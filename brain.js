@@ -511,6 +511,15 @@ function brainDecide(votes, meta){
     why = (disagree === 1)
       ? agree + ' layers agree ' + dir.toUpperCase() + ' but one soft disagreement — watch, do not chase'
       : agree + ' layers agree ' + dir.toUpperCase() + ' — one short of HIGH';
+  }else if (agree === 2 && disagree === 0){
+    /* radar tier — two independent layers agree and NOTHING fights it. Across
+       a 500+ contract universe the strict 3-vote bar reads as a wall of ASIDE
+       in quiet regimes; the desk answer is a thin-but-honest radar list whose
+       reason names exactly why it is not conviction yet. disagree===1 stays
+       ASIDE (contested-lite), PRIME/HIGH bars unchanged. */
+    tier = 'WATCH';
+    why = '2 layers agree ' + dir.toUpperCase()
+        + ' — radar only: thin but uncontested, one more agreeing layer builds conviction';
   }else{
     tier = 'ASIDE';
     why = 'thin evidence — only ' + agree + ' layer' + (agree === 1 ? '' : 's') + ' point ' + dir.toUpperCase();

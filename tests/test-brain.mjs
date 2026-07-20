@@ -231,7 +231,8 @@ ok(d.tier === 'WATCH' && d.disagree === 1, '4 agreeing + one soft disagreement -
 d = DECIDE([v('engine', 'long'), v('oiflow', 'long'), v('regime', 'long'), v('rotation', 'short'), v('onchain', 'short')], { unavailable: [] });
 ok(d.tier === 'ASIDE' && d.reasons[0].indexOf('contested') >= 0, '3v2 split -> ASIDE contested');
 d = DECIDE([v('engine', 'long'), v('oiflow', 'long')], { unavailable: [] });
-ok(d.tier === 'ASIDE' && d.reasons[0].indexOf('thin') >= 0, 'only 2 agreeing -> ASIDE thin');
+ok(d.tier === 'WATCH' && d.agree === 2 && d.disagree === 0 && d.reasons[0].indexOf('radar only') >= 0,
+   '2 agreeing + zero disagreement -> WATCH radar tier (thin but uncontested)');
 d = DECIDE([v('regime', 'long'), v('rotation', 'long'), v('onchain', 'short'), v('news', 'neutral', 'context')].concat([]), { unavailable: [] });
 ok(d.tier === 'ASIDE' && d.agree === 2 && d.disagree === 1, '2v1 -> ASIDE (thin beats majority)');
 d = DECIDE(PRIME5.concat([v('news', 'veto', 'context')]), { unavailable: [] });
@@ -650,10 +651,10 @@ console.log('== lazy-fetch cap binds honestly ==');
   WU.HG_tabs[0].mount(TU.pane);
   await runAndWait(TU.stubs);
   const uStat = TU.stubs['#brainStat'].textContent;
-  ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 50 watch · 4 aside') === 0,
-     '50 alts reach WATCH, bases + gold aside — got "' + uStat + '"');
-  ok(capCalls.length === 40, 'fetch cap respected: 40 fetches out of 50 watch candidates — got ' + capCalls.length);
-  ok(uStat.indexOf('+10 more watch candidates — raise evidence to fetch') >= 0,
+  ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 52 watch · 2 aside') === 0,
+     '50 alts reach WATCH on 3 votes, ETH+SOL join on the 2-vote radar tier, BTC + gold aside — got "' + uStat + '"');
+  ok(capCalls.length === 40, 'fetch cap respected: 40 fetches out of 52 watch candidates — got ' + capCalls.length);
+  ok(uStat.indexOf('+12 more watch candidates — raise evidence to fetch') >= 0,
      'honest note when the cap binds — got "' + uStat + '"');
   ok(uStat.indexOf('universe 53 (delta 28 + cdcx 25)') >= 0, 'combined counts over the big universe are exact');
   ok(capSnaps.some(function(s){ return s === '0/40 candidates · delta 28 · cdcx 25'; }),
@@ -981,7 +982,7 @@ console.log('== stuck-scan timeouts (AB) ==');
   B2.stubs['#brainRun']._handler();
   await waitIdle(B2.stubs);
   const b2Stat = B2.stubs['#brainStat'].textContent;
-  ok(b2Stat.indexOf('done · 0 PRIME · 0 HIGH · 50 watch') === 0,
+  ok(b2Stat.indexOf('done · 0 PRIME · 0 HIGH · 52 watch') === 0,
      'AB2: watchdog trip still renders the verdicts — got "' + b2Stat + '"');
   ok(b2Stat.indexOf('timed out') >= 0 && b2Stat.indexOf('partial') >= 0,
      'AB2: the stuck scan names its timeout honestly — got "' + b2Stat + '"');

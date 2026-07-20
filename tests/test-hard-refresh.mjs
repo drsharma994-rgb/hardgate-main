@@ -187,8 +187,8 @@ assert(groupTabs('overview') === 'brain,execute,bias,regime,trendmx,rotation,new
   'OVERVIEW group gains brain first, rotation after trendmx');
 assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,onchain,coil,apex,trap,smc,ob,div',
   'CRYPTO group gains onchain after liqs');
-assert(groupTabs('gold') === 'gold,goldpro,goldspot',
-  'GOLD group becomes gold,goldpro,goldspot');
+assert(groupTabs('gold') === 'gold,goldpro,goldspot,goldscalp',
+  'GOLD group becomes gold,goldpro,goldspot,goldscalp');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',
   'HG_TAB_GROUP maps rotation→overview, onchain→crypto, goldspot→gold');

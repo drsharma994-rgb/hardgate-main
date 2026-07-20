@@ -256,7 +256,7 @@ assert(EXPECTED.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '] && 
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
-  gold:       ['gold', 'goldpro', 'goldspot'],
+  gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp'],
   strategies: ['strats', 'meanrev', 'best', 'carry', 'scorecard'],
   tools:      ['basis', 'search', 'log', 'trade', 'finder']
 };
@@ -296,7 +296,7 @@ assert(!!manifest && Array.isArray(manifest.icons)
 let swSrc = '', swErr = null;
 try{ swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8'); }catch(e){ swErr = e; }
 assert(!swErr && swSrc.length > 0, 'sw.js exists at project root');
-assert(swSrc.indexOf('hg-v6') !== -1, 'sw.js uses the versioned cache name hg-v6');
+assert(swSrc.indexOf('hg-v7') !== -1, 'sw.js uses the versioned cache name hg-v7');
 assert(swSrc.indexOf('/api/') !== -1 && swSrc.indexOf('/api/proxy') !== -1,
   'sw.js explicitly never caches /api/ or /api/proxy responses');
 assert(swSrc.indexOf('skipWaiting') !== -1 && swSrc.indexOf('clients.claim') !== -1,
