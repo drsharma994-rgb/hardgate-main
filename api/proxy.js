@@ -1,0 +1,91 @@
+/* HARDGATE /api/proxy — same-origin Vercel serverless function replacing the
+   dead hardgate-proxy.onrender.com proxy (and the flaky public CORS proxies).
+   The app calls GET /api/proxy?url=<encodedUrl>; we forward the GET server-side
+   (no browser CORS) and pass the upstream status + text body straight through.
+   CommonJS, zero deps, Node 18+ global fetch. Never throws at load. */
+
+const ALLOWED_HOSTS = new Set([
+  'api.coindcx.com',
+  'public.coindcx.com',
+  'query1.finance.yahoo.com',
+  'query2.finance.yahoo.com',
+  // news.js sources: ForexFactory weekly calendar + crypto headline RSS
+  'nfs.faireconomy.media',
+  'cointelegraph.com',
+  'www.coindesk.com',
+  // goldspot.js: gold-api.com spot XAU fallback when the direct CORS fetch fails
+  'api.gold-api.com',
+]);
+
+const UPSTREAM_TIMEOUT_MS = 15000;
+
+function send(res, status, body, extraHeaders){
+  const headers = Object.assign({
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 's-maxage=30, stale-while-revalidate=60',
+  }, extraHeaders || {});
+  for (const k of Object.keys(headers)) res.setHeader(k, headers[k]);
+  res.statusCode = status;
+  res.end(body);
+}
+
+function sendJson(res, status, obj){
+  send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8' });
+}
+
+module.exports = async (req, res) => {
+  // CORS preflight
+  if (req.method === 'OPTIONS'){
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });
+
+  // target url: Vercel parses req.query; fall back to a manual parse so the
+  // handler also works under a plain Node http server (and in tests).
+  let raw = req.query && req.query.url;
+  if (raw == null && req.url){
+    try { raw = new URL(req.url, 'http://localhost').searchParams.get('url'); } catch (e) {}
+  }
+  if (Array.isArray(raw)) raw = raw[0];
+  if (!raw) return sendJson(res, 400, { error: 'missing url param' });
+
+  let target;
+  try { target = new URL(raw); } catch (e) { return sendJson(res, 400, { error: 'invalid url param' }); }
+  if (target.protocol !== 'https:' || !ALLOWED_HOSTS.has(target.hostname)){
+    return sendJson(res, 403, { error: 'host not allowed' });
+  }
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT_MS);
+  try{
+    const upstream = await fetch(target.toString(), {
+      method: 'GET',
+      signal: ctrl.signal,
+      redirect: 'follow',
+      headers: {
+        // Yahoo in particular 403s bare node fetch UAs — present a plain browser UA
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': '*/*',
+      },
+    });
+    const text = await upstream.text();
+    // pass through status + body; forward only content-type (fetch already
+    // decoded any gzip, so content-length/encoding must NOT be forwarded)
+    send(res, upstream.status, text, {
+      'Content-Type': upstream.headers.get('content-type') || 'text/plain; charset=utf-8',
+    });
+  }catch(e){
+    const msg = e && e.name === 'AbortError'
+      ? 'upstream timeout after ' + UPSTREAM_TIMEOUT_MS + 'ms'
+      : String((e && e.message) || e);
+    sendJson(res, 502, { error: msg });
+  }finally{
+    clearTimeout(timer);
+  }
+};

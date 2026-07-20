@@ -1,0 +1,9 @@
+tests/
+archive/
+scripts/
+.github/
+*.zip
+*.md
+node_modules/
+.vercel
+alert-state.json

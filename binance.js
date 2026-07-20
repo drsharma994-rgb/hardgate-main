@@ -1,0 +1,321 @@
+/* =========================================================================
+HARDGATE — binance.js
+Binance USD-M futures (fapi.binance.com) public data layer.
+CORS-open (Access-Control-Allow-Origin: *), no API key required.
+
+Classic script: every top-level function below becomes a global.
+Discipline:
+  - never throw: every public function resolves null/[] on any failure
+  - every fetch carries a 10s AbortController timeout
+  - results cached 60s in-memory, keyed by fn+args, so scanners can
+    re-poll without hammering the API
+  - makeTokenBucket(ratePerSec, burst): generic client-side rate limiter,
+    exported as a global (the extracted candles.js module builds its
+    apiBucket from it). take() returns 0 when a token was consumed,
+    else the ms to wait for the next token.
+
+Candle rows everywhere in HARDGATE: {t:<unix seconds>, o,h,l,c,v},
+sorted ascending by t — binanceKlines() normalizes to exactly that.
+========================================================================= */
+'use strict';
+
+function makeTokenBucket(ratePerSec, burst){
+  ratePerSec = Math.max(0.1, ratePerSec || 1);
+  burst = Math.max(1, burst || 1);
+  let tokens = burst, lastTs = Date.now();
+  return {
+    take: function(){
+      const now = Date.now();
+      tokens = Math.min(burst, tokens + (now - lastTs)/1000*ratePerSec);
+      lastTs = now;
+      if (tokens >= 1){ tokens -= 1; return 0; }
+      return Math.ceil((1 - tokens)/ratePerSec*1000);
+    }
+  };
+}
+
+const BINANCE_FAPI = 'https://fapi.binance.com';
+const __binBucket = makeTokenBucket(6, 6); // gentle smoothing; fapi allows far more
+const __BIN_CACHE = new Map();
+const BIN_CACHE_MS = 60*1000;
+
+async function __binFetchJson(url, timeoutMs){
+  const ctrl = new AbortController();
+  const timer = setTimeout(function(){ ctrl.abort(); }, timeoutMs || 10000);
+  try{
+    const w = __binBucket.take();
+    if (w > 0) await new Promise(function(r){ setTimeout(r, Math.min(w, 2000)); });
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+  finally{ clearTimeout(timer); }
+}
+
+function __binCacheGet(key){
+  const h = __BIN_CACHE.get(key);
+  return (h && (Date.now() - h.at) < BIN_CACHE_MS) ? h.val : undefined;
+}
+function __binCachePut(key, val){
+  const bad = (val === null || val === undefined) || (Array.isArray(val) && val.length === 0);
+  if (!bad) __BIN_CACHE.set(key, { at: Date.now(), val: val }); // only cache successes
+  return val;
+}
+
+/* GET /fapi/v1/klines -> [{t(sec),o,h,l,c,v}] ascending */
+async function binanceKlines(symbol, interval, limit){
+  try{
+    if (!symbol) return [];
+    interval = interval || '1h';
+    limit = Math.max(1, Math.min(1500, limit || 500));
+    const key = 'klines|' + symbol + '|' + interval + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/fapi/v1/klines?symbol=' + encodeURIComponent(symbol) +
+                '&interval=' + encodeURIComponent(interval) + '&limit=' + limit;
+    const raw = await __binFetchJson(url);
+    if (!Array.isArray(raw)) return [];
+    const rows = raw.map(function(k){
+      return { t: Math.floor((+k[0])/1000), o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] };
+    }).filter(function(r){
+      return isFinite(r.t) && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c);
+    }).sort(function(a,b){ return a.t - b.t; });
+    return __binCachePut(key, rows);
+  }catch(e){ return []; }
+}
+
+/* GET /fapi/v1/exchangeInfo -> USDT-margined PERPETUAL symbols with status TRADING */
+async function binancePerpUniverse(){
+  try{
+    const key = 'universe';
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const j = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/exchangeInfo');
+    if (!j || !Array.isArray(j.symbols)) return [];
+    const out = j.symbols.filter(function(s){
+      return s && s.quoteAsset === 'USDT' && s.contractType === 'PERPETUAL' && s.status === 'TRADING';
+    }).map(function(s){ return s.symbol; });
+    return __binCachePut(key, out);
+  }catch(e){ return []; }
+}
+
+/* GET /fapi/v1/ticker/24hr -> map symbol -> {symbol, mark, chg24, turnoverUsd} */
+async function binanceTickers24h(){
+  try{
+    const key = 'tickers24h';
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const raw = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/ticker/24hr');
+    if (!Array.isArray(raw)) return null;
+    const map = {};
+    for (let i = 0; i < raw.length; i++){
+      const d = raw[i];
+      if (!d || !d.symbol) continue;
+      map[d.symbol] = {
+        symbol: d.symbol,
+        mark: +d.lastPrice,
+        chg24: +d.priceChangePercent,
+        turnoverUsd: +d.quoteVolume
+      };
+    }
+    return __binCachePut(key, map);
+  }catch(e){ return null; }
+}
+
+/* GET /fapi/v1/premiumIndex -> {fundingPct (percent units), markPrice, nextFundingTime} */
+async function binanceFunding(symbol){
+  try{
+    if (!symbol) return null;
+    const key = 'funding|' + symbol;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const j = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/premiumIndex?symbol=' + encodeURIComponent(symbol));
+    if (!j || j.lastFundingRate === undefined) return null;
+    return __binCachePut(key, {
+      fundingPct: (+j.lastFundingRate)*100, // decimal rate -> percent units (0.00002095 -> 0.002095)
+      markPrice: +j.markPrice,
+      nextFundingTime: +j.nextFundingTime // ms epoch
+    });
+  }catch(e){ return null; }
+}
+
+/* GET /fapi/v1/openInterest (+ premiumIndex mark) -> {oiContracts, oiUsd} */
+async function binanceOI(symbol){
+  try{
+    if (!symbol) return null;
+    const key = 'oi|' + symbol;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const j = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/openInterest?symbol=' + encodeURIComponent(symbol));
+    if (!j || j.openInterest === undefined) return null;
+    const oiContracts = +j.openInterest;
+    let oiUsd = null;
+    const p = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/premiumIndex?symbol=' + encodeURIComponent(symbol));
+    if (p && isFinite(+p.markPrice)) oiUsd = oiContracts * (+p.markPrice);
+    return __binCachePut(key, { oiContracts: oiContracts, oiUsd: oiUsd });
+  }catch(e){ return null; }
+}
+
+/* Shared parser for the /futures/data long-short family */
+function __binParseLS(raw, tsKey){
+  if (!Array.isArray(raw)) return null;
+  const series = raw.map(function(d){
+    const longPct = (+d.longAccount)*100, shortPct = (+d.shortAccount)*100;
+    return {
+      longPct: longPct,
+      shortPct: shortPct,
+      ratio: +d.longShortRatio,
+      t: Math.floor((+d[tsKey || 'timestamp'])/1000)
+    };
+  }).filter(function(r){ return isFinite(r.t); })
+    .sort(function(a,b){ return a.t - b.t; });
+  if (!series.length) return null;
+  return { latest: series[series.length - 1], series: series };
+}
+
+/* GET /futures/data/globalLongShortAccountRatio -> {latest, series} of {longPct, shortPct, ratio, t} */
+async function binanceLongShort(symbol, period, limit){
+  try{
+    if (!symbol) return null;
+    period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
+    const key = 'ls|' + symbol + '|' + period + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/futures/data/globalLongShortAccountRatio?symbol=' + encodeURIComponent(symbol) +
+                '&period=' + encodeURIComponent(period) + '&limit=' + limit;
+    return __binCachePut(key, __binParseLS(await __binFetchJson(url)));
+  }catch(e){ return null; }
+}
+
+/* GET /futures/data/topLongShortPositionRatio (top trader positions) -> same shape as binanceLongShort */
+async function binanceTopTraders(symbol, period, limit){
+  try{
+    if (!symbol) return null;
+    period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
+    const key = 'top|' + symbol + '|' + period + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/futures/data/topLongShortPositionRatio?symbol=' + encodeURIComponent(symbol) +
+                '&period=' + encodeURIComponent(period) + '&limit=' + limit;
+    return __binCachePut(key, __binParseLS(await __binFetchJson(url)));
+  }catch(e){ return null; }
+}
+
+/* GET /futures/data/takerlongshortRatio -> {latest, series} of {buySellRatio, t} */
+async function binanceTakerRatio(symbol, period, limit){
+  try{
+    if (!symbol) return null;
+    period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
+    const key = 'taker|' + symbol + '|' + period + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/futures/data/takerlongshortRatio?symbol=' + encodeURIComponent(symbol) +
+                '&period=' + encodeURIComponent(period) + '&limit=' + limit;
+    const raw = await __binFetchJson(url);
+    if (!Array.isArray(raw)) return null;
+    const series = raw.map(function(d){
+      return { buySellRatio: +d.buySellRatio, t: Math.floor((+d.timestamp)/1000) };
+    }).filter(function(r){ return isFinite(r.t); })
+      .sort(function(a,b){ return a.t - b.t; });
+    if (!series.length) return null;
+    return __binCachePut(key, { latest: series[series.length - 1], series: series });
+  }catch(e){ return null; }
+}
+
+/* GET /fapi/v1/fundingInfo -> map symbol -> {intervalHours, capPct, floorPct}.
+   Binance perps do NOT all settle funding 3x/day: fundingIntervalHours is
+   per-symbol (1h/4h/8h live), so APR must annualize with
+   (24/intervalHours)*365 — a hardcoded 3*365 is wrong on every non-8h perp.
+   capPct/floorPct are the adjusted funding rate cap/floor in PERCENT units
+   (wire decimals 0.02/-0.02 -> 2/-2). Symbols with a missing/invalid
+   fundingIntervalHours are omitted entirely, so callers can tell "unknown
+   interval" apart from a verified 8h and label it '(assumed 8h)'.
+   Exchange metadata moves slowly -> cached 10 min, not the default 60s. */
+const FUNDING_INFO_CACHE_MS = 10*60*1000;
+async function binanceFundingInfo(){
+  try{
+    const key = 'fundingInfo';
+    const h = __BIN_CACHE.get(key);
+    if (h && (Date.now() - h.at) < FUNDING_INFO_CACHE_MS) return h.val;
+    const raw = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/fundingInfo');
+    if (!Array.isArray(raw)) return null;
+    const map = {};
+    for (let i = 0; i < raw.length; i++){
+      const d = raw[i];
+      if (!d || !d.symbol) continue;
+      const hrs = +d.fundingIntervalHours;
+      if (!isFinite(hrs) || hrs <= 0) continue; // unknown interval -> omit (caller assumes 8h)
+      map[d.symbol] = {
+        intervalHours: hrs,
+        capPct: (+d.adjustedFundingRateCap)*100,   // decimal -> percent units
+        floorPct: (+d.adjustedFundingRateFloor)*100
+      };
+    }
+    return __binCachePut(key, map);
+  }catch(e){ return null; }
+}
+
+/* GET /futures/data/topLongShortAccountRatio (top trader ACCOUNTS, distinct
+   from topLongShortPositionRatio used by binanceTopTraders) -> same parsed
+   shape as binanceLongShort: {latest, series} of {longPct, shortPct, ratio, t} */
+async function binanceTopLSAccounts(symbol, period, limit){
+  try{
+    if (!symbol) return null;
+    period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
+    const key = 'topacct|' + symbol + '|' + period + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/futures/data/topLongShortAccountRatio?symbol=' + encodeURIComponent(symbol) +
+                '&period=' + encodeURIComponent(period) + '&limit=' + limit;
+    return __binCachePut(key, __binParseLS(await __binFetchJson(url)));
+  }catch(e){ return null; }
+}
+
+/* GET /futures/data/basis?pair=..&contractType=.. -> {latest, series} of
+   {annualizedBasisPct, basisRatePct, basis, futuresPrice, indexPrice, t}.
+   Data layer for a future term-structure tab. Wire basisRate/annualizedBasisRate
+   are decimal fractions (0.0377 = 3.77%/yr) -> converted to PERCENT units here,
+   same convention as binanceFunding. basis itself is quote-ccy (futures - index).
+   contractType: CURRENT_QUARTER | NEXT_QUARTER | PERPETUAL. */
+async function binanceBasis(pair, contractType, period, limit){
+  try{
+    pair = pair || 'BTCUSDT';
+    contractType = contractType || 'CURRENT_QUARTER';
+    period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 1));
+    const key = 'basis|' + pair + '|' + contractType + '|' + period + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/futures/data/basis?pair=' + encodeURIComponent(pair) +
+                '&contractType=' + encodeURIComponent(contractType) +
+                '&period=' + encodeURIComponent(period) + '&limit=' + limit;
+    const raw = await __binFetchJson(url);
+    if (!Array.isArray(raw)) return null;
+    const series = raw.map(function(d){
+      return {
+        annualizedBasisPct: (+d.annualizedBasisRate)*100, // decimal -> percent units
+        basisRatePct: (+d.basisRate)*100,
+        basis: +d.basis,
+        futuresPrice: +d.futuresPrice,
+        indexPrice: +d.indexPrice,
+        t: Math.floor((+d.timestamp)/1000)
+      };
+    }).filter(function(r){ return isFinite(r.t); })
+      .sort(function(a,b){ return a.t - b.t; });
+    if (!series.length) return null;
+    return __binCachePut(key, { latest: series[series.length - 1], series: series });
+  }catch(e){ return null; }
+}
+
+/* GET /futures/data/openInterestHist -> {latest, series} of {oi, oiUsd, t} */
+async function binanceOIHistory(symbol, period, limit){
+  try{
+    if (!symbol) return null;
+    period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
+    const key = 'oih|' + symbol + '|' + period + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/futures/data/openInterestHist?symbol=' + encodeURIComponent(symbol) +
+                '&period=' + encodeURIComponent(period) + '&limit=' + limit;
+    const raw = await __binFetchJson(url);
+    if (!Array.isArray(raw)) return null;
+    const series = raw.map(function(d){
+      return {
+        oi: +d.sumOpenInterest,
+        oiUsd: (d.sumOpenInterestValue !== undefined) ? +d.sumOpenInterestValue : null,
+        t: Math.floor((+d.timestamp)/1000)
+      };
+    }).filter(function(r){ return isFinite(r.t) && isFinite(r.oi); })
+      .sort(function(a,b){ return a.t - b.t; });
+    if (!series.length) return null;
+    return __binCachePut(key, { latest: series[series.length - 1], series: series });
+  }catch(e){ return null; }
+}
