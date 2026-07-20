@@ -778,6 +778,159 @@ async function refreshScorecard(){
   }
 }
 
+/* ================= export — one click, paste-ready =================
+   Plain-text summary the user can paste anywhere (chat, journal, analyst);
+   JSON for the full ledger. Both builders are PURE over the loaded store —
+   the wire (clipboard/download) lives in the button handlers, and every
+   wire failure falls back honestly instead of dying silently. */
+function exportLine(k, b){
+  return String(k).toUpperCase() + '  n=' + b.n
+    + '  win ' + pct(b.winRate)
+    + '  avgR ' + fmtR(b.avgR);
+}
+function buildExportText(){
+  try{
+    var st = hgScoreStats(store);
+    var L = [];
+    L.push('HARDGATE SCORECARD — exported ' + dstr(Date.now()) + ' ' + timeStr());
+    L.push('ledger: ' + st.settled + ' settled · ' + st.open + ' open'
+      + ' · win rate ' + pct(st.winRate)
+      + ' · avg R ' + fmtR(st.avgR)
+      + ' · expectancy ' + fmtR(st.expectancy) + '/trade');
+    L.push(st.settled === 0
+      ? 'evidence: no settled trades yet'
+      : (st.enoughData
+          ? 'evidence: ENOUGH DATA (>= ' + MIN_DATA + ' settled)'
+          : 'evidence: ANECDOTE — ' + st.settled + ' settled, need >= ' + MIN_DATA));
+    function section(title, obj){
+      var keys = [];
+      for (var k in obj){ if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] && obj[k].n > 0) keys.push(k); }
+      if (!keys.length) return;
+      keys.sort(function(a, b){ return (obj[b].n - obj[a].n) || (a < b ? -1 : 1); });
+      L.push(''); L.push(title);
+      for (var i = 0; i < keys.length; i++) L.push(exportLine(keys[i], obj[keys[i]]));
+    }
+    section('BY TIER', st.byTier);
+    section('BY DIRECTION', st.byDir);
+    section('BY LANE', st.byLane);
+    section('BY LAYER — which votes make money', st.byLayer);
+    var settled = [], open = [];
+    for (var i = 0; i < store.length; i++){
+      var r = store[i];
+      if (!r || typeof r !== 'object') continue;
+      if (r.status === 'settled') settled.push(r); else open.push(r);
+    }
+    settled.sort(function(a, b){ return (b.closedAt || b.settledAt || b.at || 0) - (a.closedAt || a.settledAt || a.at || 0); });
+    open.sort(function(a, b){ return (b.at || 0) - (a.at || 0); });
+    if (settled.length){
+      L.push(''); L.push('SETTLED LEDGER — newest first');
+      for (var s = 0; s < settled.length; s++){
+        var r2 = settled[s];
+        L.push(dstr(r2.closedAt || r2.settledAt || r2.at) + ' · ' + r2.sym + ' ' + r2.dir + (r2.tier ? ' ' + r2.tier : '')
+          + ' · entry ' + fmtPx(r2.entry) + ' stop ' + fmtPx(r2.stop) + ' t1 ' + fmtPx(r2.t1) + (r2.t2 ? ' t2 ' + fmtPx(r2.t2) : '')
+          + ' · ' + (r2.outcome || 'settled') + ' ' + fmtR(r2.r)
+          + (Array.isArray(r2.layers) && r2.layers.length ? ' · layers: ' + r2.layers.join(',') : ''));
+      }
+    }
+    if (open.length){
+      L.push(''); L.push('OPEN — unsettled');
+      for (var o = 0; o < open.length; o++){
+        var r3 = open[o];
+        L.push(r3.sym + ' ' + r3.dir + (r3.tier ? ' ' + r3.tier : '')
+          + ' · entry ' + fmtPx(r3.entry) + ' stop ' + fmtPx(r3.stop) + ' t1 ' + fmtPx(r3.t1)
+          + ' · opened ' + dstr(r3.at)
+          + (typeof r3.mtm === 'number' && isFinite(r3.mtm) ? ' · mtm ' + fmtR(r3.mtm) : ''));
+      }
+    }
+    if (!settled.length && !open.length)
+      L.push('', 'no records yet — run the BRAIN tab; every PRIME/HIGH setup lands here automatically.');
+    return L.join('\n');
+  }catch(e){ return 'HARDGATE SCORECARD export failed: ' + errMsg(e); }
+}
+function buildExportJson(){
+  try{
+    return JSON.stringify({ app: 'hardgate-scorecard', version: 1,
+      exportedAt: Date.now(), stats: hgScoreStats(store), records: store }, null, 2);
+  }catch(e){ return '{"app":"hardgate-scorecard","error":"' + errMsg(e).replace(/"/g, "'") + '"}'; }
+}
+function copyText(t, cb){
+  try{
+    if (typeof navigator !== 'undefined' && navigator && navigator.clipboard
+        && typeof navigator.clipboard.writeText === 'function'){
+      try{
+        navigator.clipboard.writeText(t).then(function(){ cb(true); }, function(){ cb(false); });
+        return;
+      }catch(e){}
+    }
+  }catch(e){}
+  try{
+    if (typeof document !== 'undefined' && document && document.body
+        && typeof document.createElement === 'function'){
+      var ta = document.createElement('textarea');
+      ta.value = t;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      try{ ta.focus(); ta.select(); }catch(e){}
+      var okc = false;
+      try{ okc = !!(document.execCommand && document.execCommand('copy')); }catch(e){}
+      try{ document.body.removeChild(ta); }catch(e){}
+      cb(okc); return;
+    }
+  }catch(e){}
+  cb(false);
+}
+function downloadText(filename, text, mime){
+  try{
+    if (typeof Blob === 'undefined' || typeof URL === 'undefined'
+        || typeof URL.createObjectURL !== 'function'
+        || typeof document === 'undefined' || !document || typeof document.createElement !== 'function') return false;
+    var url = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    (document.body || document.documentElement).appendChild(a);
+    a.click();
+    setTimeout(function(){
+      try{ a.parentNode && a.parentNode.removeChild(a); }catch(e){}
+      try{ URL.revokeObjectURL(url); }catch(e){}
+    }, 100);
+    return true;
+  }catch(e){ return false; }
+}
+function exportFilename(ext){
+  try{
+    var d = new Date();
+    return 'hardgate-scorecard-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
+      + '-' + pad(d.getHours()) + pad(d.getMinutes()) + '.' + ext;
+  }catch(e){ return 'hardgate-scorecard.' + ext; }
+}
+function setStat(ui, msg, warn){
+  try{
+    if (ui && ui.stat){
+      ui.stat.textContent = msg;
+      ui.stat.className = warn ? 'note warn' : 'note';
+    }
+  }catch(e){}
+}
+/* COPY STATS: clipboard first; a blocked clipboard falls back to a .txt
+   download; both blocked says so and points at the on-screen tables. */
+function onCopyStats(ui){
+  var txt = buildExportText();
+  copyText(txt, function(ok){
+    if (ok){ setStat(ui, 'stats copied — paste them anywhere (chat, journal, your analyst) · ' + timeStr()); return; }
+    var dl = downloadText(exportFilename('txt'), txt, 'text/plain');
+    setStat(ui, dl
+      ? 'clipboard blocked — downloaded the stats as a .txt instead · ' + timeStr()
+      : 'clipboard and download both blocked — the ledger tables above can be selected and copied manually · ' + timeStr(), true);
+  });
+}
+function onExportJson(ui){
+  var name = exportFilename('json');
+  var ok = downloadText(name, buildExportJson(), 'application/json');
+  setStat(ui, ok
+    ? 'ledger downloaded: ' + name + ' · ' + timeStr()
+    : 'download blocked by the browser — use COPY STATS instead · ' + timeStr(), !ok);
+}
+
 /* ================= mount ================= */
 function mountScorecard(el){
   try{
@@ -788,7 +941,9 @@ function mountScorecard(el){
       + '<div class="note">Evidence, not signals. The BRAIN and EXECUTE tabs log their setups here; this tab walks each one forward on 1h candles and settles it to an honest R-multiple. The BY-LAYER table is the point — which voting layers actually make money, measured. Numbers below 5 settled trades are anecdote, not evidence.</div>'
       + '<div class="note warn" id="scoreWarn" style="display:none;margin-top:6px"></div>'
       + '<div class="note" id="scoreStat" style="margin-top:6px">idle — ledger loaded from this browser; press RE-SETTLE to check open trades against fresh 1h candles.</div>'
-      + '<div class="row" style="margin-top:8px"><button class="btn" id="scoreRun">RE-SETTLE NOW</button></div>'
+      + '<div class="row" style="margin-top:8px"><button class="btn" id="scoreRun">RE-SETTLE NOW</button>'
+      + '<button class="btn" id="scoreCopy" title="copy a plain-text stats summary — paste it anywhere">COPY STATS</button>'
+      + '<button class="btn" id="scoreExport" title="download the full ledger + stats as JSON">EXPORT JSON</button></div>'
       + '<div class="grid3" style="margin-top:12px" id="scoreBoard"></div>'
       + '<hr class="sep">'
       + '<div id="scoreBreaks"></div>'
@@ -801,6 +956,8 @@ function mountScorecard(el){
       stat: el.querySelector('#scoreStat'),
       warn: el.querySelector('#scoreWarn'),
       btn: el.querySelector('#scoreRun'),
+      copyBtn: el.querySelector('#scoreCopy'),
+      exportBtn: el.querySelector('#scoreExport'),
       board: el.querySelector('#scoreBoard'),
       breaks: el.querySelector('#scoreBreaks'),
       openWrap: el.querySelector('#scoreOpenWrap'),
@@ -816,6 +973,8 @@ function mountScorecard(el){
       ui.warn.style.display = 'block';
     }
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runSettle(ui); });
+    if (ui.copyBtn) ui.copyBtn.addEventListener('click', function(){ onCopyStats(ui); });
+    if (ui.exportBtn) ui.exportBtn.addEventListener('click', function(){ onExportJson(ui); });
     render(ui);
   }catch(e){
     try{ el.innerHTML = '<div class="empty">scorecard mount failed: ' + esc(errMsg(e)) + '</div>'; }catch(e2){}
@@ -831,6 +990,7 @@ try{
   G.hgScoreSettle = hgScoreSettle;
   G.hgScoreWalk = hgScoreWalk;
   G.hgScoreStats = hgScoreStats;
+  G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
   G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };
   G.HG_tabs = G.HG_tabs || [];
   G.HG_tabs.push({ id: 'scorecard', label: 'SCORECARD', mount: mountScorecard, refresh: refreshScorecard });
