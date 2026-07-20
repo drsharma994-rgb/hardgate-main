@@ -51,6 +51,22 @@ Pure classifier exposed as window.squeezeClassify(rows4h, rows1d) =>
                      // donchian-break results) / NaN otherwise
     donchianBreak }  // 'LONG' | 'SHORT' | null (price break + current-bar volZ >= 1)
 Never throws; unknown/short/degenerate input => state 'NONE'.
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL scan the result list is cached
+in a module-local snapshot, exposed as window.squeezeState() for the BRAIN
+meta-engine AND published to window.HG_squeezeResults (the key engine.js's
+Stage-0 universe contract already feature-checks — its {syms, at} form is
+filled alongside `results` so the master gate engine can consume the scan
+without a parse change):
+  window.squeezeState()     -> { results: [ { sym, dir: 'long'|'short'|null
+                                 (null on BUILDING watch cards), kind:
+                                 'fired'|'break'|'build' } ],
+                                 at: <epochMs> } | null
+  window.HG_squeezeResults = { results: <same rows>, syms: [sym, ...], at }
+The getter is zero-arg, NEVER throws (try-catch -> null), returns null before
+the first successful scan, and otherwise hands out a DEEP-FROZEN deep copy.
+An aborted/failed re-run keeps the PREVIOUS good snapshot with its original
+`at` — good data is never replaced by a failed run.
 ========================================================================= */
 (function(){
 'use strict';
@@ -386,6 +402,43 @@ function cardHTML(r){
    the user has never run (skip instead). */
 var __scan = { run: null, busy: false, hasRun: false };
 
+/* ---------------- BRAIN state snapshot (window.squeezeState + HG_squeezeResults)
+   Last SUCCESSFUL scan's result rows, cached for the BRAIN meta-engine and
+   published on the key engine.js's Stage-0 already reads. Aborted/failed
+   re-runs never touch them — the previous good snapshot keeps its original
+   `at`. The getter (registration block below) hands out DEEP-FROZEN deep
+   copies and never throws. W is assigned at module load; the publisher only
+   ever runs inside a scan, long after that. */
+var __sqSnap = null;
+function __sqStateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = __sqStateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
+function publishSqueezeState(results){
+  try{
+    var rows = [], syms = [], i, r;
+    for (i = 0; i < results.length; i++){
+      r = results[i];
+      if (!r) continue;
+      rows.push({ sym: r.sym,
+                  dir: (r.dir === 'long' || r.dir === 'short') ? r.dir : null,
+                  kind: r.kind });
+      syms.push(r.sym);
+    }
+    var at = Date.now();
+    __sqSnap = { results: rows, at: at };
+    /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
+       mirrors window.squeezeState() for the BRAIN. */
+    W.HG_squeezeResults = { results: rows, syms: syms, at: at };
+  }catch(e){ /* state publishing must never break the scan */ }
+}
+
 async function squeezeRefresh(){
   try{
     if (__scan.busy) return 'busy';
@@ -519,6 +572,7 @@ function mount(el){
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
       setStat('universe ' + uni.length + ' · fired ' + nFired + ' · building ' + nBuild
               + ' · breakouts ' + nBreak + ' · failed ' + failed + ' · ' + secs + 's');
+      publishSqueezeState(results);   /* BRAIN: cache + publish the successful scan (aborts above never reach here) */
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
     }finally{
@@ -537,6 +591,9 @@ W.squeezeClassify = squeezeClassify;
 W.squeezePlan = squeezePlan;
 W.squeezePlanHTML = squeezePlanHTML;
 W.squeezePlanBlock = squeezePlanBlock;
+W.squeezeState = function(){
+  try{ return __sqSnap ? __sqStateView(__sqSnap) : null; }catch(e){ return null; }
+};
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'squeeze', label: 'SQUEEZE', mount: mount, refresh: squeezeRefresh });
 })();

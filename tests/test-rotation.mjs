@@ -341,5 +341,72 @@ try { vm.runInContext(readFileSync(path.join(root, 'rotation.js'), 'utf8'), bare
 catch(e){ bareThrew = e; }
 assert(!bareThrew, 'rotation.js loads cleanly with no window defined');
 
+/* ================= 6) BRAIN state getter — window.rotationState =================
+   Fresh context: getter exposed; null pre-run; populated with the last
+   rotationSignal result + `at` after a successful run; deep-frozen fresh
+   copies; a failed re-run (all legs down) keeps the previous good snapshot
+   with its original `at`; sabotaged internals -> null, no throw. */
+{
+  const s2 = {
+    window: {}, console, setTimeout, clearTimeout, AbortController,
+    localStorage: makeLocalStorage(),
+    fetch: async () => ({ ok: false, status: 503, json: async () => null })
+  };
+  const ctx2 = vm.createContext(s2);
+  vm.runInContext(readFileSync(path.join(root, 'rotation.js'), 'utf8'), ctx2, { filename: 'rotation.js' });
+  const W2 = s2.window;
+  const tab2 = W2.HG_tabs[0];
+
+  assert(typeof W2.rotationState === 'function', 'state: window.rotationState exposed');
+  assert(W2.rotationState() === null, 'state: null before the first successful run');
+  assert(W2.rotationState() === null, 'state: still null after a skipped refresh (never run)');
+
+  const MK2 = altFixture(5, 8, 10); // 8/10 = 80% -> ALT SEASON
+  s2.fetch = async (url) => {
+    const u = String(url);
+    if (u.indexOf('/coins/markets') > -1) return { ok: true, status: 200, json: async () => MK2 };
+    if (u.indexOf('/global') > -1) return { ok: true, status: 200, json: async () => ({ data: { market_cap_percentage: { btc: 55, eth: 15 }, market_cap_change_percentage_24h_usd: 1 } }) };
+    if (u.indexOf('/search/trending') > -1) return { ok: true, status: 200, json: async () => ({ coins: [] }) };
+    return { ok: false, status: 404, json: async () => null };
+  };
+  const el2 = fakeEl();
+  tab2.mount(el2);
+  const ui2 = { btn: el2._nodes['[data-rot="run"]'], note: el2._nodes['[data-rot="note"]'], out: el2._nodes['[data-rot="out"]'] };
+  const stRun = await ui2.btn._click();
+  assert(stRun === 'refreshed', 'state: fixture run resolves "refreshed"');
+
+  const st = W2.rotationState();
+  assert(st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at),
+         'state: populated after the successful run (signal + at)');
+  assert(Object.keys(st).sort().join(',') === 'altPct,at,evidence,season',
+         'state: keys exactly {season, altPct, evidence, at}');
+  assert(st.season === 'alt' && st.altPct === 80 && Array.isArray(st.evidence)
+         && st.evidence.join(' ').indexOf('8/10') > -1,
+         'state: content mirrors the last rotationSignal result (alt, 80%, 8/10 evidence)');
+  assert(Object.isFrozen(st) && Object.isFrozen(st.evidence), 'state: the view is frozen (state + evidence)');
+  const st2 = W2.rotationState();
+  assert(st2 !== st && st2.evidence !== st.evidence && JSON.stringify(st2) === JSON.stringify(st),
+         'state: each call hands a fresh copy with identical content');
+
+  /* failed re-run (every leg down) keeps the PREVIOUS good snapshot + original at */
+  s2.fetch = async () => ({ ok: false, status: 503, json: async () => null });
+  let failStatus = null, failThrew = null;
+  try{ failStatus = await tab2.refresh(); }catch(e){ failThrew = e; }
+  assert(!failThrew && typeof failStatus === 'string' && failStatus.indexOf('failed') === 0,
+         'state: the failing re-run reports "failed: ...", never throws');
+  const st3 = W2.rotationState();
+  assert(st3 && st3.at === st.at && st3.altPct === 80 && st3.season === 'alt',
+         'state: stale-good snapshot preserved after the failed re-run (same at, same content)');
+
+  /* sabotaged internals: getter degrades to null, never throws, then recovers */
+  let sThrew = null, sGot = 'unset';
+  vm.runInContext('globalThis.__keepIA = Array.isArray; Array.isArray = undefined;', ctx2);
+  try{ sGot = W2.rotationState(); }catch(e){ sThrew = e; }
+  vm.runInContext('Array.isArray = globalThis.__keepIA; delete globalThis.__keepIA;', ctx2);
+  assert(!sThrew && sGot === null,
+         'state: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
+  assert(W2.rotationState() !== null, 'state: getter recovers once internals are restored');
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

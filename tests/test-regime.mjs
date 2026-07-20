@@ -706,6 +706,94 @@ console.log('== hard refresh: registration, refreshed/busy/skipped paths, never 
   assert(__unhandled.length === 0, 'no unhandled rejections on any refresh path');
 }
 
+/* ---------------- 15) BRAIN state getter — window.regimeState ----------------
+   Fresh context: getter exposed; null before the first successful scan;
+   populated {label, score, playbook, at} after a fully-stubbed RISK-ON scan;
+   deep-frozen fresh copies; a failing re-run keeps the previous good
+   snapshot with its original `at`; sabotaged internals -> null, no throw. */
+console.log('== BRAIN state getter (window.regimeState) ==');
+{
+  const rows260 = [];
+  for (let i = 0; i < 260; i++) rows260.push({ t: i, o: 100, h: 110, l: 90, c: 100 + i, v: 1 });
+  const ethbtcKlines3 = [];
+  for (let i = 0; i < 40; i++) ethbtcKlines3.push([0, 0, 0, 0, 0.05 + i * 0.001, 0, 0, 0, 0, 0, 0, 0]);
+  const llama3 = { peggedAssets: [
+    { symbol: 'USDT', circulating: { peggedUSD: 101e9 }, circulatingPrevWeek: { peggedUSD: 100e9 }, circulatingPrevMonth: { peggedUSD: 99e9 } }
+  ]};
+  const sandbox3 = {
+    window: {}, console, setTimeout, clearTimeout, AbortController,
+    ema: (arr) => arr.map(v => v * 0.99),
+    binanceKlines: async () => rows260,
+    getDXY: async () => ({ value: 102, trend20: 'FALLING', change20Pct: -0.8 }),
+    getGoldMacro: async () => ({ tnx: 4.0, tnxTrend: 'FALLING' }),
+    fetch: async (url) => {
+      const u = String(url);
+      if (u.indexOf('coingecko.com') > -1)
+        return { ok: true, status: 200, json: async () => ({ data: { market_cap_percentage: { btc: 45 } } }) };
+      if (u.indexOf('alternative.me') > -1)
+        return { ok: true, status: 200, json: async () => ({ data: [{ value: '75', value_classification: 'Greed' }] }) };
+      if (u.indexOf('api.binance.com') > -1)
+        return { ok: true, status: 200, json: async () => ethbtcKlines3 };
+      if (u.indexOf('stablecoins.llama.fi') > -1)
+        return { ok: true, status: 200, json: async () => llama3 };
+      return { ok: false, status: 503, json: async () => null };
+    }
+  };
+  const ctx3 = vm.createContext(sandbox3);
+  vm.runInContext(readFileSync(path.join(root, 'regime.js'), 'utf8'), ctx3, { filename: 'regime.js' });
+  const W3 = sandbox3.window;
+  const tab3 = W3.HG_tabs[0];
+
+  assert(typeof W3.regimeState === 'function', 'state: window.regimeState exposed');
+  assert(W3.regimeState() === null, 'state: null before the first successful scan');
+
+  const el3 = fakeEl();
+  tab3.mount(el3); /* auto-run starts */
+  const stat3 = el3._nodes['#regimeStat'], out3 = el3._nodes['#regimeOut'], run3 = el3._nodes['#regimeRun'];
+  let settled3 = false;
+  for (let i = 0; i < 200; i++){
+    if (run3.disabled === false && (stat3.textContent || '').indexOf('8/8 sources ok') > -1){ settled3 = true; break; }
+    await new Promise(r => setTimeout(r, 25));
+  }
+  assert(settled3, 'state: fully-stubbed RISK-ON scan completes (8/8 sources ok)');
+
+  const st = W3.regimeState();
+  assert(st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at),
+         'state: populated after the successful scan ({label, score, playbook, at})');
+  assert(st.label === 'RISK-ON' && st.score === 7,
+         'state: label + score come from the regimeVerdict result (RISK-ON, 7)');
+  assert(st.playbook && st.playbook.regime === 'RISK-ON' && st.playbook.bias === 'LONG-ONLY'
+         && st.playbook.cls === 'long' && Array.isArray(st.playbook.setups),
+         'state: playbook is the window.regimePlaybook output (bias LONG-ONLY, setups array)');
+  assert(Object.isFrozen(st) && Object.isFrozen(st.playbook) && Object.isFrozen(st.playbook.setups),
+         'state: the view is deep-frozen (state, playbook, setups all frozen)');
+  const st2 = W3.regimeState();
+  assert(st2 !== st && st2.playbook !== st.playbook && JSON.stringify(st2) === JSON.stringify(st),
+         'state: each call hands a fresh deep copy with identical content');
+
+  /* failing re-run (DOM dead -> rgRun catch path) keeps the previous good snapshot */
+  const desc3 = Object.getOwnPropertyDescriptor(out3, 'innerHTML');
+  Object.defineProperty(out3, 'innerHTML', {
+    configurable: true, get: function(){ return ''; }, set: function(){ throw new Error('dom dead'); }
+  });
+  let rfThrew = null, rf = null;
+  try{ rf = await tab3.refresh(); }catch(e){ rfThrew = e; }
+  Object.defineProperty(out3, 'innerHTML', desc3);
+  const st3 = W3.regimeState();
+  assert(!rfThrew, 'state: failing re-run never rejects the refresh');
+  assert(st3 && st3.at === st.at && st3.label === 'RISK-ON' && st3.score === 7,
+         'state: stale-good snapshot preserved after the failing re-run (same at, same content)');
+
+  /* sabotaged internals: getter degrades to null, never throws, then recovers */
+  let sThrew = null, sGot = 'unset';
+  vm.runInContext('globalThis.__keepIA = Array.isArray; Array.isArray = undefined;', ctx3);
+  try{ sGot = W3.regimeState(); }catch(e){ sThrew = e; }
+  vm.runInContext('Array.isArray = globalThis.__keepIA; delete globalThis.__keepIA;', ctx3);
+  assert(!sThrew && sGot === null,
+         'state: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
+  assert(W3.regimeState() !== null, 'state: getter recovers once internals are restored');
+}
+
 /* ---------------- summary ---------------- */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail > 0){ console.error('TESTS FAILED'); process.exit(1); }

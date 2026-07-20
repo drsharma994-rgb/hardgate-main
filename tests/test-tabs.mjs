@@ -7,7 +7,7 @@
      3. extracts the three INLINE <script> blocks from index.html and runs
         them in order, exactly as the browser would,
      4. asserts the GROUPED two-tier nav: HG_NAV_GROUPS model (5 fixed groups,
-        incl. not-yet-registered strats/meanrev), dynamic tabs tagged into
+        incl. not-yet-registered brain/strats/meanrev), dynamic tabs tagged into
         their group via HG_TAB_GROUP, row-2 buttons ordered by group sequence,
         group chips rendered, ≤2-click reachability, active-group persistence
         in localStorage, and showTab() lazy-mounting a tab exactly once while
@@ -220,7 +220,7 @@ assert(EXPECTED.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '] && 
 
 /* ---------------- group model ---------------- */
 const EXPECTED_GROUPS = {
-  overview:   ['execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
+  overview:   ['brain', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldspot'],
   strategies: ['strats', 'meanrev', 'best', 'carry'],
@@ -232,12 +232,12 @@ assert(run("HG_NAV_GROUPS.map(function(g){ return g.id; }).join(',')") === 'over
   'fixed group order: OVERVIEW → CRYPTO SCANS → GOLD → STRATEGIES → TOOLS');
 assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
-  'group membership matches the spec (incl. not-yet-registered strats/meanrev — groups render with missing ids)');
+  'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', regime:'overview',
                    carry:'strategies', goldpro:'gold', strats:'strategies', meanrev:'strategies',
-                   execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
+                   brain:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
-  'HG_TAB_GROUP maps every dynamic id into its group (execute/news/squeeze/trendmx/oiflow/regime/carry/goldpro/strats/meanrev/rotation/onchain/goldspot)');
+  'HG_TAB_GROUP maps every dynamic id into its group (brain/execute/news/squeeze/trendmx/oiflow/regime/carry/goldpro/strats/meanrev/rotation/onchain/goldspot)');
 
 /* ---------------- registration mapping + row-2 layout ---------------- */
 const navIds = navEl.children.map(c => c.id);

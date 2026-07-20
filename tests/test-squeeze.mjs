@@ -496,6 +496,111 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(sRef4 === 'refreshed', '12: busy flag released after the error path — module refreshes again (got "' + sRef4 + '")');
 }
 
+/* ---------------- 13) BRAIN state getter — window.squeezeState + HG_squeezeResults ----------------
+   Fresh context: getter exposed; null pre-run; exact
+   {results:[{sym,dir,kind}], at} shape after a successful scan covering a
+   BUILDING card (dir null) and a Donchian-break card (dir long);
+   HG_squeezeResults published in the engine.js Stage-0 contract form
+   ({syms, at} + mirrored results); deep-frozen fresh copies; an honest-abort
+   re-run keeps the previous good snapshot with its original `at`; the getter
+   never throws with sabotaged internals. */
+{
+  const ctx3 = vm.createContext(Object.create(null));
+  ctx3.window = {};
+  ctx3.setTimeout = setTimeout;
+  for (const f of ['indicators.js', 'indicators2.js', 'squeeze.js']){
+    vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx3, { filename: f });
+  }
+  const W3 = ctx3.window;
+  const tab3 = W3.HG_tabs[0];
+  function sqStubEl13(){
+    return { innerHTML: '', textContent: '', className: '', disabled: false,
+             style: {}, firstElementChild: { style: {} },
+             addEventListener: function(ev, fn){ this._handler = fn; } };
+  }
+  function sqPane13(){
+    const stubs = {};
+    const pane = { _html: '',
+      set innerHTML(v){ this._html = v; }, get innerHTML(){ return this._html; },
+      querySelector: function(sel){ if (!stubs[sel]) stubs[sel] = sqStubEl13(); return stubs[sel]; } };
+    return { pane: pane, stubs: stubs };
+  }
+  async function waitSq13(stubs){
+    const t0 = Date.now();
+    while (stubs['#sqRun'].disabled && Date.now() - t0 < 8000)
+      await new Promise(function(res){ setTimeout(res, 25); });
+  }
+  assert(typeof W3.squeezeState === 'function', '13: window.squeezeState exposed');
+  assert(W3.squeezeState() === null, '13: null before the first successful scan');
+  assert(W3.HG_squeezeResults === undefined, '13: HG_squeezeResults not written before the first scan');
+
+  /* FLATUSDT: flat 4h -> BUILDING (dir null) · BRKUSDT: close 80.5 > DC up 80 with vol z 3 -> break LONG */
+  const brkRows = expRows(60, 50, 0.5, 0).concat([{ t: 60, o: 80, h: 81, l: 79, c: 80.5, v: 1300 }]);
+  let uni3 = ['FLATUSDT', 'BRKUSDT'];
+  ctx3.binancePerpUniverse = async function(){ return uni3; };
+  ctx3.binanceTickers24h = async function(){
+    return { FLATUSDT: { mark: 50, chg24: 0.1, turnoverUsd: 500e6 },
+             BRKUSDT: { mark: 80, chg24: 1.2, turnoverUsd: 400e6 } };
+  };
+  ctx3.binanceKlines = async function(sym, tf){
+    if (tf === '4h') return sym === 'BRKUSDT' ? brkRows : flatRows(60, 50, 1, 0);
+    if (tf === '1d') return dUp;
+    return flatRows(120, 50, 1, 0);
+  };
+
+  const P3 = sqPane13();
+  tab3.mount(P3.pane);
+  P3.stubs['#sqRun']._handler();
+  await waitSq13(P3.stubs);
+  assert(P3.stubs['#sqStat'].textContent.indexOf('building 1') >= 0
+         && P3.stubs['#sqStat'].textContent.indexOf('breakouts 1') >= 0,
+         '13: fixture scan completes (1 building + 1 breakout)');
+
+  const st = W3.squeezeState();
+  assert(st && Array.isArray(st.results) && typeof st.at === 'number' && isFinite(st.at),
+         '13: shape = {results:[], at:<epochMs>} after the successful scan');
+  assert(st.results.length === 2
+         && Object.keys(st.results[0]).sort().join(',') === 'dir,kind,sym',
+         '13: one row per card, keys exactly {sym, dir, kind}');
+  assert(st.results[0].sym === 'FLATUSDT' && st.results[0].kind === 'build' && st.results[0].dir === null,
+         '13: BUILDING watch card carries dir null (no direction to fabricate)');
+  assert(st.results[1].sym === 'BRKUSDT' && st.results[1].kind === 'break' && st.results[1].dir === 'long',
+         '13: Donchian-break card carries kind "break" + dir "long"');
+  assert(Object.isFrozen(st) && Object.isFrozen(st.results) && Object.isFrozen(st.results[0]),
+         '13: the view is deep-frozen (state, results, rows all frozen)');
+  const st2 = W3.squeezeState();
+  assert(st2 !== st && st2.results !== st.results && JSON.stringify(st2) === JSON.stringify(st),
+         '13: each call hands a fresh deep copy with identical content');
+
+  /* HG_squeezeResults — the key engine.js Stage-0 already feature-checks */
+  const pub = W3.HG_squeezeResults;
+  assert(pub && typeof pub === 'object' && typeof pub.at === 'number'
+         && Array.isArray(pub.syms) && pub.syms.join(',') === 'FLATUSDT,BRKUSDT',
+         '13: HG_squeezeResults published in the engine.js Stage-0 form ({syms, at})');
+  assert(Array.isArray(pub.results) && pub.results.length === 2
+         && pub.results[0].kind === 'build' && pub.results[1].kind === 'break',
+         '13: HG_squeezeResults.results mirrors the squeezeState rows');
+
+  /* honest abort (universe leg returns nothing) keeps the PREVIOUS good snapshot + publisher key */
+  uni3 = [];
+  const ref3 = await tab3.refresh();
+  const stA = W3.squeezeState();
+  assert(ref3 === 'refreshed' && P3.stubs['#sqStat'].textContent.indexOf('unavailable') >= 0,
+         '13: re-run aborts honestly (universe unavailable, no fabricated candidates)');
+  assert(stA && stA.at === st.at && stA.results.length === 2
+         && W3.HG_squeezeResults.at === pub.at,
+         '13: stale-good snapshot + publisher key preserved after the abort (same at, same content)');
+
+  /* sabotaged internals: getter degrades to null, never throws, then recovers */
+  let sThrew = null, sGot = 'unset';
+  vm.runInContext('globalThis.__keepIA = Array.isArray; Array.isArray = undefined;', ctx3);
+  try{ sGot = W3.squeezeState(); }catch(e){ sThrew = e; }
+  vm.runInContext('Array.isArray = globalThis.__keepIA; delete globalThis.__keepIA;', ctx3);
+  assert(!sThrew && sGot === null,
+         '13: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
+  assert(W3.squeezeState() !== null, '13: getter recovers once internals are restored');
+}
+
 /* ---------------- summary ---------------- */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail > 0){ console.error('TESTS FAILED'); process.exit(1); }

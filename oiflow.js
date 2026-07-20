@@ -37,6 +37,22 @@ Registers itself via window.HG_tabs.push({id:'oiflow', label:'OI FLOW', mount, r
 global HARD REFRESH button awaits refresh() (house contract: async, never
 throws, returns 'refreshed' | 'skipped: not run yet' | 'busy', busy-guarded,
 and never triggers a first-time full-universe scan on its own).
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL scan the candidate list is
+cached in a module-local snapshot, exposed as window.oiflowState() for the
+BRAIN meta-engine AND published to window.HG_oiflowResults (the key
+engine.js's Stage-0 universe contract already feature-checks — its
+{syms, at} form is filled alongside `results` so the master gate engine can
+consume the scan without a parse change):
+  window.oiflowState()    -> { results: [ { sym, dir, evidence: <number —
+                              agreeing-read count>, cls: <string — classifier
+                              regime label, else the lead evidence string> } ],
+                              at: <epochMs> } | null
+  window.HG_oiflowResults = { results: <same rows>, syms: [sym, ...], at }
+The getter is zero-arg, NEVER throws (try-catch -> null), returns null before
+the first successful scan, and otherwise hands out a DEEP-FROZEN deep copy.
+An aborted/failed re-run keeps the PREVIOUS good snapshot with its original
+`at` — good data is never replaced by a failed run.
 ========================================================================= */
 (function(){
 'use strict';
@@ -402,6 +418,43 @@ var __scanning = false;   /* a scan is in flight (RUN button or refresh) */
 var __hasRun    = false;  /* at least one scan attempt finished since mount */
 var __mountedEl = null;   /* pane element from the latest mount() */
 
+/* ---------------- BRAIN state snapshot (window.oiflowState + HG_oiflowResults)
+   Last SUCCESSFUL scan's candidate rows, cached for the BRAIN meta-engine and
+   published on the key engine.js's Stage-0 already reads. Aborted/failed
+   re-runs never touch them — the previous good snapshot keeps its original
+   `at`. The getter hands out DEEP-FROZEN deep copies and never throws. */
+var __oiSnap = null;
+function __oiStateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = __oiStateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
+function publishOiflowState(results){
+  try{
+    var rows = [], syms = [], i, r, clsTxt;
+    for (i = 0; i < results.length; i++){
+      r = results[i];
+      if (!r || !r.cls) continue;
+      clsTxt = (typeof r.cls.regime === 'string' && r.cls.regime) ? r.cls.regime
+             : ((r.cls.evidence && r.cls.evidence.length) ? String(r.cls.evidence[0]) : '');
+      rows.push({ sym: r.sym, dir: r.cls.dir,
+                  evidence: (typeof r.cls.score === 'number' && isFinite(r.cls.score)) ? r.cls.score : 0,
+                  cls: clsTxt });
+      syms.push(r.sym);
+    }
+    var at = Date.now();
+    __oiSnap = { results: rows, at: at };
+    /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
+       mirrors window.oiflowState() for the BRAIN. */
+    G.HG_oiflowResults = { results: rows, syms: syms, at: at };
+  }catch(e){ /* state publishing must never break the scan */ }
+}
+
 async function oiflowRefresh(){
   try{
     if (__scanning) return 'busy';
@@ -477,6 +530,7 @@ async function runScan(el){
       + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
       + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
     if (!results.length) empty.style.display = 'block';
+    publishOiflowState(results);   /* BRAIN: cache + publish the successful scan (aborts above never reach here) */
   }catch(e){
     stat.className = 'note warn';
     stat.textContent = 'oiflow scan failed: ' + (e && e.message ? e.message : e);
@@ -526,6 +580,9 @@ function mount(el){
 
 /* ---------------- registration ---------------- */
 G.oiflowClassify = oiflowClassify;
+G.oiflowState = function(){
+  try{ return __oiSnap ? __oiStateView(__oiSnap) : null; }catch(e){ return null; }
+};
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'oiflow', label: 'OI FLOW', mount: function(el){ mount(el); }, refresh: oiflowRefresh });
 

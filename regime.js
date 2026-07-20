@@ -33,6 +33,15 @@ directional bias (LONG-ONLY / SHORT-ONLY / BOTH / STAND-ASIDE), preferred
 setup types (trend-follow vs mean-revert vs carry, conditioned on the R4/R8
 gauge rows), position-size guidance (full / half / quarter from |score|),
 and one explicit INVALIDATION line. Rendered as a card under the verdict.
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL gauge scan the verdict is
+cached in a module-local snapshot and exposed as window.regimeState() for
+the BRAIN meta-engine. Zero-arg, NEVER throws (try-catch -> null), returns
+null before the first successful scan, otherwise a DEEP-FROZEN deep copy:
+  { label: <regime word string>, score: <number>,
+    playbook: <window.regimePlaybook output object | null>, at: <epochMs> }
+An aborted/failed re-run keeps the PREVIOUS good snapshot with its original
+`at` — good data is never replaced by a failed run.
 ========================================================================= */
 (function(){
 'use strict';
@@ -582,6 +591,35 @@ function rgRender(out, v, meta){
    gives refresh its 'busy' status. */
 var rgTab = { els: null, busy: false, hasRun: false };
 
+/* ---------------- BRAIN state snapshot (window.regimeState) ----------------
+   Last SUCCESSFUL scan's verdict, cached for the BRAIN meta-engine. Failed
+   re-runs never touch it — the previous good snapshot keeps its original
+   `at`. The getter hands out DEEP-FROZEN deep copies and never throws. */
+var __rgSnap = null;
+function __rgStateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = __rgStateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
+function setRgSnapshot(v){
+  try{
+    if (!v || typeof v !== 'object') return;
+    var pb = null;
+    try{ pb = regimePlaybook(v); }catch(ePb){ pb = null; }
+    __rgSnap = {
+      label: (typeof v.word === 'string' && v.word) ? v.word : 'UNKNOWN',
+      score: (typeof v.score === 'number' && isFinite(v.score)) ? v.score : 0,
+      playbook: pb,
+      at: Date.now()
+    };
+  }catch(e){ /* snapshotting must never break the scan */ }
+}
+
 /* refresh contract: async, NEVER throws, terse status string —
    'refreshed' | 'skipped: not run yet' | 'busy'. Safe before mount. */
 async function refreshRegime(){
@@ -620,6 +658,7 @@ async function rgRun(els){
 
     var v = regimeVerdict(components);
     rgRender(els.out, v, { fails: fails, total: 8 });
+    setRgSnapshot(v); /* BRAIN: cache the successful scan (catch path below never reaches here) */
     if (els.stat) els.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) +
       ' UTC · ' + (8 - fails) + '/8 sources ok · cached 60s (stables 10m)';
     rgSetProg(els.prog, 1);
@@ -667,6 +706,9 @@ function mountRegime(el){
 
 W.regimeVerdict = regimeVerdict;
 W.regimePlaybook = regimePlaybook;
+W.regimeState = function(){
+  try{ return __rgSnap ? __rgStateView(__rgSnap) : null; }catch(e){ return null; }
+};
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'regime', label: 'REGIME', mount: mountRegime, refresh: refreshRegime });
 

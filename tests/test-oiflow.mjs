@@ -512,4 +512,82 @@ Object.defineProperty(nbStat, 'textContent', nbDesc);
 const nRef3 = await tab2.refresh();
 ok(nRef3 === 'refreshed', 'N: busy flag released after the error path — module refreshes again (got "' + nRef3 + '")');
 
+/* ================= O) BRAIN state getter — window.oiflowState + HG_oiflowResults =================
+   Fresh module instance (clean closure state). Covers: getter exposed; null
+   pre-run; exact {results:[{sym,dir,evidence:number,cls:string}], at} shape
+   after a successful scan; HG_oiflowResults published in the engine.js
+   Stage-0 contract form ({syms, at} + mirrored results); deep-frozen fresh
+   copies; an honest-abort re-run keeps the PREVIOUS good snapshot with its
+   original `at`; the getter never throws with sabotaged internals. */
+console.log('== BRAIN state getter (window.oiflowState + HG_oiflowResults) ==');
+globalThis.window = {};   /* fresh window -> fresh module instance, clean scan + snapshot state */
+vm.runInThisContext(fs.readFileSync(root + 'oiflow.js', 'utf8'), { filename: 'oiflow.js' });
+const tab3 = globalThis.window.HG_tabs[0];
+ok(tab3 && tab3.id === 'oiflow' && typeof tab3.refresh === 'function', 'O: fresh registration found');
+ok(typeof globalThis.window.oiflowState === 'function', 'O: window.oiflowState exposed');
+ok(globalThis.window.oiflowState() === null, 'O: null before the first successful scan');
+ok(globalThis.window.HG_oiflowResults === undefined, 'O: HG_oiflowResults not written before the first scan');
+
+stubLegs({
+  AAAUSDT: { mark: 100, chg24: 2,   turnover: 500e6, oi: [100, 103], taker: 1.2, longPct: 50 }, // LONG x2 card
+  BBBUSDT: { mark: 50,  chg24: 0.1, turnover: 400e6, oi: [100, 100], taker: 1.0, longPct: 50 }  // no evidence -> no card
+});
+globalThis.binanceKlines = async function(sym, interval, limit){ return mkRows(limit || 120, 100, 0.1); };
+delete globalThis.smartSetup; delete globalThis.atr; delete globalThis.ema; // -> context-only card (state does not need a plan)
+
+const O = freshPane();
+tab3.mount(O.pane);
+O.stubs['#oiflowRun']._handler();
+await waitScan(O.stubs);
+ok(O.stubs['#oiflowStat'].textContent.indexOf('done · 0 setups (0 confirmed) · 1 context') === 0,
+   'O: fixture scan completes (1 context card, 1 symbol without evidence)');
+
+const oState = globalThis.window.oiflowState();
+ok(oState && Array.isArray(oState.results) && typeof oState.at === 'number' && isFinite(oState.at),
+   'O: shape = {results:[], at:<epochMs>} after the successful scan');
+ok(oState.results.length === 1, 'O: only the evidence-backed candidate is published');
+const oRow = oState.results[0];
+ok(Object.keys(oRow).sort().join(',') === 'cls,dir,evidence,sym',
+   'O: result row keys exactly {sym, dir, evidence, cls}');
+ok(oRow.sym === 'AAAUSDT' && oRow.dir === 'LONG' && oRow.evidence === 2
+   && oRow.cls === 'NEW LONGS (trend fuel)',
+   'O: row carries sym/dir, the agreeing-read COUNT (evidence: 2) and the classifier label (cls string)');
+ok(Object.isFrozen(oState) && Object.isFrozen(oState.results) && Object.isFrozen(oRow),
+   'O: the view is deep-frozen (state, results, rows all frozen)');
+const oState2 = globalThis.window.oiflowState();
+ok(oState2 !== oState && oState2.results !== oState.results
+   && JSON.stringify(oState2) === JSON.stringify(oState),
+   'O: each call hands a fresh deep copy with identical content');
+
+/* HG_oiflowResults — the key engine.js Stage-0 already feature-checks */
+const oPub = globalThis.window.HG_oiflowResults;
+ok(oPub && typeof oPub === 'object' && typeof oPub.at === 'number' && isFinite(oPub.at),
+   'O: HG_oiflowResults published with an `at` stamp');
+ok(Array.isArray(oPub.syms) && oPub.syms.length === 1 && oPub.syms[0] === 'AAAUSDT',
+   'O: HG_oiflowResults.syms is the engine.js Stage-0 contract form (symbol list)');
+ok(Array.isArray(oPub.results) && oPub.results.length === 1 && oPub.results[0].sym === 'AAAUSDT'
+   && oPub.results[0].dir === 'LONG' && oPub.results[0].evidence === 2,
+   'O: HG_oiflowResults.results mirrors the oiflowState rows');
+
+/* honest abort (binance layer gone) keeps the PREVIOUS good snapshot + publisher key */
+delete globalThis.binancePerpUniverse;
+const oRef = await tab3.refresh();
+ok(oRef === 'refreshed' && O.stubs['#oiflowStat'].textContent.indexOf('not loaded') >= 0,
+   'O: re-run aborts honestly (data layer missing), refresh still resolves');
+const oState3 = globalThis.window.oiflowState();
+ok(oState3 && oState3.at === oState.at && oState3.results.length === 1
+   && oState3.results[0].sym === 'AAAUSDT'
+   && globalThis.window.HG_oiflowResults.at === oPub.at,
+   'O: stale-good snapshot + publisher key preserved after the abort (same at, same content)');
+
+/* sabotaged internals: getter degrades to null, never throws, then recovers */
+const keepIsArrayO = Array.isArray;
+let oThrew = false, oGot = 'unset';
+Array.isArray = undefined;
+try{ oGot = globalThis.window.oiflowState(); }catch(e){ oThrew = true; }
+Array.isArray = keepIsArrayO;
+ok(!oThrew && oGot === null,
+   'O: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
+ok(globalThis.window.oiflowState() !== null, 'O: getter recovers once internals are restored');
+
 console.log('\nALL ' + passed + ' OIFLOW ASSERTIONS PASSED');

@@ -276,5 +276,73 @@ try { vm.runInContext(readFileSync(path.join(root, 'goldspot.js'), 'utf8'), bare
 catch(e){ bareThrew = e; }
 assert(!bareThrew, 'goldspot.js loads cleanly with no window defined');
 
+/* ================= 5) BRAIN state getter — window.goldspotState =================
+   Fresh context: getter exposed; null pre-run; populated with the last
+   goldBasisSignal result + `at` after a successful run; deep-frozen fresh
+   copies; a failed re-run (spot + perp both down) keeps the previous good
+   snapshot with its original `at`; sabotaged internals -> null, no throw. */
+{
+  const s2 = {
+    window: {}, console, setTimeout, clearTimeout, AbortController,
+    fetch: async (url) => {
+      if (String(url) === 'https://api.gold-api.com/price/XAU')
+        return { ok: true, status: 200, json: async () => ({ price: 3000, updatedAt: '2026-04-25T12:00:00.000Z' }) };
+      return { ok: false, status: 404, json: async () => null };
+    },
+    binanceFunding: async (sym) => (sym === 'XAUUSDT'
+      ? { fundingPct: 0.01, markPrice: 3005, nextFundingTime: 1800000000000 } : null),
+    binanceFundingInfo: async () => ({ XAUUSDT: { intervalHours: 8 } })
+  };
+  const ctx2 = vm.createContext(s2);
+  vm.runInContext(readFileSync(path.join(root, 'goldspot.js'), 'utf8'), ctx2, { filename: 'goldspot.js' });
+  const W2 = s2.window;
+  const tab2 = W2.HG_tabs[0];
+
+  assert(typeof W2.goldspotState === 'function', 'state: window.goldspotState exposed');
+  assert(W2.goldspotState() === null, 'state: null before the first successful run');
+  assert(W2.goldspotState() === null, 'state: still null after a skipped refresh (never run)');
+
+  const el2 = fakeEl();
+  tab2.mount(el2);
+  const ui2 = { btn: el2._nodes['[data-gs="run"]'], note: el2._nodes['[data-gs="note"]'], out: el2._nodes['[data-gs="out"]'] };
+  const stRun = await ui2.btn._click();
+  assert(stRun === 'refreshed', 'state: fixture run resolves "refreshed"');
+
+  const st = W2.goldspotState();
+  assert(st && typeof st === 'object' && typeof st.at === 'number' && isFinite(st.at),
+         'state: populated after the successful run (signal + at)');
+  assert(Object.keys(st).sort().join(',') === 'at,basisPct,evidence,verdict',
+         'state: keys exactly {basisPct, verdict, evidence, at}');
+  assert(st.verdict === 'longs-crowding' && Math.abs(st.basisPct - 0.1667) < 1e-9
+         && Array.isArray(st.evidence) && st.evidence.join(' ').indexOf('perp premium') > -1,
+         'state: content mirrors the last goldBasisSignal result (premium +0.167%, longs-crowding)');
+  assert(Object.isFrozen(st) && Object.isFrozen(st.evidence), 'state: the view is frozen (state + evidence)');
+  const st2 = W2.goldspotState();
+  assert(st2 !== st && st2.evidence !== st.evidence && JSON.stringify(st2) === JSON.stringify(st),
+         'state: each call hands a fresh copy with identical content');
+
+  /* failed re-run (spot + perp both down) keeps the PREVIOUS good snapshot + original at */
+  s2.fetch = async () => ({ ok: false, status: 503, json: async () => null });
+  s2.binanceFunding = undefined;
+  s2.binanceFundingInfo = undefined;
+  let failStatus = null, failThrew = null;
+  try{ failStatus = await tab2.refresh(); }catch(e){ failThrew = e; }
+  assert(!failThrew && typeof failStatus === 'string' && failStatus.indexOf('failed') === 0,
+         'state: the failing re-run reports "failed: ...", never throws');
+  const st3 = W2.goldspotState();
+  assert(st3 && st3.at === st.at && st3.verdict === 'longs-crowding'
+         && Math.abs(st3.basisPct - 0.1667) < 1e-9,
+         'state: stale-good snapshot preserved after the failed re-run (same at, same content)');
+
+  /* sabotaged internals: getter degrades to null, never throws, then recovers */
+  let sThrew = null, sGot = 'unset';
+  vm.runInContext('globalThis.__keepIA = Array.isArray; Array.isArray = undefined;', ctx2);
+  try{ sGot = W2.goldspotState(); }catch(e){ sThrew = e; }
+  vm.runInContext('Array.isArray = globalThis.__keepIA; delete globalThis.__keepIA;', ctx2);
+  assert(!sThrew && sGot === null,
+         'state: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
+  assert(W2.goldspotState() !== null, 'state: getter recovers once internals are restored');
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

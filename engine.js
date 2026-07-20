@@ -60,6 +60,19 @@ first user run (a global refresh must never trigger an expensive first-time
 full-universe scan), otherwise it re-runs the same funnel the RUN button
 triggers and returns 'refreshed'. tests/test-engine.mjs drives gateCandidate
 and the refresh contract with stubbed globals.
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL scan the funnel output is
+cached in a module-local snapshot and exposed as window.engineState() for
+the BRAIN meta-engine. Zero-arg, NEVER throws (try-catch -> null), returns
+null before the first successful scan, otherwise a DEEP-FROZEN deep copy:
+  { survivors: [ { sym, dir, conviction, plan: {entry,stop,t1,t2} | null,
+                   gatesPassed } ],
+    rejected:  [ { sym, vetoGate } ],
+    at: <epochMs> }
+survivors mirror the execution cards rendered (plan null when the setup
+builder declined — direction real, levels not fabricated). An aborted or
+failed re-run keeps the PREVIOUS good snapshot with its original `at` —
+good data is never replaced by a failed run.
 ========================================================================= */
 (function(){
 'use strict';
@@ -517,6 +530,45 @@ var __busy = false;   // module-local re-entry guard — no global timers anywhe
 var __hasRun = false; // true once a scan attempt has completed (user run or honest abort)
 var __el = null;      // last mounted pane, so refresh() can re-run without a click
 
+/* ---------------- BRAIN state snapshot (window.engineState) ----------------
+   Last SUCCESSFUL scan's funnel output, cached for the BRAIN meta-engine.
+   Aborted/failed re-runs never touch it — the previous good snapshot keeps
+   its original `at`. The getter below hands out DEEP-FROZEN deep copies so
+   callers can never mutate module state, and never throws. */
+var __snap = null;
+function __stateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = __stateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
+function setSnapshot(survivors, rejected){
+  try{
+    var sv = [], i, rec, res, plan;
+    for (i = 0; i < survivors.length; i++){
+      rec = survivors[i]; res = rec && rec.res;
+      if (!rec || !res) continue;
+      plan = null;
+      if (res.plan && isFinite(res.plan.entry) && isFinite(res.plan.stop)
+          && isFinite(res.plan.t1) && isFinite(res.plan.t2))
+        plan = { entry: res.plan.entry, stop: res.plan.stop, t1: res.plan.t1, t2: res.plan.t2 };
+      sv.push({ sym: rec.sym, dir: res.dir, conviction: res.conviction, plan: plan,
+                gatesPassed: (typeof res.gatesPassed === 'number' && isFinite(res.gatesPassed)) ? res.gatesPassed : 0 });
+    }
+    var rj = [];
+    for (i = 0; i < rejected.length; i++){
+      rec = rejected[i]; res = rec && rec.res;
+      if (!rec || !res) continue;
+      rj.push({ sym: rec.sym, vetoGate: (typeof res.vetoGate === 'string') ? res.vetoGate : null });
+    }
+    __snap = { survivors: sv, rejected: rj, at: Date.now() };
+  }catch(e){ /* snapshotting must never break the scan */ }
+}
+
 function setProg(el, f){
   var p = el.querySelector('#engineProg');
   if (!p) return;
@@ -605,6 +657,7 @@ async function runScan(el){
       + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
       + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
     if (!survivors.length) empty.style.display = 'block';
+    setSnapshot(survivors, rejected);   /* BRAIN: cache the successful scan (aborts above never reach here) */
   }catch(e){
     stat.className = 'note warn';
     stat.textContent = 'engine scan failed: ' + (e && e.message ? e.message : e);
@@ -679,6 +732,9 @@ async function refresh(){
 
 /* ---------------- registration ---------------- */
 G.gateCandidate = gateCandidate;
+G.engineState = function(){
+  try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
+};
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'execute', label: 'EXECUTE', mount: function(el){ mount(el); }, refresh: refresh });
 

@@ -27,6 +27,10 @@
         an expensive first scan, even with data available), 'refreshed'
         after a completed run, 'busy' while a scan is in flight, double-
         refresh still busy, never throws with every global absent
+     Q) BRAIN state getter — window.engineState: null pre-run, exact
+        {survivors, rejected, at} shape post-run, deep-frozen copies,
+        stale-good snapshot preserved after an honest abort, never throws
+        with sabotaged internals
    No live network. Run: node tests/test-engine.mjs */
 
 import fs from 'node:fs';
@@ -712,5 +716,91 @@ try{ status = await tab3.refresh(); }catch(e){ threw = true; }
 ok(!threw && typeof status === 'string' && status.length > 0,
    'P: refresh with every global absent never throws and still returns a terse status string');
 ok(status === 'refreshed', 'P: refresh re-runs the honest abort path → "refreshed" (no fabricated work claimed)');
+
+/* ================= Q) BRAIN state getter — window.engineState =================
+   Fresh module instance (clean closure state). Covers: getter exposed; null
+   before the first successful run; populated with the exact contract shape
+   after a successful scan (survivors = execution cards, rejected = WHY
+   ASIDE rows); DEEP-FROZEN deep copies each call; an honest-abort re-run
+   keeps the PREVIOUS good snapshot with its original `at`; the getter never
+   throws, even with sabotaged internals. */
+console.log('== BRAIN state getter (window.engineState) ==');
+vm.runInThisContext(fs.readFileSync(root + 'engine.js', 'utf8'), { filename: 'engine.js' });
+const tabQ = globalThis.window.HG_tabs[globalThis.window.HG_tabs.length - 1];
+ok(tabQ && tabQ.id === 'execute', 'Q: fresh registration found');
+ok(typeof globalThis.window.engineState === 'function', 'Q: window.engineState exposed');
+ok(globalThis.window.engineState() === null, 'Q: null before the first successful run');
+
+stubIndicators(); stubSmartClassifyAgree(); stubSmartSetup();
+globalThis.hgNewsRisk = function(){ return { blackout: false }; };
+globalThis.binancePerpUniverse = async function(){ return ['BTCUSDT', 'SOLUSDT']; };
+globalThis.binanceTickers24h = async function(){
+  return { BTCUSDT: { mark: 106, chg24: 2, turnoverUsd: 800e6 },
+           SOLUSDT: { mark: 106, chg24: 3, turnoverUsd: 900e6 } };
+};
+globalThis.binanceFunding = async function(){ return { markPrice: 106, fundingPct: 0.01 }; };
+globalThis.binanceKlines = async function(sym, interval, limit){
+  if (sym === 'SOLUSDT') return mkRows(limit || 260, 106, 7, 3); // weak close -> G2 veto
+  return mkRows(limit || 260, 106, 0.25, 1.0);
+};
+delete globalThis.binanceOIHistory; delete globalThis.binanceLongShort;
+delete globalThis.binanceTopTraders; delete globalThis.binanceTakerRatio;
+delete globalThis.window.HG_oiflowResults; delete globalThis.window.HG_squeezeResults;
+
+const Q = freshPane();
+tabQ.mount(Q.pane);
+Q.stubs['#engineRun']._handler();
+await waitScan(Q.stubs);
+ok(Q.stubs['#engineStat'].textContent.indexOf('done · 1 executions') === 0,
+   'Q: fixture scan completes (1 execution, 1 aside)');
+
+const qState = globalThis.window.engineState();
+ok(qState && typeof qState === 'object', 'Q: populated after the successful run');
+ok(typeof qState.at === 'number' && isFinite(qState.at)
+   && Array.isArray(qState.survivors) && Array.isArray(qState.rejected),
+   'Q: shape = {survivors:[], rejected:[], at:<epochMs>}');
+ok(qState.survivors.length === 1 && qState.rejected.length === 1,
+   'Q: 1 survivor + 1 rejected mirrors the rendered cards / WHY ASIDE');
+const qSv = qState.survivors[0];
+ok(Object.keys(qSv).sort().join(',') === 'conviction,dir,gatesPassed,plan,sym',
+   'Q: survivor row keys exactly {sym, dir, conviction, plan, gatesPassed}');
+ok(qSv.sym === 'BTCUSDT' && qSv.dir === 'long' && qSv.conviction === 'STRONG' && qSv.gatesPassed === 6,
+   'Q: survivor carries sym/dir/conviction/gatesPassed from the funnel result');
+ok(qSv.plan && qSv.plan.entry === 106 && qSv.plan.stop === 101 && qSv.plan.t1 === 116 && qSv.plan.t2 === 123.5
+   && Object.keys(qSv.plan).sort().join(',') === 'entry,stop,t1,t2',
+   'Q: survivor plan reduced to exactly {entry, stop, t1, t2}');
+ok(qState.rejected[0].sym === 'SOLUSDT' && qState.rejected[0].vetoGate === 'G2'
+   && Object.keys(qState.rejected[0]).sort().join(',') === 'sym,vetoGate',
+   'Q: rejected rows carry exactly {sym, vetoGate}');
+ok(Object.isFrozen(qState) && Object.isFrozen(qState.survivors) && Object.isFrozen(qSv)
+   && Object.isFrozen(qSv.plan) && Object.isFrozen(qState.rejected),
+   'Q: the view is deep-frozen (state, rows and plan all frozen)');
+const qState2 = globalThis.window.engineState();
+ok(qState2 !== qState && qState2.survivors !== qState.survivors
+   && JSON.stringify(qState2) === JSON.stringify(qState),
+   'Q: each call hands a fresh deep copy with identical content');
+
+/* honest abort (data layer gone) keeps the PREVIOUS good snapshot + original at */
+delete globalThis.binancePerpUniverse; delete globalThis.binanceTickers24h;
+const Q2 = freshPane();
+tabQ.mount(Q2.pane);
+Q2.stubs['#engineRun']._handler();
+await waitScan(Q2.stubs);
+ok(Q2.stubs['#engineStat'].textContent.indexOf('empty universe') >= 0,
+   'Q: re-run aborts honestly (empty universe)');
+const qState3 = globalThis.window.engineState();
+ok(qState3 && qState3.at === qState.at && qState3.survivors.length === 1
+   && qState3.survivors[0].sym === 'BTCUSDT' && qState3.rejected[0].vetoGate === 'G2',
+   'Q: stale-good snapshot preserved after the abort (same at, same content)');
+
+/* sabotaged internals: getter degrades to null, never throws, then recovers */
+const keepIsArray = Array.isArray;
+let qThrew = false, qGot = 'unset';
+Array.isArray = undefined;
+try{ qGot = globalThis.window.engineState(); }catch(e){ qThrew = true; }
+Array.isArray = keepIsArray;
+ok(!qThrew && qGot === null,
+   'Q: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
+ok(globalThis.window.engineState() !== null, 'Q: getter recovers once internals are restored');
 
 console.log('\nALL ' + passed + ' ENGINE ASSERTIONS PASSED');

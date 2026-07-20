@@ -32,6 +32,16 @@ window.rotationTrendTag (pure attention tag), window.rotationMergeTrending
 (pure trending/markets merge), window.rotationLeaders (pure rank helper),
 plus the window.HG_tabs registration below (with the house refresh contract:
 async, never throws, skips before first run, busy-guarded, status string).
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL run (fresh fetch with any data,
+or a live cache hit) the last window.rotationSignal result is cached in a
+module-local snapshot and exposed as window.rotationState() for the BRAIN
+meta-engine. Zero-arg, NEVER throws (try-catch -> null), returns null before
+the first successful run, otherwise a DEEP-FROZEN deep copy:
+  { season, altPct, evidence: [strings], at: <epochMs> }
+(i.e. the rotationSignal result PLUS `at`). A failed re-run (every CoinGecko
+leg down) keeps the PREVIOUS good snapshot with its original `at` — good
+data is never replaced by a failed run.
 ========================================================================= */
 (function(){
 'use strict';
@@ -402,7 +412,33 @@ function renderTrendingPanel(merged){
 }
 
 /* ============================ scan orchestrator ============================ */
-var __rot = { cache: null, busy: false, ranOnce: false, ui: null };
+var __rot = { cache: null, busy: false, ranOnce: false, ui: null, stateSnap: null };
+
+/* BRAIN state snapshot (window.rotationState): the last rotationSignal
+   result + `at`, cached only on SUCCESSFUL runs — a failed re-run keeps the
+   previous good snapshot with its original `at`. The getter hands out
+   DEEP-FROZEN deep copies and never throws. */
+function setRotSnapshot(sig){
+  try{
+    if (!sig || typeof sig !== 'object') return;
+    __rot.stateSnap = {
+      season: sig.season,
+      altPct: (typeof sig.altPct === 'number' && isFinite(sig.altPct)) ? sig.altPct : null,
+      evidence: Array.isArray(sig.evidence) ? sig.evidence.slice() : [],
+      at: Date.now()
+    };
+  }catch(e){ /* snapshotting must never break the scan */ }
+}
+function rotStateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = rotStateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
 
 async function runRotation(ui, opts){
   if (__rot.busy) return 'busy';
@@ -448,6 +484,7 @@ async function runRotation(ui, opts){
         setNote(ui, 'all sources unavailable — showing empty state.', true);
       } else {
         var sig = rotationSignal(data);
+        if (status === 'refreshed') setRotSnapshot(sig); /* BRAIN: only a successful run overwrites the snapshot */
         var degraded = [];
         if (!data.markets) degraded.push('markets');
         if (!data.global) degraded.push('global');
@@ -513,6 +550,9 @@ if (typeof window !== 'undefined'){
   window.rotationTrendTag = rotationTrendTag;
   window.rotationMergeTrending = rotationMergeTrending;
   window.rotationLeaders = rotationLeaders;
+  window.rotationState = function(){
+    try{ return __rot.stateSnap ? rotStateView(__rot.stateSnap) : null; }catch(e){ return null; }
+  };
   window.HG_tabs = window.HG_tabs || [];
   window.HG_tabs.push({ id: 'rotation', label: 'ROTATION', mount: mount, refresh: refreshRotation });
 }

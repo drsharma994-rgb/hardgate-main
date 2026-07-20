@@ -549,6 +549,7 @@ table tr:hover td{background:rgba(217,164,65,.045)}
 <script src="onchain.js"></script>
 <script src="rotation.js"></script>
 <script src="goldspot.js"></script>
+<script src="brain.js"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -1731,7 +1732,7 @@ cardsEl.innerHTML = __cardsHtml.join('');
    later) — missing ids are skipped everywhere, so showTab/setHgGroup never
    break on an absent tab. */
 const HG_NAV_GROUPS = [
-  { id:'overview',   label:'OVERVIEW',     tabs:['execute','bias','regime','trendmx','rotation','news'] },
+  { id:'overview',   label:'OVERVIEW',     tabs:['brain','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','best','carry'] },
@@ -3064,6 +3065,8 @@ async function runGoldSetup(){
       swingStop: (casc !== 'mixed') ? lastSwing(h4, casc, 30) : null,
       weekRange: weekRange
     });
+    /* stash for the BRAIN tab's gold lane (brain.js reads aside/dir/confidence/reason + entry/stop/t1/t2) */
+    try{ window.__hgGoldSetupDecision = Object.assign({}, decision, { at: Date.now() }); }catch(e){}
     const stampsHtml = decision.stamps.map(function(s){
       return '<span class="gpip' + (s.ok === true ? ' ok' : '') + '"'
         + (s.ok === false ? ' style="color:var(--short);border-color:rgba(228,88,107,.5);background:rgba(228,88,107,.08)"' : '')

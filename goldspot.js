@@ -26,6 +26,16 @@ Exports (and ONLY these): window.goldBasisSignal (pure basis classifier),
 window.goldFundingAnnualized (pure funding annualizer), plus the
 window.HG_tabs registration below (house refresh contract: async, never
 throws, skips before first run, busy-guarded, status string).
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL run (fresh fetch with a spot or
+perp leg, or a live cache hit) the last window.goldBasisSignal result is
+cached in a module-local snapshot and exposed as window.goldspotState() for
+the BRAIN meta-engine. Zero-arg, NEVER throws (try-catch -> null), returns
+null before the first successful run, otherwise a DEEP-FROZEN deep copy:
+  { basisPct, verdict, evidence: [strings], at: <epochMs> }
+(i.e. the goldBasisSignal result PLUS `at`). A failed re-run (spot and perp
+both down) keeps the PREVIOUS good snapshot with its original `at` — good
+data is never replaced by a failed run.
 ========================================================================= */
 (function(){
 'use strict';
@@ -256,7 +266,33 @@ function renderBasisPanel(data, sig){
 }
 
 /* ============================ scan orchestrator ============================ */
-var __gs = { cache: null, busy: false, ranOnce: false, ui: null };
+var __gs = { cache: null, busy: false, ranOnce: false, ui: null, stateSnap: null };
+
+/* BRAIN state snapshot (window.goldspotState): the last goldBasisSignal
+   result + `at`, cached only on SUCCESSFUL runs — a failed re-run keeps the
+   previous good snapshot with its original `at`. The getter hands out
+   DEEP-FROZEN deep copies and never throws. */
+function setGsSnapshot(sig){
+  try{
+    if (!sig || typeof sig !== 'object') return;
+    __gs.stateSnap = {
+      basisPct: (typeof sig.basisPct === 'number' && isFinite(sig.basisPct)) ? sig.basisPct : null,
+      verdict: sig.verdict,
+      evidence: Array.isArray(sig.evidence) ? sig.evidence.slice() : [],
+      at: Date.now()
+    };
+  }catch(e){ /* snapshotting must never break the scan */ }
+}
+function gsStateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = gsStateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
 
 async function runGoldSpot(ui, opts){
   if (__gs.busy) return 'busy';
@@ -304,6 +340,7 @@ async function runGoldSpot(ui, opts){
           perp: data.perp ? data.perp.mark : null,
           funding: funding
         });
+        if (status === 'refreshed') setGsSnapshot(sig); /* BRAIN: only a successful run overwrites the snapshot */
         var degraded = [];
         if (!data.spot) degraded.push('spot');
         if (!data.perp) degraded.push('perp');
@@ -367,6 +404,9 @@ async function refreshGoldSpot(){
 if (typeof window !== 'undefined'){
   window.goldBasisSignal = goldBasisSignal;
   window.goldFundingAnnualized = goldFundingAnnualized;
+  window.goldspotState = function(){
+    try{ return __gs.stateSnap ? gsStateView(__gs.stateSnap) : null; }catch(e){ return null; }
+  };
   window.HG_tabs = window.HG_tabs || [];
   window.HG_tabs.push({ id: 'goldspot', label: 'GOLD SPOT', mount: mount, refresh: refreshGoldSpot });
 }
