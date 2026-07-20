@@ -1,0 +1,95 @@
+/* =========================================================================
+   HARDGATE service worker — cache hg-v6
+   Fresh data is sacred in trading: NETWORK-FIRST for EVERYTHING. The cache
+   exists ONLY as an offline fallback for the static app shell.
+   NEVER cached: /api/ and /api/proxy responses, non-GET requests, cross-origin
+   market data (Delta / CoinDCX / Binance / gold feeds), and responses marked
+   no-store/private. install/activate are wrapped so they never throw.
+   ========================================================================= */
+'use strict';
+
+const HG_CACHE = 'hg-v6';
+
+/* Static app shell, precached best-effort for the offline fallback. A single
+   missing file must never fail install — runtime network-first backfills. */
+const HG_SHELL = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './icon.svg',
+  './indicators.js', './indicators2.js', './store.js', './binance.js', './macro.js',
+  './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js',
+  './goldpro.js', './strats.js', './meanrev.js', './liqs.js', './xuniverse.js',
+  './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
+  './brain.js', './scorecard.js'
+];
+
+/* true → the request/response must NEVER touch the cache (fresh market data
+   semantics). Doubt defaults to true: a missed cache entry is cheap, a stale
+   market number is not. */
+function hgNeverCache(req, url){
+  try{
+    if (!req || req.method !== 'GET') return true;
+    if (!url || url.origin !== self.location.origin) return true;  /* exchange/market APIs are cross-origin */
+    const p = url.pathname || '';
+    if (p === '/api' || p.indexOf('/api/') === 0) return true;     /* serverless API routes */
+    if ((url.href || '').indexOf('/api/proxy') !== -1) return true;/* proxy passthroughs */
+    return false;
+  }catch(e){ return true; }
+}
+
+self.addEventListener('install', function(ev){
+  ev.waitUntil(
+    caches.open(HG_CACHE)
+      .then(function(c){ return c.addAll(HG_SHELL); })
+      .catch(function(){ /* precache is best-effort — never fail install */ })
+      .then(function(){ try{ return self.skipWaiting(); }catch(e){} })
+  );
+});
+
+self.addEventListener('activate', function(ev){
+  ev.waitUntil(
+    caches.keys()
+      .then(function(keys){
+        return Promise.all(keys.map(function(k){
+          if (k !== HG_CACHE) return caches.delete(k);             /* old-cache cleanup */
+          return undefined;
+        }));
+      })
+      .catch(function(){ /* cleanup failure must not block activation */ })
+      .then(function(){ try{ return self.clients.claim(); }catch(e){} })
+  );
+});
+
+self.addEventListener('fetch', function(ev){
+  const req = ev.request;
+  if (!req || req.method !== 'GET') return;                        /* non-GET → straight to network, untouched */
+  let url = null;
+  try{ url = new URL(req.url); }catch(e){ return; }                /* unparsable → let the browser handle it */
+
+  const cacheable = !hgNeverCache(req, url);
+
+  /* network-first for EVERYTHING; cache consulted only when the network fails */
+  ev.respondWith(
+    fetch(req).then(function(res){
+      try{
+        const cc = (res && res.headers && res.headers.get('cache-control')) || '';
+        if (cacheable && res && res.ok && !/no-store|private/i.test(cc)){
+          const copy = res.clone();
+          caches.open(HG_CACHE).then(function(c){ c.put(req, copy); }).catch(function(){});
+        }
+      }catch(e){}
+      return res;
+    }).catch(function(netErr){
+      return caches.match(req).then(function(hit){
+        if (hit) return hit;                                       /* offline fallback: static shell only */
+        if (req.mode === 'navigate'){
+          return caches.match('./index.html').then(function(shell){
+            return shell || Promise.reject(netErr);
+          });
+        }
+        throw netErr;                                              /* honest failure — never a stale number */
+      });
+    })
+  );
+});

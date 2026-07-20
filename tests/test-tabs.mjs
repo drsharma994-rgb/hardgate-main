@@ -15,6 +15,13 @@
      5. xuniverse.js <script src> tag is present and ordered after binance.js
         and before engine.js (no-tab library consumed by engine/brain),
      6. getTickers / candlesRangeRaw stay reachable as window-scope globals.
+     7. SCORECARD wiring: scorecard.js <script src> tag ordered after brain.js,
+        'scorecard' in the STRATEGIES group + HG_TAB_GROUP.
+     8. PWA polish: <link rel="manifest"> + theme-color meta, manifest.webmanifest
+        parses with installable fields + icon.svg, sw.js is versioned (hg-v6),
+        network-first, never caches /api/ or /api/proxy, and the inline
+        serviceWorker registration is guarded (https/localhost only, inside an
+        existing inline block — still exactly 3 inline blocks).
    A stub DOM (auto-vivifying getElementById) and a dead fetch stub keep
    everything offline; boot-time network calls fail fast and are tolerated.
    Run: node tests/test-tabs.mjs */
@@ -215,6 +222,13 @@ assert(iXuniverse !== -1, 'index.html includes <script src="xuniverse.js"></scri
 assert(iBinance !== -1 && iEngine !== -1 && iBinance < iXuniverse && iXuniverse < iEngine,
   'xuniverse.js tag ordered after binance.js and before engine.js');
 
+/* scorecard.js strategy module: wired after brain.js so any brain globals it
+   feature-checks already exist */
+const iBrain = html.indexOf(tagOf('brain.js'));
+const iScorecard = html.indexOf(tagOf('scorecard.js'));
+assert(iScorecard !== -1, 'index.html includes <script src="scorecard.js"></script>');
+assert(iBrain !== -1 && iBrain < iScorecard, 'scorecard.js tag ordered after brain.js');
+
 loadErr = null;
 try{
   blocks.forEach((body, i) => vm.runInContext(body, ctx, { filename: 'index.html:inline-' + (i + 1) }));
@@ -243,7 +257,7 @@ const EXPECTED_GROUPS = {
   overview:   ['brain', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldspot'],
-  strategies: ['strats', 'meanrev', 'best', 'carry'],
+  strategies: ['strats', 'meanrev', 'best', 'carry', 'scorecard'],
   tools:      ['basis', 'search', 'log', 'trade', 'finder']
 };
 assert(run('Array.isArray(HG_NAV_GROUPS)') === true && run('HG_NAV_GROUPS.length') === 5,
@@ -255,9 +269,52 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', regime:'overview',
                    carry:'strategies', goldpro:'gold', strats:'strategies', meanrev:'strategies',
+                   scorecard:'strategies',
                    brain:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
-  'HG_TAB_GROUP maps every dynamic id into its group (brain/execute/news/squeeze/trendmx/oiflow/regime/carry/goldpro/strats/meanrev/rotation/onchain/goldspot)');
+  'HG_TAB_GROUP maps every dynamic id into its group (brain/execute/news/squeeze/trendmx/oiflow/regime/carry/goldpro/strats/meanrev/scorecard/rotation/onchain/goldspot)');
+
+/* ---------------- PWA wiring (manifest + icon + service worker) ---------------- */
+assert(html.indexOf('<link rel="manifest" href="manifest.webmanifest">') !== -1,
+  '<link rel="manifest"> points at manifest.webmanifest');
+assert(/<meta name="theme-color" content="#0A0D12">/.test(html),
+  'theme-color meta matches the app background color (--ink #0A0D12)');
+
+let manifest = null, manifestErr = null;
+try{ manifest = JSON.parse(readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8')); }
+catch(e){ manifestErr = e; }
+assert(!manifestErr, 'manifest.webmanifest parses as JSON' + (manifestErr ? ' — got: ' + manifestErr.message : ''));
+assert(!!manifest && manifest.name === 'HARDGATE' && manifest.short_name === 'HARDGATE',
+  'manifest name + short_name are HARDGATE');
+assert(!!manifest && manifest.display === 'standalone'
+    && manifest.background_color === '#0A0D12' && manifest.theme_color === '#0A0D12',
+  'manifest is installable: display standalone + dark background/theme matching the app CSS');
+assert(!!manifest && Array.isArray(manifest.icons)
+    && manifest.icons.some(ic => ic && /(^|\/)icon\.svg$/.test(ic.src || '') && /maskable/.test(ic.purpose || '')),
+  'manifest icons reference maskable icon.svg');
+
+let swSrc = '', swErr = null;
+try{ swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8'); }catch(e){ swErr = e; }
+assert(!swErr && swSrc.length > 0, 'sw.js exists at project root');
+assert(swSrc.indexOf('hg-v6') !== -1, 'sw.js uses the versioned cache name hg-v6');
+assert(swSrc.indexOf('/api/') !== -1 && swSrc.indexOf('/api/proxy') !== -1,
+  'sw.js explicitly never caches /api/ or /api/proxy responses');
+assert(swSrc.indexOf('skipWaiting') !== -1 && swSrc.indexOf('clients.claim') !== -1,
+  'sw.js activates immediately (skipWaiting + clients.claim)');
+assert(swSrc.indexOf('caches.delete') !== -1 && swSrc.indexOf('HG_CACHE') !== -1,
+  'sw.js cleans up old versioned caches on activate');
+
+/* registration must be guarded: https/localhost only, fully feature-checked,
+   living inside one of the 3 existing inline blocks (no 4th block, file://
+   opens and this vm sandbox skip cleanly) */
+assert(html.indexOf("serviceWorker.register('sw.js')") !== -1, 'inline code registers sw.js');
+assert(blocks.some(b => b.indexOf("serviceWorker.register('sw.js')") !== -1),
+  'sw registration lives inside an existing inline <script> block (still exactly 3 blocks)');
+const regIdx = html.indexOf("serviceWorker.register('sw.js')");
+const guardWindow = html.slice(Math.max(0, regIdx - 1500), regIdx);
+assert(guardWindow.indexOf('location.protocol') !== -1 && guardWindow.indexOf("'https:'") !== -1
+    && guardWindow.indexOf('localhost') !== -1 && guardWindow.indexOf('typeof navigator') !== -1,
+  'sw registration is guarded by typeof-navigator + location.protocol https/localhost checks');
 
 /* ---------------- registration mapping + row-2 layout ---------------- */
 const navIds = navEl.children.map(c => c.id);
@@ -357,7 +414,7 @@ assert(run('HG_GROUP') === 'strategies', 'showTab("best") auto-switches OVERVIEW
 assert(storeMem.get('hg_active_group') === 'strategies', 'showTab-driven group switch persists too');
 
 /* a group chip click shows its tabs AND auto-opens the first AVAILABLE one —
-   strats/meanrev are not registered yet, so STRATEGIES opens BEST */
+   strats/meanrev/scorecard are not registered yet, so STRATEGIES opens BEST */
 run("window.__shown = []; showTab = function(t){ window.__shown.push(t); };");
 const stratChip = chipsRow.children.filter(c => c.getAttribute('data-g') === 'strategies')[0];
 assert(stratChip && Array.isArray(stratChip._ev.click) && stratChip._ev.click.length === 1,

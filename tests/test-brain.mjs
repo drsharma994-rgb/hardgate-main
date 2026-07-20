@@ -799,5 +799,415 @@ console.log('== hard-refresh contract over the combined universe ==');
      'refreshed run still scans the full combined universe');
 }
 
+/* ================= Z) silent-click reproduction: mount resilience =================
+   THE REPORTED BUG: RUN SYNTHESIS renders but the click reveals NOTHING.
+   Root causes exercised here: (a) mount() throws AFTER innerHTML painted but
+   BEFORE the click listener attaches — one big try/catch swallows it, so the
+   button looks alive and stays dead; (b) index.html latches HG_MOUNTED before
+   mount() returns, so a failed mount never re-runs — the module must retry
+   itself; (c) run-path guard failures used to `return` silently. */
+console.log('== silent click: mount throw before listener attach (Z) ==');
+function hostilePane(opts){
+  opts = opts || {};
+  const throwSels = opts.throwSels || {};   /* sel -> 'inf' | n times to throw */
+  const nullSels = opts.nullSels || {};     /* sel -> true: querySelector returns null */
+  const stubs = {};
+  const pane = {
+    _html: '', _text: '', _adj: [],
+    set innerHTML(v){ if (opts.htmlThrows) throw new Error('innerHTML blocked'); this._html = v; },
+    get innerHTML(){ return this._html; },
+    set textContent(v){ this._text = String(v); },
+    get textContent(){ return this._text; },
+    insertAdjacentHTML(pos, html){ this._adj.push(String(html)); },
+    querySelector(sel){
+      if (throwSels[sel] === 'inf') throw new Error('querySelector blocked: ' + sel);
+      if (throwSels[sel] > 0){ throwSels[sel]--; throw new Error('querySelector blocked: ' + sel); }
+      if (nullSels[sel]) return null;
+      if (!stubs[sel]) stubs[sel] = stubEl();
+      return stubs[sel];
+    }
+  };
+  return { pane: pane, stubs: stubs };
+}
+const sleep = ms => new Promise(function(res){ setTimeout(res, ms); });
+async function waitIdle(stubs){
+  const t0 = Date.now();
+  while (stubs['#brainRun'].disabled && Date.now() - t0 < 8000)
+    await new Promise(function(res){ setTimeout(res, 25); });
+}
+
+/* Z1: deps-note wiring explodes — the button must STILL get its listener,
+   and the pane must SAY it degraded (never a dead button with no note) */
+{
+  const WZ1 = freshBrain();
+  const tabZ1 = WZ1.HG_tabs[0];
+  const Z1 = hostilePane({ throwSels: { '#brainDeps': 'inf' } });
+  tabZ1.mount(Z1.pane);
+  ok(!!(Z1.stubs['#brainRun'] && typeof Z1.stubs['#brainRun']._handler === 'function'),
+     'Z1: RUN listener attached even though #brainDeps wiring throws (the silent-click repro)');
+  ok(Z1.stubs['#brainStat'].textContent.indexOf('mount degraded') >= 0
+     && Z1.stubs['#brainStat'].className === 'note warn',
+     'Z1: degraded mount leaves a VISIBLE honest note — got "' + Z1.stubs['#brainStat'].textContent + '"');
+  Z1.stubs['#brainRun']._handler();
+  await waitIdle(Z1.stubs);
+  ok(Z1.stubs['#brainStat'].textContent.indexOf('done ·') === 0,
+     'Z1: the click actually runs the synthesis after the degraded mount — got "' + Z1.stubs['#brainStat'].textContent + '"');
+}
+
+/* Z2: listener attach fails once — mount must retry (HG_MOUNTED is latched
+   outside our scope) and the dead button must be announced while it is dead */
+{
+  const WZ2 = freshBrain();
+  const tabZ2 = WZ2.HG_tabs[0];
+  const Z2 = hostilePane({ throwSels: { '#brainRun': 1 } });
+  tabZ2.mount(Z2.pane);
+  ok(!(Z2.stubs['#brainRun'] && Z2.stubs['#brainRun']._handler),
+     'Z2: first mount attempt fails to wire the button (reproduces the dead click)');
+  ok(Z2.stubs['#brainStat'].textContent.indexOf('retry') >= 0,
+     'Z2: the dead button is announced, never silent — got "' + Z2.stubs['#brainStat'].textContent + '"');
+  await sleep(120);
+  ok(!!(Z2.stubs['#brainRun'] && typeof Z2.stubs['#brainRun']._handler === 'function'),
+     'Z2: mount retries itself and the listener lands');
+  Z2.stubs['#brainRun']._handler();
+  await waitIdle(Z2.stubs);
+  ok(Z2.stubs['#brainStat'].textContent.indexOf('done ·') === 0, 'Z2: the retried button runs the scan');
+}
+
+/* Z3: even the shell paint fails — a last-resort visible note, mount never throws */
+{
+  const WZ3 = freshBrain();
+  const tabZ3 = WZ3.HG_tabs[0];
+  const Z3 = hostilePane({ htmlThrows: true });
+  let z3err = null;
+  try{ tabZ3.mount(Z3.pane); tabZ3.mount(Z3.pane); }catch(e){ z3err = e; }
+  ok(!z3err, 'Z3: mount never throws, even with a hostile pane' + (z3err ? ' — got: ' + z3err.message : ''));
+  ok(Z3.pane.textContent.indexOf('brain mount failed') >= 0,
+     'Z3: shell failure paints a last-resort visible note — got "' + Z3.pane.textContent + '"');
+}
+
+/* ================= AA) run-path failures are VISIBLE, never silent ================= */
+console.log('== run-path failure visibility (AA) ==');
+/* AA1: a pane element went missing — the old guard returned silently (zero
+   feedback); now the stat line must say exactly what is wrong */
+{
+  const WA1 = freshBrain();
+  const A1 = hostilePane({ nullSels: { '#brainCards': true } });
+  WA1.HG_tabs[0].mount(A1.pane);
+  A1.stubs['#brainRun']._handler();
+  await sleep(30);
+  ok(A1.stubs['#brainStat'].className === 'note warn'
+     && A1.stubs['#brainStat'].textContent.indexOf('unavailable') >= 0,
+     'AA1: missing pane element -> visible honest note, not a silent no-op — got "' + A1.stubs['#brainStat'].textContent + '"');
+}
+/* AA2: a throwing render surfaces on the stat line and releases the button */
+{
+  const WA2 = freshBrain();
+  const A2 = freshPane();
+  WA2.HG_tabs[0].mount(A2.pane);
+  Object.defineProperty(A2.stubs['#brainCards'], 'innerHTML',
+    { set: function(){ throw new Error('paint blocked'); }, get: function(){ return ''; } });
+  A2.stubs['#brainRun']._handler();
+  await waitIdle(A2.stubs);
+  ok(A2.stubs['#brainStat'].className === 'note warn'
+     && A2.stubs['#brainStat'].textContent.indexOf('brain synthesis failed: paint blocked') >= 0,
+     'AA2: a render failure surfaces on the stat line — got "' + A2.stubs['#brainStat'].textContent + '"');
+  ok(A2.stubs['#brainRun'].disabled === false, 'AA2: button re-enabled after the failure (busy released)');
+}
+/* AA3: gutted pane (stat/cards/watch/aside/empty all null) — last-resort note
+   painted into the pane itself, click never throws */
+{
+  const WA3 = freshBrain();
+  const A3 = hostilePane({ nullSels: { '#brainStat': true, '#brainCards': true, '#brainWatch': true,
+                                       '#brainAside': true, '#brainEmpty': true } });
+  WA3.HG_tabs[0].mount(A3.pane);
+  let a3err = null;
+  try{ A3.stubs['#brainRun']._handler(); }catch(e){ a3err = e; }
+  await sleep(20);
+  ok(!a3err, 'AA3: click with a gutted pane never throws' + (a3err ? ' — got: ' + a3err.message : ''));
+  ok(A3.pane._adj.length >= 1 && A3.pane._adj[0].indexOf('unavailable') >= 0,
+     'AA3: last-resort visible note painted into the pane itself — got ' + JSON.stringify(A3.pane._adj));
+}
+
+/* ================= AB) stuck scans time out VISIBLY ================= */
+console.log('== stuck-scan timeouts (AB) ==');
+/* AB1: a hung legacy universe feed — bounded by the per-leg timeout, busy released */
+{
+  const WB1 = freshBrain();
+  WB1.brainTunables.fetchMs = 80;
+  WB1.binanceTickers24h = function(){ return new Promise(function(){}); }; /* hangs forever */
+  const B1 = freshPane();
+  WB1.HG_tabs[0].mount(B1.pane);
+  B1.stubs['#brainRun']._handler();
+  await waitIdle(B1.stubs);
+  ok(B1.stubs['#brainStat'].textContent.indexOf('done ·') === 0,
+     'AB1: hung universe feed times out and the run completes — got "' + B1.stubs['#brainStat'].textContent + '"');
+  ok(B1.stubs['#brainStat'].textContent.indexOf('Binance turnover feed unavailable') >= 0,
+     'AB1: the timeout degrades honestly on the stat line');
+  const b1ref = await WB1.HG_tabs[0].refresh();
+  ok(b1ref === 'refreshed', 'AB1: busy flag released — refresh works after the timed-out scan (got "' + b1ref + '")');
+}
+/* AB2: scan-level watchdog — every candle leg hangs; the scan stops launching
+   new work, renders partial results, says so, and releases the button */
+{
+  const WB2 = freshBrain();
+  WB2.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  WB2.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WB2.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WB2.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WB2.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  WB2.squeezeState = function(){ return { results: [] }; };
+  WB2.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  WB2.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  const alts2 = [], ofRes2 = [];
+  for (let i = 1; i <= 50; i++){
+    const base = 'ALT' + i;
+    alts2.push(i % 2
+      ? { sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: i * 1e6, mark: 1, fundingPct: null, alsoOn: null }
+      : { sym: 'B-' + base + '_USDT', base: base, exchange: 'cdcx', turnoverUsd: i * 1e6, mark: 1, fundingPct: null, alsoOn: null });
+    ofRes2.push({ sym: base + 'USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' });
+  }
+  WB2.oiflowState = function(){ return { results: ofRes2 }; };
+  WB2.xuUniverse = async function(){
+    return [{ sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+            { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+            { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null }].concat(alts2);
+  };
+  WB2.brainTunables.fetchMs = 100;
+  WB2.brainTunables.scanMs = 250;
+  let hungCalls = 0;
+  WB2.xuCandles = function(){ hungCalls++; return new Promise(function(){}); }; /* every leg hangs */
+  const B2 = freshPane();
+  WB2.HG_tabs[0].mount(B2.pane);
+  B2.stubs['#brainRun']._handler();
+  await waitIdle(B2.stubs);
+  const b2Stat = B2.stubs['#brainStat'].textContent;
+  ok(b2Stat.indexOf('done · 0 PRIME · 0 HIGH · 50 watch') === 0,
+     'AB2: watchdog trip still renders the verdicts — got "' + b2Stat + '"');
+  ok(b2Stat.indexOf('timed out') >= 0 && b2Stat.indexOf('partial') >= 0,
+     'AB2: the stuck scan names its timeout honestly — got "' + b2Stat + '"');
+  ok(hungCalls > 0 && hungCalls < 40,
+     'AB2: the watchdog stops launching new fetches — got ' + hungCalls + ' of 40');
+  ok(B2.stubs['#brainRun'].disabled === false, 'AB2: button re-enabled after the watchdog trip');
+  ok(B2.stubs['#brainWatch'].innerHTML.indexOf('lrow') >= 0, 'AB2: partial results actually rendered');
+}
+
+/* ================= AC) QUICK RESCAN ================= */
+console.log('== quick rescan (AC) ==');
+{
+  globalThis.localStorage = lsStub();
+  const WC = freshBrain();
+  stubLayersPrime(WC);
+  let xuCalls = 0; const xuForces = [];
+  let xuList = XUL;
+  WC.xuUniverse = async function(force){ xuCalls++; xuForces.push(force); return xuList; };
+  WC.xuState = function(){ return { count: xuList.length, delta: 3, cdcx: 2, at: Date.now(), note: null }; };
+  let candleSyms = [];
+  WC.xuCandles = function(item){ candleSyms.push(item.sym); return Promise.resolve(fakeRows(120)); };
+  const tabC = WC.HG_tabs[0];
+  const TC = freshPane();
+  tabC.mount(TC.pane);
+
+  ok(TC.pane._html.indexOf('id="brainQuick"') >= 0 && TC.pane._html.indexOf('QUICK RESCAN') >= 0,
+     'AC: QUICK RESCAN button rendered beside RUN SYNTHESIS');
+
+  /* before any full scan: honest guard, zero network work */
+  TC.stubs['#brainQuick']._handler();
+  await sleep(20);
+  ok(TC.stubs['#brainStat'].textContent.indexOf('full synthesis first') >= 0,
+     'AC: quick rescan before any full scan says exactly what to do — got "' + TC.stubs['#brainStat'].textContent + '"');
+  ok(candleSyms.length === 0 && xuCalls === 0, 'AC: the guard fires zero network work');
+
+  /* full scan baseline */
+  await runAndWait(TC.stubs);
+  ok(TC.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
+     'AC: full-scan baseline intact — got "' + TC.stubs['#brainStat'].textContent + '"');
+  candleSyms = []; xuCalls = 0; xuForces.length = 0;
+
+  /* quick rescan: recheck WATCH+ only, cache-read universe, age stamps */
+  TC.stubs['#brainQuick']._handler();
+  await waitIdle(TC.stubs);
+  const q1 = TC.stubs['#brainStat'].textContent;
+  ok(/^quick rescan: 4 checked · 2 unchanged · \d+s/.test(q1),
+     'AC: stat line counts checked vs unchanged — got "' + q1 + '"');
+  ok(xuForces.every(function(f){ return f !== true; }) && xuCalls <= 1,
+     'AC: never forces an exchange refetch (cache-read only) — calls=' + xuCalls + ' forces=' + JSON.stringify(xuForces));
+  ok(candleSyms.length === 4 && candleSyms.indexOf('DOGEUSDT') === -1,
+     'AC: candles refetched only for the recheck set, ASIDE candidates untouched — got ' + candleSyms.join(','));
+  const q1aside = TC.stubs['#brainAside'].innerHTML;
+  ok(q1aside.indexOf('engine veto @ G2') >= 0 && q1aside.indexOf('AS OF') >= 0,
+     'AC: unchanged verdicts keep their reason AND carry an age stamp');
+  ok(TC.stubs['#brainCards'].innerHTML.indexOf('ENTRY <b>100</b>') >= 0,
+     'AC: the PRIME card is re-planned with fresh candles');
+  ok(q1.indexOf('new listing') === -1, 'AC: no new-listing note when the universe is unchanged');
+
+  /* new-listing detection from the cached universe */
+  xuList = XUL.concat([{ sym: 'NEWUSDT', base: 'NEW', exchange: 'delta', turnoverUsd: 5e8, mark: 2, fundingPct: null, alsoOn: null }]);
+  const ofOld = WC.oiflowState;
+  WC.oiflowState = function(){ const r = ofOld(); r.results.push({ sym: 'NEWUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' }); return r; };
+  candleSyms = [];
+  TC.stubs['#brainQuick']._handler();
+  await waitIdle(TC.stubs);
+  const q2 = TC.stubs['#brainStat'].textContent;
+  ok(/^quick rescan: 5 checked · 2 unchanged/.test(q2) && q2.indexOf('1 new listing') >= 0,
+     'AC: a new listing is detected and checked — got "' + q2 + '"');
+  ok(TC.stubs['#brainWatch'].innerHTML.indexOf('>NEW</span>') >= 0,
+     'AC: the new listing is judged on arrival (3 layers -> WATCH)');
+  ok(candleSyms.indexOf('NEWUSDT') >= 0, 'AC: the new listing earns its candle fetch');
+
+  /* stale universe cache: new-listing check skips honestly, zero xu calls */
+  WC.xuState = function(){ return { count: 6, delta: 4, cdcx: 2, at: Date.now() - 20 * 60 * 1000, note: null }; };
+  xuCalls = 0;
+  TC.stubs['#brainQuick']._handler();
+  await waitIdle(TC.stubs);
+  const q3 = TC.stubs['#brainStat'].textContent;
+  ok(xuCalls === 0, 'AC: stale cache -> the universe is NOT refetched for a quick rescan');
+  ok(q3.indexOf('new-listing check skipped') >= 0 && /^quick rescan: 5 checked · 2 unchanged/.test(q3),
+     'AC: the skip is named on the stat line — got "' + q3 + '"');
+
+  /* layers flip: rechecked candidates move, unchanged keep their prior verdict */
+  WC.regimeState = function(){ return { label: 'RISK-OFF', score: -4, playbook: { bias: 'SHORT-ONLY', sizeNote: 'half size' } }; };
+  TC.stubs['#brainQuick']._handler();
+  await waitIdle(TC.stubs);
+  const q4 = TC.stubs['#brainStat'].textContent;
+  ok(q4.indexOf('0 PRIME · 0 HIGH') >= 0, 'AC: BTC loses PRIME when the regime flips — got "' + q4 + '"');
+  ok(TC.stubs['#brainCards'].innerHTML.indexOf('B-BTC_USDT') === -1
+     && TC.stubs['#brainWatch'].innerHTML.indexOf('>BTC</span>') >= 0,
+     'AC: the rechecked candidate moves to WATCH honestly');
+  const q4aside = TC.stubs['#brainAside'].innerHTML;
+  ok(q4aside.indexOf('engine veto @ G2') >= 0 && q4aside.indexOf('AS OF') >= 0,
+     'AC: the unchanged veto verdict survives the regime flip, age stamp intact');
+  delete globalThis.localStorage;
+}
+
+/* AC-legacy: same candidate set, engine plans short-circuit candle refetches */
+{
+  const WL = freshBrain();
+  stubLayersPrime(WL);
+  WL.binanceTickers24h = async function(){ return {
+    BTCUSDT: { symbol: 'BTCUSDT', mark: 100, chg24: 2, turnoverUsd: 9e9 },
+    ETHUSDT: { symbol: 'ETHUSDT', mark: 50, chg24: -1, turnoverUsd: 5e9 },
+    SOLUSDT: { symbol: 'SOLUSDT', mark: 20, chg24: 3, turnoverUsd: 2e9 },
+    XRPUSDT: { symbol: 'XRPUSDT', mark: 1, chg24: 0.5, turnoverUsd: 1e9 } }; };
+  const kl = [];
+  WL.binanceKlines = function(sym, tf){ kl.push(sym + '|' + tf); return Promise.resolve(fakeRows(120)); };
+  const TL = freshPane();
+  WL.HG_tabs[0].mount(TL.pane);
+  await runAndWait(TL.stubs);
+  kl.length = 0;
+  TL.stubs['#brainQuick']._handler();
+  await waitIdle(TL.stubs);
+  const ql = TL.stubs['#brainStat'].textContent;
+  ok(/^quick rescan: 4 checked · 1 unchanged · \d+s/.test(ql),
+     'AC-legacy: quick rescan works without the combined feed — got "' + ql + '"');
+  ok(ql.indexOf('legacy mode') >= 0, 'AC-legacy: new-listing skip is named honestly — got "' + ql + '"');
+  ok(TL.stubs['#brainCards'].innerHTML.indexOf('ENTRY <b>100</b>') >= 0
+     && TL.stubs['#brainAside'].innerHTML.indexOf('AS OF') >= 0,
+     'AC-legacy: PRIME card re-rendered, unchanged gold lane age-stamped');
+  ok(kl.length === 0, 'AC-legacy: no candle refetch when the engine already holds the plan — got ' + kl.join(','));
+}
+
+/* ================= AD) scorecard hook ================= */
+console.log('== scorecard hook (AD) ==');
+let unhandledRej = 0;
+process.on('unhandledRejection', function(){ unhandledRej++; });
+{
+  const WD = freshBrain();
+  stubLayersPrime(WD);
+  WD.xuUniverse = async function(){ return XUL; };
+  WD.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const recs = [];
+  WD.hgScoreRecord = function(rec){ recs.push(rec); };
+  const TD = freshPane();
+  WD.HG_tabs[0].mount(TD.pane);
+  await runAndWait(TD.stubs);
+  ok(recs.length === 1, 'AD: exactly one scorecard record — PRIME/HIGH only, WATCH/ASIDE never recorded (got ' + recs.length + ')');
+  const r0 = recs[0] || {};
+  ok(r0.source === 'brain' && r0.sym === 'B-BTC_USDT' && r0.dir === 'long' && r0.tier === 'PRIME',
+     'AD: record carries source/sym/dir/tier — got ' + JSON.stringify(r0).slice(0, 140));
+  ok(r0.entry === 100 && r0.stop === 95 && r0.t1 === 110 && r0.t2 === 117.5,
+     'AD: levels come from the engine plan verbatim — got ' + JSON.stringify([r0.entry, r0.stop, r0.t1, r0.t2]));
+  ok(Array.isArray(r0.layers) && r0.layers.join(',') === 'regime,onchain,engine,oiflow,liqs',
+     'AD: layers = the agreeing layer names in vote order — got ' + JSON.stringify(r0.layers));
+  ok(typeof r0.at === 'number' && isFinite(r0.at) && Math.abs(Date.now() - r0.at) < 60000,
+     'AD: record timestamped at scan time');
+
+  /* quick rescan records its fresh PRIME/HIGH cards too */
+  recs.length = 0;
+  WD.xuState = function(){ return { count: 5, delta: 3, cdcx: 2, at: Date.now(), note: null }; };
+  TD.stubs['#brainQuick']._handler();
+  await waitIdle(TD.stubs);
+  ok(recs.length === 1 && recs[0].tier === 'PRIME' && recs[0].source === 'brain',
+     'AD: quick rescan records its fresh PRIME/HIGH cards too');
+
+  /* a throwing recorder never breaks the scan or the render */
+  WD.hgScoreRecord = function(){ throw new Error('scorecard down'); };
+  await runAndWait(TD.stubs);
+  ok(TD.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME') === 0
+     && TD.stubs['#brainCards'].innerHTML.indexOf('B-BTC_USDT') >= 0,
+     'AD: a throwing hgScoreRecord never breaks the scan or the render');
+
+  /* a rejecting-promise recorder: fire-and-forget, no unhandled rejection */
+  const rejBefore = unhandledRej;
+  WD.hgScoreRecord = function(){ return Promise.reject(new Error('async scorecard down')); };
+  await runAndWait(TD.stubs);
+  await sleep(30);
+  ok(unhandledRej === rejBefore, 'AD: a rejecting hgScoreRecord promise is swallowed fire-and-forget');
+
+  /* absent recorder: clean no-op */
+  delete WD.hgScoreRecord;
+  await runAndWait(TD.stubs);
+  ok(TD.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME') === 0, 'AD: absent hgScoreRecord is a no-op');
+}
+/* AD2: HIGH tier recorded in legacy mode, exact layers */
+{
+  const WE = freshBrain();
+  WE.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  WE.regimeState = function(){ return { label: 'RISK-OFF', score: -4, playbook: { bias: 'SHORT-ONLY', sizeNote: 'half size' } }; };
+  WE.rotationState = function(){ return { season: 'btc', altPct: 22, evidence: [] }; };
+  WE.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WE.engineState = function(){
+    return { survivors: [{ sym: 'ETHUSDT', dir: 'short', conviction: 'MODERATE',
+                           plan: { entry: 50, stop: 53, t1: 44, t2: 39.5 }, gatesPassed: 5 }],
+             rejected: [], at: 124 };
+  };
+  WE.oiflowState = function(){ return { results: [{ sym: 'ETHUSDT', dir: 'SHORT', evidence: ['NEW SHORTS (trend fuel)'] }] }; };
+  WE.squeezeState = function(){ return { results: [{ sym: 'ETHUSDT', kind: 'fired', dir: 'short' }] }; };
+  WE.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  WE.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  const recs5 = [];
+  WE.hgScoreRecord = function(rec){ recs5.push(rec); };
+  const TE = freshPane();
+  WE.HG_tabs[0].mount(TE.pane);
+  await runAndWait(TE.stubs);
+  ok(recs5.length === 1 && recs5[0].tier === 'HIGH' && recs5[0].sym === 'ETHUSDT' && recs5[0].dir === 'short',
+     'AD: HIGH tier recorded in legacy mode too — got ' + JSON.stringify(recs5[0]).slice(0, 140));
+  ok(recs5[0] && Array.isArray(recs5[0].layers) && recs5[0].layers.join(',') === 'regime,engine,oiflow,squeeze',
+     'AD: HIGH record layers exact — got ' + (recs5[0] && JSON.stringify(recs5[0].layers)));
+}
+/* AD3: PRIME without a plan records null levels — numbers never fabricated */
+{
+  const WF2 = freshBrain();
+  WF2.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  WF2.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WF2.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WF2.onchainState = function(){ return { bias: 'bullish', evidence: [], flags: {} }; };
+  WF2.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  WF2.oiflowState = function(){ return { results: [{ sym: 'BTCUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' }] }; };
+  WF2.squeezeState = function(){ return { results: [{ sym: 'BTCUSDT', kind: 'fired', dir: 'long' }] }; };
+  WF2.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
+  WF2.liqFlushSetup = function(){ return { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
+  WF2.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  /* no binanceTickers24h/binanceKlines/smartSetup/hgPlanLevels — a plan is impossible */
+  const recs6 = [];
+  WF2.hgScoreRecord = function(rec){ recs6.push(rec); };
+  const TF2 = freshPane();
+  WF2.HG_tabs[0].mount(TF2.pane);
+  await runAndWait(TF2.stubs);
+  ok(recs6.length === 1 && recs6[0].tier === 'PRIME' && recs6[0].sym === 'BTCUSDT',
+     'AD: PRIME without a plan is still recorded — got ' + recs6.length);
+  ok(recs6[0] && recs6[0].entry === null && recs6[0].stop === null && recs6[0].t1 === null && recs6[0].t2 === null,
+     'AD: missing plan -> null levels, never fabricated numbers');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

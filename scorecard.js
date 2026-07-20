@@ -1,0 +1,839 @@
+/* =========================================================================
+HARDGATE — scorecard.js
+SCORECARD tab: outcome tracking that proves (or disproves) the engine with
+real numbers. Philosophy: gates, not scores — evidence, not signals. Every
+PRIME/HIGH setup the BRAIN / EXECUTE scans surface can be logged here,
+walked forward against 1h candles, and settled to an honest R-multiple.
+The per-layer breakdown is the point: which voting layers actually make
+money, measured — never assumed.
+
+CALLERS (brain.js / engine.js, both feature-check first):
+  window.hgScoreRecord({source:'brain'|'execute', sym, dir, tier,
+                        entry, stop, t1, t2, layers:[names], at})
+    -> {ok:true, record, persisted, note?} | {ok:false, reason, dupOf?}
+    Validates the plan (dir long|short; long: stop<entry<t1; short mirrors;
+    t1 required; wrong-side/missing t2 -> null, never invented), DEDUPES
+    (same sym+dir within 24h -> {ok:false, reason:'duplicate: ...'}), then
+    persists to localStorage 'hg_score_v1' (cap: last 200 records — oldest
+    SETTLED evicted first so live trades are never silently dropped; quota
+    failures keep the ledger in memory and say so). NEVER throws.
+
+SETTLEMENT (walk rules — the whole honesty of the ledger lives here):
+  window.hgScoreSettle(fetchCandles) -> Promise<{settled, open, failed, notes}>
+    For every OPEN record: rows = await fetchCandles(record) (per-record
+    catch isolation — one symbol's failure never stops the loop and leaves
+    an honest note ON the record), then hgScoreWalk. fetchCandles injected
+    (tests); when omitted, the module's feature-checked default route runs
+    (gold lane -> getXAUCandles; else xuUniverse+xuCandles matched by
+    sym/base; else inline getCandles; no route -> every record fails
+    honestly, nothing is marked).
+
+  window.hgScoreWalk(record, rows) -> {state, r, bars, closedAt} — PURE.
+    rows = ascending 1h candles [{t(seconds),o,h,l,c}]. The walk starts at
+    the first bar whose window [t, t+dur) extends PAST record.at (dur from
+    row spacing, default 3600s) — the bar containing the entry fill is
+    included; earlier bars are ignored. The settlement window is
+    [at, at+14d): the first bar opening at or after the 14-day mark ends
+    the trade. SAME-BAR RULE: a bar touching both stop and a target counts
+    the STOP first (intra-bar order is unknowable — always conservative).
+    R LADDER (r(level) = dirSign*(level-entry)/|entry-stop|; engine plans
+    are exactly 2R/3.5R so these reproduce the house numbers, non-house
+    plans score their ACTUAL multiple — never a fabricated one):
+      stop first .................. 'SL'      r = -1 (exactly, by construction)
+      t1 first, then t2 ........... 'T2'      r = r(t2)   ("T1-then-T2 = full")
+      t1 first, then stop ......... 'T1S'     r = r(t1)/2 (partial-bank
+                                      convention: half banked at t1, runner
+                                      died at breakeven -> +1R on house plans)
+      t1+t2 spanned by ONE bar .... 'T2' (no stop in that bar -> fill-through)
+      t1 first, 14d window ends ... 'T1'      r = r(t1)
+      nothing touched in 14d ...... 'EXPIRED' r = mark-to-market at last close
+      rows end before 14d ......... 'OPEN'    r = live mark-to-market
+                                      (provisional; closedAt=null)
+      malformed record ............ 'INVALID' r = null (zero risk, wrong-side
+                                      stop/t1, missing dir/at — never scored)
+
+STATS (pure): window.hgScoreStats(records) -> {
+  open, settled, wins, losses, counted, winRate, avgR, expectancy,
+  enoughData, byTier:{PRIME:{n,wins,winRate,avgR},HIGH:{...},...},
+  byLane:{crypto:{...},gold:{...}}, byDir:{long:{...},short:{...}},
+  byLayer:{NAME:{n,wins,winRate,avgR}} }
+  Settled records WITHOUT a finite R (e.g. EXPIRED with no candle data)
+  count in `settled` but are excluded from every rate/average — never
+  silently folded in. expectancy = mean R per settled trade (the per-trade
+  edge; identical to avgR by construction, kept separate for the header).
+  enoughData = settled >= 5 — below that the UI says 'not enough data'.
+
+TAB: window.HG_tabs.push({id:'scorecard', label:'SCORECARD', mount, refresh})
+  (STRATEGIES group — nav group wiring lives in index.html, not here.)
+  Header scoreboard (win rate / avg R / expectancy / settled+open counts,
+  honest 'not enough data' below 5 settled), BY-TIER + BY-LANE/BY-DIR +
+  BY-LAYER tables, OPEN table (live mark-to-market, time in trade),
+  SETTLED history (last 50, colored outcome pips). Mount renders the stored
+  ledger with NO network; RE-SETTLE NOW runs settlement on demand.
+  refresh() contract: async, NEVER throws, terse status — 'busy' while a
+  settlement is in flight, 'skipped: not run yet' before the first user
+  settle (a global refresh must never trigger an expensive first-time
+  candle sweep on its own), 'refreshed' after a re-settle.
+
+Classic script, IIFE, no build step. Loads any time after xuniverse.js
+(absence of every candle route degrades honestly). Never throws at load.
+========================================================================= */
+(function(){
+'use strict';
+
+var G = (typeof window !== 'undefined') ? window
+      : (typeof globalThis !== 'undefined') ? globalThis : this;
+
+/* ---------------- constants ---------------- */
+var LS_KEY     = 'hg_score_v1';
+var CAP        = 200;                    /* max stored records */
+var DEDUPE_MS  = 24 * 3600 * 1000;       /* same sym+dir inside 24h -> duplicate */
+var EXPIRE_MS  = 14 * 86400 * 1000;      /* 14-day settlement window */
+var MIN_DATA   = 5;                      /* 'not enough data' below this many settled */
+var SETTLE_TF  = '1h';
+var SETTLE_SEC = 3600;
+var MAX_BARS   = 500;                    /* candle fetch cap (> 14d of 1h bars) */
+
+/* ---------------- module state ---------------- */
+var store = [];
+var storageNote = null;   /* unreadable existing ledger (load-time), shown in UI */
+var persistNote = null;   /* last save failure note (quota), shown in UI */
+var idCounter = 0;
+var __sc = { busy: false, ranOnce: false, ui: null };
+
+/* ---------------- small pure helpers ---------------- */
+function errMsg(e){ return (e && e.message) ? e.message : String(e); }
+function fin(x){
+  var n = (typeof x === 'number') ? x : parseFloat(x);
+  return isFinite(n) ? n : null;
+}
+function round4(x){
+  return (typeof x === 'number' && isFinite(x)) ? Math.round(x * 10000) / 10000 : null;
+}
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;';
+  });
+}
+/* mirror of xuniverse.js baseOf for BOTH venues ('BTCUSD'/'BTCUSDT'/
+   'B-BTC_USDT' -> 'BTC') so records from either scan mode find their
+   candle route */
+function baseOfSym(sym){
+  return String(sym == null ? '' : sym).toUpperCase()
+    .replace(/^B-/, '').replace(/_USDT$/, '').replace(/USD(T)?$/, '');
+}
+function laneOf(sym, hint){
+  if (hint === 'gold' || hint === 'crypto') return hint;
+  return (/XAU|PAXG|GOLD/.test(String(sym == null ? '' : sym).toUpperCase())) ? 'gold' : 'crypto';
+}
+function sanitizeLayers(x){
+  try{
+    if (!Array.isArray(x)) return [];
+    var seen = {}, out = [];
+    for (var i = 0; i < x.length; i++){
+      var s = String(x[i] == null ? '' : x[i]).trim();
+      if (!s) continue;
+      s = s.slice(0, 32);
+      var k = s.toUpperCase();
+      if (seen[k]) continue;
+      seen[k] = 1; out.push(s);
+    }
+    return out;
+  }catch(e){ return []; }
+}
+
+/* ---------------- formatters (display only; null -> honest dash) ---------------- */
+function pad(n){ return (n < 10 ? '0' : '') + n; }
+function timeStr(){ try{ return new Date().toTimeString().slice(0, 8); }catch(e){ return ''; } }
+function dstr(ms){
+  try{
+    var d = new Date(ms);
+    if (!isFinite(d.getTime())) return '—';
+    return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }catch(e){ return '—'; }
+}
+function ageStr(ms){
+  try{
+    if (!isFinite(ms) || ms < 0) return '—';
+    var h = Math.floor(ms / 3600000);
+    if (h < 1) return '<1h';
+    if (h < 48) return h + 'h';
+    var d = Math.floor(h / 24);
+    return d + 'd ' + (h % 24) + 'h';
+  }catch(e){ return '—'; }
+}
+function fmtR(r){
+  if (typeof r !== 'number' || !isFinite(r)) return '—';
+  return (r > 0 ? '+' : '') + r.toFixed(2) + 'R';
+}
+function pct(x){
+  return (typeof x === 'number' && isFinite(x)) ? (x * 100).toFixed(0) + '%' : '—';
+}
+function fmtPx(p){
+  if (typeof p !== 'number' || !isFinite(p)) return '—';
+  var a = Math.abs(p);
+  if (a >= 1000) return p.toFixed(1);
+  if (a >= 100) return p.toFixed(2);
+  if (a >= 1) return p.toFixed(3);
+  return p.toPrecision(3);
+}
+
+/* ---------------- storage ----------------
+   Every access try-caught: localStorage can be absent (vm tests), blocked
+   (privacy mode) or full (quota). Failures degrade to in-memory with an
+   honest note — the ledger NEVER throws and never lies about persistence. */
+function validStoredRecord(r){
+  try{
+    if (!r || typeof r !== 'object') return false;
+    if (typeof r.sym !== 'string' || !r.sym) return false;
+    if (r.dir !== 'long' && r.dir !== 'short') return false;
+    if (fin(r.entry) === null || fin(r.stop) === null || fin(r.at) === null) return false;
+    return true;
+  }catch(e){ return false; }
+}
+function loadStore(){
+  store = [];
+  storageNote = null;
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return;
+    var raw = null;
+    try{ raw = localStorage.getItem(LS_KEY); }catch(e){
+      storageNote = 'stored ledger unreadable (localStorage access failed) — using an empty in-memory ledger';
+      return;
+    }
+    if (!raw) return;
+    var parsed;
+    try{ parsed = JSON.parse(raw); }catch(e){
+      storageNote = 'stored ledger is corrupt (JSON parse failed) — starting fresh; the raw value was left untouched under ' + LS_KEY;
+      return;
+    }
+    if (!Array.isArray(parsed)){
+      storageNote = 'stored ledger is not an array — starting fresh; the raw value was left untouched under ' + LS_KEY;
+      return;
+    }
+    var dropped = 0;
+    for (var i = 0; i < parsed.length; i++){
+      var r = parsed[i];
+      if (!validStoredRecord(r)){ dropped++; continue; }
+      if (r.status !== 'settled') r.status = 'open';
+      if (!Array.isArray(r.layers)) r.layers = [];
+      store.push(r);
+    }
+    if (dropped) storageNote = 'dropped ' + dropped + ' corrupt entr' + (dropped === 1 ? 'y' : 'ies') + ' from the stored ledger';
+    if (store.length > CAP) enforceCap();
+  }catch(e){
+    store = [];
+    storageNote = 'ledger load failed: ' + errMsg(e) + ' — using an empty in-memory ledger';
+  }
+}
+function saveStore(){
+  persistNote = null;
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return { ok: false, note: 'localStorage unavailable — ledger kept in memory only' };
+    try{
+      localStorage.setItem(LS_KEY, JSON.stringify(store));
+      return { ok: true };
+    }catch(e){
+      persistNote = 'localStorage write failed (quota?) — ledger kept in memory only, NOT persisted';
+      return { ok: false, note: persistNote };
+    }
+  }catch(e){
+    persistNote = 'ledger save failed: ' + errMsg(e);
+    return { ok: false, note: persistNote };
+  }
+}
+/* cap: last 200 records — oldest SETTLED evicted first; a live (open)
+   trade is only ever dropped when the store is 200 deep in open trades. */
+function enforceCap(){
+  try{
+    while (store.length > CAP){
+      var idx = -1, bestAt = Infinity;
+      for (var i = 0; i < store.length; i++){
+        if (store[i] && store[i].status === 'settled' && store[i].at < bestAt){ bestAt = store[i].at; idx = i; }
+      }
+      if (idx < 0){
+        for (var j = 0; j < store.length; j++){
+          if (store[j] && store[j].at < bestAt){ bestAt = store[j].at; idx = j; }
+        }
+      }
+      if (idx < 0) break;
+      store.splice(idx, 1);
+    }
+  }catch(e){ /* capping is best-effort; the store stays honest either way */ }
+}
+
+/* ================= the walk (PURE — vm-testable, no DOM, no network) =================
+   record: {dir:'long'|'short', entry, stop, t1, t2?, at(ms)}
+   rows:   ascending candles [{t(seconds),o,h,l,c}] (unsorted/gappy input is
+           sorted+filtered defensively; duplicates kept in time order).
+   Rules (see header for the full contract):
+     - the first walked bar is the first bar whose window [t, t+dur) extends
+       PAST record.at (dur inferred from row spacing, default 1h) — the bar
+       containing the entry fill is included, earlier bars ignored;
+     - the settlement window is [at, at+14d): the first bar opening at or
+       after the 14-day mark ends the trade (EXPIRED/T1);
+     - same-bar stop + target -> the STOP counts (conservative);
+     - after t1 is touched, the walk keeps watching the SAME fixed levels
+       (no stop-management simulation): stop -> 'T1S' at r(t1)/2, t2 -> 'T2'
+       at r(t2) ("T1-then-T2 = full"). */
+function hgScoreWalk(record, rows){
+  var INVALID = { state: 'INVALID', r: null, bars: 0, closedAt: null };
+  try{
+    var rec = record || {};
+    var dir = (rec.dir === 'long' || rec.dir === 'short') ? rec.dir : null;
+    var entry = fin(rec.entry), stop = fin(rec.stop), t1 = fin(rec.t1), t2 = fin(rec.t2);
+    var at = fin(rec.at);
+    if (!dir || entry === null || stop === null || at === null) return INVALID;
+    if (entry === stop) return INVALID;                       /* zero risk: no R unit */
+    var sign = (dir === 'long') ? 1 : -1;
+    if (dir === 'long'  && !(stop < entry)) return INVALID;   /* wrong-side stop */
+    if (dir === 'short' && !(stop > entry)) return INVALID;
+    if (t1 !== null && sign * (t1 - entry) <= 0) return INVALID;  /* wrong-side t1 */
+    if (t2 !== null && sign * (t2 - entry) <= 0) t2 = null;       /* degenerate t2 ignored */
+    var risk = Math.abs(entry - stop);
+    function rOf(level){ return sign * (level - entry) / risk; }
+
+    /* defensive copy: keep bars with a finite time, sort ascending */
+    var bars = [];
+    if (Array.isArray(rows)){
+      for (var i = 0; i < rows.length; i++){
+        var b = rows[i];
+        if (!b) continue;
+        var t = fin(b.t);
+        if (t === null) continue;
+        bars.push({ t: t, h: fin(b.h), l: fin(b.l), c: fin(b.c) });
+      }
+      bars.sort(function(a, b2){ return a.t - b2.t; });
+    }
+    var dur = SETTLE_SEC;
+    if (bars.length >= 2){
+      var d = bars[1].t - bars[0].t;
+      if (isFinite(d) && d > 0) dur = d;
+    }
+    var deadline = at + EXPIRE_MS;
+    var touchedT1 = false, walked = 0, lastClose = null, lastT = null, expired = false;
+    for (var k = 0; k < bars.length; k++){
+      var bar = bars[k];
+      if ((bar.t + dur) * 1000 <= at) continue;      /* closed at/before entry -> pre-entry */
+      if (bar.t * 1000 >= deadline){ expired = true; break; }
+      walked++;
+      lastT = bar.t;
+      if (bar.c !== null) lastClose = bar.c;
+      var stopHit = (bar.l !== null && bar.h !== null)
+        && (dir === 'long' ? bar.l <= stop : bar.h >= stop);
+      var t1Hit = (t1 !== null && bar.l !== null && bar.h !== null)
+        && (dir === 'long' ? bar.h >= t1 : bar.l <= t1);
+      var t2Hit = (t2 !== null && bar.l !== null && bar.h !== null)
+        && (dir === 'long' ? bar.h >= t2 : bar.l <= t2);
+      if (!touchedT1){
+        if (stopHit) return { state: 'SL', r: -1, bars: walked, closedAt: bar.t };
+        if (t1Hit){
+          if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
+          touchedT1 = true;
+          continue;
+        }
+        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
+      }else{
+        if (stopHit) return { state: 'T1S', r: rOf(t1) / 2, bars: walked, closedAt: bar.t };
+        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
+      }
+    }
+    if (touchedT1){
+      if (expired) return { state: 'T1', r: rOf(t1), bars: walked, closedAt: lastT };
+      return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null };
+    }
+    if (expired) return { state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT };
+    return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null };
+  }catch(e){ return INVALID; }
+}
+
+/* ================= stats (PURE — vm-testable) =================
+   Buckets count SETTLED records with a finite R only; null-R settlements
+   stay visible in `settled` but never leak into a rate or average. */
+function hgScoreStats(records){
+  var empty = { open: 0, settled: 0, wins: 0, losses: 0, counted: 0,
+                winRate: null, avgR: null, expectancy: null, enoughData: false,
+                byTier: { PRIME: { n: 0, wins: 0, winRate: null, avgR: null },
+                          HIGH:  { n: 0, wins: 0, winRate: null, avgR: null } },
+                byLane: { crypto: { n: 0, wins: 0, winRate: null, avgR: null },
+                          gold:   { n: 0, wins: 0, winRate: null, avgR: null } },
+                byDir:  { long:  { n: 0, wins: 0, winRate: null, avgR: null },
+                          short: { n: 0, wins: 0, winRate: null, avgR: null } },
+                byLayer: {} };
+  try{
+    var list = Array.isArray(records) ? records : [];
+    var rs = [];      /* settled with finite r — the only r-math basis */
+    var settled = 0, open = 0;
+    for (var i = 0; i < list.length; i++){
+      var r = list[i];
+      if (!r || typeof r !== 'object') continue;
+      if (r.status === 'settled'){
+        settled++;
+        if (typeof r.r === 'number' && isFinite(r.r)) rs.push(r);
+      }else{
+        open++;
+      }
+    }
+    function bucket(){ return { n: 0, wins: 0, sumR: 0 }; }
+    function finish(b){
+      return { n: b.n, wins: b.wins,
+               winRate: b.n ? b.wins / b.n : null,
+               avgR: b.n ? b.sumR / b.n : null };
+    }
+    var byTier = { PRIME: bucket(), HIGH: bucket() };
+    var byLane = { crypto: bucket(), gold: bucket() };
+    var byDir = { long: bucket(), short: bucket() };
+    var byLayer = {};
+    var wins = 0, losses = 0, sumR = 0;
+    for (var j = 0; j < rs.length; j++){
+      var rec = rs[j], rr = rec.r;
+      if (rr > 0) wins++; else if (rr < 0) losses++;
+      sumR += rr;
+      var tier = (typeof rec.tier === 'string' && rec.tier) ? rec.tier.toUpperCase() : 'UNTIERED';
+      if (!byTier[tier]) byTier[tier] = bucket();
+      byTier[tier].n++; byTier[tier].sumR += rr; if (rr > 0) byTier[tier].wins++;
+      var lane = (rec.lane === 'gold') ? 'gold' : 'crypto';
+      byLane[lane].n++; byLane[lane].sumR += rr; if (rr > 0) byLane[lane].wins++;
+      var dir = (rec.dir === 'short') ? 'short' : 'long';
+      byDir[dir].n++; byDir[dir].sumR += rr; if (rr > 0) byDir[dir].wins++;
+      var layers = Array.isArray(rec.layers) ? rec.layers : [];
+      for (var li = 0; li < layers.length; li++){
+        var ln = String(layers[li] == null ? '' : layers[li]).trim().toUpperCase();
+        if (!ln) continue;
+        if (!byLayer[ln]) byLayer[ln] = bucket();
+        byLayer[ln].n++; byLayer[ln].sumR += rr; if (rr > 0) byLayer[ln].wins++;
+      }
+    }
+    var counted = rs.length;
+    var avgR = counted ? sumR / counted : null;
+    var out = {
+      open: open, settled: settled, wins: wins, losses: losses, counted: counted,
+      winRate: counted ? wins / counted : null,
+      avgR: avgR,
+      expectancy: avgR,   /* mean R per settled trade — the per-trade edge */
+      enoughData: settled >= MIN_DATA,
+      byTier: {}, byLane: {}, byDir: {}, byLayer: {}
+    };
+    for (var tk in byTier) out.byTier[tk] = finish(byTier[tk]);
+    for (var lk in byLane) out.byLane[lk] = finish(byLane[lk]);
+    for (var dk in byDir) out.byDir[dk] = finish(byDir[dk]);
+    for (var nk in byLayer) out.byLayer[nk] = finish(byLayer[nk]);
+    return out;
+  }catch(e){ return empty; }
+}
+
+/* ================= record ================= */
+function hgScoreRecord(input){
+  try{
+    var inp = (input && typeof input === 'object') ? input : {};
+    var sym = String(inp.sym == null ? '' : inp.sym).toUpperCase().trim();
+    if (!sym) return { ok: false, reason: 'sym required' };
+    var dir = String(inp.dir == null ? '' : inp.dir).toLowerCase().trim();
+    if (dir !== 'long' && dir !== 'short') return { ok: false, reason: 'dir must be long|short (got "' + String(inp.dir) + '")' };
+    var entry = fin(inp.entry), stop = fin(inp.stop), t1 = fin(inp.t1), t2raw = fin(inp.t2);
+    if (entry === null || stop === null || !(entry > 0)) return { ok: false, reason: 'entry/stop must be finite positive numbers' };
+    if (entry === stop) return { ok: false, reason: 'entry equals stop — zero risk, cannot score R' };
+    if (dir === 'long'  && !(stop < entry)) return { ok: false, reason: 'long stop must be below entry' };
+    if (dir === 'short' && !(stop > entry)) return { ok: false, reason: 'short stop must be above entry' };
+    if (t1 === null) return { ok: false, reason: 't1 required (finite number)' };
+    if (dir === 'long'  && !(t1 > entry)) return { ok: false, reason: 'long t1 must be above entry' };
+    if (dir === 'short' && !(t1 < entry)) return { ok: false, reason: 'short t1 must be below entry' };
+    var t2 = null;
+    if (t2raw !== null && ((dir === 'long' && t2raw > entry) || (dir === 'short' && t2raw < entry))) t2 = t2raw;
+    /* wrong-side/non-finite t2 -> dropped to null, never invented */
+    var at = fin(inp.at);
+    at = (at !== null && at > 0) ? Math.floor(at) : Date.now();
+    for (var i = 0; i < store.length; i++){
+      var e = store[i];
+      if (e && e.sym === sym && e.dir === dir && Math.abs(e.at - at) < DEDUPE_MS){
+        return { ok: false, reason: 'duplicate: ' + sym + ' ' + dir + ' already recorded within 24h', dupOf: e.id };
+      }
+    }
+    var rec = {
+      id: 'sc_' + at.toString(36) + '_' + (idCounter++).toString(36) + '_' + sym,
+      source: (typeof inp.source === 'string' && inp.source.trim()) ? inp.source.trim().toLowerCase().slice(0, 24) : 'unknown',
+      sym: sym, dir: dir,
+      tier: (typeof inp.tier === 'string' && inp.tier.trim()) ? inp.tier.trim().toUpperCase().slice(0, 16) : null,
+      lane: laneOf(sym, inp.lane),
+      entry: entry, stop: stop, t1: t1, t2: t2,
+      layers: sanitizeLayers(inp.layers),
+      at: at,
+      status: 'open',
+      outcome: null, r: null, bars: 0, closedAt: null, settledAt: null,
+      mtm: null, lastCheck: null, note: null
+    };
+    store.push(rec);
+    enforceCap();
+    var saved = saveStore();
+    var out = { ok: true, record: rec, persisted: saved.ok };
+    if (saved.note) out.note = saved.note;
+    return out;
+  }catch(e){
+    return { ok: false, reason: 'record failed: ' + errMsg(e) };
+  }
+}
+
+/* ================= settle ================= */
+function barsNeeded(at){
+  try{
+    var ageMs = Date.now() - at;
+    var n = Math.ceil(ageMs / 3600000) + 4;
+    if (!isFinite(n) || n < 50) n = 50;
+    return Math.min(n, MAX_BARS);
+  }catch(e){ return 340; }
+}
+function matchXu(list, sym){
+  try{
+    if (!Array.isArray(list)) return null;
+    var base = baseOfSym(sym);
+    var s = String(sym || '').toUpperCase();
+    for (var i = 0; i < list.length; i++){
+      var it = list[i];
+      if (!it || !it.sym) continue;
+      if (String(it.sym).toUpperCase() === s) return it;
+    }
+    for (var j = 0; j < list.length; j++){
+      var it2 = list[j];
+      if (!it2 || !it2.sym) continue;
+      if (it2.alsoOn && String(it2.alsoOn).toUpperCase() === s) return it2;
+    }
+    for (var k = 0; k < list.length; k++){
+      var it3 = list[k];
+      if (!it3 || !it3.sym) continue;
+      if (it3.base === base || baseOfSym(it3.sym) === base) return it3;
+    }
+    return null;
+  }catch(e){ return null; }
+}
+function hasCandleRoute(){
+  try{
+    return (typeof G.xuUniverse === 'function' && typeof G.xuCandles === 'function')
+        || (typeof G.getCandles === 'function')
+        || (typeof G.getXAUCandles === 'function');
+  }catch(e){ return false; }
+}
+/* default candle route (feature-checked at every step; per-record failures
+   reject and are catch-isolated by hgScoreSettle) */
+function defaultFetchCandles(rec){
+  try{
+    var n = barsNeeded(rec.at);
+    if (rec.lane === 'gold' && typeof G.getXAUCandles === 'function'){
+      return G.getXAUCandles(SETTLE_TF, n);
+    }
+    if (typeof G.xuUniverse === 'function' && typeof G.xuCandles === 'function'){
+      return G.xuUniverse(false).then(function(list){
+        var item = matchXu(list, rec.sym);
+        if (item) return G.xuCandles(item, SETTLE_TF, n);
+        throw new Error('no combined-universe match for ' + rec.sym);
+      });
+    }
+    if (typeof G.getCandles === 'function'){
+      return G.getCandles(rec.sym, SETTLE_TF, n);
+    }
+    if (typeof G.getXAUCandles === 'function'){
+      return G.getXAUCandles(SETTLE_TF, n);
+    }
+    return Promise.reject(new Error('no candle route (xuCandles/getCandles absent)'));
+  }catch(e){
+    return Promise.reject(e);
+  }
+}
+async function hgScoreSettle(fetchCandles){
+  var out = { settled: 0, open: 0, failed: 0, notes: [] };
+  try{
+    var fn = (typeof fetchCandles === 'function') ? fetchCandles
+           : (hasCandleRoute() ? defaultFetchCandles : null);
+    if (!fn) out.notes.push('no candle route available — xuniverse/getCandles absent');
+    for (var i = 0; i < store.length; i++){
+      var rec = store[i];
+      if (!rec || rec.status !== 'open') continue;
+      try{
+        if (!fn){ rec.note = 'no candle route — settlement unavailable'; out.failed++; continue; }
+        var rows = await fn(rec);
+        if (!Array.isArray(rows) || !rows.length){
+          rec.note = 'no candle data returned — still open, unsettled';
+          rec.lastCheck = Date.now();
+          out.open++;
+          continue;
+        }
+        var w = hgScoreWalk(rec, rows);
+        rec.lastCheck = Date.now();
+        if (w.state === 'INVALID'){
+          rec.note = 'record failed validation at settlement — left open, never scored';
+          out.failed++;
+          continue;
+        }
+        rec.bars = w.bars;
+        if (w.state === 'OPEN'){
+          rec.mtm = round4(w.r);
+          rec.note = null;
+          out.open++;
+        }else{
+          rec.status = 'settled';
+          rec.outcome = w.state;
+          rec.r = round4(w.r);
+          rec.bars = w.bars;
+          rec.closedAt = w.closedAt;
+          rec.settledAt = Date.now();
+          rec.mtm = null;
+          rec.note = null;
+          out.settled++;
+        }
+      }catch(e){
+        try{ rec.note = 'settlement failed for ' + rec.sym + ': ' + errMsg(e); }catch(e2){}
+        out.failed++;
+      }
+    }
+    saveStore();
+    return out;
+  }catch(e){
+    out.notes.push('settle loop failed: ' + errMsg(e));
+    return out;
+  }
+}
+
+/* ================= UI (DOM — every render failure leaves an honest note) ================= */
+function outcomePip(outcome){
+  var o = String(outcome || '');
+  if (o === 'T2' || o === 'T1') return '<span class="gpip ok">' + o + '</span>';
+  if (o === 'T1S') return '<span class="gpip" style="color:var(--gold);border-color:var(--gold-dim);background:rgba(217,164,65,.08)">T1S</span>';
+  if (o === 'SL') return '<span class="gpip" style="color:var(--short);border-color:rgba(228,88,107,.5);background:rgba(228,88,107,.08)">SL</span>';
+  if (o === 'EXPIRED') return '<span class="gpip">EXPIRED</span>';
+  return '<span class="gpip">' + esc(o || '?') + '</span>';
+}
+function rCell(r){
+  if (typeof r !== 'number' || !isFinite(r)) return '<span>—</span>';
+  return '<span class="' + (r > 0 ? 'pos' : (r < 0 ? 'neg' : '')) + '">' + fmtR(r) + '</span>';
+}
+function boardHtml(st){
+  var honesty = st.settled === 0
+    ? '<div class="note warn" style="margin-top:8px">no settled trades yet — the engine has no track record to show. Run BRAIN/EXECUTE scans, let the setups live, then RE-SETTLE.</div>'
+    : (!st.enoughData
+      ? '<div class="note warn" style="margin-top:8px">not enough data — ' + st.settled + ' settled (need ≥ ' + MIN_DATA + '). Below that, win rate and expectancy are anecdote, not evidence.</div>'
+      : '');
+  return '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">SETTLED</span></div>'
+    + '<div class="big">' + st.settled + '</div>'
+    + '<div class="note">open ' + st.open + ' · wins ' + st.wins + ' · losses ' + st.losses + '</div></div>'
+    + '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">WIN RATE</span></div>'
+    + '<div class="big">' + pct(st.winRate) + '</div>'
+    + '<div class="note">r-scored ' + st.counted + ' of ' + st.settled + ' settled</div></div>'
+    + '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">AVG R</span></div>'
+    + '<div class="big">' + fmtR(st.avgR) + '</div>'
+    + '<div class="note">expectancy ' + fmtR(st.expectancy) + ' per settled trade</div></div>'
+    + honesty;
+}
+function statTableHtml(title, sub, rows, emptyNote){
+  var h = '<div class="note" style="margin:10px 0 4px"><b>' + esc(title) + '</b>' + (sub ? ' <span>' + esc(sub) + '</span>' : '') + '</div>';
+  if (!rows.length) return h + '<div class="empty" style="padding:12px">' + esc(emptyNote || 'no settled data') + '</div>';
+  h += '<table><tr><th></th><th>n</th><th>win%</th><th>avg R</th></tr>';
+  for (var i = 0; i < rows.length; i++){
+    h += '<tr><td>' + esc(rows[i][0]) + '</td><td>' + rows[i][1] + '</td><td>' + pct(rows[i][2]) + '</td><td>' + fmtR(rows[i][3]) + '</td></tr>';
+  }
+  return h + '</table>';
+}
+function breakdownsHtml(st){
+  var tierRows = [];
+  var tierOrder = ['PRIME', 'HIGH'];
+  for (var tk in st.byTier) if (tierOrder.indexOf(tk) < 0) tierOrder.push(tk);
+  for (var ti = 0; ti < tierOrder.length; ti++){
+    var b = st.byTier[tierOrder[ti]];
+    if (b) tierRows.push([tierOrder[ti], b.n, b.winRate, b.avgR]);
+  }
+  var laneRows = [['CRYPTO'].concat([st.byLane.crypto.n, st.byLane.crypto.winRate, st.byLane.crypto.avgR]),
+                  ['GOLD'].concat([st.byLane.gold.n, st.byLane.gold.winRate, st.byLane.gold.avgR])];
+  var dirRows = [['LONG'].concat([st.byDir.long.n, st.byDir.long.winRate, st.byDir.long.avgR]),
+                 ['SHORT'].concat([st.byDir.short.n, st.byDir.short.winRate, st.byDir.short.avgR])];
+  var left = statTableHtml('BY TIER', 'conviction tier at record time', tierRows, 'nothing settled yet');
+  var right = statTableHtml('BY LANE', 'crypto vs gold', laneRows, 'nothing settled yet')
+            + statTableHtml('BY DIRECTION', '', dirRows, 'nothing settled yet');
+  var layerRows = [];
+  for (var lk in st.byLayer){
+    var lb = st.byLayer[lk];
+    layerRows.push([lk, lb.n, lb.winRate, lb.avgR]);
+  }
+  layerRows.sort(function(a, b){ return (b[1] - a[1]) || (a[0] < b[0] ? -1 : 1); });
+  var layer = statTableHtml('BY LAYER — the per-layer edge meter',
+    'outcome attribution: every layer that voted for a settled setup carries that result',
+    layerRows, 'no settled trades with layer attribution yet');
+  return '<div class="grid2"><div>' + left + '</div><div>' + right + '</div></div>' + layer;
+}
+function layersPips(layers){
+  if (!Array.isArray(layers) || !layers.length) return '';
+  var h = '<div class="gates" style="margin-top:4px">';
+  for (var i = 0; i < layers.length; i++) h += '<span class="gpip">' + esc(layers[i]) + '</span>';
+  return h + '</div>';
+}
+function openHtml(records){
+  var opens = [];
+  for (var i = 0; i < records.length; i++) if (records[i] && records[i].status === 'open') opens.push(records[i]);
+  opens.sort(function(a, b){ return b.at - a.at; });
+  var h = '<div class="note" style="margin:10px 0 4px"><b>OPEN</b> <span>live mark-to-market from the last settlement · time in trade from record time</span></div>';
+  if (!opens.length) return h + '<div class="empty" style="padding:12px">no open trades right now — nothing the engine is currently answerable for.</div>';
+  h += '<table><tr><th>sym</th><th>dir</th><th>tier</th><th>src</th><th>entry</th><th>stop</th><th>t1</th><th>t2</th><th>age</th><th>mtm R</th><th>note</th></tr>';
+  var now = Date.now();
+  for (var j = 0; j < opens.length; j++){
+    var r = opens[j];
+    h += '<tr><td><b>' + esc(r.sym) + '</b>' + layersPips(r.layers) + '</td>'
+      + '<td class="' + (r.dir === 'long' ? 'pos' : 'neg') + '">' + esc(r.dir.toUpperCase()) + '</td>'
+      + '<td>' + esc(r.tier || '—') + '</td>'
+      + '<td>' + esc(r.source || '—') + '</td>'
+      + '<td>' + fmtPx(r.entry) + '</td><td>' + fmtPx(r.stop) + '</td>'
+      + '<td>' + fmtPx(r.t1) + '</td><td>' + fmtPx(r.t2) + '</td>'
+      + '<td>' + ageStr(now - r.at) + '</td>'
+      + '<td>' + rCell(r.mtm) + '</td>'
+      + '<td style="color:var(--mut)">' + esc(r.note || '') + '</td></tr>';
+  }
+  return h + '</table>';
+}
+function settledHtml(records){
+  var done = [];
+  for (var i = 0; i < records.length; i++) if (records[i] && records[i].status === 'settled') done.push(records[i]);
+  done.sort(function(a, b){ return (b.settledAt || 0) - (a.settledAt || 0); });
+  var h = '<div class="note" style="margin:10px 0 4px"><b>SETTLED</b> <span>last 50 · SL −1R · T1 +2R · T2 +3.5R · T1S +1R (house plans) · EXPIRED marked to market</span></div>';
+  if (!records.length){
+    return h + '<div class="empty">No setups recorded yet — the BRAIN and EXECUTE tabs log their PRIME/HIGH setups here after each scan. This ledger stays empty until real setups exist; nothing is backfilled or simulated.</div>';
+  }
+  if (!done.length) return h + '<div class="empty" style="padding:12px">no settled trades yet — ' + records.length + ' open. Let them play out, then RE-SETTLE.</div>';
+  if (done.length > 50) done = done.slice(0, 50);
+  h += '<table><tr><th>settled</th><th>sym</th><th>dir</th><th>tier</th><th>src</th><th>outcome</th><th>R</th><th>bars</th><th>held</th></tr>';
+  for (var j = 0; j < done.length; j++){
+    var r = done[j];
+    var held = (r.closedAt && isFinite(r.closedAt)) ? ageStr(r.closedAt * 1000 - r.at) : '—';
+    h += '<tr><td>' + dstr(r.settledAt) + '</td>'
+      + '<td><b>' + esc(r.sym) + '</b></td>'
+      + '<td class="' + (r.dir === 'long' ? 'pos' : 'neg') + '">' + esc(r.dir.toUpperCase()) + '</td>'
+      + '<td>' + esc(r.tier || '—') + '</td>'
+      + '<td>' + esc(r.source || '—') + '</td>'
+      + '<td>' + outcomePip(r.outcome) + '</td>'
+      + '<td>' + rCell(r.r) + '</td>'
+      + '<td>' + (isFinite(r.bars) ? r.bars : '—') + '</td>'
+      + '<td>' + held + '</td></tr>';
+  }
+  return h + '</table>';
+}
+function render(ui){
+  try{
+    if (!ui) return;
+    var st = hgScoreStats(store);
+    if (ui.board) ui.board.innerHTML = boardHtml(st);
+    if (ui.breaks) ui.breaks.innerHTML = breakdownsHtml(st);
+    if (ui.openWrap) ui.openWrap.innerHTML = openHtml(store);
+    if (ui.settledWrap) ui.settledWrap.innerHTML = settledHtml(store);
+  }catch(e){
+    try{ if (ui && ui.settledWrap) ui.settledWrap.innerHTML = '<div class="empty">scorecard render failed: ' + esc(errMsg(e)) + '</div>'; }catch(e2){}
+  }
+}
+
+/* ================= settle run + refresh contract ================= */
+async function runSettle(ui){
+  if (__sc.busy){
+    try{ if (ui && ui.stat) ui.stat.textContent = 'settlement already running…'; }catch(e){}
+    return 'busy';
+  }
+  __sc.busy = true;
+  try{
+    __sc.ranOnce = true;
+    var openN = 0;
+    for (var i = 0; i < store.length; i++) if (store[i] && store[i].status === 'open') openN++;
+    if (!hasCandleRoute()){
+      /* no way to fetch a single candle — say so in the status line instead
+         of failing every record one by one (never a silent failure) */
+      render(ui);
+      var m0 = 'no candle route available (xuCandles/getCandles/getXAUCandles absent) — '
+        + openN + ' open record' + (openN === 1 ? '' : 's') + ' left unsettled · ' + timeStr();
+      try{ if (ui && ui.stat) ui.stat.textContent = m0; }catch(e){}
+      return m0;
+    }
+    if (ui && ui.stat){
+      ui.stat.textContent = openN
+        ? 'settling ' + openN + ' open record' + (openN === 1 ? '' : 's') + ' against 1h candles…'
+        : 'no open records — rendering the stored ledger…';
+    }
+    var res = await hgScoreSettle(defaultFetchCandles);
+    render(ui);
+    var msg = 'settled ' + res.settled + ' · still open ' + res.open + ' · failed ' + res.failed + ' · ' + timeStr();
+    if (res.notes && res.notes.length) msg += ' (' + res.notes.join('; ') + ')';
+    try{ if (ui && ui.stat) ui.stat.textContent = msg; }catch(e){}
+    return msg;
+  }catch(e){
+    var m = 'error: ' + errMsg(e);
+    try{ if (ui && ui.stat) ui.stat.textContent = m; }catch(e2){}
+    return m;
+  }finally{
+    __sc.busy = false;
+  }
+}
+/* hard-refresh contract: async, NEVER throws, terse status. 'busy' while a
+   settlement runs; 'skipped: not run yet' before the first user settle (a
+   global refresh never fires an expensive first-time candle sweep); after
+   the first run it re-settles the same way RE-SETTLE NOW does. */
+async function refreshScorecard(){
+  try{
+    if (__sc.busy) return 'busy';
+    if (!__sc.ranOnce || !__sc.ui) return 'skipped: not run yet';
+    await runSettle(__sc.ui);
+    return 'refreshed';
+  }catch(e){
+    return 'error: ' + errMsg(e);
+  }
+}
+
+/* ================= mount ================= */
+function mountScorecard(el){
+  try{
+    if (!el) return;
+    el.innerHTML =
+      '<div class="panel">'
+      + '<h2>Scorecard — the engine\'s real record <span>gates, not scores · every recorded setup settled against 1h candles · SL −1R · T1 +2R · T2 +3.5R · T1-then-stop +1R · 14-day expiry marked to market</span></h2>'
+      + '<div class="note">Evidence, not signals. The BRAIN and EXECUTE tabs log their setups here; this tab walks each one forward on 1h candles and settles it to an honest R-multiple. The BY-LAYER table is the point — which voting layers actually make money, measured. Numbers below 5 settled trades are anecdote, not evidence.</div>'
+      + '<div class="note warn" id="scoreWarn" style="display:none;margin-top:6px"></div>'
+      + '<div class="note" id="scoreStat" style="margin-top:6px">idle — ledger loaded from this browser; press RE-SETTLE to check open trades against fresh 1h candles.</div>'
+      + '<div class="row" style="margin-top:8px"><button class="btn" id="scoreRun">RE-SETTLE NOW</button></div>'
+      + '<div class="grid3" style="margin-top:12px" id="scoreBoard"></div>'
+      + '<hr class="sep">'
+      + '<div id="scoreBreaks"></div>'
+      + '<hr class="sep">'
+      + '<div id="scoreOpenWrap"></div>'
+      + '<div id="scoreSettledWrap"></div>'
+      + '</div>';
+    var ui = {
+      el: el,
+      stat: el.querySelector('#scoreStat'),
+      warn: el.querySelector('#scoreWarn'),
+      btn: el.querySelector('#scoreRun'),
+      board: el.querySelector('#scoreBoard'),
+      breaks: el.querySelector('#scoreBreaks'),
+      openWrap: el.querySelector('#scoreOpenWrap'),
+      settledWrap: el.querySelector('#scoreSettledWrap')
+    };
+    __sc.ui = ui;
+    var warns = [];
+    if (storageNote) warns.push(storageNote);
+    if (persistNote) warns.push(persistNote);
+    if (!hasCandleRoute()) warns.push('no candle route available (xuCandles/getCandles/getXAUCandles all absent) — the ledger renders, but settlement cannot run');
+    if (ui.warn && warns.length){
+      ui.warn.textContent = warns.join(' · ');
+      ui.warn.style.display = 'block';
+    }
+    if (ui.btn) ui.btn.addEventListener('click', function(){ return runSettle(ui); });
+    render(ui);
+  }catch(e){
+    try{ el.innerHTML = '<div class="empty">scorecard mount failed: ' + esc(errMsg(e)) + '</div>'; }catch(e2){}
+  }
+}
+
+/* ================= load + exports + registration ================= */
+try{ loadStore(); }catch(e){ store = []; storageNote = 'ledger load failed: ' + errMsg(e); }
+idCounter = store.length;
+
+try{
+  G.hgScoreRecord = hgScoreRecord;
+  G.hgScoreSettle = hgScoreSettle;
+  G.hgScoreWalk = hgScoreWalk;
+  G.hgScoreStats = hgScoreStats;
+  G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };
+  G.HG_tabs = G.HG_tabs || [];
+  G.HG_tabs.push({ id: 'scorecard', label: 'SCORECARD', mount: mountScorecard, refresh: refreshScorecard });
+}catch(e){}
+
+})();

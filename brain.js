@@ -94,6 +94,34 @@ Layer state contracts consumed (ALL feature-checked; any may be absent):
                              has run; optional, layer degrades honestly)
   plans via window.smartSetup / window.hgPlanLevels only — never invented.
 
+QUICK RESCAN (button beside RUN): re-votes + refetches candles ONLY for
+candidates that were WATCH-or-better last scan plus any NEW listings; every
+other candidate keeps its prior verdict rendered with an 'AS OF HH:MM' age
+stamp. The universe is CACHE-READ ONLY — never an exchange refetch: the xu
+cache is consulted only when xuState() proves it fresh (< 15 min), so
+xuUniverse(false) is a guaranteed cache hit; stale/absent cache skips
+new-listing detection with an honest note. Stat line:
+'quick rescan: N checked · M unchanged · Xs'.
+
+SCORECARD HOOK: after every successful scan (full or quick), every PRIME /
+HIGH card is reported to window.hgScoreRecord({source:'brain', sym, dir,
+tier, entry, stop, t1, t2, layers:[agreeing layer names], at}) — feature-
+checked, per-card try-caught, fire-and-forget (promise rejections
+swallowed), never blocking render. Plan-less cards record null levels.
+
+SILENT-FIREWALL (the 'click reveals nothing' fix): mount wires the RUN and
+QUICK listeners FIRST, in isolation from the deps/venue wiring, and retries
+a failed mount itself (3 attempts) — index.html latches HG_MOUNTED before
+mount() returns, so a failed mount would otherwise never re-run and the
+button would stay silently dead forever. Every failure path (hostile pane,
+missing elements, throwing render, hung feed) leaves a VISIBLE honest
+message — never a silent empty pane. Every awaited leg carries the 12s
+timeout (incl. binanceTickers24h / binanceKlines / getXAUCandles), and a
+scan-level watchdog (default 150s) stops launching new work when tripped,
+renders partial results with a 'scan timed out' note, and always releases
+__busy. window.brainTunables = {fetchMs, scanMs} is the documented vm-test
+seam; production never touches it.
+
 Classic script, no build step. Loads after every module it reads; absence of
 any module degrades honestly. Registers via
   window.HG_tabs.push({id:'brain', label:'BRAIN', mount, refresh})
@@ -123,6 +151,13 @@ var BASE_BLOCK  = { USDC:1, FDUSD:1, TUSD:1, BUSD:1, USDP:1,
 var FETCH_CAP   = 40;      /* max 4h candle fetches per scan — documented, honest when it binds */
 var CHUNK_SIZE  = 5;       /* candle fetches in flight per chunk */
 var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
+var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
+var XU_CACHE_MS = 15 * 60 * 1000; /* mirror of xuniverse.js CACHE_MS (its documented contract) */
+/* vm-test seam: suites may shorten timeouts; production never touches this */
+var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS };
+/* the seam is this SAME object by reference — mutating window.brainTunables
+   mutates what every withTimeout/watchdog reads */
+G.brainTunables = TUN;
 var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with engine.js
                                        (lowercase 'all'/'delta'/'cdcx' on disk; brain
                                        normalizes case on read, writes lowercase back) */
@@ -150,6 +185,7 @@ function esc(s){
 function __last(a){ return (a && a.length) ? a[a.length - 1] : NaN; }
 function isDir(d){ return d === 'long' || d === 'short'; }
 function isDirUp(d){ return d === 'LONG' || d === 'SHORT'; }
+function errMsg(e){ return (e && e.message) ? e.message : String(e); }
 
 /* =========================================================================
 PURE VOTE COLLECTOR — one candidate's raw layer outputs in, votes out.
@@ -162,7 +198,6 @@ function brainCollect(inputs){
   var inp = (inputs && typeof inputs === 'object') ? inputs : {};
   var sym  = (typeof inp.sym === 'string') ? inp.sym : '';
   var lane = (inp.lane === 'gold') ? 'gold' : 'crypto';
-  var isBtc = sym.toUpperCase().indexOf('BTC') === 0;
   var votes = [], unavailable = [], silent = [];
 
   /* alias matching — layer states keyed by Binance-style syms ('BTCUSDT')
@@ -176,6 +211,13 @@ function brainCollect(inputs){
     }
   }
   function named(s){ return typeof s === 'string' && aliasSet[s] === 1; }
+
+  /* BTC-ness gates rotation neutrality + the on-chain layer. A combined
+     candidate's sym is venue-native ('B-BTC_USDT' — prefix check FAILS), so
+     test the base asset through the alias set; legacy syms ('BTCUSDT')
+     still match the prefix. */
+  var isBtc = sym.toUpperCase().indexOf('BTC') === 0
+           || aliasSet['BTC'] === 1 || aliasSet['BTCUSDT'] === 1;
 
   function push(layer, vote, text, extra){
     var v = { layer: layer, vote: vote, text: String(text || ''),
@@ -637,7 +679,7 @@ function setVenue(v){
 
 /* ---------------- promise timeout (12s, never rejects) ---------------- */
 function withTimeout(p, ms){
-  ms = (typeof ms === 'number' && ms > 0) ? ms : FETCH_MS;
+  ms = (typeof ms === 'number' && ms > 0) ? ms : TUN.fetchMs;
   return new Promise(function(resolve){
     var done = false;
     var timer = setTimeout(function(){ if (!done){ done = true; resolve(null); } }, ms);
@@ -654,7 +696,7 @@ async function legacyUniverse(){
               note: 'BTC/ETH/SOL only — Binance turnover feed unavailable, top-10 alts skipped' };
   try{
     if (typeof G.binanceTickers24h !== 'function') return out;
-    var ticks = await G.binanceTickers24h();
+    var ticks = await withTimeout(G.binanceTickers24h(), TUN.fetchMs); /* hung feed degrades, never parks the scan */
     if (!ticks || typeof ticks !== 'object') return out;
     var base = {}; for (var b = 0; b < BASE_SYMS.length; b++) base[BASE_SYMS[b]] = 1;
     var arr = [];
@@ -681,7 +723,7 @@ async function legacyUniverse(){
 async function buildUniverse(){
   if (typeof G.xuUniverse === 'function'){
     var failed = false, list = null;
-    try{ list = await withTimeout(G.xuUniverse(false), FETCH_MS); }
+    try{ list = await withTimeout(G.xuUniverse(false), TUN.fetchMs); }
     catch(e){ failed = true; }
     if (Array.isArray(list) && list.length) return brainUniverse(list, { venue: getVenue() });
     /* feed present but failed/empty — honest legacy fallback, noted on the stat line */
@@ -714,6 +756,56 @@ async function fetch4h(cand){
     }
   }catch(e){}
   return null;
+}
+
+/* bounded lazy 4h fetching for a WATCH-or-better row set: tier/evidence
+   order, CHUNK_SIZE in flight, per-symbol catch isolation, FETCH_CAP/scan,
+   and a scan-level watchdog (TUN.scanMs) that stops LAUNCHING new work when
+   tripped — partial coverage is reported honestly, never silently. */
+async function fetchCandleQueue(rows, uni, stat, t0){
+  var out = { capNote: '', watchNote: '', fetched: 0, total: 0, timedOut: false };
+  var queue = [];
+  for (var qi = 0; qi < rows.length; qi++){
+    if (rows[qi].lane === 'crypto') queue.push(rows[qi]);
+  }
+  queue.sort(function(a, b){
+    return (TIER_RANK[b.dec.tier] - TIER_RANK[a.dec.tier])
+        || (b.dec.agree - a.dec.agree)
+        || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0))
+        || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0);
+  });
+  var overflow = [];
+  if (queue.length > FETCH_CAP){ overflow = queue.slice(FETCH_CAP); queue = queue.slice(0, FETCH_CAP); }
+  var settle = (typeof Promise.allSettled === 'function')
+    ? function(ps){ return Promise.allSettled(ps); }
+    : function(ps){ return Promise.all(ps.map(function(p){
+        return p.then(function(v){ return { status: 'fulfilled', value: v }; },
+                      function(e){ return { status: 'rejected', reason: e }; });
+      })); };
+  for (var fi = 0; fi < queue.length; fi += CHUNK_SIZE){
+    if (Date.now() - t0 > TUN.scanMs){ out.timedOut = true; break; } /* watchdog: stop launching */
+    var chunk = queue.slice(fi, fi + CHUNK_SIZE);
+    try{ stat.textContent = fi + '/' + queue.length + ' candidates · delta '
+      + uni.counts.delta + ' · cdcx ' + uni.counts.cdcx; }catch(e){}
+    await settle(chunk.map(function(crow){
+      return fetch4h(crow).then(function(r4){ crow.rows4h = r4; },
+                                function(){ crow.rows4h = null; });
+    }));
+    out.fetched += chunk.length;
+  }
+  out.total = queue.length;
+  if (out.timedOut)
+    out.watchNote = ' · scan timed out — partial candle coverage (' + out.fetched + '/' + queue.length + ')';
+  if (overflow.length){
+    var allWatch = true;
+    for (var ow = 0; ow < overflow.length; ow++){
+      if (overflow[ow].dec.tier !== 'WATCH'){ allWatch = false; break; }
+    }
+    out.capNote = allWatch
+      ? ' · +' + overflow.length + ' more watch candidates — raise evidence to fetch'
+      : ' · +' + overflow.length + ' more candidates unfetched (fetch cap ' + FETCH_CAP + ')';
+  }
+  return out;
 }
 
 /* ---------------- collect + decide for one candidate ---------------- */
@@ -786,8 +878,8 @@ function enginePlanFor(row, snap){
 async function klineRows(sym){
   var out = { rows4h: null, rows1h: null };
   if (typeof G.binanceKlines !== 'function') return out;
-  try{ var r4 = await G.binanceKlines(sym, '4h', KLINES_4H); out.rows4h = (r4 && r4.length) ? r4 : null; }catch(e){}
-  try{ var r1 = await G.binanceKlines(sym, '1h', KLINES_1H); out.rows1h = (r1 && r1.length) ? r1 : null; }catch(e){}
+  try{ var r4 = await withTimeout(G.binanceKlines(sym, '4h', KLINES_4H), TUN.fetchMs); out.rows4h = (r4 && r4.length) ? r4 : null; }catch(e){}
+  try{ var r1 = await withTimeout(G.binanceKlines(sym, '1h', KLINES_1H), TUN.fetchMs); out.rows1h = (r1 && r1.length) ? r1 : null; }catch(e){}
   return out;
 }
 
@@ -861,7 +953,7 @@ async function goldPlan(row, snap){
   var rows = null;
   try{
     if (typeof G.getXAUCandles === 'function'){
-      var h4 = await G.getXAUCandles('4h', KLINES_4H);
+      var h4 = await withTimeout(G.getXAUCandles('4h', KLINES_4H), TUN.fetchMs); /* hung gold feed must not park the scan */
       rows = (h4 && h4.length) ? h4 : null;
     }
   }catch(e){ rows = null; }
@@ -968,23 +1060,25 @@ function displaySym(row){
 }
 
 function watchRowHTML(row){
+  var age = row.ageStamp ? ' <span class="stamp na">' + esc(String(row.ageStamp).toUpperCase()) + '</span>' : '';
   return '<div class="lrow">'
     + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + (row.dec.dir ? row.dec.dir.toUpperCase() + ' bias — ' : '')
     + esc(row.dec.reasons[0] || '') + '</span>'
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '') + '</span>'
-    + '<span class="stamp na">WATCH</span></div>';
+    + '<span class="stamp na">WATCH</span>' + age + '</div>';
 }
 
 function asideRowHTML(row){
   var vetoed = row.dec.vetoes && row.dec.vetoes.length;
+  var age = row.ageStamp ? ' <span class="stamp na">' + esc(String(row.ageStamp).toUpperCase()) + '</span>' : '';
   return '<div class="lrow">'
     + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + esc(row.dec.reasons[0] || 'aside') + '</span>'
     + '<span class="gdetail">' + row.dec.longCount + 'L/' + row.dec.shortCount + 'S'
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '') + '</span>'
-    + '<span class="stamp ' + (vetoed ? 'veto' : 'na') + '">' + (vetoed ? 'VETO' : 'ASIDE') + '</span></div>';
+    + '<span class="stamp ' + (vetoed ? 'veto' : 'na') + '">' + (vetoed ? 'VETO' : 'ASIDE') + '</span>' + age + '</div>';
 }
 
 function paintCharts(cardsEl, rows){
@@ -1016,10 +1110,82 @@ function depStatus(){
   return missing;
 }
 
+/* ---------------- silent-firewall helpers ---------------- */
+/* age stamp for verdicts carried over unchanged by a quick rescan */
+function ageOf(at){
+  if (!isFinite(at)) return 'as of ?';
+  try{ return 'as of ' + new Date(at).toTimeString().slice(0, 5); }catch(e){ return 'as of ?'; }
+}
+
+/* every failure path ends VISIBLE: stat line -> empty block -> a note
+   appended to the pane itself. Never a silent empty pane. */
+function paintFatal(el, msg){
+  try{
+    var stat = el && el.querySelector ? el.querySelector('#brainStat') : null;
+    if (stat){ stat.className = 'note warn'; stat.textContent = msg; return; }
+  }catch(e){}
+  try{
+    var empty = el.querySelector('#brainEmpty');
+    if (empty){ empty.style.display = 'block'; empty.textContent = msg; return; }
+  }catch(e){}
+  try{ el.insertAdjacentHTML('beforeend', '<div class="note warn">' + esc(msg) + '</div>'); }
+  catch(e){ try{ el.textContent = msg; }catch(e2){} }
+}
+
+/* one bad row must never blank the whole render — it becomes an honest row */
+function safeCardHTML(row){
+  try{ return cardHTML(row); }
+  catch(e){
+    return '<div class="card"><div class="chead"><span class="sym">' + esc(row && row.sym) + '</span>'
+      + '<span class="dir"><span class="stamp veto">RENDER FAILED</span></span></div>'
+      + '<div class="plan">card render failed: ' + esc(errMsg(e)) + ' — the verdict was computed, the display failed</div></div>';
+  }
+}
+function safeWatchRowHTML(row){
+  try{ return watchRowHTML(row); }
+  catch(e){ return '<div class="lrow"><span class="gid">' + esc(row && row.sym) + '</span><span class="gname">row render failed: '
+    + esc(errMsg(e)) + '</span><span class="gdetail"></span><span class="stamp na">WATCH</span></div>'; }
+}
+function safeAsideRowHTML(row){
+  try{ return asideRowHTML(row); }
+  catch(e){ return '<div class="lrow"><span class="gid">' + esc(row && row.sym) + '</span><span class="gname">row render failed: '
+    + esc(errMsg(e)) + '</span><span class="gdetail"></span><span class="stamp na">ASIDE</span></div>'; }
+}
+
+/* scorecard hook — PRIME/HIGH cards only, fire-and-forget, never blocking
+   render; a missing/throwing/rejecting recorder changes nothing */
+function scoreRecord(setups){
+  try{
+    if (typeof G.hgScoreRecord !== 'function') return;
+    for (var i = 0; i < setups.length; i++){
+      (function(row){
+        try{
+          var dec = row && row.dec;
+          if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return;
+          var agreeing = [];
+          var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
+          for (var a = 0; a < votes.length; a++){
+            if (votes[a] && votes[a].vote === dec.dir) agreeing.push(votes[a].layer);
+          }
+          var p = row.plan || null;
+          var ret = G.hgScoreRecord({
+            source: 'brain', sym: row.sym, dir: dec.dir, tier: dec.tier,
+            entry: p ? p.entry : null, stop: p ? p.stop : null,
+            t1: p ? p.t1 : null, t2: p ? p.t2 : null,
+            layers: agreeing, at: Date.now()
+          });
+          if (ret && typeof ret.then === 'function') ret.then(null, function(){});
+        }catch(e){ /* one card's record must never break the rest */ }
+      })(setups[i]);
+    }
+  }catch(e){ /* recording is best-effort */ }
+}
+
 /* ---------------- tab state + hard-refresh contract ---------------- */
 var __busy = false;
 var __hasRun = false;
 var __mountedEl = null;
+var __lastResult = null;  /* {rows, uni, at} — quick rescan rechecks this, never the wire */
 
 async function brainRefresh(){
   try{
@@ -1037,7 +1203,19 @@ async function runBrain(el){
       watchWrap = el.querySelector('#brainWatchWrap'),
       aside = el.querySelector('#brainAside'), asideWrap = el.querySelector('#brainAsideWrap'),
       empty = el.querySelector('#brainEmpty');
-  if (!btn || !stat || !cards || !watch || !aside || !empty) return;
+  if (!btn || !stat || !cards || !watch || !aside || !empty){
+    /* used to be a silent return — the reported "click does nothing". Now the
+       failure is always VISIBLE, with the missing element named. */
+    var miss = [];
+    if (!btn) miss.push('#brainRun');
+    if (!stat) miss.push('#brainStat');
+    if (!cards) miss.push('#brainCards');
+    if (!watch) miss.push('#brainWatch');
+    if (!aside) miss.push('#brainAside');
+    if (!empty) miss.push('#brainEmpty');
+    paintFatal(el, 'brain pane incomplete — ' + miss.join(', ') + ' unavailable — remount the tab');
+    return;
+  }
   if (__busy) return;
   __busy = true;
   var t0 = Date.now();
@@ -1066,6 +1244,7 @@ async function runBrain(el){
     var rows = [];
     for (var i = 0; i < uni.candidates.length; i++) rows.push(judgeCrypto(uni.candidates[i], snap));
     rows.push(judgeGold(snap));
+    for (var rj = 0; rj < rows.length; rj++) rows[rj].judgedAt = t0; /* quick rescan ages verdicts from this */
 
     /* bucket: PRIME/HIGH cards, WATCH list, ASIDE ledger */
     var primes = [], highs = [], watches = [], asides = [];
@@ -1084,48 +1263,14 @@ async function runBrain(el){
 
     if (combined){
       /* lazy, bounded candle fetching: 4h rows ONLY for crypto candidates at
-         WATCH-or-better on the non-candle layers, highest-evidence first,
-         CHUNK_SIZE per chunk, per-symbol catch isolation, FETCH_CAP/scan.
+         WATCH-or-better on the non-candle layers — the shared queue helper
+         owns ordering, chunking, the fetch cap and the scan watchdog.
          The gold lane keeps its own candle path (goldPlan, unchanged). */
-      var queue = [];
-      var wplus = primes.concat(highs, watches);
-      for (var qi = 0; qi < wplus.length; qi++){
-        if (wplus[qi].lane === 'crypto') queue.push(wplus[qi]);
-      }
-      queue.sort(function(a, b){
-        return (TIER_RANK[b.dec.tier] - TIER_RANK[a.dec.tier])
-            || (b.dec.agree - a.dec.agree)
-            || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0))
-            || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0);
-      });
-      var overflow = [];
-      if (queue.length > FETCH_CAP){ overflow = queue.slice(FETCH_CAP); queue = queue.slice(0, FETCH_CAP); }
-      var settle = (typeof Promise.allSettled === 'function')
-        ? function(ps){ return Promise.allSettled(ps); }
-        : function(ps){ return Promise.all(ps.map(function(p){
-            return p.then(function(v){ return { status: 'fulfilled', value: v }; },
-                          function(e){ return { status: 'rejected', reason: e }; });
-          })); };
-      for (var fi = 0; fi < queue.length; fi += CHUNK_SIZE){
-        var chunk = queue.slice(fi, fi + CHUNK_SIZE);
-        stat.textContent = fi + '/' + queue.length + ' candidates · delta '
-          + uni.counts.delta + ' · cdcx ' + uni.counts.cdcx;
-        await settle(chunk.map(function(crow){
-          return fetch4h(crow).then(function(r4){ crow.rows4h = r4; },
-                                    function(){ crow.rows4h = null; });
-        }));
-      }
-      if (overflow.length){
-        var allWatch = true;
-        for (var ow = 0; ow < overflow.length; ow++){
-          if (overflow[ow].dec.tier !== 'WATCH'){ allWatch = false; break; }
-        }
-        capNote = allWatch
-          ? ' · +' + overflow.length + ' more watch candidates — raise evidence to fetch'
-          : ' · +' + overflow.length + ' more candidates unfetched (fetch cap ' + FETCH_CAP + ')';
-      }
+      var fq = await fetchCandleQueue(primes.concat(highs, watches), uni, stat, t0);
+      capNote = fq.capNote + fq.watchNote;
       /* plans only for PRIME/HIGH — engine plans first, prefetched 4h rows */
       for (var sx = 0; sx < setups.length; sx++){
+        if (Date.now() - t0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
         stat.textContent = 'planning ' + (sx + 1) + '/' + setups.length + ' · ' + setups[sx].sym;
         try{
           var gotx = (setups[sx].lane === 'gold') ? await goldPlan(setups[sx], snap)
@@ -1136,6 +1281,7 @@ async function runBrain(el){
     }else{
       /* legacy mode — today's flow, unchanged: bounded kline fetches per setup */
       for (var s = 0; s < setups.length; s++){
+        if (Date.now() - t0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
         stat.textContent = 'planning ' + (s + 1) + '/' + setups.length + ' · ' + setups[s].sym;
         try{
           var got = (setups[s].lane === 'gold') ? await goldPlan(setups[s], snap)
@@ -1165,6 +1311,11 @@ async function runBrain(el){
     asideWrap.style.display = asides.length ? 'block' : 'none';
     if (!setups.length && !watches.length) empty.style.display = 'block';
 
+    /* scorecard hook — PRIME/HIGH only, fire-and-forget, after plans land */
+    scoreRecord(setups);
+    /* quick-rescan baseline: full row set + universe + scan time */
+    __lastResult = { rows: rows, uni: uni, at: Date.now() };
+
     if (combined){
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
@@ -1177,7 +1328,7 @@ async function runBrain(el){
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
         + uni.candidates.length + ' + XAU (' + uni.note + ')'
-        + (uni.xuNote ? ' · ' + uni.xuNote : '') + ' · '
+        + (uni.xuNote ? ' · ' + uni.xuNote : '') + capNote + ' · '
         + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
     }
   }catch(e){
@@ -1190,13 +1341,216 @@ async function runBrain(el){
   }
 }
 
+/* ---------------- QUICK RESCAN ----------------
+   Rechecks ONLY what the last full scan already saw: the WATCH-or-better
+   set is re-judged against a FRESH layer snapshot (regime flips move
+   candidates honestly), ASIDE verdicts carry over with an AS OF age stamp,
+   and the universe is a CACHE read (never a forced exchange refetch) used
+   solely to detect new listings, which get judged on arrival. */
+async function runQuick(el){
+  var btn, qbtn, stat, read, readWrap, cards, watch, watchWrap, aside, asideWrap, empty;
+  try{ btn = el.querySelector('#brainRun'); }catch(e){}
+  try{ qbtn = el.querySelector('#brainQuick'); }catch(e){}
+  try{ stat = el.querySelector('#brainStat'); }catch(e){}
+  try{ read = el.querySelector('#brainRead'); }catch(e){}
+  try{ readWrap = el.querySelector('#brainReadWrap'); }catch(e){}
+  try{ cards = el.querySelector('#brainCards'); }catch(e){}
+  try{ watch = el.querySelector('#brainWatch'); }catch(e){}
+  try{ watchWrap = el.querySelector('#brainWatchWrap'); }catch(e){}
+  try{ aside = el.querySelector('#brainAside'); }catch(e){}
+  try{ asideWrap = el.querySelector('#brainAsideWrap'); }catch(e){}
+  try{ empty = el.querySelector('#brainEmpty'); }catch(e){}
+  if (!btn || !stat || !cards || !watch || !aside || !empty){
+    var miss = [];
+    if (!btn) miss.push('#brainRun');
+    if (!stat) miss.push('#brainStat');
+    if (!cards) miss.push('#brainCards');
+    if (!watch) miss.push('#brainWatch');
+    if (!aside) miss.push('#brainAside');
+    if (!empty) miss.push('#brainEmpty');
+    paintFatal(el, 'brain pane incomplete — ' + miss.join(', ') + ' unavailable — remount the tab');
+    return;
+  }
+  if (__busy) return;
+  if (!__lastResult){
+    stat.className = 'note warn';
+    stat.textContent = 'quick rescan needs a full synthesis first — hit RUN SYNTHESIS once; '
+      + 'quick mode only rechecks what the last scan already saw';
+    return;
+  }
+  __busy = true;
+  var t0 = Date.now();
+  try{
+    btn.disabled = true;
+    if (qbtn) qbtn.disabled = true;
+    stat.className = 'note';
+    stat.textContent = 'quick recheck — fresh layers over the last scan’s watch set…';
+
+    var snap = snapshotLayers();
+    var last = __lastResult;
+    var lastRows = (last && Array.isArray(last.rows)) ? last.rows : [];
+    var combined = !!(last.uni && last.uni.mode === 'combined');
+    var newNote = '';
+
+    /* universe: CACHE read only, solely for new-listing detection */
+    var freshCands = null;
+    if (combined){
+      var xuAt = NaN;
+      try{ var xs = (typeof G.xuState === 'function') ? G.xuState() : null; xuAt = xs && xs.at; }catch(e){}
+      if (isFinite(xuAt) && (Date.now() - xuAt) > XU_CACHE_MS){
+        newNote = ' · new-listing check skipped (universe cache stale — run a full synthesis)';
+      }else{
+        try{
+          var list = await withTimeout(G.xuUniverse(false), TUN.fetchMs); /* cache read, never forced */
+          if (Array.isArray(list) && list.length){
+            var fu = brainUniverse(list, { venue: last.uni.venue || getVenue() });
+            freshCands = fu.candidates;
+            last.uni = fu;
+          }else{
+            newNote = ' · new-listing check skipped (universe cache unreadable)';
+          }
+        }catch(e){ newNote = ' · new-listing check skipped (universe cache unreadable)'; }
+      }
+    }else{
+      newNote = ' · legacy mode — new-listing check needs the combined feed';
+    }
+
+    /* recheck set: last scan's WATCH-or-better rows (crypto + gold lane) */
+    var recheck = [], unchanged = [];
+    for (var i = 0; i < lastRows.length; i++){
+      var lr = lastRows[i];
+      if (lr && lr.dec && TIER_RANK[lr.dec.tier] >= TIER_RANK.WATCH) recheck.push(lr);
+      else unchanged.push(lr);
+    }
+    /* new listings: in the cached universe but unseen by the last scan */
+    var newCands = [];
+    if (freshCands){
+      var seen = {};
+      for (var s2 = 0; s2 < lastRows.length; s2++) seen[lastRows[s2].sym] = 1;
+      for (var f2 = 0; f2 < freshCands.length; f2++){
+        if (!seen[freshCands[f2].sym]) newCands.push(freshCands[f2]);
+      }
+      if (newCands.length)
+        newNote = ' · ' + newCands.length + ' new listing' + (newCands.length > 1 ? 's' : '') + ' — judged on arrival';
+    }
+
+    /* re-judge against the FRESH snapshot — flips move candidates honestly */
+    var rows = [], ri;
+    for (ri = 0; ri < recheck.length; ri++){
+      rows.push(recheck[ri].lane === 'gold' ? judgeGold(snap) : judgeCrypto(recheck[ri], snap));
+    }
+    for (ri = 0; ri < newCands.length; ri++) rows.push(judgeCrypto(newCands[ri], snap));
+    for (ri = 0; ri < rows.length; ri++) rows[ri].judgedAt = t0;
+    var checked = rows.length;
+
+    /* bucket */
+    var primes = [], highs = [], watches = [], asides = [];
+    for (var r = 0; r < rows.length; r++){
+      var row = rows[r], t = row.dec.tier;
+      if (t === 'PRIME') primes.push(row);
+      else if (t === 'HIGH') highs.push(row);
+      else if (t === 'WATCH') watches.push(row);
+      else asides.push(row);
+    }
+    var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
+    primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
+    var setups = primes.concat(highs);
+    var extraNote = '';
+
+    if (combined){
+      /* fresh candles for the rechecked WATCH-or-better set — same bounded queue */
+      var fq = await fetchCandleQueue(primes.concat(highs, watches), last.uni, stat, t0);
+      extraNote = fq.watchNote;
+      for (var sx = 0; sx < setups.length; sx++){
+        if (Date.now() - t0 > TUN.scanMs){ extraNote += ' · planning timed out — some levels unavailable'; break; }
+        try{
+          var gotx = (setups[sx].lane === 'gold') ? await goldPlan(setups[sx], snap)
+                                                  : await cryptoPlanXu(setups[sx], snap);
+          setups[sx].plan = gotx.plan; setups[sx].rows = gotx.rows;
+        }catch(e){ setups[sx].plan = null; setups[sx].rows = null; }
+      }
+    }else{
+      /* legacy quick: the gate engine already holds the plans — ZERO refetch */
+      var priorBySym = {};
+      for (var pr = 0; pr < lastRows.length; pr++) priorBySym[lastRows[pr].sym] = lastRows[pr];
+      for (var ls = 0; ls < setups.length; ls++){
+        try{
+          if (setups[ls].lane === 'gold'){
+            var gg = await goldPlan(setups[ls], snap);
+            setups[ls].plan = gg.plan; setups[ls].rows = gg.rows;
+          }else{
+            var prior = priorBySym[setups[ls].sym];
+            setups[ls].plan = enginePlanFor(setups[ls], snap) || (prior && prior.plan) || null;
+            setups[ls].rows = (prior && prior.rows) || null;
+          }
+        }catch(e){ setups[ls].plan = null; setups[ls].rows = null; }
+      }
+    }
+
+    /* unchanged verdicts carry over with an honest AS OF age stamp */
+    for (var u = 0; u < unchanged.length; u++){
+      unchanged[u].ageStamp = ageOf(unchanged[u].judgedAt || last.at);
+      asides.push(unchanged[u]);
+    }
+
+    /* render — same shape as a full scan */
+    if (read && readWrap){
+      read.textContent = marketRead(snap);
+      readWrap.style.display = 'block';
+    }
+    cards.innerHTML = setups.map(cardHTML).join('');
+    paintCharts(cards, setups);
+    watch.innerHTML = watches.map(watchRowHTML).join('');
+    if (watchWrap) watchWrap.style.display = watches.length ? 'block' : 'none';
+    aside.innerHTML = asides.map(asideRowHTML).join('');
+    if (asideWrap) asideWrap.style.display = asides.length ? 'block' : 'none';
+    empty.style.display = (!setups.length && !watches.length) ? 'block' : 'none';
+
+    /* scorecard hook — fresh PRIME/HIGH cards earn a record, unchanged never do */
+    scoreRecord(setups);
+
+    /* the quick result becomes the new baseline */
+    var allRows = rows;
+    for (var ar = 0; ar < unchanged.length; ar++) allRows.push(unchanged[ar]);
+    __lastResult = { rows: allRows, uni: last.uni, at: Date.now() };
+
+    stat.className = 'note';
+    stat.textContent = 'quick rescan: ' + checked + ' checked · ' + unchanged.length + ' unchanged · '
+      + ((Date.now() - t0) / 1000).toFixed(0) + 's' + newNote + extraNote
+      + ' · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
+      + watches.length + ' watch · ' + asides.length + ' aside'
+      + ' · ' + new Date().toTimeString().slice(0, 5);
+  }catch(e){
+    stat.className = 'note warn';
+    stat.textContent = 'quick rescan failed: ' + (e && e.message ? e.message : e);
+  }finally{
+    __busy = false;
+    btn.disabled = false;
+    if (qbtn) qbtn.disabled = false;
+  }
+}
+
+/* mount-time notes always land somewhere visible — stat line first, then a
+   note appended to the pane, then raw text. Never a silent dead button. */
+function mountNote(el, msg){
+  try{
+    var stat = el.querySelector('#brainStat');
+    if (stat){ stat.className = 'note warn'; stat.textContent = msg; return; }
+  }catch(e){}
+  try{ el.insertAdjacentHTML('beforeend', '<div class="note warn">' + esc(msg) + '</div>'); }
+  catch(e){ try{ el.textContent = msg; }catch(e2){} }
+}
+
 function mount(el){
   if (!el) return;
+  /* 1) shell paint — isolated. If even this fails, a last-resort note goes
+     straight onto the pane and mount STILL never throws. */
   try{
     el.innerHTML =
       '<div class="panel">'
       + '<h2>BRAIN — meta-intelligence <span>reads every layer · evidence agreement, not scores</span></h2>'
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
+      + '<button class="btn" id="brainQuick" title="recheck the last scan’s watch set against fresh layers — cached universe, new listings judged on arrival">QUICK RESCAN</button>'
       + '<select id="brainVenue" style="display:none" title="venue filter — combined Delta India + CoinDCX universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
       + '<option value="CDCX">COINDCX ONLY</option></select>'
@@ -1219,18 +1573,32 @@ function mount(el){
       + '<div id="brainAside"></div></div>'
       + '<div class="empty" id="brainEmpty" style="display:none">No high-probability setups right now — standing aside is a position.</div>';
     __mountedEl = el;
-    var deps = el.querySelector('#brainDeps');
-    if (deps){
-      var missing = depStatus();
-      if (missing.length){
-        deps.className = 'note warn';
-        deps.textContent = 'dark layers: ' + missing.join(', ') + ' — those votes sit out and conviction is capped honestly.';
-      }else{
-        deps.textContent = 'all layer getters present · news + regime + rotation + on-chain + engine + oiflow + squeeze + liqs + gold lane';
-      }
-    }
+  }catch(e){
+    try{ el.textContent = 'brain mount failed: ' + errMsg(e) + ' — reload the tab'; }catch(e2){}
+    try{ el.insertAdjacentHTML('beforeend', '<div class="note warn">brain mount failed: ' + esc(errMsg(e)) + ' — reload the tab</div>'); }catch(e3){}
+    return;
+  }
+  /* 2) the click listeners — FIRST and each isolated. A dead RUN button was
+     the reported bug: it used to share one big try with the deps note, so a
+     throw anywhere earlier silently killed the click. If attach fails, the
+     dead button is ANNOUNCED and mount retries itself once (index.html
+     latches HG_MOUNTED, so the module must retry on its own). */
+  var runWired = false;
+  try{
     var btn = el.querySelector('#brainRun');
     if (btn) btn.addEventListener('click', function(){ runBrain(el); });
+    runWired = !!btn;
+  }catch(e){ runWired = false; }
+  try{
+    var qbtn = el.querySelector('#brainQuick');
+    if (qbtn) qbtn.addEventListener('click', function(){ runQuick(el); });
+  }catch(e){}
+  if (!runWired){
+    mountNote(el, 'brain mount degraded: run button wiring failed — retrying…');
+    setTimeout(function(){ try{ mount(el); }catch(e){} }, 100);
+  }
+  /* 3) venue filter — isolated */
+  try{
     var vsel = el.querySelector('#brainVenue');
     if (vsel){
       vsel.value = getVenue();
@@ -1242,7 +1610,32 @@ function mount(el){
         if (__hasRun && !__busy) runBrain(el);
       });
     }
-  }catch(e){ /* never throw at mount */ }
+  }catch(e){ mountNote(el, 'brain mount degraded: venue filter unavailable — scan still runs'); }
+  /* 4) deps note — isolated; its failure used to kill the RUN listener */
+  try{
+    var deps = el.querySelector('#brainDeps');
+    if (deps){
+      var missing = depStatus();
+      if (missing.length){
+        deps.className = 'note warn';
+        deps.textContent = 'dark layers: ' + missing.join(', ') + ' — those votes sit out and conviction is capped honestly.';
+      }else{
+        deps.textContent = 'all layer getters present · news + regime + rotation + on-chain + engine + oiflow + squeeze + liqs + gold lane';
+      }
+    }
+  }catch(e){ mountNote(el, 'brain mount degraded: layer-deps note unavailable — scan still runs'); }
+  /* 5) shell sanity sweep — every element the RUN path needs, verified at
+     mount so a half-painted shell is announced before the user ever clicks.
+     (#brainRun/#brainQuick are deliberately NOT re-queried here — the wiring
+     step above owns them, and a hostile pane may ration its throws.) */
+  try{
+    var need = ['#brainStat', '#brainCards', '#brainWatch', '#brainAside', '#brainEmpty'];
+    var gone = [];
+    for (var n = 0; n < need.length; n++){
+      if (!el.querySelector(need[n])) gone.push(need[n]);
+    }
+    if (gone.length) mountNote(el, 'brain mount degraded: ' + gone.join(', ') + ' unavailable — remount the tab');
+  }catch(e){ mountNote(el, 'brain mount degraded: shell sanity check unavailable — scan may still run'); }
 }
 
 /* ---------------- registration ---------------- */

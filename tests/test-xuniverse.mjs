@@ -67,15 +67,24 @@ function fetchRecorder(routes){
 
 /* ---------------- fixtures: REAL field names from index.html ---------------- */
 const DELTA_BODY = { result: [
-  { symbol: 'BTCUSD',  mark_price: '60000.5', close: '60000',   open: '59000', funding_rate: '0.05',  turnover_usd: '2500000000', oi_value_usd: '900000000' },
-  { symbol: 'ETHUSD',  mark_price: '3000.25', close: '3000',    open: '3050',  funding_rate: '-0.02', turnover_usd: '1200000000', oi_value_usd: '500000000' },
-  { symbol: 'SOLUSD',  mark_price: '150.5',   close: '150',     open: '148',   funding_rate: '0.01',  turnover: '800000000' },          // turnover fallback field
+  { symbol: 'BTCUSD',  mark_price: '60000.5', close: '60000',   open: '59000', funding_rate: '0.05',  turnover_usd: '2500000000', oi_value_usd: '900000000', oi_contracts: '15000' },
+  { symbol: 'ETHUSD',  mark_price: '3000.25', close: '3000',    open: '3050',  funding_rate: '-0.02', turnover_usd: '1200000000', oi_value_usd: '500000000', oi: '166666.0000' }, // oi fallback (no oi_contracts)
+  { symbol: 'SOLUSD',  mark_price: '150.5',   close: '150',     open: '148',   funding_rate: '0.01',  turnover: '800000000' },          // turnover fallback field; no OI -> nulls
   { symbol: 'XAUTUSD', mark_price: '4000',    close: '4000',    open: '3990',  funding_rate: '0.00',  turnover_usd: '5000000' },        // gold token
   { symbol: 'DOGEUSD', close: '0.12',         open: '0.11' },                                                                            // no mark_price -> close; no funding/turnover -> nulls
   { symbol: 'BADUSD',  mark_price: 'not-a-number', close: '' }                                                                           // unparseable -> mark null, row KEPT
 ] };
 const CDCX_BODY = [ 'B-BTC_USDT', 'B-ETH_USDT', 'B-XRP_USDT', 'B-DOGE_USDT', { symbol: 'B-ADA_USDT' }, { symbol: 'B-MATIC_USDT' } ];
 const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
+/* REAL shape of CoinDCX GET /market_data/v3/current_prices/futures/rt
+   (verified live): per-pair mp=mark, ls=last, v=24h USDT turnover, fr raw. */
+const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
+  'B-BTC_USDT':  { fr: 0.00005278, h: 65084.6, l: 63736.1, v: 6999746971.98, ls: 64845.3, pc: 0.529, mkt: 'BTCUSDT', mp: 64845.3 },
+  'B-ETH_USDT':  { fr: 0.00002124, h: 1894.6,  l: 1841.84, v: 6492470405.67, ls: 1887.46, pc: 0.742, mkt: 'ETHUSDT', mp: 1887.47 },
+  'B-XRP_USDT':  { v: '125000000', ls: '0.62' },                                                        // mp absent -> ls fallback
+  'B-DOGE_USDT': { mp: 'not-a-number', v: 'junk' },                                                     // unparseable -> row untouched
+  'B-PAXG_USDT': { mp: 4025.06597958, v: 40660403.7375 }                                                // not in instrument list -> ignored
+} };
 
 /* =========================================================================
    1) LOAD-TIME SAFETY (bare context: no fetch, no AbortController)
@@ -89,6 +98,10 @@ const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
   assert(typeof w.xuNormCdcx === 'function', 'load: xuNormCdcx exported');
   assert(typeof w.xuState === 'function', 'load: xuState exported');
   assert(typeof w.xuUniverseNote === 'function', 'load: xuUniverseNote exported');
+  assert(typeof w.xuMergeCdcxMarks === 'function', 'load: xuMergeCdcxMarks exported');
+  assert(typeof w.xuPositioning === 'function', 'load: xuPositioning exported');
+  assert(w.xuPositioning('BTC') === null && w.xuPositioning('B-BTC_USDT') === null,
+         'load: xuPositioning null before any fetch (no cache, never throws)');
   assert(w.xuState() === null, 'load: xuState() null before any fetch attempt');
   assert(w.xuUniverseNote() === null, 'load: xuUniverseNote() null before any fetch attempt');
   assert(w.HG_tabs === undefined, 'load: library module registers NO tab');
@@ -209,7 +222,7 @@ const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   const uni = await w.xuUniverse();
   assert(uni.length === 9, 'universe: combined deduped list = 9 contracts (got ' + uni.length + ')');
-  assert(f.urls.length === 2, 'universe: exactly two network legs fired');
+  assert(f.urls.length === 3, 'universe: three network legs fired (delta + cdcx instruments + cdcx marks companion)');
   assert(f.urls[0].indexOf('https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures') === 0,
          'universe: Delta leg fetched DIRECT (CORS-proven), not proxied');
   assert(f.urls[1].indexOf('/api/proxy?url=') === 0, 'universe: CoinDCX leg routed through the same-origin /api/proxy');
@@ -217,14 +230,17 @@ const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
   assert(dec.indexOf('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments') >= 0 &&
          dec.indexOf('margin_currency_short_name[]=USDT') >= 0,
          'universe: proxy wraps the real CoinDCX active_instruments USDT endpoint');
+  assert(f.urls[2].indexOf('/api/proxy?url=') === 0 &&
+         decodeURIComponent(f.urls[2]).indexOf('https://public.coindcx.com/market_data/v3/current_prices/futures/rt') >= 0,
+         'universe: companion marks leg wraps the CoinDCX current_prices/futures/rt endpoint');
   const st = w.xuState();
   assert(st && st.count === 9 && st.delta === 6 && st.cdcx === 6 && typeof st.at === 'number',
          'universe: xuState reports {count:9, delta:6, cdcx:6, at}');
-  assert(st.note === null && w.xuUniverseNote() === null, 'universe: healthy run -> note null');
+  assert(st.note === null && w.xuUniverseNote() === null, 'universe: healthy run -> note null (marks stub has no prices map -> merges nothing, not a failure)');
   const uni2 = await w.xuUniverse();
-  assert(f.urls.length === 2 && uni2 === uni, 'universe: second call within 15 min served from cache (no new fetch, same array)');
+  assert(f.urls.length === 3 && uni2 === uni, 'universe: second call within 15 min served from cache (no new fetch, same array)');
   const uni3 = await w.xuUniverse(true);
-  assert(f.urls.length === 4 && uni3.length === 9, 'universe: force=true bypasses the cache and refetches both legs');
+  assert(f.urls.length === 6 && uni3.length === 9, 'universe: force=true bypasses the cache and refetches all three legs');
   // every entry carries the full contract shape
   const okShape = uni3.every(function(r){
     return typeof r.sym === 'string' && typeof r.base === 'string' &&
@@ -232,9 +248,11 @@ const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
            (r.turnoverUsd === null || typeof r.turnoverUsd === 'number') &&
            (r.mark === null || typeof r.mark === 'number') &&
            (r.fundingPct === null || typeof r.fundingPct === 'number') &&
+           (r.oiUsd === null || typeof r.oiUsd === 'number') &&
+           (r.oiContracts === null || typeof r.oiContracts === 'number') &&
            (r.alsoOn === null || typeof r.alsoOn === 'string');
   });
-  assert(okShape, 'universe: every entry matches {sym, base, exchange, turnoverUsd|null, mark|null, fundingPct|null, alsoOn|null}');
+  assert(okShape, 'universe: every entry matches {sym, base, exchange, turnoverUsd|null, mark|null, fundingPct|null, oiUsd|null, oiContracts|null, alsoOn|null}');
 }
 {
   /* CoinDCX leg down -> Delta-only list with honest note */
@@ -305,8 +323,8 @@ const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
   const p1 = w.xuUniverse(), p2 = w.xuUniverse();
   release();
   const r = await Promise.all([p1, p2]);
-  assert(f.urls.length === 2 && r[0].length === 9 && r[1].length === 9,
-         'busy-guard: overlapping xuUniverse calls share one fetch round (2 URLs, not 4)');
+  assert(f.urls.length === 3 && r[0].length === 9 && r[1].length === 9,
+         'busy-guard: overlapping xuUniverse calls share one fetch round (3 URLs, not 6)');
 }
 
 /* =========================================================================
@@ -378,6 +396,190 @@ const CDCX_CANDLES = { data: [
   const d = await w.xuCandles({ sym: 'BTCUSD', exchange: 'delta' }, '1h', 5);
   const c = await w.xuCandles({ sym: 'B-BTC_USDT', exchange: 'coindcx' }, '1h', 5);
   assert(d.length === 0 && c.length === 0, 'candles: network failure on either route -> [] per leg, never throws');
+}
+
+/* =========================================================================
+   7) Delta native positioning — OI/funding parsing incl. missing fields
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  const rows = w.xuNormDelta(DELTA_BODY);
+  const btc = rows.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc.oiUsd === 9e8, 'deltaOI: oi_value_usd string parsed to number (900000000)');
+  assert(btc.oiContracts === 15000, 'deltaOI: oi_contracts parsed to number');
+  const eth = rows.filter(function(r){ return r.base === 'ETH'; })[0];
+  assert(eth.oiUsd === 5e8 && eth.oiContracts === 166666, 'deltaOI: oi field is the fallback when oi_contracts absent');
+  const sol = rows.filter(function(r){ return r.base === 'SOL'; })[0];
+  assert(sol.oiUsd === null && sol.oiContracts === null, 'deltaOI: OI absent from payload -> honest nulls, never 0 or fabricated');
+  const xaut = rows.filter(function(r){ return r.sym === 'XAUTUSD'; })[0];
+  assert(xaut.fundingPct === 0, 'deltaOI: funding 0.00 stays numeric 0 — distinct from null (a real print, not missing data)');
+  const f1 = w.xuNormDelta({ result: [{ symbol: 'LTCUSD', mark_price: '100', oi_value: '12345.5' }] });
+  assert(f1[0].oiUsd === 12345.5, 'deltaOI: oi_value is the fallback when oi_value_usd absent (mirrors loadTickersDelta precedence)');
+  const f2 = w.xuNormDelta({ result: [{ symbol: 'OIBADUSD', mark_price: '1', oi_value_usd: 'junk', oi_contracts: 'NaNish' }] });
+  assert(f2[0].oiUsd === null && f2[0].oiContracts === null, 'deltaOI: unparseable OI fields -> null, row kept');
+}
+
+/* =========================================================================
+   8) xuMerge carries OI through dedupe (replace + honest gap-fill)
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  const m = w.xuMerge(w.xuNormDelta(DELTA_BODY), w.xuNormCdcx(CDCX_BODY));
+  const btc = m.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc.oiUsd === 9e8 && btc.oiContracts === 15000, 'mergeOI: delta primary keeps its native OI through the merge');
+  const sol = m.filter(function(r){ return r.base === 'SOL'; })[0];
+  assert(sol.oiUsd === null, 'mergeOI: missing OI stays null after merge — nothing fabricated');
+  /* secondary venue fills OI gaps honestly */
+  const m2 = w.xuMerge(
+    [{ sym: 'BTCUSD', base: 'BTC', exchange: 'delta', turnoverUsd: null, mark: 1, fundingPct: null, oiUsd: null, oiContracts: null, alsoOn: null }],
+    [{ sym: 'B-BTC_USDT', base: 'BTC', exchange: 'coindcx', turnoverUsd: null, mark: 2, fundingPct: null, oiUsd: 777, oiContracts: 3, alsoOn: null }]
+  );
+  assert(m2.length === 1 && m2[0].exchange === 'delta' && m2[0].oiUsd === 777 && m2[0].oiContracts === 3,
+         'mergeOI: OI gap on the primary filled from the secondary venue');
+  /* winner replaces OI with its own values */
+  const m3 = w.xuMerge(
+    [{ sym: 'BTCUSD', base: 'BTC', exchange: 'delta', turnoverUsd: 100, mark: 1, fundingPct: 0.01, oiUsd: 900, oiContracts: 10, alsoOn: null }],
+    [{ sym: 'B-BTC_USDT', base: 'BTC', exchange: 'coindcx', turnoverUsd: 500, mark: 2, fundingPct: null, oiUsd: 123, oiContracts: 4, alsoOn: null }]
+  );
+  assert(m3[0].exchange === 'coindcx' && m3[0].oiUsd === 123 && m3[0].oiContracts === 4,
+         'mergeOI: higher-turnover winner carries its own OI (delta OI still reachable via xuPositioning)');
+}
+
+/* =========================================================================
+   9) xuMergeCdcxMarks — pure companion merge, failure tolerance
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  const base = w.xuNormCdcx(CDCX_BODY);
+  const res = w.xuMergeCdcxMarks(base, CDCX_MARKS_BODY);
+  const btc = res.rows.filter(function(r){ return r.sym === 'B-BTC_USDT'; })[0];
+  assert(btc.mark === 64845.3, 'cdcxMarks: mark merged from mp');
+  assert(btc.turnoverUsd === 6999746971.98, 'cdcxMarks: 24h USDT turnover merged from v');
+  assert(btc.fundingPct === null, 'cdcxMarks: fundingPct untouched — rt fr units unverified, never converted or invented');
+  const xrp = res.rows.filter(function(r){ return r.sym === 'B-XRP_USDT'; })[0];
+  assert(xrp.mark === 0.62 && xrp.turnoverUsd === 125000000, 'cdcxMarks: mp absent -> ls fallback; string v parsed');
+  const doge = res.rows.filter(function(r){ return r.sym === 'B-DOGE_USDT'; })[0];
+  assert(doge.mark === null && doge.turnoverUsd === null, 'cdcxMarks: unparseable mp+v -> row keeps honest nulls');
+  const ada = res.rows.filter(function(r){ return r.sym === 'B-ADA_USDT'; })[0];
+  assert(ada.mark === null, 'cdcxMarks: symbol absent from prices map -> nulls preserved');
+  assert(res.count === 3, 'cdcxMarks: count reports exactly the 3 rows actually enriched (BTC, ETH, XRP — DOGE junk skipped), got ' + res.count);
+  assert(base.filter(function(r){ return r.sym === 'B-BTC_USDT'; })[0].mark === null,
+         'cdcxMarks: input rows never mutated (pure function)');
+  /* bare string/number price form */
+  const s = w.xuMergeCdcxMarks(w.xuNormCdcx(['B-ETH_USDT']), { 'B-ETH_USDT': '1887.5' });
+  assert(s.rows[0].mark === 1887.5 && s.rows[0].turnoverUsd === null && s.count === 1,
+         'cdcxMarks: bare string price per symbol accepted as mark');
+  /* garbage bodies -> rows unchanged, never throws */
+  const g1 = w.xuMergeCdcxMarks(base, ['not', 'a', 'map']);
+  const g2 = w.xuMergeCdcxMarks(base, null);
+  assert(g1.count === 0 && g2.count === 0 && g1.rows.length === base.length && g2.rows.length === base.length,
+         'cdcxMarks: array/null body -> rows pass through unchanged (never throws)');
+}
+
+/* =========================================================================
+   10) universe end-to-end with the marks companion leg
+========================================================================= */
+{
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: 'current_prices', body: CDCX_MARKS_BODY },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(f.urls.length === 3 && f.urls[1].indexOf('active_instruments') >= 0 && f.urls[2].indexOf('current_prices') >= 0,
+         'marksE2E: instruments list fetched before the marks companion leg');
+  const xrp = uni.filter(function(r){ return r.base === 'XRP'; })[0];
+  assert(xrp && xrp.mark === 0.62 && xrp.turnoverUsd === 125000000,
+         'marksE2E: cdcx-only contract lands with REAL mark+turnover instead of blind nulls');
+  assert(xrp.oiUsd === null && xrp.fundingPct === null, 'marksE2E: cdcx OI/funding stay honest nulls even with marks merged');
+  const btc = uni.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc.exchange === 'coindcx' && btc.alsoOn === 'BTCUSD' && btc.turnoverUsd === 6999746971.98,
+         'marksE2E: real cdcx turnover ($7B > delta $2.5B) wins primary honestly; delta becomes alsoOn');
+  const st = w.xuState();
+  assert(st.cdcxMarks === 3 && st.note === null, 'marksE2E: xuState.cdcxMarks counts enriched rows; healthy run note null');
+  const okShape = uni.every(function(r){
+    return (r.oiUsd === null || typeof r.oiUsd === 'number') && (r.oiContracts === null || typeof r.oiContracts === 'number');
+  });
+  assert(okShape, 'marksE2E: merged universe carries the additive oiUsd/oiContracts fields on every row');
+}
+{
+  /* marks leg down -> universe unaffected, honest note, nulls preserved */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: 'current_prices', fail: true, failMsg: 'rt 502' },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(uni.length === 9, 'marksFail: marks leg down NEVER blocks or shrinks the universe (still 9 contracts)');
+  const xrp = uni.filter(function(r){ return r.base === 'XRP'; })[0];
+  assert(xrp.mark === null && xrp.turnoverUsd === null, 'marksFail: cdcx rows keep honest nulls when marks fail');
+  assert(w.xuUniverseNote().indexOf('marks leg failed') >= 0 && w.xuUniverseNote().indexOf('nulls') >= 0,
+         'marksFail: visible honest note names the failed marks leg, got "' + w.xuUniverseNote() + '"');
+  assert(w.xuState().cdcxMarks === 0, 'marksFail: xuState.cdcxMarks 0 when the leg failed');
+}
+{
+  /* marks failure + delta failure: primary leg note still leads */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', httpFail: 503 },
+    { match: 'current_prices', fail: true, failMsg: 'rt 502' },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(uni.length === 6 && w.xuUniverseNote().indexOf('delta leg failed') === 0 &&
+         w.xuUniverseNote().indexOf('marks leg failed') >= 0,
+         'marksFail: combined failure note names BOTH failed legs, primary leg first');
+}
+
+/* =========================================================================
+   11) xuPositioning — per-venue native positioning from the cache
+========================================================================= */
+{
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: 'current_prices', body: CDCX_MARKS_BODY },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  await w.xuUniverse();
+  const p1 = w.xuPositioning('BTC');
+  assert(p1 && p1.exchange === 'delta' && p1.fundingPct === 0.05 && p1.oiUsd === 9e8 && p1.mark === 60000.5,
+         'positioning: base "BTC" -> DELTA-native {fundingPct, oiUsd, mark} even when cdcx won the merged primary');
+  const p2 = w.xuPositioning('B-BTC_USDT');
+  assert(p2 && p2.exchange === 'delta' && p2.oiUsd === 9e8 && p2.sym === 'BTCUSD',
+         'positioning: CoinDCX sym "B-BTC_USDT" resolves to the same Delta-native positioning');
+  const p3 = w.xuPositioning('BTCUSD');
+  assert(p3 && p3.exchange === 'delta' && p3.fundingPct === 0.05, 'positioning: Delta sym "BTCUSD" resolves too');
+  const px = w.xuPositioning('XRP');
+  assert(px && px.exchange === 'coindcx' && px.mark === 0.62 && px.fundingPct === null && px.oiUsd === null,
+         'positioning: cdcx-only asset answers mark-only with funding/OI honestly null');
+  assert(w.xuPositioning('NOPE') === null && w.xuPositioning('') === null && w.xuPositioning(null) === null,
+         'positioning: unknown/empty/garbage lookup -> null (never throws, never fabricates)');
+  /* cache interplay: positioning survives a later forced total outage (stale kept) */
+  const ctx = makeCtx({ fetch: f, AbortController: AbortController });
+  const w2 = loadModule(ctx);
+  await w2.xuUniverse();
+  ctx.fetch = fetchRecorder([
+    { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
+  ]);
+  const uni = await w2.xuUniverse(true);
+  const pst = w2.xuPositioning('BTC');
+  assert(uni.length === 9 && pst && pst.oiUsd === 9e8 && w2.xuUniverseNote().indexOf('last good universe') >= 0,
+         'positioning: stale cache keeps positioning available after a forced total outage — honestly labeled stale');
+}
+{
+  /* empty-cache outage -> positioning null, never throws */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  await w.xuUniverse();
+  assert(w.xuPositioning('BTC') === null && w.xuState().cdcxMarks === 0,
+         'positioning: total outage with no cache -> null positioning + cdcxMarks 0, honestly empty');
 }
 
 /* ---------------- summary ---------------- */

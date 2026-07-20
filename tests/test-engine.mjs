@@ -109,6 +109,7 @@ function cleanOptional(){
   delete globalThis.toTrade;
   delete globalThis.hgMiniChart;
   delete globalThis.hgChartAvailable;
+  delete globalThis.hgPlanLevels;
 }
 
 function longInp(over){
@@ -144,7 +145,7 @@ ok(['bias','regime','trendmx','swing','scalp','squeeze','smart','oiflow','liqs',
 ok(globalThis.window.runScan === undefined && globalThis.window.gatherSymbol === undefined
    && globalThis.window.collectUniverse === undefined && globalThis.window.cardHTML === undefined
    && globalThis.window.buildPlan === undefined && globalThis.window.atrFallbackPlan === undefined,
-   'only gateCandidate + HG_tabs leak onto window');
+   'internal helpers stay private (only the documented exports reach window)');
 
 /* ================= K) mount(el) smoke test — BEFORE stubbing any global ================= */
 console.log('== mount(el) smoke test (graceful, nothing stubbed) ==');
@@ -1157,5 +1158,315 @@ ok(V1.stubs['#engineStat'].textContent.indexOf('done · 2 executions') === 0
    'V: with xu* absent the Binance top-24 fallback behaves exactly as before');
 ok(V1.stubs['#engineAsideCount'].textContent === '1 rejected',
    'V: legacy aside count format unchanged (no exchange tallies without xu)');
+
+/* ================= W) smartSetup decline → hgPlanLevels fallback =================
+   USER BUG REPRO ('execute tab shows setups without tp and sl'): in combined
+   mode the positioning legs are all null → the real smartClassify fires zero
+   evidence → cls.dir = null → the real smartSetup guard (!cls.dir) declines.
+   Pre-fix buildPlan respected that null with NO fallback — the ATR fallback
+   only fired when the smartSetup GLOBAL was absent, which never happens in
+   the browser (index.html defines it inline) → survivor cards rendered with
+   no ENTRY/STOP/T1/T2. The hgPlanLevels fallback is now MANDATORY; only its
+   absence or failure may leave the honest 'levels unavailable — size down'
+   note — never a bare card. */
+console.log('== smartSetup decline → hgPlanLevels fallback (plan-less survivor repro) ==');
+stubXuPrereqs(); cfgX({ venue: 'all', minTurnover: 1000000 });
+/* the REAL index.html behavior with null positioning evidence */
+globalThis.smartClassify = function(){ return { dir: null, longEv: [], shortEv: [], regime: [], score: 0, total: 0 }; };
+globalThis.smartSetup = function(cls, rows4h){
+  if (!cls || !cls.dir || !rows4h || rows4h.length < 60) return null;   // the REAL index.html guard
+  return { type: 'SWING', dir: cls.dir, entry: 106, stop: 101, t1: 116, t2: 123.5, rr1: 2, rr2: 3.5, riskPct: 4.72, confirmed: true, note: '' };
+};
+function stubHgPlanLevels(){
+  globalThis.hgPlanLevels = function(dir, rows){                        // faithful index.html semantics
+    if (dir !== 'long' && dir !== 'short') return null;
+    if (!rows || !rows.length || typeof atr !== 'function') return null;
+    const entry = +rows[rows.length - 1].c;
+    const av = atr(rows, 14), a = av[av.length - 1];
+    if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
+    const stop = dir === 'long' ? entry - 1.5*a : entry + 1.5*a;
+    const risk = Math.abs(entry - stop);
+    return { dir: dir, entry: entry, stop: stop,
+             t1: dir === 'long' ? entry + 2*risk : entry - 2*risk,
+             t2: dir === 'long' ? entry + 3.5*risk : entry - 3.5*risk,
+             risk: risk, note: 'ATR stop (no clean swing)' };
+  };
+}
+delete globalThis.hgPlanLevels;
+let w = gateX(longInp());
+ok(w.pass === true && w.plan === null,
+   'W-REPRO: cls.dir null (the combined-mode norm) → smartSetup declines and, with no fallback module loaded, the survivor is plan-less');
+
+let hplArgs = [];
+stubHgPlanLevels();
+globalThis.hgPlanLevels = (function(orig){ return function(dir, rows){ hplArgs.push({ dir: dir, n: rows && rows.length }); return orig(dir, rows); }; })(globalThis.hgPlanLevels);
+w = gateX(longInp());
+ok(w.pass === true && w.plan !== null,
+   'W-FIX: a smartSetup decline now falls back to hgPlanLevels — a survivor never renders bare');
+ok(hplArgs.length === 1 && hplArgs[0].dir === 'long' && hplArgs[0].n === 260,
+   'W: hgPlanLevels is called with (dir, rows4h)');
+ok(w.plan && w.plan.type === 'LEVELS' && w.plan.entry === 106 && w.plan.stop === 103 && w.plan.t1 === 112 && w.plan.t2 === 116.5,
+   'W: fallback levels normalized into the plan shape (entry 106 · stop 103 · T1 112 · T2 116.5)');
+ok(Math.abs(w.plan.rr1 - 2) < 1e-9 && Math.abs(w.plan.rr2 - 3.5) < 1e-9 && Math.abs(w.plan.riskPct - 300/106) < 1e-9,
+   'W: rr1/rr2/riskPct derived from the fallback levels, never fabricated');
+ok(w.plan.note.indexOf('hgPlanLevels') >= 0, 'W: the fallback is labelled honestly in the plan note');
+ok(w.plan.confirmed === true && w.riskPct === 1.0,
+   'W: fallback plan CONFIRMED by the 4H 20/50 cascade → full STRONG risk policy');
+
+hplArgs = [];
+globalThis.smartSetup = function(cls){ return { type: 'SWING', dir: cls.dir || 'long', entry: 106, stop: 101, t1: 116, t2: 123.5, rr1: 2, rr2: 3.5, riskPct: 4.72, confirmed: true, note: '' }; };
+w = gateX(longInp());
+ok(w.plan && w.plan.type === 'SWING' && w.plan.entry === 106 && w.plan.stop === 101 && hplArgs.length === 0,
+   'W: a sane smartSetup plan still wins — the fallback is never consulted');
+
+globalThis.smartSetup = function(){ return { type: 'SWING', dir: 'long', entry: 106, stop: 110, t1: 116, t2: 123.5, rr1: 2, rr2: 3.5, riskPct: 3, confirmed: true, note: '' }; };
+w = gateX(longInp());
+ok(w.plan && w.plan.type === 'LEVELS' && w.plan.stop === 103,
+   'W: garbage smartSetup output (stop above entry on a long) → sanity veto → hgPlanLevels fallback');
+
+globalThis.smartSetup = function(){ return null; };
+globalThis.hgPlanLevels = function(){ throw new Error('levels module exploded'); };
+w = gateX(longInp());
+ok(w.pass === true && w.plan === null, 'W: hgPlanLevels throwing → plan null, gates still pass, no crash');
+globalThis.hgPlanLevels = function(){ return { dir: 'long', entry: 106, stop: 120, t1: 112, t2: 116.5, risk: 14, note: '' }; };
+w = gateX(longInp());
+ok(w.pass === true && w.plan === null, 'W: hgPlanLevels returning a wrong-side stop → sanity veto → null, never rendered');
+
+stubHgPlanLevels();
+globalThis.smartSetup = function(cls){ if (!cls || !cls.dir) return null; return { type: 'SWING', dir: 'short', entry: 94, stop: 99, t1: 84, t2: 76.5, rr1: 2, rr2: 3.5, riskPct: 5.32, confirmed: true, note: '' }; };
+w = gateX(shortInp());
+ok(w.pass === true && w.plan && w.plan.type === 'LEVELS' && w.plan.dir === 'short'
+   && w.plan.entry === 94 && w.plan.stop === 97 && w.plan.t1 === 88 && w.plan.t2 === 83.5,
+   'W: short fallback levels mirror (stop 97 > entry 94 > T1 88 > T2 83.5)');
+
+globalThis.ema = function(vals, p){ const lc = vals[vals.length-1]; const t = {9:lc+4, 20:lc-8, 21:lc-1, 50:lc-6, 200:lc-16}; return vals.map(function(){ return t[p]; }); };
+w = gateX(longInp());
+ok(w.plan && w.plan.type === 'LEVELS' && w.plan.confirmed === false && w.riskPct === 0.5,
+   'W: fallback plan UNCONFIRMED when the 20/50 cascade disagrees → suggested risk halved');
+stubIndicators();
+
+/* card-level repro: a full combined-mode scan must render ENTRY/STOP/T1/T2
+   for a declined survivor, or a visible honest note — never a bare card */
+stubXuPrereqs();
+globalThis.smartClassify = function(){ return { dir: null, longEv: [], shortEv: [], regime: [], score: 0, total: 0 }; };
+globalThis.smartSetup = function(cls, rows4h){ if (!cls || !cls.dir || !rows4h || rows4h.length < 60) return null; return { type: 'SWING', dir: cls.dir, entry: 106, stop: 101, t1: 116, t2: 123.5, rr1: 2, rr2: 3.5, riskPct: 4.72, confirmed: true, note: '' }; };
+stubHgPlanLevels();
+dropBinanceLegacy();
+XU_SHAPES = {};
+globalThis.window.xuUniverse = async function(){ return [ xuItem('BAREUSDT', 'delta') ]; };
+stubXuCandles();
+const W1 = freshPane();
+tabX.mount(W1.pane);
+W1.stubs['#engineRun']._handler();
+await waitScan2(W1.stubs);
+const wHtml = W1.stubs['#engineCards'].innerHTML;
+ok(W1.stubs['#engineStat'].textContent.indexOf('done · 1 executions (1 STRONG · 1 with plans)') === 0,
+   'W: the declined survivor now counts as planned in the stat line');
+ok(wHtml.indexOf('ENTRY <b>106</b>') >= 0 && wHtml.indexOf('STOP <b>103</b>') >= 0
+   && wHtml.indexOf('T1 112') >= 0 && wHtml.indexOf('T2 116.5') >= 0 && wHtml.indexOf('LEVELS') >= 0,
+   'W: the survivor card renders real ENTRY/STOP/T1/T2 via the hgPlanLevels fallback');
+delete globalThis.hgPlanLevels;
+stubXuCandles();
+const W2 = freshPane();
+tabX.mount(W2.pane);
+W2.stubs['#engineRun']._handler();
+await waitScan2(W2.stubs);
+const w2Html = W2.stubs['#engineCards'].innerHTML;
+ok(w2Html.indexOf('BAREUSDT') >= 0 && w2Html.indexOf('class="plan"') >= 0
+   && w2Html.toLowerCase().indexOf('levels unavailable') >= 0 && w2Html.toLowerCase().indexOf('size down') >= 0
+   && w2Html.indexOf('ENTRY <b>') === -1,
+   'W: fallback unavailable → the card still carries a visible "levels unavailable — size down" plan block (never bare)');
+ok(W2.stubs['#engineStat'].textContent.indexOf('0 with plans') >= 0,
+   'W: the stat line counts the plan-less survivor honestly');
+
+/* ================= X) staged 1h fetch preserved for declining survivors ================= */
+console.log('== staged 1h fetch feeds the plan builder even when smartSetup declines ==');
+stubXuPrereqs(); cfgX({ venue: 'all', minTurnover: 1000000 });
+globalThis.smartClassify = function(){ return { dir: null, longEv: [], shortEv: [], regime: [], score: 0, total: 0 }; };
+const setupCalls = [];
+globalThis.smartSetup = function(cls, rows4h, rows1h){
+  setupCalls.push({ n4: rows4h && rows4h.length, n1: (rows1h && rows1h.length) || 0 });
+  if (!cls || !cls.dir) return null;
+  return { type: 'SWING', dir: cls.dir, entry: 106, stop: 101, t1: 116, t2: 123.5, rr1: 2, rr2: 3.5, riskPct: 4.72, confirmed: true, note: '' };
+};
+stubHgPlanLevels();
+XU_SHAPES = { WEAKUSDT: 'weakclose' };
+globalThis.window.xuUniverse = async function(){ return [ xuItem('PASSAUSDT', 'delta'), xuItem('PASSBUSDT', 'coindcx'), xuItem('WEAKUSDT', 'delta') ]; };
+stubXuCandles();
+const X1 = freshPane();
+tabX.mount(X1.pane);
+X1.stubs['#engineRun']._handler();
+await waitScan2(X1.stubs);
+ok(xuCalls.filter(function(c){ return c.tf === '4h'; }).length === 3
+   && xuCalls.filter(function(c){ return c.tf === '1h'; }).length === 2,
+   'X: staged fetch intact — 4h for all 3 candidates, 1h for the 2 survivors only');
+ok(setupCalls.filter(function(c){ return c.n1 === 120; }).length === 2,
+   'X: smartSetup re-invoked with the staged 1h rows for both survivors (the 1h leg still feeds the plan builder)');
+ok(X1.stubs['#engineStat'].textContent.indexOf('done · 2 executions (2 STRONG · 2 with plans)') === 0,
+   'X: both declining survivors still render plans (via hgPlanLevels) after the staged re-run');
+
+/* ================= Y) QUICK RESCAN =================
+   New button beside RUN: reuses the cached universe (never a forced refetch),
+   re-gates ONLY last scan's survivors + new listings on fresh candles; every
+   other candidate keeps its prior verdict + age. */
+console.log('== QUICK RESCAN: cached universe, survivors + new listings only ==');
+vm.runInThisContext(fs.readFileSync(root + 'engine.js', 'utf8'), { filename: 'engine.js' });
+const tabY = globalThis.window.HG_tabs[globalThis.window.HG_tabs.length - 1];
+ok(typeof globalThis.window.engineQuickTargets === 'function', 'Y: window.engineQuickTargets exposed (pure quick-rescan diff)');
+
+let qt = globalThis.window.engineQuickTargets(['A','B','C'], ['A'], ['A','B','C']);
+ok(qt.recheck.join(',') === 'A' && qt.newListings.length === 0 && qt.unchanged.join(',') === 'B,C' && qt.gone.length === 0,
+   'Y: engineQuickTargets — the survivor is rechecked, the rest unchanged');
+qt = globalThis.window.engineQuickTargets(['A','B','C'], ['A'], ['A','B','C','D']);
+ok(qt.recheck.join(',') === 'A' && qt.newListings.join(',') === 'D' && qt.unchanged.join(',') === 'B,C',
+   'Y: engineQuickTargets — universe additions surface as new listings');
+qt = globalThis.window.engineQuickTargets(['A','B','C'], ['A'], ['B','C']);
+ok(qt.recheck.length === 0 && qt.gone.join(',') === 'A' && qt.unchanged.join(',') === 'B,C',
+   'Y: engineQuickTargets — a vanished survivor is "gone" (verdict kept), never silently dropped');
+qt = globalThis.window.engineQuickTargets(null, null, null);
+ok(qt && qt.recheck.length === 0 && qt.newListings.length === 0 && qt.unchanged.length === 0 && qt.gone.length === 0,
+   'Y: engineQuickTargets tolerates null inputs without throwing');
+
+const Y0 = freshPane();
+tabY.mount(Y0.pane);
+ok(Y0.pane._html.indexOf('id="engineQuick"') >= 0 && Y0.pane._html.indexOf('QUICK RESCAN') >= 0,
+   'Y: QUICK RESCAN button rendered beside RUN');
+ok(typeof Y0.stubs['#engineQuick']._handler === 'function', 'Y: QUICK RESCAN wired to a click handler');
+
+stubXuPrereqs();
+delete globalThis.hgPlanLevels;
+dropBinanceLegacy();
+XU_SHAPES = { WEAKUSDT: 'weakclose' };
+const yUniForce = [];
+globalThis.window.xuUniverse = async function(force){ yUniForce.push(force); return [ xuItem('GOODUSDT', 'delta'), xuItem('WEAKUSDT', 'delta') ]; };
+stubXuCandles();
+Y0.stubs['#engineQuick']._handler();
+await new Promise(function(res){ setTimeout(res, 50); });
+ok(Y0.stubs['#engineStat'].className === 'note warn'
+   && Y0.stubs['#engineStat'].textContent.indexOf('run a full scan first') >= 0,
+   'Y: QUICK before any full scan → honest visible note, no work fabricated');
+ok(xuCalls.length === 0, 'Y: pre-run QUICK fires zero candle requests');
+
+Y0.stubs['#engineRun']._handler();
+await waitScan2(Y0.stubs);
+ok(Y0.stubs['#engineStat'].textContent.indexOf('done · 1 executions') === 0, 'Y: baseline full scan completes (1 execution, 1 aside)');
+const yUniCallsAfterFull = yUniForce.length;
+stubXuCandles();
+Y0.stubs['#engineQuick']._handler();
+await waitScan2(Y0.stubs);
+const yStat = Y0.stubs['#engineStat'].textContent;
+ok(yStat.indexOf('quick rescan: 1 checked · 1 unchanged') === 0,
+   'Y: stat reports "quick rescan: 1 checked · 1 unchanged"');
+ok(yUniForce.length === yUniCallsAfterFull + 1 && yUniForce[yUniForce.length - 1] !== true,
+   'Y: the universe list is cache-served — never a forced refetch');
+ok(xuCalls.length === 2 && xuCalls.every(function(c){ return c.sym === 'GOODUSDT'; })
+   && xuCalls.filter(function(c){ return c.tf === '4h'; }).length === 1
+   && xuCalls.filter(function(c){ return c.tf === '1h'; }).length === 1,
+   'Y: fresh candles re-fetched for the prior survivor only (4h+1h) — the rejected candidate keeps its verdict for free');
+ok(Y0.stubs['#engineCards'].innerHTML.indexOf('GOODUSDT') >= 0
+   && Y0.stubs['#engineAsideList'].innerHTML.indexOf('WEAKUSDT') >= 0,
+   'Y: survivor card + prior WHY ASIDE verdict both still rendered');
+const yState = globalThis.window.engineState();
+ok(yState && yState.survivors.length === 1 && yState.rejected.length === 1 && yState.survivors[0].sym === 'GOODUSDT',
+   'Y: BRAIN snapshot refreshed after the quick rescan');
+
+globalThis.window.xuUniverse = async function(force){ yUniForce.push(force); return [ xuItem('GOODUSDT', 'delta'), xuItem('WEAKUSDT', 'delta'), xuItem('NEWUSDT', 'coindcx') ]; };
+stubXuCandles();
+Y0.stubs['#engineQuick']._handler();
+await waitScan2(Y0.stubs);
+const y2Stat = Y0.stubs['#engineStat'].textContent;
+ok(y2Stat.indexOf('quick rescan: 2 checked · 1 unchanged') === 0 && y2Stat.indexOf('1 new listing') >= 0,
+   'Y: a new listing is detected from the cached universe and gated — "2 checked · 1 unchanged (1 new listing)"');
+ok(xuCalls.filter(function(c){ return c.sym === 'NEWUSDT' && c.tf === '4h'; }).length === 1
+   && xuCalls.filter(function(c){ return c.sym === 'NEWUSDT' && c.tf === '1h'; }).length === 1
+   && xuCalls.filter(function(c){ return c.sym === 'WEAKUSDT'; }).length === 0,
+   'Y: the new listing gets the full staged treatment; the rejected one is still untouched');
+ok(Y0.stubs['#engineCards'].innerHTML.indexOf('NEWUSDT') >= 0, 'Y: new-listing survivor card rendered');
+
+XU_SHAPES = { GOODUSDT: 'weakclose', NEWUSDT: 'weakclose' };
+stubXuCandles();
+Y0.stubs['#engineQuick']._handler();
+await waitScan2(Y0.stubs);
+const y3Stat = Y0.stubs['#engineStat'].textContent;
+ok(y3Stat.indexOf('quick rescan: 2 checked · 1 unchanged') === 0 && y3Stat.indexOf('0 executions') >= 0,
+   'Y: survivors whose fresh candles now veto are re-gated honestly — 0 executions remain');
+ok(Y0.stubs['#engineCards'].innerHTML.indexOf('GOODUSDT') === -1
+   && Y0.stubs['#engineAsideList'].innerHTML.indexOf('GOODUSDT') >= 0
+   && Y0.stubs['#engineAsideList'].innerHTML.indexOf('NEWUSDT') >= 0,
+   'Y: flipped survivors leave the cards and land in WHY ASIDE with their new veto');
+ok(Y0.stubs['#engineEmpty'].style.display === 'block', 'Y: empty state returns when no survivors remain');
+const y3State = globalThis.window.engineState();
+ok(y3State && y3State.survivors.length === 0 && y3State.rejected.length === 3,
+   'Y: BRAIN snapshot mirrors the flips (0 survivors / 3 rejected)');
+
+stubXuCandles();
+Y0.stubs['#engineQuick']._handler();
+await waitScan2(Y0.stubs);
+ok(Y0.stubs['#engineStat'].textContent.indexOf('quick rescan: 0 checked · 3 unchanged') === 0
+   && xuCalls.length === 0,
+   'Y: nothing to re-gate → "0 checked · 3 unchanged", zero candle requests');
+
+XU_SHAPES = { WEAKUSDT: 'weakclose' };
+stubXuCandles();
+Y0.stubs['#engineRun']._handler();
+await waitScan2(Y0.stubs);
+ok(Y0.stubs['#engineStat'].textContent.indexOf('done · 2 executions') === 0, 'Y: fresh full scan re-seeds the cache (2 executions)');
+globalThis.window.xuUniverse = async function(){ throw new Error('universe feed down'); };
+stubXuCandles();
+Y0.stubs['#engineQuick']._handler();
+await waitScan2(Y0.stubs);
+const y4Stat = Y0.stubs['#engineStat'].textContent;
+ok(y4Stat.indexOf('quick rescan: 2 checked') === 0 && y4Stat.indexOf('cached universe') >= 0,
+   'Y: universe-list failure during QUICK → cached universe reused with an honest note, survivors still re-gated');
+ok(xuCalls.filter(function(c){ return c.sym === 'GOODUSDT' && c.tf === '4h'; }).length === 1,
+   'Y: re-gating continued on the cached universe items despite the list failure');
+
+/* legacy mode + busy guard */
+console.log('== QUICK RESCAN: legacy mode + busy guard ==');
+vm.runInThisContext(fs.readFileSync(root + 'engine.js', 'utf8'), { filename: 'engine.js' });
+const tabZ = globalThis.window.HG_tabs[globalThis.window.HG_tabs.length - 1];
+stubXuPrereqs();
+delete globalThis.hgPlanLevels;
+delete globalThis.window.xuUniverse; delete globalThis.window.xuCandles;
+globalThis.binancePerpUniverse = async function(){ return ['BTCUSDT', 'SOLUSDT']; };
+globalThis.binanceTickers24h = async function(){
+  return { BTCUSDT: { mark: 106, chg24: 2, turnoverUsd: 800e6 },
+           SOLUSDT: { mark: 106, chg24: 3, turnoverUsd: 900e6 } };
+};
+globalThis.binanceFunding = async function(){ return { markPrice: 106, fundingPct: 0.01 }; };
+let zKlineCalls = [];
+globalThis.binanceKlines = async function(sym, interval, limit){
+  zKlineCalls.push({ sym: sym, tf: interval });
+  if (sym === 'SOLUSDT') return mkRows(limit || 260, 106, 7, 3);
+  return mkRows(limit || 260, 106, 0.25, 1.0);
+};
+const Z0 = freshPane();
+tabZ.mount(Z0.pane);
+Z0.stubs['#engineRun']._handler();
+await waitScan2(Z0.stubs);
+ok(Z0.stubs['#engineStat'].textContent.indexOf('done · 1 executions') === 0, 'Y-legacy: baseline full scan (1 execution, 1 aside)');
+zKlineCalls = [];
+Z0.stubs['#engineQuick']._handler();
+await waitScan2(Z0.stubs);
+const zStat = Z0.stubs['#engineStat'].textContent;
+ok(zStat.indexOf('quick rescan: 1 checked · 1 unchanged') === 0, 'Y-legacy: stat counts hold in legacy mode');
+ok(zStat.indexOf('new-listing detection needs the combined universe') >= 0,
+   'Y-legacy: honest note that new-listing detection needs the combined universe');
+ok(zKlineCalls.length === 2 && zKlineCalls.every(function(c){ return c.sym === 'BTCUSDT'; }),
+   'Y-legacy: only the prior survivor re-gathers fresh candles (4h+1h)');
+
+const zDef = [];
+globalThis.binanceKlines = function(sym, interval, limit){
+  return new Promise(function(res){ zDef.push(function(){ res(mkRows(limit || 260, 106, 0.25, 1.0)); }); });
+};
+Z0.stubs['#engineRun']._handler();
+await new Promise(function(res){ setTimeout(res, 60); });
+const zDefBefore = zDef.length, zStatBusy = Z0.stubs['#engineStat'].textContent;
+Z0.stubs['#engineQuick']._handler();
+await new Promise(function(res){ setTimeout(res, 60); });
+ok(Z0.stubs['#engineStat'].textContent === zStatBusy && zDef.length === zDefBefore,
+   'Y: QUICK during a running scan is a no-op (busy guard) — stat untouched, zero extra fetches');
+zDef.forEach(function(r){ r(); });
+await waitScan2(Z0.stubs);
 
 console.log('\nALL ' + passed + ' ENGINE ASSERTIONS PASSED');

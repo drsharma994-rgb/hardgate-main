@@ -68,13 +68,28 @@ engine behaves EXACTLY as before: scanner results, else Binance top-24):
   persists (localStorage 'hgEngineVenue' / 'hgEngineMinTurn', try-caught).
 
 SURVIVORS render as execution cards: big LONG/SHORT verdict, conviction,
-ENTRY/STOP/T1/T2 via window.smartSetup (local ATR fallback when it is absent
-— entry=last 4h close, stop 1.5xATR14, T1 2R, T2 3.5R; a smartSetup NULL is
-respected as "structure broken", never fabricated around), R:R, suggested
-risk fraction (policy: STRONG 1% / MODERATE 0.5% of equity, unconfirmed
-setups halved), and a SEND TO TRADE PLAN button (window.toTrade,
-feature-checked). WHY ASIDE lists every rejected candidate with the exact
-gate that killed it.
+ENTRY/STOP/T1/T2 via window.smartSetup, backed by the MANDATORY
+window.hgPlanLevels(rows4h) fallback (normalized to type LEVELS with
+rr/risk%/confirmed derived, never fabricated) when smartSetup declines —
+the combined-mode norm, since null positioning legs make smartClassify
+yield cls.dir = null and smartSetup's own guard bow out. Only when the
+fallback module is absent or itself fails does the card show the honest
+'levels unavailable — size down' block; never a bare card. (smartSetup
+absent as a global -> local ATR fallback, vm/standalone only.) R:R,
+suggested risk fraction (policy: STRONG 1% / MODERATE 0.5% of equity,
+unconfirmed setups halved), and a SEND TO TRADE PLAN button
+(window.toTrade, feature-checked). WHY ASIDE lists every rejected
+candidate with the exact gate that killed it.
+
+QUICK RESCAN (button beside RUN): reuses the last full scan's cached
+universe + verdicts — never a forced universe refetch (the list comes
+from xuUniverse(false), cache-served; on failure the cached list is
+reused with an honest note). Re-gates ONLY last scan's survivors + new
+listings on fresh candles (same staged 4h->1h pipeline); every other
+candidate keeps its prior verdict + age. Flipped survivors move to WHY
+ASIDE with their new veto; delisted survivors keep their verdict,
+flagged. Stat: 'quick rescan: N checked · M unchanged'. The pure target
+diff is exported as window.engineQuickTargets.
 
 Scanner-results contract checked in order (first fresh non-empty wins):
   window.HG_oiflowResults / oiflowResults / HG_squeezeResults /
@@ -235,6 +250,17 @@ function trailState(ok){ return ok === true ? 'pass' : (ok === false ? 'veto' : 
 /* =========================================================================
 PLAN BUILDERS
 ========================================================================= */
+/* 4h EMA20/50 cascade agreement — the `confirmed` flag shared by every
+   plan builder (smartSetup computes its own; the fallbacks use this). */
+function planConfirmed(dir, rows4h){
+  try{
+    if (typeof ema !== 'function' || !rows4h || rows4h.length < 60) return false;
+    var c4 = rows4h.map(function(r){ return r.c; });
+    var e20 = __last(ema(c4, 20)), e50 = __last(ema(c4, 50));
+    return isFinite(e20) && isFinite(e50) && (dir === 'long' ? e20 > e50 : e20 < e50);
+  }catch(e){ return false; }
+}
+
 /* Local ATR fallback, mirrors oiflow.js: entry = last 4h close, stop =
    1.5xATR14(4h) against dir, T1 = 2R, T2 = 3.5R; confirmed = 4h EMA20/50
    cascade on the side of dir. Null when atr is missing or inputs are bad. */
@@ -245,42 +271,77 @@ function atrFallbackPlan(dir, rows4h){
     var a4 = __last(atr(rows4h, 14));
     if (!isFinite(entry) || entry <= 0 || !isFinite(a4) || a4 <= 0) return null;
     var risk = 1.5 * a4;
-    var confirmed = false;
-    if (typeof ema === 'function' && rows4h.length >= 60){
-      var c4 = rows4h.map(function(r){ return r.c; });
-      var e20 = __last(ema(c4, 20)), e50 = __last(ema(c4, 50));
-      confirmed = isFinite(e20) && isFinite(e50) && (dir === 'long' ? e20 > e50 : e20 < e50);
-    }
     return {
       type: 'ATR', dir: dir, entry: entry,
       stop:   dir === 'long' ? entry - risk     : entry + risk,
       t1:     dir === 'long' ? entry + 2*risk   : entry - 2*risk,
       t2:     dir === 'long' ? entry + 3.5*risk : entry - 3.5*risk,
       rr1: 2, rr2: 3.5, riskPct: risk/entry*100,
-      confirmed: confirmed, note: 'local ATR fallback (smartSetup unavailable)'
+      confirmed: planConfirmed(dir, rows4h), note: 'local ATR fallback (smartSetup unavailable)'
     };
   }catch(e){ return null; }
 }
 
-/* smartSetup (index.html) first; when it is absent, the ATR fallback; when it
-   RETURNS null, respect the decline (broken structure) — never fabricate
-   around it. Every plan is sanity-checked: stop on the correct side of
-   entry, targets beyond entry on the side of dir. */
-function buildPlan(dir, cls, rows4h, rows1h){
-  var plan = null;
-  if (typeof smartSetup === 'function'){
-    var c = cls || { dir: dir, longEv: [], shortEv: [], regime: [], score: 0, total: 0 };
-    try{ plan = smartSetup(c, rows4h, rows1h) || null; }catch(e){ plan = null; }
-    if (!plan) return null;
-  }else{
-    plan = atrFallbackPlan(dir, rows4h);
-  }
-  if (!plan) return null;
-  var ok = isFinite(plan.entry) && isFinite(plan.stop) && isFinite(plan.t1) && isFinite(plan.t2)
+/* window.hgPlanLevels (index.html universal fallback) — feature-checked on
+   both the bare global and window, exactly like the xu* lookups. */
+function hgPlanLevelsFn(){
+  if (typeof hgPlanLevels === 'function') return hgPlanLevels;
+  if (G && typeof G.hgPlanLevels === 'function') return G.hgPlanLevels;
+  if (typeof globalThis !== 'undefined' && typeof globalThis.hgPlanLevels === 'function') return globalThis.hgPlanLevels;
+  return null;
+}
+
+/* hgPlanLevels returns {dir, entry, stop, t1, t2, risk, note} — normalize it
+   into the engine plan shape (type/rr1/rr2/riskPct/confirmed) so downstream
+   rendering, sizing and the BRAIN snapshot see one consistent contract. */
+function normalizeHgPlan(pl, dir, rows4h){
+  if (!pl || typeof pl !== 'object') return null;
+  var e = +pl.entry, s = +pl.stop, t1 = +pl.t1, t2 = +pl.t2;
+  if (!isFinite(e) || !isFinite(s) || !isFinite(t1) || !isFinite(t2) || e <= 0) return null;
+  var risk = Math.abs(e - s);
+  if (!(risk > 0)) return null;
+  return {
+    type: 'LEVELS', dir: dir, entry: e, stop: s, t1: t1, t2: t2,
+    rr1: Math.abs(t1 - e)/risk, rr2: Math.abs(t2 - e)/risk, riskPct: risk/e*100,
+    confirmed: planConfirmed(dir, rows4h),
+    note: (pl.note ? String(pl.note) + ' · ' : '') + 'hgPlanLevels fallback (setup builder declined)'
+  };
+}
+
+/* Every plan is sanity-checked: stop on the correct side of entry, targets
+   beyond entry on the side of dir. */
+function sanePlanSides(plan, dir){
+  return !!plan && isFinite(plan.entry) && isFinite(plan.stop) && isFinite(plan.t1) && isFinite(plan.t2)
     && (dir === 'long'
         ? (plan.stop < plan.entry && plan.t1 > plan.entry && plan.t2 > plan.entry)
         : (plan.stop > plan.entry && plan.t1 < plan.entry && plan.t2 < plan.entry));
-  return ok ? plan : null;
+}
+
+/* smartSetup (index.html) first. When it declines (returns null) or throws —
+   the combined-mode norm, since the positioning legs are null there so the
+   real smartClassify yields cls.dir = null and smartSetup's own guard bows
+   out — the window.hgPlanLevels(rows4h) fallback is MANDATORY: a survivor
+   card must never render bare. Only when the fallback module is absent or
+   itself fails does the plan stay null (the card then shows the honest
+   'levels unavailable — size down' block). When smartSetup is absent as a
+   global, the local ATR fallback handles it (never happens in the browser —
+   index.html defines smartSetup inline — kept for standalone/vm use). */
+function buildPlan(dir, cls, rows4h, rows1h){
+  if (typeof smartSetup === 'function'){
+    var c = cls || { dir: dir, longEv: [], shortEv: [], regime: [], score: 0, total: 0 };
+    var plan = null;
+    try{ plan = smartSetup(c, rows4h, rows1h) || null; }catch(e){ plan = null; }
+    if (plan && sanePlanSides(plan, dir)) return plan;
+    var hpl = hgPlanLevelsFn();
+    if (hpl){
+      var fb = null;
+      try{ fb = normalizeHgPlan(hpl(dir, rows4h), dir, rows4h); }catch(e){ fb = null; }
+      if (fb && sanePlanSides(fb, dir)) return fb;
+    }
+    return null;
+  }
+  var plan2 = atrFallbackPlan(dir, rows4h);
+  return (plan2 && sanePlanSides(plan2, dir)) ? plan2 : null;
 }
 
 /* Fixed sizing policy (percent of equity), clearly labelled in the UI:
@@ -579,6 +640,26 @@ async function xuCandleLeg(item, tf, n){
   return clean ? dropFormingXu(clean, tf) : null;
 }
 
+/* raw xu rows -> normalized, venue-filtered, base-asset-deduped item list +
+   tallies. Shared by collectUniverse (full scan) and quickRescan (new-listing
+   detection on the cached list). */
+function normalizeXuList(raw, cfg){
+  var items = [], seen = {}, tallies = { delta: 0, cdcx: 0, other: 0 }, dropped = 0, valid = 0;
+  for (var i = 0; i < raw.length; i++){
+    var it = null;
+    try{ it = normXuItem(raw[i]); }catch(e){ it = null; }
+    if (!it){ dropped++; continue; }
+    valid++;
+    if (cfg.venue !== 'all' && it.exchange !== cfg.venue){ dropped++; continue; }
+    var key = it.exchange + '|' + (it.base || it.sym);   /* dedup by base asset per venue */
+    if (seen[key]){ dropped++; continue; }
+    seen[key] = true;
+    tallies[it.exchange]++;
+    items.push(it);
+  }
+  return { items: items, tallies: tallies, dropped: dropped, valid: valid };
+}
+
 async function collectUniverse(){
   var cfg = getCfg();
   var ticks = null;
@@ -595,19 +676,8 @@ async function collectUniverse(){
     try{ raw = await raceTimeout(Promise.resolve().then(function(){ return xu(false); }), XU_TIMEOUT_MS, null); }
     catch(e){ raw = null; }
     if (raw && raw.length){
-      var items = [], seen = {}, tallies = { delta: 0, cdcx: 0, other: 0 }, dropped = 0, valid = 0;
-      for (var i = 0; i < raw.length; i++){
-        var it = null;
-        try{ it = normXuItem(raw[i]); }catch(e){ it = null; }
-        if (!it){ dropped++; continue; }
-        valid++;
-        if (cfg.venue !== 'all' && it.exchange !== cfg.venue){ dropped++; continue; }
-        var key = it.exchange + '|' + (it.base || it.sym);   /* dedup by base asset per venue */
-        if (seen[key]){ dropped++; continue; }
-        seen[key] = true;
-        tallies[it.exchange]++;
-        items.push(it);
-      }
+      var norm = normalizeXuList(raw, cfg);
+      var items = norm.items, tallies = norm.tallies, dropped = norm.dropped, valid = norm.valid;
       if (items.length){
         var src = 'combined delta+coindcx universe · delta ' + tallies.delta + ' · cdcx ' + tallies.cdcx
           + (tallies.other ? ' · other ' + tallies.other : '')
@@ -705,7 +775,7 @@ function cardHTML(r){
     + '<div class="vwhy"><b>' + res.conviction + ' CONVICTION</b> — ' + res.gatesPassed + ' of 6 gates passed'
     + ' · suggested risk <b>' + FMT(res.riskPct, 2) + '%</b> of equity'
     + (res.turnoverUnverified ? ' · turnover unverified — size down' : '')
-    + (s ? ' · ' + s.type + (s.confirmed ? ' CONFIRMED' : ' UNCONFIRMED') : ' · no executable plan') + '</div></div>';
+    + (s ? ' · ' + s.type + (s.confirmed ? ' CONFIRMED' : ' UNCONFIRMED') : ' · levels unavailable — size down') + '</div></div>';
   var mini = '<div class="mini">'
     + '<span class="k">mark</span><span>' + PX(r.mark) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.chg24 !== null ? PCT(r.chg24, 2) : '—') + '</span>'
@@ -719,7 +789,7 @@ function cardHTML(r){
     }).join('') + '</div>';
   var planHtml = s
     ? '<div class="plan">' + planText(s) + '</div>'
-    : '<div class="plan">All 6 gates passed but no executable plan — the setup builder declined (broken structure) or is unavailable. Direction is real; levels are not. Do not improvise them.</div>';
+    : '<div class="plan">Levels unavailable — size down. All 6 gates passed but neither the setup builder nor the universal hgPlanLevels fallback could compute levels from the 4h structure. Direction is real; levels are not. Do not improvise them.</div>';
   var chartBox = s ? '<div class="engineChart" data-sym="' + symHtml + '" style="height:180px;margin-top:8px"></div>' : '';
   var tradeBtn = (s && typeof toTrade === 'function')
     ? '<button class="toTrade" onclick="'
@@ -821,11 +891,132 @@ function depStatus(){
               'ema', 'rsi', 'atr', 'volZ'];
   var missing = [];
   for (var i = 0; i < need.length; i++) if (typeof root[need[i]] !== 'function') missing.push(need[i]);
-  var optional = ['smartClassify', 'smartSetup', 'hgStructure', 'hgNewsRisk', 'toTrade', 'hgMiniChart',
+  var optional = ['smartClassify', 'smartSetup', 'hgPlanLevels', 'hgStructure', 'hgNewsRisk', 'toTrade', 'hgMiniChart',
                   'xuUniverse', 'xuCandles'];
   var optMissing = [];
   for (var j = 0; j < optional.length; j++) if (typeof root[optional[j]] !== 'function') optMissing.push(optional[j]);
   return { missing: missing, optMissing: optMissing };
+}
+
+/* ---------------- shared per-candidate gating (full scan + QUICK RESCAN) ---------------- */
+/* xu mode, STAGED: 4h first, full funnel on it; 1h ONLY for passers (plan
+   quality). Dead candidates never cost a second request. */
+async function gateXuCandidate(item, cfg){
+  var src = item.exchange + (item.alsoOn.length ? ' (also on ' + item.alsoOn.join('/') + ')' : '')
+          + ' · combined universe';
+  var rows4h = await xuCandleLeg(item, '4h', 260);
+  var inp = { sym: item.sym, source: src, rows4h: rows4h, rows1h: null,
+              chg24: null, turnoverUsd: item.turnoverUsd, fundingPct: item.fundingPct,
+              oiChgPct: null, retailLongPct: null, topLongPct: null, takerRatio: null,
+              minTurnover: cfg.minTurnover };
+  var res = gateCandidate(inp);
+  if (res.pass){
+    var rows1h = await xuCandleLeg(item, '1h', 120);
+    if (rows1h && rows1h.length){ inp.rows1h = rows1h; res = gateCandidate(inp); }
+  }
+  return { sym: item.sym, exchange: item.exchange, res: res, rows4h: rows4h,
+           mark: item.mark, chg24: null, fundingPct: item.fundingPct,
+           oiChgPct: null, turnoverUsd: item.turnoverUsd };
+}
+async function gateLegacyCandidate(sym, ticks, source, cfg){
+  var inp = await gatherSymbol(sym, ticks ? ticks[sym] : null, source);
+  inp.minTurnover = cfg.minTurnover;
+  var res = gateCandidate(inp);
+  return { sym: sym, res: res, rows4h: inp.rows4h,
+           mark: inp.mark, chg24: inp.chg24, fundingPct: inp.fundingPct,
+           oiChgPct: inp.oiChgPct, turnoverUsd: inp.turnoverUsd };
+}
+
+function sortResults(survivors, rejected){
+  survivors.sort(function(a, b){
+    var ca = a.res.conviction === 'STRONG' ? 0 : 1, cb2 = b.res.conviction === 'STRONG' ? 0 : 1;
+    var fa = (a.res.plan && a.res.plan.confirmed) ? 0 : 1, fb = (b.res.plan && b.res.plan.confirmed) ? 0 : 1;
+    var pa = a.res.plan ? 0 : 1, pb = b.res.plan ? 0 : 1;
+    return (ca - cb2) || (pa - pb) || (fa - fb)
+      || (b.res.gatesPassed - a.res.gatesPassed)
+      || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
+  });
+  rejected.sort(function(a, b){
+    var ia = a.res.vetoGate ? +a.res.vetoGate.slice(1) : -1, ib = b.res.vetoGate ? +b.res.vetoGate.slice(1) : -1;
+    return (ib - ia) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0);
+  });
+}
+
+/* cards + charts + WHY ASIDE + empty state; returns the stat tallies.
+   Shared by runScan (full) and quickRescan (cached-universe re-gate). */
+function paintResults(el, survivors, rejected, isXu){
+  var cards = el.querySelector('#engineCards'), empty = el.querySelector('#engineEmpty'),
+      asidePanel = el.querySelector('#engineAside'), asideList = el.querySelector('#engineAsideList'),
+      asideCount = el.querySelector('#engineAsideCount');
+  if (cards){
+    cards.innerHTML = survivors.map(cardHTML).join('');
+    paintCharts(cards, survivors);
+  }
+  if (asidePanel && asideList){
+    asideList.innerHTML = asideHTML(rejected);
+    if (asideCount){
+      var acTxt = rejected.length + ' rejected';
+      if (isXu){
+        var rd = 0, rc = 0, ro = 0;
+        for (var ai = 0; ai < rejected.length; ai++){
+          var ex2 = rejected[ai].exchange;
+          if (ex2 === 'delta') rd++; else if (ex2 === 'cdcx') rc++; else ro++;
+        }
+        acTxt += ' · delta ' + rd + ' · cdcx ' + rc + (ro ? ' · other ' + ro : '');
+      }
+      asideCount.textContent = acTxt;
+    }
+    asidePanel.style.display = rejected.length ? 'block' : 'none';
+  }
+  if (empty) empty.style.display = survivors.length ? 'none' : 'block';
+  var nStrong = 0, nPlan = 0;
+  for (var ri = 0; ri < survivors.length; ri++){
+    if (survivors[ri].res.conviction === 'STRONG') nStrong++;
+    if (survivors[ri].res.plan) nPlan++;
+  }
+  return { nStrong: nStrong, nPlan: nPlan };
+}
+
+/* ---------------- QUICK RESCAN ----------------
+   Pure target diff, exported as window.engineQuickTargets for vm tests.
+   prevCandidates/prevSurvivors/curr are symbol arrays; returns
+   {recheck, newListings, unchanged, gone}:
+     recheck     = prior survivors still listed (re-gated on fresh candles)
+     newListings = symbols in the current universe never gated before
+     unchanged   = prior non-survivor candidates (keep prior verdict + age)
+     gone        = prior survivors no longer listed (verdict kept, flagged) */
+function engineQuickTargets(prevCandidates, prevSurvivors, curr){
+  try{
+    prevCandidates = Array.isArray(prevCandidates) ? prevCandidates : [];
+    prevSurvivors  = Array.isArray(prevSurvivors)  ? prevSurvivors  : [];
+    curr           = Array.isArray(curr)           ? curr           : [];
+    var inCurr = {}, inPrev = {}, inSurv = {}, i;
+    for (i = 0; i < curr.length; i++) inCurr[curr[i]] = true;
+    for (i = 0; i < prevCandidates.length; i++) inPrev[prevCandidates[i]] = true;
+    for (i = 0; i < prevSurvivors.length; i++) inSurv[prevSurvivors[i]] = true;
+    var recheck = [], newListings = [], unchanged = [], gone = [];
+    for (i = 0; i < curr.length; i++){
+      var s = curr[i];
+      if (inSurv[s]) recheck.push(s);
+      else if (!inPrev[s]) newListings.push(s);
+    }
+    for (i = 0; i < prevCandidates.length; i++){
+      var s2 = prevCandidates[i];
+      if (inSurv[s2]){ if (!inCurr[s2]) gone.push(s2); }
+      else unchanged.push(s2);
+    }
+    return { recheck: recheck, newListings: newListings, unchanged: unchanged, gone: gone };
+  }catch(e){ return { recheck: [], newListings: [], unchanged: [], gone: [] }; }
+}
+
+/* last SUCCESSFUL full scan — the universe + verdicts QUICK RESCAN reuses.
+   Set exactly where setSnapshot is (aborted/failed runs never touch it). */
+var __lastScan = null;
+
+function setScanButtons(el, disabled){
+  var b1 = el.querySelector('#engineRun'), b2 = el.querySelector('#engineQuick');
+  if (b1) b1.disabled = disabled;
+  if (b2) b2.disabled = disabled;
 }
 
 async function runScan(el){
@@ -836,7 +1027,7 @@ async function runScan(el){
       asideCount = el.querySelector('#engineAsideCount');
   if (!btn || !stat || !cards || !empty) return;
   __busy = true;
-  btn.disabled = true; cards.innerHTML = ''; empty.style.display = 'none';
+  setScanButtons(el, true); cards.innerHTML = ''; empty.style.display = 'none';
   if (asidePanel) asidePanel.style.display = 'none';
   stat.className = 'note';
   var t0 = Date.now();
@@ -862,88 +1053,139 @@ async function runScan(el){
         stat.textContent = 'gating ' + (i + 1) + '/' + cands.length + ' · ' + sym
           + (isXu ? ' · delta ' + proc.delta + ' · cdcx ' + proc.cdcx + ' · failed ' + failed : '');
         try{
-          if (isXu){
-            /* STAGED: 4h first, full funnel on it; 1h ONLY for passers (plan
-               quality). Dead candidates never cost a second request. */
-            var item = cand;
-            var src = item.exchange + (item.alsoOn.length ? ' (also on ' + item.alsoOn.join('/') + ')' : '')
-                    + ' · combined universe';
-            var rows4h = await xuCandleLeg(item, '4h', 260);
-            var inp = { sym: item.sym, source: src, rows4h: rows4h, rows1h: null,
-                        chg24: null, turnoverUsd: item.turnoverUsd, fundingPct: item.fundingPct,
-                        oiChgPct: null, retailLongPct: null, topLongPct: null, takerRatio: null,
-                        minTurnover: uni.cfg.minTurnover };
-            var res = gateCandidate(inp);
-            if (res.pass){
-              var rows1h = await xuCandleLeg(item, '1h', 120);
-              if (rows1h && rows1h.length){ inp.rows1h = rows1h; res = gateCandidate(inp); }
-            }
-            proc[item.exchange]++;
-            var xrec = { sym: item.sym, exchange: item.exchange, res: res, rows4h: rows4h,
-                         mark: item.mark, chg24: null, fundingPct: item.fundingPct,
-                         oiChgPct: null, turnoverUsd: item.turnoverUsd };
-            if (res.pass) survivors.push(xrec); else rejected.push(xrec);
-          }else{
-            var inp2 = await gatherSymbol(sym, uni.ticks ? uni.ticks[sym] : null, uni.source);
-            inp2.minTurnover = uni.cfg.minTurnover;
-            var res2 = gateCandidate(inp2);
-            var rec = { sym: sym, res: res2, rows4h: inp2.rows4h,
-                        mark: inp2.mark, chg24: inp2.chg24, fundingPct: inp2.fundingPct,
-                        oiChgPct: inp2.oiChgPct, turnoverUsd: inp2.turnoverUsd };
-            if (res2.pass) survivors.push(rec); else rejected.push(rec);
-          }
+          var rec = isXu ? await gateXuCandidate(cand, uni.cfg)
+                         : await gateLegacyCandidate(sym, uni.ticks, uni.source, uni.cfg);
+          if (isXu) proc[cand.exchange]++;
+          if (rec.res.pass) survivors.push(rec); else rejected.push(rec);
         }catch(e){ failed++; }
       }));
       await SLEEP(CHUNK_SLEEP_MS);
     }
-    survivors.sort(function(a, b){
-      var ca = a.res.conviction === 'STRONG' ? 0 : 1, cb2 = b.res.conviction === 'STRONG' ? 0 : 1;
-      var fa = (a.res.plan && a.res.plan.confirmed) ? 0 : 1, fb = (b.res.plan && b.res.plan.confirmed) ? 0 : 1;
-      var pa = a.res.plan ? 0 : 1, pb = b.res.plan ? 0 : 1;
-      return (ca - cb2) || (pa - pb) || (fa - fb)
-        || (b.res.gatesPassed - a.res.gatesPassed)
-        || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
-    });
-    rejected.sort(function(a, b){
-      var ia = a.res.vetoGate ? +a.res.vetoGate.slice(1) : -1, ib = b.res.vetoGate ? +b.res.vetoGate.slice(1) : -1;
-      return (ib - ia) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0);
-    });
-    cards.innerHTML = survivors.map(cardHTML).join('');
-    paintCharts(cards, survivors);
-    if (asidePanel && asideList){
-      asideList.innerHTML = asideHTML(rejected);
-      if (asideCount){
-        var acTxt = rejected.length + ' rejected';
-        if (isXu){
-          var rd = 0, rc = 0, ro = 0;
-          for (var ai = 0; ai < rejected.length; ai++){
-            var ex2 = rejected[ai].exchange;
-            if (ex2 === 'delta') rd++; else if (ex2 === 'cdcx') rc++; else ro++;
-          }
-          acTxt += ' · delta ' + rd + ' · cdcx ' + rc + (ro ? ' · other ' + ro : '');
-        }
-        asideCount.textContent = acTxt;
-      }
-      asidePanel.style.display = rejected.length ? 'block' : 'none';
-    }
-    var nStrong = 0, nPlan = 0;
-    for (var ri = 0; ri < survivors.length; ri++){
-      if (survivors[ri].res.conviction === 'STRONG') nStrong++;
-      if (survivors[ri].res.plan) nPlan++;
-    }
-    stat.textContent = 'done · ' + survivors.length + ' executions (' + nStrong + ' STRONG · ' + nPlan + ' with plans)'
+    sortResults(survivors, rejected);
+    var counts = paintResults(el, survivors, rejected, isXu);
+    stat.textContent = 'done · ' + survivors.length + ' executions (' + counts.nStrong + ' STRONG · ' + counts.nPlan + ' with plans)'
       + ' · ' + rejected.length + ' aside · universe ' + uni.syms.length + ' (' + uni.source + ')'
       + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
       + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
-    if (!survivors.length) empty.style.display = 'block';
     setSnapshot(survivors, rejected);   /* BRAIN: cache the successful scan (aborts above never reach here) */
+    __lastScan = { uni: uni, survivors: survivors, rejected: rejected, at: Date.now() };   /* QUICK RESCAN cache */
   }catch(e){
     stat.className = 'note warn';
     stat.textContent = 'engine scan failed: ' + (e && e.message ? e.message : e);
   }finally{
     setProg(el, null);
-    btn.disabled = false;
+    setScanButtons(el, false);
     __hasRun = true;
+    __busy = false;
+  }
+}
+
+/* ---------------- QUICK RESCAN ----------------
+   Reuses the last full scan's cached universe + verdicts — never a forced
+   universe refetch. Re-gates ONLY last scan's survivors + new listings on
+   fresh candles; every other candidate keeps its prior verdict + age. Stat
+   shape: 'quick rescan: N checked · M unchanged …'. Never throws; a failure
+   leaves the prior verdicts rendered with an honest warn. */
+async function quickRescan(el){
+  if (__busy) return;
+  var stat = el.querySelector('#engineStat'), cards = el.querySelector('#engineCards'),
+      empty = el.querySelector('#engineEmpty');
+  if (!stat || !cards || !empty) return;
+  if (!__lastScan || !__lastScan.uni){
+    stat.className = 'note warn';
+    stat.textContent = 'quick rescan: run a full scan first — no cached universe or verdicts yet';
+    return;
+  }
+  __busy = true;
+  setScanButtons(el, true);
+  stat.className = 'note';
+  var t0 = Date.now();
+  try{
+    var last = __lastScan, cfg = last.uni.cfg || getCfg();
+    var isXu = last.uni.mode === 'xu';
+    var currSyms = (last.uni.syms || []).slice();
+    var currItems = (isXu && last.uni.items) ? last.uni.items.slice() : null;
+    var uniNote = '';
+    if (isXu){
+      /* new-listing detection from the CACHE-SERVED list (xuUniverse(false)
+         never forces a refetch — the 15-min cache answers when fresh) */
+      var xu = xuUniverseFn();
+      if (xu){
+        var raw = await leg(function(){
+          return raceTimeout(Promise.resolve().then(function(){ return xu(false); }), XU_TIMEOUT_MS, null);
+        }, null);
+        if (raw && raw.length){
+          var norm = normalizeXuList(raw, cfg);
+          if (norm.items.length){
+            currItems = norm.items;
+            currSyms = norm.items.map(function(x){ return x.sym; });
+          }else uniNote = ' · live list filtered empty — cached universe reused';
+        }else uniNote = ' · live universe list unavailable — cached universe reused';
+      }else uniNote = ' · universe module gone — cached universe reused';
+    }else{
+      uniNote = ' · legacy universe — new-listing detection needs the combined universe';
+    }
+    var tg = engineQuickTargets(last.uni.syms, last.survivors.map(function(r){ return r.sym; }), currSyms);
+    var toGate = tg.recheck.concat(tg.newListings);
+    var unchangedN = tg.unchanged.length + tg.gone.length;
+    if (!toGate.length){
+      stat.textContent = 'quick rescan: 0 checked · ' + unchangedN + ' unchanged — nothing to re-gate'
+        + ' · ' + last.survivors.length + ' executions · ' + last.rejected.length + ' aside'
+        + uniNote + ' · full scan ' + new Date(last.at).toTimeString().slice(0, 5);
+      return;
+    }
+    var itemBySym = {};
+    if (isXu && currItems) for (var ii = 0; ii < currItems.length; ii++) itemBySym[currItems[ii].sym] = currItems[ii];
+    var fresh = [], failed = 0;
+    for (var ci = 0; ci < toGate.length; ci += CHUNK){
+      var chunk = toGate.slice(ci, ci + CHUNK);
+      await Promise.all(chunk.map(async function(sym, k){
+        var i = ci + k;
+        setProg(el, (i + 1)/toGate.length);
+        stat.textContent = 'quick rescan · re-gating ' + (i + 1) + '/' + toGate.length + ' · ' + sym;
+        try{
+          if (isXu){
+            var item = itemBySym[sym];
+            if (!item){ failed++; return; }
+            fresh.push(await gateXuCandidate(item, cfg));
+          }else{
+            fresh.push(await gateLegacyCandidate(sym, last.uni.ticks, last.uni.source, cfg));
+          }
+        }catch(e){ failed++; }
+      }));
+      await SLEEP(CHUNK_SLEEP_MS);
+    }
+    /* merge: fresh verdicts replace; everything unchecked keeps prior verdict + age */
+    var bySym = {}, i2;
+    for (i2 = 0; i2 < last.rejected.length; i2++) bySym[last.rejected[i2].sym] = last.rejected[i2];
+    for (i2 = 0; i2 < last.survivors.length; i2++) bySym[last.survivors[i2].sym] = last.survivors[i2];
+    for (i2 = 0; i2 < fresh.length; i2++) bySym[fresh[i2].sym] = fresh[i2];
+    var survivors = [], rejected = [];
+    for (var k2 in bySym){
+      if (!Object.prototype.hasOwnProperty.call(bySym, k2)) continue;
+      if (bySym[k2].res && bySym[k2].res.pass) survivors.push(bySym[k2]); else rejected.push(bySym[k2]);
+    }
+    sortResults(survivors, rejected);
+    var counts = paintResults(el, survivors, rejected, isXu);
+    stat.textContent = 'quick rescan: ' + toGate.length + ' checked · ' + unchangedN + ' unchanged'
+      + (tg.newListings.length ? ' (' + tg.newListings.length + ' new listing' + (tg.newListings.length > 1 ? 's' : '') + ')' : '')
+      + (tg.gone.length ? ' · ' + tg.gone.length + ' delisted (verdict kept)' : '')
+      + ' · ' + survivors.length + ' executions (' + counts.nStrong + ' STRONG · ' + counts.nPlan + ' with plans)'
+      + ' · ' + rejected.length + ' aside'
+      + (failed ? ' · ' + failed + ' failed (skipped)' : '')
+      + uniNote
+      + ' · full scan ' + new Date(last.at).toTimeString().slice(0, 5)
+      + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's';
+    setSnapshot(survivors, rejected);   /* BRAIN: mirror the merged verdicts */
+    __lastScan = { uni: { mode: last.uni.mode, syms: currSyms, items: currItems, tallies: last.uni.tallies,
+                          source: last.uni.source, ticks: last.uni.ticks, cfg: cfg },
+                   survivors: survivors, rejected: rejected, at: last.at };   /* keep the full-scan age */
+  }catch(e){
+    stat.className = 'note warn';
+    stat.textContent = 'quick rescan failed: ' + (e && e.message ? e.message : e) + ' — prior verdicts kept';
+  }finally{
+    setProg(el, null);
+    setScanButtons(el, false);
     __busy = false;
   }
 }
@@ -956,6 +1198,7 @@ function mount(el){
       '<div class="panel">'
       + '<h2>EXECUTE — master gate engine <span>6-stage funnel · gates, not scores · every verdict shows its trail</span></h2>'
       + '<div class="row"><button class="btn" id="engineRun">RUN THE GATES</button>'
+      + '<button class="btn" id="engineQuick" title="cached universe, no refetch — re-gates only last scan’s survivors + new listings on fresh candles; everything else keeps its verdict">QUICK RESCAN</button>'
       + '<span class="note" id="engineStat"></span></div>'
       + '<div class="row" id="engineCfg" style="margin-top:8px">'
       + '<label class="f">VENUE<select id="engineVenue">'
@@ -978,7 +1221,8 @@ function mount(el){
       + '<b>G4 LIQUIDITY/VOL</b> (ATR sanity · turnover floor · EMA21 anchor · unverified turnover halves size) → <b>G5 NEWS RISK</b> (blackout veto). '
       + 'One VETO kills the trade — the trail is printed on every card, and every kill lands in WHY ASIDE. '
       + 'Conviction = gates passed: STRONG 6/6, MODERATE 4-5/6. Suggested risk: STRONG 1% / MODERATE 0.5% of equity, unconfirmed setups halved. '
-      + 'Levels come from the SMART $ setup builder with a local ATR fallback; a declined setup is never fabricated around. '
+      + 'Levels come from the SMART $ setup builder backed by the mandatory hgPlanLevels fallback; when neither can compute levels the card says so (levels unavailable — size down) — never a bare card. '
+      + 'QUICK RESCAN reuses the cached universe: survivors + new listings re-gated on fresh candles, everything else keeps its verdict. '
       + 'Standing aside is a position.</div>'
       + '<div class="prog" id="engineProg"><i></i></div>'
       + '</div>'
@@ -1001,6 +1245,8 @@ function mount(el){
     }
     var btn = el.querySelector('#engineRun');
     if (btn) btn.addEventListener('click', function(){ runScan(el).catch(function(){ /* runScan handles its own errors; this only swallows a pre-guard surprise so it never surfaces as an unhandled rejection */ }); });
+    var qbtn = el.querySelector('#engineQuick');
+    if (qbtn) qbtn.addEventListener('click', function(){ quickRescan(el).catch(function(){ /* same contract: quickRescan handles its own errors */ }); });
     /* config row: reflect the effective config, persist every change */
     var cfgNow = engineConfig();
     var vSel = el.querySelector('#engineVenue'), tSel = el.querySelector('#engineTurn');
@@ -1037,6 +1283,7 @@ async function refresh(){
 /* ---------------- registration ---------------- */
 G.gateCandidate = gateCandidate;
 G.engineConfig = engineConfig;
+G.engineQuickTargets = engineQuickTargets;
 G.engineState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };

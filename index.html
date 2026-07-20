@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0A0D12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HARDGATE">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -552,6 +560,8 @@ table tr:hover td{background:rgba(217,164,65,.045)}
 <script src="rotation.js"></script>
 <script src="goldspot.js"></script>
 <script src="brain.js"></script>
+<!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
+<script src="scorecard.js"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -1737,7 +1747,7 @@ const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot'] },
-  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','best','carry'] },
+  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','best','carry','scorecard'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
@@ -4640,6 +4650,28 @@ function saveTdKey(){
 try{ const __tdk = localStorage.getItem('hg_td_key'); if (__tdk && $('tdKeyInput')) $('tdKeyInput').value = __tdk; }catch(e){}
 
 runMarketPictureUI();
+
+/* ---------------- PWA: service worker registration ----------------
+   sw.js is network-first for EVERYTHING (fresh market data is sacred); its
+   cache is an offline fallback only and never stores /api/ or /api/proxy
+   responses. Register only on real web origins — https or localhost —
+   so file:// opens and the vm test sandboxes (no location / no
+   navigator.serviceWorker) skip cleanly. Every step is feature-checked and
+   wrapped: registration must never throw at load or break boot. */
+try{
+  (function(){
+    if (typeof navigator === 'undefined' || !navigator || typeof navigator.serviceWorker === 'undefined') return;
+    if (typeof location === 'undefined' || !location || typeof location.protocol !== 'string') return;
+    const __hgLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '[::1]';
+    if (location.protocol !== 'https:' && !__hgLocal) return;   /* http/file/capacitor etc. → no SW */
+    const __hgRegister = function(){
+      try{ navigator.serviceWorker.register('sw.js').catch(function(){ /* registration failure is non-fatal — app stays online-first */ }); }
+      catch(e){}
+    };
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('load', __hgRegister);
+    else __hgRegister();
+  })();
+}catch(e){}
 </script>
 </body>
 </html>
