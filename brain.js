@@ -1317,11 +1317,13 @@ async function runBrain(el){
           + ') · ' + setups.length + ' prime/high · ' + watches.length + ' watch'
         : '';
     }
-    cards.innerHTML = setups.map(cardHTML).join('');
+    /* safe* wrappers: one bad row becomes an honest RENDER FAILED row,
+       never blanks the whole 500-row render */
+    cards.innerHTML = setups.map(safeCardHTML).join('');
     paintCharts(cards, setups);
-    watch.innerHTML = watches.map(watchRowHTML).join('');
+    watch.innerHTML = watches.map(safeWatchRowHTML).join('');
     watchWrap.style.display = watches.length ? 'block' : 'none';
-    aside.innerHTML = asides.map(asideRowHTML).join('');
+    aside.innerHTML = asides.map(safeAsideRowHTML).join('');
     asideWrap.style.display = asides.length ? 'block' : 'none';
     if (!setups.length && !watches.length) empty.style.display = 'block';
 
@@ -1474,7 +1476,8 @@ async function runQuick(el){
     if (combined){
       /* fresh candles for the rechecked WATCH-or-better set — same bounded queue */
       var fq = await fetchCandleQueue(primes.concat(highs, watches), last.uni, stat, t0);
-      extraNote = fq.watchNote;
+      /* same honesty contract as the full scan: a binding fetch cap is named */
+      extraNote = fq.capNote + fq.watchNote;
       for (var sx = 0; sx < setups.length; sx++){
         if (Date.now() - t0 > TUN.scanMs){ extraNote += ' · planning timed out — some levels unavailable'; break; }
         try{
@@ -1512,11 +1515,11 @@ async function runQuick(el){
       read.textContent = marketRead(snap);
       readWrap.style.display = 'block';
     }
-    cards.innerHTML = setups.map(cardHTML).join('');
+    cards.innerHTML = setups.map(safeCardHTML).join('');
     paintCharts(cards, setups);
-    watch.innerHTML = watches.map(watchRowHTML).join('');
+    watch.innerHTML = watches.map(safeWatchRowHTML).join('');
     if (watchWrap) watchWrap.style.display = watches.length ? 'block' : 'none';
-    aside.innerHTML = asides.map(asideRowHTML).join('');
+    aside.innerHTML = asides.map(safeAsideRowHTML).join('');
     if (asideWrap) asideWrap.style.display = asides.length ? 'block' : 'none';
     empty.style.display = (!setups.length && !watches.length) ? 'block' : 'none';
 
@@ -1700,8 +1703,10 @@ function mount(el){
       vsel.style.display = (typeof G.xuUniverse === 'function') ? '' : 'none';
       vsel.addEventListener('change', function(){
         setVenue(vsel.value);
-        /* explicit user action — re-run is fine, but never a first-time scan */
-        if (__hasRun && !__busy) runBrain(el);
+        /* explicit user action — re-run is fine, but never a first-time scan,
+           and never mid-warm: a scan launched while WARM UP LAYERS is running
+           reads half-warmed layers and silently eats the warm-up's auto-fire */
+        if (__hasRun && !__busy && !__warming) runBrain(el);
       });
     }
   }catch(e){ mountNote(el, 'brain mount degraded: venue filter unavailable — scan still runs'); }
