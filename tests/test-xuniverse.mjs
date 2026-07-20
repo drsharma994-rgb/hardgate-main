@@ -1,0 +1,386 @@
+/* HARDGATE — xuniverse.js unit tests (Node 18+, builtins only).
+   Loads xuniverse.js as a classic script inside a vm context with a
+   `window` stub (exactly like the browser's <script> globals) and asserts:
+     1) xuNormDelta / xuNormCdcx payload normalization with the REAL field
+        names from index.html (mark_price, funding_rate percent units,
+        turnover_usd/turnover fallback, B-XXX_USDT symbol format)
+     2) xuMerge cross-exchange dedupe by base asset, turnover precedence,
+        alsoOn tagging, unknown-turnover delta preference, nothing dropped
+     3) xuUniverse end-to-end with stubbed fetch: direct Delta URL,
+        /api/proxy-wrapped CoinDCX URL, 15-min cache + force bypass,
+        per-leg allSettled degradation, total-outage honesty, busy-guard
+     4) xuCandles routing per exchange incl. proxy URL construction,
+        resolution maps, ms->s time conversion, failure tolerance
+     5) load-time safety: no fetch/AbortController -> module still loads,
+        every export callable, nothing throws.
+   Run: node tests/test-xuniverse.mjs */
+
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SRC = readFileSync(path.join(root, 'xuniverse.js'), 'utf8');
+
+/* ---------------- harness ---------------- */
+let pass = 0, fail = 0;
+function assert(cond, msg){
+  if (cond){ pass++; console.log('ok    - ' + msg); }
+  else { fail++; console.error('FAIL  - ' + msg); }
+}
+
+/* ---------------- context / stub factories ---------------- */
+function makeCtx(extra){
+  const base = {
+    window: {},
+    console: console,
+    setTimeout: setTimeout,
+    clearTimeout: clearTimeout
+    // NOTE: no fetch / AbortController unless `extra` adds them — load-time
+    // feature-checks get exercised on the bare context too.
+  };
+  return vm.createContext(Object.assign(Object.create(null), base, extra || {}));
+}
+function loadModule(ctx){
+  vm.runInContext(SRC, ctx, { filename: 'xuniverse.js' });
+  return ctx.window;
+}
+/* fetch stub that records URLs and serves routed bodies (or fails them) */
+function fetchRecorder(routes){
+  const urls = [];
+  const fn = async function(url){
+    urls.push(String(url));
+    for (const r of routes){
+      if (String(url).indexOf(r.match) >= 0){
+        if (r.fail) throw new Error(r.failMsg || 'network down');
+        if (r.httpFail) return { ok: false, status: r.httpFail, json: async function(){ return null; } };
+        const body = (typeof r.body === 'function') ? r.body(url) : r.body;
+        return { ok: true, status: 200, json: async function(){ return body; } };
+      }
+    }
+    return { ok: false, status: 404, json: async function(){ return null; } };
+  };
+  fn.urls = urls;
+  return fn;
+}
+
+/* ---------------- fixtures: REAL field names from index.html ---------------- */
+const DELTA_BODY = { result: [
+  { symbol: 'BTCUSD',  mark_price: '60000.5', close: '60000',   open: '59000', funding_rate: '0.05',  turnover_usd: '2500000000', oi_value_usd: '900000000' },
+  { symbol: 'ETHUSD',  mark_price: '3000.25', close: '3000',    open: '3050',  funding_rate: '-0.02', turnover_usd: '1200000000', oi_value_usd: '500000000' },
+  { symbol: 'SOLUSD',  mark_price: '150.5',   close: '150',     open: '148',   funding_rate: '0.01',  turnover: '800000000' },          // turnover fallback field
+  { symbol: 'XAUTUSD', mark_price: '4000',    close: '4000',    open: '3990',  funding_rate: '0.00',  turnover_usd: '5000000' },        // gold token
+  { symbol: 'DOGEUSD', close: '0.12',         open: '0.11' },                                                                            // no mark_price -> close; no funding/turnover -> nulls
+  { symbol: 'BADUSD',  mark_price: 'not-a-number', close: '' }                                                                           // unparseable -> mark null, row KEPT
+] };
+const CDCX_BODY = [ 'B-BTC_USDT', 'B-ETH_USDT', 'B-XRP_USDT', 'B-DOGE_USDT', { symbol: 'B-ADA_USDT' }, { symbol: 'B-MATIC_USDT' } ];
+const CDCX_BODY_OBJFORM = { instruments: ['B-BTC_USDT', 'B-SOL_USDT'] };
+
+/* =========================================================================
+   1) LOAD-TIME SAFETY (bare context: no fetch, no AbortController)
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  assert(typeof w.xuUniverse === 'function', 'load: xuUniverse exported on window with no fetch present');
+  assert(typeof w.xuCandles === 'function', 'load: xuCandles exported');
+  assert(typeof w.xuMerge === 'function', 'load: xuMerge exported');
+  assert(typeof w.xuNormDelta === 'function', 'load: xuNormDelta exported');
+  assert(typeof w.xuNormCdcx === 'function', 'load: xuNormCdcx exported');
+  assert(typeof w.xuState === 'function', 'load: xuState exported');
+  assert(typeof w.xuUniverseNote === 'function', 'load: xuUniverseNote exported');
+  assert(w.xuState() === null, 'load: xuState() null before any fetch attempt');
+  assert(w.xuUniverseNote() === null, 'load: xuUniverseNote() null before any fetch attempt');
+  assert(w.HG_tabs === undefined, 'load: library module registers NO tab');
+  const rows = await w.xuUniverse();
+  assert(Array.isArray(rows) && rows.length === 0, 'load: xuUniverse with fetch missing -> [] (never throws)');
+  assert(typeof w.xuUniverseNote() === 'string' && w.xuUniverseNote().indexOf('failed') >= 0,
+         'load: total outage sets an honest note, got "' + w.xuUniverseNote() + '"');
+  const candles = await w.xuCandles({ sym: 'BTCUSD', exchange: 'delta' }, '1h', 5);
+  assert(Array.isArray(candles) && candles.length === 0, 'load: xuCandles with fetch missing -> [] (never throws)');
+}
+
+/* =========================================================================
+   2) xuNormDelta — real Delta field names
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  const rows = w.xuNormDelta(DELTA_BODY);
+  assert(rows.length === 6, 'normDelta: all 6 rows kept, none dropped silently (got ' + rows.length + ')');
+  const btc = rows.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc && btc.sym === 'BTCUSD', 'normDelta: BTCUSD symbol preserved');
+  assert(btc.exchange === 'delta' && btc.alsoOn === null, 'normDelta: exchange tagged delta, alsoOn null');
+  assert(btc.mark === 60000.5, 'normDelta: mark parsed from mark_price string');
+  assert(btc.fundingPct === 0.05, 'normDelta: funding_rate kept in percent units (0.05, NO *100) — got ' + btc.fundingPct);
+  assert(btc.turnoverUsd === 2.5e9, 'normDelta: turnover_usd string parsed to number');
+  const sol = rows.filter(function(r){ return r.base === 'SOL'; })[0];
+  assert(sol && sol.turnoverUsd === 8e8, 'normDelta: falls back to turnover field when turnover_usd absent');
+  const doge = rows.filter(function(r){ return r.base === 'DOGE'; })[0];
+  assert(doge && doge.mark === 0.12, 'normDelta: mark falls back to close when mark_price absent');
+  assert(doge && doge.fundingPct === null && doge.turnoverUsd === null, 'normDelta: missing funding/turnover -> honest nulls');
+  const xaut = rows.filter(function(r){ return r.sym === 'XAUTUSD'; })[0];
+  assert(xaut && xaut.base === 'XAUT', 'normDelta: XAUTUSD -> base XAUT (USD suffix strip)');
+  const bad = rows.filter(function(r){ return r.base === 'BAD'; })[0];
+  assert(bad && bad.mark === null, 'normDelta: unparseable mark -> null, row kept (not silently dropped)');
+  assert(w.xuNormDelta(null).length === 0 && w.xuNormDelta({}).length === 0 && w.xuNormDelta('junk').length === 0,
+         'normDelta: garbage input -> [] without throwing');
+  assert(w.xuNormDelta({ result: [] }).length === 0, 'normDelta: empty result -> []');
+  const bare = w.xuNormDelta(DELTA_BODY.result);
+  assert(bare.length === 6, 'normDelta: accepts a bare array as well as {result:[...]}');
+}
+
+/* =========================================================================
+   3) xuNormCdcx — real CoinDCX shapes
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  const rows = w.xuNormCdcx(CDCX_BODY);
+  assert(rows.length === 6, 'normCdcx: all 6 instruments parsed (strings + {symbol} objects), got ' + rows.length);
+  const btc = rows.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc && btc.sym === 'B-BTC_USDT', 'normCdcx: B-BTC_USDT symbol preserved verbatim');
+  assert(btc && btc.exchange === 'coindcx', 'normCdcx: exchange tagged coindcx');
+  assert(btc && btc.turnoverUsd === null && btc.mark === null && btc.fundingPct === null,
+         'normCdcx: no mark/funding/turnover on this endpoint -> honest nulls, never fabricated');
+  const ada = rows.filter(function(r){ return r.sym === 'B-ADA_USDT'; })[0];
+  assert(ada && ada.base === 'ADA', 'normCdcx: {symbol} object items supported');
+  const obj = w.xuNormCdcx(CDCX_BODY_OBJFORM);
+  assert(obj.length === 2 && obj[1].sym === 'B-SOL_USDT' && obj[1].base === 'SOL',
+         'normCdcx: {instruments:[...]} envelope supported');
+  assert(w.xuNormCdcx(null).length === 0 && w.xuNormCdcx(42).length === 0, 'normCdcx: garbage input -> [] without throwing');
+}
+
+/* =========================================================================
+   4) xuMerge — dedupe by base across venues
+========================================================================= */
+{
+  const w = loadModule(makeCtx());
+  const d = w.xuNormDelta(DELTA_BODY);
+  const c = w.xuNormCdcx(CDCX_BODY);
+  const m = w.xuMerge(d, c);
+  // bases: BTC ETH SOL XAUT DOGE BAD (delta) + BTC ETH XRP DOGE ADA MATIC (cdcx) = 9 unique
+  assert(m.length === 9, 'merge: union of both venues by base = 9 unique assets, nothing dropped (got ' + m.length + ')');
+  const btc = m.filter(function(r){ return r.base === 'BTC'; })[0];
+  assert(btc && btc.exchange === 'delta' && btc.sym === 'BTCUSD', 'merge: BTCUSD and B-BTC_USDT are the same asset; delta wins on known turnover');
+  assert(btc && btc.alsoOn === 'B-BTC_USDT', 'merge: alsoOn carries the other venue symbol (B-BTC_USDT)');
+  assert(btc.turnoverUsd === 2.5e9, 'merge: primary keeps its real turnover');
+  const xrp = m.filter(function(r){ return r.base === 'XRP'; })[0];
+  assert(xrp && xrp.exchange === 'coindcx' && xrp.alsoOn === null, 'merge: cdcx-only contract kept with alsoOn null');
+  const matic = m.filter(function(r){ return r.base === 'MATIC'; })[0];
+  assert(matic && matic.sym === 'B-MATIC_USDT', 'merge: smallest cdcx-only contract survives — no silent truncation');
+  const doge = m.filter(function(r){ return r.base === 'DOGE'; })[0];
+  assert(doge && doge.exchange === 'delta' && doge.alsoOn === 'B-DOGE_USDT',
+         'merge: turnover unknown on BOTH venues -> delta preferred, cdcx tagged as alsoOn');
+  assert(m[0].base === 'BTC' && m[1].base === 'ETH' && m[2].base === 'SOL',
+         'merge: sorted turnover-desc (BTC 2.5B > ETH 1.2B > SOL 0.8B)');
+  assert(m[m.length-1].turnoverUsd === null && m[3].turnoverUsd !== null,
+         'merge: unknown-turnover entries sort last, known ones first');
+  // higher-turnover venue wins even when it is CoinDCX
+  const m2 = w.xuMerge(
+    w.xuNormDelta({ result: [{ symbol: 'BTCUSD', mark_price: '1', turnover_usd: '100' }] }),
+    [{ sym: 'B-BTC_USDT', base: 'BTC', exchange: 'coindcx', turnoverUsd: 500, mark: 1, fundingPct: null, alsoOn: null }]
+  );
+  assert(m2.length === 1 && m2[0].exchange === 'coindcx' && m2[0].sym === 'B-BTC_USDT' && m2[0].alsoOn === 'BTCUSD',
+         'merge: higher-turnover venue wins even when it is CoinDCX; delta becomes alsoOn');
+  // known turnover beats unknown
+  const m3 = w.xuMerge(
+    w.xuNormDelta({ result: [{ symbol: 'LTCUSD', mark_price: '1' }] }),
+    [{ sym: 'B-LTC_USDT', base: 'LTC', exchange: 'coindcx', turnoverUsd: 10, mark: null, fundingPct: null, alsoOn: null }]
+  );
+  assert(m3.length === 1 && m3[0].exchange === 'coindcx' && m3[0].alsoOn === 'LTCUSD',
+         'merge: known turnover beats unknown (cdcx $10 primary over delta unknown)');
+  // within-exchange duplicate base keeps higher turnover
+  const m4 = w.xuMerge(w.xuNormDelta({ result: [
+    { symbol: 'BTCUSD', mark_price: '1', turnover_usd: '100' },
+    { symbol: 'BTCUSDT', mark_price: '2', turnover_usd: '999' }
+  ] }), []);
+  assert(m4.length === 1 && m4[0].sym === 'BTCUSDT' && m4[0].turnoverUsd === 999 && m4[0].alsoOn === null,
+         'merge: same-venue duplicate base dedupes to the higher-turnover row, alsoOn stays null');
+  assert(w.xuMerge([], []).length === 0 && w.xuMerge(null, undefined).length === 0, 'merge: empty/garbage inputs -> []');
+}
+
+/* =========================================================================
+   5) xuUniverse end-to-end: URLs, cache, force, degradation
+========================================================================= */
+{
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(uni.length === 9, 'universe: combined deduped list = 9 contracts (got ' + uni.length + ')');
+  assert(f.urls.length === 2, 'universe: exactly two network legs fired');
+  assert(f.urls[0].indexOf('https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures') === 0,
+         'universe: Delta leg fetched DIRECT (CORS-proven), not proxied');
+  assert(f.urls[1].indexOf('/api/proxy?url=') === 0, 'universe: CoinDCX leg routed through the same-origin /api/proxy');
+  const dec = decodeURIComponent(f.urls[1]);
+  assert(dec.indexOf('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments') >= 0 &&
+         dec.indexOf('margin_currency_short_name[]=USDT') >= 0,
+         'universe: proxy wraps the real CoinDCX active_instruments USDT endpoint');
+  const st = w.xuState();
+  assert(st && st.count === 9 && st.delta === 6 && st.cdcx === 6 && typeof st.at === 'number',
+         'universe: xuState reports {count:9, delta:6, cdcx:6, at}');
+  assert(st.note === null && w.xuUniverseNote() === null, 'universe: healthy run -> note null');
+  const uni2 = await w.xuUniverse();
+  assert(f.urls.length === 2 && uni2 === uni, 'universe: second call within 15 min served from cache (no new fetch, same array)');
+  const uni3 = await w.xuUniverse(true);
+  assert(f.urls.length === 4 && uni3.length === 9, 'universe: force=true bypasses the cache and refetches both legs');
+  // every entry carries the full contract shape
+  const okShape = uni3.every(function(r){
+    return typeof r.sym === 'string' && typeof r.base === 'string' &&
+           (r.exchange === 'delta' || r.exchange === 'coindcx') &&
+           (r.turnoverUsd === null || typeof r.turnoverUsd === 'number') &&
+           (r.mark === null || typeof r.mark === 'number') &&
+           (r.fundingPct === null || typeof r.fundingPct === 'number') &&
+           (r.alsoOn === null || typeof r.alsoOn === 'string');
+  });
+  assert(okShape, 'universe: every entry matches {sym, base, exchange, turnoverUsd|null, mark|null, fundingPct|null, alsoOn|null}');
+}
+{
+  /* CoinDCX leg down -> Delta-only list with honest note */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: '/api/proxy?url=', fail: true, failMsg: 'proxy 502' }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(uni.length === 6, 'degrade: cdcx leg down -> the 6 Delta contracts still returned');
+  assert(w.xuUniverseNote().indexOf('coindcx leg failed') === 0, 'degrade: honest note names the failed leg, got "' + w.xuUniverseNote() + '"');
+  const st = w.xuState();
+  assert(st.cdcx === 0 && st.delta === 6, 'degrade: xuState counts the failed leg as 0');
+}
+{
+  /* Delta leg down -> CoinDCX-only list with honest note */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', httpFail: 503 },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(uni.length === 6 && uni.every(function(r){ return r.exchange === 'coindcx'; }),
+         'degrade: delta leg HTTP 503 -> the 6 CoinDCX contracts still returned');
+  assert(w.xuUniverseNote().indexOf('delta leg failed') === 0, 'degrade: note names the delta leg');
+}
+{
+  /* total outage with no cache -> [] + honest note; with cache -> stale rows kept */
+  const f = fetchRecorder([
+    { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const uni = await w.xuUniverse();
+  assert(Array.isArray(uni) && uni.length === 0, 'outage: both legs down, no cache -> [] (never throws, nothing fabricated)');
+  assert(w.xuUniverseNote().indexOf('both exchange legs failed') === 0, 'outage: note states both legs failed');
+  assert(w.xuState().count === 0, 'outage: xuState reports an empty universe honestly');
+}
+{
+  /* good cache survives a later forced total outage (good data never replaced) */
+  const good = fetchRecorder([
+    { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: '/api/proxy?url=', body: CDCX_BODY }
+  ]);
+  const ctx = makeCtx({ fetch: good, AbortController: AbortController });
+  const w = loadModule(ctx);
+  await w.xuUniverse();
+  ctx.fetch = fetchRecorder([
+    { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
+  ]);
+  const uni = await w.xuUniverse(true);
+  assert(uni.length === 9, 'outage: forced refetch during total outage keeps the last good 9-contract universe');
+  assert(w.xuUniverseNote().indexOf('last good universe') >= 0, 'outage: note says the data is stale, got "' + w.xuUniverseNote() + '"');
+}
+{
+  /* busy-guard: concurrent calls share one in-flight fetch */
+  let release;
+  const gate = new Promise(function(r){ release = r; });
+  const f = async function(url){
+    f.urls.push(String(url));
+    await gate;
+    if (String(url).indexOf('delta.exchange') >= 0) return { ok: true, status: 200, json: async function(){ return DELTA_BODY; } };
+    return { ok: true, status: 200, json: async function(){ return CDCX_BODY; } };
+  };
+  f.urls = [];
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const p1 = w.xuUniverse(), p2 = w.xuUniverse();
+  release();
+  const r = await Promise.all([p1, p2]);
+  assert(f.urls.length === 2 && r[0].length === 9 && r[1].length === 9,
+         'busy-guard: overlapping xuUniverse calls share one fetch round (2 URLs, not 4)');
+}
+
+/* =========================================================================
+   6) xuCandles — per-exchange routing
+========================================================================= */
+const DELTA_CANDLES = { result: [
+  { time: 1700003600, open: '101', high: '105', low: '100', close: '104', volume: '11' },
+  { time: 1700000000, open: '100', high: '102', low: '99',  close: '101', volume: '10' }
+] };
+const CDCX_CANDLES = { data: [
+  { time: 1700003600000, open: '201', high: '205', low: '200', close: '204', volume: '21' },
+  { time: 1700000000000, open: '200', high: '202', low: '199', close: '201' }
+] };
+{
+  const f = fetchRecorder([
+    { match: 'delta.exchange/v2/history/candles', body: DELTA_CANDLES },
+    { match: '/api/proxy?url=', body: CDCX_CANDLES }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+
+  const dItem = { sym: 'BTCUSD', base: 'BTC', exchange: 'delta' };
+  const rows = await w.xuCandles(dItem, '4h', 50);
+  assert(rows.length === 2, 'candles: delta rows returned');
+  assert(rows[0].t === 1700000000 && rows[1].t === 1700003600, 'candles: delta t kept in SECONDS and sorted ascending');
+  assert(rows[0].o === 100 && rows[0].h === 102 && rows[0].l === 99 && rows[0].c === 101 && rows[0].v === 10,
+         'candles: delta {t,o,h,l,c,v} mapped from {time,open,high,low,close,volume} strings');
+  const du = f.urls[0];
+  assert(du.indexOf('https://api.india.delta.exchange/v2/history/candles') === 0, 'candles: delta fetched DIRECT');
+  assert(du.indexOf('resolution=4h') >= 0 && du.indexOf('symbol=BTCUSD') >= 0, 'candles: delta DELTA_RES 4h->4h and symbol in query');
+  const m = /[?&]start=(\d+)&end=(\d+)/.exec(du);
+  assert(m && (+m[2] - +m[1]) === 14400 * 53, 'candles: delta window = secPer(4h) * (n+3) = 14400*53s');
+
+  const cItem = { sym: 'B-BTC_USDT', base: 'BTC', exchange: 'coindcx' };
+  const crows = await w.xuCandles(cItem, '1h', 10);
+  assert(crows.length === 2, 'candles: cdcx rows returned');
+  assert(crows[0].t === 1700000000 && crows[1].t === 1700003600, 'candles: cdcx time ms -> floored to seconds, ascending');
+  assert(crows[1].v === 21 && crows[0].v === 0, 'candles: cdcx volume parsed, missing volume -> 0');
+  const cu = decodeURIComponent(f.urls[1]);
+  assert(f.urls[1].indexOf('/api/proxy?url=') === 0, 'candles: cdcx routed via the same-origin proxy');
+  assert(cu.indexOf('https://public.coindcx.com/market_data/candlesticks') >= 0 &&
+         cu.indexOf('pair=B-BTC_USDT') >= 0 && cu.indexOf('resolution=60') >= 0 && cu.indexOf('pcode=f') >= 0,
+         'candles: cdcx CDCX_RES 1h->60, pair and pcode=f in proxied URL');
+  const cm = /[?&]from=(\d+)&to=(\d+)/.exec(cu);
+  assert(cm && (+cm[2] - +cm[1]) === 3600 * 13, 'candles: cdcx window = secPer(1h) * (n+3)');
+
+  /* resolution maps verbatim for the other timeframes */
+  await w.xuCandles(dItem, '15m', 5); assert(f.urls[f.urls.length-1].indexOf('resolution=15m') >= 0, 'candles: delta 15m->15m');
+  await w.xuCandles(dItem, '2h', 5);  assert(f.urls[f.urls.length-1].indexOf('resolution=2h') >= 0, 'candles: delta 2h->2h');
+  await w.xuCandles(dItem, '1d', 5);  assert(f.urls[f.urls.length-1].indexOf('resolution=1d') >= 0, 'candles: delta 1d->1d');
+  await w.xuCandles(cItem, '15m', 5); assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=15') >= 0, 'candles: cdcx 15m->15');
+  await w.xuCandles(cItem, '2h', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=120') >= 0, 'candles: cdcx 2h->120');
+  await w.xuCandles(cItem, '4h', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=240') >= 0, 'candles: cdcx 4h->240');
+  await w.xuCandles(cItem, '1d', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=1D') >= 0, 'candles: cdcx 1d->1D');
+
+  /* failure + nonsense tolerance — never throws */
+  const bad = await w.xuCandles(dItem, '3h', 5);
+  assert(Array.isArray(bad) && bad.length === 0, 'candles: unsupported tf -> [] (never throws)');
+  const noex = await w.xuCandles({ sym: 'X', exchange: 'binance' }, '1h', 5);
+  assert(Array.isArray(noex) && noex.length === 0, 'candles: unknown exchange -> [] (never throws)');
+  const noitem = await w.xuCandles(null, '1h', 5);
+  assert(Array.isArray(noitem) && noitem.length === 0, 'candles: null item -> [] (never throws)');
+}
+{
+  const f = fetchRecorder([
+    { match: 'delta.exchange', fail: true, failMsg: 'timeout' },
+    { match: '/api/proxy?url=', httpFail: 500 }
+  ]);
+  const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
+  const d = await w.xuCandles({ sym: 'BTCUSD', exchange: 'delta' }, '1h', 5);
+  const c = await w.xuCandles({ sym: 'B-BTC_USDT', exchange: 'coindcx' }, '1h', 5);
+  assert(d.length === 0 && c.length === 0, 'candles: network failure on either route -> [] per leg, never throws');
+}
+
+/* ---------------- summary ---------------- */
+console.log('');
+console.log(pass + ' passed, ' + fail + ' failed');
+if (fail > 0){ process.exitCode = 1; }

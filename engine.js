@@ -7,9 +7,13 @@ every card shows its full PASS/VETO/N-A trail. Conviction is a count of
 gates passed (STRONG = 6/6, MODERATE = 4-5/6), never a fabricated number.
 
 THE 6-STAGE FUNNEL (pure: gateCandidate(inp) -> {pass, dir, trail, plan}):
-  G0 UNIVERSE      symbol + >=210 4h bars (EMA200 warmup). Candidates come
-                   from whichever scanners published fresh results (see
-                   contract below) else top-24 USDT perps by 24h turnover.
+  G0 UNIVERSE      symbol + >=210 4h bars (EMA200 warmup). Stage-0 precedence
+                   (first available wins): (1) fresh scanner results (existing
+                   contract below) -> (2) window.xuUniverse() COMBINED Delta
+                   India + CoinDCX futures list (ALL contracts, deduplicated
+                   by base asset, NO count cap — liquidity is enforced by G4,
+                   never by silent truncation) -> (3) Binance top-24 USDT
+                   perps by 24h turnover (legacy fallback).
   G1 STRUCTURE     4H EMA9/21/50 cascade -> dir (mixed = chop veto), spread
                    |E21-E50| >= 0.25xATR (anti-chop), close vs EMA200 (HTF
                    side). Optional window.hgStructure(rows4h) ->
@@ -24,12 +28,44 @@ THE 6-STAGE FUNNEL (pure: gateCandidate(inp) -> {pass, dir, trail, plan}):
                    retailLongPct,topLongPct,takerRatio}) when present: an
                    opposing majority with score >= 2 VETOES; agreement
                    strengthens. Both legs missing => N/A, never fabricated.
-  G4 LIQUIDITY/VOL ATR(4h) sanity (0.05%..25% of price), 24h turnover >= $10M
-                   floor (unknown = noted, not vetoed), price <= 1.5xATR from
-                   EMA21 (anti-chase anchor, mirrors swing).
+  G4 LIQUIDITY/VOL ATR(4h) sanity (0.05%..25% of price), 24h turnover floor
+                   (gateCandidate default $10M; the EXECUTE tab's MIN TURNOVER
+                   select — $0.5M/$1M/$10M/$50M, default $1M — overrides it at
+                   scan time via inp.minTurnover; CoinDCX turnover UNKNOWN =
+                   never auto-vetoed: G4 passes with 'turnover unverified —
+                   size down' and the suggested risk fraction is halved),
+                   price <= 1.5xATR from EMA21 (anti-chase anchor, mirrors
+                   swing).
   G5 NEWS RISK     inp.news or window.hgNewsRisk(sym) ->
                    {blackout|veto:true, event, until} VETOES with the event
                    name shown. Module absent => N/A with an honest note.
+
+COMBINED-UNIVERSE CONTRACT (xuniverse.js, feature-checked — when absent the
+engine behaves EXACTLY as before: scanner results, else Binance top-24):
+  window.xuUniverse(force) -> Promise<[ { sym, base, exchange, turnoverUsd,
+                   mark, fundingPct, alsoOn } ]> — every Delta India + CoinDCX
+                   futures contract, deduped by base asset. exchange is
+                   normalized to 'delta' | 'cdcx' ('coindcx' accepted).
+  window.xuCandles(item, tf, n) -> Promise<rows> — candle rows for THAT item
+                   (exchange-aware symbol routing lives inside xuniverse.js);
+                   window.getCandles(sym, tf, n) is the fallback when
+                   xuCandles is absent or returns nothing. Rows are sanitized
+                   to {t,o,h,l,c,v} numbers, time-sorted, still-forming bar
+                   dropped (gates only ever see closed candles).
+  STAGED FETCHING (the combined list can run 300-600 symbols): only 4h
+  candles are fetched up front; gateCandidate runs the cheap G0-G2 gates
+  (structure + momentum need nothing else); 1h candles are fetched ONLY for
+  candidates that PASS the full funnel (plan quality) — dead candidates never
+  cost a second request. CHUNK concurrency and per-symbol catch isolation
+  are unchanged; the progress line reports 'X/Y · delta n · cdcx m · failed
+  k' and the WHY ASIDE header tallies rejections per exchange.
+  UI CONFIG ROW (EXECUTE tab, persisted in localStorage): VENUE select
+  ALL/DELTA/CDCX pre-filters the xu universe (an emptied filter is reported
+  honestly, never silently replaced by the Binance fallback) and MIN
+  TURNOVER select sets the G4 floor at runtime. window.engineConfig(set?) is
+  the pure getter/setter (vm-testable): engineConfig() -> {venue,
+  minTurnover}; engineConfig({venue, minTurnover}) merges, validates and
+  persists (localStorage 'hgEngineVenue' / 'hgEngineMinTurn', try-caught).
 
 SURVIVORS render as execution cards: big LONG/SHORT verdict, conviction,
 ENTRY/STOP/T1/T2 via window.smartSetup (local ATR fallback when it is absent
@@ -49,9 +85,13 @@ Scanner-results contract checked in order (first fresh non-empty wins):
 Classic script, no build step. Loads AFTER binance.js, indicators.js and the
 scanner modules — INTEGRATOR: register engine.js LAST (after oiflow.js,
 squeeze.js, strats.js etc.) so Stage-0 can see their published results, and
-map the tab: HG_TAB_GROUP['execute'] = 'overview' (suggested). Registers
-itself via window.HG_tabs.push({id:'execute', label:'EXECUTE', mount,
-refresh}). Never throws at load; every optional global is feature-checked.
+map the tab: HG_TAB_GROUP['execute'] = 'overview' (suggested). xuniverse.js
+is optional — every reference to window.xuUniverse / window.xuCandles is
+feature-checked (typeof === 'function') and timeout-wrapped (12s), so the
+engine is byte-for-byte the old behavior when the module is missing.
+Registers itself via window.HG_tabs.push({id:'execute', label:'EXECUTE',
+mount, refresh}). Never throws at load; every optional global is
+feature-checked.
 No global intervals — the RUN button and the hard-refresh contract are the
 only triggers. refresh() (⟳ HARD REFRESH, index.html hardRefreshAll): async,
 NEVER throws, returns a terse status string — 'busy' while a scan is running
@@ -82,7 +122,7 @@ var G = (typeof window !== 'undefined') ? window
 
 /* ---------------- tunables ---------------- */
 var MIN_ROWS_4H      = 210;      // swing-scan history floor (EMA200 warmup)
-var MIN_TURNOVER     = 10e6;     // $10M 24h quote turnover floor (G4)
+var MIN_TURNOVER     = 10e6;     // $10M 24h quote turnover floor — gateCandidate DEFAULT when inp.minTurnover is absent
 var MAX_UNIVERSE     = 24;       // fallback universe cap (top-N by turnover)
 var SCANNER_FRESH_MS = 10*60*1000;
 var SPREAD_MIN_ATR   = 0.25;     // |E21-E50| >= 0.25xATR (swing G1)
@@ -97,6 +137,17 @@ var ANCHOR_MAX_ATR   = 1.5;      // max distance from EMA21 in ATRs (swing)
 var CHUNK            = 4;
 var CHUNK_SLEEP_MS   = 150;
 var ASIDE_MAX        = 40;
+var XU_TIMEOUT_MS    = 12000;    // xuUniverse() / xuCandles() abort budget
+
+/* EXECUTE-tab config row (venue + min-turnover), persisted in localStorage.
+   Scan-time defaults: venue ALL, G4 floor $1M (the long tail is judged by
+   structure first; G4 still vetoes verified-illiquid picks with the reason
+   shown). gateCandidate itself keeps the $10M default when no per-call
+   minTurnover is supplied — purity preserved for direct/vm callers. */
+var LS_VENUE         = 'hgEngineVenue';
+var LS_TURN          = 'hgEngineMinTurn';
+var CFG_DEFAULTS     = { venue: 'all', minTurnover: 1000000 };
+var __cfg            = { venue: CFG_DEFAULTS.venue, minTurnover: CFG_DEFAULTS.minTurnover };
 
 var GATES = [ ['G0','UNIVERSE'], ['G1','STRUCTURE'], ['G2','MOMENTUM'],
               ['G3','POSITIONING'], ['G4','LIQUIDITY/VOL'], ['G5','NEWS RISK'] ];
@@ -115,6 +166,58 @@ function n2(x, d){ d = (d === undefined) ? 2 : d; return isFinite(x) ? Number(x)
 function sp(x, d){ d = (d === undefined) ? 2 : d; return isFinite(x) ? (x >= 0 ? '+' : '') + Number(x).toFixed(d) : 'n/a'; }
 function numOrNull(x){ return (typeof x === 'number' && isFinite(x)) ? x : null; }
 function esc(s){ return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+/* $ formatting for floors/turnovers that can dip below $1M (9e6 -> '9M',
+   2.5e6 -> '2.5M', 4e5 -> '400k') — keeps G4 reasons readable at any floor. */
+function moneyM(x){ x = +x; if (!isFinite(x)) return 'n/a'; var m = x/1e6;
+  if (m >= 1){ var r = Math.round(m*10)/10; return n2(r, (r === Math.round(r)) ? 0 : 1) + 'M'; }
+  return n2(Math.round(x/1e3), 0) + 'k'; }
+
+/* Abort budget for external xu* legs: resolves to `fallback` after ms unless
+   the promise settles first. Never rejects — pairs with leg() isolation. */
+function raceTimeout(p, ms, fallback){
+  return new Promise(function(res){
+    var done = false;
+    var t = setTimeout(function(){ if (!done){ done = true; res(fallback); } }, ms);
+    Promise.resolve(p).then(
+      function(v){ if (!done){ done = true; clearTimeout(t); res(v); } },
+      function(){ if (!done){ done = true; clearTimeout(t); res(fallback); } });
+  });
+}
+
+/* ---------------- EXECUTE config (venue + min-turnover) ----------------
+   Pure getter/setter, exported as window.engineConfig. getCfg() overlays
+   localStorage on the module vars on every read so a stored choice survives
+   reloads and direct storage edits are honored at the next scan. */
+function getCfg(){
+  var c = { venue: __cfg.venue, minTurnover: __cfg.minTurnover };
+  try{
+    if (typeof localStorage !== 'undefined' && localStorage){
+      var v = localStorage.getItem(LS_VENUE);
+      if (v === 'all' || v === 'delta' || v === 'cdcx') c.venue = v;
+      var t = parseFloat(localStorage.getItem(LS_TURN));
+      if (isFinite(t) && t > 0) c.minTurnover = t;
+    }
+  }catch(e){ /* storage blocked -> module defaults */ }
+  return c;
+}
+function engineConfig(set){
+  try{
+    if (set && typeof set === 'object'){
+      if (set.venue === 'all' || set.venue === 'delta' || set.venue === 'cdcx') __cfg.venue = set.venue;
+      var t = numOrNull(set.minTurnover);
+      if (t !== null && t > 0) __cfg.minTurnover = t;
+      try{
+        if (typeof localStorage !== 'undefined' && localStorage){
+          localStorage.setItem(LS_VENUE, __cfg.venue);
+          localStorage.setItem(LS_TURN, String(__cfg.minTurnover));
+        }
+      }catch(e){ /* persistence best-effort */ }
+    }
+    var c = getCfg();
+    return { venue: c.venue, minTurnover: c.minTurnover };
+  }catch(e){ return { venue: CFG_DEFAULTS.venue, minTurnover: CFG_DEFAULTS.minTurnover }; }
+}
 
 /* gateRow markup — reuse the global from index.html when present so the
    ledger looks identical everywhere; local copy keeps the module standalone
@@ -329,12 +432,18 @@ function gateCandidate(inp){
   if (!(atrPct <= ATRPCT_MAX))
     return die(4, 'ATR ' + n2(atrPct, 1) + '% of price > ' + ATRPCT_MAX + '% — untradeable volatility');
   var to = numOrNull(inp.turnoverUsd);
-  if (to !== null && to < MIN_TURNOVER)
-    return die(4, '24h turnover $' + n2(to/1e6, 0) + 'M < $' + n2(MIN_TURNOVER/1e6, 0) + 'M floor — slippage risk');
+  var floor = numOrNull(inp.minTurnover);   /* scan-time select overrides; default $10M */
+  if (!(floor > 0)) floor = MIN_TURNOVER;
+  if (to !== null && to < floor)
+    return die(4, '24h turnover $' + moneyM(to) + ' < $' + moneyM(floor) + ' floor — slippage risk');
   var anchorX = Math.abs(p - e21)/a4;
   if (!(anchorX <= ANCHOR_MAX_ATR))
     return die(4, 'price ' + n2(anchorX) + 'xATR from EMA21 > ' + ANCHOR_MAX_ATR + ' — too extended, wait for the pullback (swing anchor)');
-  note_(4, true, 'ATR ' + n2(atrPct, 2) + '% of price · ' + (to !== null ? 'turnover $' + n2(to/1e6, 0) + 'M' : 'turnover n/a')
+  /* turnover UNKNOWN (CoinDCX exposes no turnover field): never an auto-veto,
+     but conviction-backed sizing is halved and the card says why */
+  var toNote = (to !== null) ? 'turnover $' + moneyM(to) : 'turnover n/a — turnover unverified — size down';
+  if (to === null) res.turnoverUnverified = true;
+  note_(4, true, 'ATR ' + n2(atrPct, 2) + '% of price · ' + toNote
         + ' · ' + n2(anchorX) + 'xATR off EMA21');
 
   /* ---------- G5 NEWS RISK ---------- */
@@ -359,6 +468,8 @@ function gateCandidate(inp){
   res.conviction = res.gatesPassed >= GATES.length ? 'STRONG' : 'MODERATE';
   res.plan = buildPlan(dir, cls, rows4h, inp.rows1h);
   res.riskPct = suggestedRiskPct(res.conviction, res.plan);
+  if (res.turnoverUnverified === true && typeof res.riskPct === 'number' && isFinite(res.riskPct))
+    res.riskPct = Math.round(res.riskPct/2 * 10000)/10000;   /* halved: turnover unverified — size down */
   return res;
 }
 
@@ -388,22 +499,147 @@ function readScannerResults(){
   return null;
 }
 
+/* ---------------- combined delta+coindcx universe (xuniverse.js) ----------------
+   Every reference feature-checked: when window.xuUniverse is absent the
+   engine behaves EXACTLY as before (scanner results -> Binance top-24). */
+function xuUniverseFn(){
+  if (typeof G.xuUniverse === 'function') return G.xuUniverse;
+  if (typeof globalThis !== 'undefined' && typeof globalThis.xuUniverse === 'function') return globalThis.xuUniverse;
+  return null;
+}
+function xuCandlesFn(){
+  if (typeof G.xuCandles === 'function') return G.xuCandles;
+  if (typeof globalThis !== 'undefined' && typeof globalThis.xuCandles === 'function') return globalThis.xuCandles;
+  return null;
+}
+function normXuItem(raw){
+  if (!raw || typeof raw !== 'object') return null;
+  var sym = (typeof raw.sym === 'string' && raw.sym) ? raw.sym
+          : ((typeof raw.symbol === 'string' && raw.symbol) ? raw.symbol : null);
+  if (!sym) return null;
+  var ex = String(raw.exchange || '').toLowerCase();
+  var exk = (ex === 'delta') ? 'delta' : ((ex === 'coindcx' || ex === 'cdcx') ? 'cdcx' : 'other');
+  return {
+    sym: sym,
+    base: (typeof raw.base === 'string' && raw.base) ? raw.base : null,
+    exchange: exk,            /* normalized key for the venue filter + tallies */
+    raw: raw,                 /* ORIGINAL row — xuCandles routes on raw.exchange ('coindcx'), never pass it the normalized key */
+    turnoverUsd: numOrNull(raw.turnoverUsd),
+    mark: numOrNull(raw.mark),
+    fundingPct: numOrNull(raw.fundingPct),
+    alsoOn: Array.isArray(raw.alsoOn) ? raw.alsoOn.slice() : ((typeof raw.alsoOn === 'string' && raw.alsoOn) ? [raw.alsoOn] : [])
+  };
+}
+/* rows -> clean {t,o,h,l,c,v} numbers, time-sorted; null when nothing usable.
+   Accepts both {t,o,h,l,c,v} and {time,open,high,low,close,volume} shapes. */
+function sanitizeXuRows(rows){
+  if (!rows || !rows.length) return null;
+  var out = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i]; if (!r) continue;
+    var t = +((r.t !== undefined) ? r.t : r.time);
+    var o = +((r.o !== undefined) ? r.o : r.open);
+    var h = +((r.h !== undefined) ? r.h : r.high);
+    var l = +((r.l !== undefined) ? r.l : r.low);
+    var c = +((r.c !== undefined) ? r.c : r.close);
+    var v = +((r.v !== undefined) ? r.v : r.volume);
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) continue;
+    out.push({ t: isFinite(t) ? t : 0, o: o, h: h, l: l, c: c, v: isFinite(v) ? v : 0 });
+  }
+  if (!out.length) return null;
+  out.sort(function(a, b){ return a.t - b.t; });
+  return out;
+}
+/* gates only ever see CLOSED candles — a still-forming bar repaints */
+function dropFormingXu(rows, tf){
+  var sec = (tf === '4h') ? 14400 : (tf === '1h' ? 3600 : 0);
+  if (!sec || !rows || !rows.length) return rows;
+  var lastT = rows[rows.length - 1].t;
+  if (lastT > 1e12) lastT = Math.floor(lastT/1000);
+  if (lastT <= 0) return rows;
+  return ((Date.now()/1000) - lastT < sec) ? rows.slice(0, -1) : rows;
+}
+/* one candle leg for an xu item: xuCandles(item,tf,n) first (12s budget),
+   getCandles(sym,tf,n) as the fallback; leg-isolated, sanitized, forming bar
+   dropped. Returns null when both sources fail — G0 then vetoes honestly. */
+async function xuCandleLeg(item, tf, n){
+  var fn = xuCandlesFn();
+  var rows = null;
+  if (fn){
+    /* pass the ORIGINAL universe row: xuCandles routes on raw.exchange */
+    var target = (item && item.raw) ? item.raw : item;
+    rows = await leg(function(){
+      return raceTimeout(Promise.resolve().then(function(){ return fn(target, tf, n); }), XU_TIMEOUT_MS, null);
+    }, null);
+  }
+  if ((!rows || !rows.length) && typeof getCandles === 'function'){
+    rows = await leg(function(){ return getCandles(item.sym, tf, n); }, null);
+  }
+  var clean = sanitizeXuRows(rows);
+  return clean ? dropFormingXu(clean, tf) : null;
+}
+
 async function collectUniverse(){
+  var cfg = getCfg();
   var ticks = null;
   if (typeof binanceTickers24h === 'function'){
     try{ ticks = await binanceTickers24h(); }catch(e){ ticks = null; }
   }
   var fromScanners = readScannerResults();
-  if (fromScanners) return { syms: fromScanners.syms, source: fromScanners.source, ticks: ticks };
+  if (fromScanners) return { mode: 'legacy', syms: fromScanners.syms, source: fromScanners.source, ticks: ticks, cfg: cfg };
+  /* (2) combined Delta India + CoinDCX universe — ALL contracts, no count
+     cap; liquidity is enforced at G4, never by truncation. */
+  var xu = xuUniverseFn();
+  if (xu){
+    var raw = null;
+    try{ raw = await raceTimeout(Promise.resolve().then(function(){ return xu(false); }), XU_TIMEOUT_MS, null); }
+    catch(e){ raw = null; }
+    if (raw && raw.length){
+      var items = [], seen = {}, tallies = { delta: 0, cdcx: 0, other: 0 }, dropped = 0, valid = 0;
+      for (var i = 0; i < raw.length; i++){
+        var it = null;
+        try{ it = normXuItem(raw[i]); }catch(e){ it = null; }
+        if (!it){ dropped++; continue; }
+        valid++;
+        if (cfg.venue !== 'all' && it.exchange !== cfg.venue){ dropped++; continue; }
+        var key = it.exchange + '|' + (it.base || it.sym);   /* dedup by base asset per venue */
+        if (seen[key]){ dropped++; continue; }
+        seen[key] = true;
+        tallies[it.exchange]++;
+        items.push(it);
+      }
+      if (items.length){
+        var src = 'combined delta+coindcx universe · delta ' + tallies.delta + ' · cdcx ' + tallies.cdcx
+          + (tallies.other ? ' · other ' + tallies.other : '')
+          + ' · ALL contracts (liquidity gated at G4, never truncated)'
+          + (cfg.venue !== 'all' ? ' · venue ' + cfg.venue.toUpperCase() + ' (' + dropped + ' filtered out)' : '');
+        return { mode: 'xu', syms: items.map(function(x){ return x.sym; }), items: items,
+                 tallies: tallies, source: src, ticks: ticks, cfg: cfg };
+      }
+      if (valid > 0){
+        /* the venue filter emptied the combined list — say so, do NOT
+           silently substitute the Binance fallback for a filtered-out venue */
+        return { mode: 'legacy', syms: [], ticks: ticks, cfg: cfg,
+                 source: 'combined universe held ' + valid + ' contracts but venue ' + cfg.venue.toUpperCase()
+                       + ' filtered every one out — widen the VENUE select to scan them' };
+      }
+      /* raw list unusable (nothing parseable) — fall through to Binance */
+    }
+    /* xu unavailable / errored / timed out / empty — fall through to Binance */
+  }
+  /* (3) legacy Binance fallback */
   if (typeof binancePerpUniverse === 'function' && ticks){
     var perps = [];
     try{ perps = await binancePerpUniverse() || []; }catch(e){ perps = []; }
-    var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
+    var floor = cfg.minTurnover;
+    var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= floor; })
                    .sort(function(a, b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
                    .slice(0, MAX_UNIVERSE);
-    return { syms: uni, source: 'fallback: top ' + MAX_UNIVERSE + ' USDT perps by 24h turnover (≥$' + n2(MIN_TURNOVER/1e6, 0) + 'M)', ticks: ticks };
+    return { mode: 'legacy', syms: uni, ticks: ticks, cfg: cfg,
+             source: 'fallback: top ' + MAX_UNIVERSE + ' USDT perps by 24h turnover (≥$' + moneyM(floor) + ')' };
   }
-  return { syms: [], source: 'none — no scanner results published and binance.js unavailable', ticks: ticks };
+  return { mode: 'legacy', syms: [], ticks: ticks, cfg: cfg,
+           source: 'none — no scanner results published, combined universe module absent, binance.js unavailable' };
 }
 
 /* ---------------- per-symbol data gathering (every leg feature-checked) ---------------- */
@@ -468,6 +704,7 @@ function cardHTML(r){
   var verdict = '<div class="verdict ' + dir + '"><div class="vword">' + dir.toUpperCase() + '</div>'
     + '<div class="vwhy"><b>' + res.conviction + ' CONVICTION</b> — ' + res.gatesPassed + ' of 6 gates passed'
     + ' · suggested risk <b>' + FMT(res.riskPct, 2) + '%</b> of equity'
+    + (res.turnoverUnverified ? ' · turnover unverified — size down' : '')
     + (s ? ' · ' + s.type + (s.confirmed ? ' CONFIRMED' : ' UNCONFIRMED') : ' · no executable plan') + '</div></div>';
   var mini = '<div class="mini">'
     + '<span class="k">mark</span><span>' + PX(r.mark) + '</span>'
@@ -490,7 +727,8 @@ function cardHTML(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   return '<div class="card ' + dir + '">'
-    + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE' + badge + '</span></div>'
+    + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
+    + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge + '</span></div>'
     + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn
     + '</div>';
 }
@@ -500,7 +738,7 @@ function asideHTML(rejected){
     var kill = null;
     for (var i = 0; i < r.res.trail.length; i++) if (r.res.trail[i].ok === false){ kill = r.res.trail[i]; break; }
     if (!kill) return '';
-    return gateRowHTML(kill.gate, kill.name + ' · ' + r.sym, 'veto', esc(kill.note));
+    return gateRowHTML(kill.gate, kill.name + ' · ' + r.sym + (r.exchange ? ' · ' + r.exchange : ''), 'veto', esc(kill.note));
   }).join('');
   if (rejected.length > ASIDE_MAX)
     rows += gateRowHTML('…', (rejected.length - ASIDE_MAX) + ' more rejections', 'na', 'list capped at ' + ASIDE_MAX);
@@ -583,7 +821,8 @@ function depStatus(){
               'ema', 'rsi', 'atr', 'volZ'];
   var missing = [];
   for (var i = 0; i < need.length; i++) if (typeof root[need[i]] !== 'function') missing.push(need[i]);
-  var optional = ['smartClassify', 'smartSetup', 'hgStructure', 'hgNewsRisk', 'toTrade', 'hgMiniChart'];
+  var optional = ['smartClassify', 'smartSetup', 'hgStructure', 'hgNewsRisk', 'toTrade', 'hgMiniChart',
+                  'xuUniverse', 'xuCandles'];
   var optMissing = [];
   for (var j = 0; j < optional.length; j++) if (typeof root[optional[j]] !== 'function') optMissing.push(optional[j]);
   return { missing: missing, optMissing: optMissing };
@@ -611,19 +850,48 @@ async function runScan(el){
       return;
     }
     var survivors = [], rejected = [], failed = 0;
-    for (var ci = 0; ci < uni.syms.length; ci += CHUNK){
-      var chunk = uni.syms.slice(ci, ci + CHUNK);
-      await Promise.all(chunk.map(async function(sym, k){
+    var isXu = (uni.mode === 'xu');
+    var cands = isXu ? uni.items : uni.syms;
+    var proc = { delta: 0, cdcx: 0, other: 0 };   /* gated-per-exchange tallies */
+    for (var ci = 0; ci < cands.length; ci += CHUNK){
+      var chunk = cands.slice(ci, ci + CHUNK);
+      await Promise.all(chunk.map(async function(cand, k){
         var i = ci + k;
-        setProg(el, (i + 1)/uni.syms.length);
-        stat.textContent = 'gating ' + (i + 1) + '/' + uni.syms.length + ' · ' + sym;
+        var sym = isXu ? cand.sym : cand;
+        setProg(el, (i + 1)/cands.length);
+        stat.textContent = 'gating ' + (i + 1) + '/' + cands.length + ' · ' + sym
+          + (isXu ? ' · delta ' + proc.delta + ' · cdcx ' + proc.cdcx + ' · failed ' + failed : '');
         try{
-          var inp = await gatherSymbol(sym, uni.ticks ? uni.ticks[sym] : null, uni.source);
-          var res = gateCandidate(inp);
-          var rec = { sym: sym, res: res, rows4h: inp.rows4h,
-                      mark: inp.mark, chg24: inp.chg24, fundingPct: inp.fundingPct,
-                      oiChgPct: inp.oiChgPct, turnoverUsd: inp.turnoverUsd };
-          if (res.pass) survivors.push(rec); else rejected.push(rec);
+          if (isXu){
+            /* STAGED: 4h first, full funnel on it; 1h ONLY for passers (plan
+               quality). Dead candidates never cost a second request. */
+            var item = cand;
+            var src = item.exchange + (item.alsoOn.length ? ' (also on ' + item.alsoOn.join('/') + ')' : '')
+                    + ' · combined universe';
+            var rows4h = await xuCandleLeg(item, '4h', 260);
+            var inp = { sym: item.sym, source: src, rows4h: rows4h, rows1h: null,
+                        chg24: null, turnoverUsd: item.turnoverUsd, fundingPct: item.fundingPct,
+                        oiChgPct: null, retailLongPct: null, topLongPct: null, takerRatio: null,
+                        minTurnover: uni.cfg.minTurnover };
+            var res = gateCandidate(inp);
+            if (res.pass){
+              var rows1h = await xuCandleLeg(item, '1h', 120);
+              if (rows1h && rows1h.length){ inp.rows1h = rows1h; res = gateCandidate(inp); }
+            }
+            proc[item.exchange]++;
+            var xrec = { sym: item.sym, exchange: item.exchange, res: res, rows4h: rows4h,
+                         mark: item.mark, chg24: null, fundingPct: item.fundingPct,
+                         oiChgPct: null, turnoverUsd: item.turnoverUsd };
+            if (res.pass) survivors.push(xrec); else rejected.push(xrec);
+          }else{
+            var inp2 = await gatherSymbol(sym, uni.ticks ? uni.ticks[sym] : null, uni.source);
+            inp2.minTurnover = uni.cfg.minTurnover;
+            var res2 = gateCandidate(inp2);
+            var rec = { sym: sym, res: res2, rows4h: inp2.rows4h,
+                        mark: inp2.mark, chg24: inp2.chg24, fundingPct: inp2.fundingPct,
+                        oiChgPct: inp2.oiChgPct, turnoverUsd: inp2.turnoverUsd };
+            if (res2.pass) survivors.push(rec); else rejected.push(rec);
+          }
         }catch(e){ failed++; }
       }));
       await SLEEP(CHUNK_SLEEP_MS);
@@ -644,7 +912,18 @@ async function runScan(el){
     paintCharts(cards, survivors);
     if (asidePanel && asideList){
       asideList.innerHTML = asideHTML(rejected);
-      if (asideCount) asideCount.textContent = rejected.length + ' rejected';
+      if (asideCount){
+        var acTxt = rejected.length + ' rejected';
+        if (isXu){
+          var rd = 0, rc = 0, ro = 0;
+          for (var ai = 0; ai < rejected.length; ai++){
+            var ex2 = rejected[ai].exchange;
+            if (ex2 === 'delta') rd++; else if (ex2 === 'cdcx') rc++; else ro++;
+          }
+          acTxt += ' · delta ' + rd + ' · cdcx ' + rc + (ro ? ' · other ' + ro : '');
+        }
+        asideCount.textContent = acTxt;
+      }
       asidePanel.style.display = rejected.length ? 'block' : 'none';
     }
     var nStrong = 0, nPlan = 0;
@@ -678,11 +957,25 @@ function mount(el){
       + '<h2>EXECUTE — master gate engine <span>6-stage funnel · gates, not scores · every verdict shows its trail</span></h2>'
       + '<div class="row"><button class="btn" id="engineRun">RUN THE GATES</button>'
       + '<span class="note" id="engineStat"></span></div>'
+      + '<div class="row" id="engineCfg" style="margin-top:8px">'
+      + '<label class="f">VENUE<select id="engineVenue">'
+      + '<option value="all">ALL (Delta + CoinDCX)</option>'
+      + '<option value="delta">DELTA only</option>'
+      + '<option value="cdcx">CDCX only</option>'
+      + '</select></label>'
+      + '<label class="f">MIN TURNOVER<select id="engineTurn">'
+      + '<option value="500000">$0.5M</option>'
+      + '<option value="1000000">$1M</option>'
+      + '<option value="10000000">$10M</option>'
+      + '<option value="50000000">$50M</option>'
+      + '</select></label>'
+      + '<span class="note">combined universe only — liquidity is judged at G4, never truncated</span>'
+      + '</div>'
       + '<div class="note" id="engineDeps" style="margin-top:8px"></div>'
       + '<div class="note" style="margin-top:8px">'
-      + '<b>G0 UNIVERSE</b> (scanner results, else top perps by turnover) → <b>G1 STRUCTURE</b> (4H EMA cascade + anti-chop spread + EMA200 side) → '
+      + '<b>G0 UNIVERSE</b> (scanner results, else the combined Delta+CoinDCX futures universe — every contract, liquidity gated at G4 not truncated — else top perps by turnover) → <b>G1 STRUCTURE</b> (4H EMA cascade + anti-chop spread + EMA200 side) → '
       + '<b>G2 MOMENTUM</b> (RSI extremes · volume z · close position) → <b>G3 POSITIONING</b> (funding crowding · smart-$ divergence) → '
-      + '<b>G4 LIQUIDITY/VOL</b> (ATR sanity · turnover floor · EMA21 anchor) → <b>G5 NEWS RISK</b> (blackout veto). '
+      + '<b>G4 LIQUIDITY/VOL</b> (ATR sanity · turnover floor · EMA21 anchor · unverified turnover halves size) → <b>G5 NEWS RISK</b> (blackout veto). '
       + 'One VETO kills the trade — the trail is printed on every card, and every kill lands in WHY ASIDE. '
       + 'Conviction = gates passed: STRONG 6/6, MODERATE 4-5/6. Suggested risk: STRONG 1% / MODERATE 0.5% of equity, unconfirmed setups halved. '
       + 'Levels come from the SMART $ setup builder with a local ATR fallback; a declined setup is never fabricated around. '
@@ -708,6 +1001,17 @@ function mount(el){
     }
     var btn = el.querySelector('#engineRun');
     if (btn) btn.addEventListener('click', function(){ runScan(el).catch(function(){ /* runScan handles its own errors; this only swallows a pre-guard surprise so it never surfaces as an unhandled rejection */ }); });
+    /* config row: reflect the effective config, persist every change */
+    var cfgNow = engineConfig();
+    var vSel = el.querySelector('#engineVenue'), tSel = el.querySelector('#engineTurn');
+    if (vSel){
+      try{ vSel.value = cfgNow.venue; }catch(e){}
+      vSel.addEventListener('change', function(){ engineConfig({ venue: vSel.value }); });
+    }
+    if (tSel){
+      try{ tSel.value = String(cfgNow.minTurnover); }catch(e){}
+      tSel.addEventListener('change', function(){ engineConfig({ minTurnover: parseFloat(tSel.value) }); });
+    }
   }catch(e){ /* never throw at mount */ }
 }
 
@@ -732,6 +1036,7 @@ async function refresh(){
 
 /* ---------------- registration ---------------- */
 G.gateCandidate = gateCandidate;
+G.engineConfig = engineConfig;
 G.engineState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };

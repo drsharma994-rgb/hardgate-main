@@ -20,13 +20,62 @@ named in the ledger and CAPS the tier (1-2 dark layers -> cap HIGH,
 
 Pure core, no DOM, fully vm-testable:
   window.brainCollect(inputs) -> {sym, lane, votes, unavailable, silent}
-    inputs  = {sym, lane:'crypto'|'gold', news, regime, rotation, onchain,
-               engine, oiflow, squeeze, liq, gold}
+    inputs  = {sym, lane:'crypto'|'gold', aliases?, news, regime, rotation,
+               onchain, engine, oiflow, squeeze, liq, gold}
     vote    = {layer, vote:'long'|'short'|'neutral'|'veto', text,
                kind:'structural'|'positioning'|'context', caution?, strong?}
   window.brainDecide(votes, meta?) -> {tier, dir, agree, disagree,
     longCount, shortCount, vetoes, reasons, hasStructural, hasPositioning,
     newsCaution, cappedFrom}
+  window.brainUniverse(xuList, {venue}?) -> pure combined-universe builder:
+    {mode:'combined', candidates:[{sym, base, exchange, turnoverUsd, xu,
+    alsoOn, aliases}], counts:{total, delta, cdcx}, venue, note}
+
+FULL-COMBINED-UNIVERSE CANDIDATE MODEL (xuniverse.js contract, both
+feature-checked; ABSENT -> today's legacy behavior is byte-identical):
+  window.xuUniverse(force) -> Promise<[{sym, base, exchange, turnoverUsd,
+    mark, fundingPct, alsoOn}]>  — the combined Delta Exchange India +
+    CoinDCX futures universe, already deduplicated by base asset and
+    liquidity-gated by xuniverse.js (brain never truncates silently:
+    every item it receives gets voted).
+  window.xuCandles(item, tf, n) -> Promise<rows {t,o,h,l,c,v} ascending>
+    — 4h rows for one combined-universe item, routed to its exchange.
+
+Candidate universe (combined mode): BTC/ETH/SOL mapped onto their xu
+entries when present (a BTC candidate deduped to the CoinDCX listing
+B-BTC_USDT stays ONE candidate and its candles route through CoinDCX)
++ EVERY alt in the xu list (no top-10 cap) + the XAU gold lane
+(unchanged). Vote assembly is CPU-cheap, so every candidate is voted on
+the non-candle layers. CANDLE-FETCHING is lazy and bounded: 4h rows are
+fetched (xuCandles for xu items, else the inline getCandles router, else
+binanceKlines) ONLY for candidates reaching WATCH-or-better on the
+non-candle layers, highest-evidence first, CHUNK_SIZE 5, per-symbol
+catch isolation, 12s per-fetch timeout, capped at FETCH_CAP (40)
+fetches/scan — when the cap binds the status line says so honestly
+('+37 more watch candidates — raise evidence to fetch'). Plans remain
+PRIME/HIGH-only and come from the gate engine / smartSetup /
+hgPlanLevels exactly as before — in combined mode smartSetup receives []
+for 1h rows (4h-only fetch budget), an input it already tolerates.
+Layer states keyed by Binance-style syms ('BTCUSDT') still vote for xu
+candidates via alias matching (sym, base+'USDT', base). An xu candidate
+whose xuCandles leg fails never silently reroutes to Binance — it gets
+no rows and an honest 'levels unavailable'.
+
+Venue filter: ALL/DELTA/CDCX <select> beside RUN SYNTHESIS, persisted in
+localStorage 'hgEngineVenue' — the key is SHARED with the EXECUTE engine
+(lowercase 'all'/'delta'/'cdcx' on disk; brain normalizes case on read and
+writes lowercase back, so one filter choice drives both tabs). The select is
+visible only when the combined feed is present. BTC/ETH/SOL are always
+scanned; the filter selects which exchange listing feeds their candles (a
+base absent from the filtered listings falls back to the legacy candle
+route and is shown exchange-less). xuniverse.js emits exchange
+'delta'|'coindcx' — candidates normalize to 'delta'|'cdcx' (engine's keys)
+while cand.xu always keeps the ORIGINAL item so xuCandles routes on
+item.exchange correctly.
+
+MARKET READ header + the run summary gain combined counts:
+'universe 412 (delta 187 + cdcx 225) · 8 prime/high · 21 watch'.
+Fetch progress: 'X/Y candidates · delta n · cdcx m'.
 
 Layer state contracts consumed (ALL feature-checked; any may be absent):
   window.hgNewsRisk(sym) -> {risk:'low'|'med'|'high', blackout, events, note}
@@ -51,8 +100,7 @@ any module degrades honestly. Registers via
 refresh(): async, never throws, returns 'refreshed' | 'skipped: not run yet'
 | 'busy' | 'error', busy-guarded, and never fires a first-time synthesis
 from a global hard refresh.
-========================================================================= */
-(function(){
+========================================================================= */(function(){
 'use strict';
 
 var G = (typeof window !== 'undefined') ? window
@@ -60,13 +108,24 @@ var G = (typeof window !== 'undefined') ? window
 
 /* ---------------- tunables ---------------- */
 var BASE_SYMS   = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];   /* always in the universe */
-var TOP_ALTS    = 10;                                   /* extra alts by 24h turnover */
+var TOP_ALTS    = 10;                                   /* extra alts by 24h turnover (legacy mode) */
 var KLINES_4H   = 120;
 var KLINES_1H   = 120;
 var PLAN_MIN_TIER = 'HIGH';                             /* plans only for PRIME/HIGH cards */
 /* fiat/stable + metal perps are not alts for the rotation universe */
 var ALT_BLOCK   = { USDCUSDT:1, FDUSDUSDT:1, TUSDUSDT:1, BUSDUSDT:1, USDPUSDT:1,
                     DAIUSDT:1, EURUSDT:1, GBPUSDT:1, XAUUSDT:1, PAXGUSDT:1 };
+
+/* ---- combined-universe tunables (xuniverse.js present) ---- */
+var BASES       = ['BTC', 'ETH', 'SOL'];  /* BASE_SYMS as base assets */
+var BASE_BLOCK  = { USDC:1, FDUSD:1, TUSD:1, BUSD:1, USDP:1,
+                    DAI:1, EUR:1, GBP:1, XAU:1, PAXG:1 }; /* base-asset mirror of ALT_BLOCK */
+var FETCH_CAP   = 40;      /* max 4h candle fetches per scan — documented, honest when it binds */
+var CHUNK_SIZE  = 5;       /* candle fetches in flight per chunk */
+var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
+var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with engine.js
+                                       (lowercase 'all'/'delta'/'cdcx' on disk; brain
+                                       normalizes case on read, writes lowercase back) */
 
 /* layer kind map — structural vs positioning vs context. PRIME requires at
    least one agreeing structural AND one agreeing positioning vote. */
@@ -105,6 +164,18 @@ function brainCollect(inputs){
   var lane = (inp.lane === 'gold') ? 'gold' : 'crypto';
   var isBtc = sym.toUpperCase().indexOf('BTC') === 0;
   var votes = [], unavailable = [], silent = [];
+
+  /* alias matching — layer states keyed by Binance-style syms ('BTCUSDT')
+     still vote for combined-universe candidates ('B-BTC_USDT'): a layer row
+     matches when its sym is the candidate sym OR one of its aliases
+     (base+'USDT', base). No aliases -> exact match only (legacy behavior). */
+  var aliasSet = {}; aliasSet[sym] = 1;
+  if (Array.isArray(inp.aliases)){
+    for (var ai = 0; ai < inp.aliases.length; ai++){
+      if (typeof inp.aliases[ai] === 'string' && inp.aliases[ai]) aliasSet[inp.aliases[ai]] = 1;
+    }
+  }
+  function named(s){ return typeof s === 'string' && aliasSet[s] === 1; }
 
   function push(layer, vote, text, extra){
     var v = { layer: layer, vote: vote, text: String(text || ''),
@@ -228,7 +299,7 @@ function brainCollect(inputs){
     var surv = Array.isArray(en.survivors) ? en.survivors : [];
     for (ei = 0; ei < surv.length; ei++){
       var sv = surv[ei];
-      if (sv && sv.sym === sym && isDir(sv.dir)){
+      if (sv && named(sv.sym) && isDir(sv.dir)){
         push('engine', sv.dir,
              'ENGINE SURVIVOR · ' + (sv.conviction || 'n/a') + ' conviction'
              + (sv.plan ? ' · plan ready' : ' · no plan'),
@@ -240,7 +311,7 @@ function brainCollect(inputs){
       var rej = Array.isArray(en.rejected) ? en.rejected : [];
       for (ei = 0; ei < rej.length; ei++){
         var rj = rej[ei];
-        if (rj && rj.sym === sym){
+        if (rj && named(rj.sym)){
           push('engine', 'veto', 'engine veto' + (rj.vetoGate ? ' @ ' + rj.vetoGate : ''));
           enHit = true; break;
         }
@@ -255,7 +326,7 @@ function brainCollect(inputs){
     var ofRes = Array.isArray(inp.oiflow.results) ? inp.oiflow.results : [], ofHit = false;
     for (var oi = 0; oi < ofRes.length; oi++){
       var or = ofRes[oi];
-      if (or && or.sym === sym && isDirUp(or.dir)){
+      if (or && named(or.sym) && isDirUp(or.dir)){
         /* oiflowState rows: evidence = score (number), cls = regime/lead string;
            a raw {evidence:[strings]} shape is also accepted */
         var oEv = '';
@@ -275,7 +346,7 @@ function brainCollect(inputs){
     var sqRes = Array.isArray(inp.squeeze.results) ? inp.squeeze.results : [], sqHit = false;
     for (var si = 0; si < sqRes.length; si++){
       var sr = sqRes[si];
-      if (sr && sr.sym === sym){
+      if (sr && named(sr.sym)){
         sqHit = true;
         if (isDir(sr.dir) && sr.kind === 'fired')
           push('squeeze', sr.dir, 'SQUEEZE fired ' + sr.dir.toUpperCase() + ' — compression released');
@@ -293,7 +364,7 @@ function brainCollect(inputs){
   if (inp.liq === undefined || inp.liq === null){ silent.push('liqs'); if (inp.liq === undefined) unavailable.push('liqs'); }
   else if (typeof inp.liq === 'object'){
     var lf = inp.liq;
-    if (isDir(lf.dir) && (!lf.sym || lf.sym === sym))
+    if (isDir(lf.dir) && (!lf.sym || named(lf.sym)))
       push('liqs', lf.dir,
            'LIQS flush-reversal — ' + (lf.flushSide || '?') + ' flush'
            + (isFinite(lf.flushUsd) ? ' $' + FMT(lf.flushUsd / 1e6, 1) + 'M' : '')
@@ -458,9 +529,128 @@ function newsFor(sym){
   }catch(e){ return undefined; }
 }
 
-/* ---------------- candidate universe ---------------- */
-async function buildUniverse(){
-  var out = { cryptos: BASE_SYMS.slice(), ticks: null,
+/* ---------------- candidates + candidate universe ---------------- */
+function legacyCand(sym){
+  return { sym: sym, base: String(sym).replace(/USDT$/, ''), exchange: null,
+           turnoverUsd: null, xu: null, alsoOn: null, aliases: [sym] };
+}
+function candOf(c){ return (typeof c === 'string') ? legacyCand(c) : c; }
+
+/* =========================================================================
+PURE COMBINED-UNIVERSE BUILDER — xuniverse.js list in, candidates out.
+xuList items: {sym, base, exchange:'delta'|'cdcx', turnoverUsd, mark,
+fundingPct, alsoOn}. Defensively deduped by base (highest turnover kept),
+BTC/ETH/SOL mapped onto their entries first, every other non-blocked base
+appended by turnover — NO top-N cap, nothing silently dropped.
+========================================================================= */
+function brainUniverse(xuList, opts){
+  opts = (opts && typeof opts === 'object') ? opts : {};
+  var venue = normVenue(opts.venue);
+  var items = [];
+  if (Array.isArray(xuList)){
+    for (var i = 0; i < xuList.length; i++){
+      var it = xuList[i];
+      if (!it || typeof it !== 'object') continue;
+          var sym = (typeof it.sym === 'string') ? it.sym : '';
+      var base = (typeof it.base === 'string') ? it.base.toUpperCase() : '';
+      /* xuniverse.js emits 'delta'|'coindcx'; normalize to engine's keys
+         ('delta'|'cdcx'). cand.xu keeps the ORIGINAL item — xuCandles routes
+         on item.exchange ('coindcx'), never hand it the normalized key. */
+      var exRaw = (typeof it.exchange === 'string') ? it.exchange.toLowerCase() : '';
+      var ex = (exRaw === 'delta') ? 'delta' : ((exRaw === 'coindcx' || exRaw === 'cdcx') ? 'cdcx' : '');
+      if (!sym || !base || !ex) continue;
+      items.push({ sym: sym, base: base, exchange: ex,
+                   turnoverUsd: (typeof it.turnoverUsd === 'number' && isFinite(it.turnoverUsd)) ? it.turnoverUsd : null,
+                   alsoOn: (it.alsoOn === undefined ? null : it.alsoOn), xu: it });
+    }
+  }
+  if (venue !== 'ALL')
+    items = items.filter(function(it){ return it.exchange === venue.toLowerCase(); });
+  /* dedupe by base — highest turnover wins (xu promises deduped; belt+braces) */
+  items.sort(function(a, b){
+    return ((b.turnoverUsd === null ? -1 : b.turnoverUsd) - (a.turnoverUsd === null ? -1 : a.turnoverUsd));
+  });
+  var byBase = {}, order = [];
+  for (var d = 0; d < items.length; d++){
+    if (!byBase[items[d].base]){ byBase[items[d].base] = items[d]; order.push(items[d].base); }
+  }
+  function xuCand(it){
+    var aliases = [], seen = {};
+    var cand = { sym: it.sym, base: it.base, exchange: it.exchange,
+                 turnoverUsd: it.turnoverUsd, xu: it.xu, alsoOn: it.alsoOn, aliases: aliases };
+    var raw = [it.sym, it.base + 'USDT', it.base];
+    for (var a = 0; a < raw.length; a++){
+      if (raw[a] && !seen[raw[a]]){ seen[raw[a]] = 1; aliases.push(raw[a]); }
+    }
+    return cand;
+  }
+  /* BTC/ETH/SOL first — mapped onto their combined-universe entry when
+     present (candles route via xuCandles), else a legacy-route candidate */
+  var candidates = [];
+  for (var b = 0; b < BASES.length; b++){
+    if (byBase[BASES[b]]){ candidates.push(xuCand(byBase[BASES[b]])); delete byBase[BASES[b]]; }
+    else candidates.push(legacyCand(BASES[b] + 'USDT'));
+  }
+  /* EVERY remaining non-blocked base — no cap */
+  for (var k = 0; k < order.length; k++){
+    var bb = order[k];
+    if (!byBase[bb] || BASE_BLOCK[bb]) continue;
+    candidates.push(xuCand(byBase[bb]));
+  }
+  var nDelta = 0, nCdcx = 0;
+  for (var c = 0; c < candidates.length; c++){
+    if (candidates[c].exchange === 'delta') nDelta++;
+    else if (candidates[c].exchange === 'cdcx') nCdcx++;
+  }
+  return { mode: 'combined', candidates: candidates,
+           counts: { total: candidates.length, delta: nDelta, cdcx: nCdcx },
+           venue: venue,
+           note: 'BTC/ETH/SOL + ' + Math.max(0, candidates.length - BASES.length)
+               + ' combined alts (delta ' + nDelta + ' + cdcx ' + nCdcx + ') + XAU gold lane' };
+}
+
+/* ---------------- venue filter (persisted) ---------------- */
+function normVenue(v){
+  v = String(v === null || v === undefined ? '' : v).toUpperCase();
+  return (v === 'DELTA' || v === 'CDCX') ? v : 'ALL';
+}
+function lsGet(k){
+  try{
+    var L = (typeof localStorage !== 'undefined') ? localStorage : (G && G.localStorage);
+    if (L && typeof L.getItem === 'function') return L.getItem(k);
+  }catch(e){}
+  return null;
+}
+function lsSet(k, v){
+  try{
+    var L = (typeof localStorage !== 'undefined') ? localStorage : (G && G.localStorage);
+    if (L && typeof L.setItem === 'function') L.setItem(k, v);
+  }catch(e){}
+}
+var __venue = null;  /* module-local cache; localStorage is the source of truth across loads */
+function getVenue(){ if (__venue) return __venue; __venue = normVenue(lsGet(VENUE_KEY)); return __venue; }
+function setVenue(v){
+  __venue = normVenue(v);
+  /* persist in engine.js's lowercase format so both tabs share one filter */
+  lsSet(VENUE_KEY, __venue.toLowerCase());
+}
+
+/* ---------------- promise timeout (12s, never rejects) ---------------- */
+function withTimeout(p, ms){
+  ms = (typeof ms === 'number' && ms > 0) ? ms : FETCH_MS;
+  return new Promise(function(resolve){
+    var done = false;
+    var timer = setTimeout(function(){ if (!done){ done = true; resolve(null); } }, ms);
+    Promise.resolve(p).then(
+      function(v){ if (!done){ done = true; clearTimeout(timer); resolve(v); } },
+      function(){ if (!done){ done = true; clearTimeout(timer); resolve(null); } });
+  });
+}
+
+/* legacy universe — today's behavior, byte-identical when xuniverse.js is absent */
+async function legacyUniverse(){
+  var out = { mode: 'legacy', candidates: BASE_SYMS.map(legacyCand), ticks: null,
+              counts: null, venue: 'ALL', xuNote: null,
               note: 'BTC/ETH/SOL only — Binance turnover feed unavailable, top-10 alts skipped' };
   try{
     if (typeof G.binanceTickers24h !== 'function') return out;
@@ -479,7 +669,7 @@ async function buildUniverse(){
     }
     arr.sort(function(a, b){ return b.turnoverUsd - a.turnoverUsd; });
     var alts = arr.slice(0, TOP_ALTS).map(function(x){ return x.sym; });
-    out.cryptos = BASE_SYMS.concat(alts);
+    out.candidates = BASE_SYMS.concat(alts).map(legacyCand);
     out.ticks = ticks;
     out.note = alts.length
       ? 'BTC/ETH/SOL + top-' + alts.length + ' alts by 24h turnover + XAU gold lane'
@@ -488,17 +678,58 @@ async function buildUniverse(){
   }catch(e){ return out; }
 }
 
+async function buildUniverse(){
+  if (typeof G.xuUniverse === 'function'){
+    var failed = false, list = null;
+    try{ list = await withTimeout(G.xuUniverse(false), FETCH_MS); }
+    catch(e){ failed = true; }
+    if (Array.isArray(list) && list.length) return brainUniverse(list, { venue: getVenue() });
+    /* feed present but failed/empty — honest legacy fallback, noted on the stat line */
+    var leg = await legacyUniverse();
+    leg.xuNote = 'combined universe feed ' + (failed ? 'failed' : 'empty') + ' — legacy Binance fallback';
+    return leg;
+  }
+  return legacyUniverse();
+}
+
+/* 4h rows for one candidate — xuCandles for xu items, else the inline
+   getCandles router, else binanceKlines. Never throws; null on failure.
+   An xu candidate whose xu leg fails never silently reroutes to Binance. */
+async function fetch4h(cand){
+  try{
+    if (cand.xu){
+      if (typeof G.xuCandles === 'function'){
+        var rx = await withTimeout(G.xuCandles(cand.xu, '4h', KLINES_4H));
+        if (rx && rx.length) return rx;
+      }
+      return null;
+    }
+    if (typeof G.getCandles === 'function'){
+      var rg = await withTimeout(G.getCandles(cand.sym, '4h', KLINES_4H));
+      if (rg && rg.length) return rg;
+    }
+    if (typeof G.binanceKlines === 'function'){
+      var rb = await withTimeout(G.binanceKlines(cand.sym, '4h', KLINES_4H));
+      if (rb && rb.length) return rb;
+    }
+  }catch(e){}
+  return null;
+}
+
 /* ---------------- collect + decide for one candidate ---------------- */
-function judgeCrypto(sym, snap){
+function judgeCrypto(cand, snap){
+  cand = candOf(cand);
   var col = brainCollect({
-    sym: sym, lane: 'crypto',
-    news: newsFor(sym),
+    sym: cand.sym, aliases: cand.aliases, lane: 'crypto',
+    news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     liq: (snap.liqSetup === undefined ? undefined : snap.liqSetup)
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
-  return { sym: sym, lane: 'crypto', col: col, dec: dec };
+  return { sym: cand.sym, base: cand.base, exchange: cand.exchange,
+           turnoverUsd: cand.turnoverUsd, xu: cand.xu, alsoOn: cand.alsoOn,
+           aliases: cand.aliases, lane: 'crypto', col: col, dec: dec };
 }
 
 function judgeGold(snap){
@@ -508,7 +739,8 @@ function judgeGold(snap){
     gold: { setup: snap.goldSetup, deep: snap.goldDeep, basis: snap.goldBasis }
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
-  return { sym: 'XAU', lane: 'gold', col: col, dec: dec };
+  return { sym: 'XAU', base: 'XAU', exchange: null, turnoverUsd: null,
+           xu: null, alsoOn: null, aliases: ['XAU', 'XAUUSDT'], lane: 'gold', col: col, dec: dec };
 }
 
 /* ---------------- plans — smartSetup / hgPlanLevels ONLY, never invented ---------------- */
@@ -526,15 +758,21 @@ function normalizePlan(p, src, note){
            src: src };
 }
 
-function enginePlanFor(sym, snap){
+function enginePlanFor(row, snap){
   try{
     var en = snap.engine;
     if (!en || !Array.isArray(en.survivors)) return null;
+    var aliasSet = {}; aliasSet[row.sym] = 1;
+    if (Array.isArray(row.aliases)){
+      for (var a = 0; a < row.aliases.length; a++){
+        if (typeof row.aliases[a] === 'string' && row.aliases[a]) aliasSet[row.aliases[a]] = 1;
+      }
+    }
     for (var i = 0; i < en.survivors.length; i++){
       var sv = en.survivors[i];
       /* engineState survivor plan is {entry,stop,t1,t2} — dir lives on the
          survivor record, so inject it before normalizing */
-      if (sv && sv.sym === sym && sv.plan){
+      if (sv && aliasSet[sv.sym] === 1 && sv.plan){
         var p = {}, k;
         for (k in sv.plan){ if (Object.prototype.hasOwnProperty.call(sv.plan, k)) p[k] = sv.plan[k]; }
         if (!isDir(p.dir)) p.dir = sv.dir;
@@ -556,7 +794,7 @@ async function klineRows(sym){
 /* plan for a crypto PRIME/HIGH card: engine survivor plan -> smartSetup ->
    hgPlanLevels -> honest 'levels unavailable'. */
 async function cryptoPlan(row, snap){
-  var ep = enginePlanFor(row.sym, snap);
+  var ep = enginePlanFor(row, snap);
   if (ep) return { plan: ep, rows: null };
   var kl = await klineRows(row.sym);
   var rows = kl.rows4h || kl.rows1h;
@@ -578,6 +816,37 @@ async function cryptoPlan(row, snap){
     try{
       var pl = G.hgPlanLevels(row.dec.dir, rows);
       var hp = normalizePlan(pl, 'hgPlanLevels');
+      if (hp) return { plan: hp, rows: rows };
+    }catch(e){}
+  }
+  return { plan: null, rows: rows };
+}
+
+/* combined-mode crypto plan: same precedence as cryptoPlan (engine survivor
+   plan -> smartSetup -> hgPlanLevels) but consumes the lazily pre-fetched 4h
+   rows instead of fetching ad hoc. smartSetup gets [] for 1h rows — the
+   fetch budget is 4h-only, an input it already tolerates. */
+async function cryptoPlanXu(row, snap){
+  var ep = enginePlanFor(row, snap);
+  if (ep) return { plan: ep, rows: null };
+  var rows = (row.rows4h && row.rows4h.length) ? row.rows4h : null;
+  if (!rows) return { plan: null, rows: null };
+  if (typeof G.smartSetup === 'function' && rows.length >= 60){
+    try{
+      var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
+      var contra   = row.col.votes.filter(function(v){ return v.vote === (row.dec.dir === 'long' ? 'short' : 'long'); });
+      var cls = { dir: row.dec.dir,
+                  longEv: row.dec.dir === 'long' ? agreeing.map(function(v){ return v.text; }) : contra.map(function(v){ return v.text; }),
+                  shortEv: row.dec.dir === 'short' ? agreeing.map(function(v){ return v.text; }) : contra.map(function(v){ return v.text; }),
+                  score: row.dec.agree, total: row.dec.agree + row.dec.disagree, regime: [] };
+      var sp = G.smartSetup(cls, rows, []);
+      var np = normalizePlan(sp, sp && sp.type ? 'smartSetup ' + sp.type : 'smartSetup');
+      if (np) return { plan: np, rows: rows };
+    }catch(e){ /* fall through to hgPlanLevels */ }
+  }
+  if (typeof G.hgPlanLevels === 'function'){
+    try{
+      var hp = normalizePlan(G.hgPlanLevels(row.dec.dir, rows), 'hgPlanLevels');
       if (hp) return { plan: hp, rows: rows };
     }catch(e){}
   }
@@ -661,6 +930,8 @@ function cardHTML(row){
   var plan = row.plan || null;
   var silentTxt = row.col.silent.length ? row.col.silent.join(', ') + ' silent' : '';
   var darkTxt = row.col.unavailable.length ? row.col.unavailable.join(', ') + ' dark' : '';
+  var venueStamp = (row.exchange === 'delta') ? ' <span class="stamp na">DELTA</span>'
+                 : (row.exchange === 'cdcx') ? ' <span class="stamp na">COINDCX</span>' : '';
   var tradeBtn = (plan && typeof G.toTrade === 'function')
     ? '<button class="toTrade" onclick="'
       + ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ',' + JSON.stringify(dir) + ','
@@ -672,7 +943,7 @@ function cardHTML(row){
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + esc(row.lane === 'gold' ? 'XAU · GOLD' : row.sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + dir.toUpperCase() + '</span> ' + dec.tier
-    + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + '</span></div>'
+    + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + venueStamp + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">verdict</span><span>' + esc(dec.reasons[0] || '') + '</span>'
     + '<span class="k">structure check</span><span>'
@@ -689,9 +960,16 @@ function cardHTML(row){
     + '</div>';
 }
 
+/* ledger display name: gold -> XAU, otherwise the base asset (BTC), falling
+   back to the legacy sym strip — identical output for legacy candidates */
+function displaySym(row){
+  if (row.lane === 'gold' || row.sym === 'XAU') return 'XAU';
+  return row.base || String(row.sym).replace(/USDT$/, '');
+}
+
 function watchRowHTML(row){
   return '<div class="lrow">'
-    + '<span class="gid">' + esc(row.sym === 'XAU' ? 'XAU' : row.sym.replace(/USDT$/, '')) + '</span>'
+    + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + (row.dec.dir ? row.dec.dir.toUpperCase() + ' bias — ' : '')
     + esc(row.dec.reasons[0] || '') + '</span>'
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
@@ -702,7 +980,7 @@ function watchRowHTML(row){
 function asideRowHTML(row){
   var vetoed = row.dec.vetoes && row.dec.vetoes.length;
   return '<div class="lrow">'
-    + '<span class="gid">' + esc(row.sym === 'XAU' ? 'XAU' : row.sym.replace(/USDT$/, '')) + '</span>'
+    + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + esc(row.dec.reasons[0] || 'aside') + '</span>'
     + '<span class="gdetail">' + row.dec.longCount + 'L/' + row.dec.shortCount + 'S'
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '') + '</span>'
@@ -773,10 +1051,20 @@ async function runBrain(el){
 
     var snap = snapshotLayers();
     var uni = await buildUniverse();
+    var combined = (uni.mode === 'combined');
 
-    /* collect + decide — fully synchronous once layers are snapshotted */
+    /* venue select is only meaningful with the combined feed — keep it hidden
+       in legacy mode (absent xu -> today's behavior, byte-identical) */
+    var vsel = el.querySelector('#brainVenue');
+    if (vsel){
+      vsel.style.display = combined ? '' : 'none';
+      if (combined) vsel.value = uni.venue;
+    }
+
+    /* collect + decide — fully synchronous once layers are snapshotted;
+       CPU-cheap, so EVERY candidate gets voted (no universe truncation) */
     var rows = [];
-    for (var i = 0; i < uni.cryptos.length; i++) rows.push(judgeCrypto(uni.cryptos[i], snap));
+    for (var i = 0; i < uni.candidates.length; i++) rows.push(judgeCrypto(uni.candidates[i], snap));
     rows.push(judgeGold(snap));
 
     /* bucket: PRIME/HIGH cards, WATCH list, ASIDE ledger */
@@ -791,21 +1079,83 @@ async function runBrain(el){
     var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
     primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
 
-    /* plans only for PRIME/HIGH — bounded kline fetches, engine plans first */
     var setups = primes.concat(highs);
-    for (var s = 0; s < setups.length; s++){
-      stat.textContent = 'planning ' + (s + 1) + '/' + setups.length + ' · ' + setups[s].sym;
-      try{
-        var got = (setups[s].lane === 'gold') ? await goldPlan(setups[s], snap)
-                                              : await cryptoPlan(setups[s], snap);
-        setups[s].plan = got.plan; setups[s].rows = got.rows;
-      }catch(e){ setups[s].plan = null; setups[s].rows = null; }
+    var capNote = '';
+
+    if (combined){
+      /* lazy, bounded candle fetching: 4h rows ONLY for crypto candidates at
+         WATCH-or-better on the non-candle layers, highest-evidence first,
+         CHUNK_SIZE per chunk, per-symbol catch isolation, FETCH_CAP/scan.
+         The gold lane keeps its own candle path (goldPlan, unchanged). */
+      var queue = [];
+      var wplus = primes.concat(highs, watches);
+      for (var qi = 0; qi < wplus.length; qi++){
+        if (wplus[qi].lane === 'crypto') queue.push(wplus[qi]);
+      }
+      queue.sort(function(a, b){
+        return (TIER_RANK[b.dec.tier] - TIER_RANK[a.dec.tier])
+            || (b.dec.agree - a.dec.agree)
+            || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0))
+            || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0);
+      });
+      var overflow = [];
+      if (queue.length > FETCH_CAP){ overflow = queue.slice(FETCH_CAP); queue = queue.slice(0, FETCH_CAP); }
+      var settle = (typeof Promise.allSettled === 'function')
+        ? function(ps){ return Promise.allSettled(ps); }
+        : function(ps){ return Promise.all(ps.map(function(p){
+            return p.then(function(v){ return { status: 'fulfilled', value: v }; },
+                          function(e){ return { status: 'rejected', reason: e }; });
+          })); };
+      for (var fi = 0; fi < queue.length; fi += CHUNK_SIZE){
+        var chunk = queue.slice(fi, fi + CHUNK_SIZE);
+        stat.textContent = fi + '/' + queue.length + ' candidates · delta '
+          + uni.counts.delta + ' · cdcx ' + uni.counts.cdcx;
+        await settle(chunk.map(function(crow){
+          return fetch4h(crow).then(function(r4){ crow.rows4h = r4; },
+                                    function(){ crow.rows4h = null; });
+        }));
+      }
+      if (overflow.length){
+        var allWatch = true;
+        for (var ow = 0; ow < overflow.length; ow++){
+          if (overflow[ow].dec.tier !== 'WATCH'){ allWatch = false; break; }
+        }
+        capNote = allWatch
+          ? ' · +' + overflow.length + ' more watch candidates — raise evidence to fetch'
+          : ' · +' + overflow.length + ' more candidates unfetched (fetch cap ' + FETCH_CAP + ')';
+      }
+      /* plans only for PRIME/HIGH — engine plans first, prefetched 4h rows */
+      for (var sx = 0; sx < setups.length; sx++){
+        stat.textContent = 'planning ' + (sx + 1) + '/' + setups.length + ' · ' + setups[sx].sym;
+        try{
+          var gotx = (setups[sx].lane === 'gold') ? await goldPlan(setups[sx], snap)
+                                                  : await cryptoPlanXu(setups[sx], snap);
+          setups[sx].plan = gotx.plan; setups[sx].rows = gotx.rows;
+        }catch(e){ setups[sx].plan = null; setups[sx].rows = null; }
+      }
+    }else{
+      /* legacy mode — today's flow, unchanged: bounded kline fetches per setup */
+      for (var s = 0; s < setups.length; s++){
+        stat.textContent = 'planning ' + (s + 1) + '/' + setups.length + ' · ' + setups[s].sym;
+        try{
+          var got = (setups[s].lane === 'gold') ? await goldPlan(setups[s], snap)
+                                                : await cryptoPlan(setups[s], snap);
+          setups[s].plan = got.plan; setups[s].rows = got.rows;
+        }catch(e){ setups[s].plan = null; setups[s].rows = null; }
+      }
     }
 
     /* render */
     if (read && readWrap){
       read.textContent = marketRead(snap);
       readWrap.style.display = 'block';
+    }
+    var readUni = el.querySelector('#brainReadUni');
+    if (readUni){
+      readUni.textContent = combined
+        ? 'universe ' + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx
+          + ') · ' + setups.length + ' prime/high · ' + watches.length + ' watch'
+        : '';
     }
     cards.innerHTML = setups.map(cardHTML).join('');
     paintCharts(cards, setups);
@@ -815,10 +1165,21 @@ async function runBrain(el){
     asideWrap.style.display = asides.length ? 'block' : 'none';
     if (!setups.length && !watches.length) empty.style.display = 'block';
 
-    stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
-      + watches.length + ' watch · ' + asides.length + ' aside · universe '
-      + uni.cryptos.length + ' + XAU (' + uni.note + ') · '
-      + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+    if (combined){
+      stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
+        + watches.length + ' watch · ' + asides.length + ' aside · universe '
+        + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx + ') + XAU · '
+        + setups.length + ' prime/high · ' + watches.length + ' watch'
+        + (uni.venue !== 'ALL' ? ' · venue ' + uni.venue : '')
+        + capNote + ' · '
+        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+    }else{
+      stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
+        + watches.length + ' watch · ' + asides.length + ' aside · universe '
+        + uni.candidates.length + ' + XAU (' + uni.note + ')'
+        + (uni.xuNote ? ' · ' + uni.xuNote : '') + ' · '
+        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+    }
   }catch(e){
     stat.className = 'note warn';
     stat.textContent = 'brain synthesis failed: ' + (e && e.message ? e.message : e);
@@ -836,15 +1197,20 @@ function mount(el){
       '<div class="panel">'
       + '<h2>BRAIN — meta-intelligence <span>reads every layer · evidence agreement, not scores</span></h2>'
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
+      + '<select id="brainVenue" style="display:none" title="venue filter — combined Delta India + CoinDCX universe">'
+      + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
+      + '<option value="CDCX">COINDCX ONLY</option></select>'
       + '<span class="note" id="brainStat"></span></div>'
       + '<div class="note" id="brainDeps" style="margin-top:8px"></div>'
       + '<div class="note" style="margin-top:8px">Conviction is independent layers <b>agreeing</b>, each with a human-readable '
       + 'evidence string — never an invented number. <b>PRIME</b>: 5+ layers agree incl. structural + positioning, zero vetoes, '
       + 'news clear. <b>HIGH</b>: 4 agree, zero vetoes. <b>WATCH</b>: 3 agree or one soft disagreement. <b>ASIDE</b>: any veto, '
       + 'a tie, contested or thin — the killing reason is shown. Dark layers are named and cap the tier. '
-      + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented.</div>'
+      + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented. '
+      + 'Universe: BTC/ETH/SOL + every Delta India + CoinDCX futures listing (combined, deduped by base, via xuniverse.js when '
+      + 'present — else legacy Binance top-10). Candles are fetched lazily, only for WATCH-or-better candidates (cap 40/scan).</div>'
       + '</div>'
-      + '<div class="panel" id="brainReadWrap" style="display:none;margin-top:10px"><h2>MARKET READ</h2>'
+      + '<div class="panel" id="brainReadWrap" style="display:none;margin-top:10px"><h2>MARKET READ <span id="brainReadUni"></span></h2>'
       + '<div class="note" id="brainRead" style="font-size:12px;line-height:1.7"></div></div>'
       + '<div class="cards" id="brainCards" style="margin-top:10px"></div>'
       + '<div class="panel" id="brainWatchWrap" style="display:none;margin-top:10px"><h2>WATCH <span>one layer short of conviction</span></h2>'
@@ -865,12 +1231,24 @@ function mount(el){
     }
     var btn = el.querySelector('#brainRun');
     if (btn) btn.addEventListener('click', function(){ runBrain(el); });
+    var vsel = el.querySelector('#brainVenue');
+    if (vsel){
+      vsel.value = getVenue();
+      /* visible only when the combined feed is present (runBrain re-checks too) */
+      vsel.style.display = (typeof G.xuUniverse === 'function') ? '' : 'none';
+      vsel.addEventListener('change', function(){
+        setVenue(vsel.value);
+        /* explicit user action — re-run is fine, but never a first-time scan */
+        if (__hasRun && !__busy) runBrain(el);
+      });
+    }
   }catch(e){ /* never throw at mount */ }
 }
 
 /* ---------------- registration ---------------- */
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
+G.brainUniverse = brainUniverse;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'brain', label: 'BRAIN', mount: function(el){ mount(el); }, refresh: brainRefresh });
 

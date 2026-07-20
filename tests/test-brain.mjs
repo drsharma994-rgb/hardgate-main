@@ -49,9 +49,11 @@ ok(Array.isArray(W.HG_tabs) && W.HG_tabs.length === 1, 'HG_tabs array created wi
 const tab = W.HG_tabs[0];
 ok(tab.id === 'brain' && tab.label === 'BRAIN' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
    'HG_tabs entry = {id:brain, label:BRAIN, mount, refresh}');
+ok(typeof W.brainUniverse === 'function', 'window.brainUniverse exposed (pure combined-universe builder)');
 ok(W.snapshotLayers === undefined && W.runBrain === undefined && W.marketRead === undefined
-   && W.buildUniverse === undefined && W.cardHTML === undefined,
-   'only brainCollect/brainDecide + HG_tabs leak onto window');
+   && W.buildUniverse === undefined && W.cardHTML === undefined && W.legacyUniverse === undefined
+   && W.fetch4h === undefined && W.brainRefresh === undefined,
+   'only brainCollect/brainDecide/brainUniverse + HG_tabs leak onto window');
 
 /* ================= B) news votes ================= */
 console.log('== news votes ==');
@@ -260,9 +262,9 @@ ok(d.tier === 'ASIDE', 'caps never promote — thin stays ASIDE');
 /* ================= M) mount smoke test ================= */
 console.log('== mount smoke test (all layer getters absent) ==');
 function stubEl(){
-  return { innerHTML: '', textContent: '', className: '', disabled: false,
-           style: {}, firstElementChild: { style: {} },
-           addEventListener: function(ev, fn){ this._handler = fn; } };
+  return { innerHTML: '', textContent: '', className: '', disabled: false, value: '',
+           style: {}, firstElementChild: { style: {} }, _handlers: {},
+           addEventListener: function(ev, fn){ this._handler = fn; this._handlers[ev] = fn; } };
 }
 function freshPane(){
   const stubs = {};
@@ -428,6 +430,374 @@ ok(Q.stubs['#brainRead'].textContent.indexOf('dark:') >= 0, 'market read names t
 let qRef = null;
 try{ qRef = await tab3.refresh(); }catch(e){ qErr = e; }
 ok(qRef === 'refreshed', 'refresh on the barren app still honors the contract');
+
+/* ================= combined-universe helpers ================= */
+function freshBrain(){
+  globalThis.window = {};
+  vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
+  return globalThis.window;
+}
+function fakeRows(n){
+  const rows = []; const t0 = 1700000000 - (n || 120) * 14400;
+  for (let i = 0; i < (n || 120); i++)
+    rows.push({ t: t0 + i * 14400, o: 100, h: 101, l: 99, c: 100.5, v: 1000 });
+  return rows;
+}
+function lsStub(){
+  const m = {};
+  return { getItem: function(k){ return (k in m) ? m[k] : null; },
+           setItem: function(k, v){ m[k] = String(v); },
+           removeItem: function(k){ delete m[k]; }, _m: m };
+}
+async function runAndWait(stubs){
+  stubs['#brainRun']._handler();
+  const t0 = Date.now();
+  while (stubs['#brainRun'].disabled && Date.now() - t0 < 8000)
+    await new Promise(function(res){ setTimeout(res, 25); });
+}
+/* shared xu fixture: BTC deduped to the CoinDCX listing, XAU/USDC blocked */
+const XUL = [
+  { sym: 'B-BTC_USDT', base: 'BTC',  exchange: 'cdcx',  turnoverUsd: 9e9, mark: 100,  fundingPct: 0.01,  alsoOn: ['delta'] },
+  { sym: 'ETHUSDT',    base: 'ETH',  exchange: 'delta', turnoverUsd: 5e9, mark: 50,   fundingPct: -0.02, alsoOn: ['cdcx'] },
+  { sym: 'SOLUSDT',    base: 'SOL',  exchange: 'delta', turnoverUsd: 2e9, mark: 20,   fundingPct: 0,     alsoOn: null },
+  { sym: 'B-XRP_USDT', base: 'XRP',  exchange: 'cdcx',  turnoverUsd: 1e9, mark: 1,    fundingPct: null,  alsoOn: null },
+  { sym: 'DOGEUSDT',   base: 'DOGE', exchange: 'delta', turnoverUsd: 8e8, mark: 0.2,  fundingPct: null,  alsoOn: null },
+  { sym: 'XAUUSDT',    base: 'XAU',  exchange: 'delta', turnoverUsd: 3e9, mark: 2400, fundingPct: null,  alsoOn: null },
+  { sym: 'USDCUSDT',   base: 'USDC', exchange: 'delta', turnoverUsd: 7e9, mark: 1,    fundingPct: null,  alsoOn: null }
+];
+/* layers -> BTC PRIME long (5 layers via Binance-keyed aliases), ETH/SOL/XRP
+   WATCH (regime+rotation+oiflow), DOGE vetoed aside, gold aside */
+function stubLayersPrime(WX){
+  WX.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'no high-impact USD events within 36h' }; };
+  WX.hgNewsState = function(){ return { loaded: true, events: [] }; };
+  WX.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', size: 'full', sizeNote: 'full size' } }; };
+  WX.rotationState = function(){ return { season: 'alt', altPct: 78, evidence: [] }; };
+  WX.onchainState = function(){ return { bias: 'bullish', evidence: [{ side: 'bull', text: 'miners healthy' }], flags: {} }; };
+  WX.engineState = function(){
+    return { survivors: [{ sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
+                           plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 6 }],
+             rejected: [{ sym: 'DOGEUSDT', vetoGate: 'G2' }], at: 123 };
+  };
+  WX.oiflowState = function(){ return { results: [
+    { sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS (trend fuel)' },
+    { sym: 'ETHUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'SOLUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'XRPUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WX.squeezeState = function(){ return { results: [] }; };
+  WX.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
+  WX.liqFlushSetup = function(){ return { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
+  WX.goldspotState = function(){ return { basisPct: 0.01, verdict: 'balanced' }; };
+  WX.toTrade = function(){};
+}
+
+/* ================= R) pure combined-universe builder ================= */
+console.log('== brainUniverse: xu consumption, dedupe, base mapping, venue ==');
+{
+  const bu = W.brainUniverse(XUL, { venue: 'ALL' });
+  ok(bu.mode === 'combined', 'brainUniverse mode is combined');
+  ok(bu.candidates.length === 5, 'XAU + USDC bases blocked, 5 candidates remain — got ' + bu.candidates.length);
+  ok(bu.candidates[0].sym === 'B-BTC_USDT' && bu.candidates[0].base === 'BTC'
+     && bu.candidates[0].exchange === 'cdcx' && bu.candidates[0].xu === XUL[0],
+     'BTC mapped onto its combined-universe entry (B-BTC_USDT dedupe, original xu item kept)');
+  ok(bu.candidates[0].aliases.indexOf('BTCUSDT') >= 0 && bu.candidates[0].aliases.indexOf('BTC') >= 0,
+     'BTC candidate aliases carry BTCUSDT + BTC for layer matching');
+  ok(bu.candidates[1].sym === 'ETHUSDT' && bu.candidates[1].exchange === 'delta', 'ETH mapped onto the delta listing');
+  ok(bu.counts.total === 5 && bu.counts.delta === 3 && bu.counts.cdcx === 2,
+     'counts: total 5 (delta 3 + cdcx 2) — got ' + JSON.stringify(bu.counts));
+  ok(!bu.candidates.some(function(c){ return c.base === 'XAU' || c.base === 'USDC'; }),
+     'metal + stable bases never become crypto candidates');
+  ok(bu.candidates[3].base === 'XRP' && bu.candidates[4].base === 'DOGE', 'alts ordered by turnover after the bases');
+
+  const dupe = W.brainUniverse([
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 5e9 },
+    { sym: 'B-BTC_USDT', base: 'BTC', exchange: 'cdcx', turnoverUsd: 9e9 } ], { venue: 'ALL' });
+  ok(dupe.candidates.filter(function(c){ return c.base === 'BTC'; }).length === 1
+     && dupe.candidates[0].sym === 'B-BTC_USDT',
+     'defensive dedupe by base: one BTC candidate, highest turnover listing kept');
+
+  const noBases = W.brainUniverse([{ sym: 'B-XRP_USDT', base: 'XRP', exchange: 'cdcx', turnoverUsd: 1e9 }], { venue: 'ALL' });
+  ok(noBases.candidates.length === 4 && noBases.candidates[0].sym === 'BTCUSDT'
+     && noBases.candidates[0].xu === null && noBases.candidates[0].exchange === null,
+     'base absent from the xu list -> legacy-route candidate (BTCUSDT, exchange-less)');
+
+  const dOnly = W.brainUniverse(XUL, { venue: 'DELTA' });
+  ok(dOnly.counts.total === 4 && dOnly.counts.delta === 3 && dOnly.counts.cdcx === 0
+     && dOnly.candidates[0].sym === 'BTCUSDT' && dOnly.candidates[0].exchange === null
+     && !dOnly.candidates.some(function(c){ return c.base === 'XRP'; }),
+     'venue DELTA filters cdcx listings; BTC falls back to the legacy route, honestly exchange-less');
+
+  const cOnly = W.brainUniverse(XUL, { venue: 'CDCX' });
+  ok(cOnly.counts.total === 4 && cOnly.counts.delta === 0 && cOnly.counts.cdcx === 2
+     && cOnly.candidates[0].sym === 'B-BTC_USDT' && cOnly.candidates[0].exchange === 'cdcx',
+     'venue CDCX keeps cdcx listings incl. the deduped BTC entry');
+
+  const big = [];
+  for (let i = 1; i <= 25; i++) big.push({ sym: 'B-A' + i + '_USDT', base: 'A' + i, exchange: 'cdcx', turnoverUsd: i * 1e6 });
+  const bigU = W.brainUniverse(big, { venue: 'ALL' });
+  ok(bigU.candidates.length === 28, 'no top-10 cap: every xu alt is a candidate (3 bases + 25 alts)');
+
+  const empty = W.brainUniverse(null, {});
+  ok(empty.candidates.length === 3 && empty.candidates.every(function(c){ return c.xu === null; })
+     && empty.counts.total === 3 && empty.counts.delta === 0 && empty.counts.cdcx === 0,
+     'null xu list -> 3 legacy base candidates, zeroed exchange counts');
+  const junk = W.brainUniverse([null, 42, { sym: 'XUSDT' }, { sym: 'B-X_USDT', base: 'X', exchange: 'mars' }], {});
+  ok(junk.candidates.length === 3, 'malformed xu items are skipped, never throw');
+
+  /* xuniverse.js actually emits exchange:'coindcx' — normalize to 'cdcx',
+     keep the ORIGINAL item so xuCandles routes on raw exchange */
+  const cx = W.brainUniverse([{ sym: 'B-ADA_USDT', base: 'ADA', exchange: 'coindcx', turnoverUsd: 5e8 }], { venue: 'ALL' });
+  const ada = cx.candidates[3];
+  ok(ada && ada.exchange === 'cdcx' && ada.xu.exchange === 'coindcx' && cx.counts.cdcx === 1,
+     "xuniverse.js 'coindcx' exchange normalized to 'cdcx', original item preserved for xuCandles routing");
+  ok(W.brainUniverse([{ sym: 'B-ADA_USDT', base: 'ADA', exchange: 'coindcx', turnoverUsd: 5e8 }], { venue: 'CDCX' }).candidates.length === 4,
+     "venue CDCX matches items emitted as 'coindcx'");
+}
+
+/* ================= S) alias matching in brainCollect ================= */
+console.log('== alias matching (Binance-keyed layers vote for xu candidates) ==');
+{
+  const C2 = freshBrain().brainCollect;
+  const EN2 = { survivors: [{ sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG' }], rejected: [], at: 1 };
+  let r2 = C2({ sym: 'B-BTC_USDT', aliases: ['B-BTC_USDT', 'BTCUSDT', 'BTC'], engine: EN2 });
+  ok(r2.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'long'; }),
+     'engine survivor keyed BTCUSDT votes for the B-BTC_USDT candidate via alias');
+  r2 = C2({ sym: 'B-BTC_USDT', engine: EN2 });
+  ok(!r2.votes.some(function(x){ return x.layer === 'engine'; }) && r2.silent.indexOf('engine') >= 0,
+     'without aliases the same survivor stays silent — alias is what bridges the formats');
+  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], oiflow: { results: [{ sym: 'BTC', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' }] } });
+  ok(r2.votes.some(function(x){ return x.layer === 'oiflow' && x.vote === 'long'; }), 'oiflow row keyed bare BTC matches via alias');
+  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], squeeze: { results: [{ sym: 'B-BTC_USDT', kind: 'fired', dir: 'long' }] } });
+  ok(r2.votes.some(function(x){ return x.layer === 'squeeze' && x.vote === 'long'; }), 'squeeze row keyed by the xu sym still matches exactly');
+  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], liq: { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 } });
+  ok(r2.votes.some(function(x){ return x.layer === 'liqs' && x.vote === 'long'; }), 'flush setup naming BTCUSDT matches via alias');
+  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], engine: { survivors: [], rejected: [{ sym: 'BTC', vetoGate: 'G4' }], at: 1 } });
+  ok(r2.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto' && x.text.indexOf('G4') >= 0; }),
+     'engine rejection keyed bare BTC vetoes via alias');
+}
+
+/* ================= T) full combined-universe run ================= */
+console.log('== full synthesis over the combined universe ==');
+const WT = freshBrain();
+stubLayersPrime(WT);
+WT.xuUniverse = async function(){ return XUL; };
+const xuCalls = [], statSnaps = [];
+const TT = freshPane();
+WT.xuCandles = function(item, tf, n){
+  xuCalls.push({ item: item, tf: tf, n: n });
+  statSnaps.push(TT.stubs['#brainStat'].textContent);
+  return Promise.resolve(fakeRows(n));
+};
+const tabT = WT.HG_tabs[0];
+tabT.mount(TT.pane);
+await runAndWait(TT.stubs);
+const tStat = TT.stubs['#brainStat'].textContent;
+const tCards = TT.stubs['#brainCards'].innerHTML;
+ok(tStat.indexOf('done · 1 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
+   'combined run buckets: 1 PRIME · 0 HIGH · 3 watch · 2 aside — got "' + tStat + '"');
+ok(tStat.indexOf('universe 5 (delta 3 + cdcx 2)') >= 0, 'summary gains combined per-exchange counts');
+ok(tStat.indexOf('1 prime/high · 3 watch') >= 0, 'summary gains prime/high + watch tallies');
+ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 1 prime/high · 3 watch',
+   'MARKET READ header carries the combined counts — got "' + TT.stubs['#brainReadUni'].textContent + '"');
+ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 5 LAYERS') >= 0 && tCards.indexOf('>LONG</span>') >= 0,
+   'BTC card renders under the cdcx sym via alias-matched Binance-keyed layer votes');
+ok(tCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && tCards.indexOf('COINDCX') >= 0
+   && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
+   'engine plan + COINDCX venue stamp + xu-sym toTrade payload on the card');
+ok(xuCalls.length === 4, 'lazy fetch: exactly the 4 WATCH+ candidates fetched (BTC+ETH+SOL+XRP), DOGE aside untouched — got ' + xuCalls.length);
+ok(xuCalls[0].item === XUL[0] && xuCalls[0].tf === '4h' && xuCalls[0].n === 120,
+   'highest-evidence-first: the PRIME BTC candidate fetches first, via xuCandles with its original xu item');
+ok(!xuCalls.some(function(c){ return c.item.sym === 'DOGEUSDT'; }), 'ASIDE candidates never trigger a candle fetch');
+ok(statSnaps.some(function(s){ return /^\d+\/4 candidates · delta 3 · cdcx 2$/.test(s); }),
+   'fetch progress reports X/Y candidates · delta n · cdcx m — saw "' + statSnaps[0] + '"');
+const tWatch = TT.stubs['#brainWatch'].innerHTML;
+ok(tWatch.indexOf('>ETH</span>') >= 0 && tWatch.indexOf('>SOL</span>') >= 0 && tWatch.indexOf('>XRP</span>') >= 0,
+   'WATCH ledger lists the watch alts by base asset');
+const tAside = TT.stubs['#brainAside'].innerHTML;
+ok(tAside.indexOf('>DOGE</span>') >= 0 && tAside.indexOf('engine veto @ G2') >= 0 && tAside.indexOf('>XAU</span>') >= 0,
+   'ASIDE ledger: DOGE vetoed with the gate named, gold lane present');
+ok(TT.stubs['#brainVenue'].style.display === '', 'venue select visible when the combined feed is present');
+ok(tStat.indexOf(' · venue ') === -1, 'no venue suffix on the default ALL filter');
+
+/* ================= U) lazy-fetch cap ================= */
+console.log('== lazy-fetch cap binds honestly ==');
+{
+  const WU = freshBrain();
+  WU.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  WU.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WU.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WU.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WU.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  WU.squeezeState = function(){ return { results: [] }; };
+  WU.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  WU.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  const alts = [], ofRes = [];
+  for (let i = 1; i <= 50; i++){
+    const base = 'ALT' + i;
+    alts.push(i % 2
+      ? { sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: i * 1e6, mark: 1, fundingPct: null, alsoOn: null }
+      : { sym: 'B-' + base + '_USDT', base: base, exchange: 'cdcx', turnoverUsd: i * 1e6, mark: 1, fundingPct: null, alsoOn: null });
+    ofRes.push({ sym: base + 'USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' });
+  }
+  WU.oiflowState = function(){ return { results: ofRes }; };
+  WU.xuUniverse = async function(){
+    return [{ sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+            { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+            { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null }].concat(alts);
+  };
+  const capCalls = [], capSnaps = [];
+  const TU = freshPane();
+  WU.xuCandles = function(item){ capCalls.push(item.sym); capSnaps.push(TU.stubs['#brainStat'].textContent); return Promise.resolve(fakeRows(120)); };
+  WU.HG_tabs[0].mount(TU.pane);
+  await runAndWait(TU.stubs);
+  const uStat = TU.stubs['#brainStat'].textContent;
+  ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 50 watch · 4 aside') === 0,
+     '50 alts reach WATCH, bases + gold aside — got "' + uStat + '"');
+  ok(capCalls.length === 40, 'fetch cap respected: 40 fetches out of 50 watch candidates — got ' + capCalls.length);
+  ok(uStat.indexOf('+10 more watch candidates — raise evidence to fetch') >= 0,
+     'honest note when the cap binds — got "' + uStat + '"');
+  ok(uStat.indexOf('universe 53 (delta 28 + cdcx 25)') >= 0, 'combined counts over the big universe are exact');
+  ok(capSnaps.some(function(s){ return s === '0/40 candidates · delta 28 · cdcx 25'; }),
+     'progress line counts down the capped fetch queue');
+}
+
+/* ================= V) absent-xu fallback identical to legacy ================= */
+console.log('== absent-xu fallback is byte-identical to legacy ==');
+{
+  const WV = freshBrain();
+  stubLayersPrime(WV);
+  WV.binanceTickers24h = async function(){ return {
+    BTCUSDT: { symbol: 'BTCUSDT', mark: 100, chg24: 2, turnoverUsd: 9e9 },
+    ETHUSDT: { symbol: 'ETHUSDT', mark: 50, chg24: -1, turnoverUsd: 5e9 },
+    SOLUSDT: { symbol: 'SOLUSDT', mark: 20, chg24: 3, turnoverUsd: 2e9 },
+    XRPUSDT: { symbol: 'XRPUSDT', mark: 1, chg24: 0.5, turnoverUsd: 1e9 } }; };
+  const TV = freshPane();
+  WV.HG_tabs[0].mount(TV.pane);
+  await runAndWait(TV.stubs);
+  const vStat = TV.stubs['#brainStat'].textContent;
+  ok(vStat.indexOf('done · 1 PRIME · 0 HIGH · 3 watch · 1 aside') === 0, 'legacy buckets unchanged without xu');
+  ok(vStat.indexOf('universe 4 + XAU (BTC/ETH/SOL + top-1 alts by 24h turnover + XAU gold lane) · ') >= 0,
+     'legacy universe wording byte-identical — got "' + vStat + '"');
+  ok(vStat.indexOf('(delta') === -1 && vStat.indexOf('prime/high') === -1, 'no combined-count vocabulary in legacy mode');
+  ok(TV.stubs['#brainVenue'].style.display === 'none', 'venue select hidden when xu is absent');
+  ok(TV.stubs['#brainReadUni'].textContent === '', 'MARKET READ header count blank in legacy mode');
+
+  const WF = freshBrain();
+  stubLayersPrime(WF);
+  WF.binanceTickers24h = WV.binanceTickers24h;
+  WF.xuUniverse = function(){ throw new Error('boom'); };
+  const TF = freshPane();
+  WF.HG_tabs[0].mount(TF.pane);
+  await runAndWait(TF.stubs);
+  ok(TF.stubs['#brainStat'].textContent.indexOf('universe 4 + XAU') >= 0
+     && TF.stubs['#brainStat'].textContent.indexOf('combined universe feed failed — legacy Binance fallback') >= 0,
+     'throwing xuUniverse -> legacy fallback with an honest note');
+  WF.xuUniverse = async function(){ return { nope: 1 }; };
+  await WF.HG_tabs[0].refresh();
+  ok(TF.stubs['#brainStat'].textContent.indexOf('combined universe feed empty — legacy Binance fallback') >= 0,
+     'garbage xuUniverse result -> legacy fallback, noted honestly');
+}
+
+/* ================= W) per-symbol fetch isolation ================= */
+console.log('== per-symbol candle-fetch isolation ==');
+{
+  const WW = freshBrain();
+  stubLayersPrime(WW);
+  WW.xuUniverse = async function(){ return XUL; };
+  WW.xuCandles = function(item){
+    if (item.sym === 'SOLUSDT') return Promise.reject(new Error('delta down'));
+    if (item.sym === 'ETHUSDT') throw new Error('sync boom');
+    return Promise.resolve(fakeRows(120));
+  };
+  const TW = freshPane();
+  WW.HG_tabs[0].mount(TW.pane);
+  let wErr = null;
+  try{ await runAndWait(TW.stubs); }catch(e){ wErr = e; }
+  ok(!wErr, 'rejecting + sync-throwing xuCandles legs never crash the run' + (wErr ? ' — ' + wErr.message : ''));
+  ok(TW.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME') === 0, 'run completes with degraded legs');
+  ok(TW.stubs['#brainWatch'].innerHTML.indexOf('>SOL</span>') >= 0 && TW.stubs['#brainWatch'].innerHTML.indexOf('>ETH</span>') >= 0,
+     'failed-fetch candidates still render their votes honestly');
+}
+
+/* ================= X) venue filter integration ================= */
+console.log('== venue filter: persisted (shared engine key), applied, re-runs ==');
+{
+  globalThis.localStorage = lsStub();
+  globalThis.localStorage.setItem('hgEngineVenue', 'cdcx');   /* engine.js writes lowercase */
+  const WX2 = freshBrain();
+  stubLayersPrime(WX2);
+  WX2.xuUniverse = async function(){ return XUL; };
+  const xuC = [], binC = [];
+  WX2.xuCandles = function(item){ xuC.push(item.sym); return Promise.resolve(fakeRows(120)); };
+  WX2.binanceKlines = function(sym, tf){ binC.push(sym + '|' + tf); return Promise.resolve(fakeRows(120)); };
+  const TX2 = freshPane();
+  WX2.HG_tabs[0].mount(TX2.pane);
+  ok(TX2.stubs['#brainVenue'].value === 'CDCX', "venue select initialized from the shared engine key ('cdcx' lowercase)");
+  await runAndWait(TX2.stubs);
+  const xStat = TX2.stubs['#brainStat'].textContent;
+  ok(xStat.indexOf('universe 4 (delta 0 + cdcx 2)') >= 0 && xStat.indexOf(' · venue CDCX') >= 0,
+     'CDCX filter: only cdcx listings + legacy-fallback bases, venue named — got "' + xStat + '"');
+  ok(xuC.indexOf('B-BTC_USDT') >= 0 && xuC.indexOf('B-XRP_USDT') >= 0 && xuC.indexOf('ETHUSDT') === -1,
+     'filtered-in xu items fetch via xuCandles; filtered-out delta listings never touched');
+  ok(binC.indexOf('ETHUSDT|4h') >= 0 && binC.indexOf('SOLUSDT|4h') >= 0,
+     'bases absent from the CDCX listings fetch via the legacy route (binanceKlines)');
+
+  TX2.stubs['#brainVenue'].value = 'DELTA';
+  TX2.stubs['#brainVenue']._handlers.change();
+  {
+    const t0 = Date.now();
+    while (TX2.stubs['#brainRun'].disabled && Date.now() - t0 < 8000)
+      await new Promise(function(res){ setTimeout(res, 25); });
+  }
+  const x2Stat = TX2.stubs['#brainStat'].textContent;
+  ok(globalThis.localStorage.getItem('hgEngineVenue') === 'delta',
+     "venue change persists to the shared key in engine's lowercase format");
+  ok(x2Stat.indexOf(' · venue DELTA') >= 0 && x2Stat.indexOf('(delta 3 + cdcx 0)') >= 0,
+     'venue change re-runs the synthesis under the new filter — got "' + x2Stat + '"');
+
+  globalThis.localStorage = lsStub();
+  globalThis.localStorage.setItem('hgEngineVenue', 'BOGUS');
+  const WX3 = freshBrain();
+  stubLayersPrime(WX3);
+  WX3.xuUniverse = async function(){ return XUL; };
+  WX3.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TX3 = freshPane();
+  WX3.HG_tabs[0].mount(TX3.pane);
+  await runAndWait(TX3.stubs);
+  ok(TX3.stubs['#brainStat'].textContent.indexOf(' · venue ') === -1
+     && TX3.stubs['#brainStat'].textContent.indexOf('universe 5 (delta 3 + cdcx 2)') >= 0,
+     'invalid stored venue degrades to ALL, never crashes');
+  delete globalThis.localStorage;
+}
+
+/* ================= Y) refresh contract in combined mode ================= */
+console.log('== hard-refresh contract over the combined universe ==');
+{
+  const WY = freshBrain();
+  stubLayersPrime(WY);
+  const tabY = WY.HG_tabs[0];
+  let y0 = await tabY.refresh();
+  ok(y0 === 'skipped: not run yet', 'combined mode: refresh before any run still skips (no expensive first scan)');
+  const TY = freshPane();
+  tabY.mount(TY.pane);
+  let releaseGate;
+  WY.xuUniverse = function(){ return new Promise(function(res){ releaseGate = function(){ res(XUL); }; }); };
+  WY.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  TY.stubs['#brainRun']._handler();
+  await new Promise(function(res){ setTimeout(res, 20); });
+  const yBusy = await tabY.refresh();
+  ok(yBusy === 'busy', 'combined mode: refresh during an in-flight scan -> busy');
+  releaseGate();
+  {
+    const t0 = Date.now();
+    while (TY.stubs['#brainRun'].disabled && Date.now() - t0 < 8000)
+      await new Promise(function(res){ setTimeout(res, 25); });
+  }
+  WY.xuUniverse = async function(){ return XUL; };
+  const y1 = await tabY.refresh();
+  ok(y1 === 'refreshed', 'combined mode: refresh after a completed run -> refreshed');
+  ok(TY.stubs['#brainStat'].textContent.indexOf('universe 5 (delta 3 + cdcx 2)') >= 0,
+     'refreshed run still scans the full combined universe');
+}
 
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

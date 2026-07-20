@@ -12,6 +12,9 @@
         group chips rendered, ≤2-click reachability, active-group persistence
         in localStorage, and showTab() lazy-mounting a tab exactly once while
         switching groups when the target lives elsewhere.
+     5. xuniverse.js <script src> tag is present and ordered after binance.js
+        and before engine.js (no-tab library consumed by engine/brain),
+     6. getTickers / candlesRangeRaw stay reachable as window-scope globals.
    A stub DOM (auto-vivifying getElementById) and a dead fetch stub keep
    everything offline; boot-time network calls fail fast and are tolerated.
    Run: node tests/test-tabs.mjs */
@@ -202,6 +205,16 @@ let m;
 while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
 assert(blocks.length === 3, 'index.html yields exactly 3 non-empty inline <script> blocks (got ' + blocks.length + ')');
 
+/* xuniverse.js library tag: no-tab IIFE consumed by engine.js/brain.js —
+   must load after binance.js and before engine.js so consumers find it */
+const tagOf = f => '<script src="' + f + '"></script>';
+const iBinance = html.indexOf(tagOf('binance.js'));
+const iXuniverse = html.indexOf(tagOf('xuniverse.js'));
+const iEngine = html.indexOf(tagOf('engine.js'));
+assert(iXuniverse !== -1, 'index.html includes <script src="xuniverse.js"></script>');
+assert(iBinance !== -1 && iEngine !== -1 && iBinance < iXuniverse && iXuniverse < iEngine,
+  'xuniverse.js tag ordered after binance.js and before engine.js');
+
 loadErr = null;
 try{
   blocks.forEach((body, i) => vm.runInContext(body, ctx, { filename: 'index.html:inline-' + (i + 1) }));
@@ -213,6 +226,13 @@ assert(!loadErr, 'all 3 inline blocks execute (boot sequence included) without t
 const run = code => vm.runInContext(code, ctx);
 
 assert(run('typeof showTab') === 'function', 'showTab is defined by inline code');
+
+/* data-layer entry points must be window-scope globals so late-loaded library
+   modules (xuniverse.js) and engine/brain consumers can feature-check them */
+assert(run('typeof window.getTickers') === 'function' && run('getTickers === window.getTickers') === true,
+  'getTickers is reachable as a window-scope global (inline classic-script function)');
+assert(run('typeof window.candlesRangeRaw') === 'function' && run('candlesRangeRaw === window.candlesRangeRaw') === true,
+  'candlesRangeRaw is reachable as a window-scope global (inline classic-script function)');
 assert(run('typeof HG_TAB_MODS') === 'object' && run('Object.keys(HG_TAB_MODS).length') === 6,
   'HG_TAB_MODS filled with all 6 modules');
 assert(EXPECTED.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '] && HG_TAB_MODS[' + JSON.stringify(id) + '].id') === id),

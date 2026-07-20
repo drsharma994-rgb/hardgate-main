@@ -803,4 +803,359 @@ ok(!qThrew && qGot === null,
    'Q: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
 ok(globalThis.window.engineState() !== null, 'Q: getter recovers once internals are restored');
 
+/* ================= R) combined universe — precedence, venue filter, config =================
+   Fresh module instance (clean busy/hasRun closure). window.xuUniverse /
+   window.xuCandles stub the parallel xuniverse.js contract. */
+console.log('== xu combined universe: Stage-0 precedence + venue filter + config ==');
+vm.runInThisContext(fs.readFileSync(root + 'engine.js', 'utf8'), { filename: 'engine.js' });
+const tabX = globalThis.window.HG_tabs[globalThis.window.HG_tabs.length - 1];
+const gateX = globalThis.window.gateCandidate;
+const cfgX = globalThis.window.engineConfig;
+ok(tabX && tabX.id === 'execute', 'R: fresh registration found');
+ok(typeof cfgX === 'function', 'R: window.engineConfig exposed (pure config getter/setter)');
+
+async function waitScan2(stubs){
+  const t0 = Date.now();
+  while (stubs['#engineRun'].disabled && Date.now() - t0 < 30000)
+    await new Promise(function(res){ setTimeout(res, 25); });
+}
+function xuItem(sym, exchange, over){
+  return Object.assign({ sym: sym, base: sym.replace('USDT', ''), exchange: exchange,
+                         turnoverUsd: 50e6, mark: 106, fundingPct: 0.01, alsoOn: [] }, over || {});
+}
+let XU_SHAPES = {};
+let xuCalls = [];
+function stubXuCandles(){
+  xuCalls = [];
+  globalThis.window.xuCandles = function(item, tf){
+    xuCalls.push({ sym: item.sym, tf: tf, ex: item.exchange });
+    const shape = XU_SHAPES[item.sym] || 'pass';
+    if (shape === 'throw') return Promise.reject(new Error('venue candle feed down'));
+    if (shape === 'thin') return Promise.resolve(mkRows(120, 106, 0.25, 1.0));
+    if (shape === 'weakclose') return Promise.resolve(mkRows(tf === '4h' ? 260 : 120, 106, 7, 3));
+    if (shape === 'poison') return Promise.resolve(mkRows(tf === '4h' ? 260 : 120, 55555, 0.25, 1.0));
+    return Promise.resolve(mkRows(tf === '4h' ? 260 : 120, 106, 0.25, 1.0));
+  };
+}
+function stubBinanceLegacy(){
+  globalThis.binancePerpUniverse = async function(){ return ['BTCUSDT']; };
+  globalThis.binanceTickers24h = async function(){ return { BTCUSDT: { mark: 106, chg24: 2, turnoverUsd: 800e6 } }; };
+  globalThis.binanceKlines = async function(sym, interval, limit){ return mkRows(limit || 260, 106, 0.25, 1.0); };
+  globalThis.binanceFunding = async function(){ return { markPrice: 106, fundingPct: 0.01 }; };
+}
+function dropBinanceLegacy(){
+  delete globalThis.binancePerpUniverse; delete globalThis.binanceTickers24h;
+  delete globalThis.binanceKlines; delete globalThis.binanceFunding;
+}
+function stubXuPrereqs(){
+  stubIndicators();
+  globalThis.smartClassify = function(){ return { dir: 'long', longEv: ['stub: trend fuel'], shortEv: [], regime: [], score: 1, total: 1 }; };
+  stubSmartSetup();
+  globalThis.hgNewsRisk = function(){ return { blackout: false }; };
+}
+stubXuPrereqs(); cfgX({ venue: 'all', minTurnover: 1000000 });
+
+/* R1 — fresh scanner results beat the xu universe (existing contract first) */
+let xuUniCalls = 0;
+globalThis.window.xuUniverse = async function(){ xuUniCalls++; return [xuItem('AAAUSDT', 'delta')]; };
+stubXuCandles(); stubBinanceLegacy();
+globalThis.window.HG_smartResults = ['BTCUSDT'];
+const R1 = freshPane();
+tabX.mount(R1.pane);
+R1.stubs['#engineRun']._handler();
+await waitScan2(R1.stubs);
+ok(R1.stubs['#engineStat'].textContent.indexOf('scanner results · HG_smartResults') >= 0,
+   'R: fresh scanner results take precedence over the xu combined universe');
+ok(xuUniCalls === 0, 'R: xuUniverse is never even called while scanner results are fresh');
+delete globalThis.window.HG_smartResults;
+
+/* R2 — no scanner results, xu present, binance layer gone: combined universe used */
+dropBinanceLegacy();
+globalThis.window.xuUniverse = async function(){
+  return [ xuItem('AAAUSDT', 'delta'), xuItem('BBBUSDT', 'coindcx', { turnoverUsd: null, fundingPct: null }) ];
+};
+stubXuCandles();
+const R2 = freshPane();
+tabX.mount(R2.pane);
+ok(R2.pane._html.indexOf('id="engineVenue"') >= 0 && R2.pane._html.indexOf('id="engineTurn"') >= 0,
+   'R: EXECUTE tab renders the VENUE + MIN TURNOVER config row');
+ok(R2.pane._html.indexOf('$0.5M') >= 0 && R2.pane._html.indexOf('$1M') >= 0
+   && R2.pane._html.indexOf('$10M') >= 0 && R2.pane._html.indexOf('$50M') >= 0,
+   'R: turnover select offers $0.5M / $1M / $10M / $50M');
+R2.stubs['#engineRun']._handler();
+await waitScan2(R2.stubs);
+const r2Stat = R2.stubs['#engineStat'].textContent, r2Html = R2.stubs['#engineCards'].innerHTML;
+ok(r2Stat.indexOf('universe 2 (combined delta+coindcx universe · delta 1 · cdcx 1') >= 0,
+   'R: combined universe drives the scan with per-exchange counts in the stat line');
+ok(r2Stat.indexOf('done · 2 executions (2 STRONG · 2 with plans)') === 0,
+   'R: both xu candidates pass the full funnel (delta + cdcx)');
+ok(xuCalls.filter(function(c){ return c.tf === '4h'; }).length === 2
+   && xuCalls.filter(function(c){ return c.tf === '1h'; }).length === 2,
+   'R: passers fetch 4h then 1h through xuCandles (exchange-aware routing)');
+ok(xuCalls.every(function(c){ return c.ex === 'delta' || c.ex === 'coindcx'; })
+   && xuCalls.some(function(c){ return c.sym === 'BBBUSDT' && c.ex === 'coindcx'; }),
+   'R: xuCandles receives the ORIGINAL universe row (raw exchange "coindcx", never the normalized key)');
+ok(r2Html.indexOf('AAAUSDT') >= 0 && r2Html.indexOf('BBBUSDT') >= 0
+   && r2Html.indexOf('turnover unverified — size down') >= 0,
+   'R: CoinDCX card with unknown turnover renders the honest size-down warning');
+
+/* R5 — venue filter DELTA pre-filters the combined universe */
+cfgX({ venue: 'delta' });
+globalThis.window.xuUniverse = async function(){
+  return [ xuItem('AAAUSDT', 'delta'), xuItem('BBBUSDT', 'coindcx'), xuItem('CCCUSDT', 'delta') ];
+};
+stubXuCandles();
+const R5 = freshPane();
+tabX.mount(R5.pane);
+ok(R5.stubs['#engineVenue'].value === 'delta', 'R: venue select reflects the effective config at mount');
+R5.stubs['#engineRun']._handler();
+await waitScan2(R5.stubs);
+ok(R5.stubs['#engineStat'].textContent.indexOf('universe 2 (combined delta+coindcx universe · delta 2 · cdcx 0') >= 0
+   && R5.stubs['#engineStat'].textContent.indexOf('venue DELTA (1 filtered out)') >= 0,
+   'R: VENUE=DELTA scans delta items only and says what was filtered out');
+ok(xuCalls.length === 4 && xuCalls.every(function(c){ return c.sym !== 'BBBUSDT'; }),
+   'R: no candle request is ever fired for a filtered-out cdcx item');
+
+/* R6 — venue filter CDCX */
+cfgX({ venue: 'cdcx' });
+stubXuCandles();
+const R6 = freshPane();
+tabX.mount(R6.pane);
+R6.stubs['#engineRun']._handler();
+await waitScan2(R6.stubs);
+ok(R6.stubs['#engineStat'].textContent.indexOf('universe 1 (combined delta+coindcx universe · delta 0 · cdcx 1') >= 0,
+   'R: VENUE=CDCX scans cdcx items only');
+ok(xuCalls.every(function(c){ return c.sym === 'BBBUSDT'; }), 'R: only the cdcx item is gated');
+
+/* R7 — venue filter empties the list: honest abort, NO silent binance fallback */
+cfgX({ venue: 'delta' });
+globalThis.window.xuUniverse = async function(){ return [ xuItem('BBBUSDT', 'coindcx') ]; };
+stubBinanceLegacy();   /* present on purpose — must NOT be substituted */
+const R7 = freshPane();
+tabX.mount(R7.pane);
+R7.stubs['#engineRun']._handler();
+await waitScan2(R7.stubs);
+ok(R7.stubs['#engineStat'].className === 'note warn'
+   && R7.stubs['#engineStat'].textContent.indexOf('empty universe') >= 0
+   && R7.stubs['#engineStat'].textContent.indexOf('venue DELTA') >= 0
+   && R7.stubs['#engineStat'].textContent.indexOf('fallback') === -1,
+   'R: a venue filter that empties the combined list aborts honestly (no silent Binance substitution)');
+dropBinanceLegacy();
+
+/* R8 — defensive dedupe by base asset per venue */
+cfgX({ venue: 'all' });
+globalThis.window.xuUniverse = async function(){
+  return [ xuItem('AAAUSDT', 'delta'), xuItem('AAAUSDT', 'delta'), xuItem('AAABUSDT', 'coindcx', { base: 'AAA' }) ];
+};
+stubXuCandles();
+const R8 = freshPane();
+tabX.mount(R8.pane);
+R8.stubs['#engineRun']._handler();
+await waitScan2(R8.stubs);
+ok(R8.stubs['#engineStat'].textContent.indexOf('universe 2 (combined') >= 0
+   && xuCalls.filter(function(c){ return c.sym === 'AAAUSDT' && c.tf === '4h'; }).length === 1,
+   'R: duplicate base-asset rows are deduped (3 raw → 2 unique candidates)');
+
+/* R3 — xu returns an empty list: Binance fallback engages */
+globalThis.window.xuUniverse = async function(){ return []; };
+stubBinanceLegacy();
+const R3 = freshPane();
+tabX.mount(R3.pane);
+R3.stubs['#engineRun']._handler();
+await waitScan2(R3.stubs);
+ok(R3.stubs['#engineStat'].textContent.indexOf('fallback: top 24 USDT perps') >= 0,
+   'R: empty xu universe falls back to Binance top-24 honestly');
+
+/* R4 — xu throws: Binance fallback engages */
+globalThis.window.xuUniverse = async function(){ throw new Error('both venues down'); };
+const R4 = freshPane();
+tabX.mount(R4.pane);
+R4.stubs['#engineRun']._handler();
+await waitScan2(R4.stubs);
+ok(R4.stubs['#engineStat'].textContent.indexOf('fallback: top 24 USDT perps') >= 0,
+   'R: a throwing xuUniverse degrades to the Binance fallback, never a crash');
+
+/* R9 — config persistence via localStorage (feature-checked, try-caught) */
+const r9c = cfgX();
+ok(r9c.venue === 'all' && r9c.minTurnover === 1000000, 'R: config defaults are ALL venues + $1M floor');
+const r9store = {};
+globalThis.localStorage = {
+  getItem: function(k){ return (k in r9store) ? r9store[k] : null; },
+  setItem: function(k, v){ r9store[k] = String(v); },
+  removeItem: function(k){ delete r9store[k]; }
+};
+cfgX({ venue: 'cdcx' });
+ok(r9store.hgEngineVenue === 'cdcx', 'R: venue choice persists to localStorage (hgEngineVenue)');
+cfgX({ minTurnover: 50000000 });
+ok(r9store.hgEngineMinTurn === '50000000', 'R: min-turnover choice persists to localStorage (hgEngineMinTurn)');
+const r9eff = cfgX();
+ok(r9eff.venue === 'cdcx' && r9eff.minTurnover === 50000000, 'R: getter reflects the stored effective config');
+cfgX({ venue: 'all', minTurnover: 1000000 });
+delete globalThis.localStorage;
+
+/* ================= S) turnover floor math (pure gateCandidate) ================= */
+console.log('== turnover floor: runtime select + null-turnover conviction halving ==');
+stubXuPrereqs();
+let s = gateX(longInp({ turnoverUsd: 9e6, minTurnover: 1e6 }));
+ok(s.pass === true && s.trail[4].ok === true, 'S: $9M turnover passes when the runtime floor is $1M');
+s = gateX(longInp({ turnoverUsd: 40e6, minTurnover: 50e6 }));
+ok(s.pass === false && s.vetoGate === 'G4' && s.trail[4].note.indexOf('$50M floor') >= 0
+   && s.trail[4].note.indexOf('$40M') >= 0,
+   'S: $40M turnover vetoes at the $50M runtime floor with both numbers in the reason');
+s = gateX(longInp({ turnoverUsd: 0.6e6, minTurnover: 0.5e6 }));
+ok(s.pass === true, 'S: $600k turnover passes at the $0.5M floor (long tail judged by structure first)');
+s = gateX(longInp({ turnoverUsd: 9e6, minTurnover: NaN }));
+ok(s.pass === false && s.vetoGate === 'G4', 'S: NaN floor is rejected — gate falls back to the $10M default');
+s = gateX(longInp({ turnoverUsd: 9e6, minTurnover: -5 }));
+ok(s.pass === false && s.vetoGate === 'G4', 'S: negative floor is rejected — gate falls back to the $10M default');
+s = gateX(longInp({ turnoverUsd: null, minTurnover: 50e6 }));
+ok(s.pass === true && s.turnoverUnverified === true
+   && s.trail[4].note.indexOf('turnover unverified — size down') >= 0,
+   'S: null turnover NEVER auto-dies on the floor — passes with the unverified warning');
+ok(s.riskPct === 0.5, 'S: null turnover halves conviction-backed risk (STRONG confirmed 1.0% → 0.5%)');
+s = gateX(longInp({ turnoverUsd: 800e6 }));
+ok(s.riskPct === 1.0 && !s.turnoverUnverified, 'S: verified turnover keeps the full 1.0% risk');
+globalThis.smartSetup = function(cls){ return { type: 'SWING', dir: cls.dir, entry: 106, stop: 101, t1: 116, t2: 123.5, rr1: 2, rr2: 3.5, riskPct: 4.72, confirmed: false, note: '' }; };
+s = gateX(longInp({ turnoverUsd: null }));
+ok(s.riskPct === 0.25, 'S: unconfirmed plan + unverified turnover stack both halvings (1.0 → 0.5 → 0.25)');
+stubSmartSetup();
+s = gateX(longInp({ turnoverUsd: null }));
+ok(s.trail[4].note.indexOf('turnover n/a') >= 0, 'S: legacy "turnover n/a" phrasing preserved in the G4 note');
+
+/* ================= T) staged fetching + combined counts =================
+   7 xu candidates: 2 pass (4h+1h), G0/G2/G3/G4 casualties + 1 candle-feed
+   failure must NEVER trigger a 1h request. */
+console.log('== staged fetching: 1h only for survivors, combined counts ==');
+stubXuPrereqs(); cfgX({ venue: 'all', minTurnover: 1000000 });
+dropBinanceLegacy();
+XU_SHAPES = { WEAKUSDT: 'weakclose', THINUSDT: 'thin', BADUSDT: 'throw' };
+globalThis.window.xuUniverse = async function(){
+  return [
+    xuItem('PASSAUSDT', 'delta'),
+    xuItem('PASSBUSDT', 'coindcx', { turnoverUsd: null, fundingPct: null }),
+    xuItem('WEAKUSDT', 'delta'),
+    xuItem('THINUSDT', 'coindcx'),
+    xuItem('FUNDYUSDT', 'delta', { fundingPct: 0.05 }),
+    xuItem('POORUSDT', 'coindcx', { turnoverUsd: 0.4e6 }),
+    xuItem('BADUSDT', 'delta')
+  ];
+};
+stubXuCandles();
+const T1 = freshPane();
+tabX.mount(T1.pane);
+const tStatEl = T1.pane.querySelector('#engineStat');
+const tSeen = []; let tCur = '';
+Object.defineProperty(tStatEl, 'textContent', { get: function(){ return tCur; }, set: function(v){ tCur = v; tSeen.push(v); } });
+T1.stubs['#engineRun']._handler();
+await waitScan2(T1.stubs);
+const tCalls4 = xuCalls.filter(function(c){ return c.tf === '4h'; });
+const tCalls1 = xuCalls.filter(function(c){ return c.tf === '1h'; });
+ok(tCalls4.length === 7, 'T: 4h candles fetched for all 7 candidates (staged leg 1)');
+ok(tCalls1.length === 2, 'T: 1h candles fetched ONLY for the 2 survivors — dead candidates never cost a 2nd request');
+ok(tCalls1.map(function(c){ return c.sym; }).sort().join(',') === 'PASSAUSDT,PASSBUSDT',
+   'T: the 1h requests are exactly the passing candidates');
+ok(tCur.indexOf('done · 2 executions') === 0 && tCur.indexOf('5 aside') >= 0
+   && tCur.indexOf('universe 7 (combined delta+coindcx universe · delta 4 · cdcx 3') >= 0
+   && tCur.indexOf('ALL contracts') >= 0,
+   'T: final stat carries survivors/aside + combined per-exchange universe counts');
+ok(tSeen.some(function(v){ return /gating \d+\/7 · [A-Z0-9]+ · delta \d+ · cdcx \d+ · failed \d+/.test(v); }),
+   'T: progress line shows "X/Y · sym · delta n · cdcx m · failed k" while scanning');
+ok(T1.stubs['#engineAsideCount'].textContent === '5 rejected · delta 3 · cdcx 2',
+   'T: WHY ASIDE header tallies rejections per exchange');
+const tAside = T1.stubs['#engineAsideList'].innerHTML;
+ok(tAside.indexOf('WEAKUSDT · delta') >= 0 && tAside.indexOf('THINUSDT · cdcx') >= 0
+   && tAside.indexOf('POORUSDT · cdcx') >= 0,
+   'T: WHY ASIDE rows carry the exchange tag next to each rejected symbol');
+const tHtml = T1.stubs['#engineCards'].innerHTML;
+ok(tHtml.indexOf('PASSAUSDT') >= 0 && tHtml.indexOf('PASSBUSDT') >= 0 && tHtml.indexOf('WEAKUSDT') === -1,
+   'T: only survivors render cards');
+const tState = globalThis.window.engineState();
+ok(tState && tState.survivors.length === 2 && tState.rejected.length === 5,
+   'T: BRAIN snapshot mirrors the xu scan (2 survivors / 5 rejected)');
+
+/* G1-massacre: every candidate dies at structure — zero 1h requests */
+globalThis.ema = function(vals){ return vals.map(function(){ return 100; }); };
+globalThis.window.xuUniverse = async function(){
+  return [ xuItem('G1AUSDT', 'delta'), xuItem('G1BUSDT', 'coindcx'), xuItem('G1CUSDT', 'delta') ];
+};
+stubXuCandles();
+const T2 = freshPane();
+tabX.mount(T2.pane);
+T2.stubs['#engineRun']._handler();
+await waitScan2(T2.stubs);
+ok(xuCalls.filter(function(c){ return c.tf === '4h'; }).length === 3
+   && xuCalls.filter(function(c){ return c.tf === '1h'; }).length === 0,
+   'T: G1 casualties fetch 4h only — 1h is never requested for structure failures');
+ok(T2.stubs['#engineStat'].textContent.indexOf('done · 0 executions') === 0
+   && T2.stubs['#engineStat'].textContent.indexOf('3 aside') >= 0,
+   'T: G1-massacre scan completes honestly (0 executions, 3 aside)');
+stubIndicators();
+
+/* ================= U) per-symbol failure isolation at 120-symbol scale ================= */
+console.log('== failure isolation at scale (120-symbol fixture universe) ==');
+stubXuPrereqs(); cfgX({ venue: 'all', minTurnover: 1000000 });
+XU_SHAPES = {};
+const uItems = [];
+for (let ui = 0; ui < 120; ui++){
+  const usym = 'U' + ui + 'USDT';
+  if (ui >= 100 && ui < 110) XU_SHAPES[usym] = 'weakclose';
+  else if (ui >= 110 && ui < 115) XU_SHAPES[usym] = 'throw';
+  else if (ui >= 115) XU_SHAPES[usym] = 'poison';
+  uItems.push(xuItem(usym, ui % 2 === 0 ? 'delta' : 'coindcx'));
+}
+globalThis.window.xuUniverse = async function(){ return uItems; };
+stubXuCandles();
+const uBaseEma = emaStub;
+globalThis.ema = function(vals, p){
+  if (vals[vals.length - 1] === 55555) throw new Error('poisoned rows');
+  return uBaseEma(vals, p);
+};
+const U1 = freshPane();
+tabX.mount(U1.pane);
+U1.stubs['#engineRun']._handler();
+await waitScan2(U1.stubs);
+const uStat = U1.stubs['#engineStat'].textContent;
+ok(xuCalls.filter(function(c){ return c.tf === '4h'; }).length === 120,
+   'U: all 120 candidates got exactly one 4h request');
+ok(xuCalls.filter(function(c){ return c.tf === '1h'; }).length === 100,
+   'U: 1h fetched for the 100 survivors only (G2/G0 casualties + failures skipped)');
+ok(uStat.indexOf('done · 100 executions') === 0 && uStat.indexOf('15 aside') >= 0,
+   'U: 100 survivors + 15 gated rejections at 120-symbol scale');
+ok(uStat.indexOf('5 symbols failed (skipped)') >= 0,
+   'U: 5 hard per-symbol exceptions isolated as failures, never killing the scan');
+ok(uStat.indexOf('universe 120 (combined delta+coindcx universe · delta 60 · cdcx 60') >= 0,
+   'U: combined per-exchange universe counts honest at scale');
+const uState = globalThis.window.engineState();
+ok(uState && uState.survivors.length === 100 && uState.rejected.length === 15,
+   'U: BRAIN snapshot consistent with the 120-symbol scan');
+stubIndicators();
+
+/* ================= V) xu* absent → legacy behavior intact ================= */
+console.log('== xu absent: legacy Binance behavior intact ==');
+delete globalThis.window.xuUniverse; delete globalThis.window.xuCandles;
+XU_SHAPES = {};
+stubXuPrereqs(); cfgX({ venue: 'all', minTurnover: 1000000 });
+globalThis.binancePerpUniverse = async function(){ return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']; };
+globalThis.binanceTickers24h = async function(){
+  return { BTCUSDT: { mark: 106, chg24: 2,  turnoverUsd: 800e6 },
+           ETHUSDT: { mark: 94,  chg24: -2, turnoverUsd: 500e6 },
+           SOLUSDT: { mark: 106, chg24: 3,  turnoverUsd: 900e6 } };
+};
+globalThis.binanceFunding = async function(sym){ return { markPrice: sym === 'ETHUSDT' ? 94 : 106, fundingPct: 0.01 }; };
+globalThis.binanceKlines = async function(sym, interval, limit){
+  if (sym === 'BTCUSDT') return mkRows(limit || 260, 106, 0.25, 1.0);
+  if (sym === 'ETHUSDT') return mkRows(limit || 260, 94, 1.0, 0.25);
+  if (sym === 'SOLUSDT') return mkRows(limit || 260, 106, 7, 3);
+  return [];
+};
+const V1 = freshPane();
+tabX.mount(V1.pane);
+V1.stubs['#engineRun']._handler();
+await waitScan2(V1.stubs);
+ok(V1.stubs['#engineStat'].textContent.indexOf('done · 2 executions') === 0
+   && V1.stubs['#engineStat'].textContent.indexOf('universe 3 (fallback: top 24 USDT perps') >= 0,
+   'V: with xu* absent the Binance top-24 fallback behaves exactly as before');
+ok(V1.stubs['#engineAsideCount'].textContent === '1 rejected',
+   'V: legacy aside count format unchanged (no exchange tallies without xu)');
+
 console.log('\nALL ' + passed + ' ENGINE ASSERTIONS PASSED');
