@@ -1287,7 +1287,28 @@ G.engineQuickTargets = engineQuickTargets;
 G.engineState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };
+/* ---------------- BRAIN warm-up hook ----------------
+   Reuses the real gate scan against an inert pane so the BRAIN can warm this
+   layer without mounting the EXECUTE tab. This is the slow leg of a warm-up
+   — the BRAIN soft-caps it and says so in its note. Shares the mounted
+   tab's busy guard (__busy). Never throws. */
+function __engWarmShim(){
+  return { innerHTML: '', textContent: '', className: '', disabled: false,
+           style: {}, firstElementChild: { style: {} },
+           querySelector: function(){ return null; } };
+}
+async function engineWarm(){
+  try{
+    if (G.engineState && G.engineState()) return 'fresh';
+    if (__busy) return 'busy';
+    await runScan({ querySelector: function(){ return __engWarmShim(); } });
+    return (G.engineState && G.engineState()) ? 'warmed' : 'unavailable: gate scan did not complete (network?)';
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'execute', label: 'EXECUTE', mount: function(el){ mount(el); }, refresh: refresh });
+G.HG_warmups = G.HG_warmups || [];
+G.HG_warmups.push({ id: 'engine', label: 'EXECUTE', run: engineWarm });
 
 })();

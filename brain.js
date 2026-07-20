@@ -147,7 +147,21 @@ var ALT_BLOCK   = { USDCUSDT:1, FDUSDUSDT:1, TUSDUSDT:1, BUSDUSDT:1, USDPUSDT:1,
 /* ---- combined-universe tunables (xuniverse.js present) ---- */
 var BASES       = ['BTC', 'ETH', 'SOL'];  /* BASE_SYMS as base assets */
 var BASE_BLOCK  = { USDC:1, FDUSD:1, TUSD:1, BUSD:1, USDP:1,
-                    DAI:1, EUR:1, GBP:1, XAU:1, PAXG:1 }; /* base-asset mirror of ALT_BLOCK */
+                    DAI:1, EUR:1, GBP:1, XAU:1, PAXG:1, /* base-asset mirror of ALT_BLOCK */
+                    /* non-crypto contracts Delta India lists as perps — metals,
+                       energy, index, FX, agri. Crypto layers can never vote on
+                       them, so they would sit 0L/0S ASIDE forever. xuniverse's
+                       contract is "never drop, consumers gate" — this is the gate. */
+                    XAUT:1, XAG:1, SLVON:1, XPT:1, XPD:1,
+                    CL:1, BZ:1, WTI:1, BRENT:1, NATGAS:1, GASOIL:1,
+                    SPX:1, NDX:1, DJI:1, US30:1, US100:1, US500:1, US2000:1, NAS100:1,
+                    DAX:1, GER40:1, FTSE:1, UK100:1, CAC:1, FRA40:1, EU50:1, STOXX50:1,
+                    N225:1, JP225:1, HSI:1, HK50:1, AUS200:1,
+                    NIFTY:1, NIFTY50:1, BANKNIFTY:1, BANK:1, FINNIFTY:1, MIDCPNIFTY:1,
+                    SENSEX:1, INDIA50:1, VIX:1,
+                    DXY:1, EURUSD:1, GBPUSD:1, USDJPY:1, USDINR:1, EURINR:1, GBPINR:1, JPYINR:1,
+                    AUDUSD:1, NZDUSD:1, USDCAD:1, USDCHF:1, USDSGD:1, USDZAR:1, USDMXN:1,
+                    CORN:1, WHEAT:1, SOY:1, SOYBEAN:1, SUGAR:1, COFFEE:1, COCOA:1, COTTON:1 };
 var FETCH_CAP   = 40;      /* max 4h candle fetches per scan — documented, honest when it binds */
 var CHUNK_SIZE  = 5;       /* candle fetches in flight per chunk */
 var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
@@ -1530,6 +1544,83 @@ async function runQuick(el){
   }
 }
 
+/* ---------------- WARM UP LAYERS ----------------
+   One click runs every layer module's published warm hook (G.HG_warmups) in
+   sequence — engine LAST, it is the deep gate scan and the slow leg — then
+   auto-fires the synthesis. Per-layer results land in the deps note so the
+   stat line keeps its synthesis contract; a capped layer keeps running in
+   its own time and the note says so. Never throws. */
+var __warming = false;
+async function runWarmup(el){
+  var stat = null, deps = null, warmBtn = null, runBtn = null, quickBtn = null;
+  try{ stat = el.querySelector('#brainStat'); }catch(e){}
+  try{ deps = el.querySelector('#brainDeps'); }catch(e){}
+  try{ warmBtn = el.querySelector('#brainWarm'); }catch(e){}
+  try{ runBtn = el.querySelector('#brainRun'); }catch(e){}
+  try{ quickBtn = el.querySelector('#brainQuick'); }catch(e){}
+  if (!stat){
+    paintFatal(el, 'brain pane incomplete — #brainStat unavailable — remount the tab');
+    return;
+  }
+  if (__warming || __busy) return;
+  var hooks = [];
+  try{
+    var reg = Array.isArray(G.HG_warmups) ? G.HG_warmups : [];
+    for (var i = 0; i < reg.length; i++){
+      var h = reg[i];
+      if (h && typeof h.run === 'function' && typeof h.id === 'string') hooks.push(h);
+    }
+  }catch(e){}
+  hooks.sort(function(a, b){ return (a.id === 'engine' ? 1 : 0) - (b.id === 'engine' ? 1 : 0); });
+  if (!hooks.length){
+    stat.className = 'note warn';
+    stat.textContent = 'no warmable layers found — layer modules did not publish warm hooks (script load order?)';
+    return;
+  }
+  __warming = true;
+  if (warmBtn) warmBtn.disabled = true;
+  if (runBtn) runBtn.disabled = true;
+  if (quickBtn) quickBtn.disabled = true;
+  var results = [];
+  try{
+    for (var k = 0; k < hooks.length; k++){
+      var hk = hooks[k];
+      stat.className = 'note';
+      stat.textContent = 'warming ' + (k + 1) + '/' + hooks.length + ' · ' + (hk.label || hk.id)
+        + (hk.id === 'engine' ? ' — the deep gate scan, the slow leg' : '') + '…';
+      var r;
+      try{
+        /* rejections are mapped to 'error:' BEFORE withTimeout sees them —
+           withTimeout resolves null on a rejected promise (its timeout
+           contract), which would otherwise mislabel a failed layer as
+           "still running" */
+        r = await withTimeout(
+          Promise.resolve().then(function(){ return hk.run(); }).then(
+            function(v){ return v; },
+            function(e){ return 'error: ' + errMsg(e); }),
+          240000); /* 4-min soft cap per layer */
+        if (r === null) r = 'still running — it lands in its own time';
+        else if (typeof r !== 'string') r = 'warmed';
+      }catch(e){ r = 'error: ' + errMsg(e); }
+      results.push((hk.label || hk.id) + ': ' + r);
+      try{
+        if (deps){
+          deps.className = 'note';
+          deps.textContent = 'warm-up · ' + results.join(' · ');
+        }
+      }catch(e){}
+    }
+  }finally{
+    __warming = false;
+    if (warmBtn) warmBtn.disabled = false;
+    if (runBtn) runBtn.disabled = false;
+    if (quickBtn) quickBtn.disabled = false;
+  }
+  /* auto-fire the synthesis over the warmed layers */
+  try{ stat.className = 'note'; stat.textContent = 'layers warmed — running synthesis…'; }catch(e){}
+  try{ await runBrain(el); }catch(e){ /* runBrain owns its failure surface */ }
+}
+
 /* mount-time notes always land somewhere visible — stat line first, then a
    note appended to the pane, then raw text. Never a silent dead button. */
 function mountNote(el, msg){
@@ -1551,6 +1642,7 @@ function mount(el){
       + '<h2>BRAIN — meta-intelligence <span>reads every layer · evidence agreement, not scores</span></h2>'
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
       + '<button class="btn" id="brainQuick" title="recheck the last scan’s watch set against fresh layers — cached universe, new listings judged on arrival">QUICK RESCAN</button>'
+      + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'
       + '<select id="brainVenue" style="display:none" title="venue filter — combined Delta India + CoinDCX universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
       + '<option value="CDCX">COINDCX ONLY</option></select>'
@@ -1592,6 +1684,8 @@ function mount(el){
   try{
     var qbtn = el.querySelector('#brainQuick');
     if (qbtn) qbtn.addEventListener('click', function(){ runQuick(el); });
+    var wbtn = el.querySelector('#brainWarm');
+    if (wbtn) wbtn.addEventListener('click', function(){ runWarmup(el); });
   }catch(e){}
   if (!runWired){
     mountNote(el, 'brain mount degraded: run button wiring failed — retrying…');
@@ -1629,7 +1723,7 @@ function mount(el){
      (#brainRun/#brainQuick are deliberately NOT re-queried here — the wiring
      step above owns them, and a hostile pane may ration its throws.) */
   try{
-    var need = ['#brainStat', '#brainCards', '#brainWatch', '#brainAside', '#brainEmpty'];
+    var need = ['#brainStat', '#brainCards', '#brainWatch', '#brainAside', '#brainEmpty', '#brainWarm'];
     var gone = [];
     for (var n = 0; n < need.length; n++){
       if (!el.querySelector(need[n])) gone.push(need[n]);

@@ -636,7 +636,20 @@ W.__hgNewsReset = function(){
   NEWS.loaded = false; NEWS.at = 0; NEWS.events = []; NEWS.headlines = []; NEWS.fng = null; NEWS.errors = [];
 };
 
+/* BRAIN warm-up hook: force a fresh calendar/F&G/headline fetch so the
+   BRAIN can warm this layer without mounting the tab. Never throws. */
+async function newsWarm(){
+  try{
+    if (NEWS.loaded) return 'fresh';
+    await hgNewsRefresh(true);
+    if (NEWS.loaded) return 'warmed';
+    return 'unavailable: ' + ((NEWS.errors && NEWS.errors[0]) || 'no news source reachable');
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'news', label: 'NEWS', mount: mount, refresh: refresh });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'news', label: 'NEWS', run: newsWarm });
 
 })();

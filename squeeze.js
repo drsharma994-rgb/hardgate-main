@@ -591,9 +591,67 @@ W.squeezeClassify = squeezeClassify;
 W.squeezePlan = squeezePlan;
 W.squeezePlanHTML = squeezePlanHTML;
 W.squeezePlanBlock = squeezePlanBlock;
+/* ---------------- BRAIN warm-up hook ----------------
+   runScan lives inside mount (it closes over the pane nodes), so the BRAIN
+   cannot reuse it unmounted. sqWarm duplicates the scan core headless and
+   publishes through the same publishSqueezeState, whose consumers only ever
+   read {sym, dir, kind} — the heavy card context (klines, tick) is a
+   render-only concern. Shares __scan.busy with the mounted scan so the two
+   can never double-fetch. Never throws. */
+async function sqWarm(){
+  try{
+    if (W.squeezeState && W.squeezeState()) return 'fresh';
+  }catch(e0){}
+  if (__scan.busy) return 'busy';
+  if (typeof binancePerpUniverse !== 'function' || typeof binanceTickers24h !== 'function'
+      || typeof binanceKlines !== 'function'){
+    return 'unavailable: Binance data layer not loaded';
+  }
+  __scan.busy = true;
+  try{
+    var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
+    var perps = res[0] || [], ticks = res[1];
+    if (!perps.length || !ticks) return 'unavailable: Binance universe fetch failed';
+    var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
+                   .sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
+                   .slice(0, MAX_UNIVERSE);
+    if (!uni.length) return 'skipped: no perps above the 24h turnover floor';
+    var results = [];
+    for (var ci = 0; ci < uni.length; ci += CHUNK){
+      var chunk = uni.slice(ci, ci + CHUNK);
+      await Promise.all(chunk.map(async function(sym){
+        try{
+          var rows4h = await binanceKlines(sym, '4h', KL_4H_LIMIT);
+          if (!rows4h || !rows4h.length) return;
+          var rows1d = [];
+          try{ rows1d = await binanceKlines(sym, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
+          var cls = squeezeClassify(rows4h, rows1d || []);
+          if (cls.state === 'FIRED_LONG' || cls.state === 'FIRED_SHORT'){
+            results.push({ sym: sym, kind: 'fired', dir: cls.state === 'FIRED_LONG' ? 'long' : 'short' });
+          } else if (cls.donchianBreak){
+            results.push({ sym: sym, kind: 'break', dir: cls.donchianBreak === 'LONG' ? 'long' : 'short' });
+          } else if (cls.state === 'BUILDING'){
+            results.push({ sym: sym, kind: 'build', dir: null });
+          }
+        }catch(e){ /* one symbol's failure never kills the warm-up */ }
+      }));
+      if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
+    }
+    publishSqueezeState(results);
+    __scan.hasRun = true;
+    return 'warmed · ' + results.length + ' squeezes across ' + uni.length + ' perps';
+  }catch(e){
+    return 'error: ' + ((e && e.message) || e);
+  }finally{
+    __scan.busy = false;
+  }
+}
+
 W.squeezeState = function(){
   try{ return __sqSnap ? __sqStateView(__sqSnap) : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'squeeze', label: 'SQUEEZE', mount: mount, refresh: squeezeRefresh });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'squeeze', label: 'SQUEEZE', run: sqWarm });
 })();

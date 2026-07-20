@@ -794,5 +794,12 @@ G.liqAgg = liqAgg;
 G.liqFlushSetup = liqFlushSetup;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'liqs', label: 'LIQS', mount: function(el){ mount(el); }, refresh: refreshLiqs });
+/* BRAIN warm-up hook: there is nothing to pre-fetch — this layer is fed by
+   a live websocket only (Binance exposes no free REST liquidation history),
+   so the hook just says so and lets the BRAIN name the gap honestly. */
+G.HG_warmups = G.HG_warmups || [];
+G.HG_warmups.push({ id: 'liqs', label: 'LIQS', run: async function(){
+  return 'skipped: stream-only layer — open the LIQS tab once to start the live socket';
+} });
 
 })();

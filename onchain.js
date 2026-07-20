@@ -620,7 +620,20 @@ G.__onchainReset = function(){
   OC.loaded = false; OC.at = 0; OC.snap = null; OC.errors = [];
 };
 
+/* BRAIN warm-up hook: force a fresh multi-leg fetch so the BRAIN can warm
+   this layer without mounting the tab. Never throws. */
+async function onchainWarm(){
+  try{
+    if (OC.loaded && OC.snap) return 'fresh';
+    await onchainFetch(true);
+    if (OC.loaded && OC.snap) return 'warmed';
+    return 'unavailable: ' + ((OC.errors && OC.errors[0]) || 'every on-chain leg failed');
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'onchain', label: 'ON-CHAIN', mount: mount, refresh: refresh });
+G.HG_warmups = G.HG_warmups || [];
+G.HG_warmups.push({ id: 'onchain', label: 'ON-CHAIN', run: onchainWarm });
 
 })();

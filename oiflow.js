@@ -583,7 +583,27 @@ G.oiflowClassify = oiflowClassify;
 G.oiflowState = function(){
   try{ return __oiSnap ? __oiStateView(__oiSnap) : null; }catch(e){ return null; }
 };
+/* ---------------- BRAIN warm-up hook ----------------
+   Reuses the real runScan against an inert pane (querySelector hands out
+   stubs) so the BRAIN can warm this layer without mounting the tab. The
+   mounted tab's own busy guard (__scanning) is shared. Never throws. */
+function __oiWarmShim(){
+  return { innerHTML: '', textContent: '', className: '', disabled: false,
+           style: {}, firstElementChild: { style: {} },
+           querySelector: function(){ return null; } };
+}
+async function oiflowWarm(){
+  try{
+    if (G.oiflowState && G.oiflowState()) return 'fresh';
+    if (__scanning) return 'busy';
+    await runScan({ querySelector: function(){ return __oiWarmShim(); } });
+    return (G.oiflowState && G.oiflowState()) ? 'warmed' : 'unavailable: scan did not complete (network?)';
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'oiflow', label: 'OI FLOW', mount: function(el){ mount(el); }, refresh: oiflowRefresh });
+G.HG_warmups = G.HG_warmups || [];
+G.HG_warmups.push({ id: 'oiflow', label: 'OI FLOW', run: oiflowWarm });
 
 })();

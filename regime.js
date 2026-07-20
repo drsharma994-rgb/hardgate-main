@@ -709,7 +709,27 @@ W.regimePlaybook = regimePlaybook;
 W.regimeState = function(){
   try{ return __rgSnap ? __rgStateView(__rgSnap) : null; }catch(e){ return null; }
 };
+/* ---------------- BRAIN warm-up hook ----------------
+   Runs the real 8-gauge scan against inert stub nodes so the BRAIN tab can
+   warm this layer without mounting it. Never throws; the BRAIN prints the
+   returned string verbatim. */
+function __rgWarmShim(){
+  return { innerHTML: '', textContent: '', className: '', disabled: false,
+           style: {}, firstElementChild: { style: {} },
+           querySelector: function(){ return null; } };
+}
+async function regimeWarm(){
+  try{
+    if (W.regimeState && W.regimeState()) return 'fresh';
+    if (rgTab.busy) return 'busy';
+    await rgRun({ out: __rgWarmShim(), run: __rgWarmShim(), stat: __rgWarmShim(), prog: __rgWarmShim() });
+    return (W.regimeState && W.regimeState()) ? 'warmed' : 'unavailable: every gauge source failed';
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'regime', label: 'REGIME', mount: mountRegime, refresh: refreshRegime });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'regime', label: 'REGIME', run: regimeWarm });
 
 })();

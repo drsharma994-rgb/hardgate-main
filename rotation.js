@@ -544,6 +544,19 @@ async function refreshRotation(){
   }
 }
 
+/* BRAIN warm-up hook: run the CoinGecko scan headless (ui = null falls back
+   to __rot.ui, and every ui touch is null-gated) so the BRAIN can warm this
+   layer without mounting the tab. Never throws. */
+async function rotationWarm(){
+  try{
+    if (window.rotationState && window.rotationState()) return 'fresh';
+    var r = await runRotation(null, { force: true });
+    if (r === 'busy') return 'busy';
+    if (window.rotationState && window.rotationState()) return 'warmed';
+    return (typeof r === 'string' && r.indexOf('failed') === 0) ? r : 'warmed — partial data';
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
+
 if (typeof window !== 'undefined'){
   window.rotationSignal = rotationSignal;
   window.rotationDomSnapshot = rotationDomSnapshot;
@@ -555,5 +568,7 @@ if (typeof window !== 'undefined'){
   };
   window.HG_tabs = window.HG_tabs || [];
   window.HG_tabs.push({ id: 'rotation', label: 'ROTATION', mount: mount, refresh: refreshRotation });
+  window.HG_warmups = window.HG_warmups || [];
+  window.HG_warmups.push({ id: 'rotation', label: 'ROTATION', run: rotationWarm });
 }
 })();
