@@ -288,6 +288,96 @@ await run('hardRefreshAll()');
 assert(/^refreshed 19 · skipped 2 · failed 0 · /.test(chip.textContent),
   'subsequent run executes normally — busy flag not stuck');
 
+/* ---------------- 5. theme wiring: bright.css linked + precached ---------------- */
+const iStyleEnd = html.indexOf('</style>');
+const iBright = html.indexOf('<link rel="stylesheet" href="bright.css">');
+assert(iStyleEnd !== -1 && iBright !== -1 && iStyleEnd < iBright && iBright < html.indexOf('</head>'),
+  'bright.css <link> lands after the inline </style> block, inside <head>');
+const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
+assert(/HG_CACHE\s*=\s*'hg-v8'/.test(swSrc), 'service worker cache name bumped to hg-v8 (clients pick up the new shell)');
+assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
+
+/* ---------------- 6. auto-refresh control: header placement + OFF default ---------------- */
+const iHrdBtn = html.indexOf('id="hardRefreshBtn"');
+const iAuto = html.indexOf('id="autoRefreshCtl"');
+const iHrdStat = html.indexOf('id="hardRefreshStat"');
+assert(iHrdBtn !== -1 && iAuto !== -1 && iHrdBtn < iAuto,
+  'AUTO segmented control renders in the header after #hardRefreshBtn');
+assert(iHrdStat !== -1 && iAuto < iHrdStat,
+  'AUTO control sits immediately after the button (before the refresh status chip)');
+['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRefreshCount'].forEach(function(id){
+  assert(html.indexOf('id="' + id + '"') !== -1, 'header contains #' + id);
+});
+const autoCount = documentStub.getElementById('autoRefreshCount');
+assert(run('HG_AUTO_MS') === 0, 'auto refresh defaults to OFF (HG_AUTO_MS 0) with no saved choice');
+assert(run("document.getElementById('autoRefOff').classList.contains('on')") === true,
+  'OFF segment is painted active by default');
+assert(autoCount.style.display === 'none', 'countdown chip hidden while OFF');
+assert(run('HG_AUTO_TIMER') === null, 'no interval lives while OFF');
+
+/* ---------------- 7. choice → interval mapping + persistence ---------------- */
+run("setAutoRefresh('120000')");
+assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
+  '2m maps to 120000ms and persists to localStorage');
+assert(run('HG_AUTO_TIMER !== null') === true, 'the single interval starts when armed');
+assert(autoCount.style.display !== 'none', 'countdown chip shows while armed');
+assert(run("document.getElementById('autoRef120000').classList.contains('on')") === true
+    && run("document.getElementById('autoRefOff').classList.contains('on')") === false,
+  'active segment repaints to 2m');
+const timer1 = run('HG_AUTO_TIMER');
+run("setAutoRefresh('180000')");
+assert(run('HG_AUTO_MS') === 180000 && storeMem.get('hgAutoRefresh') === '180000',
+  '3m maps to 180000ms and persists');
+assert(run('HG_AUTO_TIMER') !== null && run('HG_AUTO_TIMER') !== timer1,
+  'changing the choice re-arms the interval (old one cleared, never stacked)');
+run("setAutoRefresh('300000')");
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  '5m maps to 300000ms and persists');
+run("setAutoRefresh('bogus')");
+assert(run('HG_AUTO_MS') === 0 && storeMem.get('hgAutoRefresh') === 'off',
+  'unknown choice degrades to OFF honestly (no throw, no fake schedule)');
+assert(run('HG_AUTO_TIMER') === null && autoCount.style.display === 'none',
+  'interval cleared and countdown hidden when set to OFF');
+
+/* ---------------- 8. restore on load ---------------- */
+storeMem.set('hgAutoRefresh', '180000');
+run('hgAutoInit()');
+assert(run('HG_AUTO_MS') === 180000 && run('HG_AUTO_TIMER !== null') === true,
+  'saved 3m choice restores on load and resumes automatically');
+assert(run("document.getElementById('autoRef180000').classList.contains('on')") === true,
+  'restored segment painted active');
+storeMem.set('hgAutoRefresh', 'garbage');
+run('hgAutoInit()');
+assert(run('HG_AUTO_MS') === 0 && run('HG_AUTO_TIMER') === null,
+  'corrupt saved value restores as OFF without throwing');
+storeMem.delete('hgAutoRefresh');
+
+/* ---------------- 9. scheduled fire → the EXISTING hardRefreshAll ---------------- */
+sandbox.__stubs.hardRefreshAll = async function(){ bump('hardRefreshAll'); };
+run('hardRefreshAll = window.__stubs.hardRefreshAll;');   /* rebind like the inline stubs above */
+run("setAutoRefresh('120000')");
+const hraBefore = sandbox.__calls.hardRefreshAll || 0;
+run('HG_AUTO_NEXT = Date.now() - 1');                     /* pretend the tick is due */
+run('hgAutoTick()');
+assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 1,
+  'a due tick fires hardRefreshAll exactly once — no second refresh pipeline');
+assert(run('HG_AUTO_NEXT > Date.now()') === true,
+  'the next tick is re-booked even though this one fired (busy self-skip keeps the cadence)');
+run('hgAutoTick()');
+assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 1,
+  'a non-due tick only updates the countdown — no extra fire');
+assert(/^next \d+:\d{2}$/.test(autoCount.textContent),
+  'countdown chip shows mm:ss while armed — got: "' + autoCount.textContent + '"');
+
+/* OFF stops the firing */
+run("setAutoRefresh('off')");
+assert(run('HG_AUTO_TIMER') === null, 'interval cleared when set to OFF');
+run('HG_AUTO_NEXT = Date.now() - 1');
+run('hgAutoTick()');
+assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 1,
+  'no further fires after OFF (stray ticks no-op)');
+assert(autoCount.style.display === 'none', 'countdown hidden after OFF');
+
 /* ---------------- settle & summary ---------------- */
 process.on('unhandledRejection', () => {});
 await new Promise(r => setTimeout(r, 200));

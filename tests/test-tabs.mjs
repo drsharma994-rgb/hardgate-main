@@ -296,7 +296,7 @@ assert(!!manifest && Array.isArray(manifest.icons)
 let swSrc = '', swErr = null;
 try{ swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8'); }catch(e){ swErr = e; }
 assert(!swErr && swSrc.length > 0, 'sw.js exists at project root');
-assert(swSrc.indexOf('hg-v7') !== -1, 'sw.js uses the versioned cache name hg-v7');
+assert(/hg-v\d+/.test(swSrc), 'sw.js uses a versioned cache name hg-vN (bumped on every shell change)');
 assert(swSrc.indexOf('/api/') !== -1 && swSrc.indexOf('/api/proxy') !== -1,
   'sw.js explicitly never caches /api/ or /api/proxy responses');
 assert(swSrc.indexOf('skipWaiting') !== -1 && swSrc.indexOf('clients.claim') !== -1,

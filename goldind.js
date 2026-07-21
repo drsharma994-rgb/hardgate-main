@@ -44,6 +44,22 @@ Exports (all on window):
                              (never tighter), targets 1.5R/2.5R snapped to
                              opposing swept structure when one sits between
                              entry and target. Long/short symmetric.
+  goldScalpSetups(same inp)  — MULTI-STRATEGY candidates: one candidate per
+                             strategy trigger (sweep reversal, OB/breaker
+                             retest, FVG fill, session-VWAP bounce/rejection,
+                             EMA ribbon pullback, Asian-range breakout, RSI
+                             75/25 divergence), each with ATR-stop levels,
+                             1.5R/2.5R targets, a deterministic STRUCTURAL
+                             conviction id (strategy|dir|structural anchor
+                             rounded to whole dollars — swept level / OB edge
+                             / FVG edge / session VWAP / 20-EMA / Asian box
+                             edge / divergence pivot; entry drift INSIDE the
+                             same zone reproduces the same id) and plain-
+                             language why/invalidates. -> [] when nothing.
+  goldRankSetups(cands, ctx) — transparent confluence tally ranker (reads +
+                             killzone weight + news penalty + macro tilt +
+                             PAXG-basis positioning + seasonality + F&G),
+                             -> {ranked, best}. Pure, total.
 ========================================================================= */
 (function(){
 'use strict';
@@ -497,7 +513,7 @@ function goldAsianRange(rows){
    + RSI higher-low (bullish exhaustion) across the last two swing pivots.
    -> {rsi, zone:'OVERBOUGHT'|'OVERSOLD'|'NEUTRAL'|'NONE', div, detail}. */
 function goldRSIGold(rows){
-  var out = { rsi: NaN, zone: 'NONE', div: null, detail: '' };
+  var out = { rsi: NaN, zone: 'NONE', div: null, detail: '', pivotLow: null, pivotHigh: null };
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 20) return out;
@@ -527,9 +543,11 @@ function goldRSIGold(rows){
     }
     if (bullDiv && (!bearDiv || bullDiv.barsAgo <= bearDiv.barsAgo)){
       out.div = 'BULLISH';
+      out.pivotLow = p2.v;                 /* price of the 2nd (lower) low — divergence stop structure */
       out.detail = 'price lower-low, RSI higher-low (' + bullDiv.barsAgo + ' bars ago) — bullish exhaustion divergence';
     } else if (bearDiv){
       out.div = 'BEARISH';
+      out.pivotHigh = q2.v;                /* price of the 2nd (higher) high — divergence stop structure */
       out.detail = 'price higher-high, RSI lower-high (' + bearDiv.barsAgo + ' bars ago) — bearish exhaustion divergence';
     }
     return out;
@@ -869,6 +887,532 @@ function goldScalpSetup(inp){
   }catch(e){ return null; }
 }
 
+/* =========================================================================
+   MULTI-STRATEGY CANDIDATES — goldScalpSetups({rows15m, rows1h, rows4h, now,
+   news}) -> [candidate, ...] (possibly empty, NEVER null, never throws).
+   Each candidate is ONE strategy-specific setup composed from the detectors
+   above — liquidity-sweep reversal, order-block/breaker retest, FVG fill,
+   session-VWAP bounce/rejection, EMA 20/50/200 ribbon pullback, Asian-range
+   (00:00-07:00 GMT) breakout, modified-RSI(75/25) divergence — with entry,
+   an ATR-based stop (1.5-2x ATR14 15m, never tighter), TP1 1.5R / TP2 2.5R
+   snapped to opposing structure when one sits between entry and target
+   (>=1.2R), a deterministic STRUCTURAL conviction id (strategy|dir|anchor:
+   the strategy's structural price — swept level / OB edge / FVG edge /
+   session VWAP / 20-EMA / Asian box edge / divergence pivot — rounded to
+   whole dollars, so price drifting INSIDE the same structural zone
+   reproduces the identical id), the agreeing-reads ledger and plain-
+   language why/invalidates text. A candidate needs its structural trigger
+   PLUS >=2 independent agreeing reads (strictly more than opposing); the
+   200-EMA sell-only gate suppresses longs below the 200. Levels always come
+   from structure + ATR — nothing is fabricated.
+   -> [{id, strategy, stratKey, dir, entry, stop, t1, t2, rr, rr2, grade,
+        confluence, agree, oppose, reads:{long,short}, killzone,
+        killzoneWeight, newsCaution, newsStamp, atr, zone:{lo,hi}, why,
+        invalidates, notes}]
+========================================================================= */
+var GST_NAME = {
+  sweep:  'LIQUIDITY SWEEP REVERSAL',
+  ob:     'ORDER BLOCK / BREAKER RETEST',
+  fvg:    'FVG FILL',
+  vwap:   'SESSION VWAP BOUNCE / REJECTION',
+  ribbon: 'EMA RIBBON PULLBACK',
+  asian:  'ASIAN RANGE BREAKOUT',
+  rsidiv: 'RSI 75/25 DIVERGENCE'
+};
+
+/* shared ATR-survival level builder: stop 1.5-2x ATR14(15m) (never tighter),
+   optionally extended to sit beyond a structure price; TP1 1.5R / TP2 2.5R
+   with TP1 snapped to the nearest opposing structure between entry and TP1
+   when that snap still pays >= 1.2R. */
+function __gsLevels(dir, entry, a15, structStop, snapLvls){
+  var stopDist = 1.5*a15, stopNote = 'stop 1.5×ATR14(15m)';
+  if (isFinite(structStop)){
+    var d = (dir === 'long') ? (entry - structStop) : (structStop - entry);
+    if (d > 0){
+      var want = d + 0.25*a15;
+      if (want > 2*a15) want = 2*a15;
+      if (want > stopDist){
+        stopDist = want;
+        stopNote = 'stop beyond structure ' + structStop.toFixed(2) + ' (' + (stopDist/a15).toFixed(2) + '×ATR14, capped 2×)';
+      }
+    }
+  }
+  var stop = (dir === 'long') ? entry - stopDist : entry + stopDist;
+  var risk = stopDist;
+  var t1 = (dir === 'long') ? entry + 1.5*risk : entry - 1.5*risk;
+  var t2 = (dir === 'long') ? entry + 2.5*risk : entry - 2.5*risk;
+  if (snapLvls && snapLvls.length){
+    var bestLvl = NaN, bestR = Infinity;
+    for (var si = 0; si < snapLvls.length; si++){
+      var L = snapLvls[si];
+      if (!isFinite(L)) continue;
+      var onSide = (dir === 'long') ? (L > entry && L < t1) : (L < entry && L > t1);
+      if (!onSide) continue;
+      var rL = Math.abs(L - entry)/risk;
+      if (rL >= 1.2 && rL < bestR){ bestR = rL; bestLvl = L; }
+    }
+    if (isFinite(bestLvl)){ t1 = bestLvl; stopNote += '; TP1 snapped to opposing structure ' + bestLvl.toFixed(2); }
+  }
+  return { stop: stop, t1: t1, t2: t2,
+           rr: Math.abs(t1 - entry)/risk, rr2: Math.abs(t2 - entry)/risk,
+           stopNote: stopNote };
+}
+
+/* opposing-structure levels for TP snapping: the opposing swept level plus
+   the near edge of opposing unmitigated order blocks. */
+function __gsSnapLvls(D, dir){
+  var out = [], sw = D.sw, ob = D.ob, entry = D.entry;
+  if (sw){
+    var L = (dir === 'long') ? (sw.highSweep ? sw.highSweep.level : NaN)
+                             : (sw.lowSweep ? sw.lowSweep.level : NaN);
+    if (isFinite(L)) out.push(L);
+  }
+  if (ob){
+    var zones = (dir === 'long') ? ob.bearish : ob.bullish;
+    for (var i = 0; i < zones.length; i++){
+      var edge = (dir === 'long') ? zones[i].bottom : zones[i].top;
+      if (isFinite(edge) && ((dir === 'long' && edge > entry) || (dir === 'short' && edge < entry))) out.push(edge);
+    }
+  }
+  return out;
+}
+
+/* candidate assembly + quality gates (>=2 agreeing reads, majority, 200-EMA
+   sell-only gate for longs, grade = agreeing reads + killzone weight with a
+   one-letter news downgrade). Returns null when the gates fail.
+   CONVICTION ID: keyed on STRUCTURE, never the live entry — `key|dir|anchor`
+   where anchor is the strategy's structural price (swept level / OB edge /
+   FVG edge / session VWAP / 20-EMA / Asian box edge / divergence pivot)
+   rounded to whole dollars. Price drifting INSIDE the same structural zone
+   reproduces the identical id, so the tab's conviction lock restores the
+   original levels verbatim; only a genuinely different structure mints a
+   new id. */
+function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anchor){
+  try{
+    var longEv = [], shortEv = [], i;
+    for (i = 0; i < D.reads.length; i++) (D.reads[i].side === 'long' ? longEv : shortEv).push(D.reads[i]);
+    var myEv = (dir === 'long') ? longEv : shortEv;
+    var oppose = (dir === 'long') ? shortEv.length : longEv.length;
+    if (myEv.length < 2 || myEv.length <= oppose) return null;
+    if (dir === 'long' && D.rb && D.rb.sellOnly) return null;
+    var lv = __gsLevels(dir, D.entry, D.a15, structStop, snapLvls);
+    var score = myEv.length + D.kz.weight;
+    var grade = (score >= 8) ? 'A' : ((score >= 5) ? 'B' : 'C');
+    if (D.news.caution) grade = (grade === 'A') ? 'B' : 'C';
+    var conf = [];
+    for (i = 0; i < myEv.length; i++) conf.push(myEv[i].label);
+    var bucket = String(isFinite(anchor) ? Math.round(anchor) : Math.round(D.entry));
+    var hh = isFinite(D.kz.hourGMT) ? ('0' + D.kz.hourGMT).slice(-2) + ':00 GMT' : 'n/a';
+    return {
+      id: key + '|' + dir + '|' + bucket,
+      strategy: GST_NAME[key] || key, stratKey: key, dir: dir,
+      entry: D.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr, rr2: lv.rr2,
+      grade: grade, confluence: conf, agree: myEv.length, oppose: oppose,
+      reads: { long: longEv.length, short: shortEv.length },
+      killzone: D.kz.label + ' · ' + hh, killzoneWeight: D.kz.weight,
+      newsCaution: D.news.caution,
+      newsStamp: D.news.caution ? NEWS_STAMP + (D.news.title ? ' (' + D.news.title + ')' : '') : null,
+      atr: D.a15,
+      zone: zone || { lo: D.entry - 0.25*D.a15, hi: D.entry + 0.25*D.a15 },
+      why: why, invalidates: invalidates,
+      notes: (D.notes || []).concat([lv.stopNote])
+    };
+  }catch(e){ return null; }
+}
+
+/* detector bundle + the shared agreeing-reads ledger (same read logic as the
+   goldScalpSetup composite, exposed once for all strategy candidates). */
+function __goldBundle(rows, rows1h, rows4h, entry, a15){
+  var D = { entry: entry, a15: a15, reads: [], notes: [] };
+  function add(side, tag, label){ D.reads.push({ side: side, tag: tag, label: label }); }
+  var i, z;
+
+  var sw = D.sw = goldSweeps(rows);
+  if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
+    if (sw.dir === 'bullish') add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago)');
+    else add('short', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + rejection (' + sw.barsAgo + 'b ago)');
+  }
+
+  var ob = D.ob = goldOrderBlocks(rows);
+  if (ob){
+    var tol = 0.5*a15;
+    for (i = 0; i < ob.bullish.length; i++){
+      z = ob.bullish[i];
+      if (entry >= z.bottom - tol && entry <= z.top + tol){ add('long', 'ob', 'bullish order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)); break; }
+    }
+    for (i = 0; i < ob.bearish.length; i++){
+      z = ob.bearish[i];
+      if (entry >= z.bottom - tol && entry <= z.top + tol){ add('short', 'ob', 'bearish order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)); break; }
+    }
+    for (i = 0; i < ob.breakers.length; i++){
+      z = ob.breakers[i];
+      if (z.dir === 'bullish' && entry > z.top) { add('long', 'breaker', 'breaker block — failed supply ' + z.top.toFixed(2) + ' flipped to demand'); break; }
+      if (z.dir === 'bearish' && entry < z.bottom){ add('short', 'breaker', 'breaker block — failed demand ' + z.bottom.toFixed(2) + ' flipped to supply'); break; }
+    }
+  }
+
+  var fvg = D.fvg = goldFVG(rows);
+  if (fvg && fvg.length){
+    var g = fvg[0];
+    if (g.age <= 25){
+      if (g.dir === 'bullish' && entry >= g.bottom) add('long', 'fvg', 'unmitigated 15m FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' holding');
+      else if (g.dir === 'bearish' && entry <= g.top) add('short', 'fvg', 'unmitigated 15m FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' capping');
+    }
+  }
+  D.fvg1 = null;
+  if (rows1h && rows1h.length >= 30){
+    var fvg1 = D.fvg1 = goldFVG(rows1h);
+    if (fvg1 && fvg1.length){
+      var g1 = fvg1[0];
+      if (g1.age <= 25){
+        if (g1.dir === 'bullish' && entry >= g1.bottom) add('long', 'fvg1h', 'unmitigated 1H FVG ' + g1.bottom.toFixed(2) + '–' + g1.top.toFixed(2));
+        else if (g1.dir === 'bearish' && entry <= g1.top) add('short', 'fvg1h', 'unmitigated 1H FVG ' + g1.bottom.toFixed(2) + '–' + g1.top.toFixed(2));
+      }
+    }
+  }
+
+  /* session VWAP anchored 00:00 GMT of the last bar's UTC day */
+  var n = rows.length, anchor = -1, tl = rows[n-1].t;
+  if (isFinite(tl)){
+    var ds = Math.floor(tl/86400)*86400;
+    for (var ai = n - 1; ai >= 0; ai--){
+      var tt = rows[ai].t;
+      if (!isFinite(tt) || tt < ds){ anchor = ai + 1; break; }
+    }
+    if (anchor < 0 || anchor >= n) anchor = 0;
+  }
+  D.anchor = anchor;
+  var vw = D.vw = (anchor >= 0) ? goldVWAP(rows, anchor) : null;
+  if (vw){
+    if (vw.pos === 'ABOVE') add('long', 'vwap', 'holding above session VWAP ' + vw.value.toFixed(2));
+    else if (vw.pos === 'BELOW') add('short', 'vwap', 'capped below session VWAP ' + vw.value.toFixed(2));
+  }
+
+  var rb = D.rb = goldRibbon(rows);
+  if (rb.mode === 'BULL') add('long', 'ribbon', rb.pullback20 ? 'EMA ribbon bull + 20-EMA pullback zone' : 'EMA ribbon bull (20>50, above 200)');
+  else if (rb.mode === 'BEAR') add('short', 'ribbon', rb.pullback20 ? 'EMA ribbon bear + 20-EMA pullback zone' : 'EMA ribbon bear (20<50, below 200)');
+
+  var ich = D.ich = goldIchimoku(rows);
+  if (ich.state === 'ABOVE') add('long', 'ichimoku', 'price above the cloud (thickness ' + (isFinite(ich.thickness) ? ich.thickness.toFixed(2) : 'n/a') + ')');
+  else if (ich.state === 'BELOW') add('short', 'ichimoku', 'price below the cloud (thickness ' + (isFinite(ich.thickness) ? ich.thickness.toFixed(2) : 'n/a') + ')');
+
+  var vsq = D.vsq = goldVolSqueeze(rows);
+  if (vsq.state === 'FIRED' && vsq.dir){
+    add(vsq.dir === 'UP' ? 'long' : 'short', 'squeeze', 'BB/KC squeeze fired ' + vsq.dir.toLowerCase() + ' (' + vsq.firedAgo + 'b ago) — expansion');
+  } else if (vsq.state === 'ON' && vsq.onRun >= 3){
+    D.notes.push('BB inside KC ×' + vsq.onRun + ' — squeeze building, expansion coming');
+  }
+
+  var asian = D.asian = goldAsianRange(rows);
+  if (asian){
+    if (asian.state === 'LONG_BREAK') add('long', 'asian', 'Asian-range breakout above ' + asian.hi.toFixed(2));
+    else if (asian.state === 'SHORT_BREAK') add('short', 'asian', 'Asian-range breakdown below ' + asian.lo.toFixed(2));
+  }
+
+  var rg = D.rg = goldRSIGold(rows);
+  if (rg.zone === 'OVERSOLD') add('long', 'rsi', 'RSI ' + rg.rsi.toFixed(1) + ' ≤ 25 — gold oversold extreme');
+  else if (rg.zone === 'OVERBOUGHT') add('short', 'rsi', 'RSI ' + rg.rsi.toFixed(1) + ' ≥ 75 — gold overbought extreme');
+  if (rg.div === 'BULLISH') add('long', 'rsidiv', 'RSI bullish divergence — ' + rg.detail);
+  else if (rg.div === 'BEARISH') add('short', 'rsidiv', 'RSI bearish divergence — ' + rg.detail);
+
+  var cc = D.cc = goldCCI(rows);
+  if (cc.zone === 'EXTREME_LOW') add('long', 'cci', 'CCI ' + cc.cci.toFixed(0) + ' ≤ -100 extreme');
+  else if (cc.zone === 'EXTREME_HIGH') add('short', 'cci', 'CCI ' + cc.cci.toFixed(0) + ' ≥ +100 extreme');
+  else if (cc.zeroCross && cc.zeroCross.barsAgo <= 2){
+    add(cc.zeroCross.dir === 'UP' ? 'long' : 'short', 'cci', 'CCI zero-line cross ' + cc.zeroCross.dir.toLowerCase() + ' (' + cc.zeroCross.barsAgo + 'b ago)');
+  }
+
+  var sr = D.sr = goldStochRSI(rows);
+  if (rb.mode === 'BULL' && (sr.state === 'OVERSOLD' || sr.crossUp))
+    add('long', 'stochrsi', 'StochRSI ' + (isFinite(sr.k) ? sr.k.toFixed(0) : 'n/a') + ' washed out inside a bull ribbon — pullback timed');
+  else if (rb.mode === 'BEAR' && (sr.state === 'OVERBOUGHT' || sr.crossDown))
+    add('short', 'stochrsi', 'StochRSI ' + (isFinite(sr.k) ? sr.k.toFixed(0) : 'n/a') + ' stretched inside a bear ribbon — pullback timed');
+
+  var lastBar = rows[n-1];
+  var mfi = D.mfi = goldMFI(rows);
+  if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
+  else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
+
+  D.rb4 = null;
+  if (rows4h && rows4h.length >= 50){
+    var rb4 = D.rb4 = goldRibbon(rows4h);
+    if (rb4.mode === 'BULL') add('long', 'macro4h', '4H ribbon bull — macro tailwind');
+    else if (rb4.mode === 'BEAR') add('short', 'macro4h', '4H ribbon bear — macro headwind');
+  }
+  return D;
+}
+
+function goldScalpSetups(inp){
+  try{
+    inp = inp || {};
+    var rows = __rows(inp.rows15m);
+    if (!rows || rows.length < 30) return [];
+    var n = rows.length;
+    var a15 = __last(_atr(rows, 14));
+    if (!isFinite(a15) || !(a15 > 0)) return [];
+    var entry = rows[n-1].c;
+    if (!isFinite(entry) || !(entry > 0)) return [];
+    var nowMs = __toMs(inp.now);
+    if (!isFinite(nowMs)) nowMs = Date.now();
+    var kz = goldKillzone(nowMs);
+    var newsState = inp.news;
+    if (newsState === undefined && typeof W.hgNewsState === 'function'){
+      try{ newsState = W.hgNewsState(); }catch(eN){ newsState = null; }
+    }
+    var news = __newsCaution(newsState, nowMs);
+
+    var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
+    D.kz = kz; D.news = news;
+
+    var out = [], seen = {};
+    function push(c){ if (c && !seen[c.id]){ seen[c.id] = true; out.push(c); } }
+    var tol = 0.5*a15;
+
+    /* --- 1) liquidity-sweep reversal --- */
+    var sw = D.sw;
+    if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
+      var sdir = (sw.dir === 'bullish') ? 'long' : 'short';
+      push(__gsCand('sweep', sdir, D, sw.level, __gsSnapLvls(D, sdir),
+        'swept ' + (sdir === 'long' ? 'sell-side liquidity at ' : 'buy-side liquidity at ') + sw.level.toFixed(2)
+          + ' and reclaimed within ' + sw.barsAgo + ' bar(s) — the stop hunt is complete, reversal fuel is loaded',
+        'a 15m close back beyond ' + sw.level.toFixed(2) + ' (the swept ' + (sdir === 'long' ? 'low' : 'high') + ') negates the reclaim',
+        undefined, sw.level));
+    }
+
+    /* --- 2) order-block / breaker retest --- */
+    var ob = D.ob;
+    if (ob){
+      var i, z;
+      for (i = 0; i < ob.bullish.length; i++){
+        z = ob.bullish[i];
+        if (entry >= z.bottom - tol && entry <= z.top + tol){
+          push(__gsCand('ob', 'long', D, z.bottom, __gsSnapLvls(D, 'long'),
+            'price retesting the bullish order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2) + ' — unmitigated demand from the displacement origin',
+            'a 15m close below the order-block base ' + z.bottom.toFixed(2) + ' fails the demand zone (it becomes a breaker)',
+            { lo: z.bottom, hi: z.top }, z.bottom));
+          break;
+        }
+      }
+      for (i = 0; i < ob.bearish.length; i++){
+        z = ob.bearish[i];
+        if (entry >= z.bottom - tol && entry <= z.top + tol){
+          push(__gsCand('ob', 'short', D, z.top, __gsSnapLvls(D, 'short'),
+            'price retesting the bearish order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2) + ' — unmitigated supply from the displacement origin',
+            'a 15m close above the order-block top ' + z.top.toFixed(2) + ' fails the supply zone (it becomes a breaker)',
+            { lo: z.bottom, hi: z.top }, z.top));
+          break;
+        }
+      }
+      for (i = 0; i < ob.breakers.length; i++){
+        z = ob.breakers[i];
+        if (z.dir === 'bullish' && entry > z.top && entry <= z.top + 2*a15){
+          push(__gsCand('ob', 'long', D, z.bottom, __gsSnapLvls(D, 'long'),
+            'failed supply at ' + z.top.toFixed(2) + ' flipped to demand (breaker) — price holding above the flip',
+            'a 15m close back below the breaker base ' + z.bottom.toFixed(2) + ' negates the flip',
+            { lo: z.bottom, hi: z.top }, z.bottom));
+          break;
+        }
+        if (z.dir === 'bearish' && entry < z.bottom && entry >= z.bottom - 2*a15){
+          push(__gsCand('ob', 'short', D, z.top, __gsSnapLvls(D, 'short'),
+            'failed demand at ' + z.bottom.toFixed(2) + ' flipped to supply (breaker) — price holding below the flip',
+            'a 15m close back above the breaker top ' + z.top.toFixed(2) + ' negates the flip',
+            { lo: z.bottom, hi: z.top }, z.top));
+          break;
+        }
+      }
+    }
+
+    /* --- 3) FVG fill (15m first, then 1H) --- */
+    function fvgCand(g, label){
+      if (!g || g.age > 25) return;
+      if (entry < g.bottom - tol || entry > g.top + tol) return;   /* must be AT/IN the gap */
+      if (g.dir === 'bullish'){
+        push(__gsCand('fvg', 'long', D, g.bottom, __gsSnapLvls(D, 'long'),
+          'price retraced into the unmitigated ' + label + ' FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' — the imbalance fill zone is acting as demand',
+          'a 15m close below the gap base ' + g.bottom.toFixed(2) + ' fills-and-fails the imbalance',
+          { lo: g.bottom, hi: g.top }, g.bottom));
+      } else {
+        push(__gsCand('fvg', 'short', D, g.top, __gsSnapLvls(D, 'short'),
+          'price rallied into the unmitigated ' + label + ' FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' — the imbalance fill zone is acting as supply',
+          'a 15m close above the gap top ' + g.top.toFixed(2) + ' fills-and-fails the imbalance',
+          { lo: g.bottom, hi: g.top }, g.top));
+      }
+    }
+    var gotFvg = false;
+    if (D.fvg && D.fvg.length){ var before = out.length; fvgCand(D.fvg[0], '15m'); gotFvg = out.length > before; }
+    if (!gotFvg && D.fvg1 && D.fvg1.length) fvgCand(D.fvg1[0], '1H');
+
+    /* --- 4) session-VWAP bounce / rejection --- */
+    var vw = D.vw;
+    if (vw && isFinite(vw.value) && Math.abs(entry - vw.value) <= 0.75*a15){
+      var vZone = { lo: vw.value - 0.25*a15, hi: vw.value + 0.25*a15 };
+      if (vw.pos === 'ABOVE'){
+        push(__gsCand('vwap', 'long', D, vw.lower, __gsSnapLvls(D, 'long'),
+          'price bouncing off session VWAP ' + vw.value.toFixed(2) + ' — holding the bid side of fair value',
+          'a 15m close back below session VWAP ' + vw.value.toFixed(2) + ' loses fair value',
+          vZone, vw.value));
+      } else if (vw.pos === 'BELOW'){
+        push(__gsCand('vwap', 'short', D, vw.upper, __gsSnapLvls(D, 'short'),
+          'price rejected at session VWAP ' + vw.value.toFixed(2) + ' — capped under fair value',
+          'a 15m close back above session VWAP ' + vw.value.toFixed(2) + ' reclaims fair value',
+          vZone, vw.value));
+      }
+    }
+
+    /* --- 5) EMA 20/50/200 ribbon pullback --- */
+    var rb = D.rb;
+    if (rb && rb.pullback20 && (rb.mode === 'BULL' || rb.mode === 'BEAR')){
+      var rdir = (rb.mode === 'BULL') ? 'long' : 'short';
+      push(__gsCand('ribbon', rdir, D, (isFinite(rb.e50) ? rb.e50 : NaN), __gsSnapLvls(D, rdir),
+        'pullback into the 20-EMA (' + (isFinite(rb.e20) ? rb.e20.toFixed(2) : 'n/a') + ') inside a ' + rb.mode.toLowerCase()
+          + ' 20/50/200 ribbon — trend-continuation entry with the flow',
+        'a 15m close through the 50-EMA ' + (isFinite(rb.e50) ? rb.e50.toFixed(2) : 'n/a') + ' breaks the pullback structure',
+        { lo: (isFinite(rb.e20) ? rb.e20 - 0.25*a15 : entry - 0.25*a15), hi: (isFinite(rb.e20) ? rb.e20 + 0.25*a15 : entry + 0.25*a15) },
+        rb.e20));
+    }
+
+    /* --- 6) Asian-range (00:00-07:00 GMT) breakout --- */
+    var asian = D.asian;
+    if (asian && (asian.state === 'LONG_BREAK' || asian.state === 'SHORT_BREAK')){
+      var adir = (asian.state === 'LONG_BREAK') ? 'long' : 'short';
+      push(__gsCand('asian', adir, D, (adir === 'long' ? asian.hi : asian.lo), __gsSnapLvls(D, adir),
+        'London-volume breakout ' + (adir === 'long' ? 'above' : 'below') + ' the Asian box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2)
+          + ' (' + asian.dayIso + ', 00:00–07:00 GMT) — range expansion underway',
+        'a 15m close back inside the Asian range (' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ') negates the breakout',
+        undefined, (adir === 'long' ? asian.hi : asian.lo)));
+    }
+
+    /* --- 7) modified-RSI (75/25) divergence --- */
+    var rg = D.rg;
+    if (rg && rg.div){
+      var ddir = (rg.div === 'BULLISH') ? 'long' : 'short';
+      var piv = (ddir === 'long') ? rg.pivotLow : rg.pivotHigh;
+      push(__gsCand('rsidiv', ddir, D, (isFinite(piv) ? piv : NaN), __gsSnapLvls(D, ddir),
+        rg.detail + ' — momentum is exhausting at the extreme, mean-reversion ' + (ddir === 'long' ? 'long' : 'short'),
+        'a 15m close beyond the divergence pivot ' + (isFinite(piv) ? piv.toFixed(2) : 'extreme') + ' confirms continuation instead of exhaustion',
+        undefined, piv));
+    }
+
+    return out;
+  }catch(e){ return []; }
+}
+
+/* =========================================================================
+   RANKER — goldRankSetups(cands, ctx): transparent, human-readable confluence
+   tally per candidate. Pure + total: every ctx leg is optional and degrades
+   to a zero-point omission. Tally parts (pts):
+     +N    independent agreeing reads (candidate's own ledger)
+     +0..3 ICT killzone weight (London/NY overlap 13:00-17:00 GMT = 3, highest)
+     -2    high-impact news window (+/-30 min via the hgNewsState-shaped ctx.news)
+     +/-2  fundamentals tilt ctx.macro.realRateHint (TAILWIND favors longs,
+           HEADWIND favors shorts; DXY/US10Y trends quoted in the label)
+     +/-1  positioning ctx.spot.verdict (PAXG basis: longs-crowding fades
+           longs / backs shorts; shorts-crowding = squeeze fuel for longs)
+     +1    seasonality ctx.season.bias STRONG (Jan-Feb) behind a long
+     +1    crypto risk sentiment ctx.fng ({v,c}: extreme fear <=25 backs a
+           risk-off gold long; extreme greed >=75 backs a short)
+   Sort: tally desc, then grade, then killzone weight, then agreeing reads
+   (stable). -> {ranked:[cand + {tally, tallyParts:[{label,pts}]}], best} —
+   {ranked:[], best:null} on any failure.
+========================================================================= */
+function goldRankSetups(cands, ctx){
+  var out = { ranked: [], best: null };
+  try{
+    if (!Array.isArray(cands) || !cands.length) return out;
+    ctx = ctx || {};
+    var nowMs = __toMs(ctx.now);
+    if (!isFinite(nowMs)) nowMs = Date.now();
+    var news = __newsCaution(ctx.news, nowMs);
+    var macro = (ctx.macro && typeof ctx.macro === 'object') ? ctx.macro : null;
+    var hint = macro ? macro.realRateHint : null;
+    var spot = (ctx.spot && typeof ctx.spot === 'object') ? ctx.spot : null;
+    var verdict = spot ? spot.verdict : null;
+    var basisTxt = (spot && isFinite(spot.basisPct)) ? ((spot.basisPct > 0 ? '+' : '') + Number(spot.basisPct).toFixed(3) + '%') : 'n/a';
+    var season = (ctx.season && typeof ctx.season === 'object') ? ctx.season : null;
+    var fng = (ctx.fng && typeof ctx.fng === 'object') ? ctx.fng : null;
+    var fngV = (fng && isFinite(+fng.v)) ? +fng.v : null;
+
+    var ranked = [], i, k;
+    for (i = 0; i < cands.length; i++){
+      var c = cands[i];
+      if (!c || (c.dir !== 'long' && c.dir !== 'short')) continue;
+      var parts = [], tally = 0;
+      var agree = isFinite(c.agree) ? c.agree
+                : (c.reads ? ((c.dir === 'long') ? c.reads.long : c.reads.short) : 0);
+      if (agree > 0){
+        parts.push({ label: agree + ' independent agreeing read' + (agree === 1 ? '' : 's'), pts: agree });
+        tally += agree;
+      }
+      var kzw = isFinite(c.killzoneWeight) ? c.killzoneWeight : 0;
+      if (kzw > 0){
+        var kzName = c.killzone ? String(c.killzone).split(' · ')[0] : 'KILLZONE';
+        parts.push({ label: kzName + ' — ICT killzone weight', pts: kzw });
+        tally += kzw;
+      }
+      if (news.caution){
+        parts.push({ label: 'high-impact news window ±30 min' + (news.title ? ' — ' + news.title : '') + ' (fade risk)', pts: -2 });
+        tally -= 2;
+      }
+      if (hint === 'TAILWIND' || hint === 'HEADWIND'){
+        var favors = (hint === 'TAILWIND') ? 'long' : 'short';
+        var mPts = (c.dir === favors) ? 2 : -2;
+        var mWhy = [];
+        if (macro.dxy && macro.dxy.trend20) mWhy.push('DXY ' + String(macro.dxy.trend20).toLowerCase());
+        if (macro.tnxTrend) mWhy.push('US10Y ' + String(macro.tnxTrend).toLowerCase());
+        parts.push({ label: 'macro ' + hint.toLowerCase() + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
+                       + ' — ' + (mPts > 0 ? 'favors ' + c.dir + 's' : 'works against ' + c.dir + 's'), pts: mPts });
+        tally += mPts;
+      }
+      if (verdict === 'longs-crowding' || verdict === 'shorts-crowding'){
+        var pPts, pLab;
+        if (verdict === 'longs-crowding'){
+          pPts = (c.dir === 'short') ? 1 : -1;
+          pLab = 'PAXG basis ' + basisTxt + ' — leveraged longs crowding (fade risk for longs)';
+        } else {
+          pPts = (c.dir === 'long') ? 1 : -1;
+          pLab = 'PAXG basis ' + basisTxt + ' — shorts crowding (squeeze fuel for longs)';
+        }
+        parts.push({ label: pLab, pts: pPts });
+        tally += pPts;
+      }
+      if (season && season.bias === 'STRONG' && c.dir === 'long'){
+        parts.push({ label: 'seasonal tailwind — Jan–Feb is historically gold\'s strongest stretch', pts: 1 });
+        tally += 1;
+      }
+      if (fngV !== null){
+        if (fngV <= 25 && c.dir === 'long'){
+          parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme fear, risk-off bid for gold', pts: 1 });
+          tally += 1;
+        } else if (fngV >= 75 && c.dir === 'short'){
+          parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme greed, risk-on weighs on gold', pts: 1 });
+          tally += 1;
+        }
+      }
+      var rc = {};
+      for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
+      rc.tally = tally;
+      rc.tallyParts = parts;
+      ranked.push(rc);
+    }
+    var gOrd = { A: 0, B: 1, C: 2 };
+    ranked.sort(function(x, y){
+      if (y.tally !== x.tally) return y.tally - x.tally;
+      var gx = (gOrd[x.grade] === undefined) ? 9 : gOrd[x.grade];
+      var gy = (gOrd[y.grade] === undefined) ? 9 : gOrd[y.grade];
+      if (gx !== gy) return gx - gy;
+      var kx = isFinite(x.killzoneWeight) ? x.killzoneWeight : 0;
+      var ky = isFinite(y.killzoneWeight) ? y.killzoneWeight : 0;
+      if (ky !== kx) return ky - kx;
+      var ax = isFinite(x.agree) ? x.agree : 0;
+      var ay = isFinite(y.agree) ? y.agree : 0;
+      return ay - ax;
+    });
+    out.ranked = ranked;
+    out.best = ranked.length ? ranked[0] : null;
+    return out;
+  }catch(e){ return { ranked: [], best: null }; }
+}
+
 /* ---------------- exports ---------------- */
 W.goldFVG = goldFVG;
 W.goldOrderBlocks = goldOrderBlocks;
@@ -885,4 +1429,6 @@ W.goldCCI = goldCCI;
 W.goldStochRSI = goldStochRSI;
 W.goldSeason = goldSeason;
 W.goldScalpSetup = goldScalpSetup;
+W.goldScalpSetups = goldScalpSetups;
+W.goldRankSetups = goldRankSetups;
 })();

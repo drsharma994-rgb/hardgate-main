@@ -1,5 +1,5 @@
 /* =========================================================================
-   HARDGATE service worker — cache hg-v7
+   HARDGATE service worker — cache hg-v8
    Fresh data is sacred in trading: NETWORK-FIRST for EVERYTHING. The cache
    exists ONLY as an offline fallback for the static app shell.
    NEVER cached: /api/ and /api/proxy responses, non-GET requests, cross-origin
@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v7';
+const HG_CACHE = 'hg-v8';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -16,7 +16,7 @@ const HG_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon.svg',
+  './icon.svg', './bright.css',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './macro.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js',
   './goldpro.js', './strats.js', './meanrev.js', './liqs.js', './xuniverse.js',

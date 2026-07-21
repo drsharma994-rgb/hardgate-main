@@ -131,7 +131,15 @@ td:first-child,th:first-child{text-align:left}
 table{width:100%;border-collapse:collapse}
 table tr:nth-child(even) td{background:rgba(255,255,255,.018)}
 table tr:hover td{background:rgba(217,164,65,.045)}
+
+/* ---------- auto refresh segmented control (header) ---------- */
+.hgauto{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.hgauto .hgalabel{padding:4px 8px;font-size:9px;letter-spacing:.14em;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap}
+.hgauto button{background:transparent;border:0;color:var(--mut);padding:4px 9px;font-size:10px;letter-spacing:.08em}
+.hgauto button:hover{color:var(--txt)}
+.hgauto button.on{background:var(--gold);color:#14100A;font-weight:600}
 </style>
+<link rel="stylesheet" href="bright.css">
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -149,6 +157,8 @@ table tr:hover td{background:rgba(217,164,65,.045)}
   <div class="spacer"></div>
   <span class="statuschip" id="chipClock"><b>—</b> IST</span>
   <button id="hardRefreshBtn" class="statuschip" style="cursor:pointer" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
+<span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" onclick="setAutoRefresh('300000')">5m</button></span>
+<span class="statuschip" id="autoRefreshCount" style="display:none"></span>
 <span class="statuschip" id="hardRefreshStat"></span>
 <span class="statuschip" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
 <span class="statuschip" style="display:inline-flex;align-items:center;gap:6px" title="free push via ntfy.sh — pick an unguessable topic">
@@ -4596,6 +4606,100 @@ async function hardRefreshAll(){
     HG_REFRESH_BUSY = false;
   }
 }
+
+/* ⏱ AUTO REFRESH — segmented OFF / 2m / 3m / 5m control sitting next to
+   ⟳ HARD REFRESH in the header. The choice persists in localStorage under
+   'hgAutoRefresh' ('off'|'120000'|'180000'|'300000') and is restored on load —
+   a saved ON choice resumes automatically. ONE 1s setInterval drives both the
+   countdown chip ('next 1:47') and the schedule; it is cleared on every change
+   and on OFF, never stacked. Each due tick calls the EXISTING hardRefreshAll()
+   — there is no second refresh pipeline. If a refresh is already in flight,
+   hardRefreshAll() self-skips (honest) and the countdown simply continues to
+   the next tick. Every step is feature-checked and try-wrapped: this must
+   never throw at load or during ticks. */
+const HG_AUTO_KEY = 'hgAutoRefresh';
+const HG_AUTO_CHOICES = { 'off':0, '120000':120000, '180000':180000, '300000':300000 };
+let HG_AUTO_MS = 0;        /* 0 = OFF */
+let HG_AUTO_NEXT = 0;      /* epoch ms of the next scheduled tick */
+let HG_AUTO_TIMER = null;  /* the ONE interval handle; null while OFF */
+function hgAutoEls(){
+  let count = null;
+  try{
+    if (typeof document !== 'undefined' && document && typeof document.getElementById === 'function')
+      count = document.getElementById('autoRefreshCount');
+  }catch(e){}
+  return { count: count };
+}
+function hgAutoPaint(){
+  try{
+    const activeId = HG_AUTO_MS > 0 ? ('autoRef' + HG_AUTO_MS) : 'autoRefOff';
+    ['autoRefOff','autoRef120000','autoRef180000','autoRef300000'].forEach(function(id){
+      let b = null;
+      try{
+        if (typeof document !== 'undefined' && document && typeof document.getElementById === 'function')
+          b = document.getElementById(id);
+      }catch(e){}
+      if (b && b.classList && typeof b.classList.toggle === 'function') b.classList.toggle('on', id === activeId);
+    });
+    const els = hgAutoEls();
+    if (els.count && els.count.style) els.count.style.display = HG_AUTO_MS > 0 ? '' : 'none';
+  }catch(e){}
+}
+function hgAutoFmtRemain(ms){
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+}
+function hgAutoTick(){
+  try{
+    if (!(HG_AUTO_MS > 0)) return;                       /* OFF — stray ticks no-op */
+    const now = Date.now();
+    if (now >= HG_AUTO_NEXT){
+      HG_AUTO_NEXT = now + HG_AUTO_MS;                   /* next tick booked even if this one self-skips (busy) */
+      try{
+        if (typeof hardRefreshAll === 'function'){
+          const p = hardRefreshAll();
+          if (p && typeof p.catch === 'function') p.catch(function(){ /* tallies land on the chip; rejections stay non-fatal */ });
+        }
+      }catch(e){}
+    }
+    const els = hgAutoEls();
+    if (els.count){
+      els.count.textContent = 'next ' + hgAutoFmtRemain(HG_AUTO_NEXT - now);
+      if (els.count.style) els.count.style.display = '';
+    }
+  }catch(e){}
+}
+function setAutoRefresh(v){
+  try{
+    const key = (v === undefined || v === null) ? 'off' : String(v);
+    const ms = (typeof HG_AUTO_CHOICES[key] === 'number') ? HG_AUTO_CHOICES[key] : 0;  /* unknown → OFF, honest */
+    HG_AUTO_MS = ms;
+    try{
+      if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.setItem === 'function')
+        localStorage.setItem(HG_AUTO_KEY, ms > 0 ? String(ms) : 'off');
+    }catch(e){}
+    if (HG_AUTO_TIMER !== null){ try{ clearInterval(HG_AUTO_TIMER); }catch(e){} HG_AUTO_TIMER = null; }
+    if (ms > 0){
+      HG_AUTO_NEXT = Date.now() + ms;
+      try{
+        if (typeof setInterval === 'function') HG_AUTO_TIMER = setInterval(hgAutoTick, 1000);
+      }catch(e){ HG_AUTO_TIMER = null; }
+      hgAutoTick();                                      /* paint 'next m:ss' immediately */
+    }
+    hgAutoPaint();
+  }catch(e){}
+}
+function hgAutoInit(){
+  try{
+    let saved = null;
+    try{
+      if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.getItem === 'function')
+        saved = localStorage.getItem(HG_AUTO_KEY);
+    }catch(e){}
+    setAutoRefresh(typeof saved === 'string' ? saved : 'off');  /* garbage values degrade to OFF */
+  }catch(e){}
+}
+hgAutoInit();
 
 /* ================= DYNAMIC FEATURE TABS =================
    Modules loaded after macro.js register on window.HG_tabs. Build a nav

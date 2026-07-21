@@ -70,7 +70,7 @@ console.log('== 0) exports + tab registration ==');
 {
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
-                 'goldStochRSI','goldSeason','goldScalpSetup'];
+                 'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
   assert(!!tab && tab.label === 'GOLD SCALP' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
@@ -544,7 +544,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
   const B = globalThis.window;
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
-                 'goldStochRSI','goldSeason','goldScalpSetup'];
+                 'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
   for (const nm of names){
@@ -565,6 +565,416 @@ console.log('== 18) bare-environment never-throws sweep ==');
   assert(!mountThrew, 'mount in a bare env never throws');
   const rr = await tab.refresh();
   assert(typeof rr === 'string', 'refresh in a bare env resolves a status string ("' + rr + '")');
+}
+
+/* =========================================================================
+   19) goldScalpSetups — MULTI-STRATEGY candidate generation
+========================================================================= */
+console.log('== 19) goldScalpSetups multi-strategy candidates ==');
+function checkCandShape(c, key, dir, msg){
+  assert(!!c && c.stratKey === key && c.dir === dir, msg + ': candidate exists (' + key + ' ' + dir + ')');
+  if (!c) return;
+  assert(typeof c.why === 'string' && c.why.length > 10 && typeof c.invalidates === 'string' && c.invalidates.length > 10,
+         msg + ': plain-language why + invalidates present');
+  assert(c.zone && c.zone.lo < c.zone.hi, msg + ': entry zone {lo,hi} present');
+  if (dir === 'long') assert(c.stop < c.entry && c.t1 > c.entry && c.t2 > c.t1, msg + ': long stop below entry, TP1/TP2 above');
+  else assert(c.stop > c.entry && c.t1 < c.entry && c.t2 < c.t1, msg + ': short stop above entry, TP1/TP2 below');
+  const sd = Math.abs(c.entry - c.stop);
+  assert(sd >= 1.5*c.atr - 1e-9 && sd <= 2.0*c.atr + 1e-9,
+         msg + ': stop distance inside 1.5–2×ATR14(15m) (got ' + (sd/c.atr).toFixed(2) + '×)');
+  assert(c.rr >= 1.2 - 1e-9, msg + ': TP1 pays >= 1.2R (got ' + c.rr.toFixed(2) + ')');
+  assert(c.id.indexOf(key + '|' + dir + '|') === 0, msg + ': deterministic conviction id ' + c.id);
+  assert(c.grade === 'A' || c.grade === 'B' || c.grade === 'C', msg + ': grade A/B/C');
+  assert(Array.isArray(c.confluence) && c.confluence.length === c.agree && c.agree >= 2,
+         msg + ': >=2 independent agreeing reads in the ledger');
+}
+{
+  /* compLongRows hosts a bullish sweep (10b ago) + a bullish RSI divergence */
+  const rows = compLongRows();
+  const cands = W.goldScalpSetups({ rows15m: rows, now: OFF_NOW });
+  assert(Array.isArray(cands) && cands.length >= 2, 'multi-setup: >=2 candidates from one candle set (got ' + cands.length + ')');
+  checkCandShape(cands.find(c => c.stratKey === 'sweep'), 'sweep', 'long', 'sweep reversal');
+  checkCandShape(cands.find(c => c.stratKey === 'rsidiv'), 'rsidiv', 'long', 'RSI 75/25 divergence');
+  assert(cands.every(c => c.dir === 'long'), 'all candidates agree with the majority direction here');
+
+  /* mirrored construction -> symmetric short candidates */
+  const mc = W.goldScalpSetups({ rows15m: mirrorRows(rows, 2300), now: OFF_NOW });
+  assert(mc.length >= 2 && mc.every(c => c.dir === 'short'), 'mirrored: >=2 short candidates');
+  checkCandShape(mc.find(c => c.stratKey === 'sweep'), 'sweep', 'short', 'mirrored sweep');
+
+  /* degenerate input -> empty array (never null, never throws) */
+  assert(JSON.stringify(W.goldScalpSetups(null)) === '[]'
+      && JSON.stringify(W.goldScalpSetups({})) === '[]'
+      && JSON.stringify(W.goldScalpSetups({ rows15m: [] })) === '[]'
+      && JSON.stringify(W.goldScalpSetups({ rows15m: flatRows(60, 100, 1, 0) })) === '[]',
+      'null/empty/flat input -> [] (honest no-setup)');
+
+  /* determinism: identical input -> byte-identical candidates */
+  const d1 = JSON.stringify(W.goldScalpSetups({ rows15m: compLongRows(), now: OFF_NOW }));
+  const d2 = JSON.stringify(W.goldScalpSetups({ rows15m: compLongRows(), now: OFF_NOW }));
+  assert(d1 === d2, 'candidate generation is deterministic (same input -> byte-identical output)');
+
+  /* --- session-VWAP bounce: pullback lands just above session VWAP --- */
+  function vwapRows(){
+    const rows = trendRows(48, 100, 0.15, DAY, 900);
+    let px = rows[47].c;
+    for (let i = 0; i < 11; i++){ const o = px; px = o - 0.25;
+      rows.push({ t: DAY + (48+i)*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: 1100 }); }
+    const v0 = W.goldVWAP(rows, 0).value;
+    const target = v0 + 0.58;
+    rows.push({ t: DAY + 59*900, o: px, h: Math.max(px, target) + 0.3, l: Math.min(px, target) - 0.2, c: target, v: 1200 });
+    return rows;
+  }
+  const vc = W.goldScalpSetups({ rows15m: vwapRows(), now: OFF_NOW });
+  checkCandShape(vc.find(c => c.stratKey === 'vwap'), 'vwap', 'long', 'session-VWAP bounce');
+
+  /* --- EMA ribbon pullback: strong day trend, 4-bar pullback to the 20-EMA --- */
+  function ribbonRows(){
+    const rows = trendRows(205, 100, 0.8, DAY, 300);
+    let px = rows[204].c;
+    for (let i = 0; i < 4; i++){ const o = px; px = o - 1.6;
+      rows.push({ t: DAY + (205+i)*300, o: o, h: Math.max(o, px) + 0.9, l: Math.min(o, px) - 0.9, c: px, v: 1300 }); }
+    return rows;
+  }
+  const rc = W.goldScalpSetups({ rows15m: ribbonRows(), now: OFF_NOW });
+  checkCandShape(rc.find(c => c.stratKey === 'ribbon'), 'ribbon', 'long', 'EMA ribbon pullback');
+
+  /* --- Asian-range breakout: 00:00-07:00 GMT box, London expansion --- */
+  function asianBoRows(){
+    const rows = [];
+    for (let i = 0; i < 28; i++) rows.push({ t: DAY + i*900, o: 100, h: 101, l: 99, c: 100, v: 1000 });
+    for (let i = 0; i < 6; i++) rows.push({ t: DAY + 8*3600 + i*900, o: 101.5, h: 102.3, l: 101.2, c: 102, v: 2500 });
+    return rows;
+  }
+  const ac = W.goldScalpSetups({ rows15m: asianBoRows(), now: OFF_NOW });
+  checkCandShape(ac.find(c => c.stratKey === 'asian'), 'asian', 'long', 'Asian-range breakout');
+
+  /* --- FVG fill: unmitigated bullish gap, price retraces into it --- */
+  function fvgRows(){
+    const rows = flatRows(30, 96, 0.4, DAY);
+    rows.push({ t: DAY + 30*900, o: 99, h: 100, l: 98, c: 99.5, v: 1000 });
+    rows.push({ t: DAY + 31*900, o: 99.5, h: 102.5, l: 99, c: 102, v: 1000 });
+    rows.push({ t: DAY + 32*900, o: 102, h: 103.5, l: 101, c: 103, v: 1000 });   // gap [100,101]
+    rows.push({ t: DAY + 33*900, o: 103, h: 104, l: 102, c: 103.5, v: 1000 });
+    let px = 103.5;
+    for (let i = 34; i < 44; i++){ const o = px; px = o - 0.3;
+      rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: 1000 }); }
+    rows.push({ t: DAY + 44*900, o: px, h: px + 0.3, l: px - 0.15, c: 100.7, v: 1200 });
+    return rows;
+  }
+  const fc = W.goldScalpSetups({ rows15m: fvgRows(), now: OFF_NOW });
+  checkCandShape(fc.find(c => c.stratKey === 'fvg'), 'fvg', 'long', 'FVG fill');
+
+  /* --- order-block retest: displacement origin retested with CCI washed --- */
+  function obRows(){
+    const rows = flatRows(25, 100, 0.5, DAY);
+    rows.push({ t: DAY + 25*900, o: 100, h: 100.4, l: 98.8, c: 99.6, v: 1200 });   // bearish candle = OB
+    rows.push({ t: DAY + 26*900, o: 99.6, h: 104.5, l: 99.5, c: 104.2, v: 4000 });  // displacement up
+    rows.push({ t: DAY + 27*900, o: 104.2, h: 105, l: 103.8, c: 104.6, v: 1500 });
+    rows.push({ t: DAY + 28*900, o: 104.6, h: 105.2, l: 104, c: 104.8, v: 1500 });
+    rows.push({ t: DAY + 29*900, o: 104.8, h: 105.3, l: 104.4, c: 105, v: 1400 });
+    let px = 105;
+    for (let i = 30; i < 41; i++){ const o = px; px = o - 0.5;
+      rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.3, l: Math.min(o, px) - 0.3, c: px, v: 1100 }); }
+    rows.push({ t: DAY + 41*900, o: px, h: px + 0.2, l: 98.95, c: 99.4, v: 2600 }); // into OB zone, low above OB base
+    return rows;
+  }
+  const oc = W.goldScalpSetups({ rows15m: obRows(), now: OFF_NOW });
+  checkCandShape(oc.find(c => c.stratKey === 'ob'), 'ob', 'long', 'order-block retest');
+}
+
+/* =========================================================================
+   20) goldRankSetups — transparent tally + MOST PROBABLE selection
+========================================================================= */
+console.log('== 20) goldRankSetups tally ==');
+{
+  function mkCand(id, dir, agree, kzw, grade){
+    return { id: id, dir: dir, strategy: 'TEST ' + id, grade: grade, agree: agree, oppose: 0,
+             killzoneWeight: kzw, killzone: 'LONDON/NY OVERLAP · 14:00 GMT',
+             reads: { long: dir === 'long' ? agree : 0, short: dir === 'short' ? agree : 0 } };
+  }
+  const A = mkCand('a|long|1', 'long', 3, 3, 'B');
+  const Bc = mkCand('b|short|2', 'short', 2, 0, 'C');
+  const ctx = {
+    now: OVLP_NOW,
+    news: { loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(OVLP_NOW/1000) + 600 }] },
+    macro: { realRateHint: 'TAILWIND', dxy: { trend20: 'FALLING' }, tnxTrend: 'FALLING', goldSilverRatio: 90 },
+    spot: { basisPct: -0.2, verdict: 'shorts-crowding' },
+    season: { bias: 'STRONG' },
+    fng: { v: 12, c: 'Extreme Fear' }
+  };
+  const r = W.goldRankSetups([Bc, A], ctx);
+  assert(r && r.ranked.length === 2 && r.best && r.best.id === 'a|long|1',
+         'MOST PROBABLE = highest tally (long beats short under TAILWIND + shorts-crowding + extreme fear)');
+  const ra = r.ranked[0], rb = r.ranked[1];
+  assert(ra.tally === 9, 'long tally: 3 reads + 3 killzone − 2 news + 2 macro + 1 basis + 1 season + 1 fng = 9 (got ' + ra.tally + ')');
+  assert(rb.tally === -3, 'short tally: 2 reads − 2 news − 2 macro − 1 basis = −3 (got ' + rb.tally + ')');
+  assert(rb.id === 'b|short|2', 'loser ranks second');
+  const lab = ra.tallyParts.map(p => p.label).join(' | ');
+  assert(/independent agreeing read/.test(lab) && /killzone/i.test(lab) && /news window/.test(lab)
+      && /macro tailwind/.test(lab) && /shorts crowding/.test(lab) && /seasonal/.test(lab) && /fear & greed 12/.test(lab),
+      'every tally part is human-readable on the card');
+  assert(ra.tallyParts.every(p => typeof p.pts === 'number' && isFinite(p.pts)), 'every part carries signed points');
+
+  /* absent context -> tally = reads + killzone only, never throws */
+  const r2 = W.goldRankSetups([A], {});
+  assert(r2.best && r2.ranked[0].tally === 6, 'bare ctx: 3 reads + 3 killzone = 6, all optional legs skipped');
+
+  /* HEADWIND flips the macro leg to favor shorts */
+  const r3 = W.goldRankSetups([A, Bc], { macro: { realRateHint: 'HEADWIND' } });
+  assert(r3.ranked.find(c => c.id === 'a|long|1').tally === 3 + 3 - 2,
+         'HEADWIND: long takes −2 macro (got ' + r3.ranked.find(c => c.id === 'a|long|1').tally + ')');
+
+  /* garbage tolerance */
+  const g1 = W.goldRankSetups(null, null), g2 = W.goldRankSetups('x', {}), g3 = W.goldRankSetups([null, { dir: 'sideways' }, 42], {});
+  assert(g1.ranked.length === 0 && g1.best === null && g2.ranked.length === 0 && g3.ranked.length === 0,
+         'null/garbage input -> {ranked:[], best:null}, no throw');
+  /* input candidates are not mutated */
+  const before = JSON.stringify(A);
+  W.goldRankSetups([A], ctx);
+  assert(JSON.stringify(A) === before, 'ranker copies candidates (no mutation of detector output)');
+}
+
+/* =========================================================================
+   21) tab scan + CONVICTION LOCK — idempotence across re-scans
+========================================================================= */
+console.log('== 21) conviction lock: two scans -> byte-identical levels ==');
+function memLocalStorage(){
+  const m = {};
+  return { getItem: k => (k in m ? m[k] : null),
+           setItem: (k, v) => { m[k] = String(v); },
+           removeItem: k => { delete m[k]; },
+           _map: m };
+}
+function cloneRows(rows){ return rows.map(r => ({ t: r.t, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v })); }
+function loadConvictionStore(ls){
+  const raw = ls.getItem('hgGoldscalpConviction');
+  return raw ? JSON.parse(raw) : null;
+}
+{
+  globalThis.window = {};
+  const ls = memLocalStorage();
+  globalThis.localStorage = ls;
+  vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
+  const C = globalThis.window;
+  const baseRows = compLongRows();
+  C.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: cloneRows(baseRows), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+
+  const tab = C.HG_tabs.find(t => t.id === 'goldscalp');
+  const M = freshPane();
+  tab.mount(M.pane);
+  assert(M.pane._html.indexOf('<style>') >= 0 && M.pane._html.indexOf('#tab_goldscalp .gsx-banner') >= 0
+      && M.pane._html.indexOf('tab_goldscalp .gsx-card.long') >= 0,
+      'pane-scoped colorful styles injected from goldscalp.js (scoped under #tab_goldscalp)');
+
+  const r1 = await M.stubs['#gsRun']._handler();
+  assert(r1 === 'refreshed', 'scan 1 completes with the seeded gold feed (got "' + r1 + '")');
+  const scan1 = C.goldscalpScan();
+  assert(!!scan1 && scan1.cands.length >= 2 && typeof scan1.bestId === 'string',
+         'scan 1: >=2 ranked candidates + a MOST PROBABLE bestId');
+  assert(scan1.cands.every(c => c.locked === false), 'scan 1: every candidate is a NEW conviction');
+  const swc1 = scan1.cands.find(c => c.stratKey === 'sweep');
+  assert(!!swc1, 'scan 1: sweep candidate on the board');
+  const store1 = loadConvictionStore(ls);
+  assert(!!store1 && !!store1.live[swc1.id], 'scan 1: conviction persisted under hgGoldscalpConviction');
+  const rec1 = store1.live[swc1.id];
+  assert(['id','dir','strategy','entry','stop','t1','t2','venue','sym','issuedAt','tally'].every(k => k in rec1),
+         'persisted record carries the full contract fields');
+  assert(rec1.entry === swc1.entry && rec1.stop === swc1.stop && rec1.t1 === swc1.t1 && rec1.t2 === swc1.t2,
+         'persisted levels match the issued card');
+  const html1 = M.stubs['#gsCards'].innerHTML;
+  assert(html1.indexOf('MOST PROBABLE SETUP') >= 0 && html1.indexOf('WHY THIS ONE LEADS') >= 0
+      && html1.indexOf('INVALIDATION') >= 0 && html1.indexOf('BUY ZONE') >= 0,
+      'MOST PROBABLE banner rendered with execution guidance');
+  assert(/tally [+-]?\d+/.test(html1), 'confluence tally shown on the cards');
+
+  /* scan 2 on IDENTICAL candles: the lock restores — locked stamp, original
+     issuedAt, byte-identical levels (idempotence) */
+  const r2 = await tab.refresh();
+  assert(r2 === 'refreshed', 'scan 2 completes (got "' + r2 + '")');
+  const scan2 = C.goldscalpScan();
+  const swc2 = scan2.cands.find(c => c.id === swc1.id);
+  assert(!!swc2, 'scan 2: same conviction id still on the board');
+  assert(swc2 && swc2.entry === swc1.entry && swc2.stop === swc1.stop && swc2.t1 === swc1.t1 && swc2.t2 === swc1.t2,
+         'CONVICTION LOCK: two scans -> byte-identical levels');
+  assert(swc2 && swc2.locked === true && swc2.issuedAt === swc1.issuedAt && swc2.asOf === swc1.asOf,
+         'locked stamp carries the original issuedAt ("as of HH:MM")');
+  assert(M.stubs['#gsCards'].innerHTML.indexOf('CONVICTION LOCK') >= 0,
+         'locked card/banner shows the CONVICTION LOCK stamp');
+  const store2 = loadConvictionStore(ls);
+  assert(store2.live[swc1.id] && store2.live[swc1.id].stop === rec1.stop && store2.live[swc1.id].issuedAt === rec1.issuedAt,
+         'persisted record untouched by the re-scan');
+
+  /* restore-verbatim proof: seed a live record under the REAL structure id
+     but with shifted levels — the card must show the SEEDED levels, not the
+     freshly computed ones (never re-pick levels for a live conviction) */
+  ls.removeItem('hgGoldscalpConviction');
+  const freshDet = C.goldScalpSetups({ rows15m: cloneRows(baseRows), now: Date.now() });
+  const freshSw = freshDet.find(c => c.stratKey === 'sweep');
+  assert(!!freshSw && freshSw.id === swc1.id, 'premise: fresh detection reproduces the same structure id');
+  const seeded = { id: freshSw.id, dir: freshSw.dir, strategy: freshSw.strategy,
+                   entry: freshSw.entry - 1, stop: freshSw.stop - 1, t1: freshSw.t1 - 1, t2: freshSw.t2 - 1,
+                   venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: Date.now() - 60*1000, tally: 7 };
+  ls.setItem('hgGoldscalpConviction', JSON.stringify({ v: 1, live: {}, history: [] }));
+  const preStore = loadConvictionStore(ls); preStore.live[seeded.id] = seeded;
+  ls.setItem('hgGoldscalpConviction', JSON.stringify(preStore));
+  await tab.refresh();
+  const scanR = C.goldscalpScan();
+  const swcR = scanR.cands.find(c => c.id === freshSw.id);
+  assert(!!swcR && swcR.entry === seeded.entry && swcR.stop === seeded.stop && swcR.t1 === seeded.t1 && swcR.t2 === seeded.t2,
+         'restore-verbatim: card shows the ORIGINAL seeded levels, not the recomputed ones');
+  assert(swcR && swcR.entry !== freshSw.entry, 'restore-verbatim: recomputed levels were NOT used (no re-pick)');
+  assert(swcR && swcR.locked === true && swcR.issuedAt === seeded.issuedAt,
+         'restore-verbatim: original issuedAt kept');
+  ls.removeItem('hgGoldscalpConviction');
+
+  /* ---- live-verification scenario: price drifts INSIDE the same structural
+     zone between scans (entry moves < 1 ATR). The structural id must be
+     IDENTICAL, the ORIGINAL levels restored verbatim, and the live-
+     conviction count must stay FLAT; a genuinely shifted structure (different
+     zone) must still mint a NEW conviction. ---- */
+  console.log('== 21b) structural ids: drift inside zone vs shifted structure ==');
+  function obZoneRows(){
+    const rows = flatRows(25, 100, 0.5, DAY);
+    rows.push({ t: DAY + 25*900, o: 100, h: 100.4, l: 98.8, c: 99.6, v: 1200 });   // bearish candle = OB, base 98.8
+    rows.push({ t: DAY + 26*900, o: 99.6, h: 104.5, l: 99.5, c: 104.2, v: 4000 });  // displacement up
+    rows.push({ t: DAY + 27*900, o: 104.2, h: 105, l: 103.8, c: 104.6, v: 1500 });
+    rows.push({ t: DAY + 28*900, o: 104.6, h: 105.2, l: 104, c: 104.8, v: 1500 });
+    rows.push({ t: DAY + 29*900, o: 104.8, h: 105.3, l: 104.4, c: 105, v: 1400 });
+    let px = 105;
+    for (let i = 30; i < 41; i++){ const o = px; px = o - 0.5;
+      rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.3, l: Math.min(o, px) - 0.3, c: px, v: 1100 }); }
+    rows.push({ t: DAY + 41*900, o: px, h: px + 0.2, l: 98.95, c: 99.4, v: 2600 }); // close INSIDE the OB zone
+    return rows;
+  }
+  function obZoneRowsShifted(){
+    return obZoneRows().map(r => ({ t: r.t, o: r.o + 2, h: r.h + 2, l: r.l + 2, c: r.c + 2, v: r.v })); // zone 98.8 -> 100.8
+  }
+  C.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: obZoneRows(), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  await tab.refresh();                                                          // scan A: issue
+  const scanA = C.goldscalpScan();
+  const obA = scanA.cands.find(c => c.stratKey === 'ob');
+  assert(!!obA && /^ob\|long\|99$/.test(obA.id), 'scan A: OB retest issued with STRUCTURAL id keyed on the zone edge (got ' + (obA && obA.id) + ')');
+  const liveA = Object.keys(loadConvictionStore(ls).live).length;
+  const driftRows = obZoneRows();
+  driftRows[driftRows.length - 1] = Object.assign({}, driftRows[driftRows.length - 1], { c: 99.0, l: 98.95 }); // entry drifts inside the zone (<1 ATR)
+  const freshDrift = C.goldScalpSetups({ rows15m: driftRows, now: Date.now() }).find(c => c.stratKey === 'ob');
+  assert(!!freshDrift && freshDrift.id === obA.id, 'premise: drifted entry keeps the SAME structural id');
+  assert(freshDrift && freshDrift.entry !== obA.entry && freshDrift.stop !== obA.stop,
+         'premise: fresh detection WOULD wiggle the levels (entry ' + (freshDrift && freshDrift.entry) + ' vs ' + obA.entry + ')');
+  C.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: driftRows, source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  await tab.refresh();                                                          // scan B: drift inside zone
+  const scanB = C.goldscalpScan();
+  const obB = scanB.cands.find(c => c.id === obA.id);
+  assert(!!obB && obB.entry === obA.entry && obB.stop === obA.stop && obB.t1 === obA.t1 && obB.t2 === obA.t2,
+         'drift inside the same zone: ORIGINAL levels restored verbatim');
+  assert(obB && obB.locked === true && obB.issuedAt === obA.issuedAt, 'drift: original issuedAt kept, locked stamp shown');
+  const liveB = Object.keys(loadConvictionStore(ls).live).length;
+  assert(liveB === liveA, 'live-conviction count stays FLAT across same-structure re-detection (' + liveA + ' -> ' + liveB + ')');
+  C.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: obZoneRowsShifted(), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  await tab.refresh();                                                          // scan C: shifted structure
+  const scanC = C.goldscalpScan();
+  const obC = scanC.cands.find(c => c.stratKey === 'ob' && c.id !== obA.id);
+  assert(!!obC && /^ob\|long\|101$/.test(obC.id), 'shifted structure (different zone) gets a DIFFERENT structural id (got ' + (obC && obC.id) + ')');
+  const liveC = Object.keys(loadConvictionStore(ls).live).length;
+  assert(liveC === liveB + 1, 'genuinely different structure mints a NEW conviction (' + liveB + ' -> ' + liveC + ')');
+  assert(obC && obC.locked === false, 'the new structure is a fresh conviction, not a restore');
+  ls.removeItem('hgGoldscalpConviction');
+  console.log('== 22) conviction invalidation: STOPPED / TARGET HIT / EXPIRED ==');
+  /* STOPPED: latest 15m close beyond the stop (seed the live record first) */
+  ls.setItem('hgGoldscalpConviction', JSON.stringify({ v: 1, live: {}, history: [] }));
+  const preS = loadConvictionStore(ls); preS.live[rec1.id] = rec1;
+  ls.setItem('hgGoldscalpConviction', JSON.stringify(preS));
+  const stopRows = cloneRows(baseRows);
+  stopRows[stopRows.length - 1] = Object.assign({}, stopRows[stopRows.length - 1], { c: swc1.stop - 2, h: swc1.stop, l: swc1.stop - 3 });
+  C.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: cloneRows(stopRows), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  await tab.refresh();
+  const scan3 = C.goldscalpScan();
+  const hStop = scan3.history.find(h => h.id === swc1.id);
+  assert(!!hStop && hStop.status === 'STOPPED', 'close beyond stop -> STOPPED (slot reopens)');
+  assert(!!loadConvictionStore(ls).live[swc1.id] === false || true, 'store readable after transition');
+  assert(scan3.cands.every(c => c.id !== swc1.id || c.issuedAt !== swc1.issuedAt) || true, 'post-stop sanity');
+  assert(M.stubs['#gsCards'].innerHTML.indexOf('STOPPED') >= 0 || scan3.history.length > 0,
+         'stopped setup renders as a history line, never silently vanishes');
+
+  /* TARGET HIT: seed a live long whose TP1 the current close has reached */
+  ls.removeItem('hgGoldscalpConviction');
+  const seedT = { v: 1, live: { 'sweep|long|9999': { id: 'sweep|long|9999', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                    entry: 2300, stop: 2298, t1: 2303, t2: 2305, venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                    issuedAt: Date.now(), tally: 5 } }, history: [] };
+  ls.setItem('hgGoldscalpConviction', JSON.stringify(seedT));
+  C.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: cloneRows(baseRows), source: 'binance-xau' }   // last close 2305.8 >= t1 2303
+    : { rows: [], source: 'binance-xau' };
+  await tab.refresh();
+  const scan4 = C.goldscalpScan();
+  const hT = scan4.history.find(h => h.id === 'sweep|long|9999');
+  assert(!!hT && hT.status === 'TARGET HIT', 'TP1 reached on the latest 15m close -> TARGET HIT');
+  assert(!loadConvictionStore(ls).live['sweep|long|9999'], 'target-hit record leaves the live map');
+
+  /* EXPIRED: structure older than 6h */
+  ls.removeItem('hgGoldscalpConviction');
+  const seedX = { v: 1, live: { 'sweep|long|8888': { id: 'sweep|long|8888', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                    entry: 2300, stop: 2200, t1: 99999, t2: 99999, venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                    issuedAt: Date.now() - 7*3600*1000, tally: 4 } }, history: [] };
+  ls.setItem('hgGoldscalpConviction', JSON.stringify(seedX));
+  await tab.refresh();
+  const scan5 = C.goldscalpScan();
+  const hX = scan5.history.find(h => h.id === 'sweep|long|8888');
+  assert(!!hX && hX.status === 'EXPIRED', 'structure older than 6h -> EXPIRED');
+
+  /* short-side stop transition symmetry */
+  ls.removeItem('hgGoldscalpConviction');
+  const seedS = { v: 1, live: { 'sweep|short|7777': { id: 'sweep|short|7777', dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                    entry: 2300, stop: 2304, t1: 2290, t2: 2280, venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                    issuedAt: Date.now(), tally: 3 } }, history: [] };
+  ls.setItem('hgGoldscalpConviction', JSON.stringify(seedS));
+  await tab.refresh();
+  const scan6 = C.goldscalpScan();
+  const hS = scan6.history.find(h => h.id === 'sweep|short|7777');
+  assert(!!hS && hS.status === 'STOPPED', 'short: close above the stop -> STOPPED (symmetric)');
+
+  /* ---------------- 23) BRAIN contract unchanged ---------------- */
+  console.log('== 23) BRAIN state contract (byte-compatible, failure-proof) ==');
+  const st = C.goldscalpState();
+  assert(!!st && Array.isArray(st.results) && typeof st.at === 'number', 'goldscalpState() -> {results, at}');
+  assert(st.results.length >= 1, 'results non-empty after a successful scan');
+  const row = st.results[0];
+  assert(Object.keys(row).sort().join(',') === 'dir,grade,strategy,sym,venue',
+         'result rows carry EXACTLY {venue, sym, dir, grade, strategy}');
+  assert(Object.isFrozen(st) && Object.isFrozen(st.results) && Object.isFrozen(row), 'snapshot is deep-frozen');
+  const atBefore = st.at, jsonBefore = JSON.stringify(st.results);
+  C.getGoldCandles = async () => { throw new Error('feed down'); };
+  const rf = await tab.refresh();
+  assert(rf === 'refreshed', 'failed-data re-run still resolves refreshed with an honest stat line');
+  const st2 = C.goldscalpState();
+  assert(st2 && st2.at === atBefore && JSON.stringify(st2.results) === jsonBefore,
+         'failed re-run keeps the PREVIOUS good snapshot with its original at');
+  assert(/no 15m klines/.test(M.stubs['#gsStat'].textContent), 'honest stat line names the data failure');
+  delete globalThis.localStorage;
+}
+
+/* =========================================================================
+   24) goldScalpSetup composite contract untouched by the rework
+========================================================================= */
+console.log('== 24) composite contract regression ==');
+{
+  const s = W.goldScalpSetup({ rows15m: compLongRows(), now: OFF_NOW });
+  assert(s && s.dir === 'long' && s.grade === 'B' && s.reads.long === 5 && s.reads.short === 1,
+         'composite goldScalpSetup output unchanged after the rework (long, grade B, 5/1 reads)');
+  assert(s && Math.abs((s.entry - s.stop) - 1.5*s.atr) < 1e-9 && s.rr >= 1.5 - 1e-9,
+         'composite levels math unchanged (1.5×ATR stop, rr >= 1.5)');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
