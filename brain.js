@@ -11,7 +11,7 @@ AGREEING, each speaking with a human-readable evidence string:
   PRIME = 5+ layers agree, incl. >=1 structural AND >=1 positioning,
           zero vetoes, news clear
   HIGH  = 4 layers agree, zero vetoes
-  WATCH = 3 layers agree, or exactly one soft disagreement
+  WATCH = 3 layers agree, 2 uncontested (radar), or exactly one soft disagreement
   ASIDE = any veto / a tie / contested / thin — with the killing reason
 
 Missing layers never fabricate conviction: every absent/unrun layer is
@@ -58,8 +58,10 @@ hgPlanLevels exactly as before — in combined mode smartSetup receives []
 for 1h rows (4h-only fetch budget), an input it already tolerates.
 Layer states keyed by Binance-style syms ('BTCUSDT') still vote for xu
 candidates via alias matching (sym, base+'USDT', base). An xu candidate
-whose xuCandles leg fails never silently reroutes to Binance — it gets
-no rows and an honest 'levels unavailable'.
+whose venue candle leg falls short is rerouted to Binance INSIDE
+xuCandles (deliberate, same row shape, never fabricated — xuniverse.js
+fallback contract); when every source fails it gets an honest
+'levels unavailable'.
 
 Venue filter: ALL/DELTA/CDCX <select> beside RUN SYNTHESIS, persisted in
 localStorage 'hgEngineVenue' — the key is SHARED with the EXECUTE engine
@@ -182,9 +184,16 @@ var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural',
   goldsetup: 'structural', golddeep: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
-  news: 'context', regime: 'context', rotation: 'context', onchain: 'context'
+  news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
+  tape: 'context'
 };
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
+
+/* TAPE layer thresholds — 24h momentum only counts with participation behind
+   it, and past the extreme band the same tape argues fade, not chase. */
+var TAPE_MIN_VOL = 10e6;  /* $10M Binance 24h quote turnover — participation floor */
+var TAPE_MIN_CHG = 8;     /* |24h change| % — directional momentum threshold */
+var TAPE_EXTREME = 25;    /* |24h change| % — overextended: caution, never a chase vote */
 
 /* ---------------- formatters: reuse index.html helpers when present ---------------- */
 function _fmtFb(n, d){ d = (d === undefined) ? 2 : d; return (n === null || n === undefined || !isFinite(n)) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 }); }
@@ -368,7 +377,33 @@ function brainCollect(inputs){
       for (ei = 0; ei < rej.length; ei++){
         var rj = rej[ei];
         if (rj && named(rj.sym)){
-          push('engine', 'veto', 'engine veto' + (rj.vetoGate ? ' @ ' + rj.vetoGate : ''));
+          /* gate-stage taxonomy (engine.js setSnapshot contract — rejected rows
+             carry {sym, vetoGate, dir, gatesPassed}; dir is the G1 structure
+             lean, null when no side was ever committed):
+             G4 LIQUIDITY / G5 NEWS → hard veto (untradeable / dangerous — a
+               kill must mean something);
+             G2 MOMENTUM / G3 POSITIONING with a committed lean → NON-
+               CONFIRMATION, not opposition: neutral caution, gate named;
+             G0/G1 (dir null) → no clean structure: chop is information,
+               not a direction, and never a kill. */
+          var vg = (typeof rj.vetoGate === 'string') ? rj.vetoGate : '';
+          var rdir = isDir(rj.dir) ? rj.dir : null;
+          var gp = (typeof rj.gatesPassed === 'number' && isFinite(rj.gatesPassed)) ? ' (' + rj.gatesPassed + '/6 gates)' : '';
+          if (vg === 'G4' || vg === 'G5'){
+            push('engine', 'veto', 'engine veto @ ' + vg);
+          } else if (vg === 'G2' || vg === 'G3'){
+            /* G2/G3 only fire AFTER G1 committed a structure lean — even on
+               legacy rows that never carried dir, the lean existed; name the
+               non-confirmation, direction word when known, never a kill */
+            push('engine', 'neutral',
+                 (rdir ? 'engine lean ' + rdir.toUpperCase() + ' unconfirmed'
+                       : 'engine momentum/positioning unconfirmed')
+                 + ' — rejected @ ' + vg + gp,
+                 { caution: true });
+          } else {
+            push('engine', 'neutral',
+                 'engine: no committed structure — rejected @ ' + (vg || 'G1') + gp);
+          }
           enHit = true; break;
         }
       }
@@ -414,6 +449,42 @@ function brainCollect(inputs){
       }
     }
     if (!sqHit) silent.push('squeeze');
+  }
+
+  /* ---- TAPE — 24h momentum + participation (Binance 24h tickers map,
+     {SYM:{chg24, turnoverUsd}}, app-wide cached — no extra fetch). Gives
+     every Binance-overlapping candidate at least one possible evidence read;
+     symbols with no Binance perp or a sub-threshold tape are silent, never
+     dark. Past the extreme band the tape argues fade, not chase. ---- */
+  if (!inp.tape || typeof inp.tape !== 'object'){
+    if (inp.tape === undefined) unavailable.push('tape');
+    /* null = layer deliberately not applicable to this lane (gold) */
+  }
+  else{
+    var tRow = null;
+    for (var ak in aliasSet){
+      if (!Object.prototype.hasOwnProperty.call(aliasSet, ak)) continue;
+      if (inp.tape[ak] && typeof inp.tape[ak] === 'object'){ tRow = inp.tape[ak]; break; }
+    }
+    var tpHit = false;
+    if (tRow){
+      var tChg = +tRow.chg24, tVol = +tRow.turnoverUsd;
+      if (isFinite(tChg) && isFinite(tVol) && tVol >= TAPE_MIN_VOL){
+        var tPct = (tChg >= 0 ? '+' : '') + tChg.toFixed(1) + '%';
+        var tVolTxt = ' · $' + (tVol >= 1e9 ? FMT(tVol / 1e9, 1) + 'B' : FMT(tVol / 1e6, 0) + 'M') + ' Binance turnover';
+        if (Math.abs(tChg) >= TAPE_EXTREME){
+          push('tape', 'neutral', 'tape ' + tPct + ' 24h — overextended, fade risk' + tVolTxt, { caution: true });
+          tpHit = true;
+        } else if (tChg >= TAPE_MIN_CHG){
+          push('tape', 'long', 'tape ' + tPct + ' 24h — momentum with participation' + tVolTxt);
+          tpHit = true;
+        } else if (tChg <= -TAPE_MIN_CHG){
+          push('tape', 'short', 'tape ' + tPct + ' 24h — sellers in control' + tVolTxt);
+          tpHit = true;
+        }
+      }
+    }
+    if (!tpHit) silent.push('tape');
   }
 
   /* ---- LIQS flush-reversal (one market-wide setup; must name this symbol) ---- */
@@ -546,7 +617,7 @@ Returns plain data for brainCollect inputs + the market read. Never throws.
 function snapshotLayers(){
   var o = { regime: undefined, rotation: undefined, onchain: undefined,
             engine: undefined, oiflow: undefined, squeeze: undefined,
-            liqSnap: undefined, liqSetup: undefined,
+            liqSnap: undefined, liqSetup: undefined, tape: undefined,
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
             newsState: undefined, fng: null };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
@@ -712,6 +783,27 @@ function withTimeout(p, ms){
   });
 }
 
+/* TAPE is an async app-wide cached feed (binanceTickers24h -> {SYM:{chg24,
+   turnoverUsd}}) — snapshotLayers is sync by design, so the tape leg is
+   filled post-snapshot under a hard 8s budget: a hung or failed feed
+   degrades to unavailable('tape') — named dark — never a stalled scan.
+   The legacy universe leg already fetches this same map: when uni carries a
+   'ticks' key the result (map OR failure-null) is reused — the same feed is
+   never paid for twice in one run. Combined mode has no ticks key -> fetch. */
+async function fillTape(snap, uni){
+  try{
+    if (!snap || typeof snap !== 'object') return;
+    if (uni && typeof uni === 'object' && ('ticks' in uni)){
+      snap.tape = (uni.ticks && typeof uni.ticks === 'object') ? uni.ticks : undefined;
+      return;
+    }
+    if (typeof G.binanceTickers24h !== 'function'){ snap.tape = undefined; return; }
+    var t = await withTimeout(
+      Promise.resolve().then(function(){ return G.binanceTickers24h(); }), 8000);
+    snap.tape = (t && typeof t === 'object') ? t : undefined;
+  }catch(e){ try{ snap.tape = undefined; }catch(e2){} }
+}
+
 /* legacy universe — today's behavior, byte-identical when xuniverse.js is absent */
 async function legacyUniverse(){
   var out = { mode: 'legacy', candidates: BASE_SYMS.map(legacyCand), ticks: null,
@@ -759,7 +851,8 @@ async function buildUniverse(){
 
 /* 4h rows for one candidate — xuCandles for xu items, else the inline
    getCandles router, else binanceKlines. Never throws; null on failure.
-   An xu candidate whose xu leg fails never silently reroutes to Binance. */
+   xuCandles itself reroutes short venue legs to Binance (its fallback
+   contract) — rows may be Binance-sourced for thin venue listings. */
 async function fetch4h(cand){
   try{
     if (cand.xu){
@@ -839,6 +932,7 @@ function judgeCrypto(cand, snap){
     news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
+    tape: snap.tape,
     liq: (snap.liqSetup === undefined ? undefined : snap.liqSetup)
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
@@ -851,6 +945,7 @@ function judgeGold(snap){
   var col = brainCollect({
     sym: 'XAU', lane: 'gold',
     news: newsFor('XAUUSDT'),
+    tape: null, /* tape is the crypto 24h momentum read — not a gold-lane layer */
     gold: { setup: snap.goldSetup, deep: snap.goldDeep, basis: snap.goldBasis }
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
@@ -1084,10 +1179,16 @@ function displaySym(row){
 
 function watchRowHTML(row){
   var age = row.ageStamp ? ' <span class="stamp na">' + esc(String(row.ageStamp).toUpperCase()) + '</span>' : '';
+  /* radar rows carry a plan whenever the planning pass reached them — the
+     same never-invented planLine the PRIME/HIGH cards use; without one the
+     row says so instead of hiding the gap */
+  var plan = (row.plan && isFinite(row.plan.entry)) ? planLine(row.plan) : null;
   return '<div class="lrow">'
     + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + (row.dec.dir ? row.dec.dir.toUpperCase() + ' bias — ' : '')
-    + esc(row.dec.reasons[0] || '') + '</span>'
+    + esc(row.dec.reasons[0] || '')
+    + (plan ? ' <span class="gdetail">' + plan + '</span>' : '')
+    + '</span>'
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '') + '</span>'
     + '<span class="stamp na">WATCH</span>' + age + '</div>';
@@ -1252,6 +1353,7 @@ async function runBrain(el){
 
     var snap = snapshotLayers();
     var uni = await buildUniverse();
+    await fillTape(snap, uni);   /* legacy mode reuses the universe leg's tickers — one fetch per run */
     var combined = (uni.mode === 'combined');
 
     /* venue select is only meaningful with the combined feed — keep it hidden
@@ -1291,15 +1393,19 @@ async function runBrain(el){
          The gold lane keeps its own candle path (goldPlan, unchanged). */
       var fq = await fetchCandleQueue(primes.concat(highs, watches), uni, stat, t0);
       capNote = fq.capNote + fq.watchNote;
-      /* plans only for PRIME/HIGH — engine plans first, prefetched 4h rows */
-      for (var sx = 0; sx < setups.length; sx++){
+      /* plans for PRIME/HIGH first, then WATCH radar rows while the scan
+         budget lasts — engine plans first, then the SMART $ / hgPlanLevels
+         fallback over prefetched 4h rows. Levels are never invented; a row
+         the budget or the candle cap cut simply says levels unavailable. */
+      var planSet = setups.concat(watches);
+      for (var sx = 0; sx < planSet.length; sx++){
         if (Date.now() - t0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
-        stat.textContent = 'planning ' + (sx + 1) + '/' + setups.length + ' · ' + setups[sx].sym;
+        stat.textContent = 'planning ' + (sx + 1) + '/' + planSet.length + ' · ' + planSet[sx].sym;
         try{
-          var gotx = (setups[sx].lane === 'gold') ? await goldPlan(setups[sx], snap)
-                                                  : await cryptoPlanXu(setups[sx], snap);
-          setups[sx].plan = gotx.plan; setups[sx].rows = gotx.rows;
-        }catch(e){ setups[sx].plan = null; setups[sx].rows = null; }
+          var gotx = (planSet[sx].lane === 'gold') ? await goldPlan(planSet[sx], snap)
+                                                   : await cryptoPlanXu(planSet[sx], snap);
+          planSet[sx].plan = gotx.plan; planSet[sx].rows = gotx.rows;
+        }catch(e){ planSet[sx].plan = null; planSet[sx].rows = null; }
       }
     }else{
       /* legacy mode — today's flow, unchanged: bounded kline fetches per setup */
@@ -1412,6 +1518,7 @@ async function runQuick(el){
     stat.textContent = 'quick recheck — fresh layers over the last scan’s watch set…';
 
     var snap = snapshotLayers();
+    await fillTape(snap);
     var last = __lastResult;
     var lastRows = (last && Array.isArray(last.rows)) ? last.rows : [];
     var combined = !!(last.uni && last.uni.mode === 'combined');
@@ -1662,11 +1769,16 @@ function mount(el){
       + '<div class="note" id="brainDeps" style="margin-top:8px"></div>'
       + '<div class="note" style="margin-top:8px">Conviction is independent layers <b>agreeing</b>, each with a human-readable '
       + 'evidence string — never an invented number. <b>PRIME</b>: 5+ layers agree incl. structural + positioning, zero vetoes, '
-      + 'news clear. <b>HIGH</b>: 4 agree, zero vetoes. <b>WATCH</b>: 3 agree or one soft disagreement. <b>ASIDE</b>: any veto, '
-      + 'a tie, contested or thin — the killing reason is shown. Dark layers are named and cap the tier. '
-      + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented. '
+      + 'news clear. <b>HIGH</b>: 4 agree, zero vetoes. <b>WATCH</b>: 3 agree, or 2 uncontested (radar — thin but nothing fights it), '
+      + 'or one soft disagreement. <b>ASIDE</b>: any veto, a tie, contested or thin — the killing reason is shown. '
+      + 'Engine rejections veto only at G4 liquidity / G5 news; a G2/G3 non-confirmation is named, never a kill. '
+      + 'Dark layers are named and cap the tier. '
+      + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented, '
+      + 'and radar rows carry them whenever the candle cap reached the candidate. '
       + 'Universe: BTC/ETH/SOL + every Delta India + CoinDCX futures listing (combined, deduped by base, via xuniverse.js when '
-      + 'present — else legacy Binance top-10). Candles are fetched lazily, only for WATCH-or-better candidates (cap 40/scan).</div>'
+      + 'present — else legacy Binance top-10; thin venue candle legs fall back to Binance inside xuCandles). '
+      + 'Candles are fetched lazily, only for WATCH-or-better candidates (cap 40/scan). '
+      + 'The TAPE layer reads 24h Binance momentum + turnover for every overlapping listing (±8% with ≥$10M behind it; ±25% flags fade, never a chase) — no extra fetch.</div>'
       + '</div>'
       + '<div class="panel" id="brainReadWrap" style="display:none;margin-top:10px"><h2>MARKET READ <span id="brainReadUni"></span></h2>'
       + '<div class="note" id="brainRead" style="font-size:12px;line-height:1.7"></div></div>'

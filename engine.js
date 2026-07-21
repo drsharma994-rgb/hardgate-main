@@ -122,8 +122,12 @@ the BRAIN meta-engine. Zero-arg, NEVER throws (try-catch -> null), returns
 null before the first successful scan, otherwise a DEEP-FROZEN deep copy:
   { survivors: [ { sym, dir, conviction, plan: {entry,stop,t1,t2} | null,
                    gatesPassed } ],
-    rejected:  [ { sym, vetoGate } ],
+    rejected:  [ { sym, vetoGate, dir, gatesPassed } ],
     at: <epochMs> }
+rejected rows keep the evidence the funnel already computed: dir = the G1
+cascade side that was under evaluation when the veto hit ('long'/'short',
+null when the kill came at G0/G1 — before any side was committed), and
+gatesPassed = count of fully-passed gates (N/A gates never count).
 survivors mirror the execution cards rendered (plan null when the setup
 builder declined — direction real, levels not fabricated). An aborted or
 failed re-run keeps the PREVIOUS good snapshot with its original `at` —
@@ -842,7 +846,10 @@ var __el = null;      // last mounted pane, so refresh() can re-run without a cl
    Last SUCCESSFUL scan's funnel output, cached for the BRAIN meta-engine.
    Aborted/failed re-runs never touch it — the previous good snapshot keeps
    its original `at`. The getter below hands out DEEP-FROZEN deep copies so
-   callers can never mutate module state, and never throws. */
+   callers can never mutate module state, and never throws.
+   rejected rows = {sym, vetoGate, dir, gatesPassed} — dir/gatesPassed are
+   the funnel's own evidence at kill time (dir null for G0/G1 vetoes, where
+   no side was ever committed); additive-only, sym/vetoGate untouched. */
 var __snap = null;
 function __stateView(v){
   if (v === null || typeof v !== 'object') return v;
@@ -871,7 +878,9 @@ function setSnapshot(survivors, rejected){
     for (i = 0; i < rejected.length; i++){
       rec = rejected[i]; res = rec && rec.res;
       if (!rec || !res) continue;
-      rj.push({ sym: rec.sym, vetoGate: (typeof res.vetoGate === 'string') ? res.vetoGate : null });
+      rj.push({ sym: rec.sym, vetoGate: (typeof res.vetoGate === 'string') ? res.vetoGate : null,
+                dir: (res.dir === 'long' || res.dir === 'short') ? res.dir : null,   /* G1 lean under evaluation at kill time; null pre-G1-commit */
+                gatesPassed: (typeof res.gatesPassed === 'number' && isFinite(res.gatesPassed)) ? res.gatesPassed : 0 });
     }
     __snap = { survivors: sv, rejected: rj, at: Date.now() };
   }catch(e){ /* snapshotting must never break the scan */ }

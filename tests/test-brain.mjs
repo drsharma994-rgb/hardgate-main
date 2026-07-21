@@ -125,19 +125,76 @@ ok(r.unavailable.indexOf('onchain') >= 0, 'onchainState() null for BTC -> unavai
 /* ================= F) engine votes ================= */
 console.log('== engine votes ==');
 const EN = { survivors: [{ sym: 'ETHUSDT', dir: 'long', conviction: 'STRONG', plan: { dir: 'long', entry: 1, stop: 0.9, t1: 1.2 } }],
-             rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3' }], at: 1 };
+             rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3', dir: 'long', gatesPassed: 3 },
+                        { sym: 'LTCUSDT', vetoGate: 'G4', dir: 'short', gatesPassed: 4 },
+                        { sym: 'CHOPUSDT', vetoGate: 'G1', dir: null, gatesPassed: 1 }], at: 1 };
 r = COLLECT({ sym: 'ETHUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'long' && x.strong === true && x.text.indexOf('STRONG') >= 0; }),
    'engine survivor -> strong vote in the survivor direction');
 r = COLLECT({ sym: 'SOLUSDT', engine: EN });
-ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto' && x.text.indexOf('G3') >= 0; }),
-   'engine rejection -> veto vote naming the veto gate');
+ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.caution === true
+                                 && x.text.indexOf('G3') >= 0 && x.text.indexOf('LONG') >= 0; }),
+   'G2/G3 rejection with a committed lean -> named NON-CONFIRMATION (neutral caution), never a veto');
+r = COLLECT({ sym: 'LTCUSDT', engine: EN });
+ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto' && x.text.indexOf('G4') >= 0; }),
+   'G4 liquidity rejection stays a hard VETO naming the gate');
+r = COLLECT({ sym: 'CHOPUSDT', engine: EN });
+ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.text.indexOf('G1') >= 0
+                                 && x.text.indexOf('no committed structure') >= 0; }),
+   'G0/G1 rejection (dir null) -> neutral chop note, never a veto');
+r = COLLECT({ sym: 'SOLUSDT', engine: { survivors: [], rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3' }], at: 1 } });
+ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.caution === true
+                                 && x.text.indexOf('unconfirmed') >= 0 && x.text.indexOf('G3') >= 0; })
+   && !r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto'; }),
+   'legacy G2/G3 rows (no dir field) still read as non-confirmation — the lean existed even when unrecorded');
 r = COLLECT({ sym: 'XRPUSDT', engine: EN });
 ok(!r.votes.some(function(x){ return x.layer === 'engine'; }) && r.silent.indexOf('engine') >= 0
    && r.unavailable.indexOf('engine') === -1,
    'symbol not gated -> engine silent (available, no coverage), not unavailable');
 r = COLLECT({ sym: 'ETHUSDT', engine: null });
 ok(r.unavailable.indexOf('engine') >= 0, 'engineState() null (never ran) -> unavailable');
+r = COLLECT({ sym: 'XRPUSDT', engine: EN });
+ok(!r.votes.some(function(x){ return x.layer === 'engine'; }) && r.silent.indexOf('engine') >= 0
+   && r.unavailable.indexOf('engine') === -1,
+   'symbol not gated -> engine silent (available, no coverage), not unavailable');
+r = COLLECT({ sym: 'ETHUSDT', engine: null });
+ok(r.unavailable.indexOf('engine') >= 0, 'engineState() null (never ran) -> unavailable');
+
+/* ================= F2) tape votes — 24h momentum + participation ================= */
+console.log('== tape votes ==');
+r = COLLECT({ sym: 'SYNUSDT', tape: { SYNUSDT: { symbol: 'SYNUSDT', chg24: 12.4, turnoverUsd: 380e6 } } });
+ok(r.votes.some(function(x){ return x.layer === 'tape' && x.vote === 'long' && x.kind === 'context'
+                                 && x.text.indexOf('+12.4%') >= 0 && x.text.indexOf('momentum with participation') >= 0; }),
+   'tape: +12.4% on $380M -> long momentum vote naming both numbers');
+r = COLLECT({ sym: 'REUSDT', tape: { REUSDT: { symbol: 'REUSDT', chg24: -9.8, turnoverUsd: 95e6 } } });
+ok(r.votes.some(function(x){ return x.layer === 'tape' && x.vote === 'short' && x.text.indexOf('-9.8%') >= 0
+                                 && x.text.indexOf('sellers in control') >= 0; }),
+   'tape: -9.8% -> short vote (sellers in control)');
+r = COLLECT({ sym: 'PUMPUSDT', tape: { PUMPUSDT: { symbol: 'PUMPUSDT', chg24: 31.2, turnoverUsd: 1.2e9 } } });
+ok(r.votes.some(function(x){ return x.layer === 'tape' && x.vote === 'neutral' && x.caution === true
+                                 && x.text.indexOf('overextended') >= 0 && x.text.indexOf('fade risk') >= 0; })
+   && !r.votes.some(function(x){ return x.layer === 'tape' && (x.vote === 'long' || x.vote === 'short'); }),
+   'tape: |25%+ -> overextended CAUTION, never a chase vote');
+r = COLLECT({ sym: 'BTCUSDT', tape: { BTCUSDT: { symbol: 'BTCUSDT', chg24: 2, turnoverUsd: 9e9 } } });
+ok(!r.votes.some(function(x){ return x.layer === 'tape'; }) && r.silent.indexOf('tape') >= 0
+   && r.unavailable.indexOf('tape') === -1,
+   'tape: sub-threshold move -> silent (live, nothing to say), not dark');
+r = COLLECT({ sym: 'THINUSDT', tape: { THINUSDT: { symbol: 'THINUSDT', chg24: 14, turnoverUsd: 3e6 } } });
+ok(r.silent.indexOf('tape') >= 0 && !r.votes.some(function(x){ return x.layer === 'tape'; }),
+   'tape: big move on sub-$10M turnover -> no participation, no vote');
+r = COLLECT({ sym: 'NOBINUSDT', tape: { BTCUSDT: { symbol: 'BTCUSDT', chg24: 12, turnoverUsd: 9e9 } } });
+ok(r.silent.indexOf('tape') >= 0 && r.unavailable.indexOf('tape') === -1,
+   'tape: no Binance perp for this base -> silent, never dark');
+r = COLLECT({ sym: 'B-SYN_USDT', aliases: ['B-SYN_USDT', 'SYN', 'SYNUSDT'],
+              tape: { SYNUSDT: { symbol: 'SYNUSDT', chg24: 12.4, turnoverUsd: 380e6 } } });
+ok(r.votes.some(function(x){ return x.layer === 'tape' && x.vote === 'long'; }),
+   'tape: combined-universe candidate matches its Binance perp through aliases');
+r = COLLECT({ sym: 'BTCUSDT' });
+ok(r.unavailable.indexOf('tape') >= 0, 'tape feed missing -> unavailable (named dark)');
+r = COLLECT({ sym: 'XAU', lane: 'gold', tape: null });
+ok(r.unavailable.indexOf('tape') === -1 && r.silent.indexOf('tape') === -1
+   && !r.votes.some(function(x){ return x.layer === 'tape'; }),
+   'tape: null = not applicable (gold lane) — no vote, not dark, not silent');
 
 /* ================= G) oiflow votes ================= */
 console.log('== oiflow votes ==');
@@ -302,7 +359,7 @@ W.engineState = function(){
   return { survivors: [{ sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
                          plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 },   /* engineState real shape: no dir on plan */
                          gatesPassed: 6 }],
-           rejected: [{ sym: 'SOLUSDT', vetoGate: 'G2' }], at: 123 };
+           rejected: [{ sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 }], at: 123 };
 };
 W.oiflowState = function(){ return { results: [{ sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS (trend fuel)' }] }; };
 W.squeezeState = function(){ return { results: [{ sym: 'ETHUSDT', kind: 'fired', dir: 'short' }] }; };
@@ -340,8 +397,8 @@ ok(nCards.indexOf('toTrade(&quot;BTCUSDT&quot;,&quot;long&quot;,100,95,110)') >=
    'SEND TO TRADE PLAN payload carries sym/dir/entry/stop/t1');
 ok(nCards.indexOf('ENGINE: ENGINE SURVIVOR') >= 0 && nCards.indexOf('REGIME:') >= 0 && nCards.indexOf('NEWS: news clear') >= 0,
    'evidence ledger lists every layer vote with its text');
-ok(nAside.indexOf('>SOL</span>') >= 0 && nAside.indexOf('engine veto @ G2') >= 0 && nAside.indexOf('>VETO</span>') >= 0,
-   'ASIDE ledger: SOLUSDT vetoed with the killing gate named');
+ok(nAside.indexOf('>SOL</span>') >= 0 && nAside.indexOf('engine veto @ G4') >= 0 && nAside.indexOf('>VETO</span>') >= 0,
+   'ASIDE ledger: SOLUSDT hard-vetoed at G4 liquidity with the killing gate named');
 ok(nAside.indexOf('XAU') >= 0, 'gold lane lands in ASIDE when the gold setup layer is dark');
 ok(nRead.indexOf('RISK-ON regime') >= 0 && nRead.indexOf('btc season 31%') >= 0 && nRead.indexOf('on-chain bullish') >= 0
    && nRead.indexOf('no high-impact USD events') >= 0,
@@ -488,6 +545,13 @@ function stubLayersPrime(WX){
   WX.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
   WX.liqFlushSetup = function(){ return { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
   WX.goldspotState = function(){ return { basisPct: 0.01, verdict: 'balanced' }; };
+  /* TAPE layer present but sub-threshold everywhere — silent, never dark,
+     so these fixtures pin the pre-tape layer semantics exactly */
+  WX.binanceTickers24h = async function(){ return {
+    BTCUSDT: { symbol: 'BTCUSDT', mark: 100, chg24: 2, turnoverUsd: 9e9 },
+    ETHUSDT: { symbol: 'ETHUSDT', mark: 50, chg24: -1, turnoverUsd: 5e9 },
+    SOLUSDT: { symbol: 'SOLUSDT', mark: 20, chg24: 3, turnoverUsd: 2e9 },
+    XRPUSDT: { symbol: 'XRPUSDT', mark: 1, chg24: 0.5, turnoverUsd: 1e9 } }; };
   WX.toTrade = function(){};
 }
 
@@ -593,29 +657,30 @@ tabT.mount(TT.pane);
 await runAndWait(TT.stubs);
 const tStat = TT.stubs['#brainStat'].textContent;
 const tCards = TT.stubs['#brainCards'].innerHTML;
-ok(tStat.indexOf('done · 1 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
-   'combined run buckets: 1 PRIME · 0 HIGH · 3 watch · 2 aside — got "' + tStat + '"');
+ok(tStat.indexOf('done · 1 PRIME · 0 HIGH · 4 watch · 1 aside') === 0,
+   'combined run buckets: 1 PRIME · 0 HIGH · 4 watch (DOGE radar: regime+rotation, G2 non-confirmation no longer kills) · 1 aside — got "' + tStat + '"');
 ok(tStat.indexOf('universe 5 (delta 3 + cdcx 2)') >= 0, 'summary gains combined per-exchange counts');
-ok(tStat.indexOf('1 prime/high · 3 watch') >= 0, 'summary gains prime/high + watch tallies');
-ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 1 prime/high · 3 watch',
+ok(tStat.indexOf('1 prime/high · 4 watch') >= 0, 'summary gains prime/high + watch tallies');
+ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 1 prime/high · 4 watch',
    'MARKET READ header carries the combined counts — got "' + TT.stubs['#brainReadUni'].textContent + '"');
 ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 5 LAYERS') >= 0 && tCards.indexOf('>LONG</span>') >= 0,
    'BTC card renders under the cdcx sym via alias-matched Binance-keyed layer votes');
 ok(tCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && tCards.indexOf('COINDCX') >= 0
    && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
    'engine plan + COINDCX venue stamp + xu-sym toTrade payload on the card');
-ok(xuCalls.length === 4, 'lazy fetch: exactly the 4 WATCH+ candidates fetched (BTC+ETH+SOL+XRP), DOGE aside untouched — got ' + xuCalls.length);
+ok(xuCalls.length === 5, 'lazy fetch: the 5 WATCH+ candidates fetched (BTC+ETH+SOL+XRP+DOGE radar), XAU lane aside untouched — got ' + xuCalls.length);
 ok(xuCalls[0].item === XUL[0] && xuCalls[0].tf === '4h' && xuCalls[0].n === 120,
    'highest-evidence-first: the PRIME BTC candidate fetches first, via xuCandles with its original xu item');
-ok(!xuCalls.some(function(c){ return c.item.sym === 'DOGEUSDT'; }), 'ASIDE candidates never trigger a candle fetch');
-ok(statSnaps.some(function(s){ return /^\d+\/4 candidates · delta 3 · cdcx 2$/.test(s); }),
+ok(!xuCalls.some(function(c){ return c.item.sym === 'XAUUSDT'; }), 'ASIDE gold lane never triggers a crypto candle fetch');
+ok(statSnaps.some(function(s){ return /^\d+\/5 candidates · delta 3 · cdcx 2$/.test(s); }),
    'fetch progress reports X/Y candidates · delta n · cdcx m — saw "' + statSnaps[0] + '"');
 const tWatch = TT.stubs['#brainWatch'].innerHTML;
-ok(tWatch.indexOf('>ETH</span>') >= 0 && tWatch.indexOf('>SOL</span>') >= 0 && tWatch.indexOf('>XRP</span>') >= 0,
-   'WATCH ledger lists the watch alts by base asset');
+ok(tWatch.indexOf('>ETH</span>') >= 0 && tWatch.indexOf('>SOL</span>') >= 0 && tWatch.indexOf('>XRP</span>') >= 0
+   && tWatch.indexOf('>DOGE</span>') >= 0 && tWatch.indexOf('radar only') >= 0,
+   'WATCH ledger lists the watch alts incl. DOGE on the radar tier, reason named honestly');
 const tAside = TT.stubs['#brainAside'].innerHTML;
-ok(tAside.indexOf('>DOGE</span>') >= 0 && tAside.indexOf('engine veto @ G2') >= 0 && tAside.indexOf('>XAU</span>') >= 0,
-   'ASIDE ledger: DOGE vetoed with the gate named, gold lane present');
+ok(tAside.indexOf('>DOGE</span>') === -1 && tAside.indexOf('>XAU</span>') >= 0,
+   'ASIDE ledger: DOGE promoted to radar (G2 non-confirmation), gold lane present');
 ok(TT.stubs['#brainVenue'].style.display === '', 'venue select visible when the combined feed is present');
 ok(tStat.indexOf(' · venue ') === -1, 'no venue suffix on the default ALL filter');
 
@@ -1020,22 +1085,22 @@ console.log('== quick rescan (AC) ==');
 
   /* full scan baseline */
   await runAndWait(TC.stubs);
-  ok(TC.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
-     'AC: full-scan baseline intact — got "' + TC.stubs['#brainStat'].textContent + '"');
+  ok(TC.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME · 0 HIGH · 4 watch · 1 aside') === 0,
+     'AC: full-scan baseline intact (DOGE on the radar tier) — got "' + TC.stubs['#brainStat'].textContent + '"');
   candleSyms = []; xuCalls = 0; xuForces.length = 0;
 
   /* quick rescan: recheck WATCH+ only, cache-read universe, age stamps */
   TC.stubs['#brainQuick']._handler();
   await waitIdle(TC.stubs);
   const q1 = TC.stubs['#brainStat'].textContent;
-  ok(/^quick rescan: 4 checked · 2 unchanged · \d+s/.test(q1),
-     'AC: stat line counts checked vs unchanged — got "' + q1 + '"');
+  ok(/^quick rescan: 5 checked · 1 unchanged · \d+s/.test(q1),
+     'AC: stat line counts checked (BTC + 4 watch incl. DOGE radar) vs unchanged (XAU lane) — got "' + q1 + '"');
   ok(xuForces.every(function(f){ return f !== true; }) && xuCalls <= 1,
      'AC: never forces an exchange refetch (cache-read only) — calls=' + xuCalls + ' forces=' + JSON.stringify(xuForces));
-  ok(candleSyms.length === 4 && candleSyms.indexOf('DOGEUSDT') === -1,
-     'AC: candles refetched only for the recheck set, ASIDE candidates untouched — got ' + candleSyms.join(','));
+  ok(candleSyms.length === 5 && candleSyms.indexOf('DOGEUSDT') >= 0 && candleSyms.indexOf('XAUUSDT') === -1,
+     'AC: candles refetched only for the recheck set incl. the DOGE radar row, gold lane untouched — got ' + candleSyms.join(','));
   const q1aside = TC.stubs['#brainAside'].innerHTML;
-  ok(q1aside.indexOf('engine veto @ G2') >= 0 && q1aside.indexOf('AS OF') >= 0,
+  ok(q1aside.indexOf('>XAU</span>') >= 0 && q1aside.indexOf('AS OF') >= 0,
      'AC: unchanged verdicts keep their reason AND carry an age stamp');
   ok(TC.stubs['#brainCards'].innerHTML.indexOf('ENTRY <b>100</b>') >= 0,
      'AC: the PRIME card is re-planned with fresh candles');
@@ -1049,7 +1114,7 @@ console.log('== quick rescan (AC) ==');
   TC.stubs['#brainQuick']._handler();
   await waitIdle(TC.stubs);
   const q2 = TC.stubs['#brainStat'].textContent;
-  ok(/^quick rescan: 5 checked · 2 unchanged/.test(q2) && q2.indexOf('1 new listing') >= 0,
+  ok(/^quick rescan: 6 checked · 1 unchanged/.test(q2) && q2.indexOf('1 new listing') >= 0,
      'AC: a new listing is detected and checked — got "' + q2 + '"');
   ok(TC.stubs['#brainWatch'].innerHTML.indexOf('>NEW</span>') >= 0,
      'AC: the new listing is judged on arrival (3 layers -> WATCH)');
@@ -1062,7 +1127,7 @@ console.log('== quick rescan (AC) ==');
   await waitIdle(TC.stubs);
   const q3 = TC.stubs['#brainStat'].textContent;
   ok(xuCalls === 0, 'AC: stale cache -> the universe is NOT refetched for a quick rescan');
-  ok(q3.indexOf('new-listing check skipped') >= 0 && /^quick rescan: 5 checked · 2 unchanged/.test(q3),
+  ok(q3.indexOf('new-listing check skipped') >= 0 && /^quick rescan: 6 checked · 1 unchanged/.test(q3),
      'AC: the skip is named on the stat line — got "' + q3 + '"');
 
   /* layers flip: rechecked candidates move, unchanged keep their prior verdict */
@@ -1075,8 +1140,8 @@ console.log('== quick rescan (AC) ==');
      && TC.stubs['#brainWatch'].innerHTML.indexOf('>BTC</span>') >= 0,
      'AC: the rechecked candidate moves to WATCH honestly');
   const q4aside = TC.stubs['#brainAside'].innerHTML;
-  ok(q4aside.indexOf('engine veto @ G2') >= 0 && q4aside.indexOf('AS OF') >= 0,
-     'AC: the unchanged veto verdict survives the regime flip, age stamp intact');
+  ok(q4aside.indexOf('>XAU</span>') >= 0 && q4aside.indexOf('AS OF') >= 0,
+     'AC: the unchanged gold-lane verdict survives the regime flip, age stamp intact');
   delete globalThis.localStorage;
 }
 
@@ -1198,14 +1263,16 @@ process.on('unhandledRejection', function(){ unhandledRej++; });
   WF2.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
   WF2.liqFlushSetup = function(){ return { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
   WF2.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
-  /* no binanceTickers24h/binanceKlines/smartSetup/hgPlanLevels — a plan is impossible */
+  /* no binanceTickers24h/binanceKlines/smartSetup/hgPlanLevels — a plan is impossible;
+     the missing TAPE feed is a dark layer, so the run is PRIME quality but the
+     verdict is honestly CAPPED at HIGH (dark layers cap conviction) */
   const recs6 = [];
   WF2.hgScoreRecord = function(rec){ recs6.push(rec); };
   const TF2 = freshPane();
   WF2.HG_tabs[0].mount(TF2.pane);
   await runAndWait(TF2.stubs);
-  ok(recs6.length === 1 && recs6[0].tier === 'PRIME' && recs6[0].sym === 'BTCUSDT',
-     'AD: PRIME without a plan is still recorded — got ' + recs6.length);
+  ok(recs6.length === 1 && recs6[0].tier === 'HIGH' && recs6[0].sym === 'BTCUSDT',
+     'AD: plan-less setup still recorded — PRIME quality capped to HIGH with the tape feed dark — got ' + recs6.length);
   ok(recs6[0] && recs6[0].entry === null && recs6[0].stop === null && recs6[0].t1 === null && recs6[0].t2 === null,
      'AD: missing plan -> null levels, never fabricated numbers');
 }

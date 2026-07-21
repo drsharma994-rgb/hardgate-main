@@ -11,6 +11,9 @@
         per-leg allSettled degradation, total-outage honesty, busy-guard
      4) xuCandles routing per exchange incl. proxy URL construction,
         resolution maps, ms->s time conversion, failure tolerance
+     4b) xuCandles Binance fallback: venue failure/thin rows -> base's
+        USDT-perp klines, contract intact, perp-universe session cache,
+        honest empty when the base is not on Binance
      5) load-time safety: no fetch/AbortController -> module still loads,
         every export callable, nothing throws.
    Run: node tests/test-xuniverse.mjs */
@@ -63,6 +66,25 @@ function fetchRecorder(routes){
   };
   fn.urls = urls;
   return fn;
+}
+/* window stubs for the Binance candle fallback: binancePerpUniverse serves
+   a fixed perp list (throws when perpList === 'THROW'), binanceKlines
+   serves fixed rows. Both record every call. */
+function binanceStubs(perpList, klineRows){
+  const calls = { perp: 0, klines: [] };
+  const win = {
+    binancePerpUniverse: async function(){
+      calls.perp++;
+      if (perpList === 'THROW') throw new Error('binance down');
+      return perpList;
+    },
+    binanceKlines: async function(sym, interval, limit){
+      calls.klines.push([sym, interval, limit]);
+      if (klineRows === 'THROW') throw new Error('klines down');
+      return klineRows;
+    }
+  };
+  return { win: win, calls: calls };
 }
 
 /* ---------------- fixtures: REAL field names from index.html ---------------- */
@@ -338,6 +360,15 @@ const CDCX_CANDLES = { data: [
   { time: 1700003600000, open: '201', high: '205', low: '200', close: '204', volume: '21' },
   { time: 1700000000000, open: '200', high: '202', low: '199', close: '201' }
 ] };
+/* already in the exact consumer contract: {t(sec),o,h,l,c,v} ascending —
+   binanceKlines() normalizes to this shape in production */
+const BINANCE_CANDLES = [
+  { t: 1700000000, o: 100, h: 102, l: 99,  c: 101, v: 10 },
+  { t: 1700003600, o: 101, h: 105, l: 100, c: 104, v: 11 },
+  { t: 1700007200, o: 104, h: 106, l: 103, c: 105, v: 12 },
+  { t: 1700010800, o: 105, h: 107, l: 104, c: 106, v: 13 },
+  { t: 1700014400, o: 106, h: 108, l: 105, c: 107, v: 14 }
+];
 {
   const f = fetchRecorder([
     { match: 'delta.exchange/v2/history/candles', body: DELTA_CANDLES },
@@ -580,6 +611,137 @@ const CDCX_CANDLES = { data: [
   await w.xuUniverse();
   assert(w.xuPositioning('BTC') === null && w.xuState().cdcxMarks === 0,
          'positioning: total outage with no cache -> null positioning + cdcxMarks 0, honestly empty');
+}
+
+/* =========================================================================
+   12) xuCandles Binance fallback — venue legs that fail or come back too
+       thin reroute to the base asset's USDT perp; contract intact; rows
+       never fabricated; perp universe fetched at most once per session
+========================================================================= */
+{
+  /* (a) venue OK (rows >= requested) -> Binance NEVER consulted */
+  const f = fetchRecorder([{ match: 'delta.exchange/v2/history/candles', body: DELTA_CANDLES }]);
+  const bs = binanceStubs(['BTCUSDT'], BINANCE_CANDLES);
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const rows = await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1h', 2);
+  assert(rows.length === 2 && rows[0].t === 1700000000 && rows[1].c === 104,
+         'fallback: sufficient venue rows pass through untouched');
+  assert(bs.calls.perp === 0 && bs.calls.klines.length === 0,
+         'fallback: venue OK -> Binance never consulted (no perp lookup, no kline call)');
+  assert(w.xuCandles.lastSource === 'delta', 'fallback: lastSource tags the venue route on a healthy leg');
+}
+{
+  /* (b) venue empty + base on Binance -> Binance rows, exact same shape */
+  const f = fetchRecorder([{ match: 'delta.exchange/v2/history/candles', body: { result: [] } }]);
+  const bs = binanceStubs(['BTCUSDT', 'XRPUSDT'], BINANCE_CANDLES);
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const rows = await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '4h', 5);
+  assert(rows.length === 5 && rows[0].t === 1700000000 && rows[4].c === 107,
+         'fallback: venue empty + base on Binance -> Binance rows returned');
+  const okShape = rows.every(function(r, i){
+    return Object.keys(r).sort().join(',') === 'c,h,l,o,t,v' &&
+           isFinite(r.t) && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c) && isFinite(r.v) &&
+           (i === 0 || r.t > rows[i-1].t) && r.t < 1e12;
+  });
+  assert(okShape, 'fallback: rows keep the exact {t(seconds),o,h,l,c,v} ascending contract — bare rows, no extra fields');
+  assert(bs.calls.perp === 1 && bs.calls.klines.length === 1, 'fallback: one perp-universe lookup, one kline call');
+  assert(bs.calls.klines[0][0] === 'BTCUSDT' && bs.calls.klines[0][1] === '4h' && bs.calls.klines[0][2] === 5,
+         'fallback: kline args = base+USDT, venue tf passed through (4h is Binance-native, no remap), requested count');
+  assert(w.xuCandles.lastSource === 'binance-fallback',
+         'fallback: source tagged on xuCandles.lastSource, return shape unchanged');
+  /* interval passthrough pins: every module tf is Binance-native 1:1 */
+  await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '15m', 5);
+  assert(bs.calls.klines[bs.calls.klines.length-1][1] === '15m', 'fallback: 15m -> Binance 15m (identity)');
+  await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '2h', 5);
+  assert(bs.calls.klines[bs.calls.klines.length-1][1] === '2h', 'fallback: 2h -> Binance 2h (identity)');
+  await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1d', 5);
+  assert(bs.calls.klines[bs.calls.klines.length-1][1] === '1d', 'fallback: 1d -> Binance 1d (identity)');
+}
+{
+  /* (b2) venue THIN (fewer rows than requested) -> deeper Binance series wins;
+     base derived from sym per module convention when item.base is absent */
+  const f = fetchRecorder([{ match: 'candlesticks', body: CDCX_CANDLES }]); // 2 venue rows
+  const bs = binanceStubs(['XRPUSDT'], BINANCE_CANDLES);
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const rows = await w.xuCandles({ sym: 'B-XRP_USDT', base: 'XRP', exchange: 'coindcx' }, '1h', 5);
+  assert(rows.length === 5 && rows[4].c === 107,
+         'fallback: thin venue (2 < 5 requested) -> deeper Binance series wins');
+  assert(bs.calls.klines[0][0] === 'XRPUSDT', 'fallback: B-XRP_USDT base -> XRPUSDT');
+  assert(w.xuCandles.lastSource === 'binance-fallback', 'fallback: thin-venue reroute tagged binance-fallback');
+  const rows2 = await w.xuCandles({ sym: 'B-XRP_USDT', exchange: 'coindcx' }, '1h', 5); // no item.base
+  assert(rows2.length === 5 && bs.calls.klines[bs.calls.klines.length-1][0] === 'XRPUSDT',
+         'fallback: missing item.base -> base derived from sym via module convention (B-XRP_USDT -> XRP)');
+}
+{
+  /* Binance series NOT deeper than the venue's -> native venue rows kept */
+  const f = fetchRecorder([{ match: 'candlesticks', body: CDCX_CANDLES }]); // 2 venue rows
+  const bs = binanceStubs(['XRPUSDT'], [BINANCE_CANDLES[0]]);              // only 1 Binance row
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const rows = await w.xuCandles({ sym: 'B-XRP_USDT', base: 'XRP', exchange: 'coindcx' }, '1h', 5);
+  assert(rows.length === 2 && rows[0].t === 1700000000 && rows[1].t === 1700003600,
+         'fallback: Binance not deeper -> native venue rows kept (fallback never downgrades)');
+  assert(w.xuCandles.lastSource === 'coindcx', 'fallback: venue-kept result tagged to its venue');
+}
+{
+  /* (c) venue empty + base NOT on Binance -> honest empty, never fabricated */
+  const f = fetchRecorder([{ match: 'delta.exchange/v2/history/candles', body: { result: [] } }]);
+  const bs = binanceStubs(['ETHUSDT'], BINANCE_CANDLES); // no BTCUSDT in the perp universe
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const rows = await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1h', 5);
+  assert(Array.isArray(rows) && rows.length === 0,
+         'fallback: base NOT a Binance perp -> honest [], never fabricated');
+  assert(bs.calls.perp === 1 && bs.calls.klines.length === 0,
+         'fallback: verified non-member -> no wasted kline call');
+  assert(w.xuCandles.lastSource === 'delta', 'fallback: empty venue result still tagged to its venue route');
+}
+{
+  /* (d) both down -> honest empty, never throws. Perp universe throwing
+     degrades to direct-kline-attempt mode; empty klines = not on Binance. */
+  const f = fetchRecorder([{ match: 'delta.exchange', fail: true, failMsg: 'timeout' }]);
+  const bs = binanceStubs('THROW', []);
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const rows = await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1h', 5);
+  assert(Array.isArray(rows) && rows.length === 0,
+         'fallback: venue down + Binance down -> honest [], never throws');
+  assert(bs.calls.perp === 1 && bs.calls.klines.length === 1,
+         'fallback: perp universe unavailable -> membership probed by one direct kline attempt');
+  /* klines itself throwing -> still honest [] */
+  const f2 = fetchRecorder([{ match: 'delta.exchange', httpFail: 500 }]);
+  const bs2 = binanceStubs(['BTCUSDT'], 'THROW');
+  const w2 = loadModule(makeCtx({ window: bs2.win, fetch: f2, AbortController: AbortController }));
+  const rows2 = await w2.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1h', 5);
+  assert(Array.isArray(rows2) && rows2.length === 0,
+         'fallback: venue HTTP 500 + throwing binanceKlines -> honest [], never throws');
+}
+{
+  /* (e) binancePerpUniverse called AT MOST ONCE across two fallbacks —
+     sequential AND concurrent (in-flight attempt is shared) */
+  const f = fetchRecorder([
+    { match: 'delta.exchange/v2/history/candles', body: { result: [] } },
+    { match: 'candlesticks', body: { data: [] } }
+  ]);
+  const bs = binanceStubs(['BTCUSDT', 'XRPUSDT'], BINANCE_CANDLES);
+  const w = loadModule(makeCtx({ window: bs.win, fetch: f, AbortController: AbortController }));
+  const r1 = await w.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1h', 5);
+  const r2 = await w.xuCandles({ sym: 'B-XRP_USDT', base: 'XRP', exchange: 'coindcx' }, '1h', 5);
+  assert(r1.length === 5 && r2.length === 5, 'fallback: both venue-empty legs reroute to Binance');
+  assert(bs.calls.perp === 1,
+         'fallback: binancePerpUniverse called at most once across two sequential fallbacks (session cache), got ' + bs.calls.perp);
+  assert(bs.calls.klines.length === 2 && bs.calls.klines[1][0] === 'XRPUSDT',
+         'fallback: one kline call per disappointed leg; second leg maps B-XRP_USDT -> XRPUSDT');
+  /* concurrent fallbacks share the single in-flight universe fetch */
+  const f3 = fetchRecorder([
+    { match: 'delta.exchange/v2/history/candles', body: { result: [] } },
+    { match: 'candlesticks', body: { data: [] } }
+  ]);
+  const bs3 = binanceStubs(['BTCUSDT', 'XRPUSDT'], BINANCE_CANDLES);
+  const w3 = loadModule(makeCtx({ window: bs3.win, fetch: f3, AbortController: AbortController }));
+  const rr = await Promise.all([
+    w3.xuCandles({ sym: 'BTCUSD', base: 'BTC', exchange: 'delta' }, '1h', 5),
+    w3.xuCandles({ sym: 'B-XRP_USDT', base: 'XRP', exchange: 'coindcx' }, '1h', 5)
+  ]);
+  assert(rr[0].length === 5 && rr[1].length === 5 && bs3.calls.perp === 1,
+         'fallback: concurrent fallbacks share ONE perp-universe fetch (in-flight guard), got ' + bs3.calls.perp);
 }
 
 /* ---------------- summary ---------------- */

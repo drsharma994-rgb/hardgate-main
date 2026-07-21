@@ -125,7 +125,7 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
                  plan: { entry: 50, stop: 47, t1: 56, t2: 60.5 }, gatesPassed: 5 },
                { sym: 'ALT007USDT', dir: 'long', conviction: 'MODERATE',
                  plan: null, gatesPassed: 4 } ],                                          /* survivor without a plan -> candle fallback */
-             rejected: [ { sym: 'SOLUSDT', vetoGate: 'G2' } ], at: 123 };
+             rejected: [ { sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 } ], at: 123 };
   };
   W.oiflowState = function(){ return { results: [
     { sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS (trend fuel)' },
@@ -251,8 +251,8 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   /* ---- ledgers at scale ---- */
   const lrows = bAside.split('<div class="lrow">').length - 1;
   assert(lrows === 503, 'ASIDE ledger renders all 503 aside rows (502 crypto + XAU) — got ' + lrows);
-  assert(bAside.indexOf('>SOL</span>') >= 0 && bAside.indexOf('engine veto @ G2') >= 0 && bAside.indexOf('>VETO</span>') >= 0,
-         'SOL veto aside with the killing gate named');
+  assert(bAside.indexOf('>SOL</span>') >= 0 && bAside.indexOf('engine veto @ G4') >= 0 && bAside.indexOf('>VETO</span>') >= 0,
+         'SOL hard-vetoed at G4 liquidity with the killing gate named');
   assert(bAside.indexOf('>XAU</span>') >= 0, 'gold lane lands in ASIDE when its setup layer is dark');
   assert(bWatch === '' && PB.stubs['#brainWatchWrap'].style.display === 'none',
          'WATCH panel empty + hidden when nothing is on watch');
@@ -295,20 +295,20 @@ console.log('== C) quick rescan over 45 watch candidates: cap note honest ==');
   W.HG_tabs[0].mount(PC.pane);
   await runAndWait(PC.stubs);
   const cFull = PC.stubs['#brainStat'].textContent;
-  assert(cFull.indexOf('done · 0 PRIME · 0 HIGH · 45 watch · 4 aside') === 0,
-         'full scan: 45 alts reach WATCH — got "' + cFull + '"');
-  assert(candleCalls === 40, 'full scan: fetch cap respected (40 of 45) — got ' + candleCalls);
-  assert(cFull.indexOf('+5 more watch candidates — raise evidence to fetch') >= 0,
+  assert(cFull.indexOf('done · 0 PRIME · 0 HIGH · 47 watch · 2 aside') === 0,
+         'full scan: 45 alts reach WATCH on 3 votes, BTC+ETH join on the 2-vote radar tier — got "' + cFull + '"');
+  assert(candleCalls === 40, 'full scan: fetch cap respected (40 of 47) — got ' + candleCalls);
+  assert(cFull.indexOf('+7 more watch candidates — raise evidence to fetch') >= 0,
          'full scan: cap note named honestly — got "' + cFull + '"');
 
   candleCalls = 0;
   PC.stubs['#brainQuick']._handler();
   await waitIdle(PC.stubs);
   const cQuick = PC.stubs['#brainStat'].textContent;
-  assert(/^quick rescan: 45 checked · 4 unchanged/.test(cQuick),
-         'quick rescan rechecks the 45-watch set — got "' + cQuick + '"');
-  assert(candleCalls === 40, 'quick rescan: fetch cap respected again (40 of 45) — got ' + candleCalls);
-  assert(cQuick.indexOf('+5 more watch candidates — raise evidence to fetch') >= 0,
+  assert(/^quick rescan: 47 checked · 2 unchanged/.test(cQuick),
+         'quick rescan rechecks the 47-watch set — got "' + cQuick + '"');
+  assert(candleCalls === 40, 'quick rescan: fetch cap respected again (40 of 47) — got ' + candleCalls);
+  assert(cQuick.indexOf('+7 more watch candidates — raise evidence to fetch') >= 0,
          'quick rescan: the binding fetch cap is NAMED on the stat line, never silently dropped — got "' + cQuick + '"');
 }
 

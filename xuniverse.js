@@ -28,6 +28,19 @@ EXPORTS (all on window, all feature-checkable, none ever throw):
       failure -> [] (never throws). Mirrors index.html candlesDelta /
       candlesCdcx field mapping verbatim; still-forming-bar dropping stays
       with consumers (same as the app's raw candle fetchers).
+      BINANCE FALLBACK: when the venue leg fails or returns fewer rows
+      than requested (thin listing) and the base asset trades as a Binance
+      USDT perp, window.binanceKlines(base+'USDT', tf, n) serves instead —
+      same {t(sec),o,h,l,c,v} asc shape (binance.js normalizes identically).
+      Binance rows win ONLY when deeper than the venue's; Binance empty ->
+      the venue's honest rows are kept, nothing is ever fabricated. The
+      return stays BARE rows; the source is tagged on the debug-only field
+      xuCandles.lastSource ('delta'|'coindcx'|'binance-fallback'|null) —
+      per-call global state, it RACES under concurrent fetches. Membership:
+      window.binancePerpUniverse() at most once per session (guarded);
+      when unavailable the kline fetch itself is attempted and an empty
+      result reads as "not on Binance". All module tfs map 1:1 onto
+      Binance intervals (see BIN_RES).
   window.xuMerge(deltaRows, cdcxRows) -> pure merge of normalized rows.
       Dedupe by base asset (BTCUSD/BTCUSDT and B-BTC_USDT are the same
       asset): the higher-known-turnover venue becomes the primary entry,
@@ -377,41 +390,115 @@ async function xuUniverse(force){
 }
 function errMsg(e){ return (e && e.message) ? e.message : String(e); }
 
+/* ---------------- Binance candle fallback ----------------
+   Thin venue listings (mostly CoinDCX) often return empty/too-few candles,
+   which excludes them from every gate/vote. When the venue leg cannot fill
+   the request and the same BASE asset trades as a Binance USDT perp, serve
+   window.binanceKlines(base+'USDT') instead. Contract preserved exactly:
+   Promise<[{t(sec),o,h,l,c,v}] asc>, [] on failure, never throws, rows
+   never fabricated. Feature-checked: no binance.js -> venue rows pass
+   through untouched, exactly as before. */
+var BIN_RES = {'15m':'15m','1h':'1h','2h':'2h','4h':'4h','1d':'1d'};
+/* Every tf this module accepts is Binance-native 1:1 today; the map is the
+   single point where a FUTURE venue tf Binance lacks must be mapped to the
+   nearest Binance interval (Binance: 1m 3m 5m 15m 30m 1h 2h 4h 6h 8h 12h
+   1d 1w). */
+
+var binPerps = undefined;   // undefined=never attempted; null=unavailable; {}=symbol->true
+var binPerpsInflight = null;
+/* window.binancePerpUniverse() at most ONCE per session, guarded, never
+   throwing; concurrent fallbacks share the single in-flight attempt. */
+async function binancePerpMap(){
+  if (binPerps !== undefined) return binPerps;
+  if (binPerpsInflight) return binPerpsInflight;
+  binPerpsInflight = (async function(){
+    try{
+      if (typeof G.binancePerpUniverse === 'function'){
+        var list = await G.binancePerpUniverse();
+        if (Array.isArray(list) && list.length){
+          var m = {};
+          for (var i = 0; i < list.length; i++) m[String(list[i]).toUpperCase()] = true;
+          binPerps = m;
+          return binPerps;
+        }
+      }
+    }catch(e){}
+    binPerps = null; // unavailable -> membership probed by direct kline attempt
+    return binPerps;
+  })();
+  try{ return await binPerpsInflight; }finally{ binPerpsInflight = null; }
+}
+
+/* Returns Binance rows when they BEAT the venue's (deeper series), else
+   null — the caller keeps the venue rows. Never throws, never fabricates. */
+async function binanceCandleFallback(item, tf, count, venueRows){
+  try{
+    if (typeof G.binanceKlines !== 'function') return null;
+    var base = (item.base && typeof item.base === 'string') ? item.base.toUpperCase()
+             : baseOf(item.sym, item.exchange); // module convention when base is absent
+    if (!base) return null;
+    var bSym = base + 'USDT';
+    var perps = await binancePerpMap();
+    if (perps && !perps[bSym]) return null; // verified NOT a Binance perp — no wasted kline call
+    /* perps null -> universe unavailable: attempt directly, empty = not on Binance */
+    var rows = await G.binanceKlines(bSym, BIN_RES[tf] || tf, count);
+    if (Array.isArray(rows) && rows.length > venueRows.length) return rows;
+    return null;
+  }catch(e){ return null; }
+}
+
 /* ---------------- candle router ---------------- */
 async function xuCandles(item, tf, n){
   try{
+    xuCandles.lastSource = null; // debug-only tag, see the fallback note above
     if (!item || !item.sym) return [];
     var res = DELTA_RES[tf]; // same tf key set on both maps
     var secPer = SEC_PER[tf];
     if (!res || !secPer) return [];
     var count = (isFinite(+n) && +n > 0) ? Math.floor(+n) : 200;
+    var rows = [], src = null;
     if (item.exchange === 'coindcx'){
-      var to = nowSec(), from = to - secPer * (count + 3);
-      var url = CDCX_PUB + '/market_data/candlesticks?pair=' + encodeURIComponent(item.sym) +
-                '&from=' + from + '&to=' + to + '&resolution=' + CDCX_RES[tf] + '&pcode=f';
-      var r = await timedFetch(CDCX_PROXY(url));
-      if (!r || !r.ok) return [];
-      var j = await r.json();
-      var rows = ((j && j.data) || []).map(function(c){
-        return { t: Math.floor((c.time !== undefined && c.time !== null ? c.time : c.t) / 1000),
-                 o: +c.open, h: +c.high, l: +c.low, c: +c.close, v: +(c.volume !== undefined && c.volume !== null ? c.volume : 0) };
-      }).filter(function(c){ return isFinite(c.t); });
-      rows.sort(function(a, b){ return a.t - b.t; });
-      return rows;
+      src = 'coindcx';
+      try{
+        var to = nowSec(), from = to - secPer * (count + 3);
+        var url = CDCX_PUB + '/market_data/candlesticks?pair=' + encodeURIComponent(item.sym) +
+                  '&from=' + from + '&to=' + to + '&resolution=' + CDCX_RES[tf] + '&pcode=f';
+        var r = await timedFetch(CDCX_PROXY(url));
+        if (r && r.ok){
+          var j = await r.json();
+          rows = ((j && j.data) || []).map(function(c){
+            return { t: Math.floor((c.time !== undefined && c.time !== null ? c.time : c.t) / 1000),
+                     o: +c.open, h: +c.high, l: +c.low, c: +c.close, v: +(c.volume !== undefined && c.volume !== null ? c.volume : 0) };
+          }).filter(function(c){ return isFinite(c.t); });
+          rows.sort(function(a, b){ return a.t - b.t; });
+        }
+      }catch(e){ rows = []; } // venue leg down -> [] -> Binance fallback below
     }
-    if (item.exchange === 'delta'){
-      var end = nowSec(), start = end - secPer * (count + 3);
-      var r2 = await timedFetch(DELTA + '/v2/history/candles?resolution=' + DELTA_RES[tf] +
-                                '&symbol=' + encodeURIComponent(item.sym) + '&start=' + start + '&end=' + end);
-      if (!r2 || !r2.ok) return [];
-      var j2 = await r2.json();
-      var rows2 = ((j2 && j2.result) || []).map(function(c){
-        return { t: c.time, o: +c.open, h: +c.high, l: +c.low, c: +c.close, v: +c.volume };
-      }).filter(function(c){ return isFinite(c.t); });
-      rows2.sort(function(a, b){ return a.t - b.t; });
-      return rows2;
+    else if (item.exchange === 'delta'){
+      src = 'delta';
+      try{
+        var end = nowSec(), start = end - secPer * (count + 3);
+        var r2 = await timedFetch(DELTA + '/v2/history/candles?resolution=' + DELTA_RES[tf] +
+                                  '&symbol=' + encodeURIComponent(item.sym) + '&start=' + start + '&end=' + end);
+        if (r2 && r2.ok){
+          var j2 = await r2.json();
+          rows = ((j2 && j2.result) || []).map(function(c){
+            return { t: c.time, o: +c.open, h: +c.high, l: +c.low, c: +c.close, v: +c.volume };
+          }).filter(function(c){ return isFinite(c.t); });
+          rows.sort(function(a, b){ return a.t - b.t; });
+        }
+      }catch(e){ rows = []; } // venue leg down -> [] -> Binance fallback below
     }
-    return [];
+    else return [];
+    /* Venue could not fill the request (outage or thin listing): reroute to
+       the base asset's Binance USDT perp when one exists. Binance rows win
+       only when deeper; the venue's honest rows are never hidden. */
+    if (rows.length < count){
+      var fb = await binanceCandleFallback(item, tf, count, rows);
+      if (fb){ rows = fb; src = 'binance-fallback'; }
+    }
+    xuCandles.lastSource = src;
+    return rows;
   }catch(e){ return []; }
 }
 

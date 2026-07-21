@@ -28,9 +28,10 @@
         after a completed run, 'busy' while a scan is in flight, double-
         refresh still busy, never throws with every global absent
      Q) BRAIN state getter — window.engineState: null pre-run, exact
-        {survivors, rejected, at} shape post-run, deep-frozen copies,
-        stale-good snapshot preserved after an honest abort, never throws
-        with sabotaged internals
+        {survivors, rejected, at} shape post-run (rejected rows enriched
+        {sym, vetoGate, dir, gatesPassed}), deep-frozen copies (mutation
+        never leaks), stale-good snapshot preserved after an honest abort,
+        never throws with sabotaged internals; G0/G1 vetoes keep dir null
    No live network. Run: node tests/test-engine.mjs */
 
 import fs from 'node:fs';
@@ -765,17 +766,30 @@ ok(qState.survivors.length === 1 && qState.rejected.length === 1,
 const qSv = qState.survivors[0];
 ok(Object.keys(qSv).sort().join(',') === 'conviction,dir,gatesPassed,plan,sym',
    'Q: survivor row keys exactly {sym, dir, conviction, plan, gatesPassed}');
+ok(Object.keys(qSv).join(',') === 'sym,dir,conviction,plan,gatesPassed',
+   'Q: survivor row key ORDER unchanged (sym,dir,conviction,plan,gatesPassed) — enrichment was additive-only');
 ok(qSv.sym === 'BTCUSDT' && qSv.dir === 'long' && qSv.conviction === 'STRONG' && qSv.gatesPassed === 6,
    'Q: survivor carries sym/dir/conviction/gatesPassed from the funnel result');
 ok(qSv.plan && qSv.plan.entry === 106 && qSv.plan.stop === 101 && qSv.plan.t1 === 116 && qSv.plan.t2 === 123.5
    && Object.keys(qSv.plan).sort().join(',') === 'entry,stop,t1,t2',
    'Q: survivor plan reduced to exactly {entry, stop, t1, t2}');
 ok(qState.rejected[0].sym === 'SOLUSDT' && qState.rejected[0].vetoGate === 'G2'
-   && Object.keys(qState.rejected[0]).sort().join(',') === 'sym,vetoGate',
-   'Q: rejected rows carry exactly {sym, vetoGate}');
+   && qState.rejected[0].dir === 'long' && qState.rejected[0].gatesPassed === 2
+   && Object.keys(qState.rejected[0]).sort().join(',') === 'dir,gatesPassed,sym,vetoGate',
+   'Q: rejected rows carry exactly {sym, vetoGate, dir, gatesPassed} — G2 veto keeps the G1 lean + true-gate count');
 ok(Object.isFrozen(qState) && Object.isFrozen(qState.survivors) && Object.isFrozen(qSv)
-   && Object.isFrozen(qSv.plan) && Object.isFrozen(qState.rejected),
+   && Object.isFrozen(qSv.plan) && Object.isFrozen(qState.rejected) && Object.isFrozen(qState.rejected[0]),
    'Q: the view is deep-frozen (state, rows and plan all frozen)');
+/* mutation attempts on a handed-out view never leak into module state
+   (strict mode throws on frozen writes — the try/catch is the point) */
+try{ qState.rejected[0].vetoGate = 'G9'; qState.rejected[0].dir = 'short';
+     qState.rejected[0].evil = 1; qState.rejected.push({ sym: 'HACKUSDT' });
+     qState.survivors[0].dir = 'short'; }catch(e){}
+const qStateMut = globalThis.window.engineState();
+ok(qStateMut.rejected.length === 1 && qStateMut.rejected[0].vetoGate === 'G2'
+   && qStateMut.rejected[0].dir === 'long' && qStateMut.rejected[0].gatesPassed === 2
+   && qStateMut.rejected[0].evil === undefined && qStateMut.survivors[0].dir === 'long',
+   'Q: mutating a handed-out view never leaks into module state (fresh copy intact)');
 const qState2 = globalThis.window.engineState();
 ok(qState2 !== qState && qState2.survivors !== qState.survivors
    && JSON.stringify(qState2) === JSON.stringify(qState),
@@ -803,6 +817,42 @@ Array.isArray = keepIsArray;
 ok(!qThrew && qGot === null,
    'Q: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
 ok(globalThis.window.engineState() !== null, 'Q: getter recovers once internals are restored');
+
+/* enriched rejected rows at the EARLY veto stages: a G0/G1 kill commits no
+   side — res.dir is only assigned after G1 fully passes, so dir stays null
+   and gatesPassed counts only fully-passed gates (G1 veto → 1 = G0 only;
+   G0 veto → 0). Fixture: CHOPUSDT mixed cascade → G1; THINUSDT 120 bars → G0. */
+globalThis.binancePerpUniverse = async function(){ return ['CHOPUSDT', 'THINUSDT']; };
+globalThis.binanceTickers24h = async function(){
+  return { CHOPUSDT: { mark: 100, chg24: 1, turnoverUsd: 700e6 },
+           THINUSDT: { mark: 106, chg24: 1, turnoverUsd: 700e6 } };
+};
+const keepEmaQ = globalThis.ema;
+globalThis.ema = function(vals, p){
+  const lc = vals[vals.length - 1];
+  if (lc === 100){ const t = { 9: 104, 20: 101, 21: 99, 50: 106, 200: 90 }; return vals.map(function(){ return t[p]; }); }
+  return emaStub(vals, p);   // 104 > 99 but 99 < 106 → neither cascade → G1 'mixed' veto
+};
+globalThis.binanceKlines = async function(sym, interval, limit){
+  if (sym === 'THINUSDT') return mkRows(120, 106, 0.25, 1.0);   // 120 < 210 → G0 thin-history veto
+  return mkRows(limit || 260, 100, 0.25, 1.0);                  // last close 100 → mixed cascade above
+};
+const Q4 = freshPane();
+tabQ.mount(Q4.pane);
+Q4.stubs['#engineRun']._handler();
+await waitScan(Q4.stubs);
+ok(Q4.stubs['#engineStat'].textContent.indexOf('done · 0 executions') === 0,
+   'Q: G0/G1 fixture scan completes (0 executions, 2 aside)');
+const q4 = globalThis.window.engineState();
+ok(q4 && q4.survivors.length === 0 && q4.rejected.length === 2,
+   'Q: snapshot mirrors the all-rejected scan');
+ok(q4.rejected[0].sym === 'CHOPUSDT' && q4.rejected[0].vetoGate === 'G1'
+   && q4.rejected[0].dir === null && q4.rejected[0].gatesPassed === 1,
+   'Q: G1 veto keeps dir null (no side committed before G1 completes) + gatesPassed 1 (G0 only)');
+ok(q4.rejected[1].sym === 'THINUSDT' && q4.rejected[1].vetoGate === 'G0'
+   && q4.rejected[1].dir === null && q4.rejected[1].gatesPassed === 0,
+   'Q: G0 veto keeps dir null + gatesPassed 0');
+globalThis.ema = keepEmaQ;
 
 /* ================= R) combined universe — precedence, venue filter, config =================
    Fresh module instance (clean busy/hasRun closure). window.xuUniverse /
