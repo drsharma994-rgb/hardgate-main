@@ -758,6 +758,11 @@ function loadConvictionStore(ls){
   vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C = globalThis.window;
+  /* tab scans use wall-clock Date.now() — pin it to a fixed London/NY-overlap
+     instant so the off-session quality gate never makes these lock assertions
+     time-of-day dependent (the gate itself is pinned separately in section 25) */
+  const realDateNow = Date.now;
+  Date.now = () => OVLP_NOW + 30*60*1000;   // 14:30 GMT -> killzone weight 3
   const baseRows = compLongRows();
   C.getGoldCandles = async (tf) => (tf === '15m')
     ? { rows: cloneRows(baseRows), source: 'binance-xau' }
@@ -962,6 +967,7 @@ function loadConvictionStore(ls){
   assert(st2 && st2.at === atBefore && JSON.stringify(st2.results) === jsonBefore,
          'failed re-run keeps the PREVIOUS good snapshot with its original at');
   assert(/no 15m klines/.test(M.stubs['#gsStat'].textContent), 'honest stat line names the data failure');
+  Date.now = realDateNow;
   delete globalThis.localStorage;
 }
 
@@ -975,6 +981,183 @@ console.log('== 24) composite contract regression ==');
          'composite goldScalpSetup output unchanged after the rework (long, grade B, 5/1 reads)');
   assert(s && Math.abs((s.entry - s.stop) - 1.5*s.atr) < 1e-9 && s.rr >= 1.5 - 1e-9,
          'composite levels math unchanged (1.5×ATR stop, rr >= 1.5)');
+}
+
+/* =========================================================================
+   25) QUALITY GATES — off-session demotion + tally bar, trend alignment,
+       min R:R after snapping, Kaufman-ER chop filter, news-window veto
+========================================================================= */
+console.log('== 25) quality gates: low-probability setups cut, reasons named ==');
+const ASIAN_NOW = Date.UTC(2024, 0, 16, 3, 0, 0);          // 03:00 GMT -> ASIAN weight 0
+function obRows25(){
+  const rows = flatRows(25, 100, 0.5, DAY);
+  rows.push({ t: DAY + 25*900, o: 100, h: 100.4, l: 98.8, c: 99.6, v: 1200 });
+  rows.push({ t: DAY + 26*900, o: 99.6, h: 104.5, l: 99.5, c: 104.2, v: 4000 });
+  rows.push({ t: DAY + 27*900, o: 104.2, h: 105, l: 103.8, c: 104.6, v: 1500 });
+  rows.push({ t: DAY + 28*900, o: 104.6, h: 105.2, l: 104, c: 104.8, v: 1500 });
+  rows.push({ t: DAY + 29*900, o: 104.8, h: 105.3, l: 104.4, c: 105, v: 1400 });
+  let px = 105;
+  for (let i = 30; i < 41; i++){ const o = px; px = o - 0.5;
+    rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.3, l: Math.min(o, px) - 0.3, c: px, v: 1100 }); }
+  rows.push({ t: DAY + 41*900, o: px, h: px + 0.2, l: 98.95, c: 99.4, v: 2600 });
+  return rows;
+}
+function asianBoRows25(){
+  const rows = [];
+  for (let i = 0; i < 28; i++) rows.push({ t: DAY + i*900, o: 100, h: 101, l: 99, c: 100, v: 1000 });
+  for (let i = 0; i < 6; i++) rows.push({ t: DAY + 8*3600 + i*900, o: 101.5, h: 102.3, l: 101.2, c: 102, v: 2500 });
+  return rows;
+}
+function ctRows25(){                 /* 200-bar wiggle downtrend + bullish sweep/divergence tail below the falling 200 */
+  const down = wiggleRows(200, 2600, 0.4, -1.1, DAY - 200*900, 900);
+  const lastC = down[down.length - 1].c;
+  const tail = compLongRows().slice(-40).map((r, i) => ({
+    t: DAY + i*900, o: r.o + (lastC - 2300), h: r.h + (lastC - 2300), l: r.l + (lastC - 2300), c: r.c + (lastC - 2300), v: r.v }));
+  return down.concat(tail);
+}
+function rows4hBear25(){ return trendRows(220, 2900, -1.2, DAY - 220*4*3600, 4*3600); }
+function rows4hBull25(){ return trendRows(220, 2300, 1.2, DAY - 220*4*3600, 4*3600); }
+function rrShortRows25(){            /* short into a bearish OB with a bullish OB top ~0.7R below entry */
+  const rows = flatRows(25, 100, 0.5, DAY);
+  const P = (i, o, h, l, c, v) => rows.push({ t: DAY + i*900, o: o, h: h, l: l, c: c, v: (v === undefined ? 1000 : v) });
+  P(25, 100, 100.6, 99.8, 100.4, 1200);           // bull candle -> bearish OB seed [99.8,100.6]
+  P(26, 100.4, 100.5, 95.8, 96.0, 4000);          // displacement down -> bearish OB
+  let px = 96.0;
+  for (let i = 27; i < 49; i++){ const o = px; px = o - 0.06; P(i, o, Math.max(o, px) + 0.3, Math.min(o, px) - 0.3, px, 900); }
+  P(49, 94.7, 94.8, 94.1, 94.4, 1200);
+  px = 94.4;
+  for (let i = 50; i < 60; i++){ const o = px; px = o + 0.4; P(i, o, Math.max(o, px) + 0.25, Math.min(o, px) - 0.25, px, 1000); }
+  P(60, 98.8, 99.0, 98.6, 98.7, 1100);            // bearish candle -> bullish OB seed [98.6,99.0]
+  P(61, 98.7, 100.2, 98.6, 100.0, 3500);          // displacement up
+  P(62, 100.0, 100.2, 99.7, 99.9, 1300);          // into the bearish OB zone
+  P(63, 99.9, 100.1, 99.6, 99.9, 2200);           // entry 99.9
+  return rows;
+}
+{
+  /* ---- (1) OFF-SESSION DEMOTION + raised tally bar + Asian exception ---- */
+  const offC = W.goldScalpSetups({ rows15m: compLongRows(), now: OFF_NOW });
+  assert(offC.length >= 2 && offC.every(c => c.demoted === true && c.offSession === true && c.stamps.indexOf('OFF-SESSION') >= 0),
+         'off-session: candidates detected outside every ICT killzone are demoted + stamped OFF-SESSION');
+  const offRank = W.goldRankSetups(offC, { now: OFF_NOW });
+  assert(offRank.rejected.length === 0 && offRank.ranked.length === offC.length && offRank.ranked.every(c => c.demoted),
+         'off-session: tally clearing the +2 raised bar still renders (demoted)');
+  assert(offRank.best === null, 'off-session: demoted candidates can NEVER be MOST PROBABLE (best null when all demoted)');
+  const offRank2 = W.goldRankSetups(offC, { now: OFF_NOW,
+    news: { loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(OFF_NOW/1000) }] },
+    macro: { realRateHint: 'HEADWIND' } });
+  assert(offRank2.ranked.length === 0 && offRank2.rejected.length === offC.length
+      && offRank2.rejected.every(r => /OFF-SESSION/.test(r.reason) && /below the raised bar \(\+2\)/.test(r.reason)),
+         'off-session tally bar: tally ' + offRank2.rejected.map(r => (r.reason.match(/tally ([+-]?\d+)/) || [])[1]) + ' below +2 -> held back with the reason named');
+  const asianC = W.goldScalpSetups({ rows15m: asianBoRows25(), now: ASIAN_NOW });
+  const asianOnly = asianC.find(c => c.stratKey === 'asian');
+  assert(!!asianOnly && asianOnly.demoted === false && asianOnly.stamps.length === 0,
+         'off-session exception: the Asian-range breakout strategy trades its own 00:00-07:00 GMT session undemoted');
+  const asianOther = asianC.find(c => c.stratKey !== 'asian');
+  assert(!asianOther || (asianOther.demoted === true && asianOther.stamps.indexOf('OFF-SESSION') >= 0),
+         'a non-Asian strategy in the Asian window IS off-session demoted (only the Asian strategy is exempt)');
+  const asianOff = W.goldScalpSetups({ rows15m: asianBoRows25(), now: OFF_NOW });
+  const asianAtOff = asianOff.find(c => c.stratKey === 'asian');
+  assert(!!asianAtOff && asianAtOff.demoted === true && asianAtOff.stamps.indexOf('OFF-SESSION') >= 0,
+         'the Asian strategy outside its own session is demoted like everything else');
+
+  /* ---- (2) TREND ALIGNMENT ---- */
+  const ctBear = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBear25(), now: OVLP_NOW });
+  const rsiL = ctBear.find(c => c.stratKey === 'rsidiv'), swL = ctBear.find(c => c.stratKey === 'sweep');
+  assert(!!rsiL && rsiL.demoted === true && rsiL.stamps.indexOf('COUNTER-TREND') >= 0
+      && /falling 200-EMA-15m/.test(rsiL.gateNotes.join(' ')) && /bearish 4H/.test(rsiL.gateNotes.join(' ')),
+         'trend: long below a FALLING 200-EMA-15m with a bearish 4H stack -> COUNTER-TREND demotion');
+  assert(!!swL && swL.demoted === false,
+         'trend exception: the liquidity-sweep trigger is the sanctioned counter-trend play (never demoted)');
+  const ctBull = W.goldScalpSetups({ rows15m: ctRows25(), rows4h: rows4hBull25(), now: OVLP_NOW });
+  const rsiLB = ctBull.find(c => c.stratKey === 'rsidiv');
+  assert(!!rsiLB && rsiLB.demoted === false, 'trend: a disagreeing (bullish) 4H stack clears the demotion — not counter-trend');
+  const ctNone = W.goldScalpSetups({ rows15m: ctRows25(), now: OVLP_NOW });
+  const rsiLN = ctNone.find(c => c.stratKey === 'rsidiv');
+  assert(!!rsiLN && rsiLN.demoted === true, 'trend: 4H unavailable -> the falling 15m 200-EMA evidence alone demotes');
+  const ctMir = W.goldScalpSetups({ rows15m: mirrorRows(ctRows25(), 2560), rows4h: rows4hBull25(), now: OVLP_NOW });
+  const rsiS = ctMir.find(c => c.stratKey === 'rsidiv'), swS = ctMir.find(c => c.stratKey === 'sweep');
+  assert(!!rsiS && rsiS.dir === 'short' && rsiS.demoted === true && rsiS.stamps.indexOf('COUNTER-TREND') >= 0
+      && /rising 200-EMA-15m/.test(rsiS.gateNotes.join(' ')),
+         'trend (mirrored): short above a RISING 200-EMA-15m with a bullish 4H stack -> COUNTER-TREND demotion');
+  assert(!!swS && swS.demoted === false, 'trend (mirrored): the sweep-rejection short is exempt');
+
+  /* ---- (3) MIN R:R AFTER SNAPPING ---- */
+  const rrC = W.goldScalpSetups({ rows15m: rrShortRows25(), now: OVLP_NOW });
+  assert(!rrC.find(c => c.stratKey === 'ob'), 'min-R:R: opposing structure < 1.2R away -> the setup does NOT render as a card');
+  const rrDrop = (rrC.rejected || []).find(r => r.stratKey === 'ob');
+  assert(!!rrDrop && rrDrop.dir === 'short' && /structure too close — R:R insufficient/.test(rrDrop.reason),
+         'min-R:R: realized TP1 < 1.2R after snapping -> dropped with the named reason ("' + (rrDrop && rrDrop.reason) + '")');
+  assert(Array.isArray(rrC.rejected) && rrC.rejected.length >= 1
+      && rrC.rejected.every(r => typeof r.reason === 'string' && r.reason.length > 10),
+         'min-R:R: every held-back setup carries a human-readable reason (never silently dropped)');
+
+  /* ---- (4) CHOP FILTER ---- */
+  const chopC = W.goldScalpSetups({ rows15m: obRows25(), now: OVLP_NOW });
+  const chopOb = chopC.find(c => c.stratKey === 'ob');
+  assert(!!chopOb && chopOb.demoted === true && chopOb.stamps.indexOf('CHOP') >= 0
+      && /Kaufman ER .* < 0\.25/.test(chopOb.gateNotes.join(' ')),
+         'chop: Kaufman ER(20) < 0.25 demotes the mean-reversion OB retest (stamped CHOP)');
+  const chopBreak = W.goldScalpSetups({ rows15m: compLongRows(), now: OVLP_NOW });
+  const chSw = chopBreak.find(c => c.stratKey === 'sweep'), chRs = chopBreak.find(c => c.stratKey === 'rsidiv');
+  assert(!!chSw && chSw.stamps.indexOf('CHOP') < 0 && !!chRs && chRs.stamps.indexOf('CHOP') < 0,
+         'chop: breakout triggers (sweep) and divergence plays are exempt from the chop demotion');
+
+  /* ---- (5) NEWS-WINDOW VETO (tab level) ---- */
+  {
+    globalThis.window = {};
+    const ls2 = memLocalStorage();
+    globalThis.localStorage = ls2;
+    vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+    vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
+    const C2 = globalThis.window;
+    const FIXED = OVLP_NOW + 30*60*1000;
+    const realDateNow2 = Date.now;
+    Date.now = () => FIXED;
+    C2.hgNewsState = () => ({ loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(FIXED/1000) + 300 }] });
+    C2.getGoldCandles = async (tf) => (tf === '15m')
+      ? { rows: cloneRows(compLongRows()), source: 'binance-xau' }
+      : { rows: [], source: 'binance-xau' };
+    const tab2 = C2.HG_tabs.find(t => t.id === 'goldscalp');
+    const M2 = freshPane();
+    tab2.mount(M2.pane);
+    await M2.stubs['#gsRun']._handler();                       // scan A: veto active, empty store
+    const sA = C2.goldscalpScan();
+    const liveA2 = Object.keys(loadConvictionStore(ls2).live).length;
+    assert(liveA2 === 0 && sA.cands.length === 0,
+           'news veto: inside the ±30-min high-impact window NO new conviction is issued');
+    assert(sA.rejected.length >= 2
+        && sA.rejected.every(r => /NEWS WINDOW — no new entries, wait 15–30 min after release/.test(r.reason)),
+           'news veto: every held-back setup renders the NEWS WINDOW reason line');
+    assert(M2.stubs['#gsCards'].innerHTML.indexOf('NEWS WINDOW — no new entries') >= 0,
+           'news veto: reason lines rendered on the pane (never silently dropped)');
+
+    /* already-live conviction keeps running untouched through the window */
+    const det = C2.goldScalpSetups({ rows15m: cloneRows(compLongRows()), now: FIXED });
+    const detSw = det.find(c => c.stratKey === 'sweep');
+    const preStore = loadConvictionStore(ls2) || { v: 1, live: {}, history: [] };
+    preStore.live[detSw.id] = { id: detSw.id, dir: detSw.dir, strategy: detSw.strategy,
+                                entry: detSw.entry, stop: detSw.stop, t1: detSw.t1, t2: detSw.t2,
+                                venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: FIXED - 60*1000, tally: 7 };
+    ls2.setItem('hgGoldscalpConviction', JSON.stringify(preStore));
+    await tab2.refresh();                                      // scan B: veto active, one live record
+    const sB = C2.goldscalpScan();
+    const liveB2 = Object.keys(loadConvictionStore(ls2).live).length;
+    assert(liveB2 === 1, 'news veto: nothing new minted even with a live record present (live count flat)');
+    assert(sB.cands.length === 1 && sB.cands[0].id === detSw.id && sB.cands[0].locked === true && sB.cands[0].vetoed === false,
+           'news veto: the already-live conviction is restored + locked — it keeps running untouched');
+    assert(sB.rejected.length === 1 && /NEWS WINDOW/.test(sB.rejected[0].reason),
+           'news veto: the OTHER (not-yet-live) setup is still held back with the reason line');
+
+    /* window passes -> issuance resumes */
+    C2.hgNewsState = () => ({ loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(FIXED/1000) + 45*60 }] });
+    await tab2.refresh();                                      // scan C: outside the window again
+    const sC = C2.goldscalpScan();
+    const liveC2 = Object.keys(loadConvictionStore(ls2).live).length;
+    assert(liveC2 === 2 && sC.cands.some(c => c.locked === false),
+           'news window passed -> new convictions issue again (held-back setup mints)');
+    Date.now = realDateNow2;
+    delete globalThis.localStorage;
+  }
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

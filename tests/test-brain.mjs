@@ -14,6 +14,11 @@
      O) second run — ETH HIGH short + short plan sanity
      P) hard-refresh contract (skip / busy / refreshed, never throws)
      Q) never-throws with ALL globals absent
+     R-AD) combined universe, venue filter, quick rescan, scorecard hook
+     AE) radar quality gates (liquidity floor demotion + exact reason, null
+         turnover pass-through, overextension WATCH demotion ±15% both sides,
+         PRIME/HIGH caution chips, funding crowding caution non-demotion,
+         tape-missing pass-through, suppressed tally on the stat line)
    No live network. Run: node tests/test-brain.mjs */
 
 import fs from 'node:fs';
@@ -716,11 +721,16 @@ console.log('== lazy-fetch cap binds honestly ==');
   WU.HG_tabs[0].mount(TU.pane);
   await runAndWait(TU.stubs);
   const uStat = TU.stubs['#brainStat'].textContent;
-  ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 52 watch · 2 aside') === 0,
-     '50 alts reach WATCH on 3 votes, ETH+SOL join on the 2-vote radar tier, BTC + gold aside — got "' + uStat + '"');
-  ok(capCalls.length === 40, 'fetch cap respected: 40 fetches out of 52 watch candidates — got ' + capCalls.length);
-  ok(uStat.indexOf('+12 more watch candidates — raise evidence to fetch') >= 0,
+  ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 48 watch · 6 aside') === 0,
+     '46 alts reach WATCH on 3 votes, ETH+SOL join on the 2-vote radar tier; ALT1-ALT4 (1-4M turnover) gated below the $5M liquidity floor; BTC + gold aside — got "' + uStat + '"');
+  ok(capCalls.length === 40, 'fetch cap respected: 40 fetches out of 48 watch candidates — got ' + capCalls.length);
+  ok(uStat.indexOf('+8 more watch candidates — raise evidence to fetch') >= 0,
      'honest note when the cap binds — got "' + uStat + '"');
+  ok(uStat.indexOf(' · 4 gated: 4 liquidity') >= 0,
+     'liquidity-gate demotions tallied on the stat line, never silent — got "' + uStat + '"');
+  ok(TU.stubs['#brainAside'].innerHTML.indexOf('below liquidity floor — $1.0M 24h turnover, slippage eats the edge') >= 0
+     && TU.stubs['#brainAside'].innerHTML.indexOf('>ALT4</span>') >= 0,
+     'gated sub-floor alts land on the ASIDE ledger with the kill reason named');
   ok(uStat.indexOf('universe 53 (delta 28 + cdcx 25)') >= 0, 'combined counts over the big universe are exact');
   ok(capSnaps.some(function(s){ return s === '0/40 candidates · delta 28 · cdcx 25'; }),
      'progress line counts down the capped fetch queue');
@@ -1047,8 +1057,8 @@ console.log('== stuck-scan timeouts (AB) ==');
   B2.stubs['#brainRun']._handler();
   await waitIdle(B2.stubs);
   const b2Stat = B2.stubs['#brainStat'].textContent;
-  ok(b2Stat.indexOf('done · 0 PRIME · 0 HIGH · 52 watch') === 0,
-     'AB2: watchdog trip still renders the verdicts — got "' + b2Stat + '"');
+  ok(b2Stat.indexOf('done · 0 PRIME · 0 HIGH · 48 watch') === 0,
+     'AB2: watchdog trip still renders the verdicts (4 sub-floor alts gated aside) — got "' + b2Stat + '"');
   ok(b2Stat.indexOf('timed out') >= 0 && b2Stat.indexOf('partial') >= 0,
      'AB2: the stuck scan names its timeout honestly — got "' + b2Stat + '"');
   ok(hungCalls > 0 && hungCalls < 40,
@@ -1275,6 +1285,237 @@ process.on('unhandledRejection', function(){ unhandledRej++; });
      'AD: plan-less setup still recorded — PRIME quality capped to HIGH with the tape feed dark — got ' + recs6.length);
   ok(recs6[0] && recs6[0].entry === null && recs6[0].stop === null && recs6[0].t1 === null && recs6[0].t2 === null,
      'AD: missing plan -> null levels, never fabricated numbers');
+}
+
+/* ================= AE) radar quality gates ================= */
+console.log('== radar quality gates: liquidity floor / overextension guard / funding crowding ==');
+/* row-level extraction: the <div class="lrow"> segment naming >SYM</span> */
+function lrowSeg(html, sym){
+  const segs = String(html).split('<div class="lrow">');
+  for (let i = 0; i < segs.length; i++){
+    if (segs[i].indexOf('>' + sym + '</span>') >= 0) return segs[i];
+  }
+  return '';
+}
+function stubQuietLayers(WX){
+  WX.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  WX.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  WX.squeezeState = function(){ return { results: [] }; };
+  WX.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  WX.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  WX.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+}
+
+/* AE1 — LIQUIDITY FLOOR: known sub-$5M turnover demotes WATCH -> ASIDE with
+   the exact reason; null turnover (unknown) and exactly-$5M pass through */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'THINUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'MYSTUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'EXACTUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'THINUSDT', base: 'THIN', exchange: 'delta', turnoverUsd: 2e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'MYSTUSDT', base: 'MYST', exchange: 'delta', turnoverUsd: null, mark: 1, fundingPct: null, alsoOn: null },
+    { sym: 'EXACTUSDT', base: 'EXACT', exchange: 'delta', turnoverUsd: 5e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  const TG1 = freshPane();
+  WG.HG_tabs[0].mount(TG1.pane);
+  await runAndWait(TG1.stubs);
+  const g1Stat = TG1.stubs['#brainStat'].textContent;
+  const g1Watch = TG1.stubs['#brainWatch'].innerHTML;
+  const g1Aside = TG1.stubs['#brainAside'].innerHTML;
+  ok(g1Stat.indexOf('done · 0 PRIME · 0 HIGH · 4 watch · 3 aside') === 0,
+     'AE1: buckets — ETH/SOL/MYST/EXACT watch, BTC+THIN+gold aside — got "' + g1Stat + '"');
+  ok(g1Stat.indexOf(' · 1 gated: 1 liquidity') >= 0,
+     'AE1: stat line tallies the liquidity demotion — got "' + g1Stat + '"');
+  ok(g1Aside.indexOf('>THIN</span>') >= 0
+     && lrowSeg(g1Aside, 'THIN').indexOf('below liquidity floor — $2.0M 24h turnover, slippage eats the edge') >= 0,
+     'AE1: below-floor WATCH demoted to ASIDE with the exact reason — got "' + lrowSeg(g1Aside, 'THIN').slice(0, 160) + '"');
+  ok(g1Watch.indexOf('>THIN</span>') === -1, 'AE1: the gated row leaves the WATCH ledger (demoted, not hidden)');
+  ok(g1Watch.indexOf('>MYST</span>') >= 0 && g1Aside.indexOf('>MYST</span>') === -1,
+     'AE1: null turnover = unknown = NEVER punished — MYST keeps its WATCH row');
+  ok(g1Watch.indexOf('>EXACT</span>') >= 0,
+     'AE1: exactly $5.0M turnover passes the >= $5M floor (boundary honored)');
+}
+
+/* AE2 — OVEREXTENSION GUARD (long): a WATCH chase into a >= +15% 24h move
+   demotes; the +15.0% boundary fires; a perp missing from the tape passes */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'QUIETUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.binanceTickers24h = async function(){ return {
+    PUMPUSDT: { symbol: 'PUMPUSDT', mark: 1, chg24: 18.2, turnoverUsd: 300e6 },
+    EDGEUSDT: { symbol: 'EDGEUSDT', mark: 1, chg24: 15.0, turnoverUsd: 200e6 } }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'PUMPUSDT', base: 'PUMP', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'EDGEUSDT', base: 'EDGE', exchange: 'delta', turnoverUsd: 40e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'QUIETUSDT', base: 'QUIET', exchange: 'delta', turnoverUsd: 60e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  const TG2 = freshPane();
+  WG.HG_tabs[0].mount(TG2.pane);
+  await runAndWait(TG2.stubs);
+  const g2Stat = TG2.stubs['#brainStat'].textContent;
+  const g2Watch = TG2.stubs['#brainWatch'].innerHTML;
+  const g2Aside = TG2.stubs['#brainAside'].innerHTML;
+  ok(g2Stat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 4 aside') === 0,
+     'AE2: buckets — ETH/SOL/QUIET watch, PUMP+EDGE gated aside — got "' + g2Stat + '"');
+  ok(g2Stat.indexOf(' · 2 gated: 2 overextended') >= 0,
+     'AE2: stat line tallies both overextension demotions — got "' + g2Stat + '"');
+  ok(lrowSeg(g2Aside, 'PUMP').indexOf('overextended +18.2% 24h — chasing tops is how radar dies') >= 0,
+     'AE2: +18.2% chase demoted with the exact reason — got "' + lrowSeg(g2Aside, 'PUMP').slice(0, 160) + '"');
+  ok(lrowSeg(g2Aside, 'EDGE').indexOf('overextended +15.0% 24h — chasing tops is how radar dies') >= 0,
+     'AE2: exactly +15.0% trips the >= +15% guard (boundary honored)');
+  ok(g2Watch.indexOf('>PUMP</span>') === -1 && g2Watch.indexOf('>EDGE</span>') === -1,
+     'AE2: gated chases leave the WATCH ledger');
+  ok(g2Watch.indexOf('>QUIET</span>') >= 0 && g2Aside.indexOf('>QUIET</span>') === -1,
+     'AE2: tape-missing pass-through — a WATCH row with no tape perp is never punished');
+}
+
+/* AE3 — OVEREXTENSION (short) + FUNDING CROWDING: shorts demote on <= -15%;
+   same-direction |funding| >= 0.1%/8h cautions WITHOUT demoting; opposite-
+   sign and sub-threshold funding stay silent */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-OFF', score: -4, playbook: { bias: 'SHORT-ONLY', sizeNote: 'half size' } }; };
+  WG.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'DUMPUSDT', dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' },
+    { sym: 'CROWDUSDT', dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' },
+    { sym: 'FLIPUSDT', dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' },
+    { sym: 'TAMEUSDT', dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' },
+    { sym: 'FEDGEUSDT', dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' } ] }; };
+  WG.binanceTickers24h = async function(){ return {
+    DUMPUSDT:  { symbol: 'DUMPUSDT',  mark: 1, chg24: -17.5, turnoverUsd: 400e6 },
+    CROWDUSDT: { symbol: 'CROWDUSDT', mark: 1, chg24: -9.5,  turnoverUsd: 100e6 },
+    FLIPUSDT:  { symbol: 'FLIPUSDT',  mark: 1, chg24: -9.1,  turnoverUsd: 100e6 },
+    TAMEUSDT:  { symbol: 'TAMEUSDT',  mark: 1, chg24: -8.9,  turnoverUsd: 100e6 },
+    FEDGEUSDT: { symbol: 'FEDGEUSDT', mark: 1, chg24: -8.5,  turnoverUsd: 100e6 } }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'DUMPUSDT', base: 'DUMP', exchange: 'delta', turnoverUsd: 30e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'CROWDUSDT', base: 'CROWD', exchange: 'delta', turnoverUsd: 20e6, mark: 1, fundingPct: -0.14, alsoOn: null },
+    { sym: 'FLIPUSDT', base: 'FLIP', exchange: 'delta', turnoverUsd: 20e6, mark: 1, fundingPct: 0.3, alsoOn: null },
+    { sym: 'TAMEUSDT', base: 'TAME', exchange: 'delta', turnoverUsd: 20e6, mark: 1, fundingPct: -0.05, alsoOn: null },
+    { sym: 'FEDGEUSDT', base: 'FEDGE', exchange: 'delta', turnoverUsd: 20e6, mark: 1, fundingPct: -0.1, alsoOn: null } ]; };
+  const TG3 = freshPane();
+  WG.HG_tabs[0].mount(TG3.pane);
+  await runAndWait(TG3.stubs);
+  const g3Stat = TG3.stubs['#brainStat'].textContent;
+  const g3Watch = TG3.stubs['#brainWatch'].innerHTML;
+  const g3Aside = TG3.stubs['#brainAside'].innerHTML;
+  ok(g3Stat.indexOf('done · 0 PRIME · 0 HIGH · 4 watch · 5 aside') === 0,
+     'AE3: buckets — CROWD/FLIP/TAME/FEDGE watch (cautions never demote), DUMP gated — got "' + g3Stat + '"');
+  ok(g3Stat.indexOf(' · 1 gated: 1 overextended') >= 0,
+     'AE3: only the overextended chase is tallied — funding cautions are NOT demotions — got "' + g3Stat + '"');
+  ok(lrowSeg(g3Aside, 'DUMP').indexOf('overextended -17.5% 24h — chasing tops is how radar dies') >= 0,
+     'AE3: short chase into a -17.5% move demotes with the exact signed reason');
+  ok(lrowSeg(g3Watch, 'CROWD').indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AE3: -0.14%/8h funding behind a SHORT row -> caution named on the WATCH row, tier unchanged');
+  ok(lrowSeg(g3Watch, 'FEDGE').indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AE3: exactly |0.1|%/8h funding trips the >= 0.1% caution (boundary honored)');
+  ok(lrowSeg(g3Watch, 'FLIP').length > 0 && lrowSeg(g3Watch, 'FLIP').indexOf('funding crowded') === -1,
+     'AE3: positive funding behind a SHORT row is opposite-direction — no caution');
+  ok(lrowSeg(g3Watch, 'TAME').length > 0 && lrowSeg(g3Watch, 'TAME').indexOf('funding crowded') === -1,
+     'AE3: |0.05|%/8h funding is sub-threshold — no caution');
+}
+
+/* AE4 — PRIME/HIGH chips, never demotions: an overextended PRIME keeps its
+   tier and shows amber GUARD chips; a WATCH row names its funding caution;
+   nothing demoted -> no stat tally */
+{
+  const WG = freshBrain();
+  stubLayersPrime(WG);
+  WG.binanceTickers24h = async function(){ return {
+    BTCUSDT: { symbol: 'BTCUSDT', mark: 100, chg24: 16.4, turnoverUsd: 9e9 },
+    ETHUSDT: { symbol: 'ETHUSDT', mark: 50, chg24: -1, turnoverUsd: 5e9 },
+    SOLUSDT: { symbol: 'SOLUSDT', mark: 20, chg24: 3, turnoverUsd: 2e9 },
+    XRPUSDT: { symbol: 'XRPUSDT', mark: 1, chg24: 0.5, turnoverUsd: 1e9 } }; };
+  const XUL2 = [
+    { sym: 'B-BTC_USDT', base: 'BTC',  exchange: 'cdcx',  turnoverUsd: 9e9, mark: 100,  fundingPct: 0.13,  alsoOn: ['delta'] },
+    { sym: 'ETHUSDT',    base: 'ETH',  exchange: 'delta', turnoverUsd: 5e9, mark: 50,   fundingPct: 0.11,  alsoOn: ['cdcx'] },
+    { sym: 'SOLUSDT',    base: 'SOL',  exchange: 'delta', turnoverUsd: 2e9, mark: 20,   fundingPct: 0,     alsoOn: null },
+    { sym: 'B-XRP_USDT', base: 'XRP',  exchange: 'cdcx',  turnoverUsd: 1e9, mark: 1,    fundingPct: null,  alsoOn: null },
+    { sym: 'DOGEUSDT',   base: 'DOGE', exchange: 'delta', turnoverUsd: 8e8, mark: 0.2,  fundingPct: null,  alsoOn: null }
+  ];
+  WG.xuUniverse = async function(){ return XUL2; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TG4 = freshPane();
+  WG.HG_tabs[0].mount(TG4.pane);
+  await runAndWait(TG4.stubs);
+  const g4Stat = TG4.stubs['#brainStat'].textContent;
+  const g4Cards = TG4.stubs['#brainCards'].innerHTML;
+  const g4Watch = TG4.stubs['#brainWatch'].innerHTML;
+  ok(g4Stat.indexOf('done · 1 PRIME · 0 HIGH · 4 watch · 1 aside') === 0,
+     'AE4: buckets unchanged — cautions never demote — got "' + g4Stat + '"');
+  ok(g4Stat.indexOf('gated') === -1, 'AE4: nothing demoted -> no gate tally on the stat line — got "' + g4Stat + '"');
+  ok(g4Cards.indexOf('PRIME · 6 LAYERS') >= 0,
+     'AE4: BTC stays PRIME on 6 layers (tape momentum joined) despite the extended move');
+  ok(g4Cards.indexOf('GUARD: overextended +16.4% 24h — chasing tops is how radar dies') >= 0,
+     'AE4: PRIME overextension renders as a caution CHIP, not a demotion');
+  ok(g4Cards.indexOf('GUARD: funding crowded same-direction — squeeze risk') >= 0,
+     'AE4: +0.13%/8h funding behind the LONG PRIME chips a crowding caution on the card');
+  ok(lrowSeg(g4Watch, 'ETH').indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AE4: +0.11%/8h funding behind the LONG WATCH row names the caution on the row');
+  ok(lrowSeg(g4Watch, 'SOL').length > 0 && lrowSeg(g4Watch, 'SOL').indexOf('funding crowded') === -1,
+     'AE4: zero funding -> no caution');
+}
+
+/* AE5 — combined tally + HIGH demotion + kill precedence: liquidity beats
+   overextension (first kill named), HIGH is not spared the floor */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'THIN1USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'THIN2USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'DUSTUSDT',  dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.binanceTickers24h = async function(){ return {
+    PUMPUSDT: { symbol: 'PUMPUSDT', mark: 1, chg24: 19.1, turnoverUsd: 300e6 },
+    DUSTUSDT: { symbol: 'DUSTUSDT', mark: 1, chg24: 22.4, turnoverUsd: 500e6 } }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'THIN1USDT', base: 'THIN1', exchange: 'delta', turnoverUsd: 1.5e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'THIN2USDT', base: 'THIN2', exchange: 'delta', turnoverUsd: 3.2e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'PUMPUSDT', base: 'PUMP', exchange: 'delta', turnoverUsd: 40e6, mark: 1, fundingPct: 0, alsoOn: null },
+    { sym: 'DUSTUSDT', base: 'DUST', exchange: 'delta', turnoverUsd: 1.2e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  const TG5 = freshPane();
+  WG.HG_tabs[0].mount(TG5.pane);
+  await runAndWait(TG5.stubs);
+  const g5Stat = TG5.stubs['#brainStat'].textContent;
+  const g5Watch = TG5.stubs['#brainWatch'].innerHTML;
+  const g5Aside = TG5.stubs['#brainAside'].innerHTML;
+  ok(g5Stat.indexOf('done · 0 PRIME · 0 HIGH · 2 watch · 6 aside') === 0,
+     'AE5: buckets — ETH/SOL watch, 4 gated + BTC + gold aside — got "' + g5Stat + '"');
+  ok(g5Stat.indexOf(' · 4 gated: 3 liquidity · 1 overextended') >= 0,
+     'AE5: the suppressed tally names both gate kinds — got "' + g5Stat + '"');
+  ok(lrowSeg(g5Aside, 'THIN1').indexOf('below liquidity floor — $1.5M 24h turnover, slippage eats the edge') >= 0
+     && lrowSeg(g5Aside, 'THIN2').indexOf('below liquidity floor — $3.2M 24h turnover, slippage eats the edge') >= 0,
+     'AE5: both sub-floor WATCH rows demoted with exact per-row reasons');
+  ok(lrowSeg(g5Aside, 'PUMP').indexOf('overextended +19.1% 24h — chasing tops is how radar dies') >= 0,
+     'AE5: the overextended WATCH chase demoted with its exact reason');
+  ok(lrowSeg(g5Aside, 'DUST').indexOf('below liquidity floor — $1.2M 24h turnover, slippage eats the edge') >= 0
+     && lrowSeg(g5Aside, 'DUST').indexOf('overextended') === -1,
+     'AE5: HIGH (4 layers) is not spared the floor; liquidity is the named first kill, not overextension');
+  ok(g5Watch.indexOf('>THIN1</span>') === -1 && g5Watch.indexOf('>DUST</span>') === -1
+     && g5Watch.indexOf('>ETH</span>') >= 0 && g5Watch.indexOf('>SOL</span>') >= 0,
+     'AE5: gated rows leave WATCH; clean radar rows stay');
 }
 
 console.log('\n' + passed + ' assertions passed');

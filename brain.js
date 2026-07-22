@@ -18,6 +18,23 @@ Missing layers never fabricate conviction: every absent/unrun layer is
 named in the ledger and CAPS the tier (1-2 dark layers -> cap HIGH,
 3+ -> cap WATCH).
 
+RADAR QUALITY GATES (post-decide, brainDecide itself pure): three honest
+win-rate gates applied in judgeCrypto after the tier lands, cutting
+low-quality radar setups with NAMED reasons — nothing is silently dropped.
+  LIQUIDITY FLOOR: WATCH-or-better requires >= $5M KNOWN 24h turnover;
+    below-floor candidates demote to ASIDE, reason rendered on the row
+    ('below liquidity floor — $X.XM 24h turnover, slippage eats the edge').
+    null turnover = unknown = never punished.
+  OVEREXTENSION GUARD: the tape perp already moved >= +/-15% in the row's
+    bias direction — WATCH demotes to ASIDE ('overextended +XX.X% 24h —
+    chasing tops is how radar dies'); PRIME/HIGH gets an amber GUARD
+    caution chip instead (multi-layer conviction, tier unchanged).
+  FUNDING CROWDING: |fundingPct| >= 0.1%/8h leaning the SAME way as the
+    row's bias -> GUARD caution chip ('funding crowded same-direction —
+    squeeze risk'), never a veto, tier unchanged.
+Demotions are tallied on the stat line ('N gated: K liquidity · M
+overextended'); cautions render on the card/row they belong to.
+
 Pure core, no DOM, fully vm-testable:
   window.brainCollect(inputs) -> {sym, lane, votes, unavailable, silent}
     inputs  = {sym, lane:'crypto'|'gold', aliases?, news, regime, rotation,
@@ -194,6 +211,23 @@ var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
 var TAPE_MIN_VOL = 10e6;  /* $10M Binance 24h quote turnover — participation floor */
 var TAPE_MIN_CHG = 8;     /* |24h change| % — directional momentum threshold */
 var TAPE_EXTREME = 25;    /* |24h change| % — overextended: caution, never a chase vote */
+
+/* ---- radar quality gates (post-decide, brainDecide stays pure) ----
+   Win-rate gates applied in judgeCrypto AFTER the tier is decided. They cut
+   low-quality radar setups using ONLY data already on the row/snapshot
+   (turnover, tape, funding — nothing refetched, nothing fabricated), and
+   every gate NAMES its reason on the rendered card/row + the stat tally:
+     LIQUIDITY FLOOR: WATCH-or-better requires >= $5M KNOWN 24h turnover —
+       below it slippage eats the edge -> demote to ASIDE. null turnover is
+       unknown and is NEVER punished.
+     OVEREXTENSION GUARD: the tape perp already moved >= +/-15% in the row's
+       bias direction — a WATCH radar chase demotes to ASIDE; PRIME/HIGH
+       conviction is multi-layer, so it earns a caution chip instead.
+     FUNDING CROWDING: |fundingPct| >= 0.1%/8h leaning the SAME way as the
+       row's bias -> caution chip, never a veto, tier unchanged. */
+var GATE_MIN_TURNOVER = 5e6;   /* $5M 24h turnover — radar liquidity floor */
+var GATE_OVEREXT_CHG  = 15;    /* |24h change| % — chasing threshold */
+var GATE_FUNDING_ABS  = 0.1;   /* |funding %/8h| — same-direction crowding */
 
 /* ---------------- formatters: reuse index.html helpers when present ---------------- */
 function _fmtFb(n, d){ d = (d === undefined) ? 2 : d; return (n === null || n === undefined || !isFinite(n)) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 }); }
@@ -611,6 +645,83 @@ function brainDecide(votes, meta){
 }
 
 /* =========================================================================
+RADAR QUALITY GATES — pure, post-decide (brainDecide itself is untouched).
+One candidate row + the layer snapshot in; the gate verdict out. Applied in
+judgeCrypto so BOTH scan modes inherit the gates; every input pass-through is
+deliberate (null turnover, missing tape, non-finite funding = unknown, never
+punished). Never throws — a gate failure degrades to no gate at all.
+========================================================================= */
+function radarGates(row, snap){
+  var out = { demote: false, liquidity: false, overextended: false, reason: null, cautions: [] };
+  try{
+    var dec = row && row.dec;
+    if (!dec || !isDir(dec.dir)) return out;
+    var rank = TIER_RANK[dec.tier];
+    if (!(rank >= TIER_RANK.WATCH)) return out;   /* ASIDE rows need no gate */
+
+    /* (1) LIQUIDITY FLOOR — known turnover below $5M demotes any WATCH+ tier.
+       The first kill wins: one honest reason leads the row. */
+    var to = row.turnoverUsd;
+    if (typeof to === 'number' && isFinite(to) && to < GATE_MIN_TURNOVER){
+      out.demote = true; out.liquidity = true;
+      out.reason = 'below liquidity floor — $' + (to / 1e6).toFixed(1)
+                 + 'M 24h turnover, slippage eats the edge';
+      return out;
+    }
+
+    /* (2) OVEREXTENSION GUARD — the candidate's perp is on the tape and its
+       24h move already ran >= +/-15% in the row's bias direction. WATCH radar
+       demotes; PRIME/HIGH keeps its tier and takes a caution chip instead. */
+    var tape = snap && snap.tape;
+    if (tape && typeof tape === 'object'){
+      var tRow = null;
+      var aliasSet = {}; if (row.sym) aliasSet[row.sym] = 1;
+      if (Array.isArray(row.aliases)){
+        for (var a = 0; a < row.aliases.length; a++){
+          if (typeof row.aliases[a] === 'string' && row.aliases[a]) aliasSet[row.aliases[a]] = 1;
+        }
+      }
+      for (var k in aliasSet){
+        if (!Object.prototype.hasOwnProperty.call(aliasSet, k)) continue;
+        if (tape[k] && typeof tape[k] === 'object'){ tRow = tape[k]; break; }
+      }
+      if (tRow){
+        var chg = +tRow.chg24;
+        if (isFinite(chg) && ((dec.dir === 'long' && chg >= GATE_OVEREXT_CHG)
+                           || (dec.dir === 'short' && chg <= -GATE_OVEREXT_CHG))){
+          var oxReason = 'overextended ' + (chg >= 0 ? '+' : '') + chg.toFixed(1)
+                       + '% 24h — chasing tops is how radar dies';
+          if (rank === TIER_RANK.WATCH){
+            out.demote = true; out.overextended = true; out.reason = oxReason;
+            return out;
+          }
+          out.cautions.push(oxReason);   /* PRIME/HIGH: chip, tier stands */
+        }
+      }
+    }
+
+    /* (3) FUNDING CROWDING — |fundingPct| >= 0.1%/8h leaning the SAME way as
+       the row's bias: caution chip, never a veto, tier unchanged. */
+    var fp = row.xu && row.xu.fundingPct;
+    if (typeof fp === 'number' && isFinite(fp) && Math.abs(fp) >= GATE_FUNDING_ABS
+        && ((dec.dir === 'long' && fp > 0) || (dec.dir === 'short' && fp < 0))){
+      out.cautions.push('funding crowded same-direction — squeeze risk');
+    }
+  }catch(e){}
+  return out;
+}
+
+/* stat-line honesty: the demotion tally, rendered only when gates bit */
+function gateTally(liq, over){
+  var n = liq + over;
+  if (!n) return '';
+  var parts = [];
+  if (liq) parts.push(liq + ' liquidity');
+  if (over) parts.push(over + ' overextended');
+  return ' · ' + n + ' gated: ' + parts.join(' · ');
+}
+
+/* =========================================================================
 Impure layer snapshot — every getter feature-checked, every call try-caught.
 Returns plain data for brainCollect inputs + the market read. Never throws.
 ========================================================================= */
@@ -936,9 +1047,29 @@ function judgeCrypto(cand, snap){
     liq: (snap.liqSetup === undefined ? undefined : snap.liqSetup)
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
-  return { sym: cand.sym, base: cand.base, exchange: cand.exchange,
+  var row = { sym: cand.sym, base: cand.base, exchange: cand.exchange,
            turnoverUsd: cand.turnoverUsd, xu: cand.xu, alsoOn: cand.alsoOn,
            aliases: cand.aliases, lane: 'crypto', col: col, dec: dec };
+  /* radar quality gates — post-decide demotions + cautions (brainDecide stays
+     pure). A demotion's reason LEADS the row's reasons so the ASIDE ledger
+     names the kill; cautions land as GUARD chips on cards and as a named note
+     on watch rows — nothing is silently dropped. */
+  var g = radarGates(row, snap);
+  if (g.demote){
+    dec.gatedFrom = dec.tier;
+    dec.tier = 'ASIDE';
+    dec.reasons.unshift(g.reason);
+    row.gated = g.liquidity ? 'liquidity' : 'overextended';
+  }
+  if (g.cautions.length){
+    row.cautions = g.cautions.slice();
+    for (var gc = 0; gc < g.cautions.length; gc++){
+      col.votes.push({ layer: 'guard', vote: 'neutral', kind: 'context',
+                       caution: true, text: g.cautions[gc] });
+      dec.reasons.push(g.cautions[gc]);
+    }
+  }
+  return row;
 }
 
 function judgeGold(snap){
@@ -1113,6 +1244,10 @@ function marketRead(snap){
 /* ---------------- rendering ---------------- */
 function votePip(v, decidedDir){
   var cls = 'gpip', label = v.layer.toUpperCase();
+  /* gate cautions render as amber chips — named, never silent, never a veto */
+  if (v.layer === 'guard')
+    return '<span class="gpip" style="color:#d8a24a;border-color:rgba(216,162,74,.5);background:rgba(216,162,74,.08)">'
+      + label + ': ' + esc(v.text) + '</span>';
   if (v.vote === 'veto')
     return '<span class="gpip" style="color:var(--short);border-color:rgba(228,88,107,.5);background:rgba(228,88,107,.08)">'
       + label + ': ' + esc(v.text) + '</span>';
@@ -1183,10 +1318,12 @@ function watchRowHTML(row){
      same never-invented planLine the PRIME/HIGH cards use; without one the
      row says so instead of hiding the gap */
   var plan = (row.plan && isFinite(row.plan.entry)) ? planLine(row.plan) : null;
+  /* gate cautions (funding crowding etc.) are named on the row, never silent */
+  var caut = (row.cautions && row.cautions.length) ? ' · ' + esc(row.cautions.join(' · ')) : '';
   return '<div class="lrow">'
     + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + (row.dec.dir ? row.dec.dir.toUpperCase() + ' bias — ' : '')
-    + esc(row.dec.reasons[0] || '')
+    + esc(row.dec.reasons[0] || '') + caut
     + (plan ? ' <span class="gdetail">' + plan + '</span>' : '')
     + '</span>'
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
@@ -1383,6 +1520,14 @@ async function runBrain(el){
     var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
     primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
 
+    /* radar-gate tally — demotions are counted on the stat line, never silent */
+    var gatedLiq = 0, gatedOver = 0;
+    for (var gr = 0; gr < rows.length; gr++){
+      if (rows[gr].gated === 'liquidity') gatedLiq++;
+      else if (rows[gr].gated === 'overextended') gatedOver++;
+    }
+    var gateNote = gateTally(gatedLiq, gatedOver);
+
     var setups = primes.concat(highs);
     var capNote = '';
 
@@ -1453,13 +1598,13 @@ async function runBrain(el){
         + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx + ') + XAU · '
         + setups.length + ' prime/high · ' + watches.length + ' watch'
         + (uni.venue !== 'ALL' ? ' · venue ' + uni.venue : '')
-        + capNote + ' · '
+        + gateNote + capNote + ' · '
         + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
     }else{
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
         + uni.candidates.length + ' + XAU (' + uni.note + ')'
-        + (uni.xuNote ? ' · ' + uni.xuNote : '') + capNote + ' · '
+        + (uni.xuNote ? ' · ' + uni.xuNote : '') + gateNote + capNote + ' · '
         + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
     }
   }catch(e){
@@ -1589,6 +1734,15 @@ async function runQuick(el){
     var setups = primes.concat(highs);
     var extraNote = '';
 
+    /* radar-gate tally for THIS recheck pass — carried-over asides were
+       counted at their own scan time, never double-counted here */
+    var gatedLiq = 0, gatedOver = 0;
+    for (var gq = 0; gq < rows.length; gq++){
+      if (rows[gq].gated === 'liquidity') gatedLiq++;
+      else if (rows[gq].gated === 'overextended') gatedOver++;
+    }
+    var gateNote = gateTally(gatedLiq, gatedOver);
+
     if (combined){
       /* fresh candles for the rechecked WATCH-or-better set — same bounded queue */
       var fq = await fetchCandleQueue(primes.concat(highs, watches), last.uni, stat, t0);
@@ -1652,6 +1806,7 @@ async function runQuick(el){
       + ((Date.now() - t0) / 1000).toFixed(0) + 's' + newNote + extraNote
       + ' · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
       + watches.length + ' watch · ' + asides.length + ' aside'
+      + gateNote
       + ' · ' + new Date().toTimeString().slice(0, 5);
   }catch(e){
     stat.className = 'note warn';
@@ -1773,6 +1928,9 @@ function mount(el){
       + 'or one soft disagreement. <b>ASIDE</b>: any veto, a tie, contested or thin — the killing reason is shown. '
       + 'Engine rejections veto only at G4 liquidity / G5 news; a G2/G3 non-confirmation is named, never a kill. '
       + 'Dark layers are named and cap the tier. '
+      + 'Radar quality gates cut low-quality setups with named reasons: WATCH-or-better needs ≥$5M known 24h turnover, '
+      + 'a ±15%+ 24h tape move in the row’s direction kills a WATCH chase (PRIME/HIGH gets a caution chip), '
+      + 'and same-direction funding ≥0.1%/8h chips a crowding caution — demotions are tallied on the stat line. '
       + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented, '
       + 'and radar rows carry them whenever the candle cap reached the candidate. '
       + 'Universe: BTC/ETH/SOL + every Delta India + CoinDCX futures listing (combined, deduped by base, via xuniverse.js when '

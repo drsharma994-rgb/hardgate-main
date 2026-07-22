@@ -55,11 +55,30 @@ Exports (all on window):
                              / FVG edge / session VWAP / 20-EMA / Asian box
                              edge / divergence pivot; entry drift INSIDE the
                              same zone reproduces the same id) and plain-
-                             language why/invalidates. -> [] when nothing.
+                             language why/invalidates. QUALITY GATES: a
+                             realized TP1 < 1.2R after snapping to opposing
+                             structure drops the candidate onto the returned
+                             array's .rejected side-channel with a named
+                             reason ('structure too close — R:R
+                             insufficient'); counter-trend (beyond a sloping
+                             200-EMA-15m, 4H-stack confirmed; sweep triggers
+                             exempt), off-session (killzone weight 0; the
+                             Asian-range strategy keeps its own session) and
+                             chop (Kaufman ER(20) < 0.25; VWAP/OB/FVG only)
+                             DEMOTE candidates (demoted/stamps/gateNotes on
+                             the candidate) — demoted setups can never be
+                             MOST PROBABLE. -> [] when nothing.
   goldRankSetups(cands, ctx) — transparent confluence tally ranker (reads +
                              killzone weight + news penalty + macro tilt +
-                             PAXG-basis positioning + seasonality + F&G),
-                             -> {ranked, best}. Pure, total.
+                             PAXG-basis positioning + seasonality + F&G).
+                             Demoted candidates sink below non-demoted and
+                             can never be best; OFF-SESSION-demoted
+                             candidates must clear tally >= +2 (normal bar 0
+                             + 2) or they land in .rejected with the reason
+                             named. -> {ranked, best, rejected}. Pure, total.
+  goldNewsCaution(news, now) — shared ±30-min high-impact news-window check
+                             -> {caution, title}; the tab vetoes NEW
+                             convictions inside the window.
 ========================================================================= */
 (function(){
 'use strict';
@@ -160,6 +179,24 @@ function __pivots(vals, win){
     if (isL) out.push({ i: i, type: 'low', v: v });
   }
   return out;
+}
+/* Kaufman Efficiency Ratio over the last `win` closes: |net change| divided
+   by the sum of absolute bar-to-bar changes. ER -> 1 = clean directional
+   move, ER -> 0 = overlapping chop. NaN when there aren't enough closes. */
+function __kaufmanER(closes, win){
+  try{
+    win = win || 20;
+    if (!closes || closes.length < win + 1) return NaN;
+    var n = closes.length, sum = 0;
+    for (var i = n - win; i < n; i++){
+      var d = Math.abs(closes[i] - closes[i-1]);
+      if (!isFinite(d)) return NaN;
+      sum += d;
+    }
+    var net = Math.abs(closes[n-1] - closes[n-1-win]);
+    if (!isFinite(net)) return NaN;
+    return sum > 0 ? net/sum : 0;
+  }catch(e){ return NaN; }
 }
 
 /* ============================ 1) Fair Value Gaps ============================
@@ -648,6 +685,11 @@ function goldSeason(d){
 ========================================================================= */
 var NEWS_WINDOW_MS = 30*60*1000;
 var NEWS_STAMP = 'NEWS WINDOW — wait 15–30 min after release, let the sweep complete first';
+/* quality-gate bars: any candidate renders when its confluence tally clears
+   the normal bar (0); an OFF-SESSION-demoted candidate must clear +2 above
+   the normal bar to render at all. */
+var GS_TALLY_BAR = 0;
+var GS_OFFSESSION_BAR = GS_TALLY_BAR + 2;
 
 function __newsCaution(news, nowMs){
   try{
@@ -902,13 +944,25 @@ function goldScalpSetup(inp){
    whole dollars, so price drifting INSIDE the same structural zone
    reproduces the identical id), the agreeing-reads ledger and plain-
    language why/invalidates text. A candidate needs its structural trigger
-   PLUS >=2 independent agreeing reads (strictly more than opposing); the
-   200-EMA sell-only gate suppresses longs below the 200. Levels always come
-   from structure + ATR — nothing is fabricated.
+   PLUS >=2 independent agreeing reads (strictly more than opposing).
+   QUALITY GATES (win-rate first, every gate names its reason): TP1 snaps
+   to the NEAREST opposing structure at any distance and a realized TP1
+   < 1.2R drops the candidate to the .rejected side-channel ('structure
+   too close — R:R insufficient'); TREND ALIGNMENT demotes longs below a
+   FALLING 200-EMA-15m with a bearish 4H EMA50/200 stack (mirrored for
+   shorts; liquidity-sweep triggers are the sanctioned counter-trend
+   exception); OFF-SESSION demotes anything detected outside every ICT
+   killzone (weight 0) except the Asian-range strategy in its own session;
+   CHOP (Kaufman ER(20) < 0.25) demotes mean-reversion retests (VWAP/OB/
+   FVG). Demoted candidates carry demoted/stamps/gateNotes and can never
+   be MOST PROBABLE; the ranker holds OFF-SESSION demotions to a +2 tally
+   bar. Levels always come from structure + ATR — nothing is fabricated.
    -> [{id, strategy, stratKey, dir, entry, stop, t1, t2, rr, rr2, grade,
         confluence, agree, oppose, reads:{long,short}, killzone,
-        killzoneWeight, newsCaution, newsStamp, atr, zone:{lo,hi}, why,
-        invalidates, notes}]
+        killzoneWeight, newsCaution, newsStamp, atr, demoted, offSession,
+        stamps, gateNotes, zone:{lo,hi}, why, invalidates, notes}] with a
+        .rejected side-channel [{dropped, id, strategy, stratKey, dir,
+        reason}] for hard-gated setups.
 ========================================================================= */
 var GST_NAME = {
   sweep:  'LIQUIDITY SWEEP REVERSAL',
@@ -922,8 +976,9 @@ var GST_NAME = {
 
 /* shared ATR-survival level builder: stop 1.5-2x ATR14(15m) (never tighter),
    optionally extended to sit beyond a structure price; TP1 1.5R / TP2 2.5R
-   with TP1 snapped to the nearest opposing structure between entry and TP1
-   when that snap still pays >= 1.2R. */
+   with TP1 snapped to the NEAREST opposing structure between entry and TP1
+   (any distance — the realized rr reports the honest structure-capped payoff;
+   __gsCand then drops the candidate when that realized TP1 pays < 1.2R). */
 function __gsLevels(dir, entry, a15, structStop, snapLvls){
   var stopDist = 1.5*a15, stopNote = 'stop 1.5×ATR14(15m)';
   if (isFinite(structStop)){
@@ -949,7 +1004,7 @@ function __gsLevels(dir, entry, a15, structStop, snapLvls){
       var onSide = (dir === 'long') ? (L > entry && L < t1) : (L < entry && L > t1);
       if (!onSide) continue;
       var rL = Math.abs(L - entry)/risk;
-      if (rL >= 1.2 && rL < bestR){ bestR = rL; bestLvl = L; }
+      if (rL < bestR){ bestR = rL; bestLvl = L; }
     }
     if (isFinite(bestLvl)){ t1 = bestLvl; stopNote += '; TP1 snapped to opposing structure ' + bestLvl.toFixed(2); }
   }
@@ -977,9 +1032,20 @@ function __gsSnapLvls(D, dir){
   return out;
 }
 
-/* candidate assembly + quality gates (>=2 agreeing reads, majority, 200-EMA
-   sell-only gate for longs, grade = agreeing reads + killzone weight with a
-   one-letter news downgrade). Returns null when the gates fail.
+/* candidate assembly + quality gates. Hard pass/fail: >=2 independent
+   agreeing reads, strictly more agreeing than opposing. MIN R:R: after TP1
+   snaps to the nearest opposing structure, a realized TP1 < 1.2R drops the
+   candidate — returned as a {dropped, reason} object so the tab can render
+   the reason line (never a silent drop). Soft demotions (never MOST
+   PROBABLE, reason stamped on the card): COUNTER-TREND — long below a
+   FALLING 200-EMA-15m with a bearish 4H EMA50/200 stack (mirrored for
+   shorts; a liquidity-sweep trigger is the only sanctioned counter-trend
+   play); OFF-SESSION — detected outside every ICT killzone (killzone
+   weight 0; the Asian-range strategy is allowed its own 00:00-07:00 GMT
+   session) and held to a +2 higher tally bar in goldRankSetups; CHOP —
+   Kaufman ER(20) < 0.25 demotes mean-reversion retests (VWAP/OB/FVG).
+   Grade = agreeing reads + killzone weight with a one-letter news
+   downgrade. Returns null when the hard gates fail.
    CONVICTION ID: keyed on STRUCTURE, never the live entry — `key|dir|anchor`
    where anchor is the strategy's structural price (swept level / OB edge /
    FVG edge / session VWAP / 20-EMA / Asian box edge / divergence pivot)
@@ -994,14 +1060,54 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     var myEv = (dir === 'long') ? longEv : shortEv;
     var oppose = (dir === 'long') ? shortEv.length : longEv.length;
     if (myEv.length < 2 || myEv.length <= oppose) return null;
-    if (dir === 'long' && D.rb && D.rb.sellOnly) return null;
     var lv = __gsLevels(dir, D.entry, D.a15, structStop, snapLvls);
+    var bucket = String(isFinite(anchor) ? Math.round(anchor) : Math.round(D.entry));
+    /* (3) MIN R:R AFTER SNAPPING — opposing structure too close to pay for
+       the trade: dropped with a named reason, never silently. */
+    if (lv.rr < 1.2){
+      return { dropped: true, id: key + '|' + dir + '|' + bucket,
+               strategy: GST_NAME[key] || key, stratKey: key, dir: dir,
+               reason: 'structure too close — R:R insufficient (opposing structure caps TP1 at '
+                       + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
+    }
+    var demoted = false, offSess = false, stamps = [], gateNotes = [];
+    /* (2) TREND ALIGNMENT — counter-trend when price sits beyond a 200-EMA-15m
+       that is falling (longs) / rising (shorts) and the 4H EMA50/200 stack
+       agrees (or is unavailable); sweep triggers are the sanctioned
+       counter-trend exception and are never demoted by this gate. */
+    if (key !== 'sweep' && isFinite(D.e200v) && isFinite(D.e200Slope)){
+      if (dir === 'long' && D.entry < D.e200v && D.e200Slope < 0 && D.stack4 !== 'bull'){
+        demoted = true; stamps.push('COUNTER-TREND');
+        gateNotes.push('long below a falling 200-EMA-15m'
+          + (D.stack4 === 'bear' ? ' with a bearish 4H EMA50/200 stack' : '')
+          + ' — counter-trend; only sweep-reclaim entries are sanctioned here');
+      } else if (dir === 'short' && D.entry > D.e200v && D.e200Slope > 0 && D.stack4 !== 'bear'){
+        demoted = true; stamps.push('COUNTER-TREND');
+        gateNotes.push('short above a rising 200-EMA-15m'
+          + (D.stack4 === 'bull' ? ' with a bullish 4H EMA50/200 stack' : '')
+          + ' — counter-trend; only sweep-rejection entries are sanctioned here');
+      }
+    }
+    /* (1) OFF-SESSION — outside every ICT killzone (killzone weight 0). The
+       Asian-range strategy trades its own session; everything else is
+       demoted and held to a +2 higher tally bar in goldRankSetups. */
+    var inKillzone = !!(D.kz && D.kz.weight > 0);
+    if (!inKillzone && !(key === 'asian' && D.kz && D.kz.zone === 'ASIAN')){
+      demoted = true; offSess = true; stamps.push('OFF-SESSION');
+      gateNotes.push('detected ' + (D.kz ? (D.kz.label || 'OFF-HOURS') : 'OFF-HOURS')
+        + ' — outside every ICT killzone; held to a +2 higher confluence-tally bar');
+    }
+    /* (4) CHOP FILTER — Kaufman ER(20) < 0.25 = overlapping chop; mean-
+       reversion retests (VWAP/OB/FVG) demoted, breakout triggers exempt. */
+    if ((key === 'vwap' || key === 'ob' || key === 'fvg') && isFinite(D.er) && D.er < 0.25){
+      demoted = true; stamps.push('CHOP');
+      gateNotes.push('Kaufman ER ' + D.er.toFixed(2) + ' < 0.25 — overlapping chop; mean-reversion retests demoted');
+    }
     var score = myEv.length + D.kz.weight;
     var grade = (score >= 8) ? 'A' : ((score >= 5) ? 'B' : 'C');
     if (D.news.caution) grade = (grade === 'A') ? 'B' : 'C';
     var conf = [];
     for (i = 0; i < myEv.length; i++) conf.push(myEv[i].label);
-    var bucket = String(isFinite(anchor) ? Math.round(anchor) : Math.round(D.entry));
     var hh = isFinite(D.kz.hourGMT) ? ('0' + D.kz.hourGMT).slice(-2) + ':00 GMT' : 'n/a';
     return {
       id: key + '|' + dir + '|' + bucket,
@@ -1013,6 +1119,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       newsCaution: D.news.caution,
       newsStamp: D.news.caution ? NEWS_STAMP + (D.news.title ? ' (' + D.news.title + ')' : '') : null,
       atr: D.a15,
+      demoted: demoted, offSession: offSess, stamps: stamps, gateNotes: gateNotes,
       zone: zone || { lo: D.entry - 0.25*D.a15, hi: D.entry + 0.25*D.a15 },
       why: why, invalidates: invalidates,
       notes: (D.notes || []).concat([lv.stopNote])
@@ -1164,8 +1271,29 @@ function goldScalpSetups(inp){
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
     D.kz = kz; D.news = news;
 
-    var out = [], seen = {};
-    function push(c){ if (c && !seen[c.id]){ seen[c.id] = true; out.push(c); } }
+    /* quality-gate context shared by every strategy candidate:
+       200-EMA-15m value + 5-bar slope (trend alignment), the 4H EMA50/200
+       stack ('bull' | 'bear' | null when unknowable), Kaufman ER(20) chop. */
+    var closes15 = __closes(rows);
+    var e2arr = _ema(closes15, 200);
+    D.e200v = __last(e2arr);
+    var e2back = (e2arr && e2arr.length >= 6) ? e2arr[e2arr.length - 6] : NaN;
+    D.e200Slope = (isFinite(D.e200v) && isFinite(e2back)) ? (D.e200v - e2back) : NaN;
+    var rb4s = D.rb4;
+    D.stack4 = (rb4s && isFinite(rb4s.e50) && isFinite(rb4s.e200))
+      ? (rb4s.e50 > rb4s.e200 ? 'bull' : (rb4s.e50 < rb4s.e200 ? 'bear' : null)) : null;
+    D.er = __kaufmanER(closes15, 20);
+
+    /* dropped candidates (e.g. structure too close — R:R insufficient) ride
+       the .rejected side-channel so the tab can render named reason lines;
+       the main array keeps its established shape/semantics. */
+    var out = [], rejected = [], seen = {};
+    out.rejected = rejected;
+    function push(c){
+      if (!c) return;
+      if (c.dropped){ rejected.push(c); return; }
+      if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
+    }
     var tol = 0.5*a15;
 
     /* --- 1) liquidity-sweep reversal --- */
@@ -1316,7 +1444,7 @@ function goldScalpSetups(inp){
    {ranked:[], best:null} on any failure.
 ========================================================================= */
 function goldRankSetups(cands, ctx){
-  var out = { ranked: [], best: null };
+  var out = { ranked: [], best: null, rejected: [] };
   try{
     if (!Array.isArray(cands) || !cands.length) return out;
     ctx = ctx || {};
@@ -1336,6 +1464,12 @@ function goldRankSetups(cands, ctx){
     for (i = 0; i < cands.length; i++){
       var c = cands[i];
       if (!c || (c.dir !== 'long' && c.dir !== 'short')) continue;
+      if (c.dropped){   /* hard quality-gate drop (e.g. min R:R) -> named reason line */
+        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                            reason: c.reason || 'failed a quality gate' });
+        continue;
+      }
       var parts = [], tally = 0;
       var agree = isFinite(c.agree) ? c.agree
                 : (c.reads ? ((c.dir === 'long') ? c.reads.long : c.reads.short) : 0);
@@ -1388,6 +1522,22 @@ function goldRankSetups(cands, ctx){
           tally += 1;
         }
       }
+      /* (1) OFF-SESSION tally bar: demoted off-session candidates must clear
+         +2 above the normal render bar or they are held back with a named
+         reason line (never silently dropped). */
+      if (c.demoted && c.offSession && tally < GS_OFFSESSION_BAR){
+        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                            reason: 'OFF-SESSION — outside every ICT killzone; confluence tally '
+                                    + (tally > 0 ? '+' : '') + tally + ' below the raised bar (+'
+                                    + GS_OFFSESSION_BAR + ')' });
+        continue;
+      }
+      /* quality-gate demotions are transparent on the card (0-pt chips) */
+      if (c.demoted && Array.isArray(c.stamps)){
+        for (var st = 0; st < c.stamps.length; st++)
+          parts.push({ label: c.stamps[st] + ' — quality-gate demotion, can never lead', pts: 0 });
+      }
       var rc = {};
       for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
       rc.tally = tally;
@@ -1396,6 +1546,8 @@ function goldRankSetups(cands, ctx){
     }
     var gOrd = { A: 0, B: 1, C: 2 };
     ranked.sort(function(x, y){
+      var dx = x.demoted ? 1 : 0, dy = y.demoted ? 1 : 0;
+      if (dx !== dy) return dx - dy;                 /* demoted can never lead */
       if (y.tally !== x.tally) return y.tally - x.tally;
       var gx = (gOrd[x.grade] === undefined) ? 9 : gOrd[x.grade];
       var gy = (gOrd[y.grade] === undefined) ? 9 : gOrd[y.grade];
@@ -1408,7 +1560,10 @@ function goldRankSetups(cands, ctx){
       return ay - ax;
     });
     out.ranked = ranked;
-    out.best = ranked.length ? ranked[0] : null;
+    out.best = null;
+    for (i = 0; i < ranked.length; i++){   /* MOST PROBABLE = best non-demoted */
+      if (!ranked[i].demoted){ out.best = ranked[i]; break; }
+    }
     return out;
   }catch(e){ return { ranked: [], best: null }; }
 }
@@ -1431,4 +1586,5 @@ W.goldSeason = goldSeason;
 W.goldScalpSetup = goldScalpSetup;
 W.goldScalpSetups = goldScalpSetups;
 W.goldRankSetups = goldRankSetups;
+W.goldNewsCaution = __newsCaution;   /* shared ±30-min high-impact window check */
 })();

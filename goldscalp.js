@@ -26,6 +26,24 @@ RANKING TALLY (shown on every card):
   +1    crypto risk sentiment (lexical global S.fng — feature-checked softly,
         skipped when absent)
 
+QUALITY GATES (win-rate first; every gate names its reason on the card or on
+a small reason line — nothing is dropped silently):
+  1) OFF-SESSION — detected outside every ICT killzone (killzone weight 0):
+     demoted (can never be MOST PROBABLE, stamped OFF-SESSION) and must clear
+     tally >= +2 (normal render bar 0 + 2) to render at all. The Asian-range
+     breakout strategy is allowed its own 00:00-07:00 GMT session.
+  2) COUNTER-TREND — longs below a FALLING 200-EMA-15m with a bearish 4H
+     EMA50/200 stack (mirrored for shorts) are demoted; a liquidity-sweep
+     trigger is the only sanctioned counter-trend play (exempt).
+  3) MIN R:R — after TP1 snaps to the nearest opposing structure, a realized
+     TP1 < 1.2R drops the candidate to a 'structure too close — R:R
+     insufficient' reason line.
+  4) CHOP — Kaufman ER(20) < 0.25 on 15m closes demotes mean-reversion
+     retests (VWAP bounce, OB retest, FVG fill); breakout triggers exempt.
+  5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new conviction
+     is issued ('NEWS WINDOW — no new entries' reason line); already-live
+     convictions keep running untouched.
+
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
      fallback, then Twelve Data / Yahoo.
@@ -57,10 +75,13 @@ pre-rework contract — one row per qualifying candidate.)
 DIAGNOSTIC SURFACE — window.goldscalpScan(): the last successful scan in
 full (deep-frozen, never throws, null before the first scan):
   { cands: [{ id, venue, sym, dir, strategy, grade, entry, stop, t1, t2, rr,
-             rr2, tally, tallyParts, agree, oppose, killzone, atr, locked,
-             issuedAt, asOf, why, invalidates }],
+             rr2, tally, tallyParts, agree, oppose, killzone, atr, demoted,
+             stamps, vetoed, locked, issuedAt, asOf, why, invalidates }],
     bestId, history: [{ id, dir, strategy, venue, sym, entry, stop, t1, t2,
-                        status, issuedAt, closedAt, closePrice }], at } | null
+                        status, issuedAt, closedAt, closePrice }],
+    rejected: [{ id, strategy, stratKey, dir, venue, sym, reason }], at } | null
+  (cands = rendered/actionable only; vetoed news-window setups live in
+  rejected with their reason, bestId = first non-demoted, non-vetoed id.)
 ========================================================================= */
 (function(){
 'use strict';
@@ -124,7 +145,7 @@ function publishState(cands){
 
 /* ---------------- diagnostic surface (full last scan) ---------------- */
 var __scanSnap = null;
-function publishScan(ranked, best, history, at){
+function publishScan(ranked, best, history, at, rejected){
   try{
     var cands = [];
     for (var i = 0; i < ranked.length; i++){
@@ -140,6 +161,9 @@ function publishScan(ranked, best, history, at){
           ? c.tallyParts.map(function(p){ return { label: p && p.label, pts: p && p.pts }; }) : [],
         agree: isFinite(c.agree) ? c.agree : null, oppose: isFinite(c.oppose) ? c.oppose : null,
         killzone: c.killzone || null, atr: isFinite(c.atr) ? c.atr : null,
+        demoted: !!c.demoted,
+        stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
+        vetoed: !!c.vetoed,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null
       });
@@ -155,7 +179,15 @@ function publishScan(ranked, best, history, at){
                   closedAt: isFinite(h.closedAt) ? h.closedAt : null,
                   closePrice: isFinite(h.closePrice) ? h.closePrice : null });
     }
-    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, at: at };
+    var rej = [];
+    for (var q = 0; q < (rejected || []).length; q++){
+      var r0 = rejected[q];
+      if (!r0) continue;
+      rej.push({ id: r0.id || null, strategy: r0.strategy || null, stratKey: r0.stratKey || null,
+                 dir: r0.dir || null, venue: r0.venue || null, sym: r0.sym || null,
+                 reason: r0.reason || null });
+    }
+    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej, at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
 
@@ -202,8 +234,12 @@ function saveConvictions(store){
 }
 
 /* venueRows: { venueLabel: { rows15m } } — latest 15m closes per venue for
-   invalidation checks. Mutates the ranked candidates (restores levels). */
-function applyConviction(ranked, venueRows, nowMs){
+   invalidation checks. Mutates the ranked candidates (restores levels).
+   noMint (NEWS-WINDOW VETO): inside a high-impact ±30-min window NO new
+   conviction is issued — unmatched candidates are flagged c.vetoed and
+   render as reason lines; already-live convictions keep running untouched
+   (transitions + verbatim restore still apply). */
+function applyConviction(ranked, venueRows, nowMs, noMint){
   var store = loadConvictions(), transitions = [];
   try{
     var id, rec, i;
@@ -257,6 +293,8 @@ function applyConviction(ranked, venueRows, nowMs){
         }
         c.venue = rec.venue; c.sym = rec.sym;
         c.locked = true; c.issuedAt = rec.issuedAt;
+      } else if (noMint){
+        c.vetoed = true;   /* news window — held back, nothing minted */
       } else {
         rec = { id: c.id, dir: c.dir, strategy: c.strategy, entry: c.entry, stop: c.stop,
                 t1: c.t1, t2: c.t2, venue: c.venue, sym: c.sym, issuedAt: nowMs,
@@ -264,7 +302,8 @@ function applyConviction(ranked, venueRows, nowMs){
         store.live[c.id] = rec;
         c.locked = false; c.issuedAt = nowMs;
       }
-      try{ c.asOf = new Date(c.issuedAt).toISOString().slice(11, 16) + ' UTC'; }catch(eD){ c.asOf = ''; }
+      try{ c.asOf = isFinite(c.issuedAt) ? new Date(c.issuedAt).toISOString().slice(11, 16) + ' UTC' : ''; }
+      catch(eD){ c.asOf = ''; }
     }
     saveConvictions(store);
   }catch(e){}
@@ -318,7 +357,11 @@ var GS_CSS = ''
 + '#tab_goldscalp .gsx-hrow.stopped{border-left-color:#ff6b4a}'
 + '#tab_goldscalp .gsx-hrow.target{border-left-color:#19e3a2}'
 + '#tab_goldscalp .gsx-hrow.expired{border-left-color:#ffd76a}'
-+ '#tab_goldscalp .gsx-hrow b{letter-spacing:.08em}';
++ '#tab_goldscalp .gsx-hrow b{letter-spacing:.08em}'
++ '#tab_goldscalp .gsx-hrow.rej{border-left-color:#ff9f43}'
++ '#tab_goldscalp .gsx-gateline{font-size:10px;color:#ff9f43;letter-spacing:.04em;margin-top:8px;'
++ 'border:1px solid rgba(255,159,67,.35);border-radius:4px;padding:5px 8px;line-height:1.55;background:rgba(255,159,67,.06)}'
++ '#tab_goldscalp .gsx-gateline b{letter-spacing:.12em}';
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -378,6 +421,10 @@ function cardHTML(c, isBest, season){
   var lockLine = c.locked
     ? '<div class="gsx-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
     : '<div class="gsx-lockline" style="color:var(--mut,#8a8f98)">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
+  var gateLine = (c.demoted && Array.isArray(c.stamps) && c.stamps.length)
+    ? '<div class="gsx-gateline"><b>⚠ ' + esc(c.stamps.join(' · ')) + '</b> — '
+      + esc((Array.isArray(c.gateNotes) ? c.gateNotes : []).join(' · '))
+      + ' — demoted by quality gate: can never be MOST PROBABLE.</div>' : '';
   var tradeBtn = (typeof toTrade === 'function' && c.sym)
     ? '<button class="toTrade" onclick="'
       + ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
@@ -408,10 +455,23 @@ function cardHTML(c, isBest, season){
     + '</div>'
     + (c.why ? '<div class="gsx-whyline">' + esc(c.why) + '</div>' : '')
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
+    + gateLine
     + lockLine
     + newsBanner + notes + seasonLine
     + tradeBtn
     + '</div>';
+}
+
+function rejectedHTML(rejected){
+  if (!rejected || !rejected.length) return '';
+  var rows = rejected.map(function(r){
+    if (!r) return '';
+    return '<div class="gsx-hrow rej"><b>✕ HELD BACK</b> · ' + esc(r.strategy || 'SETUP')
+      + (r.dir ? ' · ' + esc(String(r.dir).toUpperCase()) : '')
+      + (r.venue ? ' · ' + esc(r.venue) : '')
+      + ' — ' + esc(r.reason || 'failed a quality gate') + '</div>';
+  }).join('');
+  return '<div class="gsx-hist"><div class="gsx-hhead">QUALITY GATES — setups held back, every reason named (never silently dropped)</div>' + rows + '</div>';
 }
 
 function historyHTML(history){
@@ -473,9 +533,12 @@ async function fetchDeltaXaut(){
   return out;
 }
 
-/* per-venue candidate composition (multi-strategy first, composite fallback) */
+/* per-venue candidate composition (multi-strategy first, composite fallback).
+   Hard-gated setups ride the .rejected side-channel so the scan can render
+   named reason lines — nothing is dropped silently. */
 function buildCandidates(leg, now, news, venue, sym){
   var out = [];
+  out.rejected = [];
   try{
     var setupsFn = gfn('goldScalpSetups');
     if (setupsFn){
@@ -488,6 +551,14 @@ function buildCandidates(leg, now, news, venue, sym){
           if (!c || !c.dir) continue;
           c.venue = venue; c.sym = sym;
           out.push(c);
+        }
+        var rej = got.rejected || [];
+        for (var rj = 0; rj < rej.length; rj++){
+          var rc0 = rej[rj];
+          if (!rc0) continue;
+          out.rejected.push({ id: rc0.id || null, strategy: rc0.strategy || null, stratKey: rc0.stratKey || null,
+                              dir: rc0.dir || null, venue: venue, sym: sym,
+                              reason: rc0.reason || 'failed a quality gate' });
         }
       }
       return out;
@@ -564,7 +635,7 @@ async function runScan(ui){
     if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
 
-    var cands = [], legs = [], venueRows = {}, i;
+    var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
 
     /* leg 1: primary gold feed (getGoldCandles chain -> PAXGUSDT fallback) */
     var gold = await fetchGoldKlines();
@@ -575,6 +646,7 @@ async function runScan(ui){
       venueRows[v] = { rows15m: gold.rows15m };
       var got = buildCandidates(gold, now, news, v, sym1);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
+      for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
       legs.push(v + ': ' + gold.rows15m.length + ' 15m bars — '
         + (got.length ? got.length + ' strategy candidate' + (got.length === 1 ? '' : 's') : 'no qualifying confluence'));
     } else {
@@ -589,6 +661,7 @@ async function runScan(ui){
       venueRows['DELTA XAUTUSD'] = { rows15m: dx.rows15m };
       var got2 = buildCandidates(dx, now, news, 'DELTA XAUTUSD', 'XAUTUSD');
       for (i = 0; i < got2.length; i++) cands.push(got2[i]);
+      for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
       legs.push('DELTA XAUTUSD: ' + dx.rows15m.length + ' 15m bars — '
         + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
     } else if (dx.item){
@@ -602,7 +675,10 @@ async function runScan(ui){
     if (rankFn){
       var rk = null;
       try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }
-      if (rk && Array.isArray(rk.ranked)){ ranked = rk.ranked; best = rk.best; }
+      if (rk && Array.isArray(rk.ranked)){
+        ranked = rk.ranked; best = rk.best;
+        for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
+      }
     } else {
       var gOrd = { A: 0, B: 1, C: 2 };
       ranked = cands.slice().sort(function(x, y){
@@ -615,11 +691,42 @@ async function runScan(ui){
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
 
+    /* (5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new
+       conviction is issued; already-live convictions keep running untouched */
+    var newsVeto = false, newsVetoTitle = null;
+    var ncFn = gfn('goldNewsCaution');
+    if (ncFn && news){
+      try{
+        var nc2 = ncFn(news, now);
+        if (nc2 && nc2.caution){ newsVeto = true; newsVetoTitle = nc2.title || null; }
+      }catch(eV){ newsVeto = false; }
+    }
+
     /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
        invalidation against the latest 15m close (STOPPED / TARGET HIT /
        EXPIRED); never re-pick levels for a live conviction */
-    var lock = applyConviction(ranked, venueRows, now);
-    if (ranked.length) best = ranked[0];
+    var lock = applyConviction(ranked, venueRows, now, newsVeto);
+
+    /* split: vetoed candidates render as named reason lines, not cards */
+    var cards = [], i2;
+    for (i2 = 0; i2 < ranked.length; i2++){
+      var vc = ranked[i2];
+      if (vc && vc.vetoed){
+        rejectedAll.push({ id: vc.id || null, strategy: vc.strategy || null, stratKey: vc.stratKey || null,
+                           dir: vc.dir, venue: vc.venue || null, sym: vc.sym || null,
+                           reason: 'NEWS WINDOW — no new entries, wait 15–30 min after release'
+                                   + (newsVetoTitle ? ' (' + newsVetoTitle + ')' : '') });
+      } else if (vc) cards.push(vc);
+    }
+    if (newsVeto) legs.push('high-impact news window — new convictions held (existing ones keep running)');
+
+    /* MOST PROBABLE = first non-demoted, non-vetoed candidate (may be null —
+       an honest 'nothing leads' when every setup is gate-demoted) */
+    best = null;
+    for (i2 = 0; i2 < ranked.length; i2++){
+      var bc = ranked[i2];
+      if (bc && !bc.demoted && !bc.vetoed){ best = bc; break; }
+    }
     if (lock.transitions.length){
       legs.push(lock.transitions.length + ' conviction' + (lock.transitions.length === 1 ? '' : 's')
         + ' closed (' + lock.transitions.map(function(t){ return t.status; }).join(', ').toLowerCase() + ')');
@@ -629,10 +736,11 @@ async function runScan(ui){
 
     /* render */
     if (ui && ui.cards && ui.empty){
-      if (!ranked.length) ui.empty.style.display = 'block';
+      if (!cards.length && !rejectedAll.length) ui.empty.style.display = 'block';
       else {
-        ui.cards.innerHTML = bannerHTML(best, ranked)
-          + ranked.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+        ui.cards.innerHTML = bannerHTML(best, cards)
+          + cards.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+          + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
       }
     }
@@ -642,8 +750,8 @@ async function runScan(ui){
             !gold.rows15m.length && !dx.rows15m.length);
     setProg(ui, null);
     if (gold.rows15m.length || dx.rows15m.length){
-      publishState(ranked);                       /* only a real data run overwrites the snapshots */
-      publishScan(ranked, best, lock.store.history, now);
+      publishState(cards);                        /* only a real data run overwrites the snapshots */
+      publishScan(cards, best, lock.store.history, now, rejectedAll);
     }
     return 'refreshed';
   }catch(e){
@@ -676,7 +784,12 @@ function mount(el){
       + 'positioning + seasonality + fear&amp;greed. The leader gets the <b>MOST PROBABLE SETUP</b> banner. Stops are '
       + '1.5–2× ATR14(15m), never tighter; targets 1.5R / 2.5R snapped to opposing structure. Issued setups are '
       + '<b>CONVICTION-LOCKED</b>: re-scans restore the original levels verbatim — they only move on invalidation '
-      + '(15m close beyond stop → STOPPED, TP1 → TARGET HIT, 6h → EXPIRED), and closed setups stay visible as history.</div>'
+      + '(15m close beyond stop → STOPPED, TP1 → TARGET HIT, 6h → EXPIRED), and closed setups stay visible as history. '
+      + '<b>QUALITY GATES</b> cut low-probability setups before they lead: off-session detections (outside every ICT '
+      + 'killzone) are demoted and held to a +2 tally bar, counter-trend entries against a sloping 200-EMA-15m/4H stack '
+      + 'are demoted unless they are sweep-reclaims, a realized TP1 under 1.2R after structure-snapping drops the setup, '
+      + 'Kaufman-ER chop (&lt; 0.25) demotes mean-reversion retests, and a high-impact news window vetoes NEW convictions '
+      + '— every gate names its reason on the card or on a held-back line below.</div>'
       + '<div class="prog" id="gsProg"><i></i></div>'
       + '</div>'
       + '<div class="cards" id="gsCards"></div>'

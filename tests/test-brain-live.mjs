@@ -10,6 +10,9 @@
         4 layers, SOL veto aside), xuCandles stubbed with house kline rows
      C) quick rescan over a 45-watch scan: the fetch cap must bind AND the
         stat line must SAY so (regression cover for the cap note)
+     D) radar quality gates at scale: a sub-floor WATCH alt and an overextended
+        WATCH chase demote to ASIDE with named reasons + a stat tally; the
+        quick rescan carries the gated verdicts over with AS OF stamps
    No live network anywhere. Run: node tests/test-brain-live.mjs */
 
 import fs from 'node:fs';
@@ -256,6 +259,7 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   assert(bAside.indexOf('>XAU</span>') >= 0, 'gold lane lands in ASIDE when its setup layer is dark');
   assert(bWatch === '' && PB.stubs['#brainWatchWrap'].style.display === 'none',
          'WATCH panel empty + hidden when nothing is on watch');
+  assert(bStat.indexOf('gated') === -1, 'no gate tally when nothing tripped a radar gate — got "' + bStat + '"');
   assert(PB.stubs['#brainEmpty'].style.display !== 'block', 'empty state stays hidden when setups exist');
   assert(PB.stubs['#brainRead'].textContent.indexOf('RISK-ON regime') >= 0
          && PB.stubs['#brainRead'].textContent.indexOf('btc season 25%') >= 0
@@ -310,6 +314,81 @@ console.log('== C) quick rescan over 45 watch candidates: cap note honest ==');
   assert(candleCalls === 40, 'quick rescan: fetch cap respected again (40 of 47) — got ' + candleCalls);
   assert(cQuick.indexOf('+7 more watch candidates — raise evidence to fetch') >= 0,
          'quick rescan: the binding fetch cap is NAMED on the stat line, never silently dropped — got "' + cQuick + '"');
+  assert(cFull.indexOf('gated') === -1 && cQuick.indexOf('gated') === -1,
+         'no gate tally when no gate tripped (all turnovers >= $201M, no tape feed)');
+}
+
+/* ================= D) radar quality gates at scale =================
+   61-row universe: 55 clean radar alts + a sub-floor THINALT + an overextended
+   PUMPALT. The two gated rows demote to ASIDE with named reasons, the stat
+   line tallies them, the fetch cap binds over the remaining 57 watch rows,
+   and a quick rescan carries the gated verdicts over with AS OF stamps. */
+console.log('== D) liquidity floor + overextension guard over a 61-row universe ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  W.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  W.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  W.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  W.squeezeState = function(){ return { results: [] }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  W.binanceTickers24h = async function(){ return {
+    PUMPALTUSDT: { symbol: 'PUMPALTUSDT', mark: 1, chg24: 17.3, turnoverUsd: 250e6 } }; };
+  const list = [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'THINALTUSDT', base: 'THINALT', exchange: 'delta', turnoverUsd: 2e6, mark: 1, fundingPct: null, alsoOn: null },
+    { sym: 'PUMPALTUSDT', base: 'PUMPALT', exchange: 'delta', turnoverUsd: 60e6, mark: 1, fundingPct: null, alsoOn: null }
+  ];
+  const ofRes = [ { sym: 'THINALTUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ];
+  for (let n = 1; n <= 55; n++){
+    const base = 'RALT' + String(n).padStart(3, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+    ofRes.push({ sym: base + 'USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' });
+  }
+  W.oiflowState = function(){ return { results: ofRes }; };
+  W.xuUniverse = async function(){ return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  W.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const PD = freshPane();
+  W.HG_tabs[0].mount(PD.pane);
+  await runAndWait(PD.stubs);
+  const dStat = PD.stubs['#brainStat'].textContent;
+  const dWatch = PD.stubs['#brainWatch'].innerHTML;
+  const dAside = PD.stubs['#brainAside'].innerHTML;
+  assert(dStat.indexOf('done · 0 PRIME · 0 HIGH · 57 watch · 4 aside') === 0,
+         'full scan: 55 clean alts + ETH/SOL radar watch; THINALT + PUMPALT gated aside; BTC + gold aside — got "' + dStat + '"');
+  assert(dStat.indexOf(' · 2 gated: 1 liquidity · 1 overextended') >= 0,
+         'full scan: the gate tally names both kinds — got "' + dStat + '"');
+  assert(dStat.indexOf('+17 more watch candidates — raise evidence to fetch') >= 0,
+         'fetch cap binds over the surviving 57 watch rows, honestly — got "' + dStat + '"');
+  assert(dAside.indexOf('>THINALT</span>') >= 0
+         && dAside.indexOf('below liquidity floor — $2.0M 24h turnover, slippage eats the edge') >= 0,
+         'THINALT ($2.0M turnover) demoted to ASIDE with the exact liquidity reason');
+  assert(dAside.indexOf('>PUMPALT</span>') >= 0
+         && dAside.indexOf('overextended +17.3% 24h — chasing tops is how radar dies') >= 0,
+         'PUMPALT (+17.3% 24h) demoted to ASIDE with the exact overextension reason');
+  assert(dWatch.indexOf('>THINALT</span>') === -1 && dWatch.indexOf('>PUMPALT</span>') === -1
+         && dWatch.indexOf('>RALT001</span>') >= 0,
+         'gated rows leave the WATCH ledger; the 55 clean radar rows stay');
+
+  /* quick rescan: gated verdicts are ASIDE now — carried over with AS OF
+     stamps, never re-gated, and the quick tally stays empty */
+  PD.stubs['#brainQuick']._handler();
+  await waitIdle(PD.stubs);
+  const dQuick = PD.stubs['#brainStat'].textContent;
+  const dQuickAside = PD.stubs['#brainAside'].innerHTML;
+  assert(/^quick rescan: 57 checked · 4 unchanged/.test(dQuick),
+         'quick rescan rechecks the 57 surviving watch rows; the 4 asides (incl. both gated) carry over — got "' + dQuick + '"');
+  assert(dQuick.indexOf('gated') === -1,
+         'quick pass gates nothing new — carried-over demotions are never double-counted — got "' + dQuick + '"');
+  assert(dQuickAside.indexOf('below liquidity floor — $2.0M 24h turnover, slippage eats the edge') >= 0
+         && dQuickAside.indexOf('overextended +17.3% 24h — chasing tops is how radar dies') >= 0
+         && dQuickAside.indexOf('AS OF') >= 0,
+         'gated verdicts persist through the quick rescan with their named reasons + AS OF age stamps');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
