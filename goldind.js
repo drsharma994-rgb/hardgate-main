@@ -959,7 +959,9 @@ function goldScalpSetup(inp){
    bar. Levels always come from structure + ATR — nothing is fabricated.
    -> [{id, strategy, stratKey, dir, entry, stop, t1, t2, rr, rr2, grade,
         confluence, agree, oppose, reads:{long,short}, killzone,
-        killzoneWeight, newsCaution, newsStamp, atr, demoted, offSession,
+        killzoneWeight, newsCaution, newsStamp, atr, anchor (the numeric
+        structural price behind the id bucket — the tab merges duplicate
+        convictions whose anchors sit within 0.5×ATR), demoted, offSession,
         stamps, gateNotes, zone:{lo,hi}, why, invalidates, notes}] with a
         .rejected side-channel [{dropped, id, strategy, stratKey, dir,
         reason}] for hard-gated setups.
@@ -1118,7 +1120,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       killzone: D.kz.label + ' · ' + hh, killzoneWeight: D.kz.weight,
       newsCaution: D.news.caution,
       newsStamp: D.news.caution ? NEWS_STAMP + (D.news.title ? ' (' + D.news.title + ')' : '') : null,
-      atr: D.a15,
+      atr: D.a15, anchor: isFinite(anchor) ? anchor : D.entry,
       demoted: demoted, offSession: offSess, stamps: stamps, gateNotes: gateNotes,
       zone: zone || { lo: D.entry - 0.25*D.a15, hi: D.entry + 0.25*D.a15 },
       why: why, invalidates: invalidates,

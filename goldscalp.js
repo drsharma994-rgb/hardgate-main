@@ -10,10 +10,18 @@ confluence tally (window.goldRankSetups), crowns the #1 with a MOST PROBABLE
 SETUP banner (full execution guidance), and pins every issued setup under a
 CONVICTION LOCK (localStorage 'hgGoldscalpConviction'): re-running the scan
 restores the ORIGINAL levels verbatim with an 'as of HH:MM' stamp — levels
-are never re-picked for a live conviction. Transitions only on invalidation
-against the latest 15m close: beyond stop -> STOPPED, TP1 reached -> TARGET
-HIT, structure older than 6h -> EXPIRED. Closed setups render as a small
-history line — they never vanish silently.
+are never re-picked for a live conviction. A new setup whose direction AND
+symbol match a live conviction and whose structure anchor sits within
+0.5×ATR of the live anchor MERGES into it (lastConfirmedAt refreshes, the
+original levels and id stand, card reads 'conviction re-confirmed ·
+original levels stand') instead of double-issuing. Transitions only on
+invalidation against the latest 15m close: beyond stop -> STOPPED, TP1
+reached -> TARGET HIT, structure older than 6h -> EXPIRED. Closed setups
+render as a small history line — they never vanish silently. Every card
+carries a compact TRADE MANAGEMENT block (At TP1: close 50%, move stop to
+breakeven; runner targets TP2 — with the card's real values) and an ENTRY
+GUIDANCE line (price in zone — market entry valid / price outside zone —
+limit order at zone edge <price>).
 
 RANKING TALLY (shown on every card):
   +N    independent agreeing reads (the candidate's own ledger)
@@ -75,8 +83,9 @@ pre-rework contract — one row per qualifying candidate.)
 DIAGNOSTIC SURFACE — window.goldscalpScan(): the last successful scan in
 full (deep-frozen, never throws, null before the first scan):
   { cands: [{ id, venue, sym, dir, strategy, grade, entry, stop, t1, t2, rr,
-             rr2, tally, tallyParts, agree, oppose, killzone, atr, demoted,
-             stamps, vetoed, locked, issuedAt, asOf, why, invalidates }],
+             rr2, tally, tallyParts, agree, oppose, killzone, atr, anchor,
+             zone, demoted, stamps, vetoed, merged, locked, issuedAt, asOf,
+             why, invalidates }],
     bestId, history: [{ id, dir, strategy, venue, sym, entry, stop, t1, t2,
                         status, issuedAt, closedAt, closePrice }],
     rejected: [{ id, strategy, stratKey, dir, venue, sym, reason }], at } | null
@@ -161,9 +170,11 @@ function publishScan(ranked, best, history, at, rejected){
           ? c.tallyParts.map(function(p){ return { label: p && p.label, pts: p && p.pts }; }) : [],
         agree: isFinite(c.agree) ? c.agree : null, oppose: isFinite(c.oppose) ? c.oppose : null,
         killzone: c.killzone || null, atr: isFinite(c.atr) ? c.atr : null,
+        anchor: isFinite(c.anchor) ? c.anchor : null,
+        zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null,
         demoted: !!c.demoted,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
-        vetoed: !!c.vetoed,
+        vetoed: !!c.vetoed, merged: !!c.merged,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null
       });
@@ -238,7 +249,15 @@ function saveConvictions(store){
    noMint (NEWS-WINDOW VETO): inside a high-impact ±30-min window NO new
    conviction is issued — unmatched candidates are flagged c.vetoed and
    render as reason lines; already-live convictions keep running untouched
-   (transitions + verbatim restore still apply). */
+   (transitions + verbatim restore still apply).
+   DUPLICATE-CONVICTION MERGE: a candidate whose direction AND symbol match
+   a live locked conviction and whose structure anchor sits within 0.5×ATR
+   of that conviction's anchor merges into it — the conviction's
+   lastConfirmedAt refreshes, its ORIGINAL levels and id stand, and the
+   candidate renders 'conviction re-confirmed · original levels stand'
+   instead of minting a second overlapping card. Different direction, or an
+   anchor beyond 0.5×ATR, is a normal new evaluation. A merge is a
+   re-confirmation, not an issuance, so it also applies during a news veto. */
 function applyConviction(ranked, venueRows, nowMs, noMint){
   var store = loadConvictions(), transitions = [];
   try{
@@ -293,14 +312,39 @@ function applyConviction(ranked, venueRows, nowMs, noMint){
         }
         c.venue = rec.venue; c.sym = rec.sym;
         c.locked = true; c.issuedAt = rec.issuedAt;
-      } else if (noMint){
-        c.vetoed = true;   /* news window — held back, nothing minted */
       } else {
-        rec = { id: c.id, dir: c.dir, strategy: c.strategy, entry: c.entry, stop: c.stop,
-                t1: c.t1, t2: c.t2, venue: c.venue, sym: c.sym, issuedAt: nowMs,
-                tally: isFinite(c.tally) ? c.tally : 0 };
-        store.live[c.id] = rec;
-        c.locked = false; c.issuedAt = nowMs;
+        /* duplicate-conviction merge: same symbol+direction, structure anchor
+           within 0.5×ATR of a live conviction -> merge, never double-issue */
+        var mr = null;
+        if (isFinite(c.anchor) && isFinite(c.atr) && c.atr > 0){
+          for (var mid in store.live){
+            if (!Object.prototype.hasOwnProperty.call(store.live, mid)) continue;
+            var mr0 = store.live[mid];
+            if (!mr0 || mr0.dir !== c.dir || mr0.sym !== c.sym || !isFinite(mr0.anchor)) continue;
+            if (Math.abs(c.anchor - mr0.anchor) <= 0.5*c.atr){ mr = mr0; break; }
+          }
+        }
+        if (mr){
+          mr.lastConfirmedAt = nowMs;      /* refresh 'last confirmed at' */
+          c.entry = mr.entry; c.stop = mr.stop; c.t1 = mr.t1; c.t2 = mr.t2;
+          var mrisk = Math.abs(mr.entry - mr.stop);
+          if (mrisk > 0){
+            c.rr = Math.abs(mr.t1 - mr.entry)/mrisk;
+            c.rr2 = Math.abs(mr.t2 - mr.entry)/mrisk;
+          }
+          c.venue = mr.venue; c.sym = mr.sym;
+          c.locked = true; c.issuedAt = mr.issuedAt;
+          c.merged = true; c.mergedInto = mr.id; c.mergedAt = nowMs;
+        } else if (noMint){
+          c.vetoed = true;   /* news window — held back, nothing minted */
+        } else {
+          rec = { id: c.id, dir: c.dir, strategy: c.strategy, entry: c.entry, stop: c.stop,
+                  t1: c.t1, t2: c.t2, venue: c.venue, sym: c.sym, issuedAt: nowMs,
+                  tally: isFinite(c.tally) ? c.tally : 0,
+                  anchor: isFinite(c.anchor) ? c.anchor : null };
+          store.live[c.id] = rec;
+          c.locked = false; c.issuedAt = nowMs;
+        }
       }
       try{ c.asOf = isFinite(c.issuedAt) ? new Date(c.issuedAt).toISOString().slice(11, 16) + ' UTC' : ''; }
       catch(eD){ c.asOf = ''; }
@@ -361,7 +405,14 @@ var GS_CSS = ''
 + '#tab_goldscalp .gsx-hrow.rej{border-left-color:#ff9f43}'
 + '#tab_goldscalp .gsx-gateline{font-size:10px;color:#ff9f43;letter-spacing:.04em;margin-top:8px;'
 + 'border:1px solid rgba(255,159,67,.35);border-radius:4px;padding:5px 8px;line-height:1.55;background:rgba(255,159,67,.06)}'
-+ '#tab_goldscalp .gsx-gateline b{letter-spacing:.12em}';
++ '#tab_goldscalp .gsx-gateline b{letter-spacing:.12em}'
++ '#tab_goldscalp .gsx-mgmt{font-size:10px;margin-top:8px;padding:5px 8px;border-radius:4px;line-height:1.55;'
++ 'color:var(--txt,#d7dbe0);border:1px dashed rgba(255,215,106,.35);background:rgba(255,215,106,.05)}'
++ '#tab_goldscalp .gsx-mgmt b{color:#ffd76a;letter-spacing:.12em;font-size:9px}'
++ '#tab_goldscalp .gsx-guide{font-size:10px;margin-top:6px;letter-spacing:.03em;color:var(--mut,#8a8f98);line-height:1.5}'
++ '#tab_goldscalp .gsx-guide b{letter-spacing:.12em;font-size:9px}'
++ '#tab_goldscalp .gsx-guide.in{color:#19e3a2}'
++ '#tab_goldscalp .gsx-guide.out{color:#ff9f43}';
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -418,9 +469,31 @@ function cardHTML(c, isBest, season){
   var seasonLine = season ? '<div class="note" style="margin-top:6px">' + esc(season) + '</div>' : '';
   var tallyNum = isFinite(c.tally)
     ? '<span class="gsx-tallynum ' + (c.tally >= 0 ? 'up' : 'dn') + '">tally ' + (c.tally > 0 ? '+' : '') + c.tally + '</span>' : '';
-  var lockLine = c.locked
-    ? '<div class="gsx-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
-    : '<div class="gsx-lockline" style="color:var(--mut,#8a8f98)">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
+  var lockLine;
+  if (c.merged){
+    var mAt = '';
+    try{ mAt = new Date(c.mergedAt).toISOString().slice(11, 16) + ' UTC'; }catch(eM){}
+    lockLine = '<div class="gsx-lockline">⬤ conviction re-confirmed · original levels stand'
+      + ' <span style="opacity:.65">(issued ' + esc(c.asOf || '') + (mAt ? ' · re-confirmed ' + esc(mAt) : '') + ')</span></div>';
+  } else {
+    lockLine = c.locked
+      ? '<div class="gsx-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
+      : '<div class="gsx-lockline" style="color:var(--mut,#8a8f98)">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
+  }
+  /* trade-management block + entry guidance — compact, under the levels,
+     always built from THIS card's real TP1/TP2/zone values */
+  var mgmtBlock = (isFinite(c.t1) && isFinite(c.t2) && isFinite(c.entry))
+    ? '<div class="gsx-mgmt"><b>TRADE MANAGEMENT</b> · At TP1 $' + pxF(c.t1)
+      + ': close 50%, move stop to breakeven ($' + pxF(c.entry) + '). Runner targets TP2 $' + pxF(c.t2) + '.</div>'
+    : '';
+  var guideBlock = '';
+  if (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi) && isFinite(c.pxNow)){
+    var inZone = c.pxNow >= c.zone.lo && c.pxNow <= c.zone.hi;
+    guideBlock = '<div class="gsx-guide ' + (inZone ? 'in' : 'out') + '"><b>ENTRY GUIDANCE</b> · '
+      + (inZone ? 'price in zone — market entry valid'
+                : 'price outside zone — limit order at zone edge $' + pxF(c.pxNow > c.zone.hi ? c.zone.hi : c.zone.lo))
+      + '</div>';
+  }
   var gateLine = (c.demoted && Array.isArray(c.stamps) && c.stamps.length)
     ? '<div class="gsx-gateline"><b>⚠ ' + esc(c.stamps.join(' · ')) + '</b> — '
       + esc((Array.isArray(c.gateNotes) ? c.gateNotes : []).join(' · '))
@@ -453,6 +526,7 @@ function cardHTML(c, isBest, season){
     + ' · TP1 <b>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
     + ' · TP2 <b>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + '</div>'
+    + mgmtBlock + guideBlock
     + (c.why ? '<div class="gsx-whyline">' + esc(c.why) + '</div>' : '')
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine
@@ -711,6 +785,13 @@ async function runScan(ui){
     var cards = [], i2;
     for (i2 = 0; i2 < ranked.length; i2++){
       var vc = ranked[i2];
+      if (vc){
+        var vr2 = venueRows ? venueRows[vc.venue] : null;   /* current 15m close for entry guidance */
+        if (vr2 && vr2.rows15m && vr2.rows15m.length){
+          var lc2 = vr2.rows15m[vr2.rows15m.length - 1];
+          if (lc2 && isFinite(lc2.c)) vc.pxNow = lc2.c;
+        }
+      }
       if (vc && vc.vetoed){
         rejectedAll.push({ id: vc.id || null, strategy: vc.strategy || null, stratKey: vc.stratKey || null,
                            dir: vc.dir, venue: vc.venue || null, sym: vc.sym || null,

@@ -1,0 +1,1264 @@
+/* =========================================================================
+HARDGATE — goldswing.js
+GOLD SWING tab: swing-horizon (4h/1d) gold setups, same architecture family
+as goldscalp.js. RUN SCAN pulls 4h + 1d gold klines from every available
+venue, composes PER-STRATEGY swing candidates from real candle/indicator
+math, ranks them with a transparent human-readable confluence tally, crowns
+the #1 with a MOST PROBABLE SETUP banner (full execution plan), and pins
+every issued setup under a CONVICTION LOCK (localStorage
+'hgGoldswingConviction'): re-running the scan restores the ORIGINAL levels
+verbatim with an 'as of HH:MM' stamp — levels are never re-picked for a
+live conviction. Transitions only on invalidation against the latest 4h
+close: beyond stop -> STOPPED, TP1 reached -> TARGET HIT, structure older
+than 5 days -> EXPIRED. Closed setups render as a small history line — they
+never vanish silently.
+
+STRATEGY CANDIDATES (each names its evidence; a candidate needs its trigger
+PLUS >=2 independent agreeing reads, strictly more than opposing — a trigger
+without confluence is held back on the .rejected side-channel with the
+reason named, never silently dropped):
+  1) 4H TREND PULLBACK (EMA50/200) — 4h trend stack (price beyond EMA50,
+     EMA50 beyond EMA200) pulling back into the 50-EMA value zone (within
+     0.75xATR of EMA50). Stop anchored beyond the 200-EMA.
+  2) WEEKLY RANGE BREAKOUT — prior ISO week's high/low (computed from real
+     1d bars) either SWEPT + RECLAIMED on a 4h close (mean-reversion) or
+     BROKEN WITH DISPLACEMENT (latest 4h bar closes beyond the level with a
+     >=1.5xATR range — range expansion). Stop anchored beyond the level.
+  3) 4H ORDER BLOCK RETEST — unmitigated 4h order block (goldOrderBlocks,
+     i.e. the origin of a structure-breaking displacement) retested. Stop
+     anchored beyond the OB edge.
+  4) MACRO-ALIGNED TREND CONTINUATION — a REAL daily trend stack (EMA50/200
+     on 1d) aligned with getGoldMacro's realRateHint (TAILWIND favors longs,
+     HEADWIND favors shorts). Macro NEVER fabricates a setup: no daily
+     trend stack or a NEUTRAL/absent hint -> no candidate.
+
+RANKING TALLY (shown on every card — same pattern as GOLD SCALP; ICT
+killzone session weights are intraday-only and deliberately NOT a swing
+tally leg, the detected session is shown as context on the card instead):
+  +N    independent agreeing reads (the candidate's own ledger)
+  -2    high-impact news window (+/-30 min, goldNewsCaution / hgNewsState)
+  +/-2  fundamentals tilt (getGoldMacro realRateHint: TAILWIND favors
+        longs, HEADWIND favors shorts; DXY/US10Y trends quoted in the label)
+  +/-1  positioning (window.goldspotState PAXG basis verdict)
+  +1    seasonality (goldSeason STRONG bias behind a long)
+  +1    crypto risk sentiment (lexical global S.fng — feature-checked
+        softly, skipped when absent)
+
+SWING RISK MODEL (all from real values, nothing fabricated): stop 1.5-2x
+ATR14(4h), never tighter, extended to sit beyond the structure (OB edge /
+range edge / 200-EMA) when that is wider, capped at 2x; targets at
+1.5R / 2.5R / 4R. News windows never veto minting at swing horizon (the
+entry zone persists for days) — they cost -2 tally and carry a NEWS-FADE
+stamp instead.
+
+goldind.js detector layer is consumed READ-ONLY and every export is
+feature-checked (gfn): goldSweeps / goldOrderBlocks / goldFVG / goldVWAP /
+goldKillzone (session context only) / goldNewsCaution / goldSeason. ATR +
+EMA are taken from indicators.js globals (atr/ema) when loaded, with local
+copies identical to goldind.js's own fallbacks otherwise (goldind.js does
+not export an ATR — the local copy is the honest degradation). getGoldMacro
+(macro.js) is async + optional. A missing detector simply removes its
+evidence line and says so in the scan stat / card notes.
+
+Feeds (in preference order):
+  1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
+     fallback, then Twelve Data / Yahoo.
+  2) binanceKlines('PAXGUSDT') — deepest free gold-proxy feed (fallback).
+  3) Delta's XAUTUSD perp, when window.xuUniverse + window.xuCandles exist
+     and XAUT is listed — scanned as a SECOND venue with its own candidates.
+
+Classic script, no build step, loads AFTER goldind.js + binance.js (+macro.js
+/xuniverse.js/news.js/goldspot.js when present). Never throws at load, mount,
+scan or refresh: every external global is feature-checked (gfn), every
+network leg is async with its own try/catch, localStorage is probed softly,
+and every failure degrades to an honest stat line / empty state.
+
+Registers window.HG_tabs.push({id:'goldswing', label:'GOLD SWING', mount,
+refresh}) — refresh(): async, never throws, 'busy' | 'skipped: not run yet' |
+'refreshed' | 'error: …', busy-guarded, and never triggers a first-time scan
+on its own. Warm-up: window.HG_warmups.push({id:'goldswing', run}) — 'fresh'
+when a state snapshot exists, else a headless scan against inert stub
+elements (oiflow.js oiflowWarm pattern) -> 'warmed' | 'busy' | 'unavailable: …'.
+
+BRAIN STATE CONTRACT — after each SUCCESSFUL scan the qualifying setups are
+cached module-locally and exposed as window.goldswingState() for the BRAIN:
+  { results: [{ venue, sym, dir, grade, strategy }], at } | null
+Zero-arg getter, never throws, deep-frozen copies; a failed re-run keeps the
+previous good snapshot with its original `at`.
+
+DIAGNOSTIC SURFACE — window.goldswingScan(): the last successful scan in
+full (deep-frozen, never throws, null before the first scan):
+  { cands: [{ id, venue, sym, dir, strategy, stratKey, grade, entry, stop,
+             t1, t2, t3, rr, rr2, rr3, tally, tallyParts, agree, oppose,
+             session, atr, locked, issuedAt, asOf, why, invalidates, anchor }],
+    bestId, history: [{ id, dir, strategy, venue, sym, entry, stop, t1, t2,
+                        t3, status, issuedAt, closedAt, closePrice }],
+    rejected: [{ id, strategy, stratKey, dir, venue, sym, reason }], at } | null
+========================================================================= */
+(function(){
+'use strict';
+
+var W = (typeof window !== 'undefined') ? window
+      : (typeof globalThis !== 'undefined') ? globalThis : {};
+
+var KL_4H = 220, KL_1D = 260;
+var MIN_4H = 60;          /* bars needed for stable ATR + detector windows */
+
+/* ---------------- tiny helpers ---------------- */
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function pxF(n){
+  if (typeof px === 'function'){ try{ return px(n); }catch(e){} }
+  if (n === null || n === undefined || !isFinite(n)) return '—';
+  var a = Math.abs(n);
+  var d = a >= 1000 ? 2 : a >= 100 ? 2 : a >= 1 ? 4 : 6;
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
+}
+function fmtF(n, d){
+  if (typeof fmt === 'function'){ try{ return fmt(n, d); }catch(e){} }
+  return (n === null || n === undefined || !isFinite(n)) ? '—'
+       : Number(n).toLocaleString('en-US', { maximumFractionDigits: (d === undefined ? 2 : d) });
+}
+function gfn(name){
+  try{ if (typeof W[name] === 'function') return W[name]; }catch(e){}
+  try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
+  return null;
+}
+
+var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F' };
+function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
+
+/* ---------------- local indicator fallbacks (identical math to indicators.js
+   / goldind.js's own local copies — goldind.js does NOT export an ATR, so
+   the honest degradation is the same local copy it uses itself) ---------------- */
+function __emaLocal(vals, p){
+  var out = new Array(vals.length).fill(NaN);
+  if (!vals || vals.length < p) return out;
+  var k = 2/(p+1), sum = 0, i;
+  for (i = 0; i < p; i++) sum += vals[i];
+  var e = sum/p;
+  out[p-1] = e;
+  for (i = p; i < vals.length; i++){ e = vals[i]*k + e*(1-k); out[i] = e; }
+  return out;
+}
+function __atrLocal(rows, p){
+  p = p || 14;
+  var out = new Array(rows.length).fill(NaN), a = null;
+  for (var i = 1; i < rows.length; i++){
+    var r = rows[i], q = rows[i-1];
+    if (!r || !q) continue;
+    var tr = Math.max(r.h - r.l, Math.abs(r.h - q.c), Math.abs(r.l - q.c));
+    if (!isFinite(tr)) continue;
+    if (a === null){
+      if (i >= p){
+        var s = 0, ok = true;
+        for (var k = i-p+1; k <= i; k++){
+          var rk = rows[k], rj = rows[k-1];
+          if (!rk || !rj){ ok = false; break; }
+          var tk = Math.max(rk.h - rk.l, Math.abs(rk.h - rj.c), Math.abs(rk.l - rj.c));
+          if (!isFinite(tk)){ ok = false; break; }
+          s += tk;
+        }
+        if (ok){ a = s/p; out[i] = a; }
+      }
+    } else { a = (a*(p-1) + tr)/p; out[i] = a; }
+  }
+  return out;
+}
+var _ema = (typeof ema === 'function') ? ema : __emaLocal;
+var _atr = (typeof atr === 'function') ? atr : __atrLocal;
+
+function __rows(rows){
+  if (!Array.isArray(rows) || !rows.length) return null;
+  var out = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (r && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c)) out.push(r);
+  }
+  return out.length ? out : null;
+}
+function __closes(rows){ return rows.map(function(r){ return r.c; }); }
+function __last(a){ return (a && a.length) ? a[a.length - 1] : NaN; }
+
+/* ---------------- ISO-week helpers (UTC Monday boundary) ---------------- */
+function __weekStartSec(t){                    /* t: unix seconds */
+  var d = Math.floor(t/86400)*86400;
+  var dow = new Date(d*1000).getUTCDay();      /* 0 = Sunday */
+  var back = (dow + 6) % 7;                    /* days since Monday */
+  return d - back*86400;
+}
+function __weekAnchorIndex(rows4){
+  /* first 4h bar of the last bar's current UTC week (weekly VWAP anchor) */
+  try{
+    var n = rows4.length, tl = rows4[n-1].t;
+    if (!isFinite(tl)) return -1;
+    var ws = __weekStartSec(tl);
+    for (var i = n - 1; i >= 0; i--){
+      var t = rows4[i].t;
+      if (!isFinite(t) || t < ws) return i + 1;
+    }
+    return 0;
+  }catch(e){ return -1; }
+}
+function __weeklyRange(rows1d){
+  /* prior COMPLETED ISO week's high/low from real daily bars */
+  try{
+    rows1d = __rows(rows1d);
+    if (!rows1d || rows1d.length < 5) return null;
+    var n = rows1d.length, tl = rows1d[n-1].t;
+    if (!isFinite(tl)) return null;
+    var prev = __weekStartSec(tl) - 7*86400;
+    var hi = -Infinity, lo = Infinity, bars = 0;
+    for (var i = 0; i < n; i++){
+      var t = rows1d[i].t;
+      if (!isFinite(t) || __weekStartSec(t) !== prev) continue;
+      if (rows1d[i].h > hi) hi = rows1d[i].h;
+      if (rows1d[i].l < lo) lo = rows1d[i].l;
+      bars++;
+    }
+    if (bars < 3 || !(hi > lo)) return null;
+    return { hi: hi, lo: lo, bars: bars };
+  }catch(e){ return null; }
+}
+
+/* ---------------- BRAIN state snapshot ---------------- */
+var __snap = null;
+function __stateView(v){
+  if (v === null || typeof v !== 'object') return v;
+  var out = Array.isArray(v) ? [] : {};
+  for (var k in v){
+    if (!Object.prototype.hasOwnProperty.call(v, k)) continue;
+    out[k] = __stateView(v[k]);
+  }
+  Object.freeze(out);
+  return out;
+}
+function publishState(cands){
+  try{
+    var rows = [];
+    for (var i = 0; i < cands.length; i++){
+      var c = cands[i];
+      if (!c || !c.dir) continue;
+      rows.push({ venue: c.venue, sym: c.sym, dir: c.dir, grade: c.grade, strategy: c.strategy });
+    }
+    __snap = { results: rows, at: Date.now() };
+  }catch(e){ /* snapshotting must never break the scan */ }
+}
+
+/* ---------------- diagnostic surface (full last scan) ---------------- */
+var __scanSnap = null;
+function publishScan(ranked, best, history, at, rejected){
+  try{
+    var cands = [];
+    for (var i = 0; i < ranked.length; i++){
+      var c = ranked[i];
+      if (!c || !c.dir) continue;
+      cands.push({
+        id: c.id || null, venue: c.venue || null, sym: c.sym || null,
+        dir: c.dir, strategy: c.strategy || null, stratKey: c.stratKey || null,
+        grade: c.grade || null, entry: c.entry, stop: c.stop,
+        t1: c.t1, t2: c.t2, t3: c.t3, rr: c.rr, rr2: c.rr2, rr3: c.rr3,
+        tally: isFinite(c.tally) ? c.tally : null,
+        tallyParts: Array.isArray(c.tallyParts)
+          ? c.tallyParts.map(function(p){ return { label: p && p.label, pts: p && p.pts }; }) : [],
+        agree: isFinite(c.agree) ? c.agree : null, oppose: isFinite(c.oppose) ? c.oppose : null,
+        session: c.session || null, atr: isFinite(c.atr) ? c.atr : null,
+        locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
+        asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
+        anchor: isFinite(c.anchor) ? c.anchor : null,
+        zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null
+      });
+    }
+    var hist = [];
+    for (var j = 0; j < (history || []).length; j++){
+      var h = history[j];
+      if (!h) continue;
+      hist.push({ id: h.id || null, dir: h.dir || null, strategy: h.strategy || null,
+                  venue: h.venue || null, sym: h.sym || null,
+                  entry: h.entry, stop: h.stop, t1: h.t1, t2: h.t2, t3: h.t3,
+                  status: h.status || null, issuedAt: isFinite(h.issuedAt) ? h.issuedAt : null,
+                  closedAt: isFinite(h.closedAt) ? h.closedAt : null,
+                  closePrice: isFinite(h.closePrice) ? h.closePrice : null });
+    }
+    var rej = [];
+    for (var q = 0; q < (rejected || []).length; q++){
+      var r0 = rejected[q];
+      if (!r0) continue;
+      rej.push({ id: r0.id || null, strategy: r0.strategy || null, stratKey: r0.stratKey || null,
+                 dir: r0.dir || null, venue: r0.venue || null, sym: r0.sym || null,
+                 reason: r0.reason || null });
+    }
+    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej, at: at };
+  }catch(e){ /* snapshotting must never break the scan */ }
+}
+
+/* ============================ CONVICTION LOCK ============================
+   localStorage 'hgGoldswingConviction' -> { v, live: {id: rec}, history:
+   [rec] } where rec = { id, dir, strategy, entry, stop, t1, t2, t3, venue,
+   sym, issuedAt, tally }. A re-scan NEVER re-picks levels for a live
+   conviction: the stored entry/stop/t1/t2/t3 are restored verbatim with an
+   'as of HH:MM' stamp. Transitions only on invalidation against the latest
+   4h close: beyond stop -> STOPPED (slot reopens), TP1 reached -> TARGET
+   HIT, older than 5 days -> EXPIRED. Closed records move to a capped
+   history — never silently dropped. localStorage is probed softly; without
+   it the lock is memory-only for the scan (still never throws). */
+var CONVICTION_KEY = 'hgGoldswingConviction';
+var CONVICTION_TTL_MS = 5*24*60*60*1000;       /* 5-day expiry */
+var CONVICTION_HIST = 8;
+
+function __lsRead(){
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return null;
+    return localStorage.getItem(CONVICTION_KEY);
+  }catch(e){ return null; }
+}
+function __lsWrite(s){
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return;
+    localStorage.setItem(CONVICTION_KEY, s);
+  }catch(e){}
+}
+function loadConvictions(){
+  var fresh = { v: 1, live: {}, history: [] };
+  try{
+    var raw = __lsRead();
+    if (!raw) return fresh;
+    var j = JSON.parse(raw);
+    if (!j || typeof j !== 'object') return fresh;
+    if (!j.live || typeof j.live !== 'object') j.live = {};
+    if (!Array.isArray(j.history)) j.history = [];
+    return j;
+  }catch(e){ return fresh; }
+}
+function saveConvictions(store){
+  try{ __lsWrite(JSON.stringify({ v: 1, live: store.live, history: store.history })); }catch(e){}
+}
+
+/* venueRows: { venueLabel: { rows4h } } — latest 4h closes per venue for
+   invalidation checks. Mutates the ranked candidates (restores levels). */
+function applyConviction(ranked, venueRows, nowMs){
+  var store = loadConvictions(), transitions = [];
+  try{
+    var id, rec, i;
+    /* 1) invalidation transitions on live convictions */
+    for (id in store.live){
+      if (!Object.prototype.hasOwnProperty.call(store.live, id)) continue;
+      rec = store.live[id];
+      if (!rec || (rec.dir !== 'long' && rec.dir !== 'short') || !isFinite(rec.stop)
+          || !isFinite(rec.t1) || !isFinite(rec.issuedAt)){
+        delete store.live[id];
+        continue;
+      }
+      var status = null, lastClose = NaN;
+      var vr = venueRows ? venueRows[rec.venue] : null;
+      if (vr && vr.rows4h && vr.rows4h.length){
+        var lc = vr.rows4h[vr.rows4h.length - 1];
+        if (lc && isFinite(lc.c)) lastClose = lc.c;
+      }
+      if (isFinite(lastClose)){
+        if (rec.dir === 'long'){
+          if (lastClose < rec.stop) status = 'STOPPED';
+          else if (lastClose >= rec.t1) status = 'TARGET HIT';
+        } else {
+          if (lastClose > rec.stop) status = 'STOPPED';
+          else if (lastClose <= rec.t1) status = 'TARGET HIT';
+        }
+      }
+      if (!status && (nowMs - rec.issuedAt) > CONVICTION_TTL_MS) status = 'EXPIRED';
+      if (status){
+        rec.status = status;
+        rec.closedAt = nowMs;
+        if (isFinite(lastClose)) rec.closePrice = lastClose;
+        store.history.unshift(rec);
+        delete store.live[id];
+        transitions.push(rec);
+      }
+    }
+    if (store.history.length > CONVICTION_HIST) store.history = store.history.slice(0, CONVICTION_HIST);
+
+    /* 2) restore live conviction levels verbatim / issue new convictions.
+       Keys are venue-scoped: the same strategy can fire the same setup id on
+       two venues (e.g. BINANCE + DELTA) — each venue keeps its OWN record and
+       a restore never overwrites a candidate's venue. Bare legacy keys (no
+       venue prefix) still restore for their matching venue and migrate. */
+    for (i = 0; i < ranked.length; i++){
+      var c = ranked[i];
+      if (!c || !c.id) continue;
+      var cKey = (c.venue ? c.venue + '|' : '') + c.id;
+      rec = store.live[cKey];
+      if (!rec && store.live[c.id]
+          && (!store.live[c.id].venue || store.live[c.id].venue === c.venue)){
+        rec = store.live[c.id];
+        delete store.live[c.id];
+        store.live[cKey] = rec;
+      }
+      if (rec){
+        c.entry = rec.entry; c.stop = rec.stop; c.t1 = rec.t1; c.t2 = rec.t2;
+        if (isFinite(rec.t3)) c.t3 = rec.t3;
+        var risk = Math.abs(rec.entry - rec.stop);
+        if (risk > 0){
+          c.rr = Math.abs(rec.t1 - rec.entry)/risk;
+          c.rr2 = Math.abs(rec.t2 - rec.entry)/risk;
+          if (isFinite(rec.t3)) c.rr3 = Math.abs(rec.t3 - rec.entry)/risk;
+        }
+        c.venue = rec.venue; c.sym = rec.sym;
+        c.locked = true; c.issuedAt = rec.issuedAt;
+      } else {
+        rec = { id: c.id, dir: c.dir, strategy: c.strategy, entry: c.entry, stop: c.stop,
+                t1: c.t1, t2: c.t2, t3: c.t3, venue: c.venue, sym: c.sym, issuedAt: nowMs,
+                tally: isFinite(c.tally) ? c.tally : 0 };
+        store.live[cKey] = rec;
+        c.locked = false; c.issuedAt = nowMs;
+      }
+      try{ c.asOf = isFinite(c.issuedAt) ? new Date(c.issuedAt).toISOString().slice(11, 16) + ' UTC' : ''; }
+      catch(eD){ c.asOf = ''; }
+    }
+    saveConvictions(store);
+  }catch(e){}
+  return { store: store, transitions: transitions };
+}
+
+/* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
+var GW_CSS = ''
++ '#tab_goldswing .gsw-banner{position:relative;border-radius:10px;padding:2px;margin:16px 0 18px;'
++ 'background:linear-gradient(120deg,#5a7a1f,#c9ff6a 28%,#6a8a0b 52%,#e4ffa8 76%,#5a7a1f);'
++ 'box-shadow:0 16px 38px -18px rgba(190,255,100,.45)}'
++ '#tab_goldswing .gsw-banner-in{background:linear-gradient(180deg,#101307,#0c0d05);border-radius:8px;padding:14px 18px}'
++ '#tab_goldswing .gsw-eye{font-size:10px;letter-spacing:.3em;color:#c9ff6a;font-weight:700}'
++ '#tab_goldswing .gsw-dir{font-family:var(--disp,inherit);font-size:26px;font-weight:800;letter-spacing:.06em;margin-top:4px}'
++ '#tab_goldswing .gsw-dir.long{color:#19e3a2;text-shadow:0 0 22px rgba(25,227,162,.4)}'
++ '#tab_goldswing .gsw-dir.short{color:#ff6b4a;text-shadow:0 0 22px rgba(255,107,74,.4)}'
++ '#tab_goldswing .gsw-dir span{display:block;font-family:inherit;font-size:10px;font-weight:600;letter-spacing:.14em;color:var(--mut,#8a8f98);margin-top:3px}'
++ '#tab_goldswing .gsw-plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0 4px}'
++ '#tab_goldswing .gsw-plan>div{background:rgba(201,255,106,.05);border:1px solid rgba(201,255,106,.18);border-radius:6px;padding:8px 10px}'
++ '#tab_goldswing .gsw-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:var(--mut,#8a8f98)}'
++ '#tab_goldswing .gsw-plan b{display:block;font-size:15px;color:#c9ff6a;margin:2px 0}'
++ '#tab_goldswing .gsw-plan u{text-decoration:none;font-size:10px;color:var(--txt,#d7dbe0);opacity:.75}'
++ '#tab_goldswing .gsw-why{font-size:11px;margin-top:8px}'
++ '#tab_goldswing .gsw-why b{color:#c9ff6a;letter-spacing:.12em;font-size:10px}'
++ '#tab_goldswing .gsw-tally{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}'
++ '#tab_goldswing .gsw-tp{font-size:9px;letter-spacing:.03em;padding:2px 7px;border-radius:3px;border:1px solid}'
++ '#tab_goldswing .gsw-tp.pos{color:#19e3a2;border-color:rgba(25,227,162,.45);background:rgba(25,227,162,.07)}'
++ '#tab_goldswing .gsw-tp.neg{color:#ff6b4a;border-color:rgba(255,107,74,.45);background:rgba(255,107,74,.07)}'
++ '#tab_goldswing .gsw-inv{font-size:11px;color:var(--mut,#8a8f98);margin-top:8px;line-height:1.5}'
++ '#tab_goldswing .gsw-inv b{color:#ff6b4a;letter-spacing:.12em;font-size:10px}'
++ '#tab_goldswing .gsw-lock{margin-top:10px;font-size:10px;letter-spacing:.08em;color:#c9ff6a;border-top:1px dashed rgba(201,255,106,.3);padding-top:8px}'
++ '#tab_goldswing .gsw-lock.new{color:var(--mut,#8a8f98)}'
++ '#tab_goldswing .gsw-card.long{border-left:4px solid #19e3a2;background:linear-gradient(180deg,rgba(25,227,162,.06),transparent 42%),var(--panel,#16181d)}'
++ '#tab_goldswing .gsw-card.short{border-left:4px solid #ff6b4a;background:linear-gradient(180deg,rgba(255,107,74,.06),transparent 42%),var(--panel,#16181d)}'
++ '#tab_goldswing .gsw-card.best{box-shadow:0 0 0 1px rgba(201,255,106,.55),0 12px 30px -18px rgba(190,255,100,.45)}'
++ '#tab_goldswing .gsw-strat{color:#c9ff6a;font-size:10px;font-weight:700;letter-spacing:.12em}'
++ '#tab_goldswing .gsw-grade{font-weight:700}'
++ '#tab_goldswing .gsw-grade.A{color:#c9ff6a}'
++ '#tab_goldswing .gsw-grade.B{color:#19e3a2}'
++ '#tab_goldswing .gsw-grade.C{color:var(--mut,#8a8f98)}'
++ '#tab_goldswing .gsw-tallynum{font-weight:700}'
++ '#tab_goldswing .gsw-tallynum.up{color:#19e3a2}'
++ '#tab_goldswing .gsw-tallynum.dn{color:#ff6b4a}'
++ '#tab_goldswing .gsw-lockline{font-size:9px;color:#c9ff6a;letter-spacing:.1em;margin-top:6px}'
++ '#tab_goldswing .gsw-whyline{font-size:11px;color:var(--txt,#d7dbe0);margin-top:8px;line-height:1.55}'
++ '#tab_goldswing .gsw-invline{font-size:10px;color:var(--mut,#8a8f98);margin-top:5px;line-height:1.5}'
++ '#tab_goldswing .gsw-invline b{color:#ff6b4a;letter-spacing:.08em}'
++ '#tab_goldswing .gsw-hist{margin-top:18px}'
++ '#tab_goldswing .gsw-hhead{font-size:10px;letter-spacing:.2em;color:var(--mut,#8a8f98);margin-bottom:6px}'
++ '#tab_goldswing .gsw-hrow{font-size:10px;padding:5px 9px;border-left:2px solid var(--line,#2a2e35);margin-bottom:3px;color:var(--mut,#8a8f98);line-height:1.5}'
++ '#tab_goldswing .gsw-hrow.stopped{border-left-color:#ff6b4a}'
++ '#tab_goldswing .gsw-hrow.target{border-left-color:#19e3a2}'
++ '#tab_goldswing .gsw-hrow.expired{border-left-color:#c9ff6a}'
++ '#tab_goldswing .gsw-hrow b{letter-spacing:.08em}'
++ '#tab_goldswing .gsw-hrow.rej{border-left-color:#ff9f43}';
+
+/* ---------------- renderers ---------------- */
+function tallyChips(c){
+  if (!Array.isArray(c.tallyParts) || !c.tallyParts.length) return '';
+  return '<div class="gsw-tally">' + c.tallyParts.map(function(p){
+    if (!p) return '';
+    return '<span class="gsw-tp ' + (p.pts >= 0 ? 'pos' : 'neg') + '">' + (p.pts >= 0 ? '+' : '') + p.pts + ' · ' + esc(p.label) + '</span>';
+  }).join('') + '</div>';
+}
+
+function bannerHTML(best, ranked){
+  if (!best) return '';
+  var dirUp = best.dir.toUpperCase();
+  var act = best.dir === 'long' ? 'BUY ZONE' : 'SELL ZONE';
+  var nextTally = null;
+  for (var i = 0; i < ranked.length; i++){
+    if (ranked[i] && ranked[i].id !== best.id && isFinite(ranked[i].tally)){ nextTally = ranked[i].tally; break; }
+  }
+  var tallyTxt = isFinite(best.tally)
+    ? ('confluence tally ' + (best.tally > 0 ? '+' : '') + best.tally
+       + (nextTally !== null ? (' vs next best ' + (nextTally > 0 ? '+' : '') + nextTally) : ' — only candidate on the board'))
+    : 'tally unavailable';
+  var lock = best.locked
+    ? '<div class="gsw-lock">⬤ CONVICTION LOCK — issued as of ' + esc(best.asOf || '') + '; entry/stop/targets held verbatim, never re-picked on re-scans.</div>'
+    : '<div class="gsw-lock new">○ NEW CONVICTION — issued this scan at ' + esc(best.asOf || '') + '; these levels are now locked until invalidated.</div>';
+  return '<div class="gsw-banner"><div class="gsw-banner-in">'
+    + '<div class="gsw-eye">MOST PROBABLE SETUP</div>'
+    + '<div class="gsw-dir ' + best.dir + '">' + dirUp
+    + '<span>' + esc(best.strategy) + ' · ' + esc(best.venue) + (best.sym ? ' (' + esc(best.sym) + ')' : '')
+    + ' · GRADE ' + esc(best.grade) + '</span></div>'
+    + '<div class="gsw-plan">'
+    + '<div><i>' + act + '</i><b>$' + pxF(best.zone ? best.zone.lo : best.entry) + ' – $' + pxF(best.zone ? best.zone.hi : best.entry) + '</b><u>entry $' + pxF(best.entry) + '</u></div>'
+    + '<div><i>STOP</i><b>$' + pxF(best.stop) + '</b><u>4h close beyond it kills the idea</u></div>'
+    + '<div><i>TP1</i><b>$' + pxF(best.t1) + '</b><u>' + fmtF(best.rr, 1) + 'R — trim / de-risk</u></div>'
+    + '<div><i>TP2</i><b>$' + pxF(best.t2) + '</b><u>' + fmtF(best.rr2, 1) + 'R — swing core</u></div>'
+    + '<div><i>TP3</i><b>$' + pxF(best.t3) + '</b><u>' + fmtF(best.rr3, 1) + 'R — runner</u></div>'
+    + '</div>'
+    + '<div class="gsw-why"><b>WHY THIS ONE LEADS</b> — ' + esc(tallyTxt) + '.</div>'
+    + tallyChips(best)
+    + '<div class="gsw-whyline">' + esc(best.why || '') + '</div>'
+    + '<div class="gsw-inv"><b>INVALIDATION</b> — ' + esc(best.invalidates || 'a 4h close beyond the stop') + '. Hard stop $' + pxF(best.stop) + ' — never widen it.</div>'
+    + lock
+    + '</div></div>';
+}
+
+function cardHTML(c, isBest, season){
+  var dirUp = c.dir.toUpperCase();
+  var gradeCls = c.grade === 'A' ? 'ok' : '';
+  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok">' + esc(x) + '</span>'; }).join('');
+  if (c.oppose > 0) chips += '<span class="gpip">' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
+  var newsBanner = c.newsCaution
+    ? '<div class="note warn" style="margin-top:8px">NEWS-FADE — ' + esc(c.newsStamp || '') + '</div>' : '';
+  var notes = (c.notes && c.notes.length)
+    ? '<div class="note" style="margin-top:6px">' + c.notes.map(esc).join(' · ') + '</div>' : '';
+  var seasonLine = season ? '<div class="note" style="margin-top:6px">' + esc(season) + '</div>' : '';
+  var tallyNum = isFinite(c.tally)
+    ? '<span class="gsw-tallynum ' + (c.tally >= 0 ? 'up' : 'dn') + '">tally ' + (c.tally > 0 ? '+' : '') + c.tally + '</span>' : '';
+  var lockLine = c.locked
+    ? '<div class="gsw-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
+    : '<div class="gsw-lockline" style="color:var(--mut,#8a8f98)">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
+  var tradeBtn = (typeof toTrade === 'function' && c.sym)
+    ? '<button class="toTrade" onclick="'
+      + ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
+          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      + '">SEND TO TRADE PLAN →</button>' : '';
+  return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
+    + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
+    + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span></div>'
+    + '<div class="gsw-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
+    + '<div class="mini">'
+    + '<span class="k">venue</span><span>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
+    + '<span class="k">reads</span><span>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
+    + '<span class="k">session</span><span>' + esc(c.session || 'n/a') + ' (context — swing entries are not session-gated)</span>'
+    + '<span class="k">ATR14 4h</span><span>' + pxF(c.atr) + '</span>'
+    + '<span class="k">R:R</span><span>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2) · 1 : ' + fmtF(c.rr3, 1) + ' (T3)</span>'
+    + '</div>'
+    + '<div class="gates">'
+    + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
+    + chips
+    + '</div>'
+    + tallyChips(c)
+    + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
+    + ' · ENTRY <b>$' + pxF(c.entry) + '</b>'
+    + ' · STOP <b>$' + pxF(c.stop) + '</b>'
+    + ' · TP1 <b>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
+    + ' · TP2 <b>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
+    + ' · TP3 <b>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
+    + '</div>'
+    + (c.why ? '<div class="gsw-whyline">' + esc(c.why) + '</div>' : '')
+    + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
+    + lockLine
+    + newsBanner + notes + seasonLine
+    + tradeBtn
+    + '</div>';
+}
+
+function rejectedHTML(rejected){
+  if (!rejected || !rejected.length) return '';
+  var rows = rejected.map(function(r){
+    if (!r) return '';
+    return '<div class="gsw-hrow rej"><b>✕ HELD BACK</b> · ' + esc(r.strategy || 'SETUP')
+      + (r.dir ? ' · ' + esc(String(r.dir).toUpperCase()) : '')
+      + (r.venue ? ' · ' + esc(r.venue) : '')
+      + ' — ' + esc(r.reason || 'failed a quality gate') + '</div>';
+  }).join('');
+  return '<div class="gsw-hist"><div class="gsw-hhead">CONFLUENCE GATES — triggers without enough agreement, every reason named (never silently dropped)</div>' + rows + '</div>';
+}
+
+function historyHTML(history){
+  if (!history || !history.length) return '';
+  var rows = history.map(function(h){
+    if (!h) return '';
+    var icon = h.status === 'STOPPED' ? '✕' : (h.status === 'TARGET HIT' ? '✓' : '⏱');
+    var cls = h.status === 'STOPPED' ? 'stopped' : (h.status === 'TARGET HIT' ? 'target' : 'expired');
+    var when = '';
+    try{ when = new Date(h.closedAt || h.issuedAt).toISOString().slice(11, 16) + ' UTC'; }catch(e){}
+    return '<div class="gsw-hrow ' + cls + '"><b>' + icon + ' ' + esc(h.status) + '</b> · '
+      + esc(String(h.dir || '').toUpperCase()) + ' · ' + esc(h.strategy || '') + ' · ' + esc(h.venue || '')
+      + ' · entry $' + pxF(h.entry) + ' · stop $' + pxF(h.stop) + ' · TP1 $' + pxF(h.t1)
+      + (isFinite(h.closePrice) ? ' · closed near $' + pxF(h.closePrice) : '')
+      + ' · ' + esc(when) + '</div>';
+  }).join('');
+  return '<div class="gsw-hist"><div class="gsw-hhead">CONVICTION HISTORY — closed setups, never silently dropped</div>' + rows + '</div>';
+}
+
+/* ---------------- data legs (each catch-isolated) ---------------- */
+async function fetchGoldKlines(){
+  var out = { rows4h: [], rows1d: [], source: null };
+  var ggc = gfn('getGoldCandles');
+  if (ggc){
+    try{ var a = await ggc('4h', KL_4H); if (a && a.rows && a.rows.length){ out.rows4h = a.rows; out.source = a.source; } }catch(e){}
+    try{ var b = await ggc('1d', KL_1D); if (b && b.rows && b.rows.length){ out.rows1d = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
+  }
+  if (!out.rows4h.length){
+    var bk = gfn('binanceKlines');
+    if (bk){
+      try{ var p = await bk('PAXGUSDT', '4h', KL_4H); if (p && p.length){ out.rows4h = p; out.source = 'binance-paxg'; } }catch(e3){}
+      try{ var q = await bk('PAXGUSDT', '1d', KL_1D); if (q && q.length) out.rows1d = q; }catch(e4){}
+    }
+  }
+  return out;
+}
+
+/* Delta XAUTUSD perp leg — only when the xuniverse layer exists and lists it */
+async function fetchDeltaXaut(){
+  var out = { rows4h: [], rows1d: [], item: null };
+  var xu = gfn('xuUniverse'), xc = gfn('xuCandles');
+  if (!xu || !xc) return out;
+  var uni = null;
+  try{ uni = await xu(); }catch(e){ uni = null; }
+  if (!Array.isArray(uni) || !uni.length) return out;
+  var item = null;
+  for (var i = 0; i < uni.length; i++){
+    var it = uni[i];
+    if (!it) continue;
+    if ((it.base === 'XAUT' || it.sym === 'XAUTUSD') && it.exchange === 'delta'){ item = it; break; }
+  }
+  if (!item) return out;
+  out.item = item;
+  try{ var a = await xc(item, '4h', KL_4H); if (a && a.length) out.rows4h = a; }catch(e2){}
+  try{ var b = await xc(item, '1d', KL_1D); if (b && b.length) out.rows1d = b; }catch(e3){}
+  return out;
+}
+
+/* ============================ SWING STRATEGY ENGINE ============================ */
+var SW_NAME = {
+  pullback: '4H TREND PULLBACK (EMA50/200)',
+  wkbreak:  'WEEKLY RANGE BREAKOUT',
+  ob:       '4H ORDER BLOCK RETEST',
+  macro:    'MACRO-ALIGNED TREND CONTINUATION'
+};
+var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
+
+/* swing risk model: stop 1.5-2x ATR14(4h), never tighter, extended beyond
+   the structure when wider (capped 2x); targets fixed at 1.5R / 2.5R / 4R. */
+function __swLevels(dir, entry, a4, structStop){
+  var stopDist = 1.5*a4, stopNote = 'stop 1.5×ATR14(4h)';
+  if (isFinite(structStop)){
+    var d = (dir === 'long') ? (entry - structStop) : (structStop - entry);
+    if (d > 0){
+      var want = d + 0.25*a4;
+      if (want > 2*a4) want = 2*a4;
+      if (want > stopDist){
+        stopDist = want;
+        stopNote = 'stop beyond structure ' + structStop.toFixed(2) + ' (' + (stopDist/a4).toFixed(2) + '×ATR14(4h), capped 2×)';
+      }
+    }
+  }
+  var stop = (dir === 'long') ? entry - stopDist : entry + stopDist;
+  var risk = stopDist;
+  return { stop: stop,
+           t1: (dir === 'long') ? entry + 1.5*risk : entry - 1.5*risk,
+           t2: (dir === 'long') ? entry + 2.5*risk : entry - 2.5*risk,
+           t3: (dir === 'long') ? entry + 4.0*risk : entry - 4.0*risk,
+           rr: 1.5, rr2: 2.5, rr3: 4.0, stopNote: stopNote };
+}
+
+/* per-venue candidate composition. Every detector is feature-checked and
+   read-only; triggers without enough agreement ride the .rejected side-
+   channel with the reason named. */
+function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
+  var out = [];
+  out.rejected = [];
+  try{
+    var rows4 = __rows(leg.rows4h);
+    if (!rows4 || rows4.length < MIN_4H) return out;
+    var n = rows4.length;
+    var a4 = __last(_atr(rows4, 14));
+    if (!isFinite(a4) || !(a4 > 0)) return out;
+    var entry = rows4[n-1].c;
+    if (!isFinite(entry) || !(entry > 0)) return out;
+    var rows1d = __rows(leg.rows1d);
+
+    /* ---- shared evidence ledger: every read names itself with real numbers ---- */
+    var reads = [], notes = [];
+    function add(side, tag, label){ reads.push({ side: side, tag: tag, label: label }); }
+    var i, z;
+
+    /* 4h trend stack (EMA50/200) */
+    var c4 = __closes(rows4);
+    var e50_4 = __last(_ema(c4, 50)), e200_4 = __last(_ema(c4, 200));
+    var trend4 = null;
+    if (isFinite(e50_4) && isFinite(e200_4)){
+      if (entry > e50_4 && e50_4 > e200_4) trend4 = 'bull';
+      else if (entry < e50_4 && e50_4 < e200_4) trend4 = 'bear';
+    }
+    if (trend4 === 'bull') add('long', 'trend4h', '4h uptrend — price above EMA50 ' + e50_4.toFixed(2) + ' stacked over EMA200 ' + e200_4.toFixed(2));
+    else if (trend4 === 'bear') add('short', 'trend4h', '4h downtrend — price below EMA50 ' + e50_4.toFixed(2) + ' stacked under EMA200 ' + e200_4.toFixed(2));
+
+    /* daily trend stack (1d EMA50/200) */
+    var e50_1 = NaN, e200_1 = NaN, trend1 = null;
+    if (rows1d && rows1d.length >= 60){
+      var c1 = __closes(rows1d);
+      e50_1 = __last(_ema(c1, 50)); e200_1 = __last(_ema(c1, 200));
+      var dClose = c1[c1.length - 1];
+      if (isFinite(e50_1) && isFinite(e200_1) && isFinite(dClose)){
+        if (dClose > e50_1 && e50_1 > e200_1) trend1 = 'bull';
+        else if (dClose < e50_1 && e50_1 < e200_1) trend1 = 'bear';
+      }
+      if (trend1 === 'bull') add('long', 'trend1d', 'daily uptrend — EMA50 ' + e50_1.toFixed(2) + ' stacked over EMA200 ' + e200_1.toFixed(2));
+      else if (trend1 === 'bear') add('short', 'trend1d', 'daily downtrend — EMA50 ' + e50_1.toFixed(2) + ' stacked under EMA200 ' + e200_1.toFixed(2));
+      else if (!isFinite(e200_1)) notes.push('daily context partial (' + rows1d.length + ' 1d bars — 200-EMA needs 200) — swing reads lean on the 4h');
+    } else {
+      notes.push('daily context unavailable (' + (rows1d ? rows1d.length : 0) + ' 1d bars) — swing reads lean on the 4h alone');
+    }
+
+    /* weekly-anchored VWAP on 4h bars (goldind.js, read-only) */
+    var vw = null, vwapFn = gfn('goldVWAP');
+    if (vwapFn){
+      var wAnchor = __weekAnchorIndex(rows4);
+      if (wAnchor >= 0 && wAnchor < n){
+        try{ vw = vwapFn(rows4, wAnchor); }catch(eV){ vw = null; }
+        if (vw){
+          if (vw.pos === 'ABOVE') add('long', 'vwapw', 'holding above the week\u2019s anchored VWAP ' + vw.value.toFixed(2));
+          else if (vw.pos === 'BELOW') add('short', 'vwapw', 'capped below the week\u2019s anchored VWAP ' + vw.value.toFixed(2));
+        }
+      }
+    } else notes.push('goldVWAP unavailable (goldind.js) — weekly VWAP evidence skipped');
+
+    /* 4h order blocks (goldind.js, read-only) */
+    var ob = null, obFn = gfn('goldOrderBlocks');
+    if (obFn){ try{ ob = obFn(rows4); }catch(eO){ ob = null; } }
+    if (ob){
+      var tol = 0.5*a4;
+      for (i = 0; i < ob.bullish.length; i++){
+        z = ob.bullish[i];
+        if (entry >= z.bottom - tol && entry <= z.top + tol){ add('long', 'ob4h', 'inside the unmitigated bullish 4h order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)); break; }
+      }
+      for (i = 0; i < ob.bearish.length; i++){
+        z = ob.bearish[i];
+        if (entry >= z.bottom - tol && entry <= z.top + tol){ add('short', 'ob4h', 'inside the unmitigated bearish 4h order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)); break; }
+      }
+    } else if (!obFn) notes.push('goldOrderBlocks unavailable (goldind.js) — order-block evidence skipped');
+
+    /* 4h FVG imbalance (goldind.js, read-only) */
+    var fvg = null, fvgFn = gfn('goldFVG');
+    if (fvgFn){ try{ fvg = fvgFn(rows4); }catch(eF){ fvg = null; } }
+    if (fvg && fvg.length){
+      var g = fvg[0];
+      if (g.age <= 25){
+        if (g.dir === 'bullish' && entry >= g.bottom) add('long', 'fvg4h', 'unmitigated 4h FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' holding below price');
+        else if (g.dir === 'bearish' && entry <= g.top) add('short', 'fvg4h', 'unmitigated 4h FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' capping above price');
+      }
+    } else if (!fvgFn) notes.push('goldFVG unavailable (goldind.js) — imbalance evidence skipped');
+
+    /* 4h liquidity sweeps (goldind.js, read-only) */
+    var sw = null, swFn = gfn('goldSweeps');
+    if (swFn){ try{ sw = swFn(rows4); }catch(eS){ sw = null; } }
+    if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
+      if (sw.dir === 'bullish') add('long', 'sweep4h', '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago)');
+      else add('short', 'sweep4h', '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + rejection (' + sw.barsAgo + 'b ago)');
+    } else if (!swFn) notes.push('goldSweeps unavailable (goldind.js) — sweep evidence skipped');
+
+    /* prior week high/low from real 1d bars */
+    var wk = __weeklyRange(rows1d);
+    if (!wk) notes.push('prior-week range unavailable (need >=3 daily bars in the prior ISO week) — weekly-breakout strategy offline');
+
+    /* ---- candidate assembly ---- */
+    var seen = {};
+    function push(c){
+      if (!c) return;
+      if (c.dropped){ out.rejected.push(c); return; }
+      if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
+    }
+    function ledger(dir, triggerRead){
+      var longEv = [], shortEv = [], j;
+      for (j = 0; j < reads.length; j++) (reads[j].side === 'long' ? longEv : shortEv).push(reads[j]);
+      if (triggerRead) (dir === 'long' ? longEv : shortEv).push(triggerRead);
+      return { mine: (dir === 'long') ? longEv : shortEv,
+               oppose: (dir === 'long') ? shortEv.length : longEv.length,
+               counts: { long: longEv.length, short: shortEv.length } };
+    }
+    function mkCand(key, dir, anchor, structStop, zone, why, invalidates, triggerRead){
+      try{
+        var L = ledger(dir, triggerRead);
+        var id = key + '|' + dir + '|' + Math.round(anchor);
+        if (L.mine.length < 2 || L.mine.length <= L.oppose){
+          return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
+                   venue: venue, sym: sym,
+                   reason: 'trigger fired but confluence insufficient — ' + L.mine.length + ' agreeing vs '
+                           + L.oppose + ' opposing read(s) (need >= 2 agreeing and a majority)' };
+        }
+        var lv = __swLevels(dir, entry, a4, structStop);
+        var grade = (L.mine.length >= 5) ? 'A' : ((L.mine.length >= 3) ? 'B' : 'C');
+        if (newsC && newsC.caution) grade = (grade === 'A') ? 'B' : 'C';
+        var conf = [];
+        for (var j = 0; j < L.mine.length; j++) conf.push(L.mine[j].label);
+        return {
+          id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
+          entry: entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, t3: lv.t3,
+          rr: lv.rr, rr2: lv.rr2, rr3: lv.rr3,
+          grade: grade, confluence: conf, agree: L.mine.length, oppose: L.oppose,
+          reads: L.counts,
+          session: sessionTxt || 'n/a',
+          newsCaution: !!(newsC && newsC.caution),
+          newsStamp: (newsC && newsC.caution) ? SW_NEWS_STAMP + (newsC.title ? ' (' + newsC.title + ')' : '') : null,
+          atr: a4, anchor: anchor,
+          zone: zone || { lo: entry - 0.25*a4, hi: entry + 0.25*a4 },
+          why: why, invalidates: invalidates,
+          notes: notes.concat([lv.stopNote]),
+          venue: venue, sym: sym
+        };
+      }catch(e){ return null; }
+    }
+
+    /* 1) 4h trend pullback to the EMA50/EMA200 confluence */
+    if (trend4 && isFinite(e50_4) && Math.abs(entry - e50_4) <= 0.75*a4){
+      var pdir = (trend4 === 'bull') ? 'long' : 'short';
+      push(mkCand('pullback', pdir, e50_4, e200_4,
+        { lo: e50_4 - 0.25*a4, hi: e50_4 + 0.25*a4 },
+        (pdir === 'long' ? 'uptrend' : 'downtrend') + ' on the 4h (EMA50 ' + e50_4.toFixed(2)
+          + (pdir === 'long' ? ' above ' : ' below ') + 'EMA200 ' + e200_4.toFixed(2)
+          + ') pulling back into the 50-EMA value zone — trend-continuation entry at the moving-average shelf',
+        'a 4h close ' + (pdir === 'long' ? 'below' : 'above') + ' the 200-EMA ' + e200_4.toFixed(2)
+          + ' breaks the trend structure that justifies the entry',
+        { side: pdir, tag: 'pullback', label: 'pullback into the 4h 50-EMA ' + e50_4.toFixed(2)
+          + ' (within 0.75×ATR) inside a ' + trend4.toLowerCase() + ' EMA50/200 stack' }));
+    }
+
+    /* 2) weekly-range breakout: prior week high/low swept + reclaimed, or
+       broken with displacement */
+    if (wk){
+      var rec = null;
+      var rStart = Math.max(0, n - 11);
+      for (i = rStart; i < n; i++){
+        var rr2 = rows4[i], ago = n - 1 - i;
+        if (rr2.l < wk.lo && rr2.c > wk.lo) rec = { dir: 'long', level: wk.lo, barsAgo: ago };
+        else if (rr2.h > wk.hi && rr2.c < wk.hi) rec = { dir: 'short', level: wk.hi, barsAgo: ago };
+      }
+      if (rec){
+        push(mkCand('wkbreak', rec.dir, rec.level, rec.level, undefined,
+          'prior week\u2019s ' + (rec.dir === 'long' ? 'low' : 'high') + ' ' + rec.level.toFixed(2)
+            + ' swept and reclaimed ' + (rec.barsAgo === 0 ? 'on the latest 4h close' : rec.barsAgo + ' 4h bar(s) ago')
+            + ' — the stop raid on the weekly range is complete, mean-reversion fuel loaded',
+          'a 4h close back ' + (rec.dir === 'long' ? 'below' : 'above') + ' ' + rec.level.toFixed(2)
+            + ' (the swept weekly level) negates the reclaim',
+          { side: rec.dir, tag: 'wkbreak', label: 'weekly range sweep + reclaim of ' + rec.level.toFixed(2)
+            + ' (' + rec.barsAgo + 'b ago)' }));
+      } else {
+        var lb = rows4[n-1], rng = lb.h - lb.l;
+        if (lb.c > wk.hi && lb.c > lb.o && rng >= 1.5*a4){
+          push(mkCand('wkbreak', 'long', wk.hi, wk.hi, undefined,
+            'prior week\u2019s high ' + wk.hi.toFixed(2) + ' broken with a displacement 4h close (bar range '
+              + (rng/a4).toFixed(2) + '×ATR) — weekly range expansion underway',
+            'a 4h close back below the prior week\u2019s high ' + wk.hi.toFixed(2) + ' fails the breakout and traps the breakout buyers',
+            { side: 'long', tag: 'wkbreak', label: 'weekly range breakout above prior week\u2019s high ' + wk.hi.toFixed(2) + ' with displacement' }));
+        } else if (lb.c < wk.lo && lb.c < lb.o && rng >= 1.5*a4){
+          push(mkCand('wkbreak', 'short', wk.lo, wk.lo, undefined,
+            'prior week\u2019s low ' + wk.lo.toFixed(2) + ' broken with a displacement 4h close (bar range '
+              + (rng/a4).toFixed(2) + '×ATR) — weekly range expansion underway',
+            'a 4h close back above the prior week\u2019s low ' + wk.lo.toFixed(2) + ' fails the breakdown and traps the breakdown sellers',
+            { side: 'short', tag: 'wkbreak', label: 'weekly range breakout below prior week\u2019s low ' + wk.lo.toFixed(2) + ' with displacement' }));
+        }
+      }
+    }
+
+    /* 3) 4h order-block retest after the structure break (the OB is the
+       origin of a displacement through the prior 20-bar swing — the break) */
+    if (ob){
+      var tol2 = 0.5*a4;
+      for (i = 0; i < ob.bullish.length; i++){
+        z = ob.bullish[i];
+        if (entry >= z.bottom - tol2 && entry <= z.top + tol2){
+          push(mkCand('ob', 'long', z.bottom, z.bottom, { lo: z.bottom, hi: z.top },
+            'price retesting the bullish 4h order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)
+              + ' left by the structure-breaking displacement — unmitigated demand at the origin of the break',
+            'a 4h close below the order-block base ' + z.bottom.toFixed(2) + ' fails the demand zone (it becomes a breaker)',
+            null));
+          break;
+        }
+      }
+      for (i = 0; i < ob.bearish.length; i++){
+        z = ob.bearish[i];
+        if (entry >= z.bottom - tol2 && entry <= z.top + tol2){
+          push(mkCand('ob', 'short', z.top, z.top, { lo: z.bottom, hi: z.top },
+            'price retesting the bearish 4h order block ' + z.bottom.toFixed(2) + '–' + z.top.toFixed(2)
+              + ' left by the structure-breaking displacement — unmitigated supply at the origin of the break',
+            'a 4h close above the order-block top ' + z.top.toFixed(2) + ' fails the supply zone (it becomes a breaker)',
+            null));
+          break;
+        }
+      }
+    }
+
+    /* 4) macro-aligned trend continuation — a REAL daily trend stack plus a
+       directional real-rate hint agreeing with it; macro never fabricates */
+    var hint = (macro && typeof macro === 'object') ? macro.realRateHint : null;
+    if (trend1 && (hint === 'TAILWIND' || hint === 'HEADWIND')){
+      var mdir = (hint === 'TAILWIND') ? 'long' : 'short';
+      if ((mdir === 'long' && trend1 === 'bull') || (mdir === 'short' && trend1 === 'bear')){
+        var mWhy = [];
+        if (macro.dxy && macro.dxy.trend20) mWhy.push('DXY ' + String(macro.dxy.trend20).toLowerCase());
+        if (macro.tnxTrend) mWhy.push('US10Y ' + String(macro.tnxTrend).toLowerCase());
+        push(mkCand('macro', mdir, e50_1, e200_1, undefined,
+          'daily ' + (trend1 === 'bull' ? 'uptrend' : 'downtrend') + ' (EMA50 ' + e50_1.toFixed(2) + ' vs EMA200 '
+            + e200_1.toFixed(2) + ') aligned with a ' + (hint === 'TAILWIND' ? 'falling' : 'rising')
+            + ' real-rate backdrop' + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
+            + ' — macro ' + hint.toLowerCase() + ' behind ' + mdir + 's',
+          'a 4h close ' + (mdir === 'long' ? 'below' : 'above') + ' the daily 200-EMA region ' + e200_1.toFixed(2)
+            + ' breaks the macro-aligned trend thesis',
+          { side: mdir, tag: 'macro', label: 'macro ' + hint.toLowerCase() + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
+            + ' — real-rate backdrop favors ' + mdir + 's' }));
+      }
+    }
+  }catch(e){}
+  return out;
+}
+
+/* ---------------- ranking: transparent confluence tally ---------------- */
+function rankSetups(cands, ctx){
+  var out = { ranked: [], best: null, rejected: [] };
+  try{
+    if (!Array.isArray(cands) || !cands.length) return out;
+    ctx = ctx || {};
+    var news = (ctx.news && typeof ctx.news === 'object') ? ctx.news : { caution: false, title: null };
+    var macro = (ctx.macro && typeof ctx.macro === 'object') ? ctx.macro : null;
+    var hint = macro ? macro.realRateHint : null;
+    var spot = (ctx.spot && typeof ctx.spot === 'object') ? ctx.spot : null;
+    var verdict = spot ? spot.verdict : null;
+    var basisTxt = (spot && isFinite(spot.basisPct)) ? ((spot.basisPct > 0 ? '+' : '') + Number(spot.basisPct).toFixed(3) + '%') : 'n/a';
+    var season = (ctx.season && typeof ctx.season === 'object') ? ctx.season : null;
+    var fng = (ctx.fng && typeof ctx.fng === 'object') ? ctx.fng : null;
+    var fngV = (fng && isFinite(+fng.v)) ? +fng.v : null;
+
+    var ranked = [], i, k;
+    for (i = 0; i < cands.length; i++){
+      var c = cands[i];
+      if (!c || (c.dir !== 'long' && c.dir !== 'short')) continue;
+      if (c.dropped){
+        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                            reason: c.reason || 'failed a quality gate' });
+        continue;
+      }
+      var parts = [], tally = 0;
+      var agree = isFinite(c.agree) ? c.agree : 0;
+      if (agree > 0){
+        parts.push({ label: agree + ' independent agreeing read' + (agree === 1 ? '' : 's'), pts: agree });
+        tally += agree;
+      }
+      if (news.caution){
+        parts.push({ label: 'high-impact news window ±30 min' + (news.title ? ' — ' + news.title : '') + ' (fade risk)', pts: -2 });
+        tally -= 2;
+      }
+      if (hint === 'TAILWIND' || hint === 'HEADWIND'){
+        var favors = (hint === 'TAILWIND') ? 'long' : 'short';
+        var mPts = (c.dir === favors) ? 2 : -2;
+        var mWhy = [];
+        if (macro.dxy && macro.dxy.trend20) mWhy.push('DXY ' + String(macro.dxy.trend20).toLowerCase());
+        if (macro.tnxTrend) mWhy.push('US10Y ' + String(macro.tnxTrend).toLowerCase());
+        parts.push({ label: 'macro ' + hint.toLowerCase() + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
+                       + ' — ' + (mPts > 0 ? 'favors ' + c.dir + 's' : 'works against ' + c.dir + 's'), pts: mPts });
+        tally += mPts;
+      }
+      if (verdict === 'longs-crowding' || verdict === 'shorts-crowding'){
+        var pPts, pLab;
+        if (verdict === 'longs-crowding'){
+          pPts = (c.dir === 'short') ? 1 : -1;
+          pLab = 'PAXG basis ' + basisTxt + ' — leveraged longs crowding (fade risk for longs)';
+        } else {
+          pPts = (c.dir === 'long') ? 1 : -1;
+          pLab = 'PAXG basis ' + basisTxt + ' — shorts crowding (squeeze fuel for longs)';
+        }
+        parts.push({ label: pLab, pts: pPts });
+        tally += pPts;
+      }
+      if (season && season.bias === 'STRONG' && c.dir === 'long'){
+        parts.push({ label: 'seasonal tailwind — Jan–Feb is historically gold\u2019s strongest stretch', pts: 1 });
+        tally += 1;
+      }
+      if (fngV !== null){
+        if (fngV <= 25 && c.dir === 'long'){
+          parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme fear, risk-off bid for gold', pts: 1 });
+          tally += 1;
+        } else if (fngV >= 75 && c.dir === 'short'){
+          parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme greed, risk-on weighs on gold', pts: 1 });
+          tally += 1;
+        }
+      }
+      var rc = {};
+      for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
+      rc.tally = tally;
+      rc.tallyParts = parts;
+      ranked.push(rc);
+    }
+    var gOrd = { A: 0, B: 1, C: 2 };
+    ranked.sort(function(x, y){
+      if (y.tally !== x.tally) return y.tally - x.tally;
+      var gx = (gOrd[x.grade] === undefined) ? 9 : gOrd[x.grade];
+      var gy = (gOrd[y.grade] === undefined) ? 9 : gOrd[y.grade];
+      if (gx !== gy) return gx - gy;
+      var ax = isFinite(x.agree) ? x.agree : 0;
+      var ay = isFinite(y.agree) ? y.agree : 0;
+      return ay - ax;
+    });
+    out.ranked = ranked;
+    out.best = ranked.length ? ranked[0] : null;   /* MOST PROBABLE = highest tally */
+    return out;
+  }catch(e){ return { ranked: [], best: null, rejected: [] }; }
+}
+
+/* ---------------- scan ---------------- */
+var __scan = { busy: false, hasRun: false, ui: null };
+
+function setStat(ui, t, warn){
+  if (!ui || !ui.stat) return;
+  ui.stat.textContent = t;
+  ui.stat.className = warn ? 'note warn' : 'note';
+}
+function setProg(ui, f){
+  if (!ui || !ui.prog) return;
+  ui.prog.style.display = (f === null) ? 'none' : 'block';
+  if (f !== null && ui.prog.firstElementChild) ui.prog.firstElementChild.style.width = (f*100).toFixed(1) + '%';
+}
+
+async function runScan(ui){
+  if (__scan.busy) return 'busy';
+  __scan.busy = true;
+  var t0 = Date.now();
+  try{
+    if (ui && ui.btn) ui.btn.disabled = true;
+    if (ui && ui.cards) ui.cards.innerHTML = '';
+    if (ui && ui.empty) ui.empty.style.display = 'none';
+    setProg(ui, 0);
+    if (!gfn('getGoldCandles') && !gfn('binanceKlines')){
+      setStat(ui, 'gold klines layer missing — macro.js getGoldCandles / binance.js binanceKlines not loaded (check script order).', true);
+      return 'error: no klines layer';
+    }
+
+    setStat(ui, 'pulling gold klines 4h/1d…');
+    var now = Date.now();
+    var newsRaw = null;
+    var ns = gfn('hgNewsState');
+    if (ns){ try{ newsRaw = ns(); }catch(eN){ newsRaw = null; } }
+    var seasonFn = gfn('goldSeason');
+    var season = null;
+    if (seasonFn){ try{ season = seasonFn(now); }catch(eSe){ season = null; } }
+
+    /* shared ±30-min high-impact window check (goldind.js export preferred,
+       identical local math as the honest fallback) */
+    var newsC = { caution: false, title: null };
+    var ncFn = gfn('goldNewsCaution');
+    if (newsRaw){
+      if (ncFn){
+        try{ var nc = ncFn(newsRaw, now); if (nc){ newsC.caution = !!nc.caution; newsC.title = nc.title || null; } }catch(eNc){}
+      } else {
+        try{
+          var evs = Array.isArray(newsRaw.events) ? newsRaw.events : [];
+          for (var ei = 0; ei < evs.length; ei++){
+            var ev = evs[ei];
+            if (!ev || ev.impact !== 'high') continue;
+            var et = (+ev.t < 1e12) ? (+ev.t)*1000 : +ev.t;
+            if (isFinite(et) && Math.abs(et - now) <= 30*60*1000){ newsC.caution = true; newsC.title = ev.title || null; break; }
+          }
+        }catch(eNc2){}
+      }
+    }
+
+    /* session context (goldKillzone) — shown on cards, never a swing gate */
+    var sessionTxt = 'n/a';
+    var kzFn = gfn('goldKillzone');
+    if (kzFn){
+      try{
+        var kz = kzFn(now);
+        if (kz && kz.label){
+          var hh = isFinite(kz.hourGMT) ? ('0' + kz.hourGMT).slice(-2) + ':00 GMT' : 'n/a';
+          sessionTxt = kz.label + ' · ' + hh;
+        }
+      }catch(eK){}
+    }
+
+    /* ranking context legs — every one optional, every one catch-isolated */
+    var ctx = { now: now, news: newsC, season: season, macro: null, spot: null, fng: null };
+    var gm = gfn('getGoldMacro');
+    if (gm){
+      setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');
+      try{ ctx.macro = await gm(); }catch(eM){ ctx.macro = null; }
+    }
+    var gss = gfn('goldspotState');
+    if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
+    try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
+
+    var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
+
+    /* leg 1: primary gold feed (getGoldCandles chain -> PAXGUSDT fallback) */
+    var gold = await fetchGoldKlines();
+    setProg(ui, 0.45);
+    if (gold.rows4h.length){
+      var v = venueLabel(gold.source);
+      var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
+      venueRows[v] = { rows4h: gold.rows4h };
+      var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1);
+      for (i = 0; i < got.length; i++) cands.push(got[i]);
+      for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
+      legs.push(v + ': ' + gold.rows4h.length + ' 4h bars — '
+        + (got.length ? got.length + ' strategy candidate' + (got.length === 1 ? '' : 's') : 'no qualifying confluence'));
+    } else {
+      legs.push('primary gold feed: no 4h klines from any source (macro chain + PAXGUSDT both failed)');
+    }
+
+    /* leg 2: Delta XAUTUSD perp (best-effort second venue) */
+    setStat(ui, 'checking Delta XAUTUSD perp…');
+    var dx = await fetchDeltaXaut();
+    setProg(ui, 0.75);
+    if (dx.item && dx.rows4h.length){
+      venueRows['DELTA XAUTUSD'] = { rows4h: dx.rows4h };
+      var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD');
+      for (i = 0; i < got2.length; i++) cands.push(got2[i]);
+      for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
+      legs.push('DELTA XAUTUSD: ' + dx.rows4h.length + ' 4h bars — '
+        + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
+    } else if (dx.item){
+      legs.push('DELTA XAUTUSD: listed but candles unavailable');
+    } else {
+      legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
+    }
+
+    /* ranking: transparent confluence tally across ALL venues */
+    var rk = rankSetups(cands, ctx);
+    var ranked = rk.ranked, best = rk.best;
+    for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
+
+    /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
+       invalidation against the latest 4h close (STOPPED / TARGET HIT /
+       EXPIRED after 5 days); never re-pick levels for a live conviction */
+    var lock = applyConviction(ranked, venueRows, now);
+
+    if (lock.transitions.length){
+      legs.push(lock.transitions.length + ' conviction' + (lock.transitions.length === 1 ? '' : 's')
+        + ' closed (' + lock.transitions.map(function(t){ return t.status; }).join(', ').toLowerCase() + ')');
+    }
+    var liveN = 0;
+    for (var k in lock.store.live){ if (Object.prototype.hasOwnProperty.call(lock.store.live, k)) liveN++; }
+
+    /* render */
+    if (ui && ui.cards && ui.empty){
+      if (!ranked.length && !rejectedAll.length) ui.empty.style.display = 'block';
+      else {
+        ui.cards.innerHTML = bannerHTML(best, ranked)
+          + ranked.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+          + rejectedHTML(rejectedAll)
+          + historyHTML(lock.store.history);
+      }
+    }
+    var secs = ((Date.now() - t0)/1000).toFixed(1);
+    setStat(ui, legs.join(' · ') + ' · ' + liveN + ' live conviction' + (liveN === 1 ? '' : 's')
+            + ' · ' + secs + 's · ' + new Date().toISOString().slice(11, 19) + ' UTC',
+            !gold.rows4h.length && !dx.rows4h.length);
+    setProg(ui, null);
+    if (gold.rows4h.length || dx.rows4h.length){
+      publishState(ranked);                        /* only a real data run overwrites the snapshots */
+      publishScan(ranked, best, lock.store.history, now, rejectedAll);
+    }
+    return 'refreshed';
+  }catch(e){
+    setStat(ui, 'scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
+    return 'error: ' + ((e && e.message) ? e.message : String(e));
+  }finally{
+    __scan.busy = false;
+    __scan.hasRun = true;
+    try{ if (ui && ui.btn) ui.btn.disabled = false; }catch(e2){}
+    setProg(ui, null);
+  }
+}
+
+/* ---------------- mount / refresh / warm-up ---------------- */
+function mount(el){
+  if (!el) return;
+  try{
+    el.innerHTML =
+      '<style>' + GW_CSS + '</style>'
+      + '<div class="panel">'
+      + '<h2>GOLD SWING <span>multi-strategy 4h/1d swing engine · EMA50/200 pullbacks · weekly-range breaks · OB retests · macro-aligned continuation</span></h2>'
+      + '<div class="row"><button class="btn" id="gwRun">RUN SCAN</button>'
+      + '<span class="note" id="gwStat">idle — composes per-strategy swing candidates on 4h/1d, ranks them by a transparent tally, and locks issued levels for up to 5 days.</span></div>'
+      + '<div class="note" style="margin-top:8px">Desk note: gold respects levels — on the swing horizon it respects them for days. '
+      + 'The engine composes ONE candidate per strategy trigger — <b>4h trend pullback</b> into the EMA50/200 confluence, '
+      + '<b>weekly-range breakout</b> (prior week\u2019s high/low swept + reclaimed, or broken with displacement), '
+      + '<b>4h order-block retest</b> at the origin of a structure break, and <b>macro-aligned trend continuation</b> '
+      + '(a real daily EMA50/200 stack aligned with the real-rate backdrop — macro only tilts, it never fabricates a setup). '
+      + 'Each candidate needs its trigger plus >=2 independent agreeing reads (strictly more than opposing); triggers without '
+      + 'enough agreement are held back with the reason named below. Every candidate is ranked by a visible <b>confluence '
+      + 'tally</b>: agreeing reads − high-impact news-window penalty ± macro tilt (DXY/US10Y) ± PAXG-basis positioning + '
+      + 'seasonality + fear&amp;greed. The leader gets the <b>MOST PROBABLE SETUP</b> banner. Stops are 1.5–2× ATR14(4h), '
+      + 'never tighter, anchored beyond the structure (OB edge / weekly-range edge / 200-EMA); targets 1.5R / 2.5R / 4R. '
+      + 'Issued setups are <b>CONVICTION-LOCKED</b>: re-scans restore the original levels verbatim — they only move on '
+      + 'invalidation against the latest 4h close (beyond stop → STOPPED, TP1 → TARGET HIT, 5 days → EXPIRED), and closed '
+      + 'setups stay visible as history.</div>'
+      + '<div class="prog" id="gwProg"><i></i></div>'
+      + '</div>'
+      + '<div class="cards" id="gwCards"></div>'
+      + '<div class="empty" id="gwEmpty" style="display:none">no qualifying 4h/1d swing confluence right now — gold respects levels; let the structure come to you.</div>';
+
+    var ui = {
+      btn:   el.querySelector('#gwRun'),
+      stat:  el.querySelector('#gwStat'),
+      prog:  el.querySelector('#gwProg'),
+      cards: el.querySelector('#gwCards'),
+      empty: el.querySelector('#gwEmpty')
+    };
+    __scan.ui = ui;
+
+    var missing = [];
+    if (!gfn('getGoldCandles') && !gfn('binanceKlines')) missing.push('gold klines (macro.js getGoldCandles / binance.js binanceKlines)');
+    if (!gfn('goldSweeps') && !gfn('goldOrderBlocks') && !gfn('goldFVG') && !gfn('goldVWAP'))
+      missing.push('goldind.js detectors (sweep/OB/FVG/VWAP evidence offline — trend-pullback, weekly-range and macro strategies still run on local math)');
+    if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + '.', true);
+
+    if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui); });
+  }catch(e){ /* never throw at mount */ }
+}
+
+async function goldswingRefresh(){
+  try{
+    if (__scan.busy) return 'busy';
+    if (!__scan.hasRun || !__scan.ui) return 'skipped: not run yet';
+    return await runScan(__scan.ui);
+  }catch(e){ return 'error: ' + ((e && e.message) ? e.message : String(e)); }
+}
+
+/* BRAIN warm-up hook — headless scan against inert stub elements (oiflow.js
+   oiflowWarm pattern). Shares __scan.busy with the mounted scan. Never throws. */
+function __gwWarmShim(){
+  return { innerHTML: '', textContent: '', className: '', disabled: false,
+           style: {}, firstElementChild: { style: {} },
+           querySelector: function(){ return null; } };
+}
+async function gwWarm(){
+  try{
+    if (W.goldswingState && W.goldswingState()) return 'fresh';
+  }catch(e0){}
+  if (__scan.busy) return 'busy';
+  if (!gfn('getGoldCandles') && !gfn('binanceKlines')) return 'unavailable: gold klines layer not loaded';
+  var stubUi = { btn: __gwWarmShim(), stat: __gwWarmShim(), prog: __gwWarmShim(),
+                 cards: __gwWarmShim(), empty: __gwWarmShim() };
+  await runScan(stubUi);
+  return (W.goldswingState && W.goldswingState()) ? 'warmed'
+       : 'unavailable: scan did not complete (no gold klines from any source)';
+}
+
+/* ---------------- registration ---------------- */
+W.goldswingState = function(){
+  try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
+};
+W.goldswingScan = function(){
+  try{ return __scanSnap ? __stateView(__scanSnap) : null; }catch(e){ return null; }
+};
+W.HG_tabs = W.HG_tabs || [];
+W.HG_tabs.push({ id: 'goldswing', label: 'GOLD SWING', mount: mount, refresh: goldswingRefresh });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'goldswing', label: 'GOLD SWING', run: gwWarm });
+})();

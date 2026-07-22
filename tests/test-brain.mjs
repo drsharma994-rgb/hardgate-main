@@ -58,7 +58,9 @@ ok(typeof W.brainUniverse === 'function', 'window.brainUniverse exposed (pure co
 ok(W.snapshotLayers === undefined && W.runBrain === undefined && W.marketRead === undefined
    && W.buildUniverse === undefined && W.cardHTML === undefined && W.legacyUniverse === undefined
    && W.fetch4h === undefined && W.brainRefresh === undefined,
-   'only brainCollect/brainDecide/brainUniverse + HG_tabs leak onto window');
+   'only brainCollect/brainDecide/brainUniverse + __hgBrainLast + HG_tabs leak onto window');
+ok(typeof W.__hgBrainLast === 'function', 'window.__hgBrainLast exposed for the signal logger');
+ok(W.__hgBrainLast() === null, '__hgBrainLast() returns null before the first scan');
 
 /* ================= B) news votes ================= */
 console.log('== news votes ==');
@@ -1516,6 +1518,352 @@ function stubQuietLayers(WX){
   ok(g5Watch.indexOf('>THIN1</span>') === -1 && g5Watch.indexOf('>DUST</span>') === -1
      && g5Watch.indexOf('>ETH</span>') >= 0 && g5Watch.indexOf('>SOL</span>') >= 0,
      'AE5: gated rows leave WATCH; clean radar rows stay');
+}
+
+/* ================= AF) TREND4H / F&G / path-to-HIGH / __hgBrainLast ================= */
+console.log('== TREND4H promotion, F&G extremes, path-to-HIGH, signal-logger snapshot ==');
+/* deterministic trending 4h rows: net slope +/-0.4/bar with a sine wiggle so
+   confirmed 2-bar swing pivots exist (rising maxima = higher-highs, falling
+   minima = lower-lows); flat fakeRows() has NO pivots and equal EMAs */
+function trendRows(up){
+  const rows = []; const t0 = 1700000000 - 120 * 14400;
+  for (let i = 0; i < 120; i++){
+    const base = up ? 100 + i * 0.4 : 100 - i * 0.4;
+    const c = base + Math.sin(i / 3) * 1.5;
+    rows.push({ t: t0 + i * 14400, o: c - 0.1, h: c + 0.6, l: c - 0.6, c: c, v: 1000 });
+  }
+  return rows;
+}
+
+/* ---- AF0: F&G vote semantics in brainCollect (unit) ---- */
+{
+  const C3 = freshBrain().brainCollect;
+  let r3 = C3({ sym: 'BTCUSDT', fng: { v: 12, c: 'Extreme Fear' } });
+  ok(r3.votes.some(function(x){ return x.layer === 'fng' && x.vote === 'long' && x.kind === 'context'
+                                   && x.text === 'F&G 12 extreme fear — contrarian long context'; }),
+     'F&G 12 -> named contrarian long context vote for BTC');
+  r3 = C3({ sym: 'ETHUSDT', fng: { v: 85, c: 'Extreme Greed' } });
+  ok(r3.votes.some(function(x){ return x.layer === 'fng' && x.vote === 'short'
+                                   && x.text === 'F&G 85 extreme greed — contrarian short context'; }),
+     'F&G 85 -> named contrarian short context vote for ETH (legacy sym)');
+  r3 = C3({ sym: 'B-SOL_USDT', aliases: ['B-SOL_USDT', 'SOLUSDT', 'SOL'], fng: { v: 9 } });
+  ok(r3.votes.some(function(x){ return x.layer === 'fng' && x.vote === 'long'; }),
+     'F&G extreme votes for an xu-sym major through aliases');
+  r3 = C3({ sym: 'BTCUSDT', fng: { v: 20 } });
+  ok(r3.votes.some(function(x){ return x.layer === 'fng' && x.vote === 'long' && x.text.indexOf('F&G 20 ') === 0; }),
+     'F&G exactly 20 -> long vote (<= 20 boundary honored)');
+  r3 = C3({ sym: 'BTCUSDT', fng: { v: 80 } });
+  ok(r3.votes.some(function(x){ return x.layer === 'fng' && x.vote === 'short' && x.text.indexOf('F&G 80 ') === 0; }),
+     'F&G exactly 80 -> short vote (>= 80 boundary honored)');
+  r3 = C3({ sym: 'BTCUSDT', fng: { v: 21 } });
+  ok(!r3.votes.some(function(x){ return x.layer === 'fng'; }) && r3.silent.indexOf('fng') >= 0,
+     'F&G 21 -> neutral zone silent, no vote');
+  r3 = C3({ sym: 'BTCUSDT', fng: { v: 79 } });
+  ok(!r3.votes.some(function(x){ return x.layer === 'fng'; }) && r3.silent.indexOf('fng') >= 0,
+     'F&G 79 -> neutral zone silent, no vote');
+  r3 = C3({ sym: 'ALTUSDT', fng: { v: 12 } });
+  ok(!r3.votes.some(function(x){ return x.layer === 'fng'; }) && r3.silent.indexOf('fng') >= 0
+     && r3.unavailable.indexOf('fng') === -1,
+     'F&G extreme is majors-only — alts silent, never dark');
+  r3 = C3({ sym: 'BTCUSDT' });
+  ok(!r3.votes.some(function(x){ return x.layer === 'fng'; }) && r3.silent.indexOf('fng') === -1
+     && r3.unavailable.indexOf('fng') === -1,
+     'F&G absent -> the layer sits out ENTIRELY: no vote, not silent, NOT dark (never caps)');
+  r3 = C3({ sym: 'BTCUSDT', fng: { v: NaN } });
+  ok(!r3.votes.some(function(x){ return x.layer === 'fng'; }) && r3.unavailable.indexOf('fng') === -1,
+     'non-finite F&G -> sits out, never dark');
+  const dOnly = DECIDE([{ layer: 'fng', vote: 'long', text: 'F&G 12 extreme fear — contrarian long context', kind: 'context' }], {});
+  ok(dOnly.tier === 'ASIDE' && dOnly.agree === 1, 'F&G can never create a tier by itself (lone context vote = thin ASIDE)');
+}
+
+/* ---- AF1: TREND4H promotes WATCH -> HIGH after the candle fetch ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [ { sym: 'TRENDYUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'TRENDYUSDT', base: 'TRENDY', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(item){
+    return Promise.resolve(item.sym === 'TRENDYUSDT' ? trendRows(true) : fakeRows(120));
+  };
+  const TF1 = freshPane();
+  WG.HG_tabs[0].mount(TF1.pane);
+  await runAndWait(TF1.stubs);
+  const f1Stat = TF1.stubs['#brainStat'].textContent;
+  const f1Cards = TF1.stubs['#brainCards'].innerHTML;
+  const f1Watch = TF1.stubs['#brainWatch'].innerHTML;
+  ok(f1Stat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 2 aside') === 0,
+     'AF1: TRENDY (3 layers -> WATCH on votes) promoted to HIGH by the post-fetch TREND4H vote — got "' + f1Stat + '"');
+  ok(f1Cards.indexOf('TRENDYUSDT') >= 0 && f1Cards.indexOf('HIGH · 4 LAYERS') >= 0 && f1Cards.indexOf('>LONG</span>') >= 0,
+     'AF1: promoted card renders HIGH · 4 LAYERS LONG');
+  ok(f1Cards.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
+     'AF1: the TREND4H pip names EMA alignment + higher-high (HTML-escaped)');
+  ok(f1Watch.indexOf('>TRENDY</span>') === -1 && f1Watch.indexOf('>ETH</span>') >= 0,
+     'AF1: the promoted row leaves WATCH; flat-candle radar rows stay put (no fabricated votes)');
+  const snap1 = WG.__hgBrainLast();
+  const tr = snap1.rows.filter(function(x){ return x.sym === 'TRENDYUSDT'; })[0];
+  ok(tr && tr.tier === 'HIGH' && tr.dir === 'long'
+     && tr.evidence.indexOf('TREND4H: 4h EMA20>EMA50 + higher-high — structural long') >= 0,
+     'AF1: __hgBrainLast evidence carries the raw TREND4H string for the promoted row');
+}
+
+/* ---- AF2: TREND4H completes PRIME (bars unchanged: structural + positioning + news clear) ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'bullish', evidence: [{ side: 'bull', text: 'miners healthy' }], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [ { sym: 'BTCUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.binanceTickers24h = async function(){ return { BTCUSDT: { symbol: 'BTCUSDT', mark: 100, chg24: 2, turnoverUsd: 9e9 } }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(trendRows(true)); };
+  const TF2 = freshPane();
+  WG.HG_tabs[0].mount(TF2.pane);
+  await runAndWait(TF2.stubs);
+  const f2Stat = TF2.stubs['#brainStat'].textContent;
+  const f2Cards = TF2.stubs['#brainCards'].innerHTML;
+  ok(f2Stat.indexOf('done · 1 PRIME · 0 HIGH · 0 watch · 3 aside') === 0,
+     'AF2: BTC (4 layers HIGH incl. positioning, no structural) completes PRIME via the TREND4H structural vote — got "' + f2Stat + '"');
+  ok(f2Cards.indexOf('PRIME · 5 LAYERS') >= 0 && f2Cards.indexOf('✓ structural · ✓ positioning') >= 0,
+     'AF2: PRIME card still passes the unchanged bar — structural AND positioning present');
+  ok(f2Cards.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
+     'AF2: the promoting vote is named on the card');
+}
+
+/* ---- AF3: TREND4H dark honesty — failed fetch caps PRIME -> HIGH, named ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'bullish', evidence: [{ side: 'bull', text: 'miners healthy' }], flags: {} }; };
+  WG.engineState = function(){ return { survivors: [ { sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
+      plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 6 } ], rejected: [], at: 1 }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS' },
+    { sym: 'ALTWUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.binanceTickers24h = async function(){ return { BTCUSDT: { symbol: 'BTCUSDT', mark: 100, chg24: 2, turnoverUsd: 9e9 } }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ALTWUSDT', base: 'ALTW', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(null); };   /* every fetch fails */
+  const TF3 = freshPane();
+  WG.HG_tabs[0].mount(TF3.pane);
+  await runAndWait(TF3.stubs);
+  const f3Stat = TF3.stubs['#brainStat'].textContent;
+  const f3Cards = TF3.stubs['#brainCards'].innerHTML;
+  const f3Watch = TF3.stubs['#brainWatch'].innerHTML;
+  ok(f3Stat.indexOf('done · 0 PRIME · 1 HIGH · 1 watch · 3 aside') === 0,
+     'AF3: PRIME-quality BTC with unfetchable candles is honestly CAPPED to HIGH — got "' + f3Stat + '"');
+  ok(f3Cards.indexOf('CAPPED from PRIME') >= 0 && f3Cards.indexOf('trend4h') >= 0,
+     'AF3: the cap names trend4h as the dark layer on the card');
+  ok(lrowSeg(f3Watch, 'ALTW').indexOf('1 dark') >= 0,
+     'AF3: a WATCH row with failed fetch reports its dark trend4h honestly');
+  ok(lrowSeg(f3Watch, 'ALTW').indexOf('path to HIGH: needs TREND4H + ENGINE') >= 0,
+     'AF3: path-to-HIGH names TREND4H first among the layers that could still agree — got "' + lrowSeg(f3Watch, 'ALTW').slice(0, 220) + '"');
+}
+
+/* ---- AF4: TREND4H short side + counter-trend candles never vote ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-OFF', score: -4, playbook: { bias: 'SHORT-ONLY', sizeNote: 'half size' } }; };
+  WG.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [ { sym: 'DROPYUSDT', dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' } ] }; };
+  WG.squeezeState = function(){ return { results: [ { sym: 'DROPYUSDT', kind: 'break', dir: 'short' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'DROPYUSDT', base: 'DROPY', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(item){ return Promise.resolve(item.sym === 'DROPYUSDT' ? trendRows(false) : fakeRows(120)); };
+  const TF4 = freshPane();
+  WG.HG_tabs[0].mount(TF4.pane);
+  await runAndWait(TF4.stubs);
+  const f4Stat = TF4.stubs['#brainStat'].textContent;
+  const f4Cards = TF4.stubs['#brainCards'].innerHTML;
+  ok(f4Stat.indexOf('done · 0 PRIME · 1 HIGH · 0 watch · 4 aside') === 0,
+     'AF4: short-biased DROPY promoted WATCH -> HIGH by the downtrend TREND4H vote (BTC tied aside, ETH/SOL thin aside) — got "' + f4Stat + '"');
+  ok(f4Cards.indexOf('HIGH · 4 LAYERS') >= 0 && f4Cards.indexOf('>SHORT</span>') >= 0
+     && f4Cards.indexOf('TREND4H: 4h EMA20&lt;EMA50 + lower-low — structural short') >= 0,
+     'AF4: short TREND4H pip names EMA20<EMA50 + lower-low');
+
+  /* counter-trend: a LONG-biased WATCH row on DOWNTREND candles -> no vote, stays WATCH */
+  const WG2 = freshBrain();
+  stubQuietLayers(WG2);
+  WG2.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG2.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG2.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG2.oiflowState = function(){ return { results: [ { sym: 'FIGHTUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG2.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'FIGHTUSDT', base: 'FIGHT', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG2.xuCandles = function(item){ return Promise.resolve(item.sym === 'FIGHTUSDT' ? trendRows(false) : fakeRows(120)); };
+  const TF5 = freshPane();
+  WG2.HG_tabs[0].mount(TF5.pane);
+  await runAndWait(TF5.stubs);
+  const f5Stat = TF5.stubs['#brainStat'].textContent;
+  ok(f5Stat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
+     'AF4: counter-trend candles cast NO vote — the LONG row fighting a downtrend stays WATCH — got "' + f5Stat + '"');
+  ok(TF5.stubs['#brainCards'].innerHTML === '' && TF5.stubs['#brainWatch'].innerHTML.indexOf('>FIGHT</span>') >= 0,
+     'AF4: no promotion against the trend; the row keeps its honest WATCH verdict');
+  const snapF = WG2.__hgBrainLast().rows.filter(function(x){ return x.sym === 'FIGHTUSDT'; })[0];
+  ok(snapF && snapF.tier === 'WATCH' && !snapF.evidence.some(function(e){ return e.indexOf('TREND4H:') === 0; }),
+     'AF4: snapshot evidence confirms no TREND4H vote was fabricated against the trend');
+}
+
+/* ---- AF5: F&G extremes at run level + __hgBrainLast contract ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'ALTONEUSDT', base: 'ALTONE', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TF6 = freshPane();
+  WG.HG_tabs[0].mount(TF6.pane);
+
+  /* extreme fear: majors gain the contrarian long vote, alts do not */
+  globalThis.S = { fng: { v: 12, c: 'Extreme Fear' } };
+  await runAndWait(TF6.stubs);
+  const g5Stat = TF6.stubs['#brainStat'].textContent;
+  const g5Watch = TF6.stubs['#brainWatch'].innerHTML;
+  ok(g5Stat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
+     'AF5: F&G 12 — BTC reaches WATCH on 3 layers (regime+rotation+F&G), ETH/SOL on radar — got "' + g5Stat + '"');
+  ok(lrowSeg(g5Watch, 'BTC').indexOf('3 layers agree LONG') >= 0 && lrowSeg(g5Watch, 'BTC').indexOf('radar only') === -1,
+     'AF5: the F&G vote counts as a real third layer for BTC');
+  ok(lrowSeg(g5Watch, 'ETH').indexOf('radar only') >= 0,
+     'AF5: ETH rides radar on regime + F&G (2 layers, uncontested)');
+  ok(g5Watch.indexOf('>ALTONE</span>') === -1 && TF6.stubs['#brainAside'].innerHTML.indexOf('>ALTONE</span>') >= 0,
+     'AF5: F&G is majors-only — ALTONE stays ASIDE on its lone regime vote');
+  let snap5 = WG.__hgBrainLast();
+  const bRow = snap5.rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  const aRow = snap5.rows.filter(function(x){ return x.sym === 'ALTONEUSDT'; })[0];
+  ok(bRow && bRow.evidence.indexOf('FNG: F&G 12 extreme fear — contrarian long context') >= 0,
+     'AF5: __hgBrainLast evidence names the F&G vote for the signal logger');
+  ok(aRow && !aRow.evidence.some(function(e){ return e.indexOf('FNG:') === 0; }),
+     'AF5: the alt row carries no F&G evidence');
+
+  /* snapshot contract: shape + deep freeze */
+  ok(typeof snap5.at === 'number' && isFinite(snap5.at) && typeof snap5.marketRead === 'string'
+     && snap5.marketRead.indexOf('RISK-ON regime') >= 0 && Array.isArray(snap5.rows) && snap5.rows.length === 5,
+     'AF5: snapshot = {at, marketRead, rows[5]} of the completed synthesis');
+  ok(Object.isFrozen(snap5) && Object.isFrozen(snap5.rows) && Object.isFrozen(snap5.rows[0])
+     && Object.isFrozen(snap5.rows[0].evidence),
+     'AF5: the snapshot is DEEP-frozen (object, rows, row, evidence)');
+  let froze = false;
+  try{ snap5.rows.push({}); }catch(e){ froze = true; }
+  ok(froze, 'AF5: mutating the frozen snapshot throws (signal logger cannot corrupt state)');
+  const gRow = snap5.rows.filter(function(x){ return x.sym === 'XAU'; })[0];
+  ok(gRow && gRow.plan === null, 'AF5: plan-less rows snapshot plan:null — levels never fabricated');
+
+  /* extreme greed: the contrarian SHORT vote is real — it contests BTC's longs aside */
+  globalThis.S = { fng: { v: 88, c: 'Extreme Greed' } };
+  await runAndWait(TF6.stubs);
+  const g6Stat = TF6.stubs['#brainStat'].textContent;
+  ok(g6Stat.indexOf('done · 0 PRIME · 0 HIGH · 0 watch · 5 aside') === 0,
+     'AF5: F&G 88 greed votes SHORT against the long playbook — contested, honestly ASIDE — got "' + g6Stat + '"');
+  snap5 = WG.__hgBrainLast();
+  const bRow2 = snap5.rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  ok(bRow2 && bRow2.evidence.indexOf('FNG: F&G 88 extreme greed — contrarian short context') >= 0,
+     'AF5: the greed vote is named in the snapshot evidence');
+
+  /* neutral zone: silent — same verdict as no F&G at all */
+  globalThis.S = { fng: { v: 50, c: 'Neutral' } };
+  await runAndWait(TF6.stubs);
+  snap5 = WG.__hgBrainLast();
+  const bRow3 = snap5.rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  ok(TF6.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 0 HIGH · 1 watch · 4 aside') === 0
+     && bRow3 && !bRow3.evidence.some(function(e){ return e.indexOf('FNG:') === 0; }),
+     'AF5: F&G 50 neutral -> silent, BTC back to 2-layer radar (ETH/SOL drop to thin ASIDE) with zero F&G evidence — got "' + TF6.stubs['#brainStat'].textContent + '"');
+  delete globalThis.S;
+}
+
+/* ---- AF6: path-to-HIGH names dissent + dark caps concretely ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  /* BTC: 5 PRIME-quality layers but 3 dark (onchain/tape/liqs absent) -> capped WATCH */
+  WG.engineState = function(){ return { survivors: [
+    { sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
+      plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 6 },
+    { sym: 'MIXEDUSDT', dir: 'long', conviction: 'MEDIUM' } ], rejected: [], at: 1 }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS' },
+    { sym: 'MIXEDUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'ETHUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.squeezeState = function(){ return { results: [
+    { sym: 'BTCUSDT', kind: 'fired', dir: 'long' },
+    { sym: 'MIXEDUSDT', kind: 'break', dir: 'short' } ] }; };
+  delete WG.liqAgg;   /* liqs dark */
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    { sym: 'MIXEDUSDT', base: 'MIXED', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TF7 = freshPane();
+  WG.HG_tabs[0].mount(TF7.pane);
+  await runAndWait(TF7.stubs);
+  const f7Watch = TF7.stubs['#brainWatch'].innerHTML;
+  ok(lrowSeg(f7Watch, 'BTC').indexOf('path to PRIME: 3 dark layers must return (onchain, tape, liqs)') >= 0,
+     'AF6: capped WATCH names exactly which dark layers unblock PRIME — got "' + lrowSeg(f7Watch, 'BTC').slice(-220) + '"');
+  ok(lrowSeg(f7Watch, 'MIXED').indexOf('path to HIGH: SQUEEZE dissent must clear + 1 more agreeing layer') >= 0,
+     'AF6: soft-disagreement WATCH names the dissenting layer that must clear — got "' + lrowSeg(f7Watch, 'MIXED').slice(-220) + '"');
+  ok(lrowSeg(f7Watch, 'ETH').indexOf('path to HIGH: needs TREND4H + ENGINE') >= 0,
+     'AF6: radar WATCH names TREND4H first, then the next silent directional layer — got "' + lrowSeg(f7Watch, 'ETH').slice(-220) + '"');
+}
+
+/* ---- AF7: quick rescan re-applies TREND4H + refreshes the snapshot ---- */
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [ { sym: 'TRENDYUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'TRENDYUSDT', base: 'TRENDY', exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuState = function(){ return { count: 2, delta: 2, cdcx: 0, at: Date.now(), note: null }; };
+  WG.xuCandles = function(item){ return Promise.resolve(item.sym === 'TRENDYUSDT' ? trendRows(true) : fakeRows(120)); };
+  const TF8 = freshPane();
+  WG.HG_tabs[0].mount(TF8.pane);
+  await runAndWait(TF8.stubs);
+  const at1 = WG.__hgBrainLast().at;
+  ok(TF8.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 1 HIGH') === 0,
+     'AF7: baseline scan promotes TRENDY to HIGH via TREND4H');
+  TF8.stubs['#brainQuick']._handler();
+  {
+    const t0 = Date.now();
+    while (TF8.stubs['#brainRun'].disabled && Date.now() - t0 < 8000)
+      await new Promise(function(res){ setTimeout(res, 25); });
+  }
+  const q8 = TF8.stubs['#brainStat'].textContent;
+  ok(q8.indexOf('1 HIGH') >= 0 && TF8.stubs['#brainCards'].innerHTML.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
+     'AF7: quick rescan re-fetches and re-promotes TRENDY to HIGH with the named vote — got "' + q8 + '"');
+  const snap8 = WG.__hgBrainLast();
+  ok(snap8 && snap8.at >= at1 && Object.isFrozen(snap8)
+     && snap8.rows.some(function(x){ return x.sym === 'TRENDYUSDT' && x.tier === 'HIGH'; }),
+     'AF7: the quick rescan IS a completed synthesis — snapshot refreshed, still frozen');
 }
 
 console.log('\n' + passed + ' assertions passed');

@@ -256,7 +256,7 @@ assert(EXPECTED.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '] && 
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
-  gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp'],
+  gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp', 'goldswing', 'signallog'],
   strategies: ['strats', 'meanrev', 'best', 'carry', 'scorecard'],
   tools:      ['basis', 'search', 'log', 'trade', 'finder']
 };

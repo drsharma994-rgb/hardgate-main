@@ -13,6 +13,13 @@
      D) radar quality gates at scale: a sub-floor WATCH alt and an overextended
         WATCH chase demote to ASIDE with named reasons + a stat tally; the
         quick rescan carries the gated verdicts over with AS OF stamps
+     E) TREND4H + F&G at scale: a 3-vote WATCH alt on a real 4h uptrend fetches
+        first (highest turnover among the tied rows) and promotes WATCH -> HIGH
+        through the unchanged bars, the 40-fetch cap named over the remaining
+        radar rows, a quick rescan re-deriving the same promotion; F&G 9
+        extreme fear lifting BTC to a real 3-layer WATCH + ETH/SOL to radar
+        while alts sit the layer out (majors only), F&G absent restoring the
+        pre-F&G verdict math exactly
    No live network anywhere. Run: node tests/test-brain-live.mjs */
 
 import fs from 'node:fs';
@@ -61,6 +68,24 @@ function fakeRows(n){
   for (let i = 0; i < (n || 120); i++)
     rows.push({ t: t0 + i * 14400, o: 100, h: 101, l: 99, c: 100.5, v: 1000 });
   return rows;
+}
+/* deterministic 4h trend with real swing wiggle — EMA20 vs EMA50 separates,
+   2-bar pivots confirm a higher-high (up) / lower-low (down) structure break */
+function trendRows(up){
+  const rows = []; const t0 = 1700000000 - 120 * 14400;
+  for (let i = 0; i < 120; i++){
+    const base = up ? 100 + i * 0.4 : 100 - i * 0.4;
+    const c = base + Math.sin(i / 3) * 1.5;
+    rows.push({ t: t0 + i * 14400, o: c - 0.1, h: c + 0.6, l: c - 0.6, c: c, v: 1000 });
+  }
+  return rows;
+}
+function lrowSeg(html, sym){
+  const segs = String(html).split('<div class="lrow">');
+  for (let i = 0; i < segs.length; i++){
+    if (segs[i].indexOf('>' + sym + '</span>') >= 0) return segs[i];
+  }
+  return '';
 }
 async function runAndWait(stubs){
   stubs['#brainRun']._handler();
@@ -389,6 +414,151 @@ console.log('== D) liquidity floor + overextension guard over a 61-row universe 
          && dQuickAside.indexOf('overextended +17.3% 24h — chasing tops is how radar dies') >= 0
          && dQuickAside.indexOf('AS OF') >= 0,
          'gated verdicts persist through the quick rescan with their named reasons + AS OF age stamps');
+}
+
+/* ================= E1) TREND4H structural promotion at scale =================
+   57-crypto universe: TRENDY rides regime+rotation+oiflow to a 3-vote WATCH,
+   fetches FIRST (highest turnover among the tied 3-agree rows), and the
+   uptrend TREND4H vote promotes it WATCH -> HIGH through the unchanged tier
+   bars. The 40-fetch cap binds over the 56-row watch set and SAYS so; a quick
+   rescan re-judges fresh, re-fetches and re-derives the same promotion. */
+console.log('== E1) TREND4H promotion at scale + honest fetch cap + quick rescan ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  W.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  W.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  W.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  W.squeezeState = function(){ return { results: [] }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  const list = [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null },
+    /* highest turnover among the 3-agree radar rows -> fetches FIRST */
+    { sym: 'TRENDYUSDT', base: 'TRENDY', exchange: 'delta', turnoverUsd: 60e6, mark: 1, fundingPct: 0, alsoOn: null }
+  ];
+  const ofRes = [ { sym: 'TRENDYUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ];
+  for (let n = 1; n <= 53; n++){
+    const base = 'RALT' + String(n).padStart(3, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+    ofRes.push({ sym: base + 'USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' });
+  }
+  W.oiflowState = function(){ return { results: ofRes }; };
+  W.xuUniverse = async function(){ return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  const candleCalls = [];
+  W.xuCandles = function(item){
+    candleCalls.push(item.sym);
+    return Promise.resolve(item.sym === 'TRENDYUSDT' ? trendRows(true) : fakeRows(120));
+  };
+  const PE = freshPane();
+  W.HG_tabs[0].mount(PE.pane);
+  await runAndWait(PE.stubs);
+  const eStat = PE.stubs['#brainStat'].textContent;
+  const eCards = PE.stubs['#brainCards'].innerHTML;
+  assert(eStat.indexOf('done · 0 PRIME · 1 HIGH · 55 watch · 2 aside') === 0,
+         'E1: TRENDY promoted WATCH -> HIGH by the uptrend TREND4H vote; 55 radar rows stay WATCH; BTC + gold aside — got "' + eStat + '"');
+  assert(eCards.indexOf('TRENDYUSDT') >= 0 && eCards.indexOf('HIGH · 4 LAYERS') >= 0 && eCards.indexOf('>LONG</span>') >= 0,
+         'E1: the promoted card renders HIGH · 4 LAYERS LONG');
+  assert(eCards.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
+         'E1: the promoting structural vote is named on the card (HTML-escaped)');
+  assert(eStat.indexOf('+16 more watch candidates — raise evidence to fetch') >= 0,
+         'E1: the 40-fetch cap binds over the 56-row watch set, honestly named — got "' + eStat + '"');
+  assert(candleCalls.length === 40 && candleCalls[0] === 'TRENDYUSDT',
+         'E1: exactly 40 fetches and TRENDY goes FIRST (turnover-ordered queue) — got ' + candleCalls.length + ' / ' + candleCalls[0]);
+  const snapE = W.__hgBrainLast();
+  const tRow = snapE.rows.filter(function(x){ return x.sym === 'TRENDYUSDT'; })[0];
+  assert(tRow && tRow.tier === 'HIGH' && tRow.dir === 'long'
+         && tRow.evidence.indexOf('TREND4H: 4h EMA20>EMA50 + higher-high — structural long') >= 0,
+         'E1: __hgBrainLast carries the promoted row with the RAW TREND4H evidence string');
+
+  /* quick rescan: the 56 WATCH-or-better rows re-judge FRESH (the trend vote
+     is not carried — it is re-earned through a re-fetch), then re-promote */
+  PE.stubs['#brainQuick']._handler();
+  await waitIdle(PE.stubs);
+  const eQuick = PE.stubs['#brainStat'].textContent;
+  assert(/^quick rescan: 56 checked · 2 unchanged/.test(eQuick),
+         'E1: quick rescan rechecks the 56 WATCH-or-better rows; BTC + gold carry over — got "' + eQuick + '"');
+  assert(eQuick.indexOf('0 PRIME · 1 HIGH · 55 watch · 2 aside') >= 0
+         && PE.stubs['#brainCards'].innerHTML.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
+         'E1: the quick pass re-derives the same promotion deterministically — got "' + eQuick + '"');
+  assert(eQuick.indexOf('+16 more watch candidates — raise evidence to fetch') >= 0,
+         'E1: the fetch cap binds again on the quick pass, still named — got "' + eQuick + '"');
+  const snapE2 = W.__hgBrainLast();
+  assert(snapE2 && snapE2.at >= snapE.at && Object.isFrozen(snapE2)
+         && snapE2.rows.some(function(x){ return x.sym === 'TRENDYUSDT' && x.tier === 'HIGH'; }),
+         'E1: the quick rescan IS a completed synthesis — snapshot refreshed, frozen, TRENDY still HIGH');
+}
+
+/* ================= E2) F&G extreme fear at scale =================
+   F&G 9: BTC reaches a REAL 3-layer WATCH (regime+rotation+F&G), ETH/SOL ride
+   radar on regime+F&G, and 10 alts sit the layer out entirely (majors-only —
+   no vote, not dark, never a cap). With F&G deleted the verdicts fall back to
+   the exact pre-F&G math — the layer never existed. */
+console.log('== E2) F&G extreme fear: majors vote, alts sit out, absent restores ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  W.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  W.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  W.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  W.squeezeState = function(){ return { results: [] }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  const list = [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null }
+  ];
+  for (let n = 1; n <= 10; n++){
+    const base = 'FALT' + String(n).padStart(2, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+  }
+  W.oiflowState = function(){ return { results: [] }; };
+  W.xuUniverse = async function(){ return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  W.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const PF = freshPane();
+  W.HG_tabs[0].mount(PF.pane);
+
+  globalThis.S = { fng: { v: 9, c: 'Extreme Fear' } };
+  await runAndWait(PF.stubs);
+  const fStat = PF.stubs['#brainStat'].textContent;
+  const fWatch = PF.stubs['#brainWatch'].innerHTML;
+  const fAside = PF.stubs['#brainAside'].innerHTML;
+  assert(fStat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 11 aside') === 0,
+         'E2: F&G 9 — BTC a real 3-layer WATCH, ETH/SOL radar WATCH, 10 alts + gold aside — got "' + fStat + '"');
+  assert(lrowSeg(fWatch, 'BTC').indexOf('3 layers agree LONG') >= 0 && lrowSeg(fWatch, 'BTC').indexOf('radar only') === -1,
+         'E2: the F&G vote counts as a real third layer for BTC (not radar)');
+  assert(lrowSeg(fWatch, 'ETH').indexOf('radar only') >= 0,
+         'E2: ETH rides radar on regime + F&G (2 layers, uncontested)');
+  assert(fWatch.indexOf('>FALT01</span>') === -1 && fAside.indexOf('>FALT01</span>') >= 0,
+         'E2: majors-only — the alts stay ASIDE on their lone regime vote');
+  assert(PF.stubs['#brainRead'].textContent.indexOf('F&G 9 Extreme Fear') >= 0,
+         'E2: MARKET READ carries the F&G print');
+  const snapF = W.__hgBrainLast();
+  const bRow = snapF.rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  const eRow = snapF.rows.filter(function(x){ return x.sym === 'ETHUSDT'; })[0];
+  const aRow = snapF.rows.filter(function(x){ return x.sym === 'FALT01USDT'; })[0];
+  assert(bRow && bRow.evidence.indexOf('FNG: F&G 9 extreme fear — contrarian long context') >= 0
+         && eRow && eRow.evidence.some(function(x){ return x.indexOf('FNG: F&G 9 extreme fear') === 0; }),
+         'E2: snapshot evidence names the contrarian long vote for both BTC and ETH (majors)');
+  assert(aRow && !aRow.evidence.some(function(x){ return x.indexOf('FNG:') === 0; }),
+         'E2: the alt row carries zero F&G evidence — the layer sat out');
+
+  /* F&G absent -> the layer sits out ENTIRELY: the pre-F&G math returns */
+  delete globalThis.S;
+  await runAndWait(PF.stubs);
+  const f2Stat = PF.stubs['#brainStat'].textContent;
+  const snapF2 = W.__hgBrainLast();
+  const bRow2 = snapF2.rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  assert(f2Stat.indexOf('done · 0 PRIME · 0 HIGH · 1 watch · 13 aside') === 0
+         && bRow2 && !bRow2.evidence.some(function(x){ return x.indexOf('FNG:') === 0; }),
+         'E2: F&G absent — BTC back to 2-layer radar, ETH/SOL thin aside, zero F&G evidence — got "' + f2Stat + '"');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

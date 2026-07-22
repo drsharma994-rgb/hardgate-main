@@ -1160,5 +1160,165 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   }
 }
 
+/* =========================================================================
+   26) card execution blocks: TRADE MANAGEMENT + ENTRY GUIDANCE on every
+       card, and the DUPLICATE-CONVICTION MERGE (0.5×ATR structure anchor)
+========================================================================= */
+console.log('== 26) execution blocks + duplicate-conviction merge ==');
+function pxLike(n){                                  /* mirrors pxF fallback formatting */
+  const a = Math.abs(n);
+  const d = a >= 1000 ? 2 : a >= 100 ? 2 : a >= 1 ? 4 : 6;
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
+}
+function obZoneRows26(){
+  const rows = flatRows(25, 100, 0.5, DAY);
+  rows.push({ t: DAY + 25*900, o: 100, h: 100.4, l: 98.8, c: 99.6, v: 1200 });   // bullish OB, base 98.8
+  rows.push({ t: DAY + 26*900, o: 99.6, h: 104.5, l: 99.5, c: 104.2, v: 4000 });
+  rows.push({ t: DAY + 27*900, o: 104.2, h: 105, l: 103.8, c: 104.6, v: 1500 });
+  rows.push({ t: DAY + 28*900, o: 104.6, h: 105.2, l: 104, c: 104.8, v: 1500 });
+  rows.push({ t: DAY + 29*900, o: 104.8, h: 105.3, l: 104.4, c: 105, v: 1400 });
+  let px = 105;
+  for (let i = 30; i < 41; i++){ const o = px; px = o - 0.5;
+    rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.3, l: Math.min(o, px) - 0.3, c: px, v: 1100 }); }
+  rows.push({ t: DAY + 41*900, o: px, h: px + 0.2, l: 98.95, c: 99.4, v: 2600 }); // close inside the OB zone
+  return rows;
+}
+function vwapRows26(){
+  const rows = trendRows(48, 100, 0.15, DAY, 900);
+  let px = rows[47].c;
+  for (let i = 0; i < 11; i++){ const o = px; px = o - 0.25;
+    rows.push({ t: DAY + (48+i)*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: 1100 }); }
+  const v0 = W.goldVWAP(rows, 0).value;
+  const target = v0 + 0.58;
+  rows.push({ t: DAY + 59*900, o: px, h: Math.max(px, target) + 0.3, l: Math.min(px, target) - 0.2, c: target, v: 1200 });
+  return rows;
+}
+{
+  globalThis.window = {};
+  const ls3 = memLocalStorage();
+  globalThis.localStorage = ls3;
+  vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
+  const C3 = globalThis.window;
+  const FIXED = OVLP_NOW + 30*60*1000;
+  const realDateNow3 = Date.now;
+  Date.now = () => FIXED;
+  C3.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: cloneRows(compLongRows()), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  const tab3 = C3.HG_tabs.find(t => t.id === 'goldscalp');
+  const M3 = freshPane();
+  tab3.mount(M3.pane);
+  await M3.stubs['#gsRun']._handler();
+  const s1 = C3.goldscalpScan();
+
+  /* candidates carry their numeric structure anchor (id bucket = Math.round(anchor)) */
+  const detA = C3.goldScalpSetups({ rows15m: obZoneRows26(), now: FIXED });
+  const obDet = detA.find(c => c.stratKey === 'ob');
+  assert(!!obDet && isFinite(obDet.anchor) && obDet.id === 'ob|long|' + Math.round(obDet.anchor),
+         'candidate carries its numeric structure anchor (id bucket = Math.round(anchor), got ' + (obDet && obDet.anchor) + ')');
+
+  /* (1) TRADE MANAGEMENT block on EVERY card, with the card's real values */
+  const html1 = M3.stubs['#gsCards'].innerHTML;
+  const mgmtCount = (html1.match(/TRADE MANAGEMENT/g) || []).length;
+  assert(mgmtCount === s1.cands.length && s1.cands.length >= 2,
+         'trade-management block rendered on EVERY scalp card (' + mgmtCount + '/' + s1.cands.length + ')');
+  const swG = s1.cands.find(c => c.stratKey === 'sweep');
+  assert(html1.indexOf('At TP1 $' + pxLike(swG.t1) + ': close 50%, move stop to breakeven ($' + pxLike(swG.entry)
+      + '). Runner targets TP2 $' + pxLike(swG.t2) + '.') >= 0,
+         'management block uses the card\'s real TP1/entry(breakeven)/TP2 values');
+
+  /* (3) ENTRY GUIDANCE — price inside the entry zone */
+  const guideInCount = (html1.match(/price in zone — market entry valid/g) || []).length;
+  assert(guideInCount === s1.cands.length,
+         'entry guidance: price inside the zone -> "price in zone — market entry valid" on every card');
+
+  /* (3) ENTRY GUIDANCE — price outside the entry zone (vwap bounce: close sits above the zone) */
+  C3.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: vwapRows26(), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  await tab3.refresh();
+  const s2 = C3.goldscalpScan();
+  const vw2 = s2.cands.find(c => c.stratKey === 'vwap');
+  assert(!!vw2 && vw2.zone && isFinite(vw2.zone.hi), 'premise: vwap candidate with a zone on the board');
+  const html2 = M3.stubs['#gsCards'].innerHTML;
+  assert(html2.indexOf('price outside zone — limit order at zone edge $' + pxLike(vw2.zone.hi)) >= 0,
+         'entry guidance: price above the zone -> "price outside zone — limit order at zone edge <real edge>"');
+
+  /* (2) DUPLICATE-CONVICTION MERGE — same sym+dir, anchor within 0.5×ATR */
+  const seedMerge = { v: 1, live: {}, history: [] };
+  seedMerge.live['sweep|long|99'] = { id: 'sweep|long|99', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                                      entry: 99.5, stop: 98.0, t1: 101.5, t2: 103.0,
+                                      venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                                      issuedAt: FIXED - 120*1000, tally: 8, anchor: 99.2 };
+  ls3.removeItem('hgGoldscalpConviction');
+  ls3.setItem('hgGoldscalpConviction', JSON.stringify(seedMerge));
+  C3.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: obZoneRows26(), source: 'binance-xau' }       // ob long, anchor 98.8 — Δ 0.4 <= 0.5×ATR(≈1.2)
+    : { rows: [], source: 'binance-xau' };
+  await tab3.refresh();
+  const s3 = C3.goldscalpScan();
+  const obM = s3.cands.find(c => c.id === 'ob|long|99');
+  const storeM = loadConvictionStore(ls3);
+  assert(!!obM && obM.merged === true && obM.locked === true && obM.issuedAt === FIXED - 120*1000,
+         'merge: overlapping setup merges into the live conviction (re-confirmed, original issuedAt kept)');
+  assert(!!obM && obM.entry === 99.5 && obM.stop === 98.0 && obM.t1 === 101.5 && obM.t2 === 103.0,
+         'merge: the ORIGINAL levels stand — no re-pick, no second card');
+  assert(!!storeM && !storeM.live['ob|long|99'] && Object.keys(storeM.live).length === 1
+      && storeM.live['sweep|long|99'].lastConfirmedAt === FIXED,
+         'merge: nothing new minted; live conviction\'s lastConfirmedAt refreshed');
+  assert(M3.stubs['#gsCards'].innerHTML.indexOf('conviction re-confirmed · original levels stand') >= 0,
+         'merge: the card says "conviction re-confirmed · original levels stand"');
+
+  /* merge guards: anchor beyond 0.5×ATR -> normal new evaluation */
+  const seedFar = { v: 1, live: {}, history: [] };
+  seedFar.live['sweep|long|100'] = { id: 'sweep|long|100', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                                     entry: 100.3, stop: 98.6, t1: 102.6, t2: 104.3,
+                                     venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                                     issuedAt: FIXED - 120*1000, tally: 8, anchor: 99.8 };
+  ls3.removeItem('hgGoldscalpConviction');
+  ls3.setItem('hgGoldscalpConviction', JSON.stringify(seedFar));
+  await tab3.refresh();
+  const s4 = C3.goldscalpScan();
+  const obF = s4.cands.find(c => c.id === 'ob|long|99');
+  const storeF = loadConvictionStore(ls3);
+  assert(!!obF && !obF.merged && obF.locked === false && Object.keys(storeF.live).length === 2
+      && !!storeF.live['ob|long|99'],
+         'merge guard: anchor beyond 0.5×ATR (Δ 1.0) -> normal new conviction, no merge');
+  assert(M3.stubs['#gsCards'].innerHTML.indexOf('conviction re-confirmed · original levels stand') < 0,
+         'merge guard: no re-confirmed line on a genuinely new conviction');
+
+  /* merge guards: different direction -> normal new evaluation */
+  const seedDir = { v: 1, live: {}, history: [] };
+  seedDir.live['sweep|short|99'] = { id: 'sweep|short|99', dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                                     entry: 99.5, stop: 100.5, t1: 98.0, t2: 96.5,
+                                     venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                                     issuedAt: FIXED - 120*1000, tally: 8, anchor: 99.0 };
+  ls3.removeItem('hgGoldscalpConviction');
+  ls3.setItem('hgGoldscalpConviction', JSON.stringify(seedDir));
+  await tab3.refresh();
+  const s5 = C3.goldscalpScan();
+  const obD = s5.cands.find(c => c.id === 'ob|long|99');
+  assert(!!obD && !obD.merged && obD.locked === false && Object.keys(loadConvictionStore(ls3).live).length === 2,
+         'merge guard: different direction -> normal new conviction, no merge');
+
+  /* merge guards: different symbol -> normal new evaluation */
+  const seedSym = { v: 1, live: {}, history: [] };
+  seedSym.live['sweep|long|99'] = { id: 'sweep|long|99', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                                    entry: 99.5, stop: 98.0, t1: 101.5, t2: 103.0,
+                                    venue: 'BINANCE PAXGUSDT', sym: 'PAXGUSDT',
+                                    issuedAt: FIXED - 120*1000, tally: 8, anchor: 99.0 };
+  ls3.removeItem('hgGoldscalpConviction');
+  ls3.setItem('hgGoldscalpConviction', JSON.stringify(seedSym));
+  await tab3.refresh();
+  const s6 = C3.goldscalpScan();
+  const obS = s6.cands.find(c => c.id === 'ob|long|99');
+  assert(!!obS && !obS.merged && obS.locked === false && Object.keys(loadConvictionStore(ls3).live).length === 2,
+         'merge guard: different symbol -> normal new conviction, no merge');
+
+  Date.now = realDateNow3;
+  delete globalThis.localStorage;
+}
+
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

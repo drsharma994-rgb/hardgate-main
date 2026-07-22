@@ -187,8 +187,8 @@ assert(groupTabs('overview') === 'brain,execute,bias,regime,trendmx,rotation,new
   'OVERVIEW group gains brain first, rotation after trendmx');
 assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,onchain,coil,apex,trap,smc,ob,div',
   'CRYPTO group gains onchain after liqs');
-assert(groupTabs('gold') === 'gold,goldpro,goldspot,goldscalp',
-  'GOLD group becomes gold,goldpro,goldspot,goldscalp');
+assert(groupTabs('gold') === 'gold,goldpro,goldspot,goldscalp,goldswing,signallog',
+  'GOLD group becomes gold,goldpro,goldspot,goldscalp,goldswing,signallog');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',
   'HG_TAB_GROUP maps rotation→overview, onchain→crypto, goldspot→gold');
@@ -294,7 +294,7 @@ const iBright = html.indexOf('<link rel="stylesheet" href="bright.css">');
 assert(iStyleEnd !== -1 && iBright !== -1 && iStyleEnd < iBright && iBright < html.indexOf('</head>'),
   'bright.css <link> lands after the inline </style> block, inside <head>');
 const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
-assert(/HG_CACHE\s*=\s*'hg-v8'/.test(swSrc), 'service worker cache name bumped to hg-v8 (clients pick up the new shell)');
+assert(/HG_CACHE\s*=\s*'hg-v9'/.test(swSrc), 'service worker cache name bumped to hg-v9 (clients pick up the new shell)');
 assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
 
 /* ---------------- 6. auto-refresh control: header placement + OFF default ---------------- */

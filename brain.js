@@ -35,6 +35,33 @@ low-quality radar setups with NAMED reasons — nothing is silently dropped.
 Demotions are tallied on the stat line ('N gated: K liquidity · M
 overextended'); cautions render on the card/row they belong to.
 
+TREND4H STRUCTURAL LAYER (post-fetch promotion): for WATCH-or-better rows
+whose 4h candles the lazy fetch already landed, EMA20-vs-EMA50 alignment
+PLUS the most recent swing-structure break (higher-high / lower-low from
+2-bar pivots) must BOTH agree with the row's bias -> a named structural
+vote ('TREND4H: 4h EMA20>EMA50 + higher-high — structural long') is pushed
+and the row is RE-DECIDED through the same pure brainDecide — WATCH can
+promote to HIGH and HIGH to PRIME with ZERO tier-bar changes (PRIME still
+needs 5+ agreeing incl. structural + positioning, zero vetoes, news clear).
+Candles missing/unfetchable/too thin -> 'trend4h' is named dark for that
+symbol (existing cap logic applies); candles present but disagreeing ->
+'trend4h' silent, never dark.
+
+F&G EXTREME CONTRARIAN (context): Fear & Greed <= 20 -> a named long-context
+vote for BTC/ETH/SOL only ('F&G 12 extreme fear — contrarian long
+context'); >= 80 -> short-context. ONE context layer only, never a tier by
+itself; neutral zone 21-79 and non-majors are silent; F&G absent -> the
+layer sits out entirely (never dark, never caps).
+
+PATH TO THE NEXT TIER: every WATCH row names CONCRETELY what builds the
+next tier ('path to HIGH: needs TREND4H + 1 positioning layer'), computed
+from what is currently dark/silent/dissenting — never a generic string.
+
+SIGNAL-LOGGER SEAM: window.__hgBrainLast() -> deep-frozen {at, marketRead,
+rows:[{sym, dir, tier, evidence:[strings], plan:{entry,stop,t1,t2}|null}]}
+of the last completed synthesis (full or quick), null before the first
+scan. Never throws.
+
 Pure core, no DOM, fully vm-testable:
   window.brainCollect(inputs) -> {sym, lane, votes, unavailable, silent}
     inputs  = {sym, lane:'crypto'|'gold', aliases?, news, regime, rotation,
@@ -200,11 +227,21 @@ var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with 
 var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural',
   goldsetup: 'structural', golddeep: 'structural',
+  trend4h: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
-  tape: 'context'
+  tape: 'context', fng: 'context'
 };
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
+
+/* TREND4H structural layer — evaluated post-fetch on the lazily fetched 4h
+   rows: EMA20 vs EMA50 alignment + the most recent swing-structure break.
+   Needs enough history for an honest EMA50 seed plus confirmed pivots. */
+var TREND4H_MIN_ROWS = 60;
+
+/* F&G extreme contrarian thresholds — context vote for the majors only */
+var FNG_FEAR = 20;   /* <= 20 extreme fear -> contrarian LONG context */
+var FNG_GREED = 80;  /* >= 80 extreme greed -> contrarian SHORT context */
 
 /* TAPE layer thresholds — 24h momentum only counts with participation behind
    it, and past the extreme band the same tape argues fade, not chase. */
@@ -389,6 +426,31 @@ function brainCollect(inputs){
       else if (oc.bias === 'bearish') push('onchain', 'short', 'on-chain bearish' + (ocEv ? ' — ' + ocEv : ''));
       else push('onchain', 'neutral', 'on-chain neutral' + (ocEv ? ' — ' + ocEv : ''));
     }
+  }
+
+  /* ---- F&G EXTREME CONTRARIAN (context, majors only) ----
+     Fear & Greed <= 20 -> contrarian long context; >= 80 -> contrarian short.
+     ONE context layer, never a tier by itself (a lone context vote is thin
+     ASIDE downstream). Neutral zone 21-79 = silent. Majors = BTC/ETH/SOL via
+     the alias set (covers 'ETHUSDT' legacy syms and 'B-BTC_USDT' xu syms).
+     F&G absent -> the layer sits out ENTIRELY: not a vote, not silent, NOT
+     dark — it must never cap conviction across the whole universe. */
+  var fng = inp.fng;
+  if (fng && typeof fng === 'object' && isFinite(+fng.v)){
+    var fv = +fng.v;
+    if (fv <= FNG_FEAR || fv >= FNG_GREED){
+      var isMajor = false;
+      for (var fb = 0; fb < BASES.length; fb++){
+        if (aliasSet[BASES[fb]] === 1 || aliasSet[BASES[fb] + 'USDT'] === 1){ isMajor = true; break; }
+      }
+      if (isMajor){
+        var frd = Math.round(fv);
+        if (fv <= FNG_FEAR)
+          push('fng', 'long', 'F&G ' + frd + ' extreme fear — contrarian long context');
+        else
+          push('fng', 'short', 'F&G ' + frd + ' extreme greed — contrarian short context');
+      }else silent.push('fng');   /* extreme print, nothing to say for this alt */
+    }else silent.push('fng');     /* neutral zone — live, no edge */
   }
 
   /* ---- GATE ENGINE — survivor = strong vote, rejection = veto w/ gate ---- */
@@ -1043,7 +1105,7 @@ function judgeCrypto(cand, snap){
     news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
-    tape: snap.tape,
+    tape: snap.tape, fng: snap.fng,
     liq: (snap.liqSetup === undefined ? undefined : snap.liqSetup)
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
@@ -1082,6 +1144,212 @@ function judgeGold(snap){
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
   return { sym: 'XAU', base: 'XAU', exchange: null, turnoverUsd: null,
            xu: null, alsoOn: null, aliases: ['XAU', 'XAUUSDT'], lane: 'gold', col: col, dec: dec };
+}
+
+/* =========================================================================
+TREND4H STRUCTURAL LAYER — evaluated AFTER the lazy candle-fetch stage on
+rows that already carry rows4h. Pure candle math, never a fabricated read:
+  EMA20 vs EMA50 alignment (standard EMA, SMA-seeded over the fetched closes)
+  + the most recent confirmed swing-structure break (2-bar pivots: a higher
+  second swing HIGH = higher-high, a lower second swing LOW = lower-low).
+Both must agree with the row's bias -> a named structural vote is pushed and
+the row is RE-DECIDED through the same pure brainDecide (tier bars unchanged:
+PRIME still needs 5+ incl. structural + positioning, zero vetoes, news
+clear). Candles missing/unfetchable/too short -> 'trend4h' is honestly dark
+for that symbol (named in unavailable, the existing cap logic applies);
+candles present but no agreement -> 'trend4h' silent, never dark.
+========================================================================= */
+function emaLast(rows, n){
+  var closes = [];
+  for (var i = 0; i < rows.length; i++){
+    var c = +rows[i].c;
+    if (isFinite(c)) closes.push(c);
+  }
+  if (closes.length < n) return NaN;
+  var k = 2 / (n + 1), e = 0;
+  for (var s = 0; s < n; s++) e += closes[s];
+  e /= n;
+  for (var j = n; j < closes.length; j++) e = closes[j] * k + e * (1 - k);
+  return e;
+}
+
+/* confirmed 2-bar swing pivots; the most recent break wins a tie */
+function structureOf(rows){
+  var hs = [], ls = [];   /* [value, index] of confirmed swing highs/lows */
+  for (var i = 2; i < rows.length - 2; i++){
+    var h = +rows[i].h, l = +rows[i].l;
+    var h1 = +rows[i-1].h, h2 = +rows[i-2].h, h3 = +rows[i+1].h, h4 = +rows[i+2].h;
+    var l1 = +rows[i-1].l, l2 = +rows[i-2].l, l3 = +rows[i+1].l, l4 = +rows[i+2].l;
+    if (isFinite(h) && isFinite(h1) && isFinite(h2) && isFinite(h3) && isFinite(h4)
+        && h > h1 && h > h2 && h > h3 && h > h4) hs.push([h, i]);
+    if (isFinite(l) && isFinite(l1) && isFinite(l2) && isFinite(l3) && isFinite(l4)
+        && l < l1 && l < l2 && l < l3 && l < l4) ls.push([l, i]);
+  }
+  var hh = hs.length >= 2 && hs[hs.length-1][0] > hs[hs.length-2][0];
+  var ll = ls.length >= 2 && ls[ls.length-1][0] < ls[ls.length-2][0];
+  if (hh && ll) return (hs[hs.length-1][1] >= ls[ls.length-1][1]) ? 'HH' : 'LL';
+  if (hh) return 'HH';
+  if (ll) return 'LL';
+  return null;
+}
+
+/* -> {dir, text} when EMA alignment AND the structure break both agree on a
+   direction, else null. Never throws. */
+function trend4hAssess(rows){
+  try{
+    var e20 = emaLast(rows, 20), e50 = emaLast(rows, 50);
+    if (!isFinite(e20) || !isFinite(e50) || e20 === e50) return null;
+    var dir = e20 > e50 ? 'long' : 'short';
+    var st = structureOf(rows);
+    if (dir === 'long' && st !== 'HH') return null;
+    if (dir === 'short' && st !== 'LL') return null;
+    return { dir: dir,
+             text: '4h EMA20' + (dir === 'long' ? '>' : '<') + 'EMA50 + '
+                 + (dir === 'long' ? 'higher-high' : 'lower-low') + ' — structural ' + dir };
+  }catch(e){ return null; }
+}
+
+/* post-fetch pass over the judged rows: WATCH-or-better crypto rows only
+   (ASIDE rows never earned a fetch and are left untouched). Re-decides any
+   row whose evidence changed so promotions land honestly. Never throws. */
+function applyTrend4h(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!Array.isArray(row.rows4h) || row.rows4h.length < TREND4H_MIN_ROWS){
+        /* candles missing / unfetchable / too thin — honestly dark */
+        if (row.col.unavailable.indexOf('trend4h') === -1){
+          row.col.unavailable.push('trend4h');
+          row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+        }
+        continue;
+      }
+      var t = trend4hAssess(row.rows4h);
+      if (t && t.dir === row.dec.dir){
+        row.col.votes.push({ layer: 'trend4h', vote: t.dir, kind: 'structural', text: t.text });
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else{
+        row.col.silent.push('trend4h');   /* candles live, nothing to say for this direction */
+      }
+    }
+  }catch(e){}
+}
+
+/* shared bucketing — used at judge time and again after TREND4H promotions */
+function bucketRows(rows){
+  var primes = [], highs = [], watches = [], asides = [];
+  for (var r = 0; r < rows.length; r++){
+    var t = rows[r] && rows[r].dec && rows[r].dec.tier;
+    if (t === 'PRIME') primes.push(rows[r]);
+    else if (t === 'HIGH') highs.push(rows[r]);
+    else if (t === 'WATCH') watches.push(rows[r]);
+    else asides.push(rows[r]);
+  }
+  var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
+  primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
+  return { primes: primes, highs: highs, watches: watches, asides: asides };
+}
+
+/* =========================================================================
+PATH TO THE NEXT TIER — every WATCH row names CONCRETELY what would build
+the next tier, computed from what is currently dark/silent/dissenting:
+  capped rows      -> the dark layers that must return (the cap is the wall)
+  soft disagreement-> the dissenting layer that must clear (+ any agree gap)
+  otherwise        -> the next agreeing layers, naming the fetch-gated
+                      TREND4H first, then live-but-silent directional layers,
+                      then dark ones; leftover slots name the missing kind
+                      (positioning/structural) the row still lacks.
+Never a generic string. Never throws.
+========================================================================= */
+var PATH_DIR_LAYERS = { trend4h:1, engine:1, oiflow:1, squeeze:1, liqs:1,
+                        tape:1, regime:1, rotation:1, onchain:1, fng:1 };
+function pathToNextTier(row){
+  try{
+    var dec = row && row.dec;
+    if (!dec || dec.tier !== 'WATCH' || !row.col) return '';
+    var un = Array.isArray(row.col.unavailable) ? row.col.unavailable : [];
+    /* capped rows: the way back up is the dark layers returning */
+    if (dec.cappedFrom){
+      return 'path to ' + dec.cappedFrom + ': ' + un.length + ' dark layer'
+        + (un.length === 1 ? '' : 's') + ' must return (' + un.join(', ') + ')';
+    }
+    /* a soft dissent blocks HIGH by itself — name who must clear */
+    var contra = (dec.dir === 'long') ? 'short' : 'long';
+    var dissent = [];
+    var votes = Array.isArray(row.col.votes) ? row.col.votes : [];
+    for (var i = 0; i < votes.length; i++){
+      if (votes[i] && votes[i].vote === contra) dissent.push(votes[i].layer.toUpperCase());
+    }
+    if (dissent.length){
+      var t = 'path to HIGH: ' + dissent.join(' + ') + ' dissent must clear';
+      var more = 4 - dec.agree;
+      if (more > 0) t += ' + ' + more + ' more agreeing layer' + (more === 1 ? '' : 's');
+      return t;
+    }
+    var need = Math.max(1, 4 - dec.agree);
+    var silent = Array.isArray(row.col.silent) ? row.col.silent : [];
+    var named = [];
+    if (silent.indexOf('trend4h') >= 0 || un.indexOf('trend4h') >= 0) named.push('TREND4H');
+    for (var s = 0; s < silent.length; s++){
+      if (PATH_DIR_LAYERS[silent[s]] && silent[s] !== 'trend4h') named.push(silent[s].toUpperCase());
+    }
+    for (var u = 0; u < un.length; u++){
+      if (PATH_DIR_LAYERS[un[u]] && un[u] !== 'trend4h' && named.indexOf(un[u].toUpperCase()) === -1)
+        named.push(un[u].toUpperCase());
+    }
+    var parts = [];
+    for (var n = 0; n < need && n < named.length; n++) parts.push(named[n]);
+    /* leftover slots: name the kind the row still lacks toward conviction */
+    var saidPos = false, saidStruct = false;
+    while (parts.length < need){
+      if (!dec.hasPositioning && !saidPos){ parts.push('1 positioning layer'); saidPos = true; }
+      else if (!dec.hasStructural && !saidStruct){ parts.push('1 structural layer'); saidStruct = true; }
+      else { parts.push('1 more agreeing layer'); break; }
+    }
+    if (!named.length && !parts.length) parts.push('1 more agreeing layer');
+    return 'path to HIGH: needs ' + parts.join(' + ');
+  }catch(e){ return ''; }
+}
+
+/* =========================================================================
+SNAPSHOT FOR THE SIGNAL LOGGER — window.__hgBrainLast(): a DEEP-FROZEN copy
+of the last completed synthesis {at, marketRead, rows:[{sym, dir, tier,
+evidence, plan}]} — never the live row objects (quick rescans keep mutating
+those), never throws, null before the first scan.
+========================================================================= */
+var __lastSnap = null;
+function deepFreeze(o){
+  if (!o || typeof o !== 'object') return o;
+  try{ Object.freeze(o); }catch(e){}
+  for (var k in o){
+    if (Object.prototype.hasOwnProperty.call(o, k)) deepFreeze(o[k]);
+  }
+  return o;
+}
+function buildSnapshot(rows, readTxt, at){
+  try{
+    var out = { at: at, marketRead: String(readTxt === null || readTxt === undefined ? '' : readTxt), rows: [] };
+    for (var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (!r || !r.dec) continue;
+      var ev = [];
+      var vs = (r.col && Array.isArray(r.col.votes)) ? r.col.votes : [];
+      for (var a = 0; a < vs.length; a++){
+        if (vs[a]) ev.push(vs[a].layer.toUpperCase() + ': ' + vs[a].text);
+      }
+      var p = r.plan;
+      out.rows.push({
+        sym: r.sym, dir: r.dec.dir || null, tier: r.dec.tier,
+        evidence: ev,
+        plan: (p && isFinite(p.entry) && isFinite(p.stop) && isFinite(p.t1))
+              ? { entry: p.entry, stop: p.stop, t1: p.t1, t2: (isFinite(p.t2) ? p.t2 : null) }
+              : null
+      });
+    }
+    return deepFreeze(out);
+  }catch(e){ return null; }
 }
 
 /* ---------------- plans — smartSetup / hgPlanLevels ONLY, never invented ---------------- */
@@ -1320,6 +1588,9 @@ function watchRowHTML(row){
   var plan = (row.plan && isFinite(row.plan.entry)) ? planLine(row.plan) : null;
   /* gate cautions (funding crowding etc.) are named on the row, never silent */
   var caut = (row.cautions && row.cautions.length) ? ' · ' + esc(row.cautions.join(' · ')) : '';
+  /* path to the next tier — concrete layers named from what is dark/silent/
+     dissenting right now, never a generic string */
+  var path = pathToNextTier(row);
   return '<div class="lrow">'
     + '<span class="gid">' + esc(displaySym(row)) + '</span>'
     + '<span class="gname">' + (row.dec.dir ? row.dec.dir.toUpperCase() + ' bias — ' : '')
@@ -1327,7 +1598,8 @@ function watchRowHTML(row){
     + (plan ? ' <span class="gdetail">' + plan + '</span>' : '')
     + '</span>'
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
-    + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '') + '</span>'
+    + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '')
+    + (path ? ' · ' + esc(path) : '') + '</span>'
     + '<span class="stamp na">WATCH</span>' + age + '</div>';
 }
 
@@ -1509,16 +1781,8 @@ async function runBrain(el){
     for (var rj = 0; rj < rows.length; rj++) rows[rj].judgedAt = t0; /* quick rescan ages verdicts from this */
 
     /* bucket: PRIME/HIGH cards, WATCH list, ASIDE ledger */
-    var primes = [], highs = [], watches = [], asides = [];
-    for (var r = 0; r < rows.length; r++){
-      var row = rows[r], t = row.dec.tier;
-      if (t === 'PRIME') primes.push(row);
-      else if (t === 'HIGH') highs.push(row);
-      else if (t === 'WATCH') watches.push(row);
-      else asides.push(row);
-    }
-    var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
-    primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
+    var bk = bucketRows(rows);
+    var primes = bk.primes, highs = bk.highs, watches = bk.watches, asides = bk.asides;
 
     /* radar-gate tally — demotions are counted on the stat line, never silent */
     var gatedLiq = 0, gatedOver = 0;
@@ -1538,6 +1802,14 @@ async function runBrain(el){
          The gold lane keeps its own candle path (goldPlan, unchanged). */
       var fq = await fetchCandleQueue(primes.concat(highs, watches), uni, stat, t0);
       capNote = fq.capNote + fq.watchNote;
+      /* TREND4H structural layer — post-fetch: EMA20/EMA50 + swing structure
+         on the rows the queue already landed. A named structural vote can
+         promote WATCH -> HIGH -> PRIME through the same pure brainDecide
+         (bars never lowered); missing candles -> honestly dark, capped. */
+      applyTrend4h(rows);
+      bk = bucketRows(rows);   /* re-bucket after promotions/dark caps */
+      primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
+      setups = primes.concat(highs);
       /* plans for PRIME/HIGH first, then WATCH radar rows while the scan
          budget lasts — engine plans first, then the SMART $ / hgPlanLevels
          fallback over prefetched 4h rows. Levels are never invented; a row
@@ -1566,8 +1838,9 @@ async function runBrain(el){
     }
 
     /* render */
+    var readTxt = marketRead(snap);
     if (read && readWrap){
-      read.textContent = marketRead(snap);
+      read.textContent = readTxt;
       readWrap.style.display = 'block';
     }
     var readUni = el.querySelector('#brainReadUni');
@@ -1591,6 +1864,8 @@ async function runBrain(el){
     scoreRecord(setups);
     /* quick-rescan baseline: full row set + universe + scan time */
     __lastResult = { rows: rows, uni: uni, at: Date.now() };
+    /* signal-logger snapshot — deep-frozen copy of the completed synthesis */
+    __lastSnap = buildSnapshot(rows, readTxt, Date.now());
 
     if (combined){
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
@@ -1721,16 +1996,8 @@ async function runQuick(el){
     var checked = rows.length;
 
     /* bucket */
-    var primes = [], highs = [], watches = [], asides = [];
-    for (var r = 0; r < rows.length; r++){
-      var row = rows[r], t = row.dec.tier;
-      if (t === 'PRIME') primes.push(row);
-      else if (t === 'HIGH') highs.push(row);
-      else if (t === 'WATCH') watches.push(row);
-      else asides.push(row);
-    }
-    var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
-    primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
+    var bk = bucketRows(rows);
+    var primes = bk.primes, highs = bk.highs, watches = bk.watches, asides = bk.asides;
     var setups = primes.concat(highs);
     var extraNote = '';
 
@@ -1748,6 +2015,12 @@ async function runQuick(el){
       var fq = await fetchCandleQueue(primes.concat(highs, watches), last.uni, stat, t0);
       /* same honesty contract as the full scan: a binding fetch cap is named */
       extraNote = fq.capNote + fq.watchNote;
+      /* TREND4H over the freshly fetched rows — promotions re-decided, then
+         re-bucketed exactly like the full scan */
+      applyTrend4h(rows);
+      bk = bucketRows(rows);
+      primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
+      setups = primes.concat(highs);
       for (var sx = 0; sx < setups.length; sx++){
         if (Date.now() - t0 > TUN.scanMs){ extraNote += ' · planning timed out — some levels unavailable'; break; }
         try{
@@ -1781,8 +2054,9 @@ async function runQuick(el){
     }
 
     /* render — same shape as a full scan */
+    var readTxt = marketRead(snap);
     if (read && readWrap){
-      read.textContent = marketRead(snap);
+      read.textContent = readTxt;
       readWrap.style.display = 'block';
     }
     cards.innerHTML = setups.map(safeCardHTML).join('');
@@ -1800,6 +2074,8 @@ async function runQuick(el){
     var allRows = rows;
     for (var ar = 0; ar < unchanged.length; ar++) allRows.push(unchanged[ar]);
     __lastResult = { rows: allRows, uni: last.uni, at: Date.now() };
+    /* signal-logger snapshot — the quick rescan IS a completed synthesis */
+    __lastSnap = buildSnapshot(allRows, readTxt, Date.now());
 
     stat.className = 'note';
     stat.textContent = 'quick rescan: ' + checked + ' checked · ' + unchanged.length + ' unchanged · '
@@ -1931,6 +2207,9 @@ function mount(el){
       + 'Radar quality gates cut low-quality setups with named reasons: WATCH-or-better needs ≥$5M known 24h turnover, '
       + 'a ±15%+ 24h tape move in the row’s direction kills a WATCH chase (PRIME/HIGH gets a caution chip), '
       + 'and same-direction funding ≥0.1%/8h chips a crowding caution — demotions are tallied on the stat line. '
+      + 'After the candle fetch, TREND4H (4h EMA20/EMA50 + swing structure) can promote WATCH→HIGH→PRIME with a named '
+      + 'structural vote; extreme F&amp;G (≤20 / ≥80) adds one contrarian context vote for the majors; '
+      + 'every WATCH row names its concrete path to the next tier. '
       + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented, '
       + 'and radar rows carry them whenever the candle cap reached the candidate. '
       + 'Universe: BTC/ETH/SOL + every Delta India + CoinDCX futures listing (combined, deduped by base, via xuniverse.js when '
@@ -2020,6 +2299,9 @@ function mount(el){
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
 G.brainUniverse = brainUniverse;
+/* signal-logger seam: deep-frozen {at, marketRead, rows} of the LAST completed
+   synthesis (full or quick), null before the first scan. Never throws. */
+G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'brain', label: 'BRAIN', mount: function(el){ mount(el); }, refresh: brainRefresh });
 
