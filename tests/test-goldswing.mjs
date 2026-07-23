@@ -819,9 +819,167 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
   assert(/tabs:\['gold','goldpro','goldspot','goldscalp','goldswing','signallog'\]/.test(gLine),
          'GOLD group gains goldswing + signallog after goldscalp — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v9'/.test(sw), 'service worker cache bumped to hg-v9');
+  assert(/HG_CACHE\s*=\s*'hg-v11'/.test(sw), 'service worker cache bumped to hg-v11 (alerts workstream)');
   assert(sw.indexOf("'./goldswing.js'") !== -1 && sw.indexOf("'./signallog.js'") !== -1,
          'goldswing.js + signallog.js added to the HG_SHELL precache list');
+}
+
+/* =========================================================================
+   14) FORMING NOW (buildWatch) + WHY SILENT — per-strategy ARMED/IDLE watch
+       items with real levels, and the honest lead reason for silent scans
+========================================================================= */
+console.log('== 14) forming-now watch + WHY SILENT ==');
+function atrLast14(rows, p){                               /* mirrors the module's local ATR (Wilder) */
+  p = p || 14;
+  let a = null;
+  for (let i = 1; i < rows.length; i++){
+    const r = rows[i], q = rows[i-1];
+    const tr = Math.max(r.h - r.l, Math.abs(r.h - q.c), Math.abs(r.l - q.c));
+    if (a === null){
+      if (i >= p){ let s = 0; for (let k = i-p+1; k <= i; k++){ const rk = rows[k], rj = rows[k-1]; s += Math.max(rk.h - rk.l, Math.abs(rk.h - rj.c), Math.abs(rk.l - rj.c)); } a = s/p; }
+    } else a = (a*(p-1) + tr)/p;
+  }
+  return a;
+}
+function weekStartSec14(t){ const d = Math.floor(t/86400)*86400; const dow = new Date(d*1000).getUTCDay(); return d - ((dow + 6) % 7)*86400; }
+function weeklyRange14(rows1d){                            /* mirrors the module's __weeklyRange */
+  const n = rows1d.length, tl = rows1d[n-1].t;
+  const prev = weekStartSec14(tl) - 7*86400;
+  let hi = -Infinity, lo = Infinity, bars = 0;
+  for (let i = 0; i < n; i++){
+    const t = rows1d[i].t;
+    if (weekStartSec14(t) !== prev) continue;
+    if (rows1d[i].h > hi) hi = rows1d[i].h;
+    if (rows1d[i].l < lo) lo = rows1d[i].l;
+    bars++;
+  }
+  return (bars < 3 || !(hi > lo)) ? null : { hi: hi, lo: lo };
+}
+function pxLike14(n){                                      /* mirrors pxF fallback formatting */
+  const a = Math.abs(n);
+  const d = a >= 1000 ? 2 : a >= 100 ? 2 : a >= 1 ? 4 : 6;
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
+}
+function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFractionDigits: d }); }
+{
+  const realDateNow = Date.now;
+  Date.now = () => MAR_NOW;
+
+  /* (a) candidate-producing scan: panel renders, snapshot carries the watch items */
+  const env = makeScanEnv(pullback4h(), dailyBull());
+  await env.M.stubs['#gwRun']._handler();
+  const scan = env.C.goldswingScan();
+  const html = env.M.stubs['#gwCards'].innerHTML;
+  assert(html.indexOf('FORMING NOW — what the engine is watching') >= 0
+      && html.indexOf('armed setups are watch items, not entries') >= 0,
+      'FORMING NOW panel rendered after the cards with the honest watch-item label');
+  assert(html.indexOf('ARMED') >= 0 && html.indexOf('IDLE') >= 0, 'armed rows highlighted, idle rows muted');
+  assert(Array.isArray(scan.armed) && scan.armed.length === 4, 'snapshot.armed: 4 watch items (one venue leg)');
+  assert(scan.armed.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,strategy,venue'
+      && w.venue === 'BINANCE XAUUSDT'),
+         'snapshot.armed entries carry EXACTLY {strategy, venue, state, level, condition, reason}, venue-tagged');
+  assert(scan.whySilent === null, 'whySilent null when candidates qualify');
+  assert('armed' in scan && 'whySilent' in scan
+      && Array.isArray(scan.cands) && typeof scan.bestId === 'string' && typeof scan.at === 'number',
+         'additive contract: existing snapshot fields untouched, armed/whySilent added');
+  const byKey = {};
+  const SWK = { pullback: '4H TREND PULLBACK (EMA50/200)', wkbreak: 'WEEKLY RANGE BREAKOUT',
+                ob: '4H ORDER BLOCK RETEST', macro: 'MACRO-ALIGNED TREND CONTINUATION' };
+  for (const w of scan.armed){ for (const k in SWK){ if (w.strategy === SWK[k]) byKey[k] = w; } }
+  const pRows = pullback4h();
+  const e50p = emaLast(pRows.map(r => r.c), 50);
+  assert(byKey.pullback.state === 'armed' && Math.abs(byKey.pullback.level - e50p) < 1e-9
+      && /watching the 4h 50-EMA/.test(byKey.pullback.condition) && /bull EMA50\/200 stack/.test(byKey.pullback.condition),
+         'pullback: armed on the real 4h 50-EMA ' + byKey.pullback.level);
+  const wkExp = weeklyRange14(dailyBull());
+  const pEntry = pRows[pRows.length - 1].c;
+  const wkLvl = Math.abs(pEntry - wkExp.lo) <= Math.abs(wkExp.hi - pEntry) ? wkExp.lo : wkExp.hi;
+  assert(byKey.wkbreak.state === 'armed' && byKey.wkbreak.level === wkLvl
+      && /prior week’s (low|high)/.test(byKey.wkbreak.condition),
+         'wkbreak: armed on the nearer prior-week edge ' + wkLvl + ' (real weekly range)');
+  assert(byKey.ob.state === 'idle' && /no unmitigated 4h order block on the chart/.test(byKey.ob.reason),
+         'ob: honestly idle when the 4h chart has no unmitigated order block');
+  const e50d = emaLast(dailyBull().map(r => r.c), 50);
+  assert(byKey.macro.state === 'armed' && Math.abs(byKey.macro.level - e50d) < 1e-9
+      && /daily bull stack in place — fires when the real-rate backdrop \(now unavailable\) aligns/.test(byKey.macro.condition),
+         'macro: armed on the daily 50-EMA, honestly waiting on the real-rate backdrop');
+
+  /* (b) OB armed on the real zone / idle when it sits beyond 1.5×ATR */
+  const envB = makeScanEnv(obSwing4h(2399.4), dailyBull());
+  await envB.M.stubs['#gwRun']._handler();
+  const obB = envB.C.goldswingScan().armed.find(w => w.strategy === '4H ORDER BLOCK RETEST');
+  assert(obB && obB.state === 'armed' && obB.level === 2398.8
+      && /unmitigated bullish 4h order block 2398.80–2400.40 — fires on a retest/.test(obB.condition),
+         'ob: armed on the real zone 2398.80–2400.40 (edge 2398.8)');
+  const envF = makeScanEnv(obFar4h(), dailyBull());
+  await envF.M.stubs['#gwRun']._handler();
+  const obF2 = envF.C.goldswingScan().armed.find(w => w.strategy === '4H ORDER BLOCK RETEST');
+  assert(obF2 && obF2.state === 'idle' && /no unmitigated 4h order block within 1.5×ATR of price/.test(obF2.reason),
+         'ob: zone beyond 1.5×ATR -> idle with the reason named');
+
+  /* (c) macro honestly offline without daily bars */
+  const envN = makeScanEnv(obSwing4h(2399.4), []);
+  await envN.M.stubs['#gwRun']._handler();
+  const mcN = envN.C.goldswingScan().armed.find(w => w.strategy === 'MACRO-ALIGNED TREND CONTINUATION');
+  assert(mcN && mcN.state === 'idle' && /daily context unavailable \(0 1d bars\) — macro strategy offline/.test(mcN.reason),
+         'macro: no 1d bars -> honestly offline (no fabrication)');
+
+  /* (d) pullback honestly idle without a 4h trend stack */
+  const envT = makeScanEnv(flatRows(70, 2390, 3, DAY - 70*H4), dailyBull());
+  await envT.M.stubs['#gwRun']._handler();
+  const pbT = envT.C.goldswingScan().armed.find(w => w.strategy === '4H TREND PULLBACK (EMA50/200)');
+  assert(pbT && pbT.state === 'idle' && /no 4h EMA50\/200 trend stack right now/.test(pbT.reason),
+         'pullback: no 4h trend stack -> idle with the reason named');
+
+  /* (e) silent scan: lead = nearest armed trigger with real $ + ATR(4h) distance */
+  const envQ = makeScanEnv(wkQuiet4h(), weekly1d());
+  await envQ.M.stubs['#gwRun']._handler();
+  const qScan = envQ.C.goldswingScan();
+  assert(qScan.cands.length === 0, 'premise: quiet rows produce zero qualifying candidates');
+  const qA4 = atrLast14(wkQuiet4h(), 14);
+  const qExpect = 'nearest armed trigger: WEEKLY RANGE BREAKOUT (BINANCE XAUUSDT) at $' + pxLike14(2380)
+    + ' — $' + pxLike14(10) + ' (' + fmtLike14(10/qA4, 1) + '×ATR(4h)) away';
+  assert(qScan.whySilent === qExpect,
+         'silent lead = nearest armed trigger with real $ + ATR distance — got "' + qScan.whySilent + '"');
+  const qHtml = envQ.M.stubs['#gwCards'].innerHTML;
+  assert(qHtml.indexOf('WHY SILENT') >= 0 && qHtml.indexOf('FORMING NOW') >= 0,
+         'WHY SILENT line + watch panel rendered on the silent scan');
+  assert(envQ.M.stubs['#gwEmpty'].style.display !== 'block', 'empty state stays hidden when watch data exists');
+
+  /* (f) live convictions lead; nearest-armed rides as the tail */
+  envQ.ls.setItem('hgGoldswingConviction', JSON.stringify({ v: 1, live: {
+    'BINANCE XAUUSDT|wkbreak|long|9999': { id: 'wkbreak|long|9999', dir: 'long', strategy: 'WEEKLY RANGE BREAKOUT',
+                         entry: 2300, stop: 2290, t1: 99999, t2: 99999, t3: 99999,
+                         venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: MAR_NOW, tally: 4 } }, history: [] }));
+  await envQ.tab.refresh();
+  const vScan = envQ.C.goldswingScan();
+  assert(vScan.whySilent.indexOf('1 live conviction already locked — re-confirmations, not new issuance') === 0
+      && /· nearest armed trigger:/.test(vScan.whySilent),
+         'convictions lead + nearest-armed tail — got "' + vScan.whySilent + '"');
+
+  /* (g) news window outranks live convictions (precedence news > convictions) */
+  const envG = makeScanEnv(wkQuiet4h(), weekly1d(), { news: { loaded: true,
+    events: [{ title: 'US CPI', impact: 'high', t: Math.floor(MAR_NOW/1000) + 300 }] } });
+  envG.ls.setItem('hgGoldswingConviction', JSON.stringify({ v: 1, live: {
+    'BINANCE XAUUSDT|wkbreak|long|9999': { id: 'wkbreak|long|9999', dir: 'long', strategy: 'WEEKLY RANGE BREAKOUT',
+                         entry: 2300, stop: 2290, t1: 99999, t2: 99999, t3: 99999,
+                         venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: MAR_NOW, tally: 4 } }, history: [] }));
+  await envG.M.stubs['#gwRun']._handler();
+  const gScan = envG.C.goldswingScan();
+  assert(gScan.whySilent.indexOf('high-impact news window ±30 min — US CPI') === 0,
+         'news window leads even with a live conviction (precedence news > convictions) — got "' + gScan.whySilent + '"');
+
+  /* (h) feeds failed: the empty state itself carries the WHY SILENT reason */
+  const envX = makeScanEnv([], []);
+  await envX.M.stubs['#gwRun']._handler();
+  assert(envX.M.stubs['#gwEmpty'].style.display === 'block'
+      && /WHY SILENT/.test(envX.M.stubs['#gwEmpty'].innerHTML)
+      && /feeds failed — no 4h klines/.test(envX.M.stubs['#gwEmpty'].innerHTML),
+         'feeds failed: empty state carries the WHY SILENT feeds-failed line');
+  assert(envX.M.stubs['#gwCards'].innerHTML === '', 'feeds failed: no cards rendered without data');
+
+  Date.now = realDateNow;
+  cleanup();
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

@@ -1,0 +1,588 @@
+/* =========================================================================
+HARDGATE — hgalert.js
+SOUND ALERTS: a small fixed-position bell (bottom-right, NOT a tab) that
+plays a short synthesized musical phrase so the owner knows to come enter:
+
+  (a) BRAIN — window.__hgBrainLast() rows contain tier HIGH or PRIME.
+      Alerts once per NEW sym+tier set: the last-alerted set is tracked and
+      a re-alert fires only when the set changes or 30 min have passed. A
+      set that goes dark (no HIGH/PRIME rows) re-arms — its return is new.
+  (b) GOLD — combined live qualifying candidates from window.goldscalpScan()
+      and window.goldswingScan() (.cands arrays, read defensively) reaching
+      the threshold (default 10, user-editable in the bell panel, persisted
+      'hgAlertGoldMin'). Alerts once per UPWARD crossing; re-arms when the
+      count falls back below the threshold. Absent/throwing sources count 0
+      and are named in the panel — never an error.
+
+SOUND: Web Audio API synthesized chime (no audio file) — E5 -> G5 -> C6
+(659.26 / 783.99 / 1046.50 Hz, sine/sine/triangle, ~0.9s, soft exponential
+envelopes, modest master gain). AudioContext is feature-checked; when the
+browser has none the bell honestly shows 'sound unavailable in this
+browser'.
+
+AUTOPLAY POLICY (honest): browsers block audio before a user gesture. The
+bell starts in 'click to enable alerts'; the first click creates/resumes
+the AudioContext, plays a test chime and arms the engine. Enabled state
+persists in localStorage 'hgAlertEnabled'; on later loads a previously-
+enabled bell shows 'armed — plays after your next click' until a gesture
+unlocks it — it never pretends it can play before one.
+
+THROTTLE: minimum 15 min between chimes of the same class ('brain' /
+'gold') even if conditions persist; the classes chime independently. A
+trigger consumed by the throttle or by MUTE is acknowledged in the last-
+alert line ('chime held by 15-min throttle' / 'muted') — never silent
+about having fired.
+
+UI: bell button states off / click-to-enable / armed / muted, plus a small
+expand panel — master MUTE toggle (persisted 'hgAlertMuted'), gold
+threshold input, last-alert lines ('13:41 brain HIGH: RE, ZBT' /
+'13:52 gold setups 11 >= 10'), a TEST CHIME button, and the honest note
+'alerts evaluate while the app is open, after scans have run — brain
+alerts need a completed synthesis'.
+
+EVALUATION: every 60s (single guarded setInterval, unref'd) plus the
+manual window.hgAlertCheck(). Every getter call is wrapped in try/catch;
+absent window.__hgBrainLast etc. is a normal state, never an error.
+
+TEST/DIAGNOSTIC SURFACE (never throws):
+  window.hgAlertCheck() -> one evaluation round; returns a plain status
+    object {enabled, unlocked, muted, audioOk, goldMin, chimed[], note,
+    brain?, gold?}.
+  window.hgAlertTest()  -> plays the test chime now (bypasses MUTE — it is
+    a sound check, not an alert); returns true when the chime played.
+
+Classic script, no build step, loads after the modules it reads; absence
+of any module, DOM, storage or AudioContext degrades honestly. Never
+throws at load, at evaluation, or at chime time.
+========================================================================= */
+(function(){
+'use strict';
+
+var W = (typeof window !== 'undefined') ? window
+      : (typeof globalThis !== 'undefined') ? globalThis : {};
+
+var LS_ENABLED = 'hgAlertEnabled';
+var LS_MUTED   = 'hgAlertMuted';
+var LS_GOLDMIN = 'hgAlertGoldMin';
+
+var INTERVAL_MS       = 60*1000;         /* evaluation cadence */
+var CHIME_GAP_MS      = 15*60*1000;      /* per-class chime throttle */
+var BRAIN_REALERT_MS  = 30*60*1000;      /* same-set brain re-alert */
+var GOLD_MIN_DEFAULT  = 10;
+
+/* ---------------- tiny helpers ---------------- */
+function esc(s){
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function gfn(name){
+  try{ if (typeof W[name] === 'function') return W[name]; }catch(e){}
+  try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
+  return null;
+}
+function rowsFrom(val){
+  if (Array.isArray(val)) return val;
+  if (val && typeof val === 'object'){
+    var keys = ['rows', 'cands', 'results', 'cards', 'setups'];
+    for (var i = 0; i < keys.length; i++){
+      if (Array.isArray(val[keys[i]])) return val[keys[i]];
+    }
+  }
+  return [];
+}
+function hhmm(){
+  try{
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }catch(e){ return ''; }
+}
+
+/* ---------------- storage (soft probes, never throw) ---------------- */
+function lsGet(k){
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return null;
+    return localStorage.getItem(k);
+  }catch(e){ return null; }
+}
+function lsSet(k, v){
+  try{
+    if (typeof localStorage === 'undefined' || !localStorage) return;
+    localStorage.setItem(k, v);
+  }catch(e){}
+}
+
+/* ---------------- state ---------------- */
+var __enabled  = (lsGet(LS_ENABLED) === '1');
+var __muted    = (lsGet(LS_MUTED) === '1');
+var __goldMin  = (function(){
+  var n = parseInt(lsGet(LS_GOLDMIN), 10);
+  return (isFinite(n) && n >= 1 && n <= 99) ? n : GOLD_MIN_DEFAULT;
+})();
+var __unlocked = false;                  /* session-only: a gesture has unlocked audio */
+var __ctx      = null;                   /* AudioContext, created on first gesture */
+var __timer    = null;                   /* setInterval handle — started once, guarded */
+var __ui       = null;                   /* bell DOM, null when headless */
+var __panelOpen = false;
+
+var __lastChime = { brain: 0, gold: 0 }; /* per-class throttle clocks */
+var __lastBrainKey = null;               /* last-alerted sym+tier set (null = armed) */
+var __lastBrainTrigAt = 0;               /* last brain trigger (chimed or consumed) */
+var __goldArmed = true;                  /* gold crossing latch (re-arms below threshold) */
+var __lastBrainLine = '';                /* '13:41 brain HIGH: RE, ZBT' */
+var __lastGoldLine  = '';                /* '13:52 gold setups 11 >= 10' */
+
+/* last evaluation reads, for the panel's honest lines */
+var __evaluated = false;
+var __brainLive = false, __brainHits = [];
+var __gold = { count: 0, scalp: 0, swing: 0, scalpLive: false, swingLive: false };
+
+/* ---------------- audio engine ---------------- */
+function acCtor(){
+  try{ if (typeof W.AudioContext === 'function') return W.AudioContext; }catch(e){}
+  try{ if (typeof W.webkitAudioContext === 'function') return W.webkitAudioContext; }catch(e){}
+  return null;
+}
+function audioOk(){ return !!acCtor(); }
+
+function ensureCtx(){
+  var AC = acCtor();
+  if (!AC) return null;
+  try{
+    if (!__ctx) __ctx = new AC();
+    if (__ctx && __ctx.state === 'suspended' && typeof __ctx.resume === 'function'){
+      try{
+        var p = __ctx.resume();
+        if (p && typeof p.catch === 'function') p.catch(function(){});
+      }catch(e){}
+    }
+    return __ctx;
+  }catch(e){ return null; }
+}
+
+/* the click that reaches unlockAudio() IS the user gesture */
+function unlockAudio(){
+  if (__unlocked) return true;
+  var ctx = ensureCtx();
+  if (!ctx) return false;
+  __unlocked = true;
+  return true;
+}
+
+/* E5 -> G5 -> C6, ~0.9s, soft exponential envelopes, modest master gain.
+   Raw player: no enable/mute/throttle gating here — callers gate. */
+function playChime(){
+  try{
+    var ctx = ensureCtx();
+    if (!ctx) return false;
+    if (typeof ctx.createOscillator !== 'function' || typeof ctx.createGain !== 'function') return false;
+    var dest = ctx.destination;
+    if (!dest) return false;
+    var t0 = 0;
+    try{ if (typeof ctx.currentTime === 'number' && isFinite(ctx.currentTime)) t0 = ctx.currentTime; }catch(e){}
+    var master = ctx.createGain();
+    if (!master) return false;
+    try{
+      if (master.gain && typeof master.gain.setValueAtTime === 'function') master.gain.setValueAtTime(0.6, t0);
+      else if (master.gain) master.gain.value = 0.6;
+    }catch(e){}
+    try{ master.connect(dest); }catch(e){ return false; }
+    var notes = [659.26, 783.99, 1046.50];   /* E5, G5, C6 */
+    var types = ['sine', 'sine', 'triangle'];
+    var step = 0.18, hold = 0.55;            /* last note rings out ~0.9s total */
+    for (var i = 0; i < notes.length; i++){
+      var t = t0 + i*step;
+      var osc = null, g = null;
+      try{ osc = ctx.createOscillator(); g = ctx.createGain(); }catch(e){ continue; }
+      if (!osc || !g) continue;
+      try{ osc.type = types[i]; }catch(e){}
+      try{
+        if (osc.frequency && typeof osc.frequency.setValueAtTime === 'function') osc.frequency.setValueAtTime(notes[i], t);
+        else if (osc.frequency) osc.frequency.value = notes[i];
+      }catch(e){}
+      try{
+        var gn = g.gain;
+        if (gn && typeof gn.setValueAtTime === 'function'){
+          gn.setValueAtTime(0.0001, t);
+          if (typeof gn.exponentialRampToValueAtTime === 'function'){
+            gn.exponentialRampToValueAtTime(0.25, t + 0.02);
+            gn.exponentialRampToValueAtTime(0.0001, t + hold);
+          }
+        } else if (gn){ gn.value = 0.2; }
+      }catch(e){}
+      try{ osc.connect(g); }catch(e){ continue; }
+      try{ g.connect(master); }catch(e){}
+      try{ if (typeof osc.start === 'function') osc.start(t); }catch(e){}
+      try{ if (typeof osc.stop === 'function') osc.stop(t + hold + 0.05); }catch(e){}
+    }
+    return true;
+  }catch(e){ return false; }
+}
+
+/* per-class chime gate: MUTE suppresses evaluation chimes (TEST bypasses —
+   it calls playChime directly); 15 min minimum between same-class chimes. */
+function tryChime(cls){
+  if (__muted) return 'muted';
+  var now = 0;
+  try{ now = Date.now(); }catch(e){ return 'silent'; }
+  if (now - (__lastChime[cls] || 0) < CHIME_GAP_MS) return 'throttled';
+  if (!playChime()) return 'silent';
+  __lastChime[cls] = now;
+  return 'played';
+}
+
+/* ---------------- source readers (each catch-isolated) ---------------- */
+/* brain: window.__hgBrainLast() -> {rows:[{sym, tier, ...}]}. Qualifying =
+   tier HIGH or PRIME. live=false when absent/throwing/null — normal state. */
+function brainQual(){
+  var fn = null;
+  try{ if (typeof W.__hgBrainLast === 'function') fn = W.__hgBrainLast; }catch(e){}
+  if (!fn) return { live: false, hits: [] };
+  var val = null;
+  try{ val = fn(); }catch(e){ return { live: false, hits: [] }; }
+  if (val === null || val === undefined) return { live: false, hits: [] };
+  var rows = rowsFrom(val), hits = [], seen = {};
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || typeof r !== 'object') continue;
+    var tier = String(r.tier === null || r.tier === undefined ? '' : r.tier).toUpperCase();
+    if (tier !== 'HIGH' && tier !== 'PRIME') continue;
+    var sym = r.sym || r.symbol;
+    if (!sym) continue;
+    sym = String(sym);
+    var k = sym + '|' + tier;
+    if (seen[k]) continue;
+    seen[k] = 1;
+    hits.push({ sym: sym, tier: tier });
+  }
+  return { live: true, hits: hits };
+}
+function brainKey(hits){
+  var parts = [];
+  for (var i = 0; i < hits.length; i++) parts.push(hits[i].sym + '|' + hits[i].tier);
+  parts.sort();
+  return parts.join(';');
+}
+function brainTopTier(hits){
+  for (var i = 0; i < hits.length; i++) if (hits[i].tier === 'PRIME') return 'PRIME';
+  return 'HIGH';
+}
+function brainSyms(hits){
+  var out = [], seen = {};
+  for (var i = 0; i < hits.length; i++){
+    if (seen[hits[i].sym]) continue;
+    seen[hits[i].sym] = 1;
+    out.push(hits[i].sym);
+  }
+  if (out.length > 6) return out.slice(0, 6).join(', ') + ' +' + (out.length - 6) + ' more';
+  return out.join(', ');
+}
+
+/* gold: window.goldscalpScan() / window.goldswingScan() -> {cands:[...]}.
+   Combined qualifying count; absent/throwing sources count 0 and are named. */
+function goldCount(){
+  var out = { count: 0, scalp: 0, swing: 0, scalpLive: false, swingLive: false };
+  var srcs = [['scalp', 'goldscalpScan'], ['swing', 'goldswingScan']];
+  for (var s = 0; s < srcs.length; s++){
+    var fn = gfn(srcs[s][1]);
+    if (!fn) continue;
+    var val = null;
+    try{ val = fn(); }catch(e){ continue; }
+    if (val === null || val === undefined) continue;
+    var cands = Array.isArray(val) ? val
+              : (val && typeof val === 'object' && Array.isArray(val.cands)) ? val.cands : [];
+    var n = 0;
+    for (var i = 0; i < cands.length; i++) if (cands[i] && typeof cands[i] === 'object') n++;
+    out[srcs[s][0]] = n;
+    out[srcs[s][0] + 'Live'] = true;
+    out.count += n;
+  }
+  return out;
+}
+
+/* ---------------- evaluation round ---------------- */
+function evaluate(){
+  var st = {
+    enabled: __enabled, unlocked: __unlocked, muted: __muted,
+    audioOk: audioOk(), goldMin: __goldMin, chimed: [], note: ''
+  };
+  if (!__enabled){ st.note = 'alerts off — click the bell to enable'; return st; }
+  if (!audioOk()){ st.note = 'sound unavailable in this browser'; return st; }
+  if (!__unlocked){ st.note = 'armed — plays after your next click (browser autoplay policy)'; return st; }
+
+  var now = 0;
+  try{ now = Date.now(); }catch(e){ now = 0; }
+
+  /* (a) BRAIN — HIGH/PRIME sym+tier set, alert once per NEW set */
+  var bq = brainQual();
+  __brainLive = bq.live;
+  __brainHits = bq.hits;
+  if (bq.live && bq.hits.length){
+    var key = brainKey(bq.hits);
+    var isNew = (key !== __lastBrainKey);
+    var realert = (__lastBrainTrigAt > 0) && (now - __lastBrainTrigAt >= BRAIN_REALERT_MS);
+    if (isNew || realert){
+      __lastBrainKey = key;
+      __lastBrainTrigAt = now;
+      var line = hhmm() + ' brain ' + brainTopTier(bq.hits) + ': ' + brainSyms(bq.hits);
+      var rb = tryChime('brain');
+      if (rb === 'played'){
+        __lastBrainLine = line;
+        st.chimed.push('brain');
+      } else if (rb === 'muted'){
+        __lastBrainLine = line + ' (muted)';
+      } else if (rb === 'throttled'){
+        __lastBrainLine = line + ' (chime held by 15-min throttle)';
+      } else {
+        __lastBrainLine = line + ' (sound failed)';
+      }
+    }
+  } else if (bq.live){
+    __lastBrainKey = null;                 /* set went dark -> its return is new */
+  }
+
+  /* (b) GOLD — combined qualifying count, alert once per upward crossing */
+  var gc = goldCount();
+  __gold = gc;
+  if (gc.count >= __goldMin){
+    if (__goldArmed){
+      __goldArmed = false;
+      var gline = hhmm() + ' gold setups ' + gc.count + ' >= ' + __goldMin;
+      var rg = tryChime('gold');
+      if (rg === 'played'){
+        __lastGoldLine = gline;
+        st.chimed.push('gold');
+      } else if (rg === 'muted'){
+        __lastGoldLine = gline + ' (muted)';
+      } else if (rg === 'throttled'){
+        __lastGoldLine = gline + ' (chime held by 15-min throttle)';
+      } else {
+        __lastGoldLine = gline + ' (sound failed)';
+      }
+    }
+  } else {
+    __goldArmed = true;                    /* fell back below threshold -> re-arm */
+  }
+
+  __evaluated = true;
+  st.brain = { live: bq.live, count: bq.hits.length, syms: brainSyms(bq.hits) };
+  st.gold  = { count: gc.count, scalp: gc.scalp, swing: gc.swing,
+               scalpLive: gc.scalpLive, swingLive: gc.swingLive, armed: __goldArmed };
+  st.note = st.chimed.length ? ('chimed: ' + st.chimed.join(', ')) : 'checked — no new alert conditions';
+  renderUI();
+  return st;
+}
+
+/* ---------------- UI ---------------- */
+var AL_CSS = ''
++ '#hgAlertRoot{position:fixed;right:18px;bottom:18px;z-index:9999;font-family:inherit}'
++ '#hgAlertRoot .hgab-btn{display:block;margin-left:auto;padding:8px 14px;border-radius:20px;'
++ 'border:1px solid var(--line,#2a2e35);background:var(--panel,#15181d);color:var(--txt,#d7dbe0);'
++ 'font-size:11px;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.35)}'
++ '#hgAlertRoot .hgab-btn.armed{border-color:rgba(25,227,162,.5);color:#19e3a2}'
++ '#hgAlertRoot .hgab-btn.waiting{border-color:rgba(255,215,106,.5);color:#ffd76a}'
++ '#hgAlertRoot .hgab-btn.muted{border-color:rgba(255,107,74,.5);color:#ff6b4a}'
++ '#hgAlertRoot .hgab-btn.unavailable{color:var(--mut,#8a8f98);cursor:default}'
++ '#hgAlertRoot .hgab-panel{position:absolute;right:0;bottom:52px;width:290px;padding:12px 14px;'
++ 'border-radius:8px;border:1px solid var(--line,#2a2e35);background:var(--panel,#15181d);'
++ 'color:var(--txt,#d7dbe0);box-shadow:0 8px 28px rgba(0,0,0,.45);font-size:11px}'
++ '#hgAlertRoot .hgab-title{font-size:10px;letter-spacing:.18em;font-weight:800;margin-bottom:6px}'
++ '#hgAlertRoot .hgab-title span{color:var(--mut,#8a8f98);font-weight:400;letter-spacing:.04em}'
++ '#hgAlertRoot .hgab-state{margin-bottom:8px;font-weight:700}'
++ '#hgAlertRoot .hgab-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}'
++ '#hgAlertRoot .hgab-mini{padding:3px 9px;border-radius:4px;border:1px solid var(--line,#2a2e35);'
++ 'background:transparent;color:var(--txt,#d7dbe0);font-size:10px;letter-spacing:.1em;cursor:pointer}'
++ '#hgAlertRoot .hgab-lbl{color:var(--mut,#8a8f98);font-size:10px;display:flex;gap:5px;align-items:center}'
++ '#hgAlertRoot .hgab-lbl input{width:44px;background:var(--bg,#0e1114);color:var(--txt,#d7dbe0);'
++ 'border:1px solid var(--line,#2a2e35);border-radius:4px;padding:2px 5px;font-size:11px}'
++ '#hgAlertRoot .hgab-line{color:var(--mut,#8a8f98);margin-top:4px;line-height:1.5}'
++ '#hgAlertRoot .hgab-note{color:var(--mut,#8a8f98);margin-top:8px;font-size:10px;line-height:1.5;'
++ 'border-top:1px solid rgba(42,46,53,.5);padding-top:6px}';
+
+function bellState(){
+  if (!audioOk()) return 'unavailable';
+  if (!__enabled) return 'off';
+  if (__muted) return 'muted';
+  if (!__unlocked) return 'waiting';
+  return 'armed';
+}
+function bellLabel(){
+  switch (bellState()){
+    case 'unavailable': return '🔕 sound unavailable in this browser';
+    case 'off':         return '🔔 click to enable alerts';
+    case 'muted':       return '🔕 alerts muted';
+    case 'waiting':     return '🔔 armed — plays after your next click';
+    default:            return '🔔 alerts armed';
+  }
+}
+function stateLine(){
+  switch (bellState()){
+    case 'unavailable': return 'sound unavailable in this browser — the bell cannot chime here.';
+    case 'off':         return 'alerts off — click the bell to enable (your browser asks for one click before sound).';
+    case 'muted':       return 'alerts muted — evaluation continues, chimes stay silent until unmuted.';
+    case 'waiting':     return 'armed — plays after your next click (browser autoplay policy).';
+    default:            return 'alerts armed — chimes for new brain HIGH/PRIME sets and gold crossings.';
+  }
+}
+function brainLine(){
+  if (!__evaluated) return 'brain: not evaluated yet — checks run once alerts are armed';
+  if (!__brainLive) return 'brain: waiting for a completed synthesis';
+  if (!__brainHits.length) return 'brain: no HIGH/PRIME rows right now';
+  return 'brain: ' + brainTopTier(__brainHits) + '/HIGH+ set — ' + brainSyms(__brainHits);
+}
+function goldLine(){
+  if (!__evaluated) return 'gold: not evaluated yet — checks run once alerts are armed';
+  var g = __gold;
+  var wait = [];
+  if (!g.scalpLive) wait.push('scalp');
+  if (!g.swingLive) wait.push('swing');
+  var s = 'gold: ' + g.count + ' live setups (scalp ' + g.scalp + ' + swing ' + g.swing + ')'
+        + ' · threshold ' + __goldMin;
+  if (wait.length) s += ' · waiting: ' + wait.join(', ');
+  return s;
+}
+
+function renderUI(){
+  var ui = __ui;
+  if (!ui) return;
+  try{
+    var stt = bellState();
+    if (ui.btn){
+      ui.btn.textContent = bellLabel();
+      ui.btn.className = 'hgab-btn ' + stt;
+    }
+    if (ui.panel) ui.panel.style.display = __panelOpen ? 'block' : 'none';
+    if (ui.state) ui.state.textContent = stateLine();
+    if (ui.mute) ui.mute.textContent = __muted ? 'UNMUTE' : 'MUTE';
+    if (ui.minIn && ui.minIn.value !== String(__goldMin)) ui.minIn.value = String(__goldMin);
+    if (ui.brain) ui.brain.textContent = brainLine();
+    if (ui.gold) ui.gold.textContent = goldLine();
+    if (ui.lastB) ui.lastB.textContent = 'last brain alert: ' + (__lastBrainLine || 'none yet this session');
+    if (ui.lastG) ui.lastG.textContent = 'last gold alert: ' + (__lastGoldLine || 'none yet this session');
+  }catch(e){ /* rendering never breaks the engine */ }
+}
+
+function onBell(){
+  try{
+    if (!audioOk()){ __panelOpen = !__panelOpen; renderUI(); return; }
+    var wasArmed = __enabled && __unlocked;
+    if (!__enabled){ __enabled = true; lsSet(LS_ENABLED, '1'); }
+    if (!__unlocked) unlockAudio();
+    if (!wasArmed && __enabled && __unlocked) playChime();   /* the arming test chime */
+    __panelOpen = !__panelOpen;
+    if (__enabled && __unlocked && !__evaluated) evaluate(); /* instant honest lines */
+    renderUI();
+  }catch(e){}
+}
+function onMute(){
+  try{
+    __muted = !__muted;
+    lsSet(LS_MUTED, __muted ? '1' : '0');
+    renderUI();
+  }catch(e){}
+}
+function onMinChange(){
+  try{
+    var v = __ui && __ui.minIn ? parseInt(__ui.minIn.value, 10) : NaN;
+    if (!isFinite(v) || v < 1) v = GOLD_MIN_DEFAULT;
+    if (v > 99) v = 99;
+    __goldMin = v;
+    lsSet(LS_GOLDMIN, String(v));
+    renderUI();
+  }catch(e){}
+}
+function onTest(){
+  try{ hgAlertTest(); }catch(e){}
+}
+
+function buildUI(){
+  if (__ui) return;
+  try{
+    if (typeof document === 'undefined' || !document || typeof document.createElement !== 'function') return;
+    if (!document.body || typeof document.body.appendChild !== 'function') return;
+    var root = document.createElement('div');
+    if (!root) return;
+    root.id = 'hgAlertRoot';
+    root.innerHTML = ''
+      + '<style>' + AL_CSS + '</style>'
+      + '<div class="hgab-panel" id="hgAlertPanel" style="display:none">'
+      + '<div class="hgab-title">HG ALERTS <span>sound chimes for BRAIN + GOLD setups</span></div>'
+      + '<div class="hgab-state" id="hgAlertState"></div>'
+      + '<div class="hgab-row">'
+      + '<button class="hgab-mini" id="hgAlertMute" type="button">MUTE</button>'
+      + '<label class="hgab-lbl">gold threshold <input id="hgAlertMin" type="number" min="1" max="99" step="1"></label>'
+      + '<button class="hgab-mini" id="hgAlertTest" type="button">TEST CHIME</button>'
+      + '</div>'
+      + '<div class="hgab-line" id="hgAlertBrain"></div>'
+      + '<div class="hgab-line" id="hgAlertGold"></div>'
+      + '<div class="hgab-line" id="hgAlertLastB"></div>'
+      + '<div class="hgab-line" id="hgAlertLastG"></div>'
+      + '<div class="hgab-note">alerts evaluate while the app is open, after scans have run — '
+      + 'brain alerts need a completed synthesis</div>'
+      + '</div>'
+      + '<button class="hgab-btn" id="hgAlertBtn" type="button"></button>';
+    document.body.appendChild(root);
+    __ui = {
+      btn:   root.querySelector ? root.querySelector('#hgAlertBtn') : null,
+      panel: root.querySelector ? root.querySelector('#hgAlertPanel') : null,
+      state: root.querySelector ? root.querySelector('#hgAlertState') : null,
+      mute:  root.querySelector ? root.querySelector('#hgAlertMute') : null,
+      minIn: root.querySelector ? root.querySelector('#hgAlertMin') : null,
+      test:  root.querySelector ? root.querySelector('#hgAlertTest') : null,
+      brain: root.querySelector ? root.querySelector('#hgAlertBrain') : null,
+      gold:  root.querySelector ? root.querySelector('#hgAlertGold') : null,
+      lastB: root.querySelector ? root.querySelector('#hgAlertLastB') : null,
+      lastG: root.querySelector ? root.querySelector('#hgAlertLastG') : null
+    };
+    if (__ui.btn && __ui.btn.addEventListener) __ui.btn.addEventListener('click', onBell);
+    if (__ui.mute && __ui.mute.addEventListener) __ui.mute.addEventListener('click', onMute);
+    if (__ui.minIn && __ui.minIn.addEventListener) __ui.minIn.addEventListener('change', onMinChange);
+    if (__ui.test && __ui.test.addEventListener) __ui.test.addEventListener('click', onTest);
+    renderUI();
+  }catch(e){ /* a broken DOM never breaks the engine */ }
+}
+
+/* ---------------- interval (started once, guarded) ---------------- */
+function ensureTimer(){
+  if (__timer !== null) return;
+  try{
+    if (typeof setInterval !== 'function') return;
+    var iv = setInterval(function(){
+      try{ evaluate(); }catch(e){}
+    }, INTERVAL_MS);
+    __timer = iv;
+    try{ if (iv && typeof iv.unref === 'function') iv.unref(); }catch(e2){}   /* never hold a Node process open */
+  }catch(e){}
+}
+
+/* ---------------- registration ---------------- */
+function hgAlertTest(){
+  try{
+    if (!audioOk()){ renderUI(); return false; }
+    if (!__unlocked) unlockAudio();        /* the TEST click is itself a gesture */
+    var ok = playChime();                  /* bypasses MUTE — a sound check, not an alert */
+    renderUI();
+    return ok;
+  }catch(e){ return false; }
+}
+W.hgAlertCheck = function(){
+  try{ return evaluate(); }
+  catch(e){
+    return { enabled: __enabled, unlocked: __unlocked, muted: __muted,
+             audioOk: audioOk(), goldMin: __goldMin, chimed: [],
+             note: 'error: ' + ((e && e.message) ? e.message : String(e)) };
+  }
+};
+W.hgAlertTest = function(){
+  try{ return hgAlertTest(); }catch(e){ return false; }
+};
+
+try{
+  if (typeof document !== 'undefined' && document && !document.body
+      && typeof document.addEventListener === 'function'){
+    document.addEventListener('DOMContentLoaded', function(){ try{ buildUI(); }catch(e){} });
+  }
+}catch(e){}
+buildUI();
+ensureTimer();
+})();

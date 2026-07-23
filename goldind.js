@@ -1428,6 +1428,154 @@ function goldScalpSetups(inp){
 }
 
 /* =========================================================================
+   FORMING-NOW WATCH — goldWatch({rows15m, rows1h, rows4h, now, tf}): per-
+   strategy ARMED/IDLE state with the EXACT live trigger condition and the
+   REAL price level the strategy is watching, all from the same detector
+   math (__goldBundle) the candidates are built from — nothing fabricated.
+   'armed' = the structural trigger level exists and is watchable; it is a
+   WATCH ITEM, NOT an entry (a candidate still needs the trigger PLUS >=2
+   independent agreeing reads). 'idle' carries the honest reason (and the
+   text 'no levels available' when the level is uncomputable). tf labels the
+   timeframe in the condition text ('15m' scalp; other callers pass their
+   own). -> [{stratKey, strategy, state:'armed'|'idle', level:number|null,
+   condition:string, reason:string|null}] — always one entry per strategy,
+   [] on garbage input, never throws.
+========================================================================= */
+function goldWatch(inp){
+  var out = [];
+  try{
+    inp = inp || {};
+    var rows = __rows(inp.rows15m);
+    if (!rows || rows.length < 30) return [];
+    var n = rows.length;
+    var a15 = __last(_atr(rows, 14));
+    if (!isFinite(a15) || !(a15 > 0)) return [];
+    var entry = rows[n-1].c;
+    if (!isFinite(entry) || !(entry > 0)) return [];
+    var tf = (typeof inp.tf === 'string' && inp.tf) ? inp.tf : '15m';
+    var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
+    function emit(key, state, level, condition, reason){
+      out.push({ stratKey: key, strategy: GST_NAME[key] || key,
+                 state: (state === 'armed') ? 'armed' : 'idle',
+                 level: (typeof level === 'number' && isFinite(level)) ? level : null,
+                 condition: condition || '', reason: reason || null });
+    }
+
+    /* 1) liquidity sweep — the prior-25-bar swing high/low is the watched
+       liquidity pool; the trigger is a wick beyond it + a reclaim close. */
+    if (n >= 26){
+      var sH = -Infinity, sL = Infinity;
+      for (var i = Math.max(0, n - 25); i < n; i++){
+        if (rows[i].h > sH) sH = rows[i].h;
+        if (rows[i].l < sL) sL = rows[i].l;
+      }
+      if (isFinite(sH) && isFinite(sL)){
+        var nearLow = Math.abs(entry - sL) <= Math.abs(sH - entry);
+        emit('sweep', 'armed', nearLow ? sL : sH,
+          'watching ' + (nearLow ? sL : sH).toFixed(2) + ' (last ' + tf + ' swing ' + (nearLow ? 'low' : 'high')
+            + ') — fires on a wick ' + (nearLow ? 'below + reclaim close' : 'above + rejection close'), null);
+      } else emit('sweep', 'idle', null, '', 'no levels available (swing high/low not computable)');
+    } else emit('sweep', 'idle', null, '', 'not enough bars for a 25-bar swing — no levels available');
+
+    /* 2) order block / breaker — nearest unmitigated zone; armed only when
+       it sits within 1.5×ATR (the retest itself triggers inside 0.5×ATR). */
+    var ob = D.ob, obZones = [];
+    if (ob){
+      var oi, oz;
+      for (oi = 0; oi < ob.bullish.length; oi++){ oz = ob.bullish[oi]; obZones.push({ dir: 'bullish', top: oz.top, bottom: oz.bottom }); }
+      for (oi = 0; oi < ob.bearish.length; oi++){ oz = ob.bearish[oi]; obZones.push({ dir: 'bearish', top: oz.top, bottom: oz.bottom }); }
+    }
+    if (obZones.length){
+      var obNear = null, obDist = Infinity;
+      for (oi = 0; oi < obZones.length; oi++){
+        oz = obZones[oi];
+        var dz = (entry > oz.top) ? (entry - oz.top) : ((entry < oz.bottom) ? (oz.bottom - entry) : 0);
+        if (dz < obDist){ obDist = dz; obNear = oz; }
+      }
+      if (obNear && obDist <= 1.5*a15){
+        var obEdge = (entry >= obNear.bottom && entry <= obNear.top)
+          ? ((obNear.dir === 'bullish') ? obNear.bottom : obNear.top)
+          : ((entry > obNear.top) ? obNear.top : obNear.bottom);
+        emit('ob', 'armed', obEdge,
+          'watching the unmitigated ' + obNear.dir + ' ' + tf + ' order block ' + obNear.bottom.toFixed(2) + '–'
+            + obNear.top.toFixed(2) + ' — fires on a retest (price within 0.5×ATR of the zone)', null);
+      } else {
+        emit('ob', 'idle', null, '', 'no unmitigated ' + tf + ' order block within 1.5×ATR of price');
+      }
+    } else emit('ob', 'idle', null, '', 'no unmitigated ' + tf + ' order block on the chart — no levels available');
+
+    /* 3) FVG — nearest unfilled gap (age <= 25), 15m first then 1H; armed
+       when within 1.5×ATR (the fill triggers AT/IN the gap). */
+    var fvgNear = null, fvgDist = Infinity, fvgTf = tf;
+    function scanGaps(gaps, label){
+      if (!gaps || !gaps.length) return;
+      for (var gi = 0; gi < gaps.length; gi++){
+        var g = gaps[gi];
+        if (!g || g.age > 25) continue;
+        var dg = (entry > g.top) ? (entry - g.top) : ((entry < g.bottom) ? (g.bottom - entry) : 0);
+        if (dg < fvgDist){ fvgDist = dg; fvgNear = g; fvgTf = label; }
+      }
+    }
+    scanGaps(D.fvg, tf);
+    if (fvgDist > 1.5*a15){ fvgNear = null; fvgDist = Infinity; }   /* 15m too far -> try the 1H gap */
+    scanGaps(D.fvg1, '1H');
+    if (fvgNear && fvgDist <= 1.5*a15){
+      var fEdge = (entry >= fvgNear.bottom && entry <= fvgNear.top)
+        ? ((fvgNear.dir === 'bullish') ? fvgNear.bottom : fvgNear.top)
+        : ((entry > fvgNear.top) ? fvgNear.top : fvgNear.bottom);
+      emit('fvg', 'armed', fEdge,
+        'watching the unmitigated ' + fvgTf + ' FVG ' + fvgNear.bottom.toFixed(2) + '–' + fvgNear.top.toFixed(2)
+          + ' — fires on a retrace into the gap', null);
+    } else emit('fvg', 'idle', null, '', 'no unfilled ' + tf + ' imbalance nearby (within 1.5×ATR)');
+
+    /* 4) session VWAP — always armed when computable: fair value is always
+       a live magnet; the trigger is a touch (within 0.75×ATR). */
+    var vw = D.vw;
+    if (vw && isFinite(vw.value)){
+      emit('vwap', 'armed', vw.value,
+        'watching session VWAP ' + vw.value.toFixed(2) + ' — fires on a touch (within 0.75×ATR): bounce/rejection at fair value', null);
+    } else emit('vwap', 'idle', null, '', 'no levels available (session VWAP not computable)');
+
+    /* 5) EMA ribbon — armed on the 20-EMA only inside a directional stack;
+       MIXED/NONE ribbons have no pullback trade to watch. */
+    var rb = D.rb;
+    if (rb && (rb.mode === 'BULL' || rb.mode === 'BEAR') && isFinite(rb.e20)){
+      emit('ribbon', 'armed', rb.e20,
+        'watching the 20-EMA ' + rb.e20.toFixed(2) + ' — fires on a pullback into it (within 0.5×ATR) inside a '
+          + rb.mode + ' 20/50/200 ribbon', null);
+    } else if (!rb || !isFinite(rb.e20)){
+      emit('ribbon', 'idle', null, '', 'no levels available (20-EMA not computable on these bars)');
+    } else {
+      emit('ribbon', 'idle', null, '', 'ribbon ' + (rb.mode || 'NONE') + ' — no directional 20/50/200 stack to pull back into');
+    }
+
+    /* 6) Asian range — the 00:00–07:00 GMT box; fires on the London break
+       + close outside. Honest idle when no box exists (e.g. 4h/1d rows). */
+    var asian = D.asian;
+    if (asian && isFinite(asian.hi) && isFinite(asian.lo)){
+      var aNearLow = Math.abs(entry - asian.lo) <= Math.abs(asian.hi - entry);
+      emit('asian', 'armed', aNearLow ? asian.lo : asian.hi,
+        'armed 00:00–07:00 GMT: box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ' (' + asian.dayIso
+          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London break + close outside', null);
+    } else emit('asian', 'idle', null, '', 'no Asian-range box yet (needs >=3 bars inside 00:00–07:00 GMT) — no levels available');
+
+    /* 7) RSI 75/25 divergence — always watching while RSI is computable;
+       the pivot to beat is carried when one exists. */
+    var rg = D.rg;
+    if (rg && isFinite(rg.rsi)){
+      var pivHi = (typeof rg.pivotHigh === 'number' && isFinite(rg.pivotHigh)) ? rg.pivotHigh : NaN;
+      var pivLo = (typeof rg.pivotLow === 'number' && isFinite(rg.pivotLow)) ? rg.pivotLow : NaN;
+      var piv = isFinite(pivHi) ? pivHi : pivLo;
+      emit('rsidiv', 'armed', piv,
+        'RSI now ' + rg.rsi.toFixed(1) + ' — fires on a fresh price extreme with a lower RSI extreme (75/25 divergence)'
+          + (isFinite(piv) ? '; pivot to beat ' + piv.toFixed(2) : ' — no levels available yet (no confirmed pivot)'), null);
+    } else emit('rsidiv', 'idle', null, '', 'no levels available (RSI(14) not computable on these bars)');
+
+    return out;
+  }catch(e){ return []; }
+}
+
+/* =========================================================================
    RANKER — goldRankSetups(cands, ctx): transparent, human-readable confluence
    tally per candidate. Pure + total: every ctx leg is optional and degrades
    to a zero-point omission. Tally parts (pts):
@@ -1587,6 +1735,7 @@ W.goldStochRSI = goldStochRSI;
 W.goldSeason = goldSeason;
 W.goldScalpSetup = goldScalpSetup;
 W.goldScalpSetups = goldScalpSetups;
+W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
 W.goldNewsCaution = __newsCaution;   /* shared ±30-min high-impact window check */
 })();

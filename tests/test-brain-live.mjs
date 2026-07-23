@@ -26,6 +26,11 @@
         a collapsed audit toggle with zero ledgers rendered until clicked; a
         slow warm hook lifts a layer from dark to voting while a stuck hook
         stays named-dark after the cap
+     G) structure-anchored limit plans at scale: an engine-survivor HIGH keeps
+        its verbatim gate-engine plan even with an anchor available; a promoted
+        HIGH card + swing-fixture radar rows offer patient 4h-structure LIMITs
+        while flat-candle rows keep the hgPlanLevels fallback honestly labeled;
+        the quick rescan re-derives every working limit deterministically
    No live network anywhere. Run: node tests/test-brain-live.mjs */
 
 import fs from 'node:fs';
@@ -684,6 +689,128 @@ console.log('== E2) F&G extreme fear: majors vote, alts sit out, absent restores
   assert(f2Stat.indexOf('done · 0 PRIME · 0 HIGH · 1 watch · 13 aside') === 0
          && bRow2 && !bRow2.evidence.some(function(x){ return x.indexOf('FNG:') === 0; }),
          'E2: F&G absent — BTC back to 2-layer radar, ETH/SOL thin aside, zero F&G evidence — got "' + f2Stat + '"');
+}
+
+/* ================= G) STRUCTURE-ANCHORED LIMITS at scale =================
+   26-crypto universe: an engine-survivor HIGH keeps its gate-engine plan even
+   with an anchor available (precedence); LTREND promotes WATCH -> HIGH and its
+   card offers a 4h-FVG LIMIT; three swing-fixture radar rows offer swing-zone
+   limits; ten flat rows keep the hgPlanLevels fallback with the honest
+   no-structure label. Quick rescan re-derives every limit deterministically. */
+console.log('== G) anchored limit plans at scale: engine precedence, LIMIT render, honest fallback, quick persistence ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  W.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  W.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  W.engineState = function(){ return { survivors: [
+    { sym: 'ENGWINUSDT', dir: 'long', conviction: 'MODERATE',
+      plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 5 } ], rejected: [], at: 1 }; };
+  W.squeezeState = function(){ return { results: [] }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  const ofRes = [ { sym: 'ENGWINUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+                  { sym: 'LTRENDUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ];
+  const list = [
+    { sym: 'BTCUSDT',    base: 'BTC',    exchange: 'delta', turnoverUsd: 9e9,  mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT',    base: 'ETH',    exchange: 'delta', turnoverUsd: 5e9,  mark: 50,  fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT',    base: 'SOL',    exchange: 'delta', turnoverUsd: 2e9,  mark: 20,  fundingPct: 0, alsoOn: null },
+    { sym: 'ENGWINUSDT', base: 'ENGWIN', exchange: 'delta', turnoverUsd: 90e6, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'LTRENDUSDT', base: 'LTREND', exchange: 'delta', turnoverUsd: 80e6, mark: 1,   fundingPct: 0, alsoOn: null }
+  ];
+  for (let n = 1; n <= 3; n++){
+    const base = 'WALT0' + n;
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 70e6, mark: 1, fundingPct: 0, alsoOn: null });
+    ofRes.push({ sym: base + 'USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' });
+  }
+  for (let n = 1; n <= 18; n++){
+    const base = 'FALT' + String(n).padStart(2, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+    if (n <= 10) ofRes.push({ sym: base + 'USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' });
+  }
+  W.oiflowState = function(){ return { results: ofRes }; };
+  W.xuUniverse = async function(){ return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  const bar = function(c, hh, ll){ return { t: 0, o: c, h: hh !== undefined ? hh : c + 0.5, l: ll !== undefined ? ll : c - 0.5, c: c, v: 1000 }; };
+  const swingLongRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[113] = bar(99.6, 99.9, 99.3);
+    rows[114] = bar(99.3, 99.7, 99.0);
+    rows[115] = bar(99.2, 99.5, 98.8);
+    rows[116] = bar(99.5, 99.8, 99.1);
+    rows[117] = bar(99.8, 100.1, 99.4);
+    rows[118] = bar(100, 100.3, 99.7);
+    rows[119] = bar(100, 100.3, 99.7);
+    return rows;
+  };
+  W.xuCandles = function(item){
+    if (item.sym === 'LTRENDUSDT') return Promise.resolve(trendRows(true));
+    if (item.sym === 'ENGWINUSDT' || item.sym.indexOf('WALT') === 0) return Promise.resolve(swingLongRows());
+    return Promise.resolve(fakeRows(120));
+  };
+  let planCalls = 0;
+  W.hgPlanLevels = function(dir){ planCalls++; return { dir: dir, entry: 10, stop: 9, t1: 12, t2: 13 }; };
+  W.toTrade = function(){};
+  const PG = freshPane();
+  W.HG_tabs[0].mount(PG.pane);
+  await runAndWait(PG.stubs);
+  const gStat = PG.stubs['#brainStat'].textContent;
+  const gCards = PG.stubs['#brainCards'].innerHTML;
+  const gWatch = PG.stubs['#brainWatch'].innerHTML;
+  assert(gStat.indexOf('done · 0 PRIME · 2 HIGH · 23 watch · 2 aside') === 0,
+         'G: 27 rows — ENGWIN + LTREND HIGH, ETH/SOL + 3 WALT + 18 FALT watch (oiflow 3-layer or radar), BTC + gold aside — got "' + gStat + '"');
+
+  /* engine survivor precedence: an anchor EXISTS on ENGWIN's candles (swing
+     zone), yet the gate-engine plan renders verbatim — never overridden */
+  const engSeg = gCards.split('<div class="card ').filter(function(s){ return s.indexOf('ENGWINUSDT') >= 0; })[0] || '';
+  assert(engSeg.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && engSeg.indexOf('gate engine') >= 0
+         && engSeg.indexOf('LIMIT @') === -1,
+         'G: engine survivor plan wins even with an anchor available — verbatim gate-engine levels, no LIMIT override');
+
+  /* the promoted card + the radar rows offer patient limits */
+  assert(gCards.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
+         && gCards.indexOf('stop <b>146.85</b> (0.5xATR beyond 4h FVG)') >= 0
+         && gCards.indexOf('TP1 <b>148.85</b> · TP2 <b>149.64</b> · R:R 1.5') >= 0
+         && gCards.indexOf('cancel if 4h closes beyond <b>147.49</b>') >= 0
+         && gCards.indexOf('limit working ~24h or until structure breaks') >= 0,
+         'G: LTREND promoted WATCH -> HIGH renders the full anchored LIMIT block on the card');
+  assert(lrowSeg(gWatch, 'WALT01').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0
+         && lrowSeg(gWatch, 'WALT02').indexOf('LIMIT @ <b>99.1</b>') >= 0
+         && lrowSeg(gWatch, 'WALT03').indexOf('LIMIT @ <b>99.1</b>') >= 0,
+         'G: all three swing-fixture radar rows offer the swing-low zone limit');
+  assert(lrowSeg(gWatch, 'FALT01').indexOf('ENTRY <b>10</b>') >= 0
+         && lrowSeg(gWatch, 'FALT01').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+         'G: flat-candle rows keep the hgPlanLevels plan UNTOUCHED with the honest no-structure label');
+  assert(planCalls === 20, 'G: hgPlanLevels consulted ONLY for the 20 anchor-less flat-candle rows (ETH/SOL + 18 FALT) — got ' + planCalls);
+
+  /* snapshot + audit at scale */
+  const gSnap = W.__hgBrainLast();
+  const gL = gSnap.rows.filter(function(x){ return x.sym === 'LTRENDUSDT'; })[0];
+  const gW = gSnap.rows.filter(function(x){ return x.sym === 'WALT01USDT'; })[0];
+  assert(gL && gL.plan && Object.keys(gL.plan).sort().join(',') === 'entry,stop,t1,t2'
+         && gL.plan.entry === 147.64569307942614 && gL.plan.entry < 148.9834776804744
+         && gW && gW.plan && gW.plan.entry === 99.1 && gW.plan.stop < 99.1,
+         'G: snapshot rows keep the exact {entry,stop,t1,t2} shape; limits sit BELOW the mark (patient, never a chase)');
+  const lAudit = W.__hgBrainAudit('LTRENDUSDT');
+  const fAudit = W.__hgBrainAudit('FALT01USDT');
+  assert(lAudit && lAudit.indexOf('>PLAN<') >= 0 && lAudit.indexOf('>LIMIT<') >= 0
+         && lAudit.indexOf('4h FVG 147.65 (zone 147.49–147.65) · 1.04×ATR below mark') >= 0
+         && fAudit && fAudit.indexOf('>GATE<') >= 0
+         && fAudit.indexOf('hgPlanLevels levels — no nearby 4h structure — gate-engine levels') >= 0,
+         'G: the audit PLAN line names the anchor source for limits and the gate-engine provenance for fallbacks');
+
+  /* quick rescan: every limit re-derived deterministically, population intact */
+  PG.stubs['#brainQuick']._handler();
+  await waitIdle(PG.stubs);
+  const gQuick = PG.stubs['#brainStat'].textContent;
+  assert(/^quick rescan: 25 checked · 2 unchanged/.test(gQuick) && gQuick.indexOf('2 HIGH · 23 watch · 2 aside') >= 0,
+         'G: quick rescan rechecks the 25 WATCH-or-better rows with the same buckets — got "' + gQuick + '"');
+  assert(PG.stubs['#brainCards'].innerHTML.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
+         && lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'WALT01').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0
+         && lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'FALT01').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+         'G: the quick pass re-derives the same limits + fallbacks — WATCH rows keep their working orders');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

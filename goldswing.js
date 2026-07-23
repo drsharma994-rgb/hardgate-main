@@ -250,7 +250,7 @@ function publishState(cands){
 
 /* ---------------- diagnostic surface (full last scan) ---------------- */
 var __scanSnap = null;
-function publishScan(ranked, best, history, at, rejected){
+function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
     var cands = [];
     for (var i = 0; i < ranked.length; i++){
@@ -291,7 +291,19 @@ function publishScan(ranked, best, history, at, rejected){
                  dir: r0.dir || null, venue: r0.venue || null, sym: r0.sym || null,
                  reason: r0.reason || null });
     }
-    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej, at: at };
+    /* additive: FORMING-NOW watch items + the WHY SILENT line (zero-candidate
+       scans). Existing fields above are untouched. */
+    var arm = [];
+    for (var wq = 0; wq < (armed || []).length; wq++){
+      var w0 = armed[wq];
+      if (!w0) continue;
+      arm.push({ strategy: w0.strategy || null, venue: w0.venue || null,
+                 state: (w0.state === 'armed') ? 'armed' : 'idle',
+                 level: (typeof w0.level === 'number' && isFinite(w0.level)) ? w0.level : null,
+                 condition: w0.condition || '', reason: w0.reason || null });
+    }
+    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej,
+                   armed: arm, whySilent: (typeof whySilent === 'string' && whySilent) ? whySilent : null, at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
 
@@ -469,7 +481,15 @@ var GW_CSS = ''
 + '#tab_goldswing .gsw-hrow.target{border-left-color:#19e3a2}'
 + '#tab_goldswing .gsw-hrow.expired{border-left-color:#c9ff6a}'
 + '#tab_goldswing .gsw-hrow b{letter-spacing:.08em}'
-+ '#tab_goldswing .gsw-hrow.rej{border-left-color:#ff9f43}';
++ '#tab_goldswing .gsw-hrow.rej{border-left-color:#ff9f43}'
++ '#tab_goldswing .gsw-wrow{font-size:10px;padding:5px 9px;border-left:2px solid var(--line,#2a2e35);margin-bottom:3px;color:var(--mut,#8a8f98);line-height:1.5}'
++ '#tab_goldswing .gsw-wrow b{letter-spacing:.08em}'
++ '#tab_goldswing .gsw-wrow.armed{border-left-color:#c9ff6a;color:var(--txt,#d7dbe0)}'
++ '#tab_goldswing .gsw-wst{font-size:8px;letter-spacing:.14em;padding:1px 5px;border-radius:3px;margin-right:6px;border:1px solid}'
++ '#tab_goldswing .gsw-wrow.armed .gsw-wst{color:#c9ff6a;border-color:rgba(201,255,106,.5);background:rgba(201,255,106,.08)}'
++ '#tab_goldswing .gsw-wrow.idle .gsw-wst{color:var(--mut,#8a8f98);border-color:var(--line,#2a2e35)}'
++ '#tab_goldswing .gsw-silent{font-size:11px;color:#ff9f43;border:1px solid rgba(255,159,67,.35);border-radius:4px;padding:8px 10px;margin:12px 0;line-height:1.55;background:rgba(255,159,67,.06)}'
++ '#tab_goldswing .gsw-silent b{letter-spacing:.12em}';
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -593,6 +613,72 @@ function historyHTML(history){
       + ' · ' + esc(when) + '</div>';
   }).join('');
   return '<div class="gsw-hist"><div class="gsw-hhead">CONVICTION HISTORY — closed setups, never silently dropped</div>' + rows + '</div>';
+}
+
+/* FORMING NOW — what the engine is watching: per-strategy per-venue
+   ARMED/IDLE rows with the exact live trigger condition + real level from
+   buildWatch (same detector math as the candidates). Armed setups are
+   watch items, NOT entries. */
+function formingNowHTML(armed){
+  if (!armed || !armed.length) return '';
+  var rows = armed.map(function(w){
+    if (!w) return '';
+    var st = w.state === 'armed';
+    var lvlNum = (typeof w.level === 'number' && isFinite(w.level));
+    return '<div class="gsw-wrow ' + (st ? 'armed' : 'idle') + '">'
+      + '<span class="gsw-wst">' + (st ? 'ARMED' : 'IDLE') + '</span>'
+      + '<b>' + esc(w.strategy || 'SETUP') + '</b>'
+      + (w.venue ? ' · ' + esc(w.venue) : '')
+      + (lvlNum ? ' · $' + pxF(w.level) : '')
+      + ' — ' + esc(st ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range'))
+      + '</div>';
+  }).join('');
+  return '<div class="gsw-hist gsw-watch"><div class="gsw-hhead">FORMING NOW — what the engine is watching'
+    + ' <span style="opacity:.65">(armed setups are watch items, not entries)</span></div>' + rows + '</div>';
+}
+
+/* nearest armed trigger across venues, distance in $ and ATR(4h) */
+function nearestArmed(armed, watchMeta){
+  var best = null;
+  for (var i = 0; i < (armed || []).length; i++){
+    var w = armed[i];
+    if (!w || w.state !== 'armed' || !(typeof w.level === 'number' && isFinite(w.level))) continue;
+    var m = watchMeta ? watchMeta[w.venue] : null;
+    if (!m || !isFinite(m.lastClose)) continue;
+    var dist = Math.abs(w.level - m.lastClose);
+    if (!best || dist < best.dist){
+      best = { strategy: w.strategy, venue: w.venue, level: w.level, dist: dist,
+               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist/m.atr : NaN };
+    }
+  }
+  return best;
+}
+
+/* WHY SILENT — the single honest lead reason a scan produced zero qualifying
+   candidates. Precedence: news window > feeds failed > live convictions >
+   nearest armed trigger. ICT killzones are deliberately NOT a case here —
+   they are intraday context, never a swing gate. The nearest-armed tail is
+   appended whenever it isn't itself the lead and watch data exists. */
+function whySilentText(o){
+  var lead = null;
+  if (o.newsCaution) lead = 'high-impact news window ±30 min' + (o.newsTitle ? ' — ' + o.newsTitle : '')
+    + ': fade risk — new reads held for the release';
+  else if (o.feedsFailed) lead = 'feeds failed — no 4h klines from any source (macro chain + PAXGUSDT + Delta all quiet)';
+  else if (o.liveN > 0) lead = o.liveN + ' live conviction' + (o.liveN === 1 ? '' : 's')
+    + ' already locked — re-confirmations, not new issuance';
+  var near = nearestArmed(o.armed, o.watchMeta);
+  var tail = null;
+  if (near){
+    tail = 'nearest armed trigger: ' + near.strategy + (near.venue ? ' (' + near.venue + ')' : '')
+      + ' at $' + pxF(near.level) + ' — $' + pxF(near.dist)
+      + (isFinite(near.distAtr) ? ' (' + fmtF(near.distAtr, 1) + '×ATR(4h)) away' : ' away');
+  }
+  if (!lead) lead = tail ? tail : 'no qualifying setups — the board is flat';
+  else if (tail) lead = lead + ' · ' + tail;
+  return lead;
+}
+function whySilentHTML(ws){
+  return '<div class="gsw-silent"><b>WHY SILENT</b> — ' + esc(ws) + '</div>';
 }
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
@@ -918,6 +1004,131 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
   return out;
 }
 
+/* FORMING-NOW WATCH — per-strategy ARMED/IDLE state with the exact live
+   trigger condition + the REAL level from the same detector math
+   buildCandidates uses (recomputed read-only; nothing fabricated). 'armed'
+   is a WATCH ITEM, NOT an entry — a candidate still needs its trigger plus
+   >=2 agreeing reads. 'idle' carries the honest reason ('no levels
+   available' when the level is uncomputable). Never throws.
+   -> [{stratKey, strategy, venue, state, level, condition, reason}] */
+function buildWatch(leg, nowMs, macro, venue){
+  var out = [];
+  function emit(key, state, level, condition, reason){
+    out.push({ stratKey: key, strategy: SW_NAME[key] || key, venue: venue || null,
+               state: (state === 'armed') ? 'armed' : 'idle',
+               level: (typeof level === 'number' && isFinite(level)) ? level : null,
+               condition: condition || '', reason: reason || null });
+  }
+  try{
+    var rows4 = __rows(leg.rows4h);
+    if (!rows4 || rows4.length < MIN_4H){
+      var shortWhy = 'not enough 4h bars (' + (rows4 ? rows4.length : 0) + '/' + MIN_4H + ') — no levels available';
+      emit('pullback', 'idle', null, '', shortWhy);
+      emit('wkbreak',  'idle', null, '', shortWhy);
+      emit('ob',       'idle', null, '', shortWhy);
+      emit('macro',    'idle', null, '', shortWhy);
+      return out;
+    }
+    var n = rows4.length;
+    var a4 = __last(_atr(rows4, 14));
+    var entry = rows4[n-1].c;
+    var rows1d = __rows(leg.rows1d);
+    var hint = (macro && typeof macro === 'object') ? macro.realRateHint : null;
+
+    /* 4h trend stack (same math as buildCandidates) */
+    var c4 = __closes(rows4);
+    var e50_4 = __last(_ema(c4, 50)), e200_4 = __last(_ema(c4, 200));
+    var trend4 = null;
+    if (isFinite(e50_4) && isFinite(e200_4)){
+      if (entry > e50_4 && e50_4 > e200_4) trend4 = 'bull';
+      else if (entry < e50_4 && e50_4 < e200_4) trend4 = 'bear';
+    }
+
+    /* 1) 4h trend pullback — watching the 50-EMA value zone */
+    if (trend4 && isFinite(e50_4)){
+      emit('pullback', 'armed', e50_4,
+        'watching the 4h 50-EMA ' + e50_4.toFixed(2) + ' — fires on a pullback within 0.75×ATR inside the '
+          + trend4 + ' EMA50/200 stack', null);
+    } else if (!isFinite(e50_4)){
+      emit('pullback', 'idle', null, '', 'no levels available (4h EMA50 not computable on ' + n + ' bars)');
+    } else {
+      emit('pullback', 'idle', null, '', 'no 4h EMA50/200 trend stack right now — nothing to pull back into');
+    }
+
+    /* 2) weekly-range breakout — watching the prior week's high/low */
+    var wk = __weeklyRange(rows1d);
+    if (wk){
+      var nearLo = Math.abs(entry - wk.lo) <= Math.abs(wk.hi - entry);
+      emit('wkbreak', 'armed', nearLo ? wk.lo : wk.hi,
+        'watching the prior week\u2019s ' + (nearLo ? 'low ' + wk.lo.toFixed(2) : 'high ' + wk.hi.toFixed(2))
+          + ' (range ' + wk.lo.toFixed(2) + '–' + wk.hi.toFixed(2) + ') — fires on a sweep + reclaim or a ≥1.5×ATR displacement 4h close beyond it', null);
+    } else {
+      emit('wkbreak', 'idle', null, '', 'prior-week range unavailable (need >=3 daily bars in the prior ISO week) — no levels available');
+    }
+
+    /* 3) 4h order-block retest — nearest unmitigated OB within 1.5×ATR */
+    var ob = null, obFn = gfn('goldOrderBlocks');
+    if (obFn){ try{ ob = obFn(rows4); }catch(eO){ ob = null; } }
+    var obZones = [], oi, oz;
+    if (ob){
+      for (oi = 0; oi < ob.bullish.length; oi++){ oz = ob.bullish[oi]; obZones.push({ dir: 'bullish', top: oz.top, bottom: oz.bottom }); }
+      for (oi = 0; oi < ob.bearish.length; oi++){ oz = ob.bearish[oi]; obZones.push({ dir: 'bearish', top: oz.top, bottom: oz.bottom }); }
+    }
+    if (obZones.length && isFinite(a4) && a4 > 0){
+      var obNear = null, obDist = Infinity;
+      for (oi = 0; oi < obZones.length; oi++){
+        oz = obZones[oi];
+        var dz = (entry > oz.top) ? (entry - oz.top) : ((entry < oz.bottom) ? (oz.bottom - entry) : 0);
+        if (dz < obDist){ obDist = dz; obNear = oz; }
+      }
+      if (obNear && obDist <= 1.5*a4){
+        var obEdge = (entry >= obNear.bottom && entry <= obNear.top)
+          ? ((obNear.dir === 'bullish') ? obNear.bottom : obNear.top)
+          : ((entry > obNear.top) ? obNear.top : obNear.bottom);
+        emit('ob', 'armed', obEdge,
+          'watching the unmitigated ' + obNear.dir + ' 4h order block ' + obNear.bottom.toFixed(2) + '–'
+            + obNear.top.toFixed(2) + ' — fires on a retest (price within 0.5×ATR of the zone)', null);
+      } else {
+        emit('ob', 'idle', null, '', 'no unmitigated 4h order block within 1.5×ATR of price');
+      }
+    } else if (!obFn){
+      emit('ob', 'idle', null, '', 'goldOrderBlocks unavailable (goldind.js) — no levels available');
+    } else {
+      emit('ob', 'idle', null, '', 'no unmitigated 4h order block on the chart — no levels available');
+    }
+
+    /* 4) macro-aligned continuation — watching the daily stack vs the
+       real-rate backdrop (macro never fabricates) */
+    var e50_1 = NaN, trend1 = null;
+    if (rows1d && rows1d.length >= 60){
+      var c1 = __closes(rows1d);
+      e50_1 = __last(_ema(c1, 50));
+      var e200_1 = __last(_ema(c1, 200));
+      var dClose = c1[c1.length - 1];
+      if (isFinite(e50_1) && isFinite(e200_1) && isFinite(dClose)){
+        if (dClose > e50_1 && e50_1 > e200_1) trend1 = 'bull';
+        else if (dClose < e50_1 && e50_1 < e200_1) trend1 = 'bear';
+      }
+    }
+    if (trend1 && isFinite(e50_1)){
+      var aligned = (hint === 'TAILWIND' && trend1 === 'bull') || (hint === 'HEADWIND' && trend1 === 'bear');
+      var opposed = (hint === 'TAILWIND' && trend1 === 'bear') || (hint === 'HEADWIND' && trend1 === 'bull');
+      emit('macro', 'armed', e50_1,
+        aligned
+          ? 'daily ' + trend1 + ' stack aligned with a ' + String(hint).toLowerCase() + ' real-rate backdrop — fires with >=2 independent agreeing reads'
+          : (opposed
+              ? 'daily ' + trend1 + ' stack fights a ' + String(hint).toLowerCase() + ' real-rate backdrop — no alignment, macro never fabricates'
+              : 'daily ' + trend1 + ' stack in place — fires when the real-rate backdrop (now '
+                + (hint ? String(hint).toLowerCase() : 'unavailable') + ') aligns'), null);
+    } else if (rows1d && rows1d.length >= 60){
+      emit('macro', 'idle', null, '', 'no daily EMA50/200 trend stack — macro continuation has no trend to align with');
+    } else {
+      emit('macro', 'idle', null, '', 'daily context unavailable (' + (rows1d ? rows1d.length : 0) + ' 1d bars) — macro strategy offline');
+    }
+  }catch(e){}
+  return out;
+}
+
 /* ---------------- ranking: transparent confluence tally ---------------- */
 function rankSetups(cands, ctx){
   var out = { ranked: [], best: null, rejected: [] };
@@ -1093,6 +1304,19 @@ async function runScan(ui){
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
+    var armedAll = [], watchMeta = {};
+    function collectWatch(leg, venue){
+      try{
+        if (leg && leg.rows4h && leg.rows4h.length){
+          var lc = leg.rows4h[leg.rows4h.length - 1];
+          var aArr = _atr(leg.rows4h, 14);
+          watchMeta[venue] = { atr: (aArr && aArr.length) ? aArr[aArr.length - 1] : NaN,
+                               lastClose: (lc && isFinite(lc.c)) ? lc.c : NaN };
+        }
+        var wl = buildWatch(leg, now, ctx.macro, venue);
+        for (var wi = 0; wi < wl.length; wi++){ if (wl[wi]) armedAll.push(wl[wi]); }
+      }catch(eW){}
+    }
 
     /* leg 1: primary gold feed (getGoldCandles chain -> PAXGUSDT fallback) */
     var gold = await fetchGoldKlines();
@@ -1102,6 +1326,7 @@ async function runScan(ui){
       var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
       venueRows[v] = { rows4h: gold.rows4h };
       var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1);
+      collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
       legs.push(v + ': ' + gold.rows4h.length + ' 4h bars — '
@@ -1117,6 +1342,7 @@ async function runScan(ui){
     if (dx.item && dx.rows4h.length){
       venueRows['DELTA XAUTUSD'] = { rows4h: dx.rows4h };
       var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD');
+      collectWatch(dx, 'DELTA XAUTUSD');
       for (i = 0; i < got2.length; i++) cands.push(got2[i]);
       for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
       legs.push('DELTA XAUTUSD: ' + dx.rows4h.length + ' 4h bars — '
@@ -1144,14 +1370,38 @@ async function runScan(ui){
     var liveN = 0;
     for (var k in lock.store.live){ if (Object.prototype.hasOwnProperty.call(lock.store.live, k)) liveN++; }
 
+    /* WHY SILENT — the honest lead reason when zero candidates qualify */
+    var whySilent = null;
+    if (!ranked.length){
+      whySilent = whySilentText({
+        newsCaution: !!(newsC && newsC.caution), newsTitle: newsC ? newsC.title : null,
+        feedsFailed: !gold.rows4h.length && !dx.rows4h.length,
+        liveN: liveN, armed: armedAll, watchMeta: watchMeta
+      });
+    }
+
     /* render */
     if (ui && ui.cards && ui.empty){
-      if (!ranked.length && !rejectedAll.length) ui.empty.style.display = 'block';
-      else {
+      if (ranked.length){
+        ui.empty.style.display = 'none';
         ui.cards.innerHTML = bannerHTML(best, ranked)
           + ranked.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+          + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
+      } else if (rejectedAll.length || armedAll.length){
+        /* zero qualifying candidates but something to show: WHY SILENT leads,
+           then the watch panel, then the held-back reason lines */
+        ui.empty.style.display = 'none';
+        ui.cards.innerHTML = (whySilent ? whySilentHTML(whySilent) : '')
+          + formingNowHTML(armedAll)
+          + rejectedHTML(rejectedAll)
+          + historyHTML(lock.store.history);
+      } else {
+        /* literally nothing (feeds failed): the empty state carries the reason */
+        ui.cards.innerHTML = '';
+        if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent);
+        ui.empty.style.display = 'block';
       }
     }
     var secs = ((Date.now() - t0)/1000).toFixed(1);
@@ -1161,7 +1411,7 @@ async function runScan(ui){
     setProg(ui, null);
     if (gold.rows4h.length || dx.rows4h.length){
       publishState(ranked);                        /* only a real data run overwrites the snapshots */
-      publishScan(ranked, best, lock.store.history, now, rejectedAll);
+      publishScan(ranked, best, lock.store.history, now, rejectedAll, armedAll, whySilent);
     }
     return 'refreshed';
   }catch(e){

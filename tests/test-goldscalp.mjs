@@ -1320,5 +1320,239 @@ function vwapRows26(){
   delete globalThis.localStorage;
 }
 
+/* =========================================================================
+   27) FORMING NOW (goldWatch) + WHY SILENT — per-strategy ARMED/IDLE watch
+       items with real levels, and the honest lead reason for silent scans
+========================================================================= */
+console.log('== 27) goldWatch forming-now + tab WHY SILENT ==');
+function emaLast27(vals, p){                              /* mirrors the module EMA seed */
+  if (vals.length < p) return NaN;
+  const k = 2/(p+1); let e = 0;
+  for (let i = 0; i < p; i++) e += vals[i];
+  e /= p;
+  for (let i = p; i < vals.length; i++) e = vals[i]*k + e*(1-k);
+  return e;
+}
+function fvgRows27(){                                     /* unmitigated bullish gap, price retraces INTO it */
+  const rows = flatRows(30, 96, 0.4, DAY);
+  rows.push({ t: DAY + 30*900, o: 99, h: 100, l: 98, c: 99.5, v: 1000 });
+  rows.push({ t: DAY + 31*900, o: 99.5, h: 102.5, l: 99, c: 102, v: 1000 });
+  rows.push({ t: DAY + 32*900, o: 102, h: 103.5, l: 101, c: 103, v: 1000 });   // gap [100,101]
+  rows.push({ t: DAY + 33*900, o: 103, h: 104, l: 102, c: 103.5, v: 1000 });
+  let px = 103.5;
+  for (let i = 34; i < 44; i++){ const o = px; px = o - 0.3;
+    rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: 1000 }); }
+  rows.push({ t: DAY + 44*900, o: px, h: px + 0.3, l: px - 0.15, c: 100.7, v: 1200 });
+  return rows;
+}
+function ribbonRows27(){                                  /* strong trend + pullback to the 20-EMA */
+  const rows = trendRows(205, 100, 0.8, DAY, 300);
+  let px = rows[204].c;
+  for (let i = 0; i < 4; i++){ const o = px; px = o - 1.6;
+    rows.push({ t: DAY + (205+i)*300, o: o, h: Math.max(o, px) + 0.9, l: Math.min(o, px) - 0.9, c: px, v: 1300 }); }
+  return rows;
+}
+function flat900(n, base, spread){                        /* 15m-step flat bars (silent scans) */
+  const r = [];
+  for (let i = 0; i < n; i++) r.push({ t: DAY + i*900, o: base, h: base + spread, l: base - spread, c: base, v: 1000 });
+  return r;
+}
+function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFractionDigits: d }); }
+
+/* ---- 27a) goldWatch unit contract ---- */
+{
+  assert(typeof W.goldWatch === 'function', 'window.goldWatch exported');
+  assert(JSON.stringify(W.goldWatch(null)) === '[]'
+      && JSON.stringify(W.goldWatch({})) === '[]'
+      && JSON.stringify(W.goldWatch({ rows15m: [] })) === '[]'
+      && JSON.stringify(W.goldWatch({ rows15m: flatRows(10, 100, 1, 0) })) === '[]',
+      'goldWatch: null/empty/short input -> [] (never null, never throws)');
+
+  const rows = compLongRows();
+  const wl = W.goldWatch({ rows15m: rows, now: OFF_NOW, tf: '15m' });
+  assert(Array.isArray(wl) && wl.length === 7, 'goldWatch: one watch item per scalp strategy (7)');
+  assert(wl.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,stratKey,strategy'),
+         'goldWatch: every item carries EXACTLY {stratKey, strategy, state, level, condition, reason}');
+  assert(wl.every(w => (w.state === 'armed' && typeof w.condition === 'string' && w.condition.length > 10)
+                    || (w.state === 'idle' && typeof w.reason === 'string' && w.reason.length > 5)),
+         'goldWatch: armed items carry a live trigger condition, idle items carry the honest reason');
+  const byKey = {};
+  for (const w of wl) byKey[w.stratKey] = w;
+
+  /* sweep: armed on the NEARER of the last-25-bar swing high/low */
+  const sH = Math.max(...rows.slice(-25).map(r => r.h)), sL = Math.min(...rows.slice(-25).map(r => r.l));
+  const entry = rows[rows.length - 1].c;
+  const swLvl = Math.abs(entry - sL) <= Math.abs(sH - entry) ? sL : sH;
+  assert(byKey.sweep.state === 'armed' && byKey.sweep.level === swLvl,
+         'sweep: armed on the nearer 25-bar swing ' + (swLvl === sL ? 'low' : 'high') + ' ' + swLvl);
+  assert(/last 15m swing (low|high)/.test(byKey.sweep.condition) && /fires on a wick/.test(byKey.sweep.condition),
+         'sweep: condition names the exact live trigger — got "' + byKey.sweep.condition + '"');
+
+  /* vwap: always armed when computable, level = the session VWAP itself */
+  assert(byKey.vwap.state === 'armed' && isFinite(byKey.vwap.level)
+      && /session VWAP/.test(byKey.vwap.condition) && /bounce\/rejection/.test(byKey.vwap.condition),
+         'vwap: armed on the real session VWAP ' + byKey.vwap.level);
+
+  /* ribbon: compLongRows resolves MIXED (e20 < e50 after the long decline) ->
+     honest idle; a directional stack arms on the real 20-EMA */
+  assert(byKey.ribbon.state === 'idle' && /ribbon MIXED/.test(byKey.ribbon.reason),
+         'ribbon: MIXED stack on compLongRows -> idle with the reason named ("' + byKey.ribbon.reason + '")');
+  const rw = W.goldWatch({ rows15m: ribbonRows27(), now: OFF_NOW, tf: '15m' });
+  const rRb = rw.find(w => w.stratKey === 'ribbon');
+  const e20r = emaLast27(ribbonRows27().map(r => r.c), 20);
+  assert(rRb && rRb.state === 'armed' && Math.abs(rRb.level - e20r) < 1e-9
+      && /BULL 20\/50\/200 ribbon/.test(rRb.condition),
+         'ribbon: armed on the real 20-EMA ' + (rRb && rRb.level) + ' inside a BULL stack');
+
+  /* asian: box from the last bar's 00:00-07:00 GMT window, still building */
+  const box = rows.filter(r => r.t >= DAY + 86400 && r.t < DAY + 86400 + 7*3600);
+  const bHi = Math.max(...box.map(r => r.h)), bLo = Math.min(...box.map(r => r.l));
+  const aLvl = Math.abs(entry - bLo) <= Math.abs(bHi - entry) ? bLo : bHi;
+  assert(byKey.asian.state === 'armed' && byKey.asian.level === aLvl
+      && /00:00–07:00 GMT/.test(byKey.asian.condition) && /still building/.test(byKey.asian.condition),
+         'asian: armed on the real box ' + bLo + '–' + bHi + ' (nearest edge ' + aLvl + ')');
+
+  /* rsidiv: armed with the real divergence pivot to beat (the sweep-wick low) */
+  const pivExp = W.goldRSIGold(rows).pivotLow;
+  assert(byKey.rsidiv.state === 'armed' && byKey.rsidiv.level === pivExp
+      && /RSI now/.test(byKey.rsidiv.condition) && byKey.rsidiv.condition.indexOf('pivot to beat ' + pivExp.toFixed(2)) >= 0,
+         'rsidiv: armed, pivot to beat ' + pivExp + ' — got "' + byKey.rsidiv.condition + '"');
+
+  /* fvg on compLongRows: the unmitigated gap is within reach -> armed on its edge */
+  assert(byKey.fvg.state === 'armed' && byKey.fvg.level === 2303.5
+      && /unmitigated 15m FVG 2303.00–2303.50 — fires on a retrace into the gap/.test(byKey.fvg.condition),
+         'fvg: armed on the real gap 2303.00–2303.50 (near edge 2303.5) — got "' + byKey.fvg.condition + '"');
+  /* fvg armed with price INSIDE the gap -> the far edge is the level */
+  const fw = W.goldWatch({ rows15m: fvgRows27(), now: OFF_NOW, tf: '15m' });
+  const fFvg = fw.find(w => w.stratKey === 'fvg');
+  assert(fFvg && fFvg.state === 'armed' && fFvg.level === 100
+      && /unmitigated 15m FVG 100.00–101.00 — fires on a retrace into the gap/.test(fFvg.condition),
+         'fvg: armed on the real gap 100.00–101.00 when price is inside it');
+
+  /* ob armed: price inside the unmitigated bullish OB zone */
+  const ow = W.goldWatch({ rows15m: obZoneRows26(), now: OFF_NOW, tf: '15m' });
+  const oOb = ow.find(w => w.stratKey === 'ob');
+  assert(oOb && oOb.state === 'armed' && oOb.level === 98.8
+      && /unmitigated bullish 15m order block 98.80–100.40 — fires on a retest/.test(oOb.condition),
+         'ob: armed on the real zone 98.80–100.40 (edge 98.8) — got "' + (oOb && oOb.condition) + '"');
+
+  /* flat rows: honest mixed states, nothing fabricated */
+  const fl = W.goldWatch({ rows15m: flatRows(60, 100, 1, DAY), now: OFF_NOW, tf: '15m' });
+  const fByKey = {};
+  for (const w of fl) fByKey[w.stratKey] = w;
+  assert(fByKey.ob.state === 'idle' && /no unmitigated 15m order block on the chart/.test(fByKey.ob.reason)
+      && fByKey.fvg.state === 'idle'
+      && fByKey.ribbon.state === 'idle' && /ribbon MIXED/.test(fByKey.ribbon.reason),
+         'flat: ob/fvg/ribbon honestly idle with reasons named');
+  assert(fByKey.vwap.state === 'armed' && fByKey.vwap.level === 100
+      && fByKey.sweep.state === 'armed' && fByKey.sweep.level === 99
+      && fByKey.asian.state === 'armed',
+      'flat: vwap/sweep/asian still armed on their real levels (no fabrication needed to watch)');
+  assert(fByKey.rsidiv.state === 'armed' && fByKey.rsidiv.level === null
+      && /RSI now 50.0/.test(fByKey.rsidiv.condition) && /no levels available yet/.test(fByKey.rsidiv.condition),
+         'flat: rsidiv armed with RSI 50 but honestly "no levels available yet (no confirmed pivot)"');
+
+  /* 4h/1d-shaped rows: the Asian box honestly cannot exist -> idle, never faked */
+  const wl4 = W.goldWatch({ rows15m: trendRows(220, 2300, 1.2, DAY - 220*4*3600, 4*3600), now: OFF_NOW, tf: '4h' });
+  const a4 = wl4.find(w => w.stratKey === 'asian');
+  assert(a4 && a4.state === 'idle' && /no Asian-range box yet/.test(a4.reason),
+         '4h rows: asian watch honestly idle — "' + (a4 && a4.reason) + '"');
+}
+
+/* ---- 27b) tab FORMING NOW panel + WHY SILENT precedence ---- */
+{
+  globalThis.window = {};
+  const ls4 = memLocalStorage();
+  globalThis.localStorage = ls4;
+  vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
+  const C4 = globalThis.window;
+  const FIXED = OVLP_NOW + 30*60*1000;                     // 14:30 GMT -> killzone weight 3
+  const realDateNow4 = Date.now;
+  Date.now = () => FIXED;
+  C4.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: cloneRows(compLongRows()), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  const tab4 = C4.HG_tabs.find(t => t.id === 'goldscalp');
+  const M4 = freshPane();
+  tab4.mount(M4.pane);
+  await M4.stubs['#gsRun']._handler();
+  const wScan = C4.goldscalpScan();
+
+  /* panel renders after the cards; snapshot carries the additive fields */
+  const wHtml = M4.stubs['#gsCards'].innerHTML;
+  assert(wHtml.indexOf('FORMING NOW — what the engine is watching') >= 0
+      && wHtml.indexOf('armed setups are watch items, not entries') >= 0,
+      'FORMING NOW panel rendered after the cards with the honest watch-item label');
+  assert(wHtml.indexOf('ARMED') >= 0, 'armed rows highlighted in the panel');
+  assert(Array.isArray(wScan.armed) && wScan.armed.length === 7, 'snapshot.armed: 7 watch items (one venue leg)');
+  assert(wScan.armed.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,strategy,venue'
+      && w.venue === 'BINANCE XAUUSDT'),
+         'snapshot.armed entries carry EXACTLY {strategy, venue, state, level, condition, reason}, venue-tagged');
+  assert(wScan.armed.find(w => w.strategy === 'LIQUIDITY SWEEP REVERSAL').state === 'armed',
+         'snapshot.armed: sweep armed on the fixture');
+  assert(wScan.whySilent === null, 'whySilent null when candidates qualify');
+  assert('armed' in wScan && 'whySilent' in wScan
+      && Array.isArray(wScan.cands) && typeof wScan.bestId === 'string' && typeof wScan.at === 'number',
+         'additive contract: existing snapshot fields untouched, armed/whySilent added');
+
+  /* silent scan (flat rows, OVLP): lead = nearest armed trigger with $ + ATR distance */
+  C4.getGoldCandles = async (tf) => (tf === '15m')
+    ? { rows: flat900(240, 100, 0.5), source: 'binance-xau' }
+    : { rows: [], source: 'binance-xau' };
+  await tab4.refresh();
+  const sScan = C4.goldscalpScan();
+  assert(sScan.cands.length === 0, 'premise: flat rows produce zero qualifying candidates');
+  const sHtml = M4.stubs['#gsCards'].innerHTML;
+  assert(sHtml.indexOf('WHY SILENT') >= 0, 'WHY SILENT line rendered when the scan yields zero candidates');
+  assert(/nearest armed trigger: SESSION VWAP BOUNCE \/ REJECTION \(BINANCE XAUUSDT\) at \$100 — \$0 \(0×ATR\(15m\)\) away/
+      .test(sScan.whySilent),
+      'silent lead = nearest armed trigger with real $ + ATR distance — got "' + sScan.whySilent + '"');
+  assert(sHtml.indexOf('FORMING NOW') >= 0, 'watch panel still rendered on the silent scan');
+  assert(M4.stubs['#gsEmpty'].style.display !== 'block', 'empty state stays hidden when watch data exists');
+
+  /* off-session: killzone leads, nearest-armed rides as the tail */
+  Date.now = () => OFF_NOW;                                // 20:00 GMT -> weight 0
+  await tab4.refresh();
+  const kScan = C4.goldscalpScan();
+  assert(kScan.whySilent.indexOf('outside every ICT killzone (OFF-HOURS)') === 0
+      && /· nearest armed trigger:/.test(kScan.whySilent),
+         'killzone lead + nearest-armed tail — got "' + kScan.whySilent + '"');
+
+  /* news window outranks the killzone (precedence news > killzone) */
+  C4.hgNewsState = () => ({ loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(OFF_NOW/1000) + 300 }] });
+  await tab4.refresh();
+  const nScan = C4.goldscalpScan();
+  assert(nScan.whySilent.indexOf('high-impact news window ±30 min — US CPI') === 0
+      && !/outside every ICT killzone/.test(nScan.whySilent),
+         'news window leads even off-session (precedence news > killzone) — got "' + nScan.whySilent + '"');
+  delete C4.hgNewsState;
+
+  /* live convictions: re-confirmations, not new issuance */
+  Date.now = () => FIXED;
+  ls4.setItem('hgGoldscalpConviction', JSON.stringify({ v: 1, live: {
+    'sweep|long|9999': { id: 'sweep|long|9999', dir: 'long', strategy: 'LIQUIDITY SWEEP REVERSAL',
+                         entry: 99, stop: 95, t1: 99999, t2: 99999, venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT',
+                         issuedAt: FIXED, tally: 5 } }, history: [] }));
+  await tab4.refresh();
+  const cScan = C4.goldscalpScan();
+  assert(cScan.whySilent.indexOf('1 live conviction already locked — re-confirmations, not new issuance') === 0
+      && /· nearest armed trigger:/.test(cScan.whySilent),
+         'convictions lead + nearest-armed tail — got "' + cScan.whySilent + '"');
+  ls4.removeItem('hgGoldscalpConviction');
+
+  /* feeds failed: the empty state itself carries the WHY SILENT reason */
+  C4.getGoldCandles = async () => ({ rows: [], source: 'binance-xau' });
+  await tab4.refresh();
+  assert(M4.stubs['#gsEmpty'].style.display === 'block'
+      && /WHY SILENT/.test(M4.stubs['#gsEmpty'].innerHTML)
+      && /feeds failed — no 15m klines/.test(M4.stubs['#gsEmpty'].innerHTML),
+         'feeds failed: empty state carries the WHY SILENT feeds-failed line');
+  assert(M4.stubs['#gsCards'].innerHTML === '', 'feeds failed: no cards rendered without data');
+
+  Date.now = realDateNow4;
+  delete globalThis.localStorage;
+}
+
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

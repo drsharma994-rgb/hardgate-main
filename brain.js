@@ -47,6 +47,36 @@ Candles missing/unfetchable/too thin -> 'trend4h' is named dark for that
 symbol (existing cap logic applies); candles present but disagreeing ->
 'trend4h' silent, never dark.
 
+STRUCTURE-ANCHORED LIMIT ENTRY PLANS (combined mode): a WATCH-or-better row
+whose 4h candles the lazy fetch already landed no longer has to chase the
+mark — cryptoPlanXu tries a patient LIMIT at 4h structure FIRST (engine
+survivor plans still win; smartSetup/hgPlanLevels stay the fallback):
+  ANCHOR (LONG): the HIGHEST level among {last confirmed swing-low zone top
+    (2-bar pivot, zone = pivot low up to the higher neighboring low),
+    EMA20(4h), EMA50(4h), nearest UNTOUCHED bullish 4h FVG/imbalance top}
+    sitting BELOW the last 4h close, 0.25-1.5 x ATR14(4h) away. SHORT mirrors
+    (LOWEST level ABOVE, swing-high zone / EMAs / untouched bearish FVG).
+    Every number is rows4h math — never invented.
+  STOP: 0.5 x ATR14(4h) beyond the anchoring structure (LONG below the zone
+    bottom / line, SHORT above the zone top / line).
+  TP1/TP2: the 1.5R/2.5R convention, SNAPPED to opposing 4h structure where
+    it exists (nearest opposing pivot becomes TP1; the next one beyond it
+    becomes TP2), else the raw multiples. The existing MIN R:R discipline
+    holds: snapped TP1 under 1.5R -> the anchored plan is declined and the
+    gate-engine fallback plan renders with the reason named.
+  IN-ZONE: mark already inside the anchor zone -> 'price in zone — limit at
+    zone edge <price> or market' (entry = the far zone edge).
+  Render: 'LIMIT @ <entry> — pullback to <anchor>' / 'stop <stop> (0.5xATR
+    beyond <anchor>)' / 'TP1 <t1> · TP2 <t2> · R:R <x>' / 'cancel if 4h
+    closes beyond <invalidation>' / 'limit working ~24h or until structure
+    breaks'; the audit ledger gains a PLAN line naming the anchor source.
+  No anchor in band -> the smartSetup/hgPlanLevels plan is kept UNTOUCHED and
+  honestly labeled ('no nearby 4h structure — gate-engine levels'); candles
+  missing/failed/too thin -> the same honest fallback, never a fabricated
+  anchor. The plan contract stays {dir, entry, stop, t1, t2} plus ADDITIVE
+  fields (entryType:'limit'|'zone'|'gate', anchorName, anchorNote, cancelIf)
+  — __hgBrainLast rows and the signal logger keep their exact shape.
+
 F&G EXTREME CONTRARIAN (context): Fear & Greed <= 20 -> a named long-context
 vote for BTC/ETH/SOL only ('F&G 12 extreme fear — contrarian long
 context'); >= 80 -> short-context. ONE context layer only, never a tier by
@@ -238,6 +268,17 @@ var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
    rows: EMA20 vs EMA50 alignment + the most recent swing-structure break.
    Needs enough history for an honest EMA50 seed plus confirmed pivots. */
 var TREND4H_MIN_ROWS = 60;
+
+/* STRUCTURE-ANCHORED LIMIT PLANS — entry/stop/TP geometry, all multiples of
+   ATR14(4h) on the row's own fetched 4h candles. The 1.5R/2.5R convention and
+   the 1.5R minimum on TP1 mirror the terminal's smartSetup discipline. */
+var ANCHOR_MIN_ROWS = 60;    /* same honesty bar as TREND4H / smartSetup */
+var ANCHOR_BAND_MIN = 0.25;  /* anchor must sit >= 0.25 x ATR from the mark... */
+var ANCHOR_BAND_MAX = 1.5;   /* ...and <= 1.5 x ATR away (a reachable pullback) */
+var ANCHOR_STOP_ATR = 0.5;   /* stop = 0.5 x ATR beyond the anchoring structure */
+var PLAN_TP1_R    = 1.5;     /* raw TP multiples when no opposing structure exists */
+var PLAN_TP2_R    = 2.5;
+var PLAN_MIN_RR1  = 1.5;     /* MIN R:R discipline — snapped TP1 below this declines */
 
 /* F&G extreme contrarian thresholds — context vote for the majors only */
 var FNG_FEAR = 20;   /* <= 20 extreme fear -> contrarian LONG context */
@@ -1255,9 +1296,10 @@ function emaLast(rows, n){
   return e;
 }
 
-/* confirmed 2-bar swing pivots; the most recent break wins a tie */
-function structureOf(rows){
-  var hs = [], ls = [];   /* [value, index] of confirmed swing highs/lows */
+/* confirmed 2-bar swing pivots: [value, index] ascending — the single scanner
+   shared by the TREND4H structure read and the anchored-limit planner */
+function pivotScan(rows){
+  var hs = [], ls = [];
   for (var i = 2; i < rows.length - 2; i++){
     var h = +rows[i].h, l = +rows[i].l;
     var h1 = +rows[i-1].h, h2 = +rows[i-2].h, h3 = +rows[i+1].h, h4 = +rows[i+2].h;
@@ -1267,6 +1309,12 @@ function structureOf(rows){
     if (isFinite(l) && isFinite(l1) && isFinite(l2) && isFinite(l3) && isFinite(l4)
         && l < l1 && l < l2 && l < l3 && l < l4) ls.push([l, i]);
   }
+  return { hs: hs, ls: ls };
+}
+
+/* confirmed 2-bar swing pivots; the most recent break wins a tie */
+function structureOf(rows){
+  var p = pivotScan(rows), hs = p.hs, ls = p.ls;
   var hh = hs.length >= 2 && hs[hs.length-1][0] > hs[hs.length-2][0];
   var ll = ls.length >= 2 && ls[ls.length-1][0] < ls[ls.length-2][0];
   if (hh && ll) return (hs[hs.length-1][1] >= ls[ls.length-1][1]) ? 'HH' : 'LL';
@@ -1325,6 +1373,187 @@ function applyTrend4h(rows){
       }
     }
   }catch(e){}
+}
+
+/* =========================================================================
+STRUCTURE-ANCHORED LIMIT ENTRY PLANS — a WATCH-or-better row with fetched 4h
+candles gets a patient LIMIT at 4h structure instead of a market chase.
+Pure rows4h math, never a fabricated level:
+  ATR14(4h)   Wilder-smoothed, SMA-seeded — the terminal's own convention.
+  ANCHORS     LONG: the HIGHEST of {last confirmed swing-low zone top,
+              EMA20(4h), EMA50(4h), nearest untouched bullish FVG top} that
+              sits BELOW the mark 0.25-1.5 x ATR away; SHORT mirrors with
+              swing-high zone / EMAs / nearest untouched bearish FVG bottom.
+              "Untouched" = no later candle traded into the gap at all.
+  STOP        0.5 x ATR beyond the structure (zone far edge / EMA line).
+  TP1/TP2     snapped to opposing 4h pivots where they exist (nearest opposing
+              pivot = TP1, the one beyond = TP2), else the raw 1.5R/2.5R
+              multiples; a snapped TP1 under the 1.5R minimum DECLINES the
+              anchored plan -> the caller's gate-engine fallback, reason named.
+  IN-ZONE     mark already inside the anchor zone -> entry at the far zone
+              edge, honestly labeled 'price in zone'.
+Returns {plan, note} — plan null + an honest note when no anchor qualifies;
+null + '' when the candles themselves are unreadable (silent legacy fallback).
+Never throws.
+========================================================================= */
+/* ATR14 last value — Wilder smoothing, SMA seed (indicators.js convention) */
+function atrLast(rows, p){
+  try{
+    var n = rows.length;
+    if (n < p + 1) return NaN;
+    var a = null;
+    for (var i = 1; i < n; i++){
+      var h = +rows[i].h, l = +rows[i].l, pc = +rows[i-1].c;
+      if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) return NaN;
+      var tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+      if (a === null){
+        if (i >= p){
+          var s = 0;
+          for (var k = i - p + 1; k <= i; k++){
+            var h2 = +rows[k].h, l2 = +rows[k].l, pc2 = +rows[k-1].c;
+            s += Math.max(h2 - l2, Math.abs(h2 - pc2), Math.abs(l2 - pc2));
+          }
+          a = s / p;
+        }
+      }else a = (a * (p - 1) + tr) / p;
+    }
+    return (a !== null && isFinite(a) && a > 0) ? a : NaN;
+  }catch(e){ return NaN; }
+}
+
+/* the four anchor candidates for one direction — zones carry {lo, hi, zone},
+   lines carry {level}; never invented, all straight off the candles */
+function anchorCandidates(rows, dir, piv){
+  var out = [], n = rows.length, long = (dir === 'long');
+  /* 1) last confirmed swing pivot zone — LONG: zone = [pivot low, higher of
+        the two confirmation-bar lows]; SHORT mirrors around the pivot high */
+  var pivs = long ? piv.ls : piv.hs;
+  if (pivs.length){
+    var pv = pivs[pivs.length - 1], pi = pv[1];
+    var n1 = long ? +rows[pi-1].l : +rows[pi-1].h;
+    var n2 = long ? +rows[pi+1].l : +rows[pi+1].h;
+    if (isFinite(n1) && isFinite(n2)){
+      out.push({ name: long ? 'swing-low zone' : 'swing-high zone', zone: true,
+                 lo: long ? pv[0] : Math.min(n1, n2),
+                 hi: long ? Math.max(n1, n2) : pv[0] });
+    }
+  }
+  /* 2/3) the EMA lines */
+  var e20 = emaLast(rows, 20), e50 = emaLast(rows, 50);
+  if (isFinite(e20)) out.push({ name: 'EMA20(4h)', zone: false, level: e20 });
+  if (isFinite(e50)) out.push({ name: 'EMA50(4h)', zone: false, level: e50 });
+  /* 4) nearest UNTOUCHED 4h FVG/imbalance — LONG: bullish gap [h[i-1], l[i+1]]
+        below the mark; SHORT: bearish gap [h[i+1], l[i-1]] above. A later
+        candle trading into the gap (partial fill included) mitigates it. */
+  for (var i = n - 3; i >= 2; i--){
+    var hA = +rows[i-1].h, lA = +rows[i-1].l;
+    var hB = +rows[i+1].h, lB = +rows[i+1].l;
+    if (!isFinite(hA) || !isFinite(lA) || !isFinite(hB) || !isFinite(lB)) continue;
+    var glo = long ? hA : hB, ghi = long ? lB : lA;
+    if (ghi <= glo) continue;   /* no imbalance at this bar */
+    var touched = false;
+    for (var j = i + 2; j < n; j++){
+      var x = long ? +rows[j].l : +rows[j].h;
+      if (isFinite(x) && (long ? x <= ghi : x >= glo)){ touched = true; break; }
+    }
+    if (!touched){
+      out.push({ name: '4h FVG', zone: true, lo: glo, hi: ghi });
+      break;   /* nearest = most recent only */
+    }
+  }
+  return out;
+}
+
+/* pick the anchor: an in-zone mark wins outright (price is AT structure);
+   otherwise the highest in-band level for LONG / lowest for SHORT */
+function pickAnchor(dir, cands, mark, atr){
+  var long = (dir === 'long');
+  var bandLo = ANCHOR_BAND_MIN * atr, bandHi = ANCHOR_BAND_MAX * atr;
+  var inz = null, i, c;
+  for (i = 0; i < cands.length; i++){
+    c = cands[i];
+    if (!c.zone) continue;
+    if (mark >= c.lo && mark <= c.hi){
+      if (!inz || (long ? c.hi > inz.hi : c.lo < inz.lo)) inz = c;
+    }
+  }
+  if (inz) return { anchor: inz, inZone: true };
+  var best = null;
+  for (i = 0; i < cands.length; i++){
+    c = cands[i];
+    var lvl = c.zone ? (long ? c.hi : c.lo) : c.level;
+    if (!isFinite(lvl)) continue;
+    var d = long ? (mark - lvl) : (lvl - mark);
+    if (d < bandLo || d > bandHi) continue;
+    if (!best || (long ? lvl > best.lvl : lvl < best.lvl)) best = { anchor: c, lvl: lvl };
+  }
+  return best ? { anchor: best.anchor, inZone: false } : null;
+}
+
+function anchoredLimitPlan(dir, rows){
+  try{
+    if (!isDir(dir) || !Array.isArray(rows)) return { plan: null, note: '' };
+    if (rows.length < ANCHOR_MIN_ROWS)
+      return { plan: null, note: '4h history too thin for a structure anchor — gate-engine levels' };
+    var long = (dir === 'long');
+    var mark = +rows[rows.length - 1].c;
+    var atr = atrLast(rows, 14);
+    if (!isFinite(mark) || mark <= 0 || !isFinite(atr) || atr <= 0)
+      return { plan: null, note: '' };   /* unreadable candles — silent legacy fallback */
+    var piv = pivotScan(rows);
+    var pick = pickAnchor(dir, anchorCandidates(rows, dir, piv), mark, atr);
+    if (!pick) return { plan: null, note: 'no nearby 4h structure — gate-engine levels' };
+    var a = pick.anchor, entry, structEdge;
+    if (pick.inZone){
+      entry = long ? a.lo : a.hi;        /* limit at the far zone edge */
+      structEdge = entry;
+    }else{
+      entry = a.zone ? (long ? a.hi : a.lo) : a.level;
+      structEdge = a.zone ? (long ? a.lo : a.hi) : a.level;
+    }
+    var stop = long ? structEdge - ANCHOR_STOP_ATR * atr
+                    : structEdge + ANCHOR_STOP_ATR * atr;
+    var risk = long ? entry - stop : stop - entry;
+    if (!(risk > 0)) return { plan: null, note: '' };
+    var cancelIf = structEdge;   /* a 4h close beyond the structure kills the limit */
+    /* TP1 snaps to the nearest opposing pivot; TP2 to the one beyond it */
+    var opp = long ? piv.hs : piv.ls, t1v = NaN, o, v;
+    for (o = 0; o < opp.length; o++){
+      v = opp[o][0];
+      if (long ? (v > entry && (!isFinite(t1v) || v < t1v))
+               : (v < entry && (!isFinite(t1v) || v > t1v))) t1v = v;
+    }
+    var t1, t2;
+    if (isFinite(t1v)){
+      var rr1 = Math.abs(t1v - entry) / risk;
+      if (rr1 < PLAN_MIN_RR1)
+        return { plan: null, note: 'anchored limit R:R ' + FMT(rr1, 1)
+          + ' below the 1.5 minimum — gate-engine levels' };
+      t1 = t1v;
+      var t2v = NaN;
+      for (o = 0; o < opp.length; o++){
+        v = opp[o][0];
+        if (long ? (v > t1 && (!isFinite(t2v) || v < t2v))
+                 : (v < t1 && (!isFinite(t2v) || v > t2v))) t2v = v;
+      }
+      t2 = isFinite(t2v) ? t2v : (long ? entry + PLAN_TP2_R * risk : entry - PLAN_TP2_R * risk);
+    }else{
+      t1 = long ? entry + PLAN_TP1_R * risk : entry - PLAN_TP1_R * risk;
+      t2 = long ? entry + PLAN_TP2_R * risk : entry - PLAN_TP2_R * risk;
+    }
+    var anchorNote = pick.inZone
+      ? 'mark inside ' + a.name + ' ' + PX(a.lo) + '–' + PX(a.hi) + ' — limit at the zone edge'
+      : a.name + ' ' + PX(entry)
+        + (a.zone ? ' (zone ' + PX(a.lo) + '–' + PX(a.hi) + ')' : '')
+        + ' · ' + FMT((long ? mark - entry : entry - mark) / atr, 2) + '×ATR '
+        + (long ? 'below' : 'above') + ' mark';
+    var plan = normalizePlan({
+      dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, type: 'ANCHOR4H',
+      entryType: pick.inZone ? 'zone' : 'limit',
+      anchorName: a.name, anchorNote: anchorNote, cancelIf: cancelIf, note: ''
+    }, 'structure-anchored limit (4h)');
+    return { plan: plan, note: '' };
+  }catch(e){ return { plan: null, note: '' }; }
 }
 
 /* shared bucketing — used at judge time and again after TREND4H promotions */
@@ -1454,7 +1683,14 @@ function normalizePlan(p, src, note){
            riskPct: isFinite(p.riskPct) ? p.riskPct : Math.abs(e - s) / e * 100,
            confirmed: p.confirmed === true, type: p.type || null,
            note: ((p.note || '') + (note ? (p.note ? ' · ' : '') + note : '')) || '',
-           src: src };
+           src: src,
+           /* ADDITIVE structure-anchor fields — the {dir, entry, stop, t1, t2}
+              contract is untouched; 'gate' marks every classic gate-engine /
+              smartSetup / hgPlanLevels plan */
+           entryType: (p.entryType === 'limit' || p.entryType === 'zone') ? p.entryType : 'gate',
+           anchorName: (typeof p.anchorName === 'string') ? p.anchorName : '',
+           anchorNote: (typeof p.anchorNote === 'string') ? p.anchorNote : '',
+           cancelIf: isFinite(p.cancelIf) ? +p.cancelIf : null };
 }
 
 function enginePlanFor(row, snap){
@@ -1521,15 +1757,25 @@ async function cryptoPlan(row, snap){
   return { plan: null, rows: rows };
 }
 
-/* combined-mode crypto plan: same precedence as cryptoPlan (engine survivor
-   plan -> smartSetup -> hgPlanLevels) but consumes the lazily pre-fetched 4h
-   rows instead of fetching ad hoc. smartSetup gets [] for 1h rows — the
-   fetch budget is 4h-only, an input it already tolerates. */
+/* combined-mode crypto plan: engine survivor plan first, then the STRUCTURE-
+   ANCHORED limit over the lazily pre-fetched 4h rows, then the smartSetup /
+   hgPlanLevels fallback — kept untouched and honestly labeled when no anchor
+   qualifies. smartSetup gets [] for 1h rows — the fetch budget is 4h-only,
+   an input it already tolerates. */
 async function cryptoPlanXu(row, snap){
   var ep = enginePlanFor(row, snap);
   if (ep) return { plan: ep, rows: null };
   var rows = (row.rows4h && row.rows4h.length) ? row.rows4h : null;
   if (!rows) return { plan: null, rows: null };
+  /* patient LIMIT at 4h structure — the row's own fetched candles, never a
+     fabricated level; declines (band empty / R:R fails) fall through with
+     the reason named on the fallback plan */
+  var fbNote = '';
+  try{
+    var ap = anchoredLimitPlan(row.dec.dir, rows);
+    if (ap && ap.plan) return { plan: ap.plan, rows: rows };
+    fbNote = (ap && ap.note) ? ap.note : '';
+  }catch(e){ fbNote = ''; }
   if (typeof G.smartSetup === 'function' && rows.length >= 60){
     try{
       var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
@@ -1539,13 +1785,13 @@ async function cryptoPlanXu(row, snap){
                   shortEv: row.dec.dir === 'short' ? agreeing.map(function(v){ return v.text; }) : contra.map(function(v){ return v.text; }),
                   score: row.dec.agree, total: row.dec.agree + row.dec.disagree, regime: [] };
       var sp = G.smartSetup(cls, rows, []);
-      var np = normalizePlan(sp, sp && sp.type ? 'smartSetup ' + sp.type : 'smartSetup');
+      var np = normalizePlan(sp, sp && sp.type ? 'smartSetup ' + sp.type : 'smartSetup', fbNote);
       if (np) return { plan: np, rows: rows };
     }catch(e){ /* fall through to hgPlanLevels */ }
   }
   if (typeof G.hgPlanLevels === 'function'){
     try{
-      var hp = normalizePlan(G.hgPlanLevels(row.dec.dir, rows), 'hgPlanLevels');
+      var hp = normalizePlan(G.hgPlanLevels(row.dec.dir, rows), 'hgPlanLevels', fbNote);
       if (hp) return { plan: hp, rows: rows };
     }catch(e){}
   }
@@ -1619,6 +1865,21 @@ function votePip(v, decidedDir){
 
 function planLine(plan){
   if (!plan) return 'levels unavailable — size down';
+  /* structure-anchored limit: the patient-entry render — anchor, invalidation
+     and working-order validity named, never a market chase */
+  if (plan.entryType === 'limit' || plan.entryType === 'zone'){
+    var an = esc(plan.anchorName || '4h structure');
+    return (plan.entryType === 'zone'
+        ? 'price in zone — limit at zone edge <b>' + PX(plan.entry) + '</b> or market'
+        : 'LIMIT @ <b>' + PX(plan.entry) + '</b> — pullback to ' + an)
+      + ' · stop <b>' + PX(plan.stop) + '</b> (0.5xATR beyond ' + an + ')'
+      + ' · TP1 <b>' + PX(plan.t1) + '</b>'
+      + (plan.t2 !== null ? ' · TP2 <b>' + PX(plan.t2) + '</b>' : '')
+      + ' · R:R ' + FMT(plan.rr1, 1)
+      + (isFinite(plan.cancelIf) ? ' · cancel if 4h closes beyond <b>' + PX(plan.cancelIf) + '</b>' : '')
+      + ' · limit working ~24h or until structure breaks'
+      + (plan.src ? ' — ' + esc(plan.src) : '');
+  }
   var risk = Math.abs(plan.entry - plan.stop);
   return 'ENTRY <b>' + PX(plan.entry) + '</b> · STOP <b>' + PX(plan.stop) + '</b>'
     + ' · T1 <b>' + PX(plan.t1) + '</b> (' + FMT(plan.rr1, 1) + 'R)'
@@ -1681,6 +1942,24 @@ function rowAuditHTML(row){
       out.push(auditLineHTML(String(vv.layer).toUpperCase(),
         vv.caution === true ? 'CAUTION' : String(vv.vote || 'neutral').toUpperCase(),
         vv.text || 'no evidence recorded'));
+    }
+    /* PLAN line — names the anchor source for structure-anchored limits, the
+       gate-engine provenance (incl. any honest fallback label) otherwise.
+       Only when the row actually carries a plan; plan-less rows stay as-is. */
+    var pl = row.plan;
+    if (pl && isFinite(pl.entry) && isFinite(pl.stop)){
+      if (pl.entryType === 'limit' || pl.entryType === 'zone'){
+        out.push(auditLineHTML('PLAN', String(pl.entryType).toUpperCase(),
+          (pl.entryType === 'zone' ? 'price in zone — limit at zone edge ' : 'LIMIT @ ')
+          + PX(pl.entry)
+          + (pl.anchorNote ? ' — ' + pl.anchorNote : '')
+          + ' · stop ' + PX(pl.stop)
+          + (isFinite(pl.cancelIf) ? ' · cancel if 4h closes beyond ' + PX(pl.cancelIf) : '')));
+      }else{
+        out.push(auditLineHTML('PLAN', 'GATE',
+          (pl.src ? String(pl.src) + ' levels' : 'gate-engine levels')
+          + (pl.note ? ' — ' + pl.note : '')));
+      }
     }
     return '<div class="auditRows">' + out.join('') + '</div>';
   }catch(e){
@@ -2260,13 +2539,16 @@ async function runQuick(el){
       bk = bucketRows(rows);
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
-      for (var sx = 0; sx < setups.length; sx++){
+      /* same planning population as the full scan — WATCH radar rows keep
+         their working limits across a quick rescan, never silently dropped */
+      var qPlanSet = setups.concat(watches);
+      for (var sx = 0; sx < qPlanSet.length; sx++){
         if (Date.now() - t0 > TUN.scanMs){ extraNote += ' · planning timed out — some levels unavailable'; break; }
         try{
-          var gotx = (setups[sx].lane === 'gold') ? await goldPlan(setups[sx], snap)
-                                                  : await cryptoPlanXu(setups[sx], snap);
-          setups[sx].plan = gotx.plan; setups[sx].rows = gotx.rows;
-        }catch(e){ setups[sx].plan = null; setups[sx].rows = null; }
+          var gotx = (qPlanSet[sx].lane === 'gold') ? await goldPlan(qPlanSet[sx], snap)
+                                                    : await cryptoPlanXu(qPlanSet[sx], snap);
+          qPlanSet[sx].plan = gotx.plan; qPlanSet[sx].rows = gotx.rows;
+        }catch(e){ qPlanSet[sx].plan = null; qPlanSet[sx].rows = null; }
       }
     }else{
       /* legacy quick: the gate engine already holds the plans — ZERO refetch */
@@ -2562,6 +2844,9 @@ function mount(el){
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
 G.brainUniverse = brainUniverse;
+/* structure-anchored limit seam: the pure planner — (dir, rows4h) ->
+   {plan, note}; rows4h math only, never throws */
+G.brainAnchorPlan = anchoredLimitPlan;
 /* click-to-audit seams: the ledger builder, the toggle, and a sym-keyed
    lookup over the last synthesis (console/debug friendly, read-only) */
 G.rowAuditHTML = rowAuditHTML;

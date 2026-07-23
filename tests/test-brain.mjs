@@ -19,6 +19,12 @@
          turnover pass-through, overextension WATCH demotion ±15% both sides,
          PRIME/HIGH caution chips, funding crowding caution non-demotion,
          tape-missing pass-through, suppressed tally on the stat line)
+     AF) F&G contrarian + TREND4H promotion/dark honesty   AG) funding votes
+     AH) click-to-audit ledger    AI) bounded warm-wait
+     AJ) structure-anchored limit plans — pure planner (each anchor type wins,
+         band rejection, R:R decline, in-zone vs limit, stop/TP math)
+     AK) anchored limits end-to-end (LIMIT render, snapshot {entry,stop,t1,t2}
+         shape, audit PLAN line, quick-rescan persistence)
    No live network. Run: node tests/test-brain.mjs */
 
 import fs from 'node:fs';
@@ -2135,6 +2141,324 @@ console.log('== bounded warm-wait: dark->voting promotion, honest dark after the
   await runAndWait(TI.stubs);
   ok(regimeRuns === 1 && TI.stubs['#brainStat'].textContent.indexOf('done ·') === 0,
      'AI: an immediate re-run SKIPS the warm-wait (layers warm-checked moments ago) and still completes');
+}
+
+/* ================= AJ) STRUCTURE-ANCHORED LIMIT PLANS — pure planner =================
+   Each anchor type wins in its own fixture; band rejection, R:R decline,
+   in-zone vs limit labels, stop/TP math and the never-throw contract — all
+   numbers straight off the 4h candles (window.brainAnchorPlan seam). */
+console.log('== structure-anchored limit plans: anchor selection, band, stop/TP math, in-zone ==');
+{
+  const ANCHOR = W.brainAnchorPlan;
+  ok(typeof ANCHOR === 'function', 'AJ: window.brainAnchorPlan exposed (pure planner seam)');
+  const near = function(a, b){ return Math.abs(a - b) < 1e-9; };
+  const bar = function(c, hh, ll){ return { t: 0, o: c, h: hh !== undefined ? hh : c + 0.5, l: ll !== undefined ? ll : c - 0.5, c: c, v: 1000 }; };
+  /* flat 100 range-1 bars with one shallow confirmed dip (pivot low 98.8) */
+  const swingLongRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[113] = bar(99.6, 99.9, 99.3);
+    rows[114] = bar(99.3, 99.7, 99.0);
+    rows[115] = bar(99.2, 99.5, 98.8);   /* pivot low 98.8 */
+    rows[116] = bar(99.5, 99.8, 99.1);
+    rows[117] = bar(99.8, 100.1, 99.4);
+    rows[118] = bar(100, 100.3, 99.7);
+    rows[119] = bar(100, 100.3, 99.7);
+    return rows;
+  };
+
+  /* ---- AJ1: the swing-low zone top wins (EMAs hug the mark, no FVG) ---- */
+  let ap = ANCHOR('long', swingLongRows());
+  ok(ap.plan && ap.note === '', 'AJ1: an anchored plan lands on the swing-low fixture');
+  ok(ap.plan.entryType === 'limit' && ap.plan.anchorName === 'swing-low zone'
+     && ap.plan.type === 'ANCHOR4H' && ap.plan.src === 'structure-anchored limit (4h)',
+     'AJ1: entryType limit, anchor named, ANCHOR4H type, structure-anchored src');
+  ok(ap.plan.entry === 99.1 && ap.plan.cancelIf === 98.8,
+     'AJ1: entry = the swing-low zone TOP (higher confirmation low 99.1); invalidation = the pivot low 98.8');
+  ok(near(ap.plan.stop, 98.8 - 0.5 * 0.8648027021281775) && near(ap.plan.stop, 98.36759864893591),
+     'AJ1: stop = 0.5 x ATR14(4h) beyond the zone bottom — 98.3676');
+  ok(near(ap.plan.t1, 100.19860202659612) && near(ap.plan.t2, 100.9310033776602)
+     && near(ap.plan.rr1, 1.5) && near(ap.plan.rr2, 2.5),
+     'AJ1: no opposing 4h structure -> raw 1.5R/2.5R targets');
+  ok(ap.plan.anchorNote === 'swing-low zone 99.1 (zone 98.8–99.1) · 1.04×ATR below mark',
+     'AJ1: anchor note names the zone + the ATR multiple — got "' + ap.plan.anchorNote + '"');
+
+  /* ---- AJ2: EMA20(4h) wins on a gentle monotonic ramp (no pivots, no FVG) ---- */
+  const ramp = function(step, range){
+    const rows = [];
+    for (let i = 0; i < 120; i++){
+      const c = 100 + i * step;
+      rows.push({ t: 0, o: c - 0.02, h: c + range / 2, l: c - range / 2, c: c, v: 1000 });
+    }
+    return rows;
+  };
+  ap = ANCHOR('long', ramp(0.05, 0.4));
+  ok(ap.plan && ap.plan.anchorName === 'EMA20(4h)' && near(ap.plan.entry, 105.475)
+     && near(ap.plan.stop, 105.275) && near(ap.plan.t1, 105.775) && near(ap.plan.t2, 105.975),
+     'AJ2: EMA20(4h) wins the ramp — entry at the line, stop 0.5xATR beyond, raw 1.5R/2.5R');
+  ok(ap.plan.anchorNote === 'EMA20(4h) 105.48 · 1.19×ATR below mark',
+     'AJ2: the line anchor note carries the ATR multiple — got "' + ap.plan.anchorNote + '"');
+
+  /* ---- AJ3: EMA50(4h) wins when EMA20 hugs the mark inside 0.25xATR ---- */
+  const decay = function(){
+    const rows = []; let c = 100;
+    for (let i = 0; i < 120; i++){
+      c += 0.09 * Math.pow(0.97, i);
+      rows.push({ t: 0, o: c - 0.01, h: c + 0.2, l: c - 0.2, c: c, v: 1000 });
+    }
+    return rows;
+  };
+  ap = ANCHOR('long', decay());
+  ok(ap.plan && ap.plan.anchorName === 'EMA50(4h)' && near(ap.plan.entry, 102.75172367977194)
+     && near(ap.plan.stop, 102.55172367977194),
+     'AJ3: EMA20 too close to the mark (< 0.25xATR) -> EMA50(4h) wins the band');
+  ok(ap.plan.anchorNote === 'EMA50(4h) 102.75 · 0.43×ATR below mark',
+     'AJ3: the EMA50 note is honest about the distance — got "' + ap.plan.anchorNote + '"');
+
+  /* ---- AJ4: the untouched 4h FVG wins on the shared trend fixture ---- */
+  ap = ANCHOR('long', trendRows(true));
+  ok(ap.plan && ap.plan.anchorName === '4h FVG' && near(ap.plan.entry, 147.64569307942614)
+     && near(ap.plan.stop, 146.84603755122723) && near(ap.plan.cancelIf, 147.48882586775437)
+     && near(ap.plan.t1, 148.8451763717245) && near(ap.plan.t2, 149.64483189992342),
+     'AJ4: nearest untouched bullish FVG — entry at the gap top, stop 0.5xATR beyond the gap bottom');
+  ok(ap.plan.anchorNote === '4h FVG 147.65 (zone 147.49–147.65) · 1.04×ATR below mark',
+     'AJ4: the FVG note names the zone — got "' + ap.plan.anchorNote + '"');
+
+  /* ---- AJ5: SHORT mirrors — swing-high zone + a SNAPPED TP1 (downtrend) ---- */
+  const swingShortRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[113] = bar(100.4, 100.7, 100.1);
+    rows[114] = bar(100.7, 101.0, 100.3);
+    rows[115] = bar(100.8, 101.2, 100.5);  /* pivot high 101.2 */
+    rows[116] = bar(100.5, 100.9, 100.2);
+    rows[117] = bar(100.2, 100.6, 99.9);
+    rows[118] = bar(100, 100.3, 99.7);
+    rows[119] = bar(100, 100.3, 99.7);
+    return rows;
+  };
+  ap = ANCHOR('short', swingShortRows());
+  ok(ap.plan && ap.plan.anchorName === 'swing-high zone' && ap.plan.entry === 100.9
+     && ap.plan.cancelIf === 101.2 && near(ap.plan.stop, 101.63240135106409),
+     'AJ5: SHORT mirrors — entry at the swing-high zone bottom, stop 0.5xATR above the pivot high');
+  ap = ANCHOR('short', trendRows(false));
+  ok(ap.plan && ap.plan.anchorName === 'swing-high zone' && near(ap.plan.entry, 55.43525148753334)
+     && near(ap.plan.t1, 54.034692799964496) && near(ap.plan.rr1, 2.074698491592134) && !near(ap.plan.rr1, 1.5),
+     'AJ5: TP1 SNAPPED to the nearest opposing pivot (rr1 2.07, not the raw 1.5R)');
+
+  /* ---- AJ6: TP1/TP2 both snap to opposing structure when it exists ---- */
+  const tpSnapRows = function(){
+    const rows = swingLongRows();
+    rows[100] = bar(101.5, 102.5, 101.0);   /* confirmed pivot high 102.5 */
+    rows[99]  = bar(101.2, 101.8, 100.8);
+    rows[101] = bar(101.2, 101.8, 100.8);
+    rows[90]  = bar(104.0, 105.0, 103.5);   /* confirmed pivot high 105 */
+    rows[89]  = bar(103.5, 104.2, 103.0);
+    rows[91]  = bar(103.5, 104.2, 103.0);
+    return rows;
+  };
+  ap = ANCHOR('long', tpSnapRows());
+  ok(ap.plan && ap.plan.t1 === 102.5 && ap.plan.t2 === 105,
+     'AJ6: TP1 snaps to the nearest opposing pivot (102.5), TP2 to the one beyond it (105)');
+
+  /* ---- AJ7: band rejection -> honest gate-engine fallback, no anchor ---- */
+  ap = ANCHOR('long', ramp(0.08, 0.4));
+  ok(ap.plan === null && ap.note === 'no nearby 4h structure — gate-engine levels',
+     'AJ7: every anchor beyond 1.5xATR -> declined, honestly labeled — got "' + ap.note + '"');
+  ap = ANCHOR('long', trendRows(false));
+  ok(ap.plan === null && ap.note === 'no nearby 4h structure — gate-engine levels',
+     'AJ7: counter-trend candles (LONG row, downtrend) -> no below-mark anchor in band, never fabricated');
+
+  /* ---- AJ8: MIN R:R discipline — opposing structure inside 1.5R declines ---- */
+  const rrFailRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[110] = bar(99.6, 99.9, 99.3);
+    rows[111] = bar(99.3, 99.6, 99.0);
+    rows[112] = bar(99.2, 99.5, 98.9);
+    rows[113] = bar(99.1, 99.4, 98.8);   /* pivot low 98.8 */
+    rows[114] = bar(99.5, 99.8, 99.1);
+    rows[115] = bar(99.8, 100.0, 99.5);
+    rows[116] = bar(99.9, 100.0, 99.7);
+    rows[117] = bar(99.95, 100.05, 99.75); /* confirmed pivot high 100.05 — too close */
+    rows[118] = bar(99.9, 99.95, 99.7);
+    rows[119] = bar(99.9, 100.0, 99.8);
+    return rows;
+  };
+  ap = ANCHOR('long', rrFailRows());
+  ok(ap.plan === null && ap.note === 'anchored limit R:R 1.2 below the 1.5 minimum — gate-engine levels',
+     'AJ8: snapped TP1 under the 1.5R minimum -> declined with the R:R named — got "' + ap.note + '"');
+
+  /* ---- AJ9: mark INSIDE the anchor zone -> 'zone' entryType at the far edge ---- */
+  const inZoneRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[114] = bar(99.5, 99.8, 99.2);
+    rows[115] = bar(99.2, 99.5, 98.9);
+    rows[116] = bar(99.0, 99.3, 98.9);
+    rows[117] = bar(98.9, 99.2, 98.6);   /* pivot low 98.6 */
+    rows[118] = bar(99.1, 99.4, 98.9);
+    rows[119] = bar(98.85, 99.2, 98.7); /* mark 98.85 inside [98.6, 98.9] */
+    return rows;
+  };
+  ap = ANCHOR('long', inZoneRows());
+  ok(ap.plan && ap.plan.entryType === 'zone' && ap.plan.entry === 98.6 && ap.plan.cancelIf === 98.6
+     && near(ap.plan.stop, 98.17946557397427),
+     'AJ9: price in zone — limit at the far zone edge (98.6), stop 0.5xATR beyond');
+  ok(ap.plan.anchorNote === 'mark inside swing-low zone 98.6–98.9 — limit at the zone edge',
+     'AJ9: the in-zone note says exactly that — got "' + ap.plan.anchorNote + '"');
+
+  /* ---- AJ10: thin history + the never-throw contract ---- */
+  ap = ANCHOR('long', swingLongRows().slice(80));
+  ok(ap.plan === null && ap.note === '4h history too thin for a structure anchor — gate-engine levels',
+     'AJ10: 40 candles (< 60) -> honestly too thin, labeled fallback');
+  let threw = null;
+  try{
+    const junk = [ANCHOR('long', null), ANCHOR('long', []), ANCHOR('short', 'nope'),
+                  ANCHOR('sideways', swingLongRows()), ANCHOR(null, swingLongRows()),
+                  ANCHOR('long', [{ h: 'x', l: NaN, c: -5 }])];
+    if (junk.some(function(r){ return !r || r.plan !== null; })) threw = new Error('junk input produced a plan');
+  }catch(e){ threw = e; }
+  ok(!threw, 'AJ10: null/empty/garbage/non-dir inputs -> {plan:null}, never throws, never fabricates'
+     + (threw ? ' — ' + threw.message : ''));
+
+  /* ---- AJ11: additive contract — the plan keeps {dir,entry,stop,t1,t2} plus
+        entryType/anchorName/anchorNote/cancelIf only ---- */
+  ap = ANCHOR('long', swingLongRows());
+  const pKeys = Object.keys(ap.plan).sort().join(',');
+  ok(pKeys === 'anchorName,anchorNote,cancelIf,confirmed,dir,entry,entryType,note,riskPct,rr1,rr2,src,stop,t1,t2,type',
+     'AJ11: normalized plan shape — classic fields + additive anchor fields only — got ' + pKeys);
+  ok(typeof ap.plan.dir === 'string' && isFinite(ap.plan.entry) && isFinite(ap.plan.stop)
+     && isFinite(ap.plan.t1) && isFinite(ap.plan.t2),
+     'AJ11: dir/entry/stop/t1/t2 intact for downstream readers (toTrade, charts, scorecard, signallog)');
+}
+
+/* ================= AK) ANCHORED LIMITS end-to-end: render, snapshot, audit, quick =================
+   One combined scan: TRENDY (uptrend) promoted HIGH with a 4h-FVG limit on the
+   card; W1 (swing-low fixture) keeps its WATCH radar verdict with a swing-zone
+   limit on the row; INZONE closes inside its zone; FLAT + ETH/SOL flat candles
+   fall back to the hgPlanLevels stub with the honest label. */
+console.log('== anchored limits at run level: LIMIT render, snapshot shape, audit PLAN line, quick persistence ==');
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'TRENDYUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'W1USDT',     dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'INZONEUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'FLATUSDT',   dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  const bar = function(c, hh, ll){ return { t: 0, o: c, h: hh !== undefined ? hh : c + 0.5, l: ll !== undefined ? ll : c - 0.5, c: c, v: 1000 }; };
+  const swingLongRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[113] = bar(99.6, 99.9, 99.3);
+    rows[114] = bar(99.3, 99.7, 99.0);
+    rows[115] = bar(99.2, 99.5, 98.8);
+    rows[116] = bar(99.5, 99.8, 99.1);
+    rows[117] = bar(99.8, 100.1, 99.4);
+    rows[118] = bar(100, 100.3, 99.7);
+    rows[119] = bar(100, 100.3, 99.7);
+    return rows;
+  };
+  const inZoneRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[114] = bar(99.5, 99.8, 99.2);
+    rows[115] = bar(99.2, 99.5, 98.9);
+    rows[116] = bar(99.0, 99.3, 98.9);
+    rows[117] = bar(98.9, 99.2, 98.6);
+    rows[118] = bar(99.1, 99.4, 98.9);
+    rows[119] = bar(98.85, 99.2, 98.7);
+    return rows;
+  };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT',    base: 'BTC',    exchange: 'delta', turnoverUsd: 9e9,  mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT',    base: 'ETH',    exchange: 'delta', turnoverUsd: 5e9,  mark: 50,  fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT',    base: 'SOL',    exchange: 'delta', turnoverUsd: 2e9,  mark: 20,  fundingPct: 0, alsoOn: null },
+    { sym: 'TRENDYUSDT', base: 'TRENDY', exchange: 'delta', turnoverUsd: 60e6, mark: 1,   fundingPct: 0, alsoOn: null },
+    { sym: 'W1USDT',     base: 'W1',     exchange: 'delta', turnoverUsd: 55e6, mark: 1,   fundingPct: 0, alsoOn: null },
+    { sym: 'INZONEUSDT', base: 'INZONE', exchange: 'delta', turnoverUsd: 52e6, mark: 1,   fundingPct: 0, alsoOn: null },
+    { sym: 'FLATUSDT',   base: 'FLAT',   exchange: 'delta', turnoverUsd: 50e6, mark: 1,   fundingPct: 0, alsoOn: null } ]; };
+  WG.xuState = function(){ return { count: 7, delta: 7, cdcx: 0, at: Date.now(), note: null }; };
+  WG.xuCandles = function(item){
+    return Promise.resolve(item.sym === 'TRENDYUSDT' ? trendRows(true)
+                         : item.sym === 'W1USDT'     ? swingLongRows()
+                         : item.sym === 'INZONEUSDT' ? inZoneRows()
+                         : fakeRows(120));
+  };
+  let planCalls = 0;
+  WG.hgPlanLevels = function(dir){ planCalls++; return { dir: dir, entry: 10, stop: 9, t1: 12, t2: 13 }; };
+  WG.toTrade = function(){};
+  const TK = freshPane();
+  WG.HG_tabs[0].mount(TK.pane);
+  await runAndWait(TK.stubs);
+  const kStat = TK.stubs['#brainStat'].textContent;
+  const kCards = TK.stubs['#brainCards'].innerHTML;
+  const kWatch = TK.stubs['#brainWatch'].innerHTML;
+  ok(kStat.indexOf('done · 0 PRIME · 1 HIGH · 5 watch · 2 aside') === 0,
+     'AK: fixture scan — TRENDY HIGH via TREND4H; W1/INZONE/FLAT + ETH/SOL WATCH; BTC + gold aside — got "' + kStat + '"');
+
+  /* ---- the promoted card carries the patient LIMIT, not a market chase ---- */
+  ok(kCards.indexOf('HIGH · 4 LAYERS') >= 0
+     && kCards.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
+     && kCards.indexOf('stop <b>146.85</b> (0.5xATR beyond 4h FVG)') >= 0
+     && kCards.indexOf('TP1 <b>148.85</b> · TP2 <b>149.64</b> · R:R 1.5') >= 0
+     && kCards.indexOf('cancel if 4h closes beyond <b>147.49</b>') >= 0
+     && kCards.indexOf('limit working ~24h or until structure breaks — structure-anchored limit (4h)') >= 0,
+     'AK: the TRENDY card renders the full anchored limit block — anchor, stop, TPs, R:R, invalidation, validity');
+  ok(kCards.indexOf('ENTRY <b>') === -1,
+     'AK: no market-entry render on the anchored card — the LIMIT block replaces it');
+  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.84603755122723,148.8451763717245)') >= 0,
+     'AK: SEND TO TRADE PLAN carries the anchored entry/stop/t1 verbatim');
+
+  /* ---- WATCH rows: swing-zone limit, in-zone label, honest fallback ---- */
+  ok(lrowSeg(kWatch, 'W1').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0
+     && lrowSeg(kWatch, 'W1').indexOf('cancel if 4h closes beyond <b>98.8</b>') >= 0,
+     'AK: the W1 radar WATCH row offers the swing-low zone limit (waiting, not chasing)');
+  ok(lrowSeg(kWatch, 'INZONE').indexOf('price in zone — limit at zone edge <b>98.6</b> or market') >= 0,
+     'AK: mark inside the zone -> the in-zone label with the edge price');
+  ok(lrowSeg(kWatch, 'FLAT').indexOf('ENTRY <b>10</b>') >= 0
+     && lrowSeg(kWatch, 'FLAT').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+     'AK: flat candles -> the hgPlanLevels plan UNTOUCHED + the honest no-structure label');
+  ok(planCalls === 3, 'AK: hgPlanLevels consulted ONLY for the anchor-less rows (FLAT + ETH + SOL), never for anchored rows — got ' + planCalls);
+
+  /* ---- snapshot + audit contract ---- */
+  const kSnap = WG.__hgBrainLast();
+  const kTrendy = kSnap.rows.filter(function(x){ return x.sym === 'TRENDYUSDT'; })[0];
+  ok(kTrendy && kTrendy.plan && Object.keys(kTrendy.plan).sort().join(',') === 'entry,stop,t1,t2'
+     && kTrendy.plan.entry === 147.64569307942614 && kTrendy.plan.stop === 146.84603755122723
+     && kTrendy.plan.t1 === 148.8451763717245 && kTrendy.plan.t2 === 149.64483189992342,
+     'AK: __hgBrainLast keeps the EXACT {entry,stop,t1,t2} shape for the signallog — additive fields stay off the wire');
+  ok(kTrendy.plan.entry < 148.9834776804744,
+     'AK: the limit entry sits BELOW the last 4h close (patient pullback, never a chase)');
+  const kAudit = WG.__hgBrainAudit('TRENDYUSDT');
+  ok(kAudit && kAudit.indexOf('>PLAN<') >= 0 && kAudit.indexOf('>LIMIT<') >= 0
+     && kAudit.indexOf('LIMIT @ 147.65 — 4h FVG 147.65 (zone 147.49–147.65) · 1.04×ATR below mark · stop 146.85 · cancel if 4h closes beyond 147.49') >= 0,
+     'AK: the audit ledger gains a PLAN line naming the anchor source — got ' + (kAudit ? 'line present' : 'null'));
+  const fAudit = WG.__hgBrainAudit('FLATUSDT');
+  ok(fAudit && fAudit.indexOf('>PLAN<') >= 0 && fAudit.indexOf('>GATE<') >= 0
+     && fAudit.indexOf('hgPlanLevels levels — no nearby 4h structure — gate-engine levels') >= 0,
+     'AK: fallback rows audit the gate-engine provenance + the no-structure reason');
+  const btcAudit = WG.__hgBrainAudit('BTCUSDT');
+  ok(btcAudit && btcAudit.indexOf('>PLAN<') === -1,
+     'AK: plan-less rows gain NO plan line — the ledger stays exactly as before');
+
+  /* ---- quick rescan: same plans re-derived, WATCH rows keep their working limits ---- */
+  TK.stubs['#brainQuick']._handler();
+  await (async function(){
+    const t0 = Date.now();
+    while (TK.stubs['#brainRun'].disabled && Date.now() - t0 < 8000)
+      await new Promise(function(res){ setTimeout(res, 25); });
+  })();
+  const kQuick = TK.stubs['#brainStat'].textContent;
+  ok(/^quick rescan: 6 checked · 2 unchanged/.test(kQuick) && kQuick.indexOf('1 HIGH · 5 watch · 2 aside') >= 0,
+     'AK: quick rescan rechecks the 6 WATCH-or-better rows, same buckets — got "' + kQuick + '"');
+  ok(TK.stubs['#brainCards'].innerHTML.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
+     && lrowSeg(TK.stubs['#brainWatch'].innerHTML, 'W1').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0,
+     'AK: the quick pass re-derives the SAME anchored limits deterministically — WATCH rows keep their working limits');
 }
 
 console.log('\n' + passed + ' assertions passed');

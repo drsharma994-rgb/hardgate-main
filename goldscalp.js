@@ -124,6 +124,35 @@ function gfn(name){
 }
 function signed(n, d){ return (n > 0 ? '+' : '') + fmtF(n, d); }
 
+/* local ATR copy (identical math to goldind.js's own fallback — goldind.js
+   does NOT export an ATR; used here only to express watch-trigger distances
+   in ATR units, the same honest degradation goldswing.js uses) */
+function __atrLocal(rows, p){
+  p = p || 14;
+  var out = new Array(rows.length).fill(NaN), a = null;
+  for (var i = 1; i < rows.length; i++){
+    var r = rows[i], q = rows[i-1];
+    if (!r || !q) continue;
+    var tr = Math.max(r.h - r.l, Math.abs(r.h - q.c), Math.abs(r.l - q.c));
+    if (!isFinite(tr)) continue;
+    if (a === null){
+      if (i >= p){
+        var s = 0, ok = true;
+        for (var k = i-p+1; k <= i; k++){
+          var rk = rows[k], rj = rows[k-1];
+          if (!rk || !rj){ ok = false; break; }
+          var tk = Math.max(rk.h - rk.l, Math.abs(rk.h - rj.c), Math.abs(rk.l - rj.c));
+          if (!isFinite(tk)){ ok = false; break; }
+          s += tk;
+        }
+        if (ok){ a = s/p; out[i] = a; }
+      }
+    } else { a = (a*(p-1) + tr)/p; out[i] = a; }
+  }
+  return out;
+}
+var _atr = (typeof atr === 'function') ? atr : __atrLocal;
+
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
                   'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F' };
 function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
@@ -154,7 +183,7 @@ function publishState(cands){
 
 /* ---------------- diagnostic surface (full last scan) ---------------- */
 var __scanSnap = null;
-function publishScan(ranked, best, history, at, rejected){
+function publishScan(ranked, best, history, at, rejected, armed, whySilent){
   try{
     var cands = [];
     for (var i = 0; i < ranked.length; i++){
@@ -198,7 +227,19 @@ function publishScan(ranked, best, history, at, rejected){
                  dir: r0.dir || null, venue: r0.venue || null, sym: r0.sym || null,
                  reason: r0.reason || null });
     }
-    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej, at: at };
+    /* additive: FORMING-NOW watch items + the WHY SILENT line (zero-candidate
+       scans). Existing fields above are untouched. */
+    var arm = [];
+    for (var wq = 0; wq < (armed || []).length; wq++){
+      var w0 = armed[wq];
+      if (!w0) continue;
+      arm.push({ strategy: w0.strategy || null, venue: w0.venue || null,
+                 state: (w0.state === 'armed') ? 'armed' : 'idle',
+                 level: (typeof w0.level === 'number' && isFinite(w0.level)) ? w0.level : null,
+                 condition: w0.condition || '', reason: w0.reason || null });
+    }
+    __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej,
+                   armed: arm, whySilent: (typeof whySilent === 'string' && whySilent) ? whySilent : null, at: at };
   }catch(e){ /* snapshotting must never break the scan */ }
 }
 
@@ -412,7 +453,15 @@ var GS_CSS = ''
 + '#tab_goldscalp .gsx-guide{font-size:10px;margin-top:6px;letter-spacing:.03em;color:var(--mut,#8a8f98);line-height:1.5}'
 + '#tab_goldscalp .gsx-guide b{letter-spacing:.12em;font-size:9px}'
 + '#tab_goldscalp .gsx-guide.in{color:#19e3a2}'
-+ '#tab_goldscalp .gsx-guide.out{color:#ff9f43}';
++ '#tab_goldscalp .gsx-guide.out{color:#ff9f43}'
++ '#tab_goldscalp .gsx-wrow{font-size:10px;padding:5px 9px;border-left:2px solid var(--line,#2a2e35);margin-bottom:3px;color:var(--mut,#8a8f98);line-height:1.5}'
++ '#tab_goldscalp .gsx-wrow b{letter-spacing:.08em}'
++ '#tab_goldscalp .gsx-wrow.armed{border-left-color:#ffd76a;color:var(--txt,#d7dbe0)}'
++ '#tab_goldscalp .gsx-wst{font-size:8px;letter-spacing:.14em;padding:1px 5px;border-radius:3px;margin-right:6px;border:1px solid}'
++ '#tab_goldscalp .gsx-wrow.armed .gsx-wst{color:#ffd76a;border-color:rgba(255,215,106,.5);background:rgba(255,215,106,.08)}'
++ '#tab_goldscalp .gsx-wrow.idle .gsx-wst{color:var(--mut,#8a8f98);border-color:var(--line,#2a2e35)}'
++ '#tab_goldscalp .gsx-silent{font-size:11px;color:#ff9f43;border:1px solid rgba(255,159,67,.35);border-radius:4px;padding:8px 10px;margin:12px 0;line-height:1.55;background:rgba(255,159,67,.06)}'
++ '#tab_goldscalp .gsx-silent b{letter-spacing:.12em}';
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -565,6 +614,72 @@ function historyHTML(history){
   return '<div class="gsx-hist"><div class="gsx-hhead">CONVICTION HISTORY — closed setups, never silently dropped</div>' + rows + '</div>';
 }
 
+/* FORMING NOW — what the engine is watching: per-strategy per-venue
+   ARMED/IDLE rows with the exact live trigger condition + real level from
+   goldind.js's goldWatch. Armed setups are watch items, NOT entries. */
+function formingNowHTML(armed){
+  if (!armed || !armed.length) return '';
+  var rows = armed.map(function(w){
+    if (!w) return '';
+    var st = w.state === 'armed';
+    var lvlNum = (typeof w.level === 'number' && isFinite(w.level));
+    return '<div class="gsx-wrow ' + (st ? 'armed' : 'idle') + '">'
+      + '<span class="gsx-wst">' + (st ? 'ARMED' : 'IDLE') + '</span>'
+      + '<b>' + esc(w.strategy || 'SETUP') + '</b>'
+      + (w.venue ? ' · ' + esc(w.venue) : '')
+      + (lvlNum ? ' · $' + pxF(w.level) : '')
+      + ' — ' + esc(st ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range'))
+      + '</div>';
+  }).join('');
+  return '<div class="gsx-hist gsx-watch"><div class="gsx-hhead">FORMING NOW — what the engine is watching'
+    + ' <span style="opacity:.65">(armed setups are watch items, not entries)</span></div>' + rows + '</div>';
+}
+
+/* nearest armed trigger across venues, distance in $ and ATR(15m) */
+function nearestArmed(armed, watchMeta){
+  var best = null;
+  for (var i = 0; i < (armed || []).length; i++){
+    var w = armed[i];
+    if (!w || w.state !== 'armed' || !(typeof w.level === 'number' && isFinite(w.level))) continue;
+    var m = watchMeta ? watchMeta[w.venue] : null;
+    if (!m || !isFinite(m.lastClose)) continue;
+    var dist = Math.abs(w.level - m.lastClose);
+    if (!best || dist < best.dist){
+      best = { strategy: w.strategy, venue: w.venue, level: w.level, dist: dist,
+               distAtr: (isFinite(m.atr) && m.atr > 0) ? dist/m.atr : NaN };
+    }
+  }
+  return best;
+}
+
+/* WHY SILENT — the single honest lead reason a scan produced zero qualifying
+   candidates. Precedence: news window > feeds failed > outside killzones >
+   live convictions > nearest armed trigger. The nearest-armed tail is
+   appended whenever it isn't itself the lead and watch data exists. */
+function whySilentText(o){
+  var lead = null;
+  if (o.newsVeto) lead = 'high-impact news window ±30 min' + (o.newsVetoTitle ? ' — ' + o.newsVetoTitle : '')
+    + ': new convictions held, issuance resumes after the window';
+  else if (o.feedsFailed) lead = 'feeds failed — no 15m klines from any source (macro chain + PAXGUSDT + Delta all quiet)';
+  else if (o.kzWeight === 0) lead = 'outside every ICT killzone (' + (o.kzLabel || 'OFF-HOURS')
+    + ') — detections are demoted by the off-session gate and held to a +2 tally bar';
+  else if (o.liveN > 0) lead = o.liveN + ' live conviction' + (o.liveN === 1 ? '' : 's')
+    + ' already locked — re-confirmations, not new issuance';
+  var near = nearestArmed(o.armed, o.watchMeta);
+  var tail = null;
+  if (near){
+    tail = 'nearest armed trigger: ' + near.strategy + (near.venue ? ' (' + near.venue + ')' : '')
+      + ' at $' + pxF(near.level) + ' — $' + pxF(near.dist)
+      + (isFinite(near.distAtr) ? ' (' + fmtF(near.distAtr, 1) + '×ATR(15m)) away' : ' away');
+  }
+  if (!lead) lead = tail ? tail : 'no qualifying setups — the board is flat';
+  else if (tail) lead = lead + ' · ' + tail;
+  return lead;
+}
+function whySilentHTML(ws){
+  return '<div class="gsx-silent"><b>WHY SILENT</b> — ' + esc(ws) + '</div>';
+}
+
 /* ---------------- data legs (each catch-isolated) ---------------- */
 async function fetchGoldKlines(){
   var out = { rows15m: [], rows1h: [], rows4h: [], source: null };
@@ -710,6 +825,23 @@ async function runScan(ui){
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
+    var armedAll = [], watchMeta = {};
+    var watchFn = gfn('goldWatch');
+    function collectWatch(rows15m, rows1h, rows4h, venue){
+      try{
+        if (rows15m && rows15m.length){
+          var lc = rows15m[rows15m.length - 1];
+          var aArr = _atr(rows15m, 14);
+          watchMeta[venue] = { atr: (aArr && aArr.length) ? aArr[aArr.length - 1] : NaN,
+                               lastClose: (lc && isFinite(lc.c)) ? lc.c : NaN };
+        }
+        if (!watchFn) return;
+        var wl = watchFn({ rows15m: rows15m, rows1h: rows1h, rows4h: rows4h, now: now, tf: '15m' });
+        for (var wi = 0; wi < (wl || []).length; wi++){
+          if (wl[wi]){ wl[wi].venue = venue; armedAll.push(wl[wi]); }
+        }
+      }catch(eW){}
+    }
 
     /* leg 1: primary gold feed (getGoldCandles chain -> PAXGUSDT fallback) */
     var gold = await fetchGoldKlines();
@@ -719,6 +851,7 @@ async function runScan(ui){
       var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
       venueRows[v] = { rows15m: gold.rows15m };
       var got = buildCandidates(gold, now, news, v, sym1);
+      collectWatch(gold.rows15m, gold.rows1h, gold.rows4h, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
       legs.push(v + ': ' + gold.rows15m.length + ' 15m bars — '
@@ -734,6 +867,7 @@ async function runScan(ui){
     if (dx.item && dx.rows15m.length){
       venueRows['DELTA XAUTUSD'] = { rows15m: dx.rows15m };
       var got2 = buildCandidates(dx, now, news, 'DELTA XAUTUSD', 'XAUTUSD');
+      collectWatch(dx.rows15m, dx.rows1h, dx.rows4h, 'DELTA XAUTUSD');
       for (i = 0; i < got2.length; i++) cands.push(got2[i]);
       for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
       legs.push('DELTA XAUTUSD: ' + dx.rows15m.length + ' 15m bars — '
@@ -815,14 +949,48 @@ async function runScan(ui){
     var liveN = 0;
     for (var k in lock.store.live){ if (Object.prototype.hasOwnProperty.call(lock.store.live, k)) liveN++; }
 
+    /* WHY SILENT — the honest lead reason when zero candidates qualify.
+       Session context for the killzone case (same goldKillzone the gates use). */
+    var whySilent = null;
+    if (!cards.length){
+      var kzW = null, kzL = null;
+      var kzFn2 = gfn('goldKillzone');
+      if (kzFn2){
+        try{
+          var kz2 = kzFn2(now);
+          if (kz2){ kzW = kz2.weight; kzL = kz2.label; }
+        }catch(eK2){}
+      }
+      whySilent = whySilentText({
+        newsVeto: newsVeto, newsVetoTitle: newsVetoTitle,
+        feedsFailed: !gold.rows15m.length && !dx.rows15m.length,
+        kzWeight: kzW, kzLabel: kzL,
+        liveN: liveN, armed: armedAll, watchMeta: watchMeta
+      });
+    }
+
     /* render */
     if (ui && ui.cards && ui.empty){
-      if (!cards.length && !rejectedAll.length) ui.empty.style.display = 'block';
-      else {
+      if (cards.length){
+        ui.empty.style.display = 'none';
         ui.cards.innerHTML = bannerHTML(best, cards)
           + cards.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+          + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
+      } else if (rejectedAll.length || armedAll.length){
+        /* zero qualifying candidates but something to show: WHY SILENT leads,
+           then the watch panel, then the held-back reason lines */
+        ui.empty.style.display = 'none';
+        ui.cards.innerHTML = (whySilent ? whySilentHTML(whySilent) : '')
+          + formingNowHTML(armedAll)
+          + rejectedHTML(rejectedAll)
+          + historyHTML(lock.store.history);
+      } else {
+        /* literally nothing (feeds failed): the empty state carries the reason */
+        ui.cards.innerHTML = '';
+        if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent);
+        ui.empty.style.display = 'block';
       }
     }
     var secs = ((Date.now() - t0)/1000).toFixed(1);
@@ -832,7 +1000,7 @@ async function runScan(ui){
     setProg(ui, null);
     if (gold.rows15m.length || dx.rows15m.length){
       publishState(cards);                        /* only a real data run overwrites the snapshots */
-      publishScan(cards, best, lock.store.history, now, rejectedAll);
+      publishScan(cards, best, lock.store.history, now, rejectedAll, armedAll, whySilent);
     }
     return 'refreshed';
   }catch(e){
