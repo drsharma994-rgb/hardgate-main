@@ -487,4 +487,144 @@ globalThis.WebSocket = __hadWS2;
 await new Promise(r => setTimeout(r, 100));
 ok(__unhandledL.length === 0, 'no unhandled rejections on any refresh path');
 
+/* ================= L) BRAIN warm-up: socket auto-start ================= */
+console.log('== warm-up: auto-start, double-start guard, reuse, honesty ==');
+
+/* the exported warm hook keeps its name + signature byte-identical for brain.js */
+const warmG = globalThis.window.HG_warmups.filter(function(h){ return h && h.id === 'liqs'; })[0];
+ok(warmG && warmG.label === 'LIQS' && typeof warmG.run === 'function',
+   'HG_warmups entry {id:liqs, label:LIQS, run} registered');
+ok(warmG.run.length === 0 && warmG.run.constructor.name === 'AsyncFunction',
+   'warm hook signature unchanged: zero-arg async function (brain.js calls it unchanged)');
+
+/* fresh vm context per scenario: real timers (startStream owns an interval),
+   a stubbed WebSocket mirroring section K, no network ever touched */
+function mkWarmCtx(WS){
+  return vm.createContext({
+    window: {}, WebSocket: WS,
+    setTimeout: setTimeout, clearTimeout: clearTimeout,
+    setInterval: setInterval, clearInterval: clearInterval
+  });
+}
+function mkStubWS(made){
+  function StubWS(url){ this.url = url; this.readyState = 0; made.push(this); }
+  StubWS.prototype.close = function(){ this.readyState = 3; if (this.onclose) this.onclose(); };
+  return StubWS;
+}
+function mkPane(stubs){
+  return {
+    _html: '',
+    set innerHTML(v){ this._html = v; },
+    get innerHTML(){ return this._html; },
+    querySelector: function(sel){ if (!stubs[sel]) stubs[sel] = stubEl(); return stubs[sel]; }
+  };
+}
+function loadLiqs(ctx){
+  vm.runInContext(fs.readFileSync(root + 'liqs.js', 'utf8'), ctx, { filename: 'liqs.js' });
+  return ctx.window.HG_warmups[0].run;
+}
+
+/* ---- L1: idle layer — warm itself opens the socket via the shared starter ---- */
+{
+  const made = [];
+  const ctx = mkWarmCtx(mkStubWS(made));
+  const warm = loadLiqs(ctx);
+
+  let r = await warm();
+  ok(r === 'socket started — accumulating liquidations' && made.length === 1
+     && made[0].url.indexOf('forceOrder') > -1,
+     'warm on an idle layer starts the forceOrder socket — got "' + r + '"');
+
+  r = await warm();
+  ok(r === 'socket connecting — accumulating liquidations' && made.length === 1,
+     'double-warm while CONNECTING opens no second socket — got "' + r + '"');
+
+  made[0].onopen(); /* socket live, no prints yet */
+  r = await warm();
+  ok(r === 'socket live — 0 events in window' && made.length === 1,
+     'warm on a live-but-empty stream reports a real 0, still no new socket — got "' + r + '"');
+
+  made[0].onmessage({ data: JSON.stringify({ o: { s: 'BTCUSDT', S: 'SELL', p: '50000', q: '4', T: Date.now() } }) });
+  r = await warm();
+  ok(r === 'socket live — 1 event in window' && made.length === 1,
+     'warm reports the REAL accumulated window count (1 print ingested) — got "' + r + '"');
+
+  /* tab mounted AFTER the auto-start reflects the running state */
+  const stubsL = {}, paneL = mkPane(stubsL);
+  ctx.window.HG_tabs[0].mount(paneL);
+  ok(stubsL['#liqsStat'].textContent.indexOf('LIVE') > -1,
+     'tab mounted after auto-start shows the live status — got "' + stubsL['#liqsStat'].textContent + '"');
+  ok(stubsL['#liqsStart'].disabled === true && stubsL['#liqsStart'].textContent === 'RUNNING',
+     'START reflects the auto-started socket: disabled + RUNNING');
+  stubsL['#liqsStart']._handler(); /* pressed anyway — the shared starter guards */
+  ok(made.length === 1, 'START pressed while live is a guarded no-op — never a second socket');
+
+  stubsL['#liqsStop']._handler(); /* explicit STOP — also clears tick/retry timers */
+  ok(made.length === 1 && made[0].readyState === 3, 'STOP closes the auto-started socket');
+  ok(stubsL['#liqsStart'].disabled === false && stubsL['#liqsStart'].textContent === 'START',
+     'START re-arms after STOP');
+  r = await warm();
+  ok(r.indexOf('skipped') === 0 && r.indexOf('operator') > -1 && made.length === 1,
+     'warm never restarts against an explicit operator STOP — got "' + r + '"');
+}
+
+/* ---- L2: warm after the tab's own START reuses the live session ---- */
+{
+  const made = [];
+  const ctx = mkWarmCtx(mkStubWS(made));
+  loadLiqs(ctx);
+  const stubs2 = {}, pane2 = mkPane(stubs2);
+  ctx.window.HG_tabs[0].mount(pane2);
+  stubs2['#liqsStart']._handler(); /* operator START — fresh session */
+  made[0].onopen();
+  made[0].onmessage({ data: JSON.stringify({ o: { s: 'ETHUSDT', S: 'BUY', p: '3000', q: '100', T: Date.now() } }) });
+  made[0].onmessage({ data: JSON.stringify({ o: { s: 'SOLUSDT', S: 'SELL', p: '100', q: '1000', T: Date.now() } }) });
+  const r = await ctx.window.HG_warmups[0].run();
+  ok(r === 'socket live — 2 events in window' && made.length === 1,
+     'warm after tab START reuses the live socket — real count 2, no reset, no second socket — got "' + r + '"');
+  stubs2['#liqsStop']._handler(); /* clear tick timer */
+}
+
+/* ---- L3: no WebSocket in the environment — honest skip, never throws ---- */
+{
+  const ctx = mkWarmCtx(undefined);
+  const warm = loadLiqs(ctx);
+  let r = null, threw = null;
+  try{ r = await warm(); }catch(e){ threw = e; }
+  ok(!threw && r === 'skipped: stream unavailable — no WebSocket in this environment',
+     'no-WebSocket environment -> honest skip string, nothing thrown — got "' + r + '"');
+}
+
+/* ---- L4: the start itself fails — honest skip naming why ---- */
+{
+  const ctx = mkWarmCtx(function(){ throw new Error('no sockets'); });
+  const warm = loadLiqs(ctx);
+  let r = null, threw = null;
+  try{ r = await warm(); }catch(e){ threw = e; }
+  ok(!threw && typeof r === 'string' && r.indexOf('skipped') === 0 && r.indexOf('fail') > -1,
+     'socket constructor failure -> honest skip naming the failure — got "' + r + '"');
+  const stubs4 = {}, pane4 = mkPane(stubs4);
+  ctx.window.HG_tabs[0].mount(pane4);
+  stubs4['#liqsStop']._handler(); /* clear the pending bounded retry + tick */
+}
+
+/* ---- L5: live status but silently-dead socket — immediate bounded reconnect ---- */
+{
+  const made = [];
+  const ctx = mkWarmCtx(mkStubWS(made));
+  const warm = loadLiqs(ctx);
+  await warm();                    /* auto-start socket #1 */
+  made[0].onopen();                /* live */
+  made[0].readyState = 3;          /* silently dead — no onclose fired */
+  const r = await warm();
+  ok(made.length === 2 && r.indexOf('reconnect') > -1,
+     'warm on a silently-dead socket reconnects immediately (socket #2) — got "' + r + '"');
+  const stubs5 = {}, pane5 = mkPane(stubs5);
+  ctx.window.HG_tabs[0].mount(pane5);
+  stubs5['#liqsStop']._handler(); /* clear tick timer + close socket #2 */
+}
+
+await new Promise(r => setTimeout(r, 100));
+ok(__unhandledL.length === 0, 'no unhandled rejections on any warm-up path');
+
 console.log('\nALL ' + passed + ' LIQS ASSERTIONS PASSED');

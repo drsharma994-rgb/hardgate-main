@@ -214,7 +214,7 @@ var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
 var XU_CACHE_MS = 15 * 60 * 1000; /* mirror of xuniverse.js CACHE_MS (its documented contract) */
 /* vm-test seam: suites may shorten timeouts; production never touches this */
-var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS };
+var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000 };
 /* the seam is this SAME object by reference — mutating window.brainTunables
    mutates what every withTimeout/watchdog reads */
 G.brainTunables = TUN;
@@ -230,7 +230,7 @@ var LAYER_KIND = {
   trend4h: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
-  tape: 'context', fng: 'context'
+  tape: 'context', fng: 'context', funding: 'context', guard: 'context'
 };
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
 
@@ -294,6 +294,18 @@ function brainCollect(inputs){
   var lane = (inp.lane === 'gold') ? 'gold' : 'crypto';
   var votes = [], unavailable = [], silent = [];
 
+  /* per-layer audit ledger (click-to-audit): EVERY layer lands exactly one
+     note {status, text} as it is evaluated — a vote's evidence string, the
+     exact dark reason, or why the layer stayed silent. Display-only: votes /
+     unavailable / silent carry today's semantics unchanged. (Named `jot` —
+     the NEWS block already owns a local `note` var for the event text.) */
+  var notes = {};
+  function jot(layer, status, text){
+    notes[layer] = { status: String(status || ''), text: String(text === null || text === undefined ? '' : text) };
+  }
+  function dark(layer, why){ unavailable.push(layer); jot(layer, 'DARK', why); }
+  function hush(layer, why){ silent.push(layer); jot(layer, 'SILENT', why); }
+
   /* alias matching — layer states keyed by Binance-style syms ('BTCUSDT')
      still vote for combined-universe candidates ('B-BTC_USDT'): a layer row
      matches when its sym is the candidate sym OR one of its aliases
@@ -318,10 +330,11 @@ function brainCollect(inputs){
               kind: LAYER_KIND[layer] || 'context' };
     if (extra){ for (var k in extra){ if (Object.prototype.hasOwnProperty.call(extra, k)) v[k] = extra[k]; } }
     votes.push(v);
+    jot(layer, String(vote).toUpperCase(), text);
   }
 
   /* ---- NEWS (both lanes) — blackout / high-impact = hard veto ---- */
-  if (!inp.news || typeof inp.news !== 'object'){ unavailable.push('news'); }
+  if (!inp.news || typeof inp.news !== 'object'){ dark('news', 'no news-risk state — hgNewsRisk/hgNewsState unavailable or never ran'); }
   else{
     var n = inp.news;
     var note = (typeof n.note === 'string' && n.note) ? n.note : '';
@@ -338,10 +351,12 @@ function brainCollect(inputs){
   /* ================= GOLD LANE ================= */
   if (lane === 'gold'){
     var g = (inp.gold && typeof inp.gold === 'object') ? inp.gold : null;
-    if (!g){ unavailable.push('goldsetup', 'golddeep', 'goldbasis'); }
+    if (!g){ dark('goldsetup', 'GOLD tab has not published a setup decision (run GOLD once)');
+             dark('golddeep', 'no 37-gate deep verdict stashed by the GOLD tab');
+             dark('goldbasis', 'no goldspot basis state — goldspot layer cold'); }
     else{
       /* gold setup decision (goldSetupDecision output, stashed when GOLD ran) */
-      if (!g.setup || typeof g.setup !== 'object'){ unavailable.push('goldsetup'); }
+      if (!g.setup || typeof g.setup !== 'object'){ dark('goldsetup', 'GOLD tab has not published a setup decision (run GOLD once)'); }
       else{
         var gs = g.setup;
         if (gs.aside === true || !isDir(gs.dir))
@@ -352,7 +367,7 @@ function brainCollect(inputs){
                { strong: gs.confidence === 'STRONG' });
       }
       /* gold deep scan verdict (37-gate ledger) */
-      if (!g.deep || typeof g.deep !== 'object'){ unavailable.push('golddeep'); }
+      if (!g.deep || typeof g.deep !== 'object'){ dark('golddeep', 'no 37-gate deep verdict stashed by the GOLD tab'); }
       else{
         var gd = g.deep;
         if (isDir(gd.dir))
@@ -363,7 +378,7 @@ function brainCollect(inputs){
           push('golddeep', 'neutral', 'GOLD DEEP ' + (gd.label || 'mixed') + ' — timeframes disagree, no directional verdict');
       }
       /* goldspot basis — crowding read, fade the crowded side */
-      if (!g.basis || typeof g.basis !== 'object'){ unavailable.push('goldbasis'); }
+      if (!g.basis || typeof g.basis !== 'object'){ dark('goldbasis', 'no goldspot basis state — goldspot layer cold'); }
       else{
         var bs = g.basis;
         var bTxt = 'perp basis ' + (isFinite(bs.basisPct) ? (bs.basisPct >= 0 ? '+' : '') + FMT(bs.basisPct, 3) + '%' : 'n/a');
@@ -375,13 +390,13 @@ function brainCollect(inputs){
           push('goldbasis', 'neutral', bTxt + ' — positioning balanced');
       }
     }
-    return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent };
+    return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent, notes: notes };
   }
 
   /* ================= CRYPTO LANE ================= */
 
   /* ---- REGIME playbook ---- */
-  if (!inp.regime || typeof inp.regime !== 'object'){ unavailable.push('regime'); }
+  if (!inp.regime || typeof inp.regime !== 'object'){ dark('regime', 'regime layer returned no state — cold or failed; WARM UP or open REGIME'); }
   else{
     var rg = inp.regime, pb = (rg.playbook && typeof rg.playbook === 'object') ? rg.playbook : {};
     var rl = (typeof rg.label === 'string' && rg.label) ? rg.label : 'regime';
@@ -397,7 +412,7 @@ function brainCollect(inputs){
   }
 
   /* ---- ROTATION season ---- */
-  if (!inp.rotation || typeof inp.rotation !== 'object'){ unavailable.push('rotation'); }
+  if (!inp.rotation || typeof inp.rotation !== 'object'){ dark('rotation', 'rotation layer returned no state — cold or failed'); }
   else{
     var ro = inp.rotation;
     var ap = isFinite(ro.altPct) ? Math.round(ro.altPct) + '%' : 'n/a';
@@ -414,7 +429,7 @@ function brainCollect(inputs){
 
   /* ---- ON-CHAIN (BTC lane only — alts simply skip this layer) ---- */
   if (isBtc){
-    if (!inp.onchain || typeof inp.onchain !== 'object'){ unavailable.push('onchain'); }
+    if (!inp.onchain || typeof inp.onchain !== 'object'){ dark('onchain', 'on-chain layer returned no state — cold or failed (BTC lane only)'); }
     else{
       var oc = inp.onchain;
       var ocEv = '';
@@ -427,6 +442,7 @@ function brainCollect(inputs){
       else push('onchain', 'neutral', 'on-chain neutral' + (ocEv ? ' — ' + ocEv : ''));
     }
   }
+  else jot('onchain', 'SILENT', 'BTC-lane layer — alts carry no on-chain read');
 
   /* ---- F&G EXTREME CONTRARIAN (context, majors only) ----
      Fear & Greed <= 20 -> contrarian long context; >= 80 -> contrarian short.
@@ -449,12 +465,13 @@ function brainCollect(inputs){
           push('fng', 'long', 'F&G ' + frd + ' extreme fear — contrarian long context');
         else
           push('fng', 'short', 'F&G ' + frd + ' extreme greed — contrarian short context');
-      }else silent.push('fng');   /* extreme print, nothing to say for this alt */
-    }else silent.push('fng');     /* neutral zone — live, no edge */
+      }else hush('fng', 'extreme F&G print, but this context layer is majors-only — nothing to say for this alt');
+    }else hush('fng', 'F&G ' + Math.round(fv) + ' — inside the 21-79 neutral zone, no contrarian edge');
   }
+  else jot('fng', 'SILENT', 'no Fear & Greed print — the layer sits out entirely (never dark, never caps)');
 
   /* ---- GATE ENGINE — survivor = strong vote, rejection = veto w/ gate ---- */
-  if (!inp.engine || typeof inp.engine !== 'object'){ unavailable.push('engine'); }
+  if (!inp.engine || typeof inp.engine !== 'object'){ dark('engine', 'gate engine returned no state — the deep scan has not warmed'); }
   else{
     var en = inp.engine, enHit = false, ei;
     var surv = Array.isArray(en.survivors) ? en.survivors : [];
@@ -504,11 +521,11 @@ function brainCollect(inputs){
         }
       }
     }
-    if (!enHit) silent.push('engine');   /* engine ran, this symbol not gated */
+    if (!enHit) hush('engine', 'engine ran — this symbol was not gated (no survivor or rejection row)');
   }
 
   /* ---- OI FLOW / SMART classification ---- */
-  if (!inp.oiflow || typeof inp.oiflow !== 'object'){ unavailable.push('oiflow'); }
+  if (!inp.oiflow || typeof inp.oiflow !== 'object'){ dark('oiflow', 'OI-flow layer returned no state — cold or failed'); }
   else{
     var ofRes = Array.isArray(inp.oiflow.results) ? inp.oiflow.results : [], ofHit = false;
     for (var oi = 0; oi < ofRes.length; oi++){
@@ -524,11 +541,11 @@ function brainCollect(inputs){
         ofHit = true; break;
       }
     }
-    if (!ofHit) silent.push('oiflow');
+    if (!ofHit) hush('oiflow', 'no OI-flow classification names this symbol');
   }
 
   /* ---- SQUEEZE ---- */
-  if (!inp.squeeze || typeof inp.squeeze !== 'object'){ unavailable.push('squeeze'); }
+  if (!inp.squeeze || typeof inp.squeeze !== 'object'){ dark('squeeze', 'squeeze layer returned no state — cold or failed'); }
   else{
     var sqRes = Array.isArray(inp.squeeze.results) ? inp.squeeze.results : [], sqHit = false;
     for (var si = 0; si < sqRes.length; si++){
@@ -544,7 +561,7 @@ function brainCollect(inputs){
         break;
       }
     }
-    if (!sqHit) silent.push('squeeze');
+    if (!sqHit) hush('squeeze', 'no squeeze state names this symbol');
   }
 
   /* ---- TAPE — 24h momentum + participation (Binance 24h tickers map,
@@ -553,7 +570,7 @@ function brainCollect(inputs){
      symbols with no Binance perp or a sub-threshold tape are silent, never
      dark. Past the extreme band the tape argues fade, not chase. ---- */
   if (!inp.tape || typeof inp.tape !== 'object'){
-    if (inp.tape === undefined) unavailable.push('tape');
+    if (inp.tape === undefined) dark('tape', 'no 24h ticker feed — binanceTickers24h unavailable or returned nothing');
     /* null = layer deliberately not applicable to this lane (gold) */
   }
   else{
@@ -580,11 +597,15 @@ function brainCollect(inputs){
         }
       }
     }
-    if (!tpHit) silent.push('tape');
+    if (!tpHit) hush('tape', 'no Binance perp overlap, or a sub-threshold 24h tape (needs |chg| >= 8% with >= $10M turnover)');
   }
 
   /* ---- LIQS flush-reversal (one market-wide setup; must name this symbol) ---- */
-  if (inp.liq === undefined || inp.liq === null){ silent.push('liqs'); if (inp.liq === undefined) unavailable.push('liqs'); }
+  if (inp.liq === undefined || inp.liq === null){
+    if (inp.liq === undefined){ hush('liqs', 'no liquidation snapshot — stream-only layer cold (open LIQS once to start the socket)');
+                                dark('liqs', 'no liquidation snapshot — stream-only layer cold (open LIQS once to start the socket)'); }
+    else hush('liqs', 'liquidations live — no flush-reversal setup in the current window');
+  }
   else if (typeof inp.liq === 'object'){
     var lf = inp.liq;
     if (isDir(lf.dir) && (!lf.sym || named(lf.sym)))
@@ -592,11 +613,67 @@ function brainCollect(inputs){
            'LIQS flush-reversal — ' + (lf.flushSide || '?') + ' flush'
            + (isFinite(lf.flushUsd) ? ' $' + FMT(lf.flushUsd / 1e6, 1) + 'M' : '')
            + ' · fade to ' + lf.dir.toUpperCase());
-    else silent.push('liqs');
+    else hush('liqs', 'a flush setup exists but does not name this symbol');
   }
-  else silent.push('liqs');
+  else hush('liqs', 'no liquidation setup state');
 
-  return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent };
+  /* trend4h is a POST-FETCH layer — ASIDE rows never earn a candle fetch, so
+     their ledger says so plainly; WATCH-or-better rows get this note
+     overwritten by applyTrend4h (vote / dark / silent-with-reason) */
+  jot('trend4h', 'SILENT', 'awaiting the post-scan candle fetch — evaluated only for WATCH-or-better rows');
+
+  return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent, notes: notes };
+}
+
+/* audit-note writer for post-collect stages (funding, trend4h, gate guards) —
+   additive display metadata only, never touches votes/unavailable/silent */
+function colNote(col, layer, status, text){
+  try{
+    if (!col || typeof col !== 'object') return;
+    if (!col.notes || typeof col.notes !== 'object') col.notes = {};
+    col.notes[layer] = { status: String(status || ''), text: String(text === null || text === undefined ? '' : text) };
+  }catch(e){}
+}
+
+/* ---- FUNDING CONTRARIAN LAYER (one context vote, never a tier alone) ----
+   |fundingPct| >= 0.1%/8h AGAINST the row's decided direction = the crowd is
+   the fuel: a named contrarian vote ('funding -0.128%/8h — shorts crowded,
+   fade fuel for longs'). SAME-direction extremes keep the radarGates caution
+   chip and cast NO vote — never reward the crowded side. Sub-extreme prints
+   and directionless rows: silent. Funding is NEVER dark, never caps a tier. */
+function applyFunding(row){
+  try{
+    if (!row || row.lane !== 'crypto' || !row.dec || !row.col) return;
+    var col = row.col;
+    var fp = row.xu ? +row.xu.fundingPct : NaN;
+    if (!isFinite(fp)){
+      colNote(col, 'funding', 'SILENT', 'no funding print for this contract');
+      return;
+    }
+    var pct = 'funding ' + (fp >= 0 ? '+' : '') + FMT(fp, 3) + '%/8h';
+    if (Math.abs(fp) < GATE_FUNDING_ABS){
+      colNote(col, 'funding', 'SILENT', pct + ' — inside the ±0.1%/8h band, no crowd edge');
+      return;
+    }
+    var dir = row.dec.dir;
+    if (!isDir(dir)){
+      colNote(col, 'funding', 'SILENT', pct + ' — extreme, but the row has no direction to fade a crowd against');
+      return;
+    }
+    var against = (dir === 'short' && fp > 0) || (dir === 'long' && fp < 0);
+    if (against){
+      var txt = pct + ' — ' + (fp > 0 ? 'longs crowded, fade fuel for shorts'
+                                      : 'shorts crowded, fade fuel for longs');
+      col.votes.push({ layer: 'funding', vote: dir, kind: 'context', text: txt });
+      colNote(col, 'funding', dir.toUpperCase(), txt);
+      /* re-decided through the same pure brainDecide — the vote agrees with the
+         decided direction by construction, so the direction itself never flips */
+      row.dec = brainDecide(col.votes, { unavailable: col.unavailable });
+    }else{
+      /* crowded WITH the row — the caution chip itself stays in radarGates */
+      colNote(col, 'funding', 'CAUTION', pct + ' — crowded same-direction as the row — squeeze risk; caution only, never a reward vote');
+    }
+  }catch(e){}
 }
 
 /* =========================================================================
@@ -1112,6 +1189,10 @@ function judgeCrypto(cand, snap){
   var row = { sym: cand.sym, base: cand.base, exchange: cand.exchange,
            turnoverUsd: cand.turnoverUsd, xu: cand.xu, alsoOn: cand.alsoOn,
            aliases: cand.aliases, lane: 'crypto', col: col, dec: dec };
+  /* funding contrarian layer — extreme funding AGAINST the decided direction
+     becomes a named context vote before the quality gates evaluate the tier */
+  applyFunding(row);
+  dec = row.dec;
   /* radar quality gates — post-decide demotions + cautions (brainDecide stays
      pure). A demotion's reason LEADS the row's reasons so the ASIDE ledger
      names the kill; cautions land as GUARD chips on cards and as a named note
@@ -1128,6 +1209,7 @@ function judgeCrypto(cand, snap){
     for (var gc = 0; gc < g.cautions.length; gc++){
       col.votes.push({ layer: 'guard', vote: 'neutral', kind: 'context',
                        caution: true, text: g.cautions[gc] });
+      colNote(col, 'guard', 'CAUTION', g.cautions[gc]);
       dec.reasons.push(g.cautions[gc]);
     }
   }
@@ -1222,6 +1304,10 @@ function applyTrend4h(rows){
         /* candles missing / unfetchable / too thin — honestly dark */
         if (row.col.unavailable.indexOf('trend4h') === -1){
           row.col.unavailable.push('trend4h');
+          colNote(row.col, 'trend4h', 'DARK',
+            Array.isArray(row.rows4h)
+              ? 'only ' + row.rows4h.length + ' 4h candles (< ' + TREND4H_MIN_ROWS + ') — too thin for an honest EMA50 seed'
+              : 'no 4h candles returned — fetch failed, timed out, or the venue has no klines for this contract');
           row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
         }
         continue;
@@ -1229,9 +1315,13 @@ function applyTrend4h(rows){
       var t = trend4hAssess(row.rows4h);
       if (t && t.dir === row.dec.dir){
         row.col.votes.push({ layer: 'trend4h', vote: t.dir, kind: 'structural', text: t.text });
+        colNote(row.col, 'trend4h', String(t.dir).toUpperCase(), t.text);
         row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
       }else{
         row.col.silent.push('trend4h');   /* candles live, nothing to say for this direction */
+        colNote(row.col, 'trend4h', 'SILENT',
+          t && t.dir ? '4h structure reads ' + String(t.dir).toUpperCase() + ' — against the decided bias, no vote cast'
+                     : '4h EMA20/EMA50 and swing structure show no clean trend break either way');
       }
     }
   }catch(e){}
@@ -1538,6 +1628,109 @@ function planLine(plan){
     + (plan.note ? ' · ' + esc(plan.note) : '');
 }
 
+/* =========================================================================
+CLICK-TO-AUDIT LAYER BREAKDOWN — every row (PRIME/HIGH/WATCH/ASIDE/VETO,
+gold lane too) carries a collapsed audit toggle. The full layer-by-layer
+ledger renders LAZILY on click only — a 500-contract scan never expands 500
+ledgers. Each line names the layer, its verdict (LONG/SHORT/NEUTRAL/VETO/
+CAUTION/DARK/SILENT) and its one-line evidence; dark layers give the exact
+dark reason. A layer with nothing recorded says 'no evidence recorded'.
+Never throws.
+========================================================================= */
+var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
+                          'engine','oiflow','squeeze','tape','liqs','trend4h'];
+var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
+
+function auditLineHTML(label, status, text){
+  var st = String(status || 'SILENT').toUpperCase();
+  var col = (st === 'LONG') ? '#5fbf8f'
+          : (st === 'SHORT' || st === 'VETO') ? '#e4586b'
+          : (st === 'CAUTION') ? '#d8a24a'
+          : (st === 'DARK') ? '#8a93a3'
+          : '#6d7684';
+  return '<div style="display:flex;gap:8px;align-items:baseline;font-size:11px;line-height:1.7">'
+    + '<span style="flex:0 0 82px;color:#9aa6b5;font-size:10px;letter-spacing:.06em">' + esc(label) + '</span>'
+    + '<span style="flex:0 0 64px;color:' + col + ';font-size:10px;letter-spacing:.08em;font-weight:700">' + esc(st) + '</span>'
+    + '<span style="color:#c4ccd8">' + esc(text) + '</span></div>';
+}
+
+function rowAuditHTML(row){
+  try{
+    if (!row || !row.col || typeof row.col !== 'object'){
+      return '<div class="auditRows">'
+        + auditLineHTML('AUDIT', 'SILENT', 'row no longer carries its layer ledger — rescan to audit') + '</div>';
+    }
+    var col = row.col, notes = col.notes || {};
+    var order = (row.lane === 'gold') ? AUDIT_ORDER_GOLD : AUDIT_ORDER_CRYPTO;
+    var seen = {}, out = [];
+    for (var i = 0; i < order.length; i++){
+      var L = order[i]; seen[L] = 1;
+      var n = notes[L];
+      out.push(auditLineHTML(L.toUpperCase(),
+        (n && n.status) ? n.status : 'SILENT',
+        (n && n.text) ? n.text : 'no evidence recorded'));
+    }
+    /* votes outside the canonical list (gate-guard cautions) — a guard whose
+       text is the funding crowding chip is already the FUNDING line above */
+    var vs = Array.isArray(col.votes) ? col.votes : [];
+    for (var v = 0; v < vs.length; v++){
+      var vv = vs[v];
+      if (!vv || !vv.layer || seen[vv.layer]) continue;
+      if (vv.layer === 'guard' && String(vv.text || '').indexOf('funding') === 0) continue;
+      seen[vv.layer] = 1;
+      out.push(auditLineHTML(String(vv.layer).toUpperCase(),
+        vv.caution === true ? 'CAUTION' : String(vv.vote || 'neutral').toUpperCase(),
+        vv.text || 'no evidence recorded'));
+    }
+    return '<div class="auditRows">' + out.join('') + '</div>';
+  }catch(e){
+    try{
+      return '<div class="auditRows">'
+        + auditLineHTML('AUDIT', 'SILENT', 'audit render failed: ' + errMsg(e)) + '</div>';
+    }catch(e2){ return ''; }
+  }
+}
+
+function auditToggleHTML(row){
+  try{
+    var k = encodeURIComponent(String(row && row.sym || ''));
+    if (!k) return '';
+    return '<div style="margin-top:6px">'
+      + '<span data-audit="' + k + '" style="cursor:pointer;user-select:none;font-size:9px;'
+      + 'letter-spacing:.1em;color:#8fa0b8;border:1px solid rgba(143,160,184,.4);border-radius:3px;'
+      + 'padding:1px 7px" title="layer-by-layer ledger for this row">▸ LAYER AUDIT</span>'
+      + '<div data-audit-box="' + k + '" style="display:none;margin-top:6px;padding:6px 8px;'
+      + 'border:1px solid rgba(143,160,184,.25);border-radius:4px;background:rgba(143,160,184,.05)"></div>'
+      + '</div>';
+  }catch(e){ return ''; }
+}
+
+/* delegated toggle — finds the row in the LAST completed synthesis and renders
+   the ledger into that row's own box; collapsing releases the HTML again */
+function auditToggleByKey(pane, key, btnEl){
+  try{
+    if (!pane || typeof pane.querySelector !== 'function' || !key) return;
+    var box = pane.querySelector('[data-audit-box="' + key + '"]');
+    if (!box) return;
+    if (box.style.display === 'none'){
+      var sym = decodeURIComponent(key), row = null;
+      var rows = (__lastResult && Array.isArray(__lastResult.rows)) ? __lastResult.rows : [];
+      for (var i = 0; i < rows.length; i++){
+        if (rows[i] && rows[i].sym === sym){ row = rows[i]; break; }
+      }
+      box.innerHTML = row
+        ? rowAuditHTML(row)
+        : '<div class="auditRows">' + auditLineHTML('AUDIT', 'SILENT', 'row not in the last synthesis — rescan to audit') + '</div>';
+      box.style.display = '';
+      if (btnEl) btnEl.textContent = '▾ LAYER AUDIT';
+    }else{
+      box.style.display = 'none';
+      box.innerHTML = '';   /* lazy both ways — the 500-row DOM stays lean */
+      if (btnEl) btnEl.textContent = '▸ LAYER AUDIT';
+    }
+  }catch(e){}
+}
+
 function cardHTML(row){
   var dec = row.dec, dir = dec.dir;
   var plan = row.plan || null;
@@ -1570,6 +1763,7 @@ function cardHTML(row){
     + '<div class="plan">' + planLine(plan) + '</div>'
     + chartBox
     + tradeBtn
+    + auditToggleHTML(row)
     + '</div>';
 }
 
@@ -1600,7 +1794,7 @@ function watchRowHTML(row){
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '')
     + (path ? ' · ' + esc(path) : '') + '</span>'
-    + '<span class="stamp na">WATCH</span>' + age + '</div>';
+    + '<span class="stamp na">WATCH</span>' + age + auditToggleHTML(row) + '</div>';
 }
 
 function asideRowHTML(row){
@@ -1611,7 +1805,8 @@ function asideRowHTML(row){
     + '<span class="gname">' + esc(row.dec.reasons[0] || 'aside') + '</span>'
     + '<span class="gdetail">' + row.dec.longCount + 'L/' + row.dec.shortCount + 'S'
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '') + '</span>'
-    + '<span class="stamp ' + (vetoed ? 'veto' : 'na') + '">' + (vetoed ? 'VETO' : 'ASIDE') + '</span>' + age + '</div>';
+    + '<span class="stamp ' + (vetoed ? 'veto' : 'na') + '">' + (vetoed ? 'VETO' : 'ASIDE') + '</span>' + age
+    + auditToggleHTML(row) + '</div>';
 }
 
 function paintCharts(cardsEl, rows){
@@ -1729,6 +1924,46 @@ async function brainRefresh(){
   }catch(e){ return 'error'; }
 }
 
+/* ---------------- BOUNDED WARM-WAIT AT SYNTHESIS START ----------------
+   Consume every registered layer warm hook (G.HG_warmups) with a bounded
+   TOTAL cap (TUN.warmMs, Promise.race) BEFORE the layer snapshot — a layer
+   that merely needed a moment gets to vote instead of being judged dark.
+   Hooks are idempotent by contract ('fresh' when warm, 'busy' when their own
+   scan is in-flight, an honest skip string otherwise — e.g. liqs' stream-only
+   line, consumed here without special-casing); a hook that loses the race
+   leaves its layer dark, named honestly by the market read exactly as today.
+   Never blocks the scan indefinitely; never fabricates a warmed state. Skips
+   entirely when a warm pass (WARM UP or a previous synthesis) ran < 60s ago. */
+var __warmedAt = 0;
+function awaitWarmHooks(){
+  try{
+    if (__warmedAt && (Date.now() - __warmedAt) < 60000) return Promise.resolve(false);
+    var reg = [];
+    try{ reg = Array.isArray(G.HG_warmups) ? G.HG_warmups : []; }catch(e){ reg = []; }
+    var ps = [];
+    for (var i = 0; i < reg.length; i++){
+      var h = reg[i];
+      if (!h || typeof h.run !== 'function') continue;
+      try{
+        var r = h.run();   /* hooks never throw per contract; strings pass through */
+        if (r && typeof r.then === 'function') ps.push(r);
+      }catch(e){}
+    }
+    if (!ps.length) return Promise.resolve(false);
+    var ms = (isFinite(+TUN.warmMs) && +TUN.warmMs > 0) ? +TUN.warmMs : 8000;
+    var settle = (typeof Promise.allSettled === 'function')
+      ? Promise.allSettled(ps)
+      : Promise.all(ps.map(function(p){
+          return p.then(function(v){ return { status: 'fulfilled', value: v }; },
+                        function(e){ return { status: 'rejected', reason: e }; });
+        }));
+    return Promise.race([
+      settle,
+      new Promise(function(res){ setTimeout(function(){ res('capped'); }, ms); })
+    ]).then(function(){ return true; }, function(){ return true; });
+  }catch(e){ return Promise.resolve(false); }
+}
+
 async function runBrain(el){
   var btn = el.querySelector('#brainRun'), stat = el.querySelector('#brainStat'),
       read = el.querySelector('#brainRead'), readWrap = el.querySelector('#brainReadWrap'),
@@ -1758,6 +1993,10 @@ async function runBrain(el){
     if (read) read.textContent = '';
     empty.style.display = 'none';
     stat.className = 'note';
+    stat.textContent = 'warming layers — bounded wait (≤' + Math.round(((+TUN.warmMs) || 8000) / 1000) + 's)…';
+    await awaitWarmHooks();
+    __warmedAt = Date.now();
+
     stat.textContent = 'reading every intelligence layer…';
 
     var snap = snapshotLayers();
@@ -2166,7 +2405,9 @@ async function runWarmup(el){
     if (runBtn) runBtn.disabled = false;
     if (quickBtn) quickBtn.disabled = false;
   }
-  /* auto-fire the synthesis over the warmed layers */
+  /* auto-fire the synthesis over the warmed layers — mark the warm pass so the
+     synthesis's own bounded warm-wait skips (hooks would only say 'fresh') */
+  __warmedAt = Date.now();
   try{ stat.className = 'note'; stat.textContent = 'layers warmed — running synthesis…'; }catch(e){}
   try{ await runBrain(el); }catch(e){ /* runBrain owns its failure surface */ }
 }
@@ -2209,7 +2450,10 @@ function mount(el){
       + 'and same-direction funding ≥0.1%/8h chips a crowding caution — demotions are tallied on the stat line. '
       + 'After the candle fetch, TREND4H (4h EMA20/EMA50 + swing structure) can promote WATCH→HIGH→PRIME with a named '
       + 'structural vote; extreme F&amp;G (≤20 / ≥80) adds one contrarian context vote for the majors; '
-      + 'every WATCH row names its concrete path to the next tier. '
+      + 'extreme funding (≥0.1%/8h) AGAINST the row votes the crowd-fade (same-direction stays a caution chip, never a reward); '
+      + 'every WATCH row names its concrete path to the next tier, and every row expands to a full layer-by-layer audit on click. '
+      + 'A synthesis first waits on the layer warm hooks with a bounded cap — slow layers get a moment, '
+      + 'still-dark layers are named, never fabricated. '
       + 'Plans come from the gate engine, the SMART $ builder or the universal hgPlanLevels fallback only — levels are never invented, '
       + 'and radar rows carry them whenever the candle cap reached the candidate. '
       + 'Universe: BTC/ETH/SOL + every Delta India + CoinDCX futures listing (combined, deduped by base, via xuniverse.js when '
@@ -2293,12 +2537,44 @@ function mount(el){
     }
     if (gone.length) mountNote(el, 'brain mount degraded: ' + gone.join(', ') + ' unavailable — remount the tab');
   }catch(e){ mountNote(el, 'brain mount degraded: shell sanity check unavailable — scan may still run'); }
+  /* 6) click-to-audit delegate — ONE listener on the pane root; every row's
+     ▸ LAYER AUDIT toggle renders its ledger lazily on demand. Isolated: a
+     hostile pane simply has no audit toggles, the scan still runs. */
+  try{
+    if (typeof el.addEventListener === 'function'){
+      el.addEventListener('click', function(ev){
+        try{
+          var t = ev && ev.target;
+          if (!t || typeof t.getAttribute !== 'function') return;
+          var key = t.getAttribute('data-audit');
+          if (!key && typeof t.closest === 'function'){
+            var p = t.closest('[data-audit]');
+            if (p) key = p.getAttribute('data-audit');
+          }
+          if (key) auditToggleByKey(el, key, t);
+        }catch(e){}
+      });
+    }
+  }catch(e){}
 }
 
 /* ---------------- registration ---------------- */
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
 G.brainUniverse = brainUniverse;
+/* click-to-audit seams: the ledger builder, the toggle, and a sym-keyed
+   lookup over the last synthesis (console/debug friendly, read-only) */
+G.rowAuditHTML = rowAuditHTML;
+G.auditToggleByKey = auditToggleByKey;
+G.__hgBrainAudit = function(sym){
+  try{
+    var rows = (__lastResult && Array.isArray(__lastResult.rows)) ? __lastResult.rows : [];
+    for (var i = 0; i < rows.length; i++){
+      if (rows[i] && rows[i].sym === sym) return rowAuditHTML(rows[i]);
+    }
+    return null;
+  }catch(e){ return null; }
+};
 /* signal-logger seam: deep-frozen {at, marketRead, rows} of the LAST completed
    synthesis (full or quick), null before the first scan. Never throws. */
 G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };

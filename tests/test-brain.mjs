@@ -57,8 +57,12 @@ ok(tab.id === 'brain' && tab.label === 'BRAIN' && typeof tab.mount === 'function
 ok(typeof W.brainUniverse === 'function', 'window.brainUniverse exposed (pure combined-universe builder)');
 ok(W.snapshotLayers === undefined && W.runBrain === undefined && W.marketRead === undefined
    && W.buildUniverse === undefined && W.cardHTML === undefined && W.legacyUniverse === undefined
-   && W.fetch4h === undefined && W.brainRefresh === undefined,
-   'only brainCollect/brainDecide/brainUniverse + __hgBrainLast + HG_tabs leak onto window');
+   && W.fetch4h === undefined && W.brainRefresh === undefined && W.watchRowHTML === undefined
+   && W.applyFunding === undefined && W.awaitWarmHooks === undefined,
+   'only the documented seams leak onto window');
+ok(typeof W.rowAuditHTML === 'function' && typeof W.auditToggleByKey === 'function'
+   && typeof W.__hgBrainAudit === 'function',
+   'click-to-audit seams exposed: rowAuditHTML + auditToggleByKey + __hgBrainAudit');
 ok(typeof W.__hgBrainLast === 'function', 'window.__hgBrainLast exposed for the signal logger');
 ok(W.__hgBrainLast() === null, '__hgBrainLast() returns null before the first scan');
 
@@ -1418,8 +1422,8 @@ function stubQuietLayers(WX){
   const g3Stat = TG3.stubs['#brainStat'].textContent;
   const g3Watch = TG3.stubs['#brainWatch'].innerHTML;
   const g3Aside = TG3.stubs['#brainAside'].innerHTML;
-  ok(g3Stat.indexOf('done · 0 PRIME · 0 HIGH · 4 watch · 5 aside') === 0,
-     'AE3: buckets — CROWD/FLIP/TAME/FEDGE watch (cautions never demote), DUMP gated — got "' + g3Stat + '"');
+  ok(g3Stat.indexOf('done · 0 PRIME · 1 HIGH · 3 watch · 5 aside') === 0,
+     'AE3: buckets — FLIP promoted WATCH -> HIGH by the contrarian funding vote (behavior upgrade: opposite-direction extremes now VOTE); CROWD/TAME/FEDGE watch, DUMP gated — got "' + g3Stat + '"');
   ok(g3Stat.indexOf(' · 1 gated: 1 overextended') >= 0,
      'AE3: only the overextended chase is tallied — funding cautions are NOT demotions — got "' + g3Stat + '"');
   ok(lrowSeg(g3Aside, 'DUMP').indexOf('overextended -17.5% 24h — chasing tops is how radar dies') >= 0,
@@ -1428,10 +1432,15 @@ function stubQuietLayers(WX){
      'AE3: -0.14%/8h funding behind a SHORT row -> caution named on the WATCH row, tier unchanged');
   ok(lrowSeg(g3Watch, 'FEDGE').indexOf('funding crowded same-direction — squeeze risk') >= 0,
      'AE3: exactly |0.1|%/8h funding trips the >= 0.1% caution (boundary honored)');
-  ok(lrowSeg(g3Watch, 'FLIP').length > 0 && lrowSeg(g3Watch, 'FLIP').indexOf('funding crowded') === -1,
-     'AE3: positive funding behind a SHORT row is opposite-direction — no caution');
+  const g3Cards = TG3.stubs['#brainCards'].innerHTML;
+  ok(g3Watch.indexOf('>FLIP</span>') === -1 && g3Cards.indexOf('FLIPUSDT') >= 0
+     && g3Cards.indexOf('HIGH · 4 LAYERS') >= 0 && g3Cards.indexOf('>SHORT</span>') >= 0,
+     'AE3: +0.3%/8h funding AGAINST the SHORT row casts the fade vote — FLIP completes HIGH on 4 layers');
+  ok(g3Cards.indexOf('FUNDING: funding +0.3%/8h — longs crowded, fade fuel for shorts') >= 0
+     && g3Cards.indexOf('funding crowded') === -1,
+     'AE3: the contrarian vote is named on the card — and it is a VOTE, never a caution chip');
   ok(lrowSeg(g3Watch, 'TAME').length > 0 && lrowSeg(g3Watch, 'TAME').indexOf('funding crowded') === -1,
-     'AE3: |0.05|%/8h funding is sub-threshold — no caution');
+     'AE3: |0.05|%/8h funding is sub-threshold — no caution, no vote');
 }
 
 /* AE4 — PRIME/HIGH chips, never demotions: an overextended PRIME keeps its
@@ -1864,6 +1873,268 @@ function trendRows(up){
   ok(snap8 && snap8.at >= at1 && Object.isFrozen(snap8)
      && snap8.rows.some(function(x){ return x.sym === 'TRENDYUSDT' && x.tier === 'HIGH'; }),
      'AF7: the quick rescan IS a completed synthesis — snapshot refreshed, still frozen');
+}
+
+/* ================= AG) FUNDING as a voting contrarian layer =================
+   |funding| >= 0.1%/8h AGAINST the row = named crowd-fade vote (one context
+   layer, like fng); SAME-direction = caution chip, NO vote; sub-extreme and
+   directionless rows = silent. Boundary |0.1| honored. */
+console.log('== FUNDING contrarian votes: both extremes, both directions, caution-vs-vote ==');
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'LONGYUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'EDGYUSDT',  dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'SAMELUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'SUBLUSDT',  dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'BTCUSDT',   dir: 'SHORT', evidence: 2, cls: 'NEW SHORTS' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT',   base: 'BTC',   exchange: 'delta', turnoverUsd: 9e9,  mark: 100, fundingPct: -0.2,   alsoOn: null },
+    { sym: 'LONGYUSDT', base: 'LONGY', exchange: 'delta', turnoverUsd: 60e6, mark: 1,   fundingPct: -0.128, alsoOn: null },
+    { sym: 'EDGYUSDT',  base: 'EDGY',  exchange: 'delta', turnoverUsd: 55e6, mark: 1,   fundingPct: -0.1,   alsoOn: null },
+    { sym: 'SAMELUSDT', base: 'SAMEL', exchange: 'delta', turnoverUsd: 50e6, mark: 1,   fundingPct: 0.13,   alsoOn: null },
+    { sym: 'SUBLUSDT',  base: 'SUBL',  exchange: 'delta', turnoverUsd: 45e6, mark: 1,   fundingPct: -0.05,  alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TG = freshPane();
+  WG.HG_tabs[0].mount(TG.pane);
+  await runAndWait(TG.stubs);
+  const agStat = TG.stubs['#brainStat'].textContent;
+  const agCards = TG.stubs['#brainCards'].innerHTML;
+  const agWatch = TG.stubs['#brainWatch'].innerHTML;
+  ok(agStat.indexOf('done · 0 PRIME · 2 HIGH · 4 watch · 2 aside') === 0,
+     'AG: LONGY+EDGY complete HIGH via the long-fade vote; SAMEL/SUBL + auto-prepended ETH/SOL radar watch; tied BTC + gold aside — got "' + agStat + '"');
+  ok(agCards.indexOf('HIGH · 4 LAYERS') >= 0
+     && agCards.indexOf('FUNDING: funding -0.128%/8h — shorts crowded, fade fuel for longs') >= 0,
+     'AG: negative funding behind a LONG row casts the named long-fade vote (spec example verbatim)');
+  ok(agCards.indexOf('FUNDING: funding -0.1%/8h — shorts crowded, fade fuel for longs') >= 0,
+     'AG: exactly |0.1|%/8h AGAINST the row fires the vote (boundary honored)');
+  ok(lrowSeg(agWatch, 'SAMEL').indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AG: +0.13%/8h WITH the LONG row keeps the caution chip');
+  const agSnap = WG.__hgBrainLast();
+  const agBySym = function(s){ return agSnap.rows.filter(function(x){ return x.sym === s; })[0]; };
+  ok(!agBySym('SAMELUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
+     'AG: same-direction extreme casts NO vote — never reward the crowded side');
+  ok(lrowSeg(agWatch, 'SUBL').indexOf('funding crowded') === -1
+     && !agBySym('SUBLUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
+     'AG: sub-extreme funding is silent — no chip, no vote');
+  ok(agBySym('LONGYUSDT').evidence.indexOf('FUNDING: funding -0.128%/8h — shorts crowded, fade fuel for longs') >= 0,
+     'AG: __hgBrainLast carries the raw FUNDING evidence for the signal logger');
+  ok(!agBySym('BTCUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
+     'AG: extreme funding on a TIED (directionless) row casts no vote — a fade needs a direction');
+  const btcAudit = WG.__hgBrainAudit('BTCUSDT');
+  ok(btcAudit && btcAudit.indexOf('no direction to fade a crowd against') >= 0,
+     'AG: the tied row’s audit ledger names exactly WHY funding sat out');
+  const sameAudit = WG.__hgBrainAudit('SAMELUSDT');
+  ok(sameAudit && sameAudit.indexOf('never a reward vote') >= 0
+     && sameAudit.indexOf('funding crowded same-direction') === -1,
+     'AG: the FUNDING audit line carries the richer caution — the guard chip is not duplicated');
+
+  /* a lone funding vote can never create a tier; one context layer CAN complete radar */
+  const dFund = DECIDE([{ layer: 'funding', vote: 'long', text: 'funding -0.128%/8h — shorts crowded, fade fuel for longs', kind: 'context' }], {});
+  ok(dFund.tier === 'ASIDE' && dFund.agree === 1, 'AG: a lone funding vote = thin ASIDE — never a tier by itself');
+}
+{
+  const WG2 = freshBrain();
+  stubQuietLayers(WG2);
+  WG2.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG2.rotationState = function(){ return { season: 'btc', altPct: 25, evidence: [] }; };
+  WG2.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG2.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0,     alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50,  fundingPct: -0.15, alsoOn: null } ]; };
+  WG2.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TG2 = freshPane();
+  WG2.HG_tabs[0].mount(TG2.pane);
+  await runAndWait(TG2.stubs);
+  const ag2Watch = TG2.stubs['#brainWatch'].innerHTML;
+  ok(TG2.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 0 HIGH · 2 watch · 2 aside') === 0,
+     'AG: 1-layer ETH + the funding vote = radar WATCH (the vote counts as ONE context layer); auto-added SOL thin aside — got "' + TG2.stubs['#brainStat'].textContent + '"');
+  ok(lrowSeg(ag2Watch, 'ETH').indexOf('radar only') >= 0
+     && WG2.__hgBrainLast().rows.filter(function(x){ return x.sym === 'ETHUSDT'; })[0]
+          .evidence.indexOf('FUNDING: funding -0.15%/8h — shorts crowded, fade fuel for longs') >= 0,
+     'AG: funding completes radar exactly like fng — named, honest, thin');
+}
+
+/* ================= AH) CLICK-TO-AUDIT layer breakdown =================
+   Every row carries a collapsed ▸ LAYER AUDIT toggle; the ledger renders
+   LAZILY on demand with every layer's verdict + evidence + exact dark reason. */
+console.log('== click-to-audit: builder, ledger content, lazy toggles, gold lane ==');
+{
+  /* builder unit — one collect with a vote, a dark layer, silents, an F&G vote */
+  const colA = COLLECT({ sym: 'BTCUSDT', news: { risk: 'low', blackout: false, events: [], note: 'clear' },
+    regime: { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } },
+    onchain: { bias: 'bullish', evidence: [{ side: 'bull', text: 'miners healthy' }], flags: {} },
+    fng: { v: 12, c: 'Extreme Fear' },
+    oiflow: { results: [ { sym: 'BTCUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] },
+    squeeze: { results: [] },
+    tape: { BTCUSDT: { chg24: 9.5, turnoverUsd: 5e9 } },
+    liq: null });
+  const rowA = { sym: 'BTCUSDT', lane: 'crypto', col: colA,
+                 dec: DECIDE(colA.votes, { unavailable: colA.unavailable }) };
+  const ah = W.rowAuditHTML(rowA);
+  const layers12 = ['NEWS','REGIME','ROTATION','ONCHAIN','FNG','FUNDING','ENGINE','OIFLOW','SQUEEZE','TAPE','LIQS','TREND4H'];
+  ok(layers12.every(function(L){ return ah.indexOf('>' + L + '<') >= 0; }),
+     'AH: the audit ledger renders all 12 crypto layers — got missing: '
+       + layers12.filter(function(L){ return ah.indexOf('>' + L + '<') === -1; }).join(',') );
+  ok(ah.indexOf('>LONG</span>') >= 0 && ah.indexOf('playbook: longs') >= 0,
+     'AH: a voting layer shows its verdict + one-line evidence');
+  ok(ah.indexOf('>DARK</span>') >= 0 && ah.indexOf('rotation layer returned no state — cold or failed') >= 0,
+     'AH: a dark layer shows DARK + the exact dark reason');
+  ok(ah.indexOf('the deep scan has not warmed') >= 0, 'AH: engine dark reason is named verbatim');
+  ok(ah.indexOf('F&amp;G 12 extreme fear — contrarian long context') >= 0,
+     'AH: evidence strings escape honestly (F&G ampersand)');
+  ok(ah.indexOf('no evidence recorded') >= 0,
+     'AH: a layer with no recorded note falls back to \'no evidence recorded\' (never throws)');
+  ok(ah.indexOf('no squeeze state names this symbol') >= 0
+     && ah.indexOf('no flush-reversal setup in the current window') >= 0
+     && ah.indexOf('awaiting the post-scan candle fetch') >= 0,
+     'AH: silent layers say WHY they are silent, not just "silent"');
+  ok(ah.indexOf('miners healthy') >= 0 && ah.indexOf('momentum with participation') >= 0,
+     'AH: on-chain + tape evidence strings land on their lines');
+
+  /* guard rows + funding-guard dedup + veto rendering */
+  colA.votes.push({ layer: 'guard', vote: 'neutral', kind: 'context', caution: true,
+                    text: 'overextended +16.4% 24h — chasing tops is how radar dies' });
+  colA.votes.push({ layer: 'guard', vote: 'neutral', kind: 'context', caution: true,
+                    text: 'funding crowded same-direction — squeeze risk' });
+  const ah2 = W.rowAuditHTML(rowA);
+  ok(ah2.indexOf('GUARD') >= 0 && ah2.indexOf('overextended +16.4% 24h') >= 0,
+     'AH: a gate-guard caution renders as its own CAUTION line');
+  ok(ah2.indexOf('funding crowded same-direction') === -1,
+     'AH: the funding guard chip is NOT duplicated — the FUNDING line owns that story');
+  const colV = COLLECT({ sym: 'SOLUSDT', news: { risk: 'low', note: 'clear' },
+    engine: { survivors: [], rejected: [ { sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 } ], at: 1 } });
+  const ahV = W.rowAuditHTML({ sym: 'SOLUSDT', lane: 'crypto', col: colV,
+                               dec: DECIDE(colV.votes, { unavailable: colV.unavailable }) });
+  ok(ahV.indexOf('>VETO</span>') >= 0 && ahV.indexOf('engine veto @ G4') >= 0,
+     'AH: a vetoed row shows the VETO verdict + the killing gate');
+
+  /* gold lane: its own 4-layer ledger, no crypto-only layers */
+  const colG = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', note: 'clear' }, tape: null,
+    gold: { setup: { dir: 'long', confidence: 'STRONG', reason: 'composite long edge' },
+            deep: { dir: 'long', label: 'BULLISH', score: 71 },
+            basis: { basisPct: 0.01, verdict: 'balanced' } } });
+  const ahG = W.rowAuditHTML({ sym: 'XAU', lane: 'gold', col: colG,
+                              dec: DECIDE(colV.votes, { unavailable: [] }) });
+  ok(ahG.indexOf('>GOLDSETUP<') >= 0 && ahG.indexOf('>GOLDDEEP<') >= 0 && ahG.indexOf('>GOLDBASIS<') >= 0
+     && ahG.indexOf('>NEWS<') >= 0 && ahG.indexOf('>FUNDING<') === -1 && ahG.indexOf('>TREND4H<') === -1,
+     'AH: the gold lane renders its own 4-layer ledger — no crypto-only layers');
+  ok(ahG.indexOf('composite long edge') >= 0 && ahG.indexOf('positioning balanced') >= 0,
+     'AH: gold evidence strings land verbatim');
+  ok(W.rowAuditHTML(null) !== '' && W.rowAuditHTML({}).indexOf('audit') >= 0,
+     'AH: builder never throws on a broken row — honest fallback line');
+}
+{
+  /* integration — toggles on every row class, lazy by default, toggle works */
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.engineState = function(){ return { survivors: [], rejected: [ { sym: 'VETOEDUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 } ], at: 1 }; };
+  WG.squeezeState = function(){ return { results: [ { sym: 'W1USDT', kind: 'fired', dir: 'long' } ] }; };
+  WG.oiflowState = function(){ return { results: [ { sym: 'W1USDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT',    base: 'BTC',    exchange: 'delta', turnoverUsd: 9e9,  mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'W1USDT',     base: 'W1',     exchange: 'delta', turnoverUsd: 60e6, mark: 1,   fundingPct: 0, alsoOn: null },
+    { sym: 'A1USDT',     base: 'A1',     exchange: 'delta', turnoverUsd: 50e6, mark: 1,   fundingPct: 0, alsoOn: null },
+    { sym: 'VETOEDUSDT', base: 'VETOED', exchange: 'delta', turnoverUsd: 40e6, mark: 1,   fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TH = freshPane();
+  WG.HG_tabs[0].mount(TH.pane);
+  await runAndWait(TH.stubs);
+  const hCards = TH.stubs['#brainCards'].innerHTML;
+  const hWatch = TH.stubs['#brainWatch'].innerHTML;
+  const hAside = TH.stubs['#brainAside'].innerHTML;
+  ok(TH.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 1 HIGH · 3 watch · 3 aside') === 0,
+     'AH: fixture scan — W1 HIGH (4 layers), A1 + auto-prepended ETH/SOL radar watch, BTC thin aside, VETOED veto aside, gold aside — got "' + TH.stubs['#brainStat'].textContent + '"');
+  ok(hCards.indexOf('data-audit="W1USDT"') >= 0
+     && (hWatch.split('data-audit="').length - 1) === 3
+     && (hAside.split('data-audit="').length - 1) === 3,
+     'AH: every row class carries the audit toggle — card, all 3 WATCH rows, all 3 ASIDE/VETO rows');
+  ok(hCards.indexOf('auditRows') === -1 && hWatch.indexOf('auditRows') === -1 && hAside.indexOf('auditRows') === -1,
+     'AH: LAZY by default — not a single ledger is rendered until clicked (500-row scans stay lean)');
+  const w1Audit = WG.__hgBrainAudit('W1USDT');
+  ok(w1Audit && ['NEWS','REGIME','ROTATION','ONCHAIN','FNG','FUNDING','ENGINE','OIFLOW','SQUEEZE','TAPE','LIQS','TREND4H']
+       .every(function(L){ return w1Audit.indexOf('>' + L + '<') >= 0; }),
+     'AH: the HIGH row’s on-demand ledger covers all 12 layers');
+  ok(w1Audit.indexOf('SQUEEZE fired LONG — compression released') >= 0
+     && w1Audit.indexOf('inside the ±0.1%/8h band') >= 0
+     && w1Audit.indexOf('no clean trend break either way') >= 0,
+     'AH: squeeze vote + funding band-silence + flat-candle trend silence all named on demand');
+  const vAudit = WG.__hgBrainAudit('VETOEDUSDT');
+  ok(vAudit && vAudit.indexOf('>VETO</span>') >= 0 && vAudit.indexOf('engine veto @ G4') >= 0,
+     'AH: the VETO row’s ledger shows the veto + killing gate');
+  ok(WG.__hgBrainAudit('NOPEUSDT') === null, 'AH: auditing an unknown sym returns null, never throws');
+
+  /* the toggle itself: expand renders the ledger into the box; collapse releases it */
+  const stubBox = { style: { display: 'none' }, innerHTML: '' };
+  const stubBtn = { textContent: '▸ LAYER AUDIT' };
+  const stubPane = { querySelector: function(sel){ return sel.indexOf('data-audit-box') >= 0 ? stubBox : null; } };
+  WG.auditToggleByKey(stubPane, encodeURIComponent('W1USDT'), stubBtn);
+  ok(stubBox.style.display === '' && stubBox.innerHTML.indexOf('auditRows') >= 0 && stubBtn.textContent === '▾ LAYER AUDIT',
+     'AH: click EXPANDS — the ledger renders on demand into the row’s own box');
+  WG.auditToggleByKey(stubPane, encodeURIComponent('W1USDT'), stubBtn);
+  ok(stubBox.style.display === 'none' && stubBox.innerHTML === '' && stubBtn.textContent === '▸ LAYER AUDIT',
+     'AH: click again COLLAPSES and releases the HTML (lazy both ways)');
+  WG.auditToggleByKey(stubPane, encodeURIComponent('GHOSTUSDT'), stubBtn);
+  ok(stubBox.innerHTML.indexOf('row not in the last synthesis') >= 0,
+     'AH: toggling a sym missing from the last synthesis says so honestly, never throws');
+}
+
+/* ================= AI) BOUNDED WARM-WAIT at synthesis start =================
+   A slow-but-successful warm hook lifts its layer from dark to voting; a
+   never-settling hook loses the race and stays named-dark; a sync-throwing
+   hook and a liqs-style skip string are consumed without breaking the scan. */
+console.log('== bounded warm-wait: dark->voting promotion, honest dark after the cap ==');
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.brainTunables.warmMs = 400;   /* test-scale cap — the race mechanics are the product */
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [ { sym: 'BTCUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  let regimeRuns = 0;
+  WG.HG_warmups = [
+    { id: 'regime', label: 'REGIME', run: function(){
+        regimeRuns++;
+        return new Promise(function(res){
+          setTimeout(function(){
+            WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+            res('warmed');
+          }, 40);
+        }); } },
+    { id: 'rotation', label: 'ROTATION', run: function(){ return new Promise(function(){}); } },   /* never settles */
+    { id: 'boom', label: 'BOOM', run: function(){ throw new Error('kaboom'); } },                  /* sync throw */
+    { id: 'liqs', label: 'LIQS', run: async function(){
+        return 'skipped: stream-only layer — open the LIQS tab once to start the live socket'; } } /* consumed verbatim */
+  ];
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const TI = freshPane();
+  WG.HG_tabs[0].mount(TI.pane);
+  await runAndWait(TI.stubs);
+  const iStat = TI.stubs['#brainStat'].textContent;
+  const iRead = TI.stubs['#brainRead'].textContent;
+  ok(iStat.indexOf('done ·') === 0,
+     'AI: the scan COMPLETES despite a never-settling warm hook — the cap bound — got "' + iStat + '"');
+  ok(iRead.indexOf('RISK-ON regime') >= 0,
+     'AI: the slow-but-successful layer WARMED into voting instead of being judged dark — got "' + iRead + '"');
+  ok(iRead.indexOf('dark: rotation') >= 0,
+     'AI: the genuinely-stuck layer stays named-dark after the cap, exactly as today — got "' + iRead + '"');
+  const iRows = WG.__hgBrainLast().rows;
+  const iBtc = iRows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  ok(iBtc && iBtc.evidence.some(function(e){ return e.indexOf('REGIME:') === 0; })
+     && !iBtc.evidence.some(function(e){ return e.indexOf('ROTATION:') === 0; }),
+     'AI: snapshot proves it — warmed REGIME votes, stuck ROTATION never fabricated a vote');
+  ok(regimeRuns === 1, 'AI: the regime hook ran exactly once during the bounded wait — got ' + regimeRuns);
+  await runAndWait(TI.stubs);
+  ok(regimeRuns === 1 && TI.stubs['#brainStat'].textContent.indexOf('done ·') === 0,
+     'AI: an immediate re-run SKIPS the warm-wait (layers warm-checked moments ago) and still completes');
 }
 
 console.log('\n' + passed + ' assertions passed');

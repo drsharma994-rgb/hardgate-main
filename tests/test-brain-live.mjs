@@ -20,6 +20,12 @@
         extreme fear lifting BTC to a real 3-layer WATCH + ETH/SOL to radar
         while alts sit the layer out (majors only), F&G absent restoring the
         pre-F&G verdict math exactly
+     F) funding contrarian votes + click-to-audit + bounded warm-wait at
+        scale: extreme funding AGAINST a row completes radar with a named fade
+        vote while same-direction stays a caution; every rendered row carries
+        a collapsed audit toggle with zero ledgers rendered until clicked; a
+        slow warm hook lifts a layer from dark to voting while a stuck hook
+        stays named-dark after the cap
    No live network anywhere. Run: node tests/test-brain-live.mjs */
 
 import fs from 'node:fs';
@@ -414,6 +420,125 @@ console.log('== D) liquidity floor + overextension guard over a 61-row universe 
          && dQuickAside.indexOf('overextended +17.3% 24h — chasing tops is how radar dies') >= 0
          && dQuickAside.indexOf('AS OF') >= 0,
          'gated verdicts persist through the quick rescan with their named reasons + AS OF age stamps');
+}
+
+/* ================= F1) bounded warm-wait at scale =================
+   60-crypto universe; REGIME starts COLD behind a slow-but-successful warm
+   hook (40ms into a 400ms test cap) and gets to VOTE; ON-CHAIN sits behind a
+   never-settling hook and stays named-dark after the cap. Never hangs. */
+console.log('== F1) bounded warm-wait: slow layer votes, stuck layer named-dark ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  W.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  W.squeezeState = function(){ return { results: [] }; };
+  W.oiflowState = function(){ return { results: [] }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  W.brainTunables.warmMs = 400;
+  W.HG_warmups = [
+    { id: 'regime', label: 'REGIME', run: function(){
+        return new Promise(function(res){
+          setTimeout(function(){
+            W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+            res('warmed');
+          }, 40);
+        }); } },
+    { id: 'onchain', label: 'ON-CHAIN', run: function(){ return new Promise(function(){}); } },   /* never settles */
+    { id: 'liqs', label: 'LIQS', run: async function(){
+        return 'skipped: stream-only layer — open the LIQS tab once to start the live socket'; } }
+  ];
+  const list = [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null }
+  ];
+  for (let n = 1; n <= 57; n++){
+    const base = 'WALT' + String(n).padStart(3, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+  }
+  W.xuUniverse = async function(){ return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  W.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const PF = freshPane();
+  W.HG_tabs[0].mount(PF.pane);
+  await runAndWait(PF.stubs);
+  const f1Stat = PF.stubs['#brainStat'].textContent;
+  const f1Read = PF.stubs['#brainRead'].textContent;
+  assert(f1Stat.indexOf('done · 0 PRIME · 0 HIGH · 59 watch · 2 aside') === 0,
+         'F1: the scan completes over the stuck hook (cap bound) — 59 radar watch, BTC + gold aside — got "' + f1Stat + '"');
+  assert(f1Read.indexOf('RISK-ON regime') >= 0,
+         'F1: the slow REGIME hook warmed its layer into voting — never judged dark — got "' + f1Read + '"');
+  assert(f1Read.indexOf('dark: on-chain') >= 0,
+         'F1: the never-settling ON-CHAIN hook leaves its layer named-dark after the cap — got "' + f1Read + '"');
+  const f1Rows = W.__hgBrainLast().rows;
+  const f1Btc = f1Rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  assert(f1Btc && f1Btc.evidence.some(function(e){ return e.indexOf('REGIME:') === 0; })
+         && !f1Btc.evidence.some(function(e){ return e.indexOf('ONCHAIN:') === 0; }),
+         'F1: snapshot — warmed REGIME votes for BTC, stuck ON-CHAIN never fabricated a vote');
+  assert(f1Rows.length === 61, 'F1: snapshot covers the full 60-crypto universe + gold — got ' + f1Rows.length);
+}
+
+/* ================= F2) funding contrarian votes + click-to-audit at scale =================
+   BTC rides a -0.12%/8h print to a funding-completed radar WATCH; ETH takes
+   the same-direction caution with NO vote; SOL sub-extreme silent. Every row
+   carries a collapsed audit toggle; not one ledger renders until clicked. */
+console.log('== F2) funding votes + audit toggles over a 13-watch board ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  W.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  W.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  W.engineState = function(){ return { survivors: [], rejected: [], at: 1 }; };
+  W.squeezeState = function(){ return { results: [] }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  W.oiflowState = function(){ return { results: [ { sym: 'ETHUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  const list = [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: -0.12, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50,  fundingPct: 0.11,  alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20,  fundingPct: -0.09, alsoOn: null }
+  ];
+  for (let n = 1; n <= 10; n++){
+    const base = 'FALT' + String(n).padStart(2, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+  }
+  W.xuUniverse = async function(){ return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  W.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  const PF2 = freshPane();
+  W.HG_tabs[0].mount(PF2.pane);
+  await runAndWait(PF2.stubs);
+  const f2Stat = PF2.stubs['#brainStat'].textContent;
+  const f2Watch = PF2.stubs['#brainWatch'].innerHTML;
+  const f2Aside = PF2.stubs['#brainAside'].innerHTML;
+  assert(f2Stat.indexOf('done · 0 PRIME · 0 HIGH · 13 watch · 1 aside') === 0,
+         'F2: BTC/ETH/SOL + 10 alts all WATCH; gold the only aside — got "' + f2Stat + '"');
+  const f2Rows = W.__hgBrainLast().rows;
+  const f2BySym = function(s){ return f2Rows.filter(function(x){ return x.sym === s; })[0]; };
+  assert(lrowSeg(f2Watch, 'BTC').indexOf('radar only') >= 0
+         && f2BySym('BTCUSDT').evidence.indexOf('FUNDING: funding -0.12%/8h — shorts crowded, fade fuel for longs') >= 0,
+         'F2: extreme funding AGAINST completes BTC’s radar with the named fade vote');
+  assert(lrowSeg(f2Watch, 'ETH').indexOf('funding crowded same-direction — squeeze risk') >= 0
+         && !f2BySym('ETHUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
+         'F2: +0.11%/8h WITH the LONG row = caution chip, NO vote — the crowded side is never rewarded');
+  assert(lrowSeg(f2Watch, 'SOL').indexOf('funding crowded') === -1
+         && !f2BySym('SOLUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
+         'F2: -0.09%/8h sub-extreme = silent — no chip, no vote');
+  assert((f2Watch.split('data-audit="').length - 1) === 13
+         && (f2Aside.split('data-audit="').length - 1) === 1
+         && f2Watch.indexOf('auditRows') === -1 && f2Aside.indexOf('auditRows') === -1,
+         'F2: all 14 rows carry a collapsed audit toggle and NOT ONE ledger renders until clicked');
+  const btcAudit = W.__hgBrainAudit('BTCUSDT');
+  assert(btcAudit && btcAudit.indexOf('>FUNDING<') >= 0 && btcAudit.indexOf('fade fuel for longs') >= 0
+         && btcAudit.indexOf('>TREND4H<') >= 0 && btcAudit.indexOf('>REGIME<') >= 0,
+         'F2: BTC’s on-demand audit names the funding vote + the silent trend layer');
+  const xauAudit = W.__hgBrainAudit('XAU');
+  assert(xauAudit && xauAudit.indexOf('>GOLDSETUP<') >= 0 && xauAudit.indexOf('>DARK</span>') >= 0
+         && xauAudit.indexOf('run GOLD once') >= 0,
+         'F2: the gold row audits its own lane — GOLDSETUP dark with the exact reason');
 }
 
 /* ================= E1) TREND4H structural promotion at scale =================

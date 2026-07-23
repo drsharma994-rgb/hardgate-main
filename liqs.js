@@ -47,6 +47,12 @@ Registers via window.HG_tabs.push({id:'liqs', label:'LIQS', mount, refresh})
 — refresh reconnects a dead/errored socket (bounded backoff, never against
 an explicit STOP) and always recomputes the panels from the current buffer;
 'skipped: not run yet' when the tape was never started.
+
+The BRAIN warm-up hook (window.HG_warmups id 'liqs') starts the stream
+itself through the very same starter the START button uses — never a
+second socket, never against an explicit STOP, honest status strings only
+('socket started…' / 'socket live — N events in window' with N the REAL
+rolling-window count / 'skipped: …' naming why). Never throws.
 ========================================================================= */
 (function(){
 'use strict';
@@ -569,6 +575,18 @@ function renderStat(){
   stat.textContent = txt;
 }
 
+/* START reflects the stream state too: a socket that is already connecting/
+   live — however it was started, tab click OR brain warm-up auto-start —
+   shows as already-running (disabled), never a second socket. */
+function renderButtons(){
+  var bStart = q('#liqsStart'); if (!bStart) return;
+  var noWS = (typeof WebSocket !== 'function');
+  var running = (S.status === 'live' || S.status === 'connecting' || S.status === 'reconnecting');
+  bStart.disabled = noWS || running;
+  bStart.textContent = (S.status === 'live') ? 'RUNNING'
+                     : (running ? 'CONNECTING…' : 'START');
+}
+
 function renderTape(){
   var box = q('#liqsTape'); if (!box) return;
   var now = Date.now();
@@ -712,6 +730,7 @@ function render(){
     if (!S.el) return;
     var snap = S.agg.snapshot();
     renderStat();
+    renderButtons();
     renderTape();
     renderGauge(snap);
     renderTable(snap);
@@ -794,12 +813,49 @@ G.liqAgg = liqAgg;
 G.liqFlushSetup = liqFlushSetup;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'liqs', label: 'LIQS', mount: function(el){ mount(el); }, refresh: refreshLiqs });
-/* BRAIN warm-up hook: there is nothing to pre-fetch — this layer is fed by
-   a live websocket only (Binance exposes no free REST liquidation history),
-   so the hook just says so and lets the BRAIN name the gap honestly. */
+/* BRAIN warm-up hook: this layer is fed by a live websocket only (Binance
+   exposes no free REST liquidation history), so warming means STARTING the
+   stream — through startStream(), the exact starter the tab's START button
+   uses (no duplicated socket logic; its guard makes a connecting/live
+   socket a no-op, so warm never opens a second one):
+     - no WebSocket in this environment -> honest skip, nothing thrown;
+     - explicit operator STOP           -> skipped, the manual close is
+       respected (same contract as refresh — never against the operator);
+     - status connecting/live but the socket is silently dead (null /
+       CLOSING / CLOSED) -> one immediate bounded reconnect (reconnectNow,
+       the same path refresh uses);
+     - already live                     -> 'socket live — N events in window'
+       with N the REAL rolling-window count, never fabricated;
+     - otherwise (idle / error)         -> startStream() fresh, then an
+       honest verdict: 'socket started…', or a skip naming the failure. */
 G.HG_warmups = G.HG_warmups || [];
 G.HG_warmups.push({ id: 'liqs', label: 'LIQS', run: async function(){
-  return 'skipped: stream-only layer — open the LIQS tab once to start the live socket';
+  try{
+    if (typeof WebSocket !== 'function')
+      return 'skipped: stream unavailable — no WebSocket in this environment';
+    if (S.manualClose || S.status === 'stopped')
+      return 'skipped: stream stopped by operator — press START in the LIQS tab to resume';
+    var ws = S.ws, rs = -1;
+    try{ rs = (ws && isFinite(+ws.readyState)) ? +ws.readyState : -1; }catch(eR){ rs = -1; }
+    var running = (S.status === 'live' || S.status === 'connecting' || S.status === 'reconnecting');
+    if (running && ((!ws) || rs === 2 || rs === 3)){
+      reconnectNow(); /* single immediate attempt; ctor failure falls back to bounded backoff */
+      return 'socket reconnecting — restarting the liquidation stream';
+    }
+    if (S.status === 'live'){
+      var n = S.agg.snapshot().window.count;
+      return 'socket live — ' + n + ' event' + (n === 1 ? '' : 's') + ' in window';
+    }
+    if (running) return 'socket ' + S.status + ' — accumulating liquidations';
+    startStream(); /* idle or error with a WebSocket available: fresh session */
+    if (S.status === 'error')
+      return 'skipped: stream start failed in this environment';
+    if (!S.ws)
+      return 'skipped: stream start failed — socket constructor threw, bounded retry running';
+    return 'socket started — accumulating liquidations';
+  }catch(e){
+    return 'error: ' + ((e && e.message) || e);
+  }
 } });
 
 })();
