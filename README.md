@@ -73,7 +73,19 @@ Production lives at **https://hardgate-main.vercel.app** (project linked in `.ve
 2. Deploy: `vercel --prod --yes` from the project root.
 3. **Commit immediately after every deployed change** — the git history on `main` always mirrors what is
    live on Vercel. Include what changed + test status + the production deployment id in the message.
-4. Full snapshots on request: `hardgate-vN.zip` of the whole folder, kept in the parent directory.
+4. Push to GitHub (`git push origin main`) — the repo is the source of truth for the alert workflow.
+5. Full snapshots on request: `hardgate-vN.zip` of the whole folder, kept in the parent directory.
+
+### Hosting state (decided 2026-07-24, under owner review)
+
+- **Repo visibility: PUBLIC** (`github.com/drsharma994-rgb/hardgate-main`). Made public so GitHub Pages
+  could be evaluated; nothing secret is exposed — the EmailJS keys are client-side and already visible
+  on the live site. Bonus: scheduled Actions are free/unlimited on public repos.
+- **GitHub Pages mirror: ENABLED** at https://drsharma994-rgb.github.io/hardgate-main/ — serves the same
+  `main` as Vercel, but STATIC-only: `/api/proxy` does not exist there, so CoinDCX and Yahoo macro
+  reads degrade to "—". Delta India / Binance / BRAIN / Entry Ticket / alerts all work.
+- **Primary site remains Vercel** (full functionality incl. the proxy). The owner is comparing both and
+  will decide: keep the Pages mirror, or flip the repo back to private (Pages dies automatically).
 
 ## Alerts
 
