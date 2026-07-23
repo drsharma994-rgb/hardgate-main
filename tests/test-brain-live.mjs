@@ -31,6 +31,11 @@
         HIGH card + swing-fixture radar rows offer patient 4h-structure LIMITs
         while flat-candle rows keep the hgPlanLevels fallback honestly labeled;
         the quick rescan re-derives every working limit deterministically
+     H) auto-warm into RUN SYNTHESIS at scale: engine registered FIRST invokes
+        LAST through the one shared path; cold regime/oiflow/engine layers warm
+        into a real BTC HIGH carrying the gate plan; a rejecting starter and a
+        never-settling hook stay named in the accounting; the 60s freshness
+        window and QUICK RESCAN invoke zero starters
    No live network anywhere. Run: node tests/test-brain-live.mjs */
 
 import fs from 'node:fs';
@@ -441,7 +446,7 @@ console.log('== F1) bounded warm-wait: slow layer votes, stuck layer named-dark 
   W.oiflowState = function(){ return { results: [] }; };
   W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
   W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
-  W.brainTunables.warmMs = 400;
+  W.brainTunables.warmColdMs = 400;
   W.HG_warmups = [
     { id: 'regime', label: 'REGIME', run: function(){
         return new Promise(function(res){
@@ -811,6 +816,118 @@ console.log('== G) anchored limit plans at scale: engine precedence, LIMIT rende
          && lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'WALT01').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0
          && lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'FALT01').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
          'G: the quick pass re-derives the same limits + fallbacks — WATCH rows keep their working orders');
+}
+
+/* ================= H) AUTO-WARM INTO RUN SYNTHESIS at scale =================
+   40-crypto universe, F&G 12 extreme fear. Five warm hooks registered with
+   engine FIRST — the shared collection must invoke it LAST. Cold regime /
+   oiflow / engine layers warm inside the 400ms test cap and VOTE in the same
+   run: BTC lands a real 4-layer HIGH carrying the warmed engine's gate plan;
+   ETH/SOL ride regime+F&G radar. A rejecting squeeze starter and a never-
+   settling rotation hook stay named in the accounting prefix. The tape feed
+   is live-but-empty so exactly rotation+squeeze are dark (HIGH cap binds
+   exactly). Re-run inside the freshness window + QUICK RESCAN fire nothing. */
+console.log('== H) auto-warm into synthesis at scale: cold layers vote, accounting exact, re-run + quick skip ==');
+{
+  const W = freshBrain();
+  W.hgNewsRisk = function(){ return { risk: 'low', blackout: false, events: [], note: 'clear' }; };
+  W.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
+  W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
+  W.binanceTickers24h = async function(){ return {}; };   /* tape live, sub-threshold everywhere — never dark */
+  W.brainTunables.warmColdMs = 400;
+  const hCalls = [], hProg = [];
+  let PH = null;                               /* assigned before any hook can fire (mount -> run) */
+  W.HG_warmups = [
+    { id: 'engine', label: 'ENGINE', run: function(){                    /* registered FIRST … */
+        hCalls.push('engine');
+        hProg.push(PH.stubs['#brainStat'].textContent);                  /* … must still invoke LAST */
+        return new Promise(function(res){
+          setTimeout(function(){
+            W.engineState = function(){ return { survivors: [
+              { sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
+                plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 6 } ], rejected: [], at: 1 }; };
+            res('warmed');
+          }, 120);
+        }); } },
+    { id: 'regime', label: 'REGIME', run: function(){
+        hCalls.push('regime');
+        return new Promise(function(res){
+          setTimeout(function(){
+            W.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+            res('warmed');
+          }, 40);
+        }); } },
+    { id: 'oiflow', label: 'OI FLOW', run: function(){
+        hCalls.push('oiflow');
+        return new Promise(function(res){
+          setTimeout(function(){
+            W.oiflowState = function(){ return { results: [ { sym: 'BTCUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+            res('warmed');
+          }, 60);
+        }); } },
+    { id: 'squeeze', label: 'SQUEEZE', run: function(){ hCalls.push('squeeze'); return Promise.reject(new Error('melted')); } },
+    { id: 'rotation', label: 'ROTATION', run: function(){ hCalls.push('rotation'); return new Promise(function(){}); } }   /* never settles */
+  ];
+  const list = [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null },
+    { sym: 'ETHUSDT', base: 'ETH', exchange: 'delta', turnoverUsd: 5e9, mark: 50, fundingPct: 0, alsoOn: null },
+    { sym: 'SOLUSDT', base: 'SOL', exchange: 'delta', turnoverUsd: 2e9, mark: 20, fundingPct: 0, alsoOn: null }
+  ];
+  for (let n = 1; n <= 37; n++){
+    const base = 'WALT' + String(n).padStart(3, '0');
+    list.push({ sym: base + 'USDT', base: base, exchange: 'delta', turnoverUsd: 50e6, mark: 1, fundingPct: null, alsoOn: null });
+  }
+  PH = freshPane();
+  const hSnaps = [];
+  W.xuUniverse = async function(){ hSnaps.push(PH.stubs['#brainStat'].textContent); return list; };
+  W.xuState = function(){ return { count: list.length, delta: list.length, cdcx: 0, at: Date.now(), note: null }; };
+  W.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  W.HG_tabs[0].mount(PH.pane);
+
+  globalThis.S = { fng: { v: 12, c: 'Extreme Fear' } };
+  await runAndWait(PH.stubs);
+  assert(hCalls.join(',') === 'regime,oiflow,squeeze,rotation,engine',
+         'H: ONE shared invocation path — registration order preserved, engine sorted LAST — got "' + hCalls.join(',') + '"');
+  assert(hProg[0] === 'auto-warming layers — regime, oiflow, squeeze, rotation, engine (≤0.4s)…',
+         'H: the progress stat names the exact hook order + the cold cap while the starters run — got "' + hProg[0] + '"');
+  assert(hSnaps[0] === 'auto-warmed: regime, oiflow, engine'
+         + ' · still dark: squeeze (starter failed: melted) · rotation (still running — lands in its own time)'
+         + ' · reading every intelligence layer…',
+         'H: accounting prefix — three cold layers warmed into voting, the rejection + the stuck hook named — got "' + hSnaps[0] + '"');
+  const hStat = PH.stubs['#brainStat'].textContent;
+  const hCards = PH.stubs['#brainCards'].innerHTML;
+  const hWatch = PH.stubs['#brainWatch'].innerHTML;
+  assert(hStat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 38 aside') === 0,
+         'H: 41 rows — BTC HIGH on 4 warmed-or-live layers, ETH/SOL radar, 37 alts + gold aside — got "' + hStat + '"');
+  const hBtcSeg = hCards.split('<div class="card ').filter(function(s){ return s.indexOf('BTCUSDT') >= 0; })[0] || '';
+  assert(hBtcSeg.indexOf('HIGH · 4 LAYERS') >= 0 && hBtcSeg.indexOf('>LONG</span>') >= 0,
+         'H: the auto-warmed layers make BTC a real HIGH · 4 LAYERS LONG (regime+engine+oiflow+F&G), never judged dark');
+  assert(hBtcSeg.indexOf('ENTRY <b>100</b>') >= 0 && hBtcSeg.indexOf('gate engine') >= 0,
+         'H: the warmed engine survivor’s gate plan renders verbatim on the card — got "' + hBtcSeg.slice(0, 200) + '"');
+  assert(lrowSeg(hWatch, 'ETH').indexOf('radar only') >= 0 && lrowSeg(hWatch, 'SOL').indexOf('radar only') >= 0,
+         'H: ETH/SOL ride regime+F&G radar (2 uncontested) — the alts never climbed on one vote');
+  const hRows = W.__hgBrainLast().rows;
+  const hBtc = hRows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  assert(hRows.length === 41 && hBtc
+         && hBtc.evidence.some(function(e){ return e.indexOf('ENGINE: ENGINE SURVIVOR') === 0; })
+         && hBtc.evidence.some(function(e){ return e.indexOf('FNG: F&G 12 extreme fear') === 0; }),
+         'H: snapshot covers the full 40-crypto universe + gold; BTC evidence names the warmed ENGINE + the F&G vote');
+
+  /* QUICK RESCAN never auto-warms — zero starters, instant recheck */
+  PH.stubs['#brainQuick']._handler();
+  await waitIdle(PH.stubs);
+  const hQuick = PH.stubs['#brainStat'].textContent;
+  assert(hCalls.length === 5 && /^quick rescan: 3 checked · 38 unchanged/.test(hQuick)
+         && hQuick.indexOf('1 HIGH · 2 watch · 38 aside') >= 0,
+         'H: quick rescan rechecks only BTC+ETH+SOL with ZERO starter invocations — got "' + hQuick + '"');
+
+  /* re-run inside the 60s freshness window — starters skipped, no prefix */
+  await runAndWait(PH.stubs);
+  assert(hCalls.length === 5 && hSnaps[hSnaps.length - 1] === 'reading every intelligence layer…'
+         && PH.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 38 aside') === 0,
+         'H: the freshness window skips starter invocation entirely — same buckets, no accounting prefix');
+  delete globalThis.S;
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

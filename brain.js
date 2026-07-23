@@ -195,7 +195,7 @@ message — never a silent empty pane. Every awaited leg carries the 12s
 timeout (incl. binanceTickers24h / binanceKlines / getXAUCandles), and a
 scan-level watchdog (default 150s) stops launching new work when tripped,
 renders partial results with a 'scan timed out' note, and always releases
-__busy. window.brainTunables = {fetchMs, scanMs} is the documented vm-test
+__busy. window.brainTunables = {fetchMs, scanMs, warmMs, warmColdMs} is the documented vm-test
 seam; production never touches it.
 
 Classic script, no build step. Loads after every module it reads; absence of
@@ -244,7 +244,7 @@ var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
 var XU_CACHE_MS = 15 * 60 * 1000; /* mirror of xuniverse.js CACHE_MS (its documented contract) */
 /* vm-test seam: suites may shorten timeouts; production never touches this */
-var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000 };
+var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 12000 };
 /* the seam is this SAME object by reference — mutating window.brainTunables
    mutates what every withTimeout/watchdog reads */
 G.brainTunables = TUN;
@@ -2203,44 +2203,133 @@ async function brainRefresh(){
   }catch(e){ return 'error'; }
 }
 
-/* ---------------- BOUNDED WARM-WAIT AT SYNTHESIS START ----------------
-   Consume every registered layer warm hook (G.HG_warmups) with a bounded
-   TOTAL cap (TUN.warmMs, Promise.race) BEFORE the layer snapshot — a layer
-   that merely needed a moment gets to vote instead of being judged dark.
-   Hooks are idempotent by contract ('fresh' when warm, 'busy' when their own
-   scan is in-flight, an honest skip string otherwise — e.g. liqs' stream-only
-   line, consumed here without special-casing); a hook that loses the race
-   leaves its layer dark, named honestly by the market read exactly as today.
-   Never blocks the scan indefinitely; never fabricates a warmed state. Skips
-   entirely when a warm pass (WARM UP or a previous synthesis) ran < 60s ago. */
+/* ---------------- AUTO-WARM AT SYNTHESIS START ----------------
+   RUN SYNTHESIS first INVOKES the same warm starters WARM UP LAYERS uses —
+   one shared collection (warmHooksOrdered, engine LAST, the slow leg) so
+   there is exactly ONE warm-invocation path and no layer is special-cased —
+   then applies the bounded wait (Promise.race, TUN.warmColdMs, modestly
+   raised for a genuinely cold start) BEFORE the layer snapshot. A cold
+   layer whose scan lands inside the cap gets to VOTE instead of being
+   judged dark; a layer that loses the race stays named-dark, and the stat
+   line accounts honestly for both ('auto-warmed: engine, oiflow · still
+   dark: regime (returned no state)'). Hooks are idempotent by contract
+   ('fresh' when warm, 'busy' when their own scan is in-flight, an honest
+   skip string otherwise — e.g. liqs' stream-only line, consumed without
+   special-casing); a starter that throws/rejects is caught, NAMED, and its
+   layer judged dark — never fatal. Skips starter invocation entirely when
+   a warm pass (WARM UP or a previous synthesis) ran < 60s ago; QUICK
+   RESCAN never auto-warms (it stays instant). Never blocks the scan
+   indefinitely; never fabricates a warmed state. */
 var __warmedAt = 0;
-function awaitWarmHooks(){
+
+/* the warm starters in the button's invocation order — engine LAST (the
+   deep gate scan is the slow leg). THE single collection both WARM UP
+   LAYERS and the synthesis auto-warm consume. */
+function warmHooksOrdered(){
+  var hooks = [];
   try{
-    if (__warmedAt && (Date.now() - __warmedAt) < 60000) return Promise.resolve(false);
-    var reg = [];
-    try{ reg = Array.isArray(G.HG_warmups) ? G.HG_warmups : []; }catch(e){ reg = []; }
-    var ps = [];
+    var reg = Array.isArray(G.HG_warmups) ? G.HG_warmups : [];
     for (var i = 0; i < reg.length; i++){
       var h = reg[i];
-      if (!h || typeof h.run !== 'function') continue;
-      try{
-        var r = h.run();   /* hooks never throw per contract; strings pass through */
-        if (r && typeof r.then === 'function') ps.push(r);
-      }catch(e){}
+      if (h && typeof h.run === 'function' && typeof h.id === 'string') hooks.push(h);
     }
-    if (!ps.length) return Promise.resolve(false);
-    var ms = (isFinite(+TUN.warmMs) && +TUN.warmMs > 0) ? +TUN.warmMs : 8000;
-    var settle = (typeof Promise.allSettled === 'function')
-      ? Promise.allSettled(ps)
-      : Promise.all(ps.map(function(p){
-          return p.then(function(v){ return { status: 'fulfilled', value: v }; },
-                        function(e){ return { status: 'rejected', reason: e }; });
-        }));
-    return Promise.race([
-      settle,
-      new Promise(function(res){ setTimeout(function(){ res('capped'); }, ms); })
-    ]).then(function(){ return true; }, function(){ return true; });
-  }catch(e){ return Promise.resolve(false); }
+  }catch(e){}
+  hooks.sort(function(a, b){ return (a.id === 'engine' ? 1 : 0) - (b.id === 'engine' ? 1 : 0); });
+  return hooks;
+}
+
+/* hook id -> snapshotLayers key for the auto-warm accounting. The SAME
+   getters snapshotLayers reads, so 'warmed' means exactly 'now votes' */
+var WARM_LAYER_KEY = { news: 'newsState', regime: 'regime', rotation: 'rotation',
+                       onchain: 'onchain', engine: 'engine', oiflow: 'oiflow',
+                       squeeze: 'squeeze' };
+
+async function autoWarmIntoRun(stat){
+  try{
+    /* freshness window — a warm pass (button or previous synthesis) <60s
+       ago makes starter invocation redundant; skip ENTIRELY */
+    if (__warmedAt && (Date.now() - __warmedAt) < 60000) return '';
+    var hooks = warmHooksOrdered();
+    if (!hooks.length) return '';
+    var ms = (isFinite(+TUN.warmColdMs) && +TUN.warmColdMs > 0) ? +TUN.warmColdMs
+           : ((isFinite(+TUN.warmMs) && +TUN.warmMs > 0) ? +TUN.warmMs : 12000);
+    var names = [];
+    for (var n = 0; n < hooks.length; n++) names.push(hooks[n].id);
+    try{
+      if (stat){
+        stat.className = 'note';
+        stat.textContent = 'auto-warming layers — ' + names.join(', ')
+          + ' (≤' + FMT(ms / 1000, 1) + 's)…';
+      }
+    }catch(e){}
+    var pre = snapshotLayers();
+    /* invoke every starter; per-hook containment — a sync throw or a
+       rejection lands on THAT hook's record, never on the scan */
+    var recs = [];
+    var h;
+    for (h = 0; h < hooks.length; h++) recs.push({ id: hooks[h].id, outcome: 'pending', text: '' });
+    var pending = [];
+    for (h = 0; h < hooks.length; h++){
+      (function(rec, run){
+        try{
+          var r = run();   /* hooks never throw per contract; strings pass through */
+          if (r && typeof r.then === 'function'){
+            pending.push(r.then(
+              function(v){ rec.outcome = 'value'; rec.text = (typeof v === 'string') ? v : 'warmed'; },
+              function(e){ rec.outcome = 'error'; rec.text = errMsg(e); }));
+          }else{
+            rec.outcome = 'value'; rec.text = (typeof r === 'string') ? r : 'warmed';
+          }
+        }catch(e){ rec.outcome = 'error'; rec.text = errMsg(e); }
+      })(recs[h], hooks[h].run);
+    }
+    if (pending.length){
+      var settle = (typeof Promise.allSettled === 'function')
+        ? Promise.allSettled(pending)
+        : Promise.all(pending.map(function(p){
+            return p.then(function(v){ return { status: 'fulfilled', value: v }; },
+                          function(e){ return { status: 'rejected', reason: e }; });
+          }));
+      /* every pending record resolves through its mapping handler above, so
+         the race is the only cap the scan ever waits on */
+      await Promise.race([
+        settle,
+        new Promise(function(res){ setTimeout(function(){ res('capped'); }, ms); })
+      ]).then(null, function(){});
+    }
+    /* accounting: what the auto-warm accomplished vs what stayed dark */
+    var post = snapshotLayers();
+    function liveAt(snap, key){
+      try{ var v = snap[key]; return (v !== undefined && v !== null); }catch(e){ return false; }
+    }
+    var warmed = [], darkBits = [];
+    for (var k = 0; k < recs.length; k++){
+      var rec = recs[k];
+      var key = Object.prototype.hasOwnProperty.call(WARM_LAYER_KEY, rec.id) ? WARM_LAYER_KEY[rec.id] : null;
+      if (key && !liveAt(pre, key) && liveAt(post, key)){ warmed.push(rec.id); continue; }
+      if (key && liveAt(pre, key)) continue;   /* already warm before we fired — nothing to claim */
+      if (rec.outcome === 'error')
+        darkBits.push(rec.id + ' (starter failed: ' + rec.text + ')');
+      else if (rec.outcome === 'value' && rec.text.indexOf('error:') === 0)
+        darkBits.push(rec.id + ' (' + rec.text + ')');
+      else if (rec.outcome === 'value' && rec.text === 'busy')
+        darkBits.push(rec.id + ' (already running)');
+      else if (rec.outcome === 'value' && rec.text && rec.text !== 'fresh' && rec.text !== 'warmed')
+        darkBits.push(rec.id + ' (' + rec.text + ')');   /* honest skip string, verbatim */
+      else if (rec.outcome === 'pending')
+        darkBits.push(rec.id + ' (still running — lands in its own time)');
+      else if (key)
+        darkBits.push(rec.id + ' (returned no state)');
+      /* unmapped starters that came back fresh/warmed (gold lane etc.) say
+         nothing here — their warmth shows in the deck itself */
+    }
+    var bits = [];
+    if (warmed.length) bits.push('auto-warmed: ' + warmed.join(', '));
+    if (darkBits.length) bits.push('still dark: ' + darkBits.join(' · '));
+    /* the caller prefixes the accounting to the next phase's stat line, so it
+       stays readable through the universe build instead of flashing past */
+    return bits.join(' · ');
+  }catch(e){ return ''; }
 }
 
 async function runBrain(el){
@@ -2272,11 +2361,12 @@ async function runBrain(el){
     if (read) read.textContent = '';
     empty.style.display = 'none';
     stat.className = 'note';
-    stat.textContent = 'warming layers — bounded wait (≤' + Math.round(((+TUN.warmMs) || 8000) / 1000) + 's)…';
-    await awaitWarmHooks();
+    /* auto-warm: INVOKE the same starters WARM UP LAYERS uses, bounded-wait,
+       account for what warmed vs what stayed dark — then judge as today */
+    var warmNote = await autoWarmIntoRun(stat);
     __warmedAt = Date.now();
 
-    stat.textContent = 'reading every intelligence layer…';
+    stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading every intelligence layer…';
 
     var snap = snapshotLayers();
     var uni = await buildUniverse();
@@ -2634,15 +2724,8 @@ async function runWarmup(el){
     return;
   }
   if (__warming || __busy) return;
-  var hooks = [];
-  try{
-    var reg = Array.isArray(G.HG_warmups) ? G.HG_warmups : [];
-    for (var i = 0; i < reg.length; i++){
-      var h = reg[i];
-      if (h && typeof h.run === 'function' && typeof h.id === 'string') hooks.push(h);
-    }
-  }catch(e){}
-  hooks.sort(function(a, b){ return (a.id === 'engine' ? 1 : 0) - (b.id === 'engine' ? 1 : 0); });
+  /* the SAME starter collection the synthesis auto-warm uses — one path */
+  var hooks = warmHooksOrdered();
   if (!hooks.length){
     stat.className = 'note warn';
     stat.textContent = 'no warmable layers found — layer modules did not publish warm hooks (script load order?)';

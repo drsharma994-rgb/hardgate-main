@@ -20,11 +20,14 @@
          PRIME/HIGH caution chips, funding crowding caution non-demotion,
          tape-missing pass-through, suppressed tally on the stat line)
      AF) F&G contrarian + TREND4H promotion/dark honesty   AG) funding votes
-     AH) click-to-audit ledger    AI) bounded warm-wait
+     AH) click-to-audit ledger    AI) bounded warm-wait + auto-warm accounting
      AJ) structure-anchored limit plans — pure planner (each anchor type wins,
          band rejection, R:R decline, in-zone vs limit, stop/TP math)
      AK) anchored limits end-to-end (LIMIT render, snapshot {entry,stop,t1,t2}
          shape, audit PLAN line, quick-rescan persistence)
+     AL) auto-warm into RUN SYNTHESIS (shared engine-last invocation path,
+         cold engine warmed into voting, accounting prefix, 60s freshness
+         skip, QUICK RESCAN never warms, zero-hooks legacy stat)
    No live network. Run: node tests/test-brain.mjs */
 
 import fs from 'node:fs';
@@ -2095,12 +2098,15 @@ console.log('== click-to-audit: builder, ledger content, lazy toggles, gold lane
 /* ================= AI) BOUNDED WARM-WAIT at synthesis start =================
    A slow-but-successful warm hook lifts its layer from dark to voting; a
    never-settling hook loses the race and stays named-dark; a sync-throwing
-   hook and a liqs-style skip string are consumed without breaking the scan. */
+   hook and a liqs-style skip string are consumed without breaking the scan.
+   The auto-warm accounting (warmed / starter-failed / still-running / skip
+   string) rides the stat line through the universe build; a <60s re-run and
+   QUICK RESCAN invoke zero starters. */
 console.log('== bounded warm-wait: dark->voting promotion, honest dark after the cap ==');
 {
   const WG = freshBrain();
   stubQuietLayers(WG);
-  WG.brainTunables.warmMs = 400;   /* test-scale cap — the race mechanics are the product */
+  WG.brainTunables.warmColdMs = 400;   /* test-scale cold-start cap — the race mechanics are the product */
   WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
   WG.oiflowState = function(){ return { results: [ { sym: 'BTCUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
   let regimeRuns = 0;
@@ -2118,10 +2124,13 @@ console.log('== bounded warm-wait: dark->voting promotion, honest dark after the
     { id: 'liqs', label: 'LIQS', run: async function(){
         return 'skipped: stream-only layer — open the LIQS tab once to start the live socket'; } } /* consumed verbatim */
   ];
-  WG.xuUniverse = async function(){ return [
+  const TI = freshPane();
+  /* transient-stat capture: xuUniverse fires mid-scan — AFTER the auto-warm
+     accounting prefix is painted, BEFORE 'done ·' replaces it */
+  const iSnaps = [];
+  WG.xuUniverse = async function(){ iSnaps.push(TI.stubs['#brainStat'].textContent); return [
     { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null } ]; };
   WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
-  const TI = freshPane();
   WG.HG_tabs[0].mount(TI.pane);
   await runAndWait(TI.stubs);
   const iStat = TI.stubs['#brainStat'].textContent;
@@ -2138,9 +2147,108 @@ console.log('== bounded warm-wait: dark->voting promotion, honest dark after the
      && !iBtc.evidence.some(function(e){ return e.indexOf('ROTATION:') === 0; }),
      'AI: snapshot proves it — warmed REGIME votes, stuck ROTATION never fabricated a vote');
   ok(regimeRuns === 1, 'AI: the regime hook ran exactly once during the bounded wait — got ' + regimeRuns);
+  ok(iSnaps[0] === 'auto-warmed: regime'
+       + ' · still dark: rotation (still running — lands in its own time)'
+       + ' · boom (starter failed: kaboom)'
+       + ' · liqs (skipped: stream-only layer — open the LIQS tab once to start the live socket)'
+       + ' · reading every intelligence layer…',
+     'AI: the auto-warm accounting rides the stat line through the universe build — warmed / stuck / failed / skipped each named — got "' + iSnaps[0] + '"');
+  /* QUICK RESCAN never auto-warms — straight to the recheck, zero starters */
+  TI.stubs['#brainQuick']._handler();
+  await waitIdle(TI.stubs);
+  ok(regimeRuns === 1 && TI.stubs['#brainStat'].textContent.indexOf('quick rescan:') === 0,
+     'AI: QUICK RESCAN invokes zero warm starters and stays instant — got "' + TI.stubs['#brainStat'].textContent + '"');
   await runAndWait(TI.stubs);
   ok(regimeRuns === 1 && TI.stubs['#brainStat'].textContent.indexOf('done ·') === 0,
      'AI: an immediate re-run SKIPS the warm-wait (layers warm-checked moments ago) and still completes');
+  ok(iSnaps[iSnaps.length - 1] === 'reading every intelligence layer…',
+     'AI: inside the 60s freshness window the re-run carries NO accounting prefix — got "' + iSnaps[iSnaps.length - 1] + '"');
+}
+
+/* ================= AL) AUTO-WARM INTO RUN SYNTHESIS =================
+   The synthesis INVOKES the same starters WARM UP LAYERS uses — one shared
+   collection, engine sorted LAST even when registered FIRST — then bounded-
+   waits on the cold-start cap. A genuinely COLD engine layer warms into
+   VOTING inside the cap and its gate plan renders verbatim; a rejecting
+   starter and a skip string are named in the accounting; the 60s freshness
+   window and QUICK RESCAN invoke zero starters; no hooks at all -> the
+   legacy stat line byte-identical. */
+console.log('== auto-warm into synthesis: shared engine-last path, accounting prefix, freshness skip, quick never warms ==');
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  delete WG.engineState;                     /* engine starts genuinely COLD — its hook installs the state */
+  WG.brainTunables.warmColdMs = 400;
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  const calls = [], progSnaps = [];
+  let TL = null;                             /* assigned before any hook can fire (mount -> run) */
+  WG.HG_warmups = [
+    { id: 'engine', label: 'ENGINE', run: function(){                    /* registered FIRST … */
+        calls.push('engine');
+        progSnaps.push(TL.stubs['#brainStat'].textContent);              /* … must still invoke LAST */
+        return new Promise(function(res){
+          setTimeout(function(){
+            WG.engineState = function(){ return { survivors: [
+              { sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
+                plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 6 } ], rejected: [], at: 1 }; };
+            res('warmed');
+          }, 60);
+        }); } },
+    { id: 'regime', label: 'REGIME', run: function(){
+        calls.push('regime');
+        return new Promise(function(res){
+          setTimeout(function(){
+            WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+            res('warmed');
+          }, 30);
+        }); } },
+    { id: 'boom', label: 'BOOM', run: function(){ calls.push('boom'); return Promise.reject(new Error('kaput')); } },
+    { id: 'liqs', label: 'LIQS', run: async function(){ calls.push('liqs');
+        return 'skipped: stream-only layer — open the LIQS tab once to start the live socket'; } }
+  ];
+  TL = freshPane();
+  const alSnaps = [];
+  WG.xuUniverse = async function(){ alSnaps.push(TL.stubs['#brainStat'].textContent); return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null } ]; };
+  WG.HG_tabs[0].mount(TL.pane);
+  await runAndWait(TL.stubs);
+  ok(calls.join(',') === 'regime,boom,liqs,engine',
+     'AL: ONE shared invocation path — registration order preserved, engine sorted LAST — got "' + calls.join(',') + '"');
+  ok(progSnaps[0] === 'auto-warming layers — regime, boom, liqs, engine (≤0.4s)…',
+     'AL: the progress stat names the exact hook order + the cold cap while the starters run — got "' + progSnaps[0] + '"');
+  ok(alSnaps[0] === 'auto-warmed: regime, engine'
+       + ' · still dark: boom (starter failed: kaput)'
+       + ' · liqs (skipped: stream-only layer — open the LIQS tab once to start the live socket)'
+       + ' · reading every intelligence layer…',
+     'AL: accounting prefix — cold engine + regime warmed into voting, the rejection + the skip named verbatim — got "' + alSnaps[0] + '"');
+  ok(TL.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 0 HIGH · 1 watch · 3 aside') === 0,
+     'AL: tally — the warmed BTC rides radar WATCH, ETH/SOL/gold aside — got "' + TL.stubs['#brainStat'].textContent + '"');
+  const alBtc = WG.__hgBrainLast().rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  ok(alBtc && alBtc.evidence.some(function(e){ return e.indexOf('ENGINE: ENGINE SURVIVOR') === 0; })
+        && alBtc.evidence.some(function(e){ return e.indexOf('REGIME:') === 0; }),
+     'AL: the auto-warmed ENGINE + REGIME layers VOTE in the very same run — never judged dark');
+  const alBtcRow = lrowSeg(TL.stubs['#brainWatch'].innerHTML, 'BTC');
+  ok(alBtcRow.indexOf('ENTRY <b>100</b>') >= 0 && alBtcRow.indexOf('gate engine') >= 0,
+     'AL: the warmed engine survivor’s gate plan renders on the radar row verbatim — got "' + alBtcRow.slice(0, 200) + '"');
+  await runAndWait(TL.stubs);
+  ok(calls.length === 4 && alSnaps[alSnaps.length - 1] === 'reading every intelligence layer…',
+     'AL: re-run inside the 60s freshness window SKIPS starter invocation entirely — no prefix, no re-warm');
+  TL.stubs['#brainQuick']._handler();
+  await waitIdle(TL.stubs);
+  ok(calls.length === 4 && TL.stubs['#brainStat'].textContent.indexOf('quick rescan:') === 0,
+     'AL: QUICK RESCAN never auto-warms — zero new starter calls, instant recheck — got "' + TL.stubs['#brainStat'].textContent + '"');
+  /* zero hooks registered -> no warm phase at all, the legacy stat line unprefixed */
+  const WN = freshBrain();
+  stubQuietLayers(WN);
+  WN.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  const TN = freshPane();
+  const nSnaps = [];
+  WN.xuUniverse = async function(){ nSnaps.push(TN.stubs['#brainStat'].textContent); return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null } ]; };
+  WN.HG_tabs[0].mount(TN.pane);
+  await runAndWait(TN.stubs);
+  ok(nSnaps[0] === 'reading every intelligence layer…' && TN.stubs['#brainStat'].textContent.indexOf('done ·') === 0,
+     'AL: zero registered hooks -> the scan runs exactly as before, stat byte-identical — got "' + nSnaps[0] + '"');
 }
 
 /* ================= AJ) STRUCTURE-ANCHORED LIMIT PLANS — pure planner =================
