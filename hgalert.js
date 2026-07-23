@@ -13,6 +13,14 @@ plays a short synthesized musical phrase so the owner knows to come enter:
       'hgAlertGoldMin'). Alerts once per UPWARD crossing; re-arms when the
       count falls back below the threshold. Absent/throwing sources count 0
       and are named in the panel — never an error.
+  (c) TICKET — the BRAIN tab's ENTRY TICKET, pushed by brain.js on every
+      completed synthesis via window.hgAlertTicket({at, long, short}).
+      Alerts once per CHANGED ticket: the key is sym@entry per side, so a
+      new symbol OR a moved entry price on either side fires. The first
+      sighting after load seeds silently; 'no qualified entry' is a real
+      state — a side appearing or vanishing IS a change. When armed, the
+      chime fires AND an ntfy push goes out via window.sendAlertPush (when
+      a topic is configured); the 15-min class throttle covers both.
 
 SOUND: Web Audio API synthesized chime (no audio file) — E5 -> G5 -> C6
 (659.26 / 783.99 / 1046.50 Hz, sine/sine/triangle, ~0.9s, soft exponential
@@ -125,12 +133,16 @@ var __timer    = null;                   /* setInterval handle — started once,
 var __ui       = null;                   /* bell DOM, null when headless */
 var __panelOpen = false;
 
-var __lastChime = { brain: 0, gold: 0 }; /* per-class throttle clocks */
+var __lastChime = { brain: 0, gold: 0, ticket: 0 }; /* per-class throttle clocks */
 var __lastBrainKey = null;               /* last-alerted sym+tier set (null = armed) */
 var __lastBrainTrigAt = 0;               /* last brain trigger (chimed or consumed) */
 var __goldArmed = true;                  /* gold crossing latch (re-arms below threshold) */
 var __lastBrainLine = '';                /* '13:41 brain HIGH: RE, ZBT' */
 var __lastGoldLine  = '';                /* '13:52 gold setups 11 >= 10' */
+var __ticketKey = null;                  /* last-seen ticket key (null = not seeded yet) */
+var __ticketDesc = '';                   /* 'long BTC@112000 · short —' */
+var __ticketLive = false;                /* a ticket push has arrived this session */
+var __lastTicketLine = '';               /* '00:21 ticket: short ACE@0.0852 → ACE@0.0853' */
 
 /* last evaluation reads, for the panel's honest lines */
 var __evaluated = false;
@@ -300,6 +312,67 @@ function goldCount(){
   return out;
 }
 
+/* ---------------- (c) TICKET — entry-ticket change alerts ----------------
+   brain.js pushes {at, long:{sym,entry}|null, short:{sym,entry}|null} on
+   every completed synthesis. The alert key is sym@entry per side — a new
+   symbol, a moved entry, or a side appearing/vanishing all count as a
+   change. First sighting seeds silently. Chime + ntfy share the class
+   throttle. Never throws. */
+function ticketSideKey(side){
+  if (!side || !side.sym || !isFinite(+side.entry)) return '—';
+  return String(side.sym) + '@' + String(+side.entry);
+}
+function ticketKeyOf(snap){
+  return ticketSideKey(snap && snap.long) + ';' + ticketSideKey(snap && snap.short);
+}
+function ticketDescOf(snap){
+  var L = (snap && snap.long && snap.long.sym) ? ('long ' + snap.long.sym + '@' + (+snap.long.entry)) : 'long —';
+  var S = (snap && snap.short && snap.short.sym) ? ('short ' + snap.short.sym + '@' + (+snap.short.entry)) : 'short —';
+  return L + ' · ' + S;
+}
+function onTicket(snap){
+  try{
+    if (!snap || typeof snap !== 'object') return 'ignored';
+    var key = ticketKeyOf(snap);
+    __ticketLive = true;
+    __ticketDesc = ticketDescOf(snap);
+    if (__ticketKey === null){ __ticketKey = key; renderUI(); return 'seeded'; }
+    if (key === __ticketKey) return 'unchanged';
+    __ticketKey = key;
+    var line = hhmm() + ' ticket: ' + __ticketDesc;
+    if (!__enabled || !__unlocked || !audioOk()){
+      __lastTicketLine = line + (__enabled ? ' (armed — plays after your next click)' : ' (alerts off)');
+      renderUI();
+      return 'unarmed';
+    }
+    var now = 0;
+    try{ now = Date.now(); }catch(e){ now = 0; }
+    if (now - (__lastChime.ticket || 0) < CHIME_GAP_MS){
+      __lastTicketLine = line + ' (alert held by 15-min throttle)';
+      renderUI();
+      return 'throttled';
+    }
+    __lastChime.ticket = now;
+    var suffix;
+    if (__muted){ suffix = ' (muted)'; }
+    else if (playChime()){ suffix = ''; }
+    else { suffix = ' (sound failed)'; }
+    /* ntfy push — the free sendAlertPush from index.html; no topic = its
+       own silent skip. Fire-and-forget, never awaited into the UI path. */
+    try{
+      var push = gfn('sendAlertPush');
+      if (push) push('HARDGATE entry ticket changed',
+        'Long: ' + ((snap.long && snap.long.sym) ? snap.long.sym + ' @ ' + (+snap.long.entry) : '—')
+        + '\nShort: ' + ((snap.short && snap.short.sym) ? snap.short.sym + ' @ ' + (+snap.short.entry) : '—'));
+      suffix += ' · push sent';
+      if (!push) suffix = suffix.replace(' · push sent', '');
+    }catch(e){ suffix += ' · push failed'; }
+    __lastTicketLine = line + suffix;
+    renderUI();
+    return 'alerted';
+  }catch(e){ return 'error'; }
+}
+
 /* ---------------- evaluation round ---------------- */
 function evaluate(){
   var st = {
@@ -441,6 +514,10 @@ function goldLine(){
   if (wait.length) s += ' · waiting: ' + wait.join(', ');
   return s;
 }
+function ticketLine(){
+  if (!__ticketLive) return 'ticket: waiting for a completed synthesis — alerts on sym/entry changes';
+  return 'ticket: ' + (__ticketDesc || '—');
+}
 
 function renderUI(){
   var ui = __ui;
@@ -457,8 +534,10 @@ function renderUI(){
     if (ui.minIn && ui.minIn.value !== String(__goldMin)) ui.minIn.value = String(__goldMin);
     if (ui.brain) ui.brain.textContent = brainLine();
     if (ui.gold) ui.gold.textContent = goldLine();
+    if (ui.ticket) ui.ticket.textContent = ticketLine();
     if (ui.lastB) ui.lastB.textContent = 'last brain alert: ' + (__lastBrainLine || 'none yet this session');
     if (ui.lastG) ui.lastG.textContent = 'last gold alert: ' + (__lastGoldLine || 'none yet this session');
+    if (ui.lastT) ui.lastT.textContent = 'last ticket alert: ' + (__lastTicketLine || 'none yet this session');
   }catch(e){ /* rendering never breaks the engine */ }
 }
 
@@ -506,7 +585,7 @@ function buildUI(){
     root.innerHTML = ''
       + '<style>' + AL_CSS + '</style>'
       + '<div class="hgab-panel" id="hgAlertPanel" style="display:none">'
-      + '<div class="hgab-title">HG ALERTS <span>sound chimes for BRAIN + GOLD setups</span></div>'
+      + '<div class="hgab-title">HG ALERTS <span>sound chimes for BRAIN + GOLD + TICKET changes</span></div>'
       + '<div class="hgab-state" id="hgAlertState"></div>'
       + '<div class="hgab-row">'
       + '<button class="hgab-mini" id="hgAlertMute" type="button">MUTE</button>'
@@ -515,10 +594,12 @@ function buildUI(){
       + '</div>'
       + '<div class="hgab-line" id="hgAlertBrain"></div>'
       + '<div class="hgab-line" id="hgAlertGold"></div>'
+      + '<div class="hgab-line" id="hgAlertTicket"></div>'
       + '<div class="hgab-line" id="hgAlertLastB"></div>'
       + '<div class="hgab-line" id="hgAlertLastG"></div>'
+      + '<div class="hgab-line" id="hgAlertLastT"></div>'
       + '<div class="hgab-note">alerts evaluate while the app is open, after scans have run — '
-      + 'brain alerts need a completed synthesis</div>'
+      + 'brain + ticket alerts need a completed synthesis; ticket also pushes to ntfy when a topic is saved</div>'
       + '</div>'
       + '<button class="hgab-btn" id="hgAlertBtn" type="button"></button>';
     document.body.appendChild(root);
@@ -531,8 +612,10 @@ function buildUI(){
       test:  root.querySelector ? root.querySelector('#hgAlertTest') : null,
       brain: root.querySelector ? root.querySelector('#hgAlertBrain') : null,
       gold:  root.querySelector ? root.querySelector('#hgAlertGold') : null,
+      ticket: root.querySelector ? root.querySelector('#hgAlertTicket') : null,
       lastB: root.querySelector ? root.querySelector('#hgAlertLastB') : null,
-      lastG: root.querySelector ? root.querySelector('#hgAlertLastG') : null
+      lastG: root.querySelector ? root.querySelector('#hgAlertLastG') : null,
+      lastT: root.querySelector ? root.querySelector('#hgAlertLastT') : null
     };
     if (__ui.btn && __ui.btn.addEventListener) __ui.btn.addEventListener('click', onBell);
     if (__ui.mute && __ui.mute.addEventListener) __ui.mute.addEventListener('click', onMute);
@@ -565,6 +648,10 @@ function hgAlertTest(){
     return ok;
   }catch(e){ return false; }
 }
+W.hgAlertTicket = function(snap){
+  try{ return onTicket(snap); }
+  catch(e){ return 'error'; }
+};
 W.hgAlertCheck = function(){
   try{ return evaluate(); }
   catch(e){

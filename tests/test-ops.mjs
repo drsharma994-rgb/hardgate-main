@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { needsHeartbeat, emailVerdict, HEARTBEAT_MS } from '../scripts/alert-check.mjs';
+import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
+         ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush } from '../scripts/alert-check.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -161,6 +162,34 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   const bad = emailVerdict({ ok: false, err: 'Invalid grant', ts: 1 });
   ok(bad.fail === true && bad.err === 'Invalid grant', 'email gate: ok:false -> fail with err');
   ok(emailVerdict({ ok: false }).err === 'unknown error', 'email gate: ok:false without err -> fallback message');
+}
+
+/* ---------------- alert-check.mjs ticket helpers ---------------- */
+
+{
+  const a = { long: { sym: 'BTC', entry: 100 }, short: null };
+  ok(JSON.stringify(ticketSnapshot(a)) === JSON.stringify(a), 'ticket: snapshot normalizes a clean state verbatim');
+  ok(ticketSnapshot(null).long === null && ticketSnapshot(undefined).short === null,
+     'ticket: null/garbage input -> both sides null, never throws');
+  ok(ticketSnapshot({ long: { sym: 'X', entry: 'oops' }, short: { entry: 5 } }).long === null
+     && ticketSnapshot({ long: { sym: 'X', entry: 'oops' }, short: { entry: 5 } }).short === null,
+     'ticket: non-finite entry or missing sym -> side null, never fabricated');
+  ok(ticketChanged(a, { long: { sym: 'BTC', entry: 100 }, short: null }) === false,
+     'ticket: identical state -> unchanged');
+  ok(ticketChanged(a, { long: { sym: 'BTC', entry: 101 }, short: null }) === true,
+     'ticket: moved entry -> changed');
+  ok(ticketChanged(a, { long: { sym: 'BTC', entry: 100 }, short: { sym: 'ACE', entry: 0.085 } }) === true,
+     'ticket: side appearing -> changed');
+  ok(ticketChanged(a, { long: null, short: null }) === true,
+     'ticket: side vanishing -> changed');
+  ok(ticketPushBody(a).indexOf('BTC @ 100') >= 0 && ticketPushBody(a).indexOf('Short: —') >= 0,
+     'ticket: push body names the levels, empty side shown as —');
+  const skip = await sendTicketPush('', a);
+  ok(typeof skip === 'string' && skip.indexOf('skipped') === 0, 'ticket: no NTFY_TOPIC -> honest skip, no network');
+  let failed; await withFetch(async () => { throw new Error('offline'); }, async () => { failed = await sendTicketPush('t', a); });
+  ok(typeof failed === 'string' && failed.indexOf('failed') === 0, 'ticket: ntfy network error -> honest failure string — got ' + JSON.stringify(failed));
+  let sent; await withFetch(fetchOk('{}', 202), async () => { sent = await sendTicketPush('t', a); });
+  ok(sent === 'sent', 'ticket: ntfy 2xx -> sent — got ' + JSON.stringify(sent));
 }
 
 /* ---------------- config / repo files ---------------- */

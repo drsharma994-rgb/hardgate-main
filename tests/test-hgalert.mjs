@@ -165,8 +165,8 @@ console.log('== 2) sound unavailable (no AudioContext) ==');
   const env = loadHgalert({ doc });
   const ui = uiOf(env);
   assert(!!ui.root && ui.root.id === 'hgAlertRoot', 'bell root appended to document.body');
-  assert(ui.root.innerHTML.indexOf('alerts evaluate while the app is open, after scans have run — brain alerts need a completed synthesis') >= 0,
-         'panel carries the honest note: evaluates while open, brain needs a completed synthesis');
+  assert(ui.root.innerHTML.indexOf('alerts evaluate while the app is open, after scans have run — brain + ticket alerts need a completed synthesis') >= 0,
+         'panel carries the honest note: evaluates while open, brain + ticket alerts need a completed synthesis');
   assert(ui.q('#hgAlertBtn').textContent === '🔕 sound unavailable in this browser',
          'bell honestly shows "sound unavailable in this browser"');
   assert(ui.q('#hgAlertBtn').className === 'hgab-btn unavailable', 'button class reflects the unavailable state');
@@ -608,6 +608,64 @@ console.log('== 9) hostile env never-throws ==');
   assert(threw4 === 0, 'no window, no document, no storage: load + check + test never throw');
   delete globalThis.hgAlertCheck;
   delete globalThis.hgAlertTest;
+}
+
+/* =========================================================================
+   10) TICKET — entry-ticket change alerts (sym/entry key, seed → change
+       → chime + ntfy push → 15-min throttle; unarmed + garbage honesty)
+========================================================================= */
+console.log('== 10) ticket change alerts ==');
+{
+  const ls = memLocalStorage();
+  ls.setItem('hgAlertEnabled', '1');
+  const doc = stubDocument();
+  const env = loadHgalert({ doc, ls, audio: true });
+  const ui = uiOf(env);
+  clickBtn(env);                                    /* gesture: unlock + arm */
+
+  const oscCount = () => FakeAudioContext.__instances.reduce((n, c) => n + c.__osc.length, 0);
+  const pushes = [];
+  env.W.sendAlertPush = (title, body) => { pushes.push({ title, body }); return Promise.resolve(); };
+
+  assert(typeof env.W.hgAlertTicket === 'function', 'window.hgAlertTicket seam exposed');
+
+  /* first sighting seeds silently — no chime, no push */
+  const beforeSeed = oscCount();
+  const r1 = env.W.hgAlertTicket({ at: 1, long: { sym: 'BTC', entry: 100 }, short: null });
+  assert(r1 === 'seeded' && oscCount() === beforeSeed && pushes.length === 0,
+         'first ticket sighting seeds silently (no chime, no push)');
+  assert(ui.q('#hgAlertTicket').textContent.indexOf('long BTC@100') >= 0,
+         'panel ticket line shows the seeded state');
+
+  /* identical snapshot is a no-op */
+  assert(env.W.hgAlertTicket({ at: 2, long: { sym: 'BTC', entry: 100 }, short: null }) === 'unchanged',
+         'identical ticket -> unchanged, no alert');
+
+  /* entry price moved -> chime + ntfy push */
+  const beforeChime = oscCount();
+  const r3 = env.W.hgAlertTicket({ at: 3, long: { sym: 'BTC', entry: 101 }, short: null });
+  assert(r3 === 'alerted' && oscCount() > beforeChime, 'moved entry price -> alerted with a chime');
+  assert(pushes.length === 1 && pushes[0].title.indexOf('ticket') >= 0
+      && pushes[0].body.indexOf('BTC @ 101') >= 0,
+         'ntfy push carries the new levels');
+  assert(ui.q('#hgAlertLastT').textContent.indexOf('ticket: long BTC@101') >= 0,
+         'last-ticket line records the alert');
+
+  /* a side appearing is a change — but the 15-min class throttle holds it */
+  const r4 = env.W.hgAlertTicket({ at: 4, long: { sym: 'BTC', entry: 101 }, short: { sym: 'ACE', entry: 0.085 } });
+  assert(r4 === 'throttled' && pushes.length === 1,
+         'side appearing inside the throttle window -> held, honestly named');
+
+  /* garbage never throws */
+  assert(env.W.hgAlertTicket(null) === 'ignored' && env.W.hgAlertTicket(42) === 'ignored'
+      && env.W.hgAlertTicket({}) !== 'error',
+         'garbage snapshots -> ignored/handled, never throws');
+
+  /* unarmed engine: changes tracked but not chimed */
+  const env2 = loadHgalert({ doc: stubDocument(), ls: memLocalStorage(), audio: true });
+  env2.W.hgAlertTicket({ at: 1, long: { sym: 'ETH', entry: 50 }, short: null });
+  assert(env2.W.hgAlertTicket({ at: 2, long: { sym: 'ETH', entry: 51 }, short: null }) === 'unarmed',
+         'alerts off -> change recorded, honestly reported unarmed');
 }
 
 globalThis.setInterval = REAL_SET_INTERVAL;

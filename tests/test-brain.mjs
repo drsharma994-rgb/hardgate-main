@@ -2569,5 +2569,58 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
      'AK: the quick pass re-derives the SAME anchored limits deterministically — WATCH rows keep their working limits');
 }
 
+/* ================= AM) ENTRY TICKET — pure selector ================= */
+console.log('== AM) entry ticket selector ==');
+{
+  const TICK = W.__hgBrainTickets;
+  ok(typeof TICK === 'function', 'AM: window.__hgBrainTickets seam exposed');
+  const mkRow = (sym, tier, dir, agree, plan) => ({
+    sym: sym, lane: 'crypto',
+    dec: { tier: tier, dir: dir, agree: agree, reasons: [sym + ' reason'], vetoes: [] },
+    plan: plan || null
+  });
+  const limPlan = (dir, e, s, t1, t2, rr1) => ({ dir: dir, entry: e, stop: s, t1: t1, t2: t2,
+    rr1: rr1, entryType: 'limit', anchorName: '4h EMA20/21', cancelIf: s - 5 });
+
+  /* best-per-side: highest tier wins, agree breaks ties, rr1 last */
+  const t1 = TICK([
+    mkRow('AAAUSDT', 'HIGH', 'long', 4, limPlan('long', 10, 9, 12, 13, 2)),
+    mkRow('BBBUSDT', 'PRIME', 'long', 5, limPlan('long', 20, 19, 23, 25, 3)),
+    mkRow('CCCUSDT', 'WATCH', 'short', 3, limPlan('short', 30, 31, 27, 25, 3)),
+    mkRow('DDDUSDT', 'ASIDE', 'short', 1, null)
+  ]);
+  ok(t1.long && t1.long.sym === 'BBBUSDT', 'AM: PRIME long beats HIGH long for the long ticket');
+  ok(t1.short && t1.short.sym === 'CCCUSDT', 'AM: WATCH short with a plan earns the short ticket');
+  ok(t1.longNear === null && t1.shortNear === null, 'AM: no near-miss named when a planned ticket exists on that side');
+
+  /* honest empty side: plan-less leaning row becomes the named near miss */
+  const t2 = TICK([
+    mkRow('EEEUSDT', 'WATCH', 'long', 3, null),
+    mkRow('FFFUSDT', 'ASIDE', 'short', 1, null),
+    mkRow('GGGUSDT', 'ASIDE', 'long', 1, null)
+  ]);
+  ok(t2.long === null && t2.short === null, 'AM: no plans -> both tickets honestly null');
+  ok(t2.longNear && t2.longNear.sym === 'EEEUSDT', 'AM: the WATCH long is named as the long near miss (ASIDE never outranks it)');
+  ok(t2.shortNear === null, 'AM: ASIDE rows are tier-0 — never named as a near miss');
+
+  /* plan direction overrides the verdict direction (the plan is the truth) */
+  const t3 = TICK([ mkRow('HHHUSDT', 'HIGH', 'long', 4, limPlan('short', 30, 31, 27, 25, 3)) ]);
+  ok(t3.short && t3.short.sym === 'HHHUSDT' && t3.long === null,
+     'AM: a short PLAN on a long-leaning row files the ticket as SHORT');
+
+  /* degenerate plans rejected: missing levels or zero-width risk */
+  const t4 = TICK([
+    mkRow('IIIUSDT', 'PRIME', 'long', 6, { dir: 'long', entry: 10, stop: 10, t1: 12 }),
+    mkRow('JJJUSDT', 'PRIME', 'long', 6, { dir: 'long', entry: 10, stop: 9 }),
+    mkRow('KKKUSDT', 'HIGH', 'long', 4, limPlan('long', 10, 9, 12, null, 2))
+  ]);
+  ok(t4.long && t4.long.sym === 'KKKUSDT', 'AM: zero-width-risk and t1-less plans are rejected; the valid one wins');
+
+  /* never throws on garbage */
+  const t5 = TICK(null), t6 = TICK([null, {}, { dec: null }, { dec: { dir: 'long' }, plan: { entry: 'x' } }, 42]);
+  ok(t5.long === null && t5.short === null && t6.long === null && t6.short === null,
+     'AM: garbage input -> all-null tickets, never throws');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

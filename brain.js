@@ -1890,6 +1890,180 @@ function planLine(plan){
 }
 
 /* =========================================================================
+ENTRY TICKET — the one-glance answer to "at what EXACT price do I enter?"
+After every synthesis (full or quick) the single best LONG and the single
+best SHORT row carrying a real computed plan are promoted into two big
+tickets pinned above the cards. The limit price renders in the largest type
+on the tab, framed exactly as the order is placed:
+  LONG  -> MIN ENTRY — place a limit buy down to <price> (the lowest
+           probable entry the structure math supports)
+  SHORT -> MAX ENTRY — place a limit sell up to <price> (the highest
+           price the pullback math still validates)
+plus stop, MOST PROBABLE TARGET (T1), stretch (T2), R:R, cancel-if, working
+validity and a SEND TO TRADE PLAN handoff. Gate-engine (non-pullback) plans
+are labeled ENTRY AT with their source named — never dressed up as limits.
+When NO row on a side carries a computed plan, that side still renders: an
+honest NO QUALIFIED LONG/SHORT naming the nearest plan-less candidate and
+why. Levels are never invented — a ticket only ever echoes a plan the
+planners already made. Never throws.
+========================================================================= */
+function tierRank(t){
+  t = String(t || '').toUpperCase();
+  return t === 'PRIME' ? 3 : t === 'HIGH' ? 2 : t === 'WATCH' ? 1 : 0;
+}
+function ticketCandidate(row){
+  try{
+    if (!row || !row.dec || !row.plan) return null;
+    var p = row.plan, dir = row.dec.dir;
+    if (p.dir === 'long' || p.dir === 'short') dir = p.dir; /* the plan is the truth on direction */
+    if (dir !== 'long' && dir !== 'short') return null;
+    if (!isFinite(p.entry) || !isFinite(p.stop) || !isFinite(p.t1)) return null;
+    if (p.entry === p.stop) return null;
+    return { row: row, dir: dir,
+             rank: tierRank(row.dec.tier) * 1000
+                 + (isFinite(row.dec.agree) ? row.dec.agree : 0) * 10
+                 + Math.min(isFinite(p.rr1) ? p.rr1 : 0, 9.9) };
+  }catch(e){ return null; }
+}
+function buildEntryTickets(rows){
+  var out = { long: null, short: null, longNear: null, shortNear: null };
+  try{
+    rows = Array.isArray(rows) ? rows : [];
+    var bestL = null, bestS = null, nearL = null, nearS = null;
+    for (var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (!r || !r.dec) continue;
+      var c = ticketCandidate(r);
+      if (c){
+        if (c.dir === 'long' && (!bestL || c.rank > bestL.rank)) bestL = c;
+        else if (c.dir === 'short' && (!bestS || c.rank > bestS.rank)) bestS = c;
+        continue;
+      }
+      /* near miss — the highest-tier plan-less row leaning each way, named
+         honestly on the empty side of the panel */
+      var d = r.dec.dir, rk = tierRank(r.dec.tier);
+      if (rk <= 0) continue;
+      if (d === 'long' && (!nearL || rk > nearL.rank)) nearL = { row: r, rank: rk };
+      else if (d === 'short' && (!nearS || rk > nearS.rank)) nearS = { row: r, rank: rk };
+    }
+    out.long = bestL ? bestL.row : null;
+    out.short = bestS ? bestS.row : null;
+    out.longNear = nearL ? nearL.row : null;
+    out.shortNear = nearS ? nearS.row : null;
+  }catch(e){}
+  return out;
+}
+function ticketSymTxt(row){
+  return row.lane === 'gold' ? 'XAU · GOLD' : String(row.base || row.sym || '?');
+}
+function ticketTradeBtn(row, dir){
+  try{
+    var p = row.plan;
+    if (!p || typeof G.toTrade !== 'function') return '';
+    return '<button class="toTrade" style="margin-top:8px" onclick="'
+      + ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ','
+         + JSON.stringify(dir) + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      + '">SEND TO TRADE PLAN →</button>';
+  }catch(e){ return ''; }
+}
+function ticketHTML(row, dir){
+  try{
+    var p = row.plan, dec = row.dec, long = dir === 'long';
+    var col = long ? '#5fbf8f' : '#e4586b';
+    var limitish = (p.entryType === 'limit' || p.entryType === 'zone');
+    var headline = limitish
+      ? (long ? 'MIN ENTRY — LIMIT BUY DOWN TO' : 'MAX ENTRY — LIMIT SELL UP TO')
+      : 'ENTRY AT';
+    var subline = limitish
+      ? (p.entryType === 'zone'
+          ? 'price already inside the zone — limit at the zone edge or market'
+          : (long ? 'lowest probable entry — pullback to ' : 'highest validated entry — pullback to ')
+            + esc(p.anchorName || '4h structure'))
+      : esc(p.src ? String(p.src) + ' levels' : 'gate-engine levels') + (p.note ? ' — ' + esc(p.note) : '');
+    var venueStamp = (row.exchange === 'delta') ? ' · DELTA'
+                   : (row.exchange === 'cdcx') ? ' · COINDCX' : '';
+    return '<div style="flex:1 1 340px;border:1px solid ' + col + ';border-radius:6px;'
+      + 'background:rgba(255,255,255,.02);padding:12px 14px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+      + '<span style="font-size:15px;font-weight:700;letter-spacing:.04em">' + esc(ticketSymTxt(row)) + '</span>'
+      + '<span style="font-size:10px;letter-spacing:.08em;color:' + col + ';font-weight:700">'
+      + dir.toUpperCase() + ' TICKET · ' + esc(String(dec.tier || '').toUpperCase()) + ' · '
+      + (isFinite(dec.agree) ? dec.agree : 0) + ' LAYERS' + venueStamp + '</span></div>'
+      + '<div style="margin-top:8px;font-size:10px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
+      + '<div style="font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.2">'
+      + PX(p.entry) + '</div>'
+      + '<div style="font-size:11px;color:#c4ccd8;margin-top:2px">' + subline + '</div>'
+      + '<div style="margin-top:8px;font-size:11.5px;line-height:1.8;color:#c4ccd8">'
+      + 'STOP <b>' + PX(p.stop) + '</b>'
+      + (limitish ? ' (0.5×ATR beyond ' + esc(p.anchorName || 'anchor') + ')' : '')
+      + (isFinite(p.cancelIf) && p.cancelIf !== null ? ' · cancel if 4h closes beyond <b>' + PX(p.cancelIf) + '</b>' : '')
+      + '<br>MOST PROBABLE TARGET <b style="color:' + col + '">' + PX(p.t1) + '</b>'
+      + ' (R:R ' + FMT(isFinite(p.rr1) ? p.rr1 : Math.abs(p.t1 - p.entry) / Math.abs(p.entry - p.stop), 1) + ')'
+      + (p.t2 !== null && isFinite(p.t2) ? ' · STRETCH <b>' + PX(p.t2) + '</b>'
+        + (isFinite(p.rr2) ? ' (' + FMT(p.rr2, 1) + 'R)' : '') : '')
+      + (isFinite(p.riskPct) ? '<br>risk ' + FMT(p.riskPct, 2) + '% from entry' : '')
+      + (limitish ? '<br>limit working ~24h or until structure breaks' : '')
+      + '</div>'
+      + ticketTradeBtn(row, dir)
+      + '</div>';
+  }catch(e){
+    return '<div style="flex:1 1 340px;border:1px solid rgba(143,160,184,.4);border-radius:6px;padding:12px 14px">'
+      + '<span style="font-size:11px;color:#9aa6b5">ticket render failed: ' + esc(errMsg(e))
+      + ' — the row card below still carries the plan</span></div>';
+  }
+}
+function noTicketHTML(dir, nearRow){
+  try{
+    var long = dir === 'long';
+    var col = long ? '#5fbf8f' : '#e4586b';
+    var near = '';
+    if (nearRow && nearRow.dec){
+      near = '<div style="margin-top:8px;font-size:11px;line-height:1.7;color:#c4ccd8">nearest: <b>'
+        + esc(ticketSymTxt(nearRow)) + '</b> ' + esc(String(nearRow.dec.tier || '').toUpperCase())
+        + ' — ' + esc(nearRow.dec.reasons && nearRow.dec.reasons[0] ? nearRow.dec.reasons[0] : 'no reason recorded')
+        + (nearRow.plan ? '' : ' · levels unavailable — it never reached the candle budget or no anchor qualified')
+        + '</div>';
+    }
+    return '<div style="flex:1 1 340px;border:1px dashed rgba(143,160,184,.4);border-radius:6px;padding:12px 14px">'
+      + '<div style="font-size:10px;letter-spacing:.1em;color:#9aa6b5">' + dir.toUpperCase() + ' TICKET</div>'
+      + '<div style="margin-top:8px;font-size:13px;font-weight:700;color:' + col + '">NO QUALIFIED '
+      + dir.toUpperCase() + ' ENTRY</div>'
+      + '<div style="margin-top:4px;font-size:11px;color:#9aa6b5">no ' + dir
+      + ' row carries a computed plan this scan — the app refuses to invent a level.'
+      + ' Standing aside on this side is the position.</div>'
+      + near + '</div>';
+  }catch(e){ return ''; }
+}
+function paintEntryTickets(el, rows){
+  try{
+    if (!el || typeof el.querySelector !== 'function') return;
+    var wrap = el.querySelector('#brainTicketWrap'), box = el.querySelector('#brainTicket');
+    if (!wrap || !box) return;
+    var t = buildEntryTickets(rows);
+    box.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap">'
+      + (t.long ? ticketHTML(t.long, 'long') : noTicketHTML('long', t.longNear))
+      + (t.short ? ticketHTML(t.short, 'short') : noTicketHTML('short', t.shortNear))
+      + '</div>';
+    var age = el.querySelector('#brainTicketAge');
+    if (age) age.textContent = 'levels as of ' + new Date().toTimeString().slice(0, 8)
+      + ' — refreshed by every synthesis, including the AUTO cycle';
+    wrap.style.display = 'block';
+    /* alert seam — publish the painted tickets and ping the alert engine
+       (hgalert.js owns chime/push policy; plain data only, never awaited) */
+    try{
+      var tsnap = {
+        at: Date.now(),
+        long: t.long ? { sym: String(t.long.sym), entry: +t.long.plan.entry } : null,
+        short: t.short ? { sym: String(t.short.sym), entry: +t.short.plan.entry } : null
+      };
+      __lastTicketSnap = tsnap;
+      if (typeof G.hgAlertTicket === 'function') G.hgAlertTicket(tsnap);
+    }catch(e){}
+  }catch(e){ /* the ticket is additive — the scan render stands without it */ }
+}
+
+/* =========================================================================
 CLICK-TO-AUDIT LAYER BREAKDOWN — every row (PRIME/HIGH/WATCH/ASIDE/VETO,
 gold lane too) carries a collapsed audit toggle. The full layer-by-layer
 ledger renders LAZILY on click only — a 500-contract scan never expands 500
@@ -2193,6 +2367,7 @@ var __busy = false;
 var __hasRun = false;
 var __mountedEl = null;
 var __lastResult = null;  /* {rows, uni, at} — quick rescan rechecks this, never the wire */
+var __lastTicketSnap = null; /* last painted entry tickets — alert seam snapshot */
 
 async function brainRefresh(){
   try{
@@ -2358,6 +2533,15 @@ async function runBrain(el){
   try{
     btn.disabled = true;
     cards.innerHTML = ''; watch.innerHTML = ''; aside.innerHTML = '';
+    /* ENTRY TICKET stays up during the rescan — on the AUTO cycle a full
+       synthesis can take most of the interval, and a blanked ticket would be
+       invisible half the time. Stale levels with a named refresh state beat
+       a hole; paintEntryTickets replaces them when the scan completes. */
+    var ta0 = el.querySelector('#brainTicketAge');
+    if (ta0 && ta0.textContent && ta0.textContent.indexOf('refreshing') !== 0){
+      var m0 = /^levels as of (\S+)/.exec(ta0.textContent);
+      ta0.textContent = 'refreshing — levels shown are as of ' + (m0 ? m0[1] : 'the last completed scan') + '…';
+    }
     if (read) read.textContent = '';
     empty.style.display = 'none';
     stat.className = 'note';
@@ -2462,6 +2646,9 @@ async function runBrain(el){
        never blanks the whole 500-row render */
     cards.innerHTML = setups.map(safeCardHTML).join('');
     paintCharts(cards, setups);
+    /* ENTRY TICKET — best long + best short with computed plans, over the
+       FULL row set so planned WATCH radar rows qualify too */
+    paintEntryTickets(el, rows);
     watch.innerHTML = watches.map(safeWatchRowHTML).join('');
     watchWrap.style.display = watches.length ? 'block' : 'none';
     aside.innerHTML = asides.map(safeAsideRowHTML).join('');
@@ -2672,6 +2859,9 @@ async function runQuick(el){
     }
     cards.innerHTML = setups.map(safeCardHTML).join('');
     paintCharts(cards, setups);
+    /* ENTRY TICKET — same contract as the full scan; the rechecked row set
+       carries every freshly planned WATCH-or-better row */
+    paintEntryTickets(el, rows);
     watch.innerHTML = watches.map(safeWatchRowHTML).join('');
     if (watchWrap) watchWrap.style.display = watches.length ? 'block' : 'none';
     aside.innerHTML = asides.map(safeAsideRowHTML).join('');
@@ -2828,6 +3018,12 @@ function mount(el){
       + '</div>'
       + '<div class="panel" id="brainReadWrap" style="display:none;margin-top:10px"><h2>MARKET READ <span id="brainReadUni"></span></h2>'
       + '<div class="note" id="brainRead" style="font-size:12px;line-height:1.7"></div></div>'
+      + '<div class="panel" id="brainTicketWrap" style="display:none;margin-top:10px">'
+      + '<h2>ENTRY TICKET <span>the exact price to place your limit order at — MIN entry for the best long, MAX entry for the best short · '
+      + 'stop, most-probable target, cancel-if and validity stated · levels come from the planners only, never invented — '
+      + 'when a side has nothing, the ticket says so honestly</span></h2>'
+      + '<div id="brainTicket"></div>'
+      + '<div class="note" id="brainTicketAge" style="margin-top:6px;font-size:10px"></div></div>'
       + '<div class="cards" id="brainCards" style="margin-top:10px"></div>'
       + '<div class="panel" id="brainWatchWrap" style="display:none;margin-top:10px"><h2>WATCH <span>one layer short of conviction</span></h2>'
       + '<div id="brainWatch"></div></div>'
@@ -2930,6 +3126,11 @@ G.brainUniverse = brainUniverse;
 /* structure-anchored limit seam: the pure planner — (dir, rows4h) ->
    {plan, note}; rows4h math only, never throws */
 G.brainAnchorPlan = anchoredLimitPlan;
+/* entry-ticket seam: the pure selector — rows -> {long, short, longNear,
+   shortNear}; no DOM, no fetch, never throws */
+G.__hgBrainTickets = buildEntryTickets;
+/* last painted ticket snapshot (alert/diagnostic seam, read-only) */
+G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
 /* click-to-audit seams: the ledger builder, the toggle, and a sym-keyed
    lookup over the last synthesis (console/debug friendly, read-only) */
 G.rowAuditHTML = rowAuditHTML;

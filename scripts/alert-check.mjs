@@ -38,6 +38,48 @@ function emailVerdict(email) {
   return { fail: false };
 }
 
+/* ---------------- entry-ticket watch (server-side) ----------------
+   The CI run completes a full brain synthesis in the page and reads
+   window.__hgBrainTicketNow() -> {at, long:{sym,entry}|null, short:{...}|null}.
+   Only sym/entry per side is persisted/compared — same key semantics as the
+   in-browser hgalert TICKET class: a new symbol, a moved entry, or a side
+   appearing/vanishing is a change. First recorded state seeds silently. */
+function ticketSide(s) {
+  return (s && s.sym != null && Number.isFinite(+s.entry))
+    ? { sym: String(s.sym), entry: +s.entry }
+    : null;
+}
+function ticketSnapshot(raw) {
+  return { long: ticketSide(raw && raw.long), short: ticketSide(raw && raw.short) };
+}
+function ticketChanged(prev, next) {
+  return JSON.stringify(ticketSnapshot(prev)) !== JSON.stringify(ticketSnapshot(next));
+}
+function ticketPushBody(next) {
+  const t = ticketSnapshot(next);
+  const fmt = (s) => (s ? s.sym + ' @ ' + s.entry : '—');
+  return 'Long: ' + fmt(t.long) + '\nShort: ' + fmt(t.short);
+}
+/* ntfy push straight from Node (no page needed). No topic -> honest skip. */
+async function sendTicketPush(topic, next) {
+  if (!topic) return 'skipped: no NTFY_TOPIC secret configured';
+  try {
+    const res = await fetch('https://ntfy.sh/' + encodeURIComponent(topic), {
+      method: 'POST',
+      headers: {
+        'Title': 'HARDGATE entry ticket changed',
+        'Priority': '4',
+        'Tags': 'chart_with_upwards_trend',
+        'Click': SITE_URL
+      },
+      body: ticketPushBody(next)
+    });
+    return (res && res.status >= 200 && res.status < 300) ? 'sent' : 'failed: HTTP ' + (res && res.status);
+  } catch (e) {
+    return 'failed: ' + ((e && e.message) ? e.message : String(e));
+  }
+}
+
 async function main() {
   // dynamic import: keeps this module loadable without puppeteer installed
   // (tests import the pure helpers above); CI installs puppeteer before running.
@@ -83,6 +125,37 @@ async function main() {
     };
   }, prevState);
 
+  /* entry-ticket watch: mount the BRAIN pane offscreen, run ONE full
+     synthesis (bounded), read the painted ticket snapshot. The page's own
+     alert engine stays unarmed in CI (no gesture), so no double-notify:
+     the push below is the only ticket channel here. A slow/failed synthesis
+     degrades to a logged warn and no state change — never a red run. */
+  const ticketResult = await page.evaluate(async () => {
+    try {
+      const mods = (typeof HG_TAB_MODS !== 'undefined' && HG_TAB_MODS) ? HG_TAB_MODS : {};
+      const mod = mods['brain'];
+      if (!mod || typeof mod.mount !== 'function') return { ok: false, err: 'brain module not registered' };
+      const pane = document.createElement('div');
+      pane.style.display = 'none';
+      document.body.appendChild(pane);
+      mod.mount(pane);
+      const runBtn = pane.querySelector('#brainRun');
+      if (!runBtn) return { ok: false, err: 'brain pane incomplete: #brainRun' };
+      runBtn.click();
+      const t0 = Date.now();
+      let stat = '';
+      while (Date.now() - t0 < 360000) {
+        await new Promise((r) => setTimeout(r, 4000));
+        stat = (pane.querySelector('#brainStat') || {}).textContent || '';
+        if (/^done|failed/i.test(stat)) break;
+      }
+      const snap = (typeof window.__hgBrainTicketNow === 'function') ? window.__hgBrainTicketNow() : null;
+      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap };
+    } catch (e) {
+      return { ok: false, err: (e && e.message) ? e.message : String(e) };
+    }
+  });
+
   await browser.close();
 
   const newState = result.state;
@@ -106,6 +179,28 @@ async function main() {
     newState.lastRunAt = new Date().toISOString();
   } else if (prevState.lastRunAt) {
     newState.lastRunAt = prevState.lastRunAt;
+  }
+
+  /* entry-ticket diff + server-side ntfy push. Seeds silently on the first
+     recorded state; a failed synthesis leaves prevState.ticket untouched so
+     a transient CI wobble never reads as 'ticket vanished'. */
+  console.log('Ticket synthesis:', ticketResult.ok
+    ? 'ok — ' + (ticketResult.stat || '')
+    : 'degraded — ' + (ticketResult.err || ticketResult.stat || 'no detail'));
+  if (ticketResult.ok && ticketResult.ticket) {
+    const nextTicket = ticketSnapshot(ticketResult.ticket);
+    console.log('Ticket now:', JSON.stringify(nextTicket), '· previous:', JSON.stringify(prevState.ticket ?? null));
+    if (prevState.ticket === undefined) {
+      console.log('Ticket state seeded silently (first recorded run) — no push.');
+    } else if (ticketChanged(prevState.ticket, nextTicket)) {
+      const pushResult = await sendTicketPush(process.env.NTFY_TOPIC || '', nextTicket);
+      console.log('TICKET CHANGED — push: ' + pushResult);
+    } else {
+      console.log('Ticket unchanged — no push.');
+    }
+    newState.ticket = nextTicket;
+  } else if (prevState.ticket !== undefined) {
+    newState.ticket = prevState.ticket;
   }
 
   saveState(newState);
@@ -132,4 +227,5 @@ if (invokedDirectly) {
   });
 }
 
-export { needsHeartbeat, emailVerdict, HEARTBEAT_MS };
+export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
+         ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush };

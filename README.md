@@ -65,6 +65,16 @@ the GOLD tab's DATA chip and in backtest footers.
 Open `index.html` in a browser, or serve the folder (e.g. GitHub Pages). Everything loads from the folder
 plus one CDN library (EmailJS).
 
+## Deploy & version workflow
+
+Production lives at **https://hardgate-main.vercel.app** (project linked in `.vercel/`, CLI authed).
+
+1. Make the change; run the affected test suites (`node tests/test-brain.mjs`, …) — all assertions must pass.
+2. Deploy: `vercel --prod --yes` from the project root.
+3. **Commit immediately after every deployed change** — the git history on `main` always mirrors what is
+   live on Vercel. Include what changed + test status + the production deployment id in the message.
+4. Full snapshots on request: `hardgate-vN.zip` of the whole folder, kept in the parent directory.
+
 ## Alerts
 
 Toggle the 🔔 chip in the header. While ON, every 15 minutes a silent cycle runs:
@@ -79,7 +89,11 @@ your own topic in the UI when enabling alerts. Every alert also lands in the LOG
 
 A GitHub Actions job (`.github/workflows/alert-notify.yml`) replays the alert cycle against the live site
 every 15 minutes, goes red on email-delivery failure, and stamps at most one keep-alive commit per day so
-GitHub's 60-day scheduled-workflow auto-disable never bites.
+GitHub's 60-day scheduled-workflow auto-disable never bites. The same job also completes one BRAIN
+synthesis per run and watches the **ENTRY TICKET**: a new symbol, a moved entry price, or a side
+appearing/vanishing triggers an **ntfy push straight from the runner** (repo secret `NTFY_TOPIC`; unset =
+changes are logged, push skipped) — so ticket alerts reach you even with the app closed. First recorded
+state seeds silently; a failed synthesis leaves the committed ticket state untouched.
 
 ## Tests
 
