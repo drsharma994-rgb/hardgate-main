@@ -2304,7 +2304,15 @@ function sniperOk(c, st){
     return !!st && (st.state === 'in-zone' || st.state === 'approaching');
   }catch(e){ return false; }
 }
-var __sniper = false;   /* SNIPER toggle state (session) */
+var __sniper = (function(){   /* owner mandate 2026-07-25: SNIPER defaults ON; the toggle persists */
+  try{
+    if (typeof localStorage !== 'undefined' && localStorage){
+      var v = localStorage.getItem('hgBrainSniper');
+      if (v !== null) return v === '1';
+    }
+  }catch(e){}
+  return true;
+})();
 function boardCardHTML(c, stamp){
   try{
     var row = c.row, p = row.plan, dir = c.dir, long = dir === 'long';
@@ -2702,6 +2710,14 @@ function scoreRecord(setups){
 
 /* ---------------- tab state + hard-refresh contract ---------------- */
 var __busy = false;
+var __busySince = 0;  /* same hung-await watchdog as engine.js: a synthesis whose
+                         promise never settles (stalled fetch) would otherwise
+                         freeze the BRAIN tab forever. A scan older than
+                         BRAIN_BUSY_STUCK_MS is declared stuck; the guard opens. */
+var BRAIN_BUSY_STUCK_MS = 8*60*1000;
+function brainBusyStuck(){
+  return !!__busy && __busySince > 0 && (Date.now() - __busySince) > BRAIN_BUSY_STUCK_MS;
+}
 var __hasRun = false;
 var __mountedEl = null;
 var __lastResult = null;  /* {rows, uni, at} — quick rescan rechecks this, never the wire */
@@ -2709,7 +2725,7 @@ var __lastTicketSnap = null; /* last painted entry tickets — alert seam snapsh
 
 async function brainRefresh(){
   try{
-    if (__busy) return 'busy';
+    if (__busy && !brainBusyStuck()) return 'busy';
     if (!__hasRun || !__mountedEl) return 'skipped: not run yet';
     await runBrain(__mountedEl);
     return 'refreshed';
@@ -2865,8 +2881,8 @@ async function runBrain(el){
     paintFatal(el, 'brain pane incomplete — ' + miss.join(', ') + ' unavailable — remount the tab');
     return;
   }
-  if (__busy) return;
-  __busy = true;
+  if (__busy && !brainBusyStuck()) return;
+  __busy = true; __busySince = Date.now();
   var t0 = Date.now();
   try{
     btn.disabled = true;
@@ -3025,7 +3041,7 @@ async function runBrain(el){
     stat.className = 'note warn';
     stat.textContent = 'brain synthesis failed: ' + (e && e.message ? e.message : e);
   }finally{
-    __busy = false;
+    __busy = false; __busySince = 0;
     __hasRun = true;
     btn.disabled = false;
   }
@@ -3061,14 +3077,14 @@ async function runQuick(el){
     paintFatal(el, 'brain pane incomplete — ' + miss.join(', ') + ' unavailable — remount the tab');
     return;
   }
-  if (__busy) return;
+  if (__busy && !brainBusyStuck()) return;
   if (!__lastResult){
     stat.className = 'note warn';
     stat.textContent = 'quick rescan needs a full synthesis first — hit RUN SYNTHESIS once; '
       + 'quick mode only rechecks what the last scan already saw';
     return;
   }
-  __busy = true;
+  __busy = true; __busySince = Date.now();
   var t0 = Date.now();
   try{
     btn.disabled = true;
@@ -3233,7 +3249,7 @@ async function runQuick(el){
     stat.className = 'note warn';
     stat.textContent = 'quick rescan failed: ' + (e && e.message ? e.message : e);
   }finally{
-    __busy = false;
+    __busy = false; __busySince = 0;
     btn.disabled = false;
     if (qbtn) qbtn.disabled = false;
   }
@@ -3376,7 +3392,7 @@ function mount(el){
       + '<button class="btn ghost" id="brainSniper" style="margin:2px 0 6px;padding:3px 10px;font-size:10px;letter-spacing:.08em" '
       + 'title="SNIPER mode — the day-trade filter: resting LIMIT orders only, mark IN ZONE or APPROACHING, '
       + 'and a stop tight enough for ≥20x max-safe leverage (≤3% away, planner formula with 1.5× liquidation clearance). '
-      + 'Stacks the odds; no filter can promise a stop never gets hit">SNIPER: OFF</button>'
+      + 'Stacks the odds; no filter can promise a stop never gets hit">SNIPER: ON</button>'
       + '<div id="brainBoard"></div>'
       + '<div class="note" id="brainBoardAge" style="margin-top:6px;font-size:10px"></div></div>'
       + '<div class="cards" id="brainCards" style="margin-top:10px"></div>'
@@ -3428,20 +3444,28 @@ function mount(el){
       });
     }
   }catch(e){ mountNote(el, 'brain mount degraded: venue filter unavailable — scan still runs'); }
-  /* 3b) SNIPER toggle — isolated; repaints the board from the LAST completed
-     scan's rows, never triggers a scan itself */
+  /* 3b) SNIPER toggle — isolated; defaults ON (owner mandate), persists in
+     localStorage; repaints the board from the LAST completed scan's rows,
+     never triggers a scan itself */
   try{
     var snBtn = el.querySelector('#brainSniper');
-    if (snBtn) snBtn.addEventListener('click', function(){
-      try{
-        __sniper = !__sniper;
-        snBtn.textContent = 'SNIPER: ' + (__sniper ? 'ON' : 'OFF');
-        snBtn.style.color = __sniper ? '#5fbf8f' : '';
-        snBtn.style.borderColor = __sniper ? 'rgba(95,191,143,.6)' : '';
-        var lr = (__lastResult && Array.isArray(__lastResult.rows)) ? __lastResult.rows : [];
-        if (lr.length) paintLimitBoard(el, lr);
-      }catch(e){}
-    });
+    var snPaint = function(){
+      snBtn.textContent = 'SNIPER: ' + (__sniper ? 'ON' : 'OFF');
+      snBtn.style.color = __sniper ? '#5fbf8f' : '';
+      snBtn.style.borderColor = __sniper ? 'rgba(95,191,143,.6)' : '';
+    };
+    if (snBtn){
+      snPaint();
+      snBtn.addEventListener('click', function(){
+        try{
+          __sniper = !__sniper;
+          try{ if (typeof localStorage !== 'undefined' && localStorage) localStorage.setItem('hgBrainSniper', __sniper ? '1' : '0'); }catch(e){}
+          snPaint();
+          var lr = (__lastResult && Array.isArray(__lastResult.rows)) ? __lastResult.rows : [];
+          if (lr.length) paintLimitBoard(el, lr);
+        }catch(e){}
+      });
+    }
   }catch(e){ mountNote(el, 'brain mount degraded: sniper toggle unavailable — board still renders'); }
   /* 4) deps note — isolated; its failure used to kill the RUN listener */
   try{
@@ -3506,6 +3530,8 @@ G.__hgBrainBoard = buildLimitBoard;
 /* sniper seam: the planner-formula max-safe leverage — (entry, stop, mmr?) ->
    1..100; pure, never throws */
 G.__hgBrainSniperLev = sniperLev;
+/* sniper filter predicate — (candidate, hgLimitState) -> bool; pure */
+G.__hgBrainSniperOk = sniperOk;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

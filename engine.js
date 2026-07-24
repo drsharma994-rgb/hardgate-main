@@ -839,6 +839,22 @@ function paintCharts(cardsEl, survivors){
 
 /* ---------------- tab UI ---------------- */
 var __busy = false;   // module-local re-entry guard — no global timers anywhere
+var __busySince = 0;  /* watchdog: an await that never settles (hung fetch —
+                         no timeout) keeps the promise pending forever, finally
+                         never runs, and the layer stays dark PERMANENTLY (the
+                         2026-07-24 all-ASIDE outage). A scan older than
+                         BUSY_STUCK_MS is declared stuck and the guard is
+                         force-released; the in-flight corpse can only write to
+                         its (usually inert) pane — harmless next to a dead layer. */
+var BUSY_STUCK_MS = 10*60*1000;
+function busyStuck(){
+  return !!__busy && __busySince > 0 && (Date.now() - __busySince) > BUSY_STUCK_MS;
+}
+function busyAcquire(){
+  if (__busy && !busyStuck()) return false;
+  __busy = true; __busySince = Date.now(); return true;
+}
+function busyRelease(){ __busy = false; __busySince = 0; }
 var __hasRun = false; // true once a scan attempt has completed (user run or honest abort)
 var __el = null;      // last mounted pane, so refresh() can re-run without a click
 
@@ -1029,13 +1045,12 @@ function setScanButtons(el, disabled){
 }
 
 async function runScan(el){
-  if (__busy) return;
+  if (!busyAcquire()) return;
   var btn = el.querySelector('#engineRun'), stat = el.querySelector('#engineStat'),
       cards = el.querySelector('#engineCards'), empty = el.querySelector('#engineEmpty'),
       asidePanel = el.querySelector('#engineAside'), asideList = el.querySelector('#engineAsideList'),
       asideCount = el.querySelector('#engineAsideCount');
-  if (!btn || !stat || !cards || !empty) return;
-  __busy = true;
+  if (!btn || !stat || !cards || !empty){ busyRelease(); return; }
   setScanButtons(el, true); cards.innerHTML = ''; empty.style.display = 'none';
   if (asidePanel) asidePanel.style.display = 'none';
   stat.className = 'note';
@@ -1085,7 +1100,7 @@ async function runScan(el){
     setProg(el, null);
     setScanButtons(el, false);
     __hasRun = true;
-    __busy = false;
+    busyRelease();
   }
 }
 
@@ -1096,16 +1111,16 @@ async function runScan(el){
    shape: 'quick rescan: N checked · M unchanged …'. Never throws; a failure
    leaves the prior verdicts rendered with an honest warn. */
 async function quickRescan(el){
-  if (__busy) return;
+  if (!busyAcquire()) return;
   var stat = el.querySelector('#engineStat'), cards = el.querySelector('#engineCards'),
       empty = el.querySelector('#engineEmpty');
-  if (!stat || !cards || !empty) return;
+  if (!stat || !cards || !empty){ busyRelease(); return; }
   if (!__lastScan || !__lastScan.uni){
+    busyRelease();
     stat.className = 'note warn';
     stat.textContent = 'quick rescan: run a full scan first — no cached universe or verdicts yet';
     return;
   }
-  __busy = true;
   setScanButtons(el, true);
   stat.className = 'note';
   var t0 = Date.now();
@@ -1195,7 +1210,7 @@ async function quickRescan(el){
   }finally{
     setProg(el, null);
     setScanButtons(el, false);
-    __busy = false;
+    busyRelease();
   }
 }
 
@@ -1280,7 +1295,7 @@ function mount(el){
    runScan sets __busy synchronously), so a double-refresh can't slip past. */
 async function refresh(){
   try{
-    if (__busy) return 'busy';
+    if (__busy && !busyStuck()) return 'busy';
     if (!__hasRun || !__el) return 'skipped: not run yet';
     await runScan(__el);
     return 'refreshed';
@@ -1309,7 +1324,7 @@ function __engWarmShim(){
 async function engineWarm(){
   try{
     if (G.engineState && G.engineState()) return 'fresh';
-    if (__busy) return 'busy';
+    if (__busy && !busyStuck()) return 'busy';
     await runScan({ querySelector: function(){ return __engWarmShim(); } });
     return (G.engineState && G.engineState()) ? 'warmed' : 'unavailable: gate scan did not complete (network?)';
   }catch(e){ return 'error: ' + ((e && e.message) || e); }

@@ -43,6 +43,11 @@ const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep)
 
 /* ---- load the module in a pristine global scope: only a window stub ---- */
 globalThis.window = {};
+/* SNIPER suite default OFF: the shipped default is ON (owner mandate), but
+   every fixture board below asserts the UNFILTERED render — the AO section
+   verifies the shipped default + the toggle/persistence logic separately */
+globalThis.localStorage = { getItem: function(k){ return k === 'hgBrainSniper' ? '0' : null; },
+                            setItem: function(){}, removeItem: function(){} };
 vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
 
 let passed = 0;
@@ -516,6 +521,12 @@ ok(qRef === 'refreshed', 'refresh on the barren app still honors the contract');
 /* ================= combined-universe helpers ================= */
 function freshBrain(){
   globalThis.window = {};
+  /* SNIPER fixture default OFF (shipped default is ON — verified in AO):
+     board fixtures assert the UNFILTERED render; a deleted/absent
+     localStorage must never flip fixtures into sniper-filtered boards */
+  if (!globalThis.localStorage || typeof globalThis.localStorage.getItem !== 'function')
+    globalThis.localStorage = lsStub();
+  try{ globalThis.localStorage.setItem('hgBrainSniper', '0'); }catch(e){}
   vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
   return globalThis.window;
 }
@@ -3008,6 +3019,30 @@ console.log('== AO) sniper mode ==');
   ok(snipRow && snipRow.lev >= 20 && wideRow && wideRow.lev < 20,
      'AO: candidates carry max-safe leverage — tight-stop limit qualifies, wide-stop does not');
   ok(snipRow.lev === 23, 'AO: 2.5% stop -> 23x — got ' + snipRow.lev + 'x');
+
+  /* the filter predicate itself — limits only, >=20x, in-zone/approaching */
+  const SO = W.__hgBrainSniperOk;
+  ok(typeof SO === 'function', 'AO: window.__hgBrainSniperOk seam exposed');
+  ok(SO({ limit: true, lev: 23 }, { state: 'in-zone' }) === true
+     && SO({ limit: true, lev: 23 }, { state: 'approaching' }) === true,
+     'AO: limit + 23x + in-zone/approaching -> sniper-grade');
+  ok(SO({ limit: true, lev: 23 }, { state: 'waiting' }) === false
+     && SO({ limit: true, lev: 23 }, { state: 'stale' }) === false,
+     'AO: WAITING/STALE stays out — the moment has not come (or has passed)');
+  ok(SO({ limit: true, lev: 8 }, { state: 'in-zone' }) === false,
+     'AO: wide stop (8x) never sniper-grade even in zone');
+  ok(SO({ limit: false, lev: 46 }, { state: 'in-zone' }) === false,
+     'AO: market-entry plans never sniper-grade — resting limits only');
+  ok(SO(null, null) === false && SO({}, undefined) === false, 'AO: garbage -> false, never throws');
+
+  /* the shipped default is ON (owner mandate 2026-07-25) — this suite loaded
+     the module with an explicit OFF stub; assert the artifact itself */
+  const brainSrc = fs.readFileSync(root + 'brain.js', 'utf8');
+  ok(/hgBrainSniper'[\s\S]{0,160}v === '1'[\s\S]{0,120}return true;/.test(brainSrc),
+     'AO: __sniper initializer defaults ON when no preference is stored');
+  ok(brainSrc.indexOf('>SNIPER: ON</button>') >= 0, 'AO: the shell ships with the SNIPER: ON label');
+  ok(brainSrc.indexOf("localStorage.setItem('hgBrainSniper'") >= 0,
+     'AO: the toggle persists the preference');
 }
 
 console.log('\n' + passed + ' assertions passed');
