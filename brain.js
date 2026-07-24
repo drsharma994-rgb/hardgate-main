@@ -2229,6 +2229,7 @@ function boardCandidate(row){
     if (!c || tierRank(row.dec.tier) <= 0) return null;  /* qualified rows only — ASIDE never boards */
     var et = row.plan.entryType;
     c.limit = (et === 'limit' || et === 'zone');
+    c.lev = sniperLev(row.plan.entry, row.plan.stop);   /* max-safe leverage, planner formula */
     return c;
   }catch(e){ return null; }
 }
@@ -2273,6 +2274,37 @@ function boardAtrFor(row){
 }
 var LIMIT_STATE_COL = { 'in-zone': '#5fbf8f', approaching: '#d8a24a', waiting: '#8fa0b8',
                         stale: '#e4586b', nomark: '#6d7684', none: '#6d7684' };
+
+/* =========================================================================
+SNIPER MODE — the owner's day-trade filter over the board: resting LIMIT
+orders only, mark IN ZONE or APPROACHING, and a stop tight enough that the
+planner's OWN auto-leverage math allows >= 20x. The leverage formula is
+byte-identical to planTrade in index.html (1.5x liquidation clearance,
+0.5% MMR): 20x needs stop distance <= 3.0%, 30x needs <= 1.9%. No new
+indicators, no invented levels — it FILTERS what the planners already
+produced and prints the max-safe leverage honestly on every card. Nothing
+here (or anywhere) can promise a stop never gets hit — sniper stacks the
+odds; it does not repeal risk.
+========================================================================= */
+var SNIPER_MIN_LEV = 20;
+var SNIPER_MMR = 0.005;
+function sniperLev(entry, stop, mmr){
+  try{
+    entry = +entry; stop = +stop;
+    if (!isFinite(entry) || !isFinite(stop) || entry <= 0 || entry === stop) return 1;
+    var sd = Math.abs(entry - stop) / entry;
+    var lev = Math.floor(1 / (sd * 1.5 + (isFinite(+mmr) && +mmr > 0 ? +mmr : SNIPER_MMR)));
+    return Math.max(1, Math.min(100, lev));
+  }catch(e){ return 1; }
+}
+function sniperOk(c, st){
+  try{
+    if (!c || !c.limit) return false;   /* sniper = resting limit orders only */
+    if (!(c.lev >= SNIPER_MIN_LEV)) return false;
+    return !!st && (st.state === 'in-zone' || st.state === 'approaching');
+  }catch(e){ return false; }
+}
+var __sniper = false;   /* SNIPER toggle state (session) */
 function boardCardHTML(c, stamp){
   try{
     var row = c.row, p = row.plan, dir = c.dir, long = dir === 'long';
@@ -2286,6 +2318,7 @@ function boardCardHTML(c, stamp){
       ? esc(p.anchorName || '4h structure')
       : esc((p.src ? String(p.src) + ' levels' : 'gate-engine levels') + (p.note ? ' — ' + p.note : ''));
     var rr1 = isFinite(p.rr1) ? p.rr1 : Math.abs(p.t1 - p.entry) / Math.abs(p.entry - p.stop);
+    var levCol = c.lev >= SNIPER_MIN_LEV ? '#5fbf8f' : (c.lev >= 10 ? '#d8a24a' : '#6d7684');
     return '<div style="flex:1 1 300px;max-width:420px;border:1px solid rgba(143,160,184,.35);border-left:3px solid ' + col + ';border-radius:6px;'
       + 'background:rgba(255,255,255,.02);padding:10px 12px">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
@@ -2295,7 +2328,10 @@ function boardCardHTML(c, stamp){
       + '<span style="font-size:9px;letter-spacing:.08em;color:#9aa6b5">'
       + esc(String(row.dec.tier || '').toUpperCase()) + ' · ' + (isFinite(row.dec.agree) ? row.dec.agree : 0) + ' LAYERS</span>'
       + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + stCol + ';border:1px solid ' + stCol
-      + ';border-radius:3px;padding:1px 5px" title="' + esc(st.note) + '">' + esc(st.label) + '</span></div>'
+      + ';border-radius:3px;padding:1px 5px" title="' + esc(st.note) + '">' + esc(st.label) + '</span>'
+      + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + levCol + ';border:1px solid ' + levCol
+      + ';border-radius:3px;padding:1px 5px" title="max safe leverage from the planner formula — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop">'
+      + c.lev + 'x SAFE</span></div>'
       + '<div style="margin-top:6px;font-size:9px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
       + '<div style="font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.25">'
       + PX(p.entry) + '</div>'
@@ -2323,28 +2359,44 @@ function paintLimitBoard(el, rows){
     var b = buildLimitBoard(rows);
     var stamp = new Date().toTimeString().slice(0, 8);
     var html = '', i;
-    if (!b.limits.length && !b.marketOnly.length){
-      html = '<div class="note" style="font-size:11.5px;line-height:1.7">No qualified limit setups this scan — standing aside is the position.</div>';
+    /* SNIPER mode: resting limits only, mark IN ZONE/APPROACHING, >= 20x-safe
+       stop — market-only rows sit out entirely; an empty read names the three
+       requirements honestly instead of relaxing them */
+    var limits = b.limits, marketOnly = b.marketOnly;
+    if (__sniper){
+      limits = limits.filter(function(c){
+        return sniperOk(c, hgLimitState(c.row.plan, boardMarkFor(c.row), boardAtrFor(c.row)));
+      });
+      marketOnly = [];
+    }
+    if (!limits.length && !marketOnly.length){
+      html = '<div class="note" style="font-size:11.5px;line-height:1.7">'
+        + (__sniper
+           ? 'No sniper-grade setups right now — a card must be a resting LIMIT with the mark IN ZONE or APPROACHING '
+             + 'and a stop tight enough for ≥' + SNIPER_MIN_LEV + 'x (≤3% away). Nothing qualified; standing aside is the position.'
+           : 'No qualified limit setups this scan — standing aside is the position.')
+        + '</div>';
     }else{
-      if (b.limits.length){
+      if (limits.length){
         html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
-        for (i = 0; i < b.limits.length; i++) html += boardCardHTML(b.limits[i], stamp);
+        for (i = 0; i < limits.length; i++) html += boardCardHTML(limits[i], stamp);
         html += '</div>';
       }else{
-        html += '<div class="note" style="font-size:11.5px;line-height:1.7">No qualified limit setups this scan — standing aside is the position.</div>';
+        html = '<div class="note" style="font-size:11.5px;line-height:1.7">No qualified limit setups this scan — standing aside is the position.</div>';
       }
-      if (b.marketOnly.length){
+      if (marketOnly.length){
         html += '<div style="margin-top:10px;border-top:1px dashed rgba(143,160,184,.35);padding-top:8px">'
           + '<div style="font-size:10px;letter-spacing:.1em;color:#9aa6b5;margin-bottom:6px">'
           + 'MARKET-ONLY (no limit anchor) — engine/builder market entries with the decline reason named; never dressed up as limits</div>'
           + '<div style="display:flex;gap:10px;flex-wrap:wrap">';
-        for (i = 0; i < b.marketOnly.length; i++) html += boardCardHTML(b.marketOnly[i], stamp);
+        for (i = 0; i < marketOnly.length; i++) html += boardCardHTML(marketOnly[i], stamp);
         html += '</div></div>';
       }
     }
     box.innerHTML = html;
     var age = el.querySelector('#brainBoardAge');
-    if (age) age.textContent = 'levels as of ' + stamp + ' — refreshed by every synthesis, including the AUTO cycle';
+    if (age) age.textContent = 'levels as of ' + stamp + (__sniper ? ' · SNIPER filter ON (limits ≥' + SNIPER_MIN_LEV + 'x-safe, in/approaching zone)' : '')
+      + ' — refreshed by every synthesis, including the AUTO cycle';
     wrap.style.display = 'block';
   }catch(e){ /* the board is additive — the ticket + cards stand without it */ }
 }
@@ -3321,6 +3373,10 @@ function mount(el){
       + '(tier · layers · R:R) · the state chip reads a zero-fetch mark, never a new candle fetch · '
       + 'market-entry plans sit separated below with the no-anchor reason named, never dressed up as limits — '
       + 'when nothing qualifies, the board says so honestly</span></h2>'
+      + '<button class="btn ghost" id="brainSniper" style="margin:2px 0 6px;padding:3px 10px;font-size:10px;letter-spacing:.08em" '
+      + 'title="SNIPER mode — the day-trade filter: resting LIMIT orders only, mark IN ZONE or APPROACHING, '
+      + 'and a stop tight enough for ≥20x max-safe leverage (≤3% away, planner formula with 1.5× liquidation clearance). '
+      + 'Stacks the odds; no filter can promise a stop never gets hit">SNIPER: OFF</button>'
       + '<div id="brainBoard"></div>'
       + '<div class="note" id="brainBoardAge" style="margin-top:6px;font-size:10px"></div></div>'
       + '<div class="cards" id="brainCards" style="margin-top:10px"></div>'
@@ -3372,6 +3428,21 @@ function mount(el){
       });
     }
   }catch(e){ mountNote(el, 'brain mount degraded: venue filter unavailable — scan still runs'); }
+  /* 3b) SNIPER toggle — isolated; repaints the board from the LAST completed
+     scan's rows, never triggers a scan itself */
+  try{
+    var snBtn = el.querySelector('#brainSniper');
+    if (snBtn) snBtn.addEventListener('click', function(){
+      try{
+        __sniper = !__sniper;
+        snBtn.textContent = 'SNIPER: ' + (__sniper ? 'ON' : 'OFF');
+        snBtn.style.color = __sniper ? '#5fbf8f' : '';
+        snBtn.style.borderColor = __sniper ? 'rgba(95,191,143,.6)' : '';
+        var lr = (__lastResult && Array.isArray(__lastResult.rows)) ? __lastResult.rows : [];
+        if (lr.length) paintLimitBoard(el, lr);
+      }catch(e){}
+    });
+  }catch(e){ mountNote(el, 'brain mount degraded: sniper toggle unavailable — board still renders'); }
   /* 4) deps note — isolated; its failure used to kill the RUN listener */
   try{
     var deps = el.querySelector('#brainDeps');
@@ -3432,6 +3503,9 @@ G.__hgBrainTickets = buildEntryTickets;
    ticket-ranked candidates; and the pure validity read — (plan, mark, atr)
    -> {state, label, note}. No DOM, no fetch, never throw */
 G.__hgBrainBoard = buildLimitBoard;
+/* sniper seam: the planner-formula max-safe leverage — (entry, stop, mmr?) ->
+   1..100; pure, never throws */
+G.__hgBrainSniperLev = sniperLev;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

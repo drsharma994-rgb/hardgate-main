@@ -2975,5 +2975,40 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
      'AN10: the legacy board lists the anchored limit — no market-only group when every plan is a limit');
 }
 
+/* ================= AO) SNIPER mode — leverage math + board filter ================= */
+console.log('== AO) sniper mode ==');
+{
+  const SL = W.__hgBrainSniperLev;
+  ok(typeof SL === 'function', 'AO: window.__hgBrainSniperLev seam exposed');
+  /* byte-identical to planTrade: floor(1/(stopDist*1.5 + 0.005)), clamped 1-100 */
+  ok(SL(100, 97) === 20, 'AO: 3.0% stop -> exactly 20x (the SNIPER_MIN_LEV boundary)');
+  ok(SL(100, 98.11) === 29, 'AO: 1.89% stop -> 29x');
+  ok(SL(100, 98.9) === 46, 'AO: 1.1% stop -> 46x');
+  ok(SL(100, 90) === 6, 'AO: 10% stop -> 6x — wide swing stops are NOT sniper material');
+  ok(SL(100, 100) === 1 && SL(0, 97) === 1 && SL('x', 97) === 1 && SL(100, 'x') === 1,
+     'AO: zero-width / non-finite inputs -> 1x floor, never throws');
+  ok(SL(100, 97, 0.01) === 18, 'AO: higher MMR lowers the safe leverage honestly');
+
+  /* candidates carry the leverage; ASIDE/boardless rows stay off */
+  const rows = [
+    { sym: 'SNIPUSDT', lane: 'crypto',
+      dec: { tier: 'WATCH', dir: 'long', agree: 3, reasons: ['sniper row'], vetoes: [] },
+      plan: { dir: 'long', entry: 100, stop: 97.5, t1: 105, rr1: 2, entryType: 'limit', anchorName: '4h FVG' } },
+    { sym: 'WIDEUSDT', lane: 'crypto',
+      dec: { tier: 'HIGH', dir: 'long', agree: 4, reasons: ['wide stop row'], vetoes: [] },
+      plan: { dir: 'long', entry: 100, stop: 92, t1: 116, rr1: 2, entryType: 'limit', anchorName: '4h OB' } },
+    { sym: 'MKTUSDT', lane: 'crypto',
+      dec: { tier: 'WATCH', dir: 'short', agree: 3, reasons: ['market row'], vetoes: [] },
+      plan: { dir: 'short', entry: 100, stop: 101.5, t1: 97, rr1: 2, entryType: 'gate', src: 'smartSetup' } }
+  ];
+  const bd = W.__hgBrainBoard(rows);
+  ok(bd.limits.length === 2 && bd.marketOnly.length === 1, 'AO: board bucketing intact with sniper fields');
+  const snipRow = bd.limits.filter(function(c){ return c.row.sym === 'SNIPUSDT'; })[0];
+  const wideRow = bd.limits.filter(function(c){ return c.row.sym === 'WIDEUSDT'; })[0];
+  ok(snipRow && snipRow.lev >= 20 && wideRow && wideRow.lev < 20,
+     'AO: candidates carry max-safe leverage — tight-stop limit qualifies, wide-stop does not');
+  ok(snipRow.lev === 23, 'AO: 2.5% stop -> 23x — got ' + snipRow.lev + 'x');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);
