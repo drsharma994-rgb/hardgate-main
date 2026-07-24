@@ -1648,7 +1648,8 @@ function hgLimitState(plan, mark, atr){
     if (!isFinite(mark) || mark <= 0)
       return { state: 'nomark', label: 'MARK n/a',
                note: 'no zero-fetch mark available — validity unmeasured' };
-    var cancel = isFinite(+plan.cancelIf) ? +plan.cancelIf : null;
+    var cancel = (plan.cancelIf !== null && plan.cancelIf !== undefined && isFinite(+plan.cancelIf))
+               ? +plan.cancelIf : null;   /* null/undefined cancelIf = NO cancel level — never coerces to 0 */
     if (cancel !== null && (long ? mark < cancel : mark > cancel))
       return { state: 'stale', label: 'STALE',
                note: 'mark ' + PX(mark) + ' beyond the cancel-if ' + PX(cancel)

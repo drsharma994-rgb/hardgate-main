@@ -2846,6 +2846,15 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
      'AN8: correct side without a usable ATR -> WAITING, distance honestly unmeasured');
   st = LS(lp, 99, NaN);
   ok(st.state === 'stale', 'AN8: wrong side needs no ATR — the cross alone is STALE');
+  /* cancelIf null/undefined = NO cancel level — never coerces to 0 and
+     ghost-STALEs a market plan (the live KITE/TRIA/PHAROS 'cancel-if 0' bug) */
+  const nc = { dir: 'short', entry: 100, stop: 101, t1: 98, cancelIf: null };
+  st = LS(nc, 99.2, 2);
+  ok(st.state !== 'stale' && st.note.indexOf('cancel-if') === -1,
+     'AN8: cancelIf null -> no phantom cancel level (null coerces to 0 in isFinite(+x)) — got "' + st.state + ' / ' + st.note + '"');
+  st = LS({ dir: 'short', entry: 100, stop: 101, t1: 98 }, 99.2, 2);
+  ok(st.state === 'approaching' && st.note.indexOf('cancel-if') === -1,
+     'AN8: cancelIf absent -> plain APPROACHING, no cancel comparison at all');
   ok(LS(null, 100, 2).state === 'none' && LS({ dir: 'sideways', entry: 1 }, 100, 2).state === 'none',
      'AN8: plan-less / non-dir garbage -> the none state, never throws');
   let lsThrew = null;
