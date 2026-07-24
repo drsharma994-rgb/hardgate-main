@@ -28,6 +28,10 @@
      AL) auto-warm into RUN SYNTHESIS (shared engine-last invocation path,
          cold engine warmed into voting, accounting prefix, 60s freshness
          skip, QUICK RESCAN never warms, zero-hooks legacy stat)
+     AN) LIMIT BOARD — expanded anchors (OB / liquidity pool / AVWAP seams +
+         real-module wiring), buildLimitBoard selector, hgLimitState bands,
+         run-level board paint (groups, zero-fetch state chips, alert-neutral)
+         + legacy-lane anchored-first precedence
    No live network. Run: node tests/test-brain.mjs */
 
 import fs from 'node:fs';
@@ -2620,6 +2624,346 @@ console.log('== AM) entry ticket selector ==');
   const t5 = TICK(null), t6 = TICK([null, {}, { dec: null }, { dec: { dir: 'long' }, plan: { entry: 'x' } }, 42]);
   ok(t5.long === null && t5.short === null && t6.long === null && t6.short === null,
      'AM: garbage input -> all-null tickets, never throws');
+}
+
+/* ================= AN) LIMIT BOARD — expanded anchors, board builder, live state =================
+   AN1-6: OB / liquidity-pool / AVWAP anchor families via the window seams
+          (stubbed per family on fresh module instances), the union pick,
+          band rejection, the 0.5xATR stop and the sub-1.5R decline — plus the
+          REAL indicators.js / indicators2.js wiring (function-name contract).
+   AN7:   buildLimitBoard — exactly the qualified rows, ticket-rank order,
+          market-only separated, plan-null and ASIDE excluded, never throws.
+   AN8:   hgLimitState — IN ZONE / APPROACHING / WAITING / STALE boundaries,
+          wrong-side cross + cancel-if reasons, MARK n/a, garbage never throws.
+   AN9:   run level — board renders under the ticket, limit + MARKET-ONLY
+          groups, state chips off the zero-fetch mark (xuPositioning first),
+          refreshing semantics, alert seam untouched, honest empty state.
+   AN10:  legacy + gold lanes get the same anchored-first precedence. */
+console.log('== AN) limit board: expanded anchors, builder, live state, run level ==');
+{
+  const bar = function(c, hh, ll){ return { t: 0, o: c, h: hh !== undefined ? hh : c + 0.5, l: ll !== undefined ? ll : c - 0.5, c: c, v: 1000 }; };
+  const flat = function(){ const r = []; for (let i = 0; i < 120; i++) r.push(bar(100)); return r; };
+  const swingLongRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[113] = bar(99.6, 99.9, 99.3);
+    rows[114] = bar(99.3, 99.7, 99.0);
+    rows[115] = bar(99.2, 99.5, 98.8);
+    rows[116] = bar(99.5, 99.8, 99.1);
+    rows[117] = bar(99.8, 100.1, 99.4);
+    rows[118] = bar(100, 100.3, 99.7);
+    rows[119] = bar(100, 100.3, 99.7);
+    return rows;
+  };
+  const rrFailRows = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push(bar(100));
+    rows[110] = bar(99.6, 99.9, 99.3);
+    rows[111] = bar(99.3, 99.6, 99.0);
+    rows[112] = bar(99.2, 99.5, 98.9);
+    rows[113] = bar(99.1, 99.4, 98.8);
+    rows[114] = bar(99.5, 99.8, 99.1);
+    rows[115] = bar(99.8, 100.0, 99.5);
+    rows[116] = bar(99.9, 100.0, 99.7);
+    rows[117] = bar(99.95, 100.05, 99.75); /* confirmed pivot high 100.05 — too close */
+    rows[118] = bar(99.9, 99.95, 99.7);
+    rows[119] = bar(99.9, 100.0, 99.8);
+    return rows;
+  };
+  const near = function(a, b){ return Math.abs(a - b) < 1e-9; };
+
+  /* ---- AN1: order block zone anchor (stubbed family seam), LONG + SHORT ---- */
+  const WA1 = freshBrain();
+  WA1.findOrderBlock = function(rows, dir){
+    return dir === 'long' ? { top: 99.5, bottom: 99.3, age: 5 } : { top: 100.7, bottom: 100.5, age: 5 }; };
+  let ap = WA1.brainAnchorPlan('long', flat());
+  ok(ap.plan && ap.plan.anchorName === '4h order block top' && ap.plan.entryType === 'limit'
+     && ap.plan.entry === 99.5 && ap.plan.cancelIf === 99.3,
+     'AN1: OB zone wins — entry at the 4h order block top, cancel-if at the zone bottom');
+  ok(ap.plan.stop === 98.8 && near(ap.plan.t1, 100.55) && near(ap.plan.t2, 101.25),
+     'AN1: stop exactly 0.5xATR beyond the OB far edge (ATR 1.0), raw 1.5R/2.5R targets');
+  ok(ap.plan.anchorNote === '4h order block top 99.5 (zone 99.3–99.5) · 0.5×ATR below mark',
+     'AN1: the OB note names the family + level basis — got "' + ap.plan.anchorNote + '"');
+  ap = WA1.brainAnchorPlan('short', flat());
+  ok(ap.plan && ap.plan.anchorName === '4h order block bottom' && ap.plan.entry === 100.5
+     && ap.plan.stop === 101.2 && ap.plan.cancelIf === 100.7,
+     'AN1: SHORT mirrors — entry at the OB bottom, stop 0.5xATR above the zone top');
+
+  /* ---- AN2: liquidity pool line anchor, both sides ---- */
+  const WA2 = freshBrain();
+  WA2.findLiquidityPools = function(){ return { buySide: { level: 100.6, count: 3 }, sellSide: { level: 99.4, count: 4 } }; };
+  ap = WA2.brainAnchorPlan('long', flat());
+  ok(ap.plan && ap.plan.anchorName === 'sell-side equal-lows pool' && ap.plan.entry === 99.4
+     && ap.plan.stop === 98.9 && near(ap.plan.t1, 100.15) && near(ap.plan.t2, 100.65)
+     && ap.plan.cancelIf === 99.4,
+     'AN2: LONG limits at the sell-side equal-lows pool — line anchor, stop 0.5xATR beyond the level');
+  ap = WA2.brainAnchorPlan('short', flat());
+  ok(ap.plan && ap.plan.anchorName === 'buy-side equal-highs pool' && ap.plan.entry === 100.6
+     && ap.plan.stop === 101.1 && near(ap.plan.t1, 99.85) && near(ap.plan.t2, 99.35),
+     'AN2: SHORT mirrors at the buy-side equal-highs pool');
+
+  /* ---- AN3: AVWAP anchored at the last confirmed swing low ---- */
+  const WA3 = freshBrain();
+  WA3.findLiquidityPools = function(){ return { buySide: null, sellSide: null }; };
+  const avCalls = [];
+  WA3.hgAVWAP = function(rows, idx){ avCalls.push(idx); return { value: 99.35, upper: 100, lower: 98.7, stdev: 0.6 }; };
+  ap = WA3.brainAnchorPlan('long', swingLongRows());
+  ok(ap.plan && ap.plan.anchorName === 'AVWAP from the last swing low' && ap.plan.entry === 99.35
+     && avCalls.length === 1 && avCalls[0] === 115,
+     'AN3: AVWAP computed from the last confirmed swing-low bar (index 115), entry at the value');
+  ok(near(ap.plan.stop, 98.91759864893591) && ap.plan.cancelIf === 99.35,
+     'AN3: AVWAP line stop 0.5xATR beyond the level, cancel-if at the level itself');
+  ap = WA3.brainAnchorPlan('long', flat());
+  ok(ap.plan === null && avCalls.length === 1,
+     'AN3: no confirmed pivot -> AVWAP never even computed (no anchor bar, no fabricated index)');
+
+  /* ---- AN4: union pick — all families present, the highest in-band level wins ---- */
+  const WA4 = freshBrain();
+  WA4.findOrderBlock = function(){ return { top: 99.3, bottom: 99.15, age: 3 }; };
+  WA4.findLiquidityPools = function(){ return { buySide: null, sellSide: { level: 99.15, count: 2 } }; };
+  WA4.hgAVWAP = function(){ return { value: 99.2, upper: 100, lower: 98.4, stdev: 0.8 }; };
+  ap = WA4.brainAnchorPlan('long', swingLongRows());
+  ok(ap.plan && ap.plan.anchorName === '4h order block top' && ap.plan.entry === 99.3,
+     'AN4: union of families — OB top 99.3 beats AVWAP 99.2, pool 99.15, swing zone 99.1 (nearest below mark)');
+  ok(near(ap.plan.stop, 99.15 - 0.5 * 0.8648027021281775)
+     && near(ap.plan.t1, ap.plan.entry + 1.5 * (ap.plan.entry - ap.plan.stop))
+     && near(ap.plan.t2, ap.plan.entry + 2.5 * (ap.plan.entry - ap.plan.stop)),
+     'AN4: stop/TP math family-independent — 0.5xATR beyond the OB bottom, raw 1.5R/2.5R');
+
+  /* ---- AN5: band rejection + the honest decline still bind the new families ---- */
+  const WA5 = freshBrain();
+  WA5.findLiquidityPools = function(){ return { buySide: { level: 103, count: 3 }, sellSide: { level: 97, count: 4 } }; };
+  WA5.findOrderBlock = function(){ return { top: 96.8, bottom: 96.5, age: 9 }; };
+  ap = WA5.brainAnchorPlan('long', flat());
+  ok(ap.plan === null && ap.note === 'no nearby 4h structure — gate-engine levels',
+     'AN5: pool 3xATR away + OB even farther -> declined, never stretched into band — got "' + ap.note + '"');
+  const WA6 = freshBrain();
+  WA6.findOrderBlock = function(){ return { top: 99.5, bottom: 99.3, age: 5 }; };
+  ap = WA6.brainAnchorPlan('long', rrFailRows());
+  ok(ap.plan === null && ap.note === 'anchored limit R:R 1.2 below the 1.5 minimum — gate-engine levels',
+     'AN5: snapped TP1 under 1.5R declines an OB plan exactly like a swing plan — got "' + ap.note + '"');
+
+  /* ---- AN6: the REAL indicators.js / indicators2.js wiring (name contract) ---- */
+  globalThis.window = {};
+  vm.runInThisContext(fs.readFileSync(root + 'indicators.js', 'utf8'), { filename: 'indicators.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'indicators2.js', 'utf8'), { filename: 'indicators2.js' });
+  const WR = globalThis.window;      /* indicators2 self-exports hgAVWAP here */
+  WR.findOrderBlock = globalThis.findOrderBlock;         /* classic-script globals, */
+  WR.findLiquidityPools = globalThis.findLiquidityPools; /* bridged onto the window stub */
+  vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
+  ok(typeof WR.hgAVWAP === 'function' && typeof WR.findOrderBlock === 'function'
+     && typeof WR.findLiquidityPools === 'function', 'AN6: real modules present on the seam window');
+  ap = WR.brainAnchorPlan('long', flat());
+  ok(ap.plan && ap.plan.anchorName === 'sell-side equal-lows pool' && ap.plan.entry === 99.5
+     && ap.plan.stop === 99,
+     'AN6: REAL findLiquidityPools — flat fixture equal lows 99.5 anchor the long limit');
+  ap = WR.brainAnchorPlan('short', flat());
+  ok(ap.plan && ap.plan.anchorName === 'buy-side equal-highs pool' && ap.plan.entry === 100.5,
+     'AN6: REAL findLiquidityPools — equal highs 100.5 anchor the short limit');
+  ap = WR.brainAnchorPlan('long', swingLongRows());
+  ok(ap.plan && ap.plan.anchorName === 'AVWAP from the last swing low' && ap.plan.entry === 99.68,
+     'AN6: REAL hgAVWAP from the swing-low bar wins the union on the swing fixture (99.68, nearest below mark)');
+}
+{
+  /* ---- AN7: buildLimitBoard — pure selector ---- */
+  const BOARD = W.__hgBrainBoard;
+  ok(typeof BOARD === 'function', 'AN7: window.__hgBrainBoard seam exposed');
+  const mkRow = (sym, tier, dir, agree, plan) => ({
+    sym: sym, base: sym.replace('USDT', ''), lane: 'crypto',
+    dec: { tier: tier, dir: dir, agree: agree, reasons: [sym + ' reason'], vetoes: [] },
+    plan: plan || null
+  });
+  const limPlan = (dir, e, s, t1, t2, rr1) => ({ dir: dir, entry: e, stop: s, t1: t1, t2: t2,
+    rr1: rr1, entryType: 'limit', anchorName: '4h order block top', cancelIf: s - 0.5 });
+  const gatePlan = (dir, e, s, t1, t2, rr1, note) => ({ dir: dir, entry: e, stop: s, t1: t1, t2: t2,
+    rr1: rr1, entryType: 'gate', src: 'hgPlanLevels', note: note || '' });
+
+  const b1 = BOARD([
+    mkRow('AAAUSDT', 'WATCH', 'long', 3, limPlan('long', 10, 9, 12, 13, 2)),
+    mkRow('BBBUSDT', 'PRIME', 'long', 5, limPlan('long', 20, 19, 23, 25, 3)),
+    mkRow('CCCUSDT', 'HIGH', 'short', 4, limPlan('short', 30, 31, 27, 25, 3)),
+    mkRow('DDDUSDT', 'HIGH', 'long', 4, gatePlan('long', 10, 9, 12, 13, 2, 'no nearby 4h structure — gate-engine levels')),
+    mkRow('EEEUSDT', 'WATCH', 'long', 3, null),
+    mkRow('FFFUSDT', 'ASIDE', 'long', 1, limPlan('long', 10, 9, 12, 13, 2))
+  ]);
+  ok(b1.limits.length === 3 && b1.marketOnly.length === 1,
+     'AN7: 3 limit rows + 1 market-only — plan-null and ASIDE rows are NOT listed');
+  ok(b1.limits[0].row.sym === 'BBBUSDT' && b1.limits[1].row.sym === 'CCCUSDT' && b1.limits[2].row.sym === 'AAAUSDT',
+     'AN7: sorted tierRank first — PRIME > HIGH > WATCH');
+  ok(b1.marketOnly[0].row.sym === 'DDDUSDT' && b1.marketOnly[0].limit === false
+     && b1.marketOnly[0].row.plan.note === 'no nearby 4h structure — gate-engine levels',
+     'AN7: the market-only row is separated and carries its named decline reason');
+
+  const b2 = BOARD([
+    mkRow('GGGUSDT', 'HIGH', 'long', 5, limPlan('long', 10, 9, 12, 13, 2)),
+    mkRow('HHHUSDT', 'HIGH', 'long', 4, limPlan('long', 10, 9, 14, 16, 9)),
+    mkRow('IIIUSDT', 'HIGH', 'long', 5, limPlan('long', 10, 9, 13, 14.5, 3))
+  ]);
+  ok(b2.limits[0].row.sym === 'IIIUSDT' && b2.limits[1].row.sym === 'GGGUSDT' && b2.limits[2].row.sym === 'HHHUSDT',
+     'AN7: inside a tier — agree breaks first (HHH last), rr1 breaks what agree leaves (III over GGG, same order as the ticket ranks)');
+  const b3 = BOARD(null), b4 = BOARD([null, {}, { dec: null }, 42, { dec: { tier: 'PRIME', dir: 'long' }, plan: { entry: 'x' } }]);
+  ok(b3.limits.length === 0 && b3.marketOnly.length === 0 && b4.limits.length === 0 && b4.marketOnly.length === 0,
+     'AN7: garbage input -> empty groups, never throws');
+}
+{
+  /* ---- AN8: hgLimitState — the "when to enter" read ---- */
+  const LS = W.hgLimitState;
+  ok(typeof LS === 'function', 'AN8: window.hgLimitState seam exposed');
+  const lp = { dir: 'long', entry: 100, stop: 99, t1: 102, t2: 103, cancelIf: 98.5 };
+  const sp = { dir: 'short', entry: 100, stop: 101, t1: 98, t2: 97, cancelIf: 101.5 };
+  let st = LS(lp, 100.5, 2);
+  ok(st.state === 'in-zone' && st.label === 'IN ZONE', 'AN8: 0.25xATR from entry (boundary) -> IN ZONE');
+  st = LS(lp, 99.5, 2);
+  ok(st.state === 'in-zone', 'AN8: just below the limit but inside the zone -> still IN ZONE (filling, not stale)');
+  st = LS(lp, 100.51, 2);
+  ok(st.state === 'approaching' && st.label === 'APPROACHING', 'AN8: 0.25-1.0xATR on the correct side -> APPROACHING');
+  st = LS(lp, 102, 2);
+  ok(st.state === 'approaching', 'AN8: exactly 1.0xATR away (boundary) -> APPROACHING');
+  st = LS(lp, 102.01, 2);
+  ok(st.state === 'waiting' && st.label === 'WAITING', 'AN8: beyond 1.0xATR on the correct side -> WAITING');
+  st = LS(lp, 99.4, 2);
+  ok(st.state === 'stale' && st.note.indexOf('wrong side') >= 0,
+     'AN8: crossed to the wrong side of the entry -> STALE naming the cross');
+  st = LS(lp, 98.4, 2);
+  ok(st.state === 'stale' && st.note.indexOf('cancel-if') >= 0 && st.note.indexOf('98.5') >= 0,
+     'AN8: beyond the cancel-if -> STALE naming the level — got "' + st.note + '"');
+  st = LS(sp, 99.5, 2);
+  ok(st.state === 'in-zone', 'AN8: SHORT mirrors — 0.25xATR above -> IN ZONE');
+  st = LS(sp, 98, 2);
+  ok(st.state === 'approaching', 'AN8: SHORT exactly 1.0xATR below (boundary) -> APPROACHING');
+  st = LS(sp, 97.99, 2);
+  ok(st.state === 'waiting', 'AN8: SHORT beyond 1.0xATR on the correct side -> WAITING');
+  st = LS(sp, 100.6, 2);
+  ok(st.state === 'stale' && st.note.indexOf('wrong side') >= 0, 'AN8: SHORT wrong-side cross -> STALE');
+  st = LS(sp, 101.6, 2);
+  ok(st.state === 'stale' && st.note.indexOf('cancel-if') >= 0, 'AN8: SHORT beyond cancel-if -> STALE');
+  st = LS(lp, NaN, 2);
+  ok(st.state === 'nomark' && st.label === 'MARK n/a', 'AN8: no mark -> MARK n/a, never a guessed state');
+  ok(LS(lp, 0, 2).state === 'nomark' && LS(lp, undefined, 2).state === 'nomark' && LS(lp, -3, 2).state === 'nomark',
+     'AN8: zero / undefined / negative marks -> MARK n/a');
+  st = LS(lp, 101, NaN);
+  ok(st.state === 'waiting' && st.note.indexOf('ATR unavailable') >= 0,
+     'AN8: correct side without a usable ATR -> WAITING, distance honestly unmeasured');
+  st = LS(lp, 99, NaN);
+  ok(st.state === 'stale', 'AN8: wrong side needs no ATR — the cross alone is STALE');
+  ok(LS(null, 100, 2).state === 'none' && LS({ dir: 'sideways', entry: 1 }, 100, 2).state === 'none',
+     'AN8: plan-less / non-dir garbage -> the none state, never throws');
+  let lsThrew = null;
+  try{ LS(lp, 'x', 'y'); LS(42, {}, []); LS(lp, 100, -1); }catch(e){ lsThrew = e; }
+  ok(!lsThrew, 'AN8: garbage marks/atrs/plans never throw' + (lsThrew ? ' — ' + lsThrew.message : ''));
+}
+{
+  /* ---- AN9: run level — board paint, groups, zero-fetch state chips, alerts ---- */
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  WG.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WG.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.oiflowState = function(){ return { results: [
+    { sym: 'TRENDYUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'FLATUSDT',   dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
+    { sym: 'NOMKUSDT',   dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
+  WG.xuUniverse = async function(){ return [
+    { sym: 'BTCUSDT',    base: 'BTC',    exchange: 'delta', turnoverUsd: 9e9,  mark: 100,    fundingPct: 0, alsoOn: null },
+    { sym: 'TRENDYUSDT', base: 'TRENDY', exchange: 'delta', turnoverUsd: 60e6, mark: 1,      fundingPct: 0, alsoOn: null },
+    { sym: 'FLATUSDT',   base: 'FLAT',   exchange: 'delta', turnoverUsd: 50e6, mark: 9.6,    fundingPct: 0, alsoOn: null },
+    { sym: 'NOMKUSDT',   base: 'NOMK',   exchange: 'delta', turnoverUsd: 48e6, mark: null,   fundingPct: 0, alsoOn: null } ]; };
+  WG.xuState = function(){ return { count: 4, delta: 4, cdcx: 0, at: Date.now(), note: null }; };
+  WG.xuCandles = function(item){
+    return Promise.resolve(item.sym === 'TRENDYUSDT' ? trendRows(true) : fakeRows(120)); };
+  /* zero-fetch positioning cache: TRENDY answered near the close (its xu mark
+     of 1 would be stale-wrong — the chip proving the cache wins), FLAT/NOMK
+     honestly null so the row's own snapshot takes over */
+  WG.xuPositioning = function(base){
+    if (base === 'TRENDY') return { sym: 'TRENDYUSDT', base: 'TRENDY', mark: 148.98, fundingPct: 0, oiUsd: null, exchange: 'delta' };
+    return null; };
+  WG.hgPlanLevels = function(dir){ return { dir: dir, entry: 10, stop: 9, t1: 12, t2: 13 }; };
+  WG.toTrade = function(){};
+  const alertSnaps = [];
+  WG.hgAlertTicket = function(tsnap){ alertSnaps.push(tsnap); };
+  const TB = freshPane();
+  WG.HG_tabs[0].mount(TB.pane);
+  ok(TB.pane._html.indexOf('id="brainBoardWrap"') >= 0 && TB.pane._html.indexOf('LIMIT BOARD') >= 0
+     && TB.pane._html.indexOf('id="brainBoardAge"') >= 0,
+     'AN9: the LIMIT BOARD shell mounts directly under the ENTRY TICKET panel');
+  await runAndWait(TB.stubs);
+  const boardHtml = TB.stubs['#brainBoard'].innerHTML;
+  ok(TB.stubs['#brainBoardWrap'].style.display === 'block', 'AN9: the board reveals after the synthesis');
+  ok(boardHtml.indexOf('LIMIT ENTRY') >= 0 && boardHtml.indexOf('147.65') >= 0
+     && boardHtml.indexOf('4h FVG') >= 0 && boardHtml.indexOf('cancel if 4h closes beyond <b>147.49</b>') >= 0,
+     'AN9: the TRENDY card carries the exact resting limit — entry, anchor family, cancel-if');
+  ok(boardHtml.indexOf('WAITING') >= 0,
+     'AN9: TRENDY chip reads the xuPositioning cache mark (148.98, ~1.04xATR away) — the cache beats the row mark of 1');
+  ok(boardHtml.indexOf('MARKET-ONLY (no limit anchor)') >= 0
+     && boardHtml.indexOf('ENTRY AT (market — no limit anchor in band)') >= 0
+     && boardHtml.indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+     'AN9: flat-candle rows sit in the separated MARKET-ONLY group with the decline reason named');
+  ok(boardHtml.indexOf('IN ZONE') >= 0,
+     'AN9: FLAT chip falls back to the row mark (9.6 vs entry 10, ATR 2) -> IN ZONE');
+  ok(boardHtml.indexOf('MARK n/a') >= 0,
+     'AN9: NOMK has no cache mark and a null row mark -> the chip says MARK n/a, never a guess');
+  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.84603755122723,148.8451763717245)') >= 0,
+     'AN9: every board card keeps the SEND TO TRADE PLAN handoff verbatim');
+  ok(boardHtml.indexOf('BTCUSDT') === -1 && boardHtml.indexOf('XAU') === -1,
+     'AN9: plan-null rows (BTC, gold ASIDE) never board — the ticket near-miss copy covers them');
+  ok(/^levels as of \d{2}:\d{2}:\d{2} — refreshed by every synthesis/.test(TB.stubs['#brainBoardAge'].textContent),
+     'AN9: the board carries the ticket freshness stamp semantics — got "' + TB.stubs['#brainBoardAge'].textContent + '"');
+  ok(alertSnaps.length === 1 && alertSnaps[0].long && alertSnaps[0].long.sym === 'TRENDYUSDT'
+     && alertSnaps[0].long.entry === 147.64569307942614,
+     'AN9: the hgalert TICKET watch fires exactly once with the same sym@entry keys — board paint is alert-neutral');
+
+  /* refreshing semantics: mid-rescan the stamp goes honest-stale, then repaints */
+  let midAge = null;
+  WG.xuUniverse = async function(){ midAge = TB.stubs['#brainBoardAge'].textContent; return [
+    { sym: 'BTCUSDT',    base: 'BTC',    exchange: 'delta', turnoverUsd: 9e9,  mark: 100,  fundingPct: 0, alsoOn: null },
+    { sym: 'TRENDYUSDT', base: 'TRENDY', exchange: 'delta', turnoverUsd: 60e6, mark: 1,    fundingPct: 0, alsoOn: null },
+    { sym: 'FLATUSDT',   base: 'FLAT',   exchange: 'delta', turnoverUsd: 50e6, mark: 9.6,  fundingPct: 0, alsoOn: null },
+    { sym: 'NOMKUSDT',   base: 'NOMK',   exchange: 'delta', turnoverUsd: 48e6, mark: null, fundingPct: 0, alsoOn: null } ]; };
+  await runAndWait(TB.stubs);
+  ok(midAge && midAge.indexOf('refreshing — levels shown are as of ') === 0,
+     'AN9: during the rescan the board stamp goes honestly stale — got "' + midAge + '"');
+  ok(/^levels as of /.test(TB.stubs['#brainBoardAge'].textContent)
+     && TB.stubs['#brainBoard'].innerHTML.indexOf('147.65') >= 0,
+     'AN9: the completed rescan repaints the same deterministic levels + a fresh stamp');
+
+  /* honest empty state: everything dark -> nothing boards */
+  const WE = freshBrain();
+  const TE = freshPane();
+  WE.HG_tabs[0].mount(TE.pane);
+  await runAndWait(TE.stubs);
+  ok(TE.stubs['#brainBoardWrap'].style.display === 'block'
+     && TE.stubs['#brainBoard'].innerHTML.indexOf('No qualified limit setups this scan — standing aside is the position.') >= 0,
+     'AN9: all-dark scan -> the honest empty state, never a fabricated board');
+}
+{
+  /* ---- AN10: legacy lane anchored-first (engine plans still verbatim) ---- */
+  const WL2 = freshBrain();
+  stubQuietLayers(WL2);
+  delete WL2.xuCandles;                       /* legacy route: binanceKlines */
+  WL2.regimeState = function(){ return { label: 'RISK-ON', score: 4, playbook: { bias: 'LONG-ONLY', sizeNote: 'full size' } }; };
+  WL2.rotationState = function(){ return { season: 'alt', altPct: 80, evidence: [] }; };
+  WL2.oiflowState = function(){ return { results: [{ sym: 'ETHUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' }] }; };
+  WL2.squeezeState = function(){ return { results: [{ sym: 'ETHUSDT', kind: 'fired', dir: 'long' }] }; };
+  const swingRows2 = function(){
+    const rows = [];
+    for (let i = 0; i < 120; i++) rows.push({ t: 0, o: 100, h: 100.5, l: 99.5, c: 100, v: 1000 });
+    const bx = function(i, c, hh, ll){ rows[i] = { t: 0, o: c, h: hh, l: ll, c: c, v: 1000 }; };
+    bx(113, 99.6, 99.9, 99.3); bx(114, 99.3, 99.7, 99.0); bx(115, 99.2, 99.5, 98.8);
+    bx(116, 99.5, 99.8, 99.1); bx(117, 99.8, 100.1, 99.4); bx(118, 100, 100.3, 99.7); bx(119, 100, 100.3, 99.7);
+    return rows;
+  };
+  WL2.binanceKlines = function(sym, tf){ return Promise.resolve(tf === '4h' ? swingRows2() : null); };
+  WL2.toTrade = function(){};
+  const TL2 = freshPane();
+  WL2.HG_tabs[0].mount(TL2.pane);
+  await runAndWait(TL2.stubs);
+  const legCards = TL2.stubs['#brainCards'].innerHTML;
+  ok(legCards.indexOf('ETHUSDT') >= 0 && legCards.indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0,
+     'AN10: legacy lane — the HIGH row gets the patient LIMIT before smartSetup/hgPlanLevels are consulted');
+  const legBoard = TL2.stubs['#brainBoard'].innerHTML;
+  ok(legBoard.indexOf('LIMIT ENTRY') >= 0 && legBoard.indexOf('99.1') >= 0
+     && legBoard.indexOf('MARKET-ONLY (no limit anchor)') === -1,
+     'AN10: the legacy board lists the anchored limit — no market-only group when every plan is a limit');
 }
 
 console.log('\n' + passed + ' assertions passed');

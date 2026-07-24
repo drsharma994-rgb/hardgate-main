@@ -53,10 +53,15 @@ mark — cryptoPlanXu tries a patient LIMIT at 4h structure FIRST (engine
 survivor plans still win; smartSetup/hgPlanLevels stay the fallback):
   ANCHOR (LONG): the HIGHEST level among {last confirmed swing-low zone top
     (2-bar pivot, zone = pivot low up to the higher neighboring low),
-    EMA20(4h), EMA50(4h), nearest UNTOUCHED bullish 4h FVG/imbalance top}
-    sitting BELOW the last 4h close, 0.25-1.5 x ATR14(4h) away. SHORT mirrors
-    (LOWEST level ABOVE, swing-high zone / EMAs / untouched bearish FVG).
-    Every number is rows4h math — never invented.
+    EMA20(4h), EMA50(4h), nearest UNTOUCHED bullish 4h FVG/imbalance top,
+    unmitigated 4h order block top, sell-side equal-lows pool, AVWAP from the
+    last swing low} sitting BELOW the last 4h close, 0.25-1.5 x ATR14(4h)
+    away. SHORT mirrors (LOWEST level ABOVE, swing-high zone / EMAs /
+    untouched bearish FVG / OB bottom / buy-side equal-highs pool / AVWAP
+    from the last swing high). Order block / pool / AVWAP come from
+    indicators.js / indicators2.js through typeof feature-checks — an absent
+    module = the family sits out. Every number is rows4h math — never
+    invented.
   STOP: 0.5 x ATR14(4h) beyond the anchoring structure (LONG below the zone
     bottom / line, SHORT above the zone top / line).
   TP1/TP2: the 1.5R/2.5R convention, SNAPPED to opposing 4h structure where
@@ -76,6 +81,19 @@ survivor plans still win; smartSetup/hgPlanLevels stay the fallback):
   anchor. The plan contract stays {dir, entry, stop, t1, t2} plus ADDITIVE
   fields (entryType:'limit'|'zone'|'gate', anchorName, anchorNote, cancelIf)
   — __hgBrainLast rows and the signal logger keep their exact shape.
+
+LIMIT BOARD (BRAIN tab, under the ENTRY TICKET): every PRIME/HIGH/WATCH row
+carrying a computed plan listed as its own card — the exact resting limit
+(entry/stop/T1/T2/R:R/anchor/cancel-if), a live validity chip (IN ZONE /
+APPROACHING / WAITING / STALE / MARK n/a from window.hgLimitState over a
+zero-fetch mark: xuPositioning cache -> the row's own snapshot), and the
+SEND TO TRADE PLAN handoff. Market-entry plans (gate engine / smartSetup /
+hgPlanLevels) sit in a separated MARKET-ONLY group with the decline reason
+named. Board rows reuse the same plan objects the ticket alerts on, so
+hgalert keys (sym@entry) stay byte-stable; the board repaints on the ticket
+seam after every synthesis/quick rescan, never a new fetch. The same
+anchored-first precedence now covers the legacy crypto lane and the gold
+lane — engine survivor plans stay verbatim everywhere.
 
 F&G EXTREME CONTRARIAN (context): Fear & Greed <= 20 -> a named long-context
 vote for BTC/ETH/SOL only ('F&G 12 extreme fear — contrarian long
@@ -279,6 +297,10 @@ var ANCHOR_STOP_ATR = 0.5;   /* stop = 0.5 x ATR beyond the anchoring structure 
 var PLAN_TP1_R    = 1.5;     /* raw TP multiples when no opposing structure exists */
 var PLAN_TP2_R    = 2.5;
 var PLAN_MIN_RR1  = 1.5;     /* MIN R:R discipline — snapped TP1 below this declines */
+/* LIMIT STATE bands (mark vs the resting limit, ATR multiples) — the "when
+   to enter" chip vocabulary, same 0.25 zone width as the anchor band */
+var LIMIT_ZONE_ATR = 0.25;   /* mark within 0.25 x ATR of entry -> IN ZONE (filling) */
+var LIMIT_NEAR_ATR = 1.0;    /* 0.25-1.0 x ATR on the correct side -> APPROACHING */
 
 /* F&G extreme contrarian thresholds — context vote for the majors only */
 var FNG_FEAR = 20;   /* <= 20 extreme fear -> contrarian LONG context */
@@ -1381,10 +1403,15 @@ candles gets a patient LIMIT at 4h structure instead of a market chase.
 Pure rows4h math, never a fabricated level:
   ATR14(4h)   Wilder-smoothed, SMA-seeded — the terminal's own convention.
   ANCHORS     LONG: the HIGHEST of {last confirmed swing-low zone top,
-              EMA20(4h), EMA50(4h), nearest untouched bullish FVG top} that
-              sits BELOW the mark 0.25-1.5 x ATR away; SHORT mirrors with
-              swing-high zone / EMAs / nearest untouched bearish FVG bottom.
+              EMA20(4h), EMA50(4h), nearest untouched bullish FVG top,
+              unmitigated 4h order block top, sell-side equal-lows pool,
+              AVWAP from the last swing low} that sits BELOW the mark
+              0.25-1.5 x ATR away; SHORT mirrors with swing-high zone / EMAs /
+              nearest untouched bearish FVG bottom / OB bottom / buy-side
+              equal-highs pool / AVWAP from the last swing high.
               "Untouched" = no later candle traded into the gap at all.
+              OB/pool/AVWAP come from indicators.js / indicators2.js through
+              typeof feature-checks — an absent module = the family sits out.
   STOP        0.5 x ATR beyond the structure (zone far edge / EMA line).
   TP1/TP2     snapped to opposing 4h pivots where they exist (nearest opposing
               pivot = TP1, the one beyond = TP2), else the raw 1.5R/2.5R
@@ -1461,6 +1488,47 @@ function anchorCandidates(rows, dir, piv){
       break;   /* nearest = most recent only */
     }
   }
+  /* 5) unmitigated ORDER BLOCK zone (indicators.js, feature-checked — absent
+        module = the family simply sits out, never fabricated). LONG: the
+        bullish OB below the mark, entry at the zone top; SHORT mirrors at
+        the zone bottom. */
+  try{
+    if (typeof G.findOrderBlock === 'function'){
+      var ob = G.findOrderBlock(rows, dir);
+      if (ob && isFinite(+ob.top) && isFinite(+ob.bottom) && +ob.top > +ob.bottom){
+        out.push({ name: long ? '4h order block top' : '4h order block bottom',
+                   zone: true, lo: +ob.bottom, hi: +ob.top });
+      }
+    }
+  }catch(e){}
+  /* 6) equal-highs/lows LIQUIDITY POOL (indicators.js, feature-checked).
+        LONG: the sell-side equal-lows cluster below the mark; SHORT: the
+        buy-side equal-highs cluster above. A line anchor at the pool level. */
+  try{
+    if (typeof G.findLiquidityPools === 'function'){
+      var lp = G.findLiquidityPools(rows);
+      var pool = lp ? (long ? lp.sellSide : lp.buySide) : null;
+      if (pool && isFinite(+pool.level) && +pool.level > 0){
+        out.push({ name: long ? 'sell-side equal-lows pool' : 'buy-side equal-highs pool',
+                   zone: false, level: +pool.level });
+      }
+    }
+  }catch(e){}
+  /* 7) ANCHORED VWAP (indicators2.js, feature-checked) from the last
+        confirmed same-direction swing pivot — a real volume-weighted level
+        off the candles, never a fitted line. */
+  try{
+    if (typeof G.hgAVWAP === 'function'){
+      var apiv = long ? piv.ls : piv.hs;
+      if (apiv.length){
+        var av = G.hgAVWAP(rows, apiv[apiv.length - 1][1]);
+        if (av && isFinite(+av.value) && +av.value > 0){
+          out.push({ name: long ? 'AVWAP from the last swing low' : 'AVWAP from the last swing high',
+                     zone: false, level: +av.value });
+        }
+      }
+    }
+  }catch(e){}
   return out;
 }
 
@@ -1554,6 +1622,55 @@ function anchoredLimitPlan(dir, rows){
     }, 'structure-anchored limit (4h)');
     return { plan: plan, note: '' };
   }catch(e){ return { plan: null, note: '' }; }
+}
+
+/* =========================================================================
+LIMIT STATE — "when to enter": the live validity of ONE resting limit plan,
+computed from a zero-fetch mark vs the plan's OWN levels (entry, cancel-if)
+and the row's 4h ATR. No candle fetches, no order tracking. Pure, never
+throws; exported on window.hgLimitState for the vm suites.
+  IN ZONE     mark within 0.25 x ATR of the entry — the limit should be
+              filling/live
+  APPROACHING 0.25-1.0 x ATR away on the correct side — leave the order
+              resting (single-mark read: the band measures DISTANCE, it never
+              claims to see motion)
+  WAITING     > 1.0 x ATR away on the correct side — the pullback hasn't come
+  STALE       mark beyond the cancel-if, or crossed to the wrong side of the
+              entry — the order should be pulled; the note names exactly why
+  MARK n/a    no zero-fetch mark — honestly unmeasured, never guessed
+========================================================================= */
+function hgLimitState(plan, mark, atr){
+  try{
+    if (!plan || !isDir(plan.dir) || !isFinite(+plan.entry))
+      return { state: 'none', label: '—', note: 'no computed plan' };
+    var long = plan.dir === 'long', entry = +plan.entry;
+    mark = +mark; atr = +atr;
+    if (!isFinite(mark) || mark <= 0)
+      return { state: 'nomark', label: 'MARK n/a',
+               note: 'no zero-fetch mark available — validity unmeasured' };
+    var cancel = isFinite(+plan.cancelIf) ? +plan.cancelIf : null;
+    if (cancel !== null && (long ? mark < cancel : mark > cancel))
+      return { state: 'stale', label: 'STALE',
+               note: 'mark ' + PX(mark) + ' beyond the cancel-if ' + PX(cancel)
+                   + ' — pull the order' };
+    var dist = Math.abs(mark - entry);
+    var zone = (isFinite(atr) && atr > 0) ? LIMIT_ZONE_ATR * atr : 0;
+    if (long ? (mark < entry - zone) : (mark > entry + zone))
+      return { state: 'stale', label: 'STALE',
+               note: 'mark crossed to the wrong side of the limit — filled or broken, '
+                   + 'no order tracking; pull and reassess' };
+    if (!isFinite(atr) || atr <= 0)
+      return { state: 'waiting', label: 'WAITING',
+               note: 'mark on the correct side — ATR unavailable, distance unmeasured' };
+    if (dist <= zone)
+      return { state: 'in-zone', label: 'IN ZONE',
+               note: 'mark within 0.25×ATR of the limit — the order should be filling/live' };
+    if (dist <= LIMIT_NEAR_ATR * atr)
+      return { state: 'approaching', label: 'APPROACHING',
+               note: 'mark ' + FMT(dist / atr, 2) + '×ATR from the limit — leave the order resting' };
+    return { state: 'waiting', label: 'WAITING',
+             note: 'mark ' + FMT(dist / atr, 2) + '×ATR away — the pullback has not come yet' };
+  }catch(e){ return { state: 'nomark', label: 'MARK n/a', note: 'state unavailable' }; }
 }
 
 /* shared bucketing — used at judge time and again after TREND4H promotions */
@@ -1726,14 +1843,25 @@ async function klineRows(sym){
   return out;
 }
 
-/* plan for a crypto PRIME/HIGH card: engine survivor plan -> smartSetup ->
-   hgPlanLevels -> honest 'levels unavailable'. */
+/* plan for a crypto PRIME/HIGH card: engine survivor plan -> the STRUCTURE-
+   ANCHORED limit over the fetched 4h rows -> smartSetup -> hgPlanLevels ->
+   honest 'levels unavailable'. Same anchored-first precedence as the combined
+   mode: a qualified row gets its patient LIMIT wherever real 4h structure
+   sits in band; declines fall through with the reason named. */
 async function cryptoPlan(row, snap){
   var ep = enginePlanFor(row, snap);
   if (ep) return { plan: ep, rows: null };
   var kl = await klineRows(row.sym);
   var rows = kl.rows4h || kl.rows1h;
   if (!rows) return { plan: null, rows: null };
+  var fbNote = '';
+  if (kl.rows4h){
+    try{
+      var ap = anchoredLimitPlan(row.dec.dir, kl.rows4h);
+      if (ap && ap.plan) return { plan: ap.plan, rows: kl.rows4h };
+      fbNote = (ap && ap.note) ? ap.note : '';
+    }catch(e){ fbNote = ''; }
+  }
   if (typeof G.smartSetup === 'function' && kl.rows4h && kl.rows4h.length >= 60){
     try{
       var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
@@ -1743,14 +1871,14 @@ async function cryptoPlan(row, snap){
                   shortEv: row.dec.dir === 'short' ? agreeing.map(function(v){ return v.text; }) : contra.map(function(v){ return v.text; }),
                   score: row.dec.agree, total: row.dec.agree + row.dec.disagree, regime: [] };
       var sp = G.smartSetup(cls, kl.rows4h, kl.rows1h || []);
-      var np = normalizePlan(sp, sp && sp.type ? 'smartSetup ' + sp.type : 'smartSetup');
+      var np = normalizePlan(sp, sp && sp.type ? 'smartSetup ' + sp.type : 'smartSetup', fbNote);
       if (np) return { plan: np, rows: kl.rows4h };
     }catch(e){ /* fall through to hgPlanLevels */ }
   }
   if (typeof G.hgPlanLevels === 'function'){
     try{
       var pl = G.hgPlanLevels(row.dec.dir, rows);
-      var hp = normalizePlan(pl, 'hgPlanLevels');
+      var hp = normalizePlan(pl, 'hgPlanLevels', fbNote);
       if (hp) return { plan: hp, rows: rows };
     }catch(e){}
   }
@@ -1810,9 +1938,20 @@ async function goldPlan(row, snap){
       rows = (h4 && h4.length) ? h4 : null;
     }
   }catch(e){ rows = null; }
+  /* gold rows deserve the same patient limit first: anchored at real XAU 4h
+     structure when one sits in band, else the hgPlanLevels fallback with the
+     decline reason named */
+  var fbNote = '';
+  if (rows){
+    try{
+      var ga = anchoredLimitPlan(row.dec.dir, rows);
+      if (ga && ga.plan) return { plan: ga.plan, rows: rows };
+      fbNote = (ga && ga.note) ? ga.note : '';
+    }catch(e){ fbNote = ''; }
+  }
   if (rows && typeof G.hgPlanLevels === 'function'){
     try{
-      var hp = normalizePlan(G.hgPlanLevels(row.dec.dir, rows), 'hgPlanLevels · XAU 4h');
+      var hp = normalizePlan(G.hgPlanLevels(row.dec.dir, rows), 'hgPlanLevels · XAU 4h', fbNote);
       if (hp) return { plan: hp, rows: rows };
     }catch(e){}
   }
@@ -2060,7 +2199,153 @@ function paintEntryTickets(el, rows){
       __lastTicketSnap = tsnap;
       if (typeof G.hgAlertTicket === 'function') G.hgAlertTicket(tsnap);
     }catch(e){}
+    /* LIMIT BOARD rides the same repaint seam — same rows, same plan objects
+       (alert keys stay stable), zero extra fetches */
+    paintLimitBoard(el, rows);
   }catch(e){ /* the ticket is additive — the scan render stands without it */ }
+}
+
+/* =========================================================================
+LIMIT BOARD — every qualified setup, one exact resting limit each. The ENTRY
+TICKET answers "the single best long/short"; the board lists EVERY
+PRIME/HIGH/WATCH row carrying a computed plan, sorted exactly like the ticket
+ranks (tier -> agree -> R:R):
+  LIMITS       rows whose plan is a structure-anchored limit ('limit'/'zone')
+               — SYM, side, tier, the exact LIMIT ENTRY, stop, T1, T2, R:R,
+               the anchor family named, cancel-if, a live validity chip
+               (hgLimitState over a zero-fetch mark) and the trade handoff.
+  MARKET-ONLY  rows whose plan is a market entry (gate engine / smartSetup /
+               hgPlanLevels), separated at the bottom with the named decline
+               reason — never dressed up as limits.
+Rows with plan:null are NOT listed (the ticket's near-miss copy covers them).
+Board rows reuse the SAME plan objects the ticket alerts on — alert keys
+(sym@entry) stay byte-stable. Pure builder seam: window.__hgBrainBoard.
+Never throws.
+========================================================================= */
+function boardCandidate(row){
+  try{
+    var c = ticketCandidate(row);
+    if (!c || tierRank(row.dec.tier) <= 0) return null;  /* qualified rows only — ASIDE never boards */
+    var et = row.plan.entryType;
+    c.limit = (et === 'limit' || et === 'zone');
+    return c;
+  }catch(e){ return null; }
+}
+function buildLimitBoard(rows){
+  var out = { limits: [], marketOnly: [] };
+  try{
+    rows = Array.isArray(rows) ? rows : [];
+    for (var i = 0; i < rows.length; i++){
+      var c = boardCandidate(rows[i]);
+      if (!c) continue;
+      (c.limit ? out.limits : out.marketOnly).push(c);
+    }
+    var byRank = function(a, b){ return b.rank - a.rank; };
+    out.limits.sort(byRank); out.marketOnly.sort(byRank);
+  }catch(e){}
+  return out;
+}
+/* zero-fetch mark for the state chip: the xuniverse positioning cache first,
+   then the row's own snapshot — never a new fetch, honestly NaN otherwise */
+function boardMarkFor(row){
+  try{
+    if (row && row.base && typeof G.xuPositioning === 'function'){
+      var pos = G.xuPositioning(row.base);
+      if (pos && isFinite(+pos.mark) && +pos.mark > 0) return +pos.mark;
+    }
+  }catch(e){}
+  try{
+    if (row && row.xu && isFinite(+row.xu.mark) && +row.xu.mark > 0) return +row.xu.mark;
+  }catch(e){}
+  try{
+    if (row && isFinite(+row.mark) && +row.mark > 0) return +row.mark;
+  }catch(e){}
+  return NaN;
+}
+/* the row's own 4h ATR — candles the scan already fetched, never refetched */
+function boardAtrFor(row){
+  try{
+    var rows = (row && Array.isArray(row.rows4h) && row.rows4h.length >= 15) ? row.rows4h
+             : (row && Array.isArray(row.rows) && row.rows.length >= 15) ? row.rows : null;
+    return rows ? atrLast(rows, 14) : NaN;
+  }catch(e){ return NaN; }
+}
+var LIMIT_STATE_COL = { 'in-zone': '#5fbf8f', approaching: '#d8a24a', waiting: '#8fa0b8',
+                        stale: '#e4586b', nomark: '#6d7684', none: '#6d7684' };
+function boardCardHTML(c, stamp){
+  try{
+    var row = c.row, p = row.plan, dir = c.dir, long = dir === 'long';
+    var col = long ? '#5fbf8f' : '#e4586b';
+    var st = hgLimitState(p, boardMarkFor(row), boardAtrFor(row));
+    var stCol = LIMIT_STATE_COL[st.state] || '#6d7684';
+    var headline = c.limit
+      ? (p.entryType === 'zone' ? 'LIMIT ENTRY (price in zone — zone edge)' : 'LIMIT ENTRY')
+      : 'ENTRY AT (market — no limit anchor in band)';
+    var subline = c.limit
+      ? esc(p.anchorName || '4h structure')
+      : esc((p.src ? String(p.src) + ' levels' : 'gate-engine levels') + (p.note ? ' — ' + p.note : ''));
+    var rr1 = isFinite(p.rr1) ? p.rr1 : Math.abs(p.t1 - p.entry) / Math.abs(p.entry - p.stop);
+    return '<div style="flex:1 1 300px;max-width:420px;border:1px solid rgba(143,160,184,.35);border-left:3px solid ' + col + ';border-radius:6px;'
+      + 'background:rgba(255,255,255,.02);padding:10px 12px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+      + '<span style="font-size:13px;font-weight:700;letter-spacing:.04em">' + esc(ticketSymTxt(row)) + '</span>'
+      + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + col + '">'
+      + dir.toUpperCase() + '</span>'
+      + '<span style="font-size:9px;letter-spacing:.08em;color:#9aa6b5">'
+      + esc(String(row.dec.tier || '').toUpperCase()) + ' · ' + (isFinite(row.dec.agree) ? row.dec.agree : 0) + ' LAYERS</span>'
+      + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + stCol + ';border:1px solid ' + stCol
+      + ';border-radius:3px;padding:1px 5px" title="' + esc(st.note) + '">' + esc(st.label) + '</span></div>'
+      + '<div style="margin-top:6px;font-size:9px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
+      + '<div style="font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.25">'
+      + PX(p.entry) + '</div>'
+      + '<div style="font-size:10.5px;color:#c4ccd8">' + subline + '</div>'
+      + '<div style="margin-top:6px;font-size:10.5px;line-height:1.7;color:#c4ccd8">'
+      + 'STOP <b>' + PX(p.stop) + '</b>'
+      + ' · T1 <b>' + PX(p.t1) + '</b>'
+      + (p.t2 !== null && isFinite(p.t2) ? ' · T2 <b>' + PX(p.t2) + '</b>' : '')
+      + ' · R:R ' + FMT(rr1, 1)
+      + (isFinite(p.cancelIf) && p.cancelIf !== null ? '<br>cancel if 4h closes beyond <b>' + PX(p.cancelIf) + '</b>' : '')
+      + '<br><span style="color:#9aa6b5">' + esc(st.note) + ' · as of ' + esc(stamp) + '</span>'
+      + '</div>'
+      + ticketTradeBtn(row, dir)
+      + '</div>';
+  }catch(e){
+    return '<div style="flex:1 1 300px;border:1px solid rgba(143,160,184,.4);border-radius:6px;padding:10px 12px">'
+      + '<span style="font-size:11px;color:#9aa6b5">board row render failed: ' + esc(errMsg(e)) + '</span></div>';
+  }
+}
+function paintLimitBoard(el, rows){
+  try{
+    if (!el || typeof el.querySelector !== 'function') return;
+    var wrap = el.querySelector('#brainBoardWrap'), box = el.querySelector('#brainBoard');
+    if (!wrap || !box) return;
+    var b = buildLimitBoard(rows);
+    var stamp = new Date().toTimeString().slice(0, 8);
+    var html = '', i;
+    if (!b.limits.length && !b.marketOnly.length){
+      html = '<div class="note" style="font-size:11.5px;line-height:1.7">No qualified limit setups this scan — standing aside is the position.</div>';
+    }else{
+      if (b.limits.length){
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+        for (i = 0; i < b.limits.length; i++) html += boardCardHTML(b.limits[i], stamp);
+        html += '</div>';
+      }else{
+        html += '<div class="note" style="font-size:11.5px;line-height:1.7">No qualified limit setups this scan — standing aside is the position.</div>';
+      }
+      if (b.marketOnly.length){
+        html += '<div style="margin-top:10px;border-top:1px dashed rgba(143,160,184,.35);padding-top:8px">'
+          + '<div style="font-size:10px;letter-spacing:.1em;color:#9aa6b5;margin-bottom:6px">'
+          + 'MARKET-ONLY (no limit anchor) — engine/builder market entries with the decline reason named; never dressed up as limits</div>'
+          + '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+        for (i = 0; i < b.marketOnly.length; i++) html += boardCardHTML(b.marketOnly[i], stamp);
+        html += '</div></div>';
+      }
+    }
+    box.innerHTML = html;
+    var age = el.querySelector('#brainBoardAge');
+    if (age) age.textContent = 'levels as of ' + stamp + ' — refreshed by every synthesis, including the AUTO cycle';
+    wrap.style.display = 'block';
+  }catch(e){ /* the board is additive — the ticket + cards stand without it */ }
 }
 
 /* =========================================================================
@@ -2541,6 +2826,12 @@ async function runBrain(el){
     if (ta0 && ta0.textContent && ta0.textContent.indexOf('refreshing') !== 0){
       var m0 = /^levels as of (\S+)/.exec(ta0.textContent);
       ta0.textContent = 'refreshing — levels shown are as of ' + (m0 ? m0[1] : 'the last completed scan') + '…';
+    }
+    /* LIMIT BOARD carries the same refreshing semantics during the rescan */
+    var ba0 = el.querySelector('#brainBoardAge');
+    if (ba0 && ba0.textContent && ba0.textContent.indexOf('refreshing') !== 0){
+      var bm0 = /^levels as of (\S+)/.exec(ba0.textContent);
+      ba0.textContent = 'refreshing — levels shown are as of ' + (bm0 ? bm0[1] : 'the last completed scan') + '…';
     }
     if (read) read.textContent = '';
     empty.style.display = 'none';
@@ -3024,6 +3315,13 @@ function mount(el){
       + 'when a side has nothing, the ticket says so honestly</span></h2>'
       + '<div id="brainTicket"></div>'
       + '<div class="note" id="brainTicketAge" style="margin-top:6px;font-size:10px"></div></div>'
+      + '<div class="panel" id="brainBoardWrap" style="display:none;margin-top:10px">'
+      + '<h2>LIMIT BOARD <span>every qualified setup, one exact resting limit each — sorted like the ticket '
+      + '(tier · layers · R:R) · the state chip reads a zero-fetch mark, never a new candle fetch · '
+      + 'market-entry plans sit separated below with the no-anchor reason named, never dressed up as limits — '
+      + 'when nothing qualifies, the board says so honestly</span></h2>'
+      + '<div id="brainBoard"></div>'
+      + '<div class="note" id="brainBoardAge" style="margin-top:6px;font-size:10px"></div></div>'
       + '<div class="cards" id="brainCards" style="margin-top:10px"></div>'
       + '<div class="panel" id="brainWatchWrap" style="display:none;margin-top:10px"><h2>WATCH <span>one layer short of conviction</span></h2>'
       + '<div id="brainWatch"></div></div>'
@@ -3129,6 +3427,11 @@ G.brainAnchorPlan = anchoredLimitPlan;
 /* entry-ticket seam: the pure selector — rows -> {long, short, longNear,
    shortNear}; no DOM, no fetch, never throws */
 G.__hgBrainTickets = buildEntryTickets;
+/* limit-board seams: the pure builder — rows -> {limits, marketOnly} of
+   ticket-ranked candidates; and the pure validity read — (plan, mark, atr)
+   -> {state, label, note}. No DOM, no fetch, never throw */
+G.__hgBrainBoard = buildLimitBoard;
+G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
 /* click-to-audit seams: the ledger builder, the toggle, and a sym-keyed
