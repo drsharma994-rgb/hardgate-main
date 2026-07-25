@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
-         engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS } from '../scripts/alert-check.mjs';
+         engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
+         fallbackLegs } from '../scripts/alert-check.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -225,6 +226,27 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
      'engine alert: 1h ago -> inside the 2h throttle');
   ok(engineAlertDue(new Date(now - ENGINE_ALERT_MS - 60000).toISOString(), now) === true,
      'engine alert: past the 2h throttle -> due again (continuous outage re-alerts slowly)');
+}
+
+/* ---------------- alert-check.mjs ntfy fallback selector ---------------- */
+
+{
+  const prev = { delta: null, coindcx: null, gold: null };
+  const curr = { delta: 'INJUSD|long', coindcx: null, gold: null };
+  const legs1 = fallbackLegs(prev, curr);
+  ok(legs1.length === 1 && legs1[0].leg === 'delta' && legs1[0].key === 'INJUSD|long',
+     'fallback: a NEW setup on one leg is selected for the push');
+  ok(fallbackLegs(prev, { delta: null, coindcx: null, gold: null }).length === 0,
+     'fallback: no setups -> nothing to push');
+  const same = fallbackLegs({ delta: 'INJUSD|long' }, curr);
+  ok(same.length === 0, 'fallback: unchanged alert key -> not new, no push');
+  const pushed = { delta: null, ntfyFallback: { delta: { key: 'INJUSD|long', at: '2026-07-25T07:00:00Z' } } };
+  ok(fallbackLegs(pushed, curr).length === 0,
+     'fallback: the same setup already pushed is deduped — 15-min retries never spam');
+  const moved = fallbackLegs(pushed, { delta: 'INJUSD|short', coindcx: null, gold: null });
+  ok(moved.length === 1, 'fallback: a DIFFERENT setup on the same leg pushes again');
+  ok(fallbackLegs(null, curr).length === 1 && fallbackLegs(undefined, undefined).length === 0,
+     'fallback: garbage state -> safe defaults, never throws');
 }
 
 /* ---------------- config / repo files ---------------- */

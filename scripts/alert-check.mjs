@@ -106,6 +106,24 @@ function engineAlertDue(lastAlertAt, now) {
   return !Number.isFinite(t) || (now - t) > ENGINE_ALERT_MS;
 }
 
+/* ---------------- ntfy fallback for setup alerts ----------------
+   When the EmailJS send fails (e.g. the monthly quota the 2026-07-25 run
+   exposed), the NEW setup still reaches the owner via ntfy — once per
+   setup per leg, stamped in alert-state.json so 15-min retries of the
+   same dead email channel never spam. Pure selector, testable. */
+function fallbackLegs(prev, curr) {
+  const out = [];
+  const prevFb = (prev && typeof prev.ntfyFallback === 'object' && prev.ntfyFallback) || {};
+  for (const leg of ['delta', 'coindcx', 'gold']) {
+    const key = curr ? (curr[leg] ?? null) : null;
+    if (!key) continue;                                                        /* no setup on this leg */
+    if (JSON.stringify((prev || {})[leg] ?? null) === JSON.stringify(key)) continue;  /* not new this run */
+    if (prevFb[leg] && JSON.stringify(prevFb[leg].key) === JSON.stringify(key)) continue; /* already pushed */
+    out.push({ leg, key });
+  }
+  return out;
+}
+
 async function main() {
   // dynamic import: keeps this module loadable without puppeteer installed
   // (tests import the pure helpers above); CI installs puppeteer before running.
@@ -260,13 +278,44 @@ async function main() {
   /* email gate LAST: the ticket + engine bookkeeping above is saved either
      way. On email failure the alert KEYS roll back (the setup re-fires and
      the email retries next run) — without discarding ticket/engine state
-     the way the old early-exit did (found in the 2026-07-25 run logs). */
+     the way the old early-exit did (found in the 2026-07-25 run logs).
+     Before going red, the SAME new setup goes out via the free ntfy
+     fallback — once per setup per leg; when every new setup is covered the
+     run stays GREEN with a loud warn (the alert reached the owner; the
+     email channel's failure is a degradation, not a lost alert). */
   if (verdict.fail) {
+    const need = fallbackLegs(prevState, result.state);
+    const prevFb = (prevState && typeof prevState.ntfyFallback === 'object' && prevState.ntfyFallback) || {};
+    const fb = Object.assign({}, prevFb);
+    let covered = 0;
+    for (const item of need) {
+      const label = item.leg.toUpperCase() + ' setup: ' + JSON.stringify(item.key);
+      const pushResult = await sendNtfy(process.env.NTFY_TOPIC || '',
+        'HARDGATE ' + label,
+        'New ' + item.leg + ' setup ' + JSON.stringify(item.key)
+          + ' — the email channel failed (' + verdict.err
+          + '); this ntfy is the free fallback. Levels: open the site.');
+      console.log('ntfy fallback ' + item.leg + ' ' + JSON.stringify(item.key) + ': ' + pushResult);
+      /* only a real 'sent' covers the alert — 'skipped: no NTFY_TOPIC'
+         means the alert went NOWHERE; the run must go red and say so,
+         never green on a silent loss */
+      if (pushResult === 'sent'){
+        fb[item.leg] = { key: item.key, at: new Date().toISOString() };
+        covered++;
+      }
+    }
+    if (Object.keys(fb).length) newState.ntfyFallback = fb;
     newState.delta = prevState.delta ?? null;
     newState.coindcx = prevState.coindcx ?? null;
     newState.gold = prevState.gold ?? null;
     saveState(newState);
-    console.error('EMAIL DELIVERY FAILED: ' + verdict.err + ' — alert keys rolled back so the email retries next run; ticket/engine state kept.');
+    if (covered === need.length) {
+      console.warn('EMAIL DELIVERY FAILED (' + verdict.err + ') but every new setup (' + need.length
+        + ') went out via the ntfy fallback — staying GREEN; the email channel retries next run.');
+      return;
+    }
+    console.error('EMAIL DELIVERY FAILED: ' + verdict.err + ' — and ' + (need.length - covered)
+      + ' setup(s) could not be delivered by the fallback either — alert keys rolled back, the run is red, retry next run.');
     process.exit(1);
   }
 
@@ -296,4 +345,5 @@ if (invokedDirectly) {
 
 export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
-         engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS };
+         engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
+         fallbackLegs };
