@@ -847,6 +847,7 @@ var __busySince = 0;  /* watchdog: an await that never settles (hung fetch —
                          force-released; the in-flight corpse can only write to
                          its (usually inert) pane — harmless next to a dead layer. */
 var BUSY_STUCK_MS = 10*60*1000;
+var ENGINE_FRESH_MS = 30*60*1000;  /* warm-hook TTL: older survivors re-scan */
 function busyStuck(){
   return !!__busy && __busySince > 0 && (Date.now() - __busySince) > BUSY_STUCK_MS;
 }
@@ -1323,7 +1324,11 @@ function __engWarmShim(){
 }
 async function engineWarm(){
   try{
-    if (G.engineState && G.engineState()) return 'fresh';
+    /* TTL: survivors age — a warm snapshot older than ENGINE_FRESH_MS is NOT
+       fresh; stale survivors must not keep voting all day in a long-lived
+       tab (spotted during the 2026-07-25 stuck-busy repair) */
+    var st = (G.engineState && G.engineState()) || null;
+    if (st && isFinite(+st.at) && (Date.now() - +st.at) < ENGINE_FRESH_MS) return 'fresh';
     if (__busy && !busyStuck()) return 'busy';
     await runScan({ querySelector: function(){ return __engWarmShim(); } });
     return (G.engineState && G.engineState()) ? 'warmed' : 'unavailable: gate scan did not complete (network?)';

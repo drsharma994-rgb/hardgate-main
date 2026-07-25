@@ -703,7 +703,10 @@ ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 5 LAYERS') >= 0
 ok(tCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && tCards.indexOf('COINDCX') >= 0
    && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
    'engine plan + COINDCX venue stamp + xu-sym toTrade payload on the card');
-ok(xuCalls.length === 5, 'lazy fetch: the 5 WATCH+ candidates fetched (BTC+ETH+SOL+XRP+DOGE radar), XAU lane aside untouched — got ' + xuCalls.length);
+const xu4h = xuCalls.filter(function(c){ return c.tf === '4h'; }), xu1h = xuCalls.filter(function(c){ return c.tf === '1h'; });
+ok(xu4h.length === 5, 'lazy fetch: the 5 WATCH+ candidates fetched 4h (BTC+ETH+SOL+XRP+DOGE radar), XAU lane aside untouched — got ' + xu4h.length);
+ok(xu1h.length === 4, '1h sniper rescue: ONE bounded 1h fetch per candidate whose 4h anchor declined (BTC took the engine plan — no rescue fetch) — got ' + xu1h.length);
+ok(xu1h.every(function(c){ return c.n === 120; }), '1h rescue fetches use the standard 120-bar depth');
 ok(xuCalls[0].item === XUL[0] && xuCalls[0].tf === '4h' && xuCalls[0].n === 120,
    'highest-evidence-first: the PRIME BTC candidate fetches first, via xuCandles with its original xu item');
 ok(!xuCalls.some(function(c){ return c.item.sym === 'XAUUSDT'; }), 'ASIDE gold lane never triggers a crypto candle fetch');
@@ -747,13 +750,16 @@ console.log('== lazy-fetch cap binds honestly ==');
   };
   const capCalls = [], capSnaps = [];
   const TU = freshPane();
-  WU.xuCandles = function(item){ capCalls.push(item.sym); capSnaps.push(TU.stubs['#brainStat'].textContent); return Promise.resolve(fakeRows(120)); };
+  WU.xuCandles = function(item, tf){ capCalls.push(item.sym + '|' + tf); capSnaps.push(TU.stubs['#brainStat'].textContent); return Promise.resolve(fakeRows(120)); };
   WU.HG_tabs[0].mount(TU.pane);
   await runAndWait(TU.stubs);
   const uStat = TU.stubs['#brainStat'].textContent;
+  const cap4h = capCalls.filter(function(c){ return c.slice(-3) === '|4h'; });
+  const cap1h = capCalls.filter(function(c){ return c.slice(-3) === '|1h'; });
   ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 48 watch · 6 aside') === 0,
      '46 alts reach WATCH on 3 votes, ETH+SOL join on the 2-vote radar tier; ALT1-ALT4 (1-4M turnover) gated below the $5M liquidity floor; BTC + gold aside — got "' + uStat + '"');
-  ok(capCalls.length === 40, 'fetch cap respected: 40 fetches out of 48 watch candidates — got ' + capCalls.length);
+  ok(cap4h.length === 40, 'fetch cap respected: 40 4h fetches out of 48 watch candidates — got ' + cap4h.length);
+  ok(cap1h.length <= 12, 'the 1h sniper rescue has its OWN honest budget (≤12/scan), never a second full sweep — got ' + cap1h.length);
   ok(uStat.indexOf('+8 more watch candidates — raise evidence to fetch') >= 0,
      'honest note when the cap binds — got "' + uStat + '"');
   ok(uStat.indexOf(' · 4 gated: 4 liquidity') >= 0,
@@ -1108,7 +1114,7 @@ console.log('== quick rescan (AC) ==');
   WC.xuUniverse = async function(force){ xuCalls++; xuForces.push(force); return xuList; };
   WC.xuState = function(){ return { count: xuList.length, delta: 3, cdcx: 2, at: Date.now(), note: null }; };
   let candleSyms = [];
-  WC.xuCandles = function(item){ candleSyms.push(item.sym); return Promise.resolve(fakeRows(120)); };
+  WC.xuCandles = function(item, tf){ candleSyms.push(item.sym + '|' + tf); return Promise.resolve(fakeRows(120)); };
   const tabC = WC.HG_tabs[0];
   const TC = freshPane();
   tabC.mount(TC.pane);
@@ -1137,8 +1143,11 @@ console.log('== quick rescan (AC) ==');
      'AC: stat line counts checked (BTC + 4 watch incl. DOGE radar) vs unchanged (XAU lane) — got "' + q1 + '"');
   ok(xuForces.every(function(f){ return f !== true; }) && xuCalls <= 1,
      'AC: never forces an exchange refetch (cache-read only) — calls=' + xuCalls + ' forces=' + JSON.stringify(xuForces));
-  ok(candleSyms.length === 5 && candleSyms.indexOf('DOGEUSDT') >= 0 && candleSyms.indexOf('XAUUSDT') === -1,
-     'AC: candles refetched only for the recheck set incl. the DOGE radar row, gold lane untouched — got ' + candleSyms.join(','));
+  const ac4h = candleSyms.filter(function(c){ return c.slice(-3) === '|4h'; });
+  const ac1h = candleSyms.filter(function(c){ return c.slice(-3) === '|1h'; });
+  ok(ac4h.length === 5 && ac4h.some(function(c){ return c.indexOf('DOGEUSDT') === 0; }) && !ac4h.some(function(c){ return c.indexOf('XAUUSDT') === 0; }),
+     'AC: 4h candles refetched only for the recheck set incl. the DOGE radar row, gold lane untouched — got ' + ac4h.join(','));
+  ok(ac1h.length <= 4, 'AC: 1h sniper rescue bounded per candidate that needs it (BTC took the engine plan) — got ' + ac1h.length);
   const q1aside = TC.stubs['#brainAside'].innerHTML;
   ok(q1aside.indexOf('>XAU</span>') >= 0 && q1aside.indexOf('AS OF') >= 0,
      'AC: unchanged verdicts keep their reason AND carry an age stamp');
@@ -1158,7 +1167,7 @@ console.log('== quick rescan (AC) ==');
      'AC: a new listing is detected and checked — got "' + q2 + '"');
   ok(TC.stubs['#brainWatch'].innerHTML.indexOf('>NEW</span>') >= 0,
      'AC: the new listing is judged on arrival (3 layers -> WATCH)');
-  ok(candleSyms.indexOf('NEWUSDT') >= 0, 'AC: the new listing earns its candle fetch');
+  ok(candleSyms.indexOf('NEWUSDT|4h') >= 0, 'AC: the new listing earns its candle fetch');
 
   /* stale universe cache: new-listing check skips honestly, zero xu calls */
   WC.xuState = function(){ return { count: 6, delta: 4, cdcx: 2, at: Date.now() - 20 * 60 * 1000, note: null }; };
@@ -3043,6 +3052,35 @@ console.log('== AO) sniper mode ==');
   ok(brainSrc.indexOf('>SNIPER: ON</button>') >= 0, 'AO: the shell ships with the SNIPER: ON label');
   ok(brainSrc.indexOf("localStorage.setItem('hgBrainSniper'") >= 0,
      'AO: the toggle persists the preference');
+}
+
+/* ================= AP) 1H SNIPER RESCUE — tf labeling + tighter-plan chooser ================= */
+console.log('== AP) 1h sniper rescue ==');
+{
+  /* tf label: the SAME pure planner names its anchors after the timeframe fed —
+     flat rows + a stubbed OB family isolate the label from the pivot math */
+  const fr = []; for (let i = 0; i < 120; i++) fr.push({ t: 1700000000 + i * 3600, o: 100, h: 101, l: 99, c: 100 });
+  W.findOrderBlock = function(){ return { top: 98.5, bottom: 98.2, age: 3 }; };
+  const p1h = W.brainAnchorPlan('long', fr, '1h');
+  ok(p1h.plan && p1h.plan.anchorName === '1h order block top',
+     'AP: 1h run names the anchor with the 1h label — got "' + (p1h.plan && p1h.plan.anchorName) + '"');
+  ok(p1h.plan && p1h.plan.src && p1h.plan.src.indexOf('(1h)') >= 0,
+     'AP: the plan provenance says structure-anchored limit (1h)');
+  const p4h = W.brainAnchorPlan('long', fr);
+  ok(p4h.plan && p4h.plan.anchorName === '4h order block top',
+     'AP: the default call keeps the 4h label — got "' + (p4h.plan && p4h.plan.anchorName) + '"');
+  delete W.findOrderBlock;
+
+  /* the chooser: tighter valid plan wins; ties/nulls honest */
+  const SP = W.__hgBrainSniperPick;
+  ok(typeof SP === 'function', 'AP: window.__hgBrainSniperPick seam exposed');
+  const wide = { entry: 100, stop: 95 }, tight = { entry: 100, stop: 98.5 };
+  ok(SP(wide, tight) === tight, 'AP: tighter 1h stop beats the wider 4h stop');
+  ok(SP(tight, wide) === tight, 'AP: wider 1h rescue never replaces a tight 4h plan');
+  ok(SP(null, tight) === tight, 'AP: 4h declined -> the 1h rescue IS the plan');
+  ok(SP(wide, null) === wide, 'AP: no 1h anchor -> the 4h plan stands');
+  ok(SP(null, null) === null && SP(null, { entry: 100, stop: 100 }) === null,
+     'AP: nothing valid anywhere -> null, never invented');
 }
 
 console.log('\n' + passed + ' assertions passed');

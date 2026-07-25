@@ -257,6 +257,10 @@ var BASE_BLOCK  = { USDC:1, FDUSD:1, TUSD:1, BUSD:1, USDP:1,
                     AUDUSD:1, NZDUSD:1, USDCAD:1, USDCHF:1, USDSGD:1, USDZAR:1, USDMXN:1,
                     CORN:1, WHEAT:1, SOY:1, SOYBEAN:1, SUGAR:1, COFFEE:1, COCOA:1, COTTON:1 };
 var FETCH_CAP   = 40;      /* max 4h candle fetches per scan — documented, honest when it binds */
+var RESCUE_CAP  = 12;      /* max 1h sniper-rescue fetches per scan — the rescue is a
+                              precision tool for near-misses, not a second full sweep;
+                              the 4h sweep keeps its own FETCH_CAP */
+var __rescueFetches = 0;   /* per-scan rescue counter, reset at every synthesis start */
 var CHUNK_SIZE  = 5;       /* candle fetches in flight per chunk */
 var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
@@ -1449,8 +1453,11 @@ function atrLast(rows, p){
 }
 
 /* the four anchor candidates for one direction — zones carry {lo, hi, zone},
-   lines carry {level}; never invented, all straight off the candles */
-function anchorCandidates(rows, dir, piv){
+   lines carry {level}; never invented, all straight off the candles.
+   tf is a LABEL only ('4h' default, '1h' for the sniper rescue) — the math
+   is identical on any candle set; names must say which timeframe fed them */
+function anchorCandidates(rows, dir, piv, tf){
+  tf = (tf === '1h') ? '1h' : '4h';
   var out = [], n = rows.length, long = (dir === 'long');
   /* 1) last confirmed swing pivot zone — LONG: zone = [pivot low, higher of
         the two confirmation-bar lows]; SHORT mirrors around the pivot high */
@@ -1467,8 +1474,8 @@ function anchorCandidates(rows, dir, piv){
   }
   /* 2/3) the EMA lines */
   var e20 = emaLast(rows, 20), e50 = emaLast(rows, 50);
-  if (isFinite(e20)) out.push({ name: 'EMA20(4h)', zone: false, level: e20 });
-  if (isFinite(e50)) out.push({ name: 'EMA50(4h)', zone: false, level: e50 });
+  if (isFinite(e20)) out.push({ name: 'EMA20(' + tf + ')', zone: false, level: e20 });
+  if (isFinite(e50)) out.push({ name: 'EMA50(' + tf + ')', zone: false, level: e50 });
   /* 4) nearest UNTOUCHED 4h FVG/imbalance — LONG: bullish gap [h[i-1], l[i+1]]
         below the mark; SHORT: bearish gap [h[i+1], l[i-1]] above. A later
         candle trading into the gap (partial fill included) mitigates it. */
@@ -1484,7 +1491,7 @@ function anchorCandidates(rows, dir, piv){
       if (isFinite(x) && (long ? x <= ghi : x >= glo)){ touched = true; break; }
     }
     if (!touched){
-      out.push({ name: '4h FVG', zone: true, lo: glo, hi: ghi });
+      out.push({ name: tf + ' FVG', zone: true, lo: glo, hi: ghi });
       break;   /* nearest = most recent only */
     }
   }
@@ -1496,7 +1503,7 @@ function anchorCandidates(rows, dir, piv){
     if (typeof G.findOrderBlock === 'function'){
       var ob = G.findOrderBlock(rows, dir);
       if (ob && isFinite(+ob.top) && isFinite(+ob.bottom) && +ob.top > +ob.bottom){
-        out.push({ name: long ? '4h order block top' : '4h order block bottom',
+        out.push({ name: long ? tf + ' order block top' : tf + ' order block bottom',
                    zone: true, lo: +ob.bottom, hi: +ob.top });
       }
     }
@@ -1558,19 +1565,20 @@ function pickAnchor(dir, cands, mark, atr){
   return best ? { anchor: best.anchor, inZone: false } : null;
 }
 
-function anchoredLimitPlan(dir, rows){
+function anchoredLimitPlan(dir, rows, tf){
+  tf = (tf === '1h') ? '1h' : '4h';   /* label only — identical math either way */
   try{
     if (!isDir(dir) || !Array.isArray(rows)) return { plan: null, note: '' };
     if (rows.length < ANCHOR_MIN_ROWS)
-      return { plan: null, note: '4h history too thin for a structure anchor — gate-engine levels' };
+      return { plan: null, note: tf + ' history too thin for a structure anchor — gate-engine levels' };
     var long = (dir === 'long');
     var mark = +rows[rows.length - 1].c;
     var atr = atrLast(rows, 14);
     if (!isFinite(mark) || mark <= 0 || !isFinite(atr) || atr <= 0)
       return { plan: null, note: '' };   /* unreadable candles — silent legacy fallback */
     var piv = pivotScan(rows);
-    var pick = pickAnchor(dir, anchorCandidates(rows, dir, piv), mark, atr);
-    if (!pick) return { plan: null, note: 'no nearby 4h structure — gate-engine levels' };
+    var pick = pickAnchor(dir, anchorCandidates(rows, dir, piv, tf), mark, atr);
+    if (!pick) return { plan: null, note: 'no nearby ' + tf + ' structure — gate-engine levels' };
     var a = pick.anchor, entry, structEdge;
     if (pick.inZone){
       entry = long ? a.lo : a.hi;        /* limit at the far zone edge */
@@ -1619,9 +1627,25 @@ function anchoredLimitPlan(dir, rows){
       dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, type: 'ANCHOR4H',
       entryType: pick.inZone ? 'zone' : 'limit',
       anchorName: a.name, anchorNote: anchorNote, cancelIf: cancelIf, note: ''
-    }, 'structure-anchored limit (4h)');
+    }, 'structure-anchored limit (' + tf + ')');
     return { plan: plan, note: '' };
   }catch(e){ return { plan: null, note: '' }; }
+}
+
+/* 1H rescue chooser — pure: of two VALID anchored plans (same row, same
+   direction, one 4h one 1h), the tighter stop-distance wins (that is what
+   lifts a card over the 20x grade); a tie or wider keeps the 4h plan —
+   the stronger structure. null handling is honest either way. */
+function pickSniperPlan(p4, p1){
+  var ok4 = !!(p4 && isFinite(+p4.entry) && isFinite(+p4.stop) && +p4.entry !== +p4.stop);
+  var ok1 = !!(p1 && isFinite(+p1.entry) && isFinite(+p1.stop) && +p1.entry !== +p1.stop);
+  if (ok1 && !ok4) return p1;
+  if (ok1 && ok4){
+    var sd4 = Math.abs(+p4.entry - +p4.stop) / +p4.entry;
+    var sd1 = Math.abs(+p1.entry - +p1.stop) / +p1.entry;
+    if (sd1 < sd4) return p1;
+  }
+  return ok4 ? p4 : null;
 }
 
 /* =========================================================================
@@ -1856,13 +1880,24 @@ async function cryptoPlan(row, snap){
   var rows = kl.rows4h || kl.rows1h;
   if (!rows) return { plan: null, rows: null };
   var fbNote = '';
+  var ap = null;
   if (kl.rows4h){
     try{
-      var ap = anchoredLimitPlan(row.dec.dir, kl.rows4h);
-      if (ap && ap.plan) return { plan: ap.plan, rows: kl.rows4h };
+      ap = anchoredLimitPlan(row.dec.dir, kl.rows4h);
       fbNote = (ap && ap.note) ? ap.note : '';
-    }catch(e){ fbNote = ''; }
+    }catch(e){ ap = null; fbNote = ''; }
   }
+  /* 1H SNIPER RESCUE (legacy): same rule as combined — but klineRows already
+     fetched the 1h leg, so this costs ZERO extra fetches */
+  if ((!(ap && ap.plan) || sniperLev(ap.plan.entry, ap.plan.stop) < SNIPER_MIN_LEV)
+      && kl.rows1h && kl.rows1h.length){
+    try{
+      var a1 = anchoredLimitPlan(row.dec.dir, kl.rows1h, '1h');
+      var pick1 = pickSniperPlan(ap && ap.plan, a1 && a1.plan);
+      if (pick1 && !(ap && ap.plan && pick1 === ap.plan)) return { plan: pick1, rows: kl.rows1h };
+    }catch(e){ /* the 4h result stands */ }
+  }
+  if (ap && ap.plan) return { plan: ap.plan, rows: kl.rows4h };
   if (typeof G.smartSetup === 'function' && kl.rows4h && kl.rows4h.length >= 60){
     try{
       var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
@@ -1900,11 +1935,31 @@ async function cryptoPlanXu(row, snap){
      fabricated level; declines (band empty / R:R fails) fall through with
      the reason named on the fallback plan */
   var fbNote = '';
+  var ap = null;
   try{
-    var ap = anchoredLimitPlan(row.dec.dir, rows);
-    if (ap && ap.plan) return { plan: ap.plan, rows: rows };
+    ap = anchoredLimitPlan(row.dec.dir, rows);
     fbNote = (ap && ap.note) ? ap.note : '';
-  }catch(e){ fbNote = ''; }
+  }catch(e){ ap = null; fbNote = ''; }
+  /* 1H SNIPER RESCUE (combined): when the 4h anchor declined OR its stop is
+     wider than the 20x grade (stopDist > 3%), ONE bounded 1h fetch re-runs
+     the SAME pure planner on 1h candles — tighter zones, tighter ATR, nearer
+     targets (the day-trade timeframe). pickSniperPlan keeps the tighter
+     valid plan; the 4h plan wins ties (stronger structure). Budget: one
+     fetch (TUN.fetchMs), only for candidates that need it. */
+  if ((!(ap && ap.plan) || sniperLev(ap.plan.entry, ap.plan.stop) < SNIPER_MIN_LEV)
+      && __rescueFetches < RESCUE_CAP
+      && row.xu && typeof G.xuCandles === 'function'){
+    __rescueFetches++;
+    try{
+      var r1 = await withTimeout(G.xuCandles(row.xu, '1h', KLINES_1H), TUN.fetchMs);
+      if (r1 && r1.length){
+        var a1 = anchoredLimitPlan(row.dec.dir, r1, '1h');
+        var pick1 = pickSniperPlan(ap && ap.plan, a1 && a1.plan);
+        if (pick1 && !(ap && ap.plan && pick1 === ap.plan)) return { plan: pick1, rows: r1 };
+      }
+    }catch(e){ /* the 4h result stands */ }
+  }
+  if (ap && ap.plan) return { plan: ap.plan, rows: rows };
   if (typeof G.smartSetup === 'function' && rows.length >= 60){
     try{
       var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
@@ -2905,6 +2960,7 @@ async function runBrain(el){
     if (read) read.textContent = '';
     empty.style.display = 'none';
     stat.className = 'note';
+    __rescueFetches = 0;   /* per-scan 1h-rescue budget (RESCUE_CAP) */
     /* auto-warm: INVOKE the same starters WARM UP LAYERS uses, bounded-wait,
        account for what warmed vs what stayed dark — then judge as today */
     var warmNote = await autoWarmIntoRun(stat);
@@ -3090,6 +3146,7 @@ async function runQuick(el){
     btn.disabled = true;
     if (qbtn) qbtn.disabled = true;
     stat.className = 'note';
+    __rescueFetches = 0;   /* per-scan 1h-rescue budget (RESCUE_CAP) */
     stat.textContent = 'quick recheck — fresh layers over the last scan’s watch set…';
 
     var snap = snapshotLayers();
@@ -3532,6 +3589,8 @@ G.__hgBrainBoard = buildLimitBoard;
 G.__hgBrainSniperLev = sniperLev;
 /* sniper filter predicate — (candidate, hgLimitState) -> bool; pure */
 G.__hgBrainSniperOk = sniperOk;
+/* 1h-rescue chooser — (plan4h, plan1h) -> the tighter valid plan; pure */
+G.__hgBrainSniperPick = pickSniperPlan;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
