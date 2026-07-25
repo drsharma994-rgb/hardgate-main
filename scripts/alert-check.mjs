@@ -79,6 +79,31 @@ async function sendNtfy(topic, title, body) {
     return 'failed: ' + ((e && e.message) ? e.message : String(e));
   }
 }
+/* Telegram straight from Node — the owner's primary channel (2026-07-25:
+   chosen over email after the EmailJS quota died). No secrets -> honest skip. */
+async function sendTelegramCi(text) {
+  const t = process.env.TELEGRAM_TOKEN, c = process.env.TELEGRAM_CHAT_ID;
+  if (!t || !c) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
+  try {
+    const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(t) + '/sendMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: c, text: String(text || ''), disable_web_page_preview: true })
+    });
+    return (res && (res.ok === true || (res.status >= 200 && res.status < 300))) ? 'sent'
+      : 'failed: HTTP ' + (res && (res.status !== undefined ? res.status : '?'));
+  } catch (e) {
+    return 'failed: ' + ((e && e.message) ? e.message : String(e));
+  }
+}
+/* CI alert cascade: Telegram first, ntfy as the second free channel. The
+   result string always names both channels honestly. */
+async function sendAlertCi(title, body) {
+  const tg = await sendTelegramCi(title + '\n' + body + '\n' + SITE_URL);
+  if (tg === 'sent') return 'telegram: sent';
+  const nt = await sendNtfy(process.env.NTFY_TOPIC || '', title, body);
+  return 'telegram ' + tg + ' · ntfy ' + nt;
+}
 async function sendTicketPush(topic, next) {
   return sendNtfy(topic, 'HARDGATE entry ticket changed', ticketPushBody(next));
 }
@@ -143,6 +168,16 @@ async function main() {
   page.on('pageerror', (err) => console.error('[page error]', err.message));
 
   const cacheBuster = Date.now();
+  /* Telegram channel: the page's alert cycle prefers Telegram when creds are
+     present — inject the repo secrets into page storage BEFORE any script
+     runs, so CI sends natively (full levels in the message), the
+     __hgLastEmail gate reads ok via the telegram channel, and the run is
+     green regardless of EmailJS quota. Unset secrets = page uses email. */
+  if (process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+    await page.evaluateOnNewDocument((t, c) => {
+      try { localStorage.setItem('hg_tg_token', t); localStorage.setItem('hg_tg_chat', c); } catch (e) {}
+    }, process.env.TELEGRAM_TOKEN, process.env.TELEGRAM_CHAT_ID);
+  }
   await page.goto(SITE_URL + '?nocache=' + cacheBuster, {
     waitUntil: 'domcontentloaded',
     timeout: 60000
@@ -240,7 +275,7 @@ async function main() {
     if (prevState.ticket === undefined) {
       console.log('Ticket state seeded silently (first recorded run) — no push.');
     } else if (ticketChanged(prevState.ticket, nextTicket)) {
-      const pushResult = await sendTicketPush(process.env.NTFY_TOPIC || '', nextTicket);
+      const pushResult = await sendAlertCi('HARDGATE entry ticket changed', ticketPushBody(nextTicket));
       console.log('TICKET CHANGED — push: ' + pushResult);
     } else {
       console.log('Ticket unchanged — no push.');
@@ -261,8 +296,7 @@ async function main() {
     } else {
       console.warn('ENGINE DARK: ' + engV.why);
       if (engineAlertDue(prevState.engineAlertAt, Date.now())) {
-        const pushResult = await sendNtfy(process.env.NTFY_TOPIC || '',
-          'HARDGATE engine layer dark',
+        const pushResult = await sendAlertCi('HARDGATE engine layer dark',
           engV.why + ' — 500+ contracts lost their structural voter. Open the EXECUTE tab / check the scan.');
         console.warn('ENGINE DARK — push: ' + pushResult);
         newState.engineAlertAt = new Date().toISOString();
@@ -290,8 +324,7 @@ async function main() {
     let covered = 0;
     for (const item of need) {
       const label = item.leg.toUpperCase() + ' setup: ' + JSON.stringify(item.key);
-      const pushResult = await sendNtfy(process.env.NTFY_TOPIC || '',
-        'HARDGATE ' + label,
+      const pushResult = await sendAlertCi('HARDGATE ' + label,
         'New ' + item.leg + ' setup ' + JSON.stringify(item.key)
           + ' — the email channel failed (' + verdict.err
           + '); this ntfy is the free fallback. Levels: open the site.');
@@ -299,7 +332,7 @@ async function main() {
       /* only a real 'sent' covers the alert — 'skipped: no NTFY_TOPIC'
          means the alert went NOWHERE; the run must go red and say so,
          never green on a silent loss */
-      if (pushResult === 'sent'){
+      if (pushResult.indexOf('sent') >= 0){
         fb[item.leg] = { key: item.key, at: new Date().toISOString() };
         covered++;
       }
@@ -345,5 +378,6 @@ if (invokedDirectly) {
 
 export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
+         sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs };

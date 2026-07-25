@@ -165,6 +165,11 @@ table tr:hover td{background:rgba(217,164,65,.045)}
   <input id="ntfyTopic" placeholder="ntfy topic" style="width:110px;padding:2px 6px;font-size:11px" title="free push via ntfy.sh — pick an unguessable topic">
   <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="saveNtfyTopic()">SAVE</button><span class="note" id="ntfyTopicStat"></span>
 </span>
+<span class="statuschip" style="display:inline-flex;align-items:center;gap:6px" title="Telegram alerts (primary channel — free, unlimited): bot token from @BotFather + your chat id (send /start to your bot, then read chat id from api.telegram.org/bot<token>/getUpdates). Stored in this browser only.">
+  <input id="tgToken" placeholder="telegram bot token" style="width:150px;padding:2px 6px;font-size:11px" title="bot token from @BotFather — stored in this browser only">
+  <input id="tgChat" placeholder="chat id" style="width:80px;padding:2px 6px;font-size:11px" title="your Telegram chat id">
+  <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="saveTelegram()">SAVE</button><button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="testTelegram()">TEST</button><span class="note" id="tgStat"></span>
+</span>
 </header>
 <div id="marketPictureBar" style="padding:8px 16px;text-align:center;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.04em">MARKET PICTURE: <b id="mpVerdict">—</b> <span id="mpDetail" class="note" style="font-size:11px"></span></div>
 <div class="navgroups" id="navGroups" role="tablist" aria-label="HARDGATE tool groups"></div>
@@ -3442,6 +3447,45 @@ function saveNtfyTopic(){
   }catch(e){ $('ntfyTopicStat').textContent = 'save failed'; }
 }
 
+/* Telegram alerts — the PRIMARY channel (free Bot API, no quota, CORS-open).
+   Config lives in this browser only (hg_tg_token / hg_tg_chat), same trust
+   model as the ntfy topic. Plain-text messages; returns true on delivery,
+   an error string otherwise. Never throws. */
+function tgCreds(){
+  let token = null, chat = null;
+  try{ token = localStorage.getItem('hg_tg_token'); }catch(e){}
+  try{ chat = localStorage.getItem('hg_tg_chat'); }catch(e){}
+  return (token && chat) ? { token: token, chat: chat } : null;
+}
+async function sendTelegram(text){
+  try{
+    const c = tgCreds();
+    if (!c) return 'not-configured';
+    const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(c.token) + '/sendMessage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: c.chat, text: String(text || ''), disable_web_page_preview: true })
+    });
+    if (!res || !res.ok) return 'HTTP ' + (res && res.status);
+    const j = await res.json().catch(function(){ return null; });
+    return (j && j.ok) ? true : ('api: ' + JSON.stringify(j).slice(0, 120));
+  }catch(e){ return emailErrStr(e); }
+}
+function saveTelegram(){
+  const t = ($('tgToken').value||'').trim(), c = ($('tgChat').value||'').trim();
+  try{
+    if (t) localStorage.setItem('hg_tg_token', t); else localStorage.removeItem('hg_tg_token');
+    if (c) localStorage.setItem('hg_tg_chat', c); else localStorage.removeItem('hg_tg_chat');
+    $('tgStat').textContent = (t && c) ? 'saved' : (t || c ? 'partial — need both' : 'cleared');
+  }catch(e){ $('tgStat').textContent = 'save failed'; }
+}
+async function testTelegram(){
+  const stat = $('tgStat');
+  if (stat) stat.textContent = 'sending…';
+  const r = await sendTelegram('HARDGATE — Telegram alerts connected ✅ (' + new Date().toTimeString().slice(0, 8) + ')');
+  if (stat) stat.textContent = (r === true) ? 'test sent ✓' : ('test failed: ' + r);
+}
+
 /* One visible line in the setup LOG when an alert email fails — status 'note'
    rows are never graded by checkOutcomes and never count as open setups. */
 function logAlertLine(text){
@@ -3480,9 +3524,26 @@ async function sendAlertEmail(w, exchange){
     rr: fmt(w.rr,2),
     time: new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'})
   };
+  const tgText = '🚨 HARDGATE ' + exchange.toUpperCase() + ' SETUP\n'
+    + params.symbol + ' ' + params.direction + ' (' + params.exchange + ')\n'
+    + 'entry ' + params.entry + ' · stop ' + params.stop + ' · target ' + params.target + '\n'
+    + 'R:R ' + params.rr + ' · families ' + params.families + ' · ' + params.time + '\n'
+    + 'https://hardgate-main.vercel.app/';
+  /* Telegram first (free, unlimited); EmailJS only when Telegram is not
+     configured or failed — the __hgLastEmail gate reflects whichever
+     channel actually delivered, with the channel named */
+  try{
+    const tg = await sendTelegram(tgText);
+    if (tg === true){
+      window.__hgLastEmail = { ok: true, err: null, ts: Date.now(), channel: 'telegram' };
+      logSetup(w.t.symbol, w.dir, 'alert-'+exchange, w.entry, w.stop, t1);
+      return;
+    }
+    if (tg !== 'not-configured') console.warn('telegram send failed, falling back to email:', tg);
+  }catch(e){ /* fall through to email */ }
   try{
     await emailjs.send('service_0qbpylf','template_mfnzomd', params);
-    window.__hgLastEmail = { ok: true, err: null, ts: Date.now() };
+    window.__hgLastEmail = { ok: true, err: null, ts: Date.now(), channel: 'email' };
     logSetup(w.t.symbol, w.dir, 'alert-'+exchange, w.entry, w.stop, t1);
   }catch(e){
     window.__hgLastEmail = { ok: false, err: emailErrStr(e), ts: Date.now() };
@@ -3509,9 +3570,23 @@ async function sendGoldAlertEmail(g){
     rr: fmt(Math.abs(g.t1-g.entry)/Math.abs(g.entry-g.stop), 2),
     time: new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'})
   };
+  const tgText = '🚨 HARDGATE GOLD SETUP\n'
+    + params.symbol + ' ' + params.direction + ' (' + params.exchange + ')\n'
+    + 'entry ' + params.entry + ' · stop ' + params.stop + ' · target ' + params.target + '\n'
+    + 'R:R ' + params.rr + ' · gates ' + params.families + ' · ' + params.time + '\n'
+    + 'https://hardgate-main.vercel.app/';
+  try{
+    const tg = await sendTelegram(tgText);
+    if (tg === true){
+      window.__hgLastEmail = { ok: true, err: null, ts: Date.now(), channel: 'telegram' };
+      logSetup('XAUUSD', g.dir, 'alert-gold', g.entry, g.stop, g.t1);
+      return;
+    }
+    if (tg !== 'not-configured') console.warn('telegram send failed, falling back to email:', tg);
+  }catch(e){ /* fall through to email */ }
   try{
     await emailjs.send('service_0qbpylf','template_mfnzomd', params);
-    window.__hgLastEmail = { ok: true, err: null, ts: Date.now() };
+    window.__hgLastEmail = { ok: true, err: null, ts: Date.now(), channel: 'email' };
     logSetup('XAUUSD', g.dir, 'alert-gold', g.entry, g.stop, g.t1);
   }catch(e){
     window.__hgLastEmail = { ok: false, err: emailErrStr(e), ts: Date.now() };
@@ -3786,6 +3861,8 @@ function initAlerts(){
   let saved = null;
   try{ saved = localStorage.getItem('hg_alerts_on'); }catch(e){}
   try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
+  try{ const tt = localStorage.getItem('hg_tg_token'); if (tt && $('tgToken')) $('tgToken').value = tt; }catch(e){}
+  try{ const tc = localStorage.getItem('hg_tg_chat'); if (tc && $('tgChat')) $('tgChat').value = tc; }catch(e){}
   updateAlertChip();
   if (saved === '1'){
     S.alertsOn = true;

@@ -92,21 +92,30 @@ Production lives at **https://hardgate-main.vercel.app** (project linked in `.ve
 
 Toggle the 🔔 chip in the header. While ON, every 15 minutes a silent cycle runs:
 
-1. **Delta** and **CoinDCX**: full best-setup scan — emails the top CLEAN pick when it changes
+1. **Delta** and **CoinDCX**: full best-setup scan — alerts the top CLEAN pick when it changes
    (deduped by symbol+direction).
-2. **Gold**: silent swing-gate read — emails only on a fresh STRONG verdict (all GS gates clean with a
+2. **Gold**: silent swing-gate read — alerts only on a fresh STRONG verdict (all GS gates clean with a
    full plan), deduped the same way.
 
-Emails go through EmailJS (account embedded in `index.html`). Push alerts go through **ntfy.sh** — set
-your own topic in the UI when enabling alerts. Every alert also lands in the LOG tab.
+**Telegram is the primary alert channel** (free Bot API, no quota) — save your bot token + chat id in the
+header (stored in this browser only) and hit TEST. EmailJS is the automatic fallback when Telegram is not
+configured or fails. Push alerts can also go through **ntfy.sh** as a second free channel. Every alert
+lands in the LOG tab.
+
+A GitHub Actions job (`.github/workflows/alert-notify.yml`) replays the alert cycle against the live site
+every 15 minutes. With the `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID` repo secrets set, CI injects them into
+the page so setup alerts send natively with full levels (EmailJS quota irrelevant); CI-side pushes
+(entry-ticket changes, engine-dark watchdog, email-failure fallback) cascade Telegram → ntfy. The job
+goes red only when an alert could NOT be delivered on any channel, and stamps at most one keep-alive
+commit per day.
 
 A GitHub Actions job (`.github/workflows/alert-notify.yml`) replays the alert cycle against the live site
 every 15 minutes, goes red on email-delivery failure, and stamps at most one keep-alive commit per day so
 GitHub's 60-day scheduled-workflow auto-disable never bites. The same job also completes one BRAIN
 synthesis per run and watches the **ENTRY TICKET**: a new symbol, a moved entry price, or a side
-appearing/vanishing triggers an **ntfy push straight from the runner** (repo secret `NTFY_TOPIC`; unset =
-changes are logged, push skipped) — so ticket alerts reach you even with the app closed. First recorded
-state seeds silently; a failed synthesis leaves the committed ticket state untouched. The same run also
+appearing/vanishing triggers a **Telegram push straight from the runner** (ntfy as fallback channel) —
+so ticket alerts reach you even with the app closed. First recorded state seeds silently; a failed
+synthesis leaves the committed ticket state untouched. The same run also
 verifies the **gate engine is publishing** after the synthesis: a null or 45-min-stale `engineState`
 (the 2026-07-25 all-ASIDE outage class) fires one throttled push per 2h per continuous outage, and
 recovery clears the stamp.

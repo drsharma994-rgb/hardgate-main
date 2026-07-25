@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
+         sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs } from '../scripts/alert-check.mjs';
 
@@ -249,6 +250,40 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
      'fallback: garbage state -> safe defaults, never throws');
 }
 
+/* ---------------- alert-check.mjs telegram channel + cascade ---------------- */
+
+{
+  /* env hygiene: save/restore around each probe */
+  const savedT = process.env.TELEGRAM_TOKEN, savedC = process.env.TELEGRAM_CHAT_ID, savedN = process.env.NTFY_TOPIC;
+  delete process.env.TELEGRAM_TOKEN; delete process.env.TELEGRAM_CHAT_ID;
+  const skipT = await sendTelegramCi('x');
+  ok(typeof skipT === 'string' && skipT.indexOf('skipped') === 0, 'telegram: no secrets -> honest skip, no network');
+  process.env.TELEGRAM_TOKEN = 'tok'; process.env.TELEGRAM_CHAT_ID = '42';
+  let tgSent, tgCall = null;
+  await withFetch(async (url, opts) => { tgCall = { url, opts }; return fetchOk('{}', 200)(url, opts); },
+    async () => { tgSent = await sendTelegramCi('hello'); });
+  ok(tgSent === 'sent' && tgCall && tgCall.url.indexOf('api.telegram.org/bot') >= 0
+     && tgCall.url.indexOf('tok') >= 0 && JSON.parse(tgCall.opts.body).chat_id === '42',
+     'telegram: posts sendMessage to the bot endpoint with the chat id');
+  let tgFail;
+  await withFetch(fetchOk('{}', 403), async () => { tgFail = await sendTelegramCi('x'); });
+  ok(typeof tgFail === 'string' && tgFail.indexOf('failed') === 0, 'telegram: non-2xx -> honest failure string');
+  /* cascade: telegram success short-circuits ntfy; telegram failure falls through */
+  let casc1, ntfyCalls = 0;
+  await withFetch(async () => { ntfyCalls++; return { status: 200, text: async () => '{}', headers: { get: () => null } }; },
+    async () => { casc1 = await sendAlertCi('t', 'b'); });
+  ok(casc1 === 'telegram: sent' && ntfyCalls === 1, 'cascade: telegram success is the whole result, ntfy untouched');
+  delete process.env.TELEGRAM_TOKEN; delete process.env.TELEGRAM_CHAT_ID;
+  delete process.env.NTFY_TOPIC;
+  let casc2;
+  await withFetch(fetchOk('{}', 200), async () => { casc2 = await sendAlertCi('t', 'b'); });
+  ok(typeof casc2 === 'string' && casc2.indexOf('telegram skipped') === 0 && casc2.indexOf('ntfy skipped') >= 0,
+     'cascade: both channels unset -> both honestly skipped — got "' + casc2 + '"');
+  if (savedT !== undefined) process.env.TELEGRAM_TOKEN = savedT;
+  if (savedC !== undefined) process.env.TELEGRAM_CHAT_ID = savedC;
+  if (savedN !== undefined) process.env.NTFY_TOPIC = savedN;
+}
+
 /* ---------------- config / repo files ---------------- */
 
 {
@@ -268,6 +303,7 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   const yml = fs.readFileSync(fileURLToPath(new URL('../.github/workflows/alert-notify.yml', import.meta.url)), 'utf8');
   ok(yml.includes('node scripts/alert-check.mjs'), 'workflow still runs scripts/alert-check.mjs');
   ok(yml.includes('git diff --cached --quiet || git commit'), 'workflow commit guard intact (works with heartbeat: no-op when state unchanged)');
+  ok(yml.includes('TELEGRAM_TOKEN') && yml.includes('TELEGRAM_CHAT_ID'), 'workflow passes the telegram secrets');
 }
 for (const f of ['../api/proxy.js', '../scripts/alert-check.mjs']){
   try{
