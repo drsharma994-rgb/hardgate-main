@@ -3083,5 +3083,41 @@ console.log('== AP) 1h sniper rescue ==');
      'AP: nothing valid anywhere -> null, never invented');
 }
 
+/* ================= AQ) ENGINE PATIENCE — cold engine outlives the shared cap ================= */
+console.log('== engine patience: the 12s cap loses, the 150s patience wins ==');
+{
+  const WG = freshBrain();
+  stubQuietLayers(WG);
+  delete WG.engineState;                     /* genuinely cold engine */
+  WG.brainTunables.warmColdMs = 200;         /* shared cap loses the race */
+  WG.brainTunables.engineWarmMs = 4000;      /* …but the patience window covers the slow leg */
+  WG.onchainState = function(){ return { bias: 'neutral', evidence: [], flags: {} }; };
+  WG.HG_warmups = [
+    { id: 'engine', label: 'ENGINE', run: function(){
+        return new Promise(function(res){
+          setTimeout(function(){
+            WG.engineState = function(){ return { survivors: [
+              { sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
+                plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 }, gatesPassed: 6 } ], rejected: [], at: Date.now() }; };
+            res('warmed');
+          }, 800);   /* past the shared cap, inside the patience window */
+        }); } }
+  ];
+  const TP = freshPane();
+  const pSnaps = [];
+  WG.xuUniverse = async function(){ pSnaps.push(TP.stubs['#brainStat'].textContent); return [
+    { sym: 'BTCUSDT', base: 'BTC', exchange: 'delta', turnoverUsd: 9e9, mark: 100, fundingPct: 0, alsoOn: null } ]; };
+  WG.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  WG.HG_tabs[0].mount(TP.pane);
+  await runAndWait(TP.stubs);
+  const pStat = TP.stubs['#brainStat'].textContent;
+  ok(pStat.indexOf('done ·') === 0, 'AQ: the synthesis COMPLETES after waiting for the slow engine — got "' + pStat + '"');
+  ok(pSnaps.length && pSnaps[0].indexOf('auto-warmed: engine') === 0,
+     'AQ: the accounting names the engine WARMED, not dark — got "' + pSnaps[0] + '"');
+  const pBtc = WG.__hgBrainLast().rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
+  ok(pBtc && pBtc.evidence.some(function(e){ return e.indexOf('ENGINE: ENGINE SURVIVOR') === 0; }),
+     'AQ: the engine survivor VOTES instead of the whole board going dark-aside');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

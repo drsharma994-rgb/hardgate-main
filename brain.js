@@ -266,7 +266,7 @@ var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
 var XU_CACHE_MS = 15 * 60 * 1000; /* mirror of xuniverse.js CACHE_MS (its documented contract) */
 /* vm-test seam: suites may shorten timeouts; production never touches this */
-var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 12000 };
+var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 12000, engineWarmMs: 150000 };
 /* the seam is this SAME object by reference — mutating window.brainTunables
    mutates what every withTimeout/watchdog reads */
 G.brainTunables = TUN;
@@ -2853,19 +2853,22 @@ async function autoWarmIntoRun(stat){
     var h;
     for (h = 0; h < hooks.length; h++) recs.push({ id: hooks[h].id, outcome: 'pending', text: '' });
     var pending = [];
+    var engPending = null;
     for (h = 0; h < hooks.length; h++){
-      (function(rec, run){
+      (function(rec, run, isEng){
         try{
           var r = run();   /* hooks never throw per contract; strings pass through */
           if (r && typeof r.then === 'function'){
-            pending.push(r.then(
+            var mp = r.then(
               function(v){ rec.outcome = 'value'; rec.text = (typeof v === 'string') ? v : 'warmed'; },
-              function(e){ rec.outcome = 'error'; rec.text = errMsg(e); }));
+              function(e){ rec.outcome = 'error'; rec.text = errMsg(e); });
+            pending.push(mp);
+            if (isEng) engPending = mp;
           }else{
             rec.outcome = 'value'; rec.text = (typeof r === 'string') ? r : 'warmed';
           }
         }catch(e){ rec.outcome = 'error'; rec.text = errMsg(e); }
-      })(recs[h], hooks[h].run);
+      })(recs[h], hooks[h].run, hooks[h].id === 'engine');
     }
     if (pending.length){
       var settle = (typeof Promise.allSettled === 'function')
@@ -2881,6 +2884,27 @@ async function autoWarmIntoRun(stat){
         new Promise(function(res){ setTimeout(function(){ res('capped'); }, ms); })
       ]).then(null, function(){});
     }
+    /* ENGINE PATIENCE: the 500-contract gate scan legitimately takes ~2 min —
+      far beyond the shared 12s cap; without this extended wait a cold engine
+      is dark at EVERY first synthesis and 500+ rows lose their structural
+      voter (the 2026-07-25 all-ASIDE pattern). When the engine alone is
+      still pending, wait on IT up to TUN.engineWarmMs; the stat line says
+      so honestly. vm suites shorten via brainTunables. */
+    try{
+      var engRec = null;
+      for (h = 0; h < recs.length; h++) if (recs[h].id === 'engine') engRec = recs[h];
+      if (engPending && engRec && engRec.outcome === 'pending'){
+        var engCap = (isFinite(+TUN.engineWarmMs) && +TUN.engineWarmMs > 0) ? +TUN.engineWarmMs : 150000;
+        if (stat){
+          stat.textContent = 'engine gate scan running — waiting for the slow leg (≤'
+            + FMT(engCap / 1000, 0) + 's on a cold start)…';
+        }
+        await Promise.race([
+          engPending,
+          new Promise(function(res){ setTimeout(function(){ res('capped'); }, engCap); })
+        ]).then(null, function(){});
+      }
+    }catch(e){}
     /* accounting: what the auto-warm accomplished vs what stayed dark */
     var post = snapshotLayers();
     function liveAt(snap, key){
