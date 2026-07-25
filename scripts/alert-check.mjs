@@ -198,12 +198,6 @@ async function main() {
   console.log('Email status (window.__hgLastEmail):', JSON.stringify(result.email));
 
   const verdict = emailVerdict(result.email);
-  if (verdict.fail) {
-    // State intentionally NOT saved: the committed alert keys stay as they were,
-    // so the same setup re-fires next run and the email is retried.
-    console.error('EMAIL DELIVERY FAILED: ' + verdict.err + ' — alert state left uncommitted so the next run retries.');
-    process.exit(1);
-  }
   if (verdict.warn) {
     console.warn('WARN: window.__hgLastEmail missing or malformed — no email attempted this cycle (or senders not instrumented yet); continuing.');
   }
@@ -242,16 +236,16 @@ async function main() {
      one push per ENGINE_ALERT_MS per continuous outage, stamp carried in
      alert-state.json; recovery clears it honestly. */
   if (ticketResult.ok) {
-    const verdict = engineVerdict(ticketResult.engine, Date.now());
-    if (verdict.ok) {
-      console.log('Engine live — ' + verdict.survivors + ' survivors voting.'
+    const engV = engineVerdict(ticketResult.engine, Date.now());
+    if (engV.ok) {
+      console.log('Engine live — ' + engV.survivors + ' survivors voting.'
         + (prevState.engineAlertAt ? ' (recovered — outage stamp cleared)' : ''));
     } else {
-      console.warn('ENGINE DARK: ' + verdict.why);
+      console.warn('ENGINE DARK: ' + engV.why);
       if (engineAlertDue(prevState.engineAlertAt, Date.now())) {
         const pushResult = await sendNtfy(process.env.NTFY_TOPIC || '',
           'HARDGATE engine layer dark',
-          verdict.why + ' — 500+ contracts lost their structural voter. Open the EXECUTE tab / check the scan.');
+          engV.why + ' — 500+ contracts lost their structural voter. Open the EXECUTE tab / check the scan.');
         console.warn('ENGINE DARK — push: ' + pushResult);
         newState.engineAlertAt = new Date().toISOString();
       } else {
@@ -261,6 +255,19 @@ async function main() {
     }
   } else if (prevState.engineAlertAt) {
     newState.engineAlertAt = prevState.engineAlertAt;   /* degraded run: keep the stamp, change nothing */
+  }
+
+  /* email gate LAST: the ticket + engine bookkeeping above is saved either
+     way. On email failure the alert KEYS roll back (the setup re-fires and
+     the email retries next run) — without discarding ticket/engine state
+     the way the old early-exit did (found in the 2026-07-25 run logs). */
+  if (verdict.fail) {
+    newState.delta = prevState.delta ?? null;
+    newState.coindcx = prevState.coindcx ?? null;
+    newState.gold = prevState.gold ?? null;
+    saveState(newState);
+    console.error('EMAIL DELIVERY FAILED: ' + verdict.err + ' — alert keys rolled back so the email retries next run; ticket/engine state kept.');
+    process.exit(1);
   }
 
   saveState(newState);

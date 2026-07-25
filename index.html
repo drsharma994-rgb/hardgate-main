@@ -3453,6 +3453,19 @@ function logAlertLine(text){
   }catch(e){}
 }
 
+/* EmailJS failures arrive as {status, text} objects without .message —
+   String(e) yields the useless '[object Object]' seen in CI logs. Serialize
+   honestly. */
+function emailErrStr(e){
+  try{
+    if (!e) return 'unknown';
+    if (typeof e === 'string') return e;
+    if (e.message) return String(e.message);
+    if (e.text) return 'HTTP ' + (e.status || '?') + ': ' + String(e.text);
+    return JSON.stringify(e).slice(0, 300);
+  }catch(x){ return 'unreadable error object'; }
+}
+
 async function sendAlertEmail(w, exchange){
   const t1 = (w.t1!=null && isFinite(w.t1)) ? w.t1 : (w.dir==='long' ? w.entry+2*w.risk : w.entry-2*w.risk); // the BEST card's planned 3.5·ATR target, not a recomputed fixed 2R
   const params = {
@@ -3472,9 +3485,9 @@ async function sendAlertEmail(w, exchange){
     window.__hgLastEmail = { ok: true, err: null, ts: Date.now() };
     logSetup(w.t.symbol, w.dir, 'alert-'+exchange, w.entry, w.stop, t1);
   }catch(e){
-    window.__hgLastEmail = { ok: false, err: String((e && e.message) || e), ts: Date.now() };
+    window.__hgLastEmail = { ok: false, err: emailErrStr(e), ts: Date.now() };
     console.error('HARDGATE alert email failed', e);
-    logAlertLine('ALERT EMAIL FAILED: ' + w.t.symbol + ' ' + w.dir.toUpperCase() + ' (' + exchange + ') — ' + String((e && e.message) || e));
+    logAlertLine('ALERT EMAIL FAILED: ' + w.t.symbol + ' ' + w.dir.toUpperCase() + ' (' + exchange + ') — ' + emailErrStr(e));
   }
 }
 
@@ -3501,9 +3514,9 @@ async function sendGoldAlertEmail(g){
     window.__hgLastEmail = { ok: true, err: null, ts: Date.now() };
     logSetup('XAUUSD', g.dir, 'alert-gold', g.entry, g.stop, g.t1);
   }catch(e){
-    window.__hgLastEmail = { ok: false, err: String((e && e.message) || e), ts: Date.now() };
+    window.__hgLastEmail = { ok: false, err: emailErrStr(e), ts: Date.now() };
     console.error('HARDGATE gold alert email failed', e);
-    logAlertLine('ALERT EMAIL FAILED: XAUUSD ' + g.dir.toUpperCase() + ' (gold) — ' + String((e && e.message) || e));
+    logAlertLine('ALERT EMAIL FAILED: XAUUSD ' + g.dir.toUpperCase() + ' (gold) — ' + emailErrStr(e));
   }
 }
 
