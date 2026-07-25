@@ -2989,6 +2989,13 @@ async function runBrain(el){
        account for what warmed vs what stayed dark — then judge as today */
     var warmNote = await autoWarmIntoRun(stat);
     __warmedAt = Date.now();
+    /* the scan budget (TUN.scanMs) governs the SCAN — fetch + judge + plan.
+       The warm phase is pre-scan work: with engine patience the warm can
+       legitimately take ~3 min, and charging it to the scan budget starved
+       planning of its own time ('planning timed out' right after a warm
+       engine VOTED — the 09:02 run). t0 stays the honest total-wait clock
+       for the done line; bt0 budgets the scan itself. */
+    var bt0 = Date.now();
 
     stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading every intelligence layer…';
 
@@ -3032,7 +3039,7 @@ async function runBrain(el){
          WATCH-or-better on the non-candle layers — the shared queue helper
          owns ordering, chunking, the fetch cap and the scan watchdog.
          The gold lane keeps its own candle path (goldPlan, unchanged). */
-      var fq = await fetchCandleQueue(primes.concat(highs, watches), uni, stat, t0);
+      var fq = await fetchCandleQueue(primes.concat(highs, watches), uni, stat, bt0);
       capNote = fq.capNote + fq.watchNote;
       /* TREND4H structural layer — post-fetch: EMA20/EMA50 + swing structure
          on the rows the queue already landed. A named structural vote can
@@ -3048,7 +3055,7 @@ async function runBrain(el){
          the budget or the candle cap cut simply says levels unavailable. */
       var planSet = setups.concat(watches);
       for (var sx = 0; sx < planSet.length; sx++){
-        if (Date.now() - t0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
+        if (Date.now() - bt0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
         stat.textContent = 'planning ' + (sx + 1) + '/' + planSet.length + ' · ' + planSet[sx].sym;
         try{
           var gotx = (planSet[sx].lane === 'gold') ? await goldPlan(planSet[sx], snap)
@@ -3059,7 +3066,7 @@ async function runBrain(el){
     }else{
       /* legacy mode — today's flow, unchanged: bounded kline fetches per setup */
       for (var s = 0; s < setups.length; s++){
-        if (Date.now() - t0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
+        if (Date.now() - bt0 > TUN.scanMs){ capNote += ' · planning timed out — some levels unavailable'; break; }
         stat.textContent = 'planning ' + (s + 1) + '/' + setups.length + ' · ' + setups[s].sym;
         try{
           var got = (setups[s].lane === 'gold') ? await goldPlan(setups[s], snap)
