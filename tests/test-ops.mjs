@@ -10,7 +10,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
-         ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush } from '../scripts/alert-check.mjs';
+         ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
+         engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS } from '../scripts/alert-check.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -190,6 +191,40 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(typeof failed === 'string' && failed.indexOf('failed') === 0, 'ticket: ntfy network error -> honest failure string — got ' + JSON.stringify(failed));
   let sent; await withFetch(fetchOk('{}', 202), async () => { sent = await sendTicketPush('t', a); });
   ok(sent === 'sent', 'ticket: ntfy 2xx -> sent — got ' + JSON.stringify(sent));
+
+  /* sendNtfy is the shared channel — same contract, custom title/body */
+  const skip2 = await sendNtfy('', 't', 'b');
+  ok(typeof skip2 === 'string' && skip2.indexOf('skipped') === 0, 'ntfy: no topic -> honest skip, no network');
+  let sent2, captured = null;
+  await withFetch(async (url, opts) => { captured = { url, opts }; return fetchOk('{}', 200)(url, opts); },
+    async () => { sent2 = await sendNtfy('mytopic', 'Custom Title', 'Custom Body'); });
+  ok(sent2 === 'sent' && captured && captured.opts.headers.Title === 'Custom Title'
+     && captured.opts.body === 'Custom Body' && captured.url.indexOf('mytopic') >= 0,
+     'ntfy: the shared sender carries the custom title/body to the topic');
+}
+
+/* ---------------- alert-check.mjs engine-outage watchdog ---------------- */
+
+{
+  const now = Date.now();
+  ok(engineVerdict(null, now).ok === false, 'engine watchdog: null state -> dark');
+  ok(engineVerdict({ live: false }, now).ok === false, 'engine watchdog: not live -> dark');
+  ok(engineVerdict(undefined, now).why.indexOf('engineState null') >= 0,
+     'engine watchdog: the dark reason names the missing publication');
+  const stale = engineVerdict({ live: true, survivors: 3, at: now - ENGINE_STALE_MS - 60000 }, now);
+  ok(stale.ok === false && stale.why.indexOf('stale') >= 0,
+     'engine watchdog: a snapshot older than 45m reads as stale-dark — got "' + stale.why + '"');
+  const live = engineVerdict({ live: true, survivors: 14, at: now - 60000 }, now);
+  ok(live.ok === true && live.survivors === 14, 'engine watchdog: fresh state -> live with survivor count');
+  ok(engineVerdict({ live: true, survivors: 2, at: 'garbage' }, now).ok === false,
+     'engine watchdog: unparseable timestamp -> stale-dark, never trusted');
+
+  ok(engineAlertDue(undefined, now) === true, 'engine alert: no prior stamp -> due');
+  ok(engineAlertDue('garbage', now) === true, 'engine alert: corrupt stamp -> due');
+  ok(engineAlertDue(new Date(now - 3600000).toISOString(), now) === false,
+     'engine alert: 1h ago -> inside the 2h throttle');
+  ok(engineAlertDue(new Date(now - ENGINE_ALERT_MS - 60000).toISOString(), now) === true,
+     'engine alert: past the 2h throttle -> due again (continuous outage re-alerts slowly)');
 }
 
 /* ---------------- config / repo files ---------------- */

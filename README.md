@@ -106,7 +106,10 @@ GitHub's 60-day scheduled-workflow auto-disable never bites. The same job also c
 synthesis per run and watches the **ENTRY TICKET**: a new symbol, a moved entry price, or a side
 appearing/vanishing triggers an **ntfy push straight from the runner** (repo secret `NTFY_TOPIC`; unset =
 changes are logged, push skipped) — so ticket alerts reach you even with the app closed. First recorded
-state seeds silently; a failed synthesis leaves the committed ticket state untouched.
+state seeds silently; a failed synthesis leaves the committed ticket state untouched. The same run also
+verifies the **gate engine is publishing** after the synthesis: a null or 45-min-stale `engineState`
+(the 2026-07-25 all-ASIDE outage class) fires one throttled push per 2h per continuous outage, and
+recovery clears the stamp.
 
 ## Tests
 

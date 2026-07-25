@@ -61,23 +61,49 @@ function ticketPushBody(next) {
   return 'Long: ' + fmt(t.long) + '\nShort: ' + fmt(t.short);
 }
 /* ntfy push straight from Node (no page needed). No topic -> honest skip. */
-async function sendTicketPush(topic, next) {
+async function sendNtfy(topic, title, body) {
   if (!topic) return 'skipped: no NTFY_TOPIC secret configured';
   try {
     const res = await fetch('https://ntfy.sh/' + encodeURIComponent(topic), {
       method: 'POST',
       headers: {
-        'Title': 'HARDGATE entry ticket changed',
+        'Title': String(title || 'HARDGATE alert'),
         'Priority': '4',
         'Tags': 'chart_with_upwards_trend',
         'Click': SITE_URL
       },
-      body: ticketPushBody(next)
+      body: String(body || '')
     });
     return (res && res.status >= 200 && res.status < 300) ? 'sent' : 'failed: HTTP ' + (res && res.status);
   } catch (e) {
     return 'failed: ' + ((e && e.message) ? e.message : String(e));
   }
+}
+async function sendTicketPush(topic, next) {
+  return sendNtfy(topic, 'HARDGATE entry ticket changed', ticketPushBody(next));
+}
+
+/* ---------------- engine-outage watchdog ----------------
+   The CI run completes a full brain synthesis; a synthesis finishing with
+   engineState null (or a stale snapshot) means 500+ contracts just lost
+   their structural voter — the 2026-07-25 all-ASIDE outage class. Push
+   throttled to one per ENGINE_ALERT_MS per continuous outage; recovery
+   clears the stamp. */
+const ENGINE_STALE_MS = 45 * 60 * 1000;
+const ENGINE_ALERT_MS = 2 * 60 * 60 * 1000;
+function engineVerdict(engine, now) {
+  if (!engine || engine.live !== true) {
+    return { ok: false, why: 'engineState null after a completed synthesis — the gate scan is not publishing' };
+  }
+  const age = Number.isFinite(+engine.at) ? (now - +engine.at) : Infinity;
+  if (!(age >= 0 && age <= ENGINE_STALE_MS)) {
+    return { ok: false, why: 'engineState stale (' + (Number.isFinite(age) ? Math.round(age / 60000) : '?') + 'm old) — survivors are not being refreshed' };
+  }
+  return { ok: true, survivors: Number.isFinite(+engine.survivors) ? +engine.survivors : 0 };
+}
+function engineAlertDue(lastAlertAt, now) {
+  const t = Date.parse(lastAlertAt || '');
+  return !Number.isFinite(t) || (now - t) > ENGINE_ALERT_MS;
 }
 
 async function main() {
@@ -150,7 +176,16 @@ async function main() {
         if (/^done|failed/i.test(stat)) break;
       }
       const snap = (typeof window.__hgBrainTicketNow === 'function') ? window.__hgBrainTicketNow() : null;
-      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap };
+      /* engine-outage watchdog read: after a COMPLETED synthesis the gate
+         engine must be publishing — null/stale here is the outage class
+         that took the board down on 2026-07-25 */
+      let engine = { live: false };
+      try {
+        const eng = (typeof window.engineState === 'function') ? window.engineState() : null;
+        if (eng) engine = { live: true, survivors: Array.isArray(eng.survivors) ? eng.survivors.length : 0,
+                            at: Number.isFinite(+eng.at) ? +eng.at : null };
+      } catch (e) { engine = { live: false }; }
+      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -203,6 +238,31 @@ async function main() {
     newState.ticket = prevState.ticket;
   }
 
+  /* engine-outage watchdog: verdict over the post-synthesis engine read;
+     one push per ENGINE_ALERT_MS per continuous outage, stamp carried in
+     alert-state.json; recovery clears it honestly. */
+  if (ticketResult.ok) {
+    const verdict = engineVerdict(ticketResult.engine, Date.now());
+    if (verdict.ok) {
+      console.log('Engine live — ' + verdict.survivors + ' survivors voting.'
+        + (prevState.engineAlertAt ? ' (recovered — outage stamp cleared)' : ''));
+    } else {
+      console.warn('ENGINE DARK: ' + verdict.why);
+      if (engineAlertDue(prevState.engineAlertAt, Date.now())) {
+        const pushResult = await sendNtfy(process.env.NTFY_TOPIC || '',
+          'HARDGATE engine layer dark',
+          verdict.why + ' — 500+ contracts lost their structural voter. Open the EXECUTE tab / check the scan.');
+        console.warn('ENGINE DARK — push: ' + pushResult);
+        newState.engineAlertAt = new Date().toISOString();
+      } else {
+        console.warn('ENGINE DARK — inside the 2h throttle, no push.');
+        if (prevState.engineAlertAt) newState.engineAlertAt = prevState.engineAlertAt;
+      }
+    }
+  } else if (prevState.engineAlertAt) {
+    newState.engineAlertAt = prevState.engineAlertAt;   /* degraded run: keep the stamp, change nothing */
+  }
+
   saveState(newState);
 
   const alertChanged = ['delta', 'coindcx', 'gold'].some(
@@ -228,4 +288,5 @@ if (invokedDirectly) {
 }
 
 export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
-         ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush };
+         ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
+         engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS };
