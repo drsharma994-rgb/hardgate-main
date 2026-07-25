@@ -2,5 +2,9 @@
   "delta": null,
   "coindcx": null,
   "gold": null,
-  "lastRunAt": "2026-07-24T13:09:34.024Z"
+  "lastRunAt": "2026-07-25T16:10:16.690Z",
+  "ticket": {
+    "long": null,
+    "short": null
+  }
 }
