@@ -1666,7 +1666,7 @@ function applyFundz(rows){
           'z ' + (z > 0 ? '+' : '') + z + ' vs own history — crowd on the other side');
         row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
       }else if ((dir === 'long' && crowdLong) || (dir === 'short' && crowdShort)){
-        var ctxt = 'funding z +' + z + ' — ' + (dir === 'long' ? 'longs' : 'shorts')
+        var ctxt = 'funding z ' + (z > 0 ? '+' : '') + z + ' — ' + (dir === 'long' ? 'longs' : 'shorts')
           + ' crowded vs own 30d history, squeeze risk';
         row.col.votes.push({ layer: 'fundz', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
         colNote(row.col, 'fundz', 'CAUTION', ctxt);
