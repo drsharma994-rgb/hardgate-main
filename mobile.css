@@ -1,0 +1,102 @@
+/* ==========================================================================
+   HARDGATE — MOBILE LAYER (mobile.css)
+   Responsive optimization for phones and small tablets. Loaded AFTER
+   bright.css so equal-specificity layout rules here win. Layout-only by
+   design (colors/theme stay with bright.css). Every rule is behind a width
+   gate — desktop rendering is untouched.
+   Breakpoints: ≤860px (phones + small tablets), ≤480px (small phones).
+   ========================================================================== */
+
+/* ---------- phones + small tablets (≤860px) ----------------------------- */
+@media (max-width: 860px){
+
+  /* the sticky desktop header would eat a third of a phone screen */
+  header{
+    position: static;
+    gap: 6px 8px;
+    padding: 8px 10px;
+    align-items: flex-start;
+  }
+  .brand{ font-size: 15px; line-height: 1.25; }
+  .brand small{ display: block; font-size: 9px; letter-spacing: .08em; margin-top: 2px; }
+
+  /* status chips + controls: smaller, still readable, tappable */
+  .statuschip{ font-size: 10px; padding: 3px 7px; }
+  .hgauto{ font-size: 10px; }
+  .hgauto .hgalabel{ padding: 0 4px; }
+  .hgauto button, .xtoggle button{ min-height: 30px; padding: 4px 8px; font-size: 10px; }
+
+  /* alert/push config inputs: full-width pairs, never clipped */
+  header input{ font-size: 11px !important; min-height: 30px; }
+  #ntfyTopic{ width: 90px !important; }
+  #tgToken{ width: 120px !important; }
+  #tgChat{ width: 70px !important; }
+
+  /* nav groups + tabs: horizontal scroll already works — make targets fat */
+  .navgroups{ padding: 6px 10px 0; gap: 6px; }
+  .navgroups button{ min-height: 36px; padding: 7px 12px; font-size: 10px; letter-spacing: .08em; }
+  nav{ padding: 0 8px; }
+  nav button{ min-height: 42px; padding: 11px 14px; font-size: 11px; letter-spacing: .1em; }
+
+  /* content width + panel rhythm */
+  main{ padding: 10px 8px 48px; }
+  .panel{ padding: 12px 10px; margin-bottom: 12px; border-radius: 6px; }
+  .panel h2{ font-size: 12px; letter-spacing: .1em; }
+  #marketPictureBar{ font-size: 12px !important; padding: 6px 10px !important; }
+
+  /* every grid of cards collapses to one honest column */
+  .cards{ grid-template-columns: 1fr; gap: 10px; }
+  .grid2, .grid3{ grid-template-columns: 1fr; }
+
+  /* buttons: real touch targets */
+  .btn, .btn.ghost, .toTrade{ min-height: 40px; padding: 9px 14px; font-size: 12px; }
+  select, input[type="text"], input[type="number"]{ min-height: 36px; }
+
+  /* brain ticket + limit board flex cards: never overflow the viewport */
+  #brainTicket > div > div,
+  #brainBoard > div > div{
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  #brainTicketWrap, #brainBoardWrap{ overflow-x: hidden; }
+
+  /* ledger tables scroll sideways instead of crushing columns */
+  .ledger, .kv{ overflow-x: auto; }
+
+  /* charts keep their shape without eating the fold */
+  .hgchart{ height: 150px; }
+
+  /* notes read comfortably on small screens */
+  .note{ font-size: 11px; line-height: 1.65; }
+
+  /* the floating alert bell never covers content on a phone */
+  #hgAlertRoot{ right: 10px !important; bottom: 10px !important; }
+  #hgAlertRoot .hgab-btn{ padding: 6px 10px !important; font-size: 10px !important; }
+  #hgAlertRoot .hgab-panel{ width: min(86vw, 290px) !important; }
+}
+
+/* ---------- small phones (≤480px) ---------------------------------------- */
+@media (max-width: 480px){
+
+  header input{ max-width: 44vw; }
+
+  /* the big entry number stays big but never clips */
+  #brainTicket b, #brainBoard b{ word-break: break-all; }
+
+  /* audit ledger columns compress: label/status/text stack gracefully */
+  .auditRows > div{ flex-wrap: wrap; }
+  .auditRows > div > span:first-child{ flex-basis: 70px !important; }
+
+  /* card header meta stacks under the symbol */
+  .card .chead{ flex-wrap: wrap; }
+
+  /* kill-zone / leverage / venue chips wrap instead of clipping */
+  .card .chead span, .gpip{ max-width: 100%; }
+}
+
+/* ---------- touch ergonomics (all touch devices, any width) -------------- */
+@media (hover: none) and (pointer: coarse){
+  button, .btn, .toTrade, select{ touch-action: manipulation; }   /* kills the 300ms tap delay */
+  a, button, select, input{ -webkit-tap-highlight-color: rgba(245,197,66,.25); }
+}
