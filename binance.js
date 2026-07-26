@@ -319,3 +319,50 @@ async function binanceOIHistory(symbol, period, limit){
     return __binCachePut(key, { latest: series[series.length - 1], series: series });
   }catch(e){ return null; }
 }
+
+/* GET /fapi/v1/fundingRate?symbol&limit -> [{rate, t}] ascending — the symbol's
+   OWN funding history (3 prints/day), free, for z-score reads. null on any
+   failure; 60s cached like the rest of the layer. */
+async function binanceFundingHist(symbol, limit){
+  try{
+    if (!symbol) return null;
+    limit = Math.max(10, Math.min(1000, limit || 100));
+    const key = 'fundhist|' + symbol + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/fapi/v1/fundingRate?symbol=' + encodeURIComponent(symbol) + '&limit=' + limit;
+    const raw = await __binFetchJson(url);
+    if (!Array.isArray(raw) || raw.length < 10) return null;
+    const rows = raw.map(function(d){
+      return { rate: +d.fundingRate, t: Math.floor((+d.fundingTime)/1000) };
+    }).filter(function(r){ return isFinite(r.rate) && isFinite(r.t); })
+      .sort(function(a,b){ return a.t - b.t; });
+    if (rows.length < 10) return null;
+    return __binCachePut(key, rows);
+  }catch(e){ return null; }
+}
+
+/* GET /fapi/v1/depth?symbol&limit=20 -> {bidUsd, askUsd} top-of-book totals —
+   order-book imbalance reads (proxy context for the same asset elsewhere).
+   null on any failure; 60s cached. */
+async function binanceDepth(symbol, limit){
+  try{
+    if (!symbol) return null;
+    limit = Math.max(5, Math.min(100, limit || 20));
+    const key = 'depth|' + symbol + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_FAPI + '/fapi/v1/depth?symbol=' + encodeURIComponent(symbol) + '&limit=' + limit;
+    const j = await __binFetchJson(url);
+    if (!j || !Array.isArray(j.bids) || !Array.isArray(j.asks)) return null;
+    const tot = function(side){
+      let usd = 0;
+      for (let i = 0; i < side.length; i++){
+        const p = +side[i][0], q = +side[i][1];
+        if (isFinite(p) && isFinite(q)) usd += p * q;
+      }
+      return usd;
+    };
+    const out = { bidUsd: tot(j.bids), askUsd: tot(j.asks) };
+    if (!(out.bidUsd >= 0) || !(out.askUsd >= 0)) return null;
+    return __binCachePut(key, out);
+  }catch(e){ return null; }
+}

@@ -1764,13 +1764,14 @@ function trendRows(up){
   WG2.HG_tabs[0].mount(TF5.pane);
   await runAndWait(TF5.stubs);
   const f5Stat = TF5.stubs['#brainStat'].textContent;
-  ok(f5Stat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
-     'AF4: counter-trend candles cast NO vote — the LONG row fighting a downtrend stays WATCH — got "' + f5Stat + '"');
-  ok(TF5.stubs['#brainCards'].innerHTML === '' && TF5.stubs['#brainWatch'].innerHTML.indexOf('>FIGHT</span>') >= 0,
-     'AF4: no promotion against the trend; the row keeps its honest WATCH verdict');
+  ok(f5Stat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 2 aside') === 0,
+     'AF4: counter-trend candles cast NO trend vote — but the genuine bullish divergence on those same downtrend candles earns FIGHT a HIGH via the div layer (price LL + RSI HL, mathematically confirmed) — got "' + f5Stat + '"');
+  ok(TF5.stubs['#brainCards'].innerHTML.indexOf('FIGHTUSDT') >= 0,
+     'AF4: the divergence promotion renders as a card — the trend layer itself stayed honest');
   const snapF = WG2.__hgBrainLast().rows.filter(function(x){ return x.sym === 'FIGHTUSDT'; })[0];
-  ok(snapF && snapF.tier === 'WATCH' && !snapF.evidence.some(function(e){ return e.indexOf('TREND4H:') === 0; }),
-     'AF4: snapshot evidence confirms no TREND4H vote was fabricated against the trend');
+  ok(snapF && !snapF.evidence.some(function(e){ return e.indexOf('TREND4H:') === 0; })
+     && snapF.evidence.some(function(e){ return e.indexOf('DIV: price LL + RSI HL') === 0; }),
+     'AF4: snapshot proves it — no TREND4H vote fabricated against the trend; the DIV vote is the real, named one');
 }
 
 /* ---- AF5: F&G extremes at run level + __hgBrainLast contract ---- */
@@ -3256,6 +3257,46 @@ console.log('== AT) liqpool magnet guard ==');
   ok(LP(rLong) === 'dark', 'AT: absent findLiquidityPools -> honest dark');
   ok(LP(null) === null && LP({}) === null && LP(mkRow('long', 0, 0, 0)) === null,
      'AT: garbage rows/plans -> null, never throws');
+}
+
+/* ================= AU) TIER-2/3 — funding z + RSI divergence ================= */
+console.log('== AU) tier-2/3 layers ==');
+{
+  /* funding z-score */
+  const FZ = W.__hgBrainFundZ;
+  ok(typeof FZ === 'function', 'AU: funding-z seam exposed');
+  const flatF = Array.from({ length: 90 }, function(){ return { rate: 0.0001, t: 1 }; });
+  flatF.push({ rate: 0.0001, t: 2 });
+  ok(!isFinite(FZ(flatF)), 'AU: zero-variance history -> NaN, never a divide-by-zero z');
+  const hist = [];
+  for (let i = 0; i < 90; i++) hist.push({ rate: 0.0001 * (i % 2 ? 1 : -1), t: i });
+  const mean0 = hist.reduce(function(a, b){ return a + b.rate; }, 0) / 90;
+  hist.push({ rate: mean0 + 0.0006, t: 91 });
+  const z = FZ(hist);
+  ok(isFinite(z) && z > 2, 'AU: a funding print way above the 30d distribution reads z > 2 — got ' + z);
+  ok(!isFinite(FZ(null)) && !isFinite(FZ([{ rate: 1 }, { rate: 2 }])), 'AU: garbage/thin history -> NaN, never throws');
+
+  /* RSI divergence — build a double-top with weakening momentum (pivots
+     AFTER the RSI-14 warm-up so both legs are finite) */
+  const RD = W.__hgBrainRsiDiv;
+  ok(typeof RD === 'function', 'AU: rsi-divergence seam exposed');
+  const dbl = [];
+  for (let i = 0; i < 46; i++) dbl.push({ t: i, o: 100, h: 100.5, l: 99.5, c: 100, v: 1000 });
+  /* first high at bar 18 (strong thrust), pullback, second HIGHER high at
+     bar 33 with weak momentum; newest pivot 12 bars from the end */
+  for (let i = 15; i <= 18; i++){ dbl[i].o = dbl[i - 1].c + 0.3; dbl[i].c = dbl[i].o + 0.5; dbl[i].h = dbl[i].c + 0.2; dbl[i].l = dbl[i].o - 0.2; }
+  dbl[18].h = 103.4; dbl[18].l = 102.0;
+  for (let i = 19; i <= 29; i++){ dbl[i].o = 100.6; dbl[i].c = 100.4; dbl[i].h = 100.8; dbl[i].l = 100.0; }
+  for (let i = 30; i <= 33; i++){ dbl[i].o = dbl[i - 1].c + 0.1; dbl[i].c = dbl[i].o + 0.15; dbl[i].h = dbl[i].c + 0.1; dbl[i].l = dbl[i].o - 0.1; }
+  dbl[33].h = 103.8; dbl[33].l = 102.4;   /* higher price high, far weaker thrust */
+  for (let i = 34; i < 46; i++){ dbl[i].o = 100.5; dbl[i].c = 100.3; dbl[i].h = 100.7; dbl[i].l = 99.9; }
+  const dv = RD(dbl);
+  ok(dv && dv.dir === 'short' && /price HH \+ RSI LH/.test(dv.text),
+     'AU: price HH + RSI LH reads bearish regular divergence — got "' + (dv && dv.text) + '"');
+  ok(RD(null) === null && RD(dbl.slice(0, 20)) === null, 'AU: garbage/thin rows -> null, never throws');
+  const flat120 = [];
+  for (let i = 0; i < 120; i++) flat120.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 1000 });
+  ok(RD(flat120) === null, 'AU: perfectly flat tape -> no fabricated divergence');
 }
 
 console.log('\n' + passed + ' assertions passed');

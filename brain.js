@@ -1250,7 +1250,11 @@ async function fetchCandleQueue(rows, uni, stat, t0){
         fetch4h(crow).then(function(r4){ crow.rows4h = r4; },
                            function(){ crow.rows4h = null; }),
         fetch1h(crow).then(function(r1){ crow.rows1h = r1; },
-                           function(){ crow.rows1h = null; })
+                           function(){ crow.rows1h = null; }),
+        fetchFunding(crow).then(function(fh){ crow.fundHist = fh; },
+                               function(){ crow.fundHist = null; }),
+        fetchBook(crow).then(function(bk){ crow.bookDepth = bk; },
+                             function(){ crow.bookDepth = null; })
       ]);
     }));
     out.fetched += chunk.length;
@@ -1576,6 +1580,265 @@ function applyVolreg(rows){
     }
   }catch(e){}
 }
+/* =========================================================================
+TIER-2/3 CONVICTION LAYERS — all free data, all honest degradation:
+  FUNDZ ('fundz', context)   funding-rate Z-SCORE vs the symbol's own
+    history (Binance /fapi/v1/fundingRate, ~30d). The absolute 0.1%/8h
+    guard stays; this adds the RELATIVE read: z <= -2 behind a LONG (shorts
+    crowded vs own history) votes the fade; z >= 2 behind it cautions the
+    squeeze. SHORT mirrors. Endpoint absent/failed -> silent, never dark.
+  BTCREL ('btcrel', context guard) BTC relative strength from the rows the
+    scan already fetched (20-bar 4h return). Only speaks when BTC is TRENDING
+    (|rB| >= 1%): BTC strong + alt LONG lagging >= 3% -> caution (tide
+    against); alt LONG outperforming >= 5% -> RS-leader context vote (the
+    APEX logic, wired in). BTC weak -> alt LONG caution, short note. Flat
+    BTC -> silent everywhere. BTC row itself is the benchmark, never voted.
+  DIV ('div', context)      regular RSI-14 divergence on the fetched 4h
+    rows — the divergence tab's own gates (2 valid pivots, span >= 10 bars,
+    newest <= 15 bars old). WITH the row's bias -> context vote; AGAINST ->
+    caution; none -> silent.
+  BOOK ('book', guard)      Binance top-20 depth imbalance (proxy for the
+    same asset — deepest book in the world). LONG: asks >= 1.5x bids ->
+    'book stacked against' caution; bids >= 1.5x asks -> supported note;
+    total top-20 depth < $200k -> thin-book slippage caution. SHORT mirrors.
+    Fetch failed / non-Binance listing -> silent.
+========================================================================= */
+function binanceSymFor(cand){
+  try{
+    var al = (cand && Array.isArray(cand.aliases)) ? cand.aliases : [];
+    for (var i = 0; i < al.length; i++){
+      if (/USDT$/.test(al[i]) && al[i].indexOf('-') === -1) return al[i];
+    }
+    if (cand && cand.base && /^[A-Z0-9]+$/.test(cand.base)) return cand.base + 'USDT';
+  }catch(e){}
+  return null;
+}
+async function fetchFunding(cand){
+  try{
+    if (typeof G.binanceFundingHist !== 'function') return null;
+    var sym = binanceSymFor(cand);
+    if (!sym) return null;
+    var r = await withTimeout(G.binanceFundingHist(sym, 100), TUN.fetchMs);
+    return (r && r.length) ? r : null;
+  }catch(e){ return null; }
+}
+async function fetchBook(cand){
+  try{
+    if (typeof G.binanceDepth !== 'function') return null;
+    var sym = binanceSymFor(cand);
+    if (!sym) return null;
+    var r = await withTimeout(G.binanceDepth(sym, 20), TUN.fetchMs);
+    return (r && isFinite(+r.bidUsd) && isFinite(+r.askUsd)) ? r : null;
+  }catch(e){ return null; }
+}
+function fundingZ(hist){
+  try{
+    if (!Array.isArray(hist) || hist.length < 10) return NaN;
+    var n = hist.length, mean = 0, i;
+    for (i = 0; i < n; i++) mean += +hist[i].rate;
+    mean /= n;
+    var v = 0;
+    for (i = 0; i < n; i++){ var d = +hist[i].rate - mean; v += d * d; }
+    var sd = Math.sqrt(v / n);
+    if (!(sd > 0)) return NaN;
+    return Math.round(((+hist[n - 1].rate - mean) / sd) * 100) / 100;
+  }catch(e){ return NaN; }
+}
+function applyFundz(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      var z = fundingZ(row.fundHist), dir = row.dec.dir;
+      if (!isFinite(z)){
+        row.col.silent.push('fundz');
+        colNote(row.col, 'fundz', 'SILENT', 'no funding history — z-score unread');
+        continue;
+      }
+      var crowdLong = z >= 2, crowdShort = z <= -2;
+      if ((dir === 'long' && crowdShort) || (dir === 'short' && crowdLong)){
+        row.col.votes.push({ layer: 'fundz', vote: dir, kind: 'context',
+          text: 'funding z ' + (z > 0 ? '+' : '') + z + ' — ' + (dir === 'long' ? 'shorts' : 'longs')
+            + ' crowded vs own 30d history, fade fuel' });
+        colNote(row.col, 'fundz', String(dir).toUpperCase(),
+          'z ' + (z > 0 ? '+' : '') + z + ' vs own history — crowd on the other side');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if ((dir === 'long' && crowdLong) || (dir === 'short' && crowdShort)){
+        var ctxt = 'funding z +' + z + ' — ' + (dir === 'long' ? 'longs' : 'shorts')
+          + ' crowded vs own 30d history, squeeze risk';
+        row.col.votes.push({ layer: 'fundz', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+        colNote(row.col, 'fundz', 'CAUTION', ctxt);
+      }else{
+        row.col.silent.push('fundz');
+        colNote(row.col, 'fundz', 'SILENT', 'z ' + (z > 0 ? '+' : '') + z + ' inside ±2 — no crowd extreme');
+      }
+    }
+  }catch(e){}
+}
+function ret20(rows){
+  try{
+    var n = rows.length;
+    if (n < 22) return NaN;
+    var a = +rows[n - 21].c, b = +rows[n - 1].c;
+    if (!isFinite(a) || !isFinite(b) || a <= 0) return NaN;
+    return ((b - a) / a) * 100;
+  }catch(e){ return NaN; }
+}
+function applyBtcrel(rows){
+  try{
+    var btc = null, i;
+    for (i = 0; i < rows.length; i++){
+      if (rows[i] && rows[i].base === 'BTC'){ btc = rows[i]; break; }
+    }
+    if (!btc || !Array.isArray(btc.rows4h)) return;
+    var rB = ret20(btc.rows4h);
+    if (!isFinite(rB) || Math.abs(rB) < 1) return;   /* flat BTC: no tide to read */
+    var btcUp = rB > 0;
+    for (i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || row.base === 'BTC') continue;
+      if (!Array.isArray(row.rows4h)) continue;
+      var rA = ret20(row.rows4h);
+      if (!isFinite(rA)) continue;
+      var spread = rB - rA, dir = row.dec.dir;
+      if (dir === 'long'){
+        if (btcUp && spread >= 3){
+          var ctxt = 'BTC +' + FMT(rB, 1) + '% vs ' + FMT(rA, 1) + '% over 80h — alts bleed against a strong BTC, longs fight the tide';
+          row.col.votes.push({ layer: 'btcrel', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+          colNote(row.col, 'btcrel', 'CAUTION', ctxt);
+        }else if (spread <= -5){
+          row.col.votes.push({ layer: 'btcrel', vote: 'long', kind: 'context',
+            text: 'outperforming BTC by ' + FMT(-spread, 1) + '% over 80h — relative-strength leader' });
+          colNote(row.col, 'btcrel', 'LONG', 'RS leader — +' + FMT(-spread, 1) + '% vs BTC over 80h');
+          row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+        }else{
+          row.col.silent.push('btcrel');
+          colNote(row.col, 'btcrel', 'SILENT', 'BTC ' + (btcUp ? '+' : '') + FMT(rB, 1) + '%, spread ' + FMT(spread, 1) + '% — no tide edge');
+        }
+      }else{
+        if (!btcUp && -spread >= 3){
+          var ctxt2 = 'BTC ' + FMT(rB, 1) + '% — falling tide lifts shorts, but ' + FMT(rA, 1) + '% own move means the easy part is done';
+          colNote(row.col, 'btcrel', 'NEUTRAL', ctxt2);
+        }else{
+          row.col.silent.push('btcrel');
+          colNote(row.col, 'btcrel', 'SILENT', 'BTC ' + (btcUp ? '+' : '') + FMT(rB, 1) + '%, spread ' + FMT(spread, 1) + '% — no tide edge');
+        }
+      }
+    }
+  }catch(e){}
+}
+function rsiSeries(closes, p){
+  try{
+    if (closes.length < p + 1) return null;
+    var gains = 0, losses = 0, out = new Array(closes.length).fill(null), i;
+    for (i = 1; i <= p; i++){
+      var d = closes[i] - closes[i - 1];
+      if (d >= 0) gains += d; else losses -= d;
+    }
+    var ag = gains / p, al = losses / p;
+    out[p] = (al === 0) ? 100 : 100 - 100 / (1 + ag / al);
+    for (i = p + 1; i < closes.length; i++){
+      var d2 = closes[i] - closes[i - 1];
+      ag = (ag * (p - 1) + (d2 > 0 ? d2 : 0)) / p;
+      al = (al * (p - 1) + (d2 < 0 ? -d2 : 0)) / p;
+      out[i] = (al === 0) ? 100 : 100 - 100 / (1 + ag / al);
+    }
+    return out;
+  }catch(e){ return null; }
+}
+function rsiDivergence(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 40) return null;
+    var closes = [];
+    for (var i = 0; i < rows.length; i++) closes.push(+rows[i].c);
+    var rsi = rsiSeries(closes, 14);
+    if (!rsi) return null;
+    var piv = pivotScan(rows), n = rows.length;
+    function divFor(pivots, isHigh){
+      if (pivots.length < 2) return null;
+      var p2 = pivots[pivots.length - 1], p1 = pivots[pivots.length - 2];
+      var span = p2[1] - p1[1];
+      if (span < 10) return null;
+      if ((n - 1 - p2[1]) > 15) return null;
+      var r1 = rsi[p1[1]], r2 = rsi[p2[1]];
+      if (!isFinite(r1) || !isFinite(r2)) return null;
+      if (isHigh && p2[0] > p1[0] && r2 < r1)
+        return { dir: 'short', text: 'price HH + RSI LH over ' + span + ' bars — bearish regular divergence' };
+      if (!isHigh && p2[0] < p1[0] && r2 > r1)
+        return { dir: 'long', text: 'price LL + RSI HL over ' + span + ' bars — bullish regular divergence' };
+      return null;
+    }
+    return divFor(piv.hs, true) || divFor(piv.ls, false);
+  }catch(e){ return null; }
+}
+function applyDiv(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      if (!Array.isArray(row.rows4h) || row.rows4h.length < 40) continue;
+      var d = rsiDivergence(row.rows4h), dir = row.dec.dir;
+      if (d && d.dir === dir){
+        row.col.votes.push({ layer: 'div', vote: dir, kind: 'context', text: d.text + ' on 4H' });
+        colNote(row.col, 'div', String(dir).toUpperCase(), d.text);
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if (d){
+        var ctxt = d.text + ' — AGAINST the ' + dir.toUpperCase() + ' bias, momentum disagreement';
+        row.col.votes.push({ layer: 'div', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+        colNote(row.col, 'div', 'CAUTION', ctxt);
+      }else{
+        row.col.silent.push('div');
+        colNote(row.col, 'div', 'SILENT', 'no qualifying regular divergence (pivot/span/freshness gates)');
+      }
+    }
+  }catch(e){}
+}
+function applyBook(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      var bk = row.bookDepth;
+      if (!bk || !(+bk.bidUsd >= 0) || !(+bk.askUsd >= 0)){
+        row.col.silent.push('book');
+        colNote(row.col, 'book', 'SILENT', 'no Binance depth for this asset — book unread');
+        continue;
+      }
+      var tot = +bk.bidUsd + +bk.askUsd, dir = row.dec.dir;
+      if (tot < 200000){
+        var thin = 'thin book — $' + FMT(tot / 1000, 0) + 'k top-20 depth, slippage on the limit fill (Binance proxy)';
+        row.col.votes.push({ layer: 'book', vote: 'neutral', kind: 'context', caution: true, text: thin });
+        colNote(row.col, 'book', 'CAUTION', thin);
+        continue;
+      }
+      var ratio = (+bk.askUsd > 0) ? (+bk.bidUsd) / (+bk.askUsd) : 99;
+      var against = (dir === 'long' && ratio <= 0.67) || (dir === 'short' && ratio >= 1.5);
+      var supported = (dir === 'long' && ratio >= 1.5) || (dir === 'short' && ratio <= 0.67);
+      if (against){
+        var ctxt = 'book stacked against — ' + (dir === 'long' ? 'asks' : 'bids') + ' '
+          + FMT(dir === 'long' ? 1 / ratio : ratio, 1) + 'x ' + (dir === 'long' ? 'bids' : 'asks')
+          + ' (Binance proxy) — the pullback may overshoot the limit';
+        row.col.votes.push({ layer: 'book', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+        colNote(row.col, 'book', 'CAUTION', ctxt);
+      }else if (supported){
+        colNote(row.col, 'book', 'NEUTRAL', 'book supported — ' + (dir === 'long' ? 'bids' : 'asks')
+          + ' ' + FMT(dir === 'long' ? ratio : 1 / ratio, 1) + 'x ' + (dir === 'long' ? 'asks' : 'bids') + ' (Binance proxy)');
+      }else{
+        row.col.silent.push('book');
+        colNote(row.col, 'book', 'SILENT', 'book balanced at ' + FMT(ratio, 2) + ' bid/ask — no edge claimed');
+      }
+    }
+  }catch(e){}
+}
+
 /* =========================================================================
 LIQPOOL MAGNET GUARD ('liqpool', context) — the stop-hunt read. Runs AFTER
 planning (it needs the plan's stop/T1) on the row's own 4h candles via
@@ -2876,7 +3139,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','session'];
+                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','fundz','btcrel','div','book','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
 
 function auditLineHTML(label, status, text){
@@ -3453,6 +3716,10 @@ async function runBrain(el){
       applyTrend4h(rows);
       applyMtf(rows);
       applyVolreg(rows);
+      applyFundz(rows);
+      applyBtcrel(rows);
+      applyDiv(rows);
+      applyBook(rows);
       bk = bucketRows(rows);   /* re-bucket after promotions/dark caps */
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -3674,6 +3941,10 @@ async function runQuick(el){
       applyTrend4h(rows);
       applyMtf(rows);
       applyVolreg(rows);
+      applyFundz(rows);
+      applyBtcrel(rows);
+      applyDiv(rows);
+      applyBook(rows);
       bk = bucketRows(rows);
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -4049,6 +4320,9 @@ G.__hgBrainMtf = { resampleDaily: resampleDaily, dailySide: dailySide };
 G.__hgBrainAtrPct = atrPercentile;
 G.__hgBrainSession = sessionWindow;
 G.__hgBrainLiqpool = liqpoolNote;
+/* Tier-2/3 seams: pure math for the vm suites */
+G.__hgBrainFundZ = fundingZ;
+G.__hgBrainRsiDiv = rsiDivergence;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
