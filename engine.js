@@ -153,8 +153,8 @@ var FUND_DIR         = 0.04;     // funding against dir veto (swing G4)
 var ATRPCT_MIN       = 0.05;     // ATR < 0.05% of price = dead book
 var ATRPCT_MAX       = 25;       // ATR > 25% of price = untradeable
 var ANCHOR_MAX_ATR   = 1.5;      // max distance from EMA21 in ATRs (swing)
-var CHUNK            = 4;
-var CHUNK_SLEEP_MS   = 150;
+var CHUNK            = 6;
+var CHUNK_SLEEP_MS   = 100;
 var ASIDE_MAX        = 40;
 var XU_TIMEOUT_MS    = 12000;    // xuUniverse() / xuCandles() abort budget
 

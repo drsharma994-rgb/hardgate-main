@@ -266,7 +266,7 @@ var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
 var XU_CACHE_MS = 15 * 60 * 1000; /* mirror of xuniverse.js CACHE_MS (its documented contract) */
 /* vm-test seam: suites may shorten timeouts; production never touches this */
-var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 12000, engineWarmMs: 150000 };
+var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 12000, engineWarmMs: 240000 };
 /* the seam is this SAME object by reference — mutating window.brainTunables
    mutates what every withTimeout/watchdog reads */
 G.brainTunables = TUN;
