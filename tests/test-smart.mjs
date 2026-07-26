@@ -324,4 +324,49 @@ console.log('== smartCardHTML ==');
      'no-setup card: old informational text, no trade button');
 }
 
+/* ================= 8) +COINDCX twin mapping ================= */
+console.log('== smartCdcxMap ==');
+{
+  const perps = ['BTCUSDT', 'AEVOUSDT', 'SOLUSDT'];
+  const xu = [
+    { sym: 'B-BTC_USDT',  base: 'BTC',  exchange: 'cdcx' },
+    { sym: 'B-AEVO_USDT', base: 'AEVO', exchange: 'cdcx' },
+    { sym: 'B-SOL_USDT',  base: 'SOL',  exchange: 'cdcx' },
+    { sym: 'B-GHOST_USDT', base: 'GHOST', exchange: 'cdcx' },
+    { sym: 'ETHUSD',      base: 'ETH',  exchange: 'delta' },   /* other venue ignored */
+    null, {}
+  ];
+  const m = globalThis.smartCdcxMap(xu, perps);
+  ok(m.twinOf.BTCUSDT === 'B-BTC_USDT' && m.twinOf.AEVOUSDT === 'B-AEVO_USDT' && m.twinOf.SOLUSDT === 'B-SOL_USDT',
+     'every CoinDCX row with a Binance twin maps base -> twin sym');
+  ok(!m.twinOf.GHOSTUSDT && m.noTwin.length === 1 && m.noTwin[0] === 'B-GHOST_USDT',
+     'CoinDCX-only contracts are named, never fabricated — GHOST has no positioning data anywhere');
+  ok(!m.twinOf.ETHUSDT, 'delta rows never enter the CoinDCX map');
+  const g = globalThis.smartCdcxMap(null, null);
+  ok(Object.keys(g.twinOf).length === 0 && g.noTwin.length === 0, 'garbage input -> empty map, never throws');
+}
+
+/* ================= 9) venue stamping on the card ================= */
+console.log('== venue stamping (COINDCX chip + toTrade target) ==');
+{
+  const clsL = { dir: 'long', longEv: ['trend fuel: price+OI rising'], shortEv: [], regime: ['new longs entering'], score: 1, total: 1 };
+  const base = { sym: 'AEVOUSDT', tick: { symbol: 'AEVOUSDT', mark: 1, chg24: 3, turnoverUsd: 5e7 },
+                 markPrice: 1.02, fundingPct: 0.01, oiUsd: 1.2e6, oiChgPct: 2,
+                 retailLongPct: 50, topLongPct: 55, takerRatio: 1.15, cls: clsL,
+                 venue: 'cdcx', venueSym: 'B-AEVO_USDT' };
+  const setup = { type: 'SWING', dir: 'long', entry: 1.02, stop: 0.99, t1: 1.08, t2: 1.12,
+                  rr1: 2, rr2: 3.5, riskPct: 2.9, confirmed: true, note: '' };
+  const h = globalThis.smartCardHTML(Object.assign({ setup: setup }, base));
+  ok(h.indexOf('B-AEVO_USDT') !== -1 && h.indexOf('>COINDCX<') !== -1,
+     'COINDCX-stamped card shows the CoinDCX sym + venue chip');
+  ok(h.indexOf('positioning via AEVOUSDT on Binance') !== -1,
+     'the chip honestly names the Binance twin the positioning came from');
+  ok(h.indexOf('toTrade(&quot;B-AEVO_USDT&quot;') !== -1,
+     'the trade handoff targets the CoinDCX contract, not the twin');
+  const h2 = globalThis.smartCardHTML(Object.assign({ setup: setup },
+    Object.assign({}, base, { venue: undefined, venueSym: undefined })));
+  ok(h2.indexOf('AEVOUSDT') !== -1 && h2.indexOf('>COINDCX<') === -1,
+     'plain Binance rows carry no venue chip');
+}
+
 console.log(`\nALL ${passed} SMART-MONEY ASSERTIONS PASSED`);

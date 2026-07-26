@@ -439,9 +439,13 @@ table tr:hover td{background:rgba(217,164,65,.045)}
     <h2>Smart Money — Binance positioning <span>100% free fapi data · funding · OI · retail vs top traders · taker flow</span></h2>
     <div class="row">
       <button class="btn" id="smartRun" onclick="runSmartScan()">RUN SCAN</button>
+      <select id="smartVenue" onchange="setSmartVenue(this.value)" title="BINANCE ONLY = the classic scan · +COINDCX = also cover every CoinDCX contract that has a Binance twin — positioning is a property of the asset, honestly stamped; CoinDCX-only contracts are named (no positioning data exists for them)">
+        <option value="binance">BINANCE ONLY</option>
+        <option value="cdcx">+COINDCX</option>
+      </select>
       <span class="note" id="smartStat"></span>
     </div>
-    <div class="note" style="margin-top:8px">Evidence, not signals — now with executable plans. Every card tallies independent positioning reads: <b>price/OI regime</b> (new-longs trend fuel · short-covering fade · new-shorts fuel · long capitulation), <b>funding crowding</b> (|f| ≥ 0.05%/8h — fade the crowded side), <b>retail contrarian</b> (≥65% / ≤35% long), <b>smart-money divergence</b> (top traders vs retail ≥15pp — follow top traders), <b>taker imbalance</b> (≥1.1 / ≤0.9). Direction = evidence majority; cards with a majority get a <b>SWING</b> (continuation — 4H structure stop, 2R/3.5R) or <b>SCALP</b> (reversion — stop beyond the 24h extreme, 1.5R/2.5R, 24h time-stop) plan with entry · stop · targets and a one-click handoff to TRADE PLAN; CONFIRMED means the 4H EMA20/50 cascade agrees. Universe: the full Binance USDT-perp list with ≥$5M 24h turnover, screened to |24h move| ≥ 2% or top-120 turnover. Funding/OI/retail positioning exists only on Binance — Delta/CoinDCX expose no such fields; their full perp universes are structure-scanned on the SWING/SCALP tabs.</div>
+    <div class="note" style="margin-top:8px">Evidence, not signals — now with executable plans. Every card tallies independent positioning reads: <b>price/OI regime</b> (new-longs trend fuel · short-covering fade · new-shorts fuel · long capitulation), <b>funding crowding</b> (|f| ≥ 0.05%/8h — fade the crowded side), <b>retail contrarian</b> (≥65% / ≤35% long), <b>smart-money divergence</b> (top traders vs retail ≥15pp — follow top traders), <b>taker imbalance</b> (≥1.1 / ≤0.9). Direction = evidence majority; cards with a majority get a <b>SWING</b> (continuation — 4H structure stop, 2R/3.5R) or <b>SCALP</b> (reversion — stop beyond the 24h extreme, 1.5R/2.5R, 24h time-stop) plan with entry · stop · targets and a one-click handoff to TRADE PLAN; CONFIRMED means the 4H EMA20/50 cascade agrees. Universe: the full Binance USDT-perp list with ≥$5M 24h turnover, screened to |24h move| ≥ 2% or top-120 turnover. Funding/OI/retail positioning exists only on Binance — Delta/CoinDCX expose no such fields; their full perp universes are structure-scanned on the SWING/SCALP tabs. <b>+COINDCX mode</b>: every CoinDCX contract with a Binance twin is scanned through the twin (positioning is a property of the asset — the card says so and hands off to CoinDCX); contracts with no twin are named honestly, never fabricated.</div>
     <div class="prog" id="smartProg"><i></i></div>
   </div>
   <div id="smartGold"></div>
@@ -1380,11 +1384,14 @@ function smartCardHTML(r){
       + ' · T2 <b>' + px(s.t2) + '</b> (' + fmt(s.rr2, 1) + 'R) · risk ' + fmt(s.riskPct, 2) + '%' + (s.note ? ' — ' + s.note : '')
     : regime + 'Direction is an evidence majority, not a signal — confirm 4H structure, funding window and R:R on the SWING/SCALP tab before trading it.';
   const tradeBtn = s ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
+      + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  const venueChip = r.venue === 'cdcx'
+    ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
+    : '';
   return '<div class="card ' + r.cls.dir + '">'
-    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE' + badge + '</span></div>'
+    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE' + badge + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">mark</span><span>' + px(r.markPrice) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.tick && r.tick.chg24 !== null ? pct(r.tick.chg24, 2) : '—') + '</span>'
@@ -1403,6 +1410,33 @@ function smartCardHTML(r){
     + '</div>';
 }
 
+/* <<< SMART MONEY: +COINDCX mode — map CoinDCX universe rows onto their
+   Binance twin by base asset. Positioning is a property of the ASSET: a
+   CoinDCX contract whose base trades on Binance gets the full positioning
+   read through the twin, honestly stamped; contracts with no twin are
+   named (no positioning data exists for them anywhere). PURE, testable. */
+function smartCdcxMap(xuItems, binancePerps){
+  const out = { twinOf: {}, extras: [], noTwin: [] };
+  try{
+    const binSet = {};
+    (binancePerps || []).forEach(function(s){ binSet[s] = true; });
+    (xuItems || []).forEach(function(it){
+      if (!it || it.exchange !== 'cdcx' || !it.base) return;
+      const binSym = it.base + 'USDT';
+      if (binSet[binSym]) out.twinOf[binSym] = it.sym;
+      else out.noTwin.push(it.sym);
+    });
+  }catch(e){}
+  return out;
+}
+function setSmartVenue(v){
+  try{
+    const next = (v === 'cdcx') ? 'cdcx' : 'binance';
+    if ($('smartVenue')) $('smartVenue').value = next;
+    try{ localStorage.setItem('hgSmartVenue', next); }catch(e){}
+  }catch(e){}
+}
+
 async function runSmartScan(){
   const btn = $('smartRun'), cardsEl = $('smartCards'), emptyEl = $('smartEmpty'), statEl = $('smartStat'), goldEl = $('smartGold');
   btn.disabled = true; cardsEl.innerHTML = ''; goldEl.innerHTML = ''; emptyEl.style.display = 'none';
@@ -1413,8 +1447,26 @@ async function runSmartScan(){
     const perps = res[0], ticks = res[1];
     if (!perps.length || !ticks){ statEl.textContent = 'Binance universe unavailable (network issue?)'; return; }
     const scr = smartScreenCandidates(perps, ticks);
-    const uni = scr.universe, cands = scr.candidates;
-    statEl.textContent = 'universe ' + uni.length + ' perps ≥$5M · ' + cands.length + ' screened — deep scanning…';
+    const uni = scr.universe;
+    let cands = scr.candidates;
+    /* +COINDCX mode: every CoinDCX contract with a Binance twin joins the scan
+       through the twin; contracts without one are named on the stat line */
+    let cdcxInfo = null;
+    const venueMode = ($('smartVenue') ? $('smartVenue').value : 'binance');
+    if (venueMode === 'cdcx' && typeof xuUniverse === 'function'){
+      try{
+        const xu = await xuUniverse();
+        cdcxInfo = smartCdcxMap(xu, perps);
+        const inCands = {}; cands.forEach(function(s){ inCands[s] = true; });
+        Object.keys(cdcxInfo.twinOf).forEach(function(binSym){
+          if (!inCands[binSym] && ticks[binSym] && ticks[binSym].turnoverUsd >= SMART_MIN_TURNOVER) cdcxInfo.extras.push(binSym);
+        });
+        if (cdcxInfo.extras.length) cands = cands.concat(cdcxInfo.extras);
+      }catch(e){ cdcxInfo = { twinOf: {}, extras: [], noTwin: [], error: true }; }
+    }
+    statEl.textContent = 'universe ' + uni.length + ' perps ≥$5M · ' + cands.length + ' screened'
+      + (cdcxInfo ? ' · +' + Object.keys(cdcxInfo.twinOf).length + ' CoinDCX twins (' + cdcxInfo.extras.length + ' extra) · '
+        + cdcxInfo.noTwin.length + ' CoinDCX-only (no positioning data anywhere)' : '') + ' — deep scanning…';
     const results = []; let failed = 0;
     const CHUNK = 6;
     for (let ci = 0; ci < cands.length; ci += CHUNK){
@@ -1426,6 +1478,9 @@ async function runSmartScan(){
         try{
           const r = await smartScanSymbol(sym, ticks[sym]);
           if (!r){ failed++; return; }
+          /* CoinDCX twin stamping: the positioning read is the ASSET's — the
+             card names the CoinDCX contract and the Binance twin honestly */
+          if (cdcxInfo && cdcxInfo.twinOf[sym]){ r.venue = 'cdcx'; r.venueSym = cdcxInfo.twinOf[sym]; }
           r.cls = smartClassify(smartClsInput(r));
           if (!(r.cls.dir && Math.max(r.cls.longEv.length, r.cls.shortEv.length) >= 2)) return;
           r.setup = smartSetup(r.cls, r.rows4h, r.rows1h);
@@ -1477,8 +1532,11 @@ async function runSmartScan(){
     });
     const nSetup = results.filter(function(r){ return !!r.setup; }).length;
     const nConf = results.filter(function(r){ return r.setup && r.setup.confirmed; }).length;
+    const nCdcx = results.filter(function(r){ return r.venue === 'cdcx'; }).length;
     statEl.textContent = 'done · ' + nSetup + ' setups (' + nConf + ' confirmed) · ' + (results.length - nSetup) + ' context'
       + ' · universe ' + uni.length + ' perps ≥$5M (' + cands.length + ' screened)'
+      + (cdcxInfo ? ' · ' + nCdcx + ' CoinDCX-covered via Binance twin'
+        + (cdcxInfo.noTwin.length ? ' · ' + cdcxInfo.noTwin.length + ' CoinDCX-only: no positioning data exists for them (structure-only on BRAIN/SWING/SCALP)' : '') : '')
       + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
       + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0,5);
     if (!results.length) emptyEl.style.display = 'block';
@@ -3865,6 +3923,7 @@ function initAlerts(){
   try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
   try{ const tt = localStorage.getItem('hg_tg_token'); if (tt && $('tgToken')) $('tgToken').value = tt; }catch(e){}
   try{ const tc = localStorage.getItem('hg_tg_chat'); if (tc && $('tgChat')) $('tgChat').value = tc; }catch(e){}
+  try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
   updateAlertChip();
   if (saved === '1'){
     S.alertsOn = true;
