@@ -2199,6 +2199,7 @@ function ticketHTML(row, dir){
         + (isFinite(p.rr2) ? ' (' + FMT(p.rr2, 1) + 'R)' : '') : '')
       + (isFinite(p.riskPct) ? '<br>risk ' + FMT(p.riskPct, 2) + '% from entry' : '')
       + (limitish ? '<br>limit working ~24h or until structure breaks' : '')
+      + familyLineHTML(p)
       + '</div>'
       + ticketTradeBtn(row, dir)
       + '</div>';
@@ -2259,6 +2260,94 @@ function paintEntryTickets(el, rows){
        (alert keys stay stable), zero extra fetches */
     paintLimitBoard(el, rows);
   }catch(e){ /* the ticket is additive — the scan render stands without it */ }
+}
+
+/* =========================================================================
+FAMILY HIT-RATES — every board/ticket card shows how ITS OWN setup family
+has actually performed in this browser's Setup Log (the honest audit:
+first touch of T1 or stop on closed candles, same-bar = SL, exp excluded,
+time_stop = -0.1R — the log's own grading rules, never softened).
+Families: anchor-led limits (fvg / order-block / ema / swing-zone / pool /
+avwap) and the engine/smartSetup/hgPlanLevels sources. Board plans are
+auto-logged with the family as kind (the log's 12h sym+dir+kind dedupe
+applies), so the stats build from the day this ships — an empty family
+says so honestly, never a borrowed track record from another family.
+========================================================================= */
+function planFamily(p){
+  try{
+    if (!p) return 'unknown';
+    var an = String(p.anchorName || '');
+    if (/FVG/i.test(an)) return 'fvg-limit';
+    if (/order block/i.test(an)) return 'ob-limit';
+    if (/EMA\d+/i.test(an)) return 'ema-limit';
+    if (/swing-(high|low)/i.test(an)) return 'swing-zone-limit';
+    if (/pool/i.test(an)) return 'pool-limit';
+    if (/AVWAP/i.test(an)) return 'avwap-limit';
+    var src = String(p.src || '');
+    if (/smartSetup\s*SCALP/i.test(src)) return 'smart-scalp';
+    if (/smartSetup\s*SWING/i.test(src)) return 'smart-swing';
+    if (/engine/i.test(src)) return 'engine-plan';
+    if (/hgPlanLevels/i.test(src)) return 'gate-levels';
+    if (/gold/i.test(src)) return 'gold-plan';
+    return 'anchored-limit';
+  }catch(e){ return 'unknown'; }
+}
+var FAMILY_LABEL = {
+  'fvg-limit': 'FVG limits', 'ob-limit': 'OB limits', 'ema-limit': 'EMA limits',
+  'swing-zone-limit': 'swing-zone limits', 'pool-limit': 'pool limits',
+  'avwap-limit': 'AVWAP limits', 'smart-scalp': 'smart scalps',
+  'smart-swing': 'smart swings', 'engine-plan': 'engine plans',
+  'gate-levels': 'gate levels', 'gold-plan': 'gold plans',
+  'anchored-limit': 'anchored limits', 'unknown': 'this family'
+};
+/* pure stats over a log array — tp = win (+rr), sl = -1R, time_stop = -0.1R,
+   exp/open excluded. Returns null when no closed samples exist. */
+function familyStats(log, kind){
+  try{
+    if (!Array.isArray(log)) return null;
+    var tp = 0, sl = 0, ts = 0, sumR = 0;
+    for (var i = 0; i < log.length; i++){
+      var e = log[i];
+      if (!e || e.kind !== kind) continue;
+      if (e.status === 'tp'){ tp++; sumR += isFinite(+e.rr) ? +e.rr : 1.5; }
+      else if (e.status === 'sl'){ sl++; sumR -= 1; }
+      else if (e.status === 'time_stop'){ ts++; sumR += isFinite(+e.rr) ? +e.rr : -0.1; }
+    }
+    var n = tp + sl + ts;
+    if (!n) return null;
+    return { kind: kind, tp: tp, sl: sl, ts: ts, n: n,
+             hitPct: Math.round((tp / n) * 100), sumR: Math.round(sumR * 10) / 10 };
+  }catch(e){ return null; }
+}
+function familyLineHTML(p){
+  try{
+    var fam = planFamily(p);
+    var label = FAMILY_LABEL[fam] || fam;
+    var st = (typeof G.loadLog === 'function') ? familyStats(G.loadLog(), fam) : null;
+    if (!st) return '<br><span style="color:#6d7684">history: no closed ' + esc(label)
+      + ' in the Setup Log yet — the family record builds from here</span>';
+    var col = st.hitPct >= 55 ? '#5fbf8f' : (st.hitPct >= 40 ? '#d8a24a' : '#e4586b');
+    return '<br><span style="color:' + col + '">history: ' + esc(label) + ' '
+      + st.tp + '/' + st.n + ' (' + st.hitPct + '%) · Σ'
+      + (st.sumR > 0 ? '+' : '') + st.sumR + 'R'
+      + (st.ts ? ' · ' + st.ts + ' time-stopped' : '')
+      + (st.n < 8 ? ' · thin sample' : '') + '</span>';
+  }catch(e){ return ''; }
+}
+/* auto-log the board's plans with the family as kind — dedupe inside
+   logSetup (12h sym+dir+kind) keeps repeat scans from flooding */
+function logBoardSetups(rows){
+  try{
+    if (typeof G.logSetup !== 'function') return;
+    rows = Array.isArray(rows) ? rows : [];
+    for (var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (!r || !r.plan || !r.dec || (r.dec.dir !== 'long' && r.dec.dir !== 'short')) continue;
+      var p = r.plan;
+      if (!isFinite(+p.entry) || !isFinite(+p.stop) || !isFinite(+p.t1)) continue;
+      try{ G.logSetup(String(r.sym), r.dec.dir, planFamily(p), +p.entry, +p.stop, +p.t1); }catch(e){}
+    }
+  }catch(e){}
 }
 
 /* =========================================================================
@@ -2406,6 +2495,7 @@ function boardCardHTML(c, stamp){
       + ' · R:R ' + FMT(rr1, 1)
       + (isFinite(p.cancelIf) && p.cancelIf !== null ? '<br>cancel if 4h closes beyond <b>' + PX(p.cancelIf) + '</b>' : '')
       + '<br><span style="color:#9aa6b5">' + esc(st.note) + ' · as of ' + esc(stamp) + '</span>'
+      + familyLineHTML(p)
       + '</div>'
       + ticketTradeBtn(row, dir)
       + '</div>';
@@ -2461,6 +2551,9 @@ function paintLimitBoard(el, rows){
     if (age) age.textContent = 'levels as of ' + stamp + (__sniper ? ' · SNIPER filter ON (limits ≥' + SNIPER_MIN_LEV + 'x-safe, in/approaching zone)' : '')
       + ' — refreshed by every synthesis, including the AUTO cycle';
     wrap.style.display = 'block';
+    /* family track records accrue from here: the board's plans auto-log with
+       their setup family (12h dedupe) so per-card hit-rates stay honest */
+    logBoardSetups(rows);
   }catch(e){ /* the board is additive — the ticket + cards stand without it */ }
 }
 
@@ -3625,6 +3718,9 @@ G.__hgBrainSniperLev = sniperLev;
 G.__hgBrainSniperOk = sniperOk;
 /* 1h-rescue chooser — (plan4h, plan1h) -> the tighter valid plan; pure */
 G.__hgBrainSniperPick = pickSniperPlan;
+/* family seams: plan -> family tag; (log, kind) -> honest stats; pure */
+G.__hgBrainPlanFamily = planFamily;
+G.__hgBrainFamStats = familyStats;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

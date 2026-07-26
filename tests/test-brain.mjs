@@ -3119,5 +3119,43 @@ console.log('== engine patience: the 12s cap loses, the 150s patience wins ==');
      'AQ: the engine survivor VOTES instead of the whole board going dark-aside');
 }
 
+/* ================= AR) FAMILY HIT-RATES — tags, stats, honesty ================= */
+console.log('== AR) family hit-rates ==');
+{
+  const PF = W.__hgBrainPlanFamily, FS = W.__hgBrainFamStats;
+  ok(typeof PF === 'function' && typeof FS === 'function', 'AR: family seams exposed');
+
+  /* family tagging */
+  ok(PF({ anchorName: '1h FVG' }) === 'fvg-limit', 'AR: 1h FVG anchor -> fvg-limit');
+  ok(PF({ anchorName: '4h order block top' }) === 'ob-limit', 'AR: OB anchor -> ob-limit');
+  ok(PF({ anchorName: 'EMA50(4h)' }) === 'ema-limit', 'AR: EMA anchor -> ema-limit');
+  ok(PF({ anchorName: 'swing-high zone' }) === 'swing-zone-limit', 'AR: swing zone -> swing-zone-limit');
+  ok(PF({ anchorName: 'sell-side equal-lows pool' }) === 'pool-limit', 'AR: pool anchor -> pool-limit');
+  ok(PF({ anchorName: 'AVWAP from the last swing low' }) === 'avwap-limit', 'AR: AVWAP anchor -> avwap-limit');
+  ok(PF({ src: 'smartSetup SCALP levels' }) === 'smart-scalp'
+     && PF({ src: 'smartSetup SWING levels' }) === 'smart-swing',
+     'AR: smartSetup srcs split scalp vs swing');
+  ok(PF({ src: 'gate engine' }) === 'engine-plan' && PF({ src: 'hgPlanLevels' }) === 'gate-levels',
+     'AR: engine and gate-levels sources map');
+  ok(PF(null) === 'unknown' && PF({}) === 'anchored-limit', 'AR: garbage -> safe tags, never throws');
+
+  /* stats over a synthetic log — the log's own grading rules */
+  const log = [
+    { kind: 'fvg-limit', status: 'tp', rr: 2.1 }, { kind: 'fvg-limit', status: 'tp', rr: 1.5 },
+    { kind: 'fvg-limit', status: 'sl' }, { kind: 'fvg-limit', status: 'time_stop', rr: -0.1 },
+    { kind: 'fvg-limit', status: 'exp' },   /* excluded */
+    { kind: 'fvg-limit', status: 'open' },  /* excluded */
+    { kind: 'ob-limit', status: 'sl' }
+  ];
+  const st = FS(log, 'fvg-limit');
+  ok(st && st.tp === 2 && st.sl === 1 && st.ts === 1 && st.n === 4,
+     'AR: tp/sl/time_stop counted, exp + open excluded');
+  ok(st.hitPct === 50 && st.sumR === 2.5, 'AR: hit% and ΣR by the log rules — got ' + (st && st.hitPct) + '% Σ' + (st && st.sumR));
+  ok(FS(log, 'ob-limit').n === 1 && FS(log, 'ob-limit').hitPct === 0,
+     'AR: a losing family reads 0% honestly, never hidden');
+  ok(FS(log, 'pool-limit') === null && FS(null, 'fvg-limit') === null && FS('x', 1) === null,
+     'AR: no closed samples / garbage -> null, never invented');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);
