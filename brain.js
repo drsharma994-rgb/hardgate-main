@@ -1191,6 +1191,29 @@ async function fetch4h(cand){
   return null;
 }
 
+/* 1h rows for one candidate — same routes, same never-throws contract; the
+   queue fetches this leg in parallel with the 4h leg for the MTF layer */
+async function fetch1h(cand){
+  try{
+    if (cand.xu){
+      if (typeof G.xuCandles === 'function'){
+        var rx = await withTimeout(G.xuCandles(cand.xu, '1h', KLINES_1H));
+        if (rx && rx.length) return rx;
+      }
+      return null;
+    }
+    if (typeof G.getCandles === 'function'){
+      var rg = await withTimeout(G.getCandles(cand.sym, '1h', KLINES_1H));
+      if (rg && rg.length) return rg;
+    }
+    if (typeof G.binanceKlines === 'function'){
+      var rb = await withTimeout(G.binanceKlines(cand.sym, '1h', KLINES_1H));
+      if (rb && rb.length) return rb;
+    }
+  }catch(e){}
+  return null;
+}
+
 /* bounded lazy 4h fetching for a WATCH-or-better row set: tier/evidence
    order, CHUNK_SIZE in flight, per-symbol catch isolation, FETCH_CAP/scan,
    and a scan-level watchdog (TUN.scanMs) that stops LAUNCHING new work when
@@ -1221,8 +1244,14 @@ async function fetchCandleQueue(rows, uni, stat, t0){
     try{ stat.textContent = fi + '/' + queue.length + ' candidates · delta '
       + uni.counts.delta + ' · cdcx ' + uni.counts.cdcx; }catch(e){}
     await settle(chunk.map(function(crow){
-      return fetch4h(crow).then(function(r4){ crow.rows4h = r4; },
-                                function(){ crow.rows4h = null; });
+      /* 4h + 1h legs in parallel per candidate: the 1h leg feeds the MTF
+         layer and doubles as the sniper-rescue cache — one wall-clock cost */
+      return Promise.all([
+        fetch4h(crow).then(function(r4){ crow.rows4h = r4; },
+                           function(){ crow.rows4h = null; }),
+        fetch1h(crow).then(function(r1){ crow.rows1h = r1; },
+                           function(){ crow.rows1h = null; })
+      ]);
     }));
     out.fetched += chunk.length;
   }
@@ -1259,6 +1288,7 @@ function judgeCrypto(cand, snap){
   /* funding contrarian layer — extreme funding AGAINST the decided direction
      becomes a named context vote before the quality gates evaluate the tier */
   applyFunding(row);
+  applySession(row);
   dec = row.dec;
   /* radar quality gates — post-decide demotions + cautions (brainDecide stays
      pure). A demotion's reason LEADS the row's reasons so the ASIDE ledger
@@ -1402,8 +1432,182 @@ function applyTrend4h(rows){
 }
 
 /* =========================================================================
+MTF ALIGN LAYER ('mtf', structural) — the conviction multiplier. A WATCH-or-
+better row earns a STRUCTURAL vote only when ALL THREE timeframes agree with
+the decided bias:
+  1D leg  resampled from the fetched 4h candles (6 bars -> 1 day): swing
+          structure (HH/LL) + close vs EMA9 side
+  4H leg  the existing TREND4H read (EMA20/EMA50 + structure break)
+  1H leg  the same read on the parallel-fetched 1h candles
+3/3 agreement -> named structural vote, row re-decided (promotions land
+through the same pure brainDecide). A 1D leg AGAINST the bias -> a named
+CAUTION guard, never a silent kill. Anything else -> silent with the failing
+legs named. A missing 1h leg is named, never dark-invented.
+VOL REGIME LAYER ('volreg', context) — same pass, zero extra fetches: the
+current ATR14's percentile rank over the fetched window. 30-80th pct =
+'healthy trend vol' context vote; <20th = dead-tape CAUTION; >90th =
+climax-vol CAUTION; transition bands stay silent.
+SESSION LAYER ('session', context) — clock-only, negative-only by design:
+off-hours tape (Sunday or 01:00-05:30 IST) earns a CAUTION guard (thin
+liquidity, worse fills). It NEVER votes direction — a uniform free vote
+would distort every tier at once. The current window also rides board
+cards as a chip (kill-zone aware, same windows as the gold lane).
+========================================================================= */
+var MTF_MIN_ROWS = 60;
+function resampleDaily(rows){
+  var out = [];
+  try{
+    for (var i = 0; i + 6 <= rows.length; i += 6){
+      var seg = rows.slice(i, i + 6), o = +seg[0].o, h = -Infinity, l = Infinity, c = +seg[5].c, v = 0, ok = true;
+      for (var k = 0; k < 6; k++){
+        var hk = +seg[k].h, lk = +seg[k].l;
+        if (!isFinite(hk) || !isFinite(lk) || !isFinite(o) || !isFinite(c)){ ok = false; break; }
+        if (hk > h) h = hk;
+        if (lk < l) l = lk;
+        v += +seg[k].v || 0;
+      }
+      if (ok) out.push({ t: seg[5].t, o: o, h: h, l: l, c: c, v: v });
+    }
+  }catch(e){}
+  return out;
+}
+function dailySide(rows4h){
+  try{
+    var d = resampleDaily(rows4h);
+    if (d.length < 10) return null;
+    var st = structureOf(d), e9 = emaLast(d, 9), c = +d[d.length - 1].c;
+    if (!isFinite(e9) || !isFinite(c)) return null;
+    if (st === 'HH' && c > e9) return 'long';
+    if (st === 'LL' && c < e9) return 'short';
+    if (!st){
+      /* monotonic trends print no 2-bar pullback pivots — fall back to the
+         EMA9 side + slope, still nothing but the candles speaking */
+      var e9prev = emaLast(d.slice(0, d.length - 3), 9);
+      if (isFinite(e9prev) && c > e9 && e9 > e9prev) return 'long';
+      if (isFinite(e9prev) && c < e9 && e9 < e9prev) return 'short';
+    }
+    return null;
+  }catch(e){ return null; }
+}
+function applyMtf(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      if (!Array.isArray(row.rows4h) || row.rows4h.length < MTF_MIN_ROWS) continue;  /* trend4h owns the dark note */
+      var d1 = dailySide(row.rows4h);
+      var h4r = trend4hAssess(row.rows4h), h4 = h4r ? h4r.dir : null;
+      var has1h = Array.isArray(row.rows1h) && row.rows1h.length >= MTF_MIN_ROWS;
+      var h1r = has1h ? trend4hAssess(row.rows1h) : null, h1 = h1r ? h1r.dir : null;
+      var dir = row.dec.dir;
+      if (d1 === dir && h4 === dir && h1 === dir){
+        row.col.votes.push({ layer: 'mtf', vote: dir, kind: 'structural',
+          text: '1D+4H+1H all read ' + dir.toUpperCase() + ' — timeframe-aligned' });
+        colNote(row.col, 'mtf', String(dir).toUpperCase(), '1D+4H+1H all read ' + dir.toUpperCase() + ' — timeframe-aligned');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if (d1 && d1 !== dir){
+        var ctxt = '1D structure reads ' + String(d1).toUpperCase() + ' — against the ' + dir.toUpperCase() + ' bias, daily headwind';
+        row.col.votes.push({ layer: 'mtf', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+        colNote(row.col, 'mtf', 'CAUTION', ctxt);
+      }else{
+        var misses = [];
+        if (d1 !== dir) misses.push(d1 ? '1D reads ' + String(d1).toUpperCase() : '1D no clean structure');
+        if (h4 !== dir) misses.push('4H not aligned');
+        if (!has1h) misses.push('1h leg missing');
+        else if (h1 !== dir) misses.push(h1 ? '1H reads ' + String(h1).toUpperCase() : '1H no clean break');
+        row.col.silent.push('mtf');
+        colNote(row.col, 'mtf', 'SILENT', 'not timeframe-aligned — ' + misses.join(' · '));
+      }
+    }
+  }catch(e){}
+}
+/* ATR14 percentile rank of the latest value over the fetched window */
+function atrPercentile(rows, p){
+  try{
+    if (!Array.isArray(rows) || rows.length < p * 3) return NaN;
+    var series = [];
+    for (var end = p + 1; end <= rows.length; end++){
+      var a = atrLast(rows.slice(0, end), p);
+      if (isFinite(a) && a > 0) series.push(a);
+    }
+    if (series.length < 10) return NaN;
+    var cur = series[series.length - 1], less = 0, eq = 0;
+    for (var i = 0; i < series.length; i++){
+      if (series[i] < cur) less++;
+      else if (series[i] === cur) eq++;
+    }
+    /* midrank: an all-equal (perfectly flat) series reads 50, not a fake 100 */
+    return Math.round(((less + 0.5 * eq) / series.length) * 100);
+  }catch(e){ return NaN; }
+}
+function applyVolreg(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      if (!Array.isArray(row.rows4h) || row.rows4h.length < MTF_MIN_ROWS) continue;
+      var pct = atrPercentile(row.rows4h, 14), dir = row.dec.dir;
+      if (!isFinite(pct)){
+        row.col.silent.push('volreg');
+        colNote(row.col, 'volreg', 'SILENT', 'ATR series too thin for an honest percentile');
+        continue;
+      }
+      if (pct < 20){
+        var dead = 'dead tape — ATR at the ' + pct + 'th percentile of its 20d range, trend entries starve in chop';
+        row.col.votes.push({ layer: 'volreg', vote: 'neutral', kind: 'context', caution: true, text: dead });
+        colNote(row.col, 'volreg', 'CAUTION', dead);
+      }else if (pct > 90){
+        var clim = 'climax volatility — ATR at the ' + pct + 'th percentile, late entries get wicked';
+        row.col.votes.push({ layer: 'volreg', vote: 'neutral', kind: 'context', caution: true, text: clim });
+        colNote(row.col, 'volreg', 'CAUTION', clim);
+      }else if (pct >= 30 && pct <= 80){
+        row.col.votes.push({ layer: 'volreg', vote: dir, kind: 'context',
+          text: 'vol regime healthy — ATR ' + pct + 'th percentile of 20d, room to move without chaos' });
+        colNote(row.col, 'volreg', String(dir).toUpperCase(), 'healthy trend vol — ATR ' + pct + 'th percentile');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else{
+        row.col.silent.push('volreg');
+        colNote(row.col, 'volreg', 'SILENT', 'ATR ' + pct + 'th percentile — transition band, no edge claimed');
+      }
+    }
+  }catch(e){}
+}
+/* session window (IST, gold-lane kill zones). now injectable for tests. */
+function sessionWindow(now){
+  try{
+    var d = now ? new Date(now) : new Date();
+    var ist = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60000);
+    var mins = ist.getHours() * 60 + ist.getMinutes(), day = ist.getDay();
+    var london = mins >= 750 && mins <= 930;    /* 12:30-15:30 IST */
+    var ny = mins >= 1050 && mins <= 1230;      /* 17:30-20:30 IST */
+    var dead = (day === 0) || (mins >= 60 && mins <= 390);  /* Sunday or 01:00-06:30 IST */
+    return { dead: dead, london: london, ny: ny,
+             label: dead ? 'off-hours (Sun/late-night IST)'
+                  : london ? 'London kill zone'
+                  : ny ? 'NY kill zone' : 'mid-session' };
+  }catch(e){ return { dead: false, london: false, ny: false, label: '—' }; }
+}
+function applySession(row){
+  try{
+    var sw = sessionWindow();
+    row.session = sw.label;
+    if (sw.dead){
+      var ctxt = 'off-hours tape (Sun / 01:00-06:30 IST) — thin liquidity, worse fills';
+      row.col.votes.push({ layer: 'session', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+      colNote(row.col, 'session', 'CAUTION', ctxt);
+      row.cautions = (row.cautions || []).concat([ctxt]);
+    }else{
+      colNote(row.col, 'session', 'NEUTRAL', sw.label + (sw.london || sw.ny ? ' — prime liquidity window' : ''));
+    }
+  }catch(e){}
+}
+
+/* =========================================================================
 STRUCTURE-ANCHORED LIMIT ENTRY PLANS — a WATCH-or-better row with fetched 4h
-candles gets a patient LIMIT at 4h structure instead of a market chase.
 Pure rows4h math, never a fabricated level:
   ATR14(4h)   Wilder-smoothed, SMA-seeded — the terminal's own convention.
   ANCHORS     LONG: the HIGHEST of {last confirmed swing-low zone top,
@@ -1941,23 +2145,24 @@ async function cryptoPlanXu(row, snap){
     fbNote = (ap && ap.note) ? ap.note : '';
   }catch(e){ ap = null; fbNote = ''; }
   /* 1H SNIPER RESCUE (combined): when the 4h anchor declined OR its stop is
-     wider than the 20x grade (stopDist > 3%), ONE bounded 1h fetch re-runs
-     the SAME pure planner on 1h candles — tighter zones, tighter ATR, nearer
-     targets (the day-trade timeframe). pickSniperPlan keeps the tighter
-     valid plan; the 4h plan wins ties (stronger structure). Budget: one
-     fetch (TUN.fetchMs), only for candidates that need it. */
-  if ((!(ap && ap.plan) || sniperLev(ap.plan.entry, ap.plan.stop) < SNIPER_MIN_LEV)
-      && __rescueFetches < RESCUE_CAP
-      && row.xu && typeof G.xuCandles === 'function'){
-    __rescueFetches++;
-    try{
-      var r1 = await withTimeout(G.xuCandles(row.xu, '1h', KLINES_1H), TUN.fetchMs);
-      if (r1 && r1.length){
+     wider than the 20x grade (stopDist > 3%), the SAME pure planner re-runs
+     on 1h candles — tighter zones, tighter ATR, nearer targets. The queue
+     already fetched the 1h leg for MTF; the bounded fetch (RESCUE_CAP) is
+     only the fallback for a missing leg. pickSniperPlan keeps the tighter
+     valid plan; the 4h plan wins ties (stronger structure). */
+  if (!(ap && ap.plan) || sniperLev(ap.plan.entry, ap.plan.stop) < SNIPER_MIN_LEV){
+    var r1 = (row.rows1h && row.rows1h.length) ? row.rows1h : null;
+    if (!r1 && __rescueFetches < RESCUE_CAP && row.xu && typeof G.xuCandles === 'function'){
+      __rescueFetches++;
+      try{ r1 = await withTimeout(G.xuCandles(row.xu, '1h', KLINES_1H), TUN.fetchMs); }catch(e){ r1 = null; }
+    }
+    if (r1 && r1.length){
+      try{
         var a1 = anchoredLimitPlan(row.dec.dir, r1, '1h');
         var pick1 = pickSniperPlan(ap && ap.plan, a1 && a1.plan);
         if (pick1 && !(ap && ap.plan && pick1 === ap.plan)) return { plan: pick1, rows: r1 };
-      }
-    }catch(e){ /* the 4h result stands */ }
+      }catch(e){ /* the 4h result stands */ }
+    }
   }
   if (ap && ap.plan) return { plan: ap.plan, rows: rows };
   if (typeof G.smartSetup === 'function' && rows.length >= 60){
@@ -2494,6 +2699,9 @@ function boardCardHTML(c, stamp){
       : esc((p.src ? String(p.src) + ' levels' : 'gate-engine levels') + (p.note ? ' — ' + p.note : ''));
     var rr1 = isFinite(p.rr1) ? p.rr1 : Math.abs(p.t1 - p.entry) / Math.abs(p.entry - p.stop);
     var levCol = c.lev >= SNIPER_MIN_LEV ? '#5fbf8f' : (c.lev >= 10 ? '#d8a24a' : '#6d7684');
+    var sw = sessionWindow();
+    var swCol = sw.dead ? '#6d7684' : (sw.london || sw.ny ? '#5fbf8f' : '#8fa0b8');
+    var swTxt = sw.london ? 'LONDON KZ' : sw.ny ? 'NY KZ' : sw.dead ? 'OFF-HOURS' : 'MID-SESSION';
     return '<div style="flex:1 1 300px;max-width:420px;border:1px solid rgba(143,160,184,.35);border-left:3px solid ' + col + ';border-radius:6px;'
       + 'background:rgba(255,255,255,.02);padding:10px 12px">'
       + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
@@ -2506,7 +2714,10 @@ function boardCardHTML(c, stamp){
       + ';border-radius:3px;padding:1px 5px" title="' + esc(st.note) + '">' + esc(st.label) + '</span>'
       + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + levCol + ';border:1px solid ' + levCol
       + ';border-radius:3px;padding:1px 5px" title="max safe leverage from the planner formula — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop">'
-      + c.lev + 'x SAFE</span></div>'
+      + c.lev + 'x SAFE</span>'
+      + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + swCol + ';border:1px solid ' + swCol
+      + ';border-radius:3px;padding:1px 5px" title="entry timing window (IST) — gold-lane kill zones; off-hours tape means thinner books and worse fills">'
+      + swTxt + '</span></div>'
       + '<div style="margin-top:6px;font-size:9px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
       + '<div style="font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.25">'
       + PX(p.entry) + '</div>'
@@ -2596,7 +2807,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','trend4h'];
+                          'engine','oiflow','squeeze','tape','liqs','trend4h','mtf','volreg','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
 
 function auditLineHTML(label, status, text){
@@ -3171,6 +3382,8 @@ async function runBrain(el){
          promote WATCH -> HIGH -> PRIME through the same pure brainDecide
          (bars never lowered); missing candles -> honestly dark, capped. */
       applyTrend4h(rows);
+      applyMtf(rows);
+      applyVolreg(rows);
       bk = bucketRows(rows);   /* re-bucket after promotions/dark caps */
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -3386,6 +3599,8 @@ async function runQuick(el){
       /* TREND4H over the freshly fetched rows — promotions re-decided, then
          re-bucketed exactly like the full scan */
       applyTrend4h(rows);
+      applyMtf(rows);
+      applyVolreg(rows);
       bk = bucketRows(rows);
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -3753,6 +3968,10 @@ G.__hgBrainFamStats = familyStats;
 /* sniper-grade seam: the current hit set (read-only; alert channels consume) */
 G.hgSniperState = function(){ try{ return __lastSniperHits; }catch(e){ return []; } };
 G.__hgBrainSniperHits = sniperHitsFrom;
+/* Tier-1 layer seams (vm suites): pure candle/clock math, never throw */
+G.__hgBrainMtf = { resampleDaily: resampleDaily, dailySide: dailySide };
+G.__hgBrainAtrPct = atrPercentile;
+G.__hgBrainSession = sessionWindow;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

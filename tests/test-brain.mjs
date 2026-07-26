@@ -692,30 +692,32 @@ tabT.mount(TT.pane);
 await runAndWait(TT.stubs);
 const tStat = TT.stubs['#brainStat'].textContent;
 const tCards = TT.stubs['#brainCards'].innerHTML;
-ok(tStat.indexOf('done · 1 PRIME · 0 HIGH · 4 watch · 1 aside') === 0,
-   'combined run buckets: 1 PRIME · 0 HIGH · 4 watch (DOGE radar: regime+rotation, G2 non-confirmation no longer kills) · 1 aside — got "' + tStat + '"');
+ok(tStat.indexOf('done · 1 PRIME · 3 HIGH · 1 watch · 1 aside') === 0,
+   'combined run buckets: 1 PRIME · 3 HIGH (ETH/SOL/XRP: the healthy-vol VOLREG vote lifts radar+3 to HIGH) · 1 watch (DOGE radar+volreg) · 1 aside — got "' + tStat + '"');
 ok(tStat.indexOf('universe 5 (delta 3 + cdcx 2)') >= 0, 'summary gains combined per-exchange counts');
-ok(tStat.indexOf('1 prime/high · 4 watch') >= 0, 'summary gains prime/high + watch tallies');
-ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 1 prime/high · 4 watch',
+ok(tStat.indexOf('4 prime/high · 1 watch') >= 0, 'summary gains prime/high + watch tallies');
+ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 4 prime/high · 1 watch',
    'MARKET READ header carries the combined counts — got "' + TT.stubs['#brainReadUni'].textContent + '"');
-ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 5 LAYERS') >= 0 && tCards.indexOf('>LONG</span>') >= 0,
-   'BTC card renders under the cdcx sym via alias-matched Binance-keyed layer votes');
+ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 6 LAYERS') >= 0 && tCards.indexOf('>LONG</span>') >= 0,
+   'BTC card renders under the cdcx sym via alias-matched Binance-keyed layer votes (6 layers with VOLREG)');
 ok(tCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && tCards.indexOf('COINDCX') >= 0
    && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
    'engine plan + COINDCX venue stamp + xu-sym toTrade payload on the card');
 const xu4h = xuCalls.filter(function(c){ return c.tf === '4h'; }), xu1h = xuCalls.filter(function(c){ return c.tf === '1h'; });
 ok(xu4h.length === 5, 'lazy fetch: the 5 WATCH+ candidates fetched 4h (BTC+ETH+SOL+XRP+DOGE radar), XAU lane aside untouched — got ' + xu4h.length);
-ok(xu1h.length === 4, '1h sniper rescue: ONE bounded 1h fetch per candidate whose 4h anchor declined (BTC took the engine plan — no rescue fetch) — got ' + xu1h.length);
-ok(xu1h.every(function(c){ return c.n === 120; }), '1h rescue fetches use the standard 120-bar depth');
+ok(xu1h.length === 5, 'the queue fetches the 1h leg for every WATCH+ candidate in parallel (MTF layer + sniper-rescue cache, zero extra rescue fetches) — got ' + xu1h.length);
+ok(xu1h.every(function(c){ return c.n === 120; }), '1h legs use the standard 120-bar depth');
 ok(xuCalls[0].item === XUL[0] && xuCalls[0].tf === '4h' && xuCalls[0].n === 120,
    'highest-evidence-first: the PRIME BTC candidate fetches first, via xuCandles with its original xu item');
 ok(!xuCalls.some(function(c){ return c.item.sym === 'XAUUSDT'; }), 'ASIDE gold lane never triggers a crypto candle fetch');
 ok(statSnaps.some(function(s){ return /^\d+\/5 candidates · delta 3 · cdcx 2$/.test(s); }),
    'fetch progress reports X/Y candidates · delta n · cdcx m — saw "' + statSnaps[0] + '"');
 const tWatch = TT.stubs['#brainWatch'].innerHTML;
-ok(tWatch.indexOf('>ETH</span>') >= 0 && tWatch.indexOf('>SOL</span>') >= 0 && tWatch.indexOf('>XRP</span>') >= 0
-   && tWatch.indexOf('>DOGE</span>') >= 0 && tWatch.indexOf('radar only') >= 0,
-   'WATCH ledger lists the watch alts incl. DOGE on the radar tier, reason named honestly');
+ok(tWatch.indexOf('>DOGE</span>') >= 0 && tWatch.indexOf('>ETH</span>') === -1 && tWatch.indexOf('>SOL</span>') === -1,
+   'WATCH ledger: DOGE alone remains (volreg lifted it to full WATCH from radar); ETH/SOL/XRP moved up to cards');
+ok(tCards.indexOf('ETHUSDT') >= 0 && tCards.indexOf('SOLUSDT') >= 0 && tCards.indexOf('B-XRP_USDT') >= 0
+   && (tCards.match(/HIGH · 4 LAYERS/g) || []).length === 3,
+   'the promoted alts render as HIGH cards (4 layers each: regime + rotation + oiflow + volreg)');
 const tAside = TT.stubs['#brainAside'].innerHTML;
 ok(tAside.indexOf('>DOGE</span>') === -1 && tAside.indexOf('>XAU</span>') >= 0,
    'ASIDE ledger: DOGE promoted to radar (G2 non-confirmation), gold lane present');
@@ -756,10 +758,10 @@ console.log('== lazy-fetch cap binds honestly ==');
   const uStat = TU.stubs['#brainStat'].textContent;
   const cap4h = capCalls.filter(function(c){ return c.slice(-3) === '|4h'; });
   const cap1h = capCalls.filter(function(c){ return c.slice(-3) === '|1h'; });
-  ok(uStat.indexOf('done · 0 PRIME · 0 HIGH · 48 watch · 6 aside') === 0,
-     '46 alts reach WATCH on 3 votes, ETH+SOL join on the 2-vote radar tier; ALT1-ALT4 (1-4M turnover) gated below the $5M liquidity floor; BTC + gold aside — got "' + uStat + '"');
+  ok(uStat.indexOf('done · 0 PRIME · 40 HIGH · 8 watch · 6 aside') === 0,
+     '46 alts at 3 votes + the healthy-vol VOLREG vote -> 40 HIGH · 8 WATCH; ALT1-ALT4 (1-4M turnover) gated below the $5M liquidity floor; BTC + gold aside — got "' + uStat + '"');
   ok(cap4h.length === 40, 'fetch cap respected: 40 4h fetches out of 48 watch candidates — got ' + cap4h.length);
-  ok(cap1h.length <= 12, 'the 1h sniper rescue has its OWN honest budget (≤12/scan), never a second full sweep — got ' + cap1h.length);
+  ok(cap1h.length === 40, 'the 1h leg rides the same capped queue in parallel (MTF layer) — got ' + cap1h.length);
   ok(uStat.indexOf('+8 more watch candidates — raise evidence to fetch') >= 0,
      'honest note when the cap binds — got "' + uStat + '"');
   ok(uStat.indexOf(' · 4 gated: 4 liquidity') >= 0,
@@ -1131,8 +1133,8 @@ console.log('== quick rescan (AC) ==');
 
   /* full scan baseline */
   await runAndWait(TC.stubs);
-  ok(TC.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME · 0 HIGH · 4 watch · 1 aside') === 0,
-     'AC: full-scan baseline intact (DOGE on the radar tier) — got "' + TC.stubs['#brainStat'].textContent + '"');
+  ok(TC.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME · 3 HIGH · 1 watch · 1 aside') === 0,
+     'AC: full-scan baseline intact (volreg lifts ETH/SOL/XRP to HIGH; DOGE at WATCH) — got "' + TC.stubs['#brainStat'].textContent + '"');
   candleSyms = []; xuCalls = 0; xuForces.length = 0;
 
   /* quick rescan: recheck WATCH+ only, cache-read universe, age stamps */
@@ -1147,7 +1149,7 @@ console.log('== quick rescan (AC) ==');
   const ac1h = candleSyms.filter(function(c){ return c.slice(-3) === '|1h'; });
   ok(ac4h.length === 5 && ac4h.some(function(c){ return c.indexOf('DOGEUSDT') === 0; }) && !ac4h.some(function(c){ return c.indexOf('XAUUSDT') === 0; }),
      'AC: 4h candles refetched only for the recheck set incl. the DOGE radar row, gold lane untouched — got ' + ac4h.join(','));
-  ok(ac1h.length <= 4, 'AC: 1h sniper rescue bounded per candidate that needs it (BTC took the engine plan) — got ' + ac1h.length);
+  ok(ac1h.length === 5, 'AC: the 1h leg rides the same recheck fetch (MTF layer) — got ' + ac1h.length);
   const q1aside = TC.stubs['#brainAside'].innerHTML;
   ok(q1aside.indexOf('>XAU</span>') >= 0 && q1aside.indexOf('AS OF') >= 0,
      'AC: unchanged verdicts keep their reason AND carry an age stamp');
@@ -1165,8 +1167,9 @@ console.log('== quick rescan (AC) ==');
   const q2 = TC.stubs['#brainStat'].textContent;
   ok(/^quick rescan: 6 checked · 1 unchanged/.test(q2) && q2.indexOf('1 new listing') >= 0,
      'AC: a new listing is detected and checked — got "' + q2 + '"');
-  ok(TC.stubs['#brainWatch'].innerHTML.indexOf('>NEW</span>') >= 0,
-     'AC: the new listing is judged on arrival (3 layers -> WATCH)');
+  ok(TC.stubs['#brainCards'].innerHTML.indexOf('NEWUSDT') >= 0
+     || TC.stubs['#brainWatch'].innerHTML.indexOf('>NEW</span>') >= 0,
+     'AC: the new listing is judged on arrival (3 layers + volreg -> WATCH-or-HIGH honestly)');
   ok(candleSyms.indexOf('NEWUSDT|4h') >= 0, 'AC: the new listing earns its candle fetch');
 
   /* stale universe cache: new-listing check skips honestly, zero xu calls */
@@ -1235,14 +1238,14 @@ process.on('unhandledRejection', function(){ unhandledRej++; });
   const TD = freshPane();
   WD.HG_tabs[0].mount(TD.pane);
   await runAndWait(TD.stubs);
-  ok(recs.length === 1, 'AD: exactly one scorecard record — PRIME/HIGH only, WATCH/ASIDE never recorded (got ' + recs.length + ')');
+  ok(recs.length === 4, 'AD: four scorecard records — PRIME + the three volreg-promoted HIGH alts; WATCH/ASIDE never recorded (got ' + recs.length + ')');
   const r0 = recs[0] || {};
   ok(r0.source === 'brain' && r0.sym === 'B-BTC_USDT' && r0.dir === 'long' && r0.tier === 'PRIME',
      'AD: record carries source/sym/dir/tier — got ' + JSON.stringify(r0).slice(0, 140));
   ok(r0.entry === 100 && r0.stop === 95 && r0.t1 === 110 && r0.t2 === 117.5,
      'AD: levels come from the engine plan verbatim — got ' + JSON.stringify([r0.entry, r0.stop, r0.t1, r0.t2]));
-  ok(Array.isArray(r0.layers) && r0.layers.join(',') === 'regime,onchain,engine,oiflow,liqs',
-     'AD: layers = the agreeing layer names in vote order — got ' + JSON.stringify(r0.layers));
+  ok(Array.isArray(r0.layers) && r0.layers.join(',') === 'regime,onchain,engine,oiflow,liqs,volreg',
+     'AD: layers = the agreeing layer names in vote order, volreg included — got ' + JSON.stringify(r0.layers));
   ok(typeof r0.at === 'number' && isFinite(r0.at) && Math.abs(Date.now() - r0.at) < 60000,
      'AD: record timestamped at scan time');
 
@@ -1251,8 +1254,8 @@ process.on('unhandledRejection', function(){ unhandledRej++; });
   WD.xuState = function(){ return { count: 5, delta: 3, cdcx: 2, at: Date.now(), note: null }; };
   TD.stubs['#brainQuick']._handler();
   await waitIdle(TD.stubs);
-  ok(recs.length === 1 && recs[0].tier === 'PRIME' && recs[0].source === 'brain',
-     'AD: quick rescan records its fresh PRIME/HIGH cards too');
+  ok(recs.length === 4 && recs[0].tier === 'PRIME' && recs[0].source === 'brain',
+     'AD: quick rescan records its fresh PRIME/HIGH cards too (PRIME + 3 volreg-lifted HIGH rows)');
 
   /* a throwing recorder never breaks the scan or the render */
   WD.hgScoreRecord = function(){ throw new Error('scorecard down'); };
@@ -1366,18 +1369,20 @@ function stubQuietLayers(WX){
   const g1Stat = TG1.stubs['#brainStat'].textContent;
   const g1Watch = TG1.stubs['#brainWatch'].innerHTML;
   const g1Aside = TG1.stubs['#brainAside'].innerHTML;
-  ok(g1Stat.indexOf('done · 0 PRIME · 0 HIGH · 4 watch · 3 aside') === 0,
-     'AE1: buckets — ETH/SOL/MYST/EXACT watch, BTC+THIN+gold aside — got "' + g1Stat + '"');
+  ok(g1Stat.indexOf('done · 0 PRIME · 2 HIGH · 2 watch · 3 aside') === 0,
+     'AE1: buckets — volreg lifts ETH/SOL to HIGH; MYST/EXACT at full WATCH; BTC+THIN+gold aside — got "' + g1Stat + '"');
   ok(g1Stat.indexOf(' · 1 gated: 1 liquidity') >= 0,
      'AE1: stat line tallies the liquidity demotion — got "' + g1Stat + '"');
   ok(g1Aside.indexOf('>THIN</span>') >= 0
      && lrowSeg(g1Aside, 'THIN').indexOf('below liquidity floor — $2.0M 24h turnover, slippage eats the edge') >= 0,
      'AE1: below-floor WATCH demoted to ASIDE with the exact reason — got "' + lrowSeg(g1Aside, 'THIN').slice(0, 160) + '"');
   ok(g1Watch.indexOf('>THIN</span>') === -1, 'AE1: the gated row leaves the WATCH ledger (demoted, not hidden)');
-  ok(g1Watch.indexOf('>MYST</span>') >= 0 && g1Aside.indexOf('>MYST</span>') === -1,
-     'AE1: null turnover = unknown = NEVER punished — MYST keeps its WATCH row');
-  ok(g1Watch.indexOf('>EXACT</span>') >= 0,
-     'AE1: exactly $5.0M turnover passes the >= $5M floor (boundary honored)');
+  ok(g1Aside.indexOf('>MYST</span>') === -1,
+     'AE1: null turnover = unknown = NEVER punished — MYST keeps its conviction row (HIGH card via oiflow + volreg)');
+  ok(TG1.stubs['#brainCards'].innerHTML.indexOf('MYSTUSDT') >= 0 && TG1.stubs['#brainCards'].innerHTML.indexOf('EXACTUSDT') >= 0,
+     'AE1: MYST + EXACT render as HIGH cards (regime + rotation + oiflow + volreg)');
+  ok(TG1.stubs['#brainCards'].innerHTML.indexOf('THINUSDT') === -1,
+     'AE1: the liquidity gate still demotes THIN despite the volreg vote — floors bite, never overridden');
 }
 
 /* AE2 — OVEREXTENSION GUARD (long): a WATCH chase into a >= +15% 24h move
@@ -1405,8 +1410,8 @@ function stubQuietLayers(WX){
   const g2Stat = TG2.stubs['#brainStat'].textContent;
   const g2Watch = TG2.stubs['#brainWatch'].innerHTML;
   const g2Aside = TG2.stubs['#brainAside'].innerHTML;
-  ok(g2Stat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 4 aside') === 0,
-     'AE2: buckets — ETH/SOL/QUIET watch, PUMP+EDGE gated aside — got "' + g2Stat + '"');
+  ok(g2Stat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 4 aside') === 0,
+     'AE2: buckets — volreg lifts QUIET to HIGH; ETH/SOL watch; PUMP+EDGE gated aside (overextension guard unfazed by volreg) — got "' + g2Stat + '"');
   ok(g2Stat.indexOf(' · 2 gated: 2 overextended') >= 0,
      'AE2: stat line tallies both overextension demotions — got "' + g2Stat + '"');
   ok(lrowSeg(g2Aside, 'PUMP').indexOf('overextended +18.2% 24h — chasing tops is how radar dies') >= 0,
@@ -1415,8 +1420,8 @@ function stubQuietLayers(WX){
      'AE2: exactly +15.0% trips the >= +15% guard (boundary honored)');
   ok(g2Watch.indexOf('>PUMP</span>') === -1 && g2Watch.indexOf('>EDGE</span>') === -1,
      'AE2: gated chases leave the WATCH ledger');
-  ok(g2Watch.indexOf('>QUIET</span>') >= 0 && g2Aside.indexOf('>QUIET</span>') === -1,
-     'AE2: tape-missing pass-through — a WATCH row with no tape perp is never punished');
+  ok(g2Aside.indexOf('>QUIET</span>') === -1 && TG2.stubs['#brainCards'].innerHTML.indexOf('QUIETUSDT') >= 0,
+     'AE2: tape-missing pass-through — no tape perp is never punished; volreg lifts QUIET to a HIGH card');
 }
 
 /* AE3 — OVEREXTENSION (short) + FUNDING CROWDING: shorts demote on <= -15%;
@@ -1455,25 +1460,24 @@ function stubQuietLayers(WX){
   const g3Stat = TG3.stubs['#brainStat'].textContent;
   const g3Watch = TG3.stubs['#brainWatch'].innerHTML;
   const g3Aside = TG3.stubs['#brainAside'].innerHTML;
-  ok(g3Stat.indexOf('done · 0 PRIME · 1 HIGH · 3 watch · 5 aside') === 0,
-     'AE3: buckets — FLIP promoted WATCH -> HIGH by the contrarian funding vote (behavior upgrade: opposite-direction extremes now VOTE); CROWD/TAME/FEDGE watch, DUMP gated — got "' + g3Stat + '"');
+  const g3Cards = TG3.stubs['#brainCards'].innerHTML;
+  ok(g3Stat.indexOf('done · 0 PRIME · 4 HIGH · 0 watch · 5 aside') === 0,
+     'AE3: buckets — FLIP promoted by the contrarian funding vote; volreg lifts CROWD/TAME/FEDGE to HIGH cards too; DUMP gated — got "' + g3Stat + '"');
   ok(g3Stat.indexOf(' · 1 gated: 1 overextended') >= 0,
      'AE3: only the overextended chase is tallied — funding cautions are NOT demotions — got "' + g3Stat + '"');
   ok(lrowSeg(g3Aside, 'DUMP').indexOf('overextended -17.5% 24h — chasing tops is how radar dies') >= 0,
      'AE3: short chase into a -17.5% move demotes with the exact signed reason');
-  ok(lrowSeg(g3Watch, 'CROWD').indexOf('funding crowded same-direction — squeeze risk') >= 0,
-     'AE3: -0.14%/8h funding behind a SHORT row -> caution named on the WATCH row, tier unchanged');
-  ok(lrowSeg(g3Watch, 'FEDGE').indexOf('funding crowded same-direction — squeeze risk') >= 0,
-     'AE3: exactly |0.1|%/8h funding trips the >= 0.1% caution (boundary honored)');
-  const g3Cards = TG3.stubs['#brainCards'].innerHTML;
+  ok(g3Cards.indexOf('CROWDUSDT') >= 0 && g3Cards.indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AE3: -0.14%/8h funding behind a SHORT row -> caution named on the HIGH card (volreg lifted the tier)');
+  ok(g3Cards.indexOf('FEDGEUSDT') >= 0,
+     'AE3: exactly |0.1|%/8h funding trips the >= 0.1% caution (boundary honored, on the card)');
   ok(g3Watch.indexOf('>FLIP</span>') === -1 && g3Cards.indexOf('FLIPUSDT') >= 0
-     && g3Cards.indexOf('HIGH · 4 LAYERS') >= 0 && g3Cards.indexOf('>SHORT</span>') >= 0,
-     'AE3: +0.3%/8h funding AGAINST the SHORT row casts the fade vote — FLIP completes HIGH on 4 layers');
-  ok(g3Cards.indexOf('FUNDING: funding +0.3%/8h — longs crowded, fade fuel for shorts') >= 0
-     && g3Cards.indexOf('funding crowded') === -1,
-     'AE3: the contrarian vote is named on the card — and it is a VOTE, never a caution chip');
-  ok(lrowSeg(g3Watch, 'TAME').length > 0 && lrowSeg(g3Watch, 'TAME').indexOf('funding crowded') === -1,
-     'AE3: |0.05|%/8h funding is sub-threshold — no caution, no vote');
+     && g3Cards.indexOf('HIGH · 5 LAYERS') >= 0 && g3Cards.indexOf('>SHORT</span>') >= 0,
+     'AE3: +0.3%/8h funding AGAINST the SHORT row casts the fade vote — FLIP completes HIGH on 5 layers (with volreg)');
+  ok(g3Cards.indexOf('FUNDING: funding +0.3%/8h — longs crowded, fade fuel for shorts') >= 0,
+     'AE3: the contrarian vote is named on the card — a VOTE (crowding cautions on OTHER cards stay chips)');
+  ok(g3Cards.indexOf('TAMEUSDT') >= 0,
+     'AE3: |0.05|%/8h funding is sub-threshold — no caution, no vote; TAME still earns its HIGH card via volreg');
 }
 
 /* AE4 — PRIME/HIGH chips, never demotions: an overextended PRIME keeps its
@@ -1502,19 +1506,19 @@ function stubQuietLayers(WX){
   const g4Stat = TG4.stubs['#brainStat'].textContent;
   const g4Cards = TG4.stubs['#brainCards'].innerHTML;
   const g4Watch = TG4.stubs['#brainWatch'].innerHTML;
-  ok(g4Stat.indexOf('done · 1 PRIME · 0 HIGH · 4 watch · 1 aside') === 0,
-     'AE4: buckets unchanged — cautions never demote — got "' + g4Stat + '"');
+  ok(g4Stat.indexOf('done · 1 PRIME · 3 HIGH · 1 watch · 1 aside') === 0,
+     'AE4: buckets — volreg lifts ETH/SOL/XRP to HIGH cards; cautions never demote — got "' + g4Stat + '"');
   ok(g4Stat.indexOf('gated') === -1, 'AE4: nothing demoted -> no gate tally on the stat line — got "' + g4Stat + '"');
-  ok(g4Cards.indexOf('PRIME · 6 LAYERS') >= 0,
-     'AE4: BTC stays PRIME on 6 layers (tape momentum joined) despite the extended move');
+  ok(g4Cards.indexOf('PRIME · 7 LAYERS') >= 0,
+     'AE4: BTC stays PRIME on 7 layers (tape momentum + volreg joined) despite the extended move');
   ok(g4Cards.indexOf('GUARD: overextended +16.4% 24h — chasing tops is how radar dies') >= 0,
      'AE4: PRIME overextension renders as a caution CHIP, not a demotion');
   ok(g4Cards.indexOf('GUARD: funding crowded same-direction — squeeze risk') >= 0,
      'AE4: +0.13%/8h funding behind the LONG PRIME chips a crowding caution on the card');
-  ok(lrowSeg(g4Watch, 'ETH').indexOf('funding crowded same-direction — squeeze risk') >= 0,
-     'AE4: +0.11%/8h funding behind the LONG WATCH row names the caution on the row');
-  ok(lrowSeg(g4Watch, 'SOL').length > 0 && lrowSeg(g4Watch, 'SOL').indexOf('funding crowded') === -1,
-     'AE4: zero funding -> no caution');
+  ok(g4Cards.indexOf('ETHUSDT') >= 0 && g4Cards.indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AE4: +0.11%/8h funding behind the LONG row names the caution on the HIGH card');
+  ok(g4Cards.indexOf('SOLUSDT') >= 0,
+     'AE4: zero funding -> no caution; SOL still earns its HIGH card via volreg');
 }
 
 /* AE5 — combined tally + HIGH demotion + kill precedence: liquidity beats
@@ -1641,11 +1645,15 @@ function trendRows(up){
   const f1Cards = TF1.stubs['#brainCards'].innerHTML;
   const f1Watch = TF1.stubs['#brainWatch'].innerHTML;
   ok(f1Stat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 2 aside') === 0,
-     'AF1: TRENDY (3 layers -> WATCH on votes) promoted to HIGH by the post-fetch TREND4H vote — got "' + f1Stat + '"');
-  ok(f1Cards.indexOf('TRENDYUSDT') >= 0 && f1Cards.indexOf('HIGH · 4 LAYERS') >= 0 && f1Cards.indexOf('>LONG</span>') >= 0,
-     'AF1: promoted card renders HIGH · 4 LAYERS LONG');
+     'AF1: TRENDY (3 layers -> WATCH) reaches PRIME via TREND4H + MTF + VOLREG votes, then the dark-layer cap holds it at HIGH — got "' + f1Stat + '"');
+  ok(f1Cards.indexOf('TRENDYUSDT') >= 0 && f1Cards.indexOf('HIGH · 6 LAYERS') >= 0 && f1Cards.indexOf('>LONG</span>') >= 0,
+     'AF1: the card renders HIGH · 6 LAYERS LONG — regime + rotation + oiflow + trend4h + mtf + volreg');
   ok(f1Cards.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
      'AF1: the TREND4H pip names EMA alignment + higher-high (HTML-escaped)');
+  ok(f1Cards.indexOf('MTF: 1D+4H+1H all read LONG') >= 0,
+     'AF1: the MTF pip names the three-way timeframe alignment');
+  ok(f1Cards.indexOf('CAPPED from PRIME') >= 0,
+     'AF1: the degradation cap honestly names the PRIME it held back (dark layers capped it)');
   ok(f1Watch.indexOf('>TRENDY</span>') === -1 && f1Watch.indexOf('>ETH</span>') >= 0,
      'AF1: the promoted row leaves WATCH; flat-candle radar rows stay put (no fabricated votes)');
   const snap1 = WG.__hgBrainLast();
@@ -1674,8 +1682,8 @@ function trendRows(up){
   const f2Cards = TF2.stubs['#brainCards'].innerHTML;
   ok(f2Stat.indexOf('done · 1 PRIME · 0 HIGH · 0 watch · 3 aside') === 0,
      'AF2: BTC (4 layers HIGH incl. positioning, no structural) completes PRIME via the TREND4H structural vote — got "' + f2Stat + '"');
-  ok(f2Cards.indexOf('PRIME · 5 LAYERS') >= 0 && f2Cards.indexOf('✓ structural · ✓ positioning') >= 0,
-     'AF2: PRIME card still passes the unchanged bar — structural AND positioning present');
+  ok(f2Cards.indexOf('PRIME · 7 LAYERS') >= 0 && f2Cards.indexOf('✓ structural · ✓ positioning') >= 0,
+     'AF2: PRIME card passes the unchanged bar — structural AND positioning present, now 7 layers with MTF + VOLREG');
   ok(f2Cards.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
      'AF2: the promoting vote is named on the card');
 }
@@ -1735,9 +1743,9 @@ function trendRows(up){
   const f4Cards = TF4.stubs['#brainCards'].innerHTML;
   ok(f4Stat.indexOf('done · 0 PRIME · 1 HIGH · 0 watch · 4 aside') === 0,
      'AF4: short-biased DROPY promoted WATCH -> HIGH by the downtrend TREND4H vote (BTC tied aside, ETH/SOL thin aside) — got "' + f4Stat + '"');
-  ok(f4Cards.indexOf('HIGH · 4 LAYERS') >= 0 && f4Cards.indexOf('>SHORT</span>') >= 0
+  ok(f4Cards.indexOf('HIGH · 5 LAYERS') >= 0 && f4Cards.indexOf('>SHORT</span>') >= 0
      && f4Cards.indexOf('TREND4H: 4h EMA20&lt;EMA50 + lower-low — structural short') >= 0,
-     'AF4: short TREND4H pip names EMA20<EMA50 + lower-low');
+     'AF4: short TREND4H pip names EMA20<EMA50 + lower-low (5 layers with MTF; volreg cautions dead tape, no vote)');
 
   /* counter-trend: a LONG-biased WATCH row on DOWNTREND candles -> no vote, stays WATCH */
   const WG2 = freshBrain();
@@ -1786,12 +1794,12 @@ function trendRows(up){
   await runAndWait(TF6.stubs);
   const g5Stat = TF6.stubs['#brainStat'].textContent;
   const g5Watch = TF6.stubs['#brainWatch'].innerHTML;
-  ok(g5Stat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 2 aside') === 0,
-     'AF5: F&G 12 — BTC reaches WATCH on 3 layers (regime+rotation+F&G), ETH/SOL on radar — got "' + g5Stat + '"');
-  ok(lrowSeg(g5Watch, 'BTC').indexOf('3 layers agree LONG') >= 0 && lrowSeg(g5Watch, 'BTC').indexOf('radar only') === -1,
-     'AF5: the F&G vote counts as a real third layer for BTC');
-  ok(lrowSeg(g5Watch, 'ETH').indexOf('radar only') >= 0,
-     'AF5: ETH rides radar on regime + F&G (2 layers, uncontested)');
+  ok(g5Stat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 2 aside') === 0,
+     'AF5: F&G 12 + volreg — BTC reaches HIGH on 4 layers (regime+rotation+F&G+volreg), ETH/SOL on radar+volreg — got "' + g5Stat + '"');
+  ok(TF6.stubs['#brainCards'].innerHTML.indexOf('BTCUSDT') >= 0,
+     'AF5: the F&G vote + volreg carry BTC to a HIGH card');
+  ok(lrowSeg(g5Watch, 'ETH').indexOf('3 layers agree LONG') >= 0,
+     'AF5: ETH at full WATCH on regime + F&G + volreg (3 layers)');
   ok(g5Watch.indexOf('>ALTONE</span>') === -1 && TF6.stubs['#brainAside'].innerHTML.indexOf('>ALTONE</span>') >= 0,
      'AF5: F&G is majors-only — ALTONE stays ASIDE on its lone regime vote');
   let snap5 = WG.__hgBrainLast();
@@ -1868,10 +1876,10 @@ function trendRows(up){
   const f7Watch = TF7.stubs['#brainWatch'].innerHTML;
   ok(lrowSeg(f7Watch, 'BTC').indexOf('path to PRIME: 3 dark layers must return (onchain, tape, liqs)') >= 0,
      'AF6: capped WATCH names exactly which dark layers unblock PRIME — got "' + lrowSeg(f7Watch, 'BTC').slice(-220) + '"');
-  ok(lrowSeg(f7Watch, 'MIXED').indexOf('path to HIGH: SQUEEZE dissent must clear + 1 more agreeing layer') >= 0,
-     'AF6: soft-disagreement WATCH names the dissenting layer that must clear — got "' + lrowSeg(f7Watch, 'MIXED').slice(-220) + '"');
-  ok(lrowSeg(f7Watch, 'ETH').indexOf('path to HIGH: needs TREND4H + ENGINE') >= 0,
-     'AF6: radar WATCH names TREND4H first, then the next silent directional layer — got "' + lrowSeg(f7Watch, 'ETH').slice(-220) + '"');
+  ok(lrowSeg(f7Watch, 'MIXED').indexOf('path to HIGH: SQUEEZE dissent must clear') >= 0,
+     'AF6: soft-disagreement WATCH names the dissenting layer that must clear (volreg already fills the agree slot) — got "' + lrowSeg(f7Watch, 'MIXED').slice(-220) + '"');
+  ok(lrowSeg(f7Watch, 'ETH').indexOf('path to HIGH: needs TREND4H') >= 0,
+     'AF6: radar WATCH names TREND4H as the last missing layer (volreg already votes) — got "' + lrowSeg(f7Watch, 'ETH').slice(-220) + '"');
 }
 
 /* ---- AF7: quick rescan re-applies TREND4H + refreshes the snapshot ---- */
@@ -1938,22 +1946,22 @@ console.log('== FUNDING contrarian votes: both extremes, both directions, cautio
   const agStat = TG.stubs['#brainStat'].textContent;
   const agCards = TG.stubs['#brainCards'].innerHTML;
   const agWatch = TG.stubs['#brainWatch'].innerHTML;
-  ok(agStat.indexOf('done · 0 PRIME · 2 HIGH · 4 watch · 2 aside') === 0,
-     'AG: LONGY+EDGY complete HIGH via the long-fade vote; SAMEL/SUBL + auto-prepended ETH/SOL radar watch; tied BTC + gold aside — got "' + agStat + '"');
-  ok(agCards.indexOf('HIGH · 4 LAYERS') >= 0
+  ok(agStat.indexOf('done · 0 PRIME · 4 HIGH · 2 watch · 2 aside') === 0,
+     'AG: LONGY+EDGY complete HIGH via the long-fade vote; volreg lifts SAMEL/SUBL to HIGH too; ETH/SOL radar watch; tied BTC + gold aside — got "' + agStat + '"');
+  ok(agCards.indexOf('HIGH · 5 LAYERS') >= 0
      && agCards.indexOf('FUNDING: funding -0.128%/8h — shorts crowded, fade fuel for longs') >= 0,
-     'AG: negative funding behind a LONG row casts the named long-fade vote (spec example verbatim)');
+     'AG: negative funding behind a LONG row casts the named long-fade vote (spec example verbatim, 5 layers with volreg)');
   ok(agCards.indexOf('FUNDING: funding -0.1%/8h — shorts crowded, fade fuel for longs') >= 0,
      'AG: exactly |0.1|%/8h AGAINST the row fires the vote (boundary honored)');
-  ok(lrowSeg(agWatch, 'SAMEL').indexOf('funding crowded same-direction — squeeze risk') >= 0,
-     'AG: +0.13%/8h WITH the LONG row keeps the caution chip');
+  ok(agCards.indexOf('SAMELUSDT') >= 0 && agCards.indexOf('funding crowded same-direction — squeeze risk') >= 0,
+     'AG: +0.13%/8h WITH the LONG row keeps the caution chip on its HIGH card');
   const agSnap = WG.__hgBrainLast();
   const agBySym = function(s){ return agSnap.rows.filter(function(x){ return x.sym === s; })[0]; };
   ok(!agBySym('SAMELUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
      'AG: same-direction extreme casts NO vote — never reward the crowded side');
-  ok(lrowSeg(agWatch, 'SUBL').indexOf('funding crowded') === -1
+  ok(agCards.indexOf('SUBLUSDT') >= 0
      && !agBySym('SUBLUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
-     'AG: sub-extreme funding is silent — no chip, no vote');
+     'AG: sub-extreme funding is silent — no chip, no vote; SUBL still earns its card via volreg');
   ok(agBySym('LONGYUSDT').evidence.indexOf('FUNDING: funding -0.128%/8h — shorts crowded, fade fuel for longs') >= 0,
      'AG: __hgBrainLast carries the raw FUNDING evidence for the signal logger');
   ok(!agBySym('BTCUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
@@ -1986,10 +1994,10 @@ console.log('== FUNDING contrarian votes: both extremes, both directions, cautio
   const ag2Watch = TG2.stubs['#brainWatch'].innerHTML;
   ok(TG2.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 0 HIGH · 2 watch · 2 aside') === 0,
      'AG: 1-layer ETH + the funding vote = radar WATCH (the vote counts as ONE context layer); auto-added SOL thin aside — got "' + TG2.stubs['#brainStat'].textContent + '"');
-  ok(lrowSeg(ag2Watch, 'ETH').indexOf('radar only') >= 0
+  ok(lrowSeg(ag2Watch, 'ETH').indexOf('3 layers agree LONG') >= 0
      && WG2.__hgBrainLast().rows.filter(function(x){ return x.sym === 'ETHUSDT'; })[0]
           .evidence.indexOf('FUNDING: funding -0.15%/8h — shorts crowded, fade fuel for longs') >= 0,
-     'AG: funding completes radar exactly like fng — named, honest, thin');
+     'AG: funding + volreg complete a full WATCH — each named, each ONE context layer, no double count');
 }
 
 /* ================= AH) CLICK-TO-AUDIT layer breakdown =================
@@ -2530,19 +2538,19 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
   const kStat = TK.stubs['#brainStat'].textContent;
   const kCards = TK.stubs['#brainCards'].innerHTML;
   const kWatch = TK.stubs['#brainWatch'].innerHTML;
-  ok(kStat.indexOf('done · 0 PRIME · 1 HIGH · 5 watch · 2 aside') === 0,
-     'AK: fixture scan — TRENDY HIGH via TREND4H; W1/INZONE/FLAT + ETH/SOL WATCH; BTC + gold aside — got "' + kStat + '"');
+  ok(kStat.indexOf('done · 0 PRIME · 2 HIGH · 4 watch · 2 aside') === 0,
+     'AK: fixture scan — TRENDY HIGH via TREND4H (+MTF+VOLREG); a second HIGH via volreg; 4 watch; BTC + gold aside — got "' + kStat + '"');
 
   /* ---- the promoted card carries the patient LIMIT, not a market chase ---- */
-  ok(kCards.indexOf('HIGH · 4 LAYERS') >= 0
+  ok(kCards.indexOf('HIGH · 6 LAYERS') >= 0
      && kCards.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
      && kCards.indexOf('stop <b>146.85</b> (0.5xATR beyond 4h FVG)') >= 0
      && kCards.indexOf('TP1 <b>148.85</b> · TP2 <b>149.64</b> · R:R 1.5') >= 0
      && kCards.indexOf('cancel if 4h closes beyond <b>147.49</b>') >= 0
      && kCards.indexOf('limit working ~24h or until structure breaks — structure-anchored limit (4h)') >= 0,
      'AK: the TRENDY card renders the full anchored limit block — anchor, stop, TPs, R:R, invalidation, validity');
-  ok(kCards.indexOf('ENTRY <b>') === -1,
-     'AK: no market-entry render on the anchored card — the LIMIT block replaces it');
+  ok(kCards.indexOf('TRENDYUSDT') >= 0 && kCards.slice(kCards.indexOf('TRENDYUSDT'), kCards.indexOf('TRENDYUSDT') + 1400).indexOf('ENTRY <b>') === -1,
+     'AK: no market-entry render on the TRENDY anchored card — the LIMIT block replaces it (other cards unaffected)');
   ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.84603755122723,148.8451763717245)') >= 0,
      'AK: SEND TO TRADE PLAN carries the anchored entry/stop/t1 verbatim');
 
@@ -2552,9 +2560,10 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
      'AK: the W1 radar WATCH row offers the swing-low zone limit (waiting, not chasing)');
   ok(lrowSeg(kWatch, 'INZONE').indexOf('price in zone — limit at zone edge <b>98.6</b> or market') >= 0,
      'AK: mark inside the zone -> the in-zone label with the edge price');
-  ok(lrowSeg(kWatch, 'FLAT').indexOf('ENTRY <b>10</b>') >= 0
-     && lrowSeg(kWatch, 'FLAT').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
-     'AK: flat candles -> the hgPlanLevels plan UNTOUCHED + the honest no-structure label');
+  ok(kCards.indexOf('FLATUSDT') >= 0
+     && kCards.indexOf('ENTRY <b>10</b>') >= 0
+     && kCards.indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+     'AK: flat candles -> the hgPlanLevels plan UNTOUCHED + the honest no-structure label (FLAT now on a HIGH card via volreg)');
   ok(planCalls === 3, 'AK: hgPlanLevels consulted ONLY for the anchor-less rows (FLAT + ETH + SOL), never for anchored rows — got ' + planCalls);
 
   /* ---- snapshot + audit contract ---- */
@@ -2586,7 +2595,7 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
       await new Promise(function(res){ setTimeout(res, 25); });
   })();
   const kQuick = TK.stubs['#brainStat'].textContent;
-  ok(/^quick rescan: 6 checked · 2 unchanged/.test(kQuick) && kQuick.indexOf('1 HIGH · 5 watch · 2 aside') >= 0,
+  ok(/^quick rescan: 6 checked · 2 unchanged/.test(kQuick) && kQuick.indexOf('2 HIGH · 4 watch · 2 aside') >= 0,
      'AK: quick rescan rechecks the 6 WATCH-or-better rows, same buckets — got "' + kQuick + '"');
   ok(TK.stubs['#brainCards'].innerHTML.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
      && lrowSeg(TK.stubs['#brainWatch'].innerHTML, 'W1').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0,
@@ -3155,6 +3164,57 @@ console.log('== AR) family hit-rates ==');
      'AR: a losing family reads 0% honestly, never hidden');
   ok(FS(log, 'pool-limit') === null && FS(null, 'fvg-limit') === null && FS('x', 1) === null,
      'AR: no closed samples / garbage -> null, never invented');
+}
+
+/* ================= AS) TIER-1 LAYERS — MTF, vol regime, session ================= */
+console.log('== AS) tier-1 layers ==');
+{
+  /* resampleDaily: 6x4h -> 1d, OHLCV aggregated honestly */
+  const M = W.__hgBrainMtf;
+  ok(M && typeof M.resampleDaily === 'function' && typeof M.dailySide === 'function',
+     'AS: MTF seams exposed');
+  const raw = [];
+  for (let i = 0; i < 120; i++) raw.push({ t: 1700000000 + i * 14400, o: 100, h: 101, l: 99, c: 100, v: 10 });
+  const days = M.resampleDaily(raw);
+  ok(days.length === 20 && days[0].h === 101 && days[0].l === 99 && days[0].v === 60,
+     'AS: 120 4h bars resample into 20 honest daily bars');
+
+  /* dailySide: HH structure + close above EMA9 -> long */
+  const up = [];
+  for (let i = 0; i < 120; i++){
+    const base = 90 + i * 0.25;   /* steady climb: HH structure everywhere */
+    up.push({ t: i * 14400, o: base, h: base + 1.5, l: base - 0.5, c: base + 1, v: 1000 });
+  }
+  ok(M.dailySide(up) === 'long', 'AS: a clean daily uptrend reads long');
+  const dn = up.slice().reverse().map(function(r, i){ return { t: i * 14400, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v }; });
+  ok(M.dailySide(dn) === 'short', 'AS: a clean daily downtrend reads short');
+  ok(M.dailySide(raw) === null, 'AS: flat tape -> no daily side, never invented');
+
+  /* atrPercentile: rising-vol tape reads high, flat tape reads low */
+  const AP = W.__hgBrainAtrPct;
+  ok(typeof AP === 'function', 'AS: ATR-percentile seam exposed');
+  const volUp = [];
+  for (let i = 0; i < 120; i++){
+    const w = 0.5 + i * 0.08;   /* widening ranges = rising ATR */
+    volUp.push({ t: i, o: 100, h: 100 + w, l: 100 - w, c: 100, v: 100 });
+  }
+  const hiPct = AP(volUp, 14);
+  ok(isFinite(hiPct) && hiPct >= 90, 'AS: rising-vol tape reads a top-decile ATR percentile — got ' + hiPct);
+  const loPct = AP(raw, 14);
+  ok(isFinite(loPct) && loPct >= 40 && loPct <= 60, 'AS: perfectly flat tape reads the mid band (midrank ~50), never a fake extreme — got ' + loPct);
+  ok(!isFinite(AP(null, 14)) && !isFinite(AP(raw.slice(0, 10), 14)),
+     'AS: garbage/thin rows -> NaN, never a fake percentile');
+
+  /* sessionWindow: kill zones + off-hours, IST-anchored */
+  const SW = W.__hgBrainSession;
+  ok(typeof SW === 'function', 'AS: session seam exposed');
+  ok(SW('2026-07-27T07:00:00Z').london === true, 'AS: 12:30 IST (07:00 UTC Monday) -> London kill zone');
+  ok(SW('2026-07-27T12:30:00Z').ny === true, 'AS: 18:00 IST (12:30 UTC Monday) -> NY kill zone');
+  ok(SW('2026-07-26T08:00:00Z').dead === true, 'AS: Sunday -> off-hours');
+  ok(SW('2026-07-28T00:30:00Z').dead === true, 'AS: 06:00 IST -> late-night off-hours');
+  ok(SW('2026-07-27T04:00:00Z').dead === false && SW('2026-07-27T04:00:00Z').london === false
+     && SW('2026-07-27T04:00:00Z').ny === false,
+     'AS: 09:30 IST weekday -> mid-session, no flags');
 }
 
 console.log('\n' + passed + ' assertions passed');
