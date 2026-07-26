@@ -668,6 +668,65 @@ console.log('== 10) ticket change alerts ==');
          'alerts off -> change recorded, honestly reported unarmed');
 }
 
+/* =========================================================================
+   11) SNIPER — 20x-grade hit-set alerts (seed → change → chime + cascade
+       → throttle; cleared; unarmed; garbage)
+========================================================================= */
+console.log('== 11) sniper hit-set alerts ==');
+{
+  const ls = memLocalStorage();
+  ls.setItem('hgAlertEnabled', '1');
+  const doc = stubDocument();
+  const env = loadHgalert({ doc, ls, audio: true });
+  const ui = uiOf(env);
+  clickBtn(env);                                    /* gesture: unlock + arm */
+
+  const oscCount = () => FakeAudioContext.__instances.reduce((n, c) => n + c.__osc.length, 0);
+  const tgCalls = [];
+  env.W.sendTelegram = (txt) => { tgCalls.push(txt); return Promise.resolve(true); };
+
+  assert(typeof env.W.hgAlertSniper === 'function', 'window.hgAlertSniper seam exposed');
+
+  const hit = (sym, entry) => ({ sym, dir: 'short', entry, stop: entry * 1.04, t1: entry * 0.93, lev: 24, state: 'IN ZONE' });
+
+  /* first sighting seeds silently */
+  const beforeSeed = oscCount();
+  const r1 = env.W.hgAlertSniper([hit('ACE', 0.085)]);
+  assert(r1 === 'seeded' && oscCount() === beforeSeed && tgCalls.length === 0,
+         'first sniper set seeds silently (no chime, no push)');
+  assert(ui.q('#hgAlertSniper').textContent.indexOf('ACE SHORT @ 0.085 (24x, IN ZONE)') >= 0,
+         'panel sniper line shows the seeded hit');
+
+  /* identical set is a no-op */
+  assert(env.W.hgAlertSniper([hit('ACE', 0.085)]) === 'unchanged', 'identical hit set -> unchanged');
+
+  /* a NEW card fires the chime + the Telegram-first cascade */
+  const beforeChime = oscCount();
+  const r3 = env.W.hgAlertSniper([hit('ACE', 0.085), hit('DOGE', 0.069)]);
+  assert(r3 === 'alerted' && oscCount() > beforeChime, 'new sniper-grade card -> alerted with a chime');
+  assert(tgCalls.length === 1 && tgCalls[0].indexOf('SNIPER') >= 0 && tgCalls[0].indexOf('DOGE') >= 0,
+         'telegram-first push carries the new hit');
+  assert(ui.q('#hgAlertLastS').textContent.indexOf('SNIPER') >= 0, 'last-sniper line records the alert');
+
+  /* moved entry inside the throttle window -> held, honestly named */
+  const r4 = env.W.hgAlertSniper([hit('ACE', 0.086), hit('DOGE', 0.069)]);
+  assert(r4 === 'throttled' && tgCalls.length === 1, 'moved entry inside 15-min throttle -> held');
+
+  /* board clearing is noted, never chimed */
+  const r5 = env.W.hgAlertSniper([]);
+  assert(r5 === 'cleared' && oscCount() === oscCount(), 'empty set -> cleared, silent');
+
+  /* garbage never throws */
+  assert(env.W.hgAlertSniper(null) === 'ignored' && env.W.hgAlertSniper('x') === 'ignored',
+         'garbage hit sets -> ignored, never throws');
+
+  /* unarmed engine: changes tracked, honestly unarmed */
+  const env2 = loadHgalert({ doc: stubDocument(), ls: memLocalStorage(), audio: true });
+  env2.W.hgAlertSniper([hit('ACE', 0.085)]);
+  assert(env2.W.hgAlertSniper([hit('ACE', 0.085), hit('SOL', 100)]) === 'unarmed',
+         'alerts off -> sniper change recorded, honestly reported unarmed');
+}
+
 globalThis.setInterval = REAL_SET_INTERVAL;
 Date.now = REAL_DATE_NOW;
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

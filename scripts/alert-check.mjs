@@ -149,6 +149,25 @@ function fallbackLegs(prev, curr) {
   return out;
 }
 
+/* ---------------- sniper-grade hits (server-side) ----------------
+   Key semantics mirror the in-browser hgalert SNIPER class: sym@entry per
+   hit, sorted. First sighting seeds silently; a changed NON-EMPTY set
+   pushes (Telegram first via sendAlertCi); an empty set never pushes. */
+function sniperKey(hits) {
+  const parts = [];
+  for (const h of (Array.isArray(hits) ? hits : [])) {
+    if (h && h.sym && Number.isFinite(+h.entry)) parts.push(String(h.sym) + '@' + String(+h.entry));
+  }
+  parts.sort();
+  return parts.join(';');
+}
+function sniperBody(hits) {
+  return hits.slice(0, 5).map(function(h){
+    return h.sym + ' ' + String(h.dir || '').toUpperCase() + ' @ ' + h.entry
+      + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ') · stop ' + h.stop + ' · T1 ' + h.t1;
+  }).join('\n') + (hits.length > 5 ? '\n+' + (hits.length - 5) + ' more' : '');
+}
+
 async function main() {
   // dynamic import: keeps this module loadable without puppeteer installed
   // (tests import the pure helpers above); CI installs puppeteer before running.
@@ -238,7 +257,18 @@ async function main() {
         if (eng) engine = { live: true, survivors: Array.isArray(eng.survivors) ? eng.survivors.length : 0,
                             at: Number.isFinite(+eng.at) ? +eng.at : null };
       } catch (e) { engine = { live: false }; }
-      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine };
+      /* sniper-grade hit set for the server-side high-priority push */
+      let sniper = [];
+      try {
+        const sh = (typeof window.hgSniperState === 'function') ? window.hgSniperState() : [];
+        if (Array.isArray(sh)) sniper = sh.filter(function(h){
+          return h && h.sym && Number.isFinite(+h.entry) && Number.isFinite(+h.stop) && Number.isFinite(+h.t1);
+        }).map(function(h){
+          return { sym: String(h.sym), dir: String(h.dir || ''), entry: +h.entry, stop: +h.stop,
+                   t1: +h.t1, lev: Number.isFinite(+h.lev) ? +h.lev : null, state: String(h.state || '') };
+        });
+      } catch (e) { sniper = []; }
+      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine, sniper: sniper };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -283,6 +313,28 @@ async function main() {
     newState.ticket = nextTicket;
   } else if (prevState.ticket !== undefined) {
     newState.ticket = prevState.ticket;
+  }
+
+  /* sniper-grade push: the CI's highest-priority alert — a 20x-grade
+     resting limit with the mark in/approaching the zone. Seeds silently;
+     a changed non-empty set pushes; empty sets never push. */
+  if (ticketResult.ok) {
+    const hits = Array.isArray(ticketResult.sniper) ? ticketResult.sniper : [];
+    const sKey = sniperKey(hits);
+    console.log('Sniper-grade hits: ' + (hits.length ? hits.length + ' (' + sKey + ')' : 'none'));
+    if (prevState.sniper === undefined) {
+      console.log('Sniper state seeded silently — no push.');
+      if (hits.length) newState.sniper = { key: sKey, hits: hits, at: new Date().toISOString() };
+    } else if (hits.length && sKey !== (prevState.sniper && prevState.sniper.key)) {
+      const pushResult = await sendAlertCi('🎯 HARDGATE SNIPER SETUP',
+        sniperBody(hits) + '\n20x-grade resting limit, mark in/approaching the zone.');
+      console.log('SNIPER ALERT — push: ' + pushResult);
+      newState.sniper = { key: sKey, hits: hits, at: new Date().toISOString() };
+    } else if (prevState.sniper) {
+      newState.sniper = hits.length ? { key: sKey, hits: hits, at: prevState.sniper.at } : prevState.sniper;
+    }
+  } else if (prevState.sniper !== undefined) {
+    newState.sniper = prevState.sniper;   /* degraded run: keep, change nothing */
   }
 
   /* engine-outage watchdog: verdict over the post-synthesis engine read;
@@ -380,4 +432,4 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
-         fallbackLegs };
+         fallbackLegs, sniperKey, sniperBody };

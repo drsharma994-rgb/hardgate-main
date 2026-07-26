@@ -2457,6 +2457,29 @@ var __sniper = (function(){   /* owner mandate 2026-07-25: SNIPER defaults ON; t
   }catch(e){}
   return true;
 })();
+
+/* SNIPER-GRADE HITS — the exact set the alerts fire on: resting LIMIT,
+   mark IN ZONE or APPROACHING, stop tight enough for >=20x. Published as a
+   plain snapshot after every paint (browser hgalert reads it) and pushed
+   to window.hgAlertSniper when armed; the CI runner reads the same seam.
+   Independent of the display toggle — the grade is computed, not shown. */
+var __lastSniperHits = [];
+function sniperHitsFrom(rows){
+  var out = [];
+  try{
+    var b = buildLimitBoard(rows);
+    for (var i = 0; i < b.limits.length; i++){
+      var c = b.limits[i];
+      if (!c || !c.row || !c.row.plan) continue;
+      var st = hgLimitState(c.row.plan, boardMarkFor(c.row), boardAtrFor(c.row));
+      if (!sniperOk(c, st)) continue;
+      var p = c.row.plan;
+      out.push({ sym: String(c.row.sym), dir: c.dir, entry: +p.entry, stop: +p.stop,
+                 t1: +p.t1, lev: c.lev, state: String(st.label || '') });
+    }
+  }catch(e){}
+  return out;
+}
 function boardCardHTML(c, stamp){
   try{
     var row = c.row, p = row.plan, dir = c.dir, long = dir === 'long';
@@ -2554,6 +2577,12 @@ function paintLimitBoard(el, rows){
     /* family track records accrue from here: the board's plans auto-log with
        their setup family (12h dedupe) so per-card hit-rates stay honest */
     logBoardSetups(rows);
+    /* sniper-grade snapshot: publish + ping the alert engine (chime/push
+       policy lives in hgalert.js / the CI runner — plain data only here) */
+    try{
+      __lastSniperHits = sniperHitsFrom(rows);
+      if (typeof G.hgAlertSniper === 'function') G.hgAlertSniper(__lastSniperHits);
+    }catch(e){}
   }catch(e){ /* the board is additive — the ticket + cards stand without it */ }
 }
 
@@ -3721,6 +3750,9 @@ G.__hgBrainSniperPick = pickSniperPlan;
 /* family seams: plan -> family tag; (log, kind) -> honest stats; pure */
 G.__hgBrainPlanFamily = planFamily;
 G.__hgBrainFamStats = familyStats;
+/* sniper-grade seam: the current hit set (read-only; alert channels consume) */
+G.hgSniperState = function(){ try{ return __lastSniperHits; }catch(e){ return []; } };
+G.__hgBrainSniperHits = sniperHitsFrom;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

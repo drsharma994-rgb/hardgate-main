@@ -3421,17 +3421,19 @@ function updateAlertChip(){
 }
 
 /* ntfy.sh push — free, no signup, CORS *. Topic comes from the header settings
-   row (hg_ntfy_topic); no topic configured = silent skip, never throws. */
-async function sendAlertPush(title, body){
+   row (hg_ntfy_topic); no topic configured = silent skip, never throws.
+   opts.priority: ntfy 1-5 (default 4; sniper-grade alerts use 5). */
+async function sendAlertPush(title, body, opts){
   let topic = null;
   try{ topic = localStorage.getItem('hg_ntfy_topic'); }catch(e){}
   if (!topic) return;
+  const prio = (opts && isFinite(+opts.priority)) ? Math.max(1, Math.min(5, Math.round(+opts.priority))) : 4;
   try{
     await fetch('https://ntfy.sh/' + encodeURIComponent(topic), {
       method: 'POST',
       headers: {
         'Title': String(title || 'HARDGATE alert'),
-        'Priority': '4',
+        'Priority': String(prio),
         'Tags': 'chart_with_upwards_trend',
         'Click': 'https://hardgate-main.vercel.app/'
       },

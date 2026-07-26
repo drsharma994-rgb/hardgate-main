@@ -13,7 +13,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
-         fallbackLegs } from '../scripts/alert-check.mjs';
+         fallbackLegs, sniperKey, sniperBody } from '../scripts/alert-check.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -282,6 +282,26 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   if (savedT !== undefined) process.env.TELEGRAM_TOKEN = savedT;
   if (savedC !== undefined) process.env.TELEGRAM_CHAT_ID = savedC;
   if (savedN !== undefined) process.env.NTFY_TOPIC = savedN;
+}
+
+/* ---------------- alert-check.mjs sniper-grade helpers ---------------- */
+
+{
+  ok(sniperKey(null) === '' && sniperKey([null, {}, { sym: 'X' }]) === '',
+     'sniper key: garbage/entry-less hits -> empty key, never throws');
+  ok(sniperKey([{ sym: 'B', entry: 2 }, { sym: 'A', entry: 1 }]) === 'A@1;B@2',
+     'sniper key: sym@entry, sorted deterministically');
+  ok(sniperKey([{ sym: 'A', entry: 1 }]) !== sniperKey([{ sym: 'A', entry: 1.01 }]),
+     'sniper key: a moved entry changes the key (re-alerts)');
+  const body = sniperBody([
+    { sym: 'ACE', dir: 'short', entry: 0.085, stop: 0.089, t1: 0.077, lev: 24, state: 'IN ZONE' },
+    { sym: 'B', dir: 'long', entry: 10, stop: 9.7, t1: 10.6, lev: 20, state: 'APPROACHING' }
+  ]);
+  ok(body.indexOf('ACE SHORT @ 0.085 (24x, IN ZONE) · stop 0.089 · T1 0.077') >= 0,
+     'sniper body: levels + leverage + state spelled out — got "' + body.split('\n')[0] + '"');
+  ok(sniperBody(Array.from({ length: 7 }, function(_, i){ return { sym: 'S' + i, dir: 'long', entry: i + 1, stop: i, t1: i + 2, lev: 25, state: 'IN ZONE' }; }))
+       .indexOf('+2 more') >= 0,
+     'sniper body: long hit lists truncate with a +N more tail');
 }
 
 /* ---------------- config / repo files ---------------- */

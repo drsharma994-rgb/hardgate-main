@@ -21,6 +21,10 @@ plays a short synthesized musical phrase so the owner knows to come enter:
       state — a side appearing or vanishing IS a change. When armed, the
       chime fires AND an ntfy push goes out via window.sendAlertPush (when
       a topic is configured); the 15-min class throttle covers both.
+  (d) SNIPER — the highest-priority alert: 20x-grade resting limits with
+      the mark IN ZONE or APPROACHING, pushed by brain.js after every
+      paint via window.hgAlertSniper(hits). New card or moved entry fires
+      chime + Telegram-first push cascade (ntfy at priority 5 second).
 
 SOUND: Web Audio API synthesized chime (no audio file) — E5 -> G5 -> C6
 (659.26 / 783.99 / 1046.50 Hz, sine/sine/triangle, ~0.9s, soft exponential
@@ -133,7 +137,7 @@ var __timer    = null;                   /* setInterval handle — started once,
 var __ui       = null;                   /* bell DOM, null when headless */
 var __panelOpen = false;
 
-var __lastChime = { brain: 0, gold: 0, ticket: 0 }; /* per-class throttle clocks */
+var __lastChime = { brain: 0, gold: 0, ticket: 0, sniper: 0 }; /* per-class throttle clocks */
 var __lastBrainKey = null;               /* last-alerted sym+tier set (null = armed) */
 var __lastBrainTrigAt = 0;               /* last brain trigger (chimed or consumed) */
 var __goldArmed = true;                  /* gold crossing latch (re-arms below threshold) */
@@ -143,6 +147,10 @@ var __ticketKey = null;                  /* last-seen ticket key (null = not see
 var __ticketDesc = '';                   /* 'long BTC@112000 · short —' */
 var __ticketLive = false;                /* a ticket push has arrived this session */
 var __lastTicketLine = '';               /* '00:21 ticket: short ACE@0.0852 → ACE@0.0853' */
+var __sniperKey = null;                  /* last-seen sniper hit-set key */
+var __sniperDesc = '';                   /* 'ACE SHORT @ 0.0852 (24x, IN ZONE) · …' */
+var __sniperLive = false;                /* a sniper push has arrived this session */
+var __lastSniperLine = '';               /* last sniper alert/seed line */
 
 /* last evaluation reads, for the panel's honest lines */
 var __evaluated = false;
@@ -373,6 +381,76 @@ function onTicket(snap){
   }catch(e){ return 'error'; }
 }
 
+/* ---------------- (d) SNIPER — 20x-grade in-zone entries, the owner's
+   highest-priority alert. brain.js pushes the hit set after every paint:
+   [{sym, dir, entry, stop, t1, lev, state}]. Alert on a CHANGED set (new
+   card, moved entry, card vanished is noted silently); first sighting
+   seeds silently. Push cascade: Telegram first (sendTelegram, index.html),
+   ntfy second (sendAlertPush at priority 5). 15-min class throttle covers
+   both. Never throws. */
+function sniperKeyOf(hits){
+  var parts = [];
+  for (var i = 0; i < hits.length; i++){
+    var h = hits[i];
+    if (h && h.sym && isFinite(+h.entry)) parts.push(String(h.sym) + '@' + String(+h.entry));
+  }
+  parts.sort();
+  return parts.join(';');
+}
+function sniperDesc(hits){
+  var bits = [];
+  for (var i = 0; i < hits.length && bits.length < 3; i++){
+    var h = hits[i];
+    if (h && h.sym) bits.push(String(h.sym) + ' ' + String(h.dir || '').toUpperCase()
+      + ' @ ' + (+h.entry) + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ')');
+  }
+  return bits.length ? bits.join(' · ') + (hits.length > 3 ? ' +' + (hits.length - 3) + ' more' : '') : '—';
+}
+function onSniper(hits){
+  try{
+    if (!Array.isArray(hits)) return 'ignored';
+    var key = sniperKeyOf(hits);
+    __sniperLive = true;
+    if (__sniperKey === null){ __sniperKey = key; __sniperDesc = sniperDesc(hits); renderUI(); return 'seeded'; }
+    if (key === __sniperKey) return 'unchanged';
+    __sniperKey = key;
+    __sniperDesc = sniperDesc(hits);
+    if (!hits.length){ __lastSniperLine = hhmm() + ' sniper board cleared'; renderUI(); return 'cleared'; }
+    var line = hhmm() + ' SNIPER: ' + __sniperDesc;
+    if (!__enabled || !__unlocked || !audioOk()){
+      __lastSniperLine = line + (__enabled ? ' (armed — plays after your next click)' : ' (alerts off)');
+      renderUI();
+      return 'unarmed';
+    }
+    var now = 0;
+    try{ now = Date.now(); }catch(e){ now = 0; }
+    if (now - (__lastChime.sniper || 0) < CHIME_GAP_MS){
+      __lastSniperLine = line + ' (alert held by 15-min throttle)';
+      renderUI();
+      return 'throttled';
+    }
+    __lastChime.sniper = now;
+    var suffix;
+    if (__muted){ suffix = ' (muted)'; }
+    else if (playChime()){ suffix = ''; }
+    else { suffix = ' (sound failed)'; }
+    /* push cascade: Telegram first (index.html sendTelegram), ntfy at max
+       priority second — fire-and-forget both ways, results never block */
+    var txt = '🎯 HARDGATE SNIPER SETUP\n' + __sniperDesc
+      + '\n20x-grade resting limit, mark in/approaching the zone.\nhttps://hardgate-main.vercel.app/';
+    try{
+      var tg = gfn('sendTelegram');
+      if (tg){ suffix += ' · telegram'; Promise.resolve(tg(txt)).then(function(r){
+        if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SNIPER SETUP', txt, { priority: 5 }); }
+      }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SNIPER SETUP', txt, { priority: 5 }); }); }
+      else { var nt2 = gfn('sendAlertPush'); if (nt2){ nt2('HARDGATE SNIPER SETUP', txt, { priority: 5 }); suffix += ' · ntfy p5'; } }
+    }catch(e){}
+    __lastSniperLine = line + suffix;
+    renderUI();
+    return 'alerted';
+  }catch(e){ return 'error'; }
+}
+
 /* ---------------- evaluation round ---------------- */
 function evaluate(){
   var st = {
@@ -518,6 +596,10 @@ function ticketLine(){
   if (!__ticketLive) return 'ticket: waiting for a completed synthesis — alerts on sym/entry changes';
   return 'ticket: ' + (__ticketDesc || '—');
 }
+function sniperLine(){
+  if (!__sniperLive) return 'sniper: waiting for a completed synthesis — alerts on 20x-grade in-zone entries';
+  return 'sniper: ' + (__sniperDesc || 'no sniper-grade cards right now');
+}
 
 function renderUI(){
   var ui = __ui;
@@ -535,9 +617,11 @@ function renderUI(){
     if (ui.brain) ui.brain.textContent = brainLine();
     if (ui.gold) ui.gold.textContent = goldLine();
     if (ui.ticket) ui.ticket.textContent = ticketLine();
+    if (ui.sniper) ui.sniper.textContent = sniperLine();
     if (ui.lastB) ui.lastB.textContent = 'last brain alert: ' + (__lastBrainLine || 'none yet this session');
     if (ui.lastG) ui.lastG.textContent = 'last gold alert: ' + (__lastGoldLine || 'none yet this session');
     if (ui.lastT) ui.lastT.textContent = 'last ticket alert: ' + (__lastTicketLine || 'none yet this session');
+    if (ui.lastS) ui.lastS.textContent = 'last sniper alert: ' + (__lastSniperLine || 'none yet this session');
   }catch(e){ /* rendering never breaks the engine */ }
 }
 
@@ -585,7 +669,7 @@ function buildUI(){
     root.innerHTML = ''
       + '<style>' + AL_CSS + '</style>'
       + '<div class="hgab-panel" id="hgAlertPanel" style="display:none">'
-      + '<div class="hgab-title">HG ALERTS <span>sound chimes for BRAIN + GOLD + TICKET changes</span></div>'
+      + '<div class="hgab-title">HG ALERTS <span>sound chimes for BRAIN + GOLD + TICKET + SNIPER</span></div>'
       + '<div class="hgab-state" id="hgAlertState"></div>'
       + '<div class="hgab-row">'
       + '<button class="hgab-mini" id="hgAlertMute" type="button">MUTE</button>'
@@ -595,9 +679,11 @@ function buildUI(){
       + '<div class="hgab-line" id="hgAlertBrain"></div>'
       + '<div class="hgab-line" id="hgAlertGold"></div>'
       + '<div class="hgab-line" id="hgAlertTicket"></div>'
+      + '<div class="hgab-line" id="hgAlertSniper"></div>'
       + '<div class="hgab-line" id="hgAlertLastB"></div>'
       + '<div class="hgab-line" id="hgAlertLastG"></div>'
       + '<div class="hgab-line" id="hgAlertLastT"></div>'
+      + '<div class="hgab-line" id="hgAlertLastS"></div>'
       + '<div class="hgab-note">alerts evaluate while the app is open, after scans have run — '
       + 'brain + ticket alerts need a completed synthesis; ticket also pushes to ntfy when a topic is saved</div>'
       + '</div>'
@@ -613,9 +699,11 @@ function buildUI(){
       brain: root.querySelector ? root.querySelector('#hgAlertBrain') : null,
       gold:  root.querySelector ? root.querySelector('#hgAlertGold') : null,
       ticket: root.querySelector ? root.querySelector('#hgAlertTicket') : null,
+      sniper: root.querySelector ? root.querySelector('#hgAlertSniper') : null,
       lastB: root.querySelector ? root.querySelector('#hgAlertLastB') : null,
       lastG: root.querySelector ? root.querySelector('#hgAlertLastG') : null,
-      lastT: root.querySelector ? root.querySelector('#hgAlertLastT') : null
+      lastT: root.querySelector ? root.querySelector('#hgAlertLastT') : null,
+      lastS: root.querySelector ? root.querySelector('#hgAlertLastS') : null
     };
     if (__ui.btn && __ui.btn.addEventListener) __ui.btn.addEventListener('click', onBell);
     if (__ui.mute && __ui.mute.addEventListener) __ui.mute.addEventListener('click', onMute);
@@ -650,6 +738,10 @@ function hgAlertTest(){
 }
 W.hgAlertTicket = function(snap){
   try{ return onTicket(snap); }
+  catch(e){ return 'error'; }
+};
+W.hgAlertSniper = function(hits){
+  try{ return onSniper(hits); }
   catch(e){ return 'error'; }
 };
 W.hgAlertCheck = function(){
