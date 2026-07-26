@@ -2894,15 +2894,18 @@ async function autoWarmIntoRun(stat){
       var engRec = null;
       for (h = 0; h < recs.length; h++) if (recs[h].id === 'engine') engRec = recs[h];
       if (engPending && engRec && engRec.outcome === 'pending'){
-        var engCap = (isFinite(+TUN.engineWarmMs) && +TUN.engineWarmMs > 0) ? +TUN.engineWarmMs : 150000;
-        if (stat){
-          stat.textContent = 'engine gate scan running — waiting for the slow leg (≤'
-            + FMT(engCap / 1000, 0) + 's on a cold start)…';
+        var engCap = (isFinite(+TUN.engineWarmMs) && +TUN.engineWarmMs > 0) ? +TUN.engineWarmMs : 240000;
+        /* live progress, never a frozen-looking wait: the stat line counts
+           the seconds while the gate scan works through 500+ contracts */
+        var wStart = Date.now();
+        while (engRec.outcome === 'pending' && (Date.now() - wStart) < engCap){
+          if (stat){
+            stat.textContent = 'engine gate scan running — '
+              + Math.round((Date.now() - wStart) / 1000) + 's elapsed (≤'
+              + FMT(engCap / 1000, 0) + 's on a cold start — the structural voter is worth the wait)…';
+          }
+          await new Promise(function(res){ setTimeout(res, 2000); });
         }
-        await Promise.race([
-          engPending,
-          new Promise(function(res){ setTimeout(function(){ res('capped'); }, engCap); })
-        ]).then(null, function(){});
       }
     }catch(e){}
     /* accounting: what the auto-warm accomplished vs what stayed dark */
