@@ -330,8 +330,8 @@ console.log('== smartCdcxMap ==');
   const perps = ['BTCUSDT', 'AEVOUSDT', 'SOLUSDT'];
   const xu = [
     { sym: 'B-BTC_USDT',  base: 'BTC',  exchange: 'cdcx' },
-    { sym: 'B-AEVO_USDT', base: 'AEVO', exchange: 'cdcx' },
-    { sym: 'B-SOL_USDT',  base: 'SOL',  exchange: 'cdcx' },
+    { sym: 'B-AEVO_USDT', base: 'AEVO', exchange: 'coindcx' },   /* xuniverse.js's own spelling */
+    { sym: 'B-SOL_USDT',  base: 'SOL',  exchange: 'coindcx' },
     { sym: 'B-GHOST_USDT', base: 'GHOST', exchange: 'cdcx' },
     { sym: 'ETHUSD',      base: 'ETH',  exchange: 'delta' },   /* other venue ignored */
     null, {}

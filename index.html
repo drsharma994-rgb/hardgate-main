@@ -1421,7 +1421,8 @@ function smartCdcxMap(xuItems, binancePerps){
     const binSet = {};
     (binancePerps || []).forEach(function(s){ binSet[s] = true; });
     (xuItems || []).forEach(function(it){
-      if (!it || it.exchange !== 'cdcx' || !it.base) return;
+      if (!it || !it.base) return;
+      if (it.exchange !== 'cdcx' && it.exchange !== 'coindcx') return;   /* xuniverse.js says 'coindcx' */
       const binSym = it.base + 'USDT';
       if (binSet[binSym]) out.twinOf[binSym] = it.sym;
       else out.noTwin.push(it.sym);
