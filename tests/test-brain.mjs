@@ -3217,5 +3217,46 @@ console.log('== AS) tier-1 layers ==');
      'AS: 09:30 IST weekday -> mid-session, no flags');
 }
 
+/* ================= AT) LIQPOOL — stop-run caution + T1 magnet ================= */
+console.log('== AT) liqpool magnet guard ==');
+{
+  const LP = W.__hgBrainLiqpool;
+  ok(typeof LP === 'function', 'AT: liqpool seam exposed');
+  const flat = []; for (let i = 0; i < 120; i++) flat.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 100 });
+  const mkRow = (dir, entry, stop, t1) => ({
+    dec: { dir: dir, tier: 'WATCH', agree: 3, reasons: ['x'], vetoes: [] },
+    plan: { dir: dir, entry: entry, stop: stop, t1: t1, entryType: 'limit', anchorName: '4h FVG' },
+    rows4h: flat
+  });
+
+  /* pool at the stop -> stop-run caution */
+  W.findLiquidityPools = function(){ return { buySide: { level: 101.5, count: 3 }, sellSide: { level: 97.2, count: 4 } }; };
+  const rLong = mkRow('long', 100, 97.1, 106);
+  const n1 = LP(rLong);
+  ok(Array.isArray(n1) && n1[0].kind === 'caution' && n1[0].text.indexOf('sell-side pool at 97.2') >= 0
+     && n1[0].text.indexOf('stop-run territory') >= 0,
+     'AT: a sell-side pool within 0.5xATR of the long stop fires the stop-run caution');
+
+  /* SHORT mirrors at the buy-side pool */
+  const rShort = mkRow('short', 100, 101.4, 94);
+  const n2 = LP(rShort);
+  ok(Array.isArray(n2) && n2[0].kind === 'caution' && n2[0].text.indexOf('buy-side pool at 101.5') >= 0,
+     'AT: SHORT mirrors — the buy-side pool over the stop fires');
+
+  /* pool at T1 instead -> magnet note, not a caution */
+  W.findLiquidityPools = function(){ return { buySide: { level: 105.8, count: 3 }, sellSide: null }; };
+  const n3 = LP(rLong);
+  ok(Array.isArray(n3) && n3[0].kind === 'note' && n3[0].text.indexOf('the target IS the magnet') >= 0,
+     'AT: a pool at T1 reads as the magnet note, never a stop warning');
+
+  /* no pool in band -> null (SILENT at apply time); module absent -> 'dark' */
+  W.findLiquidityPools = function(){ return { buySide: { level: 150, count: 3 }, sellSide: { level: 50, count: 3 } }; };
+  ok(LP(rLong) === null, 'AT: pools out of band -> null (SILENT), never a stretched claim');
+  delete W.findLiquidityPools;
+  ok(LP(rLong) === 'dark', 'AT: absent findLiquidityPools -> honest dark');
+  ok(LP(null) === null && LP({}) === null && LP(mkRow('long', 0, 0, 0)) === null,
+     'AT: garbage rows/plans -> null, never throws');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

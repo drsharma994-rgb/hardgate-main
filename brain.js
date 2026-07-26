@@ -1576,6 +1576,75 @@ function applyVolreg(rows){
     }
   }catch(e){}
 }
+/* =========================================================================
+LIQPOOL MAGNET GUARD ('liqpool', context) — the stop-hunt read. Runs AFTER
+planning (it needs the plan's stop/T1) on the row's own 4h candles via
+indicators.js findLiquidityPools (equal highs/lows — the pools SMC traders
+actually mean; the liquidation stream carries no price levels, never
+fabricated). Two honest reads, never a vote on direction:
+  CAUTION   the row's STOP sits within 0.5xATR of the opposing pool
+            (equal lows under a long stop / equal highs over a short one)
+            — classic stop-run territory, expect a wick through
+  NEUTRAL   the pool sits at T1 instead — the target IS the magnet
+Absent module -> DARK note; no pool in band -> SILENT. Never throws.
+========================================================================= */
+function liqpoolNote(row){
+  try{
+    var p = row && row.plan;
+    if (!p || !(+p.entry > 0) || !(+p.stop > 0) || +p.entry === +p.stop) return null;
+    if (typeof G.findLiquidityPools !== 'function') return 'dark';
+    var rows = (row.rows4h && row.rows4h.length >= 30) ? row.rows4h
+             : (Array.isArray(row.rows) && row.rows.length >= 30) ? row.rows : null;
+    if (!rows) return null;
+    var lp = G.findLiquidityPools(rows);
+    if (!lp) return null;
+    var atr = boardAtrFor(row);
+    if (!isFinite(atr) || atr <= 0) return null;
+    var long = row.dec.dir === 'long', out = [];
+    var stopPool = long ? lp.sellSide : lp.buySide;
+    if (stopPool && isFinite(+stopPool.level)
+        && Math.abs(+stopPool.level - (+p.stop)) <= 0.5 * atr){
+      out.push({ kind: 'caution',
+        text: 'stop sits inside the ' + (long ? 'sell-side' : 'buy-side') + ' pool at '
+          + PX(+stopPool.level) + ' (' + (+stopPool.count || 2) + ' equal ' + (long ? 'lows' : 'highs')
+          + ') — stop-run territory, expect a wick through' });
+    }
+    var t1Pool = long ? lp.buySide : lp.sellSide;
+    if (t1Pool && isFinite(+t1Pool.level) && isFinite(+p.t1)
+        && Math.abs(+t1Pool.level - (+p.t1)) <= 0.5 * atr){
+      out.push({ kind: 'note',
+        text: (long ? 'buy-side' : 'sell-side') + ' pool at ' + PX(+t1Pool.level)
+          + ' sits at T1 — the target IS the magnet' });
+    }
+    return out.length ? out : null;
+  }catch(e){ return null; }
+}
+function applyLiqpool(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col || !row.plan) continue;
+      var ns = liqpoolNote(row);
+      if (ns === 'dark'){
+        colNote(row.col, 'liqpool', 'DARK', 'findLiquidityPools module absent — pool guard sits out');
+        continue;
+      }
+      if (!ns){
+        colNote(row.col, 'liqpool', 'SILENT', 'no equal-highs/lows pool within 0.5xATR of the plan levels');
+        continue;
+      }
+      for (var k = 0; k < ns.length; k++){
+        if (ns[k].kind === 'caution'){
+          row.col.votes.push({ layer: 'liqpool', vote: 'neutral', kind: 'context', caution: true, text: ns[k].text });
+          colNote(row.col, 'liqpool', 'CAUTION', ns[k].text);
+        }else{
+          colNote(row.col, 'liqpool', 'NEUTRAL', ns[k].text);
+        }
+      }
+    }
+  }catch(e){}
+}
+
 /* session window (IST, gold-lane kill zones). now injectable for tests. */
 function sessionWindow(now){
   try{
@@ -2807,7 +2876,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','trend4h','mtf','volreg','session'];
+                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
 
 function auditLineHTML(label, status, text){
@@ -3414,6 +3483,10 @@ async function runBrain(el){
       }
     }
 
+    /* LIQPOOL guard — post-plan pass: pools need the plan's stop/T1 */
+    if (combined) applyLiqpool(planSet);
+    else applyLiqpool(setups);
+
     /* render */
     var readTxt = marketRead(snap);
     if (read && readWrap){
@@ -3632,6 +3705,9 @@ async function runQuick(el){
         }catch(e){ setups[ls].plan = null; setups[ls].rows = null; }
       }
     }
+
+    /* LIQPOOL guard — post-plan pass over the freshly planned set */
+    applyLiqpool(combined ? qPlanSet : setups);
 
     /* unchanged verdicts carry over with an honest AS OF age stamp */
     for (var u = 0; u < unchanged.length; u++){
@@ -3972,6 +4048,7 @@ G.__hgBrainSniperHits = sniperHitsFrom;
 G.__hgBrainMtf = { resampleDaily: resampleDaily, dailySide: dailySide };
 G.__hgBrainAtrPct = atrPercentile;
 G.__hgBrainSession = sessionWindow;
+G.__hgBrainLiqpool = liqpoolNote;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
