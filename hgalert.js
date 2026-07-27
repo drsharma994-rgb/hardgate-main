@@ -365,15 +365,24 @@ function onTicket(snap){
     if (__muted){ suffix = ' (muted)'; }
     else if (playChime()){ suffix = ''; }
     else { suffix = ' (sound failed)'; }
-    /* ntfy push — the free sendAlertPush from index.html; no topic = its
-       own silent skip. Fire-and-forget, never awaited into the UI path. */
+    /* push cascade: Telegram first (index.html sendTelegram), ntfy second —
+       the 2026-07-27 gap: ticket changes chimed but never reached Telegram
+       when only ntfy was wired. Fire-and-forget; results never block. */
+    var tickTxt = 'HARDGATE entry ticket changed\n'
+      + 'Long: ' + ((snap.long && snap.long.sym) ? snap.long.sym + ' @ ' + (+snap.long.entry) : '—')
+      + '\nShort: ' + ((snap.short && snap.short.sym) ? snap.short.sym + ' @ ' + (+snap.short.entry) : '—')
+      + '\nhttps://hardgate-main.vercel.app/';
     try{
-      var push = gfn('sendAlertPush');
-      if (push) push('HARDGATE entry ticket changed',
-        'Long: ' + ((snap.long && snap.long.sym) ? snap.long.sym + ' @ ' + (+snap.long.entry) : '—')
-        + '\nShort: ' + ((snap.short && snap.short.sym) ? snap.short.sym + ' @ ' + (+snap.short.entry) : '—'));
-      suffix += ' · push sent';
-      if (!push) suffix = suffix.replace(' · push sent', '');
+      var tg = gfn('sendTelegram');
+      if (tg){
+        suffix += ' · telegram';
+        Promise.resolve(tg(tickTxt)).then(function(r){
+          if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE entry ticket changed', tickTxt); }
+        }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE entry ticket changed', tickTxt); });
+      }else{
+        var nt2 = gfn('sendAlertPush');
+        if (nt2){ nt2('HARDGATE entry ticket changed', tickTxt); suffix += ' · ntfy'; }
+      }
     }catch(e){ suffix += ' · push failed'; }
     __lastTicketLine = line + suffix;
     renderUI();

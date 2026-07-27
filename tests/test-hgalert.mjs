@@ -651,6 +651,17 @@ console.log('== 10) ticket change alerts ==');
   assert(ui.q('#hgAlertLastT').textContent.indexOf('ticket: long BTC@101') >= 0,
          'last-ticket line records the alert');
 
+  /* telegram-first cascade: when sendTelegram exists, the ticket goes there first */
+  const tgTicket = [];
+  env.W.sendTelegram = (t) => { tgTicket.push(t); return Promise.resolve(true); };
+  Date.now = () => REAL_DATE_NOW() + 16 * 60 * 1000;   /* past the throttle */
+  const r3b = env.W.hgAlertTicket({ at: 4, long: { sym: 'BTC', entry: 102 }, short: null });
+  assert(r3b === 'alerted' && tgTicket.length === 1 && tgTicket[0].indexOf('BTC @ 102') >= 0
+      && pushes.length === 1,
+         'telegram-first: the ticket change lands on Telegram, ntfy untouched on success');
+  Date.now = REAL_DATE_NOW;
+  delete env.W.sendTelegram;
+
   /* a side appearing is a change — but the 15-min class throttle holds it */
   const r4 = env.W.hgAlertTicket({ at: 4, long: { sym: 'BTC', entry: 101 }, short: { sym: 'ACE', entry: 0.085 } });
   assert(r4 === 'throttled' && pushes.length === 1,
