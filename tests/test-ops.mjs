@@ -13,7 +13,8 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
-         fallbackLegs, sniperKey, sniperBody } from '../scripts/alert-check.mjs';
+         fallbackLegs, sniperKey, sniperBody,
+         digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC } from '../scripts/alert-check.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -302,6 +303,46 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(sniperBody(Array.from({ length: 7 }, function(_, i){ return { sym: 'S' + i, dir: 'long', entry: i + 1, stop: i, t1: i + 2, lev: 25, state: 'IN ZONE' }; }))
        .indexOf('+2 more') >= 0,
      'sniper body: long hit lists truncate with a +N more tail');
+}
+
+/* ---------------- alert-check.mjs daily digest helpers ---------------- */
+
+{
+  const at = (h, m) => Date.UTC(2026, 6, 27, h, m);
+  ok(digestDue(undefined, at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 5)) === true,
+     'digest: first ever run inside the window -> due');
+  ok(digestDue('garbage', at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 5)) === true,
+     'digest: corrupt stamp inside the window -> due');
+  ok(digestDue(undefined, at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC - 5)) === false,
+     'digest: before the window -> not due');
+  ok(digestDue(undefined, at(DIGEST_HOUR_UTC + 2, 0)) === false,
+     'digest: after the window -> not due');
+  ok(digestDue(new Date(at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 1) - 21 * 3600000).toISOString(), at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 5)) === true,
+     'digest: 21h-old stamp -> due again (next day)');
+  ok(digestDue(new Date(at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 1)).toISOString(), at(DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 5)) === false,
+     'digest: 4-min-old stamp -> suppressed (one per day)');
+
+  const body = digestBody({
+    now: Date.UTC(2026, 6, 27, DIGEST_HOUR_UTC, DIGEST_MIN_UTC + 1),
+    read: 'MIXED — SELECTIVE regime (score -2) · on-chain neutral · F&G 26 Fear',
+    ticket: { long: null, short: { sym: 'ACE', entry: 0.085 } },
+    prevTicket: { long: { sym: 'DOGE', entry: 0.069 }, short: null },
+    sniper: [{ sym: 'ACE', dir: 'short', entry: 0.085, lev: 24 }],
+    engineOk: true, survivors: 7,
+    top: [{ sym: 'WLD', dir: 'short', tier: 'WATCH', entry: 0.3437, stop: 0.367, t1: 0.305 }]
+  });
+  ok(body.indexOf('Market: MIXED — SELECTIVE') >= 0, 'digest: market read line carried');
+  ok(body.indexOf('Ticket: LONG — · SHORT ACE @ 0.085') >= 0, 'digest: ticket levels spelled, empty side as —');
+  ok(body.indexOf('Sniper-grade: ACE SHORT @ 0.085 (24x)') >= 0, 'digest: sniper hits with leverage');
+  ok(body.indexOf('Engine: 7 survivors voting') >= 0, 'digest: engine line');
+  ok(body.indexOf('· WLD SHORT (WATCH) @ 0.3437 · stop 0.367 · T1 0.305') >= 0, 'digest: top planned rows with levels');
+  ok(body.indexOf('Last digest ticket: LONG DOGE @ 0.069 · SHORT —') >= 0, 'digest: yesterday comparison carried');
+  ok(body.indexOf('IST') >= 0, 'digest: IST timestamp present');
+  const empty = digestBody({ now: Date.now(), read: '', ticket: { long: null, short: null },
+    sniper: [], engineOk: false, top: [] });
+  ok(empty.indexOf('Engine: DARK') >= 0 && empty.indexOf('Top plans: none') >= 0,
+     'digest: dark engine + empty board render honestly, never hidden');
+  ok(ticketLine({ long: null, short: null }) === 'LONG — · SHORT —', 'digest: ticket line null-safe');
 }
 
 /* ---------------- config / repo files ---------------- */

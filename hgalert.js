@@ -451,6 +451,70 @@ function onSniper(hits){
   }catch(e){ return 'error'; }
 }
 
+/* ---------------- (e) DAILY FAMILY DIGEST — the Setup Log's per-family
+   track record, pushed once per day at 21:05-21:35 IST while the app is
+   open. The log lives in THIS browser (localStorage), so this is the only
+   honest source for family hit-rates — the server digest covers market/
+   ticket/sniper; this covers the family's own record. Telegram first, ntfy
+   fallback; the day stamp persists so exactly one push per day, and a
+   failed delivery retries next cycle. Never throws. */
+function famDigestText(){
+  try{
+    var load = gfn('loadLog'), st = gfn('__hgBrainFamStats');
+    if (!load || !st) return null;
+    var log = load() || [], kinds = {}, i;
+    for (i = 0; i < log.length; i++) if (log[i] && log[i].kind) kinds[log[i].kind] = 1;
+    var ks = Object.keys(kinds);
+    if (!ks.length) return 'no logged setups yet — the family record starts with the next board scan';
+    var rows = [];
+    for (i = 0; i < ks.length; i++){
+      var s = st(log, ks[i]);
+      if (s) rows.push(s);
+    }
+    if (!rows.length) return 'no closed setups graded yet — the record builds as T1/stops print';
+    rows.sort(function(a, b){ return b.n - a.n; });
+    var lines = [];
+    for (i = 0; i < rows.length; i++){
+      var r = rows[i];
+      lines.push(r.kind + ': ' + r.tp + '/' + r.n + ' (' + r.hitPct + '%) · Σ'
+        + (r.sumR > 0 ? '+' : '') + r.sumR + 'R');
+    }
+    return lines.join('\n');
+  }catch(e){ return null; }
+}
+function maybeFamDigest(nowD){
+  try{
+    var now = nowD ? new Date(nowD) : new Date();
+    var ist = new Date(now.getTime() + (330 + now.getTimezoneOffset()) * 60000);
+    var mins = ist.getHours() * 60 + ist.getMinutes();
+    if (!(mins >= 1265 && mins <= 1295)) return 'outside-window';   /* 21:05-21:35 IST */
+    var day = ist.toDateString(), last = null;
+    try{ last = localStorage.getItem('hgFamDigestDay'); }catch(e){}
+    if (last === day) return 'already-sent';
+    var tg = gfn('sendTelegram');
+    if (!tg) return 'no-channel';
+    var body = famDigestText();
+    if (!body) return 'no-data';
+    var tickFn = gfn('__hgBrainTicketNow'), tick = null;
+    try{ tick = tickFn ? tickFn() : null; }catch(e){}
+    var tickLine = 'Ticket: LONG ' + (tick && tick.long ? tick.long.sym + ' @ ' + tick.long.entry : '—')
+                 + ' · SHORT ' + (tick && tick.short ? tick.short.sym + ' @ ' + tick.short.entry : '—');
+    var txt = '📊 HARDGATE DAILY — Setup Log family records (browser)\n' + tickLine + '\n' + body;
+    Promise.resolve(tg(txt)).then(function(r){
+      if (r === true){ try{ localStorage.setItem('hgFamDigestDay', day); }catch(e){} return; }
+      var topic = null;
+      try{ topic = localStorage.getItem('hg_ntfy_topic'); }catch(e){}
+      if (topic){
+        var nt = gfn('sendAlertPush');
+        if (nt) nt('HARDGATE DAILY — family records', txt);
+        try{ localStorage.setItem('hgFamDigestDay', day); }catch(e){}
+      }
+      /* no channel delivered -> no stamp -> honest retry next cycle */
+    }).catch(function(){});
+    return 'fired';
+  }catch(e){ return 'error'; }
+}
+
 /* ---------------- evaluation round ---------------- */
 function evaluate(){
   var st = {
@@ -520,6 +584,7 @@ function evaluate(){
   st.gold  = { count: gc.count, scalp: gc.scalp, swing: gc.swing,
                scalpLive: gc.scalpLive, swingLive: gc.swingLive, armed: __goldArmed };
   st.note = st.chimed.length ? ('chimed: ' + st.chimed.join(', ')) : 'checked — no new alert conditions';
+  maybeFamDigest();   /* daily family-record push (21:05-21:35 IST, once/day) */
   renderUI();
   return st;
 }
@@ -744,6 +809,9 @@ W.hgAlertSniper = function(hits){
   try{ return onSniper(hits); }
   catch(e){ return 'error'; }
 };
+/* family-digest seams (vm suites): the text builder + the daily tick */
+W.__hgFamDigestText = function(){ try{ return famDigestText(); }catch(e){ return null; } };
+W.__hgFamDigestTick = function(d){ try{ return maybeFamDigest(d); }catch(e){ return 'error'; } };
 W.hgAlertCheck = function(){
   try{ return evaluate(); }
   catch(e){

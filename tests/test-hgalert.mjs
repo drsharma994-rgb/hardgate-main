@@ -727,6 +727,66 @@ console.log('== 11) sniper hit-set alerts ==');
          'alerts off -> sniper change recorded, honestly reported unarmed');
 }
 
+/* =========================================================================
+   12) DAILY FAMILY DIGEST — text builder + once-per-day window logic
+========================================================================= */
+console.log('== 12) daily family digest ==');
+{
+  const doc = stubDocument();
+  const env = loadHgalert({ doc, ls: memLocalStorage(), audio: true });
+
+  /* text builder over a stubbed log + the real brain familyStats shape */
+  env.W.loadLog = () => [
+    { kind: 'fvg-limit', status: 'tp', rr: 2 }, { kind: 'fvg-limit', status: 'sl' },
+    { kind: 'smart-scalp', status: 'tp', rr: 1.5 }, { kind: 'fvg-limit', status: 'exp' }
+  ];
+  env.W.__hgBrainFamStats = (log, kind) => {
+    const es = log.filter(e => e.kind === kind && (e.status === 'tp' || e.status === 'sl' || e.status === 'time_stop'));
+    if (!es.length) return null;
+    const tp = es.filter(e => e.status === 'tp').length;
+    return { kind, tp, sl: es.filter(e => e.status === 'sl').length, ts: 0, n: es.length,
+             hitPct: Math.round(tp / es.length * 100), sumR: es.reduce((a, e) => a + (e.status === 'tp' ? (e.rr || 1.5) : -1), 0) };
+  };
+  const txt = env.W.__hgFamDigestText();
+  assert(txt.indexOf('fvg-limit: 1/2 (50%)') >= 0 && txt.indexOf('smart-scalp: 1/1 (100%)') >= 0,
+         'digest text carries per-family records, sorted by sample size');
+  assert(txt.indexOf('exp') === -1, 'expired rows stay out of the record');
+
+  env.W.loadLog = () => [];
+  assert(env.W.__hgFamDigestText().indexOf('no logged setups yet') >= 0,
+         'empty log -> honest "starts with the next board scan"');
+  delete env.W.loadLog;
+  assert(env.W.__hgFamDigestText() === null, 'loadLog absent -> null, never throws');
+
+  /* window + once-per-day logic (21:05-21:35 IST = 15:35-16:05 UTC) */
+  const env2 = loadHgalert({ doc: stubDocument(), ls: memLocalStorage(), audio: true });
+  env2.W.loadLog = () => [{ kind: 'fvg-limit', status: 'tp', rr: 2 }];
+  env2.W.__hgBrainFamStats = () => ({ kind: 'fvg-limit', tp: 1, sl: 0, ts: 0, n: 1, hitPct: 100, sumR: 2 });
+  const tgCalls = [];
+  env2.W.sendTelegram = (t) => { tgCalls.push(t); return Promise.resolve(true); };
+  const inWindow = '2026-07-27T15:40:00Z';   /* 21:10 IST */
+  assert(env2.W.__hgFamDigestTick(inWindow) === 'fired',
+         'inside the window with data + channel -> fired');
+  await new Promise(r => setTimeout(r, 30));
+  assert(tgCalls.length === 1 && tgCalls[0].indexOf('family records') >= 0
+      && tgCalls[0].indexOf('fvg-limit: 1/1 (100%)') >= 0,
+         'the push carries the ticket line + family records');
+  assert(env2.W.__hgFamDigestTick(inWindow) === 'already-sent',
+         'second call same day -> suppressed (one digest per day)');
+  assert(env2.W.__hgFamDigestTick('2026-07-27T10:00:00Z') === 'outside-window',
+         'outside the window -> no-op');
+
+  /* failed telegram + no ntfy topic -> no stamp, honest retry */
+  const env3 = loadHgalert({ doc: stubDocument(), ls: memLocalStorage(), audio: true });
+  env3.W.loadLog = () => [{ kind: 'fvg-limit', status: 'tp', rr: 2 }];
+  env3.W.__hgBrainFamStats = () => ({ kind: 'fvg-limit', tp: 1, sl: 0, ts: 0, n: 1, hitPct: 100, sumR: 2 });
+  env3.W.sendTelegram = () => Promise.resolve('HTTP 403');
+  env3.W.__hgFamDigestTick(inWindow);
+  await new Promise(r => setTimeout(r, 30));
+  assert(env3.W.__hgFamDigestTick(inWindow) === 'fired',
+         'failed delivery leaves no stamp -> the next cycle retries honestly');
+}
+
 globalThis.setInterval = REAL_SET_INTERVAL;
 Date.now = REAL_DATE_NOW;
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

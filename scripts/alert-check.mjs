@@ -168,6 +168,51 @@ function sniperBody(hits) {
   }).join('\n') + (hits.length > 5 ? '\n+' + (hits.length - 5) + ' more' : '');
 }
 
+/* ---------------- DAILY DIGEST ----------------
+   Once per day (~21:07 IST, inside the 15-min runs), a full-market summary
+   push: market read, entry ticket, sniper hits, engine, top planned rows.
+   Pure body composition (testable); the push itself is a daily, never
+   throttled. Stamp rides alert-state.json so exactly one digest per day. */
+const DIGEST_HOUR_UTC = 15, DIGEST_MIN_UTC = 37;   /* 21:07 IST, off-peak minute */
+const DIGEST_WINDOW_MIN = 45;
+function digestDue(lastDigestAt, now) {
+  const d = new Date(now);
+  const mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const start = DIGEST_HOUR_UTC * 60 + DIGEST_MIN_UTC;
+  if (!(mins >= start && mins <= start + DIGEST_WINDOW_MIN)) return false;
+  const t = Date.parse(lastDigestAt || '');
+  return !Number.isFinite(t) || (now - t) > 20 * 60 * 60 * 1000;
+}
+function ticketLine(t) {
+  const f = (s) => (s ? s.sym + ' @ ' + s.entry : '—');
+  return 'LONG ' + f(t && t.long) + ' · SHORT ' + f(t && t.short);
+}
+function digestBody(info) {
+  const lines = [];
+  const dt = new Date(info.now + 5.5 * 3600 * 1000);   /* IST stamp */
+  const day = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()];
+  lines.push(day + ' ' + String(dt.getUTCDate()).padStart(2, '0') + '/'
+    + String(dt.getUTCMonth() + 1).padStart(2, '0') + ' '
+    + String(dt.getUTCHours()).padStart(2, '0') + ':' + String(dt.getUTCMinutes()).padStart(2, '0') + ' IST');
+  lines.push('Market: ' + (info.read || '—'));
+  lines.push('Ticket: ' + ticketLine(info.ticket));
+  lines.push('Sniper-grade: ' + (info.sniper && info.sniper.length
+    ? info.sniper.map(function(h){ return h.sym + ' ' + String(h.dir || '').toUpperCase() + ' @ ' + h.entry + ' (' + (h.lev || '?') + 'x)'; }).join(' · ')
+    : 'none right now'));
+  lines.push('Engine: ' + (info.engineOk ? (info.survivors + ' survivors voting') : 'DARK — check the app'));
+  if (info.top && info.top.length){
+    lines.push('Top plans:');
+    for (const r of info.top){
+      lines.push('· ' + r.sym + ' ' + String(r.dir || '').toUpperCase() + ' (' + r.tier + ') @ ' + r.entry
+        + ' · stop ' + r.stop + ' · T1 ' + r.t1);
+    }
+  } else {
+    lines.push('Top plans: none — standing aside is a position.');
+  }
+  if (info.prevTicket) lines.push('Last digest ticket: ' + ticketLine(info.prevTicket));
+  return lines.join('\n');
+}
+
 async function main() {
   // dynamic import: keeps this module loadable without puppeteer installed
   // (tests import the pure helpers above); CI installs puppeteer before running.
@@ -268,7 +313,24 @@ async function main() {
                    t1: +h.t1, lev: Number.isFinite(+h.lev) ? +h.lev : null, state: String(h.state || '') };
         });
       } catch (e) { sniper = []; }
-      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine, sniper: sniper };
+      /* daily digest reads: the market-read line + up to 3 top planned rows
+         from the completed synthesis (frozen snapshot, plan levels intact) */
+      let read = '';
+      try { read = (document.getElementById('brainRead') || {}).textContent || ''; } catch (e) {}
+      let top = [];
+      try {
+        const last = (typeof window.__hgBrainLast === 'function') ? window.__hgBrainLast() : null;
+        const rws = (last && Array.isArray(last.rows)) ? last.rows : [];
+        top = rws.filter(function(r){
+          return r && r.plan && isFinite(+r.plan.entry)
+            && (r.tier === 'PRIME' || r.tier === 'HIGH' || r.tier === 'WATCH');
+        }).slice(0, 3).map(function(r){
+          return { sym: String(r.sym), dir: String(r.dir || ''), tier: String(r.tier || ''),
+                   entry: +r.plan.entry, stop: +r.plan.stop, t1: +r.plan.t1 };
+        });
+      } catch (e) { top = []; }
+      return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine,
+               sniper: sniper, read: String(read).slice(0, 300), top: top };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -361,6 +423,29 @@ async function main() {
     newState.engineAlertAt = prevState.engineAlertAt;   /* degraded run: keep the stamp, change nothing */
   }
 
+  /* DAILY DIGEST — one full-market summary per day at ~21:07 IST, riding
+     the 15-min runs. Unconditional channel (a daily, never throttled); the
+     stamp rides alert-state.json so exactly one digest per day. */
+  if (ticketResult.ok && digestDue(prevState.digestAt, Date.now())) {
+    const body = digestBody({
+      now: Date.now(),
+      read: ticketResult.read || '',
+      ticket: ticketSnapshot(ticketResult.ticket),
+      prevTicket: prevState.digestTicket || null,
+      sniper: Array.isArray(ticketResult.sniper) ? ticketResult.sniper : [],
+      engineOk: engineVerdict(ticketResult.engine, Date.now()).ok,
+      survivors: engineVerdict(ticketResult.engine, Date.now()).survivors || 0,
+      top: Array.isArray(ticketResult.top) ? ticketResult.top : []
+    });
+    const pushResult = await sendAlertCi('HARDGATE DAILY DIGEST', body);
+    console.log('DAILY DIGEST — push: ' + pushResult);
+    newState.digestAt = new Date().toISOString();
+    newState.digestTicket = ticketSnapshot(ticketResult.ticket);
+  } else if (prevState.digestAt) {
+    newState.digestAt = prevState.digestAt;
+    if (prevState.digestTicket) newState.digestTicket = prevState.digestTicket;
+  }
+
   /* email gate LAST: the ticket + engine bookkeeping above is saved either
      way. On email failure the alert KEYS roll back (the setup re-fires and
      the email retries next run) — without discarding ticket/engine state
@@ -432,4 +517,5 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
-         fallbackLegs, sniperKey, sniperBody };
+         fallbackLegs, sniperKey, sniperBody,
+         digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC };
