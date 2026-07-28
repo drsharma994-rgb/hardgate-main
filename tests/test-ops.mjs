@@ -385,7 +385,7 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(offHoursTag(Date.UTC(2026, 6, 28, 20, 0)).indexOf('half size or skip') > 0
      && offHoursTag(Date.UTC(2026, 6, 27, 4, 30)) === '', 'offHoursTag: body warning only off-hours');
 }
-for (const f of ['../api/proxy.js', '../scripts/alert-check.mjs']){
+for (const f of ['../api/proxy.js', '../scripts/alert-check.mjs', '../scripts/server.mjs']){
   try{
     execFileSync(process.execPath, ['--check', fileURLToPath(new URL(f, import.meta.url))], { stdio: 'pipe' });
     ok(true, 'node --check ' + f);

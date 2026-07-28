@@ -1,0 +1,16 @@
+# HARDGATE on Render — one-click blueprint.
+# New → Blueprint → pick this repo: Render reads this file and creates the
+# web service (static app + /api/proxy on the same origin, zero deps).
+# Free plan sleeps after ~15 min idle; first hit after a sleep cold-starts
+# in ~30s. Upgrade to a paid plan to keep it always-on.
+services:
+  - type: web
+    name: hardgate-main
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: ""
+    startCommand: node scripts/server.mjs
+    autoDeploy: true
+    healthCheckPath: /
