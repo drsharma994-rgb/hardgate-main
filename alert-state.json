@@ -5,6 +5,9 @@
   "lastRunAt": "2026-07-27T18:09:26.192Z",
   "ticket": {
     "long": null,
-    "short": null
+    "short": {
+      "sym": "B-SKL_USDT",
+      "entry": 0.00379
+    }
   }
 }
