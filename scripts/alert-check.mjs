@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { pathToFileURL } from 'url';
 
-const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.vercel.app/';
+const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com/';
 const STATE_FILE = 'alert-state.json';
 /* GitHub auto-disables scheduled workflows after 60 days of repository
    inactivity. The heartbeat below stamps lastRunAt into alert-state.json at

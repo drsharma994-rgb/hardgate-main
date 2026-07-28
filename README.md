@@ -67,12 +67,16 @@ plus one CDN library (EmailJS).
 
 ## Deploy & version workflow
 
-Production lives at **https://hardgate-main.vercel.app** (project linked in `.vercel/`, CLI authed).
+Production lives at **https://hardgate-main.onrender.com** (Render web service, `render.yaml` blueprint,
+auto-deploys on every push to `main`; `scripts/server.mjs` serves the static app + `/api/proxy` on one
+origin). The Vercel project (`.vercel/`, team apex-terminal1) is parked — deploys blocked by team billing
+since 2026-07-29; `vercel --prod --yes` resumes it if billing is reactivated.
 
 1. Make the change; run the affected test suites (`node tests/test-brain.mjs`, …) — all assertions must pass.
-2. Deploy: `vercel --prod --yes` from the project root.
-3. **Commit immediately after every deployed change** — the git history on `main` always mirrors what is
-   live on Vercel. Include what changed + test status + the production deployment id in the message.
+2. Ship: commit → push. **Render auto-deploys from `main`** (no CLI step); `vercel --prod --yes` only if
+   the Vercel team is live again.
+3. **Commit immediately after every change** — the git history on `main` always mirrors what Render
+   deploys. Include what changed + test status in the message.
 4. Push to GitHub (`git push origin main`) — the repo is the source of truth for the alert workflow.
 5. Full snapshots on request: `hardgate-vN.zip` of the whole folder, kept in the parent directory.
 
@@ -85,8 +89,9 @@ Production lives at **https://hardgate-main.vercel.app** (project linked in `.ve
   https://drsharma994-rgb.github.io/hardgate-main/ — serves the same `main` as Vercel and rebuilds on
   every push, but STATIC-only: `/api/proxy` does not exist there, so CoinDCX and Yahoo macro reads
   degrade to "—". Delta India / Binance / BRAIN / Entry Ticket / alerts all work.
-- **Primary site remains Vercel** (full functionality incl. the proxy). Every change: test →
-  `vercel --prod` → commit → push (the push updates the Pages mirror on its own).
+- **Primary site: Render** (https://hardgate-main.onrender.com — full functionality incl. the proxy;
+  auto-deploys from `main`). Vercel parked (team billing block). The push updates the Pages mirror on
+  its own.
 
 ## Alerts
 

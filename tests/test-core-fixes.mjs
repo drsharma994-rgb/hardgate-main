@@ -66,7 +66,7 @@ function grabFn(name){
 assert(html.includes("const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u);"),
   'CDCX_PROXY is the same-origin /api/proxy?url= mapper');
 assert(!html.includes('corsproxy.io'), 'corsproxy.io no longer appears anywhere (paywalled, 403)');
-assert(!html.includes('onrender.com'), 'dead Render proxy host fully removed');
+assert(!html.includes('hardgate-proxy.onrender.com'), 'dead Render proxy host fully removed (hardgate-main.onrender.com hosting is fine)');
 assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
   'allorigins + codetabs kept as last-resort public backups');
 {
@@ -100,7 +100,7 @@ assert(html.includes("$('ntfyTopic').value = t"), 'ntfy topic prefilled on load 
 
 /* ================= 3. email failure visibility (functional, mocked emailjs) ================= */
 {
-  const code = [grabFn('logAlertLine'), grabFn('sendAlertPush'), grabFn('sendAlertEmail'), grabFn('sendGoldAlertEmail')].join('\n');
+  const code = [grabFn('emailErrStr'), grabFn('logAlertLine'), grabFn('sendAlertPush'), grabFn('sendAlertEmail'), grabFn('sendGoldAlertEmail')].join('\n');
   const savedLogs = [];
   const fetchCalls = [];
   const loggedSetups = [];
@@ -174,7 +174,7 @@ assert(html.includes("$('ntfyTopic').value = t"), 'ntfy topic prefilled on load 
   assert(call && call.opts.headers['Title'] === 'My Title'
       && call.opts.headers['Priority'] === '4'
       && call.opts.headers['Tags'] === 'chart_with_upwards_trend'
-      && call.opts.headers['Click'] === 'https://hardgate-main.vercel.app/',
+      && call.opts.headers['Click'] === 'https://hardgate-main.onrender.com/',
     'push headers: Title / Priority 4 / Tags / Click');
   assert(call && call.opts.body === 'My Body', 'push sends the plain-text body');
 

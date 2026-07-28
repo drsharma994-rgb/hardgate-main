@@ -391,7 +391,7 @@ function onTicket(snap){
       + 'Long: ' + ((snap.long && snap.long.sym) ? snap.long.sym + ' @ ' + (+snap.long.entry) : '—')
       + '\nShort: ' + ((snap.short && snap.short.sym) ? snap.short.sym + ' @ ' + (+snap.short.entry) : '—')
       + offHoursTag()
-      + '\nhttps://hardgate-main.vercel.app/';
+      + '\nhttps://hardgate-main.onrender.com/';
     try{
       var tg = gfn('sendTelegram');
       if (tg){
@@ -477,7 +477,7 @@ function onSniper(hits){
     var txt = '🎯 HARDGATE SNIPER SETUP\n' + __sniperDesc
       + '\n20x-grade resting limit, mark in/approaching the zone.' + validUntil
       + offHoursTag()
-      + '\nhttps://hardgate-main.vercel.app/';
+      + '\nhttps://hardgate-main.onrender.com/';
     try{
       var tg = gfn('sendTelegram');
       if (tg){ suffix += ' · telegram'; Promise.resolve(tg(txt)).then(function(r){
