@@ -3298,5 +3298,38 @@ console.log('== AU) tier-2/3 layers ==');
   ok(RD(flat120) === null, 'AU: perfectly flat tape -> no fabricated divergence');
 }
 
+/* ================= AV) WICK-ADAPTIVE STOPS + CVD ================= */
+console.log('== AV) wick-adaptive stops + CVD ==');
+{
+  const WB = W.__hgBrainWickBuf, CV = W.__hgBrainCvd;
+  ok(typeof WB === 'function' && typeof CV === 'function', 'AV: wick-buffer + CVD seams exposed');
+
+  /* calm tape keeps the 0.75 floor */
+  const calm = []; for (let i = 0; i < 120; i++) calm.push({ t: i, o: 100, h: 100.6, l: 99.4, c: 100, v: 100 });
+  ok(WB(calm, 1.0, true) === 0.75, 'AV: calm tape keeps the 0.75xATR floor');
+
+  /* high-wick tape earns a wider buffer (clamped at 1.5) */
+  const spiky = [];
+  for (let i = 0; i < 120; i++){
+    const w = (i % 3 === 0) ? 3.2 : 0.4;
+    spiky.push({ t: i, o: 100, h: 100 + 0.4, l: 100 - w, c: 100, v: 100 });
+  }
+  const buf = WB(spiky, 1.0, true);
+  ok(buf > 0.75 && buf <= 1.5, 'AV: high-wick symbols get a wider buffer from their OWN distribution — got ' + buf);
+  ok(WB(spiky, 1.0, false) === 0.75, 'AV: the other side (upper wicks calm here) keeps the floor — side-specific math');
+  ok(WB(null, 1, true) === 0.75 && WB([], 1, true) === 0.75 && WB(calm, NaN, true) === 0.75,
+     'AV: garbage/NaN inputs -> the floor, never throws');
+
+  /* CVD: rising buyer control reads long, seller control short, flat null */
+  const mkTaker = (vals) => vals.map(function(v, i){ return { buySellRatio: v, t: i }; });
+  const bulls = mkTaker([1,1,1,1,1,1,1,1, 1.1,1.15,1.2,1.1,1.15,1.2,1.25,1.3]);
+  ok(CV(bulls).dir === 'long' && CV(bulls).ratio > 1, 'AV: rising taker buy dominance -> CVD long');
+  const bears = mkTaker([1,1,1,1,1,1,1,1, 0.9,0.85,0.8,0.9,0.85,0.8,0.75,0.7]);
+  ok(CV(bears).dir === 'short', 'AV: rising taker sell dominance -> CVD short');
+  const flat = mkTaker([1,1,1,1,1,1,1,1, 1,1.02,0.98,1,1.01,0.99,1,1.01]);
+  ok(CV(flat).dir === null, 'AV: balanced flow -> no CVD direction, never invented');
+  ok(CV(null) === null && CV(mkTaker([1,1,1])) === null, 'AV: garbage/thin series -> null, never throws');
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

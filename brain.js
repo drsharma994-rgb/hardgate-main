@@ -1256,7 +1256,9 @@ async function fetchCandleQueue(rows, uni, stat, t0){
         fetchFunding(crow).then(function(fh){ crow.fundHist = fh; },
                                function(){ crow.fundHist = null; }),
         fetchBook(crow).then(function(bk){ crow.bookDepth = bk; },
-                             function(){ crow.bookDepth = null; })
+                             function(){ crow.bookDepth = null; }),
+        fetchTaker(crow).then(function(tk){ crow.taker = tk; },
+                             function(){ crow.taker = null; })
       ]);
     }));
     out.fetched += chunk.length;
@@ -1633,6 +1635,17 @@ async function fetchBook(cand){
     return (r && isFinite(+r.bidUsd) && isFinite(+r.askUsd)) ? r : null;
   }catch(e){ return null; }
 }
+/* taker buy/sell volume series for the CVD layer — same free endpoint the
+   SMART $ tab uses, per candidate, cached by binance.js */
+async function fetchTaker(cand){
+  try{
+    if (typeof G.binanceTakerRatio !== 'function') return null;
+    var sym = binanceSymFor(cand);
+    if (!sym) return null;
+    var r = await withTimeout(G.binanceTakerRatio(sym, '1h', 25), TUN.fetchMs);
+    return (r && Array.isArray(r.series) && r.series.length >= 8) ? r.series : null;
+  }catch(e){ return null; }
+}
 function fundingZ(hist){
   try{
     if (!Array.isArray(hist) || hist.length < 10) return NaN;
@@ -1841,6 +1854,56 @@ function applyBook(rows){
   }catch(e){}
 }
 
+/* CVD LAYER ('cvd', context) — cumulative volume delta from Binance's free
+   taker buy/sell endpoint (the SMART $ tab's own feed). Recent 8-period
+   mean ratio vs the prior 8: flow WITH the row's bias votes, flow AGAINST
+   cautions — a setup fighting its own order flow is a stop-out candidate. */
+function cvdAssess(series){
+  try{
+    if (!Array.isArray(series) || series.length < 16) return null;
+    var n = series.length, recent = 0, prior = 0, i, c = 0;
+    for (i = n - 8; i < n; i++){ recent += +series[i].buySellRatio || 0; c++; }
+    recent /= c || 1;
+    for (i = n - 16; i < n - 8; i++){ prior += +series[i].buySellRatio || 0; }
+    prior /= 8;
+    if (!(prior > 0) || !(recent > 0)) return null;
+    if (recent >= 1.05 && recent >= prior - 0.05) return { dir: 'long', ratio: recent };
+    if (recent <= 0.95 && recent <= prior + 0.05) return { dir: 'short', ratio: recent };
+    return { dir: null, ratio: recent };
+  }catch(e){ return null; }
+}
+function applyCvd(rows){
+  try{
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      var a = row.taker ? cvdAssess(row.taker) : null, dir = row.dec.dir;
+      if (!a){
+        row.col.silent.push('cvd');
+        colNote(row.col, 'cvd', 'SILENT', 'no taker-flow series for this asset — CVD unread');
+        continue;
+      }
+      if (a.dir === dir){
+        row.col.votes.push({ layer: 'cvd', vote: dir, kind: 'context',
+          text: 'CVD confirms — taker buy/sell ' + FMT(a.ratio, 2) + ' and ' + (dir === 'long' ? 'buyers' : 'sellers') + ' in control' });
+        colNote(row.col, 'cvd', String(dir).toUpperCase(), 'flow with the bias — ratio ' + FMT(a.ratio, 2));
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if (a.dir && a.dir !== dir){
+        var ctxt = 'CVD against — taker buy/sell ' + FMT(a.ratio, 2) + ' shows '
+          + (a.dir === 'long' ? 'buyers' : 'sellers') + ' in control against the ' + dir.toUpperCase()
+          + ' bias — a setup fighting its own order flow is a stop-out candidate';
+        row.col.votes.push({ layer: 'cvd', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
+        colNote(row.col, 'cvd', 'CAUTION', ctxt);
+      }else{
+        row.col.silent.push('cvd');
+        colNote(row.col, 'cvd', 'SILENT', 'flow balanced at ' + FMT(a.ratio, 2) + ' — no CVD edge');
+      }
+    }
+  }catch(e){}
+}
+
 /* =========================================================================
 LIQPOOL MAGNET GUARD ('liqpool', context) — the stop-hunt read. Runs AFTER
 planning (it needs the plan's stop/T1) on the row's own 4h candles via
@@ -1990,6 +2053,40 @@ function atrLast(rows, p){
   }catch(e){ return NaN; }
 }
 
+/* =========================================================================
+WICK-ADAPTIVE STOP BUFFER — the stop distance comes from the symbol's OWN
+wick distribution, not a flat constant. For each side we measure the
+adverse wick/ATR ratios over the recent 60 bars (lower wicks for longs,
+upper for shorts), take the 80th percentile, and clamp it into
+[ANCHOR_STOP_ATR, 1.5]. Calm symbols keep the 0.75 floor; high-wick
+symbols get the buffer their own tape demands. Named on the plan
+(stopBuf), never silent.
+========================================================================= */
+function pctile(arr, p){
+  try{
+    if (!Array.isArray(arr) || !arr.length) return NaN;
+    var a = arr.slice().sort(function(x, y){ return x - y; });
+    var i = Math.min(a.length - 1, Math.max(0, Math.ceil((p / 100) * a.length) - 1));
+    return a[i];
+  }catch(e){ return NaN; }
+}
+function wickBuffer(rows, atr, long){
+  try{
+    if (!Array.isArray(rows) || rows.length < 30 || !isFinite(atr) || atr <= 0) return ANCHOR_STOP_ATR;
+    var ratios = [];
+    for (var i = Math.max(1, rows.length - 60); i < rows.length; i++){
+      var o = +rows[i].o, h = +rows[i].h, l = +rows[i].l, c = +rows[i].c;
+      if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) continue;
+      var wick = long ? (Math.min(o, c) - l) : (h - Math.max(o, c));   /* the side's adverse wick */
+      if (wick > 0) ratios.push(wick / atr);
+    }
+    if (ratios.length < 20) return ANCHOR_STOP_ATR;
+    var p80 = pctile(ratios, 80);
+    if (!isFinite(p80)) return ANCHOR_STOP_ATR;
+    return Math.max(ANCHOR_STOP_ATR, Math.min(1.5, Math.round(p80 * 100) / 100));
+  }catch(e){ return ANCHOR_STOP_ATR; }
+}
+
 /* the four anchor candidates for one direction — zones carry {lo, hi, zone},
    lines carry {level}; never invented, all straight off the candles.
    tf is a LABEL only ('4h' default, '1h' for the sniper rescue) — the math
@@ -2125,8 +2222,9 @@ function anchoredLimitPlan(dir, rows, tf){
       entry = a.zone ? (long ? a.hi : a.lo) : a.level;
       structEdge = a.zone ? (long ? a.lo : a.hi) : a.level;
     }
-    var stop = long ? structEdge - ANCHOR_STOP_ATR * atr
-                    : structEdge + ANCHOR_STOP_ATR * atr;
+    var buf = wickBuffer(rows, atr, long);
+    var stop = long ? structEdge - buf * atr
+                    : structEdge + buf * atr;
     /* pool-aware stop: if the opposing liquidity pool (equal lows under a
        long / equal highs over a short) sits just BEYOND the computed stop,
        the stop is stop-run bait — push it 0.25xATR past the pool instead of
@@ -2183,7 +2281,8 @@ function anchoredLimitPlan(dir, rows, tf){
     var plan = normalizePlan({
       dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, type: 'ANCHOR4H',
       entryType: pick.inZone ? 'zone' : 'limit',
-      anchorName: a.name, anchorNote: anchorNote + poolNote, cancelIf: cancelIf, note: ''
+      anchorName: a.name, anchorNote: anchorNote + poolNote, cancelIf: cancelIf, note: '',
+      stopBuf: buf
     }, 'structure-anchored limit (' + tf + ')');
     return { plan: plan, note: '' };
   }catch(e){ return { plan: null, note: '' }; }
@@ -2625,7 +2724,7 @@ function planLine(plan){
     return (plan.entryType === 'zone'
         ? 'price in zone — limit at zone edge <b>' + PX(plan.entry) + '</b> or market'
         : 'LIMIT @ <b>' + PX(plan.entry) + '</b> — pullback to ' + an)
-      + ' · stop <b>' + PX(plan.stop) + '</b> (0.75xATR beyond ' + an + (plan.anchorNote && plan.anchorNote.indexOf('pool') >= 0 ? ', pool-adjusted' : '') + ')'
+      + ' · stop <b>' + PX(plan.stop) + '</b> (' + FMT(isFinite(plan.stopBuf) ? plan.stopBuf : 0.75, 2) + 'xATR beyond ' + an + (plan.anchorNote && plan.anchorNote.indexOf('pool') >= 0 ? ', pool-adjusted' : '') + ')'
       + ' · TP1 <b>' + PX(plan.t1) + '</b>'
       + (plan.t2 !== null ? ' · TP2 <b>' + PX(plan.t2) + '</b>' : '')
       + ' · R:R ' + FMT(plan.rr1, 1)
@@ -2749,7 +2848,7 @@ function ticketHTML(row, dir){
       + '<div style="font-size:11px;color:#c4ccd8;margin-top:2px">' + subline + '</div>'
       + '<div style="margin-top:8px;font-size:11.5px;line-height:1.8;color:#c4ccd8">'
       + 'STOP <b>' + PX(p.stop) + '</b>'
-      + (limitish ? ' (0.75×ATR beyond ' + esc(p.anchorName || 'anchor') + ')' : '')
+      + (limitish ? ' (' + FMT(isFinite(p.stopBuf) ? p.stopBuf : 0.75, 2) + '×ATR beyond ' + esc(p.anchorName || 'anchor') + ')' : '')
       + (isFinite(p.cancelIf) && p.cancelIf !== null ? ' · cancel if 4h closes beyond <b>' + PX(p.cancelIf) + '</b>' : '')
       + '<br>MOST PROBABLE TARGET <b style="color:' + col + '">' + PX(p.t1) + '</b>'
       + ' (R:R ' + FMT(isFinite(p.rr1) ? p.rr1 : Math.abs(p.t1 - p.entry) / Math.abs(p.entry - p.stop), 1) + ')'
@@ -3160,7 +3259,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','fundz','btcrel','div','book','session'];
+                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','fundz','btcrel','div','book','cvd','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
 
 function auditLineHTML(label, status, text){
@@ -3741,6 +3840,7 @@ async function runBrain(el){
       applyBtcrel(rows);
       applyDiv(rows);
       applyBook(rows);
+      applyCvd(rows);
       bk = bucketRows(rows);   /* re-bucket after promotions/dark caps */
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -3966,6 +4066,7 @@ async function runQuick(el){
       applyBtcrel(rows);
       applyDiv(rows);
       applyBook(rows);
+      applyCvd(rows);
       bk = bucketRows(rows);
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -4344,6 +4445,9 @@ G.__hgBrainLiqpool = liqpoolNote;
 /* Tier-2/3 seams: pure math for the vm suites */
 G.__hgBrainFundZ = fundingZ;
 G.__hgBrainRsiDiv = rsiDivergence;
+/* wick-adaptive stop + CVD seams */
+G.__hgBrainWickBuf = wickBuffer;
+G.__hgBrainCvd = cvdAssess;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
