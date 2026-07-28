@@ -770,6 +770,22 @@ function planText(s){
     + ' · risk ' + FMT(s.riskPct, 2) + '%' + (s.note ? ' — ' + s.note : '');
 }
 
+/* Max-safe leverage chip on EXECUTE cards — identical formula to the BRAIN
+   planner: floor(1 / (stop distance ×1.5 + 0.5% MMR)), liquidation
+   clearance ≥1.5× the stop. The owner's stop-out fix, on every card. */
+function safeLevChipHtml(entry, stop){
+  try{
+    entry = +entry; stop = +stop;
+    if (!(isFinite(entry) && isFinite(stop)) || entry <= 0 || entry === stop) return '';
+    var sd = Math.abs(entry - stop) / entry;
+    var lev = Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
+    var col = lev >= 20 ? '#2EE6A8' : (lev >= 10 ? '#F5C542' : '#8B9CC4');
+    return ' · <span style="font-weight:700;color:' + col + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop. Trading above this is how accounts die.">'
+      + lev + 'x SAFE</span>'
+      + (lev >= 20 && sd <= 0.03 ? ' <span style="font-weight:700;color:#2EE6A8" title="stop distance ≤3% — meets the 20x SNIPER discipline">· SNIPER GRADE</span>' : '');
+  }catch(e){ return ''; }
+}
+
 function cardHTML(r){
   var res = r.res, dir = res.dir, s = res.plan;
   var symHtml = esc(r.sym);
@@ -792,7 +808,7 @@ function cardHTML(r){
       return gateRowHTML(t.gate, t.name, trailState(t.ok), esc(t.note));
     }).join('') + '</div>';
   var planHtml = s
-    ? '<div class="plan">' + planText(s) + '</div>'
+    ? '<div class="plan">' + planText(s) + safeLevChipHtml(s.entry, s.stop) + '</div>'
     : '<div class="plan">Levels unavailable — size down. All 6 gates passed but neither the setup builder nor the universal hgPlanLevels fallback could compute levels from the 4h structure. Direction is real; levels are not. Do not improvise them.</div>';
   var chartBox = s ? '<div class="engineChart" data-sym="' + symHtml + '" style="height:180px;margin-top:8px"></div>' : '';
   var tradeBtn = (s && typeof toTrade === 'function')
@@ -807,8 +823,7 @@ function cardHTML(r){
     + '</div>';
 }
 
-function asideHTML(rejected){
-  var rows = rejected.slice(0, ASIDE_MAX).map(function(r){
+function asideHTML(rejected){  var rows = rejected.slice(0, ASIDE_MAX).map(function(r){
     var kill = null;
     for (var i = 0; i < r.res.trail.length; i++) if (r.res.trail[i].ok === false){ kill = r.res.trail[i]; break; }
     if (!kill) return '';

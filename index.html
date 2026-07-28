@@ -2201,7 +2201,25 @@ function planBlock(dir, entry, stop, t1, t2, note){
     + ' · T1 <b>'+px(t1)+'</b> ('+fmt(Math.abs(t1-entry)/risk,1)+'R)'
     + ' · T2 <b>'+px(t2)+'</b> ('+fmt(Math.abs(t2-entry)/risk,1)+'R)'
     + ' · risk '+fmt(risk/entry*100,2)+'%'
+    + hgSafeLevChip(entry, stop)
     + (note ? ' — '+note : '');
+}
+/* Max-safe leverage chip on EVERY plan line, every tab (owner mandate
+   2026-07-28 — 'this is what was making me hit stop loss'). Identical
+   formula to the BRAIN planner: floor(1 / (stop distance ×1.5 + 0.5% MMR))
+   so liquidation clearance stays ≥1.5× the stop. Green ≥20x, amber ≥10x,
+   grey below; SNIPER GRADE when the stop also fits the ≤3% discipline. */
+function hgSafeLevChip(entry, stop){
+  try{
+    entry = +entry; stop = +stop;
+    if (!(isFinite(entry) && isFinite(stop)) || entry <= 0 || entry === stop) return '';
+    const sd = Math.abs(entry - stop) / entry;
+    const lev = Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
+    const col = lev >= 20 ? '#2EE6A8' : (lev >= 10 ? '#F5C542' : '#8B9CC4');
+    return ' · <span style="font-weight:700;color:' + col + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop. Trading above this is how accounts die.">'
+      + lev + 'x SAFE</span>'
+      + (lev >= 20 && sd <= 0.03 ? ' <span style="font-weight:700;color:#2EE6A8" title="stop distance ≤3% — meets the 20x SNIPER discipline">· SNIPER GRADE</span>' : '');
+  }catch(e){ return ''; }
 }
 /* Universal fallback plan (same convention as oiflow.js when smartSetup is
    unavailable): entry = last close or the card's own trigger level
