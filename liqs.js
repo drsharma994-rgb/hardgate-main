@@ -682,7 +682,9 @@ function setupCardHTML(setup){
   var planTxt = hasPlan
     ? 'ENTRY <b>' + PX(setup.entry) + '</b> · STOP <b>' + PX(setup.stop) + '</b>'
       + ' · T1 ' + PX(setup.t1) + ' (' + FMT(setup.rr1, 1) + 'R) · T2 ' + PX(setup.t2) + ' (' + FMT(setup.rr2, 1) + 'R)'
-      + ' · risk ' + FMT(setup.riskPct, 2) + '%' + (setup.note ? ' — ' + esc(setup.note) : '')
+      + ' · risk ' + FMT(setup.riskPct, 2) + '%'
+      + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(setup.entry, setup.stop) : '')
+      + (setup.note ? ' — ' + esc(setup.note) : '')
     : 'no tradeable levels — ' + esc(setup.note);
   var tradeBtn = (hasPlan && setup.sym && typeof toTrade === 'function')
     ? '<button class="toTrade" onclick="'

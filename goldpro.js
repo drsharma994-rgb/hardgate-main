@@ -389,6 +389,7 @@ function renderLevelsPanel(o){
      + ' · T1 ' + esc(pxF(p.t1)) + ' (' + fnum(p.rr1, 1) + 'R)'
      + ' · T2 ' + esc(pxF(p.t2)) + ' (' + fnum(p.rr2, 1) + 'R)'
      + ' · risk ' + fnum(p.riskPct, 2) + '%'
+     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(p.entry, p.stop) : '')
      + (p.structural ? ' — stop = wider of 1.5×ATR14(4H) / structure beyond the 30-bar swing'
                      : ' — stop = 1.5×ATR14(4H)')
      + '</div>';

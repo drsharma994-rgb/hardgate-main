@@ -1390,7 +1390,9 @@ function smartCardHTML(r){
   const regime = r.cls.regime.length ? r.cls.regime.join(' · ') + '. ' : '';
   const planTxt = s
     ? regime + 'ENTRY <b>' + px(s.entry) + '</b> · STOP <b>' + px(s.stop) + '</b> · T1 <b>' + px(s.t1) + '</b> (' + fmt(s.rr1, 1) + 'R)'
-      + ' · T2 <b>' + px(s.t2) + '</b> (' + fmt(s.rr2, 1) + 'R) · risk ' + fmt(s.riskPct, 2) + '%' + (s.note ? ' — ' + s.note : '')
+      + ' · T2 <b>' + px(s.t2) + '</b> (' + fmt(s.rr2, 1) + 'R) · risk ' + fmt(s.riskPct, 2) + '%'
+      + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
+      + (s.note ? ' — ' + s.note : '')
     : regime + 'Direction is an evidence majority, not a signal — confirm 4H structure, funding window and R:R on the SWING/SCALP tab before trading it.';
   const tradeBtn = s ? '<button class="toTrade" onclick="'
       + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
@@ -1528,6 +1530,7 @@ async function runSmartScan(){
             + (gSetup ? '<br>' + (gx.cls.dir === 'long' ? 'LONG' : 'SHORT') + ' ' + gSetup.type + ' plan: ENTRY <b>' + px(gSetup.entry)
               + '</b> · STOP <b>' + px(gSetup.stop) + '</b> · T1 <b>' + px(gSetup.t1) + '</b> (' + fmt(gSetup.rr1, 1) + 'R) · T2 <b>'
               + px(gSetup.t2) + '</b> (' + fmt(gSetup.rr2, 1) + 'R) · risk ' + fmt(gSetup.riskPct, 2) + '%'
+              + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(gSetup.entry, gSetup.stop) : '')
               + (gSetup.note ? ' — ' + gSetup.note : '') : '')
             + '</div>' + (gSetup ? '<div class="hgchart" id="hgchart-smartgold"></div>' : '') + '</div>';
           if (gSetup && gx.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smartgold'), gx.rows4h,

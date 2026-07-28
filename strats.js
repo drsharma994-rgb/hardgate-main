@@ -406,6 +406,7 @@ function sgLiveFooter(stratId, rows, trades){
       + ' · T1 ' + sgPx(lv.t1) + ' (' + lv.rr1.toFixed(1) + 'R)'
       + ' · T2 ' + sgPx(lv.t2) + ' (' + lv.rr2.toFixed(1) + 'R)'
       + ' · risk ' + lv.riskPct.toFixed(2) + '%'
+      + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(lv.entry, lv.stop) : '')
       + (lv.note ? ' — ' + sgEsc(lv.note) : '') + '</div>';
   }
   var lastT = (Array.isArray(trades) && trades.length) ? trades[trades.length - 1].t : null;

@@ -2766,6 +2766,8 @@ function planLine(plan){
      and working-order validity named, never a market chase */
   if (plan.entryType === 'limit' || plan.entryType === 'zone'){
     var an = esc(plan.anchorName || '4h structure');
+    var limLev = sniperLev(plan.entry, plan.stop);
+    var limLevCol = limLev >= SNIPER_MIN_LEV ? '#5fbf8f' : (limLev >= 10 ? '#d8a24a' : '#6d7684');
     return (plan.entryType === 'zone'
         ? 'price in zone — limit at zone edge <b>' + PX(plan.entry) + '</b> or market'
         : 'LIMIT @ <b>' + PX(plan.entry) + '</b> — pullback to ' + an)
@@ -2773,15 +2775,21 @@ function planLine(plan){
       + ' · TP1 <b>' + PX(plan.t1) + '</b>'
       + (plan.t2 !== null ? ' · TP2 <b>' + PX(plan.t2) + '</b>' : '')
       + ' · R:R ' + FMT(plan.rr1, 1)
+      + ' · <span style="font-weight:700;color:' + limLevCol + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop">'
+      + limLev + 'x SAFE</span>'
       + (isFinite(plan.cancelIf) ? ' · cancel if 4h closes beyond <b>' + PX(plan.cancelIf) + '</b>' : '')
       + ' · limit working ~24h or until structure breaks'
       + (plan.src ? ' — ' + esc(plan.src) : '');
   }
   var risk = Math.abs(plan.entry - plan.stop);
+  var planLev = sniperLev(plan.entry, plan.stop);
+  var planLevCol = planLev >= SNIPER_MIN_LEV ? '#5fbf8f' : (planLev >= 10 ? '#d8a24a' : '#6d7684');
   return 'ENTRY <b>' + PX(plan.entry) + '</b> · STOP <b>' + PX(plan.stop) + '</b>'
     + ' · T1 <b>' + PX(plan.t1) + '</b> (' + FMT(plan.rr1, 1) + 'R)'
     + (plan.t2 !== null ? ' · T2 <b>' + PX(plan.t2) + '</b> (' + FMT(plan.rr2, 1) + 'R)' : '')
     + ' · risk ' + FMT(plan.riskPct, 2) + '%'
+    + ' · <span style="font-weight:700;color:' + planLevCol + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop">'
+    + planLev + 'x SAFE</span>'
     + (plan.src ? ' — ' + esc(plan.src) : '')
     + (plan.note ? ' · ' + esc(plan.note) : '');
 }

@@ -285,7 +285,8 @@ function meanrevPlanHtml(p){
   if (!p) return '';
   return 'ENTRY <b>' + pxF(p.entry) + '</b> · STOP <b>' + pxF(p.stop) + '</b>'
     + ' · T1 ' + pxF(p.t1) + ' (' + fmtF(p.rr1, 1) + 'R) · T2 ' + pxF(p.t2) + ' (' + fmtF(p.rr2, 1) + 'R)'
-    + ' · risk ' + fmtF(p.riskPct, 2) + '%';
+    + ' · risk ' + fmtF(p.riskPct, 2) + '%'
+    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(p.entry, p.stop) : '');
 }
 
 /* ---------------- scanner (UI) ---------------- */

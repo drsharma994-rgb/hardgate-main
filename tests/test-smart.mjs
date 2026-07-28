@@ -317,6 +317,14 @@ console.log('== smartCardHTML ==');
   ok(h.indexOf('class="toTrade"') !== -1 && h.indexOf('SEND TO TRADE PLAN') !== -1
      && h.indexOf('toTrade(&quot;TESTUSDT&quot;,&quot;long&quot;,102.38,101.33,104.48)') !== -1,
      'setup card: toTrade handoff button with escaped payload');
+  /* SAFE-leverage chip: smartCardHTML calls the global hgSafeLevChip when the
+     full app provides it (index.html inline block) and degrades cleanly when
+     the block is absent (standalone test harness). */
+  ok(h.indexOf('x SAFE') === -1, 'chip absent without the global helper (clean degradation)');
+  globalThis.hgSafeLevChip = (entry, stop) => ' · <span>TESTCHIP ' + entry + '/' + stop + ' x SAFE</span>';
+  const hChip = globalThis.smartCardHTML(Object.assign({ setup: setup }, base));
+  ok(hChip.indexOf('TESTCHIP 102.38/101.33 x SAFE') !== -1, 'SAFE chip rendered on the plan line when the helper exists');
+  delete globalThis.hgSafeLevChip;
   const h2 = globalThis.smartCardHTML(Object.assign({ setup: Object.assign({}, setup, { confirmed: false }) }, base));
   ok(h2.indexOf('UNCONFIRMED') !== -1, 'unconfirmed setup: UNCONFIRMED pip');
   const h3 = globalThis.smartCardHTML(Object.assign({ setup: null }, base));

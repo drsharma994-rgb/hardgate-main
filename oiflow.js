@@ -360,7 +360,9 @@ function cardHTML(r){
   var planTxt = s
     ? 'ENTRY <b>' + PX(s.entry) + '</b> · STOP <b>' + PX(s.stop) + '</b>'
       + ' · T1 ' + PX(s.t1) + ' (' + FMT(s.rr1, 1) + 'R) · T2 ' + PX(s.t2) + ' (' + FMT(s.rr2, 1) + 'R)'
-      + ' · risk ' + FMT(s.riskPct, 2) + '%' + (s.note ? ' — ' + s.note : '')
+      + ' · risk ' + FMT(s.riskPct, 2) + '%'
+      + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
+      + (s.note ? ' — ' + s.note : '')
     : oiflowPlan(r);
   var tradeBtn = (s && typeof toTrade === 'function')
     ? '<button class="toTrade" onclick="'

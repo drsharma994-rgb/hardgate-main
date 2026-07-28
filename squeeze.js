@@ -271,6 +271,7 @@ function squeezePlanHTML(s){
     + ' · T1 <b>' + pxF(s.t1) + '</b> (' + fmtF(rr1, 1) + 'R)'
     + ' · T2 <b>' + pxF(s.t2) + '</b> (' + fmtF(rr2, 1) + 'R)'
     + (isFinite(s.riskPct) ? ' · risk ' + fmtF(s.riskPct, 2) + '%' : '')
+    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + esc(s.note) : '');
 }
 
