@@ -92,6 +92,25 @@ function gfn(name){
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   return null;
 }
+/* OFF-HOURS tag for ticket/sniper pushes — same windows as brain.js
+   sessionWindow (Sunday, or 01:00-06:30 IST). Prefers the brain's own seam
+   (__hgBrainSession) so app and alerts never disagree; falls back to the same
+   IST math standalone. Alerts are TAGGED, never suppressed — the brain
+   already haircut the conviction. Never throws. */
+function offHoursTag(){
+  try{
+    var sw = gfn('__hgBrainSession');
+    var dead = null;
+    if (sw){ var w = sw(); if (w && typeof w.dead === 'boolean') dead = w.dead; }
+    if (dead === null){
+      var d = new Date();
+      var ist = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60000);
+      var mins = ist.getHours() * 60 + ist.getMinutes();
+      dead = (ist.getDay() === 0) || (mins >= 60 && mins <= 390);
+    }
+    return dead ? '\n⚠️ OFF-HOURS tape (Sun / 01:00-06:30 IST) — conviction haircut applied; half size or skip' : '';
+  }catch(e){ return ''; }
+}
 function rowsFrom(val){
   if (Array.isArray(val)) return val;
   if (val && typeof val === 'object'){
@@ -371,6 +390,7 @@ function onTicket(snap){
     var tickTxt = 'HARDGATE entry ticket changed\n'
       + 'Long: ' + ((snap.long && snap.long.sym) ? snap.long.sym + ' @ ' + (+snap.long.entry) : '—')
       + '\nShort: ' + ((snap.short && snap.short.sym) ? snap.short.sym + ' @ ' + (+snap.short.entry) : '—')
+      + offHoursTag()
       + '\nhttps://hardgate-main.vercel.app/';
     try{
       var tg = gfn('sendTelegram');
@@ -456,6 +476,7 @@ function onSniper(hits){
     }catch(e){}
     var txt = '🎯 HARDGATE SNIPER SETUP\n' + __sniperDesc
       + '\n20x-grade resting limit, mark in/approaching the zone.' + validUntil
+      + offHoursTag()
       + '\nhttps://hardgate-main.vercel.app/';
     try{
       var tg = gfn('sendTelegram');
@@ -831,6 +852,8 @@ W.hgAlertSniper = function(hits){
 /* family-digest seams (vm suites): the text builder + the daily tick */
 W.__hgFamDigestText = function(){ try{ return famDigestText(); }catch(e){ return null; } };
 W.__hgFamDigestTick = function(d){ try{ return maybeFamDigest(d); }catch(e){ return 'error'; } };
+/* off-hours tag seam (vm suites): '' or the warning line; never throws */
+W.__hgAlertOffHoursTag = function(){ try{ return offHoursTag(); }catch(e){ return ''; } };
 W.hgAlertCheck = function(){
   try{ return evaluate(); }
   catch(e){

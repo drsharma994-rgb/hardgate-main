@@ -38,6 +38,24 @@ function emailVerdict(email) {
   return { fail: false };
 }
 
+/* ---------------- off-hours session tag ----------------
+   Same windows as brain.js sessionWindow (IST): Sunday, or 01:00-06:30 IST.
+   Off-hours alerts are never SUPPRESSED — the brain already haircut the tier;
+   the push is TAGGED so the size discipline travels with the message. */
+function istOffHours(now) {
+  try {
+    const ist = new Date((now === undefined || now === null ? Date.now() : +now) + 5.5 * 3600 * 1000);
+    const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    return (ist.getUTCDay() === 0) || (mins >= 60 && mins <= 390);
+  } catch (e) { return false; }
+}
+function offHoursPrefix(now) { return istOffHours(now) ? '⚠️ OFF-HOURS · ' : ''; }
+function offHoursTag(now) {
+  return istOffHours(now)
+    ? '\n⚠️ OFF-HOURS tape (Sun / 01:00-06:30 IST) — brain conviction haircut applied; half size or skip'
+    : '';
+}
+
 /* ---------------- entry-ticket watch (server-side) ----------------
    The CI run completes a full brain synthesis in the page and reads
    window.__hgBrainTicketNow() -> {at, long:{sym,entry}|null, short:{...}|null}.
@@ -374,7 +392,8 @@ async function main() {
     if (prevState.ticket === undefined) {
       console.log('Ticket state seeded silently (first recorded run) — no push.');
     } else if (ticketChanged(prevState.ticket, nextTicket)) {
-      const pushResult = await sendAlertCi('HARDGATE entry ticket changed', ticketPushBody(nextTicket));
+      const pushResult = await sendAlertCi(offHoursPrefix() + 'HARDGATE entry ticket changed',
+        ticketPushBody(nextTicket) + offHoursTag());
       console.log('TICKET CHANGED — push: ' + pushResult);
     } else {
       console.log('Ticket unchanged — no push.');
@@ -395,8 +414,8 @@ async function main() {
       console.log('Sniper state seeded silently — no push.');
       if (hits.length) newState.sniper = { key: sKey, hits: hits, at: new Date().toISOString() };
     } else if (hits.length && sKey !== (prevState.sniper && prevState.sniper.key)) {
-      const pushResult = await sendAlertCi('🎯 HARDGATE SNIPER SETUP',
-        sniperBody(hits) + '\n20x-grade resting limit, mark in/approaching the zone.');
+      const pushResult = await sendAlertCi(offHoursPrefix() + '🎯 HARDGATE SNIPER SETUP',
+        sniperBody(hits) + '\n20x-grade resting limit, mark in/approaching the zone.' + offHoursTag());
       console.log('SNIPER ALERT — push: ' + pushResult);
       newState.sniper = { key: sKey, hits: hits, at: new Date().toISOString() };
     } else if (prevState.sniper) {
@@ -525,4 +544,5 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs, sniperKey, sniperBody,
-         digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC };
+         digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
+         istOffHours, offHoursPrefix, offHoursTag };

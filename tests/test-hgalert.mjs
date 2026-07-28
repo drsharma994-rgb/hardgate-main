@@ -801,6 +801,55 @@ console.log('== 12) daily family digest ==');
          'failed delivery leaves no stamp -> the next cycle retries honestly');
 }
 
+/* =========================================================================
+   13) OFF-HOURS TAG — ticket/sniper pushes carry the session warning
+========================================================================= */
+console.log('== 13) off-hours tag ==');
+{
+  const ls = memLocalStorage();
+  ls.setItem('hgAlertEnabled', '1');
+  const env = loadHgalert({ doc: stubDocument(), ls, audio: true });
+  clickBtn(env);                                    /* gesture: unlock + arm */
+  const tgCalls = [];
+  env.W.sendTelegram = (t) => { tgCalls.push(t); return Promise.resolve(true); };
+
+  /* brain seam present + dead -> tag on the seam */
+  env.W.__hgBrainSession = () => ({ dead: true, london: false, ny: false, label: 'off-hours' });
+  assert(env.W.__hgAlertOffHoursTag().indexOf('OFF-HOURS') >= 0
+      && env.W.__hgAlertOffHoursTag().indexOf('half size or skip') >= 0,
+         'dead session -> warning tag');
+  env.W.__hgBrainSession = () => ({ dead: false, london: true, ny: false, label: 'London kill zone' });
+  assert(env.W.__hgAlertOffHoursTag() === '', 'live session (London KZ) -> no tag');
+
+  /* the tag rides the actual sniper push */
+  env.W.__hgBrainSession = () => ({ dead: true, london: false, ny: false, label: 'off-hours' });
+  const hit = (sym, entry) => ({ sym, dir: 'long', entry, stop: entry * 0.97, t1: entry * 1.06, lev: 22, state: 'IN ZONE' });
+  env.W.hgAlertSniper([hit('ACE', 0.085)]);                       /* seeds silently */
+  env.W.hgAlertSniper([hit('ACE', 0.085), hit('DOGE', 0.069)]);   /* new card -> push */
+  await new Promise(r => setTimeout(r, 30));
+  assert(tgCalls.length === 1 && tgCalls[0].indexOf('OFF-HOURS tape') >= 0
+      && tgCalls[0].indexOf('half size or skip') >= 0,
+         'off-hours sniper push carries the warning, never suppressed');
+
+  /* live session: same push path, no warning line */
+  const ls2 = memLocalStorage();
+  ls2.setItem('hgAlertEnabled', '1');
+  const env2 = loadHgalert({ doc: stubDocument(), ls: ls2, audio: true });
+  clickBtn(env2);
+  const tg2 = [];
+  env2.W.sendTelegram = (t) => { tg2.push(t); return Promise.resolve(true); };
+  env2.W.__hgBrainSession = () => ({ dead: false, london: false, ny: true, label: 'NY kill zone' });
+  env2.W.hgAlertSniper([hit('ACE', 0.085)]);
+  env2.W.hgAlertSniper([hit('ACE', 0.085), hit('DOGE', 0.069)]);
+  await new Promise(r => setTimeout(r, 30));
+  assert(tg2.length === 1 && tg2[0].indexOf('OFF-HOURS') === -1,
+         'live-session sniper push stays clean');
+
+  /* seam absent -> IST fallback math returns a string, never throws */
+  const env3 = loadHgalert({ doc: stubDocument(), ls: memLocalStorage(), audio: true });
+  assert(typeof env3.W.__hgAlertOffHoursTag() === 'string', 'fallback path returns a string, never throws');
+}
+
 globalThis.setInterval = REAL_SET_INTERVAL;
 Date.now = REAL_DATE_NOW;
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

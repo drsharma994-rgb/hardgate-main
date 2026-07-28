@@ -14,7 +14,8 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs, sniperKey, sniperBody,
-         digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC } from '../scripts/alert-check.mjs';
+         digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
+         istOffHours, offHoursPrefix, offHoursTag } from '../scripts/alert-check.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -370,6 +371,19 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(yml.includes('node scripts/alert-check.mjs'), 'workflow still runs scripts/alert-check.mjs');
   ok(yml.includes('git diff --cached --quiet || git commit'), 'workflow commit guard intact (works with heartbeat: no-op when state unchanged)');
   ok(yml.includes('TELEGRAM_TOKEN') && yml.includes('TELEGRAM_CHAT_ID'), 'workflow passes the telegram secrets');
+}
+/* off-hours session tag — same IST windows as brain.js sessionWindow;
+   deterministic UTC anchors (IST = UTC + 5:30) */
+{
+  ok(istOffHours(Date.UTC(2026, 6, 28, 20, 0)) === true, 'istOffHours: 01:30 IST Tuesday -> off-hours');
+  ok(istOffHours(Date.UTC(2026, 6, 26, 4, 0)) === true, 'istOffHours: Sunday 09:30 IST -> off-hours');
+  ok(istOffHours(Date.UTC(2026, 6, 27, 4, 30)) === false, 'istOffHours: 10:00 IST Monday -> live');
+  ok(istOffHours(Date.UTC(2026, 6, 27, 7, 30)) === false, 'istOffHours: 13:00 IST London KZ -> live (KZ is not dead)');
+  ok(istOffHours('garbage') === false, 'istOffHours: garbage -> live, never throws');
+  ok(offHoursPrefix(Date.UTC(2026, 6, 28, 20, 0)).indexOf('OFF-HOURS') >= 0
+     && offHoursPrefix(Date.UTC(2026, 6, 27, 4, 30)) === '', 'offHoursPrefix: title prefix only off-hours');
+  ok(offHoursTag(Date.UTC(2026, 6, 28, 20, 0)).indexOf('half size or skip') > 0
+     && offHoursTag(Date.UTC(2026, 6, 27, 4, 30)) === '', 'offHoursTag: body warning only off-hours');
 }
 for (const f of ['../api/proxy.js', '../scripts/alert-check.mjs']){
   try{
