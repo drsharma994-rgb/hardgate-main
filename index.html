@@ -1121,7 +1121,15 @@ async function runDivScan(){
         const a4 = last(atr(rows,14));
         if (!isFinite(a4) || a4<=0) continue;
         const entry = p;
-        const stop = dir==="long" ? pivB.v - 0.5*a4 : pivB.v + 0.5*a4;
+        /* stop at the divergence pivot ± 0.75xATR, CAPPED at 2xATR from entry:
+           a pivot 10-14% away (KAITO/BUSD real losses, 2026-07-27) is not a
+           stop, it's a liquidation schedule at any meaningful leverage. The
+           cap is named on the card, never silent. */
+        let stop = dir==="long" ? pivB.v - 0.75*a4 : pivB.v + 0.75*a4;
+        let capped = false;
+        const maxStop = 2*a4;
+        if (dir==="long" && entry-stop > maxStop){ stop = entry - maxStop; capped = true; }
+        if (dir==="short" && stop-entry > maxStop){ stop = entry + maxStop; capped = true; }
         const risk = Math.abs(entry-stop);
         if (!(risk>0)) continue;
         const t1 = dir==="long" ? entry+2*risk : entry-2*risk;
@@ -1134,7 +1142,7 @@ async function runDivScan(){
           [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
            ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
           ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
-          planBlock(dir,entry,stop,t1,t2), entry, stop, t1));
+          planBlock(dir,entry,stop,t1,t2, capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : ''), entry, stop, t1));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);

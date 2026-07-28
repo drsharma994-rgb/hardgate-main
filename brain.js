@@ -297,7 +297,9 @@ var TREND4H_MIN_ROWS = 60;
 var ANCHOR_MIN_ROWS = 60;    /* same honesty bar as TREND4H / smartSetup */
 var ANCHOR_BAND_MIN = 0.25;  /* anchor must sit >= 0.25 x ATR from the mark... */
 var ANCHOR_BAND_MAX = 1.5;   /* ...and <= 1.5 x ATR away (a reachable pullback) */
-var ANCHOR_STOP_ATR = 0.5;   /* stop = 0.5 x ATR beyond the anchoring structure */
+var ANCHOR_STOP_ATR = 0.75;  /* stop = 0.75 x ATR beyond the anchoring structure —
+                                0.5 died to ordinary wicks (owner's real log, 2026-07-27);
+                                0.75 keeps the R:R discipline with real breathing room */
 var PLAN_TP1_R    = 1.5;     /* raw TP multiples when no opposing structure exists */
 var PLAN_TP2_R    = 2.5;
 var PLAN_MIN_RR1  = 1.5;     /* MIN R:R discipline — snapped TP1 below this declines */
@@ -2125,6 +2127,25 @@ function anchoredLimitPlan(dir, rows, tf){
     }
     var stop = long ? structEdge - ANCHOR_STOP_ATR * atr
                     : structEdge + ANCHOR_STOP_ATR * atr;
+    /* pool-aware stop: if the opposing liquidity pool (equal lows under a
+       long / equal highs over a short) sits just BEYOND the computed stop,
+       the stop is stop-run bait — push it 0.25xATR past the pool instead of
+       leaving it where the hunt goes. Named in the note, never silent. */
+    var poolNote = '';
+    try{
+      if (typeof G.findLiquidityPools === 'function'){
+        var lp2 = G.findLiquidityPools(rows);
+        var opp2 = lp2 ? (long ? lp2.sellSide : lp2.buySide) : null;
+        if (opp2 && isFinite(+opp2.level) && +opp2.level > 0){
+          var beyond = long ? (stop - +opp2.level) : (+opp2.level - stop);
+          if (beyond > 0 && beyond <= 1.0 * atr){
+            stop = long ? +opp2.level - 0.25 * atr : +opp2.level + 0.25 * atr;
+            poolNote = ' · stop widened past the ' + (long ? 'sell-side' : 'buy-side')
+              + ' pool at ' + PX(+opp2.level) + ' (stop-run territory)';
+          }
+        }
+      }
+    }catch(e){}
     var risk = long ? entry - stop : stop - entry;
     if (!(risk > 0)) return { plan: null, note: '' };
     var cancelIf = structEdge;   /* a 4h close beyond the structure kills the limit */
@@ -2162,7 +2183,7 @@ function anchoredLimitPlan(dir, rows, tf){
     var plan = normalizePlan({
       dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, type: 'ANCHOR4H',
       entryType: pick.inZone ? 'zone' : 'limit',
-      anchorName: a.name, anchorNote: anchorNote, cancelIf: cancelIf, note: ''
+      anchorName: a.name, anchorNote: anchorNote + poolNote, cancelIf: cancelIf, note: ''
     }, 'structure-anchored limit (' + tf + ')');
     return { plan: plan, note: '' };
   }catch(e){ return { plan: null, note: '' }; }
@@ -2604,7 +2625,7 @@ function planLine(plan){
     return (plan.entryType === 'zone'
         ? 'price in zone — limit at zone edge <b>' + PX(plan.entry) + '</b> or market'
         : 'LIMIT @ <b>' + PX(plan.entry) + '</b> — pullback to ' + an)
-      + ' · stop <b>' + PX(plan.stop) + '</b> (0.5xATR beyond ' + an + ')'
+      + ' · stop <b>' + PX(plan.stop) + '</b> (0.75xATR beyond ' + an + (plan.anchorNote && plan.anchorNote.indexOf('pool') >= 0 ? ', pool-adjusted' : '') + ')'
       + ' · TP1 <b>' + PX(plan.t1) + '</b>'
       + (plan.t2 !== null ? ' · TP2 <b>' + PX(plan.t2) + '</b>' : '')
       + ' · R:R ' + FMT(plan.rr1, 1)
@@ -2728,7 +2749,7 @@ function ticketHTML(row, dir){
       + '<div style="font-size:11px;color:#c4ccd8;margin-top:2px">' + subline + '</div>'
       + '<div style="margin-top:8px;font-size:11.5px;line-height:1.8;color:#c4ccd8">'
       + 'STOP <b>' + PX(p.stop) + '</b>'
-      + (limitish ? ' (0.5×ATR beyond ' + esc(p.anchorName || 'anchor') + ')' : '')
+      + (limitish ? ' (0.75×ATR beyond ' + esc(p.anchorName || 'anchor') + ')' : '')
       + (isFinite(p.cancelIf) && p.cancelIf !== null ? ' · cancel if 4h closes beyond <b>' + PX(p.cancelIf) + '</b>' : '')
       + '<br>MOST PROBABLE TARGET <b style="color:' + col + '">' + PX(p.t1) + '</b>'
       + ' (R:R ' + FMT(isFinite(p.rr1) ? p.rr1 : Math.abs(p.t1 - p.entry) / Math.abs(p.entry - p.stop), 1) + ')'

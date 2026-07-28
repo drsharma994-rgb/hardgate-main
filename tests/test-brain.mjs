@@ -2316,9 +2316,9 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
      'AJ1: entryType limit, anchor named, ANCHOR4H type, structure-anchored src');
   ok(ap.plan.entry === 99.1 && ap.plan.cancelIf === 98.8,
      'AJ1: entry = the swing-low zone TOP (higher confirmation low 99.1); invalidation = the pivot low 98.8');
-  ok(near(ap.plan.stop, 98.8 - 0.5 * 0.8648027021281775) && near(ap.plan.stop, 98.36759864893591),
-     'AJ1: stop = 0.5 x ATR14(4h) beyond the zone bottom — 98.3676');
-  ok(near(ap.plan.t1, 100.19860202659612) && near(ap.plan.t2, 100.9310033776602)
+  ok(near(ap.plan.stop, 98.8 - 0.75 * 0.8648027021281775) && near(ap.plan.stop, 98.15139797340387),
+     'AJ1: stop = 0.75 x ATR14(4h) beyond the zone bottom — 98.1514');
+  ok(near(ap.plan.t1, 100.5229030398942) && near(ap.plan.t2, 101.47150506649033)
      && near(ap.plan.rr1, 1.5) && near(ap.plan.rr2, 2.5),
      'AJ1: no opposing 4h structure -> raw 1.5R/2.5R targets');
   ok(ap.plan.anchorNote === 'swing-low zone 99.1 (zone 98.8–99.1) · 1.04×ATR below mark',
@@ -2335,8 +2335,8 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
   };
   ap = ANCHOR('long', ramp(0.05, 0.4));
   ok(ap.plan && ap.plan.anchorName === 'EMA20(4h)' && near(ap.plan.entry, 105.475)
-     && near(ap.plan.stop, 105.275) && near(ap.plan.t1, 105.775) && near(ap.plan.t2, 105.975),
-     'AJ2: EMA20(4h) wins the ramp — entry at the line, stop 0.5xATR beyond, raw 1.5R/2.5R');
+     && near(ap.plan.stop, 105.175) && near(ap.plan.t1, 105.925) && near(ap.plan.t2, 106.225),
+     'AJ2: EMA20(4h) wins the ramp — entry at the line, stop 0.75xATR beyond, raw 1.5R/2.5R');
   ok(ap.plan.anchorNote === 'EMA20(4h) 105.48 · 1.19×ATR below mark',
      'AJ2: the line anchor note carries the ATR multiple — got "' + ap.plan.anchorNote + '"');
 
@@ -2351,7 +2351,7 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
   };
   ap = ANCHOR('long', decay());
   ok(ap.plan && ap.plan.anchorName === 'EMA50(4h)' && near(ap.plan.entry, 102.75172367977194)
-     && near(ap.plan.stop, 102.55172367977194),
+     && near(ap.plan.stop, 102.45172367977194),
      'AJ3: EMA20 too close to the mark (< 0.25xATR) -> EMA50(4h) wins the band');
   ok(ap.plan.anchorNote === 'EMA50(4h) 102.75 · 0.43×ATR below mark',
      'AJ3: the EMA50 note is honest about the distance — got "' + ap.plan.anchorNote + '"');
@@ -2359,9 +2359,9 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
   /* ---- AJ4: the untouched 4h FVG wins on the shared trend fixture ---- */
   ap = ANCHOR('long', trendRows(true));
   ok(ap.plan && ap.plan.anchorName === '4h FVG' && near(ap.plan.entry, 147.64569307942614)
-     && near(ap.plan.stop, 146.84603755122723) && near(ap.plan.cancelIf, 147.48882586775437)
-     && near(ap.plan.t1, 148.8451763717245) && near(ap.plan.t2, 149.64483189992342),
-     'AJ4: nearest untouched bullish FVG — entry at the gap top, stop 0.5xATR beyond the gap bottom');
+     && near(ap.plan.stop, 146.52464339296364) && near(ap.plan.cancelIf, 147.48882586775437)
+     && near(ap.plan.t1, 149.32726760911987) && near(ap.plan.t2, 150.4483172955824),
+     'AJ4: nearest untouched bullish FVG — entry at the gap top, stop 0.75xATR beyond the gap bottom');
   ok(ap.plan.anchorNote === '4h FVG 147.65 (zone 147.49–147.65) · 1.04×ATR below mark',
      'AJ4: the FVG note names the zone — got "' + ap.plan.anchorNote + '"');
 
@@ -2380,12 +2380,11 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
   };
   ap = ANCHOR('short', swingShortRows());
   ok(ap.plan && ap.plan.anchorName === 'swing-high zone' && ap.plan.entry === 100.9
-     && ap.plan.cancelIf === 101.2 && near(ap.plan.stop, 101.63240135106409),
-     'AJ5: SHORT mirrors — entry at the swing-high zone bottom, stop 0.5xATR above the pivot high');
+     && ap.plan.cancelIf === 101.2 && near(ap.plan.stop, 101.84860202659614),
+     'AJ5: SHORT mirrors — entry at the swing-high zone bottom, stop 0.75xATR above the pivot high');
   ap = ANCHOR('short', trendRows(false));
-  ok(ap.plan && ap.plan.anchorName === 'swing-high zone' && near(ap.plan.entry, 55.43525148753334)
-     && near(ap.plan.t1, 54.034692799964496) && near(ap.plan.rr1, 2.074698491592134) && !near(ap.plan.rr1, 1.5),
-     'AJ5: TP1 SNAPPED to the nearest opposing pivot (rr1 2.07, not the raw 1.5R)');
+  ok(ap.plan === null && ap.note.indexOf('R:R 1.4 below the 1.5 minimum') >= 0,
+     'AJ5: the wider stop makes the marginal setup DECLINE honestly (R:R 1.4 < 1.5) instead of entering to get stopped out — the fix working, gate-engine fallback named');
 
   /* ---- AJ6: TP1/TP2 both snap to opposing structure when it exists ---- */
   const tpSnapRows = function(){
@@ -2427,8 +2426,8 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
     return rows;
   };
   ap = ANCHOR('long', rrFailRows());
-  ok(ap.plan === null && ap.note === 'anchored limit R:R 1.2 below the 1.5 minimum — gate-engine levels',
-     'AJ8: snapped TP1 under the 1.5R minimum -> declined with the R:R named — got "' + ap.note + '"');
+  ok(ap.plan === null && ap.note === 'anchored limit R:R 0.9 below the 1.5 minimum — gate-engine levels',
+     'AJ8: snapped TP1 under the 1.5R minimum -> declined with the R:R named (wider stop, honest math) — got "' + ap.note + '"');
 
   /* ---- AJ9: mark INSIDE the anchor zone -> 'zone' entryType at the far edge ---- */
   const inZoneRows = function(){
@@ -2444,8 +2443,8 @@ console.log('== structure-anchored limit plans: anchor selection, band, stop/TP 
   };
   ap = ANCHOR('long', inZoneRows());
   ok(ap.plan && ap.plan.entryType === 'zone' && ap.plan.entry === 98.6 && ap.plan.cancelIf === 98.6
-     && near(ap.plan.stop, 98.17946557397427),
-     'AJ9: price in zone — limit at the far zone edge (98.6), stop 0.5xATR beyond');
+     && near(ap.plan.stop, 97.96919836096141),
+     'AJ9: price in zone — limit at the far zone edge (98.6), stop 0.75xATR beyond');
   ok(ap.plan.anchorNote === 'mark inside swing-low zone 98.6–98.9 — limit at the zone edge',
      'AJ9: the in-zone note says exactly that — got "' + ap.plan.anchorNote + '"');
 
@@ -2545,14 +2544,14 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
   /* ---- the promoted card carries the patient LIMIT, not a market chase ---- */
   ok(kCards.indexOf('HIGH · 6 LAYERS') >= 0
      && kCards.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
-     && kCards.indexOf('stop <b>146.85</b> (0.5xATR beyond 4h FVG)') >= 0
-     && kCards.indexOf('TP1 <b>148.85</b> · TP2 <b>149.64</b> · R:R 1.5') >= 0
+     && kCards.indexOf('stop <b>146.52</b> (0.75xATR beyond 4h FVG)') >= 0
+     && kCards.indexOf('TP1 <b>149.33</b> · TP2 <b>150.45</b> · R:R 1.5') >= 0
      && kCards.indexOf('cancel if 4h closes beyond <b>147.49</b>') >= 0
      && kCards.indexOf('limit working ~24h or until structure breaks — structure-anchored limit (4h)') >= 0,
      'AK: the TRENDY card renders the full anchored limit block — anchor, stop, TPs, R:R, invalidation, validity');
   ok(kCards.indexOf('TRENDYUSDT') >= 0 && kCards.slice(kCards.indexOf('TRENDYUSDT'), kCards.indexOf('TRENDYUSDT') + 1400).indexOf('ENTRY <b>') === -1,
      'AK: no market-entry render on the TRENDY anchored card — the LIMIT block replaces it (other cards unaffected)');
-  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.84603755122723,148.8451763717245)') >= 0,
+  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987)') >= 0,
      'AK: SEND TO TRADE PLAN carries the anchored entry/stop/t1 verbatim');
 
   /* ---- WATCH rows: swing-zone limit, in-zone label, honest fallback ---- */
@@ -2571,14 +2570,14 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
   const kSnap = WG.__hgBrainLast();
   const kTrendy = kSnap.rows.filter(function(x){ return x.sym === 'TRENDYUSDT'; })[0];
   ok(kTrendy && kTrendy.plan && Object.keys(kTrendy.plan).sort().join(',') === 'entry,stop,t1,t2'
-     && kTrendy.plan.entry === 147.64569307942614 && kTrendy.plan.stop === 146.84603755122723
-     && kTrendy.plan.t1 === 148.8451763717245 && kTrendy.plan.t2 === 149.64483189992342,
+     && kTrendy.plan.entry === 147.64569307942614 && kTrendy.plan.stop === 146.52464339296364
+     && kTrendy.plan.t1 === 149.32726760911987 && kTrendy.plan.t2 === 150.4483172955824,
      'AK: __hgBrainLast keeps the EXACT {entry,stop,t1,t2} shape for the signallog — additive fields stay off the wire');
   ok(kTrendy.plan.entry < 148.9834776804744,
      'AK: the limit entry sits BELOW the last 4h close (patient pullback, never a chase)');
   const kAudit = WG.__hgBrainAudit('TRENDYUSDT');
   ok(kAudit && kAudit.indexOf('>PLAN<') >= 0 && kAudit.indexOf('>LIMIT<') >= 0
-     && kAudit.indexOf('LIMIT @ 147.65 — 4h FVG 147.65 (zone 147.49–147.65) · 1.04×ATR below mark · stop 146.85 · cancel if 4h closes beyond 147.49') >= 0,
+     && kAudit.indexOf('LIMIT @ 147.65 — 4h FVG 147.65 (zone 147.49–147.65) · 1.04×ATR below mark · stop 146.52 · cancel if 4h closes beyond 147.49') >= 0,
      'AK: the audit ledger gains a PLAN line naming the anchor source — got ' + (kAudit ? 'line present' : 'null'));
   const fAudit = WG.__hgBrainAudit('FLATUSDT');
   ok(fAudit && fAudit.indexOf('>PLAN<') >= 0 && fAudit.indexOf('>GATE<') >= 0
@@ -2710,26 +2709,26 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
   ok(ap.plan && ap.plan.anchorName === '4h order block top' && ap.plan.entryType === 'limit'
      && ap.plan.entry === 99.5 && ap.plan.cancelIf === 99.3,
      'AN1: OB zone wins — entry at the 4h order block top, cancel-if at the zone bottom');
-  ok(ap.plan.stop === 98.8 && near(ap.plan.t1, 100.55) && near(ap.plan.t2, 101.25),
-     'AN1: stop exactly 0.5xATR beyond the OB far edge (ATR 1.0), raw 1.5R/2.5R targets');
+  ok(ap.plan.stop === 98.55 && near(ap.plan.t1, 100.925) && near(ap.plan.t2, 101.875),
+     'AN1: stop exactly 0.75xATR beyond the OB far edge (ATR 1.0), raw 1.5R/2.5R targets');
   ok(ap.plan.anchorNote === '4h order block top 99.5 (zone 99.3–99.5) · 0.5×ATR below mark',
      'AN1: the OB note names the family + level basis — got "' + ap.plan.anchorNote + '"');
   ap = WA1.brainAnchorPlan('short', flat());
   ok(ap.plan && ap.plan.anchorName === '4h order block bottom' && ap.plan.entry === 100.5
-     && ap.plan.stop === 101.2 && ap.plan.cancelIf === 100.7,
-     'AN1: SHORT mirrors — entry at the OB bottom, stop 0.5xATR above the zone top');
+     && ap.plan.stop === 101.45 && ap.plan.cancelIf === 100.7,
+     'AN1: SHORT mirrors — entry at the OB bottom, stop 0.75xATR above the zone top');
 
   /* ---- AN2: liquidity pool line anchor, both sides ---- */
   const WA2 = freshBrain();
   WA2.findLiquidityPools = function(){ return { buySide: { level: 100.6, count: 3 }, sellSide: { level: 99.4, count: 4 } }; };
   ap = WA2.brainAnchorPlan('long', flat());
   ok(ap.plan && ap.plan.anchorName === 'sell-side equal-lows pool' && ap.plan.entry === 99.4
-     && ap.plan.stop === 98.9 && near(ap.plan.t1, 100.15) && near(ap.plan.t2, 100.65)
+     && ap.plan.stop === 98.65 && near(ap.plan.t1, 100.525) && near(ap.plan.t2, 101.275)
      && ap.plan.cancelIf === 99.4,
-     'AN2: LONG limits at the sell-side equal-lows pool — line anchor, stop 0.5xATR beyond the level');
+     'AN2: LONG limits at the sell-side equal-lows pool — line anchor, stop 0.75xATR beyond the level');
   ap = WA2.brainAnchorPlan('short', flat());
   ok(ap.plan && ap.plan.anchorName === 'buy-side equal-highs pool' && ap.plan.entry === 100.6
-     && ap.plan.stop === 101.1 && near(ap.plan.t1, 99.85) && near(ap.plan.t2, 99.35),
+     && ap.plan.stop === 101.35 && near(ap.plan.t1, 99.475) && near(ap.plan.t2, 98.725),
      'AN2: SHORT mirrors at the buy-side equal-highs pool');
 
   /* ---- AN3: AVWAP anchored at the last confirmed swing low ---- */
@@ -2741,8 +2740,8 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
   ok(ap.plan && ap.plan.anchorName === 'AVWAP from the last swing low' && ap.plan.entry === 99.35
      && avCalls.length === 1 && avCalls[0] === 115,
      'AN3: AVWAP computed from the last confirmed swing-low bar (index 115), entry at the value');
-  ok(near(ap.plan.stop, 98.91759864893591) && ap.plan.cancelIf === 99.35,
-     'AN3: AVWAP line stop 0.5xATR beyond the level, cancel-if at the level itself');
+  ok(near(ap.plan.stop, 98.70139797340387) && ap.plan.cancelIf === 99.35,
+     'AN3: AVWAP line stop 0.75xATR beyond the level, cancel-if at the level itself');
   ap = WA3.brainAnchorPlan('long', flat());
   ok(ap.plan === null && avCalls.length === 1,
      'AN3: no confirmed pivot -> AVWAP never even computed (no anchor bar, no fabricated index)');
@@ -2755,10 +2754,10 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
   ap = WA4.brainAnchorPlan('long', swingLongRows());
   ok(ap.plan && ap.plan.anchorName === '4h order block top' && ap.plan.entry === 99.3,
      'AN4: union of families — OB top 99.3 beats AVWAP 99.2, pool 99.15, swing zone 99.1 (nearest below mark)');
-  ok(near(ap.plan.stop, 99.15 - 0.5 * 0.8648027021281775)
+  ok(near(ap.plan.stop, 99.15 - 0.75 * 0.8648027021281775)
      && near(ap.plan.t1, ap.plan.entry + 1.5 * (ap.plan.entry - ap.plan.stop))
      && near(ap.plan.t2, ap.plan.entry + 2.5 * (ap.plan.entry - ap.plan.stop)),
-     'AN4: stop/TP math family-independent — 0.5xATR beyond the OB bottom, raw 1.5R/2.5R');
+     'AN4: stop/TP math family-independent — 0.75xATR beyond the OB bottom, raw 1.5R/2.5R');
 
   /* ---- AN5: band rejection + the honest decline still bind the new families ---- */
   const WA5 = freshBrain();
@@ -2770,7 +2769,7 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
   const WA6 = freshBrain();
   WA6.findOrderBlock = function(){ return { top: 99.5, bottom: 99.3, age: 5 }; };
   ap = WA6.brainAnchorPlan('long', rrFailRows());
-  ok(ap.plan === null && ap.note === 'anchored limit R:R 1.2 below the 1.5 minimum — gate-engine levels',
+  ok(ap.plan === null && ap.note === 'anchored limit R:R 0.9 below the 1.5 minimum — gate-engine levels',
      'AN5: snapped TP1 under 1.5R declines an OB plan exactly like a swing plan — got "' + ap.note + '"');
 
   /* ---- AN6: the REAL indicators.js / indicators2.js wiring (name contract) ---- */
@@ -2785,8 +2784,8 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
      && typeof WR.findLiquidityPools === 'function', 'AN6: real modules present on the seam window');
   ap = WR.brainAnchorPlan('long', flat());
   ok(ap.plan && ap.plan.anchorName === 'sell-side equal-lows pool' && ap.plan.entry === 99.5
-     && ap.plan.stop === 99,
-     'AN6: REAL findLiquidityPools — flat fixture equal lows 99.5 anchor the long limit');
+     && ap.plan.stop === 98.75,
+     'AN6: REAL findLiquidityPools — flat fixture equal lows 99.5 anchor the long limit, stop 0.75xATR beyond');
   ap = WR.brainAnchorPlan('short', flat());
   ok(ap.plan && ap.plan.anchorName === 'buy-side equal-highs pool' && ap.plan.entry === 100.5,
      'AN6: REAL findLiquidityPools — equal highs 100.5 anchor the short limit');
@@ -2941,7 +2940,7 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
      'AN9: FLAT chip falls back to the row mark (9.6 vs entry 10, ATR 2) -> IN ZONE');
   ok(boardHtml.indexOf('MARK n/a') >= 0,
      'AN9: NOMK has no cache mark and a null row mark -> the chip says MARK n/a, never a guess');
-  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.84603755122723,148.8451763717245)') >= 0,
+  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987)') >= 0,
      'AN9: every board card keeps the SEND TO TRADE PLAN handoff verbatim');
   ok(boardHtml.indexOf('BTCUSDT') === -1 && boardHtml.indexOf('XAU') === -1,
      'AN9: plan-null rows (BTC, gold ASIDE) never board — the ticket near-miss copy covers them');
