@@ -261,6 +261,7 @@ var RESCUE_CAP  = 12;      /* max 1h sniper-rescue fetches per scan — the resc
                               precision tool for near-misses, not a second full sweep;
                               the 4h sweep keeps its own FETCH_CAP */
 var __rescueFetches = 0;   /* per-scan rescue counter, reset at every synthesis start */
+var __sessionNowOverride = null;   /* test seam: when set, sessionWindow() uses this clock */
 var CHUNK_SIZE  = 5;       /* candle fetches in flight per chunk */
 var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
@@ -860,7 +861,8 @@ deliberate (null turnover, missing tape, non-finite funding = unknown, never
 punished). Never throws — a gate failure degrades to no gate at all.
 ========================================================================= */
 function radarGates(row, snap){
-  var out = { demote: false, liquidity: false, overextended: false, reason: null, cautions: [] };
+  var out = { demote: false, liquidity: false, overextended: false, reason: null, cautions: [],
+              haircut: false, haircutReason: null };
   try{
     var dec = row && row.dec;
     if (!dec || !isDir(dec.dir)) return out;
@@ -915,8 +917,43 @@ function radarGates(row, snap){
         && ((dec.dir === 'long' && fp > 0) || (dec.dir === 'short' && fp < 0))){
       out.cautions.push('funding crowded same-direction — squeeze risk');
     }
+
+    /* (4) OFF-HOURS CONVICTION HAIRCUT — dead tape (Sunday / 01:00-06:30 IST,
+       stamped by applySession as row.sessionDead) drops the tier ONE notch
+       (PRIME->HIGH, HIGH->WATCH, WATCH->ASIDE). Thin books and worse fills
+       mean the same layer agreement deserves less conviction. Runs last so a
+       hard demote (liquidity/overextension) always wins. */
+    if (row.sessionDead === true){
+      out.haircut = true;
+      out.haircutReason = 'off-hours tape (Sun / 01:00-06:30 IST) — conviction haircut: thin books, worse fills';
+    }
   }catch(e){}
   return out;
+}
+
+/* OFF-HOURS CONVICTION HAIRCUT — applied per-row. Idempotent within one
+   decide: dec.gatedFrom marks a tier that already took a gate/haircut, and
+   the post-fetch re-decides (trend4h / mtf / volreg build fresh dec objects)
+   get exactly ONE re-application via applySessionHaircut below. A liquidity/
+   overextension demote (tier ASIDE, gatedFrom set) always wins. */
+function sessionHaircut(row){
+  try{
+    if (!row || row.sessionDead !== true || !row.dec) return;
+    if (row.dec.gatedFrom) return;
+    if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) return;
+    row.dec.gatedFrom = row.dec.tier;
+    row.dec.tier = row.dec.tier === 'PRIME' ? 'HIGH' : (row.dec.tier === 'HIGH' ? 'WATCH' : 'ASIDE');
+    row.dec.reasons.unshift('off-hours tape (Sun / 01:00-06:30 IST) — conviction haircut: thin books, worse fills');
+    row.gated = 'session';
+  }catch(e){}
+}
+/* pass over the judged rows after every re-decide stage — the haircut must
+   survive promotions, so it is the LAST word on the tier, each time */
+function applySessionHaircut(rows){
+  try{
+    if (!Array.isArray(rows)) return;
+    for (var i = 0; i < rows.length; i++) sessionHaircut(rows[i]);
+  }catch(e){}
 }
 
 /* stat-line honesty: the demotion tally, rendered only when gates bit */
@@ -1308,9 +1345,11 @@ function judgeCrypto(cand, snap){
     dec.tier = 'ASIDE';
     dec.reasons.unshift(g.reason);
     row.gated = g.liquidity ? 'liquidity' : 'overextended';
+  }else if (g.haircut){
+    sessionHaircut(row);   /* no-op when the tier is already gated */
   }
   if (g.cautions.length){
-    row.cautions = g.cautions.slice();
+    row.cautions = (row.cautions || []).concat(g.cautions);
     for (var gc = 0; gc < g.cautions.length; gc++){
       col.votes.push({ layer: 'guard', vote: 'neutral', kind: 'context',
                        caution: true, text: g.cautions[gc] });
@@ -1976,6 +2015,8 @@ function applyLiqpool(rows){
 /* session window (IST, gold-lane kill zones). now injectable for tests. */
 function sessionWindow(now){
   try{
+    if (now === undefined && __sessionNowOverride !== null && __sessionNowOverride !== undefined)
+      now = __sessionNowOverride;   /* test seam: deterministic clock */
     var d = now ? new Date(now) : new Date();
     var ist = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60000);
     var mins = ist.getHours() * 60 + ist.getMinutes(), day = ist.getDay();
@@ -1992,6 +2033,7 @@ function applySession(row){
   try{
     var sw = sessionWindow();
     row.session = sw.label;
+    row.sessionDead = sw.dead === true;
     if (sw.dead){
       var ctxt = 'off-hours tape (Sun / 01:00-06:30 IST) — thin liquidity, worse fills';
       row.col.votes.push({ layer: 'session', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
@@ -3954,6 +3996,7 @@ async function runBrain(el){
       applyDiv(rows);
       applyBook(rows);
       applyCvd(rows);
+      applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
       bk = bucketRows(rows);   /* re-bucket after promotions/dark caps */
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -4185,6 +4228,7 @@ async function runQuick(el){
       applyDiv(rows);
       applyBook(rows);
       applyCvd(rows);
+      applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
       bk = bucketRows(rows);
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
       setups = primes.concat(highs);
@@ -4562,6 +4606,11 @@ G.__hgBrainSniperHits = sniperHitsFrom;
 G.__hgBrainMtf = { resampleDaily: resampleDaily, dailySide: dailySide };
 G.__hgBrainAtrPct = atrPercentile;
 G.__hgBrainSession = sessionWindow;
+/* test seam: set/clear the synthesis clock — __hgBrainSetClock(ms|null).
+   Production never calls this; scans keep using the real wall clock. */
+G.__hgBrainSetClock = function(ms){ __sessionNowOverride = (ms === null || ms === undefined) ? null : ms; };
+G.__hgBrainSessionHaircut = sessionHaircut;
+G.__hgBrainApplySessionHaircut = applySessionHaircut;
 G.__hgBrainLiqpool = liqpoolNote;
 /* Tier-2/3 seams: pure math for the vm suites */
 G.__hgBrainFundZ = fundingZ;

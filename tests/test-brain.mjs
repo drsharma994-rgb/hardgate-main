@@ -54,6 +54,10 @@ let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
 const W = globalThis.window;
+/* pin the synthesis clock (same mid-session anchor as freshBrain) so tier
+   expectations never depend on the wall clock — the haircut seam is
+   exercised deliberately in section AS */
+W.__hgBrainSetClock('2026-07-27T04:30:00Z');
 const COLLECT = W.brainCollect;
 const DECIDE = W.brainDecide;
 
@@ -528,6 +532,9 @@ function freshBrain(){
     globalThis.localStorage = lsStub();
   try{ globalThis.localStorage.setItem('hgBrainSniper', '0'); }catch(e){}
   vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
+  /* pin the synthesis clock to a mid-session weekday (10:00 IST Monday) so
+     the off-hours conviction haircut never makes wall-clock-dependent tiers */
+  globalThis.window.__hgBrainSetClock('2026-07-27T04:30:00Z');
   return globalThis.window;
 }
 function fakeRows(n){
@@ -3241,6 +3248,40 @@ console.log('== AS) tier-1 layers ==');
   ok(SW('2026-07-27T04:00:00Z').dead === false && SW('2026-07-27T04:00:00Z').london === false
      && SW('2026-07-27T04:00:00Z').ny === false,
      'AS: 09:30 IST weekday -> mid-session, no flags');
+
+  /* off-hours conviction haircut: pure, idempotent, demote-safe */
+  const SH = W.__hgBrainSessionHaircut, ASH = W.__hgBrainApplySessionHaircut;
+  ok(typeof SH === 'function' && typeof ASH === 'function', 'AS: haircut seams exposed');
+  const mkDec = tier => ({ dir: 'long', tier: tier, agree: 4, reasons: ['r'], vetoes: [] });
+  const r1 = { sessionDead: true, dec: mkDec('PRIME') };
+  SH(r1);
+  ok(r1.dec.tier === 'HIGH' && r1.dec.gatedFrom === 'PRIME' && r1.gated === 'session'
+     && r1.dec.reasons[0].indexOf('off-hours') === 0,
+     'AS: PRIME -> HIGH off-hours, ledger leads with the haircut');
+  SH(r1);
+  ok(r1.dec.tier === 'HIGH', 'AS: haircut is idempotent within one decide (no double drop)');
+  const r2 = { sessionDead: true, dec: mkDec('WATCH') };
+  SH(r2);
+  ok(r2.dec.tier === 'ASIDE' && r2.dec.gatedFrom === 'WATCH', 'AS: WATCH -> ASIDE off-hours');
+  const r3 = { sessionDead: true, dec: mkDec('ASIDE') };
+  SH(r3);
+  ok(r3.dec.tier === 'ASIDE' && !r3.dec.gatedFrom, 'AS: ASIDE rows untouched');
+  const r4 = { sessionDead: false, dec: mkDec('PRIME') };
+  SH(r4);
+  ok(r4.dec.tier === 'PRIME' && !r4.dec.gatedFrom, 'AS: live-session rows untouched');
+  const r5 = { sessionDead: true, dec: Object.assign(mkDec('ASIDE'), { gatedFrom: 'HIGH' }), gated: 'liquidity' };
+  SH(r5);
+  ok(r5.dec.tier === 'ASIDE' && r5.dec.gatedFrom === 'HIGH' && r5.gated === 'liquidity',
+     'AS: a hard demote wins — haircut never re-labels a liquidity gate');
+  /* the pass: fresh re-decide objects (no gatedFrom) get exactly one re-application */
+  const rows = [{ sessionDead: true, dec: mkDec('PRIME') }, { sessionDead: true, dec: mkDec('HIGH') }];
+  ASH(rows);
+  ok(rows[0].dec.tier === 'HIGH' && rows[1].dec.tier === 'WATCH',
+     'AS: applySessionHaircut re-applies once after a fresh re-decide (promotion-proof)');
+  ASH(rows);
+  ok(rows[0].dec.tier === 'HIGH' && rows[1].dec.tier === 'WATCH', 'AS: the pass itself is idempotent');
+  ASH(null); SH(null);
+  ok(true, 'AS: garbage inputs never throw');
 }
 
 /* ================= AT) LIQPOOL — stop-run caution + T1 magnet ================= */
