@@ -2288,6 +2288,51 @@ function anchoredLimitPlan(dir, rows, tf){
   }catch(e){ return { plan: null, note: '' }; }
 }
 
+/* ---------------- staleness guard — the biggest hidden SL cause ----------
+   A ticket/board painted an hour ago is a TRAP in fast tape: the user
+   enters a level the market already ran through. Every 60s this checks the
+   last completed synthesis age; past 10 min the age lines get a loud
+   warning suffix, past 20 min a hard one. Self-clearing on the next paint.
+   One guarded interval, started at mount, never throws. */
+var STALE_WARN_MS = 10 * 60 * 1000, STALE_HARD_MS = 20 * 60 * 1000;
+function stalenessTick(){
+  try{
+    var el = __mountedEl;
+    if (!el || typeof el.querySelector !== 'function') return;
+    var at = (__lastResult && isFinite(+__lastResult.at)) ? +__lastResult.at : 0;
+    if (!at) return;
+    var age = Date.now() - at;
+    var ta = el.querySelector('#brainTicketAge'), ba = el.querySelector('#brainBoardAge');
+    var mark = function(node, base){
+      if (!node || !node.textContent) return;
+      var clean = node.textContent.replace(/ · ⚠.*$/, '');
+      if (age > STALE_HARD_MS){
+        node.textContent = clean + ' · ⚠ STALE LEVELS (' + Math.round(age / 60000)
+          + ' min old) — DO NOT ENTER from this board, RUN SYNTHESIS first';
+        node.style.color = '#e4586b';
+      }else if (age > STALE_WARN_MS){
+        node.textContent = clean + ' · levels aging (' + Math.round(age / 60000)
+          + ' min) — verify with a rescan before entering';
+        node.style.color = '#d8a24a';
+      }else{
+        node.textContent = clean;
+        node.style.color = '';
+      }
+    };
+    mark(ta, 'ticket');
+    mark(ba, 'board');
+  }catch(e){}
+}
+var __stalenessTimer = null;
+function ensureStalenessTimer(){
+  if (__stalenessTimer !== null) return;
+  try{
+    if (typeof setInterval !== 'function') return;
+    __stalenessTimer = setInterval(function(){ try{ stalenessTick(); }catch(e){} }, 60000);
+    try{ if (__stalenessTimer && typeof __stalenessTimer.unref === 'function') __stalenessTimer.unref(); }catch(e){}
+  }catch(e){}
+}
+
 /* 1H rescue chooser — pure: of two VALID anchored plans (same row, same
    direction, one 4h one 1h), the tighter stop-distance wins (that is what
    lifts a card over the 20x grade); a tie or wider keeps the 4h plan —
@@ -2898,6 +2943,25 @@ function paintEntryTickets(el, rows){
       + (t.long ? ticketHTML(t.long, 'long') : noTicketHTML('long', t.longNear))
       + (t.short ? ticketHTML(t.short, 'short') : noTicketHTML('short', t.shortNear))
       + '</div>';
+    /* chop-regime banner: in a deadzone regime with fear sentiment, trend
+       setups statistically die — say it ON the panel the user trades from.
+       snap comes from the last synthesis (regime + F&G), never invented. */
+    try{
+      var banner = el.querySelector('#brainRegimeBanner');
+      if (banner){
+        var rs = (__regimeSnap && __regimeSnap.score !== null) ? __regimeSnap.score : null;
+        var rlabel = (__regimeSnap && __regimeSnap.label) || '';
+        var fng = (__regimeSnap && __regimeSnap.fng !== null) ? __regimeSnap.fng : null;
+        var chop = (rs !== null && rs >= -3 && rs <= 3) || (fng !== null && fng <= 30);
+        if (chop){
+          banner.style.display = 'block';
+          banner.textContent = '⚠ CHOP REGIME — ' + (rlabel || 'mixed') + (fng !== null ? ' · F&G ' + fng : '')
+            + ': trend entries die in mean-reverting tape. Sniper-grade only, half size, or stand aside.';
+        }else{
+          banner.style.display = 'none';
+        }
+      }
+    }catch(e){}
     var age = el.querySelector('#brainTicketAge');
     if (age) age.textContent = 'levels as of ' + new Date().toTimeString().slice(0, 8)
       + ' — refreshed by every synthesis, including the AUTO cycle';
@@ -3597,6 +3661,7 @@ var __hasRun = false;
 var __mountedEl = null;
 var __lastResult = null;  /* {rows, uni, at} — quick rescan rechecks this, never the wire */
 var __lastTicketSnap = null; /* last painted entry tickets — alert seam snapshot */
+var __regimeSnap = null;      /* {score, label, fng} from the last completed synthesis — chop banner */
 
 async function brainRefresh(){
   try{
@@ -3823,6 +3888,11 @@ async function runBrain(el){
     stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading every intelligence layer…';
 
     var snap = snapshotLayers();
+    __regimeSnap = {
+      score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
+      label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
+      fng: (snap.fng && isFinite(+snap.fng.v)) ? +snap.fng.v : null
+    };
     var uni = await buildUniverse();
     await fillTape(snap, uni);   /* legacy mode reuses the universe leg's tickers — one fetch per run */
     var combined = (uni.mode === 'combined');
@@ -4015,6 +4085,11 @@ async function runQuick(el){
     stat.textContent = 'quick recheck — fresh layers over the last scan’s watch set…';
 
     var snap = snapshotLayers();
+    __regimeSnap = {
+      score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
+      label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
+      fng: (snap.fng && isFinite(+snap.fng.v)) ? +snap.fng.v : null
+    };
     await fillTape(snap);
     var last = __lastResult;
     var lastRows = (last && Array.isArray(last.rows)) ? last.rows : [];
@@ -4315,6 +4390,7 @@ function mount(el){
       + 'stop, most-probable target, cancel-if and validity stated · levels come from the planners only, never invented — '
       + 'when a side has nothing, the ticket says so honestly</span></h2>'
       + '<div id="brainTicket"></div>'
+      + '<div class="note warn" id="brainRegimeBanner" style="display:none;margin-top:8px;font-size:11.5px"></div>'
       + '<div class="note" id="brainTicketAge" style="margin-top:6px;font-size:10px"></div></div>'
       + '<div class="panel" id="brainBoardWrap" style="display:none;margin-top:10px">'
       + '<h2>LIMIT BOARD <span>every qualified setup, one exact resting limit each — sorted like the ticket '
@@ -4334,6 +4410,7 @@ function mount(el){
       + '<div id="brainAside"></div></div>'
       + '<div class="empty" id="brainEmpty" style="display:none">No high-probability setups right now — standing aside is a position.</div>';
     __mountedEl = el;
+    ensureStalenessTimer();   /* staleness guard ticks every 60s from first mount */
   }catch(e){
     try{ el.textContent = 'brain mount failed: ' + errMsg(e) + ' — reload the tab'; }catch(e2){}
     try{ el.insertAdjacentHTML('beforeend', '<div class="note warn">brain mount failed: ' + esc(errMsg(e)) + ' — reload the tab</div>'); }catch(e3){}
