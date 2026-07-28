@@ -3123,7 +3123,21 @@ function sniperOk(c, st){
   try{
     if (!c || !c.limit) return false;   /* sniper = resting limit orders only */
     if (!(c.lev >= SNIPER_MIN_LEV)) return false;
-    return !!st && (st.state === 'in-zone' || st.state === 'approaching');
+    if (!(!!st && (st.state === 'in-zone' || st.state === 'approaching'))) return false;
+    /* EV gate (owner mandate 2026-07-28): a family with a REAL record (n>=4
+       closed) must be paying — est*rr1 - (1-est) > 0. No record / thin
+       record = unproven, not proven-bad: passes. */
+    var p = c.row && c.row.plan;
+    if (p && typeof G.loadLog === 'function'){
+      var fst = familyStats(G.loadLog(), planFamily(p));
+      if (fst && fst.n >= 4){
+        var est = estWinRate(fst);
+        var rr1 = isFinite(+p.rr1) ? +p.rr1
+                : Math.abs(+p.t1 - +p.entry) / Math.abs(+p.entry - +p.stop);
+        if (isFinite(est) && isFinite(rr1) && (est * rr1 - (1 - est)) <= 0) return false;
+      }
+    }
+    return true;
   }catch(e){ return false; }
 }
 var __sniper = (function(){   /* owner mandate 2026-07-25: SNIPER defaults ON; the toggle persists */
@@ -3232,8 +3246,8 @@ function paintLimitBoard(el, rows){
     if (!limits.length && !marketOnly.length){
       html = '<div class="note" style="font-size:11.5px;line-height:1.7">'
         + (__sniper
-           ? 'No sniper-grade setups right now — a card must be a resting LIMIT with the mark IN ZONE or APPROACHING '
-             + 'and a stop tight enough for ≥' + SNIPER_MIN_LEV + 'x (≤3% away). Nothing qualified; standing aside is the position.'
+           ? 'No sniper-grade setups right now — a card must be a resting LIMIT with the mark IN ZONE or APPROACHING, '
+             + 'a stop tight enough for ≥' + SNIPER_MIN_LEV + 'x (≤3% away), and a paying family record (EV > 0) when one exists. Nothing qualified; standing aside is the position.'
            : 'No qualified limit setups this scan — standing aside is the position.')
         + '</div>';
     }else{

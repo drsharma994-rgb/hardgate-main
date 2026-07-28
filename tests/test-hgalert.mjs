@@ -705,8 +705,10 @@ console.log('== 11) sniper hit-set alerts ==');
   const r1 = env.W.hgAlertSniper([hit('ACE', 0.085)]);
   assert(r1 === 'seeded' && oscCount() === beforeSeed && tgCalls.length === 0,
          'first sniper set seeds silently (no chime, no push)');
-  assert(ui.q('#hgAlertSniper').textContent.indexOf('ACE SHORT @ 0.085 (24x, IN ZONE)') >= 0,
-         'panel sniper line shows the seeded hit');
+  assert(ui.q('#hgAlertSniper').textContent.indexOf('ACE SHORT @ 0.085 (24x, IN ZONE)') >= 0
+      && ui.q('#hgAlertSniper').textContent.indexOf('SL 0.0884') >= 0
+      && ui.q('#hgAlertSniper').textContent.indexOf('TP 0.07905') >= 0,
+         'panel sniper line shows entry + SL + TP spelled out');
 
   /* identical set is a no-op */
   assert(env.W.hgAlertSniper([hit('ACE', 0.085)]) === 'unchanged', 'identical hit set -> unchanged');

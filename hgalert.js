@@ -411,7 +411,8 @@ function sniperDesc(hits){
   for (var i = 0; i < hits.length && bits.length < 3; i++){
     var h = hits[i];
     if (h && h.sym) bits.push(String(h.sym) + ' ' + String(h.dir || '').toUpperCase()
-      + ' @ ' + (+h.entry) + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ')');
+      + ' @ ' + (+h.entry) + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ')'
+      + ' · SL ' + (+h.stop) + ' · TP ' + (+h.t1));
   }
   return bits.length ? bits.join(' · ') + (hits.length > 3 ? ' +' + (hits.length - 3) + ' more' : '') : '—';
 }

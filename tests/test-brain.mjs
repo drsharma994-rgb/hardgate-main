@@ -3053,6 +3053,23 @@ console.log('== AO) sniper mode ==');
      'AO: market-entry plans never sniper-grade — resting limits only');
   ok(SO(null, null) === false && SO({}, undefined) === false, 'AO: garbage -> false, never throws');
 
+  /* EV gate: a proven-bad family (n>=4, EV<=0) is refused; proven-good and
+     unproven pass. loadLog stubbed per case via a fresh module instance. */
+  const mkC = (lev) => ({ limit: true, lev: lev, row: { plan: { dir: 'long', entry: 100, stop: 97.5, t1: 105, rr1: 2, entryType: 'limit', anchorName: '4h FVG' } } });
+  ok(SO(mkC(23), { state: 'in-zone' }) === true, 'AO: no family record -> unproven passes (not proven-bad)');
+  W.loadLog = function(){ return [
+    { kind: 'fvg-limit', status: 'sl' }, { kind: 'fvg-limit', status: 'sl' },
+    { kind: 'fvg-limit', status: 'sl' }, { kind: 'fvg-limit', status: 'sl' } ]; };
+  ok(SO(mkC(23), { state: 'in-zone' }) === false,
+     'AO: proven-bad family (0/4, EV negative) is REFUSED — the EV gate bites');
+  W.loadLog = function(){ return [
+    { kind: 'fvg-limit', status: 'tp', rr: 2 }, { kind: 'fvg-limit', status: 'tp', rr: 2 },
+    { kind: 'fvg-limit', status: 'sl' }, { kind: 'fvg-limit', status: 'tp', rr: 2 } ]; };
+  ok(SO(mkC(23), { state: 'in-zone' }) === true, 'AO: proven-good family (3/4) passes the EV gate');
+  W.loadLog = function(){ return [ { kind: 'fvg-limit', status: 'sl' }, { kind: 'fvg-limit', status: 'sl' } ]; };
+  ok(SO(mkC(23), { state: 'in-zone' }) === true, 'AO: thin record (n=2) stays unproven, not proven-bad — passes');
+  delete W.loadLog;
+
   /* the shipped default is ON (owner mandate 2026-07-25) — this suite loaded
      the module with an explicit OFF stub; assert the artifact itself */
   const brainSrc = fs.readFileSync(root + 'brain.js', 'utf8');
