@@ -1402,7 +1402,8 @@ function smartCardHTML(r){
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
   return '<div class="card ' + r.cls.dir + '">'
-    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE' + badge + '</span></div>'
+    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE' + badge
+      + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">mark</span><span>' + px(r.markPrice) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.tick && r.tick.chg24 !== null ? pct(r.tick.chg24, 2) : '—') + '</span>'
@@ -1518,7 +1519,8 @@ async function runSmartScan(){
         if (extreme){
           const gSetup = gx.cls.dir ? smartSetup(gx.cls, gx.rows4h, gx.rows1h) : null;
           goldEl.innerHTML = '<div class="card" style="border-left:3px solid var(--gold)">'
-            + '<div class="chead"><span class="sym">XAUUSDT · GOLD PERP</span><span class="dir" style="color:var(--gold)">POSITIONING EXTREME</span></div>'
+            + '<div class="chead"><span class="sym">XAUUSDT · GOLD PERP</span><span class="dir" style="color:var(--gold)">POSITIONING EXTREME'
+            + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
             + '<div class="mini">'
             + '<span class="k">funding 8h</span><span>' + (gx.fundingPct !== null ? fmt(gx.fundingPct, 4) + '%' : 'n/a') + '</span>'
             + '<span class="k">retail long</span><span>' + (gx.retailLongPct !== null ? fmt(gx.retailLongPct, 1) + '%' : 'n/a') + '</span>'
@@ -2222,6 +2224,25 @@ function hgSafeLevChip(entry, stop){
     return ' · <span style="font-weight:700;color:' + col + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop. Trading above this is how accounts die.">'
       + lev + 'x SAFE</span>'
       + (lev >= 20 && sd <= 0.03 ? ' <span style="font-weight:700;color:#2EE6A8" title="stop distance ≤3% — meets the 20x SNIPER discipline">· SNIPER GRADE</span>' : '');
+  }catch(e){ return ''; }
+}
+/* Session/kill-zone timing chip — identical windows to brain.js sessionWindow
+   (London 12:30-15:30 IST, NY 17:30-20:30 IST, dead = Sunday or 01:00-06:30
+   IST). Green in a kill zone, blue mid-session, grey off-hours. Rendered on
+   SMART $, gold-extreme and EXECUTE cards so every entry shows its timing
+   quality, not just brain tickets. Pass `now` (ms) in tests. */
+function hgSessionChip(now){
+  try{
+    const d = now ? new Date(now) : new Date();
+    const ist = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60000);
+    const mins = ist.getHours() * 60 + ist.getMinutes(), day = ist.getDay();
+    const london = mins >= 750 && mins <= 930;
+    const ny = mins >= 1050 && mins <= 1230;
+    const dead = (day === 0) || (mins >= 60 && mins <= 390);
+    const col = dead ? '#8B9CC4' : (london || ny ? '#2EE6A8' : '#7FB3FF');
+    const txt = london ? 'LONDON KZ' : ny ? 'NY KZ' : dead ? 'OFF-HOURS' : 'MID-SESSION';
+    return ' <span class="gpip" style="color:' + col + ';border-color:' + col + '" title="entry timing window (IST) — London 12:30-15:30 / NY 17:30-20:30 kill zones carry the deepest liquidity; off-hours tape (Sun, 01:00-06:30 IST) means thinner books and worse fills">'
+      + txt + '</span>';
   }catch(e){ return ''; }
 }
 /* Universal fallback plan (same convention as oiflow.js when smartSetup is

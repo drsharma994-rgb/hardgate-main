@@ -818,7 +818,8 @@ function cardHTML(r){
       + '">SEND TO TRADE PLAN →</button>' : '';
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
-    + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge + '</span></div>'
+    + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
+    + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
     + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn
     + '</div>';
 }

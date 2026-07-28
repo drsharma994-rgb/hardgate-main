@@ -325,6 +325,13 @@ console.log('== smartCardHTML ==');
   const hChip = globalThis.smartCardHTML(Object.assign({ setup: setup }, base));
   ok(hChip.indexOf('TESTCHIP 102.38/101.33 x SAFE') !== -1, 'SAFE chip rendered on the plan line when the helper exists');
   delete globalThis.hgSafeLevChip;
+  /* session chip in the chead: absent standalone, rendered when the app
+     provides hgSessionChip */
+  ok(h.indexOf('LONDON KZ') === -1 && h.indexOf('OFF-HOURS') === -1, 'session chip absent without the global helper');
+  globalThis.hgSessionChip = () => ' <span class="gpip">TESTKZ</span>';
+  const hKz = globalThis.smartCardHTML(Object.assign({ setup: setup }, base));
+  ok(hKz.indexOf('TESTKZ') !== -1, 'session chip rendered in the card header when the helper exists');
+  delete globalThis.hgSessionChip;
   const h2 = globalThis.smartCardHTML(Object.assign({ setup: Object.assign({}, setup, { confirmed: false }) }, base));
   ok(h2.indexOf('UNCONFIRMED') !== -1, 'unconfirmed setup: UNCONFIRMED pip');
   const h3 = globalThis.smartCardHTML(Object.assign({ setup: null }, base));
@@ -375,6 +382,23 @@ console.log('== venue stamping (COINDCX chip + toTrade target) ==');
     Object.assign({}, base, { venue: undefined, venueSym: undefined })));
   ok(h2.indexOf('AEVOUSDT') !== -1 && h2.indexOf('>COINDCX<') === -1,
      'plain Binance rows carry no venue chip');
+}
+
+/* ================= 10) hgSessionChip — kill-zone windows (IST) ================= */
+console.log('== hgSessionChip ==');
+{
+  const chipFn = html.match(/function hgSessionChip\(now\)\{[\s\S]*?\n\}/);
+  if (!chipFn) throw new Error('hgSessionChip not found in index.html');
+  vm.runInThisContext(chipFn[0], { filename: 'sessionchip-extract.js' });
+  const chip = globalThis.hgSessionChip;
+  /* UTC anchors → IST = UTC + 5:30 regardless of machine tz */
+  ok(chip(Date.UTC(2026, 6, 29, 7, 30)).indexOf('LONDON KZ') !== -1, '13:00 IST Wed → LONDON KZ');
+  ok(chip(Date.UTC(2026, 6, 29, 13, 0)).indexOf('NY KZ') !== -1, '18:30 IST Wed → NY KZ');
+  ok(chip(Date.UTC(2026, 6, 29, 20, 0)).indexOf('OFF-HOURS') !== -1, '01:30 IST → OFF-HOURS');
+  ok(chip(Date.UTC(2026, 6, 26, 4, 0)).indexOf('OFF-HOURS') !== -1, 'Sunday 09:30 IST → OFF-HOURS');
+  ok(chip(Date.UTC(2026, 6, 29, 5, 0)).indexOf('MID-SESSION') !== -1, '10:30 IST Wed → MID-SESSION');
+  ok(chip(Date.UTC(2026, 6, 29, 7, 0)).indexOf('LONDON KZ') !== -1, '12:30 IST boundary → LONDON KZ');
+  ok(typeof chip('garbage') === 'string', 'garbage input never throws, always returns a string');
 }
 
 console.log(`\nALL ${passed} SMART-MONEY ASSERTIONS PASSED`);
