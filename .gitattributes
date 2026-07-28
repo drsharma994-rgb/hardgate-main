@@ -1,0 +1,13 @@
+# HARDGATE line-ending policy: LF everywhere.
+# A CRLF conversion once broke test-extraction regexes (2026-07-28).
+* text=auto
+*.html text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.svg text eol=lf
+*.webmanifest text eol=lf
+*.txt text eol=lf
