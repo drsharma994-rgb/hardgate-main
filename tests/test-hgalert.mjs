@@ -715,8 +715,9 @@ console.log('== 11) sniper hit-set alerts ==');
   const beforeChime = oscCount();
   const r3 = env.W.hgAlertSniper([hit('ACE', 0.085), hit('DOGE', 0.069)]);
   assert(r3 === 'alerted' && oscCount() > beforeChime, 'new sniper-grade card -> alerted with a chime');
-  assert(tgCalls.length === 1 && tgCalls[0].indexOf('SNIPER') >= 0 && tgCalls[0].indexOf('DOGE') >= 0,
-         'telegram-first push carries the new hit');
+  assert(tgCalls.length === 1 && tgCalls[0].indexOf('SNIPER') >= 0 && tgCalls[0].indexOf('DOGE') >= 0
+      && tgCalls[0].indexOf('valid until ~') >= 0,
+         'telegram-first push carries the new hit AND the 24h validity window');
   assert(ui.q('#hgAlertLastS').textContent.indexOf('SNIPER') >= 0, 'last-sniper line records the alert');
 
   /* moved entry inside the throttle window -> held, honestly named */

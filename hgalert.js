@@ -444,9 +444,18 @@ function onSniper(hits){
     else if (playChime()){ suffix = ''; }
     else { suffix = ' (sound failed)'; }
     /* push cascade: Telegram first (index.html sendTelegram), ntfy at max
-       priority second — fire-and-forget both ways, results never block */
+       priority second — fire-and-forget both ways, results never block.
+       Validity named so the owner knows the window (limits work ~24h or
+       until structure breaks — same contract as the plan itself). */
+    var validUntil = '';
+    try{
+      var vu = new Date(now + 24 * 3600 * 1000);
+      validUntil = '\nvalid until ~' + ('0' + vu.getHours()).slice(-2) + ':' + ('0' + vu.getMinutes()).slice(-2)
+        + ' tomorrow (24h limit validity, or until structure breaks)';
+    }catch(e){}
     var txt = '🎯 HARDGATE SNIPER SETUP\n' + __sniperDesc
-      + '\n20x-grade resting limit, mark in/approaching the zone.\nhttps://hardgate-main.vercel.app/';
+      + '\n20x-grade resting limit, mark in/approaching the zone.' + validUntil
+      + '\nhttps://hardgate-main.vercel.app/';
     try{
       var tg = gfn('sendTelegram');
       if (tg){ suffix += ' · telegram'; Promise.resolve(tg(txt)).then(function(r){

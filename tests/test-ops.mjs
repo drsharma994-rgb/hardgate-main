@@ -303,6 +303,11 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(sniperBody(Array.from({ length: 7 }, function(_, i){ return { sym: 'S' + i, dir: 'long', entry: i + 1, stop: i, t1: i + 2, lev: 25, state: 'IN ZONE' }; }))
        .indexOf('+2 more') >= 0,
      'sniper body: long hit lists truncate with a +N more tail');
+  ok(sniperBody([{ sym: 'ACE', dir: 'short', entry: 0.085, stop: 0.089, t1: 0.077, lev: 24, state: 'IN ZONE' }])
+       .indexOf('valid until ~') >= 0
+       && sniperBody([{ sym: 'ACE', dir: 'short', entry: 0.085, stop: 0.089, t1: 0.077, lev: 24, state: 'IN ZONE' }])
+       .indexOf('24h limit validity') >= 0,
+     'sniper body: the 24h validity window is named so the owner knows the fill window');
 }
 
 /* ---------------- alert-check.mjs daily digest helpers ---------------- */

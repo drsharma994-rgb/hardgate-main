@@ -162,10 +162,17 @@ function sniperKey(hits) {
   return parts.join(';');
 }
 function sniperBody(hits) {
-  return hits.slice(0, 5).map(function(h){
+  var lines = hits.slice(0, 5).map(function(h){
     return h.sym + ' ' + String(h.dir || '').toUpperCase() + ' @ ' + h.entry
       + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ') · stop ' + h.stop + ' · T1 ' + h.t1;
-  }).join('\n') + (hits.length > 5 ? '\n+' + (hits.length - 5) + ' more' : '');
+  });
+  var body = lines.join('\n') + (hits.length > 5 ? '\n+' + (hits.length - 5) + ' more' : '');
+  try{
+    var vu = new Date(Date.now() + 24 * 3600 * 1000 + 5.5 * 3600 * 1000);   /* IST */
+    body += '\nvalid until ~' + ('0' + vu.getUTCHours()).slice(-2) + ':' + ('0' + vu.getUTCMinutes()).slice(-2)
+      + ' IST tomorrow (24h limit validity, or until structure breaks)';
+  }catch(e){}
+  return body;
 }
 
 /* ---------------- DAILY DIGEST ----------------
