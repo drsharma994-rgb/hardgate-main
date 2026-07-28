@@ -2,12 +2,12 @@
   "delta": null,
   "coindcx": null,
   "gold": null,
-  "lastRunAt": "2026-07-27T18:09:26.192Z",
+  "lastRunAt": "2026-07-28T19:28:20.532Z",
   "ticket": {
     "long": null,
     "short": {
-      "sym": "B-TAIKO_USDT",
-      "entry": 0.07419
+      "sym": "B-BTC_USDT",
+      "entry": 63723.9
     }
   }
 }
