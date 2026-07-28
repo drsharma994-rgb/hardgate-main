@@ -2983,13 +2983,34 @@ function familyLineHTML(p){
     var st = (typeof G.loadLog === 'function') ? familyStats(G.loadLog(), fam) : null;
     if (!st) return '<br><span style="color:#6d7684">history: no closed ' + esc(label)
       + ' in the Setup Log yet — the family record builds from here</span>';
+    /* Jeffreys-smoothed win-rate estimate ((tp+0.5)/(n+1)) — a principled
+       read that never screams 100% off 2 wins, plus the honest expected
+       value per trade in R: est*rr1 - (1-est). No smoothing games beyond
+       that, the numbers speak. */
+    var est = estWinRate(st);
+    var rr1 = (p && isFinite(+p.rr1)) ? +p.rr1
+            : (p && isFinite(+p.entry) && isFinite(+p.stop) && isFinite(+p.t1) && +p.entry !== +p.stop
+               ? Math.abs(+p.t1 - +p.entry) / Math.abs(+p.entry - +p.stop) : NaN);
     var col = st.hitPct >= 55 ? '#5fbf8f' : (st.hitPct >= 40 ? '#d8a24a' : '#e4586b');
+    var evTxt = '';
+    if (isFinite(rr1) && rr1 > 0){
+      var ev = est * rr1 - (1 - est);
+      evTxt = ' · EV <b style="color:' + (ev > 0 ? '#5fbf8f' : '#e4586b') + '">'
+        + (ev > 0 ? '+' : '') + FMT(ev, 2) + 'R</b>/trade';
+    }
     return '<br><span style="color:' + col + '">history: ' + esc(label) + ' '
       + st.tp + '/' + st.n + ' (' + st.hitPct + '%) · Σ'
       + (st.sumR > 0 ? '+' : '') + st.sumR + 'R'
       + (st.ts ? ' · ' + st.ts + ' time-stopped' : '')
-      + (st.n < 8 ? ' · thin sample' : '') + '</span>';
+      + ' · est win ' + FMT(est * 100, 0) + '%' + evTxt
+      + ' <span style="color:#6d7684">(n=' + st.n + (st.n < 8 ? ', thin' : '') + ')</span></span>';
   }catch(e){ return ''; }
+}
+function estWinRate(st){
+  try{
+    if (!st || !isFinite(+st.n) || +st.n <= 0) return NaN;
+    return (+st.tp + 0.5) / (+st.n + 1);
+  }catch(e){ return NaN; }
 }
 /* auto-log the board's plans with the family as kind — dedupe inside
    logSetup (12h sym+dir+kind) keeps repeat scans from flooding */
@@ -4434,6 +4455,7 @@ G.__hgBrainSniperPick = pickSniperPlan;
 /* family seams: plan -> family tag; (log, kind) -> honest stats; pure */
 G.__hgBrainPlanFamily = planFamily;
 G.__hgBrainFamStats = familyStats;
+G.__hgBrainEstWin = estWinRate;
 /* sniper-grade seam: the current hit set (read-only; alert channels consume) */
 G.hgSniperState = function(){ try{ return __lastSniperHits; }catch(e){ return []; } };
 G.__hgBrainSniperHits = sniperHitsFrom;

@@ -3164,6 +3164,15 @@ console.log('== AR) family hit-rates ==');
      'AR: a losing family reads 0% honestly, never hidden');
   ok(FS(log, 'pool-limit') === null && FS(null, 'fvg-limit') === null && FS('x', 1) === null,
      'AR: no closed samples / garbage -> null, never invented');
+
+  /* Jeffreys-smoothed win-rate estimate */
+  const EW = W.__hgBrainEstWin;
+  ok(typeof EW === 'function', 'AR: est-win seam exposed');
+  ok(Math.abs(EW({ tp: 8, n: 11 }) - 8.5 / 12) < 1e-12, 'AR: (tp+0.5)/(n+1) smoothing — 8/11 reads 70.8%, not a naked 73%');
+  ok(EW({ tp: 2, n: 2 }) < 0.9, 'AR: 2/2 never screams 100% — the prior keeps thin samples honest');
+  ok(!isFinite(EW(null)) && !isFinite(EW({ tp: 0, n: 0 })), 'AR: no samples -> no estimate, never invented');
+  const ev = EW({ tp: 8, n: 11 }) * 1.5 - (1 - EW({ tp: 8, n: 11 }));
+  ok(ev > 0.7 && ev < 0.85, 'AR: the EV read on that record lands ~+0.77R/trade — got ' + Math.round(ev * 100) / 100);
 }
 
 /* ================= AS) TIER-1 LAYERS — MTF, vol regime, session ================= */
