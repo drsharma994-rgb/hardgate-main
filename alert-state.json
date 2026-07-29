@@ -5,6 +5,40 @@
   "lastRunAt": "2026-07-28T19:28:20.532Z",
   "ticket": {
     "long": null,
-    "short": null
+    "short": {
+      "sym": "B-XRP_USDT",
+      "entry": 1.0711
+    }
+  },
+  "setups": {
+    "keys": {
+      "B-XRP_USDT:short@1.0711": 1785306118327,
+      "B-ADA_USDT:short@0.1635": 1785306118327,
+      "B-TAO_USDT:short@192.45": 1785306118327,
+      "B-UB_USDT:long@0.14344": 1785306118327,
+      "B-XPL_USDT:short@0.08022": 1785306118327,
+      "B-WLFI_USDT:short@0.05393": 1785306118327,
+      "B-EVAA_USDT:short@0.7992": 1785306118327,
+      "B-BILL_USDT:short@0.02399": 1785306118327,
+      "B-SNX_USDT:short@0.2078": 1785306118327,
+      "B-IRYS_USDT:long@0.01488": 1785306118327,
+      "B-TRIA_USDT:short@0.007887": 1785306118327,
+      "B-SKY_USDT:short@0.05704": 1785306118327,
+      "B-HOLO_USDT:long@0.07154": 1785306118327,
+      "B-SIREN_USDT:short@0.02757": 1785306118327,
+      "B-SXT_USDT:short@0.006749": 1785306118327,
+      "B-ZEST_USDT:long@0.25161": 1785306118327,
+      "B-CAKE_USDT:short@1.3785": 1785306118327,
+      "B-SPX_USDT:short@0.3214": 1785306118327,
+      "B-CC_USDT:short@0.11818": 1785306118327,
+      "B-SYRUP_USDT:short@0.16406": 1785306118327,
+      "B-ROSE_USDT:short@0.005209": 1785306118327,
+      "B-HUMA_USDT:short@0.020996": 1785306118327,
+      "B-ORCA_USDT:short@1.15": 1785306118327,
+      "B-ARPA_USDT:short@0.008042": 1785306118327,
+      "B-AT_USDT:short@0.1345": 1785306118327,
+      "B-AWE_USDT:short@0.05414": 1785306118327
+    },
+    "at": "2026-07-29T06:21:58.327Z"
   }
 }
