@@ -195,7 +195,8 @@ function saveWatchState(st){
 }
 
 /* ---------------- the loop ---------------- */
-let __busy = false, __timer = null;
+let __busy = false, __timer = null, __armed = false;
+let __lastCycle = null;   /* {at, fires, fresh, push} — counts only, no secrets */
 async function cycle(){
   if (__busy) return;
   __busy = true;
@@ -205,14 +206,26 @@ async function cycle(){
     const { fresh, keys } = newFires(st.keys, fires, Date.now());
     console.log('[squeeze-watch] ' + fires.length + ' live fires · ' + fresh.length + ' new'
       + (st.seeded ? '' : ' (first cycle — seeding silently)'));
+    let push = 'none';
     if (st.seeded && fresh.length){
       const r = await sendTelegram('🌀 HARDGATE SQUEEZE FIRED\n' + watchBody(fresh));
-      console.log('[squeeze-watch] push: ' + (r === true ? 'telegram ok' : r));
+      push = (r === true) ? 'telegram ok' : String(r);
+      console.log('[squeeze-watch] push: ' + push);
     }
+    __lastCycle = { at: new Date().toISOString(), fires: fires.length, fresh: fresh.length, push: push };
     saveWatchState({ keys, seeded: true, at: new Date().toISOString() });
   }catch(e){
+    __lastCycle = { at: new Date().toISOString(), error: String((e && e.message) || e).slice(0, 120) };
     console.warn('[squeeze-watch] cycle failed (next in 5 min): ' + ((e && e.message) || e));
   }finally{ __busy = false; }
+}
+
+/* status for GET /api/squeeze-watch — armed flag + last cycle counts.
+   Never exposes env values, keys, or symbol-level state. */
+function squeezeWatchStatus(){
+  return { armed: __armed, intervalMin: INTERVAL_MS / 60000,
+           telegramConfigured: !!(process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_CHAT_ID),
+           lastCycle: __lastCycle };
 }
 
 /* started by scripts/server.mjs when TELEGRAM_TOKEN + TELEGRAM_CHAT_ID are
@@ -231,8 +244,9 @@ function startSqueezeWatch(){
   setTimeout(() => { cycle(); }, 20000).unref?.();
   __timer = setInterval(() => { cycle(); }, INTERVAL_MS);
   try{ __timer.unref(); }catch(e){}
+  __armed = true;
   console.log('[squeeze-watch] armed — 5-min fired-squeeze scan, Telegram direct');
   return 'armed';
 }
 
-export { fireKey, newFires, atrPlan, fmtL, watchBody, scanFires, startSqueezeWatch, INTERVAL_MS };
+export { fireKey, newFires, atrPlan, fmtL, watchBody, scanFires, startSqueezeWatch, squeezeWatchStatus, INTERVAL_MS };

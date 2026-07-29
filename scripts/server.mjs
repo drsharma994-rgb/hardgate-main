@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { startSqueezeWatch } from './squeeze-watch.mjs';
+import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
@@ -43,6 +43,13 @@ const server = http.createServer(async (req, res) => {
     baseHeaders(res);
     const u = new URL(req.url || '/', 'http://localhost');
     if (u.pathname === '/api/proxy') return proxyHandler(req, res);
+    /* squeeze-watch status: armed? last cycle? fires? — no secrets, counts only */
+    if (u.pathname === '/api/squeeze-watch'){
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.statusCode = 200;
+      return res.end(JSON.stringify(squeezeWatchStatus()));
+    }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
        .html fallback (/x -> /x.html), no directory listings */
