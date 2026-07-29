@@ -432,22 +432,45 @@ function gateCandidate(inp){
   var _rsi = (typeof rsi === 'function') ? rsi : null;
   var _volZ = (typeof volZ === 'function') ? volZ : null;
   if (!_rsi || !_volZ) return die(2, 'momentum indicators missing (rsi/volZ) — participation unverifiable');
-  var r14 = __last(_rsi(c4, 14));
+  var rsiArr = _rsi(c4, 14);
+  var r14 = __last(rsiArr);
   if (!isFinite(r14)) return die(2, 'RSI(4h) not warmed up');
   if (dir === 'long' && r14 > 70)
     return die(2, 'RSI ' + n2(r14, 1) + ' > 70 — never chase an overbought cascade (swing G3)');
   if (dir === 'short' && r14 < 30)
     return die(2, 'RSI ' + n2(r14, 1) + ' < 30 — never chase an oversold cascade (swing G3)');
   var vz = _volZ(rows4h, 20);
-  if (!(vz > VOLZ_MIN))
-    return die(2, 'volume z ' + (isFinite(vz) ? sp(vz) : 'n/a') + ' <= ' + VOLZ_MIN + ' — no participation behind the close (swing G5)');
   var cb = rows4h[rows4h.length - 1], range = (+cb.h) - (+cb.l);
   var closePos = range > 0 ? ((+cb.c) - (+cb.l))/range : 0.5;
-  if (dir === 'long' && closePos < CLOSEPOS_LONG)
-    return die(2, 'close ' + Math.round(closePos*100) + '% up the bar < 60% — sellers hit the close (swing G5)');
-  if (dir === 'short' && closePos > CLOSEPOS_SHORT)
+  var closeOK = (dir === 'long') ? (closePos >= CLOSEPOS_LONG) : (closePos <= CLOSEPOS_SHORT);
+  /* regime-adaptive participation (experienced-trader read): in a market-wide
+     quiet tape an absolute volZ > 0.5 floor rejects 100% of the universe —
+     pullback entries in established structure are exactly where a trader
+     WANTs to be, and volume typically confirms after the move starts. So
+     participation is proven EITHER by classic volume expansion OR, on a
+     quiet tape, by price action doing the talking: RSI slope running with
+     the trade direction AND a strong close location. Volume COLLAPSING
+     (z <= -1.5) into a weak close is still a hard no — that is distribution,
+     not quiet accumulation. */
+  var rPrev = rsiArr[rsiArr.length - 4];
+  var slopeOK = isFinite(rPrev) ? (dir === 'long' ? r14 > rPrev : r14 < rPrev) : false;
+  var volOK = isFinite(vz) && vz > VOLZ_MIN;
+  var quietNote = '';
+  if (!volOK){
+    if (isFinite(vz) && vz <= -1.5 && !closeOK)
+      return die(2, 'volume z ' + sp(vz) + ' collapsing into a weak close ('
+                 + Math.round(closePos*100) + '% of bar) — distribution, not quiet accumulation (swing G5)');
+    if (!(closeOK && slopeOK))
+      return die(2, 'volume z ' + (isFinite(vz) ? sp(vz) : 'n/a') + ' <= ' + VOLZ_MIN
+                 + ' on a quiet tape, and no stand-in confirmation (need RSI slope with direction + strong close) (swing G5)');
+    quietNote = ' · quiet tape — RSI slope + close location stand in for volume';
+  }
+  if (!closeOK){
+    if (dir === 'long')
+      return die(2, 'close ' + Math.round(closePos*100) + '% up the bar < 60% — sellers hit the close (swing G5)');
     return die(2, 'close ' + Math.round(closePos*100) + '% up the bar > 40% — buyers hit the close (swing G5)');
-  note_(2, true, 'RSI ' + n2(r14, 1) + ' · vol z ' + sp(vz) + ' · close ' + Math.round(closePos*100) + '% of bar');
+  }
+  note_(2, true, 'RSI ' + n2(r14, 1) + ' · vol z ' + sp(vz) + ' · close ' + Math.round(closePos*100) + '% of bar' + quietNote);
 
   /* ---------- G3 POSITIONING ---------- */
   var fr = numOrNull(inp.fundingPct);

@@ -282,6 +282,32 @@ r = gateCandidate(longInp());
 ok(r.pass === false && r.vetoGate === 'G2', 'volZ NaN → veto, no fabricated participation');
 globalThis.volZ = function(){ return 1.2; };
 
+/* regime-adaptive participation: quiet-tape stand-in paths */
+globalThis.volZ = function(){ return 0.2; };
+globalThis.rsi = function(){ return [50, 52, 54, 58]; }; /* rising slope, long */
+r = gateCandidate(longInp());
+ok(r.pass === true && r.trail[2].note.indexOf('quiet tape') >= 0,
+   'volZ 0.2 + rising RSI slope + strong close → quiet-tape pass with honest note');
+globalThis.rsi = function(){ return [58, 56, 54, 52]; }; /* falling slope, long */
+r = gateCandidate(longInp());
+ok(r.pass === false && r.vetoGate === 'G2' && r.trail[2].note.indexOf('quiet tape') >= 0,
+   'volZ 0.2 + RSI slope AGAINST long → quiet-tape veto (no stand-in)');
+globalThis.rsi = function(){ return [54, 52, 50, 48]; }; /* falling slope, short */
+r = gateCandidate(shortInp());
+ok(r.pass === true && r.trail[2].note.indexOf('quiet tape') >= 0,
+   'volZ 0.2 + falling RSI slope + weak-40% close → short quiet-tape pass');
+globalThis.rsi = function(){ return [50, 52, 54, 58]; };
+globalThis.volZ = function(){ return -2.0; };
+r = gateCandidate(longInp({ rows4h: mkRows(260, 106, 7, 3) })); /* closePos 0.30, weak */
+ok(r.pass === false && r.trail[2].note.indexOf('collapsing into a weak close') >= 0,
+   'volZ -2.0 + weak close → distribution veto, no stand-in allowed');
+globalThis.volZ = function(){ return -2.0; };
+r = gateCandidate(longInp());
+ok(r.pass === true && r.trail[2].note.indexOf('quiet tape') >= 0,
+   'volZ -2.0 but strong close + rising slope → still passes (collapse alone is not distribution)');
+globalThis.rsi = function(){ return [50, 58]; };
+globalThis.volZ = function(){ return 1.2; };
+
 r = gateCandidate(longInp({ rows4h: mkRows(260, 106, 7, 3) })); // closePos 0.30
 ok(r.pass === false && r.vetoGate === 'G2' && r.trail[2].note.indexOf('sellers hit the close') >= 0,
    'long with close 30% up the bar → weak-close veto');
