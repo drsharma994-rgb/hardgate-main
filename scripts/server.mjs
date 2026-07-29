@@ -10,6 +10,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
+import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
@@ -50,6 +51,13 @@ const server = http.createServer(async (req, res) => {
       res.statusCode = 200;
       return res.end(JSON.stringify(squeezeWatchStatus()));
     }
+    /* gh-dispatch status: armed? last dispatch result? — no secrets, counts only */
+    if (u.pathname === '/api/gh-dispatch'){
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.statusCode = 200;
+      return res.end(JSON.stringify(ghDispatchStatus()));
+    }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
        .html fallback (/x -> /x.html), no directory listings */
@@ -78,6 +86,10 @@ server.listen(PORT, () => console.log('HARDGATE listening on :' + PORT));
 /* 5-minute fired-squeeze Telegram watch (arms only with TELEGRAM_TOKEN +
    TELEGRAM_CHAT_ID in the environment; logs its status either way) */
 startSqueezeWatch();
+
+/* GitHub cron replacement: fires alert-notify.yml via workflow_dispatch every
+   13 min (arms only with GH_DISPATCH_TOKEN in the environment; logs either way) */
+startGhDispatch();
 
 /* keep-alive self-ping — Render free tier sleeps after ~15 min idle, which
    would pause the squeeze watch. Ping our own status endpoint every 10 min
