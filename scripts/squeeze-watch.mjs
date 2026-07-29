@@ -98,15 +98,28 @@ function fmtL(n){
   return Number.isFinite(v) ? String(+v.toPrecision(6)) : '—';
 }
 
+/* leverage idea — same house rule as alert-check: stop-out ≈ 1% of account,
+   1x floor, 30x cap. Null when the levels can't produce an honest number. */
+function levIdea(entry, stop){
+  const e = +entry, st = +stop;
+  if (!Number.isFinite(e) || !Number.isFinite(st) || e <= 0) return null;
+  const riskPct = Math.abs(e - st) / e;
+  if (!(riskPct > 0)) return null;
+  return Math.max(1, Math.min(30, Math.floor(0.01 / riskPct)));
+}
+
 function watchBody(fires){
   const lines = fires.slice(0, 6).map(function(f){
     const p = f.plan;
+    const lev = p ? levIdea(p.entry, p.stop) : null;
     return '· ' + f.sym + ' ' + f.dir.toUpperCase() + ' — TTM squeeze FIRED (4h, ' + f.firedAgo
       + ' bar' + (f.firedAgo === 1 ? '' : 's') + ' ago)'
       + (p ? '\n  entry ' + fmtL(p.entry) + ' · SL ' + fmtL(p.stop) + ' · TP ' + fmtL(p.t1) + ' · T2 ' + fmtL(p.t2)
+             + (lev !== null ? ' · lev ~' + lev + 'x' : '')
            : '\n  levels on the SQUEEZE tab');
   });
   return lines.join('\n') + (fires.length > 6 ? '\n+' + (fires.length - 6) + ' more' : '')
+    + '\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
     + '\n' + SITE;
 }
 

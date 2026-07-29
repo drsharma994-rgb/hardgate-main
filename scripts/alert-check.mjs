@@ -256,13 +256,30 @@ function freshSetups(prevKeys, list, now) {
   }
   return { fresh, keys };
 }
+/* leverage idea: the leverage at which a stop-out costs ~1% of account
+   equity (position notional = lev × margin; SL distance% × lev = equity hit).
+   Floored at 1x, capped at 30x (owner's stated band). Null when the levels
+   can't honestly produce a number. */
+function levIdea(entry, stop) {
+  const e = +entry, st = +stop;
+  if (!Number.isFinite(e) || !Number.isFinite(st) || e <= 0) return null;
+  const riskPct = Math.abs(e - st) / e;
+  if (!(riskPct > 0)) return null;
+  return Math.max(1, Math.min(30, Math.floor(0.01 / riskPct)));
+}
+function levText(entry, stop) {
+  const l = levIdea(entry, stop);
+  return l === null ? '' : ' · lev ~' + l + 'x';
+}
 function setupsBody(list) {
   const lines = list.slice(0, 8).map(function(s){
     return '· ' + s.sym + ' ' + String(s.dir || '').toUpperCase() + ' [' + s.src + ']'
       + ' @ ' + s.entry + ' · SL ' + s.stop + ' · TP ' + s.t1
-      + (s.t2 !== null ? ' · T2 ' + s.t2 : '');
+      + (s.t2 !== null ? ' · T2 ' + s.t2 : '')
+      + levText(s.entry, s.stop);
   });
-  return lines.join('\n') + (list.length > 8 ? '\n+' + (list.length - 8) + ' more' : '');
+  return lines.join('\n') + (list.length > 8 ? '\n+' + (list.length - 8) + ' more' : '')
+    + '\nlev ~Nx = stop-out ≈ 1% of account (cap 30x) — size down if you risk less.';
 }
 
 /* ---------------- DAILY DIGEST ----------------
