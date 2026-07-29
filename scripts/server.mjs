@@ -78,3 +78,22 @@ server.listen(PORT, () => console.log('HARDGATE listening on :' + PORT));
 /* 5-minute fired-squeeze Telegram watch (arms only with TELEGRAM_TOKEN +
    TELEGRAM_CHAT_ID in the environment; logs its status either way) */
 startSqueezeWatch();
+
+/* keep-alive self-ping — Render free tier sleeps after ~15 min idle, which
+   would pause the squeeze watch. Ping our own status endpoint every 10 min
+   so the service (and the watch) never sleeps. Uses Render's injected
+   RENDER_EXTERNAL_URL; override with SELF_PING_URL if ever needed.
+   Honest no-op outside Render. */
+(function keepAlive(){
+  const base = process.env.SELF_PING_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!base){ console.log('[keep-alive] disabled — no RENDER_EXTERNAL_URL in the environment'); return; }
+  const url = base.replace(/\/+$/, '') + '/api/squeeze-watch';
+  const ping = async () => {
+    try{ const r = await fetch(url); console.log('[keep-alive] ping ' + r.status); }
+    catch(e){ console.warn('[keep-alive] ping failed (next in 10 min): ' + ((e && e.message) || e)); }
+  };
+  setTimeout(ping, 60000).unref?.();              /* first ping 1 min after boot */
+  const t = setInterval(ping, 10 * 60 * 1000);    /* then every 10 min (< 15 min sleep threshold) */
+  try{ t.unref(); }catch(e){}
+  console.log('[keep-alive] armed — self-ping every 10 min → ' + url);
+})();
