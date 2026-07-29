@@ -1,14 +1,11 @@
 {
   "delta": null,
-  "coindcx": null,
+  "coindcx": "B-SAPIEN_USDT|long",
   "gold": null,
   "lastRunAt": "2026-07-28T19:28:20.532Z",
   "ticket": {
     "long": null,
-    "short": {
-      "sym": "B-XRP_USDT",
-      "entry": 1.0711
-    }
+    "short": null
   },
   "setups": {
     "keys": {
@@ -37,8 +34,26 @@
       "B-ORCA_USDT:short@1.15": 1785306118327,
       "B-ARPA_USDT:short@0.008042": 1785306118327,
       "B-AT_USDT:short@0.1345": 1785306118327,
-      "B-AWE_USDT:short@0.05414": 1785306118327
+      "B-AWE_USDT:short@0.05414": 1785306118327,
+      "B-BEAT_USDT:long@3.672": 1785317179258,
+      "B-RIF_USDT:short@0.08035": 1785317179258,
+      "B-ALLO_USDT:short@0.31782": 1785317179258,
+      "B-BOME_USDT:long@0.0005659": 1785317179258,
+      "B-SLX_USDT:short@0.09409": 1785317179258,
+      "B-TLM_USDT:short@0.001624": 1785317179258,
+      "B-EPIC_USDT:long@0.7135": 1785317179258,
+      "B-EVAA_USDT:short@0.8005": 1785317179258,
+      "B-BILL_USDT:short@0.0238": 1785317179258,
+      "B-PLUME_USDT:long@0.01225": 1785317179258,
+      "B-TRIA_USDT:short@0.007874": 1785317179258,
+      "B-MET_USDT:long@0.1732": 1785317179258,
+      "B-ZEST_USDT:long@0.25175": 1785317179258,
+      "B-T_USDT:short@0.003439": 1785317179258,
+      "B-SXT_USDT:short@0.006645": 1785317179258,
+      "B-TOWNS_USDT:short@0.001978": 1785317179258,
+      "B-SAPIEN_USDT:long@0.0808": 1785317179258,
+      "B-JCT_USDT:short@0.003951": 1785317179258
     },
-    "at": "2026-07-29T06:21:58.327Z"
+    "at": "2026-07-29T09:26:19.747Z"
   }
 }
