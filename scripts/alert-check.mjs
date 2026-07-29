@@ -488,8 +488,19 @@ async function main() {
           if (sv && sv.plan) pushSetup('EXECUTE ' + String(sv.conviction || ''), sv.sym, sv.dir, sv.plan);
         });
       } catch (e) { setups = []; }
+      /* news blackout read — USD high-impact events veto everything. The CI
+         stamps this and pushes once when the window lifts (owner request
+         2026-07-29: 'ping me when the blackout ends'). */
+      let blackout = null;
+      try {
+        if (typeof window.hgNewsRisk === 'function'){
+          const nr = window.hgNewsRisk('BTC');   /* USD events hit every symbol */
+          blackout = { active: !!(nr && nr.blackout), note: String((nr && nr.note) || '').slice(0, 160) };
+        }
+      } catch (e) { blackout = null; }
       return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine,
-               sniper: sniper, squeeze: squeeze, setups: setups, read: String(read).slice(0, 300), top: top };
+               sniper: sniper, squeeze: squeeze, setups: setups, read: String(read).slice(0, 300), top: top,
+               blackout: blackout };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -579,6 +590,34 @@ async function main() {
     }
   } else if (prevState.squeeze !== undefined) {
     newState.squeeze = prevState.squeeze;   /* degraded run: keep, change nothing */
+  }
+
+  /* news-blackout transition push: ACTIVE→clear pings once so the owner knows
+     setups can form again; clear→ACTIVE pings once so a quiet board is
+     explained before anyone asks. Seeds silently; degraded runs keep state. */
+  if (ticketResult.ok && ticketResult.blackout) {
+    const cur = !!ticketResult.blackout.active;
+    const note = String(ticketResult.blackout.note || '');
+    console.log('News blackout: ' + (cur ? 'ACTIVE — ' + note : 'clear'));
+    if (prevState.newsBlackout === undefined) {
+      newState.newsBlackout = { active: cur, at: new Date().toISOString() };
+      console.log('Blackout state seeded silently — no push.');
+    } else {
+      const was = !!(prevState.newsBlackout && prevState.newsBlackout.active);
+      if (was && !cur) {
+        const pushResult = await sendAlertCi('✅ HARDGATE NEWS BLACKOUT LIFTED',
+          'The high-impact event window has passed — majors are tradeable again.'
+          + '\nNew confirmed setups resume pushing here with entry/SL/TP/lev.');
+        console.log('BLACKOUT LIFTED — push: ' + pushResult);
+      } else if (!was && cur) {
+        const pushResult = await sendAlertCi('⛔ HARDGATE NEWS BLACKOUT',
+          (note || 'High-impact event risk active') + '\nMajors are vetoed until the window passes — a quiet board is expected, not broken.');
+        console.log('BLACKOUT STARTED — push: ' + pushResult);
+      }
+      newState.newsBlackout = { active: cur, at: new Date().toISOString() };
+    }
+  } else if (prevState.newsBlackout !== undefined) {
+    newState.newsBlackout = prevState.newsBlackout;   /* degraded run: keep, change nothing */
   }
 
   /* confirmed-setups sweep: every run, NEW valid+confirmed setups with
