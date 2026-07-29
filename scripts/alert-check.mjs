@@ -225,6 +225,16 @@ function digestBody(info) {
     ? info.sniper.map(function(h){ return h.sym + ' ' + String(h.dir || '').toUpperCase() + ' @ ' + h.entry + ' (' + (h.lev || '?') + 'x)'; }).join(' · ')
     : 'none right now'));
   lines.push('Engine: ' + (info.engineOk ? (info.survivors + ' survivors voting') : 'DARK — check the app'));
+  /* hosting health — the daily "you'd notice a Render pause here" line.
+     probe: {ok, status, ms} from a timed GET of the site root, taken just
+     before the digest composes (pure render below; the probe lives in main). */
+  if (info.hosting){
+    const h = info.hosting;
+    lines.push('Hosting: ' + (h.ok
+      ? 'Render UP · http ' + h.status + ' · ' + (h.ms / 1000).toFixed(1) + 's'
+      : 'DEGRADED — ' + (h.status ? 'http ' + h.status : (h.err || 'unreachable'))
+        + ' — if this repeats, check the Render dashboard'));
+  }
   if (info.top && info.top.length){
     lines.push('Top plans:');
     for (const r of info.top){
@@ -453,6 +463,18 @@ async function main() {
      the 15-min runs. Unconditional channel (a daily, never throttled); the
      stamp rides alert-state.json so exactly one digest per day. */
   if (ticketResult.ok && digestDue(prevState.digestAt, Date.now())) {
+    /* timed probe of the site root — the hosting-health line in the digest */
+    let hosting = null;
+    try{
+      const t0 = Date.now();
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      const resp = await fetch(SITE_URL, { signal: ctrl.signal, redirect: 'follow' });
+      clearTimeout(timer);
+      hosting = { ok: resp.ok, status: resp.status, ms: Date.now() - t0 };
+    }catch(e){
+      hosting = { ok: false, status: 0, ms: 0, err: (e && e.name === 'AbortError') ? 'timeout >20s' : String((e && e.message) || e).slice(0, 80) };
+    }
     const body = digestBody({
       now: Date.now(),
       read: ticketResult.read || '',
@@ -461,7 +483,8 @@ async function main() {
       sniper: Array.isArray(ticketResult.sniper) ? ticketResult.sniper : [],
       engineOk: engineVerdict(ticketResult.engine, Date.now()).ok,
       survivors: engineVerdict(ticketResult.engine, Date.now()).survivors || 0,
-      top: Array.isArray(ticketResult.top) ? ticketResult.top : []
+      top: Array.isArray(ticketResult.top) ? ticketResult.top : [],
+      hosting: hosting
     });
     const pushResult = await sendAlertCi('HARDGATE DAILY DIGEST', body);
     console.log('DAILY DIGEST — push: ' + pushResult);

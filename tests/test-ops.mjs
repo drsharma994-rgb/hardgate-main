@@ -349,6 +349,19 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(empty.indexOf('Engine: DARK') >= 0 && empty.indexOf('Top plans: none') >= 0,
      'digest: dark engine + empty board render honestly, never hidden');
   ok(ticketLine({ long: null, short: null }) === 'LONG — · SHORT —', 'digest: ticket line null-safe');
+
+  /* hosting-health line: up / degraded / absent */
+  const up = digestBody({ now: Date.now(), read: '', ticket: { long: null, short: null },
+    sniper: [], engineOk: true, survivors: 3, top: [], hosting: { ok: true, status: 200, ms: 1234 } });
+  ok(up.indexOf('Hosting: Render UP · http 200 · 1.2s') >= 0, 'digest: hosting line — Render up with latency');
+  const down = digestBody({ now: Date.now(), read: '', ticket: { long: null, short: null },
+    sniper: [], engineOk: false, top: [], hosting: { ok: false, status: 503, ms: 900 } });
+  ok(down.indexOf('Hosting: DEGRADED — http 503') >= 0 && down.indexOf('Render dashboard') >= 0,
+     'digest: hosting line — degraded names the status + where to look');
+  const tout = digestBody({ now: Date.now(), read: '', ticket: { long: null, short: null },
+    sniper: [], engineOk: false, top: [], hosting: { ok: false, status: 0, ms: 0, err: 'timeout >20s' } });
+  ok(tout.indexOf('Hosting: DEGRADED — timeout >20s') >= 0, 'digest: hosting line — timeout names the error, not a fake status');
+  ok(body.indexOf('Hosting:') === -1, 'digest: no probe -> no hosting line (older callers stay clean)');
 }
 
 /* ---------------- config / repo files ---------------- */
