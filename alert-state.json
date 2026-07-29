@@ -1,13 +1,10 @@
 {
   "delta": null,
-  "coindcx": "B-GMX_USDT|long",
+  "coindcx": null,
   "gold": null,
   "lastRunAt": "2026-07-28T19:28:20.532Z",
   "ticket": {
     "long": null,
-    "short": {
-      "sym": "B-XPL_USDT",
-      "entry": 0.08373
-    }
+    "short": null
   }
 }
