@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { startSqueezeWatch } from './squeeze-watch.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
@@ -66,3 +67,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => console.log('HARDGATE listening on :' + PORT));
+
+/* 5-minute fired-squeeze Telegram watch (arms only with TELEGRAM_TOKEN +
+   TELEGRAM_CHAT_ID in the environment; logs its status either way) */
+startSqueezeWatch();

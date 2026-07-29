@@ -17,6 +17,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          istOffHours, offHoursPrefix, offHoursTag } from '../scripts/alert-check.mjs';
+import { fireKey, newFires, atrPlan, fmtL, watchBody, INTERVAL_MS as SQ_WATCH_MS } from '../scripts/squeeze-watch.mjs';
 
 const require = createRequire(import.meta.url);
 const proxy = require('../api/proxy.js');
@@ -414,6 +415,46 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   const many = [];
   for (let i = 0; i < 10; i++) many.push({ src: 'BRAIN HIGH', sym: 'S' + i, dir: 'long', entry: 10 + i, stop: 9, t1: 12 + i });
   ok(setupsBody(many).indexOf('+2 more') >= 0, 'setupsBody: >8 setups summarized honestly');
+}
+
+/* ---------------- squeeze-watch (Render 5-min scanner) ---------------- */
+{
+  ok(SQ_WATCH_MS === 5 * 60 * 1000, 'squeeze-watch: true 5-minute cadence');
+  const fires = [
+    { sym: 'BNBUSDT', dir: 'short', firedAgo: 0, fireBarT: 1785297600000,
+      plan: { entry: 568.87, stop: 576.511162, t1: 553.587675, t2: 542.125931 } },
+    { sym: 'SPCXUSDT', dir: 'long', firedAgo: 2, fireBarT: 1785268800000, plan: null }
+  ];
+  ok(fireKey(fires[0]) === 'BNBUSDT:short:1785297600000', 'fireKey: sym:dir:fireBar — the fire-bar identity');
+  const now = Date.UTC(2026, 6, 29, 12, 0);
+  const n1 = newFires({}, fires, now);
+  ok(n1.fresh.length === 2, 'newFires: empty memory -> all fresh');
+  const n2 = newFires(n1.keys, fires, now + 5 * 60000);
+  ok(n2.fresh.length === 0, 'newFires: same fire bars 5 min later -> NO repeat push (the 5-min dedupe)');
+  const n3 = newFires(n2.keys, fires.concat([{ sym: 'SOLUSDT', dir: 'long', firedAgo: 0, fireBarT: 1785300000000, plan: null }]), now + 10 * 60000);
+  ok(n3.fresh.length === 1 && n3.fresh[0].sym === 'SOLUSDT', 'newFires: only the new fire pushes');
+  const n4 = newFires(n1.keys, fires, now + 49 * 3600000);
+  ok(n4.fresh.length === 2, 'newFires: 48h-old memory expires -> a persistent fire re-alerts honestly');
+  /* atrPlan: long + short geometry, garbage safety */
+  const rows = [];
+  for (let i = 0; i < 40; i++) rows.push({ t: i, o: 100, h: 102, l: 98, c: 100, v: 1000 });
+  const atrFn = (r, n) => r.map(() => 2);   /* ATR = 2 */
+  const pl = atrPlan(atrFn, rows, 'long');
+  ok(pl && pl.entry === 100 && pl.stop === 97 && pl.t1 === 106 && pl.t2 === 110.5,
+     'atrPlan LONG: stop 1.5xATR below, T1 2R, T2 3.5R');
+  const ps = atrPlan(atrFn, rows, 'short');
+  ok(ps && ps.stop === 103 && ps.t1 === 94 && ps.t2 === 89.5, 'atrPlan SHORT: mirrored geometry');
+  ok(atrPlan(null, rows, 'long') === null && atrPlan(atrFn, [], 'long') === null
+     && atrPlan(atrFn, rows, 'flat') === null, 'atrPlan: missing fn/rows or bad dir -> null, never throws');
+  ok(fmtL(553.5876748294394) === '553.588' && fmtL(0.000012345678) === '0.0000123457' && fmtL(null) === '—',
+     'fmtL: 6 significant digits, garbage as —');
+  const body = watchBody(fires);
+  ok(body.indexOf('BNBUSDT SHORT — TTM squeeze FIRED (4h, 0 bars ago)') >= 0
+     && body.indexOf('entry 568.87 · SL 576.511 · TP 553.588') >= 0,
+     'watchBody: fired line + formatted levels');
+  ok(body.indexOf('SPCXUSDT LONG — TTM squeeze FIRED (4h, 2 bars ago)') >= 0
+     && body.indexOf('levels on the SQUEEZE tab') >= 0,
+     'watchBody: plan-less fire honestly points at the tab');
 }
 
 /* ---------------- config / repo files ---------------- */
