@@ -14,6 +14,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
+         mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          istOffHours, offHoursPrefix, offHoursTag } from '../scripts/alert-check.mjs';
 
@@ -382,6 +383,37 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   const many = [];
   for (let i = 0; i < 8; i++) many.push({ sym: 'S' + i, dir: 'long', kind: 'fired' });
   ok(squeezeBody(many).indexOf('+3 more') >= 0, 'squeezeBody: >5 rows summarized honestly');
+}
+
+/* ---------------- confirmed setups sweep (server pipeline) ---------------- */
+{
+  const raw = [
+    { src: 'BRAIN PRIME', sym: 'BTCUSDT', dir: 'long',  entry: 100, stop: 97, t1: 106, t2: 110.5 },
+    { src: 'EXECUTE STRONG', sym: 'BTCUSDT', dir: 'long', entry: 100, stop: 97, t1: 106 },
+    { src: 'BRAIN HIGH', sym: 'SOLUSDT', dir: 'short', entry: 50, stop: 52, t1: 46 },
+    { src: 'BRAIN HIGH', sym: 'BAD1', dir: 'long', entry: null, stop: 1, t1: 2 },      /* no entry -> dropped */
+    { src: 'BRAIN HIGH', sym: 'BAD2', dir: 'long', entry: 10, stop: 10, t1: 12 },       /* zero risk -> dropped */
+    { src: 'EXECUTE WEAK', sym: 'BAD3', dir: 'long', entry: 10, stop: 9, t1: null }     /* no TP -> dropped */
+  ];
+  const m = mergeSetups(raw);
+  ok(m.length === 2, 'mergeSetups: invalid rows dropped (null entry/stop/t1, zero risk)');
+  ok(m[0].sym === 'BTCUSDT' && m[0].src === 'BRAIN PRIME + EXECUTE STRONG' && m[0].t2 === 110.5,
+     'mergeSetups: same sym+dir merges, sources join, t2 survives');
+  ok(setupsBody(m).indexOf('· BTCUSDT LONG [BRAIN PRIME + EXECUTE STRONG] @ 100 · SL 97 · TP 106 · T2 110.5') >= 0,
+     'setupsBody: entry/SL/TP/T2 spelled with both source badges');
+  const now = Date.UTC(2026, 6, 29, 12, 0);
+  const f1 = freshSetups({}, m, now);
+  ok(f1.fresh.length === 2 && Object.keys(f1.keys).length === 2, 'freshSetups: empty memory -> all fresh');
+  const f2 = freshSetups(f1.keys, m, now + 900000);
+  ok(f2.fresh.length === 0, 'freshSetups: unchanged board 15 min later -> no re-push');
+  const f3 = freshSetups(f2.keys, m.concat([{ src: 'BRAIN PRIME', sym: 'ACEUSDT', dir: 'long', entry: 0.085, stop: 0.08, t1: 0.095 }]), now + 1800000);
+  ok(f3.fresh.length === 1 && f3.fresh[0].sym === 'ACEUSDT', 'freshSetups: only the NEW formation pushes');
+  const f4 = freshSetups(f1.keys, m, now + SETUP_REMIND_MS + 1000);
+  ok(f4.fresh.length === 2, 'freshSetups: after 24h a still-live setup reminds honestly');
+  ok(freshSetups(null, null, now).fresh.length === 0, 'freshSetups: garbage -> nothing, never throws');
+  const many = [];
+  for (let i = 0; i < 10; i++) many.push({ src: 'BRAIN HIGH', sym: 'S' + i, dir: 'long', entry: 10 + i, stop: 9, t1: 12 + i });
+  ok(setupsBody(many).indexOf('+2 more') >= 0, 'setupsBody: >8 setups summarized honestly');
 }
 
 /* ---------------- config / repo files ---------------- */

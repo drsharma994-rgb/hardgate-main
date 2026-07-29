@@ -218,6 +218,53 @@ function squeezeBody(rows) {
     + '\nlevels on the SQUEEZE tab — entry/stop/targets live there.';
 }
 
+/* ---------------- confirmed setups sweep (server-side) ----------------
+   Every 15-min run collects VALID + CONFIRMED setups WITH levels from the
+   page's own state seams: BRAIN PRIME/HIGH rows with plans, and EXECUTE
+   survivors (6/6 gates) with plans. Same sym+dir across sources merges into
+   one line with both badges. Only setups with finite entry/stop/t1 qualify
+   (the owner's TP+SL requirement); t2 rides along when present.
+   Alert memory: a setup key (sym:dir@entry) pushes ONCE per 24h — new
+   formations push as they appear; unchanged boards never re-spam. */
+const SETUP_REMIND_MS = 24 * 3600 * 1000;
+function mergeSetups(list) {
+  const m = new Map();
+  for (const s of (Array.isArray(list) ? list : [])) {
+    if (!s || !s.sym) continue;
+    if (s.entry === null || s.entry === undefined || s.stop === null || s.stop === undefined
+        || s.t1 === null || s.t1 === undefined) continue;
+    const e = +s.entry, st = +s.stop, t1 = +s.t1;
+    if (!Number.isFinite(e) || !Number.isFinite(st) || !Number.isFinite(t1) || e === st) continue;
+    const k = String(s.sym) + ':' + String(s.dir || '');
+    const cur = m.get(k);
+    if (cur) { if (s.src && cur.src.indexOf(s.src) === -1) cur.src += ' + ' + s.src; continue; }
+    m.set(k, { sym: String(s.sym), dir: String(s.dir || ''), src: String(s.src || ''),
+               entry: e, stop: st, t1: t1, t2: Number.isFinite(+s.t2) ? +s.t2 : null });
+  }
+  return [...m.values()];
+}
+function setupKey(s) { return s.sym + ':' + s.dir + '@' + s.entry; }
+function freshSetups(prevKeys, list, now) {
+  const keys = {}, cutoff = now - SETUP_REMIND_MS, fresh = [];
+  for (const k of Object.keys(prevKeys || {})) {
+    const t = +prevKeys[k];
+    if (Number.isFinite(t) && t > cutoff) keys[k] = t;
+  }
+  for (const s of (Array.isArray(list) ? list : [])) {
+    const k = setupKey(s);
+    if (keys[k] === undefined) { fresh.push(s); keys[k] = now; }
+  }
+  return { fresh, keys };
+}
+function setupsBody(list) {
+  const lines = list.slice(0, 8).map(function(s){
+    return '· ' + s.sym + ' ' + String(s.dir || '').toUpperCase() + ' [' + s.src + ']'
+      + ' @ ' + s.entry + ' · SL ' + s.stop + ' · TP ' + s.t1
+      + (s.t2 !== null ? ' · T2 ' + s.t2 : '');
+  });
+  return lines.join('\n') + (list.length > 8 ? '\n+' + (list.length - 8) + ' more' : '');
+}
+
 /* ---------------- DAILY DIGEST ----------------
    Once per day (~21:07 IST, inside the 15-min runs), a full-market summary
    push: market read, entry ticket, sniper hits, engine, top planned rows.
@@ -402,8 +449,30 @@ async function main() {
                    entry: +r.plan.entry, stop: +r.plan.stop, t1: +r.plan.t1 };
         });
       } catch (e) { top = []; }
+      /* confirmed setups with levels — BRAIN PRIME/HIGH planned rows +
+         EXECUTE survivors (6/6 gates) with plans. Entry/stop/t1 mandatory. */
+      let setups = [];
+      try {
+        const pushSetup = function(src, sym, dir, p){
+          if (!p) return;
+          if (p.entry === null || p.entry === undefined || p.stop === null || p.stop === undefined
+              || p.t1 === null || p.t1 === undefined) return;
+          const e = +p.entry, st = +p.stop, t1 = +p.t1;
+          if (!Number.isFinite(e) || !Number.isFinite(st) || !Number.isFinite(t1) || e === st) return;
+          setups.push({ src: String(src), sym: String(sym), dir: String(dir || ''), entry: e, stop: st,
+                        t1: t1, t2: Number.isFinite(+p.t2) ? +p.t2 : null });
+        };
+        (last && Array.isArray(last.rows) ? last.rows : []).forEach(function(r){
+          if (r && r.plan && (r.tier === 'PRIME' || r.tier === 'HIGH'))
+            pushSetup('BRAIN ' + r.tier, r.sym, r.dir, r.plan);
+        });
+        const engS = (typeof window.engineState === 'function') ? window.engineState() : null;
+        (engS && Array.isArray(engS.survivors) ? engS.survivors : []).forEach(function(sv){
+          if (sv && sv.plan) pushSetup('EXECUTE ' + String(sv.conviction || ''), sv.sym, sv.dir, sv.plan);
+        });
+      } catch (e) { setups = []; }
       return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine,
-               sniper: sniper, squeeze: squeeze, read: String(read).slice(0, 300), top: top };
+               sniper: sniper, squeeze: squeeze, setups: setups, read: String(read).slice(0, 300), top: top };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -493,6 +562,26 @@ async function main() {
     }
   } else if (prevState.squeeze !== undefined) {
     newState.squeeze = prevState.squeeze;   /* degraded run: keep, change nothing */
+  }
+
+  /* confirmed-setups sweep: every run, NEW valid+confirmed setups with
+     entry/SL/TP from BRAIN PRIME/HIGH + EXECUTE survivors push once per 24h
+     per sym:dir@entry. Seeds silently; degraded runs keep the old memory. */
+  if (ticketResult.ok) {
+    const merged = mergeSetups(ticketResult.setups);
+    const prevKeys = (prevState.setups && prevState.setups.keys) || {};
+    const { fresh, keys } = freshSetups(prevKeys, merged, Date.now());
+    console.log('Confirmed setups: ' + merged.length + ' live · ' + fresh.length + ' new');
+    if (prevState.setups === undefined) {
+      console.log('Setups memory seeded silently (' + Object.keys(keys).length + ' keys) — no push.');
+    } else if (fresh.length) {
+      const pushResult = await sendAlertCi(offHoursPrefix() + '📋 HARDGATE CONFIRMED SETUP' + (fresh.length > 1 ? 'S' : ''),
+        setupsBody(fresh) + offHoursTag());
+      console.log('CONFIRMED SETUPS — push: ' + pushResult);
+    }
+    newState.setups = { keys: keys, at: new Date().toISOString() };
+  } else if (prevState.setups !== undefined) {
+    newState.setups = prevState.setups;   /* degraded run: keep, change nothing */
   }
 
   /* engine-outage watchdog: verdict over the post-synthesis engine read;
@@ -627,5 +716,6 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
+         mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          istOffHours, offHoursPrefix, offHoursTag };
