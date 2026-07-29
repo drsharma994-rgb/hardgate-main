@@ -193,6 +193,31 @@ function sniperBody(hits) {
   return body;
 }
 
+/* ---------------- squeeze setups (server-side) ----------------
+   Key semantics mirror the in-browser hgalert SQUEEZE class: sym:dir per
+   fired/break row, sorted. First sighting seeds silently; a changed
+   NON-EMPTY set pushes (Telegram first via sendAlertCi); empty never pushes.
+   The page read carries no levels (sqWarm publishes sym/dir/kind only), so
+   the body honestly points at the SQUEEZE tab for entries/stops. */
+function squeezeKey(rows) {
+  const parts = [];
+  for (const r of (Array.isArray(rows) ? rows : [])) {
+    if (r && r.sym && (r.dir === 'long' || r.dir === 'short')
+        && (r.kind === 'fired' || r.kind === 'break'))
+      parts.push(String(r.sym) + ':' + r.dir);
+  }
+  parts.sort();
+  return parts.join(';');
+}
+function squeezeBody(rows) {
+  var lines = rows.slice(0, 5).map(function(r){
+    return r.sym + ' ' + String(r.dir || '').toUpperCase()
+      + ' (' + (r.kind === 'break' ? 'DONCHIAN BREAK' : 'FIRED') + ')';
+  });
+  return lines.join('\n') + (rows.length > 5 ? '\n+' + (rows.length - 5) + ' more' : '')
+    + '\nlevels on the SQUEEZE tab — entry/stop/targets live there.';
+}
+
 /* ---------------- DAILY DIGEST ----------------
    Once per day (~21:07 IST, inside the 15-min runs), a full-market summary
    push: market read, entry ticket, sniper hits, engine, top planned rows.
@@ -348,6 +373,19 @@ async function main() {
                    t1: +h.t1, lev: Number.isFinite(+h.lev) ? +h.lev : null, state: String(h.state || '') };
         });
       } catch (e) { sniper = []; }
+      /* actionable squeeze set (fired / Donchian break) for the server-side
+         push — published by squeeze.js's scan (sqWarm runs in this page) */
+      let squeeze = [];
+      try {
+        const sq = window.HG_squeezeResults;
+        const rows = (sq && Array.isArray(sq.results)) ? sq.results : [];
+        squeeze = rows.filter(function(r){
+          return r && r.sym && (r.dir === 'long' || r.dir === 'short')
+            && (r.kind === 'fired' || r.kind === 'break');
+        }).map(function(r){
+          return { sym: String(r.sym), dir: String(r.dir), kind: String(r.kind || 'fired') };
+        });
+      } catch (e) { squeeze = []; }
       /* daily digest reads: the market-read line + up to 3 top planned rows
          from the completed synthesis (frozen snapshot, plan levels intact) */
       let read = '';
@@ -365,7 +403,7 @@ async function main() {
         });
       } catch (e) { top = []; }
       return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine,
-               sniper: sniper, read: String(read).slice(0, 300), top: top };
+               sniper: sniper, squeeze: squeeze, read: String(read).slice(0, 300), top: top };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -433,6 +471,28 @@ async function main() {
     }
   } else if (prevState.sniper !== undefined) {
     newState.sniper = prevState.sniper;   /* degraded run: keep, change nothing */
+  }
+
+  /* squeeze push: fired TTM squeezes + Donchian breaks across the perp
+     universe. Same contract as sniper: seeds silently, a changed non-empty
+     set pushes, empty sets never push; degraded runs keep the old state. */
+  if (ticketResult.ok) {
+    const sqRows = Array.isArray(ticketResult.squeeze) ? ticketResult.squeeze : [];
+    const qKey = squeezeKey(sqRows);
+    console.log('Squeeze setups: ' + (sqRows.length ? sqRows.length + ' (' + qKey + ')' : 'none'));
+    if (prevState.squeeze === undefined) {
+      console.log('Squeeze state seeded silently — no push.');
+      if (sqRows.length) newState.squeeze = { key: qKey, rows: sqRows, at: new Date().toISOString() };
+    } else if (sqRows.length && qKey !== (prevState.squeeze && prevState.squeeze.key)) {
+      const pushResult = await sendAlertCi(offHoursPrefix() + '🌀 HARDGATE SQUEEZE',
+        squeezeBody(sqRows) + offHoursTag());
+      console.log('SQUEEZE ALERT — push: ' + pushResult);
+      newState.squeeze = { key: qKey, rows: sqRows, at: new Date().toISOString() };
+    } else if (prevState.squeeze) {
+      newState.squeeze = sqRows.length ? { key: qKey, rows: sqRows, at: prevState.squeeze.at } : prevState.squeeze;
+    }
+  } else if (prevState.squeeze !== undefined) {
+    newState.squeeze = prevState.squeeze;   /* degraded run: keep, change nothing */
   }
 
   /* engine-outage watchdog: verdict over the post-synthesis engine read;
@@ -566,6 +626,6 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
-         fallbackLegs, sniperKey, sniperBody,
+         fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          istOffHours, offHoursPrefix, offHoursTag };

@@ -170,6 +170,8 @@ var __sniperKey = null;                  /* last-seen sniper hit-set key */
 var __sniperDesc = '';                   /* 'ACE SHORT @ 0.0852 (24x, IN ZONE) · …' */
 var __sniperLive = false;                /* a sniper push has arrived this session */
 var __lastSniperLine = '';               /* last sniper alert/seed line */
+var __squeezeKey = null;                 /* last-seen squeeze hit-set key */
+var __lastSqueezeLine = '';              /* last squeeze alert/seed line (push-only class) */
 
 /* last evaluation reads, for the panel's honest lines */
 var __evaluated = false;
@@ -487,6 +489,81 @@ function onSniper(hits){
     }catch(e){}
     __lastSniperLine = line + suffix;
     renderUI();
+    return 'alerted';
+  }catch(e){ return 'error'; }
+}
+
+/* ---------------- (d2) SQUEEZE — fired TTM squeezes + Donchian breaks,
+   pushed by squeeze.js's publishSqueezeState after every scan (mounted or
+   sqWarm): [{sym, dir, kind:'fired'|'break', entry, stop, t1}] — levels are
+   null when the publisher had no candles (sqWarm path); the message then
+   honestly points at the SQUEEZE tab. Same semantics as SNIPER: first
+   sighting seeds silently, a changed NON-EMPTY set chimes + pushes
+   (Telegram first, ntfy p4 second), an empty set clears silently, 15-min
+   class throttle. Push-only class: no panel row. Never throws. */
+function squeezeKeyOf(hits){
+  var parts = [];
+  for (var i = 0; i < hits.length; i++){
+    var h = hits[i];
+    if (h && h.sym && (h.dir === 'long' || h.dir === 'short')){
+      var e = (h.entry === null || h.entry === undefined) ? NaN : +h.entry;
+      parts.push(String(h.sym) + ':' + h.dir + (isFinite(e) ? '@' + String(e) : ''));
+    }
+  }
+  parts.sort();
+  return parts.join(';');
+}
+function squeezeDesc(hits){
+  var bits = [];
+  for (var i = 0; i < hits.length && bits.length < 3; i++){
+    var h = hits[i];
+    if (!h || !h.sym) continue;
+    var head = String(h.sym) + ' ' + String(h.dir || '').toUpperCase()
+      + ' (' + (h.kind === 'break' ? 'DONCHIAN BREAK' : 'FIRED') + ')';
+    var e = (h.entry === null || h.entry === undefined) ? NaN : +h.entry;
+    bits.push(isFinite(e)
+      ? head + ' @ ' + e + ' · SL ' + (+h.stop) + ' · TP ' + (+h.t1)
+      : head + ' — levels on the SQUEEZE tab');
+  }
+  return bits.length ? bits.join('\n') + (hits.length > 3 ? '\n+' + (hits.length - 3) + ' more' : '') : '—';
+}
+function onSqueeze(hits){
+  try{
+    if (!Array.isArray(hits)) return 'ignored';
+    var key = squeezeKeyOf(hits);
+    if (__squeezeKey === null){ __squeezeKey = key; __lastSqueezeLine = hhmm() + ' squeeze seeded'; return 'seeded'; }
+    if (key === __squeezeKey) return 'unchanged';
+    __squeezeKey = key;
+    if (!hits.length){ __lastSqueezeLine = hhmm() + ' squeeze board cleared'; return 'cleared'; }
+    var desc = squeezeDesc(hits);
+    var line = hhmm() + ' SQUEEZE: ' + desc.split('\n')[0];
+    if (!__enabled || !__unlocked || !audioOk()){
+      __lastSqueezeLine = line + (__enabled ? ' (armed — plays after your next click)' : ' (alerts off)');
+      return 'unarmed';
+    }
+    var now = 0;
+    try{ now = Date.now(); }catch(e){ now = 0; }
+    if (now - (__lastChime.squeeze || 0) < CHIME_GAP_MS){
+      __lastSqueezeLine = line + ' (alert held by 15-min throttle)';
+      return 'throttled';
+    }
+    __lastChime.squeeze = now;
+    var suffix;
+    if (__muted){ suffix = ' (muted)'; }
+    else if (playChime()){ suffix = ''; }
+    else { suffix = ' (sound failed)'; }
+    var txt = '🌀 HARDGATE SQUEEZE\n' + desc
+      + '\nTTM squeeze fired / Donchian break — momentum release, confirm on the SQUEEZE tab.'
+      + offHoursTag()
+      + '\nhttps://hardgate-main.onrender.com/';
+    try{
+      var tg = gfn('sendTelegram');
+      if (tg){ suffix += ' · telegram'; Promise.resolve(tg(txt)).then(function(r){
+        if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SQUEEZE', txt, { priority: 4 }); }
+      }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE SQUEEZE', txt, { priority: 4 }); }); }
+      else { var nt2 = gfn('sendAlertPush'); if (nt2){ nt2('HARDGATE SQUEEZE', txt, { priority: 4 }); suffix += ' · ntfy p4'; } }
+    }catch(e){}
+    __lastSqueezeLine = line + suffix;
     return 'alerted';
   }catch(e){ return 'error'; }
 }
@@ -847,6 +924,10 @@ W.hgAlertTicket = function(snap){
 };
 W.hgAlertSniper = function(hits){
   try{ return onSniper(hits); }
+  catch(e){ return 'error'; }
+};
+W.hgAlertSqueeze = function(hits){
+  try{ return onSqueeze(hits); }
   catch(e){ return 'error'; }
 };
 /* family-digest seams (vm suites): the text builder + the daily tick */

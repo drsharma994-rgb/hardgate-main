@@ -13,7 +13,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          ticketSnapshot, ticketChanged, ticketPushBody, sendTicketPush, sendNtfy,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
-         fallbackLegs, sniperKey, sniperBody,
+         fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          istOffHours, offHoursPrefix, offHoursTag } from '../scripts/alert-check.mjs';
 
@@ -362,6 +362,26 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
     sniper: [], engineOk: false, top: [], hosting: { ok: false, status: 0, ms: 0, err: 'timeout >20s' } });
   ok(tout.indexOf('Hosting: DEGRADED — timeout >20s') >= 0, 'digest: hosting line — timeout names the error, not a fake status');
   ok(body.indexOf('Hosting:') === -1, 'digest: no probe -> no hosting line (older callers stay clean)');
+}
+
+/* ---------------- squeeze key/body (server pipeline) ---------------- */
+{
+  const rows = [
+    { sym: 'SOLUSDT', dir: 'long',  kind: 'fired' },
+    { sym: 'ACEUSDT', dir: 'short', kind: 'break' },
+    { sym: 'DOGEUSDT', dir: null,   kind: 'build' },     /* building: never keys, never bodies */
+    { sym: 'XRPUSDT', dir: 'long',  kind: 'fired' }
+  ];
+  ok(squeezeKey(rows) === 'ACEUSDT:short;SOLUSDT:long;XRPUSDT:long',
+     'squeezeKey: sym:dir sorted, fired+break only, build rows excluded');
+  ok(squeezeKey([]) === '' && squeezeKey(null) === '', 'squeezeKey: empty/garbage -> empty key, never throws');
+  const sb = squeezeBody(rows.filter(r => r.kind !== 'build'));
+  ok(sb.indexOf('SOLUSDT LONG (FIRED)') >= 0 && sb.indexOf('ACEUSDT SHORT (DONCHIAN BREAK)') >= 0,
+     'squeezeBody: kind spelled honestly (FIRED vs DONCHIAN BREAK)');
+  ok(sb.indexOf('levels on the SQUEEZE tab') >= 0, 'squeezeBody: no levels server-side -> points at the tab');
+  const many = [];
+  for (let i = 0; i < 8; i++) many.push({ sym: 'S' + i, dir: 'long', kind: 'fired' });
+  ok(squeezeBody(many).indexOf('+3 more') >= 0, 'squeezeBody: >5 rows summarized honestly');
 }
 
 /* ---------------- config / repo files ---------------- */

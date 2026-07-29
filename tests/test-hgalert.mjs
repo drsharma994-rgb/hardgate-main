@@ -850,6 +850,58 @@ console.log('== 13) off-hours tag ==');
   assert(typeof env3.W.__hgAlertOffHoursTag() === 'string', 'fallback path returns a string, never throws');
 }
 
+/* =========================================================================
+   14) SQUEEZE — fired/break alerts (seed → change → chime + cascade
+       → throttle; cleared; null-levels honesty; garbage)
+========================================================================= */
+console.log('== 14) squeeze alerts ==');
+{
+  const ls = memLocalStorage();
+  ls.setItem('hgAlertEnabled', '1');
+  const env = loadHgalert({ doc: stubDocument(), ls, audio: true });
+  clickBtn(env);
+  const tgCalls = [];
+  env.W.sendTelegram = (t) => { tgCalls.push(t); return Promise.resolve(true); };
+
+  assert(typeof env.W.hgAlertSqueeze === 'function', 'window.hgAlertSqueeze seam exposed');
+  const sq = (sym, dir, kind, entry) => ({ sym, dir, kind,
+    entry: entry || null, stop: entry ? entry * 1.03 : null, t1: entry ? entry * 0.94 : null });
+
+  /* first sighting seeds silently */
+  assert(env.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', 100)]) === 'seeded' && tgCalls.length === 0,
+         'first squeeze set seeds silently');
+  assert(env.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', 100)]) === 'unchanged', 'identical set -> unchanged');
+
+  /* a NEW fired squeeze chimes + pushes with levels */
+  const r = env.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', 100), sq('ACEUSDT', 'short', 'break', 0.085)]);
+  await new Promise(r2 => setTimeout(r2, 30));
+  assert(r === 'alerted' && tgCalls.length === 1, 'new squeeze card -> alerted, one telegram push');
+  assert(tgCalls[0].indexOf('HARDGATE SQUEEZE') >= 0 && tgCalls[0].indexOf('ACEUSDT SHORT (DONCHIAN BREAK)') >= 0
+      && tgCalls[0].indexOf('SL') >= 0 && tgCalls[0].indexOf('hardgate-main.onrender.com') >= 0,
+         'push carries kind, levels and the site link');
+
+  /* moved entry inside the throttle window -> held */
+  assert(env.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', 101), sq('ACEUSDT', 'short', 'break', 0.085)]) === 'throttled'
+      && tgCalls.length === 1, 'changed set inside 15-min throttle -> held');
+
+  /* null levels (sqWarm path) -> honest pointer, still a valid key */
+  const env2 = loadHgalert({ doc: stubDocument(), ls: (() => { const l = memLocalStorage(); l.setItem('hgAlertEnabled', '1'); return l; })(), audio: true });
+  clickBtn(env2);
+  const tg2 = [];
+  env2.W.sendTelegram = (t) => { tg2.push(t); return Promise.resolve(true); };
+  const rSeed2 = env2.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', null)]);
+  const rAlert2 = env2.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', null), sq('DOGEUSDT', 'short', 'fired', null)]);
+  await new Promise(r2 => setTimeout(r2, 30));
+  assert(tg2.length === 1 && tg2[0].indexOf('levels on the SQUEEZE tab') >= 0,
+         'level-less rows alert with an honest "levels on the SQUEEZE tab" pointer — got seed=' + rSeed2
+           + ' alert=' + rAlert2 + ' tg=' + tg2.length + (tg2[0] ? ' :: ' + tg2[0].slice(0, 120) : ''));
+
+  /* cleared + garbage */
+  assert(env.W.hgAlertSqueeze([]) === 'cleared', 'empty set -> cleared, silent');
+  assert(env.W.hgAlertSqueeze(null) === 'ignored' && env.W.hgAlertSqueeze('x') === 'ignored',
+         'garbage -> ignored, never throws');
+}
+
 globalThis.setInterval = REAL_SET_INTERVAL;
 Date.now = REAL_DATE_NOW;
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

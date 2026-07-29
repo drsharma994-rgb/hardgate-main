@@ -437,6 +437,27 @@ function publishSqueezeState(results){
     /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
        mirrors window.squeezeState() for the BRAIN. */
     W.HG_squeezeResults = { results: rows, syms: syms, at: at };
+    /* ALERT seam: actionable squeezes (fired / Donchian break with a
+       direction) pushed to hgalert's SQUEEZE class. Levels attached when
+       this publisher holds the candles (mounted scan); honestly null from
+       sqWarm — the alert text then points at the SQUEEZE tab. */
+    try{
+      if (typeof W.hgAlertSqueeze === 'function'){
+        var hits = [];
+        for (i = 0; i < results.length; i++){
+          r = results[i];
+          if (!r || (r.kind !== 'fired' && r.kind !== 'break')) continue;
+          if (r.dir !== 'long' && r.dir !== 'short') continue;
+          var p = null;
+          try{ p = squeezePlan({ dir: r.dir, rows4h: r.rows4h, rows1h: r.rows1h, cls: r.cls }); }catch(ep){ p = null; }
+          hits.push({ sym: r.sym, dir: r.dir, kind: r.kind,
+                      entry: (p && isFinite(p.entry)) ? p.entry : null,
+                      stop:  (p && isFinite(p.stop))  ? p.stop  : null,
+                      t1:    (p && isFinite(p.t1))    ? p.t1    : null });
+        }
+        W.hgAlertSqueeze(hits);
+      }
+    }catch(eA){ /* alerting never breaks the scan */ }
   }catch(e){ /* state publishing must never break the scan */ }
 }
 
