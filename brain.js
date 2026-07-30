@@ -3345,6 +3345,42 @@ function boardCardHTML(c, stamp){
       + '<span style="font-size:11px;color:#9aa6b5">board row render failed: ' + esc(errMsg(e)) + '</span></div>';
   }
 }
+/* WATCH DESK — WATCH-tier rows are forming (one+ layers short of a plan) and
+   used to vanish from the UI entirely, which read as "the brain is empty".
+   They now render as a compact desk below the board, honestly labelled
+   NOT-YET-EXECUTABLE: no entry/stop printed, just direction, layer count and
+   the top reason. A card graduates to the LIMIT BOARD on its own the scan
+   the plan qualifies — the desk is a radar, never a signal. */
+function watchDeskHTML(rows){
+  try{
+    rows = Array.isArray(rows) ? rows : [];
+    var ws = [], i;
+    for (i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (r && r.dec && String(r.dec.tier || '').toUpperCase() === 'WATCH' && r.dec.dir) ws.push(r);
+    }
+    if (!ws.length) return '';
+    ws.sort(function(a, b){ return ((b.dec.agree || 0) - (a.dec.agree || 0)); });
+    ws = ws.slice(0, 12);
+    var html = '<div style="margin-top:12px;border-top:1px dashed rgba(216,162,74,.45);padding-top:8px">'
+      + '<div style="font-size:10px;letter-spacing:.1em;color:#d8a24a;margin-bottom:6px">'
+      + 'WATCH DESK · forming, not yet executable — layers still missing; do not chase, a limit card appears above the scan the plan qualifies</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    for (i = 0; i < ws.length; i++){
+      var r2 = ws[i], d = r2.dec, long = d.dir === 'long';
+      var col = long ? '#5fbf8f' : '#e4586b';
+      html += '<div style="flex:1 1 240px;max-width:340px;border:1px solid rgba(143,160,184,.25);border-left:3px solid ' + col
+        + ';border-radius:6px;background:rgba(255,255,255,.015);padding:8px 10px">'
+        + '<div style="display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;align-items:baseline">'
+        + '<span style="font-size:12px;font-weight:700;letter-spacing:.03em">' + esc(ticketSymTxt(r2)) + '</span>'
+        + '<span style="font-size:9px;font-weight:700;letter-spacing:.08em;color:' + col + '">' + String(d.dir).toUpperCase() + '</span>'
+        + '<span style="font-size:9px;letter-spacing:.08em;color:#9aa6b5">' + (isFinite(d.agree) ? d.agree : 0) + ' LAYERS</span></div>'
+        + '<div style="margin-top:4px;font-size:10px;line-height:1.6;color:#c4ccd8">'
+        + esc((d.reasons && d.reasons[0]) ? d.reasons[0] : 'forming') + '</div></div>';
+    }
+    return html + '</div></div>';
+  }catch(e){ return ''; }
+}
 function paintLimitBoard(el, rows){
   try{
     if (!el || typeof el.querySelector !== 'function') return;
@@ -3387,6 +3423,7 @@ function paintLimitBoard(el, rows){
         html += '</div></div>';
       }
     }
+    html += watchDeskHTML(rows);
     box.innerHTML = html;
     var age = el.querySelector('#brainBoardAge');
     if (age) age.textContent = 'levels as of ' + stamp + (__sniper ? ' · SNIPER filter ON (limits ≥' + SNIPER_MIN_LEV + 'x-safe, in/approaching zone)' : '')
