@@ -1,11 +1,18 @@
 {
-  "delta": null,
-  "coindcx": "B-SAPIEN_USDT|long",
+  "delta": "TRXUSD|short",
+  "coindcx": "B-TRX_USDT|short",
   "gold": null,
-  "lastRunAt": "2026-07-28T19:28:20.532Z",
+  "lastRunAt": "2026-07-30T04:30:09.092Z",
   "ticket": {
     "long": null,
-    "short": null
+    "short": {
+      "sym": "B-ESPORTS_USDT",
+      "entry": 0.0219
+    }
+  },
+  "newsBlackout": {
+    "active": false,
+    "at": "2026-07-30T04:30:09.689Z"
   },
   "setups": {
     "keys": {
@@ -52,8 +59,34 @@
       "B-SXT_USDT:short@0.006645": 1785317179258,
       "B-TOWNS_USDT:short@0.001978": 1785317179258,
       "B-SAPIEN_USDT:long@0.0808": 1785317179258,
-      "B-JCT_USDT:short@0.003951": 1785317179258
+      "B-JCT_USDT:short@0.003951": 1785317179258,
+      "B-DEXE_USDT:short@2.546": 1785385809689,
+      "B-ZAMA_USDT:long@0.05692": 1785385809689,
+      "B-TRX_USDT:short@0.3255": 1785385809689,
+      "B-ESPORTS_USDT:short@0.0219": 1785385809689,
+      "B-XPL_USDT:short@0.07692": 1785385809689,
+      "B-ALLO_USDT:short@0.30942": 1785385809689,
+      "B-US_USDT:long@0.049468": 1785385809689,
+      "B-ERA_USDT:short@0.06485": 1785385809689,
+      "B-GWEI_USDT:short@0.01792": 1785385809689,
+      "B-MIRA_USDT:short@0.04094": 1785385809689,
+      "B-SKYAI_USDT:short@0.02564": 1785385809689,
+      "B-BILL_USDT:short@0.0235": 1785385809689,
+      "B-SYRUP_USDT:short@0.16113": 1785385809689,
+      "B-AGLD_USDT:short@0.1474": 1785385809689,
+      "B-MANA_USDT:short@0.06658": 1785385809689,
+      "B-USELESS_USDT:short@0.05171": 1785385809689,
+      "B-EGLD_USDT:short@2.727": 1785385809689,
+      "B-RUNE_USDT:long@0.4455": 1785385809689,
+      "B-MON_USDT:short@0.02074": 1785385809689,
+      "B-CELO_USDT:short@0.06325": 1785385809689,
+      "B-OPG_USDT:short@0.0936": 1785385809689,
+      "B-ONE_USDT:short@0.001164": 1785385809689,
+      "B-M_USDT:short@1.1229": 1785385809689,
+      "B-BANANA_USDT:long@3.813": 1785385809689,
+      "B-TURTLE_USDT:long@0.04076": 1785385809689,
+      "B-G_USDT:short@0.003225": 1785385809689
     },
-    "at": "2026-07-29T11:45:35.875Z"
+    "at": "2026-07-30T04:30:10.209Z"
   }
 }
