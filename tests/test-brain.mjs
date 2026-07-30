@@ -94,7 +94,8 @@ let r = COLLECT({ sym: 'BTCUSDT', news: { risk: 'high', blackout: true, events: 
 ok(r.votes.length === 1 && r.votes[0].layer === 'news' && r.votes[0].vote === 'veto'
    && r.votes[0].text.indexOf('BLACKOUT') >= 0, 'news blackout -> veto vote with reason');
 r = COLLECT({ sym: 'BTCUSDT', news: { risk: 'high', blackout: false, events: [], note: 'CPI in 20m' } });
-ok(r.votes[0].vote === 'veto' && r.votes[0].text.indexOf('CPI') >= 0, 'news risk=high (no blackout) -> veto with the event named');
+ok(r.votes[0].vote === 'neutral' && r.votes[0].caution === true && r.votes[0].text.indexOf('CPI') >= 0,
+   'news risk=high (no blackout) -> neutral caution (veto lives ONLY in the true blackout window)');
 r = COLLECT({ sym: 'BTCUSDT', news: { risk: 'med', blackout: false, events: [], note: 'PPI in 3h' } });
 ok(r.votes[0].vote === 'neutral' && r.votes[0].caution === true && r.votes[0].text.indexOf('PPI') >= 0,
    'news risk=med -> neutral caution vote (blocks PRIME downstream)');

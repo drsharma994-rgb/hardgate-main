@@ -206,15 +206,20 @@ assert(/localStorage\.setItem\(HG_GROUP_KEY, gid\)/.test(html), 'active group pe
 assert(/'hg_active_group'/.test(html), 'persistence key hg_active_group');
 assert(html.includes('GATES, NOT SCORES · 23+ TOOLS'), 'brand small-text carries the tool count');
 
-/* ================= 5. alertBusy guards on all 10 scan entry points ================= */
+/* ================= 5. alertBusy auto-wait guard on all 10 scan entry points (v53) ================= */
 const GUARDED = ['runGold', 'runSmcScan', 'runObScan', 'runCoilScan', 'runApexScan',
                  'runTrapScan', 'runBias', 'runDivScan', 'runExpansionCheck', 'runBasisScan'];
 for (const name of GUARDED){
-  const reG = new RegExp('async function ' + name + '\\(\\)\\{\\s*if \\(S\\.alertBusy\\)\\{');
-  assert(reG.test(html), name + ' opens with the S.alertBusy early-return guard');
+  const fnStart = html.indexOf('async function ' + name + '()');
+  assert(fnStart !== -1 && html.slice(fnStart, fnStart + 320).indexOf('waitAlertIdle') !== -1,
+    name + ' opens with the waitAlertIdle auto-wait guard (no more bounce-and-retry)');
 }
-assert((html.match(/alert cycle is running — try again in a few seconds/g) || []).length >= 12,
-  'guard status note matches the runScan/runBest pattern everywhere (12+ sites)');
+assert((html.match(/alert cycle is running — try again in a few seconds/g) || []).length === 0,
+  'the old bounce message is gone from every scan entry point');
+assert((html.match(/await waitAlertIdle\(/g) || []).length >= 12,
+  'waitAlertIdle auto-wait guard wired at 12+ scan entry points');
+assert(/async function waitAlertIdle\(statEl\)/.test(html), 'waitAlertIdle helper defined');
+assert(/Date\.now\(\) - t0 < 60000/.test(html), 'waitAlertIdle waits bounded (60s), never hangs a scan forever');
 
 /* ================= 6. Delta WS reconnect backoff ================= */
 assert(/let wsRetryMs = 1000;/.test(html), 'wsRetryMs backoff state declared (starts at 1s)');

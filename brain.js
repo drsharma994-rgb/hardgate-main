@@ -411,7 +411,13 @@ function brainCollect(inputs){
     if (n.blackout === true)
       push('news', 'veto', 'NEWS BLACKOUT — ' + (note || 'inside a high-impact event window'));
     else if (n.risk === 'high')
-      push('news', 'veto', 'high-impact event risk — ' + (note || 'red event inside the risk window'));
+      /* experienced-trader calibration (2026-07-30): risk 'high' fires on ANY
+         high-impact event inside 24h — with FOMC/GDP/PCE landing on back-to-back
+         days this vetoed the board PERMANENTLY. A professional stands aside
+         only inside the true blackout window (handled above); an event hours
+         away is context — a caution chip, never a kill. */
+      push('news', 'neutral', 'high-impact event on the horizon (no veto outside the blackout window): '
+           + (note || 'red event inside 24h'), { caution: true });
     else if (n.risk === 'med')
       push('news', 'neutral', 'caution: ' + (note || 'medium-impact event approaching'), { caution: true });
     else

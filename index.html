@@ -855,6 +855,20 @@ async function getCandles(sym, res, count){
   return rows;
 }
 
+/* Busy-bounce killer (v53): the alert cycle can hold S.alertBusy for minutes;
+   manual scans used to just tell the user 'try again in a few seconds' — the
+   'sometimes the scan does not work' bug. Now they wait (bounded, 60s) for the
+   cycle to finish and then proceed automatically. Returns false only when the
+   flag is genuinely stuck. */
+async function waitAlertIdle(statEl){
+  if (!S.alertBusy) return true;
+  if (statEl) statEl.textContent = 'alert cycle finishing — your scan starts automatically…';
+  const t0 = Date.now();
+  while (S.alertBusy && Date.now() - t0 < 60000) await new Promise(r => setTimeout(r, 800));
+  if (S.alertBusy){ if (statEl) statEl.textContent = 'alert cycle stuck — reload the tab'; return false; }
+  return true;
+}
+
 /* Gold candles — Stage 2 reroute through macro.js getGoldCandles fallback chain
    (Binance PAXGUSDT perp → Twelve Data XAU/USD → Yahoo GC=F via CORS proxies).
    Same contract as the old direct-Twelve-Data version: rows ascending, forming
@@ -977,7 +991,7 @@ async function setExchange(x){
   renderBiasChips();
 }
 async function runCoilScan(){
-  if (S.alertBusy){ const st0=$('coilStat'); if (st0) st0.textContent='alert cycle is running — try again in a few seconds'; return; }
+  const st0=$('coilStat'); if (!(await waitAlertIdle(st0))) return;
   const btn=$('coilRun'); const cardsEl=$('coilCards'); const emptyEl=$('coilEmpty'); const statEl=$('coilStat');
   btn.disabled=true; cardsEl.innerHTML=''; let __cardsHtml = []; emptyEl.style.display='none';
   try{
@@ -1039,7 +1053,7 @@ const COILWATCH_KEY = "hardgate_coilwatch_v1";
 function saveCoilWatch(list){ try{ localStorage.setItem(COILWATCH_KEY, JSON.stringify({at:nowSec(), ex:S.exchange, list:list})); }catch(e){} }
 function loadCoilWatch(){ try{ return JSON.parse(localStorage.getItem(COILWATCH_KEY)||"null"); }catch(e){ return null; } }
 async function runExpansionCheck(){
-  if (S.alertBusy){ const st0=$("expStat"); if (st0) st0.textContent="alert cycle is running — try again in a few seconds"; return; }
+  const st0=$("expStat"); if (!(await waitAlertIdle(st0))) return;
   const btn=$("expRun"); const cardsEl=$("expCards"); const emptyEl=$("expEmpty"); const statEl=$("expStat");
   btn.disabled=true; cardsEl.innerHTML=""; let __cardsHtml = []; emptyEl.style.display="none";
   try{
@@ -1080,7 +1094,7 @@ async function runExpansionCheck(){
 cardsEl.innerHTML = __cardsHtml.join(''); setProg("expProg", null); btn.disabled=false; }
 }
 async function runDivScan(){
-  if (S.alertBusy){ const st0=$("divStat"); if (st0) st0.textContent="alert cycle is running — try again in a few seconds"; return; }
+  const st0=$("divStat"); if (!(await waitAlertIdle(st0))) return;
   const btn=$("divRun"); const cardsEl=$("divCards"); const emptyEl=$("divEmpty"); const statEl=$("divStat");
   btn.disabled=true; cardsEl.innerHTML=""; let __cardsHtml = []; emptyEl.style.display="none";
   try{
@@ -1163,7 +1177,7 @@ async function runDivScan(){
 cardsEl.innerHTML = __cardsHtml.join(''); setProg("divProg", null); btn.disabled=false; }
 }
 async function runBasisScan(){
-  if (S.alertBusy){ const st0=$("basisStat"); if (st0) st0.textContent="alert cycle is running — try again in a few seconds"; return; }
+  const st0=$("basisStat"); if (!(await waitAlertIdle(st0))) return;
   const btn=$("basisRun"); const cardsEl=$("basisCards"); const emptyEl=$("basisEmpty"); const statEl=$("basisStat");
   btn.disabled=true; cardsEl.innerHTML=""; let __cardsHtml = []; emptyEl.style.display="none";
   try{
@@ -1571,7 +1585,7 @@ async function runSmartScan(){
 /* <<< SMART MONEY END <<< */
 
 async function runApexScan(){
-  if (S.alertBusy){ const st0=$('apexStat'); if (st0) st0.textContent='alert cycle is running — try again in a few seconds'; return; }
+  const st0=$('apexStat'); if (!(await waitAlertIdle(st0))) return;
   const btn=$('apexRun'); const cardsEl=$('apexCards'); const emptyEl=$('apexEmpty'); const statEl=$('apexStat');
   btn.disabled=true; cardsEl.innerHTML=''; let __cardsHtml = []; emptyEl.style.display='none';
   try{
@@ -1629,7 +1643,7 @@ cardsEl.innerHTML = __cardsHtml.join('');
   }
 }
 async function runTrapScan(){
-if (S.alertBusy){ const st0=$('trapStat'); if (st0) st0.textContent='alert cycle is running — try again in a few seconds'; return; }
+const st0=$('trapStat'); if (!(await waitAlertIdle(st0))) return;
 const btn=$('trapRun'); const cardsEl=$('trapCards'); const emptyEl=$('trapEmpty'); const statEl=$('trapStat');
 btn.disabled=true; cardsEl.innerHTML=''; let __cardsHtml = []; emptyEl.style.display='none';
 try{
@@ -1718,7 +1732,7 @@ btn.disabled=false;
 }
 }
 async function runSmcScan(){
-  if (S.alertBusy){ const st0 = $('smcStat'); if (st0) st0.textContent = 'alert cycle is running — try again in a few seconds'; return; }
+  const st0 = $('smcStat'); if (!(await waitAlertIdle(st0))) return;
   const btn = $('smcRun'); const cardsEl = $('smcCards'); const emptyEl = $('smcEmpty'); const statEl = $('smcStat');
   btn.disabled = true; cardsEl.innerHTML = ''; let __cardsHtml = []; emptyEl.style.display = 'none';
   try{
@@ -1787,7 +1801,7 @@ cardsEl.innerHTML = __cardsHtml.join('');
   }
 }
 async function runObScan(){
-  if (S.alertBusy){ const st0 = $('obStat'); if (st0) st0.textContent = 'alert cycle is running — try again in a few seconds'; return; }
+  const st0 = $('obStat'); if (!(await waitAlertIdle(st0))) return;
   const btn = $('obRun'); const cardsEl = $('obCards'); const emptyEl = $('obEmpty'); const statEl = $('obStat');
   btn.disabled = true; cardsEl.innerHTML = ''; let __cardsHtml = []; emptyEl.style.display = 'none';
   try{
@@ -1993,7 +2007,7 @@ function gateRow(id,name,state,detail){ // state: 'pass'|'veto'|'na'
 }
 
 async function runBias(){
-  if (S.alertBusy){ const st0=$('biasOut'); if (st0) st0.innerHTML='<div class="empty">alert cycle is running — try again in a few seconds</div>'; return; }
+  const st0=$('biasOut'); if (!(await waitAlertIdle(st0))) return;
   const sym = ($('biasSym').value||'').trim() || (S.exchange==='delta'?'BTCUSD':'B-BTC_USDT');
   $('biasSym').value = sym;
   const out = $('biasOut'); out.innerHTML=''; setProg('biasProg',0.05); $('biasRun').disabled=true;
@@ -2325,7 +2339,7 @@ function toTrade(sym,dir,entry,stop,t1){
 
 async function runScan(kind){
   const isSwing = kind==='swing';
-  if (S.alertBusy){ const st0=$(isSwing?'swingStat':'scalpStat'); if (st0) st0.textContent='alert cycle is running — try again in a few seconds'; return; }
+  const st0=$(isSwing?'swingStat':'scalpStat'); if (!(await waitAlertIdle(st0))) return;
   const scanAll = $(isSwing?'swingAll':'scalpAll').checked;
   const N = Math.max(5, Math.min(500, +$(isSwing?'swingN':'scalpN').value||30));
   const minTurn = isSwing ? (+$('swingTurn').value||0) : 0;
@@ -2431,7 +2445,7 @@ function goldSession(){
 function utcDayStart(){ const d=new Date(); return Math.floor(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())/1000); }
 
 async function runGold(){
-  if (S.alertBusy){ const st0=$('goldStat'); if (st0) st0.textContent='alert cycle is running — try again in a few seconds'; return; }
+  const st0=$('goldStat'); if (!(await waitAlertIdle(st0))) return;
   const btn=$('goldRun'); btn.disabled=true; setProg('goldProg',0.1);
   $('goldStat').textContent='';
   const __macroP = (typeof getGoldMacro==='function') ? getGoldMacro().catch(function(){ return null; }) : Promise.resolve(null); // auto macro loads in parallel — never blocks the ledgers
@@ -3169,7 +3183,7 @@ function goldSetupDecision(inp){
 async function runGoldSetup(){
   const btn = $('goldSetupRun'), out = $('goldSetupOut'), stat = $('goldSetupStat');
   if (!btn || !out) return;
-  if (S.alertBusy){ if (stat) stat.textContent = 'alert cycle is running — try again in a few seconds'; return; }
+  if (!(await waitAlertIdle(stat))) return;
   btn.disabled = true; if (stat) stat.textContent = ''; setProg('goldSetupProg', 0.08);
   try{
     const macroP = (typeof getGoldMacro === 'function') ? getGoldMacro().catch(function(){ return null; }) : Promise.resolve(null);
@@ -3462,7 +3476,7 @@ const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='
 }
 
 async function runBest(){
-  if (S.alertBusy){ $('bestStat').textContent='alert cycle is running — try again in a few seconds'; return; }
+  if (!(await waitAlertIdle($('bestStat')))) return;
   const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
   const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='';
   try{
