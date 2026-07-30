@@ -873,7 +873,15 @@ async function waitAlertIdle(statEl){
     if (stale()){ S.alertBusy = false; break; }
     await new Promise(r => setTimeout(r, 800));
   }
-  if (S.alertBusy){ if (statEl) statEl.textContent = 'alert cycle stuck — reload the tab'; return false; }
+  if (S.alertBusy){
+    /* the cycle outlived the wait — a user click wins over background work.
+       Force-clear and proceed: the lastAlertKey dedupe absorbs any overlap,
+       and the worst case is a parallel fetch loop, never a dead scanner.
+       Replaces the old 'alert cycle stuck — reload the tab' dead end. */
+    S.alertBusy = false;
+    S.alertBusySince = null;
+    if (statEl) statEl.textContent = 'alert cycle overran — running your scan now…';
+  }
   return true;
 }
 
