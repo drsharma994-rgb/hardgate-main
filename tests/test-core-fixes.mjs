@@ -219,7 +219,7 @@ assert((html.match(/alert cycle is running — try again in a few seconds/g) || 
 assert((html.match(/await waitAlertIdle\(/g) || []).length >= 12,
   'waitAlertIdle auto-wait guard wired at 12+ scan entry points');
 assert(/async function waitAlertIdle\(statEl\)/.test(html), 'waitAlertIdle helper defined');
-assert(/Date\.now\(\) - t0 < 60000/.test(html), 'waitAlertIdle waits bounded (60s), never hangs a scan forever');
+assert(/Date\.now\(\) - t0 < 240000/.test(html), 'waitAlertIdle waits bounded (240s), never hangs a scan forever');
 
 /* ================= 6. Delta WS reconnect backoff ================= */
 assert(/let wsRetryMs = 1000;/.test(html), 'wsRetryMs backoff state declared (starts at 1s)');
