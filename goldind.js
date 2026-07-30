@@ -893,9 +893,11 @@ function goldScalpSetup(inp){
     var rr = Math.abs(t1 - entry)/risk, rr2 = Math.abs(t2 - entry)/risk;
 
     /* --- strategy name: strongest structural read first --- */
-    var PRIORITY = ['sweep', 'breaker', 'ob', 'asian', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
+    var PRIORITY = ['sweep', 'breaker', 'ob', 'asian', 'openrange', 'adrfade', 'bosalign', 'vwapband', 'squeeze', 'fvg', 'vwap', 'stochrsi', 'rsidiv'];
     var NAMES = { sweep: 'LIQUIDITY SWEEP REVERSAL', breaker: 'BREAKER BLOCK REVERSAL',
                   ob: 'ORDER BLOCK RETRACE', asian: 'ASIAN RANGE BREAKOUT',
+                  openrange: 'OPENING RANGE BREAKOUT', adrfade: 'ADR EXHAUSTION FADE',
+                  bosalign: 'BOS ALIGNMENT ENTRY', vwapband: 'VWAP BAND MEAN-REVERSION',
                   squeeze: 'SQUEEZE EXPANSION', fvg: 'FVG RECLAIM', vwap: 'VWAP BOUNCE',
                   stochrsi: 'EMA20 PULLBACK', rsidiv: 'RSI DIVERGENCE' };
     var myTags = {};
@@ -973,7 +975,11 @@ var GST_NAME = {
   vwap:   'SESSION VWAP BOUNCE / REJECTION',
   ribbon: 'EMA RIBBON PULLBACK',
   asian:  'ASIAN RANGE BREAKOUT',
-  rsidiv: 'RSI 75/25 DIVERGENCE'
+  rsidiv: 'RSI 75/25 DIVERGENCE',
+  vwapband: 'VWAP BAND MEAN-REVERSION',
+  openrange: 'OPENING RANGE BREAKOUT',
+  adrfade: 'ADR EXHAUSTION FADE',
+  bosalign: 'BOS ALIGNMENT ENTRY'
 };
 
 /* shared ATR-survival level builder: stop 1.5-2x ATR14(15m) (never tighter),
@@ -1057,8 +1063,16 @@ function __gsSnapLvls(D, dir){
    new id. */
 function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anchor){
   try{
+    /* v54: context reads (zone state, trend strength, session structure)
+       inform but NEVER veto — excluded from the oppose count. A strategy
+       candidate still counts its own trigger read; the remaining ctx reads
+       sit in D.reads for the audit trail without touching the gates. */
     var longEv = [], shortEv = [], i;
-    for (i = 0; i < D.reads.length; i++) (D.reads[i].side === 'long' ? longEv : shortEv).push(D.reads[i]);
+    for (i = 0; i < D.reads.length; i++){
+      var rd = D.reads[i];
+      if (rd.ctx && !(rd.tag === key && rd.side === dir)) continue;
+      (rd.side === 'long' ? longEv : shortEv).push(rd);
+    }
     var myEv = (dir === 'long') ? longEv : shortEv;
     var oppose = (dir === 'long') ? shortEv.length : longEv.length;
     if (myEv.length < 2 || myEv.length <= oppose) return null;
@@ -1133,7 +1147,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
    goldScalpSetup composite, exposed once for all strategy candidates). */
 function __goldBundle(rows, rows1h, rows4h, entry, a15){
   var D = { entry: entry, a15: a15, reads: [], notes: [] };
-  function add(side, tag, label){ D.reads.push({ side: side, tag: tag, label: label }); }
+  function add(side, tag, label, ctx){ D.reads.push({ side: side, tag: tag, label: label, ctx: !!ctx }); }
   var i, z;
 
   var sw = D.sw = goldSweeps(rows);
@@ -1248,6 +1262,71 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
     if (rb4.mode === 'BULL') add('long', 'macro4h', '4H ribbon bull — macro tailwind');
     else if (rb4.mode === 'BEAR') add('short', 'macro4h', '4H ribbon bear — macro headwind');
   }
+
+  /* === v54 GOLD MASTERCLASS detectors ===
+     Every read added below is a CONTEXT read (ctx:true): zone state, trend
+     strength, session structure. Context informs the confluence ledger but
+     NEVER vetoes — __gsCand excludes ctx reads from the oppose count, and a
+     v54 strategy candidate counts its own trigger read plus the independent
+     classic reads, so the masterclass layer cannot silence the legacy setups. */
+  var vwb = D.vwb = goldVWAPBands(rows, anchor >= 0 ? anchor : 0);
+  if (vwb){
+    if (vwb.band === 'AT_2σ' || vwb.band === 'AT_3σ'){
+      if (vwb.pos === 'ABOVE') add('short', 'vwapband', 'price at VWAP ' + vwb.band + ' (' + vwb.distSig.toFixed(1) + 'σ) — mean-reversion short', true);
+      else if (vwb.pos === 'BELOW') add('long', 'vwapband', 'price at VWAP ' + vwb.band + ' (' + vwb.distSig.toFixed(1) + 'σ) — mean-reversion long', true);
+    }
+  }
+  var bos = D.bos = goldBOS(rows);
+  if (bos && bos.bos){
+    if (bos.bos === 'bullish') add('long', 'bosalign', 'BOS bullish — structure break with ' + (bos.strength || 'moderate') + ' displacement', true);
+    else add('short', 'bosalign', 'BOS bearish — structure break with ' + (bos.strength || 'moderate') + ' displacement', true);
+  }
+  if (bos && bos.choch){
+    if (bos.choch === 'bullish') add('long', 'bosalign', 'CHoCH bullish — bias flip to demand', true);
+    else add('short', 'bosalign', 'CHoCH bearish — bias flip to supply', true);
+  }
+  var pd = D.pd = goldPremiumDiscount(rows);
+  if (pd){
+    if (pd.zone === 'PREMIUM') add('short', 'premium', 'price in daily PREMIUM zone (top 25%) — sells favored', true);
+    else if (pd.zone === 'DISCOUNT') add('long', 'premium', 'price in daily DISCOUNT zone (bottom 25%) — buys favored', true);
+  }
+  var adr = D.adr = goldADR(rows, 14);
+  if (adr && adr.exhausted === 'YES'){
+    if (adr.bias === 'short') add('short', 'adrfade', 'ADR ' + (adr.pctOfADR*100).toFixed(0) + '% consumed — exhaustion fade short', true);
+    else add('long', 'adrfade', 'ADR ' + (adr.pctOfADR*100).toFixed(0) + '% consumed — exhaustion fade long', true);
+  }
+  var orL = D.orL = goldOpeningRange(rows, 'london');
+  var orN = D.orN = goldOpeningRange(rows, 'ny');
+  if (orL && (orL.state === 'LONG_BREAK' || orL.state === 'SHORT_BREAK')){
+    var odir = (orL.state === 'LONG_BREAK') ? 'long' : 'short';
+    add(odir, 'openrange', 'London opening-range breakout ' + (odir==='long'?'above':'below') + ' $' + (odir==='long'?orL.hi:orL.lo).toFixed(2), true);
+  }
+  if (orN && (orN.state === 'LONG_BREAK' || orN.state === 'SHORT_BREAK')){
+    var odir2 = (orN.state === 'LONG_BREAK') ? 'long' : 'short';
+    add(odir2, 'openrange', 'NY opening-range breakout ' + (odir2==='long'?'above':'below') + ' $' + (odir2==='long'?orN.hi:orN.lo).toFixed(2), true);
+  }
+  var eq = D.eq = goldEqualLevels(rows);
+  if (eq && eq.nearestHigh && eq.nearestHigh.touches >= 2){
+    D.notes.push('equal highs liquidity pool at $' + eq.nearestHigh.level.toFixed(2) + ' (×' + eq.nearestHigh.touches + ') — sweep target above');
+  }
+  if (eq && eq.nearestLow && eq.nearestLow.touches >= 2){
+    D.notes.push('equal lows liquidity pool at $' + eq.nearestLow.level.toFixed(2) + ' (×' + eq.nearestLow.touches + ') — sweep target below');
+  }
+  var adxR = D.adxR = goldADX(rows);
+  if (adxR){
+    if (adxR.state === 'TRENDING') D.notes.push('ADX ' + adxR.adx.toFixed(1) + ' — trending market, ride the move');
+    else if (adxR.state === 'CHOP') D.notes.push('ADX ' + adxR.adx.toFixed(1) + ' — chop regime, mean-reversion favored');
+  }
+  var rbD = D.rbD = goldRangeBound(rows);
+  if (rbD && rbD.isRangeBound){
+    D.notes.push('RANGE-BOUND (' + rbD.confidence + ' confidence) — fade the edges, avoid breakouts');
+  }
+  var ha = D.ha = goldHeikinAshi(rows);
+  if (ha && ha.strength === 'STRONG'){
+    if (ha.dir === 'bull') add('long', 'ha', 'Heikin-Ashi STRONG bull — ' + ha.consecutive + ' consecutive bull candles', true);
+    else if (ha.dir === 'bear') add('short', 'ha', 'Heikin-Ashi STRONG bear — ' + ha.consecutive + ' consecutive bear candles', true);
+  }
+
   return D;
 }
 
@@ -1421,6 +1500,71 @@ function goldScalpSetups(inp){
         rg.detail + ' — momentum is exhausting at the extreme, mean-reversion ' + (ddir === 'long' ? 'long' : 'short'),
         'a 15m close beyond the divergence pivot ' + (isFinite(piv) ? piv.toFixed(2) : 'extreme') + ' confirms continuation instead of exhaustion',
         undefined, piv));
+    }
+
+    /* === v54 GOLD MASTERCLASS strategy candidates === */
+    /* --- 8) VWAP Band mean-reversion (2σ/3σ) — ONLY in chop or when ADX<25 --- */
+    var vwb = D.vwb;
+    if (vwb && (vwb.band === 'AT_2σ' || vwb.band === 'AT_3σ')){
+      var chopOk = !D.rbD || !D.rbD.isRangeBound;
+      var adxOk = !D.adxR || D.adxR.adx < 25 || D.adxR.state !== 'TRENDING';
+      if (chopOk && adxOk){
+        var vdir = (vwb.pos === 'ABOVE') ? 'short' : ((vwb.pos === 'BELOW') ? 'long' : null);
+        if (vdir){
+          var vwapStop = (vdir === 'long') ? vwb.lower3 : vwb.upper3;
+          push(__gsCand('vwapband', vdir, D, vwapStop, __gsSnapLvls(D, vdir),
+            'VWAP ' + vwb.band + ' mean-reversion (' + vwb.distSig.toFixed(1) + 'σ from fair value) — price stretched, reversion to VWAP $' + vwb.value.toFixed(2) + ' expected',
+            'a 15m close beyond VWAP 3σ band (' + (vdir==='long'?vwb.lower3:vwb.upper3).toFixed(2) + ') negates the mean-reversion edge',
+            { lo: vwb.value - 0.25*D.a15, hi: vwb.value + 0.25*D.a15 }, vwb.value));
+        }
+      }
+    }
+    /* --- 9) Opening Range Breakout (London/NY) --- */
+    var orL = D.orL, orN = D.orN;
+    function orCand(orr){
+      if (!orr || !(orr.state === 'LONG_BREAK' || orr.state === 'SHORT_BREAK')) return;
+      var odir = (orr.state === 'LONG_BREAK') ? 'long' : 'short';
+      var oLvl = (odir === 'long') ? orr.hi : orr.lo;
+      push(__gsCand('openrange', odir, D, oLvl, __gsSnapLvls(D, odir),
+        orr.session.toUpperCase() + ' opening-range breakout ' + (odir==='long'?'above':'below') + ' $' + oLvl.toFixed(2)
+          + ' — first-hour momentum, volume-confirmed expansion',
+        'a 15m close back inside the opening range (' + orr.lo.toFixed(2) + '–' + orr.hi.toFixed(2) + ') negates the breakout',
+        undefined, oLvl));
+    }
+    orCand(orL); orCand(orN);
+    /* --- 10) ADR Exhaustion Fade — counter-trend when >80% ADR consumed --- */
+    var adr = D.adr;
+    if (adr && adr.exhausted === 'YES' && isFinite(adr.pctOfADR)){
+      var adir = (adr.bias === 'short') ? 'short' : 'long';
+      var adrOk = false;
+      if (adir === 'short' && D.pd && D.pd.zone === 'PREMIUM') adrOk = true;
+      if (adir === 'long' && D.pd && D.pd.zone === 'DISCOUNT') adrOk = true;
+      if (adir === 'short' && D.vwb && D.vwb.pos === 'ABOVE') adrOk = true;
+      if (adir === 'long' && D.vwb && D.vwb.pos === 'BELOW') adrOk = true;
+      if (adrOk){
+        var adrStop = (adir === 'long') ? entry + 1.2*D.a15 : entry - 1.2*D.a15;
+        push(__gsCand('adrfade', adir, D, adrStop, __gsSnapLvls(D, adir),
+          'ADR exhaustion fade — ' + (adr.pctOfADR*100).toFixed(0) + '% of daily range consumed, momentum stretched. '
+            + (adir==='long'?'Buy the dip':'Sell the rip') + ' with tight stop.',
+          'a fresh 15m high/low beyond the exhaustion point confirms continuation, not exhaustion',
+          undefined, entry));
+      }
+    }
+    /* --- 11) BOS Alignment — multi-timeframe structure confirmation --- */
+    var bos = D.bos;
+    if (bos && bos.bos){
+      var bdir = (bos.bos === 'bullish') ? 'long' : 'short';
+      var htAlign = D.rb4 && ((bdir==='long' && D.rb4.mode==='BULL') || (bdir==='short' && D.rb4.mode==='BEAR'));
+      var mtAlign = D.rb && ((bdir==='long' && D.rb.mode==='BULL') || (bdir==='short' && D.rb.mode==='BEAR'));
+      if (htAlign || mtAlign){
+        var bosLvl = (bdir==='long') ? bos.lastSwingLow : bos.lastSwingHigh;
+        push(__gsCand('bosalign', bdir, D, bosLvl, __gsSnapLvls(D, bdir),
+          'BOS alignment — ' + (bdir==='long'?'bullish':'bearish') + ' break-of-structure on 15m '
+            + (htAlign?'with 4H trend confirmation':'with 15m trend confirmation')
+            + ' — trade the pullback into the broken structure',
+          'a 15m close back through the BOS level $' + bosLvl.toFixed(2) + ' invalidates the break',
+          undefined, bosLvl));
+      }
     }
 
     return out;
@@ -1718,7 +1862,353 @@ function goldRankSetups(cands, ctx){
   }catch(e){ return { ranked: [], best: null }; }
 }
 
+/* =========================================================================
+   v54 GOLD MASTERCLASS — new detectors for choppy-market precision
+   ========================================================================= */
+
+/* 15) VWAP with Standard-Deviation Bands (1σ / 2σ / 3σ) */
+function goldVWAPBands(rows, anchorIndex){
+  try{
+    rows = __rows(rows);
+    if (!rows) return null;
+    var n = rows.length;
+    var a = Math.floor(anchorIndex);
+    if (!isFinite(a) || a < 0) a = 0;
+    if (a >= n) return null;
+    var sumWV = 0, sumV = 0, sumTP = 0, cnt = 0, i, r, tp, v;
+    for (i = a; i < n; i++){
+      r = rows[i]; tp = (r.h + r.l + r.c)/3;
+      if (!isFinite(tp)) continue;
+      v = (isFinite(r.v) && r.v > 0) ? r.v : 0;
+      sumWV += tp*v; sumV += v; sumTP += tp; cnt++;
+    }
+    if (!cnt) return null;
+    var val = sumV > 0 ? sumWV/sumV : sumTP/cnt;
+    var varSum = 0;
+    for (i = a; i < n; i++){
+      r = rows[i]; tp = (r.h + r.l + r.c)/3;
+      if (!isFinite(tp)) continue;
+      v = (isFinite(r.v) && r.v > 0) ? r.v : 0;
+      varSum += (sumV > 0 ? v : 1) * (tp - val) * (tp - val);
+    }
+    var sd = Math.sqrt(varSum/(sumV > 0 ? sumV : cnt));
+    var c = rows[n-1].c;
+    var pos = (sd > 0 && Math.abs(c - val) <= 0.25*sd) ? 'AT' : (c > val ? 'ABOVE' : (c < val ? 'BELOW' : 'AT'));
+    var d = Math.abs(c - val), band = 'INSIDE';
+    if (sd > 0){
+      if (d >= 3*sd) band = 'AT_3σ';
+      else if (d >= 2*sd) band = 'AT_2σ';
+      else if (d >= 1*sd) band = 'AT_1σ';
+    }
+    return { value: val, upper1: val + sd, upper2: val + 2*sd, upper3: val + 3*sd,
+             lower1: val - sd, lower2: val - 2*sd, lower3: val - 3*sd,
+             stdev: sd, pos: pos, band: band, distSig: sd > 0 ? d/sd : NaN };
+  }catch(e){ return null; }
+}
+
+/* 16) BOS / CHoCH */
+function goldBOS(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 30) return null;
+    var n = rows.length;
+    var sH = -Infinity, sL = Infinity;
+    for (var i = n - 21; i < n - 1; i++){
+      if (i < 0) continue;
+      if (rows[i].h > sH) sH = rows[i].h;
+      if (rows[i].l < sL) sL = rows[i].l;
+    }
+    if (!isFinite(sH) || !isFinite(sL)) return null;
+    var last = rows[n-1], pre = rows[n-2];
+    if (!last || !pre) return null;
+    var aArr = _atr(rows, 14);
+    var atr = __last(aArr);
+    var out = { bos: null, choch: null, lastSwingHigh: sH, lastSwingLow: sL, bosAge: null, chochAge: null, strength: null };
+    if (last.c > sH && pre.c <= sH){
+      out.bos = 'bullish'; out.bosAge = 0;
+      out.strength = (last.c - sH >= 0.5*atr) ? 'STRONG' : 'WEAK';
+    } else if (last.c < sL && pre.c >= sL){
+      out.bos = 'bearish'; out.bosAge = 0;
+      out.strength = (sL - last.c >= 0.5*atr) ? 'STRONG' : 'WEAK';
+    }
+    if (!out.bos && last.c < sH && pre.c >= sH && pre.h >= sH){
+      out.choch = 'bearish'; out.chochAge = 0;
+      out.strength = (sH - last.c >= 0.3*atr) ? 'STRONG' : 'WEAK';
+    } else if (!out.bos && last.c > sL && pre.c <= sL && pre.l <= sL){
+      out.choch = 'bullish'; out.chochAge = 0;
+      out.strength = (last.c - sL >= 0.3*atr) ? 'STRONG' : 'WEAK';
+    }
+    return out;
+  }catch(e){ return null; }
+}
+
+/* 17) Premium / Discount Zones */
+function goldPremiumDiscount(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 20) return null;
+    var n = rows.length, hh = -Infinity, ll = Infinity, i;
+    for (i = Math.max(0, n - 20); i < n; i++){
+      if (rows[i].h > hh) hh = rows[i].h;
+      if (rows[i].l < ll) ll = rows[i].l;
+    }
+    if (!isFinite(hh) || !isFinite(ll) || hh <= ll) return null;
+    var c = rows[n-1].c, r = hh - ll;
+    var pct = (c - ll)/r;
+    var zone = (pct >= 0.75) ? 'PREMIUM' : ((pct <= 0.25) ? 'DISCOUNT' : 'NEUTRAL');
+    var adxCtx = null;
+    var adxR = goldADX(rows);
+    if (adxR && isFinite(adxR.adx)) adxCtx = adxR.adx >= 25 ? 'TRENDING' : 'CHOP';
+    return { zone: zone, rangeHi: hh, rangeLo: ll, range: r, pct: pct, adxContext: adxCtx };
+  }catch(e){ return null; }
+}
+
+/* 18) Average Daily Range with Exhaustion Detection */
+function goldADR(rows, lookback){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 50) return null;
+    lookback = lookback || 14;
+    var n = rows.length, c = rows[n-1], todayR = c.h - c.l;
+    var days = {}, i, t, ds, key;
+    for (i = 0; i < n; i++){
+      t = rows[i].t; if (!isFinite(t)) continue;
+      ds = Math.floor(t/86400)*86400;
+      key = String(ds);
+      if (!days[key]) days[key] = { hi: rows[i].h, lo: rows[i].l };
+      else { if (rows[i].h > days[key].hi) days[key].hi = rows[i].h; if (rows[i].l < days[key].lo) days[key].lo = rows[i].l; }
+    }
+    var ranges = [];
+    var keys = Object.keys(days).map(Number).sort(function(a,b){ return a-b; });
+    for (i = 0; i < keys.length; i++){
+      var d = days[String(keys[i])];
+      if (d.hi > d.lo) ranges.push(d.hi - d.lo);
+    }
+    if (ranges.length < 3) return null;
+    var use = ranges.slice(-lookback);
+    var sum = 0; for (i = 0; i < use.length; i++) sum += use[i];
+    var adr = sum/use.length;
+    var pct = adr > 0 ? todayR/adr : NaN;
+    var ex = null, bias = null;
+    if (isFinite(pct)){
+      if (pct >= 0.85){ ex = 'YES'; bias = (c.c > c.o) ? 'short' : 'long'; }
+      else if (pct >= 0.60){ ex = 'BUILDING'; bias = (c.c > c.o) ? 'long' : 'short'; }
+      else { ex = 'NO'; bias = (c.c > c.o) ? 'long' : 'short'; }
+    }
+    return { adr: adr, todayRange: todayR, pctOfADR: pct, exhausted: ex, bias: bias };
+  }catch(e){ return null; }
+}
+
+/* 19) Opening Range Breakout */
+function goldOpeningRange(rows, session){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 5) return null;
+    var n = rows.length, tl = rows[n-1].t;
+    if (!isFinite(tl)) return null;
+    var ds = Math.floor(tl/86400)*86400;
+    var startH = (session === 'london') ? 7 : 13;
+    var endH = (session === 'london') ? 8 : 14;
+    var boxStart = ds + startH*3600, boxEnd = ds + endH*3600;
+    var nowSec = tl;
+    if (nowSec >= 1e12) nowSec = Math.floor(nowSec/1000);
+    var hi = -Infinity, lo = Infinity, bars = 0;
+    for (var i = 0; i < n; i++){
+      var t = rows[i].t; if (!isFinite(t)) continue;
+      if (t >= 1e12) t = Math.floor(t/1000);
+      if (t < boxStart || t >= boxEnd) continue;
+      if (rows[i].h > hi) hi = rows[i].h;
+      if (rows[i].l < lo) lo = rows[i].l;
+      bars++;
+    }
+    if (bars < 2 || !(hi > lo)) return null;
+    var c = rows[n-1].c, ct = rows[n-1].t;
+    if (ct >= 1e12) ct = Math.floor(ct/1000);
+    var state = (ct < boxEnd) ? 'BUILDING'
+              : (c > hi) ? 'LONG_BREAK'
+              : (c < lo) ? 'SHORT_BREAK' : 'INSIDE';
+    return { session: session || 'unknown', hi: hi, lo: lo, mid: (hi+lo)/2,
+             state: state, barsInBox: bars,
+             dayIso: new Date(ds*1000).toISOString().slice(0, 10) };
+  }catch(e){ return null; }
+}
+
+/* 20) Equal Highs / Equal Lows */
+function goldEqualLevels(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 30) return null;
+    var n = rows.length;
+    var aArr = _atr(rows, 14);
+    var atr = __last(aArr);
+    if (!isFinite(atr) || !(atr > 0)) return null;
+    var tol = 0.3*atr;
+    var highs = [], lows = [], i;
+    for (i = 5; i < n - 5; i++){
+      var isH = true, isL = true, k;
+      for (k = 1; k <= 5; k++){
+        if (rows[i].h <= rows[i-k].h || rows[i].h <= rows[i+k].h) isH = false;
+        if (rows[i].l >= rows[i-k].l || rows[i].l >= rows[i+k].l) isL = false;
+      }
+      if (isH) highs.push({ level: rows[i].h, i: i });
+      if (isL) lows.push({ level: rows[i].l, i: i });
+    }
+    function cluster(levels){
+      var groups = [], g, j;
+      for (j = 0; j < levels.length; j++){
+        var placed = false;
+        for (g = 0; g < groups.length; g++){
+          if (Math.abs(levels[j].level - groups[g].level) <= tol){
+            groups[g].level = (groups[g].level*groups[g].touches + levels[j].level)/(groups[g].touches + 1);
+            groups[g].touches++; placed = true; break;
+          }
+        }
+        if (!placed) groups.push({ level: levels[j].level, touches: 1 });
+      }
+      return groups.filter(function(x){ return x.touches >= 2; }).sort(function(a,b){ return a.level - b.level; });
+    }
+    var eH = cluster(highs), eL = cluster(lows);
+    var c = rows[n-1].c;
+    var nH = null, nL = null, dH = Infinity, dL = Infinity;
+    for (i = 0; i < eH.length; i++){ var d = Math.abs(eH[i].level - c); if (d < dH){ dH = d; nH = eH[i]; } }
+    for (i = 0; i < eL.length; i++){ var d2 = Math.abs(eL[i].level - c); if (d2 < dL){ dL = d2; nL = eL[i]; } }
+    return { equalHighs: eH, equalLows: eL, nearestHigh: nH, nearestLow: nL };
+  }catch(e){ return null; }
+}
+
+/* 21) ADX(14) with +DI / -DI */
+function goldADX(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 28) return null;
+    var n = rows.length, i;
+    var tr = [], pDM = [], mDM = [];
+    for (i = 1; i < n; i++){
+      var up = rows[i].h - rows[i-1].h, down = rows[i-1].l - rows[i].l;
+      var trv = Math.max(rows[i].h - rows[i].l, Math.abs(rows[i].h - rows[i-1].c), Math.abs(rows[i].l - rows[i-1].c));
+      tr.push(trv);
+      pDM.push((up > down && up > 0) ? up : 0);
+      mDM.push((down > up && down > 0) ? down : 0);
+    }
+    var m = tr.length;
+    if (m < 14) return null;
+    var atr14 = 0, p14 = 0, m14 = 0;
+    for (i = 0; i < 14; i++){ atr14 += tr[m-14+i]; p14 += pDM[m-14+i]; m14 += mDM[m-14+i]; }
+    atr14 /= 14; p14 /= 14; m14 /= 14;
+    for (i = 14; i < m; i++){
+      atr14 = (atr14*13 + tr[i])/14;
+      p14 = (p14*13 + pDM[i])/14;
+      m14 = (m14*13 + mDM[i])/14;
+    }
+    var pDI = 100*p14/atr14, mDI = 100*m14/atr14;
+    var dx = 100*Math.abs(pDI - mDI)/(pDI + mDI);
+    var adx = dx;
+    var state = adx >= 25 ? 'TRENDING' : (adx < 20 ? 'CHOP' : 'TRANSITION');
+    return { adx: adx, plusDI: pDI, minusDI: mDI, state: state, dir: pDI > mDI ? 'bull' : (pDI < mDI ? 'bear' : null) };
+  }catch(e){ return null; }
+}
+
+/* 22) Range-Bound Market Detector */
+function goldRangeBound(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 50) return null;
+    var n = rows.length, c = __closes(rows);
+    var adxR = goldADX(rows);
+    var adxOk = adxR && adxR.adx < 20;
+    var sum = 0, k;
+    for (k = n-20; k < n; k++) sum += c[k];
+    var mid = sum/20, sq = 0;
+    for (k = n-20; k < n; k++) sq += (c[k]-mid)*(c[k]-mid);
+    var sd = Math.sqrt(sq/20);
+    var bbWidthPct = mid > 0 ? (2*sd*2)/mid*100 : NaN;
+    var bbOk = isFinite(bbWidthPct) && bbWidthPct < 5.0;
+    var aArr = _atr(rows, 14);
+    var atrNow = __last(aArr);
+    var atrHist = [];
+    for (k = 19; k < n; k++) if (isFinite(aArr[k])) atrHist.push(aArr[k]);
+    atrHist.sort(function(a,b){ return a-b; });
+    var med = atrHist.length ? atrHist[Math.floor(atrHist.length/2)] : NaN;
+    var atrOk = isFinite(atrNow) && isFinite(med) && atrNow < med;
+    var atrPct = med > 0 ? atrNow/med : NaN;
+    var conf = (adxOk && bbOk && atrOk) ? 'HIGH' : ((adxOk && bbOk) || (adxOk && atrOk) || (bbOk && atrOk)) ? 'MEDIUM' : 'LOW';
+    return { isRangeBound: adxOk && bbOk && atrOk, adxOk: !!adxOk, bbOk: !!bbOk, atrOk: !!atrOk,
+             bbWidthPct: bbWidthPct, atrPctOfMedian: atrPct, confidence: conf,
+             adx: adxR ? adxR.adx : NaN };
+  }catch(e){ return null; }
+}
+
+/* 23) Heikin-Ashi Trend Strength */
+function goldHeikinAshi(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 5) return null;
+    var n = rows.length, ha = [];
+    var prevO = rows[0].o, prevC = rows[0].c;
+    for (var i = 1; i < n; i++){
+      var o = (prevO + prevC)/2;
+      var c = (rows[i].o + rows[i].h + rows[i].l + rows[i].c)/4;
+      var h = Math.max(rows[i].h, o, c);
+      var l = Math.min(rows[i].l, o, c);
+      ha.push({ o: o, h: h, l: l, c: c, body: c-o });
+      prevO = o; prevC = c;
+    }
+    var m = ha.length;
+    if (m < 3) return null;
+    var last = ha[m-1];
+    var consec = 0, j;
+    for (j = m-1; j >= 0; j--){
+      if ((last.body > 0 && ha[j].body > 0) || (last.body < 0 && ha[j].body < 0)) consec++;
+      else break;
+    }
+    var dir = last.body > 0 ? 'bull' : (last.body < 0 ? 'bear' : null);
+    var bodyPct = Math.abs(last.body)/(last.h - last.l);
+    var strength = (consec >= 4 && bodyPct > 0.6) ? 'STRONG' : (consec >= 2 && bodyPct > 0.4) ? 'MODERATE' : 'WEAK';
+    return { dir: dir, strength: strength, consecutive: consec, lastBody: last.body, lastSize: bodyPct };
+  }catch(e){ return null; }
+}
+
+/* 24) Smart Exit Engine */
+function goldSmartExit(dir, entry, stop, t1, t2, rows, opts){
+  try{
+    opts = opts || {};
+    var isScalp = opts.scalp !== false;
+    var notes = [];
+    var a = _atr(rows, 14);
+    var atr = __last(a);
+    if (!isFinite(atr) || !(atr > 0)) atr = Math.abs(entry - stop)/1.5;
+    var trail = null;
+    if (dir === 'long') trail = entry + 1.5*atr; else trail = entry - 1.5*atr;
+    notes.push('Trailing stop activates after TP1 hit — trails at 1.5×ATR (' + (isFinite(trail)?trail.toFixed(2):'n/a') + ')');
+    var timeBars = isScalp ? 6 : 24;
+    notes.push('Time exit: close full position after ' + timeBars + ' bars if neither TP nor SL hit');
+    var mfi = goldMFI(rows);
+    var volSignal = null;
+    if (mfi.last === 'SQUAT'){
+      volSignal = 'MFI SQUAT — high volume + low range at target area: take profit now';
+      notes.push(volSignal);
+    }
+    var n = rows.length, lastC = rows[n-1].c;
+    var structBreak = false, structNote = '';
+    if (dir === 'long' && lastC < entry - 0.25*atr){ structBreak = true; structNote = 'price broke back below entry — structure failed, exit early'; }
+    else if (dir === 'short' && lastC > entry + 0.25*atr){ structBreak = true; structNote = 'price broke back above entry — structure failed, exit early'; }
+    if (structBreak) notes.push(structNote);
+    var partials = [
+      { pct: 0.30, at: t1, note: 'Close 30% at TP1 (' + (isFinite(t1)?t1.toFixed(2):'n/a') + '), move stop to breakeven' },
+      { pct: 0.30, at: t2, note: 'Close 30% at TP2 (' + (isFinite(t2)?t2.toFixed(2):'n/a') + '), trail remainder' },
+      { pct: 0.40, at: null, note: 'Runner 40% — trail with 1.5×ATR stop until trailing stop or time exit' }
+    ];
+    var runnerStop = trail;
+    return {
+      trailingStop: trail, timeExitBars: timeBars, volExitSignal: volSignal,
+      structBreak: structBreak, structNote: structNote,
+      partials: partials, runnerStop: runnerStop, notes: notes
+    };
+  }catch(e){ return { trailingStop: null, timeExitBars: isScalp?6:24, volExitSignal: null, structBreak: false, partials:[], notes:[] }; }
+}
+
 /* ---------------- exports ---------------- */
+
 W.goldFVG = goldFVG;
 W.goldOrderBlocks = goldOrderBlocks;
 W.goldSweeps = goldSweeps;
@@ -1737,5 +2227,16 @@ W.goldScalpSetup = goldScalpSetup;
 W.goldScalpSetups = goldScalpSetups;
 W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
-W.goldNewsCaution = __newsCaution;   /* shared ±30-min high-impact window check */
+W.goldNewsCaution = __newsCaution;
+/* v54 GOLD MASTERCLASS exports */
+W.goldVWAPBands = goldVWAPBands;
+W.goldBOS = goldBOS;
+W.goldPremiumDiscount = goldPremiumDiscount;
+W.goldADR = goldADR;
+W.goldOpeningRange = goldOpeningRange;
+W.goldEqualLevels = goldEqualLevels;
+W.goldADX = goldADX;
+W.goldRangeBound = goldRangeBound;
+W.goldHeikinAshi = goldHeikinAshi;
+W.goldSmartExit = goldSmartExit;   /* shared ±30-min high-impact window check */
 })();

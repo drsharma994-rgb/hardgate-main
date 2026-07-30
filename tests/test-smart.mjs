@@ -37,6 +37,12 @@ globalThis.fmt = (n, d = 2) => (n === null || n === undefined || isNaN(n)) ? '�
 globalThis.px = n => isFinite(n) ? Number(n).toFixed(2) : '—';
 globalThis.pct = (n, d = 1) => isFinite(n) ? (n >= 0 ? '+' : '') + n.toFixed(d) + '%' : '—';
 globalThis.gateRow = (id, name, state, detail) => `GATE:${id}|${state}|${name} :: ${detail}\n`;
+// v53 waitAlertIdle stub — mirrors the real contract: false only when the alert
+// cycle is genuinely busy (tests never set S.alertBusy, so scans proceed).
+globalThis.waitAlertIdle = async statEl => {
+  if (globalThis.S.alertBusy && globalThis.S.alertBusySince && Date.now() - globalThis.S.alertBusySince > 4*60*1000) globalThis.S.alertBusy = false;
+  return !globalThis.S.alertBusy;
+};
 
 // ---- load the extracted smart block + runBias ----
 vm.runInThisContext(smartBlock[0], { filename: 'smart-extract.js' });
