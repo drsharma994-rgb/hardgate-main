@@ -198,12 +198,43 @@ function cryptoWatchInjectStyles(){
   document.head.appendChild(el);
 }
 
+/* News gate for crypto SWING/SCALP scans — uses hgNewsRisk with BTC as the
+   macro proxy (USD calendar events hit every symbol). Never throws. */
+function cryptoNewsGate(symbol){
+  try{
+    var sym = symbol || 'BTC';
+    if (typeof hgNewsRisk !== 'function'){
+      return { blackout: false, caution: false, risk: 'low', note: 'news not loaded', events: [] };
+    }
+    var nr = hgNewsRisk(sym);
+    return {
+      blackout: !!nr.blackout,
+      caution: !!(nr.blackout || nr.risk === 'high'),
+      risk: nr.risk || 'low',
+      note: nr.note || '',
+      events: nr.events || []
+    };
+  }catch(e){
+    return { blackout: false, caution: false, risk: 'low', note: 'news error', events: [] };
+  }
+}
+
+function cryptoNewsBannerHTML(ns){
+  if (!ns || (!ns.blackout && !ns.caution)) return '';
+  var title = ns.blackout ? 'NEWS BLACKOUT — crypto scan paused' : 'NEWS CAUTION — size down / verify calendar';
+  return '<div class="note' + (ns.blackout ? ' warn' : '') + '" style="margin-bottom:10px">'
+    + '<b>' + cwEsc(title) + '</b> — ' + cwEsc(ns.note || 'high-impact USD window')
+    + '</div>';
+}
+
 if (typeof window !== 'undefined'){
   window.swingWatchEval = swingWatchEval;
   window.scalpWatchEval = scalpWatchEval;
   window.coilWatchItems = coilWatchItems;
   window.cryptoFormingNowHTML = cryptoFormingNowHTML;
   window.cryptoWatchInjectStyles = cryptoWatchInjectStyles;
+  window.cryptoNewsGate = cryptoNewsGate;
+  window.cryptoNewsBannerHTML = cryptoNewsBannerHTML;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cryptoWatchInjectStyles);
   else cryptoWatchInjectStyles();
 }
