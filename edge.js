@@ -13,7 +13,7 @@ hgStructureGate, liquidity pools, TTM squeeze, native funding (Delta).
 
 Pure exports (never throw):
   edgeSignal, edgeEnrich, edgeAssess, edgePlan, edgeBacktest,
-  edgeMaxSafeLev, edgeUseLev
+  edgeMaxSafeLev, edgeUseLev, edgeSwingRead
 ========================================================================= */
 (function(){
 'use strict';
@@ -205,6 +205,39 @@ function edgeSignal(rows){
   }catch(e){ return null; }
 }
 
+/* Same 4H EMA cascade read as SWING SCAN tab G1 (9>21>50 long, inverse short)
+   with the 0.25×ATR spread gate. Pure — never throws. */
+function edgeSwingRead(rows){
+  var out = { dir: null, rawDir: null, label: 'SWING cascade n/a', htf: null, spreadOk: false };
+  try{
+    if (!rows || rows.length < 55 || typeof ema !== 'function' || typeof atr !== 'function') return out;
+    var closes = new Array(rows.length);
+    for (var i = 0; i < rows.length; i++) closes[i] = rows[i].c;
+    var n = closes.length - 1;
+    var e9a = ema(closes, 9), e21a = ema(closes, 21), e50a = ema(closes, 50), e200a = ema(closes, 200);
+    var e9 = e9a[n], e21 = e21a[n], e50 = e50a[n], e200 = e200a[n], p = closes[n];
+    if (!(isFinite(e9) && isFinite(e21) && isFinite(e50))) return out;
+    var rawDir = null;
+    if (e9 > e21 && e21 > e50) rawDir = 'long';
+    else if (e9 < e21 && e21 < e50) rawDir = 'short';
+    var a4a = atr(rows, 14), a4 = a4a[n];
+    var spreadOk = isFinite(a4) && a4 > 0 && Math.abs(e21 - e50) >= 0.25 * a4;
+    var htf = null;
+    if (isFinite(e200) && isFinite(p)) htf = p > e200 ? 'long' : (p < e200 ? 'short' : null);
+    out.rawDir = rawDir;
+    out.spreadOk = spreadOk;
+    out.dir = (rawDir && spreadOk) ? rawDir : null;
+    out.htf = htf;
+    if (!rawDir) out.label = 'SWING cascade mixed (no G1)';
+    else {
+      out.label = 'SWING 4H cascade ' + rawDir.toUpperCase()
+        + (spreadOk ? '' : ' · EMA spread too tight for G1');
+      if (htf && htf !== rawDir) out.label += ' · price ' + (htf === 'long' ? 'above' : 'below') + ' EMA200';
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
 function edgeEnrich(sig, rows, item, candleSrc){
   var out = { tally: 0, parts: [], notes: [], candleSrc: candleSrc || null };
   try{
@@ -230,6 +263,22 @@ function edgeEnrich(sig, rows, item, candleSrc){
         out.parts.push({ label: 'vol regime COMPRESSING — stored energy at the range edge', pts: 1 });
         out.tally += 1;
       }
+    }
+
+    var sw = edgeSwingRead(rows);
+    out.swing = sw;
+    if (sw.dir && sw.dir !== dir){
+      out.swingConflict = true;
+      out.parts.push({
+        label: 'OPPOSES SWING SCAN — 4H cascade ' + sw.dir.toUpperCase()
+          + ' vs EDGE ' + dir.toUpperCase() + ' fade · counter-trend bounce',
+        pts: -1
+      });
+      out.tally -= 1;
+      out.notes.push('swing opposes');
+    } else if (sw.dir === dir){
+      out.parts.push({ label: 'SWING 4H cascade agrees (' + sw.dir.toUpperCase() + ')', pts: 1 });
+      out.tally += 1;
     }
 
     if (typeof meanrevAssess === 'function'){
@@ -408,6 +457,11 @@ function cardHTML(r){
       : 'THIN RECORD: no historical edge fades on these bars');
   var gates = (en.parts || []).filter(function(pt){ return pt.pts > 0; }).slice(0, 5)
     .map(function(pt){ return '<span class="gpip ok">' + esc(pt.label) + '</span>'; }).join('');
+  var swingWarn = en.swingConflict
+    ? '<div class="plan" style="color:var(--gold);border-left:3px solid var(--gold);padding-left:8px;margin:6px 0">'
+      + '<b>OPPOSES SWING TAB</b> — ' + esc((en.swing && en.swing.label) ? en.swing.label : '4H cascade disagrees')
+      + '. This EDGE fade fights SWING continuation — prefer SWING for the main position; size down or skip.</div>'
+    : '';
   var planBlock = p
     ? '<div class="plan">' + edgePlanHtml(p)
       + ' — ' + DON_LEN + '-bar range fade on <b>' + esc(venueLabel(r.item)) + '</b>'
@@ -430,7 +484,12 @@ function cardHTML(r){
     + '<span class="k">turnover</span><span>' + turnover + '</span>'
     + '</div>'
     + '<div class="gates">' + gates
+    + (en.swingConflict
+      ? '<span class="gpip" style="color:var(--gold);border-color:var(--gold)">SWING conflict</span>'
+      : (en.swing && en.swing.dir === sig.dir
+        ? '<span class="gpip ok">SWING agrees</span>' : ''))
     + '<span class="gpip ok">R:R ' + fmtF(sig.rr, 2) + ' · USE ' + (p ? p.useLev : '—') + 'x</span></div>'
+    + swingWarn
     + planBlock + '<div class="plan">' + record + '</div>' + btn + '</div>';
 }
 
@@ -448,7 +507,7 @@ function mount(el){
     + '<p class="note">Scans the <b>combined Delta + CoinDCX</b> universe (xuUniverse). Candles route per venue'
     + ' with Binance fallback when history is thin. Confluence: Donchian range touch, %B extreme,'
     + ' mean-reversion, structure gate, liquidity pools, TTM squeeze, funding (Delta native).'
-    + ' Cards need tally ≥ ' + MIN_TALLY + ' (core range edge = 2). <b>USE Nx</b> = 50% of max-safe leverage.</p>'
+    + ' Cards need tally ≥ ' + MIN_TALLY + ' (core range edge = 2). Conflicts with <b>SWING SCAN</b> cascade are flagged. <b>USE Nx</b> = 50% of max-safe leverage.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — Delta+CoinDCX · turnover ≥ $'
     + fmtF(MIN_TURNOVER / 1e6, 2) + 'M when known · top ' + MAX_UNIVERSE
@@ -536,6 +595,9 @@ function mount(el){
         await sleep(CHUNK_SLEEP_MS);
       }
       found.sort(function(a, b){
+        var ac = (a.enrich && a.enrich.swingConflict) ? 1 : 0;
+        var bc = (b.enrich && b.enrich.swingConflict) ? 1 : 0;
+        if (ac !== bc) return ac - bc;
         return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
       });
       if (!found.length){
@@ -578,6 +640,7 @@ W.edgePlan = edgePlan;
 W.edgeBacktest = edgeBacktest;
 W.edgeMaxSafeLev = edgeMaxSafeLev;
 W.edgeUseLev = edgeUseLev;
+W.edgeSwingRead = edgeSwingRead;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'edge', label: 'EDGE', mount: mount, refresh: edgeRefresh });
 

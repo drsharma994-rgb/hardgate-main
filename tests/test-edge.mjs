@@ -61,6 +61,7 @@ assert(typeof W.edgePlan === 'function', 'edgePlan exported');
 assert(typeof W.edgeBacktest === 'function', 'edgeBacktest exported');
 assert(typeof W.edgeMaxSafeLev === 'function', 'edgeMaxSafeLev exported');
 assert(typeof W.edgeUseLev === 'function', 'edgeUseLev exported');
+assert(typeof W.edgeSwingRead === 'function', 'edgeSwingRead exported');
 assert(Array.isArray(W.HG_tabs) && W.HG_tabs.some(function(t){ return t.id === 'edge'; }),
   'HG_tabs registers edge tab');
 
@@ -107,7 +108,20 @@ console.log('== %B series ==');
   assert(r === null || (r.plan && r.tally >= 2), 'assess null or passes min tally with plan');
 }
 
-console.log('== edgePlan geometry ==');
+console.log('== edgeSwingRead + SWING conflict ==');
+{
+  var closes = [];
+  var i;
+  for (i = 0; i < 260; i++) closes.push(100 - i * 0.08);
+  var bear = mkRows(closes, 0.2);
+  var sw = W.edgeSwingRead(bear);
+  assert(sw && sw.dir === 'short', 'declining series -> SWING short cascade');
+  var sig = { dir: 'long', edge: 'RANGE BOTTOM', swept: true };
+  var en = W.edgeEnrich(sig, bear, { sym: 'TESTUSD', exchange: 'delta' }, 'delta');
+  assert(en.swingConflict === true, 'EDGE long vs SWING short flags conflict');
+  assert(en.parts.some(function(p){ return /OPPOSES SWING/i.test(p.label); }), 'conflict part present');
+}
+
 {
   var p = W.edgePlan({ dir: 'short', entry: 100, stop: 103, t1: 96, t2: 92 });
   assert(p && p.stop > p.entry && p.t1 < p.entry && p.rr1 > 0, 'short plan geometry');
