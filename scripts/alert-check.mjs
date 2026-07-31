@@ -5,7 +5,7 @@ const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com
 const STATE_FILE = 'alert-state.json';
 /* Owner Telegram defaults — used when TELEGRAM_TOKEN/TELEGRAM_CHAT_ID env
    secrets are unset (browser page + CI runner). */
-const HG_TG_DEFAULT_TOKEN = '8678184060:AAHMxxcw4eTSs2C31fvTyEWFgMrGv8N3S6A';
+const HG_TG_DEFAULT_TOKEN = '8678184060:AAGKhoukjgitAAk8kMzPHRF3WF6U8oXaNcc';
 const HG_TG_DEFAULT_CHAT = '-1004014764';
 /* GitHub auto-disables scheduled workflows after 60 days of repository
    inactivity. The heartbeat below stamps lastRunAt into alert-state.json at
