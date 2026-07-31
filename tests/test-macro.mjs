@@ -242,7 +242,8 @@ async function macroOnly(setR, klines){
 /* ================= Part 4: getGoldMacro shape + hints + Yahoo last resort ================= */
 console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==');
 {
-  const SHAPE = ['dxy', 'goldSilverRatio', 'realRateHint', 'silver', 'tnx', 'tnxChange20Pct', 'tnxTrend'];
+  const SHAPE = ['dxy', 'dxyOfficial', 'goldSilverRatio', 'realRateHint', 'realYield10Y',
+    'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend'];
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
   assert(Object.keys(m).sort().join('|') === SHAPE.join('|'), 'exact return shape keys: ' + SHAPE.join(', '));
@@ -260,7 +261,9 @@ console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==
   // everything dead -> full null shape, no throw
   const mD = await macroOnly([], async () => []);
   assert(Object.keys(mD).sort().join('|') === SHAPE.join('|'), 'dead-everything shape keys intact');
-  assert(mD.dxy === null && mD.tnx === null && mD.tnxTrend === null && mD.tnxChange20Pct === null &&
+  assert(mD.dxy === null && mD.dxyOfficial === null && mD.tnx === null && mD.tnxTrend === null &&
+         mD.tnxChange20Pct === null && mD.tnxSource === null && mD.realYield10Y === null &&
+         mD.realYieldTrend === null && mD.realYieldChange20Pct === null &&
          mD.silver === null && mD.goldSilverRatio === null && mD.realRateHint === 'NEUTRAL',
          'all legs null + NEUTRAL hint when every source is down');
 

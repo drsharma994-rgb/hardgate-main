@@ -483,7 +483,7 @@ async function getGoldMacro(){
     });
   }catch(e){
     return { dxy: null, dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
-             realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
+             tnxSource: null, realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
              silver: null, goldSilverRatio: null, realRateHint: 'NEUTRAL' };
   }
 }
