@@ -3722,13 +3722,20 @@ function saveNtfyTopic(){
 }
 
 /* Telegram alerts — the PRIMARY channel (free Bot API, no quota, CORS-open).
-   Config lives in this browser only (hg_tg_token / hg_tg_chat), same trust
-   model as the ntfy topic. Plain-text messages; returns true on delivery,
-   an error string otherwise. Never throws. */
+   Owner defaults below are used when hg_tg_token / hg_tg_chat are unset in
+   this browser; localStorage overrides still win if you SAVE different values.
+   Plain-text messages; returns true on delivery, an error string otherwise.
+   Never throws. */
+const HG_TG_DEFAULT = {
+  token: '8678184060:AAHMxxcw4eTSs2C31fvTyEWFgMrGv8N3S6A',
+  chat: '-1004014764'
+};
 function tgCreds(){
   let token = null, chat = null;
   try{ token = localStorage.getItem('hg_tg_token'); }catch(e){}
   try{ chat = localStorage.getItem('hg_tg_chat'); }catch(e){}
+  if (!token && HG_TG_DEFAULT.token) token = HG_TG_DEFAULT.token;
+  if (!chat && HG_TG_DEFAULT.chat) chat = HG_TG_DEFAULT.chat;
   return (token && chat) ? { token: token, chat: chat } : null;
 }
 async function sendTelegram(text){
@@ -4152,8 +4159,12 @@ function initAlerts(){
   let saved = null;
   try{ saved = localStorage.getItem('hg_alerts_on'); }catch(e){}
   try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
-  try{ const tt = localStorage.getItem('hg_tg_token'); if (tt && $('tgToken')) $('tgToken').value = tt; }catch(e){}
-  try{ const tc = localStorage.getItem('hg_tg_chat'); if (tc && $('tgChat')) $('tgChat').value = tc; }catch(e){}
+  try{
+    const tt = localStorage.getItem('hg_tg_token') || (HG_TG_DEFAULT && HG_TG_DEFAULT.token) || '';
+    const tc = localStorage.getItem('hg_tg_chat') || (HG_TG_DEFAULT && HG_TG_DEFAULT.chat) || '';
+    if ($('tgToken')) $('tgToken').value = tt;
+    if ($('tgChat')) $('tgChat').value = tc;
+  }catch(e){}
   try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
   updateAlertChip();
   if (saved === '1'){
