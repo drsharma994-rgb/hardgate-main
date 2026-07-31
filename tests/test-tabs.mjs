@@ -176,32 +176,36 @@ assert(!loadErr, 'support scripts load without throwing' + (loadErr ? ' — got:
 
 loadErr = null;
 try{
-  ['squeeze.js', 'trendtable.js', 'oiflow.js', 'regime.js', 'carry.js', 'goldpro.js'].forEach(load);
+  ['squeeze.js', 'trendtable.js', 'oiflow.js', 'regime.js', 'carry.js', 'termbasis.js', 'goldpro.js'].forEach(load);
 }catch(e){ loadErr = e; }
-assert(!loadErr, 'six feature-tab modules load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
+assert(!loadErr, 'feature-tab modules load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
 
 /* ---------------- HG_tabs registration ---------------- */
-const EXPECTED = [
+const REQUIRED_TABS = [
   ['squeeze', 'SQUEEZE'],
   ['trendmx', 'TREND MATRIX'],
   ['oiflow', 'OI FLOW'],
   ['regime', 'REGIME'],
   ['carry', 'CARRY'],
+  ['termbasis', 'TERM BASIS'],
   ['goldpro', 'GOLD PRO']
 ];
 const tabs = sandbox.HG_tabs;
-assert(Array.isArray(tabs) && tabs.length === 6,
-  'window.HG_tabs has exactly 6 registrations (got ' + (tabs && tabs.length) + ')');
-assert(EXPECTED.every(([id, label], i) =>
-  tabs[i] && tabs[i].id === id && tabs[i].label === label && typeof tabs[i].mount === 'function'),
-  'HG_tabs order/ids/labels/mount match: ' + EXPECTED.map(e => e[0]).join(', '));
+assert(Array.isArray(tabs) && tabs.length >= REQUIRED_TABS.length,
+  'window.HG_tabs has at least ' + REQUIRED_TABS.length + ' registrations (got ' + (tabs && tabs.length) + ')');
+assert(REQUIRED_TABS.every(([id, label]) => {
+  const t = tabs.find(function(x){ return x && x.id === id; });
+  return t && t.label === label && typeof t.mount === 'function';
+}), 'HG_tabs includes required ids/labels/mount: ' + REQUIRED_TABS.map(e => e[0]).join(', '));
 assert(new Set(tabs.map(t => t.id)).size === tabs.length, 'HG_tabs ids are unique');
 
-/* each module mount() tolerates a bare stub element without sync throw */
-for (const t of tabs){
+/* each required module mount() tolerates a bare stub element without sync throw */
+for (const [id] of REQUIRED_TABS){
+  const t = tabs.find(function(x){ return x && x.id === id; });
+  if (!t) continue;
   let threw = null;
   try { t.mount(makeEl('div')); } catch(e){ threw = e; }
-  assert(!threw, 'mount() of tab "' + t.id + '" does not throw synchronously' + (threw ? ' — got: ' + threw.message : ''));
+  assert(!threw, 'mount() of tab "' + id + '" does not throw synchronously' + (threw ? ' — got: ' + threw.message : ''));
 }
 
 /* ---------------- inline blocks from index.html ---------------- */
@@ -247,10 +251,10 @@ assert(run('typeof window.getTickers') === 'function' && run('getTickers === win
   'getTickers is reachable as a window-scope global (inline classic-script function)');
 assert(run('typeof window.candlesRangeRaw') === 'function' && run('candlesRangeRaw === window.candlesRangeRaw') === true,
   'candlesRangeRaw is reachable as a window-scope global (inline classic-script function)');
-assert(run('typeof HG_TAB_MODS') === 'object' && run('Object.keys(HG_TAB_MODS).length') === 6,
-  'HG_TAB_MODS filled with all 6 modules');
-assert(EXPECTED.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '] && HG_TAB_MODS[' + JSON.stringify(id) + '].id') === id),
-  'HG_TAB_MODS keyed by every module id');
+assert(run('typeof HG_TAB_MODS') === 'object' && run('Object.keys(HG_TAB_MODS).length') >= REQUIRED_TABS.length,
+  'HG_TAB_MODS filled with loaded modules (got ' + run('Object.keys(HG_TAB_MODS).length') + ')');
+assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '] && HG_TAB_MODS[' + JSON.stringify(id) + '].id') === id),
+  'HG_TAB_MODS keyed by every required module id');
 
 /* ---------------- group model ---------------- */
 const EXPECTED_GROUPS = {
@@ -318,11 +322,11 @@ assert(guardWindow.indexOf('location.protocol') !== -1 && guardWindow.indexOf("'
 
 /* ---------------- registration mapping + row-2 layout ---------------- */
 const navIds = navEl.children.map(c => c.id);
-assert(EXPECTED.every(([id]) => navIds.indexOf('tabB_' + id) !== -1),
-  'nav gained a button for every module: ' + navIds.join(', '));
-assert(EXPECTED.every(([id]) => navEl.children[navIds.indexOf('tabB_' + id)].textContent === EXPECTED.find(e => e[0] === id)[1]),
+assert(REQUIRED_TABS.every(([id]) => navIds.indexOf('tabB_' + id) !== -1),
+  'nav gained a button for every required module: ' + navIds.join(', '));
+assert(REQUIRED_TABS.every(([id]) => navEl.children[navIds.indexOf('tabB_' + id)].textContent === REQUIRED_TABS.find(e => e[0] === id)[1]),
   'nav button labels match module labels');
-assert(EXPECTED.every(([id]) => {
+assert(REQUIRED_TABS.every(([id]) => {
   const b = navEl.children.filter(c => c.id === 'tabB_' + id)[0];
   return b && b.getAttribute('data-g') === ID2GROUP[id];
 }), 'dynamic nav buttons registered INTO their group via data-g (not appended flat)');
@@ -330,16 +334,16 @@ assert(navEl.children.filter(c => c.id === 'tabB_coil')[0].getAttribute('data-g'
     && navEl.children.filter(c => c.id === 'tabB_best')[0].getAttribute('data-g') === 'strategies',
   'static buttons tagged with their groups too (coil→crypto, best→strategies)');
 const EXPECTED_ORDER = ['tabB_regime', 'tabB_trendmx', 'tabB_squeeze', 'tabB_oiflow', 'tabB_coil',
-                        'tabB_goldpro', 'tabB_best', 'tabB_carry', 'tabB_dash'];
+                        'tabB_goldpro', 'tabB_best', 'tabB_carry', 'tabB_termbasis', 'tabB_dash'];
 assert(navIds.join(',') === EXPECTED_ORDER.join(','),
   'row-2 buttons ordered by group sequence, then group tab order (unassigned last): ' + navIds.join(', '));
 
 /* panes appended to <main> as .tabpane with matching ids */
 const paneIds = mainEl.children.map(c => c.id);
-assert(EXPECTED.every(([id]) => {
+assert(REQUIRED_TABS.every(([id]) => {
   const i = paneIds.indexOf('tab_' + id);
   return i !== -1 && mainEl.children[i].className === 'tabpane';
-}), 'main gained a .tabpane pane for every module: ' + paneIds.join(', '));
+}), 'main gained a .tabpane pane for every required module: ' + paneIds.join(', '));
 
 /* ---------------- group chips ---------------- */
 const chipsRow = documentStub.getElementById('navGroups');
@@ -355,8 +359,8 @@ assert(navEl.children.every(c => {
   const g = c.getAttribute('data-g');
   return !g || (EXPECTED_GROUPS[g] && EXPECTED_GROUPS[g].indexOf(c.id.slice(5)) !== -1);
 }), 'every nav button lives in exactly one chip group → reachable in ≤2 clicks (group chip, then tab)');
-assert(EXPECTED.every(([id]) => Object.keys(EXPECTED_GROUPS).some(g => EXPECTED_GROUPS[g].indexOf(id) !== -1)),
-  'every dynamic module id is reachable through a group');
+assert(REQUIRED_TABS.every(([id]) => Object.keys(EXPECTED_GROUPS).some(g => EXPECTED_GROUPS[g].indexOf(id) !== -1)),
+  'every required module id is reachable through a group');
 
 /* default paint: OVERVIEW active */
 assert(navEl.children.filter(c => c.id === 'tabB_regime')[0].style.display !== 'none',

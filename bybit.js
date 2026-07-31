@@ -96,7 +96,6 @@ async function bybitAccountRatio(symbol, period, limit){
   }catch(e){ return null; }
 }
 
-/* One-shot positioning snapshot for cross-check (same field names as smartScanSymbol). */
 async function bybitPositioningSnapshot(symbol){
   try{
     if (!symbol) return null;
@@ -116,5 +115,25 @@ async function bybitPositioningSnapshot(symbol){
       oiUsd: (oih && oih.latest) ? oih.latest.oiUsd : null,
       retailLongPct: (ar && ar.latest) ? ar.latest.longPct : null
     };
+  }catch(e){ return null; }
+}
+
+/* GET /v5/market/tickers?category=linear -> map base -> {symbol, pct8h, turnoverUsd} */
+async function bybitLinearTickersByBase(){
+  try{
+    var key = 'tickersAll';
+    var hit = __byCacheGet(key); if (hit !== undefined) return hit;
+    var r = await __byFetchJson(BYBIT_API + '/v5/market/tickers?category=linear');
+    if (!r || !Array.isArray(r.list)) return null;
+    var map = {};
+    for (var i = 0; i < r.list.length; i++){
+      var row = r.list[i];
+      if (!row || !row.symbol || String(row.symbol).indexOf('USDT') < 0) continue;
+      var base = String(row.symbol).replace(/USDT$/, '');
+      var pct8h = isFinite(+row.fundingRate) ? (+row.fundingRate) * 100 : null;
+      var turnoverUsd = isFinite(+row.turnover24h) ? +row.turnover24h : null;
+      map[base] = { symbol: row.symbol, pct8h: pct8h, turnoverUsd: turnoverUsd };
+    }
+    return __byCachePut(key, map);
   }catch(e){ return null; }
 }
