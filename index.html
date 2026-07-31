@@ -649,15 +649,21 @@ const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
 const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
 const CDCX_API = 'https://api.coindcx.com';
-const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u); // same-origin Vercel function (allowlist: api.coindcx.com, public.coindcx.com, query1/2.finance.yahoo.com) — replaces the dead Render proxy
 const EXECUTE_BACKEND_URL = ''; // set to your delta-trader.ts POST /execute endpoint to enable EXECUTE BRACKET
 function executeBackendReady(){
   return typeof EXECUTE_BACKEND_URL === 'string' && EXECUTE_BACKEND_URL.length > 0
     && EXECUTE_BACKEND_URL.indexOf('your-secure-backend.com') < 0;
 }
+const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u);
+/* Last-resort only when same-origin /api/proxy is missing (GitHub Pages) or
+   transiently failing — never the first choice on Render. */
+const CDCX_PUBLIC_PROXIES = [
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
+];
 
-/* CoinDCX fetch: try direct (CORS may block), then same-origin /api/proxy only.
-   No third-party CORS proxies — they leak exchange API paths off-origin. */
+/* CoinDCX fetch: same-origin /api/proxy first (browser CORS blocks direct),
+   then direct (Node/tests), then public CORS backups as last resort. */
 
 /* ---------------- lightweight rate-limit tracking (client-side estimate only) ---------------- */
 const RateTrack = { td: [], cdcx: [] };
@@ -696,20 +702,32 @@ function trackCall(bucket){
 
 async function cdcxGet(url){
   trackCall('cdcx');
-  try{
-    const r = await fetch(url);
-    if(!r.ok) throw new Error('HTTP '+r.status);
+  async function readJson(r, via){
+    if (!r.ok) throw new Error((via || 'fetch') + ' HTTP ' + r.status);
     const j = await r.json();
-    S.cdcxViaProxy = false;
+    S.cdcxViaProxy = via;
     return j;
-  }catch(e){}
-  try{
-    const r = await fetch(CDCX_PROXY(url));
-    if(!r.ok) throw new Error('proxy HTTP '+r.status);
-    S.cdcxViaProxy = 'api';
-    return r.json();
-  }catch(e){}
-  throw new Error('CoinDCX unreachable — direct fetch blocked and /api/proxy failed (serve via Render or enable the proxy)');
+  }
+  async function tryOrigin(){
+    let r = await fetch(CDCX_PROXY(url));
+    if (r.status === 429){
+      await sleep(400);
+      r = await fetch(CDCX_PROXY(url));
+    }
+    return readJson(r, 'api');
+  }
+  async function tryDirect(){
+    return readJson(await fetch(url), false);
+  }
+  async function tryPublic(build){
+    return readJson(await fetch(build(url)), 'public');
+  }
+  try{ return await tryOrigin(); }catch(e){}
+  try{ return await tryDirect(); }catch(e){}
+  for (const build of CDCX_PUBLIC_PROXIES){
+    try{ return await tryPublic(build); }catch(e){}
+  }
+  throw new Error('CoinDCX unreachable — reload and retry, or use https://hardgate-main.onrender.com (full /api/proxy)');
 }
 
 /* ---------------- utils ---------------- */

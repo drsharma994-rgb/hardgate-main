@@ -18,8 +18,10 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;
+/* Scans fire parallel CoinDCX candle fetches — keep a generous ceiling so
+   whole-exchange sweeps never 429 themselves; abuse is still bounded. */
 const RATE_WINDOW_MS = 60000;
-const RATE_MAX_PER_WINDOW = 120;
+const RATE_MAX_PER_WINDOW = 3000;
 const __rateBuckets = new Map();
 
 function clientKey(req){

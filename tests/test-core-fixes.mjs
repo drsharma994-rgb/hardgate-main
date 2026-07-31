@@ -67,14 +67,14 @@ assert(html.includes("const CDCX_PROXY = u => '/api/proxy?url=' + encodeURICompo
   'CDCX_PROXY is the same-origin /api/proxy?url= mapper');
 assert(!html.includes('corsproxy.io'), 'corsproxy.io no longer appears anywhere (paywalled, 403)');
 assert(!html.includes('hardgate-proxy.onrender.com'), 'dead Render proxy host fully removed (hardgate-main.onrender.com hosting is fine)');
-assert(!html.includes('allorigins.win') && !html.includes('codetabs.com'),
-  'third-party CORS proxies removed — CoinDCX uses direct + same-origin /api/proxy only');
+assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
+  'public CORS proxies kept as last resort after same-origin /api/proxy');
 {
   const cg = grabFn('cdcxGet');
-  const iDirect = cg.indexOf('await fetch(url)');
   const iApi = cg.indexOf('await fetch(CDCX_PROXY(url))');
-  assert(iDirect !== -1 && iApi !== -1 && iDirect < iApi && !cg.includes('CDCX_PUBLIC_PROXIES'),
-    'cdcxGet fallback order: direct → /api/proxy (no public backups)');
+  const iPublic = cg.indexOf('CDCX_PUBLIC_PROXIES');
+  assert(iApi !== -1 && iPublic !== -1 && iApi < iPublic,
+    'cdcxGet order: same-origin /api/proxy first, public backups last');
 }
 assert(html.includes('function executeBackendReady'),
   'EXECUTE BRACKET gated behind executeBackendReady()');
