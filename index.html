@@ -612,6 +612,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="oiflow.js"></script>
 <script src="regime.js"></script>
 <script src="carry.js"></script>
+<script src="termbasis.js"></script>
 <script src="goldpro.js"></script>
 <script src="strats.js"></script>
 <script src="meanrev.js"></script>
@@ -1959,7 +1960,7 @@ const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
-  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','scorecard'] },
+  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','termbasis','scorecard'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
@@ -2459,6 +2460,23 @@ async function runScan(kind, opts){
   const minTurn = isSwing ? (+$('swingTurn').value||0) : 0;
   const cardsEl = $(isSwing?'swingCards':'scalpCards'), emptyEl=$(isSwing?'swingEmpty':'scalpEmpty'), statEl=$(isSwing?'swingStat':'scalpStat');
   const btn = $(isSwing?'swingRun':'scalpRun');
+  let newsGate = { blackout: false, caution: false };
+  try{
+    if (typeof hgNewsRefresh === 'function') hgNewsRefresh(false);
+    if (typeof cryptoNewsGate === 'function') newsGate = cryptoNewsGate('BTC');
+  }catch(e){}
+  if (newsGate.blackout){
+    if (!quiet){
+      const banner = (typeof cryptoNewsBannerHTML === 'function') ? cryptoNewsBannerHTML(newsGate) : '';
+      cardsEl.innerHTML = banner || '';
+      emptyEl.style.display = 'none';
+      statEl.className = 'note warn';
+      statEl.textContent = 'skipped — ' + (newsGate.note || 'news blackout');
+      setProg(isSwing?'swingProg':'scalpProg', null);
+      btn.disabled = false;
+    }
+    return;
+  }
   if (!quiet){ cardsEl.innerHTML=''; emptyEl.style.display='none'; emptyEl.textContent=''; btn.disabled=true; }
   let cands = [];
   let uni = [];
@@ -2473,6 +2491,10 @@ async function runScan(kind, opts){
     const snap = { at: Date.now(), cands: cands, stat: statEl.textContent };
     if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
     if (!quiet && !found){ emptyEl.textContent=(isSwing?'No CLEAN swing setups. Standing aside is a position.':'No CLEAN scalp triggers right now.'); emptyEl.style.display='block'; }
+    if (!quiet && newsGate.caution){
+      const nb = (typeof cryptoNewsBannerHTML === 'function') ? cryptoNewsBannerHTML(newsGate) : '';
+      if (nb) cardsEl.insertAdjacentHTML('afterbegin', nb);
+    }
     try{ await refreshCryptoWatch(kind, uni, cands.map(function(c){ return c.sym; }), { quiet: quiet }); }catch(e){ console.warn('crypto watch', e); }
   }catch(e){
     statEl.textContent = `scan failed: ${e.message}`;
@@ -5280,6 +5302,14 @@ function hgBootNav(){
   if (first) showTab(first);
 }
 hgBootNav();
+
+/* Background BRAIN layer warm — bounded, non-blocking; layers land in their
+   own time (engine gate scan may continue after the cap). */
+try{
+  if (typeof hgBrainAutoWarm === 'function'){
+    setTimeout(function(){ hgBrainAutoWarm().catch(function(){}); }, 800);
+  }
+}catch(e){}
 
 function saveTdKey(){
   const v = ($('tdKeyInput').value||'').trim();

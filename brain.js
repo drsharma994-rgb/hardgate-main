@@ -3928,6 +3928,24 @@ async function brainRefresh(){
    RESCAN never auto-warms (it stays instant). Never blocks the scan
    indefinitely; never fabricates a warmed state. */
 var __warmedAt = 0;
+var __autoWarming = false;
+
+/* Boot-time background warm: same bounded starter pass as synthesis
+   auto-warm, but fire-and-forget (no stat line, no synthesis). Safe to call
+   on every page load — idempotent within the 60s freshness window. */
+async function hgBrainAutoWarm(){
+  try{
+    if (__autoWarming || __warming) return 'busy';
+    __autoWarming = true;
+    try{
+      if (typeof G.hgNewsRefresh === 'function') await G.hgNewsRefresh(false);
+    }catch(e){}
+    await autoWarmIntoRun(null);
+    __warmedAt = Date.now();
+    return 'started';
+  }catch(e){ return 'error: ' + errMsg(e); }
+  finally{ __autoWarming = false; }
+}
 
 /* the warm starters in the button's invocation order — engine LAST (the
    deep gate scan is the slow leg). THE single collection both WARM UP
@@ -4836,6 +4854,7 @@ G.__hgBrainAudit = function(sym){
 /* signal-logger seam: deep-frozen {at, marketRead, rows} of the LAST completed
    synthesis (full or quick), null before the first scan. Never throws. */
 G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };
+G.hgBrainAutoWarm = hgBrainAutoWarm;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'brain', label: 'BRAIN', mount: function(el){ mount(el); }, refresh: brainRefresh });
 

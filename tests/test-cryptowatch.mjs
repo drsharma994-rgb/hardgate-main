@@ -40,7 +40,16 @@ const coils = globalThis.coilWatchItems({ list: [{ symbol: 'ETHUSD', coilLow: 30
 ok(coils.length === 1 && coils[0].state === 'armed', 'coil watchlist → armed row');
 
 console.log('== cryptoFormingNowHTML ==');
-const html = globalThis.cryptoFormingNowHTML(coils);
-ok(html.indexOf('FORMING NOW') >= 0 && html.indexOf('ETHUSD') >= 0, 'panel HTML renders');
+const panelHtml = globalThis.cryptoFormingNowHTML(coils);
+ok(panelHtml.indexOf('FORMING NOW') >= 0 && panelHtml.indexOf('ETHUSD') >= 0, 'panel HTML renders');
+
+console.log('== cryptoNewsGate ==');
+globalThis.hgNewsRisk = function(){
+  return { risk: 'high', blackout: true, note: 'BLACKOUT: NFP', events: [{ title: 'NFP' }] };
+};
+const ng = globalThis.cryptoNewsGate('BTC');
+ok(ng.blackout === true && ng.caution === true, 'blackout propagates from hgNewsRisk');
+const newsBanner = globalThis.cryptoNewsBannerHTML(ng);
+ok(newsBanner.indexOf('NEWS BLACKOUT') !== -1 && newsBanner.indexOf('NFP') !== -1, 'banner HTML includes blackout + note');
 
 console.log('\n' + passed + ' passed');
