@@ -409,9 +409,17 @@ Tab state + socket layer — one logical stream shared by the mounted pane.
 var LIQS_LS_KEY = 'hg_liqs_session_v1';
 var __liqsSaveTimer = null;
 
+function __liqsStorage(){
+  try{
+    var ls = (typeof G !== 'undefined' && G && G.localStorage) ? G.localStorage : null;
+    if (!ls && typeof localStorage !== 'undefined') ls = localStorage;
+    return (ls && typeof ls.getItem === 'function') ? ls : null;
+  }catch(e){ return null; }
+}
 function __liqsLsRead(){
   try{
-    if (typeof localStorage === 'undefined' || !localStorage || typeof localStorage.getItem !== 'function') return null;
+    var localStorage = __liqsStorage();
+    if (!localStorage) return null;
     var raw = localStorage.getItem(LIQS_LS_KEY);
     if (!raw) return null;
     var j = JSON.parse(raw);
@@ -421,13 +429,15 @@ function __liqsLsRead(){
 }
 function __liqsLsWrite(data){
   try{
-    if (typeof localStorage === 'undefined' || !localStorage || typeof localStorage.setItem !== 'function') return;
+    var localStorage = __liqsStorage();
+    if (!localStorage || typeof localStorage.setItem !== 'function') return;
     localStorage.setItem(LIQS_LS_KEY, JSON.stringify(data));
   }catch(e){}
 }
 function __liqsLsClear(){
   try{
-    if (typeof localStorage === 'undefined' || !localStorage || typeof localStorage.removeItem !== 'function') return;
+    var localStorage = __liqsStorage();
+    if (!localStorage || typeof localStorage.removeItem !== 'function') return;
     localStorage.removeItem(LIQS_LS_KEY);
   }catch(e){}
 }

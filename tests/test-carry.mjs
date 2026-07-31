@@ -278,7 +278,8 @@ console.log('--- scan: happy path ---');
   assert(cards.indexOf('SHORT perp on <b>DELTA</b>') >= 0, 'plan shorts the higher-funding venue');
   assert(cards.indexOf('LONG perp on <b>BINANCE</b>') >= 0, 'plan longs the lower-funding venue');
   assert(cards.indexOf('547.5%') >= 0, 'delta APR shown (0.5 * 3 * 365)');
-  assert(cards.indexOf('DELTA-NEUTRAL') >= 0, 'card labeled delta-neutral');
+  assert(cards.indexOf('BINANCE↔DELTA') >= 0 && cards.indexOf('delta-neutral') >= 0,
+    'card labeled with pair + delta-neutral gate');
   assert(cards.indexOf('basis risk') >= 0 && cards.indexOf('0.05%/side/entry') >= 0 &&
          cards.indexOf('funding flips') >= 0 && cards.indexOf('counterparty') >= 0,
     'risk notes (basis, fees, flips, counterparty) on the card');

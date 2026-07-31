@@ -25,7 +25,7 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 
 | Task | Command | Notes |
 |------|---------|-------|
-| Unit + integration tests | `npm test` | Offline gate; 15 suites, 600+ assertions; no network |
+| Unit + integration tests | `npm test` | Offline gate; includes carry, liqs, macro, fred, warmup; no network |
 | Live data smoke test | `node tests/test-data-layer.mjs` | Optional; Binance legs skip on HTTP 451 |
 | Additional suites | `node tests/test-<name>.mjs` | See README Tests section |
 | Lint | *(none)* | No ESLint or formatter configured |
@@ -42,4 +42,4 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 - **BRAIN auto-warm:** On load, `hgBrainAutoWarm()` runs in the background (~800ms after boot) with the same bounded layer starters as synthesis auto-warm — non-blocking; engine gate scan may continue after the cap.
 - **TERM BASIS tab:** Dynamic `termbasis.js` module under STRATEGIES — Binance perp vs quarterly futures curve via `binanceBasis()`.
 - **FRED macro (optional):** Set `FRED_API_KEY` on the server to enable `/api/fred` (DGS10, DTWEXBGS, DFII10). Without it, macro.js falls back to Treasury/Frankfurter/Yahoo as before.
-- **LIQS session persist:** Rolling 1h liquidation prints persist in `localStorage` key `hg_liqs_session_v1`; BRAIN reads `liqsState()` instead of minting a fresh `liqAgg()` each synthesis.
+- **LIQS session persist:** Rolling 1h liquidation prints persist in `window.localStorage` key `hg_liqs_session_v1`; BRAIN reads `liqsState()` instead of minting a fresh `liqAgg()` each synthesis.
