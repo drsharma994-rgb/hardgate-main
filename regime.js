@@ -186,14 +186,34 @@ async function rgFetchFng(){
 
 async function rgFetchDxy(){
   try{
-    if (typeof getDXY !== 'function') return null;
     var key = 'rg|dxy', hit = rgCacheGet(key); if (hit !== undefined) return hit;
+    if (typeof getGoldMacro === 'function'){
+      var m = await getGoldMacro();
+      if (m && m.dxyOfficial && isFinite(+m.dxyOfficial.value)){
+        return rgCachePut(key, {
+          value: +m.dxyOfficial.value,
+          trend20: m.dxyOfficial.trend20 || null,
+          change20Pct: isFinite(+m.dxyOfficial.change20Pct) ? +m.dxyOfficial.change20Pct : null,
+          source: 'fred'
+        });
+      }
+      if (m && m.dxy && isFinite(+m.dxy.value)){
+        return rgCachePut(key, {
+          value: +m.dxy.value,
+          trend20: m.dxy.trend20 || null,
+          change20Pct: isFinite(+m.dxy.change20Pct) ? +m.dxy.change20Pct : null,
+          source: 'frankfurter'
+        });
+      }
+    }
+    if (typeof getDXY !== 'function') return null;
     var d = await getDXY();
     if (!d || !isFinite(+d.value)) return null;
     return rgCachePut(key, {
       value: +d.value,
       trend20: d.trend20 || null,
-      change20Pct: isFinite(+d.change20Pct) ? +d.change20Pct : null
+      change20Pct: isFinite(+d.change20Pct) ? +d.change20Pct : null,
+      source: 'frankfurter'
     });
   }catch(e){ return null; }
 }

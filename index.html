@@ -599,12 +599,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </main>
 
 
+<script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
 <script src="store.js"></script>
 <script src="binance.js"></script>
 <script src="bybit.js"></script>
 <script src="positioning.js"></script>
+<script src="cryptogates.js"></script>
 <script src="cryptowatch.js"></script>
 <script src="macro.js"></script>
 <script src="squeeze.js"></script>
@@ -974,21 +976,28 @@ function renderGoldMacroAuto(m, source){
     if (!m){ el.innerHTML = '<div class="empty">Macro feed unavailable right now — DXY/yield gates degrade to N/A, ledgers unaffected.</div>'; return; }
     const arr = t => t==='RISING' ? '▲' : (t==='FALLING' ? '▼' : '→');
     const goldCol = t => t==='RISING' ? 'var(--short)' : (t==='FALLING' ? 'var(--long)' : 'var(--mut)'); // gold wants DXY + yields DOWN
-    const dxy = m.dxy || null;
-    const dxyTxt = dxy
-      ? fmt(dxy.value,2)+' <span style="color:'+goldCol(dxy.trend20)+'">'+arr(dxy.trend20)+' '+dxy.trend20+'</span>'+(dxy.change20Pct!==null&&dxy.change20Pct!==undefined ? ' · '+pct(dxy.change20Pct,2)+' / 20d' : '')
+    const dxyLeg = (m.dxyOfficial && isFinite(m.dxyOfficial.value)) ? m.dxyOfficial : m.dxy;
+    const dxySrc = (m.dxyOfficial && isFinite(m.dxyOfficial.value)) ? 'FRED DTWEXBGS'
+      : ((m.dxy && isFinite(m.dxy.value)) ? 'Frankfurter proxy' : null);
+    const dxyTxt = dxyLeg
+      ? fmt(dxyLeg.value,2)+' <span style="color:'+goldCol(dxyLeg.trend20)+'">'+arr(dxyLeg.trend20)+' '+dxyLeg.trend20+'</span>'+(dxyLeg.change20Pct!==null&&dxyLeg.change20Pct!==undefined ? ' · '+pct(dxyLeg.change20Pct,2)+' / 20d' : '')+(dxySrc ? ' · '+dxySrc : '')
       : '—';
+    const tnxSrc = m.tnxSource ? (' · '+String(m.tnxSource).toUpperCase()) : '';
     const tnxTxt = (m.tnx!==null && m.tnx!==undefined)
-      ? fmt(m.tnx,2)+'%'+(m.tnxTrend ? ' <span style="color:'+goldCol(m.tnxTrend)+'">'+arr(m.tnxTrend)+' '+m.tnxTrend+'</span>' : '')
+      ? fmt(m.tnx,2)+'%'+(m.tnxTrend ? ' <span style="color:'+goldCol(m.tnxTrend)+'">'+arr(m.tnxTrend)+' '+m.tnxTrend+'</span>' : '')+tnxSrc
+      : '—';
+    const ryTxt = (m.realYield10Y!==null && m.realYield10Y!==undefined)
+      ? fmt(m.realYield10Y,2)+'%'+(m.realYieldTrend ? ' <span style="color:'+goldCol(m.realYieldTrend)+'">'+arr(m.realYieldTrend)+' '+m.realYieldTrend+'</span>' : '')
       : '—';
     const hintCol = m.realRateHint==='TAILWIND' ? 'var(--long)' : (m.realRateHint==='HEADWIND' ? 'var(--short)' : 'var(--mut)');
     el.innerHTML =
-        '<div class="kv"><span class="k">DXY (ICE formula · ECB fixes)</span><span class="v">'+dxyTxt+'</span></div>'
-      + '<div class="kv"><span class="k">US10Y yield (^TNX)</span><span class="v">'+tnxTxt+'</span></div>'
+        '<div class="kv"><span class="k">DXY (official when FRED configured)</span><span class="v">'+dxyTxt+'</span></div>'
+      + '<div class="kv"><span class="k">US10Y yield</span><span class="v">'+tnxTxt+'</span></div>'
+      + (ryTxt !== '—' ? '<div class="kv"><span class="k">10Y real yield (TIPS)</span><span class="v">'+ryTxt+'</span></div>' : '')
       + '<div class="kv"><span class="k">Gold / Silver ratio</span><span class="v">'+(m.goldSilverRatio!==null&&m.goldSilverRatio!==undefined ? fmt(m.goldSilverRatio,1) : '—')+'</span></div>'
       + '<div class="kv"><span class="k">Real-rate hint for gold</span><span class="v" style="color:'+hintCol+';font-weight:600">'+(m.realRateHint||'—')+'</span></div>'
       + '<div class="kv"><span class="k">Gold candle source</span><span class="v">'+(GOLD_SRC_LABEL[source] || '—')+'</span></div>'
-      + '<div class="note" style="margin-top:6px">Falling DXY + falling yields = TAILWIND for gold · both rising = HEADWIND. “—” means that data leg failed (Yahoo via proxy is best-effort) — gates that need it show N/A, the ledgers are unaffected.</div>';
+      + '<div class="note" style="margin-top:6px">Falling DXY + falling yields = TAILWIND for gold · both rising = HEADWIND. “—” means that data leg failed — gates that need it show N/A, the ledgers are unaffected.</div>';
   }catch(e){ el.innerHTML = '<div class="empty">macro panel render failed</div>'; }
 }
 

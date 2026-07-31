@@ -235,7 +235,7 @@ globalThis.fetch = async () => { throw new Error('network disabled in tests'); }
   assert(/4H cascade/.test(out) && /LONG/.test(out), 'flow B: 4H cascade reads LONG');
   assert(/MACRO LEDGER/.test(out), 'flow B: macro ledger rendered');
   assert((out.match(/stamp pass/g) || []).length === 3, 'flow B: M1 DXY + M2 10Y + M3 hint all stamp BULL(pass)');
-  assert(/DXY · dollar index/.test(out) && /FALLING/.test(out), 'flow B: DXY row shows FALLING');
+  assert(/dollar index \(20d trend\)/.test(out) && /FALLING/.test(out), 'flow B: DXY row shows FALLING');
   assert(/Gold\/Silver ratio/.test(out) && /mid-range/.test(out), 'flow B: GSR 78.6 reads mid-range INFO');
   assert(/stamp veto/.test(out) && /contrarian bearish lean/.test(out), 'flow B: extreme positive funding stamps BEAR contrarian');
   assert(/65% long/.test(out) && /retail heavily long/.test(out), 'flow B: retail 65% long stamps contrarian BEAR');

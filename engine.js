@@ -920,6 +920,7 @@ var __busySince = 0;  /* watchdog: an await that never settles (hung fetch —
                          its (usually inert) pane — harmless next to a dead layer. */
 var BUSY_STUCK_MS = 10*60*1000;
 var ENGINE_FRESH_MS = 30*60*1000;  /* warm-hook TTL: older survivors re-scan */
+G.ENGINE_FRESH_MS = ENGINE_FRESH_MS;
 function busyStuck(){
   return !!__busy && __busySince > 0 && (Date.now() - __busySince) > BUSY_STUCK_MS;
 }

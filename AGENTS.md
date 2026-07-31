@@ -43,3 +43,7 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 - **TERM BASIS tab:** Dynamic `termbasis.js` module under STRATEGIES — Binance perp vs quarterly futures curve via `binanceBasis()`.
 - **FRED macro (optional):** Set `FRED_API_KEY` on the server to enable `/api/fred` (DGS10, DTWEXBGS, DFII10). Without it, macro.js falls back to Treasury/Frankfurter/Yahoo as before.
 - **LIQS session persist:** Rolling 1h liquidation prints persist in `window.localStorage` key `hg_liqs_session_v1`; BRAIN reads `liqsState()` instead of minting a fresh `liqAgg()` each synthesis.
+- **BRAIN layer warm hooks:** `HG_warmups` may register `carry` and `termbasis`; BRAIN snapshots `carryState` / `termBasisState` as optional context votes (hush when cold, never dark). LIQS warm accounting uses `liqSnap`.
+- **CRYPTO gate math:** Shared `cryptogates.js` (`swingGateMatrix`, `scalpGateMatrix`, `swingTryClean`, `scalpTryClean`) — `cryptowatch.js` delegates to it; `index.html` loads it before `cryptowatch.js`.
+- **Hosting mode:** `hghost.js` exposes `hgHostingMode()` / `hgApiAvailable()` — carry/termbasis tabs show an honest note on static GitHub Pages hosts without `/api/proxy`.
+- **BRAIN live tests:** `tests/test-brain-live.mjs` pins `__hgBrainSetClock()` to mid-session IST so off-hours conviction haircuts do not flake CI.

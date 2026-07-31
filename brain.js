@@ -283,7 +283,8 @@ var LAYER_KIND = {
   trend4h: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
-  tape: 'context', fng: 'context', funding: 'context', guard: 'context'
+  tape: 'context', fng: 'context', funding: 'context', guard: 'context',
+  carry: 'context', termbasis: 'context'
 };
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
 
@@ -550,6 +551,13 @@ function brainCollect(inputs){
   if (!inp.engine || typeof inp.engine !== 'object'){ dark('engine', 'gate engine returned no state — the deep scan has not warmed'); }
   else{
     var en = inp.engine, enHit = false, ei;
+    var engFresh = (typeof G.ENGINE_FRESH_MS === 'number' && G.ENGINE_FRESH_MS > 0) ? G.ENGINE_FRESH_MS : (30 * 60 * 1000);
+    var engAt = (en.at && isFinite(+en.at)) ? +en.at : 0;
+    var engAge = (engAt > 1e11) ? (Date.now() - engAt) : 0;
+    if (!(engAge >= 0 && engAge <= engFresh)){
+      dark('engine', 'gate engine snapshot stale (' + (isFinite(engAge) ? Math.floor(engAge / 60000) : '?')
+        + 'm old) — re-run EXECUTE scan; survivors do not vote until refreshed');
+    }else{
     var surv = Array.isArray(en.survivors) ? en.survivors : [];
     for (ei = 0; ei < surv.length; ei++){
       var sv = surv[ei];
@@ -598,6 +606,7 @@ function brainCollect(inputs){
       }
     }
     if (!enHit) hush('engine', 'engine ran — this symbol was not gated (no survivor or rejection row)');
+    }
   }
 
   /* ---- OI FLOW / SMART classification ---- */
@@ -640,6 +649,29 @@ function brainCollect(inputs){
     if (!sqHit) hush('squeeze', 'no squeeze state names this symbol');
   }
 
+  /* ---- CARRY — cross-venue funding spread context (not a tier alone) ---- */
+  if (inp.carry === undefined || inp.carry === null){ hush('carry', 'carry scanner returned no state — run CARRY or warm the layer'); }
+  else{
+    var csp = isFinite(+inp.carry.topSpread) ? +inp.carry.topSpread : null;
+    var cbase = (typeof inp.carry.topBase === 'string' && inp.carry.topBase) ? inp.carry.topBase : null;
+    if (csp !== null && csp >= 25)
+      push('carry', 'neutral', 'CARRY ' + FMT(csp, 1) + '% APR spread'
+        + (cbase ? ' on ' + cbase : '') + ' — verify both legs, funding can flip', { caution: true });
+    else hush('carry', 'no cross-venue carry spread ≥ 25% APR right now');
+  }
+
+  /* ---- TERM BASIS — futures curve shape context ---- */
+  if (inp.termbasis === undefined || inp.termbasis === null){ hush('termbasis', 'term basis scanner returned no state — run TERM BASIS or warm'); }
+  else{
+    var tb = inp.termbasis.top;
+    if (tb && typeof tb === 'object' && tb.regime === 'contango' && isFinite(+tb.spreadCur) && +tb.spreadCur >= 0.25)
+      push('termbasis', 'neutral', 'TERM BASIS perp rich vs dated futures on '
+        + (tb.pair || '?') + ' (' + FMT(+tb.spreadCur, 2) + '%) — crowded long funding risk', { caution: true });
+    else if (tb && typeof tb === 'object' && tb.regime === 'backwardation')
+      push('termbasis', 'neutral', 'TERM BASIS backwardation on ' + (tb.pair || '?') + ' — perp cheap vs dated');
+    else hush('termbasis', 'term structure flat or sub-threshold — no curve edge');
+  }
+
   /* ---- TAPE — 24h momentum + participation (Binance 24h tickers map,
      {SYM:{chg24, turnoverUsd}}, app-wide cached — no extra fetch). Gives
      every Binance-overlapping candidate at least one possible evidence read;
@@ -678,9 +710,11 @@ function brainCollect(inputs){
 
   /* ---- LIQS flush-reversal (one market-wide setup; must name this symbol) ---- */
   if (inp.liq === undefined || inp.liq === null){
-    if (inp.liq === undefined){ hush('liqs', 'no liquidation snapshot — stream-only layer cold (open LIQS once to start the socket)');
-                                dark('liqs', 'no liquidation snapshot — stream-only layer cold (open LIQS once to start the socket)'); }
-    else hush('liqs', 'liquidations live — no flush-reversal setup in the current window');
+    if (inp.liq === undefined){
+      dark('liqs', 'no liquidation snapshot — LIQS stream cold or not yet warmed (auto-warm + session persist apply)');
+    }else{
+      hush('liqs', 'liquidations live — no flush-reversal setup in the current window');
+    }
   }
   else if (typeof inp.liq === 'object'){
     var lf = inp.liq;
@@ -984,11 +1018,12 @@ function snapshotLayers(){
             engine: undefined, oiflow: undefined, squeeze: undefined,
             liqSnap: undefined, liqSetup: undefined, tape: undefined,
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
-            newsState: undefined, fng: null };
+            newsState: undefined, fng: null, carry: undefined, termbasis: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
                   engine: 'engineState', oiflow: 'oiflowState', squeeze: 'squeezeState',
-                  goldBasis: 'goldspotState', newsState: 'hgNewsState' };
+                  goldBasis: 'goldspotState', newsState: 'hgNewsState',
+                  carry: 'carryState', termbasis: 'termBasisState' };
   for (var k in getters){
     if (!Object.prototype.hasOwnProperty.call(getters, k)) continue;
     try{ o[k] = grab(getters[k])(); }catch(e){ o[k] = undefined; }
@@ -1344,6 +1379,7 @@ function judgeCrypto(cand, snap){
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     tape: snap.tape, fng: snap.fng,
+    carry: snap.carry, termbasis: snap.termbasis,
     liq: (snap.liqSetup === undefined ? undefined : snap.liqSetup)
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
@@ -3978,7 +4014,26 @@ function warmHooksOrdered(){
    getters snapshotLayers reads, so 'warmed' means exactly 'now votes' */
 var WARM_LAYER_KEY = { news: 'newsState', regime: 'regime', rotation: 'rotation',
                        onchain: 'onchain', engine: 'engine', oiflow: 'oiflow',
-                       squeeze: 'squeeze' };
+                       squeeze: 'squeeze', liqs: 'liqSnap', carry: 'carry',
+                       termbasis: 'termbasis' };
+
+async function enrichLiqSetup(snap){
+  try{
+    if (!snap || snap.liqSetup || !snap.liqSnap) return snap;
+    var cls = snap.liqSnap.imbalance && snap.liqSnap.imbalance.cls;
+    if (cls !== 'long-flush' && cls !== 'short-flush') return snap;
+    var sym = null;
+    var top = snap.liqSnap.top;
+    if (top && top.length && top[0] && top[0].sym) sym = top[0].sym;
+    if (!sym) return snap;
+    var rows = null;
+    if (typeof G.getCandles === 'function') rows = await G.getCandles(sym, '1h', 120);
+    else if (typeof G.binanceKlines === 'function') rows = await G.binanceKlines(sym, '1h', 120);
+    if (rows && rows.length && typeof G.liqFlushSetup === 'function')
+      snap.liqSetup = G.liqFlushSetup(snap.liqSnap, rows) || null;
+  }catch(e){}
+  return snap;
+}
 
 async function autoWarmIntoRun(stat){
   try{
@@ -4155,6 +4210,7 @@ async function runBrain(el){
     stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading every intelligence layer…';
 
     var snap = snapshotLayers();
+    snap = await enrichLiqSetup(snap);
     __regimeSnap = {
       score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
       label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
@@ -4356,6 +4412,7 @@ async function runQuick(el){
     stat.textContent = 'quick recheck — fresh layers over the last scan’s watch set…';
 
     var snap = snapshotLayers();
+    snap = await enrichLiqSetup(snap);
     __regimeSnap = {
       score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
       label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',

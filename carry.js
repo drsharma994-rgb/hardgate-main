@@ -319,7 +319,9 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     ui.cards.innerHTML = cards.map(function(c){
       const hi = c.sp.shortVenue, lo = c.sp.longVenue;
       const hiSym = __venueSym(c, hi), loSym = __venueSym(c, lo);
-      const pairLbl = (c.pair === 'bin-bybit') ? 'BINANCE↔BYBIT' : 'BINANCE↔DELTA';
+      const pairLbl = (c.pair === 'bin-bybit') ? 'BINANCE↔BYBIT'
+        : (c.pair === 'delta-bybit') ? 'DELTA↔BYBIT'
+        : 'BINANCE↔DELTA';
       const ivl = c.bin.intervalHours;
       const settleTxt = ivl + 'h settle' + (c.bin.intervalAssumed ? ' (assumed 8h)' : '');
       const spreadPerDayPct = c.sp.spreadAPR / 365;
@@ -336,6 +338,11 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       } else if (c.pair === 'bin-bybit'){
         mini.push(['bybit APR (current)', F(c.sp.bybitAPR, 1) + '%']);
         mini.push(['binance APR (avg ' + c.bin.prints + 'F)', F(c.sp.binanceAPR, 1) + '%']);
+        mini.push(['bybit 8h now', P(c.byb.pct8h, 4)]);
+      } else if (c.pair === 'delta-bybit'){
+        mini.push(['delta APR (current)', F(c.sp.deltaAPR, 1) + '%']);
+        mini.push(['bybit APR (current)', F(c.sp.bybitAPR, 1) + '%']);
+        mini.push(['delta 8h now', P(c.del.pct8h, 4)]);
         mini.push(['bybit 8h now', P(c.byb.pct8h, 4)]);
       }
       mini.push(['binance ' + ivl + 'h now', P(c.bin.cur8hPct, 4)]);
@@ -519,8 +526,14 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       }
       __prog(ui, 0.85);
 
-      /* ---- match by base asset + spread cards ---- */
+      /* ---- match by base asset + spread cards (best pair per base) ---- */
       const cards = [];
+      const byBase = {};
+      function offerCard(card){
+        if (!card || !card.base || !card.sp) return;
+        const prev = byBase[card.base];
+        if (!prev || card.sp.spreadAPR > prev.sp.spreadAPR) byBase[card.base] = card;
+      }
       let matched = 0;
       if (delta){
         for (let i = 0; i < rows.length; i++){
@@ -530,7 +543,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           matched++;
           const sp = carrySpreadInt(d.pct8h, r.avg8hPct, r.intervalHours);
           if (!sp || sp.spreadAPR < SPREAD_MIN_APR) continue;
-          cards.push({ base: r.base, pair: 'bin-delta', bin: r, del: d, sp: sp });
+          offerCard({ base: r.base, pair: 'bin-delta', bin: r, del: d, sp: sp });
         }
       }
       if (bybit){
@@ -540,9 +553,19 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           if (!b || r2.avg8hPct === null || b.pct8h === null) continue;
           const spB = carrySpreadPair(r2.avg8hPct, b.pct8h, 'binance', 'bybit', r2.intervalHours, 8);
           if (!spB || spB.spreadAPR < SPREAD_MIN_APR) continue;
-          cards.push({ base: r2.base, pair: 'bin-bybit', bin: r2, byb: b, sp: spB });
+          spB.binanceAPR = spB.aprA; spB.bybitAPR = spB.aprB;
+          offerCard({ base: r2.base, pair: 'bin-bybit', bin: r2, byb: b, sp: spB });
+          if (delta && delta[r2.base]){
+            const d2 = delta[r2.base];
+            const spD = carrySpreadPair(d2.pct8h, b.pct8h, 'delta', 'bybit', 8, 8);
+            if (spD && spD.spreadAPR >= SPREAD_MIN_APR){
+              spD.deltaAPR = spD.aprA; spD.bybitAPR = spD.aprB;
+              offerCard({ base: r2.base, pair: 'delta-bybit', bin: r2, del: d2, byb: b, sp: spD });
+            }
+          }
         }
       }
+      for (const bk in byBase){ if (Object.prototype.hasOwnProperty.call(byBase, bk)) cards.push(byBase[bk]); }
       cards.sort(function(a, b){ return b.sp.spreadAPR - a.sp.spreadAPR; });
 
       if (cards.length && typeof bybitFunding === 'function'){
@@ -577,6 +600,12 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           }catch(e){ /* c.levels stays unset -> honest fallback on the card */ }
         }));
       }
+      __carrySnap = {
+        at: Date.now(),
+        topSpread: cards.length ? cards[0].sp.spreadAPR : null,
+        topBase: cards.length ? cards[0].base : null,
+        count: cards.length
+      };
       __renderCards(ui, cards);
 
       /* ---- binance-only payers table ---- */
@@ -618,6 +647,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
      runCarryScan already catch-isolate failures (counted), so a refresh can
      degrade but never rejects. */
   var __carry = { busy: false, ranOnce: false, ui: null };
+  var __carrySnap = null;
   async function refreshCarry(){
     try{
       if (__carry.busy) return 'busy';
@@ -628,17 +658,45 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     }
   }
 
+  function __carryWarmShim(){
+    return { innerHTML: '', textContent: '', className: '', disabled: false,
+      style: {}, firstElementChild: { style: {} },
+      querySelector: function(sel){
+        return { style: {}, textContent: '', innerHTML: '', disabled: false,
+          addEventListener: function(){}, removeEventListener: function(){} };
+      } };
+  }
+  async function carryWarm(){
+    try{
+      if (typeof window.carryState === 'function' && window.carryState()) return 'fresh';
+      if (__carry.busy) return 'busy';
+      const shim = __carryWarmShim();
+      const ui = {
+        btn: shim, stat: shim, prog: shim, warn: shim,
+        cards: shim, empty: shim, tableWrap: shim
+      };
+      __carry.ui = ui;
+      const r = await runCarryScan(ui);
+      __carry.ranOnce = true;
+      return (typeof window.carryState === 'function' && window.carryState())
+        ? 'warmed' : ('unavailable: ' + (r || 'carry scan did not publish state'));
+    }catch(e){ return 'error: ' + ((e && e.message) || e); }
+  }
+
   /* ============================ mount ============================ */
   function mountCarry(el){
     if (!el) return;
+    const hostNote = (typeof hgHostingMode === 'function' && hgHostingMode() === 'static')
+      ? ' Static host (GitHub Pages) — Delta leg and proxy APIs need Render for full carry scans.'
+      : '';
     el.innerHTML =
       '<div class="panel">'
       + '<h2>Carry — funding arbitrage <span>delta-neutral · binance vs delta india · APR = rate × (24 ÷ funding interval) × 365</span></h2>'
       + '<div class="note" style="margin-bottom:10px">LEG A — Binance: all-symbols premiumIndex, top ' + TOP_N +
         ' by |lastFundingRate| with ≥ $20M 24h turnover, plus the last ' + HIST_LIMIT +
         ' funding prints per symbol for an average rate. LEG B — Delta India perp tickers (funding_rate is already percent per 8h interval). ' +
-        'LEG C — Bybit linear perps (current funding, 8h). Matched by base asset (BTCUSD ~ BTCUSDT). Cross-venue cards need |APR spread| ≥ ' + SPREAD_MIN_APR +
-        '%. Delta cards include a Bybit cross-check when funding resolves. Carry is not free money — funding flips, bases drift, fees eat thin spreads. Every number is shown so you can verify; none of it is a signal.</div>'
+        'LEG C — Bybit linear perps (current funding, 8h). Matched by base asset; the best spread per base wins (Binance↔Delta, Binance↔Bybit, or Delta↔Bybit). Cross-venue cards need |APR spread| ≥ ' + SPREAD_MIN_APR +
+        '%. Carry is not free money — funding flips, bases drift, fees eat thin spreads.' + hostNote + '</div>'
       + '<div class="note" id="carryStat">idle — press RUN.</div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="carryRun">RUN CARRY SCAN</button></div>'
       + '<div class="prog" id="carryProg"><i></i></div>'
@@ -684,8 +742,13 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     window.carrySpreadPair = carrySpreadPair;
     window.carryBybitCrossCheck = carryBybitCrossCheck;
     window.carryPlan = carryPlan;             // per-card execution levels (SL/TP audit)
+    window.carryState = function carryState(){
+      try{ return __carrySnap ? JSON.parse(JSON.stringify(__carrySnap)) : null; }catch(e){ return null; }
+    };
     window.HG_tabs = window.HG_tabs || [];
     window.HG_tabs.push({ id: 'carry', label: 'CARRY', mount: mountCarry, refresh: refreshCarry });
+    window.HG_warmups = window.HG_warmups || [];
+    window.HG_warmups.push({ id: 'carry', label: 'CARRY', run: carryWarm });
   }
 
 })();
