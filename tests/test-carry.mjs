@@ -209,6 +209,19 @@ console.log('--- carrySpread: invalid inputs -> null ---');
   assert(cs({}, []) === null, 'object/array -> null');
 }
 
+console.log('--- carrySpreadPair + carryBybitCrossCheck ---');
+{
+  const w = loadModule(makeCtx());
+  assert(typeof w.carrySpreadPair === 'function', 'carrySpreadPair exported');
+  assert(typeof w.carryBybitCrossCheck === 'function', 'carryBybitCrossCheck exported');
+  const p = w.carrySpreadPair(0.02, 0.05, 'binance', 'bybit', 8, 8);
+  assert(p && p.pair === 'binance-bybit' && p.shortVenue === 'bybit', 'binance-bybit pair classifies short on richer leg');
+  const cc = w.carryBybitCrossCheck({ binanceAPR: 20, deltaAPR: 40 }, 0.03);
+  assert(cc && cc.status === 'confirms', 'bybit between binance and delta -> confirms');
+  const cc2 = w.carryBybitCrossCheck({ binanceAPR: 20, deltaAPR: 40 }, 0.5);
+  assert(cc2 && cc2.status === 'conflicts', 'bybit richest -> conflicts');
+}
+
 /* ================================================================
    2) TAB REGISTRATION
 ================================================================ */

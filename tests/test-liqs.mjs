@@ -627,4 +627,32 @@ function loadLiqs(ctx){
 await new Promise(r => setTimeout(r, 100));
 ok(__unhandledL.length === 0, 'no unhandled rejections on any warm-up path');
 
+console.log('== liqs session persist ==');
+{
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: function(k){ return store.has(k) ? store.get(k) : null; },
+    setItem: function(k, v){ store.set(k, String(v)); },
+    removeItem: function(k){ store.delete(k); }
+  };
+  const ctx = mkWarmCtx(mkStubWS([]));
+  loadLiqs(ctx);
+  const agg = ctx.window.liqAgg();
+  agg.add({ sym: 'BTCUSDT', side: 'long', usd: 2e6, t: Date.now() });
+  ctx.window.liqsState = ctx.window.liqsState || (function(){
+    return { snap: agg.snapshot(), setup: null, at: Date.now(), live: false };
+  });
+  /* replay path via module state — hydrate by reloading with saved payload */
+  const payload = store.get('hg_liqs_session_v1');
+  ok(!payload, 'fresh module before ingest persist throttle — may be absent immediately');
+  const ctx2 = mkWarmCtx(mkStubWS([]));
+  store.set('hg_liqs_session_v1', JSON.stringify({
+    v: 1, at: Date.now(), manualClose: false,
+    prints: [{ sym: 'ETHUSDT', side: 'short', usd: 1500000, t: Date.now() }]
+  }));
+  loadLiqs(ctx2);
+  const st = ctx2.window.liqsState();
+  ok(st && st.snap && st.snap.window.count >= 1, 'hydrated session restores rolling window for BRAIN');
+}
+
 console.log('\nALL ' + passed + ' LIQS ASSERTIONS PASSED');

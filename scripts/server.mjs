@@ -14,6 +14,7 @@ import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
+const fredHandler = require('../api/fred.js');
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));   /* repo root (trailing sep) */
 const PORT = +(process.env.PORT || 10000);
@@ -44,6 +45,7 @@ const server = http.createServer(async (req, res) => {
     baseHeaders(res);
     const u = new URL(req.url || '/', 'http://localhost');
     if (u.pathname === '/api/proxy') return proxyHandler(req, res);
+    if (u.pathname === '/api/fred') return fredHandler(req, res);
     /* squeeze-watch status: armed? last cycle? fires? — no secrets, counts only */
     if (u.pathname === '/api/squeeze-watch'){
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

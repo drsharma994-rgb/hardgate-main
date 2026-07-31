@@ -1000,18 +1000,29 @@ function snapshotLayers(){
       o.onchain = G.onchainSignal(o.onchain.snap);
     }
   }catch(e){ o.onchain = undefined; }
-  /* liqs: fresh snapshot from the exported aggregator factory; a flush setup
-     only exists when the window imbalance classifies as a flush */
+  /* liqs: live tab snapshot via liqsState(); test stubs may still use liqAgg(). */
   try{
-    if (typeof G.liqAgg === 'function'){
+    var liqSnap = null, liqSetup = null;
+    if (typeof G.liqsState === 'function'){
+      var lst = G.liqsState();
+      if (lst && lst.snap){
+        liqSnap = lst.snap;
+        liqSetup = (lst.setup !== undefined) ? lst.setup : null;
+      }
+    }
+    if (!liqSnap && typeof G.liqAgg === 'function'){
       var agg = G.liqAgg();
       if (agg && typeof agg.snapshot === 'function'){
-        o.liqSnap = agg.snapshot();
-        var cls = o.liqSnap && o.liqSnap.imbalance && o.liqSnap.imbalance.cls;
-        if ((cls === 'long-flush' || cls === 'short-flush') && typeof G.liqFlushSetup === 'function')
-          o.liqSetup = G.liqFlushSetup(o.liqSnap, null) || null;
-        else o.liqSetup = null;
+        liqSnap = agg.snapshot();
+        var cls0 = liqSnap && liqSnap.imbalance && liqSnap.imbalance.cls;
+        if ((cls0 === 'long-flush' || cls0 === 'short-flush') && typeof G.liqFlushSetup === 'function')
+          liqSetup = G.liqFlushSetup(liqSnap, null) || null;
+        else liqSetup = null;
       }
+    }
+    if (liqSnap){
+      o.liqSnap = liqSnap;
+      o.liqSetup = liqSetup;
     }
   }catch(e){ o.liqSnap = undefined; o.liqSetup = undefined; }
   /* gold lane verdicts stashed by the GOLD tab (both optional) */
