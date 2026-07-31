@@ -499,6 +499,24 @@ W.mrSignal = mrSignal;
 W.mrBacktest = mrBacktest;
 W.meanrevPlan = meanrevPlan;
 W.meanrevPlanHtml = meanrevPlanHtml;
+/* meanrevAssess(rows) — pure read for BRAIN/BEST: live signal + replay stats. */
+function meanrevAssess(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < REGIME_LEN + 10) return null;
+    var sig = mrSignal(rows);
+    var bt = mrBacktest(rows);
+    if (!bt || !isFinite(bt.n)) return { signal: sig, dir: sig ? sig.dir : null, expR: 0, n: 0 };
+    return {
+      signal: sig,
+      dir: sig ? sig.dir : null,
+      expR: isFinite(bt.expR) ? bt.expR : 0,
+      n: bt.n,
+      winPct: bt.winPct,
+      pf: bt.pf
+    };
+  }catch(e){ return null; }
+}
+W.meanrevAssess = meanrevAssess;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'meanrev', label: 'MEAN REV', mount: mount, refresh: mrRefresh });
 })();

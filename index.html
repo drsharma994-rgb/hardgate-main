@@ -3394,8 +3394,17 @@ function bestProfitBoost(s){
   }catch(e){ return 0; }
 }
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 3);
+  const strong = clean.filter(s => s.famScore >= 4);
   return strong.length ? strong : clean;
+}
+function bestSessionActive(){
+  try{
+    const d = new Date();
+    const ist = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60000);
+    const mins = ist.getHours() * 60 + ist.getMinutes(), day = ist.getDay();
+    if (day === 0 || (mins >= 60 && mins <= 390)) return false;
+    return (mins >= 750 && mins <= 930) || (mins >= 1050 && mins <= 1230);
+  }catch(e){ return false; }
 }
 async function runCascadeCore(uni){
   const clean=[];
@@ -3409,6 +3418,10 @@ async function runCascadeCore(uni){
       try{
         const rows=await getCandles(t.symbol,'4h',260);
         if (rows.length<210) return;
+        if (typeof detectRegime === 'function'){
+          const dr = detectRegime(rows);
+          if (dr && dr.regime === 'compression') return;
+        }
         const c=rows.map(r=>r.c);
         const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50)), e200=last(ema(c,200));
         const p=last(c), r14=last(rsi(c,14)), vz=volZ(rows,20), a4=last(atr(rows,14));
@@ -3469,6 +3482,21 @@ const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='
       const d20 = s.dir==='long' ? Math.max(...s.rows.slice(-20).map(r=>r.h)) : Math.min(...s.rows.slice(-20).map(r=>r.l));
       const mDc = Math.abs(s.entry-d20)/s.entry<=0.015, mRr=s.rr>=3;
       const f4 = mDc||mRr;
+      function pxFmt(n){ return (typeof px === 'function') ? px(n) : Number(n).toFixed(2); }
+      /* F6 SESSION — ICT London/NY kill zones (IST): liquidity depth for fills. */
+      const f6 = bestSessionActive();
+      /* F7 VALUE AREA — 80-bar volume profile: longs from discount VA, shorts from premium VA. */
+      let f7=false, f7Detail='volume profile n/a';
+      try{
+        const vp = (typeof volumeProfile === 'function') ? volumeProfile(s.rows, 80, 24) : null;
+        const pxLast = last(s.rows.map(r=>r.c));
+        if (vp && isFinite(vp.poc) && isFinite(pxLast)){
+          f7 = (want>0 && isFinite(vp.val) && pxLast <= vp.poc && pxLast >= vp.val)
+            || (want<0 && isFinite(vp.vah) && pxLast >= vp.poc && pxLast <= vp.vah);
+          f7Detail = 'POC ' + pxFmt(vp.poc) + ' · VA ' + pxFmt(vp.val) + '–' + pxFmt(vp.vah)
+            + (f7 ? ' · aligned' : ' · not at edge');
+        }
+      }catch(e){}
       /* F5 VOLATILITY/MOMENTUM — members: Bollinger(20,2) squeeze-to-breakout, ADX(14) trend
          strength+direction, StochRSI(14) not-exhausted. Majority 2/3 — grouped as one family
          because all three measure the same underlying fact: is momentum expanding in your
@@ -3511,10 +3539,12 @@ const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='
         ['F3','PARTICIPATION family — volume z > 1.0 or VWAP side', f3, `z ${fmt(s.vz,2)} · ${vwapDetail}`],
         ['F4','STRUCTURE family — Donchian-20 breakout zone or R:R ≥ 3', f4, `Donchian ${mDc?'✓':'✗'} (${px(d20)}) · R:R ${mRr?'✓':'✗'} (${fmt(s.rr,2)}R)`],
         ['F5','VOLATILITY/MOMENTUM family — 2-of-3 majority: Bollinger breakout · ADX trend+direction · StochRSI not-exhausted', f5, f5Detail],
+        ['F6','SESSION family — London/NY ICT kill zone active (IST liquidity window)', f6, f6 ? 'London 12:30–15:30 or NY 17:30–20:30 IST' : 'off-hours / mid-session — thinner liquidity'],
+        ['F7','VALUE AREA family — price at 70% volume-profile edge (discount for longs, premium for shorts)', f7, f7Detail],
         ['R1','ROBUSTNESS — cascade also holds on 2H (anti curve-fit)', r1, r1D],
         ['R2','ROBUSTNESS — cascade age ≥3 closed 4H bars (anti flicker)', r2, `${age} bars`],
       ];
-      s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0);
+      s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0);
       s.robScore=(r1?1:0)+(r2?1:0);
       s.profitBoost = bestProfitBoost(s);
       await sleep(60);
@@ -3552,15 +3582,15 @@ async function runBest(){
     }
     const t1=w.t1; const t2=w.t2;
     logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/5 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
-    const famGateNote = pool.length < clean.length ? ' · ≥3/5 families required for #1' : '';
+    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/7 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+    const famGateNote = pool.length < clean.length ? ' · ≥4/7 families required for #1' : '';
     out.innerHTML = `
       <div class="panel">
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/5 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
-          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families, then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 5/5 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/7 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (session + value-area included), then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 7/7 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2)}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>

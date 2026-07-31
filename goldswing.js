@@ -879,6 +879,11 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
                            + L.oppose + ' opposing read(s) (need >= 2 agreeing and a majority)' };
         }
         var lv = __swLevels(dir, entry, a4, structStop);
+        if (lv.rr < 1.2){
+          return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
+                   venue: venue, sym: sym,
+                   reason: 'structure too close — R:R insufficient (' + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
+        }
         var grade = (L.mine.length >= 5) ? 'A' : ((L.mine.length >= 3) ? 'B' : 'C');
         if (newsC && newsC.caution) grade = (grade === 'A') ? 'B' : 'C';
         var conf = [];
@@ -1131,6 +1136,10 @@ function buildWatch(leg, nowMs, macro, venue){
 
 /* ---------------- ranking: transparent confluence tally ---------------- */
 function rankSetups(cands, ctx){
+  try{
+    if (typeof window !== 'undefined' && typeof window.goldRankSetups === 'function')
+      return window.goldRankSetups(cands, ctx);
+  }catch(e){}
   var out = { ranked: [], best: null, rejected: [] };
   try{
     if (!Array.isArray(cands) || !cands.length) return out;
@@ -1302,6 +1311,8 @@ async function runScan(ui){
     var gss = gfn('goldspotState');
     if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
+    var gps = gfn('goldProState');
+    if (gps){ try{ ctx.goldPro = gps(); }catch(eGp){ ctx.goldPro = null; } }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};

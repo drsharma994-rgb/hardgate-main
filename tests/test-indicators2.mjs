@@ -213,6 +213,7 @@ function stairCloses(cycles){             // 9-bar cycles; peak close 13+2k @off
 }
 assert(typeof G.hgStructure === 'function' && typeof G.hgAVWAP === 'function' && typeof G.hgAtrPercentile === 'function',
        'hg exports: hgStructure/hgAVWAP/hgAtrPercentile are functions');
+assert(typeof G.hgStructureGate === 'function', 'hgStructureGate exported');
 assert(W.hgStructure === G.hgStructure && W.hgAVWAP === G.hgAVWAP && W.hgAtrPercentile === G.hgAtrPercentile,
        'hg exports: same functions attached on window');
 {

@@ -474,6 +474,11 @@ async function runGoldPro(ui){
       realRateHint: macro ? macro.realRateHint : null,
       corr: isFinite(cr.corr) ? cr.corr : null
     });
+    try{ window.__hgGoldProVerdict = {
+      word: verdict.word,
+      why: verdict.why,
+      bias: (verdict.word === 'STRUCTURAL BULL') ? 'long' : ((verdict.word === 'STRUCTURAL BEAR') ? 'short' : null)
+    }; }catch(e){}
 
     var src = g1d.source || g4h.source || null;
     if (ui.srcchip) ui.srcchip.textContent = 'SRC: ' + srcLabel(src);
@@ -656,6 +661,9 @@ function mount(el){
 if (typeof window !== 'undefined'){
   window.goldProVerdict = goldProVerdict;
   window.goldProPlan = goldProPlan;
+  window.goldProState = function(){
+    try{ return window.__hgGoldProVerdict || null; }catch(e){ return null; }
+  };
   window.HG_tabs = window.HG_tabs || [];
   window.HG_tabs.push({ id: 'goldpro', label: 'GOLD PRO', mount: mount, refresh: refreshGoldPro });
 }
