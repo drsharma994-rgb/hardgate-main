@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = {};
-for (const f of ['indicators.js', 'indicators2.js', 'edge.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'meanrev.js', 'edge.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window;
@@ -27,7 +27,6 @@ function mkRows(closes, spread){
   });
 }
 
-/* flat range then dip to bottom + reclaim */
 function bottomFadeSeries(){
   var closes = [];
   var i;
@@ -51,8 +50,13 @@ function bottomFadeSeries(){
   return rows;
 }
 
+const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+assert(/xuniverse\.js[\s\S]*edge\.js/.test(html), 'index.html loads xuniverse.js before edge.js');
+
 console.log('== edge exports ==');
 assert(typeof W.edgeSignal === 'function', 'edgeSignal exported');
+assert(typeof W.edgeEnrich === 'function', 'edgeEnrich exported');
+assert(typeof W.edgeAssess === 'function', 'edgeAssess exported');
 assert(typeof W.edgePlan === 'function', 'edgePlan exported');
 assert(typeof W.edgeBacktest === 'function', 'edgeBacktest exported');
 assert(typeof W.edgeMaxSafeLev === 'function', 'edgeMaxSafeLev exported');
@@ -78,6 +82,23 @@ console.log('== edgeSignal + plan ==');
   } else {
     assert(true, 'synthetic bottom fade may not fire on every fixture — geometry still tested below');
   }
+}
+
+console.log('== edgeEnrich confluence ==');
+{
+  var rows = bottomFadeSeries();
+  var sig = { dir: 'long', edge: 'RANGE BOTTOM', swept: true, entry: 99, stop: 95, t1: 102, t2: 105 };
+  var en = W.edgeEnrich(sig, rows, { symbol: 'BTCUSD', exchange: 'delta', fundingPct: -0.03, turnoverUsd: 5e6 }, 'delta');
+  assert(en && typeof en.tally === 'number', 'enrich returns tally');
+  assert(Array.isArray(en.parts) && en.parts.length >= 1, 'enrich returns parts');
+}
+
+console.log('== edgeAssess tally gate ==');
+{
+  var rows = bottomFadeSeries();
+  var item = { symbol: 'BTCUSD', exchange: 'delta', turnoverUsd: 5e6 };
+  var r = W.edgeAssess(rows, item, 'delta');
+  assert(r === null || (r.plan && r.tally >= 3), 'assess null or passes min tally with plan');
 }
 
 console.log('== edgePlan geometry ==');
