@@ -277,8 +277,8 @@ assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id
 /* ---------------- PWA wiring (manifest + icon + service worker) ---------------- */
 assert(html.indexOf('<link rel="manifest" href="manifest.webmanifest">') !== -1,
   '<link rel="manifest"> points at manifest.webmanifest');
-assert(/<meta name="theme-color" content="#0A0D12">/.test(html),
-  'theme-color meta matches the app background color (--ink #0A0D12)');
+assert(/<meta name="theme-color" content="#0F1730">/.test(html),
+  'theme-color meta matches the vivid app chrome (--panel2 #0F1730)');
 
 let manifest = null, manifestErr = null;
 try{ manifest = JSON.parse(readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8')); }
@@ -287,7 +287,7 @@ assert(!manifestErr, 'manifest.webmanifest parses as JSON' + (manifestErr ? ' â€
 assert(!!manifest && manifest.name === 'HARDGATE' && manifest.short_name === 'HARDGATE',
   'manifest name + short_name are HARDGATE');
 assert(!!manifest && manifest.display === 'standalone'
-    && manifest.background_color === '#0A0D12' && manifest.theme_color === '#0A0D12',
+    && manifest.background_color === '#0B1024' && manifest.theme_color === '#0F1730',
   'manifest is installable: display standalone + dark background/theme matching the app CSS');
 assert(!!manifest && Array.isArray(manifest.icons)
     && manifest.icons.some(ic => ic && /(^|\/)icon\.svg$/.test(ic.src || '') && /maskable/.test(ic.purpose || '')),

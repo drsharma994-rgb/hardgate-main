@@ -67,16 +67,17 @@ assert(html.includes("const CDCX_PROXY = u => '/api/proxy?url=' + encodeURICompo
   'CDCX_PROXY is the same-origin /api/proxy?url= mapper');
 assert(!html.includes('corsproxy.io'), 'corsproxy.io no longer appears anywhere (paywalled, 403)');
 assert(!html.includes('hardgate-proxy.onrender.com'), 'dead Render proxy host fully removed (hardgate-main.onrender.com hosting is fine)');
-assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
-  'allorigins + codetabs kept as last-resort public backups');
+assert(!html.includes('allorigins.win') && !html.includes('codetabs.com'),
+  'third-party CORS proxies removed — CoinDCX uses direct + same-origin /api/proxy only');
 {
   const cg = grabFn('cdcxGet');
   const iDirect = cg.indexOf('await fetch(url)');
   const iApi = cg.indexOf('await fetch(CDCX_PROXY(url))');
-  const iPublic = cg.indexOf('CDCX_PUBLIC_PROXIES');
-  assert(iDirect !== -1 && iApi !== -1 && iPublic !== -1 && iDirect < iApi && iApi < iPublic,
-    'cdcxGet fallback order: direct → /api/proxy → public backups');
+  assert(iDirect !== -1 && iApi !== -1 && iDirect < iApi && !cg.includes('CDCX_PUBLIC_PROXIES'),
+    'cdcxGet fallback order: direct → /api/proxy (no public backups)');
 }
+assert(html.includes('function executeBackendReady'),
+  'EXECUTE BRACKET gated behind executeBackendReady()');
 
 /* ================= 2. ntfy.sh push ================= */
 assert(html.includes("https://ntfy.sh/' + encodeURIComponent(topic)"),
@@ -190,7 +191,8 @@ assert(/nav\{[^}]*overflow-x\s*:\s*auto/.test(html), 'nav CSS: overflow-x:auto (
 assert(/nav\{[^}]*flex-wrap\s*:\s*nowrap/.test(html), 'nav CSS: flex-wrap:nowrap');
 assert(html.includes('-webkit-overflow-scrolling:touch'), 'nav CSS: -webkit-overflow-scrolling:touch');
 assert(/nav button\{[^}]*flex\s*:\s*none/.test(html), 'nav buttons: flex:none');
-assert(/header\{[^}]*flex-wrap\s*:\s*wrap/.test(html), 'header row: flex-wrap:wrap (belt-and-braces)');
+assert(/header\{[^}]*flex-direction\s*:\s*column/.test(html), 'header row: column layout + drawer (mobile-friendly)');
+assert(/\.header-primary\{[^}]*flex-wrap\s*:\s*wrap/.test(html), 'header primary row: flex-wrap:wrap on chips row');
 assert((html.match(/@media/g) || []).length === 1, 'still exactly one @media query in the file');
 
 /* ================= 4b. grouped two-tier nav ================= */

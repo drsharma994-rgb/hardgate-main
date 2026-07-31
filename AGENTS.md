@@ -25,14 +25,17 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 
 | Task | Command | Notes |
 |------|---------|-------|
-| Unit + integration tests | `npm test` | 144 assertions; no network required |
-| Live data smoke test | `node tests/test-data-layer.mjs` | Hits Binance, Frankfurter, gold-api directly |
-| Additional suites | `node tests/test-<name>.mjs` | See README "Tests" section for the full list |
+| Unit + integration tests | `npm test` | Offline gate; 15 suites, 600+ assertions; no network |
+| Live data smoke test | `node tests/test-data-layer.mjs` | Optional; Binance legs skip on HTTP 451 |
+| Additional suites | `node tests/test-<name>.mjs` | See README Tests section |
 | Lint | *(none)* | No ESLint or formatter configured |
 
 ### Gotchas
 
-- **Binance geo-blocking (HTTP 451):** Cloud VMs in some regions cannot reach `fapi.binance.com` directly. `npm test` still passes (offline/mocked). `tests/test-data-layer.mjs` will fail with HTTP 451 in those environments. The browser UI may show degraded Binance-dependent tabs (SMART $, SQUEEZE, etc.) but Delta India, proxy-backed CoinDCX, and macro data still work.
+- **Binance geo-blocking (HTTP 451):** Cloud VMs in some regions cannot reach `fapi.binance.com` directly. `npm test` still passes (offline/mocked). `tests/test-data-layer.mjs` skips Binance legs on 451. The browser UI may show degraded Binance-dependent tabs (SMART $, SQUEEZE, etc.) but Delta India, proxy-backed CoinDCX, and macro data still work.
 - **Use the Node server, not `file://`:** Opening `index.html` directly skips `/api/proxy`, breaking CoinDCX, Yahoo, and gold-api fallbacks.
 - **No runtime npm dependencies:** `package.json` has only `start` and `test` scripts. `npm install` is a no-op.
 - **Node 18+ required:** Server and tests use ES modules and global `fetch`.
+- **Alert dual clocks:** If `GH_DISPATCH_TOKEN` is set on Render, set GitHub repo variable `RENDER_DISPATCH_PRIMARY=true` so scheduled `alert-notify.yml` runs do not overlap Render's 13-min dispatch.
+- **EXECUTE BRACKET:** Hidden until `EXECUTE_BACKEND_URL` is set in `index.html` (non-empty, not the placeholder host).
+- **CoinDCX:** No third-party CORS proxy fallbacks — only direct fetch or same-origin `/api/proxy`.

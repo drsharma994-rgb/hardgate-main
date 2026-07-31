@@ -533,10 +533,11 @@ console.log('\n== G) hgProfitRankHint ==');
   assert(z && z.boost === 0 && z.enough === false, 'G2 empty ledger -> boost 0, enough false');
 
   const R = w.hgScoreRecord, SETTLE = w.hgScoreSettle;
+  const DAY_MS = 25 * 3600 * 1000; /* >24h dedupe window */
   for (let i = 0; i < 4; i++){
     R({ source: 'brain', sym: 'BTCUSDT', dir: 'long', tier: 'PRIME',
-      entry: 100, stop: 90, t1: 120, layers: ['TREND'], at: (T0 + i * 7200) * 1000 });
-    const rec = w.hgScoreRecords()[i];
+      entry: 100, stop: 90, t1: 120, layers: ['TREND'], at: T0 * 1000 + i * DAY_MS });
+    const rec = w.hgScoreRecords().find(function(r){ return r && r.sym === 'BTCUSDT' && r.at === T0 * 1000 + i * DAY_MS; });
     rec.status = 'settled';
     rec.r = (i < 3) ? 1.5 : -1;
     rec.state = (i < 3) ? 'T1' : 'SL';
@@ -547,7 +548,7 @@ console.log('\n== G) hgProfitRankHint ==');
 
   for (let j = 0; j < 4; j++){
     R({ source: 'brain', sym: 'ETHUSDT', dir: 'short', tier: 'HIGH',
-      entry: 200, stop: 210, t1: 180, layers: ['REGIME'], at: (T0 + 10000 + j * 7200) * 1000 });
+      entry: 200, stop: 210, t1: 180, layers: ['REGIME'], at: T0 * 1000 + 200 * DAY_MS + j * DAY_MS });
   }
   w.hgScoreRecords().forEach(function(rec){
     if (rec && rec.sym === 'ETHUSDT'){ rec.status = 'settled'; rec.r = -1; rec.state = 'SL'; }

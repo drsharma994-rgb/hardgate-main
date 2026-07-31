@@ -3399,5 +3399,60 @@ console.log('== AV) wick-adaptive stops + CVD ==');
   ok(CV(null) === null && CV(mkTaker([1,1,1])) === null, 'AV: garbage/thin series -> null, never throws');
 }
 
+/* ================= AW) post-fetch structure / meanrev / poc (PR #4 integration) ================= */
+console.log('== AW) post-fetch structure / meanrev / poc integration ==');
+{
+  globalThis.window = {};
+  globalThis.localStorage = { getItem: function(){ return null; }, setItem: function(){}, removeItem: function(){} };
+  vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
+  const WB = globalThis.window;
+  const AS = WB.__hgBrainApplyStructure;
+  const AM = WB.__hgBrainApplyMeanrev;
+  const AP = WB.__hgBrainApplyPoc;
+  ok(typeof AS === 'function' && typeof AM === 'function' && typeof AP === 'function',
+     'AW: post-fetch apply seams exported');
+
+  function mkRow(tier, dir){
+    const rows4h = [];
+    for (let i = 0; i < 220; i++) rows4h.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 1000 });
+    return { lane: 'crypto', dec: { tier: tier, dir: dir }, col: { votes: [], silent: [], unavailable: [] }, rows4h: rows4h };
+  }
+
+  WB.hgStructureGate = function(){ return { bos: true, veto: false, note: 'BOS confirms long on 4H' }; };
+  const rBos = mkRow('WATCH', 'long');
+  AS([rBos]);
+  ok(rBos.col.votes.some(function(v){ return v.layer === 'structure' && v.vote === 'long'; }),
+     'AW: structure BOS casts a structural long vote');
+
+  WB.hgStructureGate = function(){ return { veto: true, bos: false, note: 'CHoCH against the committed bias' }; };
+  const rVeto = mkRow('HIGH', 'long');
+  AS([rVeto]);
+  ok(rVeto.col.votes.some(function(v){ return v.layer === 'structure' && v.caution; }),
+     'AW: structure CHoCH against bias -> CAUTION vote');
+
+  globalThis.detectRegime = function(){ return { regime: 'range', label: 'RANGE' }; };
+  WB.meanrevAssess = function(){ return { signal: true, dir: 'long', n: 8, winPct: 62, expR: 0.4 }; };
+  const rMr = mkRow('WATCH', 'long');
+  AM([rMr]);
+  ok(rMr.col.votes.some(function(v){ return v.layer === 'meanrev' && v.vote === 'long'; }),
+     'AW: meanrev aligned in range regime votes long');
+
+  WB.meanrevAssess = function(){ return { signal: true, dir: 'short', n: 8, winPct: 62, expR: 0.4 }; };
+  const rMrOpp = mkRow('WATCH', 'long');
+  AM([rMrOpp]);
+  ok(rMrOpp.col.votes.some(function(v){ return v.layer === 'meanrev' && v.caution; }),
+     'AW: opposing meanrev trigger -> CAUTION');
+
+  globalThis.volumeProfile = function(){ return { poc: 100, val: 98, vah: 102 }; };
+  const rPoc = mkRow('WATCH', 'long');
+  rPoc.rows4h[rPoc.rows4h.length - 1].c = 99;
+  AP([rPoc]);
+  ok(rPoc.col.votes.some(function(v){ return v.layer === 'poc' && v.vote === 'long'; }),
+     'AW: POC value-area edge aligned with long bias votes long');
+
+  globalThis.detectRegime = undefined;
+  globalThis.volumeProfile = undefined;
+}
+
 console.log('\n' + passed + ' assertions passed');
 process.exit(0);

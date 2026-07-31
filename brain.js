@@ -4813,6 +4813,10 @@ G.__hgBrainRsiDiv = rsiDivergence;
 /* wick-adaptive stop + CVD seams */
 G.__hgBrainWickBuf = wickBuffer;
 G.__hgBrainCvd = cvdAssess;
+/* post-fetch layer seams — integration-tested without a full synthesis run */
+G.__hgBrainApplyStructure = applyStructure;
+G.__hgBrainApplyMeanrev = applyMeanrev;
+G.__hgBrainApplyPoc = applyPoc;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

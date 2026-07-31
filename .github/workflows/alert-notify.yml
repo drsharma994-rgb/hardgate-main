@@ -9,6 +9,10 @@
 # already covers both cases: unchanged state -> no commit, stamped/changed
 # state -> commit. Email delivery failures exit the script non-zero BEFORE the
 # state is saved, so the run goes red and the alert retries next cycle.
+#
+# Dual clocks: when Render arms GH_DISPATCH_TOKEN (workflow_dispatch every 13 min),
+# set repository variable RENDER_DISPATCH_PRIMARY=true to skip scheduled runs here
+# and avoid overlapping Puppeteer sweeps against production.
 name: HARDGATE Alert Notify
 
 on:
@@ -25,6 +29,7 @@ concurrency:
 
 jobs:
   check-and-notify:
+    if: ${{ github.event_name != 'schedule' || vars.RENDER_DISPATCH_PRIMARY != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

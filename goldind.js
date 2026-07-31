@@ -693,7 +693,12 @@ var GS_OFFSESSION_BAR = GS_TALLY_BAR + 2;
 
 function __newsCaution(news, nowMs){
   try{
-    if (!news || !Array.isArray(news.events)) return { caution: false, title: null };
+    if (!news || typeof news !== 'object') return { caution: false, title: null };
+    /* goldswing passes a pre-shaped {caution, title} leg; honour it directly */
+    if (!Array.isArray(news.events)){
+      if ('caution' in news) return { caution: !!news.caution, title: news.title || null };
+      return { caution: false, title: null };
+    }
     for (var i = 0; i < news.events.length; i++){
       var ev = news.events[i];
       if (!ev || ev.impact !== 'high') continue;

@@ -91,11 +91,10 @@ startSqueezeWatch();
    13 min (arms only with GH_DISPATCH_TOKEN in the environment; logs either way) */
 startGhDispatch();
 
-/* keep-alive self-ping — Render free tier sleeps after ~15 min idle, which
-   would pause the squeeze watch. Ping our own status endpoint every 10 min
-   so the service (and the watch) never sleeps. Uses Render's injected
-   RENDER_EXTERNAL_URL; override with SELF_PING_URL if ever needed.
-   Honest no-op outside Render. */
+/* keep-alive self-ping — on Render free tier the service sleeps after ~15 min idle.
+   Paid plans stay always-on; the ping is harmless and keeps squeeze-watch + gh-dispatch
+   alive on any plan. Uses Render's injected RENDER_EXTERNAL_URL; override with
+   SELF_PING_URL if ever needed. Honest no-op outside Render. */
 (function keepAlive(){
   const base = process.env.SELF_PING_URL || process.env.RENDER_EXTERNAL_URL;
   if (!base){ console.log('[keep-alive] disabled — no RENDER_EXTERNAL_URL in the environment'); return; }

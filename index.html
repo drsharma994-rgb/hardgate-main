@@ -650,14 +650,14 @@ const CDCX_PUB = 'https://public.coindcx.com';
 const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
 const CDCX_API = 'https://api.coindcx.com';
 const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u); // same-origin Vercel function (allowlist: api.coindcx.com, public.coindcx.com, query1/2.finance.yahoo.com) — replaces the dead Render proxy
-const EXECUTE_BACKEND_URL = 'https://your-secure-backend.com/execute'; // TODO: replace with your real delta-trader.ts execution endpoint before this can fire real orders
-const CDCX_PUBLIC_PROXIES = [
-  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-  u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
-]; // Public backup proxies tried in order if the same-origin proxy fails (last resort, rate-limited). The third former backup was dropped 2026-07 — paywalled, verified 403.
+const EXECUTE_BACKEND_URL = ''; // set to your delta-trader.ts POST /execute endpoint to enable EXECUTE BRACKET
+function executeBackendReady(){
+  return typeof EXECUTE_BACKEND_URL === 'string' && EXECUTE_BACKEND_URL.length > 0
+    && EXECUTE_BACKEND_URL.indexOf('your-secure-backend.com') < 0;
+}
 
-/* CoinDCX fetch: try direct (CORS may block), fall back to the same-origin
-   /api/proxy function, then the public backups. Every leg null-tolerant. */
+/* CoinDCX fetch: try direct (CORS may block), then same-origin /api/proxy only.
+   No third-party CORS proxies — they leak exchange API paths off-origin. */
 
 /* ---------------- lightweight rate-limit tracking (client-side estimate only) ---------------- */
 const RateTrack = { td: [], cdcx: [] };
@@ -709,15 +709,7 @@ async function cdcxGet(url){
     S.cdcxViaProxy = 'api';
     return r.json();
   }catch(e){}
-  for (const build of CDCX_PUBLIC_PROXIES){
-    try{
-      const r = await fetch(build(url));
-      if(!r.ok) throw new Error('public proxy HTTP '+r.status);
-      S.cdcxViaProxy = 'public';
-      return r.json();
-    }catch(e){}
-  }
-  throw new Error('all proxies failed');
+  throw new Error('CoinDCX unreachable — direct fetch blocked and /api/proxy failed (serve via Render or enable the proxy)');
 }
 
 /* ---------------- utils ---------------- */

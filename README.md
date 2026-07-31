@@ -5,8 +5,8 @@ discipline: every setup must pass a ledger of explicit pass/veto gates, and any 
 trade aside. No composite scores, no black boxes — every gate shows its evidence.
 
 Runs entirely in the browser against free public data. No build step, no backend required (one optional
-execution endpoint, disabled by default). When deployed on Vercel, a small same-origin function
-(`/api/proxy`) covers the CORS-blocked CoinDCX/Yahoo reads.
+execution endpoint, disabled until you set `EXECUTE_BACKEND_URL` in `index.html`). When deployed on
+Render, a small same-origin handler (`/api/proxy`) covers the CORS-blocked CoinDCX/Yahoo reads.
 
 ## The 23 tabs
 
@@ -36,7 +36,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | **BASIS** | Funding/basis monitor (Delta + Binance 8h funding side by side) |
 | **SEARCH** | Cross-exchange symbol lookup + on-demand Twelve Data swing backtests |
 | **LOG** | Auto-logged CLEAN setups, outcomes graded against closed candles (conservative same-bar = SL rule) |
-| **TRADE PLAN** | Fixed-R ticket builder with portfolio-heat check and an optional execution backend |
+| **TRADE PLAN** | Fixed-R ticket builder with portfolio-heat check; EXECUTE BRACKET appears only when `EXECUTE_BACKEND_URL` is set in `index.html` |
 | **FIND TRADE** | Per-symbol evaluation of all strategies + full backtest context |
 
 ## Free data sources
@@ -44,7 +44,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | Source | Used for | Key? |
 |---|---|---|
 | **Delta Exchange India** public API + WebSocket | Primary crypto perp tickers, funding, candles | No |
-| **CoinDCX** public API (via same-origin Vercel function `/api/proxy`) | Secondary crypto perps (no funding/turnover fields — gates degrade honestly) | No |
+| **CoinDCX** public API (via same-origin `/api/proxy` on Render) | Secondary crypto perps (no funding/turnover fields — gates degrade honestly) | No |
 | **Binance USD-M futures `fapi`** | SMART $ positioning (funding, OI history, retail/top-trader ratios, taker flow), **XAUUSDT TradFi perp — primary gold instrument** (klines, funding, OI), PAXG gold candles, B1 cross-exchange confirm | No |
 | **US Treasury** daily yield-curve CSV | US 10Y yield for the macro panels (replaces the dead Yahoo `^TNX` leg) | No |
 | **gold-api.com** | Spot XAU/XAG (gold/silver ratio + spot context) | No |
@@ -114,35 +114,28 @@ the page so setup alerts send natively with full levels (EmailJS quota irrelevan
 goes red only when an alert could NOT be delivered on any channel, and stamps at most one keep-alive
 commit per day.
 
-A GitHub Actions job (`.github/workflows/alert-notify.yml`) replays the alert cycle against the live site
-every 15 minutes, goes red on email-delivery failure, and stamps at most one keep-alive commit per day so
-GitHub's 60-day scheduled-workflow auto-disable never bites. The same job also completes one BRAIN
-synthesis per run and watches the **ENTRY TICKET**: a new symbol, a moved entry price, or a side
-appearing/vanishing triggers a **Telegram push straight from the runner** (ntfy as fallback channel) —
-so ticket alerts reach you even with the app closed. First recorded state seeds silently; a failed
-synthesis leaves the committed ticket state untouched. The same run also
-verifies the **gate engine is publishing** after the synthesis: a null or 45-min-stale `engineState`
-(the 2026-07-25 all-ASIDE outage class) fires one throttled push per 2h per continuous outage, and
-recovery clears the stamp.
+The same job also completes one BRAIN synthesis per run and watches the **ENTRY TICKET**: a new symbol,
+a moved entry price, or a side appearing/vanishing triggers a **Telegram push straight from the runner**
+(ntfy as fallback) — so ticket alerts reach you even with the app closed. First recorded state seeds
+silently; a failed synthesis leaves the committed ticket state untouched. Each run also verifies the
+**gate engine is publishing** after synthesis: a null or 45-min-stale `engineState` fires one throttled
+push per 2h per continuous outage, and recovery clears the stamp.
+
+**Dual clocks:** Render can arm `GH_DISPATCH_TOKEN` to fire `workflow_dispatch` every 13 minutes (more
+reliable than GitHub cron drift). When that is active, set repository variable `RENDER_DISPATCH_PRIMARY=true`
+so the GitHub schedule skips and you do not run two Puppeteer sweeps against production.
 
 ## Tests
 
+**CI gate (push/PR to `main`):** `npm test` — offline suites, no network.
+
 ```
-node tests/extract-inline.mjs     # inline <script> blocks parse + key markers present
-node tests/test-tabs.mjs          # tab wiring: HG_tabs registration, boot, nav/panes, lazy mount
-node tests/test-data-layer.mjs    # live-network smoke: binance.js, macro.js, DXY, PAXG
-node tests/test-gold-deep.mjs     # 37-gate gold deep scan, macro-null degradation, quick ledgers
-node tests/test-smart.mjs         # SMART $ classifier, symbol mapping, B1 confirm, scan end-to-end
-node tests/test-backtest-ux.mjs   # chunked backtests: identical results, progress, cooperative cancel
-node tests/test-indicators2.mjs   # extended indicators (TTM squeeze, z-score, correlation…)
-node tests/test-squeeze.mjs       # SQUEEZE classifier + scanner
-node tests/test-trendtable.mjs    # TREND MATRIX components + composite
-node tests/test-oiflow.mjs        # OI FLOW pure classifier
-node tests/test-regime.mjs        # REGIME gauges + aggregate verdict + mount smoke
-node tests/test-carry.mjs         # CARRY spread math + matching
-node tests/test-goldpro.mjs       # GOLD PRO structure/macro/correlation logic
-node tests/test-ops.mjs           # ops: /api/proxy allowlist + passthrough, alert heartbeat/email gate, config sanity
+npm test                          # full gate (brain, engine, scorecard, goldswing, …)
+node tests/test-data-layer.mjs    # optional live-network smoke (Binance legs skip on HTTP 451)
 ```
+
+Additional suites (not all in `npm test` yet): `test-squeeze.mjs`, `test-regime.mjs`, `test-goldpro.mjs`,
+`test-carry.mjs`, `test-oiflow.mjs`, and others under `tests/`.
 
 ## Repo layout
 
@@ -159,7 +152,7 @@ oiflow.js       OI FLOW tab module
 regime.js       REGIME tab module
 carry.js        CARRY tab module
 goldpro.js      GOLD PRO tab module
-api/proxy.js    same-origin Vercel proxy (CoinDCX + Yahoo allowlist) — replaces the dead Render proxy
+api/proxy.js    same-origin proxy (CoinDCX + Yahoo allowlist) — used by Render via scripts/server.mjs
 alert-state.json
 scripts/        alert-check helper (CI alert replay + email gate + keep-alive heartbeat)
 tests/          node test suites above

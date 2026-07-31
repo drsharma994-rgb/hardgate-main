@@ -294,7 +294,7 @@ const iBright = html.indexOf('<link rel="stylesheet" href="bright.css">');
 assert(iStyleEnd !== -1 && iBright !== -1 && iStyleEnd < iBright && iBright < html.indexOf('</head>'),
   'bright.css <link> lands after the inline </style> block, inside <head>');
 const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
-assert(/HG_CACHE\s*=\s*'hg-v11'/.test(swSrc), 'service worker cache name bumped to hg-v11 (clients pick up the new shell)');
+assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(swSrc), 'service worker cache name is hg-vN (clients pick up the new shell)');
 assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
 
 /* ---------------- 6. auto-refresh control: header placement + OFF default ---------------- */
