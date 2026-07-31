@@ -13,17 +13,17 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --ink:#F8FAFC; --panel:#FFFFFF; --panel2:#F1F5F9; --line:#E2E8F0;
   --gold:#C9921A; --gold-dim:#A67C12;
   --long:#059669; --short:#DC2626; --veto:#DC2626; --pass:#059669;
-  --txt:#0F172A; --mut:#64748B; --dim:#94A3B8;
+  --txt:#020617; --mut:#334155; --dim:#475569;
   --mono:'IBM Plex Mono',monospace; --disp:'Space Grotesk',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--ink);color:var(--txt);font-family:var(--mono);font-size:13px;line-height:1.45}
+html,body{background:var(--ink);color:var(--txt);font-family:var(--mono);font-size:13px;font-weight:500;line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:var(--gold)}
 button{font-family:var(--mono);cursor:pointer}
 input,select{font-family:var(--mono);background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:6px 8px;border-radius:4px;font-size:13px}
@@ -46,27 +46,27 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 .market-picture-bar{padding:8px 16px;text-align:center;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.04em}
 .market-picture-bar .note{font-size:11px;display:block;margin-top:2px}
 .brand{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--gold)}
-.brand small{display:block;font-family:var(--mono);font-weight:400;font-size:9px;letter-spacing:.18em;color:var(--mut)}
+.brand small{display:block;font-family:var(--mono);font-weight:600;font-size:9px;letter-spacing:.18em;color:var(--mut)}
 .xtoggle{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
-.xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em}
+.xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em;font-weight:600}
 .xtoggle button.on{background:var(--gold);color:#14100A;font-weight:600}
-.statuschip{font-size:10px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:4px;white-space:nowrap}
-.statuschip b{color:var(--txt);font-weight:500}
+.statuschip{font-size:10px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:4px;white-space:nowrap;font-weight:600}
+.statuschip b{color:var(--txt);font-weight:700}
 .statuschip.warn b{color:var(--short)}
 .spacer{flex:1}
 
 /* ---------- tabs (two-tier: group row + active group's tab row) ---------- */
 .navgroups{display:flex;gap:8px;padding:8px 16px 0;border-bottom:1px solid var(--line);background:var(--panel2);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .navgroups::-webkit-scrollbar{height:4px}
-.navgroups button{flex:none;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:500;transition:color .15s,border-color .15s,background .15s}
+.navgroups button{flex:none;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:600;transition:color .15s,border-color .15s,background .15s}
 .navgroups button:hover{color:var(--txt);border-color:var(--gold-dim)}
 .navgroups button.on{background:var(--gold);border-color:var(--gold);color:#14100A;font-weight:600}
 .navgroups button .cnt{opacity:.6;font-weight:400;margin-left:6px}
 nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--ink);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 nav::-webkit-scrollbar{height:4px}
-nav button{position:relative;background:transparent;border:0;color:var(--mut);padding:11px 18px;font-size:12px;letter-spacing:.14em;font-weight:500;flex:none;transition:color .15s}
+nav button{position:relative;background:transparent;border:0;color:var(--mut);padding:11px 18px;font-size:12px;letter-spacing:.14em;font-weight:600;flex:none;transition:color .15s}
 nav button:hover{color:var(--txt)}
-nav button.on{color:var(--gold)}
+nav button.on{color:var(--gold);font-weight:700}
 nav button::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .18s ease}
 nav button.on::after{transform:scaleX(1)}
 main{padding:18px 16px 60px;max-width:1280px;margin:0 auto}
@@ -74,15 +74,15 @@ main{padding:18px 16px 60px;max-width:1280px;margin:0 auto}
 
 /* ---------- panels ---------- */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(15,23,42,.06),0 8px 24px -12px rgba(15,23,42,.10)}
-.panel h2{font-family:var(--disp);font-size:13px;font-weight:700;letter-spacing:.14em;color:var(--txt);margin-bottom:10px;text-transform:uppercase}
-.panel h2 span{color:var(--mut);font-family:var(--mono);font-weight:400;font-size:10px;letter-spacing:.06em;text-transform:none;margin-left:8px}
+.panel h2{font-family:var(--disp);font-size:13px;font-weight:800;letter-spacing:.14em;color:var(--txt);margin-bottom:10px;text-transform:uppercase}
+.panel h2 span{color:var(--mut);font-family:var(--mono);font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:none;margin-left:8px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
-.kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:12px}
-.kv .k{color:var(--mut)}.kv .v{color:var(--txt);text-align:right}
-.note{font-size:11px;color:var(--mut);line-height:1.55}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:12px;font-weight:500}
+.kv .k{color:var(--mut);font-weight:600}.kv .v{color:var(--txt);text-align:right;font-weight:700}
+.note{font-size:11px;color:var(--mut);line-height:1.55;font-weight:500}
 .note.warn{color:var(--gold)}
 hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 
@@ -91,16 +91,17 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .lrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
 .lrow:last-child{border-bottom:0}
 .lrow .gid{font-size:10px;color:var(--dim);width:34px;flex:none;letter-spacing:.06em}
-.lrow .gname{flex:1;font-size:12px}
-.lrow .gdetail{font-size:10px;color:var(--mut);text-align:right;max-width:46%;word-break:break-word}
+.lrow .gname{flex:1;font-size:12px;font-weight:600}
+.lrow .gdetail{font-size:10px;color:var(--mut);text-align:right;max-width:46%;word-break:break-word;font-weight:500}
 .stamp{flex:none;font-size:9px;font-weight:600;letter-spacing:.16em;padding:3px 8px;border-radius:3px;border:1px solid}
 .stamp.pass{color:var(--pass);border-color:rgba(53,192,142,.65);background:rgba(53,192,142,.08)}
 .stamp.veto{color:var(--veto);border-color:rgba(228,88,107,.65);background:rgba(228,88,107,.09)}
 .stamp.na{color:var(--mut);border-color:var(--dim);background:rgba(15,23,42,.03)}
 .verdict{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);margin-top:12px;background:var(--panel2);flex-wrap:wrap}
-.verdict .vword{font-family:var(--disp);font-size:24px;font-weight:700;letter-spacing:.1em}
-.verdict.long .vword{color:var(--long)}.verdict.short .vword{color:var(--short)}.verdict.aside .vword{color:var(--mut)}
-.verdict .vwhy{font-size:11px;color:var(--mut);line-height:1.5}
+.verdict .vword{font-family:var(--disp);font-size:24px;font-weight:800;letter-spacing:.1em}
+.verdict.long .vword{color:var(--long)}.verdict.short .vword{color:var(--short)}
+.verdict.aside .vword{color:var(--mut);font-weight:700}
+.verdict .vwhy{font-size:11px;color:var(--mut);line-height:1.5;font-weight:500}
 
 /* ---------- scanner cards ---------- */
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
@@ -109,37 +110,38 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .card.long{border-left:3px solid var(--long)}
 .card.short{border-left:3px solid var(--short)}
 .card .chead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-.card .sym{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.04em}
-.card .dir{font-size:10px;font-weight:600;letter-spacing:.14em}
+.card .sym{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:.04em}
+.card .dir{font-size:10px;font-weight:700;letter-spacing:.14em}
 .card.long .dir{color:var(--long)}.card.short .dir{color:var(--short)}
-.card .mini{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:11px;margin:8px 0}
-.card .mini .k{color:var(--mut)}
+.card .mini{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:11px;margin:8px 0;font-weight:500}
+.card .mini .k{color:var(--mut);font-weight:600}
 .card .gates{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.gpip{font-size:9px;letter-spacing:.06em;padding:2px 6px;border-radius:3px;border:1px solid var(--line);color:var(--txt);background:rgba(15,23,42,.03)}
+.gpip{font-size:10px;letter-spacing:.06em;padding:2px 6px;border-radius:3px;border:1px solid var(--line);color:var(--txt);background:rgba(15,23,42,.03);font-weight:600}
 .gpip.ok{color:var(--pass);border-color:rgba(53,192,142,.5);background:rgba(53,192,142,.08)}
-.card .plan{font-size:11px;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin-top:8px;line-height:1.6}
-.card .plan b{color:var(--gold);font-weight:600}
+.card .plan{font-size:11px;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin-top:8px;line-height:1.6;font-weight:500}
+.card .plan b{color:var(--gold);font-weight:700}
 .card .toTrade{margin-top:8px;width:100%;background:transparent;border:1px solid var(--gold-dim);color:var(--gold);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
 .card .toTrade:hover{background:rgba(201,146,26,.08)}
 .hgchart{height:190px;margin-top:8px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);overflow:hidden}
 
 /* ---------- controls ---------- */
-.btn{background:var(--gold);color:#14100A;border:0;border-radius:4px;padding:8px 16px;font-weight:600;font-size:12px;letter-spacing:.08em}
+.btn{background:var(--gold);color:#14100A;border:0;border-radius:4px;padding:8px 16px;font-weight:700;font-size:12px;letter-spacing:.08em}
 .btn:disabled{background:var(--dim);color:var(--panel)}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:400}
-.chip{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:12px;padding:4px 11px;font-size:11px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:600}
+.chip{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:12px;padding:4px 11px;font-size:11px;font-weight:600}
 .chip.on{border-color:var(--gold);color:var(--gold)}
 .prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px;display:none}
 .prog i{display:block;height:100%;background:var(--gold);width:0%;transition:width .2s}
-label.f{display:flex;flex-direction:column;gap:4px;font-size:10px;color:var(--mut);letter-spacing:.08em}
-.big{font-family:var(--disp);font-size:20px;font-weight:700}
-.pos{color:var(--long)}.neg{color:var(--short)}
-.checklist label{display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 0;color:var(--txt);cursor:pointer}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:10px;color:var(--mut);letter-spacing:.08em;font-weight:600}
+.big{font-family:var(--disp);font-size:20px;font-weight:800}
+.pos{color:var(--long);font-weight:700}.neg{color:var(--short);font-weight:700}
+.checklist label{display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 0;color:var(--txt);cursor:pointer;font-weight:600}
 .checklist input{width:auto}
-.ticket{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12px;white-space:pre-wrap;line-height:1.7}
-.empty{padding:30px;text-align:center;color:var(--mut);font-size:12px;border:1px dashed var(--line);border-radius:8px}
+.ticket{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12px;white-space:pre-wrap;line-height:1.7;font-weight:500}
+.empty{padding:30px;text-align:center;color:var(--mut);font-size:12px;border:1px dashed var(--line);border-radius:8px;font-weight:600}
 td,th{padding:4px 10px;font-size:11px;text-align:right;border-bottom:1px solid var(--line)}
-th{color:var(--mut);font-weight:500;letter-spacing:.06em}
+th{color:var(--mut);font-weight:700;letter-spacing:.06em}
+td{color:var(--txt);font-weight:600}
 td:first-child,th:first-child{text-align:left}
 table{width:100%;border-collapse:collapse}
 table tr:nth-child(even) td{background:rgba(15,23,42,.025)}
@@ -147,8 +149,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 
 /* ---------- auto refresh segmented control (header) ---------- */
 .hgauto{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:5px;overflow:hidden}
-.hgauto .hgalabel{padding:4px 8px;font-size:9px;letter-spacing:.14em;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap}
-.hgauto button{background:transparent;border:0;color:var(--mut);padding:4px 9px;font-size:10px;letter-spacing:.08em}
+.hgauto .hgalabel{padding:4px 8px;font-size:9px;letter-spacing:.14em;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap;font-weight:700}
+.hgauto button{background:transparent;border:0;color:var(--mut);padding:4px 9px;font-size:10px;letter-spacing:.08em;font-weight:600}
 .hgauto button:hover{color:var(--txt)}
 .hgauto button.on{background:var(--gold);color:#14100A;font-weight:600}
 </style>
@@ -2225,7 +2227,7 @@ function hgMiniChart(el, rows, plan, opts){
     const chart = LightweightCharts.createChart(el, {
       width: el.clientWidth || 320,
       height: (opts && isFinite(opts.height)) ? opts.height : 190,
-      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#64748B', fontSize: 10 },
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#334155', fontSize: 10 },
       grid: { vertLines: { color: 'rgba(226,232,240,0.9)' }, horzLines: { color: 'rgba(226,232,240,0.9)' } },
       rightPriceScale: { borderColor: 'rgba(226,232,240,0.95)' },
       timeScale: { borderColor: 'rgba(226,232,240,0.95)', timeVisible: true, secondsVisible: false },
