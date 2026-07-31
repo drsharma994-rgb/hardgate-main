@@ -2872,10 +2872,12 @@ function ticketCandidate(row){
     if (dir !== 'long' && dir !== 'short') return null;
     if (!isFinite(p.entry) || !isFinite(p.stop) || !isFinite(p.t1)) return null;
     if (p.entry === p.stop) return null;
+    var pBoost = profitRankBoost(row, dir);
     return { row: row, dir: dir,
              rank: tierRank(row.dec.tier) * 1000
                  + (isFinite(row.dec.agree) ? row.dec.agree : 0) * 10
-                 + Math.min(isFinite(p.rr1) ? p.rr1 : 0, 9.9) };
+                 + Math.min(isFinite(p.rr1) ? p.rr1 : 0, 9.9)
+                 + pBoost };
   }catch(e){ return null; }
 }
 function buildEntryTickets(rows){
@@ -3131,6 +3133,52 @@ function estWinRate(st){
     if (!st || !isFinite(+st.n) || +st.n <= 0) return NaN;
     return (+st.tp + 0.5) / (+st.n + 1);
   }catch(e){ return NaN; }
+}
+/* settled scorecard + setup-log EV -> small rank boost for ticket/board sort.
+   Unproven families / empty scorecard = 0; proven-bad demotes. */
+function profitRankBoost(row, dir){
+  var boost = 0;
+  try{
+    if (!row || !row.plan) return 0;
+    var p = row.plan;
+    if (typeof G.hgProfitRankHint === 'function'){
+      var agreeing = [];
+      var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
+      for (var a = 0; a < votes.length; a++){
+        if (votes[a] && votes[a].vote === dir) agreeing.push(votes[a].layer);
+      }
+      var h = G.hgProfitRankHint({
+        sym: row.sym, dir: dir, tier: row.dec && row.dec.tier,
+        layers: agreeing, lane: row.lane, rr1: p.rr1
+      });
+      if (h && isFinite(h.boost)) boost += h.boost;
+    }
+    if (typeof G.loadLog === 'function'){
+      var fst = familyStats(G.loadLog(), planFamily(p));
+      if (fst && fst.n >= 4){
+        var est = estWinRate(fst);
+        var rr1 = isFinite(+p.rr1) ? +p.rr1
+                : Math.abs(+p.t1 - +p.entry) / Math.abs(+p.entry - +p.stop);
+        if (isFinite(est) && isFinite(rr1) && rr1 > 0){
+          var ev = est * rr1 - (1 - est);
+          boost += Math.max(-15, Math.min(15, ev * 8));
+        }
+      }
+    }
+  }catch(e){}
+  return boost;
+}
+function familyEvOk(p){
+  try{
+    if (!p || typeof G.loadLog !== 'function') return true;
+    var fst = familyStats(G.loadLog(), planFamily(p));
+    if (!fst || fst.n < 4) return true;
+    var est = estWinRate(fst);
+    var rr1 = isFinite(+p.rr1) ? +p.rr1
+            : Math.abs(+p.t1 - +p.entry) / Math.abs(+p.entry - +p.stop);
+    if (!isFinite(est) || !isFinite(rr1) || rr1 <= 0) return true;
+    return (est * rr1 - (1 - est)) > 0;
+  }catch(e){ return true; }
 }
 /* auto-log the board's plans with the family as kind — dedupe inside
    logSetup (12h sym+dir+kind) keeps repeat scans from flooding */
@@ -3721,12 +3769,13 @@ function scoreRecord(setups){
         try{
           var dec = row && row.dec;
           if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return;
+          var p = row.plan || null;
+          if (p && !familyEvOk(p)) return; /* proven-bad family EV — skip scorecard log */
           var agreeing = [];
           var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
           for (var a = 0; a < votes.length; a++){
             if (votes[a] && votes[a].vote === dec.dir) agreeing.push(votes[a].layer);
           }
-          var p = row.plan || null;
           var ret = G.hgScoreRecord({
             source: 'brain', sym: row.sym, dir: dec.dir, tier: dec.tier,
             entry: p ? p.entry : null, stop: p ? p.stop : null,
@@ -4642,6 +4691,7 @@ G.__hgBrainSniperPick = pickSniperPlan;
 G.__hgBrainPlanFamily = planFamily;
 G.__hgBrainFamStats = familyStats;
 G.__hgBrainEstWin = estWinRate;
+G.__hgBrainProfitBoost = profitRankBoost;
 /* sniper-grade seam: the current hit set (read-only; alert channels consume) */
 G.hgSniperState = function(){ try{ return __lastSniperHits; }catch(e){ return []; } };
 G.__hgBrainSniperHits = sniperHitsFrom;
