@@ -96,7 +96,12 @@ since 2026-07-29; `vercel --prod --yes` resumes it if billing is reactivated.
 
 ## Alerts
 
-Toggle the 🔔 chip in the header. While ON, every 15 minutes a silent cycle runs:
+Toggle the 🔔 chip in the header. **This deployment forces alerts ON** in the browser
+(`HG_ALERTS_FORCED_ON`) on every page load, with a **3-minute** silent cycle
+(`HG_ALERT_CYCLE_MS`) and **3-minute AUTO hard refresh** so scanners stay warm.
+The 🔔 toggle cannot turn alerts off while forced-on is set.
+
+While armed, every 3 minutes a silent cycle runs:
 
 1. **Delta** and **CoinDCX**: full best-setup scan — alerts the top CLEAN pick when it changes
    (deduped by symbol+direction).

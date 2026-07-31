@@ -651,6 +651,12 @@ let __hgSwingScan = null, __hgScalpScan = null;
 window.swingScan = function(){ return __hgSwingScan; };
 window.scalpScan = function(){ return __hgScalpScan; };
 
+/* Owner policy: alerts always armed in this browser; 3-min scan/alert cadence +
+   3-min AUTO hard refresh so tab scanners stay warm. Toggle OFF is ignored. */
+const HG_ALERTS_FORCED_ON = true;
+const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
+const HG_ALERTS_AUTO_REFRESH_MS = 180000;
+
 const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
 const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
@@ -3690,7 +3696,16 @@ function isManualScanBusy(){
 
 function updateAlertChip(){
   const el = document.getElementById('alertState');
-  if (el) el.textContent = S.alertsOn ? 'ON' : 'OFF';
+  if (el) el.textContent = (HG_ALERTS_FORCED_ON || S.alertsOn) ? 'ON' : 'OFF';
+}
+
+function armAlertCycle(){
+  S.alertsOn = true;
+  try{ localStorage.setItem('hg_alerts_on', '1'); }catch(e){}
+  updateAlertChip();
+  if (S.alertTimer) clearInterval(S.alertTimer);
+  runAlertCycle();
+  S.alertTimer = setInterval(runAlertCycle, HG_ALERT_CYCLE_MS);
 }
 
 /* ntfy.sh push — free, no signup, CORS *. Topic comes from the header settings
@@ -3958,12 +3973,12 @@ async function runAlertCycle(){
 }
 
 function toggleAlerts(){
+  if (HG_ALERTS_FORCED_ON){ armAlertCycle(); return; }
   S.alertsOn = !S.alertsOn;
   try{ localStorage.setItem('hg_alerts_on', S.alertsOn ? '1':'0'); }catch(e){}
   updateAlertChip();
   if (S.alertsOn){
-    runAlertCycle();
-    S.alertTimer = setInterval(runAlertCycle, 15*60*1000);
+    armAlertCycle();
   } else {
     if (S.alertTimer) clearInterval(S.alertTimer);
     S.alertTimer = null;
@@ -4177,8 +4192,6 @@ out.innerHTML = '<div class="panel"><h2>'+raw+' <span>'+dHits.length+' Delta Ind
 
 function initAlerts(){
   try{ emailjs.init({publicKey:'TrHdawQ8xirRSOZps'}); }catch(e){}
-  let saved = null;
-  try{ saved = localStorage.getItem('hg_alerts_on'); }catch(e){}
   try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
   try{
     const tt = localStorage.getItem('hg_tg_token') || (HG_TG_DEFAULT && HG_TG_DEFAULT.token) || '';
@@ -4187,13 +4200,17 @@ function initAlerts(){
     if ($('tgChat')) $('tgChat').value = tc;
   }catch(e){}
   try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
-  updateAlertChip();
-  if (saved === '1'){
-    S.alertsOn = true;
-    updateAlertChip();
-    runAlertCycle();
-    S.alertTimer = setInterval(runAlertCycle, 15*60*1000);
+  if (HG_ALERTS_FORCED_ON){
+    armAlertCycle();
+    try{
+      if (typeof setAutoRefresh === 'function') setAutoRefresh(String(HG_ALERTS_AUTO_REFRESH_MS));
+    }catch(e){}
+    return;
   }
+  let saved = null;
+  try{ saved = localStorage.getItem('hg_alerts_on'); }catch(e){}
+  updateAlertChip();
+  if (saved === '1') armAlertCycle();
 }
 
 
@@ -5113,6 +5130,10 @@ function setAutoRefresh(v){
 }
 function hgAutoInit(){
   try{
+    if (HG_ALERTS_FORCED_ON && typeof setAutoRefresh === 'function'){
+      setAutoRefresh(String(HG_ALERTS_AUTO_REFRESH_MS));
+      return;
+    }
     let saved = null;
     try{
       if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.getItem === 'function')
