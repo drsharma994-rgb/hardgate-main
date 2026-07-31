@@ -527,7 +527,7 @@ function cardHTML(c, isBest, season){
   } else {
     lockLine = c.locked
       ? '<div class="gsx-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
-      : '<div class="gsx-lockline" style="color:var(--mut,#8a8f98)">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
+      : '<div class="gsx-lockline" style="color:#475569">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
   }
   /* trade-management block + entry guidance — compact, under the levels,
      always built from THIS card's real TP1/TP2/zone values */
