@@ -1733,6 +1733,8 @@ function goldWatch(inp){
      +1    seasonality ctx.season.bias STRONG (Jan-Feb) behind a long
      +1    crypto risk sentiment ctx.fng ({v,c}: extreme fear <=25 backs a
            risk-off gold long; extreme greed >=75 backs a short)
+     +0..2 structural R:R bonus (≥2R = +1, ≥2.5R = +2) when c.rr is finite
+     +/-N  scorecard expectancy boost via window.hgProfitRankHint (gold lane)
    Sort: tally desc, then grade, then killzone weight, then agreeing reads
    (stable). -> {ranked:[cand + {tally, tallyParts:[{label,pts}]}], best} —
    {ranked:[], best:null} on any failure.
@@ -1816,6 +1818,25 @@ function goldRankSetups(cands, ctx){
           tally += 1;
         }
       }
+      var rrVal = isFinite(c.rr) ? +c.rr : (isFinite(c.rr1) ? +c.rr1 : NaN);
+      if (isFinite(rrVal) && rrVal >= 2){
+        var rrPts = rrVal >= 2.5 ? 2 : 1;
+        parts.push({ label: 'structural R:R ' + rrVal.toFixed(1) + 'R — reward/risk geometry', pts: rrPts });
+        tally += rrPts;
+      }
+      try{
+        var gfn = (typeof window !== 'undefined' && window.hgProfitRankHint) ? window.hgProfitRankHint : null;
+        if (gfn){
+          var gh = gfn({ sym: c.sym || 'XAUUSD', dir: c.dir, tier: c.grade, lane: 'gold', rr1: rrVal });
+          if (gh && gh.enough && isFinite(gh.boost) && gh.boost !== 0){
+            var gPts = Math.max(-3, Math.min(3, Math.round(gh.boost / 8)));
+            if (gPts !== 0){
+              parts.push({ label: 'scorecard expectancy ' + (gh.expectancy > 0 ? '+' : '') + gh.expectancy.toFixed(2) + 'R/trade (gold ledger)', pts: gPts });
+              tally += gPts;
+            }
+          }
+        }
+      }catch(e){}
       /* (1) OFF-SESSION tally bar: demoted off-session candidates must clear
          +2 above the normal render bar or they are held back with a named
          reason line (never silently dropped). */
@@ -1851,7 +1872,10 @@ function goldRankSetups(cands, ctx){
       if (ky !== kx) return ky - kx;
       var ax = isFinite(x.agree) ? x.agree : 0;
       var ay = isFinite(y.agree) ? y.agree : 0;
-      return ay - ax;
+      if (ay !== ax) return ay - ax;
+      var rrx = isFinite(x.rr) ? x.rr : (isFinite(x.rr1) ? x.rr1 : 0);
+      var rry = isFinite(y.rr) ? y.rr : (isFinite(y.rr1) ? y.rr1 : 0);
+      return rry - rrx;
     });
     out.ranked = ranked;
     out.best = null;

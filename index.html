@@ -3384,7 +3384,19 @@ function renderLogBadge(){ const b=$('tabB_log'); if(b){ const n=loadLog().lengt
 /* =============================================================================
    BEST — all hard gates first (binary ticket), then rank CLEAN survivors by a
    visible tally of independent aligned confirmations. Never a weighted score.
+   Profit rank: scorecard expectancy boost when ledger has evidence (n≥3).
    ============================================================================= */
+function bestProfitBoost(s){
+  try{
+    if (typeof hgProfitRankHint !== 'function') return 0;
+    var h = hgProfitRankHint({ sym: s.t.symbol, dir: s.dir, lane: 'crypto', rr1: s.rr });
+    return (h && isFinite(h.boost)) ? h.boost : 0;
+  }catch(e){ return 0; }
+}
+function bestSortPool(clean){
+  const strong = clean.filter(s => s.famScore >= 3);
+  return strong.length ? strong : clean;
+}
 async function runCascadeCore(uni){
   const clean=[];
     let breadthBull=0, breadthTotal=0;
@@ -3504,9 +3516,10 @@ const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='
       ];
       s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0);
       s.robScore=(r1?1:0)+(r2?1:0);
+      s.profitBoost = bestProfitBoost(s);
       await sleep(60);
     }
-    clean.sort((a,b)=> b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
+    clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
   return {clean, breadth:{bull:breadthBull, total:breadthTotal}};
 }
 
@@ -3528,7 +3541,8 @@ async function runBest(){
       out.innerHTML=`<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across the ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
       return;
     }
-    const w=clean[0];
+    const pool = bestSortPool(clean);
+    const w = pool[0];
     const breadthPct = breadth.total>=10 ? (breadth.bull/breadth.total*100) : 50;
     const regimeDir = breadth.total>=10 ? (breadthPct<=20?'bear':(breadthPct>=80?'bull':null)) : null;
     if (regimeDir && ((regimeDir==='bear' && w.dir==='long') || (regimeDir==='bull' && w.dir==='short'))){
@@ -3538,14 +3552,15 @@ async function runBest(){
     }
     const t1=w.t1; const t2=w.t2;
     logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-    const others = clean.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/5 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R`).join('<br>') || 'none';
+    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/5 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+    const famGateNote = pool.length < clean.length ? ' · ≥3/5 families required for #1' : '';
     out.innerHTML = `
       <div class="panel">
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/5 FAMILIES · ${w.robScore}/2 ROBUST</div>
-          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${clean.length} CLEAN setups by independent evidence families, then robustness, then structural R:R. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 5/5 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/5 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families, then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 5/5 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2)}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>

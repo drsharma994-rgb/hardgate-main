@@ -997,8 +997,11 @@ function sortResults(survivors, rejected){
     var ca = a.res.conviction === 'STRONG' ? 0 : 1, cb2 = b.res.conviction === 'STRONG' ? 0 : 1;
     var fa = (a.res.plan && a.res.plan.confirmed) ? 0 : 1, fb = (b.res.plan && b.res.plan.confirmed) ? 0 : 1;
     var pa = a.res.plan ? 0 : 1, pb = b.res.plan ? 0 : 1;
+    var rra = (a.res.plan && isFinite(a.res.plan.rr1)) ? a.res.plan.rr1 : 0;
+    var rrb = (b.res.plan && isFinite(b.res.plan.rr1)) ? b.res.plan.rr1 : 0;
     return (ca - cb2) || (pa - pb) || (fa - fb)
       || (b.res.gatesPassed - a.res.gatesPassed)
+      || (rrb - rra)
       || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
   });
   rejected.sort(function(a, b){
