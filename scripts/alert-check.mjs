@@ -6,7 +6,7 @@ const STATE_FILE = 'alert-state.json';
 /* Owner Telegram defaults — used when TELEGRAM_TOKEN/TELEGRAM_CHAT_ID env
    secrets are unset (browser page + CI runner). */
 const HG_TG_DEFAULT_TOKEN = '8678184060:AAGKhoukjgitAAk8kMzPHRF3WF6U8oXaNcc';
-const HG_TG_DEFAULT_CHAT = '-1004014764';
+const HG_TG_DEFAULT_CHAT = '1004014764';
 /* GitHub auto-disables scheduled workflows after 60 days of repository
    inactivity. The heartbeat below stamps lastRunAt into alert-state.json at
    most once per 24h, so the workflow's commit step produces ~1 keep-alive
