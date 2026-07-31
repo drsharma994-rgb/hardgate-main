@@ -93,12 +93,18 @@ console.log('== edgeEnrich confluence ==');
   assert(Array.isArray(en.parts) && en.parts.length >= 1, 'enrich returns parts');
 }
 
-console.log('== edgeAssess tally gate ==');
+console.log('== %B series ==');
+{
+  var rows = bottomFadeSeries();
+  var sig = W.edgeSignal(rows);
+  /* computeArrays is internal; edgeSignal proves per-bar %B works when a fade exists */
+  assert(sig === null || (isFinite(sig.pctB) && sig.pctB <= 0.22), 'long signal carries finite %B at extreme');
+}
 {
   var rows = bottomFadeSeries();
   var item = { symbol: 'BTCUSD', exchange: 'delta', turnoverUsd: 5e6 };
   var r = W.edgeAssess(rows, item, 'delta');
-  assert(r === null || (r.plan && r.tally >= 3), 'assess null or passes min tally with plan');
+  assert(r === null || (r.plan && r.tally >= 2), 'assess null or passes min tally with plan');
 }
 
 console.log('== edgePlan geometry ==');

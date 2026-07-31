@@ -18,8 +18,8 @@ Pure exports (never throw):
 (function(){
 'use strict';
 
-var MIN_TURNOVER  = 500000;
-var MAX_UNIVERSE  = 50;
+var MIN_TURNOVER  = 100000;
+var MAX_UNIVERSE  = 120;
 var KL_LIMIT      = 300;
 var DON_LEN       = 55;
 var BB_LEN        = 20;
@@ -27,9 +27,10 @@ var BB_MULT       = 2;
 var ATR_LEN       = 14;
 var EXT_LEN       = 8;
 var STOP_ATR      = 1.5;
-var TOUCH_ATR     = 0.25;
+var TOUCH_ATR     = 0.35;
 var MIN_RR        = 1.5;
-var MIN_TALLY     = 3;
+var MIN_TALLY     = 2;
+var SIGNAL_LOOKBACK = 8;
 var MAX_HOLD      = 12;
 var MIN_RECORD    = 3;
 var CHUNK         = 4;
@@ -92,7 +93,7 @@ function edgeUseLev(entry, stop, frac){
 function computeArrays(rows){
   if (typeof donchian !== 'function' || typeof atr !== 'function' ||
       typeof sma !== 'function' || typeof bollinger !== 'function' ||
-      typeof bollingerPercentB !== 'function' || typeof lowest !== 'function' ||
+      typeof lowest !== 'function' ||
       typeof highest !== 'function' || typeof rsi !== 'function') return null;
   var n = rows.length;
   var clean = new Array(n), closes = new Array(n), highs = new Array(n), lows = new Array(n);
@@ -103,8 +104,15 @@ function computeArrays(rows){
     highs[i]  = (r && isFinite(r.h)) ? r.h : NaN;
     lows[i]   = (r && isFinite(r.l)) ? r.l : NaN;
   }
+  var bb = bollinger(closes, BB_LEN, BB_MULT);
+  var pb = new Array(n);
+  for (var j = 0; j < n; j++){
+    var u = bb.upper[j], l = bb.lower[j];
+    if (isFinite(u) && isFinite(l) && u !== l) pb[j] = (closes[j] - l) / (u - l);
+    else pb[j] = NaN;
+  }
   return { rows: clean, closes: closes, highs: highs, lows: lows,
-           dc: donchian(clean, DON_LEN), pb: bollingerPercentB(closes, BB_LEN, BB_MULT),
+           dc: donchian(clean, DON_LEN), pb: pb,
            atr: atr(clean, ATR_LEN), sma20: sma(closes, 20), rsi14: rsi(closes, 14),
            loExt: lowest(lows, EXT_LEN), hiExt: highest(highs, EXT_LEN) };
 }
@@ -128,7 +136,7 @@ function setupAt(A, i){
     var touchBot = isFinite(l) && l <= dcLo + tol;
     var sweptLo = isFinite(l) && isFinite(priorLo) && priorLo < Infinity && l < priorLo && c > priorLo;
     var rejectLo = isFinite(closePos) && closePos >= 0.55 && isFinite(o) && c >= o;
-    var pbLo = isFinite(pb) && pb <= 0.18;
+    var pbLo = isFinite(pb) && pb <= 0.22;
     if (touchBot && pbLo && (rejectLo || sweptLo)){
       var extreme = isFinite(A.loExt[i]) ? A.loExt[i] : l;
       var stop = extreme - STOP_ATR * at;
@@ -146,7 +154,7 @@ function setupAt(A, i){
     var touchTop = isFinite(h) && h >= dcHi - tol;
     var sweptHi = isFinite(h) && isFinite(priorHi) && priorHi > -Infinity && h > priorHi && c < priorHi;
     var rejectHi = isFinite(closePos) && closePos <= 0.45 && isFinite(o) && c <= o;
-    var pbHi = isFinite(pb) && pb >= 0.82;
+    var pbHi = isFinite(pb) && pb >= 0.78;
     if (touchTop && pbHi && (rejectHi || sweptHi)){
       extreme = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
       stop = extreme + STOP_ATR * at;
@@ -170,17 +178,30 @@ function edgeSignal(rows){
     if (!rows || rows.length < DON_LEN + 30) return null;
     var A = computeArrays(rows);
     if (!A) return null;
-    var i = rows.length - 1;
-    var s = setupAt(A, i);
-    if (!s) return null;
-    var reg = (typeof detectRegime === 'function') ? detectRegime(rows) : null;
-    if (reg && (reg.regime === 'trend' || reg.regime === 'volatile')) return null;
-    s.regime = reg ? reg.label : 'n/a';
-    s.rsi14 = isFinite(A.rsi14[i]) ? A.rsi14[i] : null;
-    s.pctB = isFinite(A.pb[i]) ? A.pb[i] : null;
-    s.dcLo = A.dc.lo[i];
-    s.dcHi = A.dc.up[i];
-    return s;
+    var i0 = rows.length - 1;
+    for (var lb = 0; lb < SIGNAL_LOOKBACK; lb++){
+      var i = i0 - lb;
+      if (i < DON_LEN + 5) break;
+      var s = setupAt(A, i);
+      if (!s) continue;
+      var slice = rows.slice(0, i + 1);
+      var reg = (typeof detectRegime === 'function') ? detectRegime(slice) : null;
+      if (reg && reg.regime === 'volatile') continue;
+      if (reg && reg.regime === 'trend'){
+        var pbAt = A.pb[i];
+        var atExtreme = (s.dir === 'long' && isFinite(pbAt) && pbAt <= 0.25) ||
+                        (s.dir === 'short' && isFinite(pbAt) && pbAt >= 0.75);
+        if (!atExtreme) continue;
+      }
+      s.regime = reg ? reg.label : 'n/a';
+      s.rsi14 = isFinite(A.rsi14[i]) ? A.rsi14[i] : null;
+      s.pctB = isFinite(A.pb[i]) ? A.pb[i] : null;
+      s.dcLo = A.dc.lo[i];
+      s.dcHi = A.dc.up[i];
+      s.barAge = lb;
+      return s;
+    }
+    return null;
   }catch(e){ return null; }
 }
 
@@ -191,6 +212,17 @@ function edgeEnrich(sig, rows, item, candleSrc){
     var dir = sig.dir;
     out.parts.push({ label: sig.edge + (sig.swept ? ' · sweep+reclaim' : ' · touch+reject'), pts: 2 });
     out.tally += 2;
+    if (sig.barAge > 0){
+      out.parts.push({ label: 'setup formed ' + sig.barAge + ' bar' + (sig.barAge === 1 ? '' : 's') + ' ago — still active', pts: 0 });
+    }
+
+    if (typeof detectRegime === 'function'){
+      var regE = detectRegime(rows);
+      if (regE && (regE.regime === 'range' || regE.regime === 'compression' || regE.regime === 'weak_trend')){
+        out.parts.push({ label: 'regime ' + regE.label + ' — favourable for range fade', pts: 1 });
+        out.tally += 1;
+      }
+    }
 
     if (typeof volRegime === 'function'){
       var vr = volRegime(rows, 50);
@@ -217,11 +249,10 @@ function edgeEnrich(sig, rows, item, candleSrc){
     if (typeof hgStructureGate === 'function'){
       var sg = hgStructureGate(rows, dir);
       if (sg && sg.veto){
-        out.veto = true;
-        out.parts.push({ label: 'structure CHoCH against bias — veto', pts: -99 });
-        return out;
-      }
-      if (sg && sg.bos){
+        out.parts.push({ label: 'structure CHoCH against bias — heavy caution', pts: -2 });
+        out.tally -= 2;
+        out.notes.push('structure opposes');
+      } else if (sg && sg.bos){
         out.parts.push({ label: sg.note || 'BOS confirms the fade direction', pts: 1 });
         out.tally += 1;
       }
@@ -276,7 +307,6 @@ function edgeAssess(rows, item, candleSrc){
     var sig = edgeSignal(rows);
     if (!sig) return null;
     var en = edgeEnrich(sig, rows, item, candleSrc);
-    if (en.veto) return null;
     if (en.tally < MIN_TALLY) return null;
     var plan = edgePlan(sig);
     if (!plan) return null;
@@ -418,10 +448,11 @@ function mount(el){
     + '<p class="note">Scans the <b>combined Delta + CoinDCX</b> universe (xuUniverse). Candles route per venue'
     + ' with Binance fallback when history is thin. Confluence: Donchian range touch, %B extreme,'
     + ' mean-reversion, structure gate, liquidity pools, TTM squeeze, funding (Delta native).'
-    + ' Cards need tally ≥ ' + MIN_TALLY + ' independent reads. <b>USE Nx</b> = 50% of max-safe leverage.</p>'
+    + ' Cards need tally ≥ ' + MIN_TALLY + ' (core range edge = 2). <b>USE Nx</b> = 50% of max-safe leverage.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — Delta+CoinDCX · turnover ≥ $'
-    + fmtF(MIN_TURNOVER / 1e6, 1) + 'M when known · top ' + MAX_UNIVERSE + '</span></div>'
+    + fmtF(MIN_TURNOVER / 1e6, 2) + 'M when known · top ' + MAX_UNIVERSE
+    + ' · last ' + SIGNAL_LOOKBACK + ' bars</span></div>'
     + '<div class="prog" id="edgeProg"><i></i></div>'
     + '<div class="cards" id="edgeCards"></div>'
     + '<div class="empty" id="edgeEmpty" style="display:none">No qualifying edge setups on Delta or CoinDCX right now.</div>'
@@ -454,7 +485,7 @@ function mount(el){
     cardsEl.innerHTML = '';
     emptyEl.style.display = 'none';
     setProg(0);
-    var skipped = 0, t0 = Date.now();
+    var skipped = 0, rawSig = 0, tallyFail = 0, t0 = Date.now();
     try{
       var uni = await xuUniverse(true);
       var note = (typeof xuUniverseNote === 'function') ? xuUniverseNote() : null;
@@ -488,8 +519,13 @@ function mount(el){
             var src = xuCandles.lastSource || item.exchange;
             rows = edgeDropForming(rows, TF);
             if (!rows || rows.length < DON_LEN + 30){ skipped++; return; }
+            var sigOnly = edgeSignal(rows);
+            if (sigOnly) rawSig++;
             var assessed = edgeAssess(rows, item, src);
-            if (!assessed) return;
+            if (!assessed){
+              if (sigOnly) tallyFail++;
+              return;
+            }
             var bt = edgeBacktest(rows);
             found.push({
               item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
@@ -504,8 +540,10 @@ function mount(el){
       });
       if (!found.length){
         emptyEl.style.display = 'block';
-        setStat('done — 0 setups / ' + list.length + ' contracts · tally bar ' + MIN_TALLY
-          + ' · ' + skipped + ' skipped · ' + Math.floor((Date.now() - t0) / 1000) + 's');
+        setStat('done — 0 setups / ' + list.length + ' contracts · '
+          + rawSig + ' raw edge' + (rawSig === 1 ? '' : 's')
+          + (tallyFail ? (' · ' + tallyFail + ' below tally ' + MIN_TALLY) : '')
+          + ' · ' + skipped + ' thin candles · ' + Math.floor((Date.now() - t0) / 1000) + 's');
         return;
       }
       cardsEl.innerHTML = found.map(cardHTML).join('');
