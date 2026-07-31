@@ -351,7 +351,7 @@ assert(html.includes("hgMiniChart($('goldSetupChart')"), 'GOLD SETUP composite m
   assert(ret && ret.chart, 'happy path returns {chart, destroy()}');
   assert(rec.created === 1 && rec.charts[0].el === el, 'createChart called once with the container element');
   const cr = rec.charts[0];
-  assert(cr.opts && cr.opts.layout && cr.opts.layout.textColor === '#6B7A90', 'chart theme: muted blue-gray text');
+  assert(cr.opts && cr.opts.layout && cr.opts.layout.textColor === '#64748B', 'chart theme: muted slate text');
   assert(cr.candleOpts && cr.candleOpts.upColor === '#35C08E' && cr.candleOpts.downColor === '#E4586B'
       && cr.candleOpts.wickUpColor === '#35C08E' && cr.candleOpts.wickDownColor === '#E4586B',
     'candle series: --long/--short bodies AND wicks');
