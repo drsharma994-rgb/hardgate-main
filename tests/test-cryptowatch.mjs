@@ -6,8 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const load = f => vm.runInThisContext(fs.readFileSync(root + f, 'utf8'), { filename: f });
+globalThis.window = globalThis;
 load('indicators.js');
 load('indicators2.js');
+load('cryptogates.js');
 load('cryptowatch.js');
 
 let passed = 0;

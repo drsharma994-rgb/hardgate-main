@@ -132,6 +132,46 @@ function collectGold(out, kind, src, minTally){
   }
 }
 
+function pushWatch(out, src, row){
+  if (!row || typeof row !== 'object') return;
+  if (row.state !== 'armed') return;
+  var sym = row.sym;
+  var dir = row.dir;
+  if (!sym || (dir !== 'long' && dir !== 'short')) return;
+  var lvl = fin(+row.level) ? +row.level : null;
+  if (lvl === null) return;
+  var stop = dir === 'long' ? lvl * 0.985 : lvl * 1.015;
+  var t1 = dir === 'long' ? lvl * 1.02 : lvl * 0.98;
+  out.push({
+    src: String(src || 'WATCH'),
+    sym: String(sym),
+    dir: String(dir),
+    entry: lvl,
+    stop: stop,
+    t1: t1,
+    t2: null,
+    rr: null,
+    tally: row.gatesPassed || null,
+    tier: 'WATCH',
+    prime: false,
+    watch: true,
+    note: row.condition || row.reason || 'forming — not CLEAN yet'
+  });
+}
+
+function collectCryptoWatch(out){
+  try{
+    var cw = W.__hgCryptoWatch;
+    if (!cw || typeof cw !== 'object') return;
+    ['swing', 'scalp'].forEach(function(kind){
+      var bag = cw[kind];
+      if (!bag || !Array.isArray(bag.items)) return;
+      var src = kind === 'swing' ? 'SWING WATCH' : 'SCALP WATCH';
+      for (var i = 0; i < bag.items.length; i++) pushWatch(out, src, bag.items[i]);
+    });
+  }catch(e){}
+}
+
 function hgTabAlertsCollect(win){
   var out = [];
   var root = win || W;
@@ -140,6 +180,7 @@ function hgTabAlertsCollect(win){
   try{
     collectCrypto(out, 'swing', 'SWING');
     collectCrypto(out, 'scalp', 'SCALP');
+    collectCryptoWatch(out);
     collectEdge(out);
     collectBrain(out);
     var goldMin = GOLD_MIN_TALLY;
@@ -156,6 +197,7 @@ function hgTabAlertsCollect(win){
 }
 
 function setupKey(s){
+  if (s.watch) return s.src + ':watch:' + s.sym + ':' + s.dir + '@' + (s.tally || s.gatesPassed || 0);
   return s.src + ':' + s.sym + ':' + s.dir + '@' + s.entry;
 }
 
@@ -193,8 +235,9 @@ function hgTabAlertsFormat(fresh){
   var lines = [];
   for (var i = 0; i < (fresh || []).length; i++){
     var s = fresh[i];
-    var tag = s.prime ? '🔥 ' : '· ';
+    var tag = s.prime ? '🔥 ' : (s.watch ? '👁 ' : '· ');
     var extra = '';
+    if (s.watch && s.note) extra = ' · ' + s.note;
     if (s.tally !== null) extra += ' · tally ' + (s.tally > 0 ? '+' : '') + s.tally;
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';

@@ -313,10 +313,12 @@ function renderMacroPanel(macro, funding, ls){
   var rows = [];
 
   // M1 — DXY 20d trend (FALLING dollar = gold BULL)
-  var dxy = (macro && macro.dxy) ? macro.dxy : null;
+  var dxy = (macro && macro.dxyOfficial && isFinite(macro.dxyOfficial.value)) ? macro.dxyOfficial
+    : ((macro && macro.dxy) ? macro.dxy : null);
+  var dxyLbl = (macro && macro.dxyOfficial && isFinite(macro.dxyOfficial.value)) ? 'FRED DTWEXBGS' : 'DXY proxy';
   if (dxy && isFinite(dxy.value)){
     var tr = dxy.trend20 || 'FLAT';
-    rows.push(lrow('M1', 'DXY · dollar index (20d trend)',
+    rows.push(lrow('M1', dxyLbl + ' · dollar index (20d trend)',
       fnum(dxy.value, 2) + ' · ' + tr + (isFinite(dxy.change20Pct) ? ' (' + signed(dxy.change20Pct, 1) + '% over 20d)' : ''),
       tr === 'FALLING' ? 'pass' : (tr === 'RISING' ? 'veto' : 'na'),
       tr === 'FALLING' ? 'BULL' : (tr === 'RISING' ? 'BEAR' : 'NEUT')));
@@ -324,9 +326,10 @@ function renderMacroPanel(macro, funding, ls){
 
   // M2 — US10Y trend (FALLING yields = gold BULL)
   var tnxTr = macro ? macro.tnxTrend : null;
+  var tnxSrc = (macro && macro.tnxSource) ? (' · ' + macro.tnxSource) : '';
   if (macro && isFinite(macro.tnx)){
     rows.push(lrow('M2', 'US 10Y yield (20d trend)',
-      fnum(macro.tnx, 2) + '% · ' + (tnxTr || 'FLAT') + (isFinite(macro.tnxChange20Pct) ? ' (' + signed(macro.tnxChange20Pct, 1) + '% rel. 20d)' : ''),
+      fnum(macro.tnx, 2) + '% · ' + (tnxTr || 'FLAT') + (isFinite(macro.tnxChange20Pct) ? ' (' + signed(macro.tnxChange20Pct, 1) + '% rel. 20d)' : '') + tnxSrc,
       tnxTr === 'FALLING' ? 'pass' : (tnxTr === 'RISING' ? 'veto' : 'na'),
       tnxTr === 'FALLING' ? 'BULL' : (tnxTr === 'RISING' ? 'BEAR' : 'NEUT')));
   } else rows.push(lrow('M2', 'US 10Y yield (20d trend)', 'unavailable', 'na', 'N/A'));

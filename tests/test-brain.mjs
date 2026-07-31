@@ -161,10 +161,12 @@ console.log('== engine votes ==');
 const EN = { survivors: [{ sym: 'ETHUSDT', dir: 'long', conviction: 'STRONG', plan: { dir: 'long', entry: 1, stop: 0.9, t1: 1.2 } }],
              rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3', dir: 'long', gatesPassed: 3 },
                         { sym: 'LTCUSDT', vetoGate: 'G4', dir: 'short', gatesPassed: 4 },
-                        { sym: 'CHOPUSDT', vetoGate: 'G1', dir: null, gatesPassed: 1 }], at: 1 };
+                        { sym: 'CHOPUSDT', vetoGate: 'G1', dir: null, gatesPassed: 1 }], at: Date.now() };
 r = COLLECT({ sym: 'ETHUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'long' && x.strong === true && x.text.indexOf('STRONG') >= 0; }),
    'engine survivor -> strong vote in the survivor direction');
+r = COLLECT({ sym: 'ETHUSDT', engine: Object.assign({}, EN, { at: Date.now() - 60 * 60 * 1000 }) });
+ok(r.unavailable.indexOf('engine') >= 0, 'stale engine snapshot (>30m) -> dark, survivors do not vote');
 r = COLLECT({ sym: 'SOLUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.caution === true
                                  && x.text.indexOf('G3') >= 0 && x.text.indexOf('LONG') >= 0; }),
@@ -176,7 +178,7 @@ r = COLLECT({ sym: 'CHOPUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.text.indexOf('G1') >= 0
                                  && x.text.indexOf('no committed structure') >= 0; }),
    'G0/G1 rejection (dir null) -> neutral chop note, never a veto');
-r = COLLECT({ sym: 'SOLUSDT', engine: { survivors: [], rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3' }], at: 1 } });
+r = COLLECT({ sym: 'SOLUSDT', engine: { survivors: [], rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3' }], at: Date.now() } });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.caution === true
                                  && x.text.indexOf('unconfirmed') >= 0 && x.text.indexOf('G3') >= 0; })
    && !r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto'; }),
@@ -393,10 +395,14 @@ W.engineState = function(){
   return { survivors: [{ sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
                          plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 },   /* engineState real shape: no dir on plan */
                          gatesPassed: 6 }],
-           rejected: [{ sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 }], at: 123 };
+           rejected: [{ sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 }], at: Date.now() };
 };
 W.oiflowState = function(){ return { results: [{ sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS (trend fuel)' }] }; };
 W.squeezeState = function(){ return { results: [{ sym: 'ETHUSDT', kind: 'fired', dir: 'short' }] }; };
+W.carryState = function(){ return null; };
+W.termBasisState = function(){ return null; };
+W.liqsState = function(){ return { snap: { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6, count: 1 }, spikeUsd: 2e6 },
+  setup: { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6, entry: 100, stop: 95, t1: 110, t2: 117.5 } }; };
 W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
 W.liqFlushSetup = function(){ return { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
 W.goldspotState = function(){ return { basisPct: 0.01, verdict: 'balanced' }; };
@@ -585,6 +591,10 @@ function stubLayersPrime(WX){
     { sym: 'SOLUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
     { sym: 'XRPUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
   WX.squeezeState = function(){ return { results: [] }; };
+  WX.carryState = function(){ return null; };
+  WX.termBasisState = function(){ return null; };
+  WX.liqsState = function(){ return { snap: { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [{ sym: 'BTCUSDT', side: 'short', usd: 3e6, t: Date.now() }], window: { ms: 3.6e6, count: 1 }, spikeUsd: 2e6 },
+    setup: { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6, entry: 100, stop: 95, t1: 110, t2: 117.5 } }; };
   WX.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
   WX.liqFlushSetup = function(){ return { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
   WX.goldspotState = function(){ return { basisPct: 0.01, verdict: 'balanced' }; };
@@ -678,7 +688,7 @@ console.log('== alias matching (Binance-keyed layers vote for xu candidates) =='
   ok(r2.votes.some(function(x){ return x.layer === 'squeeze' && x.vote === 'long'; }), 'squeeze row keyed by the xu sym still matches exactly');
   r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], liq: { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 } });
   ok(r2.votes.some(function(x){ return x.layer === 'liqs' && x.vote === 'long'; }), 'flush setup naming BTCUSDT matches via alias');
-  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], engine: { survivors: [], rejected: [{ sym: 'BTC', vetoGate: 'G4' }], at: 1 } });
+  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], engine: { survivors: [], rejected: [{ sym: 'BTC', vetoGate: 'G4' }], at: Date.now() } });
   ok(r2.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto' && x.text.indexOf('G4') >= 0; }),
      'engine rejection keyed bare BTC vetoes via alias');
 }
@@ -2191,7 +2201,6 @@ console.log('== bounded warm-wait: dark->voting promotion, honest dark after the
   ok(iSnaps[0] === 'auto-warmed: regime'
        + ' · still dark: rotation (still running — lands in its own time)'
        + ' · boom (starter failed: kaboom)'
-       + ' · liqs (skipped: stream-only layer — open the LIQS tab once to start the live socket)'
        + ' · reading every intelligence layer…',
      'AI: the auto-warm accounting rides the stat line through the universe build — warmed / stuck / failed / skipped each named — got "' + iSnaps[0] + '"');
   /* QUICK RESCAN never auto-warms — straight to the recheck, zero starters */
@@ -2259,7 +2268,6 @@ console.log('== auto-warm into synthesis: shared engine-last path, accounting pr
      'AL: the progress stat names the exact hook order + the cold cap while the starters run — got "' + progSnaps[0] + '"');
   ok(alSnaps[0] === 'auto-warmed: regime, engine'
        + ' · still dark: boom (starter failed: kaput)'
-       + ' · liqs (skipped: stream-only layer — open the LIQS tab once to start the live socket)'
        + ' · reading every intelligence layer…',
      'AL: accounting prefix — cold engine + regime warmed into voting, the rejection + the skip named verbatim — got "' + alSnaps[0] + '"');
   ok(TL.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 0 HIGH · 1 watch · 3 aside') === 0,

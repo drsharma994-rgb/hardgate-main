@@ -83,10 +83,14 @@ function freshPane(){
   };
   return { pane: pane, stubs: stubs };
 }
+/* Fri 2026-07-31 15:30 IST — mid-session, outside the off-hours haircut window */
+const BRAIN_TEST_CLOCK = Date.UTC(2026, 6, 31, 10, 0, 0);
 function freshBrain(){
   globalThis.window = {};
   vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
-  return globalThis.window;
+  const W = globalThis.window;
+  if (typeof W.__hgBrainSetClock === 'function') W.__hgBrainSetClock(BRAIN_TEST_CLOCK);
+  return W;
 }
 /* house kline row shape (same as test-brain.mjs fakeRows) */
 function fakeRows(n){

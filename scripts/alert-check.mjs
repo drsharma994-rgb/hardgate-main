@@ -138,7 +138,7 @@ async function sendTicketPush(topic, next) {
    their structural voter — the 2026-07-25 all-ASIDE outage class. Push
    throttled to one per ENGINE_ALERT_MS per continuous outage; recovery
    clears the stamp. */
-const ENGINE_STALE_MS = 45 * 60 * 1000;
+const ENGINE_STALE_MS = 30 * 60 * 1000; /* aligned with engine.js ENGINE_FRESH_MS */
 const ENGINE_ALERT_MS = 2 * 60 * 60 * 1000;
 function engineVerdict(engine, now) {
   if (!engine || engine.live !== true) {

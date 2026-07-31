@@ -87,6 +87,7 @@ the user runs a scan once.
   var __busy = false;
   var __ranOnce = false;
   var __uiEl = null;
+  var __tbSnap = null;
 
   async function fetchBasisLeg(pair, contractType){
     try{
@@ -178,9 +179,22 @@ the user runs a scan once.
         + (failed ? ' · ' + failed + ' incomplete' : '')
         + ' · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's';
       if (!results.length){
-        empty.textContent = 'No term-structure data returned — Binance basis endpoint may be geo-blocked or pairs lack dated futures.';
+        var hostMsg = (typeof hgHostingMode === 'function' && hgHostingMode() === 'static')
+          ? ' Static host — term basis needs Binance /api routes on Render.'
+          : '';
+        empty.textContent = 'No term-structure data returned — Binance basis endpoint may be geo-blocked or pairs lack dated futures.' + hostMsg;
         empty.style.display = 'block';
       }
+      __tbSnap = {
+        at: Date.now(),
+        top: results.length ? {
+          pair: results[0].pair,
+          regime: results[0].curve.regime,
+          spreadCur: results[0].curve.spreadCur,
+          score: results[0].score
+        } : null,
+        count: results.length
+      };
       __ranOnce = true;
       return 'refreshed';
     }catch(e){
@@ -228,9 +242,30 @@ the user runs a scan once.
     }catch(e){}
   }
 
+  function __tbWarmEl(){
+    var stub = { style: {}, textContent: '', className: '', innerHTML: '',
+      disabled: false, addEventListener: function(){} };
+    return { innerHTML: '', querySelector: function(){ return stub; } };
+  }
+
+  async function termbasisWarm(){
+    try{
+      if (G.termBasisState && G.termBasisState()) return 'fresh';
+      if (__busy) return 'busy';
+      var el = __uiEl || __tbWarmEl();
+      var r = await runTermBasisScan(el);
+      return (G.termBasisState && G.termBasisState()) ? 'warmed' : ('unavailable: ' + (r || 'no curve data'));
+    }catch(e){ return 'error: ' + ((e && e.message) || e); }
+  }
+
   G.termBasisCurve = termBasisCurve;
   G.termBasisScore = termBasisScore;
+  G.termBasisState = function termBasisState(){
+    try{ return __tbSnap ? JSON.parse(JSON.stringify(__tbSnap)) : null; }catch(e){ return null; }
+  };
   G.HG_tabs = G.HG_tabs || [];
   G.HG_tabs.push({ id: 'termbasis', label: 'TERM BASIS', mount: mount, refresh: termbasisRefresh });
+  G.HG_warmups = G.HG_warmups || [];
+  G.HG_warmups.push({ id: 'termbasis', label: 'TERM BASIS', run: termbasisWarm });
 
 })();

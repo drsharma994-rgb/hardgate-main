@@ -28,203 +28,97 @@ function cwFmt(n, d){
   return Number(n).toFixed(d === undefined ? 2 : d);
 }
 
-/* Swing: mirror runScan gates; return null if all 7 pass (already CLEAN). */
 function swingWatchEval(rows, ticker){
-  if (!rows || rows.length < 210) return null;
-  var c = rows.map(function(r){ return r.c; });
-  var e9 = last(ema(c, 9)), e21 = last(ema(c, 21)), e50 = last(ema(c, 50)), e200 = last(ema(c, 200));
-  var p = last(c), r14 = last(rsi(c, 14)), vz = volZ(rows, 20);
-  var dir = null;
-  if (e9 > e21 && e21 > e50) dir = 'long';
-  else if (e9 < e21 && e21 < e50) dir = 'short';
-  if (!dir) return { state: 'idle', dir: null, strategy: 'SWING 4H', sym: ticker && ticker.symbol,
+  if (typeof swingGateMatrix !== 'function') return null;
+  var m = swingGateMatrix(rows, ticker);
+  if (!m) return null;
+  if (m.clean) return null;
+  if (!m.dir) return { state: 'idle', dir: null, strategy: 'SWING 4H', sym: ticker && ticker.symbol,
     reason: 'no aligned 4H EMA cascade (G1)', gatesPassed: 0, gatesTotal: 7, level: null };
-
-  var a4 = last(atr(rows, 14));
-  var gates = [];
-  var g1 = isFinite(a4) && Math.abs(e21 - e50) >= 0.25 * a4;
-  gates.push(['G1 cascade+spread', g1]);
-  var g2 = dir === 'long' ? p > e200 : p < e200;
-  gates.push(['G2 HTF side', g2]);
-  var g3 = !((dir === 'long' && r14 > 70) || (dir === 'short' && r14 < 30));
-  gates.push(['G3 RSI', g3]);
-  var g4 = true, g4note = 'funding n/a';
-  if (ticker && ticker.fundingPct !== null){
-    var fr = ticker.fundingPct;
-    g4 = Math.abs(fr) <= 0.05 + 1e-9 && !((dir === 'long' && fr >= 0.04) || (dir === 'short' && fr <= -0.04));
-    g4note = cwFmt(fr, 4) + '%';
+  var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+  if (m.passed >= 5){
+    return { state: 'armed', dir: m.dir, strategy: 'SWING 4H · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
+      condition: m.passed + '/7 gates pass — waiting: ' + missing.join(', '),
+      gatesPassed: m.passed, gatesTotal: 7, level: m.level };
   }
-  gates.push(['G4 funding', g4]);
-  var currentBar = rows[rows.length - 1];
-  var range = currentBar.h - currentBar.l;
-  var closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5;
-  var closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40;
-  var _rA = rsi(c, 14);
-  var _rP = _rA[_rA.length - 4];
-  var slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
-  var g5 = (vz > 0.5) || (closeOK && slopeOK);
-  gates.push(['G5 vol+wick', g5 && closeOK]);
-  var stop = lastSwing(rows, dir, 30);
-  var entry = p;
-  var risk = Math.abs(entry - stop);
-  var expectedMove = a4 * 3.5;
-  var dynamicRR = risk > 0 ? expectedMove / risk : 0;
-  var g6 = dynamicRR >= 2;
-  gates.push(['G6 R:R≥2', g6]);
-  var ev = cusumLast(c.slice(-120), 1);
-  var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
-  gates.push(['G7 CUSUM', g7]);
-
-  var passed = gates.filter(function(g){ return g[1]; }).length;
-  if (passed >= 7) return null;
-
-  var missing = gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
-  var level = isFinite(e21) ? e21 : p;
-  if (passed >= 5){
-    return { state: 'armed', dir: dir, strategy: 'SWING 4H · ' + dir.toUpperCase(), sym: ticker && ticker.symbol,
-      condition: passed + '/7 gates pass — waiting: ' + missing.join(', '),
-      gatesPassed: passed, gatesTotal: 7, level: level };
-  }
-  return { state: 'idle', dir: dir, strategy: 'SWING 4H · ' + dir.toUpperCase(), sym: ticker && ticker.symbol,
-    reason: passed + '/7 gates — need ≥5 to arm (' + missing.join(', ') + ')',
-    gatesPassed: passed, gatesTotal: 7, level: level };
+  return { state: 'idle', dir: m.dir, strategy: 'SWING 4H · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
+    reason: m.passed + '/7 gates — need ≥5 to arm (' + missing.join(', ') + ')',
+    gatesPassed: m.passed, gatesTotal: 7, level: m.level };
 }
 
 function scalpWatchEval(h1, m15, ticker, minsToFunding){
-  if (!h1 || h1.length < 60 || !m15 || m15.length < 60) return null;
-  var c1 = h1.map(function(r){ return r.c; });
-  var e9h = last(ema(c1, 9)), e21h = last(ema(c1, 21)), e50h = last(ema(c1, 50));
-  var dir = null;
-  if (e9h > e21h && e21h > e50h) dir = 'long';
-  else if (e9h < e21h && e21h < e50h) dir = 'short';
-  if (!dir) return { state: 'idle', dir: null, strategy: 'SCALP 15m', sym: ticker && ticker.symbol,
+  if (typeof scalpGateMatrix !== 'function') return null;
+  var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
+  if (!m) return null;
+  if (m.clean) return null;
+  if (!m.dir) return { state: 'idle', dir: null, strategy: 'SCALP 15m', sym: ticker && ticker.symbol,
     reason: 'no 1H cascade (G1)', gatesPassed: 0, gatesTotal: 7, level: null };
-
-  var c15 = m15.map(function(r){ return r.c; });
-  var e9a = ema(c15, 9), e21a = ema(c15, 21);
-  var n = c15.length;
-  var priorWin = m15.slice(n - 24, n - 7);
-  var localLow = Math.min.apply(null, priorWin.map(function(r){ return r.l; }));
-  var localHigh = Math.max.apply(null, priorWin.map(function(r){ return r.h; }));
-  var recentWin = m15.slice(n - 7, n - 1);
-  var swept = dir === 'long' ? Math.min.apply(null, recentWin.map(function(r){ return r.l; })) < localLow
-    : Math.max.apply(null, recentWin.map(function(r){ return r.h; })) > localHigh;
-  var reclaimed = dir === 'long' ? (c15[n - 1] > e9a[n - 1] && e9a[n - 1] > e21a[n - 1])
-    : (c15[n - 1] < e9a[n - 1] && e9a[n - 1] < e21a[n - 1]);
-  var pullbackHold = (dir === 'long' ? (m15[n - 1].l <= e21a[n - 1] && c15[n - 1] > e21a[n - 1])
-    : (m15[n - 1].h >= e21a[n - 1] && c15[n - 1] < e21a[n - 1])) && reclaimed;
-  var g2 = (swept && reclaimed) || pullbackHold;
-  var r15 = last(rsi(c15, 14));
-  var g3 = dir === 'long' ? (r15 >= 40 && r15 <= 65) : (r15 >= 35 && r15 <= 60);
-  var g4 = true;
-  if (ticker && ticker.fundingPct !== null){
-    var fr = ticker.fundingPct;
-    g4 = Math.abs(fr) <= 0.05 + 1e-9 && !((dir === 'long' && fr >= 0.04) || (dir === 'short' && fr <= -0.04));
+  var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+  if (m.passed >= 5){
+    return { state: 'armed', dir: m.dir, strategy: 'SCALP 15m · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
+      condition: m.passed + '/7 gates pass — waiting: ' + missing.join(', '),
+      gatesPassed: m.passed, gatesTotal: 7, level: m.level };
   }
-  var g5 = (minsToFunding === undefined || minsToFunding === null) ? true : minsToFunding >= 25;
-  var atrArr = atr(m15, 14);
-  var a = last(atrArr);
-  var base = atrArr.slice(-96).filter(isFinite).sort(function(x,y){ return x - y; });
-  var aMed = base.length ? base[Math.floor(base.length / 2)] : NaN;
-  var g6a = isFinite(a) && isFinite(aMed) && a >= 0.8 * aMed;
-  var vz = volZ(m15, 20);
-  var currentBar = m15[m15.length - 1];
-  var range = currentBar.h - currentBar.l;
-  var closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5;
-  var closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40;
-  var g6b = (vz > 0.5) || closeOK;
-  var g6 = g6a && g6b && closeOK;
-  var entry = c15[n - 1];
-  var stop = swept && reclaimed
-    ? (dir === 'long' ? localLow - a * 0.25 : localHigh + a * 0.25)
-    : (dir === 'long' ? Math.min.apply(null, m15.slice(n - 8, n - 1).map(function(r){ return r.l; })) - a * 0.25
-      : Math.max.apply(null, m15.slice(n - 8, n - 1).map(function(r){ return r.h; })) + a * 0.25);
-  var risk = Math.abs(entry - stop);
-  var g7 = risk > 0 && (a * 2.5 / risk) >= 1.5;
-
-  var gates = [['G1 1H trend', true], ['G2 sweep/reclaim', g2], ['G3 RSI band', g3],
-    ['G4 funding', g4], ['G5 settle>25m', g5], ['G6 vol alive', g6], ['G7 1.5R', g7]];
-  var passed = gates.filter(function(g){ return g[1]; }).length;
-  if (passed >= 7) return null;
-  var missing = gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
-  var level = isFinite(e21a[n - 1]) ? e21a[n - 1] : entry;
-  if (passed >= 5){
-    return { state: 'armed', dir: dir, strategy: 'SCALP 15m · ' + dir.toUpperCase(), sym: ticker && ticker.symbol,
-      condition: passed + '/7 gates — waiting: ' + missing.join(', '),
-      gatesPassed: passed, gatesTotal: 7, level: level };
-  }
-  return { state: 'idle', dir: dir, strategy: 'SCALP 15m · ' + dir.toUpperCase(), sym: ticker && ticker.symbol,
-    reason: passed + '/7 gates — need ≥5 to arm (' + missing.join(', ') + ')',
-    gatesPassed: passed, gatesTotal: 7, level: level };
+  return { state: 'idle', dir: m.dir, strategy: 'SCALP 15m · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
+    reason: m.passed + '/7 gates — need ≥5 to arm (' + missing.join(', ') + ')',
+    gatesPassed: m.passed, gatesTotal: 7, level: m.level };
 }
 
-function coilWatchItems(watch){
-  if (!watch || !Array.isArray(watch.list) || !watch.list.length) return [];
-  return watch.list.map(function(w){
-    if (!w || !w.symbol) return null;
+function coilWatchItems(cw){
+  if (!cw || !cw.list || !cw.list.length) return [];
+  return cw.list.map(function(w){
     return { state: 'armed', dir: w.dir || 'long', strategy: 'COIL COMPRESSION', sym: w.symbol,
-      condition: 'sweep below ' + cwFmt(w.coilLow) + ' then reclaim — range ' + cwFmt(w.coilLow) + '–' + cwFmt(w.coilHigh),
-      gatesPassed: 3, gatesTotal: 3, level: w.coilLow };
-  }).filter(Boolean);
+      condition: w.note || 'compression watch', gatesPassed: 5, gatesTotal: 7, level: w.level || null };
+  });
 }
 
 function cryptoFormingNowHTML(items){
-  if (!items || !items.length){
-    return '<div class="hgwatch"><div class="hgwatch-h">FORMING NOW <span>— no partial setups on watch</span></div>'
+  items = items || [];
+  if (!items.length){
+    return '<div class="hgwatch"><div class="hgwatch-h">FORMING NOW <span>≥5/7 gates, not CLEAN — watch only</span></div>'
       + '<div class="hgw-row idle"><span class="hgw-st">IDLE</span> Run SCAN — armed rows appear when ≥5/7 gates pass but the setup is not CLEAN yet.</div></div>';
   }
   var armedN = items.filter(function(w){ return w && w.state === 'armed'; }).length;
   var rows = items.map(function(w){
     if (!w) return '';
     var st = w.state === 'armed';
-    var lvl = (typeof w.level === 'number' && isFinite(w.level)) ? ' · trigger ~' + cwFmt(w.level) : '';
     return '<div class="hgw-row ' + (st ? 'armed' : 'idle') + '">'
       + '<span class="hgw-st">' + (st ? 'ARMED' : 'IDLE') + '</span>'
-      + '<b>' + cwEsc(w.sym) + '</b> · ' + cwEsc(w.strategy || 'SETUP')
-      + (w.gatesPassed !== undefined ? ' (' + w.gatesPassed + '/' + (w.gatesTotal || 7) + ')' : '')
-      + lvl + ' — ' + cwEsc(st ? (w.condition || 'watching') : (w.reason || w.condition || ''))
+      + '<b>' + cwEsc(w.sym || '?') + '</b> · ' + cwEsc(w.strategy || '')
+      + (w.condition ? ' — ' + cwEsc(w.condition) : (w.reason ? ' — ' + cwEsc(w.reason) : ''))
+      + (w.level !== null && w.level !== undefined ? ' · ref ' + cwFmt(w.level) : '')
       + '</div>';
   }).join('');
-  return '<div class="hgwatch"><div class="hgwatch-h">FORMING NOW <span>— '
+  return '<div class="hgwatch"><div class="hgwatch-h">FORMING NOW <span>'
     + armedN + ' armed · watch items, not entries</span></div>' + rows + '</div>';
 }
 
 function cryptoWatchInjectStyles(){
   if (typeof document === 'undefined') return;
   if (document.getElementById('hg-cryptowatch-css')) return;
-  var el = document.createElement('style');
-  el.id = 'hg-cryptowatch-css';
-  el.textContent = CW_CSS;
-  document.head.appendChild(el);
+  var s = document.createElement('style');
+  s.id = 'hg-cryptowatch-css';
+  s.textContent = CW_CSS;
+  document.head.appendChild(s);
 }
 
-/* News gate for crypto SWING/SCALP scans — uses hgNewsRisk with BTC as the
-   macro proxy (USD calendar events hit every symbol). Never throws. */
-function cryptoNewsGate(symbol){
+function cryptoNewsGate(sym){
   try{
-    var sym = symbol || 'BTC';
-    if (typeof hgNewsRisk !== 'function'){
-      return { blackout: false, caution: false, risk: 'low', note: 'news not loaded', events: [] };
+    if (typeof hgNewsRisk === 'function'){
+      var r = hgNewsRisk(sym || 'BTC');
+      if (r && r.blackout) return { blackout: true, caution: true, note: r.note || 'news blackout' };
+      if (r && (r.risk === 'high' || r.risk === 'med')) return { blackout: false, caution: true, note: r.note || '' };
     }
-    var nr = hgNewsRisk(sym);
-    return {
-      blackout: !!nr.blackout,
-      caution: !!(nr.blackout || nr.risk === 'high'),
-      risk: nr.risk || 'low',
-      note: nr.note || '',
-      events: nr.events || []
-    };
-  }catch(e){
-    return { blackout: false, caution: false, risk: 'low', note: 'news error', events: [] };
-  }
+  }catch(e){}
+  return { blackout: false, caution: false, note: '' };
 }
 
-function cryptoNewsBannerHTML(ns){
-  if (!ns || (!ns.blackout && !ns.caution)) return '';
-  var title = ns.blackout ? 'NEWS BLACKOUT — crypto scan paused' : 'NEWS CAUTION — size down / verify calendar';
-  return '<div class="note' + (ns.blackout ? ' warn' : '') + '" style="margin-bottom:10px">'
-    + '<b>' + cwEsc(title) + '</b> — ' + cwEsc(ns.note || 'high-impact USD window')
-    + '</div>';
+function cryptoNewsBannerHTML(gate){
+  if (!gate || !gate.caution) return '';
+  var cls = gate.blackout ? 'warn' : 'note';
+  var head = gate.blackout ? 'NEWS BLACKOUT' : 'CRYPTO NEWS';
+  return '<div class="note ' + cls + '" style="margin-bottom:10px">' + head + ' — '
+    + cwEsc(gate.note || (gate.blackout ? 'blackout active' : 'elevated event risk')) + '</div>';
 }
 
 if (typeof window !== 'undefined'){
@@ -235,6 +129,4 @@ if (typeof window !== 'undefined'){
   window.cryptoWatchInjectStyles = cryptoWatchInjectStyles;
   window.cryptoNewsGate = cryptoNewsGate;
   window.cryptoNewsBannerHTML = cryptoNewsBannerHTML;
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cryptoWatchInjectStyles);
-  else cryptoWatchInjectStyles();
 }
