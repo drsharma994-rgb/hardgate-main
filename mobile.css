@@ -163,7 +163,7 @@
 
   .ledger,.kv{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .hgchart{height:160px}
-  .note{font-size:12px;line-height:1.65}
+  .note{font-size:12px;line-height:1.65;font-weight:500}
 
   /* tables scroll horizontally */
   table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
