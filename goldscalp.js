@@ -823,6 +823,8 @@ async function runScan(ui){
     var gss = gfn('goldspotState');
     if (gss){ try{ ctx.spot = gss(); }catch(eS0){ ctx.spot = null; } }
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
+    var gps = gfn('goldProState');
+    if (gps){ try{ ctx.goldPro = gps(); }catch(eGp){ ctx.goldPro = null; } }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};

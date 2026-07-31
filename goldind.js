@@ -1135,6 +1135,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       newsCaution: D.news.caution,
       newsStamp: D.news.caution ? NEWS_STAMP + (D.news.title ? ' (' + D.news.title + ')' : '') : null,
       atr: D.a15, anchor: isFinite(anchor) ? anchor : D.entry,
+      pdZone: (D.pd && D.pd.zone) ? D.pd.zone : null,
       demoted: demoted, offSession: offSess, stamps: stamps, gateNotes: gateNotes,
       zone: zone || { lo: D.entry - 0.25*D.a15, hi: D.entry + 0.25*D.a15 },
       why: why, invalidates: invalidates,
@@ -1813,10 +1814,31 @@ function goldRankSetups(cands, ctx){
         if (fngV <= 25 && c.dir === 'long'){
           parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme fear, risk-off bid for gold', pts: 1 });
           tally += 1;
-        } else if (fngV >= 75 && c.dir === 'short'){
+        } else       if (fngV >= 75 && c.dir === 'short'){
           parts.push({ label: 'crypto fear & greed ' + fngV + ' — extreme greed, risk-on weighs on gold', pts: 1 });
           tally += 1;
         }
+      }
+      if (c.pdZone === 'DISCOUNT' && c.dir === 'long'){
+        parts.push({ label: 'premium/discount — price in discount zone of the 20-bar range (buy-the-dip bias)', pts: 1 });
+        tally += 1;
+      } else if (c.pdZone === 'PREMIUM' && c.dir === 'short'){
+        parts.push({ label: 'premium/discount — price in premium zone of the 20-bar range (sell-the-rip bias)', pts: 1 });
+        tally += 1;
+      } else if (c.pdZone === 'PREMIUM' && c.dir === 'long'){
+        parts.push({ label: 'premium/discount — long from premium zone (chase risk)', pts: -1 });
+        tally -= 1;
+      } else if (c.pdZone === 'DISCOUNT' && c.dir === 'short'){
+        parts.push({ label: 'premium/discount — short from discount zone (fade risk)', pts: -1 });
+        tally -= 1;
+      }
+      var pro = (ctx.goldPro && typeof ctx.goldPro === 'object') ? ctx.goldPro : null;
+      if (pro && (pro.word === 'STRUCTURAL BULL' || pro.word === 'STRUCTURAL BEAR')){
+        var favors = (pro.word === 'STRUCTURAL BULL') ? 'long' : 'short';
+        var pPts = (c.dir === favors) ? 2 : -2;
+        parts.push({ label: 'GOLD PRO ' + pro.word.replace('STRUCTURAL ', '').toLowerCase()
+                       + ' — institutional structure/macro alignment', pts: pPts });
+        tally += pPts;
       }
       var rrVal = isFinite(c.rr) ? +c.rr : (isFinite(c.rr1) ? +c.rr1 : NaN);
       if (isFinite(rrVal) && rrVal >= 2){

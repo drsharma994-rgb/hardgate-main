@@ -278,7 +278,7 @@ var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with 
 /* layer kind map — structural vs positioning vs context. PRIME requires at
    least one agreeing structural AND one agreeing positioning vote. */
 var LAYER_KIND = {
-  engine: 'structural', squeeze: 'structural',
+  engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
   goldsetup: 'structural', golddeep: 'structural',
   trend4h: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
@@ -697,6 +697,9 @@ function brainCollect(inputs){
      their ledger says so plainly; WATCH-or-better rows get this note
      overwritten by applyTrend4h (vote / dark / silent-with-reason) */
   jot('trend4h', 'SILENT', 'awaiting the post-scan candle fetch — evaluated only for WATCH-or-better rows');
+  jot('structure', 'SILENT', 'awaiting post-fetch BOS/CHoCH read on 4H structure');
+  jot('meanrev', 'SILENT', 'awaiting post-fetch mean-reversion assess (range regimes only)');
+  jot('poc', 'SILENT', 'awaiting post-fetch volume-profile value-area read');
 
   return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent, notes: notes };
 }
@@ -1894,6 +1897,99 @@ function applyBook(rows){
       }else{
         row.col.silent.push('book');
         colNote(row.col, 'book', 'SILENT', 'book balanced at ' + FMT(ratio, 2) + ' bid/ask — no edge claimed');
+      }
+    }
+  }catch(e){}
+}
+function applyStructure(rows){
+  try{
+    var sgFn = (typeof G.hgStructureGate === 'function') ? G.hgStructureGate
+             : (typeof hgStructureGate === 'function') ? hgStructureGate : null;
+    if (!sgFn) return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || !Array.isArray(row.rows4h) || row.rows4h.length < 40) continue;
+      var sg = sgFn(row.rows4h, row.dec.dir);
+      if (sg && sg.veto){
+        var ctxt = sg.note || 'CHoCH against the committed bias — structure broken';
+        row.col.votes.push({ layer: 'structure', vote: 'neutral', kind: 'structural', caution: true, text: ctxt });
+        colNote(row.col, 'structure', 'CAUTION', ctxt);
+      }else if (sg && sg.bos){
+        row.col.votes.push({ layer: 'structure', vote: row.dec.dir, kind: 'structural',
+          text: sg.note || ('BOS confirms ' + row.dec.dir.toUpperCase() + ' on 4H') });
+        colNote(row.col, 'structure', String(row.dec.dir).toUpperCase(), sg.note || 'BOS confirms cascade');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else{
+        row.col.silent.push('structure');
+        colNote(row.col, 'structure', 'SILENT', (sg && sg.note) ? sg.note : 'no fresh BOS/CHoCH on 4H');
+      }
+    }
+  }catch(e){}
+}
+function applyMeanrev(rows){
+  try{
+    if (typeof G.meanrevAssess !== 'function') return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || !Array.isArray(row.rows4h) || row.rows4h.length < 210) continue;
+      var m = G.meanrevAssess(row.rows4h);
+      if (!m || !m.signal || !m.dir){
+        row.col.silent.push('meanrev');
+        colNote(row.col, 'meanrev', 'SILENT', 'no live mean-reversion trigger on 4H');
+        continue;
+      }
+      var regime = (typeof detectRegime === 'function') ? detectRegime(row.rows4h) : null;
+      var rangeish = regime && (regime.regime === 'range' || regime.regime === 'compression');
+      var rec = (m.n >= 3) ? ('SETUP RECORD ' + m.n + ' trades · ' + Math.round(m.winPct) + '% win · avg '
+        + (m.expR > 0 ? '+' : '') + FMT(m.expR, 2) + 'R') : ('thin record n=' + m.n);
+      if (m.dir === row.dec.dir && rangeish){
+        row.col.votes.push({ layer: 'meanrev', vote: m.dir, kind: 'structural',
+          text: 'MEAN REV ' + m.dir.toUpperCase() + ' — RSI(2)/%B extreme in ' + (regime.label || 'range')
+            + ' · ' + rec });
+        colNote(row.col, 'meanrev', String(m.dir).toUpperCase(), rec);
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if (m.dir !== row.dec.dir){
+        row.col.votes.push({ layer: 'meanrev', vote: 'neutral', kind: 'structural', caution: true,
+          text: 'mean-reversion signal ' + m.dir.toUpperCase() + ' opposes the ' + row.dec.dir.toUpperCase() + ' bias · ' + rec });
+        colNote(row.col, 'meanrev', 'CAUTION', 'MR trigger opposes bias');
+      }else{
+        row.col.silent.push('meanrev');
+        colNote(row.col, 'meanrev', 'SILENT', 'MR trigger aligns but regime is ' + (regime ? regime.label : 'unknown') + ' — trend systems only');
+      }
+    }
+  }catch(e){}
+}
+function applyPoc(rows){
+  try{
+    if (typeof volumeProfile !== 'function') return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || !Array.isArray(row.rows4h) || row.rows4h.length < 40) continue;
+      var vp = volumeProfile(row.rows4h, 80, 24);
+      if (!vp || !isFinite(vp.poc)){
+        row.col.silent.push('poc');
+        colNote(row.col, 'poc', 'SILENT', 'volume profile unavailable (thin/zero volume history)');
+        continue;
+      }
+      var p = row.rows4h[row.rows4h.length - 1].c;
+      var dir = row.dec.dir;
+      var aligned = (dir === 'long' && isFinite(vp.val) && p <= vp.poc && p >= vp.val)
+                 || (dir === 'short' && isFinite(vp.vah) && p >= vp.poc && p <= vp.vah);
+      if (aligned){
+        row.col.votes.push({ layer: 'poc', vote: dir, kind: 'structural',
+          text: 'price in ' + (dir === 'long' ? 'discount' : 'premium') + ' value area — POC '
+            + PX(vp.poc) + ' · VA ' + PX(vp.val) + '–' + PX(vp.vah) });
+        colNote(row.col, 'poc', String(dir).toUpperCase(), 'value-area edge aligned with ' + dir);
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else{
+        row.col.silent.push('poc');
+        colNote(row.col, 'poc', 'SILENT', 'POC ' + PX(vp.poc) + ' — price not at a value-area edge for ' + dir);
       }
     }
   }catch(e){}
@@ -3499,7 +3595,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','fundz','btcrel','div','book','cvd','session'];
+                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','fundz','btcrel','div','meanrev','poc','book','cvd','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
 
 function auditLineHTML(label, status, text){
@@ -4081,11 +4177,14 @@ async function runBrain(el){
          promote WATCH -> HIGH -> PRIME through the same pure brainDecide
          (bars never lowered); missing candles -> honestly dark, capped. */
       applyTrend4h(rows);
+      applyStructure(rows);
       applyMtf(rows);
       applyVolreg(rows);
       applyFundz(rows);
       applyBtcrel(rows);
       applyDiv(rows);
+      applyMeanrev(rows);
+      applyPoc(rows);
       applyBook(rows);
       applyCvd(rows);
       applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
@@ -4313,11 +4412,14 @@ async function runQuick(el){
       /* TREND4H over the freshly fetched rows — promotions re-decided, then
          re-bucketed exactly like the full scan */
       applyTrend4h(rows);
+      applyStructure(rows);
       applyMtf(rows);
       applyVolreg(rows);
       applyFundz(rows);
       applyBtcrel(rows);
       applyDiv(rows);
+      applyMeanrev(rows);
+      applyPoc(rows);
       applyBook(rows);
       applyCvd(rows);
       applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
