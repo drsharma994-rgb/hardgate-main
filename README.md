@@ -32,7 +32,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | **REGIME** | Market-wide RISK-ON / RISK-OFF dashboard: 7 gauges (BTC 1D trend, ETH/BTC slope, BTC dominance, Fear & Greed, DXY, US 10Y, gold) — score ±6, ≥±3 calls the regime |
 | **CARRY** | Delta-neutral funding carry: Binance vs Delta India funding APR side by side, cross-venue spread cards when the gap ≥ 25% annualized |
 | **GOLD PRO** | Professional gold context: 1D/4H structure, gold-stamped macro ledger (DXY, 10Y, real-rate hint, gold/silver ratio, PAXG positioning), 60-day gold–DXY correlation |
-| **EDGE** | Range-edge scanner (Binance perps): LONG at range bottom / SHORT at range top with sweep+reclaim or rejection — full plan + conservative USE leverage |
+| **EDGE** | Multi-venue range-edge scanner (Delta + CoinDCX + Binance fallback): Donchian range, sweep+reclaim, vol regime, mean-rev, liquidity pools, TTM squeeze, funding — SL, T1/T2, safe **USE** leverage |
 | **BEST** | Whole-exchange cascade: the seven hard gates + evidence scoring; emails the top pick when alerts are on |
 | **BASIS** | Funding/basis monitor (Delta + Binance 8h funding side by side) |
 | **SEARCH** | Cross-exchange symbol lookup + on-demand Twelve Data swing backtests |
