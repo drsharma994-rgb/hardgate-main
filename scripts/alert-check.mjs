@@ -3,6 +3,10 @@ import { pathToFileURL } from 'url';
 
 const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com/';
 const STATE_FILE = 'alert-state.json';
+/* Owner Telegram defaults — used when TELEGRAM_TOKEN/TELEGRAM_CHAT_ID env
+   secrets are unset (browser page + CI runner). */
+const HG_TG_DEFAULT_TOKEN = '8678184060:AAHMxxcw4eTSs2C31fvTyEWFgMrGv8N3S6A';
+const HG_TG_DEFAULT_CHAT = '-1004014764';
 /* GitHub auto-disables scheduled workflows after 60 days of repository
    inactivity. The heartbeat below stamps lastRunAt into alert-state.json at
    most once per 24h, so the workflow's commit step produces ~1 keep-alive
@@ -100,7 +104,8 @@ async function sendNtfy(topic, title, body) {
 /* Telegram straight from Node — the owner's primary channel (2026-07-25:
    chosen over email after the EmailJS quota died). No secrets -> honest skip. */
 async function sendTelegramCi(text) {
-  const t = process.env.TELEGRAM_TOKEN, c = process.env.TELEGRAM_CHAT_ID;
+  const t = process.env.TELEGRAM_TOKEN || HG_TG_DEFAULT_TOKEN;
+  const c = process.env.TELEGRAM_CHAT_ID || HG_TG_DEFAULT_CHAT;
   if (!t || !c) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
   try {
     const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(t) + '/sendMessage', {
@@ -365,6 +370,10 @@ async function main() {
     await page.evaluateOnNewDocument((t, c) => {
       try { localStorage.setItem('hg_tg_token', t); localStorage.setItem('hg_tg_chat', c); } catch (e) {}
     }, process.env.TELEGRAM_TOKEN, process.env.TELEGRAM_CHAT_ID);
+  } else {
+    await page.evaluateOnNewDocument((t, c) => {
+      try { localStorage.setItem('hg_tg_token', t); localStorage.setItem('hg_tg_chat', c); } catch (e) {}
+    }, HG_TG_DEFAULT_TOKEN, HG_TG_DEFAULT_CHAT);
   }
   if (prevState.tabAlerts) {
     await page.evaluateOnNewDocument((keys) => {
