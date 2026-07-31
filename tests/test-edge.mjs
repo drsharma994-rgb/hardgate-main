@@ -43,6 +43,8 @@ assert(/xuniverse\.js[\s\S]*edge\.js/.test(readFileSync(path.join(root, 'index.h
 console.log('== edge exports ==');
 assert(typeof W.edgeSignal === 'function', 'edgeSignal exported');
 assert(typeof W.edgeSwingBias === 'function', 'edgeSwingBias exported');
+assert(typeof W.edgeScan === 'function', 'edgeScan exported');
+assert(typeof W.edgeWarm === 'function', 'edgeWarm exported');
 assert(typeof W.edgeSwingRead === 'function', 'edgeSwingRead exported');
 assert(typeof W.edgeEnrich === 'function', 'edgeEnrich exported');
 assert(typeof W.edgeAssess === 'function', 'edgeAssess exported');

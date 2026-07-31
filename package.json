@@ -6,6 +6,6 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node scripts/server.mjs",
-    "test": "node tests/test-brain.mjs && node tests/test-engine.mjs && node tests/test-smart.mjs && node tests/test-hgalert.mjs && node tests/test-ops.mjs && node tests/extract-inline.mjs && node tests/test-brain-live.mjs && node tests/test-gold-deep.mjs && node tests/test-scorecard.mjs && node tests/test-goldswing.mjs && node tests/test-indicators2.mjs && node tests/test-meanrev.mjs && node tests/test-edge.mjs && node tests/test-tabs.mjs && node tests/test-core-fixes.mjs && node tests/test-hard-refresh.mjs"
+    "test": "node tests/test-brain.mjs && node tests/test-engine.mjs && node tests/test-smart.mjs && node tests/test-hgalert.mjs && node tests/test-tabalerts.mjs && node tests/test-ops.mjs && node tests/extract-inline.mjs && node tests/test-brain-live.mjs && node tests/test-gold-deep.mjs && node tests/test-scorecard.mjs && node tests/test-goldswing.mjs && node tests/test-indicators2.mjs && node tests/test-meanrev.mjs && node tests/test-edge.mjs && node tests/test-tabs.mjs && node tests/test-core-fixes.mjs && node tests/test-hard-refresh.mjs"
   }
 }

@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v18';
+const HG_CACHE = 'hg-v19';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -22,7 +22,7 @@ const HG_SHELL = [
   './goldpro.js', './strats.js', './meanrev.js', './edge.js', './liqs.js', './xuniverse.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './signallog.js',
-  './hgalert.js', './brain.js', './scorecard.js'
+  './hgalert.js', './tabalerts.js', './brain.js', './scorecard.js'
 ];
 
 /* true → the request/response must NEVER touch the cache (fresh market data
