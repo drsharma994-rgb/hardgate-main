@@ -102,7 +102,8 @@ async function sendNtfy(topic, title, body) {
   }
 }
 /* Telegram straight from Node — the owner's primary channel (2026-07-25:
-   chosen over email after the EmailJS quota died). No secrets -> honest skip. */
+   chosen over email after the EmailJS quota died). Env secrets win; else the
+   baked-in HG_TG_DEFAULT_* owner defaults. Only skips when both are absent. */
 async function sendTelegramCi(text) {
   const t = process.env.TELEGRAM_TOKEN || HG_TG_DEFAULT_TOKEN;
   const c = process.env.TELEGRAM_CHAT_ID || HG_TG_DEFAULT_CHAT;
