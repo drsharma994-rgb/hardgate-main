@@ -192,6 +192,7 @@ table tr:hover td{background:rgba(217,164,65,.045)}
         <input id="tgToken" placeholder="bot token" title="bot token from @BotFather">
         <input id="tgChat" placeholder="chat id" title="your Telegram chat id">
         <button class="btn ghost header-field-btn" type="button" onclick="saveTelegram()">SAVE</button>
+        <button class="btn ghost header-field-btn" type="button" onclick="resetTelegramDefaults()">RESET</button>
         <button class="btn ghost header-field-btn" type="button" onclick="testTelegram()">TEST</button>
         <span class="note" id="tgStat"></span>
       </label>
@@ -3742,15 +3743,30 @@ async function sendTelegram(text){
   try{
     const c = tgCreds();
     if (!c) return 'not-configured';
-    const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(c.token) + '/sendMessage', {
+    /* Token goes in the path raw — encodeURIComponent breaks the colon segment. */
+    const res = await fetch('https://api.telegram.org/bot' + c.token + '/sendMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: c.chat, text: String(text || ''), disable_web_page_preview: true })
     });
-    if (!res || !res.ok) return 'HTTP ' + (res && res.status);
     const j = await res.json().catch(function(){ return null; });
+    if (!res || !res.ok){
+      const desc = (j && j.description) ? String(j.description) : '';
+      return 'HTTP ' + (res && res.status) + (desc ? ' — ' + desc : '');
+    }
     return (j && j.ok) ? true : ('api: ' + JSON.stringify(j).slice(0, 120));
   }catch(e){ return emailErrStr(e); }
+}
+function resetTelegramDefaults(){
+  try{
+    localStorage.removeItem('hg_tg_token');
+    localStorage.removeItem('hg_tg_chat');
+  }catch(e){}
+  try{
+    if ($('tgToken') && HG_TG_DEFAULT.token) $('tgToken').value = HG_TG_DEFAULT.token;
+    if ($('tgChat') && HG_TG_DEFAULT.chat) $('tgChat').value = HG_TG_DEFAULT.chat;
+    if ($('tgStat')) $('tgStat').textContent = 'reset to built-in defaults — hit TEST';
+  }catch(e){}
 }
 function saveTelegram(){
   const t = ($('tgToken').value||'').trim(), c = ($('tgChat').value||'').trim();
@@ -3764,7 +3780,12 @@ async function testTelegram(){
   const stat = $('tgStat');
   if (stat) stat.textContent = 'sending…';
   const r = await sendTelegram('HARDGATE — Telegram alerts connected ✅ (' + new Date().toTimeString().slice(0, 8) + ')');
-  if (stat) stat.textContent = (r === true) ? 'test sent ✓' : ('test failed: ' + r);
+  if (stat){
+    if (r === true) stat.textContent = 'test sent ✓';
+    else if (String(r).indexOf('401') >= 0){
+      stat.textContent = 'test failed: ' + r + ' — token invalid/revoked; get a fresh one from @BotFather → RESET → TEST. For groups: add the bot + send any message first.';
+    } else stat.textContent = 'test failed: ' + r;
+  }
 }
 
 /* One visible line in the setup LOG when an alert email fails — status 'note'

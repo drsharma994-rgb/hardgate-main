@@ -108,7 +108,7 @@ async function sendTelegramCi(text) {
   const c = process.env.TELEGRAM_CHAT_ID || HG_TG_DEFAULT_CHAT;
   if (!t || !c) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
   try {
-    const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(t) + '/sendMessage', {
+    const res = await fetch('https://api.telegram.org/bot' + t + '/sendMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: c, text: String(text || ''), disable_web_page_preview: true })
