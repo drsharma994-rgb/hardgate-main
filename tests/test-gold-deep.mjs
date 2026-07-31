@@ -35,6 +35,11 @@ const elements = {};
 globalThis.$ = id => (elements[id] = elements[id] || { innerHTML: '', textContent: '', title: '' });
 globalThis.setProg = () => {};
 globalThis.S = { goldDataSource: null };
+globalThis.waitAlertIdle = async function(statEl){
+  if (globalThis.S.alertBusy && globalThis.S.alertBusySince && Date.now() - globalThis.S.alertBusySince > 4 * 60 * 1000)
+    globalThis.S.alertBusy = false;
+  return !globalThis.S.alertBusy;
+};
 globalThis.GOLD_SYM = 'XAUTUSD';
 globalThis.GOLD_SRC_LABEL = { 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
 globalThis.nowSec = () => Math.floor(Date.now() / 1000);

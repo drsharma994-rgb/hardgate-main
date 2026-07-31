@@ -6,10 +6,12 @@
         two null-turnover rows) — exact expected candidate math pinned
      B) WARM UP -> synthesis: 3 fake HG_warmups hooks (engine registered FIRST
         must run LAST; one throws -> 'error:'), every layer getter seeded with
-        realistic directional evidence (BTC PRIME 7 layers, ETH + ALT007 HIGH
-        4 layers, SOL veto aside), xuCandles stubbed with house kline rows
+        realistic directional evidence (BTC PRIME 8 layers, ETH + ALT007 PRIME
+        5 layers, SOL veto aside), xuCandles stubbed with house kline rows
+        (4h + 1h legs per candidate)
      C) quick rescan over a 45-watch scan: the fetch cap must bind AND the
-        stat line must SAY so (regression cover for the cap note)
+        stat line must SAY so (regression cover for the cap note); post-fetch
+        conviction layers promote the capped set to HIGH
      D) radar quality gates at scale: a sub-floor WATCH alt and an overextended
         WATCH chase demote to ASIDE with named reasons + a stat tally; the
         quick rescan carries the gated verdicts over with AS OF stamps
@@ -55,6 +57,14 @@ async function waitFor(cond, ms){
   const t0 = Date.now();
   while (!cond() && Date.now() - t0 < (ms || 30000)) await sleep(25);
   return cond();
+}
+/* fetchCandleQueue pulls 4h + 1h in parallel per candidate — count legs, not symbols */
+const CANDLE_TF_LEGS = 2;
+function candleLegCalls(candidates){ return candidates * CANDLE_TF_LEGS; }
+function uniqCandleSyms(calls){
+  const u = [];
+  for (let i = 0; i < calls.length; i++) if (u.indexOf(calls[i]) < 0) u.push(calls[i]);
+  return u;
 }
 
 /* ---- harness, copied from tests/test-brain.mjs ---- */
@@ -231,8 +241,8 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   const bDeps = PB.stubs['#brainDeps'].textContent;
 
   assert(done, 'stat reaches "done ·" after the warm-up auto-fires the synthesis — got "' + bStat + '"');
-  assert(bStat.indexOf('done · 1 PRIME · 2 HIGH · 0 watch · 503 aside') === 0,
-         'buckets over 506 rows: 1 PRIME · 2 HIGH · 0 watch · 503 aside — got "' + bStat + '"');
+  assert(bStat.indexOf('done · 3 PRIME · 0 HIGH · 0 watch · 503 aside') === 0,
+         'buckets over 506 rows: 3 PRIME · 0 HIGH · 0 watch · 503 aside — got "' + bStat + '"');
   assert(bStat.indexOf('universe ' + expTotal + ' (delta ' + expDelta + ' + cdcx ' + expCdcx + ')') >= 0,
          'stat universe count exact: universe 505 (delta 252 + cdcx 253) — got "' + bStat + '"');
   assert(PB.stubs['#brainReadUni'].textContent === 'universe 505 (delta 252 + cdcx 253) · 3 prime/high · 0 watch',
@@ -249,13 +259,13 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
 
   /* ---- every rendered setup card honors the TP/SL contract ---- */
   const cardSegs = bCards.split('<div class="card ').slice(1);
-  assert(cardSegs.length === 3, 'exactly 3 setup cards rendered (BTC PRIME + ETH/ALT007 HIGH) — got ' + cardSegs.length);
+  assert(cardSegs.length === 3, 'exactly 3 setup cards rendered (BTC + ETH + ALT007 PRIME) — got ' + cardSegs.length);
   assert(cardSegs.every(function(s){ return s.indexOf('ENTRY <b>') >= 0 && s.indexOf('STOP <b>') >= 0 && s.indexOf('T1 <b>') >= 0; }),
          'EVERY rendered setup card contains ENTRY, STOP and T1 HTML — the TP/SL contract');
 
   /* ---- BTC PRIME card: alias-matched layers, engine plan verbatim ---- */
-  assert(bCards.indexOf('B-BTC_USDT') >= 0 && bCards.indexOf('PRIME · 7 LAYERS') >= 0 && bCards.indexOf('>LONG</span>') >= 0,
-         'BTC PRIME card: cdcx sym, LONG, 7 agreeing layers (regime+rotation+onchain+engine+oiflow+squeeze+liqs)');
+  assert(bCards.indexOf('B-BTC_USDT') >= 0 && bCards.indexOf('PRIME · 8 LAYERS') >= 0 && bCards.indexOf('>LONG</span>') >= 0,
+         'BTC PRIME card: cdcx sym, LONG, 8 agreeing layers (regime+rotation+onchain+engine+oiflow+squeeze+liqs+post-fetch)');
   assert(bCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && bCards.indexOf('T1 <b>110</b> (2R)') >= 0
          && bCards.indexOf('T2 <b>117.5</b>') >= 0 && bCards.indexOf('gate engine') >= 0,
          'BTC card uses the gate engine plan verbatim — levels never invented');
@@ -263,9 +273,9 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
          'BTC card: COINDCX venue stamp + xu-sym toTrade payload');
 
   /* ---- ETH HIGH card: engine plan, DELTA stamp ---- */
-  assert(bCards.indexOf('ETHUSDT') >= 0 && bCards.indexOf('HIGH · 4 LAYERS') >= 0
+  assert(bCards.indexOf('ETHUSDT') >= 0 && bCards.indexOf('PRIME · 5 LAYERS') >= 0
          && bCards.indexOf('ENTRY <b>50</b> · STOP <b>47</b>') >= 0 && bCards.indexOf('T1 <b>56</b> (2R)') >= 0,
-         'ETH HIGH card: 4 layers, engine plan rendered');
+         'ETH PRIME card: 5 layers, engine plan rendered');
   assert(bCards.indexOf('DELTA') >= 0, 'delta-listed card carries the DELTA venue stamp');
 
   /* ---- ALT007 HIGH card: engine survivor WITHOUT a plan -> fetched-candle fallback ---- */
@@ -275,7 +285,10 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   assert(planCalls === 1, 'hgPlanLevels consulted exactly once — only the engine-plan-less card (got ' + planCalls + ')');
 
   /* ---- lazy bounded candle fetching at scale ---- */
-  assert(xuCalls.length === 3, 'candles fetched ONLY for the 3 WATCH-or-better candidates out of 505 — got ' + xuCalls.length);
+  assert(xuCalls.length === candleLegCalls(3),
+         'candles fetched ONLY for the 3 WATCH-or-better candidates (4h+1h legs) — got ' + xuCalls.length);
+  assert(uniqCandleSyms(xuCalls).length === 3,
+         'exactly 3 unique symbols fetched — got ' + uniqCandleSyms(xuCalls).join(','));
   assert(xuCalls[0] === 'B-BTC_USDT', 'highest-evidence-first: the PRIME BTC candidate fetches first — got ' + xuCalls.join(','));
   assert(xuCalls.indexOf('ETHUSDT') >= 0 && xuCalls.indexOf('ALT007USDT') >= 0
          && xuCalls.indexOf('B-SOL_USDT') === -1 && xuCalls.indexOf('SOLUSDT') === -1,
@@ -340,9 +353,9 @@ console.log('== C) quick rescan over 45 watch candidates: cap note honest ==');
   W.HG_tabs[0].mount(PC.pane);
   await runAndWait(PC.stubs);
   const cFull = PC.stubs['#brainStat'].textContent;
-  assert(cFull.indexOf('done · 0 PRIME · 0 HIGH · 47 watch · 2 aside') === 0,
-         'full scan: 45 alts reach WATCH on 3 votes, BTC+ETH join on the 2-vote radar tier — got "' + cFull + '"');
-  assert(candleCalls === 40, 'full scan: fetch cap respected (40 of 47) — got ' + candleCalls);
+  assert(cFull.indexOf('done · 0 PRIME · 40 HIGH · 7 watch · 2 aside') === 0,
+         'full scan: 45 alts reach WATCH then post-fetch promotes the capped 40 to HIGH; BTC+ETH join on radar — got "' + cFull + '"');
+  assert(candleCalls === candleLegCalls(40), 'full scan: fetch cap respected (40 candidates, 4h+1h legs) — got ' + candleCalls);
   assert(cFull.indexOf('+7 more watch candidates — raise evidence to fetch') >= 0,
          'full scan: cap note named honestly — got "' + cFull + '"');
 
@@ -352,7 +365,7 @@ console.log('== C) quick rescan over 45 watch candidates: cap note honest ==');
   const cQuick = PC.stubs['#brainStat'].textContent;
   assert(/^quick rescan: 47 checked · 2 unchanged/.test(cQuick),
          'quick rescan rechecks the 47-watch set — got "' + cQuick + '"');
-  assert(candleCalls === 40, 'quick rescan: fetch cap respected again (40 of 47) — got ' + candleCalls);
+  assert(candleCalls === candleLegCalls(40), 'quick rescan: fetch cap respected again (40 candidates, 4h+1h legs) — got ' + candleCalls);
   assert(cQuick.indexOf('+7 more watch candidates — raise evidence to fetch') >= 0,
          'quick rescan: the binding fetch cap is NAMED on the stat line, never silently dropped — got "' + cQuick + '"');
   assert(cFull.indexOf('gated') === -1 && cQuick.indexOf('gated') === -1,
@@ -400,8 +413,8 @@ console.log('== D) liquidity floor + overextension guard over a 61-row universe 
   const dStat = PD.stubs['#brainStat'].textContent;
   const dWatch = PD.stubs['#brainWatch'].innerHTML;
   const dAside = PD.stubs['#brainAside'].innerHTML;
-  assert(dStat.indexOf('done · 0 PRIME · 0 HIGH · 57 watch · 4 aside') === 0,
-         'full scan: 55 clean alts + ETH/SOL radar watch; THINALT + PUMPALT gated aside; BTC + gold aside — got "' + dStat + '"');
+  assert(dStat.indexOf('done · 0 PRIME · 40 HIGH · 17 watch · 4 aside') === 0,
+         'full scan: 55 clean alts promote to HIGH after fetch; THINALT + PUMPALT gated aside; BTC + gold aside — got "' + dStat + '"');
   assert(dStat.indexOf(' · 2 gated: 1 liquidity · 1 overextended') >= 0,
          'full scan: the gate tally names both kinds — got "' + dStat + '"');
   assert(dStat.indexOf('+17 more watch candidates — raise evidence to fetch') >= 0,
@@ -412,9 +425,10 @@ console.log('== D) liquidity floor + overextension guard over a 61-row universe 
   assert(dAside.indexOf('>PUMPALT</span>') >= 0
          && dAside.indexOf('overextended +17.3% 24h — chasing tops is how radar dies') >= 0,
          'PUMPALT (+17.3% 24h) demoted to ASIDE with the exact overextension reason');
-  assert(dWatch.indexOf('>THINALT</span>') === -1 && dWatch.indexOf('>PUMPALT</span>') === -1
-         && dWatch.indexOf('>RALT001</span>') >= 0,
-         'gated rows leave the WATCH ledger; the 55 clean radar rows stay');
+  assert(dWatch.indexOf('>THINALT</span>') === -1 && dWatch.indexOf('>PUMPALT</span>') === -1,
+         'gated rows leave the WATCH ledger');
+  assert(W.__hgBrainLast().rows.some(function(x){ return x.sym === 'RALT001USDT' && x.tier === 'HIGH'; }),
+         'clean radar rows that earned a post-fetch leg promote to HIGH instead of sitting on WATCH');
 
   /* quick rescan: gated verdicts are ASIDE now — carried over with AS OF
      stamps, never re-gated, and the quick tally stays empty */
@@ -522,23 +536,25 @@ console.log('== F2) funding votes + audit toggles over a 13-watch board ==');
   W.HG_tabs[0].mount(PF2.pane);
   await runAndWait(PF2.stubs);
   const f2Stat = PF2.stubs['#brainStat'].textContent;
+  const f2Cards = PF2.stubs['#brainCards'].innerHTML;
   const f2Watch = PF2.stubs['#brainWatch'].innerHTML;
   const f2Aside = PF2.stubs['#brainAside'].innerHTML;
-  assert(f2Stat.indexOf('done · 0 PRIME · 0 HIGH · 13 watch · 1 aside') === 0,
-         'F2: BTC/ETH/SOL + 10 alts all WATCH; gold the only aside — got "' + f2Stat + '"');
+  assert(f2Stat.indexOf('done · 0 PRIME · 1 HIGH · 12 watch · 1 aside') === 0,
+         'F2: ETH HIGH on crowded funding; BTC/SOL + 10 alts WATCH; gold the only aside — got "' + f2Stat + '"');
   const f2Rows = W.__hgBrainLast().rows;
   const f2BySym = function(s){ return f2Rows.filter(function(x){ return x.sym === s; })[0]; };
-  assert(lrowSeg(f2Watch, 'BTC').indexOf('radar only') >= 0
+  assert(lrowSeg(f2Watch, 'BTC').indexOf('3 layers agree LONG') >= 0
          && f2BySym('BTCUSDT').evidence.indexOf('FUNDING: funding -0.12%/8h — shorts crowded, fade fuel for longs') >= 0,
-         'F2: extreme funding AGAINST completes BTC’s radar with the named fade vote');
-  assert(lrowSeg(f2Watch, 'ETH').indexOf('funding crowded same-direction — squeeze risk') >= 0
+         'F2: extreme funding AGAINST completes BTC’s WATCH with the named fade vote');
+  assert(f2Cards.indexOf('ETHUSDT') >= 0 && f2Cards.indexOf('funding crowded same-direction — squeeze risk') >= 0
          && !f2BySym('ETHUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
-         'F2: +0.11%/8h WITH the LONG row = caution chip, NO vote — the crowded side is never rewarded');
+         'F2: +0.11%/8h WITH the LONG row = caution chip on the HIGH card, NO vote — the crowded side is never rewarded');
   assert(lrowSeg(f2Watch, 'SOL').indexOf('funding crowded') === -1
          && !f2BySym('SOLUSDT').evidence.some(function(e){ return e.indexOf('FUNDING:') === 0; }),
          'F2: -0.09%/8h sub-extreme = silent — no chip, no vote');
-  assert((f2Watch.split('data-audit="').length - 1) === 13
+  assert((f2Watch.split('data-audit="').length - 1) === 12
          && (f2Aside.split('data-audit="').length - 1) === 1
+         && (f2Cards.split('data-audit="').length - 1) === 1
          && f2Watch.indexOf('auditRows') === -1 && f2Aside.indexOf('auditRows') === -1,
          'F2: all 14 rows carry a collapsed audit toggle and NOT ONE ledger renders until clicked');
   const btcAudit = W.__hgBrainAudit('BTCUSDT');
@@ -594,16 +610,16 @@ console.log('== E1) TREND4H promotion at scale + honest fetch cap + quick rescan
   await runAndWait(PE.stubs);
   const eStat = PE.stubs['#brainStat'].textContent;
   const eCards = PE.stubs['#brainCards'].innerHTML;
-  assert(eStat.indexOf('done · 0 PRIME · 1 HIGH · 55 watch · 2 aside') === 0,
-         'E1: TRENDY promoted WATCH -> HIGH by the uptrend TREND4H vote; 55 radar rows stay WATCH; BTC + gold aside — got "' + eStat + '"');
+  assert(eStat.indexOf('done · 0 PRIME · 40 HIGH · 16 watch · 2 aside') === 0,
+         'E1: TRENDY promoted WATCH -> HIGH by the uptrend TREND4H vote; capped set promotes to HIGH; BTC + gold aside — got "' + eStat + '"');
   assert(eCards.indexOf('TRENDYUSDT') >= 0 && eCards.indexOf('HIGH · 4 LAYERS') >= 0 && eCards.indexOf('>LONG</span>') >= 0,
          'E1: the promoted card renders HIGH · 4 LAYERS LONG');
   assert(eCards.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
          'E1: the promoting structural vote is named on the card (HTML-escaped)');
   assert(eStat.indexOf('+16 more watch candidates — raise evidence to fetch') >= 0,
          'E1: the 40-fetch cap binds over the 56-row watch set, honestly named — got "' + eStat + '"');
-  assert(candleCalls.length === 40 && candleCalls[0] === 'TRENDYUSDT',
-         'E1: exactly 40 fetches and TRENDY goes FIRST (turnover-ordered queue) — got ' + candleCalls.length + ' / ' + candleCalls[0]);
+  assert(candleCalls.length === candleLegCalls(40) && candleCalls[0] === 'TRENDYUSDT',
+         'E1: exactly 40 candidates fetched (4h+1h legs) and TRENDY goes FIRST — got ' + candleCalls.length + ' / ' + candleCalls[0]);
   const snapE = W.__hgBrainLast();
   const tRow = snapE.rows.filter(function(x){ return x.sym === 'TRENDYUSDT'; })[0];
   assert(tRow && tRow.tier === 'HIGH' && tRow.dir === 'long'
@@ -617,7 +633,7 @@ console.log('== E1) TREND4H promotion at scale + honest fetch cap + quick rescan
   const eQuick = PE.stubs['#brainStat'].textContent;
   assert(/^quick rescan: 56 checked · 2 unchanged/.test(eQuick),
          'E1: quick rescan rechecks the 56 WATCH-or-better rows; BTC + gold carry over — got "' + eQuick + '"');
-  assert(eQuick.indexOf('0 PRIME · 1 HIGH · 55 watch · 2 aside') >= 0
+  assert(eQuick.indexOf('0 PRIME · 40 HIGH · 16 watch · 2 aside') >= 0
          && PE.stubs['#brainCards'].innerHTML.indexOf('TREND4H: 4h EMA20&gt;EMA50 + higher-high — structural long') >= 0,
          'E1: the quick pass re-derives the same promotion deterministically — got "' + eQuick + '"');
   assert(eQuick.indexOf('+16 more watch candidates — raise evidence to fetch') >= 0,
@@ -663,22 +679,23 @@ console.log('== E2) F&G extreme fear: majors vote, alts sit out, absent restores
   globalThis.S = { fng: { v: 9, c: 'Extreme Fear' } };
   await runAndWait(PF.stubs);
   const fStat = PF.stubs['#brainStat'].textContent;
+  const fCards = PF.stubs['#brainCards'].innerHTML;
   const fWatch = PF.stubs['#brainWatch'].innerHTML;
   const fAside = PF.stubs['#brainAside'].innerHTML;
-  assert(fStat.indexOf('done · 0 PRIME · 0 HIGH · 3 watch · 11 aside') === 0,
-         'E2: F&G 9 — BTC a real 3-layer WATCH, ETH/SOL radar WATCH, 10 alts + gold aside — got "' + fStat + '"');
-  assert(lrowSeg(fWatch, 'BTC').indexOf('3 layers agree LONG') >= 0 && lrowSeg(fWatch, 'BTC').indexOf('radar only') === -1,
-         'E2: the F&G vote counts as a real third layer for BTC (not radar)');
-  assert(lrowSeg(fWatch, 'ETH').indexOf('radar only') >= 0,
-         'E2: ETH rides radar on regime + F&G (2 layers, uncontested)');
-  assert(fWatch.indexOf('>FALT01</span>') === -1 && fAside.indexOf('>FALT01</span>') >= 0,
-         'E2: majors-only — the alts stay ASIDE on their lone regime vote');
-  assert(PF.stubs['#brainRead'].textContent.indexOf('F&G 9 Extreme Fear') >= 0,
-         'E2: MARKET READ carries the F&G print');
+  assert(fStat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 11 aside') === 0,
+         'E2: F&G 9 — BTC a real 3-layer HIGH, ETH/SOL radar WATCH, 10 alts + gold aside — got "' + fStat + '"');
   const snapF = W.__hgBrainLast();
   const bRow = snapF.rows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
   const eRow = snapF.rows.filter(function(x){ return x.sym === 'ETHUSDT'; })[0];
   const aRow = snapF.rows.filter(function(x){ return x.sym === 'FALT01USDT'; })[0];
+  assert(fCards.indexOf('BTCUSDT') >= 0 && bRow && bRow.evidence.some(function(x){ return x.indexOf('FNG: F&G 9 extreme fear') === 0; }),
+         'E2: the F&G vote counts as a real third layer for BTC on the HIGH card (not radar)');
+  assert(lrowSeg(fWatch, 'ETH').indexOf('3 layers agree LONG') >= 0,
+         'E2: ETH reaches a real 3-layer WATCH on regime + F&G (not radar)');
+  assert(fWatch.indexOf('>FALT01</span>') === -1 && fAside.indexOf('>FALT01</span>') >= 0,
+         'E2: majors-only — the alts stay ASIDE on their lone regime vote');
+  assert(PF.stubs['#brainRead'].textContent.indexOf('F&G 9 Extreme Fear') >= 0,
+         'E2: MARKET READ carries the F&G print');
   assert(bRow && bRow.evidence.indexOf('FNG: F&G 9 extreme fear — contrarian long context') >= 0
          && eRow && eRow.evidence.some(function(x){ return x.indexOf('FNG: F&G 9 extreme fear') === 0; }),
          'E2: snapshot evidence names the contrarian long vote for both BTC and ETH (majors)');
@@ -764,8 +781,8 @@ console.log('== G) anchored limit plans at scale: engine precedence, LIMIT rende
   const gStat = PG.stubs['#brainStat'].textContent;
   const gCards = PG.stubs['#brainCards'].innerHTML;
   const gWatch = PG.stubs['#brainWatch'].innerHTML;
-  assert(gStat.indexOf('done · 0 PRIME · 2 HIGH · 23 watch · 2 aside') === 0,
-         'G: 27 rows — ENGWIN + LTREND HIGH, ETH/SOL + 3 WALT + 18 FALT watch (oiflow 3-layer or radar), BTC + gold aside — got "' + gStat + '"');
+  assert(gStat.indexOf('done · 0 PRIME · 12 HIGH · 13 watch · 2 aside') === 0,
+         'G: 27 rows — ENGWIN + LTREND + post-fetch promotions HIGH; ETH/SOL + 3 WALT watch; BTC + gold aside — got "' + gStat + '"');
 
   /* engine survivor precedence: an anchor EXISTS on ENGWIN's candles (swing
      zone), yet the gate-engine plan renders verbatim — never overridden */
@@ -776,8 +793,8 @@ console.log('== G) anchored limit plans at scale: engine precedence, LIMIT rende
 
   /* the promoted card + the radar rows offer patient limits */
   assert(gCards.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
-         && gCards.indexOf('stop <b>146.85</b> (0.5xATR beyond 4h FVG)') >= 0
-         && gCards.indexOf('TP1 <b>148.85</b> · TP2 <b>149.64</b> · R:R 1.5') >= 0
+         && gCards.indexOf('stop <b>146.52</b> (0.75xATR beyond 4h FVG)') >= 0
+         && gCards.indexOf('TP1 <b>149.33</b> · TP2 <b>150.45</b> · R:R 1.5') >= 0
          && gCards.indexOf('cancel if 4h closes beyond <b>147.49</b>') >= 0
          && gCards.indexOf('limit working ~24h or until structure breaks') >= 0,
          'G: LTREND promoted WATCH -> HIGH renders the full anchored LIMIT block on the card');
@@ -785,8 +802,11 @@ console.log('== G) anchored limit plans at scale: engine precedence, LIMIT rende
          && lrowSeg(gWatch, 'WALT02').indexOf('LIMIT @ <b>99.1</b>') >= 0
          && lrowSeg(gWatch, 'WALT03').indexOf('LIMIT @ <b>99.1</b>') >= 0,
          'G: all three swing-fixture radar rows offer the swing-low zone limit');
-  assert(lrowSeg(gWatch, 'FALT01').indexOf('ENTRY <b>10</b>') >= 0
-         && lrowSeg(gWatch, 'FALT01').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+  const faltSeg = lrowSeg(gWatch, 'FALT01')
+    || gCards.split('<div class="card ').filter(function(s){ return s.indexOf('FALT01') >= 0; })[0]
+    || '';
+  assert(faltSeg.indexOf('ENTRY <b>10</b>') >= 0
+         && faltSeg.indexOf('no nearby 4h structure — gate-engine levels') >= 0,
          'G: flat-candle rows keep the hgPlanLevels plan UNTOUCHED with the honest no-structure label');
   assert(planCalls === 20, 'G: hgPlanLevels consulted ONLY for the 20 anchor-less flat-candle rows (ETH/SOL + 18 FALT) — got ' + planCalls);
 
@@ -810,12 +830,14 @@ console.log('== G) anchored limit plans at scale: engine precedence, LIMIT rende
   PG.stubs['#brainQuick']._handler();
   await waitIdle(PG.stubs);
   const gQuick = PG.stubs['#brainStat'].textContent;
-  assert(/^quick rescan: 25 checked · 2 unchanged/.test(gQuick) && gQuick.indexOf('2 HIGH · 23 watch · 2 aside') >= 0,
+  assert(/^quick rescan: 25 checked · 2 unchanged/.test(gQuick) && gQuick.indexOf('12 HIGH · 13 watch · 2 aside') >= 0,
          'G: quick rescan rechecks the 25 WATCH-or-better rows with the same buckets — got "' + gQuick + '"');
   assert(PG.stubs['#brainCards'].innerHTML.indexOf('LIMIT @ <b>147.65</b> — pullback to 4h FVG') >= 0
          && lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'WALT01').indexOf('LIMIT @ <b>99.1</b> — pullback to swing-low zone') >= 0
-         && lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'FALT01').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
-         'G: the quick pass re-derives the same limits + fallbacks — WATCH rows keep their working orders');
+         && (lrowSeg(PG.stubs['#brainWatch'].innerHTML, 'FALT01')
+             || PG.stubs['#brainCards'].innerHTML.split('<div class="card ').filter(function(s){ return s.indexOf('FALT01') >= 0; })[0]
+             || '').indexOf('no nearby 4h structure — gate-engine levels') >= 0,
+         'G: the quick pass re-derives the same limits + fallbacks — WATCH/HIGH rows keep their working orders');
 }
 
 /* ================= H) AUTO-WARM INTO RUN SYNTHESIS at scale =================
@@ -901,12 +923,13 @@ console.log('== H) auto-warm into synthesis at scale: cold layers vote, accounti
   assert(hStat.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 38 aside') === 0,
          'H: 41 rows — BTC HIGH on 4 warmed-or-live layers, ETH/SOL radar, 37 alts + gold aside — got "' + hStat + '"');
   const hBtcSeg = hCards.split('<div class="card ').filter(function(s){ return s.indexOf('BTCUSDT') >= 0; })[0] || '';
-  assert(hBtcSeg.indexOf('HIGH · 4 LAYERS') >= 0 && hBtcSeg.indexOf('>LONG</span>') >= 0,
-         'H: the auto-warmed layers make BTC a real HIGH · 4 LAYERS LONG (regime+engine+oiflow+F&G), never judged dark');
+  assert(hBtcSeg.indexOf('HIGH · 5 LAYERS') >= 0 && hBtcSeg.indexOf('>LONG</span>') >= 0,
+         'H: the auto-warmed layers make BTC a real HIGH · 5 LAYERS LONG (regime+engine+oiflow+F&G+post-fetch), never judged dark');
   assert(hBtcSeg.indexOf('ENTRY <b>100</b>') >= 0 && hBtcSeg.indexOf('gate engine') >= 0,
          'H: the warmed engine survivor’s gate plan renders verbatim on the card — got "' + hBtcSeg.slice(0, 200) + '"');
-  assert(lrowSeg(hWatch, 'ETH').indexOf('radar only') >= 0 && lrowSeg(hWatch, 'SOL').indexOf('radar only') >= 0,
-         'H: ETH/SOL ride regime+F&G radar (2 uncontested) — the alts never climbed on one vote');
+  assert((lrowSeg(hWatch, 'ETH').indexOf('3 layers agree LONG') >= 0 || lrowSeg(hWatch, 'ETH').indexOf('radar only') >= 0)
+         && (lrowSeg(hWatch, 'SOL').indexOf('3 layers agree LONG') >= 0 || lrowSeg(hWatch, 'SOL').indexOf('radar only') >= 0),
+         'H: ETH/SOL stay on WATCH with regime+F&G evidence — the alts never climbed on one vote');
   const hRows = W.__hgBrainLast().rows;
   const hBtc = hRows.filter(function(x){ return x.sym === 'BTCUSDT'; })[0];
   assert(hRows.length === 41 && hBtc

@@ -6,6 +6,6 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node scripts/server.mjs",
-    "test": "node tests/test-brain.mjs && node tests/test-engine.mjs && node tests/test-smart.mjs && node tests/test-hgalert.mjs && node tests/test-ops.mjs && node tests/extract-inline.mjs"
+    "test": "node tests/test-brain.mjs && node tests/test-engine.mjs && node tests/test-smart.mjs && node tests/test-hgalert.mjs && node tests/test-ops.mjs && node tests/extract-inline.mjs && node tests/test-brain-live.mjs && node tests/test-gold-deep.mjs"
   }
 }
