@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0A0D12">
+<meta name="theme-color" content="#0F1730">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -31,7 +31,20 @@ input:focus,select:focus{outline:1px solid var(--gold-dim)}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 
 /* ---------- top bar ---------- */
-header{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap;position:sticky;top:0;z-index:50}
+header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:50}
+.header-primary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%}
+.header-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%;padding-top:6px}
+.header-drawer{width:100%}
+.header-drawer-inner{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0 2px;border-top:1px solid var(--line);margin-top:6px}
+.header-menu-btn{display:none;margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--gold);border-radius:6px;padding:6px 12px;font-size:16px;line-height:1;min-height:36px}
+.header-menu-btn[aria-expanded="true"]{background:rgba(217,164,65,.15);border-color:var(--gold)}
+.header-field{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.02)}
+.header-field-label{font-size:9px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase;flex:0 0 100%}
+.header-field input{flex:1 1 120px;min-width:0;padding:4px 8px;font-size:11px}
+.header-field-btn{padding:4px 10px!important;font-size:10px!important;min-height:30px}
+.header-action{cursor:pointer}
+.market-picture-bar{padding:8px 16px;text-align:center;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.04em}
+.market-picture-bar .note{font-size:11px;display:block;margin-top:2px}
 .brand{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--gold)}
 .brand small{display:block;font-family:var(--mono);font-weight:400;font-size:9px;letter-spacing:.18em;color:var(--mut)}
 .xtoggle{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
@@ -79,12 +92,12 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .lrow:last-child{border-bottom:0}
 .lrow .gid{font-size:10px;color:var(--dim);width:34px;flex:none;letter-spacing:.06em}
 .lrow .gname{flex:1;font-size:12px}
-.lrow .gdetail{font-size:10px;color:var(--mut);text-align:right;max-width:46%}
+.lrow .gdetail{font-size:10px;color:var(--mut);text-align:right;max-width:46%;word-break:break-word}
 .stamp{flex:none;font-size:9px;font-weight:600;letter-spacing:.16em;padding:3px 8px;border-radius:3px;border:1px solid}
 .stamp.pass{color:var(--pass);border-color:rgba(53,192,142,.65);background:rgba(53,192,142,.08)}
 .stamp.veto{color:var(--veto);border-color:rgba(228,88,107,.65);background:rgba(228,88,107,.09)}
 .stamp.na{color:var(--mut);border-color:var(--dim);background:rgba(255,255,255,.02)}
-.verdict{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);margin-top:12px;background:var(--panel2)}
+.verdict{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);margin-top:12px;background:var(--panel2);flex-wrap:wrap}
 .verdict .vword{font-family:var(--disp);font-size:24px;font-weight:700;letter-spacing:.1em}
 .verdict.long .vword{color:var(--long)}.verdict.short .vword{color:var(--short)}.verdict.aside .vword{color:var(--mut)}
 .verdict .vwhy{font-size:11px;color:var(--mut);line-height:1.5}
@@ -145,34 +158,47 @@ table tr:hover td{background:rgba(217,164,65,.045)}
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-<header>
-  <div class="brand">HARDGATE<small>DELTA · COINDCX · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
-  <div class="xtoggle">
-    <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
-    <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
+<header class="hg-header">
+  <div class="header-primary">
+    <div class="brand">HARDGATE<small>DELTA · COINDCX · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+    <div class="xtoggle">
+      <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
+      <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
+    </div>
+    <button type="button" class="header-menu-btn" id="headerMenuBtn" aria-expanded="false" aria-controls="headerDrawer" onclick="toggleHeaderDrawer()" title="Tools &amp; alerts">☰</button>
   </div>
-  <span class="statuschip" id="chipConn"><b>—</b> symbols</span>
-  <span class="statuschip" id="chipFund">next funding <b>—</b></span>
-  <span class="statuschip" id="chipFng">F&amp;G <b>—</b></span>
-  <span class="statuschip" id="chipDom">BTC.D <b>—</b></span>
-  <div class="spacer"></div>
-  <span class="statuschip" id="chipClock"><b>—</b> IST</span>
-  <button id="hardRefreshBtn" class="statuschip" style="cursor:pointer" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
-<span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" onclick="setAutoRefresh('300000')">5m</button></span>
-<span class="statuschip" id="autoRefreshCount" style="display:none"></span>
-<span class="statuschip" id="hardRefreshStat"></span>
-<span class="statuschip" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
-<span class="statuschip" style="display:inline-flex;align-items:center;gap:6px" title="free push via ntfy.sh — pick an unguessable topic">
-  <input id="ntfyTopic" placeholder="ntfy topic" style="width:110px;padding:2px 6px;font-size:11px" title="free push via ntfy.sh — pick an unguessable topic">
-  <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="saveNtfyTopic()">SAVE</button><span class="note" id="ntfyTopicStat"></span>
-</span>
-<span class="statuschip" style="display:inline-flex;align-items:center;gap:6px" title="Telegram alerts (primary channel — free, unlimited): bot token from @BotFather + your chat id (send /start to your bot, then read chat id from api.telegram.org/bot<token>/getUpdates). Stored in this browser only.">
-  <input id="tgToken" placeholder="telegram bot token" style="width:150px;padding:2px 6px;font-size:11px" title="bot token from @BotFather — stored in this browser only">
-  <input id="tgChat" placeholder="chat id" style="width:80px;padding:2px 6px;font-size:11px" title="your Telegram chat id">
-  <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="saveTelegram()">SAVE</button><button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="testTelegram()">TEST</button><span class="note" id="tgStat"></span>
-</span>
+  <div class="header-chips" id="headerChips">
+    <span class="statuschip" id="chipConn"><b>—</b> symbols</span>
+    <span class="statuschip" id="chipFund">next funding <b>—</b></span>
+    <span class="statuschip" id="chipFng">F&amp;G <b>—</b></span>
+    <span class="statuschip" id="chipDom">BTC.D <b>—</b></span>
+    <span class="statuschip" id="chipClock"><b>—</b> IST</span>
+  </div>
+  <div class="header-drawer" id="headerDrawer">
+    <div class="header-drawer-inner">
+      <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
+      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button></span>
+      <span class="statuschip" id="autoRefreshCount" style="display:none"></span>
+      <span class="statuschip" id="hardRefreshStat"></span>
+      <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
+      <label class="header-field" title="free push via ntfy.sh — pick an unguessable topic">
+        <span class="header-field-label">ntfy</span>
+        <input id="ntfyTopic" placeholder="topic" title="free push via ntfy.sh — pick an unguessable topic">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveNtfyTopic()">SAVE</button>
+        <span class="note" id="ntfyTopicStat"></span>
+      </label>
+      <label class="header-field" title="Telegram alerts: bot token from @BotFather + chat id. Stored in this browser only.">
+        <span class="header-field-label">telegram</span>
+        <input id="tgToken" placeholder="bot token" title="bot token from @BotFather">
+        <input id="tgChat" placeholder="chat id" title="your Telegram chat id">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveTelegram()">SAVE</button>
+        <button class="btn ghost header-field-btn" type="button" onclick="testTelegram()">TEST</button>
+        <span class="note" id="tgStat"></span>
+      </label>
+    </div>
+  </div>
 </header>
-<div id="marketPictureBar" style="padding:8px 16px;text-align:center;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.04em">MARKET PICTURE: <b id="mpVerdict">—</b> <span id="mpDetail" class="note" style="font-size:11px"></span></div>
+<div id="marketPictureBar" class="market-picture-bar">MARKET PICTURE: <b id="mpVerdict">—</b> <span id="mpDetail" class="note"></span></div>
 <div class="navgroups" id="navGroups" role="tablist" aria-label="HARDGATE tool groups"></div>
 <nav id="navTabs" aria-label="HARDGATE tabs">
   <button id="tabB_brain" onclick="showTab('brain')">BRAIN</button>
@@ -5021,6 +5047,14 @@ function hgAutoInit(){
         saved = localStorage.getItem(HG_AUTO_KEY);
     }catch(e){}
     setAutoRefresh(typeof saved === 'string' ? saved : 'off');  /* garbage values degrade to OFF */
+  }catch(e){}
+}
+function toggleHeaderDrawer(){
+  try{
+    const d = $('headerDrawer'), b = $('headerMenuBtn');
+    if (!d) return;
+    const open = d.classList.toggle('open');
+    if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
   }catch(e){}
 }
 hgAutoInit();

@@ -1,276 +1,261 @@
 /* ==========================================================================
-   HARDGATE — BRIGHT GLOBAL THEME (bright.css)
-   Pure override sheet. Link AFTER the inline <style> block in index.html so
-   equal-specificity rules here win. No existing file is modified.
-
-   House rules honored:
-   - colors, backgrounds, borders, box-shadows, text-shadows ONLY
-   - no layout properties (position/display/flex/grid/margin/padding/width)
-   - no font-family changes
-   - readable contrast: dark text on bright chips, bright text on dark panels
-   - safe when JS adds classes at runtime (ok/na/veto/caution all pre-styled)
+   HARDGATE — VIVID THEME (bright.css)
+   Colorful trading-terminal aesthetic: deep blue base, gold/cyan/magenta accents,
+   group-tinted navigation, glowing direction cues. Loaded after index.html
+   inline styles. Layout lives in index.html + mobile.css.
    ========================================================================== */
 
-/* ---------- 1. core palette: brighter vars (cascade feeds every var() user) */
+/* ---------- 1. core palette ---------- */
 :root{
-  --ink:#0F1730;            /* rich deep blue, was near-black #0A0D12        */
-  --panel:#1B2547;          /* brighter blue-charcoal panel surface          */
-  --panel2:#151D3A;         /* secondary surface                             */
-  --line:#34426E;           /* visible but calm hairlines                    */
-  --gold:#F5C542;           /* vivid gold accent                             */
-  --gold-dim:#C99A2E;       /* hover gold                                    */
-  --long:#2EE6A8;           /* emerald-teal = LONG (house semantics kept)    */
-  --short:#FF6D5A;          /* red-orange   = SHORT (house semantics kept)   */
+  --ink:#0B1024;
+  --panel:#1A2348;
+  --panel2:#141C38;
+  --line:#3A4A78;
+  --gold:#FFD257;
+  --gold-dim:#E8B42A;
+  --long:#2EE6A8;
+  --short:#FF6D5A;
   --veto:#FF6D5A;
   --pass:#2EE6A8;
-  --txt:#E9EFFC;            /* bright ink on dark panels                     */
-  --mut:#93A3C4;            /* readable secondary                            */
-  --dim:#64759C;
+  --txt:#EEF4FF;
+  --mut:#9AA8C8;
+  --dim:#6B7FA8;
+  --cyan:#22D3EE;
+  --magenta:#E879F9;
+  --purple:#A78BFA;
+  --orange:#FB923C;
 }
 
-/* ---------- 2. page backdrop: deep blue with a subtle cyan/gold ambience --- */
-html,body{background:#0F1730;color:#E9EFFC}
+/* ---------- 2. ambient page background ---------- */
+html,body{background:#0B1024;color:#EEF4FF}
 body{
   background:
-    radial-gradient(1200px 600px at 72% -10%, rgba(34,211,238,.07), rgba(34,211,238,0) 60%),
-    radial-gradient(1000px 520px at 8% -12%, rgba(245,197,66,.06), rgba(245,197,66,0) 55%),
-    #0F1730;
+    radial-gradient(ellipse 900px 500px at 85% -5%, rgba(34,211,238,.12), transparent 55%),
+    radial-gradient(ellipse 800px 480px at 5% -8%, rgba(245,197,66,.10), transparent 50%),
+    radial-gradient(ellipse 600px 400px at 50% 100%, rgba(232,121,249,.06), transparent 60%),
+    #0B1024;
 }
-a{color:#FFD257}
-::selection{background:rgba(232,121,249,.40);color:#FFFFFF}
-::-webkit-scrollbar-thumb{background:#3D4C7C}
-::-webkit-scrollbar-thumb:hover{background:#C99A2E}
+a{color:#FFE08A}
+::selection{background:rgba(232,121,249,.45);color:#FFFFFF}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#4A5A8C,#3A4A78)}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#FFD257,#E8B42A)}
 
-/* ---------- 3. header + brand ------------------------------------------- */
-header{
-  background:linear-gradient(180deg,#18213F 0%,#141C37 100%);
-  border-bottom-color:#2C3860;
-  box-shadow:0 6px 24px -12px rgba(0,0,0,.60);
+/* ---------- 3. header ---------- */
+header,.hg-header{
+  background:linear-gradient(135deg,#1A2550 0%,#141C38 50%,#121832 100%);
+  border-bottom-color:#3A4A78;
+  box-shadow:0 8px 32px -12px rgba(0,0,0,.65),inset 0 1px 0 rgba(148,178,255,.08);
 }
-.brand{color:#FFD257;text-shadow:0 0 16px rgba(245,197,66,.40)}
+.brand{
+  color:#FFD257;
+  text-shadow:0 0 20px rgba(255,210,87,.45),0 0 40px rgba(245,197,66,.15);
+}
 .brand small{color:#7F92BB}
-#marketPictureBar{background:#101838}
+.header-chips .statuschip:nth-child(1){border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.06)}
+.header-chips .statuschip:nth-child(2){border-color:rgba(167,139,250,.35);background:rgba(167,139,250,.06)}
+.header-chips .statuschip:nth-child(3){border-color:rgba(251,146,60,.35);background:rgba(251,146,60,.06)}
+.header-chips .statuschip:nth-child(4){border-color:rgba(232,121,249,.35);background:rgba(232,121,249,.06)}
+.header-chips .statuschip:nth-child(5){border-color:rgba(46,230,168,.35);background:rgba(46,230,168,.06)}
+.header-drawer-inner{border-top-color:#2C3860}
+.header-field{border-color:#3D4C7C;background:rgba(34,211,238,.04)}
+.header-menu-btn{border-color:#C99A2E;color:#FFD257}
+.header-menu-btn:hover{background:rgba(245,197,66,.12);box-shadow:0 0 12px rgba(245,197,66,.35)}
+
+.market-picture-bar{
+  background:linear-gradient(90deg,rgba(34,211,238,.08),rgba(245,197,66,.10),rgba(232,121,249,.08));
+  border-bottom-color:#3A4A78;
+  color:#C7D3EE;
+  box-shadow:inset 0 -1px 0 rgba(255,255,255,.04);
+}
+.market-picture-bar b{color:#FFD257;text-shadow:0 0 10px rgba(255,210,87,.35)}
 
 /* exchange toggle */
-.xtoggle{border-color:#35426E}
+.xtoggle{border-color:#3A4A78;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
 .xtoggle button{color:#8B9CC4}
-.xtoggle button:hover{color:#E9EFFC}
+.xtoggle button:hover{color:#EEF4FF}
 .xtoggle button.on{
-  background:linear-gradient(180deg,#FFD968,#F5C542);
-  color:#231803;
-  box-shadow:0 0 12px rgba(245,197,66,.40);
+  background:linear-gradient(180deg,#FFE59A,#FFD257 45%,#E8B42A);
+  color:#1A1204;
+  box-shadow:0 0 16px rgba(255,210,87,.45);
 }
 
 /* status chips */
-.statuschip{color:#8B9CC4;border-color:#35426E;background:rgba(148,178,255,.05)}
-.statuschip b{color:#E9EFFC}
-.statuschip.warn b{color:#FF8A76}
-.statuschip[onclick]:hover{
-  border-color:#C99A2E;color:#DFE8FB;
-  box-shadow:0 0 10px -3px rgba(245,197,66,.40);
+.statuschip{color:#9AA8C8;border-color:#3A4A78;background:rgba(148,178,255,.06)}
+.statuschip b{color:#EEF4FF}
+.statuschip.warn b{color:#FF9A86}
+.statuschip[onclick]:hover,.header-action:hover{
+  border-color:#FFD257;color:#EEF4FF;
+  box-shadow:0 0 14px -2px rgba(255,210,87,.45);
 }
 
-/* ---------- 4. nav groups (top tier) ------------------------------------- */
+/* ---------- 4. nav groups — each group gets its own accent when active --- */
 .navgroups{
-  background:linear-gradient(180deg,#18213F,#131B36);
-  border-bottom-color:#2C3860;
+  background:linear-gradient(180deg,#182142,#121832);
+  border-bottom-color:#3A4A78;
 }
-.navgroups button{color:#8B9CC4;border-color:#35426E;background:rgba(148,178,255,.03)}
-.navgroups button:hover{
-  color:#E9EFFC;border-color:#C99A2E;
-  box-shadow:0 0 10px -3px rgba(245,197,66,.40);
+.navgroups button{
+  color:#8B9CC4;
+  border-color:#3A4A78;
+  background:rgba(148,178,255,.04);
 }
-.navgroups button.on{
-  background:linear-gradient(180deg,#FFD968,#F5C542);
-  border-color:#F5C542;color:#231803;
-  box-shadow:0 0 14px rgba(245,197,66,.45);
+.navgroups button:hover{color:#EEF4FF;border-color:#6B7FA8}
+.navgroups button[data-g="overview"].on{
+  background:linear-gradient(180deg,#5EEAD4,#22D3EE);
+  border-color:#22D3EE;color:#042F2E;
+  box-shadow:0 0 18px rgba(34,211,238,.50);
+}
+.navgroups button[data-g="crypto"].on{
+  background:linear-gradient(180deg,#C4B5FD,#A78BFA);
+  border-color:#A78BFA;color:#1E1033;
+  box-shadow:0 0 18px rgba(167,139,250,.50);
+}
+.navgroups button[data-g="gold"].on{
+  background:linear-gradient(180deg,#FFE59A,#FFD257 50%,#E8B42A);
+  border-color:#FFD257;color:#231803;
+  box-shadow:0 0 20px rgba(255,210,87,.55);
+}
+.navgroups button[data-g="strategies"].on{
+  background:linear-gradient(180deg,#F0ABFC,#E879F9);
+  border-color:#E879F9;color:#3B0764;
+  box-shadow:0 0 18px rgba(232,121,249,.50);
+}
+.navgroups button[data-g="tools"].on{
+  background:linear-gradient(180deg,#FDBA74,#FB923C);
+  border-color:#FB923C;color:#431407;
+  box-shadow:0 0 18px rgba(251,146,60,.45);
 }
 
-/* ---------- 5. nav tabs (bottom tier) ------------------------------------ */
-nav{background:#0D1429;border-bottom-color:#2C3860}
+/* ---------- 5. nav tabs ---------- */
+nav{background:#0A0F22;border-bottom-color:#3A4A78}
 nav button{color:#8B9CC4}
-nav button:hover{color:#DFE8FB}
-nav button.on{color:#FFD257;text-shadow:0 0 12px rgba(245,197,66,.45)}
-nav button::after{background:linear-gradient(90deg,#F5C542,#22D3EE)}
-nav button.on::after{box-shadow:0 0 8px rgba(245,197,66,.60)}
+nav button:hover{color:#EEF4FF}
+nav button.on{color:#FFD257;text-shadow:0 0 14px rgba(255,210,87,.40)}
+nav button::after{background:linear-gradient(90deg,#FFD257,#22D3EE,#E879F9)}
+nav button.on::after{box-shadow:0 0 10px rgba(255,210,87,.55)}
 
-/* ---------- 6. panels ---------------------------------------------------- */
+/* ---------- 6. panels ---------- */
 .panel{
-  background:linear-gradient(180deg,#1D2749 0%,#1A2342 100%);
-  border-color:#35426E;
-  box-shadow:0 1px 2px rgba(0,0,0,.30),0 18px 44px -30px rgba(0,0,0,.80),
-             inset 0 1px 0 rgba(148,178,255,.06);
+  background:linear-gradient(165deg,#1E2850 0%,#1A2348 40%,#171F3E 100%);
+  border-color:#3A4A78;
+  box-shadow:0 2px 4px rgba(0,0,0,.25),0 20px 48px -28px rgba(0,0,0,.85),
+             inset 0 1px 0 rgba(148,178,255,.08);
 }
-.panel h2{color:#EEF3FF}
-.panel h2 span{color:#8B9CC4}
+.panel h2{color:#F2F6FF}
+.panel h2 span{color:#9AA8C8}
 
-/* ---------- 7. scanner cards + direction top accents ----------------------
-   Direction is shown as an inset top hairline (box-shadow = zero layout
-   cost) on top of the existing left border: emerald long / red-orange short */
+/* ---------- 7. scanner cards ---------- */
 .card{
-  background:linear-gradient(180deg,#1D2749 0%,#1A2340 100%);
-  border-color:#35426E;
-  box-shadow:inset 0 1px 0 rgba(148,178,255,.05);
+  background:linear-gradient(165deg,#1E2850,#1A2340);
+  border-color:#3A4A78;
+  box-shadow:inset 0 1px 0 rgba(148,178,255,.06);
 }
 .card:hover{
   border-color:#C99A2E;
-  box-shadow:inset 0 1px 0 rgba(148,178,255,.05),
-             0 12px 30px -16px rgba(0,0,0,.85),
-             0 0 18px -6px rgba(245,197,66,.45);
+  box-shadow:0 14px 36px -16px rgba(0,0,0,.85),0 0 22px -4px rgba(255,210,87,.40);
 }
 .card.long{
   border-left-color:var(--long);
-  box-shadow:inset 0 2px 0 0 #2EE6A8,inset 0 1px 0 rgba(148,178,255,.05);
+  box-shadow:inset 3px 0 0 0 #2EE6A8,inset 0 1px 0 rgba(148,178,255,.06);
 }
-.card.long:hover{
-  border-color:#2EE6A8;
-  box-shadow:inset 0 2px 0 0 #2EE6A8,
-             0 12px 30px -16px rgba(0,0,0,.85),
-             0 0 22px -6px rgba(46,230,168,.50);
-}
+.card.long:hover{border-color:#2EE6A8;box-shadow:inset 3px 0 0 0 #2EE6A8,0 0 24px -4px rgba(46,230,168,.45)}
 .card.short{
   border-left-color:var(--short);
-  box-shadow:inset 0 2px 0 0 #FF6D5A,inset 0 1px 0 rgba(148,178,255,.05);
+  box-shadow:inset 3px 0 0 0 #FF6D5A,inset 0 1px 0 rgba(148,178,255,.06);
 }
-.card.short:hover{
-  border-color:#FF6D5A;
-  box-shadow:inset 0 2px 0 0 #FF6D5A,
-             0 12px 30px -16px rgba(0,0,0,.85),
-             0 0 22px -6px rgba(255,109,90,.50);
-}
-.card .sym{color:#F2F6FF}
-.card.long .dir{color:#2EE6A8;text-shadow:0 0 10px rgba(46,230,168,.40)}
-.card.short .dir{color:#FF8A76;text-shadow:0 0 10px rgba(255,109,90,.40)}
-.card .mini .k{color:#8B9CC4}
-.card .plan{background:#141C38;border-color:#35426E;color:#D7E0F5}
+.card.short:hover{border-color:#FF6D5A;box-shadow:inset 3px 0 0 0 #FF6D5A,0 0 24px -4px rgba(255,109,90,.45)}
+.card .sym{color:#F8FAFF}
+.card.long .dir{color:#2EE6A8;text-shadow:0 0 12px rgba(46,230,168,.45)}
+.card.short .dir{color:#FF9A86;text-shadow:0 0 12px rgba(255,109,90,.45)}
+.card .mini .k{color:#9AA8C8}
+.card .plan{background:#121832;border-color:#3A4A78;color:#DCE6F8}
 .card .plan b{color:#FFD257}
-.hgchart{background:#141C38;border-color:#35426E}
+.hgchart{background:#121832;border-color:#3A4A78}
 
-/* ---------- 8. gate pips: tinted chips, bright text on dark tint --------- */
-.gpip{background:rgba(148,178,255,.07);border-color:#3F4F82;color:#BCC9E8}
-.gpip.ok{
-  background:rgba(46,230,168,.13);border-color:rgba(46,230,168,.55);color:#4FF0BD;
-  box-shadow:0 0 10px -4px rgba(46,230,168,.55);
-}
-.gpip.na{background:rgba(140,165,225,.12);border-color:rgba(140,165,225,.50);color:#A7BBF0}
-.gpip.veto{background:rgba(255,109,90,.12);border-color:rgba(255,109,90,.55);color:#FF9A86}
-.gpip.caution{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.55);color:#FFD166}
+/* ---------- 8. gate pips ---------- */
+.gpip{background:rgba(148,178,255,.08);border-color:#44568C;color:#C7D3EE}
+.gpip.ok{background:rgba(46,230,168,.14);border-color:rgba(46,230,168,.60);color:#5FF0BD;box-shadow:0 0 12px -4px rgba(46,230,168,.55)}
+.gpip.na{background:rgba(140,165,225,.12);border-color:rgba(140,165,225,.50);color:#B8C8F0}
+.gpip.veto{background:rgba(255,109,90,.14);border-color:rgba(255,109,90,.60);color:#FFAA96}
+.gpip.caution{background:rgba(255,210,87,.14);border-color:rgba(255,210,87,.55);color:#FFE08A}
 
-/* ---------- 9. stamps: filled vivid chips, dark text for contrast -------- */
-.stamp{box-shadow:0 1px 6px -2px rgba(0,0,0,.50)}
-.stamp.pass,.stamp.ok{
-  background:linear-gradient(180deg,#4BF0BB,#23D69B);
-  border-color:#5FF5C6;color:#03301F;
-}
-.stamp.veto{
-  background:linear-gradient(180deg,#FF8A70,#F4512E);
-  border-color:#FFA18C;color:#330A03;
-}
-.stamp.na{
-  background:linear-gradient(180deg,#9DB4E2,#728CC0);
-  border-color:#B6C8EE;color:#0C1730;
-}
-.stamp.caution{
-  background:linear-gradient(180deg,#FFD166,#F0A51D);
-  border-color:#FFE08F;color:#3A2602;
-}
+/* ---------- 9. stamps ---------- */
+.stamp{box-shadow:0 2px 8px -2px rgba(0,0,0,.55)}
+.stamp.pass,.stamp.ok{background:linear-gradient(180deg,#4BF0BB,#23D69B);border-color:#5FF5C6;color:#03301F}
+.stamp.veto{background:linear-gradient(180deg,#FF9A86,#F4512E);border-color:#FFB09C;color:#330A03}
+.stamp.na{background:linear-gradient(180deg,#A8BCE8,#7A94C8);border-color:#C8D8F8;color:#0C1730}
+.stamp.caution{background:linear-gradient(180deg,#FFE08A,#F0A51D);border-color:#FFF0B8;color:#3A2602}
 
-/* ---------- 10. verdict blocks ------------------------------------------- */
-.verdict{background:linear-gradient(180deg,#182142,#141C38);border-color:#35426E}
-.verdict.long{border-color:rgba(46,230,168,.50);box-shadow:0 0 18px -8px rgba(46,230,168,.45)}
-.verdict.long .vword{color:#2EE6A8;text-shadow:0 0 14px rgba(46,230,168,.50)}
-.verdict.short{border-color:rgba(255,109,90,.50);box-shadow:0 0 18px -8px rgba(255,109,90,.45)}
-.verdict.short .vword{color:#FF8A76;text-shadow:0 0 14px rgba(255,109,90,.50)}
-.verdict.aside .vword{color:#A7BBF0}
-.verdict .vwhy{color:#8B9CC4}
+/* ---------- 10. verdict blocks ---------- */
+.verdict{background:linear-gradient(135deg,#182142,#141C38);border-color:#3A4A78}
+.verdict.long{
+  border-color:rgba(46,230,168,.55);
+  background:linear-gradient(135deg,rgba(46,230,168,.08),#141C38);
+  box-shadow:0 0 24px -8px rgba(46,230,168,.50);
+}
+.verdict.long .vword{color:#2EE6A8;text-shadow:0 0 16px rgba(46,230,168,.55)}
+.verdict.short{
+  border-color:rgba(255,109,90,.55);
+  background:linear-gradient(135deg,rgba(255,109,90,.08),#141C38);
+  box-shadow:0 0 24px -8px rgba(255,109,90,.50);
+}
+.verdict.short .vword{color:#FF9A86;text-shadow:0 0 16px rgba(255,109,90,.55)}
+.verdict.aside .vword{color:#B8C8F0}
+.verdict .vwhy{color:#9AA8C8}
 
-/* ---------- 11. buttons --------------------------------------------------- */
+/* ---------- 11. buttons ---------- */
 .btn{
-  background:linear-gradient(180deg,#FFDD7A 0%,#F5C542 52%,#E3AC24 100%);
-  color:#231803;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 20px -10px rgba(245,197,66,.55);
+  background:linear-gradient(180deg,#FFE59A 0%,#FFD257 48%,#E8B42A 100%);
+  color:#1A1204;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.30),0 8px 22px -10px rgba(255,210,87,.60);
 }
 .btn:hover:not(:disabled){
-  background:linear-gradient(180deg,#FFE59A 0%,#FFD257 52%,#F0B62E 100%);
-  color:#231803;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.30),
-             0 8px 22px -10px rgba(245,197,66,.65),
-             0 0 18px rgba(245,197,66,.50);
+  background:linear-gradient(180deg,#FFF0B8,#FFE08A 48%,#F0B62E);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 22px rgba(255,210,87,.55);
 }
 .btn:disabled{background:#3D4A6E;color:#AAB8D8;box-shadow:none}
-.btn.ghost{background:rgba(34,211,238,.04);border-color:#3D4C7C;color:#C7D3EE}
-.btn.ghost:hover{
-  background:rgba(34,211,238,.10);border-color:#22D3EE;color:#7FE7F7;
-  box-shadow:0 0 12px rgba(34,211,238,.25);
-}
+.btn.ghost{background:rgba(34,211,238,.06);border-color:#44568C;color:#C7D3EE}
+.btn.ghost:hover{background:rgba(34,211,238,.14);border-color:#22D3EE;color:#7FE7F7;box-shadow:0 0 14px rgba(34,211,238,.30)}
+.card .toTrade{border-color:#C99A2E;color:#FFD257;background:rgba(255,210,87,.06)}
+.card .toTrade:hover{background:rgba(255,210,87,.16);border-color:#FFD257;box-shadow:0 0 16px rgba(255,210,87,.40)}
 
-/* card trade handoff */
-.card .toTrade{border-color:#C99A2E;color:#FFD257;background:rgba(245,197,66,.05)}
-.card .toTrade:hover{
-  background:rgba(245,197,66,.14);border-color:#F5C542;color:#FFE08A;
-  box-shadow:0 0 14px rgba(245,197,66,.35);
-}
+.chip{border-color:#3A4A78;color:#9AA8C8}
+.chip.on{border-color:#E879F9;color:#F0ABFC;background:rgba(232,121,249,.10);box-shadow:0 0 12px -4px rgba(232,121,249,.55)}
 
-/* round filter chips: magenta accent when active */
-.chip{border-color:#35426E;color:#8B9CC4}
-.chip.on{
-  border-color:#E879F9;color:#F0A6FF;background:rgba(232,121,249,.08);
-  box-shadow:0 0 10px -4px rgba(232,121,249,.50);
-}
-
-/* ---------- 12. notes / warnings ----------------------------------------- */
-.note{color:#93A3C4}
-.note.warn{color:#FFD166}
-
-/* ---------- 13. inputs & selects ----------------------------------------- */
-input,select{background:#141C38;border-color:#3D4C7C;color:#E9EFFC}
+/* ---------- 12. notes / inputs / ledger ---------- */
+.note{color:#9AA8C8}
+.note.warn{color:#FFE08A}
+input,select{background:#121832;border-color:#44568C;color:#EEF4FF}
 input::placeholder{color:#5D6D94}
-input:focus,select:focus{
-  outline-color:#22D3EE;border-color:#22D3EE;
-  box-shadow:0 0 10px -3px rgba(34,211,238,.50);
-}
-
-/* ---------- 14. gate ledger rows ----------------------------------------- */
-.ledger{border-color:#35426E}
-.lrow{background:#141C38;border-bottom-color:#2C3860}
+input:focus,select:focus{outline-color:#22D3EE;border-color:#22D3EE;box-shadow:0 0 12px -2px rgba(34,211,238,.55)}
+.ledger{border-color:#3A4A78}
+.lrow{background:#121832;border-bottom-color:#2C3860}
 .lrow:hover{background:#182142}
 .lrow .gid{color:#5CC8E0}
-.lrow .gname{color:#DBE4F8}
-.lrow .gdetail{color:#8B9CC4}
-
-/* ---------- 15. progress bars -------------------------------------------- */
+.lrow .gname{color:#E0E8FA}
+.lrow .gdetail{color:#9AA8C8}
 .prog{background:#2C3860}
-.prog i{
-  background:linear-gradient(90deg,#E3AC24,#FFD968);
-  box-shadow:0 0 8px rgba(245,197,66,.65);
-}
-
-/* ---------- 16. misc surfaces -------------------------------------------- */
+.prog i{background:linear-gradient(90deg,#E879F9,#FFD257,#22D3EE);box-shadow:0 0 10px rgba(255,210,87,.55)}
 hr.sep{border-top-color:#2C3860}
-.kv .k{color:#8B9CC4}
-.kv .v{color:#E9EFFC}
-.big{color:#F2F6FF}
+.kv .k{color:#9AA8C8}
+.kv .v{color:#EEF4FF}
+.big{color:#F8FAFF}
 .pos{color:#2EE6A8}
-.neg{color:#FF8A76}
-.checklist label{color:#D7E0F5}
-.ticket{background:#141C38;border-color:#35426E;color:#D7E0F5}
-.empty{color:#8B9CC4;border-color:#3D4C7C}
-th{color:#8FD9E8}
+.neg{color:#FF9A86}
+.checklist label{color:#DCE6F8}
+.ticket{background:#121832;border-color:#3A4A78;color:#DCE6F8}
+.empty{color:#9AA8C8;border-color:#44568C;background:rgba(148,178,255,.03)}
+th{color:#7FE7F7}
 td,th{border-bottom-color:#2C3860}
-table tr:nth-child(even) td{background:rgba(148,178,255,.03)}
-table tr:hover td{background:rgba(245,197,66,.06)}
+table tr:nth-child(even) td{background:rgba(148,178,255,.04)}
+table tr:hover td{background:rgba(255,210,87,.07)}
+.hgauto{border-color:#3A4A78}
+.hgauto .hgalabel{color:#6B7FA8;border-right-color:#3A4A78}
+.hgauto button.on{background:linear-gradient(180deg,#C4B5FD,#A78BFA);color:#1E1033}
 
-/* ---------- 17. gold shimmer for conviction elements ----------------------
-   Gold scalp tab marks high-conviction elements with .convictionGold.
-   Text-shadow pulse only — never clobbers the element's own background.    */
+/* gold conviction shimmer */
 @keyframes convictionGoldShimmer{
-  0%,100%{text-shadow:0 0 3px rgba(245,197,66,.20),0 0 12px rgba(245,197,66,.10)}
-  50%{text-shadow:0 0 8px rgba(245,197,66,.75),0 0 22px rgba(245,197,66,.35)}
+  0%,100%{text-shadow:0 0 4px rgba(255,210,87,.25),0 0 14px rgba(255,210,87,.12)}
+  50%{text-shadow:0 0 10px rgba(255,210,87,.80),0 0 28px rgba(255,210,87,.40)}
 }
-.convictionGold{
-  color:#F5C542;
-  animation:convictionGoldShimmer 2.6s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce){
-  .convictionGold{animation:none}
-}
+.convictionGold{color:#FFD257;animation:convictionGoldShimmer 2.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.convictionGold{animation:none}}
