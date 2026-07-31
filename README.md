@@ -102,6 +102,13 @@ Toggle the 🔔 chip in the header. While ON, every 15 minutes a silent cycle ru
    (deduped by symbol+direction).
 2. **Gold**: silent swing-gate read — alerts only on a fresh STRONG verdict (all GS gates clean with a
    full plan), deduped the same way.
+3. **SWING / SCALP / EDGE / BRAIN / GOLD SCALP / GOLD SWING**: quiet rescans of each tab, then Telegram
+   for any **new** setup with entry, stop, and target. Gold scalp/swing require **tally ≥ 10** (editable in
+   the bell panel). BRAIN rows need **HIGH** or **PRIME** tier with a plan. EDGE uses tally ≥ 3. Each setup
+   key dedupes for 15 minutes; PRIME / very-high confluence lines are tagged 🔥.
+
+Between 15-min cycles, the alert bell’s 60s evaluate also pushes **live BRAIN + GOLD** tab setups to
+Telegram when they first appear (same dedup keys).
 
 **Telegram is the primary alert channel** (free Bot API, no quota) — save your bot token + chat id in the
 header (stored in this browser only) and hit TEST. EmailJS is the automatic fallback when Telegram is not

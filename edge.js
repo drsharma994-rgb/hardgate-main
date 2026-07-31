@@ -551,6 +551,23 @@ function cardHTML(r){
 }
 
 var __edge = { busy: false, ranOnce: false, run: null };
+var __edgeScanSnap = null;
+
+function publishEdgeScan(found){
+  try{
+    var cands = [];
+    for (var i = 0; i < (found || []).length; i++){
+      var r = found[i], p = r.plan || {}, sig = r.sig || {};
+      cands.push({
+        sym: r.sym || (r.item && r.item.sym),
+        dir: sig.dir || p.dir,
+        entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2,
+        rr: sig.rr, tally: r.tally
+      });
+    }
+    __edgeScanSnap = { at: Date.now(), cands: cands };
+  }catch(e){ __edgeScanSnap = { at: Date.now(), cands: [] }; }
+}
 
 function mount(el){
   if (!el) return;
@@ -614,6 +631,7 @@ function mount(el){
       });
       list = list.slice(0, MAX_UNIVERSE);
       if (!list.length){
+        publishEdgeScan([]);
         setStat('universe empty — ' + (note || 'exchange fetch failed'), true);
         return;
       }
@@ -646,6 +664,7 @@ function mount(el){
       found.sort(function(a, b){
         return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
       });
+      publishEdgeScan(found);
       if (!found.length){
         emptyEl.style.display = 'block';
         setStat('done — 0 setups / ' + list.length + ' · ' + noBias + ' no SWING bias · '
@@ -679,6 +698,32 @@ function edgeRefresh(){
   }catch(e){ return 'refreshed'; }
 }
 
+function __edgeWarmShim(){
+  return { innerHTML: '', textContent: '', className: '', disabled: false,
+           style: {}, firstElementChild: { style: {} },
+           querySelector: function(){ return null; } };
+}
+async function edgeWarm(){
+  try{
+    if (__edgeScanSnap && __edgeScanSnap.at && Date.now() - __edgeScanSnap.at < 14 * 60 * 1000) return 'fresh';
+  }catch(e0){}
+  if (__edge.busy) return 'busy';
+  if (typeof xuUniverse !== 'function' || typeof xuCandles !== 'function') return 'unavailable';
+  if (typeof __edge.run === 'function' && __edge.ranOnce){
+    return await __edge.run();
+  }
+  var pane = document.createElement('div');
+  pane.style.display = 'none';
+  document.body.appendChild(pane);
+  try{
+    mount(pane);
+    if (typeof __edge.run === 'function') return await __edge.run();
+  }finally{
+    try{ pane.remove(); }catch(e){}
+  }
+  return __edgeScanSnap ? 'warmed' : 'unavailable';
+}
+
 var W = (typeof window !== 'undefined') ? window : this;
 W.edgeSignal = edgeSignal;
 W.edgeEnrich = edgeEnrich;
@@ -689,7 +734,11 @@ W.edgeMaxSafeLev = edgeMaxSafeLev;
 W.edgeUseLev = edgeUseLev;
 W.edgeSwingRead = edgeSwingRead;
 W.edgeSwingBias = edgeSwingBias;
+W.edgeScan = function(){ try{ return __edgeScanSnap; }catch(e){ return null; } };
+W.edgeWarm = edgeWarm;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'edge', label: 'EDGE', mount: mount, refresh: edgeRefresh });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'edge', label: 'EDGE', run: edgeWarm });
 
 })();

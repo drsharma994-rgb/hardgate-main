@@ -13,7 +13,7 @@ function loadState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   } catch (e) {
-    return { delta: null, coindcx: null, gold: null };
+    return { delta: null, coindcx: null, gold: null, tabAlerts: null };
   }
 }
 
@@ -366,6 +366,11 @@ async function main() {
       try { localStorage.setItem('hg_tg_token', t); localStorage.setItem('hg_tg_chat', c); } catch (e) {}
     }, process.env.TELEGRAM_TOKEN, process.env.TELEGRAM_CHAT_ID);
   }
+  if (prevState.tabAlerts) {
+    await page.evaluateOnNewDocument((keys) => {
+      try { localStorage.setItem('hg_tabalert_keys', JSON.stringify(keys)); } catch (e) {}
+    }, prevState.tabAlerts);
+  }
   await page.goto(SITE_URL + '?nocache=' + cacheBuster, {
     waitUntil: 'domcontentloaded',
     timeout: 60000
@@ -386,9 +391,12 @@ async function main() {
     // the cycle so any send attempt this run is captured. If several sends fire
     // in one cycle this holds the LAST one (contract limitation).
     const email = (typeof window !== 'undefined' && window.__hgLastEmail) ? window.__hgLastEmail : null;
+    let tabAlerts = null;
+    try { tabAlerts = JSON.parse(localStorage.getItem('hg_tabalert_keys') || 'null'); } catch (e) { tabAlerts = null; }
     return {
       state: { delta: S.lastAlertKey.delta, coindcx: S.lastAlertKey.coindcx, gold: S.lastAlertKey.gold ?? null },
-      email: email
+      email: email,
+      tabAlerts: tabAlerts
     };
   }, prevState);
 
@@ -511,6 +519,12 @@ async function main() {
   const newState = result.state;
   console.log('New alert state:', JSON.stringify(newState));
   console.log('Email status (window.__hgLastEmail):', JSON.stringify(result.email));
+  if (result.tabAlerts) {
+    newState.tabAlerts = result.tabAlerts;
+    console.log('Tab setup alert keys:', Object.keys(result.tabAlerts).length);
+  } else if (prevState.tabAlerts) {
+    newState.tabAlerts = prevState.tabAlerts;
+  }
 
   const verdict = emailVerdict(result.email);
   if (verdict.warn) {

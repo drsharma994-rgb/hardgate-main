@@ -702,6 +702,11 @@ function evaluate(){
                scalpLive: gc.scalpLive, swingLive: gc.swingLive, armed: __goldArmed };
   st.note = st.chimed.length ? ('chimed: ' + st.chimed.join(', ')) : 'checked — no new alert conditions';
   maybeFamDigest();   /* daily family-record push (21:05-21:35 IST, once/day) */
+  /* live BRAIN/GOLD tab-setup Telegram between 15-min scan cycles */
+  try{
+    var tabLive = gfn('hgTabAlertsCheckLive');
+    if (tabLive) Promise.resolve(tabLive()).catch(function(){});
+  }catch(e){}
   renderUI();
   return st;
 }
