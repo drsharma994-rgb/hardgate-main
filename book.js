@@ -555,8 +555,12 @@ function blotterHTML(rows, opts){
     + '<th>Event</th><th>Symbol</th><th>Detail</th></tr></thead><tbody>'
     + rows.map(function(b){
       var type = b.type || '—';
-      var typeCls = (type === 'execute_ok') ? 'ok' : ((type === 'execute_fail') ? 'warn' : '');
-      var detail = b.note || b.dir || (b.qty != null ? ('qty ' + fmtF(b.qty, 4)) : '') || '';
+      var typeCls = (type === 'execute_ok' || type === 'execute_fill') ? 'ok' : ((type === 'execute_fail') ? 'warn' : '');
+      var detail = b.note || b.dir || '';
+      if (type === 'execute_fill' && isFinite(b.fillPct)){
+        detail = (detail ? detail + ' · ' : '') + Math.round(b.fillPct * 100) + '% filled';
+      }
+      if (!detail && b.qty != null) detail = 'qty ' + fmtF(b.qty, 4);
       if (b.status) detail += (detail ? ' · ' : '') + 'HTTP ' + b.status;
       if (b.idempotencyKey) detail += (detail ? ' · ' : '') + 'idem ' + String(b.idempotencyKey).slice(0, 16);
       return '<tr><td>' + new Date(b.at).toLocaleTimeString() + '</td>'
@@ -596,6 +600,10 @@ function deskHeaderHTML(desk){
         + (bookExecuteReady() && desk.execute.fail
           ? ' · <span class="statuschip warn bookDeskAct" id="bookDeskExecRetry" style="cursor:pointer"'
             + ' title="Retry all failed brackets across funds">retry all failed</span>' : '')
+        + '</div>' : '')
+    + (desk.fill && (desk.fill.unfilled || desk.fill.partial)
+      ? '<div class="note warn" style="margin-top:6px">Broker fills: <b>' + (desk.fill.unfilled || 0)
+        + ' unfilled</b> · <b>' + (desk.fill.partial || 0) + ' partial</b> (bracket sent, fill not confirmed)'
         + '</div>' : '')
     + (fundChips ? '<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">' + fundChips + '</div>' : '')
     + '</div>';
@@ -1031,7 +1039,7 @@ async function bookExportBlotterCSV(){
     var showFund = multiFund || rows.some(function(b){ return b && b._fundId; });
     var header = ['at_iso', 'time_local'];
     if (showFund) header.push('fund');
-    header.push('type', 'sym', 'dir', 'qty', 'status', 'note', 'idempotencyKey', 'positionId');
+    header.push('type', 'sym', 'dir', 'qty', 'filledQty', 'fillPct', 'status', 'note', 'idempotencyKey', 'positionId');
     var lines = [header.join(',')];
     rows.forEach(function(b){
       var at = b.at ? new Date(b.at) : null;
@@ -1045,6 +1053,8 @@ async function bookExportBlotterCSV(){
         bookCsvCell(b.sym || ''),
         bookCsvCell(b.dir || ''),
         bookCsvCell(b.qty != null ? b.qty : ''),
+        bookCsvCell(b.filledQty != null ? b.filledQty : ''),
+        bookCsvCell(b.fillPct != null ? b.fillPct : ''),
         bookCsvCell(b.status != null ? b.status : ''),
         bookCsvCell(b.note || ''),
         bookCsvCell(b.idempotencyKey || ''),
@@ -1275,6 +1285,10 @@ function deskExecStatusHTML(){
       chips.push('<span class="statuschip" title="Rolling 7d execute blotter for active fund">7d '
         + exFund.ok + ' OK · ' + exFund.fail + ' fail · ' + exFund.pending + ' pending</span>');
     }
+  }
+  if (__book.desk && __book.desk.fill && (__book.desk.fill.unfilled || __book.desk.fill.partial)){
+    chips.push('<span class="statuschip warn" title="Bracket sent but broker fill missing or partial">fills '
+      + (__book.desk.fill.unfilled || 0) + ' open · ' + (__book.desk.fill.partial || 0) + ' partial</span>');
   }
   if (__book.desk && __book.desk.execute && (__book.desk.execute.ok || __book.desk.execute.fail || __book.desk.execute.pending)){
     var exDesk = __book.desk.execute;

@@ -101,6 +101,43 @@ async function recordExecuteBlotter(plan, payload, result){
   }catch(e){}
 }
 
+function parseExecuteFill(plan, result){
+  if (!plan || !plan.positionId || !result || !result.ok) return null;
+  var j = result.json || {};
+  var src = j.fill || null;
+  if (!src && j.response){
+    try{
+      var parsed = JSON.parse(j.response);
+      if (parsed && parsed.fill) src = parsed.fill;
+      else if (parsed && (parsed.filledQty || parsed.filled_qty || parsed.filled)) src = parsed;
+    }catch(e2){}
+  }
+  if (!src || !(src.filledQty > 0 || src.filled_qty > 0 || src.filled > 0)) return null;
+  return {
+    positionId: plan.positionId,
+    fund: plan.fund,
+    filledQty: +(src.filledQty != null ? src.filledQty : (src.filled_qty != null ? src.filled_qty : src.filled)),
+    qty: src.qty != null ? +src.qty : (plan.qty > 0 ? +plan.qty : undefined),
+    avgPrice: src.avgPrice != null ? +src.avgPrice : (src.avg_price != null ? +src.avg_price : undefined),
+    note: src.note || 'auto from execute response',
+  };
+}
+
+async function recordExecuteFill(plan, fill){
+  try{
+    if (!fill || !fill.positionId) return;
+    if (typeof W.hgApiAvailable !== 'function' || !W.hgApiAvailable()) return;
+    if (typeof W.bookFundBody !== 'function') return;
+    var body = W.bookFundBody(Object.assign({ fund: plan.fund }, fill));
+    await fetch('/api/book/execute-fill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (typeof W.bookRefresh === 'function') W.bookRefresh();
+  }catch(e){}
+}
+
 async function postExecute(url, payload){
   var body = url.indexOf('/api/execute') >= 0 ? { plan: payload, idempotencyKey: payload.idempotencyKey } : payload;
   var last = { ok: false, status: 0, json: null, reason: 'network error' };
@@ -151,6 +188,10 @@ async function executeTrade(plan, opts){
   }
   var result = await postExecute(url, payload);
   await recordExecuteBlotter(plan, payload, result);
+  if (result.ok){
+    var autoFill = parseExecuteFill(plan, result);
+    if (autoFill) await recordExecuteFill(plan, autoFill);
+  }
   if (!result.ok){
     var msg = (result.json && result.json.reason) || (result.json && result.json.response) || result.reason || ('HTTP ' + result.status);
     try{ alert('Execution failed: ' + msg); }catch(e4){}

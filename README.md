@@ -79,7 +79,7 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 
 **Automation (BRAIN tab):** optional **auto-add PRIME/HIGH to book** (deduped, silent), **PRIME only** filter, **auto EXEC after auto-add**. `alert-check.mjs` pushes Telegram when desk rollup shows pending/failed brackets.
 
-**Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). `POST /api/book/execute-fill` records broker fill qty against an open position (webhook reconcile). TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. Blotter records `execute_ok` / `execute_fail` per fund via `plan.fund`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
+**Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). Responses may include `fill` fields; the client auto-posts to `POST /api/book/execute-fill`. Optional `BOOK_EXECUTE_FILL_SECRET` protects the fill webhook. TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. Blotter records `execute_ok` / `execute_fail` per fund via `plan.fund`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
 
 **Env vars (Render):** `EXECUTE_BACKEND_URL`, `EXECUTE_WEBHOOK_URL`, `LP_DIGEST_WEBHOOK_URL`, `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`, `LP_DIGEST_EMAIL_TO` (+ Resend/SendGrid/SMTP), `BOOK_MAX_DAILY_LOSS_PCT` (optional — `0.02` or `2` for 2% UTC day halt). See `AGENTS.md` for full list.
 
