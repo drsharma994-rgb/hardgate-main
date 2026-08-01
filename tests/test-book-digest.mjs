@@ -1,12 +1,14 @@
 /* HARDGATE — LP digest schedule + delivery tests */
 import {
   lpDigestDue, LP_DIGEST_HOUR_UTC, LP_DIGEST_MIN_UTC, LP_DIGEST_DOW_UTC,
-  LP_DIGEST_MIN_INTERVAL_MS,
+  LP_DIGEST_MIN_INTERVAL_MS, pbNewBook,
 } from '../lib/paperbook-core.mjs';
 import {
   digestChannelsReady, digestCronAuthOk, deliverLpDigest,
 } from '../lib/paperbook-digest.mjs';
-import { pbNewBook } from '../lib/paperbook-core.mjs';
+import {
+  digestEmailReady, digestEmailTo, buildMimeMessage, sendDigestEmail,
+} from '../lib/digest-email.mjs';
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
@@ -55,6 +57,32 @@ ok(digestCronAuthOk(Object.assign({}, reqRemote, { headers: { 'x-book-digest-key
 ok(digestCronAuthOk(reqRemote) === false, 'remote without key blocked');
 delete process.env.BOOK_DIGEST_CRON_SECRET;
 ok(digestCronAuthOk(reqRemote) === true, 'open cron when secret unset');
+
+ok(digestEmailTo().length === 0, 'email to empty by default');
+process.env.LP_DIGEST_EMAIL_TO = 'lp@fund.com';
+process.env.RESEND_API_KEY = 're_test';
+process.env.LP_DIGEST_EMAIL_FROM = 'desk@hardgate.io';
+ok(digestEmailReady() === true, 'resend email ready with to+from+key');
+var mime = buildMimeMessage('desk@hardgate.io', ['lp@fund.com'], 'Subject', 'plain', '<b>html</b>');
+ok(mime.indexOf('multipart/alternative') >= 0 && mime.indexOf('plain') >= 0, 'mime multipart built');
+delete process.env.LP_DIGEST_EMAIL_TO;
+delete process.env.RESEND_API_KEY;
+delete process.env.LP_DIGEST_EMAIL_FROM;
+
+process.env.LP_DIGEST_EMAIL_TO = 'lp@fund.com';
+process.env.RESEND_API_KEY = 're_test';
+process.env.LP_DIGEST_EMAIL_FROM = 'desk@hardgate.io';
+var prevFetch2 = globalThis.fetch;
+globalThis.fetch = async function(url, opts){
+  if (String(url).indexOf('api.resend.com') >= 0) return { ok: true, status: 200, text: async function(){ return '{}'; } };
+  return prevFetch2(url, opts);
+};
+var mailed = await sendDigestEmail('Test', 'body', '<p>body</p>');
+ok(mailed.ok && mailed.provider === 'resend', 'sendDigestEmail resend ok');
+globalThis.fetch = prevFetch2;
+delete process.env.LP_DIGEST_EMAIL_TO;
+delete process.env.RESEND_API_KEY;
+delete process.env.LP_DIGEST_EMAIL_FROM;
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

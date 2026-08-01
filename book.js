@@ -359,7 +359,7 @@ async function bookExportDigest(period){
 async function bookSendDigest(){
   if (!bookApiOn()) return;
   if (!__book.digestReady){
-    try{ alert('Digest not configured — set LP_DIGEST_WEBHOOK_URL and/or TELEGRAM_TOKEN+TELEGRAM_CHAT_ID on Render.'); }catch(e){}
+    try{ alert('Digest not configured — set LP_DIGEST_WEBHOOK_URL, Telegram, and/or LP_DIGEST_EMAIL_TO (+ Resend/SendGrid/SMTP) on Render.'); }catch(e){}
     return;
   }
   if (!confirm('Send weekly LP digest to the configured webhook?')) return;
@@ -531,7 +531,7 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>PAPER FUND BOOK <span>$1M NAV · risk limits · paper fills at plan entry</span></h2>'
-    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly LP digest auto-sends Sun ~21:07 IST when webhook/Telegram is configured.</p>'
+    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly LP digest auto-sends Sun ~21:07 IST (webhook / Telegram / email).</p>'
     + '<div class="row" style="align-items:center;gap:12px">'
     + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
     + '</div>'
