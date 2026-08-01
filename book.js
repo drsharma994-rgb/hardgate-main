@@ -16,9 +16,20 @@ Registers window.HG_tabs id 'book' label 'BOOK'.
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null };
+var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [] };
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
+var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
+
+function bookAutoOn(){
+  try{
+    var v = localStorage.getItem(BOOK_AUTO_KEY);
+    return v === null ? true : v === '1';
+  }catch(e){ return true; }
+}
+function bookSetAuto(on){
+  try{ localStorage.setItem(BOOK_AUTO_KEY, on ? '1' : '0'); }catch(e){}
+}
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
@@ -201,11 +212,62 @@ async function bookRefreshMarks(){
   var marks = await bookCollectMarks(snap);
   if (!Object.keys(marks).length) return snap;
   if (bookApiOn()){
-    var r = await bookFetch('/api/book/marks', { method: 'POST', body: JSON.stringify({ marks: marks }) });
-    if (r.json && r.json.ok){ __book.snap = r.json; __book.lastAt = Date.now(); }
+    var r = await bookFetch('/api/book/marks', {
+      method: 'POST',
+      body: JSON.stringify({ marks: marks, auto: bookAutoOn() }),
+    });
+    if (r.json && r.json.ok){
+      __book.snap = r.json;
+      __book.lastAt = Date.now();
+      if (r.json.autoActions && r.json.autoActions.length){
+        __book.autoLog = (r.json.autoActions.concat(__book.autoLog)).slice(0, 12);
+      }
+    }
     return __book.snap;
   }
   return snap;
+}
+
+function autoLogHTML(){
+  var log = __book.autoLog || [];
+  if (!log.length) return '<div class="note">Auto desk idle — rules: T1 scale 50% · trail BE at 1R · stop-out at mark.</div>';
+  return '<ul class="bookAutoLog">' + log.map(function(a){
+    var txt = a.action === 'scale_t1' ? ('T1 scale ' + Math.round((a.pct || 0.5) * 100) + '% · ' + a.sym)
+      : a.action === 'trail_be' ? ('Trail BE · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
+      : a.action === 'stop_out' ? ('Stop out · ' + a.sym + ' ' + (a.dir || ''))
+      : (a.action || 'action');
+    return '<li>' + esc(txt) + '</li>';
+  }).join('') + '</ul>';
+}
+
+async function bookExportLp(){
+  try{
+    var month = new Date().toISOString().slice(0, 7);
+    var r = await bookFetch('/api/book/lp?month=' + encodeURIComponent(month));
+    if (!r.json || !r.json.ok) return;
+    var lp = r.json.lp;
+    var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>HARDGATE LP Report ' + esc(lp.month) + '</title>'
+      + '<style>body{font-family:system-ui;background:#0b0f14;color:#e8eaed;padding:24px}'
+      + 'h1{font-size:20px}table{border-collapse:collapse;width:100%;margin-top:12px}'
+      + 'td,th{border:1px solid #2a2f3a;padding:8px;text-align:left;font-size:13px}</style></head><body>'
+      + '<h1>HARDGATE Paper Fund — LP Report</h1>'
+      + '<p>Month: <b>' + esc(lp.month) + '</b> · Generated ' + new Date().toISOString() + '</p>'
+      + '<table><tr><th>NAV</th><td>' + fmtUsd(lp.navUsd) + '</td></tr>'
+      + '<tr><th>Equity</th><td>' + fmtUsd(lp.equityUsd) + '</td></tr>'
+      + '<tr><th>MTD return</th><td>' + fmtF(lp.mtdReturnPct, 2) + '%</td></tr>'
+      + '<tr><th>MTD realized</th><td>' + fmtUsd(lp.mtdRealizedUsd) + '</td></tr>'
+      + '<tr><th>Trades closed</th><td>' + lp.tradesClosed + '</td></tr>'
+      + '<tr><th>Win rate</th><td>' + fmtF(lp.winRate * 100, 1) + '%</td></tr>'
+      + '<tr><th>Open positions</th><td>' + lp.openCount + '</td></tr></table>'
+      + '<p style="margin-top:24px;font-size:11px;color:#888">Paper fund simulation — not audited. For desk use only.</p>'
+      + '</body></html>';
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hardgate-lp-' + lp.month + '.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){}
 }
 
 function heatBarHTML(s){
@@ -364,17 +426,22 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>PAPER FUND BOOK <span>$1M NAV · risk limits · paper fills at plan entry</span></h2>'
-    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN with live equity · <b>50%</b> scale at mark · <b>BE</b> stop to entry · heat + bucket caps enforced pre-trade.</p>'
+    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh.</p>'
+    + '<div class="row" style="align-items:center;gap:12px">'
+    + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · BE @1R · stop-out)</label>'
+    + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
+    + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
     + '<button class="btn ghost" id="bookReset">RESET BOOK</button>'
     + '<span class="note" id="bookStat">idle</span>'
     + '</div>'
     + '<div class="kv" id="bookSummary"></div>'
     + '<div id="bookHeat"></div>'
+    + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
     + '<div style="overflow-x:auto"><table class="booktbl" id="bookTable">'
@@ -389,6 +456,7 @@ function mount(el){
   var stat = el.querySelector('#bookStat');
   var summary = el.querySelector('#bookSummary');
   var heatEl = el.querySelector('#bookHeat');
+  var autoLogEl = el.querySelector('#bookAutoLog');
   var body = el.querySelector('#bookBody');
   var empty = el.querySelector('#bookEmpty');
   var closedEl = el.querySelector('#bookClosed');
@@ -421,6 +489,7 @@ function mount(el){
         + '<span class="k">Open</span><span class="v">' + s.openCount + ' positions · gross ' + fmtUsd(s.grossUsd) + '</span>';
     }
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
+    if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
     var positions = (snap.book && snap.book.positions) || [];
     if (body){
       body.innerHTML = positions.map(posRowHTML).join('');
@@ -473,6 +542,14 @@ function mount(el){
   el.querySelector('#bookRefresh').addEventListener('click', function(){ refresh(); });
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
+  el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
+  var autoChk = el.querySelector('#bookAutoRules');
+  if (autoChk){
+    autoChk.addEventListener('change', function(){
+      bookSetAuto(autoChk.checked);
+      setStat(autoChk.checked ? 'auto desk ON' : 'auto desk OFF');
+    });
+  }
   el.querySelector('#bookCloseAll').addEventListener('click', async function(){
     if (!bookApiOn()) return;
     var snap = __book.snap || await bookPull();

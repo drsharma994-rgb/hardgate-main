@@ -2,7 +2,8 @@
 import {
   pbNewBook, pbAddIntent, pbRiskCheck, pbClosePosition, pbCloseAll,
   pbMarkBook, pbSummary, pbAttribution, pbRollDay, pbPushNavHistory,
-  pbScalePosition, pbMoveStop, pbUnrealizedR, PB_DEFAULTS,
+  pbScalePosition, pbMoveStop, pbUnrealizedR, pbApplyAutoRules, pbLpReport,
+  PB_DEFAULTS,
 } from '../lib/paperbook-core.mjs';
 
 let pass = 0, fail = 0;
@@ -75,6 +76,25 @@ var moved = pbMoveStop(scaled.book, scaled.book.positions[0].id, scaled.book.pos
 ok(moved.ok && moved.position.stop === moved.position.entry, 'move stop to breakeven');
 var rVal = pbUnrealizedR(Object.assign({}, scaled.book.positions[0], { mark: 215 }));
 ok(rVal != null && rVal > 0, 'unrealized R positive on winner');
+
+var t1Book = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'auto' }).book;
+var t1Marked = pbMarkBook(t1Book, { BTCUSD: 111 });
+var t1Auto = pbApplyAutoRules(t1Marked, {});
+ok(t1Auto.actions.some(function(a){ return a.action === 'scale_t1'; }), 'auto scales 50% at T1');
+ok(t1Auto.book.positions.length === 1 && t1Auto.book.positions[0].t1Scaled, 'remainder tagged t1Scaled');
+
+var beBook = pbAddIntent(pbNewBook(), { sym: 'SOLUSD', dir: 'long', entry: 100, stop: 90, t1: 120, strategy: 'auto' }).book;
+var beMarked = pbMarkBook(beBook, { SOLUSD: 110 });
+var beAuto = pbApplyAutoRules(beMarked, { t1Scale: false });
+ok(beAuto.actions.some(function(a){ return a.action === 'trail_be'; }), 'auto trails stop to BE at 1R');
+
+var stopBook = pbAddIntent(pbNewBook(), { sym: 'XRPUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'auto' }).book;
+var stopMarked = pbMarkBook(stopBook, { XRPUSD: 94 });
+var stopAuto = pbApplyAutoRules(stopMarked, { t1Scale: false, trailBeAtR: 0 });
+ok(stopAuto.actions.some(function(a){ return a.action === 'stop_out'; }), 'auto stop-out when mark hits stop');
+
+var lp = pbLpReport(pbNewBook(), new Date().toISOString().slice(0, 7));
+ok(lp.month && isFinite(lp.equityUsd), 'LP report month + equity');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
