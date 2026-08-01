@@ -3953,6 +3953,7 @@ function scoreRecord(setups){
    never switches tabs or alerts on veto (silent addToBook). */
 var BRAIN_AUTO_BOOK_KEY = 'hg_brain_auto_book_v1';
 var BRAIN_AUTO_BOOK_SEEN_KEY = 'hg_brain_auto_book_seen_v1';
+var BRAIN_AUTO_EXEC_AFTER_BOOK_KEY = 'hg_brain_auto_exec_v1';
 var BRAIN_AUTO_BOOK_SEEN_TTL = 8 * 60 * 60 * 1000;
 
 function brainAutoBookOn(){
@@ -3960,6 +3961,12 @@ function brainAutoBookOn(){
 }
 function brainSetAutoBook(on){
   try{ localStorage.setItem(BRAIN_AUTO_BOOK_KEY, on ? '1' : '0'); }catch(e){}
+}
+function brainAutoExecAfterBookOn(){
+  try{ return localStorage.getItem(BRAIN_AUTO_EXEC_AFTER_BOOK_KEY) === '1'; }catch(e){ return false; }
+}
+function brainSetAutoExecAfterBook(on){
+  try{ localStorage.setItem(BRAIN_AUTO_EXEC_AFTER_BOOK_KEY, on ? '1' : '0'); }catch(e){}
 }
 function brainAutoBookKey(fund, sym, dir){
   return String(fund || 'main') + ':' + String(sym) + ':' + String(dir);
@@ -4021,7 +4028,7 @@ function brainRowBookOpts(row){
   }catch(e){ return null; }
 }
 async function brainAutoBookRecord(setups){
-  var out = { added: 0, skipped: 0, veto: 0 };
+  var out = { added: 0, skipped: 0, veto: 0, execOk: 0, execFail: 0 };
   try{
     if (!brainAutoBookOn()) return out;
     if (typeof G.addToBook !== 'function') return out;
@@ -4032,6 +4039,7 @@ async function brainAutoBookRecord(setups){
     }
     var seen = brainAutoBookSeenPrune(brainAutoBookSeenLoad());
     var now = Date.now();
+    var addedPositions = [];
     for (var i = 0; i < setups.length; i++){
       var opts = brainRowBookOpts(setups[i]);
       if (!opts) continue;
@@ -4042,6 +4050,7 @@ async function brainAutoBookRecord(setups){
         if (r && r.ok){
           seen[key] = now;
           out.added++;
+          if (r.position) addedPositions.push(r.position);
         }else if (r && r.veto){
           out.veto++;
         }else{
@@ -4050,15 +4059,26 @@ async function brainAutoBookRecord(setups){
       }catch(e){ out.skipped++; }
     }
     brainAutoBookSeenSave(seen);
+    if (brainAutoExecAfterBookOn() && addedPositions.length
+      && typeof G.bookExecuteBatchPositions === 'function'
+      && typeof G.executeBackendReady === 'function' && G.executeBackendReady()){
+      try{
+        var ex = await G.bookExecuteBatchPositions(addedPositions, 'hardgate-brain-auto-exec');
+        out.execOk = (ex && ex.ok) || 0;
+        out.execFail = (ex && ex.fail) || 0;
+      }catch(eEx){}
+    }
   }catch(e){}
   return out;
 }
 function brainAutoBookStatNote(ab){
-  if (!ab || (!ab.added && !ab.skipped && !ab.veto)) return '';
+  if (!ab || (!ab.added && !ab.skipped && !ab.veto && !ab.execOk && !ab.execFail)) return '';
   var parts = [];
   if (ab.added) parts.push('+' + ab.added);
   if (ab.skipped) parts.push(ab.skipped + ' dup');
   if (ab.veto) parts.push(ab.veto + ' veto');
+  if (ab.execOk) parts.push('exec +' + ab.execOk);
+  if (ab.execFail) parts.push(ab.execFail + ' exec fail');
   return ' · auto-book ' + parts.join(' · ');
 }
 
@@ -4837,6 +4857,8 @@ function mount(el){
       + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'
       + '<label class="note" id="brainAutoBookWrap" title="After each synthesis, add PRIME/HIGH cards with plans to the paper book (deduped; no tab switch)">'
       + '<input type="checkbox" id="brainAutoBook"> Auto-add PRIME/HIGH to book</label>'
+      + '<label class="note" id="brainAutoExecWrap" title="After auto-add, send EXEC brackets for newly added positions (requires /api/execute)">'
+      + '<input type="checkbox" id="brainAutoExec"> Auto EXEC after auto-add</label>'
       + '<select id="brainVenue" style="display:none" title="venue filter — combined multi-exchange universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
       + '<option value="CDCX">COINDCX ONLY</option><option value="STARTRADER">STARTRADER ONLY</option></select>'
@@ -4918,6 +4940,14 @@ function mount(el){
       abChk.checked = brainAutoBookOn();
       abChk.addEventListener('change', function(){
         brainSetAutoBook(abChk.checked);
+      });
+    }
+    var aeChk = el.querySelector('#brainAutoExec');
+    if (aeChk){
+      aeChk.checked = brainAutoExecAfterBookOn();
+      aeChk.disabled = !(typeof G.executeBackendReady === 'function' && G.executeBackendReady());
+      aeChk.addEventListener('change', function(){
+        brainSetAutoExecAfterBook(aeChk.checked);
       });
     }
   }catch(e){}
@@ -5081,6 +5111,8 @@ G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } 
 G.hgBrainAutoWarm = hgBrainAutoWarm;
 G.brainAutoBookOn = brainAutoBookOn;
 G.brainSetAutoBook = brainSetAutoBook;
+G.brainAutoExecAfterBookOn = brainAutoExecAfterBookOn;
+G.brainSetAutoExecAfterBook = brainSetAutoExecAfterBook;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'brain', label: 'BRAIN', mount: function(el){ mount(el); }, refresh: brainRefresh });
 
