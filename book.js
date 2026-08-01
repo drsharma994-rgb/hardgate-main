@@ -128,8 +128,18 @@ function bookFilterBlotterRows(rows){
   rows = rows || [];
   if (!bookBlotterExecOnlyOn()) return rows;
   return rows.filter(function(b){
-    return b && (b.type === 'execute_ok' || b.type === 'execute_fail');
+    return b && (b.type === 'execute_ok' || b.type === 'execute_fail'
+      || b.type === 'execute_fill' || b.type === 'live_send');
   });
+}
+
+function bookDataFund(p){
+  return (p && p._fundId) ? (' data-fund="' + esc(p._fundId) + '"') : '';
+}
+
+function bookActionFund(el){
+  if (!el || !el.getAttribute) return bookFundId();
+  return el.getAttribute('data-fund') || bookFundId();
 }
 
 function esc(s){
@@ -641,14 +651,16 @@ function deskHeaderHTML(desk){
     + '</div>';
 }
 
-async function bookLivePosition(id){
+async function bookLivePosition(id, fundId){
   if (!bookApiOn()) return;
   if (!__book.liveReady){
     try{ alert('Live execute not configured — set EXECUTE_WEBHOOK_URL on Render.'); }catch(e){}
     return;
   }
+  var p = bookFindPosAny(id);
+  fundId = fundId || (p && p._fundId) || bookFundId();
   if (!confirm('Send LIVE bracket for this paper position to the execution webhook?')) return;
-  var r = await bookFetch('/api/book/live', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id })) });
+  var r = await bookFetch('/api/book/live', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id, fund: fundId })) });
   if (r.json && r.json.ok){
     try{ alert('Live bracket sent (HTTP ' + r.json.status + ').'); }catch(e2){}
   } else {
@@ -711,8 +723,9 @@ async function bookExecuteFromPosition(position, opts){
 
 async function bookExecutePosition(id, opts){
   opts = opts || {};
-  var p = bookFindPos(id);
+  var p = bookFindPosAny(id);
   if (!p) return { ok: false, reason: 'missing position' };
+  if (!opts.fund && p._fundId) opts.fund = p._fundId;
   return bookExecuteFromPosition(p, opts);
 }
 
@@ -949,6 +962,25 @@ function bookFindPos(id){
   return null;
 }
 
+function bookFindPosAny(id){
+  var p = bookFindPos(id);
+  if (p) return p;
+  var all = (__book.consolidatedAll && __book.consolidatedAll.positions) || [];
+  for (var i = 0; i < all.length; i++){
+    if (all[i].id === id) return all[i];
+  }
+  return null;
+}
+
+function bookBlotterRowsForView(){
+  var multiFund = (__book.funds || []).length > 1;
+  if (multiFund && __book.consolidatedAll){
+    return __book.consolidatedAll.blotter || [];
+  }
+  var snap = __book.snap;
+  return (snap && snap.book && snap.book.blotter) || snap.blotter || [];
+}
+
 function bookPositionNeedsFillPoll(p, blotter){
   if (!p || !p.id) return false;
   if ((p.brokerFillPct || 0) >= 0.999) return false;
@@ -957,9 +989,9 @@ function bookPositionNeedsFillPoll(p, blotter){
 
 async function bookPollFillPosition(id){
   if (!bookApiOn() || !bookExecuteReady()) return { ok: false, reason: 'unavailable' };
-  var p = bookFindPos(id);
+  var p = bookFindPosAny(id);
   if (!p) return { ok: false, reason: 'missing position' };
-  var blotter = (__book.snap && __book.snap.book && __book.snap.book.blotter) || [];
+  var blotter = bookBlotterRowsForView();
   if (!bookPositionNeedsFillPoll(p, blotter)) return { ok: false, reason: 'no poll needed' };
   var evt = bookLatestExecForPosition(blotter, p.id);
   var params = new URLSearchParams({ positionId: p.id });
@@ -1268,13 +1300,14 @@ function bookBracketEventOk(evt){
 function posFillChipHTML(p, blotter){
   blotter = blotter || [];
   if (!p) return '';
+  var fundAttr = bookDataFund(p);
   var pct = p.brokerFillPct;
   if (pct > 0){
     var pctR = Math.round(pct * 100);
     var label = pctR >= 100 ? 'FILL OK' : ('FILL ' + pctR + '%');
     var partialPoll = pctR < 100 && bookExecuteReady() && bookApiOn();
     return ' <span class="statuschip ' + (pctR >= 100 ? 'ok' : 'warn') + '"'
-      + (partialPoll ? (' data-poll-fill="' + esc(p.id) + '" style="cursor:pointer"') : '')
+      + (partialPoll ? (' data-poll-fill="' + esc(p.id) + '"' + fundAttr + ' style="cursor:pointer"') : '')
       + ' title="' + (partialPoll ? 'Click to poll for remaining fill · ' : '')
       + 'Broker filled ' + (isFinite(p.brokerFilledQty) ? p.brokerFilledQty.toFixed(4) : pctR + '%') + ' of order">'
       + label + '</span>';
@@ -1282,7 +1315,7 @@ function posFillChipHTML(p, blotter){
   if (bookPositionNeedsFillPoll(p, blotter)){
     var pollReady = bookExecuteReady() && bookApiOn();
     return ' <span class="statuschip warn"'
-      + (pollReady ? (' data-poll-fill="' + esc(p.id) + '" style="cursor:pointer"') : '')
+      + (pollReady ? (' data-poll-fill="' + esc(p.id) + '"' + fundAttr + ' style="cursor:pointer"') : '')
       + ' title="' + (pollReady ? 'Click to poll broker fill status' : 'Bracket sent — fill not confirmed') + '">UNFILLED</span>';
   }
   return '';
@@ -1291,8 +1324,9 @@ function posFillChipHTML(p, blotter){
 function posExecChipHTML(p, blotter){
   var evt = bookLatestExecForPosition(blotter, p && p.id);
   var execReady = bookExecuteReady();
+  var fundAttr = bookDataFund(p);
   var click = execReady ? ' style="cursor:pointer"' : '';
-  var dataExec = execReady ? (' data-exec="' + esc(p.id) + '"') : '';
+  var dataExec = execReady ? (' data-exec="' + esc(p.id) + '"' + fundAttr) : '';
   if (!evt){
     return '<span class="statuschip warn"' + dataExec + click
       + ' title="' + (execReady ? 'Click to send EXEC bracket' : 'No bracket sent yet') + '">EXEC —</span>';
@@ -1410,17 +1444,20 @@ function closedRowHTML(c){
     + new Date(c.closedAt).toLocaleString() + '</td></tr>';
 }
 
-function posRowHTML(p, blotter){
+function posRowHTML(p, blotter, opts){
   blotter = blotter || [];
+  opts = opts || {};
+  var fundAttr = bookDataFund(p);
   var upl = p.unrealizedUsd || 0;
   var uplCls = upl >= 0 ? 'ok' : 'warn';
   var rVal = posR(p);
   var rCls = (rVal != null && rVal >= 0) ? 'ok' : 'warn';
   var liveBtn = __book.liveReady
-    ? '<button class="btn" data-live="' + esc(p.id) + '" title="Send bracket to EXECUTE_WEBHOOK_URL">LIVE</button>' : '';
+    ? '<button class="btn" data-live="' + esc(p.id) + '"' + fundAttr + ' title="Send bracket to EXECUTE_WEBHOOK_URL">LIVE</button>' : '';
   var execBtn = bookExecuteReady()
-    ? '<button class="btn ghost" data-exec="' + esc(p.id) + '" title="EXECUTE BRACKET via /api/execute proxy">EXEC</button>' : '';
+    ? '<button class="btn ghost" data-exec="' + esc(p.id) + '"' + fundAttr + ' title="EXECUTE BRACKET via /api/execute proxy">EXEC</button>' : '';
   return '<tr>'
+    + (opts.showFund ? '<td><span class="statuschip bookSrc" title="Paper fund">' + esc(p._fundId || 'main') + '</span></td>' : '')
     + '<td>' + esc(p.sym) + '</td>'
     + '<td>' + esc((p.dir || '').toUpperCase()) + '</td>'
     + '<td>' + esc(p.strategy || '—') + posSourceChip(p) + '</td>'
@@ -1435,9 +1472,9 @@ function posRowHTML(p, blotter){
     + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
     + execBtn
     + liveBtn
-    + '<button class="btn ghost" data-scale="0.5" data-id="' + esc(p.id) + '" title="Scale out 50% at mark">50%</button>'
-    + '<button class="btn ghost" data-be="' + esc(p.id) + '" title="Move stop to breakeven">BE</button>'
-    + '<button class="btn ghost" data-close="' + esc(p.id) + '">CLOSE</button>'
+    + '<button class="btn ghost" data-scale="0.5" data-id="' + esc(p.id) + '"' + fundAttr + ' title="Scale out 50% at mark">50%</button>'
+    + '<button class="btn ghost" data-be="' + esc(p.id) + '"' + fundAttr + ' title="Move stop to breakeven">BE</button>'
+    + '<button class="btn ghost" data-close="' + esc(p.id) + '"' + fundAttr + '>CLOSE</button>'
     + '</td>'
     + '</tr>';
 }
@@ -1495,7 +1532,7 @@ function mount(el){
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
     + '<div class="panel" style="margin-top:8px"><div class="row" style="align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">'
     + '<h3 style="margin:0">Execution blotter</h3>'
-    + '<label class="note" title="Show only execute_ok / execute_fail rows"><input type="checkbox" id="bookBlotterExecOnly"> EXEC only</label>'
+    + '<label class="note" title="Show execute_ok / execute_fail / execute_fill / live_send rows"><input type="checkbox" id="bookBlotterExecOnly"> EXEC only</label>'
     + '</div><div id="bookBlotter"></div>'
     + '<div id="bookBlotterAll" style="display:none;margin-top:8px"><h4 style="font-size:12px;margin:0 0 6px">Cross-fund execute events</h4><div id="bookBlotterAllBody"></div></div>'
     + '</div>'
@@ -1521,6 +1558,7 @@ function mount(el){
   var blotterAllBody = el.querySelector('#bookBlotterAllBody');
   var body = el.querySelector('#bookBody');
   var empty = el.querySelector('#bookEmpty');
+  var tableHead = el.querySelector('#bookTable thead tr');
   var closedEl = el.querySelector('#bookClosed');
   var crossAttrEl = el.querySelector('#bookCrossAttr');
   var attrEl = el.querySelector('#bookAttr');
@@ -1603,8 +1641,17 @@ function mount(el){
     }
     var positions = (snap.book && snap.book.positions) || [];
     var blotterRows = (snap.book && snap.book.blotter) || snap.blotter || [];
+    if (multiFund && consolidated){
+      positions = consolidated.positions || positions;
+      blotterRows = consolidated.blotter || blotterRows;
+    }
+    if (tableHead){
+      tableHead.innerHTML = (multiFund ? '<th>Fund</th>' : '')
+        + '<th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th>'
+        + '<th>R</th><th>UPL</th><th>Risk</th><th>Bracket</th><th>OMS</th>';
+    }
     if (body){
-      body.innerHTML = positions.map(function(p){ return posRowHTML(p, blotterRows); }).join('');
+      body.innerHTML = positions.map(function(p){ return posRowHTML(p, blotterRows, { showFund: multiFund }); }).join('');
       if (empty) empty.style.display = positions.length ? 'none' : 'block';
     }
     if (closedEl && snap.book && snap.book.closed){
@@ -1862,12 +1909,12 @@ function mount(el){
     }
     var liveBtn = t.closest('[data-live]');
     if (liveBtn){
-      bookLivePosition(liveBtn.getAttribute('data-live'));
+      bookLivePosition(liveBtn.getAttribute('data-live'), bookActionFund(liveBtn));
       return;
     }
     var execBtn = t.closest('[data-exec]');
     if (execBtn){
-      await bookExecutePosition(execBtn.getAttribute('data-exec'));
+      await bookExecutePosition(execBtn.getAttribute('data-exec'), { fund: bookActionFund(execBtn) });
       await refresh();
       return;
     }
@@ -1907,7 +1954,7 @@ function mount(el){
       var sid = scaleBtn.getAttribute('data-id');
       var pct = +scaleBtn.getAttribute('data-scale');
       if (!sid || !(pct > 0)) return;
-      await bookFetch('/api/book/scale', { method: 'POST', body: JSON.stringify(bookFundBody({ id: sid, pct: pct })) });
+      await bookFetch('/api/book/scale', { method: 'POST', body: JSON.stringify(bookFundBody({ id: sid, pct: pct, fund: bookActionFund(scaleBtn) })) });
       bookScoreSettle();
       await refresh();
       return;
@@ -1915,9 +1962,9 @@ function mount(el){
     var beBtn = t.closest('[data-be]');
     if (beBtn){
       if (!bookApiOn()) return;
-      var bp = bookFindPos(beBtn.getAttribute('data-be'));
+      var bp = bookFindPosAny(beBtn.getAttribute('data-be'));
       if (!bp) return;
-      await bookFetch('/api/book/stop', { method: 'POST', body: JSON.stringify(bookFundBody({ id: bp.id, stop: bp.entry })) });
+      await bookFetch('/api/book/stop', { method: 'POST', body: JSON.stringify(bookFundBody({ id: bp.id, stop: bp.entry, fund: bookActionFund(beBtn) })) });
       await refresh();
       return;
     }
@@ -1925,7 +1972,7 @@ function mount(el){
     if (!btn) return;
     var id = btn.getAttribute('data-close');
     if (!id || !bookApiOn()) return;
-    await bookFetch('/api/book/close', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id })) });
+    await bookFetch('/api/book/close', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id, fund: bookActionFund(btn) })) });
     bookScoreSettle();
     await refresh();
   });
@@ -1977,6 +2024,7 @@ W.bookBuildExecutePlan = bookBuildExecutePlan;
 W.bookExecuteBatchPositions = bookExecuteBatchPositions;
 W.bookExecuteFromPosition = bookExecuteFromPosition;
 W.bookFetchAllPositions = bookFetchAllPositions;
+W.bookFindPosAny = bookFindPosAny;
 W.bookExecuteAllFundsPending = bookExecuteAllFundsPending;
 W.bookExportBlotterCSV = bookExportBlotterCSV;
 W.bookRetryAllFundsFailed = bookRetryAllFundsFailed;

@@ -102,6 +102,12 @@ ok(bookJs.indexOf('all.closed') >= 0 && bookJs.indexOf('closedAt') >= 0
 ok(bookJs.indexOf('bookBlotterExecOnlyOn') >= 0 && bookJs.indexOf('bookFilterBlotterRows') >= 0
   && bookJs.indexOf('id="bookBlotterExecOnly"') >= 0,
   'book.js EXEC-only blotter filter toggle');
+ok(bookJs.indexOf('execute_fill') >= 0 && bookJs.indexOf('live_send') >= 0
+  && bookJs.indexOf('bookFilterBlotterRows') >= 0,
+  'book.js EXEC blotter filter includes fill + live rows');
+ok(bookJs.indexOf('bookFindPosAny') >= 0 && bookJs.indexOf('showFund') >= 0
+  && bookJs.indexOf('data-fund') >= 0,
+  'book.js multi-fund positions table + fund-routed OMS actions');
 ok(bookJs.indexOf('bookDailyLossHalted') >= 0 && bookJs.indexOf('DAY HALT') >= 0
   && bookJs.indexOf('bookDayHalt') >= 0,
   'book.js daily loss halt banner + status chip');
