@@ -213,7 +213,7 @@ function getCfg(){
   try{
     if (typeof localStorage !== 'undefined' && localStorage){
       var v = localStorage.getItem(LS_VENUE);
-      if (v === 'all' || v === 'delta' || v === 'cdcx') c.venue = v;
+      if (v === 'all' || v === 'delta' || v === 'cdcx' || v === 'startrader' || v === 'binance') c.venue = v;
       var t = parseFloat(localStorage.getItem(LS_TURN));
       if (isFinite(t) && t > 0) c.minTurnover = t;
     }
@@ -223,7 +223,7 @@ function getCfg(){
 function engineConfig(set){
   try{
     if (set && typeof set === 'object'){
-      if (set.venue === 'all' || set.venue === 'delta' || set.venue === 'cdcx') __cfg.venue = set.venue;
+      if (set.venue === 'all' || set.venue === 'delta' || set.venue === 'cdcx' || set.venue === 'startrader' || set.venue === 'binance') __cfg.venue = set.venue;
       var t = numOrNull(set.minTurnover);
       if (t !== null && t > 0) __cfg.minTurnover = t;
       try{
@@ -639,7 +639,10 @@ function normXuItem(raw){
           : ((typeof raw.symbol === 'string' && raw.symbol) ? raw.symbol : null);
   if (!sym) return null;
   var ex = String(raw.exchange || '').toLowerCase();
-  var exk = (ex === 'delta') ? 'delta' : ((ex === 'coindcx' || ex === 'cdcx') ? 'cdcx' : 'other');
+  var exk = (ex === 'delta') ? 'delta'
+          : ((ex === 'coindcx' || ex === 'cdcx') ? 'cdcx'
+          : ((ex === 'startrader') ? 'startrader'
+          : ((ex === 'binance') ? 'binance' : 'other')));
   return {
     sym: sym,
     base: (typeof raw.base === 'string' && raw.base) ? raw.base : null,
@@ -1303,9 +1306,11 @@ function mount(el){
       + '<span class="note" id="engineStat"></span></div>'
       + '<div class="row" id="engineCfg" style="margin-top:8px">'
       + '<label class="f">VENUE<select id="engineVenue">'
-      + '<option value="all">ALL (Delta + CoinDCX)</option>'
+      + '<option value="all">ALL (Delta + CoinDCX + Startrader + Binance)</option>'
       + '<option value="delta">DELTA only</option>'
       + '<option value="cdcx">CDCX only</option>'
+      + '<option value="startrader">STARTRADER only</option>'
+      + '<option value="binance">BINANCE ext only</option>'
       + '</select></label>'
       + '<label class="f">MIN TURNOVER<select id="engineTurn">'
       + '<option value="500000">$0.5M</option>'

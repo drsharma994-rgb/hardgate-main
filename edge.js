@@ -509,7 +509,8 @@ function edgePlanHtml(p){
 function venueLabel(item){
   if (!item) return '—';
   var v = String(item.exchange || '').toUpperCase();
-  if (item.alsoOn) return v + ' · also ' + esc(item.alsoOn);
+  if (v === 'COINDCX') v = 'CDCX';
+  if (item.alsoOn) return v + ' · also ' + esc(String(item.alsoOn).split(',')[0]);
   return v;
 }
 

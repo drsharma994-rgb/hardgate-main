@@ -266,7 +266,7 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   // every entry carries the full contract shape
   const okShape = uni3.every(function(r){
     return typeof r.sym === 'string' && typeof r.base === 'string' &&
-           (r.exchange === 'delta' || r.exchange === 'coindcx') &&
+           (r.exchange === 'delta' || r.exchange === 'coindcx' || r.exchange === 'startrader' || r.exchange === 'binance') &&
            (r.turnoverUsd === null || typeof r.turnoverUsd === 'number') &&
            (r.mark === null || typeof r.mark === 'number') &&
            (r.fundingPct === null || typeof r.fundingPct === 'number') &&
