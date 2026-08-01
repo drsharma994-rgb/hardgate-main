@@ -2,7 +2,7 @@
 import {
   pbNormalizeStore, pbNewStore, pbGetBook, pbSetBook, pbListFunds,
   pbCreateFund, pbResetFund, PB_DEFAULT_FUND,
-  pbConsolidatedLp, pbConsolidatedHtml, pbConsolidatedDigestText,
+  pbConsolidatedLp, pbConsolidatedHtml, pbConsolidatedDigestText, pbConsolidatedAttribution,
 } from '../lib/paperbook-funds.mjs';
 import { pbNewBook, pbAddIntent } from '../lib/paperbook-core.mjs';
 
@@ -54,6 +54,22 @@ var html = pbConsolidatedHtml(consolidated);
 ok(html.indexOf('Consolidated LP') >= 0 && html.indexOf('gold') >= 0, 'consolidated HTML renders funds');
 var text = pbConsolidatedDigestText(consolidated);
 ok(text.indexOf('By fund:') >= 0 && text.indexOf('gold') >= 0, 'consolidated digest text lists funds');
+
+var attrStore = pbNewStore('main');
+attrStore = pbCreateFund(attrStore, { id: 'gold' }).store;
+var attrMain = pbGetBook(attrStore, 'main');
+var attrAddMain = pbAddIntent(attrMain.book, { sym: 'BTCUSD', dir: 'long', entry: 50000, stop: 49000, strategy: 'brain' });
+attrStore = pbSetBook(attrStore, 'main', attrAddMain.book);
+var attrGold = pbGetBook(attrStore, 'gold');
+var attrAddGold = pbAddIntent(attrGold.book, { sym: 'XAUUSD', dir: 'long', entry: 2000, stop: 1990, strategy: 'gold' });
+attrStore = pbSetBook(attrStore, 'gold', attrAddGold.book);
+var crossAttr = pbConsolidatedAttribution(attrStore);
+ok(crossAttr.fundCount === 2 && crossAttr.byFund.length === 2, 'cross-fund attribution spans funds');
+ok(crossAttr.byStrategy.some(function(r){ return r.key === 'brain'; })
+  && crossAttr.byStrategy.some(function(r){ return r.key === 'gold'; }), 'cross-fund strategy rollup');
+ok(crossAttr.strategyByFund.length >= 2
+  && crossAttr.strategyByFund.some(function(r){ return r.cells && r.cells.main != null; }),
+  'strategy × fund matrix populated');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
