@@ -73,9 +73,13 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 | **gold** | $500k | Gold swing/scalp/deep, GOLD PRO, macro real-rate hint |
 | **macro** | $250k | CARRY, TERM BASIS |
 
-**Desk features:** per-fund heat + bucket caps, mark refresh with auto rules (50% at T1, BE @1R, ATR trail), optional **auto EXEC bracket on add** (BOOK tab checkbox), optional **BRAIN auto-add PRIME/HIGH to book** (BRAIN tab checkbox — deduped, no tab switch), per-position **Bracket** column on open rows, cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`) with bracket rollup in digest, weekly digest cron.
+**Desk features:** per-fund heat + bucket caps, mark refresh with auto desk rules (50% at T1, BE @1R, ATR trail). **Bracket column** on open rows (`BRACKET OK` / `BRACKET FAIL` / `EXEC —`). Cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`) with bracket rollup in digest, weekly digest cron.
 
-**Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
+**Automation (BOOK tab):** optional **auto EXEC on add**, **auto EXEC pending on refresh**, **auto retry failed on refresh**, and **auto pending/retry all funds** (multi-fund). Batch buttons: **EXEC PENDING** / **RETRY FAILED** (active fund) and **ALL FUNDS PENDING** / **ALL FUNDS RETRY**. Desk rollup line has clickable **EXEC all pending** / **retry all failed**. Exports: per-fund CSV (with bracket column), **EXPORT ALL CSV** (all funds, open + closed), **EXPORT BLOTTER** (execute events).
+
+**Automation (BRAIN tab):** optional **auto-add PRIME/HIGH to book** (deduped, silent), **PRIME only** filter, **auto EXEC after auto-add**. `alert-check.mjs` pushes Telegram when desk rollup shows pending/failed brackets.
+
+**Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. Blotter records `execute_ok` / `execute_fail` per fund via `plan.fund`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
 
 **Env vars (Render):** `EXECUTE_BACKEND_URL`, `EXECUTE_WEBHOOK_URL`, `LP_DIGEST_WEBHOOK_URL`, `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`, `LP_DIGEST_EMAIL_TO` (+ Resend/SendGrid/SMTP). See `AGENTS.md` for full list.
 

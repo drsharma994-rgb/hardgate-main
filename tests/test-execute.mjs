@@ -56,6 +56,9 @@ ok(bookJs.indexOf('bookAutoExecScope') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_CR
 ok(bookJs.indexOf('bookExportConsolidatedCSV') >= 0 && bookJs.indexOf('EXPORT ALL CSV') >= 0
   && bookJs.indexOf('bookDeskExecPending') >= 0,
   'book.js consolidated CSV + desk rollup EXEC shortcuts');
+ok(bookJs.indexOf('all.closed') >= 0 && bookJs.indexOf('closedAt') >= 0
+  && bookJs.indexOf('bookFetchAllPositions') >= 0,
+  'book.js consolidated export includes closed trades across funds');
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
