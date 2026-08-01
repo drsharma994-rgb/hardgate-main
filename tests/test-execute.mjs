@@ -50,6 +50,12 @@ ok(bookJs.indexOf('bookMaybeAutoRetryFailed') >= 0 && bookJs.indexOf('BOOK_AUTO_
   'book.js auto retry failed on mark refresh');
 ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',bracket,') >= 0,
   'book.js position CSV includes bracket column');
+ok(bookJs.indexOf('bookAutoExecScope') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_CROSS_FUND_KEY') >= 0
+  && bookJs.indexOf('Auto pending/retry all funds') >= 0,
+  'book.js cross-fund auto pending/retry on refresh');
+ok(bookJs.indexOf('bookExportConsolidatedCSV') >= 0 && bookJs.indexOf('EXPORT ALL CSV') >= 0
+  && bookJs.indexOf('bookDeskExecPending') >= 0,
+  'book.js consolidated CSV + desk rollup EXEC shortcuts');
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');

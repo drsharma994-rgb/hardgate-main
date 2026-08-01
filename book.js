@@ -23,6 +23,7 @@ var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
 var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
 var BOOK_AUTO_EXEC_PENDING_KEY = 'hg_book_auto_exec_pending_v1';
 var BOOK_AUTO_RETRY_FAILED_KEY = 'hg_book_auto_retry_failed_v1';
+var BOOK_AUTO_EXEC_CROSS_FUND_KEY = 'hg_book_auto_exec_cross_fund_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
 function bookFundId(){
@@ -96,6 +97,12 @@ function bookAutoRetryFailedOn(){
 }
 function bookSetAutoRetryFailed(on){
   try{ localStorage.setItem(BOOK_AUTO_RETRY_FAILED_KEY, on ? '1' : '0'); }catch(e){}
+}
+function bookAutoExecCrossFundOn(){
+  try{ return localStorage.getItem(BOOK_AUTO_EXEC_CROSS_FUND_KEY) === '1'; }catch(e){ return false; }
+}
+function bookSetAutoExecCrossFund(on){
+  try{ localStorage.setItem(BOOK_AUTO_EXEC_CROSS_FUND_KEY, on ? '1' : '0'); }catch(e){}
 }
 
 function esc(s){
@@ -244,20 +251,16 @@ async function bookMaybeAutoExecute(position){
 
 async function bookMaybeAutoExecPending(snap){
   if (!bookAutoExecPendingOn() || !bookExecuteReady()) return null;
-  snap = snap || __book.snap;
-  var positions = (snap && snap.book && snap.book.positions) || [];
-  var blotter = (snap && snap.book && snap.book.blotter) || [];
-  var targets = bookExecTargets(positions, blotter, { pending: true, failed: false });
+  var scope = await bookAutoExecScope(snap);
+  var targets = bookExecTargets(scope.positions, scope.blotter, { pending: true, failed: false });
   if (!targets.length) return null;
   return bookExecuteBatch(targets, 'hardgate-book-auto-pending');
 }
 
 async function bookMaybeAutoRetryFailed(snap){
   if (!bookAutoRetryFailedOn() || !bookExecuteReady()) return null;
-  snap = snap || __book.snap;
-  var positions = (snap && snap.book && snap.book.positions) || [];
-  var blotter = (snap && snap.book && snap.book.blotter) || [];
-  var targets = bookExecTargets(positions, blotter, { pending: false, failed: true });
+  var scope = await bookAutoExecScope(snap);
+  var targets = bookExecTargets(scope.positions, scope.blotter, { pending: false, failed: true });
   if (!targets.length) return null;
   return bookExecuteBatch(targets, 'hardgate-book-auto-retry');
 }
@@ -365,6 +368,26 @@ async function bookFetchAllPositions(){
   }
   blotter.sort(function(a, b){ return (+b.at || 0) - (+a.at || 0); });
   return { positions: positions, blotter: blotter };
+}
+
+async function bookAutoExecScope(snap){
+  if (bookAutoExecCrossFundOn() && (__book.funds || []).length > 1){
+    var all = __book.consolidatedAll || await bookFetchAllPositions();
+    __book.consolidatedAll = all;
+    return { positions: all.positions || [], blotter: all.blotter || [] };
+  }
+  snap = snap || __book.snap;
+  return {
+    positions: (snap && snap.book && snap.book.positions) || [],
+    blotter: (snap && snap.book && snap.book.blotter) || [],
+  };
+}
+
+async function bookPullAfterAutoExec(){
+  await bookPull();
+  if ((__book.funds || []).length > 1){
+    try{ __book.consolidatedAll = await bookFetchAllPositions(); }catch(e){}
+  }
 }
 
 async function bookFetchOpenKeys(){
@@ -534,7 +557,14 @@ function deskHeaderHTML(desk){
     + (desk.execute && (desk.execute.ok || desk.execute.fail || desk.execute.pending)
       ? '<div class="note" style="margin-top:6px">Cross-fund brackets (7d): <b>'
         + (desk.execute.ok || 0) + ' OK</b> · <b>' + (desk.execute.fail || 0) + ' fail</b> · '
-        + (desk.execute.pending || 0) + ' open without bracket</div>' : '')
+        + (desk.execute.pending || 0) + ' open without bracket'
+        + (bookExecuteReady() && desk.execute.pending
+          ? ' · <span class="statuschip warn bookDeskAct" id="bookDeskExecPending" style="cursor:pointer"'
+            + ' title="Send brackets for all pending positions across funds">EXEC all pending</span>' : '')
+        + (bookExecuteReady() && desk.execute.fail
+          ? ' · <span class="statuschip warn bookDeskAct" id="bookDeskExecRetry" style="cursor:pointer"'
+            + ' title="Retry all failed brackets across funds">retry all failed</span>' : '')
+        + '</div>' : '')
     + (fundChips ? '<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">' + fundChips + '</div>' : '')
     + '</div>';
 }
@@ -1028,7 +1058,36 @@ function bookExportCSV(){
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'hardgate-book-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.download = 'hardgate-book-' + bookFundId() + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){}
+}
+
+async function bookExportConsolidatedCSV(){
+  try{
+    if (!bookApiOn()) return;
+    var all = __book.consolidatedAll || await bookFetchAllPositions();
+    var positions = all.positions || [];
+    var blotter = all.blotter || [];
+    if (!positions.length){
+      try{ alert('No open positions across funds to export.'); }catch(e){}
+      return;
+    }
+    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,bracket,openedAt'];
+    positions.forEach(function(p){
+      lines.push([
+        bookCsvCell(p._fundId || 'main'), 'open', bookCsvCell(p.sym), bookCsvCell(p.dir),
+        bookCsvCell(p.strategy || ''), bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
+        p.notionalUsd, p.entry, p.mark, p.unrealizedUsd || 0,
+        bookCsvCell(bookBracketExportLabel(blotter, p.id)),
+        p.openedAt || '',
+      ].join(','));
+    });
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hardgate-book-all-funds-' + new Date().toISOString().slice(0, 10) + '.csv';
     a.click();
     URL.revokeObjectURL(a.href);
   }catch(e){}
@@ -1122,6 +1181,7 @@ function deskExecStatusHTML(){
   if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
   if (bookAutoExecPendingOn()) chips.push('<span class="statuschip ok" title="Silent EXEC PENDING batch on each mark refresh">auto EXEC pending</span>');
   if (bookAutoRetryFailedOn()) chips.push('<span class="statuschip ok" title="Silent RETRY FAILED batch on each mark refresh">auto retry fail</span>');
+  if (bookAutoExecCrossFundOn()) chips.push('<span class="statuschip ok" title="Auto pending/retry scans every fund book">auto EXEC all funds</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
     var abTitle = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
       ? 'BRAIN synthesis auto-adds PRIME plans only'
@@ -1215,6 +1275,8 @@ function mount(el){
     + (bookAutoExecPendingOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto EXEC pending on refresh</label>'
     + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoRetryFailed" '
     + (bookAutoRetryFailedOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto retry failed on refresh</label>'
+    + '<label class="note" id="bookAutoCrossFundWrap" style="display:none"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoExecCrossFund" '
+    + (bookAutoExecCrossFundOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto pending/retry all funds</label>'
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
@@ -1227,6 +1289,7 @@ function mount(el){
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
+    + '<button class="btn ghost" id="bookExportConsolidatedCsv" style="display:none" title="Open positions across all funds with bracket column">EXPORT ALL CSV</button>'
     + '<button class="btn ghost" id="bookExportBlotter" title="Execution blotter CSV (all funds when multi-fund)">EXPORT BLOTTER</button>'
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
     + '<button class="btn ghost" id="bookExportConsolidated" title="All funds — month MTD">CONSOLIDATED LP</button>'
@@ -1397,6 +1460,14 @@ function mount(el){
         rfAllBtn.style.display = 'none';
       }
     }
+    var exportAllCsvBtn = el.querySelector('#bookExportConsolidatedCsv');
+    if (exportAllCsvBtn) exportAllCsvBtn.style.display = (multiFund && bookApiOn()) ? '' : 'none';
+    var crossFundWrap = el.querySelector('#bookAutoCrossFundWrap');
+    var crossFundChk = el.querySelector('#bookAutoExecCrossFund');
+    if (crossFundWrap){
+      crossFundWrap.style.display = (multiFund && execReady) ? '' : 'none';
+      if (crossFundChk) crossFundChk.disabled = !execReady;
+    }
     setStat('updated ' + new Date(snap.summary.at || Date.now()).toLocaleTimeString()
       + (bookTabVisible() ? ' · auto-refresh on' : ''));
   }
@@ -1411,9 +1482,9 @@ function mount(el){
       await bookRefreshMarks();
       try{
         var ax = await bookMaybeAutoExecPending(__book.snap);
-        if (ax && (ax.ok || ax.fail)) await bookPull();
+        if (ax && (ax.ok || ax.fail)) await bookPullAfterAutoExec();
         var ar = await bookMaybeAutoRetryFailed(__book.snap);
-        if (ar && (ar.ok || ar.fail)) await bookPull();
+        if (ar && (ar.ok || ar.fail)) await bookPullAfterAutoExec();
       }catch(eAutoP){}
       paint(__book.snap);
     }catch(e){
@@ -1434,15 +1505,28 @@ function mount(el){
 
   el.querySelector('#bookRefresh').addEventListener('click', function(){ refresh(); });
   var execPendingBtn = el.querySelector('#bookExecPending');
-  if (execPendingBtn) execPendingBtn.addEventListener('click', function(){ bookExecutePending(); });
+  if (execPendingBtn) execPendingBtn.addEventListener('click', async function(){
+    await bookExecutePending();
+    await refresh();
+  });
   var retryFailedBtn = el.querySelector('#bookRetryFailed');
-  if (retryFailedBtn) retryFailedBtn.addEventListener('click', function(){ bookRetryFailed(); });
+  if (retryFailedBtn) retryFailedBtn.addEventListener('click', async function(){
+    await bookRetryFailed();
+    await refresh();
+  });
   var execAllPendingBtn = el.querySelector('#bookExecAllPending');
-  if (execAllPendingBtn) execAllPendingBtn.addEventListener('click', function(){ bookExecuteAllFundsPending(); });
+  if (execAllPendingBtn) execAllPendingBtn.addEventListener('click', async function(){
+    await bookExecuteAllFundsPending();
+    await refresh();
+  });
   var retryAllFailedBtn = el.querySelector('#bookRetryAllFailed');
-  if (retryAllFailedBtn) retryAllFailedBtn.addEventListener('click', function(){ bookRetryAllFundsFailed(); });
+  if (retryAllFailedBtn) retryAllFailedBtn.addEventListener('click', async function(){
+    await bookRetryAllFundsFailed();
+    await refresh();
+  });
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
+  el.querySelector('#bookExportConsolidatedCsv').addEventListener('click', function(){ bookExportConsolidatedCSV(); });
   el.querySelector('#bookExportBlotter').addEventListener('click', function(){ bookExportBlotterCSV(); });
   el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
   el.querySelector('#bookExportConsolidated').addEventListener('click', function(){ bookExportConsolidated('month'); });
@@ -1475,6 +1559,13 @@ function mount(el){
     autoRetryFailedChk.addEventListener('change', function(){
       bookSetAutoRetryFailed(autoRetryFailedChk.checked);
       setStat(autoRetryFailedChk.checked ? 'auto retry failed ON' : 'auto retry failed OFF');
+    });
+  }
+  var autoCrossFundChk = el.querySelector('#bookAutoExecCrossFund');
+  if (autoCrossFundChk){
+    autoCrossFundChk.addEventListener('change', function(){
+      bookSetAutoExecCrossFund(autoCrossFundChk.checked);
+      setStat(autoCrossFundChk.checked ? 'auto EXEC all funds ON' : 'auto EXEC all funds OFF');
     });
   }
   if (fundSel){
@@ -1539,6 +1630,18 @@ function mount(el){
       await refresh();
       return;
     }
+    var deskPending = t.closest('#bookDeskExecPending');
+    if (deskPending){
+      await bookExecuteAllFundsPending();
+      await refresh();
+      return;
+    }
+    var deskRetry = t.closest('#bookDeskExecRetry');
+    if (deskRetry){
+      await bookRetryAllFundsFailed();
+      await refresh();
+      return;
+    }
     var scaleBtn = t.closest('[data-scale]');
     if (scaleBtn){
       if (!bookApiOn()) return;
@@ -1596,7 +1699,10 @@ W.bookRefresh = bookRefresh;
 W.bookAutoExecOn = bookAutoExecOn;
 W.bookAutoExecPendingOn = bookAutoExecPendingOn;
 W.bookAutoRetryFailedOn = bookAutoRetryFailedOn;
+W.bookAutoExecCrossFundOn = bookAutoExecCrossFundOn;
 W.bookBracketExportLabel = bookBracketExportLabel;
+W.bookExportConsolidatedCSV = bookExportConsolidatedCSV;
+W.bookAutoExecScope = bookAutoExecScope;
 W.bookResolveFund = bookResolveFund;
 W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
