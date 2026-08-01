@@ -785,6 +785,27 @@ function posSourceChip(p){
   return ' <span class="statuschip bookSrc" title="Scanner source">' + esc(src) + '</span>';
 }
 
+function bookLatestExecForPosition(blotter, positionId){
+  if (!positionId || !Array.isArray(blotter)) return null;
+  for (var i = 0; i < blotter.length; i++){
+    var b = blotter[i];
+    if (b && b.positionId === positionId && (b.type === 'execute_ok' || b.type === 'execute_fail')) return b;
+  }
+  return null;
+}
+
+function posExecChipHTML(p, blotter){
+  var evt = bookLatestExecForPosition(blotter, p && p.id);
+  if (!evt){
+    return '<span class="statuschip warn" title="No bracket sent for this position yet">EXEC —</span>';
+  }
+  var ok = evt.type === 'execute_ok';
+  var tip = evt.note || (ok ? 'Bracket accepted by proxy' : 'Bracket rejected or failed');
+  if (evt.status) tip += ' · HTTP ' + evt.status;
+  return '<span class="statuschip ' + (ok ? 'ok' : 'warn') + '" title="' + esc(tip) + '">'
+    + (ok ? 'BRACKET OK' : 'BRACKET FAIL') + '</span>';
+}
+
 function bookLastExecuteEvent(blotter){
   blotter = blotter || [];
   for (var i = 0; i < blotter.length; i++){
@@ -821,7 +842,8 @@ function closedRowHTML(c){
     + new Date(c.closedAt).toLocaleString() + '</td></tr>';
 }
 
-function posRowHTML(p){
+function posRowHTML(p, blotter){
+  blotter = blotter || [];
   var upl = p.unrealizedUsd || 0;
   var uplCls = upl >= 0 ? 'ok' : 'warn';
   var rVal = posR(p);
@@ -840,6 +862,7 @@ function posRowHTML(p){
     + '<td class="' + rCls + '">' + (rVal != null ? fmtF(rVal, 2) + 'R' : '—') + '</td>'
     + '<td class="' + uplCls + '">' + fmtUsd(upl) + '</td>'
     + '<td>' + fmtUsd(p.riskUsd) + '</td>'
+    + '<td>' + posExecChipHTML(p, blotter) + '</td>'
     + '<td class="bookActs">'
     + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
     + execBtn
@@ -887,7 +910,7 @@ function mount(el){
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
     + '<div style="overflow-x:auto"><table class="booktbl" id="bookTable">'
-    + '<thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th><th>R</th><th>UPL</th><th>Risk</th><th>OMS</th></tr></thead>'
+    + '<thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th><th>R</th><th>UPL</th><th>Risk</th><th>Bracket</th><th>OMS</th></tr></thead>'
     + '<tbody id="bookBody"></tbody></table></div>'
     + '<div class="empty" id="bookEmpty" style="display:none">No open paper positions — add from a scanner card.</div>'
     + '</div>'
@@ -961,8 +984,9 @@ function mount(el){
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
     if (blotterEl) blotterEl.innerHTML = blotterHTML((snap.book && snap.book.blotter) || snap.blotter);
     var positions = (snap.book && snap.book.positions) || [];
+    var blotterRows = (snap.book && snap.book.blotter) || snap.blotter || [];
     if (body){
-      body.innerHTML = positions.map(posRowHTML).join('');
+      body.innerHTML = positions.map(function(p){ return posRowHTML(p, blotterRows); }).join('');
       if (empty) empty.style.display = positions.length ? 'none' : 'block';
     }
     if (closedEl && snap.book && snap.book.closed){

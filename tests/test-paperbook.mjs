@@ -5,7 +5,9 @@ import {
   pbScalePosition, pbMoveStop, pbUnrealizedR, pbApplyAutoRules, pbLpReport,
   pbWeeklyDigest, pbDigestText, pbDigestHtml, pbAtrTrailStop,
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
+  pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary,
 } from '../lib/paperbook-core.mjs';
+import { pbConsolidatedLp, pbConsolidatedDigestText } from '../lib/paperbook-funds.mjs';
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
@@ -101,6 +103,19 @@ var dig = pbWeeklyDigest(pbNewBook(), 'week');
 ok(dig.period === 'week' && isFinite(dig.equityUsd), 'weekly digest equity');
 ok(pbDigestText(dig).indexOf('HARDGATE') >= 0, 'digest text header');
 ok(pbDigestHtml(dig).indexOf('HARDGATE') >= 0, 'digest html header');
+
+var exBook = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'brain' }).book;
+var pid = exBook.positions[0].id;
+exBook = pbPushBlotter(exBook, { type: 'execute_ok', sym: 'BTCUSD', dir: 'long', positionId: pid, status: 200 });
+ok(pbLatestExecForPosition(exBook.blotter, pid).type === 'execute_ok', 'latest exec blotter row for position');
+var exSum = pbDigestExecuteSummary(exBook, Date.now() - 86400000);
+ok(exSum.ok === 1 && exSum.pending === 0, 'digest execute summary counts OK + no pending when bracket sent');
+var exDig = pbWeeklyDigest(exBook, 'week');
+ok(pbDigestText(exDig).indexOf('Brackets: 1 OK') >= 0, 'weekly digest text includes bracket rollup');
+
+var cons = pbConsolidatedLp({ version: 2, activeFund: 'main', funds: { main: exBook } }, 'week');
+ok(cons.execute && cons.execute.ok === 1, 'consolidated LP rolls up execute stats');
+ok(pbConsolidatedDigestText(cons).indexOf('Brackets: 1 OK') >= 0, 'consolidated digest text includes brackets');
 
 var atrBook = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, strategy: 'atr' }).book;
 var atrStop = pbAtrTrailStop(Object.assign({}, atrBook.positions[0], { mark: 105 }), 5, 2);
