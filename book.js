@@ -21,6 +21,7 @@ var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
 var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
+var BOOK_AUTO_EXEC_PENDING_KEY = 'hg_book_auto_exec_pending_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
 function bookFundId(){
@@ -82,6 +83,12 @@ function bookAutoExecOn(){
 }
 function bookSetAutoExec(on){
   try{ localStorage.setItem(BOOK_AUTO_EXEC_KEY, on ? '1' : '0'); }catch(e){}
+}
+function bookAutoExecPendingOn(){
+  try{ return localStorage.getItem(BOOK_AUTO_EXEC_PENDING_KEY) === '1'; }catch(e){ return false; }
+}
+function bookSetAutoExecPending(on){
+  try{ localStorage.setItem(BOOK_AUTO_EXEC_PENDING_KEY, on ? '1' : '0'); }catch(e){}
 }
 
 function esc(s){
@@ -226,6 +233,16 @@ async function bookMaybeAutoExecute(position){
   if (!plan) return null;
   if (position._fundId) plan.fund = position._fundId;
   return W.executeTrade(plan, { skipConfirm: true });
+}
+
+async function bookMaybeAutoExecPending(snap){
+  if (!bookAutoExecPendingOn() || !bookExecuteReady()) return null;
+  snap = snap || __book.snap;
+  var positions = (snap && snap.book && snap.book.positions) || [];
+  var blotter = (snap && snap.book && snap.book.blotter) || [];
+  var targets = bookExecTargets(positions, blotter, { pending: true, failed: false });
+  if (!targets.length) return null;
+  return bookExecuteBatch(targets, 'hardgate-book-auto-pending');
 }
 
 async function addToBook(opts){
@@ -1073,6 +1090,7 @@ function deskExecStatusHTML(){
     '<span class="statuschip' + (liveOn ? ' ok' : ' warn') + '" title="EXECUTE_WEBHOOK_URL">LIVE ' + (liveOn ? 'ready' : 'off') + '</span>',
   ];
   if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
+  if (bookAutoExecPendingOn()) chips.push('<span class="statuschip ok" title="Silent EXEC PENDING batch on each mark refresh">auto EXEC pending</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
     var abTitle = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
       ? 'BRAIN synthesis auto-adds PRIME plans only'
@@ -1162,6 +1180,8 @@ function mount(el){
     + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
     + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoExec" '
     + (bookAutoExecOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto EXEC bracket on add (no second confirm)</label>'
+    + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoExecPending" '
+    + (bookAutoExecPendingOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto EXEC pending on refresh</label>'
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
@@ -1356,6 +1376,10 @@ function mount(el){
       await bookPull();
       if (typeof W.hgRefreshExecuteCap === 'function') await W.hgRefreshExecuteCap();
       await bookRefreshMarks();
+      try{
+        var ax = await bookMaybeAutoExecPending(__book.snap);
+        if (ax && (ax.ok || ax.fail)) await bookPull();
+      }catch(eAutoP){}
       paint(__book.snap);
     }catch(e){
       setStat('refresh failed: ' + ((e && e.message) || e), true);
@@ -1402,6 +1426,13 @@ function mount(el){
     autoExecChk.addEventListener('change', function(){
       bookSetAutoExec(autoExecChk.checked);
       setStat(autoExecChk.checked ? 'auto EXEC on add ON' : 'auto EXEC on add OFF');
+    });
+  }
+  var autoExecPendingChk = el.querySelector('#bookAutoExecPending');
+  if (autoExecPendingChk){
+    autoExecPendingChk.addEventListener('change', function(){
+      bookSetAutoExecPending(autoExecPendingChk.checked);
+      setStat(autoExecPendingChk.checked ? 'auto EXEC pending ON' : 'auto EXEC pending OFF');
     });
   }
   if (fundSel){
@@ -1521,6 +1552,7 @@ W.bookExecutePosition = bookExecutePosition;
 W.bookFundBody = bookFundBody;
 W.bookRefresh = bookRefresh;
 W.bookAutoExecOn = bookAutoExecOn;
+W.bookAutoExecPendingOn = bookAutoExecPendingOn;
 W.bookResolveFund = bookResolveFund;
 W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
