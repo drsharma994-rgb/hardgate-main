@@ -137,6 +137,9 @@ liveBook = pbPushBlotter(liveBook, { type: 'live_send', sym: 'ETHUSD', dir: 'sho
 ok(pbLatestExecForPosition(liveBook.blotter, livePid).type === 'live_send', 'live_send counts as latest bracket event');
 ok(pbDigestExecuteSummary(liveBook, Date.now() - 86400000).pending === 0, 'live_send clears pending bracket count');
 ok(pbDigestExecuteSummary(liveBook, Date.now() - 86400000).ok === 1, 'live_send ok counts in digest bracket rollup');
+ok(pbDigestExecuteSummary(liveBook, Date.now() - 86400000).liveOk === 1, 'live_send ok tracked separately for digest LIVE line');
+var liveDig = pbWeeklyDigest(liveBook, 'week');
+ok(pbDigestText(liveDig).indexOf('LIVE webhook: 1 OK') >= 0, 'weekly digest text includes LIVE webhook rollup');
 
 var fillBook = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'fill' }).book;
 var fillPid = fillBook.positions[0].id;

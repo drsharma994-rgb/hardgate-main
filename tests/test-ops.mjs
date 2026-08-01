@@ -252,6 +252,12 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(body.indexOf('3 open without bracket') >= 0 && body.indexOf('main (2 open)') >= 0
      && body.indexOf('ALL FUNDS PENDING') >= 0,
      'book exec body names backlog + funds + remediation');
+  const liveDesk = { execute: { ok: 3, fail: 0, pending: 1, liveOk: 2, liveFail: 1 },
+    funds: [{ id: 'main', openCount: 1 }] };
+  const liveSnap = bookExecSnapshot(liveDesk);
+  ok(liveSnap.liveOk === 2 && liveSnap.liveFail === 1, 'book exec snapshot reads LIVE webhook counts');
+  ok(bookExecBody(liveDesk, liveSnap).indexOf('LIVE webhook (7d): 2 OK · 1 fail') >= 0,
+     'book exec body includes LIVE webhook line when present');
 }
 
 /* ---------------- alert-check.mjs ntfy fallback selector ---------------- */
