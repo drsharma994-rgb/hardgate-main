@@ -163,10 +163,17 @@ var exSum = pbDigestExecuteSummary(exBook, Date.now() - 86400000);
 ok(exSum.ok === 1 && exSum.pending === 0, 'digest execute summary counts OK + no pending when bracket sent');
 var exDig = pbWeeklyDigest(exBook, 'week');
 ok(pbDigestText(exDig).indexOf('Brackets: 1 OK') >= 0, 'weekly digest text includes bracket rollup');
+var fillDigBook = pbAddIntent(pbNewBook(), { sym: 'ETHUSD', dir: 'long', entry: 200, stop: 190, t1: 220, strategy: 'digfill' }).book;
+var fillDigPid = fillDigBook.positions[0].id;
+fillDigBook = pbPushBlotter(fillDigBook, { type: 'execute_ok', sym: 'ETHUSD', positionId: fillDigPid });
+var fillDig = pbWeeklyDigest(fillDigBook, 'week');
+ok(fillDig.fill && fillDig.fill.unfilled === 1, 'weekly digest includes fill backlog');
+ok(pbDigestText(fillDig).indexOf('Broker fills: 1 unfilled') >= 0, 'weekly digest text includes fill rollup');
 
 var cons = pbConsolidatedLp({ version: 2, activeFund: 'main', funds: { main: exBook } }, 'week');
 ok(cons.execute && cons.execute.ok === 1, 'consolidated LP rolls up execute stats');
 ok(pbConsolidatedDigestText(cons).indexOf('Brackets: 1 OK') >= 0, 'consolidated digest text includes brackets');
+ok(cons.fill && cons.fill.unfilled === 1, 'consolidated LP rolls up fill backlog');
 
 var atrBook = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, strategy: 'atr' }).book;
 var atrStop = pbAtrTrailStop(Object.assign({}, atrBook.positions[0], { mark: 105 }), 5, 2);

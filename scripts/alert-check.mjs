@@ -198,6 +198,34 @@ function bookFillBody(desk, snap) {
     + snap.partial + ' partial across the desk. POST /api/book/execute-fill from your broker webhook,'
     + ' poll via BOOK → POLL FILLS / POST /api/book/poll-fills, or rely on auto-fill when EXECUTE_BACKEND returns fill fields.';
 }
+async function bookTryPollFills(siteUrl) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function(){ ctrl.abort(); }, 25000);
+    const res = await fetch(new URL('/api/book/poll-fills', siteUrl).href, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allFunds: true }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const j = await res.json();
+    if (j && j.ok) {
+      console.log('Book fill poll: polled=' + (j.polled || 0) + ' filled=' + (j.filled || 0));
+      return j;
+    }
+  } catch (e) {
+    console.warn('Book fill poll failed: ' + ((e && e.message) || e));
+  }
+  return null;
+}
+async function bookFetchDesk(siteUrl) {
+  const deskCtrl = new AbortController();
+  const deskTimer = setTimeout(function(){ deskCtrl.abort(); }, 20000);
+  const deskRes = await fetch(new URL('/api/book/desk', siteUrl).href, { signal: deskCtrl.signal });
+  clearTimeout(deskTimer);
+  return deskRes.json();
+}
 function bookExecBody(desk, snap) {
   const parts = ['Cross-fund brackets (7d): ' + snap.ok + ' OK · ' + snap.fail + ' fail · '
     + snap.pending + ' open without bracket'];
@@ -819,19 +847,44 @@ async function main() {
         console.log('Book fill backlog state seeded silently.');
         newState.bookFill = { key: fillKey, snap: fillSnap, at: new Date().toISOString() };
       } else if (fillSnap.total > 0) {
-        const needsFillAlert = fillKey !== (prevState.bookFill && prevState.bookFill.key)
+        let activeFillSnap = fillSnap;
+        let activeFillKey = fillKey;
+        const caps = deskJson.capabilities || {};
+        if (caps.fillPoll) {
+          const pollRun = await bookTryPollFills(SITE_URL);
+          if (pollRun && pollRun.filled > 0) {
+            try {
+              const deskAfter = await bookFetchDesk(SITE_URL);
+              if (deskAfter && deskAfter.ok && deskAfter.desk) {
+                desk = deskAfter.desk;
+                activeFillSnap = bookFillSnapshot(desk);
+                activeFillKey = bookFillKey(activeFillSnap);
+              }
+            } catch (ePollDesk) {
+              console.warn('Desk re-fetch after fill poll failed: ' + ((ePollDesk && ePollDesk.message) || ePollDesk));
+            }
+          }
+        }
+        if (activeFillSnap.total > 0) {
+        const needsFillAlert = activeFillKey !== (prevState.bookFill && prevState.bookFill.key)
           || bookFillAlertDue(prevState.bookFill && prevState.bookFill.alertAt, now);
         if (needsFillAlert) {
           const pushResult = await sendAlertCi(offHoursPrefix() + '📒 HARDGATE BOOK FILLS',
-            bookFillBody(desk, fillSnap) + offHoursTag());
+            bookFillBody(desk, activeFillSnap) + offHoursTag());
           console.log('BOOK FILL BACKLOG — push: ' + pushResult);
           newState.bookFill = {
-            key: fillKey, snap: fillSnap,
+            key: activeFillKey, snap: activeFillSnap,
             at: (prevState.bookFill && prevState.bookFill.at) || new Date().toISOString(),
             alertAt: new Date().toISOString(),
           };
         } else {
-          newState.bookFill = Object.assign({}, prevState.bookFill, { key: fillKey, snap: fillSnap });
+          newState.bookFill = Object.assign({}, prevState.bookFill, { key: activeFillKey, snap: activeFillSnap });
+        }
+        } else {
+          const pushResult = await sendAlertCi('✅ HARDGATE BOOK FILLS CLEAR',
+            'Broker fill poll reconciled all bracketed open positions.');
+          console.log('BOOK FILLS CLEAR (poll) — push: ' + pushResult);
+          newState.bookFill = { key: activeFillKey, snap: activeFillSnap, at: new Date().toISOString(), alertAt: null };
         }
       } else if ((prevState.bookFill && prevState.bookFill.snap && prevState.bookFill.snap.total) > 0) {
         const pushResult = await sendAlertCi('✅ HARDGATE BOOK FILLS CLEAR',
