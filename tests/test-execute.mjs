@@ -55,6 +55,8 @@ ok(bookJs.indexOf('bookMaybeAutoRetryFailed') >= 0 && bookJs.indexOf('BOOK_AUTO_
   'book.js auto retry failed on mark refresh');
 ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',stop,t1,t2,') >= 0,
   'book.js position CSV includes stop/t1/t2 columns');
+ok(bookJs.indexOf('bookFillExportLabel') >= 0 && bookJs.indexOf(',bracket,fill,') >= 0,
+  'book.js position CSV includes fill column');
 ok(bookJs.indexOf('posFillChipHTML') >= 0 && bookJs.indexOf('FILL OK') >= 0,
   'book.js broker fill status chips');
 ok(bookJs.indexOf('desk.fill') >= 0 && bookJs.indexOf('Broker fills:') >= 0,
