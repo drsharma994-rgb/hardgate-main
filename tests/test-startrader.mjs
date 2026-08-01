@@ -69,6 +69,9 @@ function load(pathRel, ctx){
   const ctx = makeCtx();
   vm.runInContext(IND, ctx, { filename: 'indicators.js' });
   vm.runInContext(CG, ctx, { filename: 'cryptogates.js' });
+  ok(TAB.indexOf('stEdgeRun') > 0 && TAB.indexOf('stEdgeScanList') > 0,
+    'startradertab: EDGE panel with local scan fallback');
+  vm.runInContext(readFileSync(path.join(root, 'edge.js'), 'utf8'), ctx, { filename: 'edge.js' });
   vm.runInContext(TAB, ctx, { filename: 'startradertab.js' });
   const w = ctx.window;
   ok(typeof w.stSynthesize === 'function', 'stSynthesize exported');
@@ -83,8 +86,10 @@ function load(pathRel, ctx){
     rows, rows.slice(-120), rows.slice(-80), { symbol: 'BTCUSD', fundingPct: 0.01, mark: 110 });
   ok(setup && setup.dir === 'long' && setup.tier === 'HIGH', 'stSynthesize: mocked swing+scalp plans -> HIGH long');
   ok(w.stTierRank('PRIME') > w.stTierRank('WATCH'), 'stTierRank ordering');
-  ok(TAB.indexOf('stEdgeRun') > 0 && TAB.indexOf('edgeScanList') > 0,
-    'startradertab: EDGE panel wired to edgeScanList');
+  delete w.edgeScanList;
+  delete w.edgeCardHTML;
+  ok(w.stEdgeHasCore(), 'stEdgeHasCore true when edge primitives exist');
+  ok(typeof w.stEdgeScanList === 'function', 'stEdgeScanList exported for fallback');
 }
 
 console.log('');

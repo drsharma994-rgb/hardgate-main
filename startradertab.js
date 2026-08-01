@@ -40,6 +40,120 @@ function fmtF(n, d){
 }
 
 var TIER_RANK = { WATCH: 1, HIGH: 2, PRIME: 3 };
+var ST_EDGE_TF = '4h';
+var ST_EDGE_KL = 300;
+var ST_EDGE_CHUNK = 4;
+var ST_EDGE_CHUNK_MS = 150;
+
+function stWin(){
+  try{
+    if (typeof window !== 'undefined') return window;
+    if (typeof globalThis !== 'undefined') return globalThis;
+  }catch(e){}
+  return W;
+}
+
+function stEdgeCore(){
+  var g = stWin();
+  return {
+    drop: g.edgeDropForming,
+    swingBias: g.edgeSwingBias,
+    signal: g.edgeSignal,
+    assess: g.edgeAssess,
+    backtest: g.edgeBacktest,
+    scanList: g.edgeScanList,
+    cardHTML: g.edgeCardHTML
+  };
+}
+
+function stEdgeHasCore(api){
+  api = api || stEdgeCore();
+  return api && typeof api.swingBias === 'function' && typeof api.signal === 'function'
+    && typeof api.assess === 'function' && typeof api.backtest === 'function';
+}
+
+function stEdgeDrop(rows, tf){
+  var drop = stEdgeCore().drop;
+  if (typeof drop === 'function') return drop(rows, tf);
+  return stDropForming(rows, tf);
+}
+
+/* Same loop as edge.js edgeScanList — used when an older cached edge.js lacks the export. */
+async function stEdgeScanList(list, fetchCandles, hooks){
+  var api = stEdgeCore();
+  if (!stEdgeHasCore(api)) return null;
+  hooks = hooks || {};
+  var setProg = hooks.setProg || function(){};
+  var setStat = hooks.setStat || function(){};
+  var maxN = (hooks.maxUniverse > 0) ? hooks.maxUniverse : (list ? list.length : 0);
+  var minTurn = (hooks.minTurnover !== undefined) ? hooks.minTurnover : 0;
+  var skipped = 0, noBias = 0, noTrig = 0, tallyFail = 0, t0 = Date.now();
+  var found = [];
+  list = (list || []).filter(function(it){
+    if (!it || !it.sym) return false;
+    var t = it.turnoverUsd;
+    if (t === null || t === undefined) return true;
+    return t >= minTurn;
+  });
+  list.sort(function(a, b){ return ((b.turnoverUsd || 0) - (a.turnoverUsd || 0)); });
+  if (maxN > 0) list = list.slice(0, maxN);
+  if (!list.length) return { found: [], list: [], stats: { skipped: 0, noBias: 0, noTrig: 0, tallyFail: 0, t0: t0 } };
+
+  for (var ci = 0; ci < list.length; ci += ST_EDGE_CHUNK){
+    var chunk = list.slice(ci, ci + ST_EDGE_CHUNK);
+    await Promise.all(chunk.map(async function(item, idx){
+      var i = ci + idx;
+      setProg((i + 1) / list.length);
+      setStat('scanning ' + (i + 1) + '/' + list.length + ' · ' + item.sym + ' · '
+        + Math.floor((Date.now() - t0) / 1000) + 's');
+      try{
+        var leg = await fetchCandles(item, ST_EDGE_TF, ST_EDGE_KL);
+        var rows = leg && leg.rows;
+        var src = (leg && leg.src) ? leg.src : (item.exchange || 'unknown');
+        rows = stEdgeDrop(rows, ST_EDGE_TF);
+        if (!rows || rows.length < 210){ skipped++; return; }
+        if (!api.swingBias(rows)){ noBias++; return; }
+        if (!api.signal(rows)){ noTrig++; return; }
+        var assessed = api.assess(rows, item, src);
+        if (!assessed){ tallyFail++; return; }
+        var bt = api.backtest(rows);
+        found.push({
+          item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
+          enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src
+        });
+      }catch(e){ skipped++; }
+    }));
+    await sleep(ST_EDGE_CHUNK_MS);
+  }
+  found.sort(function(a, b){
+    return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
+  });
+  return { found: found, list: list, stats: { skipped: skipped, noBias: noBias, noTrig: noTrig, tallyFail: tallyFail, t0: t0 } };
+}
+
+function stEdgeScanFn(){
+  var scan = stEdgeCore().scanList;
+  return (typeof scan === 'function') ? scan : stEdgeScanList;
+}
+
+function stEdgeCardFn(r){
+  var card = stEdgeCore().cardHTML;
+  if (typeof card === 'function') return card(r);
+  var sig = r.sig || {}, p = r.plan || {}, sym = (r.item && r.item.sym) || r.sym || '—';
+  var plan = (p && isFinite(p.entry) && isFinite(p.stop))
+    ? ('entry ' + pxF(p.entry) + ' · stop ' + pxF(p.stop)
+      + (isFinite(p.t1) ? ' · T1 ' + pxF(p.t1) : ''))
+    : 'levels unavailable';
+  return '<div class="card ' + esc(sig.dir || '') + '"><div class="chead"><span class="sym">' + esc(sym)
+    + '</span><span class="dir">' + esc((sig.dir || '').toUpperCase()) + ' · tally ' + (r.tally || 0)
+    + '</span></div><div class="cbody"><span class="k">strategy</span><span>' + esc(sig.edge || 'EDGE')
+    + '</span><span class="k">plan</span><span>' + plan + '</span></div></div>';
+}
+
+function stEdgeReadyMsg(){
+  if (stEdgeHasCore()) return null;
+  return 'edge.js not loaded — hard refresh (Ctrl+Shift+R) to pick up the latest scanner';
+}
 
 function stTierRank(t){ return TIER_RANK[t] || 0; }
 
@@ -300,10 +414,8 @@ function mount(el){
     if (edgeBtn) edgeBtn.disabled = true;
     return;
   }
-  if (typeof W.edgeScanList !== 'function' || typeof W.edgeCardHTML !== 'function'){
-    setEdgeStat('edge.js not loaded', true);
-    if (edgeBtn) edgeBtn.disabled = true;
-  }
+  var edgeWarn = stEdgeReadyMsg();
+  if (edgeWarn) setEdgeStat(edgeWarn, true);
 
   btn.addEventListener('click', function(){ runScan(); });
   if (edgeBtn) edgeBtn.addEventListener('click', function(){ runEdgeScan(); });
@@ -376,10 +488,12 @@ function mount(el){
 
   async function runEdgeScan(){
     if (__stEdge.busy) return 'busy';
-    if (typeof W.edgeScanList !== 'function' || typeof W.edgeCardHTML !== 'function'){
-      setEdgeStat('edge.js not loaded', true);
+    var edgeMsg = stEdgeReadyMsg();
+    if (edgeMsg){
+      setEdgeStat(edgeMsg, true);
       return 'unavailable';
     }
+    var scanFn = stEdgeScanFn();
     __stEdge.busy = true;
     __stEdge.ranOnce = true;
     edgeBtn.disabled = true;
@@ -390,7 +504,7 @@ function mount(el){
       var contracts = startraderAllContracts();
       var tickers = (typeof startraderFullTickers === 'function') ? await startraderFullTickers() : [];
       var uni = stEdgeUniverse(contracts, tickers);
-      var res = await W.edgeScanList(uni, async function(item, tf, n){
+      var res = await scanFn(uni, async function(item, tf, n){
         var rows = await startraderCandles(item.sym, tf, n);
         return { rows: rows, src: stEdgeCandleSrc(item.sym) };
       }, {
@@ -411,7 +525,7 @@ function mount(el){
       }
       var longs = found.filter(function(x){ return x.sig.dir === 'long'; }).length;
       var shorts = found.length - longs;
-      edgeCards.innerHTML = found.map(W.edgeCardHTML).join('');
+      edgeCards.innerHTML = found.map(stEdgeCardFn).join('');
       setEdgeStat('done — ' + found.length + ' SWING-aligned (' + longs + 'L/' + shorts + 'S) / '
         + list.length + ' contracts · ' + Math.floor((Date.now() - st.t0) / 1000) + 's');
     }catch(e){
@@ -441,6 +555,8 @@ function startraderTabRefresh(){
 W.stDropForming = stDropForming;
 W.stSynthesize = stSynthesize;
 W.stTierRank = stTierRank;
+W.stEdgeScanList = stEdgeScanList;
+W.stEdgeHasCore = stEdgeHasCore;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'startrader', label: 'STAR TRADER', mount: mount, refresh: startraderTabRefresh });
