@@ -50,6 +50,9 @@ ok(bookJs.indexOf('posExecChipHTML') >= 0 && bookJs.indexOf('BRACKET OK') >= 0,
   'book.js per-position bracket status chips');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,
   'book.js exec bar 7d rollup + brain auto-book chip');
+ok(bookJs.indexOf('bookExecTargets') >= 0 && bookJs.indexOf('bookExecutePending') >= 0
+  && bookJs.indexOf('bookRetryFailed') >= 0 && bookJs.indexOf('bookBuildExecutePlan') >= 0,
+  'book.js batch EXEC pending + retry failed + shared execute plan');
 
 var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');
