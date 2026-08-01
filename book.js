@@ -101,6 +101,16 @@ function bookScoreRecord(opts){
   }catch(e){}
 }
 
+function bookScoreSettle(){
+  try{
+    if (typeof W.hgScoreSettle !== 'function') return;
+    var p = W.hgScoreSettle(typeof W.getCandles === 'function' ? function(sym, tf, n){
+      return W.getCandles(sym, tf, n);
+    } : null);
+    if (p && typeof p.catch === 'function') p.catch(function(){});
+  }catch(e){}
+}
+
 async function addToBook(opts){
   opts = (opts && typeof opts === 'object') ? opts : {};
   try{
@@ -270,6 +280,21 @@ function bookExportCSV(){
   }catch(e){}
 }
 
+function navHistoryHTML(hist){
+  hist = (hist || []).slice(-12).reverse();
+  if (!hist.length) return '';
+  return '<div class="panel"><h3>NAV history (recent)</h3>'
+    + '<div style="overflow-x:auto"><table class="booktbl"><thead><tr>'
+    + '<th>Time</th><th>Equity</th><th>Heat</th><th>Open</th></tr></thead><tbody>'
+    + hist.map(function(h){
+      return '<tr><td>' + new Date(h.at).toLocaleString() + '</td>'
+        + '<td>' + fmtUsd(h.equityUsd) + '</td>'
+        + '<td>' + fmtF((h.heatPct || 0) * 100, 2) + '%</td>'
+        + '<td>' + (h.openCount != null ? h.openCount : '—') + '</td></tr>';
+    }).join('')
+    + '</tbody></table></div></div>';
+}
+
 function posRowHTML(p){
   var upl = p.unrealizedUsd || 0;
   var uplCls = upl >= 0 ? 'ok' : 'warn';
@@ -311,7 +336,8 @@ function mount(el){
     + '<div class="empty" id="bookEmpty" style="display:none">No open paper positions — add from a scanner card.</div>'
     + '</div>'
     + '<div class="panel"><h3>Recently closed</h3><div id="bookClosed"></div></div>'
-    + '<div id="bookAttr"></div>';
+    + '<div id="bookAttr"></div>'
+    + '<div id="bookNavHist"></div>';
 
   var stat = el.querySelector('#bookStat');
   var summary = el.querySelector('#bookSummary');
@@ -320,6 +346,7 @@ function mount(el){
   var empty = el.querySelector('#bookEmpty');
   var closedEl = el.querySelector('#bookClosed');
   var attrEl = el.querySelector('#bookAttr');
+  var navHistEl = el.querySelector('#bookNavHist');
 
   function setStat(t, warn){ if (stat){ stat.textContent = t || ''; stat.className = warn ? 'note warn' : 'note'; } }
 
@@ -331,6 +358,7 @@ function mount(el){
       if (heatEl) heatEl.innerHTML = '';
       if (body) body.innerHTML = '';
       if (attrEl) attrEl.innerHTML = '';
+      if (navHistEl) navHistEl.innerHTML = '';
       if (empty) empty.style.display = 'block';
       return;
     }
@@ -339,7 +367,8 @@ function mount(el){
       summary.innerHTML =
         '<span class="k">NAV</span><span class="v">' + fmtUsd(s.navUsd) + '</span>'
         + '<span class="k">Equity</span><span class="v">' + fmtUsd(s.equityUsd) + '</span>'
-        + '<span class="k">Day P&amp;L</span><span class="v">' + fmtUsd(s.dayPnlUsd) + '</span>'
+        + '<span class="k">Day P&amp;L</span><span class="v">' + fmtUsd(s.dayPnlUsd)
+        + (s.dayKey ? ' <span class="note">(UTC ' + esc(s.dayKey) + ')</span>' : '') + '</span>'
         + '<span class="k">Unrealized</span><span class="v">' + fmtUsd(s.unrealizedUsd) + '</span>'
         + '<span class="k">Realized</span><span class="v">' + fmtUsd(s.realizedUsd) + '</span>'
         + '<span class="k">Open</span><span class="v">' + s.openCount + ' positions · gross ' + fmtUsd(s.grossUsd) + '</span>';
@@ -365,6 +394,7 @@ function mount(el){
         + attrTableHTML('P&amp;L by asset bucket', snap.attribution.byBucket)
         + attrTableHTML('P&amp;L by tier', snap.attribution.byTier);
     }
+    if (navHistEl) navHistEl.innerHTML = navHistoryHTML(snap.navHistory || (snap.book && snap.book.navHistory));
     setStat('updated ' + new Date(snap.summary.at || Date.now()).toLocaleTimeString()
       + (bookTabVisible() ? ' · auto-refresh on' : ''));
   }
@@ -404,6 +434,7 @@ function mount(el){
     if (!confirm('Close all ' + n + ' paper position' + (n === 1 ? '' : 's') + ' at current marks?')) return;
     var marks = await bookCollectMarks(snap);
     await bookFetch('/api/book/close-all', { method: 'POST', body: JSON.stringify({ marks: marks }) });
+    bookScoreSettle();
     await refresh();
   });
   el.querySelector('#bookReset').addEventListener('click', async function(){
@@ -419,6 +450,7 @@ function mount(el){
     var id = btn.getAttribute('data-close');
     if (!id || !bookApiOn()) return;
     await bookFetch('/api/book/close', { method: 'POST', body: JSON.stringify({ id: id }) });
+    bookScoreSettle();
     await refresh();
   });
 

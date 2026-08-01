@@ -1,7 +1,7 @@
 /* HARDGATE — paper fund book core tests */
 import {
   pbNewBook, pbAddIntent, pbRiskCheck, pbClosePosition, pbCloseAll,
-  pbMarkBook, pbSummary, pbAttribution, PB_DEFAULTS,
+  pbMarkBook, pbSummary, pbAttribution, pbRollDay, pbPushNavHistory, pbEquity, PB_DEFAULTS,
 } from '../lib/paperbook-core.mjs';
 
 let pass = 0, fail = 0;
@@ -53,6 +53,19 @@ ok(attr.byTier.some(function(r){ return r.key === 'PRIME' || r.key === 'HIGH'; }
 var allBook = pbMarkBook(multi, { BTCUSD: 101, ETHUSD: 195 });
 var allClosed = pbCloseAll(allBook, { BTCUSD: 101, ETHUSD: 195 });
 ok(allClosed.ok && allClosed.book.positions.length === 0 && allClosed.closed.length === 2, 'close all positions');
+
+var rolled = pbRollDay(pbNewBook());
+ok(rolled.dayKey && isFinite(rolled.dayStartEquityUsd), 'day roll sets UTC day key + start equity');
+
+var eqBook = pbRollDay(pbNewBook());
+eqBook = Object.assign({}, eqBook, { dayStartEquityUsd: PB_DEFAULTS.navUsd });
+var addEq = pbAddIntent(eqBook, { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'eq' });
+var markedEq = pbMarkBook(addEq.book, { BTCUSD: 105 });
+var sumEq = pbSummary(markedEq);
+ok(isFinite(sumEq.dayPnlUsd) && sumEq.dayPnlUsd > 0, 'daily PnL tracks equity vs day start');
+
+var histBook = pbPushNavHistory(markedEq, sumEq);
+ok(Array.isArray(histBook.navHistory) && histBook.navHistory.length === 1, 'nav history snapshot');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
