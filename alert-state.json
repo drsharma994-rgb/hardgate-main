@@ -2,41 +2,17 @@
   "delta": "EDENUSD|short",
   "coindcx": "B-HYPE_USDT|short",
   "gold": null,
-  "lastRunAt": "2026-07-31T09:42:54.364Z",
+  "lastRunAt": "2026-08-01T10:42:35.193Z",
   "ticket": {
     "long": null,
     "short": null
   },
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-01T08:55:05.558Z"
+    "at": "2026-08-01T10:42:35.193Z"
   },
   "setups": {
     "keys": {
-      "B-HYPE_USDT:short@54.569": 1785490974365,
-      "B-1000BONK_USDT:short@0.002813": 1785490974365,
-      "B-AERO_USDT:short@0.4222": 1785490974365,
-      "B-BSB_USDT:short@0.12052": 1785490974365,
-      "B-US_USDT:long@0.048591": 1785490974365,
-      "B-ALGO_USDT:short@0.07885": 1785490974365,
-      "B-HYPER_USDT:short@0.05903": 1785490974365,
-      "B-MEGA_USDT:short@0.03689": 1785490974365,
-      "B-IN_USDT:short@0.03462": 1785490974365,
-      "B-EDEN_USDT:short@0.03816": 1785490974365,
-      "B-NMR_USDT:short@8.562": 1785490974365,
-      "B-TAIKO_USDT:short@0.07024": 1785490974365,
-      "B-INX_USDT:long@0.007813": 1785490974365,
-      "B-ESP_USDT:short@0.06757": 1785490974365,
-      "B-EPIC_USDT:long@0.7758": 1785490974365,
-      "B-ENSO_USDT:long@0.8642": 1785490974365,
-      "B-CROSS_USDT:long@0.0889": 1785490974365,
-      "B-LAYER_USDT:short@0.06233": 1785490974365,
-      "B-PYTH_USDT:short@0.03992": 1785490974365,
-      "B-CC_USDT:short@0.11967": 1785490974365,
-      "B-SPX_USDT:short@0.3271": 1785490974365,
-      "B-RENDER_USDT:short@1.396": 1785490974365,
-      "B-ORCA_USDT:short@1.135": 1785490974365,
-      "B-ASTER_USDT:short@0.5994": 1785490974365,
       "B-LTC_USDT:short@44.88": 1785520546309,
       "B-KAT_USDT:short@0.004351": 1785520546309,
       "B-SHELL_USDT:short@0.01805": 1785520546309,
@@ -78,9 +54,36 @@
       "B-SPX_USDT:short@0.3207": 1785520546309,
       "B-IO_USDT:short@0.1341": 1785520546309,
       "B-POL_USDT:short@0.07077": 1785520546309,
-      "B-XRP_USDT:short@1.06": 1785520546309
+      "B-XRP_USDT:short@1.06": 1785520546309,
+      "B-SYRUP_USDT:short@0.15966": 1785580955194,
+      "B-COW_USDT:short@0.1158": 1785580955194,
+      "B-NEAR_USDT:short@1.662": 1785580955194,
+      "B-EPIC_USDT:long@0.7871": 1785580955194,
+      "B-US_USDT:long@0.053451": 1785580955194,
+      "B-LTC_USDT:short@44.48": 1785580955194,
+      "B-BIRB_USDT:short@0.0524": 1785580955194,
+      "B-VANRY_USDT:short@0.00403": 1785580955194,
+      "B-UB_USDT:long@0.16105": 1785580955194,
+      "B-OP_USDT:short@0.0853": 1785580955194,
+      "B-CHIP_USDT:short@0.02542": 1785580955194,
+      "B-FF_USDT:long@0.06538": 1785580955194,
+      "B-HUMA_USDT:short@0.019501": 1785580955194,
+      "B-NIGHT_USDT:short@0.01782": 1785580955194,
+      "B-BIGTIME_USDT:short@0.005637": 1785580955194,
+      "B-AGLD_USDT:short@0.147": 1785580955194,
+      "B-ESPORTS_USDT:short@0.01801": 1785580955194,
+      "B-JCT_USDT:short@0.003561": 1785580955194,
+      "B-IO_USDT:short@0.1326": 1785580955194
     },
-    "at": "2026-08-01T08:55:05.558Z"
+    "at": "2026-08-01T10:42:35.529Z"
   },
-  "engineAlertAt": "2026-08-01T08:55:07.448Z"
+  "bookExec": {
+    "key": "p0|f0",
+    "snap": {
+      "pending": 0,
+      "fail": 0,
+      "ok": 0
+    },
+    "at": "2026-08-01T10:42:35.819Z"
+  }
 }
