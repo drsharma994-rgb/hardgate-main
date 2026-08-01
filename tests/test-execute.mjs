@@ -59,6 +59,9 @@ ok(bookJs.indexOf('bookExportConsolidatedCSV') >= 0 && bookJs.indexOf('EXPORT AL
 ok(bookJs.indexOf('all.closed') >= 0 && bookJs.indexOf('closedAt') >= 0
   && bookJs.indexOf('bookFetchAllPositions') >= 0,
   'book.js consolidated export includes closed trades across funds');
+ok(bookJs.indexOf('bookBlotterExecOnlyOn') >= 0 && bookJs.indexOf('bookFilterBlotterRows') >= 0
+  && bookJs.indexOf('id="bookBlotterExecOnly"') >= 0,
+  'book.js EXEC-only blotter filter toggle');
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
