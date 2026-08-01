@@ -125,6 +125,9 @@ ok(bookJs.indexOf('opts.silent') >= 0 && bookJs.indexOf('bookFetchOpenKeys') >= 
 ok(bookJs.indexOf('posExecChipHTML') >= 0 && bookJs.indexOf('BRACKET OK') >= 0
   && bookJs.indexOf('LIVE OK') >= 0 && bookJs.indexOf('live_send') >= 0,
   'book.js per-position bracket + live status chips');
+ok(bookJs.indexOf('bookClosedTitle') >= 0 && bookJs.indexOf('consolidated.closed') >= 0
+  && bookJs.indexOf('Recently closed (all funds)') >= 0,
+  'book.js cross-fund recently closed panel');
 
 var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtnHTML') >= 0,

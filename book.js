@@ -1459,9 +1459,12 @@ function deskExecStatusHTML(){
   return '<div class="row bookExecBar" style="margin:6px 0 10px;flex-wrap:wrap;gap:6px">' + chips.join('') + '</div>';
 }
 
-function closedRowHTML(c){
+function closedRowHTML(c, opts){
+  opts = opts || {};
   var cls = (c.realizedUsd || 0) >= 0 ? 'ok' : 'warn';
-  return '<tr><td>' + esc(c.sym) + '</td><td>' + esc(c.dir) + '</td>'
+  return '<tr>'
+    + (opts.showFund ? '<td><span class="statuschip bookSrc" title="Paper fund">' + esc(c._fundId || 'main') + '</span></td>' : '')
+    + '<td>' + esc(c.sym) + '</td><td>' + esc(c.dir) + '</td>'
     + '<td>' + esc(c.strategy || '—') + posSourceChip(c) + '</td>'
     + '<td class="' + cls + '">' + fmtUsd(c.realizedUsd) + '</td><td>'
     + new Date(c.closedAt).toLocaleString() + '</td></tr>';
@@ -1565,7 +1568,7 @@ function mount(el){
     + '<tbody id="bookBody"></tbody></table></div>'
     + '<div class="empty" id="bookEmpty" style="display:none">No open paper positions — add from a scanner card.</div>'
     + '</div>'
-    + '<div class="panel"><h3>Recently closed</h3><div id="bookClosed"></div></div>'
+    + '<div class="panel"><h3 id="bookClosedTitle">Recently closed</h3><div id="bookClosed"></div></div>'
     + '<div id="bookCrossAttr"></div>'
     + '<div id="bookAttr"></div>'
     + '<div id="bookNavHist"></div>';
@@ -1690,12 +1693,23 @@ function mount(el){
         empty.style.display = viewPositions.length ? 'none' : 'block';
       }
     }
-    if (closedEl && snap.book && snap.book.closed){
-      var closed = snap.book.closed.slice(0, 8);
+    if (closedEl){
+      var closedTitleEl = el.querySelector('#bookClosedTitle');
+      var closedFundView = multiFund && consolidated;
+      var closed = closedFundView
+        ? (consolidated.closed || []).slice(0, 12)
+        : ((snap.book && snap.book.closed) || []).slice(0, 8);
+      if (closedTitleEl){
+        closedTitleEl.textContent = closedFundView ? 'Recently closed (all funds)' : 'Recently closed';
+      }
+      var closedShowFund = !!closedFundView;
       closedEl.innerHTML = closed.length
-        ? '<table class="booktbl"><thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Realized</th><th>Closed</th></tr></thead><tbody>'
-          + closed.map(closedRowHTML).join('') + '</tbody></table>'
-        : '<div class="note">No closed trades yet.</div>';
+        ? '<table class="booktbl"><thead><tr>'
+          + (closedShowFund ? '<th>Fund</th>' : '')
+          + '<th>Symbol</th><th>Side</th><th>Strategy</th><th>Realized</th><th>Closed</th></tr></thead><tbody>'
+          + closed.map(function(c){ return closedRowHTML(c, { showFund: closedShowFund }); }).join('')
+          + '</tbody></table>'
+        : '<div class="note">' + (closedFundView ? 'No closed trades across funds yet.' : 'No closed trades yet.') + '</div>';
     }
     if (crossAttrEl && snap.crossAttribution){
       crossAttrEl.innerHTML = crossAttrHTML(snap.crossAttribution);
