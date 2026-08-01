@@ -16,7 +16,7 @@ Registers window.HG_tabs id 'book' label 'BOOK'.
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-var __book = { snap: null, desk: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false };
+var __book = { snap: null, desk: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false, consolidatedAll: null };
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
@@ -148,9 +148,11 @@ async function bookPull(){
           if (ar.json && ar.json.ok && ar.json.attribution) __book.snap.crossAttribution = ar.json.attribution;
           var dr = await bookFetch('/api/book/desk');
           if (dr.json && dr.json.ok && dr.json.desk) __book.desk = dr.json.desk;
+          __book.consolidatedAll = await bookFetchAllPositions();
         }catch(e){}
       } else {
         __book.desk = null;
+        __book.consolidatedAll = null;
       }
       __book.lastAt = Date.now();
       return r.json;
@@ -222,6 +224,7 @@ async function bookMaybeAutoExecute(position){
   if (typeof W.executeTrade !== 'function' || !bookExecuteReady()) return null;
   var plan = bookBuildExecutePlan(position, 'hardgate-book-auto');
   if (!plan) return null;
+  if (position._fundId) plan.fund = position._fundId;
   return W.executeTrade(plan, { skipConfirm: true });
 }
 
@@ -263,7 +266,11 @@ async function addToBook(opts){
         bookScoreRecord(body);
         __book.lastAt = Date.now();
         try{
-          if (r.json.position) await bookMaybeAutoExecute(r.json.position);
+          if (r.json.position){
+            var autoPos = r.json.position;
+            if (r.json.fundId) autoPos = Object.assign({}, autoPos, { _fundId: r.json.fundId });
+            await bookMaybeAutoExecute(autoPos);
+          }
         }catch(eAuto){}
         if (!opts.silent && typeof W.showTab === 'function') W.showTab('book');
         return r.json;
@@ -280,6 +287,50 @@ async function addToBook(opts){
 
 function bookPositionKey(fund, sym, dir){
   return String(fund || 'main') + ':' + String(sym) + ':' + String(dir);
+}
+
+async function bookFetchAllFundBooks(){
+  var out = [];
+  if (!bookApiOn()) return out;
+  try{
+    var fr = await bookFetch('/api/book/funds');
+    var ids = [];
+    if (fr.json && Array.isArray(fr.json.funds)){
+      for (var fi = 0; fi < fr.json.funds.length; fi++){
+        var fid = fr.json.funds[fi] && fr.json.funds[fi].id;
+        if (fid) ids.push(fid);
+      }
+    }
+    if (!ids.length) ids = ['main'];
+    await Promise.all(ids.map(async function(id){
+      try{
+        var r = await bookFetch('/api/book?fund=' + encodeURIComponent(id));
+        if (r.json && r.json.book) out.push({ fundId: id, book: r.json.book });
+      }catch(e){}
+    }));
+  }catch(e){}
+  return out;
+}
+
+async function bookFetchAllPositions(){
+  var packs = await bookFetchAllFundBooks();
+  var positions = [];
+  var blotter = [];
+  for (var i = 0; i < packs.length; i++){
+    var pack = packs[i];
+    var fundId = pack.fundId;
+    var book = pack.book || {};
+    var pos = book.positions || [];
+    for (var p = 0; p < pos.length; p++){
+      if (pos[p]) positions.push(Object.assign({}, pos[p], { _fundId: fundId }));
+    }
+    var bl = book.blotter || [];
+    for (var b = 0; b < bl.length; b++){
+      if (bl[b]) blotter.push(Object.assign({}, bl[b], { _fundId: fundId }));
+    }
+  }
+  blotter.sort(function(a, b){ return (+b.at || 0) - (+a.at || 0); });
+  return { positions: positions, blotter: blotter };
 }
 
 async function bookFetchOpenKeys(){
@@ -412,14 +463,19 @@ function autoLogHTML(){
 function blotterHTML(rows){
   rows = (rows || []).slice(0, 10);
   if (!rows.length) return '<div class="note">No blotter events yet.</div>';
-  return '<table class="booktbl"><thead><tr><th>Time</th><th>Event</th><th>Symbol</th><th>Detail</th></tr></thead><tbody>'
+  var showFund = rows.some(function(b){ return b && b._fundId; });
+  return '<table class="booktbl"><thead><tr><th>Time</th>'
+    + (showFund ? '<th>Fund</th>' : '')
+    + '<th>Event</th><th>Symbol</th><th>Detail</th></tr></thead><tbody>'
     + rows.map(function(b){
       var type = b.type || '—';
       var typeCls = (type === 'execute_ok') ? 'ok' : ((type === 'execute_fail') ? 'warn' : '');
       var detail = b.note || b.dir || (b.qty != null ? ('qty ' + fmtF(b.qty, 4)) : '') || '';
       if (b.status) detail += (detail ? ' · ' : '') + 'HTTP ' + b.status;
       if (b.idempotencyKey) detail += (detail ? ' · ' : '') + 'idem ' + String(b.idempotencyKey).slice(0, 16);
-      return '<tr><td>' + new Date(b.at).toLocaleTimeString() + '</td><td class="' + typeCls + '">' + esc(type) + '</td>'
+      return '<tr><td>' + new Date(b.at).toLocaleTimeString() + '</td>'
+        + (showFund ? '<td>' + esc(b._fundId || '—') + '</td>' : '')
+        + '<td class="' + typeCls + '">' + esc(type) + '</td>'
         + '<td>' + esc(b.sym || '—') + '</td><td>' + esc(detail) + '</td></tr>';
     }).join('') + '</tbody></table>';
 }
@@ -508,6 +564,7 @@ async function bookExecuteFromPosition(position, opts){
     if (!opts.silent){ try{ alert('Cannot size bracket — missing mark or notional.'); }catch(e2){} }
     return { ok: false, reason: 'invalid plan' };
   }
+  if (opts.fund || position._fundId) plan.fund = opts.fund || position._fundId;
   try{
     await W.executeTrade(plan, opts.skipConfirm ? { skipConfirm: true } : {});
     return { ok: true };
@@ -536,7 +593,11 @@ async function bookExecuteBatch(targets, source){
     var p = targets[i];
     var pid = (p && p.id) ? p.id : p;
     var r = (p && p.sym)
-      ? await bookExecuteFromPosition(p, { skipConfirm: true, silent: true, source: source || 'hardgate-book-batch' })
+      ? await bookExecuteFromPosition(p, {
+        skipConfirm: true, silent: true,
+        source: source || 'hardgate-book-batch',
+        fund: p._fundId,
+      })
       : await bookExecutePosition(pid, { skipConfirm: true, silent: true, source: source || 'hardgate-book-batch' });
     if (r && r.ok) ok++;
     else fail++;
@@ -575,6 +636,28 @@ async function bookRetryFailed(){
     + (targets.length === 1 ? '' : 's') + '?\n\n' + syms)) return;
   var res = await bookExecuteBatch(targets, 'hardgate-book-retry');
   try{ alert('EXEC retry: ' + res.ok + ' sent · ' + res.fail + ' failed'); }catch(e2){}
+}
+
+async function bookExecuteAllFundsPending(){
+  var all = await bookFetchAllPositions();
+  var targets = bookExecTargets(all.positions, all.blotter, { pending: true, failed: false });
+  if (!targets.length){ try{ alert('No open positions across all funds waiting for a bracket.'); }catch(e){} return; }
+  var lines = targets.map(function(p){ return (p._fundId || 'main') + ':' + p.sym; }).join(', ');
+  if (!confirm('Send EXEC brackets for ' + targets.length + ' pending position'
+    + (targets.length === 1 ? '' : 's') + ' across all funds?\n\n' + lines)) return;
+  var res = await bookExecuteBatch(targets, 'hardgate-book-all-pending');
+  try{ alert('All-funds EXEC: ' + res.ok + ' sent · ' + res.fail + ' failed'); }catch(e2){}
+}
+
+async function bookRetryAllFundsFailed(){
+  var all = await bookFetchAllPositions();
+  var targets = bookExecTargets(all.positions, all.blotter, { pending: false, failed: true });
+  if (!targets.length){ try{ alert('No failed brackets across all funds to retry.'); }catch(e){} return; }
+  var lines = targets.map(function(p){ return (p._fundId || 'main') + ':' + p.sym; }).join(', ');
+  if (!confirm('Retry EXEC for ' + targets.length + ' failed position'
+    + (targets.length === 1 ? '' : 's') + ' across all funds?\n\n' + lines)) return;
+  var res = await bookExecuteBatch(targets, 'hardgate-book-all-retry');
+  try{ alert('All-funds retry: ' + res.ok + ' sent · ' + res.fail + ' failed'); }catch(e2){}
 }
 
 async function bookExportLp(){
@@ -950,6 +1033,11 @@ function deskExecStatusHTML(){
         + exFund.ok + ' OK · ' + exFund.fail + ' fail · ' + exFund.pending + ' pending</span>');
     }
   }
+  if (__book.desk && __book.desk.execute && (__book.desk.execute.ok || __book.desk.execute.fail || __book.desk.execute.pending)){
+    var exDesk = __book.desk.execute;
+    chips.push('<span class="statuschip" title="Cross-fund 7d bracket rollup from desk API">desk 7d '
+      + (exDesk.ok || 0) + ' OK · ' + (exDesk.fail || 0) + ' fail · ' + (exDesk.pending || 0) + ' pending</span>');
+  }
   var blotter = (book && book.blotter) || [];
   var last = bookLastExecuteEvent(blotter);
   if (last){
@@ -1020,6 +1108,8 @@ function mount(el){
     + (bookExecuteReady() ? '' : ' disabled') + '>EXEC PENDING</button>'
     + '<button class="btn ghost" id="bookRetryFailed" title="Retry EXEC for rows showing BRACKET FAIL"'
     + (bookExecuteReady() ? '' : ' disabled') + '>RETRY FAILED</button>'
+    + '<button class="btn ghost" id="bookExecAllPending" style="display:none" title="EXEC pending brackets across every fund">ALL FUNDS PENDING</button>'
+    + '<button class="btn ghost" id="bookRetryAllFailed" style="display:none" title="Retry failed brackets across every fund">ALL FUNDS RETRY</button>'
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
@@ -1037,6 +1127,7 @@ function mount(el){
     + '<div id="bookHeat"></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Execution blotter</h3><div id="bookBlotter"></div>'
+    + '<div id="bookBlotterAll" style="display:none;margin-top:8px"><h4 style="font-size:12px;margin:0 0 6px">Cross-fund execute events</h4><div id="bookBlotterAllBody"></div></div>'
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
     + '<div style="overflow-x:auto"><table class="booktbl" id="bookTable">'
@@ -1056,6 +1147,8 @@ function mount(el){
   var heatEl = el.querySelector('#bookHeat');
   var autoLogEl = el.querySelector('#bookAutoLog');
   var blotterEl = el.querySelector('#bookBlotter');
+  var blotterAllEl = el.querySelector('#bookBlotterAll');
+  var blotterAllBody = el.querySelector('#bookBlotterAllBody');
   var body = el.querySelector('#bookBody');
   var empty = el.querySelector('#bookEmpty');
   var closedEl = el.querySelector('#bookClosed');
@@ -1086,6 +1179,9 @@ function mount(el){
       if (execBarEl) execBarEl.innerHTML = '';
       if (deskEl) deskEl.innerHTML = '';
       if (heatEl) heatEl.innerHTML = '';
+      if (blotterEl) blotterEl.innerHTML = '';
+      if (blotterAllEl) blotterAllEl.style.display = 'none';
+      if (blotterAllBody) blotterAllBody.innerHTML = '';
       if (body) body.innerHTML = '';
       if (attrEl) attrEl.innerHTML = '';
       if (crossAttrEl) crossAttrEl.innerHTML = '';
@@ -1113,6 +1209,17 @@ function mount(el){
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
     if (blotterEl) blotterEl.innerHTML = blotterHTML((snap.book && snap.book.blotter) || snap.blotter);
+    var multiFund = (__book.funds || []).length > 1;
+    var consolidated = __book.consolidatedAll;
+    if (blotterAllEl && blotterAllBody){
+      if (multiFund && consolidated && (consolidated.blotter || []).length){
+        blotterAllEl.style.display = 'block';
+        blotterAllBody.innerHTML = blotterHTML(consolidated.blotter);
+      } else {
+        blotterAllEl.style.display = 'none';
+        blotterAllBody.innerHTML = '';
+      }
+    }
     var positions = (snap.book && snap.book.positions) || [];
     var blotterRows = (snap.book && snap.book.blotter) || snap.blotter || [];
     if (body){
@@ -1145,6 +1252,8 @@ function mount(el){
     if (navHistEl) navHistEl.innerHTML = navHistoryHTML(snap.navHistory || (snap.book && snap.book.navHistory));
     var epBtn = el.querySelector('#bookExecPending');
     var rfBtn = el.querySelector('#bookRetryFailed');
+    var epAllBtn = el.querySelector('#bookExecAllPending');
+    var rfAllBtn = el.querySelector('#bookRetryAllFailed');
     var execReady = bookExecuteReady();
     if (epBtn){
       epBtn.disabled = !execReady;
@@ -1155,6 +1264,23 @@ function mount(el){
       rfBtn.disabled = !execReady;
       var failN = bookExecTargets(positions, blotterRows, { pending: false, failed: true }).length;
       rfBtn.textContent = failN ? ('RETRY FAILED (' + failN + ')') : 'RETRY FAILED';
+    }
+    if (epAllBtn && rfAllBtn){
+      if (multiFund && execReady){
+        epAllBtn.style.display = '';
+        rfAllBtn.style.display = '';
+        epAllBtn.disabled = false;
+        rfAllBtn.disabled = false;
+        var allPos = (consolidated && consolidated.positions) || [];
+        var allBlot = (consolidated && consolidated.blotter) || [];
+        var allPendingN = bookExecTargets(allPos, allBlot, { pending: true, failed: false }).length;
+        var allFailN = bookExecTargets(allPos, allBlot, { pending: false, failed: true }).length;
+        epAllBtn.textContent = allPendingN ? ('ALL FUNDS PENDING (' + allPendingN + ')') : 'ALL FUNDS PENDING';
+        rfAllBtn.textContent = allFailN ? ('ALL FUNDS RETRY (' + allFailN + ')') : 'ALL FUNDS RETRY';
+      } else {
+        epAllBtn.style.display = 'none';
+        rfAllBtn.style.display = 'none';
+      }
     }
     setStat('updated ' + new Date(snap.summary.at || Date.now()).toLocaleTimeString()
       + (bookTabVisible() ? ' · auto-refresh on' : ''));
@@ -1190,6 +1316,10 @@ function mount(el){
   if (execPendingBtn) execPendingBtn.addEventListener('click', function(){ bookExecutePending(); });
   var retryFailedBtn = el.querySelector('#bookRetryFailed');
   if (retryFailedBtn) retryFailedBtn.addEventListener('click', function(){ bookRetryFailed(); });
+  var execAllPendingBtn = el.querySelector('#bookExecAllPending');
+  if (execAllPendingBtn) execAllPendingBtn.addEventListener('click', function(){ bookExecuteAllFundsPending(); });
+  var retryAllFailedBtn = el.querySelector('#bookRetryAllFailed');
+  if (retryAllFailedBtn) retryAllFailedBtn.addEventListener('click', function(){ bookRetryAllFundsFailed(); });
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
   el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
@@ -1269,7 +1399,8 @@ function mount(el){
     }
     var execBtn = t.closest('[data-exec]');
     if (execBtn){
-      bookExecutePosition(execBtn.getAttribute('data-exec'));
+      await bookExecutePosition(execBtn.getAttribute('data-exec'));
+      await refresh();
       return;
     }
     var scaleBtn = t.closest('[data-scale]');
@@ -1334,6 +1465,9 @@ W.bookExecTargets = bookExecTargets;
 W.bookBuildExecutePlan = bookBuildExecutePlan;
 W.bookExecuteBatchPositions = bookExecuteBatchPositions;
 W.bookExecuteFromPosition = bookExecuteFromPosition;
+W.bookFetchAllPositions = bookFetchAllPositions;
+W.bookExecuteAllFundsPending = bookExecuteAllFundsPending;
+W.bookRetryAllFundsFailed = bookRetryAllFundsFailed;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });

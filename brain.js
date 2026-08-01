@@ -4050,7 +4050,13 @@ async function brainAutoBookRecord(setups){
         if (r && r.ok){
           seen[key] = now;
           out.added++;
-          if (r.position) addedPositions.push(r.position);
+          if (r.position){
+            var fp = r.position;
+            if (r.fundId || opts.fund){
+              fp = Object.assign({}, r.position, { _fundId: r.fundId || opts.fund });
+            }
+            addedPositions.push(fp);
+          }
         }else if (r && r.veto){
           out.veto++;
         }else{
