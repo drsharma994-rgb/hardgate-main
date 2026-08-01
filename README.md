@@ -37,7 +37,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | **BASIS** | Funding/basis monitor (Delta + Binance 8h funding side by side) |
 | **SEARCH** | Cross-exchange symbol lookup + on-demand Twelve Data swing backtests |
 | **LOG** | Auto-logged CLEAN setups, outcomes graded against closed candles (conservative same-bar = SL rule) |
-| **TRADE PLAN** | Fixed-R ticket builder with portfolio-heat check; EXECUTE BRACKET (T1 + optional T2 runner) when `EXECUTE_BACKEND_URL` is set on Render |
+| **TRADE PLAN** | Fixed-R ticket builder with portfolio-heat check; **ADD TO BOOK** + EXECUTE BRACKET (T1 + optional T2 runner) when `EXECUTE_BACKEND_URL` is set on Render |
 | **BOOK** | Multi-fund paper OMS — positions, heat limits, auto desk rules (T1 scale / BE / trail), consolidated desk rollup, LP digest, live + proxy bracket execution |
 | **FIND TRADE** | Per-symbol evaluation of all strategies + full backtest context; valid plans get **ADD TO BOOK** + TRADE PLAN handoff |
 

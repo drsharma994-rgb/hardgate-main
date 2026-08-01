@@ -626,7 +626,7 @@ function bookExecuteReady(){
 function bookExecStatus(blotter, positionId){
   var evt = bookLatestExecForPosition(blotter, positionId);
   if (!evt) return 'pending';
-  return evt.type === 'execute_ok' ? 'ok' : 'fail';
+  return bookBracketEventOk(evt) ? 'ok' : 'fail';
 }
 
 function bookExecTargets(positions, blotter, modes){
@@ -1160,9 +1160,17 @@ function bookLatestExecForPosition(blotter, positionId){
   if (!positionId || !Array.isArray(blotter)) return null;
   for (var i = 0; i < blotter.length; i++){
     var b = blotter[i];
-    if (b && b.positionId === positionId && (b.type === 'execute_ok' || b.type === 'execute_fail')) return b;
+    if (!b || b.positionId !== positionId) continue;
+    if (b.type === 'execute_ok' || b.type === 'execute_fail' || b.type === 'live_send') return b;
   }
   return null;
+}
+
+function bookBracketEventOk(evt){
+  if (!evt) return false;
+  if (evt.type === 'execute_ok') return true;
+  if (evt.type === 'live_send') return evt.ok !== false;
+  return false;
 }
 
 function posExecChipHTML(p, blotter){
@@ -1174,13 +1182,14 @@ function posExecChipHTML(p, blotter){
     return '<span class="statuschip warn"' + dataExec + click
       + ' title="' + (execReady ? 'Click to send EXEC bracket' : 'No bracket sent yet') + '">EXEC —</span>';
   }
-  var ok = evt.type === 'execute_ok';
-  var tip = evt.note || (ok ? 'Bracket accepted by proxy' : 'Bracket rejected or failed');
+  var ok = bookBracketEventOk(evt);
+  var isLive = evt.type === 'live_send';
+  var tip = evt.note || (ok ? (isLive ? 'Live webhook accepted' : 'Bracket accepted by proxy') : (isLive ? 'Live webhook rejected' : 'Bracket rejected or failed'));
   if (evt.status) tip += ' · HTTP ' + evt.status;
   if (!ok && execReady) tip = 'Click to retry · ' + tip;
+  var label = ok ? (isLive ? 'LIVE OK' : 'BRACKET OK') : (isLive ? 'LIVE FAIL' : 'BRACKET FAIL');
   return '<span class="statuschip ' + (ok ? 'ok' : 'warn') + '"' + (ok ? '' : dataExec) + (ok ? '' : click)
-    + ' title="' + esc(tip) + '">'
-    + (ok ? 'BRACKET OK' : 'BRACKET FAIL') + '</span>';
+    + ' title="' + esc(tip) + '">' + label + '</span>';
 }
 
 function bookDigestExecuteSummary(book, startMs){

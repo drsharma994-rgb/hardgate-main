@@ -70,8 +70,15 @@ ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') 
   'book.js desk exec status bar + closed trade source chips');
 ok(bookJs.indexOf('opts.silent') >= 0 && bookJs.indexOf('bookFetchOpenKeys') >= 0,
   'book.js silent add + cross-fund open-key dedup');
-ok(bookJs.indexOf('posExecChipHTML') >= 0 && bookJs.indexOf('BRACKET OK') >= 0,
-  'book.js per-position bracket status chips');
+ok(bookJs.indexOf('posExecChipHTML') >= 0 && bookJs.indexOf('BRACKET OK') >= 0
+  && bookJs.indexOf('LIVE OK') >= 0 && bookJs.indexOf('live_send') >= 0,
+  'book.js per-position bracket + live status chips');
+
+var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtnHTML') >= 0,
+  'trade plan exposes ADD TO BOOK when plan valid');
+ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
+  'swing and scalp scans use distinct scanner ids');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,
   'book.js exec bar 7d rollup + brain auto-book chip');
 ok(bookJs.indexOf('brainAutoBookPrimeOnlyOn') >= 0 && bookJs.indexOf('BRAIN auto-book PRIME') >= 0,
