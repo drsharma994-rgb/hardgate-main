@@ -76,8 +76,10 @@ assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
   assert(iApi !== -1 && iPublic !== -1 && iApi < iPublic,
     'cdcxGet order: same-origin /api/proxy first, public backups last');
 }
-assert(html.includes('function executeBackendReady'),
-  'EXECUTE BRACKET gated behind executeBackendReady()');
+assert(html.includes('function executeBackendReady') || html.includes('execute.js?v='),
+  'EXECUTE BRACKET gated via executeBackendReady (execute.js or inline)');
+assert(fs.readFileSync(path.join(root, 'execute.js'), 'utf8').includes('executeBackendReady'),
+  'execute.js defines executeBackendReady');
 
 /* ================= 2. ntfy.sh push ================= */
 assert(html.includes("https://ntfy.sh/' + encodeURIComponent(topic)"),

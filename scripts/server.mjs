@@ -13,6 +13,7 @@ import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
 import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
 import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch.mjs';
 import { createPaperbookApi } from '../lib/paperbook-api.mjs';
+import { createExecuteApi } from '../lib/execute-api.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
@@ -21,6 +22,7 @@ const fredHandler = require('../api/fred.js');
 const ROOT = fileURLToPath(new URL('../', import.meta.url));   /* repo root (trailing sep) */
 const PORT = +(process.env.PORT || 10000);
 const paperbookHandler = createPaperbookApi(ROOT);
+const executeHandler = createExecuteApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -71,6 +73,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/book' || u.pathname.indexOf('/api/book/') === 0){
       return paperbookHandler(req, res);
+    }
+    if (u.pathname === '/api/execute' || u.pathname === '/api/execute/capabilities'){
+      return executeHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style

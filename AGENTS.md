@@ -37,7 +37,7 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 - **No runtime npm dependencies:** `package.json` has only `start` and `test` scripts. `npm install` is a no-op.
 - **Node 18+ required:** Server and tests use ES modules and global `fetch`.
 - **Alert dual clocks:** If `GH_DISPATCH_TOKEN` is set on Render, set GitHub repo variable `RENDER_DISPATCH_PRIMARY=true` so scheduled `alert-notify.yml` runs do not overlap Render's 13-min dispatch.
-- **EXECUTE BRACKET:** Hidden until `EXECUTE_BACKEND_URL` is set in `index.html` (non-empty, not the placeholder host).
+- **EXECUTE BRACKET:** TRADE PLAN posts to same-origin `POST /api/execute` when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set on Render. Client module `execute.js`; optional Settings → Execute URL or `HG_EXECUTE_BACKEND_OVERRIDE`. `GET /api/execute/capabilities`.
 - **CoinDCX:** No third-party CORS proxy fallbacks — only direct fetch or same-origin `/api/proxy`.
 - **BRAIN auto-warm:** On load, `hgBrainAutoWarm()` runs in the background (~800ms after boot) with the same bounded layer starters as synthesis auto-warm — non-blocking; engine gate scan may continue after the cap.
 - **TERM BASIS tab:** Dynamic `termbasis.js` module under STRATEGIES — Binance perp vs quarterly futures curve via `binanceBasis()`.
