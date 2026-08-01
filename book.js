@@ -754,6 +754,42 @@ function posSourceChip(p){
   return ' <span class="statuschip bookSrc" title="Scanner source">' + esc(src) + '</span>';
 }
 
+function bookLastExecuteEvent(blotter){
+  blotter = blotter || [];
+  for (var i = 0; i < blotter.length; i++){
+    var b = blotter[i];
+    if (b && (b.type === 'execute_ok' || b.type === 'execute_fail')) return b;
+  }
+  return null;
+}
+
+function deskExecStatusHTML(){
+  var execOn = bookExecuteReady();
+  var liveOn = __book.liveReady;
+  var chips = [
+    '<span class="statuschip' + (execOn ? ' ok' : ' warn') + '" title="/api/execute proxy">EXEC ' + (execOn ? 'ready' : 'off') + '</span>',
+    '<span class="statuschip' + (liveOn ? ' ok' : ' warn') + '" title="EXECUTE_WEBHOOK_URL">LIVE ' + (liveOn ? 'ready' : 'off') + '</span>',
+  ];
+  if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
+  if (bookAutoOn()) chips.push('<span class="statuschip" title="T1 scale · BE · trail on mark refresh">auto desk</span>');
+  var blotter = (__book.snap && __book.snap.book && __book.snap.book.blotter) || [];
+  var last = bookLastExecuteEvent(blotter);
+  if (last){
+    var ok = last.type === 'execute_ok';
+    chips.push('<span class="statuschip ' + (ok ? 'ok' : 'warn') + '">last bracket ' + (ok ? 'OK' : 'FAIL')
+      + (last.sym ? ' · ' + esc(last.sym) : '') + '</span>');
+  }
+  return '<div class="row bookExecBar" style="margin:6px 0 10px;flex-wrap:wrap;gap:6px">' + chips.join('') + '</div>';
+}
+
+function closedRowHTML(c){
+  var cls = (c.realizedUsd || 0) >= 0 ? 'ok' : 'warn';
+  return '<tr><td>' + esc(c.sym) + '</td><td>' + esc(c.dir) + '</td>'
+    + '<td>' + esc(c.strategy || '—') + posSourceChip(c) + '</td>'
+    + '<td class="' + cls + '">' + fmtUsd(c.realizedUsd) + '</td><td>'
+    + new Date(c.closedAt).toLocaleString() + '</td></tr>';
+}
+
 function posRowHTML(p){
   var upl = p.unrealizedUsd || 0;
   var uplCls = upl >= 0 ? 'ok' : 'warn';
@@ -812,6 +848,7 @@ function mount(el){
     + '<span class="note" id="bookStat">idle</span>'
     + '</div>'
     + '<div class="kv" id="bookSummary"></div>'
+    + '<div id="bookExecBar"></div>'
     + '<div id="bookDesk"></div>'
     + '<div id="bookHeat"></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
@@ -830,6 +867,7 @@ function mount(el){
 
   var stat = el.querySelector('#bookStat');
   var summary = el.querySelector('#bookSummary');
+  var execBarEl = el.querySelector('#bookExecBar');
   var deskEl = el.querySelector('#bookDesk');
   var heatEl = el.querySelector('#bookHeat');
   var autoLogEl = el.querySelector('#bookAutoLog');
@@ -861,6 +899,7 @@ function mount(el){
     if (!snap || !snap.summary){
       setStat(bookApiOn() ? 'book empty — add from scanners' : 'backend required — deploy on Render for /api/book', !bookApiOn());
       if (summary) summary.innerHTML = '';
+      if (execBarEl) execBarEl.innerHTML = '';
       if (deskEl) deskEl.innerHTML = '';
       if (heatEl) heatEl.innerHTML = '';
       if (body) body.innerHTML = '';
@@ -885,6 +924,7 @@ function mount(el){
         + '<span class="k">Realized</span><span class="v">' + fmtUsd(s.realizedUsd) + '</span>'
         + '<span class="k">Open</span><span class="v">' + s.openCount + ' positions · gross ' + fmtUsd(s.grossUsd) + '</span>';
     }
+    if (execBarEl) execBarEl.innerHTML = deskExecStatusHTML();
     if (deskEl) deskEl.innerHTML = deskHeaderHTML(__book.desk);
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
@@ -897,11 +937,8 @@ function mount(el){
     if (closedEl && snap.book && snap.book.closed){
       var closed = snap.book.closed.slice(0, 8);
       closedEl.innerHTML = closed.length
-        ? '<table class="booktbl"><thead><tr><th>Symbol</th><th>Side</th><th>Realized</th><th>Closed</th></tr></thead><tbody>'
-          + closed.map(function(c){
-            return '<tr><td>' + esc(c.sym) + '</td><td>' + esc(c.dir) + '</td><td>' + fmtUsd(c.realizedUsd) + '</td><td>'
-              + new Date(c.closedAt).toLocaleString() + '</td></tr>';
-          }).join('') + '</tbody></table>'
+        ? '<table class="booktbl"><thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Realized</th><th>Closed</th></tr></thead><tbody>'
+          + closed.map(closedRowHTML).join('') + '</tbody></table>'
         : '<div class="note">No closed trades yet.</div>';
     }
     if (crossAttrEl && snap.crossAttribution){
@@ -931,6 +968,7 @@ function mount(el){
     setStat('loading…');
     try{
       await bookPull();
+      if (typeof W.hgRefreshExecuteCap === 'function') await W.hgRefreshExecuteCap();
       await bookRefreshMarks();
       paint(__book.snap);
     }catch(e){
