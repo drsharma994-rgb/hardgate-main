@@ -1,7 +1,8 @@
 /* HARDGATE — paper fund book core tests */
 import {
   pbNewBook, pbAddIntent, pbRiskCheck, pbClosePosition, pbCloseAll,
-  pbMarkBook, pbSummary, pbAttribution, pbRollDay, pbPushNavHistory, pbEquity, PB_DEFAULTS,
+  pbMarkBook, pbSummary, pbAttribution, pbRollDay, pbPushNavHistory,
+  pbScalePosition, pbMoveStop, pbUnrealizedR, PB_DEFAULTS,
 } from '../lib/paperbook-core.mjs';
 
 let pass = 0, fail = 0;
@@ -66,6 +67,14 @@ ok(isFinite(sumEq.dayPnlUsd) && sumEq.dayPnlUsd > 0, 'daily PnL tracks equity vs
 
 var histBook = pbPushNavHistory(markedEq, sumEq);
 ok(Array.isArray(histBook.navHistory) && histBook.navHistory.length === 1, 'nav history snapshot');
+
+var omsBook = pbAddIntent(pbNewBook(), { sym: 'ETHUSD', dir: 'long', entry: 200, stop: 190, t1: 220, strategy: 'oms' }).book;
+var scaled = pbScalePosition(pbMarkBook(omsBook, { ETHUSD: 210 }), omsBook.positions[0].id, 0.5, 210);
+ok(scaled.ok && scaled.book.positions.length === 1 && scaled.book.positions[0].notionalUsd < omsBook.positions[0].notionalUsd, 'scale 50% reduces open notional');
+var moved = pbMoveStop(scaled.book, scaled.book.positions[0].id, scaled.book.positions[0].entry);
+ok(moved.ok && moved.position.stop === moved.position.entry, 'move stop to breakeven');
+var rVal = pbUnrealizedR(Object.assign({}, scaled.book.positions[0], { mark: 215 }));
+ok(rVal != null && rVal > 0, 'unrealized R positive on winner');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
