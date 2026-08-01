@@ -16,7 +16,7 @@ Registers window.HG_tabs id 'book' label 'BOOK'.
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [] };
+var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false };
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
@@ -83,7 +83,12 @@ function bookLocalLoad(){
 async function bookPull(){
   if (bookApiOn()){
     var r = await bookFetch('/api/book');
-    if (r.json && r.json.ok){ __book.snap = r.json; __book.lastAt = Date.now(); return r.json; }
+    if (r.json && r.json.ok){
+      __book.snap = r.json;
+      __book.liveReady = !!(r.json.capabilities && r.json.capabilities.liveExecute);
+      __book.lastAt = Date.now();
+      return r.json;
+    }
   }
   var local = bookLocalLoad();
   if (local && local.book){
@@ -230,14 +235,44 @@ async function bookRefreshMarks(){
 
 function autoLogHTML(){
   var log = __book.autoLog || [];
-  if (!log.length) return '<div class="note">Auto desk idle — rules: T1 scale 50% · trail BE at 1R · stop-out at mark.</div>';
+  if (!log.length) return '<div class="note">Auto desk idle — T1 50% · lock +0.5R @2R · lock +1R @3R · BE @1R · stop-out.</div>';
   return '<ul class="bookAutoLog">' + log.map(function(a){
     var txt = a.action === 'scale_t1' ? ('T1 scale ' + Math.round((a.pct || 0.5) * 100) + '% · ' + a.sym)
       : a.action === 'trail_be' ? ('Trail BE · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
+      : a.action === 'trail_lock_half' ? ('Lock +0.5R · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
+      : a.action === 'trail_lock_1r' ? ('Lock +1R · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
       : a.action === 'stop_out' ? ('Stop out · ' + a.sym + ' ' + (a.dir || ''))
       : (a.action || 'action');
     return '<li>' + esc(txt) + '</li>';
   }).join('') + '</ul>';
+}
+
+function blotterHTML(rows){
+  rows = (rows || []).slice(0, 10);
+  if (!rows.length) return '<div class="note">No blotter events yet.</div>';
+  return '<table class="booktbl"><thead><tr><th>Time</th><th>Event</th><th>Symbol</th><th>Detail</th></tr></thead><tbody>'
+    + rows.map(function(b){
+      return '<tr><td>' + new Date(b.at).toLocaleTimeString() + '</td><td>' + esc(b.type || '—') + '</td>'
+        + '<td>' + esc(b.sym || '—') + '</td><td>' + esc(b.note || b.dir || (b.qty != null ? ('qty ' + fmtF(b.qty, 4)) : '') || '') + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+async function bookLivePosition(id){
+  if (!bookApiOn()) return;
+  if (!__book.liveReady){
+    try{ alert('Live execute not configured — set EXECUTE_WEBHOOK_URL on Render.'); }catch(e){}
+    return;
+  }
+  if (!confirm('Send LIVE bracket for this paper position to the execution webhook?')) return;
+  var r = await bookFetch('/api/book/live', { method: 'POST', body: JSON.stringify({ id: id }) });
+  if (r.json && r.json.ok){
+    try{ alert('Live bracket sent (HTTP ' + r.json.status + ').'); }catch(e2){}
+  } else {
+    try{ alert('Live send failed: ' + ((r.json && r.json.reason) || r.json.response || 'error')); }catch(e3){}
+  }
+  await bookPull();
+  var pane = document.getElementById('tab_book');
+  if (pane && pane.querySelector('#bookRefresh')) pane.querySelector('#bookRefresh').click();
 }
 
 async function bookExportLp(){
@@ -258,8 +293,14 @@ async function bookExportLp(){
       + '<tr><th>MTD realized</th><td>' + fmtUsd(lp.mtdRealizedUsd) + '</td></tr>'
       + '<tr><th>Trades closed</th><td>' + lp.tradesClosed + '</td></tr>'
       + '<tr><th>Win rate</th><td>' + fmtF(lp.winRate * 100, 1) + '%</td></tr>'
-      + '<tr><th>Open positions</th><td>' + lp.openCount + '</td></tr></table>'
-      + '<p style="margin-top:24px;font-size:11px;color:#888">Paper fund simulation — not audited. For desk use only.</p>'
+      + '<tr><th>Open positions</th><td>' + lp.openCount + '</td></tr></table>';
+    if (lp.byStrategy && lp.byStrategy.length){
+      html += '<h2 style="margin-top:20px;font-size:16px">P&amp;L by strategy</h2><table><tr><th>Strategy</th><th>Trades</th><th>P&amp;L</th></tr>'
+        + lp.byStrategy.map(function(s){
+          return '<tr><td>' + esc(s.key) + '</td><td>' + s.count + '</td><td>' + fmtUsd(s.pnlUsd) + '</td></tr>';
+        }).join('') + '</table>';
+    }
+    html += '<p style="margin-top:24px;font-size:11px;color:#888">Paper fund simulation — not audited. For desk use only.</p>'
       + '</body></html>';
     var blob = new Blob([html], { type: 'text/html' });
     var a = document.createElement('a');
@@ -298,8 +339,9 @@ function bucketBarsHTML(s){
 }
 
 function posR(p){
-  if (!p || !isFinite(p.entry) || !isFinite(p.stop) || !isFinite(p.mark)) return null;
-  var risk = Math.abs(p.entry - p.stop);
+  if (!p || !isFinite(p.entry) || !isFinite(p.mark)) return null;
+  var orig = isFinite(p.origStop) ? p.origStop : p.stop;
+  var risk = Math.abs(p.entry - orig);
   if (!(risk > 0)) return null;
   var move = p.dir === 'short' ? (p.entry - p.mark) : (p.mark - p.entry);
   return move / risk;
@@ -403,6 +445,8 @@ function posRowHTML(p){
   var uplCls = upl >= 0 ? 'ok' : 'warn';
   var rVal = posR(p);
   var rCls = (rVal != null && rVal >= 0) ? 'ok' : 'warn';
+  var liveBtn = __book.liveReady
+    ? '<button class="btn" data-live="' + esc(p.id) + '" title="Send bracket to EXECUTE_WEBHOOK_URL">LIVE</button>' : '';
   return '<tr>'
     + '<td>' + esc(p.sym) + '</td>'
     + '<td>' + esc((p.dir || '').toUpperCase()) + '</td>'
@@ -415,6 +459,7 @@ function posRowHTML(p){
     + '<td>' + fmtUsd(p.riskUsd) + '</td>'
     + '<td class="bookActs">'
     + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
+    + liveBtn
     + '<button class="btn ghost" data-scale="0.5" data-id="' + esc(p.id) + '" title="Scale out 50% at mark">50%</button>'
     + '<button class="btn ghost" data-be="' + esc(p.id) + '" title="Move stop to breakeven">BE</button>'
     + '<button class="btn ghost" data-close="' + esc(p.id) + '">CLOSE</button>'
@@ -442,6 +487,7 @@ function mount(el){
     + '<div class="kv" id="bookSummary"></div>'
     + '<div id="bookHeat"></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
+    + '<div class="panel" style="margin-top:8px"><h3>Execution blotter</h3><div id="bookBlotter"></div>'
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
     + '<div style="overflow-x:auto"><table class="booktbl" id="bookTable">'
@@ -457,6 +503,7 @@ function mount(el){
   var summary = el.querySelector('#bookSummary');
   var heatEl = el.querySelector('#bookHeat');
   var autoLogEl = el.querySelector('#bookAutoLog');
+  var blotterEl = el.querySelector('#bookBlotter');
   var body = el.querySelector('#bookBody');
   var empty = el.querySelector('#bookEmpty');
   var closedEl = el.querySelector('#bookClosed');
@@ -490,6 +537,7 @@ function mount(el){
     }
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
+    if (blotterEl) blotterEl.innerHTML = blotterHTML((snap.book && snap.book.blotter) || snap.blotter);
     var positions = (snap.book && snap.book.positions) || [];
     if (body){
       body.innerHTML = positions.map(posRowHTML).join('');
@@ -577,6 +625,11 @@ function mount(el){
       if (mp) bookManagePosition(mp);
       return;
     }
+    var liveBtn = t.closest('[data-live]');
+    if (liveBtn){
+      bookLivePosition(liveBtn.getAttribute('data-live'));
+      return;
+    }
     var scaleBtn = t.closest('[data-scale]');
     if (scaleBtn){
       if (!bookApiOn()) return;
@@ -627,6 +680,7 @@ W.bookBtnHTML = bookBtnHTML;
 W.bookRefreshMarks = bookRefreshMarks;
 W.bookState = bookState;
 W.bookManagePosition = bookManagePosition;
+W.bookLivePosition = bookLivePosition;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });
