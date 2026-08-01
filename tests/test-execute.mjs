@@ -46,6 +46,8 @@ ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') 
   'book.js desk exec status bar + closed trade source chips');
 ok(bookJs.indexOf('opts.silent') >= 0 && bookJs.indexOf('bookFetchOpenKeys') >= 0,
   'book.js silent add + cross-fund open-key dedup');
+ok(bookJs.indexOf('posExecChipHTML') >= 0 && bookJs.indexOf('BRACKET OK') >= 0,
+  'book.js per-position bracket status chips');
 
 var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');
