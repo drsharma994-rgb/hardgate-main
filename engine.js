@@ -875,11 +875,13 @@ function cardHTML(r){
       + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (s && typeof G.bookBtnHTML === 'function')
+    ? G.bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { strategy: 'execute', venue: r.exchange || 'delta' }) : '';
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
     + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
-    + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn
+    + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn + bookBtn
     + '</div>';
 }
 

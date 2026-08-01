@@ -512,6 +512,14 @@ function cardHTML(r){
     planBlk = '<div class="plan">entry ' + pxF(entry) + ' · stop ' + pxF(stop)
       + (t1 != null ? ' · T1 ' + pxF(t1) : '') + '</div>';
   }
+  var bookBtn = (entry != null && stop != null && typeof W.bookBtnHTML === 'function')
+    ? W.bookBtnHTML(r.sym, r.dir, entry, stop, t1, {
+      strategy: 'startrader', tier: r.tier, klass: r.klass, venue: 'startrader',
+      layers: (r.votes || []).map(function(v){ return v.src; })
+    }) : '';
+  var tradeBtn = (entry != null && stop != null && typeof W.toTrade === 'function')
+    ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir)
+      + ',' + entry + ',' + stop + ',' + (t1 != null ? t1 : 'null') + ')">SEND TO TRADE PLAN →</button>' : '';
   return '<div class="card ' + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="gpip">' + klassChip(r.klass) + '</span>'
@@ -521,7 +529,7 @@ function cardHTML(r){
     + '<span class="k">confluence</span><span>' + r.points + ' pts · ' + r.votes.length + ' reads agree</span>'
     + '<span class="k">strategies</span><span>' + esc(voteTxt) + '</span>'
     + '<span class="k">mark</span><span>' + pxF(r.mark) + '</span>'
-  + '</div>' + planBlk + '</div>';
+  + '</div>' + planBlk + tradeBtn + bookBtn + '</div>';
 }
 
 var __st = { busy: false, ranOnce: false, run: null };
