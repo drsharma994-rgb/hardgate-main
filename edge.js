@@ -703,9 +703,11 @@ function __edgeWarmShim(){
            style: {}, firstElementChild: { style: {} },
            querySelector: function(){ return null; } };
 }
-async function edgeWarm(){
+async function edgeWarm(opts){
+  opts = (opts && typeof opts === 'object') ? opts : {};
   try{
-    if (__edgeScanSnap && __edgeScanSnap.at && Date.now() - __edgeScanSnap.at < 14 * 60 * 1000) return 'fresh';
+    if (!opts.force && __edgeScanSnap && __edgeScanSnap.at
+        && Date.now() - __edgeScanSnap.at < 14 * 60 * 1000) return 'fresh';
   }catch(e0){}
   if (__edge.busy) return 'busy';
   if (typeof xuUniverse !== 'function' || typeof xuCandles !== 'function') return 'unavailable';

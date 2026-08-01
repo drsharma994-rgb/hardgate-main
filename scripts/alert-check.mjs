@@ -397,6 +397,11 @@ async function main() {
       if ('gold' in S.lastAlertKey) S.lastAlertKey.gold = prev.gold ?? null;
     }
     await runAlertCycle();
+    let edgeInfo = null;
+    try{
+      const es = (typeof edgeScan === 'function') ? edgeScan() : null;
+      edgeInfo = { at: es && es.at, count: (es && Array.isArray(es.cands)) ? es.cands.length : 0 };
+    }catch(e){ edgeInfo = { err: String(e && e.message ? e.message : e) }; }
     // window.__hgLastEmail = {ok, err, ts} from the page's senders — read AFTER
     // the cycle so any send attempt this run is captured. If several sends fire
     // in one cycle this holds the LAST one (contract limitation).
@@ -406,7 +411,8 @@ async function main() {
     return {
       state: { delta: S.lastAlertKey.delta, coindcx: S.lastAlertKey.coindcx, gold: S.lastAlertKey.gold ?? null },
       email: email,
-      tabAlerts: tabAlerts
+      tabAlerts: tabAlerts,
+      edge: edgeInfo
     };
   }, prevState);
 
@@ -529,6 +535,9 @@ async function main() {
   const newState = result.state;
   console.log('New alert state:', JSON.stringify(newState));
   console.log('Email status (window.__hgLastEmail):', JSON.stringify(result.email));
+  if (result.edge) {
+    console.log('EDGE scan snapshot:', JSON.stringify(result.edge));
+  }
   if (result.tabAlerts) {
     newState.tabAlerts = result.tabAlerts;
     console.log('Tab setup alert keys:', Object.keys(result.tabAlerts).length);
