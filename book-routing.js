@@ -36,6 +36,7 @@ function bookScannerFund(source, meta){
     if (k === 'fx' || k === 'index' || k === 'commodity') return 'macro';
     return 'swing';
   }
+  if (source === 'carry' || source === 'termbasis') return 'macro';
   return bookRouteFund(meta);
 }
 window.bookRouteFund = bookRouteFund;

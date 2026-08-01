@@ -141,6 +141,35 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     return (c.bin && c.bin.symbol) ? c.bin.symbol : '—';
   }
 
+  function __deskSym(sym){
+    sym = String(sym || '');
+    if (/USDT$/i.test(sym)) return sym.replace(/USDT$/i, 'USD');
+    return sym;
+  }
+
+  function carryBookBtn(c){
+    try{
+      var lv = c && c.levels;
+      if (!lv || typeof bookBtnHTML !== 'function') return '';
+      var hi = c.sp && c.sp.shortVenue;
+      var lo = c.sp && c.sp.longVenue;
+      var sym = __deskSym(__venueSym(c, hi));
+      if (!sym || sym === '—') return '';
+      var entry = lv.entry;
+      var stop = lv.stopShort;
+      var t1 = entry - lv.t1Px;
+      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return '';
+      return bookBtnHTML(sym, 'short', entry, stop, t1, {
+        scanner: 'carry',
+        fund: 'macro',
+        strategy: 'carry',
+        klass: 'macro',
+        venue: hi || 'carry',
+        layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')]
+      });
+    }catch(e){ return ''; }
+  }
+
   /* ================== per-card execution levels (SL/TP audit) ==================
      carryPlan({entry, atr, spreadAPR, intervalHours}) -> levels | null.
        ENTRY  : delta-neutral pair at the reference mark (binance leg), equal
@@ -377,6 +406,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         + '<div class="gates">' + gates.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('') + '</div>'
         + '<div class="plan">' + plan + '</div>'
         + '<div class="plan">' + lvTxt + '</div>'
+        + carryBookBtn(c)
         + '</div>';
     }).join('');
   }
@@ -742,6 +772,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     window.carrySpreadPair = carrySpreadPair;
     window.carryBybitCrossCheck = carryBybitCrossCheck;
     window.carryPlan = carryPlan;             // per-card execution levels (SL/TP audit)
+    window.carryBookBtn = carryBookBtn;       // paper book CTA (short carry leg → macro fund)
     window.carryState = function carryState(){
       try{ return __carrySnap ? JSON.parse(JSON.stringify(__carrySnap)) : null; }catch(e){ return null; }
     };

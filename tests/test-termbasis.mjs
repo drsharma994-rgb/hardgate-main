@@ -29,6 +29,23 @@ ok(back && back.regime === 'backwardation', 'downward curve → backwardation');
 ok(globalThis.termBasisCurve(NaN, 1, 1) === null, 'non-finite → null');
 ok(globalThis.termBasisScore(cont) > globalThis.termBasisScore(flat), 'larger spread scores higher');
 
+ok(typeof globalThis.termBasisPlan === 'function', 'termBasisPlan exported');
+const plan = globalThis.termBasisPlan({
+  pair: 'BTCUSDT',
+  mark: 60000,
+  curve: cont
+});
+ok(plan && plan.dir === 'short' && plan.sym === 'BTCUSD', 'contango → short perp plan on desk sym');
+ok(plan && plan.stop > plan.entry && plan.t1 < plan.entry, 'short plan stop above / T1 below entry');
+ok(globalThis.termBasisPlan({ pair: 'ETHUSDT', mark: 3000, curve: back })?.dir === 'long',
+  'backwardation → long perp plan');
+
+globalThis.bookBtnHTML = function(sym, dir, entry, stop, t1, meta){
+  return '<button class="toBook" data-fund="' + (meta && meta.fund) + '">' + sym + '</button>';
+};
+const btn = globalThis.termBasisBookBtn({ pair: 'BTCUSDT', mark: 60000, curve: cont });
+ok(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'termBasisBookBtn renders when plan exists');
+
 const tabs = globalThis.window.HG_tabs || [];
 const mod = tabs.find(t => t && t.id === 'termbasis');
 ok(!!mod && mod.label === 'TERM BASIS' && typeof mod.mount === 'function' && typeof mod.refresh === 'function',
