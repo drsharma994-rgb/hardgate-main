@@ -31,26 +31,91 @@ var ST_CRYPTO = [
   ['ZECUSD','ZEC']
 ];
 
-/* klass: crypto | metal | oil | index | fx — yahoo = Yahoo chart symbol */
-var ST_OTHER = [
+/* klass: crypto | metal | commodity | index | fx | etf | share — yahoo = Yahoo chart symbol */
+var ST_METALS = [
   { sym: 'XAUUSD', base: 'XAU', klass: 'metal', yahoo: null, gold: true, label: 'Gold' },
   { sym: 'XAGUSD', base: 'XAG', klass: 'metal', yahoo: 'SI=F', label: 'Silver' },
-  { sym: 'USOIL',  base: 'WTI', klass: 'oil',   yahoo: 'CL=F', label: 'WTI Crude' },
-  { sym: 'UKOIL',  base: 'BRN', klass: 'oil',   yahoo: 'BZ=F', label: 'Brent Crude' },
+  { sym: 'XPTUSD', base: 'XPT', klass: 'metal', yahoo: 'PL=F', label: 'Platinum' },
+  { sym: 'XPDUSD', base: 'XPD', klass: 'metal', yahoo: 'PA=F', label: 'Palladium' }
+];
+
+var ST_COMMODITIES = [
+  { sym: 'USOIL',  base: 'WTI', klass: 'commodity', yahoo: 'CL=F', label: 'WTI Crude' },
+  { sym: 'UKOIL',  base: 'BRN', klass: 'commodity', yahoo: 'BZ=F', label: 'Brent Crude' },
+  { sym: 'NATGAS', base: 'NG',  klass: 'commodity', yahoo: 'NG=F', label: 'Natural Gas' },
+  { sym: 'COPPER', base: 'HG',  klass: 'commodity', yahoo: 'HG=F', label: 'Copper' },
+  { sym: 'CORN',   base: 'ZC',  klass: 'commodity', yahoo: 'ZC=F', label: 'Corn' },
+  { sym: 'WHEAT',  base: 'ZW',  klass: 'commodity', yahoo: 'ZW=F', label: 'Wheat' },
+  { sym: 'COFFEE', base: 'KC',  klass: 'commodity', yahoo: 'KC=F', label: 'Coffee' },
+  { sym: 'SUGAR',  base: 'SB',  klass: 'commodity', yahoo: 'SB=F', label: 'Sugar' },
+  { sym: 'COCOA',  base: 'CC',  klass: 'commodity', yahoo: 'CC=F', label: 'Cocoa' }
+];
+
+var ST_INDICES = [
   { sym: 'U30USD', base: 'DJ30', klass: 'index', yahoo: '^DJI', label: 'Dow Jones 30' },
   { sym: 'SPX500', base: 'SPX', klass: 'index', yahoo: '^GSPC', label: 'S&P 500' },
   { sym: 'NAS100', base: 'NDX', klass: 'index', yahoo: '^NDX', label: 'Nasdaq 100' },
+  { sym: 'US2000', base: 'RUT', klass: 'index', yahoo: '^RUT', label: 'Russell 2000' },
   { sym: 'GER40',  base: 'DAX', klass: 'index', yahoo: '^GDAXI', label: 'DAX 40' },
   { sym: 'UK100',  base: 'FTSE', klass: 'index', yahoo: '^FTSE', label: 'FTSE 100' },
+  { sym: 'FRA40',  base: 'CAC', klass: 'index', yahoo: '^FCHI', label: 'CAC 40' },
+  { sym: 'ESP35',  base: 'IBEX', klass: 'index', yahoo: '^IBEX', label: 'IBEX 35' },
+  { sym: 'AUS200', base: 'ASX', klass: 'index', yahoo: '^AXJO', label: 'ASX 200' },
   { sym: 'JPN225', base: 'N225', klass: 'index', yahoo: '^N225', label: 'Nikkei 225' },
+  { sym: 'HK50',   base: 'HSI', klass: 'index', yahoo: '^HSI', label: 'Hang Seng' },
+  { sym: 'CHN50',  base: 'SSE', klass: 'index', yahoo: '000001.SS', label: 'China A50 proxy' }
+];
+
+var ST_FX = [
   { sym: 'EURUSD', base: 'EUR', klass: 'fx', yahoo: 'EURUSD=X', label: 'Euro / USD' },
   { sym: 'GBPUSD', base: 'GBP', klass: 'fx', yahoo: 'GBPUSD=X', label: 'Pound / USD' },
   { sym: 'USDJPY', base: 'JPY', klass: 'fx', yahoo: 'JPY=X', label: 'USD / Yen' },
   { sym: 'USDCHF', base: 'CHF', klass: 'fx', yahoo: 'CHF=X', label: 'USD / Franc' },
   { sym: 'AUDUSD', base: 'AUD', klass: 'fx', yahoo: 'AUDUSD=X', label: 'Aussie / USD' },
   { sym: 'USDCAD', base: 'CAD', klass: 'fx', yahoo: 'CAD=X', label: 'USD / CAD' },
-  { sym: 'NZDUSD', base: 'NZD', klass: 'fx', yahoo: 'NZDUSD=X', label: 'Kiwi / USD' }
+  { sym: 'NZDUSD', base: 'NZD', klass: 'fx', yahoo: 'NZDUSD=X', label: 'Kiwi / USD' },
+  { sym: 'EURJPY', base: 'EURJPY', klass: 'fx', yahoo: 'EURJPY=X', label: 'Euro / Yen' },
+  { sym: 'EURGBP', base: 'EURGBP', klass: 'fx', yahoo: 'EURGBP=X', label: 'Euro / Pound' },
+  { sym: 'GBPJPY', base: 'GBPJPY', klass: 'fx', yahoo: 'GBPJPY=X', label: 'Pound / Yen' },
+  { sym: 'EURCHF', base: 'EURCHF', klass: 'fx', yahoo: 'EURCHF=X', label: 'Euro / Franc' },
+  { sym: 'EURAUD', base: 'EURAUD', klass: 'fx', yahoo: 'EURAUD=X', label: 'Euro / Aussie' },
+  { sym: 'EURNZD', base: 'EURNZD', klass: 'fx', yahoo: 'EURNZD=X', label: 'Euro / Kiwi' },
+  { sym: 'GBPAUD', base: 'GBPAUD', klass: 'fx', yahoo: 'GBPAUD=X', label: 'Pound / Aussie' },
+  { sym: 'USDNOK', base: 'NOK', klass: 'fx', yahoo: 'NOK=X', label: 'USD / Krone' },
+  { sym: 'USDSEK', base: 'SEK', klass: 'fx', yahoo: 'SEK=X', label: 'USD / Krona' },
+  { sym: 'USDMXN', base: 'MXN', klass: 'fx', yahoo: 'MXN=X', label: 'USD / Peso' },
+  { sym: 'USDZAR', base: 'ZAR', klass: 'fx', yahoo: 'ZAR=X', label: 'USD / Rand' }
 ];
+
+var ST_ETF = [
+  { sym: 'SPY',  base: 'SPY', klass: 'etf', yahoo: 'SPY', label: 'S&P 500 ETF' },
+  { sym: 'QQQ',  base: 'QQQ', klass: 'etf', yahoo: 'QQQ', label: 'Nasdaq 100 ETF' },
+  { sym: 'DIA',  base: 'DIA', klass: 'etf', yahoo: 'DIA', label: 'Dow ETF' },
+  { sym: 'IWM',  base: 'IWM', klass: 'etf', yahoo: 'IWM', label: 'Russell 2000 ETF' },
+  { sym: 'GLD',  base: 'GLD', klass: 'etf', yahoo: 'GLD', label: 'Gold ETF' },
+  { sym: 'SLV',  base: 'SLV', klass: 'etf', yahoo: 'SLV', label: 'Silver ETF' },
+  { sym: 'USO',  base: 'USO', klass: 'etf', yahoo: 'USO', label: 'Oil ETF' },
+  { sym: 'TLT',  base: 'TLT', klass: 'etf', yahoo: 'TLT', label: '20Y Treasury ETF' },
+  { sym: 'EEM',  base: 'EEM', klass: 'etf', yahoo: 'EEM', label: 'EM Equity ETF' },
+  { sym: 'XLE',  base: 'XLE', klass: 'etf', yahoo: 'XLE', label: 'Energy Sector ETF' }
+];
+
+var ST_SHARES = [
+  { sym: 'AAPL',  base: 'AAPL', klass: 'share', yahoo: 'AAPL', label: 'Apple' },
+  { sym: 'MSFT',  base: 'MSFT', klass: 'share', yahoo: 'MSFT', label: 'Microsoft' },
+  { sym: 'AMZN',  base: 'AMZN', klass: 'share', yahoo: 'AMZN', label: 'Amazon' },
+  { sym: 'GOOGL', base: 'GOOGL', klass: 'share', yahoo: 'GOOGL', label: 'Alphabet' },
+  { sym: 'META',  base: 'META', klass: 'share', yahoo: 'META', label: 'Meta' },
+  { sym: 'NVDA',  base: 'NVDA', klass: 'share', yahoo: 'NVDA', label: 'Nvidia' },
+  { sym: 'TSLA',  base: 'TSLA', klass: 'share', yahoo: 'TSLA', label: 'Tesla' },
+  { sym: 'NFLX',  base: 'NFLX', klass: 'share', yahoo: 'NFLX', label: 'Netflix' },
+  { sym: 'AMD',   base: 'AMD', klass: 'share', yahoo: 'AMD', label: 'AMD' },
+  { sym: 'BABA',  base: 'BABA', klass: 'share', yahoo: 'BABA', label: 'Alibaba' },
+  { sym: 'JPM',   base: 'JPM', klass: 'share', yahoo: 'JPM', label: 'JPMorgan' },
+  { sym: 'XOM',   base: 'XOM', klass: 'share', yahoo: 'XOM', label: 'Exxon Mobil' }
+];
+
+var ST_OTHER = ST_METALS.concat(ST_COMMODITIES, ST_INDICES, ST_FX, ST_ETF, ST_SHARES);
 
 var ST_META = {};
 for (var i = 0; i < ST_CRYPTO.length; i++){
@@ -79,7 +144,7 @@ function startraderAllContracts(){
   var out = [];
   for (var k in ST_META) if (ST_META.hasOwnProperty(k)) out.push(ST_META[k]);
   out.sort(function(a, b){
-    var rank = { crypto: 0, metal: 1, oil: 2, index: 3, fx: 4 };
+    var rank = { crypto: 0, metal: 1, commodity: 2, oil: 2, index: 3, fx: 4, etf: 5, share: 6 };
     var ra = rank[a.klass] || 9, rb = rank[b.klass] || 9;
     if (ra !== rb) return ra - rb;
     return a.sym < b.sym ? -1 : (a.sym > b.sym ? 1 : 0);
@@ -273,6 +338,11 @@ try{
   G.startraderUniverseRows = startraderUniverseRows;
   G.startraderTickers = startraderTickers;
   G.startraderFullTickers = startraderFullTickers;
+  G.startraderKlassGroups = function(){
+    return { metals: ST_METALS.length, commodities: ST_COMMODITIES.length,
+      indices: ST_INDICES.length, fx: ST_FX.length, etf: ST_ETF.length, shares: ST_SHARES.length,
+      crypto: ST_CRYPTO.length };
+  };
 }catch(e){}
 
 })();

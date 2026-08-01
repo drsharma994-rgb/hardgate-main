@@ -57,9 +57,12 @@ function load(pathRel, ctx){
   const ctx = makeCtx();
   load('startrader.js', ctx);
   const all = ctx.window.startraderAllContracts();
-  ok(all.length >= 55, 'full catalog: crypto + metals + oil + indices + fx (got ' + all.length + ')');
+  ok(all.length >= 100, 'full catalog: crypto + metals + commodities + indices + fx + etf + shares (got ' + all.length + ')');
   ok(ctx.window.startraderContract('XAUUSD').klass === 'metal', 'XAUUSD tagged metal');
-  ok(ctx.window.startraderContract('USOIL').yahoo === 'CL=F', 'USOIL maps to WTI Yahoo');
+  ok(ctx.window.startraderContract('USOIL').klass === 'commodity', 'USOIL tagged commodity');
+  ok(ctx.window.startraderContract('SPY').klass === 'etf', 'SPY tagged etf');
+  ok(ctx.window.startraderContract('AAPL').klass === 'share', 'AAPL tagged share');
+  ok(typeof ctx.window.startraderKlassGroups === 'function', 'startraderKlassGroups exported');
 }
 
 {

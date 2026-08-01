@@ -177,8 +177,197 @@ function stMajorityDir(votes){
   return votes.length ? votes[0].dir : null;
 }
 
-/* Multi-strategy synthesis — pure, vm-testable */
-function stSynthesize(contract, rows4h, rows1h, rows15m, ticker){
+function stNewsSym(contract){
+  contract = contract || {};
+  if (contract.gold || contract.sym === 'XAUUSD') return 'XAUUSD';
+  if (contract.klass === 'fx' || contract.klass === 'metal' || contract.klass === 'commodity'
+      || contract.klass === 'oil' || contract.klass === 'index' || contract.klass === 'etf'
+      || contract.klass === 'share') return contract.sym;
+  return contract.sym;
+}
+
+function stIsGoldLane(contract){
+  return !!(contract && (contract.gold || contract.sym === 'XAUUSD' || contract.sym === 'GLD'));
+}
+
+function stIsMacroUsd(contract){
+  var k = contract && contract.klass;
+  return k === 'metal' || k === 'commodity' || k === 'oil' || k === 'fx' || k === 'index'
+    || k === 'etf' || k === 'share' || stIsGoldLane(contract);
+}
+
+/* Shared market context — news, regime, sentiment, gold/macro layers (sync reads). */
+function stBuildContext(){
+  var g = stWin();
+  var ctx = {};
+  try{ if (typeof g.regimeState === 'function') ctx.regime = g.regimeState(); }catch(e){}
+  try{ if (typeof g.hgNewsState === 'function') ctx.newsState = g.hgNewsState(); }catch(e){}
+  try{ if (typeof g.rotationState === 'function') ctx.rotation = g.rotationState(); }catch(e){}
+  try{ if (typeof g.onchainState === 'function') ctx.onchain = g.onchainState(); }catch(e){}
+  try{ if (typeof g.goldspotState === 'function') ctx.goldBasis = g.goldspotState(); }catch(e){}
+  ctx.goldSetup = g.__hgGoldSetupDecision || null;
+  ctx.goldDeep = g.__hgGoldDeepVerdict || null;
+  return ctx;
+}
+
+async function stWarmContext(){
+  var g = stWin();
+  var tasks = [];
+  if (typeof g.hgNewsRefresh === 'function'){
+    tasks.push(g.hgNewsRefresh(false).catch(function(){ return null; }));
+  }
+  if (typeof g.regimeWarm === 'function'){
+    tasks.push(g.regimeWarm().catch(function(){ return null; }));
+  }
+  if (tasks.length) await Promise.all(tasks);
+  var ctx = stBuildContext();
+  if (typeof g.getGoldMacro === 'function'){
+    try{ ctx.goldMacro = await g.getGoldMacro(); }catch(e){}
+  }
+  return ctx;
+}
+
+function stContextVotes(contract, dir, ctx, ticker, rows4h, rows1h, rows15m){
+  var votes = [];
+  ctx = ctx || {};
+  var g = stWin();
+
+  if (typeof g.hgNewsRisk === 'function'){
+    try{
+      var nr = g.hgNewsRisk(stNewsSym(contract));
+      if (nr){
+        if (nr.blackout) return { veto: true, reason: nr.note || 'NEWS BLACKOUT', votes: [] };
+        if (nr.risk === 'high') votes.push({ src: 'NEWS', dir: dir, pts: 0, detail: 'high-impact horizon', caution: true });
+        else if (nr.risk === 'med') votes.push({ src: 'NEWS', dir: dir, pts: 0, detail: 'med-impact ahead', caution: true });
+        else votes.push({ src: 'NEWS', dir: dir, pts: 1, detail: 'calendar clear' });
+      }
+    }catch(e){}
+  }
+
+  if (ctx.newsState && ctx.newsState.fng){
+    var fng = ctx.newsState.fng;
+    var fv = (fng && isFinite(fng.value)) ? fng.value : (isFinite(fng) ? fng : null);
+    if (fv !== null){
+      if (contract.klass === 'crypto'){
+        if (fv >= 75 && dir === 'long') votes.push({ src: 'SENTIMENT', dir: 'short', pts: 1, detail: 'F&G greed ' + fv });
+        else if (fv <= 25 && dir === 'short') votes.push({ src: 'SENTIMENT', dir: 'long', pts: 1, detail: 'F&G fear ' + fv });
+        else votes.push({ src: 'SENTIMENT', dir: dir, pts: 1, detail: 'F&G ' + fv });
+      } else {
+        votes.push({ src: 'SENTIMENT', dir: dir, pts: 1, detail: 'F&G ' + fv + ' (macro mood)' });
+      }
+    }
+  }
+
+  if (ctx.regime && ctx.regime.playbook){
+    var pb = ctx.regime.playbook;
+    var rl = ctx.regime.label || 'REGIME';
+    if (pb.bias === 'LONG-ONLY' && dir === 'long') votes.push({ src: 'REGIME', dir: 'long', pts: 2, detail: rl + ' · long-only' });
+    else if (pb.bias === 'SHORT-ONLY' && dir === 'short') votes.push({ src: 'REGIME', dir: 'short', pts: 2, detail: rl + ' · short-only' });
+    else if (pb.bias === 'STAND-ASIDE') votes.push({ src: 'REGIME', dir: dir, pts: 0, detail: rl + ' · stand-aside', caution: true });
+    else if (pb.bias === 'BOTH') votes.push({ src: 'REGIME', dir: dir, pts: 1, detail: rl + ' · selective' });
+  }
+
+  if (stIsGoldLane(contract)){
+    if (ctx.goldSetup && ctx.goldSetup.dir && !ctx.goldSetup.aside){
+      if (ctx.goldSetup.dir === dir) votes.push({ src: 'GOLD SETUP', dir: dir, pts: 3, detail: ctx.goldSetup.reason || 'gold composite' });
+      else votes.push({ src: 'GOLD SETUP', dir: ctx.goldSetup.dir, pts: 1, detail: 'gold tab disagrees' });
+    }
+    if (ctx.goldDeep && ctx.goldDeep.dir === dir){
+      votes.push({ src: 'GOLD DEEP', dir: dir, pts: 2, detail: ctx.goldDeep.label || '37-gate deep' });
+    }
+    if (ctx.goldBasis && ctx.goldBasis.verdict){
+      if (ctx.goldBasis.verdict === 'longs-crowding' && dir === 'short')
+        votes.push({ src: 'GOLD BASIS', dir: 'short', pts: 2, detail: 'longs crowding' });
+      else if (ctx.goldBasis.verdict === 'shorts-crowding' && dir === 'long')
+        votes.push({ src: 'GOLD BASIS', dir: 'long', pts: 2, detail: 'shorts crowding' });
+    }
+    if (typeof g.goldScalpSetups === 'function' && rows15m && rows15m.length >= 30){
+      try{
+        var gs = g.goldScalpSetups({ rows15m: rows15m, newsState: ctx.newsState });
+        if (gs && gs.length){
+          var top = gs[0];
+          if (top && top.dir === dir) votes.push({ src: 'GOLD SCALP', dir: dir, pts: 2, detail: top.kind || 'gold scalp' });
+        }
+      }catch(e){}
+    }
+  }
+
+  if (ctx.goldMacro && typeof g.goldProVerdict === 'function' && stIsMacroUsd(contract)){
+    try{
+      var gm = ctx.goldMacro;
+      var gv = g.goldProVerdict({
+        goldAbove200: gm.above200, dxyTrend: gm.dxyTrend, tnxTrend: gm.tnxTrend,
+        realRateHint: gm.realRateHint, corr: gm.corr
+      });
+      if (gv && gv.dir === dir) votes.push({ src: 'MACRO', dir: dir, pts: 2, detail: gv.label || 'DXY/yield tilt' });
+      else if (gv && gv.dir && gv.dir !== dir) votes.push({ src: 'MACRO', dir: gv.dir, pts: 1, detail: 'macro leans ' + gv.dir });
+    }catch(e){}
+  }
+
+  if (contract.klass === 'crypto'){
+    if (ctx.onchain && ctx.onchain.bias && ctx.onchain.bias === dir){
+      votes.push({ src: 'ONCHAIN', dir: dir, pts: 1, detail: 'on-chain ' + dir });
+    }
+    if (ctx.rotation && typeof g.rotationSignal === 'function'){
+      try{
+        var rot = g.rotationSignal(ctx.rotation);
+        if (rot && rot.season === 'altseason' && dir === 'long' && contract.base !== 'BTC'){
+          votes.push({ src: 'ROTATION', dir: 'long', pts: 1, detail: 'altseason tailwind' });
+        } else if (rot && rot.season === 'btcseason' && contract.base === 'BTC' && dir === 'long'){
+          votes.push({ src: 'ROTATION', dir: 'long', pts: 1, detail: 'BTC season' });
+        }
+      }catch(e){}
+    }
+    if (typeof g.cryptoNewsGate === 'function'){
+      try{
+        var ng = g.cryptoNewsGate(contract.sym);
+        if (ng && ng.blackout) return { veto: true, reason: ng.note || 'crypto news gate', votes: [] };
+        if (ng && ng.caution) votes.push({ src: 'CRYPTO NEWS', dir: dir, pts: 0, detail: ng.note || 'headline caution', caution: true });
+      }catch(e){}
+    }
+    if (typeof g.smartClassify === 'function' && ticker){
+      try{
+        var cls = g.smartClassify({
+          chg24: ticker.chg24, oiChgPct: ticker.oiChgPct, fundingPct: ticker.fundingPct,
+          turnoverUsd: ticker.turnoverUsd, mark: ticker.mark
+        });
+        if (cls && cls.dir === dir) votes.push({ src: 'SMART $', dir: dir, pts: 2, detail: (cls.regime && cls.regime[0]) || 'flow read' });
+        if (typeof g.smartSetup === 'function' && cls){
+          var ss = g.smartSetup(cls, rows4h, rows1h);
+          if (ss && ss.dir === dir) votes.push({ src: 'SMART PLAN', dir: dir, pts: 2, plan: ss, detail: ss.type || 'smart plan' });
+        }
+      }catch(e){}
+    }
+    if (typeof g.oiflowClassify === 'function' && ticker){
+      try{
+        var oi = g.oiflowClassify({ fundingZ: null, oiChg: ticker.oiChgPct, pxChg: ticker.chg24 });
+        if (oi && oi.dir === dir) votes.push({ src: 'OI FLOW', dir: dir, pts: 1, detail: oi.regime || 'positioning' });
+      }catch(e){}
+    }
+  }
+
+  if (typeof g.hgStructureGate === 'function' && rows4h && rows4h.length >= 40){
+    try{
+      var sg = g.hgStructureGate(rows4h, dir);
+      if (sg && sg.veto) return { veto: true, reason: sg.note || 'structure veto', votes: [] };
+      if (sg && sg.bos) votes.push({ src: 'STRUCTURE', dir: dir, pts: 2, detail: sg.note || 'BOS aligned' });
+    }catch(e){}
+  }
+
+  if (typeof g.hgStructure === 'function' && rows4h && rows4h.length >= 40){
+    try{
+      var hs = g.hgStructure(rows4h);
+      if (hs && (hs.dir === dir || hs.trend === dir)){
+        votes.push({ src: 'STRUCTURE', dir: dir, pts: 1, detail: 'swing structure agrees' });
+      }
+    }catch(e){}
+  }
+
+  return { veto: false, votes: votes };
+}
+
+/* Multi-strategy synthesis — pure, vm-testable; optional ctx adds news/regime/sentiment/macro */
+function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
   try{
     contract = contract || {};
     ticker = ticker || { symbol: contract.sym, fundingPct: null };
@@ -245,10 +434,20 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker){
 
     if (!votes.length) return null;
 
-    for (var v = 0; v < votes.length; v++) points += votes[v].pts;
-
     var dir = stMajorityDir(votes);
     if (!dir) return null;
+
+    if (ctx){
+      var cx = stContextVotes(contract, dir, ctx, ticker, rows4h, rows1h, rows15m);
+      if (cx && cx.veto) return null;
+      if (cx && cx.votes && cx.votes.length){
+        for (var cv = 0; cv < cx.votes.length; cv++) votes.push(cx.votes[cv]);
+      }
+      dir = stMajorityDir(votes);
+      if (!dir) return null;
+    }
+
+    for (var v = 0; v < votes.length; v++) points += votes[v].pts;
 
     var agree = votes.filter(function(x){ return x.dir === dir; });
     var agreePts = 0;
@@ -262,9 +461,12 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker){
     var hasCleanSwing = agree.some(function(x){ return x.src.indexOf('SWING') === 0 && x.pts >= 3; });
     var hasCleanScalp = agree.some(function(x){ return x.src.indexOf('SCALP') === 0 && x.pts >= 2; });
     var hasEdgeStrong = agree.some(function(x){ return x.src === 'EDGE' && x.pts >= 3; });
+    var hasContext = agree.some(function(x){
+      return x.src === 'REGIME' || x.src === 'MACRO' || x.src === 'GOLD SETUP' || x.src === 'NEWS';
+    });
 
-    if (agreePts >= 6 && kindN >= 3 && (hasCleanSwing || hasEdgeStrong)) tier = 'PRIME';
-    else if (agreePts >= 4 && kindN >= 2 && (hasCleanSwing || hasCleanScalp || hasEdgeStrong)) tier = 'HIGH';
+    if (agreePts >= 7 && kindN >= 3 && (hasCleanSwing || hasEdgeStrong || hasContext)) tier = 'PRIME';
+    else if (agreePts >= 5 && kindN >= 2 && (hasCleanSwing || hasCleanScalp || hasEdgeStrong || hasContext)) tier = 'HIGH';
 
     var plan = null;
     for (var p = 0; p < agree.length; p++){
@@ -289,7 +491,10 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker){
 }
 
 function klassChip(k){
-  var labels = { crypto: 'CRYPTO', metal: 'METAL', oil: 'OIL', index: 'INDEX', fx: 'FX' };
+  var labels = {
+    crypto: 'CRYPTO', metal: 'METAL', commodity: 'COMMODITY', oil: 'COMMODITY',
+    index: 'INDEX', fx: 'FX', etf: 'ETF', share: 'SHARE'
+  };
   return labels[k] || String(k || '').toUpperCase();
 }
 
@@ -342,7 +547,7 @@ function stEdgeCandleSrc(sym){
     if (!c) return 'startrader';
     if (c.klass === 'crypto') return 'startrader-binance';
     if (c.gold) return 'startrader-gold';
-    if (c.yahoo) return 'startrader-yahoo';
+    if (c.yahoo || c.klass === 'etf' || c.klass === 'share') return 'startrader-yahoo';
     return 'startrader';
   }catch(e){ return 'startrader'; }
 }
@@ -350,13 +555,13 @@ function stEdgeCandleSrc(sym){
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>STAR TRADER <span>full CFD universe · crypto · gold · oil · indices · forex · multi-strategy confluence</span></h2>'
-    + '<div class="note" style="margin-bottom:10px">Scans every STARTRADER contract using the app\'s existing gate engines: '
-    + '<b>SWING</b> (4H cascade + funding + CUSUM) · <b>SCALP</b> (1H/15m Judas) · <b>EDGE</b> (swing-aligned entries) · '
-    + '<b>SQUEEZE</b> · <b>MEAN REV</b>. '
-    + 'Crypto uses Binance USD-M proxy; gold uses XAUUSDT/PAXG chain; oil/FX/indices use Yahoo via /api/proxy. '
-    + '<b>PRIME</b> = 3+ strategy families agree with a clean swing or strong EDGE; <b>HIGH</b> = 2+ families with a clean plan. '
-    + 'Trade execution stays on STARTRADER — this tab is scan + plan only.</div>'
+    + '<h2>STAR TRADER <span>crypto · metals · commodities · indices · forex · ETFs · shares · multi-factor confluence</span></h2>'
+    + '<div class="note" style="margin-bottom:10px">Scans the full STARTRADER CFD universe with every gate the app ships: '
+    + '<b>SWING</b> · <b>SCALP</b> · <b>EDGE</b> · <b>SQUEEZE</b> · <b>MEAN REV</b> plus '
+    + '<b>NEWS</b> · <b>REGIME</b> · <b>SENTIMENT</b> (F&amp;G) · <b>MACRO</b> (DXY/yields for USD assets) · '
+    + '<b>GOLD</b> layers on XAU/GLD · <b>STRUCTURE</b> · <b>SMART $</b> / <b>OI FLOW</b> on crypto. '
+    + 'News blackout = hard veto. Crypto: Binance proxy; metals/commodities/FX/indices/ETFs/shares: Yahoo via /api/proxy. '
+    + '<b>PRIME</b> = 3+ strategy families + regime/macro/gold context; <b>HIGH</b> = 2+ families with a clean plan.</div>'
     + '<div class="row"><button class="btn" id="stRun">SCAN STAR TRADER</button>'
     + '<span class="note" id="stStat"></span></div>'
     + '<div class="prog" id="stProg"><i></i></div>'
@@ -431,6 +636,8 @@ function mount(el){
     var t0 = Date.now();
     var skipped = 0, found = [];
     try{
+      setStat('warming news · regime · macro…');
+      var ctx = await stWarmContext();
       var contracts = startraderAllContracts();
       var tickers = (typeof startraderFullTickers === 'function') ? await startraderFullTickers() : [];
       var tmap = {};
@@ -449,7 +656,7 @@ function mount(el){
             var m15 = stDropForming(await startraderCandles(c.sym, '15m', 180), '15m');
             if (!h4 || h4.length < MIN_BARS_4H){ skipped++; return; }
             var tk = tmap[c.sym] || { symbol: c.sym, fundingPct: null, mark: null };
-            var setup = stSynthesize(c, h4, h1, m15, tk);
+            var setup = stSynthesize(c, h4, h1, m15, tk, ctx);
             if (setup) found.push(setup);
           }catch(e){ skipped++; }
         }));
@@ -557,6 +764,9 @@ W.stSynthesize = stSynthesize;
 W.stTierRank = stTierRank;
 W.stEdgeScanList = stEdgeScanList;
 W.stEdgeHasCore = stEdgeHasCore;
+W.stBuildContext = stBuildContext;
+W.stContextVotes = stContextVotes;
+W.stWarmContext = stWarmContext;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'startrader', label: 'STAR TRADER', mount: mount, refresh: startraderTabRefresh });
