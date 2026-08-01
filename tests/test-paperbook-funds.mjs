@@ -2,7 +2,7 @@
 import {
   pbNormalizeStore, pbNewStore, pbGetBook, pbSetBook, pbListFunds,
   pbCreateFund, pbResetFund, PB_DEFAULT_FUND,
-  pbConsolidatedLp, pbConsolidatedHtml,
+  pbConsolidatedLp, pbConsolidatedHtml, pbConsolidatedDigestText,
 } from '../lib/paperbook-funds.mjs';
 import { pbNewBook, pbAddIntent } from '../lib/paperbook-core.mjs';
 
@@ -52,6 +52,8 @@ ok(consolidated.fundCount === 2 && consolidated.byFund.length === 2, 'consolidat
 ok(consolidated.openCount === 2, 'consolidated sums open positions');
 var html = pbConsolidatedHtml(consolidated);
 ok(html.indexOf('Consolidated LP') >= 0 && html.indexOf('gold') >= 0, 'consolidated HTML renders funds');
+var text = pbConsolidatedDigestText(consolidated);
+ok(text.indexOf('By fund:') >= 0 && text.indexOf('gold') >= 0, 'consolidated digest text lists funds');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

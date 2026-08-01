@@ -4,6 +4,7 @@
    window opens (Sunday ~21:07 IST, same minute as the market daily digest).
 
    Requires LP_DIGEST_WEBHOOK_URL and/or TELEGRAM_TOKEN+TELEGRAM_CHAT_ID.
+   Sends consolidated all-funds rollup unless LP_DIGEST_FUND is set (or pass fund in body).
    State: scripts/.book-digest-state.json (last send stamp). Zero deps. */
 
 import { lpDigestDue } from '../lib/paperbook-core.mjs';
@@ -77,7 +78,7 @@ function startBookDigestWatch(){
   __timer = setInterval(function(){ cycle(); }, INTERVAL_MS);
   try{ __timer.unref(); }catch(e){}
   __armed = true;
-  console.log('[book-digest-watch] armed — weekly LP digest check every 15 min (Sun ~21:07 IST window)');
+  console.log('[book-digest-watch] armed — weekly consolidated LP digest every 15 min (Sun ~21:07 IST) unless LP_DIGEST_FUND is set');
   return 'armed';
 }
 

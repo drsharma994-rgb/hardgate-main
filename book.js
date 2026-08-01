@@ -452,10 +452,30 @@ async function bookSendDigest(){
     try{ alert('Digest not configured — set LP_DIGEST_WEBHOOK_URL, Telegram, and/or LP_DIGEST_EMAIL_TO (+ Resend/SendGrid/SMTP) on Render.'); }catch(e){}
     return;
   }
-  if (!confirm('Send weekly LP digest to the configured webhook?')) return;
-  var r = await bookFetch('/api/book/digest/send', { method: 'POST', body: JSON.stringify(bookFundBody({ period: 'week' })) });
+  if (!confirm('Send weekly LP digest for fund "' + bookFundId() + '"?')) return;
+  var r = await bookFetch('/api/book/digest/send', { method: 'POST', body: JSON.stringify(bookFundBody({ period: 'week', consolidated: false })) });
   if (r.json && r.json.ok){
-    try{ alert('Digest sent (HTTP ' + r.json.status + ').'); }catch(e2){}
+    try{ alert('Digest sent.'); }catch(e2){}
+  } else if (r.json && r.json.skipped){
+    try{ alert('Digest skipped: ' + (r.json.reason || 'not due')); }catch(e4){}
+  } else {
+    try{ alert('Digest send failed: ' + ((r.json && r.json.reason) || r.json.response || 'error')); }catch(e3){}
+  }
+}
+
+async function bookSendConsolidatedDigest(){
+  if (!bookApiOn()) return;
+  if (!__book.digestReady){
+    try{ alert('Digest not configured — set LP_DIGEST_WEBHOOK_URL, Telegram, and/or LP_DIGEST_EMAIL_TO (+ Resend/SendGrid/SMTP) on Render.'); }catch(e){}
+    return;
+  }
+  if (!confirm('Send consolidated weekly LP digest (all funds)?')) return;
+  var r = await bookFetch('/api/book/digest/send', { method: 'POST', body: JSON.stringify({ period: 'week', consolidated: true }) });
+  if (r.json && r.json.ok){
+    var n = (r.json.fundCount != null) ? r.json.fundCount : (r.json.digest && r.json.digest.fundCount);
+    try{ alert('Consolidated digest sent' + (n ? ' (' + n + ' funds).' : '.')); }catch(e2){}
+  } else if (r.json && r.json.skipped){
+    try{ alert('Digest skipped: ' + (r.json.reason || 'not due')); }catch(e4){}
   } else {
     try{ alert('Digest send failed: ' + ((r.json && r.json.reason) || r.json.response || 'error')); }catch(e3){}
   }
@@ -628,7 +648,7 @@ function mount(el){
     + '<label class="note">Fund <select id="bookFundSel" class="bookFundSel"></select></label>'
     + '<button class="btn ghost" id="bookNewFund" title="Create a new paper fund book">+ FUND</button>'
     + '</div>'
-    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly LP digest auto-sends Sun ~21:07 IST (webhook / Telegram / email).</p>'
+    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly consolidated LP digest auto-sends Sun ~21:07 IST (webhook / Telegram / email) unless <code>LP_DIGEST_FUND</code> pins a single fund.</p>'
     + '<div class="row" style="align-items:center;gap:12px">'
     + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
     + '</div>'
@@ -640,7 +660,8 @@ function mount(el){
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
     + '<button class="btn ghost" id="bookExportConsolidated" title="All funds — month MTD">CONSOLIDATED LP</button>'
     + '<button class="btn ghost" id="bookExportDigest">WEEKLY DIGEST</button>'
-    + '<button class="btn ghost" id="bookSendDigest" title="POST digest to LP_DIGEST_WEBHOOK_URL">SEND DIGEST</button>'
+    + '<button class="btn ghost" id="bookSendDigest" title="Weekly digest for active fund">SEND FUND DIGEST</button>'
+    + '<button class="btn ghost" id="bookSendConsolidated" title="Weekly digest — all funds rollup">SEND CONSOLIDATED</button>'
     + '<button class="btn ghost" id="bookReset">RESET BOOK</button>'
     + '<span class="note" id="bookStat">idle</span>'
     + '</div>'
@@ -771,6 +792,7 @@ function mount(el){
   el.querySelector('#bookExportConsolidated').addEventListener('click', function(){ bookExportConsolidated('month'); });
   el.querySelector('#bookExportDigest').addEventListener('click', function(){ bookExportDigest('week'); });
   el.querySelector('#bookSendDigest').addEventListener('click', bookSendDigest);
+  el.querySelector('#bookSendConsolidated').addEventListener('click', bookSendConsolidatedDigest);
   var autoChk = el.querySelector('#bookAutoRules');
   if (autoChk){
     autoChk.addEventListener('change', function(){
