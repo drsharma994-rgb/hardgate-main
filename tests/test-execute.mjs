@@ -51,6 +51,8 @@ ok(bookJs.indexOf('posExecChipHTML') >= 0 && bookJs.indexOf('BRACKET OK') >= 0,
   'book.js per-position bracket status chips');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,
   'book.js exec bar 7d rollup + brain auto-book chip');
+ok(bookJs.indexOf('brainAutoBookPrimeOnlyOn') >= 0 && bookJs.indexOf('BRAIN auto-book PRIME') >= 0,
+  'book.js exec bar reflects PRIME-only auto-book mode');
 ok(bookJs.indexOf('bookExecuteBatchPositions') >= 0 && bookJs.indexOf('bookExecuteFromPosition') >= 0,
   'book.js batch execute from position objects');
 ok(bookJs.indexOf('EXEC PENDING (') >= 0 && bookJs.indexOf('data-exec=') >= 0 && bookJs.indexOf('Click to send EXEC') >= 0,

@@ -3954,6 +3954,7 @@ function scoreRecord(setups){
 var BRAIN_AUTO_BOOK_KEY = 'hg_brain_auto_book_v1';
 var BRAIN_AUTO_BOOK_SEEN_KEY = 'hg_brain_auto_book_seen_v1';
 var BRAIN_AUTO_EXEC_AFTER_BOOK_KEY = 'hg_brain_auto_exec_v1';
+var BRAIN_AUTO_BOOK_PRIME_ONLY_KEY = 'hg_brain_auto_book_prime_v1';
 var BRAIN_AUTO_BOOK_SEEN_TTL = 8 * 60 * 60 * 1000;
 
 function brainAutoBookOn(){
@@ -3961,6 +3962,12 @@ function brainAutoBookOn(){
 }
 function brainSetAutoBook(on){
   try{ localStorage.setItem(BRAIN_AUTO_BOOK_KEY, on ? '1' : '0'); }catch(e){}
+}
+function brainAutoBookPrimeOnlyOn(){
+  try{ return localStorage.getItem(BRAIN_AUTO_BOOK_PRIME_ONLY_KEY) === '1'; }catch(e){ return false; }
+}
+function brainSetAutoBookPrimeOnly(on){
+  try{ localStorage.setItem(BRAIN_AUTO_BOOK_PRIME_ONLY_KEY, on ? '1' : '0'); }catch(e){}
 }
 function brainAutoExecAfterBookOn(){
   try{ return localStorage.getItem(BRAIN_AUTO_EXEC_AFTER_BOOK_KEY) === '1'; }catch(e){ return false; }
@@ -3995,6 +4002,7 @@ function brainRowBookOpts(row){
   try{
     var dec = row && row.dec;
     if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return null;
+    if (brainAutoBookPrimeOnlyOn() && dec.tier !== 'PRIME') return null;
     var plan = row.plan;
     if (!plan || !isFinite(plan.entry) || !isFinite(plan.stop)) return null;
     if (!familyEvOk(plan)) return null;
@@ -4863,6 +4871,8 @@ function mount(el){
       + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'
       + '<label class="note" id="brainAutoBookWrap" title="After each synthesis, add PRIME/HIGH cards with plans to the paper book (deduped; no tab switch)">'
       + '<input type="checkbox" id="brainAutoBook"> Auto-add PRIME/HIGH to book</label>'
+      + '<label class="note" id="brainAutoBookPrimeWrap" title="When auto-book is on, add PRIME tier only — skip HIGH">'
+      + '<input type="checkbox" id="brainAutoBookPrime"> PRIME only</label>'
       + '<label class="note" id="brainAutoExecWrap" title="After auto-add, send EXEC brackets for newly added positions (requires /api/execute)">'
       + '<input type="checkbox" id="brainAutoExec"> Auto EXEC after auto-add</label>'
       + '<select id="brainVenue" style="display:none" title="venue filter — combined multi-exchange universe">'
@@ -4942,10 +4952,23 @@ function mount(el){
     var wbtn = el.querySelector('#brainWarm');
     if (wbtn) wbtn.addEventListener('click', function(){ runWarmup(el); });
     var abChk = el.querySelector('#brainAutoBook');
+    var abPrimeChk = el.querySelector('#brainAutoBookPrime');
+    function syncAutoBookPrimeUi(){
+      if (!abPrimeChk) return;
+      abPrimeChk.disabled = !(abChk && abChk.checked);
+    }
     if (abChk){
       abChk.checked = brainAutoBookOn();
       abChk.addEventListener('change', function(){
         brainSetAutoBook(abChk.checked);
+        syncAutoBookPrimeUi();
+      });
+    }
+    if (abPrimeChk){
+      abPrimeChk.checked = brainAutoBookPrimeOnlyOn();
+      syncAutoBookPrimeUi();
+      abPrimeChk.addEventListener('change', function(){
+        brainSetAutoBookPrimeOnly(abPrimeChk.checked);
       });
     }
     var aeChk = el.querySelector('#brainAutoExec');
@@ -5117,6 +5140,8 @@ G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } 
 G.hgBrainAutoWarm = hgBrainAutoWarm;
 G.brainAutoBookOn = brainAutoBookOn;
 G.brainSetAutoBook = brainSetAutoBook;
+G.brainAutoBookPrimeOnlyOn = brainAutoBookPrimeOnlyOn;
+G.brainSetAutoBookPrimeOnly = brainSetAutoBookPrimeOnly;
 G.brainAutoExecAfterBookOn = brainAutoExecAfterBookOn;
 G.brainSetAutoExecAfterBook = brainSetAutoExecAfterBook;
 G.HG_tabs = G.HG_tabs || [];
