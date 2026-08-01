@@ -46,5 +46,5 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 - **BRAIN layer warm hooks:** `HG_warmups` may register `carry` and `termbasis`; BRAIN snapshots `carryState` / `termBasisState` as optional context votes (hush when cold, never dark). LIQS warm accounting uses `liqSnap`.
 - **EDGE Telegram alerts:** `runEdgeAlertCycle()` every **15 min** — quiet `edgeWarm({ force: true })` then `hgTabAlertsRunEdge()` (new setups only; 15-min dedup per `sym:dir@entry`). SWING/SCALP/GOLD/BRAIN stay on the 3-min cycle. GitHub/Render `alert-check.mjs` replays the same path every 15 min.
 - **Hosting mode:** `hghost.js` exposes `hgHostingMode()` / `hgApiAvailable()` — carry/termbasis tabs show an honest note on static GitHub Pages hosts without `/api/proxy`.
-- **PAPER BOOK:** Desk OMS + **auto rules** (T1 50% scale, BE @1R, stop-out on mark refresh). **LP REPORT** button exports monthly HTML. APIs: `/api/book/auto`, `/api/book/lp`.
+- **PAPER BOOK:** Auto trails **+0.5R @2R**, **+1R @3R**, BE @1R. **LIVE** button when `EXECUTE_WEBHOOK_URL` set on Render (`POST /api/book/live`). Execution **blotter** + `GET /api/book/capabilities`.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins `__hgBrainSetClock()` to mid-session IST so off-hours conviction haircuts do not flake CI.
