@@ -949,6 +949,43 @@ function bookFindPos(id){
   return null;
 }
 
+function bookPositionNeedsFillPoll(p, blotter){
+  if (!p || !p.id) return false;
+  if ((p.brokerFillPct || 0) >= 0.999) return false;
+  return bookBracketEventOk(bookLatestExecForPosition(blotter, p.id));
+}
+
+async function bookPollFillPosition(id){
+  if (!bookApiOn() || !bookExecuteReady()) return { ok: false, reason: 'unavailable' };
+  var p = bookFindPos(id);
+  if (!p) return { ok: false, reason: 'missing position' };
+  var blotter = (__book.snap && __book.snap.book && __book.snap.book.blotter) || [];
+  if (!bookPositionNeedsFillPoll(p, blotter)) return { ok: false, reason: 'no poll needed' };
+  var evt = bookLatestExecForPosition(blotter, p.id);
+  var params = new URLSearchParams({ positionId: p.id });
+  if (evt && evt.idempotencyKey) params.set('idempotencyKey', evt.idempotencyKey);
+  if (p.sym) params.set('sym', p.sym);
+  if (p.dir) params.set('side', p.dir);
+  if (isFinite(p.notionalUsd)) params.set('notionalUsd', String(p.notionalUsd));
+  if (isFinite(p.mark)) params.set('mark', String(p.mark));
+  if (evt && isFinite(evt.qty)) params.set('qty', String(evt.qty));
+  var pollRes = await fetch('/api/execute/fill-status?' + params.toString());
+  var pollJson = null;
+  try{ pollJson = await pollRes.json(); }catch(e){}
+  if (!pollJson || !pollJson.ok || !pollJson.fill){
+    return { ok: false, reason: (pollJson && pollJson.reason) || 'no fill from backend' };
+  }
+  var fillBody = Object.assign({ positionId: p.id, fund: p._fundId || bookFundId() }, pollJson.fill);
+  var fr = await bookFetch('/api/book/execute-fill', {
+    method: 'POST',
+    body: JSON.stringify(bookFundBody(fillBody)),
+  });
+  if (fr.json && fr.json.ok){
+    return { ok: true, fillPct: fr.json.fillPct, position: fr.json.position };
+  }
+  return { ok: false, reason: (fr.json && fr.json.reason) || 'apply failed' };
+}
+
 function bookManagePosition(p){
   try{
     var snap = __book.snap;
@@ -1228,13 +1265,27 @@ function bookBracketEventOk(evt){
   return false;
 }
 
-function posFillChipHTML(p){
-  if (!p || !(p.brokerFillPct > 0)) return '';
-  var pct = Math.round(p.brokerFillPct * 100);
-  var label = pct >= 100 ? 'FILL OK' : ('FILL ' + pct + '%');
-  return ' <span class="statuschip ' + (pct >= 100 ? 'ok' : 'warn') + '" title="Broker filled '
-    + (isFinite(p.brokerFilledQty) ? p.brokerFilledQty.toFixed(4) : pct + '%') + ' of order">'
-    + label + '</span>';
+function posFillChipHTML(p, blotter){
+  blotter = blotter || [];
+  if (!p) return '';
+  var pct = p.brokerFillPct;
+  if (pct > 0){
+    var pctR = Math.round(pct * 100);
+    var label = pctR >= 100 ? 'FILL OK' : ('FILL ' + pctR + '%');
+    var partialPoll = pctR < 100 && bookExecuteReady() && bookApiOn();
+    return ' <span class="statuschip ' + (pctR >= 100 ? 'ok' : 'warn') + '"'
+      + (partialPoll ? (' data-poll-fill="' + esc(p.id) + '" style="cursor:pointer"') : '')
+      + ' title="' + (partialPoll ? 'Click to poll for remaining fill · ' : '')
+      + 'Broker filled ' + (isFinite(p.brokerFilledQty) ? p.brokerFilledQty.toFixed(4) : pctR + '%') + ' of order">'
+      + label + '</span>';
+  }
+  if (bookPositionNeedsFillPoll(p, blotter)){
+    var pollReady = bookExecuteReady() && bookApiOn();
+    return ' <span class="statuschip warn"'
+      + (pollReady ? (' data-poll-fill="' + esc(p.id) + '" style="cursor:pointer"') : '')
+      + ' title="' + (pollReady ? 'Click to poll broker fill status' : 'Bracket sent — fill not confirmed') + '">UNFILLED</span>';
+  }
+  return '';
 }
 
 function posExecChipHTML(p, blotter){
@@ -1379,7 +1430,7 @@ function posRowHTML(p, blotter){
     + '<td class="' + rCls + '">' + (rVal != null ? fmtF(rVal, 2) + 'R' : '—') + '</td>'
     + '<td class="' + uplCls + '">' + fmtUsd(upl) + '</td>'
     + '<td>' + fmtUsd(p.riskUsd) + '</td>'
-    + '<td>' + posExecChipHTML(p, blotter) + posFillChipHTML(p) + '</td>'
+    + '<td>' + posExecChipHTML(p, blotter) + posFillChipHTML(p, blotter) + '</td>'
     + '<td class="bookActs">'
     + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
     + execBtn
@@ -1820,6 +1871,18 @@ function mount(el){
       await refresh();
       return;
     }
+    var pollFillBtn = t.closest('[data-poll-fill]');
+    if (pollFillBtn){
+      var pollId = pollFillBtn.getAttribute('data-poll-fill');
+      var pollR = await bookPollFillPosition(pollId);
+      if (pollR && pollR.ok){
+        try{ alert('Fill updated' + (isFinite(pollR.fillPct) ? ' (' + Math.round(pollR.fillPct * 100) + '%)' : '') + '.'); }catch(e){}
+      } else if (pollR && pollR.reason !== 'no poll needed'){
+        try{ alert('Fill poll: ' + pollR.reason); }catch(e2){}
+      }
+      await refresh();
+      return;
+    }
     var deskPending = t.closest('#bookDeskExecPending');
     if (deskPending){
       await bookExecuteAllFundsPending();
@@ -1898,6 +1961,8 @@ W.bookAutoRetryFailedOn = bookAutoRetryFailedOn;
 W.bookAutoExecCrossFundOn = bookAutoExecCrossFundOn;
 W.bookAutoPollFillsOn = bookAutoPollFillsOn;
 W.bookPollFills = bookPollFills;
+W.bookPollFillPosition = bookPollFillPosition;
+W.bookPositionNeedsFillPoll = bookPositionNeedsFillPoll;
 W.bookDailyLossHalted = bookDailyLossHalted;
 W.bookBlotterExecOnlyOn = bookBlotterExecOnlyOn;
 W.bookFilterBlotterRows = bookFilterBlotterRows;
