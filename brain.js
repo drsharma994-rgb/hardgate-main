@@ -3774,6 +3774,8 @@ function cardHTML(row){
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (plan && typeof G.bookBtnHTML === 'function')
     ? G.bookBtnHTML(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, plan.entry, plan.stop, plan.t1, {
+      scanner: 'brain',
+      fund: row.lane === 'gold' ? 'gold' : 'main',
       strategy: 'brain', tier: dec.tier, klass: row.lane === 'gold' ? 'metal' : 'crypto',
       layers: row.col.votes.filter(function(v){ return v.vote === dir; }).map(function(v){ return v.layer; })
     }) : '';
