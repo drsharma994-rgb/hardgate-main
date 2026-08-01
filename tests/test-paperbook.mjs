@@ -3,6 +3,7 @@ import {
   pbNewBook, pbAddIntent, pbRiskCheck, pbClosePosition, pbCloseAll,
   pbMarkBook, pbSummary, pbAttribution, pbRollDay, pbPushNavHistory,
   pbScalePosition, pbMoveStop, pbUnrealizedR, pbApplyAutoRules, pbLpReport,
+  pbWeeklyDigest, pbDigestText, pbDigestHtml, pbAtrTrailStop,
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
 } from '../lib/paperbook-core.mjs';
 
@@ -95,6 +96,20 @@ ok(stopAuto.actions.some(function(a){ return a.action === 'stop_out'; }), 'auto 
 
 var lp = pbLpReport(pbNewBook(), new Date().toISOString().slice(0, 7));
 ok(lp.month && isFinite(lp.equityUsd) && Array.isArray(lp.byStrategy), 'LP report month + equity + strategies');
+
+var dig = pbWeeklyDigest(pbNewBook(), 'week');
+ok(dig.period === 'week' && isFinite(dig.equityUsd), 'weekly digest equity');
+ok(pbDigestText(dig).indexOf('HARDGATE') >= 0, 'digest text header');
+ok(pbDigestHtml(dig).indexOf('HARDGATE') >= 0, 'digest html header');
+
+var atrBook = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, strategy: 'atr' }).book;
+var atrStop = pbAtrTrailStop(Object.assign({}, atrBook.positions[0], { mark: 105 }), 5, 2);
+ok(atrStop === 95, 'ATR trail stop long mark-2*atr');
+var atrAuto = pbApplyAutoRules(pbMarkBook(atrBook, { BTCUSD: 105 }), {
+  t1Scale: false, trailBeAtR: 0, trailLockHalfRAt2R: false, trailLock1RAt3R: false,
+  atrMarks: { BTCUSD: 5 },
+});
+ok(atrAuto.actions.some(function(a){ return a.action === 'trail_atr'; }), 'auto ATR trail at 0.5R+');
 
 var trail2 = pbAddIntent(pbNewBook(), { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, strategy: 'trail' }).book;
 var trail2Auto = pbApplyAutoRules(pbMarkBook(trail2, { BTCUSD: 120 }), { t1Scale: false, trailBeAtR: 0 });

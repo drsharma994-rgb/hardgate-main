@@ -16,7 +16,7 @@ Registers window.HG_tabs id 'book' label 'BOOK'.
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false };
+var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false };
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
@@ -86,6 +86,7 @@ async function bookPull(){
     if (r.json && r.json.ok){
       __book.snap = r.json;
       __book.liveReady = !!(r.json.capabilities && r.json.capabilities.liveExecute);
+      __book.digestReady = !!(r.json.capabilities && r.json.capabilities.digestWebhook);
       __book.lastAt = Date.now();
       return r.json;
     }
@@ -211,15 +212,40 @@ async function bookCollectMarks(snap){
   return marks;
 }
 
+async function bookCollectAtrMarks(snap){
+  snap = snap || __book.snap;
+  if (!snap || !snap.book || !snap.book.positions || !snap.book.positions.length) return {};
+  var atrFn = (typeof W.atr === 'function') ? W.atr : (typeof atr === 'function' ? atr : null);
+  if (!atrFn) return {};
+  var atrMarks = {};
+  var positions = snap.book.positions;
+  await Promise.all(positions.map(async function(p){
+    try{
+      var rows = null;
+      if (typeof W.getCandles === 'function'){
+        rows = await W.getCandles(p.sym, '4h', 20);
+      } else if (typeof W.startraderCandles === 'function' && typeof W.startraderContract === 'function' && W.startraderContract(p.sym)){
+        rows = await W.startraderCandles(p.sym, '4h', 20);
+      }
+      if (!rows || rows.length < 15) return;
+      var a = atrFn(rows, 14);
+      var last = a[a.length - 1];
+      if (isFinite(last) && last > 0) atrMarks[p.sym] = last;
+    }catch(e){}
+  }));
+  return atrMarks;
+}
+
 async function bookRefreshMarks(){
   var snap = __book.snap || await bookPull();
   if (!snap || !snap.book || !snap.book.positions || !snap.book.positions.length) return snap;
   var marks = await bookCollectMarks(snap);
   if (!Object.keys(marks).length) return snap;
+  var atrMarks = await bookCollectAtrMarks(snap);
   if (bookApiOn()){
     var r = await bookFetch('/api/book/marks', {
       method: 'POST',
-      body: JSON.stringify({ marks: marks, auto: bookAutoOn() }),
+      body: JSON.stringify({ marks: marks, atrMarks: atrMarks, auto: bookAutoOn() }),
     });
     if (r.json && r.json.ok){
       __book.snap = r.json;
@@ -235,12 +261,13 @@ async function bookRefreshMarks(){
 
 function autoLogHTML(){
   var log = __book.autoLog || [];
-  if (!log.length) return '<div class="note">Auto desk idle — T1 50% · lock +0.5R @2R · lock +1R @3R · BE @1R · stop-out.</div>';
+  if (!log.length) return '<div class="note">Auto desk idle — T1 50% · ATR trail · lock +0.5R @2R · lock +1R @3R · BE @1R · stop-out.</div>';
   return '<ul class="bookAutoLog">' + log.map(function(a){
     var txt = a.action === 'scale_t1' ? ('T1 scale ' + Math.round((a.pct || 0.5) * 100) + '% · ' + a.sym)
       : a.action === 'trail_be' ? ('Trail BE · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
       : a.action === 'trail_lock_half' ? ('Lock +0.5R · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
       : a.action === 'trail_lock_1r' ? ('Lock +1R · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R')
+      : a.action === 'trail_atr' ? ('ATR trail · ' + a.sym + ' @ ' + fmtF(a.r, 2) + 'R · ' + fmtF(a.mult, 1) + '×ATR')
       : a.action === 'stop_out' ? ('Stop out · ' + a.sym + ' ' + (a.dir || ''))
       : (a.action || 'action');
     return '<li>' + esc(txt) + '</li>';
@@ -309,6 +336,39 @@ async function bookExportLp(){
     a.click();
     URL.revokeObjectURL(a.href);
   }catch(e){}
+}
+
+async function bookExportDigest(period){
+  period = period === 'month' ? 'month' : 'week';
+  try{
+    var r = await bookFetch('/api/book/digest?period=' + encodeURIComponent(period));
+    if (!r.json || !r.json.ok) return;
+    var html = r.json.html || '';
+    if (!html && r.json.digest){
+      html = '<!DOCTYPE html><html><body><pre>' + esc(JSON.stringify(r.json.digest, null, 2)) + '</pre></body></html>';
+    }
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hardgate-digest-' + period + '-' + new Date().toISOString().slice(0, 10) + '.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){}
+}
+
+async function bookSendDigest(){
+  if (!bookApiOn()) return;
+  if (!__book.digestReady){
+    try{ alert('Digest webhook not configured — set LP_DIGEST_WEBHOOK_URL on Render.'); }catch(e){}
+    return;
+  }
+  if (!confirm('Send weekly LP digest to the configured webhook?')) return;
+  var r = await bookFetch('/api/book/digest/send', { method: 'POST', body: JSON.stringify({ period: 'week' }) });
+  if (r.json && r.json.ok){
+    try{ alert('Digest sent (HTTP ' + r.json.status + ').'); }catch(e2){}
+  } else {
+    try{ alert('Digest send failed: ' + ((r.json && r.json.reason) || r.json.response || 'error')); }catch(e3){}
+  }
 }
 
 function heatBarHTML(s){
@@ -473,7 +533,7 @@ function mount(el){
     + '<h2>PAPER FUND BOOK <span>$1M NAV · risk limits · paper fills at plan entry</span></h2>'
     + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh.</p>'
     + '<div class="row" style="align-items:center;gap:12px">'
-    + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · BE @1R · stop-out)</label>'
+    + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
@@ -481,6 +541,8 @@ function mount(el){
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
+    + '<button class="btn ghost" id="bookExportDigest">WEEKLY DIGEST</button>'
+    + '<button class="btn ghost" id="bookSendDigest" title="POST digest to LP_DIGEST_WEBHOOK_URL">SEND DIGEST</button>'
     + '<button class="btn ghost" id="bookReset">RESET BOOK</button>'
     + '<span class="note" id="bookStat">idle</span>'
     + '</div>'
@@ -591,6 +653,8 @@ function mount(el){
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
   el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
+  el.querySelector('#bookExportDigest').addEventListener('click', function(){ bookExportDigest('week'); });
+  el.querySelector('#bookSendDigest').addEventListener('click', bookSendDigest);
   var autoChk = el.querySelector('#bookAutoRules');
   if (autoChk){
     autoChk.addEventListener('change', function(){
