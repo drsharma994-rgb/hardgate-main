@@ -1,5 +1,8 @@
 /* HARDGATE — paper fund book core tests */
-import { pbNewBook, pbAddIntent, pbRiskCheck, pbClosePosition, pbMarkBook, pbSummary, PB_DEFAULTS } from '../lib/paperbook-core.mjs';
+import {
+  pbNewBook, pbAddIntent, pbRiskCheck, pbClosePosition, pbCloseAll,
+  pbMarkBook, pbSummary, pbAttribution, PB_DEFAULTS,
+} from '../lib/paperbook-core.mjs';
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
@@ -34,10 +37,22 @@ var closed = pbClosePosition(marked, marked.positions[0].id, 103);
 ok(closed.ok && closed.book.positions.length === 0, 'close position');
 
 var sum = pbSummary(closed.book);
-ok(isFinite(sum.equityUsd), 'summary equity');
+ok(isFinite(sum.equityUsd) && isFinite(sum.maxHeatPct), 'summary equity + maxHeatPct');
 
 var veto = pbRiskCheck(book, { sym: 'ETHUSD', dir: 'long', entry: 100, stop: 99, newsBlackout: true });
 ok(veto.veto, 'news blackout veto flag');
+
+var multi = pbNewBook();
+var a1 = pbAddIntent(multi, { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'brain', tier: 'PRIME' });
+var a2 = pbAddIntent(a1.book, { sym: 'ETHUSD', dir: 'short', entry: 200, stop: 210, t1: 180, strategy: 'edge', tier: 'HIGH' });
+multi = a2.book;
+var attr = pbAttribution(multi);
+ok(attr.byStrategy.length >= 2 && attr.byStrategy.some(function(r){ return r.key === 'brain'; }), 'attribution by strategy');
+ok(attr.byTier.some(function(r){ return r.key === 'PRIME' || r.key === 'HIGH'; }), 'attribution by tier');
+
+var allBook = pbMarkBook(multi, { BTCUSD: 101, ETHUSD: 195 });
+var allClosed = pbCloseAll(allBook, { BTCUSD: 101, ETHUSD: 195 });
+ok(allClosed.ok && allClosed.book.positions.length === 0 && allClosed.closed.length === 2, 'close all positions');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

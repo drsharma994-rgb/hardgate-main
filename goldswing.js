@@ -555,6 +555,8 @@ function cardHTML(c, isBest, season){
       + ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
+    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { strategy: 'goldswing', klass: 'metals' }) : '';
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span></div>'
@@ -583,6 +585,7 @@ function cardHTML(c, isBest, season){
     + lockLine
     + newsBanner + notes + seasonLine
     + tradeBtn
+    + bookBtn
     + '</div>';
 }
 

@@ -323,6 +323,14 @@ function cardHTML(r){
       + ' · T1 = sma' + MEAN_LEN + ' mean · T2 = opposite band(' + BB_LEN + ',' + BB_MULT + ')</div>'
     : '<div class="plan">levels unavailable — ATR/band data missing for ' + esc(r.sym) + '</div>';
 
+  var tradeBtn = (lv && typeof toTrade === 'function')
+    ? '<button class="toTrade" onclick="'
+      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(sig.dir) + ',' + lv.entry + ',' + lv.stop + ',' + lv.t1 + ')')
+          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (lv && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { strategy: 'meanrev' }) : '';
+
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="dir">' + dirUp + ' · MEAN REV · exp ' + fmtSignedR(bt.expR) + '</span></div>'
@@ -341,6 +349,8 @@ function cardHTML(r){
     + '</div>'
     + planBlock
     + '<div class="plan">' + record + '</div>'
+    + tradeBtn
+    + bookBtn
     + '</div>';
 }
 
