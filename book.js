@@ -16,7 +16,7 @@ Registers window.HG_tabs id 'book' label 'BOOK'.
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false };
+var __book = { snap: null, desk: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false };
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
@@ -125,7 +125,11 @@ async function bookPull(){
         try{
           var ar = await bookFetch('/api/book/attribution');
           if (ar.json && ar.json.ok && ar.json.attribution) __book.snap.crossAttribution = ar.json.attribution;
+          var dr = await bookFetch('/api/book/desk');
+          if (dr.json && dr.json.ok && dr.json.desk) __book.desk = dr.json.desk;
         }catch(e){}
+      } else {
+        __book.desk = null;
       }
       __book.lastAt = Date.now();
       return r.json;
@@ -322,9 +326,35 @@ function blotterHTML(rows){
   if (!rows.length) return '<div class="note">No blotter events yet.</div>';
   return '<table class="booktbl"><thead><tr><th>Time</th><th>Event</th><th>Symbol</th><th>Detail</th></tr></thead><tbody>'
     + rows.map(function(b){
-      return '<tr><td>' + new Date(b.at).toLocaleTimeString() + '</td><td>' + esc(b.type || '—') + '</td>'
-        + '<td>' + esc(b.sym || '—') + '</td><td>' + esc(b.note || b.dir || (b.qty != null ? ('qty ' + fmtF(b.qty, 4)) : '') || '') + '</td></tr>';
+      var type = b.type || '—';
+      var typeCls = (type === 'execute_ok') ? 'ok' : ((type === 'execute_fail') ? 'warn' : '');
+      var detail = b.note || b.dir || (b.qty != null ? ('qty ' + fmtF(b.qty, 4)) : '') || '';
+      if (b.status) detail += (detail ? ' · ' : '') + 'HTTP ' + b.status;
+      if (b.idempotencyKey) detail += (detail ? ' · ' : '') + 'idem ' + String(b.idempotencyKey).slice(0, 16);
+      return '<tr><td>' + new Date(b.at).toLocaleTimeString() + '</td><td class="' + typeCls + '">' + esc(type) + '</td>'
+        + '<td>' + esc(b.sym || '—') + '</td><td>' + esc(detail) + '</td></tr>';
     }).join('') + '</tbody></table>';
+}
+
+function deskHeaderHTML(desk){
+  if (!desk || (desk.fundCount || 0) < 2) return '';
+  var maxPct = BOOK_MAX_HEAT_PCT;
+  var heatPct = isFinite(desk.heatPct) ? desk.heatPct : 0;
+  var fill = maxPct > 0 ? Math.min(100, (heatPct / maxPct) * 100) : 0;
+  var warn = heatPct >= maxPct * 0.85;
+  var fundChips = (desk.funds || []).map(function(f){
+    return '<span class="statuschip">' + esc(f.label || f.id) + ' <b>' + fmtUsd(f.equityUsd) + '</b>'
+      + ' · heat ' + fmtF((f.heatPct || 0) * 100, 1) + '% · ' + (f.openCount || 0) + ' open</span>';
+  }).join('');
+  return '<div class="panel bookDeskHdr"><h3>Desk rollup <span>' + desk.fundCount + ' funds</span></h3>'
+    + '<div class="kv"><span class="k">Total equity</span><span class="v">' + fmtUsd(desk.equityUsd) + '</span>'
+    + '<span class="k">NAV</span><span class="v">' + fmtUsd(desk.navUsd) + '</span>'
+    + '<span class="k">Open</span><span class="v">' + (desk.openCount || 0) + ' · gross ' + fmtUsd(desk.grossUsd || 0) + '</span></div>'
+    + '<div class="bookHeatWrap"><span class="k">Cross-fund heat</span>'
+    + '<div class="bookHeatBar' + (warn ? ' warn' : '') + '"><div class="bookHeatFill" style="width:' + fill.toFixed(1) + '%"></div></div>'
+    + '<span class="v">' + fmtF(heatPct * 100, 2) + '% / ' + fmtF(maxPct * 100, 0) + '% · ' + fmtUsd(desk.heatUsd || 0) + '</span></div>'
+    + (fundChips ? '<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">' + fundChips + '</div>' : '')
+    + '</div>';
 }
 
 async function bookLivePosition(id){
@@ -375,6 +405,8 @@ async function bookExecutePosition(id){
     stop: p.stop,
     t1: t1,
     vetoed: false,
+    positionId: p.id,
+    source: 'hardgate-book',
   });
 }
 
@@ -721,6 +753,7 @@ function mount(el){
     + '<span class="note" id="bookStat">idle</span>'
     + '</div>'
     + '<div class="kv" id="bookSummary"></div>'
+    + '<div id="bookDesk"></div>'
     + '<div id="bookHeat"></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Execution blotter</h3><div id="bookBlotter"></div>'
@@ -738,6 +771,7 @@ function mount(el){
 
   var stat = el.querySelector('#bookStat');
   var summary = el.querySelector('#bookSummary');
+  var deskEl = el.querySelector('#bookDesk');
   var heatEl = el.querySelector('#bookHeat');
   var autoLogEl = el.querySelector('#bookAutoLog');
   var blotterEl = el.querySelector('#bookBlotter');
@@ -768,6 +802,7 @@ function mount(el){
     if (!snap || !snap.summary){
       setStat(bookApiOn() ? 'book empty — add from scanners' : 'backend required — deploy on Render for /api/book', !bookApiOn());
       if (summary) summary.innerHTML = '';
+      if (deskEl) deskEl.innerHTML = '';
       if (heatEl) heatEl.innerHTML = '';
       if (body) body.innerHTML = '';
       if (attrEl) attrEl.innerHTML = '';
@@ -791,6 +826,7 @@ function mount(el){
         + '<span class="k">Realized</span><span class="v">' + fmtUsd(s.realizedUsd) + '</span>'
         + '<span class="k">Open</span><span class="v">' + s.openCount + ' positions · gross ' + fmtUsd(s.grossUsd) + '</span>';
     }
+    if (deskEl) deskEl.innerHTML = deskHeaderHTML(__book.desk);
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
     if (blotterEl) blotterEl.innerHTML = blotterHTML((snap.book && snap.book.blotter) || snap.blotter);
@@ -982,6 +1018,7 @@ W.bookState = bookState;
 W.bookManagePosition = bookManagePosition;
 W.bookLivePosition = bookLivePosition;
 W.bookExecutePosition = bookExecutePosition;
+W.bookFundBody = bookFundBody;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });

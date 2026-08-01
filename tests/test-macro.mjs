@@ -242,7 +242,7 @@ async function macroOnly(setR, klines){
 /* ================= Part 4: getGoldMacro shape + hints + Yahoo last resort ================= */
 console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==');
 {
-  const SHAPE = ['dxy', 'dxyOfficial', 'goldSilverRatio', 'realRateHint', 'realYield10Y',
+  const SHAPE = ['dxy', 'dxyOfficial', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realYield10Y',
     'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend'];
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
@@ -264,7 +264,7 @@ console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==
   assert(mD.dxy === null && mD.dxyOfficial === null && mD.tnx === null && mD.tnxTrend === null &&
          mD.tnxChange20Pct === null && mD.tnxSource === null && mD.realYield10Y === null &&
          mD.realYieldTrend === null && mD.realYieldChange20Pct === null &&
-         mD.silver === null && mD.goldSilverRatio === null && mD.realRateHint === 'NEUTRAL',
+         mD.silver === null && mD.goldPx === null && mD.goldSilverRatio === null && mD.realRateHint === 'NEUTRAL',
          'all legs null + NEUTRAL hint when every source is down');
 
   // Yahoo last resort through /api/proxy: Treasury + gold-api + Binance dead
@@ -368,6 +368,19 @@ console.log('\n== Part 5: getGoldCandles chain ==');
   await getGoldCandles('1h', 3);
   await getGoldCandles('1h', 99999);
   assert(kCalls[0] === 10 && kCalls[1] === 5000, 'count clamped to [10, 5000] before hitting the chain');
+}
+
+/* ================= Part 6: macroGoldPlan ================= */
+console.log('\n== Part 6: macroGoldPlan ==');
+{
+  assert(macroGoldPlan(null) === null, 'null macro -> null plan');
+  assert(macroGoldPlan({ realRateHint: 'NEUTRAL', goldPx: 2500 }) === null, 'NEUTRAL hint -> null plan');
+  assert(macroGoldPlan({ realRateHint: 'TAILWIND' }) === null, 'missing goldPx -> null plan');
+  const tail = macroGoldPlan({ realRateHint: 'TAILWIND', goldPx: 2500 });
+  assert(tail && tail.dir === 'long' && tail.sym === 'XAUUSD' && tail.entry === 2500, 'TAILWIND -> long XAUUSD at spot');
+  assert(Math.abs(tail.stop - 2475) < 1e-9 && Math.abs(tail.t1 - 2550) < 1e-9, '1% risk · 2R T1 on tailwind plan');
+  const head = macroGoldPlan({ realRateHint: 'HEADWIND', goldPx: 3000 });
+  assert(head && head.dir === 'short' && Math.abs(head.stop - 3030) < 1e-9, 'HEADWIND -> short with 1% stop above');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

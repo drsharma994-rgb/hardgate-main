@@ -37,6 +37,7 @@ function bookScannerFund(source, meta){
     return 'swing';
   }
   if (source === 'carry' || source === 'termbasis') return 'macro';
+  if (source === 'macro' || source === 'goldpro') return 'gold';
   return bookRouteFund(meta);
 }
 window.bookRouteFund = bookRouteFund;

@@ -126,6 +126,8 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .card .toBook:hover{background:rgba(61,214,200,.08)}
 table.booktbl{width:100%;border-collapse:collapse;font-size:12px}
 table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);padding:6px 8px;text-align:left}
+.bookDeskHdr{margin-top:8px;border:1px solid rgba(255,255,255,.08)}
+.bookDeskHdr h3{font-size:14px;margin:0 0 8px}
 .bookHeatWrap{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .bookHeatBar{flex:1;min-width:120px;height:10px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
 .bookHeatBar.warn .bookHeatFill{background:linear-gradient(90deg,#c9921a,#e05a4f)}
@@ -1062,12 +1064,23 @@ function renderGoldMacroAuto(m, source){
       ? fmt(m.realYield10Y,2)+'%'+(m.realYieldTrend ? ' <span style="color:'+goldCol(m.realYieldTrend)+'">'+arr(m.realYieldTrend)+' '+m.realYieldTrend+'</span>' : '')
       : '—';
     const hintCol = m.realRateHint==='TAILWIND' ? 'var(--long)' : (m.realRateHint==='HEADWIND' ? 'var(--short)' : 'var(--mut)');
+    let macroBook = '';
+    if (typeof macroGoldPlan === 'function' && typeof bookBtnHTML === 'function'){
+      const mgp = macroGoldPlan(m);
+      if (mgp){
+        macroBook = '<div style="margin-top:8px">' + bookBtnHTML(mgp.sym, mgp.dir, mgp.entry, mgp.stop, mgp.t1, {
+          scanner: 'macro', fund: 'gold', strategy: 'macro', klass: 'metals',
+          layers: [mgp.hint || 'macro', 'real-rate']
+        }) + '</div>';
+      }
+    }
     el.innerHTML =
         '<div class="kv"><span class="k">DXY (official when FRED configured)</span><span class="v">'+dxyTxt+'</span></div>'
       + '<div class="kv"><span class="k">US10Y yield</span><span class="v">'+tnxTxt+'</span></div>'
       + (ryTxt !== '—' ? '<div class="kv"><span class="k">10Y real yield (TIPS)</span><span class="v">'+ryTxt+'</span></div>' : '')
       + '<div class="kv"><span class="k">Gold / Silver ratio</span><span class="v">'+(m.goldSilverRatio!==null&&m.goldSilverRatio!==undefined ? fmt(m.goldSilverRatio,1) : '—')+'</span></div>'
       + '<div class="kv"><span class="k">Real-rate hint for gold</span><span class="v" style="color:'+hintCol+';font-weight:600">'+(m.realRateHint||'—')+'</span></div>'
+      + macroBook
       + '<div class="kv"><span class="k">Gold candle source</span><span class="v">'+(GOLD_SRC_LABEL[source] || '—')+'</span></div>'
       + '<div class="note" style="margin-top:6px">Falling DXY + falling yields = TAILWIND for gold · both rising = HEADWIND. “—” means that data leg failed — gates that need it show N/A, the ledgers are unaffected.</div>';
   }catch(e){ el.innerHTML = '<div class="empty">macro panel render failed</div>'; }
