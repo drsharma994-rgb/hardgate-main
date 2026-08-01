@@ -38,6 +38,13 @@ function bookScannerFund(source, meta){
   }
   if (source === 'carry' || source === 'termbasis') return 'macro';
   if (source === 'macro' || source === 'goldpro') return 'gold';
+  if (source === 'smart') return 'main';
+  if (source === 'squeeze' || source === 'oiflow' || source === 'liqs' || source === 'trendmx'
+      || source === 'meanrev' || source === 'execute' || source === 'best'
+      || source === 'swing' || source === 'scalp' || source === 'swing-scalp') return 'swing';
+  if (source === 'goldswing' || source === 'goldscalp' || source === 'gold-swing'
+      || source === 'gold-scalp' || source === 'gold-deep-swing' || source === 'gold-deep-scalp'
+      || source === 'gold-setup' || source === 'gold-breakout' || source === 'gold-meanrev') return 'gold';
   return bookRouteFund(meta);
 }
 window.bookRouteFund = bookRouteFund;

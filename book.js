@@ -42,6 +42,10 @@ function bookFundBody(extra){
 
 function bookResolveFund(opts){
   opts = opts || {};
+  var scannerFn = W.hgBookScannerFund || W.bookScannerFund;
+  if (opts.scanner && typeof scannerFn === 'function'){
+    return scannerFn(opts.scanner, opts);
+  }
   if (typeof W.bookRouteFund === 'function'){
     return W.bookRouteFund({
       fund: opts.fund,

@@ -370,7 +370,7 @@ function cardHTML(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { strategy: 'oiflow' }) : '';
+    ? bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'oiflow', strategy: 'oiflow' }) : '';
   var chartBox = s ? '<div class="oiflowChart" data-sym="' + r.sym + '" style="height:180px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dirLow + '">'
     + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE' + badge + '</span></div>'

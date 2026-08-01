@@ -1612,7 +1612,7 @@ function smartCardHTML(r){
       + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
-  const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, { strategy: 'smart' }) : '';
+  const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'smart', strategy: 'smart' }) : '';
   const venueChip = r.venue === 'cdcx'
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
@@ -2517,7 +2517,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId){
   const onclickAttr = onclickJs.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
   const bookBtn = (isFinite(entry) && isFinite(stop) && typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(sym, dir, entry, stop, t1, { strategy: 'swing-scalp' }) : '';
+    ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: 'swing-scalp', strategy: 'swing-scalp' }) : '';
   return `<div class="card ${dir}">
     <div class="chead"><span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span></div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
@@ -2963,7 +2963,7 @@ async function runGold(){
         swingPlanHtml = `<div class="plan">${planBlock(casc,entry,stop,t1,t2)}</div>
           <div class="hgchart" id="goldSwingChart"></div>
           <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop},${t1})">SEND TO TRADE PLAN →</button>`
-          + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { strategy: 'gold-swing', klass: 'metals', fund: 'gold' });
+          + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-swing', strategy: 'gold-swing', klass: 'metals', fund: 'gold' });
       }
     } else {
       sg.push(['GS7','Structural R:R ≥ 2','na','no direction to measure']);
@@ -3037,7 +3037,7 @@ async function runGold(){
           logSetup(GOLD_SYM, dir, 'gold-scalp', lastClose, stop, t1);
           planHtml=`<div class="plan">${planBlock(dir,lastClose,stop,t1,oppo)}</div>
             <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop},${t1})">SEND TO TRADE PLAN →</button>`
-            + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { strategy: 'gold-scalp', klass: 'metals', fund: 'gold' });
+            + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { scanner: 'gold-scalp', strategy: 'gold-scalp', klass: 'metals', fund: 'gold' });
         }
       } else {
         g.push(['GC6','2R fits before the opposite pool','na','needs a completed sweep + reclaim first']);
@@ -3351,7 +3351,7 @@ async function runGoldDeep(){
       if(score>=60){
         logSetup(GOLD_SYM,casc,'gold-deep-swing',entry,stop,t1);
         swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')">SEND TO TRADE PLAN →</button>';
-        swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold' });
+        swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-deep-swing', strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold' });
       }
     }
     setProg('goldDeepProg',0.6);
@@ -3446,7 +3446,7 @@ async function runGoldDeep(){
         if(scoreC>=50&&swept&&reclaimed){
           logSetup(GOLD_SYM,dir,'gold-deep-scalp',scalpEntry,scalpStop,scalpT1);
           planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')">SEND TO TRADE PLAN →</button>';
-          planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold' });
+          planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold' });
         }
       }
       return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
@@ -3470,7 +3470,9 @@ async function runGoldDeep(){
           const bT1=breakDir==='long'?priceNow+2*bRisk:priceNow-2*bRisk;
           breakoutHtml='<div class="panel"><h2>Breakout Strategy <span>Bollinger squeeze + ADX expansion</span></h2>'
             +'<div class="note">Squeeze detected. ADX '+fmt(adxVal,1)+'. Price closed outside the band. Momentum expansion play.</div>'
-            +'<div class="plan">'+planBlock(breakDir,priceNow,bbMid,bT1,bT1)+'</div></div>';
+            +'<div class="plan">'+planBlock(breakDir,priceNow,bbMid,bT1,bT1)+'</div>'
+            +hgBookBtn(GOLD_SYM, breakDir, priceNow, bbMid, bT1, { scanner: 'gold-breakout', strategy: 'gold-breakout', klass: 'metals', fund: 'gold' })
+            +'</div>';
         }
       }
       const pat=candlePattern(h4);
@@ -3480,7 +3482,9 @@ async function runGoldDeep(){
         const mT1=revDir==='long'?priceNow+1.5*mRisk:priceNow-1.5*mRisk;
         meanRevHtml='<div class="panel"><h2>Mean Reversion <span>band touch + reversal candle + RSI extreme</span></h2>'
           +'<div class="note">Price at band edge. '+(pat.engulfing||'no engulf')+' · '+(pat.pinBar?'pin bar':'no pin')+' · RSI '+fmt(r4,1)+'. Counter-trend scalp.</div>'
-          +'<div class="plan">'+planBlock(revDir,priceNow,bbMid,mT1,mT1)+'</div></div>';
+          +'<div class="plan">'+planBlock(revDir,priceNow,bbMid,mT1,mT1)+'</div>'
+          +hgBookBtn(GOLD_SYM, revDir, priceNow, bbMid, mT1, { scanner: 'gold-meanrev', strategy: 'gold-meanrev', klass: 'metals', fund: 'gold' })
+          +'</div>';
       }
     }
     /* ================= assemble output ================= */
@@ -3707,7 +3711,7 @@ async function runGoldSetup(){
       + '<div class="gates">' + stampsHtml + '</div>'
       + '<div class="hgchart" id="goldSetupChart"></div>'
       + '<button class="toTrade" onclick="toTrade(\'' + GOLD_SYM + '\',\'' + dir + '\',' + decision.entry + ',' + decision.stop + ',' + decision.t1 + ')">SEND TO TRADE PLAN →</button>'
-      + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { strategy: 'gold-setup', klass: 'metals', fund: 'gold' })
+      + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { scanner: 'gold-setup', strategy: 'gold-setup', klass: 'metals', fund: 'gold' })
       + '</div>';
     if (typeof hgMiniChart === 'function') hgMiniChart($('goldSetupChart'), h4, { dir: dir, entry: decision.entry, stop: decision.stop, t1: decision.t1, t2: decision.t2 });
     if (stat) stat.textContent = decision.confidence.toLowerCase() + ' ' + dir + ' · closed bars only · ' + new Date().toTimeString().slice(0,5);
@@ -4005,7 +4009,7 @@ async function runBest(){
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2)}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { strategy: 'best' })}
+        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best' })}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
