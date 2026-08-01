@@ -329,7 +329,7 @@ function cardHTML(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (lv && typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev' }) : '';
+    ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev', t2: lv.t2 }) : '';
 
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'

@@ -79,6 +79,14 @@ ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtn
   'trade plan exposes ADD TO BOOK when plan valid');
 ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
   'swing and scalp scans use distinct scanner ids');
+
+var squeezeJs = fs.readFileSync(path.join(root, 'squeeze.js'), 'utf8');
+var edgeJs = fs.readFileSync(path.join(root, 'edge.js'), 'utf8');
+var macroJs = fs.readFileSync(path.join(root, 'macro.js'), 'utf8');
+ok(squeezeJs.indexOf("t2: s.t2") >= 0, 'squeeze book CTA passes T2 runner');
+ok(edgeJs.indexOf('t2: p.t2') >= 0, 'edge book CTA passes T2 runner');
+ok(macroJs.indexOf('t2: t2') >= 0 && macroJs.indexOf('macroGoldPlan') >= 0,
+  'macro gold plan includes T2 for book add');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,
   'book.js exec bar 7d rollup + brain auto-book chip');
 ok(bookJs.indexOf('brainAutoBookPrimeOnlyOn') >= 0 && bookJs.indexOf('BRAIN auto-book PRIME') >= 0,

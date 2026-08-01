@@ -551,7 +551,8 @@ function cardHTML(r){
       scanner: 'edge',
       fund: edgeFund,
       strategy: 'edge', klass: edgeKlass, venue: 'startrader',
-      layers: ['EDGE', 'SWING']
+      layers: ['EDGE', 'SWING'],
+      t2: p.t2
     }) : '';
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'

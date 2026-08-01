@@ -403,7 +403,8 @@ function renderLevelsPanel(o){
       fund: 'gold',
       strategy: 'goldpro',
       klass: 'metals',
-      layers: ['goldpro', '4h-levels']
+      layers: ['goldpro', '4h-levels'],
+      t2: p.t2
     });
   }
   return h + '</div>';
