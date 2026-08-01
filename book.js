@@ -1079,23 +1079,34 @@ function bookBracketExportLabel(blotter, positionId){
   return 'EXEC —';
 }
 
+function bookFillExportLabel(p, blotter){
+  if (!p) return '';
+  var pct = p.brokerFillPct;
+  if (pct >= 0.999) return 'FILL OK';
+  if (pct > 0) return 'FILL ' + Math.round(pct * 100) + '%';
+  if (p.id && bookBracketEventOk(bookLatestExecForPosition(blotter, p.id))) return 'UNFILLED';
+  return '';
+}
+
 function bookExportCSV(){
   try{
     var snap = __book.snap;
     if (!snap || !snap.book) return;
     var blotter = snap.book.blotter || [];
-    var lines = ['type,sym,dir,strategy,bucket,tier,notional,entry,stop,t1,t2,mark,pnl,bracket,openedAt,closedAt'];
+    var lines = ['type,sym,dir,strategy,bucket,tier,notional,entry,stop,t1,t2,mark,pnl,bracket,fill,openedAt,closedAt'];
     (snap.book.positions || []).forEach(function(p){
       lines.push(['open', bookCsvCell(p.sym), bookCsvCell(p.dir), bookCsvCell(p.strategy || ''),
         bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
         p.notionalUsd, p.entry, p.stop, p.t1, p.t2, p.mark, p.unrealizedUsd || 0,
         bookCsvCell(bookBracketExportLabel(blotter, p.id)),
+        bookCsvCell(bookFillExportLabel(p, blotter)),
         p.openedAt || '', ''].join(','));
     });
     (snap.book.closed || []).forEach(function(c){
       lines.push(['closed', bookCsvCell(c.sym), bookCsvCell(c.dir), bookCsvCell(c.strategy || ''),
         bookCsvCell(c.bucket || ''), bookCsvCell(c.tier || ''),
         c.notionalUsd, c.entry, c.stop, c.t1, c.t2, c.mark, c.realizedUsd || 0, '',
+        bookCsvCell(bookFillExportLabel(c, blotter)),
         c.openedAt || '', c.closedAt || ''].join(','));
     });
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -1118,13 +1129,14 @@ async function bookExportConsolidatedCSV(){
       try{ alert('No positions or closed trades across funds to export.'); }catch(e){}
       return;
     }
-    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,stop,t1,t2,mark,pnl,bracket,openedAt,closedAt'];
+    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,stop,t1,t2,mark,pnl,bracket,fill,openedAt,closedAt'];
     positions.forEach(function(p){
       lines.push([
         bookCsvCell(p._fundId || 'main'), 'open', bookCsvCell(p.sym), bookCsvCell(p.dir),
         bookCsvCell(p.strategy || ''), bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
         p.notionalUsd, p.entry, p.stop, p.t1, p.t2, p.mark, p.unrealizedUsd || 0,
         bookCsvCell(bookBracketExportLabel(blotter, p.id)),
+        bookCsvCell(bookFillExportLabel(p, blotter)),
         p.openedAt || '', '',
       ].join(','));
     });
@@ -1133,6 +1145,7 @@ async function bookExportConsolidatedCSV(){
         bookCsvCell(c._fundId || 'main'), 'closed', bookCsvCell(c.sym), bookCsvCell(c.dir),
         bookCsvCell(c.strategy || ''), bookCsvCell(c.bucket || ''), bookCsvCell(c.tier || ''),
         c.notionalUsd, c.entry, c.stop, c.t1, c.t2, c.mark, c.realizedUsd || 0, '',
+        bookCsvCell(bookFillExportLabel(c, blotter)),
         c.openedAt || '', c.closedAt || '',
       ].join(','));
     });
@@ -1376,7 +1389,7 @@ function mount(el){
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
-    + '<button class="btn ghost" id="bookExportConsolidatedCsv" style="display:none" title="Open + recently closed positions across all funds with bracket column">EXPORT ALL CSV</button>'
+    + '<button class="btn ghost" id="bookExportConsolidatedCsv" style="display:none" title="Open + recently closed positions across all funds with bracket + fill columns">EXPORT ALL CSV</button>'
     + '<button class="btn ghost" id="bookExportBlotter" title="Execution blotter CSV (all funds when multi-fund)">EXPORT BLOTTER</button>'
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
     + '<button class="btn ghost" id="bookExportConsolidated" title="All funds — month MTD">CONSOLIDATED LP</button>'

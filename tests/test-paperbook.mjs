@@ -7,6 +7,7 @@ import {
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
   pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary, pbDailyLossState,
   parseMaxDailyLossPct, pbBookCfgFromEnv, pbApplyExecuteFill, pbFillBacklogSummary, pbBracketSentForPosition,
+  pbFillExportLabel,
 } from '../lib/paperbook-core.mjs';
 import { pbConsolidatedLp, pbConsolidatedDigestText } from '../lib/paperbook-funds.mjs';
 
@@ -151,6 +152,11 @@ backlogBook = pbApplyExecuteFill(backlogBook, { positionId: bkPid, filledQty: 0.
 var bkPart = pbFillBacklogSummary(backlogBook);
 ok(bkPart.partial === 1, 'fill backlog counts partial fill');
 ok(pbBracketSentForPosition(backlogBook.blotter, bkPid), 'bracket sent helper');
+ok(pbFillExportLabel(backlogBook.positions[0], backlogBook.blotter) === 'FILL 25%', 'fill export label partial');
+var unfilledBk = pbAddIntent(pbNewBook(), { sym: 'SOLUSD', dir: 'long', entry: 100, stop: 95, t1: 110, strategy: 'uf' }).book;
+var ufPid = unfilledBk.positions[0].id;
+unfilledBk = pbPushBlotter(unfilledBk, { type: 'execute_ok', sym: 'SOLUSD', positionId: ufPid });
+ok(pbFillExportLabel(unfilledBk.positions[0], unfilledBk.blotter) === 'UNFILLED', 'fill export label unfilled after bracket');
 var exSum = pbDigestExecuteSummary(exBook, Date.now() - 86400000);
 ok(exSum.ok === 1 && exSum.pending === 0, 'digest execute summary counts OK + no pending when bracket sent');
 var exDig = pbWeeklyDigest(exBook, 'week');
