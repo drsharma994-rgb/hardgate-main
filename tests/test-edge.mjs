@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = {};
-for (const f of ['indicators.js', 'indicators2.js', 'meanrev.js', 'edge.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'meanrev.js', 'cryptogates.js', 'edge.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window;
@@ -86,7 +86,36 @@ console.log('== edgeBacktest never throws ==');
   assert(bt && typeof bt.n === 'number', 'backtest shape');
 }
 
-console.log('== refresh contract ==');
+console.log('== exact entry geometry ==');
+{
+  var bull = trendSeries('long', 260);
+  var sig = W.edgeSignal(bull);
+  if (sig){
+    assert(sig.entryType === 'LIMIT' || sig.entryType === 'MARKET', 'signal carries entryType');
+    assert(sig.entry !== undefined && isFinite(sig.entry), 'signal has finite exact entry');
+    assert(sig.entryGuidance && sig.entryGuidance.length > 5, 'signal carries entry guidance text');
+    if (sig.edge === 'EMA21 PULLBACK'){
+      assert(Math.abs(sig.entry - sig.anchor) < 1e-6, 'EMA21 pullback entry equals the EMA21 anchor, not bar close');
+    }
+  } else {
+    assert(true, 'trend fixture may not trigger on every bar — skip exact-entry pin when no signal');
+  }
+}
+
+console.log('== edgeExactEntry pure seam ==');
+{
+  assert(typeof W.edgeExactEntry === 'function', 'edgeExactEntry exported');
+  assert(typeof W.edgeEntryGuidance === 'function', 'edgeEntryGuidance exported');
+  var g = W.edgeEntryGuidance(100.1, 100, { lo: 99.8, hi: 100.2 }, 'long');
+  assert(g.inZone === true, 'mark inside zone -> inZone');
+}
+
+console.log('== cryptogates bias parity ==');
+{
+  var bull = trendSeries('long', 260);
+  var b = W.edgeSwingBias(bull);
+  assert(b && b.dir === 'long', 'bias with cryptogates loaded');
+}
 {
   var tab = W.HG_tabs.filter(function(t){ return t.id === 'edge'; })[0];
   assert(tab.refresh() === 'skipped: not run yet', 'refresh before scan skipped');

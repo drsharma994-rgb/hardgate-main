@@ -1,12 +1,16 @@
 /* =========================================================================
 HARDGATE — edge.js
-EDGE tab v3: SWING-aligned entry scanner (Delta India + CoinDCX).
+EDGE tab v4: SWING-aligned entry scanner (Delta India + CoinDCX).
 
-Finds high-quality continuation entries that AGREE with SWING SCAN:
+Finds high-quality continuation entries that AGREE with SWING SCAN
+(cryptogates swingGateMatrix G1–G3 when loaded):
   LONG  — 4H cascade bullish + HTF above EMA200 + pullback to value
-          (EMA21 hold, sweep-reclaim, or aligned range-bottom touch)
+          (LIMIT @ EMA21, sweep-reclaim level, or Donchian range edge)
   SHORT — 4H cascade bearish + HTF below EMA200 + rally into resistance
-          (EMA21 reject, sweep-fail, or aligned range-top touch)
+          (LIMIT @ EMA21, sweep-fail level, or Donchian range edge)
+
+Every card names one EXACT resting entry (structure level, not bar close)
+plus IN-ZONE / LIMIT guidance vs the live mark.
 
 Technical: Donchian, %B, RSI, EMA stack, structure gate, liquidity pools,
 TTM squeeze, vol regime, mean-reversion layer.
@@ -14,7 +18,8 @@ Fundamental: venue turnover, native funding (Delta), cross-venue listing.
 
 Pure exports (never throw):
   edgeSignal, edgeEnrich, edgeAssess, edgePlan, edgeBacktest,
-  edgeMaxSafeLev, edgeUseLev, edgeSwingRead, edgeSwingBias
+  edgeMaxSafeLev, edgeUseLev, edgeSwingRead, edgeSwingBias,
+  edgeEntryGuidance, edgeExactEntry
 ========================================================================= */
 (function(){
 'use strict';
@@ -150,16 +155,124 @@ function edgeSwingRead(rows){
   }catch(e){ return out; }
 }
 
-/* Mandatory bias: SWING G1 + G2 HTF + not volatile */
+/* Mandatory bias: SWING G1 cascade+spread + G2 HTF + G3 RSI (cryptogates parity) */
 function edgeSwingBias(rows){
   try{
     if (!rows || rows.length < 210) return null;
     var sw = edgeSwingRead(rows);
     if (!sw.dir) return null;
     if (sw.htf && sw.htf !== sw.dir) return null;
+    var passed = null, clean = false, anchorLevel = null;
+    if (typeof swingGateMatrix === 'function'){
+      var m = swingGateMatrix(rows, null);
+      if (!m || !m.dir || m.dir !== sw.dir) return null;
+      if (!m.gates[0][1] || !m.gates[1][1] || !m.gates[2][1]) return null;
+      passed = m.passed;
+      clean = m.clean === true;
+      anchorLevel = isFinite(m.level) ? m.level : null;
+    }
     var reg = (typeof detectRegime === 'function') ? detectRegime(rows) : null;
     if (reg && reg.regime === 'volatile') return null;
-    return { dir: sw.dir, swing: sw, regime: reg ? reg.label : 'n/a' };
+    return {
+      dir: sw.dir, swing: sw, regime: reg ? reg.label : 'n/a',
+      swingPassed: passed, swingClean: clean, anchorLevel: anchorLevel
+    };
+  }catch(e){ return null; }
+}
+
+/* Exact resting entry + zone from the trigger bar — never the close when a
+   structure level is the honest fill price. */
+function edgeExactEntry(biasDir, kind, A, i, ctx){
+  try{
+    ctx = ctx || {};
+    var c = A.closes[i], h = A.highs[i], l = A.lows[i];
+    var at = A.atr[i], tol = PULL_ATR * at;
+    var e21 = A.e21[i], dcLo = A.dc.lo[i], dcHi = A.dc.up[i];
+    var mark = c, entry, zoneLo, zoneHi, entryType = 'LIMIT', anchor;
+
+    if (biasDir === 'long'){
+      if (kind === 'EMA21 PULLBACK' && isFinite(e21)){
+        entry = e21;
+        anchor = e21;
+        zoneLo = e21 - tol * 0.5;
+        zoneHi = e21 + tol * 0.25;
+        if (mark > zoneHi + tol * 0.5) return null;
+        entryType = (mark >= zoneLo && mark <= zoneHi + tol * 0.25) ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'SWEEP + RECLAIM' && isFinite(ctx.priorLo)){
+        entry = ctx.priorLo;
+        anchor = ctx.priorLo;
+        zoneLo = ctx.priorLo - tol * 0.25;
+        zoneHi = ctx.priorLo + tol * 0.5;
+        entryType = mark >= entry ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'RANGE BOTTOM (trend)' && isFinite(dcLo)){
+        entry = dcLo;
+        anchor = dcLo;
+        zoneLo = dcLo - tol * 0.25;
+        zoneHi = dcLo + tol * 0.5;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
+      } else return null;
+      if (!(entry < mark + tol * 1.25)) return null;
+    } else {
+      if (kind === 'EMA21 REJECTION' && isFinite(e21)){
+        entry = e21;
+        anchor = e21;
+        zoneLo = e21 - tol * 0.25;
+        zoneHi = e21 + tol * 0.5;
+        if (mark < zoneLo - tol * 0.5) return null;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'SWEEP + FAIL' && isFinite(ctx.priorHi)){
+        entry = ctx.priorHi;
+        anchor = ctx.priorHi;
+        zoneLo = ctx.priorHi - tol * 0.5;
+        zoneHi = ctx.priorHi + tol * 0.25;
+        entryType = mark <= entry ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'RANGE TOP (trend)' && isFinite(dcHi)){
+        entry = dcHi;
+        anchor = dcHi;
+        zoneLo = dcHi - tol * 0.5;
+        zoneHi = dcHi + tol * 0.25;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
+      } else return null;
+      if (!(entry > mark - tol * 1.25)) return null;
+    }
+    return {
+      entry: entry, mark: mark, entryType: entryType, anchor: anchor,
+      zone: { lo: zoneLo, hi: zoneHi }
+    };
+  }catch(e){ return null; }
+}
+
+function edgeEntryGuidance(mark, entry, zone, dir){
+  try{
+    mark = +mark; entry = +entry;
+    if (!isFinite(mark) || !isFinite(entry)) return { inZone: false, text: 'mark unavailable' };
+    var zLo = zone && isFinite(zone.lo) ? zone.lo : entry;
+    var zHi = zone && isFinite(zone.hi) ? zone.hi : entry;
+    var inZone = mark >= zLo && mark <= zHi;
+    if (inZone) return { inZone: true, text: 'price in entry zone — market fill valid at ' + pxF(entry) };
+    if (dir === 'long'){
+      return mark < entry
+        ? { inZone: false, text: 'LIMIT @ ' + pxF(entry) + ' — mark below entry, order working' }
+        : { inZone: false, text: 'LIMIT @ ' + pxF(entry) + ' — wait for pullback to structure' };
+    }
+    return mark > entry
+      ? { inZone: false, text: 'LIMIT @ ' + pxF(entry) + ' — mark above entry, order working' }
+      : { inZone: false, text: 'LIMIT @ ' + pxF(entry) + ' — wait for rally into resistance' };
+  }catch(e){ return { inZone: false, text: '' }; }
+}
+
+function finalizeSetup(biasDir, A, i, spec){
+  try{
+    var ex = edgeExactEntry(biasDir, spec.edge, A, i, spec.ctx);
+    if (!ex) return null;
+    var p = planFromRisk(biasDir, ex.entry, spec.stop, spec.t1Hint, spec.t2Hint);
+    if (!p) return null;
+    var guide = edgeEntryGuidance(ex.mark, ex.entry, ex.zone, biasDir);
+    return Object.assign(p, {
+      edge: spec.edge, swept: spec.swept, extreme: spec.extreme,
+      mark: ex.mark, entry: ex.entry, entryType: ex.entryType,
+      anchor: ex.anchor, zone: ex.zone, entryGuidance: guide.text, inZone: guide.inZone
+    });
   }catch(e){ return null; }
 }
 
@@ -211,9 +324,11 @@ function trySetupAt(A, i, biasDir){
         if (hold && pbOk){
           var extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           var stopL = Math.min(extremeL, l) - STOP_ATR * at;
-          var pL = planFromRisk('long', c, stopL, isFinite(e9) ? e9 + at : c + 2 * (c - stopL),
-            isFinite(dcHi) ? dcHi : null);
-          if (pL) return Object.assign(pL, { edge: 'EMA21 PULLBACK', swept: false, extreme: extremeL });
+          var pL = finalizeSetup('long', A, i, {
+            edge: 'EMA21 PULLBACK', swept: false, extreme: extremeL, stop: stopL,
+            t1Hint: isFinite(e9) ? e9 + at : null, t2Hint: isFinite(dcHi) ? dcHi : null, ctx: {}
+          });
+          if (pL) return pL;
         }
       }
 
@@ -226,8 +341,12 @@ function trySetupAt(A, i, biasDir){
       if (sweptLo && isFinite(closePos) && closePos >= 0.55){
         extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
         stopL = extremeL - STOP_ATR * at;
-        pL = planFromRisk('long', c, stopL, isFinite(dcMid) ? dcMid : c + 2 * (c - stopL), dcHi);
-        if (pL) return Object.assign(pL, { edge: 'SWEEP + RECLAIM', swept: true, extreme: extremeL });
+        pL = finalizeSetup('long', A, i, {
+          edge: 'SWEEP + RECLAIM', swept: true, extreme: extremeL, stop: stopL,
+          t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcHi) ? dcHi : null,
+          ctx: { priorLo: priorLo }
+        });
+        if (pL) return pL;
       }
 
       /* 3) Aligned range-bottom touch (only in uptrend — at lower Donchian) */
@@ -235,8 +354,11 @@ function trySetupAt(A, i, biasDir){
         if (isFinite(closePos) && closePos >= 0.5){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = extremeL - STOP_ATR * at;
-          pL = planFromRisk('long', c, stopL, dcMid, dcHi);
-          if (pL) return Object.assign(pL, { edge: 'RANGE BOTTOM (trend)', swept: false, extreme: extremeL });
+          pL = finalizeSetup('long', A, i, {
+            edge: 'RANGE BOTTOM (trend)', swept: false, extreme: extremeL, stop: stopL,
+            t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcHi) ? dcHi : null, ctx: {}
+          });
+          if (pL) return pL;
         }
       }
     }
@@ -252,9 +374,11 @@ function trySetupAt(A, i, biasDir){
         if (reject && pbHiOk){
           var extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           var stopS = Math.max(extremeH, h) + STOP_ATR * at;
-          var pS = planFromRisk('short', c, stopS, isFinite(e9) ? e9 - at : c - 2 * (stopS - c),
-            isFinite(dcLo) ? dcLo : null);
-          if (pS) return Object.assign(pS, { edge: 'EMA21 REJECTION', swept: false, extreme: extremeH });
+          var pS = finalizeSetup('short', A, i, {
+            edge: 'EMA21 REJECTION', swept: false, extreme: extremeH, stop: stopS,
+            t1Hint: isFinite(e9) ? e9 - at : null, t2Hint: isFinite(dcLo) ? dcLo : null, ctx: {}
+          });
+          if (pS) return pS;
         }
       }
 
@@ -267,8 +391,12 @@ function trySetupAt(A, i, biasDir){
       if (sweptHi && isFinite(closePos) && closePos <= 0.45){
         extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
         stopS = extremeH + STOP_ATR * at;
-        pS = planFromRisk('short', c, stopS, isFinite(dcMid) ? dcMid : c - 2 * (stopS - c), dcLo);
-        if (pS) return Object.assign(pS, { edge: 'SWEEP + FAIL', swept: true, extreme: extremeH });
+        pS = finalizeSetup('short', A, i, {
+          edge: 'SWEEP + FAIL', swept: true, extreme: extremeH, stop: stopS,
+          t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcLo) ? dcLo : null,
+          ctx: { priorHi: priorHi }
+        });
+        if (pS) return pS;
       }
 
       /* 3) Aligned range-top rejection */
@@ -276,8 +404,11 @@ function trySetupAt(A, i, biasDir){
         if (isFinite(closePos) && closePos <= 0.5){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = extremeH + STOP_ATR * at;
-          pS = planFromRisk('short', c, stopS, dcMid, dcLo);
-          if (pS) return Object.assign(pS, { edge: 'RANGE TOP (trend)', swept: false, extreme: extremeH });
+          pS = finalizeSetup('short', A, i, {
+            edge: 'RANGE TOP (trend)', swept: false, extreme: extremeH, stop: stopS,
+            t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcLo) ? dcLo : null, ctx: {}
+          });
+          if (pS) return pS;
         }
       }
     }
@@ -494,16 +625,25 @@ function edgeBacktest(rows){
   }catch(e){ return btZero(); }
 }
 
-function edgePlanHtml(p){
+function edgePlanHtml(p, sig){
   if (!p) return '';
+  var head = (p.entryType === 'MARKET' || (sig && sig.entryType === 'MARKET'))
+    ? 'MARKET @ <b>' + pxF(p.entry) + '</b>'
+    : 'LIMIT @ <b>' + pxF(p.entry) + '</b>';
+  if (sig && sig.anchor && isFinite(sig.anchor) && sig.anchor !== p.entry){
+    head += ' <span style="color:var(--mut)">(anchor ' + pxF(sig.anchor) + ')</span>';
+  }
   var levLine = ' · USE <b>' + p.useLev + 'x</b> (conservative · max safe ' + p.maxLev + 'x)';
   var t2 = (p.t2 !== null && isFinite(p.t2) && isFinite(p.rr2))
     ? ' · T2 ' + pxF(p.t2) + ' (' + fmtF(p.rr2, 1) + 'R)' : '';
-  return 'ENTRY <b>' + pxF(p.entry) + '</b> · STOP <b>' + pxF(p.stop) + '</b>'
+  var guide = (sig && sig.entryGuidance)
+    ? '<div class="note" style="margin-top:4px;font-size:11px">' + esc(sig.entryGuidance) + '</div>' : '';
+  return head + ' · STOP <b>' + pxF(p.stop) + '</b>'
     + ' · T1 ' + pxF(p.t1) + ' (' + fmtF(p.rr1, 1) + 'R)' + t2
     + ' · risk ' + fmtF(p.riskPct, 2) + '%' + levLine
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(p.entry, p.stop) : '')
-    + (typeof hgSessionChip === 'function' ? hgSessionChip() : '');
+    + (typeof hgSessionChip === 'function' ? hgSessionChip() : '')
+    + guide;
 }
 
 function venueLabel(item){
@@ -531,7 +671,7 @@ function cardHTML(r){
   var gates = (en.parts || []).filter(function(pt){ return pt.pts > 0; }).slice(0, 6)
     .map(function(pt){ return '<span class="gpip ok">' + esc(pt.label) + '</span>'; }).join('');
   var planBlock = p
-    ? '<div class="plan">' + edgePlanHtml(p)
+    ? '<div class="plan">' + edgePlanHtml(p, sig)
       + ' — SWING-aligned <b>' + esc(venueLabel(r.item)) + '</b>'
       + (r.candleSrc ? ' · ' + esc(r.candleSrc) : '')
       + '</div>' : '<div class="plan">levels unavailable</div>';
@@ -651,8 +791,9 @@ function mount(el){
 
   el.innerHTML = '<div class="panel">'
     + '<h2>EDGE Scanner <span>SWING-aligned entries · Delta + CoinDCX</span></h2>'
-    + '<p class="note">Only shows setups that <b>agree with SWING SCAN</b> (4H EMA cascade G1 + price vs EMA200 G2).'
-    + ' Strategies: <b>EMA21 pullback</b>, <b>sweep+reclaim/fail</b>, <b>aligned range edge</b>.'
+    + '<p class="note">Only shows setups that <b>agree with SWING SCAN</b> (G1 cascade+spread · G2 EMA200 side · G3 RSI — same as cryptogates when loaded).'
+    + ' Strategies: <b>LIMIT @ EMA21 pullback/rejection</b>, <b>LIMIT @ sweep reclaim/fail level</b>, <b>LIMIT @ Donchian range edge</b>.'
+    + ' Each card names the exact resting entry (structure level, not bar close) plus in-zone guidance.'
     + ' Confluence: structure BOS, vol regime, liquidity, TTM squeeze, funding, turnover.'
     + ' Min R:R ' + MIN_RR + ' · tally ≥ ' + MIN_TALLY + ' · <b>USE Nx</b> = 50% max-safe.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
@@ -777,6 +918,8 @@ W.edgeMaxSafeLev = edgeMaxSafeLev;
 W.edgeUseLev = edgeUseLev;
 W.edgeSwingRead = edgeSwingRead;
 W.edgeSwingBias = edgeSwingBias;
+W.edgeEntryGuidance = edgeEntryGuidance;
+W.edgeExactEntry = edgeExactEntry;
 W.edgeScanList = edgeScanList;
 W.edgeCardHTML = cardHTML;
 W.edgeDropForming = edgeDropForming;
