@@ -9,7 +9,7 @@
   },
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-01T13:22:36.382Z"
+    "at": "2026-08-01T14:46:32.875Z"
   },
   "setups": {
     "keys": {
@@ -73,23 +73,38 @@
       "B-AGLD_USDT:short@0.147": 1785580955194,
       "B-ESPORTS_USDT:short@0.01801": 1785580955194,
       "B-JCT_USDT:short@0.003561": 1785580955194,
-      "B-IO_USDT:short@0.1326": 1785580955194
+      "B-IO_USDT:short@0.1326": 1785580955194,
+      "B-LPT_USDT:short@1.273": 1785595592876,
+      "B-1000BONK_USDT:short@0.002786": 1785595592876,
+      "B-ZRO_USDT:short@0.7348": 1785595592876,
+      "B-ICNT_USDT:short@0.1307": 1785595592876,
+      "B-EPIC_USDT:long@0.8676": 1785595592876,
+      "B-BIRB_USDT:short@0.04924": 1785595592876,
+      "B-TURTLE_USDT:long@0.04275": 1785595592876,
+      "B-US_USDT:long@0.051769": 1785595592876,
+      "B-VANRY_USDT:short@0.003903": 1785595592876,
+      "B-ESP_USDT:short@0.06381": 1785595592876,
+      "B-AERO_USDT:short@0.4148": 1785595592876,
+      "B-BIGTIME_USDT:short@0.005624": 1785595592876,
+      "B-ADA_USDT:long@0.1731": 1785595592876,
+      "B-STABLE_USDT:short@0.03401": 1785595592876
     },
-    "at": "2026-08-01T13:22:36.382Z"
+    "at": "2026-08-01T14:46:33.311Z"
   },
-  "engineAlertAt": "2026-08-01T11:47:52.525Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
       "pending": 0,
       "fail": 0,
-      "ok": 0
+      "ok": 0,
+      "liveOk": 0,
+      "liveFail": 0
     },
     "at": "2026-08-01T10:42:35.819Z"
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-01T13:22:36.755Z"
+    "at": "2026-08-01T14:46:33.603Z"
   },
   "bookFill": {
     "key": "u0|p0",
