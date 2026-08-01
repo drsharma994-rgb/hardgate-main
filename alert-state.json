@@ -9,52 +9,10 @@
   },
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-01T17:00:35.199Z"
+    "at": "2026-08-01T18:11:28.311Z"
   },
   "setups": {
     "keys": {
-      "B-LTC_USDT:short@44.88": 1785520546309,
-      "B-KAT_USDT:short@0.004351": 1785520546309,
-      "B-SHELL_USDT:short@0.01805": 1785520546309,
-      "B-CC_USDT:short@0.11886": 1785520546309,
-      "B-XPL_USDT:short@0.07491": 1785520546309,
-      "B-MAGMA_USDT:short@0.28825": 1785520546309,
-      "B-GUN_USDT:short@0.002985": 1785520546309,
-      "B-ATH_USDT:short@0.003837": 1785520546309,
-      "B-VVV_USDT:short@11.801": 1785520546309,
-      "B-BOME_USDT:long@0.000609": 1785520546309,
-      "B-PIPPIN_USDT:short@0.01574": 1785520546309,
-      "B-JCT_USDT:short@0.003583": 1785520546309,
-      "B-TUT_USDT:long@0.01555": 1785520546309,
-      "B-ESPORTS_USDT:short@0.01795": 1785520546309,
-      "B-ZEC_USDT:short@454.31": 1785520546309,
-      "B-COTI_USDT:long@0.01716": 1785520546309,
-      "B-ENA_USDT:short@0.07994": 1785520546309,
-      "B-XMR_USDT:long@352.55": 1785520546309,
-      "B-BTW_USDT:long@0.08954": 1785520546309,
-      "B-SNX_USDT:short@0.2135": 1785520546309,
-      "B-SKL_USDT:short@0.003559": 1785520546309,
-      "B-MET_USDT:long@0.1743": 1785520546309,
-      "B-BABY_USDT:short@0.01142": 1785520546309,
-      "B-PARTI_USDT:short@0.02349": 1785520546309,
-      "B-SKYAI_USDT:short@0.02469": 1785520546309,
-      "B-COMP_USDT:short@16.44": 1785520546309,
-      "B-EDEN_USDT:short@0.03756": 1785520546309,
-      "B-PIXEL_USDT:short@0.003958": 1785520546309,
-      "B-BB_USDT:short@0.01534": 1785520546309,
-      "B-ESP_USDT:short@0.06747": 1785520546309,
-      "B-US_USDT:long@0.051245": 1785520546309,
-      "B-BSB_USDT:short@0.11799": 1785520546309,
-      "B-AERO_USDT:short@0.4154": 1785520546309,
-      "B-KITE_USDT:short@0.09268": 1785520546309,
-      "B-WAL_USDT:short@0.0258": 1785520546309,
-      "B-OGN_USDT:short@0.01495": 1785520546309,
-      "B-NMR_USDT:short@8.441": 1785520546309,
-      "B-HYPE_USDT:short@54.294": 1785520546309,
-      "B-SPX_USDT:short@0.3207": 1785520546309,
-      "B-IO_USDT:short@0.1341": 1785520546309,
-      "B-POL_USDT:short@0.07077": 1785520546309,
-      "B-XRP_USDT:short@1.06": 1785520546309,
       "B-SYRUP_USDT:short@0.15966": 1785580955194,
       "B-COW_USDT:short@0.1158": 1785580955194,
       "B-NEAR_USDT:short@1.662": 1785580955194,
@@ -89,24 +47,24 @@
       "B-ADA_USDT:long@0.1731": 1785595592876,
       "B-STABLE_USDT:short@0.03401": 1785595592876
     },
-    "at": "2026-08-01T17:00:35.200Z"
+    "at": "2026-08-01T18:11:28.312Z"
   },
-  "engineAlertAt": "2026-08-01T15:46:44.999Z",
+  "engineAlertAt": "2026-08-01T18:11:30.764Z",
   "bookExec": {
-    "key": "p1|f0",
+    "key": "p0|f0",
     "snap": {
-      "pending": 1,
+      "pending": 0,
       "fail": 0,
       "ok": 0,
       "liveOk": 0,
       "liveFail": 0
     },
-    "at": "2026-08-01T10:42:35.819Z",
-    "alertAt": "2026-08-01T15:46:45.398Z"
+    "at": "2026-08-01T18:11:31.735Z",
+    "alertAt": null
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-01T17:00:35.470Z"
+    "at": "2026-08-01T18:11:31.735Z"
   },
   "bookFill": {
     "key": "u0|p0",
