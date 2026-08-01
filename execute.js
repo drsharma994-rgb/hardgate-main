@@ -46,7 +46,7 @@ function resolvePostUrl(){
 function executeIdempotencyKey(plan){
   if (plan && plan.idempotencyKey) return String(plan.idempotencyKey);
   var bucket = Math.floor(Date.now() / 60000);
-  var raw = [plan.sym, plan.side, plan.qty, plan.stop, plan.t1, plan.positionId || '', bucket].join('|');
+  var raw = [plan.sym, plan.side, plan.qty, plan.stop, plan.t1, plan.t2, plan.positionId || '', bucket].join('|');
   var h = 0;
   for (var i = 0; i < raw.length; i++) h = ((h << 5) - h + raw.charCodeAt(i)) | 0;
   return 'hgx-' + Math.abs(h).toString(36) + '-' + bucket;
@@ -58,12 +58,14 @@ function buildPayload(plan){
   if (!isFinite(plan.stop) || !isFinite(plan.t1)) return null;
   var ts = (typeof W.nowSec === 'function') ? W.nowSec() : Math.floor(Date.now() / 1000);
   var idem = executeIdempotencyKey(plan);
+  var bracket = { stop: +plan.stop, takeProfit: +plan.t1 };
+  if (isFinite(plan.t2)) bracket.takeProfit2 = +plan.t2;
   return {
     symbol: plan.sym,
     side: plan.side,
     qty: +plan.qty,
     leverage: isFinite(plan.lev) ? +plan.lev : undefined,
-    bracket: { stop: +plan.stop, takeProfit: +plan.t1 },
+    bracket: bracket,
     timestamp: ts,
     source: plan.source || 'hardgate-trade-plan',
     idempotencyKey: idem,

@@ -127,6 +127,7 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 table.booktbl{width:100%;border-collapse:collapse;font-size:12px}
 table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);padding:6px 8px;text-align:left}
 .bookDeskHdr{margin-top:8px;border:1px solid rgba(255,255,255,.08)}
+.bookSrc{font-size:10px;opacity:.85;margin-left:4px;vertical-align:middle}
 .bookDeskHdr h3{font-size:14px;margin:0 0 8px}
 .bookHeatWrap{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
 .bookHeatBar{flex:1;min-width:120px;height:10px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
@@ -2865,7 +2866,7 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     </div>
     <hr class="sep">
     <div class="ticket" id="ticketTxt">${ticket}</div>
-    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
+    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); const t2runner = side==='long' ? entry+3*riskUnit : entry-3*riskUnit; if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2runner+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
 }
 
 /* =============================================================================
