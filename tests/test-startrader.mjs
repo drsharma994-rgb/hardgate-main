@@ -83,6 +83,8 @@ function load(pathRel, ctx){
     rows, rows.slice(-120), rows.slice(-80), { symbol: 'BTCUSD', fundingPct: 0.01, mark: 110 });
   ok(setup && setup.dir === 'long' && setup.tier === 'HIGH', 'stSynthesize: mocked swing+scalp plans -> HIGH long');
   ok(w.stTierRank('PRIME') > w.stTierRank('WATCH'), 'stTierRank ordering');
+  ok(TAB.indexOf('stEdgeRun') > 0 && TAB.indexOf('edgeScanList') > 0,
+    'startradertab: EDGE panel wired to edgeScanList');
 }
 
 console.log('');

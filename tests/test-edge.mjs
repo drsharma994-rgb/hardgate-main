@@ -48,6 +48,9 @@ assert(typeof W.edgeWarm === 'function', 'edgeWarm exported');
 assert(typeof W.edgeSwingRead === 'function', 'edgeSwingRead exported');
 assert(typeof W.edgeEnrich === 'function', 'edgeEnrich exported');
 assert(typeof W.edgeAssess === 'function', 'edgeAssess exported');
+assert(typeof W.edgeScanList === 'function', 'edgeScanList exported');
+assert(typeof W.edgeCardHTML === 'function', 'edgeCardHTML exported');
+assert(typeof W.edgeDropForming === 'function', 'edgeDropForming exported');
 assert(Array.isArray(W.HG_tabs) && W.HG_tabs.some(function(t){ return t.id === 'edge'; }),
   'HG_tabs registers edge tab');
 

@@ -508,6 +508,11 @@ function edgePlanHtml(p){
 
 function venueLabel(item){
   if (!item) return '—';
+  var ex = String(item.exchange || '').toLowerCase();
+  if (ex === 'startrader'){
+    var k = item.klass ? String(item.klass).toUpperCase() : 'CFD';
+    return 'STARTRADER · ' + k + (item.label ? ' · ' + item.label : '');
+  }
   var v = String(item.exchange || '').toUpperCase();
   if (v === 'COINDCX') v = 'CDCX';
   if (item.alsoOn) return v + ' · also ' + esc(String(item.alsoOn).split(',')[0]);
@@ -570,6 +575,58 @@ function publishEdgeScan(found){
   }catch(e){ __edgeScanSnap = { at: Date.now(), cands: [] }; }
 }
 
+/* Shared EDGE scan loop — same logic as the EDGE tab; callers supply universe
+   rows + async candle fetcher (xuCandles, startraderCandles, etc.). */
+async function edgeScanList(list, fetchCandles, hooks){
+  hooks = hooks || {};
+  var setProg = hooks.setProg || function(){};
+  var setStat = hooks.setStat || function(){};
+  var maxN = (hooks.maxUniverse > 0) ? hooks.maxUniverse : MAX_UNIVERSE;
+  var minTurn = (hooks.minTurnover !== undefined) ? hooks.minTurnover : MIN_TURNOVER;
+  var skipped = 0, noBias = 0, noTrig = 0, tallyFail = 0, t0 = Date.now();
+  var found = [];
+  list = (list || []).filter(function(it){
+    if (!it || !it.sym) return false;
+    var t = it.turnoverUsd;
+    if (t === null || t === undefined) return true;
+    return t >= minTurn;
+  });
+  list.sort(function(a, b){ return ((b.turnoverUsd || 0) - (a.turnoverUsd || 0)); });
+  if (maxN > 0) list = list.slice(0, maxN);
+  if (!list.length) return { found: [], list: [], stats: { skipped: 0, noBias: 0, noTrig: 0, tallyFail: 0 } };
+
+  for (var ci = 0; ci < list.length; ci += CHUNK){
+    var chunk = list.slice(ci, ci + CHUNK);
+    await Promise.all(chunk.map(async function(item, idx){
+      var i = ci + idx;
+      setProg((i + 1) / list.length);
+      setStat('scanning ' + (i + 1) + '/' + list.length + ' · ' + item.sym + ' · '
+        + Math.floor((Date.now() - t0) / 1000) + 's');
+      try{
+        var leg = await fetchCandles(item, TF, KL_LIMIT);
+        var rows = leg && leg.rows;
+        var src = (leg && leg.src) ? leg.src : (item.exchange || 'unknown');
+        rows = edgeDropForming(rows, TF);
+        if (!rows || rows.length < 210){ skipped++; return; }
+        if (!edgeSwingBias(rows)){ noBias++; return; }
+        if (!edgeSignal(rows)){ noTrig++; return; }
+        var assessed = edgeAssess(rows, item, src);
+        if (!assessed){ tallyFail++; return; }
+        var bt = edgeBacktest(rows);
+        found.push({
+          item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
+          enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src
+        });
+      }catch(e){ skipped++; }
+    }));
+    await sleep(CHUNK_SLEEP_MS);
+  }
+  found.sort(function(a, b){
+    return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
+  });
+  return { found: found, list: list, stats: { skipped: skipped, noBias: noBias, noTrig: noTrig, tallyFail: tallyFail, t0: t0 } };
+}
+
 function mount(el){
   if (!el) return;
   var missing = [];
@@ -617,67 +674,35 @@ function mount(el){
     cardsEl.innerHTML = '';
     emptyEl.style.display = 'none';
     setProg(0);
-    var skipped = 0, noBias = 0, noTrig = 0, tallyFail = 0, t0 = Date.now();
     try{
       var uni = await xuUniverse(true);
       var note = (typeof xuUniverseNote === 'function') ? xuUniverseNote() : null;
-      var list = (uni || []).filter(function(it){
-        if (!it || !it.sym) return false;
-        var t = it.turnoverUsd;
-        if (t === null || t === undefined) return true;
-        return t >= MIN_TURNOVER;
-      });
-      list.sort(function(a, b){
-        return ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
-      });
-      list = list.slice(0, MAX_UNIVERSE);
-      if (!list.length){
+      if (!uni || !uni.length){
         publishEdgeScan([]);
         setStat('universe empty — ' + (note || 'exchange fetch failed'), true);
         return;
       }
-      var found = [];
-      for (var ci = 0; ci < list.length; ci += CHUNK){
-        var chunk = list.slice(ci, ci + CHUNK);
-        await Promise.all(chunk.map(async function(item, idx){
-          var i = ci + idx;
-          setProg((i + 1) / list.length);
-          setStat('scanning ' + (i + 1) + '/' + list.length + ' · ' + item.sym + ' · '
-            + Math.floor((Date.now() - t0) / 1000) + 's');
-          try{
-            var rows = await xuCandles(item, TF, KL_LIMIT);
-            var src = xuCandles.lastSource || item.exchange;
-            rows = edgeDropForming(rows, TF);
-            if (!rows || rows.length < 210){ skipped++; return; }
-            if (!edgeSwingBias(rows)){ noBias++; return; }
-            if (!edgeSignal(rows)){ noTrig++; return; }
-            var assessed = edgeAssess(rows, item, src);
-            if (!assessed){ tallyFail++; return; }
-            var bt = edgeBacktest(rows);
-            found.push({
-              item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
-              enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src
-            });
-          }catch(e){ skipped++; }
-        }));
-        await sleep(CHUNK_SLEEP_MS);
-      }
-      found.sort(function(a, b){
-        return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
-      });
+      var res = await edgeScanList(uni, function(item, tf, n){
+        return xuCandles(item, tf, n).then(function(rows){
+          return { rows: rows, src: xuCandles.lastSource || item.exchange };
+        });
+      }, { setProg: setProg, setStat: setStat });
+      var found = res.found;
+      var list = res.list;
+      var st = res.stats;
       publishEdgeScan(found);
       if (!found.length){
         emptyEl.style.display = 'block';
-        setStat('done — 0 setups / ' + list.length + ' · ' + noBias + ' no SWING bias · '
-          + noTrig + ' no trigger · ' + tallyFail + ' below tally · ' + skipped + ' thin · '
-          + Math.floor((Date.now() - t0) / 1000) + 's');
+        setStat('done — 0 setups / ' + list.length + ' · ' + st.noBias + ' no SWING bias · '
+          + st.noTrig + ' no trigger · ' + st.tallyFail + ' below tally · ' + st.skipped + ' thin · '
+          + Math.floor((Date.now() - st.t0) / 1000) + 's');
         return;
       }
       var longs = found.filter(function(x){ return x.sig.dir === 'long'; }).length;
       var shorts = found.length - longs;
       cardsEl.innerHTML = found.map(cardHTML).join('');
       setStat('done — ' + found.length + ' SWING-aligned (' + longs + 'L/' + shorts + 'S) · '
-        + Math.floor((Date.now() - t0) / 1000) + 's');
+        + Math.floor((Date.now() - st.t0) / 1000) + 's');
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) || e), true);
     }finally{
@@ -737,6 +762,9 @@ W.edgeMaxSafeLev = edgeMaxSafeLev;
 W.edgeUseLev = edgeUseLev;
 W.edgeSwingRead = edgeSwingRead;
 W.edgeSwingBias = edgeSwingBias;
+W.edgeScanList = edgeScanList;
+W.edgeCardHTML = cardHTML;
+W.edgeDropForming = edgeDropForming;
 W.edgeScan = function(){ try{ return __edgeScanSnap; }catch(e){ return null; } };
 W.edgeWarm = edgeWarm;
 W.HG_tabs = W.HG_tabs || [];

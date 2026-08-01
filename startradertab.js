@@ -206,6 +206,32 @@ function cardHTML(r){
 }
 
 var __st = { busy: false, ranOnce: false, run: null };
+var __stEdge = { busy: false, ranOnce: false, run: null };
+
+function stEdgeUniverse(contracts, tickers){
+  var tmap = {};
+  for (var ti = 0; ti < (tickers || []).length; ti++) tmap[tickers[ti].symbol] = tickers[ti];
+  return (contracts || []).map(function(c){
+    var tk = tmap[c.sym] || {};
+    return {
+      sym: c.sym, base: c.base, exchange: 'startrader', klass: c.klass, label: c.label,
+      turnoverUsd: (tk.turnoverUsd != null) ? tk.turnoverUsd : null,
+      fundingPct: (tk.fundingPct != null) ? tk.fundingPct : null,
+      mark: tk.mark
+    };
+  });
+}
+
+function stEdgeCandleSrc(sym){
+  try{
+    var c = (typeof startraderContract === 'function') ? startraderContract(sym) : null;
+    if (!c) return 'startrader';
+    if (c.klass === 'crypto') return 'startrader-binance';
+    if (c.gold) return 'startrader-gold';
+    if (c.yahoo) return 'startrader-yahoo';
+    return 'startrader';
+  }catch(e){ return 'startrader'; }
+}
 
 function mount(el){
   el.innerHTML =
@@ -222,13 +248,29 @@ function mount(el){
     + '<div class="prog" id="stProg"><i></i></div>'
     + '</div>'
     + '<div class="cards" id="stCards"></div>'
-    + '<div class="empty" id="stEmpty" style="display:none">No solid STARTRADER setups right now. Standing aside is a position.</div>';
+    + '<div class="empty" id="stEmpty" style="display:none">No solid STARTRADER setups right now. Standing aside is a position.</div>'
+    + '<div class="panel" style="margin-top:18px">'
+    + '<h2>STAR TRADER EDGE <span>same SWING-aligned EDGE logic as the EDGE tab · full CFD universe</span></h2>'
+    + '<p class="note">Runs the <b>identical EDGE scanner</b> as the main EDGE tab: 4H SWING cascade bias, pullback/sweep/range entries,'
+    + ' confluence tally, backtest record, and trade-plan levels — scoped to every STARTRADER contract.'
+    + ' Crypto uses Binance proxy; gold/oil/FX/indices use the same routed feeds as the confluence scan above.</p>'
+    + '<div class="row"><button class="btn" id="stEdgeRun">FIND EDGE SETUPS</button>'
+    + '<span class="note" id="stEdgeStat">idle — SWING-aligned · all STARTRADER contracts</span></div>'
+    + '<div class="prog" id="stEdgeProg"><i></i></div>'
+    + '</div>'
+    + '<div class="cards" id="stEdgeCards"></div>'
+    + '<div class="empty" id="stEdgeEmpty" style="display:none">No SWING-aligned EDGE entries on STARTRADER right now.</div>';
 
   var btn = el.querySelector('#stRun');
   var stat = el.querySelector('#stStat');
   var prog = el.querySelector('#stProg');
   var cards = el.querySelector('#stCards');
   var empty = el.querySelector('#stEmpty');
+  var edgeBtn = el.querySelector('#stEdgeRun');
+  var edgeStat = el.querySelector('#stEdgeStat');
+  var edgeProg = el.querySelector('#stEdgeProg');
+  var edgeCards = el.querySelector('#stEdgeCards');
+  var edgeEmpty = el.querySelector('#stEdgeEmpty');
 
   function setProg(f){
     if (!prog) return;
@@ -241,13 +283,30 @@ function mount(el){
     stat.className = warn ? 'note warn' : 'note';
   }
 
+  function setEdgeProg(f){
+    if (!edgeProg) return;
+    edgeProg.style.display = (f === null) ? 'none' : 'block';
+    if (f !== null && edgeProg.firstElementChild) edgeProg.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
+  }
+  function setEdgeStat(txt, warn){
+    if (!edgeStat) return;
+    edgeStat.textContent = txt || '';
+    edgeStat.className = warn ? 'note warn' : 'note';
+  }
+
   if (typeof startraderAllContracts !== 'function'){
     setStat('startrader.js not loaded', true);
     btn.disabled = true;
+    if (edgeBtn) edgeBtn.disabled = true;
     return;
+  }
+  if (typeof W.edgeScanList !== 'function' || typeof W.edgeCardHTML !== 'function'){
+    setEdgeStat('edge.js not loaded', true);
+    if (edgeBtn) edgeBtn.disabled = true;
   }
 
   btn.addEventListener('click', function(){ runScan(); });
+  if (edgeBtn) edgeBtn.addEventListener('click', function(){ runEdgeScan(); });
 
   async function runScan(){
     if (__st.busy) return 'busy';
@@ -314,13 +373,68 @@ function mount(el){
   }
 
   __st.run = runScan;
+
+  async function runEdgeScan(){
+    if (__stEdge.busy) return 'busy';
+    if (typeof W.edgeScanList !== 'function' || typeof W.edgeCardHTML !== 'function'){
+      setEdgeStat('edge.js not loaded', true);
+      return 'unavailable';
+    }
+    __stEdge.busy = true;
+    __stEdge.ranOnce = true;
+    edgeBtn.disabled = true;
+    edgeCards.innerHTML = '';
+    edgeEmpty.style.display = 'none';
+    setEdgeProg(0);
+    try{
+      var contracts = startraderAllContracts();
+      var tickers = (typeof startraderFullTickers === 'function') ? await startraderFullTickers() : [];
+      var uni = stEdgeUniverse(contracts, tickers);
+      var res = await W.edgeScanList(uni, async function(item, tf, n){
+        var rows = await startraderCandles(item.sym, tf, n);
+        return { rows: rows, src: stEdgeCandleSrc(item.sym) };
+      }, {
+        setProg: setEdgeProg,
+        setStat: setEdgeStat,
+        maxUniverse: uni.length || 200,
+        minTurnover: 0
+      });
+      var found = res.found;
+      var list = res.list;
+      var st = res.stats;
+      if (!found.length){
+        edgeEmpty.style.display = 'block';
+        setEdgeStat('done — 0 setups / ' + list.length + ' · ' + st.noBias + ' no SWING bias · '
+          + st.noTrig + ' no trigger · ' + st.tallyFail + ' below tally · ' + st.skipped + ' thin · '
+          + Math.floor((Date.now() - st.t0) / 1000) + 's');
+        return;
+      }
+      var longs = found.filter(function(x){ return x.sig.dir === 'long'; }).length;
+      var shorts = found.length - longs;
+      edgeCards.innerHTML = found.map(W.edgeCardHTML).join('');
+      setEdgeStat('done — ' + found.length + ' SWING-aligned (' + longs + 'L/' + shorts + 'S) / '
+        + list.length + ' contracts · ' + Math.floor((Date.now() - st.t0) / 1000) + 's');
+    }catch(e){
+      setEdgeStat('scan failed: ' + ((e && e.message) || e), true);
+    }finally{
+      setEdgeProg(null);
+      edgeBtn.disabled = false;
+      __stEdge.busy = false;
+    }
+    return 'refreshed';
+  }
+
+  __stEdge.run = runEdgeScan;
 }
 
 function startraderTabRefresh(){
   try{
-    if (__st.busy) return 'busy';
-    if (!__st.ranOnce || typeof __st.run !== 'function') return 'skipped: not run yet';
-    return __st.run();
+    if (__st.busy || __stEdge.busy) return 'busy';
+    var tasks = [];
+    if (__st.ranOnce && typeof __st.run === 'function') tasks.push(__st.run());
+    if (__stEdge.ranOnce && typeof __stEdge.run === 'function') tasks.push(__stEdge.run());
+    if (!tasks.length) return 'skipped: not run yet';
+    return Promise.all(tasks).then(function(){ return 'refreshed'; });
   }catch(e){ return 'refreshed'; }
 }
 
