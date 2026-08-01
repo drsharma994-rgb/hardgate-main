@@ -3772,6 +3772,11 @@ function cardHTML(row){
          + plan.entry + ',' + plan.stop + ',' + plan.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (plan && typeof G.bookBtnHTML === 'function')
+    ? G.bookBtnHTML(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, plan.entry, plan.stop, plan.t1, {
+      strategy: 'brain', tier: dec.tier, klass: row.lane === 'gold' ? 'metal' : 'crypto',
+      layers: row.col.votes.filter(function(v){ return v.vote === dir; }).map(function(v){ return v.layer; })
+    }) : '';
   var chartBox = (plan && row.rows)
     ? '<div class="hgchart brainChart" data-sym="' + esc(row.sym) + '" style="height:190px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dir + '">'
@@ -3791,6 +3796,7 @@ function cardHTML(row){
     + '<div class="plan">' + planLine(plan) + '</div>'
     + chartBox
     + tradeBtn
+    + bookBtn
     + auditToggleHTML(row)
     + '</div>';
 }

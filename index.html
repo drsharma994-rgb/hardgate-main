@@ -122,6 +122,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .card .plan b{color:var(--gold);font-weight:700}
 .card .toTrade{margin-top:8px;width:100%;background:transparent;border:1px solid var(--gold-dim);color:var(--gold);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
 .card .toTrade:hover{background:rgba(201,146,26,.08)}
+.card .toBook{margin-top:6px;width:100%;background:transparent;border:1px solid var(--cyan,#3dd6c8);color:var(--cyan,#3dd6c8);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
+.card .toBook:hover{background:rgba(61,214,200,.08)}
+table.booktbl{width:100%;border-collapse:collapse;font-size:12px}
+table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);padding:6px 8px;text-align:left}
 .hgchart{height:190px;margin-top:8px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);overflow:hidden}
 
 /* ---------- controls ---------- */
@@ -642,6 +646,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
+<script src="book.js?v=40"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -2022,7 +2027,7 @@ cardsEl.innerHTML = __cardsHtml.join('');
    later) — missing ids are skipped everywhere, so showTab/setHgGroup never
    break on an absent tab. */
 const HG_NAV_GROUPS = [
-  { id:'overview',   label:'OVERVIEW',     tabs:['brain','startrader','execute','bias','regime','trendmx','rotation','news'] },
+  { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','termbasis','scorecard'] },

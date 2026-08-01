@@ -539,6 +539,11 @@ function cardHTML(r){
   var btn = (p && typeof toTrade === 'function')
     ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(p.dir)
       + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')">SEND TO TRADE PLAN</button>' : '';
+  var bookBtn = (p && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(sym, p.dir, p.entry, p.stop, p.t1, {
+      strategy: 'edge', klass: (r.item && r.item.klass) || null, venue: 'startrader',
+      layers: ['EDGE', 'SWING']
+    }) : '';
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
@@ -553,7 +558,7 @@ function cardHTML(r){
     + '<div class="gates">' + gates
     + '<span class="gpip ok">SWING aligned</span>'
     + '<span class="gpip ok">R:R ' + fmtF(sig.rr, 2) + ' · USE ' + (p ? p.useLev : '—') + 'x</span></div>'
-    + planBlock + '<div class="plan">' + record + '</div>' + btn + '</div>';
+    + planBlock + '<div class="plan">' + record + '</div>' + btn + bookBtn + '</div>';
 }
 
 var __edge = { busy: false, ranOnce: false, run: null };
