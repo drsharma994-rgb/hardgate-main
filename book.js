@@ -495,15 +495,15 @@ function bookExecTargets(positions, blotter, modes){
   return out;
 }
 
-async function bookExecutePosition(id, opts){
+async function bookExecuteFromPosition(position, opts){
   opts = opts || {};
-  var p = bookFindPos(id);
-  if (!p || typeof W.executeTrade !== 'function') return { ok: false, reason: 'missing position' };
+  if (!position || !position.id) return { ok: false, reason: 'missing position' };
+  if (typeof W.executeTrade !== 'function') return { ok: false, reason: 'no executeTrade' };
   if (!bookExecuteReady()){
     if (!opts.silent){ try{ alert('EXECUTE BRACKET unavailable — set EXECUTE_BACKEND_URL on Render or save an Execute URL in Settings.'); }catch(e){} }
     return { ok: false, reason: 'execute off' };
   }
-  var plan = bookBuildExecutePlan(p, opts.source);
+  var plan = bookBuildExecutePlan(position, opts.source);
   if (!plan){
     if (!opts.silent){ try{ alert('Cannot size bracket — missing mark or notional.'); }catch(e2){} }
     return { ok: false, reason: 'invalid plan' };
@@ -516,6 +516,13 @@ async function bookExecutePosition(id, opts){
   }
 }
 
+async function bookExecutePosition(id, opts){
+  opts = opts || {};
+  var p = bookFindPos(id);
+  if (!p) return { ok: false, reason: 'missing position' };
+  return bookExecuteFromPosition(p, opts);
+}
+
 async function bookExecuteBatch(targets, source){
   targets = targets || [];
   if (!targets.length) return { ok: 0, fail: 0, total: 0 };
@@ -526,7 +533,11 @@ async function bookExecuteBatch(targets, source){
   var ok = 0;
   var fail = 0;
   for (var i = 0; i < targets.length; i++){
-    var r = await bookExecutePosition(targets[i].id, { skipConfirm: true, silent: true, source: source || 'hardgate-book-batch' });
+    var p = targets[i];
+    var pid = (p && p.id) ? p.id : p;
+    var r = (p && p.sym)
+      ? await bookExecuteFromPosition(p, { skipConfirm: true, silent: true, source: source || 'hardgate-book-batch' })
+      : await bookExecutePosition(pid, { skipConfirm: true, silent: true, source: source || 'hardgate-book-batch' });
     if (r && r.ok) ok++;
     else fail++;
   }
@@ -534,6 +545,10 @@ async function bookExecuteBatch(targets, source){
     if (typeof W.bookRefresh === 'function') await W.bookRefresh();
   }catch(e){}
   return { ok: ok, fail: fail, total: targets.length };
+}
+
+async function bookExecuteBatchPositions(positions, source){
+  return bookExecuteBatch(positions, source);
 }
 
 async function bookExecutePending(){
@@ -866,13 +881,19 @@ function bookLatestExecForPosition(blotter, positionId){
 
 function posExecChipHTML(p, blotter){
   var evt = bookLatestExecForPosition(blotter, p && p.id);
+  var execReady = bookExecuteReady();
+  var click = execReady ? ' style="cursor:pointer"' : '';
+  var dataExec = execReady ? (' data-exec="' + esc(p.id) + '"') : '';
   if (!evt){
-    return '<span class="statuschip warn" title="No bracket sent for this position yet">EXEC —</span>';
+    return '<span class="statuschip warn"' + dataExec + click
+      + ' title="' + (execReady ? 'Click to send EXEC bracket' : 'No bracket sent yet') + '">EXEC —</span>';
   }
   var ok = evt.type === 'execute_ok';
   var tip = evt.note || (ok ? 'Bracket accepted by proxy' : 'Bracket rejected or failed');
   if (evt.status) tip += ' · HTTP ' + evt.status;
-  return '<span class="statuschip ' + (ok ? 'ok' : 'warn') + '" title="' + esc(tip) + '">'
+  if (!ok && execReady) tip = 'Click to retry · ' + tip;
+  return '<span class="statuschip ' + (ok ? 'ok' : 'warn') + '"' + (ok ? '' : dataExec) + (ok ? '' : click)
+    + ' title="' + esc(tip) + '">'
     + (ok ? 'BRACKET OK' : 'BRACKET FAIL') + '</span>';
 }
 
@@ -916,6 +937,9 @@ function deskExecStatusHTML(){
   if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
     chips.push('<span class="statuschip ok" title="BRAIN synthesis auto-adds PRIME/HIGH plans to book">BRAIN auto-book</span>');
+  }
+  if (typeof W.brainAutoExecAfterBookOn === 'function' && W.brainAutoExecAfterBookOn()){
+    chips.push('<span class="statuschip ok" title="BRAIN auto-add then EXEC brackets for new positions">BRAIN auto-exec</span>');
   }
   if (bookAutoOn()) chips.push('<span class="statuschip" title="T1 scale · BE · trail on mark refresh">auto desk</span>');
   var book = __book.snap && __book.snap.book;
@@ -1122,8 +1146,16 @@ function mount(el){
     var epBtn = el.querySelector('#bookExecPending');
     var rfBtn = el.querySelector('#bookRetryFailed');
     var execReady = bookExecuteReady();
-    if (epBtn) epBtn.disabled = !execReady;
-    if (rfBtn) rfBtn.disabled = !execReady;
+    if (epBtn){
+      epBtn.disabled = !execReady;
+      var pendingN = bookExecTargets(positions, blotterRows, { pending: true, failed: false }).length;
+      epBtn.textContent = pendingN ? ('EXEC PENDING (' + pendingN + ')') : 'EXEC PENDING';
+    }
+    if (rfBtn){
+      rfBtn.disabled = !execReady;
+      var failN = bookExecTargets(positions, blotterRows, { pending: false, failed: true }).length;
+      rfBtn.textContent = failN ? ('RETRY FAILED (' + failN + ')') : 'RETRY FAILED';
+    }
     setStat('updated ' + new Date(snap.summary.at || Date.now()).toLocaleTimeString()
       + (bookTabVisible() ? ' · auto-refresh on' : ''));
   }
@@ -1300,6 +1332,8 @@ W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
 W.bookExecTargets = bookExecTargets;
 W.bookBuildExecutePlan = bookBuildExecutePlan;
+W.bookExecuteBatchPositions = bookExecuteBatchPositions;
+W.bookExecuteFromPosition = bookExecuteFromPosition;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });

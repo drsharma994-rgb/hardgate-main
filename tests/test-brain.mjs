@@ -1355,6 +1355,8 @@ console.log('== auto-book hook (AD4) ==');
      'AD4: brain.js defines auto-book toggle + record hook');
   ok(brainSrc.indexOf('id="brainAutoBook"') >= 0 && brainSrc.indexOf('silent: true') >= 0,
      'AD4: mount checkbox + silent addToBook opts');
+  ok(brainSrc.indexOf('brainAutoExecAfterBookOn') >= 0 && brainSrc.indexOf('id="brainAutoExec"') >= 0,
+     'AD4b: brain auto EXEC after auto-add toggle');
 
   const lsStore = { hgBrainSniper: '0' };
   const prevLs = globalThis.localStorage;
