@@ -155,6 +155,40 @@ function engineAlertDue(lastAlertAt, now) {
   return !Number.isFinite(t) || (now - t) > ENGINE_ALERT_MS;
 }
 
+/* ---------------- book bracket backlog alert ----------------
+   Server-side probe of GET /api/book/desk — open positions without a
+   bracket blotter (pending) or failed sends nudge the desk. Seeds silently;
+   re-alerts on count change or every BOOK_EXEC_ALERT_MS while backlog persists. */
+const BOOK_EXEC_ALERT_MS = 4 * 60 * 60 * 1000;
+function bookExecSnapshot(desk) {
+  const ex = desk && desk.execute;
+  if (!ex) return { pending: 0, fail: 0, ok: 0 };
+  return {
+    pending: Number.isFinite(+ex.pending) ? +ex.pending : 0,
+    fail: Number.isFinite(+ex.fail) ? +ex.fail : 0,
+    ok: Number.isFinite(+ex.ok) ? +ex.ok : 0,
+  };
+}
+function bookExecKey(snap) {
+  return 'p' + snap.pending + '|f' + snap.fail;
+}
+function bookExecAlertDue(lastAlertAt, now) {
+  const t = Date.parse(lastAlertAt || '');
+  return !Number.isFinite(t) || (now - t) > BOOK_EXEC_ALERT_MS;
+}
+function bookExecBody(desk, snap) {
+  const parts = ['Cross-fund brackets (7d): ' + snap.ok + ' OK · ' + snap.fail + ' fail · '
+    + snap.pending + ' open without bracket'];
+  const funds = (desk && Array.isArray(desk.funds)) ? desk.funds : [];
+  if (funds.length) {
+    parts.push('Funds: ' + funds.map(function(f){
+      return (f.id || '?') + ' (' + (f.openCount || 0) + ' open)';
+    }).join(', '));
+  }
+  parts.push('BOOK → EXEC PENDING or ALL FUNDS PENDING to send brackets.');
+  return parts.join('\n');
+}
+
 /* ---------------- ntfy fallback for setup alerts ----------------
    When the EmailJS send fails (e.g. the monthly quota the 2026-07-25 run
    exposed), the NEW setup still reaches the owner via ntfy — once per
@@ -697,6 +731,52 @@ async function main() {
     newState.engineAlertAt = prevState.engineAlertAt;   /* degraded run: keep the stamp, change nothing */
   }
 
+  /* book bracket backlog — desk API probe, independent of synthesis */
+  try {
+    const deskCtrl = new AbortController();
+    const deskTimer = setTimeout(function(){ deskCtrl.abort(); }, 20000);
+    const deskRes = await fetch(new URL('/api/book/desk', SITE_URL).href, { signal: deskCtrl.signal });
+    clearTimeout(deskTimer);
+    const deskJson = await deskRes.json();
+    if (deskJson && deskJson.ok && deskJson.desk) {
+      const desk = deskJson.desk;
+      const snap = bookExecSnapshot(desk);
+      const key = bookExecKey(snap);
+      const now = Date.now();
+      console.log('Book brackets: ' + snap.pending + ' pending · ' + snap.fail + ' fail · ' + snap.ok + ' OK');
+      if (prevState.bookExec === undefined) {
+        console.log('Book bracket state seeded silently.');
+        newState.bookExec = { key: key, snap: snap, at: new Date().toISOString() };
+      } else {
+        const prevSnap = (prevState.bookExec && prevState.bookExec.snap) || { pending: 0, fail: 0 };
+        const needsAlert = (snap.pending > 0 || snap.fail > 0)
+          && (key !== (prevState.bookExec && prevState.bookExec.key)
+            || bookExecAlertDue(prevState.bookExec && prevState.bookExec.alertAt, now));
+        if (needsAlert) {
+          const pushResult = await sendAlertCi(offHoursPrefix() + '📒 HARDGATE BOOK BRACKETS',
+            bookExecBody(desk, snap) + offHoursTag());
+          console.log('BOOK BRACKET BACKLOG — push: ' + pushResult);
+          newState.bookExec = {
+            key: key, snap: snap,
+            at: (prevState.bookExec && prevState.bookExec.at) || new Date().toISOString(),
+            alertAt: new Date().toISOString(),
+          };
+        } else if (snap.pending === 0 && snap.fail === 0
+          && (prevSnap.pending > 0 || prevSnap.fail > 0)) {
+          const pushResult = await sendAlertCi('✅ HARDGATE BOOK BRACKETS CLEAR',
+            'No open positions waiting for a bracket and no failed sends in the desk rollup.');
+          console.log('BOOK BRACKETS CLEAR — push: ' + pushResult);
+          newState.bookExec = { key: key, snap: snap, at: new Date().toISOString(), alertAt: null };
+        } else {
+          newState.bookExec = Object.assign({}, prevState.bookExec, { key: key, snap: snap });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Book desk probe failed: ' + ((e && e.message) || e));
+    if (prevState.bookExec !== undefined) newState.bookExec = prevState.bookExec;
+  }
+
   /* DAILY DIGEST — one full-market summary per day at ~21:07 IST, riding
      the 15-min runs. Unconditional channel (a daily, never throttled); the
      stamp rides alert-state.json so exactly one digest per day. */
@@ -807,4 +887,5 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
+         bookExecSnapshot, bookExecKey, bookExecAlertDue, bookExecBody, BOOK_EXEC_ALERT_MS,
          istOffHours, offHoursPrefix, offHoursTag };

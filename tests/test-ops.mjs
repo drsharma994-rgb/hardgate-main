@@ -16,6 +16,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
+         bookExecSnapshot, bookExecKey, bookExecAlertDue, bookExecBody, BOOK_EXEC_ALERT_MS,
          istOffHours, offHoursPrefix, offHoursTag } from '../scripts/alert-check.mjs';
 import { fireKey, newFires, atrPlan, fmtL, watchBody, INTERVAL_MS as SQ_WATCH_MS } from '../scripts/squeeze-watch.mjs';
 
@@ -231,6 +232,26 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
      'engine alert: 1h ago -> inside the 2h throttle');
   ok(engineAlertDue(new Date(now - ENGINE_ALERT_MS - 60000).toISOString(), now) === true,
      'engine alert: past the 2h throttle -> due again (continuous outage re-alerts slowly)');
+}
+
+/* ---------------- alert-check.mjs book bracket backlog helpers ---------------- */
+
+{
+  const now = Date.now();
+  const desk = { execute: { ok: 2, fail: 1, pending: 3 }, funds: [{ id: 'main', openCount: 2 }, { id: 'gold', openCount: 1 }] };
+  const snap = bookExecSnapshot(desk);
+  ok(snap.pending === 3 && snap.fail === 1 && snap.ok === 2, 'book exec snapshot reads desk execute rollup');
+  ok(bookExecKey(snap) === 'p3|f1', 'book exec key encodes pending/fail counts');
+  ok(bookExecSnapshot(null).pending === 0, 'book exec snapshot: missing desk -> zeros');
+  ok(bookExecAlertDue(undefined, now) === true, 'book exec alert: no prior stamp -> due');
+  ok(bookExecAlertDue(new Date(now - 3600000).toISOString(), now) === false,
+     'book exec alert: 1h ago -> inside 4h throttle');
+  ok(bookExecAlertDue(new Date(now - BOOK_EXEC_ALERT_MS - 60000).toISOString(), now) === true,
+     'book exec alert: past 4h throttle -> due again');
+  const body = bookExecBody(desk, snap);
+  ok(body.indexOf('3 open without bracket') >= 0 && body.indexOf('main (2 open)') >= 0
+     && body.indexOf('ALL FUNDS PENDING') >= 0,
+     'book exec body names backlog + funds + remediation');
 }
 
 /* ---------------- alert-check.mjs ntfy fallback selector ---------------- */
