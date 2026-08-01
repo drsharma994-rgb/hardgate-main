@@ -3769,7 +3769,8 @@ function cardHTML(row){
   var tradeBtn = (plan && typeof G.toTrade === 'function')
     ? '<button class="toTrade" onclick="'
       + ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ',' + JSON.stringify(dir) + ','
-         + plan.entry + ',' + plan.stop + ',' + plan.t1 + ')')
+         + plan.entry + ',' + plan.stop + ',' + plan.t1
+         + (isFinite(plan.t2) ? ',' + plan.t2 : '') + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (plan && typeof G.bookBtnHTML === 'function')
@@ -3777,6 +3778,7 @@ function cardHTML(row){
       scanner: 'brain',
       fund: row.lane === 'gold' ? 'gold' : 'main',
       strategy: 'brain', tier: dec.tier, klass: row.lane === 'gold' ? 'metal' : 'crypto',
+      t2: isFinite(plan.t2) ? plan.t2 : null,
       layers: row.col.votes.filter(function(v){ return v.vote === dir; }).map(function(v){ return v.layer; })
     }) : '';
   var chartBox = (plan && row.rows)

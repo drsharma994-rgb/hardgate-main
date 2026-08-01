@@ -433,7 +433,7 @@ ok(nCards.indexOf('BTCUSDT') >= 0 && nCards.indexOf('PRIME · 6 LAYERS') >= 0 &&
 ok(nCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && nCards.indexOf('T1 <b>110</b> (2R)') >= 0
    && nCards.indexOf('gate engine') >= 0, 'PRIME card uses the gate engine plan verbatim — never invented');
 ok(95 < 100 && 110 > 100 && 117.5 > 110, 'long plan sanity: stop below entry, targets above');
-ok(nCards.indexOf('toTrade(&quot;BTCUSDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
+ok(nCards.indexOf('toTrade(&quot;BTCUSDT&quot;,&quot;long&quot;,100,95,110') >= 0,
    'SEND TO TRADE PLAN payload carries sym/dir/entry/stop/t1');
 ok(nCards.indexOf('ENGINE: ENGINE SURVIVOR') >= 0 && nCards.indexOf('REGIME:') >= 0 && nCards.indexOf('NEWS: news clear') >= 0,
    'evidence ledger lists every layer vote with its text');
@@ -469,7 +469,7 @@ ok(oCards.indexOf('ETHUSDT') >= 0 && oCards.indexOf('HIGH · 4 LAYERS') >= 0 && 
 ok(oCards.indexOf('ENTRY <b>50</b> · STOP <b>53</b>') >= 0 && oCards.indexOf('T1 <b>44</b> (2R)') >= 0,
    'short plan renders from the engine plan');
 ok(53 > 50 && 44 < 50 && 39.5 < 44, 'short plan sanity: stop above entry, targets below');
-ok(oCards.indexOf('toTrade(&quot;ETHUSDT&quot;,&quot;short&quot;,50,53,44)') >= 0, 'short toTrade payload correct');
+ok(oCards.indexOf('toTrade(&quot;ETHUSDT&quot;,&quot;short&quot;,50,53,44') >= 0, 'short toTrade payload correct');
 ok(oCards.indexOf('BTCUSDT') === -1, 'BTC dropped out of the cards after the regime flip (no stale convictions)');
 
 /* ================= P) hard-refresh contract ================= */
@@ -719,7 +719,7 @@ ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 4
 ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 6 LAYERS') >= 0 && tCards.indexOf('>LONG</span>') >= 0,
    'BTC card renders under the cdcx sym via alias-matched Binance-keyed layer votes (6 layers with VOLREG)');
 ok(tCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && tCards.indexOf('COINDCX') >= 0
-   && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
+   && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110') >= 0,
    'engine plan + COINDCX venue stamp + xu-sym toTrade payload on the card');
 const xu4h = xuCalls.filter(function(c){ return c.tf === '4h'; }), xu1h = xuCalls.filter(function(c){ return c.tf === '1h'; });
 ok(xu4h.length === 5, 'lazy fetch: the 5 WATCH+ candidates fetched 4h (BTC+ETH+SOL+XRP+DOGE radar), XAU lane aside untouched — got ' + xu4h.length);
@@ -2567,7 +2567,7 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
      'AK: the TRENDY card renders the full anchored limit block — anchor, stop, TPs, R:R, invalidation, validity');
   ok(kCards.indexOf('TRENDYUSDT') >= 0 && kCards.slice(kCards.indexOf('TRENDYUSDT'), kCards.indexOf('TRENDYUSDT') + 1400).indexOf('ENTRY <b>') === -1,
      'AK: no market-entry render on the TRENDY anchored card — the LIMIT block replaces it (other cards unaffected)');
-  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987)') >= 0,
+  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987') >= 0,
      'AK: SEND TO TRADE PLAN carries the anchored entry/stop/t1 verbatim');
 
   /* ---- WATCH rows: swing-zone limit, in-zone label, honest fallback ---- */
@@ -2956,7 +2956,7 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
      'AN9: FLAT chip falls back to the row mark (9.6 vs entry 10, ATR 2) -> IN ZONE');
   ok(boardHtml.indexOf('MARK n/a') >= 0,
      'AN9: NOMK has no cache mark and a null row mark -> the chip says MARK n/a, never a guess');
-  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987)') >= 0,
+  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987') >= 0,
      'AN9: every board card keeps the SEND TO TRADE PLAN handoff verbatim');
   ok(boardHtml.indexOf('BTCUSDT') === -1 && boardHtml.indexOf('XAU') === -1,
      'AN9: plan-null rows (BTC, gold ASIDE) never board — the ticket near-miss copy covers them');

@@ -20,6 +20,7 @@ var __book = { snap: null, desk: null, busy: false, lastAt: 0, autoTimer: null, 
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
+var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
 function bookFundId(){
@@ -75,6 +76,12 @@ function bookAutoOn(){
 }
 function bookSetAuto(on){
   try{ localStorage.setItem(BOOK_AUTO_KEY, on ? '1' : '0'); }catch(e){}
+}
+function bookAutoExecOn(){
+  try{ return localStorage.getItem(BOOK_AUTO_EXEC_KEY) === '1'; }catch(e){ return false; }
+}
+function bookSetAutoExec(on){
+  try{ localStorage.setItem(BOOK_AUTO_EXEC_KEY, on ? '1' : '0'); }catch(e){}
 }
 
 function esc(s){
@@ -186,6 +193,31 @@ function bookScoreSettle(){
   }catch(e){}
 }
 
+async function bookMaybeAutoExecute(position){
+  if (!bookAutoExecOn() || !position || !position.id) return null;
+  if (typeof W.executeTrade !== 'function' || !bookExecuteReady()) return null;
+  var mark = isFinite(position.mark) ? position.mark : position.entry;
+  var qty = (mark > 0 && position.notionalUsd > 0) ? position.notionalUsd / mark : 0;
+  if (!(qty > 0)) return null;
+  var t1 = isFinite(position.t1) ? position.t1 : null;
+  if (!isFinite(t1)){
+    var risk = Math.abs(position.entry - position.stop);
+    t1 = position.dir === 'short' ? position.entry - risk : position.entry + risk;
+  }
+  return W.executeTrade({
+    sym: position.sym,
+    side: position.dir,
+    qty: qty,
+    lev: 1,
+    stop: position.stop,
+    t1: t1,
+    t2: isFinite(position.t2) ? position.t2 : undefined,
+    vetoed: false,
+    positionId: position.id,
+    source: 'hardgate-book-auto',
+  }, { skipConfirm: true });
+}
+
 async function addToBook(opts){
   opts = (opts && typeof opts === 'object') ? opts : {};
   try{
@@ -223,6 +255,9 @@ async function addToBook(opts){
         await bookPull();
         bookScoreRecord(body);
         __book.lastAt = Date.now();
+        try{
+          if (r.json.position) await bookMaybeAutoExecute(r.json.position);
+        }catch(eAuto){}
         if (typeof W.showTab === 'function') W.showTab('book');
         return r.json;
       }
@@ -758,8 +793,10 @@ function mount(el){
     + '<button class="btn ghost" id="bookNewFund" title="Create a new paper fund book">+ FUND</button>'
     + '</div>'
     + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly consolidated LP digest auto-sends Sun ~21:07 IST (webhook / Telegram / email) unless <code>LP_DIGEST_FUND</code> pins a single fund.</p>'
-    + '<div class="row" style="align-items:center;gap:12px">'
+    + '<div class="row" style="align-items:center;gap:12px;flex-wrap:wrap">'
     + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
+    + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoExec" '
+    + (bookAutoExecOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto EXEC bracket on add (no second confirm)</label>'
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
@@ -927,6 +964,13 @@ function mount(el){
       setStat(autoChk.checked ? 'auto desk ON' : 'auto desk OFF');
     });
   }
+  var autoExecChk = el.querySelector('#bookAutoExec');
+  if (autoExecChk){
+    autoExecChk.addEventListener('change', function(){
+      bookSetAutoExec(autoExecChk.checked);
+      setStat(autoExecChk.checked ? 'auto EXEC on add ON' : 'auto EXEC on add OFF');
+    });
+  }
   if (fundSel){
     fundSel.addEventListener('change', function(){
       bookSetFund(fundSel.value);
@@ -1041,6 +1085,8 @@ W.bookManagePosition = bookManagePosition;
 W.bookLivePosition = bookLivePosition;
 W.bookExecutePosition = bookExecutePosition;
 W.bookFundBody = bookFundBody;
+W.bookRefresh = bookRefresh;
+W.bookAutoExecOn = bookAutoExecOn;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });

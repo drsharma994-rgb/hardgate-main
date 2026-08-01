@@ -132,7 +132,8 @@ async function hgRefreshExecuteCap(){
   return __cap;
 }
 
-async function executeTrade(plan){
+async function executeTrade(plan, opts){
+  opts = (opts && typeof opts === 'object') ? opts : {};
   if (!plan || plan.vetoed){
     try{ alert('Cannot execute a vetoed plan.'); }catch(e){}
     return { ok: false, reason: 'vetoed' };
@@ -144,7 +145,9 @@ async function executeTrade(plan){
   }
   var payload = buildPayload(plan);
   if (!payload) return { ok: false, reason: 'invalid plan' };
-  if (!confirm('Send this bracket?\n\n' + JSON.stringify(payload, null, 2))) return { ok: false, reason: 'cancelled' };
+  if (!opts.skipConfirm){
+    if (!confirm('Send this bracket?\n\n' + JSON.stringify(payload, null, 2))) return { ok: false, reason: 'cancelled' };
+  }
   var result = await postExecute(url, payload);
   await recordExecuteBlotter(plan, payload, result);
   if (!result.ok){
@@ -152,7 +155,9 @@ async function executeTrade(plan){
     try{ alert('Execution failed: ' + msg); }catch(e4){}
     return { ok: false, status: result.status, json: result.json, reason: msg };
   }
-  try{ alert('Bracket sent (HTTP ' + result.status + ').'); }catch(e5){}
+  if (!opts.skipConfirm){
+    try{ alert('Bracket sent (HTTP ' + result.status + ').'); }catch(e5){}
+  }
   return { ok: true, status: result.status, json: result.json, idempotencyKey: payload.idempotencyKey };
 }
 
