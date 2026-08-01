@@ -776,6 +776,8 @@ function setupCardHTML(setup){
       + ('toTrade(' + JSON.stringify(setup.sym) + ',' + JSON.stringify(setup.dir) + ',' + setup.entry + ',' + setup.stop + ',' + setup.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (hasPlan && setup.sym && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(setup.sym, setup.dir, setup.entry, setup.stop, setup.t1, { strategy: 'liqs' }) : '';
   return '<div class="card ' + setup.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(setup.sym || 'MULTI') + '</span>'
     + '<span class="dir">' + dirUp + ' · FADE THE FLUSH</span></div>'
@@ -792,6 +794,7 @@ function setupCardHTML(setup){
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
     + tradeBtn
+    + bookBtn
     + '</div>';
 }
 

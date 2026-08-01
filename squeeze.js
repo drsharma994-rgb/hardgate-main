@@ -289,7 +289,9 @@ function squeezePlanBlock(inp, extra){
       + ('toTrade(' + JSON.stringify(inp.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
-  return '<div class="plan">' + inner + '</div>' + btn;
+  var bookBtn = (s && typeof bookBtnHTML === 'function' && inp && inp.sym)
+    ? bookBtnHTML(inp.sym, s.dir, s.entry, s.stop, s.t1, { strategy: 'squeeze' }) : '';
+  return '<div class="plan">' + inner + '</div>' + btn + bookBtn;
 }
 
 /* BUILDING cards carry no direction, so an ENTRY/STOP pair would be a

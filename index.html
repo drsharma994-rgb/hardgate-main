@@ -126,6 +126,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .card .toBook:hover{background:rgba(61,214,200,.08)}
 table.booktbl{width:100%;border-collapse:collapse;font-size:12px}
 table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);padding:6px 8px;text-align:left}
+.bookHeatWrap{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.bookHeatBar{flex:1;min-width:120px;height:10px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.bookHeatBar.warn .bookHeatFill{background:linear-gradient(90deg,#c9921a,#e05a4f)}
+.bookHeatFill{height:100%;background:linear-gradient(90deg,#3dd6c8,#2a9d8f);transition:width .3s}
 .hgchart{height:190px;margin-top:8px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);overflow:hidden}
 
 /* ---------- controls ---------- */
@@ -646,7 +650,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
-<script src="book.js?v=40"></script>
+<script src="book.js?v=41"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -2486,6 +2490,8 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId){
   const onclickJs = `toTrade(${JSON.stringify(sym)},${JSON.stringify(dir)},${entry},${stop},${t1})`;
   const onclickAttr = onclickJs.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
+  const bookBtn = (isFinite(entry) && isFinite(stop) && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(sym, dir, entry, stop, t1, { strategy: 'swing-scalp' }) : '';
   return `<div class="card ${dir}">
     <div class="chead"><span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span></div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
@@ -2493,6 +2499,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId){
     <div class="plan">${plan}</div>
     ${cid?`<div class="hgchart" id="${cid}"></div>`:''}
     <button class="toTrade" onclick="${onclickAttr}">SEND TO TRADE PLAN →</button>
+    ${bookBtn}
   </div>`;
 }
 function toTrade(sym,dir,entry,stop,t1){
