@@ -47,6 +47,11 @@ globalThis.fmt = (n, d = 2) => (n === null || n === undefined || isNaN(n)) ? '�
 globalThis.px = n => isFinite(n) ? Number(n).toFixed(2) : '—';
 globalThis.pct = (n, d = 1) => isFinite(n) ? (n >= 0 ? '+' : '') + n.toFixed(d) + '%' : '—';
 globalThis.gateRow = (id, name, state, detail) => `GATE:${id}|${state}|${name} :: ${detail}\n`;
+globalThis.bookBtnHTML = (sym, dir, entry, stop, t1, meta) => '<button class="toBook">ADD TO BOOK</button>';
+globalThis.hgBookBtn = function(sym, dir, entry, stop, t1, meta){
+  if (!isFinite(entry) || !isFinite(stop)) return '';
+  return bookBtnHTML(sym, dir, entry, stop, t1, meta);
+};
 globalThis.planBlock = (dir, entry, stop, t1, t2) => `PLAN:${dir} entry=${entry} stop=${stop} t1=${t1} t2=${t2}`;
 const logged = [];
 globalThis.logSetup = (sym, dir, kind, entry, stop, t1) => logged.push({ sym, dir, kind, entry });

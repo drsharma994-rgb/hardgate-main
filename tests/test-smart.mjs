@@ -37,6 +37,11 @@ globalThis.fmt = (n, d = 2) => (n === null || n === undefined || isNaN(n)) ? '�
 globalThis.px = n => isFinite(n) ? Number(n).toFixed(2) : '—';
 globalThis.pct = (n, d = 1) => isFinite(n) ? (n >= 0 ? '+' : '') + n.toFixed(d) + '%' : '—';
 globalThis.gateRow = (id, name, state, detail) => `GATE:${id}|${state}|${name} :: ${detail}\n`;
+globalThis.bookBtnHTML = (sym, dir, entry, stop, t1, meta) => '<button class="toBook">ADD TO BOOK</button>';
+globalThis.hgBookBtn = function(sym, dir, entry, stop, t1, meta){
+  if (!isFinite(entry) || !isFinite(stop)) return '';
+  return bookBtnHTML(sym, dir, entry, stop, t1, meta);
+};
 // v53 waitAlertIdle stub — mirrors the real contract: false only when the alert
 // cycle is genuinely busy (tests never set S.alertBusy, so scans proceed).
 globalThis.waitAlertIdle = async statEl => {
