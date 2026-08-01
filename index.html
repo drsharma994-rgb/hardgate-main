@@ -130,6 +130,10 @@ table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);pa
 .bookHeatBar{flex:1;min-width:120px;height:10px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
 .bookHeatBar.warn .bookHeatFill{background:linear-gradient(90deg,#c9921a,#e05a4f)}
 .bookHeatFill{height:100%;background:linear-gradient(90deg,#3dd6c8,#2a9d8f);transition:width .3s}
+.bookBucketWrap{width:100%;margin-top:8px}
+.bookBucketRow{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+.bookActs{white-space:nowrap}
+.bookActs .btn{margin:2px 2px 2px 0;padding:4px 6px;font-size:10px}
 .hgchart{height:190px;margin-top:8px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);overflow:hidden}
 
 /* ---------- controls ---------- */
@@ -650,7 +654,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
-<script src="book.js?v=42"></script>
+<script src="book.js?v=43"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.

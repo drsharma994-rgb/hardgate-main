@@ -213,11 +213,52 @@ function heatBarHTML(s){
   var maxPct = (s && isFinite(s.maxHeatPct)) ? s.maxHeatPct : BOOK_MAX_HEAT_PCT;
   var fill = maxPct > 0 ? Math.min(100, (heatPct / maxPct) * 100) : 0;
   var warn = heatPct >= maxPct * 0.85;
+  var buckets = bucketBarsHTML(s);
   return '<div class="bookHeatWrap">'
     + '<span class="k">Portfolio heat</span>'
     + '<div class="bookHeatBar' + (warn ? ' warn' : '') + '"><div class="bookHeatFill" style="width:' + fill.toFixed(1) + '%"></div></div>'
     + '<span class="v">' + fmtF(heatPct * 100, 2) + '% / ' + fmtF(maxPct * 100, 0) + '% · ' + fmtUsd(s.heatUsd || 0) + '</span>'
-    + '</div>';
+    + '</div>' + buckets;
+}
+
+function bucketBarsHTML(s){
+  var buckets = (s && s.bucketExposure) || [];
+  var maxPct = (s && isFinite(s.maxBucketPct)) ? s.maxBucketPct : 0.35;
+  if (!buckets.length) return '';
+  return '<div class="bookBucketWrap"><span class="k" style="width:100%;margin-top:6px">Asset buckets (35% cap)</span>'
+    + buckets.map(function(b){
+      var fill = maxPct > 0 ? Math.min(100, (b.pct / maxPct) * 100) : 0;
+      var warn = b.pct >= maxPct * 0.85;
+      return '<div class="bookBucketRow"><span class="k">' + esc(b.key) + '</span>'
+        + '<div class="bookHeatBar' + (warn ? ' warn' : '') + '"><div class="bookHeatFill" style="width:' + fill.toFixed(1) + '%"></div></div>'
+        + '<span class="v">' + fmtF(b.pct * 100, 1) + '% · ' + fmtUsd(b.usd) + '</span></div>';
+    }).join('') + '</div>';
+}
+
+function posR(p){
+  if (!p || !isFinite(p.entry) || !isFinite(p.stop) || !isFinite(p.mark)) return null;
+  var risk = Math.abs(p.entry - p.stop);
+  if (!(risk > 0)) return null;
+  var move = p.dir === 'short' ? (p.entry - p.mark) : (p.mark - p.entry);
+  return move / risk;
+}
+
+function bookFindPos(id){
+  var positions = (__book.snap && __book.snap.book && __book.snap.book.positions) || [];
+  for (var i = 0; i < positions.length; i++){
+    if (positions[i].id === id) return positions[i];
+  }
+  return null;
+}
+
+function bookManagePosition(p){
+  try{
+    var snap = __book.snap;
+    var eq = snap && snap.summary ? snap.summary.equityUsd : null;
+    var tEq = document.getElementById('tEq');
+    if (tEq && isFinite(eq)) tEq.value = Math.round(eq);
+    if (typeof W.toTrade === 'function') W.toTrade(p.sym, p.dir, p.entry, p.stop, p.t1);
+  }catch(e){}
 }
 
 function attrTableHTML(title, rows){
@@ -298,6 +339,8 @@ function navHistoryHTML(hist){
 function posRowHTML(p){
   var upl = p.unrealizedUsd || 0;
   var uplCls = upl >= 0 ? 'ok' : 'warn';
+  var rVal = posR(p);
+  var rCls = (rVal != null && rVal >= 0) ? 'ok' : 'warn';
   return '<tr>'
     + '<td>' + esc(p.sym) + '</td>'
     + '<td>' + esc((p.dir || '').toUpperCase()) + '</td>'
@@ -305,9 +348,15 @@ function posRowHTML(p){
     + '<td>' + fmtUsd(p.notionalUsd) + '</td>'
     + '<td>' + pxF(p.entry) + '</td>'
     + '<td>' + pxF(p.mark) + '</td>'
+    + '<td class="' + rCls + '">' + (rVal != null ? fmtF(rVal, 2) + 'R' : '—') + '</td>'
     + '<td class="' + uplCls + '">' + fmtUsd(upl) + '</td>'
     + '<td>' + fmtUsd(p.riskUsd) + '</td>'
-    + '<td><button class="btn ghost" data-close="' + esc(p.id) + '">CLOSE</button></td>'
+    + '<td class="bookActs">'
+    + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
+    + '<button class="btn ghost" data-scale="0.5" data-id="' + esc(p.id) + '" title="Scale out 50% at mark">50%</button>'
+    + '<button class="btn ghost" data-be="' + esc(p.id) + '" title="Move stop to breakeven">BE</button>'
+    + '<button class="btn ghost" data-close="' + esc(p.id) + '">CLOSE</button>'
+    + '</td>'
     + '</tr>';
 }
 
@@ -315,9 +364,7 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>PAPER FUND BOOK <span>$1M NAV · risk limits · paper fills at plan entry</span></h2>'
-    + '<p class="note">Add setups from any scanner via <b>ADD TO BOOK</b>. '
-    + 'Pre-trade risk: max 12 positions · 15% single name · 35% asset bucket · 6% portfolio heat · news blackout veto. '
-    + 'Marks auto-refresh while this tab is open. Requires the Render backend (<code>/api/book</code>).</p>'
+    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN with live equity · <b>50%</b> scale at mark · <b>BE</b> stop to entry · heat + bucket caps enforced pre-trade.</p>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
@@ -331,7 +378,7 @@ function mount(el){
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
     + '<div style="overflow-x:auto"><table class="booktbl" id="bookTable">'
-    + '<thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th><th>UPL</th><th>Risk</th><th></th></tr></thead>'
+    + '<thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th><th>R</th><th>UPL</th><th>Risk</th><th>OMS</th></tr></thead>'
     + '<tbody id="bookBody"></tbody></table></div>'
     + '<div class="empty" id="bookEmpty" style="display:none">No open paper positions — add from a scanner card.</div>'
     + '</div>'
@@ -445,7 +492,35 @@ function mount(el){
     }
   });
   el.addEventListener('click', async function(ev){
-    var btn = ev.target && ev.target.closest ? ev.target.closest('[data-close]') : null;
+    var t = ev.target;
+    if (!t || !t.closest) return;
+    var manageBtn = t.closest('[data-manage]');
+    if (manageBtn){
+      var mp = bookFindPos(manageBtn.getAttribute('data-manage'));
+      if (mp) bookManagePosition(mp);
+      return;
+    }
+    var scaleBtn = t.closest('[data-scale]');
+    if (scaleBtn){
+      if (!bookApiOn()) return;
+      var sid = scaleBtn.getAttribute('data-id');
+      var pct = +scaleBtn.getAttribute('data-scale');
+      if (!sid || !(pct > 0)) return;
+      await bookFetch('/api/book/scale', { method: 'POST', body: JSON.stringify({ id: sid, pct: pct }) });
+      bookScoreSettle();
+      await refresh();
+      return;
+    }
+    var beBtn = t.closest('[data-be]');
+    if (beBtn){
+      if (!bookApiOn()) return;
+      var bp = bookFindPos(beBtn.getAttribute('data-be'));
+      if (!bp) return;
+      await bookFetch('/api/book/stop', { method: 'POST', body: JSON.stringify({ id: bp.id, stop: bp.entry }) });
+      await refresh();
+      return;
+    }
+    var btn = t.closest('[data-close]');
     if (!btn) return;
     var id = btn.getAttribute('data-close');
     if (!id || !bookApiOn()) return;
@@ -474,6 +549,7 @@ W.addToBook = addToBook;
 W.bookBtnHTML = bookBtnHTML;
 W.bookRefreshMarks = bookRefreshMarks;
 W.bookState = bookState;
+W.bookManagePosition = bookManagePosition;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });
