@@ -110,6 +110,10 @@ ok(bookJs.indexOf('bookFindPosAny') >= 0 && bookJs.indexOf('showFund') >= 0
   'book.js multi-fund positions table + fund-routed OMS actions');
 ok(bookJs.indexOf('bookExecBarFillFilter') >= 0 && bookJs.indexOf('BOOK_POSITIONS_FILL_FILTER_KEY') >= 0,
   'book.js fill backlog positions filter toggle');
+ok(bookJs.indexOf('bookExecBarBracketFilter') >= 0 && bookJs.indexOf('BOOK_POSITIONS_BRACKET_FILTER_KEY') >= 0,
+  'book.js bracket pending positions filter toggle');
+ok(bookJs.indexOf('poll-fill') >= 0 && bookJs.indexOf('/api/book/poll-fill') >= 0,
+  'book.js single-position poll-fill API');
 ok(bookJs.indexOf('bookDailyLossHalted') >= 0 && bookJs.indexOf('DAY HALT') >= 0
   && bookJs.indexOf('bookDayHalt') >= 0,
   'book.js daily loss halt banner + status chip');
@@ -158,6 +162,8 @@ ok(apiJs.indexOf('execute-fill') >= 0 && apiJs.indexOf('pbApplyExecuteFill') >= 
   'book API accepts execute-fill webhook reconcile');
 ok(apiJs.indexOf('poll-fills') >= 0 && apiJs.indexOf('pbPositionsNeedingFillPoll') >= 0,
   'book API batch poll-fills endpoint');
+ok(apiJs.indexOf('poll-fill') >= 0 && apiJs.indexOf('pollApplyPositionFill') >= 0,
+  'book API single poll-fill endpoint');
 ok(apiJs.indexOf('hgParseExecuteFillResponse') >= 0 && apiJs.indexOf('auto from live webhook') >= 0,
   'book API live webhook auto-fill');
 
