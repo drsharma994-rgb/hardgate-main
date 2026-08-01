@@ -46,6 +46,8 @@ function bookScannerFund(source, meta){
   }
   if (source === 'squeeze' || source === 'oiflow' || source === 'liqs' || source === 'trendmx'
       || source === 'meanrev' || source === 'execute' || source === 'best' || source === 'trade-plan'
+      || source === 'smc' || source === 'ob' || source === 'divergence' || source === 'coil'
+      || source === 'coil-expansion' || source === 'apex' || source === 'liq-trap'
       || source === 'swing' || source === 'scalp' || source === 'swing-scalp') return 'swing';
   if (source === 'goldswing' || source === 'goldscalp' || source === 'gold-swing'
       || source === 'gold-scalp' || source === 'gold-deep-swing' || source === 'gold-deep-scalp'

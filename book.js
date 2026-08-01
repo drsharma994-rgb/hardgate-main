@@ -1074,18 +1074,18 @@ function bookExportCSV(){
     var snap = __book.snap;
     if (!snap || !snap.book) return;
     var blotter = snap.book.blotter || [];
-    var lines = ['type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,bracket,openedAt,closedAt'];
+    var lines = ['type,sym,dir,strategy,bucket,tier,notional,entry,stop,t1,t2,mark,pnl,bracket,openedAt,closedAt'];
     (snap.book.positions || []).forEach(function(p){
       lines.push(['open', bookCsvCell(p.sym), bookCsvCell(p.dir), bookCsvCell(p.strategy || ''),
         bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
-        p.notionalUsd, p.entry, p.mark, p.unrealizedUsd || 0,
+        p.notionalUsd, p.entry, p.stop, p.t1, p.t2, p.mark, p.unrealizedUsd || 0,
         bookCsvCell(bookBracketExportLabel(blotter, p.id)),
         p.openedAt || '', ''].join(','));
     });
     (snap.book.closed || []).forEach(function(c){
       lines.push(['closed', bookCsvCell(c.sym), bookCsvCell(c.dir), bookCsvCell(c.strategy || ''),
         bookCsvCell(c.bucket || ''), bookCsvCell(c.tier || ''),
-        c.notionalUsd, c.entry, c.mark, c.realizedUsd || 0, '',
+        c.notionalUsd, c.entry, c.stop, c.t1, c.t2, c.mark, c.realizedUsd || 0, '',
         c.openedAt || '', c.closedAt || ''].join(','));
     });
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -1108,12 +1108,12 @@ async function bookExportConsolidatedCSV(){
       try{ alert('No positions or closed trades across funds to export.'); }catch(e){}
       return;
     }
-    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,bracket,openedAt,closedAt'];
+    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,stop,t1,t2,mark,pnl,bracket,openedAt,closedAt'];
     positions.forEach(function(p){
       lines.push([
         bookCsvCell(p._fundId || 'main'), 'open', bookCsvCell(p.sym), bookCsvCell(p.dir),
         bookCsvCell(p.strategy || ''), bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
-        p.notionalUsd, p.entry, p.mark, p.unrealizedUsd || 0,
+        p.notionalUsd, p.entry, p.stop, p.t1, p.t2, p.mark, p.unrealizedUsd || 0,
         bookCsvCell(bookBracketExportLabel(blotter, p.id)),
         p.openedAt || '', '',
       ].join(','));
@@ -1122,7 +1122,7 @@ async function bookExportConsolidatedCSV(){
       lines.push([
         bookCsvCell(c._fundId || 'main'), 'closed', bookCsvCell(c.sym), bookCsvCell(c.dir),
         bookCsvCell(c.strategy || ''), bookCsvCell(c.bucket || ''), bookCsvCell(c.tier || ''),
-        c.notionalUsd, c.entry, c.mark, c.realizedUsd || 0, '',
+        c.notionalUsd, c.entry, c.stop, c.t1, c.t2, c.mark, c.realizedUsd || 0, '',
         c.openedAt || '', c.closedAt || '',
       ].join(','));
     });
@@ -1171,6 +1171,15 @@ function bookBracketEventOk(evt){
   if (evt.type === 'execute_ok') return true;
   if (evt.type === 'live_send') return evt.ok !== false;
   return false;
+}
+
+function posFillChipHTML(p){
+  if (!p || !(p.brokerFillPct > 0)) return '';
+  var pct = Math.round(p.brokerFillPct * 100);
+  var label = pct >= 100 ? 'FILL OK' : ('FILL ' + pct + '%');
+  return ' <span class="statuschip ' + (pct >= 100 ? 'ok' : 'warn') + '" title="Broker filled '
+    + (isFinite(p.brokerFilledQty) ? p.brokerFilledQty.toFixed(4) : pct + '%') + ' of order">'
+    + label + '</span>';
 }
 
 function posExecChipHTML(p, blotter){
@@ -1310,7 +1319,7 @@ function posRowHTML(p, blotter){
     + '<td class="' + rCls + '">' + (rVal != null ? fmtF(rVal, 2) + 'R' : '—') + '</td>'
     + '<td class="' + uplCls + '">' + fmtUsd(upl) + '</td>'
     + '<td>' + fmtUsd(p.riskUsd) + '</td>'
-    + '<td>' + posExecChipHTML(p, blotter) + '</td>'
+    + '<td>' + posExecChipHTML(p, blotter) + posFillChipHTML(p) + '</td>'
     + '<td class="bookActs">'
     + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
     + execBtn
