@@ -656,7 +656,7 @@ const S = {
   fng: null, dom: null,
   cdcxBlocked: false,
   cdcxViaProxy: false,
-  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, alertTimer: null,
+  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, lastEdgeAlertCheck: null, edgeAlertBusy: false, alertTimer: null,
 };
 let __hgSwingScan = null, __hgScalpScan = null;
 window.swingScan = function(){ return __hgSwingScan; };
@@ -666,6 +666,7 @@ window.scalpScan = function(){ return __hgScalpScan; };
    3-min AUTO hard refresh so tab scanners stay warm. Toggle OFF is ignored. */
 const HG_ALERTS_FORCED_ON = true;
 const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
+const HG_EDGE_ALERT_MS = 15 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram on new setups */
 const HG_ALERTS_AUTO_REFRESH_MS = 180000;
 
 const DELTA = 'https://api.india.delta.exchange';
@@ -2669,10 +2670,29 @@ async function cryptoScanWarm(kind){
 async function runTabAlertScans(){
   try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
   try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
-  try{ if (typeof edgeWarm === 'function') await edgeWarm(); }catch(e){ console.warn('tab alert edge scan', e); }
   try{ if (typeof gsWarm === 'function') await gsWarm(); }catch(e){ console.warn('tab alert gold scalp', e); }
   try{ if (typeof gwWarm === 'function') await gwWarm(); }catch(e){ console.warn('tab alert gold swing', e); }
 }
+
+/* EDGE tab — quiet universe scan every 15 min; Telegram when a setup is new
+   (15-min dedup per sym:dir@entry via tabalerts.js hg_tabalert_keys). */
+async function runEdgeAlertCycle(){
+  const now = Date.now();
+  if (S.lastEdgeAlertCheck && now - S.lastEdgeAlertCheck < HG_EDGE_ALERT_MS) return;
+  if (S.edgeAlertBusy || S.alertBusy || isManualScanBusy()) return;
+  S.edgeAlertBusy = true;
+  try{
+    if (typeof edgeWarm === 'function') await edgeWarm({ force: true, quiet: true });
+    if (typeof hgTabAlertsRunEdge === 'function'){
+      await hgTabAlertsRunEdge();
+    }else if (typeof hgTabAlertsRun === 'function'){
+      await hgTabAlertsRun({ sources: { edge: true } });
+    }
+    S.lastEdgeAlertCheck = now;
+  }catch(e){ console.warn('edge alert cycle', e); }
+  finally{ S.edgeAlertBusy = false; }
+}
+window.runEdgeAlertCycle = runEdgeAlertCycle;
 
 /* =========================================================================
    TRADE PLAN — sizing, liquidation clearance, ticket. No execution here.
@@ -4171,11 +4191,12 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* tab scanners — SWING, SCALP, EDGE, GOLD 10+ tally, BRAIN rows (from last synthesis) */
+    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; EDGE on its own 15-min clock */
     try{
       await runTabAlertScans();
+      await runEdgeAlertCycle();
       if (typeof hgTabAlertsRun === 'function'){
-        await hgTabAlertsRun();
+        await hgTabAlertsRun({ sources: { swing: true, scalp: true, brain: true, gold: true } });
       }
     }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
     S.lastAlertCheck = Date.now();

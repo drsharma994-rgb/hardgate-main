@@ -80,6 +80,23 @@ assert(collected.some(c => c.src === 'SWING'), 'swing included');
 assert(collected.some(c => c.src.indexOf('BRAIN') >= 0), 'brain included');
 assert(!collected.some(c => c.src === 'GOLD SWING'), 'gold swing below 10 excluded');
 
+const WE = loadWithWindow({
+  swingScan: () => null,
+  scalpScan: () => null,
+  edgeScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: 4, rr: 2 }] }),
+  __hgBrainLast: () => null,
+  goldscalpScan: () => null,
+  goldswingScan: () => null,
+  sendTelegram: async (t) => { WE._tg = t; return true; }
+});
+WE.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const edgeOnly = WE.hgTabAlertsCollect();
+assert(edgeOnly.length === 1 && edgeOnly[0].src === 'EDGE' && edgeOnly[0].sym === 'SOLUSD',
+       'collectEdge picks up edgeScan cands with tally >= 3');
+const edgeRun = await WE.hgTabAlertsRunEdge();
+assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('[EDGE]') >= 0,
+       'hgTabAlertsRunEdge pushes only EDGE setups to Telegram');
+
 const run = await W.hgTabAlertsRun();
 assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
 

@@ -44,6 +44,6 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 - **FRED macro (optional):** Set `FRED_API_KEY` on the server to enable `/api/fred` (DGS10, DTWEXBGS, DFII10). Without it, macro.js falls back to Treasury/Frankfurter/Yahoo as before.
 - **LIQS session persist:** Rolling 1h liquidation prints persist in `window.localStorage` key `hg_liqs_session_v1`; BRAIN reads `liqsState()` instead of minting a fresh `liqAgg()` each synthesis.
 - **BRAIN layer warm hooks:** `HG_warmups` may register `carry` and `termbasis`; BRAIN snapshots `carryState` / `termBasisState` as optional context votes (hush when cold, never dark). LIQS warm accounting uses `liqSnap`.
-- **CRYPTO gate math:** Shared `cryptogates.js` (`swingGateMatrix`, `scalpGateMatrix`, `swingTryClean`, `scalpTryClean`) — `index.html` `runScan()` and `cryptowatch.js` both delegate to it.
+- **EDGE Telegram alerts:** `runEdgeAlertCycle()` every **15 min** — quiet `edgeWarm({ force: true })` then `hgTabAlertsRunEdge()` (new setups only; 15-min dedup per `sym:dir@entry`). SWING/SCALP/GOLD/BRAIN stay on the 3-min cycle. GitHub/Render `alert-check.mjs` replays the same path every 15 min.
 - **Hosting mode:** `hghost.js` exposes `hgHostingMode()` / `hgApiAvailable()` — carry/termbasis tabs show an honest note on static GitHub Pages hosts without `/api/proxy`.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins `__hgBrainSetClock()` to mid-session IST so off-hours conviction haircuts do not flake CI.

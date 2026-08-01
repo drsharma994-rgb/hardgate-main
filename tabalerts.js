@@ -294,8 +294,8 @@ async function hgTabAlertsRun(opts){
     var allow = opts.sources;
     list = list.filter(function(s){
       if (s.src.indexOf('BRAIN') >= 0 && allow.brain) return true;
-      if (s.src === 'SWING' && allow.swing) return true;
-      if (s.src === 'SCALP' && allow.scalp) return true;
+      if (s.src.indexOf('SWING') >= 0 && allow.swing) return true;
+      if (s.src.indexOf('SCALP') >= 0 && allow.scalp) return true;
       if (s.src === 'EDGE' && allow.edge) return true;
       if (s.src.indexOf('GOLD') >= 0 && allow.gold) return true;
       return false;
@@ -337,7 +337,11 @@ async function hgTabAlertsRun(opts){
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
-  return hgTabAlertsRun({ sources: { brain: true, gold: true, ALL: false } });
+  return hgTabAlertsRun({ sources: { brain: true, gold: true, edge: true } });
+};
+W.hgTabAlertsRunEdge = function(opts){
+  opts = opts || {};
+  return hgTabAlertsRun(Object.assign({ sources: { edge: true } }, opts));
 };
 
 /* Node test / CI exports */
