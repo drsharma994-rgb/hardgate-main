@@ -158,6 +158,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       var entry = lv.entry;
       var stop = lv.stopShort;
       var t1 = entry - lv.t1Px;
+      var t2 = isFinite(lv.t2Px) ? entry - lv.t2Px : null;
       if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return '';
       return bookBtnHTML(sym, 'short', entry, stop, t1, {
         scanner: 'carry',
@@ -165,7 +166,8 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         strategy: 'carry',
         klass: 'macro',
         venue: hi || 'carry',
-        layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')]
+        layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')],
+        t2: t2
       });
     }catch(e){ return ''; }
   }

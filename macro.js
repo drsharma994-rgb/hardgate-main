@@ -501,7 +501,8 @@ function macroGoldPlan(macro){
     var entry = goldPx;
     var stop = dir === 'long' ? entry - risk : entry + risk;
     var t1 = dir === 'long' ? entry + 2 * risk : entry - 2 * risk;
-    return { sym: 'XAUUSD', dir: dir, entry: entry, stop: stop, t1: t1, hint: macro.realRateHint };
+    var t2 = dir === 'long' ? entry + 3 * risk : entry - 3 * risk;
+    return { sym: 'XAUUSD', dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, hint: macro.realRateHint };
   }catch(e){ return null; }
 }
 

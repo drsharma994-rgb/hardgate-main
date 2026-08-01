@@ -523,7 +523,8 @@ function cardHTML(r){
       scanner: 'startrader',
       fund: stFund,
       strategy: 'startrader', tier: r.tier, klass: r.klass, venue: 'startrader',
-      layers: (r.votes || []).map(function(v){ return v.src; })
+      layers: (r.votes || []).map(function(v){ return v.src; }),
+      t2: p && isFinite(p.t2) ? p.t2 : null
     }) : '';
   var tradeBtn = (entry != null && stop != null && typeof W.toTrade === 'function')
     ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir)
