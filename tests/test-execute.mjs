@@ -1,5 +1,5 @@
 /* HARDGATE — bracket execution payload + API tests */
-import { hgBuildBracketPayload, hgExecuteBackendTarget, hgExecuteIdempotencyKey } from '../lib/execute-core.mjs';
+import { hgBuildBracketPayload, hgExecuteBackendTarget, hgExecuteIdempotencyKey, hgParseExecuteFillResponse } from '../lib/execute-core.mjs';
 import { executeCapabilities } from '../lib/execute-api.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +20,9 @@ var p2 = hgBuildBracketPayload({ sym: 'BTCUSD', side: 'long', qty: 0.5, stop: 99
 ok(p2 && p2.bracket.takeProfit === 105000 && p2.bracket.takeProfit2 === 112000, 'bracket payload includes optional T2');
 ok(hgBuildBracketPayload({ sym: 'X', side: 'long', qty: 0 }) === null, 'invalid qty -> null');
 
+var fillParsed = hgParseExecuteFillResponse('{"filledQty":0.5,"qty":1,"avgPrice":100}');
+ok(fillParsed && fillParsed.filledQty === 0.5 && fillParsed.qty === 1, 'parse execute fill response JSON');
+
 var idem = hgExecuteIdempotencyKey({ sym: 'XAUUSD', side: 'long', qty: 1, stop: 2000, t1: 2020, positionId: 'pos-1' });
 ok(idem && idem.indexOf('hgx-') === 0 && idem.length <= 64, 'idempotency key stable prefix');
 
@@ -36,6 +39,8 @@ var executeJs = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
 ok(executeJs.indexOf('executeBackendReady') >= 0 && executeJs.indexOf('/api/execute') >= 0,
   'execute.js exposes ready check + proxy path');
 ok(executeJs.indexOf('execute-blotter') >= 0, 'execute.js records blotter after bracket send');
+ok(executeJs.indexOf('execute-fill') >= 0 && executeJs.indexOf('parseExecuteFill') >= 0,
+  'execute.js auto-records fill when backend returns fill fields');
 ok(executeJs.indexOf('plan.fund') >= 0, 'execute.js routes blotter to position fund');
 ok(executeJs.indexOf('skipConfirm') >= 0, 'execute.js supports silent auto-exec path');
 
@@ -52,6 +57,8 @@ ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',stop,t1,t2,
   'book.js position CSV includes stop/t1/t2 columns');
 ok(bookJs.indexOf('posFillChipHTML') >= 0 && bookJs.indexOf('FILL OK') >= 0,
   'book.js broker fill status chips');
+ok(bookJs.indexOf('desk.fill') >= 0 && bookJs.indexOf('Broker fills:') >= 0,
+  'book.js desk rollup fill backlog line');
 ok(bookJs.indexOf('bookAutoExecScope') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_CROSS_FUND_KEY') >= 0
   && bookJs.indexOf('Auto pending/retry all funds') >= 0,
   'book.js cross-fund auto pending/retry on refresh');

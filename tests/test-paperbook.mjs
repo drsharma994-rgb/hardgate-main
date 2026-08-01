@@ -6,7 +6,7 @@ import {
   pbWeeklyDigest, pbDigestText, pbDigestHtml, pbAtrTrailStop,
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
   pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary, pbDailyLossState,
-  parseMaxDailyLossPct, pbBookCfgFromEnv, pbApplyExecuteFill,
+  parseMaxDailyLossPct, pbBookCfgFromEnv, pbApplyExecuteFill, pbFillBacklogSummary, pbBracketSentForPosition,
 } from '../lib/paperbook-core.mjs';
 import { pbConsolidatedLp, pbConsolidatedDigestText } from '../lib/paperbook-funds.mjs';
 
@@ -141,6 +141,16 @@ var fillPid = fillBook.positions[0].id;
 var fillRun = pbApplyExecuteFill(fillBook, { positionId: fillPid, filledQty: 0.5, qty: 1 });
 ok(fillRun.ok && fillRun.position.brokerFillPct === 0.5, 'execute fill records 50% on position');
 ok(fillRun.book.blotter[0].type === 'execute_fill', 'execute fill pushes blotter row');
+
+var backlogBook = pbAddIntent(pbNewBook(), { sym: 'ETHUSD', dir: 'long', entry: 200, stop: 190, t1: 220, strategy: 'bk' }).book;
+var bkPid = backlogBook.positions[0].id;
+backlogBook = pbPushBlotter(backlogBook, { type: 'execute_ok', sym: 'ETHUSD', positionId: bkPid });
+var bk = pbFillBacklogSummary(backlogBook);
+ok(bk.unfilled === 1 && bk.total === 1, 'fill backlog counts bracket without fill');
+backlogBook = pbApplyExecuteFill(backlogBook, { positionId: bkPid, filledQty: 0.25, qty: 1 }).book;
+var bkPart = pbFillBacklogSummary(backlogBook);
+ok(bkPart.partial === 1, 'fill backlog counts partial fill');
+ok(pbBracketSentForPosition(backlogBook.blotter, bkPid), 'bracket sent helper');
 var exSum = pbDigestExecuteSummary(exBook, Date.now() - 86400000);
 ok(exSum.ok === 1 && exSum.pending === 0, 'digest execute summary counts OK + no pending when bracket sent');
 var exDig = pbWeeklyDigest(exBook, 'week');

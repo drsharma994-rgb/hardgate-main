@@ -176,6 +176,28 @@ function bookExecAlertDue(lastAlertAt, now) {
   const t = Date.parse(lastAlertAt || '');
   return !Number.isFinite(t) || (now - t) > BOOK_EXEC_ALERT_MS;
 }
+function bookFillSnapshot(desk) {
+  const f = desk && desk.fill;
+  if (!f) return { unfilled: 0, partial: 0, total: 0 };
+  return {
+    unfilled: Number.isFinite(+f.unfilled) ? +f.unfilled : 0,
+    partial: Number.isFinite(+f.partial) ? +f.partial : 0,
+    total: Number.isFinite(+f.total) ? +f.total : 0,
+  };
+}
+function bookFillKey(snap) {
+  return 'u' + snap.unfilled + '|p' + snap.partial;
+}
+const BOOK_FILL_ALERT_MS = 4 * 60 * 60 * 1000;
+function bookFillAlertDue(lastAlertAt, now) {
+  const t = Date.parse(lastAlertAt || '');
+  return !Number.isFinite(t) || (now - t) > BOOK_FILL_ALERT_MS;
+}
+function bookFillBody(desk, snap) {
+  return 'Bracket sent but broker fill not confirmed: ' + snap.unfilled + ' unfilled · '
+    + snap.partial + ' partial across the desk. POST /api/book/execute-fill from your broker webhook,'
+    + ' or rely on auto-fill when EXECUTE_BACKEND returns fill fields.';
+}
 function bookExecBody(desk, snap) {
   const parts = ['Cross-fund brackets (7d): ' + snap.ok + ' OK · ' + snap.fail + ' fail · '
     + snap.pending + ' open without bracket'];
@@ -790,6 +812,34 @@ async function main() {
           console.log('DAILY LOSS HALT LIFTED — push: ' + pushResult);
         }
         newState.bookDayHalt = { active: nowHalt, at: new Date().toISOString() };
+      }
+      const fillSnap = bookFillSnapshot(desk);
+      const fillKey = bookFillKey(fillSnap);
+      if (prevState.bookFill === undefined) {
+        console.log('Book fill backlog state seeded silently.');
+        newState.bookFill = { key: fillKey, snap: fillSnap, at: new Date().toISOString() };
+      } else if (fillSnap.total > 0) {
+        const needsFillAlert = fillKey !== (prevState.bookFill && prevState.bookFill.key)
+          || bookFillAlertDue(prevState.bookFill && prevState.bookFill.alertAt, now);
+        if (needsFillAlert) {
+          const pushResult = await sendAlertCi(offHoursPrefix() + '📒 HARDGATE BOOK FILLS',
+            bookFillBody(desk, fillSnap) + offHoursTag());
+          console.log('BOOK FILL BACKLOG — push: ' + pushResult);
+          newState.bookFill = {
+            key: fillKey, snap: fillSnap,
+            at: (prevState.bookFill && prevState.bookFill.at) || new Date().toISOString(),
+            alertAt: new Date().toISOString(),
+          };
+        } else {
+          newState.bookFill = Object.assign({}, prevState.bookFill, { key: fillKey, snap: fillSnap });
+        }
+      } else if ((prevState.bookFill && prevState.bookFill.snap && prevState.bookFill.snap.total) > 0) {
+        const pushResult = await sendAlertCi('✅ HARDGATE BOOK FILLS CLEAR',
+          'All bracketed open positions show broker fills confirmed.');
+        console.log('BOOK FILLS CLEAR — push: ' + pushResult);
+        newState.bookFill = { key: fillKey, snap: fillSnap, at: new Date().toISOString(), alertAt: null };
+      } else {
+        newState.bookFill = Object.assign({}, prevState.bookFill, { key: fillKey, snap: fillSnap });
       }
     }
   } catch (e) {
