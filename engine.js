@@ -213,7 +213,7 @@ function getCfg(){
   try{
     if (typeof localStorage !== 'undefined' && localStorage){
       var v = localStorage.getItem(LS_VENUE);
-      if (v === 'all' || v === 'delta' || v === 'cdcx') c.venue = v;
+      if (v === 'all' || v === 'delta' || v === 'cdcx' || v === 'startrader' || v === 'binance') c.venue = v;
       var t = parseFloat(localStorage.getItem(LS_TURN));
       if (isFinite(t) && t > 0) c.minTurnover = t;
     }
@@ -223,7 +223,7 @@ function getCfg(){
 function engineConfig(set){
   try{
     if (set && typeof set === 'object'){
-      if (set.venue === 'all' || set.venue === 'delta' || set.venue === 'cdcx') __cfg.venue = set.venue;
+      if (set.venue === 'all' || set.venue === 'delta' || set.venue === 'cdcx' || set.venue === 'startrader' || set.venue === 'binance') __cfg.venue = set.venue;
       var t = numOrNull(set.minTurnover);
       if (t !== null && t > 0) __cfg.minTurnover = t;
       try{
@@ -412,7 +412,17 @@ function gateCandidate(inp){
   if (dir === 'short' && !(p < e200))
     return die(1, 'close above 4H EMA200 — shorts need the high-timeframe side (swing G2)');
   var hsNote = '';
-  if (typeof hgStructure === 'function'){
+  var sgFn = (typeof hgStructureGate === 'function') ? hgStructureGate
+           : ((typeof G.hgStructureGate === 'function') ? G.hgStructureGate : null);
+  if (sgFn){
+    var sg = null;
+    try{ sg = sgFn(rows4h, dir); }catch(e){ hsNote = ' · hgStructure errored (ignored)'; }
+    if (sg){
+      if (sg.veto)
+        return die(1, sg.note || ('CHoCH against the ' + dir.toUpperCase() + ' cascade — structure broken (hgStructure)'));
+      if (sg.note) hsNote = ' · ' + sg.note;
+    }
+  } else if (typeof hgStructure === 'function'){
     var hs = null, hsErr = false;
     try{ hs = hgStructure(rows4h); }catch(e){ hsErr = true; }
     if (hsErr) hsNote = ' · hgStructure errored (ignored)';
@@ -423,6 +433,16 @@ function gateCandidate(inp){
       if (hs.bos === true && hs.dir === dir) hsNote = ' · BOS confirms ' + dir.toUpperCase() + ' (hgStructure)';
       else hsNote = ' · hgStructure: no opposing read';
     }
+  }
+  /* regime filter — compression chop: trend cascades are unreliable until
+     volatility expands (TTM/Bollinger squeeze discipline). */
+  if (typeof detectRegime === 'function'){
+    try{
+      var dr = detectRegime(rows4h);
+      if (dr && dr.regime === 'compression'){
+        return die(1, dr.label + ' on 4H — cascade into a squeeze is low edge (regime filter)');
+      }
+    }catch(e){}
   }
   res.dir = dir;
   note_(1, true, '4H cascade ' + dir.toUpperCase() + ' · spread ' + n2(spreadX) + 'xATR · close '
@@ -531,8 +551,21 @@ function gateCandidate(inp){
      but conviction-backed sizing is halved and the card says why */
   var toNote = (to !== null) ? 'turnover $' + moneyM(to) : 'turnover n/a — turnover unverified — size down';
   if (to === null) res.turnoverUnverified = true;
+  var pocNote = '';
+  if (typeof volumeProfile === 'function'){
+    try{
+      var vp = volumeProfile(rows4h, 80, 24);
+      if (vp && isFinite(vp.poc)){
+        var inValue = (dir === 'long' && isFinite(vp.val) && p <= vp.poc && p >= vp.val)
+                   || (dir === 'short' && isFinite(vp.vah) && p >= vp.poc && p <= vp.vah);
+        pocNote = ' · POC ' + n2(vp.poc)
+          + (inValue ? (' · price in ' + (dir === 'long' ? 'discount/value' : 'premium/value') + ' area (70% VA)') : '');
+        if (inValue) res.valueAreaAligned = true;
+      }
+    }catch(e){}
+  }
   note_(4, true, 'ATR ' + n2(atrPct, 2) + '% of price · ' + toNote
-        + ' · ' + n2(anchorX) + 'xATR off EMA21');
+        + ' · ' + n2(anchorX) + 'xATR off EMA21' + pocNote);
 
   /* ---------- G5 NEWS RISK ---------- */
   var news = (inp.news !== undefined) ? inp.news : undefined, newsNA = null, newsClear = false;
@@ -606,7 +639,10 @@ function normXuItem(raw){
           : ((typeof raw.symbol === 'string' && raw.symbol) ? raw.symbol : null);
   if (!sym) return null;
   var ex = String(raw.exchange || '').toLowerCase();
-  var exk = (ex === 'delta') ? 'delta' : ((ex === 'coindcx' || ex === 'cdcx') ? 'cdcx' : 'other');
+  var exk = (ex === 'delta') ? 'delta'
+          : ((ex === 'coindcx' || ex === 'cdcx') ? 'cdcx'
+          : ((ex === 'startrader') ? 'startrader'
+          : ((ex === 'binance') ? 'binance' : 'other')));
   return {
     sym: sym,
     base: (typeof raw.base === 'string' && raw.base) ? raw.base : null,
@@ -839,11 +875,13 @@ function cardHTML(r){
       + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (s && typeof G.bookBtnHTML === 'function')
+    ? G.bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta', t2: s.t2 }) : '';
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
     + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
-    + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn
+    + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn + bookBtn
     + '</div>';
 }
 
@@ -887,6 +925,7 @@ var __busySince = 0;  /* watchdog: an await that never settles (hung fetch —
                          its (usually inert) pane — harmless next to a dead layer. */
 var BUSY_STUCK_MS = 10*60*1000;
 var ENGINE_FRESH_MS = 30*60*1000;  /* warm-hook TTL: older survivors re-scan */
+G.ENGINE_FRESH_MS = ENGINE_FRESH_MS;
 function busyStuck(){
   return !!__busy && __busySince > 0 && (Date.now() - __busySince) > BUSY_STUCK_MS;
 }
@@ -997,8 +1036,11 @@ function sortResults(survivors, rejected){
     var ca = a.res.conviction === 'STRONG' ? 0 : 1, cb2 = b.res.conviction === 'STRONG' ? 0 : 1;
     var fa = (a.res.plan && a.res.plan.confirmed) ? 0 : 1, fb = (b.res.plan && b.res.plan.confirmed) ? 0 : 1;
     var pa = a.res.plan ? 0 : 1, pb = b.res.plan ? 0 : 1;
+    var rra = (a.res.plan && isFinite(a.res.plan.rr1)) ? a.res.plan.rr1 : 0;
+    var rrb = (b.res.plan && isFinite(b.res.plan.rr1)) ? b.res.plan.rr1 : 0;
     return (ca - cb2) || (pa - pb) || (fa - fb)
       || (b.res.gatesPassed - a.res.gatesPassed)
+      || (rrb - rra)
       || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
   });
   rejected.sort(function(a, b){
@@ -1266,9 +1308,11 @@ function mount(el){
       + '<span class="note" id="engineStat"></span></div>'
       + '<div class="row" id="engineCfg" style="margin-top:8px">'
       + '<label class="f">VENUE<select id="engineVenue">'
-      + '<option value="all">ALL (Delta + CoinDCX)</option>'
+      + '<option value="all">ALL (Delta + CoinDCX + Startrader + Binance)</option>'
       + '<option value="delta">DELTA only</option>'
       + '<option value="cdcx">CDCX only</option>'
+      + '<option value="startrader">STARTRADER only</option>'
+      + '<option value="binance">BINANCE ext only</option>'
       + '</select></label>'
       + '<label class="f">MIN TURNOVER<select id="engineTurn">'
       + '<option value="500000">$0.5M</option>'

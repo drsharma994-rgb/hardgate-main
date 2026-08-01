@@ -16,6 +16,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
+         bookExecSnapshot, bookExecKey, bookExecAlertDue, bookExecBody, BOOK_EXEC_ALERT_MS,
          istOffHours, offHoursPrefix, offHoursTag } from '../scripts/alert-check.mjs';
 import { fireKey, newFires, atrPlan, fmtL, watchBody, INTERVAL_MS as SQ_WATCH_MS } from '../scripts/squeeze-watch.mjs';
 
@@ -233,6 +234,32 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
      'engine alert: past the 2h throttle -> due again (continuous outage re-alerts slowly)');
 }
 
+/* ---------------- alert-check.mjs book bracket backlog helpers ---------------- */
+
+{
+  const now = Date.now();
+  const desk = { execute: { ok: 2, fail: 1, pending: 3 }, funds: [{ id: 'main', openCount: 2 }, { id: 'gold', openCount: 1 }] };
+  const snap = bookExecSnapshot(desk);
+  ok(snap.pending === 3 && snap.fail === 1 && snap.ok === 2, 'book exec snapshot reads desk execute rollup');
+  ok(bookExecKey(snap) === 'p3|f1', 'book exec key encodes pending/fail counts');
+  ok(bookExecSnapshot(null).pending === 0, 'book exec snapshot: missing desk -> zeros');
+  ok(bookExecAlertDue(undefined, now) === true, 'book exec alert: no prior stamp -> due');
+  ok(bookExecAlertDue(new Date(now - 3600000).toISOString(), now) === false,
+     'book exec alert: 1h ago -> inside 4h throttle');
+  ok(bookExecAlertDue(new Date(now - BOOK_EXEC_ALERT_MS - 60000).toISOString(), now) === true,
+     'book exec alert: past 4h throttle -> due again');
+  const body = bookExecBody(desk, snap);
+  ok(body.indexOf('3 open without bracket') >= 0 && body.indexOf('main (2 open)') >= 0
+     && body.indexOf('ALL FUNDS PENDING') >= 0,
+     'book exec body names backlog + funds + remediation');
+  const liveDesk = { execute: { ok: 3, fail: 0, pending: 1, liveOk: 2, liveFail: 1 },
+    funds: [{ id: 'main', openCount: 1 }] };
+  const liveSnap = bookExecSnapshot(liveDesk);
+  ok(liveSnap.liveOk === 2 && liveSnap.liveFail === 1, 'book exec snapshot reads LIVE webhook counts');
+  ok(bookExecBody(liveDesk, liveSnap).indexOf('LIVE webhook (7d): 2 OK · 1 fail') >= 0,
+     'book exec body includes LIVE webhook line when present');
+}
+
 /* ---------------- alert-check.mjs ntfy fallback selector ---------------- */
 
 {
@@ -260,8 +287,12 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   /* env hygiene: save/restore around each probe */
   const savedT = process.env.TELEGRAM_TOKEN, savedC = process.env.TELEGRAM_CHAT_ID, savedN = process.env.NTFY_TOPIC;
   delete process.env.TELEGRAM_TOKEN; delete process.env.TELEGRAM_CHAT_ID;
-  const skipT = await sendTelegramCi('x');
-  ok(typeof skipT === 'string' && skipT.indexOf('skipped') === 0, 'telegram: no secrets -> honest skip, no network');
+  let defCall = null, defSent;
+  await withFetch(async (url, opts) => { defCall = { url, opts }; return fetchOk('{}', 200)(url, opts); },
+    async () => { defSent = await sendTelegramCi('x'); });
+  ok(defSent === 'sent' && defCall && defCall.url.indexOf('api.telegram.org/bot') >= 0
+     && JSON.parse(defCall.opts.body).chat_id === '1004014764',
+     'telegram: no env secrets -> baked-in owner defaults used (not skipped)');
   process.env.TELEGRAM_TOKEN = 'tok'; process.env.TELEGRAM_CHAT_ID = '42';
   let tgSent, tgCall = null;
   await withFetch(async (url, opts) => { tgCall = { url, opts }; return fetchOk('{}', 200)(url, opts); },
@@ -281,8 +312,8 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   delete process.env.NTFY_TOPIC;
   let casc2;
   await withFetch(fetchOk('{}', 200), async () => { casc2 = await sendAlertCi('t', 'b'); });
-  ok(typeof casc2 === 'string' && casc2.indexOf('telegram skipped') === 0 && casc2.indexOf('ntfy skipped') >= 0,
-     'cascade: both channels unset -> both honestly skipped — got "' + casc2 + '"');
+  ok(casc2 === 'telegram: sent',
+     'cascade: env unset -> baked-in telegram defaults still deliver — got "' + casc2 + '"');
   if (savedT !== undefined) process.env.TELEGRAM_TOKEN = savedT;
   if (savedC !== undefined) process.env.TELEGRAM_CHAT_ID = savedC;
   if (savedN !== undefined) process.env.NTFY_TOPIC = savedN;
@@ -478,6 +509,11 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(yml.includes('git diff --cached --quiet || git commit'), 'workflow commit guard intact (works with heartbeat: no-op when state unchanged)');
   ok(yml.includes('TELEGRAM_TOKEN') && yml.includes('TELEGRAM_CHAT_ID'), 'workflow passes the telegram secrets');
 }
+{
+  const bd = fs.readFileSync(fileURLToPath(new URL('../.github/workflows/book-digest.yml', import.meta.url)), 'utf8');
+  ok(bd.includes('/api/book/digest/send'), 'book-digest workflow hits digest send endpoint');
+  ok(bd.includes('"cron":true'), 'book-digest workflow passes cron flag');
+}
 /* off-hours session tag — same IST windows as brain.js sessionWindow;
    deterministic UTC anchors (IST = UTC + 5:30) */
 {
@@ -491,7 +527,12 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(offHoursTag(Date.UTC(2026, 6, 28, 20, 0)).indexOf('half size or skip') > 0
      && offHoursTag(Date.UTC(2026, 6, 27, 4, 30)) === '', 'offHoursTag: body warning only off-hours');
 }
-for (const f of ['../api/proxy.js', '../scripts/alert-check.mjs', '../scripts/server.mjs']){
+{
+  const alertSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/alert-check.mjs', import.meta.url)), 'utf8');
+  ok(alertSrc.indexOf('bookTryPollFills') >= 0 && alertSrc.indexOf('caps.fillPoll') >= 0,
+    'alert-check auto poll-fills when fillPoll configured');
+}
+for (const f of ['../api/proxy.js', '../api/fred.js', '../scripts/alert-check.mjs', '../scripts/server.mjs', '../lib/digest-email.mjs', '../lib/execute-api.mjs']){
   try{
     execFileSync(process.execPath, ['--check', fileURLToPath(new URL(f, import.meta.url))], { stdio: 'pipe' });
     ok(true, 'node --check ' + f);

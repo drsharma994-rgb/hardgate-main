@@ -11,7 +11,7 @@ asset and reports honestly.
 
 EXPORTS (all on window, all feature-checkable, none ever throw):
   window.xuUniverse(force?) -> Promise<Array<{
-      sym, base, exchange:'delta'|'coindcx',
+      sym, base, exchange:'delta'|'coindcx'|'startrader'|'binance',
       turnoverUsd:number|null, mark:number|null, fundingPct:number|null,
       oiUsd:number|null, oiContracts:number|null,   -- Delta-native OI when
       the venue reports it (oi_value_usd / oi_contracts); null on CoinDCX
@@ -41,7 +41,8 @@ EXPORTS (all on window, all feature-checkable, none ever throw):
       when unavailable the kline fetch itself is attempted and an empty
       result reads as "not on Binance". All module tfs map 1:1 onto
       Binance intervals (see BIN_RES).
-  window.xuMerge(deltaRows, cdcxRows) -> pure merge of normalized rows.
+  window.xuMerge(deltaRows, cdcxRows, ...) -> pure merge of normalized rows
+      (2+ leg arrays; backward-compatible two-arg form).
       Dedupe by base asset (BTCUSD/BTCUSDT and B-BTC_USDT are the same
       asset): the higher-known-turnover venue becomes the primary entry,
       alsoOn carries the other venue's symbol. Turnover known beats
@@ -153,6 +154,8 @@ function timedFetch(url){
 function baseOf(sym, exchange){
   var s = String(sym == null ? '' : sym).toUpperCase();
   if (exchange === 'coindcx') return s.replace(/^B-/, '').replace(/_USDT$/, '');
+  if (exchange === 'startrader' && typeof G.startraderBaseOf === 'function') return G.startraderBaseOf(s);
+  if (exchange === 'binance') return s.replace(/USDT$/, '');
   return s.replace(/USD(T)?$/, '');
 }
 
@@ -254,13 +257,21 @@ function xuMergeCdcxMarks(rows, body){
   }catch(e){ return { rows: rows || [], count: 0 }; }
 }
 
+function xuAlsoOnAdd(cur, sym){
+  if (!sym || cur.sym === sym) return;
+  if (!cur.alsoOn) cur.alsoOn = sym;
+  else if (String(cur.alsoOn).indexOf(sym) < 0) cur.alsoOn = cur.alsoOn + ',' + sym;
+}
+
 /* ---------------- pure cross-exchange merge (vm-testable) ----------------
-   Dedupe by base asset. Known turnover beats unknown; both known -> higher
-   venue wins; both unknown -> prefer delta. alsoOn = other venue's symbol.
-   Output sorted turnover-desc, unknowns last, base alpha tiebreak. */
-function xuMerge(deltaRows, cdcxRows){
+   Dedupe by base asset across N venue legs. Known turnover beats unknown;
+   both known -> higher venue wins; both unknown -> earlier leg wins (delta
+   before cdcx before startrader before binance). alsoOn carries alternate
+   venue symbols (comma-separated when >1). Output sorted turnover-desc. */
+function xuMergeLegs(){
   try{
-    var byBase = {}; // base -> entry
+    var legArgs = arguments;
+    var byBase = {};
     var order = [];
     function num(x){ return (typeof x === 'number' && isFinite(x)) ? x : null; }
     function consider(row){
@@ -283,7 +294,7 @@ function xuMerge(deltaRows, cdcxRows){
       var rowWins = (rt !== null && ct === null) || (rt !== null && ct !== null && rt > ct);
       var otherVenue = cur.exchange !== row.exchange;
       if (rowWins){
-        if (otherVenue) cur.alsoOn = cur.sym; // displaced primary becomes the alternate venue
+        if (otherVenue) cur.alsoOn = cur.sym; /* displaced primary symbol (old code path) */
         cur.sym = row.sym; cur.exchange = row.exchange;
         cur.turnoverUsd = rt;
         cur.mark = num(row.mark);
@@ -291,8 +302,7 @@ function xuMerge(deltaRows, cdcxRows){
         cur.oiUsd = num(row.oiUsd);
         cur.oiContracts = num(row.oiContracts);
       } else if (cur.sym !== row.sym){
-        if (otherVenue && cur.alsoOn === null) cur.alsoOn = row.sym;
-        /* fill gaps honestly from the secondary venue */
+        if (otherVenue) xuAlsoOnAdd(cur, row.sym);
         if (cur.mark === null && num(row.mark) !== null) cur.mark = num(row.mark);
         if (cur.fundingPct === null && num(row.fundingPct) !== null) cur.fundingPct = num(row.fundingPct);
         if (cur.oiUsd === null && num(row.oiUsd) !== null) cur.oiUsd = num(row.oiUsd);
@@ -300,15 +310,57 @@ function xuMerge(deltaRows, cdcxRows){
         if (ct === null && rt !== null) cur.turnoverUsd = rt;
       }
     }
-    /* delta first: when turnover is unknown on BOTH, delta stays primary */
-    (deltaRows || []).forEach(consider);
-    (cdcxRows || []).forEach(consider);
+    for (var L = 0; L < legArgs.length; L++){
+      (legArgs[L] || []).forEach(consider);
+    }
     var out = order.map(function(b){ return byBase[b]; });
     out.sort(function(a, b){
       var ta = (a.turnoverUsd === null) ? -1 : a.turnoverUsd;
       var tb = (b.turnoverUsd === null) ? -1 : b.turnoverUsd;
       if (tb !== ta) return tb - ta;
       return a.base < b.base ? -1 : (a.base > b.base ? 1 : 0);
+    });
+    return out;
+  }catch(e){ return []; }
+}
+function xuMerge(deltaRows, cdcxRows){
+  try{
+    if (arguments.length <= 2) return xuMergeLegs(deltaRows, cdcxRows);
+    return xuMergeLegs.apply(null, arguments);
+  }catch(e){ return []; }
+}
+
+/* Binance USD-M perps not already covered by base — "everything else" leg */
+function xuNormBinanceExt(tickers, coveredBases){
+  try{
+    if (!tickers || typeof tickers !== 'object') return [];
+    var seen = {};
+    if (coveredBases){
+      for (var k in coveredBases) if (coveredBases[k]) seen[String(k).toUpperCase()] = true;
+    }
+    var out = [];
+    for (var sym in tickers){
+      if (!sym || !/USDT$/.test(sym)) continue;
+      var base = sym.replace(/USDT$/, '');
+      if (!base || seen[base]) continue;
+      var t = tickers[sym];
+      out.push({
+        sym: sym,
+        base: base,
+        exchange: 'binance',
+        turnoverUsd: numOrNull(t && t.turnoverUsd),
+        mark: numOrNull(t && t.mark),
+        fundingPct: null,
+        oiUsd: null,
+        oiContracts: null,
+        alsoOn: null
+      });
+      seen[base] = true;
+    }
+    out.sort(function(a, b){
+      var ta = (a.turnoverUsd === null) ? -1 : a.turnoverUsd;
+      var tb = (b.turnoverUsd === null) ? -1 : b.turnoverUsd;
+      return tb - ta;
     });
     return out;
   }catch(e){ return []; }
@@ -334,6 +386,14 @@ async function fetchCdcxMarksLeg(){
   if (!r || !r.ok) throw new Error('CoinDCX marks HTTP ' + (r ? r.status : '?'));
   return r.json();
 }
+async function fetchStartraderLeg(){
+  if (typeof G.startraderUniverseRows === 'function') return G.startraderUniverseRows();
+  return [];
+}
+async function fetchBinanceTickersLeg(){
+  if (typeof G.binanceTickers24h !== 'function') return null;
+  return G.binanceTickers24h();
+}
 
 /* ---------------- the combined universe ---------------- */
 async function xuUniverse(force){
@@ -341,10 +401,15 @@ async function xuUniverse(force){
     if (!force && cache && (Date.now() - cache.at) < CACHE_MS) return cache.rows;
     if (inflight) return inflight; // busy-guard: share the in-flight fetch
     inflight = (async function(){
-      var legs = await Promise.allSettled([fetchDeltaLeg(), fetchCdcxLeg(), fetchCdcxMarksLeg()]);
-      var d = legs[0], c = legs[1], mk = legs[2];
+      var legs = await Promise.allSettled([
+        fetchDeltaLeg(), fetchCdcxLeg(), fetchCdcxMarksLeg(),
+        fetchStartraderLeg(), fetchBinanceTickersLeg()
+      ]);
+      var d = legs[0], c = legs[1], mk = legs[2], st = legs[3], bn = legs[4];
       var dRows = d.status === 'fulfilled' ? d.value : [];
       var cRows = c.status === 'fulfilled' ? c.value : [];
+      var stRows = st.status === 'fulfilled' ? st.value : [];
+      var tickers = (bn.status === 'fulfilled') ? bn.value : null;
       var cdcxMarks = 0, marksNote = null;
       /* marks are a companion: merge when available, honest note when the
          leg failed AND there are cdcx rows that now lack marks. A 200 with
@@ -363,18 +428,26 @@ async function xuUniverse(force){
         if (cache && cache.rows){
           note = 'both exchange legs failed (' + errMsg(d.reason) + '; ' + errMsg(c.reason) + ') — showing last good universe from ' + new Date(cache.at).toISOString();
           lastNote = note;
-          return cache.rows; // good data is never replaced by a failed run
+          return cache.rows;
         }
         note = 'both exchange legs failed (' + errMsg(d.reason) + '; ' + errMsg(c.reason) + ') — universe empty';
-        cache = { rows: [], deltaRows: [], cdcxRows: [], at: Date.now(), deltaCount: 0, cdcxCount: 0, cdcxMarks: 0, note: note };
+        cache = { rows: [], deltaRows: [], cdcxRows: [], startraderRows: [], binanceRows: [], at: Date.now(), deltaCount: 0, cdcxCount: 0, startraderCount: 0, binanceCount: 0, cdcxMarks: 0, note: note };
         lastNote = note;
         return [];
       }
       if (d.status !== 'fulfilled') note = 'delta leg failed: ' + errMsg(d.reason) + ' — CoinDCX contracts only, no Delta funding/OI data';
       if (c.status !== 'fulfilled') note = 'coindcx leg failed: ' + errMsg(c.reason) + ' — Delta India contracts only';
+      if (st.status !== 'fulfilled') note = (note ? note + '; ' : '') + 'startrader leg failed: ' + errMsg(st.reason);
+      if (bn.status !== 'fulfilled') note = (note ? note + '; ' : '') + 'binance extension leg failed: ' + errMsg(bn.reason);
       if (marksNote) note = note ? (note + '; ' + marksNote) : marksNote;
-      var rows = xuMerge(dRows, cRows);
-      cache = { rows: rows, deltaRows: dRows, cdcxRows: cRows, at: Date.now(), deltaCount: dRows.length, cdcxCount: cRows.length, cdcxMarks: cdcxMarks, note: note };
+      var preMerge = xuMergeLegs(dRows, cRows, stRows);
+      var covered = {};
+      for (var ci = 0; ci < preMerge.length; ci++) covered[preMerge[ci].base] = true;
+      var bnRows = xuNormBinanceExt(tickers, covered);
+      var rows = xuMergeLegs(dRows, cRows, stRows, bnRows);
+      cache = { rows: rows, deltaRows: dRows, cdcxRows: cRows, startraderRows: stRows, binanceRows: bnRows,
+        at: Date.now(), deltaCount: dRows.length, cdcxCount: cRows.length,
+        startraderCount: stRows.length, binanceCount: bnRows.length, cdcxMarks: cdcxMarks, note: note };
       lastNote = note;
       return rows;
     })();
@@ -487,13 +560,24 @@ async function xuCandles(item, tf, n){
           }).filter(function(c){ return isFinite(c.t); });
           rows.sort(function(a, b){ return a.t - b.t; });
         }
-      }catch(e){ rows = []; } // venue leg down -> [] -> Binance fallback below
+      }catch(e){ rows = []; }
+    }
+    else if (item.exchange === 'startrader' || item.exchange === 'binance'){
+      src = item.exchange;
+      try{
+        if (typeof G.binanceKlines === 'function'){
+          var bSym = (item.exchange === 'binance') ? item.sym
+            : ((typeof G.startraderBinanceSym === 'function') ? G.startraderBinanceSym(item.base) : (item.base + 'USDT'));
+          if (bSym) rows = await G.binanceKlines(bSym, BIN_RES[tf] || tf, count);
+          if (!Array.isArray(rows)) rows = [];
+        }
+      }catch(e){ rows = []; }
     }
     else return [];
     /* Venue could not fill the request (outage or thin listing): reroute to
        the base asset's Binance USDT perp when one exists. Binance rows win
        only when deeper; the venue's honest rows are never hidden. */
-    if (rows.length < count){
+    if (rows.length < count && item.exchange !== 'startrader' && item.exchange !== 'binance'){
       var fb = await binanceCandleFallback(item, tf, count, rows);
       if (fb){ rows = fb; src = 'binance-fallback'; }
     }
@@ -506,7 +590,9 @@ async function xuCandles(item, tf, n){
 function xuState(){
   try{
     if (!cache) return null;
-    return { count: cache.rows.length, delta: cache.deltaCount, cdcx: cache.cdcxCount, cdcxMarks: (cache.cdcxMarks || 0), at: cache.at, note: cache.note };
+    return { count: cache.rows.length, delta: cache.deltaCount, cdcx: cache.cdcxCount,
+      startrader: (cache.startraderCount || 0), binance: (cache.binanceCount || 0),
+      cdcxMarks: (cache.cdcxMarks || 0), at: cache.at, note: cache.note };
   }catch(e){ return null; }
 }
 function xuUniverseNote(){
@@ -542,6 +628,21 @@ function xuPositioning(baseOrSym){
                  mark: (typeof r.mark === 'number' ? r.mark : null), exchange: 'coindcx' };
       }
     }
+    var stRows = cache.startraderRows || [], bnRows = cache.binanceRows || [];
+    for (i = 0; i < stRows.length; i++){
+      r = stRows[i];
+      if (r.sym === X || r.base === X || r.base === bD || r.base === bC){
+        return { sym: r.sym, base: r.base, fundingPct: (typeof r.fundingPct === 'number' ? r.fundingPct : null),
+                 oiUsd: null, mark: (typeof r.mark === 'number' ? r.mark : null), exchange: 'startrader' };
+      }
+    }
+    for (i = 0; i < bnRows.length; i++){
+      r = bnRows[i];
+      if (r.sym === X || r.base === X || r.base === bD || r.base === bC){
+        return { sym: r.sym, base: r.base, fundingPct: (typeof r.fundingPct === 'number' ? r.fundingPct : null),
+                 oiUsd: null, mark: (typeof r.mark === 'number' ? r.mark : null), exchange: 'binance' };
+      }
+    }
     return null;
   }catch(e){ return null; }
 }
@@ -551,8 +652,10 @@ try{
   G.xuUniverse = xuUniverse;
   G.xuCandles = xuCandles;
   G.xuMerge = xuMerge;
+  G.xuMergeLegs = xuMergeLegs;
   G.xuNormDelta = xuNormDelta;
   G.xuNormCdcx = xuNormCdcx;
+  G.xuNormBinanceExt = xuNormBinanceExt;
   G.xuMergeCdcxMarks = xuMergeCdcxMarks;
   G.xuPositioning = xuPositioning;
   G.xuState = xuState;

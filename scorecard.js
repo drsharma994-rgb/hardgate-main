@@ -57,6 +57,10 @@ STATS (pure): window.hgScoreStats(records) -> {
   enoughData, byTier:{PRIME:{n,wins,winRate,avgR},HIGH:{...},...},
   byLane:{crypto:{...},gold:{...}}, byDir:{long:{...},short:{...}},
   byLayer:{NAME:{n,wins,winRate,avgR}} }
+
+PROFIT RANK (pure): window.hgProfitRankHint({sym, dir, tier, layers, lane, rr1})
+  -> {boost, enough, expectancy, parts} — settled-ledger expectancy as a small
+  sort boost (±25 cap). Unproven buckets = boost 0; never throws.
   Settled records WITHOUT a finite R (e.g. EXPIRED with no candle data)
   count in `settled` but are excluded from every rate/average — never
   silently folded in. expectancy = mean R per settled trade (the per-trade
@@ -420,6 +424,71 @@ function hgScoreStats(records){
     for (var nk in byLayer) out.byLayer[nk] = finish(byLayer[nk]);
     return out;
   }catch(e){ return empty; }
+}
+
+/* ================= profit rank hint (PURE — live-ranking seam) =================
+   Turns settled-ledger evidence into a small sort boost for BRAIN tickets, BEST
+   cascade, and gold ranker. Unproven buckets contribute 0 — never penalize
+   absence. Proven-negative expectancy demotes; proven-positive promotes.
+   boost is in rank points on brain's ~0–3050 scale (capped ±25). */
+var HINT_MIN_N   = 3;
+var HINT_BOOST_CAP = 25;
+
+function hgProfitRankHint(input){
+  var zero = { boost: 0, enough: false, expectancy: null, parts: [] };
+  try{
+    var inp = (input && typeof input === 'object') ? input : {};
+    var parts = [], sumW = 0, sumE = 0;
+
+    function addBucket(label, bucket){
+      if (!bucket || bucket.n < HINT_MIN_N || bucket.avgR === null || !isFinite(bucket.avgR)) return;
+      var w = Math.min(bucket.n, 20);
+      parts.push({ label: label, n: bucket.n, avgR: bucket.avgR, w: w });
+      sumW += w;
+      sumE += bucket.avgR * w;
+    }
+
+    var st = hgScoreStats(store);
+    var sym = String(inp.sym == null ? '' : inp.sym).toUpperCase().trim();
+    var dir = (inp.dir === 'short') ? 'short' : ((inp.dir === 'long') ? 'long' : null);
+    var tier = String(inp.tier == null ? '' : inp.tier).toUpperCase().trim();
+    var lane = laneOf(sym, inp.lane);
+
+    if (sym && dir){
+      var sb = { n: 0, sumR: 0 };
+      for (var i = 0; i < store.length; i++){
+        var rec = store[i];
+        if (!rec || rec.status !== 'settled' || typeof rec.r !== 'number' || !isFinite(rec.r)) continue;
+        if (rec.sym === sym && rec.dir === dir){ sb.n++; sb.sumR += rec.r; }
+      }
+      if (sb.n >= HINT_MIN_N) addBucket(sym + ' ' + dir, { n: sb.n, avgR: sb.sumR / sb.n });
+    }
+
+    if (tier && st.byTier[tier]) addBucket('tier ' + tier, st.byTier[tier]);
+    if (dir && st.byDir[dir]) addBucket('dir ' + dir, st.byDir[dir]);
+    if (st.byLane[lane]) addBucket('lane ' + lane, st.byLane[lane]);
+
+    var layers = Array.isArray(inp.layers) ? inp.layers : [];
+    var bestLayer = null, bestN = 0;
+    for (var li = 0; li < layers.length; li++){
+      var ln = String(layers[li] == null ? '' : layers[li]).trim().toUpperCase();
+      if (!ln || !st.byLayer[ln]) continue;
+      var lb = st.byLayer[ln];
+      if (lb.n >= HINT_MIN_N && lb.n > bestN){ bestLayer = ln; bestN = lb.n; }
+    }
+    if (bestLayer) addBucket('layer ' + bestLayer, st.byLayer[bestLayer]);
+
+    if (!sumW) return zero;
+
+    var expectancy = sumE / sumW;
+    var boost = Math.max(-HINT_BOOST_CAP, Math.min(HINT_BOOST_CAP, expectancy * 10));
+    return {
+      boost: Math.round(boost * 100) / 100,
+      enough: true,
+      expectancy: Math.round(expectancy * 10000) / 10000,
+      parts: parts
+    };
+  }catch(e){ return zero; }
 }
 
 /* ================= record ================= */
@@ -990,6 +1059,7 @@ try{
   G.hgScoreSettle = hgScoreSettle;
   G.hgScoreWalk = hgScoreWalk;
   G.hgScoreStats = hgScoreStats;
+  G.hgProfitRankHint = hgProfitRankHint;
   G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
   G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };
   G.HG_tabs = G.HG_tabs || [];

@@ -323,6 +323,14 @@ function cardHTML(r){
       + ' · T1 = sma' + MEAN_LEN + ' mean · T2 = opposite band(' + BB_LEN + ',' + BB_MULT + ')</div>'
     : '<div class="plan">levels unavailable — ATR/band data missing for ' + esc(r.sym) + '</div>';
 
+  var tradeBtn = (lv && typeof toTrade === 'function')
+    ? '<button class="toTrade" onclick="'
+      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(sig.dir) + ',' + lv.entry + ',' + lv.stop + ',' + lv.t1 + ')')
+          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (lv && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev', t2: lv.t2 }) : '';
+
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="dir">' + dirUp + ' · MEAN REV · exp ' + fmtSignedR(bt.expR) + '</span></div>'
@@ -341,6 +349,8 @@ function cardHTML(r){
     + '</div>'
     + planBlock
     + '<div class="plan">' + record + '</div>'
+    + tradeBtn
+    + bookBtn
     + '</div>';
 }
 
@@ -499,6 +509,24 @@ W.mrSignal = mrSignal;
 W.mrBacktest = mrBacktest;
 W.meanrevPlan = meanrevPlan;
 W.meanrevPlanHtml = meanrevPlanHtml;
+/* meanrevAssess(rows) — pure read for BRAIN/BEST: live signal + replay stats. */
+function meanrevAssess(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < REGIME_LEN + 10) return null;
+    var sig = mrSignal(rows);
+    var bt = mrBacktest(rows);
+    if (!bt || !isFinite(bt.n)) return { signal: sig, dir: sig ? sig.dir : null, expR: 0, n: 0 };
+    return {
+      signal: sig,
+      dir: sig ? sig.dir : null,
+      expR: isFinite(bt.expR) ? bt.expR : 0,
+      n: bt.n,
+      winPct: bt.winPct,
+      pf: bt.pf
+    };
+  }catch(e){ return null; }
+}
+W.meanrevAssess = meanrevAssess;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'meanrev', label: 'MEAN REV', mount: mount, refresh: mrRefresh });
 })();

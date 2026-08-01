@@ -278,12 +278,13 @@ var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with 
 /* layer kind map — structural vs positioning vs context. PRIME requires at
    least one agreeing structural AND one agreeing positioning vote. */
 var LAYER_KIND = {
-  engine: 'structural', squeeze: 'structural',
+  engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
   goldsetup: 'structural', golddeep: 'structural',
   trend4h: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
-  tape: 'context', fng: 'context', funding: 'context', guard: 'context'
+  tape: 'context', fng: 'context', funding: 'context', guard: 'context',
+  carry: 'context', termbasis: 'context'
 };
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
 
@@ -550,6 +551,13 @@ function brainCollect(inputs){
   if (!inp.engine || typeof inp.engine !== 'object'){ dark('engine', 'gate engine returned no state — the deep scan has not warmed'); }
   else{
     var en = inp.engine, enHit = false, ei;
+    var engFresh = (typeof G.ENGINE_FRESH_MS === 'number' && G.ENGINE_FRESH_MS > 0) ? G.ENGINE_FRESH_MS : (30 * 60 * 1000);
+    var engAt = (en.at && isFinite(+en.at)) ? +en.at : 0;
+    var engAge = (engAt > 1e11) ? (Date.now() - engAt) : 0;
+    if (!(engAge >= 0 && engAge <= engFresh)){
+      dark('engine', 'gate engine snapshot stale (' + (isFinite(engAge) ? Math.floor(engAge / 60000) : '?')
+        + 'm old) — re-run EXECUTE scan; survivors do not vote until refreshed');
+    }else{
     var surv = Array.isArray(en.survivors) ? en.survivors : [];
     for (ei = 0; ei < surv.length; ei++){
       var sv = surv[ei];
@@ -598,6 +606,7 @@ function brainCollect(inputs){
       }
     }
     if (!enHit) hush('engine', 'engine ran — this symbol was not gated (no survivor or rejection row)');
+    }
   }
 
   /* ---- OI FLOW / SMART classification ---- */
@@ -640,6 +649,29 @@ function brainCollect(inputs){
     if (!sqHit) hush('squeeze', 'no squeeze state names this symbol');
   }
 
+  /* ---- CARRY — cross-venue funding spread context (not a tier alone) ---- */
+  if (inp.carry === undefined || inp.carry === null){ hush('carry', 'carry scanner returned no state — run CARRY or warm the layer'); }
+  else{
+    var csp = isFinite(+inp.carry.topSpread) ? +inp.carry.topSpread : null;
+    var cbase = (typeof inp.carry.topBase === 'string' && inp.carry.topBase) ? inp.carry.topBase : null;
+    if (csp !== null && csp >= 25)
+      push('carry', 'neutral', 'CARRY ' + FMT(csp, 1) + '% APR spread'
+        + (cbase ? ' on ' + cbase : '') + ' — verify both legs, funding can flip', { caution: true });
+    else hush('carry', 'no cross-venue carry spread ≥ 25% APR right now');
+  }
+
+  /* ---- TERM BASIS — futures curve shape context ---- */
+  if (inp.termbasis === undefined || inp.termbasis === null){ hush('termbasis', 'term basis scanner returned no state — run TERM BASIS or warm'); }
+  else{
+    var tb = inp.termbasis.top;
+    if (tb && typeof tb === 'object' && tb.regime === 'contango' && isFinite(+tb.spreadCur) && +tb.spreadCur >= 0.25)
+      push('termbasis', 'neutral', 'TERM BASIS perp rich vs dated futures on '
+        + (tb.pair || '?') + ' (' + FMT(+tb.spreadCur, 2) + '%) — crowded long funding risk', { caution: true });
+    else if (tb && typeof tb === 'object' && tb.regime === 'backwardation')
+      push('termbasis', 'neutral', 'TERM BASIS backwardation on ' + (tb.pair || '?') + ' — perp cheap vs dated');
+    else hush('termbasis', 'term structure flat or sub-threshold — no curve edge');
+  }
+
   /* ---- TAPE — 24h momentum + participation (Binance 24h tickers map,
      {SYM:{chg24, turnoverUsd}}, app-wide cached — no extra fetch). Gives
      every Binance-overlapping candidate at least one possible evidence read;
@@ -678,9 +710,11 @@ function brainCollect(inputs){
 
   /* ---- LIQS flush-reversal (one market-wide setup; must name this symbol) ---- */
   if (inp.liq === undefined || inp.liq === null){
-    if (inp.liq === undefined){ hush('liqs', 'no liquidation snapshot — stream-only layer cold (open LIQS once to start the socket)');
-                                dark('liqs', 'no liquidation snapshot — stream-only layer cold (open LIQS once to start the socket)'); }
-    else hush('liqs', 'liquidations live — no flush-reversal setup in the current window');
+    if (inp.liq === undefined){
+      dark('liqs', 'no liquidation snapshot — LIQS stream cold or not yet warmed (auto-warm + session persist apply)');
+    }else{
+      hush('liqs', 'liquidations live — no flush-reversal setup in the current window');
+    }
   }
   else if (typeof inp.liq === 'object'){
     var lf = inp.liq;
@@ -697,6 +731,9 @@ function brainCollect(inputs){
      their ledger says so plainly; WATCH-or-better rows get this note
      overwritten by applyTrend4h (vote / dark / silent-with-reason) */
   jot('trend4h', 'SILENT', 'awaiting the post-scan candle fetch — evaluated only for WATCH-or-better rows');
+  jot('structure', 'SILENT', 'awaiting post-fetch BOS/CHoCH read on 4H structure');
+  jot('meanrev', 'SILENT', 'awaiting post-fetch mean-reversion assess (range regimes only)');
+  jot('poc', 'SILENT', 'awaiting post-fetch volume-profile value-area read');
 
   return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent, notes: notes };
 }
@@ -981,11 +1018,12 @@ function snapshotLayers(){
             engine: undefined, oiflow: undefined, squeeze: undefined,
             liqSnap: undefined, liqSetup: undefined, tape: undefined,
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
-            newsState: undefined, fng: null };
+            newsState: undefined, fng: null, carry: undefined, termbasis: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
                   engine: 'engineState', oiflow: 'oiflowState', squeeze: 'squeezeState',
-                  goldBasis: 'goldspotState', newsState: 'hgNewsState' };
+                  goldBasis: 'goldspotState', newsState: 'hgNewsState',
+                  carry: 'carryState', termbasis: 'termBasisState' };
   for (var k in getters){
     if (!Object.prototype.hasOwnProperty.call(getters, k)) continue;
     try{ o[k] = grab(getters[k])(); }catch(e){ o[k] = undefined; }
@@ -997,18 +1035,29 @@ function snapshotLayers(){
       o.onchain = G.onchainSignal(o.onchain.snap);
     }
   }catch(e){ o.onchain = undefined; }
-  /* liqs: fresh snapshot from the exported aggregator factory; a flush setup
-     only exists when the window imbalance classifies as a flush */
+  /* liqs: live tab snapshot via liqsState(); test stubs may still use liqAgg(). */
   try{
-    if (typeof G.liqAgg === 'function'){
+    var liqSnap = null, liqSetup = null;
+    if (typeof G.liqsState === 'function'){
+      var lst = G.liqsState();
+      if (lst && lst.snap){
+        liqSnap = lst.snap;
+        liqSetup = (lst.setup !== undefined) ? lst.setup : null;
+      }
+    }
+    if (!liqSnap && typeof G.liqAgg === 'function'){
       var agg = G.liqAgg();
       if (agg && typeof agg.snapshot === 'function'){
-        o.liqSnap = agg.snapshot();
-        var cls = o.liqSnap && o.liqSnap.imbalance && o.liqSnap.imbalance.cls;
-        if ((cls === 'long-flush' || cls === 'short-flush') && typeof G.liqFlushSetup === 'function')
-          o.liqSetup = G.liqFlushSetup(o.liqSnap, null) || null;
-        else o.liqSetup = null;
+        liqSnap = agg.snapshot();
+        var cls0 = liqSnap && liqSnap.imbalance && liqSnap.imbalance.cls;
+        if ((cls0 === 'long-flush' || cls0 === 'short-flush') && typeof G.liqFlushSetup === 'function')
+          liqSetup = G.liqFlushSetup(liqSnap, null) || null;
+        else liqSetup = null;
       }
+    }
+    if (liqSnap){
+      o.liqSnap = liqSnap;
+      o.liqSetup = liqSetup;
     }
   }catch(e){ o.liqSnap = undefined; o.liqSetup = undefined; }
   /* gold lane verdicts stashed by the GOLD tab (both optional) */
@@ -1055,7 +1104,10 @@ function brainUniverse(xuList, opts){
          ('delta'|'cdcx'). cand.xu keeps the ORIGINAL item — xuCandles routes
          on item.exchange ('coindcx'), never hand it the normalized key. */
       var exRaw = (typeof it.exchange === 'string') ? it.exchange.toLowerCase() : '';
-      var ex = (exRaw === 'delta') ? 'delta' : ((exRaw === 'coindcx' || exRaw === 'cdcx') ? 'cdcx' : '');
+      var ex = (exRaw === 'delta') ? 'delta'
+        : ((exRaw === 'coindcx' || exRaw === 'cdcx') ? 'cdcx'
+        : ((exRaw === 'startrader') ? 'startrader'
+        : ((exRaw === 'binance') ? 'binance' : '')));
       if (!sym || !base || !ex) continue;
       items.push({ sym: sym, base: base, exchange: ex,
                    turnoverUsd: (typeof it.turnoverUsd === 'number' && isFinite(it.turnoverUsd)) ? it.turnoverUsd : null,
@@ -1095,22 +1147,25 @@ function brainUniverse(xuList, opts){
     if (!byBase[bb] || BASE_BLOCK[bb]) continue;
     candidates.push(xuCand(byBase[bb]));
   }
-  var nDelta = 0, nCdcx = 0;
+  var nDelta = 0, nCdcx = 0, nStar = 0, nBin = 0;
   for (var c = 0; c < candidates.length; c++){
     if (candidates[c].exchange === 'delta') nDelta++;
     else if (candidates[c].exchange === 'cdcx') nCdcx++;
+    else if (candidates[c].exchange === 'startrader') nStar++;
+    else if (candidates[c].exchange === 'binance') nBin++;
   }
   return { mode: 'combined', candidates: candidates,
-           counts: { total: candidates.length, delta: nDelta, cdcx: nCdcx },
+           counts: { total: candidates.length, delta: nDelta, cdcx: nCdcx, startrader: nStar, binance: nBin },
            venue: venue,
            note: 'BTC/ETH/SOL + ' + Math.max(0, candidates.length - BASES.length)
-               + ' combined alts (delta ' + nDelta + ' + cdcx ' + nCdcx + ') + XAU gold lane' };
+               + ' combined alts (delta ' + nDelta + ' + cdcx ' + nCdcx
+               + (nStar ? ' + startrader ' + nStar : '') + (nBin ? ' + binance ' + nBin : '') + ') + XAU gold lane' };
 }
 
 /* ---------------- venue filter (persisted) ---------------- */
 function normVenue(v){
   v = String(v === null || v === undefined ? '' : v).toUpperCase();
-  return (v === 'DELTA' || v === 'CDCX') ? v : 'ALL';
+  return (v === 'DELTA' || v === 'CDCX' || v === 'STARTRADER') ? v : 'ALL';
 }
 function lsGet(k){
   try{
@@ -1330,6 +1385,7 @@ function judgeCrypto(cand, snap){
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     tape: snap.tape, fng: snap.fng,
+    carry: snap.carry, termbasis: snap.termbasis,
     liq: (snap.liqSetup === undefined ? undefined : snap.liqSetup)
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
@@ -1894,6 +1950,99 @@ function applyBook(rows){
       }else{
         row.col.silent.push('book');
         colNote(row.col, 'book', 'SILENT', 'book balanced at ' + FMT(ratio, 2) + ' bid/ask — no edge claimed');
+      }
+    }
+  }catch(e){}
+}
+function applyStructure(rows){
+  try{
+    var sgFn = (typeof G.hgStructureGate === 'function') ? G.hgStructureGate
+             : (typeof hgStructureGate === 'function') ? hgStructureGate : null;
+    if (!sgFn) return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || !Array.isArray(row.rows4h) || row.rows4h.length < 40) continue;
+      var sg = sgFn(row.rows4h, row.dec.dir);
+      if (sg && sg.veto){
+        var ctxt = sg.note || 'CHoCH against the committed bias — structure broken';
+        row.col.votes.push({ layer: 'structure', vote: 'neutral', kind: 'structural', caution: true, text: ctxt });
+        colNote(row.col, 'structure', 'CAUTION', ctxt);
+      }else if (sg && sg.bos){
+        row.col.votes.push({ layer: 'structure', vote: row.dec.dir, kind: 'structural',
+          text: sg.note || ('BOS confirms ' + row.dec.dir.toUpperCase() + ' on 4H') });
+        colNote(row.col, 'structure', String(row.dec.dir).toUpperCase(), sg.note || 'BOS confirms cascade');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else{
+        row.col.silent.push('structure');
+        colNote(row.col, 'structure', 'SILENT', (sg && sg.note) ? sg.note : 'no fresh BOS/CHoCH on 4H');
+      }
+    }
+  }catch(e){}
+}
+function applyMeanrev(rows){
+  try{
+    if (typeof G.meanrevAssess !== 'function') return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || !Array.isArray(row.rows4h) || row.rows4h.length < 210) continue;
+      var m = G.meanrevAssess(row.rows4h);
+      if (!m || !m.signal || !m.dir){
+        row.col.silent.push('meanrev');
+        colNote(row.col, 'meanrev', 'SILENT', 'no live mean-reversion trigger on 4H');
+        continue;
+      }
+      var regime = (typeof detectRegime === 'function') ? detectRegime(row.rows4h) : null;
+      var rangeish = regime && (regime.regime === 'range' || regime.regime === 'compression');
+      var rec = (m.n >= 3) ? ('SETUP RECORD ' + m.n + ' trades · ' + Math.round(m.winPct) + '% win · avg '
+        + (m.expR > 0 ? '+' : '') + FMT(m.expR, 2) + 'R') : ('thin record n=' + m.n);
+      if (m.dir === row.dec.dir && rangeish){
+        row.col.votes.push({ layer: 'meanrev', vote: m.dir, kind: 'structural',
+          text: 'MEAN REV ' + m.dir.toUpperCase() + ' — RSI(2)/%B extreme in ' + (regime.label || 'range')
+            + ' · ' + rec });
+        colNote(row.col, 'meanrev', String(m.dir).toUpperCase(), rec);
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if (m.dir !== row.dec.dir){
+        row.col.votes.push({ layer: 'meanrev', vote: 'neutral', kind: 'structural', caution: true,
+          text: 'mean-reversion signal ' + m.dir.toUpperCase() + ' opposes the ' + row.dec.dir.toUpperCase() + ' bias · ' + rec });
+        colNote(row.col, 'meanrev', 'CAUTION', 'MR trigger opposes bias');
+      }else{
+        row.col.silent.push('meanrev');
+        colNote(row.col, 'meanrev', 'SILENT', 'MR trigger aligns but regime is ' + (regime ? regime.label : 'unknown') + ' — trend systems only');
+      }
+    }
+  }catch(e){}
+}
+function applyPoc(rows){
+  try{
+    if (typeof volumeProfile !== 'function') return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir || !Array.isArray(row.rows4h) || row.rows4h.length < 40) continue;
+      var vp = volumeProfile(row.rows4h, 80, 24);
+      if (!vp || !isFinite(vp.poc)){
+        row.col.silent.push('poc');
+        colNote(row.col, 'poc', 'SILENT', 'volume profile unavailable (thin/zero volume history)');
+        continue;
+      }
+      var p = row.rows4h[row.rows4h.length - 1].c;
+      var dir = row.dec.dir;
+      var aligned = (dir === 'long' && isFinite(vp.val) && p <= vp.poc && p >= vp.val)
+                 || (dir === 'short' && isFinite(vp.vah) && p >= vp.poc && p <= vp.vah);
+      if (aligned){
+        row.col.votes.push({ layer: 'poc', vote: dir, kind: 'structural',
+          text: 'price in ' + (dir === 'long' ? 'discount' : 'premium') + ' value area — POC '
+            + PX(vp.poc) + ' · VA ' + PX(vp.val) + '–' + PX(vp.vah) });
+        colNote(row.col, 'poc', String(dir).toUpperCase(), 'value-area edge aligned with ' + dir);
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else{
+        row.col.silent.push('poc');
+        colNote(row.col, 'poc', 'SILENT', 'POC ' + PX(vp.poc) + ' — price not at a value-area edge for ' + dir);
       }
     }
   }catch(e){}
@@ -2872,10 +3021,12 @@ function ticketCandidate(row){
     if (dir !== 'long' && dir !== 'short') return null;
     if (!isFinite(p.entry) || !isFinite(p.stop) || !isFinite(p.t1)) return null;
     if (p.entry === p.stop) return null;
+    var pBoost = profitRankBoost(row, dir);
     return { row: row, dir: dir,
              rank: tierRank(row.dec.tier) * 1000
                  + (isFinite(row.dec.agree) ? row.dec.agree : 0) * 10
-                 + Math.min(isFinite(p.rr1) ? p.rr1 : 0, 9.9) };
+                 + Math.min(isFinite(p.rr1) ? p.rr1 : 0, 9.9)
+                 + pBoost };
   }catch(e){ return null; }
 }
 function buildEntryTickets(rows){
@@ -3131,6 +3282,52 @@ function estWinRate(st){
     if (!st || !isFinite(+st.n) || +st.n <= 0) return NaN;
     return (+st.tp + 0.5) / (+st.n + 1);
   }catch(e){ return NaN; }
+}
+/* settled scorecard + setup-log EV -> small rank boost for ticket/board sort.
+   Unproven families / empty scorecard = 0; proven-bad demotes. */
+function profitRankBoost(row, dir){
+  var boost = 0;
+  try{
+    if (!row || !row.plan) return 0;
+    var p = row.plan;
+    if (typeof G.hgProfitRankHint === 'function'){
+      var agreeing = [];
+      var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
+      for (var a = 0; a < votes.length; a++){
+        if (votes[a] && votes[a].vote === dir) agreeing.push(votes[a].layer);
+      }
+      var h = G.hgProfitRankHint({
+        sym: row.sym, dir: dir, tier: row.dec && row.dec.tier,
+        layers: agreeing, lane: row.lane, rr1: p.rr1
+      });
+      if (h && isFinite(h.boost)) boost += h.boost;
+    }
+    if (typeof G.loadLog === 'function'){
+      var fst = familyStats(G.loadLog(), planFamily(p));
+      if (fst && fst.n >= 4){
+        var est = estWinRate(fst);
+        var rr1 = isFinite(+p.rr1) ? +p.rr1
+                : Math.abs(+p.t1 - +p.entry) / Math.abs(+p.entry - +p.stop);
+        if (isFinite(est) && isFinite(rr1) && rr1 > 0){
+          var ev = est * rr1 - (1 - est);
+          boost += Math.max(-15, Math.min(15, ev * 8));
+        }
+      }
+    }
+  }catch(e){}
+  return boost;
+}
+function familyEvOk(p){
+  try{
+    if (!p || typeof G.loadLog !== 'function') return true;
+    var fst = familyStats(G.loadLog(), planFamily(p));
+    if (!fst || fst.n < 4) return true;
+    var est = estWinRate(fst);
+    var rr1 = isFinite(+p.rr1) ? +p.rr1
+            : Math.abs(+p.t1 - +p.entry) / Math.abs(+p.entry - +p.stop);
+    if (!isFinite(est) || !isFinite(rr1) || rr1 <= 0) return true;
+    return (est * rr1 - (1 - est)) > 0;
+  }catch(e){ return true; }
 }
 /* auto-log the board's plans with the family as kind — dedupe inside
    logSetup (12h sym+dir+kind) keeps repeat scans from flooding */
@@ -3451,7 +3648,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','mtf','volreg','fundz','btcrel','div','book','cvd','session'];
+                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','fundz','btcrel','div','meanrev','poc','book','cvd','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
 
 function auditLineHTML(label, status, text){
@@ -3572,9 +3769,18 @@ function cardHTML(row){
   var tradeBtn = (plan && typeof G.toTrade === 'function')
     ? '<button class="toTrade" onclick="'
       + ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ',' + JSON.stringify(dir) + ','
-         + plan.entry + ',' + plan.stop + ',' + plan.t1 + ')')
+         + plan.entry + ',' + plan.stop + ',' + plan.t1
+         + (isFinite(plan.t2) ? ',' + plan.t2 : '') + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (plan && typeof G.bookBtnHTML === 'function')
+    ? G.bookBtnHTML(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, plan.entry, plan.stop, plan.t1, {
+      scanner: 'brain',
+      fund: row.lane === 'gold' ? 'gold' : 'main',
+      strategy: 'brain', tier: dec.tier, klass: row.lane === 'gold' ? 'metal' : 'crypto',
+      t2: isFinite(plan.t2) ? plan.t2 : null,
+      layers: row.col.votes.filter(function(v){ return v.vote === dir; }).map(function(v){ return v.layer; })
+    }) : '';
   var chartBox = (plan && row.rows)
     ? '<div class="hgchart brainChart" data-sym="' + esc(row.sym) + '" style="height:190px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dir + '">'
@@ -3594,6 +3800,7 @@ function cardHTML(row){
     + '<div class="plan">' + planLine(plan) + '</div>'
     + chartBox
     + tradeBtn
+    + bookBtn
     + auditToggleHTML(row)
     + '</div>';
 }
@@ -3721,12 +3928,13 @@ function scoreRecord(setups){
         try{
           var dec = row && row.dec;
           if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return;
+          var p = row.plan || null;
+          if (p && !familyEvOk(p)) return; /* proven-bad family EV — skip scorecard log */
           var agreeing = [];
           var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
           for (var a = 0; a < votes.length; a++){
             if (votes[a] && votes[a].vote === dec.dir) agreeing.push(votes[a].layer);
           }
-          var p = row.plan || null;
           var ret = G.hgScoreRecord({
             source: 'brain', sym: row.sym, dir: dec.dir, tier: dec.tier,
             entry: p ? p.entry : null, stop: p ? p.stop : null,
@@ -3738,6 +3946,154 @@ function scoreRecord(setups){
       })(setups[i]);
     }
   }catch(e){ /* recording is best-effort */ }
+}
+
+/* auto-book hook — PRIME/HIGH cards with valid plans -> paper book (optional
+   toggle). Dedupes by fund+sym+dir against open positions and an 8h seen map;
+   never switches tabs or alerts on veto (silent addToBook). */
+var BRAIN_AUTO_BOOK_KEY = 'hg_brain_auto_book_v1';
+var BRAIN_AUTO_BOOK_SEEN_KEY = 'hg_brain_auto_book_seen_v1';
+var BRAIN_AUTO_EXEC_AFTER_BOOK_KEY = 'hg_brain_auto_exec_v1';
+var BRAIN_AUTO_BOOK_PRIME_ONLY_KEY = 'hg_brain_auto_book_prime_v1';
+var BRAIN_AUTO_BOOK_SEEN_TTL = 8 * 60 * 60 * 1000;
+
+function brainAutoBookOn(){
+  try{ return localStorage.getItem(BRAIN_AUTO_BOOK_KEY) === '1'; }catch(e){ return false; }
+}
+function brainSetAutoBook(on){
+  try{ localStorage.setItem(BRAIN_AUTO_BOOK_KEY, on ? '1' : '0'); }catch(e){}
+}
+function brainAutoBookPrimeOnlyOn(){
+  try{ return localStorage.getItem(BRAIN_AUTO_BOOK_PRIME_ONLY_KEY) === '1'; }catch(e){ return false; }
+}
+function brainSetAutoBookPrimeOnly(on){
+  try{ localStorage.setItem(BRAIN_AUTO_BOOK_PRIME_ONLY_KEY, on ? '1' : '0'); }catch(e){}
+}
+function brainAutoExecAfterBookOn(){
+  try{ return localStorage.getItem(BRAIN_AUTO_EXEC_AFTER_BOOK_KEY) === '1'; }catch(e){ return false; }
+}
+function brainSetAutoExecAfterBook(on){
+  try{ localStorage.setItem(BRAIN_AUTO_EXEC_AFTER_BOOK_KEY, on ? '1' : '0'); }catch(e){}
+}
+function brainAutoBookKey(fund, sym, dir){
+  return String(fund || 'main') + ':' + String(sym) + ':' + String(dir);
+}
+function brainAutoBookSeenLoad(){
+  try{
+    var raw = localStorage.getItem(BRAIN_AUTO_BOOK_SEEN_KEY);
+    if (!raw) return {};
+    var o = JSON.parse(raw);
+    return (o && typeof o === 'object') ? o : {};
+  }catch(e){ return {}; }
+}
+function brainAutoBookSeenSave(map){
+  try{ localStorage.setItem(BRAIN_AUTO_BOOK_SEEN_KEY, JSON.stringify(map)); }catch(e){}
+}
+function brainAutoBookSeenPrune(map){
+  var now = Date.now(), out = {};
+  for (var k in map){
+    if (Object.prototype.hasOwnProperty.call(map, k) && map[k] && (now - map[k]) < BRAIN_AUTO_BOOK_SEEN_TTL){
+      out[k] = map[k];
+    }
+  }
+  return out;
+}
+function brainRowBookOpts(row){
+  try{
+    var dec = row && row.dec;
+    if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return null;
+    if (brainAutoBookPrimeOnlyOn() && dec.tier !== 'PRIME') return null;
+    var plan = row.plan;
+    if (!plan || !isFinite(plan.entry) || !isFinite(plan.stop)) return null;
+    if (!familyEvOk(plan)) return null;
+    var dir = dec.dir;
+    var sym = row.lane === 'gold' ? 'XAUTUSD' : row.sym;
+    var agreeing = [];
+    var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
+    for (var a = 0; a < votes.length; a++){
+      if (votes[a] && votes[a].vote === dir) agreeing.push(votes[a].layer);
+    }
+    var meta = {
+      scanner: 'brain',
+      fund: row.lane === 'gold' ? 'gold' : 'main',
+      strategy: 'brain',
+      klass: row.lane === 'gold' ? 'metal' : 'crypto',
+      layers: agreeing,
+    };
+    var fund = (typeof G.bookResolveFund === 'function') ? G.bookResolveFund(meta) : meta.fund;
+    return {
+      sym: sym, dir: dir,
+      entry: plan.entry, stop: plan.stop,
+      t1: plan.t1, t2: isFinite(plan.t2) ? plan.t2 : null,
+      scanner: 'brain',
+      fund: fund,
+      strategy: 'brain', tier: dec.tier,
+      klass: meta.klass,
+      layers: agreeing,
+      silent: true,
+      source: 'hardgate-brain-auto',
+    };
+  }catch(e){ return null; }
+}
+async function brainAutoBookRecord(setups){
+  var out = { added: 0, skipped: 0, veto: 0, execOk: 0, execFail: 0 };
+  try{
+    if (!brainAutoBookOn()) return out;
+    if (typeof G.addToBook !== 'function') return out;
+    if (typeof G.hgApiAvailable === 'function' && !G.hgApiAvailable()) return out;
+    var openKeys = {};
+    if (typeof G.bookFetchOpenKeys === 'function'){
+      openKeys = await G.bookFetchOpenKeys();
+    }
+    var seen = brainAutoBookSeenPrune(brainAutoBookSeenLoad());
+    var now = Date.now();
+    var addedPositions = [];
+    for (var i = 0; i < setups.length; i++){
+      var opts = brainRowBookOpts(setups[i]);
+      if (!opts) continue;
+      var key = brainAutoBookKey(opts.fund, opts.sym, opts.dir);
+      if (seen[key] || openKeys[key]){ out.skipped++; continue; }
+      try{
+        var r = await G.addToBook(opts);
+        if (r && r.ok){
+          seen[key] = now;
+          out.added++;
+          if (r.position){
+            var fp = r.position;
+            if (r.fundId || opts.fund){
+              fp = Object.assign({}, r.position, { _fundId: r.fundId || opts.fund });
+            }
+            addedPositions.push(fp);
+          }
+        }else if (r && r.veto){
+          out.veto++;
+        }else{
+          out.skipped++;
+        }
+      }catch(e){ out.skipped++; }
+    }
+    brainAutoBookSeenSave(seen);
+    if (brainAutoExecAfterBookOn() && addedPositions.length
+      && typeof G.bookExecuteBatchPositions === 'function'
+      && typeof G.executeBackendReady === 'function' && G.executeBackendReady()){
+      try{
+        var ex = await G.bookExecuteBatchPositions(addedPositions, 'hardgate-brain-auto-exec');
+        out.execOk = (ex && ex.ok) || 0;
+        out.execFail = (ex && ex.fail) || 0;
+      }catch(eEx){}
+    }
+  }catch(e){}
+  return out;
+}
+function brainAutoBookStatNote(ab){
+  if (!ab || (!ab.added && !ab.skipped && !ab.veto && !ab.execOk && !ab.execFail)) return '';
+  var parts = [];
+  if (ab.added) parts.push('+' + ab.added);
+  if (ab.skipped) parts.push(ab.skipped + ' dup');
+  if (ab.veto) parts.push(ab.veto + ' veto');
+  if (ab.execOk) parts.push('exec +' + ab.execOk);
+  if (ab.execFail) parts.push(ab.execFail + ' exec fail');
+  return ' · auto-book ' + parts.join(' · ');
 }
 
 /* ---------------- tab state + hard-refresh contract ---------------- */
@@ -3783,6 +4139,24 @@ async function brainRefresh(){
    RESCAN never auto-warms (it stays instant). Never blocks the scan
    indefinitely; never fabricates a warmed state. */
 var __warmedAt = 0;
+var __autoWarming = false;
+
+/* Boot-time background warm: same bounded starter pass as synthesis
+   auto-warm, but fire-and-forget (no stat line, no synthesis). Safe to call
+   on every page load — idempotent within the 60s freshness window. */
+async function hgBrainAutoWarm(){
+  try{
+    if (__autoWarming || __warming) return 'busy';
+    __autoWarming = true;
+    try{
+      if (typeof G.hgNewsRefresh === 'function') await G.hgNewsRefresh(false);
+    }catch(e){}
+    await autoWarmIntoRun(null);
+    __warmedAt = Date.now();
+    return 'started';
+  }catch(e){ return 'error: ' + errMsg(e); }
+  finally{ __autoWarming = false; }
+}
 
 /* the warm starters in the button's invocation order — engine LAST (the
    deep gate scan is the slow leg). THE single collection both WARM UP
@@ -3804,7 +4178,26 @@ function warmHooksOrdered(){
    getters snapshotLayers reads, so 'warmed' means exactly 'now votes' */
 var WARM_LAYER_KEY = { news: 'newsState', regime: 'regime', rotation: 'rotation',
                        onchain: 'onchain', engine: 'engine', oiflow: 'oiflow',
-                       squeeze: 'squeeze' };
+                       squeeze: 'squeeze', liqs: 'liqSnap', carry: 'carry',
+                       termbasis: 'termbasis' };
+
+async function enrichLiqSetup(snap){
+  try{
+    if (!snap || snap.liqSetup || !snap.liqSnap) return snap;
+    var cls = snap.liqSnap.imbalance && snap.liqSnap.imbalance.cls;
+    if (cls !== 'long-flush' && cls !== 'short-flush') return snap;
+    var sym = null;
+    var top = snap.liqSnap.top;
+    if (top && top.length && top[0] && top[0].sym) sym = top[0].sym;
+    if (!sym) return snap;
+    var rows = null;
+    if (typeof G.getCandles === 'function') rows = await G.getCandles(sym, '1h', 120);
+    else if (typeof G.binanceKlines === 'function') rows = await G.binanceKlines(sym, '1h', 120);
+    if (rows && rows.length && typeof G.liqFlushSetup === 'function')
+      snap.liqSetup = G.liqFlushSetup(snap.liqSnap, rows) || null;
+  }catch(e){}
+  return snap;
+}
 
 async function autoWarmIntoRun(stat){
   try{
@@ -3981,6 +4374,7 @@ async function runBrain(el){
     stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading every intelligence layer…';
 
     var snap = snapshotLayers();
+    snap = await enrichLiqSetup(snap);
     __regimeSnap = {
       score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
       label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
@@ -4032,11 +4426,14 @@ async function runBrain(el){
          promote WATCH -> HIGH -> PRIME through the same pure brainDecide
          (bars never lowered); missing candles -> honestly dark, capped. */
       applyTrend4h(rows);
+      applyStructure(rows);
       applyMtf(rows);
       applyVolreg(rows);
       applyFundz(rows);
       applyBtcrel(rows);
       applyDiv(rows);
+      applyMeanrev(rows);
+      applyPoc(rows);
       applyBook(rows);
       applyCvd(rows);
       applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
@@ -4084,6 +4481,8 @@ async function runBrain(el){
     if (readUni){
       readUni.textContent = combined
         ? 'universe ' + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx
+          + (uni.counts.startrader ? ' + startrader ' + uni.counts.startrader : '')
+          + (uni.counts.binance ? ' + binance ' + uni.counts.binance : '')
           + ') · ' + setups.length + ' prime/high · ' + watches.length + ' watch'
         : '';
     }
@@ -4102,6 +4501,11 @@ async function runBrain(el){
 
     /* scorecard hook — PRIME/HIGH only, fire-and-forget, after plans land */
     scoreRecord(setups);
+    var autoBookNote = '';
+    try{
+      var abFull = await brainAutoBookRecord(setups);
+      autoBookNote = brainAutoBookStatNote(abFull);
+    }catch(eAb){}
     /* quick-rescan baseline: full row set + universe + scan time */
     __lastResult = { rows: rows, uni: uni, at: Date.now() };
     /* signal-logger snapshot — deep-frozen copy of the completed synthesis */
@@ -4110,17 +4514,21 @@ async function runBrain(el){
     if (combined){
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
-        + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx + ') + XAU · '
+        + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx
+        + (uni.counts.startrader ? ' + startrader ' + uni.counts.startrader : '')
+        + (uni.counts.binance ? ' + binance ' + uni.counts.binance : '') + ') + XAU · '
         + setups.length + ' prime/high · ' + watches.length + ' watch'
         + (uni.venue !== 'ALL' ? ' · venue ' + uni.venue : '')
         + gateNote + capNote + ' · '
-        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5)
+        + autoBookNote;
     }else{
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
         + uni.candidates.length + ' + XAU (' + uni.note + ')'
         + (uni.xuNote ? ' · ' + uni.xuNote : '') + gateNote + capNote + ' · '
-        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5)
+        + autoBookNote;
     }
   }catch(e){
     stat.className = 'note warn';
@@ -4179,6 +4587,7 @@ async function runQuick(el){
     stat.textContent = 'quick recheck — fresh layers over the last scan’s watch set…';
 
     var snap = snapshotLayers();
+    snap = await enrichLiqSetup(snap);
     __regimeSnap = {
       score: (snap.regime && isFinite(+snap.regime.score)) ? +snap.regime.score : null,
       label: (snap.regime && snap.regime.label) ? String(snap.regime.label) : '',
@@ -4264,11 +4673,14 @@ async function runQuick(el){
       /* TREND4H over the freshly fetched rows — promotions re-decided, then
          re-bucketed exactly like the full scan */
       applyTrend4h(rows);
+      applyStructure(rows);
       applyMtf(rows);
       applyVolreg(rows);
       applyFundz(rows);
       applyBtcrel(rows);
       applyDiv(rows);
+      applyMeanrev(rows);
+      applyPoc(rows);
       applyBook(rows);
       applyCvd(rows);
       applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
@@ -4332,6 +4744,11 @@ async function runQuick(el){
 
     /* scorecard hook — fresh PRIME/HIGH cards earn a record, unchanged never do */
     scoreRecord(setups);
+    var autoBookNoteQ = '';
+    try{
+      var abQuick = await brainAutoBookRecord(setups);
+      autoBookNoteQ = brainAutoBookStatNote(abQuick);
+    }catch(eAbQ){}
 
     /* the quick result becomes the new baseline */
     var allRows = rows;
@@ -4346,7 +4763,8 @@ async function runQuick(el){
       + ' · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
       + watches.length + ' watch · ' + asides.length + ' aside'
       + gateNote
-      + ' · ' + new Date().toTimeString().slice(0, 5);
+      + ' · ' + new Date().toTimeString().slice(0, 5)
+      + autoBookNoteQ;
   }catch(e){
     stat.className = 'note warn';
     stat.textContent = 'quick rescan failed: ' + (e && e.message ? e.message : e);
@@ -4451,9 +4869,15 @@ function mount(el){
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
       + '<button class="btn" id="brainQuick" title="recheck the last scan’s watch set against fresh layers — cached universe, new listings judged on arrival">QUICK RESCAN</button>'
       + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'
-      + '<select id="brainVenue" style="display:none" title="venue filter — combined Delta India + CoinDCX universe">'
+      + '<label class="note" id="brainAutoBookWrap" title="After each synthesis, add PRIME/HIGH cards with plans to the paper book (deduped; no tab switch)">'
+      + '<input type="checkbox" id="brainAutoBook"> Auto-add PRIME/HIGH to book</label>'
+      + '<label class="note" id="brainAutoBookPrimeWrap" title="When auto-book is on, add PRIME tier only — skip HIGH">'
+      + '<input type="checkbox" id="brainAutoBookPrime"> PRIME only</label>'
+      + '<label class="note" id="brainAutoExecWrap" title="After auto-add, send EXEC brackets for newly added positions (requires /api/execute)">'
+      + '<input type="checkbox" id="brainAutoExec"> Auto EXEC after auto-add</label>'
+      + '<select id="brainVenue" style="display:none" title="venue filter — combined multi-exchange universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
-      + '<option value="CDCX">COINDCX ONLY</option></select>'
+      + '<option value="CDCX">COINDCX ONLY</option><option value="STARTRADER">STARTRADER ONLY</option></select>'
       + '<span class="note" id="brainStat"></span></div>'
       + '<div class="note" id="brainDeps" style="margin-top:8px"></div>'
       + '<div class="note" style="margin-top:8px">Conviction is independent layers <b>agreeing</b>, each with a human-readable '
@@ -4527,6 +4951,34 @@ function mount(el){
     if (qbtn) qbtn.addEventListener('click', function(){ runQuick(el); });
     var wbtn = el.querySelector('#brainWarm');
     if (wbtn) wbtn.addEventListener('click', function(){ runWarmup(el); });
+    var abChk = el.querySelector('#brainAutoBook');
+    var abPrimeChk = el.querySelector('#brainAutoBookPrime');
+    function syncAutoBookPrimeUi(){
+      if (!abPrimeChk) return;
+      abPrimeChk.disabled = !(abChk && abChk.checked);
+    }
+    if (abChk){
+      abChk.checked = brainAutoBookOn();
+      abChk.addEventListener('change', function(){
+        brainSetAutoBook(abChk.checked);
+        syncAutoBookPrimeUi();
+      });
+    }
+    if (abPrimeChk){
+      abPrimeChk.checked = brainAutoBookPrimeOnlyOn();
+      syncAutoBookPrimeUi();
+      abPrimeChk.addEventListener('change', function(){
+        brainSetAutoBookPrimeOnly(abPrimeChk.checked);
+      });
+    }
+    var aeChk = el.querySelector('#brainAutoExec');
+    if (aeChk){
+      aeChk.checked = brainAutoExecAfterBookOn();
+      aeChk.disabled = !(typeof G.executeBackendReady === 'function' && G.executeBackendReady());
+      aeChk.addEventListener('change', function(){
+        brainSetAutoExecAfterBook(aeChk.checked);
+      });
+    }
   }catch(e){}
   if (!runWired){
     mountNote(el, 'brain mount degraded: run button wiring failed — retrying…');
@@ -4642,6 +5094,7 @@ G.__hgBrainSniperPick = pickSniperPlan;
 G.__hgBrainPlanFamily = planFamily;
 G.__hgBrainFamStats = familyStats;
 G.__hgBrainEstWin = estWinRate;
+G.__hgBrainProfitBoost = profitRankBoost;
 /* sniper-grade seam: the current hit set (read-only; alert channels consume) */
 G.hgSniperState = function(){ try{ return __lastSniperHits; }catch(e){ return []; } };
 G.__hgBrainSniperHits = sniperHitsFrom;
@@ -4661,6 +5114,10 @@ G.__hgBrainRsiDiv = rsiDivergence;
 /* wick-adaptive stop + CVD seams */
 G.__hgBrainWickBuf = wickBuffer;
 G.__hgBrainCvd = cvdAssess;
+/* post-fetch layer seams — integration-tested without a full synthesis run */
+G.__hgBrainApplyStructure = applyStructure;
+G.__hgBrainApplyMeanrev = applyMeanrev;
+G.__hgBrainApplyPoc = applyPoc;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };
@@ -4680,6 +5137,13 @@ G.__hgBrainAudit = function(sym){
 /* signal-logger seam: deep-frozen {at, marketRead, rows} of the LAST completed
    synthesis (full or quick), null before the first scan. Never throws. */
 G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };
+G.hgBrainAutoWarm = hgBrainAutoWarm;
+G.brainAutoBookOn = brainAutoBookOn;
+G.brainSetAutoBook = brainSetAutoBook;
+G.brainAutoBookPrimeOnlyOn = brainAutoBookPrimeOnlyOn;
+G.brainSetAutoBookPrimeOnly = brainSetAutoBookPrimeOnly;
+G.brainAutoExecAfterBookOn = brainAutoExecAfterBookOn;
+G.brainSetAutoExecAfterBook = brainSetAutoExecAfterBook;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'brain', label: 'BRAIN', mount: function(el){ mount(el); }, refresh: brainRefresh });
 

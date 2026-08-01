@@ -531,10 +531,10 @@ function sgEquityChart(el, trades){
     }
     var chart = LC.createChart(el, {
       height: 220,
-      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#6B7A90', attributionLogo: false },
-      grid: { vertLines: { color: 'rgba(35,43,58,.55)' }, horzLines: { color: 'rgba(35,43,58,.55)' } },
-      rightPriceScale: { borderColor: '#232B3A' },
-      timeScale: { borderColor: '#232B3A', timeVisible: false },
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#334155', attributionLogo: false },
+      grid: { vertLines: { color: 'rgba(226,232,240,.9)' }, horzLines: { color: 'rgba(226,232,240,.9)' } },
+      rightPriceScale: { borderColor: '#E2E8F0' },
+      timeScale: { borderColor: '#E2E8F0', timeVisible: false },
       crosshair: { mode: 0 }
     });
     if (!chart || typeof chart.addLineSeries !== 'function' ||
@@ -546,7 +546,7 @@ function sgEquityChart(el, trades){
     ddS.setData(dd);
     try{
       if (typeof eqS.createPriceLine === 'function'){
-        eqS.createPriceLine({ price: 0, color: '#6B7A90', lineWidth: 1,
+        eqS.createPriceLine({ price: 0, color: '#334155', lineWidth: 1,
           lineStyle: (LC.LineStyle && isFinite(+LC.LineStyle.Dashed)) ? +LC.LineStyle.Dashed : 2,
           axisLabelVisible: true, title: '0R' });
       }

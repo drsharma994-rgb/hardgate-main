@@ -6,6 +6,6 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node scripts/server.mjs",
-    "test": "node tests/test-brain.mjs && node tests/test-engine.mjs && node tests/test-smart.mjs && node tests/test-hgalert.mjs && node tests/test-ops.mjs && node tests/extract-inline.mjs"
+    "test": "node tests/test-brain.mjs && node tests/test-engine.mjs && node tests/test-smart.mjs && node tests/test-positioning.mjs && node tests/test-cryptowatch.mjs && node tests/test-cryptogates.mjs && node tests/test-termbasis.mjs && node tests/test-hgalert.mjs && node tests/test-tabalerts.mjs && node tests/test-ops.mjs && node tests/extract-inline.mjs && node tests/test-brain-live.mjs && node tests/test-gold-deep.mjs && node tests/test-scorecard.mjs && node tests/test-goldswing.mjs && node tests/test-indicators2.mjs && node tests/test-meanrev.mjs && node tests/test-edge.mjs && node tests/test-tabs.mjs && node tests/test-core-fixes.mjs && node tests/test-hard-refresh.mjs && node tests/test-warmup.mjs && node tests/test-fred.mjs && node tests/test-carry.mjs && node tests/test-liqs.mjs && node tests/test-macro.mjs && node tests/test-news.mjs && node tests/test-regime.mjs && node tests/test-squeeze.mjs && node tests/test-oiflow.mjs && node tests/test-goldpro.mjs && node tests/test-carry-fix.mjs && node tests/test-xuniverse.mjs && node tests/test-startrader.mjs && node tests/test-book-digest.mjs && node tests/test-book-routing.mjs && node tests/test-paperbook-funds.mjs && node tests/test-execute.mjs && node tests/test-paperbook.mjs"
   }
 }

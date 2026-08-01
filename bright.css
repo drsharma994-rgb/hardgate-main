@@ -1,276 +1,349 @@
 /* ==========================================================================
-   HARDGATE — BRIGHT GLOBAL THEME (bright.css)
-   Pure override sheet. Link AFTER the inline <style> block in index.html so
-   equal-specificity rules here win. No existing file is modified.
-
-   House rules honored:
-   - colors, backgrounds, borders, box-shadows, text-shadows ONLY
-   - no layout properties (position/display/flex/grid/margin/padding/width)
-   - no font-family changes
-   - readable contrast: dark text on bright chips, bright text on dark panels
-   - safe when JS adds classes at runtime (ok/na/veto/caution all pre-styled)
+   HARDGATE — LIGHT THEME (bright.css)
+   Clean white UI with soft shadows, gold accents, and smooth motion.
+   Loaded after index.html inline styles. Layout lives in mobile.css.
    ========================================================================== */
 
-/* ---------- 1. core palette: brighter vars (cascade feeds every var() user) */
+/* ---------- 1. core palette ---------- */
 :root{
-  --ink:#0F1730;            /* rich deep blue, was near-black #0A0D12        */
-  --panel:#1B2547;          /* brighter blue-charcoal panel surface          */
-  --panel2:#151D3A;         /* secondary surface                             */
-  --line:#34426E;           /* visible but calm hairlines                    */
-  --gold:#F5C542;           /* vivid gold accent                             */
-  --gold-dim:#C99A2E;       /* hover gold                                    */
-  --long:#2EE6A8;           /* emerald-teal = LONG (house semantics kept)    */
-  --short:#FF6D5A;          /* red-orange   = SHORT (house semantics kept)   */
-  --veto:#FF6D5A;
-  --pass:#2EE6A8;
-  --txt:#E9EFFC;            /* bright ink on dark panels                     */
-  --mut:#93A3C4;            /* readable secondary                            */
-  --dim:#64759C;
+  --ink:#F8FAFC;
+  --panel:#FFFFFF;
+  --panel2:#F1F5F9;
+  --line:#E2E8F0;
+  --gold:#C9921A;
+  --gold-dim:#A67C12;
+  --long:#059669;
+  --short:#DC2626;
+  --veto:#DC2626;
+  --pass:#059669;
+  --txt:#020617;
+  --mut:#334155;
+  --dim:#475569;
+  --cyan:#0891B2;
+  --magenta:#C026D3;
+  --purple:#7C3AED;
+  --orange:#EA580C;
+  --shadow-sm:0 1px 2px rgba(15,23,42,.05);
+  --shadow-md:0 4px 16px -4px rgba(15,23,42,.10);
+  --shadow-lg:0 12px 40px -12px rgba(15,23,42,.14);
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
 }
 
-/* ---------- 2. page backdrop: deep blue with a subtle cyan/gold ambience --- */
-html,body{background:#0F1730;color:#E9EFFC}
+/* ---------- 2. page background ---------- */
+html,body{background:#F8FAFC;color:#020617;font-weight:500}
 body{
   background:
-    radial-gradient(1200px 600px at 72% -10%, rgba(34,211,238,.07), rgba(34,211,238,0) 60%),
-    radial-gradient(1000px 520px at 8% -12%, rgba(245,197,66,.06), rgba(245,197,66,0) 55%),
-    #0F1730;
+    radial-gradient(ellipse 900px 500px at 90% -5%, rgba(8,145,178,.06), transparent 55%),
+    radial-gradient(ellipse 800px 480px at 5% -8%, rgba(201,146,26,.07), transparent 50%),
+    radial-gradient(ellipse 600px 400px at 50% 100%, rgba(124,58,237,.04), transparent 60%),
+    #F8FAFC;
 }
-a{color:#FFD257}
-::selection{background:rgba(232,121,249,.40);color:#FFFFFF}
-::-webkit-scrollbar-thumb{background:#3D4C7C}
-::-webkit-scrollbar-thumb:hover{background:#C99A2E}
+a{color:#A67C12}
+::selection{background:rgba(201,146,26,.22);color:#020617}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#94A3B8}
 
-/* ---------- 3. header + brand ------------------------------------------- */
-header{
-  background:linear-gradient(180deg,#18213F 0%,#141C37 100%);
-  border-bottom-color:#2C3860;
-  box-shadow:0 6px 24px -12px rgba(0,0,0,.60);
+/* ---------- 3. motion primitives ---------- */
+@keyframes hgFadeIn{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
 }
-.brand{color:#FFD257;text-shadow:0 0 16px rgba(245,197,66,.40)}
-.brand small{color:#7F92BB}
-#marketPictureBar{background:#101838}
+@keyframes hgSlideDown{
+  from{opacity:0;transform:translateY(-6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes hgCardIn{
+  from{opacity:0;transform:translateY(12px) scale(.98)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes hgShimmer{
+  0%{background-position:200% 0}
+  100%{background-position:-200% 0}
+}
+@keyframes hgPulseSoft{
+  0%,100%{box-shadow:0 0 0 0 rgba(201,146,26,.0)}
+  50%{box-shadow:0 0 0 4px rgba(201,146,26,.12)}
+}
+@keyframes convictionGoldShimmer{
+  0%,100%{color:#C9921A}
+  50%{color:#E8B42A}
+}
+
+.tabpane.on{animation:hgFadeIn .35s var(--ease-out) both}
+.panel{animation:hgFadeIn .4s var(--ease-out) both}
+.cards .card{animation:hgCardIn .45s var(--ease-out) both}
+.cards .card:nth-child(2){animation-delay:.04s}
+.cards .card:nth-child(3){animation-delay:.08s}
+.cards .card:nth-child(4){animation-delay:.12s}
+.cards .card:nth-child(5){animation-delay:.16s}
+.cards .card:nth-child(n+6){animation-delay:.2s}
+
+header,.hg-header{animation:hgSlideDown .35s var(--ease-out) both}
+
+@media (prefers-reduced-motion: reduce){
+  .tabpane.on,.panel,.cards .card,header,.hg-header{animation:none}
+  .convictionGold{animation:none}
+  .prog i{animation:none}
+  *{transition-duration:.01ms!important}
+}
+
+/* ---------- 4. header ---------- */
+header,.hg-header{
+  background:rgba(255,255,255,.92);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom-color:#E2E8F0;
+  box-shadow:var(--shadow-sm);
+}
+.brand{
+  color:#C9921A;
+  text-shadow:none;
+}
+.brand small{color:#334155;font-weight:600}
+.header-chips .statuschip:nth-child(1){border-color:rgba(8,145,178,.25);background:rgba(8,145,178,.06)}
+.header-chips .statuschip:nth-child(2){border-color:rgba(124,58,237,.22);background:rgba(124,58,237,.05)}
+.header-chips .statuschip:nth-child(3){border-color:rgba(234,88,12,.22);background:rgba(234,88,12,.05)}
+.header-chips .statuschip:nth-child(4){border-color:rgba(192,38,211,.20);background:rgba(192,38,211,.05)}
+.header-chips .statuschip:nth-child(5){border-color:rgba(5,150,105,.22);background:rgba(5,150,105,.06)}
+.header-drawer-inner{border-top-color:#E2E8F0}
+.header-field{border-color:#E2E8F0;background:#FFFFFF}
+.header-menu-btn{border-color:#CBD5E1;color:#C9921A;transition:border-color .2s,background .2s,transform .15s var(--ease-spring)}
+.header-menu-btn:hover{background:rgba(201,146,26,.08);border-color:#C9921A}
+.header-menu-btn:active{transform:scale(.96)}
+
+.market-picture-bar{
+  background:linear-gradient(90deg,rgba(8,145,178,.06),rgba(201,146,26,.08),rgba(124,58,237,.05));
+  border-bottom-color:#E2E8F0;
+  color:#1E293B;
+}
+.market-picture-bar b{color:#C9921A;text-shadow:none}
 
 /* exchange toggle */
-.xtoggle{border-color:#35426E}
-.xtoggle button{color:#8B9CC4}
-.xtoggle button:hover{color:#E9EFFC}
+.xtoggle{border-color:#E2E8F0;background:#FFFFFF;box-shadow:var(--shadow-sm)}
+.xtoggle button{color:#334155;transition:color .2s,background .2s}
+.xtoggle button:hover{color:#020617}
 .xtoggle button.on{
-  background:linear-gradient(180deg,#FFD968,#F5C542);
-  color:#231803;
-  box-shadow:0 0 12px rgba(245,197,66,.40);
+  background:linear-gradient(180deg,#F5D77A,#E8B42A 55%,#C9921A);
+  color:#1A1204;
+  box-shadow:0 2px 8px rgba(201,146,26,.28);
 }
 
 /* status chips */
-.statuschip{color:#8B9CC4;border-color:#35426E;background:rgba(148,178,255,.05)}
-.statuschip b{color:#E9EFFC}
-.statuschip.warn b{color:#FF8A76}
-.statuschip[onclick]:hover{
-  border-color:#C99A2E;color:#DFE8FB;
-  box-shadow:0 0 10px -3px rgba(245,197,66,.40);
+.statuschip{
+  color:#334155;
+  border-color:#E2E8F0;
+  background:#FFFFFF;
+  transition:border-color .2s,box-shadow .2s,transform .15s var(--ease-spring);
+}
+.statuschip b{color:#020617}
+.statuschip.warn b{color:#DC2626}
+.statuschip[onclick]:hover,.header-action:hover{
+  border-color:#C9921A;
+  color:#020617;
+  box-shadow:var(--shadow-md);
+  transform:translateY(-1px);
 }
 
-/* ---------- 4. nav groups (top tier) ------------------------------------- */
+/* ---------- 5. nav groups ---------- */
 .navgroups{
-  background:linear-gradient(180deg,#18213F,#131B36);
-  border-bottom-color:#2C3860;
+  background:#FFFFFF;
+  border-bottom-color:#E2E8F0;
+  box-shadow:inset 0 -1px 0 rgba(15,23,42,.04);
 }
-.navgroups button{color:#8B9CC4;border-color:#35426E;background:rgba(148,178,255,.03)}
-.navgroups button:hover{
-  color:#E9EFFC;border-color:#C99A2E;
-  box-shadow:0 0 10px -3px rgba(245,197,66,.40);
+.navgroups button{
+  color:#334155;
+  border-color:#E2E8F0;
+  background:#F8FAFC;
+  transition:color .2s,border-color .2s,background .2s,transform .15s var(--ease-spring),box-shadow .2s;
 }
-.navgroups button.on{
-  background:linear-gradient(180deg,#FFD968,#F5C542);
-  border-color:#F5C542;color:#231803;
-  box-shadow:0 0 14px rgba(245,197,66,.45);
+.navgroups button:hover{color:#020617;border-color:#CBD5E1;transform:translateY(-1px)}
+.navgroups button[data-g="overview"].on{
+  background:linear-gradient(180deg,#67E8F9,#22D3EE);
+  border-color:#0891B2;color:#042F2E;
+  box-shadow:0 4px 14px rgba(8,145,178,.28);
+}
+.navgroups button[data-g="crypto"].on{
+  background:linear-gradient(180deg,#C4B5FD,#A78BFA);
+  border-color:#7C3AED;color:#1E1033;
+  box-shadow:0 4px 14px rgba(124,58,237,.25);
+}
+.navgroups button[data-g="gold"].on{
+  background:linear-gradient(180deg,#F5D77A,#E8B42A 50%,#C9921A);
+  border-color:#C9921A;color:#231803;
+  box-shadow:0 4px 16px rgba(201,146,26,.30);
+}
+.navgroups button[data-g="strategies"].on{
+  background:linear-gradient(180deg,#F0ABFC,#E879F9);
+  border-color:#C026D3;color:#3B0764;
+  box-shadow:0 4px 14px rgba(192,38,211,.25);
+}
+.navgroups button[data-g="tools"].on{
+  background:linear-gradient(180deg,#FDBA74,#FB923C);
+  border-color:#EA580C;color:#431407;
+  box-shadow:0 4px 14px rgba(234,88,12,.25);
 }
 
-/* ---------- 5. nav tabs (bottom tier) ------------------------------------ */
-nav{background:#0D1429;border-bottom-color:#2C3860}
-nav button{color:#8B9CC4}
-nav button:hover{color:#DFE8FB}
-nav button.on{color:#FFD257;text-shadow:0 0 12px rgba(245,197,66,.45)}
-nav button::after{background:linear-gradient(90deg,#F5C542,#22D3EE)}
-nav button.on::after{box-shadow:0 0 8px rgba(245,197,66,.60)}
+/* ---------- 6. nav tabs ---------- */
+nav{background:#F8FAFC;border-bottom-color:#E2E8F0}
+nav button{color:#334155;transition:color .2s}
+nav button:hover{color:#020617}
+nav button.on{color:#C9921A;text-shadow:none}
+nav button::after{background:linear-gradient(90deg,#C9921A,#0891B2,#7C3AED)}
+nav button.on::after{box-shadow:0 1px 6px rgba(201,146,26,.35)}
 
-/* ---------- 6. panels ---------------------------------------------------- */
+/* ---------- 7. panels & cards ---------- */
 .panel{
-  background:linear-gradient(180deg,#1D2749 0%,#1A2342 100%);
-  border-color:#35426E;
-  box-shadow:0 1px 2px rgba(0,0,0,.30),0 18px 44px -30px rgba(0,0,0,.80),
-             inset 0 1px 0 rgba(148,178,255,.06);
+  background:#FFFFFF;
+  border-color:#E2E8F0;
+  box-shadow:var(--shadow-sm),var(--shadow-md);
+  transition:box-shadow .25s var(--ease-out),transform .25s var(--ease-out);
 }
-.panel h2{color:#EEF3FF}
-.panel h2 span{color:#8B9CC4}
+.panel:hover{box-shadow:var(--shadow-sm),var(--shadow-lg)}
+.panel h2{color:#020617}
+.panel h2 span{color:#334155}
 
-/* ---------- 7. scanner cards + direction top accents ----------------------
-   Direction is shown as an inset top hairline (box-shadow = zero layout
-   cost) on top of the existing left border: emerald long / red-orange short */
 .card{
-  background:linear-gradient(180deg,#1D2749 0%,#1A2340 100%);
-  border-color:#35426E;
-  box-shadow:inset 0 1px 0 rgba(148,178,255,.05);
+  background:#FFFFFF;
+  border-color:#E2E8F0;
+  box-shadow:var(--shadow-sm);
+  transition:border-color .2s,box-shadow .25s var(--ease-out),transform .25s var(--ease-spring);
 }
 .card:hover{
-  border-color:#C99A2E;
-  box-shadow:inset 0 1px 0 rgba(148,178,255,.05),
-             0 12px 30px -16px rgba(0,0,0,.85),
-             0 0 18px -6px rgba(245,197,66,.45);
+  border-color:#C9921A;
+  box-shadow:var(--shadow-lg);
+  transform:translateY(-3px);
 }
 .card.long{
   border-left-color:var(--long);
-  box-shadow:inset 0 2px 0 0 #2EE6A8,inset 0 1px 0 rgba(148,178,255,.05);
+  box-shadow:inset 3px 0 0 0 #059669,var(--shadow-sm);
 }
-.card.long:hover{
-  border-color:#2EE6A8;
-  box-shadow:inset 0 2px 0 0 #2EE6A8,
-             0 12px 30px -16px rgba(0,0,0,.85),
-             0 0 22px -6px rgba(46,230,168,.50);
-}
+.card.long:hover{border-color:#059669;box-shadow:inset 3px 0 0 0 #059669,var(--shadow-lg)}
 .card.short{
   border-left-color:var(--short);
-  box-shadow:inset 0 2px 0 0 #FF6D5A,inset 0 1px 0 rgba(148,178,255,.05);
+  box-shadow:inset 3px 0 0 0 #DC2626,var(--shadow-sm);
 }
-.card.short:hover{
-  border-color:#FF6D5A;
-  box-shadow:inset 0 2px 0 0 #FF6D5A,
-             0 12px 30px -16px rgba(0,0,0,.85),
-             0 0 22px -6px rgba(255,109,90,.50);
-}
-.card .sym{color:#F2F6FF}
-.card.long .dir{color:#2EE6A8;text-shadow:0 0 10px rgba(46,230,168,.40)}
-.card.short .dir{color:#FF8A76;text-shadow:0 0 10px rgba(255,109,90,.40)}
-.card .mini .k{color:#8B9CC4}
-.card .plan{background:#141C38;border-color:#35426E;color:#D7E0F5}
-.card .plan b{color:#FFD257}
-.hgchart{background:#141C38;border-color:#35426E}
+.card.short:hover{border-color:#DC2626;box-shadow:inset 3px 0 0 0 #DC2626,var(--shadow-lg)}
+.card .sym{color:#020617}
+.card.long .dir{color:#059669;text-shadow:none}
+.card.short .dir{color:#DC2626;text-shadow:none}
+.card .mini .k{color:#334155}
+.card .plan{background:#F8FAFC;border-color:#E2E8F0;color:#334155}
+.card .plan b{color:#C9921A}
+.hgchart{background:#F8FAFC;border-color:#E2E8F0}
 
-/* ---------- 8. gate pips: tinted chips, bright text on dark tint --------- */
-.gpip{background:rgba(148,178,255,.07);border-color:#3F4F82;color:#BCC9E8}
-.gpip.ok{
-  background:rgba(46,230,168,.13);border-color:rgba(46,230,168,.55);color:#4FF0BD;
-  box-shadow:0 0 10px -4px rgba(46,230,168,.55);
-}
-.gpip.na{background:rgba(140,165,225,.12);border-color:rgba(140,165,225,.50);color:#A7BBF0}
-.gpip.veto{background:rgba(255,109,90,.12);border-color:rgba(255,109,90,.55);color:#FF9A86}
-.gpip.caution{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.55);color:#FFD166}
+/* ---------- 8. gate pips ---------- */
+.gpip{background:#F8FAFC;border-color:#E2E8F0;color:#475569}
+.gpip.ok{background:rgba(5,150,105,.10);border-color:rgba(5,150,105,.45);color:#047857}
+.gpip.na{background:rgba(100,116,139,.08);border-color:rgba(100,116,139,.35);color:#334155}
+.gpip.veto{background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.40);color:#B91C1C}
+.gpip.caution{background:rgba(201,146,26,.10);border-color:rgba(201,146,26,.45);color:#A67C12}
 
-/* ---------- 9. stamps: filled vivid chips, dark text for contrast -------- */
-.stamp{box-shadow:0 1px 6px -2px rgba(0,0,0,.50)}
-.stamp.pass,.stamp.ok{
-  background:linear-gradient(180deg,#4BF0BB,#23D69B);
-  border-color:#5FF5C6;color:#03301F;
-}
-.stamp.veto{
-  background:linear-gradient(180deg,#FF8A70,#F4512E);
-  border-color:#FFA18C;color:#330A03;
-}
-.stamp.na{
-  background:linear-gradient(180deg,#9DB4E2,#728CC0);
-  border-color:#B6C8EE;color:#0C1730;
-}
-.stamp.caution{
-  background:linear-gradient(180deg,#FFD166,#F0A51D);
-  border-color:#FFE08F;color:#3A2602;
-}
+/* ---------- 9. stamps ---------- */
+.stamp{box-shadow:var(--shadow-sm)}
+.stamp.pass,.stamp.ok{background:linear-gradient(180deg,#34D399,#059669);border-color:#6EE7B7;color:#FFFFFF}
+.stamp.veto{background:linear-gradient(180deg,#F87171,#DC2626);border-color:#FCA5A5;color:#FFFFFF}
+.stamp.na{background:linear-gradient(180deg,#F1F5F9,#E2E8F0);border-color:#CBD5E1;color:#334155}
+.stamp.caution{background:linear-gradient(180deg,#FCD34D,#E8B42A);border-color:#FDE68A;color:#78350F}
 
-/* ---------- 10. verdict blocks ------------------------------------------- */
-.verdict{background:linear-gradient(180deg,#182142,#141C38);border-color:#35426E}
-.verdict.long{border-color:rgba(46,230,168,.50);box-shadow:0 0 18px -8px rgba(46,230,168,.45)}
-.verdict.long .vword{color:#2EE6A8;text-shadow:0 0 14px rgba(46,230,168,.50)}
-.verdict.short{border-color:rgba(255,109,90,.50);box-shadow:0 0 18px -8px rgba(255,109,90,.45)}
-.verdict.short .vword{color:#FF8A76;text-shadow:0 0 14px rgba(255,109,90,.50)}
-.verdict.aside .vword{color:#A7BBF0}
-.verdict .vwhy{color:#8B9CC4}
+/* ---------- 10. verdict blocks ---------- */
+.verdict{background:#F8FAFC;border-color:#E2E8F0;transition:box-shadow .25s var(--ease-out)}
+.verdict.long{
+  border-color:rgba(5,150,105,.40);
+  background:linear-gradient(135deg,rgba(5,150,105,.06),#FFFFFF);
+  box-shadow:0 4px 20px -8px rgba(5,150,105,.20);
+}
+.verdict.long .vword{color:#059669;text-shadow:none}
+.verdict.short{
+  border-color:rgba(220,38,38,.35);
+  background:linear-gradient(135deg,rgba(220,38,38,.05),#FFFFFF);
+  box-shadow:0 4px 20px -8px rgba(220,38,38,.18);
+}
+.verdict.short .vword{color:#DC2626;text-shadow:none}
+.verdict.aside .vword{color:#334155}
+.verdict .vwhy{color:#334155}
 
-/* ---------- 11. buttons --------------------------------------------------- */
+/* ---------- 11. buttons ---------- */
 .btn{
-  background:linear-gradient(180deg,#FFDD7A 0%,#F5C542 52%,#E3AC24 100%);
-  color:#231803;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 20px -10px rgba(245,197,66,.55);
+  background:linear-gradient(180deg,#F5D77A 0%,#E8B42A 48%,#C9921A 100%);
+  color:#1A1204;
+  box-shadow:0 2px 8px rgba(201,146,26,.25);
+  transition:transform .15s var(--ease-spring),box-shadow .2s,background .2s;
 }
 .btn:hover:not(:disabled){
-  background:linear-gradient(180deg,#FFE59A 0%,#FFD257 52%,#F0B62E 100%);
-  color:#231803;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.30),
-             0 8px 22px -10px rgba(245,197,66,.65),
-             0 0 18px rgba(245,197,66,.50);
+  background:linear-gradient(180deg,#FFF0B8,#F5D77A 48%,#E8B42A);
+  box-shadow:0 4px 16px rgba(201,146,26,.32);
+  transform:translateY(-1px);
 }
-.btn:disabled{background:#3D4A6E;color:#AAB8D8;box-shadow:none}
-.btn.ghost{background:rgba(34,211,238,.04);border-color:#3D4C7C;color:#C7D3EE}
-.btn.ghost:hover{
-  background:rgba(34,211,238,.10);border-color:#22D3EE;color:#7FE7F7;
-  box-shadow:0 0 12px rgba(34,211,238,.25);
-}
+.btn:active:not(:disabled){transform:translateY(0) scale(.98)}
+.btn:disabled{background:#E2E8F0;color:#94A3B8;box-shadow:none}
+.btn.ghost{background:#FFFFFF;border-color:#E2E8F0;color:#334155}
+.btn.ghost:hover{background:#F8FAFC;border-color:#0891B2;color:#0891B2;box-shadow:var(--shadow-sm)}
+.card .toTrade{border-color:#C9921A;color:#A67C12;background:rgba(201,146,26,.04)}
+.card .toTrade:hover{background:rgba(201,146,26,.12);border-color:#A67C12;box-shadow:var(--shadow-sm)}
 
-/* card trade handoff */
-.card .toTrade{border-color:#C99A2E;color:#FFD257;background:rgba(245,197,66,.05)}
-.card .toTrade:hover{
-  background:rgba(245,197,66,.14);border-color:#F5C542;color:#FFE08A;
-  box-shadow:0 0 14px rgba(245,197,66,.35);
-}
+.chip{border-color:#E2E8F0;color:#334155;transition:border-color .2s,color .2s,background .2s}
+.chip.on{border-color:#7C3AED;color:#7C3AED;background:rgba(124,58,237,.08)}
 
-/* round filter chips: magenta accent when active */
-.chip{border-color:#35426E;color:#8B9CC4}
-.chip.on{
-  border-color:#E879F9;color:#F0A6FF;background:rgba(232,121,249,.08);
-  box-shadow:0 0 10px -4px rgba(232,121,249,.50);
-}
-
-/* ---------- 12. notes / warnings ----------------------------------------- */
-.note{color:#93A3C4}
-.note.warn{color:#FFD166}
-
-/* ---------- 13. inputs & selects ----------------------------------------- */
-input,select{background:#141C38;border-color:#3D4C7C;color:#E9EFFC}
-input::placeholder{color:#5D6D94}
-input:focus,select:focus{
-  outline-color:#22D3EE;border-color:#22D3EE;
-  box-shadow:0 0 10px -3px rgba(34,211,238,.50);
-}
-
-/* ---------- 14. gate ledger rows ----------------------------------------- */
-.ledger{border-color:#35426E}
-.lrow{background:#141C38;border-bottom-color:#2C3860}
-.lrow:hover{background:#182142}
-.lrow .gid{color:#5CC8E0}
-.lrow .gname{color:#DBE4F8}
-.lrow .gdetail{color:#8B9CC4}
-
-/* ---------- 15. progress bars -------------------------------------------- */
-.prog{background:#2C3860}
+/* ---------- 12. notes / inputs / ledger ---------- */
+.note{color:#334155}
+.note.warn{color:#A67C12}
+input,select{background:#FFFFFF;border-color:#E2E8F0;color:#020617;transition:border-color .2s,box-shadow .2s}
+input::placeholder{color:#94A3B8}
+input:focus,select:focus{outline-color:#0891B2;border-color:#0891B2;box-shadow:0 0 0 3px rgba(8,145,178,.15)}
+.ledger{border-color:#E2E8F0}
+.lrow{background:#FFFFFF;border-bottom-color:#F1F5F9;transition:background .15s}
+.lrow:hover{background:#F8FAFC}
+.lrow .gid{color:#0891B2}
+.lrow .gname{color:#020617}
+.lrow .gdetail{color:#334155}
+.prog{background:#E2E8F0;border-radius:3px;overflow:hidden}
 .prog i{
-  background:linear-gradient(90deg,#E3AC24,#FFD968);
-  box-shadow:0 0 8px rgba(245,197,66,.65);
+  background:linear-gradient(90deg,#7C3AED,#C9921A,#0891B2,#7C3AED);
+  background-size:200% 100%;
+  animation:hgShimmer 2s linear infinite;
+  border-radius:2px;
+}
+hr.sep{border-top-color:#E2E8F0}
+.kv .k{color:#334155}
+.kv .v{color:#020617}
+.big{color:#020617}
+.pos{color:#059669}
+.neg{color:#DC2626}
+.checklist label{color:#334155}
+.ticket{background:#F8FAFC;border-color:#E2E8F0;color:#334155}
+.empty{color:#334155;border-color:#CBD5E1;background:#F8FAFC}
+th{color:#0891B2}
+td,th{border-bottom-color:#F1F5F9}
+table tr:nth-child(even) td{background:rgba(15,23,42,.02)}
+table tr:hover td{background:rgba(201,146,26,.06)}
+.hgauto{border-color:#E2E8F0;background:#FFFFFF}
+.hgauto .hgalabel{color:#94A3B8;border-right-color:#E2E8F0}
+.hgauto button.on{background:linear-gradient(180deg,#C4B5FD,#A78BFA);color:#1E1033}
+
+.convictionGold{color:#C9921A;animation:convictionGoldShimmer 2.6s ease-in-out infinite}
+
+/* alert bell panel (light fallbacks when vars missing) */
+#hgAlertRoot .hgab-btn,#hgAlertRoot .hgab-panel{
+  background:#FFFFFF;
+  border-color:#E2E8F0;
+  color:#020617;
+  box-shadow:var(--shadow-lg);
+  font-weight:500;
 }
 
-/* ---------- 16. misc surfaces -------------------------------------------- */
-hr.sep{border-top-color:#2C3860}
-.kv .k{color:#8B9CC4}
-.kv .v{color:#E9EFFC}
-.big{color:#F2F6FF}
-.pos{color:#2EE6A8}
-.neg{color:#FF8A76}
-.checklist label{color:#D7E0F5}
-.ticket{background:#141C38;border-color:#35426E;color:#D7E0F5}
-.empty{color:#8B9CC4;border-color:#3D4C7C}
-th{color:#8FD9E8}
-td,th{border-bottom-color:#2C3860}
-table tr:nth-child(even) td{background:rgba(148,178,255,.03)}
-table tr:hover td{background:rgba(245,197,66,.06)}
-
-/* ---------- 17. gold shimmer for conviction elements ----------------------
-   Gold scalp tab marks high-conviction elements with .convictionGold.
-   Text-shadow pulse only — never clobbers the element's own background.    */
-@keyframes convictionGoldShimmer{
-  0%,100%{text-shadow:0 0 3px rgba(245,197,66,.20),0 0 12px rgba(245,197,66,.10)}
-  50%{text-shadow:0 0 8px rgba(245,197,66,.75),0 0 22px rgba(245,197,66,.35)}
-}
-.convictionGold{
-  color:#F5C542;
-  animation:convictionGoldShimmer 2.6s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce){
-  .convictionGold{animation:none}
-}
+/* ---------- 13. typography — darker + bolder readability ---------- */
+.market-picture-bar{font-weight:600}
+.market-picture-bar b{font-weight:800}
+.navgroups button.on,nav button.on{font-weight:700}
+.panel h2{font-weight:800}
+.panel h2 span{font-weight:600}
+.stamp{font-weight:700}
+.lrow .gname{font-weight:600}
+.lrow .gdetail{font-weight:500}
+.note,.empty,.verdict .vwhy{font-weight:500}
+.note.warn{font-weight:600}
+.btn{font-weight:700}
+.btn.ghost,.card .toTrade{font-weight:600}
+td{font-weight:600}
+th{font-weight:700}

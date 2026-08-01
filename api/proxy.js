@@ -18,6 +18,30 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;
+/* Scans fire parallel CoinDCX candle fetches — keep a generous ceiling so
+   whole-exchange sweeps never 429 themselves; abuse is still bounded. */
+const RATE_WINDOW_MS = 60000;
+const RATE_MAX_PER_WINDOW = 3000;
+const __rateBuckets = new Map();
+
+function clientKey(req){
+  try{
+    const xf = req.headers && (req.headers['x-forwarded-for'] || req.headers['X-Forwarded-For']);
+    if (xf) return String(xf).split(',')[0].trim();
+    if (req.socket && req.socket.remoteAddress) return String(req.socket.remoteAddress);
+  }catch(e){}
+  return 'local';
+}
+
+function rateLimited(key){
+  const now = Date.now();
+  let bucket = __rateBuckets.get(key);
+  if (!bucket){ bucket = []; __rateBuckets.set(key, bucket); }
+  while (bucket.length && now - bucket[0] > RATE_WINDOW_MS) bucket.shift();
+  if (bucket.length >= RATE_MAX_PER_WINDOW) return true;
+  bucket.push(now);
+  return false;
+}
 
 function send(res, status, body, extraHeaders){
   const headers = Object.assign({
@@ -59,6 +83,9 @@ module.exports = async (req, res) => {
   try { target = new URL(raw); } catch (e) { return sendJson(res, 400, { error: 'invalid url param' }); }
   if (target.protocol !== 'https:' || !ALLOWED_HOSTS.has(target.hostname)){
     return sendJson(res, 403, { error: 'host not allowed' });
+  }
+  if (rateLimited(clientKey(req))){
+    return sendJson(res, 429, { error: 'rate limit exceeded — try again shortly' });
   }
 
   const ctrl = new AbortController();

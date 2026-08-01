@@ -523,6 +523,44 @@ function rec(over){ return Object.assign({}, LONG, over || {}); }
     'F17 corrupt stored ledger -> mount survives and the warn line admits it');
 }
 
+/* ---------------- G) hgProfitRankHint ---------------- */
+console.log('\n== G) hgProfitRankHint ==');
+{
+  const ctx = makeCtx({ localStorage: makeStorage() });
+  const w = ctx.window;
+  assert(typeof w.hgProfitRankHint === 'function', 'G1 hgProfitRankHint exported');
+  const z = w.hgProfitRankHint({});
+  assert(z && z.boost === 0 && z.enough === false, 'G2 empty ledger -> boost 0, enough false');
+
+  const R = w.hgScoreRecord, SETTLE = w.hgScoreSettle;
+  const DAY_MS = 25 * 3600 * 1000; /* >24h dedupe window */
+  for (let i = 0; i < 4; i++){
+    R({ source: 'brain', sym: 'BTCUSDT', dir: 'long', tier: 'PRIME',
+      entry: 100, stop: 90, t1: 120, layers: ['TREND'], at: T0 * 1000 + i * DAY_MS });
+    const rec = w.hgScoreRecords().find(function(r){ return r && r.sym === 'BTCUSDT' && r.at === T0 * 1000 + i * DAY_MS; });
+    rec.status = 'settled';
+    rec.r = (i < 3) ? 1.5 : -1;
+    rec.state = (i < 3) ? 'T1' : 'SL';
+  }
+  const h = w.hgProfitRankHint({ sym: 'BTCUSDT', dir: 'long', tier: 'PRIME', layers: ['TREND'], lane: 'crypto' });
+  assert(h.enough === true && h.boost > 0, 'G3 winning sym+dir history -> positive boost (got ' + h.boost + ')');
+  assert(Array.isArray(h.parts) && h.parts.length > 0, 'G4 parts array names contributing buckets');
+
+  for (let j = 0; j < 4; j++){
+    R({ source: 'brain', sym: 'ETHUSDT', dir: 'short', tier: 'HIGH',
+      entry: 200, stop: 210, t1: 180, layers: ['REGIME'], at: T0 * 1000 + 200 * DAY_MS + j * DAY_MS });
+  }
+  w.hgScoreRecords().forEach(function(rec){
+    if (rec && rec.sym === 'ETHUSDT'){ rec.status = 'settled'; rec.r = -1; rec.state = 'SL'; }
+  });
+  const bad = w.hgProfitRankHint({ sym: 'ETHUSDT', dir: 'short', tier: 'HIGH', lane: 'crypto' });
+  assert(bad.enough === true && bad.boost < 0, 'G5 losing sym history -> negative boost (got ' + bad.boost + ')');
+
+  let threw = null;
+  try{ w.hgProfitRankHint(null); }catch(e){ threw = e; }
+  assert(threw === null, 'G6 null input never throws');
+}
+
 /* ---------------- summary ---------------- */
 process.on('unhandledRejection', function(){});
 await new Promise(function(r){ setTimeout(r, 100); });

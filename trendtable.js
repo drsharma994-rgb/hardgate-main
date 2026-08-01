@@ -255,7 +255,9 @@ function trendmxPlanBlock(r){
       + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
-  return '<div class="plan">' + inner + btn + '</div>';
+  var bookBtn = (s && typeof bookBtnHTML === 'function')
+    ? ' ' + bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'trendmx', strategy: 'trendmx', t2: s.t2 }) : '';
+  return '<div class="plan">' + inner + btn + bookBtn + '</div>';
 }
 
 var COLS = [

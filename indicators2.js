@@ -373,6 +373,51 @@ res.trend = trend;
 return res;
 }
 
+/* hgStructureGate(rows, dir, opts) — engine/BRAIN adapter over hgStructure.
+   Maps lastBOS/lastCHoCH to veto/confirm for a cascade direction. Also
+   accepts legacy test mocks {dir, bos, choch} booleans. Pure, never throws. */
+function hgStructureGate(rows, dir, opts){
+  var out = { veto: false, bos: false, choch: false, note: 'hgStructure: no read' };
+  try{
+    if (dir !== 'long' && dir !== 'short') return out;
+    if (typeof hgStructure !== 'function'){ out.note = 'hgStructure absent'; return out; }
+    var hs = null;
+    try{ hs = hgStructure(rows, opts); }catch(e){ out.note = 'hgStructure errored (ignored)'; return out; }
+    if (!hs || typeof hs !== 'object') return out;
+    /* legacy mock shape (vm tests) */
+    if (hs.choch === true && hs.dir){
+      var chLegacy = (hs.dir === 'long' || hs.dir === 'up') ? 'long' : ((hs.dir === 'short' || hs.dir === 'down') ? 'short' : null);
+      if (chLegacy && chLegacy !== dir){
+        out.veto = true; out.choch = true;
+        out.note = 'CHoCH ' + String(hs.dir).toUpperCase() + ' against the ' + dir.toUpperCase() + ' cascade (hgStructure)';
+        return out;
+      }
+    }
+    if (hs.bos === true && hs.dir === dir){
+      out.bos = true;
+      out.note = 'BOS confirms ' + dir.toUpperCase() + ' (hgStructure)';
+      return out;
+    }
+    if (!Array.isArray(rows) || !rows.length) return out;
+    var maxAge = (opts && isFinite(opts.maxBars) && opts.maxBars > 0) ? Math.floor(opts.maxBars) : 20;
+    var n = rows.length - 1;
+    var want = (dir === 'long') ? 'up' : 'down';
+    var ch = hs.lastCHoCH, bo = hs.lastBOS;
+    if (ch && ch.dir && isFinite(ch.i) && (n - ch.i) <= maxAge && ch.dir !== want){
+      out.veto = true; out.choch = true;
+      out.note = 'CHoCH ' + ch.dir.toUpperCase() + ' against the ' + dir.toUpperCase() + ' cascade (hgStructure)';
+      return out;
+    }
+    if (bo && bo.dir && isFinite(bo.i) && (n - bo.i) <= maxAge && bo.dir === want){
+      out.bos = true;
+      out.note = 'BOS confirms ' + dir.toUpperCase() + ' (hgStructure)';
+      return out;
+    }
+    out.note = 'structure trend ' + (hs.trend || 'range') + ' — no fresh opposing CHoCH';
+    return out;
+  }catch(e){ out.note = 'hgStructure gate failed (ignored)'; return out; }
+}
+
 /* hgAVWAP(rows, anchorIndex) — anchored VWAP with +/-1 volume-weighted sigma bands (see header).
    Pure, no DOM, never throws; returns {value, upper, lower, stdev}, all NaN when not computable. */
 function hgAVWAP(rows, anchorIndex){
@@ -455,6 +500,7 @@ return 100*below/(m-1);
    guarded and never throws when window is absent. */
 if (typeof window !== 'undefined' && window){
 window.hgStructure = hgStructure;
+window.hgStructureGate = hgStructureGate;
 window.hgAVWAP = hgAVWAP;
 window.hgAtrPercentile = hgAtrPercentile;
 }

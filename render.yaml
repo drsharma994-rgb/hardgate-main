@@ -1,13 +1,15 @@
 # HARDGATE on Render — one-click blueprint.
 # New → Blueprint → pick this repo: Render reads this file and creates the
 # web service (static app + /api/proxy on the same origin, zero deps).
-# Free plan sleeps after ~15 min idle; first hit after a sleep cold-starts
-# in ~30s. Upgrade to a paid plan to keep it always-on.
+# Paid plans stay always-on; free tier sleeps after ~15 min idle (~30s cold start).
+# Optional: set GH_DISPATCH_TOKEN on Render to fire alert-notify.yml every 13 min
+# (more reliable than GitHub cron). When armed, set repo variable
+# RENDER_DISPATCH_PRIMARY=true to skip the GitHub schedule (see README Alerts).
 services:
   - type: web
     name: hardgate-main
     runtime: node
-    plan: free
+    plan: starter
     region: singapore
     branch: main
     buildCommand: ""

@@ -499,12 +499,14 @@ ok(warmG.run.length === 0 && warmG.run.constructor.name === 'AsyncFunction',
 
 /* fresh vm context per scenario: real timers (startStream owns an interval),
    a stubbed WebSocket mirroring section K, no network ever touched */
-function mkWarmCtx(WS){
-  return vm.createContext({
-    window: {}, WebSocket: WS,
+function mkWarmCtx(WS, localStorage){
+  const ctx = vm.createContext({
+    window: { localStorage: localStorage || null },
+    WebSocket: WS,
     setTimeout: setTimeout, clearTimeout: clearTimeout,
     setInterval: setInterval, clearInterval: clearInterval
   });
+  return ctx;
 }
 function mkStubWS(made){
   function StubWS(url){ this.url = url; this.readyState = 0; made.push(this); }
@@ -626,5 +628,33 @@ function loadLiqs(ctx){
 
 await new Promise(r => setTimeout(r, 100));
 ok(__unhandledL.length === 0, 'no unhandled rejections on any warm-up path');
+
+console.log('== liqs session persist ==');
+{
+  const store = new Map();
+  const ls = {
+    getItem: function(k){ return store.has(k) ? store.get(k) : null; },
+    setItem: function(k, v){ store.set(k, String(v)); },
+    removeItem: function(k){ store.delete(k); }
+  };
+  const ctx = mkWarmCtx(mkStubWS([]), ls);
+  loadLiqs(ctx);
+  const agg = ctx.window.liqAgg();
+  agg.add({ sym: 'BTCUSDT', side: 'long', usd: 2e6, t: Date.now() });
+  ctx.window.liqsState = ctx.window.liqsState || (function(){
+    return { snap: agg.snapshot(), setup: null, at: Date.now(), live: false };
+  });
+  /* replay path via module state — hydrate by reloading with saved payload */
+  const payload = store.get('hg_liqs_session_v1');
+  ok(!payload, 'fresh module before ingest persist throttle — may be absent immediately');
+  const ctx2 = mkWarmCtx(mkStubWS([]), ls);
+  store.set('hg_liqs_session_v1', JSON.stringify({
+    v: 1, at: Date.now(), manualClose: false,
+    prints: [{ sym: 'ETHUSDT', side: 'short', usd: 1500000, t: Date.now() }]
+  }));
+  loadLiqs(ctx2);
+  const st = ctx2.window.liqsState();
+  ok(st && st.snap && st.snap.window.count >= 1, 'hydrated session restores rolling window for BRAIN');
+}
 
 console.log('\nALL ' + passed + ' LIQS ASSERTIONS PASSED');

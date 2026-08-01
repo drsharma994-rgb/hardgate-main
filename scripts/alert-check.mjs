@@ -3,6 +3,10 @@ import { pathToFileURL } from 'url';
 
 const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com/';
 const STATE_FILE = 'alert-state.json';
+/* Owner Telegram defaults — used when TELEGRAM_TOKEN/TELEGRAM_CHAT_ID env
+   secrets are unset (browser page + CI runner). */
+const HG_TG_DEFAULT_TOKEN = '8678184060:AAGKhoukjgitAAk8kMzPHRF3WF6U8oXaNcc';
+const HG_TG_DEFAULT_CHAT = '1004014764';
 /* GitHub auto-disables scheduled workflows after 60 days of repository
    inactivity. The heartbeat below stamps lastRunAt into alert-state.json at
    most once per 24h, so the workflow's commit step produces ~1 keep-alive
@@ -13,7 +17,7 @@ function loadState() {
   try {
     return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
   } catch (e) {
-    return { delta: null, coindcx: null, gold: null };
+    return { delta: null, coindcx: null, gold: null, tabAlerts: null };
   }
 }
 
@@ -98,12 +102,14 @@ async function sendNtfy(topic, title, body) {
   }
 }
 /* Telegram straight from Node — the owner's primary channel (2026-07-25:
-   chosen over email after the EmailJS quota died). No secrets -> honest skip. */
+   chosen over email after the EmailJS quota died). Env secrets win; else the
+   baked-in HG_TG_DEFAULT_* owner defaults. Only skips when both are absent. */
 async function sendTelegramCi(text) {
-  const t = process.env.TELEGRAM_TOKEN, c = process.env.TELEGRAM_CHAT_ID;
+  const t = process.env.TELEGRAM_TOKEN || HG_TG_DEFAULT_TOKEN;
+  const c = process.env.TELEGRAM_CHAT_ID || HG_TG_DEFAULT_CHAT;
   if (!t || !c) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
   try {
-    const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(t) + '/sendMessage', {
+    const res = await fetch('https://api.telegram.org/bot' + t + '/sendMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: c, text: String(text || ''), disable_web_page_preview: true })
@@ -132,7 +138,7 @@ async function sendTicketPush(topic, next) {
    their structural voter — the 2026-07-25 all-ASIDE outage class. Push
    throttled to one per ENGINE_ALERT_MS per continuous outage; recovery
    clears the stamp. */
-const ENGINE_STALE_MS = 45 * 60 * 1000;
+const ENGINE_STALE_MS = 30 * 60 * 1000; /* aligned with engine.js ENGINE_FRESH_MS */
 const ENGINE_ALERT_MS = 2 * 60 * 60 * 1000;
 function engineVerdict(engine, now) {
   if (!engine || engine.live !== true) {
@@ -147,6 +153,95 @@ function engineVerdict(engine, now) {
 function engineAlertDue(lastAlertAt, now) {
   const t = Date.parse(lastAlertAt || '');
   return !Number.isFinite(t) || (now - t) > ENGINE_ALERT_MS;
+}
+
+/* ---------------- book bracket backlog alert ----------------
+   Server-side probe of GET /api/book/desk — open positions without a
+   bracket blotter (pending) or failed sends nudge the desk. Seeds silently;
+   re-alerts on count change or every BOOK_EXEC_ALERT_MS while backlog persists. */
+const BOOK_EXEC_ALERT_MS = 4 * 60 * 60 * 1000;
+function bookExecSnapshot(desk) {
+  const ex = desk && desk.execute;
+  if (!ex) return { pending: 0, fail: 0, ok: 0, liveOk: 0, liveFail: 0 };
+  return {
+    pending: Number.isFinite(+ex.pending) ? +ex.pending : 0,
+    fail: Number.isFinite(+ex.fail) ? +ex.fail : 0,
+    ok: Number.isFinite(+ex.ok) ? +ex.ok : 0,
+    liveOk: Number.isFinite(+ex.liveOk) ? +ex.liveOk : 0,
+    liveFail: Number.isFinite(+ex.liveFail) ? +ex.liveFail : 0,
+  };
+}
+function bookExecKey(snap) {
+  return 'p' + snap.pending + '|f' + snap.fail;
+}
+function bookExecAlertDue(lastAlertAt, now) {
+  const t = Date.parse(lastAlertAt || '');
+  return !Number.isFinite(t) || (now - t) > BOOK_EXEC_ALERT_MS;
+}
+function bookFillSnapshot(desk) {
+  const f = desk && desk.fill;
+  if (!f) return { unfilled: 0, partial: 0, total: 0 };
+  return {
+    unfilled: Number.isFinite(+f.unfilled) ? +f.unfilled : 0,
+    partial: Number.isFinite(+f.partial) ? +f.partial : 0,
+    total: Number.isFinite(+f.total) ? +f.total : 0,
+  };
+}
+function bookFillKey(snap) {
+  return 'u' + snap.unfilled + '|p' + snap.partial;
+}
+const BOOK_FILL_ALERT_MS = 4 * 60 * 60 * 1000;
+function bookFillAlertDue(lastAlertAt, now) {
+  const t = Date.parse(lastAlertAt || '');
+  return !Number.isFinite(t) || (now - t) > BOOK_FILL_ALERT_MS;
+}
+function bookFillBody(desk, snap) {
+  return 'Bracket sent but broker fill not confirmed: ' + snap.unfilled + ' unfilled · '
+    + snap.partial + ' partial across the desk. POST /api/book/execute-fill from your broker webhook,'
+    + ' poll via BOOK → POLL FILLS / POST /api/book/poll-fills, or rely on auto-fill when EXECUTE_BACKEND returns fill fields.';
+}
+async function bookTryPollFills(siteUrl) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function(){ ctrl.abort(); }, 25000);
+    const res = await fetch(new URL('/api/book/poll-fills', siteUrl).href, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allFunds: true }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const j = await res.json();
+    if (j && j.ok) {
+      console.log('Book fill poll: polled=' + (j.polled || 0) + ' filled=' + (j.filled || 0));
+      return j;
+    }
+  } catch (e) {
+    console.warn('Book fill poll failed: ' + ((e && e.message) || e));
+  }
+  return null;
+}
+async function bookFetchDesk(siteUrl) {
+  const deskCtrl = new AbortController();
+  const deskTimer = setTimeout(function(){ deskCtrl.abort(); }, 20000);
+  const deskRes = await fetch(new URL('/api/book/desk', siteUrl).href, { signal: deskCtrl.signal });
+  clearTimeout(deskTimer);
+  return deskRes.json();
+}
+function bookExecBody(desk, snap) {
+  const parts = ['Cross-fund brackets (7d): ' + snap.ok + ' OK · ' + snap.fail + ' fail · '
+    + snap.pending + ' open without bracket'];
+  if (snap.liveOk || snap.liveFail) {
+    parts.push('LIVE webhook (7d): ' + snap.liveOk + ' OK · ' + snap.liveFail + ' fail');
+  }
+  const funds = (desk && Array.isArray(desk.funds)) ? desk.funds : [];
+  if (funds.length) {
+    parts.push('Funds: ' + funds.map(function(f){
+      return (f.id || '?') + ' (' + (f.openCount || 0) + ' open)';
+    }).join(', '));
+  }
+  parts.push('BOOK → EXEC PENDING or ALL FUNDS PENDING to send brackets.');
+  return parts.join('\n');
 }
 
 /* ---------------- ntfy fallback for setup alerts ----------------
@@ -365,6 +460,15 @@ async function main() {
     await page.evaluateOnNewDocument((t, c) => {
       try { localStorage.setItem('hg_tg_token', t); localStorage.setItem('hg_tg_chat', c); } catch (e) {}
     }, process.env.TELEGRAM_TOKEN, process.env.TELEGRAM_CHAT_ID);
+  } else {
+    await page.evaluateOnNewDocument((t, c) => {
+      try { localStorage.setItem('hg_tg_token', t); localStorage.setItem('hg_tg_chat', c); } catch (e) {}
+    }, HG_TG_DEFAULT_TOKEN, HG_TG_DEFAULT_CHAT);
+  }
+  if (prevState.tabAlerts) {
+    await page.evaluateOnNewDocument((keys) => {
+      try { localStorage.setItem('hg_tabalert_keys', JSON.stringify(keys)); } catch (e) {}
+    }, prevState.tabAlerts);
   }
   await page.goto(SITE_URL + '?nocache=' + cacheBuster, {
     waitUntil: 'domcontentloaded',
@@ -382,13 +486,22 @@ async function main() {
       if ('gold' in S.lastAlertKey) S.lastAlertKey.gold = prev.gold ?? null;
     }
     await runAlertCycle();
+    let edgeInfo = null;
+    try{
+      const es = (typeof edgeScan === 'function') ? edgeScan() : null;
+      edgeInfo = { at: es && es.at, count: (es && Array.isArray(es.cands)) ? es.cands.length : 0 };
+    }catch(e){ edgeInfo = { err: String(e && e.message ? e.message : e) }; }
     // window.__hgLastEmail = {ok, err, ts} from the page's senders — read AFTER
     // the cycle so any send attempt this run is captured. If several sends fire
     // in one cycle this holds the LAST one (contract limitation).
     const email = (typeof window !== 'undefined' && window.__hgLastEmail) ? window.__hgLastEmail : null;
+    let tabAlerts = null;
+    try { tabAlerts = JSON.parse(localStorage.getItem('hg_tabalert_keys') || 'null'); } catch (e) { tabAlerts = null; }
     return {
       state: { delta: S.lastAlertKey.delta, coindcx: S.lastAlertKey.coindcx, gold: S.lastAlertKey.gold ?? null },
-      email: email
+      email: email,
+      tabAlerts: tabAlerts,
+      edge: edgeInfo
     };
   }, prevState);
 
@@ -511,6 +624,15 @@ async function main() {
   const newState = result.state;
   console.log('New alert state:', JSON.stringify(newState));
   console.log('Email status (window.__hgLastEmail):', JSON.stringify(result.email));
+  if (result.edge) {
+    console.log('EDGE scan snapshot:', JSON.stringify(result.edge));
+  }
+  if (result.tabAlerts) {
+    newState.tabAlerts = result.tabAlerts;
+    console.log('Tab setup alert keys:', Object.keys(result.tabAlerts).length);
+  } else if (prevState.tabAlerts) {
+    newState.tabAlerts = prevState.tabAlerts;
+  }
 
   const verdict = emailVerdict(result.email);
   if (verdict.warn) {
@@ -664,6 +786,125 @@ async function main() {
     newState.engineAlertAt = prevState.engineAlertAt;   /* degraded run: keep the stamp, change nothing */
   }
 
+  /* book bracket backlog — desk API probe, independent of synthesis */
+  try {
+    const deskCtrl = new AbortController();
+    const deskTimer = setTimeout(function(){ deskCtrl.abort(); }, 20000);
+    const deskRes = await fetch(new URL('/api/book/desk', SITE_URL).href, { signal: deskCtrl.signal });
+    clearTimeout(deskTimer);
+    const deskJson = await deskRes.json();
+    if (deskJson && deskJson.ok && deskJson.desk) {
+      const desk = deskJson.desk;
+      const snap = bookExecSnapshot(desk);
+      const key = bookExecKey(snap);
+      const now = Date.now();
+      console.log('Book brackets: ' + snap.pending + ' pending · ' + snap.fail + ' fail · ' + snap.ok + ' OK');
+      if (prevState.bookExec === undefined) {
+        console.log('Book bracket state seeded silently.');
+        newState.bookExec = { key: key, snap: snap, at: new Date().toISOString() };
+      } else {
+        const prevSnap = (prevState.bookExec && prevState.bookExec.snap) || { pending: 0, fail: 0 };
+        const needsAlert = (snap.pending > 0 || snap.fail > 0)
+          && (key !== (prevState.bookExec && prevState.bookExec.key)
+            || bookExecAlertDue(prevState.bookExec && prevState.bookExec.alertAt, now));
+        if (needsAlert) {
+          const pushResult = await sendAlertCi(offHoursPrefix() + '📒 HARDGATE BOOK BRACKETS',
+            bookExecBody(desk, snap) + offHoursTag());
+          console.log('BOOK BRACKET BACKLOG — push: ' + pushResult);
+          newState.bookExec = {
+            key: key, snap: snap,
+            at: (prevState.bookExec && prevState.bookExec.at) || new Date().toISOString(),
+            alertAt: new Date().toISOString(),
+          };
+        } else if (snap.pending === 0 && snap.fail === 0
+          && (prevSnap.pending > 0 || prevSnap.fail > 0)) {
+          const pushResult = await sendAlertCi('✅ HARDGATE BOOK BRACKETS CLEAR',
+            'No open positions waiting for a bracket and no failed sends in the desk rollup.');
+          console.log('BOOK BRACKETS CLEAR — push: ' + pushResult);
+          newState.bookExec = { key: key, snap: snap, at: new Date().toISOString(), alertAt: null };
+        } else {
+          newState.bookExec = Object.assign({}, prevState.bookExec, { key: key, snap: snap });
+        }
+      }
+      if (prevState.bookDayHalt === undefined) {
+        console.log('Book daily-loss state seeded silently.');
+        newState.bookDayHalt = { active: !!desk.dailyLossHalt, at: new Date().toISOString() };
+      } else {
+        const wasHalt = !!(prevState.bookDayHalt && prevState.bookDayHalt.active);
+        const nowHalt = !!desk.dailyLossHalt;
+        if (!wasHalt && nowHalt) {
+          const pushResult = await sendAlertCi(offHoursPrefix() + '⛔ HARDGATE DAILY LOSS HALT',
+            'Desk day P&L ' + (desk.dayPnlUsd != null ? desk.dayPnlUsd.toFixed(0) : '?') + ' USD breached the -'
+              + (desk.dailyLossLimitUsd != null ? desk.dailyLossLimitUsd.toFixed(0) : '?') + ' USD limit ('
+              + Math.round((desk.maxDailyLossPct || 0) * 100) + '% of day start). New adds blocked until UTC day roll.'
+              + offHoursTag());
+          console.log('DAILY LOSS HALT — push: ' + pushResult);
+        } else if (wasHalt && !nowHalt) {
+          const pushResult = await sendAlertCi('✅ HARDGATE DAILY LOSS HALT LIFTED',
+            'Desk day P&L recovered — new adds allowed again.');
+          console.log('DAILY LOSS HALT LIFTED — push: ' + pushResult);
+        }
+        newState.bookDayHalt = { active: nowHalt, at: new Date().toISOString() };
+      }
+      const fillSnap = bookFillSnapshot(desk);
+      const fillKey = bookFillKey(fillSnap);
+      if (prevState.bookFill === undefined) {
+        console.log('Book fill backlog state seeded silently.');
+        newState.bookFill = { key: fillKey, snap: fillSnap, at: new Date().toISOString() };
+      } else if (fillSnap.total > 0) {
+        let activeFillSnap = fillSnap;
+        let activeFillKey = fillKey;
+        const caps = deskJson.capabilities || {};
+        if (caps.fillPoll) {
+          const pollRun = await bookTryPollFills(SITE_URL);
+          if (pollRun && pollRun.filled > 0) {
+            try {
+              const deskAfter = await bookFetchDesk(SITE_URL);
+              if (deskAfter && deskAfter.ok && deskAfter.desk) {
+                desk = deskAfter.desk;
+                activeFillSnap = bookFillSnapshot(desk);
+                activeFillKey = bookFillKey(activeFillSnap);
+              }
+            } catch (ePollDesk) {
+              console.warn('Desk re-fetch after fill poll failed: ' + ((ePollDesk && ePollDesk.message) || ePollDesk));
+            }
+          }
+        }
+        if (activeFillSnap.total > 0) {
+        const needsFillAlert = activeFillKey !== (prevState.bookFill && prevState.bookFill.key)
+          || bookFillAlertDue(prevState.bookFill && prevState.bookFill.alertAt, now);
+        if (needsFillAlert) {
+          const pushResult = await sendAlertCi(offHoursPrefix() + '📒 HARDGATE BOOK FILLS',
+            bookFillBody(desk, activeFillSnap) + offHoursTag());
+          console.log('BOOK FILL BACKLOG — push: ' + pushResult);
+          newState.bookFill = {
+            key: activeFillKey, snap: activeFillSnap,
+            at: (prevState.bookFill && prevState.bookFill.at) || new Date().toISOString(),
+            alertAt: new Date().toISOString(),
+          };
+        } else {
+          newState.bookFill = Object.assign({}, prevState.bookFill, { key: activeFillKey, snap: activeFillSnap });
+        }
+        } else {
+          const pushResult = await sendAlertCi('✅ HARDGATE BOOK FILLS CLEAR',
+            'Broker fill poll reconciled all bracketed open positions.');
+          console.log('BOOK FILLS CLEAR (poll) — push: ' + pushResult);
+          newState.bookFill = { key: activeFillKey, snap: activeFillSnap, at: new Date().toISOString(), alertAt: null };
+        }
+      } else if ((prevState.bookFill && prevState.bookFill.snap && prevState.bookFill.snap.total) > 0) {
+        const pushResult = await sendAlertCi('✅ HARDGATE BOOK FILLS CLEAR',
+          'All bracketed open positions show broker fills confirmed.');
+        console.log('BOOK FILLS CLEAR — push: ' + pushResult);
+        newState.bookFill = { key: fillKey, snap: fillSnap, at: new Date().toISOString(), alertAt: null };
+      } else {
+        newState.bookFill = Object.assign({}, prevState.bookFill, { key: fillKey, snap: fillSnap });
+      }
+    }
+  } catch (e) {
+    console.warn('Book desk probe failed: ' + ((e && e.message) || e));
+    if (prevState.bookExec !== undefined) newState.bookExec = prevState.bookExec;
+  }
+
   /* DAILY DIGEST — one full-market summary per day at ~21:07 IST, riding
      the 15-min runs. Unconditional channel (a daily, never throttled); the
      stamp rides alert-state.json so exactly one digest per day. */
@@ -774,4 +1015,5 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
+         bookExecSnapshot, bookExecKey, bookExecAlertDue, bookExecBody, BOOK_EXEC_ALERT_MS,
          istOffHours, offHoursPrefix, offHoursTag };

@@ -13,7 +13,10 @@
 
    Honest no-op without the token. A 422/403/404 logs and retries next tick
    (no tight loop). Rate math: 13 min ≈ 110 dispatches/day, far under the
-   1000/hr API budget. */
+   1000/hr API budget.
+
+   When this is armed on Render, set GitHub repo variable RENDER_DISPATCH_PRIMARY=true
+   so alert-notify.yml skips its 15-min schedule (avoids double Puppeteer runs). */
 
 const INTERVAL_MS = 13 * 60 * 1000;
 

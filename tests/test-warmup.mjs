@@ -203,5 +203,19 @@ console.log('== F) real layer modules publish honest warm hooks ==');
   }
 }
 
+/* ================= G) hgBrainAutoWarm boot hook ================= */
+console.log('== G) hgBrainAutoWarm ==');
+{
+  globalThis.window = {};
+  vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
+  const W = globalThis.window;
+  assert(typeof W.hgBrainAutoWarm === 'function', 'hgBrainAutoWarm exported on window');
+  W.HG_warmups = [{ id: 'news', label: 'NEWS', run: async function(){ return 'warmed'; } }];
+  W.hgNewsRefresh = async function(){ return { loaded: true }; };
+  let out = null;
+  try{ out = await W.hgBrainAutoWarm(); }catch(e){ out = 'threw:' + e.message; }
+  assert(typeof out === 'string' && out.indexOf('threw:') !== 0, 'hgBrainAutoWarm resolves without throwing — got ' + out);
+}
+
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

@@ -68,15 +68,18 @@ assert(html.includes("const CDCX_PROXY = u => '/api/proxy?url=' + encodeURICompo
 assert(!html.includes('corsproxy.io'), 'corsproxy.io no longer appears anywhere (paywalled, 403)');
 assert(!html.includes('hardgate-proxy.onrender.com'), 'dead Render proxy host fully removed (hardgate-main.onrender.com hosting is fine)');
 assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
-  'allorigins + codetabs kept as last-resort public backups');
+  'public CORS proxies kept as last resort after same-origin /api/proxy');
 {
   const cg = grabFn('cdcxGet');
-  const iDirect = cg.indexOf('await fetch(url)');
   const iApi = cg.indexOf('await fetch(CDCX_PROXY(url))');
   const iPublic = cg.indexOf('CDCX_PUBLIC_PROXIES');
-  assert(iDirect !== -1 && iApi !== -1 && iPublic !== -1 && iDirect < iApi && iApi < iPublic,
-    'cdcxGet fallback order: direct → /api/proxy → public backups');
+  assert(iApi !== -1 && iPublic !== -1 && iApi < iPublic,
+    'cdcxGet order: same-origin /api/proxy first, public backups last');
 }
+assert(html.includes('function executeBackendReady') || html.includes('execute.js?v='),
+  'EXECUTE BRACKET gated via executeBackendReady (execute.js or inline)');
+assert(fs.readFileSync(path.join(root, 'execute.js'), 'utf8').includes('executeBackendReady'),
+  'execute.js defines executeBackendReady');
 
 /* ================= 2. ntfy.sh push ================= */
 assert(html.includes("https://ntfy.sh/' + encodeURIComponent(topic)"),
@@ -190,7 +193,8 @@ assert(/nav\{[^}]*overflow-x\s*:\s*auto/.test(html), 'nav CSS: overflow-x:auto (
 assert(/nav\{[^}]*flex-wrap\s*:\s*nowrap/.test(html), 'nav CSS: flex-wrap:nowrap');
 assert(html.includes('-webkit-overflow-scrolling:touch'), 'nav CSS: -webkit-overflow-scrolling:touch');
 assert(/nav button\{[^}]*flex\s*:\s*none/.test(html), 'nav buttons: flex:none');
-assert(/header\{[^}]*flex-wrap\s*:\s*wrap/.test(html), 'header row: flex-wrap:wrap (belt-and-braces)');
+assert(/header\{[^}]*flex-direction\s*:\s*column/.test(html), 'header row: column layout + drawer (mobile-friendly)');
+assert(/\.header-primary\{[^}]*flex-wrap\s*:\s*wrap/.test(html), 'header primary row: flex-wrap:wrap on chips row');
 assert((html.match(/@media/g) || []).length === 1, 'still exactly one @media query in the file');
 
 /* ================= 4b. grouped two-tier nav ================= */
@@ -198,7 +202,7 @@ assert(html.includes('class="navgroups" id="navGroups"'), 'group row container (
 assert(/\.navgroups\{[^}]*overflow-x\s*:\s*auto/.test(html), 'group row CSS: overflow-x:auto (mobile-safe)');
 assert(/\.navgroups button\.on\{[^}]*background\s*:\s*var\(--gold\)/.test(html), 'active group chip styled like the xtoggle chips (gold fill)');
 assert(html.includes('const HG_NAV_GROUPS = ['), 'HG_NAV_GROUPS group model defined inline');
-assert(html.includes("'strats','meanrev','best','carry'"), 'STRATEGIES group pre-maps strats/meanrev before those modules land');
+assert(html.includes("'strats','meanrev','edge','best','carry'"), 'STRATEGIES group pre-maps strats/meanrev/edge before those modules land');
 assert(html.includes("const HG_TAB_GROUP = {}") && html.includes("HG_TAB_GROUP[t] = g.id"),
   'HG_TAB_GROUP id→group map built from the model');
 assert(/function setHgGroup\(gid, openFirst\)/.test(html), 'setHgGroup(gid, openFirst) group switcher present');
@@ -349,7 +353,7 @@ assert(html.includes("hgMiniChart($('goldSetupChart')"), 'GOLD SETUP composite m
   assert(ret && ret.chart, 'happy path returns {chart, destroy()}');
   assert(rec.created === 1 && rec.charts[0].el === el, 'createChart called once with the container element');
   const cr = rec.charts[0];
-  assert(cr.opts && cr.opts.layout && cr.opts.layout.textColor === '#6B7A90', 'chart theme: muted blue-gray text');
+  assert(cr.opts && cr.opts.layout && cr.opts.layout.textColor === '#334155', 'chart theme: darker slate text');
   assert(cr.candleOpts && cr.candleOpts.upColor === '#35C08E' && cr.candleOpts.downColor === '#E4586B'
       && cr.candleOpts.wickUpColor === '#35C08E' && cr.candleOpts.wickDownColor === '#E4586B',
     'candle series: --long/--short bodies AND wicks');

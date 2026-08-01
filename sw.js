@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v11';
+const HG_CACHE = 'hg-v89';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -16,13 +16,13 @@ const HG_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon.svg', './bright.css',
-  './indicators.js', './indicators2.js', './store.js', './binance.js', './macro.js',
-  './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js',
-  './goldpro.js', './strats.js', './meanrev.js', './liqs.js', './xuniverse.js',
+  './icon.svg', './bright.css', './mobile.css',
+  './indicators.js', './indicators2.js', './store.js', './binance.js', './startrader.js', './bybit.js', './positioning.js', './cryptowatch.js', './macro.js',
+  './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './termbasis.js',
+  './goldpro.js', './strats.js', './meanrev.js', './edge.js', './startradertab.js', './book-routing.js', './book.js', './execute.js', './liqs.js', './xuniverse.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './signallog.js',
-  './hgalert.js', './brain.js', './scorecard.js'
+  './hgalert.js', './tabalerts.js', './brain.js', './scorecard.js'
 ];
 
 /* true → the request/response must NEVER touch the cache (fresh market data

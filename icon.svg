@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="HARDGATE">
-  <!-- HARDGATE terminal mark: bold HG monogram + CLI prompt, gold on ink.
+  <!-- HARDGATE terminal mark: bold HG monogram + CLI prompt, gold on white.
        Maskable-safe: background bleeds to the edges; every glyph lives inside
        the central 80% safe circle (r ~= 205 around 256,256). -->
-  <rect width="512" height="512" fill="#0A0D12"/>
+  <rect width="512" height="512" fill="#F8FAFC"/>
   <!-- decorative terminal frame (safe to crop on round masks) -->
-  <rect x="96" y="96" width="320" height="320" fill="none" stroke="#232B3A" stroke-width="6"/>
-  <g fill="#D9A441">
+  <rect x="96" y="96" width="320" height="320" fill="none" stroke="#E2E8F0" stroke-width="6"/>
+  <g fill="#C9921A">
     <!-- H -->
     <rect x="108" y="176" width="34" height="160"/>
     <rect x="188" y="176" width="34" height="160"/>
@@ -16,5 +16,5 @@
     <rect x="336" y="240" width="60" height="32"/>
   </g>
   <!-- G: open ring, gap facing right into the crossbar -->
-  <path d="M 382.3 200.8 A 72 72 0 1 0 382.3 311.2" fill="none" stroke="#D9A441" stroke-width="32"/>
+  <path d="M 382.3 200.8 A 72 72 0 1 0 382.3 311.2" fill="none" stroke="#C9921A" stroke-width="32"/>
 </svg>

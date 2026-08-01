@@ -1,102 +1,217 @@
 /* ==========================================================================
    HARDGATE — MOBILE LAYER (mobile.css)
-   Responsive optimization for phones and small tablets. Loaded AFTER
-   bright.css so equal-specificity layout rules here win. Layout-only by
-   design (colors/theme stay with bright.css). Every rule is behind a width
-   gate — desktop rendering is untouched.
-   Breakpoints: ≤860px (phones + small tablets), ≤480px (small phones).
+   Phone-first layout: collapsible header tools, scrollable chips, stacked
+   verdicts, full-width cards. Loaded after bright.css.
+   Breakpoints: ≤860px (phones/tablets), ≤480px (small phones).
    ========================================================================== */
 
 /* ---------- phones + small tablets (≤860px) ----------------------------- */
 @media (max-width: 860px){
 
-  /* the sticky desktop header would eat a third of a phone screen */
-  header{
-    position: static;
-    gap: 6px 8px;
-    padding: 8px 10px;
-    align-items: flex-start;
+  html,body{font-size:14px}
+  body{padding-bottom:env(safe-area-inset-bottom,0)}
+
+  /* compact header — sticky top row only */
+  header,.hg-header{
+    position:sticky;
+    top:0;
+    padding:8px 10px 6px;
+    padding-top:max(8px,env(safe-area-inset-top,0));
+    gap:0;
   }
-  .brand{ font-size: 15px; line-height: 1.25; }
-  .brand small{ display: block; font-size: 9px; letter-spacing: .08em; margin-top: 2px; }
+  .header-primary{
+    gap:8px;
+    flex-wrap:nowrap;
+    align-items:center;
+  }
+  .brand{
+    flex:1 1 auto;
+    min-width:0;
+    font-size:15px;
+    line-height:1.2;
+  }
+  .brand small{
+    display:block;
+    font-size:8px;
+    letter-spacing:.06em;
+    margin-top:2px;
+    white-space:normal;
+    line-height:1.35;
+    opacity:.9;
+  }
+  .xtoggle{flex:none}
+  .xtoggle button{padding:6px 10px;font-size:10px;min-height:36px}
 
-  /* status chips + controls: smaller, still readable, tappable */
-  .statuschip{ font-size: 10px; padding: 3px 7px; }
-  .hgauto{ font-size: 10px; }
-  .hgauto .hgalabel{ padding: 0 4px; }
-  .hgauto button, .xtoggle button{ min-height: 30px; padding: 4px 8px; font-size: 10px; }
+  /* hamburger — tools drawer on mobile */
+  .header-menu-btn{
+    display:block;
+    flex:none;
+  }
+  .header-drawer{
+    max-height:0;
+    overflow:hidden;
+    opacity:0;
+    transform:translateY(-4px);
+    transition:max-height .32s cubic-bezier(.22,1,.36,1),opacity .24s ease,transform .28s cubic-bezier(.22,1,.36,1);
+  }
+  .header-drawer.open{
+    max-height:560px;
+    opacity:1;
+    transform:translateY(0);
+  }
+  .header-drawer-inner{
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+    padding:10px 0 4px;
+    margin-top:8px;
+  }
+  .header-field{width:100%}
+  .header-field input{width:100%!important;max-width:none!important;flex:1 1 100%}
+  .header-action,.hgauto{width:100%;justify-content:center}
+  .hgauto{flex-wrap:wrap}
 
-  /* alert/push config inputs: full-width pairs, never clipped */
-  header input{ font-size: 11px !important; min-height: 30px; }
-  #ntfyTopic{ width: 90px !important; }
-  #tgToken{ width: 120px !important; }
-  #tgChat{ width: 70px !important; }
+  /* market chips — horizontal scroll strip */
+  .header-chips{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+    gap:6px;
+    padding:8px 0 4px;
+    margin:0 -2px;
+    scroll-snap-type:x proximity;
+  }
+  .header-chips::-webkit-scrollbar{display:none}
+  .header-chips .statuschip{
+    flex:none;
+    font-size:10px;
+    padding:5px 10px;
+    scroll-snap-align:start;
+  }
 
-  /* nav groups + tabs: horizontal scroll already works — make targets fat */
-  .navgroups{ padding: 6px 10px 0; gap: 6px; }
-  .navgroups button{ min-height: 36px; padding: 7px 12px; font-size: 10px; letter-spacing: .08em; }
-  nav{ padding: 0 8px; }
-  nav button{ min-height: 42px; padding: 11px 14px; font-size: 11px; letter-spacing: .1em; }
+  .market-picture-bar{
+    font-size:12px!important;
+    padding:8px 10px!important;
+    line-height:1.45;
+  }
 
-  /* content width + panel rhythm */
-  main{ padding: 10px 8px 48px; }
-  .panel{ padding: 12px 10px; margin-bottom: 12px; border-radius: 6px; }
-  .panel h2{ font-size: 12px; letter-spacing: .1em; }
-  #marketPictureBar{ font-size: 12px !important; padding: 6px 10px !important; }
+  /* nav — momentum scroll */
+  .navgroups{
+    padding:6px 10px 0;
+    gap:6px;
+    scroll-snap-type:x proximity;
+  }
+  .navgroups button{
+    min-height:38px;
+    padding:8px 12px;
+    font-size:10px;
+    letter-spacing:.08em;
+    scroll-snap-align:start;
+  }
+  nav{
+    padding:0 6px;
+    scroll-snap-type:x proximity;
+  }
+  nav button{
+    min-height:44px;
+    padding:12px 14px;
+    font-size:11px;
+    letter-spacing:.1em;
+    scroll-snap-align:start;
+  }
 
-  /* every grid of cards collapses to one honest column */
-  .cards{ grid-template-columns: 1fr; gap: 10px; }
-  .grid2, .grid3{ grid-template-columns: 1fr; }
+  /* content */
+  main{padding:10px 8px calc(56px + env(safe-area-inset-bottom,0))}
+  .panel{padding:12px 10px;margin-bottom:12px;border-radius:12px}
+  .panel h2{font-size:12px;letter-spacing:.1em}
+  .panel h2 span{display:block;margin:4px 0 0;font-size:10px}
 
-  /* buttons: real touch targets */
-  .btn, .btn.ghost, .toTrade{ min-height: 40px; padding: 9px 14px; font-size: 12px; }
-  select, input[type="text"], input[type="number"]{ min-height: 36px; }
+  .cards{grid-template-columns:1fr;gap:10px}
+  .grid2,.grid3{grid-template-columns:1fr;gap:12px}
 
-  /* brain ticket + limit board flex cards: never overflow the viewport */
+  .btn,.btn.ghost,.toTrade,.card .toTrade{
+    min-height:44px;
+    padding:10px 16px;
+    font-size:13px;
+    width:100%;
+  }
+  .row .btn{width:auto;min-width:120px}
+  select,input[type="text"],input[type="number"]{min-height:40px;font-size:16px}
+
+  /* verdict stacks vertically */
+  .verdict{flex-direction:column;align-items:flex-start;gap:8px}
+  .verdict .vword{font-size:20px;line-height:1.2}
+
+  /* ledger rows wrap on narrow screens */
+  .lrow{flex-wrap:wrap;gap:6px;padding:10px}
+  .lrow .gid{width:auto}
+  .lrow .gname{flex:1 1 100%;order:2}
+  .lrow .gdetail{max-width:100%;text-align:left;flex:1 1 100%;order:3}
+  .lrow .stamp{order:1;margin-left:auto}
+
+  /* brain flex panels */
+  #brainTicket > div,
+  #brainBoard > div{display:flex;flex-direction:column;gap:10px}
   #brainTicket > div > div,
   #brainBoard > div > div{
-    flex: 1 1 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
+    flex:1 1 100%!important;
+    max-width:100%!important;
+    min-width:0!important;
   }
-  #brainTicketWrap, #brainBoardWrap{ overflow-x: hidden; }
+  #brainTicketWrap,#brainBoardWrap{overflow-x:hidden}
 
-  /* ledger tables scroll sideways instead of crushing columns */
-  .ledger, .kv{ overflow-x: auto; }
+  .ledger,.kv{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hgchart{height:160px}
+  .note{font-size:12px;line-height:1.65;font-weight:500}
 
-  /* charts keep their shape without eating the fold */
-  .hgchart{ height: 150px; }
+  /* tables scroll horizontally */
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+  td,th{padding:6px 10px}
 
-  /* notes read comfortably on small screens */
-  .note{ font-size: 11px; line-height: 1.65; }
+  /* floating alert */
+  #hgAlertRoot{
+    right:max(10px,env(safe-area-inset-right,0))!important;
+    bottom:max(10px,env(safe-area-inset-bottom,0))!important;
+  }
+  #hgAlertRoot .hgab-btn{padding:8px 12px!important;font-size:11px!important;min-height:44px}
+  #hgAlertRoot .hgab-panel{width:min(92vw,320px)!important;max-height:70vh;overflow:auto}
+}
 
-  /* the floating alert bell never covers content on a phone */
-  #hgAlertRoot{ right: 10px !important; bottom: 10px !important; }
-  #hgAlertRoot .hgab-btn{ padding: 6px 10px !important; font-size: 10px !important; }
-  #hgAlertRoot .hgab-panel{ width: min(86vw, 290px) !important; }
+/* ---------- desktop: drawer always open, no hamburger --------------- */
+@media (min-width: 861px){
+  .header-menu-btn{display:none!important}
+  .header-drawer{max-height:none!important;opacity:1!important;overflow:visible;transform:none!important}
+  .header-drawer-inner{border-top:0;margin-top:0;padding-top:4px}
 }
 
 /* ---------- small phones (≤480px) ---------------------------------------- */
 @media (max-width: 480px){
-
-  header input{ max-width: 44vw; }
-
-  /* the big entry number stays big but never clips */
-  #brainTicket b, #brainBoard b{ word-break: break-all; }
-
-  /* audit ledger columns compress: label/status/text stack gracefully */
-  .auditRows > div{ flex-wrap: wrap; }
-  .auditRows > div > span:first-child{ flex-basis: 70px !important; }
-
-  /* card header meta stacks under the symbol */
-  .card .chead{ flex-wrap: wrap; }
-
-  /* kill-zone / leverage / venue chips wrap instead of clipping */
-  .card .chead span, .gpip{ max-width: 100%; }
+  .brand{font-size:14px}
+  .brand small{font-size:7px;letter-spacing:.05em}
+  .xtoggle button{padding:6px 8px;font-size:9px}
+  .navgroups button{padding:7px 10px;font-size:9px}
+  nav button{padding:11px 12px;font-size:10px}
+  .verdict .vword{font-size:18px}
+  .card .sym{font-size:14px}
+  .card .chead{flex-wrap:wrap;gap:4px}
+  .card .chead span,.gpip{max-width:100%}
+  .auditRows > div{flex-wrap:wrap}
+  .auditRows > div > span:first-child{flex-basis:72px!important}
+  #brainTicket b,#brainBoard b{word-break:break-all;font-size:18px!important}
+  .empty{padding:20px 12px}
 }
 
-/* ---------- touch ergonomics (all touch devices, any width) -------------- */
+/* ---------- touch ergonomics ---------------------------------------------- */
 @media (hover: none) and (pointer: coarse){
-  button, .btn, .toTrade, select{ touch-action: manipulation; }   /* kills the 300ms tap delay */
-  a, button, select, input{ -webkit-tap-highlight-color: rgba(245,197,66,.25); }
+  button,.btn,.toTrade,select,.statuschip,.navgroups button,nav button{
+    touch-action:manipulation;
+  }
+  a,button,select,input{-webkit-tap-highlight-color:rgba(201,146,26,.18)}
+  .card:hover{transform:none}
+  .statuschip[onclick]:hover,.header-action:hover{transform:none}
+}
+
+@media (prefers-reduced-motion: reduce){
+  .header-drawer{transition:none}
 }

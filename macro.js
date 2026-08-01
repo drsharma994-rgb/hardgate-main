@@ -163,6 +163,34 @@ async function __yahooViaProxy(url){
   try{ return await __macroFetchJson(url); }catch(e){ return null; }
 }
 
+/* FRED observations via same-origin /api/fred (server holds FRED_API_KEY).
+   Returns ascending [{date, value}] or null when unconfigured/unavailable. */
+async function __fredSeries(series, limit){
+  try{
+    series = String(series || 'DGS10').toUpperCase();
+    limit = Math.max(5, Math.min(100, limit || 30));
+    const key = 'fred|' + series + '|' + limit;
+    const hit = __macroCacheGet(key, DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const j = await __macroFetchJson('/api/fred?series=' + encodeURIComponent(series) + '&limit=' + limit);
+    if (!j || !Array.isArray(j.observations) || !j.observations.length) return null;
+    const rows = j.observations.slice().reverse();
+    return __macroCachePut(key, rows);
+  }catch(e){ return null; }
+}
+
+function __trendFromFredRows(rows, relBandPct){
+  relBandPct = (typeof relBandPct === 'number' && isFinite(relBandPct)) ? relBandPct : 2;
+  if (!rows || rows.length < 2) return { value: null, date: null, trend20: 'FLAT', change20Pct: null };
+  const last = rows[rows.length - 1];
+  const back = rows[Math.max(0, rows.length - 1 - 20)];
+  let trend20 = 'FLAT', change20Pct = null;
+  if (back && isFinite(back.value) && back.value > 0 && isFinite(last.value)){
+    change20Pct = (last.value/back.value - 1)*100;
+    trend20 = change20Pct > relBandPct ? 'RISING' : (change20Pct < -relBandPct ? 'FALLING' : 'FLAT');
+  }
+  return { value: last.value, date: last.date, trend20: trend20, change20Pct: change20Pct };
+}
+
 /* ---------- US Treasury daily yield-curve CSV -> US10Y ----------
    Year is part of the URL; rows arrive newest-first with a quoted header
    (Date,"1 Mo",...,"10 Yr",...) and MM/DD/YYYY dates. ACAO:*, no key. */
@@ -218,6 +246,13 @@ function __parseTreasury10Y(csvText){
 async function getUST10Y(){
   try{
     const hit = __macroCacheGet('tnx', DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const fredRows = await __fredSeries('DGS10', 30);
+    if (fredRows && fredRows.length){
+      const ft = __trendFromFredRows(fredRows, 2);
+      if (isFinite(ft.value)){
+        return __macroCachePut('tnx', { value: ft.value, date: ft.date, trend20: ft.trend20, change20Pct: ft.change20Pct, source: 'fred' });
+      }
+    }
     const yr = new Date().getUTCFullYear();
     let rows = __parseTreasury10Y(await __macroFetchText(__treasuryCsvUrl(yr)));
     if (!rows.length) rows = __parseTreasury10Y(await __macroFetchText(__treasuryCsvUrl(yr - 1)));
@@ -229,7 +264,31 @@ async function getUST10Y(){
       change20Pct = (last.y10/back.y10 - 1)*100; // relative move in the yield itself
       trend20 = change20Pct > 2 ? 'RISING' : (change20Pct < -2 ? 'FALLING' : 'FLAT');
     }
-    return __macroCachePut('tnx', { value: last.y10, date: last.date, trend20: trend20, change20Pct: change20Pct });
+    return __macroCachePut('tnx', { value: last.y10, date: last.date, trend20: trend20, change20Pct: change20Pct, source: 'treasury' });
+  }catch(e){ return null; }
+}
+
+/* Official Fed trade-weighted broad dollar index (DTWEXBGS) when /api/fred is configured. */
+async function getDXYOfficial(){
+  try{
+    const hit = __macroCacheGet('dxyOfficial', DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const rows = await __fredSeries('DTWEXBGS', 30);
+    if (!rows || !rows.length) return null;
+    const t = __trendFromFredRows(rows, 0.3);
+    if (!isFinite(t.value)) return null;
+    return __macroCachePut('dxyOfficial', { value: t.value, date: t.date, trend20: t.trend20, change20Pct: t.change20Pct, source: 'fred' });
+  }catch(e){ return null; }
+}
+
+/* 10Y TIPS real yield (DFII10) — true real-rate leg when FRED is configured. */
+async function getRealYield10Y(){
+  try{
+    const hit = __macroCacheGet('real10y', DXY_CACHE_MS); if (hit !== undefined) return hit;
+    const rows = await __fredSeries('DFII10', 30);
+    if (!rows || !rows.length) return null;
+    const t = __trendFromFredRows(rows, 2);
+    if (!isFinite(t.value)) return null;
+    return __macroCachePut('real10y', { value: t.value, date: t.date, trend20: t.trend20, change20Pct: t.change20Pct, source: 'fred' });
   }catch(e){ return null; }
 }
 
@@ -342,8 +401,10 @@ async function getGoldMacro(){
     const hit = __macroCacheGet('macro'); if (hit !== undefined) return hit;
 
     const dxy = await getDXY(); // {value, date, trend20, change20Pct} | null
+    const dxyOfficial = await getDXYOfficial();
+    const realYield = await getRealYield10Y();
 
-    // US10Y: official Treasury CSV primary; Yahoo ^TNX via /api/proxy last resort.
+    // US10Y: FRED DGS10 primary (in getUST10Y); Treasury CSV; Yahoo ^TNX last resort.
     let tnx = null, tnxTrend = null, tnxChange20Pct = null;
     const ust = await getUST10Y();
     if (ust && isFinite(ust.value)){
@@ -400,18 +461,51 @@ async function getGoldMacro(){
 
     const dxyDown = !!(dxy && dxy.trend20 === 'FALLING'), dxyUp = !!(dxy && dxy.trend20 === 'RISING');
     const tnxDown = (tnxTrend === 'FALLING'), tnxUp = (tnxTrend === 'RISING');
-    const realRateHint = (dxyDown && tnxDown) ? 'TAILWIND' : ((dxyUp && tnxUp) ? 'HEADWIND' : 'NEUTRAL');
+    const realDown = !!(realYield && realYield.trend20 === 'FALLING');
+    const realUp = !!(realYield && realYield.trend20 === 'RISING');
+    let realRateHint = 'NEUTRAL';
+    if ((realDown && (dxyDown || tnxDown)) || (dxyDown && tnxDown)) realRateHint = 'TAILWIND';
+    else if ((realUp && (dxyUp || tnxUp)) || (dxyUp && tnxUp)) realRateHint = 'HEADWIND';
 
     return __macroCachePut('macro', {
       dxy: dxy,
-      tnx: tnx,                     // 10y yield in %, e.g. 4.31 | null
-      tnxTrend: tnxTrend,           // 'RISING'|'FALLING'|'FLAT'|null
+      dxyOfficial: dxyOfficial,
+      tnx: tnx,
+      tnxTrend: tnxTrend,
       tnxChange20Pct: tnxChange20Pct,
-      silver: silver,               // USD/oz | null
+      tnxSource: (ust && ust.source) ? ust.source : (tnx !== null ? 'yahoo' : null),
+      realYield10Y: realYield ? realYield.value : null,
+      realYieldTrend: realYield ? realYield.trend20 : null,
+      realYieldChange20Pct: realYield ? realYield.change20Pct : null,
+      silver: silver,
+      goldPx: goldPx,
       goldSilverRatio: goldSilverRatio,
       realRateHint: realRateHint
     });
   }catch(e){
-    return { dxy: null, tnx: null, tnxTrend: null, tnxChange20Pct: null, silver: null, goldSilverRatio: null, realRateHint: 'NEUTRAL' };
+    return { dxy: null, dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
+             tnxSource: null, realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
+             silver: null, goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL' };
   }
+}
+
+/* Paper-book plan from real-rate hint — TAILWIND long gold, HEADWIND short;
+   1% price risk, 2R T1. Returns null when NEUTRAL or goldPx missing. */
+function macroGoldPlan(macro){
+  try{
+    if (!macro || !macro.realRateHint || macro.realRateHint === 'NEUTRAL') return null;
+    var goldPx = macro.goldPx;
+    if (!isFinite(goldPx) || !(goldPx > 0)) return null;
+    var dir = macro.realRateHint === 'TAILWIND' ? 'long' : 'short';
+    var risk = goldPx * 0.01;
+    var entry = goldPx;
+    var stop = dir === 'long' ? entry - risk : entry + risk;
+    var t1 = dir === 'long' ? entry + 2 * risk : entry - 2 * risk;
+    var t2 = dir === 'long' ? entry + 3 * risk : entry - 3 * risk;
+    return { sym: 'XAUUSD', dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, hint: macro.realRateHint };
+  }catch(e){ return null; }
+}
+
+if (typeof window !== 'undefined'){
+  window.macroGoldPlan = macroGoldPlan;
 }

@@ -11,12 +11,18 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
 import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
+import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch.mjs';
+import { createPaperbookApi } from '../lib/paperbook-api.mjs';
+import { createExecuteApi } from '../lib/execute-api.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
+const fredHandler = require('../api/fred.js');
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));   /* repo root (trailing sep) */
 const PORT = +(process.env.PORT || 10000);
+const paperbookHandler = createPaperbookApi(ROOT);
+const executeHandler = createExecuteApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -44,6 +50,7 @@ const server = http.createServer(async (req, res) => {
     baseHeaders(res);
     const u = new URL(req.url || '/', 'http://localhost');
     if (u.pathname === '/api/proxy') return proxyHandler(req, res);
+    if (u.pathname === '/api/fred') return fredHandler(req, res);
     /* squeeze-watch status: armed? last cycle? fires? — no secrets, counts only */
     if (u.pathname === '/api/squeeze-watch'){
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -57,6 +64,18 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       res.statusCode = 200;
       return res.end(JSON.stringify(ghDispatchStatus()));
+    }
+    if (u.pathname === '/api/book-digest-watch'){
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.statusCode = 200;
+      return res.end(JSON.stringify(bookDigestWatchStatus()));
+    }
+    if (u.pathname === '/api/book' || u.pathname.indexOf('/api/book/') === 0){
+      return paperbookHandler(req, res);
+    }
+    if (u.pathname === '/api/execute' || u.pathname === '/api/execute/capabilities'){
+      return executeHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
@@ -91,11 +110,12 @@ startSqueezeWatch();
    13 min (arms only with GH_DISPATCH_TOKEN in the environment; logs either way) */
 startGhDispatch();
 
-/* keep-alive self-ping — Render free tier sleeps after ~15 min idle, which
-   would pause the squeeze watch. Ping our own status endpoint every 10 min
-   so the service (and the watch) never sleeps. Uses Render's injected
-   RENDER_EXTERNAL_URL; override with SELF_PING_URL if ever needed.
-   Honest no-op outside Render. */
+startBookDigestWatch();
+
+/* keep-alive self-ping — on Render free tier the service sleeps after ~15 min idle.
+   Paid plans stay always-on; the ping is harmless and keeps squeeze-watch + gh-dispatch
+   alive on any plan. Uses Render's injected RENDER_EXTERNAL_URL; override with
+   SELF_PING_URL if ever needed. Honest no-op outside Render. */
 (function keepAlive(){
   const base = process.env.SELF_PING_URL || process.env.RENDER_EXTERNAL_URL;
   if (!base){ console.log('[keep-alive] disabled — no RENDER_EXTERNAL_URL in the environment'); return; }

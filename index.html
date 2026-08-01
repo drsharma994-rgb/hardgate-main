@@ -5,25 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0A0D12">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HARDGATE">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#0A0D12; --panel:#121722; --panel2:#0E1320; --line:#232B3A;
-  --gold:#D9A441; --gold-dim:#8A6A2C;
-  --long:#35C08E; --short:#E4586B; --veto:#E4586B; --pass:#35C08E;
-  --txt:#CBD5E3; --mut:#6B7A90; --dim:#435062;
+  --ink:#F8FAFC; --panel:#FFFFFF; --panel2:#F1F5F9; --line:#E2E8F0;
+  --gold:#C9921A; --gold-dim:#A67C12;
+  --long:#059669; --short:#DC2626; --veto:#DC2626; --pass:#059669;
+  --txt:#020617; --mut:#334155; --dim:#475569;
   --mono:'IBM Plex Mono',monospace; --disp:'Space Grotesk',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--ink);color:var(--txt);font-family:var(--mono);font-size:13px;line-height:1.45}
+html,body{background:var(--ink);color:var(--txt);font-family:var(--mono);font-size:13px;font-weight:500;line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:var(--gold)}
 button{font-family:var(--mono);cursor:pointer}
 input,select{font-family:var(--mono);background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:6px 8px;border-radius:4px;font-size:13px}
@@ -31,45 +31,58 @@ input:focus,select:focus{outline:1px solid var(--gold-dim)}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 
 /* ---------- top bar ---------- */
-header{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap;position:sticky;top:0;z-index:50}
+header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:50}
+.header-primary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%}
+.header-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%;padding-top:6px}
+.header-drawer{width:100%}
+.header-drawer-inner{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0 2px;border-top:1px solid var(--line);margin-top:6px}
+.header-menu-btn{display:none;margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--gold);border-radius:6px;padding:6px 12px;font-size:16px;line-height:1;min-height:36px}
+.header-menu-btn[aria-expanded="true"]{background:rgba(201,146,26,.12);border-color:var(--gold)}
+.header-field{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.header-field-label{font-size:9px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase;flex:0 0 100%}
+.header-field input{flex:1 1 120px;min-width:0;padding:4px 8px;font-size:11px}
+.header-field-btn{padding:4px 10px!important;font-size:10px!important;min-height:30px}
+.header-action{cursor:pointer}
+.market-picture-bar{padding:8px 16px;text-align:center;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.04em}
+.market-picture-bar .note{font-size:11px;display:block;margin-top:2px}
 .brand{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--gold)}
-.brand small{display:block;font-family:var(--mono);font-weight:400;font-size:9px;letter-spacing:.18em;color:var(--mut)}
+.brand small{display:block;font-family:var(--mono);font-weight:600;font-size:9px;letter-spacing:.18em;color:var(--mut)}
 .xtoggle{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
-.xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em}
+.xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em;font-weight:600}
 .xtoggle button.on{background:var(--gold);color:#14100A;font-weight:600}
-.statuschip{font-size:10px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:4px;white-space:nowrap}
-.statuschip b{color:var(--txt);font-weight:500}
+.statuschip{font-size:10px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:4px;white-space:nowrap;font-weight:600}
+.statuschip b{color:var(--txt);font-weight:700}
 .statuschip.warn b{color:var(--short)}
 .spacer{flex:1}
 
 /* ---------- tabs (two-tier: group row + active group's tab row) ---------- */
 .navgroups{display:flex;gap:8px;padding:8px 16px 0;border-bottom:1px solid var(--line);background:var(--panel2);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .navgroups::-webkit-scrollbar{height:4px}
-.navgroups button{flex:none;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:500;transition:color .15s,border-color .15s,background .15s}
+.navgroups button{flex:none;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:600;transition:color .15s,border-color .15s,background .15s}
 .navgroups button:hover{color:var(--txt);border-color:var(--gold-dim)}
 .navgroups button.on{background:var(--gold);border-color:var(--gold);color:#14100A;font-weight:600}
 .navgroups button .cnt{opacity:.6;font-weight:400;margin-left:6px}
 nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--ink);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 nav::-webkit-scrollbar{height:4px}
-nav button{position:relative;background:transparent;border:0;color:var(--mut);padding:11px 18px;font-size:12px;letter-spacing:.14em;font-weight:500;flex:none;transition:color .15s}
+nav button{position:relative;background:transparent;border:0;color:var(--mut);padding:11px 18px;font-size:12px;letter-spacing:.14em;font-weight:600;flex:none;transition:color .15s}
 nav button:hover{color:var(--txt)}
-nav button.on{color:var(--gold)}
+nav button.on{color:var(--gold);font-weight:700}
 nav button::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .18s ease}
 nav button.on::after{transform:scaleX(1)}
 main{padding:18px 16px 60px;max-width:1280px;margin:0 auto}
 .tabpane{display:none}.tabpane.on{display:block}
 
 /* ---------- panels ---------- */
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.22),0 16px 40px -32px rgba(0,0,0,.75)}
-.panel h2{font-family:var(--disp);font-size:13px;font-weight:700;letter-spacing:.14em;color:var(--txt);margin-bottom:10px;text-transform:uppercase}
-.panel h2 span{color:var(--mut);font-family:var(--mono);font-weight:400;font-size:10px;letter-spacing:.06em;text-transform:none;margin-left:8px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(15,23,42,.06),0 8px 24px -12px rgba(15,23,42,.10)}
+.panel h2{font-family:var(--disp);font-size:13px;font-weight:800;letter-spacing:.14em;color:var(--txt);margin-bottom:10px;text-transform:uppercase}
+.panel h2 span{color:var(--mut);font-family:var(--mono);font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:none;margin-left:8px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 @media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
-.kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:12px}
-.kv .k{color:var(--mut)}.kv .v{color:var(--txt);text-align:right}
-.note{font-size:11px;color:var(--mut);line-height:1.55}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:12px;font-weight:500}
+.kv .k{color:var(--mut);font-weight:600}.kv .v{color:var(--txt);text-align:right;font-weight:700}
+.note{font-size:11px;color:var(--mut);line-height:1.55;font-weight:500}
 .note.warn{color:var(--gold)}
 hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 
@@ -78,64 +91,84 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .lrow{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
 .lrow:last-child{border-bottom:0}
 .lrow .gid{font-size:10px;color:var(--dim);width:34px;flex:none;letter-spacing:.06em}
-.lrow .gname{flex:1;font-size:12px}
-.lrow .gdetail{font-size:10px;color:var(--mut);text-align:right;max-width:46%}
+.lrow .gname{flex:1;font-size:12px;font-weight:600}
+.lrow .gdetail{font-size:10px;color:var(--mut);text-align:right;max-width:46%;word-break:break-word;font-weight:500}
 .stamp{flex:none;font-size:9px;font-weight:600;letter-spacing:.16em;padding:3px 8px;border-radius:3px;border:1px solid}
 .stamp.pass{color:var(--pass);border-color:rgba(53,192,142,.65);background:rgba(53,192,142,.08)}
 .stamp.veto{color:var(--veto);border-color:rgba(228,88,107,.65);background:rgba(228,88,107,.09)}
-.stamp.na{color:var(--mut);border-color:var(--dim);background:rgba(255,255,255,.02)}
-.verdict{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);margin-top:12px;background:var(--panel2)}
-.verdict .vword{font-family:var(--disp);font-size:24px;font-weight:700;letter-spacing:.1em}
-.verdict.long .vword{color:var(--long)}.verdict.short .vword{color:var(--short)}.verdict.aside .vword{color:var(--mut)}
-.verdict .vwhy{font-size:11px;color:var(--mut);line-height:1.5}
+.stamp.na{color:var(--mut);border-color:var(--dim);background:rgba(15,23,42,.03)}
+.verdict{display:flex;align-items:flex-start;gap:14px;padding:14px 16px;border-radius:6px;border:1px solid var(--line);margin-top:12px;background:var(--panel2);flex-wrap:wrap}
+.verdict .vword{font-family:var(--disp);font-size:24px;font-weight:800;letter-spacing:.1em}
+.verdict.long .vword{color:var(--long)}.verdict.short .vword{color:var(--short)}
+.verdict.aside .vword{color:var(--mut);font-weight:700}
+.verdict .vwhy{font-size:11px;color:var(--mut);line-height:1.5;font-weight:500}
 
 /* ---------- scanner cards ---------- */
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;transition:border-color .15s,box-shadow .15s,transform .15s}
-.card:hover{border-color:var(--gold-dim);box-shadow:0 10px 28px -18px rgba(0,0,0,.85);transform:translateY(-1px)}
+.card:hover{border-color:var(--gold-dim);box-shadow:0 12px 32px -16px rgba(15,23,42,.14);transform:translateY(-2px)}
 .card.long{border-left:3px solid var(--long)}
 .card.short{border-left:3px solid var(--short)}
 .card .chead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-.card .sym{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.04em}
-.card .dir{font-size:10px;font-weight:600;letter-spacing:.14em}
+.card .sym{font-family:var(--disp);font-weight:800;font-size:15px;letter-spacing:.04em}
+.card .dir{font-size:10px;font-weight:700;letter-spacing:.14em}
 .card.long .dir{color:var(--long)}.card.short .dir{color:var(--short)}
-.card .mini{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:11px;margin:8px 0}
-.card .mini .k{color:var(--mut)}
+.card .mini{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:11px;margin:8px 0;font-weight:500}
+.card .mini .k{color:var(--mut);font-weight:600}
 .card .gates{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.gpip{font-size:9px;letter-spacing:.06em;padding:2px 6px;border-radius:3px;border:1px solid var(--line);color:var(--txt);background:rgba(255,255,255,.02)}
+.gpip{font-size:10px;letter-spacing:.06em;padding:2px 6px;border-radius:3px;border:1px solid var(--line);color:var(--txt);background:rgba(15,23,42,.03);font-weight:600}
 .gpip.ok{color:var(--pass);border-color:rgba(53,192,142,.5);background:rgba(53,192,142,.08)}
-.card .plan{font-size:11px;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin-top:8px;line-height:1.6}
-.card .plan b{color:var(--gold);font-weight:600}
+.card .plan{font-size:11px;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin-top:8px;line-height:1.6;font-weight:500}
+.card .plan b{color:var(--gold);font-weight:700}
 .card .toTrade{margin-top:8px;width:100%;background:transparent;border:1px solid var(--gold-dim);color:var(--gold);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
-.card .toTrade:hover{background:rgba(217,164,65,.08)}
+.card .toTrade:hover{background:rgba(201,146,26,.08)}
+.card .toBook{margin-top:6px;width:100%;background:transparent;border:1px solid var(--cyan,#3dd6c8);color:var(--cyan,#3dd6c8);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
+.card .toBook:hover{background:rgba(61,214,200,.08)}
+table.booktbl{width:100%;border-collapse:collapse;font-size:12px}
+table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);padding:6px 8px;text-align:left}
+.bookExecBar .statuschip.ok{border-color:rgba(61,214,200,.35)}
+.bookExecBar .statuschip.warn{border-color:rgba(224,90,79,.45)}
+.bookSrc{font-size:10px;opacity:.85;margin-left:4px;vertical-align:middle}
+.bookDeskHdr h3{font-size:14px;margin:0 0 8px}
+.bookHeatWrap{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.bookHeatBar{flex:1;min-width:120px;height:10px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.bookHeatBar.warn .bookHeatFill{background:linear-gradient(90deg,#c9921a,#e05a4f)}
+.bookHeatFill{height:100%;background:linear-gradient(90deg,#3dd6c8,#2a9d8f);transition:width .3s}
+.bookBucketWrap{width:100%;margin-top:8px}
+.bookBucketRow{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+.bookActs{white-space:nowrap}
+.bookActs .btn{margin:2px 2px 2px 0;padding:4px 6px;font-size:10px}
+.bookAutoLog{margin:0;padding-left:18px;font-size:12px;color:var(--muted,#94a3b8)}
+.bookAutoLog li{margin:4px 0}
 .hgchart{height:190px;margin-top:8px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);overflow:hidden}
 
 /* ---------- controls ---------- */
-.btn{background:var(--gold);color:#14100A;border:0;border-radius:4px;padding:8px 16px;font-weight:600;font-size:12px;letter-spacing:.08em}
+.btn{background:var(--gold);color:#14100A;border:0;border-radius:4px;padding:8px 16px;font-weight:700;font-size:12px;letter-spacing:.08em}
 .btn:disabled{background:var(--dim);color:var(--panel)}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:400}
-.chip{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:12px;padding:4px 11px;font-size:11px}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:600}
+.chip{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:12px;padding:4px 11px;font-size:11px;font-weight:600}
 .chip.on{border-color:var(--gold);color:var(--gold)}
 .prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px;display:none}
 .prog i{display:block;height:100%;background:var(--gold);width:0%;transition:width .2s}
-label.f{display:flex;flex-direction:column;gap:4px;font-size:10px;color:var(--mut);letter-spacing:.08em}
-.big{font-family:var(--disp);font-size:20px;font-weight:700}
-.pos{color:var(--long)}.neg{color:var(--short)}
-.checklist label{display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 0;color:var(--txt);cursor:pointer}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:10px;color:var(--mut);letter-spacing:.08em;font-weight:600}
+.big{font-family:var(--disp);font-size:20px;font-weight:800}
+.pos{color:var(--long);font-weight:700}.neg{color:var(--short);font-weight:700}
+.checklist label{display:flex;gap:8px;align-items:center;font-size:12px;padding:4px 0;color:var(--txt);cursor:pointer;font-weight:600}
 .checklist input{width:auto}
-.ticket{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12px;white-space:pre-wrap;line-height:1.7}
-.empty{padding:30px;text-align:center;color:var(--mut);font-size:12px;border:1px dashed var(--line);border-radius:8px}
+.ticket{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:12px;font-size:12px;white-space:pre-wrap;line-height:1.7;font-weight:500}
+.empty{padding:30px;text-align:center;color:var(--mut);font-size:12px;border:1px dashed var(--line);border-radius:8px;font-weight:600}
 td,th{padding:4px 10px;font-size:11px;text-align:right;border-bottom:1px solid var(--line)}
-th{color:var(--mut);font-weight:500;letter-spacing:.06em}
+th{color:var(--mut);font-weight:700;letter-spacing:.06em}
+td{color:var(--txt);font-weight:600}
 td:first-child,th:first-child{text-align:left}
 table{width:100%;border-collapse:collapse}
-table tr:nth-child(even) td{background:rgba(255,255,255,.018)}
-table tr:hover td{background:rgba(217,164,65,.045)}
+table tr:nth-child(even) td{background:rgba(15,23,42,.025)}
+table tr:hover td{background:rgba(201,146,26,.06)}
 
 /* ---------- auto refresh segmented control (header) ---------- */
 .hgauto{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:5px;overflow:hidden}
-.hgauto .hgalabel{padding:4px 8px;font-size:9px;letter-spacing:.14em;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap}
-.hgauto button{background:transparent;border:0;color:var(--mut);padding:4px 9px;font-size:10px;letter-spacing:.08em}
+.hgauto .hgalabel{padding:4px 8px;font-size:9px;letter-spacing:.14em;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap;font-weight:700}
+.hgauto button{background:transparent;border:0;color:var(--mut);padding:4px 9px;font-size:10px;letter-spacing:.08em;font-weight:600}
 .hgauto button:hover{color:var(--txt)}
 .hgauto button.on{background:var(--gold);color:#14100A;font-weight:600}
 </style>
@@ -145,34 +178,54 @@ table tr:hover td{background:rgba(217,164,65,.045)}
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-<header>
-  <div class="brand">HARDGATE<small>DELTA · COINDCX · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
-  <div class="xtoggle">
-    <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
-    <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
+<header class="hg-header">
+  <div class="header-primary">
+    <div class="brand">HARDGATE<small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+    <div class="xtoggle">
+      <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
+      <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
+      <button id="xStar" onclick="setExchange('startrader')">STARTRADER</button>
+    </div>
+    <button type="button" class="header-menu-btn" id="headerMenuBtn" aria-expanded="false" aria-controls="headerDrawer" onclick="toggleHeaderDrawer()" title="Tools &amp; alerts">☰</button>
   </div>
-  <span class="statuschip" id="chipConn"><b>—</b> symbols</span>
-  <span class="statuschip" id="chipFund">next funding <b>—</b></span>
-  <span class="statuschip" id="chipFng">F&amp;G <b>—</b></span>
-  <span class="statuschip" id="chipDom">BTC.D <b>—</b></span>
-  <div class="spacer"></div>
-  <span class="statuschip" id="chipClock"><b>—</b> IST</span>
-  <button id="hardRefreshBtn" class="statuschip" style="cursor:pointer" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
-<span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" onclick="setAutoRefresh('300000')">5m</button></span>
-<span class="statuschip" id="autoRefreshCount" style="display:none"></span>
-<span class="statuschip" id="hardRefreshStat"></span>
-<span class="statuschip" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
-<span class="statuschip" style="display:inline-flex;align-items:center;gap:6px" title="free push via ntfy.sh — pick an unguessable topic">
-  <input id="ntfyTopic" placeholder="ntfy topic" style="width:110px;padding:2px 6px;font-size:11px" title="free push via ntfy.sh — pick an unguessable topic">
-  <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="saveNtfyTopic()">SAVE</button><span class="note" id="ntfyTopicStat"></span>
-</span>
-<span class="statuschip" style="display:inline-flex;align-items:center;gap:6px" title="Telegram alerts (primary channel — free, unlimited): bot token from @BotFather + your chat id (send /start to your bot, then read chat id from api.telegram.org/bot<token>/getUpdates). Stored in this browser only.">
-  <input id="tgToken" placeholder="telegram bot token" style="width:150px;padding:2px 6px;font-size:11px" title="bot token from @BotFather — stored in this browser only">
-  <input id="tgChat" placeholder="chat id" style="width:80px;padding:2px 6px;font-size:11px" title="your Telegram chat id">
-  <button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="saveTelegram()">SAVE</button><button class="btn ghost" style="padding:2px 8px;font-size:10px" onclick="testTelegram()">TEST</button><span class="note" id="tgStat"></span>
-</span>
+  <div class="header-chips" id="headerChips">
+    <span class="statuschip" id="chipConn"><b>—</b> symbols</span>
+    <span class="statuschip" id="chipFund">next funding <b>—</b></span>
+    <span class="statuschip" id="chipFng">F&amp;G <b>—</b></span>
+    <span class="statuschip" id="chipDom">BTC.D <b>—</b></span>
+    <span class="statuschip" id="chipClock"><b>—</b> IST</span>
+  </div>
+  <div class="header-drawer" id="headerDrawer">
+    <div class="header-drawer-inner">
+      <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
+      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button></span>
+      <span class="statuschip" id="autoRefreshCount" style="display:none"></span>
+      <span class="statuschip" id="hardRefreshStat"></span>
+      <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
+      <label class="header-field" title="free push via ntfy.sh — pick an unguessable topic">
+        <span class="header-field-label">ntfy</span>
+        <input id="ntfyTopic" placeholder="topic" title="free push via ntfy.sh — pick an unguessable topic">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveNtfyTopic()">SAVE</button>
+        <span class="note" id="ntfyTopicStat"></span>
+        <span class="note header-field-sep">|</span>
+        <label class="note" for="executeBackendUrl">Execute URL</label>
+        <input id="executeBackendUrl" placeholder="/api/execute or https://…" title="Optional direct bracket endpoint; leave empty to use Render EXECUTE_BACKEND_URL proxy">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveExecuteBackendUrl()">SAVE</button>
+        <span class="note" id="executeBackendStat"></span>
+      </label>
+      <label class="header-field" title="Telegram alerts: bot token from @BotFather + chat id. Stored in this browser only.">
+        <span class="header-field-label">telegram</span>
+        <input id="tgToken" placeholder="bot token" title="bot token from @BotFather">
+        <input id="tgChat" placeholder="chat id" title="your Telegram chat id">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveTelegram()">SAVE</button>
+        <button class="btn ghost header-field-btn" type="button" onclick="resetTelegramDefaults()">RESET</button>
+        <button class="btn ghost header-field-btn" type="button" onclick="testTelegram()">TEST</button>
+        <span class="note" id="tgStat"></span>
+      </label>
+    </div>
+  </div>
 </header>
-<div id="marketPictureBar" style="padding:8px 16px;text-align:center;border-bottom:1px solid var(--line);font-size:13px;letter-spacing:.04em">MARKET PICTURE: <b id="mpVerdict">—</b> <span id="mpDetail" class="note" style="font-size:11px"></span></div>
+<div id="marketPictureBar" class="market-picture-bar">MARKET PICTURE: <b id="mpVerdict">—</b> <span id="mpDetail" class="note"></span></div>
 <div class="navgroups" id="navGroups" role="tablist" aria-label="HARDGATE tool groups"></div>
 <nav id="navTabs" aria-label="HARDGATE tabs">
   <button id="tabB_brain" onclick="showTab('brain')">BRAIN</button>
@@ -234,6 +287,7 @@ table tr:hover td{background:rgba(217,164,65,.045)}
   </div>
   <div class="note" style="margin-bottom:10px">Gates: G1 4H EMA cascade aligned (9&gt;21&gt;50 or inverse) with real spread — |EMA21−EMA50| ≥ 0.25×ATR, so flat-tape cascades don't count · G2 price on correct side of 4H EMA200 (HTF proxy) · G3 RSI-14 not exhausted (blocks &gt;70 long / &lt;30 short) · G4 |funding| ≤ 0.05% and not paying against you · G5 volume expansion vs 20-bar mean · G6 structural R:R ≥ 2 from last swing · G7 no opposing CUSUM event in last 20 bars (the one feature your own walk-forward validated OOS, AUC ≈0.58). All gates on CLOSED bars only — nothing repaints. Zero results is a valid, honest result.</div>
   <div class="cards" id="swingCards"></div>
+  <div id="swingWatch"></div>
   <div class="empty" id="swingEmpty" style="display:none">No CLEAN swing setups. Standing aside is a position.</div>
 </section>
 
@@ -251,6 +305,7 @@ table tr:hover td{background:rgba(217,164,65,.045)}
   </div>
   <div class="note" style="margin-bottom:10px">Gates: G1 1H EMA cascade sets direction · G2 15m EMA9/21 pullback-and-reclaim in that direction · G3 15m RSI in 40–65 band (long) / 35–60 (short), no chasing exhaustion · G4 funding clean · G5 ≥ 25 min to funding settlement (00:00/08:00/16:00 UTC = 5:30/13:30/21:30 IST) · G6 ATR-based 2R target inside recent range. Scalps are invalid if you can't be filled early — entry is the reclaim close, not a market chase.</div>
   <div class="cards" id="scalpCards"></div>
+  <div id="scalpWatch"></div>
   <div class="empty" id="scalpEmpty" style="display:none">No CLEAN scalp triggers right now.</div>
 
 <div class="row" style="margin-top:10px">
@@ -273,6 +328,7 @@ table tr:hover td{background:rgba(217,164,65,.045)}
     </div>
     <div class="note" style="margin-bottom:10px">Gates: G1 Bollinger Band width is ≥ 25% tighter than its 50-bar average (Volatility Squeeze) · G2 Volume z-score < -0.5 (Drought/Quiet Accumulation) · G3 Price above 4H 200 EMA (Bullish HTF context). Action: Do not buy blindly. Send these to the Trade Plan and wait for a Liquidity Sweep of the local low before manually entering.</div>
     <div class="cards" id="coilCards"></div>
+    <div id="coilWatch"></div>
     <div class="empty" id="coilEmpty" style="display:none">No compressed assets found. The market is currently expanded.</div>
       <div class="note" style="margin:16px 0 10px;border-top:1px solid var(--line);padding-top:14px">Expansion check: after FIND COILS saves a watchlist, run this to see which of those symbols have since closed outside the compression range on a volume spike (G4 closed above coil high, G5 vol z&gt;2). Two-step process by design — run FIND COILS first, check back later.</div>
       <div class="row">
@@ -539,6 +595,7 @@ table tr:hover td{background:rgba(217,164,65,.045)}
         <label class="f">ENTRY<input id="tEntry" type="number" step="any" style="width:110px"></label>
         <label class="f">STRUCTURAL STOP<input id="tStop" type="number" step="any" style="width:110px"></label>
         <label class="f">T1 (optional)<input id="tT1" type="number" step="any" style="width:110px"></label>
+        <label class="f">T2 runner (optional)<input id="tT2" type="number" step="any" style="width:110px"></label>
       </div>
       <div class="row" style="margin-bottom:8px">
         <label class="f">EQUITY $<input id="tEq" type="number" value="1000" style="width:90px"></label>
@@ -567,22 +624,31 @@ table tr:hover td{background:rgba(217,164,65,.045)}
 </main>
 
 
+<script src="hghost.js"></script>
 <script src="indicators.js"></script>
 <script src="indicators2.js"></script>
 <script src="store.js"></script>
 <script src="binance.js"></script>
+<script src="startrader.js"></script>
+<script src="bybit.js"></script>
+<script src="positioning.js"></script>
+<script src="cryptogates.js"></script>
+<script src="cryptowatch.js"></script>
 <script src="macro.js"></script>
 <script src="squeeze.js"></script>
 <script src="trendtable.js"></script>
 <script src="oiflow.js"></script>
 <script src="regime.js"></script>
 <script src="carry.js"></script>
+<script src="termbasis.js"></script>
 <script src="goldpro.js"></script>
 <script src="strats.js"></script>
 <script src="meanrev.js"></script>
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
+<script src="edge.js?v=38"></script>
+<script src="startradertab.js?v=39"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
 <script src="onchain.js"></script>
@@ -597,8 +663,12 @@ table tr:hover td{background:rgba(217,164,65,.045)}
 <!-- signallog.js: SIGNAL LOG tab (5-min journal; feature-checks brain/scalp/swing sources at snapshot time) -->
 <script src="signallog.js"></script>
 <script src="hgalert.js"></script>
+<script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
+<script src="book-routing.js?v=55"></script>
+<script src="book.js?v=55"></script>
+<script src="execute.js?v=55"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -616,22 +686,54 @@ const S = {
   fng: null, dom: null,
   cdcxBlocked: false,
   cdcxViaProxy: false,
-  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, alertTimer: null,
+  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, lastEdgeAlertCheck: null, edgeAlertBusy: false, alertTimer: null,
 };
+let __hgSwingScan = null, __hgScalpScan = null;
+window.swingScan = function(){ return __hgSwingScan; };
+window.scalpScan = function(){ return __hgScalpScan; };
+
+/* Owner policy: alerts always armed in this browser; 3-min scan/alert cadence +
+   3-min AUTO hard refresh so tab scanners stay warm. Toggle OFF is ignored. */
+const HG_ALERTS_FORCED_ON = true;
+const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
+const HG_EDGE_ALERT_MS = 15 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram on new setups */
+const HG_ALERTS_AUTO_REFRESH_MS = 180000;
+
+function hgExLabel(ex){
+  ex = ex || S.exchange;
+  if (ex === 'delta') return 'Delta India';
+  if (ex === 'coindcx') return 'CoinDCX';
+  if (ex === 'startrader') return 'STARTRADER';
+  return String(ex || '').toUpperCase();
+}
+function hgExBtcSym(ex){
+  ex = ex || S.exchange;
+  return (ex === 'coindcx') ? 'B-BTC_USDT' : 'BTCUSD';
+}
+function hgExTurnoverUni(minTurn){
+  minTurn = (minTurn === undefined) ? 0 : minTurn;
+  if (S.exchange === 'delta' || S.exchange === 'startrader')
+    return S.tickers.filter(function(t){ return t.turnoverUsd >= minTurn; }).sort(function(a,b){ return b.turnoverUsd - a.turnoverUsd; });
+  return S.tickers.slice();
+}
 
 const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
 const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
 const CDCX_API = 'https://api.coindcx.com';
-const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u); // same-origin Vercel function (allowlist: api.coindcx.com, public.coindcx.com, query1/2.finance.yahoo.com) — replaces the dead Render proxy
-const EXECUTE_BACKEND_URL = 'https://your-secure-backend.com/execute'; // TODO: replace with your real delta-trader.ts execution endpoint before this can fire real orders
+/* EXECUTE BRACKET — execute.js + Render /api/execute proxy (EXECUTE_BACKEND_URL env).
+   Optional desk override: window.HG_EXECUTE_BACKEND_OVERRIDE or Settings → Execute URL */
+window.HG_EXECUTE_BACKEND_OVERRIDE = '';
+const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u);
+/* Last-resort only when same-origin /api/proxy is missing (GitHub Pages) or
+   transiently failing — never the first choice on Render. */
 const CDCX_PUBLIC_PROXIES = [
   u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
   u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
-]; // Public backup proxies tried in order if the same-origin proxy fails (last resort, rate-limited). The third former backup was dropped 2026-07 — paywalled, verified 403.
+];
 
-/* CoinDCX fetch: try direct (CORS may block), fall back to the same-origin
-   /api/proxy function, then the public backups. Every leg null-tolerant. */
+/* CoinDCX fetch: same-origin /api/proxy first (browser CORS blocks direct),
+   then direct (Node/tests), then public CORS backups as last resort. */
 
 /* ---------------- lightweight rate-limit tracking (client-side estimate only) ---------------- */
 const RateTrack = { td: [], cdcx: [] };
@@ -670,28 +772,32 @@ function trackCall(bucket){
 
 async function cdcxGet(url){
   trackCall('cdcx');
-  try{
-    const r = await fetch(url);
-    if(!r.ok) throw new Error('HTTP '+r.status);
+  async function readJson(r, via){
+    if (!r.ok) throw new Error((via || 'fetch') + ' HTTP ' + r.status);
     const j = await r.json();
-    S.cdcxViaProxy = false;
+    S.cdcxViaProxy = via;
     return j;
-  }catch(e){}
-  try{
-    const r = await fetch(CDCX_PROXY(url));
-    if(!r.ok) throw new Error('proxy HTTP '+r.status);
-    S.cdcxViaProxy = 'api';
-    return r.json();
-  }catch(e){}
-  for (const build of CDCX_PUBLIC_PROXIES){
-    try{
-      const r = await fetch(build(url));
-      if(!r.ok) throw new Error('public proxy HTTP '+r.status);
-      S.cdcxViaProxy = 'public';
-      return r.json();
-    }catch(e){}
   }
-  throw new Error('all proxies failed');
+  async function tryOrigin(){
+    let r = await fetch(CDCX_PROXY(url));
+    if (r.status === 429){
+      await sleep(400);
+      r = await fetch(CDCX_PROXY(url));
+    }
+    return readJson(r, 'api');
+  }
+  async function tryDirect(){
+    return readJson(await fetch(url), false);
+  }
+  async function tryPublic(build){
+    return readJson(await fetch(build(url)), 'public');
+  }
+  try{ return await tryOrigin(); }catch(e){}
+  try{ return await tryDirect(); }catch(e){}
+  for (const build of CDCX_PUBLIC_PROXIES){
+    try{ return await tryPublic(build); }catch(e){}
+  }
+  throw new Error('CoinDCX unreachable — reload and retry, or use https://hardgate-main.onrender.com (full /api/proxy)');
 }
 
 /* ---------------- utils ---------------- */
@@ -831,9 +937,38 @@ async function candlesCdcx(sym, res, count){
   rows.sort((a,b)=>a.t-b.t);
   return rows;
 }
+async function candlesStartrader(sym, res, count){
+  const base = (typeof startraderBaseOf === 'function') ? startraderBaseOf(sym) : sym.replace(/USD$/,'');
+  const bSym = (typeof startraderBinanceSym === 'function') ? startraderBinanceSym(base) : (base + 'USDT');
+  if (!bSym || typeof binanceKlines !== 'function') return [];
+  const rows = await binanceKlines(bSym, res, count);
+  return Array.isArray(rows) ? rows : [];
+}
 
-async function candlesRangeRaw(sym, res, start, end){ if (S.exchange==='delta'){ const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`); const j = await r.json(); const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume})); rows.sort((a,b)=>a.t-b.t); return rows; } else { const j = await cdcxGet(`${CDCX_PUB}/market_data/candlesticks?pair=${encodeURIComponent(sym)}&from=${start}&to=${end}&resolution=${CDCX_RES[res]}&pcode=f`); const rows = (j.data||[]).map(c=>({t:Math.floor((c.time??c.t)/1000), o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+(c.volume??0)})); rows.sort((a,b)=>a.t-b.t); return rows; } } async function getTickers(){
+async function candlesRangeRaw(sym, res, start, end){
+  if (S.exchange==='delta'){
+    const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
+    const j = await r.json();
+    const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}));
+    rows.sort((a,b)=>a.t-b.t);
+    return rows;
+  }
+  if (S.exchange==='startrader'){
+    const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res] || 3600;
+    const n = Math.max(5, Math.ceil((end - start) / secPer) + 3);
+    return candlesStartrader(sym, res, n);
+  }
+  const j = await cdcxGet(`${CDCX_PUB}/market_data/candlesticks?pair=${encodeURIComponent(sym)}&from=${start}&to=${end}&resolution=${CDCX_RES[res]}&pcode=f`);
+  const rows = (j.data||[]).map(c=>({t:Math.floor((c.time??c.t)/1000), o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+(c.volume??0)}));
+  rows.sort((a,b)=>a.t-b.t);
+  return rows;
+}
+async function getTickers(){
   if (S.exchange==='delta') return loadTickersDelta();
+  if (S.exchange==='startrader'){
+    if (typeof startraderTickers === 'function') return startraderTickers();
+    return [];
+  }
   try { const t = await loadTickersCdcx(); S.cdcxBlocked=false; return t; }
   catch(e){ S.cdcxBlocked=true; throw e; }
 }
@@ -849,7 +984,8 @@ async function getCandles(sym, res, count){
   const key = `${S.exchange}|${sym}|${res}|${count}`;
   const hit = S.candleCache[key];
   if (hit && (nowSec()-hit.at) < 60) return hit.rows;
-  let rows = S.exchange==='delta' ? await candlesDelta(sym,res,count) : await candlesCdcx(sym,res,count);
+  let rows = S.exchange==='delta' ? await candlesDelta(sym,res,count)
+    : (S.exchange==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
   rows = dropForming(rows, res);
   S.candleCache[key] = {rows, at: nowSec()};
   return rows;
@@ -917,21 +1053,40 @@ function renderGoldMacroAuto(m, source){
     if (!m){ el.innerHTML = '<div class="empty">Macro feed unavailable right now — DXY/yield gates degrade to N/A, ledgers unaffected.</div>'; return; }
     const arr = t => t==='RISING' ? '▲' : (t==='FALLING' ? '▼' : '→');
     const goldCol = t => t==='RISING' ? 'var(--short)' : (t==='FALLING' ? 'var(--long)' : 'var(--mut)'); // gold wants DXY + yields DOWN
-    const dxy = m.dxy || null;
-    const dxyTxt = dxy
-      ? fmt(dxy.value,2)+' <span style="color:'+goldCol(dxy.trend20)+'">'+arr(dxy.trend20)+' '+dxy.trend20+'</span>'+(dxy.change20Pct!==null&&dxy.change20Pct!==undefined ? ' · '+pct(dxy.change20Pct,2)+' / 20d' : '')
+    const dxyLeg = (m.dxyOfficial && isFinite(m.dxyOfficial.value)) ? m.dxyOfficial : m.dxy;
+    const dxySrc = (m.dxyOfficial && isFinite(m.dxyOfficial.value)) ? 'FRED DTWEXBGS'
+      : ((m.dxy && isFinite(m.dxy.value)) ? 'Frankfurter proxy' : null);
+    const dxyTxt = dxyLeg
+      ? fmt(dxyLeg.value,2)+' <span style="color:'+goldCol(dxyLeg.trend20)+'">'+arr(dxyLeg.trend20)+' '+dxyLeg.trend20+'</span>'+(dxyLeg.change20Pct!==null&&dxyLeg.change20Pct!==undefined ? ' · '+pct(dxyLeg.change20Pct,2)+' / 20d' : '')+(dxySrc ? ' · '+dxySrc : '')
       : '—';
+    const tnxSrc = m.tnxSource ? (' · '+String(m.tnxSource).toUpperCase()) : '';
     const tnxTxt = (m.tnx!==null && m.tnx!==undefined)
-      ? fmt(m.tnx,2)+'%'+(m.tnxTrend ? ' <span style="color:'+goldCol(m.tnxTrend)+'">'+arr(m.tnxTrend)+' '+m.tnxTrend+'</span>' : '')
+      ? fmt(m.tnx,2)+'%'+(m.tnxTrend ? ' <span style="color:'+goldCol(m.tnxTrend)+'">'+arr(m.tnxTrend)+' '+m.tnxTrend+'</span>' : '')+tnxSrc
+      : '—';
+    const ryTxt = (m.realYield10Y!==null && m.realYield10Y!==undefined)
+      ? fmt(m.realYield10Y,2)+'%'+(m.realYieldTrend ? ' <span style="color:'+goldCol(m.realYieldTrend)+'">'+arr(m.realYieldTrend)+' '+m.realYieldTrend+'</span>' : '')
       : '—';
     const hintCol = m.realRateHint==='TAILWIND' ? 'var(--long)' : (m.realRateHint==='HEADWIND' ? 'var(--short)' : 'var(--mut)');
+    let macroBook = '';
+    if (typeof macroGoldPlan === 'function' && typeof bookBtnHTML === 'function'){
+      const mgp = macroGoldPlan(m);
+      if (mgp){
+        macroBook = '<div style="margin-top:8px">' + bookBtnHTML(mgp.sym, mgp.dir, mgp.entry, mgp.stop, mgp.t1, {
+          scanner: 'macro', fund: 'gold', strategy: 'macro', klass: 'metals',
+          layers: [mgp.hint || 'macro', 'real-rate'],
+          t2: mgp.t2
+        }) + '</div>';
+      }
+    }
     el.innerHTML =
-        '<div class="kv"><span class="k">DXY (ICE formula · ECB fixes)</span><span class="v">'+dxyTxt+'</span></div>'
-      + '<div class="kv"><span class="k">US10Y yield (^TNX)</span><span class="v">'+tnxTxt+'</span></div>'
+        '<div class="kv"><span class="k">DXY (official when FRED configured)</span><span class="v">'+dxyTxt+'</span></div>'
+      + '<div class="kv"><span class="k">US10Y yield</span><span class="v">'+tnxTxt+'</span></div>'
+      + (ryTxt !== '—' ? '<div class="kv"><span class="k">10Y real yield (TIPS)</span><span class="v">'+ryTxt+'</span></div>' : '')
       + '<div class="kv"><span class="k">Gold / Silver ratio</span><span class="v">'+(m.goldSilverRatio!==null&&m.goldSilverRatio!==undefined ? fmt(m.goldSilverRatio,1) : '—')+'</span></div>'
       + '<div class="kv"><span class="k">Real-rate hint for gold</span><span class="v" style="color:'+hintCol+';font-weight:600">'+(m.realRateHint||'—')+'</span></div>'
+      + macroBook
       + '<div class="kv"><span class="k">Gold candle source</span><span class="v">'+(GOLD_SRC_LABEL[source] || '—')+'</span></div>'
-      + '<div class="note" style="margin-top:6px">Falling DXY + falling yields = TAILWIND for gold · both rising = HEADWIND. “—” means that data leg failed (Yahoo via proxy is best-effort) — gates that need it show N/A, the ledgers are unaffected.</div>';
+      + '<div class="note" style="margin-top:6px">Falling DXY + falling yields = TAILWIND for gold · both rising = HEADWIND. “—” means that data leg failed — gates that need it show N/A, the ledgers are unaffected.</div>';
   }catch(e){ el.innerHTML = '<div class="empty">macro panel render failed</div>'; }
 }
 
@@ -993,15 +1148,19 @@ async function setExchange(x){
   S.exchange = x; S.candleCache = {}; if (x!=='delta' && deltaWS){ try{ deltaWS.close(); }catch(e){} deltaWS=null; }
   $('xDelta').classList.toggle('on', x==='delta');
   $('xCdcx').classList.toggle('on', x==='coindcx');
+  $('xStar').classList.toggle('on', x==='startrader');
   $('chipConn').innerHTML = '<b>…</b> loading';
+  const exLabel = x==='delta' ? 'Delta India' : (x==='coindcx' ? 'CoinDCX' : 'STARTRADER');
   try{
     S.tickers = await getTickers();
     $('chipConn').classList.remove('warn');
-    $('chipConn').innerHTML = `<b>${S.tickers.length}</b> ${x==='delta'?'Delta India':'CoinDCX'} perps`;
-    if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`; if (x==='delta') initDeltaWS();
+    $('chipConn').innerHTML = `<b>${S.tickers.length}</b> ${exLabel} ${x==='startrader' ? 'crypto CFDs' : 'perps'}`;
+    if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`;
+    if (x==='startrader') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(Binance USD-M proxy for candles/funding — trade on STARTRADER)</b>`;
+    if (x==='delta') initDeltaWS();
   }catch(e){
     $('chipConn').classList.add('warn');
-    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':'Delta unreachable.'}`;
+    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':(x==='startrader'?'STARTRADER catalog could not load Binance enrichment — retry.':'Delta unreachable.')}`;
     S.tickers = [];
   }
   renderBiasChips();
@@ -1047,12 +1206,18 @@ async function runCoilScan(){
           ['G1 BB squeeze','G2 vol drought','G3 >4H 200 EMA'],
           (pl ? planBlock(pl.dir,pl.entry,pl.stop,pl.t1,pl.t2,pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
-          pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh));
+          pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
+          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null }));
       }catch(e){}
       await sleep(120);
     }
     saveCoilWatch(coilList);
     statEl.textContent=`done — ${found} coils found`;
+    const coilEl = $('coilWatch');
+    if (coilEl && typeof cryptoFormingNowHTML === 'function' && typeof coilWatchItems === 'function'){
+      if (typeof cryptoWatchInjectStyles === 'function') cryptoWatchInjectStyles();
+      coilEl.innerHTML = cryptoFormingNowHTML(coilWatchItems({ list: coilList, ex: S.exchange }));
+    }
     if (!found) emptyEl.style.display='block';
   }catch(e){
     statEl.textContent=`coil scan failed: ${e.message}`;
@@ -1098,7 +1263,8 @@ async function runExpansionCheck(){
         __cardsHtml.push(cardHTML(w.symbol,"long",
           [["mark",px(entry)],["coil high",px(w.coilHigh)],["coil low",px(w.coilLow)],["vol z",fmt(vz,2)],["watch age",fmt((nowSec()-watch.at)/3600,1)+"h"]],
           ["G1 was on coil watchlist","G2 closed above range","G3 vol z>2"],
-          planBlock("long",entry,stop,t1,t2), entry, stop, t1));
+          planBlock("long",entry,stop,t1,t2), entry, stop, t1, null,
+          { scanner: 'coil-expansion', strategy: 'coil-expansion', t2: t2 }));
         logSetup(w.symbol,"long","coil-expansion",entry,stop,t1);
       }catch(e){}
       await sleep(120);
@@ -1181,7 +1347,8 @@ async function runDivScan(){
           [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
            ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
           ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
-          planBlock(dir,entry,stop,t1,t2, capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : ''), entry, stop, t1));
+          planBlock(dir,entry,stop,t1,t2, capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : ''), entry, stop, t1, null,
+          { scanner: 'divergence', strategy: 'divergence', t2: t2 }));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);
@@ -1343,6 +1510,21 @@ async function smartScanSymbol(sym, tick){
     rows4h: kls[0] || [], rows1h: kls[1] || []
   };
 }
+async function smartScanSymbolWithCross(sym, tick){
+  const r = await smartScanSymbol(sym, tick);
+  if (!r) return null;
+  try{
+    if (typeof bybitPositioningSnapshot === 'function' && typeof positioningCrossCheck === 'function'){
+      const byb = await bybitPositioningSnapshot(sym);
+      r.bybit = byb;
+      r.cross = positioningCrossCheck(
+        { fundingPct: r.fundingPct, retailLongPct: r.retailLongPct, oiChgPct: r.oiChgPct },
+        byb
+      );
+    }
+  }catch(e){}
+  return r;
+}
 
 function smartClsInput(r){
   return { chg24: r.tick ? r.tick.chg24 : null, oiChgPct: r.oiChgPct, fundingPct: r.fundingPct,
@@ -1437,6 +1619,7 @@ function smartCardHTML(r){
       + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'smart', strategy: 'smart', t2: s.t2 }) : '';
   const venueChip = r.venue === 'cdcx'
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
@@ -1453,11 +1636,13 @@ function smartCardHTML(r){
     + '<span class="k">taker buy/sell</span><span>' + (r.takerRatio !== null ? fmt(r.takerRatio, 2) : 'n/a') + '</span>'
     + '<span class="k">turnover 24h</span><span>' + (r.tick ? '$' + fmt(r.tick.turnoverUsd/1e6, 0) + 'M' : '—') + '</span>'
     + '</div>'
+    + (r.cross && typeof positioningCrossHTML === 'function' ? positioningCrossHTML(r.cross) : '')
     + '<div class="gates">' + ev.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('')
       + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('') + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
     + (s ? '<div class="hgchart" id="hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '') + '"></div>' : '')
     + tradeBtn
+    + bookBtn
     + '</div>';
 }
 
@@ -1528,7 +1713,7 @@ async function runSmartScan(){
         setProg('smartProg', (i+1)/cands.length);
         statEl.textContent = 'scanning ' + (i+1) + '/' + cands.length + ' · ' + sym;
         try{
-          const r = await smartScanSymbol(sym, ticks[sym]);
+          const r = await smartScanSymbolWithCross(sym, ticks[sym]);
           if (!r){ failed++; return; }
           /* CoinDCX twin stamping: the positioning read is the ASSET's — the
              card names the CoinDCX contract and the Binance twin honestly */
@@ -1550,7 +1735,7 @@ async function runSmartScan(){
     // gold callout: XAU perp positioning extreme? (funding or retail ratio)
     try{
       const gxTick = ticks['XAUUSDT'] || { symbol: 'XAUUSDT', mark: NaN, chg24: null, turnoverUsd: 0 };
-      const gx = await smartScanSymbol('XAUUSDT', gxTick);
+      const gx = await smartScanSymbolWithCross('XAUUSDT', gxTick);
       if (gx){
         gx.cls = smartClassify(smartClsInput(gx));
         const extreme = (gx.fundingPct !== null && Math.abs(gx.fundingPct) >= 0.05)
@@ -1646,7 +1831,8 @@ async function runApexScan(){
         ['G1 BTC headwind','G2 spread ≥5%','G3 1H EMA50 intact'],
         (pl ? planBlock(pl.dir,pl.entry,pl.stop,pl.t1,pl.t2,pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
-        pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05));
+        pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
+        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null }));
     });
     statEl.textContent = `done — ${results.length} Apex assets found`;
     if (!results.length) emptyEl.style.display='block';
@@ -1733,7 +1919,7 @@ __cardsHtml.push(cardHTML(t.symbol, dir,
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
 planBlock(dir, p, stop, t1, t2, 'mean reversion — stop tight behind the wick; target the mean first')
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-p, stop, t1));
+p, stop, t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: t2 }));
 }catch(e){}
 await sleep(100);
 }
@@ -1802,7 +1988,8 @@ async function runSmcScan(){
           ['Struct Stop', px(stop)], ['Target Liq', px(t1)]
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlock(dir, p, stop, t1, t2, 'structural stop behind the FVG; T1 = nearest liquidity')
-        + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1));
+        + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1, null,
+        { scanner: 'smc', strategy: 'smc', t2: t2 }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -1857,7 +2044,8 @@ async function runObScan(){
           ['Struct Stop', px(stop)], ['Liquidity Target', target ? `${px(target.level)} (x${target.count})` : px(t1)]
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlock(dir, p, stop, t1, t2, 'structural stop behind the OB; T1 = nearest liquidity')
-        + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1));
+        + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1, null,
+        { scanner: 'ob', strategy: 'ob', t2: t2 }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -1879,10 +2067,10 @@ cardsEl.innerHTML = __cardsHtml.join('');
    later) — missing ids are skipped everywhere, so showTab/setHgGroup never
    break on an absent tab. */
 const HG_NAV_GROUPS = [
-  { id:'overview',   label:'OVERVIEW',     tabs:['brain','execute','bias','regime','trendmx','rotation','news'] },
+  { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
-  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','best','carry','scorecard'] },
+  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','termbasis','scorecard'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
@@ -2177,10 +2365,10 @@ function hgMiniChart(el, rows, plan, opts){
     const chart = LightweightCharts.createChart(el, {
       width: el.clientWidth || 320,
       height: (opts && isFinite(opts.height)) ? opts.height : 190,
-      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#6B7A90', fontSize: 10 },
-      grid: { vertLines: { color: 'rgba(35,43,58,0.45)' }, horzLines: { color: 'rgba(35,43,58,0.45)' } },
-      rightPriceScale: { borderColor: 'rgba(35,43,58,0.9)' },
-      timeScale: { borderColor: 'rgba(35,43,58,0.9)', timeVisible: true, secondsVisible: false },
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#334155', fontSize: 10 },
+      grid: { vertLines: { color: 'rgba(226,232,240,0.9)' }, horzLines: { color: 'rgba(226,232,240,0.9)' } },
+      rightPriceScale: { borderColor: 'rgba(226,232,240,0.95)' },
+      timeScale: { borderColor: 'rgba(226,232,240,0.95)', timeVisible: true, secondsVisible: false },
       crosshair: {
         vertLine: { width: 1, color: 'rgba(107,122,144,0.45)', style: LS.Dashed },
         horzLine: { width: 1, color: 'rgba(107,122,144,0.45)', style: LS.Dashed }
@@ -2333,11 +2521,16 @@ function hgPlanBlock(dir, rows, entryOverride, extraNote){
 }
 window.hgPlanLevels = hgPlanLevels;
 window.hgPlanBlock = hgPlanBlock;
-function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId){
+function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMeta){
   const symHtml = String(sym).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const onclickJs = `toTrade(${JSON.stringify(sym)},${JSON.stringify(dir)},${entry},${stop},${t1})`;
   const onclickAttr = onclickJs.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
+  bookMeta = bookMeta || {};
+  const scanId = bookMeta.scanner || 'swing-scalp';
+  const stratId = bookMeta.strategy || scanId;
+  const bookBtn = (isFinite(entry) && isFinite(stop) && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: scanId, strategy: stratId, t2: bookMeta.t2 }) : '';
   return `<div class="card ${dir}">
     <div class="chead"><span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span></div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
@@ -2345,14 +2538,30 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId){
     <div class="plan">${plan}</div>
     ${cid?`<div class="hgchart" id="${cid}"></div>`:''}
     <button class="toTrade" onclick="${onclickAttr}">SEND TO TRADE PLAN →</button>
+    ${bookBtn}
   </div>`;
 }
-function toTrade(sym,dir,entry,stop,t1){
+function toTrade(sym,dir,entry,stop,t1,t2){
   $('tSym').value=sym; $('tSide').value=dir; $('tEntry').value=entry; $('tStop').value=stop;
   /* only set T1 when a target arg actually exists — writing undefined produced
      the string "undefined" → NaN rr → permanent P2 veto on gold handoffs */
   $('tT1').value = (t1!==undefined && t1!==null && isFinite(t1)) ? t1 : '';
+  $('tT2').value = (t2!==undefined && t2!==null && isFinite(t2)) ? t2 : '';
   showTab('trade'); planTrade();
+}
+function hgBookBtn(sym, dir, entry, stop, t1, meta){
+  if (typeof bookBtnHTML !== 'function' || !isFinite(entry) || !isFinite(stop)) return '';
+  meta = meta || {};
+  if (!meta.fund && meta.scanner && typeof hgBookScannerFund === 'function'){
+    meta = Object.assign({}, meta, { fund: hgBookScannerFund(meta.scanner, meta) });
+  }
+  var t1v = (t1 !== undefined && t1 !== null && isFinite(t1)) ? t1 : null;
+  if (!isFinite(t1v)){
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return '';
+    t1v = (dir === 'short') ? entry - risk : entry + risk;
+  }
+  return bookBtnHTML(sym, dir, entry, stop, t1v, meta);
 }
 
 /* last-scan memory — a scanner tab reopened after a reload shows WHEN the
@@ -2372,33 +2581,244 @@ function scanLastHint(kind){
   }catch(e){}
 }
 
-async function runScan(kind){
-  const isSwing = kind==='swing';
-  const st0=$(isSwing?'swingStat':'scalpStat'); if (!(await waitAlertIdle(st0))) return;
-  const scanAll = $(isSwing?'swingAll':'scalpAll').checked;
-  const N = Math.max(5, Math.min(500, +$(isSwing?'swingN':'scalpN').value||30));
-  const minTurn = isSwing ? (+$('swingTurn').value||0) : 0;
-  const cardsEl = $(isSwing?'swingCards':'scalpCards'), emptyEl=$(isSwing?'swingEmpty':'scalpEmpty'), statEl=$(isSwing?'swingStat':'scalpStat');
-  const btn = $(isSwing?'swingRun':'scalpRun');
-  cardsEl.innerHTML=''; emptyEl.style.display='none'; emptyEl.textContent=''; btn.disabled=true;
+
+function scanMomentumDetail(candles, rows, dir){
+  let momDetail = 'n/a';
+  try{
+    const c = candles, nEw = c.length;
+    if (nEw >= 40){
+      const bbW = bollinger(c, 20, 2);
+      const priorWw = bbW.widthPct.slice(Math.max(0, nEw - 50), nEw - 1).filter(function(v){ return isFinite(v); });
+      const wAvgW = priorWw.length ? priorWw.reduce(function(a, b){ return a + b; }, 0) / priorWw.length : NaN;
+      const wantW = dir === 'long' ? 1 : -1;
+      const bbBreakW = (wantW > 0 ? c[nEw - 1] > bbW.upper[nEw - 1] : c[nEw - 1] < bbW.lower[nEw - 1])
+        && isFinite(wAvgW) && bbW.widthPct[nEw - 2] <= wAvgW;
+      const adxW = adx(rows, 14);
+      const adxAlignedW = adxW.adx[nEw - 1] >= 20 && (wantW > 0 ? adxW.plusDI[nEw - 1] > adxW.minusDI[nEw - 1] : adxW.minusDI[nEw - 1] > adxW.plusDI[nEw - 1]);
+      const srsiW = stochRsi(c, 14, 14);
+      const srsiOkW = isFinite(srsiW[nEw - 1]) && (wantW > 0 ? srsiW[nEw - 1] < 80 : srsiW[nEw - 1] > 20);
+      const votesW = (bbBreakW ? 1 : 0) + (adxAlignedW ? 1 : 0) + (srsiOkW ? 1 : 0);
+      momDetail = votesW + '/3 (BB ' + (bbBreakW ? 'ok' : 'x') + ' ADX ' + (adxAlignedW ? 'ok' : 'x') + ' StochRSI ' + (srsiOkW ? 'ok' : 'x') + ')';
+    }
+  }catch(e){}
+  return momDetail;
+}
+
+function renderSwingCleanCard(t, hit, cardsEl, quiet){
+  const { dir, entry, stop, t1, t2, rr: dynamicRR, rows, r14, vz, ev, entryType } = hit;
+  const momDetail = scanMomentumDetail(rows.map(function(r){ return r.c; }), rows, dir);
+  const gates = ['G1 cascade+spread', 'G2 HTF side', 'G3 RSI ok', 'G4 funding', 'G5 vol+wick', 'G6 R:R>=2',
+    'G7 CUSUM' + (ev && ev.barsAgo <= 20 ? ' ok' : ' n/a')];
+  const chartId = 'hgc-swing-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [
+    ['mark', px(t.mark || entry)],
+    ['order', (entryType || 'MARKET') === 'MARKET' ? 'market' : 'limit @ EMA9'],
+    ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
+    ['RSI 4H', fmt(r14, 1)],
+    ['vol z', fmt(vz, 2)],
+    ['funding', t.fundingPct !== null ? fmt(t.fundingPct, 4) + '%' : 'n/a'],
+    ['ann.', t.fundingPct !== null ? fmt(t.fundingPct * 3 * 365, 1) + '%' : '-'],
+    ['dyn R:R', fmt(dynamicRR, 2) + 'R vol-capped'],
+    ['turnover', t.turnoverUsd ? ('$' + fmt(t.turnoverUsd, 0)) : '-'],
+    ['context: momentum', momDetail],
+    ['Nearest OB', nearestOBText(rows, dir)],
+    ['Liquidity Target', liquidityTargetText(rows, dir)]
+  ], gates, planBlock(dir, entry, stop, t1, t2), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2 }));
+  if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
+  if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
+}
+
+function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet){
+  const { dir, entry, stop, t1, t2, rr: dynamicRR, m15, r15, a } = hit;
+  const momDetail = scanMomentumDetail(m15.map(function(r){ return r.c; }), m15, dir);
+  const chartId = 'hgc-scalp-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [
+    ['mark', px(t.mark || entry)],
+    ['1H trend', dir.toUpperCase()],
+    ['RSI 15m', fmt(r15, 1)],
+    ['ATR 15m', px(a)],
+    ['dyn R:R', fmt(dynamicRR, 2) + 'R vol-capped'],
+    ['funding', t.fundingPct !== null ? fmt(t.fundingPct, 4) + '%' : 'n/a'],
+    ['to settle', fmt(minsToFunding, 0) + 'm'],
+    ['context: momentum', momDetail],
+    ['Nearest OB', nearestOBText(m15, dir)],
+    ['Liquidity Target', liquidityTargetText(m15, dir)]
+  ], ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
+    planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h'), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2 }));
+  if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), m15, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
+  if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
+}
+
+async function runScan(kind, opts){
+  const quiet = !!(opts && opts.quiet);
+  const isSwing = kind === 'swing';
+  const st0 = $(isSwing ? 'swingStat' : 'scalpStat');
+  if (!quiet && !(await waitAlertIdle(st0))) return;
+  const scanAll = $(isSwing ? 'swingAll' : 'scalpAll').checked;
+  const N = Math.max(5, Math.min(500, +$(isSwing ? 'swingN' : 'scalpN').value || 30));
+  const minTurn = isSwing ? (+$('swingTurn').value || 0) : 0;
+  const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards'), emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty'), statEl = $(isSwing ? 'swingStat' : 'scalpStat');
+  const btn = $(isSwing ? 'swingRun' : 'scalpRun');
+  let newsGate = { blackout: false, caution: false };
+  try{
+    if (typeof hgNewsRefresh === 'function') hgNewsRefresh(false);
+    if (typeof cryptoNewsGate === 'function') newsGate = cryptoNewsGate('BTC');
+  }catch(e){}
+  if (newsGate.blackout){
+    if (!quiet){
+      const banner = (typeof cryptoNewsBannerHTML === 'function') ? cryptoNewsBannerHTML(newsGate) : '';
+      cardsEl.innerHTML = banner || '';
+      emptyEl.style.display = 'none';
+      statEl.className = 'note warn';
+      statEl.textContent = 'skipped — ' + (newsGate.note || 'news blackout');
+      setProg(isSwing ? 'swingProg' : 'scalpProg', null);
+      btn.disabled = false;
+    }
+    return;
+  }
+  if (!quiet){ cardsEl.innerHTML = ''; emptyEl.style.display = 'none'; emptyEl.textContent = ''; btn.disabled = true; }
+  let cands = [];
+  let uni = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
-    let uni = S.tickers.slice();
-    if (S.exchange==='delta') uni = uni.filter(t=> scanAll ? true : t.turnoverUsd>=minTurn).sort((a,b)=>b.turnoverUsd-a.turnoverUsd);
-    const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; }); if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
-    const universeLabel = scanAll ? `whole ${S.exchange==='delta'?'Delta India':'CoinDCX'} futures universe` : `top ${N} by turnover`;
+    uni = S.tickers.slice();
+    if (S.exchange === 'delta' || S.exchange === 'startrader') uni = uni.filter(function(t){ return scanAll ? true : t.turnoverUsd >= minTurn; }).sort(function(a, b){ return b.turnoverUsd - a.turnoverUsd; });
+    const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd || 0) > 0; });
+    if (!scanAll && turnoverKnown) uni = uni.slice(0, N);
+    const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
-    let found=0; const t0scan=Date.now(); const CHUNK_SIZE=5; for (let ci=0; ci<uni.length; ci+=CHUNK_SIZE){ const chunk = uni.slice(ci, ci+CHUNK_SIZE); await Promise.all(chunk.map(async function(t, idxInChunk){ const i = ci+idxInChunk; setProg(isSwing?'swingProg':'scalpProg', (i+1)/uni.length); statEl.textContent = `scanning ${i+1}/${uni.length} - ${t.symbol} · ${Math.floor((Date.now()-t0scan)/1000)}s`; try{ if (isSwing){ const rows = await getCandles(t.symbol,'4h',260); if (rows.length<210) return; const c=rows.map(r=>r.c); const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50)), e200=last(ema(c,200)); const p=last(c), r14=last(rsi(c,14)), vz=volZ(rows,20); let dir=null; if (e9>e21&&e21>e50) dir='long'; else if (e9<e21&&e21<e50) dir='short'; if (!dir) return; const a4=last(atr(rows,14)); if (!(isFinite(a4) && Math.abs(e21-e50) >= 0.25*a4)) return; if (dir==='long' ? !(p>e200) : !(p<e200)) return; if ((dir==='long'&&r14>70)||(dir==='short'&&r14<30)) return; if (t.fundingPct!==null){ const fr=t.fundingPct; if (Math.abs(fr)>0.05-1e-9) return; if ((dir==='long'&&fr>=0.04)||(dir==='short'&&fr<=-0.04)) return; } const currentBar = rows[rows.length-1]; const range = currentBar.h - currentBar.l; const closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5; const closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40; const _rA = rsi(c,14); const _rP = _rA[_rA.length-4]; const slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false; if (!((vz > 0.5) || (closeOK && slopeOK))) return; if (!closeOK) return; let stop = lastSwing(rows, dir, 30); const distToAnchor = Math.abs(p - e21) / a4; if (!(isFinite(distToAnchor) && distToAnchor <= 1.5)) return; let plannedEntry = p; let entryType = 'MARKET'; const distToFast = Math.abs(p - e9) / a4; if (distToFast > 0.25) { plannedEntry = dir === 'long' ? Math.min(p, e9) : Math.max(p, e9); entryType = 'LIMIT @ EMA9'; } const entry = plannedEntry; if (Math.abs(entry - stop) > 1.5 * a4) { stop = dir === 'long' ? entry - 1.5 * a4 : entry + 1.5 * a4; entryType += ' · ATR-capped stop'; } const risk = Math.abs(entry-stop); if (!(risk>0)) return; const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='long' ? entry+expectedMove : entry-expectedMove; const t2 = dir==='long' ? entry+maxExcursion : entry-maxExcursion; const dynamicRR = expectedMove/risk; if (!(dynamicRR>=2)) return; const ev = cusumLast(c.slice(-120), 1); if (ev && ev.barsAgo<=20 && ev.dir!==dir) return; found++; let momDetail = 'n/a'; try{ const nEw = c.length; if (nEw>=40){ const bbW = bollinger(c,20,2); const priorWw = bbW.widthPct.slice(Math.max(0,nEw-50), nEw-1).filter(function(v){return isFinite(v);}); const wAvgW = priorWw.length ? priorWw.reduce(function(a,b){return a+b;},0)/priorWw.length : NaN; const wantW = dir==='long' ? 1 : -1; const bbBreakW = (wantW>0 ? c[nEw-1]>bbW.upper[nEw-1] : c[nEw-1]<bbW.lower[nEw-1]) && isFinite(wAvgW) && bbW.widthPct[nEw-2]<=wAvgW; const adxW = adx(rows,14); const adxAlignedW = adxW.adx[nEw-1]>=20 && (wantW>0 ? adxW.plusDI[nEw-1]>adxW.minusDI[nEw-1] : adxW.minusDI[nEw-1]>adxW.plusDI[nEw-1]); const srsiW = stochRsi(c,14,14); const srsiOkW = isFinite(srsiW[nEw-1]) && (wantW>0 ? srsiW[nEw-1]<80 : srsiW[nEw-1]>20); const votesW = (bbBreakW?1:0)+(adxAlignedW?1:0)+(srsiOkW?1:0); momDetail = votesW+'/3 (BB '+(bbBreakW?'ok':'x')+' ADX '+(adxAlignedW?'ok':'x')+' StochRSI '+(srsiOkW?'ok':'x')+')'; } }catch(e){} cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [ ['mark',px(t.mark||p)],['order',entryType==='MARKET'?'market':'limit @ EMA9'],['24h',t.chg24!==null?pct(t.chg24,2):'-'], ['RSI 4H',fmt(r14,1)],['vol z',fmt(vz,2)], ['funding',t.fundingPct!==null?fmt(t.fundingPct,4)+'%':'n/a'],['ann.',t.fundingPct!==null?fmt(t.fundingPct*3*365,1)+'%':'-'], ['dyn R:R',fmt(dynamicRR,2)+'R vol-capped'],['turnover',t.turnoverUsd?('$'+fmt(t.turnoverUsd,0)):'-'],['context: momentum',momDetail],['Nearest OB',nearestOBText(rows,dir)],['Liquidity Target',liquidityTargetText(rows,dir)], ], ['G1 cascade+spread','G2 HTF side','G3 RSI ok','G4 funding','G5 vol+wick','G6 R:R>=2','G7 CUSUM'+(ev&&ev.barsAgo<=20?' ok':' n/a')], planBlock(dir,entry,stop,t1,t2), entry, stop, t1, 'hgc-swing-'+String(t.symbol).replace(/[^A-Za-z0-9]/g,''))); if (typeof hgMiniChart === 'function') hgMiniChart($('hgc-swing-'+String(t.symbol).replace(/[^A-Za-z0-9]/g,'')), rows, {dir:dir, entry:entry, stop:stop, t1:t1, t2:t2}); logSetup(t.symbol, dir, 'swing', entry, stop, t1); } else { const h1 = await getCandles(t.symbol,'1h',120); if (h1.length<60) return; const c1=h1.map(r=>r.c); const e9h=last(ema(c1,9)), e21h=last(ema(c1,21)), e50h=last(ema(c1,50)); let dir=null; if (e9h>e21h&&e21h>e50h) dir='long'; else if (e9h<e21h&&e21h<e50h) dir='short'; if (!dir) return; const m15 = await getCandles(t.symbol,'15m',160); if (m15.length<60) return; const c15=m15.map(r=>r.c); const e9a=ema(c15,9), e21a=ema(c15,21); const n=c15.length; const priorWin = m15.slice(n-24, n-7); const localLow = Math.min(...priorWin.map(r=>r.l)); const localHigh = Math.max(...priorWin.map(r=>r.h)); const recentWin = m15.slice(n-7, n-1); const sweptLiquidity = dir === 'long' ? Math.min(...recentWin.map(r=>r.l)) < localLow : Math.max(...recentWin.map(r=>r.h)) > localHigh; const reclaimed = dir === 'long' ? (c15[n-1] > e9a[n-1] && e9a[n-1] > e21a[n-1]) : (c15[n-1] < e9a[n-1] && e9a[n-1] < e21a[n-1]); const pullbackHold = (dir === 'long' ? (m15[n-1].l <= e21a[n-1] && c15[n-1] > e21a[n-1]) : (m15[n-1].h >= e21a[n-1] && c15[n-1] < e21a[n-1])) && reclaimed; if (!(sweptLiquidity && reclaimed) && !pullbackHold) return; const r15=last(rsi(c15,14)); if (dir==='long' ? !(r15>=40&&r15<=65) : !(r15>=35&&r15<=60)) return; if (t.fundingPct!==null){ const fr=t.fundingPct; if (Math.abs(fr)>0.05-1e-9) return; if ((dir==='long'&&fr>=0.04)||(dir==='short'&&fr<=-0.04)) return; } if (minsToFunding<25) return; const atrArr = atr(m15,14); const a = last(atrArr); const base = atrArr.slice(-96).filter(isFinite).sort((x,y)=>x-y); const aMed = base.length ? base[Math.floor(base.length/2)] : NaN; if (!(isFinite(a) && isFinite(aMed) && a >= 0.8*aMed)) return; const vz = volZ(m15,20); const currentBar = m15[m15.length-1]; const range = currentBar.h - currentBar.l; const closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5; const closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40; const _rA = rsi(c15,14); const _rL = _rA[_rA.length-1]; const _rP = _rA[_rA.length-4]; const slopeOK = (isFinite(_rL) && isFinite(_rP)) ? (dir === 'long' ? _rL > _rP : _rL < _rP) : false; if (!((vz > 0.5) || (closeOK && slopeOK))) return; if (!closeOK) return; const entry = c15[n-1]; const stop = (sweptLiquidity && reclaimed) ? (dir === 'long' ? localLow - (a * 0.25) : localHigh + (a * 0.25)) : (dir === 'long' ? Math.min(...m15.slice(n-8, n-1).map(r=>r.l)) - (a * 0.25) : Math.max(...m15.slice(n-8, n-1).map(r=>r.h)) + (a * 0.25)); const risk = Math.abs(entry - stop); if (!(risk > 0)) return; const expectedMove = a * 2.5; const t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove; const t2 = dir === 'long' ? entry + (a * 4) : entry - (a * 4); const dynamicRR = expectedMove / risk; if (!(dynamicRR >= 1.5)) return; found++; let momDetailS = 'n/a'; try{ const nEs = c15.length; if (nEs>=40){ const bbS = bollinger(c15,20,2); const priorWs = bbS.widthPct.slice(Math.max(0,nEs-50), nEs-1).filter(function(v){return isFinite(v);}); const wAvgS = priorWs.length ? priorWs.reduce(function(a,b){return a+b;},0)/priorWs.length : NaN; const wantS = dir==='long' ? 1 : -1; const bbBreakS = (wantS>0 ? c15[nEs-1]>bbS.upper[nEs-1] : c15[nEs-1]<bbS.lower[nEs-1]) && isFinite(wAvgS) && bbS.widthPct[nEs-2]<=wAvgS; const adxS = adx(m15,14); const adxAlignedS = adxS.adx[nEs-1]>=20 && (wantS>0 ? adxS.plusDI[nEs-1]>adxS.minusDI[nEs-1] : adxS.minusDI[nEs-1]>adxS.plusDI[nEs-1]); const srsiS = stochRsi(c15,14,14); const srsiOkS = isFinite(srsiS[nEs-1]) && (wantS>0 ? srsiS[nEs-1]<80 : srsiS[nEs-1]>20); const votesS = (bbBreakS?1:0)+(adxAlignedS?1:0)+(srsiOkS?1:0); momDetailS = votesS+'/3 (BB '+(bbBreakS?'ok':'x')+' ADX '+(adxAlignedS?'ok':'x')+' StochRSI '+(srsiOkS?'ok':'x')+')'; } }catch(e){} cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [ ['mark',px(t.mark||entry)],['1H trend',dir.toUpperCase()], ['RSI 15m',fmt(r15,1)],['ATR 15m',px(a)],['dyn R:R',fmt(dynamicRR,2)+'R vol-capped'], ['funding',t.fundingPct!==null?fmt(t.fundingPct,4)+'%':'n/a'],['to settle',fmt(minsToFunding,0)+'m'],['context: momentum',momDetailS],['Nearest OB',nearestOBText(m15,dir)],['Liquidity Target',liquidityTargetText(m15,dir)], ], ['G1 1H trend','G2 sweep+reclaim / EMA21 hold','G3 RSI band','G4 funding','G5 settle>25m','G6 vol+wick commit','G7 1.5R vol-capped'], planBlock(dir,entry,stop,t1,t2,'time-stop: exit within 24h'), entry, stop, t1, 'hgc-scalp-'+String(t.symbol).replace(/[^A-Za-z0-9]/g,''))); if (typeof hgMiniChart === 'function') hgMiniChart($('hgc-scalp-'+String(t.symbol).replace(/[^A-Za-z0-9]/g,'')), m15, {dir:dir, entry:entry, stop:stop, t1:t1, t2:t2}); logSetup(t.symbol, dir, 'scalp', entry, stop, t1); } }catch(e){ } })); await sleep(150); } statEl.textContent = `done - ${found} CLEAN / ${uni.length} scanned (${universeLabel})`; try{ localStorage.setItem('hg_scanlast_'+kind, JSON.stringify({at: Date.now(), stat: statEl.textContent})); }catch(e){}
-    if (!found){ emptyEl.textContent=(isSwing?'No CLEAN swing setups. Standing aside is a position.':'No CLEAN scalp triggers right now.'); emptyEl.style.display='block'; }
+    let found = 0;
+    const t0scan = Date.now();
+    const CHUNK_SIZE = 5;
+    for (let ci = 0; ci < uni.length; ci += CHUNK_SIZE){
+      const chunk = uni.slice(ci, ci + CHUNK_SIZE);
+      await Promise.all(chunk.map(async function(t, idxInChunk){
+        const i = ci + idxInChunk;
+        setProg(isSwing ? 'swingProg' : 'scalpProg', (i + 1) / uni.length);
+        statEl.textContent = 'scanning ' + (i + 1) + '/' + uni.length + ' - ' + t.symbol + ' · ' + Math.floor((Date.now() - t0scan) / 1000) + 's';
+        try{
+          if (isSwing){
+            if (typeof swingTryClean !== 'function') return;
+            const rows = await getCandles(t.symbol, '4h', 260);
+            const hit = swingTryClean(rows, t);
+            if (!hit) return;
+            found++;
+            cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
+            renderSwingCleanCard(t, hit, cardsEl, quiet);
+          } else {
+            if (typeof scalpTryClean !== 'function') return;
+            const h1 = await getCandles(t.symbol, '1h', 120);
+            const m15 = await getCandles(t.symbol, '15m', 160);
+            const hit = scalpTryClean(h1, m15, t, minsToFunding);
+            if (!hit) return;
+            found++;
+            cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
+            renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet);
+          }
+        }catch(e){}
+      }));
+      await sleep(150);
+    }
+    statEl.textContent = 'done - ' + found + ' CLEAN / ' + uni.length + ' scanned (' + universeLabel + ')';
+    try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
+    const snap = { at: Date.now(), cands: cands, stat: statEl.textContent };
+    if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
+    if (!quiet && !found){
+      emptyEl.textContent = isSwing ? 'No CLEAN swing setups. Standing aside is a position.' : 'No CLEAN scalp triggers right now.';
+      emptyEl.style.display = 'block';
+    }
+    if (!quiet && newsGate.caution){
+      const nb = (typeof cryptoNewsBannerHTML === 'function') ? cryptoNewsBannerHTML(newsGate) : '';
+      if (nb) cardsEl.insertAdjacentHTML('afterbegin', nb);
+    }
+    try{ await refreshCryptoWatch(kind, uni, cands.map(function(c){ return c.sym; }), { quiet: quiet }); }catch(e){ console.warn('crypto watch', e); }
   }catch(e){
-    statEl.textContent = `scan failed: ${e.message}`;
-  }finally{ setProg(isSwing?'swingProg':'scalpProg',null); btn.disabled=false; }
+    statEl.textContent = 'scan failed: ' + e.message;
+  }finally{
+    if (!quiet) setProg(isSwing ? 'swingProg' : 'scalpProg', null);
+    if (!quiet) btn.disabled = false;
+  }
 }
+
+
+/* Quiet background scans for the 15-min Telegram alert cycle — no UI churn. */
+async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
+  const quiet = !!(opts && opts.quiet);
+  const elId = kind === 'swing' ? 'swingWatch' : 'scalpWatch';
+  const el = $(elId);
+  if (!el || typeof swingWatchEval !== 'function' || typeof cryptoFormingNowHTML !== 'function') return;
+  if (typeof cryptoWatchInjectStyles === 'function') cryptoWatchInjectStyles();
+  const clean = {};
+  (cleanSyms || []).forEach(function(s){ clean[s] = true; });
+  let items = [];
+  const maxN = quiet ? 10 : 18;
+  const slice = (uni || []).slice(0, maxN);
+  const minsToFunding = kind === 'scalp' ? tickClock() : 0;
+  for (let i = 0; i < slice.length; i++){
+    const t = slice[i];
+    if (!t || clean[t.symbol]) continue;
+    try{
+      if (kind === 'swing'){
+        const rows = await getCandles(t.symbol, '4h', 260);
+        const w = swingWatchEval(rows, t);
+        if (w) items.push(w);
+      } else {
+        const h1 = await getCandles(t.symbol, '1h', 120);
+        const m15 = await getCandles(t.symbol, '15m', 160);
+        const w = scalpWatchEval(h1, m15, t, minsToFunding);
+        if (w) items.push(w);
+      }
+    }catch(e){}
+    if (i % 4 === 3) await sleep(quiet ? 60 : 100);
+  }
+  if (kind === 'swing' && typeof coilWatchItems === 'function'){
+    const cw = typeof loadCoilWatch === 'function' ? loadCoilWatch() : null;
+    if (cw && cw.ex === S.exchange && cw.list && cw.list.length) items = coilWatchItems(cw).concat(items);
+  }
+  items.sort(function(a,b){
+    const sa = a.state === 'armed' ? 0 : 1, sb = b.state === 'armed' ? 0 : 1;
+    return sa - sb || (b.gatesPassed || 0) - (a.gatesPassed || 0);
+  });
+  el.innerHTML = cryptoFormingNowHTML(items);
+  window.__hgCryptoWatch = window.__hgCryptoWatch || {};
+  window.__hgCryptoWatch[kind] = { at: Date.now(), items: items };
+}
+
+async function cryptoScanWarm(kind){
+  try{ await runScan(kind, { quiet: true }); return 'warmed'; }
+  catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
+}
+async function runTabAlertScans(){
+  try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
+  try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
+  try{ if (typeof gsWarm === 'function') await gsWarm(); }catch(e){ console.warn('tab alert gold scalp', e); }
+  try{ if (typeof gwWarm === 'function') await gwWarm(); }catch(e){ console.warn('tab alert gold swing', e); }
+}
+
+/* EDGE tab — quiet universe scan every 15 min; Telegram when a setup is new
+   (15-min dedup per sym:dir@entry via tabalerts.js hg_tabalert_keys). */
+async function runEdgeAlertCycle(){
+  const now = Date.now();
+  if (S.lastEdgeAlertCheck && now - S.lastEdgeAlertCheck < HG_EDGE_ALERT_MS) return;
+  if (S.edgeAlertBusy || S.alertBusy || isManualScanBusy()) return;
+  S.edgeAlertBusy = true;
+  try{
+    if (typeof edgeWarm === 'function') await edgeWarm({ force: true, quiet: true });
+    if (typeof hgTabAlertsRunEdge === 'function'){
+      await hgTabAlertsRunEdge();
+    }else if (typeof hgTabAlertsRun === 'function'){
+      await hgTabAlertsRun({ sources: { edge: true } });
+    }
+    S.lastEdgeAlertCheck = now;
+  }catch(e){ console.warn('edge alert cycle', e); }
+  finally{ S.edgeAlertBusy = false; }
+}
+window.runEdgeAlertCycle = runEdgeAlertCycle;
 
 /* =========================================================================
    TRADE PLAN — sizing, liquidation clearance, ticket. No execution here.
    ========================================================================= */
-function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return NaN; const ma=a.slice(0,n).reduce(function(x,y){return x+y;},0)/n; const mb=b.slice(0,n).reduce(function(x,y){return x+y;},0)/n; let num=0,da=0,db=0; for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; } const den=Math.sqrt(da*db); return den>0?num/den:NaN; } async function updatePortfolioHeat(sym,dir){ const elRow=$('portfolioHeatRow'); if(!elRow) return; try{ const base=(sym||'').replace(/USD$/,'').replace(/^B-/,'').replace(/_USDT$/,''); if(base==='BTC'){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">n/a (BTC itself)</span>'; return; } const btcSym = S.exchange==='delta' ? 'BTCUSD' : 'B-BTC_USDT'; const rowsSym = await getCandles(sym,'1d',31); const rowsBtc = await getCandles(btcSym,'1d',31); if(rowsSym.length<25||rowsBtc.length<25){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">not enough history</span>'; return; } const n=Math.min(rowsSym.length,rowsBtc.length); const rs=rowsSym.slice(-n), rb=rowsBtc.slice(-n); const retA=[],retB=[]; for(let i=1;i<n;i++){ retA.push(rs[i].c/rs[i-1].c-1); retB.push(rb[i].c/rb[i-1].c-1); } const r=pearsonCorr(retA,retB); const openLog=loadLog().filter(function(e){return e.status==='open';}); const btcOpen=openLog.find(function(e){return e.sym===btcSym;}); const highCorr=isFinite(r)&&r>0.75; let warn=''; if(highCorr&&btcOpen&&btcOpen.dir===dir){ warn=' <b style="color:var(--gold)">— taking this stacks beta, consider adjusting risk or standing aside</b>'; } elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">r='+(isFinite(r)?r.toFixed(2):'n/a')+' vs BTC 30d'+warn+'</span>'; }catch(e){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">check failed</span>'; } } function executeTrade(plan){ if (!plan || plan.vetoed){ alert('Cannot execute a vetoed plan.'); return; } if (!EXECUTE_BACKEND_URL || EXECUTE_BACKEND_URL.indexOf('your-secure-backend.com')>=0){ alert('EXECUTE_BACKEND_URL is still a placeholder — set it to your real delta-trader.ts endpoint before this button can do anything.'); return; } const payload = { symbol: plan.sym, side: plan.side, qty: plan.qty, leverage: plan.lev, bracket: { stop: plan.stop, takeProfit: plan.t1 }, timestamp: nowSec() }; if (!confirm('Send this bracket to '+EXECUTE_BACKEND_URL+'? '+JSON.stringify(payload,null,2))) return; fetch(EXECUTE_BACKEND_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); alert('Bracket sent.'); }).catch(function(e){ alert('Execution request failed: '+e.message); }); }  async function pullMark(){
+function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return NaN; const ma=a.slice(0,n).reduce(function(x,y){return x+y;},0)/n; const mb=b.slice(0,n).reduce(function(x,y){return x+y;},0)/n; let num=0,da=0,db=0; for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; } const den=Math.sqrt(da*db); return den>0?num/den:NaN; } async function updatePortfolioHeat(sym,dir){ const elRow=$('portfolioHeatRow'); if(!elRow) return; try{ const base=(sym||'').replace(/USD$/,'').replace(/^B-/,'').replace(/_USDT$/,''); if(base==='BTC'){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">n/a (BTC itself)</span>'; return; } const btcSym = S.exchange==='delta' ? 'BTCUSD' : 'B-BTC_USDT'; const rowsSym = await getCandles(sym,'1d',31); const rowsBtc = await getCandles(btcSym,'1d',31); if(rowsSym.length<25||rowsBtc.length<25){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">not enough history</span>'; return; } const n=Math.min(rowsSym.length,rowsBtc.length); const rs=rowsSym.slice(-n), rb=rowsBtc.slice(-n); const retA=[],retB=[]; for(let i=1;i<n;i++){ retA.push(rs[i].c/rs[i-1].c-1); retB.push(rb[i].c/rb[i-1].c-1); } const r=pearsonCorr(retA,retB); const openLog=loadLog().filter(function(e){return e.status==='open';}); const btcOpen=openLog.find(function(e){return e.sym===btcSym;}); const highCorr=isFinite(r)&&r>0.75; let warn=''; if(highCorr&&btcOpen&&btcOpen.dir===dir){ warn=' <b style="color:var(--gold)">— taking this stacks beta, consider adjusting risk or standing aside</b>'; } elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">r='+(isFinite(r)?r.toFixed(2):'n/a')+' vs BTC 30d'+warn+'</span>'; }catch(e){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">check failed</span>'; } } async function pullMark(){
   const sym=($('tSym').value||'').trim(); if(!sym) return;
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
@@ -2429,6 +2849,7 @@ function planTrade(){
   const liqDist = Math.abs(entry-liq)/entry;
   const clearance = liqDist/stopDist; // want ≥ 1.5×
   const t1 = $('tT1').value ? +$('tT1').value : (side==='long'?entry+2*riskUnit:entry-2*riskUnit);
+  const t2 = $('tT2').value ? +$('tT2').value : (side==='long'?entry+3*riskUnit:entry-3*riskUnit);
   const rr = Math.abs(t1-entry)/riskUnit;
 
   const g=[];
@@ -2448,7 +2869,7 @@ stop      ${px(stop)}   (structural, isolated, auto top-up OFF)
 size      ${fmt(qty,6)} @ ${lev}x  →  notional $${fmt(notional,2)}, margin $${fmt(margin,2)}
 risk      $${fmt(riskUsd,2)}  (${riskPct}% of equity)  ·  1R = ${px(riskUnit)}
 T1        ${px(t1)}  →  close ${scaleOut}%, stop to breakeven
-runner    trail remainder behind structure toward ${px(side==='long'?entry+3*riskUnit:entry-3*riskUnit)} (3R)
+T2        ${px(t2)}  →  runner trail (defaults to 3R when blank)
 liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
 
   out.innerHTML = `
@@ -2459,7 +2880,13 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     </div>
     <hr class="sep">
     <div class="ticket" id="ticketTxt">${ticket}</div>
-    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); if(!vet){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',vetoed:false})">EXECUTE BRACKET</button>'); }
+    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side);
+  if (!vet && typeof bookBtnHTML === 'function'){
+    var symVal = $('tSym').value || '';
+    var bookBtn = bookBtnHTML(symVal, side, entry, stop, t1, { scanner: 'trade-plan', strategy: 'trade-plan', t2: t2 });
+    if (bookBtn) out.insertAdjacentHTML('beforeend', '<div style="margin-top:8px">' + bookBtn + '</div>');
+  }
+  if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
 }
 
 /* =============================================================================
@@ -2556,7 +2983,8 @@ async function runGold(){
         gsPlan = {dir:casc, entry:entry, stop:stop, t1:t1, t2:t2};
         swingPlanHtml = `<div class="plan">${planBlock(casc,entry,stop,t1,t2)}</div>
           <div class="hgchart" id="goldSwingChart"></div>
-          <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop})">SEND TO TRADE PLAN →</button>`;
+          <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop},${t1})">SEND TO TRADE PLAN →</button>`
+          + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-swing', strategy: 'gold-swing', klass: 'metals', fund: 'gold', t2: t2 });
       }
     } else {
       sg.push(['GS7','Structural R:R ≥ 2','na','no direction to measure']);
@@ -2627,9 +3055,11 @@ async function runGold(){
           risk>0&&isFinite(room)?`room ${px(room)} vs 2R ${px(2*risk)} (pool ${px(oppo)})`:'—']);
         if (!g.some(x=>x[2]==='veto')){
           const t1=dir==='long'?lastClose+2*risk:lastClose-2*risk;
+          const t2=isFinite(oppo)?oppo:(dir==='long'?lastClose+3*risk:lastClose-3*risk);
           logSetup(GOLD_SYM, dir, 'gold-scalp', lastClose, stop, t1);
           planHtml=`<div class="plan">${planBlock(dir,lastClose,stop,t1,oppo)}</div>
-            <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop})">SEND TO TRADE PLAN →</button>`;
+            <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop},${t1})">SEND TO TRADE PLAN →</button>`
+            + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { scanner: 'gold-scalp', strategy: 'gold-scalp', klass: 'metals', fund: 'gold', t2: t2 });
         }
       } else {
         g.push(['GC6','2R fits before the opposite pool','na','needs a completed sweep + reclaim first']);
@@ -2942,7 +3372,8 @@ async function runGoldDeep(){
       swingPlanHtml='<div class="plan">'+planBlock(casc,entry,stop,t1,t2||t1)+'</div>';
       if(score>=60){
         logSetup(GOLD_SYM,casc,'gold-deep-swing',entry,stop,t1);
-        swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+')">SEND TO TRADE PLAN →</button>';
+        swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')">SEND TO TRADE PLAN →</button>';
+        swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-deep-swing', strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold', t2: t2 });
       }
     }
     setProg('goldDeepProg',0.6);
@@ -3036,7 +3467,8 @@ async function runGoldDeep(){
         planHtml='<div class="plan">'+planBlock(dir,scalpEntry,scalpStop,scalpT1,scalpT2||scalpT1)+'</div>';
         if(scoreC>=50&&swept&&reclaimed){
           logSetup(GOLD_SYM,dir,'gold-deep-scalp',scalpEntry,scalpStop,scalpT1);
-          planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+')">SEND TO TRADE PLAN →</button>';
+          planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')">SEND TO TRADE PLAN →</button>';
+          planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold', t2: scalpT2 });
         }
       }
       return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
@@ -3058,9 +3490,12 @@ async function runGoldDeep(){
         if(breakDir){
           const bRisk=Math.abs(priceNow-bbMid);
           const bT1=breakDir==='long'?priceNow+2*bRisk:priceNow-2*bRisk;
+          const bT2=breakDir==='long'?priceNow+3*bRisk:priceNow-3*bRisk;
           breakoutHtml='<div class="panel"><h2>Breakout Strategy <span>Bollinger squeeze + ADX expansion</span></h2>'
             +'<div class="note">Squeeze detected. ADX '+fmt(adxVal,1)+'. Price closed outside the band. Momentum expansion play.</div>'
-            +'<div class="plan">'+planBlock(breakDir,priceNow,bbMid,bT1,bT1)+'</div></div>';
+            +'<div class="plan">'+planBlock(breakDir,priceNow,bbMid,bT1,bT2)+'</div>'
+            +hgBookBtn(GOLD_SYM, breakDir, priceNow, bbMid, bT1, { scanner: 'gold-breakout', strategy: 'gold-breakout', klass: 'metals', fund: 'gold', t2: bT2 })
+            +'</div>';
         }
       }
       const pat=candlePattern(h4);
@@ -3068,9 +3503,12 @@ async function runGoldDeep(){
       if(revDir&&((revDir==='long'&&r4<35)||(revDir==='short'&&r4>65))){
         const mRisk=Math.abs(priceNow-bbMid);
         const mT1=revDir==='long'?priceNow+1.5*mRisk:priceNow-1.5*mRisk;
+        const mT2=revDir==='long'?priceNow+3*mRisk:priceNow-3*mRisk;
         meanRevHtml='<div class="panel"><h2>Mean Reversion <span>band touch + reversal candle + RSI extreme</span></h2>'
           +'<div class="note">Price at band edge. '+(pat.engulfing||'no engulf')+' · '+(pat.pinBar?'pin bar':'no pin')+' · RSI '+fmt(r4,1)+'. Counter-trend scalp.</div>'
-          +'<div class="plan">'+planBlock(revDir,priceNow,bbMid,mT1,mT1)+'</div></div>';
+          +'<div class="plan">'+planBlock(revDir,priceNow,bbMid,mT1,mT2)+'</div>'
+          +hgBookBtn(GOLD_SYM, revDir, priceNow, bbMid, mT1, { scanner: 'gold-meanrev', strategy: 'gold-meanrev', klass: 'metals', fund: 'gold', t2: mT2 })
+          +'</div>';
       }
     }
     /* ================= assemble output ================= */
@@ -3297,6 +3735,7 @@ async function runGoldSetup(){
       + '<div class="gates">' + stampsHtml + '</div>'
       + '<div class="hgchart" id="goldSetupChart"></div>'
       + '<button class="toTrade" onclick="toTrade(\'' + GOLD_SYM + '\',\'' + dir + '\',' + decision.entry + ',' + decision.stop + ',' + decision.t1 + ')">SEND TO TRADE PLAN →</button>'
+      + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { scanner: 'gold-setup', strategy: 'gold-setup', klass: 'metals', fund: 'gold', t2: decision.t2 })
       + '</div>';
     if (typeof hgMiniChart === 'function') hgMiniChart($('goldSetupChart'), h4, { dir: dir, entry: decision.entry, stop: decision.stop, t1: decision.t1, t2: decision.t2 });
     if (stat) stat.textContent = decision.confidence.toLowerCase() + ' ' + dir + ' · closed bars only · ' + new Date().toTimeString().slice(0,5);
@@ -3384,7 +3823,28 @@ function renderLogBadge(){ const b=$('tabB_log'); if(b){ const n=loadLog().lengt
 /* =============================================================================
    BEST — all hard gates first (binary ticket), then rank CLEAN survivors by a
    visible tally of independent aligned confirmations. Never a weighted score.
+   Profit rank: scorecard expectancy boost when ledger has evidence (n≥3).
    ============================================================================= */
+function bestProfitBoost(s){
+  try{
+    if (typeof hgProfitRankHint !== 'function') return 0;
+    var h = hgProfitRankHint({ sym: s.t.symbol, dir: s.dir, lane: 'crypto', rr1: s.rr });
+    return (h && isFinite(h.boost)) ? h.boost : 0;
+  }catch(e){ return 0; }
+}
+function bestSortPool(clean){
+  const strong = clean.filter(s => s.famScore >= 4);
+  return strong.length ? strong : clean;
+}
+function bestSessionActive(){
+  try{
+    const d = new Date();
+    const ist = new Date(d.getTime() + (330 + d.getTimezoneOffset()) * 60000);
+    const mins = ist.getHours() * 60 + ist.getMinutes(), day = ist.getDay();
+    if (day === 0 || (mins >= 60 && mins <= 390)) return false;
+    return (mins >= 750 && mins <= 930) || (mins >= 1050 && mins <= 1230);
+  }catch(e){ return false; }
+}
 async function runCascadeCore(uni){
   const clean=[];
     let breadthBull=0, breadthTotal=0;
@@ -3397,6 +3857,10 @@ async function runCascadeCore(uni){
       try{
         const rows=await getCandles(t.symbol,'4h',260);
         if (rows.length<210) return;
+        if (typeof detectRegime === 'function'){
+          const dr = detectRegime(rows);
+          if (dr && dr.regime === 'compression') return;
+        }
         const c=rows.map(r=>r.c);
         const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50)), e200=last(ema(c,200));
         const p=last(c), r14=last(rsi(c,14)), vz=volZ(rows,20), a4=last(atr(rows,14));
@@ -3457,6 +3921,21 @@ const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='
       const d20 = s.dir==='long' ? Math.max(...s.rows.slice(-20).map(r=>r.h)) : Math.min(...s.rows.slice(-20).map(r=>r.l));
       const mDc = Math.abs(s.entry-d20)/s.entry<=0.015, mRr=s.rr>=3;
       const f4 = mDc||mRr;
+      function pxFmt(n){ return (typeof px === 'function') ? px(n) : Number(n).toFixed(2); }
+      /* F6 SESSION — ICT London/NY kill zones (IST): liquidity depth for fills. */
+      const f6 = bestSessionActive();
+      /* F7 VALUE AREA — 80-bar volume profile: longs from discount VA, shorts from premium VA. */
+      let f7=false, f7Detail='volume profile n/a';
+      try{
+        const vp = (typeof volumeProfile === 'function') ? volumeProfile(s.rows, 80, 24) : null;
+        const pxLast = last(s.rows.map(r=>r.c));
+        if (vp && isFinite(vp.poc) && isFinite(pxLast)){
+          f7 = (want>0 && isFinite(vp.val) && pxLast <= vp.poc && pxLast >= vp.val)
+            || (want<0 && isFinite(vp.vah) && pxLast >= vp.poc && pxLast <= vp.vah);
+          f7Detail = 'POC ' + pxFmt(vp.poc) + ' · VA ' + pxFmt(vp.val) + '–' + pxFmt(vp.vah)
+            + (f7 ? ' · aligned' : ' · not at edge');
+        }
+      }catch(e){}
       /* F5 VOLATILITY/MOMENTUM — members: Bollinger(20,2) squeeze-to-breakout, ADX(14) trend
          strength+direction, StochRSI(14) not-exhausted. Majority 2/3 — grouped as one family
          because all three measure the same underlying fact: is momentum expanding in your
@@ -3499,14 +3978,17 @@ const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='
         ['F3','PARTICIPATION family — volume z > 1.0 or VWAP side', f3, `z ${fmt(s.vz,2)} · ${vwapDetail}`],
         ['F4','STRUCTURE family — Donchian-20 breakout zone or R:R ≥ 3', f4, `Donchian ${mDc?'✓':'✗'} (${px(d20)}) · R:R ${mRr?'✓':'✗'} (${fmt(s.rr,2)}R)`],
         ['F5','VOLATILITY/MOMENTUM family — 2-of-3 majority: Bollinger breakout · ADX trend+direction · StochRSI not-exhausted', f5, f5Detail],
+        ['F6','SESSION family — London/NY ICT kill zone active (IST liquidity window)', f6, f6 ? 'London 12:30–15:30 or NY 17:30–20:30 IST' : 'off-hours / mid-session — thinner liquidity'],
+        ['F7','VALUE AREA family — price at 70% volume-profile edge (discount for longs, premium for shorts)', f7, f7Detail],
         ['R1','ROBUSTNESS — cascade also holds on 2H (anti curve-fit)', r1, r1D],
         ['R2','ROBUSTNESS — cascade age ≥3 closed 4H bars (anti flicker)', r2, `${age} bars`],
       ];
-      s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0);
+      s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0);
       s.robScore=(r1?1:0)+(r2?1:0);
+      s.profitBoost = bestProfitBoost(s);
       await sleep(60);
     }
-    clean.sort((a,b)=> b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
+    clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
   return {clean, breadth:{bull:breadthBull, total:breadthTotal}};
 }
 
@@ -3528,7 +4010,8 @@ async function runBest(){
       out.innerHTML=`<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across the ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
       return;
     }
-    const w=clean[0];
+    const pool = bestSortPool(clean);
+    const w = pool[0];
     const breadthPct = breadth.total>=10 ? (breadth.bull/breadth.total*100) : 50;
     const regimeDir = breadth.total>=10 ? (breadthPct<=20?'bear':(breadthPct>=80?'bull':null)) : null;
     if (regimeDir && ((regimeDir==='bear' && w.dir==='long') || (regimeDir==='bull' && w.dir==='short'))){
@@ -3538,17 +4021,19 @@ async function runBest(){
     }
     const t1=w.t1; const t2=w.t2;
     logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-    const others = clean.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/5 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R`).join('<br>') || 'none';
+    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/7 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+    const famGateNote = pool.length < clean.length ? ' · ≥4/7 families required for #1' : '';
     out.innerHTML = `
       <div class="panel">
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/5 FAMILIES · ${w.robScore}/2 ROBUST</div>
-          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${clean.length} CLEAN setups by independent evidence families, then robustness, then structural R:R. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 5/5 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/7 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (session + value-area included), then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 7/7 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2)}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
+        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 })}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
@@ -3585,7 +4070,16 @@ function isManualScanBusy(){
 
 function updateAlertChip(){
   const el = document.getElementById('alertState');
-  if (el) el.textContent = S.alertsOn ? 'ON' : 'OFF';
+  if (el) el.textContent = (HG_ALERTS_FORCED_ON || S.alertsOn) ? 'ON' : 'OFF';
+}
+
+function armAlertCycle(){
+  S.alertsOn = true;
+  try{ localStorage.setItem('hg_alerts_on', '1'); }catch(e){}
+  updateAlertChip();
+  if (S.alertTimer) clearInterval(S.alertTimer);
+  runAlertCycle();
+  S.alertTimer = setInterval(runAlertCycle, HG_ALERT_CYCLE_MS);
 }
 
 /* ntfy.sh push — free, no signup, CORS *. Topic comes from the header settings
@@ -3618,28 +4112,50 @@ function saveNtfyTopic(){
 }
 
 /* Telegram alerts — the PRIMARY channel (free Bot API, no quota, CORS-open).
-   Config lives in this browser only (hg_tg_token / hg_tg_chat), same trust
-   model as the ntfy topic. Plain-text messages; returns true on delivery,
-   an error string otherwise. Never throws. */
+   Owner defaults below are used when hg_tg_token / hg_tg_chat are unset in
+   this browser; localStorage overrides still win if you SAVE different values.
+   Plain-text messages; returns true on delivery, an error string otherwise.
+   Never throws. */
+const HG_TG_DEFAULT = {
+  token: '8678184060:AAGKhoukjgitAAk8kMzPHRF3WF6U8oXaNcc',
+  chat: '1004014764'
+};
 function tgCreds(){
   let token = null, chat = null;
   try{ token = localStorage.getItem('hg_tg_token'); }catch(e){}
   try{ chat = localStorage.getItem('hg_tg_chat'); }catch(e){}
+  if (!token && HG_TG_DEFAULT.token) token = HG_TG_DEFAULT.token;
+  if (!chat && HG_TG_DEFAULT.chat) chat = HG_TG_DEFAULT.chat;
   return (token && chat) ? { token: token, chat: chat } : null;
 }
 async function sendTelegram(text){
   try{
     const c = tgCreds();
     if (!c) return 'not-configured';
-    const res = await fetch('https://api.telegram.org/bot' + encodeURIComponent(c.token) + '/sendMessage', {
+    /* Token goes in the path raw — encodeURIComponent breaks the colon segment. */
+    const res = await fetch('https://api.telegram.org/bot' + c.token + '/sendMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: c.chat, text: String(text || ''), disable_web_page_preview: true })
     });
-    if (!res || !res.ok) return 'HTTP ' + (res && res.status);
     const j = await res.json().catch(function(){ return null; });
+    if (!res || !res.ok){
+      const desc = (j && j.description) ? String(j.description) : '';
+      return 'HTTP ' + (res && res.status) + (desc ? ' — ' + desc : '');
+    }
     return (j && j.ok) ? true : ('api: ' + JSON.stringify(j).slice(0, 120));
   }catch(e){ return emailErrStr(e); }
+}
+function resetTelegramDefaults(){
+  try{
+    localStorage.removeItem('hg_tg_token');
+    localStorage.removeItem('hg_tg_chat');
+  }catch(e){}
+  try{
+    if ($('tgToken') && HG_TG_DEFAULT.token) $('tgToken').value = HG_TG_DEFAULT.token;
+    if ($('tgChat') && HG_TG_DEFAULT.chat) $('tgChat').value = HG_TG_DEFAULT.chat;
+    if ($('tgStat')) $('tgStat').textContent = 'reset to built-in defaults — hit TEST';
+  }catch(e){}
 }
 function saveTelegram(){
   const t = ($('tgToken').value||'').trim(), c = ($('tgChat').value||'').trim();
@@ -3653,7 +4169,12 @@ async function testTelegram(){
   const stat = $('tgStat');
   if (stat) stat.textContent = 'sending…';
   const r = await sendTelegram('HARDGATE — Telegram alerts connected ✅ (' + new Date().toTimeString().slice(0, 8) + ')');
-  if (stat) stat.textContent = (r === true) ? 'test sent ✓' : ('test failed: ' + r);
+  if (stat){
+    if (r === true) stat.textContent = 'test sent ✓';
+    else if (String(r).indexOf('401') >= 0){
+      stat.textContent = 'test failed: ' + r + ' — token invalid/revoked; get a fresh one from @BotFather → RESET → TEST. For groups: add the bot + send any message first.';
+    } else stat.textContent = 'test failed: ' + r;
+  }
 }
 
 /* One visible line in the setup LOG when an alert email fails — status 'note'
@@ -3811,6 +4332,14 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
+    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; EDGE on its own 15-min clock */
+    try{
+      await runTabAlertScans();
+      await runEdgeAlertCycle();
+      if (typeof hgTabAlertsRun === 'function'){
+        await hgTabAlertsRun({ sources: { swing: true, scalp: true, brain: true, gold: true } });
+      }
+    }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
     S.lastAlertCheck = Date.now();
   } finally {
     S.alertBusy = false;
@@ -3819,12 +4348,12 @@ async function runAlertCycle(){
 }
 
 function toggleAlerts(){
+  if (HG_ALERTS_FORCED_ON){ armAlertCycle(); return; }
   S.alertsOn = !S.alertsOn;
   try{ localStorage.setItem('hg_alerts_on', S.alertsOn ? '1':'0'); }catch(e){}
   updateAlertChip();
   if (S.alertsOn){
-    runAlertCycle();
-    S.alertTimer = setInterval(runAlertCycle, 15*60*1000);
+    armAlertCycle();
   } else {
     if (S.alertTimer) clearInterval(S.alertTimer);
     S.alertTimer = null;
@@ -4038,19 +4567,25 @@ out.innerHTML = '<div class="panel"><h2>'+raw+' <span>'+dHits.length+' Delta Ind
 
 function initAlerts(){
   try{ emailjs.init({publicKey:'TrHdawQ8xirRSOZps'}); }catch(e){}
+  try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
+  try{
+    const tt = localStorage.getItem('hg_tg_token') || (HG_TG_DEFAULT && HG_TG_DEFAULT.token) || '';
+    const tc = localStorage.getItem('hg_tg_chat') || (HG_TG_DEFAULT && HG_TG_DEFAULT.chat) || '';
+    if ($('tgToken')) $('tgToken').value = tt;
+    if ($('tgChat')) $('tgChat').value = tc;
+  }catch(e){}
+  try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
+  if (HG_ALERTS_FORCED_ON){
+    armAlertCycle();
+    try{
+      if (typeof setAutoRefresh === 'function') setAutoRefresh(String(HG_ALERTS_AUTO_REFRESH_MS));
+    }catch(e){}
+    return;
+  }
   let saved = null;
   try{ saved = localStorage.getItem('hg_alerts_on'); }catch(e){}
-  try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
-  try{ const tt = localStorage.getItem('hg_tg_token'); if (tt && $('tgToken')) $('tgToken').value = tt; }catch(e){}
-  try{ const tc = localStorage.getItem('hg_tg_chat'); if (tc && $('tgChat')) $('tgChat').value = tc; }catch(e){}
-  try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
   updateAlertChip();
-  if (saved === '1'){
-    S.alertsOn = true;
-    updateAlertChip();
-    runAlertCycle();
-    S.alertTimer = setInterval(runAlertCycle, 15*60*1000);
-  }
+  if (saved === '1') armAlertCycle();
 }
 
 
@@ -4588,14 +5123,40 @@ async function evalGoldSwing(){
   return {gates:sg, veto, dir:casc!=='mixed'?casc:null, entry, stop, t1, t2};
 }
 
-function renderStrategy(label, result){
+function finderBookMeta(label, assetType){
+  const l = String(label || '').toLowerCase();
+  if (assetType === 'gold' || l.indexOf('gold') >= 0){
+    return { scanner: 'finder-gold', strategy: 'finder-gold', klass: 'metals', fund: 'gold' };
+  }
+  if (l.indexOf('scalp') >= 0) return { scanner: 'finder-scalp', strategy: 'finder-scalp', fund: 'swing' };
+  if (l.indexOf('swing') >= 0) return { scanner: 'finder-swing', strategy: 'finder-swing', fund: 'swing' };
+  if (l.indexOf('judas') >= 0) return { scanner: 'finder-judas', strategy: 'finder-judas', fund: 'swing' };
+  return { scanner: 'finder', strategy: 'finder', fund: 'swing' };
+}
+
+function renderStrategy(label, result, opts){
+  opts = opts || {};
   if (result.error) return `<div class="panel"><h2>${label}</h2><div class="note warn">${result.error}</div></div>`;
   const ledger = result.gates.map(g=>gateRow(...g)).join('');
   const verdict = result.veto ? 'NO TRADE' : (result.dir ? result.dir.toUpperCase()+' VALID' : 'STAND ASIDE');
   const planHtml = (!result.veto && result.dir && result.entry!=null && result.stop!=null && result.t1!=null)
     ? `<div class="plan">${planBlock(result.dir, result.entry, result.stop, result.t1, result.t2||result.t1)}</div>`
     : '';
-  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}</div>`;
+  let bookBtn = '';
+  let tradeBtn = '';
+  const sym = opts.sym;
+  if (!result.veto && result.dir && sym && isFinite(result.entry) && isFinite(result.stop) && isFinite(result.t1)){
+    const meta = finderBookMeta(label, opts.assetType);
+    if (typeof hgBookBtn === 'function'){
+      bookBtn = '<div style="margin-top:8px">' + hgBookBtn(sym, result.dir, result.entry, result.stop, result.t1,
+        Object.assign({}, meta, { t2: result.t2 })) + '</div>';
+    }
+    const t2v = isFinite(result.t2) ? result.t2 : '';
+    tradeBtn = '<button class="toTrade" style="margin-top:8px" onclick="toTrade('
+      + JSON.stringify(sym) + ',' + JSON.stringify(result.dir) + ',' + result.entry + ',' + result.stop + ',' + result.t1
+      + (t2v !== '' ? ',' + t2v : '') + ')">SEND TO TRADE PLAN →</button>';
+  }
+  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${tradeBtn}${bookBtn}</div>`;
 }
 
 function finderTypeChanged(){
@@ -4614,7 +5175,9 @@ async function runFinder(){
       const d1=await getXAUCandles('1d',60), h1=await getXAUCandles('1h',200), m15=await getXAUCandles('15m',200);
       const jl = judasSweepCheck('long', d1, h1, m15);
       const js = judasSweepCheck('short', d1, h1, m15);
-      out.innerHTML = renderStrategy('GOLD SWING', swing) + renderStrategy('JUDAS SWEEP \u2014 LONG', jl) + renderStrategy('JUDAS SWEEP \u2014 SHORT', js)
+      out.innerHTML = renderStrategy('GOLD SWING', swing, { sym: GOLD_SYM, assetType: 'gold' })
+        + renderStrategy('JUDAS SWEEP \u2014 LONG', jl, { sym: GOLD_SYM, assetType: 'gold' })
+        + renderStrategy('JUDAS SWEEP \u2014 SHORT', js, { sym: GOLD_SYM, assetType: 'gold' })
         + `<div class="row"><button class="btn" id="finderBtRun" onclick="runFinderGoldBacktest()">RUN BACKTEST CONTEXT</button> <button class="btn" id="finderBtX" onclick="btCancel('finder')" style="display:none">CANCEL</button></div><div class="prog" id="finderBtProg"><i></i></div><div id="finderBacktestOut"></div>`;
       stat.textContent = 'evaluated \u00b7 ' + new Date().toTimeString().slice(0,8);
     } else {
@@ -4631,7 +5194,10 @@ async function runFinder(){
       const jl = judasSweepCheck('long', d1, h1, m15);
       const js = judasSweepCheck('short', d1, h1, m15);
       out.innerHTML = `<div class="note">${t.sym} \u00b7 ${t.exch==='delta'?'Delta India':'CoinDCX'} \u00b7 mark ${px(t.mark)}</div>`
-        + renderStrategy('SWING', swing) + renderStrategy('SCALP', scalp) + renderStrategy('JUDAS SWEEP \u2014 LONG', jl) + renderStrategy('JUDAS SWEEP \u2014 SHORT', js)
+        + renderStrategy('SWING', swing, { sym: t.sym, assetType: 'crypto' })
+        + renderStrategy('SCALP', scalp, { sym: t.sym, assetType: 'crypto' })
+        + renderStrategy('JUDAS SWEEP \u2014 LONG', jl, { sym: t.sym, assetType: 'crypto' })
+        + renderStrategy('JUDAS SWEEP \u2014 SHORT', js, { sym: t.sym, assetType: 'crypto' })
         + `<div class="row"><button class="btn" id="finderBtRun" onclick="runFinderCryptoBacktest('${base}')">RUN BACKTEST CONTEXT</button> <button class="btn" id="finderBtX" onclick="btCancel('finder')" style="display:none">CANCEL</button></div><div class="prog" id="finderBtProg"><i></i></div><div id="finderBacktestOut"></div>`;
       stat.textContent = 'evaluated \u00b7 closed bars only \u00b7 ' + new Date().toTimeString().slice(0,8);
     }
@@ -4970,12 +5536,24 @@ function setAutoRefresh(v){
 }
 function hgAutoInit(){
   try{
+    if (HG_ALERTS_FORCED_ON && typeof setAutoRefresh === 'function'){
+      setAutoRefresh(String(HG_ALERTS_AUTO_REFRESH_MS));
+      return;
+    }
     let saved = null;
     try{
       if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.getItem === 'function')
         saved = localStorage.getItem(HG_AUTO_KEY);
     }catch(e){}
     setAutoRefresh(typeof saved === 'string' ? saved : 'off');  /* garbage values degrade to OFF */
+  }catch(e){}
+}
+function toggleHeaderDrawer(){
+  try{
+    const d = $('headerDrawer'), b = $('headerMenuBtn');
+    if (!d) return;
+    const open = d.classList.toggle('open');
+    if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
   }catch(e){}
 }
 hgAutoInit();
@@ -5035,6 +5613,14 @@ function hgBootNav(){
   if (first) showTab(first);
 }
 hgBootNav();
+
+/* Background BRAIN layer warm — bounded, non-blocking; layers land in their
+   own time (engine gate scan may continue after the cap). */
+try{
+  if (typeof hgBrainAutoWarm === 'function'){
+    setTimeout(function(){ hgBrainAutoWarm().catch(function(){}); }, 800);
+  }
+}catch(e){}
 
 function saveTdKey(){
   const v = ($('tdKeyInput').value||'').trim();

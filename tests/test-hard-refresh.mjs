@@ -183,8 +183,8 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 
 /* ---------------- 1b. nav wiring: group membership ---------------- */
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
-assert(groupTabs('overview') === 'brain,execute,bias,regime,trendmx,rotation,news',
-  'OVERVIEW group gains brain first, rotation after trendmx');
+assert(groupTabs('overview') === 'brain,book,startrader,execute,bias,regime,trendmx,rotation,news',
+  'OVERVIEW group gains book after brain');
 assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,onchain,coil,apex,trap,smc,ob,div',
   'CRYPTO group gains onchain after liqs');
 assert(groupTabs('gold') === 'gold,goldpro,goldspot,goldscalp,goldswing,signallog',
@@ -294,10 +294,10 @@ const iBright = html.indexOf('<link rel="stylesheet" href="bright.css">');
 assert(iStyleEnd !== -1 && iBright !== -1 && iStyleEnd < iBright && iBright < html.indexOf('</head>'),
   'bright.css <link> lands after the inline </style> block, inside <head>');
 const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
-assert(/HG_CACHE\s*=\s*'hg-v11'/.test(swSrc), 'service worker cache name bumped to hg-v11 (clients pick up the new shell)');
+assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(swSrc), 'service worker cache name is hg-vN (clients pick up the new shell)');
 assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
 
-/* ---------------- 6. auto-refresh control: header placement + OFF default ---------------- */
+/* ---------------- 6. auto-refresh control: forced 3m when alerts hard-armed ---------------- */
 const iHrdBtn = html.indexOf('id="hardRefreshBtn"');
 const iAuto = html.indexOf('id="autoRefreshCtl"');
 const iHrdStat = html.indexOf('id="hardRefreshStat"');
@@ -309,11 +309,12 @@ assert(iHrdStat !== -1 && iAuto < iHrdStat,
   assert(html.indexOf('id="' + id + '"') !== -1, 'header contains #' + id);
 });
 const autoCount = documentStub.getElementById('autoRefreshCount');
-assert(run('HG_AUTO_MS') === 0, 'auto refresh defaults to OFF (HG_AUTO_MS 0) with no saved choice');
-assert(run("document.getElementById('autoRefOff').classList.contains('on')") === true,
-  'OFF segment is painted active by default');
-assert(autoCount.style.display === 'none', 'countdown chip hidden while OFF');
-assert(run('HG_AUTO_TIMER') === null, 'no interval lives while OFF');
+assert(run('HG_AUTO_MS') === 180000 && storeMem.get('hgAutoRefresh') === '180000',
+  'auto refresh defaults to 3m (HG_ALERTS_FORCED_ON) after hgAutoInit on load');
+assert(run("document.getElementById('autoRef180000').classList.contains('on')") === true,
+  '3m segment is painted active by default when forced-on');
+assert(autoCount.style.display !== 'none', 'countdown chip visible while forced 3m');
+assert(run('HG_AUTO_TIMER !== null') === true, 'interval lives while forced 3m');
 
 /* ---------------- 7. choice → interval mapping + persistence ---------------- */
 run("setAutoRefresh('120000')");
@@ -348,8 +349,8 @@ assert(run("document.getElementById('autoRef180000').classList.contains('on')") 
   'restored segment painted active');
 storeMem.set('hgAutoRefresh', 'garbage');
 run('hgAutoInit()');
-assert(run('HG_AUTO_MS') === 0 && run('HG_AUTO_TIMER') === null,
-  'corrupt saved value restores as OFF without throwing');
+assert(run('HG_AUTO_MS') === 180000 && run('HG_AUTO_TIMER !== null') === true,
+  'corrupt saved value still forces 3m when HG_ALERTS_FORCED_ON');
 storeMem.delete('hgAutoRefresh');
 
 /* ---------------- 9. scheduled fire → the EXISTING hardRefreshAll ---------------- */

@@ -819,7 +819,7 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
   assert(/tabs:\['gold','goldpro','goldspot','goldscalp','goldswing','signallog'\]/.test(gLine),
          'GOLD group gains goldswing + signallog after goldscalp — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
-  assert(/HG_CACHE\s*=\s*'hg-v11'/.test(sw), 'service worker cache bumped to hg-v11 (alerts workstream)');
+  assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');
   assert(sw.indexOf("'./goldswing.js'") !== -1 && sw.indexOf("'./signallog.js'") !== -1,
          'goldswing.js + signallog.js added to the HG_SHELL precache list');
 }

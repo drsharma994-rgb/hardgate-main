@@ -702,6 +702,11 @@ function evaluate(){
                scalpLive: gc.scalpLive, swingLive: gc.swingLive, armed: __goldArmed };
   st.note = st.chimed.length ? ('chimed: ' + st.chimed.join(', ')) : 'checked — no new alert conditions';
   maybeFamDigest();   /* daily family-record push (21:05-21:35 IST, once/day) */
+  /* live BRAIN/GOLD tab-setup Telegram between 15-min scan cycles */
+  try{
+    var tabLive = gfn('hgTabAlertsCheckLive');
+    if (tabLive) Promise.resolve(tabLive()).catch(function(){});
+  }catch(e){}
   renderUI();
   return st;
 }
@@ -710,27 +715,27 @@ function evaluate(){
 var AL_CSS = ''
 + '#hgAlertRoot{position:fixed;right:18px;bottom:18px;z-index:9999;font-family:inherit}'
 + '#hgAlertRoot .hgab-btn{display:block;margin-left:auto;padding:8px 14px;border-radius:20px;'
-+ 'border:1px solid var(--line,#2a2e35);background:var(--panel,#15181d);color:var(--txt,#d7dbe0);'
-+ 'font-size:11px;letter-spacing:.06em;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.35)}'
-+ '#hgAlertRoot .hgab-btn.armed{border-color:rgba(25,227,162,.5);color:#19e3a2}'
-+ '#hgAlertRoot .hgab-btn.waiting{border-color:rgba(255,215,106,.5);color:#ffd76a}'
-+ '#hgAlertRoot .hgab-btn.muted{border-color:rgba(255,107,74,.5);color:#ff6b4a}'
-+ '#hgAlertRoot .hgab-btn.unavailable{color:var(--mut,#8a8f98);cursor:default}'
++ 'border:1px solid var(--line,#E2E8F0);background:var(--panel,#FFFFFF);color:var(--txt,#020617);'
++ 'font-size:11px;letter-spacing:.06em;cursor:pointer;box-shadow:0 8px 24px rgba(15,23,42,.12);transition:transform .15s ease,box-shadow .2s}'
++ '#hgAlertRoot .hgab-btn.armed{border-color:rgba(5,150,105,.45);color:#059669}'
++ '#hgAlertRoot .hgab-btn.waiting{border-color:rgba(201,146,26,.50);color:#C9921A}'
++ '#hgAlertRoot .hgab-btn.muted{border-color:rgba(220,38,38,.45);color:#DC2626}'
++ '#hgAlertRoot .hgab-btn.unavailable{color:var(--mut,#64748B);cursor:default}'
 + '#hgAlertRoot .hgab-panel{position:absolute;right:0;bottom:52px;width:290px;padding:12px 14px;'
-+ 'border-radius:8px;border:1px solid var(--line,#2a2e35);background:var(--panel,#15181d);'
-+ 'color:var(--txt,#d7dbe0);box-shadow:0 8px 28px rgba(0,0,0,.45);font-size:11px}'
++ 'border-radius:12px;border:1px solid var(--line,#E2E8F0);background:var(--panel,#FFFFFF);'
++ 'color:var(--txt,#020617);box-shadow:0 12px 40px rgba(15,23,42,.14);font-size:11px;font-weight:500}'
 + '#hgAlertRoot .hgab-title{font-size:10px;letter-spacing:.18em;font-weight:800;margin-bottom:6px}'
-+ '#hgAlertRoot .hgab-title span{color:var(--mut,#8a8f98);font-weight:400;letter-spacing:.04em}'
++ '#hgAlertRoot .hgab-title span{color:var(--mut,#64748B);font-weight:400;letter-spacing:.04em}'
 + '#hgAlertRoot .hgab-state{margin-bottom:8px;font-weight:700}'
 + '#hgAlertRoot .hgab-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}'
-+ '#hgAlertRoot .hgab-mini{padding:3px 9px;border-radius:4px;border:1px solid var(--line,#2a2e35);'
-+ 'background:transparent;color:var(--txt,#d7dbe0);font-size:10px;letter-spacing:.1em;cursor:pointer}'
-+ '#hgAlertRoot .hgab-lbl{color:var(--mut,#8a8f98);font-size:10px;display:flex;gap:5px;align-items:center}'
-+ '#hgAlertRoot .hgab-lbl input{width:44px;background:var(--bg,#0e1114);color:var(--txt,#d7dbe0);'
-+ 'border:1px solid var(--line,#2a2e35);border-radius:4px;padding:2px 5px;font-size:11px}'
-+ '#hgAlertRoot .hgab-line{color:var(--mut,#8a8f98);margin-top:4px;line-height:1.5}'
-+ '#hgAlertRoot .hgab-note{color:var(--mut,#8a8f98);margin-top:8px;font-size:10px;line-height:1.5;'
-+ 'border-top:1px solid rgba(42,46,53,.5);padding-top:6px}';
++ '#hgAlertRoot .hgab-mini{padding:3px 9px;border-radius:4px;border:1px solid var(--line,#E2E8F0);'
++ 'background:transparent;color:var(--txt,#020617);font-size:10px;letter-spacing:.1em;cursor:pointer;font-weight:600}'
++ '#hgAlertRoot .hgab-lbl{color:var(--mut,#64748B);font-size:10px;display:flex;gap:5px;align-items:center}'
++ '#hgAlertRoot .hgab-lbl input{width:44px;background:var(--ink,#F8FAFC);color:var(--txt,#020617);'
++ 'border:1px solid var(--line,#E2E8F0);border-radius:4px;padding:2px 5px;font-size:11px}'
++ '#hgAlertRoot .hgab-line{color:var(--mut,#64748B);margin-top:4px;line-height:1.5}'
++ '#hgAlertRoot .hgab-note{color:var(--mut,#64748B);margin-top:8px;font-size:10px;line-height:1.5;'
++ 'border-top:1px solid #E2E8F0;padding-top:6px}';
 
 function bellState(){
   if (!audioOk()) return 'unavailable';

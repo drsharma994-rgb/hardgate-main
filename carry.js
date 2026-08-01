@@ -82,6 +82,96 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     return { deltaAPR: deltaAPR, binanceAPR: binanceAPR, spreadAPR: spreadAPR, shortVenue: shortVenue, longVenue: longVenue };
   }
 
+  /* Generalized two-venue carry spread. Rates are percent per print at each
+     venue's own funding interval. Adds aprA/aprB + pair label; legacy
+     deltaAPR/binanceAPR aliases when the pair is delta↔binance. */
+  function carrySpreadPair(rateA, rateB, venueA, venueB, intervalHoursA, intervalHoursB){
+    if (typeof rateA !== 'number' || typeof rateB !== 'number') return null;
+    if (!isFinite(rateA) || !isFinite(rateB)) return null;
+    const aprA = carryAnnualize(rateA, intervalHoursA);
+    const aprB = carryAnnualize(rateB, intervalHoursB);
+    if (aprA === null || aprB === null) return null;
+    const spreadAPR = Math.abs(aprA - aprB);
+    const shortVenue = (aprA >= aprB) ? venueA : venueB;
+    const longVenue = (shortVenue === venueA) ? venueB : venueA;
+    const out = {
+      aprA: aprA, aprB: aprB, spreadAPR: spreadAPR,
+      shortVenue: shortVenue, longVenue: longVenue,
+      venueA: venueA, venueB: venueB, pair: venueA + '-' + venueB
+    };
+    if (venueA === 'delta' && venueB === 'binance'){ out.deltaAPR = aprA; out.binanceAPR = aprB; }
+    else if (venueA === 'binance' && venueB === 'delta'){ out.deltaAPR = aprB; out.binanceAPR = aprA; }
+    else if (venueA === 'bybit' && venueB === 'binance'){ out.bybitAPR = aprA; out.binanceAPR = aprB; }
+    else if (venueA === 'binance' && venueB === 'bybit'){ out.bybitAPR = aprB; out.binanceAPR = aprA; }
+    return out;
+  }
+
+  /* Bybit funding cross-check on an existing Binance↔Delta spread card. */
+  function carryBybitCrossCheck(sp, bybitPct8h){
+    try{
+      if (!sp || typeof bybitPct8h !== 'number' || !isFinite(bybitPct8h)){
+        return { status: 'bybit-dark', bybitAPR: null, note: 'Bybit funding unavailable for cross-check' };
+      }
+      const bybitAPR = carryAnnualize(bybitPct8h, 8);
+      if (bybitAPR === null){
+        return { status: 'bybit-dark', bybitAPR: null, note: 'Bybit funding unavailable for cross-check' };
+      }
+      const binAPR = sp.binanceAPR, delAPR = sp.deltaAPR;
+      if (!isFinite(binAPR) || !isFinite(delAPR)){
+        return { status: 'neutral', bybitAPR: bybitAPR, note: 'Bybit APR ~' + F(bybitAPR, 1) + '%' };
+      }
+      const hi = Math.max(binAPR, delAPR, bybitAPR);
+      const lo = Math.min(binAPR, delAPR, bybitAPR);
+      if (bybitAPR >= hi - 0.01){
+        return { status: 'conflicts', bybitAPR: bybitAPR,
+          note: 'Bybit is the richest leg (~' + F(bybitAPR, 1) + '% APR) — best short may be Bybit, not this card' };
+      }
+      if (bybitAPR <= lo + 0.01){
+        return { status: 'conflicts', bybitAPR: bybitAPR,
+          note: 'Bybit is the cheapest leg (~' + F(bybitAPR, 1) + '% APR) — best long may be Bybit, not this card' };
+      }
+      return { status: 'confirms', bybitAPR: bybitAPR,
+        note: 'Bybit APR ~' + F(bybitAPR, 1) + '% sits between Delta and Binance — spread direction holds' };
+    }catch(e){ return { status: 'bybit-dark', bybitAPR: null, note: 'Bybit cross-check error' }; }
+  }
+
+  function __venueSym(c, venue){
+    if (venue === 'delta') return (c.del && c.del.symbol) ? c.del.symbol : '—';
+    if (venue === 'bybit') return (c.byb && c.byb.symbol) ? c.byb.symbol : ((c.bin && c.bin.symbol) ? c.bin.symbol : '—');
+    return (c.bin && c.bin.symbol) ? c.bin.symbol : '—';
+  }
+
+  function __deskSym(sym){
+    sym = String(sym || '');
+    if (/USDT$/i.test(sym)) return sym.replace(/USDT$/i, 'USD');
+    return sym;
+  }
+
+  function carryBookBtn(c){
+    try{
+      var lv = c && c.levels;
+      if (!lv || typeof bookBtnHTML !== 'function') return '';
+      var hi = c.sp && c.sp.shortVenue;
+      var lo = c.sp && c.sp.longVenue;
+      var sym = __deskSym(__venueSym(c, hi));
+      if (!sym || sym === '—') return '';
+      var entry = lv.entry;
+      var stop = lv.stopShort;
+      var t1 = entry - lv.t1Px;
+      var t2 = isFinite(lv.t2Px) ? entry - lv.t2Px : null;
+      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return '';
+      return bookBtnHTML(sym, 'short', entry, stop, t1, {
+        scanner: 'carry',
+        fund: 'macro',
+        strategy: 'carry',
+        klass: 'macro',
+        venue: hi || 'carry',
+        layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')],
+        t2: t2
+      });
+    }catch(e){ return ''; }
+  }
+
   /* ================== per-card execution levels (SL/TP audit) ==================
      carryPlan({entry, atr, spreadAPR, intervalHours}) -> levels | null.
        ENTRY  : delta-neutral pair at the reference mark (binance leg), equal
@@ -259,23 +349,38 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     ui.empty.style.display = 'none';
     ui.cards.innerHTML = cards.map(function(c){
       const hi = c.sp.shortVenue, lo = c.sp.longVenue;
-      const hiSym = (hi === 'delta') ? c.del.symbol : c.bin.symbol;
-      const loSym = (lo === 'delta') ? c.del.symbol : c.bin.symbol;
-      const ivl = c.bin.intervalHours;                            // binance funding interval (h)
+      const hiSym = __venueSym(c, hi), loSym = __venueSym(c, lo);
+      const pairLbl = (c.pair === 'bin-bybit') ? 'BINANCE↔BYBIT'
+        : (c.pair === 'delta-bybit') ? 'DELTA↔BYBIT'
+        : 'BINANCE↔DELTA';
+      const ivl = c.bin.intervalHours;
       const settleTxt = ivl + 'h settle' + (c.bin.intervalAssumed ? ' (assumed 8h)' : '');
-      const spreadPerDayPct = c.sp.spreadAPR / 365;               // interval-agnostic: spread accrues daily
-      const feeRt = 0.2;                                          // ~0.05%/side/entry × 4 fills
+      const spreadPerDayPct = c.sp.spreadAPR / 365;
+      const feeRt = 0.2;
       const daysToCover = (spreadPerDayPct > 0) ? feeRt/spreadPerDayPct : NaN;
       const mini = [
         ['spread APR', '~' + F(c.sp.spreadAPR, 1) + '%'],
-        ['delta APR (current)', F(c.sp.deltaAPR, 1) + '%'],
-        ['binance APR (avg ' + c.bin.prints + 'F)', F(c.sp.binanceAPR, 1) + '%'],
-        ['delta 8h now', P(c.del.pct8h, 4)],
-        ['binance ' + ivl + 'h now', P(c.bin.cur8hPct, 4)],
-        ['binance avg ' + ivl + 'h', P(c.bin.avg8hPct, 4)],
-        ['binance settle', settleTxt]
+        ['pair', pairLbl]
       ];
+      if (c.pair === 'bin-delta'){
+        mini.push(['delta APR (current)', F(c.sp.deltaAPR, 1) + '%']);
+        mini.push(['binance APR (avg ' + c.bin.prints + 'F)', F(c.sp.binanceAPR, 1) + '%']);
+        mini.push(['delta 8h now', P(c.del.pct8h, 4)]);
+      } else if (c.pair === 'bin-bybit'){
+        mini.push(['bybit APR (current)', F(c.sp.bybitAPR, 1) + '%']);
+        mini.push(['binance APR (avg ' + c.bin.prints + 'F)', F(c.sp.binanceAPR, 1) + '%']);
+        mini.push(['bybit 8h now', P(c.byb.pct8h, 4)]);
+      } else if (c.pair === 'delta-bybit'){
+        mini.push(['delta APR (current)', F(c.sp.deltaAPR, 1) + '%']);
+        mini.push(['bybit APR (current)', F(c.sp.bybitAPR, 1) + '%']);
+        mini.push(['delta 8h now', P(c.del.pct8h, 4)]);
+        mini.push(['bybit 8h now', P(c.byb.pct8h, 4)]);
+      }
+      mini.push(['binance ' + ivl + 'h now', P(c.bin.cur8hPct, 4)]);
+      mini.push(['binance avg ' + ivl + 'h', P(c.bin.avg8hPct, 4)]);
+      mini.push(['binance settle', settleTxt]);
       if (c.bin.atCap) mini.push(['funding cap', 'at cap — squeeze crowded']);
+      if (c.bybitCross && c.bybitCross.note) mini.push(['bybit cross', c.bybitCross.note]);
       const gates = ['spread ≥ ' + SPREAD_MIN_APR + '% APR', 'delta-neutral',
                      ivl + 'h × ' + (24/ivl) + ' × 365' + (c.bin.intervalAssumed ? ' (assumed)' : '')];
       const plan = 'SHORT perp on <b>' + hi.toUpperCase() + '</b> (' + esc(hiSym) + ') + LONG perp on <b>' +
@@ -298,11 +403,12 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         : 'LEVELS unavailable — 4h candles or the ATR layer are missing for ' + esc(c.bin.symbol)
           + '; funding-capture horizons and price invalidation cannot be quantified.';
       return '<div class="card long">'
-        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · DELTA-NEUTRAL</span></div>'
+        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span></div>'
         + '<div class="mini">' + mini.map(function(kv){ return '<span class="k">' + kv[0] + '</span><span>' + kv[1] + '</span>'; }).join('') + '</div>'
         + '<div class="gates">' + gates.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('') + '</div>'
         + '<div class="plan">' + plan + '</div>'
         + '<div class="plan">' + lvTxt + '</div>'
+        + carryBookBtn(c)
         + '</div>';
     }).join('');
   }
@@ -446,10 +552,20 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       setStat('LEG B · delta india perp tickers…');
       const delta = await __deltaPerps();
       if (!delta) warnMsgs.push('delta india tickers fetch failed — cross-venue spreads unavailable (binance-only list below)');
+      const bybit = (typeof bybitLinearTickersByBase === 'function') ? await bybitLinearTickersByBase() : null;
+      if (!bybit && typeof bybitFunding === 'function'){
+        warnMsgs.push('Bybit bulk tickers unavailable — per-card Bybit cross-check only where funding resolves');
+      }
       __prog(ui, 0.85);
 
-      /* ---- match by base asset + spread cards ---- */
+      /* ---- match by base asset + spread cards (best pair per base) ---- */
       const cards = [];
+      const byBase = {};
+      function offerCard(card){
+        if (!card || !card.base || !card.sp) return;
+        const prev = byBase[card.base];
+        if (!prev || card.sp.spreadAPR > prev.sp.spreadAPR) byBase[card.base] = card;
+      }
       let matched = 0;
       if (delta){
         for (let i = 0; i < rows.length; i++){
@@ -459,9 +575,44 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           matched++;
           const sp = carrySpreadInt(d.pct8h, r.avg8hPct, r.intervalHours);
           if (!sp || sp.spreadAPR < SPREAD_MIN_APR) continue;
-          cards.push({ base: r.base, bin: r, del: d, sp: sp });
+          offerCard({ base: r.base, pair: 'bin-delta', bin: r, del: d, sp: sp });
         }
-        cards.sort(function(a, b){ return b.sp.spreadAPR - a.sp.spreadAPR; });
+      }
+      if (bybit){
+        for (let j = 0; j < rows.length; j++){
+          const r2 = rows[j];
+          const b = bybit[r2.base];
+          if (!b || r2.avg8hPct === null || b.pct8h === null) continue;
+          const spB = carrySpreadPair(r2.avg8hPct, b.pct8h, 'binance', 'bybit', r2.intervalHours, 8);
+          if (!spB || spB.spreadAPR < SPREAD_MIN_APR) continue;
+          spB.binanceAPR = spB.aprA; spB.bybitAPR = spB.aprB;
+          offerCard({ base: r2.base, pair: 'bin-bybit', bin: r2, byb: b, sp: spB });
+          if (delta && delta[r2.base]){
+            const d2 = delta[r2.base];
+            const spD = carrySpreadPair(d2.pct8h, b.pct8h, 'delta', 'bybit', 8, 8);
+            if (spD && spD.spreadAPR >= SPREAD_MIN_APR){
+              spD.deltaAPR = spD.aprA; spD.bybitAPR = spD.aprB;
+              offerCard({ base: r2.base, pair: 'delta-bybit', bin: r2, del: d2, byb: b, sp: spD });
+            }
+          }
+        }
+      }
+      for (const bk in byBase){ if (Object.prototype.hasOwnProperty.call(byBase, bk)) cards.push(byBase[bk]); }
+      cards.sort(function(a, b){ return b.sp.spreadAPR - a.sp.spreadAPR; });
+
+      if (cards.length && typeof bybitFunding === 'function'){
+        for (let ci2 = 0; ci2 < cards.length; ci2 += CHUNK){
+          const chunkX = cards.slice(ci2, ci2 + CHUNK);
+          await Promise.all(chunkX.map(async function(c){
+            if (c.pair !== 'bin-delta' || !c.bin || !c.bin.symbol) return;
+            try{
+              const f = await bybitFunding(c.bin.symbol);
+              const pct = (f && isFinite(f.fundingPct)) ? f.fundingPct : null;
+              c.bybitCross = carryBybitCrossCheck(c.sp, pct);
+            }catch(e){}
+          }));
+          if (ci2 + CHUNK < cards.length) await __sleep(CHUNK_SLEEP_MS);
+        }
       }
       /* per-card execution levels: 4h ATR on the binance leg. Feature-checked
          and silently degrading — each card states honestly when its levels
@@ -481,6 +632,12 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           }catch(e){ /* c.levels stays unset -> honest fallback on the card */ }
         }));
       }
+      __carrySnap = {
+        at: Date.now(),
+        topSpread: cards.length ? cards[0].sp.spreadAPR : null,
+        topBase: cards.length ? cards[0].base : null,
+        count: cards.length
+      };
       __renderCards(ui, cards);
 
       /* ---- binance-only payers table ---- */
@@ -495,6 +652,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       __prog(ui, 1);
       const parts = ['done — ' + rows.length + ' binance perps deep-scanned'];
       parts.push(delta ? (Object.keys(delta).length + ' delta perps · ' + matched + ' matched') : 'delta leg failed');
+      if (bybit) parts.push(Object.keys(bybit).length + ' bybit perps');
       parts.push(cards.length + ' spreads ≥ ' + SPREAD_MIN_APR + '% APR');
       if (failures) parts.push(failures + ' per-symbol history failures (avg n/a)');
       setStat(parts.join(' · '));
@@ -521,6 +679,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
      runCarryScan already catch-isolate failures (counted), so a refresh can
      degrade but never rejects. */
   var __carry = { busy: false, ranOnce: false, ui: null };
+  var __carrySnap = null;
   async function refreshCarry(){
     try{
       if (__carry.busy) return 'busy';
@@ -531,17 +690,45 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     }
   }
 
+  function __carryWarmShim(){
+    return { innerHTML: '', textContent: '', className: '', disabled: false,
+      style: {}, firstElementChild: { style: {} },
+      querySelector: function(sel){
+        return { style: {}, textContent: '', innerHTML: '', disabled: false,
+          addEventListener: function(){}, removeEventListener: function(){} };
+      } };
+  }
+  async function carryWarm(){
+    try{
+      if (typeof window.carryState === 'function' && window.carryState()) return 'fresh';
+      if (__carry.busy) return 'busy';
+      const shim = __carryWarmShim();
+      const ui = {
+        btn: shim, stat: shim, prog: shim, warn: shim,
+        cards: shim, empty: shim, tableWrap: shim
+      };
+      __carry.ui = ui;
+      const r = await runCarryScan(ui);
+      __carry.ranOnce = true;
+      return (typeof window.carryState === 'function' && window.carryState())
+        ? 'warmed' : ('unavailable: ' + (r || 'carry scan did not publish state'));
+    }catch(e){ return 'error: ' + ((e && e.message) || e); }
+  }
+
   /* ============================ mount ============================ */
   function mountCarry(el){
     if (!el) return;
+    const hostNote = (typeof hgHostingMode === 'function' && hgHostingMode() === 'static')
+      ? ' Static host (GitHub Pages) — Delta leg and proxy APIs need Render for full carry scans.'
+      : '';
     el.innerHTML =
       '<div class="panel">'
       + '<h2>Carry — funding arbitrage <span>delta-neutral · binance vs delta india · APR = rate × (24 ÷ funding interval) × 365</span></h2>'
       + '<div class="note" style="margin-bottom:10px">LEG A — Binance: all-symbols premiumIndex, top ' + TOP_N +
         ' by |lastFundingRate| with ≥ $20M 24h turnover, plus the last ' + HIST_LIMIT +
         ' funding prints per symbol for an average rate. LEG B — Delta India perp tickers (funding_rate is already percent per 8h interval). ' +
-        'Matched by base asset (BTCUSD ~ BTCUSDT). Cross-venue cards need |APR spread| ≥ ' + SPREAD_MIN_APR +
-        '%. Carry is not free money — funding flips, bases drift, fees eat thin spreads. Every number is shown so you can verify; none of it is a signal.</div>'
+        'LEG C — Bybit linear perps (current funding, 8h). Matched by base asset; the best spread per base wins (Binance↔Delta, Binance↔Bybit, or Delta↔Bybit). Cross-venue cards need |APR spread| ≥ ' + SPREAD_MIN_APR +
+        '%. Carry is not free money — funding flips, bases drift, fees eat thin spreads.' + hostNote + '</div>'
       + '<div class="note" id="carryStat">idle — press RUN.</div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="carryRun">RUN CARRY SCAN</button></div>'
       + '<div class="prog" id="carryProg"><i></i></div>'
@@ -584,9 +771,17 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     window.carrySpread = carrySpread;         // legacy both-8h classifier (unchanged)
     window.carryAnnualize = carryAnnualize;   // per-print rate -> APR at a given interval
     window.carrySpreadInt = carrySpreadInt;   // interval-aware classifier used by the scan
+    window.carrySpreadPair = carrySpreadPair;
+    window.carryBybitCrossCheck = carryBybitCrossCheck;
     window.carryPlan = carryPlan;             // per-card execution levels (SL/TP audit)
+    window.carryBookBtn = carryBookBtn;       // paper book CTA (short carry leg → macro fund)
+    window.carryState = function carryState(){
+      try{ return __carrySnap ? JSON.parse(JSON.stringify(__carrySnap)) : null; }catch(e){ return null; }
+    };
     window.HG_tabs = window.HG_tabs || [];
     window.HG_tabs.push({ id: 'carry', label: 'CARRY', mount: mountCarry, refresh: refreshCarry });
+    window.HG_warmups = window.HG_warmups || [];
+    window.HG_warmups.push({ id: 'carry', label: 'CARRY', run: carryWarm });
   }
 
 })();

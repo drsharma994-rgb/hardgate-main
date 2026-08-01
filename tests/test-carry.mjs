@@ -209,6 +209,19 @@ console.log('--- carrySpread: invalid inputs -> null ---');
   assert(cs({}, []) === null, 'object/array -> null');
 }
 
+console.log('--- carrySpreadPair + carryBybitCrossCheck ---');
+{
+  const w = loadModule(makeCtx());
+  assert(typeof w.carrySpreadPair === 'function', 'carrySpreadPair exported');
+  assert(typeof w.carryBybitCrossCheck === 'function', 'carryBybitCrossCheck exported');
+  const p = w.carrySpreadPair(0.02, 0.05, 'binance', 'bybit', 8, 8);
+  assert(p && p.pair === 'binance-bybit' && p.shortVenue === 'bybit', 'binance-bybit pair classifies short on richer leg');
+  const cc = w.carryBybitCrossCheck({ binanceAPR: 20, deltaAPR: 40 }, 0.03);
+  assert(cc && cc.status === 'confirms', 'bybit between binance and delta -> confirms');
+  const cc2 = w.carryBybitCrossCheck({ binanceAPR: 20, deltaAPR: 40 }, 0.5);
+  assert(cc2 && cc2.status === 'conflicts', 'bybit richest -> conflicts');
+}
+
 /* ================================================================
    2) TAB REGISTRATION
 ================================================================ */
@@ -265,7 +278,8 @@ console.log('--- scan: happy path ---');
   assert(cards.indexOf('SHORT perp on <b>DELTA</b>') >= 0, 'plan shorts the higher-funding venue');
   assert(cards.indexOf('LONG perp on <b>BINANCE</b>') >= 0, 'plan longs the lower-funding venue');
   assert(cards.indexOf('547.5%') >= 0, 'delta APR shown (0.5 * 3 * 365)');
-  assert(cards.indexOf('DELTA-NEUTRAL') >= 0, 'card labeled delta-neutral');
+  assert(cards.indexOf('BINANCE↔DELTA') >= 0 && cards.indexOf('delta-neutral') >= 0,
+    'card labeled with pair + delta-neutral gate');
   assert(cards.indexOf('basis risk') >= 0 && cards.indexOf('0.05%/side/entry') >= 0 &&
          cards.indexOf('funding flips') >= 0 && cards.indexOf('counterparty') >= 0,
     'risk notes (basis, fees, flips, counterparty) on the card');
@@ -456,6 +470,30 @@ console.log('--- carryPlan: execution levels ---');
   assert(cp({ entry: 60000, atr: 500, spreadAPR: 43.8, intervalHours: 0 }) === null, 'carryPlan: interval 0 -> null');
   assert(cp({ entry: '60000', atr: 500, spreadAPR: 43.8, intervalHours: 8 }) === null, 'carryPlan: numeric string rejected (strict typing)');
   assert(cp({ entry: Infinity, atr: 500, spreadAPR: 43.8, intervalHours: 8 }) === null, 'carryPlan: Infinity -> null');
+}
+
+/* ================================================================
+   6b) PAPER BOOK — carryBookBtn (short carry leg → macro fund)
+================================================================ */
+console.log('--- carryBookBtn: macro fund CTA ---');
+{
+  const ctx = makeCtx();
+  ctx.bookBtnHTML = function(sym, dir, entry, stop, t1, meta){
+    return '<button class="toBook" data-fund="' + (meta && meta.fund) + '">' + sym + ':' + dir + '</button>';
+  };
+  const w = loadModule(ctx);
+  const lv = w.carryPlan({ entry: 60000, atr: 500, spreadAPR: 43.8, intervalHours: 8 });
+  const btn = w.carryBookBtn({
+    pair: 'bin-delta',
+    sp: { shortVenue: 'delta', longVenue: 'binance' },
+    del: { symbol: 'BTCUSD' },
+    bin: { symbol: 'BTCUSDT' },
+    levels: lv
+  });
+  assert(typeof w.carryBookBtn === 'function', 'window.carryBookBtn exported');
+  assert(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'carryBookBtn: books short leg desk sym');
+  assert(btn.indexOf('macro') >= 0, 'carryBookBtn: macro fund pinned');
+  assert(w.carryBookBtn({ levels: null }) === '', 'carryBookBtn: no levels → no button');
 }
 
 /* ================================================================

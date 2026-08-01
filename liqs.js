@@ -251,7 +251,14 @@ function liqAgg(opts){
     };
   }
 
-  return { add: add, snapshot: snapshot };
+  function replay(prints){
+    if (!Array.isArray(prints)) return 0;
+    var n = 0, i;
+    for (i = 0; i < prints.length; i++) if (add(prints[i])) n++;
+    return n;
+  }
+
+  return { add: add, snapshot: snapshot, replay: replay };
 }
 
 /* =========================================================================
@@ -399,9 +406,76 @@ function liqFlushSetup(snap, rowsOpt, opts){
 /* =========================================================================
 Tab state + socket layer — one logical stream shared by the mounted pane.
 ========================================================================= */
+var LIQS_LS_KEY = 'hg_liqs_session_v1';
+var __liqsSaveTimer = null;
+
+function __liqsStorage(){
+  try{
+    var ls = (typeof G !== 'undefined' && G && G.localStorage) ? G.localStorage : null;
+    if (!ls && typeof localStorage !== 'undefined') ls = localStorage;
+    return (ls && typeof ls.getItem === 'function') ? ls : null;
+  }catch(e){ return null; }
+}
+function __liqsLsRead(){
+  try{
+    var localStorage = __liqsStorage();
+    if (!localStorage) return null;
+    var raw = localStorage.getItem(LIQS_LS_KEY);
+    if (!raw) return null;
+    var j = JSON.parse(raw);
+    if (!j || typeof j !== 'object' || !Array.isArray(j.prints)) return null;
+    return j;
+  }catch(e){ return null; }
+}
+function __liqsLsWrite(data){
+  try{
+    var localStorage = __liqsStorage();
+    if (!localStorage || typeof localStorage.setItem !== 'function') return;
+    localStorage.setItem(LIQS_LS_KEY, JSON.stringify(data));
+  }catch(e){}
+}
+function __liqsLsClear(){
+  try{
+    var localStorage = __liqsStorage();
+    if (!localStorage || typeof localStorage.removeItem !== 'function') return;
+    localStorage.removeItem(LIQS_LS_KEY);
+  }catch(e){}
+}
+function __liqsPersistPayload(){
+  var prints = S.persistPrints || [];
+  var cut = Date.now() - WINDOW_MS;
+  prints = prints.filter(function(p){ return p && isFinite(p.t) && p.t > cut; });
+  S.persistPrints = prints;
+  return { v: 1, at: Date.now(), manualClose: !!S.manualClose, prints: prints };
+}
+function __liqsSaveSession(){
+  try{ __liqsLsWrite(__liqsPersistPayload()); }catch(e){}
+}
+function __liqsSaveSessionThrottled(){
+  if (__liqsSaveTimer) return;
+  __liqsSaveTimer = setTimeout(function(){
+    __liqsSaveTimer = null;
+    __liqsSaveSession();
+  }, 5000);
+}
+function __liqsHydrateSession(){
+  try{
+    var j = __liqsLsRead();
+    if (!j) return;
+    if (j.manualClose) S.manualClose = true;
+    var cut = Date.now() - WINDOW_MS;
+    var prints = (j.prints || []).filter(function(p){
+      return p && p.sym && (p.side === 'long' || p.side === 'short') && isFinite(p.usd) && isFinite(p.t) && p.t > cut;
+    });
+    S.persistPrints = prints.slice();
+    if (prints.length && S.agg && typeof S.agg.replay === 'function') S.agg.replay(prints);
+  }catch(e){}
+}
+
 var S = {
   agg:        liqAgg(),
   tape:       [],        /* last TAPE_MAX prints >= TAPE_MIN_USD */
+  persistPrints: [],
   ws:         null,
   status:     'idle',    /* idle | connecting | live | reconnecting | stopped | error */
   startedAt:  null,
@@ -415,6 +489,7 @@ var S = {
   setupRows:  null,      /* {sym, rows, at} 1h candles for the current setup symbol */
   setupFetchKey: null    /* symbol with an in-flight setup candle fetch */
 };
+__liqsHydrateSession();
 
 function q(sel){ return (S.el && typeof S.el.querySelector === 'function') ? S.el.querySelector(sel) : null; }
 
@@ -442,6 +517,13 @@ function ingest(parsed){
       if (S.tape.length > TAPE_MAX) S.tape.length = TAPE_MAX;
     }
     if (res.spike) onSpike(p);
+    S.persistPrints = S.persistPrints || [];
+    S.persistPrints.push({ sym: p.sym, side: p.side, usd: p.usd, t: p.t });
+    var cutP = Date.now() - WINDOW_MS;
+    if (S.persistPrints.length > 400){
+      S.persistPrints = S.persistPrints.filter(function(x){ return x && x.t > cutP; });
+    }
+    __liqsSaveSessionThrottled();
   }
   return got;
 }
@@ -526,6 +608,8 @@ function startStream(){
     S.backoff = BACKOFF_MIN;
     S.setupRows = null;
     S.setupFetchKey = null;
+    S.persistPrints = [];
+    __liqsLsClear();
     S.manualClose = false;
     clearTimeout(S.retryTimer);
     clearInterval(S.tickTimer);
@@ -546,6 +630,7 @@ function stopStream(){
       try{ ws.close(); }catch(e){}
     }
     S.status = 'stopped';
+    __liqsSaveSession();
     render();
   }catch(e){ /* never throw from a button */ }
 }
@@ -691,6 +776,8 @@ function setupCardHTML(setup){
       + ('toTrade(' + JSON.stringify(setup.sym) + ',' + JSON.stringify(setup.dir) + ',' + setup.entry + ',' + setup.stop + ',' + setup.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (hasPlan && setup.sym && typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(setup.sym, setup.dir, setup.entry, setup.stop, setup.t1, { scanner: 'liqs', strategy: 'liqs', t2: setup.t2 }) : '';
   return '<div class="card ' + setup.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(setup.sym || 'MULTI') + '</span>'
     + '<span class="dir">' + dirUp + ' · FADE THE FLUSH</span></div>'
@@ -707,6 +794,7 @@ function setupCardHTML(setup){
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
     + tradeBtn
+    + bookBtn
     + '</div>';
 }
 
@@ -813,6 +901,20 @@ async function refreshLiqs(){
 G.liqParse = liqParse;
 G.liqAgg = liqAgg;
 G.liqFlushSetup = liqFlushSetup;
+G.liqsState = function liqsState(){
+  try{
+    if (!S || !S.agg || typeof S.agg.snapshot !== 'function') return null;
+    var snap = S.agg.snapshot();
+    var hasData = !!(snap && snap.window && snap.window.count > 0);
+    var live = (S.status === 'live' || S.status === 'connecting' || S.status === 'reconnecting');
+    if (!hasData && !live && !S.startedAt) return null;
+    var cls = snap.imbalance && snap.imbalance.cls;
+    var setup = null;
+    if ((cls === 'long-flush' || cls === 'short-flush') && typeof liqFlushSetup === 'function')
+      setup = liqFlushSetup(snap, null) || null;
+    return { snap: snap, setup: setup, at: Date.now(), live: live, manualClose: !!S.manualClose };
+  }catch(e){ return null; }
+};
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'liqs', label: 'LIQS', mount: function(el){ mount(el); }, refresh: refreshLiqs });
 /* BRAIN warm-up hook: this layer is fed by a live websocket only (Binance

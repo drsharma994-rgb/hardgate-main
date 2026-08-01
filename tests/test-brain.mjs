@@ -161,10 +161,12 @@ console.log('== engine votes ==');
 const EN = { survivors: [{ sym: 'ETHUSDT', dir: 'long', conviction: 'STRONG', plan: { dir: 'long', entry: 1, stop: 0.9, t1: 1.2 } }],
              rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3', dir: 'long', gatesPassed: 3 },
                         { sym: 'LTCUSDT', vetoGate: 'G4', dir: 'short', gatesPassed: 4 },
-                        { sym: 'CHOPUSDT', vetoGate: 'G1', dir: null, gatesPassed: 1 }], at: 1 };
+                        { sym: 'CHOPUSDT', vetoGate: 'G1', dir: null, gatesPassed: 1 }], at: Date.now() };
 r = COLLECT({ sym: 'ETHUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'long' && x.strong === true && x.text.indexOf('STRONG') >= 0; }),
    'engine survivor -> strong vote in the survivor direction');
+r = COLLECT({ sym: 'ETHUSDT', engine: Object.assign({}, EN, { at: Date.now() - 60 * 60 * 1000 }) });
+ok(r.unavailable.indexOf('engine') >= 0, 'stale engine snapshot (>30m) -> dark, survivors do not vote');
 r = COLLECT({ sym: 'SOLUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.caution === true
                                  && x.text.indexOf('G3') >= 0 && x.text.indexOf('LONG') >= 0; }),
@@ -176,7 +178,7 @@ r = COLLECT({ sym: 'CHOPUSDT', engine: EN });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.text.indexOf('G1') >= 0
                                  && x.text.indexOf('no committed structure') >= 0; }),
    'G0/G1 rejection (dir null) -> neutral chop note, never a veto');
-r = COLLECT({ sym: 'SOLUSDT', engine: { survivors: [], rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3' }], at: 1 } });
+r = COLLECT({ sym: 'SOLUSDT', engine: { survivors: [], rejected: [{ sym: 'SOLUSDT', vetoGate: 'G3' }], at: Date.now() } });
 ok(r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'neutral' && x.caution === true
                                  && x.text.indexOf('unconfirmed') >= 0 && x.text.indexOf('G3') >= 0; })
    && !r.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto'; }),
@@ -393,10 +395,14 @@ W.engineState = function(){
   return { survivors: [{ sym: 'BTCUSDT', dir: 'long', conviction: 'STRONG',
                          plan: { entry: 100, stop: 95, t1: 110, t2: 117.5 },   /* engineState real shape: no dir on plan */
                          gatesPassed: 6 }],
-           rejected: [{ sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 }], at: 123 };
+           rejected: [{ sym: 'SOLUSDT', vetoGate: 'G4', dir: 'long', gatesPassed: 4 }], at: Date.now() };
 };
 W.oiflowState = function(){ return { results: [{ sym: 'BTCUSDT', dir: 'LONG', evidence: 3, cls: 'NEW LONGS (trend fuel)' }] }; };
 W.squeezeState = function(){ return { results: [{ sym: 'ETHUSDT', kind: 'fired', dir: 'short' }] }; };
+W.carryState = function(){ return null; };
+W.termBasisState = function(){ return null; };
+W.liqsState = function(){ return { snap: { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6, count: 1 }, spikeUsd: 2e6 },
+  setup: { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6, entry: 100, stop: 95, t1: 110, t2: 117.5 } }; };
 W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
 W.liqFlushSetup = function(){ return { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
 W.goldspotState = function(){ return { basisPct: 0.01, verdict: 'balanced' }; };
@@ -427,7 +433,7 @@ ok(nCards.indexOf('BTCUSDT') >= 0 && nCards.indexOf('PRIME · 6 LAYERS') >= 0 &&
 ok(nCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && nCards.indexOf('T1 <b>110</b> (2R)') >= 0
    && nCards.indexOf('gate engine') >= 0, 'PRIME card uses the gate engine plan verbatim — never invented');
 ok(95 < 100 && 110 > 100 && 117.5 > 110, 'long plan sanity: stop below entry, targets above');
-ok(nCards.indexOf('toTrade(&quot;BTCUSDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
+ok(nCards.indexOf('toTrade(&quot;BTCUSDT&quot;,&quot;long&quot;,100,95,110') >= 0,
    'SEND TO TRADE PLAN payload carries sym/dir/entry/stop/t1');
 ok(nCards.indexOf('ENGINE: ENGINE SURVIVOR') >= 0 && nCards.indexOf('REGIME:') >= 0 && nCards.indexOf('NEWS: news clear') >= 0,
    'evidence ledger lists every layer vote with its text');
@@ -463,7 +469,7 @@ ok(oCards.indexOf('ETHUSDT') >= 0 && oCards.indexOf('HIGH · 4 LAYERS') >= 0 && 
 ok(oCards.indexOf('ENTRY <b>50</b> · STOP <b>53</b>') >= 0 && oCards.indexOf('T1 <b>44</b> (2R)') >= 0,
    'short plan renders from the engine plan');
 ok(53 > 50 && 44 < 50 && 39.5 < 44, 'short plan sanity: stop above entry, targets below');
-ok(oCards.indexOf('toTrade(&quot;ETHUSDT&quot;,&quot;short&quot;,50,53,44)') >= 0, 'short toTrade payload correct');
+ok(oCards.indexOf('toTrade(&quot;ETHUSDT&quot;,&quot;short&quot;,50,53,44') >= 0, 'short toTrade payload correct');
 ok(oCards.indexOf('BTCUSDT') === -1, 'BTC dropped out of the cards after the regime flip (no stale convictions)');
 
 /* ================= P) hard-refresh contract ================= */
@@ -585,6 +591,10 @@ function stubLayersPrime(WX){
     { sym: 'SOLUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' },
     { sym: 'XRPUSDT', dir: 'LONG', evidence: 2, cls: 'NEW LONGS' } ] }; };
   WX.squeezeState = function(){ return { results: [] }; };
+  WX.carryState = function(){ return null; };
+  WX.termBasisState = function(){ return null; };
+  WX.liqsState = function(){ return { snap: { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [{ sym: 'BTCUSDT', side: 'short', usd: 3e6, t: Date.now() }], window: { ms: 3.6e6, count: 1 }, spikeUsd: 2e6 },
+    setup: { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6, entry: 100, stop: 95, t1: 110, t2: 117.5 } }; };
   WX.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'short-flush', ratio: 0.3, text: 'SHORT FLUSH' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 2e6 }; } }; };
   WX.liqFlushSetup = function(){ return { type: 'FLUSH-REVERSAL', dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 }; };
   WX.goldspotState = function(){ return { basisPct: 0.01, verdict: 'balanced' }; };
@@ -678,7 +688,7 @@ console.log('== alias matching (Binance-keyed layers vote for xu candidates) =='
   ok(r2.votes.some(function(x){ return x.layer === 'squeeze' && x.vote === 'long'; }), 'squeeze row keyed by the xu sym still matches exactly');
   r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], liq: { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 } });
   ok(r2.votes.some(function(x){ return x.layer === 'liqs' && x.vote === 'long'; }), 'flush setup naming BTCUSDT matches via alias');
-  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], engine: { survivors: [], rejected: [{ sym: 'BTC', vetoGate: 'G4' }], at: 1 } });
+  r2 = C2({ sym: 'B-BTC_USDT', aliases: ['BTCUSDT', 'BTC'], engine: { survivors: [], rejected: [{ sym: 'BTC', vetoGate: 'G4' }], at: Date.now() } });
   ok(r2.votes.some(function(x){ return x.layer === 'engine' && x.vote === 'veto' && x.text.indexOf('G4') >= 0; }),
      'engine rejection keyed bare BTC vetoes via alias');
 }
@@ -709,7 +719,7 @@ ok(TT.stubs['#brainReadUni'].textContent === 'universe 5 (delta 3 + cdcx 2) · 4
 ok(tCards.indexOf('B-BTC_USDT') >= 0 && tCards.indexOf('PRIME · 6 LAYERS') >= 0 && tCards.indexOf('>LONG</span>') >= 0,
    'BTC card renders under the cdcx sym via alias-matched Binance-keyed layer votes (6 layers with VOLREG)');
 ok(tCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && tCards.indexOf('COINDCX') >= 0
-   && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
+   && tCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110') >= 0,
    'engine plan + COINDCX venue stamp + xu-sym toTrade payload on the card');
 const xu4h = xuCalls.filter(function(c){ return c.tf === '4h'; }), xu1h = xuCalls.filter(function(c){ return c.tf === '1h'; });
 ok(xu4h.length === 5, 'lazy fetch: the 5 WATCH+ candidates fetched 4h (BTC+ETH+SOL+XRP+DOGE radar), XAU lane aside untouched — got ' + xu4h.length);
@@ -1335,6 +1345,73 @@ process.on('unhandledRejection', function(){ unhandledRej++; });
      'AD: plan-less setup still recorded — PRIME quality capped to HIGH with the tape feed dark — got ' + recs6.length);
   ok(recs6[0] && recs6[0].entry === null && recs6[0].stop === null && recs6[0].t1 === null && recs6[0].t2 === null,
      'AD: missing plan -> null levels, never fabricated numbers');
+}
+
+/* ================= AD4) auto-book hook ================= */
+console.log('== auto-book hook (AD4) ==');
+{
+  const brainSrc = fs.readFileSync(root + 'brain.js', 'utf8');
+  ok(brainSrc.indexOf('BRAIN_AUTO_BOOK_KEY') >= 0 && brainSrc.indexOf('brainAutoBookRecord') >= 0,
+     'AD4: brain.js defines auto-book toggle + record hook');
+  ok(brainSrc.indexOf('id="brainAutoBook"') >= 0 && brainSrc.indexOf('silent: true') >= 0,
+     'AD4: mount checkbox + silent addToBook opts');
+  ok(brainSrc.indexOf('brainAutoExecAfterBookOn') >= 0 && brainSrc.indexOf('id="brainAutoExec"') >= 0,
+     'AD4b: brain auto EXEC after auto-add toggle');
+  ok(brainSrc.indexOf('BRAIN_AUTO_BOOK_PRIME_ONLY_KEY') >= 0 && brainSrc.indexOf('id="brainAutoBookPrime"') >= 0
+     && brainSrc.indexOf('brainAutoBookPrimeOnlyOn') >= 0,
+     'AD4c: brain PRIME-only auto-book toggle');
+  ok(brainSrc.indexOf('_fundId') >= 0 && brainSrc.indexOf('r.fundId') >= 0,
+     'AD4d: auto-book tags added positions with fund for cross-fund EXEC');
+
+  const lsStore = { hgBrainSniper: '0' };
+  const prevLs = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: function(k){ return Object.prototype.hasOwnProperty.call(lsStore, k) ? lsStore[k] : null; },
+    setItem: function(k, v){ lsStore[k] = String(v); },
+    removeItem: function(k){ delete lsStore[k]; },
+  };
+
+  const WD = freshBrain();
+  stubLayersPrime(WD);
+  WD.xuUniverse = async function(){ return XUL; };
+  WD.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  WD.hgApiAvailable = function(){ return true; };
+  WD.bookFetchOpenKeys = async function(){ return {}; };
+  WD.brainSetAutoBook(true);
+  const bookCalls = [];
+  WD.addToBook = function(opts){
+    bookCalls.push(opts);
+    return Promise.resolve({ ok: true, position: { id: 'p-' + bookCalls.length } });
+  };
+  const TD = freshPane();
+  WD.HG_tabs[0].mount(TD.pane);
+  await runAndWait(TD.stubs);
+  ok(bookCalls.length === 1, 'AD4: one PRIME plan auto-added (HIGH alts lack finite planner levels in this fixture — got ' + bookCalls.length + ')');
+  ok(bookCalls[0] && bookCalls[0].silent === true && bookCalls[0].scanner === 'brain',
+     'AD4: auto-book calls are silent brain scanner adds');
+  ok(bookCalls[0].sym === 'B-BTC_USDT' && bookCalls[0].entry === 100 && bookCalls[0].stop === 95,
+     'AD4: levels match engine plan verbatim');
+  ok(TD.stubs['#brainStat'].textContent.indexOf('auto-book +1') >= 0,
+     'AD4: stat line tallies auto-book adds — got "' + TD.stubs['#brainStat'].textContent.slice(-50) + '"');
+
+  bookCalls.length = 0;
+  await runAndWait(TD.stubs);
+  ok(bookCalls.length === 0, 'AD4: second synthesis skips dup keys (got ' + bookCalls.length + ' calls)');
+  ok(TD.stubs['#brainStat'].textContent.indexOf('1 dup') >= 0,
+     'AD4: stat line names dup skips');
+
+  WD.addToBook = function(){ throw new Error('book down'); };
+  await runAndWait(TD.stubs);
+  ok(TD.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME') === 0,
+     'AD4: throwing addToBook never breaks synthesis render');
+
+  WD.brainSetAutoBook(false);
+  bookCalls.length = 0;
+  WD.addToBook = function(opts){ bookCalls.push(opts); return Promise.resolve({ ok: true }); };
+  await runAndWait(TD.stubs);
+  ok(bookCalls.length === 0, 'AD4: toggle off -> no auto-book calls');
+
+  globalThis.localStorage = prevLs;
 }
 
 /* ================= AE) radar quality gates ================= */
@@ -2191,7 +2268,6 @@ console.log('== bounded warm-wait: dark->voting promotion, honest dark after the
   ok(iSnaps[0] === 'auto-warmed: regime'
        + ' · still dark: rotation (still running — lands in its own time)'
        + ' · boom (starter failed: kaboom)'
-       + ' · liqs (skipped: stream-only layer — open the LIQS tab once to start the live socket)'
        + ' · reading every intelligence layer…',
      'AI: the auto-warm accounting rides the stat line through the universe build — warmed / stuck / failed / skipped each named — got "' + iSnaps[0] + '"');
   /* QUICK RESCAN never auto-warms — straight to the recheck, zero starters */
@@ -2259,7 +2335,6 @@ console.log('== auto-warm into synthesis: shared engine-last path, accounting pr
      'AL: the progress stat names the exact hook order + the cold cap while the starters run — got "' + progSnaps[0] + '"');
   ok(alSnaps[0] === 'auto-warmed: regime, engine'
        + ' · still dark: boom (starter failed: kaput)'
-       + ' · liqs (skipped: stream-only layer — open the LIQS tab once to start the live socket)'
        + ' · reading every intelligence layer…',
      'AL: accounting prefix — cold engine + regime warmed into voting, the rejection + the skip named verbatim — got "' + alSnaps[0] + '"');
   ok(TL.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 0 HIGH · 1 watch · 3 aside') === 0,
@@ -2559,7 +2634,7 @@ console.log('== anchored limits at run level: LIMIT render, snapshot shape, audi
      'AK: the TRENDY card renders the full anchored limit block — anchor, stop, TPs, R:R, invalidation, validity');
   ok(kCards.indexOf('TRENDYUSDT') >= 0 && kCards.slice(kCards.indexOf('TRENDYUSDT'), kCards.indexOf('TRENDYUSDT') + 1400).indexOf('ENTRY <b>') === -1,
      'AK: no market-entry render on the TRENDY anchored card — the LIMIT block replaces it (other cards unaffected)');
-  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987)') >= 0,
+  ok(kCards.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987') >= 0,
      'AK: SEND TO TRADE PLAN carries the anchored entry/stop/t1 verbatim');
 
   /* ---- WATCH rows: swing-zone limit, in-zone label, honest fallback ---- */
@@ -2948,7 +3023,7 @@ console.log('== AN) limit board: expanded anchors, builder, live state, run leve
      'AN9: FLAT chip falls back to the row mark (9.6 vs entry 10, ATR 2) -> IN ZONE');
   ok(boardHtml.indexOf('MARK n/a') >= 0,
      'AN9: NOMK has no cache mark and a null row mark -> the chip says MARK n/a, never a guess');
-  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987)') >= 0,
+  ok(boardHtml.indexOf('toTrade(&quot;TRENDYUSDT&quot;,&quot;long&quot;,147.64569307942614,146.52464339296364,149.32726760911987') >= 0,
      'AN9: every board card keeps the SEND TO TRADE PLAN handoff verbatim');
   ok(boardHtml.indexOf('BTCUSDT') === -1 && boardHtml.indexOf('XAU') === -1,
      'AN9: plan-null rows (BTC, gold ASIDE) never board — the ticket near-miss copy covers them');
@@ -3397,6 +3472,61 @@ console.log('== AV) wick-adaptive stops + CVD ==');
   const flat = mkTaker([1,1,1,1,1,1,1,1, 1,1.02,0.98,1,1.01,0.99,1,1.01]);
   ok(CV(flat).dir === null, 'AV: balanced flow -> no CVD direction, never invented');
   ok(CV(null) === null && CV(mkTaker([1,1,1])) === null, 'AV: garbage/thin series -> null, never throws');
+}
+
+/* ================= AW) post-fetch structure / meanrev / poc (PR #4 integration) ================= */
+console.log('== AW) post-fetch structure / meanrev / poc integration ==');
+{
+  globalThis.window = {};
+  globalThis.localStorage = { getItem: function(){ return null; }, setItem: function(){}, removeItem: function(){} };
+  vm.runInThisContext(fs.readFileSync(root + 'brain.js', 'utf8'), { filename: 'brain.js' });
+  const WB = globalThis.window;
+  const AS = WB.__hgBrainApplyStructure;
+  const AM = WB.__hgBrainApplyMeanrev;
+  const AP = WB.__hgBrainApplyPoc;
+  ok(typeof AS === 'function' && typeof AM === 'function' && typeof AP === 'function',
+     'AW: post-fetch apply seams exported');
+
+  function mkRow(tier, dir){
+    const rows4h = [];
+    for (let i = 0; i < 220; i++) rows4h.push({ t: i, o: 100, h: 101, l: 99, c: 100, v: 1000 });
+    return { lane: 'crypto', dec: { tier: tier, dir: dir }, col: { votes: [], silent: [], unavailable: [] }, rows4h: rows4h };
+  }
+
+  WB.hgStructureGate = function(){ return { bos: true, veto: false, note: 'BOS confirms long on 4H' }; };
+  const rBos = mkRow('WATCH', 'long');
+  AS([rBos]);
+  ok(rBos.col.votes.some(function(v){ return v.layer === 'structure' && v.vote === 'long'; }),
+     'AW: structure BOS casts a structural long vote');
+
+  WB.hgStructureGate = function(){ return { veto: true, bos: false, note: 'CHoCH against the committed bias' }; };
+  const rVeto = mkRow('HIGH', 'long');
+  AS([rVeto]);
+  ok(rVeto.col.votes.some(function(v){ return v.layer === 'structure' && v.caution; }),
+     'AW: structure CHoCH against bias -> CAUTION vote');
+
+  globalThis.detectRegime = function(){ return { regime: 'range', label: 'RANGE' }; };
+  WB.meanrevAssess = function(){ return { signal: true, dir: 'long', n: 8, winPct: 62, expR: 0.4 }; };
+  const rMr = mkRow('WATCH', 'long');
+  AM([rMr]);
+  ok(rMr.col.votes.some(function(v){ return v.layer === 'meanrev' && v.vote === 'long'; }),
+     'AW: meanrev aligned in range regime votes long');
+
+  WB.meanrevAssess = function(){ return { signal: true, dir: 'short', n: 8, winPct: 62, expR: 0.4 }; };
+  const rMrOpp = mkRow('WATCH', 'long');
+  AM([rMrOpp]);
+  ok(rMrOpp.col.votes.some(function(v){ return v.layer === 'meanrev' && v.caution; }),
+     'AW: opposing meanrev trigger -> CAUTION');
+
+  globalThis.volumeProfile = function(){ return { poc: 100, val: 98, vah: 102 }; };
+  const rPoc = mkRow('WATCH', 'long');
+  rPoc.rows4h[rPoc.rows4h.length - 1].c = 99;
+  AP([rPoc]);
+  ok(rPoc.col.votes.some(function(v){ return v.layer === 'poc' && v.vote === 'long'; }),
+     'AW: POC value-area edge aligned with long bias votes long');
+
+  globalThis.detectRegime = undefined;
+  globalThis.volumeProfile = undefined;
 }
 
 console.log('\n' + passed + ' assertions passed');
