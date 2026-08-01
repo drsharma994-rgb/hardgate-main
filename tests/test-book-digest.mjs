@@ -4,8 +4,10 @@ import {
   LP_DIGEST_MIN_INTERVAL_MS, pbNewBook,
 } from '../lib/paperbook-core.mjs';
 import {
-  digestChannelsReady, digestCronAuthOk, deliverLpDigest,
+  digestChannelsReady, digestCronAuthOk, deliverLpDigest, deliverConsolidatedLpDigest,
+  digestUseConsolidated,
 } from '../lib/paperbook-digest.mjs';
+import { pbNewStore, pbCreateFund } from '../lib/paperbook-funds.mjs';
 import {
   digestEmailReady, digestEmailTo, buildMimeMessage, sendDigestEmail,
 } from '../lib/digest-email.mjs';
@@ -83,6 +85,39 @@ globalThis.fetch = prevFetch2;
 delete process.env.LP_DIGEST_EMAIL_TO;
 delete process.env.RESEND_API_KEY;
 delete process.env.LP_DIGEST_EMAIL_FROM;
+
+ok(digestUseConsolidated({}) === true, 'consolidated default when no fund pin');
+var prevFund = process.env.LP_DIGEST_FUND;
+process.env.LP_DIGEST_FUND = 'gold';
+ok(digestUseConsolidated({}) === false, 'LP_DIGEST_FUND pins single-fund digest');
+delete process.env.LP_DIGEST_FUND;
+ok(digestUseConsolidated({ fund: 'main' }) === false, 'body fund opts out of consolidated');
+ok(digestUseConsolidated({ consolidated: true }) === true, 'body consolidated flag forces rollup');
+process.env.LP_DIGEST_CONSOLIDATED = 'true';
+ok(digestUseConsolidated({}) === true, 'LP_DIGEST_CONSOLIDATED=true forces rollup');
+process.env.LP_DIGEST_CONSOLIDATED = 'false';
+ok(digestUseConsolidated({}) === false, 'LP_DIGEST_CONSOLIDATED=false disables rollup');
+delete process.env.LP_DIGEST_CONSOLIDATED;
+if (prevFund) process.env.LP_DIGEST_FUND = prevFund;
+
+process.env.LP_DIGEST_WEBHOOK_URL = 'http://127.0.0.1:9/hook';
+globalThis.fetch = async function(url, opts){
+  if (String(url).indexOf('/hook') >= 0){
+    var body = opts && opts.body ? JSON.parse(opts.body) : {};
+    return {
+      ok: true,
+      status: 200,
+      text: async function(){ return body.type || 'ok'; },
+    };
+  }
+  return prevFetch(url, opts);
+};
+var store = pbNewStore('main');
+store = pbCreateFund(store, { id: 'gold' }).store;
+var consSent = await deliverConsolidatedLpDigest(store, 'week');
+ok(consSent.ok && consSent.consolidated.fundCount === 2, 'deliverConsolidatedLpDigest webhook ok');
+globalThis.fetch = prevFetch;
+process.env.LP_DIGEST_WEBHOOK_URL = prevHook;
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
