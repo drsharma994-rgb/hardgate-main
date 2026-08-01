@@ -1206,7 +1206,8 @@ async function runCoilScan(){
           ['G1 BB squeeze','G2 vol drought','G3 >4H 200 EMA'],
           (pl ? planBlock(pl.dir,pl.entry,pl.stop,pl.t1,pl.t2,pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
-          pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh));
+          pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
+          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null }));
       }catch(e){}
       await sleep(120);
     }
@@ -1262,7 +1263,8 @@ async function runExpansionCheck(){
         __cardsHtml.push(cardHTML(w.symbol,"long",
           [["mark",px(entry)],["coil high",px(w.coilHigh)],["coil low",px(w.coilLow)],["vol z",fmt(vz,2)],["watch age",fmt((nowSec()-watch.at)/3600,1)+"h"]],
           ["G1 was on coil watchlist","G2 closed above range","G3 vol z>2"],
-          planBlock("long",entry,stop,t1,t2), entry, stop, t1));
+          planBlock("long",entry,stop,t1,t2), entry, stop, t1, null,
+          { scanner: 'coil-expansion', strategy: 'coil-expansion', t2: t2 }));
         logSetup(w.symbol,"long","coil-expansion",entry,stop,t1);
       }catch(e){}
       await sleep(120);
@@ -1345,7 +1347,8 @@ async function runDivScan(){
           [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
            ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
           ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
-          planBlock(dir,entry,stop,t1,t2, capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : ''), entry, stop, t1));
+          planBlock(dir,entry,stop,t1,t2, capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : ''), entry, stop, t1, null,
+          { scanner: 'divergence', strategy: 'divergence', t2: t2 }));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);
@@ -1828,7 +1831,8 @@ async function runApexScan(){
         ['G1 BTC headwind','G2 spread ≥5%','G3 1H EMA50 intact'],
         (pl ? planBlock(pl.dir,pl.entry,pl.stop,pl.t1,pl.t2,pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
-        pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05));
+        pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
+        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null }));
     });
     statEl.textContent = `done — ${results.length} Apex assets found`;
     if (!results.length) emptyEl.style.display='block';
@@ -1915,7 +1919,7 @@ __cardsHtml.push(cardHTML(t.symbol, dir,
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
 planBlock(dir, p, stop, t1, t2, 'mean reversion — stop tight behind the wick; target the mean first')
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-p, stop, t1));
+p, stop, t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: t2 }));
 }catch(e){}
 await sleep(100);
 }
@@ -1984,7 +1988,8 @@ async function runSmcScan(){
           ['Struct Stop', px(stop)], ['Target Liq', px(t1)]
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlock(dir, p, stop, t1, t2, 'structural stop behind the FVG; T1 = nearest liquidity')
-        + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1));
+        + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1, null,
+        { scanner: 'smc', strategy: 'smc', t2: t2 }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2039,7 +2044,8 @@ async function runObScan(){
           ['Struct Stop', px(stop)], ['Liquidity Target', target ? `${px(target.level)} (x${target.count})` : px(t1)]
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlock(dir, p, stop, t1, t2, 'structural stop behind the OB; T1 = nearest liquidity')
-        + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1));
+        + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1, null,
+        { scanner: 'ob', strategy: 'ob', t2: t2 }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }

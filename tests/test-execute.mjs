@@ -48,8 +48,10 @@ ok(bookJs.indexOf('bookMaybeAutoExecPending') >= 0 && bookJs.indexOf('BOOK_AUTO_
 ok(bookJs.indexOf('bookMaybeAutoRetryFailed') >= 0 && bookJs.indexOf('BOOK_AUTO_RETRY_FAILED_KEY') >= 0
   && bookJs.indexOf('Auto retry failed on refresh') >= 0,
   'book.js auto retry failed on mark refresh');
-ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',bracket,') >= 0,
-  'book.js position CSV includes bracket column');
+ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',stop,t1,t2,') >= 0,
+  'book.js position CSV includes stop/t1/t2 columns');
+ok(bookJs.indexOf('posFillChipHTML') >= 0 && bookJs.indexOf('FILL OK') >= 0,
+  'book.js broker fill status chips');
 ok(bookJs.indexOf('bookAutoExecScope') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_CROSS_FUND_KEY') >= 0
   && bookJs.indexOf('Auto pending/retry all funds') >= 0,
   'book.js cross-fund auto pending/retry on refresh');
@@ -106,6 +108,8 @@ ok(bookJs.indexOf('bookExportBlotterCSV') >= 0 && bookJs.indexOf('EXPORT BLOTTER
 
 var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');
+ok(apiJs.indexOf('execute-fill') >= 0 && apiJs.indexOf('pbApplyExecuteFill') >= 0,
+  'book API accepts execute-fill webhook reconcile');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
