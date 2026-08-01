@@ -27,6 +27,7 @@ var BOOK_AUTO_RETRY_FAILED_KEY = 'hg_book_auto_retry_failed_v1';
 var BOOK_AUTO_EXEC_CROSS_FUND_KEY = 'hg_book_auto_exec_cross_fund_v1';
 var BOOK_AUTO_POLL_FILLS_KEY = 'hg_book_auto_poll_fills_v1';
 var BOOK_BLOTTER_FILTER_KEY = 'hg_book_blotter_filter_v1';
+var BOOK_POSITIONS_FILL_FILTER_KEY = 'hg_book_positions_fill_filter_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
 function bookFundId(){
@@ -123,6 +124,15 @@ function bookBlotterExecOnlyOn(){
 }
 function bookSetBlotterExecOnly(on){
   try{ localStorage.setItem(BOOK_BLOTTER_FILTER_KEY, on ? 'execute' : 'all'); }catch(e){}
+}
+function bookPositionsFillFilterOn(){
+  try{ return localStorage.getItem(BOOK_POSITIONS_FILL_FILTER_KEY) === '1'; }catch(e){ return false; }
+}
+function bookSetPositionsFillFilter(on){
+  try{ localStorage.setItem(BOOK_POSITIONS_FILL_FILTER_KEY, on ? '1' : '0'); }catch(e){}
+}
+function bookPositionFillBacklog(p, blotter){
+  return bookPositionNeedsFillPoll(p, blotter);
 }
 function bookFilterBlotterRows(rows){
   rows = rows || [];
@@ -662,7 +672,9 @@ async function bookLivePosition(id, fundId){
   if (!confirm('Send LIVE bracket for this paper position to the execution webhook?')) return;
   var r = await bookFetch('/api/book/live', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id, fund: fundId })) });
   if (r.json && r.json.ok){
-    try{ alert('Live bracket sent (HTTP ' + r.json.status + ').'); }catch(e2){}
+    var fillNote = (r.json.fillPct != null && r.json.fillPct > 0)
+      ? (' · fill ' + Math.round(r.json.fillPct * 100) + '% recorded') : '';
+    try{ alert('Live bracket sent (HTTP ' + r.json.status + ').' + fillNote); }catch(e2){}
   } else {
     try{ alert('Live send failed: ' + ((r.json && r.json.reason) || r.json.response || 'error')); }catch(e3){}
   }
@@ -1418,7 +1430,9 @@ function deskExecStatusHTML(){
     }
   }
   if (__book.desk && __book.desk.fill && (__book.desk.fill.unfilled || __book.desk.fill.partial)){
-    chips.push('<span class="statuschip warn" title="Bracket sent but broker fill missing or partial">fills '
+    var fillFilterOn = bookPositionsFillFilterOn();
+    chips.push('<span class="statuschip ' + (fillFilterOn ? 'ok' : 'warn') + ' bookDeskAct" id="bookExecBarFillFilter" style="cursor:pointer"'
+      + ' title="Click to ' + (fillFilterOn ? 'show all open positions' : 'filter to fill backlog only') + '">fills '
       + (__book.desk.fill.unfilled || 0) + ' open · ' + (__book.desk.fill.partial || 0) + ' partial</span>');
   }
   if (__book.desk && __book.desk.execute && (__book.desk.execute.ok || __book.desk.execute.fail || __book.desk.execute.pending)){
@@ -1639,11 +1653,15 @@ function mount(el){
         blotterAllBody.innerHTML = '';
       }
     }
-    var positions = (snap.book && snap.book.positions) || [];
+    var allPositions = (snap.book && snap.book.positions) || [];
     var blotterRows = (snap.book && snap.book.blotter) || snap.blotter || [];
     if (multiFund && consolidated){
-      positions = consolidated.positions || positions;
+      allPositions = consolidated.positions || allPositions;
       blotterRows = consolidated.blotter || blotterRows;
+    }
+    var viewPositions = allPositions;
+    if (bookPositionsFillFilterOn()){
+      viewPositions = allPositions.filter(function(p){ return bookPositionFillBacklog(p, blotterRows); });
     }
     if (tableHead){
       tableHead.innerHTML = (multiFund ? '<th>Fund</th>' : '')
@@ -1651,8 +1669,13 @@ function mount(el){
         + '<th>R</th><th>UPL</th><th>Risk</th><th>Bracket</th><th>OMS</th>';
     }
     if (body){
-      body.innerHTML = positions.map(function(p){ return posRowHTML(p, blotterRows, { showFund: multiFund }); }).join('');
-      if (empty) empty.style.display = positions.length ? 'none' : 'block';
+      body.innerHTML = viewPositions.map(function(p){ return posRowHTML(p, blotterRows, { showFund: multiFund }); }).join('');
+      if (empty){
+        empty.textContent = bookPositionsFillFilterOn()
+          ? 'No open positions in fill backlog (bracket sent, fill missing or partial).'
+          : 'No open paper positions — add from a scanner card.';
+        empty.style.display = viewPositions.length ? 'none' : 'block';
+      }
     }
     if (closedEl && snap.book && snap.book.closed){
       var closed = snap.book.closed.slice(0, 8);
@@ -1685,12 +1708,12 @@ function mount(el){
     var execReady = bookExecuteReady();
     if (epBtn){
       epBtn.disabled = !execReady;
-      var pendingN = bookExecTargets(positions, blotterRows, { pending: true, failed: false }).length;
+      var pendingN = bookExecTargets(allPositions, blotterRows, { pending: true, failed: false }).length;
       epBtn.textContent = pendingN ? ('EXEC PENDING (' + pendingN + ')') : 'EXEC PENDING';
     }
     if (rfBtn){
       rfBtn.disabled = !execReady;
-      var failN = bookExecTargets(positions, blotterRows, { pending: false, failed: true }).length;
+      var failN = bookExecTargets(allPositions, blotterRows, { pending: false, failed: true }).length;
       rfBtn.textContent = failN ? ('RETRY FAILED (' + failN + ')') : 'RETRY FAILED';
     }
     var pfBtn = el.querySelector('#bookPollFills');
@@ -1948,6 +1971,13 @@ function mount(el){
       await refresh();
       return;
     }
+    var fillFilterBtn = t.closest('#bookExecBarFillFilter');
+    if (fillFilterBtn){
+      bookSetPositionsFillFilter(!bookPositionsFillFilterOn());
+      paint(__book.snap);
+      setStat(bookPositionsFillFilterOn() ? 'fill backlog filter ON' : 'fill backlog filter OFF');
+      return;
+    }
     var scaleBtn = t.closest('[data-scale]');
     if (scaleBtn){
       if (!bookApiOn()) return;
@@ -2025,6 +2055,7 @@ W.bookExecuteBatchPositions = bookExecuteBatchPositions;
 W.bookExecuteFromPosition = bookExecuteFromPosition;
 W.bookFetchAllPositions = bookFetchAllPositions;
 W.bookFindPosAny = bookFindPosAny;
+W.bookPositionsFillFilterOn = bookPositionsFillFilterOn;
 W.bookExecuteAllFundsPending = bookExecuteAllFundsPending;
 W.bookExportBlotterCSV = bookExportBlotterCSV;
 W.bookRetryAllFundsFailed = bookRetryAllFundsFailed;
