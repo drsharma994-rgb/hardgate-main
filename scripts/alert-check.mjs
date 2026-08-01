@@ -771,6 +771,26 @@ async function main() {
           newState.bookExec = Object.assign({}, prevState.bookExec, { key: key, snap: snap });
         }
       }
+      if (prevState.bookDayHalt === undefined) {
+        console.log('Book daily-loss state seeded silently.');
+        newState.bookDayHalt = { active: !!desk.dailyLossHalt, at: new Date().toISOString() };
+      } else {
+        const wasHalt = !!(prevState.bookDayHalt && prevState.bookDayHalt.active);
+        const nowHalt = !!desk.dailyLossHalt;
+        if (!wasHalt && nowHalt) {
+          const pushResult = await sendAlertCi(offHoursPrefix() + '⛔ HARDGATE DAILY LOSS HALT',
+            'Desk day P&L ' + (desk.dayPnlUsd != null ? desk.dayPnlUsd.toFixed(0) : '?') + ' USD breached the -'
+              + (desk.dailyLossLimitUsd != null ? desk.dailyLossLimitUsd.toFixed(0) : '?') + ' USD limit ('
+              + Math.round((desk.maxDailyLossPct || 0) * 100) + '% of day start). New adds blocked until UTC day roll.'
+              + offHoursTag());
+          console.log('DAILY LOSS HALT — push: ' + pushResult);
+        } else if (wasHalt && !nowHalt) {
+          const pushResult = await sendAlertCi('✅ HARDGATE DAILY LOSS HALT LIFTED',
+            'Desk day P&L recovered — new adds allowed again.');
+          console.log('DAILY LOSS HALT LIFTED — push: ' + pushResult);
+        }
+        newState.bookDayHalt = { active: nowHalt, at: new Date().toISOString() };
+      }
     }
   } catch (e) {
     console.warn('Book desk probe failed: ' + ((e && e.message) || e));
