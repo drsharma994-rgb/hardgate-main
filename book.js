@@ -434,6 +434,10 @@ function deskHeaderHTML(desk){
     + '<div class="bookHeatWrap"><span class="k">Cross-fund heat</span>'
     + '<div class="bookHeatBar' + (warn ? ' warn' : '') + '"><div class="bookHeatFill" style="width:' + fill.toFixed(1) + '%"></div></div>'
     + '<span class="v">' + fmtF(heatPct * 100, 2) + '% / ' + fmtF(maxPct * 100, 0) + '% · ' + fmtUsd(desk.heatUsd || 0) + '</span></div>'
+    + (desk.execute && (desk.execute.ok || desk.execute.fail || desk.execute.pending)
+      ? '<div class="note" style="margin-top:6px">Cross-fund brackets (7d): <b>'
+        + (desk.execute.ok || 0) + ' OK</b> · <b>' + (desk.execute.fail || 0) + ' fail</b> · '
+        + (desk.execute.pending || 0) + ' open without bracket</div>' : '')
     + (fundChips ? '<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">' + fundChips + '</div>' : '')
     + '</div>';
 }
@@ -806,6 +810,27 @@ function posExecChipHTML(p, blotter){
     + (ok ? 'BRACKET OK' : 'BRACKET FAIL') + '</span>';
 }
 
+function bookDigestExecuteSummary(book, startMs){
+  book = book || {};
+  startMs = isFinite(startMs) ? +startMs : 0;
+  var blotter = book.blotter || [];
+  var ok = 0;
+  var fail = 0;
+  for (var i = 0; i < blotter.length; i++){
+    var row = blotter[i];
+    if (!row || (+row.at || 0) < startMs) continue;
+    if (row.type === 'execute_ok') ok++;
+    else if (row.type === 'execute_fail') fail++;
+  }
+  var pending = 0;
+  var positions = book.positions || [];
+  for (var p = 0; p < positions.length; p++){
+    var pos = positions[p];
+    if (pos && pos.id && !bookLatestExecForPosition(blotter, pos.id)) pending++;
+  }
+  return { ok: ok, fail: fail, pending: pending, total: ok + fail };
+}
+
 function bookLastExecuteEvent(blotter){
   blotter = blotter || [];
   for (var i = 0; i < blotter.length; i++){
@@ -823,8 +848,19 @@ function deskExecStatusHTML(){
     '<span class="statuschip' + (liveOn ? ' ok' : ' warn') + '" title="EXECUTE_WEBHOOK_URL">LIVE ' + (liveOn ? 'ready' : 'off') + '</span>',
   ];
   if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
+  if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
+    chips.push('<span class="statuschip ok" title="BRAIN synthesis auto-adds PRIME/HIGH plans to book">BRAIN auto-book</span>');
+  }
   if (bookAutoOn()) chips.push('<span class="statuschip" title="T1 scale · BE · trail on mark refresh">auto desk</span>');
-  var blotter = (__book.snap && __book.snap.book && __book.snap.book.blotter) || [];
+  var book = __book.snap && __book.snap.book;
+  if (book){
+    var exFund = bookDigestExecuteSummary(book, Date.now() - 7 * 86400000);
+    if (exFund.ok || exFund.fail || exFund.pending){
+      chips.push('<span class="statuschip" title="Rolling 7d execute blotter for active fund">7d '
+        + exFund.ok + ' OK · ' + exFund.fail + ' fail · ' + exFund.pending + ' pending</span>');
+    }
+  }
+  var blotter = (book && book.blotter) || [];
   var last = bookLastExecuteEvent(blotter);
   if (last){
     var ok = last.type === 'execute_ok';

@@ -5,7 +5,7 @@ import {
   pbConsolidatedLp, pbConsolidatedHtml, pbConsolidatedDigestText, pbConsolidatedAttribution,
   pbConsolidatedDesk,
 } from '../lib/paperbook-funds.mjs';
-import { pbNewBook, pbAddIntent } from '../lib/paperbook-core.mjs';
+import { pbNewBook, pbAddIntent, pbPushBlotter } from '../lib/paperbook-core.mjs';
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
@@ -76,6 +76,14 @@ var desk = pbConsolidatedDesk(attrStore);
 ok(desk.fundCount === 2 && desk.openCount === 2, 'desk rollup sums open across funds');
 ok(isFinite(desk.equityUsd) && desk.equityUsd > 0, 'desk rollup equity positive');
 ok((desk.funds || []).length === 2, 'desk rollup lists per-fund rows');
+
+var mainBook = attrStore.funds.main;
+var posId = (mainBook.positions && mainBook.positions[0] && mainBook.positions[0].id) || 'pb_test';
+mainBook = pbPushBlotter(mainBook, { type: 'execute_ok', sym: 'BTCUSD', positionId: posId, at: Date.now() });
+attrStore = pbSetBook(attrStore, 'main', mainBook);
+var deskEx = pbConsolidatedDesk(attrStore);
+ok(deskEx.execute && deskEx.execute.ok === 1 && deskEx.execute.period === '7d',
+  'desk rollup includes cross-fund 7d bracket summary');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
