@@ -1357,8 +1357,11 @@ console.log('== auto-book hook (AD4) ==');
      'AD4: mount checkbox + silent addToBook opts');
   ok(brainSrc.indexOf('brainAutoExecAfterBookOn') >= 0 && brainSrc.indexOf('id="brainAutoExec"') >= 0,
      'AD4b: brain auto EXEC after auto-add toggle');
+  ok(brainSrc.indexOf('BRAIN_AUTO_BOOK_PRIME_ONLY_KEY') >= 0 && brainSrc.indexOf('id="brainAutoBookPrime"') >= 0
+     && brainSrc.indexOf('brainAutoBookPrimeOnlyOn') >= 0,
+     'AD4c: brain PRIME-only auto-book toggle');
   ok(brainSrc.indexOf('_fundId') >= 0 && brainSrc.indexOf('r.fundId') >= 0,
-     'AD4c: auto-book tags added positions with fund for cross-fund EXEC');
+     'AD4d: auto-book tags added positions with fund for cross-fund EXEC');
 
   const lsStore = { hgBrainSniper: '0' };
   const prevLs = globalThis.localStorage;

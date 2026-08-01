@@ -1074,7 +1074,13 @@ function deskExecStatusHTML(){
   ];
   if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
-    chips.push('<span class="statuschip ok" title="BRAIN synthesis auto-adds PRIME/HIGH plans to book">BRAIN auto-book</span>');
+    var abTitle = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
+      ? 'BRAIN synthesis auto-adds PRIME plans only'
+      : 'BRAIN synthesis auto-adds PRIME/HIGH plans to book';
+    var abLabel = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
+      ? 'BRAIN auto-book PRIME'
+      : 'BRAIN auto-book';
+    chips.push('<span class="statuschip ok" title="' + abTitle + '">' + abLabel + '</span>');
   }
   if (typeof W.brainAutoExecAfterBookOn === 'function' && W.brainAutoExecAfterBookOn()){
     chips.push('<span class="statuschip ok" title="BRAIN auto-add then EXEC brackets for new positions">BRAIN auto-exec</span>');
