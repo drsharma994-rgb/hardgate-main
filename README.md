@@ -81,7 +81,7 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 
 **Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. Blotter records `execute_ok` / `execute_fail` per fund via `plan.fund`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
 
-**Env vars (Render):** `EXECUTE_BACKEND_URL`, `EXECUTE_WEBHOOK_URL`, `LP_DIGEST_WEBHOOK_URL`, `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`, `LP_DIGEST_EMAIL_TO` (+ Resend/SendGrid/SMTP). See `AGENTS.md` for full list.
+**Env vars (Render):** `EXECUTE_BACKEND_URL`, `EXECUTE_WEBHOOK_URL`, `LP_DIGEST_WEBHOOK_URL`, `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`, `LP_DIGEST_EMAIL_TO` (+ Resend/SendGrid/SMTP), `BOOK_MAX_DAILY_LOSS_PCT` (optional — `0.02` or `2` for 2% UTC day halt). See `AGENTS.md` for full list.
 
 Scanners expose **ADD · {FUND}** when a plan has entry/stop/T1; `scanner:` meta pins fund routing (`book-routing.js`).
 
