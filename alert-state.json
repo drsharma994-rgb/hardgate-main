@@ -9,7 +9,7 @@
   },
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-01T14:46:32.875Z"
+    "at": "2026-08-01T15:46:42.138Z"
   },
   "setups": {
     "keys": {
@@ -89,22 +89,24 @@
       "B-ADA_USDT:long@0.1731": 1785595592876,
       "B-STABLE_USDT:short@0.03401": 1785595592876
     },
-    "at": "2026-08-01T14:46:33.311Z"
+    "at": "2026-08-01T15:46:42.138Z"
   },
+  "engineAlertAt": "2026-08-01T15:46:44.999Z",
   "bookExec": {
-    "key": "p0|f0",
+    "key": "p1|f0",
     "snap": {
-      "pending": 0,
+      "pending": 1,
       "fail": 0,
       "ok": 0,
       "liveOk": 0,
       "liveFail": 0
     },
-    "at": "2026-08-01T10:42:35.819Z"
+    "at": "2026-08-01T10:42:35.819Z",
+    "alertAt": "2026-08-01T15:46:45.398Z"
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-01T14:46:33.603Z"
+    "at": "2026-08-01T15:46:45.398Z"
   },
   "bookFill": {
     "key": "u0|p0",
@@ -114,5 +116,10 @@
       "total": 0
     },
     "at": "2026-08-01T13:22:36.755Z"
+  },
+  "digestAt": "2026-08-01T15:46:45.767Z",
+  "digestTicket": {
+    "long": null,
+    "short": null
   }
 }
