@@ -6,6 +6,7 @@ import {
   pbWeeklyDigest, pbDigestText, pbDigestHtml, pbAtrTrailStop,
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
   pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary, pbDailyLossState,
+  parseMaxDailyLossPct, pbBookCfgFromEnv,
 } from '../lib/paperbook-core.mjs';
 import { pbConsolidatedLp, pbConsolidatedDigestText } from '../lib/paperbook-funds.mjs';
 
@@ -77,6 +78,18 @@ var dl = pbDailyLossState(haltBook);
 ok(dl.halted && dl.dayPnlUsd <= -20000, 'daily loss halt trips at -3% vs 2% limit');
 ok(!pbRiskCheck(haltBook, intent).ok, 'new intent vetoed under daily loss halt');
 ok(pbSummary(haltBook).dailyLossHalt === true, 'summary exposes dailyLossHalt flag');
+
+ok(parseMaxDailyLossPct('') === PB_DEFAULTS.maxDailyLossPct, 'empty env uses default daily loss pct');
+ok(Math.abs(parseMaxDailyLossPct('3') - 0.03) < 1e-9, 'integer percent parses as fraction');
+ok(Math.abs(parseMaxDailyLossPct('0.025') - 0.025) < 1e-9, 'fraction env parses directly');
+ok(pbBookCfgFromEnv({ BOOK_MAX_DAILY_LOSS_PCT: '1.5' }).maxDailyLossPct === 0.015, 'cfg from env');
+
+var halt3 = pbNewBook({ navUsd: 1000000 });
+halt3 = pbRollDay(halt3);
+halt3.dayStartEquityUsd = 1000000;
+halt3.cashUsd = 970000;
+var dl3 = pbDailyLossState(halt3, { maxDailyLossPct: 0.03 });
+ok(dl3.halted && dl3.pct === 0.03, 'custom 3% daily loss limit');
 
 var histBook = pbPushNavHistory(markedEq, sumEq);
 ok(Array.isArray(histBook.navHistory) && histBook.navHistory.length === 1, 'nav history snapshot');
