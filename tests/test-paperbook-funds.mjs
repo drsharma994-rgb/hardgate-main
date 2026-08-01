@@ -2,6 +2,7 @@
 import {
   pbNormalizeStore, pbNewStore, pbGetBook, pbSetBook, pbListFunds,
   pbCreateFund, pbResetFund, PB_DEFAULT_FUND,
+  pbConsolidatedLp, pbConsolidatedHtml,
 } from '../lib/paperbook-funds.mjs';
 import { pbNewBook, pbAddIntent } from '../lib/paperbook-core.mjs';
 
@@ -36,6 +37,21 @@ ok(reset.ok && reset.book.positions.length === 0, 'reset fund clears positions')
 
 ok(pbNormalizeStore({ version: 2, activeFund: PB_DEFAULT_FUND, funds: { main: pbNewBook() } }).version === 2,
   'v2 store passes through');
+
+var consStore = pbNewStore('main');
+var consGold = pbCreateFund(consStore, { id: 'gold', navUsd: 500000 });
+consStore = consGold.store;
+var consMain = pbGetBook(consStore, 'main');
+var addMain = pbAddIntent(consMain.book, { sym: 'BTCUSD', dir: 'long', entry: 50000, stop: 49000, strategy: 'brain' });
+consStore = pbSetBook(consStore, 'main', addMain.book);
+var consGoldBook = pbGetBook(consStore, 'gold');
+var addGold = pbAddIntent(consGoldBook.book, { sym: 'XAUUSD', dir: 'long', entry: 2000, stop: 1990, strategy: 'gold' });
+consStore = pbSetBook(consStore, 'gold', addGold.book);
+var consolidated = pbConsolidatedLp(consStore, 'month');
+ok(consolidated.fundCount === 2 && consolidated.byFund.length === 2, 'consolidated spans two funds');
+ok(consolidated.openCount === 2, 'consolidated sums open positions');
+var html = pbConsolidatedHtml(consolidated);
+ok(html.indexOf('Consolidated LP') >= 0 && html.indexOf('gold') >= 0, 'consolidated HTML renders funds');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

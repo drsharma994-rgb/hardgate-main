@@ -36,8 +36,21 @@ function bookFundQuery(){
 }
 function bookFundBody(extra){
   extra = extra || {};
-  extra.fund = bookFundId();
+  if (!extra.fund) extra.fund = bookFundId();
   return extra;
+}
+
+function bookResolveFund(opts){
+  opts = opts || {};
+  if (typeof W.bookRouteFund === 'function'){
+    return W.bookRouteFund({
+      fund: opts.fund,
+      strategy: opts.strategy || opts.source,
+      klass: opts.klass,
+      source: opts.source,
+    }, bookFundId());
+  }
+  return opts.fund || bookFundId();
 }
 
 function bookAutoOn(){
@@ -169,7 +182,7 @@ async function addToBook(opts){
       klass: opts.klass || null,
       strategy: opts.strategy || opts.source || 'scanner',
       tier: opts.tier || null,
-      fund: opts.fund || bookFundId(),
+      fund: bookResolveFund(opts),
       layers: opts.layers || [],
       newsBlackout: false,
     };
@@ -201,6 +214,7 @@ async function addToBook(opts){
 
 function bookBtnHTML(sym, dir, entry, stop, t1, meta){
   meta = meta || {};
+  var fund = bookResolveFund(meta);
   var payload = JSON.stringify({
     sym: sym, dir: dir, entry: entry, stop: stop,
     t1: (t1 !== undefined && isFinite(t1)) ? t1 : null,
@@ -208,9 +222,10 @@ function bookBtnHTML(sym, dir, entry, stop, t1, meta){
     tier: meta.tier || null,
     klass: meta.klass || null,
     venue: meta.venue || 'paper',
+    fund: fund,
     layers: meta.layers || []
   });
-  return '<button class="toBook" onclick=\'addToBook(' + payload + ')\'>ADD TO BOOK</button>';
+  return '<button class="toBook" title="Add to ' + fund + ' fund" onclick=\'addToBook(' + payload + ')\'>ADD · ' + esc(fund.toUpperCase()) + '</button>';
 }
 
 async function bookCollectMarks(snap){
@@ -324,6 +339,39 @@ async function bookLivePosition(id){
   if (pane && pane.querySelector('#bookRefresh')) pane.querySelector('#bookRefresh').click();
 }
 
+function bookExecuteReady(){
+  return typeof W.executeBackendReady === 'function' && W.executeBackendReady();
+}
+
+async function bookExecutePosition(id){
+  var p = bookFindPos(id);
+  if (!p || typeof W.executeTrade !== 'function') return;
+  if (!bookExecuteReady()){
+    try{ alert('EXECUTE BRACKET unavailable — set EXECUTE_BACKEND_URL on Render or save an Execute URL in Settings.'); }catch(e){}
+    return;
+  }
+  var mark = isFinite(p.mark) ? p.mark : p.entry;
+  var qty = (mark > 0 && p.notionalUsd > 0) ? p.notionalUsd / mark : 0;
+  if (!(qty > 0)){
+    try{ alert('Cannot size bracket — missing mark or notional.'); }catch(e2){}
+    return;
+  }
+  var t1 = isFinite(p.t1) ? p.t1 : null;
+  if (!isFinite(t1)){
+    var risk = Math.abs(p.entry - p.stop);
+    t1 = p.dir === 'short' ? p.entry - risk : p.entry + risk;
+  }
+  await W.executeTrade({
+    sym: p.sym,
+    side: p.dir,
+    qty: qty,
+    lev: 1,
+    stop: p.stop,
+    t1: t1,
+    vetoed: false,
+  });
+}
+
 async function bookExportLp(){
   try{
     var month = new Date().toISOString().slice(0, 7);
@@ -373,6 +421,26 @@ async function bookExportDigest(period){
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'hardgate-digest-' + period + '-' + new Date().toISOString().slice(0, 10) + '.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){}
+}
+
+async function bookExportConsolidated(period){
+  period = period === 'week' ? 'week' : 'month';
+  try{
+    var month = new Date().toISOString().slice(0, 7);
+    var r = await bookFetch('/api/book/consolidated?period=' + encodeURIComponent(period)
+      + (period === 'month' ? '&month=' + encodeURIComponent(month) : ''));
+    if (!r.json || !r.json.ok) return;
+    var html = r.json.html || '';
+    if (!html && r.json.consolidated){
+      html = '<!DOCTYPE html><html><body><pre>' + esc(JSON.stringify(r.json.consolidated, null, 2)) + '</pre></body></html>';
+    }
+    var blob = new Blob([html], { type: 'text/html' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hardgate-consolidated-' + period + '-' + new Date().toISOString().slice(0, 10) + '.html';
     a.click();
     URL.revokeObjectURL(a.href);
   }catch(e){}
@@ -529,6 +597,8 @@ function posRowHTML(p){
   var rCls = (rVal != null && rVal >= 0) ? 'ok' : 'warn';
   var liveBtn = __book.liveReady
     ? '<button class="btn" data-live="' + esc(p.id) + '" title="Send bracket to EXECUTE_WEBHOOK_URL">LIVE</button>' : '';
+  var execBtn = bookExecuteReady()
+    ? '<button class="btn ghost" data-exec="' + esc(p.id) + '" title="EXECUTE BRACKET via /api/execute proxy">EXEC</button>' : '';
   return '<tr>'
     + '<td>' + esc(p.sym) + '</td>'
     + '<td>' + esc((p.dir || '').toUpperCase()) + '</td>'
@@ -541,6 +611,7 @@ function posRowHTML(p){
     + '<td>' + fmtUsd(p.riskUsd) + '</td>'
     + '<td class="bookActs">'
     + '<button class="btn ghost" data-manage="' + esc(p.id) + '" title="Open in TRADE PLAN with fund equity">MANAGE</button>'
+    + execBtn
     + liveBtn
     + '<button class="btn ghost" data-scale="0.5" data-id="' + esc(p.id) + '" title="Scale out 50% at mark">50%</button>'
     + '<button class="btn ghost" data-be="' + esc(p.id) + '" title="Move stop to breakeven">BE</button>'
@@ -567,6 +638,7 @@ function mount(el){
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
+    + '<button class="btn ghost" id="bookExportConsolidated" title="All funds — month MTD">CONSOLIDATED LP</button>'
     + '<button class="btn ghost" id="bookExportDigest">WEEKLY DIGEST</button>'
     + '<button class="btn ghost" id="bookSendDigest" title="POST digest to LP_DIGEST_WEBHOOK_URL">SEND DIGEST</button>'
     + '<button class="btn ghost" id="bookReset">RESET BOOK</button>'
@@ -696,6 +768,7 @@ function mount(el){
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
   el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
+  el.querySelector('#bookExportConsolidated').addEventListener('click', function(){ bookExportConsolidated('month'); });
   el.querySelector('#bookExportDigest').addEventListener('click', function(){ bookExportDigest('week'); });
   el.querySelector('#bookSendDigest').addEventListener('click', bookSendDigest);
   var autoChk = el.querySelector('#bookAutoRules');
@@ -761,6 +834,11 @@ function mount(el){
       bookLivePosition(liveBtn.getAttribute('data-live'));
       return;
     }
+    var execBtn = t.closest('[data-exec]');
+    if (execBtn){
+      bookExecutePosition(execBtn.getAttribute('data-exec'));
+      return;
+    }
     var scaleBtn = t.closest('[data-scale]');
     if (scaleBtn){
       if (!bookApiOn()) return;
@@ -812,6 +890,7 @@ W.bookRefreshMarks = bookRefreshMarks;
 W.bookState = bookState;
 W.bookManagePosition = bookManagePosition;
 W.bookLivePosition = bookLivePosition;
+W.bookExecutePosition = bookExecutePosition;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });
