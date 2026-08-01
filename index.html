@@ -203,6 +203,11 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <input id="ntfyTopic" placeholder="topic" title="free push via ntfy.sh — pick an unguessable topic">
         <button class="btn ghost header-field-btn" type="button" onclick="saveNtfyTopic()">SAVE</button>
         <span class="note" id="ntfyTopicStat"></span>
+        <span class="note header-field-sep">|</span>
+        <label class="note" for="executeBackendUrl">Execute URL</label>
+        <input id="executeBackendUrl" placeholder="/api/execute or https://…" title="Optional direct bracket endpoint; leave empty to use Render EXECUTE_BACKEND_URL proxy">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveExecuteBackendUrl()">SAVE</button>
+        <span class="note" id="executeBackendStat"></span>
       </label>
       <label class="header-field" title="Telegram alerts: bot token from @BotFather + chat id. Stored in this browser only.">
         <span class="header-field-label">telegram</span>
@@ -656,7 +661,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
-<script src="book.js?v=49"></script>
+<script src="book.js?v=50"></script>
+<script src="execute.js?v=50"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -709,11 +715,9 @@ const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
 const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
 const CDCX_API = 'https://api.coindcx.com';
-const EXECUTE_BACKEND_URL = ''; // set to your delta-trader.ts POST /execute endpoint to enable EXECUTE BRACKET
-function executeBackendReady(){
-  return typeof EXECUTE_BACKEND_URL === 'string' && EXECUTE_BACKEND_URL.length > 0
-    && EXECUTE_BACKEND_URL.indexOf('your-secure-backend.com') < 0;
-}
+/* EXECUTE BRACKET — execute.js + Render /api/execute proxy (EXECUTE_BACKEND_URL env).
+   Optional desk override: window.HG_EXECUTE_BACKEND_OVERRIDE or Settings → Execute URL */
+window.HG_EXECUTE_BACKEND_OVERRIDE = '';
 const CDCX_PROXY = u => '/api/proxy?url=' + encodeURIComponent(u);
 /* Last-resort only when same-origin /api/proxy is missing (GitHub Pages) or
    transiently failing — never the first choice on Render. */
@@ -2783,7 +2787,7 @@ window.runEdgeAlertCycle = runEdgeAlertCycle;
 /* =========================================================================
    TRADE PLAN — sizing, liquidation clearance, ticket. No execution here.
    ========================================================================= */
-function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return NaN; const ma=a.slice(0,n).reduce(function(x,y){return x+y;},0)/n; const mb=b.slice(0,n).reduce(function(x,y){return x+y;},0)/n; let num=0,da=0,db=0; for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; } const den=Math.sqrt(da*db); return den>0?num/den:NaN; } async function updatePortfolioHeat(sym,dir){ const elRow=$('portfolioHeatRow'); if(!elRow) return; try{ const base=(sym||'').replace(/USD$/,'').replace(/^B-/,'').replace(/_USDT$/,''); if(base==='BTC'){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">n/a (BTC itself)</span>'; return; } const btcSym = S.exchange==='delta' ? 'BTCUSD' : 'B-BTC_USDT'; const rowsSym = await getCandles(sym,'1d',31); const rowsBtc = await getCandles(btcSym,'1d',31); if(rowsSym.length<25||rowsBtc.length<25){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">not enough history</span>'; return; } const n=Math.min(rowsSym.length,rowsBtc.length); const rs=rowsSym.slice(-n), rb=rowsBtc.slice(-n); const retA=[],retB=[]; for(let i=1;i<n;i++){ retA.push(rs[i].c/rs[i-1].c-1); retB.push(rb[i].c/rb[i-1].c-1); } const r=pearsonCorr(retA,retB); const openLog=loadLog().filter(function(e){return e.status==='open';}); const btcOpen=openLog.find(function(e){return e.sym===btcSym;}); const highCorr=isFinite(r)&&r>0.75; let warn=''; if(highCorr&&btcOpen&&btcOpen.dir===dir){ warn=' <b style="color:var(--gold)">— taking this stacks beta, consider adjusting risk or standing aside</b>'; } elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">r='+(isFinite(r)?r.toFixed(2):'n/a')+' vs BTC 30d'+warn+'</span>'; }catch(e){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">check failed</span>'; } } function executeTrade(plan){ if (!plan || plan.vetoed){ alert('Cannot execute a vetoed plan.'); return; } if (!EXECUTE_BACKEND_URL || EXECUTE_BACKEND_URL.indexOf('your-secure-backend.com')>=0){ alert('EXECUTE_BACKEND_URL is still a placeholder — set it to your real delta-trader.ts endpoint before this button can do anything.'); return; } const payload = { symbol: plan.sym, side: plan.side, qty: plan.qty, leverage: plan.lev, bracket: { stop: plan.stop, takeProfit: plan.t1 }, timestamp: nowSec() }; if (!confirm('Send this bracket to '+EXECUTE_BACKEND_URL+'? '+JSON.stringify(payload,null,2))) return; fetch(EXECUTE_BACKEND_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); alert('Bracket sent.'); }).catch(function(e){ alert('Execution request failed: '+e.message); }); }  async function pullMark(){
+function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return NaN; const ma=a.slice(0,n).reduce(function(x,y){return x+y;},0)/n; const mb=b.slice(0,n).reduce(function(x,y){return x+y;},0)/n; let num=0,da=0,db=0; for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; } const den=Math.sqrt(da*db); return den>0?num/den:NaN; } async function updatePortfolioHeat(sym,dir){ const elRow=$('portfolioHeatRow'); if(!elRow) return; try{ const base=(sym||'').replace(/USD$/,'').replace(/^B-/,'').replace(/_USDT$/,''); if(base==='BTC'){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">n/a (BTC itself)</span>'; return; } const btcSym = S.exchange==='delta' ? 'BTCUSD' : 'B-BTC_USDT'; const rowsSym = await getCandles(sym,'1d',31); const rowsBtc = await getCandles(btcSym,'1d',31); if(rowsSym.length<25||rowsBtc.length<25){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">not enough history</span>'; return; } const n=Math.min(rowsSym.length,rowsBtc.length); const rs=rowsSym.slice(-n), rb=rowsBtc.slice(-n); const retA=[],retB=[]; for(let i=1;i<n;i++){ retA.push(rs[i].c/rs[i-1].c-1); retB.push(rb[i].c/rb[i-1].c-1); } const r=pearsonCorr(retA,retB); const openLog=loadLog().filter(function(e){return e.status==='open';}); const btcOpen=openLog.find(function(e){return e.sym===btcSym;}); const highCorr=isFinite(r)&&r>0.75; let warn=''; if(highCorr&&btcOpen&&btcOpen.dir===dir){ warn=' <b style="color:var(--gold)">— taking this stacks beta, consider adjusting risk or standing aside</b>'; } elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">r='+(isFinite(r)?r.toFixed(2):'n/a')+' vs BTC 30d'+warn+'</span>'; }catch(e){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">check failed</span>'; } } async function pullMark(){
   const sym=($('tSym').value||'').trim(); if(!sym) return;
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
@@ -2844,7 +2848,7 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     </div>
     <hr class="sep">
     <div class="ticket" id="ticketTxt">${ticket}</div>
-    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); if(!vet){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',vetoed:false})">EXECUTE BRACKET</button>'); }
+    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
 }
 
 /* =============================================================================
