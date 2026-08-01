@@ -193,9 +193,8 @@ function bookScoreSettle(){
   }catch(e){}
 }
 
-async function bookMaybeAutoExecute(position){
-  if (!bookAutoExecOn() || !position || !position.id) return null;
-  if (typeof W.executeTrade !== 'function' || !bookExecuteReady()) return null;
+function bookBuildExecutePlan(position, source){
+  if (!position || !position.id) return null;
   var mark = isFinite(position.mark) ? position.mark : position.entry;
   var qty = (mark > 0 && position.notionalUsd > 0) ? position.notionalUsd / mark : 0;
   if (!(qty > 0)) return null;
@@ -204,7 +203,7 @@ async function bookMaybeAutoExecute(position){
     var risk = Math.abs(position.entry - position.stop);
     t1 = position.dir === 'short' ? position.entry - risk : position.entry + risk;
   }
-  return W.executeTrade({
+  return {
     sym: position.sym,
     side: position.dir,
     qty: qty,
@@ -214,8 +213,16 @@ async function bookMaybeAutoExecute(position){
     t2: isFinite(position.t2) ? position.t2 : undefined,
     vetoed: false,
     positionId: position.id,
-    source: 'hardgate-book-auto',
-  }, { skipConfirm: true });
+    source: source || 'hardgate-book',
+  };
+}
+
+async function bookMaybeAutoExecute(position){
+  if (!bookAutoExecOn() || !position || !position.id) return null;
+  if (typeof W.executeTrade !== 'function' || !bookExecuteReady()) return null;
+  var plan = bookBuildExecutePlan(position, 'hardgate-book-auto');
+  if (!plan) return null;
+  return W.executeTrade(plan, { skipConfirm: true });
 }
 
 async function addToBook(opts){
@@ -464,36 +471,95 @@ function bookExecuteReady(){
   return typeof W.executeBackendReady === 'function' && W.executeBackendReady();
 }
 
-async function bookExecutePosition(id){
+function bookExecStatus(blotter, positionId){
+  var evt = bookLatestExecForPosition(blotter, positionId);
+  if (!evt) return 'pending';
+  return evt.type === 'execute_ok' ? 'ok' : 'fail';
+}
+
+function bookExecTargets(positions, blotter, modes){
+  positions = positions || [];
+  blotter = blotter || [];
+  modes = modes || {};
+  var wantPending = modes.pending !== false;
+  var wantFailed = !!modes.failed;
+  var out = [];
+  for (var i = 0; i < positions.length; i++){
+    var p = positions[i];
+    if (!p || !p.id) continue;
+    var st = bookExecStatus(blotter, p.id);
+    if (st === 'ok') continue;
+    if (st === 'pending' && wantPending) out.push(p);
+    else if (st === 'fail' && wantFailed) out.push(p);
+  }
+  return out;
+}
+
+async function bookExecutePosition(id, opts){
+  opts = opts || {};
   var p = bookFindPos(id);
-  if (!p || typeof W.executeTrade !== 'function') return;
+  if (!p || typeof W.executeTrade !== 'function') return { ok: false, reason: 'missing position' };
   if (!bookExecuteReady()){
-    try{ alert('EXECUTE BRACKET unavailable — set EXECUTE_BACKEND_URL on Render or save an Execute URL in Settings.'); }catch(e){}
-    return;
+    if (!opts.silent){ try{ alert('EXECUTE BRACKET unavailable — set EXECUTE_BACKEND_URL on Render or save an Execute URL in Settings.'); }catch(e){} }
+    return { ok: false, reason: 'execute off' };
   }
-  var mark = isFinite(p.mark) ? p.mark : p.entry;
-  var qty = (mark > 0 && p.notionalUsd > 0) ? p.notionalUsd / mark : 0;
-  if (!(qty > 0)){
-    try{ alert('Cannot size bracket — missing mark or notional.'); }catch(e2){}
-    return;
+  var plan = bookBuildExecutePlan(p, opts.source);
+  if (!plan){
+    if (!opts.silent){ try{ alert('Cannot size bracket — missing mark or notional.'); }catch(e2){} }
+    return { ok: false, reason: 'invalid plan' };
   }
-  var t1 = isFinite(p.t1) ? p.t1 : null;
-  if (!isFinite(t1)){
-    var risk = Math.abs(p.entry - p.stop);
-    t1 = p.dir === 'short' ? p.entry - risk : p.entry + risk;
+  try{
+    await W.executeTrade(plan, opts.skipConfirm ? { skipConfirm: true } : {});
+    return { ok: true };
+  }catch(e){
+    return { ok: false, reason: (e && e.message) || String(e) };
   }
-  await W.executeTrade({
-    sym: p.sym,
-    side: p.dir,
-    qty: qty,
-    lev: 1,
-    stop: p.stop,
-    t1: t1,
-    t2: isFinite(p.t2) ? p.t2 : undefined,
-    vetoed: false,
-    positionId: p.id,
-    source: 'hardgate-book',
-  });
+}
+
+async function bookExecuteBatch(targets, source){
+  targets = targets || [];
+  if (!targets.length) return { ok: 0, fail: 0, total: 0 };
+  if (!bookExecuteReady()){
+    try{ alert('EXECUTE BRACKET unavailable — set EXECUTE_BACKEND_URL on Render.'); }catch(e){}
+    return { ok: 0, fail: 0, total: 0 };
+  }
+  var ok = 0;
+  var fail = 0;
+  for (var i = 0; i < targets.length; i++){
+    var r = await bookExecutePosition(targets[i].id, { skipConfirm: true, silent: true, source: source || 'hardgate-book-batch' });
+    if (r && r.ok) ok++;
+    else fail++;
+  }
+  try{
+    if (typeof W.bookRefresh === 'function') await W.bookRefresh();
+  }catch(e){}
+  return { ok: ok, fail: fail, total: targets.length };
+}
+
+async function bookExecutePending(){
+  var snap = __book.snap || await bookPull();
+  var positions = (snap && snap.book && snap.book.positions) || [];
+  var blotter = (snap && snap.book && snap.book.blotter) || [];
+  var targets = bookExecTargets(positions, blotter, { pending: true, failed: false });
+  if (!targets.length){ try{ alert('No open positions waiting for a bracket.'); }catch(e){} return; }
+  var syms = targets.map(function(p){ return p.sym; }).join(', ');
+  if (!confirm('Send EXEC brackets for ' + targets.length + ' position' + (targets.length === 1 ? '' : 's')
+    + ' without a blotter record?\n\n' + syms)) return;
+  var res = await bookExecuteBatch(targets, 'hardgate-book-pending');
+  try{ alert('EXEC pending: ' + res.ok + ' sent · ' + res.fail + ' failed'); }catch(e2){}
+}
+
+async function bookRetryFailed(){
+  var snap = __book.snap || await bookPull();
+  var positions = (snap && snap.book && snap.book.positions) || [];
+  var blotter = (snap && snap.book && snap.book.blotter) || [];
+  var targets = bookExecTargets(positions, blotter, { pending: false, failed: true });
+  if (!targets.length){ try{ alert('No positions with a failed bracket to retry.'); }catch(e){} return; }
+  var syms = targets.map(function(p){ return p.sym; }).join(', ');
+  if (!confirm('Retry EXEC brackets for ' + targets.length + ' failed position'
+    + (targets.length === 1 ? '' : 's') + '?\n\n' + syms)) return;
+  var res = await bookExecuteBatch(targets, 'hardgate-book-retry');
+  try{ alert('EXEC retry: ' + res.ok + ' sent · ' + res.fail + ' failed'); }catch(e2){}
 }
 
 async function bookExportLp(){
@@ -926,6 +992,10 @@ function mount(el){
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
+    + '<button class="btn ghost" id="bookExecPending" title="EXEC bracket for every open row showing EXEC —"'
+    + (bookExecuteReady() ? '' : ' disabled') + '>EXEC PENDING</button>'
+    + '<button class="btn ghost" id="bookRetryFailed" title="Retry EXEC for rows showing BRACKET FAIL"'
+    + (bookExecuteReady() ? '' : ' disabled') + '>RETRY FAILED</button>'
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
@@ -1049,6 +1119,11 @@ function mount(el){
       attrEl.innerHTML = '';
     }
     if (navHistEl) navHistEl.innerHTML = navHistoryHTML(snap.navHistory || (snap.book && snap.book.navHistory));
+    var epBtn = el.querySelector('#bookExecPending');
+    var rfBtn = el.querySelector('#bookRetryFailed');
+    var execReady = bookExecuteReady();
+    if (epBtn) epBtn.disabled = !execReady;
+    if (rfBtn) rfBtn.disabled = !execReady;
     setStat('updated ' + new Date(snap.summary.at || Date.now()).toLocaleTimeString()
       + (bookTabVisible() ? ' · auto-refresh on' : ''));
   }
@@ -1079,6 +1154,10 @@ function mount(el){
   }
 
   el.querySelector('#bookRefresh').addEventListener('click', function(){ refresh(); });
+  var execPendingBtn = el.querySelector('#bookExecPending');
+  if (execPendingBtn) execPendingBtn.addEventListener('click', function(){ bookExecutePending(); });
+  var retryFailedBtn = el.querySelector('#bookRetryFailed');
+  if (retryFailedBtn) retryFailedBtn.addEventListener('click', function(){ bookRetryFailed(); });
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
   el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
@@ -1219,6 +1298,8 @@ W.bookAutoExecOn = bookAutoExecOn;
 W.bookResolveFund = bookResolveFund;
 W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
+W.bookExecTargets = bookExecTargets;
+W.bookBuildExecutePlan = bookBuildExecutePlan;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });
