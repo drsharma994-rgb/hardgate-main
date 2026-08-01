@@ -650,7 +650,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
-<script src="book.js?v=41"></script>
+<script src="book.js?v=42"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -1588,6 +1588,7 @@ function smartCardHTML(r){
       + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
+  const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, { strategy: 'smart' }) : '';
   const venueChip = r.venue === 'cdcx'
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
@@ -1610,6 +1611,7 @@ function smartCardHTML(r){
     + '<div class="plan">' + planTxt + '</div>'
     + (s ? '<div class="hgchart" id="hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '') + '"></div>' : '')
     + tradeBtn
+    + bookBtn
     + '</div>';
 }
 
@@ -2509,6 +2511,17 @@ function toTrade(sym,dir,entry,stop,t1){
   $('tT1').value = (t1!==undefined && t1!==null && isFinite(t1)) ? t1 : '';
   showTab('trade'); planTrade();
 }
+function hgBookBtn(sym, dir, entry, stop, t1, meta){
+  if (typeof bookBtnHTML !== 'function' || !isFinite(entry) || !isFinite(stop)) return '';
+  meta = meta || {};
+  var t1v = (t1 !== undefined && t1 !== null && isFinite(t1)) ? t1 : null;
+  if (!isFinite(t1v)){
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return '';
+    t1v = (dir === 'short') ? entry - risk : entry + risk;
+  }
+  return bookBtnHTML(sym, dir, entry, stop, t1v, meta);
+}
 
 /* last-scan memory — a scanner tab reopened after a reload shows WHEN the
    last scan ran and what it found, instead of a bare idle pane that reads
@@ -2922,7 +2935,8 @@ async function runGold(){
         gsPlan = {dir:casc, entry:entry, stop:stop, t1:t1, t2:t2};
         swingPlanHtml = `<div class="plan">${planBlock(casc,entry,stop,t1,t2)}</div>
           <div class="hgchart" id="goldSwingChart"></div>
-          <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop})">SEND TO TRADE PLAN →</button>`;
+          <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop},${t1})">SEND TO TRADE PLAN →</button>`
+          + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { strategy: 'gold-swing', klass: 'metals' });
       }
     } else {
       sg.push(['GS7','Structural R:R ≥ 2','na','no direction to measure']);
@@ -2995,7 +3009,8 @@ async function runGold(){
           const t1=dir==='long'?lastClose+2*risk:lastClose-2*risk;
           logSetup(GOLD_SYM, dir, 'gold-scalp', lastClose, stop, t1);
           planHtml=`<div class="plan">${planBlock(dir,lastClose,stop,t1,oppo)}</div>
-            <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop})">SEND TO TRADE PLAN →</button>`;
+            <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop},${t1})">SEND TO TRADE PLAN →</button>`
+            + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { strategy: 'gold-scalp', klass: 'metals' });
         }
       } else {
         g.push(['GC6','2R fits before the opposite pool','na','needs a completed sweep + reclaim first']);
@@ -3308,7 +3323,8 @@ async function runGoldDeep(){
       swingPlanHtml='<div class="plan">'+planBlock(casc,entry,stop,t1,t2||t1)+'</div>';
       if(score>=60){
         logSetup(GOLD_SYM,casc,'gold-deep-swing',entry,stop,t1);
-        swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+')">SEND TO TRADE PLAN →</button>';
+        swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')">SEND TO TRADE PLAN →</button>';
+        swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { strategy: 'gold-deep-swing', klass: 'metals' });
       }
     }
     setProg('goldDeepProg',0.6);
@@ -3402,7 +3418,8 @@ async function runGoldDeep(){
         planHtml='<div class="plan">'+planBlock(dir,scalpEntry,scalpStop,scalpT1,scalpT2||scalpT1)+'</div>';
         if(scoreC>=50&&swept&&reclaimed){
           logSetup(GOLD_SYM,dir,'gold-deep-scalp',scalpEntry,scalpStop,scalpT1);
-          planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+')">SEND TO TRADE PLAN →</button>';
+          planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')">SEND TO TRADE PLAN →</button>';
+          planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { strategy: 'gold-deep-scalp', klass: 'metals' });
         }
       }
       return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
@@ -3663,6 +3680,7 @@ async function runGoldSetup(){
       + '<div class="gates">' + stampsHtml + '</div>'
       + '<div class="hgchart" id="goldSetupChart"></div>'
       + '<button class="toTrade" onclick="toTrade(\'' + GOLD_SYM + '\',\'' + dir + '\',' + decision.entry + ',' + decision.stop + ',' + decision.t1 + ')">SEND TO TRADE PLAN →</button>'
+      + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { strategy: 'gold-setup', klass: 'metals' })
       + '</div>';
     if (typeof hgMiniChart === 'function') hgMiniChart($('goldSetupChart'), h4, { dir: dir, entry: decision.entry, stop: decision.stop, t1: decision.t1, t2: decision.t2 });
     if (stat) stat.textContent = decision.confidence.toLowerCase() + ' ' + dir + ' · closed bars only · ' + new Date().toTimeString().slice(0,5);
@@ -3960,6 +3978,7 @@ async function runBest(){
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2)}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
+        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { strategy: 'best' })}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
