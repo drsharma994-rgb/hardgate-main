@@ -290,7 +290,7 @@ function squeezePlanBlock(inp, extra){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function' && inp && inp.sym)
-    ? bookBtnHTML(inp.sym, s.dir, s.entry, s.stop, s.t1, { strategy: 'squeeze' }) : '';
+    ? bookBtnHTML(inp.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'squeeze', strategy: 'squeeze' }) : '';
   return '<div class="plan">' + inner + '</div>' + btn + bookBtn;
 }
 
