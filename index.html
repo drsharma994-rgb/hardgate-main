@@ -594,6 +594,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <label class="f">ENTRY<input id="tEntry" type="number" step="any" style="width:110px"></label>
         <label class="f">STRUCTURAL STOP<input id="tStop" type="number" step="any" style="width:110px"></label>
         <label class="f">T1 (optional)<input id="tT1" type="number" step="any" style="width:110px"></label>
+        <label class="f">T2 runner (optional)<input id="tT2" type="number" step="any" style="width:110px"></label>
       </div>
       <div class="row" style="margin-bottom:8px">
         <label class="f">EQUITY $<input id="tEq" type="number" value="1000" style="width:90px"></label>
@@ -2529,11 +2530,12 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId){
     ${bookBtn}
   </div>`;
 }
-function toTrade(sym,dir,entry,stop,t1){
+function toTrade(sym,dir,entry,stop,t1,t2){
   $('tSym').value=sym; $('tSide').value=dir; $('tEntry').value=entry; $('tStop').value=stop;
   /* only set T1 when a target arg actually exists — writing undefined produced
      the string "undefined" → NaN rr → permanent P2 veto on gold handoffs */
   $('tT1').value = (t1!==undefined && t1!==null && isFinite(t1)) ? t1 : '';
+  $('tT2').value = (t2!==undefined && t2!==null && isFinite(t2)) ? t2 : '';
   showTab('trade'); planTrade();
 }
 function hgBookBtn(sym, dir, entry, stop, t1, meta){
@@ -2836,6 +2838,7 @@ function planTrade(){
   const liqDist = Math.abs(entry-liq)/entry;
   const clearance = liqDist/stopDist; // want ≥ 1.5×
   const t1 = $('tT1').value ? +$('tT1').value : (side==='long'?entry+2*riskUnit:entry-2*riskUnit);
+  const t2 = $('tT2').value ? +$('tT2').value : (side==='long'?entry+3*riskUnit:entry-3*riskUnit);
   const rr = Math.abs(t1-entry)/riskUnit;
 
   const g=[];
@@ -2855,7 +2858,7 @@ stop      ${px(stop)}   (structural, isolated, auto top-up OFF)
 size      ${fmt(qty,6)} @ ${lev}x  →  notional $${fmt(notional,2)}, margin $${fmt(margin,2)}
 risk      $${fmt(riskUsd,2)}  (${riskPct}% of equity)  ·  1R = ${px(riskUnit)}
 T1        ${px(t1)}  →  close ${scaleOut}%, stop to breakeven
-runner    trail remainder behind structure toward ${px(side==='long'?entry+3*riskUnit:entry-3*riskUnit)} (3R)
+T2        ${px(t2)}  →  runner trail (defaults to 3R when blank)
 liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
 
   out.innerHTML = `
@@ -2866,7 +2869,7 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     </div>
     <hr class="sep">
     <div class="ticket" id="ticketTxt">${ticket}</div>
-    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); const t2runner = side==='long' ? entry+3*riskUnit : entry-3*riskUnit; if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2runner+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
+    <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side); if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
 }
 
 /* =============================================================================
@@ -5100,14 +5103,40 @@ async function evalGoldSwing(){
   return {gates:sg, veto, dir:casc!=='mixed'?casc:null, entry, stop, t1, t2};
 }
 
-function renderStrategy(label, result){
+function finderBookMeta(label, assetType){
+  const l = String(label || '').toLowerCase();
+  if (assetType === 'gold' || l.indexOf('gold') >= 0){
+    return { scanner: 'finder-gold', strategy: 'finder-gold', klass: 'metals', fund: 'gold' };
+  }
+  if (l.indexOf('scalp') >= 0) return { scanner: 'finder-scalp', strategy: 'finder-scalp', fund: 'swing' };
+  if (l.indexOf('swing') >= 0) return { scanner: 'finder-swing', strategy: 'finder-swing', fund: 'swing' };
+  if (l.indexOf('judas') >= 0) return { scanner: 'finder-judas', strategy: 'finder-judas', fund: 'swing' };
+  return { scanner: 'finder', strategy: 'finder', fund: 'swing' };
+}
+
+function renderStrategy(label, result, opts){
+  opts = opts || {};
   if (result.error) return `<div class="panel"><h2>${label}</h2><div class="note warn">${result.error}</div></div>`;
   const ledger = result.gates.map(g=>gateRow(...g)).join('');
   const verdict = result.veto ? 'NO TRADE' : (result.dir ? result.dir.toUpperCase()+' VALID' : 'STAND ASIDE');
   const planHtml = (!result.veto && result.dir && result.entry!=null && result.stop!=null && result.t1!=null)
     ? `<div class="plan">${planBlock(result.dir, result.entry, result.stop, result.t1, result.t2||result.t1)}</div>`
     : '';
-  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}</div>`;
+  let bookBtn = '';
+  let tradeBtn = '';
+  const sym = opts.sym;
+  if (!result.veto && result.dir && sym && isFinite(result.entry) && isFinite(result.stop) && isFinite(result.t1)){
+    const meta = finderBookMeta(label, opts.assetType);
+    if (typeof hgBookBtn === 'function'){
+      bookBtn = '<div style="margin-top:8px">' + hgBookBtn(sym, result.dir, result.entry, result.stop, result.t1,
+        Object.assign({}, meta, { t2: result.t2 })) + '</div>';
+    }
+    const t2v = isFinite(result.t2) ? result.t2 : '';
+    tradeBtn = '<button class="toTrade" style="margin-top:8px" onclick="toTrade('
+      + JSON.stringify(sym) + ',' + JSON.stringify(result.dir) + ',' + result.entry + ',' + result.stop + ',' + result.t1
+      + (t2v !== '' ? ',' + t2v : '') + ')">SEND TO TRADE PLAN →</button>';
+  }
+  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${tradeBtn}${bookBtn}</div>`;
 }
 
 function finderTypeChanged(){
@@ -5126,7 +5155,9 @@ async function runFinder(){
       const d1=await getXAUCandles('1d',60), h1=await getXAUCandles('1h',200), m15=await getXAUCandles('15m',200);
       const jl = judasSweepCheck('long', d1, h1, m15);
       const js = judasSweepCheck('short', d1, h1, m15);
-      out.innerHTML = renderStrategy('GOLD SWING', swing) + renderStrategy('JUDAS SWEEP \u2014 LONG', jl) + renderStrategy('JUDAS SWEEP \u2014 SHORT', js)
+      out.innerHTML = renderStrategy('GOLD SWING', swing, { sym: GOLD_SYM, assetType: 'gold' })
+        + renderStrategy('JUDAS SWEEP \u2014 LONG', jl, { sym: GOLD_SYM, assetType: 'gold' })
+        + renderStrategy('JUDAS SWEEP \u2014 SHORT', js, { sym: GOLD_SYM, assetType: 'gold' })
         + `<div class="row"><button class="btn" id="finderBtRun" onclick="runFinderGoldBacktest()">RUN BACKTEST CONTEXT</button> <button class="btn" id="finderBtX" onclick="btCancel('finder')" style="display:none">CANCEL</button></div><div class="prog" id="finderBtProg"><i></i></div><div id="finderBacktestOut"></div>`;
       stat.textContent = 'evaluated \u00b7 ' + new Date().toTimeString().slice(0,8);
     } else {
@@ -5143,7 +5174,10 @@ async function runFinder(){
       const jl = judasSweepCheck('long', d1, h1, m15);
       const js = judasSweepCheck('short', d1, h1, m15);
       out.innerHTML = `<div class="note">${t.sym} \u00b7 ${t.exch==='delta'?'Delta India':'CoinDCX'} \u00b7 mark ${px(t.mark)}</div>`
-        + renderStrategy('SWING', swing) + renderStrategy('SCALP', scalp) + renderStrategy('JUDAS SWEEP \u2014 LONG', jl) + renderStrategy('JUDAS SWEEP \u2014 SHORT', js)
+        + renderStrategy('SWING', swing, { sym: t.sym, assetType: 'crypto' })
+        + renderStrategy('SCALP', scalp, { sym: t.sym, assetType: 'crypto' })
+        + renderStrategy('JUDAS SWEEP \u2014 LONG', jl, { sym: t.sym, assetType: 'crypto' })
+        + renderStrategy('JUDAS SWEEP \u2014 SHORT', js, { sym: t.sym, assetType: 'crypto' })
         + `<div class="row"><button class="btn" id="finderBtRun" onclick="runFinderCryptoBacktest('${base}')">RUN BACKTEST CONTEXT</button> <button class="btn" id="finderBtX" onclick="btCancel('finder')" style="display:none">CANCEL</button></div><div class="prog" id="finderBtProg"><i></i></div><div id="finderBacktestOut"></div>`;
       stat.textContent = 'evaluated \u00b7 closed bars only \u00b7 ' + new Date().toTimeString().slice(0,8);
     }

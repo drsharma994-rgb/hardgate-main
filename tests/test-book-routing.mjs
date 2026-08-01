@@ -36,7 +36,9 @@ ok(bookScannerFund('execute', {}) === 'swing', 'execute scanner → swing fund')
 ok(bookScannerFund('best', {}) === 'swing', 'best scanner → swing fund');
 ok(bookScannerFund('smart', {}) === 'main', 'smart scanner → main fund');
 ok(bookScannerFund('goldswing', {}) === 'gold', 'goldswing scanner → gold fund');
-ok(bookScannerFund('gold-breakout', {}) === 'gold', 'gold-breakout scanner → gold fund');
+ok(bookScannerFund('finder-scalp', {}) === 'swing', 'finder-scalp → swing fund');
+ok(bookScannerFund('finder-gold', { klass: 'metals' }) === 'gold', 'finder-gold → gold fund');
+ok(bookScannerFund('finder-judas', {}) === 'swing', 'finder-judas crypto → swing fund');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
