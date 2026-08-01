@@ -44,6 +44,8 @@ ok(bookJs.indexOf('bookMaybeAutoExecute') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
+ok(bookJs.indexOf('opts.silent') >= 0 && bookJs.indexOf('bookFetchOpenKeys') >= 0,
+  'book.js silent add + cross-fund open-key dedup');
 
 var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');

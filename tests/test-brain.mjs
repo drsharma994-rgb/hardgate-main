@@ -1347,6 +1347,66 @@ process.on('unhandledRejection', function(){ unhandledRej++; });
      'AD: missing plan -> null levels, never fabricated numbers');
 }
 
+/* ================= AD4) auto-book hook ================= */
+console.log('== auto-book hook (AD4) ==');
+{
+  const brainSrc = fs.readFileSync(root + 'brain.js', 'utf8');
+  ok(brainSrc.indexOf('BRAIN_AUTO_BOOK_KEY') >= 0 && brainSrc.indexOf('brainAutoBookRecord') >= 0,
+     'AD4: brain.js defines auto-book toggle + record hook');
+  ok(brainSrc.indexOf('id="brainAutoBook"') >= 0 && brainSrc.indexOf('silent: true') >= 0,
+     'AD4: mount checkbox + silent addToBook opts');
+
+  const lsStore = { hgBrainSniper: '0' };
+  const prevLs = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: function(k){ return Object.prototype.hasOwnProperty.call(lsStore, k) ? lsStore[k] : null; },
+    setItem: function(k, v){ lsStore[k] = String(v); },
+    removeItem: function(k){ delete lsStore[k]; },
+  };
+
+  const WD = freshBrain();
+  stubLayersPrime(WD);
+  WD.xuUniverse = async function(){ return XUL; };
+  WD.xuCandles = function(){ return Promise.resolve(fakeRows(120)); };
+  WD.hgApiAvailable = function(){ return true; };
+  WD.bookFetchOpenKeys = async function(){ return {}; };
+  WD.brainSetAutoBook(true);
+  const bookCalls = [];
+  WD.addToBook = function(opts){
+    bookCalls.push(opts);
+    return Promise.resolve({ ok: true, position: { id: 'p-' + bookCalls.length } });
+  };
+  const TD = freshPane();
+  WD.HG_tabs[0].mount(TD.pane);
+  await runAndWait(TD.stubs);
+  ok(bookCalls.length === 1, 'AD4: one PRIME plan auto-added (HIGH alts lack finite planner levels in this fixture — got ' + bookCalls.length + ')');
+  ok(bookCalls[0] && bookCalls[0].silent === true && bookCalls[0].scanner === 'brain',
+     'AD4: auto-book calls are silent brain scanner adds');
+  ok(bookCalls[0].sym === 'B-BTC_USDT' && bookCalls[0].entry === 100 && bookCalls[0].stop === 95,
+     'AD4: levels match engine plan verbatim');
+  ok(TD.stubs['#brainStat'].textContent.indexOf('auto-book +1') >= 0,
+     'AD4: stat line tallies auto-book adds — got "' + TD.stubs['#brainStat'].textContent.slice(-50) + '"');
+
+  bookCalls.length = 0;
+  await runAndWait(TD.stubs);
+  ok(bookCalls.length === 0, 'AD4: second synthesis skips dup keys (got ' + bookCalls.length + ' calls)');
+  ok(TD.stubs['#brainStat'].textContent.indexOf('1 dup') >= 0,
+     'AD4: stat line names dup skips');
+
+  WD.addToBook = function(){ throw new Error('book down'); };
+  await runAndWait(TD.stubs);
+  ok(TD.stubs['#brainStat'].textContent.indexOf('done · 1 PRIME') === 0,
+     'AD4: throwing addToBook never breaks synthesis render');
+
+  WD.brainSetAutoBook(false);
+  bookCalls.length = 0;
+  WD.addToBook = function(opts){ bookCalls.push(opts); return Promise.resolve({ ok: true }); };
+  await runAndWait(TD.stubs);
+  ok(bookCalls.length === 0, 'AD4: toggle off -> no auto-book calls');
+
+  globalThis.localStorage = prevLs;
+}
+
 /* ================= AE) radar quality gates ================= */
 console.log('== radar quality gates: liquidity floor / overextension guard / funding crowding ==');
 /* row-level extraction: the <div class="lrow"> segment naming >SYM</span> */
