@@ -45,6 +45,11 @@ ok(bookJs.indexOf('bookMaybeAutoExecute') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC
 ok(bookJs.indexOf('bookMaybeAutoExecPending') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_PENDING_KEY') >= 0
   && bookJs.indexOf('Auto EXEC pending on refresh') >= 0,
   'book.js auto EXEC pending on mark refresh');
+ok(bookJs.indexOf('bookMaybeAutoRetryFailed') >= 0 && bookJs.indexOf('BOOK_AUTO_RETRY_FAILED_KEY') >= 0
+  && bookJs.indexOf('Auto retry failed on refresh') >= 0,
+  'book.js auto retry failed on mark refresh');
+ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',bracket,') >= 0,
+  'book.js position CSV includes bracket column');
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');

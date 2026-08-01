@@ -22,6 +22,7 @@ var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
 var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
 var BOOK_AUTO_EXEC_PENDING_KEY = 'hg_book_auto_exec_pending_v1';
+var BOOK_AUTO_RETRY_FAILED_KEY = 'hg_book_auto_retry_failed_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
 function bookFundId(){
@@ -89,6 +90,12 @@ function bookAutoExecPendingOn(){
 }
 function bookSetAutoExecPending(on){
   try{ localStorage.setItem(BOOK_AUTO_EXEC_PENDING_KEY, on ? '1' : '0'); }catch(e){}
+}
+function bookAutoRetryFailedOn(){
+  try{ return localStorage.getItem(BOOK_AUTO_RETRY_FAILED_KEY) === '1'; }catch(e){ return false; }
+}
+function bookSetAutoRetryFailed(on){
+  try{ localStorage.setItem(BOOK_AUTO_RETRY_FAILED_KEY, on ? '1' : '0'); }catch(e){}
 }
 
 function esc(s){
@@ -243,6 +250,16 @@ async function bookMaybeAutoExecPending(snap){
   var targets = bookExecTargets(positions, blotter, { pending: true, failed: false });
   if (!targets.length) return null;
   return bookExecuteBatch(targets, 'hardgate-book-auto-pending');
+}
+
+async function bookMaybeAutoRetryFailed(snap){
+  if (!bookAutoRetryFailedOn() || !bookExecuteReady()) return null;
+  snap = snap || __book.snap;
+  var positions = (snap && snap.book && snap.book.positions) || [];
+  var blotter = (snap && snap.book && snap.book.blotter) || [];
+  var targets = bookExecTargets(positions, blotter, { pending: false, failed: true });
+  if (!targets.length) return null;
+  return bookExecuteBatch(targets, 'hardgate-book-auto-retry');
 }
 
 async function addToBook(opts){
@@ -982,18 +999,31 @@ async function bookExportBlotterCSV(){
   }catch(e){}
 }
 
+function bookBracketExportLabel(blotter, positionId){
+  var st = bookExecStatus(blotter, positionId);
+  if (st === 'ok') return 'BRACKET OK';
+  if (st === 'fail') return 'BRACKET FAIL';
+  return 'EXEC —';
+}
+
 function bookExportCSV(){
   try{
     var snap = __book.snap;
     if (!snap || !snap.book) return;
-    var lines = ['type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,openedAt,closedAt'];
+    var blotter = snap.book.blotter || [];
+    var lines = ['type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,bracket,openedAt,closedAt'];
     (snap.book.positions || []).forEach(function(p){
-      lines.push(['open', p.sym, p.dir, p.strategy || '', p.bucket || '', p.tier || '',
-        p.notionalUsd, p.entry, p.mark, p.unrealizedUsd || 0, p.openedAt || '', ''].join(','));
+      lines.push(['open', bookCsvCell(p.sym), bookCsvCell(p.dir), bookCsvCell(p.strategy || ''),
+        bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
+        p.notionalUsd, p.entry, p.mark, p.unrealizedUsd || 0,
+        bookCsvCell(bookBracketExportLabel(blotter, p.id)),
+        p.openedAt || '', ''].join(','));
     });
     (snap.book.closed || []).forEach(function(c){
-      lines.push(['closed', c.sym, c.dir, c.strategy || '', c.bucket || '', c.tier || '',
-        c.notionalUsd, c.entry, c.mark, c.realizedUsd || 0, c.openedAt || '', c.closedAt || ''].join(','));
+      lines.push(['closed', bookCsvCell(c.sym), bookCsvCell(c.dir), bookCsvCell(c.strategy || ''),
+        bookCsvCell(c.bucket || ''), bookCsvCell(c.tier || ''),
+        c.notionalUsd, c.entry, c.mark, c.realizedUsd || 0, '',
+        c.openedAt || '', c.closedAt || ''].join(','));
     });
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     var a = document.createElement('a');
@@ -1091,6 +1121,7 @@ function deskExecStatusHTML(){
   ];
   if (bookAutoExecOn()) chips.push('<span class="statuschip ok" title="Bracket sent on each successful add">auto EXEC</span>');
   if (bookAutoExecPendingOn()) chips.push('<span class="statuschip ok" title="Silent EXEC PENDING batch on each mark refresh">auto EXEC pending</span>');
+  if (bookAutoRetryFailedOn()) chips.push('<span class="statuschip ok" title="Silent RETRY FAILED batch on each mark refresh">auto retry fail</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
     var abTitle = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
       ? 'BRAIN synthesis auto-adds PRIME plans only'
@@ -1182,6 +1213,8 @@ function mount(el){
     + (bookAutoExecOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto EXEC bracket on add (no second confirm)</label>'
     + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoExecPending" '
     + (bookAutoExecPendingOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto EXEC pending on refresh</label>'
+    + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoRetryFailed" '
+    + (bookAutoRetryFailedOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto retry failed on refresh</label>'
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
@@ -1379,6 +1412,8 @@ function mount(el){
       try{
         var ax = await bookMaybeAutoExecPending(__book.snap);
         if (ax && (ax.ok || ax.fail)) await bookPull();
+        var ar = await bookMaybeAutoRetryFailed(__book.snap);
+        if (ar && (ar.ok || ar.fail)) await bookPull();
       }catch(eAutoP){}
       paint(__book.snap);
     }catch(e){
@@ -1433,6 +1468,13 @@ function mount(el){
     autoExecPendingChk.addEventListener('change', function(){
       bookSetAutoExecPending(autoExecPendingChk.checked);
       setStat(autoExecPendingChk.checked ? 'auto EXEC pending ON' : 'auto EXEC pending OFF');
+    });
+  }
+  var autoRetryFailedChk = el.querySelector('#bookAutoRetryFailed');
+  if (autoRetryFailedChk){
+    autoRetryFailedChk.addEventListener('change', function(){
+      bookSetAutoRetryFailed(autoRetryFailedChk.checked);
+      setStat(autoRetryFailedChk.checked ? 'auto retry failed ON' : 'auto retry failed OFF');
     });
   }
   if (fundSel){
@@ -1553,6 +1595,8 @@ W.bookFundBody = bookFundBody;
 W.bookRefresh = bookRefresh;
 W.bookAutoExecOn = bookAutoExecOn;
 W.bookAutoExecPendingOn = bookAutoExecPendingOn;
+W.bookAutoRetryFailedOn = bookAutoRetryFailedOn;
+W.bookBracketExportLabel = bookBracketExportLabel;
 W.bookResolveFund = bookResolveFund;
 W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
