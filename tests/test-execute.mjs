@@ -83,6 +83,9 @@ ok(bookJs.indexOf('bookFillExportLabel') >= 0 && bookJs.indexOf(',bracket,fill,'
 ok(bookJs.indexOf('bookPollFills') >= 0 && bookJs.indexOf('BOOK_AUTO_POLL_FILLS_KEY') >= 0
   && bookJs.indexOf('poll-fills') >= 0 && bookJs.indexOf('bookDeskPollFills') >= 0,
   'book.js broker fill polling UI + auto poll on refresh');
+ok(bookJs.indexOf('data-poll-fill') >= 0 && bookJs.indexOf('bookPollFillPosition') >= 0
+  && bookJs.indexOf('UNFILLED</span>') >= 0,
+  'book.js per-row UNFILLED chip + click-to-poll');
 ok(bookJs.indexOf('posFillChipHTML') >= 0 && bookJs.indexOf('FILL OK') >= 0,
   'book.js broker fill status chips');
 ok(bookJs.indexOf('desk.fill') >= 0 && bookJs.indexOf('Broker fills:') >= 0,
