@@ -1,13 +1,16 @@
 /* =========================================================================
 HARDGATE — edge.js
-EDGE tab v4: SWING-aligned entry scanner (Delta India + CoinDCX).
+EDGE tab v5: SWING-aligned entry scanner (Delta India + CoinDCX).
 
 Finds high-quality continuation entries that AGREE with SWING SCAN
-(cryptogates swingGateMatrix G1–G3 when loaded):
+(cryptogates swingGateMatrix G1–G3 when loaded; G5/G6 scored in enrich):
   LONG  — 4H cascade bullish + HTF above EMA200 + pullback to value
-          (LIMIT @ EMA21, sweep-reclaim level, or Donchian range edge)
+          (LIMIT @ EMA21/EMA9/EMA50, sweep-reclaim or OTE 62–79%, Donchian edge)
   SHORT — 4H cascade bearish + HTF below EMA200 + rally into resistance
-          (LIMIT @ EMA21, sweep-fail level, or Donchian range edge)
+          (LIMIT @ EMA21/EMA9/EMA50, sweep-fail or OTE 62–79%, Donchian edge)
+
+Sweep quality (2025/26 SMC): wick through level + reclaim close within 1–3 bars;
+stop beyond sweep wick + 0.5 ATR. OTE limit at 70.5% of impulse leg after sweep.
 
 Every card names one EXACT resting entry (structure level, not bar close)
 plus IN-ZONE / LIMIT guidance vs the live mark.
@@ -19,7 +22,7 @@ Fundamental: venue turnover, native funding (Delta), cross-venue listing.
 Pure exports (never throw):
   edgeSignal, edgeEnrich, edgeAssess, edgePlan, edgeBacktest,
   edgeMaxSafeLev, edgeUseLev, edgeSwingRead, edgeSwingBias,
-  edgeEntryGuidance, edgeExactEntry
+  edgeEntryGuidance, edgeExactEntry, edgeOteZone, edgeSweepQuality
 ========================================================================= */
 (function(){
 'use strict';
@@ -33,7 +36,14 @@ var BB_MULT       = 2;
 var ATR_LEN       = 14;
 var EXT_LEN       = 8;
 var STOP_ATR      = 1.5;
+var SWEEP_STOP_ATR = 0.5;
 var PULL_ATR      = 0.4;
+var EMA9_PULL_ATR = 0.25;
+var SWEEP_RECLAIM_MAX = 3;
+var OTE_LO        = 0.62;
+var OTE_HI        = 0.79;
+var OTE_MID       = 0.705;
+var MIN_IMPULSE_ATR = 1.5;
 var MIN_RR        = 2.0;
 var MIN_TALLY     = 3;
 var SIGNAL_LOOKBACK = 6;
@@ -163,6 +173,7 @@ function edgeSwingBias(rows){
     if (!sw.dir) return null;
     if (sw.htf && sw.htf !== sw.dir) return null;
     var passed = null, clean = false, anchorLevel = null;
+    var g5 = null, g6 = null, dynamicRR = null;
     if (typeof swingGateMatrix === 'function'){
       var m = swingGateMatrix(rows, null);
       if (!m || !m.dir || m.dir !== sw.dir) return null;
@@ -170,14 +181,93 @@ function edgeSwingBias(rows){
       passed = m.passed;
       clean = m.clean === true;
       anchorLevel = isFinite(m.level) ? m.level : null;
+      g5 = m.gates[4] ? m.gates[4][1] : null;
+      g6 = m.gates[5] ? m.gates[5][1] : null;
+      dynamicRR = isFinite(m.dynamicRR) ? m.dynamicRR : null;
     }
     var reg = (typeof detectRegime === 'function') ? detectRegime(rows) : null;
     if (reg && reg.regime === 'volatile') return null;
     return {
       dir: sw.dir, swing: sw, regime: reg ? reg.label : 'n/a',
-      swingPassed: passed, swingClean: clean, anchorLevel: anchorLevel
+      swingPassed: passed, swingClean: clean, anchorLevel: anchorLevel,
+      g5: g5, g6: g6, dynamicRR: dynamicRR
     };
   }catch(e){ return null; }
+}
+
+/* OTE band (62–79% retrace, 70.5% sweet spot) of an impulse leg — ICT/SMC 2025+ */
+function edgeOteZone(impulseLo, impulseHi, dir){
+  try{
+    impulseLo = +impulseLo; impulseHi = +impulseHi;
+    var span = impulseHi - impulseLo;
+    if (!(span > 0)) return null;
+    if (dir === 'long'){
+      return {
+        lo: impulseHi - OTE_HI * span, hi: impulseHi - OTE_LO * span,
+        mid: impulseHi - OTE_MID * span, entry: impulseHi - OTE_MID * span
+      };
+    }
+    return {
+      lo: impulseLo + OTE_LO * span, hi: impulseLo + OTE_HI * span,
+      mid: impulseLo + OTE_MID * span, entry: impulseLo + OTE_MID * span
+    };
+  }catch(e){ return null; }
+}
+
+/* Wick through level + reclaim close within 1–3 bars (liquidity sweep filter). */
+function edgeSweepQuality(A, i, dir, priorLevel){
+  try{
+    if (!isFinite(priorLevel)) return null;
+    var maxBack = Math.min(SWEEP_RECLAIM_MAX, i);
+    var sweepBar = -1, sweepExtreme = NaN, reclaimBar = -1;
+    for (var b = 0; b <= maxBack; b++){
+      var j = i - b;
+      var lj = A.lows[j], hj = A.highs[j], cj = A.closes[j];
+      if (dir === 'long'){
+        if (!(isFinite(lj) && lj < priorLevel)) continue;
+        sweepBar = j;
+        sweepExtreme = lj;
+        if (isFinite(cj) && cj > priorLevel){
+          reclaimBar = j;
+          break;
+        }
+        for (var r = j + 1; r <= i && r - j <= SWEEP_RECLAIM_MAX; r++){
+          if (isFinite(A.closes[r]) && A.closes[r] > priorLevel){
+            reclaimBar = r;
+            break;
+          }
+        }
+        if (reclaimBar >= 0) break;
+      } else {
+        if (!(isFinite(hj) && hj > priorLevel)) continue;
+        sweepBar = j;
+        sweepExtreme = hj;
+        if (isFinite(cj) && cj < priorLevel){
+          reclaimBar = j;
+          break;
+        }
+        for (var r2 = j + 1; r2 <= i && r2 - j <= SWEEP_RECLAIM_MAX; r2++){
+          if (isFinite(A.closes[r2]) && A.closes[r2] < priorLevel){
+            reclaimBar = r2;
+            break;
+          }
+        }
+        if (reclaimBar >= 0) break;
+      }
+    }
+    if (sweepBar < 0 || reclaimBar < 0) return null;
+    return { swept: true, sweepBar: sweepBar, reclaimBar: reclaimBar,
+             priorLevel: priorLevel, sweepExtreme: sweepExtreme };
+  }catch(e){ return null; }
+}
+
+function edgeSweepStop(dir, sweepExtreme, at){
+  try{
+    if (!isFinite(sweepExtreme) || !isFinite(at)) return NaN;
+    return (dir === 'long')
+      ? sweepExtreme - SWEEP_STOP_ATR * at
+      : sweepExtreme + SWEEP_STOP_ATR * at;
+  }catch(e){ return NaN; }
 }
 
 /* Exact resting entry + zone from the trigger bar — never the close when a
@@ -187,7 +277,8 @@ function edgeExactEntry(biasDir, kind, A, i, ctx){
     ctx = ctx || {};
     var c = A.closes[i], h = A.highs[i], l = A.lows[i];
     var at = A.atr[i], tol = PULL_ATR * at;
-    var e21 = A.e21[i], dcLo = A.dc.lo[i], dcHi = A.dc.up[i];
+    var e9 = A.e9[i], e21 = A.e21[i], e50 = A.e50[i];
+    var dcLo = A.dc.lo[i], dcHi = A.dc.up[i];
     var mark = c, entry, zoneLo, zoneHi, entryType = 'LIMIT', anchor;
 
     if (biasDir === 'long'){
@@ -198,12 +289,31 @@ function edgeExactEntry(biasDir, kind, A, i, ctx){
         zoneHi = e21 + tol * 0.25;
         if (mark > zoneHi + tol * 0.5) return null;
         entryType = (mark >= zoneLo && mark <= zoneHi + tol * 0.25) ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'EMA9 PULLBACK' && isFinite(e9)){
+        entry = e9;
+        anchor = e9;
+        zoneLo = e9 - tol * 0.5;
+        zoneHi = e9 + tol * 0.25;
+        if (mark > zoneHi + tol * 0.5) return null;
+        entryType = (mark >= zoneLo && mark <= zoneHi + tol * 0.25) ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'EMA50 RECLAIM' && isFinite(e50)){
+        entry = e50;
+        anchor = e50;
+        zoneLo = e50 - tol * 0.35;
+        zoneHi = e50 + tol * 0.25;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
       } else if (kind === 'SWEEP + RECLAIM' && isFinite(ctx.priorLo)){
         entry = ctx.priorLo;
         anchor = ctx.priorLo;
         zoneLo = ctx.priorLo - tol * 0.25;
         zoneHi = ctx.priorLo + tol * 0.5;
         entryType = mark >= entry ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'SWEEP + OTE' && ctx.ote){
+        entry = ctx.ote.entry;
+        anchor = ctx.ote.mid;
+        zoneLo = ctx.ote.lo;
+        zoneHi = ctx.ote.hi;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
       } else if (kind === 'RANGE BOTTOM (trend)' && isFinite(dcLo)){
         entry = dcLo;
         anchor = dcLo;
@@ -220,12 +330,31 @@ function edgeExactEntry(biasDir, kind, A, i, ctx){
         zoneHi = e21 + tol * 0.5;
         if (mark < zoneLo - tol * 0.5) return null;
         entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'EMA9 REJECTION' && isFinite(e9)){
+        entry = e9;
+        anchor = e9;
+        zoneLo = e9 - tol * 0.25;
+        zoneHi = e9 + tol * 0.5;
+        if (mark < zoneLo - tol * 0.5) return null;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'EMA50 RECLAIM' && isFinite(e50)){
+        entry = e50;
+        anchor = e50;
+        zoneLo = e50 - tol * 0.25;
+        zoneHi = e50 + tol * 0.35;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
       } else if (kind === 'SWEEP + FAIL' && isFinite(ctx.priorHi)){
         entry = ctx.priorHi;
         anchor = ctx.priorHi;
         zoneLo = ctx.priorHi - tol * 0.5;
         zoneHi = ctx.priorHi + tol * 0.25;
         entryType = mark <= entry ? 'MARKET' : 'LIMIT';
+      } else if (kind === 'SWEEP + OTE' && ctx.ote){
+        entry = ctx.ote.entry;
+        anchor = ctx.ote.mid;
+        zoneLo = ctx.ote.lo;
+        zoneHi = ctx.ote.hi;
+        entryType = (mark >= zoneLo && mark <= zoneHi) ? 'MARKET' : 'LIMIT';
       } else if (kind === 'RANGE TOP (trend)' && isFinite(dcHi)){
         entry = dcHi;
         anchor = dcHi;
@@ -312,6 +441,7 @@ function trySetupAt(A, i, biasDir){
     if (!isFinite(c) || !isFinite(at) || !(at > 0)) return null;
     var closePos = barClosePos(h, l, c);
     var tol = PULL_ATR * at;
+    var k, extremeL, extremeH, stopL, stopS, pL, pS, sq, ote, impulseLo, impulseHi;
 
     if (biasDir === 'long'){
       if (!(isFinite(e50) && c > e50)) return null;
@@ -322,9 +452,9 @@ function trySetupAt(A, i, biasDir){
         var hold = isFinite(closePos) && closePos >= 0.52 && isFinite(o) && c >= o;
         var pbOk = !isFinite(pb) || pb <= 0.55;
         if (hold && pbOk){
-          var extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
-          var stopL = Math.min(extremeL, l) - STOP_ATR * at;
-          var pL = finalizeSetup('long', A, i, {
+          extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
+          stopL = Math.min(extremeL, l) - STOP_ATR * at;
+          pL = finalizeSetup('long', A, i, {
             edge: 'EMA21 PULLBACK', swept: false, extreme: extremeL, stop: stopL,
             t1Hint: isFinite(e9) ? e9 + at : null, t2Hint: isFinite(dcHi) ? dcHi : null, ctx: {}
           });
@@ -332,15 +462,57 @@ function trySetupAt(A, i, biasDir){
         }
       }
 
-      /* 2) Sweep + reclaim of local low (with-trend liquidity grab) */
-      var priorLo = Infinity, k;
+      /* 2) EMA9 pullback when extended from fast MA (swingTryClean parity) */
+      if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
+        if (l <= e9 + tol && c >= e9 - tol * 0.5 && isFinite(closePos) && closePos >= 0.5){
+          extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
+          stopL = Math.min(extremeL, l) - STOP_ATR * at;
+          pL = finalizeSetup('long', A, i, {
+            edge: 'EMA9 PULLBACK', swept: false, extreme: extremeL, stop: stopL,
+            t1Hint: isFinite(e21) ? e21 + at : null, t2Hint: isFinite(dcHi) ? dcHi : null, ctx: {}
+          });
+          if (pL) return pL;
+        }
+      }
+
+      /* 3) EMA50 sweep + reclaim — trap filter in uptrend */
+      if (isFinite(e50) && l < e50 && c > e50 && isFinite(closePos) && closePos >= 0.55){
+        extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
+        stopL = edgeSweepStop('long', l, at);
+        if (!isFinite(stopL)) stopL = extremeL - STOP_ATR * at;
+        pL = finalizeSetup('long', A, i, {
+          edge: 'EMA50 RECLAIM', swept: true, extreme: extremeL, stop: stopL,
+          t1Hint: isFinite(e21) ? e21 + at : null, t2Hint: isFinite(dcHi) ? dcHi : null, ctx: {}
+        });
+        if (pL) return pL;
+      }
+
+      /* 4) Sweep + reclaim of local low (1–3 bar quality filter) */
+      var priorLo = Infinity;
       for (k = Math.max(0, i - 12); k < i; k++){
         if (isFinite(A.lows[k]) && A.lows[k] < priorLo) priorLo = A.lows[k];
       }
-      var sweptLo = isFinite(l) && isFinite(priorLo) && priorLo < Infinity && l < priorLo && c > priorLo;
-      if (sweptLo && isFinite(closePos) && closePos >= 0.55){
-        extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
-        stopL = extremeL - STOP_ATR * at;
+      sq = (priorLo < Infinity) ? edgeSweepQuality(A, i, 'long', priorLo) : null;
+      if (sq && isFinite(closePos) && closePos >= 0.55){
+        extremeL = isFinite(sq.sweepExtreme) ? sq.sweepExtreme : l;
+        stopL = edgeSweepStop('long', extremeL, at);
+        if (!isFinite(stopL)) stopL = extremeL - STOP_ATR * at;
+        impulseLo = extremeL;
+        impulseHi = h;
+        for (k = sq.sweepBar; k <= i; k++){
+          if (isFinite(A.highs[k]) && A.highs[k] > impulseHi) impulseHi = A.highs[k];
+        }
+        if (impulseHi - impulseLo >= MIN_IMPULSE_ATR * at){
+          ote = edgeOteZone(impulseLo, impulseHi, 'long');
+          if (ote && c > ote.hi){
+            pL = finalizeSetup('long', A, i, {
+              edge: 'SWEEP + OTE', swept: true, extreme: extremeL, stop: stopL,
+              t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcHi) ? dcHi : null,
+              ctx: { priorLo: priorLo, ote: ote }
+            });
+            if (pL) return pL;
+          }
+        }
         pL = finalizeSetup('long', A, i, {
           edge: 'SWEEP + RECLAIM', swept: true, extreme: extremeL, stop: stopL,
           t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcHi) ? dcHi : null,
@@ -349,7 +521,7 @@ function trySetupAt(A, i, biasDir){
         if (pL) return pL;
       }
 
-      /* 3) Aligned range-bottom touch (only in uptrend — at lower Donchian) */
+      /* 5) Aligned range-bottom touch (only in uptrend — at lower Donchian) */
       if (isFinite(dcLo) && l <= dcLo + tol && c > dcLo && isFinite(pb) && pb <= 0.35){
         if (isFinite(closePos) && closePos >= 0.5){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
@@ -372,9 +544,9 @@ function trySetupAt(A, i, biasDir){
         var reject = isFinite(closePos) && closePos <= 0.48 && isFinite(o) && c <= o;
         var pbHiOk = !isFinite(pb) || pb >= 0.45;
         if (reject && pbHiOk){
-          var extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
-          var stopS = Math.max(extremeH, h) + STOP_ATR * at;
-          var pS = finalizeSetup('short', A, i, {
+          extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
+          stopS = Math.max(extremeH, h) + STOP_ATR * at;
+          pS = finalizeSetup('short', A, i, {
             edge: 'EMA21 REJECTION', swept: false, extreme: extremeH, stop: stopS,
             t1Hint: isFinite(e9) ? e9 - at : null, t2Hint: isFinite(dcLo) ? dcLo : null, ctx: {}
           });
@@ -382,15 +554,57 @@ function trySetupAt(A, i, biasDir){
         }
       }
 
-      /* 2) Sweep + fail at local high */
+      /* 2) EMA9 rejection when extended from fast MA */
+      if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
+        if (h >= e9 - tol && c <= e9 + tol * 0.5 && isFinite(closePos) && closePos <= 0.5){
+          extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
+          stopS = Math.max(extremeH, h) + STOP_ATR * at;
+          pS = finalizeSetup('short', A, i, {
+            edge: 'EMA9 REJECTION', swept: false, extreme: extremeH, stop: stopS,
+            t1Hint: isFinite(e21) ? e21 - at : null, t2Hint: isFinite(dcLo) ? dcLo : null, ctx: {}
+          });
+          if (pS) return pS;
+        }
+      }
+
+      /* 3) EMA50 sweep + fail in downtrend */
+      if (isFinite(e50) && h > e50 && c < e50 && isFinite(closePos) && closePos <= 0.45){
+        extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
+        stopS = edgeSweepStop('short', h, at);
+        if (!isFinite(stopS)) stopS = extremeH + STOP_ATR * at;
+        pS = finalizeSetup('short', A, i, {
+          edge: 'EMA50 RECLAIM', swept: true, extreme: extremeH, stop: stopS,
+          t1Hint: isFinite(e21) ? e21 - at : null, t2Hint: isFinite(dcLo) ? dcLo : null, ctx: {}
+        });
+        if (pS) return pS;
+      }
+
+      /* 4) Sweep + fail at local high (1–3 bar quality filter) */
       var priorHi = -Infinity;
       for (k = Math.max(0, i - 12); k < i; k++){
         if (isFinite(A.highs[k]) && A.highs[k] > priorHi) priorHi = A.highs[k];
       }
-      var sweptHi = isFinite(h) && isFinite(priorHi) && priorHi > -Infinity && h > priorHi && c < priorHi;
-      if (sweptHi && isFinite(closePos) && closePos <= 0.45){
-        extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
-        stopS = extremeH + STOP_ATR * at;
+      sq = (priorHi > -Infinity) ? edgeSweepQuality(A, i, 'short', priorHi) : null;
+      if (sq && isFinite(closePos) && closePos <= 0.45){
+        extremeH = isFinite(sq.sweepExtreme) ? sq.sweepExtreme : h;
+        stopS = edgeSweepStop('short', extremeH, at);
+        if (!isFinite(stopS)) stopS = extremeH + STOP_ATR * at;
+        impulseHi = extremeH;
+        impulseLo = l;
+        for (k = sq.sweepBar; k <= i; k++){
+          if (isFinite(A.lows[k]) && A.lows[k] < impulseLo) impulseLo = A.lows[k];
+        }
+        if (impulseHi - impulseLo >= MIN_IMPULSE_ATR * at){
+          ote = edgeOteZone(impulseLo, impulseHi, 'short');
+          if (ote && c < ote.lo){
+            pS = finalizeSetup('short', A, i, {
+              edge: 'SWEEP + OTE', swept: true, extreme: extremeH, stop: stopS,
+              t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcLo) ? dcLo : null,
+              ctx: { priorHi: priorHi, ote: ote }
+            });
+            if (pS) return pS;
+          }
+        }
         pS = finalizeSetup('short', A, i, {
           edge: 'SWEEP + FAIL', swept: true, extreme: extremeH, stop: stopS,
           t1Hint: isFinite(dcMid) ? dcMid : null, t2Hint: isFinite(dcLo) ? dcLo : null,
@@ -399,7 +613,7 @@ function trySetupAt(A, i, biasDir){
         if (pS) return pS;
       }
 
-      /* 3) Aligned range-top rejection */
+      /* 5) Aligned range-top rejection */
       if (isFinite(dcHi) && h >= dcHi - tol && c < dcHi && isFinite(pb) && pb >= 0.65){
         if (isFinite(closePos) && closePos <= 0.5){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
@@ -460,8 +674,25 @@ function edgeEnrich(sig, rows, item, candleSrc){
     out.tally += 2;
     out.parts.push({ label: sig.edge + (sig.swept ? ' · liquidity sweep' : ' · value entry'), pts: 2 });
     out.tally += 2;
+    if (sig.edge && sig.edge.indexOf('OTE') >= 0){
+      out.parts.push({ label: 'OTE 62–79% limit (70.5% sweet spot)', pts: 1 });
+      out.tally += 1;
+    }
     if (sig.barAge > 0){
       out.parts.push({ label: 'trigger ' + sig.barAge + ' bar' + (sig.barAge === 1 ? '' : 's') + ' ago', pts: 0 });
+    }
+
+    if (bias && bias.swingClean){
+      out.parts.push({ label: 'SWING clean (7/7 gates + EMA21 anchor)', pts: 1 });
+      out.tally += 1;
+    }
+    if (bias && bias.g5 === true){
+      out.parts.push({ label: 'G5 vol+wick commit (cryptogates)', pts: 1 });
+      out.tally += 1;
+    }
+    if (bias && bias.g6 === true){
+      out.parts.push({ label: 'G6 dynamic R:R ≥2 (cryptogates)', pts: 1 });
+      out.tally += 1;
     }
 
     if (typeof detectRegime === 'function'){
@@ -792,7 +1023,8 @@ function mount(el){
   el.innerHTML = '<div class="panel">'
     + '<h2>EDGE Scanner <span>SWING-aligned entries · Delta + CoinDCX</span></h2>'
     + '<p class="note">Only shows setups that <b>agree with SWING SCAN</b> (G1 cascade+spread · G2 EMA200 side · G3 RSI — same as cryptogates when loaded).'
-    + ' Strategies: <b>LIMIT @ EMA21 pullback/rejection</b>, <b>LIMIT @ sweep reclaim/fail level</b>, <b>LIMIT @ Donchian range edge</b>.'
+    + ' Strategies: <b>LIMIT @ EMA21/EMA9/EMA50</b>, <b>sweep reclaim/fail (1–3 bar)</b>, <b>OTE 62–79%</b>, <b>Donchian range edge</b>.'
+    + ' Sweeps use wick-through + reclaim filter; stop beyond sweep wick + 0.5 ATR.'
     + ' Each card names the exact resting entry (structure level, not bar close) plus in-zone guidance.'
     + ' Confluence: structure BOS, vol regime, liquidity, TTM squeeze, funding, turnover.'
     + ' Min R:R ' + MIN_RR + ' · tally ≥ ' + MIN_TALLY + ' · <b>USE Nx</b> = 50% max-safe.</p>'
@@ -920,6 +1152,8 @@ W.edgeSwingRead = edgeSwingRead;
 W.edgeSwingBias = edgeSwingBias;
 W.edgeEntryGuidance = edgeEntryGuidance;
 W.edgeExactEntry = edgeExactEntry;
+W.edgeOteZone = edgeOteZone;
+W.edgeSweepQuality = edgeSweepQuality;
 W.edgeScanList = edgeScanList;
 W.edgeCardHTML = cardHTML;
 W.edgeDropForming = edgeDropForming;

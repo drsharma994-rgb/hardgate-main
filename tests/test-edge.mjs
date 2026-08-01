@@ -106,8 +106,32 @@ console.log('== edgeExactEntry pure seam ==');
 {
   assert(typeof W.edgeExactEntry === 'function', 'edgeExactEntry exported');
   assert(typeof W.edgeEntryGuidance === 'function', 'edgeEntryGuidance exported');
+  assert(typeof W.edgeOteZone === 'function', 'edgeOteZone exported');
+  assert(typeof W.edgeSweepQuality === 'function', 'edgeSweepQuality exported');
   var g = W.edgeEntryGuidance(100.1, 100, { lo: 99.8, hi: 100.2 }, 'long');
   assert(g.inZone === true, 'mark inside zone -> inZone');
+}
+
+console.log('== OTE zone geometry ==');
+{
+  var ote = W.edgeOteZone(100, 110, 'long');
+  assert(ote && ote.entry < 110 && ote.entry > 100, 'long OTE entry inside impulse leg');
+  assert(ote.lo <= ote.entry && ote.entry <= ote.hi, 'OTE entry inside 62-79 band');
+}
+
+console.log('== sweep quality filter ==');
+{
+  var rows = trendSeries('long', 80);
+  var n = rows.length;
+  rows[n - 3].l = rows[n - 3].c - 3;
+  rows[n - 3].c = rows[n - 3].l + 0.2;
+  rows[n - 2].c = rows[n - 2].l + 1.5;
+  rows[n - 1].c = rows[n - 1].l + 1.2;
+  var priorLo = Math.min.apply(null, rows.slice(n - 15, n - 3).map(function(r){ return r.l; }));
+  var A = { lows: rows.map(function(r){ return r.l; }), highs: rows.map(function(r){ return r.h; }),
+            closes: rows.map(function(r){ return r.c; }) };
+  var sq = W.edgeSweepQuality(A, n - 1, 'long', priorLo);
+  assert(sq === null || sq.swept === true, 'edgeSweepQuality returns swept object or null');
 }
 
 console.log('== cryptogates bias parity ==');
