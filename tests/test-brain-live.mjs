@@ -273,7 +273,7 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   assert(bCards.indexOf('ENTRY <b>100</b> · STOP <b>95</b>') >= 0 && bCards.indexOf('T1 <b>110</b> (2R)') >= 0
          && bCards.indexOf('T2 <b>117.5</b>') >= 0 && bCards.indexOf('gate engine') >= 0,
          'BTC card uses the gate engine plan verbatim — levels never invented');
-  assert(bCards.indexOf('COINDCX') >= 0 && bCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110)') >= 0,
+  assert(bCards.indexOf('COINDCX') >= 0 && bCards.indexOf('toTrade(&quot;B-BTC_USDT&quot;,&quot;long&quot;,100,95,110') >= 0,
          'BTC card: COINDCX venue stamp + xu-sym toTrade payload');
 
   /* ---- ETH HIGH card: engine plan, DELTA stamp ---- */

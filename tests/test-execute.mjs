@@ -36,6 +36,12 @@ var executeJs = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
 ok(executeJs.indexOf('executeBackendReady') >= 0 && executeJs.indexOf('/api/execute') >= 0,
   'execute.js exposes ready check + proxy path');
 ok(executeJs.indexOf('execute-blotter') >= 0, 'execute.js records blotter after bracket send');
+ok(executeJs.indexOf('skipConfirm') >= 0, 'execute.js supports silent auto-exec path');
+
+var bookJs = fs.readFileSync(path.join(root, 'book.js'), 'utf8');
+ok(bookJs.indexOf('bookMaybeAutoExecute') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_KEY') >= 0,
+  'book.js auto EXEC on add hook');
+ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
