@@ -25,6 +25,7 @@ var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
 var BOOK_AUTO_EXEC_PENDING_KEY = 'hg_book_auto_exec_pending_v1';
 var BOOK_AUTO_RETRY_FAILED_KEY = 'hg_book_auto_retry_failed_v1';
 var BOOK_AUTO_EXEC_CROSS_FUND_KEY = 'hg_book_auto_exec_cross_fund_v1';
+var BOOK_AUTO_POLL_FILLS_KEY = 'hg_book_auto_poll_fills_v1';
 var BOOK_BLOTTER_FILTER_KEY = 'hg_book_blotter_filter_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
@@ -102,6 +103,12 @@ function bookSetAutoRetryFailed(on){
 }
 function bookAutoExecCrossFundOn(){
   try{ return localStorage.getItem(BOOK_AUTO_EXEC_CROSS_FUND_KEY) === '1'; }catch(e){ return false; }
+}
+function bookAutoPollFillsOn(){
+  try{ return localStorage.getItem(BOOK_AUTO_POLL_FILLS_KEY) === '1'; }catch(e){ return false; }
+}
+function bookSetAutoPollFills(on){
+  try{ localStorage.setItem(BOOK_AUTO_POLL_FILLS_KEY, on ? '1' : '0'); }catch(e){}
 }
 function bookDailyLossHalted(){
   if (__book.desk && __book.desk.dailyLossHalt) return true;
@@ -283,6 +290,28 @@ async function bookMaybeAutoRetryFailed(snap){
   var targets = bookExecTargets(scope.positions, scope.blotter, { pending: false, failed: true });
   if (!targets.length) return null;
   return bookExecuteBatch(targets, 'hardgate-book-auto-retry');
+}
+
+async function bookPollFills(opts){
+  opts = opts || {};
+  if (!bookApiOn() || !bookExecuteReady()) return { ok: false, reason: 'unavailable' };
+  var multiFund = (__book.funds || []).length > 1;
+  var body = { allFunds: opts.allFunds != null ? !!opts.allFunds : multiFund };
+  if (opts.fund) body.fund = opts.fund;
+  var r = await bookFetch('/api/book/poll-fills', { method: 'POST', body: JSON.stringify(bookFundBody(body)) });
+  return (r.json && typeof r.json === 'object') ? r.json : { ok: false, reason: 'poll failed' };
+}
+
+async function bookMaybeAutoPollFills(){
+  if (!bookAutoPollFillsOn() || !bookExecuteReady() || !bookApiOn()) return null;
+  var deskFill = __book.desk && __book.desk.fill;
+  if (!deskFill || !(deskFill.unfilled || deskFill.partial)) return null;
+  var multiFund = (__book.funds || []).length > 1;
+  return bookPollFills({ allFunds: multiFund });
+}
+
+async function bookPollAllFundsFills(){
+  return bookPollFills({ allFunds: true });
 }
 
 async function addToBook(opts){
@@ -604,6 +633,9 @@ function deskHeaderHTML(desk){
     + (desk.fill && (desk.fill.unfilled || desk.fill.partial)
       ? '<div class="note warn" style="margin-top:6px">Broker fills: <b>' + (desk.fill.unfilled || 0)
         + ' unfilled</b> · <b>' + (desk.fill.partial || 0) + ' partial</b> (bracket sent, fill not confirmed)'
+        + (bookExecuteReady()
+          ? ' · <span class="statuschip warn bookDeskAct" id="bookDeskPollFills" style="cursor:pointer"'
+            + ' title="Poll EXECUTE backend for broker fill status across funds">poll fills</span>' : '')
         + '</div>' : '')
     + (fundChips ? '<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">' + fundChips + '</div>' : '')
     + '</div>';
@@ -1277,6 +1309,7 @@ function deskExecStatusHTML(){
   if (bookAutoExecPendingOn()) chips.push('<span class="statuschip ok" title="Silent EXEC PENDING batch on each mark refresh">auto EXEC pending</span>');
   if (bookAutoRetryFailedOn()) chips.push('<span class="statuschip ok" title="Silent RETRY FAILED batch on each mark refresh">auto retry fail</span>');
   if (bookAutoExecCrossFundOn()) chips.push('<span class="statuschip ok" title="Auto pending/retry scans every fund book">auto EXEC all funds</span>');
+  if (bookAutoPollFillsOn()) chips.push('<span class="statuschip ok" title="Poll broker fill status on each mark refresh when backlog exists">auto poll fills</span>');
   if (bookDailyLossHalted()) chips.push('<span class="statuschip warn" title="New adds blocked until UTC day roll">DAY HALT</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
     var abTitle = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
@@ -1377,6 +1410,8 @@ function mount(el){
     + (bookAutoRetryFailedOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto retry failed on refresh</label>'
     + '<label class="note" id="bookAutoCrossFundWrap" style="display:none"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoExecCrossFund" '
     + (bookAutoExecCrossFundOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto pending/retry all funds</label>'
+    + '<label class="note"' + (bookExecuteReady() ? '' : ' title="Set EXECUTE_BACKEND_URL on Render to enable"') + '><input type="checkbox" id="bookAutoPollFills" '
+    + (bookAutoPollFillsOn() ? 'checked' : '') + (bookExecuteReady() ? '' : ' disabled') + '> Auto poll broker fills on refresh</label>'
     + '</div>'
     + '<div class="row">'
     + '<button class="btn" id="bookRefresh">REFRESH MARKS</button>'
@@ -1384,6 +1419,8 @@ function mount(el){
     + (bookExecuteReady() ? '' : ' disabled') + '>EXEC PENDING</button>'
     + '<button class="btn ghost" id="bookRetryFailed" title="Retry EXEC for rows showing BRACKET FAIL"'
     + (bookExecuteReady() ? '' : ' disabled') + '>RETRY FAILED</button>'
+    + '<button class="btn ghost" id="bookPollFills" title="Poll EXECUTE backend for broker fill status"'
+    + (bookExecuteReady() ? '' : ' disabled') + '>POLL FILLS</button>'
     + '<button class="btn ghost" id="bookExecAllPending" style="display:none" title="EXEC pending brackets across every fund">ALL FUNDS PENDING</button>'
     + '<button class="btn ghost" id="bookRetryAllFailed" style="display:none" title="Retry failed brackets across every fund">ALL FUNDS RETRY</button>'
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
@@ -1558,6 +1595,14 @@ function mount(el){
       var failN = bookExecTargets(positions, blotterRows, { pending: false, failed: true }).length;
       rfBtn.textContent = failN ? ('RETRY FAILED (' + failN + ')') : 'RETRY FAILED';
     }
+    var pfBtn = el.querySelector('#bookPollFills');
+    if (pfBtn){
+      pfBtn.disabled = !execReady;
+      var fillN = (__book.desk && __book.desk.fill && __book.desk.fill.total) || 0;
+      pfBtn.textContent = fillN ? ('POLL FILLS (' + fillN + ')') : 'POLL FILLS';
+    }
+    var autoPollChk = el.querySelector('#bookAutoPollFills');
+    if (autoPollChk) autoPollChk.disabled = !execReady;
     if (epAllBtn && rfAllBtn){
       if (multiFund && execReady){
         epAllBtn.style.display = '';
@@ -1600,6 +1645,8 @@ function mount(el){
         if (ax && (ax.ok || ax.fail)) await bookPullAfterAutoExec();
         var ar = await bookMaybeAutoRetryFailed(__book.snap);
         if (ar && (ar.ok || ar.fail)) await bookPullAfterAutoExec();
+        var apf = await bookMaybeAutoPollFills();
+        if (apf && apf.filled > 0) await bookPull();
       }catch(eAutoP){}
       paint(__book.snap);
     }catch(e){
@@ -1627,6 +1674,19 @@ function mount(el){
   var retryFailedBtn = el.querySelector('#bookRetryFailed');
   if (retryFailedBtn) retryFailedBtn.addEventListener('click', async function(){
     await bookRetryFailed();
+    await refresh();
+  });
+  var pollFillsBtn = el.querySelector('#bookPollFills');
+  if (pollFillsBtn) pollFillsBtn.addEventListener('click', async function(){
+    var multiFund = (__book.funds || []).length > 1;
+    var r = await bookPollFills({ allFunds: multiFund });
+    if (r && r.filled > 0){
+      try{ alert('Recorded ' + r.filled + ' broker fill' + (r.filled === 1 ? '' : 's') + ' from poll.'); }catch(e){}
+    } else if (r && r.polled > 0){
+      try{ alert('Polled ' + r.polled + ' position' + (r.polled === 1 ? '' : 's') + ' — no new fills from backend.'); }catch(e2){}
+    } else {
+      try{ alert('No open positions need fill polling.'); }catch(e3){}
+    }
     await refresh();
   });
   var execAllPendingBtn = el.querySelector('#bookExecAllPending');
@@ -1681,6 +1741,13 @@ function mount(el){
     autoCrossFundChk.addEventListener('change', function(){
       bookSetAutoExecCrossFund(autoCrossFundChk.checked);
       setStat(autoCrossFundChk.checked ? 'auto EXEC all funds ON' : 'auto EXEC all funds OFF');
+    });
+  }
+  var autoPollFillsChk = el.querySelector('#bookAutoPollFills');
+  if (autoPollFillsChk){
+    autoPollFillsChk.addEventListener('change', function(){
+      bookSetAutoPollFills(autoPollFillsChk.checked);
+      setStat(autoPollFillsChk.checked ? 'auto poll fills ON' : 'auto poll fills OFF');
     });
   }
   var blotterExecOnlyChk = el.querySelector('#bookBlotterExecOnly');
@@ -1765,6 +1832,12 @@ function mount(el){
       await refresh();
       return;
     }
+    var deskPoll = t.closest('#bookDeskPollFills');
+    if (deskPoll){
+      await bookPollAllFundsFills();
+      await refresh();
+      return;
+    }
     var scaleBtn = t.closest('[data-scale]');
     if (scaleBtn){
       if (!bookApiOn()) return;
@@ -1823,6 +1896,8 @@ W.bookAutoExecOn = bookAutoExecOn;
 W.bookAutoExecPendingOn = bookAutoExecPendingOn;
 W.bookAutoRetryFailedOn = bookAutoRetryFailedOn;
 W.bookAutoExecCrossFundOn = bookAutoExecCrossFundOn;
+W.bookAutoPollFillsOn = bookAutoPollFillsOn;
+W.bookPollFills = bookPollFills;
 W.bookDailyLossHalted = bookDailyLossHalted;
 W.bookBlotterExecOnlyOn = bookBlotterExecOnlyOn;
 W.bookFilterBlotterRows = bookFilterBlotterRows;

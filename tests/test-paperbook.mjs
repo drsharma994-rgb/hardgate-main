@@ -7,7 +7,7 @@ import {
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
   pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary, pbDailyLossState,
   parseMaxDailyLossPct, pbBookCfgFromEnv, pbApplyExecuteFill, pbFillBacklogSummary, pbBracketSentForPosition,
-  pbFillExportLabel,
+  pbFillExportLabel, pbPositionsNeedingFillPoll,
 } from '../lib/paperbook-core.mjs';
 import { pbConsolidatedLp, pbConsolidatedDigestText } from '../lib/paperbook-funds.mjs';
 
@@ -157,6 +157,8 @@ var unfilledBk = pbAddIntent(pbNewBook(), { sym: 'SOLUSD', dir: 'long', entry: 1
 var ufPid = unfilledBk.positions[0].id;
 unfilledBk = pbPushBlotter(unfilledBk, { type: 'execute_ok', sym: 'SOLUSD', positionId: ufPid });
 ok(pbFillExportLabel(unfilledBk.positions[0], unfilledBk.blotter) === 'UNFILLED', 'fill export label unfilled after bracket');
+var needPoll = pbPositionsNeedingFillPoll(unfilledBk);
+ok(needPoll.length === 1 && needPoll[0].position.id === ufPid, 'positions needing fill poll');
 var exSum = pbDigestExecuteSummary(exBook, Date.now() - 86400000);
 ok(exSum.ok === 1 && exSum.pending === 0, 'digest execute summary counts OK + no pending when bracket sent');
 var exDig = pbWeeklyDigest(exBook, 'week');
