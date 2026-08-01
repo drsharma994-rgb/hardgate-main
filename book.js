@@ -86,7 +86,7 @@ async function bookPull(){
     if (r.json && r.json.ok){
       __book.snap = r.json;
       __book.liveReady = !!(r.json.capabilities && r.json.capabilities.liveExecute);
-      __book.digestReady = !!(r.json.capabilities && r.json.capabilities.digestWebhook);
+      __book.digestReady = !!(r.json.capabilities && (r.json.capabilities.digestSend || r.json.capabilities.digestWebhook));
       __book.lastAt = Date.now();
       return r.json;
     }
@@ -359,7 +359,7 @@ async function bookExportDigest(period){
 async function bookSendDigest(){
   if (!bookApiOn()) return;
   if (!__book.digestReady){
-    try{ alert('Digest webhook not configured — set LP_DIGEST_WEBHOOK_URL on Render.'); }catch(e){}
+    try{ alert('Digest not configured — set LP_DIGEST_WEBHOOK_URL and/or TELEGRAM_TOKEN+TELEGRAM_CHAT_ID on Render.'); }catch(e){}
     return;
   }
   if (!confirm('Send weekly LP digest to the configured webhook?')) return;
@@ -531,7 +531,7 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>PAPER FUND BOOK <span>$1M NAV · risk limits · paper fills at plan entry</span></h2>'
-    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh.</p>'
+    + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly LP digest auto-sends Sun ~21:07 IST when webhook/Telegram is configured.</p>'
     + '<div class="row" style="align-items:center;gap:12px">'
     + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
     + '</div>'

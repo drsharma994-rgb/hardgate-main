@@ -482,6 +482,11 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(yml.includes('git diff --cached --quiet || git commit'), 'workflow commit guard intact (works with heartbeat: no-op when state unchanged)');
   ok(yml.includes('TELEGRAM_TOKEN') && yml.includes('TELEGRAM_CHAT_ID'), 'workflow passes the telegram secrets');
 }
+{
+  const bd = fs.readFileSync(fileURLToPath(new URL('../.github/workflows/book-digest.yml', import.meta.url)), 'utf8');
+  ok(bd.includes('/api/book/digest/send'), 'book-digest workflow hits digest send endpoint');
+  ok(bd.includes('"cron":true'), 'book-digest workflow passes cron flag');
+}
 /* off-hours session tag — same IST windows as brain.js sessionWindow;
    deterministic UTC anchors (IST = UTC + 5:30) */
 {
