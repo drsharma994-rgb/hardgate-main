@@ -24,6 +24,7 @@ var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
 var BOOK_AUTO_EXEC_PENDING_KEY = 'hg_book_auto_exec_pending_v1';
 var BOOK_AUTO_RETRY_FAILED_KEY = 'hg_book_auto_retry_failed_v1';
 var BOOK_AUTO_EXEC_CROSS_FUND_KEY = 'hg_book_auto_exec_cross_fund_v1';
+var BOOK_BLOTTER_FILTER_KEY = 'hg_book_blotter_filter_v1';
 var BOOK_FUND_KEY = 'hg_book_fund_v1';
 
 function bookFundId(){
@@ -103,6 +104,19 @@ function bookAutoExecCrossFundOn(){
 }
 function bookSetAutoExecCrossFund(on){
   try{ localStorage.setItem(BOOK_AUTO_EXEC_CROSS_FUND_KEY, on ? '1' : '0'); }catch(e){}
+}
+function bookBlotterExecOnlyOn(){
+  try{ return localStorage.getItem(BOOK_BLOTTER_FILTER_KEY) === 'execute'; }catch(e){ return false; }
+}
+function bookSetBlotterExecOnly(on){
+  try{ localStorage.setItem(BOOK_BLOTTER_FILTER_KEY, on ? 'execute' : 'all'); }catch(e){}
+}
+function bookFilterBlotterRows(rows){
+  rows = rows || [];
+  if (!bookBlotterExecOnlyOn()) return rows;
+  return rows.filter(function(b){
+    return b && (b.type === 'execute_ok' || b.type === 'execute_fail');
+  });
 }
 
 function esc(s){
@@ -523,9 +537,12 @@ function autoLogHTML(){
   }).join('') + '</ul>';
 }
 
-function blotterHTML(rows){
+function blotterHTML(rows, opts){
+  opts = opts || {};
   rows = (rows || []).slice(0, 10);
-  if (!rows.length) return '<div class="note">No blotter events yet.</div>';
+  if (!rows.length){
+    return '<div class="note">' + esc(opts.empty || 'No blotter events yet.') + '</div>';
+  }
   var showFund = rows.some(function(b){ return b && b._fundId; });
   return '<table class="booktbl"><thead><tr><th>Time</th>'
     + (showFund ? '<th>Fund</th>' : '')
@@ -1000,6 +1017,7 @@ async function bookExportBlotterCSV(){
       if (!snap || !snap.book) return;
       rows = (snap.book.blotter || []).slice();
     }
+    rows = bookFilterBlotterRows(rows);
     if (!rows.length){ try{ alert('No blotter events to export.'); }catch(e){} return; }
     var showFund = multiFund || rows.some(function(b){ return b && b._fundId; });
     var header = ['at_iso', 'time_local'];
@@ -1319,7 +1337,10 @@ function mount(el){
     + '<div id="bookDesk"></div>'
     + '<div id="bookHeat"></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
-    + '<div class="panel" style="margin-top:8px"><h3>Execution blotter</h3><div id="bookBlotter"></div>'
+    + '<div class="panel" style="margin-top:8px"><div class="row" style="align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">'
+    + '<h3 style="margin:0">Execution blotter</h3>'
+    + '<label class="note" title="Show only execute_ok / execute_fail rows"><input type="checkbox" id="bookBlotterExecOnly"> EXEC only</label>'
+    + '</div><div id="bookBlotter"></div>'
     + '<div id="bookBlotterAll" style="display:none;margin-top:8px"><h4 style="font-size:12px;margin:0 0 6px">Cross-fund execute events</h4><div id="bookBlotterAllBody"></div></div>'
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
@@ -1401,13 +1422,20 @@ function mount(el){
     if (deskEl) deskEl.innerHTML = deskHeaderHTML(__book.desk);
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
-    if (blotterEl) blotterEl.innerHTML = blotterHTML((snap.book && snap.book.blotter) || snap.blotter);
+    var blotterEmpty = bookBlotterExecOnlyOn() ? 'No execute events in blotter.' : 'No blotter events yet.';
+    if (blotterEl) blotterEl.innerHTML = blotterHTML(
+      bookFilterBlotterRows((snap.book && snap.book.blotter) || snap.blotter),
+      { empty: blotterEmpty }
+    );
     var multiFund = (__book.funds || []).length > 1;
     var consolidated = __book.consolidatedAll;
     if (blotterAllEl && blotterAllBody){
       if (multiFund && consolidated && (consolidated.blotter || []).length){
         blotterAllEl.style.display = 'block';
-        blotterAllBody.innerHTML = blotterHTML(consolidated.blotter);
+        blotterAllBody.innerHTML = blotterHTML(
+          bookFilterBlotterRows(consolidated.blotter),
+          { empty: blotterEmpty }
+        );
       } else {
         blotterAllEl.style.display = 'none';
         blotterAllBody.innerHTML = '';
@@ -1583,6 +1611,14 @@ function mount(el){
       setStat(autoCrossFundChk.checked ? 'auto EXEC all funds ON' : 'auto EXEC all funds OFF');
     });
   }
+  var blotterExecOnlyChk = el.querySelector('#bookBlotterExecOnly');
+  if (blotterExecOnlyChk){
+    blotterExecOnlyChk.checked = bookBlotterExecOnlyOn();
+    blotterExecOnlyChk.addEventListener('change', function(){
+      bookSetBlotterExecOnly(blotterExecOnlyChk.checked);
+      paint(__book.snap);
+    });
+  }
   if (fundSel){
     fundSel.addEventListener('change', function(){
       bookSetFund(fundSel.value);
@@ -1715,6 +1751,8 @@ W.bookAutoExecOn = bookAutoExecOn;
 W.bookAutoExecPendingOn = bookAutoExecPendingOn;
 W.bookAutoRetryFailedOn = bookAutoRetryFailedOn;
 W.bookAutoExecCrossFundOn = bookAutoExecCrossFundOn;
+W.bookBlotterExecOnlyOn = bookBlotterExecOnlyOn;
+W.bookFilterBlotterRows = bookFilterBlotterRows;
 W.bookBracketExportLabel = bookBracketExportLabel;
 W.bookExportConsolidatedCSV = bookExportConsolidatedCSV;
 W.bookAutoExecScope = bookAutoExecScope;
