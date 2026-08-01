@@ -39,7 +39,7 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 | **LOG** | Auto-logged CLEAN setups, outcomes graded against closed candles (conservative same-bar = SL rule) |
 | **TRADE PLAN** | Fixed-R ticket builder with portfolio-heat check; EXECUTE BRACKET (T1 + optional T2 runner) when `EXECUTE_BACKEND_URL` is set on Render |
 | **BOOK** | Multi-fund paper OMS — positions, heat limits, auto desk rules (T1 scale / BE / trail), consolidated desk rollup, LP digest, live + proxy bracket execution |
-| **FIND TRADE** | Per-symbol evaluation of all strategies + full backtest context |
+| **FIND TRADE** | Per-symbol evaluation of all strategies + full backtest context; valid plans get **ADD TO BOOK** + TRADE PLAN handoff |
 
 ## Free data sources
 
@@ -75,7 +75,7 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 
 **Desk features:** per-fund heat + bucket caps, mark refresh with auto rules (50% at T1, BE @1R, ATR trail), cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`), weekly digest cron.
 
-**Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
+**Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
 
 **Env vars (Render):** `EXECUTE_BACKEND_URL`, `EXECUTE_WEBHOOK_URL`, `LP_DIGEST_WEBHOOK_URL`, `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`, `LP_DIGEST_EMAIL_TO` (+ Resend/SendGrid/SMTP). See `AGENTS.md` for full list.
 
