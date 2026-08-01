@@ -57,6 +57,16 @@ function bookResolveFund(opts){
   return opts.fund || bookFundId();
 }
 
+function bookMetaLayers(meta){
+  meta = meta || {};
+  var L = Array.isArray(meta.layers) ? meta.layers.slice() : [];
+  if (meta.scanner){
+    var s = String(meta.scanner);
+    if (L.indexOf(s) < 0) L.unshift(s);
+  }
+  return L.slice(0, 12);
+}
+
 function bookAutoOn(){
   try{
     var v = localStorage.getItem(BOOK_AUTO_KEY);
@@ -197,7 +207,7 @@ async function addToBook(opts){
       strategy: opts.strategy || opts.source || 'scanner',
       tier: opts.tier || null,
       fund: bookResolveFund(opts),
-      layers: opts.layers || [],
+      layers: bookMetaLayers(opts),
       newsBlackout: false,
     };
     if (!body.sym || !body.dir || !isFinite(body.entry) || !isFinite(body.stop)){
@@ -232,12 +242,13 @@ function bookBtnHTML(sym, dir, entry, stop, t1, meta){
   var payload = JSON.stringify({
     sym: sym, dir: dir, entry: entry, stop: stop,
     t1: (t1 !== undefined && isFinite(t1)) ? t1 : null,
+    t2: (meta.t2 !== undefined && isFinite(meta.t2)) ? meta.t2 : null,
     strategy: meta.strategy || meta.source || 'scanner',
     tier: meta.tier || null,
     klass: meta.klass || null,
     venue: meta.venue || 'paper',
     fund: fund,
-    layers: meta.layers || []
+    layers: bookMetaLayers(meta)
   });
   return '<button class="toBook" title="Add to ' + fund + ' fund" onclick=\'addToBook(' + payload + ')\'>ADD · ' + esc(fund.toUpperCase()) + '</button>';
 }
@@ -408,6 +419,7 @@ async function bookExecutePosition(id){
     lev: 1,
     stop: p.stop,
     t1: t1,
+    t2: isFinite(p.t2) ? p.t2 : undefined,
     vetoed: false,
     positionId: p.id,
     source: 'hardgate-book',
@@ -701,6 +713,12 @@ function navHistoryHTML(hist){
     + '</tbody></table></div></div>';
 }
 
+function posSourceChip(p){
+  var src = (p.layers && p.layers.length) ? p.layers[0] : '';
+  if (!src) return '';
+  return ' <span class="statuschip bookSrc" title="Scanner source">' + esc(src) + '</span>';
+}
+
 function posRowHTML(p){
   var upl = p.unrealizedUsd || 0;
   var uplCls = upl >= 0 ? 'ok' : 'warn';
@@ -713,7 +731,7 @@ function posRowHTML(p){
   return '<tr>'
     + '<td>' + esc(p.sym) + '</td>'
     + '<td>' + esc((p.dir || '').toUpperCase()) + '</td>'
-    + '<td>' + esc(p.strategy || '—') + '</td>'
+    + '<td>' + esc(p.strategy || '—') + posSourceChip(p) + '</td>'
     + '<td>' + fmtUsd(p.notionalUsd) + '</td>'
     + '<td>' + pxF(p.entry) + '</td>'
     + '<td>' + pxF(p.mark) + '</td>'

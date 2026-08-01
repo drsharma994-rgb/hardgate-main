@@ -116,8 +116,9 @@ var trail2Auto = pbApplyAutoRules(pbMarkBook(trail2, { BTCUSD: 120 }), { t1Scale
 ok(trail2Auto.actions.some(function(a){ return a.action === 'trail_lock_half'; }), 'auto locks +0.5R at 2R');
 ok(pbUnrealizedR(trail2Auto.book.positions[0]) >= 1.9, 'R uses origStop after trail');
 
-var liveOrd = pbBuildLiveOrder({ sym: 'BTCUSD', dir: 'long', notionalUsd: 10000, mark: 100, stop: 95, t1: 110, id: 'pb_x' });
+var liveOrd = pbBuildLiveOrder({ sym: 'BTCUSD', dir: 'long', notionalUsd: 10000, mark: 100, stop: 95, t1: 110, t2: 115, id: 'pb_x' });
 ok(liveOrd && liveOrd.qty === 100 && liveOrd.bracket.stop === 95, 'live order payload from position');
+ok(liveOrd.bracket.takeProfit2 === 115, 'live order forwards T2 when set');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
