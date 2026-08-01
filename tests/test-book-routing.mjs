@@ -26,6 +26,8 @@ ok(bookScannerFund('startrader', { klass: 'fx' }) === 'macro', 'startrader fx �
 ok(bookScannerFund('edge', { fund: 'main', klass: 'crypto' }) === 'main', 'explicit fund pins scanner routing');
 ok(bookScannerFund('carry', {}) === 'macro', 'carry scanner → macro fund');
 ok(bookScannerFund('termbasis', {}) === 'macro', 'termbasis scanner → macro fund');
+ok(bookScannerFund('macro', {}) === 'gold', 'macro scanner → gold fund');
+ok(bookScannerFund('goldpro', {}) === 'gold', 'goldpro scanner → gold fund');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

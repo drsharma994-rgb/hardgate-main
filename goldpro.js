@@ -397,6 +397,15 @@ function renderLevelsPanel(o){
                      : ' — stop = 1.5×ATR14(4H)')
      + '</div>';
   if (o.note) h += '<div class="note" style="margin-top:6px">' + esc(o.note) + '</div>';
+  if (typeof bookBtnHTML === 'function'){
+    h += bookBtnHTML('XAUUSD', p.dir, p.entry, p.stop, p.t1, {
+      scanner: 'goldpro',
+      fund: 'gold',
+      strategy: 'goldpro',
+      klass: 'metals',
+      layers: ['goldpro', '4h-levels']
+    });
+  }
   return h + '</div>';
 }
 

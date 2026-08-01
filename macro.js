@@ -478,12 +478,33 @@ async function getGoldMacro(){
       realYieldTrend: realYield ? realYield.trend20 : null,
       realYieldChange20Pct: realYield ? realYield.change20Pct : null,
       silver: silver,
+      goldPx: goldPx,
       goldSilverRatio: goldSilverRatio,
       realRateHint: realRateHint
     });
   }catch(e){
     return { dxy: null, dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
              tnxSource: null, realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
-             silver: null, goldSilverRatio: null, realRateHint: 'NEUTRAL' };
+             silver: null, goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL' };
   }
+}
+
+/* Paper-book plan from real-rate hint — TAILWIND long gold, HEADWIND short;
+   1% price risk, 2R T1. Returns null when NEUTRAL or goldPx missing. */
+function macroGoldPlan(macro){
+  try{
+    if (!macro || !macro.realRateHint || macro.realRateHint === 'NEUTRAL') return null;
+    var goldPx = macro.goldPx;
+    if (!isFinite(goldPx) || !(goldPx > 0)) return null;
+    var dir = macro.realRateHint === 'TAILWIND' ? 'long' : 'short';
+    var risk = goldPx * 0.01;
+    var entry = goldPx;
+    var stop = dir === 'long' ? entry - risk : entry + risk;
+    var t1 = dir === 'long' ? entry + 2 * risk : entry - 2 * risk;
+    return { sym: 'XAUUSD', dir: dir, entry: entry, stop: stop, t1: t1, hint: macro.realRateHint };
+  }catch(e){ return null; }
+}
+
+if (typeof window !== 'undefined'){
+  window.macroGoldPlan = macroGoldPlan;
 }

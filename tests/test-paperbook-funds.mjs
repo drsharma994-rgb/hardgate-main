@@ -3,6 +3,7 @@ import {
   pbNormalizeStore, pbNewStore, pbGetBook, pbSetBook, pbListFunds,
   pbCreateFund, pbResetFund, PB_DEFAULT_FUND,
   pbConsolidatedLp, pbConsolidatedHtml, pbConsolidatedDigestText, pbConsolidatedAttribution,
+  pbConsolidatedDesk,
 } from '../lib/paperbook-funds.mjs';
 import { pbNewBook, pbAddIntent } from '../lib/paperbook-core.mjs';
 
@@ -70,6 +71,11 @@ ok(crossAttr.byStrategy.some(function(r){ return r.key === 'brain'; })
 ok(crossAttr.strategyByFund.length >= 2
   && crossAttr.strategyByFund.some(function(r){ return r.cells && r.cells.main != null; }),
   'strategy × fund matrix populated');
+
+var desk = pbConsolidatedDesk(attrStore);
+ok(desk.fundCount === 2 && desk.openCount === 2, 'desk rollup sums open across funds');
+ok(isFinite(desk.equityUsd) && desk.equityUsd > 0, 'desk rollup equity positive');
+ok((desk.funds || []).length === 2, 'desk rollup lists per-fund rows');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
