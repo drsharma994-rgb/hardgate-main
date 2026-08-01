@@ -162,10 +162,11 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <body>
 <header class="hg-header">
   <div class="header-primary">
-    <div class="brand">HARDGATE<small>DELTA · COINDCX · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+    <div class="brand">HARDGATE<small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
     <div class="xtoggle">
       <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
       <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
+      <button id="xStar" onclick="setExchange('startrader')">STARTRADER</button>
     </div>
     <button type="button" class="header-menu-btn" id="headerMenuBtn" aria-expanded="false" aria-controls="headerDrawer" onclick="toggleHeaderDrawer()" title="Tools &amp; alerts">☰</button>
   </div>
@@ -604,6 +605,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="indicators2.js"></script>
 <script src="store.js"></script>
 <script src="binance.js"></script>
+<script src="startrader.js"></script>
 <script src="bybit.js"></script>
 <script src="positioning.js"></script>
 <script src="cryptogates.js"></script>
@@ -622,6 +624,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
 <script src="edge.js"></script>
+<script src="startradertab.js"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
 <script src="onchain.js"></script>
@@ -668,6 +671,24 @@ const HG_ALERTS_FORCED_ON = true;
 const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
 const HG_EDGE_ALERT_MS = 15 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram on new setups */
 const HG_ALERTS_AUTO_REFRESH_MS = 180000;
+
+function hgExLabel(ex){
+  ex = ex || S.exchange;
+  if (ex === 'delta') return 'Delta India';
+  if (ex === 'coindcx') return 'CoinDCX';
+  if (ex === 'startrader') return 'STARTRADER';
+  return String(ex || '').toUpperCase();
+}
+function hgExBtcSym(ex){
+  ex = ex || S.exchange;
+  return (ex === 'coindcx') ? 'B-BTC_USDT' : 'BTCUSD';
+}
+function hgExTurnoverUni(minTurn){
+  minTurn = (minTurn === undefined) ? 0 : minTurn;
+  if (S.exchange === 'delta' || S.exchange === 'startrader')
+    return S.tickers.filter(function(t){ return t.turnoverUsd >= minTurn; }).sort(function(a,b){ return b.turnoverUsd - a.turnoverUsd; });
+  return S.tickers.slice();
+}
 
 const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
@@ -891,9 +912,38 @@ async function candlesCdcx(sym, res, count){
   rows.sort((a,b)=>a.t-b.t);
   return rows;
 }
+async function candlesStartrader(sym, res, count){
+  const base = (typeof startraderBaseOf === 'function') ? startraderBaseOf(sym) : sym.replace(/USD$/,'');
+  const bSym = (typeof startraderBinanceSym === 'function') ? startraderBinanceSym(base) : (base + 'USDT');
+  if (!bSym || typeof binanceKlines !== 'function') return [];
+  const rows = await binanceKlines(bSym, res, count);
+  return Array.isArray(rows) ? rows : [];
+}
 
-async function candlesRangeRaw(sym, res, start, end){ if (S.exchange==='delta'){ const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`); const j = await r.json(); const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume})); rows.sort((a,b)=>a.t-b.t); return rows; } else { const j = await cdcxGet(`${CDCX_PUB}/market_data/candlesticks?pair=${encodeURIComponent(sym)}&from=${start}&to=${end}&resolution=${CDCX_RES[res]}&pcode=f`); const rows = (j.data||[]).map(c=>({t:Math.floor((c.time??c.t)/1000), o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+(c.volume??0)})); rows.sort((a,b)=>a.t-b.t); return rows; } } async function getTickers(){
+async function candlesRangeRaw(sym, res, start, end){
+  if (S.exchange==='delta'){
+    const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
+    const j = await r.json();
+    const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}));
+    rows.sort((a,b)=>a.t-b.t);
+    return rows;
+  }
+  if (S.exchange==='startrader'){
+    const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res] || 3600;
+    const n = Math.max(5, Math.ceil((end - start) / secPer) + 3);
+    return candlesStartrader(sym, res, n);
+  }
+  const j = await cdcxGet(`${CDCX_PUB}/market_data/candlesticks?pair=${encodeURIComponent(sym)}&from=${start}&to=${end}&resolution=${CDCX_RES[res]}&pcode=f`);
+  const rows = (j.data||[]).map(c=>({t:Math.floor((c.time??c.t)/1000), o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+(c.volume??0)}));
+  rows.sort((a,b)=>a.t-b.t);
+  return rows;
+}
+async function getTickers(){
   if (S.exchange==='delta') return loadTickersDelta();
+  if (S.exchange==='startrader'){
+    if (typeof startraderTickers === 'function') return startraderTickers();
+    return [];
+  }
   try { const t = await loadTickersCdcx(); S.cdcxBlocked=false; return t; }
   catch(e){ S.cdcxBlocked=true; throw e; }
 }
@@ -909,7 +959,8 @@ async function getCandles(sym, res, count){
   const key = `${S.exchange}|${sym}|${res}|${count}`;
   const hit = S.candleCache[key];
   if (hit && (nowSec()-hit.at) < 60) return hit.rows;
-  let rows = S.exchange==='delta' ? await candlesDelta(sym,res,count) : await candlesCdcx(sym,res,count);
+  let rows = S.exchange==='delta' ? await candlesDelta(sym,res,count)
+    : (S.exchange==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
   rows = dropForming(rows, res);
   S.candleCache[key] = {rows, at: nowSec()};
   return rows;
@@ -1060,15 +1111,19 @@ async function setExchange(x){
   S.exchange = x; S.candleCache = {}; if (x!=='delta' && deltaWS){ try{ deltaWS.close(); }catch(e){} deltaWS=null; }
   $('xDelta').classList.toggle('on', x==='delta');
   $('xCdcx').classList.toggle('on', x==='coindcx');
+  $('xStar').classList.toggle('on', x==='startrader');
   $('chipConn').innerHTML = '<b>…</b> loading';
+  const exLabel = x==='delta' ? 'Delta India' : (x==='coindcx' ? 'CoinDCX' : 'STARTRADER');
   try{
     S.tickers = await getTickers();
     $('chipConn').classList.remove('warn');
-    $('chipConn').innerHTML = `<b>${S.tickers.length}</b> ${x==='delta'?'Delta India':'CoinDCX'} perps`;
-    if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`; if (x==='delta') initDeltaWS();
+    $('chipConn').innerHTML = `<b>${S.tickers.length}</b> ${exLabel} ${x==='startrader' ? 'crypto CFDs' : 'perps'}`;
+    if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`;
+    if (x==='startrader') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(Binance USD-M proxy for candles/funding — trade on STARTRADER)</b>`;
+    if (x==='delta') initDeltaWS();
   }catch(e){
     $('chipConn').classList.add('warn');
-    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':'Delta unreachable.'}`;
+    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':(x==='startrader'?'STARTRADER catalog could not load Binance enrichment — retry.':'Delta unreachable.')}`;
     S.tickers = [];
   }
   renderBiasChips();
@@ -1967,7 +2022,7 @@ cardsEl.innerHTML = __cardsHtml.join('');
    later) — missing ids are skipped everywhere, so showTab/setHgGroup never
    break on an absent tab. */
 const HG_NAV_GROUPS = [
-  { id:'overview',   label:'OVERVIEW',     tabs:['brain','execute','bias','regime','trendmx','rotation','news'] },
+  { id:'overview',   label:'OVERVIEW',     tabs:['brain','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','termbasis','scorecard'] },
@@ -2561,10 +2616,10 @@ async function runScan(kind, opts){
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
     uni = S.tickers.slice();
-    if (S.exchange === 'delta') uni = uni.filter(function(t){ return scanAll ? true : t.turnoverUsd >= minTurn; }).sort(function(a, b){ return b.turnoverUsd - a.turnoverUsd; });
+    if (S.exchange === 'delta' || S.exchange === 'startrader') uni = uni.filter(function(t){ return scanAll ? true : t.turnoverUsd >= minTurn; }).sort(function(a, b){ return b.turnoverUsd - a.turnoverUsd; });
     const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd || 0) > 0; });
     if (!scanAll && turnoverKnown) uni = uni.slice(0, N);
-    const universeLabel = scanAll ? ('whole ' + (S.exchange === 'delta' ? 'Delta India' : 'CoinDCX') + ' futures universe') : ('top ' + N + ' by turnover');
+    const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
     let found = 0;
     const t0scan = Date.now();

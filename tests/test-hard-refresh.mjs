@@ -183,8 +183,8 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 
 /* ---------------- 1b. nav wiring: group membership ---------------- */
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
-assert(groupTabs('overview') === 'brain,execute,bias,regime,trendmx,rotation,news',
-  'OVERVIEW group gains brain first, rotation after trendmx');
+assert(groupTabs('overview') === 'brain,startrader,execute,bias,regime,trendmx,rotation,news',
+  'OVERVIEW group gains brain first, startrader second, rotation after trendmx');
 assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,onchain,coil,apex,trap,smc,ob,div',
   'CRYPTO group gains onchain after liqs');
 assert(groupTabs('gold') === 'gold,goldpro,goldspot,goldscalp,goldswing,signallog',

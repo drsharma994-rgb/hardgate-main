@@ -1104,7 +1104,10 @@ function brainUniverse(xuList, opts){
          ('delta'|'cdcx'). cand.xu keeps the ORIGINAL item — xuCandles routes
          on item.exchange ('coindcx'), never hand it the normalized key. */
       var exRaw = (typeof it.exchange === 'string') ? it.exchange.toLowerCase() : '';
-      var ex = (exRaw === 'delta') ? 'delta' : ((exRaw === 'coindcx' || exRaw === 'cdcx') ? 'cdcx' : '');
+      var ex = (exRaw === 'delta') ? 'delta'
+        : ((exRaw === 'coindcx' || exRaw === 'cdcx') ? 'cdcx'
+        : ((exRaw === 'startrader') ? 'startrader'
+        : ((exRaw === 'binance') ? 'binance' : '')));
       if (!sym || !base || !ex) continue;
       items.push({ sym: sym, base: base, exchange: ex,
                    turnoverUsd: (typeof it.turnoverUsd === 'number' && isFinite(it.turnoverUsd)) ? it.turnoverUsd : null,
@@ -1144,22 +1147,25 @@ function brainUniverse(xuList, opts){
     if (!byBase[bb] || BASE_BLOCK[bb]) continue;
     candidates.push(xuCand(byBase[bb]));
   }
-  var nDelta = 0, nCdcx = 0;
+  var nDelta = 0, nCdcx = 0, nStar = 0, nBin = 0;
   for (var c = 0; c < candidates.length; c++){
     if (candidates[c].exchange === 'delta') nDelta++;
     else if (candidates[c].exchange === 'cdcx') nCdcx++;
+    else if (candidates[c].exchange === 'startrader') nStar++;
+    else if (candidates[c].exchange === 'binance') nBin++;
   }
   return { mode: 'combined', candidates: candidates,
-           counts: { total: candidates.length, delta: nDelta, cdcx: nCdcx },
+           counts: { total: candidates.length, delta: nDelta, cdcx: nCdcx, startrader: nStar, binance: nBin },
            venue: venue,
            note: 'BTC/ETH/SOL + ' + Math.max(0, candidates.length - BASES.length)
-               + ' combined alts (delta ' + nDelta + ' + cdcx ' + nCdcx + ') + XAU gold lane' };
+               + ' combined alts (delta ' + nDelta + ' + cdcx ' + nCdcx
+               + (nStar ? ' + startrader ' + nStar : '') + (nBin ? ' + binance ' + nBin : '') + ') + XAU gold lane' };
 }
 
 /* ---------------- venue filter (persisted) ---------------- */
 function normVenue(v){
   v = String(v === null || v === undefined ? '' : v).toUpperCase();
-  return (v === 'DELTA' || v === 'CDCX') ? v : 'ALL';
+  return (v === 'DELTA' || v === 'CDCX' || v === 'STARTRADER') ? v : 'ALL';
 }
 function lsGet(k){
   try{
@@ -4317,6 +4323,8 @@ async function runBrain(el){
     if (readUni){
       readUni.textContent = combined
         ? 'universe ' + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx
+          + (uni.counts.startrader ? ' + startrader ' + uni.counts.startrader : '')
+          + (uni.counts.binance ? ' + binance ' + uni.counts.binance : '')
           + ') · ' + setups.length + ' prime/high · ' + watches.length + ' watch'
         : '';
     }
@@ -4343,7 +4351,9 @@ async function runBrain(el){
     if (combined){
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
-        + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx + ') + XAU · '
+        + uni.counts.total + ' (delta ' + uni.counts.delta + ' + cdcx ' + uni.counts.cdcx
+        + (uni.counts.startrader ? ' + startrader ' + uni.counts.startrader : '')
+        + (uni.counts.binance ? ' + binance ' + uni.counts.binance : '') + ') + XAU · '
         + setups.length + ' prime/high · ' + watches.length + ' watch'
         + (uni.venue !== 'ALL' ? ' · venue ' + uni.venue : '')
         + gateNote + capNote + ' · '
@@ -4688,9 +4698,9 @@ function mount(el){
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
       + '<button class="btn" id="brainQuick" title="recheck the last scan’s watch set against fresh layers — cached universe, new listings judged on arrival">QUICK RESCAN</button>'
       + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'
-      + '<select id="brainVenue" style="display:none" title="venue filter — combined Delta India + CoinDCX universe">'
+      + '<select id="brainVenue" style="display:none" title="venue filter — combined multi-exchange universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
-      + '<option value="CDCX">COINDCX ONLY</option></select>'
+      + '<option value="CDCX">COINDCX ONLY</option><option value="STARTRADER">STARTRADER ONLY</option></select>'
       + '<span class="note" id="brainStat"></span></div>'
       + '<div class="note" id="brainDeps" style="margin-top:8px"></div>'
       + '<div class="note" style="margin-top:8px">Conviction is independent layers <b>agreeing</b>, each with a human-readable '

@@ -258,7 +258,7 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
 
 /* ---------------- group model ---------------- */
 const EXPECTED_GROUPS = {
-  overview:   ['brain', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
+  overview:   ['brain', 'startrader', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp', 'goldswing', 'signallog'],
   strategies: ['strats', 'meanrev', 'edge', 'best', 'carry', 'termbasis', 'scorecard'],
@@ -274,7 +274,7 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', regime:'overview',
                    carry:'strategies', termbasis:'strategies', goldpro:'gold', strats:'strategies', meanrev:'strategies', edge:'strategies',
                    scorecard:'strategies',
-                   brain:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
+                   brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
   'HG_TAB_GROUP maps every dynamic id into its group (brain/execute/news/squeeze/trendmx/oiflow/regime/carry/goldpro/strats/meanrev/scorecard/rotation/onchain/goldspot)');
 
