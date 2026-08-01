@@ -353,6 +353,7 @@ async function bookFetchAllPositions(){
   var packs = await bookFetchAllFundBooks();
   var positions = [];
   var blotter = [];
+  var closed = [];
   for (var i = 0; i < packs.length; i++){
     var pack = packs[i];
     var fundId = pack.fundId;
@@ -365,9 +366,14 @@ async function bookFetchAllPositions(){
     for (var b = 0; b < bl.length; b++){
       if (bl[b]) blotter.push(Object.assign({}, bl[b], { _fundId: fundId }));
     }
+    var cl = book.closed || [];
+    for (var c = 0; c < cl.length; c++){
+      if (cl[c]) closed.push(Object.assign({}, cl[c], { _fundId: fundId }));
+    }
   }
   blotter.sort(function(a, b){ return (+b.at || 0) - (+a.at || 0); });
-  return { positions: positions, blotter: blotter };
+  closed.sort(function(a, b){ return (+b.closedAt || 0) - (+a.closedAt || 0); });
+  return { positions: positions, blotter: blotter, closed: closed };
 }
 
 async function bookAutoExecScope(snap){
@@ -1070,18 +1076,27 @@ async function bookExportConsolidatedCSV(){
     var all = __book.consolidatedAll || await bookFetchAllPositions();
     var positions = all.positions || [];
     var blotter = all.blotter || [];
-    if (!positions.length){
-      try{ alert('No open positions across funds to export.'); }catch(e){}
+    var closed = all.closed || [];
+    if (!positions.length && !closed.length){
+      try{ alert('No positions or closed trades across funds to export.'); }catch(e){}
       return;
     }
-    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,bracket,openedAt'];
+    var lines = ['fund,type,sym,dir,strategy,bucket,tier,notional,entry,mark,pnl,bracket,openedAt,closedAt'];
     positions.forEach(function(p){
       lines.push([
         bookCsvCell(p._fundId || 'main'), 'open', bookCsvCell(p.sym), bookCsvCell(p.dir),
         bookCsvCell(p.strategy || ''), bookCsvCell(p.bucket || ''), bookCsvCell(p.tier || ''),
         p.notionalUsd, p.entry, p.mark, p.unrealizedUsd || 0,
         bookCsvCell(bookBracketExportLabel(blotter, p.id)),
-        p.openedAt || '',
+        p.openedAt || '', '',
+      ].join(','));
+    });
+    closed.forEach(function(c){
+      lines.push([
+        bookCsvCell(c._fundId || 'main'), 'closed', bookCsvCell(c.sym), bookCsvCell(c.dir),
+        bookCsvCell(c.strategy || ''), bookCsvCell(c.bucket || ''), bookCsvCell(c.tier || ''),
+        c.notionalUsd, c.entry, c.mark, c.realizedUsd || 0, '',
+        c.openedAt || '', c.closedAt || '',
       ].join(','));
     });
     var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -1289,7 +1304,7 @@ function mount(el){
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
-    + '<button class="btn ghost" id="bookExportConsolidatedCsv" style="display:none" title="Open positions across all funds with bracket column">EXPORT ALL CSV</button>'
+    + '<button class="btn ghost" id="bookExportConsolidatedCsv" style="display:none" title="Open + recently closed positions across all funds with bracket column">EXPORT ALL CSV</button>'
     + '<button class="btn ghost" id="bookExportBlotter" title="Execution blotter CSV (all funds when multi-fund)">EXPORT BLOTTER</button>'
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
     + '<button class="btn ghost" id="bookExportConsolidated" title="All funds — month MTD">CONSOLIDATED LP</button>'
