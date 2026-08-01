@@ -1,4 +1,5 @@
 .vercel
 scripts/.squeeze-watch-state.json
+scripts/.book-digest-state.json
 data/paperbook.json
 snapshots/

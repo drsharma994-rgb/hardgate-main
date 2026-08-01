@@ -1,0 +1,30 @@
+# HARDGATE weekly LP digest — backup cron when Render is asleep or digest watch is disabled.
+# Primary scheduler: scripts/book-digest-watch.mjs on the Render web service.
+# Set repository secrets: BOOK_DIGEST_CRON_SECRET (must match Render env) when hardening.
+name: HARDGATE Book Digest
+
+on:
+  schedule:
+    - cron: '40 15 * * 0'
+  workflow_dispatch: {}
+
+jobs:
+  send-weekly-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST weekly LP digest to production
+        env:
+          BOOK_DIGEST_CRON_SECRET: ${{ secrets.BOOK_DIGEST_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          URL="${HARDGATE_URL:-https://hardgate-main.onrender.com}"
+          URL="${URL%/}/api/book/digest/send"
+          HDR=()
+          if [ -n "${BOOK_DIGEST_CRON_SECRET:-}" ]; then
+            HDR=(-H "X-Book-Digest-Key: ${BOOK_DIGEST_CRON_SECRET}")
+          fi
+          curl -sfS -X POST "$URL" \
+            -H "Content-Type: application/json" \
+            "${HDR[@]}" \
+            -d '{"period":"week","cron":true}'

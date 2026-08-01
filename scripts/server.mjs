@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
 import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
+import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch.mjs';
 import { createPaperbookApi } from '../lib/paperbook-api.mjs';
 
 const require = createRequire(import.meta.url);
@@ -62,6 +63,12 @@ const server = http.createServer(async (req, res) => {
       res.statusCode = 200;
       return res.end(JSON.stringify(ghDispatchStatus()));
     }
+    if (u.pathname === '/api/book-digest-watch'){
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.statusCode = 200;
+      return res.end(JSON.stringify(bookDigestWatchStatus()));
+    }
     if (u.pathname === '/api/book' || u.pathname.indexOf('/api/book/') === 0){
       return paperbookHandler(req, res);
     }
@@ -97,6 +104,8 @@ startSqueezeWatch();
 /* GitHub cron replacement: fires alert-notify.yml via workflow_dispatch every
    13 min (arms only with GH_DISPATCH_TOKEN in the environment; logs either way) */
 startGhDispatch();
+
+startBookDigestWatch();
 
 /* keep-alive self-ping — on Render free tier the service sleeps after ~15 min idle.
    Paid plans stay always-on; the ping is harmless and keeps squeeze-watch + gh-dispatch
