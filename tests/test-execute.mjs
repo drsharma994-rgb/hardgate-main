@@ -36,6 +36,7 @@ var executeJs = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
 ok(executeJs.indexOf('executeBackendReady') >= 0 && executeJs.indexOf('/api/execute') >= 0,
   'execute.js exposes ready check + proxy path');
 ok(executeJs.indexOf('execute-blotter') >= 0, 'execute.js records blotter after bracket send');
+ok(executeJs.indexOf('plan.fund') >= 0, 'execute.js routes blotter to position fund');
 ok(executeJs.indexOf('skipConfirm') >= 0, 'execute.js supports silent auto-exec path');
 
 var bookJs = fs.readFileSync(path.join(root, 'book.js'), 'utf8');
@@ -54,6 +55,11 @@ ok(bookJs.indexOf('bookExecuteBatchPositions') >= 0 && bookJs.indexOf('bookExecu
   'book.js batch execute from position objects');
 ok(bookJs.indexOf('EXEC PENDING (') >= 0 && bookJs.indexOf('data-exec=') >= 0 && bookJs.indexOf('Click to send EXEC') >= 0,
   'book.js pending counts + clickable bracket chips');
+ok(bookJs.indexOf('bookExecuteAllFundsPending') >= 0 && bookJs.indexOf('bookFetchAllPositions') >= 0
+  && bookJs.indexOf('ALL FUNDS PENDING') >= 0 && bookJs.indexOf('bookBlotterAll') >= 0,
+  'book.js cross-fund EXEC batch + consolidated blotter panel');
+ok(bookJs.indexOf('_fundId') >= 0 && bookJs.indexOf('consolidatedAll') >= 0,
+  'book.js tags cross-fund positions and caches consolidated snapshot');
 
 var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');

@@ -82,6 +82,7 @@ async function recordExecuteBlotter(plan, payload, result){
     if (typeof W.hgApiAvailable !== 'function' || !W.hgApiAvailable()) return;
     if (typeof W.bookFundBody !== 'function') return;
     var body = W.bookFundBody({
+      fund: plan.fund || undefined,
       ok: !!(result && result.ok),
       sym: plan.sym,
       dir: plan.side,
