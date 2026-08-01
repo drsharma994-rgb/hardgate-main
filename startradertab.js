@@ -512,8 +512,16 @@ function cardHTML(r){
     planBlk = '<div class="plan">entry ' + pxF(entry) + ' · stop ' + pxF(stop)
       + (t1 != null ? ' · T1 ' + pxF(t1) : '') + '</div>';
   }
+  var stFund = (function(){
+    var k = String(r.klass || '').toLowerCase();
+    if (k === 'metal' || k === 'metals') return 'gold';
+    if (k === 'fx' || k === 'index' || k === 'commodity') return 'macro';
+    return 'swing';
+  })();
   var bookBtn = (entry != null && stop != null && typeof W.bookBtnHTML === 'function')
     ? W.bookBtnHTML(r.sym, r.dir, entry, stop, t1, {
+      scanner: 'startrader',
+      fund: stFund,
       strategy: 'startrader', tier: r.tier, klass: r.klass, venue: 'startrader',
       layers: (r.votes || []).map(function(v){ return v.src; })
     }) : '';

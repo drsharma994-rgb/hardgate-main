@@ -539,9 +539,18 @@ function cardHTML(r){
   var btn = (p && typeof toTrade === 'function')
     ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(p.dir)
       + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')">SEND TO TRADE PLAN</button>' : '';
+  var edgeKlass = (r.item && r.item.klass) || null;
+  var edgeFund = (function(){
+    var k = String(edgeKlass || '').toLowerCase();
+    if (k === 'metal' || k === 'metals') return 'gold';
+    if (k === 'fx' || k === 'index' || k === 'commodity') return 'macro';
+    return 'swing';
+  })();
   var bookBtn = (p && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(sym, p.dir, p.entry, p.stop, p.t1, {
-      strategy: 'edge', klass: (r.item && r.item.klass) || null, venue: 'startrader',
+      scanner: 'edge',
+      fund: edgeFund,
+      strategy: 'edge', klass: edgeKlass, venue: 'startrader',
       layers: ['EDGE', 'SWING']
     }) : '';
   return '<div class="card ' + sig.dir + '">'
