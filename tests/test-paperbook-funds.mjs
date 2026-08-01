@@ -84,6 +84,8 @@ attrStore = pbSetBook(attrStore, 'main', mainBook);
 var deskEx = pbConsolidatedDesk(attrStore);
 ok(deskEx.execute && deskEx.execute.ok === 1 && deskEx.execute.period === '7d',
   'desk rollup includes cross-fund 7d bracket summary');
+ok('dailyLossHalt' in deskEx && isFinite(deskEx.dayPnlUsd) && isFinite(deskEx.dailyLossLimitUsd),
+  'desk rollup includes daily loss halt fields');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

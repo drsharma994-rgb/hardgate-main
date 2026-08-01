@@ -19,6 +19,7 @@ var W = (typeof window !== 'undefined') ? window
 var __book = { snap: null, desk: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false, consolidatedAll: null };
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
+var BOOK_MAX_DAILY_LOSS_PCT = 0.02;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
 var BOOK_AUTO_EXEC_KEY = 'hg_book_auto_exec_v1';
 var BOOK_AUTO_EXEC_PENDING_KEY = 'hg_book_auto_exec_pending_v1';
@@ -101,6 +102,11 @@ function bookSetAutoRetryFailed(on){
 }
 function bookAutoExecCrossFundOn(){
   try{ return localStorage.getItem(BOOK_AUTO_EXEC_CROSS_FUND_KEY) === '1'; }catch(e){ return false; }
+}
+function bookDailyLossHalted(){
+  if (__book.desk && __book.desk.dailyLossHalt) return true;
+  var s = __book.snap && __book.snap.summary;
+  return !!(s && s.dailyLossHalt);
 }
 function bookSetAutoExecCrossFund(on){
   try{ localStorage.setItem(BOOK_AUTO_EXEC_CROSS_FUND_KEY, on ? '1' : '0'); }catch(e){}
@@ -577,6 +583,9 @@ function deskHeaderHTML(desk){
     + '<div class="bookHeatWrap"><span class="k">Cross-fund heat</span>'
     + '<div class="bookHeatBar' + (warn ? ' warn' : '') + '"><div class="bookHeatFill" style="width:' + fill.toFixed(1) + '%"></div></div>'
     + '<span class="v">' + fmtF(heatPct * 100, 2) + '% / ' + fmtF(maxPct * 100, 0) + '% · ' + fmtUsd(desk.heatUsd || 0) + '</span></div>'
+    + (desk.dailyLossHalt
+      ? '<div class="note warn" style="margin-top:6px">⛔ Desk daily loss halt — new risk blocked until UTC day roll. Day P&amp;L '
+        + fmtUsd(desk.dayPnlUsd) + ' · limit -' + fmtUsd(desk.dailyLossLimitUsd) + '</div>' : '')
     + (desk.execute && (desk.execute.ok || desk.execute.fail || desk.execute.pending)
       ? '<div class="note" style="margin-top:6px">Cross-fund brackets (7d): <b>'
         + (desk.execute.ok || 0) + ' OK</b> · <b>' + (desk.execute.fail || 0) + ' fail</b> · '
@@ -1204,6 +1213,18 @@ function bookLastExecuteEvent(blotter){
   return null;
 }
 
+function dailyLossBannerHTML(snap, desk){
+  var halted = bookDailyLossHalted();
+  if (!halted) return '';
+  var dayPnl = (desk && isFinite(desk.dayPnlUsd)) ? desk.dayPnlUsd
+    : ((snap && snap.summary && snap.summary.dayPnlUsd) || 0);
+  var limit = (desk && desk.dailyLossLimitUsd) || (snap && snap.summary && snap.summary.dailyLossLimitUsd) || 0;
+  var pct = (desk && desk.maxDailyLossPct) || (snap && snap.summary && snap.summary.maxDailyLossPct) || BOOK_MAX_DAILY_LOSS_PCT;
+  return '<div class="note warn bookDayHalt" style="margin:6px 0 10px">⛔ Daily loss halt — new adds blocked until UTC day roll (existing positions may still be managed). '
+    + 'Day P&amp;L ' + fmtUsd(dayPnl) + ' · limit -' + fmtUsd(limit)
+    + ' (' + fmtF(pct * 100, 1) + '% of day start)</div>';
+}
+
 function deskExecStatusHTML(){
   var execOn = bookExecuteReady();
   var liveOn = __book.liveReady;
@@ -1215,6 +1236,7 @@ function deskExecStatusHTML(){
   if (bookAutoExecPendingOn()) chips.push('<span class="statuschip ok" title="Silent EXEC PENDING batch on each mark refresh">auto EXEC pending</span>');
   if (bookAutoRetryFailedOn()) chips.push('<span class="statuschip ok" title="Silent RETRY FAILED batch on each mark refresh">auto retry fail</span>');
   if (bookAutoExecCrossFundOn()) chips.push('<span class="statuschip ok" title="Auto pending/retry scans every fund book">auto EXEC all funds</span>');
+  if (bookDailyLossHalted()) chips.push('<span class="statuschip warn" title="New adds blocked until UTC day roll">DAY HALT</span>');
   if (typeof W.brainAutoBookOn === 'function' && W.brainAutoBookOn()){
     var abTitle = (typeof W.brainAutoBookPrimeOnlyOn === 'function' && W.brainAutoBookPrimeOnlyOn())
       ? 'BRAIN synthesis auto-adds PRIME plans only'
@@ -1334,6 +1356,7 @@ function mount(el){
     + '</div>'
     + '<div class="kv" id="bookSummary"></div>'
     + '<div id="bookExecBar"></div>'
+    + '<div id="bookDayHalt"></div>'
     + '<div id="bookDesk"></div>'
     + '<div id="bookHeat"></div>'
     + '<div class="panel" style="margin-top:8px"><h3>Auto desk log</h3><div id="bookAutoLog"></div></div>'
@@ -1392,6 +1415,8 @@ function mount(el){
       if (summary) summary.innerHTML = '';
       if (execBarEl) execBarEl.innerHTML = '';
       if (deskEl) deskEl.innerHTML = '';
+      var haltBannerEmpty = el.querySelector('#bookDayHalt');
+      if (haltBannerEmpty) haltBannerEmpty.innerHTML = '';
       if (heatEl) heatEl.innerHTML = '';
       if (blotterEl) blotterEl.innerHTML = '';
       if (blotterAllEl) blotterAllEl.style.display = 'none';
@@ -1420,6 +1445,8 @@ function mount(el){
     }
     if (execBarEl) execBarEl.innerHTML = deskExecStatusHTML();
     if (deskEl) deskEl.innerHTML = deskHeaderHTML(__book.desk);
+    var haltBanner = el.querySelector('#bookDayHalt');
+    if (haltBanner) haltBanner.innerHTML = dailyLossBannerHTML(snap, __book.desk);
     if (heatEl) heatEl.innerHTML = heatBarHTML(s);
     if (autoLogEl) autoLogEl.innerHTML = autoLogHTML();
     var blotterEmpty = bookBlotterExecOnlyOn() ? 'No execute events in blotter.' : 'No blotter events yet.';
@@ -1751,6 +1778,7 @@ W.bookAutoExecOn = bookAutoExecOn;
 W.bookAutoExecPendingOn = bookAutoExecPendingOn;
 W.bookAutoRetryFailedOn = bookAutoRetryFailedOn;
 W.bookAutoExecCrossFundOn = bookAutoExecCrossFundOn;
+W.bookDailyLossHalted = bookDailyLossHalted;
 W.bookBlotterExecOnlyOn = bookBlotterExecOnlyOn;
 W.bookFilterBlotterRows = bookFilterBlotterRows;
 W.bookBracketExportLabel = bookBracketExportLabel;

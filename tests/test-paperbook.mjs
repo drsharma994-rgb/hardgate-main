@@ -5,7 +5,7 @@ import {
   pbScalePosition, pbMoveStop, pbUnrealizedR, pbApplyAutoRules, pbLpReport,
   pbWeeklyDigest, pbDigestText, pbDigestHtml, pbAtrTrailStop,
   pbBuildLiveOrder, pbStopAtR, pbUnitRisk, PB_DEFAULTS,
-  pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary,
+  pbPushBlotter, pbLatestExecForPosition, pbDigestExecuteSummary, pbDailyLossState,
 } from '../lib/paperbook-core.mjs';
 import { pbConsolidatedLp, pbConsolidatedDigestText } from '../lib/paperbook-funds.mjs';
 
@@ -68,6 +68,15 @@ var addEq = pbAddIntent(eqBook, { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 
 var markedEq = pbMarkBook(addEq.book, { BTCUSD: 105 });
 var sumEq = pbSummary(markedEq);
 ok(isFinite(sumEq.dayPnlUsd) && sumEq.dayPnlUsd > 0, 'daily PnL tracks equity vs day start');
+
+var haltBook = pbNewBook({ navUsd: 1000000 });
+haltBook = pbRollDay(haltBook);
+haltBook.dayStartEquityUsd = 1000000;
+haltBook.cashUsd = 970000;
+var dl = pbDailyLossState(haltBook);
+ok(dl.halted && dl.dayPnlUsd <= -20000, 'daily loss halt trips at -3% vs 2% limit');
+ok(!pbRiskCheck(haltBook, intent).ok, 'new intent vetoed under daily loss halt');
+ok(pbSummary(haltBook).dailyLossHalt === true, 'summary exposes dailyLossHalt flag');
 
 var histBook = pbPushNavHistory(markedEq, sumEq);
 ok(Array.isArray(histBook.navHistory) && histBook.navHistory.length === 1, 'nav history snapshot');

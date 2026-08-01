@@ -73,7 +73,7 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 | **gold** | $500k | Gold swing/scalp/deep, GOLD PRO, macro real-rate hint |
 | **macro** | $250k | CARRY, TERM BASIS |
 
-**Desk features:** per-fund heat + bucket caps, mark refresh with auto desk rules (50% at T1, BE @1R, ATR trail). **Bracket column** on open rows (`BRACKET OK` / `BRACKET FAIL` / `EXEC —`). Cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`) with bracket rollup in digest, weekly digest cron.
+**Desk features:** per-fund heat + bucket caps, mark refresh with auto desk rules (50% at T1, BE @1R, ATR trail). **Daily loss halt** (default 2% of UTC day-start equity) blocks new adds when breached; existing positions may still be managed/EXEC'd. **Bracket column** on open rows (`BRACKET OK` / `BRACKET FAIL` / `EXEC —`). Cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`) with bracket rollup in digest, weekly digest cron.
 
 **Automation (BOOK tab):** optional **auto EXEC on add**, **auto EXEC pending on refresh**, **auto retry failed on refresh**, and **auto pending/retry all funds** (multi-fund). Batch buttons: **EXEC PENDING** / **RETRY FAILED** (active fund) and **ALL FUNDS PENDING** / **ALL FUNDS RETRY**. Desk rollup line has clickable **EXEC all pending** / **retry all failed**. Exports: per-fund CSV (with bracket column), **EXPORT ALL CSV** (all funds, open + closed), **EXPORT BLOTTER** (execute events).
 

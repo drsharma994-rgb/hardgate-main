@@ -62,6 +62,9 @@ ok(bookJs.indexOf('all.closed') >= 0 && bookJs.indexOf('closedAt') >= 0
 ok(bookJs.indexOf('bookBlotterExecOnlyOn') >= 0 && bookJs.indexOf('bookFilterBlotterRows') >= 0
   && bookJs.indexOf('id="bookBlotterExecOnly"') >= 0,
   'book.js EXEC-only blotter filter toggle');
+ok(bookJs.indexOf('bookDailyLossHalted') >= 0 && bookJs.indexOf('DAY HALT') >= 0
+  && bookJs.indexOf('bookDayHalt') >= 0,
+  'book.js daily loss halt banner + status chip');
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
