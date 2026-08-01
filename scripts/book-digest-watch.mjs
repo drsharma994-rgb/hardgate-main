@@ -70,7 +70,7 @@ function bookDigestWatchStatus(){
 function startBookDigestWatch(){
   if (__timer) return 'already running';
   if (!digestChannelsReady()){
-    console.log('[book-digest-watch] disabled — set LP_DIGEST_WEBHOOK_URL and/or TELEGRAM_TOKEN+TELEGRAM_CHAT_ID');
+    console.log('[book-digest-watch] disabled — set LP_DIGEST_WEBHOOK_URL, Telegram, and/or LP_DIGEST_EMAIL_TO + email provider');
     return 'disabled: no digest channels';
   }
   setTimeout(function(){ cycle(); }, 90000).unref?.();
