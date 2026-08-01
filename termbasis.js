@@ -56,6 +56,42 @@ the user runs a scan once.
     return Math.abs(curve.spreadCur || 0) + Math.abs(curve.slope || 0) * 0.5;
   }
 
+  /* Desk plan for paper book — perp leg of the curve trade (macro fund). */
+  function termBasisPlan(row){
+    try{
+      if (!row || !row.curve || !isFinite(row.mark) || !(row.mark > 0)) return null;
+      var c = row.curve;
+      var dir = null;
+      if (c.regime === 'contango' || c.regime === 'perp rich') dir = 'short';
+      else if (c.regime === 'backwardation' || c.regime === 'perp cheap') dir = 'long';
+      else if (Math.abs(c.spreadCur) >= 0.25) dir = c.spreadCur > 0 ? 'short' : 'long';
+      if (!dir) return null;
+      var entry = row.mark;
+      var riskPct = Math.max(0.008, Math.min(0.04, Math.abs(c.spreadCur) / 100 * 0.5 + 0.01));
+      var risk = entry * riskPct;
+      var stop = dir === 'short' ? entry + risk : entry - risk;
+      var t1 = dir === 'short' ? entry - risk : entry + risk;
+      var sym = String(row.pair || '').replace(/USDT$/i, 'USD');
+      if (!sym) return null;
+      return { sym: sym, dir: dir, entry: entry, stop: stop, t1: t1, regime: c.regime };
+    }catch(e){ return null; }
+  }
+
+  function termBasisBookBtn(row){
+    try{
+      var plan = termBasisPlan(row);
+      if (!plan || typeof bookBtnHTML !== 'function') return '';
+      return bookBtnHTML(plan.sym, plan.dir, plan.entry, plan.stop, plan.t1, {
+        scanner: 'termbasis',
+        fund: 'macro',
+        strategy: 'termbasis',
+        klass: 'macro',
+        venue: 'binance',
+        layers: ['termbasis', plan.regime || 'curve']
+      });
+    }catch(e){ return ''; }
+  }
+
   function setProg(el, frac){
     try{
       var bar = el && el.querySelector ? el.querySelector('#tbProg i') : null;
@@ -81,6 +117,7 @@ the user runs a scan once.
       + '<div class="kv"><span class="k">Mark</span><span class="v">' + fmtN(row.mark, 2) + '</span></div>'
       + '<div class="kv"><span class="k">24h turnover</span><span class="v">' + (row.turnoverUsd ? ('$' + fmtN(row.turnoverUsd, 0)) : '—') + '</span></div>'
       + '<div class="note" style="margin-top:8px">' + esc(c.note) + '</div>'
+      + termBasisBookBtn(row)
       + '</div></div>';
   }
 
@@ -260,6 +297,8 @@ the user runs a scan once.
 
   G.termBasisCurve = termBasisCurve;
   G.termBasisScore = termBasisScore;
+  G.termBasisPlan = termBasisPlan;
+  G.termBasisBookBtn = termBasisBookBtn;
   G.termBasisState = function termBasisState(){
     try{ return __tbSnap ? JSON.parse(JSON.stringify(__tbSnap)) : null; }catch(e){ return null; }
   };

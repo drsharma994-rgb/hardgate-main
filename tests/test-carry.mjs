@@ -473,6 +473,30 @@ console.log('--- carryPlan: execution levels ---');
 }
 
 /* ================================================================
+   6b) PAPER BOOK — carryBookBtn (short carry leg → macro fund)
+================================================================ */
+console.log('--- carryBookBtn: macro fund CTA ---');
+{
+  const ctx = makeCtx();
+  ctx.bookBtnHTML = function(sym, dir, entry, stop, t1, meta){
+    return '<button class="toBook" data-fund="' + (meta && meta.fund) + '">' + sym + ':' + dir + '</button>';
+  };
+  const w = loadModule(ctx);
+  const lv = w.carryPlan({ entry: 60000, atr: 500, spreadAPR: 43.8, intervalHours: 8 });
+  const btn = w.carryBookBtn({
+    pair: 'bin-delta',
+    sp: { shortVenue: 'delta', longVenue: 'binance' },
+    del: { symbol: 'BTCUSD' },
+    bin: { symbol: 'BTCUSDT' },
+    levels: lv
+  });
+  assert(typeof w.carryBookBtn === 'function', 'window.carryBookBtn exported');
+  assert(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'carryBookBtn: books short leg desk sym');
+  assert(btn.indexOf('macro') >= 0, 'carryBookBtn: macro fund pinned');
+  assert(w.carryBookBtn({ levels: null }) === '', 'carryBookBtn: no levels → no button');
+}
+
+/* ================================================================
    7) SL/TP AUDIT — scan renders per-card LEVELS when klines+atr exist
 ================================================================ */
 console.log('--- scan: execution levels rendered when klines+atr available ---');
