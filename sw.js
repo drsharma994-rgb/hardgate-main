@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v35';
+const HG_CACHE = 'hg-v36';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -19,7 +19,7 @@ const HG_SHELL = [
   './icon.svg', './bright.css', './mobile.css',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './startrader.js', './bybit.js', './positioning.js', './cryptowatch.js', './macro.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './termbasis.js',
-  './goldpro.js', './strats.js', './meanrev.js', './edge.js', './liqs.js', './xuniverse.js',
+  './goldpro.js', './strats.js', './meanrev.js', './edge.js', './startradertab.js', './liqs.js', './xuniverse.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './signallog.js',
   './hgalert.js', './tabalerts.js', './brain.js', './scorecard.js'

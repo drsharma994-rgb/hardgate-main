@@ -1,27 +1,23 @@
 /* =========================================================================
 HARDGATE — startrader.js
-STARTRADER crypto CFD catalog + Binance USD-M enrichment.
+STARTRADER CFD catalog (crypto · metals · oil · indices · forex) + data
+routing. No public STARTRADER API — proxies via Binance fapi (crypto),
+getGoldCandles (gold), Yahoo chart API via /api/proxy (oil/FX/indices).
 
-STARTRADER is a CFD broker (MT4/MT5 / proprietary app) with no public REST
-market-data API. This module holds their published USD crypto CFD symbols
-and enriches them from Binance USDT perps (mark, 24h turnover, funding) —
-the same honest proxy discipline as SMART $ / xuCandles Binance fallback.
-
-EXPORTS (window globals, never throw):
-  startraderCatalog()        -> [{sym, base}]
-  startraderBaseOf(sym)      -> base asset or ''
-  startraderBinanceSym(base) -> 'BTCUSDT' etc or null
-  startraderNormRows(tickers) -> normalized xuniverse rows (sync)
-  startraderUniverseRows()   -> Promise<rows> enriched via binanceTickers24h
-  startraderTickers()        -> Promise<index.html ticker shape>
+EXPORTS (never throw):
+  startraderCatalog() / startraderAllContracts()
+  startraderBaseOf(sym) / startraderBinanceSym(base)
+  startraderContract(sym) -> meta | null
+  startraderCandles(sym, tf, n) -> Promise<rows [{t,o,h,l,c,v}]>
+  startraderNormRows / startraderUniverseRows / startraderTickers
+  startraderFullTickers() -> all contracts with best-effort marks
 ========================================================================= */
 (function(){
 'use strict';
 var G = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-/* USD single-asset crypto CFDs (STARTRADER spec sheet — cross/JPY/XAU pairs excluded) */
-var ST_SYM_BASE = [
+var ST_CRYPTO = [
   ['ADAUSD','ADA'], ['ALGUSD','ALGO'], ['ATMUSD','ATOM'], ['AVAUSD','AVAX'],
   ['AXSUSD','AXS'], ['BATUSD','BAT'], ['BCHUSD','BCH'], ['BERAUSD','BERA'],
   ['BNBUSD','BNB'], ['BTCUSD','BTC'], ['CRVUSD','CRV'], ['DOGUSD','DOGE'],
@@ -35,18 +31,70 @@ var ST_SYM_BASE = [
   ['ZECUSD','ZEC']
 ];
 
-var ST_BASE_MAP = {};
-for (var i = 0; i < ST_SYM_BASE.length; i++){
-  ST_BASE_MAP[ST_SYM_BASE[i][0]] = ST_SYM_BASE[i][1];
+/* klass: crypto | metal | oil | index | fx — yahoo = Yahoo chart symbol */
+var ST_OTHER = [
+  { sym: 'XAUUSD', base: 'XAU', klass: 'metal', yahoo: null, gold: true, label: 'Gold' },
+  { sym: 'XAGUSD', base: 'XAG', klass: 'metal', yahoo: 'SI=F', label: 'Silver' },
+  { sym: 'USOIL',  base: 'WTI', klass: 'oil',   yahoo: 'CL=F', label: 'WTI Crude' },
+  { sym: 'UKOIL',  base: 'BRN', klass: 'oil',   yahoo: 'BZ=F', label: 'Brent Crude' },
+  { sym: 'U30USD', base: 'DJ30', klass: 'index', yahoo: '^DJI', label: 'Dow Jones 30' },
+  { sym: 'SPX500', base: 'SPX', klass: 'index', yahoo: '^GSPC', label: 'S&P 500' },
+  { sym: 'NAS100', base: 'NDX', klass: 'index', yahoo: '^NDX', label: 'Nasdaq 100' },
+  { sym: 'GER40',  base: 'DAX', klass: 'index', yahoo: '^GDAXI', label: 'DAX 40' },
+  { sym: 'UK100',  base: 'FTSE', klass: 'index', yahoo: '^FTSE', label: 'FTSE 100' },
+  { sym: 'JPN225', base: 'N225', klass: 'index', yahoo: '^N225', label: 'Nikkei 225' },
+  { sym: 'EURUSD', base: 'EUR', klass: 'fx', yahoo: 'EURUSD=X', label: 'Euro / USD' },
+  { sym: 'GBPUSD', base: 'GBP', klass: 'fx', yahoo: 'GBPUSD=X', label: 'Pound / USD' },
+  { sym: 'USDJPY', base: 'JPY', klass: 'fx', yahoo: 'JPY=X', label: 'USD / Yen' },
+  { sym: 'USDCHF', base: 'CHF', klass: 'fx', yahoo: 'CHF=X', label: 'USD / Franc' },
+  { sym: 'AUDUSD', base: 'AUD', klass: 'fx', yahoo: 'AUDUSD=X', label: 'Aussie / USD' },
+  { sym: 'USDCAD', base: 'CAD', klass: 'fx', yahoo: 'CAD=X', label: 'USD / CAD' },
+  { sym: 'NZDUSD', base: 'NZD', klass: 'fx', yahoo: 'NZDUSD=X', label: 'Kiwi / USD' }
+];
+
+var ST_META = {};
+for (var i = 0; i < ST_CRYPTO.length; i++){
+  ST_META[ST_CRYPTO[i][0]] = { sym: ST_CRYPTO[i][0], base: ST_CRYPTO[i][1],
+    klass: 'crypto', yahoo: null, gold: false, label: ST_CRYPTO[i][1] };
+}
+for (var j = 0; j < ST_OTHER.length; j++){
+  var o = ST_OTHER[j];
+  ST_META[o.sym] = { sym: o.sym, base: o.base, klass: o.klass,
+    yahoo: o.yahoo, gold: !!o.gold, label: o.label || o.sym };
 }
 
+var ST_YAHOO_RES = {
+  '15m': { i: '15m', r: '1mo' },
+  '1h':  { i: '1h',  r: '3mo' },
+  '2h':  { i: '1h',  r: '3mo', agg: 7200 },
+  '4h':  { i: '1h',  r: '6mo', agg: 14400 },
+  '1d':  { i: '1d',  r: '2y' }
+};
+
 function startraderCatalog(){
-  return ST_SYM_BASE.map(function(p){ return { sym: p[0], base: p[1] }; });
+  return ST_CRYPTO.map(function(p){ return { sym: p[0], base: p[1] }; });
+}
+
+function startraderAllContracts(){
+  var out = [];
+  for (var k in ST_META) if (ST_META.hasOwnProperty(k)) out.push(ST_META[k]);
+  out.sort(function(a, b){
+    var rank = { crypto: 0, metal: 1, oil: 2, index: 3, fx: 4 };
+    var ra = rank[a.klass] || 9, rb = rank[b.klass] || 9;
+    if (ra !== rb) return ra - rb;
+    return a.sym < b.sym ? -1 : (a.sym > b.sym ? 1 : 0);
+  });
+  return out;
+}
+
+function startraderContract(sym){
+  return ST_META[String(sym || '').toUpperCase()] || null;
 }
 
 function startraderBaseOf(sym){
-  var s = String(sym == null ? '' : sym).toUpperCase();
-  return ST_BASE_MAP[s] || s.replace(/USD$/, '');
+  var c = startraderContract(sym);
+  if (c) return c.base;
+  return String(sym == null ? '' : sym).toUpperCase().replace(/USD$/, '');
 }
 
 function startraderBinanceSym(base){
@@ -61,22 +109,101 @@ function numOrNull(x){
   return isFinite(n) ? n : null;
 }
 
+function stParseYahoo(j){
+  try{
+    var r = j && j.chart && j.chart.result && j.chart.result[0];
+    var ts = r && r.timestamp;
+    var q = r && r.indicators && r.indicators.quote && r.indicators.quote[0];
+    if (!ts || !q || !q.close) return [];
+    var out = [];
+    for (var i = 0; i < ts.length; i++){
+      var o = q.open && q.open[i], h = q.high && q.high[i], l = q.low && q.low[i], c = q.close[i];
+      if (o == null || h == null || l == null || c == null) continue;
+      out.push({ t: +ts[i], o: +o, h: +h, l: +l, c: +c,
+        v: (q.volume && q.volume[i] != null) ? +q.volume[i] : 0 });
+    }
+    out.sort(function(a, b){ return a.t - b.t; });
+    return out;
+  }catch(e){ return []; }
+}
+
+function stAggRows(rows, sec){
+  if (!sec || sec <= 0) return rows;
+  var buckets = new Map();
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    var b = Math.floor(r.t / sec) * sec;
+    var cur = buckets.get(b);
+    if (!cur) buckets.set(b, { t: b, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v || 0 });
+    else { cur.h = Math.max(cur.h, r.h); cur.l = Math.min(cur.l, r.l); cur.c = r.c; cur.v += (r.v || 0); }
+  }
+  return Array.from(buckets.values()).sort(function(a, b){ return a.t - b.t; });
+}
+
+async function stYahooFetch(url){
+  try{
+    var res = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+    if (res && res.ok) return await res.json();
+  }catch(e){}
+  try{
+    var res2 = await fetch(url);
+    if (res2 && res2.ok) return await res2.json();
+  }catch(e2){}
+  return null;
+}
+
+async function stYahooCandles(yahooSym, tf, count){
+  try{
+    var y = ST_YAHOO_RES[tf];
+    if (!yahooSym || !y) return [];
+    var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(yahooSym)
+      + '?interval=' + y.i + '&range=' + y.r;
+    var rows = stParseYahoo(await stYahooFetch(url));
+    if (y.agg) rows = stAggRows(rows, y.agg);
+    return rows.slice(-count);
+  }catch(e){ return []; }
+}
+
+async function startraderCandles(sym, tf, n){
+  try{
+    tf = tf || '4h';
+    n = Math.max(10, Math.min(500, +(n || 200)));
+    var c = startraderContract(sym);
+    if (!c) return [];
+    if (c.klass === 'crypto'){
+      if (typeof G.binanceKlines !== 'function') return [];
+      var b = startraderBinanceSym(c.base);
+      if (!b) return [];
+      var cr = await G.binanceKlines(b, tf, n);
+      return Array.isArray(cr) ? cr : [];
+    }
+    if (c.gold){
+      if (typeof G.getXAUCandles === 'function'){
+        try{ return await G.getXAUCandles(tf, n); }catch(e1){}
+      }
+      if (typeof G.getGoldCandles === 'function'){
+        var g = await G.getGoldCandles(tf, n);
+        return (g && g.rows) ? g.rows.slice(-n) : [];
+      }
+      return await stYahooCandles('GC=F', tf, n);
+    }
+    if (c.yahoo) return await stYahooCandles(c.yahoo, tf, n);
+    return [];
+  }catch(e){ return []; }
+}
+
 function startraderNormRows(tickers){
   try{
     var out = [];
-    for (var j = 0; j < ST_SYM_BASE.length; j++){
-      var sym = ST_SYM_BASE[j][0], base = ST_SYM_BASE[j][1];
+    for (var j = 0; j < ST_CRYPTO.length; j++){
+      var sym = ST_CRYPTO[j][0], base = ST_CRYPTO[j][1];
       var bSym = startraderBinanceSym(base);
       var t = (tickers && bSym) ? tickers[bSym] : null;
       out.push({
-        sym: sym,
-        base: base,
-        exchange: 'startrader',
+        sym: sym, base: base, exchange: 'startrader',
         turnoverUsd: t ? numOrNull(t.turnoverUsd) : null,
         mark: t ? numOrNull(t.mark) : null,
-        fundingPct: null,
-        oiUsd: null,
-        oiContracts: null,
+        fundingPct: null, oiUsd: null, oiContracts: null,
         alsoOn: (t && bSym) ? bSym : null
       });
     }
@@ -107,25 +234,45 @@ async function startraderTickers(){
   try{
     var rows = await startraderUniverseRows();
     return rows.map(function(r){
-      return {
-        symbol: r.sym,
-        mark: r.mark,
-        fundingPct: r.fundingPct,
-        oiUsd: 0,
-        turnoverUsd: r.turnoverUsd || 0,
-        chg24: null
-      };
+      return { symbol: r.sym, mark: r.mark, fundingPct: r.fundingPct,
+        oiUsd: 0, turnoverUsd: r.turnoverUsd || 0, chg24: null };
     }).filter(function(t){ return isFinite(t.mark) || t.turnoverUsd > 0; });
+  }catch(e){ return []; }
+}
+
+async function startraderFullTickers(){
+  try{
+    var crypto = await startraderTickers();
+    var map = {};
+    for (var i = 0; i < crypto.length; i++) map[crypto[i].symbol] = crypto[i];
+    var all = startraderAllContracts();
+    var out = [];
+    for (var j = 0; j < all.length; j++){
+      var c = all[j];
+      if (map[c.sym]){
+        out.push(map[c.sym]);
+        continue;
+      }
+      var rows = await startraderCandles(c.sym, '1d', 5);
+      var mark = (rows && rows.length) ? rows[rows.length - 1].c : null;
+      out.push({ symbol: c.sym, mark: mark, fundingPct: null, oiUsd: 0,
+        turnoverUsd: 0, chg24: null, klass: c.klass, label: c.label });
+    }
+    return out;
   }catch(e){ return []; }
 }
 
 try{
   G.startraderCatalog = startraderCatalog;
+  G.startraderAllContracts = startraderAllContracts;
+  G.startraderContract = startraderContract;
   G.startraderBaseOf = startraderBaseOf;
   G.startraderBinanceSym = startraderBinanceSym;
+  G.startraderCandles = startraderCandles;
   G.startraderNormRows = startraderNormRows;
   G.startraderUniverseRows = startraderUniverseRows;
   G.startraderTickers = startraderTickers;
+  G.startraderFullTickers = startraderFullTickers;
 }catch(e){}
 
 })();

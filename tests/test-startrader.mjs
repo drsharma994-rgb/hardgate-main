@@ -53,6 +53,38 @@ function load(pathRel, ctx){
      'merge legs: delta wins turnover; startrader sym in alsoOn');
 }
 
+{
+  const ctx = makeCtx();
+  load('startrader.js', ctx);
+  const all = ctx.window.startraderAllContracts();
+  ok(all.length >= 55, 'full catalog: crypto + metals + oil + indices + fx (got ' + all.length + ')');
+  ok(ctx.window.startraderContract('XAUUSD').klass === 'metal', 'XAUUSD tagged metal');
+  ok(ctx.window.startraderContract('USOIL').yahoo === 'CL=F', 'USOIL maps to WTI Yahoo');
+}
+
+{
+  const TAB = readFileSync(path.join(root, 'startradertab.js'), 'utf8');
+  const IND = readFileSync(path.join(root, 'indicators.js'), 'utf8');
+  const CG = readFileSync(path.join(root, 'cryptogates.js'), 'utf8');
+  const ctx = makeCtx();
+  vm.runInContext(IND, ctx, { filename: 'indicators.js' });
+  vm.runInContext(CG, ctx, { filename: 'cryptogates.js' });
+  vm.runInContext(TAB, ctx, { filename: 'startradertab.js' });
+  const w = ctx.window;
+  ok(typeof w.stSynthesize === 'function', 'stSynthesize exported');
+  w.swingTryClean = function(){ return { dir: 'long', entry: 110, stop: 105, t1: 120, t2: 125, rr: 2 }; };
+  w.scalpTryClean = function(){ return { dir: 'long', entry: 110, stop: 108, t1: 114, t2: 118, rr: 1.6 }; };
+  var rows = [];
+  for (var i = 0; i < 240; i++){
+    var c = 100 + i * 0.05;
+    rows.push({ t: 1700000000 + i * 14400, o: c, h: c + 0.2, l: c - 0.2, c: c, v: 1000 });
+  }
+  var setup = w.stSynthesize({ sym: 'BTCUSD', base: 'BTC', klass: 'crypto', label: 'Bitcoin' },
+    rows, rows.slice(-120), rows.slice(-80), { symbol: 'BTCUSD', fundingPct: 0.01, mark: 110 });
+  ok(setup && setup.dir === 'long' && setup.tier === 'HIGH', 'stSynthesize: mocked swing+scalp plans -> HIGH long');
+  ok(w.stTierRank('PRIME') > w.stTierRank('WATCH'), 'stTierRank ordering');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;

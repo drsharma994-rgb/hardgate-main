@@ -624,6 +624,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
 <script src="edge.js"></script>
+<script src="startradertab.js"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
 <script src="onchain.js"></script>
@@ -2021,7 +2022,7 @@ cardsEl.innerHTML = __cardsHtml.join('');
    later) — missing ids are skipped everywhere, so showTab/setHgGroup never
    break on an absent tab. */
 const HG_NAV_GROUPS = [
-  { id:'overview',   label:'OVERVIEW',     tabs:['brain','execute','bias','regime','trendmx','rotation','news'] },
+  { id:'overview',   label:'OVERVIEW',     tabs:['brain','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','termbasis','scorecard'] },
