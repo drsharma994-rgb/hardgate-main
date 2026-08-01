@@ -60,6 +60,9 @@ ok(bookJs.indexOf('bookExecuteAllFundsPending') >= 0 && bookJs.indexOf('bookFetc
   'book.js cross-fund EXEC batch + consolidated blotter panel');
 ok(bookJs.indexOf('_fundId') >= 0 && bookJs.indexOf('consolidatedAll') >= 0,
   'book.js tags cross-fund positions and caches consolidated snapshot');
+ok(bookJs.indexOf('bookExportBlotterCSV') >= 0 && bookJs.indexOf('EXPORT BLOTTER') >= 0
+  && bookJs.indexOf('hardgate-blotter') >= 0,
+  'book.js exports execution blotter CSV');
 
 var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');

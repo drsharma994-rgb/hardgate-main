@@ -910,6 +910,61 @@ function bookExportJSON(){
   }catch(e){}
 }
 
+function bookCsvCell(v){
+  var s = (v == null || v === undefined) ? '' : String(v);
+  if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0){
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+async function bookExportBlotterCSV(){
+  try{
+    var rows = [];
+    var multiFund = (__book.funds || []).length > 1;
+    if (multiFund){
+      var all = __book.consolidatedAll || await bookFetchAllPositions();
+      rows = (all.blotter || []).slice();
+    } else {
+      var snap = __book.snap;
+      if (!snap || !snap.book) return;
+      rows = (snap.book.blotter || []).slice();
+    }
+    if (!rows.length){ try{ alert('No blotter events to export.'); }catch(e){} return; }
+    var showFund = multiFund || rows.some(function(b){ return b && b._fundId; });
+    var header = ['at_iso', 'time_local'];
+    if (showFund) header.push('fund');
+    header.push('type', 'sym', 'dir', 'qty', 'status', 'note', 'idempotencyKey', 'positionId');
+    var lines = [header.join(',')];
+    rows.forEach(function(b){
+      var at = b.at ? new Date(b.at) : null;
+      var cols = [
+        at ? at.toISOString() : '',
+        at ? at.toLocaleString() : '',
+      ];
+      if (showFund) cols.push(bookCsvCell(b._fundId || bookFundId()));
+      cols.push(
+        bookCsvCell(b.type || ''),
+        bookCsvCell(b.sym || ''),
+        bookCsvCell(b.dir || ''),
+        bookCsvCell(b.qty != null ? b.qty : ''),
+        bookCsvCell(b.status != null ? b.status : ''),
+        bookCsvCell(b.note || ''),
+        bookCsvCell(b.idempotencyKey || ''),
+        bookCsvCell(b.positionId || '')
+      );
+      lines.push(cols.join(','));
+    });
+    var suffix = multiFund ? '-all-funds' : ('-' + bookFundId());
+    var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'hardgate-blotter' + suffix + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){}
+}
+
 function bookExportCSV(){
   try{
     var snap = __book.snap;
@@ -1113,6 +1168,7 @@ function mount(el){
     + '<button class="btn ghost" id="bookCloseAll">CLOSE ALL</button>'
     + '<button class="btn ghost" id="bookExportJson">EXPORT JSON</button>'
     + '<button class="btn ghost" id="bookExportCsv">EXPORT CSV</button>'
+    + '<button class="btn ghost" id="bookExportBlotter" title="Execution blotter CSV (all funds when multi-fund)">EXPORT BLOTTER</button>'
     + '<button class="btn ghost" id="bookExportLp">LP REPORT</button>'
     + '<button class="btn ghost" id="bookExportConsolidated" title="All funds — month MTD">CONSOLIDATED LP</button>'
     + '<button class="btn ghost" id="bookExportDigest">WEEKLY DIGEST</button>'
@@ -1322,6 +1378,7 @@ function mount(el){
   if (retryAllFailedBtn) retryAllFailedBtn.addEventListener('click', function(){ bookRetryAllFundsFailed(); });
   el.querySelector('#bookExportJson').addEventListener('click', bookExportJSON);
   el.querySelector('#bookExportCsv').addEventListener('click', bookExportCSV);
+  el.querySelector('#bookExportBlotter').addEventListener('click', function(){ bookExportBlotterCSV(); });
   el.querySelector('#bookExportLp').addEventListener('click', bookExportLp);
   el.querySelector('#bookExportConsolidated').addEventListener('click', function(){ bookExportConsolidated('month'); });
   el.querySelector('#bookExportDigest').addEventListener('click', function(){ bookExportDigest('week'); });
@@ -1467,6 +1524,7 @@ W.bookExecuteBatchPositions = bookExecuteBatchPositions;
 W.bookExecuteFromPosition = bookExecuteFromPosition;
 W.bookFetchAllPositions = bookFetchAllPositions;
 W.bookExecuteAllFundsPending = bookExecuteAllFundsPending;
+W.bookExportBlotterCSV = bookExportBlotterCSV;
 W.bookRetryAllFundsFailed = bookRetryAllFundsFailed;
 
 W.HG_tabs = W.HG_tabs || [];
