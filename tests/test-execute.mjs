@@ -42,6 +42,11 @@ var bookJs = fs.readFileSync(path.join(root, 'book.js'), 'utf8');
 ok(bookJs.indexOf('bookMaybeAutoExecute') >= 0 && bookJs.indexOf('BOOK_AUTO_EXEC_KEY') >= 0,
   'book.js auto EXEC on add hook');
 ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
+ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
+  'book.js desk exec status bar + closed trade source chips');
+
+var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
+ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
