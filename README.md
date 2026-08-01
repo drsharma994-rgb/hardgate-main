@@ -73,7 +73,7 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 | **gold** | $500k | Gold swing/scalp/deep, GOLD PRO, macro real-rate hint |
 | **macro** | $250k | CARRY, TERM BASIS |
 
-**Desk features:** per-fund heat + bucket caps, mark refresh with auto rules (50% at T1, BE @1R, ATR trail), optional **auto EXEC bracket on add** (BOOK tab checkbox), cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`), weekly digest cron.
+**Desk features:** per-fund heat + bucket caps, mark refresh with auto rules (50% at T1, BE @1R, ATR trail), optional **auto EXEC bracket on add** (BOOK tab checkbox), optional **BRAIN auto-add PRIME/HIGH to book** (BRAIN tab checkbox — deduped, no tab switch), cross-fund desk rollup (`GET /api/book/desk`), attribution (`GET /api/book/attribution`), consolidated LP (`GET /api/book/consolidated`), weekly digest cron.
 
 **Execution:** `POST /api/execute` proxies bracket orders when `EXECUTE_BACKEND_URL` (or `EXECUTE_WEBHOOK_URL`) is set — stop + T1 + optional **T2** (`takeProfit2`). TRADE PLAN has optional **T2 runner** field. BOOK **EXEC** and TRADE PLAN **EXECUTE BRACKET** share `execute.js`. **LIVE** posts to `EXECUTE_WEBHOOK_URL` via `POST /api/book/live`.
 

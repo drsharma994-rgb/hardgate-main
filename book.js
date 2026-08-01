@@ -258,17 +258,48 @@ async function addToBook(opts){
         try{
           if (r.json.position) await bookMaybeAutoExecute(r.json.position);
         }catch(eAuto){}
-        if (typeof W.showTab === 'function') W.showTab('book');
+        if (!opts.silent && typeof W.showTab === 'function') W.showTab('book');
         return r.json;
       }
       var msg = (r.json && r.json.reasons) ? r.json.reasons.join(' · ') : ((r.json && r.json.reason) || 'risk veto');
-      try{ alert('BOOK: ' + msg); }catch(e){}
+      if (!opts.silent){ try{ alert('BOOK: ' + msg); }catch(e){} }
       return r.json || { ok: false, reason: 'book API error' };
     }
-    try{ alert('Paper book requires Render backend — open hardgate-main.onrender.com'); }catch(e2){}
+    if (!opts.silent){ try{ alert('Paper book requires Render backend — open hardgate-main.onrender.com'); }catch(e2){} }
   }catch(e){
     return { ok: false, reason: (e && e.message) || String(e) };
   }
+}
+
+function bookPositionKey(fund, sym, dir){
+  return String(fund || 'main') + ':' + String(sym) + ':' + String(dir);
+}
+
+async function bookFetchOpenKeys(){
+  var keys = {};
+  if (!bookApiOn()) return keys;
+  try{
+    var fr = await bookFetch('/api/book/funds');
+    var ids = [];
+    if (fr.json && Array.isArray(fr.json.funds)){
+      for (var fi = 0; fi < fr.json.funds.length; fi++){
+        var fid = fr.json.funds[fi] && fr.json.funds[fi].id;
+        if (fid) ids.push(fid);
+      }
+    }
+    if (!ids.length) ids = ['main'];
+    await Promise.all(ids.map(async function(id){
+      try{
+        var r = await bookFetch('/api/book?fund=' + encodeURIComponent(id));
+        var pos = (r.json && r.json.book && r.json.book.positions) || [];
+        for (var i = 0; i < pos.length; i++){
+          var p = pos[i];
+          if (p && p.sym && p.dir) keys[bookPositionKey(id, p.sym, p.dir)] = true;
+        }
+      }catch(e){}
+    }));
+  }catch(e){}
+  return keys;
 }
 
 function bookBtnHTML(sym, dir, entry, stop, t1, meta){
@@ -1125,6 +1156,9 @@ W.bookExecutePosition = bookExecutePosition;
 W.bookFundBody = bookFundBody;
 W.bookRefresh = bookRefresh;
 W.bookAutoExecOn = bookAutoExecOn;
+W.bookResolveFund = bookResolveFund;
+W.bookPositionKey = bookPositionKey;
+W.bookFetchOpenKeys = bookFetchOpenKeys;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'book', label: 'BOOK', mount: mount, refresh: bookRefresh });

@@ -3948,6 +3948,120 @@ function scoreRecord(setups){
   }catch(e){ /* recording is best-effort */ }
 }
 
+/* auto-book hook — PRIME/HIGH cards with valid plans -> paper book (optional
+   toggle). Dedupes by fund+sym+dir against open positions and an 8h seen map;
+   never switches tabs or alerts on veto (silent addToBook). */
+var BRAIN_AUTO_BOOK_KEY = 'hg_brain_auto_book_v1';
+var BRAIN_AUTO_BOOK_SEEN_KEY = 'hg_brain_auto_book_seen_v1';
+var BRAIN_AUTO_BOOK_SEEN_TTL = 8 * 60 * 60 * 1000;
+
+function brainAutoBookOn(){
+  try{ return localStorage.getItem(BRAIN_AUTO_BOOK_KEY) === '1'; }catch(e){ return false; }
+}
+function brainSetAutoBook(on){
+  try{ localStorage.setItem(BRAIN_AUTO_BOOK_KEY, on ? '1' : '0'); }catch(e){}
+}
+function brainAutoBookKey(fund, sym, dir){
+  return String(fund || 'main') + ':' + String(sym) + ':' + String(dir);
+}
+function brainAutoBookSeenLoad(){
+  try{
+    var raw = localStorage.getItem(BRAIN_AUTO_BOOK_SEEN_KEY);
+    if (!raw) return {};
+    var o = JSON.parse(raw);
+    return (o && typeof o === 'object') ? o : {};
+  }catch(e){ return {}; }
+}
+function brainAutoBookSeenSave(map){
+  try{ localStorage.setItem(BRAIN_AUTO_BOOK_SEEN_KEY, JSON.stringify(map)); }catch(e){}
+}
+function brainAutoBookSeenPrune(map){
+  var now = Date.now(), out = {};
+  for (var k in map){
+    if (Object.prototype.hasOwnProperty.call(map, k) && map[k] && (now - map[k]) < BRAIN_AUTO_BOOK_SEEN_TTL){
+      out[k] = map[k];
+    }
+  }
+  return out;
+}
+function brainRowBookOpts(row){
+  try{
+    var dec = row && row.dec;
+    if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return null;
+    var plan = row.plan;
+    if (!plan || !isFinite(plan.entry) || !isFinite(plan.stop)) return null;
+    if (!familyEvOk(plan)) return null;
+    var dir = dec.dir;
+    var sym = row.lane === 'gold' ? 'XAUTUSD' : row.sym;
+    var agreeing = [];
+    var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
+    for (var a = 0; a < votes.length; a++){
+      if (votes[a] && votes[a].vote === dir) agreeing.push(votes[a].layer);
+    }
+    var meta = {
+      scanner: 'brain',
+      fund: row.lane === 'gold' ? 'gold' : 'main',
+      strategy: 'brain',
+      klass: row.lane === 'gold' ? 'metal' : 'crypto',
+      layers: agreeing,
+    };
+    var fund = (typeof G.bookResolveFund === 'function') ? G.bookResolveFund(meta) : meta.fund;
+    return {
+      sym: sym, dir: dir,
+      entry: plan.entry, stop: plan.stop,
+      t1: plan.t1, t2: isFinite(plan.t2) ? plan.t2 : null,
+      scanner: 'brain',
+      fund: fund,
+      strategy: 'brain', tier: dec.tier,
+      klass: meta.klass,
+      layers: agreeing,
+      silent: true,
+      source: 'hardgate-brain-auto',
+    };
+  }catch(e){ return null; }
+}
+async function brainAutoBookRecord(setups){
+  var out = { added: 0, skipped: 0, veto: 0 };
+  try{
+    if (!brainAutoBookOn()) return out;
+    if (typeof G.addToBook !== 'function') return out;
+    if (typeof G.hgApiAvailable === 'function' && !G.hgApiAvailable()) return out;
+    var openKeys = {};
+    if (typeof G.bookFetchOpenKeys === 'function'){
+      openKeys = await G.bookFetchOpenKeys();
+    }
+    var seen = brainAutoBookSeenPrune(brainAutoBookSeenLoad());
+    var now = Date.now();
+    for (var i = 0; i < setups.length; i++){
+      var opts = brainRowBookOpts(setups[i]);
+      if (!opts) continue;
+      var key = brainAutoBookKey(opts.fund, opts.sym, opts.dir);
+      if (seen[key] || openKeys[key]){ out.skipped++; continue; }
+      try{
+        var r = await G.addToBook(opts);
+        if (r && r.ok){
+          seen[key] = now;
+          out.added++;
+        }else if (r && r.veto){
+          out.veto++;
+        }else{
+          out.skipped++;
+        }
+      }catch(e){ out.skipped++; }
+    }
+    brainAutoBookSeenSave(seen);
+  }catch(e){}
+  return out;
+}
+function brainAutoBookStatNote(ab){
+  if (!ab || (!ab.added && !ab.skipped && !ab.veto)) return '';
+  var parts = [];
+  if (ab.added) parts.push('+' + ab.added);
+  if (ab.skipped) parts.push(ab.skipped + ' dup');
+  if (ab.veto) parts.push(ab.veto + ' veto');
+  return ' · auto-book ' + parts.join(' · ');
+}
+
 /* ---------------- tab state + hard-refresh contract ---------------- */
 var __busy = false;
 var __busySince = 0;  /* same hung-await watchdog as engine.js: a synthesis whose
@@ -4353,6 +4467,11 @@ async function runBrain(el){
 
     /* scorecard hook — PRIME/HIGH only, fire-and-forget, after plans land */
     scoreRecord(setups);
+    var autoBookNote = '';
+    try{
+      var abFull = await brainAutoBookRecord(setups);
+      autoBookNote = brainAutoBookStatNote(abFull);
+    }catch(eAb){}
     /* quick-rescan baseline: full row set + universe + scan time */
     __lastResult = { rows: rows, uni: uni, at: Date.now() };
     /* signal-logger snapshot — deep-frozen copy of the completed synthesis */
@@ -4367,13 +4486,15 @@ async function runBrain(el){
         + setups.length + ' prime/high · ' + watches.length + ' watch'
         + (uni.venue !== 'ALL' ? ' · venue ' + uni.venue : '')
         + gateNote + capNote + ' · '
-        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5)
+        + autoBookNote;
     }else{
       stat.textContent = 'done · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
         + watches.length + ' watch · ' + asides.length + ' aside · universe '
         + uni.candidates.length + ' + XAU (' + uni.note + ')'
         + (uni.xuNote ? ' · ' + uni.xuNote : '') + gateNote + capNote + ' · '
-        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5);
+        + ((Date.now() - t0) / 1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0, 5)
+        + autoBookNote;
     }
   }catch(e){
     stat.className = 'note warn';
@@ -4589,6 +4710,11 @@ async function runQuick(el){
 
     /* scorecard hook — fresh PRIME/HIGH cards earn a record, unchanged never do */
     scoreRecord(setups);
+    var autoBookNoteQ = '';
+    try{
+      var abQuick = await brainAutoBookRecord(setups);
+      autoBookNoteQ = brainAutoBookStatNote(abQuick);
+    }catch(eAbQ){}
 
     /* the quick result becomes the new baseline */
     var allRows = rows;
@@ -4603,7 +4729,8 @@ async function runQuick(el){
       + ' · ' + primes.length + ' PRIME · ' + highs.length + ' HIGH · '
       + watches.length + ' watch · ' + asides.length + ' aside'
       + gateNote
-      + ' · ' + new Date().toTimeString().slice(0, 5);
+      + ' · ' + new Date().toTimeString().slice(0, 5)
+      + autoBookNoteQ;
   }catch(e){
     stat.className = 'note warn';
     stat.textContent = 'quick rescan failed: ' + (e && e.message ? e.message : e);
@@ -4708,6 +4835,8 @@ function mount(el){
       + '<div class="row"><button class="btn" id="brainRun">RUN SYNTHESIS</button>'
       + '<button class="btn" id="brainQuick" title="recheck the last scan’s watch set against fresh layers — cached universe, new listings judged on arrival">QUICK RESCAN</button>'
       + '<button class="btn" id="brainWarm" title="run every layer tab’s scan (news, regime, rotation, on-chain, OI flow, squeeze, engine) in sequence, then auto-run the synthesis — one click instead of eight">WARM UP LAYERS</button>'
+      + '<label class="note" id="brainAutoBookWrap" title="After each synthesis, add PRIME/HIGH cards with plans to the paper book (deduped; no tab switch)">'
+      + '<input type="checkbox" id="brainAutoBook"> Auto-add PRIME/HIGH to book</label>'
       + '<select id="brainVenue" style="display:none" title="venue filter — combined multi-exchange universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
       + '<option value="CDCX">COINDCX ONLY</option><option value="STARTRADER">STARTRADER ONLY</option></select>'
@@ -4784,6 +4913,13 @@ function mount(el){
     if (qbtn) qbtn.addEventListener('click', function(){ runQuick(el); });
     var wbtn = el.querySelector('#brainWarm');
     if (wbtn) wbtn.addEventListener('click', function(){ runWarmup(el); });
+    var abChk = el.querySelector('#brainAutoBook');
+    if (abChk){
+      abChk.checked = brainAutoBookOn();
+      abChk.addEventListener('change', function(){
+        brainSetAutoBook(abChk.checked);
+      });
+    }
   }catch(e){}
   if (!runWired){
     mountNote(el, 'brain mount degraded: run button wiring failed — retrying…');
@@ -4943,6 +5079,8 @@ G.__hgBrainAudit = function(sym){
    synthesis (full or quick), null before the first scan. Never throws. */
 G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };
 G.hgBrainAutoWarm = hgBrainAutoWarm;
+G.brainAutoBookOn = brainAutoBookOn;
+G.brainSetAutoBook = brainSetAutoBook;
 G.HG_tabs = G.HG_tabs || [];
 G.HG_tabs.push({ id: 'brain', label: 'BRAIN', mount: function(el){ mount(el); }, refresh: brainRefresh });
 
