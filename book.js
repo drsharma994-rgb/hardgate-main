@@ -121,6 +121,12 @@ async function bookPull(){
       __book.digestReady = !!(r.json.capabilities && (r.json.capabilities.digestSend || r.json.capabilities.digestWebhook));
       if (r.json.fundId) bookSetFund(r.json.fundId);
       __book.funds = r.json.funds || [];
+      if ((__book.funds || []).length > 1){
+        try{
+          var ar = await bookFetch('/api/book/attribution');
+          if (ar.json && ar.json.ok && ar.json.attribution) __book.snap.crossAttribution = ar.json.attribution;
+        }catch(e){}
+      }
       __book.lastAt = Date.now();
       return r.json;
     }
@@ -553,6 +559,55 @@ function attrTableHTML(title, rows){
     + '</tbody></table></div></div>';
 }
 
+function fundAttrTableHTML(attr){
+  var funds = (attr && attr.byFund) || [];
+  if (!funds.length) return '';
+  return '<div class="panel bookCrossAttr"><h3>P&amp;L by fund <span>all books</span></h3>'
+    + '<div style="overflow-x:auto"><table class="booktbl"><thead><tr>'
+    + '<th>Fund</th><th>Equity</th><th>Open</th><th>Realized</th><th>Unrealized</th><th>Total P&amp;L</th>'
+    + '</tr></thead><tbody>'
+    + funds.map(function(f){
+      var cls = (f.pnlUsd || 0) >= 0 ? 'ok' : 'warn';
+      return '<tr><td>' + esc(f.label || f.id) + ' <span class="note">(' + esc(f.id) + ')</span></td>'
+        + '<td>' + fmtUsd(f.equityUsd) + '</td><td>' + (f.openCount || 0) + '</td>'
+        + '<td>' + fmtUsd(f.realizedUsd) + '</td><td>' + fmtUsd(f.unrealizedUsd) + '</td>'
+        + '<td class="' + cls + '">' + fmtUsd(f.pnlUsd) + '</td></tr>';
+    }).join('')
+    + '</tbody></table></div></div>';
+}
+
+function strategyMatrixHTML(attr){
+  var matrix = (attr && attr.strategyByFund) || [];
+  var ids = (attr && attr.fundIds) || [];
+  if (!matrix.length || ids.length < 2) return '';
+  var labels = attr.fundLabels || {};
+  var head = '<tr><th>Strategy</th>' + ids.map(function(id){
+    return '<th>' + esc(labels[id] || id) + '</th>';
+  }).join('') + '<th>Total</th></tr>';
+  var body = matrix.map(function(row){
+    var cells = ids.map(function(id){
+      var v = row.cells && row.cells[id];
+      if (v == null || v === 0) return '<td class="note">—</td>';
+      var cls = v >= 0 ? 'ok' : 'warn';
+      return '<td class="' + cls + '">' + fmtUsd(v) + '</td>';
+    }).join('');
+    var totalCls = (row.total || 0) >= 0 ? 'ok' : 'warn';
+    return '<tr><td>' + esc(row.key) + '</td>' + cells
+      + '<td class="' + totalCls + '"><b>' + fmtUsd(row.total) + '</b></td></tr>';
+  }).join('');
+  return '<div class="panel bookCrossAttr"><h3>Strategy × fund <span>cross-book attribution</span></h3>'
+    + '<div style="overflow-x:auto"><table class="booktbl"><thead>' + head + '</thead><tbody>'
+    + body + '</tbody></table></div></div>';
+}
+
+function crossAttrHTML(attr){
+  if (!attr || (attr.fundCount || 0) < 2) return '';
+  return fundAttrTableHTML(attr)
+    + strategyMatrixHTML(attr)
+    + attrTableHTML('P&amp;L by strategy (all funds)', attr.byStrategy)
+    + attrTableHTML('P&amp;L by asset bucket (all funds)', attr.byBucket);
+}
+
 function bookExportJSON(){
   try{
     var snap = __book.snap;
@@ -677,6 +732,7 @@ function mount(el){
     + '<div class="empty" id="bookEmpty" style="display:none">No open paper positions — add from a scanner card.</div>'
     + '</div>'
     + '<div class="panel"><h3>Recently closed</h3><div id="bookClosed"></div></div>'
+    + '<div id="bookCrossAttr"></div>'
     + '<div id="bookAttr"></div>'
     + '<div id="bookNavHist"></div>';
 
@@ -688,6 +744,7 @@ function mount(el){
   var body = el.querySelector('#bookBody');
   var empty = el.querySelector('#bookEmpty');
   var closedEl = el.querySelector('#bookClosed');
+  var crossAttrEl = el.querySelector('#bookCrossAttr');
   var attrEl = el.querySelector('#bookAttr');
   var navHistEl = el.querySelector('#bookNavHist');
 
@@ -714,6 +771,7 @@ function mount(el){
       if (heatEl) heatEl.innerHTML = '';
       if (body) body.innerHTML = '';
       if (attrEl) attrEl.innerHTML = '';
+      if (crossAttrEl) crossAttrEl.innerHTML = '';
       if (navHistEl) navHistEl.innerHTML = '';
       if (empty) empty.style.display = 'block';
       return;
@@ -751,10 +809,21 @@ function mount(el){
           }).join('') + '</tbody></table>'
         : '<div class="note">No closed trades yet.</div>';
     }
+    if (crossAttrEl && snap.crossAttribution){
+      crossAttrEl.innerHTML = crossAttrHTML(snap.crossAttribution);
+    } else if (crossAttrEl){
+      crossAttrEl.innerHTML = '';
+    }
     if (attrEl && snap.attribution){
-      attrEl.innerHTML = attrTableHTML('P&amp;L by strategy', snap.attribution.byStrategy)
+      var activeLabel = bookFundId();
+      var activeRow = (__book.funds || []).find(function(f){ return f.id === activeLabel; });
+      if (activeRow && activeRow.label) activeLabel = activeRow.label + ' (' + activeRow.id + ')';
+      attrEl.innerHTML = '<div class="panel"><h3>Active fund — ' + esc(activeLabel) + '</h3></div>'
+        + attrTableHTML('P&amp;L by strategy', snap.attribution.byStrategy)
         + attrTableHTML('P&amp;L by asset bucket', snap.attribution.byBucket)
         + attrTableHTML('P&amp;L by tier', snap.attribution.byTier);
+    } else if (attrEl){
+      attrEl.innerHTML = '';
     }
     if (navHistEl) navHistEl.innerHTML = navHistoryHTML(snap.navHistory || (snap.book && snap.book.navHistory));
     setStat('updated ' + new Date(snap.summary.at || Date.now()).toLocaleTimeString()
