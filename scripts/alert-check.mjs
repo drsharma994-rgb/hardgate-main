@@ -162,11 +162,13 @@ function engineAlertDue(lastAlertAt, now) {
 const BOOK_EXEC_ALERT_MS = 4 * 60 * 60 * 1000;
 function bookExecSnapshot(desk) {
   const ex = desk && desk.execute;
-  if (!ex) return { pending: 0, fail: 0, ok: 0 };
+  if (!ex) return { pending: 0, fail: 0, ok: 0, liveOk: 0, liveFail: 0 };
   return {
     pending: Number.isFinite(+ex.pending) ? +ex.pending : 0,
     fail: Number.isFinite(+ex.fail) ? +ex.fail : 0,
     ok: Number.isFinite(+ex.ok) ? +ex.ok : 0,
+    liveOk: Number.isFinite(+ex.liveOk) ? +ex.liveOk : 0,
+    liveFail: Number.isFinite(+ex.liveFail) ? +ex.liveFail : 0,
   };
 }
 function bookExecKey(snap) {
@@ -229,6 +231,9 @@ async function bookFetchDesk(siteUrl) {
 function bookExecBody(desk, snap) {
   const parts = ['Cross-fund brackets (7d): ' + snap.ok + ' OK · ' + snap.fail + ' fail · '
     + snap.pending + ' open without bracket'];
+  if (snap.liveOk || snap.liveFail) {
+    parts.push('LIVE webhook (7d): ' + snap.liveOk + ' OK · ' + snap.liveFail + ' fail');
+  }
   const funds = (desk && Array.isArray(desk.funds)) ? desk.funds : [];
   if (funds.length) {
     parts.push('Funds: ' + funds.map(function(f){
