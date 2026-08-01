@@ -196,7 +196,7 @@ function bookFillAlertDue(lastAlertAt, now) {
 function bookFillBody(desk, snap) {
   return 'Bracket sent but broker fill not confirmed: ' + snap.unfilled + ' unfilled · '
     + snap.partial + ' partial across the desk. POST /api/book/execute-fill from your broker webhook,'
-    + ' or rely on auto-fill when EXECUTE_BACKEND returns fill fields.';
+    + ' poll via BOOK → POLL FILLS / POST /api/book/poll-fills, or rely on auto-fill when EXECUTE_BACKEND returns fill fields.';
 }
 function bookExecBody(desk, snap) {
   const parts = ['Cross-fund brackets (7d): ' + snap.ok + ' OK · ' + snap.fail + ' fail · '

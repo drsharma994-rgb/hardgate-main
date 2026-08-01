@@ -1,6 +1,7 @@
 /* HARDGATE — bracket execution payload + API tests */
 import { hgBuildBracketPayload, hgExecuteBackendTarget, hgExecuteIdempotencyKey, hgParseExecuteFillResponse } from '../lib/execute-core.mjs';
 import { executeCapabilities } from '../lib/execute-api.mjs';
+import { hgExecuteFillPollTarget, hgBuildFillPollQuery, hgPollExecuteFill } from '../lib/execute-poll.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,12 +28,34 @@ var idem = hgExecuteIdempotencyKey({ sym: 'XAUUSD', side: 'long', qty: 1, stop: 
 ok(idem && idem.indexOf('hgx-') === 0 && idem.length <= 64, 'idempotency key stable prefix');
 
 var prev = process.env.EXECUTE_BACKEND_URL;
+var prevPoll = process.env.EXECUTE_FILL_POLL_URL;
+delete process.env.EXECUTE_FILL_POLL_URL;
 process.env.EXECUTE_BACKEND_URL = 'https://example.com/execute';
 ok(hgExecuteBackendTarget().indexOf('example.com') >= 0, 'backend target from env');
+ok(hgExecuteFillPollTarget() === 'https://example.com/fill-status', 'fill poll target derived from execute URL');
 var caps = executeCapabilities();
-ok(caps.ready && caps.mode === 'proxy', 'capabilities ready when env set');
+ok(caps.ready && caps.mode === 'proxy' && caps.fillPoll, 'capabilities ready + fill poll when env set');
+process.env.EXECUTE_FILL_POLL_URL = 'https://custom.example/poll';
+ok(hgExecuteFillPollTarget() === 'https://custom.example/poll', 'fill poll target env override');
+delete process.env.EXECUTE_FILL_POLL_URL;
 delete process.env.EXECUTE_BACKEND_URL;
 ok(executeCapabilities().ready === false, 'capabilities off without env');
+process.env.EXECUTE_BACKEND_URL = prev;
+if (prevPoll) process.env.EXECUTE_FILL_POLL_URL = prevPoll;
+
+var pollQty = hgBuildFillPollQuery({ positionId: 'p1', notionalUsd: 1000, mark: 100 });
+ok(pollQty.qty === 10, 'fill poll query derives qty from notional/mark');
+var origFetch = globalThis.fetch;
+globalThis.fetch = async function(url, init){
+  if (init && init.method === 'POST'){
+    return { ok: true, status: 200, text: async () => '{"filledQty":0.5,"qty":1}' };
+  }
+  return { ok: false, status: 404, text: async () => 'not found' };
+};
+process.env.EXECUTE_BACKEND_URL = 'https://example.com/execute';
+var polled = await hgPollExecuteFill({ positionId: 'p1', sym: 'BTCUSD', qty: 1 });
+ok(polled.ok && polled.fill && polled.fill.filledQty === 0.5, 'fill poll parses POST response');
+globalThis.fetch = origFetch;
 process.env.EXECUTE_BACKEND_URL = prev;
 
 var executeJs = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
@@ -57,6 +80,9 @@ ok(bookJs.indexOf('bookBracketExportLabel') >= 0 && bookJs.indexOf(',stop,t1,t2,
   'book.js position CSV includes stop/t1/t2 columns');
 ok(bookJs.indexOf('bookFillExportLabel') >= 0 && bookJs.indexOf(',bracket,fill,') >= 0,
   'book.js position CSV includes fill column');
+ok(bookJs.indexOf('bookPollFills') >= 0 && bookJs.indexOf('BOOK_AUTO_POLL_FILLS_KEY') >= 0
+  && bookJs.indexOf('poll-fills') >= 0 && bookJs.indexOf('bookDeskPollFills') >= 0,
+  'book.js broker fill polling UI + auto poll on refresh');
 ok(bookJs.indexOf('posFillChipHTML') >= 0 && bookJs.indexOf('FILL OK') >= 0,
   'book.js broker fill status chips');
 ok(bookJs.indexOf('desk.fill') >= 0 && bookJs.indexOf('Broker fills:') >= 0,
@@ -119,6 +145,12 @@ var apiJs = fs.readFileSync(path.join(root, 'lib/paperbook-api.mjs'), 'utf8');
 ok(apiJs.indexOf('executeProxy') >= 0, 'book capabilities expose executeProxy flag');
 ok(apiJs.indexOf('execute-fill') >= 0 && apiJs.indexOf('pbApplyExecuteFill') >= 0,
   'book API accepts execute-fill webhook reconcile');
+ok(apiJs.indexOf('poll-fills') >= 0 && apiJs.indexOf('pbPositionsNeedingFillPoll') >= 0,
+  'book API batch poll-fills endpoint');
+
+var execApiJs = fs.readFileSync(path.join(root, 'lib/execute-api.mjs'), 'utf8');
+ok(execApiJs.indexOf('fill-status') >= 0 && execApiJs.indexOf('fillPoll') >= 0,
+  'execute API exposes fill-status proxy');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
