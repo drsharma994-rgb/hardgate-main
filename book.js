@@ -20,6 +20,25 @@ var __book = { snap: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [],
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_AUTO_KEY = 'hg_book_auto_rules_v1';
+var BOOK_FUND_KEY = 'hg_book_fund_v1';
+
+function bookFundId(){
+  try{
+    var v = localStorage.getItem(BOOK_FUND_KEY);
+    return v || 'main';
+  }catch(e){ return 'main'; }
+}
+function bookSetFund(id){
+  try{ localStorage.setItem(BOOK_FUND_KEY, id || 'main'); }catch(e){}
+}
+function bookFundQuery(){
+  return '?fund=' + encodeURIComponent(bookFundId());
+}
+function bookFundBody(extra){
+  extra = extra || {};
+  extra.fund = bookFundId();
+  return extra;
+}
 
 function bookAutoOn(){
   try{
@@ -82,11 +101,13 @@ function bookLocalLoad(){
 
 async function bookPull(){
   if (bookApiOn()){
-    var r = await bookFetch('/api/book');
+    var r = await bookFetch('/api/book' + bookFundQuery());
     if (r.json && r.json.ok){
       __book.snap = r.json;
       __book.liveReady = !!(r.json.capabilities && r.json.capabilities.liveExecute);
       __book.digestReady = !!(r.json.capabilities && (r.json.capabilities.digestSend || r.json.capabilities.digestWebhook));
+      if (r.json.fundId) bookSetFund(r.json.fundId);
+      __book.funds = r.json.funds || [];
       __book.lastAt = Date.now();
       return r.json;
     }
@@ -148,6 +169,7 @@ async function addToBook(opts){
       klass: opts.klass || null,
       strategy: opts.strategy || opts.source || 'scanner',
       tier: opts.tier || null,
+      fund: opts.fund || bookFundId(),
       layers: opts.layers || [],
       newsBlackout: false,
     };
@@ -159,7 +181,7 @@ async function addToBook(opts){
       body.t1 = body.dir === 'short' ? body.entry - risk : body.entry + risk;
     }
     if (bookApiOn()){
-      var r = await bookFetch('/api/book/intent', { method: 'POST', body: JSON.stringify(body) });
+      var r = await bookFetch('/api/book/intent', { method: 'POST', body: JSON.stringify(bookFundBody(body)) });
       if (r.json && r.json.ok){
         await bookPull();
         bookScoreRecord(body);
@@ -245,7 +267,7 @@ async function bookRefreshMarks(){
   if (bookApiOn()){
     var r = await bookFetch('/api/book/marks', {
       method: 'POST',
-      body: JSON.stringify({ marks: marks, atrMarks: atrMarks, auto: bookAutoOn() }),
+      body: JSON.stringify(bookFundBody({ marks: marks, atrMarks: atrMarks, auto: bookAutoOn() })),
     });
     if (r.json && r.json.ok){
       __book.snap = r.json;
@@ -291,7 +313,7 @@ async function bookLivePosition(id){
     return;
   }
   if (!confirm('Send LIVE bracket for this paper position to the execution webhook?')) return;
-  var r = await bookFetch('/api/book/live', { method: 'POST', body: JSON.stringify({ id: id }) });
+  var r = await bookFetch('/api/book/live', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id })) });
   if (r.json && r.json.ok){
     try{ alert('Live bracket sent (HTTP ' + r.json.status + ').'); }catch(e2){}
   } else {
@@ -305,7 +327,7 @@ async function bookLivePosition(id){
 async function bookExportLp(){
   try{
     var month = new Date().toISOString().slice(0, 7);
-    var r = await bookFetch('/api/book/lp?month=' + encodeURIComponent(month));
+    var r = await bookFetch('/api/book/lp?month=' + encodeURIComponent(month) + '&fund=' + encodeURIComponent(bookFundId()));
     if (!r.json || !r.json.ok) return;
     var lp = r.json.lp;
     var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>HARDGATE LP Report ' + esc(lp.month) + '</title>'
@@ -341,7 +363,7 @@ async function bookExportLp(){
 async function bookExportDigest(period){
   period = period === 'month' ? 'month' : 'week';
   try{
-    var r = await bookFetch('/api/book/digest?period=' + encodeURIComponent(period));
+    var r = await bookFetch('/api/book/digest?period=' + encodeURIComponent(period) + '&fund=' + encodeURIComponent(bookFundId()));
     if (!r.json || !r.json.ok) return;
     var html = r.json.html || '';
     if (!html && r.json.digest){
@@ -363,7 +385,7 @@ async function bookSendDigest(){
     return;
   }
   if (!confirm('Send weekly LP digest to the configured webhook?')) return;
-  var r = await bookFetch('/api/book/digest/send', { method: 'POST', body: JSON.stringify({ period: 'week' }) });
+  var r = await bookFetch('/api/book/digest/send', { method: 'POST', body: JSON.stringify(bookFundBody({ period: 'week' })) });
   if (r.json && r.json.ok){
     try{ alert('Digest sent (HTTP ' + r.json.status + ').'); }catch(e2){}
   } else {
@@ -530,7 +552,11 @@ function posRowHTML(p){
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PAPER FUND BOOK <span>$1M NAV · risk limits · paper fills at plan entry</span></h2>'
+    + '<h2>PAPER FUND BOOK <span>multi-fund · risk limits · paper fills at plan entry</span></h2>'
+    + '<div class="row" style="align-items:center;gap:8px;margin-bottom:8px">'
+    + '<label class="note">Fund <select id="bookFundSel" class="bookFundSel"></select></label>'
+    + '<button class="btn ghost" id="bookNewFund" title="Create a new paper fund book">+ FUND</button>'
+    + '</div>'
     + '<p class="note">Desk OMS: <b>MANAGE</b> → TRADE PLAN · <b>50%</b> scale · <b>BE</b> stop · auto rules on mark refresh. Weekly LP digest auto-sends Sun ~21:07 IST (webhook / Telegram / email).</p>'
     + '<div class="row" style="align-items:center;gap:12px">'
     + '<label class="note"><input type="checkbox" id="bookAutoRules" ' + (bookAutoOn() ? 'checked' : '') + '> Auto desk (T1 50% · ATR trail · BE @1R · stop-out)</label>'
@@ -574,8 +600,21 @@ function mount(el){
 
   function setStat(t, warn){ if (stat){ stat.textContent = t || ''; stat.className = warn ? 'note warn' : 'note'; } }
 
+  var fundSel = el.querySelector('#bookFundSel');
+
+  function paintFundSelect(funds){
+    funds = funds || __book.funds || [];
+    if (!fundSel) return;
+    var cur = bookFundId();
+    fundSel.innerHTML = funds.map(function(f){
+      return '<option value="' + esc(f.id) + '"' + (f.id === cur ? ' selected' : '') + '>'
+        + esc(f.label || f.id) + ' · ' + fmtUsd(f.equityUsd) + ' · ' + f.openCount + ' open</option>';
+    }).join('');
+  }
+
   function paint(snap){
     snap = snap || __book.snap;
+    paintFundSelect(snap && snap.funds);
     if (!snap || !snap.summary){
       setStat(bookApiOn() ? 'book empty — add from scanners' : 'backend required — deploy on Render for /api/book', !bookApiOn());
       if (summary) summary.innerHTML = '';
@@ -588,7 +627,11 @@ function mount(el){
     }
     var s = snap.summary;
     if (summary){
+      var fundLabel = bookFundId();
+      var fundRow = (__book.funds || []).find(function(f){ return f.id === fundLabel; });
+      if (fundRow && fundRow.label) fundLabel = fundRow.label + ' (' + fundRow.id + ')';
       summary.innerHTML =
+        '<span class="k">Fund</span><span class="v">' + esc(fundLabel) + '</span>'
         '<span class="k">NAV</span><span class="v">' + fmtUsd(s.navUsd) + '</span>'
         + '<span class="k">Equity</span><span class="v">' + fmtUsd(s.equityUsd) + '</span>'
         + '<span class="k">Day P&amp;L</span><span class="v">' + fmtUsd(s.dayPnlUsd)
@@ -662,6 +705,30 @@ function mount(el){
       setStat(autoChk.checked ? 'auto desk ON' : 'auto desk OFF');
     });
   }
+  if (fundSel){
+    fundSel.addEventListener('change', function(){
+      bookSetFund(fundSel.value);
+      refresh();
+    });
+  }
+  el.querySelector('#bookNewFund').addEventListener('click', async function(){
+    if (!bookApiOn()) return;
+    var id = prompt('New fund id (e.g. gold, swing, macro):', 'gold');
+    if (!id) return;
+    var label = prompt('Fund label (optional):', id);
+    var navStr = prompt('Starting NAV USD (default 1000000):', '1000000');
+    var navUsd = navStr ? +navStr : 1000000;
+    var r = await bookFetch('/api/book/funds', {
+      method: 'POST',
+      body: JSON.stringify({ id: id, label: label || id, navUsd: navUsd, active: true }),
+    });
+    if (r.json && r.json.ok){
+      bookSetFund(r.json.fundId || id);
+      await refresh();
+    } else {
+      try{ alert('Create fund failed: ' + ((r.json && r.json.reason) || 'error')); }catch(e){}
+    }
+  });
   el.querySelector('#bookCloseAll').addEventListener('click', async function(){
     if (!bookApiOn()) return;
     var snap = __book.snap || await bookPull();
@@ -669,14 +736,14 @@ function mount(el){
     if (!n){ try{ alert('No open positions.'); }catch(e){} return; }
     if (!confirm('Close all ' + n + ' paper position' + (n === 1 ? '' : 's') + ' at current marks?')) return;
     var marks = await bookCollectMarks(snap);
-    await bookFetch('/api/book/close-all', { method: 'POST', body: JSON.stringify({ marks: marks }) });
+    await bookFetch('/api/book/close-all', { method: 'POST', body: JSON.stringify(bookFundBody({ marks: marks })) });
     bookScoreSettle();
     await refresh();
   });
   el.querySelector('#bookReset').addEventListener('click', async function(){
-    if (!confirm('Reset paper book to $1M NAV and clear all positions?')) return;
+    if (!confirm('Reset fund "' + bookFundId() + '" to its starting NAV and clear all positions?')) return;
     if (bookApiOn()){
-      await bookFetch('/api/book/reset', { method: 'POST', body: '{}' });
+      await bookFetch('/api/book/reset', { method: 'POST', body: JSON.stringify(bookFundBody({})) });
       await refresh();
     }
   });
@@ -700,7 +767,7 @@ function mount(el){
       var sid = scaleBtn.getAttribute('data-id');
       var pct = +scaleBtn.getAttribute('data-scale');
       if (!sid || !(pct > 0)) return;
-      await bookFetch('/api/book/scale', { method: 'POST', body: JSON.stringify({ id: sid, pct: pct }) });
+      await bookFetch('/api/book/scale', { method: 'POST', body: JSON.stringify(bookFundBody({ id: sid, pct: pct })) });
       bookScoreSettle();
       await refresh();
       return;
@@ -710,7 +777,7 @@ function mount(el){
       if (!bookApiOn()) return;
       var bp = bookFindPos(beBtn.getAttribute('data-be'));
       if (!bp) return;
-      await bookFetch('/api/book/stop', { method: 'POST', body: JSON.stringify({ id: bp.id, stop: bp.entry }) });
+      await bookFetch('/api/book/stop', { method: 'POST', body: JSON.stringify(bookFundBody({ id: bp.id, stop: bp.entry })) });
       await refresh();
       return;
     }
@@ -718,7 +785,7 @@ function mount(el){
     if (!btn) return;
     var id = btn.getAttribute('data-close');
     if (!id || !bookApiOn()) return;
-    await bookFetch('/api/book/close', { method: 'POST', body: JSON.stringify({ id: id }) });
+    await bookFetch('/api/book/close', { method: 'POST', body: JSON.stringify(bookFundBody({ id: id })) });
     bookScoreSettle();
     await refresh();
   });
