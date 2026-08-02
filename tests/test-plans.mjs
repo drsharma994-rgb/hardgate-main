@@ -35,6 +35,8 @@ assert(typeof W.hgDetectLiquiditySweep === 'function', 'hgDetectLiquiditySweep')
 assert(typeof W.hgConfirmedCascade === 'function', 'hgConfirmedCascade');
 assert(typeof W.hgRegimeAllowsSetup === 'function', 'hgRegimeAllowsSetup');
 assert(typeof W.hgSwingParity === 'function', 'hgSwingParity');
+assert(typeof W.hgPlanSwingTargets === 'function', 'hgPlanSwingTargets');
+assert(typeof W.hgEnrichSwingClean === 'function', 'hgEnrichSwingClean');
 
 console.log('== structure stop ==');
 {
@@ -79,6 +81,23 @@ console.log('== swing parity ==');
   for (var i = 0; i < bull.length; i++){ bull[i].c += i * 0.08; bull[i].h = bull[i].c + 0.4; bull[i].l = bull[i].c - 0.4; }
   var sp = W.hgSwingParity(bull, null, 'long');
   assert(sp === null || typeof sp.aligned === 'boolean', 'swing parity shape');
+}
+
+console.log('== unified swing targets ==');
+{
+  var tg = W.hgPlanSwingTargets('long', 100, 97, 2, {});
+  assert(tg && tg.t1 > 100 && tg.t2 > tg.t1, 'long unified targets above entry');
+  assert(tg.targetPolicy && tg.targetPolicy.indexOf('unified') >= 0, 'target policy label');
+  assert(tg.rr1 >= 2, 'floor R:R on t1');
+}
+
+console.log('== enrich swing clean ==');
+{
+  var hit = { dir: 'long', entry: 110, stop: 107, t1: 116, t2: 120, rr: 2, mark: 105 };
+  var rows = mkRows(80, 110);
+  var enriched = W.hgEnrichSwingClean(hit, rows, { e21: 108, e9: 109, a4: 2, p: 105 });
+  assert(enriched && enriched.entryType && enriched.targetPolicy, 'enriched hit carries entry + target metadata');
+  assert(enriched.t1 > hit.t1 || enriched.rr >= hit.rr, 'unified targets applied');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

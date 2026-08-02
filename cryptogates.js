@@ -161,8 +161,13 @@
     var t2 = dir === 'long' ? entry + maxExcursion : entry - maxExcursion;
     var dynamicRR = expectedMove / risk;
     if (!(dynamicRR >= 2)) return null;
-    return { sym: ticker && ticker.symbol, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
-      rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev };
+    var out = { sym: ticker && ticker.symbol, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
+      rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev, mark: p };
+    if (typeof hgEnrichSwingClean === 'function'){
+      var enriched = hgEnrichSwingClean(out, rows, m);
+      if (enriched) return enriched;
+    }
+    return out;
   }
 
   function scalpTryClean(h1, m15, ticker, minsToFunding){

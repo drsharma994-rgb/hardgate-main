@@ -8,12 +8,19 @@ const FAPI = 'https://fapi.binance.com';
 const FRANK = 'https://api.frankfurter.dev';
 const GOLDAPI = 'https://api.gold-api.com';
 
-async function j(url, label){
+let binanceSkipped = 0;
+let binanceAttempted = 0;
+
+async function j(url, label, opts){
+  opts = opts || {};
+  const isBinance = opts.binance === true;
+  if (isBinance) binanceAttempted++;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 10000);
   try{
     const r = await fetch(url, { signal: ctrl.signal });
     if (r.status === 451){
+      if (isBinance) binanceSkipped++;
       console.log('\n== ' + (label || url) + ' ==\nSKIP — HTTP 451 geo-block (Binance unavailable in this region)');
       return null;
     }
@@ -25,7 +32,7 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
 
 // 1) Binance klines BTCUSDT 1h -> normalized row shape
 {
-  const raw = await j(`${FAPI}/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=500`, 'binance klines BTCUSDT 1h');
+  const raw = await j(`${FAPI}/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=500`, 'binance klines BTCUSDT 1h', { binance: true });
   if (raw){
     const rows = raw.map(k => ({ t: Math.floor(k[0]/1000), o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
                     .sort((a,b) => a.t - b.t);
@@ -35,13 +42,13 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
 
 // 2) Funding BTCUSDT (premiumIndex)
 {
-  const p = await j(`${FAPI}/fapi/v1/premiumIndex?symbol=BTCUSDT`, 'binanceFunding BTCUSDT');
+  const p = await j(`${FAPI}/fapi/v1/premiumIndex?symbol=BTCUSDT`, 'binanceFunding BTCUSDT', { binance: true });
   if (p) show('binanceFunding BTCUSDT', `fundingPct=${(+p.lastFundingRate)*100}%  markPrice=${p.markPrice}  nextFundingTime=${new Date(+p.nextFundingTime).toISOString()}`);
 }
 
 // 3) Long/short ETHUSDT 1h
 {
-  const raw = await j(`${FAPI}/futures/data/globalLongShortAccountRatio?symbol=ETHUSDT&period=1h&limit=30`, 'binanceLongShort ETHUSDT');
+  const raw = await j(`${FAPI}/futures/data/globalLongShortAccountRatio?symbol=ETHUSDT&period=1h&limit=30`, 'binanceLongShort ETHUSDT', { binance: true });
   if (raw){
     const d = raw[raw.length - 1];
     show('binanceLongShort ETHUSDT', `points=${raw.length}\nlatest: longPct=${(+d.longAccount)*100}  shortPct=${(+d.shortAccount)*100}  ratio=${d.longShortRatio}  t=${new Date(+d.timestamp).toISOString()}`);
@@ -61,7 +68,7 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
 
 // 5) Binance XAUUSDT 4h klines (primary free gold feed — TradFi perp)
 {
-  const raw = await j(`${FAPI}/fapi/v1/klines?symbol=XAUUSDT&interval=4h&limit=100`, 'binance klines XAUUSDT 4h (primary gold)');
+  const raw = await j(`${FAPI}/fapi/v1/klines?symbol=XAUUSDT&interval=4h&limit=100`, 'binance klines XAUUSDT 4h (primary gold)', { binance: true });
   if (raw){
     const rows = raw.map(k => ({ t: Math.floor(k[0]/1000), o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
                     .sort((a,b) => a.t - b.t);
@@ -71,9 +78,9 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
 
 // 6) Binance XAUUSDT funding + global long/short (goldpro M5/M6 legs)
 {
-  const p = await j(`${FAPI}/fapi/v1/premiumIndex?symbol=XAUUSDT`, 'binanceFunding XAUUSDT');
+  const p = await j(`${FAPI}/fapi/v1/premiumIndex?symbol=XAUUSDT`, 'binanceFunding XAUUSDT', { binance: true });
   if (p) show('binanceFunding XAUUSDT', `fundingPct=${(+p.lastFundingRate)*100}%  markPrice=${p.markPrice}  nextFundingTime=${new Date(+p.nextFundingTime).toISOString()}`);
-  const raw = await j(`${FAPI}/futures/data/globalLongShortAccountRatio?symbol=XAUUSDT&period=1h&limit=5`, 'binanceLongShort XAUUSDT');
+  const raw = await j(`${FAPI}/futures/data/globalLongShortAccountRatio?symbol=XAUUSDT&period=1h&limit=5`, 'binanceLongShort XAUUSDT', { binance: true });
   if (raw){
     const d = raw[raw.length - 1];
     show('binanceLongShort XAUUSDT', `points=${raw.length}\nlatest: longPct=${(+d.longAccount)*100}  shortPct=${(+d.shortAccount)*100}  ratio=${d.longShortRatio}`);
@@ -82,7 +89,7 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
 
 // 7) Binance PAXGUSDT 4h klines (tokenized-gold fallback leg)
 {
-  const raw = await j(`${FAPI}/fapi/v1/klines?symbol=PAXGUSDT&interval=4h&limit=100`, 'binance klines PAXGUSDT 4h (gold fallback)');
+  const raw = await j(`${FAPI}/fapi/v1/klines?symbol=PAXGUSDT&interval=4h&limit=100`, 'binance klines PAXGUSDT 4h (gold fallback)', { binance: true });
   if (raw){
     const rows = raw.map(k => ({ t: Math.floor(k[0]/1000), o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
                     .sort((a,b) => a.t - b.t);
@@ -122,4 +129,11 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
   }
 }
 
-console.log('\nALL SMOKE TESTS PASSED (skipped Binance legs are OK in geo-blocked regions)');
+if (binanceAttempted > 0 && binanceSkipped === binanceAttempted){
+  console.log('\nALL SMOKE TESTS PASSED — Binance legs skipped (' + binanceSkipped + '/' + binanceAttempted + ' HTTP 451 geo-block; non-Binance feeds OK)');
+} else if (binanceSkipped > 0){
+  console.log('\nALL SMOKE TESTS PASSED (Binance partial skip: ' + binanceSkipped + '/' + binanceAttempted + ' geo-blocked; remaining legs OK)');
+} else {
+  console.log('\nALL SMOKE TESTS PASSED');
+}
+process.exit(0);
