@@ -99,6 +99,7 @@ Exports (all on window):
   goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
   goldOrderBlockAt(rows, index?, atr?) — displacement OB at one bar index
   detectSwings / detectMarketStructure / detectOrderBlocks — SMC aliases
+  goldDetectorReads({rows15m,...}) — full confluence ledger reads from __goldBundle
 ========================================================================= */
 (function(){
 'use strict';
@@ -1390,6 +1391,26 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
     if (bos.choch === 'bullish') add('long', 'bosalign', 'CHoCH bullish — bias flip to demand', true);
     else add('short', 'bosalign', 'CHoCH bearish — bias flip to supply', true);
   }
+  /* fractal SMC — BOS/CHOCH as independent ledger reads (count toward confluence) */
+  D.swings = goldSwings(rows, 5, 5);
+  D.mstruct = goldMarketStructure(rows, D.swings);
+  if (D.mstruct && D.mstruct.bos && isFinite(D.mstruct.level)){
+    if (D.mstruct.trend === 'bullish'){
+      add('long', 'bos', 'fractal BOS bullish — close above swing high '
+          + D.mstruct.level.toFixed(2) + ' (higher-high structure)');
+    } else if (D.mstruct.trend === 'bearish'){
+      add('short', 'bos', 'fractal BOS bearish — close below swing low '
+          + D.mstruct.level.toFixed(2) + ' (lower-low structure)');
+    }
+  } else if (D.mstruct && D.mstruct.choch && isFinite(D.mstruct.level)){
+    if (D.mstruct.trend === 'bullish'){
+      add('long', 'choch', 'fractal CHOCH bullish — character shift above swing high '
+          + D.mstruct.level.toFixed(2));
+    } else if (D.mstruct.trend === 'bearish'){
+      add('short', 'choch', 'fractal CHOCH bearish — character shift below swing low '
+          + D.mstruct.level.toFixed(2));
+    }
+  }
   var pd = D.pd = goldPremiumDiscount(rows);
   if (pd){
     if (pd.zone === 'PREMIUM') add('short', 'premium', 'price in daily PREMIUM zone (top 25%) — sells favored', true);
@@ -1433,6 +1454,21 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   }
 
   return D;
+}
+
+/* Expose the detector ledger for BRAIN / diagnostics (same reads as setup candidates). */
+function goldDetectorReads(inp){
+  try{
+    inp = inp || {};
+    var rows = __rows(inp.rows15m);
+    if (!rows || rows.length < 30) return [];
+    var a15 = __last(_atr(rows, 14));
+    if (!isFinite(a15) || !(a15 > 0)) return [];
+    var entry = rows[rows.length - 1].c;
+    if (!isFinite(entry)) return [];
+    var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
+    return D.reads ? D.reads.slice() : [];
+  }catch(e){ return []; }
 }
 
 function goldScalpSetups(inp){
@@ -1687,17 +1723,25 @@ function goldScalpSetups(inp){
     }
     /* --- 11) BOS Alignment — multi-timeframe structure confirmation --- */
     var bos = D.bos;
-    if (bos && bos.bos){
-      var bdir = (bos.bos === 'bullish') ? 'long' : 'short';
+    var ms = D.mstruct;
+    var hasFractalBos = ms && ms.bos;
+    var hasLegacyBos = bos && bos.bos;
+    if (hasFractalBos || hasLegacyBos){
+      var bdir = hasFractalBos
+        ? (ms.trend === 'bullish' ? 'long' : 'short')
+        : (bos.bos === 'bullish' ? 'long' : 'short');
       var htAlign = D.rb4 && ((bdir==='long' && D.rb4.mode==='BULL') || (bdir==='short' && D.rb4.mode==='BEAR'));
       var mtAlign = D.rb && ((bdir==='long' && D.rb.mode==='BULL') || (bdir==='short' && D.rb.mode==='BEAR'));
       if (htAlign || mtAlign){
-        var bosLvl = (bdir==='long') ? bos.lastSwingLow : bos.lastSwingHigh;
+        var bosLvl = (hasFractalBos && isFinite(ms.level)) ? ms.level
+          : ((bdir==='long') ? bos.lastSwingLow : bos.lastSwingHigh);
+        var bosKind = hasFractalBos ? 'fractal BOS' : 'BOS';
         push(__gsCand('bosalign', bdir, D, bosLvl, __gsSnapLvls(D, bdir),
-          'BOS alignment — ' + (bdir==='long'?'bullish':'bearish') + ' break-of-structure on 15m '
+          'BOS alignment — ' + (bdir==='long'?'bullish':'bearish') + ' ' + bosKind + ' on 15m '
             + (htAlign?'with 4H trend confirmation':'with 15m trend confirmation')
+            + (isFinite(bosLvl) ? ' at $' + bosLvl.toFixed(2) : '')
             + ' — trade the pullback into the broken structure',
-          'a 15m close back through the BOS level $' + bosLvl.toFixed(2) + ' invalidates the break',
+          'a 15m close back through the BOS level $' + (isFinite(bosLvl) ? bosLvl.toFixed(2) : 'structure') + ' invalidates the break',
           undefined, bosLvl));
       }
     }
@@ -2809,4 +2853,5 @@ W.goldOrderBlockAt = goldOrderBlockAt;
 W.detectSwings = goldSwings;
 W.detectMarketStructure = goldMarketStructure;
 W.detectOrderBlocks = goldOrderBlockAt;
+W.goldDetectorReads = goldDetectorReads;
 })();

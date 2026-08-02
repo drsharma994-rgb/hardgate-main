@@ -877,6 +877,28 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
       }
     } else if (!swFn) notes.push('goldSweeps unavailable (goldind.js) — sweep evidence skipped');
 
+    /* 4h fractal BOS / CHOCH (goldind.js SMC module) */
+    var swFn2 = gfn('goldSwings'), msFn = gfn('goldMarketStructure');
+    if (swFn2 && msFn){
+      try{
+        var sw4 = swFn2(rows4, 5, 5);
+        var ms4 = msFn(rows4, sw4, 5, 5);
+        if (ms4 && ms4.bos && isFinite(ms4.level)){
+          if (ms4.trend === 'bullish'){
+            add('long', 'bos', '4h fractal BOS bullish — close above swing high ' + ms4.level.toFixed(2));
+          } else if (ms4.trend === 'bearish'){
+            add('short', 'bos', '4h fractal BOS bearish — close below swing low ' + ms4.level.toFixed(2));
+          }
+        } else if (ms4 && ms4.choch && isFinite(ms4.level)){
+          if (ms4.trend === 'bullish'){
+            add('long', 'choch', '4h fractal CHOCH bullish — shift above swing high ' + ms4.level.toFixed(2));
+          } else if (ms4.trend === 'bearish'){
+            add('short', 'choch', '4h fractal CHOCH bearish — shift below swing low ' + ms4.level.toFixed(2));
+          }
+        }
+      }catch(eMs){ /* skip */ }
+    }
+
     /* prior week high/low from real 1d bars */
     var wk = __weeklyRange(rows1d);
     if (!wk) notes.push('prior-week range unavailable (need >=3 daily bars in the prior ISO week) — weekly-breakout strategy offline');
