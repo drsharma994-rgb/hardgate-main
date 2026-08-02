@@ -22,6 +22,12 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 
+function loadGoldScalpStack(){
+  vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
+}
+
 let pass = 0, fail = 0;
 function assert(cond, msg){
   if (cond){ pass++; console.log('ok    - ' + msg); }
@@ -30,9 +36,7 @@ function assert(cond, msg){
 
 /* ---------------- load the modules in a shared bare context ---------------- */
 globalThis.window = {};
-for (const f of ['goldind.js', 'goldscalp.js']){
-  vm.runInThisContext(fs.readFileSync(root + f, 'utf8'), { filename: f });
-}
+loadGoldScalpStack();
 const W = globalThis.window;
 
 /* ---------------- synthetic data builders ---------------- */
@@ -595,6 +599,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
 {
   globalThis.window = {};
   vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const B = globalThis.window;
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
@@ -821,6 +826,7 @@ function loadConvictionStore(ls){
   const ls = memLocalStorage();
   globalThis.localStorage = ls;
   vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C = globalThis.window;
   /* tab scans use wall-clock Date.now() — pin it to a fixed London/NY-overlap
@@ -1173,6 +1179,7 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
     const ls2 = memLocalStorage();
     globalThis.localStorage = ls2;
     vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+    vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
     vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
     const C2 = globalThis.window;
     const FIXED = OVLP_NOW + 30*60*1000;
@@ -1263,6 +1270,7 @@ function vwapRows26(){
   const ls3 = memLocalStorage();
   globalThis.localStorage = ls3;
   vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C3 = globalThis.window;
   const FIXED = OVLP_NOW + 30*60*1000;
@@ -1531,6 +1539,7 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   const ls4 = memLocalStorage();
   globalThis.localStorage = ls4;
   vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldscalp.js', 'utf8'), { filename: 'goldscalp.js' });
   const C4 = globalThis.window;
   const FIXED = OVLP_NOW + 30*60*1000;                     // 14:30 GMT -> killzone weight 3
@@ -1663,6 +1672,40 @@ console.log('== volume microstructure ==');
          'evaluateSwings: empty -> no OB trigger');
   assert(typeof W.detectLiquiditySweep_V2 === 'function' && W.detectLiquiditySweep_V2 === W.goldSweepV2,
          'detectLiquiditySweep_V2 alias -> goldSweepV2');
+}
+
+/* =========================================================================
+   ConvictionLockManager — unit smoke (conviction-lock.js)
+========================================================================= */
+console.log('== conviction lock manager ==');
+{
+  const Mgr = W.ConvictionLockManager;
+  assert(typeof Mgr === 'function', 'ConvictionLockManager exported');
+  assert(typeof W.applyHardgateConvictionLock === 'function', 'applyHardgateConvictionLock exported');
+  const mgr = new Mgr({ type: 'scalp' });
+  assert(mgr.generateID('sweep', 'long', 2300.5) === 'sweep|long|2301', 'generateID rounds anchor');
+  const setup = {
+    id: 'ob|long|100', type: 'scalp', direction: 'long', sym: 'XAUUSDT',
+    levels: { entry: 100, stopLoss: 99, tp1: 102, tp2: 104, anchor: 100 },
+    tally: 5
+  };
+  const lock1 = mgr.lockConviction(Object.assign({}, setup), Date.now(), 2);
+  assert(lock1.action === 'NEW_LOCK', 'lockConviction: first lock -> NEW_LOCK');
+  const lock2 = mgr.lockConviction(Object.assign({}, setup, { tally: 7 }), Date.now(), 2);
+  assert(lock2.action === 'MERGED' && lock2.setup.tally === 7, 'lockConviction: within 0.5×ATR -> MERGED');
+  const oldSetup = {
+    type: 'scalp', direction: 'long', id: 'x|long|1',
+    levels: { stopLoss: 99, tp1: 102 },
+    timestamp: Date.now() - 7 * 3600 * 1000
+  };
+  const expired = mgr.evaluateSetup(oldSetup, { t: DAY, o: 100, h: 101, l: 99, c: 100.5, v: 1 },
+    true, false, Date.now());
+  assert(expired === 'EXPIRED', 'evaluateSetup: scalp TTL exceeded -> EXPIRED');
+  const tpHit = mgr.evaluateSetup(
+    { type: 'scalp', direction: 'long', id: 'x', timestamp: Date.now(),
+      levels: { stopLoss: 99, tp1: 101 } },
+    { t: DAY, o: 100, h: 101.5, l: 99.5, c: 100.2, v: 1 }, true, false, Date.now());
+  assert(tpHit === 'TARGET HIT', 'evaluateSetup: TP1 wick hit without close through tp1');
 }
 
 /* =========================================================================

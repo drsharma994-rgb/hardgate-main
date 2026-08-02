@@ -34,6 +34,7 @@ function loadEnv(withGoldind){
   globalThis.window = {};
   if (withGoldind !== false)
     vm.runInThisContext(fs.readFileSync(root + 'goldind.js', 'utf8'), { filename: 'goldind.js' });
+  vm.runInThisContext(fs.readFileSync(root + 'conviction-lock.js', 'utf8'), { filename: 'conviction-lock.js' });
   vm.runInThisContext(fs.readFileSync(root + 'goldswing.js', 'utf8'), { filename: 'goldswing.js' });
   return globalThis.window;
 }

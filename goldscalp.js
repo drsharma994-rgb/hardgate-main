@@ -250,15 +250,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
 }
 
 /* ============================ CONVICTION LOCK ============================
-   localStorage 'hgGoldscalpConviction' -> { v, live: {id: rec}, history:
-   [rec] } where rec = { id, dir, strategy, entry, stop, t1, t2, venue, sym,
-   issuedAt, tally }. A re-scan NEVER re-picks levels for a live conviction:
-   the stored entry/stop/t1/t2 are restored verbatim with an 'as of HH:MM'
-   stamp. Transitions only on invalidation against the latest 15m close:
-   beyond stop -> STOPPED (slot reopens), TP1 reached -> TARGET HIT, older
-   than 6h -> EXPIRED. Closed records move to a capped history — never
-   silently dropped. localStorage is probed softly; without it the lock is
-   memory-only for the scan (still never throws). */
+   Delegates to conviction-lock.js (ConvictionLockManager) — localStorage
+   'hgGoldscalpConviction' -> { v, live: {id: rec}, history: [rec] }.
+   See conviction-lock.js for merge, invalidation (STOPPED / TARGET HIT /
+   EXPIRED), and anti-repaint restore semantics. */
 var CONVICTION_KEY = 'hgGoldscalpConviction';
 var CONVICTION_TTL_MS = 6*60*60*1000;
 var CONVICTION_HIST = 8;
@@ -306,99 +301,23 @@ function saveConvictions(store){
    anchor beyond 0.5×ATR, is a normal new evaluation. A merge is a
    re-confirmation, not an issuance, so it also applies during a news veto. */
 function applyConviction(ranked, venueRows, nowMs, noMint){
-  var store = loadConvictions(), transitions = [];
-  try{
-    var id, rec, i;
-    /* 1) invalidation transitions on live convictions */
-    for (id in store.live){
-      if (!Object.prototype.hasOwnProperty.call(store.live, id)) continue;
-      rec = store.live[id];
-      if (!rec || (rec.dir !== 'long' && rec.dir !== 'short') || !isFinite(rec.stop)
-          || !isFinite(rec.t1) || !isFinite(rec.issuedAt)){
-        delete store.live[id];
-        continue;
-      }
-      var status = null, lastClose = NaN;
-      var vr = venueRows ? venueRows[rec.venue] : null;
-      if (vr && vr.rows15m && vr.rows15m.length){
-        var lc = vr.rows15m[vr.rows15m.length - 1];
-        if (lc && isFinite(lc.c)) lastClose = lc.c;
-      }
-      if (isFinite(lastClose)){
-        if (rec.dir === 'long'){
-          if (lastClose < rec.stop) status = 'STOPPED';
-          else if (lastClose >= rec.t1) status = 'TARGET HIT';
-        } else {
-          if (lastClose > rec.stop) status = 'STOPPED';
-          else if (lastClose <= rec.t1) status = 'TARGET HIT';
-        }
-      }
-      if (!status && (nowMs - rec.issuedAt) > CONVICTION_TTL_MS) status = 'EXPIRED';
-      if (status){
-        rec.status = status;
-        rec.closedAt = nowMs;
-        if (isFinite(lastClose)) rec.closePrice = lastClose;
-        store.history.unshift(rec);
-        delete store.live[id];
-        transitions.push(rec);
-      }
-    }
-    if (store.history.length > CONVICTION_HIST) store.history = store.history.slice(0, CONVICTION_HIST);
-
-    /* 2) restore live conviction levels verbatim / issue new convictions */
-    for (i = 0; i < ranked.length; i++){
-      var c = ranked[i];
-      if (!c || !c.id) continue;
-      rec = store.live[c.id];
-      if (rec){
-        c.entry = rec.entry; c.stop = rec.stop; c.t1 = rec.t1; c.t2 = rec.t2;
-        var risk = Math.abs(rec.entry - rec.stop);
-        if (risk > 0){
-          c.rr = Math.abs(rec.t1 - rec.entry)/risk;
-          c.rr2 = Math.abs(rec.t2 - rec.entry)/risk;
-        }
-        c.venue = rec.venue; c.sym = rec.sym;
-        c.locked = true; c.issuedAt = rec.issuedAt;
-      } else {
-        /* duplicate-conviction merge: same symbol+direction, structure anchor
-           within 0.5×ATR of a live conviction -> merge, never double-issue */
-        var mr = null;
-        if (isFinite(c.anchor) && isFinite(c.atr) && c.atr > 0){
-          for (var mid in store.live){
-            if (!Object.prototype.hasOwnProperty.call(store.live, mid)) continue;
-            var mr0 = store.live[mid];
-            if (!mr0 || mr0.dir !== c.dir || mr0.sym !== c.sym || !isFinite(mr0.anchor)) continue;
-            if (Math.abs(c.anchor - mr0.anchor) <= 0.5*c.atr){ mr = mr0; break; }
-          }
-        }
-        if (mr){
-          mr.lastConfirmedAt = nowMs;      /* refresh 'last confirmed at' */
-          c.entry = mr.entry; c.stop = mr.stop; c.t1 = mr.t1; c.t2 = mr.t2;
-          var mrisk = Math.abs(mr.entry - mr.stop);
-          if (mrisk > 0){
-            c.rr = Math.abs(mr.t1 - mr.entry)/mrisk;
-            c.rr2 = Math.abs(mr.t2 - mr.entry)/mrisk;
-          }
-          c.venue = mr.venue; c.sym = mr.sym;
-          c.locked = true; c.issuedAt = mr.issuedAt;
-          c.merged = true; c.mergedInto = mr.id; c.mergedAt = nowMs;
-        } else if (noMint){
-          c.vetoed = true;   /* news window — held back, nothing minted */
-        } else {
-          rec = { id: c.id, dir: c.dir, strategy: c.strategy, entry: c.entry, stop: c.stop,
-                  t1: c.t1, t2: c.t2, venue: c.venue, sym: c.sym, issuedAt: nowMs,
-                  tally: isFinite(c.tally) ? c.tally : 0,
-                  anchor: isFinite(c.anchor) ? c.anchor : null };
-          store.live[c.id] = rec;
-          c.locked = false; c.issuedAt = nowMs;
-        }
-      }
-      try{ c.asOf = isFinite(c.issuedAt) ? new Date(c.issuedAt).toISOString().slice(11, 16) + ' UTC' : ''; }
-      catch(eD){ c.asOf = ''; }
-    }
-    saveConvictions(store);
-  }catch(e){}
-  return { store: store, transitions: transitions };
+  var store = loadConvictions();
+  var lockFn = (typeof applyHardgateConvictionLock === 'function')
+    ? applyHardgateConvictionLock
+    : ((typeof W !== 'undefined' && W) ? W.applyHardgateConvictionLock : null);
+  if (lockFn){
+    var got = lockFn(store, ranked, venueRows, nowMs, {
+      type: 'scalp',
+      rowKey: 'rows15m',
+      historyLimit: CONVICTION_HIST,
+      noMint: noMint,
+      venueScopedKeys: false,
+      expiryMs: CONVICTION_TTL_MS
+    });
+    saveConvictions(got.store);
+    return got;
+  }
+  return { store: store, transitions: [] };
 }
 
 /* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
