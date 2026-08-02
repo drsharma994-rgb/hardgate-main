@@ -1,5 +1,49 @@
 # AGENTS.md
 
+<<<<<<< HEAD
+## Cursor Cloud specific instructions
+
+### Product
+
+HARDGATE is a vanilla JS/HTML/CSS crypto + gold trading terminal. There is no build step and **zero npm runtime dependencies** — only Node.js 18+ is required to run the dev server and tests.
+
+### Dev server
+
+```bash
+npm start   # serves static app + /api/proxy on http://localhost:10000
+```
+
+The server entry point is `scripts/server.mjs`. It serves the repo root and mounts `/api/proxy` (CoinDCX, Yahoo Finance, news RSS allowlist in `api/proxy.js`).
+
+### Tests
+
+```bash
+npm test                              # core suites (brain, engine, smart, hgalert, ops, inline parse)
+node tests/test-tabs.mjs              # tab wiring
+node tests/<suite>.mjs                # per-module suites (see README.md)
+```
+
+Tests under `tests/test-data-layer.mjs`, `tests/test-gold-deep.mjs`, and similar live-network suites call external market APIs directly. In some cloud VM environments those calls return **HTTP 451** (geo-blocked). Offline/unit suites (`npm test`, `test-tabs`, `test-squeeze`, `test-regime`, etc.) do not depend on external network access.
+
+### Optional production env vars
+
+Only needed for Telegram squeeze alerts, GitHub dispatch cron replacement, or Render keep-alive — not for local dev:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Server port (default `10000`) |
+| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Squeeze-watch Telegram alerts |
+| `GH_DISPATCH_TOKEN` | GitHub Actions workflow dispatch |
+| `RENDER_EXTERNAL_URL` / `SELF_PING_URL` | Render free-tier keep-alive |
+
+### E2E verification
+
+1. Start `npm start`
+2. Open `http://localhost:10000` — header should show HARDGATE branding and tab nav
+3. Confirm `/api/proxy` returns 200: `curl -s -o /dev/null -w "%{http_code}" "http://localhost:10000/api/proxy?url=https://api.coindcx.com/exchange/v1/markets_details"`
+
+Browser tabs load and render even when external Binance/Delta REST calls are blocked by CORS or geo-restrictions in the VM; the proxy path for CoinDCX/Yahoo still works server-side.
+=======
 Guidance for AI agents and cloud development environments working on HARDGATE.
 
 ## Cursor Cloud specific instructions
@@ -29,6 +73,25 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 | Live data smoke test | `node tests/test-data-layer.mjs` | Optional; Binance legs skip on HTTP 451 |
 | Additional suites | `node tests/test-<name>.mjs` | See README Tests section |
 | Lint | *(none)* | No ESLint or formatter configured |
+
+### Optional production env vars
+
+Only needed for Telegram squeeze alerts, GitHub dispatch cron replacement, or Render keep-alive — not for local dev:
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Server port (default `10000`) |
+| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Squeeze-watch Telegram alerts |
+| `GH_DISPATCH_TOKEN` | GitHub Actions workflow dispatch |
+| `RENDER_EXTERNAL_URL` / `SELF_PING_URL` | Render free-tier keep-alive |
+
+### E2E verification
+
+1. Start `npm start`
+2. Open `http://localhost:10000` — header should show HARDGATE branding and tab nav
+3. Confirm `/api/proxy` returns 200: `curl -s -o /dev/null -w "%{http_code}" "http://localhost:10000/api/proxy?url=https://api.coindcx.com/exchange/v1/markets_details"`
+
+Browser tabs load and render even when external Binance/Delta REST calls are blocked by CORS or geo-restrictions in the VM; the proxy path for CoinDCX/Yahoo still works server-side.
 
 ### Gotchas
 
@@ -62,3 +125,4 @@ When adding a scanner/strategy that should land in the paper book:
 6. **Ship** — bump `HG_CACHE` in `sw.js`, update this file if non-obvious.
 
 BOOK **EXEC/LIVE status bar** shows auto EXEC, **BRAIN auto-book**, active-fund **7d bracket** chips, cross-fund **desk 7d** rollup when multi-fund, and last blotter event. **LIVE OK** / **LIVE FAIL** chips reflect successful `live_send` blotter rows (not just proxy EXEC). Multi-fund **desk rollup** (`GET /api/book/desk`) includes cross-fund 7d bracket counts and clickable **EXEC all pending** / **retry all failed** chips. With 2+ funds, BOOK shows **ALL FUNDS PENDING** / **ALL FUNDS RETRY**, **EXPORT ALL CSV**, **Auto pending/retry all funds**, a **cross-fund open positions** table (fund column + EXEC/LIVE/fill chips on every row), a **Recently closed (all funds)** panel (12 rows, fund column + scanner source), and a **Cross-fund execute events** blotter panel; `execute.js` routes blotter writes via `plan.fund` / `position._fundId`. **EXPORT BLOTTER** downloads execution blotter CSV (all funds when multi-fund; respects **EXEC only** filter when set). Per-fund and **EXPORT ALL CSV** include **stop**, **t1**, **t2**, **bracket**, and **fill** columns (`FILL OK` / `FILL n%` / `UNFILLED` when bracket sent). `POST /api/book/execute-fill` records broker fill qty (`FILL OK` / `FILL n%` chips on open rows); **`POST /api/book/poll-fills`** and **`GET /api/execute/fill-status`** poll the execute backend (`EXECUTE_FILL_POLL_URL` or `{origin}/fill-status` derived from `EXECUTE_BACKEND_URL`). BOOK **POLL FILLS** button, desk **poll fills** chip, optional **auto poll broker fills on refresh**, per-row **UNFILLED** / partial **FILL n%** chips (click to poll single position via `POST /api/book/poll-fill`), clickable **fills** chip on the exec bar to filter open positions to fill backlog only, and clickable **7d pending** chip to filter to bracket-pending rows. **LIVE** `live_send` blotter rows count in 7d bracket rollup and **last bracket** chip. **LIVE** webhook responses with fill JSON auto-apply via `pbApplyExecuteFill` (same as EXEC proxy path). Desk rollup + `alert-check` nudge when brackets are sent but fills are missing/partial. Optional `BOOK_EXECUTE_FILL_SECRET` on the fill webhook. `scripts/alert-check.mjs` probes `/api/book/desk` every 15 min and pushes when positions lack brackets or sends failed (4h throttle while backlog persists), when the desk enters or leaves **daily loss halt**, and when broker fills are missing/partial (auto-attempts `POST /api/book/poll-fills` before alerting when `fillPoll` is configured). Weekly/consolidated LP digests include **Broker fills** backlog lines and a **LIVE webhook** line when `live_send` blotter events exist in the period.
+>>>>>>> origin/main
