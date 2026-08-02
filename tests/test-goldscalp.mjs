@@ -70,7 +70,8 @@ console.log('== 0) exports + tab registration ==');
 {
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
-                 'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups'];
+                 'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
+                 'goldVolumeSpike','goldVolumeProfile'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
   assert(!!tab && tab.label === 'GOLD SCALP' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
@@ -114,6 +115,8 @@ console.log('== 1) empty / 1-2 rows / flat / garbage input ==');
   assert(W.goldScalpSetup({ rows15m: flat }) === null, 'goldScalpSetup: flat rows -> no confluence -> null');
   const junk = [{ t: 0, o: 'x', h: NaN, l: null, c: undefined, v: -1 }, null, { t: 1, o: 100, h: 101, l: 99, c: 100, v: 10 }];
   assert(W.goldFVG(junk) === null && W.goldSweeps(junk) === null, 'NaN/null holes filtered, never throws');
+  assert(W.goldVolumeSpike([]) === false && W.goldVolumeSpike(null) === false, 'goldVolumeSpike: empty/null -> false');
+  assert(W.goldVolumeProfile([]) === null && W.goldVolumeProfile(null) === null, 'goldVolumeProfile: empty/null -> null');
 }
 
 /* =========================================================================
@@ -544,7 +547,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
   const B = globalThis.window;
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
-                 'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups'];
+                 'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
+                 'goldVolumeSpike','goldVolumeProfile'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
   for (const nm of names){
@@ -1552,6 +1556,19 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
 
   Date.now = realDateNow4;
   delete globalThis.localStorage;
+}
+
+/* =========================================================================
+   volume microstructure — goldVolumeSpike + goldVolumeProfile
+========================================================================= */
+console.log('== volume microstructure ==');
+{
+  const base = flatRows(30, 100, 1, 0);
+  base[29].v = 4000;
+  assert(W.goldVolumeSpike(base) === true, 'goldVolumeSpike: last bar 4× avg -> true');
+  assert(W.goldVolumeSpike(base, 10) === false, 'goldVolumeSpike: mid bar at flat volume -> false');
+  const prof = W.goldVolumeProfile(base, 25, 10);
+  assert(prof && isFinite(prof.pocPrice) && Array.isArray(prof.hvns), 'goldVolumeProfile: returns POC + hvns array');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
