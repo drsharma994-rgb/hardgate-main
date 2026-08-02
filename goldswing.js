@@ -310,15 +310,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
 }
 
 /* ============================ CONVICTION LOCK ============================
-   localStorage 'hgGoldswingConviction' -> { v, live: {id: rec}, history:
-   [rec] } where rec = { id, dir, strategy, entry, stop, t1, t2, t3, venue,
-   sym, issuedAt, tally }. A re-scan NEVER re-picks levels for a live
-   conviction: the stored entry/stop/t1/t2/t3 are restored verbatim with an
-   'as of HH:MM' stamp. Transitions only on invalidation against the latest
-   4h close: beyond stop -> STOPPED (slot reopens), TP1 reached -> TARGET
-   HIT, older than 5 days -> EXPIRED. Closed records move to a capped
-   history — never silently dropped. localStorage is probed softly; without
-   it the lock is memory-only for the scan (still never throws). */
+   Delegates to conviction-lock.js (ConvictionLockManager) — localStorage
+   'hgGoldswingConviction'. See conviction-lock.js for lifecycle semantics. */
 var CONVICTION_KEY = 'hgGoldswingConviction';
 var CONVICTION_TTL_MS = 5*24*60*60*1000;       /* 5-day expiry */
 var CONVICTION_HIST = 8;
@@ -354,85 +347,22 @@ function saveConvictions(store){
 /* venueRows: { venueLabel: { rows4h } } — latest 4h closes per venue for
    invalidation checks. Mutates the ranked candidates (restores levels). */
 function applyConviction(ranked, venueRows, nowMs){
-  var store = loadConvictions(), transitions = [];
-  try{
-    var id, rec, i;
-    /* 1) invalidation transitions on live convictions */
-    for (id in store.live){
-      if (!Object.prototype.hasOwnProperty.call(store.live, id)) continue;
-      rec = store.live[id];
-      if (!rec || (rec.dir !== 'long' && rec.dir !== 'short') || !isFinite(rec.stop)
-          || !isFinite(rec.t1) || !isFinite(rec.issuedAt)){
-        delete store.live[id];
-        continue;
-      }
-      var status = null, lastClose = NaN;
-      var vr = venueRows ? venueRows[rec.venue] : null;
-      if (vr && vr.rows4h && vr.rows4h.length){
-        var lc = vr.rows4h[vr.rows4h.length - 1];
-        if (lc && isFinite(lc.c)) lastClose = lc.c;
-      }
-      if (isFinite(lastClose)){
-        if (rec.dir === 'long'){
-          if (lastClose < rec.stop) status = 'STOPPED';
-          else if (lastClose >= rec.t1) status = 'TARGET HIT';
-        } else {
-          if (lastClose > rec.stop) status = 'STOPPED';
-          else if (lastClose <= rec.t1) status = 'TARGET HIT';
-        }
-      }
-      if (!status && (nowMs - rec.issuedAt) > CONVICTION_TTL_MS) status = 'EXPIRED';
-      if (status){
-        rec.status = status;
-        rec.closedAt = nowMs;
-        if (isFinite(lastClose)) rec.closePrice = lastClose;
-        store.history.unshift(rec);
-        delete store.live[id];
-        transitions.push(rec);
-      }
-    }
-    if (store.history.length > CONVICTION_HIST) store.history = store.history.slice(0, CONVICTION_HIST);
-
-    /* 2) restore live conviction levels verbatim / issue new convictions.
-       Keys are venue-scoped: the same strategy can fire the same setup id on
-       two venues (e.g. BINANCE + DELTA) — each venue keeps its OWN record and
-       a restore never overwrites a candidate's venue. Bare legacy keys (no
-       venue prefix) still restore for their matching venue and migrate. */
-    for (i = 0; i < ranked.length; i++){
-      var c = ranked[i];
-      if (!c || !c.id) continue;
-      var cKey = (c.venue ? c.venue + '|' : '') + c.id;
-      rec = store.live[cKey];
-      if (!rec && store.live[c.id]
-          && (!store.live[c.id].venue || store.live[c.id].venue === c.venue)){
-        rec = store.live[c.id];
-        delete store.live[c.id];
-        store.live[cKey] = rec;
-      }
-      if (rec){
-        c.entry = rec.entry; c.stop = rec.stop; c.t1 = rec.t1; c.t2 = rec.t2;
-        if (isFinite(rec.t3)) c.t3 = rec.t3;
-        var risk = Math.abs(rec.entry - rec.stop);
-        if (risk > 0){
-          c.rr = Math.abs(rec.t1 - rec.entry)/risk;
-          c.rr2 = Math.abs(rec.t2 - rec.entry)/risk;
-          if (isFinite(rec.t3)) c.rr3 = Math.abs(rec.t3 - rec.entry)/risk;
-        }
-        c.venue = rec.venue; c.sym = rec.sym;
-        c.locked = true; c.issuedAt = rec.issuedAt;
-      } else {
-        rec = { id: c.id, dir: c.dir, strategy: c.strategy, entry: c.entry, stop: c.stop,
-                t1: c.t1, t2: c.t2, t3: c.t3, venue: c.venue, sym: c.sym, issuedAt: nowMs,
-                tally: isFinite(c.tally) ? c.tally : 0 };
-        store.live[cKey] = rec;
-        c.locked = false; c.issuedAt = nowMs;
-      }
-      try{ c.asOf = isFinite(c.issuedAt) ? new Date(c.issuedAt).toISOString().slice(11, 16) + ' UTC' : ''; }
-      catch(eD){ c.asOf = ''; }
-    }
-    saveConvictions(store);
-  }catch(e){}
-  return { store: store, transitions: transitions };
+  var store = loadConvictions();
+  var lockFn = (typeof applyHardgateConvictionLock === 'function')
+    ? applyHardgateConvictionLock
+    : ((typeof W !== 'undefined' && W) ? W.applyHardgateConvictionLock : null);
+  if (lockFn){
+    var got = lockFn(store, ranked, venueRows, nowMs, {
+      type: 'swing',
+      rowKey: 'rows4h',
+      historyLimit: CONVICTION_HIST,
+      venueScopedKeys: true,
+      expiryMs: CONVICTION_TTL_MS
+    });
+    saveConvictions(got.store);
+    return got;
+  }
+  return { store: store, transitions: [] };
 }
 
 /* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
