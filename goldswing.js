@@ -24,9 +24,9 @@ reason named, never silently dropped):
      1d bars) either SWEPT + RECLAIMED on a 4h close (mean-reversion) or
      BROKEN WITH DISPLACEMENT (latest 4h bar closes beyond the level with a
      >=1.5xATR range — range expansion). Stop anchored beyond the level.
-  3) 4H ORDER BLOCK RETEST — unmitigated 4h order block (goldOrderBlocks,
-     i.e. the origin of a structure-breaking displacement) retested. Stop
-     anchored beyond the OB edge.
+  3) 4H ORDER BLOCK RETEST — structure-aligned retest via goldOrderBlockRetest
+     (active unmitigated zones + fractal trend); legacy goldOrderBlocks
+     proximity fallback when structure is neutral. Stop anchored beyond the OB edge.
   4) MACRO-ALIGNED TREND CONTINUATION — a REAL daily trend stack (EMA50/200
      on 1d) aligned with getGoldMacro's realRateHint (TAILWIND favors longs,
      HEADWIND favors shorts). Macro NEVER fabricates a setup: no daily
@@ -879,10 +879,14 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
 
     /* 4h fractal BOS / CHOCH (goldind.js SMC module) */
     var swFn2 = gfn('goldSwings'), msFn = gfn('goldMarketStructure');
+    var ms4 = null, activeOBs4 = null, obRetest4 = null;
+    var activeFn = gfn('goldActiveOrderBlocks'), retestFn = gfn('goldOrderBlockRetest');
     if (swFn2 && msFn){
       try{
         var sw4 = swFn2(rows4, 5, 5);
-        var ms4 = msFn(rows4, sw4, 5, 5);
+        ms4 = msFn(rows4, sw4, 5, 5);
+        if (activeFn) activeOBs4 = activeFn(rows4, a4);
+        if (retestFn && ms4) obRetest4 = retestFn(rows4, n - 1, ms4, activeOBs4);
         if (ms4 && ms4.bos && isFinite(ms4.level)){
           if (ms4.trend === 'bullish'){
             add('long', 'bos', '4h fractal BOS bullish — close above swing high ' + ms4.level.toFixed(2));
@@ -1014,9 +1018,24 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
       }
     }
 
-    /* 3) 4h order-block retest after the structure break (the OB is the
-       origin of a displacement through the prior 20-bar swing — the break) */
-    if (ob){
+    /* 3) 4h order-block retest after the structure break (robust active zones
+       when fractal structure aligns; legacy proximity fallback otherwise) */
+    var obRetestDone = false;
+    if (obRetest4 && obRetest4.trigger){
+      var swDir = obRetest4.direction;
+      var swLo = obRetest4.base, swHi = obRetest4.top, swStp = obRetest4.anchor;
+      push(mkCand('ob', swDir, swStp, swStp, { lo: swLo, hi: swHi },
+        'structure-aligned 4h OB retest — price inside unmitigated '
+          + (swDir === 'long' ? 'bullish' : 'bearish') + ' order block '
+          + swLo.toFixed(2) + '–' + swHi.toFixed(2)
+          + ' during ' + (ms4 && ms4.trend ? ms4.trend : 'aligned') + ' fractal structure',
+        'a 4h close ' + (swDir === 'long' ? 'below the order-block base ' : 'above the order-block top ')
+          + swStp.toFixed(2) + ' mitigates the zone',
+        { side: swDir, tag: 'ob', label: 'structure-aligned 4h order block retest '
+          + swLo.toFixed(2) + '–' + swHi.toFixed(2) }));
+      obRetestDone = true;
+    }
+    if (!obRetestDone && ob){
       var tol2 = 0.5*a4;
       for (i = 0; i < ob.bullish.length; i++){
         z = ob.bullish[i];

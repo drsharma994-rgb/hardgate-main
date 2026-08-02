@@ -3,7 +3,8 @@ HARDGATE — goldscalp.js
 GOLD SCALP tab: expert gold scalping engine. RUN SCAN pulls multi-timeframe
 gold klines (15m/1h/4h) from every available venue, composes PER-STRATEGY
 candidates via goldind.js (window.goldScalpSetups — liquidity-sweep reversal,
-order-block/breaker retest, FVG fill, session-VWAP bounce/rejection, EMA
+order-block/breaker retest (active-zone + structure-aligned robust trigger,
+legacy proximity fallback), FVG fill, session-VWAP bounce/rejection, EMA
 20/50/200 ribbon pullback, Asian-range 00:00-07:00 GMT breakout, modified-RSI
 75/25 divergence; microstructure via HardgateGoldEngine.evaluateScalp), ranks them all with a transparent human-readable
 confluence tally (window.goldRankSetups), crowns the #1 with a MOST PROBABLE
@@ -858,6 +859,13 @@ async function runScan(ui){
     if (gold.rows15m.length){
       var v = venueLabel(gold.source);
       var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
+      var zonesFn = gfn('goldUpdateActiveZones');
+      if (zonesFn){
+        try{
+          var zOut = zonesFn(gold.rows15m);
+          if (typeof W !== 'undefined' && W) W.hgActiveOrderBlocks = zOut && zOut.activeOrderBlocks ? zOut.activeOrderBlocks : [];
+        }catch(eZ){ if (typeof W !== 'undefined' && W) W.hgActiveOrderBlocks = []; }
+      }
       venueRows[v] = { rows15m: gold.rows15m };
       var got = buildCandidates(gold, now, news, v, sym1);
       collectWatch(gold.rows15m, gold.rows1h, gold.rows4h, v);
