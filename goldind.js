@@ -105,6 +105,9 @@ Exports (all on window):
   goldOrderBlockRetest(rows, index?, structure?, activeObs?) — structure-aligned OB retest
   detectSwings / detectMarketStructure / detectOrderBlocks — SMC aliases
   updateActiveZones / detectOrderBlockRetest — robust OB retest aliases
+  getMarketSession(ts) / calculateAsianRange(rows, index?) / calculateADRExhaustion(daily, current?, lb?)
+                             — session weights, Asian H/L tracker, daily ADR exhaustion (≥80%)
+  goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
   goldDetectorReads({rows15m,...}) — full confluence ledger reads from __goldBundle
 ========================================================================= */
 (function(){
@@ -1183,6 +1186,11 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   var D = { entry: entry, a15: a15, reads: [], notes: [] };
   function add(side, tag, label, ctx){ D.reads.push({ side: side, tag: tag, label: label, ctx: !!ctx }); }
   var i, z;
+
+  var n = rows.length;
+  var lastT = rows[n - 1].t;
+  D.marketSession = getMarketSession(isFinite(lastT) ? lastT : Date.now());
+  D.asianAt = calculateAsianRange(rows, n - 1);
 
   var sw = D.sw = goldSweeps(rows);
   /* microstructure landscape + V2 triggers (HardgateGoldEngine.evaluateScalp) */
@@ -2279,6 +2287,100 @@ function goldADR(rows, lookback){
   }catch(e){ return null; }
 }
 
+/* ======================= Session & Volatility Module =======================
+   Session killzone weights, Asian-range tracker (index lookback), and daily ADR
+   exhaustion (≥80% consumed). Never throws; accepts {t,o,h,l,c,v} rows. */
+
+function getMarketSession(timestampGMT){
+  var off = { isAsianRange: false, isLondonOpen: false, isNYOverlap: false, weight: 0,
+              hourGMT: NaN, timeDecimal: NaN };
+  try{
+    var ms = __toMs(timestampGMT);
+    if (!isFinite(ms)) return off;
+    var dt = new Date(ms);
+    var hour = dt.getUTCHours();
+    var min = dt.getUTCMinutes();
+    var timeDecimal = hour + (min / 60);
+    var session = {
+      isAsianRange: timeDecimal >= 0 && timeDecimal < 7,
+      isLondonOpen: timeDecimal >= 7 && timeDecimal <= 10,
+      isNYOverlap: timeDecimal >= 13 && timeDecimal <= 17,
+      weight: 0,
+      hourGMT: hour,
+      timeDecimal: timeDecimal
+    };
+    if (session.isNYOverlap) session.weight = 3;
+    else if (session.isLondonOpen) session.weight = 2;
+    else if (session.isAsianRange) session.weight = 0;
+    return session;
+  }catch(e){ return off; }
+}
+
+/* Walk back from `currentIndex` (default last) up to 50 bars for today's
+   00:00–07:00 GMT high/low. -> {asianHigh, asianLow, valid, hi, lo}. */
+function calculateAsianRange(candles, currentIndex){
+  var invalid = { asianHigh: NaN, asianLow: NaN, valid: false, hi: NaN, lo: NaN };
+  try{
+    candles = __rows(candles);
+    if (!candles || !candles.length) return invalid;
+    if (currentIndex === undefined || currentIndex === null) currentIndex = candles.length - 1;
+    currentIndex = Math.floor(currentIndex);
+    if (currentIndex < 0 || currentIndex >= candles.length) return invalid;
+    var asianHigh = -Infinity, asianLow = Infinity, inRange = false, i;
+    var start = Math.max(0, currentIndex - 50);
+    for (i = currentIndex; i >= start; i--){
+      var r = candles[i];
+      if (!r || !isFinite(r.t)) continue;
+      var hour = new Date(__toMs(r.t)).getUTCHours();
+      if (hour >= 0 && hour < 7){
+        inRange = true;
+        if (isFinite(r.h) && r.h > asianHigh) asianHigh = r.h;
+        if (isFinite(r.l) && r.l < asianLow) asianLow = r.l;
+      } else if (inRange) break;
+    }
+    if (!inRange || !(asianHigh > asianLow) || !isFinite(asianHigh)) return invalid;
+    return { asianHigh: asianHigh, asianLow: asianLow, valid: true,
+             hi: asianHigh, lo: asianLow };
+  }catch(e){ return invalid; }
+}
+
+/* Daily ADR exhaustion on explicit daily bars. >=80% of lookback ADR consumed
+   -> isExhausted. -> {adr, currentRange, percentageConsumed, isExhausted, ...}. */
+function calculateADRExhaustion(dailyCandles, currentDailyCandle, lookback){
+  var no = { exhausted: false, isExhausted: false, percentage: 0,
+             percentageConsumed: 0, adr: NaN, currentRange: NaN };
+  try{
+    dailyCandles = __rows(dailyCandles);
+    lookback = lookback || 14;
+    if (!dailyCandles || dailyCandles.length < lookback) return no;
+    if (!currentDailyCandle) currentDailyCandle = dailyCandles[dailyCandles.length - 1];
+    if (!currentDailyCandle || !isFinite(currentDailyCandle.h) || !isFinite(currentDailyCandle.l)) return no;
+    var sumRange = 0, i;
+    var start = dailyCandles.length - lookback;
+    for (i = start; i < dailyCandles.length; i++){
+      var r = dailyCandles[i];
+      if (!r || !isFinite(r.h) || !isFinite(r.l)) continue;
+      sumRange += (r.h - r.l);
+    }
+    var adr = sumRange / lookback;
+    var currentRange = currentDailyCandle.h - currentDailyCandle.l;
+    if (!isFinite(adr) || !(adr > 0) || !isFinite(currentRange)) return no;
+    var pct = currentRange / adr;
+    return {
+      adr: adr,
+      currentRange: currentRange,
+      percentageConsumed: pct,
+      percentage: pct,
+      isExhausted: pct >= 0.80,
+      exhausted: pct >= 0.80
+    };
+  }catch(e){ return no; }
+}
+
+var goldMarketSession = getMarketSession;
+var goldAsianRangeAt = calculateAsianRange;
+var goldADRExhaustion = calculateADRExhaustion;
+
 /* 19) Opening Range Breakout */
 function goldOpeningRange(rows, session){
   try{
@@ -3066,5 +3168,11 @@ W.detectMarketStructure = goldMarketStructure;
 W.detectOrderBlocks = goldOrderBlockAt;
 W.updateActiveZones = goldUpdateActiveZones;
 W.detectOrderBlockRetest = goldOrderBlockRetest;
+W.getMarketSession = getMarketSession;
+W.calculateAsianRange = calculateAsianRange;
+W.calculateADRExhaustion = calculateADRExhaustion;
+W.goldMarketSession = goldMarketSession;
+W.goldAsianRangeAt = goldAsianRangeAt;
+W.goldADRExhaustion = goldADRExhaustion;
 W.goldDetectorReads = goldDetectorReads;
 })();

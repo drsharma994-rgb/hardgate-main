@@ -76,6 +76,8 @@ console.log('== 0) exports + tab registration ==');
                  'goldSwings','goldMarketStructure','goldOrderBlockAt',
                  'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
                  'updateActiveZones','detectOrderBlockRetest',
+                 'getMarketSession','calculateAsianRange','calculateADRExhaustion',
+                 'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
@@ -287,6 +289,37 @@ console.log('== 10) goldAsianRange ==');
   assert(s && s.state === 'SHORT_BREAK', 'close below the box -> SHORT_BREAK');
   const g = W.goldAsianRange(asianRows(100.5, 5));
   assert(g && g.state === 'BUILDING', 'before 07:00 GMT -> BUILDING');
+}
+
+/* =========================================================================
+   10b) Session & Volatility — getMarketSession / calculateAsianRange / ADR
+========================================================================= */
+console.log('== 10b) session & volatility module ==');
+{
+  function at(h, m){ return DAY + h*3600 + (m||0)*60; }
+  const ny = W.getMarketSession(at(14, 30));
+  assert(ny.isNYOverlap && ny.weight === 3, 'getMarketSession: NY overlap weight 3');
+  const lon = W.getMarketSession(at(8, 0));
+  assert(lon.isLondonOpen && lon.weight === 2, 'getMarketSession: London open weight 2');
+  const asia = W.getMarketSession(at(3, 0));
+  assert(asia.isAsianRange && asia.weight === 0, 'getMarketSession: Asian range weight 0');
+  assert(W.goldMarketSession === W.getMarketSession, 'goldMarketSession alias');
+  const rows = [];
+  for (let i = 0; i < 28; i++)
+    rows.push({ t: DAY + i*900, o: 100, h: 101.2, l: 98.8, c: 100, v: 1000 });
+  rows.push({ t: DAY + 8*3600, o: 100, h: 100.5, l: 99.5, c: 100.2, v: 2000 });
+  const ar = W.calculateAsianRange(rows, rows.length - 1);
+  assert(ar.valid && ar.asianHigh === 101.2 && ar.asianLow === 98.8,
+         'calculateAsianRange: today 00:00-07:00 GMT box');
+  assert(W.goldAsianRangeAt === W.calculateAsianRange, 'goldAsianRangeAt alias');
+  const daily = [];
+  for (let d = 0; d < 14; d++)
+    daily.push({ t: DAY - (14-d)*86400, o: 100, h: 110, l: 100, c: 105, v: 1e6 });
+  const cur = { t: DAY, o: 100, h: 109, l: 100, c: 108, v: 1e6 }; // 9/10 = 90% of ADR
+  const adr = W.calculateADRExhaustion(daily, cur, 14);
+  assert(adr.isExhausted === true && adr.percentageConsumed >= 0.80,
+         'calculateADRExhaustion: >=80% ADR consumed -> exhausted');
+  assert(W.goldADRExhaustion === W.calculateADRExhaustion, 'goldADRExhaustion alias');
 }
 
 /* =========================================================================
@@ -558,6 +591,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'goldSwings','goldMarketStructure','goldOrderBlockAt',
                  'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
                  'updateActiveZones','detectOrderBlockRetest',
+                 'getMarketSession','calculateAsianRange','calculateADRExhaustion',
+                 'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
