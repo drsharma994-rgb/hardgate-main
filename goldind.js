@@ -79,6 +79,11 @@ Exports (all on window):
   goldNewsCaution(news, now) — shared ±30-min high-impact news-window check
                              -> {caution, title}; the tab vetoes NEW
                              convictions inside the window.
+  goldVolumeSpike(rows, index?, lookback?, mult?) — absorption/climax bar:
+                             current bar volume > lookback SMA × mult (default
+                             20 bars, 1.5×); false on thin/missing volume
+  goldVolumeProfile(rows, lookback?, bins?) — volume profile POC + HVNs
+                             (mean + 1σ threshold); null when range/volume thin
 ========================================================================= */
 (function(){
 'use strict';
@@ -2258,6 +2263,94 @@ function goldSmartExit(dir, entry, stop, t1, t2, rows, opts){
   }catch(e){ return { trailingStop: null, timeExitBars: isScalp?6:24, volExitSignal: null, structBreak: false, partials:[], notes:[] }; }
 }
 
+/* ---------------- microstructure & volume analysis ---------------- */
+
+/* Absorption / climax: true when bar `index` volume exceeds the prior
+   `lookback` bars' average by `thresholdMultiplier` (default 1.5×).
+   Index defaults to the last bar. Missing/zero volume bars are skipped
+   in the average; returns false when unknowable. */
+function goldVolumeSpike(rows, index, lookback, thresholdMultiplier){
+  try{
+    rows = __rows(rows);
+    if (!rows) return false;
+    var n = rows.length;
+    if (index === undefined || index === null) index = n - 1;
+    index = Math.floor(index);
+    lookback = (lookback === undefined || lookback === null) ? 20 : Math.max(1, Math.floor(lookback));
+    thresholdMultiplier = (thresholdMultiplier === undefined || thresholdMultiplier === null)
+      ? 1.5 : +thresholdMultiplier;
+    if (!isFinite(thresholdMultiplier) || thresholdMultiplier <= 0) thresholdMultiplier = 1.5;
+    if (index < lookback || index < 0 || index >= n) return false;
+    var sumVol = 0, cnt = 0, i;
+    for (i = index - lookback; i < index; i++){
+      var v = rows[i].v;
+      if (isFinite(v) && v > 0){ sumVol += v; cnt++; }
+    }
+    if (!cnt) return false;
+    var avgVol = sumVol / cnt;
+    var cur = rows[index].v;
+    if (!(isFinite(cur) && cur > 0) || !(avgVol > 0)) return false;
+    return cur > avgVol * thresholdMultiplier;
+  }catch(e){ return false; }
+}
+
+/* Volume profile over the last `lookback` bars (default 100) split into
+   `bins` price buckets (default 50). Returns POC and HVNs (bins with
+   volume > mean + 1σ). null when range or total volume is unusable. */
+function goldVolumeProfile(rows, lookback, bins){
+  try{
+    rows = __rows(rows);
+    if (!rows) return null;
+    lookback = (lookback === undefined || lookback === null) ? 100 : Math.max(5, Math.floor(lookback));
+    bins = (bins === undefined || bins === null) ? 50 : Math.max(5, Math.floor(bins));
+    var slice = rows.slice(-lookback);
+    if (slice.length < 3) return null;
+    var maxPrice = -Infinity, minPrice = Infinity, i, r;
+    for (i = 0; i < slice.length; i++){
+      r = slice[i];
+      if (isFinite(r.h) && r.h > maxPrice) maxPrice = r.h;
+      if (isFinite(r.l) && r.l < minPrice) minPrice = r.l;
+    }
+    if (!(isFinite(maxPrice) && isFinite(minPrice)) || !(maxPrice > minPrice)) return null;
+    var binSize = (maxPrice - minPrice) / bins;
+    if (!(binSize > 0)) return null;
+    var profile = new Array(bins);
+    for (i = 0; i < bins; i++) profile[i] = 0;
+    var totalVol = 0;
+    for (i = 0; i < slice.length; i++){
+      r = slice[i];
+      var v = (isFinite(r.v) && r.v > 0) ? r.v : 0;
+      var avgPrice = (r.h + r.l + r.c) / 3;
+      if (!isFinite(avgPrice)) continue;
+      var binIndex = Math.min(Math.floor((avgPrice - minPrice) / binSize), bins - 1);
+      if (binIndex < 0) binIndex = 0;
+      profile[binIndex] += v;
+      totalVol += v;
+    }
+    if (!(totalVol > 0)) return null;
+    var maxVol = 0, pocIndex = 0;
+    for (i = 0; i < bins; i++){
+      if (profile[i] > maxVol){ maxVol = profile[i]; pocIndex = i; }
+    }
+    var pocPrice = minPrice + pocIndex * binSize + binSize / 2;
+    var meanVol = 0;
+    for (i = 0; i < bins; i++) meanVol += profile[i];
+    meanVol /= bins;
+    var varSum = 0;
+    for (i = 0; i < bins; i++) varSum += Math.pow(profile[i] - meanVol, 2);
+    var stdDev = Math.sqrt(varSum / bins);
+    var hvnThreshold = meanVol + stdDev;
+    var hvns = [];
+    for (i = 0; i < bins; i++){
+      if (profile[i] > hvnThreshold){
+        hvns.push(minPrice + i * binSize + binSize / 2);
+      }
+    }
+    return { pocPrice: pocPrice, hvns: hvns, binSize: binSize,
+             minPrice: minPrice, maxPrice: maxPrice, bars: slice.length, totalVol: totalVol };
+  }catch(e){ return null; }
+}
+
 /* ---------------- exports ---------------- */
 
 W.goldFVG = goldFVG;
@@ -2290,4 +2383,6 @@ W.goldADX = goldADX;
 W.goldRangeBound = goldRangeBound;
 W.goldHeikinAshi = goldHeikinAshi;
 W.goldSmartExit = goldSmartExit;   /* shared ±30-min high-impact window check */
+W.goldVolumeSpike = goldVolumeSpike;
+W.goldVolumeProfile = goldVolumeProfile;
 })();
