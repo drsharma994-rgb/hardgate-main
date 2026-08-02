@@ -84,6 +84,13 @@ Exports (all on window):
                              20 bars, 1.5×); false on thin/missing volume
   goldVolumeProfile(rows, lookback?, bins?) — volume profile POC + HVNs
                              (mean + 1σ threshold); null when range/volume thin
+  goldSweepV2(rows, index?, sweepLb?, volLb?, mult?) — V2 liquidity sweep:
+                             wick beyond prior-N-bar extreme + reclaim + volume
+                             climax; -> {trigger, dir, anchor, type, level} | {trigger:false}
+  goldFVGV2(rows, index?, vprof?) — V2 FVG: 3-candle gap with HVN launchpad
+                             inside/near the gap zone; -> {trigger,...}|{trigger:false}
+  goldFVGHasHVNSupport(gap, vprof) — true when an HVN sits at/below/inside gap
+  isVolumeSpike / buildVolumeProfile — aliases of goldVolumeSpike / goldVolumeProfile
 ========================================================================= */
 (function(){
 'use strict';
@@ -1163,9 +1170,26 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   var i, z;
 
   var sw = D.sw = goldSweeps(rows);
+  /* V2: volume profile early — FVG reads require HVN backing when range is wide enough */
+  D.vprof = goldVolumeProfile(rows, 100, 50);
+  D.volSpike = goldVolumeSpike(rows);
+  D.volSpikeSweep = false;
+  D.nearestHVN = NaN;
+  var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
+    ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
+  D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
   if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
-    if (sw.dir === 'bullish') add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago)');
-    else add('short', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + rejection (' + sw.barsAgo + 'b ago)');
+    var swIdx0 = rows.length - 1 - sw.barsAgo;
+    if (swIdx0 >= 0 && goldVolumeSpike(rows, swIdx0)) D.volSpikeSweep = true;
+    if (D.volSpikeSweep){
+      if (sw.dir === 'bullish'){
+        add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
+        add('long', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms sell-side liquidity taken');
+      } else {
+        add('short', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + rejection (' + sw.barsAgo + 'b ago) — volume-validated');
+        add('short', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms buy-side liquidity taken');
+      }
+    }
   }
 
   var ob = D.ob = goldOrderBlocks(rows);
@@ -1190,18 +1214,39 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   if (fvg && fvg.length){
     var g = fvg[0];
     if (g.age <= 25){
-      if (g.dir === 'bullish' && entry >= g.bottom) add('long', 'fvg', 'unmitigated 15m FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' holding');
-      else if (g.dir === 'bearish' && entry <= g.top) add('short', 'fvg', 'unmitigated 15m FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' capping');
+      var fvgV2ok = !D.vpOk || goldFVGHasHVNSupport(g, D.vprof);
+      if (fvgV2ok){
+        if (g.dir === 'bullish' && entry >= g.bottom){
+          add('long', 'fvg', 'unmitigated 15m FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2)
+              + ' holding' + (D.vpOk ? ' — HVN defends the gap' : ''));
+        } else if (g.dir === 'bearish' && entry <= g.top){
+          add('short', 'fvg', 'unmitigated 15m FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2)
+              + ' capping' + (D.vpOk ? ' — HVN defends the gap' : ''));
+        }
+      }
     }
   }
   D.fvg1 = null;
   if (rows1h && rows1h.length >= 30){
     var fvg1 = D.fvg1 = goldFVG(rows1h);
+    var vprof1 = goldVolumeProfile(rows1h, 100, 50);
+    var vpOk1 = false;
+    if (vprof1 && isFinite(vprof1.maxPrice) && isFinite(vprof1.minPrice)){
+      vpOk1 = (vprof1.maxPrice - vprof1.minPrice) >= 2.5*a15;
+    }
     if (fvg1 && fvg1.length){
       var g1 = fvg1[0];
       if (g1.age <= 25){
-        if (g1.dir === 'bullish' && entry >= g1.bottom) add('long', 'fvg1h', 'unmitigated 1H FVG ' + g1.bottom.toFixed(2) + '–' + g1.top.toFixed(2));
-        else if (g1.dir === 'bearish' && entry <= g1.top) add('short', 'fvg1h', 'unmitigated 1H FVG ' + g1.bottom.toFixed(2) + '–' + g1.top.toFixed(2));
+        var fvg1V2 = !vpOk1 || goldFVGHasHVNSupport(g1, vprof1);
+        if (fvg1V2){
+          if (g1.dir === 'bullish' && entry >= g1.bottom){
+            add('long', 'fvg1h', 'unmitigated 1H FVG ' + g1.bottom.toFixed(2) + '–' + g1.top.toFixed(2)
+                + (vpOk1 ? ' — HVN defends the gap' : ''));
+          } else if (g1.dir === 'bearish' && entry <= g1.top){
+            add('short', 'fvg1h', 'unmitigated 1H FVG ' + g1.bottom.toFixed(2) + '–' + g1.top.toFixed(2)
+                + (vpOk1 ? ' — HVN defends the gap' : ''));
+          }
+        }
       }
     }
   }
@@ -1268,25 +1313,7 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
 
-  /* volume profile + spike microstructure (feeds sweep confirmation + HVN reads) */
-  D.vprof = goldVolumeProfile(rows, 100, 50);
-  D.volSpike = goldVolumeSpike(rows);
-  D.volSpikeSweep = false;
-  D.nearestHVN = NaN;
-  var vpRange = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
-    ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
-  D.vpOk = isFinite(vpRange) && vpRange >= 2.5*a15;
-  if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
-    var swIdx = rows.length - 1 - sw.barsAgo;
-    if (swIdx >= 0 && goldVolumeSpike(rows, swIdx)){
-      D.volSpikeSweep = true;
-      if (sw.dir === 'bullish'){
-        add('long', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms sell-side liquidity taken');
-      } else {
-        add('short', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms buy-side liquidity taken');
-      }
-    }
-  }
+  /* volume profile POC / HVN proximity reads (vprof computed at bundle start) */
   if (D.vprof && D.vpOk && isFinite(D.vprof.pocPrice)){
     var pocPx = D.vprof.pocPrice;
     if (Math.abs(entry - pocPx) <= 0.75*a15){
@@ -1438,19 +1465,23 @@ function goldScalpSetups(inp){
     }
     var tol = 0.5*a15;
 
-    /* --- 1) liquidity-sweep reversal --- */
+    /* --- 1) liquidity-sweep reversal (V2: volume climax required) --- */
     var sw = D.sw;
     if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
       var sdir = (sw.dir === 'bullish') ? 'long' : 'short';
-      var swWhy = 'swept ' + (sdir === 'long' ? 'sell-side liquidity at ' : 'buy-side liquidity at ') + sw.level.toFixed(2)
-          + ' and reclaimed within ' + sw.barsAgo + ' bar(s) — the stop hunt is complete, reversal fuel is loaded';
-      if (D.volSpikeSweep){
-        swWhy += ' — volume climax on the sweep bar confirms absorption at the liquidity pool';
+      if (!D.volSpikeSweep){
+        rejected.push({ dropped: true, id: 'sweep|' + sdir + '|' + Math.round(sw.level),
+          strategy: GST_NAME.sweep, stratKey: 'sweep', dir: sdir,
+          reason: 'liquidity sweep without volume climax — V2 gate requires institutional absorption on the sweep bar' });
+      } else {
+        var swWhy = 'swept ' + (sdir === 'long' ? 'sell-side liquidity at ' : 'buy-side liquidity at ') + sw.level.toFixed(2)
+            + ' and reclaimed within ' + sw.barsAgo + ' bar(s) — volume-validated stop hunt, reversal fuel is loaded'
+            + ' — volume climax on the sweep bar confirms absorption at the liquidity pool';
+        push(__gsCand('sweep', sdir, D, sw.level, __gsSnapLvls(D, sdir),
+          swWhy,
+          'a 15m close back beyond ' + sw.level.toFixed(2) + ' (the swept ' + (sdir === 'long' ? 'low' : 'high') + ') negates the reclaim',
+          undefined, sw.level));
       }
-      push(__gsCand('sweep', sdir, D, sw.level, __gsSnapLvls(D, sdir),
-        swWhy,
-        'a 15m close back beyond ' + sw.level.toFixed(2) + ' (the swept ' + (sdir === 'long' ? 'low' : 'high') + ') negates the reclaim',
-        undefined, sw.level));
     }
 
     /* --- 2) order-block / breaker retest --- */
@@ -1496,25 +1527,47 @@ function goldScalpSetups(inp){
       }
     }
 
-    /* --- 3) FVG fill (15m first, then 1H) --- */
-    function fvgCand(g, label){
+    /* --- 3) FVG fill (15m first, then 1H) — V2: HVN launchpad when profile range is wide --- */
+    function fvgCand(g, label, vprof, vpOk){
       if (!g || g.age > 25) return;
-      if (entry < g.bottom - tol || entry > g.top + tol) return;   /* must be AT/IN the gap */
+      if (entry < g.bottom - tol || entry > g.top + tol) return;
+      if (vpOk && !goldFVGHasHVNSupport(g, vprof)){
+        rejected.push({ dropped: true,
+          id: 'fvg|' + (g.dir === 'bullish' ? 'long' : 'short') + '|' + Math.round(g.dir === 'bullish' ? g.bottom : g.top),
+          strategy: GST_NAME.fvg, stratKey: 'fvg', dir: (g.dir === 'bullish' ? 'long' : 'short'),
+          reason: 'FVG without HVN structural support — V2 gate requires a high-volume node defending the gap' });
+        return;
+      }
+      var hvnNote = (vpOk && goldFVGHasHVNSupport(g, vprof))
+        ? ' — session HVN defends the gap as a launchpad' : '';
       if (g.dir === 'bullish'){
         push(__gsCand('fvg', 'long', D, g.bottom, __gsSnapLvls(D, 'long'),
-          'price retraced into the unmitigated ' + label + ' FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' — the imbalance fill zone is acting as demand',
+          'price retraced into the unmitigated ' + label + ' FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2)
+            + ' — the imbalance fill zone is acting as demand' + hvnNote,
           'a 15m close below the gap base ' + g.bottom.toFixed(2) + ' fills-and-fails the imbalance',
           { lo: g.bottom, hi: g.top }, g.bottom));
       } else {
         push(__gsCand('fvg', 'short', D, g.top, __gsSnapLvls(D, 'short'),
-          'price rallied into the unmitigated ' + label + ' FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' — the imbalance fill zone is acting as supply',
+          'price rallied into the unmitigated ' + label + ' FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2)
+            + ' — the imbalance fill zone is acting as supply' + hvnNote,
           'a 15m close above the gap top ' + g.top.toFixed(2) + ' fills-and-fails the imbalance',
           { lo: g.bottom, hi: g.top }, g.top));
       }
     }
     var gotFvg = false;
-    if (D.fvg && D.fvg.length){ var before = out.length; fvgCand(D.fvg[0], '15m'); gotFvg = out.length > before; }
-    if (!gotFvg && D.fvg1 && D.fvg1.length) fvgCand(D.fvg1[0], '1H');
+    if (D.fvg && D.fvg.length){
+      var before = out.length;
+      fvgCand(D.fvg[0], '15m', D.vprof, D.vpOk);
+      gotFvg = out.length > before;
+    }
+    if (!gotFvg && D.fvg1 && D.fvg1.length){
+      var vprof1c = goldVolumeProfile(__rows(inp.rows1h), 100, 50);
+      var vpOk1c = false;
+      if (vprof1c && isFinite(vprof1c.maxPrice) && isFinite(vprof1c.minPrice)){
+        vpOk1c = (vprof1c.maxPrice - vprof1c.minPrice) >= 2.5*a15;
+      }
+      fvgCand(D.fvg1[0], '1H', vprof1c, vpOk1c);
+    }
 
     /* --- 4) session-VWAP bounce / rejection --- */
     var vw = D.vw;
@@ -2432,6 +2485,83 @@ function goldVolumeProfile(rows, lookback, bins){
   }catch(e){ return null; }
 }
 
+/* V2 trigger helpers — volume-validated sweep + HVN-backed FVG (never throw). */
+
+function goldFVGHasHVNSupport(g, vprof){
+  try{
+    if (!g || !vprof || !vprof.hvns || !vprof.hvns.length) return false;
+    if (!(isFinite(g.bottom) && isFinite(g.top))) return false;
+    var binSize = vprof.binSize;
+    if (!(isFinite(binSize) && binSize > 0)) return false;
+    var lo = g.bottom - 2 * binSize;
+    var hi = g.top + binSize;
+    for (var i = 0; i < vprof.hvns.length; i++){
+      var h = vprof.hvns[i];
+      if (isFinite(h) && h >= lo && h <= hi) return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
+function goldSweepV2(rows, index, sweepLookback, volLookback, mult){
+  try{
+    rows = __rows(rows);
+    if (!rows) return { trigger: false };
+    var n = rows.length;
+    if (index === undefined || index === null) index = n - 1;
+    index = Math.floor(index);
+    sweepLookback = (sweepLookback === undefined || sweepLookback === null)
+      ? 10 : Math.max(2, Math.floor(sweepLookback));
+    if (index < sweepLookback || index < 0 || index >= n) return { trigger: false };
+    var cur = rows[index];
+    if (!cur || !isFinite(cur.l) || !isFinite(cur.h) || !isFinite(cur.c)) return { trigger: false };
+    var priorLow = Infinity, priorHigh = -Infinity, i;
+    for (i = index - sweepLookback; i < index; i++){
+      if (rows[i].l < priorLow) priorLow = rows[i].l;
+      if (rows[i].h > priorHigh) priorHigh = rows[i].h;
+    }
+    var volOk = goldVolumeSpike(rows, index, volLookback, mult);
+    if (cur.l < priorLow && cur.c > priorLow && volOk){
+      return { trigger: true, dir: 'long', anchor: cur.l, type: 'long_sweep',
+               level: priorLow, index: index };
+    }
+    if (cur.h > priorHigh && cur.c < priorHigh && volOk){
+      return { trigger: true, dir: 'short', anchor: cur.h, type: 'short_sweep',
+               level: priorHigh, index: index };
+    }
+    return { trigger: false };
+  }catch(e){ return { trigger: false }; }
+}
+
+function goldFVGV2(rows, index, vprof){
+  try{
+    rows = __rows(rows);
+    if (!rows) return { trigger: false };
+    var n = rows.length;
+    if (index === undefined || index === null) index = n - 1;
+    index = Math.floor(index);
+    if (index < 2 || index >= n) return { trigger: false };
+    if (!vprof) vprof = goldVolumeProfile(rows, 100, 50);
+    var c1 = rows[index - 2], c3 = rows[index];
+    if (!c1 || !c3) return { trigger: false };
+    if (c1.h < c3.l){
+      var gapBase = c1.h, gapTop = c3.l;
+      if (goldFVGHasHVNSupport({ bottom: gapBase, top: gapTop, dir: 'bullish' }, vprof)){
+        return { trigger: true, dir: 'long', anchor: gapBase, type: 'long_fvg',
+                 bottom: gapBase, top: gapTop, index: index };
+      }
+    }
+    if (c1.l > c3.h){
+      var bBot = c3.h, bTop = c1.l;
+      if (goldFVGHasHVNSupport({ bottom: bBot, top: bTop, dir: 'bearish' }, vprof)){
+        return { trigger: true, dir: 'short', anchor: bTop, type: 'short_fvg',
+                 bottom: bBot, top: bTop, index: index };
+      }
+    }
+    return { trigger: false };
+  }catch(e){ return { trigger: false }; }
+}
+
 /* ---------------- exports ---------------- */
 
 W.goldFVG = goldFVG;
@@ -2466,4 +2596,9 @@ W.goldHeikinAshi = goldHeikinAshi;
 W.goldSmartExit = goldSmartExit;   /* shared ±30-min high-impact window check */
 W.goldVolumeSpike = goldVolumeSpike;
 W.goldVolumeProfile = goldVolumeProfile;
+W.goldFVGHasHVNSupport = goldFVGHasHVNSupport;
+W.goldSweepV2 = goldSweepV2;
+W.goldFVGV2 = goldFVGV2;
+W.isVolumeSpike = goldVolumeSpike;
+W.buildVolumeProfile = goldVolumeProfile;
 })();

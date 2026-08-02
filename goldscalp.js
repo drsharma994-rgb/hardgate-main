@@ -51,6 +51,10 @@ a small reason line — nothing is dropped silently):
   5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new conviction
      is issued ('NEWS WINDOW — no new entries' reason line); already-live
      convictions keep running untouched.
+  6) V2 VOLUME TRIGGERS (goldind.js) — liquidity sweeps require a volume
+     climax on the sweep bar; FVG fills require HVN structural support when
+     the session volume profile has enough range (>=2.5×ATR). Rejected setups
+     name the V2 gate on the .rejected side-channel.
 
 Feeds (in preference order):
   1) window.getGoldCandles (macro.js) — XAUUSDT TradFi perp first, PAXGUSDT
