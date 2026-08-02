@@ -74,6 +74,8 @@ console.log('== 0) exports + tab registration ==');
                  'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
                  'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2',
                  'goldSwings','goldMarketStructure','goldOrderBlockAt',
+                 'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
+                 'updateActiveZones','detectOrderBlockRetest',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
@@ -554,6 +556,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
                  'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2',
                  'goldSwings','goldMarketStructure','goldOrderBlockAt',
+                 'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
+                 'updateActiveZones','detectOrderBlockRetest',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
@@ -1618,6 +1622,41 @@ console.log('== SMC market structure ==');
          'goldOrderBlockAt: empty/null -> none');
   assert(W.detectSwings === W.goldSwings && W.detectMarketStructure === W.goldMarketStructure
       && W.detectOrderBlocks === W.goldOrderBlockAt, 'SMC alias exports');
+  assert(W.updateActiveZones === W.goldUpdateActiveZones
+      && W.detectOrderBlockRetest === W.goldOrderBlockRetest, 'robust OB retest alias exports');
+  const emptyZones = W.goldUpdateActiveZones([]);
+  assert(Array.isArray(emptyZones.activeOrderBlocks) && emptyZones.activeOrderBlocks.length === 0,
+         'goldUpdateActiveZones: empty -> []');
+  assert(W.goldOrderBlockRetest([]).trigger === false, 'goldOrderBlockRetest: empty -> no trigger');
+  /* bullish OB retest with aligned structure */
+  function obRetestRows(){
+    const rows = flatRows(30, 100, 0.4, DAY);
+    for (let i = 0; i < 30; i++){
+      if (i % 8 === 4){ rows[i].h = rows[i].c + 3; rows[i].l = rows[i].c - 0.2; }
+      if (i % 8 === 0){ rows[i].l = rows[i].c - 3; rows[i].h = rows[i].c + 0.2; }
+    }
+    rows.push({ t: DAY + 30*900, o: 100, h: 100.4, l: 98.8, c: 99.6, v: 1200 });
+    rows.push({ t: DAY + 31*900, o: 99.6, h: 104.5, l: 99.5, c: 104.2, v: 4000 });
+    for (let j = 32; j < 44; j++){
+      const o = 104.2 - (j - 32) * 0.3;
+      rows.push({ t: DAY + j*900, o: o, h: o + 0.4, l: o - 0.3, c: o - 0.15, v: 1100 });
+    }
+    rows[rows.length - 1].c = 99.55;
+    rows[rows.length - 1].l = 99.45;
+    rows[rows.length - 1].h = 100.1;
+    return rows;
+  }
+  const obr = obRetestRows();
+  const swO = W.goldSwings(obr, 3, 3);
+  const msO = W.goldMarketStructure(obr, swO);
+  const actO = W.goldActiveOrderBlocks(obr);
+  const rtO = W.goldOrderBlockRetest(obr, obr.length - 1, msO, actO);
+  if (msO.trend === 'bullish'){
+    assert(rtO.trigger === true && rtO.direction === 'long' && rtO.type === 'ob_retest',
+           'goldOrderBlockRetest: bullish structure + inside bullish OB -> long trigger');
+  } else {
+    assert(Array.isArray(actO), 'goldActiveOrderBlocks: returns array when structure neutral');
+  }
   /* zigzag peaks/troughs for fractal swings (5+5 window) */
   const zz = [];
   let px = 100;

@@ -98,7 +98,11 @@ Exports (all on window):
   goldSwings(rows, left?, right?) — fractal swing highs/lows -> {highs, lows}
   goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
   goldOrderBlockAt(rows, index?, atr?) — displacement OB at one bar index
+  goldActiveOrderBlocks(rows, atr?, endIndex?) — unmitigated OB zones through end bar
+  goldUpdateActiveZones(rows, index?, atr?) — {activeOrderBlocks} at index (stateless scan)
+  goldOrderBlockRetest(rows, index?, structure?, activeObs?) — structure-aligned OB retest
   detectSwings / detectMarketStructure / detectOrderBlocks — SMC aliases
+  updateActiveZones / detectOrderBlockRetest — robust OB retest aliases
   goldDetectorReads({rows15m,...}) — full confluence ledger reads from __goldBundle
 ========================================================================= */
 (function(){
@@ -1411,6 +1415,15 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
           + D.mstruct.level.toFixed(2));
     }
   }
+  D.activeOBs = goldActiveOrderBlocks(rows, a15);
+  D.obRetest = goldOrderBlockRetest(rows, rows.length - 1, D.mstruct, D.activeOBs);
+  if (D.obRetest && D.obRetest.trigger){
+    var obrSide = D.obRetest.direction;
+    add(obrSide, 'ob', 'structure-aligned order block retest — price inside unmitigated '
+        + (D.obRetest.obType === 'bullish_ob' ? 'bullish' : 'bearish') + ' OB '
+        + D.obRetest.base.toFixed(2) + '–' + D.obRetest.top.toFixed(2)
+        + ' with ' + D.mstruct.trend + ' fractal structure');
+  }
   var pd = D.pd = goldPremiumDiscount(rows);
   if (pd){
     if (pd.zone === 'PREMIUM') add('short', 'premium', 'price in daily PREMIUM zone (top 25%) — sells favored', true);
@@ -1537,9 +1550,23 @@ function goldScalpSetups(inp){
       }
     }
 
-    /* --- 2) order-block / breaker retest --- */
+    /* --- 2) order-block / breaker retest (robust: active zones + structure alignment) --- */
+    var obRetestDone = false;
+    if (D.obRetest && D.obRetest.trigger){
+      var rd = D.obRetest.direction;
+      var zLo = D.obRetest.base, zHi = D.obRetest.top, stp = D.obRetest.anchor;
+      push(__gsCand('ob', rd, D, stp, __gsSnapLvls(D, rd),
+        'structure-aligned OB retest — price dipped into unmitigated '
+          + (rd === 'long' ? 'bullish' : 'bearish') + ' order block '
+          + zLo.toFixed(2) + '–' + zHi.toFixed(2)
+          + ' during ' + (D.mstruct && D.mstruct.trend ? D.mstruct.trend : 'aligned') + ' fractal structure (close held inside the zone)',
+        'a 15m close ' + (rd === 'long' ? 'below the order-block base ' : 'above the order-block top ')
+          + stp.toFixed(2) + ' mitigates the zone',
+        { lo: zLo, hi: zHi }, stp));
+      obRetestDone = true;
+    }
     var ob = D.ob;
-    if (ob){
+    if (!obRetestDone && ob){
       var i, z;
       for (i = 0; i < ob.bullish.length; i++){
         z = ob.bullish[i];
@@ -2748,6 +2775,92 @@ function goldOrderBlockAt(rows, index, atr){
   }catch(e){ return { type: 'none' }; }
 }
 
+/* Stateful scan of unmitigated displacement OBs through `endIndex` (default
+   last bar). Close-based mitigation: bullish fails below base; bearish above
+   top. Stateless — no global mutable array. */
+function goldActiveOrderBlocks(rows, atr, endIndex){
+  var empty = [];
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 6) return empty;
+    var n = rows.length;
+    if (endIndex === undefined || endIndex === null) endIndex = n - 1;
+    endIndex = Math.floor(endIndex);
+    if (endIndex < 5) return empty;
+    if (endIndex >= n) endIndex = n - 1;
+    if (!isFinite(atr) || !(atr > 0)) atr = __last(_atr(rows, 14));
+    if (!isFinite(atr) || !(atr > 0)) return empty;
+    var active = [], i, ob, cur, j, dup;
+    for (i = 5; i <= endIndex; i++){
+      ob = goldOrderBlockAt(rows, i, atr);
+      if (ob && ob.type !== 'none' && !ob.mitigated){
+        dup = false;
+        for (j = 0; j < active.length; j++){
+          if (active[j].index === ob.index && active[j].type === ob.type){ dup = true; break; }
+        }
+        if (!dup){
+          active.push({ type: ob.type, top: ob.top, base: ob.base,
+                        index: ob.index, impulseIndex: ob.impulseIndex });
+        }
+      }
+      cur = rows[i].c;
+      if (!isFinite(cur)) continue;
+      active = active.filter(function(z){
+        if (z.type === 'bullish_ob' && cur < z.base) return false;
+        if (z.type === 'bearish_ob' && cur > z.top) return false;
+        return true;
+      });
+    }
+    return active;
+  }catch(e){ return empty; }
+}
+
+/* Incremental active-zone update at `index` (alias-friendly wrapper). */
+function goldUpdateActiveZones(rows, index, atr){
+  try{
+    rows = __rows(rows);
+    if (!rows || !rows.length) return { activeOrderBlocks: [] };
+    if (index === undefined || index === null) index = rows.length - 1;
+    return { activeOrderBlocks: goldActiveOrderBlocks(rows, atr, index) };
+  }catch(e){ return { activeOrderBlocks: [] }; }
+}
+
+/* Structure-aligned OB retest on bar `index`. Requires non-neutral trend;
+   long inside bullish OB in bullish trend, short mirror for bearish. */
+function goldOrderBlockRetest(rows, index, structure, activeObs){
+  var no = { trigger: false };
+  try{
+    rows = __rows(rows);
+    if (!rows || !rows.length) return no;
+    var n = rows.length;
+    if (index === undefined || index === null) index = n - 1;
+    index = Math.floor(index);
+    if (index < 0 || index >= n) return no;
+    structure = structure || { trend: 'neutral' };
+    if (!structure.trend || structure.trend === 'neutral') return no;
+    if (!activeObs || !activeObs.length){
+      activeObs = goldActiveOrderBlocks(rows, undefined, index);
+    }
+    var current = rows[index], ob, i;
+    for (i = 0; i < activeObs.length; i++){
+      ob = activeObs[i];
+      if (ob.type === 'bullish_ob' && structure.trend === 'bullish'){
+        if (current.l <= ob.top && current.c >= ob.base){
+          return { trigger: true, direction: 'long', anchor: ob.base, type: 'ob_retest',
+                   top: ob.top, base: ob.base, obType: ob.type, index: ob.index };
+        }
+      }
+      if (ob.type === 'bearish_ob' && structure.trend === 'bearish'){
+        if (current.h >= ob.base && current.c <= ob.top){
+          return { trigger: true, direction: 'short', anchor: ob.top, type: 'ob_retest',
+                   top: ob.top, base: ob.base, obType: ob.type, index: ob.index };
+        }
+      }
+    }
+    return no;
+  }catch(e){ return no; }
+}
+
 /* HardgateGoldEngine — scalp microstructure evaluator (volume profile first,
    then strict V2 triggers on the evaluation bar). Never throws. */
 function evaluateScalp(m15Data, ctx){
@@ -2796,6 +2909,24 @@ function evaluateScalp(m15Data, ctx){
           + (isFinite(fvgData.bottom) ? fvgData.bottom.toFixed(2) : 'n/a') + '–'
           + (isFinite(fvgData.top) ? fvgData.top.toFixed(2) : 'n/a')
           + ' (stop anchor ' + (isFinite(fvgData.anchor) ? fvgData.anchor.toFixed(2) : 'n/a') + ')'
+      });
+    }
+
+    var mstruct = goldMarketStructure(rows);
+    var activeOBs = goldActiveOrderBlocks(rows, undefined, index);
+    var obRet = goldOrderBlockRetest(rows, index, mstruct, activeOBs);
+    if (obRet && obRet.trigger){
+      out.activeTriggers.push('ORDER_BLOCK_RETEST');
+      out.agreeingReads++;
+      if (isFinite(obRet.anchor)) out.context.nearestStructure = obRet.anchor;
+      out.reads.push({
+        side: obRet.direction,
+        tag: 'ob_retest',
+        label: 'structure-aligned OB retest — '
+          + (obRet.obType === 'bullish_ob' ? 'bullish' : 'bearish') + ' zone '
+          + obRet.base.toFixed(2) + '–' + obRet.top.toFixed(2)
+          + ' with ' + mstruct.trend + ' fractal structure (stop anchor '
+          + obRet.anchor.toFixed(2) + ')'
       });
     }
     return out;
@@ -2850,8 +2981,13 @@ W.HardgateGoldEngine = HardgateGoldEngine;
 W.goldSwings = goldSwings;
 W.goldMarketStructure = goldMarketStructure;
 W.goldOrderBlockAt = goldOrderBlockAt;
+W.goldActiveOrderBlocks = goldActiveOrderBlocks;
+W.goldUpdateActiveZones = goldUpdateActiveZones;
+W.goldOrderBlockRetest = goldOrderBlockRetest;
 W.detectSwings = goldSwings;
 W.detectMarketStructure = goldMarketStructure;
 W.detectOrderBlocks = goldOrderBlockAt;
+W.updateActiveZones = goldUpdateActiveZones;
+W.detectOrderBlockRetest = goldOrderBlockRetest;
 W.goldDetectorReads = goldDetectorReads;
 })();
