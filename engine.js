@@ -346,21 +346,31 @@ function sanePlanSides(plan, dir){
    global, the local ATR fallback handles it (never happens in the browser —
    index.html defines smartSetup inline — kept for standalone/vm use). */
 function buildPlan(dir, cls, rows4h, rows1h){
+  function finish(plan){
+    if (!plan || !sanePlanSides(plan, dir)) return null;
+    if (typeof hgApplyExactEntry === 'function'){
+      try{
+        var style = plan.type ? String(plan.type).toLowerCase() : 'swing';
+        plan = hgApplyExactEntry(plan, rows4h, { rows1h: rows1h, style: style, preferEdge: true }) || plan;
+      }catch(eExact){}
+    }
+    return (plan && sanePlanSides(plan, dir)) ? plan : null;
+  }
   if (typeof smartSetup === 'function'){
     var c = cls || { dir: dir, longEv: [], shortEv: [], regime: [], score: 0, total: 0 };
     var plan = null;
     try{ plan = smartSetup(c, rows4h, rows1h) || null; }catch(e){ plan = null; }
-    if (plan && sanePlanSides(plan, dir)) return plan;
+    if (plan){ var fp = finish(plan); if (fp) return fp; }
     var hpl = hgPlanLevelsFn();
     if (hpl){
       var fb = null;
       try{ fb = normalizeHgPlan(hpl(dir, rows4h), dir, rows4h); }catch(e){ fb = null; }
-      if (fb && sanePlanSides(fb, dir)) return fb;
+      if (fb){ var ff = finish(fb); if (ff) return ff; }
     }
     return null;
   }
   var plan2 = atrFallbackPlan(dir, rows4h);
-  return (plan2 && sanePlanSides(plan2, dir)) ? plan2 : null;
+  return finish(plan2);
 }
 
 /* Fixed sizing policy (percent of equity), clearly labelled in the UI:

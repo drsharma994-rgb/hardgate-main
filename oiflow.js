@@ -297,9 +297,13 @@ function oiflowSetup(cls, rows4h, rows1h){
     var dirLow = String(cls.dir).toLowerCase();
     if (dirLow !== 'long' && dirLow !== 'short') return null;
     if (typeof smartSetup === 'function'){
-      return smartSetup({ dir: dirLow, longEv: cls.longEv, shortEv: cls.shortEv,
+      var setup = smartSetup({ dir: dirLow, longEv: cls.longEv, shortEv: cls.shortEv,
                           regime: cls.regime, score: cls.score, total: cls.total },
                         rows4h, rows1h) || null;
+      if (setup && typeof hgApplyExactEntry === 'function'){
+        setup = hgApplyExactEntry(setup, rows4h, { rows1h: rows1h, style: setup.type || 'swing', preferEdge: true }) || setup;
+      }
+      return setup;
     }
     if (typeof hgPlanLevelsCore === 'function'){
       var pl = hgPlanLevelsCore(dirLow, rows4h, null, { minRr: 2 });

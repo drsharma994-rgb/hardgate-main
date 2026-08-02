@@ -170,11 +170,203 @@ function hgPlanLevelsCore(dir, rows, entryOverride, opts){
     if (!plan) return null;
     plan.note = st.note;
     plan.planSrc = 'hgPlanLevels';
+    plan.type = opts.type || 'SWING';
+    plan.dir = dir;
+    if (opts.skipExact !== true){
+      var exactPl = hgApplyExactEntry(plan, rows, {
+        poiLevel: (isFinite(entryOverride) && entryOverride > 0) ? entryOverride : null,
+        poiLabel: opts.poiLabel,
+        style: opts.style || 'swing',
+        preferEdge: opts.preferEdge
+      });
+      if (exactPl) return exactPl;
+    }
     return plan;
   }catch(e){ return null; }
 }
 
-/* --- liquidity sweep: wick through level + reclaim within N bars --- */
+/* --- format LIMIT/MARKET entry label --- */
+function hgFormatEntryType(base, label){
+  try{
+    base = String(base || 'LIMIT');
+    label = String(label || '');
+    if (!label) return base;
+    if (base.indexOf('@') >= 0) return base;
+    return base + ' @ ' + label;
+  }catch(e){ return base || 'LIMIT'; }
+}
+
+/* --- generic POI / EMA exact entry (non-EDGE tabs) --- */
+function hgEnrichGenericExact(plan, rows, opts){
+  opts = opts || {};
+  try{
+    if (!plan || !plan.dir || !rows || !rows.length) return plan;
+    if (typeof atr !== 'function') return plan;
+    var dir = plan.dir;
+    var n = rows.length - 1;
+    var mark = isFinite(plan.mark) ? plan.mark : +rows[n].c;
+    var a4 = _last(atr(rows, 14));
+    if (!(isFinite(a4) && a4 > 0)) return plan;
+    var tol = 0.4 * a4;
+    var entry, anchor, zone, label;
+    if (isFinite(opts.poiLevel) && opts.poiLevel > 0){
+      entry = +opts.poiLevel;
+      anchor = entry;
+      label = opts.poiLabel || 'POI';
+      zone = { lo: entry - tol * 0.5, hi: entry + tol * 0.25 };
+    } else if (typeof ema === 'function'){
+      var c4 = rows.map(function(r){ return r.c; });
+      var e21 = _last(ema(c4, 21));
+      var e9 = _last(ema(c4, 9));
+      if (!isFinite(e21)) return plan;
+      var dist21 = Math.abs(mark - e21) / a4;
+      if (dist21 > 0.25){
+        entry = e21; anchor = e21; label = 'EMA21';
+        zone = { lo: e21 - tol * 0.5, hi: e21 + tol * 0.25 };
+      } else if (isFinite(e9) && Math.abs(mark - e9) / a4 > 0.25){
+        entry = (dir === 'long') ? Math.min(mark, e9) : Math.max(mark, e9);
+        anchor = e9; label = 'EMA9';
+        zone = { lo: e9 - tol * 0.5, hi: e9 + tol * 0.25 };
+      } else {
+        entry = mark; anchor = e21; label = 'EMA21';
+        zone = { lo: e21 - tol * 0.5, hi: e21 + tol * 0.25 };
+      }
+    } else return plan;
+    var ref = hgRefineEntry(mark, entry, zone, dir);
+    var entryType = ref.inZone ? hgFormatEntryType('MARKET', label) : hgFormatEntryType('LIMIT', label);
+    var stop = plan.stop;
+    if (isFinite(entry) && isFinite(stop) && Math.abs(entry - stop) > 1.5 * a4){
+      stop = (dir === 'long') ? entry - 1.5 * a4 : entry + 1.5 * a4;
+      entryType += ' · ATR-capped stop';
+    }
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return plan;
+    var minRr = opts.minRr || (plan.type === 'SCALP' ? 1.5 : HG_MIN_RR_DEFAULT);
+    var pr = hgPlanFromRisk(dir, entry, stop, {
+      t1R: plan.type === 'SCALP' ? HG_SCALP_T1_R : HG_T1_R,
+      t2R: plan.type === 'SCALP' ? HG_SCALP_T2_R : HG_T2_R,
+      minRr: minRr,
+      targetPolicy: plan.targetPolicy || 'R-multiples'
+    });
+    var out = Object.assign({}, plan, {
+      entry: entry, stop: stop, anchor: anchor, zone: zone, mark: mark,
+      entryType: entryType, entryGuidance: ref.guidance,
+      planSrc: plan.planSrc || 'hgExactEntry'
+    });
+    if (pr){
+      out.t1 = pr.t1; out.t2 = pr.t2; out.rr1 = pr.rr1; out.rr2 = pr.rr2; out.riskPct = pr.riskPct;
+    }
+    if (plan.type !== 'SCALP' && opts.style !== 'scalp'){
+      var tg = hgPlanSwingTargets(dir, entry, stop, a4, {});
+      if (tg){ out.t1 = tg.t1; out.t2 = tg.t2; out.rr1 = tg.rr1; out.targetPolicy = tg.targetPolicy; }
+    }
+    return out;
+  }catch(e){ return plan; }
+}
+
+/* --- scalp exact entry (15m EMA21 / sweep level) --- */
+function hgEnrichScalpExact(hit, m15, opts){
+  opts = opts || {};
+  try{
+    if (!hit || !hit.dir || !m15 || !m15.length) return hit;
+    if (typeof ema !== 'function' || typeof atr !== 'function') return hit;
+    var dir = hit.dir;
+    var n = m15.length - 1;
+    var mark = isFinite(hit.mark) ? hit.mark : m15[n].c;
+    var a = isFinite(hit.a) ? hit.a : _last(atr(m15, 14));
+    if (!(isFinite(a) && a > 0)) return hit;
+    var tol = 0.4 * a;
+    var c15 = m15.map(function(r){ return r.c; });
+    var e21 = isFinite(hit.e21) ? hit.e21 : _last(ema(c15, 21));
+    var entry, anchor, zone, label;
+    if (hit.swept && hit.reclaimed && isFinite(hit.sweepLevel)){
+      entry = hit.sweepLevel;
+      anchor = entry;
+      label = 'sweep level';
+      zone = (dir === 'long')
+        ? { lo: entry - tol * 0.25, hi: entry + tol * 0.5 }
+        : { lo: entry - tol * 0.5, hi: entry + tol * 0.25 };
+    } else if (isFinite(e21)){
+      entry = e21; anchor = e21; label = 'EMA21';
+      zone = { lo: e21 - tol * 0.5, hi: e21 + tol * 0.25 };
+    } else return hit;
+    var ref = hgRefineEntry(mark, entry, zone, dir);
+    var entryType = ref.inZone ? hgFormatEntryType('MARKET', label) : hgFormatEntryType('LIMIT', label);
+    var stop = hit.stop;
+    if (!(isFinite(stop))) return hit;
+    var pr = hgPlanFromRisk(dir, entry, stop, {
+      t1R: HG_SCALP_T1_R, t2R: HG_SCALP_T2_R, minRr: 1.5,
+      targetPolicy: 'scalp R-multiples (1.5R/2.5R)'
+    });
+    return Object.assign({}, hit, {
+      entry: entry, stop: stop,
+      t1: pr ? pr.t1 : hit.t1, t2: pr ? pr.t2 : hit.t2,
+      rr1: pr ? pr.rr1 : hit.rr, rr2: pr ? pr.rr2 : hit.rr2,
+      entryType: entryType, entryGuidance: ref.guidance,
+      anchor: anchor, zone: zone, mark: mark, planSrc: hit.planSrc || 'scalpTryClean'
+    });
+  }catch(e){ return hit; }
+}
+
+/* --- unified exact entry: EDGE signal first, then style enrichers --- */
+function hgApplyExactEntry(plan, rows4h, opts){
+  opts = opts || {};
+  try{
+    if (!plan || !plan.dir || !rows4h || !rows4h.length) return plan;
+    var dir = plan.dir;
+    var style = String(opts.style || plan.type || 'swing').toLowerCase();
+    var markClose = +rows4h[rows4h.length - 1].c;
+
+    if (typeof edgeSignal === 'function' && opts.preferEdge !== false
+        && style !== 'scalp' && style !== 'meanrev'){
+      try{
+        var sig = edgeSignal(rows4h);
+        if (sig && sig.dir === dir){
+          var et = sig.edge
+            ? ((sig.entryType === 'MARKET' ? 'MARKET @ ' : 'LIMIT @ ') + sig.edge)
+            : (sig.entryType || 'LIMIT');
+          return Object.assign({}, plan, {
+            entry: sig.entry, stop: sig.stop, t1: sig.t1, t2: sig.t2,
+            rr: sig.rr, rr1: sig.rr,
+            rr2: (sig.risk > 0) ? Math.abs(sig.t2 - sig.entry) / sig.risk : plan.rr2,
+            entryType: et, entryGuidance: sig.entryGuidance,
+            anchor: sig.anchor, zone: sig.zone, mark: sig.mark,
+            edge: sig.edge, planSrc: plan.planSrc || 'edgeSignal',
+            targetPolicy: plan.targetPolicy || 'exact structure (EDGE parity)'
+          });
+        }
+      }catch(eEdge){}
+    }
+
+    if (plan.entryType && plan.entryGuidance && isFinite(plan.entry)
+        && Math.abs(plan.entry - markClose) > 1e-9){
+      return plan;
+    }
+
+    if (style === 'scalp'){
+      return hgEnrichScalpExact(plan, opts.m15 || rows4h, opts);
+    }
+
+    if (typeof hgEnrichSmartPlan === 'function' && (style === 'swing' || plan.type === 'SWING')){
+      var sp = hgEnrichSmartPlan(Object.assign({ type: 'SWING' }, plan), rows4h);
+      if (sp) return sp;
+    }
+
+    return hgEnrichGenericExact(plan, rows4h, opts);
+  }catch(e){ return plan; }
+}
+
+function hgPlanMeta(plan){
+  try{
+    if (!plan) return {};
+    return {
+      entryType: plan.entryType,
+      entryGuidance: plan.entryGuidance,
+      targetPolicy: plan.targetPolicy
+    };
+  }catch(e){ return {}; }
+}
+
 function hgDetectLiquiditySweep(bars, i, dir, priorLevel, opts){
   opts = opts || {};
   try{
@@ -425,6 +617,11 @@ function hgEnrichSmartPlan(plan, rows4h){
 G.hgPlanSwingTargets = hgPlanSwingTargets;
 G.hgEnrichSwingClean = hgEnrichSwingClean;
 G.hgEnrichSmartPlan = hgEnrichSmartPlan;
+G.hgEnrichGenericExact = hgEnrichGenericExact;
+G.hgEnrichScalpExact = hgEnrichScalpExact;
+G.hgApplyExactEntry = hgApplyExactEntry;
+G.hgPlanMeta = hgPlanMeta;
+G.hgFormatEntryType = hgFormatEntryType;
 G.hgConfirmedCascade = hgConfirmedCascade;
 G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
 G.hgStructureStop = hgStructureStop;

@@ -1205,7 +1205,7 @@ async function runCoilScan(){
            ['BB width',fmt(currentWidth,2)+'% (avg '+fmt(avgWidth,2)+'%)'],['vol z',fmt(vz,2)],
            ['coil low',px(coilLow)],['coil high',px(coilHigh)]],
           ['G1 BB squeeze','G2 vol drought','G3 >4H 200 EMA'],
-          (pl ? planBlock(pl.dir,pl.entry,pl.stop,pl.t1,pl.t2,pl.note) : 'levels unavailable — size down')
+          (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
           pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
           { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null }));
@@ -1338,18 +1338,22 @@ async function runDivScan(){
         if (dir==="short" && stop-entry > maxStop){ stop = entry + maxStop; capped = true; }
         const risk = Math.abs(entry-stop);
         if (!(risk>0)) continue;
-        const t1 = dir==="long" ? entry+2*risk : entry-2*risk;
-        const t2 = dir==="long" ? entry+3*risk : entry-3*risk;
-        const rr = Math.abs(t1-entry)/risk;
-        if (!(rr>=2)) continue;
-        found++;
-        const reg = detectRegime(rows);
-        __cardsHtml.push(cardHTML(t.symbol, dir,
-          [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
-           ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
-          ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
-          planBlock(dir,entry,stop,t1,t2, capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : ''), entry, stop, t1, null,
-          { scanner: 'divergence', strategy: 'divergence', t2: t2 }));
+    const t1 = dir==='long' ? entry+2*risk : entry-2*risk;
+    const t2 = dir==='long' ? entry+3*risk : entry-3*risk;
+    const rr = Math.abs(t1-entry)/risk;
+    if (!(rr>=2)) continue;
+    var plObj = applyExactEntry({ dir: dir, type: 'SWING', entry: entry, stop: stop, t1: t1, t2: t2,
+      note: capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : '' },
+      rows, { style: 'swing', preferEdge: true });
+    entry = plObj.entry; stop = plObj.stop; t1 = plObj.t1; t2 = plObj.t2;
+    found++;
+    const reg = detectRegime(rows);
+    __cardsHtml.push(cardHTML(t.symbol, dir,
+      [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
+       ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
+      ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
+      planBlockExact(plObj, plObj.note), entry, stop, t1, null,
+      { scanner: 'divergence', strategy: 'divergence', t2: t2 }));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);
@@ -1585,17 +1589,8 @@ function smartSetup(cls, rows4h, rows1h){
     var out = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              rr1: rr1, rr2: Math.abs(t2 - entry)/risk, riskPct: risk/entry*100,
              confirmed: confirmed, note: note, targetPolicy: 'R-multiples (2R/3.5R)', planSrc: planSrc };
-    if (typeof hgRefineEntry === 'function' && typeof ema === 'function'){
-      try{
-        var e21n = last(ema(c4, 21));
-        var a4n = last(atr(rows4h, 14));
-        if (isFinite(e21n) && isFinite(a4n)){
-          var tolN = 0.4 * a4n;
-          var refN = hgRefineEntry(entry, e21n, { lo: e21n - tolN * 0.5, hi: e21n + tolN * 0.25 }, dir);
-          out.entryGuidance = refN.guidance;
-          out.entryType = (Math.abs(entry - e21n) / a4n > 0.25) ? 'LIMIT @ EMA21 (mark extended)' : 'MARKET';
-        }
-      }catch(eR){}
+    if (typeof hgApplyExactEntry === 'function'){
+      out = hgApplyExactEntry(out, rows4h, { rows1h: rows1h, style: 'swing', preferEdge: true }) || out;
     }
     return out;
   }
@@ -1620,9 +1615,13 @@ function smartSetup(cls, rows4h, rows1h){
   t1 = dir === 'long' ? entry + 1.5*sRisk : entry - 1.5*sRisk;
   t2 = dir === 'long' ? entry + 2.5*sRisk : entry - 2.5*sRisk;
   if (src === rows4h) scalpNote += ' · 4H-based (1H history short)';
-  return { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
+  var scalpOut = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
            rr1: Math.abs(t1 - entry)/sRisk, rr2: Math.abs(t2 - entry)/sRisk, riskPct: sRisk/entry*100,
-           confirmed: confirmed, note: scalpNote };
+           confirmed: confirmed, note: scalpNote, planSrc: planSrc };
+  if (typeof hgApplyExactEntry === 'function'){
+    scalpOut = hgApplyExactEntry(scalpOut, src, { rows1h: rows1h, style: 'scalp', m15: src }) || scalpOut;
+  }
+  return scalpOut;
 }
 
 function smartCardHTML(r){
@@ -1633,10 +1632,11 @@ function smartCardHTML(r){
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
   const regime = r.cls.regime.length ? r.cls.regime.join(' · ') + '. ' : '';
   const planTxt = s
-    ? regime + 'ENTRY <b>' + px(s.entry) + '</b> · STOP <b>' + px(s.stop) + '</b> · T1 <b>' + px(s.t1) + '</b> (' + fmt(s.rr1, 1) + 'R)'
+    ? regime + (s.entryType ? String(s.entryType) + ' ' : 'ENTRY ') + '<b>' + px(s.entry) + '</b> · STOP <b>' + px(s.stop) + '</b> · T1 <b>' + px(s.t1) + '</b> (' + fmt(s.rr1, 1) + 'R)'
       + ' · T2 <b>' + px(s.t2) + '</b> (' + fmt(s.rr2, 1) + 'R) · risk ' + fmt(s.riskPct, 2) + '%'
       + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
       + (s.note ? ' — ' + s.note : '')
+      + (s.entryGuidance ? '<div class="note" style="margin-top:4px;font-size:11px">' + s.entryGuidance + '</div>' : '')
       + (typeof hgPlanMetaLabel === 'function' && hgPlanMetaLabel(s) ? ' <span class="note">(' + hgPlanMetaLabel(s) + ')</span>' : '')
     : regime + 'Direction is an evidence majority, not a signal — confirm 4H structure, funding window and R:R on the SWING/SCALP tab before trading it.';
   const tradeBtn = s ? '<button class="toTrade" onclick="'
@@ -1853,7 +1853,7 @@ async function runApexScan(){
       __cardsHtml.push(cardHTML(r.sym,'long',
         [['mark',px(r.mark)],['BTC 24h',pct(btcRet24,2)],['asset 24h',pct(r.ret24,2)],['RS spread',pct(r.spread24,2)],['Nearest OB',nearestOBText(r.rows,'long')],['Liquidity Target',liquidityTargetText(r.rows,'long')]],
         ['G1 BTC headwind','G2 spread ≥5%','G3 1H EMA50 intact'],
-        (pl ? planBlock(pl.dir,pl.entry,pl.stop,pl.t1,pl.t2,pl.note) : 'levels unavailable — size down')
+        (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
         { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null }));
@@ -1935,15 +1935,18 @@ if (rr<1.5) continue;
 
 found++;
 const t2 = dir==='long' ? uOuter : lOuter;   // stretch target: opposite extreme band, beyond the mean
+var trapPl = applyExactEntry({ dir: dir, type: 'SCALP', entry: p, stop: stop, t1: t1, t2: t2,
+  note: 'mean reversion — stop tight behind the wick; target the mean first' },
+  rows, { style: 'scalp', m15: rows, poiLevel: dir==='long' ? lInner : uInner, poiLabel: 'inner band' });
 __cardsHtml.push(cardHTML(t.symbol, dir,
 [['mark',px(p)],['RSI now',fmt(rNow,1)],['RSI at sweep',fmt(rsiAtSweep,1)],['vol (ATR%)',fmt(atrPct,2)+'%'],
 [fmt(outerSD,1)+' SD swept ('+(rows.length-1-(dir==='long'?sweptLowAt:sweptHighAt))+'b ago)', dir==='long'?px(rows[sweptLowAt].l):px(rows[sweptHighAt].h)],
 [fmt(innerSD,1)+' SD reclaimed now', dir==='long'?px(lInner):px(uInner)],
 ['target (mean)',px(t1)]],
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
-planBlock(dir, p, stop, t1, t2, 'mean reversion — stop tight behind the wick; target the mean first')
+planBlockExact(trapPl, trapPl.note)
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-p, stop, t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: t2 }));
+trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2 }));
 }catch(e){}
 await sleep(100);
 }
@@ -2006,14 +2009,17 @@ async function runSmcScan(){
         if (dir === 'long' ? !(t1 > p) : !(t1 < p)) t1 = dir === 'long' ? p + 2*risk : p - 2*risk;   // liquidity target must lie beyond entry
         let t2 = dir === 'long' ? p + 3.5*risk : p - 3.5*risk;
         if (dir === 'long' ? t2 < t1 : t2 > t1) t2 = t1;   // T2 never behind T1
+        var smcPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
+          note: 'structural stop behind the FVG; T1 = nearest liquidity' }, rows,
+          { poiLevel: (fvg.top + fvg.bottom) / 2, poiLabel: 'FVG mid', preferEdge: true });
         __cardsHtml.push(cardHTML(t.symbol, dir, [
           ['mark', px(p)], ['Gap Age', `${fvg.age} bars (4H)`],
           ['FVG Top', px(fvg.top)], ['FVG Bottom', px(fvg.bottom)],
           ['Struct Stop', px(stop)], ['Target Liq', px(t1)]
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
-        planBlock(dir, p, stop, t1, t2, 'structural stop behind the FVG; T1 = nearest liquidity')
-        + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1, null,
-        { scanner: 'smc', strategy: 'smc', t2: t2 }));
+        planBlockExact(smcPl, smcPl.note)
+        + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', smcPl.entry, smcPl.stop, smcPl.t1, null,
+        { scanner: 'smc', strategy: 'smc', t2: smcPl.t2 }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2062,14 +2068,18 @@ async function runObScan(){
         if (dir === 'long' ? !(t1 > p) : !(t1 < p)) t1 = dir === 'long' ? p + 2*risk : p - 2*risk;   // liquidity target must lie beyond entry
         let t2 = dir === 'long' ? p + 3.5*risk : p - 3.5*risk;
         if (dir === 'long' ? t2 < t1 : t2 > t1) t2 = t1;   // T2 never behind T1
+        var obEntry = dir === 'long' ? ob.bottom + (ob.top - ob.bottom) * 0.382 : ob.top - (ob.top - ob.bottom) * 0.382;
+        var obPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
+          note: 'structural stop behind the OB; T1 = nearest liquidity' }, rows,
+          { poiLevel: obEntry, poiLabel: 'OB edge', preferEdge: true });
         __cardsHtml.push(cardHTML(t.symbol, dir, [
           ['mark', px(p)], ['OB Age', `${ob.age} bars (4H)`],
           ['OB Top', px(ob.top)], ['OB Bottom', px(ob.bottom)],
           ['Struct Stop', px(stop)], ['Liquidity Target', target ? `${px(target.level)} (x${target.count})` : px(t1)]
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
-        planBlock(dir, p, stop, t1, t2, 'structural stop behind the OB; T1 = nearest liquidity')
-        + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', p, stop, t1, null,
-        { scanner: 'ob', strategy: 'ob', t2: t2 }));
+        planBlockExact(obPl, obPl.note)
+        + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', obPl.entry, obPl.stop, obPl.t1, null,
+        { scanner: 'ob', strategy: 'ob', t2: obPl.t2 }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2448,6 +2458,16 @@ function hgMiniChart(el, rows, plan, opts){
 window.hgChartAvailable = hgChartAvailable;
 window.hgMiniChart = hgMiniChart;
 
+/* Apply EDGE-parity exact structure entry to any plan object. */
+function applyExactEntry(plan, rows4h, opts){
+  if (!plan || typeof hgApplyExactEntry !== 'function') return plan;
+  try{ return hgApplyExactEntry(plan, rows4h, opts || {}) || plan; }catch(e){ return plan; }
+}
+function planBlockExact(pl, note){
+  if (!pl) return 'levels unavailable — size down';
+  var meta = (typeof hgPlanMeta === 'function') ? hgPlanMeta(pl) : {};
+  return planBlock(pl.dir, pl.entry, pl.stop, pl.t1, pl.t2, note || pl.note || '', meta);
+}
 /* Universal plan line — same markup convention as oiflow.js / smartCardHTML
    (ENTRY · STOP · T1 · T2 + risk%), so every tab renders the same plan block.
    Optional note trails the line (e.g. scalp's time-stop). Invalid geometry
@@ -2547,7 +2567,8 @@ function hgPlanLevels(dir, rows, entryOverride){
     }
     const t1 = dir==='long' ? entry+2*risk : entry-2*risk;
     const t2 = dir==='long' ? entry+3.5*risk : entry-3.5*risk;
-    return { dir:dir, entry:entry, stop:stop, t1:t1, t2:t2, risk:risk, note:note };
+    var plFallback = { dir:dir, entry:entry, stop:stop, t1:t1, t2:t2, risk:risk, note:note, type:'SWING' };
+    return applyExactEntry(plFallback, rows, { poiLevel: entryOverride, style: 'swing', preferEdge: true });
   }catch(e){ return null; }
 }
 /* plan line from rows via the universal fallback, or the honest degrade note */
@@ -2555,7 +2576,7 @@ function hgPlanBlock(dir, rows, entryOverride, extraNote){
   const pl = hgPlanLevels(dir, rows, entryOverride);
   if (!pl) return 'levels unavailable — size down';
   const note = (pl.note && extraNote) ? pl.note+' · '+extraNote : (pl.note || extraNote || '');
-  return planBlock(pl.dir, pl.entry, pl.stop, pl.t1, pl.t2, note);
+  return planBlockExact(pl, note);
 }
 window.hgPlanLevels = hgPlanLevels;
 window.hgPlanBlock = hgPlanBlock;
@@ -2685,7 +2706,9 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet){
     ['Nearest OB', nearestOBText(m15, dir)],
     ['Liquidity Target', liquidityTargetText(m15, dir)]
   ], ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
-    planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h'), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2 }));
+    planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
+      entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
+    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2 }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), m15, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
 }
@@ -4069,7 +4092,7 @@ async function runBest(){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/7 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (session + value-area included), then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 7/7 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2)}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
         ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 })}
         <hr class="sep">
@@ -4769,12 +4792,17 @@ function judasSweepCheck(dir, d1rows, h1rows, m15rows){
     room = dir==='long' ? oppo-entry : entry-oppo;
     const rrOk = risk>0 && isFinite(room) && room>=2*risk;
     g.push(['JS6','2R fits before the opposite liquidity pool', rrOk?'pass':'veto', risk>0&&isFinite(room)?`room ${px(room)} vs 2R ${px(2*risk)} (pool ${px(oppo)})`:'\u2014']);
-    if (rrOk) t1 = dir==='long'?entry+2*risk:entry-2*risk;
+    if (rrOk){
+      t1 = dir==='long'?entry+2*risk:entry-2*risk;
+      var judasPl = applyExactEntry({ dir: dir, type: 'SCALP', entry: entry, stop: stop, t1: t1, t2: oppo },
+        m15rows, { style: 'scalp', m15: m15rows, poiLevel: sweptLvl, poiLabel: swept || 'sweep level' });
+      entry = judasPl.entry; stop = judasPl.stop; t1 = judasPl.t1;
+    }
   } else {
     g.push(['JS6','2R fits before the opposite pool','na','needs a completed sweep + reclaim first']);
   }
   const veto = g.some(x=>x[2]==='veto');
-  return { gates: g, veto, dir, entry, stop, t1, oppo };
+  return { gates: g, veto, dir, entry, stop, t1, oppo, rows: m15rows, m15: m15rows };
 }
 
 async function backtestScalpTD(h1rows, m15rows, ctl){
@@ -5059,7 +5087,11 @@ async function evalSwingSingle(sym, exch){
   const veto = g.some(x=>x[2]==='veto');
   const t2 = dir==='long'?p+a4*4.9:p-a4*4.9;
   const t1 = dir==='long'?p+expectedMove:p-expectedMove;
-  return {gates:g, veto, dir, entry:p, stop, t1, t2};
+  var swingRes = {gates:g, veto, dir, entry:p, stop, t1, t2, rows: rows};
+  if (!veto && typeof applyExactEntry === 'function'){
+    swingRes = Object.assign(swingRes, applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2 }, rows, { style: 'swing', preferEdge: true }));
+  }
+  return swingRes;
 }
 
 async function evalScalpSingle(sym, exch, tickerFundingPct, minsToFunding){
@@ -5113,7 +5145,13 @@ async function evalScalpSingle(sym, exch, tickerFundingPct, minsToFunding){
   const veto = g.some(x=>x[2]==='veto');
   const t1 = dir==='long'?entry+expectedMove:entry-expectedMove;
   const t2 = dir==='long'?entry+maxExcursion:entry-maxExcursion;
-  return {gates:g, veto, dir, entry, stop, t1, t2};
+  var scalpRes = {gates:g, veto, dir, entry, stop, t1, t2, rows: m15, m15: m15,
+    swept: sweptLiquidity, reclaimed: reclaimed, sweepLevel: dir==='long'?localLow:localHigh };
+  if (!veto && typeof applyExactEntry === 'function'){
+    scalpRes = Object.assign(scalpRes, applyExactEntry({ dir: dir, type: 'SCALP', entry: entry, stop: stop, t1: t1, t2: t2 },
+      m15, { style: 'scalp', m15: m15, poiLevel: dir==='long'?localLow:localHigh, poiLabel: 'sweep level' }));
+  }
+  return scalpRes;
 }
 
 async function evalGoldSwing(){
@@ -5153,12 +5191,16 @@ async function evalGoldSwing(){
     const room = casc==='long' ? Math.max(...h4.slice(-120).map(r=>r.h))-entry : entry-Math.min(...h4.slice(-120).map(r=>r.l));
     const rrOk = risk>0 && room/risk>=2;
     sg.push(['GS7','Structural R:R \u2265 2', rrOk?'pass':'veto', risk>0?`${fmt(room/risk,2)}R room`:'no structure']);
-    if(rrOk){ t1=casc==='long'?entry+2*risk:entry-2*risk; t2=casc==='long'?entry+3*risk:entry-3*risk; }
+    if(rrOk){ t1=casc==='long'?entry+2*risk:entry-2*risk; t2=casc==='long'?entry+3*risk:entry-3*risk;
+      var swingPl = applyExactEntry({ dir: casc, type: 'SWING', entry: entry, stop: stop, t1: t1, t2: t2 }, h4,
+        { style: 'swing', preferEdge: true });
+      entry = swingPl.entry; stop = swingPl.stop; t1 = swingPl.t1; t2 = swingPl.t2;
+    }
   } else {
     sg.push(['GS7','Structural R:R \u2265 2','na','no direction']);
   }
   const veto = sg.some(x=>x[2]==='veto');
-  return {gates:sg, veto, dir:casc!=='mixed'?casc:null, entry, stop, t1, t2};
+  return {gates:sg, veto, dir:casc!=='mixed'?casc:null, entry, stop, t1, t2, rows: h4};
 }
 
 function finderBookMeta(label, assetType){
@@ -5175,10 +5217,18 @@ function finderBookMeta(label, assetType){
 function renderStrategy(label, result, opts){
   opts = opts || {};
   if (result.error) return `<div class="panel"><h2>${label}</h2><div class="note warn">${result.error}</div></div>`;
+  if (!result.veto && result.dir && result.entry != null && result.rows && typeof applyExactEntry === 'function'){
+    var style = String(label).toLowerCase().indexOf('scalp') >= 0 ? 'scalp' : 'swing';
+    var ep = applyExactEntry({ dir: result.dir, type: style.toUpperCase(), entry: result.entry, stop: result.stop,
+      t1: result.t1, t2: result.t2 || result.t1 }, result.rows,
+      { style: style, m15: result.m15, preferEdge: style !== 'scalp' });
+    result = Object.assign({}, result, ep);
+  }
   const ledger = result.gates.map(g=>gateRow(...g)).join('');
   const verdict = result.veto ? 'NO TRADE' : (result.dir ? result.dir.toUpperCase()+' VALID' : 'STAND ASIDE');
   const planHtml = (!result.veto && result.dir && result.entry!=null && result.stop!=null && result.t1!=null)
-    ? `<div class="plan">${planBlock(result.dir, result.entry, result.stop, result.t1, result.t2||result.t1)}</div>`
+    ? `<div class="plan">${planBlock(result.dir, result.entry, result.stop, result.t1, result.t2||result.t1, '',
+        { entryType: result.entryType, entryGuidance: result.entryGuidance, targetPolicy: result.targetPolicy })}</div>`
     : '';
   let bookBtn = '';
   let tradeBtn = '';

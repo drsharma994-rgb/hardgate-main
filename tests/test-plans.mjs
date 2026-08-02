@@ -37,6 +37,8 @@ assert(typeof W.hgRegimeAllowsSetup === 'function', 'hgRegimeAllowsSetup');
 assert(typeof W.hgSwingParity === 'function', 'hgSwingParity');
 assert(typeof W.hgPlanSwingTargets === 'function', 'hgPlanSwingTargets');
 assert(typeof W.hgEnrichSwingClean === 'function', 'hgEnrichSwingClean');
+assert(typeof W.hgApplyExactEntry === 'function', 'hgApplyExactEntry');
+assert(typeof W.hgPlanMeta === 'function', 'hgPlanMeta');
 
 console.log('== structure stop ==');
 {
@@ -98,6 +100,15 @@ console.log('== enrich swing clean ==');
   var enriched = W.hgEnrichSwingClean(hit, rows, { e21: 108, e9: 109, a4: 2, p: 105 });
   assert(enriched && enriched.entryType && enriched.targetPolicy, 'enriched hit carries entry + target metadata');
   assert(enriched.t1 > hit.t1 || enriched.rr >= hit.rr, 'unified targets applied');
+}
+
+console.log('== apply exact entry ==');
+{
+  var plan = { dir: 'long', type: 'SWING', entry: 110, stop: 107, t1: 116, t2: 120 };
+  var rows = mkRows(80, 110);
+  var exact = W.hgApplyExactEntry(plan, rows, { style: 'swing', preferEdge: false });
+  assert(exact && exact.entryType && exact.entryGuidance, 'exact entry adds type + guidance');
+  assert(exact.entry !== 110 || exact.entryType.indexOf('MARKET') >= 0, 'EMA21 limit or in-zone market');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

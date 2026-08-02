@@ -208,7 +208,12 @@ function trendmxPlan(inp){
         var s = smartSetup({ dir: dir, longEv: c.longEv, shortEv: c.shortEv,
                              regime: c.regime, score: c.score, total: c.total },
                            rows, inp.rows1h);
-        if (tmValidSetup(s)) return s;
+        if (tmValidSetup(s)){
+          if (typeof hgApplyExactEntry === 'function'){
+            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
+          }
+          return s;
+        }
       }catch(eSmart){ /* a broken smartSetup degrades to the house fallback */ }
     }
 
