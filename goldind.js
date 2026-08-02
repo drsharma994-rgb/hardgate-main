@@ -989,7 +989,8 @@ var GST_NAME = {
   vwapband: 'VWAP BAND MEAN-REVERSION',
   openrange: 'OPENING RANGE BREAKOUT',
   adrfade: 'ADR EXHAUSTION FADE',
-  bosalign: 'BOS ALIGNMENT ENTRY'
+  bosalign: 'BOS ALIGNMENT ENTRY',
+  hvn:      'HVN / VOLUME NODE RETEST'
 };
 
 /* shared ATR-survival level builder: stop 1.5-2x ATR14(15m) (never tighter),
@@ -1267,6 +1268,55 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
 
+  /* volume profile + spike microstructure (feeds sweep confirmation + HVN reads) */
+  D.vprof = goldVolumeProfile(rows, 100, 50);
+  D.volSpike = goldVolumeSpike(rows);
+  D.volSpikeSweep = false;
+  D.nearestHVN = NaN;
+  var vpRange = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
+    ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
+  D.vpOk = isFinite(vpRange) && vpRange >= 2.5*a15;
+  if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
+    var swIdx = rows.length - 1 - sw.barsAgo;
+    if (swIdx >= 0 && goldVolumeSpike(rows, swIdx)){
+      D.volSpikeSweep = true;
+      if (sw.dir === 'bullish'){
+        add('long', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms sell-side liquidity taken');
+      } else {
+        add('short', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms buy-side liquidity taken');
+      }
+    }
+  }
+  if (D.vprof && D.vpOk && isFinite(D.vprof.pocPrice)){
+    var pocPx = D.vprof.pocPrice;
+    if (Math.abs(entry - pocPx) <= 0.75*a15){
+      if (entry >= pocPx){
+        add('short', 'poc', 'price at session POC ' + pocPx.toFixed(2) + ' — fair-value magnet from above', true);
+      } else {
+        add('long', 'poc', 'price at session POC ' + pocPx.toFixed(2) + ' — fair-value magnet from below', true);
+      }
+    }
+    var hvns = D.vprof.hvns;
+    if (hvns && hvns.length){
+      var nearH = NaN, nearD = Infinity, hi;
+      for (hi = 0; hi < hvns.length; hi++){
+        var dH = Math.abs(entry - hvns[hi]);
+        if (dH < nearD){ nearD = dH; nearH = hvns[hi]; }
+      }
+      D.nearestHVN = nearH;
+      if (isFinite(nearH) && nearD <= 0.5*a15){
+        if (entry >= nearH){
+          add('long', 'hvn', 'price retesting HVN support at ' + nearH.toFixed(2) + ' — high-volume node holding');
+        } else {
+          add('short', 'hvn', 'price retesting HVN resistance at ' + nearH.toFixed(2) + ' — high-volume node capping');
+        }
+      }
+    }
+  }
+  if (D.volSpike && !(sw && sw.barsAgo !== null && sw.barsAgo <= 2)){
+    D.notes.push('volume spike on the current bar — climax/absorption watch; confirm direction before entry');
+  }
+
   D.rb4 = null;
   if (rows4h && rows4h.length >= 50){
     var rb4 = D.rb4 = goldRibbon(rows4h);
@@ -1392,9 +1442,13 @@ function goldScalpSetups(inp){
     var sw = D.sw;
     if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
       var sdir = (sw.dir === 'bullish') ? 'long' : 'short';
+      var swWhy = 'swept ' + (sdir === 'long' ? 'sell-side liquidity at ' : 'buy-side liquidity at ') + sw.level.toFixed(2)
+          + ' and reclaimed within ' + sw.barsAgo + ' bar(s) — the stop hunt is complete, reversal fuel is loaded';
+      if (D.volSpikeSweep){
+        swWhy += ' — volume climax on the sweep bar confirms absorption at the liquidity pool';
+      }
       push(__gsCand('sweep', sdir, D, sw.level, __gsSnapLvls(D, sdir),
-        'swept ' + (sdir === 'long' ? 'sell-side liquidity at ' : 'buy-side liquidity at ') + sw.level.toFixed(2)
-          + ' and reclaimed within ' + sw.barsAgo + ' bar(s) — the stop hunt is complete, reversal fuel is loaded',
+        swWhy,
         'a 15m close back beyond ' + sw.level.toFixed(2) + ' (the swept ' + (sdir === 'long' ? 'low' : 'high') + ') negates the reclaim',
         undefined, sw.level));
     }
@@ -1578,6 +1632,23 @@ function goldScalpSetups(inp){
       }
     }
 
+    /* --- 12) HVN / volume-node retest (session volume profile) --- */
+    if (D.vpOk && D.vprof && isFinite(D.nearestHVN) && Math.abs(entry - D.nearestHVN) <= 0.5*a15
+        && (D.volSpike || D.volSpikeSweep)){
+      var hvn = D.nearestHVN;
+      var hdir = (entry >= hvn) ? 'long' : 'short';
+      var hWhy = 'price retesting the high-volume node at ' + hvn.toFixed(2);
+      if (D.volSpike){
+        hWhy += ' on a volume-climax bar — absorption at the node';
+      } else {
+        hWhy += ' — session volume profile support/resistance';
+      }
+      push(__gsCand('hvn', hdir, D, hvn, __gsSnapLvls(D, hdir),
+        hWhy,
+        'a 15m close ' + (hdir === 'long' ? 'below' : 'above') + ' the HVN at ' + hvn.toFixed(2) + ' negates the node',
+        { lo: hvn - 0.25*a15, hi: hvn + 0.25*a15 }, hvn));
+    }
+
     return out;
   }catch(e){ return []; }
 }
@@ -1725,6 +1796,16 @@ function goldWatch(inp){
         'RSI now ' + rg.rsi.toFixed(1) + ' — fires on a fresh price extreme with a lower RSI extreme (75/25 divergence)'
           + (isFinite(piv) ? '; pivot to beat ' + piv.toFixed(2) : ' — no levels available yet (no confirmed pivot)'), null);
     } else emit('rsidiv', 'idle', null, '', 'no levels available (RSI(14) not computable on these bars)');
+
+    /* 8) HVN / volume-node — nearest high-volume node from the session profile */
+    if (D.vpOk && isFinite(D.nearestHVN)){
+      emit('hvn', 'armed', D.nearestHVN,
+        'watching HVN at ' + D.nearestHVN.toFixed(2) + ' (session volume profile) — fires on a retest within 0.5×ATR'
+          + (D.volSpike ? ' with a volume-climax bar' : ''), null);
+    } else if (D.vpOk && D.vprof && isFinite(D.vprof.pocPrice)){
+      emit('hvn', 'armed', D.vprof.pocPrice,
+        'watching session POC at ' + D.vprof.pocPrice.toFixed(2) + ' — fires on a retest within 0.75×ATR', null);
+    } else emit('hvn', 'idle', null, '', 'no volume profile yet (needs >=3 bars with range and volume)');
 
     return out;
   }catch(e){ return []; }

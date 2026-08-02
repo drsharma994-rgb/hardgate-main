@@ -1374,7 +1374,7 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
 
   const rows = compLongRows();
   const wl = W.goldWatch({ rows15m: rows, now: OFF_NOW, tf: '15m' });
-  assert(Array.isArray(wl) && wl.length === 7, 'goldWatch: one watch item per scalp strategy (7)');
+  assert(Array.isArray(wl) && wl.length === 8, 'goldWatch: one watch item per scalp strategy (8)');
   assert(wl.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,stratKey,strategy'),
          'goldWatch: every item carries EXACTLY {stratKey, strategy, state, level, condition, reason}');
   assert(wl.every(w => (w.state === 'armed' && typeof w.condition === 'string' && w.condition.length > 10)
@@ -1489,7 +1489,7 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
       && wHtml.indexOf('armed setups are watch items, not entries') >= 0,
       'FORMING NOW panel rendered after the cards with the honest watch-item label');
   assert(wHtml.indexOf('ARMED') >= 0, 'armed rows highlighted in the panel');
-  assert(Array.isArray(wScan.armed) && wScan.armed.length === 7, 'snapshot.armed: 7 watch items (one venue leg)');
+  assert(Array.isArray(wScan.armed) && wScan.armed.length === 8, 'snapshot.armed: 8 watch items (one venue leg)');
   assert(wScan.armed.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,strategy,venue'
       && w.venue === 'BINANCE XAUUSDT'),
          'snapshot.armed entries carry EXACTLY {strategy, venue, state, level, condition, reason}, venue-tagged');
@@ -1569,6 +1569,13 @@ console.log('== volume microstructure ==');
   assert(W.goldVolumeSpike(base, 10) === false, 'goldVolumeSpike: mid bar at flat volume -> false');
   const prof = W.goldVolumeProfile(base, 25, 10);
   assert(prof && isFinite(prof.pocPrice) && Array.isArray(prof.hvns), 'goldVolumeProfile: returns POC + hvns array');
+  const sweepRows = compLongRows();
+  const swCands = W.goldScalpSetups({ rows15m: sweepRows, now: OFF_NOW });
+  const swCand = swCands.find(c => c.stratKey === 'sweep');
+  assert(!!swCand && swCand.why.indexOf('volume climax') >= 0,
+         'goldScalpSetups: sweep candidate cites volume climax when sweep bar spikes');
+  assert(swCand && swCand.confluence.some(l => l.indexOf('volume climax on the liquidity sweep') >= 0),
+         'goldScalpSetups: volspike read in sweep confluence ledger');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
