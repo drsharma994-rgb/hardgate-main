@@ -74,7 +74,7 @@ console.log('== 0) exports + tab registration ==');
                  'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
                  'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2',
                  'goldSwings','goldMarketStructure','goldOrderBlockAt',
-                 'detectSwings','detectMarketStructure','detectOrderBlocks'];
+                 'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
   assert(!!tab && tab.label === 'GOLD SCALP' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
@@ -554,7 +554,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
                  'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2',
                  'goldSwings','goldMarketStructure','goldOrderBlockAt',
-                 'detectSwings','detectMarketStructure','detectOrderBlocks'];
+                 'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
   for (const nm of names){
@@ -1633,6 +1633,9 @@ console.log('== SMC market structure ==');
   assert(sw.highs.length >= 2 && sw.lows.length >= 2, 'goldSwings: zigzag yields swing pivots');
   const ms = W.goldMarketStructure(zz, sw);
   assert(ms.bos === true && ms.trend === 'bullish', 'goldMarketStructure: close above HH -> bullish BOS');
+  const ledger = W.goldDetectorReads({ rows15m: zz });
+  assert(ledger.some(r => r.tag === 'bos' && r.side === 'long' && /fractal BOS bullish/.test(r.label)),
+         'goldDetectorReads: fractal BOS in confluence ledger');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
