@@ -71,7 +71,7 @@ console.log('== 0) exports + tab registration ==');
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
                  'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
-                 'goldVolumeSpike','goldVolumeProfile'];
+                 'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
   assert(!!tab && tab.label === 'GOLD SCALP' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
@@ -548,7 +548,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
                  'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
-                 'goldVolumeSpike','goldVolumeProfile'];
+                 'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
   for (const nm of names){
@@ -662,7 +662,8 @@ function checkCandShape(c, key, dir, msg){
     rows.push({ t: DAY + 33*900, o: 103, h: 104, l: 102, c: 103.5, v: 1000 });
     let px = 103.5;
     for (let i = 34; i < 44; i++){ const o = px; px = o - 0.3;
-      rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: 1000 }); }
+      const v = (px >= 99.8 && px <= 101.2) ? 8000 : 1000;
+      rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: v }); }
     rows.push({ t: DAY + 44*900, o: px, h: px + 0.3, l: px - 0.15, c: 100.7, v: 1200 });
     return rows;
   }
@@ -1345,7 +1346,8 @@ function fvgRows27(){                                     /* unmitigated bullish
   rows.push({ t: DAY + 33*900, o: 103, h: 104, l: 102, c: 103.5, v: 1000 });
   let px = 103.5;
   for (let i = 34; i < 44; i++){ const o = px; px = o - 0.3;
-    rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: 1000 }); }
+    const v = (px >= 99.8 && px <= 101.2) ? 8000 : 1000;
+    rows.push({ t: DAY + i*900, o: o, h: Math.max(o, px) + 0.35, l: Math.min(o, px) - 0.35, c: px, v: v }); }
   rows.push({ t: DAY + 44*900, o: px, h: px + 0.3, l: px - 0.15, c: 100.7, v: 1200 });
   return rows;
 }
@@ -1576,6 +1578,17 @@ console.log('== volume microstructure ==');
          'goldScalpSetups: sweep candidate cites volume climax when sweep bar spikes');
   assert(swCand && swCand.confluence.some(l => l.indexOf('volume climax on the liquidity sweep') >= 0),
          'goldScalpSetups: volspike read in sweep confluence ledger');
+  assert(swCand && swCand.why.indexOf('volume-validated') >= 0,
+         'goldScalpSetups: sweep why cites V2 volume validation');
+  const v2sw = W.goldSweepV2(base, 29, 10, 20, 1.5);
+  assert(v2sw && v2sw.trigger === false, 'goldSweepV2: flat tail bar is not a V2 sweep');
+  const v2rows = compLongRows();
+  const v2hit = W.goldSweepV2(v2rows, 109, 10, 20, 1.5);
+  assert(v2hit && v2hit.trigger === true && v2hit.dir === 'long', 'goldSweepV2: compLongRows sweep bar triggers long');
+  const fvgR = fvgRows27();
+  const fvgG = W.goldFVG(fvgR)[0];
+  const fvgP = W.goldVolumeProfile(fvgR);
+  assert(W.goldFVGHasHVNSupport(fvgG, fvgP) === true, 'goldFVGHasHVNSupport: fvg fixture gap has HVN launchpad');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

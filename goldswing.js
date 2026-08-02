@@ -53,6 +53,8 @@ stamp instead.
 
 goldind.js detector layer is consumed READ-ONLY and every export is
 feature-checked (gfn): goldSweeps / goldOrderBlocks / goldFVG / goldVWAP /
+goldVolumeSpike / goldVolumeProfile / goldSweepV2 / goldFVGV2 (V2 triggers:
+volume-validated sweeps + HVN-backed FVG when goldind.js is loaded).
 goldKillzone (session context only) / goldNewsCaution / goldSeason. ATR +
 EMA are taken from indicators.js globals (atr/ema) when loaded, with local
 copies identical to goldind.js's own fallbacks otherwise (goldind.js does
@@ -836,23 +838,43 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
       }
     } else if (!obFn) notes.push('goldOrderBlocks unavailable (goldind.js) — order-block evidence skipped');
 
-    /* 4h FVG imbalance (goldind.js, read-only) */
+    /* 4h FVG imbalance (goldind.js, read-only) — V2: HVN defends gap when profile is wide */
     var fvg = null, fvgFn = gfn('goldFVG');
     if (fvgFn){ try{ fvg = fvgFn(rows4); }catch(eF){ fvg = null; } }
+    var vprof4 = null, hvnFn = gfn('goldFVGHasHVNSupport'), vpFn = gfn('goldVolumeProfile');
+    if (vpFn){ try{ vprof4 = vpFn(rows4, 100, 50); }catch(eVp){ vprof4 = null; } }
+    var vpOk4 = vprof4 && isFinite(vprof4.maxPrice) && isFinite(vprof4.minPrice)
+      && (vprof4.maxPrice - vprof4.minPrice) >= 2.5*a4;
     if (fvg && fvg.length){
       var g = fvg[0];
       if (g.age <= 25){
-        if (g.dir === 'bullish' && entry >= g.bottom) add('long', 'fvg4h', 'unmitigated 4h FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' holding below price');
-        else if (g.dir === 'bearish' && entry <= g.top) add('short', 'fvg4h', 'unmitigated 4h FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2) + ' capping above price');
+        var fvgOk = !vpOk4 || (hvnFn && hvnFn(g, vprof4));
+        if (fvgOk){
+          if (g.dir === 'bullish' && entry >= g.bottom){
+            add('long', 'fvg4h', 'unmitigated 4h FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2)
+                + ' holding below price' + (vpOk4 ? ' — HVN defends the gap' : ''));
+          } else if (g.dir === 'bearish' && entry <= g.top){
+            add('short', 'fvg4h', 'unmitigated 4h FVG ' + g.bottom.toFixed(2) + '–' + g.top.toFixed(2)
+                + ' capping above price' + (vpOk4 ? ' — HVN defends the gap' : ''));
+          }
+        }
       }
     } else if (!fvgFn) notes.push('goldFVG unavailable (goldind.js) — imbalance evidence skipped');
 
-    /* 4h liquidity sweeps (goldind.js, read-only) */
+    /* 4h liquidity sweeps (goldind.js, read-only) — V2: volume climax on sweep bar */
     var sw = null, swFn = gfn('goldSweeps');
+    var volFn = gfn('goldVolumeSpike');
     if (swFn){ try{ sw = swFn(rows4); }catch(eS){ sw = null; } }
     if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
-      if (sw.dir === 'bullish') add('long', 'sweep4h', '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago)');
-      else add('short', 'sweep4h', '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + rejection (' + sw.barsAgo + 'b ago)');
+      var swIdx4 = n - 1 - sw.barsAgo;
+      var swVol4 = !volFn || (swIdx4 >= 0 && volFn(rows4, swIdx4, 20, 1.5));
+      if (swVol4){
+        if (sw.dir === 'bullish'){
+          add('long', 'sweep4h', '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
+        } else {
+          add('short', 'sweep4h', '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + rejection (' + sw.barsAgo + 'b ago) — volume-validated');
+        }
+      }
     } else if (!swFn) notes.push('goldSweeps unavailable (goldind.js) — sweep evidence skipped');
 
     /* prior week high/low from real 1d bars */
@@ -933,18 +955,25 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
       var rStart = Math.max(0, n - 11);
       for (i = rStart; i < n; i++){
         var rr2 = rows4[i], ago = n - 1 - i;
-        if (rr2.l < wk.lo && rr2.c > wk.lo) rec = { dir: 'long', level: wk.lo, barsAgo: ago };
-        else if (rr2.h > wk.hi && rr2.c < wk.hi) rec = { dir: 'short', level: wk.hi, barsAgo: ago };
+        if (rr2.l < wk.lo && rr2.c > wk.lo) rec = { dir: 'long', level: wk.lo, barsAgo: ago, barIndex: i };
+        else if (rr2.h > wk.hi && rr2.c < wk.hi) rec = { dir: 'short', level: wk.hi, barsAgo: ago, barIndex: i };
       }
       if (rec){
-        push(mkCand('wkbreak', rec.dir, rec.level, rec.level, undefined,
-          'prior week\u2019s ' + (rec.dir === 'long' ? 'low' : 'high') + ' ' + rec.level.toFixed(2)
-            + ' swept and reclaimed ' + (rec.barsAgo === 0 ? 'on the latest 4h close' : rec.barsAgo + ' 4h bar(s) ago')
-            + ' — the stop raid on the weekly range is complete, mean-reversion fuel loaded',
-          'a 4h close back ' + (rec.dir === 'long' ? 'below' : 'above') + ' ' + rec.level.toFixed(2)
-            + ' (the swept weekly level) negates the reclaim',
-          { side: rec.dir, tag: 'wkbreak', label: 'weekly range sweep + reclaim of ' + rec.level.toFixed(2)
-            + ' (' + rec.barsAgo + 'b ago)' }));
+        var wkVolOk = !volFn || volFn(rows4, rec.barIndex, 20, 1.5);
+        if (wkVolOk){
+          push(mkCand('wkbreak', rec.dir, rec.level, rec.level, undefined,
+            'prior week\u2019s ' + (rec.dir === 'long' ? 'low' : 'high') + ' ' + rec.level.toFixed(2)
+              + ' swept and reclaimed ' + (rec.barsAgo === 0 ? 'on the latest 4h close' : rec.barsAgo + ' 4h bar(s) ago')
+              + ' — volume-validated stop raid on the weekly range, mean-reversion fuel loaded',
+            'a 4h close back ' + (rec.dir === 'long' ? 'below' : 'above') + ' ' + rec.level.toFixed(2)
+              + ' (the swept weekly level) negates the reclaim',
+            { side: rec.dir, tag: 'wkbreak', label: 'weekly range sweep + reclaim of ' + rec.level.toFixed(2)
+              + ' (' + rec.barsAgo + 'b ago) — volume-validated' }));
+        } else {
+          out.rejected.push({ dropped: true, id: 'wkbreak|' + rec.dir + '|' + Math.round(rec.level),
+            strategy: SW_NAME.wkbreak, stratKey: 'wkbreak', dir: rec.dir, venue: venue, sym: sym,
+            reason: 'weekly sweep without volume climax — V2 gate requires institutional absorption on the sweep bar' });
+        }
       } else {
         var lb = rows4[n-1], rng = lb.h - lb.l;
         if (lb.c > wk.hi && lb.c > lb.o && rng >= 1.5*a4){
