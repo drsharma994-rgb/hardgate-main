@@ -749,11 +749,14 @@ function __swLevels(dir, entry, a4, structStop){
   }
   var stop = (dir === 'long') ? entry - stopDist : entry + stopDist;
   var risk = stopDist;
+  var gT1 = (typeof HG_GOLD_T1_R === 'number') ? HG_GOLD_T1_R : 1.5;
+  var gT2 = (typeof HG_GOLD_T2_R === 'number') ? HG_GOLD_T2_R : 2.5;
+  var gT3 = (typeof HG_GOLD_T3_R === 'number') ? HG_GOLD_T3_R : 4.0;
   return { stop: stop,
-           t1: (dir === 'long') ? entry + 1.5*risk : entry - 1.5*risk,
-           t2: (dir === 'long') ? entry + 2.5*risk : entry - 2.5*risk,
-           t3: (dir === 'long') ? entry + 4.0*risk : entry - 4.0*risk,
-           rr: 1.5, rr2: 2.5, rr3: 4.0, stopNote: stopNote };
+           t1: (dir === 'long') ? entry + gT1*risk : entry - gT1*risk,
+           t2: (dir === 'long') ? entry + gT2*risk : entry - gT2*risk,
+           t3: (dir === 'long') ? entry + gT3*risk : entry - gT3*risk,
+           rr: gT1, rr2: gT2, rr3: gT3, stopNote: stopNote, targetPolicy: 'gold ladder ' + gT1 + 'R/' + gT2 + 'R/' + gT3 + 'R' };
 }
 
 /* per-venue candidate composition. Every detector is feature-checked and
