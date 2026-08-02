@@ -718,6 +718,63 @@ function hgExTurnoverUni(minTurn){
   return S.tickers.slice();
 }
 
+/* Default: scan Delta India + CoinDCX on every tab open / SCAN click.
+   Set localStorage hg_dual_scan='0' to restore single-exchange (header toggle only). */
+const HG_DUAL_CRYPTO_EX = ['delta', 'coindcx'];
+function hgDualScanEnabled(){
+  try{ if (localStorage.getItem('hg_dual_scan') === '0') return false; }catch(e){}
+  return true;
+}
+function hgCardVenueSym(sym, venueTag){
+  if (!venueTag) return sym;
+  return '[' + venueTag + '] ' + sym;
+}
+async function withExchange(ex, fn){
+  const prevEx = S.exchange, prevTickers = S.tickers, prevCache = S.candleCache;
+  S.exchange = ex;
+  S.tickers = [];
+  S.candleCache = {};
+  try{ return await fn(); }
+  finally{
+    S.exchange = prevEx;
+    S.tickers = prevTickers;
+    S.candleCache = prevCache;
+  }
+}
+async function hgForEachDualExchange(fn, opts){
+  opts = opts || {};
+  if (opts.singleExchange || !hgDualScanEnabled() || S.exchange === 'startrader'){
+    return [await fn({ ex: S.exchange, venueTag: hgExLabel(), first: true, last: true })];
+  }
+  const out = [];
+  for (let i = 0; i < HG_DUAL_CRYPTO_EX.length; i++){
+    const ex = HG_DUAL_CRYPTO_EX[i];
+    let leg;
+    await withExchange(ex, async function(){
+      leg = await fn({ ex: ex, venueTag: hgExLabel(ex), first: i === 0, last: i === HG_DUAL_CRYPTO_EX.length - 1 });
+    });
+    out.push(leg);
+  }
+  return out;
+}
+function hgDualScanEntry(fn, opts){
+  opts = opts || {};
+  if (opts._singleLeg || opts.singleExchange || !hgDualScanEnabled()) return fn(opts);
+  return hgForEachDualExchange(function(leg){
+    return fn(Object.assign({}, opts, { _singleLeg: true, skipUiClear: !leg.first, venueTag: leg.venueTag, dualLeg: true }));
+  }, opts);
+}
+async function hgDualCryptoScanLoop(fn, opts){
+  opts = opts || {};
+  if (opts._singleLeg || opts.singleExchange || !hgDualScanEnabled()) return fn(opts);
+  for (let i = 0; i < HG_DUAL_CRYPTO_EX.length; i++){
+    await withExchange(HG_DUAL_CRYPTO_EX[i], () => fn(Object.assign({}, opts, {
+      _singleLeg: true, skipUiClear: i > 0, venueTag: hgExLabel(HG_DUAL_CRYPTO_EX[i]),
+      dualLast: i === HG_DUAL_CRYPTO_EX.length - 1
+    })));
+  }
+}
+
 const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
 const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
@@ -1166,10 +1223,24 @@ async function setExchange(x){
   }
   renderBiasChips();
 }
-async function runCoilScan(){
-  const st0=$('coilStat'); if (!(await waitAlertIdle(st0))) return;
+async function runCoilScan(opts){
+  opts = opts || {};
+  const st0=$('coilStat');
+  if (!opts._singleLeg && !(await waitAlertIdle(st0))) return;
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    return hgDualCryptoScanLoop(runCoilScanLeg, opts);
+  }
+  return runCoilScanLeg(opts);
+}
+async function runCoilScanLeg(opts){
+  opts = opts || {};
+  const skipUiClear = !!opts.skipUiClear;
+  const venueTag = opts.venueTag || '';
+  const st0=$('coilStat'); if (!skipUiClear && !(await waitAlertIdle(st0))) return;
   const btn=$('coilRun'); const cardsEl=$('coilCards'); const emptyEl=$('coilEmpty'); const statEl=$('coilStat');
-  btn.disabled=true; cardsEl.innerHTML=''; let __cardsHtml = []; emptyEl.style.display='none';
+  if (!skipUiClear){ btn.disabled=true; cardsEl.innerHTML=''; emptyEl.style.display='none'; }
+  else if (venueTag) cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers=await getTickers();
     const uni = S.exchange==='delta' ? S.tickers.filter(t=>t.turnoverUsd>=500000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
@@ -1200,7 +1271,7 @@ async function runCoilScan(){
         found++;
         coilList.push({symbol: t.symbol, dir: "long", coilLow: coilLow, coilHigh: coilHigh});
         const pl = hgPlanLevels('long', rows, coilLow);
-        __cardsHtml.push(cardHTML(t.symbol,'long',
+        __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag),'long',
           [['mark',px(t.mark||p)],['24h',t.chg24!=null?pct(t.chg24,2):'—'],
            ['BB width',fmt(currentWidth,2)+'% (avg '+fmt(avgWidth,2)+'%)'],['vol z',fmt(vz,2)],
            ['coil low',px(coilLow)],['coil high',px(coilHigh)]],
@@ -1213,19 +1284,18 @@ async function runCoilScan(){
       await sleep(120);
     }
     saveCoilWatch(coilList);
-    statEl.textContent=`done — ${found} coils found`;
+    statEl.textContent=(venueTag ? venueTag + ' · ' : '') + `done — ${found} coils found`;
     const coilEl = $('coilWatch');
     if (coilEl && typeof cryptoFormingNowHTML === 'function' && typeof coilWatchItems === 'function'){
       if (typeof cryptoWatchInjectStyles === 'function') cryptoWatchInjectStyles();
       coilEl.innerHTML = cryptoFormingNowHTML(coilWatchItems({ list: coilList, ex: S.exchange }));
     }
-    if (!found) emptyEl.style.display='block';
+    if (!found && !skipUiClear) emptyEl.style.display='block';
   }catch(e){
     statEl.textContent=`coil scan failed: ${e.message}`;
   }finally{
-cardsEl.innerHTML = __cardsHtml.join('');
-    setProg('coilProg', null);
-    btn.disabled=false;
+    cardsEl.insertAdjacentHTML('beforeend', __cardsHtml.join(''));
+    if (opts.dualLast !== false){ setProg('coilProg', null); btn.disabled=false; }
   }
 }
 
@@ -1276,10 +1346,23 @@ async function runExpansionCheck(){
   finally{
 cardsEl.innerHTML = __cardsHtml.join(''); setProg("expProg", null); btn.disabled=false; }
 }
-async function runDivScan(){
-  const st0=$("divStat"); if (!(await waitAlertIdle(st0))) return;
+async function runDivScan(opts){
+  opts = opts || {};
+  const st0=$("divStat");
+  if (!opts._singleLeg && !(await waitAlertIdle(st0))) return;
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    return hgDualCryptoScanLoop(function(o){ return runDivScanLeg(o); }, opts);
+  }
+  return runDivScanLeg(opts);
+}
+async function runDivScanLeg(opts){
+  opts = opts || {};
+  const skipUiClear = !!opts.skipUiClear;
+  const venueTag = opts.venueTag || '';
   const btn=$("divRun"); const cardsEl=$("divCards"); const emptyEl=$("divEmpty"); const statEl=$("divStat");
-  btn.disabled=true; cardsEl.innerHTML=""; let __cardsHtml = []; emptyEl.style.display="none";
+  if (!skipUiClear){ btn.disabled=true; cardsEl.innerHTML=""; emptyEl.style.display="none"; }
+  else if (venueTag) cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
     const uni = S.exchange==="delta" ? S.tickers.filter(function(t){ return t.turnoverUsd>=500000; }).sort(function(a,b){ return b.turnoverUsd-a.turnoverUsd; }) : S.tickers.slice();
@@ -1348,7 +1431,7 @@ async function runDivScan(){
     entry = plObj.entry; stop = plObj.stop; t1 = plObj.t1; t2 = plObj.t2;
     found++;
     const reg = detectRegime(rows);
-    __cardsHtml.push(cardHTML(t.symbol, dir,
+    __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
       [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
        ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
       ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
@@ -1358,11 +1441,13 @@ async function runDivScan(){
       }catch(e){}
       await sleep(120);
     }
-    statEl.textContent = "done — "+found+" divergences found";
-    if (!found) emptyEl.style.display="block";
+    statEl.textContent = (venueTag ? venueTag + " · " : "") + "done — "+found+" divergences found";
+    if (!found && opts.dualLast !== false) emptyEl.style.display="block";
   }catch(e){ statEl.textContent = "divergence scan failed: "+e.message; }
   finally{
-cardsEl.innerHTML = __cardsHtml.join(''); setProg("divProg", null); btn.disabled=false; }
+    cardsEl.insertAdjacentHTML('beforeend', __cardsHtml.join(''));
+    if (opts.dualLast !== false){ setProg("divProg", null); btn.disabled=false; }
+  }
 }
 async function runBasisScan(){
   const st0=$("basisStat"); if (!(await waitAlertIdle(st0))) return;
@@ -1809,10 +1894,23 @@ async function runSmartScan(){
 }
 /* <<< SMART MONEY END <<< */
 
-async function runApexScan(){
-  const st0=$('apexStat'); if (!(await waitAlertIdle(st0))) return;
+async function runApexScan(opts){
+  opts = opts || {};
+  const st0=$('apexStat');
+  if (!opts._singleLeg && !(await waitAlertIdle(st0))) return;
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    return hgDualCryptoScanLoop(function(o){ return runApexScanLeg(o); }, opts);
+  }
+  return runApexScanLeg(opts);
+}
+async function runApexScanLeg(opts){
+  opts = opts || {};
+  const skipUiClear = !!opts.skipUiClear;
+  const venueTag = opts.venueTag || '';
   const btn=$('apexRun'); const cardsEl=$('apexCards'); const emptyEl=$('apexEmpty'); const statEl=$('apexStat');
-  btn.disabled=true; cardsEl.innerHTML=''; let __cardsHtml = []; emptyEl.style.display='none';
+  if (!skipUiClear){ btn.disabled=true; cardsEl.innerHTML=''; emptyEl.style.display='none'; }
+  else if (venueTag) cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers=await getTickers();
     const btcSym = S.exchange==='delta' ? 'BTCUSD' : 'B-BTC_USDT';
@@ -1850,7 +1948,7 @@ async function runApexScan(){
     results.sort((a,b)=>b.spread24-a.spread24);
     results.forEach(r=>{
       const pl = hgPlanLevels('long', r.rows, r.mark);
-      __cardsHtml.push(cardHTML(r.sym,'long',
+      __cardsHtml.push(cardHTML(hgCardVenueSym(r.sym, venueTag),'long',
         [['mark',px(r.mark)],['BTC 24h',pct(btcRet24,2)],['asset 24h',pct(r.ret24,2)],['RS spread',pct(r.spread24,2)],['Nearest OB',nearestOBText(r.rows,'long')],['Liquidity Target',liquidityTargetText(r.rows,'long')]],
         ['G1 BTC headwind','G2 spread ≥5%','G3 1H EMA50 intact'],
         (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
@@ -1858,21 +1956,33 @@ async function runApexScan(){
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
         { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null }));
     });
-    statEl.textContent = `done — ${results.length} Apex assets found`;
-    if (!results.length) emptyEl.style.display='block';
+    statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done — ${results.length} Apex assets found`;
+    if (!results.length && opts.dualLast !== false) emptyEl.style.display='block';
   }catch(e){
     statEl.textContent = `apex scan failed: ${e.message}`;
   }finally{
-cardsEl.innerHTML = __cardsHtml.join('');
-    setProg('apexProg', null);
-    btn.disabled=false;
+    cardsEl.insertAdjacentHTML('beforeend', __cardsHtml.join(''));
+    if (opts.dualLast !== false){ setProg('apexProg', null); btn.disabled=false; }
   }
 }
-async function runTrapScan(){
-const st0=$('trapStat'); if (!(await waitAlertIdle(st0))) return;
-const btn=$('trapRun'); const cardsEl=$('trapCards'); const emptyEl=$('trapEmpty'); const statEl=$('trapStat');
-btn.disabled=true; cardsEl.innerHTML=''; let __cardsHtml = []; emptyEl.style.display='none';
-try{
+async function runTrapScan(opts){
+  opts = opts || {};
+  const st0=$('trapStat');
+  if (!opts._singleLeg && !(await waitAlertIdle(st0))) return;
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    return hgDualCryptoScanLoop(function(o){ return runTrapScanLeg(o); }, opts);
+  }
+  return runTrapScanLeg(opts);
+}
+async function runTrapScanLeg(opts){
+  opts = opts || {};
+  const skipUiClear = !!opts.skipUiClear;
+  const venueTag = opts.venueTag || '';
+  const btn=$('trapRun'); const cardsEl=$('trapCards'); const emptyEl=$('trapEmpty'); const statEl=$('trapStat');
+  if (!skipUiClear){ btn.disabled=true; cardsEl.innerHTML=''; emptyEl.style.display='none'; }
+  else if (venueTag) cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  let __cardsHtml = [];
+  try{
 if (!S.tickers.length) S.tickers=await getTickers();
 const uni = S.exchange==='delta' ? S.tickers.filter(t=>t.turnoverUsd>=300000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
 let found=0;
@@ -1938,7 +2048,7 @@ const t2 = dir==='long' ? uOuter : lOuter;   // stretch target: opposite extreme
 var trapPl = applyExactEntry({ dir: dir, type: 'SCALP', entry: p, stop: stop, t1: t1, t2: t2,
   note: 'mean reversion — stop tight behind the wick; target the mean first' },
   rows, { style: 'scalp', m15: rows, poiLevel: dir==='long' ? lInner : uInner, poiLabel: 'inner band' });
-__cardsHtml.push(cardHTML(t.symbol, dir,
+__cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 [['mark',px(p)],['RSI now',fmt(rNow,1)],['RSI at sweep',fmt(rsiAtSweep,1)],['vol (ATR%)',fmt(atrPct,2)+'%'],
 [fmt(outerSD,1)+' SD swept ('+(rows.length-1-(dir==='long'?sweptLowAt:sweptHighAt))+'b ago)', dir==='long'?px(rows[sweptLowAt].l):px(rows[sweptHighAt].h)],
 [fmt(innerSD,1)+' SD reclaimed now', dir==='long'?px(lInner):px(uInner)],
@@ -1950,20 +2060,32 @@ trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'li
 }catch(e){}
 await sleep(100);
 }
-statEl.textContent = `done \u2014 ${found} traps found`;
-if (!found) emptyEl.style.display='block';
+statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done \u2014 ${found} traps found`;
+if (!found && opts.dualLast !== false) emptyEl.style.display='block';
 }catch(e){
 statEl.textContent = `trap scan failed: ${e.message}`;
 }finally{
-cardsEl.innerHTML = __cardsHtml.join('');
-setProg('trapProg', null);
-btn.disabled=false;
+cardsEl.insertAdjacentHTML('beforeend', __cardsHtml.join(''));
+if (opts.dualLast !== false){ setProg('trapProg', null); btn.disabled=false; }
 }
 }
-async function runSmcScan(){
-  const st0 = $('smcStat'); if (!(await waitAlertIdle(st0))) return;
+async function runSmcScan(opts){
+  opts = opts || {};
+  const st0 = $('smcStat');
+  if (!opts._singleLeg && !(await waitAlertIdle(st0))) return;
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    return hgDualCryptoScanLoop(function(o){ return runSmcScanLeg(o); }, opts);
+  }
+  return runSmcScanLeg(opts);
+}
+async function runSmcScanLeg(opts){
+  opts = opts || {};
+  const skipUiClear = !!opts.skipUiClear;
+  const venueTag = opts.venueTag || '';
   const btn = $('smcRun'); const cardsEl = $('smcCards'); const emptyEl = $('smcEmpty'); const statEl = $('smcStat');
-  btn.disabled = true; cardsEl.innerHTML = ''; let __cardsHtml = []; emptyEl.style.display = 'none';
+  if (!skipUiClear){ btn.disabled = true; cardsEl.innerHTML = ''; emptyEl.style.display = 'none'; }
+  else if (venueTag) cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
     let uni = S.exchange === 'delta' ? S.tickers.filter(t => t.turnoverUsd >= 500000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
@@ -2012,7 +2134,7 @@ async function runSmcScan(){
         var smcPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the FVG; T1 = nearest liquidity' }, rows,
           { poiLevel: (fvg.top + fvg.bottom) / 2, poiLabel: 'FVG mid', preferEdge: true });
-        __cardsHtml.push(cardHTML(t.symbol, dir, [
+        __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir, [
           ['mark', px(p)], ['Gap Age', `${fvg.age} bars (4H)`],
           ['FVG Top', px(fvg.top)], ['FVG Bottom', px(fvg.bottom)],
           ['Struct Stop', px(stop)], ['Target Liq', px(t1)]
@@ -2023,20 +2145,32 @@ async function runSmcScan(){
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
-    statEl.textContent = `done - ${found} SMC setups found`;
-    if (!found) emptyEl.style.display = 'block';
+    statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done - ${found} SMC setups found`;
+    if (!found && opts.dualLast !== false) emptyEl.style.display = 'block';
   } catch(e){
     statEl.textContent = `smc scan failed: ${e.message}`;
   } finally {
-cardsEl.innerHTML = __cardsHtml.join('');
-    setProg('smcProg', null);
-    btn.disabled = false;
+    cardsEl.insertAdjacentHTML('beforeend', __cardsHtml.join(''));
+    if (opts.dualLast !== false){ setProg('smcProg', null); btn.disabled = false; }
   }
 }
-async function runObScan(){
-  const st0 = $('obStat'); if (!(await waitAlertIdle(st0))) return;
+async function runObScan(opts){
+  opts = opts || {};
+  const st0 = $('obStat');
+  if (!opts._singleLeg && !(await waitAlertIdle(st0))) return;
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    return hgDualCryptoScanLoop(function(o){ return runObScanLeg(o); }, opts);
+  }
+  return runObScanLeg(opts);
+}
+async function runObScanLeg(opts){
+  opts = opts || {};
+  const skipUiClear = !!opts.skipUiClear;
+  const venueTag = opts.venueTag || '';
   const btn = $('obRun'); const cardsEl = $('obCards'); const emptyEl = $('obEmpty'); const statEl = $('obStat');
-  btn.disabled = true; cardsEl.innerHTML = ''; let __cardsHtml = []; emptyEl.style.display = 'none';
+  if (!skipUiClear){ btn.disabled = true; cardsEl.innerHTML = ''; emptyEl.style.display = 'none'; }
+  else if (venueTag) cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
     let uni = S.exchange === 'delta' ? S.tickers.filter(t => t.turnoverUsd >= 500000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
@@ -2072,7 +2206,7 @@ async function runObScan(){
         var obPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the OB; T1 = nearest liquidity' }, rows,
           { poiLevel: obEntry, poiLabel: 'OB edge', preferEdge: true });
-        __cardsHtml.push(cardHTML(t.symbol, dir, [
+        __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir, [
           ['mark', px(p)], ['OB Age', `${ob.age} bars (4H)`],
           ['OB Top', px(ob.top)], ['OB Bottom', px(ob.bottom)],
           ['Struct Stop', px(stop)], ['Liquidity Target', target ? `${px(target.level)} (x${target.count})` : px(t1)]
@@ -2083,14 +2217,13 @@ async function runObScan(){
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
-    statEl.textContent = `done - ${found} Order Block setups found`;
-    if (!found) emptyEl.style.display = 'block';
+    statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done - ${found} Order Block setups found`;
+    if (!found && opts.dualLast !== false) emptyEl.style.display = 'block';
   } catch(e){
     statEl.textContent = `order block scan failed: ${e.message}`;
   } finally {
-cardsEl.innerHTML = __cardsHtml.join('');
-    setProg('obProg', null);
-    btn.disabled = false;
+    cardsEl.insertAdjacentHTML('beforeend', __cardsHtml.join(''));
+    if (opts.dualLast !== false){ setProg('obProg', null); btn.disabled = false; }
   }
 }
 /* ---------------- grouped nav (two-tier) ----------------
@@ -2205,6 +2338,8 @@ function showTab(t){
   /* switch the active group when the target tab lives in another group —
      every existing showTab('id') call site (hardRefreshAll, card handoffs,
      toTrade, …) keeps working without knowing about groups */
+  const pane = document.getElementById('tab_' + t);
+  const tabSwitch = !(pane && pane.classList.contains('on'));
   const g = HG_TAB_GROUP[t] || ((typeof HG_TAB_MODS !== 'undefined' && HG_TAB_MODS[t]) ? HG_GROUP_FALLBACK : null);
   if (g && g !== HG_GROUP){
     HG_GROUP = g;
@@ -2221,6 +2356,55 @@ function showTab(t){
   }
   /* scanner tabs: restore the last-scan memory line when the pane is idle */
   if ((t === 'swing' || t === 'scalp') && typeof scanLastHint === 'function') scanLastHint(t);
+  if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
+}
+
+/* Auto-scan Delta + CoinDCX when opening a tab (default on). */
+let __hgTabScanSeq = 0;
+let __hgTabScanBusy = false;
+const HG_TAB_AUTO_SCAN = {
+  swing: function(){ return runScan('swing'); },
+  scalp: function(){ return runScan('scalp'); },
+  best: function(){ return runBest(); },
+  coil: function(){ return runCoilScan(); },
+  apex: function(){ return runApexScan(); },
+  trap: function(){ return runTrapScan(); },
+  smc: function(){ return runSmcScan(); },
+  ob: function(){ return runObScan(); },
+  div: function(){ return runDivScan(); },
+  bias: function(){ return runBias(); },
+  basis: function(){ return runBasisScan(); },
+  search: function(){ return runSearch(); },
+  smart: function(){ return runSmartScan(); },
+  gold: function(){ return runGold(); },
+  finder: function(){ return runFinder(); }
+};
+function scheduleTabAutoScan(t){
+  if (!hgDualScanEnabled()) return;
+  const seq = ++__hgTabScanSeq;
+  setTimeout(async function(){
+    if (seq !== __hgTabScanSeq) return;
+    if (__hgTabScanBusy || (typeof isManualScanBusy === 'function' && isManualScanBusy())) return;
+    if (typeof HG_REFRESH_BUSY !== 'undefined' && HG_REFRESH_BUSY) return;
+    __hgTabScanBusy = true;
+    try{
+      if (HG_TAB_AUTO_SCAN[t]){
+        await HG_TAB_AUTO_SCAN[t]();
+        return;
+      }
+      const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS[t] : null;
+      if (!mod) return;
+      if (typeof mod.refresh === 'function'){
+        const st = await mod.refresh();
+        if (st && String(st).indexOf('skip') === 0 && t === 'brain'){
+          const pane = document.getElementById('tab_brain');
+          const runBtn = pane && pane.querySelector('#brainRun');
+          if (runBtn) runBtn.click();
+        }
+      }
+    }catch(e){ console.warn('HARDGATE tab auto-scan', t, e); }
+    finally{ __hgTabScanBusy = false; }
+  }, 120);
 }
 </script>
 
@@ -2588,10 +2772,11 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   bookMeta = bookMeta || {};
   const scanId = bookMeta.scanner || 'swing-scalp';
   const stratId = bookMeta.strategy || scanId;
+  const venueHtml = bookMeta.venue ? '<span class="stamp na">' + String(bookMeta.venue).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span> ' : '';
   const bookBtn = (isFinite(entry) && isFinite(stop) && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: scanId, strategy: stratId, t2: bookMeta.t2 }) : '';
   return `<div class="card ${dir}">
-    <div class="chead"><span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span></div>
+    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span></div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
@@ -2663,14 +2848,15 @@ function scanMomentumDetail(candles, rows, dir){
   return momDetail;
 }
 
-function renderSwingCleanCard(t, hit, cardsEl, quiet){
+function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
   const { dir, entry, stop, t1, t2, rr: dynamicRR, rows, r14, vz, ev, entryType } = hit;
   const momDetail = scanMomentumDetail(rows.map(function(r){ return r.c; }), rows, dir);
   const gates = ['G1 cascade+spread', 'G2 HTF side', 'G3 RSI ok', 'G4 funding', 'G5 vol+wick', 'G6 R:R>=2',
     'G7 CUSUM' + (ev && ev.barsAgo <= 20 ? ' ok' : ' n/a')];
-  const chartId = 'hgc-swing-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  const chartId = 'hgc-swing-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const orderLbl = entryType || 'MARKET';
-  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [
+  const cardSym = hgCardVenueSym(t.symbol, venueTag);
+  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, [
     ['mark', px(t.mark || entry)],
     ['order', orderLbl],
     ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
@@ -2685,16 +2871,17 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet){
     ['Liquidity Target', liquidityTargetText(rows, dir)]
   ], gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
     entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
-  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2 }));
+  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
 }
 
-function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet){
+function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
   const { dir, entry, stop, t1, t2, rr: dynamicRR, m15, r15, a } = hit;
   const momDetail = scanMomentumDetail(m15.map(function(r){ return r.c; }), m15, dir);
-  const chartId = 'hgc-scalp-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
-  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [
+  const chartId = 'hgc-scalp-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  const cardSym = hgCardVenueSym(t.symbol, venueTag);
+  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, [
     ['mark', px(t.mark || entry)],
     ['1H trend', dir.toUpperCase()],
     ['RSI 15m', fmt(r15, 1)],
@@ -2708,16 +2895,17 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet){
   ], ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
     planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
       entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
-    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2 }));
+    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), m15, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
 }
 
-function renderNearCleanCard(t, hit, cardsEl, kind){
+function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
   if (!hit || !hit.dir) return;
-  const chartId = 'hgc-near-' + kind + '-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  const chartId = 'hgc-near-' + kind + '-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const miss = (hit.missing || []).join(', ');
-  cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, hit.dir, [
+  const cardSym = hgCardVenueSym(t.symbol, venueTag);
+  cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, hit.dir, [
     ['mark', px(t.mark || hit.level || '—')],
     ['gates', hit.passed + '/' + (hit.gatesTotal || 7)],
     ['missing', miss || '—'],
@@ -2726,15 +2914,59 @@ function renderNearCleanCard(t, hit, cardsEl, kind){
     ['dyn R:R', hit.dynamicRR != null ? fmt(hit.dynamicRR, 2) + 'R' : '—']
   ], ['NEAR CLEAN — 6/7 · not a ticket'],
     '<span class="note warn">NEAR CLEAN ' + hit.passed + '/7 — waiting: ' + miss + '. Do not trade until all 7 hard gates pass.</span>',
-    null, null, null, chartId, { scanner: kind + '-near', strategy: kind + '-near' }));
+    null, null, null, chartId, { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag }));
   if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
 }
 
 async function runScan(kind, opts){
+  opts = opts || {};
+  if (!opts._singleLeg && !opts.singleExchange && !opts.exchange && hgDualScanEnabled()){
+    const quiet = !!opts.quiet;
+    const isSwing = kind === 'swing';
+    if (!quiet){
+      const st0 = $(isSwing ? 'swingStat' : 'scalpStat');
+      if (!(await waitAlertIdle(st0))) return;
+    }
+    const legs = await hgForEachDualExchange(function(leg){
+      return runScan(kind, Object.assign({}, opts, {
+        _singleLeg: true, skipUiClear: !leg.first, venueTag: leg.venueTag, dualLast: leg.last
+      }));
+    }, opts);
+    if (!quiet && legs && legs.length){
+      const isSwing = kind === 'swing';
+      const statEl = $(isSwing ? 'swingStat' : 'scalpStat');
+      const emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty');
+      let found = 0, nearFound = 0, scanned = 0;
+      const parts = [];
+      legs.forEach(function(L){
+        if (!L) return;
+        found += L.found || 0;
+        nearFound += L.nearFound || 0;
+        scanned += L.uniLen || 0;
+        if (L.statPart) parts.push(L.statPart);
+      });
+      statEl.textContent = 'done — ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
+        + ' / ' + scanned + ' scanned · BOTH venues (Delta + CoinDCX) · ' + parts.join(' · ');
+      try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
+      if (!found){
+        emptyEl.style.display = nearFound ? 'none' : 'block';
+      }
+    }
+    return;
+  }
+  if (opts.exchange) return withExchange(opts.exchange, () => runScan(kind, Object.assign({}, opts, { _singleLeg: true, exchange: null })));
+  return runScanLeg(kind, opts);
+}
+
+async function runScanLeg(kind, opts){
+  opts = opts || {};
   const quiet = !!(opts && opts.quiet);
+  const skipUiClear = !!(opts && opts.skipUiClear);
+  const venueTag = opts.venueTag || '';
+  const dualLast = opts.dualLast !== false;
   const isSwing = kind === 'swing';
   const st0 = $(isSwing ? 'swingStat' : 'scalpStat');
-  if (!quiet && !(await waitAlertIdle(st0))) return;
+  if (!quiet && !skipUiClear && !(await waitAlertIdle(st0))) return null;
   const scanAll = $(isSwing ? 'swingAll' : 'scalpAll').checked;
   const N = Math.max(5, Math.min(500, +$(isSwing ? 'swingN' : 'scalpN').value || 30));
   const minTurn = isSwing ? (+$('swingTurn').value || 0) : 0;
@@ -2757,7 +2989,10 @@ async function runScan(kind, opts){
     }
     return;
   }
-  if (!quiet){ cardsEl.innerHTML = ''; emptyEl.style.display = 'none'; emptyEl.textContent = ''; btn.disabled = true; }
+  if (!quiet && !skipUiClear){ cardsEl.innerHTML = ''; emptyEl.style.display = 'none'; emptyEl.textContent = ''; btn.disabled = true; }
+  if (!quiet && skipUiClear && venueTag){
+    cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
+  }
   let cands = [];
   let uni = [];
   try{
@@ -2777,7 +3012,7 @@ async function runScan(kind, opts){
       await Promise.all(chunk.map(async function(t, idxInChunk){
         const i = ci + idxInChunk;
         setProg(isSwing ? 'swingProg' : 'scalpProg', (i + 1) / uni.length);
-        statEl.textContent = 'scanning ' + (i + 1) + '/' + uni.length + ' - ' + t.symbol + ' · ' + Math.floor((Date.now() - t0scan) / 1000) + 's';
+        statEl.textContent = (venueTag ? venueTag + ' · ' : '') + 'scanning ' + (i + 1) + '/' + uni.length + ' - ' + t.symbol + ' · ' + Math.floor((Date.now() - t0scan) / 1000) + 's';
         try{
           if (isSwing){
             if (typeof swingTryClean !== 'function') return;
@@ -2800,7 +3035,7 @@ async function runScan(kind, opts){
             if (hit){
               found++;
               cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
-              renderSwingCleanCard(t, hit, cardsEl, quiet);
+              renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag);
               return;
             }
             if (!quiet && typeof swingTryNear === 'function'){
@@ -2810,7 +3045,7 @@ async function runScan(kind, opts){
                 if (nearFound === 1){
                   cardsEl.insertAdjacentHTML('beforeend', '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only. These are not tickets until all seven gates pass.</div>');
                 }
-                renderNearCleanCard(t, near, cardsEl, 'swing');
+                renderNearCleanCard(t, near, cardsEl, 'swing', venueTag);
               }
             }
           } else {
@@ -2833,7 +3068,7 @@ async function runScan(kind, opts){
             if (hit){
               found++;
               cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
-              renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet);
+              renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag);
             }
           }
         }catch(e){ audit.errors++; }
@@ -2843,14 +3078,16 @@ async function runScan(kind, opts){
     const topFail = Object.keys(audit.fail).sort(function(a, b){ return audit.fail[b] - audit.fail[a]; }).slice(0, 3);
     const failNote = topFail.length ? (' · top blocks: ' + topFail.join(', ')) : '';
     const attrNote = audit.cascade ? (' · ' + audit.cascade + ' cascades · ' + audit.pass6 + ' at 6/7+') : '';
-    statEl.textContent = 'done - ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
-      + ' / ' + uni.length + ' scanned (' + universeLabel + ')' + attrNote + failNote
+    const statPart = (venueTag || hgExLabel()) + ': ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
+      + ' / ' + uni.length + attrNote + failNote;
+    const statText = 'done - ' + statPart
       + (audit.histShort ? (' · ' + audit.histShort + ' thin history') : '')
       + (audit.errors ? (' · ' + audit.errors + ' fetch errors') : '');
-    try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
-    const snap = { at: Date.now(), cands: cands, stat: statEl.textContent };
+    if (!quiet && dualLast) statEl.textContent = statText;
+    if (!quiet && dualLast) try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
+    const snap = { at: Date.now(), cands: cands, stat: statText };
     if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
-    if (!quiet && !found){
+    if (!quiet && dualLast && !found){
       const blk = topFail.length ? (' Most common gate failures: ' + topFail.join(', ') + '.') : '';
       emptyEl.textContent = (isSwing
         ? ('No CLEAN swing setups (7/7 + EMA21 anchor). Choppy tape often blocks G5 vol+wick and G7 CUSUM.' + blk + ' NEAR CLEAN rows and FORMING NOW are watch-only.')
@@ -2862,11 +3099,13 @@ async function runScan(kind, opts){
       if (nb) cardsEl.insertAdjacentHTML('afterbegin', nb);
     }
     try{ await refreshCryptoWatch(kind, uni, cands.map(function(c){ return c.sym; }), { quiet: quiet }); }catch(e){ console.warn('crypto watch', e); }
+    return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands };
   }catch(e){
-    statEl.textContent = 'scan failed: ' + e.message;
+    if (!quiet && dualLast) statEl.textContent = 'scan failed: ' + e.message;
+    return null;
   }finally{
-    if (!quiet) setProg(isSwing ? 'swingProg' : 'scalpProg', null);
-    if (!quiet) btn.disabled = false;
+    if (!quiet && dualLast) setProg(isSwing ? 'swingProg' : 'scalpProg', null);
+    if (!quiet && dualLast) btn.disabled = false;
   }
 }
 
@@ -4119,7 +4358,74 @@ async function runCascadeCore(uni){
   return {clean, breadth:{bull:breadthBull, total:breadthTotal}};
 }
 
-async function runBest(){
+async function runBest(opts){
+  opts = opts || {};
+  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+    if (!(await waitAlertIdle($('bestStat')))) return;
+    const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
+    const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='Scanning Delta + CoinDCX…';
+    try{
+      let allClean = [], breadth = { bull: 0, total: 0 }, totalUni = 0;
+      for (let ei = 0; ei < HG_DUAL_CRYPTO_EX.length; ei++){
+        const ex = HG_DUAL_CRYPTO_EX[ei];
+        await withExchange(ex, async function(){
+          const scanAll = $('bestAll').checked;
+          const N = Math.max(5, Math.min(500, +$('bestN').value||30));
+          if (!S.tickers.length) S.tickers=await getTickers();
+          let uni = S.exchange==='delta'
+            ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
+            : S.tickers.slice();
+          const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; });
+          if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
+          totalUni += uni.length;
+          const leg = await runCascadeCore(uni);
+          (leg.clean || []).forEach(function(c){ c._venueLabel = hgExLabel(ex); });
+          allClean = allClean.concat(leg.clean || []);
+          breadth.bull += (leg.breadth && leg.breadth.bull) || 0;
+          breadth.total += (leg.breadth && leg.breadth.total) || 0;
+        });
+      }
+      const clean = allClean;
+      const universeLabel = 'both Delta India + CoinDCX futures';
+      if (!clean.length){
+        out.innerHTML=`<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
+        $('bestStat').textContent='done · 0 CLEAN · dual venue scan';
+        return;
+      }
+      const pool = bestSortPool(clean);
+      const w = pool[0];
+      const symLabel = (w._venueLabel ? '[' + w._venueLabel + '] ' : '') + w.t.symbol;
+      const breadthPct = breadth.total>=10 ? (breadth.bull/breadth.total*100) : 50;
+      const regimeDir = breadth.total>=10 ? (breadthPct<=20?'bear':(breadthPct>=80?'bull':null)) : null;
+      if (regimeDir && ((regimeDir==='bear' && w.dir==='long') || (regimeDir==='bull' && w.dir==='short'))){
+        $('bestStat').textContent = 'master veto: regime unsafe';
+        out.innerHTML = `<div class="empty"><b style="color:var(--veto)">MASTER VETO: STAND ASIDE</b><br><br>Market breadth only ${fmt(breadthPct,0)}% bullish (${breadth.bull}/${breadth.total} coins above 200-EMA on 4H) — ${regimeDir} regime, ${w.dir} setups here are ${regimeDir==='bear'?'catching falling knives':'fighting a screaming uptrend'}. Scanning canceled to protect capital.</div>`;
+        return;
+      }
+      const t1=w.t1; const t2=w.t2;
+      logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
+      const others = pool.slice(1,6).map(s=>(s._venueLabel?'['+s._venueLabel+'] ':'')+`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/7 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+      const famGateNote = pool.length < clean.length ? ' · ≥4/7 families required for #1' : '';
+      out.innerHTML = `
+      <div class="panel">
+        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
+        <div class="verdict ${w.dir}">
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/7 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (session + value-area included), then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 7/7 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
+        </div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
+        <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
+        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 })}
+        <hr class="sep">
+        <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
+      </div>`;
+      if (typeof hgMiniChart === 'function') hgMiniChart($('bestChart'), w.rows, {dir:w.dir, entry:w.entry, stop:w.stop, t1:t1, t2:t2});
+      $('bestStat').textContent=`done · ${clean.length} CLEAN of ${totalUni} scanned (${universeLabel})`;
+    }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
+    finally{ setProg('bestProg',null); btn.disabled=false; }
+    return;
+  }
   if (!(await waitAlertIdle($('bestStat')))) return;
   const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
   const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='';
@@ -4171,11 +4477,8 @@ async function runBest(){
 }
 
 async function silentBestScan(exchangeArg){
-  const prevExchange = S.exchange;
-  const prevTickers = S.tickers;
-  S.exchange = exchangeArg;
-  S.tickers = [];
   try{
+    return await withExchange(exchangeArg, async function(){
     const scanAll = true;
     const N = 999999;
     if (!S.tickers.length) S.tickers=await getTickers();
@@ -4186,8 +4489,8 @@ async function silentBestScan(exchangeArg){
     const universeLabel = scanAll ? `whole ${S.exchange==='delta'?'Delta India':'CoinDCX'} futures universe` : `top ${N} by turnover`;
     const {clean} = await runCascadeCore(uni);
     return clean;
+    });
   }catch(e){ return []; }
-  finally{ S.exchange = prevExchange; S.tickers = prevTickers; }
 }
 
 function isManualScanBusy(){
