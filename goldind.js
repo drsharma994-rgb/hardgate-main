@@ -93,9 +93,10 @@ Exports (all on window):
   isVolumeSpike / buildVolumeProfile — aliases of goldVolumeSpike / goldVolumeProfile
   detectLiquiditySweep_V2 / detectFVG_V2 — aliases of goldSweepV2 / goldFVGV2
   HardgateGoldEngine.evaluateScalp(m15, ctx?) — vol profile + V2 triggers + OB retest
-                             on the last bar -> {volProfile, sweepData, fvgData, obSetup,
-                             swings, structure, activeOrderBlocks, activeTriggers,
-                             agreeingReads, context, reads}
+                             + Asian breakout + ADR fade on the last bar
+                             -> {volProfile, sweepData, fvgData, obSetup, asianSetup,
+                             adrFade, adrData, session, asianRange, swings, structure,
+                             activeOrderBlocks, activeTriggers, agreeingReads, context, reads}
   HardgateGoldEngine.evaluateSwing(h4, ctx?) — 4h swing evaluator (structure + OB retest)
   goldSwings(rows, left?, right?) — fractal swing highs/lows -> {highs, lows}
   goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
@@ -107,6 +108,8 @@ Exports (all on window):
   updateActiveZones / detectOrderBlockRetest — robust OB retest aliases
   getMarketSession(ts) / calculateAsianRange(rows, index?) / calculateADRExhaustion(daily, current?, lb?)
                              — session weights, Asian H/L tracker, daily ADR exhaustion (≥80%)
+  goldAsianBreakout / goldADRFade — volume-validated Asian breakout + ADR exhaustion fade
+  detectAsianBreakout / detectADRFade — session & exhaustion trigger aliases
   goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
   goldDetectorReads({rows15m,...}) — full confluence ledger reads from __goldBundle
 ========================================================================= */
@@ -1688,9 +1691,21 @@ function goldScalpSetups(inp){
         rb.e20));
     }
 
-    /* --- 6) Asian-range (00:00-07:00 GMT) breakout --- */
+    /* --- 6) Asian-range (00:00-07:00 GMT) breakout — robust: volume-validated --- */
+    var asianDone = false;
+    if (D.scalpEval && D.scalpEval.asianSetup && D.scalpEval.asianSetup.trigger){
+      var ab = D.scalpEval.asianSetup;
+      var abDir = ab.direction;
+      push(__gsCand('asian', abDir, D, ab.anchor, __gsSnapLvls(D, abDir),
+        'volume-validated Asian-range breakout ' + (abDir === 'long' ? 'above' : 'below')
+          + ' the box ' + ab.asianLow.toFixed(2) + '–' + ab.asianHigh.toFixed(2)
+          + ' — displacement with volume expansion (1.3× avg)',
+        'a 15m close back inside the Asian range (' + ab.asianLow.toFixed(2) + '–' + ab.asianHigh.toFixed(2) + ') negates the breakout',
+        { lo: ab.asianLow, hi: ab.asianHigh }, abDir === 'long' ? ab.asianHigh : ab.asianLow));
+      asianDone = true;
+    }
     var asian = D.asian;
-    if (asian && (asian.state === 'LONG_BREAK' || asian.state === 'SHORT_BREAK')){
+    if (!asianDone && asian && (asian.state === 'LONG_BREAK' || asian.state === 'SHORT_BREAK')){
       var adir = (asian.state === 'LONG_BREAK') ? 'long' : 'short';
       push(__gsCand('asian', adir, D, (adir === 'long' ? asian.hi : asian.lo), __gsSnapLvls(D, adir),
         'London-volume breakout ' + (adir === 'long' ? 'above' : 'below') + ' the Asian box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2)
@@ -1740,9 +1755,21 @@ function goldScalpSetups(inp){
         undefined, oLvl));
     }
     orCand(orL); orCand(orN);
-    /* --- 10) ADR Exhaustion Fade — counter-trend when >80% ADR consumed --- */
+    /* --- 10) ADR Exhaustion Fade — robust VWAP-band fade or legacy confluence --- */
+    var adrDone = false;
+    if (D.scalpEval && D.scalpEval.adrFade && D.scalpEval.adrFade.trigger){
+      var af = D.scalpEval.adrFade;
+      var afPct = (D.scalpEval.adrData && isFinite(D.scalpEval.adrData.percentageConsumed))
+        ? (D.scalpEval.adrData.percentageConsumed * 100).toFixed(0) : '80+';
+      push(__gsCand('adrfade', af.direction, D, af.anchor, __gsSnapLvls(D, af.direction),
+        'ADR exhaustion fade — ' + afPct + '% of daily range consumed, price stretched beyond session VWAP '
+          + (af.direction === 'short' ? 'upper' : 'lower') + ' band — mean-reversion fade',
+        'a fresh 15m high/low beyond the exhaustion wick (' + af.anchor.toFixed(2) + ') confirms continuation, not exhaustion',
+        undefined, af.anchor));
+      adrDone = true;
+    }
     var adr = D.adr;
-    if (adr && adr.exhausted === 'YES' && isFinite(adr.pctOfADR)){
+    if (!adrDone && adr && adr.exhausted === 'YES' && isFinite(adr.pctOfADR)){
       var adir = (adr.bias === 'short') ? 'short' : 'long';
       var adrOk = false;
       if (adir === 'short' && D.pd && D.pd.zone === 'PREMIUM') adrOk = true;
@@ -2381,6 +2408,93 @@ var goldMarketSession = getMarketSession;
 var goldAsianRangeAt = calculateAsianRange;
 var goldADRExhaustion = calculateADRExhaustion;
 
+function __aggregateDailyFromRows(rows){
+  var out = [], days = {}, keys = [], i, r, t, sec, ds, key, d;
+  try{
+    rows = __rows(rows);
+    if (!rows || !rows.length) return out;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i]; t = r.t; if (!isFinite(t)) continue;
+      sec = (t >= 1e12) ? Math.floor(t / 1000) : t;
+      ds = Math.floor(sec / 86400) * 86400;
+      key = String(ds);
+      if (!days[key]){
+        days[key] = { t: ds, o: r.o, h: r.h, l: r.l, c: r.c, v: isFinite(r.v) ? r.v : 0 };
+        keys.push(ds);
+      } else {
+        d = days[key];
+        if (isFinite(r.h) && r.h > d.h) d.h = r.h;
+        if (isFinite(r.l) && r.l < d.l) d.l = r.l;
+        d.c = r.c;
+        d.v += (isFinite(r.v) ? r.v : 0);
+      }
+    }
+    keys.sort(function(a, b){ return a - b; });
+    for (i = 0; i < keys.length; i++) out.push(days[String(keys[i])]);
+    return out;
+  }catch(e){ return out; }
+}
+
+/* Strategy 6: Asian range breakout — Asian or London session only, close
+   outside the box with volume expansion (1.3× avg). */
+function goldAsianBreakout(candles, index, sessionData, asianRangeData){
+  var no = { trigger: false };
+  try{
+    candles = __rows(candles);
+    if (!candles || !candles.length) return no;
+    if (index === undefined || index === null) index = candles.length - 1;
+    index = Math.floor(index);
+    if (index < 0 || index >= candles.length) return no;
+    sessionData = sessionData || {};
+    if (!sessionData.isAsianRange && !sessionData.isLondonOpen) return no;
+    if (!asianRangeData || !asianRangeData.valid) return no;
+    if (!isFinite(asianRangeData.asianHigh) || !isFinite(asianRangeData.asianLow)) return no;
+    var current = candles[index];
+    if (!current || !isFinite(current.c)) return no;
+    var isBullBreakout = current.c > asianRangeData.asianHigh;
+    var isBearBreakout = current.c < asianRangeData.asianLow;
+    var hasVolume = goldVolumeSpike(candles, index, 20, 1.3);
+    if (isBullBreakout && hasVolume){
+      return { trigger: true, direction: 'long', anchor: asianRangeData.asianLow, type: 'asian_breakout',
+               asianHigh: asianRangeData.asianHigh, asianLow: asianRangeData.asianLow };
+    }
+    if (isBearBreakout && hasVolume){
+      return { trigger: true, direction: 'short', anchor: asianRangeData.asianHigh, type: 'asian_breakout',
+               asianHigh: asianRangeData.asianHigh, asianLow: asianRangeData.asianLow };
+    }
+    return no;
+  }catch(e){ return no; }
+}
+
+/* Strategy 10: ADR exhaustion fade — >80% ADR consumed and price stretched
+   beyond session VWAP 2σ bands. */
+function goldADRFade(candles, index, adrData, vwap){
+  var no = { trigger: false };
+  try{
+    candles = __rows(candles);
+    if (!candles || !candles.length) return no;
+    if (index === undefined || index === null) index = candles.length - 1;
+    index = Math.floor(index);
+    if (index < 0 || index >= candles.length) return no;
+    if (!adrData || !adrData.isExhausted) return no;
+    if (!vwap || !isFinite(vwap.upperBand) || !isFinite(vwap.lowerBand)) return no;
+    var current = candles[index];
+    if (!current || !isFinite(current.c)) return no;
+    if (current.c > vwap.upperBand){
+      return { trigger: true, direction: 'short', anchor: current.h, type: 'adr_fade_short',
+               percentageConsumed: adrData.percentageConsumed };
+    }
+    if (current.c < vwap.lowerBand){
+      return { trigger: true, direction: 'long', anchor: current.l, type: 'adr_fade_long',
+               percentageConsumed: adrData.percentageConsumed };
+    }
+    return no;
+  }catch(e){ return no; }
+}
+
+var detectAsianBreakout = goldAsianBreakout;
+var detectADRFade = goldADRFade;
+
 /* 19) Opening Range Breakout */
 function goldOpeningRange(rows, session){
   try{
@@ -2978,6 +3092,11 @@ function evaluateScalp(m15Data, ctx){
     sweepData: { trigger: false },
     fvgData: { trigger: false },
     obSetup: { trigger: false },
+    asianSetup: { trigger: false },
+    adrFade: { trigger: false },
+    adrData: null,
+    session: null,
+    asianRange: null,
     swings: null,
     structure: null,
     activeOrderBlocks: [],
@@ -3052,6 +3171,69 @@ function evaluateScalp(m15Data, ctx){
           + obSetup.base.toFixed(2) + '–' + obSetup.top.toFixed(2)
           + ' with ' + structure.trend + ' fractal structure (stop anchor '
           + obSetup.anchor.toFixed(2) + ')'
+      });
+    }
+
+    /* Session & exhaustion triggers — Asian breakout + ADR fade. */
+    var lastT = rows[index].t;
+    var sessionData = getMarketSession(isFinite(lastT) ? lastT : Date.now());
+    out.session = sessionData;
+
+    var asianRangeData = calculateAsianRange(rows, index);
+    out.asianRange = asianRangeData;
+
+    var asianSetup = goldAsianBreakout(rows, index, sessionData, asianRangeData);
+    out.asianSetup = asianSetup;
+    if (asianSetup && asianSetup.trigger){
+      out.activeTriggers.push('ASIAN_RANGE_BREAKOUT');
+      out.agreeingReads++;
+      if (isFinite(asianSetup.anchor)) out.context.nearestStructure = asianSetup.anchor;
+      out.reads.push({
+        side: asianSetup.direction,
+        tag: 'asian_breakout',
+        label: 'volume-validated Asian-range breakout '
+          + (asianSetup.direction === 'long' ? 'above' : 'below') + ' the box '
+          + asianSetup.asianLow.toFixed(2) + '–' + asianSetup.asianHigh.toFixed(2)
+          + ' (stop anchor ' + asianSetup.anchor.toFixed(2) + ')'
+      });
+    }
+
+    var dailyBars = __aggregateDailyFromRows(rows);
+    var adrData = calculateADRExhaustion(dailyBars,
+      dailyBars.length ? dailyBars[dailyBars.length - 1] : null, 14);
+    out.adrData = adrData;
+
+    var vwapAnchor = 0;
+    if (isFinite(lastT)){
+      var ds0 = Math.floor(lastT / 86400) * 86400;
+      var ai0;
+      for (ai0 = index; ai0 >= 0; ai0--){
+        var tt0 = rows[ai0].t;
+        if (!isFinite(tt0) || tt0 < ds0){ vwapAnchor = ai0 + 1; break; }
+      }
+      if (vwapAnchor < 0 || vwapAnchor >= rows.length) vwapAnchor = 0;
+    }
+    var vwbEval = goldVWAPBands(rows, vwapAnchor);
+    var vwap = vwbEval ? {
+      value: vwbEval.value,
+      upperBand: vwbEval.upper2,
+      lowerBand: vwbEval.lower2
+    } : null;
+
+    var adrFade = goldADRFade(rows, index, adrData, vwap);
+    out.adrFade = adrFade;
+    if (adrFade && adrFade.trigger){
+      out.activeTriggers.push(adrFade.type === 'adr_fade_short' ? 'ADR_FADE_SHORT' : 'ADR_FADE_LONG');
+      out.agreeingReads++;
+      if (isFinite(adrFade.anchor)) out.context.nearestStructure = adrFade.anchor;
+      out.reads.push({
+        side: adrFade.direction,
+        tag: 'adr_fade',
+        label: 'ADR exhaustion fade — '
+          + (isFinite(adrData.percentageConsumed) ? (adrData.percentageConsumed * 100).toFixed(0) : '80+')
+          + '% of daily range consumed, price beyond VWAP '
+          + (adrFade.direction === 'short' ? 'upper' : 'lower') + ' band (stop anchor '
+          + adrFade.anchor.toFixed(2) + ')'
       });
     }
     return out;
@@ -3174,5 +3356,9 @@ W.calculateADRExhaustion = calculateADRExhaustion;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;
+W.goldAsianBreakout = goldAsianBreakout;
+W.goldADRFade = goldADRFade;
+W.detectAsianBreakout = detectAsianBreakout;
+W.detectADRFade = detectADRFade;
 W.goldDetectorReads = goldDetectorReads;
 })();

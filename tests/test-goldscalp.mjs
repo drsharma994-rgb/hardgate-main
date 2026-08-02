@@ -77,6 +77,7 @@ console.log('== 0) exports + tab registration ==');
                  'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
                  'updateActiveZones','detectOrderBlockRetest',
                  'getMarketSession','calculateAsianRange','calculateADRExhaustion',
+                 'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
@@ -320,6 +321,19 @@ console.log('== 10b) session & volatility module ==');
   assert(adr.isExhausted === true && adr.percentageConsumed >= 0.80,
          'calculateADRExhaustion: >=80% ADR consumed -> exhausted');
   assert(W.goldADRExhaustion === W.calculateADRExhaustion, 'goldADRExhaustion alias');
+  assert(W.detectAsianBreakout === W.goldAsianBreakout, 'detectAsianBreakout alias');
+  assert(W.detectADRFade === W.goldADRFade, 'detectADRFade alias');
+  const abRows = [];
+  for (let i = 0; i < 28; i++) abRows.push({ t: DAY + i*900, o: 100, h: 101, l: 99, c: 100, v: 1000 });
+  abRows.push({ t: DAY + 8*3600, o: 101.5, h: 102.5, l: 101.2, c: 102.2, v: 5000 });
+  const abSess = W.getMarketSession(DAY + 8*3600);
+  const abRange = W.calculateAsianRange(abRows, abRows.length - 1);
+  const abHit = W.detectAsianBreakout(abRows, abRows.length - 1, abSess, abRange);
+  assert(abHit.trigger === true && abHit.direction === 'long' && abHit.type === 'asian_breakout',
+         'detectAsianBreakout: London session + volume breakout above Asian high');
+  const eng = W.HardgateGoldEngine;
+  const abEv = eng.evaluateScalp(abRows, { atr15: 1 });
+  assert(abEv.activeTriggers.indexOf('ASIAN_RANGE_BREAKOUT') >= 0, 'evaluateScalp: Asian breakout trigger');
 }
 
 /* =========================================================================
@@ -592,6 +606,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
                  'updateActiveZones','detectOrderBlockRetest',
                  'getMarketSession','calculateAsianRange','calculateADRExhaustion',
+                 'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
