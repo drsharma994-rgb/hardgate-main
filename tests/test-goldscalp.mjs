@@ -72,7 +72,9 @@ console.log('== 0) exports + tab registration ==');
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
                  'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
                  'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
-                 'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2'];
+                 'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2',
+                 'goldSwings','goldMarketStructure','goldOrderBlockAt',
+                 'detectSwings','detectMarketStructure','detectOrderBlocks'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
   assert(!!tab && tab.label === 'GOLD SCALP' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
@@ -550,7 +552,9 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
                  'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
                  'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
-                 'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2'];
+                 'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2',
+                 'goldSwings','goldMarketStructure','goldOrderBlockAt',
+                 'detectSwings','detectMarketStructure','detectOrderBlocks'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
   for (const nm of names){
@@ -1599,6 +1603,36 @@ console.log('== volume microstructure ==');
   assert(evComp.volProfile && isFinite(evComp.volProfile.pocPrice), 'evaluateScalp: builds vol profile');
   assert(typeof W.detectLiquiditySweep_V2 === 'function' && W.detectLiquiditySweep_V2 === W.goldSweepV2,
          'detectLiquiditySweep_V2 alias -> goldSweepV2');
+}
+
+/* =========================================================================
+   SMC & market structure — goldSwings + goldMarketStructure + goldOrderBlockAt
+========================================================================= */
+console.log('== SMC market structure ==');
+{
+  assert(W.goldSwings([]).highs.length === 0 && W.goldSwings(null).lows.length === 0,
+         'goldSwings: empty/null -> empty highs/lows');
+  const ms0 = W.goldMarketStructure(flatRows(10, 100, 1, 0));
+  assert(ms0.trend === 'neutral' && ms0.bos === false, 'goldMarketStructure: short series -> neutral');
+  assert(W.goldOrderBlockAt([]).type === 'none' && W.goldOrderBlockAt(null).type === 'none',
+         'goldOrderBlockAt: empty/null -> none');
+  assert(W.detectSwings === W.goldSwings && W.detectMarketStructure === W.goldMarketStructure
+      && W.detectOrderBlocks === W.goldOrderBlockAt, 'SMC alias exports');
+  /* zigzag peaks/troughs for fractal swings (5+5 window) */
+  const zz = [];
+  let px = 100;
+  for (let i = 0; i < 40; i++){
+    const h = px + (i % 10 === 5 ? 8 : 1);
+    const l = px - (i % 10 === 5 ? 1 : 1);
+    if (i % 10 === 5) px += 6; else px += (i % 2 ? -0.3 : 0.2);
+    zz.push({ t: i * 900, o: px, h: h, l: l, c: px, v: 1000 });
+  }
+  zz[zz.length - 1].c = zz[zz.length - 2].h + 2;
+  zz[zz.length - 1].h = zz[zz.length - 1].c + 0.5;
+  const sw = W.goldSwings(zz, 3, 3);
+  assert(sw.highs.length >= 2 && sw.lows.length >= 2, 'goldSwings: zigzag yields swing pivots');
+  const ms = W.goldMarketStructure(zz, sw);
+  assert(ms.bos === true && ms.trend === 'bullish', 'goldMarketStructure: close above HH -> bullish BOS');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

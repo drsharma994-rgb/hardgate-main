@@ -95,6 +95,10 @@ Exports (all on window):
   HardgateGoldEngine.evaluateScalp(m15, ctx?) — build vol profile, run V2 triggers
                              on the last bar -> {volProfile, sweepData, fvgData,
                              activeTriggers, agreeingReads, context, reads}
+  goldSwings(rows, left?, right?) — fractal swing highs/lows -> {highs, lows}
+  goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
+  goldOrderBlockAt(rows, index?, atr?) — displacement OB at one bar index
+  detectSwings / detectMarketStructure / detectOrderBlocks — SMC aliases
 ========================================================================= */
 (function(){
 'use strict';
@@ -2575,6 +2579,131 @@ function goldFVGV2(rows, index, vprof){
   }catch(e){ return { trigger: false }; }
 }
 
+/* ---------------- SMC & market structure (fractal swings, BOS/CHOCH, OB@bar) ---------------- */
+
+/* Fractal swing highs/lows (default 5 left + 5 right). -> {highs, lows} with
+   {index, price, barsAgo}; empty arrays when unknowable — never throws. */
+function goldSwings(rows, leftBars, rightBars){
+  var empty = { highs: [], lows: [] };
+  try{
+    rows = __rows(rows);
+    if (!rows) return empty;
+    var n = rows.length;
+    leftBars = (leftBars === undefined || leftBars === null) ? 5 : Math.max(1, Math.floor(leftBars));
+    rightBars = (rightBars === undefined || rightBars === null) ? 5 : Math.max(1, Math.floor(rightBars));
+    if (n < leftBars + rightBars + 1) return empty;
+    var highs = [], lows = [], i, j, r, isHigh, isLow;
+    for (i = leftBars; i < n - rightBars; i++){
+      isHigh = true;
+      isLow = true;
+      r = rows[i];
+      if (!isFinite(r.h) || !isFinite(r.l)) continue;
+      for (j = 1; j <= leftBars; j++){
+        if (rows[i - j].h >= r.h) isHigh = false;
+        if (rows[i - j].l <= r.l) isLow = false;
+      }
+      for (j = 1; j <= rightBars; j++){
+        if (rows[i + j].h >= r.h) isHigh = false;
+        if (rows[i + j].l <= r.l) isLow = false;
+      }
+      var ago = n - 1 - i;
+      if (isHigh) highs.push({ index: i, price: r.h, barsAgo: ago });
+      if (isLow) lows.push({ index: i, price: r.l, barsAgo: ago });
+    }
+    return { highs: highs, lows: lows };
+  }catch(e){ return empty; }
+}
+
+/* BOS / CHOCH vs the last two fractal swings per side. Optional precomputed
+   swings; computes fractals when omitted. -> {trend, bos, choch, level,
+   lastHigh, prevHigh, lastLow, prevLow} — neutral when unknowable. */
+function goldMarketStructure(rows, swings, leftBars, rightBars){
+  var neutral = { trend: 'neutral', bos: false, choch: false, level: null,
+                  lastHigh: null, prevHigh: null, lastLow: null, prevLow: null };
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 3) return neutral;
+    if (!swings || typeof swings !== 'object'){
+      swings = goldSwings(rows, leftBars, rightBars);
+    }
+    if (!swings.highs || !swings.lows) return neutral;
+    if (swings.highs.length < 2 || swings.lows.length < 2) return neutral;
+    var lastHigh = swings.highs[swings.highs.length - 1];
+    var prevHigh = swings.highs[swings.highs.length - 2];
+    var lastLow = swings.lows[swings.lows.length - 1];
+    var prevLow = swings.lows[swings.lows.length - 2];
+    var cur = rows[rows.length - 1].c;
+    if (!isFinite(cur)) return neutral;
+    var out = {
+      trend: 'neutral', bos: false, choch: false, level: null,
+      lastHigh: lastHigh, prevHigh: prevHigh, lastLow: lastLow, prevLow: prevLow
+    };
+    if (cur > lastHigh.price && lastHigh.price > prevHigh.price){
+      out.trend = 'bullish';
+      out.bos = true;
+      out.level = lastHigh.price;
+      return out;
+    }
+    if (cur < lastLow.price && lastLow.price < prevLow.price){
+      out.trend = 'bearish';
+      out.bos = true;
+      out.level = lastLow.price;
+      return out;
+    }
+    if (cur > lastHigh.price && lastHigh.price <= prevHigh.price){
+      out.trend = 'bullish';
+      out.choch = true;
+      out.level = lastHigh.price;
+      return out;
+    }
+    if (cur < lastLow.price && lastLow.price >= prevLow.price){
+      out.trend = 'bearish';
+      out.choch = true;
+      out.level = lastLow.price;
+      return out;
+    }
+    return out;
+  }catch(e){ return neutral; }
+}
+
+/* Displacement order block at bar `index` (default last): opposing candle
+   before a >=1.5×ATR impulse that engulfs it. -> {type, top, base,
+   mitigated} | {type:'none'}. */
+function goldOrderBlockAt(rows, index, atr){
+  try{
+    rows = __rows(rows);
+    if (!rows || rows.length < 6) return { type: 'none' };
+    var n = rows.length;
+    if (index === undefined || index === null) index = n - 1;
+    index = Math.floor(index);
+    if (index < 5 || index >= n) return { type: 'none' };
+    var cur = rows[index], prev = rows[index - 1];
+    if (!cur || !prev) return { type: 'none' };
+    if (!isFinite(atr) || !(atr > 0)){
+      atr = __last(_atr(rows, 14));
+    }
+    if (!isFinite(atr) || !(atr > 0)) return { type: 'none' };
+    var bodyUp = cur.c - cur.o;
+    var bodyDn = cur.o - cur.c;
+    var mitigated = false, k;
+    if (prev.c < prev.o && bodyUp > 1.5 * atr && cur.c > prev.h){
+      for (k = index + 1; k < n; k++){
+        if (rows[k].l <= prev.l){ mitigated = true; break; }
+      }
+      return { type: 'bullish_ob', top: prev.h, base: prev.l, mitigated: mitigated,
+               index: index - 1, impulseIndex: index };
+    }
+    if (prev.c > prev.o && bodyDn > 1.5 * atr && cur.c < prev.l){
+      for (k = index + 1; k < n; k++){
+        if (rows[k].h >= prev.h){ mitigated = true; break; }
+      }
+      return { type: 'bearish_ob', top: prev.h, base: prev.l, mitigated: mitigated,
+               index: index - 1, impulseIndex: index };
+    }
+    return { type: 'none' };
+  }catch(e){ return { type: 'none' }; }
+}
+
 /* HardgateGoldEngine — scalp microstructure evaluator (volume profile first,
    then strict V2 triggers on the evaluation bar). Never throws. */
 function evaluateScalp(m15Data, ctx){
@@ -2674,4 +2803,10 @@ W.detectLiquiditySweep_V2 = goldSweepV2;
 W.detectFVG_V2 = goldFVGV2;
 W.evaluateScalp = evaluateScalp;
 W.HardgateGoldEngine = HardgateGoldEngine;
+W.goldSwings = goldSwings;
+W.goldMarketStructure = goldMarketStructure;
+W.goldOrderBlockAt = goldOrderBlockAt;
+W.detectSwings = goldSwings;
+W.detectMarketStructure = goldMarketStructure;
+W.detectOrderBlocks = goldOrderBlockAt;
 })();
