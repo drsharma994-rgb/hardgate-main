@@ -877,30 +877,41 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
       }
     } else if (!swFn) notes.push('goldSweeps unavailable (goldind.js) — sweep evidence skipped');
 
-    /* 4h fractal BOS / CHOCH (goldind.js SMC module) */
-    var swFn2 = gfn('goldSwings'), msFn = gfn('goldMarketStructure');
-    var ms4 = null, activeOBs4 = null, obRetest4 = null;
-    var activeFn = gfn('goldActiveOrderBlocks'), retestFn = gfn('goldOrderBlockRetest');
-    if (swFn2 && msFn){
+    /* 4h fractal BOS / CHOCH + OB zone eval (HardgateGoldEngine.evaluateSwing) */
+    var ms4 = null, obRetest4 = null;
+    var engFn = gfn('HardgateGoldEngine');
+    if (engFn && typeof engFn.evaluateSwing === 'function'){
       try{
-        var sw4 = swFn2(rows4, 5, 5);
-        ms4 = msFn(rows4, sw4, 5, 5);
-        if (activeFn) activeOBs4 = activeFn(rows4, a4);
-        if (retestFn && ms4) obRetest4 = retestFn(rows4, n - 1, ms4, activeOBs4);
-        if (ms4 && ms4.bos && isFinite(ms4.level)){
-          if (ms4.trend === 'bullish'){
-            add('long', 'bos', '4h fractal BOS bullish — close above swing high ' + ms4.level.toFixed(2));
-          } else if (ms4.trend === 'bearish'){
-            add('short', 'bos', '4h fractal BOS bearish — close below swing low ' + ms4.level.toFixed(2));
+        var swingEval = engFn.evaluateSwing(rows4, { atr4: a4, nearestStructure: null, entry: entry });
+        ms4 = swingEval.structure;
+        obRetest4 = swingEval.obSetup;
+      }catch(eEng){ /* skip */ }
+    } else {
+      var swFn2 = gfn('goldSwings'), msFn = gfn('goldMarketStructure');
+      var updateFn = gfn('goldUpdateActiveZones'), retestFn = gfn('goldOrderBlockRetest');
+      if (swFn2 && msFn){
+        try{
+          var sw4 = swFn2(rows4, 5, 5);
+          ms4 = msFn(rows4, sw4, 5, 5);
+          if (updateFn && retestFn){
+            updateFn(rows4, n - 1, a4);
+            obRetest4 = retestFn(rows4, n - 1, ms4);
           }
-        } else if (ms4 && ms4.choch && isFinite(ms4.level)){
-          if (ms4.trend === 'bullish'){
-            add('long', 'choch', '4h fractal CHOCH bullish — shift above swing high ' + ms4.level.toFixed(2));
-          } else if (ms4.trend === 'bearish'){
-            add('short', 'choch', '4h fractal CHOCH bearish — shift below swing low ' + ms4.level.toFixed(2));
-          }
-        }
-      }catch(eMs){ /* skip */ }
+        }catch(eMs){ /* skip */ }
+      }
+    }
+    if (ms4 && ms4.bos && isFinite(ms4.level)){
+      if (ms4.trend === 'bullish'){
+        add('long', 'bos', '4h fractal BOS bullish — close above swing high ' + ms4.level.toFixed(2));
+      } else if (ms4.trend === 'bearish'){
+        add('short', 'bos', '4h fractal BOS bearish — close below swing low ' + ms4.level.toFixed(2));
+      }
+    } else if (ms4 && ms4.choch && isFinite(ms4.level)){
+      if (ms4.trend === 'bullish'){
+        add('long', 'choch', '4h fractal CHOCH bullish — shift above swing high ' + ms4.level.toFixed(2));
+      } else if (ms4.trend === 'bearish'){
+        add('short', 'choch', '4h fractal CHOCH bearish — shift below swing low ' + ms4.level.toFixed(2));
+      }
     }
 
     /* prior week high/low from real 1d bars */

@@ -92,9 +92,11 @@ Exports (all on window):
   goldFVGHasHVNSupport(gap, vprof) — true when an HVN sits at/below/inside gap
   isVolumeSpike / buildVolumeProfile — aliases of goldVolumeSpike / goldVolumeProfile
   detectLiquiditySweep_V2 / detectFVG_V2 — aliases of goldSweepV2 / goldFVGV2
-  HardgateGoldEngine.evaluateScalp(m15, ctx?) — build vol profile, run V2 triggers
-                             on the last bar -> {volProfile, sweepData, fvgData,
-                             activeTriggers, agreeingReads, context, reads}
+  HardgateGoldEngine.evaluateScalp(m15, ctx?) — vol profile + V2 triggers + OB retest
+                             on the last bar -> {volProfile, sweepData, fvgData, obSetup,
+                             swings, structure, activeOrderBlocks, activeTriggers,
+                             agreeingReads, context, reads}
+  HardgateGoldEngine.evaluateSwing(h4, ctx?) — 4h swing evaluator (structure + OB retest)
   goldSwings(rows, left?, right?) — fractal swing highs/lows -> {highs, lows}
   goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
   goldOrderBlockAt(rows, index?, atr?) — displacement OB at one bar index
@@ -1184,7 +1186,7 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
 
   var sw = D.sw = goldSweeps(rows);
   /* microstructure landscape + V2 triggers (HardgateGoldEngine.evaluateScalp) */
-  D.scalpEval = evaluateScalp(rows, { nearestStructure: null, entry: entry });
+  D.scalpEval = evaluateScalp(rows, { nearestStructure: null, entry: entry, atr15: a15 });
   D.vprof = D.scalpEval.volProfile || goldVolumeProfile(rows, 100, 50);
   D.volSpike = goldVolumeSpike(rows);
   D.volSpikeSweep = false;
@@ -2815,14 +2817,18 @@ function goldActiveOrderBlocks(rows, atr, endIndex){
   }catch(e){ return empty; }
 }
 
-/* Incremental active-zone update at `index` (alias-friendly wrapper). */
+/* Incremental active-zone update at `index` (alias-friendly wrapper). Caches the
+   last result so detectOrderBlockRetest(rows, index, structure) can omit activeObs. */
+var _lastActiveZones = null;
 function goldUpdateActiveZones(rows, index, atr){
   try{
     rows = __rows(rows);
     if (!rows || !rows.length) return { activeOrderBlocks: [] };
     if (index === undefined || index === null) index = rows.length - 1;
-    return { activeOrderBlocks: goldActiveOrderBlocks(rows, atr, index) };
-  }catch(e){ return { activeOrderBlocks: [] }; }
+    var blocks = goldActiveOrderBlocks(rows, atr, index);
+    _lastActiveZones = blocks;
+    return { activeOrderBlocks: blocks };
+  }catch(e){ _lastActiveZones = null; return { activeOrderBlocks: [] }; }
 }
 
 /* Structure-aligned OB retest on bar `index`. Requires non-neutral trend;
@@ -2839,7 +2845,8 @@ function goldOrderBlockRetest(rows, index, structure, activeObs){
     structure = structure || { trend: 'neutral' };
     if (!structure.trend || structure.trend === 'neutral') return no;
     if (!activeObs || !activeObs.length){
-      activeObs = goldActiveOrderBlocks(rows, undefined, index);
+      activeObs = (_lastActiveZones && _lastActiveZones.length) ? _lastActiveZones
+        : goldActiveOrderBlocks(rows, undefined, index);
     }
     var current = rows[index], ob, i;
     for (i = 0; i < activeObs.length; i++){
@@ -2868,6 +2875,10 @@ function evaluateScalp(m15Data, ctx){
     volProfile: null,
     sweepData: { trigger: false },
     fvgData: { trigger: false },
+    obSetup: { trigger: false },
+    swings: null,
+    structure: null,
+    activeOrderBlocks: [],
     activeTriggers: [],
     agreeingReads: 0,
     context: ctx || {},
@@ -2912,28 +2923,93 @@ function evaluateScalp(m15Data, ctx){
       });
     }
 
-    var mstruct = goldMarketStructure(rows);
-    var activeOBs = goldActiveOrderBlocks(rows, undefined, index);
-    var obRet = goldOrderBlockRetest(rows, index, mstruct, activeOBs);
-    if (obRet && obRet.trigger){
+    /* Maintain market structure & active OB zones, then evaluate OB retest. */
+    var atr15 = out.context.atr15;
+    if (!isFinite(atr15) || !(atr15 > 0)) atr15 = __last(_atr(rows, 14));
+    if (isFinite(atr15) && atr15 > 0) out.context.atr15 = atr15;
+
+    var swings = goldSwings(rows, 5, 5);
+    var structure = goldMarketStructure(rows, swings);
+    out.swings = swings;
+    out.structure = structure;
+
+    var zoneUpd = goldUpdateActiveZones(rows, index, atr15);
+    out.activeOrderBlocks = zoneUpd.activeOrderBlocks || [];
+
+    var obSetup = goldOrderBlockRetest(rows, index, structure);
+    out.obSetup = obSetup;
+    if (obSetup && obSetup.trigger){
       out.activeTriggers.push('ORDER_BLOCK_RETEST');
       out.agreeingReads++;
-      if (isFinite(obRet.anchor)) out.context.nearestStructure = obRet.anchor;
+      if (isFinite(obSetup.anchor)) out.context.nearestStructure = obSetup.anchor;
       out.reads.push({
-        side: obRet.direction,
+        side: obSetup.direction,
         tag: 'ob_retest',
         label: 'structure-aligned OB retest — '
-          + (obRet.obType === 'bullish_ob' ? 'bullish' : 'bearish') + ' zone '
-          + obRet.base.toFixed(2) + '–' + obRet.top.toFixed(2)
-          + ' with ' + mstruct.trend + ' fractal structure (stop anchor '
-          + obRet.anchor.toFixed(2) + ')'
+          + (obSetup.obType === 'bullish_ob' ? 'bullish' : 'bearish') + ' zone '
+          + obSetup.base.toFixed(2) + '–' + obSetup.top.toFixed(2)
+          + ' with ' + structure.trend + ' fractal structure (stop anchor '
+          + obSetup.anchor.toFixed(2) + ')'
       });
     }
     return out;
   }catch(e){ return out; }
 }
 
-var HardgateGoldEngine = { evaluateScalp: evaluateScalp };
+/* 4h swing evaluator — structure + active OB zones + OB retest trigger. */
+function evaluateSwing(h4Data, ctx){
+  var out = {
+    volProfile: null,
+    obSetup: { trigger: false },
+    swings: null,
+    structure: null,
+    activeOrderBlocks: [],
+    activeTriggers: [],
+    agreeingReads: 0,
+    context: ctx || {},
+    reads: []
+  };
+  try{
+    var rows = __rows(h4Data);
+    if (!rows || rows.length < 3) return out;
+    if (!out.context || typeof out.context !== 'object') out.context = {};
+    var index = rows.length - 1;
+
+    out.volProfile = goldVolumeProfile(rows, 100, 50);
+
+    var atr4 = out.context.atr4;
+    if (!isFinite(atr4) || !(atr4 > 0)) atr4 = __last(_atr(rows, 14));
+    if (isFinite(atr4) && atr4 > 0) out.context.atr4 = atr4;
+
+    var swings = goldSwings(rows, 5, 5);
+    var structure = goldMarketStructure(rows, swings);
+    out.swings = swings;
+    out.structure = structure;
+
+    var zoneUpd = goldUpdateActiveZones(rows, index, atr4);
+    out.activeOrderBlocks = zoneUpd.activeOrderBlocks || [];
+
+    var obSetup = goldOrderBlockRetest(rows, index, structure);
+    out.obSetup = obSetup;
+    if (obSetup && obSetup.trigger){
+      out.activeTriggers.push('ORDER_BLOCK_RETEST');
+      out.agreeingReads++;
+      if (isFinite(obSetup.anchor)) out.context.nearestStructure = obSetup.anchor;
+      out.reads.push({
+        side: obSetup.direction,
+        tag: 'ob_retest',
+        label: '4h structure-aligned OB retest — '
+          + (obSetup.obType === 'bullish_ob' ? 'bullish' : 'bearish') + ' zone '
+          + obSetup.base.toFixed(2) + '–' + obSetup.top.toFixed(2)
+          + ' with ' + structure.trend + ' fractal structure (stop anchor '
+          + obSetup.anchor.toFixed(2) + ')'
+      });
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+var HardgateGoldEngine = { evaluateScalp: evaluateScalp, evaluateSwing: evaluateSwing };
 
 /* ---------------- exports ---------------- */
 
@@ -2977,6 +3053,7 @@ W.buildVolumeProfile = goldVolumeProfile;
 W.detectLiquiditySweep_V2 = goldSweepV2;
 W.detectFVG_V2 = goldFVGV2;
 W.evaluateScalp = evaluateScalp;
+W.evaluateSwing = evaluateSwing;
 W.HardgateGoldEngine = HardgateGoldEngine;
 W.goldSwings = goldSwings;
 W.goldMarketStructure = goldMarketStructure;
