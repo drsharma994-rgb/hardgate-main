@@ -247,7 +247,12 @@ function squeezePlan(inp){
         var s = smartSetup({ dir: dir, longEv: c.longEv, shortEv: c.shortEv,
                              regime: c.regime, score: c.score, total: c.total },
                            rows, inp.rows1h);
-        if (validSetup(s)) return s;
+        if (validSetup(s)){
+          if (typeof hgApplyExactEntry === 'function'){
+            s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
+          }
+          return s;
+        }
       }catch(eSmart){ /* a broken smartSetup degrades to the house fallback */ }
     }
 

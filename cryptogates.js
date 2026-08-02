@@ -132,7 +132,9 @@
       dir: dir, gates: gates, passed: passed, gatesTotal: 7,
       level: entry, clean: passed >= 7,
       entry: entry, stop: stop, t1: t1, t2: t2, dynamicRR: dynamicRR,
-      r15: r15, a: a, m15: m15, h1: h1, swept: swept, reclaimed: reclaimed
+      r15: r15, a: a, m15: m15, h1: h1, swept: swept, reclaimed: reclaimed,
+      localLow: localLow, localHigh: localHigh,
+      e21: e21a[n], mark: c15[n - 1]
     };
   }
 
@@ -165,7 +167,11 @@
       rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev, mark: p };
     if (typeof hgEnrichSwingClean === 'function'){
       var enriched = hgEnrichSwingClean(out, rows, m);
-      if (enriched) return enriched;
+      if (enriched) out = enriched;
+    }
+    if (typeof hgApplyExactEntry === 'function'){
+      var exact = hgApplyExactEntry(out, rows, { style: 'swing', preferEdge: true });
+      if (exact) return exact;
     }
     return out;
   }
@@ -173,8 +179,19 @@
   function scalpTryClean(h1, m15, ticker, minsToFunding){
     var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
     if (!m || !m.dir || !m.clean) return null;
-    return { sym: ticker && ticker.symbol, dir: m.dir, entry: m.entry, stop: m.stop,
-      t1: m.t1, t2: m.t2, rr: m.dynamicRR, m15: m.m15, r15: m.r15, a: m.a };
+    var sweepLevel = (m.swept && m.reclaimed)
+      ? (m.dir === 'long' ? m.localLow : m.localHigh) : null;
+    var out = { sym: ticker && ticker.symbol, dir: m.dir, entry: m.entry, stop: m.stop,
+      t1: m.t1, t2: m.t2, rr: m.dynamicRR, m15: m.m15, r15: m.r15, a: m.a,
+      swept: m.swept, reclaimed: m.reclaimed, sweepLevel: sweepLevel,
+      e21: m.e21, mark: m.mark || m.entry };
+    if (typeof hgEnrichScalpExact === 'function'){
+      var enriched = hgEnrichScalpExact(out, m15, {});
+      if (enriched) out = enriched;
+    } else if (typeof hgApplyExactEntry === 'function'){
+      out = hgApplyExactEntry(Object.assign({ type: 'SCALP' }, out), m15, { style: 'scalp', m15: m15 }) || out;
+    }
+    return out;
   }
 
   G.swingGateMatrix = swingGateMatrix;

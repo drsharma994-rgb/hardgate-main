@@ -60,7 +60,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Use the Node server, not `file://`:** Direct file open skips `/api/proxy`.
 - **No runtime npm dependencies:** `npm install` is a no-op.
 - **Node 18+ required**
-- **Shared setup plans (`plans.js`):** Loaded after `cryptogates.js`. `hgStructureStop`, `hgPlanSwingTargets`, `hgEnrichSwingClean`, `hgSwingParity`, etc. SWING CLEAN cards use unified targets + LIMIT guidance. BEST uses `swingTryClean`. EXECUTE requires SWING G6/G7 when cryptogates loaded. EDGE requires G5 or G6 when both fail. BRAIN demotes continuation vs mean-reversion structural conflicts to ASIDE.
+- **Shared setup plans (`plans.js`):** Loaded after `cryptogates.js`. `hgApplyExactEntry` unifies EDGE-parity exact entries (EMA21/9, sweep, OTE via `edgeSignal` when loaded) across SWING/SCALP/SMART/EXECUTE and scanner tabs. Also: `hgStructureStop`, `hgPlanSwingTargets`, `hgEnrichSwingClean`, `hgSwingParity`, etc.
 - **Alert dual clocks:** Set `RENDER_DISPATCH_PRIMARY=true` on GitHub when Render dispatches alerts every 13 min.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins IST clock for session gates.
 
