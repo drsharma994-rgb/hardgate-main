@@ -1601,10 +1601,16 @@ console.log('== volume microstructure ==');
   assert(W.goldFVGHasHVNSupport(fvgG, fvgP) === true, 'goldFVGHasHVNSupport: fvg fixture gap has HVN launchpad');
   const eng = W.HardgateGoldEngine;
   assert(eng && typeof eng.evaluateScalp === 'function', 'HardgateGoldEngine.evaluateScalp exported');
+  assert(typeof eng.evaluateSwing === 'function', 'HardgateGoldEngine.evaluateSwing exported');
   const evEmpty = eng.evaluateScalp([]);
   assert(evEmpty.agreeingReads === 0 && evEmpty.activeTriggers.length === 0, 'evaluateScalp: empty -> zero triggers');
+  assert(Array.isArray(evEmpty.activeOrderBlocks), 'evaluateScalp: exposes activeOrderBlocks');
   const evComp = eng.evaluateScalp(compLongRows());
   assert(evComp.volProfile && isFinite(evComp.volProfile.pocPrice), 'evaluateScalp: builds vol profile');
+  assert(evComp.structure && typeof evComp.structure.trend === 'string', 'evaluateScalp: maintains structure');
+  const evSwing = eng.evaluateSwing([]);
+  assert(evSwing.agreeingReads === 0 && evSwing.obSetup && evSwing.obSetup.trigger === false,
+         'evaluateSwings: empty -> no OB trigger');
   assert(typeof W.detectLiquiditySweep_V2 === 'function' && W.detectLiquiditySweep_V2 === W.goldSweepV2,
          'detectLiquiditySweep_V2 alias -> goldSweepV2');
 }
@@ -1654,6 +1660,9 @@ console.log('== SMC market structure ==');
   if (msO.trend === 'bullish'){
     assert(rtO.trigger === true && rtO.direction === 'long' && rtO.type === 'ob_retest',
            'goldOrderBlockRetest: bullish structure + inside bullish OB -> long trigger');
+    W.updateActiveZones(obr, obr.length - 1);
+    const rt3 = W.detectOrderBlockRetest(obr, obr.length - 1, msO);
+    assert(rt3.trigger === true, 'detectOrderBlockRetest: uses updateActiveZones cache when activeObs omitted');
   } else {
     assert(Array.isArray(actO), 'goldActiveOrderBlocks: returns array when structure neutral');
   }
