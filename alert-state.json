@@ -2,36 +2,17 @@
   "delta": "EDENUSD|short",
   "coindcx": "B-HYPE_USDT|short",
   "gold": null,
-  "lastRunAt": "2026-08-01T10:42:35.193Z",
+  "lastRunAt": "2026-08-02T11:08:10.369Z",
   "ticket": {
     "long": null,
     "short": null
   },
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-02T09:45:05.108Z"
+    "at": "2026-08-02T11:08:10.370Z"
   },
   "setups": {
     "keys": {
-      "B-SYRUP_USDT:short@0.15966": 1785580955194,
-      "B-COW_USDT:short@0.1158": 1785580955194,
-      "B-NEAR_USDT:short@1.662": 1785580955194,
-      "B-EPIC_USDT:long@0.7871": 1785580955194,
-      "B-US_USDT:long@0.053451": 1785580955194,
-      "B-LTC_USDT:short@44.48": 1785580955194,
-      "B-BIRB_USDT:short@0.0524": 1785580955194,
-      "B-VANRY_USDT:short@0.00403": 1785580955194,
-      "B-UB_USDT:long@0.16105": 1785580955194,
-      "B-OP_USDT:short@0.0853": 1785580955194,
-      "B-CHIP_USDT:short@0.02542": 1785580955194,
-      "B-FF_USDT:long@0.06538": 1785580955194,
-      "B-HUMA_USDT:short@0.019501": 1785580955194,
-      "B-NIGHT_USDT:short@0.01782": 1785580955194,
-      "B-BIGTIME_USDT:short@0.005637": 1785580955194,
-      "B-AGLD_USDT:short@0.147": 1785580955194,
-      "B-ESPORTS_USDT:short@0.01801": 1785580955194,
-      "B-JCT_USDT:short@0.003561": 1785580955194,
-      "B-IO_USDT:short@0.1326": 1785580955194,
       "B-LPT_USDT:short@1.273": 1785595592876,
       "B-1000BONK_USDT:short@0.002786": 1785595592876,
       "B-ZRO_USDT:short@0.7348": 1785595592876,
@@ -47,7 +28,7 @@
       "B-ADA_USDT:long@0.1731": 1785595592876,
       "B-STABLE_USDT:short@0.03401": 1785595592876
     },
-    "at": "2026-08-02T09:45:05.108Z"
+    "at": "2026-08-02T11:08:10.370Z"
   },
   "engineAlertAt": "2026-08-02T09:45:07.070Z",
   "bookExec": {
@@ -64,7 +45,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-02T09:45:07.362Z"
+    "at": "2026-08-02T11:08:10.707Z"
   },
   "bookFill": {
     "key": "u0|p0",
