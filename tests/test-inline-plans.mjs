@@ -325,6 +325,7 @@ async function drive(name, runCode, cardsId, tickers, data, extraChecks){
 }
 
 (async () => {
+  run('try{ localStorage.setItem("hg_dual_scan","0"); }catch(e){}');
   await drive('scalp', 'runScan("scalp")', 'scalpCards', [TICK],
     { 'TESTUSD|1h': scalpH1, 'TESTUSD|15m': scalpM15 },
     (out) => {

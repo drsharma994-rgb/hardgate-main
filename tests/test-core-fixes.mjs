@@ -214,8 +214,8 @@ assert(html.includes('GATES, NOT SCORES · 23+ TOOLS'), 'brand small-text carrie
 const GUARDED = ['runGold', 'runSmcScan', 'runObScan', 'runCoilScan', 'runApexScan',
                  'runTrapScan', 'runBias', 'runDivScan', 'runExpansionCheck', 'runBasisScan'];
 for (const name of GUARDED){
-  const fnStart = html.indexOf('async function ' + name + '()');
-  assert(fnStart !== -1 && html.slice(fnStart, fnStart + 320).indexOf('waitAlertIdle') !== -1,
+  const fnStart = html.indexOf('async function ' + name + '(');
+  assert(fnStart !== -1 && html.slice(fnStart, fnStart + 420).indexOf('waitAlertIdle') !== -1,
     name + ' opens with the waitAlertIdle auto-wait guard (no more bounce-and-retry)');
 }
 assert((html.match(/alert cycle is running — try again in a few seconds/g) || []).length === 0,

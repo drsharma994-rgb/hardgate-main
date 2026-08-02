@@ -56,6 +56,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 
 ### Gotchas
 
+- **Dual venue scan (default):** Opening a crypto scan tab auto-runs **Delta India + CoinDCX** (`hg_dual_scan` localStorage `0` disables). Header exchange toggle still sets desk context for TRADE PLAN / bias chips.
 - **Binance geo-blocking (HTTP 451):** Cloud VMs may not reach `fapi.binance.com`. `npm test` passes offline. `tests/test-data-layer.mjs` skips Binance legs on 451 and exits 0.
 - **Use the Node server, not `file://`:** Direct file open skips `/api/proxy`.
 - **No runtime npm dependencies:** `npm install` is a no-op.
