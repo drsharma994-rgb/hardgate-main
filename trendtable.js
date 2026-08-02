@@ -160,6 +160,10 @@ function tmDirOf(inp){
 }
 
 function tmFallbackStop(dir, entry, a, rows){
+  if (typeof hgStructureStop === 'function'){
+    var st = hgStructureStop(dir, entry, rows, { atrLen: TM_ATR_LEN, look: 30 });
+    if (st) return { stop: st.stop, note: st.note };
+  }
   var stop = NaN, note = '';
   var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, 30) : NaN;
   if (isFinite(sw)){
