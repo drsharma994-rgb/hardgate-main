@@ -633,6 +633,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="bybit.js"></script>
 <script src="positioning.js"></script>
 <script src="cryptogates.js"></script>
+<script src="plans.js"></script>
 <script src="cryptowatch.js"></script>
 <script src="macro.js"></script>
 <script src="squeeze.js"></script>
@@ -647,7 +648,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
-<script src="edge.js?v=40"></script>
+<script src="edge.js?v=41"></script>
 <script src="startradertab.js?v=39"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -1551,30 +1552,39 @@ function smartSetup(cls, rows4h, rows1h){
   /* confirmed = 4h EMA20/50 cascade on the side of dir */
   const c4 = rows4h.map(function(r){ return r.c; });
   const e20 = last(ema(c4, 20)), e50 = last(ema(c4, 50));
-  const confirmed = isFinite(e20) && isFinite(e50) && (dir === 'long' ? e20 > e50 : e20 < e50);
+  const cc = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'smart') : null;
+  const confirmed = cc ? cc.confirmed && cc.dir === dir : (isFinite(e20) && isFinite(e50) && (dir === 'long' ? e20 > e50 : e20 < e50));
 
-  let entry, stop, t1, t2, note;
+  let entry, stop, t1, t2, note, planSrc = 'smartSetup';
   if (type === 'SWING'){
     entry = rows4h[n4-1].c;
     const a4 = last(atr(rows4h, 14));
     if (!isFinite(a4) || a4 <= 0) return null;
-    const sw = lastSwing(rows4h, dir, 30);           // structural extreme, last 30 completed bars
-    stop = isFinite(sw) ? (dir === 'long' ? sw - 0.25*a4 : sw + 0.25*a4) : NaN;
-    let risk = dir === 'long' ? entry - stop : stop - entry;
-    note = '';
-    if (isFinite(risk) && risk > 2.5*a4){            // structure too far — ATR fallback
-      stop = dir === 'long' ? entry - 1.5*a4 : entry + 1.5*a4;
-      risk = 1.5*a4;
-      note = 'stop capped: structure beyond 2.5×ATR';
+    let risk, note = '';
+    if (typeof hgStructureStop === 'function'){
+      const st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: 30 });
+      if (!st) return null;
+      stop = st.stop;
+      risk = st.risk;
+      note = st.note || '';
+    } else {
+      const sw = lastSwing(rows4h, dir, 30);
+      stop = isFinite(sw) ? (dir === 'long' ? sw - 0.25*a4 : sw + 0.25*a4) : NaN;
+      risk = dir === 'long' ? entry - stop : stop - entry;
+      if (isFinite(risk) && risk > 2.5*a4){
+        stop = dir === 'long' ? entry - 1.5*a4 : entry + 1.5*a4;
+        risk = 1.5*a4;
+        note = 'stop capped: structure beyond 2.5×ATR';
+      }
+      if (!(risk > 0)) return null;
     }
-    if (!(risk > 0)) return null;                    // broken structure (stop on the wrong side)
     t1 = dir === 'long' ? entry + 2*risk : entry - 2*risk;
     t2 = dir === 'long' ? entry + 3.5*risk : entry - 3.5*risk;
     const rr1 = Math.abs(t1 - entry)/risk;
-    if (rr1 < 1.5) return null;                      // defensive — t1 is 2R by construction
+    if (rr1 < 1.5) return null;
     return { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              rr1: rr1, rr2: Math.abs(t2 - entry)/risk, riskPct: risk/entry*100,
-             confirmed: confirmed, note: note };
+             confirmed: confirmed, note: note, targetPolicy: 'R-multiples (2R/3.5R)', planSrc: planSrc };
   }
   /* SCALP — 1H when there is enough history, else 4H-based fallback */
   const src = (rows1h && rows1h.length >= 30) ? rows1h : rows4h;
@@ -1614,6 +1624,7 @@ function smartCardHTML(r){
       + ' · T2 <b>' + px(s.t2) + '</b> (' + fmt(s.rr2, 1) + 'R) · risk ' + fmt(s.riskPct, 2) + '%'
       + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
       + (s.note ? ' — ' + s.note : '')
+      + (typeof hgPlanMetaLabel === 'function' && hgPlanMetaLabel(s) ? ' <span class="note">(' + hgPlanMetaLabel(s) + ')</span>' : '')
     : regime + 'Direction is an evidence majority, not a signal — confirm 4H structure, funding window and R:R on the SWING/SCALP tab before trading it.';
   const tradeBtn = s ? '<button class="toTrade" onclick="'
       + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
@@ -2483,6 +2494,11 @@ function hgSessionChip(now){
    Stop always lands on the correct side of entry for dir. */
 function hgPlanLevels(dir, rows, entryOverride){
   try{
+    if (typeof hgPlanLevelsCore === 'function'){
+      var pl = hgPlanLevelsCore(dir, rows, entryOverride, { minRr: 2 });
+      if (pl) return { dir: pl.dir, entry: pl.entry, stop: pl.stop, t1: pl.t1, t2: pl.t2, risk: pl.risk, note: pl.note,
+                       targetPolicy: pl.targetPolicy, planSrc: pl.planSrc };
+    }
     if (dir!=='long' && dir!=='short') return null;
     if (!rows || !rows.length) return null;
     const entry = (isFinite(entryOverride) && entryOverride>0) ? +entryOverride : +rows[rows.length-1].c;
@@ -3857,29 +3873,26 @@ async function runCascadeCore(uni){
       try{
         const rows=await getCandles(t.symbol,'4h',260);
         if (rows.length<210) return;
-        if (typeof detectRegime === 'function'){
+        if (typeof hgRegimeAllowsSetup === 'function'){
+          const rg = hgRegimeAllowsSetup(rows, 'best');
+          if (rg && !rg.allow) return;
+        } else if (typeof detectRegime === 'function'){
           const dr = detectRegime(rows);
           if (dr && dr.regime === 'compression') return;
         }
+        if (typeof swingTryClean !== 'function') return;
+        const tc = swingTryClean(rows, t);
+        if (!tc || !tc.dir) return;
         const c=rows.map(r=>r.c);
-        const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50)), e200=last(ema(c,200));
-        const p=last(c), r14=last(rsi(c,14)), vz=volZ(rows,20), a4=last(atr(rows,14));
-      if (isFinite(e200)){ breadthTotal++; if (p>e200) breadthBull++; }
-        let dir=null;
-        if (e9>e21&&e21>e50) dir='long'; else if (e9<e21&&e21<e50) dir='short';
-        if (!dir) return;
-        if (!(isFinite(a4)&&Math.abs(e21-e50)>=0.25*a4)) return;
-        if (dir==='long' ? !(p>e200) : !(p<e200)) return;
-        if ((dir==='long'&&r14>70)||(dir==='short'&&r14<30)) return;
-        const fr=t.fundingPct;
-        if (fr!==null){
-          if (Math.abs(fr)>0.05-1e-9) return;
-          if ((dir==='long'&&fr>=0.04)||(dir==='short'&&fr<=-0.04)) return;
-        }
-        const currentBar = rows[rows.length-1]; const range = currentBar.h - currentBar.l; const closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5; const closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40; const _rA = rsi(c,14); const _rP = _rA[_rA.length-4]; const slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false; if (!((vz > 0.5) || (closeOK && slopeOK))) return; if (!closeOK) return;
-        let stop=lastSwing(rows,dir,30); const distToAnchor = Math.abs(p - e21) / a4; if (!(isFinite(distToAnchor) && distToAnchor <= 1.5)) return; let plannedEntry = p, entryType = 'MARKET'; const distToFast = Math.abs(p - e9) / a4; if (distToFast > 0.25){ plannedEntry = dir === 'long' ? Math.min(p, e9) : Math.max(p, e9); entryType = 'LIMIT @ EMA9'; } const entry = plannedEntry; if (Math.abs(entry - stop) > 1.5 * a4){ stop = dir === 'long' ? entry - 1.5 * a4 : entry + 1.5 * a4; entryType += ' · ATR-capped stop'; } const risk=Math.abs(entry-stop);
-if (!(risk>0)) return;
-const expectedMove = a4 * 3.5; const maxExcursion = a4 * 4.9; const t1 = dir==='long' ? entry+expectedMove : entry-expectedMove; const t2 = dir==='long' ? entry+maxExcursion : entry-maxExcursion; const rr = expectedMove/risk; if (!(rr>=2)) return; const ev = cusumLast(c.slice(-120),1); if (ev && ev.barsAgo<=20 && ev.dir!==dir) return; clean.push({t,dir,rows,entry,entryType,distToAnchor,stop,risk,rr,t1,t2,vz,fr,ev});
+        const e21=last(ema(c,21)), p=last(c), a4=last(atr(rows,14));
+        const distToAnchor = (isFinite(a4) && a4 > 0) ? Math.abs(p - e21) / a4 : NaN;
+        const risk = Math.abs(tc.entry - tc.stop);
+        if (!(risk > 0)) return;
+        if (isFinite(e200)){ breadthTotal++; if (p>e200) breadthBull++; }
+        clean.push({t, dir: tc.dir, rows, entry: tc.entry, entryType: tc.entryType || 'MARKET',
+          distToAnchor, stop: tc.stop, risk, rr: tc.rr, t1: tc.t1, t2: tc.t2,
+          vz: tc.vz, fr: t.fundingPct, ev: tc.ev,
+          targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean'});
       }catch(e){}
       }));
       await sleep(60);

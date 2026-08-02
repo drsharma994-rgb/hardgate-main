@@ -258,6 +258,10 @@ PLAN BUILDERS
    plan builder (smartSetup computes its own; the fallbacks use this). */
 function planConfirmed(dir, rows4h){
   try{
+    if (typeof hgConfirmedCascade === 'function'){
+      var cc = hgConfirmedCascade(rows4h, 'smart');
+      return cc && cc.confirmed && cc.dir === dir;
+    }
     if (typeof ema !== 'function' || !rows4h || rows4h.length < 60) return false;
     var c4 = rows4h.map(function(r){ return r.c; });
     var e20 = __last(ema(c4, 20)), e50 = __last(ema(c4, 50));
@@ -270,6 +274,17 @@ function planConfirmed(dir, rows4h){
    cascade on the side of dir. Null when atr is missing or inputs are bad. */
 function atrFallbackPlan(dir, rows4h){
   try{
+    if (typeof hgPlanLevelsCore === 'function'){
+      var pl = hgPlanLevelsCore(dir, rows4h, null, { minRr: 2 });
+      if (pl){
+        return {
+          type: 'LEVELS', dir: dir, entry: pl.entry, stop: pl.stop, t1: pl.t1, t2: pl.t2,
+          rr1: pl.rr1, rr2: pl.rr2, riskPct: pl.riskPct,
+          confirmed: planConfirmed(dir, rows4h),
+          note: pl.note || 'hgPlanLevelsCore fallback', planSrc: pl.planSrc, targetPolicy: pl.targetPolicy
+        };
+      }
+    }
     if (typeof atr !== 'function' || !rows4h || !rows4h.length) return null;
     var entry = +rows4h[rows4h.length - 1].c;
     var a4 = __last(atr(rows4h, 14));
@@ -583,11 +598,32 @@ function gateCandidate(inp){
   if (newsNA) note_(5, null, newsNA);
   else note_(5, true, newsClear && news ? 'no high-impact events inside the blackout window' : 'news calendar clear');
 
+  /* ---------- SWING PARITY (cryptogates G6/G7) ---------- */
+  if (typeof hgSwingParity === 'function'){
+    try{
+      var swPar = hgSwingParity(rows4h, { fundingPct: fr, symbol: sym }, dir);
+      if (swPar && swPar.aligned){
+        res.swingGates = swPar.label;
+        res.swingClean = swPar.clean;
+        if (!swPar.g6)
+          return die(5, 'SWING G6 dynamic R:R < 2 — EXECUTE requires swing parity (plans.js)');
+        if (!swPar.g7)
+          return die(5, 'SWING G7 CUSUM against direction — EXECUTE requires swing parity (plans.js)');
+      }
+    }catch(eSp){}
+  }
+
   /* ---------- SURVIVOR ---------- */
   res.pass = true;
   res.gatesPassed = countTrue();
   res.conviction = res.gatesPassed >= GATES.length ? 'STRONG' : 'MODERATE';
   res.plan = buildPlan(dir, cls, rows4h, inp.rows1h);
+  if (res.plan){
+    if (res.swingGates) res.plan.swingGates = res.swingGates;
+    if (res.swingClean !== undefined) res.plan.swingClean = res.swingClean;
+    if (!res.plan.planSrc) res.plan.planSrc = 'engine';
+    if (typeof hgPlanMetaLabel === 'function') res.plan.metaLabel = hgPlanMetaLabel(res.plan);
+  }
   res.riskPct = suggestedRiskPct(res.conviction, res.plan);
   if (res.turnoverUnverified === true && typeof res.riskPct === 'number' && isFinite(res.riskPct))
     res.riskPct = Math.round(res.riskPct/2 * 10000)/10000;   /* halved: turnover unverified — size down */

@@ -159,9 +159,13 @@ function squeezeClassify(rows4h, rows1d){
     var out = { state:'NONE', firedAgo:firedAgo, momentum:mom, trendAgree:null,
                 volZ: volZ(rows4h.slice(0, firedIdx+1), VOLZ_LOOK), donchianBreak:dBreak };
     if (isFinite(mom) && mom > 0){
+      var swBias = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'swing') : null;
+      if (swBias && swBias.dir === 'short'){ out.state = 'NONE'; return out; }
       out.state = 'FIRED_LONG';
       out.trendAgree = (trend === null) ? null : (trend === 'UP');
     } else if (isFinite(mom) && mom < 0){
+      var swBiasS = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'swing') : null;
+      if (swBiasS && swBiasS.dir === 'long'){ out.state = 'NONE'; return out; }
       out.state = 'FIRED_SHORT';
       out.trendAgree = (trend === null) ? null : (trend === 'DOWN');
     }
@@ -202,6 +206,10 @@ function squeezeClassify(rows4h, rows1d){
    directionless/malformed input or uncomputable levels => null and the UI
    prints an honest 'levels unavailable' note instead of numbers. */
 function fallbackStop(dir, entry, a, rows){
+  if (typeof hgStructureStop === 'function'){
+    var st = hgStructureStop(dir, entry, rows, { atrLen: ATR_LEN, look: 30 });
+    if (st) return { stop: st.stop, note: st.note };
+  }
   var stop = NaN, note = '';
   var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, 30) : NaN;
   if (isFinite(sw)){

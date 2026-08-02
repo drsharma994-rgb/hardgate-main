@@ -198,7 +198,7 @@ function edgeSwingBias(rows){
 /* OTE band (62–79% retrace, 70.5% sweet spot) of an impulse leg — ICT/SMC 2025+ */
 function edgeOteZone(impulseLo, impulseHi, dir){
   try{
-    impulseLo = +impulseLo; impulseHi = +impulseHi;
+    if (typeof hgOteZone === 'function') return hgOteZone(impulseLo, impulseHi, dir);
     var span = impulseHi - impulseLo;
     if (!(span > 0)) return null;
     if (dir === 'long'){
@@ -214,10 +214,12 @@ function edgeOteZone(impulseLo, impulseHi, dir){
   }catch(e){ return null; }
 }
 
-/* Wick through level + reclaim close within 1–3 bars (liquidity sweep filter). */
+/* Wick through level + reclaim close within 1–3 bars (delegates to plans.js). */
 function edgeSweepQuality(A, i, dir, priorLevel){
   try{
-    if (!isFinite(priorLevel)) return null;
+    if (typeof hgDetectLiquiditySweep === 'function'){
+      return hgDetectLiquiditySweep(A, i, dir, priorLevel, { maxBars: SWEEP_RECLAIM_MAX });
+    }
     var maxBack = Math.min(SWEEP_RECLAIM_MAX, i);
     var sweepBar = -1, sweepExtreme = NaN, reclaimBar = -1;
     for (var b = 0; b <= maxBack; b++){
@@ -263,6 +265,10 @@ function edgeSweepQuality(A, i, dir, priorLevel){
 
 function edgeSweepStop(dir, sweepExtreme, at){
   try{
+    if (typeof hgSweepStop === 'function'){
+      var s = hgSweepStop(dir, sweepExtreme, at, { atrMult: SWEEP_STOP_ATR });
+      if (isFinite(s)) return s;
+    }
     if (!isFinite(sweepExtreme) || !isFinite(at)) return NaN;
     return (dir === 'long')
       ? sweepExtreme - SWEEP_STOP_ATR * at
@@ -781,6 +787,8 @@ function edgeAssess(rows, item, candleSrc){
   try{
     var sig = edgeSignal(rows);
     if (!sig) return null;
+    var biasPre = edgeSwingBias(rows);
+    if (biasPre && biasPre.g5 === false && biasPre.g6 === false) return null;
     var en = edgeEnrich(sig, rows, item, candleSrc);
     if (en.veto) return null;
     if (en.tally < MIN_TALLY) return null;

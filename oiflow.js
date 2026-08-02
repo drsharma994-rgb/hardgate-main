@@ -301,6 +301,18 @@ function oiflowSetup(cls, rows4h, rows1h){
                           regime: cls.regime, score: cls.score, total: cls.total },
                         rows4h, rows1h) || null;
     }
+    if (typeof hgPlanLevelsCore === 'function'){
+      var pl = hgPlanLevelsCore(dirLow, rows4h, null, { minRr: 2 });
+      if (pl){
+        var cc = (typeof hgConfirmedCascade === 'function') ? hgConfirmedCascade(rows4h, 'smart') : null;
+        return {
+          type: 'SWING', dir: dirLow, entry: pl.entry, stop: pl.stop, t1: pl.t1, t2: pl.t2,
+          rr1: pl.rr1, rr2: pl.rr2, riskPct: pl.riskPct,
+          confirmed: cc ? (cc.confirmed && cc.dir === dirLow) : false,
+          note: pl.note || 'hgPlanLevelsCore fallback', planSrc: pl.planSrc, targetPolicy: pl.targetPolicy
+        };
+      }
+    }
     if (typeof atr !== 'function' || !rows4h || !rows4h.length) return null;
     var entry = +rows4h[rows4h.length - 1].c;
     var a4 = __last(atr(rows4h, 14));

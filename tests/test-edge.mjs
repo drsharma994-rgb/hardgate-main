@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = {};
-for (const f of ['indicators.js', 'indicators2.js', 'meanrev.js', 'cryptogates.js', 'edge.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'meanrev.js', 'cryptogates.js', 'plans.js', 'edge.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const W = ctx.window;
