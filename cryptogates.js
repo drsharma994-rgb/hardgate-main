@@ -40,6 +40,11 @@
     gates.push(['G5 vol+wick', g5 && closeOK]);
     var stop = lastSwing(rows, dir, 30);
     var entry = p;
+    /* G6 uses the same ATR-capped stop as swingTryClean — uncapped structure
+       stops were failing R:R in the matrix while the ticket would cap. */
+    if (isFinite(a4) && a4 > 0 && Math.abs(entry - stop) > 1.5 * a4){
+      stop = dir === 'long' ? entry - 1.5 * a4 : entry + 1.5 * a4;
+    }
     var risk = Math.abs(entry - stop);
     var expectedMove = a4 * 3.5;
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
@@ -194,8 +199,23 @@
     return out;
   }
 
+  function swingTryNear(rows, ticker){
+    var m = swingGateMatrix(rows, ticker);
+    if (!m || !m.dir || m.clean) return null;
+    if (m.passed < 6) return null;
+    var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
+    if (!(isFinite(distToAnchor) && distToAnchor <= 1.5)) return null;
+    var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    return {
+      sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
+      missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: m.p,
+      level: m.level, dynamicRR: m.dynamicRR, nearClean: true
+    };
+  }
+
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
+  G.swingTryNear = swingTryNear;
   G.scalpTryClean = scalpTryClean;
 })();

@@ -2713,6 +2713,23 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet){
   if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
 }
 
+function renderNearCleanCard(t, hit, cardsEl, kind){
+  if (!hit || !hit.dir) return;
+  const chartId = 'hgc-near-' + kind + '-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  const miss = (hit.missing || []).join(', ');
+  cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, hit.dir, [
+    ['mark', px(t.mark || hit.level || '—')],
+    ['gates', hit.passed + '/' + (hit.gatesTotal || 7)],
+    ['missing', miss || '—'],
+    ['RSI', hit.r14 != null ? fmt(hit.r14, 1) : '—'],
+    ['vol z', hit.vz != null ? fmt(hit.vz, 2) : '—'],
+    ['dyn R:R', hit.dynamicRR != null ? fmt(hit.dynamicRR, 2) + 'R' : '—']
+  ], ['NEAR CLEAN — 6/7 · not a ticket'],
+    '<span class="note warn">NEAR CLEAN ' + hit.passed + '/7 — waiting: ' + miss + '. Do not trade until all 7 hard gates pass.</span>',
+    null, null, null, chartId, { scanner: kind + '-near', strategy: kind + '-near' }));
+  if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
+}
+
 async function runScan(kind, opts){
   const quiet = !!(opts && opts.quiet);
   const isSwing = kind === 'swing';
@@ -2751,7 +2768,8 @@ async function runScan(kind, opts){
     if (!scanAll && turnoverKnown) uni = uni.slice(0, N);
     const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
-    let found = 0;
+    let found = 0, nearFound = 0;
+    let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0 };
     const t0scan = Date.now();
     const CHUNK_SIZE = 5;
     for (let ci = 0; ci < uni.length; ci += CHUNK_SIZE){
@@ -2764,32 +2782,80 @@ async function runScan(kind, opts){
           if (isSwing){
             if (typeof swingTryClean !== 'function') return;
             const rows = await getCandles(t.symbol, '4h', 260);
+            if (!rows || rows.length < 210){ audit.histShort++; return; }
+            if (typeof swingGateMatrix === 'function'){
+              const m = swingGateMatrix(rows, t);
+              if (m && m.dir){
+                audit.cascade++;
+                if (m.passed >= 6) audit.pass6++;
+                if (m.passed >= 7 && !m.clean) audit.pass7noAnchor++;
+                if (!m.clean){
+                  for (let gi = 0; gi < m.gates.length; gi++){
+                    if (!m.gates[gi][1]) audit.fail[m.gates[gi][0]] = (audit.fail[m.gates[gi][0]] || 0) + 1;
+                  }
+                }
+              }
+            }
             const hit = swingTryClean(rows, t);
-            if (!hit) return;
-            found++;
-            cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
-            renderSwingCleanCard(t, hit, cardsEl, quiet);
+            if (hit){
+              found++;
+              cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
+              renderSwingCleanCard(t, hit, cardsEl, quiet);
+              return;
+            }
+            if (!quiet && typeof swingTryNear === 'function'){
+              const near = swingTryNear(rows, t);
+              if (near){
+                nearFound++;
+                if (nearFound === 1){
+                  cardsEl.insertAdjacentHTML('beforeend', '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only. These are not tickets until all seven gates pass.</div>');
+                }
+                renderNearCleanCard(t, near, cardsEl, 'swing');
+              }
+            }
           } else {
             if (typeof scalpTryClean !== 'function') return;
             const h1 = await getCandles(t.symbol, '1h', 120);
             const m15 = await getCandles(t.symbol, '15m', 160);
+            if (typeof scalpGateMatrix === 'function'){
+              const sm = scalpGateMatrix(h1, m15, t, minsToFunding);
+              if (sm && sm.dir){
+                audit.cascade++;
+                if (sm.passed >= 6) audit.pass6++;
+                if (!sm.clean){
+                  for (let gi = 0; gi < sm.gates.length; gi++){
+                    if (!sm.gates[gi][1]) audit.fail[sm.gates[gi][0]] = (audit.fail[sm.gates[gi][0]] || 0) + 1;
+                  }
+                }
+              }
+            }
             const hit = scalpTryClean(h1, m15, t, minsToFunding);
-            if (!hit) return;
-            found++;
-            cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
-            renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet);
+            if (hit){
+              found++;
+              cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
+              renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet);
+            }
           }
-        }catch(e){}
+        }catch(e){ audit.errors++; }
       }));
       await sleep(150);
     }
-    statEl.textContent = 'done - ' + found + ' CLEAN / ' + uni.length + ' scanned (' + universeLabel + ')';
+    const topFail = Object.keys(audit.fail).sort(function(a, b){ return audit.fail[b] - audit.fail[a]; }).slice(0, 3);
+    const failNote = topFail.length ? (' · top blocks: ' + topFail.join(', ')) : '';
+    const attrNote = audit.cascade ? (' · ' + audit.cascade + ' cascades · ' + audit.pass6 + ' at 6/7+') : '';
+    statEl.textContent = 'done - ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
+      + ' / ' + uni.length + ' scanned (' + universeLabel + ')' + attrNote + failNote
+      + (audit.histShort ? (' · ' + audit.histShort + ' thin history') : '')
+      + (audit.errors ? (' · ' + audit.errors + ' fetch errors') : '');
     try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
     const snap = { at: Date.now(), cands: cands, stat: statEl.textContent };
     if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
     if (!quiet && !found){
-      emptyEl.textContent = isSwing ? 'No CLEAN swing setups. Standing aside is a position.' : 'No CLEAN scalp triggers right now.';
-      emptyEl.style.display = 'block';
+      const blk = topFail.length ? (' Most common gate failures: ' + topFail.join(', ') + '.') : '';
+      emptyEl.textContent = (isSwing
+        ? ('No CLEAN swing setups (7/7 + EMA21 anchor). Choppy tape often blocks G5 vol+wick and G7 CUSUM.' + blk + ' NEAR CLEAN rows and FORMING NOW are watch-only.')
+        : ('No CLEAN scalp triggers (7/7). Funding window, sweep quality, or vol commit often block entries.' + blk + ' Check FORMING NOW below.'));
+      emptyEl.style.display = nearFound ? 'none' : 'block';
     }
     if (!quiet && newsGate.caution){
       const nb = (typeof cryptoNewsBannerHTML === 'function') ? cryptoNewsBannerHTML(newsGate) : '';
@@ -2815,7 +2881,7 @@ async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
   const clean = {};
   (cleanSyms || []).forEach(function(s){ clean[s] = true; });
   let items = [];
-  const maxN = quiet ? 10 : 18;
+  const maxN = quiet ? 12 : Math.min((uni || []).length, 40);
   const slice = (uni || []).slice(0, maxN);
   const minsToFunding = kind === 'scalp' ? tickClock() : 0;
   for (let i = 0; i < slice.length; i++){
