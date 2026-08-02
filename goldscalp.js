@@ -5,7 +5,7 @@ gold klines (15m/1h/4h) from every available venue, composes PER-STRATEGY
 candidates via goldind.js (window.goldScalpSetups — liquidity-sweep reversal,
 order-block/breaker retest, FVG fill, session-VWAP bounce/rejection, EMA
 20/50/200 ribbon pullback, Asian-range 00:00-07:00 GMT breakout, modified-RSI
-75/25 divergence), ranks them all with a transparent human-readable
+75/25 divergence; microstructure via HardgateGoldEngine.evaluateScalp), ranks them all with a transparent human-readable
 confluence tally (window.goldRankSetups), crowns the #1 with a MOST PROBABLE
 SETUP banner (full execution guidance), and pins every issued setup under a
 CONVICTION LOCK (localStorage 'hgGoldscalpConviction'): re-running the scan
