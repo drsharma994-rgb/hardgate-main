@@ -4534,7 +4534,15 @@ async function runBrain(el){
     watchWrap.style.display = watches.length ? 'block' : 'none';
     aside.innerHTML = asides.map(safeAsideRowHTML).join('');
     asideWrap.style.display = asides.length ? 'block' : 'none';
-    if (!setups.length && !watches.length) empty.style.display = 'block';
+    if (!setups.length && !watches.length){
+      empty.style.display = 'block';
+      empty.innerHTML = '<b>No PRIME / HIGH / WATCH radar right now.</b> '
+        + asides.length + ' symbols landed ASIDE — open the ASIDE ledger below for kill reasons. '
+        + 'BRAIN only tickets PRIME/HIGH; thin agreement or dark layers (engine/tape) often mean a quiet day. '
+        + 'Standing aside is a position.';
+    } else {
+      empty.style.display = 'none';
+    }
 
     /* scorecard hook — PRIME/HIGH only, fire-and-forget, after plans land */
     scoreRecord(setups);
