@@ -9,7 +9,7 @@
   },
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-02T07:32:06.019Z"
+    "at": "2026-08-02T09:45:05.108Z"
   },
   "setups": {
     "keys": {
@@ -47,9 +47,9 @@
       "B-ADA_USDT:long@0.1731": 1785595592876,
       "B-STABLE_USDT:short@0.03401": 1785595592876
     },
-    "at": "2026-08-02T07:32:06.020Z"
+    "at": "2026-08-02T09:45:05.108Z"
   },
-  "engineAlertAt": "2026-08-02T07:32:07.982Z",
+  "engineAlertAt": "2026-08-02T09:45:07.070Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -64,7 +64,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-02T07:32:08.273Z"
+    "at": "2026-08-02T09:45:07.362Z"
   },
   "bookFill": {
     "key": "u0|p0",
