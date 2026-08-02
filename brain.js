@@ -790,6 +790,36 @@ function applyFunding(row){
 }
 
 /* =========================================================================
+SETUP LAYER CONFLICT — continuation (trend/swing) vs mean-reversion structural
+========================================================================= */
+var BRAIN_CONT_LAYERS = { trend4h: 1, structure: 1, mtf: 1, engine: 1, edge: 1, squeeze: 1 };
+var BRAIN_REV_LAYERS = { meanrev: 1 };
+
+function brainSetupConflict(votes){
+  try{
+    votes = Array.isArray(votes) ? votes : [];
+    var cont = { long: [], short: [] }, rev = { long: [], short: [] };
+    for (var i = 0; i < votes.length; i++){
+      var v = votes[i];
+      if (!v || v.kind !== 'structural') continue;
+      if (v.vote !== 'long' && v.vote !== 'short') continue;
+      var L = String(v.layer || '');
+      if (BRAIN_REV_LAYERS[L]) rev[v.vote].push(L);
+      else if (BRAIN_CONT_LAYERS[L]) cont[v.vote].push(L);
+    }
+    if (cont.long.length && rev.short.length){
+      return 'setup conflict: continuation (' + cont.long.join('+') + ') LONG vs mean-reversion ('
+        + rev.short.join('+') + ') SHORT — stand aside';
+    }
+    if (cont.short.length && rev.long.length){
+      return 'setup conflict: continuation (' + cont.short.join('+') + ') SHORT vs mean-reversion ('
+        + rev.long.join('+') + ') LONG — stand aside';
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+/* =========================================================================
 PURE TIER DECIDER — evidence agreement only, never a fabricated score.
 ========================================================================= */
 function brainDecide(votes, meta){
@@ -816,6 +846,13 @@ function brainDecide(votes, meta){
   if (vetoes.length){
     out.reasons.push('VETO — ' + vetoes[0].text
       + (vetoes.length > 1 ? ' (+' + (vetoes.length - 1) + ' more veto)' : ''));
+    if (unavailable.length) out.reasons.push('dark layers: ' + unavailable.join(', '));
+    return out;
+  }
+
+  var setupConflict = brainSetupConflict(votes);
+  if (setupConflict){
+    out.reasons.push(setupConflict);
     if (unavailable.length) out.reasons.push('dark layers: ' + unavailable.join(', '));
     return out;
   }
@@ -5072,6 +5109,7 @@ function mount(el){
 /* ---------------- registration ---------------- */
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
+G.brainSetupConflict = brainSetupConflict;
 G.brainUniverse = brainUniverse;
 /* structure-anchored limit seam: the pure planner — (dir, rows4h) ->
    {plan, note}; rows4h math only, never throws */

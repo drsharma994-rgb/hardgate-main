@@ -295,6 +295,136 @@ var HG_GOLD_T1_R = 1.5;
 var HG_GOLD_T2_R = 2.5;
 var HG_GOLD_T3_R = 4.0;
 
+/* --- unified swing targets: max(ATR excursion, R-multiple floor) --- */
+function hgPlanSwingTargets(dir, entry, stop, atr, opts){
+  opts = opts || {};
+  try{
+    entry = +entry; stop = +stop; atr = +atr;
+    if (!(dir === 'long' || dir === 'short')) return null;
+    if (!(isFinite(entry) && isFinite(stop) && isFinite(atr) && atr > 0)) return null;
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    var expMult = opts.expMult !== undefined ? opts.expMult : 3.5;
+    var maxMult = opts.maxMult !== undefined ? opts.maxMult : 4.9;
+    var t1R = opts.t1R !== undefined ? opts.t1R : HG_T1_R;
+    var t2R = opts.t2R !== undefined ? opts.t2R : HG_T2_R;
+    var expMove = atr * expMult;
+    var maxExc = atr * maxMult;
+    var t1Atr = (dir === 'long') ? entry + expMove : entry - expMove;
+    var t2Atr = (dir === 'long') ? entry + maxExc : entry - maxExc;
+    var t1Rlv = (dir === 'long') ? entry + t1R * risk : entry - t1R * risk;
+    var t2Rlv = (dir === 'long') ? entry + t2R * risk : entry - t2R * risk;
+    var t1 = (dir === 'long') ? Math.max(t1Atr, t1Rlv) : Math.min(t1Atr, t1Rlv);
+    var t2 = (dir === 'long') ? Math.max(t2Atr, t2Rlv) : Math.min(t2Atr, t2Rlv);
+    var rr1 = Math.abs(t1 - entry) / risk;
+    return {
+      t1: t1, t2: t2, rr1: rr1, rr2: Math.abs(t2 - entry) / risk,
+      targetPolicy: 'unified: max(ATR excursion, ' + t1R + 'R/' + t2R + 'R floor)',
+      planSrc: 'swingTryClean'
+    };
+  }catch(e){ return null; }
+}
+
+/* --- LIMIT-first enrichment for SWING CLEAN hits --- */
+function hgEnrichSwingClean(hit, rows, matrix){
+  try{
+    if (!hit || !hit.dir || !rows || !rows.length) return hit;
+    var dir = hit.dir;
+    var m = matrix || {};
+    var p = isFinite(hit.mark) ? hit.mark : (isFinite(m.p) ? m.p : +rows[rows.length - 1].c);
+    var e9 = m.e9, e21 = m.e21, a4 = m.a4;
+    if (!(isFinite(a4) && a4 > 0) && typeof atr === 'function'){
+      a4 = _last(atr(rows, 14));
+    }
+    var entry = hit.entry;
+    var entryType = hit.entryType || 'MARKET';
+    var anchor = entry;
+    var zone = { lo: entry, hi: entry };
+    var guidance = '';
+
+    if (isFinite(e21) && isFinite(a4)){
+      var tol = 0.4 * a4;
+      var dist21 = Math.abs(p - e21) / a4;
+      if (dist21 > 0.25){
+        anchor = e21;
+        entry = e21;
+        zone = { lo: e21 - tol * 0.5, hi: e21 + tol * 0.25 };
+        entryType = 'LIMIT @ EMA21';
+      } else if (isFinite(e9)){
+        var dist9 = Math.abs(p - e9) / a4;
+        if (dist9 > 0.25){
+          anchor = e9;
+          entry = (dir === 'long') ? Math.min(p, e9) : Math.max(p, e9);
+          zone = { lo: e9 - tol * 0.5, hi: e9 + tol * 0.25 };
+          entryType = 'LIMIT @ EMA9';
+        }
+      }
+    }
+
+    if (typeof hgRefineEntry === 'function'){
+      var ref = hgRefineEntry(p, entry, zone, dir);
+      if (ref.entryType === 'MARKET') entryType = entryType.replace(/^LIMIT/, 'MARKET');
+      guidance = ref.guidance || '';
+      if (ref.inZone && entryType.indexOf('MARKET') < 0) entryType = 'MARKET @ ' + entryType.replace('LIMIT @ ', '');
+    }
+
+    var stop = hit.stop;
+    if (isFinite(entry) && isFinite(stop) && isFinite(a4) && Math.abs(entry - stop) > 1.5 * a4){
+      stop = (dir === 'long') ? entry - 1.5 * a4 : entry + 1.5 * a4;
+      entryType += ' · ATR-capped stop';
+    }
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return hit;
+
+    var tg = hgPlanSwingTargets(dir, entry, stop, a4, {});
+    if (!tg) return hit;
+
+    var out = Object.assign({}, hit, {
+      entry: entry, stop: stop, t1: tg.t1, t2: tg.t2, rr: tg.rr1,
+      entryType: entryType, anchor: anchor, zone: zone, mark: p,
+      entryGuidance: guidance, targetPolicy: tg.targetPolicy, planSrc: tg.planSrc
+    });
+    return out;
+  }catch(e){ return hit; }
+}
+
+/* --- SMART $ SWING plan entry refinement --- */
+function hgEnrichSmartPlan(plan, rows4h){
+  try{
+    if (!plan || !rows4h || !rows4h.length || plan.type !== 'SWING') return plan;
+    var dir = plan.dir;
+    var n = rows4h.length - 1;
+    var mark = rows4h[n].c;
+    if (typeof ema !== 'function' || typeof atr !== 'function') return plan;
+    var c4 = rows4h.map(function(r){ return r.c; });
+    var e21 = _last(ema(c4, 21));
+    var a4 = _last(atr(rows4h, 14));
+    if (!(isFinite(e21) && isFinite(a4))) return plan;
+    var tol = 0.4 * a4;
+    var entry = e21;
+    var zone = { lo: e21 - tol * 0.5, hi: e21 + tol * 0.25 };
+    var ref = hgRefineEntry(mark, entry, zone, dir);
+    plan.entry = entry;
+    plan.entryType = ref.inZone ? 'MARKET' : 'LIMIT @ EMA21';
+    plan.entryGuidance = ref.guidance;
+    plan.anchor = e21;
+    plan.planSrc = plan.planSrc || 'smartSetup';
+    if (!plan.targetPolicy) plan.targetPolicy = 'R-multiples (2R/3.5R)';
+    var st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: 30 });
+    if (st){
+      plan.stop = st.stop;
+      var pr = hgPlanFromRisk(dir, entry, st.stop, { minRr: HG_MIN_RR_SWING, targetPolicy: plan.targetPolicy });
+      if (pr){
+        plan.t1 = pr.t1; plan.t2 = pr.t2; plan.rr1 = pr.rr1; plan.rr2 = pr.rr2; plan.riskPct = pr.riskPct;
+      }
+    }
+    return plan;
+  }catch(e){ return plan; }
+}
+
+G.hgPlanSwingTargets = hgPlanSwingTargets;
+G.hgEnrichSwingClean = hgEnrichSwingClean;
+G.hgEnrichSmartPlan = hgEnrichSmartPlan;
 G.hgConfirmedCascade = hgConfirmedCascade;
 G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
 G.hgStructureStop = hgStructureStop;

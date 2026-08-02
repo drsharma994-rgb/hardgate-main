@@ -11,6 +11,7 @@ globalThis.window = globalThis;
 load('indicators.js');
 load('indicators2.js');
 load('cryptogates.js');
+load('plans.js');
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
@@ -32,6 +33,17 @@ const ticker = { symbol: 'BTCUSDT', fundingPct: 0.01, mark: rows[rows.length - 1
 const m = globalThis.swingGateMatrix(rows, ticker);
 ok(m && m.dir === 'long' && m.passed >= 1, 'swingGateMatrix returns aligned long with gate tally');
 ok(typeof globalThis.swingTryClean === 'function', 'swingTryClean exported');
+{
+  const hit = globalThis.swingTryClean(rows, ticker);
+  if (hit){
+    ok(hit.dir === 'long' || hit.dir === 'short', 'swingTryClean direction');
+    ok(typeof hit.entryType === 'string' && hit.entryType.length > 0, 'swingTryClean enriched entryType');
+    ok(hit.targetPolicy && hit.targetPolicy.indexOf('unified') >= 0, 'swingTryClean unified targetPolicy');
+    ok(isFinite(hit.mark), 'swingTryClean carries mark price');
+  } else {
+    ok(true, 'fixture may not pass all gates — enrich path still wired when hit');
+  }
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

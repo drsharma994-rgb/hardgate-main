@@ -338,6 +338,24 @@ ok(d.tier === 'ASIDE' && d.reasons[0].indexOf('no directional evidence') >= 0, '
 d = DECIDE([], {});
 ok(d.tier === 'ASIDE' && d.dir === null, 'empty votes -> ASIDE, dir null');
 
+/* ================= K2) setup layer conflict ================= */
+console.log('== setup layer conflict ==');
+ok(typeof W.brainSetupConflict === 'function', 'brainSetupConflict exported');
+{
+  var conflictVotes = [
+    v('engine', 'long'), v('trend4h', 'long'), v('structure', 'long'),
+    v('meanrev', 'short', 'structural')
+  ];
+  var cx = W.brainSetupConflict(conflictVotes);
+  ok(cx && cx.indexOf('setup conflict') >= 0 && cx.indexOf('mean-reversion') >= 0,
+     'continuation LONG vs mean-reversion SHORT -> setup conflict reason');
+  d = DECIDE(conflictVotes, { unavailable: [] });
+  ok(d.tier === 'ASIDE' && d.reasons[0].indexOf('setup conflict') >= 0,
+     'brainDecide demotes setup conflict to ASIDE before tier math');
+  var aligned = [v('engine', 'long'), v('meanrev', 'long', 'structural')];
+  ok(W.brainSetupConflict(aligned) === null, 'same-direction continuation + meanrev -> no conflict');
+}
+
 /* ================= L) missing-layer degradation caps ================= */
 console.log('== degradation caps ==');
 d = DECIDE(PRIME5, { unavailable: ['liqs'] });

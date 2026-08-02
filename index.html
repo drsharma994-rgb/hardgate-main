@@ -1582,9 +1582,22 @@ function smartSetup(cls, rows4h, rows1h){
     t2 = dir === 'long' ? entry + 3.5*risk : entry - 3.5*risk;
     const rr1 = Math.abs(t1 - entry)/risk;
     if (rr1 < 1.5) return null;
-    return { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
+    var out = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              rr1: rr1, rr2: Math.abs(t2 - entry)/risk, riskPct: risk/entry*100,
              confirmed: confirmed, note: note, targetPolicy: 'R-multiples (2R/3.5R)', planSrc: planSrc };
+    if (typeof hgRefineEntry === 'function' && typeof ema === 'function'){
+      try{
+        var e21n = last(ema(c4, 21));
+        var a4n = last(atr(rows4h, 14));
+        if (isFinite(e21n) && isFinite(a4n)){
+          var tolN = 0.4 * a4n;
+          var refN = hgRefineEntry(entry, e21n, { lo: e21n - tolN * 0.5, hi: e21n + tolN * 0.25 }, dir);
+          out.entryGuidance = refN.guidance;
+          out.entryType = (Math.abs(entry - e21n) / a4n > 0.25) ? 'LIMIT @ EMA21 (mark extended)' : 'MARKET';
+        }
+      }catch(eR){}
+    }
+    return out;
   }
   /* SCALP — 1H when there is enough history, else 4H-based fallback */
   const src = (rows1h && rows1h.length >= 30) ? rows1h : rows4h;
@@ -2439,15 +2452,24 @@ window.hgMiniChart = hgMiniChart;
    (ENTRY · STOP · T1 · T2 + risk%), so every tab renders the same plan block.
    Optional note trails the line (e.g. scalp's time-stop). Invalid geometry
    degrades honestly instead of printing NaN levels. */
-function planBlock(dir, entry, stop, t1, t2, note){
+function planBlock(dir, entry, stop, t1, t2, note, meta){
+  meta = meta || {};
   const risk = Math.abs(entry-stop);
   if (!(risk>0) || !isFinite(entry) || !isFinite(t1) || !isFinite(t2)) return 'levels unavailable — size down';
-  return 'ENTRY <b>'+px(entry)+'</b> · STOP <b>'+px(stop)+'</b>'
+  const head = (meta.entryType && String(meta.entryType).indexOf('LIMIT') >= 0)
+    ? String(meta.entryType).replace(/EMA9|EMA21/, function(m){ return m; }) + ' <b>'+px(entry)+'</b>'
+    : ((meta.entryType && String(meta.entryType).indexOf('MARKET') >= 0)
+      ? 'MARKET @ <b>'+px(entry)+'</b>'
+      : 'ENTRY <b>'+px(entry)+'</b>');
+  let line = head + ' · STOP <b>'+px(stop)+'</b>'
     + ' · T1 <b>'+px(t1)+'</b> ('+fmt(Math.abs(t1-entry)/risk,1)+'R)'
     + ' · T2 <b>'+px(t2)+'</b> ('+fmt(Math.abs(t2-entry)/risk,1)+'R)'
     + ' · risk '+fmt(risk/entry*100,2)+'%'
-    + hgSafeLevChip(entry, stop)
-    + (note ? ' — '+note : '');
+    + hgSafeLevChip(entry, stop);
+  if (meta.targetPolicy) line += ' <span class="note">('+meta.targetPolicy+')</span>';
+  if (note) line += ' — '+note;
+  if (meta.entryGuidance) line += '<div class="note" style="margin-top:4px;font-size:11px">'+meta.entryGuidance+'</div>';
+  return line;
 }
 /* Max-safe leverage chip on EVERY plan line, every tab (owner mandate
    2026-07-28 — 'this is what was making me hit stop loss'). Identical
@@ -2626,9 +2648,10 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet){
   const gates = ['G1 cascade+spread', 'G2 HTF side', 'G3 RSI ok', 'G4 funding', 'G5 vol+wick', 'G6 R:R>=2',
     'G7 CUSUM' + (ev && ev.barsAgo <= 20 ? ' ok' : ' n/a')];
   const chartId = 'hgc-swing-' + String(t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  const orderLbl = entryType || 'MARKET';
   if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(t.symbol, dir, [
     ['mark', px(t.mark || entry)],
-    ['order', (entryType || 'MARKET') === 'MARKET' ? 'market' : 'limit @ EMA9'],
+    ['order', orderLbl],
     ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
     ['RSI 4H', fmt(r14, 1)],
     ['vol z', fmt(vz, 2)],
@@ -2639,7 +2662,9 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet){
     ['context: momentum', momDetail],
     ['Nearest OB', nearestOBText(rows, dir)],
     ['Liquidity Target', liquidityTargetText(rows, dir)]
-  ], gates, planBlock(dir, entry, stop, t1, t2), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2 }));
+  ], gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
+    entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
+  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2 }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
 }
