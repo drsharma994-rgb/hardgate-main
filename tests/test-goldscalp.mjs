@@ -71,7 +71,8 @@ console.log('== 0) exports + tab registration ==');
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
                  'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
-                 'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport'];
+                 'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
+                 'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2'];
   for (const nm of names) assert(typeof W[nm] === 'function', 'window.' + nm + ' exported');
   const tab = W.HG_tabs.find(t => t.id === 'goldscalp');
   assert(!!tab && tab.label === 'GOLD SCALP' && typeof tab.mount === 'function' && typeof tab.refresh === 'function',
@@ -548,7 +549,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
   const names = ['goldFVG','goldOrderBlocks','goldSweeps','goldKillzone','goldVWAP','goldRibbon',
                  'goldIchimoku','goldMFI','goldVolSqueeze','goldAsianRange','goldRSIGold','goldCCI',
                  'goldStochRSI','goldSeason','goldScalpSetup','goldScalpSetups','goldRankSetups',
-                 'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport'];
+                 'goldVolumeSpike','goldVolumeProfile','goldSweepV2','goldFVGV2','goldFVGHasHVNSupport',
+                 'evaluateScalp','detectLiquiditySweep_V2','detectFVG_V2'];
   const junk = [null, undefined, [], 'x', 42, [{}, null, { t: 'a', o: NaN }], flatRows(5, 100, 1, 0)];
   let threw = 0;
   for (const nm of names){
@@ -1589,6 +1591,14 @@ console.log('== volume microstructure ==');
   const fvgG = W.goldFVG(fvgR)[0];
   const fvgP = W.goldVolumeProfile(fvgR);
   assert(W.goldFVGHasHVNSupport(fvgG, fvgP) === true, 'goldFVGHasHVNSupport: fvg fixture gap has HVN launchpad');
+  const eng = W.HardgateGoldEngine;
+  assert(eng && typeof eng.evaluateScalp === 'function', 'HardgateGoldEngine.evaluateScalp exported');
+  const evEmpty = eng.evaluateScalp([]);
+  assert(evEmpty.agreeingReads === 0 && evEmpty.activeTriggers.length === 0, 'evaluateScalp: empty -> zero triggers');
+  const evComp = eng.evaluateScalp(compLongRows());
+  assert(evComp.volProfile && isFinite(evComp.volProfile.pocPrice), 'evaluateScalp: builds vol profile');
+  assert(typeof W.detectLiquiditySweep_V2 === 'function' && W.detectLiquiditySweep_V2 === W.goldSweepV2,
+         'detectLiquiditySweep_V2 alias -> goldSweepV2');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

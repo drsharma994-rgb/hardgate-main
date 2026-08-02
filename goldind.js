@@ -91,6 +91,10 @@ Exports (all on window):
                              inside/near the gap zone; -> {trigger,...}|{trigger:false}
   goldFVGHasHVNSupport(gap, vprof) — true when an HVN sits at/below/inside gap
   isVolumeSpike / buildVolumeProfile — aliases of goldVolumeSpike / goldVolumeProfile
+  detectLiquiditySweep_V2 / detectFVG_V2 — aliases of goldSweepV2 / goldFVGV2
+  HardgateGoldEngine.evaluateScalp(m15, ctx?) — build vol profile, run V2 triggers
+                             on the last bar -> {volProfile, sweepData, fvgData,
+                             activeTriggers, agreeingReads, context, reads}
 ========================================================================= */
 (function(){
 'use strict';
@@ -1170,18 +1174,27 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
   var i, z;
 
   var sw = D.sw = goldSweeps(rows);
-  /* V2: volume profile early — FVG reads require HVN backing when range is wide enough */
-  D.vprof = goldVolumeProfile(rows, 100, 50);
+  /* microstructure landscape + V2 triggers (HardgateGoldEngine.evaluateScalp) */
+  D.scalpEval = evaluateScalp(rows, { nearestStructure: null, entry: entry });
+  D.vprof = D.scalpEval.volProfile || goldVolumeProfile(rows, 100, 50);
   D.volSpike = goldVolumeSpike(rows);
   D.volSpikeSweep = false;
   D.nearestHVN = NaN;
+  D.activeTriggers = D.scalpEval.activeTriggers ? D.scalpEval.activeTriggers.slice() : [];
+  if (isFinite(D.scalpEval.context.nearestStructure)) D.nearestStructure = D.scalpEval.context.nearestStructure;
+  var sei;
+  for (sei = 0; sei < D.scalpEval.reads.length; sei++){
+    var er = D.scalpEval.reads[sei];
+    add(er.side, er.tag, er.label);
+  }
   var vpRange0 = (D.vprof && isFinite(D.vprof.maxPrice) && isFinite(D.vprof.minPrice))
     ? (D.vprof.maxPrice - D.vprof.minPrice) : NaN;
   D.vpOk = isFinite(vpRange0) && vpRange0 >= 2.5*a15;
   if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
     var swIdx0 = rows.length - 1 - sw.barsAgo;
     if (swIdx0 >= 0 && goldVolumeSpike(rows, swIdx0)) D.volSpikeSweep = true;
-    if (D.volSpikeSweep){
+    var curV2 = D.activeTriggers.indexOf('LIQUIDITY_SWEEP_VOL_VALIDATED') >= 0 && sw.barsAgo === 0;
+    if (D.volSpikeSweep && !curV2){
       if (sw.dir === 'bullish'){
         add('long', 'sweep', 'liquidity sweep of ' + sw.level.toFixed(2) + ' + reclaim (' + sw.barsAgo + 'b ago) — volume-validated');
         add('long', 'volspike', 'volume climax on the liquidity sweep bar — absorption confirms sell-side liquidity taken');
@@ -2562,6 +2575,62 @@ function goldFVGV2(rows, index, vprof){
   }catch(e){ return { trigger: false }; }
 }
 
+/* HardgateGoldEngine — scalp microstructure evaluator (volume profile first,
+   then strict V2 triggers on the evaluation bar). Never throws. */
+function evaluateScalp(m15Data, ctx){
+  var out = {
+    volProfile: null,
+    sweepData: { trigger: false },
+    fvgData: { trigger: false },
+    activeTriggers: [],
+    agreeingReads: 0,
+    context: ctx || {},
+    reads: []
+  };
+  try{
+    var rows = __rows(m15Data);
+    if (!rows || rows.length < 3) return out;
+    if (!out.context || typeof out.context !== 'object') out.context = {};
+    var index = rows.length - 1;
+
+    out.volProfile = goldVolumeProfile(rows, 100, 50);
+
+    var sweepData = goldSweepV2(rows, index, 10, 20, 1.5);
+    out.sweepData = sweepData;
+    if (sweepData && sweepData.trigger){
+      out.activeTriggers.push('LIQUIDITY_SWEEP_VOL_VALIDATED');
+      out.agreeingReads++;
+      if (isFinite(sweepData.anchor)) out.context.nearestStructure = sweepData.anchor;
+      out.reads.push({
+        side: sweepData.dir,
+        tag: 'sweep_v2',
+        label: 'V2 liquidity sweep — volume-validated reclaim at '
+          + (isFinite(sweepData.level) ? sweepData.level.toFixed(2) : 'n/a')
+          + ' (stop anchor ' + (isFinite(sweepData.anchor) ? sweepData.anchor.toFixed(2) : 'n/a') + ')'
+      });
+    }
+
+    var fvgData = goldFVGV2(rows, index, out.volProfile);
+    out.fvgData = fvgData;
+    if (fvgData && fvgData.trigger){
+      out.activeTriggers.push('FVG_HVN_DEFENDED');
+      out.agreeingReads++;
+      if (isFinite(fvgData.anchor)) out.context.nearestStructure = fvgData.anchor;
+      out.reads.push({
+        side: fvgData.dir,
+        tag: 'fvg_v2',
+        label: 'V2 FVG — HVN-defended gap '
+          + (isFinite(fvgData.bottom) ? fvgData.bottom.toFixed(2) : 'n/a') + '–'
+          + (isFinite(fvgData.top) ? fvgData.top.toFixed(2) : 'n/a')
+          + ' (stop anchor ' + (isFinite(fvgData.anchor) ? fvgData.anchor.toFixed(2) : 'n/a') + ')'
+      });
+    }
+    return out;
+  }catch(e){ return out; }
+}
+
+var HardgateGoldEngine = { evaluateScalp: evaluateScalp };
+
 /* ---------------- exports ---------------- */
 
 W.goldFVG = goldFVG;
@@ -2601,4 +2670,8 @@ W.goldSweepV2 = goldSweepV2;
 W.goldFVGV2 = goldFVGV2;
 W.isVolumeSpike = goldVolumeSpike;
 W.buildVolumeProfile = goldVolumeProfile;
+W.detectLiquiditySweep_V2 = goldSweepV2;
+W.detectFVG_V2 = goldFVGV2;
+W.evaluateScalp = evaluateScalp;
+W.HardgateGoldEngine = HardgateGoldEngine;
 })();
