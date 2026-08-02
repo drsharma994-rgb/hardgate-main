@@ -5,7 +5,8 @@ gold klines (15m/1h/4h) from every available venue, composes PER-STRATEGY
 candidates via goldind.js (window.goldScalpSetups — liquidity-sweep reversal,
 order-block/breaker retest (active-zone + structure-aligned robust trigger,
 legacy proximity fallback), FVG fill, session-VWAP bounce/rejection, EMA
-20/50/200 ribbon pullback, Asian-range 00:00-07:00 GMT breakout, modified-RSI
+20/50/200 ribbon pullback, Asian-range breakout (volume-validated via detectAsianBreakout),
+ADR exhaustion fade (detectADRFade + VWAP bands), modified-RSI
 75/25 divergence; microstructure via HardgateGoldEngine.evaluateScalp / evaluateSwing), ranks them all with a transparent human-readable
 confluence tally (window.goldRankSetups), crowns the #1 with a MOST PROBABLE
 SETUP banner (full execution guidance), and pins every issued setup under a
@@ -860,11 +861,21 @@ async function runScan(ui){
       var v = venueLabel(gold.source);
       var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
       var zonesFn = gfn('goldUpdateActiveZones');
+      var evalFn = gfn('HardgateGoldEngine');
       if (zonesFn){
         try{
           var zOut = zonesFn(gold.rows15m);
           if (typeof W !== 'undefined' && W) W.hgActiveOrderBlocks = zOut && zOut.activeOrderBlocks ? zOut.activeOrderBlocks : [];
         }catch(eZ){ if (typeof W !== 'undefined' && W) W.hgActiveOrderBlocks = []; }
+      }
+      if (evalFn && typeof evalFn.evaluateScalp === 'function'){
+        try{
+          var aArr = _atr(gold.rows15m, 14);
+          var a15x = (aArr && aArr.length) ? aArr[aArr.length - 1] : NaN;
+          if (typeof W !== 'undefined' && W){
+            W.hgLastScalpEval = evalFn.evaluateScalp(gold.rows15m, { atr15: a15x });
+          }
+        }catch(eEv){ if (typeof W !== 'undefined' && W) W.hgLastScalpEval = null; }
       }
       venueRows[v] = { rows15m: gold.rows15m };
       var got = buildCandidates(gold, now, news, v, sym1);
