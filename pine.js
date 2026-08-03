@@ -211,6 +211,20 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + smcJson;
   }
+  if (sig.scriptId === 'vumanchu-cipher'){
+    var cipherAction = sig.dir === 'long' ? 'buy' : 'sell';
+    var cipherSig = sig.signalType || (sig.dir === 'long' ? 'bull_div' : 'bear_div');
+    var cipherJson = '{"action":"' + cipherAction + '","ticker":"' + sig.sym + '","signal":"' + cipherSig
+      + '","price":' + sig.price + ',"wt1":' + fmtF(sig.wt1, 2) + ',"script":"vumanchu-cipher"}';
+    return '🌲 PINE CIPHER · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nVuManChu Cipher B · WaveTrend divergence (' + cipherSig + ')'
+      + '\nWT1 ' + fmtF(sig.wt1, 2) + ' · WT2 ' + fmtF(sig.wt2, 2)
+      + ' · OS ' + (sig.osLevel || -53) + ' · OB ' + (sig.obLevel || 53)
+      + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + cipherJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
