@@ -85,6 +85,8 @@ console.log('== 0) exports + tab registration ==');
                  'calculateGoldSpotBasis','calculateKaufmanER','NewsWindowGuard',
                  'calculatePositionSize','goldAttachPositionSize',
                  'evaluateFundingRate','TickBuffer','handleOrderUpdate',
+                 'detectSMTDivergence','goldSMTDivergence','validateYieldCorrelation',
+                 'goldYieldGuard','validateOBWithCVD',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -465,6 +467,63 @@ console.log('== 10e) funding, tick buffer, order updates ==');
 }
 
 /* =========================================================================
+   10f) SMT divergence · yield guard · OB/CVD validation
+========================================================================= */
+console.log('== 10f) SMT, yield guard, OB/CVD ==');
+{
+  function smtRows(base, t0){
+    const r = [];
+    for (let i = 0; i < 20; i++){
+      r.push({ t: t0 + i * 900, o: base, h: base + 2, l: base - 2, c: base, v: 1000 });
+    }
+    return r;
+  }
+  const xau = smtRows(100, DAY);
+  const xag = smtRows(25, DAY);
+  xau.push({ t: DAY + 20 * 900, o: 100, h: 103.5, l: 99.5, c: 102, v: 2000 });
+  xag.push({ t: DAY + 20 * 900, o: 25, h: 26.5, l: 24.5, c: 25.5, v: 2000 });
+  const bear = W.detectSMTDivergence(xau, xag, xau.length - 1, 15);
+  assert(bear.smtActive && bear.type === 'BEARISH_SMT' && bear.signal === 'SHORT_GOLD',
+         'detectSMTDivergence: gold sweeps high, silver fails -> BEARISH_SMT');
+  const xauL = smtRows(100, DAY);
+  const xagL = smtRows(25, DAY);
+  xauL.push({ t: DAY + 20 * 900, o: 100, h: 100.5, l: 96.5, c: 97, v: 2000 });
+  xagL.push({ t: DAY + 20 * 900, o: 25, h: 25.5, l: 24.8, c: 25, v: 2000 });
+  const bull = W.detectSMTDivergence(xauL, xagL, xauL.length - 1, 15);
+  assert(bull.smtActive && bull.type === 'BULLISH_SMT', 'detectSMTDivergence: gold sweeps low, silver holds -> BULLISH_SMT');
+  assert(W.goldSMTDivergence === W.detectSMTDivergence, 'goldSMTDivergence alias');
+
+  const yld = [];
+  for (let i = 0; i < 6; i++) yld.push({ t: DAY + i * 86400, o: 4 + i * 0.05, h: 4.1, l: 3.9, c: 4 + i * 0.05, v: 1 });
+  const yv = W.validateYieldCorrelation(yld, 'long');
+  assert(yv.valid === false && /MACRO VETO.*spiking/.test(yv.reason),
+         'validateYieldCorrelation: rising yields veto gold long');
+  assert(W.goldYieldGuard === W.validateYieldCorrelation, 'goldYieldGuard alias');
+
+  const buf = new W.TickBuffer();
+  buf.onTrade(100, 50, true);
+  const obLong = { trigger: true, direction: 'long' };
+  const cvdBad = W.validateOBWithCVD(obLong, buf);
+  assert(cvdBad.triggerValid === false && /ORDER FLOW VETO/.test(cvdBad.reason),
+         'validateOBWithCVD: negative CVD vetoes bullish OB');
+  buf.reset();
+  buf.onTrade(100, 20, false);
+  const cvdOk = W.validateOBWithCVD(obLong, buf);
+  assert(cvdOk.triggerValid === true, 'validateOBWithCVD: positive CVD allows bullish OB');
+
+  const rows = flatRows(35, 100, 0.5, DAY);
+  const ev = W.evaluateScalp(rows, {
+    atr15: 1,
+    setupDirection: 'long',
+    us10yCandles: yld,
+    xauCandles: xau,
+    xagCandles: xag
+  });
+  assert(ev.valid === false && /MACRO VETO/.test(ev.vetoReason), 'evaluateScalp: yield guard hard veto');
+  assert(ev.smt && ev.smt.smtActive, 'evaluateScalp: wires SMT divergence read');
+}
+
+/* =========================================================================
    11) goldRSIGold — 75/25 zones + divergence both ways
 ========================================================================= */
 console.log('== 11) goldRSIGold ==');
@@ -739,6 +798,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'calculateGoldSpotBasis','calculateKaufmanER','NewsWindowGuard',
                  'calculatePositionSize','goldAttachPositionSize',
                  'evaluateFundingRate','TickBuffer','handleOrderUpdate',
+                 'detectSMTDivergence','goldSMTDivergence','validateYieldCorrelation',
+                 'goldYieldGuard','validateOBWithCVD',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
