@@ -125,6 +125,10 @@ Exports (all on window):
   detectSMTDivergence(xau, xag, index?, lb?) — gold–silver SMT sweep divergence
   validateYieldCorrelation(us10y, direction) — macro veto when gold fights US10Y trend
   validateOBWithCVD(obSetup, tickBuffer) — order-flow veto on OB retest via CVD
+  calculateOrderBookImbalance(l2Book, depth?) — L2 OBI + bullish/bearish liquidity flags
+  validateDomLiquidity(direction, l2Book, depth?) — L2 veto when book skews against trade
+  evaluateTimeDecay(setup, candle, barIndex?, maxBars?) — scalp momentum decay manager
+  calculateDynamicThresholds(daily, lookback?) — rolling vol/ATR z-score regime thresholds
   goldAsianBreakout / goldADRFade — volume-validated Asian breakout + ADR exhaustion fade
   detectAsianBreakout / detectADRFade — session & exhaustion trigger aliases
   goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
@@ -2676,11 +2680,17 @@ function handleOrderUpdate(activeSetup, exchangeOrderStatus){
     if (st === 'FILLED'){
       activeSetup.executionState = 'FULL_RISK_ON';
       activeSetup.filledUnits = filled;
+      if (isFinite(exchangeOrderStatus.barIndex)){
+        activeSetup.executionBarIndex = exchangeOrderStatus.barIndex;
+      }
       return { action: 'FILLED', setup: activeSetup };
     }
     if (st === 'PARTIALLY_FILLED' || st === 'PARTIAL'){
       activeSetup.executionState = 'PARTIAL_RISK_ON';
       activeSetup.filledUnits = filled;
+      if (isFinite(exchangeOrderStatus.barIndex)){
+        activeSetup.executionBarIndex = exchangeOrderStatus.barIndex;
+      }
       var levels = activeSetup.levels || {};
       var entry = isFinite(levels.entryPrice) ? levels.entryPrice
         : (isFinite(levels.entry) ? levels.entry : (isFinite(activeSetup.entry) ? activeSetup.entry : NaN));
@@ -2832,6 +2842,168 @@ function __wireSmtYieldGuards(ctx, index, out, obSetup){
           ? (out.vetoReason + ' | ' + out.yieldGuard.reason)
           : out.yieldGuard.reason;
       }
+    }
+  }catch(e){ /* never throw */ }
+}
+
+/* ================= DOM imbalance · time decay · dynamic regime ================= */
+
+function __l2LevelSize(level){
+  if (!level) return 0;
+  var s = level.size;
+  if (!isFinite(s)) s = level.qty;
+  if (!isFinite(s)) s = level.amount;
+  return (isFinite(s) && s > 0) ? +s : 0;
+}
+
+function calculateOrderBookImbalance(l2OrderBook, depthTicks){
+  var neutral = {
+    obiValue: 0, isBullishLiquidity: false, isBearishLiquidity: false,
+    totalBidVol: 0, totalAskVol: 0
+  };
+  try{
+    depthTicks = depthTicks || 20;
+    if (!l2OrderBook || typeof l2OrderBook !== 'object') return neutral;
+    var bids = l2OrderBook.bids || l2OrderBook.bid || [];
+    var asks = l2OrderBook.asks || l2OrderBook.ask || [];
+    if (!Array.isArray(bids) || !Array.isArray(asks)) return neutral;
+    var totalBidVol = 0, totalAskVol = 0, i, n;
+    n = Math.min(depthTicks, bids.length, asks.length);
+    if (n <= 0){
+      n = Math.min(depthTicks, Math.max(bids.length, asks.length));
+    }
+    for (i = 0; i < depthTicks; i++){
+      if (bids[i]) totalBidVol += __l2LevelSize(bids[i]);
+      if (asks[i]) totalAskVol += __l2LevelSize(asks[i]);
+    }
+    var denom = totalBidVol + totalAskVol;
+    if (!(denom > 0)) return neutral;
+    var obi = (totalBidVol - totalAskVol) / denom;
+    return {
+      obiValue: obi,
+      isBullishLiquidity: obi > 0.20,
+      isBearishLiquidity: obi < -0.20,
+      totalBidVol: totalBidVol,
+      totalAskVol: totalAskVol
+    };
+  }catch(e){ return neutral; }
+}
+
+function validateDomLiquidity(direction, l2OrderBook, depthTicks){
+  var ok = { triggerValid: true };
+  try{
+    var obi = calculateOrderBookImbalance(l2OrderBook, depthTicks);
+    ok.obi = obi;
+    var dir = String(direction || '').toLowerCase();
+    if (dir === 'long' && !obi.isBullishLiquidity){
+      return {
+        triggerValid: false,
+        reason: 'L2 VETO: Order book heavily skewed to sellers.',
+        obi: obi
+      };
+    }
+    if (dir === 'short' && !obi.isBearishLiquidity){
+      return {
+        triggerValid: false,
+        reason: 'L2 VETO: Order book heavily skewed to buyers.',
+        obi: obi
+      };
+    }
+    return ok;
+  }catch(e){ return ok; }
+}
+
+function evaluateTimeDecay(activeSetup, currentCandle, barIndex, maxBars){
+  var hold = { action: 'HOLD' };
+  try{
+    if (!activeSetup) return hold;
+    maxBars = maxBars || 8;
+    if (!isFinite(barIndex) || !isFinite(activeSetup.executionBarIndex)) return hold;
+    var barsInTrade = barIndex - activeSetup.executionBarIndex;
+    var type = activeSetup.type || 'scalp';
+    if (type !== 'scalp' || barsInTrade < maxBars) return hold;
+    var state = activeSetup.executionState;
+    if (state !== 'FULL_RISK_ON' && state !== 'PARTIAL_RISK_ON') return hold;
+    var c = currentCandle || {};
+    var close = isFinite(c.c) ? c.c : c.close;
+    if (!isFinite(close)) return hold;
+    var levels = activeSetup.levels || {};
+    var entry = isFinite(levels.entryPrice) ? levels.entryPrice
+      : (isFinite(levels.entry) ? levels.entry : activeSetup.entry);
+    if (!isFinite(entry)) return hold;
+    var dir = activeSetup.direction || activeSetup.dir;
+    var pnl = (dir === 'long') ? (close - entry) : (entry - close);
+    if (pnl <= 0){
+      return { action: 'MARKET_CLOSE_FULL', reason: 'MOMENTUM_DECAY' };
+    }
+    return { action: 'TRAIL_SL_TIGHT', reason: 'MOMENTUM_WARNING' };
+  }catch(e){ return hold; }
+}
+
+function calculateDynamicThresholds(dailyCandles, lookback){
+  var defaults = {
+    requiredVolumeForSpike: NaN,
+    requiredMinRR: 1.2,
+    regime: 'CONTRACTION',
+    meanVolume: NaN,
+    meanATR: NaN,
+    stdDevVolume: NaN
+  };
+  try{
+    lookback = lookback || 30;
+    var rows = __rows(dailyCandles);
+    if (!rows || rows.length < lookback) return defaults;
+    var slice = rows.slice(-lookback);
+    var volumes = [], atrs = [], i, r, v, rng;
+    for (i = 0; i < slice.length; i++){
+      r = slice[i];
+      v = isFinite(r.v) ? r.v : r.volume;
+      if (isFinite(v) && v > 0) volumes.push(v);
+      if (isFinite(r.h) && isFinite(r.l)) atrs.push(r.h - r.l);
+    }
+    if (volumes.length < 2 || atrs.length < 2) return defaults;
+    var meanVol = 0, meanATR = 0;
+    for (i = 0; i < volumes.length; i++) meanVol += volumes[i];
+    for (i = 0; i < atrs.length; i++) meanATR += atrs[i];
+    meanVol /= volumes.length;
+    meanATR /= atrs.length;
+    var varVol = 0;
+    for (i = 0; i < volumes.length; i++){
+      varVol += Math.pow(volumes[i] - meanVol, 2);
+    }
+    var stdDevVol = Math.sqrt(varVol / volumes.length);
+    var last = slice[slice.length - 1];
+    var lastRange = (isFinite(last.h) && isFinite(last.l)) ? (last.h - last.l) : NaN;
+    var isHighVolRegime = isFinite(lastRange) && isFinite(meanATR) && lastRange > meanATR;
+    return {
+      requiredVolumeForSpike: meanVol + (2 * stdDevVol),
+      requiredMinRR: isHighVolRegime ? 1.5 : 1.2,
+      regime: isHighVolRegime ? 'EXPANSION' : 'CONTRACTION',
+      meanVolume: meanVol,
+      meanATR: meanATR,
+      stdDevVolume: stdDevVol
+    };
+  }catch(e){ return defaults; }
+}
+
+function __wireDomAndRegime(ctx, out){
+  try{
+    ctx = ctx || {};
+    if (ctx.l2OrderBook){
+      out.domImbalance = calculateOrderBookImbalance(ctx.l2OrderBook, ctx.domDepth);
+      var domDir = ctx.setupDirection || ctx.positionDirection;
+      if (domDir){
+        out.domCheck = validateDomLiquidity(domDir, ctx.l2OrderBook, ctx.domDepth);
+        if (out.domCheck && !out.domCheck.triggerValid){
+          out.valid = false;
+          out.vetoReason = out.vetoReason
+            ? (out.vetoReason + ' | ' + out.domCheck.reason)
+            : out.domCheck.reason;
+        }
+      }
+    }
+    if (ctx.dailyCandles){
+      out.regimeThresholds = calculateDynamicThresholds(ctx.dailyCandles, ctx.regimeLookback);
     }
   }catch(e){ /* never throw */ }
 }
@@ -3536,6 +3708,9 @@ function evaluateScalp(m15Data, ctx){
     smt: { smtActive: false },
     yieldGuard: null,
     obCvdCheck: null,
+    domImbalance: null,
+    domCheck: null,
+    regimeThresholds: null,
     swings: null,
     structure: null,
     activeOrderBlocks: [],
@@ -3724,6 +3899,7 @@ function evaluateScalp(m15Data, ctx){
     if (tickBuf && typeof tickBuf.getCVD === 'function') out.cvd = tickBuf.getCVD();
 
     __wireSmtYieldGuards(out.context, index, out, obSetup);
+    __wireDomAndRegime(out.context, out);
 
     return out;
   }catch(e){ return out; }
@@ -3802,6 +3978,7 @@ function evaluateSwing(h4Data, ctx){
     if (tickBuf && typeof tickBuf.getCVD === 'function') out.cvd = tickBuf.getCVD();
 
     __wireSmtYieldGuards(out.context, index, out, obSetup);
+    __wireDomAndRegime(out.context, out);
 
     return out;
   }catch(e){ return out; }
@@ -3883,6 +4060,10 @@ W.goldSMTDivergence = detectSMTDivergence;
 W.validateYieldCorrelation = validateYieldCorrelation;
 W.goldYieldGuard = validateYieldCorrelation;
 W.validateOBWithCVD = validateOBWithCVD;
+W.calculateOrderBookImbalance = calculateOrderBookImbalance;
+W.validateDomLiquidity = validateDomLiquidity;
+W.evaluateTimeDecay = evaluateTimeDecay;
+W.calculateDynamicThresholds = calculateDynamicThresholds;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;

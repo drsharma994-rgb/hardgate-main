@@ -87,6 +87,8 @@ console.log('== 0) exports + tab registration ==');
                  'evaluateFundingRate','TickBuffer','handleOrderUpdate',
                  'detectSMTDivergence','goldSMTDivergence','validateYieldCorrelation',
                  'goldYieldGuard','validateOBWithCVD',
+                 'calculateOrderBookImbalance','validateDomLiquidity',
+                 'evaluateTimeDecay','calculateDynamicThresholds',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -524,6 +526,61 @@ console.log('== 10f) SMT, yield guard, OB/CVD ==');
 }
 
 /* =========================================================================
+   10g) DOM imbalance · time decay · dynamic regime thresholds
+========================================================================= */
+console.log('== 10g) DOM, time decay, dynamic thresholds ==');
+{
+  const book = {
+    bids: [{ size: 100 }, { size: 80 }, { size: 60 }],
+    asks: [{ size: 20 }, { size: 15 }, { size: 10 }]
+  };
+  const obi = W.calculateOrderBookImbalance(book, 3);
+  assert(obi.isBullishLiquidity && obi.obiValue > 0.20, 'calculateOrderBookImbalance: bid-heavy book -> bullish');
+  const domOk = W.validateDomLiquidity('long', book, 3);
+  assert(domOk.triggerValid === true, 'validateDomLiquidity: long allowed on bid-heavy book');
+  const askBook = {
+    bids: [{ size: 10 }, { size: 10 }],
+    asks: [{ size: 100 }, { size: 90 }, { size: 80 }]
+  };
+  const domBad = W.validateDomLiquidity('long', askBook, 3);
+  assert(domBad.triggerValid === false && /L2 VETO/.test(domBad.reason),
+         'validateDomLiquidity: long veto on ask-heavy book');
+
+  const tdSetup = {
+    type: 'scalp', direction: 'long', executionState: 'FULL_RISK_ON',
+    executionBarIndex: 10, id: 'test|long|100',
+    levels: { entryPrice: 100, stopLoss: 98, tp1: 104 }
+  };
+  const decay = W.evaluateTimeDecay(tdSetup, { c: 99.5 }, 18, 8);
+  assert(decay.action === 'MARKET_CLOSE_FULL' && decay.reason === 'MOMENTUM_DECAY',
+         'evaluateTimeDecay: 8+ bars without profit -> MARKET_CLOSE_FULL');
+  const warn = W.evaluateTimeDecay(tdSetup, { c: 100.5 }, 18, 8);
+  assert(warn.action === 'TRAIL_SL_TIGHT', 'evaluateTimeDecay: in profit but stale -> TRAIL_SL_TIGHT');
+
+  const daily = [];
+  for (let d = 0; d < 30; d++){
+    daily.push({ t: DAY + d * 86400, o: 100, h: 105, l: 100, c: 103, v: 1000 + d * 10 });
+  }
+  daily[daily.length - 1].h = 112;
+  daily[daily.length - 1].l = 100;
+  const regime = W.calculateDynamicThresholds(daily, 30);
+  assert(regime.regime === 'EXPANSION' && regime.requiredMinRR === 1.5,
+         'calculateDynamicThresholds: wide last bar -> EXPANSION + 1.5R min');
+  assert(isFinite(regime.requiredVolumeForSpike), 'calculateDynamicThresholds: dynamic volume spike threshold');
+
+  const rows = flatRows(35, 100, 0.5, DAY);
+  const ev = W.evaluateScalp(rows, {
+    atr15: 1,
+    setupDirection: 'long',
+    l2OrderBook: askBook,
+    dailyCandles: daily
+  });
+  assert(ev.valid === false && /L2 VETO/.test(ev.vetoReason), 'evaluateScalp: DOM skew hard veto');
+  assert(ev.regimeThresholds && ev.regimeThresholds.regime === 'EXPANSION',
+         'evaluateScalp: exposes dynamic regime thresholds');
+}
+
+/* =========================================================================
    11) goldRSIGold — 75/25 zones + divergence both ways
 ========================================================================= */
 console.log('== 11) goldRSIGold ==');
@@ -800,6 +857,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'evaluateFundingRate','TickBuffer','handleOrderUpdate',
                  'detectSMTDivergence','goldSMTDivergence','validateYieldCorrelation',
                  'goldYieldGuard','validateOBWithCVD',
+                 'calculateOrderBookImbalance','validateDomLiquidity',
+                 'evaluateTimeDecay','calculateDynamicThresholds',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -1903,6 +1962,14 @@ console.log('== conviction lock manager ==');
   mgr.hydrateFromRecord(rec, rec.id);
   const hydrated = mgr.activeConvictions.get(rec.id);
   assert(hydrated && hydrated.macroHint === 'TAILWIND', 'hydrateFromRecord: restores macroHint');
+  const decaySetup = {
+    type: 'scalp', direction: 'long', id: 'x|long|100', timestamp: Date.now(),
+    executionState: 'FULL_RISK_ON', executionBarIndex: 0,
+    levels: { stopLoss: 99, tp1: 101, entry: 100, entryPrice: 100 }
+  };
+  const decayStatus = mgr.evaluateSetup(decaySetup,
+    { t: DAY, o: 100, h: 100.2, l: 99.8, c: 99.9, v: 1 }, true, false, Date.now(), 9);
+  assert(decayStatus === 'MOMENTUM DECAY', 'evaluateSetup: time decay closes stale scalp');
 }
 
 /* =========================================================================
