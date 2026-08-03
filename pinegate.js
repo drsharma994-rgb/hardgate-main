@@ -65,6 +65,58 @@ function pineIntersectMaps(maps){
   return keys.map(function(k){ return maps[0][k]; });
 }
 
+function pineUnionMaps(maps){
+  var out = {};
+  maps = maps || [];
+  for (var m = 0; m < maps.length; m++){
+    var map = maps[m] || {};
+    for (var k in map){
+      if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      if (!out[k]) out[k] = map[k];
+    }
+  }
+  return Object.keys(out).map(function(k){ return out[k]; });
+}
+
+var PINE_GATE_NAMES = ['swing', 'scalp', 'edge', 'best', 'brain', 'trendmx'];
+
+/** Relaxed: sym+dir must hit minHits gate tabs; default requires a core scanner (swing/scalp/best). */
+function pineGateRelaxedPairs(maps, opts){
+  opts = opts || {};
+  var minHits = opts.minHits !== undefined ? +opts.minHits : 2;
+  var requireCore = opts.requireCore !== false;
+  var coreIdx = { 0: true, 1: true, 3: true };
+  var counts = {};
+  for (var m = 0; m < maps.length; m++){
+    var map = maps[m] || {};
+    var gname = PINE_GATE_NAMES[m] || ('gate' + m);
+    for (var k in map){
+      if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      if (!counts[k]){
+        counts[k] = { hits: 0, core: false, sym: map[k].sym, dir: map[k].dir, gates: {} };
+      }
+      counts[k].hits++;
+      counts[k].gates[gname] = true;
+      if (coreIdx[m]) counts[k].core = true;
+      if (map[k].sym) counts[k].sym = map[k].sym;
+      if (map[k].dir) counts[k].dir = map[k].dir;
+    }
+  }
+  var out = [];
+  for (var key in counts){
+    var c = counts[key];
+    if (c.hits < minHits) continue;
+    if (requireCore && !c.core) continue;
+    out.push({
+      sym: c.sym,
+      dir: c.dir,
+      gateHits: c.hits,
+      gatesPartial: c.gates
+    });
+  }
+  return out;
+}
+
 function pineRegimeAllows(dir, regime){
   if (!regime || !regime.playbook) return { ok: true, note: 'regime unknown — not blocking' };
   var bias = String(regime.playbook.bias || '').toUpperCase();
@@ -97,12 +149,14 @@ function pineTrendMatrixPairs(rows, minScore){
   return out;
 }
 
-/** Pure gate intersection from explicit snapshots (Node-testable). */
-function pineGateIntersect(snap){
-  snap = snap || {};
+/** Pure gate intersection from explicit snapshots (Node-testable). opts.mode: strict | relaxed */
+function pineGateIntersect(snap, opts){
+  opts = opts || {};
+  var mode = opts.mode || 'strict';
   var funnel = {
     swing: 0, scalp: 0, edge: 0, best: 0, brain: 0, trendmx: 0,
-    intersectRaw: 0, regimeBlocked: 0, eligible: 0
+    intersectRaw: 0, regimeBlocked: 0, eligible: 0,
+    mode: mode, minHits: opts.minHits, fallbackTier: null
   };
   var missing = [];
 
@@ -140,8 +194,26 @@ function pineGateIntersect(snap){
   funnel.trendmx = Object.keys(tmMap).length;
   if (!funnel.trendmx) missing.push('TREND MATRIX');
 
-  var raw = pineIntersectMaps([swingMap, scalpMap, edgeMap, bestMap, brainMap, tmMap]);
-  funnel.intersectRaw = raw.length;
+  var gateMaps = [swingMap, scalpMap, edgeMap, bestMap, brainMap, tmMap];
+  var raw = [];
+  if (mode === 'relaxed'){
+    funnel.minHits = opts.minHits !== undefined ? +opts.minHits : 2;
+    raw = pineGateRelaxedPairs(gateMaps, { minHits: funnel.minHits, requireCore: true });
+    funnel.intersectRaw = raw.length;
+    if (!raw.length && opts.fallback !== false){
+      raw = pineGateRelaxedPairs(gateMaps, { minHits: 1, requireCore: true });
+      if (raw.length) funnel.fallbackTier = 'core≥1';
+    }
+    if (!raw.length && opts.fallback !== false){
+      raw = pineUnionMaps([swingMap, scalpMap, bestMap, tmMap]).map(function(item){
+        return { sym: item.sym, dir: item.dir, gateHits: 1, gatesPartial: {} };
+      });
+      if (raw.length) funnel.fallbackTier = 'scanner union';
+    }
+  } else {
+    raw = pineIntersectMaps(gateMaps);
+    funnel.intersectRaw = raw.length;
+  }
 
   var regime = snap.regime || null;
   var eligible = [];
@@ -149,16 +221,18 @@ function pineGateIntersect(snap){
     var item = raw[j];
     var rg = pineRegimeAllows(item.dir, regime);
     if (!rg.ok){ funnel.regimeBlocked++; continue; }
+    var pk = pairKey(item.sym, item.dir);
     eligible.push({
       sym: item.sym,
       dir: item.dir,
+      gateHits: item.gateHits || 6,
       gates: {
-        swing: !!swingMap[pairKey(item.sym, item.dir)],
-        scalp: !!scalpMap[pairKey(item.sym, item.dir)],
-        edge: !!edgeMap[pairKey(item.sym, item.dir)],
-        best: !!bestMap[pairKey(item.sym, item.dir)],
-        brain: !!brainMap[pairKey(item.sym, item.dir)],
-        trendmx: !!tmMap[pairKey(item.sym, item.dir)],
+        swing: !!swingMap[pk],
+        scalp: !!scalpMap[pk],
+        edge: !!edgeMap[pk],
+        best: !!bestMap[pk],
+        brain: !!brainMap[pk],
+        trendmx: !!tmMap[pk],
         regime: rg.note
       }
     });
@@ -168,9 +242,10 @@ function pineGateIntersect(snap){
   return { eligible: eligible, funnel: funnel, missing: missing, at: Date.now() };
 }
 
-/** Live read from window scan getters. */
-function pineGateLive(win){
+/** Live read from window scan getters. opts.mode strict (default) or relaxed for combined PINE tab. */
+function pineGateLive(win, opts){
   win = win || G;
+  opts = opts || {};
   var saved = G;
   if (win) G = win;
   try{
@@ -198,7 +273,7 @@ function pineGateLive(win){
       brainRows: brain && brain.rows,
       trendmxRows: tm && tm.rows,
       regime: regime
-    });
+    }, opts);
   }catch(e){
     return { eligible: [], funnel: { eligible: 0 }, missing: ['error'], at: Date.now(), error: String(e && e.message || e) };
   }finally{
@@ -208,17 +283,24 @@ function pineGateLive(win){
 
 function pineFunnelRows(funnel){
   funnel = funnel || {};
-  return [
+  var rows = [
     { k: 'SWING CLEAN pairs', v: String(funnel.swing || 0) },
     { k: 'SCALP CLEAN pairs', v: String(funnel.scalp || 0) },
     { k: 'EDGE tickets (tally ≥3)', v: String(funnel.edge || 0) },
     { k: 'BEST CLEAN pairs', v: String(funnel.best || 0) },
     { k: 'BRAIN tiered pairs', v: String(funnel.brain || 0) },
-    { k: 'TREND MATRIX aligned', v: String(funnel.trendmx || 0) },
-    { k: '6-tab intersection', v: String(funnel.intersectRaw || 0) },
-    { k: 'REGIME blocked', v: String(funnel.regimeBlocked || 0) },
-    { k: 'Pine-eligible', v: String(funnel.eligible || 0) }
+    { k: 'TREND MATRIX aligned', v: String(funnel.trendmx || 0) }
   ];
+  if (funnel.mode === 'relaxed'){
+    rows.push({ k: 'Gate mode', v: 'relaxed (≥' + (funnel.minHits || 2) + ' scanners + core)' });
+    rows.push({ k: 'Relaxed matches', v: String(funnel.intersectRaw || 0) });
+    if (funnel.fallbackTier) rows.push({ k: 'Fallback tier', v: String(funnel.fallbackTier) });
+  } else {
+    rows.push({ k: '6-tab intersection', v: String(funnel.intersectRaw || 0) });
+  }
+  rows.push({ k: 'REGIME blocked', v: String(funnel.regimeBlocked || 0) });
+  rows.push({ k: 'Pine-eligible', v: String(funnel.eligible || 0) });
+  return rows;
 }
 
 G.pineNormSym = pineNormSym;
@@ -227,7 +309,7 @@ G.pineGateLive = pineGateLive;
 G.pineFunnelRows = pineFunnelRows;
 
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { pineNormSym, pineGateIntersect, pineGateLive, pineFunnelRows, pinePairsFromCands, pineTrendMatrixPairs };
+  module.exports = { pineNormSym, pineGateIntersect, pineGateLive, pineFunnelRows, pinePairsFromCands, pineTrendMatrixPairs, pineGateRelaxedPairs };
 }
 
 })();

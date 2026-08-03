@@ -14,13 +14,29 @@ var CHUNK_SLEEP_MS = 120;
 var LS_ALERT = 'hg_pine_alert_keys';
 var ALERT_GAP_MS = 15 * 60 * 1000;
 
+var PINE_GATE_OPTS = { mode: 'relaxed', minHits: 2, fallback: true };
+
 var PINE_SCRIPTS = [
-  {
-    id: 'lorentzian-kernel',
-    label: 'ML: Lorentzian + Kernel',
-    fn: 'pineLorentzianKernel',
-    opts: { kNeighbors: 8, lookback: 250, scoreLimit: 2, kernelLookback: 8, kernelBandwidth: 3 }
-  }
+  { id: 'lorentzian-kernel', label: 'ML: Lorentzian + Kernel', fn: 'pineLorentzianKernel', minBars: 260,
+    opts: { kNeighbors: 8, lookback: 250, scoreLimit: 2, kernelLookback: 8, kernelBandwidth: 3 } },
+  { id: 'msb-ob', label: 'MSB & Order Block', fn: 'pineMsbOb', minBars: 80,
+    opts: { leftBars: 5, rightBars: 5 } },
+  { id: 'squeeze-momentum', label: 'Squeeze Momentum', fn: 'pineSqueezeMomentum', minBars: 50,
+    opts: { length: 20, bbMult: 2, kcMult: 1.5 } },
+  { id: 'smart-money-flow', label: 'Smart Money Flow', fn: 'pineSmartMoneyFlow', minBars: 30,
+    opts: { length: 21, threshold: 0.10 } },
+  { id: 'half-trend', label: 'HalfTrend', fn: 'pineHalfTrend', minBars: 120,
+    opts: { amplitude: 2, atrMult: 2.0, atrLen: 100 } },
+  { id: 'smc-core', label: 'SMC: Core Math', fn: 'pineSmcCore', minBars: 30,
+    opts: { pivotLength: 5, atrLen: 14 } },
+  { id: 'vumanchu-cipher', label: 'VuManChu Cipher B', fn: 'pineVumanchuCipher', minBars: 40,
+    opts: { wtChannelLen: 9, wtAvgLen: 21, osLevel: -53, obLevel: 53 } },
+  { id: 'range-filter', label: 'Range Filter', fn: 'pineRangeFilter', minBars: 210,
+    opts: { period: 100, mult: 3.0 } },
+  { id: 'nw-envelope', label: 'NW Envelope', fn: 'pineNwEnvelope', minBars: 60,
+    opts: { bandwidth: 8.0, mult: 2.5, lookback: 50, atrLen: 100 } },
+  { id: 'weekly-avwap', label: 'Weekly AVWAP + SD', fn: 'pineWeeklyAvwap', minBars: 20,
+    opts: { bandMult: 2.0 } }
 ];
 
 function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
@@ -100,6 +116,114 @@ function buildPlan(dir, price, rows){
   };
 }
 
+function buildPlanWithTarget(dir, price, rows, target, bandStop){
+  var tgt = fin(+target) ? +target : null;
+  var stopBand = fin(+bandStop) ? +bandStop : null;
+  try{
+    if (typeof W.hgStructureStop === 'function' && rows && rows.length){
+      var st = W.hgStructureStop(dir, price, rows, { atrLen: 14, look: 30 });
+      if (st && fin(+st.stop)){
+        var stop = +st.stop;
+        if (stopBand !== null){
+          stop = dir === 'long' ? Math.min(stop, stopBand) : Math.max(stop, stopBand);
+        }
+        var risk = Math.abs(price - stop);
+        if (risk > 0){
+          var t1 = tgt !== null ? tgt : (dir === 'long' ? price + 2 * risk : price - 2 * risk);
+          return {
+            entry: price, stop: stop, t1: t1,
+            t2: dir === 'long' ? t1 + Math.abs(t1 - price) * 0.5 : t1 - Math.abs(t1 - price) * 0.5,
+            planSrc: tgt !== null ? 'mean/VWAP target' : (st.note || 'structure')
+          };
+        }
+      }
+    }
+  }catch(e){}
+  return buildPlan(dir, price, rows);
+}
+
+function signalFromScript(item, script, res, rows){
+  if (!res || !res.dir) return null;
+  if (String(res.dir).toLowerCase() !== item.dir) return null;
+  var dir = item.dir;
+  var price = res.price;
+  var entry, stop, t1, t2, planSrc;
+  var sid = script.id;
+
+  if (sid === 'msb-ob' || sid === 'smc-core'){
+    if (!fin(+res.entry) || !fin(+res.stop) || res.entry === res.stop) return null;
+    entry = +res.entry;
+    stop = +res.stop;
+    var riskOb = Math.abs(entry - stop);
+    t1 = fin(+res.t1) ? +res.t1 : (dir === 'long' ? entry + 2 * riskOb : entry - 2 * riskOb);
+    t2 = fin(+res.t2) ? +res.t2 : (dir === 'long' ? entry + 3.5 * riskOb : entry - 3.5 * riskOb);
+    planSrc = sid === 'smc-core' ? 'SMC FVG zone limit (CHoCH)' : 'MSB order block (limit @ OB)';
+  } else if (sid === 'half-trend'){
+    entry = fin(+res.entry) ? +res.entry : price;
+    stop = fin(+res.trailingStop) ? +res.trailingStop : (fin(+res.stop) ? +res.stop : null);
+    if (!fin(stop)) return null;
+    var riskHt = Math.abs(entry - stop);
+    t1 = fin(+res.t1) ? +res.t1 : (dir === 'long' ? entry + 2 * riskHt : entry - 2 * riskHt);
+    t2 = fin(+res.t2) ? +res.t2 : (dir === 'long' ? entry + 3.5 * riskHt : entry - 3.5 * riskHt);
+    planSrc = 'HalfTrend trailing line';
+  } else if (sid === 'nw-envelope'){
+    var bandLo = fin(+res.lower) ? +res.lower - (fin(+res.atr) ? res.atr * 0.25 : price * 0.005) : null;
+    var planNw = buildPlanWithTarget(dir, price, rows, res.meanTarget || res.nwCenter, bandLo);
+    entry = planNw.entry; stop = planNw.stop; t1 = planNw.t1; t2 = planNw.t2; planSrc = planNw.planSrc;
+  } else if (sid === 'weekly-avwap'){
+    var bandLoAv = null;
+    if (dir === 'long' && fin(+res.lower)) bandLoAv = +res.lower - (fin(+res.stdDev) ? res.stdDev * 0.15 : price * 0.005);
+    if (dir === 'short' && fin(+res.upper)) bandLoAv = +res.upper + (fin(+res.stdDev) ? res.stdDev * 0.15 : price * 0.005);
+    var planAv = buildPlanWithTarget(dir, price, rows, res.targetVwap || res.vwap, bandLoAv);
+    entry = planAv.entry; stop = planAv.stop; t1 = planAv.t1; t2 = planAv.t2; planSrc = planAv.planSrc;
+  } else {
+    var plan = buildPlan(dir, price, rows);
+    entry = plan.entry; stop = plan.stop; t1 = plan.t1; t2 = plan.t2; planSrc = plan.planSrc;
+  }
+
+  var sig = {
+    sym: item.sym,
+    dir: dir,
+    scriptId: script.id,
+    scriptLabel: script.label,
+    gateHits: item.gateHits,
+    newLong: !!res.newLong,
+    newShort: !!res.newShort,
+    isNew: !!(res.newLong || res.newShort),
+    price: price,
+    entry: entry,
+    stop: stop,
+    t1: t1,
+    t2: t2,
+    planSrc: planSrc,
+    gates: item.gates,
+    rows: rows
+  };
+  Object.keys(res).forEach(function(k){
+    if (k === 'dir' || k === 'rows') return;
+    if (sig[k] === undefined) sig[k] = res[k];
+  });
+  sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
+  return sig;
+}
+
+function sigNoteLine(sig){
+  var sid = sig.scriptId;
+  if (sid === 'lorentzian-kernel'){
+    return 'ML score <b>' + fmtF(sig.smoothedScore, 2) + '</b> · raw ' + fmtF(sig.mlScore, 1);
+  }
+  if (sid === 'msb-ob') return 'Limit @ OB · SH ' + pxF(sig.lastSh) + ' · SL ' + pxF(sig.lastSl);
+  if (sid === 'squeeze-momentum') return 'Squeeze fired · momentum ' + fmtF(sig.momentum, 4);
+  if (sid === 'smart-money-flow') return 'SMF ' + fmtF(sig.smf, 4) + ' · cross ±' + fmtF(sig.threshold, 2);
+  if (sid === 'half-trend') return 'HalfTrend flip · trailing ' + pxF(sig.trailingStop || sig.stop);
+  if (sid === 'smc-core') return 'CHoCH limit @ FVG ' + pxF(sig.zoneEntry || sig.entry);
+  if (sid === 'vumanchu-cipher') return 'WT1 ' + fmtF(sig.wt1, 2) + ' · ' + (sig.signalType || 'div');
+  if (sid === 'range-filter') return 'Filter ' + pxF(sig.filterLevel) + ' · regime flip';
+  if (sid === 'nw-envelope') return 'Mean ' + pxF(sig.meanTarget || sig.nwCenter) + ' · snap-back';
+  if (sid === 'weekly-avwap') return 'Week VWAP ' + pxF(sig.targetVwap || sig.vwap) + ' · band bounce';
+  return 'mark ' + pxF(sig.price);
+}
+
 function runPineScript(script, rows){
   try{
     var fn = W[script.fn];
@@ -117,34 +241,13 @@ function pineEvalEligible(eligible, fetchRows){
       if (i >= eligible.length) return signals;
       var item = eligible[i++];
       return fetchRows(item.sym).then(function(rows){
-        if (!rows || rows.length < 260) return next();
+        if (!rows || rows.length < 20) return next();
         for (var s = 0; s < scripts.length; s++){
           var script = scripts[s];
+          if (rows.length < (script.minBars || 30)) continue;
           var res = runPineScript(script, rows);
-          if (!res || !res.dir) return;
-          if (String(res.dir).toLowerCase() !== item.dir) return;
-          var plan = buildPlan(item.dir, res.price, rows);
-          var sig = {
-            sym: item.sym,
-            dir: item.dir,
-            scriptId: script.id,
-            scriptLabel: script.label,
-            mlScore: res.mlScore,
-            smoothedScore: res.smoothedScore,
-            newLong: !!res.newLong,
-            newShort: !!res.newShort,
-            isNew: !!(res.newLong || res.newShort),
-            price: res.price,
-            entry: plan.entry,
-            stop: plan.stop,
-            t1: plan.t1,
-            t2: plan.t2,
-            planSrc: plan.planSrc,
-            gates: item.gates,
-            rows: rows
-          };
-          sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
-          signals.push(sig);
+          var sig = signalFromScript(item, script, res, rows);
+          if (sig) signals.push(sig);
         }
         return next();
       }).catch(function(){ return next(); });
@@ -316,13 +419,13 @@ async function pineFireAlerts(fresh, opts){
 
 function cardHTML(sig){
   var cls = sig.dir === 'long' ? 'long' : 'short';
-  var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW SETUP</span>' : '';
+  var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>' : '';
   var gateNote = sig.gates && sig.gates.regime ? esc(sig.gates.regime) : '';
+  var hits = fin(+sig.gateHits) ? (' · ' + sig.gateHits + '/6 gates') : '';
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
     + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · ' + esc(sig.scriptLabel) + badge + '</span></h2>'
-    + '<div class="note">Smoothed ML score <b>' + fmtF(sig.smoothedScore, 2) + '</b>'
-    + ' · raw ' + fmtF(sig.mlScore, 1)
-    + ' · mark ' + pxF(sig.price)
+    + '<div class="note">' + sigNoteLine(sig)
+    + ' · mark ' + pxF(sig.price) + hits
     + (gateNote ? ' · ' + gateNote : '')
     + '</div>'
     + '<div class="plan">' + (typeof W.planBlock === 'function'
@@ -341,12 +444,14 @@ var __pineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PINE ML <span>Lorentzian KNN + Gaussian kernel · 7-gate intersection</span></h2>'
-    + '<div class="note">Only symbols that simultaneously pass <b>SWING</b>, <b>SCALP</b>, <b>EDGE</b>, <b>BEST</b>, <b>BRAIN</b>, <b>REGIME</b> bias, and <b>TREND MATRIX</b> direction are scanned. '
-    + 'When Pine math fires a <b>new</b> long/short (score crosses ±threshold on bar close), Telegram + push alert immediately.</div>'
+    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · relaxed gate (≥2 scanners + REGIME)</span></h2>'
+    + '<div class="note">Runs <b>every ported Pine script</b> (ML, MSB/OB, SQZ, SMF, HT, SMC, Cipher, RF, NW, AVWAP) on a '
+    + '<b>relaxed universe</b>: sym+dir must appear in at least two scanner tabs including one of SWING/SCALP/BEST, '
+    + 'then pass REGIME bias. Falls back to core scanner union if still empty. '
+    + 'Individual PINE sub-tabs still use strict 6-gate intersection. New bar-close setups alert immediately.</div>'
     + '<div class="row" style="margin-top:10px">'
-    + '<button class="btn" id="pineRun">RUN PINE SCAN</button>'
-    + '<span class="note" id="pineStat">Run dependent scans first (SWING, SCALP, EDGE, BEST, BRAIN, REGIME, TREND MATRIX).</span>'
+    + '<button class="btn" id="pineRun">RUN ALL PINE SCAN</button>'
+    + '<span class="note" id="pineStat">Run SWING and/or SCALP (and others) first, then scan.</span>'
     + '</div>'
     + '<div class="prog" id="pineProg"><i></i></div>'
     + '<div id="pineFunnel" style="margin-top:8px"></div>'
@@ -377,16 +482,19 @@ function mount(el){
     var status = 'refreshed';
     var t0 = Date.now();
     try{
-      if (stat) stat.textContent = 'Building 7-gate universe…';
-      var gate = (typeof W.pineGateLive === 'function') ? W.pineGateLive() : { eligible: [], funnel: {}, missing: ['pinegate'] };
+      if (stat) stat.textContent = 'Building relaxed Pine universe…';
+      var gate = (typeof W.pineGateLive === 'function')
+        ? W.pineGateLive(null, PINE_GATE_OPTS)
+        : { eligible: [], funnel: {}, missing: ['pinegate'] };
       if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE gate funnel (all tabs must agree on sym+dir)',
+        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE gate funnel (relaxed — ≥2 scanners + REGIME)',
           W.pineFunnelRows(gate.funnel), 'pineGateFunnel');
       }
       if (!gate.eligible || !gate.eligible.length){
-        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'none aligned';
-        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No contracts pass all seven gates on the same direction. Missing or empty: '
-          + esc(miss) + '. Run the scanner tabs first, then retry.</div>';
+        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'no scanner overlap';
+        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No contracts in the relaxed Pine universe. '
+          + 'Run at least <b>SWING</b> and <b>SCALP</b> (or BEST), then retry. Empty/missing: '
+          + esc(miss) + '.</div>';
         if (stat) stat.textContent = 'done · 0 eligible · ' + miss;
         __pineSnap = { at: Date.now(), signals: [], gate: gate, stat: stat ? stat.textContent : '' };
         return status;
@@ -408,35 +516,13 @@ function mount(el){
           setProg(0.05 + 0.9 * (n / eligible.length));
           try{
             var rows = await W.getCandles(item.sym, TF, KL_BARS);
-            if (!rows || rows.length < 260){ failed++; return; }
+            if (!rows || rows.length < 20){ failed++; return; }
             for (var s = 0; s < PINE_SCRIPTS.length; s++){
               var script = PINE_SCRIPTS[s];
+              if (rows.length < (script.minBars || 30)) continue;
               var res = runPineScript(script, rows);
-              if (!res || !res.dir) continue;
-              if (String(res.dir).toLowerCase() !== item.dir) continue;
-              var plan = buildPlan(item.dir, res.price, rows);
-              var sig = {
-                sym: item.sym,
-                dir: item.dir,
-                scriptId: script.id,
-                scriptLabel: script.label,
-                mlScore: res.mlScore,
-                smoothedScore: res.smoothedScore,
-                scoreLimit: res.scoreLimit,
-                newLong: !!res.newLong,
-                newShort: !!res.newShort,
-                isNew: !!(res.newLong || res.newShort),
-                price: res.price,
-                entry: plan.entry,
-                stop: plan.stop,
-                t1: plan.t1,
-                t2: plan.t2,
-                planSrc: plan.planSrc,
-                gates: item.gates,
-                rows: rows
-              };
-              sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
-              signals.push(sig);
+              var sig = signalFromScript(item, script, res, rows);
+              if (sig) signals.push(sig);
             }
           }catch(e){ failed++; }
         }));
@@ -445,7 +531,9 @@ function mount(el){
 
       signals.sort(function(a, b){
         if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
-        return Math.abs(b.smoothedScore || 0) - Math.abs(a.smoothedScore || 0);
+        var gh = (fin(+b.gateHits) ? +b.gateHits : 0) - (fin(+a.gateHits) ? +a.gateHits : 0);
+        if (gh) return gh;
+        return Math.abs(b.smoothedScore || b.momentum || b.smf || 0) - Math.abs(a.smoothedScore || a.momentum || a.smf || 0);
       });
 
       var freshNew = signals.filter(function(s){ return s.isNew; });
@@ -494,8 +582,9 @@ async function pineRefresh(){
 
 W.pineFireAlerts = pineFireAlerts;
 W.pineEvalEligible = pineEvalEligible;
+W.PINE_SCRIPTS = PINE_SCRIPTS;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'pine', label: 'PINE ML', mount: mount, refresh: pineRefresh });
+W.HG_tabs.push({ id: 'pine', label: 'PINE', mount: mount, refresh: pineRefresh });
 
 })();

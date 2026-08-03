@@ -126,7 +126,7 @@ function collectPine(out){
   for (var i = 0; i < sigs.length; i++){
     var s = sigs[i];
     if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE ML', {
+    pushSetup(out, 'PINE', {
       sym: s.sym, dir: s.dir,
       entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
       rr: s.rr
