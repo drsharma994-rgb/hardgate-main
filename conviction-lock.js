@@ -85,6 +85,8 @@ ConvictionLockManager.prototype.fromCandidate = function(c, setupType){
     },
     tally: isFinite(c.tally) ? c.tally : 0,
     macroHint: c.macroHint || null,
+    executionBarIndex: isFinite(c.executionBarIndex) ? c.executionBarIndex : null,
+    executionState: c.executionState || null,
     timestamp: isFinite(c.issuedAt) ? c.issuedAt : Date.now(),
     status: 'ACTIVE'
   };
@@ -131,8 +133,9 @@ ConvictionLockManager.prototype.lockConviction = function(setup, currentTime, cu
   }catch(e){ return out; }
 };
 
-/** Evaluate one locked setup; returns status string or null. Never deletes from map. */
-ConvictionLockManager.prototype.evaluateSetup = function(setup, currentCandle, is15mClose, is4hClose, nowMs){
+/** Evaluate one locked setup; returns status string or null. Never deletes from map.
+   Optional barIndex (6th arg) enables evaluateTimeDecay when goldind.js is loaded. */
+ConvictionLockManager.prototype.evaluateSetup = function(setup, currentCandle, is15mClose, is4hClose, nowMs, barIndex){
   try{
     if (!setup || !setup.levels) return null;
     if (!isFinite(nowMs)) nowMs = Date.now();
@@ -181,6 +184,20 @@ ConvictionLockManager.prototype.evaluateSetup = function(setup, currentCandle, i
       if (this.debug) console.log('[TARGET HIT] ' + setup.id + ' — TP1 reached.');
       return 'TARGET HIT';
     }
+
+    /* Scalp time decay — momentum exit after maxBars without profit (goldind.js). */
+    var tdFn = W.evaluateTimeDecay;
+    if (typeof tdFn === 'function' && type === 'scalp' && is15mClose && isFinite(barIndex)){
+      var td = tdFn(setup, currentCandle, barIndex, setup.maxDecayBars);
+      if (td && td.action === 'MARKET_CLOSE_FULL'){
+        if (this.debug) console.log('[MOMENTUM DECAY] ' + setup.id + ' — time decay exit.');
+        return 'MOMENTUM DECAY';
+      }
+      if (td && td.action === 'TRAIL_SL_TIGHT'){
+        setup.trailSlTight = true;
+        setup.momentumWarning = td.reason;
+      }
+    }
     return null;
   }catch(e){ return null; }
 };
@@ -226,6 +243,8 @@ ConvictionLockManager.prototype.hydrateFromRecord = function(rec, storageKey){
     },
     tally: rec.tally,
     macroHint: rec.macroHint || null,
+    executionBarIndex: rec.executionBarIndex,
+    executionState: rec.executionState || null,
     timestamp: rec.issuedAt,
     issuedAt: rec.issuedAt,
     lastConfirmedAt: rec.lastConfirmedAt,
@@ -252,6 +271,8 @@ ConvictionLockManager.prototype.toRecord = function(setup){
     lastConfirmedAt: setup.lastConfirmedAt,
     tally: setup.tally,
     macroHint: setup.macroHint || null,
+    executionBarIndex: setup.executionBarIndex,
+    executionState: setup.executionState || null,
     anchor: setup.levels.anchor
   };
 };
@@ -299,7 +320,8 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
       var is4h = (type === 'swing');
       var setup = mgr.activeConvictions.get(id);
       if (!setup) continue;
-      var status = mgr.evaluateSetup(setup, bar, is15, is4h, nowMs);
+      var barIdx = (rows && rows.length) ? rows.length - 1 : NaN;
+      var status = mgr.evaluateSetup(setup, bar, is15, is4h, nowMs, barIdx);
       if (status){
         rec.status = status;
         rec.closedAt = nowMs;
