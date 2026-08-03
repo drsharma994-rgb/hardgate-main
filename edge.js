@@ -1066,7 +1066,8 @@ function cardHTML(r){
 var __edge = { busy: false, ranOnce: false, run: null };
 var __edgeScanSnap = null;
 
-function publishEdgeScan(found){
+function publishEdgeScan(found, meta){
+  meta = meta || {};
   try{
     var cands = [];
     for (var i = 0; i < (found || []).length; i++){
@@ -1078,8 +1079,39 @@ function publishEdgeScan(found){
         rr: sig.rr, tally: r.tally
       });
     }
-    __edgeScanSnap = { at: Date.now(), cands: cands };
-  }catch(e){ __edgeScanSnap = { at: Date.now(), cands: [] }; }
+    __edgeScanSnap = {
+      at: Date.now(), cands: cands,
+      stats: meta.stats || null,
+      forming: meta.forming || [],
+      funnel: meta.funnel || null
+    };
+  }catch(e){ __edgeScanSnap = { at: Date.now(), cands: [], stats: null, forming: [], funnel: null }; }
+}
+
+function edgeFormingHTML(forming){
+  if (!forming || !forming.length) return '';
+  var rows = forming.slice(0, 12).map(function(w){
+    return '<div class="note" style="margin:4px 0;padding:6px 8px;border-left:3px solid var(--gold)">'
+      + '<b>' + esc(w.sym || '—') + '</b> · ' + esc(String(w.dir || '').toUpperCase())
+      + (w.regime ? ' · ' + esc(w.regime) : '')
+      + ' · <span style="color:var(--mut)">' + esc(w.note || 'bias OK — waiting for trigger') + '</span></div>';
+  }).join('');
+  return '<details open style="margin:10px 0;padding:8px 12px;border:1px solid var(--line);border-radius:6px">'
+    + '<summary><b>FORMING NOW</b> — SWING bias OK, no ticket yet (watch only)</summary>'
+    + rows + '</details>';
+}
+
+function edgeFunnelHTML(stats, listLen){
+  if (!stats || typeof W.hgFunnelPanelHTML !== 'function') return '';
+  var rows = [
+    { k: 'Universe scanned', v: String(listLen || '—') },
+    { k: 'No SWING bias / volatile', v: String(stats.noBias || 0) },
+    { k: 'Bias OK · no trigger', v: String(stats.noTrig || 0) },
+    { k: 'Trigger · failed tally/trap', v: String(stats.tallyFail || 0) },
+    { k: 'Thin history / errors', v: String(stats.skipped || 0) },
+    { k: 'CLEAN EDGE tickets', v: String(stats.pass || 0) }
+  ];
+  return W.hgFunnelPanelHTML('WHY EMPTY — EDGE funnel', rows, 'edgeFunnelPanel');
 }
 
 /* Shared EDGE scan loop — same logic as the EDGE tab; callers supply universe
@@ -1099,7 +1131,7 @@ async function edgeScanList(list, fetchCandles, hooks){
   var maxN = (hooks.maxUniverse > 0) ? hooks.maxUniverse : MAX_UNIVERSE;
   var minTurn = (hooks.minTurnover !== undefined) ? hooks.minTurnover : MIN_TURNOVER;
   var skipped = 0, noBias = 0, noTrig = 0, tallyFail = 0, t0 = Date.now();
-  var found = [];
+  var found = [], forming = [];
   list = (list || []).filter(function(it){
     if (!it || !it.sym) return false;
     var t = it.turnoverUsd;
@@ -1123,8 +1155,19 @@ async function edgeScanList(list, fetchCandles, hooks){
         var src = (leg && leg.src) ? leg.src : (item.exchange || 'unknown');
         rows = edgeDropForming(rows, TF);
         if (!rows || rows.length < 210){ skipped++; return; }
-        if (!edgeSwingBias(rows)){ noBias++; return; }
-        if (!edgeSignal(rows)){ noTrig++; return; }
+        var bias = edgeSwingBias(rows);
+        if (!bias){ noBias++; return; }
+        if (!edgeSignal(rows)){
+          noTrig++;
+          if (forming.length < 16){
+            forming.push({
+              sym: item.sym, dir: bias.dir,
+              regime: bias.regime || (typeof W.hgTapeRegimeLabel === 'function' ? W.hgTapeRegimeLabel(rows) : ''),
+              note: 'SWING bias OK — waiting for Donchian/OTE/sweep trigger in lookback'
+            });
+          }
+          return;
+        }
         var binanceSym = getBinanceSymFor(item);
         if (typeof W.binanceTakerRatio === 'function') {
           try { item.taker = await W.binanceTakerRatio(binanceSym, '1h', 25); } catch(e){}
@@ -1146,7 +1189,10 @@ async function edgeScanList(list, fetchCandles, hooks){
   found.sort(function(a, b){
     return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
   });
-  return { found: found, list: list, stats: { skipped: skipped, noBias: noBias, noTrig: noTrig, tallyFail: tallyFail, t0: t0 } };
+  return {
+    found: found, list: list, forming: forming,
+    stats: { skipped: skipped, noBias: noBias, noTrig: noTrig, tallyFail: tallyFail, t0: t0, pass: found.length }
+  };
 }
 
 function mount(el){
@@ -1166,13 +1212,16 @@ function mount(el){
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — SWING-aligned · top ' + MAX_UNIVERSE + '</span></div>'
     + '<div class="prog" id="edgeProg"><i></i></div>'
+    + '<div id="edgeFunnel"></div>'
+    + '<div id="edgeForming"></div>'
     + '<div class="cards" id="edgeCards"></div>'
     + '<div class="empty" id="edgeEmpty" style="display:none">No SWING-aligned edge entries right now — trend + value have not lined up.</div>'
     + '</div>';
 
   var btn = el.querySelector('#edgeRun'), statEl = el.querySelector('#edgeStat'),
       progEl = el.querySelector('#edgeProg'), cardsEl = el.querySelector('#edgeCards'),
-      emptyEl = el.querySelector('#edgeEmpty');
+      emptyEl = el.querySelector('#edgeEmpty'), funnelEl = el.querySelector('#edgeFunnel'),
+      formingEl = el.querySelector('#edgeForming');
   if (!btn || !statEl) return;
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
@@ -1196,12 +1245,14 @@ function mount(el){
     btn.disabled = true;
     cardsEl.innerHTML = '';
     emptyEl.style.display = 'none';
+    if (funnelEl) funnelEl.innerHTML = '';
+    if (formingEl) formingEl.innerHTML = '';
     setProg(0);
     try{
       var uni = await W.xuUniverse(true);
       var note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
       if (!uni || !uni.length){
-        publishEdgeScan([]);
+        publishEdgeScan([], { stats: { skipped: 0, noBias: 0, noTrig: 0, tallyFail: 0, pass: 0 } });
         setStat('universe empty — ' + (note || 'exchange fetch failed'), true);
         return;
       }
@@ -1213,11 +1264,14 @@ function mount(el){
       var found = res.found;
       var list = res.list;
       var st = res.stats;
-      publishEdgeScan(found);
+      var forming = res.forming || [];
+      publishEdgeScan(found, { stats: st, forming: forming });
+      if (funnelEl) funnelEl.innerHTML = edgeFunnelHTML(st, list.length);
+      if (formingEl) formingEl.innerHTML = edgeFormingHTML(forming);
       if (!found.length){
         emptyEl.style.display = 'block';
         setStat('done — 0 setups / ' + list.length + ' · ' + st.noBias + ' no SWING bias · '
-          + st.noTrig + ' no trigger · ' + st.tallyFail + ' failed gates (inc. Traps) · ' + st.skipped + ' thin · '
+          + st.noTrig + ' forming (no trigger) · ' + st.tallyFail + ' failed gates (inc. Traps) · ' + st.skipped + ' thin · '
           + Math.floor((Date.now() - st.t0) / 1000) + 's');
         return;
       }
@@ -1237,6 +1291,9 @@ function mount(el){
   }
 
   __edge.run = runScan;
+  setTimeout(function(){
+    if (!__edge.ranOnce && typeof runScan === 'function') runScan();
+  }, 500);
 }
 
 function edgeRefresh(){

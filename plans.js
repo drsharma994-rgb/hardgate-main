@@ -87,6 +87,64 @@ function hgTapeRegimeLabel(rows){
   }catch(e){ return 'n/a'; }
 }
 
+/* --- G5 vol+wick participation (ENGINE quiet-tape parity for SWING/SCALP) --- */
+function hgSwingG5OK(dir, rows, c, r14, vz){
+  try{
+    dir = String(dir || '').toLowerCase();
+    if (!rows || !rows.length || !c || !c.length) return { ok: false, closeOK: false, quiet: false };
+    var cb = rows[rows.length - 1];
+    var range = (+cb.h) - (+cb.l);
+    var closePos = range > 0 ? ((+cb.c) - (+cb.l)) / range : 0.5;
+    var closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40;
+    var _rA = (typeof rsi === 'function') ? rsi(c, 14) : [];
+    var _rP = _rA.length >= 4 ? _rA[_rA.length - 4] : NaN;
+    var slopeOK = isFinite(_rP) && isFinite(r14) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
+    if (isFinite(vz) && vz <= -1.5 && !closeOK) return { ok: false, closeOK: closeOK, quiet: false };
+    var volOK = isFinite(vz) && vz > 0.5;
+    var quiet = !volOK && closeOK && slopeOK;
+    var ok = (volOK || quiet) && closeOK;
+    return { ok: ok, closeOK: closeOK, quiet: quiet };
+  }catch(e){ return { ok: false, closeOK: false, quiet: false }; }
+}
+
+function hgRegimeRouteHint(rows){
+  try{
+    if (typeof detectRegime !== 'function' || !rows || rows.length < 60) return null;
+    var dr = detectRegime(rows);
+    if (!dr || !dr.regime) return null;
+    if (dr.regime === 'compression') return dr.label + ' — trend tickets blocked · try SQUEEZE or MEAN REV';
+    if (dr.regime === 'volatile') return dr.label + ' — trend continuation blocked · stand aside or size down';
+    return null;
+  }catch(e){ return null; }
+}
+
+function hgVenueDataNote(ticker){
+  try{
+    if (!ticker) return null;
+    var t = ticker.turnoverUsd;
+    if (t === null || t === undefined || !(t > 0)) return 'structure-only venue — no turnover/OI on this leg · size down';
+    return null;
+  }catch(e){ return null; }
+}
+
+function hgFunnelPanelHTML(title, rows, panelId){
+  try{
+    if (!rows || !rows.length) return '';
+    panelId = panelId || ('hgFunnel_' + Math.random().toString(36).slice(2, 9));
+    var esc = function(s){
+      return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    };
+    var body = rows.map(function(r){
+      return '<div style="display:flex;gap:8px;padding:3px 0;font-size:12px">'
+        + '<span style="min-width:140px;color:var(--mut)">' + esc(r.k) + '</span>'
+        + '<span>' + esc(r.v) + '</span></div>';
+    }).join('');
+    return '<details class="hg-funnel" id="' + esc(panelId) + '" style="margin:10px 0;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel)">'
+      + '<summary style="cursor:pointer;font-size:12px">' + esc(title) + '</summary>'
+      + '<div style="margin-top:8px">' + body + '</div></details>';
+  }catch(e){ return ''; }
+}
+
 /* --- structure stop (shared by smartSetup fallbacks, squeeze, oiflow, trendtable) --- */
 function hgStructureStop(dir, entry, rows, opts){
   opts = opts || {};
@@ -652,6 +710,10 @@ G.hgFormatEntryType = hgFormatEntryType;
 G.hgConfirmedCascade = hgConfirmedCascade;
 G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
+G.hgSwingG5OK = hgSwingG5OK;
+G.hgRegimeRouteHint = hgRegimeRouteHint;
+G.hgVenueDataNote = hgVenueDataNote;
+G.hgFunnelPanelHTML = hgFunnelPanelHTML;
 G.hgStructureStop = hgStructureStop;
 G.hgPlanFromRisk = hgPlanFromRisk;
 G.hgPlanLevelsCore = hgPlanLevelsCore;

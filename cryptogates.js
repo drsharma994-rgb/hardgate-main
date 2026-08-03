@@ -29,15 +29,21 @@
       g4 = Math.abs(fr) <= 0.05 + 1e-9 && !((dir === 'long' && fr >= 0.04) || (dir === 'short' && fr <= -0.04));
     }
     gates.push(['G4 funding', g4]);
-    var currentBar = rows[rows.length - 1];
-    var range = currentBar.h - currentBar.l;
-    var closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5;
-    var closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40;
-    var _rA = rsi(c, 14);
-    var _rP = _rA[_rA.length - 4];
-    var slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
-    var g5 = (vz > 0.5) || (closeOK && slopeOK);
-    gates.push(['G5 vol+wick', g5 && closeOK]);
+    var g5r = (typeof hgSwingG5OK === 'function')
+      ? hgSwingG5OK(dir, rows, c, r14, vz)
+      : (function(){
+          var currentBar = rows[rows.length - 1];
+          var range = currentBar.h - currentBar.l;
+          var closePos = range > 0 ? (currentBar.c - currentBar.l) / range : 0.5;
+          var closeOK = dir === 'long' ? closePos >= 0.60 : closePos <= 0.40;
+          var _rA = rsi(c, 14);
+          var _rP = _rA[_rA.length - 4];
+          var slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
+          var ok = ((vz > 0.5) || (closeOK && slopeOK)) && closeOK;
+          return { ok: ok, closeOK: closeOK, quiet: !((vz > 0.5)) && closeOK && slopeOK };
+        })();
+    var g5 = g5r.ok;
+    gates.push(['G5 vol+wick', g5]);
     var stop = lastSwing(rows, dir, 30);
     var entry = p;
     /* G6 uses the same ATR-capped stop as swingTryClean — uncapped structure
