@@ -151,4 +151,112 @@ function pineLorentzianKernel(rows, opts){
 G.pineLorentzianKernel = pineLorentzianKernel;
 G.pineMlScoreAtBar = mlScoreAtBar;
 
+function pivotHighAt(highs, confirmIdx, left, right){
+  var p = confirmIdx - right;
+  if (p < left || confirmIdx >= highs.length) return NaN;
+  var pv = highs[p];
+  for (var j = p - left; j <= p + right; j++){
+    if (j < 0 || j >= highs.length) return NaN;
+    if (highs[j] > pv) return NaN;
+  }
+  return pv;
+}
+
+function pivotLowAt(lows, confirmIdx, left, right){
+  var p = confirmIdx - right;
+  if (p < left || confirmIdx >= lows.length) return NaN;
+  var pv = lows[p];
+  for (var j = p - left; j <= p + right; j++){
+    if (j < 0 || j >= lows.length) return NaN;
+    if (lows[j] < pv) return NaN;
+  }
+  return pv;
+}
+
+/** Pine: MSB + Order Block — market structure break with OB limit entry/stop. */
+function pineMsbOb(rows, opts){
+  opts = opts || {};
+  var left = opts.leftBars || 5;
+  var right = opts.rightBars || 5;
+  try{
+    if (!rows || rows.length < left + right + 10) return null;
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+    var n = rows.length;
+
+    var lastSh = NaN, lastSl = NaN, trend = 0;
+    var lastBearHigh = NaN, lastBearLow = NaN, lastBullHigh = NaN, lastBullLow = NaN;
+    var prevBullMsb = false, prevBearMsb = false;
+    var lastResult = null;
+
+    for (var bi = 0; bi < n; bi++){
+      var r = rows[bi];
+      var o = r.o, h = r.h, l = r.l, c = r.c;
+      var ph = pivotHighAt(highs, bi, left, right);
+      var pl = pivotLowAt(lows, bi, left, right);
+      if (isFinite(ph)) lastSh = ph;
+      if (isFinite(pl)) lastSl = pl;
+
+      if (c < o){
+        lastBearHigh = h;
+        lastBearLow = l;
+      }
+      if (c > o){
+        lastBullHigh = h;
+        lastBullLow = l;
+      }
+
+      var prevC = bi > 0 ? rows[bi - 1].c : c;
+      var bullMsb = isFinite(lastSh) && prevC <= lastSh && c > lastSh && trend !== 1;
+      var bearMsb = isFinite(lastSl) && prevC >= lastSl && c < lastSl && trend !== -1;
+
+      if (bullMsb) trend = 1;
+      if (bearMsb) trend = -1;
+
+      var newLong = bullMsb && !prevBullMsb;
+      var newShort = bearMsb && !prevBearMsb;
+      var dir = newLong ? 'long' : (newShort ? 'short' : null);
+      var entry = NaN, stop = NaN;
+      if (newLong && isFinite(lastBearHigh) && isFinite(lastBearLow)){
+        entry = lastBearHigh;
+        stop = lastBearLow;
+      } else if (newShort && isFinite(lastBullLow) && isFinite(lastBullHigh)){
+        entry = lastBullLow;
+        stop = lastBullHigh;
+      }
+
+      if (bi === n - 1){
+        var risk = isFinite(entry) && isFinite(stop) ? Math.abs(entry - stop) : NaN;
+        lastResult = {
+          dir: dir,
+          trend: trend,
+          newLong: newLong,
+          newShort: newShort,
+          bullMsb: bullMsb,
+          bearMsb: bearMsb,
+          price: c,
+          entry: entry,
+          stop: stop,
+          t1: (isFinite(risk) && risk > 0 && dir === 'long') ? entry + 2 * risk
+            : (isFinite(risk) && risk > 0 && dir === 'short') ? entry - 2 * risk : NaN,
+          t2: (isFinite(risk) && risk > 0 && dir === 'long') ? entry + 3.5 * risk
+            : (isFinite(risk) && risk > 0 && dir === 'short') ? entry - 3.5 * risk : NaN,
+          lastSh: lastSh,
+          lastSl: lastSl,
+          leftBars: left,
+          rightBars: right
+        };
+      }
+
+      prevBullMsb = bullMsb;
+      prevBearMsb = bearMsb;
+    }
+    return lastResult;
+  }catch(e){ return null; }
+}
+
+G.pineMsbOb = pineMsbOb;
+G.pinePivotHighAt = pivotHighAt;
+G.pinePivotLowAt = pivotLowAt;
+
 })();

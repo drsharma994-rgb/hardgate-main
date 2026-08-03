@@ -154,6 +154,17 @@ function pineEvalEligible(eligible, fetchRows){
 }
 
 function formatPineAlert(sig){
+  if (sig.scriptId === 'msb-ob'){
+    var action = sig.dir === 'long' ? 'limit_buy' : 'limit_sell';
+    var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","entry_price":' + sig.entry
+      + ',"stop_loss":' + sig.stop + ',"script":"msb-ob"}';
+    return '🌲 PINE MSB/OB · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nMSB + Order Block · limit @ OB'
+      + '\nLIMIT ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price) + ' · structure trend ' + (sig.trend > 0 ? 'BULL' : (sig.trend < 0 ? 'BEAR' : 'NEUT'))
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + json;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
@@ -234,7 +245,7 @@ var __pineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PINE SCRIPT <span>Pine math on 7-gate intersection · Lorentzian KNN + Gaussian kernel (first script)</span></h2>'
+    + '<h2>PINE ML <span>Lorentzian KNN + Gaussian kernel · 7-gate intersection</span></h2>'
     + '<div class="note">Only symbols that simultaneously pass <b>SWING</b>, <b>SCALP</b>, <b>EDGE</b>, <b>BEST</b>, <b>BRAIN</b>, <b>REGIME</b> bias, and <b>TREND MATRIX</b> direction are scanned. '
     + 'When Pine math fires a <b>new</b> long/short (score crosses ±threshold on bar close), Telegram + push alert immediately.</div>'
     + '<div class="row" style="margin-top:10px">'
@@ -389,6 +400,6 @@ W.pineFireAlerts = pineFireAlerts;
 W.pineEvalEligible = pineEvalEligible;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'pine', label: 'PINE SCRIPT', mount: mount, refresh: pineRefresh });
+W.HG_tabs.push({ id: 'pine', label: 'PINE ML', mount: mount, refresh: pineRefresh });
 
 })();
