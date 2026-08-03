@@ -10,6 +10,7 @@ var HG_STOP_CAP_DIST_ATR = 2.5;
 var HG_STOP_FALLBACK_ATR = 1.5;
 var HG_SWEEP_STOP_ATR = 0.5;
 var HG_SWEEP_RECLAIM_MAX = 3;
+var HG_SWEEP_RECLAIM_BODY_ATR = 0.8;
 var HG_T1_R = 2;
 var HG_T2_R = 3.5;
 var HG_SCALP_T1_R = 1.5;
@@ -367,31 +368,48 @@ function hgPlanMeta(plan){
   }catch(e){ return {}; }
 }
 
+function hgSweepReclaimOk(bars, r, dir, priorLevel, minBodyAtr){
+  try{
+    var closes = bars.closes || (bars.map ? bars.map(function(row){ return row.c; }) : null);
+    if (!closes) return false;
+    var cr = closes[r];
+    if (!isFinite(cr)) return false;
+    if (dir === 'long' && !(cr > priorLevel)) return false;
+    if (dir === 'short' && !(cr < priorLevel)) return false;
+    if (!(minBodyAtr > 0)) return true;
+    var row = bars.rows && bars.rows[r] ? bars.rows[r] : (Array.isArray(bars) ? bars[r] : null);
+    var or = row && isFinite(row.o) ? row.o : NaN;
+    var atrArr = bars.atr;
+    var atrr = atrArr && isFinite(atrArr[r]) ? atrArr[r] : NaN;
+    if (!isFinite(or) || !isFinite(atrr) || !(atrr > 0)) return false;
+    return Math.abs(cr - or) > minBodyAtr * atrr;
+  }catch(e){ return false; }
+}
+
 function hgDetectLiquiditySweep(bars, i, dir, priorLevel, opts){
   opts = opts || {};
   try{
     if (!bars || !isFinite(priorLevel) || !isFinite(i)) return null;
     var maxBack = Math.min(opts.maxBars !== undefined ? opts.maxBars : HG_SWEEP_RECLAIM_MAX, i);
+    var maxSpan = opts.maxBars !== undefined ? opts.maxBars : HG_SWEEP_RECLAIM_MAX;
+    var minBodyAtr = (opts.minBodyAtr !== undefined) ? opts.minBodyAtr : HG_SWEEP_RECLAIM_BODY_ATR;
     var lows = bars.lows || bars.map(function(r){ return r.l; });
     var highs = bars.highs || bars.map(function(r){ return r.h; });
-    var closes = bars.closes || bars.map(function(r){ return r.c; });
     var sweepBar = -1, sweepExtreme = NaN, reclaimBar = -1;
     for (var b = 0; b <= maxBack; b++){
       var j = i - b;
       if (dir === 'long'){
         if (!(isFinite(lows[j]) && lows[j] < priorLevel)) continue;
         sweepBar = j; sweepExtreme = lows[j];
-        if (isFinite(closes[j]) && closes[j] > priorLevel){ reclaimBar = j; break; }
-        for (var r = j + 1; r <= i && r - j <= HG_SWEEP_RECLAIM_MAX; r++){
-          if (isFinite(closes[r]) && closes[r] > priorLevel){ reclaimBar = r; break; }
+        for (var r = j; r <= i && r - j <= maxSpan; r++){
+          if (hgSweepReclaimOk(bars, r, 'long', priorLevel, minBodyAtr)){ reclaimBar = r; break; }
         }
         if (reclaimBar >= 0) break;
       } else {
         if (!(isFinite(highs[j]) && highs[j] > priorLevel)) continue;
         sweepBar = j; sweepExtreme = highs[j];
-        if (isFinite(closes[j]) && closes[j] < priorLevel){ reclaimBar = j; break; }
-        for (var r2 = j + 1; r2 <= i && r2 - j <= HG_SWEEP_RECLAIM_MAX; r2++){
-          if (isFinite(closes[r2]) && closes[r2] < priorLevel){ reclaimBar = r2; break; }
+        for (var r2 = j; r2 <= i && r2 - j <= maxSpan; r2++){
+          if (hgSweepReclaimOk(bars, r2, 'short', priorLevel, minBodyAtr)){ reclaimBar = r2; break; }
         }
         if (reclaimBar >= 0) break;
       }

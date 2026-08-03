@@ -124,14 +124,21 @@ console.log('== sweep quality filter ==');
   var rows = trendSeries('long', 80);
   var n = rows.length;
   rows[n - 3].l = rows[n - 3].c - 3;
+  rows[n - 3].o = rows[n - 3].l + 0.1;
   rows[n - 3].c = rows[n - 3].l + 0.2;
   rows[n - 2].c = rows[n - 2].l + 1.5;
+  rows[n - 1].o = rows[n - 1].l + 0.2;
   rows[n - 1].c = rows[n - 1].l + 1.2;
   var priorLo = Math.min.apply(null, rows.slice(n - 15, n - 3).map(function(r){ return r.l; }));
-  var A = { lows: rows.map(function(r){ return r.l; }), highs: rows.map(function(r){ return r.h; }),
-            closes: rows.map(function(r){ return r.c; }) };
+  var atrArr = rows.map(function(){ return 1; });
+  var A = { rows: rows, lows: rows.map(function(r){ return r.l; }), highs: rows.map(function(r){ return r.h; }),
+            closes: rows.map(function(r){ return r.c; }), atr: atrArr };
   var sq = W.edgeSweepQuality(A, n - 1, 'long', priorLo);
-  assert(sq === null || sq.swept === true, 'edgeSweepQuality returns swept object or null');
+  assert(sq && sq.swept === true, 'edgeSweepQuality displacement reclaim passes');
+  rows[n - 2].o = rows[n - 2].c - 0.05;
+  rows[n - 1].o = rows[n - 1].c - 0.05;
+  sq = W.edgeSweepQuality(A, n - 1, 'long', priorLo);
+  assert(sq === null, 'edgeSweepQuality rejects weak reclaim body');
 }
 
 console.log('== cryptogates bias parity ==');
