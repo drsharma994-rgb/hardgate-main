@@ -82,6 +82,8 @@ console.log('== 0) exports + tab registration ==');
                  'updateActiveZones','detectOrderBlockRetest',
                  'getMarketSession','calculateAsianRange','calculateADRExhaustion',
                  'calculateMacroHint','goldCalculateMacroHint',
+                 'calculateGoldSpotBasis','calculateKaufmanER','NewsWindowGuard',
+                 'calculatePositionSize','goldAttachPositionSize',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -371,6 +373,63 @@ console.log('== 10c) calculateMacroHint ==');
 }
 
 /* =========================================================================
+   10d) basis / KER / news guard / position sizing engines
+========================================================================= */
+console.log('== 10d) confluence engines ==');
+{
+  const basisPrem = W.calculateGoldSpotBasis(2651, 2647);
+  assert(basisPrem.basisState === 'PREMIUM_BULLISH' && basisPrem.basisTally === 1,
+         'calculateGoldSpotBasis: premium > +0.15% -> PREMIUM_BULLISH +1');
+  const basisDisc = W.calculateGoldSpotBasis(2640, 2647);
+  assert(basisDisc.basisState === 'DISCOUNT_BEARISH' && basisDisc.basisTally === -1,
+         'calculateGoldSpotBasis: discount < -0.15% -> DISCOUNT_BEARISH -1');
+  assert(W.calculateGoldSpotBasis(null, 2647).basisState === 'NEUTRAL',
+         'calculateGoldSpotBasis: invalid input -> NEUTRAL');
+
+  const chopRows = flatRows(25, 100, 0.05, DAY);
+  const kerChop = W.calculateKaufmanER(chopRows, 20);
+  assert(kerChop.isChop === true && kerChop.er < 0.25,
+         'calculateKaufmanER: overlapping chop -> isChop');
+  const trendRows = flatRows(25, 100, 0.5, DAY);
+  for (let i = 0; i < trendRows.length; i++) trendRows[i].c = 100 + i * 0.4;
+  const kerTrend = W.calculateKaufmanER(trendRows, 20);
+  assert(kerTrend.isChop === false && kerTrend.er > 0.5,
+         'calculateKaufmanER: directional series -> trending');
+
+  const guard = new W.NewsWindowGuard();
+  const nowMs = Date.now();
+  const evtT = nowMs + 5 * 60 * 1000;
+  guard.setUpcomingEvents([
+    { title: 'CPI', timestamp: evtT, impact: 'HIGH' },
+    { title: 'Low impact', timestamp: evtT, impact: 'LOW' }
+  ]);
+  const inWin = guard.checkNewsWindow(nowMs, 30);
+  assert(inWin.inNewsWindow === true && inWin.eventName === 'CPI', 'NewsWindowGuard: HIGH event in ±30m');
+
+  const pos = W.calculatePositionSize(10000, 1, 2650, 2640);
+  assert(pos.positionSizeUnits > 0 && pos.riskAmountUSD === 100,
+         'calculatePositionSize: 1% risk on $10k with $10 stop distance');
+  assert(W.calculatePositionSize(10000, 1, 2650, 2650).error,
+         'calculatePositionSize: zero SL distance -> error');
+
+  const newsRows = flatRows(35, 100, 0.5, Math.floor(nowMs / 1000));
+  const ev = W.evaluateScalp(newsRows, {
+    atr15: 1,
+    paxgPrice: 2651,
+    spotXauPrice: 2647,
+    newsGuard: guard
+  });
+  assert(ev.paxgBasis && ev.paxgBasis.basisTally === 1, 'evaluateScalp: PAXG basis tally injected');
+  assert(ev.valid === false && /NEWS VETO/.test(ev.vetoReason), 'evaluateScalp: news window hard veto');
+  assert(ev.ker && typeof ev.ker.er === 'number', 'evaluateScalp: exposes ker object');
+
+  const setup = { entry: 2650, stop: 2640 };
+  W.goldAttachPositionSize(setup, 10000, 1);
+  assert(setup.positionSize && setup.positionSize.positionSizeUnits > 0,
+         'goldAttachPositionSize: attaches sizing block to setup');
+}
+
+/* =========================================================================
    11) goldRSIGold — 75/25 zones + divergence both ways
 ========================================================================= */
 console.log('== 11) goldRSIGold ==');
@@ -642,6 +701,8 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'updateActiveZones','detectOrderBlockRetest',
                  'getMarketSession','calculateAsianRange','calculateADRExhaustion',
                  'calculateMacroHint','goldCalculateMacroHint',
+                 'calculateGoldSpotBasis','calculateKaufmanER','NewsWindowGuard',
+                 'calculatePositionSize','goldAttachPositionSize',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];

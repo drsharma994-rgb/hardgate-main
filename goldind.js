@@ -97,7 +97,8 @@ Exports (all on window):
                              -> {volProfile, sweepData, fvgData, obSetup, asianSetup,
                              adrFade, adrData, session, asianRange, swings, structure,
                              activeOrderBlocks, activeTriggers, agreeingReads, macroHint,
-                             context, reads}
+                             ker, paxgBasis, newsState, confluenceTally, valid, vetoReason,
+                             isChop, context, reads}
   HardgateGoldEngine.evaluateSwing(h4, ctx?) — 4h swing evaluator (structure + OB retest)
   goldSwings(rows, left?, right?) — fractal swing highs/lows -> {highs, lows}
   goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
@@ -113,6 +114,11 @@ Exports (all on window):
                              bearish DXY bar -> TAILWIND (weak dollar favors longs);
                              bullish DXY bar -> HEADWIND; else NEUTRAL
   goldCalculateMacroHint — alias of calculateMacroHint
+  calculateGoldSpotBasis(paxg, spotXau) — PAXG vs spot basis state + tally (±0.15%)
+  calculateKaufmanER(candles, lookback?) — {er, isChop} Kaufman ER (chop < 0.25)
+  NewsWindowGuard — high-impact ±30m news window checker (setUpcomingEvents)
+  calculatePositionSize(balance, riskPct, entry, stop) — risk-based position sizing
+  goldAttachPositionSize(setup, balance, riskPct) — attach positionSize to a setup
   goldAsianBreakout / goldADRFade — volume-validated Asian breakout + ADR exhaustion fade
   detectAsianBreakout / detectADRFade — session & exhaustion trigger aliases
   goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
@@ -1208,8 +1214,17 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   if (bundleOpts.dxyCandles) scalpCtx.dxyCandles = bundleOpts.dxyCandles;
   if (bundleOpts.currentDxy) scalpCtx.currentDxy = bundleOpts.currentDxy;
   if (bundleOpts.macroHint) scalpCtx.macroHint = bundleOpts.macroHint;
+  if (bundleOpts.paxgPrice) scalpCtx.paxgPrice = bundleOpts.paxgPrice;
+  if (bundleOpts.spotXauPrice) scalpCtx.spotXauPrice = bundleOpts.spotXauPrice;
+  if (bundleOpts.newsGuard) scalpCtx.newsGuard = bundleOpts.newsGuard;
+  if (bundleOpts.news) scalpCtx.news = bundleOpts.news;
+  if (bundleOpts.newsWindowMinutes) scalpCtx.newsWindowMinutes = bundleOpts.newsWindowMinutes;
   D.scalpEval = evaluateScalp(rows, scalpCtx);
   D.macroHint = D.scalpEval.macroHint || bundleOpts.macroHint || null;
+  D.ker = D.scalpEval.ker || calculateKaufmanER(rows, 20);
+  D.paxgBasis = D.scalpEval.paxgBasis || null;
+  D.newsState = D.scalpEval.newsState || { inNewsWindow: false };
+  D.scalpValid = D.scalpEval.valid !== false;
   D.vprof = D.scalpEval.volProfile || goldVolumeProfile(rows, 100, 50);
   D.volSpike = goldVolumeSpike(rows);
   D.volSpikeSweep = false;
@@ -1532,6 +1547,10 @@ function goldScalpSetups(inp){
     if (inp.dxyCandles) bundleOpts.dxyCandles = inp.dxyCandles;
     if (inp.currentDxy) bundleOpts.currentDxy = inp.currentDxy;
     if (inp.macroHint) bundleOpts.macroHint = inp.macroHint;
+    if (isFinite(inp.paxgPrice)) bundleOpts.paxgPrice = inp.paxgPrice;
+    if (isFinite(inp.spotXauPrice)) bundleOpts.spotXauPrice = inp.spotXauPrice;
+    if (inp.newsGuard) bundleOpts.newsGuard = inp.newsGuard;
+    if (inp.news) bundleOpts.news = inp.news;
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15, bundleOpts);
     D.kz = kz; D.news = news;
 
@@ -1546,7 +1565,9 @@ function goldScalpSetups(inp){
     var rb4s = D.rb4;
     D.stack4 = (rb4s && isFinite(rb4s.e50) && isFinite(rb4s.e200))
       ? (rb4s.e50 > rb4s.e200 ? 'bull' : (rb4s.e50 < rb4s.e200 ? 'bear' : null)) : null;
-    D.er = __kaufmanER(closes15, 20);
+    var kerObj = calculateKaufmanER(rows, 20);
+    D.ker = kerObj;
+    D.er = kerObj.er;
 
     /* dropped candidates (e.g. structure too close — R:R insufficient) ride
        the .rejected side-channel so the tab can render named reason lines;
@@ -2444,6 +2465,123 @@ function calculateMacroHint(dxyCandles, currentDxy){
 
 var goldCalculateMacroHint = calculateMacroHint;
 
+/* PAXG / spot XAU basis — premium/discount vs ±0.15% band. Never throws. */
+function calculateGoldSpotBasis(paxgPrice, spotXauPrice){
+  var neutral = { basisState: 'NEUTRAL', basisTally: 0, basisSpread: NaN, basisPercent: NaN };
+  try{
+    var paxg = +paxgPrice, spot = +spotXauPrice;
+    if (!isFinite(paxg) || !(paxg > 0) || !isFinite(spot) || !(spot > 0)) return neutral;
+    var basisSpread = paxg - spot;
+    var basisPercent = (basisSpread / spot) * 100;
+    var basisState = 'PARITY', basisTally = 0;
+    if (basisPercent > 0.15){
+      basisState = 'PREMIUM_BULLISH';
+      basisTally = 1;
+    } else if (basisPercent < -0.15){
+      basisState = 'DISCOUNT_BEARISH';
+      basisTally = -1;
+    }
+    return {
+      basisSpread: basisSpread,
+      basisPercent: basisPercent,
+      basisState: basisState,
+      basisTally: basisTally
+    };
+  }catch(e){ return neutral; }
+}
+
+/* Kaufman Efficiency Ratio on candle rows — {er, isChop}. Never throws. */
+function calculateKaufmanER(candles, lookback){
+  var trending = { er: 1.0, isChop: false };
+  try{
+    lookback = lookback || 20;
+    var rows = __rows(candles);
+    if (!rows || rows.length < lookback + 1) return trending;
+    var closes = __closes(rows);
+    var er = __kaufmanER(closes, lookback);
+    if (!isFinite(er)) return trending;
+    return { er: er, isChop: er < 0.25 };
+  }catch(e){ return trending; }
+}
+
+/** High-impact news window guard (±windowMinutes). Never throws. */
+function NewsWindowGuard(){
+  this.scheduledEvents = [];
+}
+NewsWindowGuard.prototype.setUpcomingEvents = function(eventsList){
+  try{
+    this.scheduledEvents = [];
+    if (!Array.isArray(eventsList)) return;
+    var i, e, imp;
+    for (i = 0; i < eventsList.length; i++){
+      e = eventsList[i];
+      if (!e) continue;
+      imp = String(e.impact || '').toUpperCase();
+      if (imp === 'HIGH') this.scheduledEvents.push(e);
+    }
+  }catch(err){ this.scheduledEvents = []; }
+};
+NewsWindowGuard.prototype.checkNewsWindow = function(currentTimestampGMT, windowMinutes){
+  try{
+    windowMinutes = windowMinutes || 30;
+    var windowMs = windowMinutes * 60 * 1000;
+    var nowMs = __toMs(currentTimestampGMT);
+    if (!isFinite(nowMs)) nowMs = Date.now();
+    var i, event, ts, timeDiff;
+    for (i = 0; i < this.scheduledEvents.length; i++){
+      event = this.scheduledEvents[i];
+      ts = (event.timestamp !== undefined && event.timestamp !== null) ? event.timestamp : event.t;
+      ts = __toMs(ts);
+      if (!isFinite(ts)) continue;
+      timeDiff = Math.abs(nowMs - ts);
+      if (timeDiff <= windowMs){
+        return {
+          inNewsWindow: true,
+          eventName: event.title || event.name || 'High-impact event',
+          minutesToEvent: Math.round((ts - nowMs) / 60000)
+        };
+      }
+    }
+    return { inNewsWindow: false };
+  }catch(e){ return { inNewsWindow: false }; }
+};
+
+/* Risk-based position sizing in fine gold ounces / contract units. Never throws. */
+function calculatePositionSize(accountBalanceUSD, riskPercent, entryPrice, stopLossPrice){
+  try{
+    var bal = +accountBalanceUSD, riskPct = +riskPercent;
+    var entry = +entryPrice, stop = +stopLossPrice;
+    if (!isFinite(bal) || !(bal > 0) || !isFinite(riskPct) || !(riskPct > 0)
+        || !isFinite(entry) || !(entry > 0) || !isFinite(stop)){
+      return { error: 'Invalid inputs' };
+    }
+    var riskAmountUSD = bal * (riskPct / 100);
+    var priceRiskPerUnit = Math.abs(entry - stop);
+    if (!(priceRiskPerUnit > 0)) return { error: 'Invalid SL distance' };
+    var rawPositionSize = riskAmountUSD / priceRiskPerUnit;
+    var notionalValue = rawPositionSize * entry;
+    return {
+      riskAmountUSD: riskAmountUSD,
+      stopDistanceUSD: priceRiskPerUnit,
+      positionSizeUnits: Number(rawPositionSize.toFixed(3)),
+      notionalValueUSD: Number(notionalValue.toFixed(2))
+    };
+  }catch(e){ return { error: 'Invalid inputs' }; }
+}
+
+function goldAttachPositionSize(setup, accountBalanceUSD, riskPercent){
+  try{
+    if (!setup || typeof setup !== 'object') return setup;
+    var entry = isFinite(setup.entry) ? setup.entry
+      : (setup.levels && isFinite(setup.levels.entry) ? setup.levels.entry : NaN);
+    var stop = isFinite(setup.stop) ? setup.stop
+      : (setup.levels && isFinite(setup.levels.stopLoss) ? setup.levels.stopLoss : NaN);
+    var pos = calculatePositionSize(accountBalanceUSD, riskPercent, entry, stop);
+    if (pos && !pos.error) setup.positionSize = pos;
+    return setup;
+  }catch(e){ return setup; }
+}
+
 function __aggregateDailyFromRows(rows){
   var out = [], days = {}, keys = [], i, r, t, sec, ds, key, d;
   try{
@@ -3134,6 +3272,13 @@ function evaluateScalp(m15Data, ctx){
     session: null,
     asianRange: null,
     macroHint: 'NEUTRAL',
+    ker: { er: 1.0, isChop: false },
+    isChop: false,
+    paxgBasis: null,
+    newsState: { inNewsWindow: false },
+    confluenceTally: 0,
+    valid: true,
+    vetoReason: null,
     swings: null,
     structure: null,
     activeOrderBlocks: [],
@@ -3147,6 +3292,12 @@ function evaluateScalp(m15Data, ctx){
     if (!rows || rows.length < 3) return out;
     if (!out.context || typeof out.context !== 'object') out.context = {};
     var index = rows.length - 1;
+
+    out.ker = calculateKaufmanER(rows, 20);
+    out.isChop = out.ker.isChop;
+    out.confluenceTally = 0;
+    out.valid = true;
+    out.vetoReason = null;
 
     out.volProfile = goldVolumeProfile(rows, 100, 50);
 
@@ -3283,6 +3434,32 @@ function evaluateScalp(m15Data, ctx){
       out.context.macroHint = out.macroHint;
     }
 
+    /* PAXG basis + news veto + confluence tally injection. */
+    var paxgPx = out.context.paxgPrice, spotPx = out.context.spotXauPrice;
+    if (isFinite(paxgPx) && isFinite(spotPx)){
+      out.paxgBasis = calculateGoldSpotBasis(paxgPx, spotPx);
+      out.confluenceTally += out.paxgBasis.basisTally;
+    }
+    var newsGuard = out.context.newsGuard, newsState;
+    var evalMs = isFinite(lastT) ? __toMs(lastT) : Date.now();
+    var winMin = isFinite(out.context.newsWindowMinutes) ? out.context.newsWindowMinutes : 30;
+    if (newsGuard && typeof newsGuard.checkNewsWindow === 'function'){
+      newsState = newsGuard.checkNewsWindow(evalMs, winMin);
+    } else if (out.context.news){
+      var nc = __newsCaution(out.context.news, evalMs);
+      newsState = nc.caution
+        ? { inNewsWindow: true, eventName: nc.title || 'High-impact event', minutesToEvent: null }
+        : { inNewsWindow: false };
+    } else {
+      newsState = { inNewsWindow: false };
+    }
+    out.newsState = newsState;
+    if (newsState.inNewsWindow){
+      out.valid = false;
+      out.vetoReason = 'NEWS VETO: High-Impact Event (' + (newsState.eventName || 'release')
+        + ') within ±' + winMin + ' min window.';
+    }
+
     return out;
   }catch(e){ return out; }
 }
@@ -3402,6 +3579,11 @@ W.calculateAsianRange = calculateAsianRange;
 W.calculateADRExhaustion = calculateADRExhaustion;
 W.calculateMacroHint = calculateMacroHint;
 W.goldCalculateMacroHint = goldCalculateMacroHint;
+W.calculateGoldSpotBasis = calculateGoldSpotBasis;
+W.calculateKaufmanER = calculateKaufmanER;
+W.NewsWindowGuard = NewsWindowGuard;
+W.calculatePositionSize = calculatePositionSize;
+W.goldAttachPositionSize = goldAttachPositionSize;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;
