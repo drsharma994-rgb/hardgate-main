@@ -381,6 +381,86 @@ async function getGoldCandles(res, count){
   }catch(e){ return { rows: [], source: null }; }
 }
 
+/* Silver candles for gold–silver SMT (Brain macro-feeds + gold engine).
+   Binance XAGUSDT (when listed) -> Twelve Data XAG/USD -> Yahoo SI=F. */
+async function getSilverCandles(res, count){
+  try{
+    res = res || '15m';
+    count = Math.max(10, Math.min(5000, count || 50));
+    const key = 'silver|' + res + '|' + count;
+    const hit = __macroCacheGet(key); if (hit !== undefined) return hit;
+
+    try{
+      if (typeof binanceKlines === 'function' && GOLD_RES_BINANCE[res]){
+        const rows = await binanceKlines('XAGUSDT', GOLD_RES_BINANCE[res], count);
+        if (rows && rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'binance-xag' });
+      }
+    }catch(e){}
+
+    try{
+      if (typeof TWELVEDATA_KEY !== 'undefined' && TWELVEDATA_KEY && GOLD_RES_TD[res]){
+        const url = 'https://api.twelvedata.com/time_series?symbol=XAG/USD&interval=' + GOLD_RES_TD[res] +
+                    '&outputsize=' + Math.min(count + 5, 5000) + '&apikey=' + TWELVEDATA_KEY;
+        if (typeof tdThrottle === 'function') await tdThrottle();
+        const j = await __macroFetchJson(url);
+        const vals = j && j.values;
+        if (Array.isArray(vals) && vals.length){
+          const rows = vals.map(function(v){
+            const t = Date.parse(v.datetime + 'Z');
+            return { t: Math.floor(t/1000), o: +v.open, h: +v.high, l: +v.low, c: +v.close,
+                     v: isFinite(+v.volume) ? +v.volume : 0 };
+          }).filter(function(r){
+            return isFinite(r.t) && isFinite(r.o) && isFinite(r.h) && isFinite(r.l) && isFinite(r.c);
+          }).sort(function(a,b){ return a.t - b.t; });
+          if (rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'twelvedata' });
+        }
+      }
+    }catch(e){}
+
+    try{
+      const ymap = GOLD_RES_YAHOO[res];
+      if (ymap){
+        const yurl = 'https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=' + ymap.i + '&range=' + ymap.r;
+        let rows = __parseYahooChart(await __yahooViaProxy(yurl));
+        if (rows.length && ymap.agg) rows = resampleRows(rows, ymap.agg);
+        if (rows.length) return __macroCachePut(key, { rows: rows.slice(-count), source: 'yahoo-si' });
+      }
+    }catch(e){}
+
+    return { rows: [], source: null };
+  }catch(e){ return { rows: [], source: null }; }
+}
+
+/* US10Y yield as ascending OHLC rows (flat bars) for short-term trend reads. */
+async function getUST10YCandles(count){
+  try{
+    count = Math.max(5, Math.min(60, count || 10));
+    const key = 'ust10y|' + count;
+    const hit = __macroCacheGet(key, DXY_CACHE_MS); if (hit !== undefined) return hit;
+
+    try{
+      const yurl = 'https://query1.finance.yahoo.com/v8/finance/chart/^TNX?interval=1d&range=1mo';
+      let yrows = __parseYahooChart(await __yahooViaProxy(yurl));
+      if (yrows && yrows.length >= 5){
+        const rows = yrows.slice(-count).map(function(r){
+          const y = (r.c > 20) ? r.c / 10 : r.c;
+          return { t: r.t, o: y, h: y, l: y, c: y, v: 0 };
+        });
+        return __macroCachePut(key, rows);
+      }
+    }catch(e){}
+
+    const yr = new Date().getUTCFullYear();
+    let trows = __parseTreasury10Y(await __macroFetchText(__treasuryCsvUrl(yr)));
+    if (!trows.length) trows = __parseTreasury10Y(await __macroFetchText(__treasuryCsvUrl(yr - 1)));
+    if (!trows.length) return null;
+    const rows = trows.slice(-count).map(function(r){
+      return { t: r.t, o: r.y10, h: r.y10, l: r.y10, c: r.y10, v: 0 };
+    });
+    return __macroCachePut(key, rows);
+  }catch(e){ return null; }
+}
+
 /* Last daily closes of a Yahoo symbol, via the /api/proxy last-resort path. Nullable. */
 async function __yahooLastClose(symbol, range){
   try{
@@ -514,4 +594,6 @@ function getGoldMacroCached(){
 if (typeof window !== 'undefined'){
   window.macroGoldPlan = macroGoldPlan;
   window.getGoldMacroCached = getGoldMacroCached;
+  window.getSilverCandles = getSilverCandles;
+  window.getUST10YCandles = getUST10YCandles;
 }
