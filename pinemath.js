@@ -584,4 +584,101 @@ function pineHalfTrend(rows, opts){
 
 G.pineHalfTrend = pineHalfTrend;
 
+/** Pine: SMC Core — fractal swings, FVG zones, CHoCH limit entry. */
+function pineSmcCore(rows, opts){
+  opts = opts || {};
+  var pivotLen = opts.pivotLength || 5;
+  var atrLen = opts.atrLen || 14;
+  try{
+    if (!rows || rows.length < pivotLen * 2 + 10) return null;
+    var n = rows.length;
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+    var closes = rows.map(function(r){ return r.c; });
+    var atrArr = pineAtr(rows, atrLen);
+
+    var lastSh = NaN, lastSl = NaN, trend = 1;
+    var bullFvgTop = NaN, bullFvgBot = NaN, bearFvgTop = NaN, bearFvgBot = NaN;
+    var signal = null;
+
+    for (var i = 0; i < n; i++){
+      var ph = pivotHighAt(highs, i, pivotLen, pivotLen);
+      var pl = pivotLowAt(lows, i, pivotLen, pivotLen);
+      if (isFinite(ph)) lastSh = ph;
+      if (isFinite(pl)) lastSl = pl;
+
+      if (i >= 2){
+        if (lows[i] > highs[i - 2]){
+          bullFvgTop = lows[i];
+          bullFvgBot = highs[i - 2];
+        }
+        if (highs[i] < lows[i - 2]){
+          bearFvgTop = lows[i - 2];
+          bearFvgBot = highs[i];
+        }
+      }
+
+      var prevC = i > 0 ? closes[i - 1] : closes[i];
+      var c = closes[i];
+      var atr = isFinite(atrArr[i]) ? atrArr[i] : 0;
+      var bullChoch = isFinite(lastSh) && prevC <= lastSh && c > lastSh && trend === -1;
+      var bearChoch = isFinite(lastSl) && prevC >= lastSl && c < lastSl && trend === 1;
+
+      if (bullChoch){
+        trend = 1;
+        var limitEntry = bullFvgTop;
+        var stopLoss = isFinite(bullFvgBot) ? bullFvgBot - atr : NaN;
+        if (i === n - 1 && isFinite(limitEntry) && isFinite(stopLoss) && limitEntry !== stopLoss){
+          var riskL = Math.abs(limitEntry - stopLoss);
+          signal = {
+            dir: 'long',
+            newLong: true,
+            newShort: false,
+            entry: limitEntry,
+            stop: stopLoss,
+            zoneEntry: limitEntry,
+            zoneTop: bullFvgTop,
+            zoneBot: bullFvgBot,
+            t1: limitEntry + 2 * riskL,
+            t2: limitEntry + 3.5 * riskL,
+            price: c,
+            lastSh: lastSh,
+            lastSl: lastSl,
+            pivotLength: pivotLen
+          };
+        }
+      }
+      if (bearChoch){
+        trend = -1;
+        var limitEntryS = bearFvgBot;
+        var stopLossS = isFinite(bearFvgTop) ? bearFvgTop + atr : NaN;
+        if (i === n - 1 && isFinite(limitEntryS) && isFinite(stopLossS) && limitEntryS !== stopLossS){
+          var riskS = Math.abs(limitEntryS - stopLossS);
+          signal = {
+            dir: 'short',
+            newLong: false,
+            newShort: true,
+            entry: limitEntryS,
+            stop: stopLossS,
+            zoneEntry: limitEntryS,
+            zoneTop: bearFvgTop,
+            zoneBot: bearFvgBot,
+            t1: limitEntryS - 2 * riskS,
+            t2: limitEntryS - 3.5 * riskS,
+            price: c,
+            lastSh: lastSh,
+            lastSl: lastSl,
+            pivotLength: pivotLen
+          };
+        }
+      }
+    }
+
+    if (!signal) return null;
+    return signal;
+  }catch(e){ return null; }
+}
+
+G.pineSmcCore = pineSmcCore;
+
 })();
