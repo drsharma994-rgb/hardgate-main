@@ -365,6 +365,70 @@ function applyConviction(ranked, venueRows, nowMs){
   return { store: store, transitions: [] };
 }
 
+/* When a scan finds zero new qualifying candidates but live convictions remain
+   in localStorage, still render the locked card(s) — the stat already names
+   "N live conviction(s)" and WHY SILENT must not be the only surface. */
+function __cardFromLiveRec(rec){
+  if (!rec || !rec.id || (rec.dir !== 'long' && rec.dir !== 'short')) return null;
+  if (!isFinite(rec.entry) || !isFinite(rec.stop) || !isFinite(rec.t1)) return null;
+  var risk = Math.abs(rec.entry - rec.stop);
+  var card = {
+    id: rec.id,
+    dir: rec.dir,
+    strategy: rec.strategy || 'SWING SETUP',
+    stratKey: String(rec.id).split('|')[0] || 'live',
+    entry: rec.entry, stop: rec.stop, t1: rec.t1, t2: rec.t2, t3: rec.t3,
+    venue: rec.venue || null, sym: rec.sym || null,
+    locked: true, issuedAt: rec.issuedAt,
+    grade: rec.grade || 'B',
+    agree: isFinite(rec.agree) ? rec.agree : 2,
+    oppose: isFinite(rec.oppose) ? rec.oppose : 0,
+    tally: isFinite(rec.tally) ? rec.tally : 0,
+    tallyParts: Array.isArray(rec.tallyParts) ? rec.tallyParts : [],
+    why: rec.why || 'conviction locked — original levels restored verbatim on re-scan',
+    invalidates: rec.invalidates || 'a 4h close beyond the stop',
+    session: rec.session || 'n/a',
+    anchor: isFinite(rec.anchor) ? rec.anchor : rec.entry,
+    zone: (rec.zone && isFinite(rec.zone.lo) && isFinite(rec.zone.hi))
+      ? rec.zone : { lo: rec.entry - 1, hi: rec.entry + 1 },
+    notes: [],
+    newsCaution: !!rec.newsCaution,
+    newsStamp: rec.newsStamp || null,
+    confluence: Array.isArray(rec.confluence) ? rec.confluence : [],
+    reads: (rec.reads && typeof rec.reads === 'object')
+      ? rec.reads
+      : { long: (rec.dir === 'long') ? (isFinite(rec.agree) ? rec.agree : 2) : 0,
+          short: (rec.dir === 'short') ? (isFinite(rec.agree) ? rec.agree : 2) : 0 },
+    atr: isFinite(rec.atr) ? rec.atr : NaN,
+    rr: risk > 0 ? Math.abs(rec.t1 - rec.entry) / risk : NaN,
+    rr2: risk > 0 && isFinite(rec.t2) ? Math.abs(rec.t2 - rec.entry) / risk : NaN,
+    rr3: (risk > 0 && isFinite(rec.t3)) ? Math.abs(rec.t3 - rec.entry) / risk : NaN
+  };
+  try{
+    card.asOf = isFinite(card.issuedAt)
+      ? new Date(card.issuedAt).toISOString().slice(11, 16) + ' UTC' : '';
+  }catch(eA){ card.asOf = ''; }
+  return card;
+}
+function mergeLiveDisplayCards(ranked, store){
+  var out = ranked.slice(), seen = {}, i;
+  for (i = 0; i < out.length; i++){
+    if (!out[i] || !out[i].id) continue;
+    if (out[i].venue) seen[out[i].venue + '|' + out[i].id] = true;
+    seen[out[i].id] = true;
+  }
+  if (!store || !store.live) return out;
+  for (var k in store.live){
+    if (!Object.prototype.hasOwnProperty.call(store.live, k)) continue;
+    if (seen[k]) continue;
+    var rec = store.live[k];
+    if (rec && rec.id && seen[rec.id]) continue;
+    var card = __cardFromLiveRec(rec);
+    if (card){ out.push(card); seen[k] = true; if (card.id) seen[card.id] = true; }
+  }
+  return out;
+}
+
 /* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
 var GW_CSS = ''
 + '#tab_goldswing .gsw-banner{position:relative;border-radius:12px;padding:3px;margin:16px 0 18px;'
@@ -1399,6 +1463,20 @@ async function runScan(ui){
        EXPIRED after 5 days); never re-pick levels for a live conviction */
     var lock = applyConviction(ranked, venueRows, now);
 
+    var display = mergeLiveDisplayCards(ranked, lock.store);
+    var displayBest = best;
+    if (!displayBest && display.length) displayBest = display[0];
+    if (newsC && newsC.caution){
+      for (var dix = 0; dix < display.length; dix++){
+        var dc = display[dix];
+        if (!dc) continue;
+        dc.newsCaution = true;
+        dc.newsStamp = SW_NEWS_STAMP + (newsC.title ? ' (' + newsC.title + ')' : '');
+        if (dc.grade === 'A') dc.grade = 'B';
+        else if (dc.grade === 'B') dc.grade = 'C';
+      }
+    }
+
     if (lock.transitions.length){
       legs.push(lock.transitions.length + ' conviction' + (lock.transitions.length === 1 ? '' : 's')
         + ' closed (' + lock.transitions.map(function(t){ return t.status; }).join(', ').toLowerCase() + ')');
@@ -1408,7 +1486,7 @@ async function runScan(ui){
 
     /* WHY SILENT — the honest lead reason when zero candidates qualify */
     var whySilent = null;
-    if (!ranked.length){
+    if (!display.length){
       whySilent = whySilentText({
         newsCaution: !!(newsC && newsC.caution), newsTitle: newsC ? newsC.title : null,
         feedsFailed: !gold.rows4h.length && !dx.rows4h.length,
@@ -1418,10 +1496,10 @@ async function runScan(ui){
 
     /* render */
     if (ui && ui.cards && ui.empty){
-      if (ranked.length){
+      if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = bannerHTML(best, ranked)
-          + ranked.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+        ui.cards.innerHTML = bannerHTML(displayBest, display)
+          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
@@ -1446,8 +1524,8 @@ async function runScan(ui){
             !gold.rows4h.length && !dx.rows4h.length);
     setProg(ui, null);
     if (gold.rows4h.length || dx.rows4h.length){
-      publishState(ranked);                        /* only a real data run overwrites the snapshots */
-      publishScan(ranked, best, lock.store.history, now, rejectedAll, armedAll, whySilent);
+      publishState(display);                        /* only a real data run overwrites the snapshots */
+      publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
     }
     return 'refreshed';
   }catch(e){

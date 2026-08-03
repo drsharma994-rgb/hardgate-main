@@ -954,9 +954,12 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
                          venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: MAR_NOW, tally: 4 } }, history: [] }));
   await envQ.tab.refresh();
   const vScan = envQ.C.goldswingScan();
-  assert(vScan.whySilent.indexOf('1 live conviction already locked — re-confirmations, not new issuance') === 0
-      && /· nearest armed trigger:/.test(vScan.whySilent),
-         'convictions lead + nearest-armed tail — got "' + vScan.whySilent + '"');
+  assert(vScan.whySilent === null || vScan.whySilent.indexOf('nearest armed trigger:') >= 0,
+         'quiet scan with only a live lock: no misleading silence lead (got "' + vScan.whySilent + '")');
+  assert(vScan.cands.length === 1 && vScan.cands[0].locked === true && vScan.cands[0].id === 'wkbreak|long|9999',
+         'live conviction card renders when the scan finds zero new qualifying candidates');
+  assert(envQ.M.stubs['#gwCards'].innerHTML.indexOf('CONVICTION LOCK') >= 0,
+         'locked live conviction shows the CONVICTION LOCK stamp on the card');
 
   /* (g) news window outranks live convictions (precedence news > convictions) */
   const envG = makeScanEnv(wkQuiet4h(), weekly1d(), { news: { loaded: true,
@@ -967,8 +970,12 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
                          venue: 'BINANCE XAUUSDT', sym: 'XAUUSDT', issuedAt: MAR_NOW, tally: 4 } }, history: [] }));
   await envG.M.stubs['#gwRun']._handler();
   const gScan = envG.C.goldswingScan();
-  assert(gScan.whySilent.indexOf('high-impact news window ±30 min — US CPI') === 0,
-         'news window leads even with a live conviction (precedence news > convictions) — got "' + gScan.whySilent + '"');
+  assert(gScan.cands.length === 1 && gScan.cands[0].locked === true,
+         'news window: the locked live conviction still renders (fade risk on tally, not a veto)');
+  assert(gScan.whySilent === null,
+         'news window with a visible live card: WHY SILENT suppressed (got "' + gScan.whySilent + '")');
+  assert(envG.M.stubs['#gwCards'].innerHTML.indexOf('NEWS') >= 0 || envG.M.stubs['#gwCards'].innerHTML.indexOf('news') >= 0,
+         'news window: the card or banner carries the fade-risk stamp');
 
   /* (h) feeds failed: the empty state itself carries the WHY SILENT reason */
   const envX = makeScanEnv([], []);
