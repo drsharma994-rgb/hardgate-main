@@ -669,6 +669,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="signallog.js"></script>
 <script src="hgalert.js"></script>
 <script src="tabalerts.js"></script>
+<script src="hggateflip.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
 <script src="book-routing.js?v=55"></script>
@@ -1044,15 +1045,24 @@ function dropForming(rows, res){
   if (!rows.length || !sec) return rows;
   return (nowSec() - rows[rows.length-1].t < sec) ? rows.slice(0,-1) : rows;
 }
-async function getCandles(sym, res, count){
-  const key = `${S.exchange}|${sym}|${res}|${count}`;
+function hgBarIsForming(rows, res){
+  const sec = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
+  if (!rows || !rows.length || !sec) return false;
+  return (nowSec() - rows[rows.length-1].t < sec);
+}
+async function getCandles(sym, res, count, opts){
+  opts = opts || {};
+  const key = `${S.exchange}|${sym}|${res}|${count}|${opts.forming ? 'F' : 'C'}`;
   const hit = S.candleCache[key];
   if (hit && (nowSec()-hit.at) < 60) return hit.rows;
-  let rows = S.exchange==='delta' ? await candlesDelta(sym,res,count)
+  let raw = S.exchange==='delta' ? await candlesDelta(sym,res,count)
     : (S.exchange==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
-  rows = dropForming(rows, res);
-  S.candleCache[key] = {rows, at: nowSec()};
-  return rows;
+  const closed = dropForming(raw, res);
+  const out = opts.forming ? raw : closed;
+  S.candleCache[key] = {rows: out, at: nowSec()};
+  S.candleCache[`${S.exchange}|${sym}|${res}|${count}|C`] = { rows: closed, at: nowSec() };
+  S.candleCache[`${S.exchange}|${sym}|${res}|${count}|F`] = { rows: raw, at: nowSec() };
+  return out;
 }
 
 /* Busy-bounce killer (v53): the alert cycle can hold S.alertBusy for minutes;
@@ -2798,8 +2808,9 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const venueHtml = bookMeta.venue ? '<span class="stamp na">' + String(bookMeta.venue).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span> ' : '';
   const bookBtn = (isFinite(entry) && isFinite(stop) && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: scanId, strategy: stratId, t2: bookMeta.t2 }) : '';
+  const tripleChip = (typeof hgTripleStackChipHtml === 'function') ? hgTripleStackChipHtml(sym, dir) : '';
   return `<div class="card ${dir}">
-    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span></div>
+    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · CLEAN</span>${tripleChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
@@ -2922,7 +2933,7 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
     ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
     ['RSI 4H', fmt(r14, 1)],
     ['regime', typeof hgTapeRegimeLabel === 'function' ? hgTapeRegimeLabel(rows) : 'n/a'],
-    ...(typeof hgRegimeRouteHint === 'function' && hgRegimeRouteHint(rows) ? [['tape note', hgRegimeRouteHint(rows)]] : []),
+    ...(typeof hgRegimeRouteHintHtml === 'function' && hgRegimeRouteHintHtml(rows) ? [['tape note', hgRegimeRouteHintHtml(rows)]] : []),
     ...(typeof hgVenueDataNote === 'function' && hgVenueDataNote(t) ? [['venue note', hgVenueDataNote(t)]] : []),
     ['vol z', fmt(vz, 2)],
     ['funding', t.fundingPct !== null ? fmt(t.fundingPct, 4) + '%' : 'n/a'],
@@ -2973,6 +2984,7 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
     ['gates', hit.passed + '/' + (hit.gatesTotal || 7)],
     ['missing', miss || '—'],
     ['regime', (hit.rows && typeof hgTapeRegimeLabel === 'function') ? hgTapeRegimeLabel(hit.rows) : 'n/a'],
+    ...(hit.rows && typeof hgRegimeRouteHintHtml === 'function' && hgRegimeRouteHintHtml(hit.rows) ? [['tape note', hgRegimeRouteHintHtml(hit.rows)]] : []),
     ['RSI', hit.r14 != null ? fmt(hit.r14, 1) : '—'],
     ['vol z', hit.vz != null ? fmt(hit.vz, 2) : '—'],
     ['dyn R:R', hit.dynamicRR != null ? fmt(hit.dynamicRR, 2) + 'R' : '—']
@@ -3069,6 +3081,8 @@ async function runScanLeg(kind, opts){
     const minsToFunding = tickClock();
     let found = 0, nearFound = 0;
     let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0 };
+    const flipRecords = [];
+    const flipVenue = venueTag || S.exchange || '';
     const t0scan = Date.now();
     const CHUNK_SIZE = 5;
     for (let ci = 0; ci < uni.length; ci += CHUNK_SIZE){
@@ -3092,6 +3106,10 @@ async function runScanLeg(kind, opts){
                   for (let gi = 0; gi < m.gates.length; gi++){
                     if (!m.gates[gi][1]) audit.fail[m.gates[gi][0]] = (audit.fail[m.gates[gi][0]] || 0) + 1;
                   }
+                }
+                if (typeof hgGateFlipRecord === 'function'){
+                  const fr = hgGateFlipRecord('swing', flipVenue, t.symbol, m.dir, m);
+                  if (fr) flipRecords.push(fr);
                 }
               }
             }
@@ -3125,6 +3143,10 @@ async function runScanLeg(kind, opts){
                   for (let gi = 0; gi < sm.gates.length; gi++){
                     if (!sm.gates[gi][1]) audit.fail[sm.gates[gi][0]] = (audit.fail[sm.gates[gi][0]] || 0) + 1;
                   }
+                }
+                if (typeof hgGateFlipRecord === 'function'){
+                  const fr = hgGateFlipRecord('scalp', flipVenue, t.symbol, sm.dir, sm);
+                  if (fr) flipRecords.push(fr);
                 }
               }
             }
@@ -3166,6 +3188,9 @@ async function runScanLeg(kind, opts){
       if (nb) cardsEl.insertAdjacentHTML('afterbegin', nb);
     }
     try{ await refreshCryptoWatch(kind, uni, cands.map(function(c){ return c.sym; }), { quiet: quiet }); }catch(e){ console.warn('crypto watch', e); }
+    if (!quiet && typeof hgGateFlipAlerts === 'function' && flipRecords.length){
+      try{ hgGateFlipAlerts(kind, flipVenue, flipRecords); }catch(eFlip){}
+    }
     return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands };
   }catch(e){
     if (!quiet && dualLast) statEl.textContent = 'scan failed: ' + e.message;
@@ -3195,13 +3220,15 @@ async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
     if (!t || clean[t.symbol]) continue;
     try{
       if (kind === 'swing'){
-        const rows = await getCandles(t.symbol, '4h', 260);
-        const w = swingWatchEval(rows, t);
+        const rows = await getCandles(t.symbol, '4h', 260, { forming: true });
+        const unconf = typeof hgBarIsForming === 'function' && hgBarIsForming(rows, '4h');
+        const w = swingWatchEval(rows, t, { unconfirmed: unconf });
         if (w) items.push(w);
       } else {
         const h1 = await getCandles(t.symbol, '1h', 120);
-        const m15 = await getCandles(t.symbol, '15m', 160);
-        const w = scalpWatchEval(h1, m15, t, minsToFunding);
+        const m15 = await getCandles(t.symbol, '15m', 160, { forming: true });
+        const unconf = typeof hgBarIsForming === 'function' && hgBarIsForming(m15, '15m');
+        const w = scalpWatchEval(h1, m15, t, minsToFunding, { unconfirmed: unconf });
         if (w) items.push(w);
       }
     }catch(e){}
@@ -4633,8 +4660,9 @@ async function runBest(opts){
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, totalUni) + `
       <div class="panel">
-        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}</h2>
         ${bestRegimeMiniHtml(w)}
+        ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
@@ -4688,8 +4716,9 @@ async function runBest(opts){
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, uni.length) + `
       <div class="panel">
-        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}</h2>
         ${bestRegimeMiniHtml(w)}
+        ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>

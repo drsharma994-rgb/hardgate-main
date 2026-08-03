@@ -503,12 +503,13 @@ function mount(el){
     + '<span class="note" id="sqStat">idle — Binance perps ≥ $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover, top ' + MAX_UNIVERSE + '</span></div>'
     + '<div class="prog" id="sqProg"><i></i></div>'
     + '<div class="cards" id="sqCards"></div>'
+    + '<div id="sqFunnel"></div>'
     + '<div class="empty" id="sqEmpty" style="display:none">No squeezes fired, building, or Donchian breakouts right now.</div>'
     + '</div>';
 
   var btn = el.querySelector('#sqRun'), statEl = el.querySelector('#sqStat'),
       progEl = el.querySelector('#sqProg'), cardsEl = el.querySelector('#sqCards'),
-      emptyEl = el.querySelector('#sqEmpty');
+      emptyEl = el.querySelector('#sqEmpty'), funnelEl = el.querySelector('#sqFunnel');
   if (!btn || !statEl || !progEl || !cardsEl || !emptyEl) return;
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
@@ -525,6 +526,19 @@ function mount(el){
 
   btn.addEventListener('click', function(){ runScan(); });
   __scan.run = runScan;   /* publish for the hard-refresh contract */
+
+  function sqFunnelHTML(meta){
+    if (!meta || typeof W.hgFunnelPanelHTML !== 'function') return '';
+    var rows = [
+      { k: 'Universe scanned', v: String(meta.uni || 0) },
+      { k: 'Thin / fetch failed', v: String(meta.failed || 0) },
+      { k: 'TTM fired (long+short)', v: String(meta.fired || 0) },
+      { k: 'Donchian breakout', v: String(meta.break || 0) },
+      { k: 'Building (squeeze on)', v: String(meta.build || 0) },
+      { k: 'Cards shown', v: String(meta.shown || 0) }
+    ];
+    return W.hgFunnelPanelHTML('WHY EMPTY — SQUEEZE funnel', rows, 'sqFunnelPanel');
+  }
 
   async function runScan(){
     if (__scan.busy) return;              /* busy guard — never double-fetch */
@@ -602,6 +616,14 @@ function mount(el){
         else if (r.kind === 'build') nBuild++;
         else nBreak++;
       });
+
+      var shown = results.filter(function(r){ return r.kind !== 'build'; }).length;
+      if (funnelEl){
+        funnelEl.innerHTML = sqFunnelHTML({
+          uni: uni.length, failed: failed, fired: nFired, break: nBreak,
+          build: nBuild, shown: shown
+        });
+      }
 
       if (!results.length) emptyEl.style.display = 'block';
       else cardsEl.innerHTML = results.map(cardHTML).join('');

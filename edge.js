@@ -1049,7 +1049,9 @@ function cardHTML(r){
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
-    + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + '</span></div>'
+    + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + '</span>'
+    + (typeof W.hgTripleStackChipHtml === 'function' ? W.hgTripleStackChipHtml(sym, sig.dir) : '')
+    + '</div>'
     + '<div class="mini">'
     + '<span class="k">venue</span><span>' + venueLabel(r.item) + '</span>'
     + '<span class="k">strategy</span><span>' + esc(edgeLbl) + '</span>'
