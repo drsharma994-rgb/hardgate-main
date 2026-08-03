@@ -15,10 +15,12 @@ INSTITUTIONAL UPGRADES V6:
 - L2 Order Book Imbalance (OBI) Spoof Detection
 - SMT Divergence Hard Vetoes (Gold/Silver correlation)
 - US10Y Yield Macro Vetoes
+- Volume decay validator (corrective pullback vs falling knife)
 Pure exports (never throw):
   edgeSignal, edgeEnrich, edgeAssess, edgePlan, edgeBacktest,
   edgeMaxSafeLev, edgeUseLev, edgeSwingRead, edgeSwingBias,
-  edgeEntryGuidance, edgeExactEntry, edgeOteZone, edgeSweepQuality
+  edgeEntryGuidance, edgeExactEntry, edgeOteZone, edgeSweepQuality,
+  isCorrectivePullback
 ========================================================================= */
 (function(){
 'use strict';
@@ -51,6 +53,8 @@ var CHUNK         = 4;
 var CHUNK_SLEEP_MS = 150;
 var USE_LEV_FRAC  = 0.5;
 var TF            = '4h';
+var PULLBACK_VOL_LOOKBACK = 5;
+var PULLBACK_VOL_RATIO = 1.25;
 
 function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -110,13 +114,14 @@ function computeArrays(rows){
       typeof ema !== 'function' || typeof lowest !== 'function' ||
       typeof highest !== 'function' || typeof rsi !== 'function') return null;
   var n = rows.length;
-  var clean = new Array(n), closes = new Array(n), highs = new Array(n), lows = new Array(n);
+  var clean = new Array(n), closes = new Array(n), highs = new Array(n), lows = new Array(n), volumes = new Array(n);
   for (var i = 0; i < n; i++){
     var r = rows[i];
     clean[i] = r;
     closes[i] = (r && isFinite(r.c)) ? r.c : NaN;
     highs[i]  = (r && isFinite(r.h)) ? r.h : NaN;
     lows[i]   = (r && isFinite(r.l)) ? r.l : NaN;
+    volumes[i]= (r && isFinite(r.v)) ? r.v : 0;
   }
   var bb = bollinger(closes, BB_LEN, BB_MULT);
   var pb = new Array(n);
@@ -125,11 +130,29 @@ function computeArrays(rows){
     if (isFinite(u) && isFinite(l) && u !== l) pb[j] = (closes[j] - l) / (u - l);
     else pb[j] = NaN;
   }
-  return { rows: clean, closes: closes, highs: highs, lows: lows,
+  return { rows: clean, closes: closes, highs: highs, lows: lows, volumes: volumes,
            dc: donchian(clean, DON_LEN), pb: pb,
            atr: atr(clean, ATR_LEN), sma20: sma(closes, 20), rsi14: rsi(closes, 14),
            e9: ema(closes, 9), e21: ema(closes, 21), e50: ema(closes, 50), e200: ema(closes, 200),
            loExt: lowest(lows, EXT_LEN), hiExt: highest(highs, EXT_LEN) };
+}
+
+/* Volume decay validator — pullback bars should be lighter than prior impulse
+   (blocks falling-knife / violent counter-trend volume into limit bids). */
+function isCorrectivePullback(A, index, dir, lookback){
+  try{
+    lookback = (lookback === undefined || !isFinite(lookback)) ? PULLBACK_VOL_LOOKBACK : +lookback;
+    if (!A || !A.volumes || index < lookback * 2) return true;
+    var pullbackVol = 0, impulseVol = 0, vi;
+    for (vi = index - lookback + 1; vi <= index; vi++){
+      pullbackVol += A.volumes[vi] || 0;
+    }
+    for (vi = index - (lookback * 2) + 1; vi <= index - lookback; vi++){
+      impulseVol += A.volumes[vi] || 0;
+    }
+    if (pullbackVol > impulseVol * PULLBACK_VOL_RATIO) return false;
+    return true;
+  }catch(e){ return true; }
 }
 
 /* SWING SCAN G1 — 4H EMA cascade + spread gate */
@@ -450,12 +473,13 @@ function trySetupAt(A, i, biasDir){
     if (biasDir === 'long'){
       if (!(isFinite(e50) && c > e50)) return null;
       if (isFinite(rsi) && (rsi > 68 || rsi < 32)) return null;
+      var volOkLong = isCorrectivePullback(A, i, 'long');
 
       /* 1) EMA21 pullback — primary trend entry */
       if (isFinite(e21) && l <= e21 + tol && c >= e21 - tol * 0.5){
         var hold = isFinite(closePos) && closePos >= 0.52 && isFinite(o) && c >= o;
         var pbOk = !isFinite(pb) || pb <= 0.55;
-        if (hold && pbOk){
+        if (hold && pbOk && volOkLong){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = Math.min(extremeL, l) - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -468,7 +492,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 2) EMA9 pullback when extended from fast MA (swingTryClean parity) */
       if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
-        if (l <= e9 + tol && c >= e9 - tol * 0.5 && isFinite(closePos) && closePos >= 0.5){
+        if (l <= e9 + tol && c >= e9 - tol * 0.5 && isFinite(closePos) && closePos >= 0.5 && volOkLong){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = Math.min(extremeL, l) - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -480,7 +504,7 @@ function trySetupAt(A, i, biasDir){
       }
 
       /* 3) EMA50 sweep + reclaim — trap filter in uptrend */
-      if (isFinite(e50) && l < e50 && c > e50 && isFinite(closePos) && closePos >= 0.55){
+      if (isFinite(e50) && l < e50 && c > e50 && isFinite(closePos) && closePos >= 0.55 && volOkLong){
         extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
         stopL = edgeSweepStop('long', l, at);
         if (!isFinite(stopL)) stopL = extremeL - STOP_ATR * at;
@@ -527,7 +551,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 5) Aligned range-bottom touch (only in uptrend — at lower Donchian) */
       if (isFinite(dcLo) && l <= dcLo + tol && c > dcLo && isFinite(pb) && pb <= 0.35){
-        if (isFinite(closePos) && closePos >= 0.5){
+        if (isFinite(closePos) && closePos >= 0.5 && volOkLong){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = extremeL - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -542,12 +566,13 @@ function trySetupAt(A, i, biasDir){
     if (biasDir === 'short'){
       if (!(isFinite(e50) && c < e50)) return null;
       if (isFinite(rsi) && (rsi < 32 || rsi > 68)) return null;
+      var volOkShort = isCorrectivePullback(A, i, 'short');
 
       /* 1) EMA21 rally rejection */
       if (isFinite(e21) && h >= e21 - tol && c <= e21 + tol * 0.5){
         var reject = isFinite(closePos) && closePos <= 0.48 && isFinite(o) && c <= o;
         var pbHiOk = !isFinite(pb) || pb >= 0.45;
-        if (reject && pbHiOk){
+        if (reject && pbHiOk && volOkShort){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = Math.max(extremeH, h) + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
@@ -560,7 +585,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 2) EMA9 rejection when extended from fast MA */
       if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
-        if (h >= e9 - tol && c <= e9 + tol * 0.5 && isFinite(closePos) && closePos <= 0.5){
+        if (h >= e9 - tol && c <= e9 + tol * 0.5 && isFinite(closePos) && closePos <= 0.5 && volOkShort){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = Math.max(extremeH, h) + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
@@ -572,7 +597,7 @@ function trySetupAt(A, i, biasDir){
       }
 
       /* 3) EMA50 sweep + fail in downtrend */
-      if (isFinite(e50) && h > e50 && c < e50 && isFinite(closePos) && closePos <= 0.45){
+      if (isFinite(e50) && h > e50 && c < e50 && isFinite(closePos) && closePos <= 0.45 && volOkShort){
         extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
         stopS = edgeSweepStop('short', h, at);
         if (!isFinite(stopS)) stopS = extremeH + STOP_ATR * at;
@@ -619,7 +644,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 5) Aligned range-top rejection */
       if (isFinite(dcHi) && h >= dcHi - tol && c < dcHi && isFinite(pb) && pb >= 0.65){
-        if (isFinite(closePos) && closePos <= 0.5){
+        if (isFinite(closePos) && closePos <= 0.5 && volOkShort){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = extremeH + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
@@ -660,6 +685,7 @@ function edgeSignal(rows){
       s.dcHi = A.dc.up[i];
       s.barAge = lb;
       s.swingAligned = true;
+      s.volumeCorrective = isCorrectivePullback(A, i, bias.dir);
       return s;
     }
     return null;
@@ -776,6 +802,10 @@ function edgeEnrich(sig, rows, item, candleSrc){
       } else if (vr === 'NORMAL'){
         out.parts.push({ label: 'vol NORMAL — stable tape', pts: 0 });
       }
+    }
+    if (sig && sig.volumeCorrective === true){
+      out.parts.push({ label: 'pullback volume corrective (not falling knife)', pts: 1 });
+      out.tally += 1;
     }
 
     if (typeof W.hgStructureGate === 'function'){
@@ -1237,6 +1267,7 @@ W.edgeEntryGuidance = edgeEntryGuidance;
 W.edgeExactEntry = edgeExactEntry;
 W.edgeOteZone = edgeOteZone;
 W.edgeSweepQuality = edgeSweepQuality;
+W.isCorrectivePullback = isCorrectivePullback;
 W.edgeScanList = edgeScanList;
 W.edgeCardHTML = cardHTML;
 W.edgeDropForming = edgeDropForming;
