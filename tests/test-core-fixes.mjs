@@ -92,12 +92,14 @@ assert(html.includes("id=\"ntfyTopic\"") && html.includes('saveNtfyTopic()'),
   'ntfy topic input + SAVE row present near the alert bell');
 assert(html.includes("$('ntfyTopic').value = t"), 'ntfy topic prefilled on load (initAlerts)');
 {
+  const rba = grabFn('runBestAlertCycle');
+  const iEmail = rba.indexOf('await sendAlertEmail(w, ex);');
+  const iPush1 = rba.indexOf('await sendAlertPush(', iEmail);
+  assert(iEmail !== -1 && iPush1 > iEmail, 'BEST alert path: Telegram (sendAlertPush) fires alongside sendAlertEmail');
+  assert(html.includes('HG_BEST_ALERT_MS = 15 * 60 * 1000'), 'BEST tab Telegram cadence is 15 minutes');
   const rac = grabFn('runAlertCycle');
-  const iEmail = rac.indexOf('await sendAlertEmail(w, ex);');
-  const iPush1 = rac.indexOf('await sendAlertPush(', iEmail);
   const iGoldEmail = rac.indexOf('await sendGoldAlertEmail(g);');
   const iPush2 = rac.indexOf('await sendAlertPush(', iGoldEmail);
-  assert(iEmail !== -1 && iPush1 > iEmail, 'best-setup alert path: sendAlertPush fires alongside sendAlertEmail');
   assert(iGoldEmail !== -1 && iPush2 > iGoldEmail, 'gold STRONG alert path: sendAlertPush fires alongside sendGoldAlertEmail');
 }
 

@@ -528,6 +528,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
+      <span class="note">Telegram: new #1 BEST setup pinged every 15 min (built-in bot defaults in header — hit TEST).</span>
     </div>
     <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer.</div>
     <div class="prog" id="bestProg"><i></i></div>
@@ -690,15 +691,17 @@ const S = {
   fng: null, dom: null,
   cdcxBlocked: false,
   cdcxViaProxy: false,
-  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, lastEdgeAlertCheck: null, edgeAlertBusy: false, alertTimer: null,
+  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, lastBestAlertCheck: null, lastEdgeAlertCheck: null, edgeAlertBusy: false, alertTimer: null,
 };
 let __hgSwingScan = null, __hgScalpScan = null;
 window.swingScan = function(){ return __hgSwingScan; };
 window.scalpScan = function(){ return __hgScalpScan; };
 
-/* Owner policy: alerts always armed in this browser; 3-min scan/alert cadence +
-   3-min AUTO hard refresh so tab scanners stay warm. Toggle OFF is ignored. */
+/* Owner policy: alerts always armed in this browser.
+   BEST (Strategies tab): Telegram on new #1 setup every 15 min (server CI matches).
+   Other tab scanners: 3-min quiet cycle; EDGE has its own 15-min clock. */
 const HG_ALERTS_FORCED_ON = true;
+const HG_BEST_ALERT_MS = 15 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
 const HG_EDGE_ALERT_MS = 15 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram on new setups */
 const HG_ALERTS_AUTO_REFRESH_MS = 180000;
@@ -4755,10 +4758,10 @@ async function sendAlertEmail(w, exchange){
     rr: fmt(w.rr,2),
     time: new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'})
   };
-  const tgText = '🚨 HARDGATE ' + exchange.toUpperCase() + ' SETUP\n'
+  const tgText = '🚨 HARDGATE BEST (Strategies)\n'
     + params.symbol + ' ' + params.direction + ' (' + params.exchange + ')\n'
     + 'entry ' + params.entry + ' · stop ' + params.stop + ' · target ' + params.target + '\n'
-    + 'R:R ' + params.rr + ' · families ' + params.families + ' · ' + params.time + '\n'
+    + 'R:R ' + params.rr + ' · ' + params.families + '/9 families · ' + params.robustness + '/2 robust · ' + params.time + '\n'
     + 'https://hardgate-main.onrender.com/';
   /* Telegram first (free, unlimited); EmailJS only when Telegram is not
      configured or failed — the __hgLastEmail gate reflects whichever
@@ -4826,6 +4829,26 @@ async function sendGoldAlertEmail(g){
   }
 }
 
+async function runBestAlertCycle(){
+  const exchanges = ['delta','coindcx'];
+  for (const ex of exchanges){
+    try{
+      const clean = await silentBestScan(ex);
+      const w = clean && clean.length ? clean[0] : null;
+      const key = w ? (w.t.symbol + '|' + w.dir) : null;
+      if (key && key !== S.lastAlertKey[ex]){
+        await sendAlertEmail(w, ex);
+        await sendAlertPush('HARDGATE BEST (Strategies): ' + w.t.symbol + ' ' + w.dir.toUpperCase(),
+          w.t.symbol + ' ' + w.dir.toUpperCase() + ' on ' + (ex==='delta' ? 'Delta India' : 'CoinDCX')
+            + ' — entry ' + px(w.entry) + ' · stop ' + px(w.stop) + ' · ' + w.famScore + '/9 families · ' + fmt(w.rr,2) + 'R');
+        S.lastAlertKey[ex] = key;
+      } else if (!key){
+        S.lastAlertKey[ex] = null;
+      }
+    }catch(e){ console.error('HARDGATE BEST alert error for', ex, e); }
+  }
+}
+
 async function runAlertCycle(){
   /* stale-busy watchdog: a hung await (EmailJS/push/fetch with no timeout of
      its own) or a frozen background tab can leave alertBusy set forever —
@@ -4840,21 +4863,9 @@ async function runAlertCycle(){
   S.alertBusy = true;
   S.alertBusySince = Date.now();
   try{
-    const exchanges = ['delta','coindcx'];
-    for (const ex of exchanges){
-      try{
-        const clean = await silentBestScan(ex);
-        const w = clean && clean.length ? clean[0] : null;
-        const key = w ? (w.t.symbol + '|' + w.dir) : null;
-        if (key && key !== S.lastAlertKey[ex]){
-          await sendAlertEmail(w, ex);
-          await sendAlertPush('HARDGATE BEST: ' + w.t.symbol + ' ' + w.dir.toUpperCase(),
-            w.t.symbol + ' ' + w.dir.toUpperCase() + ' on ' + (ex==='delta' ? 'Delta India' : 'CoinDCX') + ' — entry ' + px(w.entry) + ' · stop ' + px(w.stop) + ' · ' + w.famScore + '/9 families · ' + fmt(w.rr,2) + 'R');
-          S.lastAlertKey[ex] = key;
-        } else if (!key){
-          S.lastAlertKey[ex] = null;
-        }
-      }catch(e){ console.error('HARDGATE alert cycle error for', ex, e); }
+    if (!S.lastBestAlertCheck || Date.now() - S.lastBestAlertCheck >= HG_BEST_ALERT_MS){
+      await runBestAlertCycle();
+      S.lastBestAlertCheck = Date.now();
     }
     /* gold leg — silent swing-gate read, emails only on a fresh STRONG verdict */
     try{
@@ -4872,7 +4883,7 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; EDGE on its own 15-min clock */
+    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; BEST every 15 min; EDGE on its own 15-min clock */
     try{
       await runTabAlertScans();
       await runEdgeAlertCycle();
