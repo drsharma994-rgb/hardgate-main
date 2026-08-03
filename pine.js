@@ -189,6 +189,17 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + smfJson;
   }
+  if (sig.scriptId === 'half-trend'){
+    var htAction = sig.dir === 'long' ? 'buy' : 'sell';
+    var htJson = '{"action":"' + htAction + '","ticker":"' + sig.sym + '","price":' + sig.price
+      + ',"trailing_stop":' + fmtF(sig.trailingStop || sig.stop, 6) + ',"script":"half-trend"}';
+    return '🌲 PINE HT · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nHalfTrend flip · amplitude ' + (sig.amplitude || 2)
+      + '\nENTRY ' + pxF(sig.entry) + ' · trailing SL ' + pxF(sig.trailingStop || sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + htJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
