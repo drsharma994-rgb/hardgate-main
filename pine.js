@@ -1,6 +1,5 @@
 /* HARDGATE — pine.js
-   PINE SCRIPT tab: run Pine-ported math only on contracts that pass ALL
-   HARDGATE scanner gates (SWING, SCALP, EDGE, BEST, BRAIN, REGIME, TREND MATRIX).
+   PINE tab: all ported Pine scripts on SWING CLEAN universe (+ REGIME).
    Alerts fire immediately on new Pine setups. */
 (function(){
 'use strict';
@@ -14,7 +13,7 @@ var CHUNK_SLEEP_MS = 120;
 var LS_ALERT = 'hg_pine_alert_keys';
 var ALERT_GAP_MS = 15 * 60 * 1000;
 
-var PINE_GATE_OPTS = { mode: 'relaxed', minHits: 2, fallback: true };
+var PINE_GATE_OPTS = { mode: 'swing' };
 
 var PINE_SCRIPTS = [
   { id: 'lorentzian-kernel', label: 'ML: Lorentzian + Kernel', fn: 'pineLorentzianKernel', minBars: 260,
@@ -421,7 +420,7 @@ function cardHTML(sig){
   var cls = sig.dir === 'long' ? 'long' : 'short';
   var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>' : '';
   var gateNote = sig.gates && sig.gates.regime ? esc(sig.gates.regime) : '';
-  var hits = fin(+sig.gateHits) ? (' · ' + sig.gateHits + '/6 gates') : '';
+  var hits = sig.gates && sig.gates.swing ? ' · SWING' : '';
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
     + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · ' + esc(sig.scriptLabel) + badge + '</span></h2>'
     + '<div class="note">' + sigNoteLine(sig)
@@ -444,14 +443,13 @@ var __pineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · relaxed gate (≥2 scanners + REGIME)</span></h2>'
-    + '<div class="note">Runs <b>every ported Pine script</b> (ML, MSB/OB, SQZ, SMF, HT, SMC, Cipher, RF, NW, AVWAP) on a '
-    + '<b>relaxed universe</b>: sym+dir must appear in at least two scanner tabs including one of SWING/SCALP/BEST, '
-    + 'then pass REGIME bias. Falls back to core scanner union if still empty. '
-    + 'Individual PINE sub-tabs still use strict 6-gate intersection. New bar-close setups alert immediately.</div>'
+    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · SWING CLEAN universe</span></h2>'
+    + '<div class="note">Runs <b>every ported Pine script</b> on <b>SWING CLEAN</b> pairs only (plus REGIME bias). '
+    + 'Does <b>not</b> require BRAIN, SCALP, EDGE, BEST, or TREND MATRIX — run <b>SWING</b> first. '
+    + 'New bar-close setups alert immediately.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="pineRun">RUN ALL PINE SCAN</button>'
-    + '<span class="note" id="pineStat">Run SWING and/or SCALP (and others) first, then scan.</span>'
+    + '<span class="note" id="pineStat">Run SWING scan first, then scan.</span>'
     + '</div>'
     + '<div class="prog" id="pineProg"><i></i></div>'
     + '<div id="pineFunnel" style="margin-top:8px"></div>'
@@ -482,18 +480,18 @@ function mount(el){
     var status = 'refreshed';
     var t0 = Date.now();
     try{
-      if (stat) stat.textContent = 'Building relaxed Pine universe…';
+      if (stat) stat.textContent = 'Building SWING Pine universe…';
       var gate = (typeof W.pineGateLive === 'function')
         ? W.pineGateLive(null, PINE_GATE_OPTS)
         : { eligible: [], funnel: {}, missing: ['pinegate'] };
       if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE gate funnel (relaxed — ≥2 scanners + REGIME)',
+        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (SWING CLEAN + REGIME)',
           W.pineFunnelRows(gate.funnel), 'pineGateFunnel');
       }
       if (!gate.eligible || !gate.eligible.length){
-        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'no scanner overlap';
-        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No contracts in the relaxed Pine universe. '
-          + 'Run at least <b>SWING</b> and <b>SCALP</b> (or BEST), then retry. Empty/missing: '
+        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'SWING empty';
+        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No SWING CLEAN pairs in the Pine universe. '
+          + 'Run <b>SWING</b> scan first. Missing: '
           + esc(miss) + '.</div>';
         if (stat) stat.textContent = 'done · 0 eligible · ' + miss;
         __pineSnap = { at: Date.now(), signals: [], gate: gate, stat: stat ? stat.textContent : '' };
@@ -583,6 +581,7 @@ async function pineRefresh(){
 W.pineFireAlerts = pineFireAlerts;
 W.pineEvalEligible = pineEvalEligible;
 W.PINE_SCRIPTS = PINE_SCRIPTS;
+W.PINE_GATE_OPTS = PINE_GATE_OPTS;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'pine', label: 'PINE', mount: mount, refresh: pineRefresh });
