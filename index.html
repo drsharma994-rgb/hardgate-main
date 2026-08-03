@@ -2402,10 +2402,17 @@ function scheduleTabAutoScan(t){
       if (!mod) return;
       if (typeof mod.refresh === 'function'){
         const st = await mod.refresh();
-        if (st && String(st).indexOf('skip') === 0 && t === 'brain'){
-          const pane = document.getElementById('tab_brain');
-          const runBtn = pane && pane.querySelector('#brainRun');
-          if (runBtn) runBtn.click();
+        if (st && String(st).indexOf('skip') === 0){
+          const autoRunBtn = {
+            brain: '#brainRun',
+            goldscalp: '#gsRun',
+            goldswing: '#gwRun'
+          }[t];
+          if (autoRunBtn){
+            const pane = document.getElementById('tab_' + t);
+            const runBtn = pane && pane.querySelector(autoRunBtn);
+            if (runBtn) runBtn.click();
+          }
         }
       }
     }catch(e){ console.warn('HARDGATE tab auto-scan', t, e); }

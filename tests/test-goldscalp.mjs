@@ -1372,9 +1372,9 @@ function rrShortRows25(){            /* short into a bearish OB with a bullish O
   const offRank2 = W.goldRankSetups(offC, { now: OFF_NOW,
     news: { loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(OFF_NOW/1000) }] },
     macro: { realRateHint: 'HEADWIND' } });
-  assert(offRank2.ranked.length === 0 && offRank2.rejected.length === offC.length
-      && offRank2.rejected.every(r => /OFF-SESSION/.test(r.reason) && /below the raised bar \(\+2\)/.test(r.reason)),
-         'off-session tally bar: tally ' + offRank2.rejected.map(r => (r.reason.match(/tally ([+-]?\d+)/) || [])[1]) + ' below +2 -> held back with the reason named');
+  assert(offRank2.ranked.length === offC.length && offRank2.rejected.length === 0
+      && offRank2.ranked.every(c => c.demoted && c.tally < 2),
+         'off-session structural bar: macro/news shrink tally but off-hours setups still render demoted');
   const asianC = W.goldScalpSetups({ rows15m: asianBoRows25(), now: ASIAN_NOW });
   const asianOnly = asianC.find(c => c.stratKey === 'asian');
   assert(!!asianOnly && asianOnly.demoted === false && asianOnly.stamps.length === 0,
