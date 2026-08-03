@@ -529,7 +529,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
     </div>
-    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional vetoes (CVD severe divergence + L2 spoof traps via Binance proxy) drop falling knives before ranking. Survivors are then scored across <b>9 independent evidence families</b> — F1 TREND (2-of-3: TSMOM · 1D · CUSUM) · F2 POSITIONING · F3 PARTICIPATION · F4 STRUCTURE · F5 VOL/MOMENTUM · F6 SESSION · F7 VALUE AREA · F8 ORDER FLOW · F9 ANCHOR CLUSTER — plus R1/R2 robustness (2H cascade + ≥3 bar persistence). ≥5/9 families required for #1 when strong pool exists. No weighting, no invented probability — and WAIT is a first-class answer.</div>
+    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer.</div>
     <div class="prog" id="bestProg"><i></i></div>
   </div>
   <div id="bestOut"><div class="empty">Run FIND BEST.</div></div>
@@ -4253,9 +4253,27 @@ async function runCascadeCore(uni){
         const e200 = e200arr.length ? last(e200arr) : NaN;
         if (isFinite(e200)){ breadthTotal++; if (p>e200) breadthBull++; }
 
+        // TIME DECAY VETO — cascade age vs displacement (dead tape)
+        let cascadeAgeBars = 0;
+        const e9a = ema(c, 9), e21a = ema(c, 21), e50a = ema(c, 50);
+        for (let b = c.length - 1; b >= 0; b--) {
+            if (tc.dir === 'long' && (e9a[b] <= e21a[b] || e21a[b] <= e50a[b])) break;
+            if (tc.dir === 'short' && (e9a[b] >= e21a[b] || e21a[b] >= e50a[b])) break;
+            cascadeAgeBars++;
+        }
+        let isStale = false;
+        let staleReason = '';
+        if (cascadeAgeBars > 6) {
+             const moveSinceTrigger = Math.abs(p - tc.entry);
+             if (moveSinceTrigger < (a4 * 1.0)) {
+                 isStale = true;
+                 staleReason = `STALE MOMENTUM: Cascade is ${cascadeAgeBars} bars old (24h+) but price hasn't displaced. Dead tape.`;
+             }
+        }
+
         clean.push({t, dir: tc.dir, rows, entry: tc.entry, entryType: tc.entryType || 'MARKET',
           distToAnchor, stop: tc.stop, risk, rr: tc.rr, t1: tc.t1, t2: tc.t2,
-          vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: false,
+          vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: isStale, cascadeAgeBars: cascadeAgeBars, staleReason: staleReason,
           targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean'});
       }catch(e){}
     }));
@@ -4269,6 +4287,10 @@ async function runCascadeCore(uni){
     const want=s.dir==='long'?1:-1;
     const c=s.rows.map(r=>r.c);
     const a4=last(atr(s.rows,14));
+
+    if (s.veto) {
+        console.log(`[BEST VETO] ${s.t.symbol} dropped: ${s.staleReason}`);
+    }
 
     /* F1 TREND */
     let mTs=false, mD1=false, tsD='1D fetch failed', d1D='1D fetch failed';
@@ -4359,11 +4381,9 @@ async function runCascadeCore(uni){
                 prior /= 8;
                 cvdRatio = recent;
 
-                // Hard Veto Limits
                 if (want > 0 && recent <= 0.85) { isCvdTrap = true; trapReason = 'SEVERE CVD DIVERGENCE: Sellers dumping into long'; }
                 if (want < 0 && recent >= 1.15) { isCvdTrap = true; trapReason = 'SEVERE CVD DIVERGENCE: Buyers squeezing short'; }
 
-                // Confirmations
                 if (want > 0 && recent >= 1.05 && recent >= prior - 0.05) cvdAligned = true;
                 if (want < 0 && recent <= 0.95 && recent <= prior + 0.05) cvdAligned = true;
             }
@@ -4381,7 +4401,12 @@ async function runCascadeCore(uni){
             f8Detail = `CVD ${isFinite(cvdRatio)?fmt(cvdRatio,2):'n/a'} ${cvdAligned?'✓':'✗'} · OBI ${isFinite(obiVal)?fmt(obiVal,2):'n/a'} ${obiAligned?'✓':'✗'}`;
         }
     } catch(e) {}
-    if (isCvdTrap) s.veto = true;
+
+    if (isCvdTrap) {
+        s.veto = true;
+        s.staleReason = trapReason;
+        console.log(`[BEST VETO] ${s.t.symbol} dropped: ${trapReason}`);
+    }
 
     /* F9 ANCHOR CLUSTERING */
     let f9 = false, f9Detail = 'no cluster';
@@ -4428,19 +4453,20 @@ async function runCascadeCore(uni){
     s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0)+(f8?1:0)+(f9?1:0);
     s.robScore=(r1?1:0)+(r2?1:0);
     s.profitBoost = bestProfitBoost(s);
-    if (isCvdTrap) {
-        s.fam.unshift(['VETO', 'INSTITUTIONAL GUARD', false, trapReason]);
-        console.log(`[BEST VETO] ${s.t.symbol} dropped: ${trapReason}`);
+
+    if (s.veto) {
+        s.fam.unshift(['VETO', 'INSTITUTIONAL / TIME GUARD', false, s.staleReason]);
     }
+
     await sleep(60);
   }
 
-  // Apply Master Vetoes
+  // Apply Master Vetoes (drop stale momentum and CVD traps from final pool)
   clean = clean.filter(s => !s.veto);
+
   clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
   return {clean, breadth:{bull:breadthBull, total:breadthTotal}};
 }
-
 async function runBest(opts){
   opts = opts || {};
   if (!opts._singleLeg && !opts.singleExchange && typeof hgDualScanEnabled === 'function' && hgDualScanEnabled()){
