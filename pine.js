@@ -225,6 +225,18 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + cipherJson;
   }
+  if (sig.scriptId === 'range-filter'){
+    var rfAction = sig.dir === 'long' ? 'regime_bull' : 'regime_bear';
+    var rfJson = '{"action":"' + rfAction + '","ticker":"' + sig.sym + '","price":' + sig.price
+      + ',"filter_level":' + fmtF(sig.filterLevel, 6) + ',"script":"range-filter"}';
+    return '🌲 PINE RF · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nRange Filter regime flip · period ' + (sig.period || 100) + ' · mult ' + fmtF(sig.mult || 3, 1)
+      + '\nFILTER ' + pxF(sig.filterLevel) + ' · rng ' + pxF(sig.rng)
+      + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + rfJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';

@@ -791,4 +791,69 @@ function pineVumanchuCipher(rows, opts){
 
 G.pineVumanchuCipher = pineVumanchuCipher;
 
+/** Pine: Range Filter — regime flip on adaptive range band (per 100, mult 3). */
+function pineRangeFilter(rows, opts){
+  opts = opts || {};
+  var per = opts.period || 100;
+  var mult = opts.mult !== undefined ? +opts.mult : 3.0;
+  try{
+    if (!rows || rows.length < per * 2 + 5) return null;
+    var n = rows.length;
+    var source = rows.map(function(r){ return r.c; });
+    var absDiff = new Array(n).fill(NaN);
+    for (var j = 1; j < n; j++){
+      absDiff[j] = Math.abs(source[j] - source[j - 1]);
+    }
+    var smrng = pineEma(absDiff, per);
+    var rngEma = pineEma(smrng, per);
+    var rngArr = rngEma.map(function(v){ return isFinite(v) ? v * mult : NaN; });
+
+    var rfArr = new Array(n).fill(NaN);
+    var trendArr = new Array(n).fill(0);
+    rfArr[0] = source[0];
+    var src0 = source[0], rf0 = rfArr[0];
+    trendArr[0] = src0 > rf0 ? 1 : (src0 < rf0 ? -1 : 0);
+
+    for (var i = 1; i < n; i++){
+      var src = source[i];
+      var rng = rngArr[i];
+      var rfPrev = isFinite(rfArr[i - 1]) ? rfArr[i - 1] : src;
+      var rfVal;
+      if (!isFinite(rng)){
+        rfVal = rfPrev;
+      } else if (src > rfPrev){
+        rfVal = (src - rng) < rfPrev ? rfPrev : (src - rng);
+      } else {
+        rfVal = (src + rng) > rfPrev ? rfPrev : (src + rng);
+      }
+      rfArr[i] = rfVal;
+      if (src > rfVal) trendArr[i] = 1;
+      else if (src < rfVal) trendArr[i] = -1;
+      else trendArr[i] = trendArr[i - 1];
+    }
+
+    var bi = n - 1;
+    var trend = trendArr[bi];
+    var prevTrend = bi > 0 ? trendArr[bi - 1] : 0;
+    var longCondition = trend === 1 && prevTrend === -1;
+    var shortCondition = trend === -1 && prevTrend === 1;
+    if (!longCondition && !shortCondition) return null;
+
+    return {
+      dir: longCondition ? 'long' : 'short',
+      newLong: longCondition,
+      newShort: shortCondition,
+      trend: trend,
+      prevTrend: prevTrend,
+      filterLevel: rfArr[bi],
+      rng: rngArr[bi],
+      period: per,
+      mult: mult,
+      price: source[bi]
+    };
+  }catch(e){ return null; }
+}
+
+G.pineRangeFilter = pineRangeFilter;
+
 })();

@@ -261,7 +261,7 @@ const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'startrader', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp', 'goldswing', 'signallog'],
-  strategies: ['strats', 'meanrev', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'carry', 'termbasis', 'scorecard'],
+  strategies: ['strats', 'meanrev', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'carry', 'termbasis', 'scorecard'],
   tools:      ['basis', 'search', 'log', 'trade', 'finder']
 };
 assert(run('Array.isArray(HG_NAV_GROUPS)') === true && run('HG_NAV_GROUPS.length') === 5,
@@ -272,7 +272,7 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', regime:'overview',
-                   carry:'strategies', termbasis:'strategies', goldpro:'gold', strats:'strategies', meanrev:'strategies', edge:'strategies', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies',
+                   carry:'strategies', termbasis:'strategies', goldpro:'gold', strats:'strategies', meanrev:'strategies', edge:'strategies', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies',
                    scorecard:'strategies',
                    brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
