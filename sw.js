@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v107';
+const HG_CACHE = 'hg-v108';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -23,7 +23,7 @@ const HG_SHELL = [
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './signallog.js',
   './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './brain.js', './scorecard.js',
-  './pinemath.js', './pinegate.js', './pine.js', './pinemsb.js', './pinesqz.js', './pinesmf.js'
+  './pinemath.js', './pinegate.js', './pine.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js'
 ];
 
 /* true → the request/response must NEVER touch the cache (fresh market data

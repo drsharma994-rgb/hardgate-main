@@ -480,4 +480,108 @@ function pineSmartMoneyFlow(rows, opts){
 
 G.pineSmartMoneyFlow = pineSmartMoneyFlow;
 
+function pineAtr(rows, len){
+  if (typeof G.atr === 'function') return G.atr(rows, len);
+  var out = new Array(rows.length).fill(NaN);
+  var a = null;
+  for (var i = 1; i < rows.length; i++){
+    var tr = Math.max(rows[i].h - rows[i].l,
+      Math.abs(rows[i].h - rows[i - 1].c),
+      Math.abs(rows[i].l - rows[i - 1].c));
+    if (a === null){
+      if (i >= len){
+        var s = 0;
+        for (var k = i - len + 1; k <= i; k++){
+          s += Math.max(rows[k].h - rows[k].l,
+            Math.abs(rows[k].h - rows[k - 1].c),
+            Math.abs(rows[k].l - rows[k - 1].c));
+        }
+        a = s / len;
+        out[i] = a;
+      }
+    } else {
+      a = (a * (len - 1) + tr) / len;
+      out[i] = a;
+    }
+  }
+  return out;
+}
+
+/** Pine: HalfTrend state machine — trend flip signals with trailing halftrend line. */
+function pineHalfTrend(rows, opts){
+  opts = opts || {};
+  var amplitude = opts.amplitude || 2;
+  var atrMult = opts.atrMult || 2.0;
+  var atrLen = opts.atrLen || 100;
+  try{
+    if (!rows || rows.length < atrLen + amplitude + 5) return null;
+    var n = rows.length;
+    var closes = rows.map(function(r){ return r.c; });
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+    var atrArr = pineAtr(rows, atrLen);
+    var highPrice = pineHighest(highs, amplitude);
+    var lowPrice = pineLowest(lows, amplitude);
+
+    var ht = lows[0];
+    var trend = 1;
+    var trendHist = [1];
+
+    for (var i = 1; i < n; i++){
+      var prevHt = ht;
+      var c = closes[i];
+      var atrBand = isFinite(atrArr[i]) ? atrArr[i] * (atrMult / 2) : 0;
+      var hp = highPrice[i];
+      var lp = lowPrice[i];
+      if (trend === 1){
+        if (c < prevHt){
+          trend = -1;
+          ht = (isFinite(hp) ? hp : c) + atrBand;
+        } else {
+          ht = Math.max(prevHt, (isFinite(lp) ? lp : c) - atrBand);
+        }
+      } else {
+        if (c > prevHt){
+          trend = 1;
+          ht = (isFinite(lp) ? lp : c) - atrBand;
+        } else {
+          ht = Math.min(prevHt, (isFinite(hp) ? hp : c) + atrBand);
+        }
+      }
+      trendHist.push(trend);
+    }
+
+    var bi = n - 1;
+    if (!isFinite(atrArr[bi]) || !isFinite(ht)) return null;
+    var prevTrend = trendHist.length > 1 ? trendHist[bi - 1] : trend;
+    var newLong = trend === 1 && prevTrend === -1;
+    var newShort = trend === -1 && prevTrend === 1;
+    var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    var stop = ht;
+    var entry = closes[bi];
+    var risk = Math.abs(entry - stop);
+    return {
+      dir: dir,
+      trend: trend,
+      prevTrend: prevTrend,
+      halftrend: ht,
+      trailingStop: ht,
+      newLong: newLong,
+      newShort: newShort,
+      longCondition: newLong,
+      shortCondition: newShort,
+      price: entry,
+      stop: stop,
+      entry: entry,
+      t1: (risk > 0 && dir === 'long') ? entry + 2 * risk : (risk > 0 && dir === 'short') ? entry - 2 * risk : NaN,
+      t2: (risk > 0 && dir === 'long') ? entry + 3.5 * risk : (risk > 0 && dir === 'short') ? entry - 3.5 * risk : NaN,
+      amplitude: amplitude,
+      atrMult: atrMult,
+      atrLen: atrLen
+    };
+  }catch(e){ return null; }
+}
+
+G.pineHalfTrend = pineHalfTrend;
+
 })();
