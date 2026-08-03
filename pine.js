@@ -177,6 +177,18 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + sqJson;
   }
+  if (sig.scriptId === 'smart-money-flow'){
+    var smfAction = sig.dir === 'long' ? 'buy' : 'sell';
+    var smfJson = '{"action":"' + smfAction + '","ticker":"' + sig.sym + '","price":' + sig.price
+      + ',"flow_strength":' + fmtF(sig.smf, 4) + ',"script":"smart-money-flow"}';
+    return '🌲 PINE SMF · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nSmart Money Flow · cross ±' + fmtF(sig.threshold, 2)
+      + '\nflow strength ' + fmtF(sig.smf, 4)
+      + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + smfJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
