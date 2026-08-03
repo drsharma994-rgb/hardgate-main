@@ -415,18 +415,52 @@ function gateCandidate(inp){
     return die(0, '4h history thin — ' + rows4h.length + ' bars < ' + MIN_ROWS_4H + ' needed (EMA200 warmup)');
   note_(0, true, sym + ' · ' + rows4h.length + 'x 4h bars' + (inp.source ? ' · ' + inp.source : ''));
 
-  /* ---------- G1 STRUCTURE ---------- */
-  var _ema = (typeof ema === 'function') ? ema : null;
-  var _atr = (typeof atr === 'function') ? atr : null;
-  if (!_ema || !_atr) return die(1, 'indicator layer not loaded (ema/atr missing) — structure unreadable, standing aside');
+  /* ---------- G1+G2 SWING 7-GATE PARITY (shared cryptogates matrix) ---------- */
   var c4 = rows4h.map(function(r){ return +r.c; });
   var p = c4[c4.length - 1];
   if (!isFinite(p) || p <= 0) return die(1, 'bad 4h closes — structure unreadable');
+  var _atr = (typeof atr === 'function') ? atr : null;
+  var a4 = _atr ? __last(_atr(rows4h, 14)) : NaN;
+  var dir = null;
+  var usedSwingSeven = false;
+  if (typeof swingSevenGateCheck === 'function'){
+    try{
+      var tkr = { symbol: sym, fundingPct: numOrNull(inp.fundingPct), mark: p, turnoverUsd: numOrNull(inp.turnoverUsd) };
+      var s7 = swingSevenGateCheck(rows4h, tkr);
+      if (!s7 || !s7.ok){
+        var rsn = (s7 && s7.reason) ? s7.reason : 'swing 7-gate check failed';
+        var fg = (s7 && s7.failedGate) ? String(s7.failedGate) : '';
+        var gIdx = (fg.indexOf('G3') >= 0 || fg.indexOf('RSI') >= 0) ? 2
+          : ((fg.indexOf('G4') >= 0 || fg.indexOf('funding') >= 0) ? 3 : 1);
+        return die(gIdx, rsn + ' (swingSevenGateCheck · shared with SWING/BEST)');
+      }
+      dir = s7.dir;
+      res.dir = dir;
+      usedSwingSeven = true;
+      if (typeof detectRegime === 'function'){
+        try{
+          var dr7 = detectRegime(rows4h);
+          if (dr7 && dr7.regime === 'compression'){
+            return die(1, dr7.label + ' on 4H — cascade into a squeeze is low edge (regime filter)');
+          }
+        }catch(eDr7){}
+      }
+      var sm = s7.matrix;
+      var vzNote = sm && isFinite(sm.vz) ? (' · vol z ' + sp(sm.vz)) : '';
+      var rNote = sm && isFinite(sm.r14) ? (' · RSI ' + n2(sm.r14, 1)) : '';
+      note_(1, true, 'SWING 7/7 + anchor · ' + dir.toUpperCase() + ' cascade (cryptogates parity)' + rNote + vzNote);
+      note_(2, true, 'momentum/participation verified via shared swingGateMatrix (G3–G7)');
+    }catch(eS7){ usedSwingSeven = false; }
+  }
+
+  /* ---------- G1 STRUCTURE (legacy path when swingSevenGateCheck unavailable) ---------- */
+  if (!usedSwingSeven){
+  var _ema = (typeof ema === 'function') ? ema : null;
+  if (!_ema || !_atr) return die(1, 'indicator layer not loaded (ema/atr missing) — structure unreadable, standing aside');
   var e9 = __last(_ema(c4, 9)), e21 = __last(_ema(c4, 21)), e50 = __last(_ema(c4, 50)), e200 = __last(_ema(c4, 200));
   if (!isFinite(e9) || !isFinite(e21) || !isFinite(e50)) return die(1, 'EMA cascade not warmed up');
-  var dir = (e9 > e21 && e21 > e50) ? 'long' : ((e9 < e21 && e21 < e50) ? 'short' : null);
+  dir = (e9 > e21 && e21 > e50) ? 'long' : ((e9 < e21 && e21 < e50) ? 'short' : null);
   if (!dir) return die(1, 'EMA9/21/50 mixed — chop. Standing aside IS the position.');
-  var a4 = __last(_atr(rows4h, 14));
   if (!isFinite(a4) || a4 <= 0) return die(1, 'ATR(4h) not computable — cascade spread cannot be verified');
   var spreadX = Math.abs(e21 - e50)/a4;
   if (spreadX < SPREAD_MIN_ATR)
@@ -517,7 +551,12 @@ function gateCandidate(inp){
   }
   note_(2, true, 'RSI ' + n2(r14, 1) + ' · vol z ' + sp(vz) + ' · close ' + Math.round(closePos*100) + '% of bar' + quietNote);
 
+  } /* end legacy G1/G2 path */
+
   /* ---------- G3 POSITIONING ---------- */
+  if (!dir){
+    dir = res.dir;
+  }
   var fr = numOrNull(inp.fundingPct);
   var scFn = (typeof smartClassify === 'function') ? smartClassify : null;
   var cls = null;
@@ -1097,6 +1136,29 @@ function sortResults(survivors, rejected){
 
 /* cards + charts + WHY ASIDE + empty state; returns the stat tallies.
    Shared by runScan (full) and quickRescan (cached-universe re-gate). */
+function engineFunnelHTML(funnel, passN){
+  if (!funnel || typeof G.hgFunnelPanelHTML !== 'function') return '';
+  var rows = [
+    { k: 'Universe gated', v: String(funnel.uni || 0) },
+    { k: 'EXECUTE pass (plans)', v: String(passN || funnel.pass || 0) },
+    { k: 'Rejected (WHY ASIDE)', v: String(funnel.reject || 0) },
+    { k: 'Symbol fetch failures', v: String(funnel.failed || 0) }
+  ];
+  var veto = funnel.veto || {};
+  Object.keys(veto).sort(function(a, b){ return veto[b] - veto[a]; }).slice(0, 8).forEach(function(g){
+    rows.push({ k: 'Veto · ' + g, v: veto[g] + ' symbols' });
+  });
+  return G.hgFunnelPanelHTML('WHY EMPTY — ENGINE funnel (6-stage gate)', rows, 'engineFunnelPanel');
+}
+
+function paintEngineFunnel(el, funnel, passN){
+  try{
+    var funnelEl = el.querySelector('#engineFunnel');
+    if (!funnelEl) return;
+    funnelEl.innerHTML = engineFunnelHTML(funnel, passN);
+  }catch(e){}
+}
+
 function paintResults(el, survivors, rejected, isXu){
   var cards = el.querySelector('#engineCards'), empty = el.querySelector('#engineEmpty'),
       asidePanel = el.querySelector('#engineAside'), asideList = el.querySelector('#engineAsideList'),
@@ -1195,6 +1257,7 @@ async function runScan(el){
     var survivors = [], rejected = [], failed = 0;
     var isXu = (uni.mode === 'xu');
     var cands = isXu ? uni.items : uni.syms;
+    var funnel = { uni: cands.length, pass: 0, reject: 0, failed: 0, veto: {} };
     var proc = { delta: 0, cdcx: 0, other: 0 };   /* gated-per-exchange tallies */
     for (var ci = 0; ci < cands.length; ci += CHUNK){
       var chunk = cands.slice(ci, ci + CHUNK);
@@ -1209,12 +1272,19 @@ async function runScan(el){
                          : await gateLegacyCandidate(sym, uni.ticks, uni.source, uni.cfg);
           if (isXu) proc[cand.exchange]++;
           if (rec.res.pass) survivors.push(rec); else rejected.push(rec);
-        }catch(e){ failed++; }
+          if (rec.res.pass) funnel.pass++;
+          else{
+            funnel.reject++;
+            var vg = rec.res.vetoGate;
+            if (vg) funnel.veto[vg] = (funnel.veto[vg] || 0) + 1;
+          }
+        }catch(e){ failed++; funnel.failed++; }
       }));
       await SLEEP(CHUNK_SLEEP_MS);
     }
     sortResults(survivors, rejected);
     var counts = paintResults(el, survivors, rejected, isXu);
+    paintEngineFunnel(el, funnel, survivors.length);
     stat.textContent = 'done · ' + survivors.length + ' executions (' + counts.nStrong + ' STRONG · ' + counts.nPlan + ' with plans)'
       + ' · ' + rejected.length + ' aside · universe ' + uni.syms.length + ' (' + uni.source + ')'
       + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
@@ -1381,6 +1451,7 @@ function mount(el){
       + '<div class="prog" id="engineProg"><i></i></div>'
       + '</div>'
       + '<div class="cards" id="engineCards"></div>'
+      + '<div id="engineFunnel"></div>'
       + '<div class="empty" id="engineEmpty" style="display:none">No executions. Standing aside is a position.</div>'
       + '<div class="panel" id="engineAside" style="display:none"><h2>WHY ASIDE — every rejected candidate &amp; the gate that killed it '
       + '<span id="engineAsideCount"></span></h2><div class="ledger" id="engineAsideList"></div></div>';

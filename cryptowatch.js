@@ -28,40 +28,43 @@ function cwFmt(n, d){
   return Number(n).toFixed(d === undefined ? 2 : d);
 }
 
-function swingWatchEval(rows, ticker){
+function swingWatchEval(rows, ticker, opts){
+  opts = opts || {};
   if (typeof swingGateMatrix !== 'function') return null;
   var m = swingGateMatrix(rows, ticker);
   if (!m) return null;
   if (m.clean) return null;
   if (!m.dir) return { state: 'idle', dir: null, strategy: 'SWING 4H', sym: ticker && ticker.symbol,
-    reason: 'no aligned 4H EMA cascade (G1)', gatesPassed: 0, gatesTotal: 7, level: null };
+    reason: 'no aligned 4H EMA cascade (G1)', gatesPassed: 0, gatesTotal: 7, level: null,
+    unconfirmed: !!opts.unconfirmed };
   var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
   if (m.passed >= 5){
     return { state: 'armed', dir: m.dir, strategy: 'SWING 4H · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
       condition: m.passed + '/7 gates pass — waiting: ' + missing.join(', '),
-      gatesPassed: m.passed, gatesTotal: 7, level: m.level };
+      gatesPassed: m.passed, gatesTotal: 7, level: m.level, unconfirmed: !!opts.unconfirmed };
   }
   return { state: 'idle', dir: m.dir, strategy: 'SWING 4H · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
     reason: m.passed + '/7 gates — need ≥5 to arm (' + missing.join(', ') + ')',
-    gatesPassed: m.passed, gatesTotal: 7, level: m.level };
+    gatesPassed: m.passed, gatesTotal: 7, level: m.level, unconfirmed: !!opts.unconfirmed };
 }
 
-function scalpWatchEval(h1, m15, ticker, minsToFunding){
+function scalpWatchEval(h1, m15, ticker, minsToFunding, opts){
+  opts = opts || {};
   if (typeof scalpGateMatrix !== 'function') return null;
   var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
   if (!m) return null;
   if (m.clean) return null;
   if (!m.dir) return { state: 'idle', dir: null, strategy: 'SCALP 15m', sym: ticker && ticker.symbol,
-    reason: 'no 1H cascade (G1)', gatesPassed: 0, gatesTotal: 7, level: null };
+    reason: 'no 1H cascade (G1)', gatesPassed: 0, gatesTotal: 7, level: null, unconfirmed: !!opts.unconfirmed };
   var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
   if (m.passed >= 5){
     return { state: 'armed', dir: m.dir, strategy: 'SCALP 15m · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
       condition: m.passed + '/7 gates pass — waiting: ' + missing.join(', '),
-      gatesPassed: m.passed, gatesTotal: 7, level: m.level };
+      gatesPassed: m.passed, gatesTotal: 7, level: m.level, unconfirmed: !!opts.unconfirmed };
   }
   return { state: 'idle', dir: m.dir, strategy: 'SCALP 15m · ' + m.dir.toUpperCase(), sym: ticker && ticker.symbol,
     reason: m.passed + '/7 gates — need ≥5 to arm (' + missing.join(', ') + ')',
-    gatesPassed: m.passed, gatesTotal: 7, level: m.level };
+    gatesPassed: m.passed, gatesTotal: 7, level: m.level, unconfirmed: !!opts.unconfirmed };
 }
 
 function coilWatchItems(cw){
@@ -84,6 +87,7 @@ function cryptoFormingNowHTML(items){
     var st = w.state === 'armed';
     return '<div class="hgw-row ' + (st ? 'armed' : 'idle') + '">'
       + '<span class="hgw-st">' + (st ? 'ARMED' : 'IDLE') + '</span>'
+      + (w.unconfirmed ? '<span class="hgw-st" style="color:#b45309;border-color:rgba(180,83,9,.45);background:rgba(251,191,36,.12)">UNCONFIRMED</span>' : '')
       + '<b>' + cwEsc(w.sym || '?') + '</b> · ' + cwEsc(w.strategy || '')
       + (w.condition ? ' — ' + cwEsc(w.condition) : (w.reason ? ' — ' + cwEsc(w.reason) : ''))
       + (w.level !== null && w.level !== undefined ? ' · ref ' + cwFmt(w.level) : '')

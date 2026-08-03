@@ -219,9 +219,24 @@
     };
   }
 
+  /* Shared 7-gate eval — single source for SWING tab, BEST (swingTryClean), ENGINE parity */
+  function swingSevenGateCheck(rows, ticker){
+    var m = swingGateMatrix(rows, ticker);
+    if (!m) return { ok: false, reason: 'insufficient 4H history', matrix: null };
+    if (!m.dir) return { ok: false, reason: 'EMA9/21/50 mixed — no cascade', matrix: m };
+    var fail = null;
+    for (var gi = 0; gi < (m.gates || []).length; gi++){
+      if (!m.gates[gi][1]){ fail = m.gates[gi][0]; break; }
+    }
+    if (fail) return { ok: false, reason: fail + ' failed', matrix: m, failedGate: fail };
+    if (!m.anchorOK) return { ok: false, reason: 'EMA21 anchor >1.5×ATR — anti-chase', matrix: m, failedGate: 'anchor' };
+    return { ok: true, dir: m.dir, matrix: m, reason: 'SWING 7/7 + anchor (cryptogates)' };
+  }
+
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
   G.swingTryNear = swingTryNear;
   G.scalpTryClean = scalpTryClean;
+  G.swingSevenGateCheck = swingSevenGateCheck;
 })();

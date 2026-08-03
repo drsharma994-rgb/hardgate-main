@@ -3859,7 +3859,9 @@ function cardHTML(row){
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + esc(row.lane === 'gold' ? 'XAU · GOLD' : row.sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + dir.toUpperCase() + '</span> ' + dec.tier
-    + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + venueStamp + '</span></div>'
+    + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + venueStamp
+    + (typeof G.hgTripleStackChipHtml === 'function' ? G.hgTripleStackChipHtml(row.sym, dir) : '')
+    + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">verdict</span><span>' + esc(dec.reasons[0] || '') + '</span>'
     + '<span class="k">structure check</span><span>'
@@ -4605,6 +4607,15 @@ async function runBrain(el){
     } else {
       empty.style.display = 'none';
     }
+    paintBrainFunnel(el, {
+      judged: rows.length,
+      prime: primes.length,
+      high: highs.length,
+      watch: watches.length,
+      aside: asides.length,
+      gatedLiq: gatedLiq,
+      gatedOver: gatedOver
+    });
 
     /* scorecard hook — PRIME/HIGH only, fire-and-forget, after plans land */
     scoreRecord(setups);
@@ -4852,6 +4863,15 @@ async function runQuick(el){
     aside.innerHTML = asides.map(safeAsideRowHTML).join('');
     if (asideWrap) asideWrap.style.display = asides.length ? 'block' : 'none';
     empty.style.display = (!setups.length && !watches.length) ? 'block' : 'none';
+    paintBrainFunnel(el, {
+      judged: rows.length,
+      prime: primes.length,
+      high: highs.length,
+      watch: watches.length,
+      aside: asides.length,
+      gatedLiq: 0,
+      gatedOver: 0
+    });
 
     /* scorecard hook — fresh PRIME/HIGH cards earn a record, unchanged never do */
     scoreRecord(setups);
@@ -4893,6 +4913,50 @@ async function runQuick(el){
    stat line keeps its synthesis contract; a capped layer keeps running in
    its own time and the note says so. Never throws. */
 var __warming = false;
+
+function brainFunnelHTML(meta){
+  if (!meta || typeof G.hgFunnelPanelHTML !== 'function') return '';
+  var rows = [
+    { k: 'Symbols judged', v: String(meta.judged || 0) },
+    { k: 'PRIME', v: String(meta.prime || 0) },
+    { k: 'HIGH', v: String(meta.high || 0) },
+    { k: 'WATCH radar', v: String(meta.watch || 0) },
+    { k: 'ASIDE (veto/tie/thin)', v: String(meta.aside || 0) },
+    { k: 'Liquidity gate demotions', v: String(meta.gatedLiq || 0) },
+    { k: 'Overextended demotions', v: String(meta.gatedOver || 0) }
+  ];
+  return G.hgFunnelPanelHTML('WHY EMPTY — BRAIN funnel (layer agreement)', rows, 'brainFunnelPanel');
+}
+
+function paintBrainFunnel(el, meta){
+  try{
+    var funnelEl = el.querySelector('#brainFunnel');
+    if (!funnelEl) return;
+    funnelEl.innerHTML = brainFunnelHTML(meta);
+  }catch(e){}
+}
+
+function setBrainWarmProg(el, frac, layerNote){
+  try{
+    var prog = el.querySelector('#brainWarmProg');
+    var layers = el.querySelector('#brainWarmLayers');
+    if (prog){
+      prog.style.display = (frac === null) ? 'none' : 'block';
+      if (frac !== null && prog.firstElementChild)
+        prog.firstElementChild.style.width = (Math.max(0, Math.min(1, frac)) * 100).toFixed(1) + '%';
+    }
+    if (layers){
+      if (layerNote){
+        layers.style.display = 'block';
+        layers.textContent = layerNote;
+      }else{
+        layers.style.display = 'none';
+        layers.textContent = '';
+      }
+    }
+  }catch(e){}
+}
+
 async function runWarmup(el){
   var stat = null, deps = null, warmBtn = null, runBtn = null, quickBtn = null;
   try{ stat = el.querySelector('#brainStat'); }catch(e){}
@@ -4920,6 +4984,11 @@ async function runWarmup(el){
   try{
     for (var k = 0; k < hooks.length; k++){
       var hk = hooks[k];
+      setBrainWarmProg(el, (k + 0.15) / hooks.length,
+        hooks.map(function(h, idx){
+          var mark = idx < k ? '✓' : (idx === k ? '▸' : '○');
+          return mark + ' ' + (h.label || h.id);
+        }).join(' · '));
       stat.className = 'note';
       stat.textContent = 'warming ' + (k + 1) + '/' + hooks.length + ' · ' + (hk.label || hk.id)
         + (hk.id === 'engine' ? ' — the deep gate scan, the slow leg' : '') + '…';
@@ -4938,6 +5007,7 @@ async function runWarmup(el){
         else if (typeof r !== 'string') r = 'warmed';
       }catch(e){ r = 'error: ' + errMsg(e); }
       results.push((hk.label || hk.id) + ': ' + r);
+      setBrainWarmProg(el, (k + 1) / hooks.length, null);
       try{
         if (deps){
           deps.className = 'note';
@@ -4947,6 +5017,7 @@ async function runWarmup(el){
     }
   }finally{
     __warming = false;
+    setBrainWarmProg(el, null, null);
     if (warmBtn) warmBtn.disabled = false;
     if (runBtn) runBtn.disabled = false;
     if (quickBtn) quickBtn.disabled = false;
@@ -4990,6 +5061,8 @@ function mount(el){
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
       + '<option value="CDCX">COINDCX ONLY</option><option value="STARTRADER">STARTRADER ONLY</option></select>'
       + '<span class="note" id="brainStat"></span></div>'
+      + '<div class="prog" id="brainWarmProg" style="display:none;margin-top:8px"><i></i></div>'
+      + '<div class="note" id="brainWarmLayers" style="display:none;margin-top:4px;font-size:10px;line-height:1.6"></div>'
       + '<div class="note" id="brainDeps" style="margin-top:8px"></div>'
       + '<div class="note" style="margin-top:8px">Conviction is independent layers <b>agreeing</b>, each with a human-readable '
       + 'evidence string — never an invented number. <b>PRIME</b>: 5+ layers agree incl. structural + positioning, zero vetoes, '
@@ -5038,7 +5111,8 @@ function mount(el){
       + '<div id="brainWatch"></div></div>'
       + '<div class="panel" id="brainAsideWrap" style="display:none;margin-top:10px"><h2>ASIDE <span>vetoed · tied · contested · thin — standing aside is a position</span></h2>'
       + '<div id="brainAside"></div></div>'
-      + '<div class="empty" id="brainEmpty" style="display:none">No high-probability setups right now — standing aside is a position.</div>';
+      + '<div class="empty" id="brainEmpty" style="display:none">No high-probability setups right now — standing aside is a position.</div>'
+      + '<div id="brainFunnel"></div>';
     __mountedEl = el;
     ensureStalenessTimer();   /* staleness guard ticks every 60s from first mount */
   }catch(e){

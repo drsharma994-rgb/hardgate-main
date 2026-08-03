@@ -118,6 +118,72 @@ function hgRegimeRouteHint(rows){
   }catch(e){ return null; }
 }
 
+function hgRegimeRouteHintHtml(rows){
+  try{
+    if (typeof detectRegime !== 'function' || !rows || rows.length < 60) return '';
+    var dr = detectRegime(rows);
+    if (!dr || !dr.regime) return '';
+    if (dr.regime === 'compression'){
+      return dr.label + ' — trend blocked · '
+        + '<a href="#" onclick="showTab(\'squeeze\');return false" style="color:var(--gold)">SQUEEZE</a> · '
+        + '<a href="#" onclick="showTab(\'meanrev\');return false" style="color:var(--gold)">MEAN REV</a>';
+    }
+    if (dr.regime === 'volatile'){
+      return dr.label + ' — trend blocked · '
+        + '<a href="#" onclick="showTab(\'scalp\');return false" style="color:var(--gold)">SCALP</a> (size down)';
+    }
+    if (dr.regime === 'range'){
+      return dr.label + ' — '
+        + '<a href="#" onclick="showTab(\'meanrev\');return false" style="color:var(--gold)">MEAN REV</a> · '
+        + '<a href="#" onclick="showTab(\'div\');return false" style="color:var(--gold)">DIVERGENCE</a>';
+    }
+    return '';
+  }catch(e){ return ''; }
+}
+
+function hgNormSym(s){
+  return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function hgTripleStackMatch(sym, dir){
+  try{
+    sym = hgNormSym(sym);
+    dir = String(dir || '').toLowerCase();
+    if (!sym || !(dir === 'long' || dir === 'short')) return null;
+    var swing = false, edge = false, brain = false;
+    var ss = (typeof G.swingScan === 'function') ? G.swingScan() : (G.__hgSwingScan || null);
+    var snap = (ss && ss.cands) ? ss.cands : [];
+    for (var i = 0; i < snap.length; i++){
+      var c = snap[i];
+      if (c && hgNormSym(c.sym) === sym && String(c.dir).toLowerCase() === dir){ swing = true; break; }
+    }
+    var es = (typeof G.edgeScan === 'function') ? G.edgeScan() : null;
+    var ec = (es && es.cands) ? es.cands : [];
+    for (var j = 0; j < ec.length; j++){
+      var e = ec[j];
+      if (e && hgNormSym(e.sym) === sym && String(e.dir).toLowerCase() === dir){ edge = true; break; }
+    }
+    var bl = (typeof G.__hgBrainLast === 'function') ? G.__hgBrainLast() : null;
+    var brows = (bl && bl.rows) ? bl.rows : [];
+    for (var k = 0; k < brows.length; k++){
+      var r = brows[k];
+      if (!r || !r.dec || !r.dec.dir) continue;
+      if (hgNormSym(r.sym) !== sym) continue;
+      if (String(r.dec.dir).toLowerCase() === dir
+          && r.dec.tier && String(r.dec.tier) !== 'ASIDE'){ brain = true; break; }
+    }
+    if (swing && edge && brain) return { swing: true, edge: true, brain: true };
+    return null;
+  }catch(e){ return null; }
+}
+
+function hgTripleStackChipHtml(sym, dir){
+  var m = hgTripleStackMatch(sym, dir);
+  if (!m) return '';
+  return '<span class="stamp pass" style="margin-left:6px;background:rgba(5,150,105,.15);border:1px solid rgba(5,150,105,.45)"'
+    + ' title="SWING CLEAN + EDGE tally + BRAIN tier agree on direction">TRIPLE STACK</span>';
+}
+
 function hgVenueDataNote(ticker){
   try{
     if (!ticker) return null;
@@ -712,6 +778,9 @@ G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
 G.hgSwingG5OK = hgSwingG5OK;
 G.hgRegimeRouteHint = hgRegimeRouteHint;
+G.hgRegimeRouteHintHtml = hgRegimeRouteHintHtml;
+G.hgTripleStackMatch = hgTripleStackMatch;
+G.hgTripleStackChipHtml = hgTripleStackChipHtml;
 G.hgVenueDataNote = hgVenueDataNote;
 G.hgFunnelPanelHTML = hgFunnelPanelHTML;
 G.hgStructureStop = hgStructureStop;
