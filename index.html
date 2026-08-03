@@ -285,7 +285,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     </div>
     <div class="prog" id="swingProg"><i></i></div>
   </div>
-  <div class="note" style="margin-bottom:10px">Gates: G1 4H EMA cascade aligned (9&gt;21&gt;50 or inverse) with real spread — |EMA21−EMA50| ≥ 0.25×ATR, so flat-tape cascades don't count · G2 price on correct side of 4H EMA200 (HTF proxy) · G3 RSI-14 not exhausted (blocks &gt;70 long / &lt;30 short) · G4 |funding| ≤ 0.05% and not paying against you · G5 volume expansion vs 20-bar mean · G6 structural R:R ≥ 2 from last swing · G7 no opposing CUSUM event in last 20 bars (the one feature your own walk-forward validated OOS, AUC ≈0.58). All gates on CLOSED bars only — nothing repaints. Zero results is a valid, honest result.</div>
+  <div class="note" style="margin-bottom:10px">Gates: G1 4H EMA cascade aligned (9&gt;21&gt;50 or inverse) with real spread — |EMA21−EMA50| ≥ 0.25×ATR, so flat-tape cascades don't count · G2 price on correct side of 4H EMA200 (HTF proxy) · G3 RSI-14 not exhausted (blocks &gt;70 long / &lt;30 short) · G4 |funding| ≤ 0.05% and not paying against you · G5 volume expansion vs 20-bar mean · G6 structural R:R ≥ 2 from last swing · G7 no opposing CUSUM event in last 20 bars (the one feature your own walk-forward validated OOS, AUC ≈0.58). All gates on CLOSED bars only — nothing repaints. Zero results is a valid, honest result. Each card shows <b>regime</b> — the 4H tape read (STRONG TREND / WEAK TREND / RANGE / COMPRESSION / VOLATILE EXPANSION), same as EDGE and DIVERGENCE.</div>
   <div class="cards" id="swingCards"></div>
   <div id="swingWatch"></div>
   <div class="empty" id="swingEmpty" style="display:none">No CLEAN swing setups. Standing aside is a position.</div>
@@ -530,7 +530,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <span class="note" id="bestStat"></span>
       <span class="note">Telegram: new #1 BEST setup pinged every 15 min (built-in bot defaults in header — hit TEST).</span>
     </div>
-    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer.</div>
+    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer. The #1 panel shows <b>4H regime</b> (STRONG TREND / WEAK TREND / …) — per-symbol tape context, not the market-wide REGIME tab.</div>
     <div class="prog" id="bestProg"><i></i></div>
   </div>
   <div id="bestOut"><div class="empty">Run FIND BEST.</div></div>
@@ -2874,6 +2874,7 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
     ['order', orderLbl],
     ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
     ['RSI 4H', fmt(r14, 1)],
+    ['regime', typeof hgTapeRegimeLabel === 'function' ? hgTapeRegimeLabel(rows) : 'n/a'],
     ['vol z', fmt(vz, 2)],
     ['funding', t.fundingPct !== null ? fmt(t.fundingPct, 4) + '%' : 'n/a'],
     ['ann.', t.fundingPct !== null ? fmt(t.fundingPct * 3 * 365, 1) + '%' : '-'],
@@ -2922,6 +2923,7 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
     ['mark', px(t.mark || hit.level || '—')],
     ['gates', hit.passed + '/' + (hit.gatesTotal || 7)],
     ['missing', miss || '—'],
+    ['regime', (hit.rows && typeof hgTapeRegimeLabel === 'function') ? hgTapeRegimeLabel(hit.rows) : 'n/a'],
     ['RSI', hit.r14 != null ? fmt(hit.r14, 1) : '—'],
     ['vol z', hit.vz != null ? fmt(hit.vz, 2) : '—'],
     ['dyn R:R', hit.dynamicRR != null ? fmt(hit.dynamicRR, 2) + 'R' : '—']
@@ -4220,6 +4222,17 @@ function bestSortPool(clean){
   return strong.length ? strong : clean;
 }
 
+function bestTapeRegimeLabel(w){
+  if (w && w.tapeRegime) return w.tapeRegime;
+  if (w && w.rows && typeof hgTapeRegimeLabel === 'function') return hgTapeRegimeLabel(w.rows);
+  return 'n/a';
+}
+
+function bestRegimeMiniHtml(w){
+  const lbl = String(bestTapeRegimeLabel(w)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<div class="mini" style="margin-top:8px"><span class="k">4H regime</span><span>' + lbl + '</span></div>';
+}
+
 function bestSessionActive(){
   try{
     const d = new Date();
@@ -4284,6 +4297,7 @@ async function runCascadeCore(uni){
         clean.push({t, dir: tc.dir, rows, entry: tc.entry, entryType: tc.entryType || 'MARKET',
           distToAnchor, stop: tc.stop, risk, rr: tc.rr, t1: tc.t1, t2: tc.t2,
           vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: isStale, cascadeAgeBars: cascadeAgeBars, staleReason: staleReason,
+          tapeRegime: (typeof hgTapeRegimeLabel === 'function') ? hgTapeRegimeLabel(rows) : 'n/a',
           targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean'});
       }catch(e){}
     }));
@@ -4528,6 +4542,7 @@ async function runBest(opts){
       out.innerHTML = `
       <div class="panel">
         <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        ${bestRegimeMiniHtml(w)}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
@@ -4580,6 +4595,7 @@ async function runBest(opts){
     out.innerHTML = `
       <div class="panel">
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        ${bestRegimeMiniHtml(w)}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>

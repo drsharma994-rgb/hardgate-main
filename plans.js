@@ -78,6 +78,15 @@ function hgRegimeAllowsSetup(rows, style){
   }catch(e){ return { allow: true, reason: null }; }
 }
 
+/* --- 4H tape regime label (STRONG TREND / WEAK TREND / …) for card UI --- */
+function hgTapeRegimeLabel(rows){
+  try{
+    if (typeof detectRegime !== 'function' || !rows || rows.length < 60) return 'DATA THIN';
+    var dr = detectRegime(rows);
+    return (dr && dr.label) ? dr.label : 'n/a';
+  }catch(e){ return 'n/a'; }
+}
+
 /* --- structure stop (shared by smartSetup fallbacks, squeeze, oiflow, trendtable) --- */
 function hgStructureStop(dir, entry, rows, opts){
   opts = opts || {};
@@ -642,6 +651,7 @@ G.hgPlanMeta = hgPlanMeta;
 G.hgFormatEntryType = hgFormatEntryType;
 G.hgConfirmedCascade = hgConfirmedCascade;
 G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
+G.hgTapeRegimeLabel = hgTapeRegimeLabel;
 G.hgStructureStop = hgStructureStop;
 G.hgPlanFromRisk = hgPlanFromRisk;
 G.hgPlanLevelsCore = hgPlanLevelsCore;

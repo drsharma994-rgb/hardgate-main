@@ -46,6 +46,15 @@ console.log('== swingTryClean + enrich ==');
   }
 }
 
+console.log('== hgTapeRegimeLabel ==');
+{
+  const rows = synthRows(80, 100);
+  const lbl = W.hgTapeRegimeLabel(rows);
+  assert(typeof lbl === 'string' && lbl.length > 0, 'tape regime label is a non-empty string');
+  assert(['STRONG TREND', 'WEAK TREND', 'RANGE', 'COMPRESSION', 'VOLATILE EXPANSION', 'DATA THIN'].indexOf(lbl) >= 0
+    || lbl === 'n/a', 'tape regime label is a known detectRegime bucket');
+}
+
 console.log('== hgRegimeAllowsSetup best ==');
 {
   const rows = synthRows(80, 100);
