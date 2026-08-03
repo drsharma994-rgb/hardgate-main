@@ -119,6 +119,9 @@ Exports (all on window):
   NewsWindowGuard — high-impact ±30m news window checker (setUpcomingEvents)
   calculatePositionSize(balance, riskPct, entry, stop) — risk-based position sizing
   goldAttachPositionSize(setup, balance, riskPct) — attach positionSize to a setup
+  evaluateFundingRate(rate, direction) — perp funding ±1 tally for swing holds (>0.03%/interval)
+  TickBuffer — live trade tick buffer with CVD (15m rolling window)
+  handleOrderUpdate(setup, exchangeStatus) — partial-fill state machine for limit orders
   goldAsianBreakout / goldADRFade — volume-validated Asian breakout + ADR exhaustion fade
   detectAsianBreakout / detectADRFade — session & exhaustion trigger aliases
   goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
@@ -2112,6 +2115,18 @@ function goldRankSetups(cands, ctx){
         parts.push({ label: pLab, pts: pPts });
         tally += pPts;
       }
+      var fundRate = (ctx.fundingRate !== undefined && ctx.fundingRate !== null)
+        ? __normFundingPct(ctx.fundingRate) : NaN;
+      if (isFinite(fundRate)){
+        var fPts = evaluateFundingRate(fundRate, c.dir);
+        if (fPts !== 0){
+          var fLab = (fPts > 0)
+            ? ('perp funding tailwind — crowd pays you to hold ' + c.dir + 's')
+            : ('perp funding headwind — you pay the crowd on ' + c.dir + 's');
+          parts.push({ label: fLab + ' (' + fundRate.toFixed(4) + '%/interval)', pts: fPts });
+          tally += fPts;
+        }
+      }
       if (season && season.bias === 'STRONG' && c.dir === 'long'){
         parts.push({ label: 'seasonal tailwind — Jan–Feb is historically gold\'s strongest stretch', pts: 1 });
         tally += 1;
@@ -2580,6 +2595,109 @@ function goldAttachPositionSize(setup, accountBalanceUSD, riskPercent){
     if (pos && !pos.error) setup.positionSize = pos;
     return setup;
   }catch(e){ return setup; }
+}
+
+var EXTREME_FUNDING_PCT = 0.03; /* percent units per interval; >0.03% = extreme imbalance */
+
+/* Normalize funding input: Hardgate binanceFunding uses percent units (0.01 = 0.01%).
+   Raw decimal rates (|r| < 0.001) are scaled to percent. Never throws. */
+function __normFundingPct(rate){
+  var r = +rate;
+  if (!isFinite(r)) return NaN;
+  if (Math.abs(r) > 0 && Math.abs(r) < 0.001) r = r * 100;
+  return r;
+}
+
+/** Perp funding tally for multi-day swing holds on PAXG/XAUT. -> -1 | 0 | +1 */
+function evaluateFundingRate(currentFundingRate, positionDirection){
+  try{
+    var rate = __normFundingPct(currentFundingRate);
+    if (!isFinite(rate)) return 0;
+    var dir = String(positionDirection || '').toLowerCase();
+    if (dir === 'long'){
+      if (rate > EXTREME_FUNDING_PCT) return -1;
+      if (rate < -EXTREME_FUNDING_PCT) return 1;
+    } else if (dir === 'short'){
+      if (rate < -EXTREME_FUNDING_PCT) return -1;
+      if (rate > EXTREME_FUNDING_PCT) return 1;
+    }
+    return 0;
+  }catch(e){ return 0; }
+}
+
+/** Live WebSocket trade buffer — rolling CVD for sweep validation. Never throws. */
+function TickBuffer(){
+  this.ticks = [];
+  this.buyVolume = 0;
+  this.sellVolume = 0;
+}
+TickBuffer.prototype.onTrade = function(price, size, isBuyerMaker){
+  try{
+    var sz = +size;
+    if (!isFinite(sz) || !(sz > 0)) return;
+    this.ticks.push({ price: price, size: sz, isBuyerMaker: !!isBuyerMaker, time: Date.now() });
+    if (isBuyerMaker) this.sellVolume += sz;
+    else this.buyVolume += sz;
+    this.cleanOldTicks(15 * 60 * 1000);
+  }catch(e){ /* never throw */ }
+};
+TickBuffer.prototype.cleanOldTicks = function(maxAgeMs){
+  try{
+    if (!isFinite(maxAgeMs) || maxAgeMs <= 0) return;
+    var cutoff = Date.now() - maxAgeMs, i, tick;
+    while (this.ticks.length && this.ticks[0].time < cutoff){
+      tick = this.ticks.shift();
+      if (!tick) continue;
+      if (tick.isBuyerMaker) this.sellVolume -= tick.size;
+      else this.buyVolume -= tick.size;
+    }
+    if (this.buyVolume < 0) this.buyVolume = 0;
+    if (this.sellVolume < 0) this.sellVolume = 0;
+  }catch(e){ /* never throw */ }
+};
+TickBuffer.prototype.getCVD = function(){
+  try{ return this.buyVolume - this.sellVolume; }catch(e){ return 0; }
+};
+TickBuffer.prototype.reset = function(){
+  this.ticks = [];
+  this.buyVolume = 0;
+  this.sellVolume = 0;
+};
+
+/** Exchange partial-fill handler for limit entries. Never throws. */
+function handleOrderUpdate(activeSetup, exchangeOrderStatus){
+  try{
+    if (!activeSetup || !exchangeOrderStatus) return null;
+    var st = String(exchangeOrderStatus.status || '').toUpperCase();
+    var filled = exchangeOrderStatus.filledSize;
+    if (st === 'FILLED'){
+      activeSetup.executionState = 'FULL_RISK_ON';
+      activeSetup.filledUnits = filled;
+      return { action: 'FILLED', setup: activeSetup };
+    }
+    if (st === 'PARTIALLY_FILLED' || st === 'PARTIAL'){
+      activeSetup.executionState = 'PARTIAL_RISK_ON';
+      activeSetup.filledUnits = filled;
+      var levels = activeSetup.levels || {};
+      var entry = isFinite(levels.entryPrice) ? levels.entryPrice
+        : (isFinite(levels.entry) ? levels.entry : (isFinite(activeSetup.entry) ? activeSetup.entry : NaN));
+      var stop = isFinite(levels.stopLoss) ? levels.stopLoss
+        : (isFinite(activeSetup.stop) ? activeSetup.stop : NaN);
+      var currentPrice = +exchangeOrderStatus.lastPrice;
+      var riskDistance = Math.abs(entry - stop);
+      var distanceMoved = Math.abs(currentPrice - entry);
+      if (isFinite(riskDistance) && riskDistance > 0 && isFinite(distanceMoved)
+          && distanceMoved > riskDistance * 0.5){
+        return {
+          action: 'CANCEL_REMAINDER',
+          setup: activeSetup,
+          reason: 'Price escaped zone — cancel remainder of partially filled limit order'
+        };
+      }
+      return { action: 'PARTIAL', setup: activeSetup };
+    }
+    return null;
+  }catch(e){ return null; }
 }
 
 function __aggregateDailyFromRows(rows){
@@ -3460,6 +3578,9 @@ function evaluateScalp(m15Data, ctx){
         + ') within ±' + winMin + ' min window.';
     }
 
+    var tickBuf = out.context.tickBuffer;
+    if (tickBuf && typeof tickBuf.getCVD === 'function') out.cvd = tickBuf.getCVD();
+
     return out;
   }catch(e){ return out; }
 }
@@ -3474,6 +3595,9 @@ function evaluateSwing(h4Data, ctx){
     activeOrderBlocks: [],
     activeTriggers: [],
     agreeingReads: 0,
+    fundingTally: 0,
+    confluenceTally: 0,
+    cvd: null,
     context: ctx || {},
     reads: []
   };
@@ -3513,6 +3637,18 @@ function evaluateSwing(h4Data, ctx){
           + obSetup.anchor.toFixed(2) + ')'
       });
     }
+
+    var fundRate = out.context.fundingRate;
+    if (fundRate !== undefined && fundRate !== null && isFinite(__normFundingPct(fundRate))){
+      var posDir = out.context.positionDirection;
+      if (!posDir && obSetup && obSetup.trigger) posDir = obSetup.direction;
+      if (!posDir) posDir = 'long';
+      out.fundingTally = evaluateFundingRate(fundRate, posDir);
+      out.confluenceTally = out.fundingTally;
+    }
+    var tickBuf = out.context.tickBuffer;
+    if (tickBuf && typeof tickBuf.getCVD === 'function') out.cvd = tickBuf.getCVD();
+
     return out;
   }catch(e){ return out; }
 }
@@ -3584,6 +3720,10 @@ W.calculateKaufmanER = calculateKaufmanER;
 W.NewsWindowGuard = NewsWindowGuard;
 W.calculatePositionSize = calculatePositionSize;
 W.goldAttachPositionSize = goldAttachPositionSize;
+W.evaluateFundingRate = evaluateFundingRate;
+W.TickBuffer = TickBuffer;
+W.handleOrderUpdate = handleOrderUpdate;
+W.EXTREME_FUNDING_PCT = EXTREME_FUNDING_PCT;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;

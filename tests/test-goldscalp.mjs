@@ -84,6 +84,7 @@ console.log('== 0) exports + tab registration ==');
                  'calculateMacroHint','goldCalculateMacroHint',
                  'calculateGoldSpotBasis','calculateKaufmanER','NewsWindowGuard',
                  'calculatePositionSize','goldAttachPositionSize',
+                 'evaluateFundingRate','TickBuffer','handleOrderUpdate',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -430,6 +431,40 @@ console.log('== 10d) confluence engines ==');
 }
 
 /* =========================================================================
+   10e) funding rate / tick buffer / order state machine
+========================================================================= */
+console.log('== 10e) funding, tick buffer, order updates ==');
+{
+  assert(W.evaluateFundingRate(0.05, 'long') === -1, 'funding: long pays extreme positive rate -> -1');
+  assert(W.evaluateFundingRate(-0.05, 'long') === 1, 'funding: long receives negative rate -> +1 tailwind');
+  assert(W.evaluateFundingRate(0.05, 'short') === 1, 'funding: short receives positive rate -> +1');
+  assert(W.evaluateFundingRate(-0.05, 'short') === -1, 'funding: short pays negative rate -> -1');
+  assert(W.evaluateFundingRate(0.01, 'long') === 0, 'funding: inside band -> neutral');
+  assert(W.evaluateFundingRate(0.0004, 'long') === -1, 'funding: accepts decimal rate (0.04%)');
+
+  const buf = new W.TickBuffer();
+  buf.onTrade(2650, 10, true);
+  buf.onTrade(2650.5, 5, false);
+  assert(buf.getCVD() === -5, 'TickBuffer: buyer-maker = sell volume, CVD = buy - sell');
+  buf.reset();
+  assert(buf.getCVD() === 0, 'TickBuffer: reset clears CVD');
+
+  const setup = { levels: { entryPrice: 2650, stopLoss: 2640 } };
+  const filled = W.handleOrderUpdate(setup, { status: 'FILLED', filledSize: 1.5 });
+  assert(filled.action === 'FILLED' && setup.executionState === 'FULL_RISK_ON',
+         'handleOrderUpdate: FILLED -> FULL_RISK_ON');
+  const partial = W.handleOrderUpdate(
+    { levels: { entryPrice: 100, stopLoss: 90 } },
+    { status: 'PARTIALLY_FILLED', filledSize: 0.5, lastPrice: 106 }
+  );
+  assert(partial.action === 'CANCEL_REMAINDER', 'handleOrderUpdate: partial + 0.5R escape -> CANCEL_REMAINDER');
+
+  const rows = flatRows(35, 100, 0.5, DAY);
+  const swingEv = W.evaluateSwing(rows, { atr4: 1, fundingRate: 0.05, positionDirection: 'long' });
+  assert(swingEv.fundingTally === -1, 'evaluateSwing: wires funding tally for swing holds');
+}
+
+/* =========================================================================
    11) goldRSIGold — 75/25 zones + divergence both ways
 ========================================================================= */
 console.log('== 11) goldRSIGold ==');
@@ -703,6 +738,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'calculateMacroHint','goldCalculateMacroHint',
                  'calculateGoldSpotBasis','calculateKaufmanER','NewsWindowGuard',
                  'calculatePositionSize','goldAttachPositionSize',
+                 'evaluateFundingRate','TickBuffer','handleOrderUpdate',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];

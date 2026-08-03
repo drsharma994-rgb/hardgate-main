@@ -1319,7 +1319,8 @@ async function runScan(ui){
     }
 
     /* ranking context legs — every one optional, every one catch-isolated */
-    var ctx = { now: now, news: newsC, season: season, macro: null, spot: null, fng: null };
+    var ctx = { now: now, news: newsC, season: season, macro: null, spot: null, fng: null,
+                fundingRate: null };
     var gm = gfn('getGoldMacro');
     if (gm){
       setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');
@@ -1330,6 +1331,13 @@ async function runScan(ui){
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
     var gps = gfn('goldProState');
     if (gps){ try{ ctx.goldPro = gps(); }catch(eGp){ ctx.goldPro = null; } }
+    var bf = gfn('binanceFunding');
+    if (bf){
+      try{
+        var frLeg = await bf('PAXGUSDT');
+        if (frLeg && isFinite(frLeg.fundingPct)) ctx.fundingRate = frLeg.fundingPct;
+      }catch(eFr){}
+    }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};
