@@ -117,6 +117,23 @@ function collectBrain(out){
   }
 }
 
+function collectPine(out){
+  var fn = gfn('pineScan');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var sigs = (val && val.signals) ? val.signals : [];
+  for (var i = 0; i < sigs.length; i++){
+    var s = sigs[i];
+    if (!s || !s.isNew) continue;
+    pushSetup(out, 'PINE', {
+      sym: s.sym, dir: s.dir,
+      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
+      rr: s.rr
+    }, { prime: true, tier: 'PINE', mlScore: s.smoothedScore });
+  }
+}
+
 function collectGold(out, kind, src, minTally){
   var fn = gfn(kind === 'scalp' ? 'goldscalpScan' : 'goldswingScan');
   if (!fn) return;
@@ -183,6 +200,7 @@ function hgTabAlertsCollect(win){
     collectCryptoWatch(out);
     collectEdge(out);
     collectBrain(out);
+    collectPine(out);
     var goldMin = GOLD_MIN_TALLY;
     try{
       var gn = parseInt((root.localStorage && root.localStorage.getItem('hgAlertGoldMin')) || '', 10);

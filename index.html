@@ -678,6 +678,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="book-routing.js?v=55"></script>
 <script src="book.js?v=55"></script>
 <script src="execute.js?v=55"></script>
+<script src="pinemath.js"></script>
+<script src="pinegate.js"></script>
+<script src="pine.js"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -700,6 +703,27 @@ const S = {
 let __hgSwingScan = null, __hgScalpScan = null;
 window.swingScan = function(){ return __hgSwingScan; };
 window.scalpScan = function(){ return __hgScalpScan; };
+let __hgBestSnap = null;
+function publishBestSnap(clean, meta){
+  __hgBestSnap = {
+    at: Date.now(),
+    clean: (clean || []).map(function(w){
+      return {
+        sym: (w.t && w.t.symbol) ? w.t.symbol : w.sym,
+        dir: w.dir,
+        entry: w.entry,
+        stop: w.stop,
+        t1: w.t1,
+        t2: w.t2,
+        rr: w.rr,
+        famScore: w.famScore,
+        robScore: w.robScore
+      };
+    }),
+    meta: meta || {}
+  };
+}
+window.bestScan = function(){ return __hgBestSnap; };
 
 /* Owner policy: alerts always armed in this browser.
    BEST (Strategies tab): Telegram on new #1 setup every 15 min (server CI matches).
@@ -2256,7 +2280,7 @@ const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
-  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','carry','termbasis','scorecard'] },
+  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','pine','carry','termbasis','scorecard'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
@@ -2385,6 +2409,11 @@ const HG_TAB_AUTO_SCAN = {
   swing: function(){ return runScan('swing'); },
   scalp: function(){ return runScan('scalp'); },
   best: function(){ return runBest(); },
+  pine: async function(){
+    const pane = document.getElementById('tab_pine');
+    const runBtn = pane && pane.querySelector('#pineRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
   brain: async function(){
     const pane = document.getElementById('tab_brain');
     const runBtn = pane && pane.querySelector('#brainRun');
@@ -4641,6 +4670,7 @@ async function runBest(opts){
       }
       const clean = allClean;
       const universeLabel = 'both Delta India + CoinDCX futures';
+      publishBestSnap(clean, { uniLen: totalUni, dual: true, funnel: bestFunnel });
       if (!clean.length){
         out.innerHTML=bestFunnelHtml(bestFunnel, 0, totalUni)
           + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
@@ -4698,6 +4728,7 @@ async function runBest(opts){
     const exLabel = S.exchange==='delta'?'Delta India':'CoinDCX';
     const universeLabel = scanAll ? `whole ${exLabel} futures universe` : `top ${N} by turnover`;
     const {clean, breadth, funnel: bestFunnel} = await runCascadeCore(uni);
+    publishBestSnap(clean, { uniLen: uni.length, dual: false, funnel: bestFunnel });
     if (!clean.length){
       out.innerHTML=bestFunnelHtml(bestFunnel, 0, uni.length)
         + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across the ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;

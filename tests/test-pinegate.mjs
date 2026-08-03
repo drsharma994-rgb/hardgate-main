@@ -1,0 +1,60 @@
+/* HARDGATE — pinegate.js unit tests (Node 18+, no network). */
+import fs from 'node:fs';
+import vm from 'node:vm';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
+let pass = 0, fail = 0;
+function assert(cond, msg){
+  if (cond){ pass++; console.log('ok    - ' + msg); }
+  else { fail++; console.error('FAIL  - ' + msg); }
+}
+
+const ctx = vm.createContext({ window: {}, console, Math, JSON, Date, isFinite, parseInt, String, Object, Array, module: { exports: {} } });
+ctx.window = ctx;
+vm.runInContext(fs.readFileSync(path.join(root, 'pinegate.js'), 'utf8'), ctx, { filename: 'pinegate.js' });
+const G = ctx.window;
+
+assert(typeof G.pineNormSym === 'function', 'pineNormSym exported');
+assert(typeof G.pineGateIntersect === 'function', 'pineGateIntersect exported');
+
+assert(G.pineNormSym('BTCUSDT') === 'BTC', 'BTCUSDT normalizes to BTC');
+assert(G.pineNormSym('BTCUSD') === 'BTC', 'BTCUSD normalizes to BTC');
+
+const baseCands = [
+  { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, tally: 4 },
+  { sym: 'ETHUSD', dir: 'short', entry: 2000, stop: 2100, t1: 1800, tally: 5 }
+];
+
+const snap = {
+  swingCands: baseCands,
+  scalpCands: baseCands,
+  edgeCands: baseCands,
+  bestClean: baseCands,
+  brainRows: [
+    { sym: 'BTCUSD', dir: 'long', tier: 'HIGH' },
+    { sym: 'ETHUSD', dir: 'short', tier: 'PRIME' }
+  ],
+  trendmxRows: [
+    { sym: 'BTCUSDT', score: 3 },
+    { sym: 'ETHUSDT', score: -3 }
+  ],
+  regime: { playbook: { bias: 'BOTH' } }
+};
+
+const res = G.pineGateIntersect(snap);
+assert(res.eligible.length === 2, 'two sym+dir pairs pass all gates');
+assert(res.funnel.eligible === 2, 'funnel counts eligible');
+
+const block = G.pineGateIntersect(Object.assign({}, snap, {
+  regime: { playbook: { bias: 'LONG-ONLY' } }
+}));
+assert(block.eligible.length === 1 && block.eligible[0].sym === 'BTCUSD', 'REGIME LONG-ONLY blocks ETH short');
+assert(block.funnel.regimeBlocked === 1, 'regime blocked counted');
+
+const empty = G.pineGateIntersect({ swingCands: [], scalpCands: baseCands });
+assert(empty.eligible.length === 0 && empty.missing.indexOf('SWING') >= 0, 'missing swing reported');
+
+console.log('\n' + pass + ' passed, ' + fail + ' failed');
+process.exit(fail ? 1 : 0);

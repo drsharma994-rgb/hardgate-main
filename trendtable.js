@@ -289,6 +289,19 @@ var COLS = [
    busy mirrors runScan's own state.running guard so overlapping refresh
    invocations can't double-fetch. */
 var tmTab = { run: null, busy: false, hasRun: false, missing: 0 };
+var __tmSnap = null;
+
+function publishTrendmxSnap(rows){
+  try{
+    if (!rows || !rows.length){ __tmSnap = null; return; }
+    __tmSnap = {
+      at: Date.now(),
+      rows: rows.map(function(r){
+        return { sym: r.sym, score: r.score, dir: tmDirOf(r) };
+      })
+    };
+  }catch(e){ __tmSnap = null; }
+}
 
 /* refresh contract: async, NEVER throws, returns a terse status string —
    'refreshed' | 'skipped: not run yet' | 'skipped: data layer missing' |
@@ -523,6 +536,7 @@ function mountTrendMatrix(el){
       }
 
       state.rows = results;
+      publishTrendmxSnap(results);
       render();
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       setStatus('universe ' + uni.length + ' perps · top ' + syms.length +
@@ -551,9 +565,13 @@ function mountTrendMatrix(el){
 /* ---------------- exports + tab registration ---------------- */
 
 W.trendScore = trendScore;
+W.tmDirOf = tmDirOf;
 W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;
+W.trendmxState = function(){
+  try{ return __tmSnap ? JSON.parse(JSON.stringify(__tmSnap)) : null; }catch(e){ return null; }
+};
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });
 
