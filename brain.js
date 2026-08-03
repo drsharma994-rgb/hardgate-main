@@ -269,7 +269,10 @@ var FETCH_MS    = 12000;   /* per-fetch + universe-feed abort timeout */
 var SCAN_MS     = 150000;  /* scan-level watchdog — guarantees __busy always releases */
 var XU_CACHE_MS = 15 * 60 * 1000; /* mirror of xuniverse.js CACHE_MS (its documented contract) */
 /* vm-test seam: suites may shorten timeouts; production never touches this */
-var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 12000, engineWarmMs: 240000 };
+var TUN = { fetchMs: FETCH_MS, scanMs: SCAN_MS, warmMs: 8000, warmColdMs: 45000, engineWarmMs: 240000,
+            layerWarmMs: 45000 }; /* warmColdMs raised 2026-08-03: the 12s cap left rotation/regime
+   still pending on cold starts (CoinGecko + regime fetches contend with engine), so synthesis
+   judged 500+ rows with those layers dark -> mass ASIDE / "no setups since yesterday". */
 /* the seam is this SAME object by reference — mutating window.brainTunables
    mutates what every withTimeout/watchdog reads */
 G.brainTunables = TUN;
@@ -4348,6 +4351,27 @@ async function autoWarmIntoRun(stat){
           await new Promise(function(res){ setTimeout(res, 2000); });
         }
       }
+      /* LAYER PATIENCE: rotation/regime/oiflow/onchain compete for network on
+         cold starts; the shared warmColdMs race marks them "still running" at
+         12s (now 45s) while synthesis proceeds with them dark -> empty board.
+         Give each slow meta-layer up to layerWarmMs after the shared cap. */
+      var layerCap = (isFinite(+TUN.layerWarmMs) && +TUN.layerWarmMs > 0) ? +TUN.layerWarmMs : 45000;
+      var slowIds = ['rotation', 'regime', 'oiflow', 'onchain'];
+      for (var si = 0; si < slowIds.length; si++){
+        var sid = slowIds[si];
+        var sRec = null;
+        for (h = 0; h < recs.length; h++) if (recs[h].id === sid){ sRec = recs[h]; break; }
+        if (!sRec || sRec.outcome !== 'pending') continue;
+        var sStart = Date.now();
+        while (sRec.outcome === 'pending' && (Date.now() - sStart) < layerCap){
+          if (stat){
+            stat.textContent = sid + ' layer still warming — '
+              + Math.round((Date.now() - sStart) / 1000) + 's (≤'
+              + FMT(layerCap / 1000, 0) + 's — BRAIN waits so votes are not dark)…';
+          }
+          await new Promise(function(res){ setTimeout(res, 1500); });
+        }
+      }
     }catch(e){}
     /* accounting: what the auto-warm accomplished vs what stayed dark */
     var post = snapshotLayers();
@@ -4404,7 +4428,11 @@ async function runBrain(el){
     paintFatal(el, 'brain pane incomplete — ' + miss.join(', ') + ' unavailable — remount the tab');
     return;
   }
-  if (__busy && !brainBusyStuck()) return;
+  if (__busy && !brainBusyStuck()){
+    stat.className = 'note';
+    stat.textContent = 'synthesis already running — wait for done or reload after ~8 min if stuck';
+    return;
+  }
   __busy = true; __busySince = Date.now();
   var t0 = Date.now();
   try{
@@ -4441,7 +4469,7 @@ async function runBrain(el){
        for the done line; bt0 budgets the scan itself. */
     var bt0 = Date.now();
 
-    stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading every intelligence layer…';
+    stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'building universe…';
 
     var snap = snapshotLayers();
     snap = await enrichLiqSetup(snap);
@@ -4451,6 +4479,7 @@ async function runBrain(el){
       fng: (snap.fng && isFinite(+snap.fng.v)) ? +snap.fng.v : null
     };
     var uni = await buildUniverse();
+    stat.textContent = (warmNote ? warmNote + ' · ' : '') + 'reading tape + judging ' + uni.candidates.length + ' candidates…';
     await fillTape(snap, uni);   /* legacy mode reuses the universe leg's tickers — one fetch per run */
     var combined = (uni.mode === 'combined');
 
@@ -4648,7 +4677,11 @@ async function runQuick(el){
     paintFatal(el, 'brain pane incomplete — ' + miss.join(', ') + ' unavailable — remount the tab');
     return;
   }
-  if (__busy && !brainBusyStuck()) return;
+  if (__busy && !brainBusyStuck()){
+    stat.className = 'note';
+    stat.textContent = 'synthesis already running — wait for full scan to finish';
+    return;
+  }
   if (!__lastResult){
     stat.className = 'note warn';
     stat.textContent = 'quick rescan needs a full synthesis first — hit RUN SYNTHESIS once; '
