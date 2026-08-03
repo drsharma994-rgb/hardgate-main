@@ -37,7 +37,9 @@ Not required for local dev or core UI:
 | Variable | Purpose |
 |----------|---------|
 | `PORT` | Server port (default `10000`) |
-| `EXECUTE_BACKEND_URL` / `EXECUTE_WEBHOOK_URL` | Live bracket orders via `/api/execute` |
+| `EXECUTE_BACKEND_URL` / `EXECUTE_WEBHOOK_URL` | Live bracket orders via `/api/execute` (forwarding proxy) |
+| `EXECUTE_CCXT_EXCHANGE` + `EXECUTE_CCXT_API_KEY` + `EXECUTE_CCXT_SECRET` | In-process CCXT executor (Bybit / Binance / Delta) — takes priority over `EXECUTE_BACKEND_URL` |
+| `EXECUTE_CCXT_SANDBOX`, `EXECUTE_CCXT_PASSWORD`, `EXECUTE_RISK_PCT` | CCXT sandbox mode, exchange password, default 1% risk sizing when qty omitted |
 | `EXECUTE_FILL_POLL_URL` | Broker fill polling endpoint |
 | `BOOK_EXECUTE_FILL_SECRET` | Webhook auth for fill updates |
 | `BOOK_MAX_DAILY_LOSS_PCT` | Daily loss halt threshold (default 2%) |
