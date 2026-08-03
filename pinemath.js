@@ -906,4 +906,90 @@ function pineNwEnvelope(rows, opts){
 
 G.pineNwEnvelope = pineNwEnvelope;
 
+function pineWeekStartSec(t){
+  if (!isFinite(t)) return NaN;
+  var ts = t < 1e12 ? t : Math.floor(t / 1000);
+  var d = Math.floor(ts / 86400) * 86400;
+  var dow = new Date(d * 1000).getUTCDay();
+  var back = (dow + 6) % 7;
+  return d - back * 86400;
+}
+
+function pineIsNewWeek(rows, i){
+  if (i <= 0) return true;
+  var t = rows[i].t, tp = rows[i - 1].t;
+  if (!isFinite(t) || !isFinite(tp)) return false;
+  return pineWeekStartSec(t) !== pineWeekStartSec(tp);
+}
+
+/** Pine: Weekly AVWAP + SD bands — wick pierce snap-back to VWAP target. */
+function pineWeeklyAvwap(rows, opts){
+  opts = opts || {};
+  var bandMult = opts.bandMult !== undefined ? +opts.bandMult : 2.0;
+  try{
+    if (!rows || rows.length < 10) return null;
+    var n = rows.length;
+    var sumVol = 0, sumPv = 0, sumPv2 = 0;
+    var signal = null;
+
+    for (var i = 0; i < n; i++){
+      if (pineIsNewWeek(rows, i)){
+        sumVol = 0;
+        sumPv = 0;
+        sumPv2 = 0;
+      }
+      var r = rows[i];
+      var typ = (r.h + r.l + r.c) / 3;
+      var vol = (isFinite(r.v) && r.v > 0) ? r.v : 0;
+      sumVol += vol;
+      sumPv += typ * vol;
+      var vwapVal = sumVol > 0 ? sumPv / sumVol : typ;
+      sumPv2 += vol * typ * typ;
+      var variance = sumVol > 0 ? Math.max(0, (sumPv2 / sumVol) - vwapVal * vwapVal) : 0;
+      var stdDev = Math.sqrt(variance);
+      var upper = vwapVal + bandMult * stdDev;
+      var lower = vwapVal - bandMult * stdDev;
+
+      if (i === n - 1){
+        var lo = r.l, hi = r.h, cl = r.c;
+        var longCond = lo < lower && cl > lower;
+        var shortCond = hi > upper && cl < upper;
+        if (longCond){
+          signal = {
+            dir: 'long',
+            newLong: true,
+            newShort: false,
+            vwap: vwapVal,
+            targetVwap: vwapVal,
+            upper: upper,
+            lower: lower,
+            stdDev: stdDev,
+            bandMult: bandMult,
+            price: cl
+          };
+        } else if (shortCond){
+          signal = {
+            dir: 'short',
+            newLong: false,
+            newShort: true,
+            vwap: vwapVal,
+            targetVwap: vwapVal,
+            upper: upper,
+            lower: lower,
+            stdDev: stdDev,
+            bandMult: bandMult,
+            price: cl
+          };
+        }
+      }
+    }
+
+    if (!signal) return null;
+    return signal;
+  }catch(e){ return null; }
+}
+
+G.pineWeeklyAvwap = pineWeeklyAvwap;
+G.pineWeekStartSec = pineWeekStartSec;
+
 })();
