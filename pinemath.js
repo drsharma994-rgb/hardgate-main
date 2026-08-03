@@ -856,4 +856,54 @@ function pineRangeFilter(rows, opts){
 
 G.pineRangeFilter = pineRangeFilter;
 
+/** Pine: NW Envelope — Gaussian kernel mean + ATR bands, wick pierce snap-back. */
+function pineNwEnvelope(rows, opts){
+  opts = opts || {};
+  var h = opts.bandwidth !== undefined ? +opts.bandwidth : 8.0;
+  var mult = opts.mult !== undefined ? +opts.mult : 2.5;
+  var lookback = opts.lookback || 50;
+  var atrLen = opts.atrLen || 100;
+  try{
+    if (!rows || rows.length < Math.max(lookback, atrLen) + 5) return null;
+    var n = rows.length;
+    var bi = n - 1;
+    var r = rows[bi];
+    var sumW = 0, sumYw = 0;
+    for (var i = 0; i < lookback; i++){
+      var idx = bi - i;
+      if (idx < 0) break;
+      var w = Math.exp(-(Math.pow(i, 2)) / (2 * Math.pow(h, 2)));
+      sumW += w;
+      sumYw += rows[idx].c * w;
+    }
+    if (sumW <= 0) return null;
+    var nwCenter = sumYw / sumW;
+    var atrArr = pineAtr(rows, atrLen);
+    var atr = atrArr[bi];
+    if (!isFinite(atr) || !isFinite(nwCenter)) return null;
+    var upper = nwCenter + atr * mult;
+    var lower = nwCenter - atr * mult;
+    var cl = r.c, lo = r.l, hi = r.h;
+    var bullishReversion = lo < lower && cl > lower;
+    var bearishReversion = hi > upper && cl < upper;
+    if (!bullishReversion && !bearishReversion) return null;
+    return {
+      dir: bullishReversion ? 'long' : 'short',
+      newLong: bullishReversion,
+      newShort: bearishReversion,
+      meanTarget: nwCenter,
+      nwCenter: nwCenter,
+      upper: upper,
+      lower: lower,
+      atr: atr,
+      bandwidth: h,
+      mult: mult,
+      lookback: lookback,
+      price: cl
+    };
+  }catch(e){ return null; }
+}
+
+G.pineNwEnvelope = pineNwEnvelope;
+
 })();

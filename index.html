@@ -688,6 +688,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="pinesmc.js"></script>
 <script src="pinecipher.js"></script>
 <script src="pinerf.js"></script>
+<script src="pinenw.js"></script>
 <script>
 /* =========================================================================
    HARDGATE — gates, not scores.
@@ -2287,7 +2288,7 @@ const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
-  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','carry','termbasis','scorecard'] },
+  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','carry','termbasis','scorecard'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
@@ -2454,6 +2455,11 @@ const HG_TAB_AUTO_SCAN = {
   'pine-rf': async function(){
     const pane = document.getElementById('tab_pine-rf');
     const runBtn = pane && pane.querySelector('#pineRfRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-nw': async function(){
+    const pane = document.getElementById('tab_pine-nw');
+    const runBtn = pane && pane.querySelector('#pineNwRun');
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
   brain: async function(){
