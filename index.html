@@ -529,7 +529,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
     </div>
-    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Survivors are then ranked by <b>independent evidence families</b>, not indicator count — because correlated indicators inflate confidence without adding information (your own factor sweeps proved this: zero factors survived deflated Sharpe). F1 TREND needs a 2-of-3 internal majority (TSMOM · 1D side · CUSUM) and yields ONE point total no matter how many trend indicators agree · F2 POSITIONING (funding tailwind) · F3 PARTICIPATION (volume z&gt;1) · F4 STRUCTURE (Donchian-20 zone or R:R≥3). Ties broken by two robustness tests: the cascade must also hold on 2H (a signal living at exactly one timeframe is curve-fit), and must be ≥3 closed bars old (not a flicker). No weighting, no 0–100, no invented probability — and WAIT is a first-class answer.</div>
+    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional vetoes (CVD severe divergence + L2 spoof traps via Binance proxy) drop falling knives before ranking. Survivors are then scored across <b>9 independent evidence families</b> — F1 TREND (2-of-3: TSMOM · 1D · CUSUM) · F2 POSITIONING · F3 PARTICIPATION · F4 STRUCTURE · F5 VOL/MOMENTUM · F6 SESSION · F7 VALUE AREA · F8 ORDER FLOW · F9 ANCHOR CLUSTER — plus R1/R2 robustness (2H cascade + ≥3 bar persistence). ≥5/9 families required for #1 when strong pool exists. No weighting, no invented probability — and WAIT is a first-class answer.</div>
     <div class="prog" id="bestProg"><i></i></div>
   </div>
   <div id="bestOut"><div class="empty">Run FIND BEST.</div></div>
@@ -4194,8 +4194,8 @@ function renderLogBadge(){ const b=$('tabB_log'); if(b){ const n=loadLog().lengt
 
 /* =============================================================================
    BEST — all hard gates first (binary ticket), then rank CLEAN survivors by a
-   visible tally of independent aligned confirmations. Never a weighted score.
-   Profit rank: scorecard expectancy boost when ledger has evidence (n≥3).
+   visible tally of 9 independent aligned confirmations + Institutional Vetoes.
+   Profit rank: scorecard expectancy boost when ledger has evidence.
    ============================================================================= */
 function bestProfitBoost(s){
   try{
@@ -4204,10 +4204,12 @@ function bestProfitBoost(s){
     return (h && isFinite(h.boost)) ? h.boost : 0;
   }catch(e){ return 0; }
 }
+
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 4);
+  const strong = clean.filter(s => s.famScore >= 5);
   return strong.length ? strong : clean;
 }
+
 function bestSessionActive(){
   try{
     const d = new Date();
@@ -4217,13 +4219,14 @@ function bestSessionActive(){
     return (mins >= 750 && mins <= 930) || (mins >= 1050 && mins <= 1230);
   }catch(e){ return false; }
 }
+
 async function runCascadeCore(uni){
-  const clean=[];
-    let breadthBull=0, breadthTotal=0;
-    const CHUNK1_SIZE=5;
-    for (let ci=0; ci<uni.length; ci+=CHUNK1_SIZE){
-      const chunk = uni.slice(ci, ci+CHUNK1_SIZE);
-      await Promise.all(chunk.map(async function(t, idxInChunk){
+  let clean=[];
+  let breadthBull=0, breadthTotal=0;
+  const CHUNK1_SIZE=5;
+  for (let ci=0; ci<uni.length; ci+=CHUNK1_SIZE){
+    const chunk = uni.slice(ci, ci+CHUNK1_SIZE);
+    await Promise.all(chunk.map(async function(t, idxInChunk){
       const i = ci+idxInChunk; setProg('bestProg',(i+1)/uni.length*0.65);
       $('bestStat').textContent=`gates ${i+1}/${uni.length} · ${t.symbol}`;
       try{
@@ -4244,126 +4247,203 @@ async function runCascadeCore(uni){
         const distToAnchor = (isFinite(a4) && a4 > 0) ? Math.abs(p - e21) / a4 : NaN;
         const risk = Math.abs(tc.entry - tc.stop);
         if (!(risk > 0)) return;
+
+        // Quick 200 EMA read for breadth
+        const e200arr = ema(c,200);
+        const e200 = e200arr.length ? last(e200arr) : NaN;
         if (isFinite(e200)){ breadthTotal++; if (p>e200) breadthBull++; }
+
         clean.push({t, dir: tc.dir, rows, entry: tc.entry, entryType: tc.entryType || 'MARKET',
           distToAnchor, stop: tc.stop, risk, rr: tc.rr, t1: tc.t1, t2: tc.t2,
-          vz: tc.vz, fr: t.fundingPct, ev: tc.ev,
+          vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: false,
           targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean'});
       }catch(e){}
-      }));
-      await sleep(60);
-    }
-    
-    /* Evidence FAMILIES for survivors — independence over count.
-       Correlated indicators are grouped; each family yields at most ONE point,
-       and the TREND family needs a 2-of-3 internal majority. This is the fix
-       for triple-counting one fact (TSMOM, 1D side and CUSUM all measure trend).
-       Plus two robustness checks: cross-timeframe stability and persistence. */
-    for (let i=0;i<clean.length;i++){
-      const s=clean[i]; setProg('bestProg',0.65+((i+1)/clean.length)*0.3);
-      $('bestStat').textContent=`evidence ${i+1}/${clean.length} · ${s.t.symbol}`;
-      const want=s.dir==='long'?1:-1;
-      /* F1 TREND — members: TSMOM(MOP 2012), 1D side, CUSUM(your OOS top feature). Majority 2/3. */
-      let mTs=false, mD1=false, tsD='1D fetch failed', d1D='1D fetch failed';
-      try{
-        const d1=await getCandles(s.t.symbol,'1d',120); const c1=d1.map(r=>r.c);
-        const r30=roc(c1,30), r90=roc(c1,90);
-        mTs = isFinite(r30)&&isFinite(r90)&&Math.sign(r30)===want&&Math.sign(r90)===want;
-        tsD = `30d ${pct(r30,1)} · 90d ${pct(r90,1)}`;
-        const e50d=last(ema(c1,50));
-        mD1 = c1.length>=60 && (s.dir==='long'?last(c1)>e50d:last(c1)<e50d);
-        d1D = `1D EMA50 ${px(e50d)}`;
-      }catch(e){}
-      const mCu = !!(s.ev&&s.ev.barsAgo<=20&&s.ev.dir===s.dir);
-      const trendVotes=(mTs?1:0)+(mD1?1:0)+(mCu?1:0);
-      const f1 = trendVotes>=2;
-      /* F2 POSITIONING — funding tailwind: the crowd pays you to hold. */
-      const f2 = s.fr!==null && (s.dir==='long'?s.fr<0:s.fr>0);
-      /* F3 PARTICIPATION — strong volume expansion. */
-      let vwapOk=false, vwapDetail='n/a';
-      try{
-        const dv = vwapDev(s.rows,20);
-        if (isFinite(dv)){ vwapOk = want>0 ? dv>0 : dv<0; vwapDetail = fmt(dv,2)+'% vs 20-bar VWAP'; }
-      }catch(e){}
-      const f3 = s.vz>1.0 || vwapOk;
-      /* F4 STRUCTURE — breakout location (Donchian-20, Turtle) or extra room (R:R≥3). */
-      const d20 = s.dir==='long' ? Math.max(...s.rows.slice(-20).map(r=>r.h)) : Math.min(...s.rows.slice(-20).map(r=>r.l));
-      const mDc = Math.abs(s.entry-d20)/s.entry<=0.015, mRr=s.rr>=3;
-      const f4 = mDc||mRr;
-      function pxFmt(n){ return (typeof px === 'function') ? px(n) : Number(n).toFixed(2); }
-      /* F6 SESSION — ICT London/NY kill zones (IST): liquidity depth for fills. */
-      const f6 = bestSessionActive();
-      /* F7 VALUE AREA — 80-bar volume profile: longs from discount VA, shorts from premium VA. */
-      let f7=false, f7Detail='volume profile n/a';
-      try{
-        const vp = (typeof volumeProfile === 'function') ? volumeProfile(s.rows, 80, 24) : null;
-        const pxLast = last(s.rows.map(r=>r.c));
-        if (vp && isFinite(vp.poc) && isFinite(pxLast)){
-          f7 = (want>0 && isFinite(vp.val) && pxLast <= vp.poc && pxLast >= vp.val)
-            || (want<0 && isFinite(vp.vah) && pxLast >= vp.poc && pxLast <= vp.vah);
-          f7Detail = 'POC ' + pxFmt(vp.poc) + ' · VA ' + pxFmt(vp.val) + '–' + pxFmt(vp.vah)
-            + (f7 ? ' · aligned' : ' · not at edge');
+    }));
+    await sleep(60);
+  }
+
+  /* Evidence FAMILIES & VETOES for survivors */
+  for (let i=0;i<clean.length;i++){
+    const s=clean[i]; setProg('bestProg',0.65+((i+1)/clean.length)*0.3);
+    $('bestStat').textContent=`evidence ${i+1}/${clean.length} · ${s.t.symbol}`;
+    const want=s.dir==='long'?1:-1;
+    const c=s.rows.map(r=>r.c);
+    const a4=last(atr(s.rows,14));
+
+    /* F1 TREND */
+    let mTs=false, mD1=false, tsD='1D fetch failed', d1D='1D fetch failed';
+    try{
+      const d1=await getCandles(s.t.symbol,'1d',120); const c1=d1.map(r=>r.c);
+      const r30=roc(c1,30), r90=roc(c1,90);
+      mTs = isFinite(r30)&&isFinite(r90)&&Math.sign(r30)===want&&Math.sign(r90)===want;
+      tsD = `30d ${pct(r30,1)} · 90d ${pct(r90,1)}`;
+      const e50d=last(ema(c1,50));
+      mD1 = c1.length>=60 && (s.dir==='long'?last(c1)>e50d:last(c1)<e50d);
+      d1D = `1D EMA50 ${px(e50d)}`;
+    }catch(e){}
+    const mCu = !!(s.ev&&s.ev.barsAgo<=20&&s.ev.dir===s.dir);
+    const trendVotes=(mTs?1:0)+(mD1?1:0)+(mCu?1:0);
+    const f1 = trendVotes>=2;
+
+    /* F2 POSITIONING */
+    const f2 = s.fr!==null && (s.dir==='long'?s.fr<0:s.fr>0);
+
+    /* F3 PARTICIPATION */
+    let vwapOk=false, vwapDetail='n/a';
+    try{
+      const dv = vwapDev(s.rows,20);
+      if (isFinite(dv)){ vwapOk = want>0 ? dv>0 : dv<0; vwapDetail = fmt(dv,2)+'% vs 20-bar VWAP'; }
+    }catch(e){}
+    const f3 = s.vz>1.0 || vwapOk;
+
+    /* F4 STRUCTURE */
+    const d20High = Math.max(...s.rows.slice(-20).map(r=>r.h));
+    const d20Low = Math.min(...s.rows.slice(-20).map(r=>r.l));
+    const d20Edge = s.dir==='long' ? d20High : d20Low;
+    const mDc = Math.abs(s.entry-d20Edge)/s.entry<=0.015, mRr=s.rr>=3;
+    const f4 = mDc||mRr;
+    function pxFmt(n){ return (typeof px === 'function') ? px(n) : Number(n).toFixed(2); }
+
+    /* F6 SESSION */
+    const f6 = bestSessionActive();
+
+    /* F7 VALUE AREA */
+    let f7=false, f7Detail='volume profile n/a', vpPoc=NaN;
+    try{
+      const vp = (typeof volumeProfile === 'function') ? volumeProfile(s.rows, 80, 24) : null;
+      const pxLast = last(c);
+      if (vp && isFinite(vp.poc) && isFinite(pxLast)){
+        vpPoc = vp.poc;
+        f7 = (want>0 && isFinite(vp.val) && pxLast <= vp.poc && pxLast >= vp.val)
+          || (want<0 && isFinite(vp.vah) && pxLast >= vp.poc && pxLast <= vp.vah);
+        f7Detail = 'POC ' + pxFmt(vp.poc) + ' · VA ' + pxFmt(vp.val) + '–' + pxFmt(vp.vah)
+          + (f7 ? ' · aligned' : ' · not at edge');
+      }
+    }catch(e){}
+
+    /* F5 VOLATILITY/MOMENTUM */
+    let f5=false, f5Detail='insufficient history';
+    try{
+      const nX = c.length;
+      if (nX>=40){
+        const bbX = bollinger(c,20,2);
+        const priorWidths = bbX.widthPct.slice(Math.max(0,nX-50), nX-1).filter(v=>isFinite(v));
+        const wAvg = priorWidths.length ? priorWidths.reduce((a,b)=>a+b,0)/priorWidths.length : NaN;
+        const bbBreak = (want>0 ? c[nX-1]>bbX.upper[nX-1] : c[nX-1]<bbX.lower[nX-1]) && isFinite(wAvg) && bbX.widthPct[nX-2]<=wAvg;
+        const adxX = adx(s.rows,14);
+        const adxAligned = adxX.adx[nX-1]>=20 && (want>0 ? adxX.plusDI[nX-1]>adxX.minusDI[nX-1] : adxX.minusDI[nX-1]>adxX.plusDI[nX-1]);
+        const srsiX = stochRsi(c,14,14);
+        const srsiOk = isFinite(srsiX[nX-1]) && (want>0 ? srsiX[nX-1]<80 : srsiX[nX-1]>20);
+        const votes5 = (bbBreak?1:0)+(adxAligned?1:0)+(srsiOk?1:0);
+        f5 = votes5>=2;
+        f5Detail = 'BB '+(bbBreak?'breakout':'no breakout')+' · ADX '+fmt(adxX.adx[nX-1],1)+' '+(adxAligned?'aligned':'not aligned')+' · StochRSI '+fmt(srsiX[nX-1],0)+' '+(srsiOk?'not exhausted':'exhausted');
+      }
+    }catch(e){}
+
+    /* F8 ORDER FLOW & MICROSTRUCTURE TRAP VETO (Binance Proxy) */
+    let f8 = false, f8Detail = 'CVD/L2 unread', isCvdTrap = false, trapReason = '';
+    try {
+        if (typeof binanceTakerRatio === 'function' && typeof binanceDepth === 'function') {
+            const symStr = s.t.symbol.replace(/USDT$/, '') + 'USDT';
+            const [tk, bk] = await Promise.all([
+                binanceTakerRatio(symStr, '1h', 25).catch(()=>null),
+                binanceDepth(symStr, 20).catch(()=>null)
+            ]);
+            let cvdRatio = NaN, obiVal = NaN, cvdAligned = false, obiAligned = false;
+
+            if (tk && tk.series && tk.series.length >= 16) {
+                let recent = 0, prior = 0, tC = 0;
+                for (let k = tk.series.length - 8; k < tk.series.length; k++) { recent += +tk.series[k].buySellRatio||0; tC++; }
+                recent /= tC||1;
+                for (let k = tk.series.length - 16; k < tk.series.length - 8; k++) prior += +tk.series[k].buySellRatio||0;
+                prior /= 8;
+                cvdRatio = recent;
+
+                // Hard Veto Limits
+                if (want > 0 && recent <= 0.85) { isCvdTrap = true; trapReason = 'SEVERE CVD DIVERGENCE: Sellers dumping into long'; }
+                if (want < 0 && recent >= 1.15) { isCvdTrap = true; trapReason = 'SEVERE CVD DIVERGENCE: Buyers squeezing short'; }
+
+                // Confirmations
+                if (want > 0 && recent >= 1.05 && recent >= prior - 0.05) cvdAligned = true;
+                if (want < 0 && recent <= 0.95 && recent <= prior + 0.05) cvdAligned = true;
+            }
+            if (bk && isFinite(+bk.bidUsd) && isFinite(+bk.askUsd)) {
+                const bid = +bk.bidUsd, ask = +bk.askUsd, tot = bid + ask;
+                if (tot > 200000) {
+                    obiVal = (bid - ask) / tot;
+                    if (want > 0 && obiVal >= 0.33) obiAligned = true;
+                    if (want < 0 && obiVal <= -0.33) obiAligned = true;
+                    if (want > 0 && obiVal <= -0.33) { isCvdTrap = true; trapReason = 'SPOOF TRAP: Heavy ASK wall blocking long'; }
+                    if (want < 0 && obiVal >= 0.33) { isCvdTrap = true; trapReason = 'SPOOF TRAP: Heavy BID wall blocking short'; }
+                }
+            }
+            f8 = cvdAligned || obiAligned;
+            f8Detail = `CVD ${isFinite(cvdRatio)?fmt(cvdRatio,2):'n/a'} ${cvdAligned?'✓':'✗'} · OBI ${isFinite(obiVal)?fmt(obiVal,2):'n/a'} ${obiAligned?'✓':'✗'}`;
         }
-      }catch(e){}
-      /* F5 VOLATILITY/MOMENTUM — members: Bollinger(20,2) squeeze-to-breakout, ADX(14) trend
-         strength+direction, StochRSI(14) not-exhausted. Majority 2/3 — grouped as one family
-         because all three measure the same underlying fact: is momentum expanding in your
-         favor right now, not three independent facts. No claim of profitability; this only
-         changes which of the already-gated survivors gets ranked first. */
-      let f5=false, f5Detail='insufficient history';
-      try{
-        const closesX = s.rows.map(function(r){return r.c;}); const nX = closesX.length;
-        if (nX>=40){
-          const bbX = bollinger(closesX,20,2);
-          const priorWidths = bbX.widthPct.slice(Math.max(0,nX-50), nX-1).filter(function(v){return isFinite(v);});
-          const wAvg = priorWidths.length ? priorWidths.reduce(function(a,b){return a+b;},0)/priorWidths.length : NaN;
-          const bbBreak = (want>0 ? closesX[nX-1]>bbX.upper[nX-1] : closesX[nX-1]<bbX.lower[nX-1]) && isFinite(wAvg) && bbX.widthPct[nX-2]<=wAvg;
-          const adxX = adx(s.rows,14);
-          const adxAligned = adxX.adx[nX-1]>=20 && (want>0 ? adxX.plusDI[nX-1]>adxX.minusDI[nX-1] : adxX.minusDI[nX-1]>adxX.plusDI[nX-1]);
-          const srsiX = stochRsi(closesX,14,14);
-          const srsiOk = isFinite(srsiX[nX-1]) && (want>0 ? srsiX[nX-1]<80 : srsiX[nX-1]>20);
-          const votes5 = (bbBreak?1:0)+(adxAligned?1:0)+(srsiOk?1:0);
-          f5 = votes5>=2;
-          f5Detail = 'BB '+(bbBreak?'breakout':'no breakout')+' · ADX '+fmt(adxX.adx[nX-1],1)+' '+(adxAligned?'aligned':'not aligned')+' · StochRSI '+fmt(srsiX[nX-1],0)+' '+(srsiOk?'not exhausted':'exhausted');
+    } catch(e) {}
+    if (isCvdTrap) s.veto = true;
+
+    /* F9 ANCHOR CLUSTERING */
+    let f9 = false, f9Detail = 'no cluster';
+    try {
+        const dcMid = (d20High + d20Low) / 2;
+        const e21 = last(ema(c, 21)), e50 = last(ema(c, 50));
+        const atrTolerance = isFinite(a4) ? a4 * 0.3 : s.entry * 0.005;
+        let clusterCount = 0;
+        const anchors = [e21, e50, dcMid, vpPoc];
+        for(let a=0; a<anchors.length; a++){
+            if (isFinite(anchors[a]) && Math.abs(s.entry - anchors[a]) <= atrTolerance) clusterCount++;
         }
-      }catch(e){}
-      /* R1 ROBUSTNESS — cascade must also hold on 2H: a signal living at exactly
-         one timeframe is a curve-fit artifact, not a trend. */
-      let r1=false, r1D='2H fetch failed';
-      try{
-        const h2=await getCandles(s.t.symbol,'2h',160); const c2=h2.map(r=>r.c);
-        const a9=last(ema(c2,9)), a21=last(ema(c2,21)), a50=last(ema(c2,50));
-        r1 = s.dir==='long' ? (a9>a21&&a21>a50) : (a9<a21&&a21<a50);
-        r1D = `2H EMA9/21/50 ${r1?'aligned':'NOT aligned'}`;
-      }catch(e){}
-      /* R2 ROBUSTNESS — persistence: cascade held ≥3 consecutive closed 4H bars. */
-      const age = cascadeAge(s.rows.map(r=>r.c), s.dir);
-      const r2 = age>=3;
-      s.fam=[
-['G0','Anti-Chase Guard — price to EMA21 distance', true, `${fmt(s.distToAnchor,2)} ATR (limit ≤ 1.5, entry: ${s.entryType})`],
-        ['F1','TREND family — 2-of-3 majority: TSMOM · 1D side · CUSUM', f1,
-          `${trendVotes}/3 → TSMOM ${mTs?'✓':'✗'} (${tsD}) · 1D ${mD1?'✓':'✗'} · CUSUM ${mCu?'✓':'✗'}${s.ev?` (${s.ev.dir.toUpperCase()} ${s.ev.barsAgo} bars ago)`:''}`],
-        ['F2','POSITIONING family — funding tailwind (crowd pays you)', f2, s.fr!==null?`${fmt(s.fr,4)}%/interval`:'n/a'],
-        ['F3','PARTICIPATION family — volume z > 1.0 or VWAP side', f3, `z ${fmt(s.vz,2)} · ${vwapDetail}`],
-        ['F4','STRUCTURE family — Donchian-20 breakout zone or R:R ≥ 3', f4, `Donchian ${mDc?'✓':'✗'} (${px(d20)}) · R:R ${mRr?'✓':'✗'} (${fmt(s.rr,2)}R)`],
-        ['F5','VOLATILITY/MOMENTUM family — 2-of-3 majority: Bollinger breakout · ADX trend+direction · StochRSI not-exhausted', f5, f5Detail],
-        ['F6','SESSION family — London/NY ICT kill zone active (IST liquidity window)', f6, f6 ? 'London 12:30–15:30 or NY 17:30–20:30 IST' : 'off-hours / mid-session — thinner liquidity'],
-        ['F7','VALUE AREA family — price at 70% volume-profile edge (discount for longs, premium for shorts)', f7, f7Detail],
-        ['R1','ROBUSTNESS — cascade also holds on 2H (anti curve-fit)', r1, r1D],
-        ['R2','ROBUSTNESS — cascade age ≥3 closed 4H bars (anti flicker)', r2, `${age} bars`],
-      ];
-      s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0);
-      s.robScore=(r1?1:0)+(r2?1:0);
-      s.profitBoost = bestProfitBoost(s);
-      await sleep(60);
+        f9 = clusterCount >= 2;
+        f9Detail = `${clusterCount} structural anchors within 0.3 ATR of entry`;
+    } catch(e) {}
+
+    /* R1 ROBUSTNESS */
+    let r1=false, r1D='2H fetch failed';
+    try{
+      const h2=await getCandles(s.t.symbol,'2h',160); const c2=h2.map(r=>r.c);
+      const a9=last(ema(c2,9)), a21=last(ema(c2,21)), a50=last(ema(c2,50));
+      r1 = s.dir==='long' ? (a9>a21&&a21>a50) : (a9<a21&&a21<a50);
+      r1D = `2H EMA9/21/50 ${r1?'aligned':'NOT aligned'}`;
+    }catch(e){}
+
+    /* R2 ROBUSTNESS */
+    const age = cascadeAge(c, s.dir);
+    const r2 = age>=3;
+
+    s.fam=[
+      ['G0','Anti-Chase Guard — price to EMA21 distance', true, `${fmt(s.distToAnchor,2)} ATR (limit ≤ 1.5, entry: ${s.entryType})`],
+      ['F1','TREND family — 2-of-3 majority: TSMOM · 1D side · CUSUM', f1, `${trendVotes}/3 → TSMOM ${mTs?'✓':'✗'} (${tsD}) · 1D ${mD1?'✓':'✗'} · CUSUM ${mCu?'✓':'✗'}${s.ev?` (${s.ev.dir.toUpperCase()} ${s.ev.barsAgo} bars ago)`:''}`],
+      ['F2','POSITIONING family — funding tailwind (crowd pays you)', f2, s.fr!==null?`${fmt(s.fr,4)}%/interval`:'n/a'],
+      ['F3','PARTICIPATION family — volume z > 1.0 or VWAP side', f3, `z ${fmt(s.vz,2)} · ${vwapDetail}`],
+      ['F4','STRUCTURE family — Donchian-20 breakout zone or R:R ≥ 3', f4, `Donchian ${mDc?'✓':'✗'} (${px(d20Edge)}) · R:R ${mRr?'✓':'✗'} (${fmt(s.rr,2)}R)`],
+      ['F5','VOLATILITY/MOMENTUM family — Bollinger breakout · ADX trend · StochRSI', f5, f5Detail],
+      ['F6','SESSION family — London/NY ICT kill zone active', f6, f6 ? 'London 12:30–15:30 or NY 17:30–20:30 IST' : 'off-hours / mid-session — thinner liquidity'],
+      ['F7','VALUE AREA family — price at 70% volume-profile edge', f7, f7Detail],
+      ['F8','ORDER FLOW family — CVD / Order Book Imbalance aligned', f8, f8Detail],
+      ['F9','ANCHOR CLUSTER family — ≥2 structure levels overlap', f9, f9Detail],
+      ['R1','ROBUSTNESS — cascade also holds on 2H (anti curve-fit)', r1, r1D],
+      ['R2','ROBUSTNESS — cascade age ≥3 closed 4H bars (anti flicker)', r2, `${age} bars`],
+    ];
+    s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0)+(f8?1:0)+(f9?1:0);
+    s.robScore=(r1?1:0)+(r2?1:0);
+    s.profitBoost = bestProfitBoost(s);
+    if (isCvdTrap) {
+        s.fam.unshift(['VETO', 'INSTITUTIONAL GUARD', false, trapReason]);
+        console.log(`[BEST VETO] ${s.t.symbol} dropped: ${trapReason}`);
     }
-    clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
+    await sleep(60);
+  }
+
+  // Apply Master Vetoes
+  clean = clean.filter(s => !s.veto);
+  clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
   return {clean, breadth:{bull:breadthBull, total:breadthTotal}};
 }
 
 async function runBest(opts){
   opts = opts || {};
-  if (!opts._singleLeg && !opts.singleExchange && hgDualScanEnabled()){
+  if (!opts._singleLeg && !opts.singleExchange && typeof hgDualScanEnabled === 'function' && hgDualScanEnabled()){
     if (!(await waitAlertIdle($('bestStat')))) return;
     const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
     const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='Scanning Delta + CoinDCX…';
@@ -4406,20 +4486,20 @@ async function runBest(opts){
         return;
       }
       const t1=w.t1; const t2=w.t2;
-      logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-      const others = pool.slice(1,6).map(s=>(s._venueLabel?'['+s._venueLabel+'] ':'')+`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/7 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
-      const famGateNote = pool.length < clean.length ? ' · ≥4/7 families required for #1' : '';
+      if (typeof logSetup === 'function') logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
+      const others = pool.slice(1,6).map(s=>(s._venueLabel?'['+s._venueLabel+'] ':'')+`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/9 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+      const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = `
       <div class="panel">
         <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/7 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
-          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (session + value-area included), then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 7/7 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 })}
+        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
@@ -4429,6 +4509,8 @@ async function runBest(opts){
     finally{ setProg('bestProg',null); btn.disabled=false; }
     return;
   }
+
+  // Single Exchange Fallback (Legacy)
   if (!(await waitAlertIdle($('bestStat')))) return;
   const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
   const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='';
@@ -4456,20 +4538,20 @@ async function runBest(opts){
       return;
     }
     const t1=w.t1; const t2=w.t2;
-    logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/7 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
-    const famGateNote = pool.length < clean.length ? ' · ≥4/7 families required for #1' : '';
+    if (typeof logSetup === 'function') logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
+    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/9 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+    const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = `
       <div class="panel">
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/7 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
-          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (session + value-area included), then robustness, then structural R:R${famGateNote}. Families cannot be inflated by correlated indicators — trend counts once no matter how many trend indicators agree. 7/7 families + 2/2 robustness is the strongest evidence this framework can honestly claim, and it is still not a promise. Logged to LOG automatically.</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${nearestOBText(w.rows,w.dir)}</b> · Liquidity Target: <b>${liquidityTargetText(w.rows,w.dir)}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 })}
+        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
@@ -4482,16 +4564,15 @@ async function runBest(opts){
 async function silentBestScan(exchangeArg){
   try{
     return await withExchange(exchangeArg, async function(){
-    const scanAll = true;
-    const N = 999999;
-    if (!S.tickers.length) S.tickers=await getTickers();
-    let uni = S.exchange==='delta'
-      ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
-      : S.tickers.slice();
-    const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; }); if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
-    const universeLabel = scanAll ? `whole ${S.exchange==='delta'?'Delta India':'CoinDCX'} futures universe` : `top ${N} by turnover`;
-    const {clean} = await runCascadeCore(uni);
-    return clean;
+      const scanAll = true;
+      const N = 999999;
+      if (!S.tickers.length) S.tickers=await getTickers();
+      let uni = S.exchange==='delta'
+        ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
+        : S.tickers.slice();
+      const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; }); if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
+      const {clean} = await runCascadeCore(uni);
+      return clean;
     });
   }catch(e){ return []; }
 }
@@ -4742,7 +4823,7 @@ async function runAlertCycle(){
         if (key && key !== S.lastAlertKey[ex]){
           await sendAlertEmail(w, ex);
           await sendAlertPush('HARDGATE BEST: ' + w.t.symbol + ' ' + w.dir.toUpperCase(),
-            w.t.symbol + ' ' + w.dir.toUpperCase() + ' on ' + (ex==='delta' ? 'Delta India' : 'CoinDCX') + ' — entry ' + px(w.entry) + ' · stop ' + px(w.stop) + ' · ' + w.famScore + '/5 families · ' + fmt(w.rr,2) + 'R');
+            w.t.symbol + ' ' + w.dir.toUpperCase() + ' on ' + (ex==='delta' ? 'Delta India' : 'CoinDCX') + ' — entry ' + px(w.entry) + ' · stop ' + px(w.stop) + ' · ' + w.famScore + '/9 families · ' + fmt(w.rr,2) + 'R');
           S.lastAlertKey[ex] = key;
         } else if (!key){
           S.lastAlertKey[ex] = null;
