@@ -46,6 +46,22 @@ console.log('== swingTryClean + enrich ==');
   }
 }
 
+console.log('== hgSwingG5OK quiet tape ==');
+{
+  const rows = synthRows(80, 100);
+  const c = rows.map(function(r){ return r.c; });
+  const vz = 0.2;
+  const r14 = 55;
+  const g5 = W.hgSwingG5OK('long', rows, c, r14, vz);
+  assert(g5 && typeof g5.ok === 'boolean', 'hgSwingG5OK returns shape');
+}
+
+console.log('== hgFunnelPanelHTML ==');
+{
+  const html = W.hgFunnelPanelHTML('Test', [{ k: 'A', v: '1' }], 'testFunnel');
+  assert(typeof html === 'string' && html.indexOf('Test') >= 0, 'funnel panel html');
+}
+
 console.log('== hgTapeRegimeLabel ==');
 {
   const rows = synthRows(80, 100);

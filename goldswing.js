@@ -1508,8 +1508,8 @@ async function runScan(ui){
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
         ui.cards.innerHTML = (whySilent ? whySilentHTML(whySilent) : '')
-          + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
+          + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
         /* literally nothing (feeds failed): the empty state carries the reason */

@@ -649,7 +649,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
-<script src="edge.js?v=46"></script>
+<script src="edge.js?v=47"></script>
 <script src="startradertab.js?v=39"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -2372,6 +2372,16 @@ const HG_TAB_AUTO_SCAN = {
   swing: function(){ return runScan('swing'); },
   scalp: function(){ return runScan('scalp'); },
   best: function(){ return runBest(); },
+  brain: async function(){
+    const pane = document.getElementById('tab_brain');
+    const runBtn = pane && pane.querySelector('#brainRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  edge: async function(){
+    const pane = document.getElementById('tab_edge');
+    const runBtn = pane && pane.querySelector('#edgeRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
   coil: function(){ return runCoilScan(); },
   apex: function(){ return runApexScan(); },
   trap: function(){ return runTrapScan(); },
@@ -2838,6 +2848,43 @@ function scanLastHint(kind){
   }catch(e){}
 }
 
+function hgScanFunnelRows(audit, kind){
+  if (!audit) return [];
+  const rows = [
+    { k: 'Universe scanned', v: String(audit.uniLen || '—') },
+    { k: 'Cascades found', v: String(audit.cascade || 0) },
+    { k: 'At 6/7+ gates', v: String(audit.pass6 || 0) },
+    { k: 'CLEAN tickets', v: String(audit.found || 0) }
+  ];
+  if (kind === 'swing' && audit.pass7noAnchor) rows.push({ k: '7/7 but anchor miss', v: String(audit.pass7noAnchor) + ' (EMA21 >1.5×ATR away — not a ticket)' });
+  if (audit.nearFound) rows.push({ k: 'NEAR CLEAN (6/7)', v: String(audit.nearFound) + ' watch-only' });
+  if (audit.histShort) rows.push({ k: 'Thin history (<210 bars)', v: String(audit.histShort) });
+  if (audit.errors) rows.push({ k: 'Fetch errors', v: String(audit.errors) });
+  const fail = audit.fail || {};
+  Object.keys(fail).sort(function(a, b){ return fail[b] - fail[a]; }).slice(0, 7).forEach(function(g){
+    rows.push({ k: 'Block · ' + g, v: fail[g] + ' symbols' });
+  });
+  return rows;
+}
+
+function hgPaintScanFunnel(kind, audit){
+  try{
+    const elId = kind + 'Funnel';
+    let el = document.getElementById(elId);
+    const host = $(kind === 'swing' ? 'swingWatch' : 'scalpWatch');
+    if (!host) return;
+    if (!el){
+      el = document.createElement('div');
+      el.id = elId;
+      host.parentNode.insertBefore(el, host);
+    }
+    const rows = hgScanFunnelRows(audit, kind);
+    el.innerHTML = (typeof hgFunnelPanelHTML === 'function' && rows.length)
+      ? hgFunnelPanelHTML('WHY EMPTY — scan funnel (' + kind.toUpperCase() + ')', rows, elId + '_panel')
+      : '';
+  }catch(e){}
+}
+
 
 function scanMomentumDetail(candles, rows, dir){
   let momDetail = 'n/a';
@@ -2875,6 +2922,8 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
     ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
     ['RSI 4H', fmt(r14, 1)],
     ['regime', typeof hgTapeRegimeLabel === 'function' ? hgTapeRegimeLabel(rows) : 'n/a'],
+    ...(typeof hgRegimeRouteHint === 'function' && hgRegimeRouteHint(rows) ? [['tape note', hgRegimeRouteHint(rows)]] : []),
+    ...(typeof hgVenueDataNote === 'function' && hgVenueDataNote(t) ? [['venue note', hgVenueDataNote(t)]] : []),
     ['vol z', fmt(vz, 2)],
     ['funding', t.fundingPct !== null ? fmt(t.fundingPct, 4) + '%' : 'n/a'],
     ['ann.', t.fundingPct !== null ? fmt(t.fundingPct * 3 * 365, 1) + '%' : '-'],
@@ -3100,13 +3149,16 @@ async function runScanLeg(kind, opts){
       + (audit.errors ? (' · ' + audit.errors + ' fetch errors') : '');
     if (!quiet && dualLast) statEl.textContent = statText;
     if (!quiet && dualLast) try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
-    const snap = { at: Date.now(), cands: cands, stat: statText };
+    const snap = { at: Date.now(), cands: cands, stat: statText, audit: Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }) };
     if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
+    if (!quiet && dualLast) hgPaintScanFunnel(kind, snap.audit);
     if (!quiet && dualLast && !found){
       const blk = topFail.length ? (' Most common gate failures: ' + topFail.join(', ') + '.') : '';
       emptyEl.textContent = (isSwing
-        ? ('No CLEAN swing setups (7/7 + EMA21 anchor). Choppy tape often blocks G5 vol+wick and G7 CUSUM.' + blk + ' NEAR CLEAN rows and FORMING NOW are watch-only.')
-        : ('No CLEAN scalp triggers (7/7). Funding window, sweep quality, or vol commit often block entries.' + blk + ' Check FORMING NOW below.'));
+        ? ('No CLEAN swing setups (7/7 + EMA21 anchor). Choppy tape often blocks G5 vol+wick and G7 CUSUM.'
+          + (audit.pass7noAnchor ? (' ' + audit.pass7noAnchor + ' had 7/7 gates but failed EMA21 anchor (>1.5×ATR).') : '')
+          + blk + ' Expand WHY EMPTY funnel below. NEAR CLEAN and FORMING NOW are watch-only.')
+        : ('No CLEAN scalp triggers (7/7). Funding window, sweep quality, or vol commit often block entries.' + blk + ' Expand WHY EMPTY funnel below.'));
       emptyEl.style.display = nearFound ? 'none' : 'block';
     }
     if (!quiet && newsGate.caution){
@@ -4246,6 +4298,7 @@ function bestSessionActive(){
 async function runCascadeCore(uni){
   let clean=[];
   let breadthBull=0, breadthTotal=0;
+  const funnel = { regimeSkip: 0, thin: 0, cleanRaw: 0, vetoStale: 0, vetoTrap: 0 };
   const CHUNK1_SIZE=5;
   for (let ci=0; ci<uni.length; ci+=CHUNK1_SIZE){
     const chunk = uni.slice(ci, ci+CHUNK1_SIZE);
@@ -4254,13 +4307,13 @@ async function runCascadeCore(uni){
       $('bestStat').textContent=`gates ${i+1}/${uni.length} · ${t.symbol}`;
       try{
         const rows=await getCandles(t.symbol,'4h',260);
-        if (rows.length<210) return;
+        if (rows.length<210){ funnel.thin++; return; }
         if (typeof hgRegimeAllowsSetup === 'function'){
           const rg = hgRegimeAllowsSetup(rows, 'best');
-          if (rg && !rg.allow) return;
+          if (rg && !rg.allow){ funnel.regimeSkip++; return; }
         } else if (typeof detectRegime === 'function'){
           const dr = detectRegime(rows);
-          if (dr && dr.regime === 'compression') return;
+          if (dr && dr.regime === 'compression'){ funnel.regimeSkip++; return; }
         }
         if (typeof swingTryClean !== 'function') return;
         const tc = swingTryClean(rows, t);
@@ -4299,6 +4352,7 @@ async function runCascadeCore(uni){
           vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: isStale, cascadeAgeBars: cascadeAgeBars, staleReason: staleReason,
           tapeRegime: (typeof hgTapeRegimeLabel === 'function') ? hgTapeRegimeLabel(rows) : 'n/a',
           targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean'});
+        funnel.cleanRaw++;
       }catch(e){}
     }));
     await sleep(60);
@@ -4485,11 +4539,40 @@ async function runCascadeCore(uni){
     await sleep(60);
   }
 
+  funnel.vetoStale = 0;
+  funnel.vetoTrap = 0;
+  for (let vi = 0; vi < clean.length; vi++){
+    const sv = clean[vi];
+    if (!sv.veto) continue;
+    if (sv.staleReason && String(sv.staleReason).indexOf('STALE') >= 0) funnel.vetoStale++;
+    else funnel.vetoTrap++;
+  }
+
   // Apply Master Vetoes (drop stale momentum and CVD traps from final pool)
   clean = clean.filter(s => !s.veto);
 
   clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
-  return {clean, breadth:{bull:breadthBull, total:breadthTotal}};
+  return {clean, breadth:{bull:breadthBull, total:breadthTotal}, funnel:funnel};
+}
+
+function bestFunnelRows(funnel, cleanLen, uniLen){
+  if (!funnel) return [];
+  const rows = [
+    { k: 'Universe scanned', v: String(uniLen || '—') },
+    { k: 'Regime blocked (compression/volatile)', v: String(funnel.regimeSkip || 0) },
+    { k: 'Thin 4H history', v: String(funnel.thin || 0) },
+    { k: 'CLEAN after 7/7 gates', v: String(funnel.cleanRaw || 0) },
+    { k: 'Veto · stale momentum', v: String(funnel.vetoStale || 0) },
+    { k: 'Veto · CVD/OBI trap', v: String(funnel.vetoTrap || 0) },
+    { k: 'Ranked survivors', v: String(cleanLen || 0) }
+  ];
+  return rows;
+}
+
+function bestFunnelHtml(funnel, cleanLen, uniLen){
+  if (typeof hgFunnelPanelHTML !== 'function') return '';
+  const rows = bestFunnelRows(funnel, cleanLen, uniLen);
+  return hgFunnelPanelHTML('WHY EMPTY — BEST funnel (7/7 → evidence → vetoes)', rows, 'bestFunnelPanel');
 }
 async function runBest(opts){
   opts = opts || {};
@@ -4499,6 +4582,7 @@ async function runBest(opts){
     const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='Scanning Delta + CoinDCX…';
     try{
       let allClean = [], breadth = { bull: 0, total: 0 }, totalUni = 0;
+      let bestFunnel = { regimeSkip: 0, thin: 0, cleanRaw: 0, vetoStale: 0, vetoTrap: 0 };
       for (let ei = 0; ei < HG_DUAL_CRYPTO_EX.length; ei++){
         const ex = HG_DUAL_CRYPTO_EX[ei];
         await withExchange(ex, async function(){
@@ -4512,6 +4596,13 @@ async function runBest(opts){
           if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
           totalUni += uni.length;
           const leg = await runCascadeCore(uni);
+          if (leg.funnel){
+            bestFunnel.regimeSkip += leg.funnel.regimeSkip || 0;
+            bestFunnel.thin += leg.funnel.thin || 0;
+            bestFunnel.cleanRaw += leg.funnel.cleanRaw || 0;
+            bestFunnel.vetoStale += leg.funnel.vetoStale || 0;
+            bestFunnel.vetoTrap += leg.funnel.vetoTrap || 0;
+          }
           (leg.clean || []).forEach(function(c){ c._venueLabel = hgExLabel(ex); });
           allClean = allClean.concat(leg.clean || []);
           breadth.bull += (leg.breadth && leg.breadth.bull) || 0;
@@ -4521,8 +4612,9 @@ async function runBest(opts){
       const clean = allClean;
       const universeLabel = 'both Delta India + CoinDCX futures';
       if (!clean.length){
-        out.innerHTML=`<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
-        $('bestStat').textContent='done · 0 CLEAN · dual venue scan';
+        out.innerHTML=bestFunnelHtml(bestFunnel, 0, totalUni)
+          + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
+        $('bestStat').textContent='done · 0 CLEAN · dual venue scan · ' + (bestFunnel.cleanRaw || 0) + ' passed gates · ' + ((bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)) + ' vetoed';
         return;
       }
       const pool = bestSortPool(clean);
@@ -4539,7 +4631,7 @@ async function runBest(opts){
       if (typeof logSetup === 'function') logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
       const others = pool.slice(1,6).map(s=>(s._venueLabel?'['+s._venueLabel+'] ':'')+`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/9 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
-      out.innerHTML = `
+      out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, totalUni) + `
       <div class="panel">
         <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         ${bestRegimeMiniHtml(w)}
@@ -4555,7 +4647,7 @@ async function runBest(opts){
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
       if (typeof hgMiniChart === 'function') hgMiniChart($('bestChart'), w.rows, {dir:w.dir, entry:w.entry, stop:w.stop, t1:t1, t2:t2});
-      $('bestStat').textContent=`done · ${clean.length} CLEAN of ${totalUni} scanned (${universeLabel})`;
+      $('bestStat').textContent=`done · ${clean.length} CLEAN of ${totalUni} scanned (${universeLabel}) · ${bestFunnel.cleanRaw||clean.length} passed 7/7 · ${(bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)} vetoed`;
     }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
     finally{ setProg('bestProg',null); btn.disabled=false; }
     return;
@@ -4574,9 +4666,11 @@ async function runBest(opts){
     const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; }); if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
     const exLabel = S.exchange==='delta'?'Delta India':'CoinDCX';
     const universeLabel = scanAll ? `whole ${exLabel} futures universe` : `top ${N} by turnover`;
-    const {clean, breadth} = await runCascadeCore(uni);
+    const {clean, breadth, funnel: bestFunnel} = await runCascadeCore(uni);
     if (!clean.length){
-      out.innerHTML=`<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across the ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
+      out.innerHTML=bestFunnelHtml(bestFunnel, 0, uni.length)
+        + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across the ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
+      $('bestStat').textContent='done · 0 CLEAN · ' + (bestFunnel && bestFunnel.cleanRaw ? bestFunnel.cleanRaw + ' passed gates · ' : '') + ((bestFunnel && (bestFunnel.vetoStale+bestFunnel.vetoTrap)) || 0) + ' vetoed';
       return;
     }
     const pool = bestSortPool(clean);
@@ -4592,7 +4686,7 @@ async function runBest(opts){
     if (typeof logSetup === 'function') logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
     const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/9 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
-    out.innerHTML = `
+    out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, uni.length) + `
       <div class="panel">
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
         ${bestRegimeMiniHtml(w)}
@@ -4608,7 +4702,7 @@ async function runBest(opts){
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
     if (typeof hgMiniChart === 'function') hgMiniChart($('bestChart'), w.rows, {dir:w.dir, entry:w.entry, stop:w.stop, t1:t1, t2:t2});
-    $('bestStat').textContent=`done · ${clean.length} CLEAN of ${uni.length} scanned (${universeLabel})`;
+    $('bestStat').textContent=`done · ${clean.length} CLEAN of ${uni.length} scanned (${universeLabel}) · ${(bestFunnel && bestFunnel.cleanRaw) || clean.length} passed 7/7 · ${((bestFunnel && bestFunnel.vetoStale) || 0)+((bestFunnel && bestFunnel.vetoTrap) || 0)} vetoed`;
   }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
   finally{ setProg('bestProg',null); btn.disabled=false; }
 }
