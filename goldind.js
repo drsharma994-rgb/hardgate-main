@@ -122,6 +122,9 @@ Exports (all on window):
   evaluateFundingRate(rate, direction) — perp funding ±1 tally for swing holds (>0.03%/interval)
   TickBuffer — live trade tick buffer with CVD (15m rolling window)
   handleOrderUpdate(setup, exchangeStatus) — partial-fill state machine for limit orders
+  detectSMTDivergence(xau, xag, index?, lb?) — gold–silver SMT sweep divergence
+  validateYieldCorrelation(us10y, direction) — macro veto when gold fights US10Y trend
+  validateOBWithCVD(obSetup, tickBuffer) — order-flow veto on OB retest via CVD
   goldAsianBreakout / goldADRFade — volume-validated Asian breakout + ADR exhaustion fade
   detectAsianBreakout / detectADRFade — session & exhaustion trigger aliases
   goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
@@ -2700,6 +2703,139 @@ function handleOrderUpdate(activeSetup, exchangeOrderStatus){
   }catch(e){ return null; }
 }
 
+/* ================= gold–silver SMT · yield guard · CVD/OB ===================
+   Logical modules: gold-silver-smt.js · yield-guard.js · CVD divergence. */
+
+function detectSMTDivergence(xauCandles, xagCandles, index, lookback){
+  var no = { smtActive: false };
+  try{
+    lookback = lookback || 15;
+    var xau = __rows(xauCandles), xag = __rows(xagCandles);
+    if (!xau || !xag || xau.length < 2 || xag.length < 2) return no;
+    if (index === undefined || index === null){
+      index = Math.min(xau.length, xag.length) - 1;
+    }
+    index = Math.floor(index);
+    if (index < 1 || index >= xau.length || index >= xag.length) return no;
+    var start = Math.max(0, index - lookback);
+    if (start >= index) return no;
+    var xauCur = xau[index], xagCur = xag[index];
+    if (!xauCur || !xagCur || !isFinite(xauCur.h) || !isFinite(xagCur.h)) return no;
+    var xauPriorHigh = -Infinity, xagPriorHigh = -Infinity;
+    var xauPriorLow = Infinity, xagPriorLow = Infinity;
+    var i;
+    for (i = start; i < index; i++){
+      if (xau[i] && isFinite(xau[i].h)) xauPriorHigh = Math.max(xauPriorHigh, xau[i].h);
+      if (xag[i] && isFinite(xag[i].h)) xagPriorHigh = Math.max(xagPriorHigh, xag[i].h);
+      if (xau[i] && isFinite(xau[i].l)) xauPriorLow = Math.min(xauPriorLow, xau[i].l);
+      if (xag[i] && isFinite(xag[i].l)) xagPriorLow = Math.min(xagPriorLow, xag[i].l);
+    }
+    if (!isFinite(xauPriorHigh) || !isFinite(xagPriorHigh)
+        || !isFinite(xauPriorLow) || !isFinite(xagPriorLow)) return no;
+    if (xauCur.h > xauPriorHigh && xagCur.h <= xagPriorHigh){
+      return { smtActive: true, type: 'BEARISH_SMT', signal: 'SHORT_GOLD', direction: 'short' };
+    }
+    if (xauCur.l < xauPriorLow && xagCur.l >= xagPriorLow){
+      return { smtActive: true, type: 'BULLISH_SMT', signal: 'LONG_GOLD', direction: 'long' };
+    }
+    return no;
+  }catch(e){ return no; }
+}
+
+function validateYieldCorrelation(us10yCandles, goldSetupDirection){
+  var ok = { valid: true };
+  try{
+    var rows = __rows(us10yCandles);
+    if (!rows || rows.length < 5) return ok;
+    var cur = rows[rows.length - 1].c;
+    var prior = rows[rows.length - 5].c;
+    if (!isFinite(cur) || !isFinite(prior)) return ok;
+    var dir = String(goldSetupDirection || '').toLowerCase();
+    if (dir === 'long' && cur > prior){
+      return { valid: false, reason: 'MACRO VETO: US10Y Yields are spiking. Do not buy Gold.' };
+    }
+    if (dir === 'short' && cur < prior){
+      return { valid: false, reason: 'MACRO VETO: US10Y Yields are dropping. Do not short Gold.' };
+    }
+    return ok;
+  }catch(e){ return ok; }
+}
+
+function validateOBWithCVD(orderBlockSetup, tickBuffer){
+  var ok = { triggerValid: true };
+  try{
+    if (!orderBlockSetup || !orderBlockSetup.trigger) return ok;
+    if (!tickBuffer || typeof tickBuffer.getCVD !== 'function') return ok;
+    var cvd = tickBuffer.getCVD();
+    var dir = orderBlockSetup.direction || orderBlockSetup.dir;
+    if (dir === 'long' && cvd < 0){
+      return {
+        triggerValid: false,
+        reason: 'ORDER FLOW VETO: Negative CVD. Sellers are absorbing the Order Block.'
+      };
+    }
+    if (dir === 'short' && cvd > 0){
+      return {
+        triggerValid: false,
+        reason: 'ORDER FLOW VETO: Positive CVD. Buyers are pushing through the Order Block.'
+      };
+    }
+    return ok;
+  }catch(e){ return ok; }
+}
+
+function __applyObCvdGate(obSetup, tickBuffer){
+  try{
+    if (!obSetup || !obSetup.trigger){
+      return { setup: obSetup || { trigger: false }, check: { triggerValid: true } };
+    }
+    var check = validateOBWithCVD(obSetup, tickBuffer);
+    if (check.triggerValid) return { setup: obSetup, check: check };
+    return {
+      setup: {
+        trigger: false, veto: check.reason, direction: obSetup.direction,
+        type: obSetup.type, obType: obSetup.obType
+      },
+      check: check
+    };
+  }catch(e){ return { setup: obSetup, check: { triggerValid: true } }; }
+}
+
+function __wireSmtYieldGuards(ctx, index, out, obSetup){
+  try{
+    ctx = ctx || {};
+    if (ctx.xauCandles && ctx.xagCandles){
+      var xauN = __rows(ctx.xauCandles).length;
+      var xagN = __rows(ctx.xagCandles).length;
+      var smtIdx = Math.min(index, xauN - 1, xagN - 1);
+      out.smt = detectSMTDivergence(ctx.xauCandles, ctx.xagCandles, smtIdx, ctx.smtLookback);
+      if (out.smt.smtActive){
+        var smtSide = out.smt.direction
+          || (out.smt.signal === 'LONG_GOLD' ? 'long' : 'short');
+        out.reads.push({
+          side: smtSide,
+          tag: 'smt',
+          label: (out.smt.type === 'BULLISH_SMT' ? 'bullish' : 'bearish')
+            + ' gold–silver SMT — correlated metal failed to confirm the liquidity sweep'
+        });
+      }
+    } else {
+      out.smt = out.smt || { smtActive: false };
+    }
+    var setupDir = ctx.setupDirection || ctx.positionDirection
+      || (obSetup && obSetup.trigger ? obSetup.direction : null);
+    if (ctx.us10yCandles && setupDir){
+      out.yieldGuard = validateYieldCorrelation(ctx.us10yCandles, setupDir);
+      if (out.yieldGuard && !out.yieldGuard.valid){
+        out.valid = false;
+        out.vetoReason = out.vetoReason
+          ? (out.vetoReason + ' | ' + out.yieldGuard.reason)
+          : out.yieldGuard.reason;
+      }
+    }
+  }catch(e){ /* never throw */ }
+}
+
 function __aggregateDailyFromRows(rows){
   var out = [], days = {}, keys = [], i, r, t, sec, ds, key, d;
   try{
@@ -3397,6 +3533,9 @@ function evaluateScalp(m15Data, ctx){
     confluenceTally: 0,
     valid: true,
     vetoReason: null,
+    smt: { smtActive: false },
+    yieldGuard: null,
+    obCvdCheck: null,
     swings: null,
     structure: null,
     activeOrderBlocks: [],
@@ -3464,7 +3603,10 @@ function evaluateScalp(m15Data, ctx){
     out.activeOrderBlocks = zoneUpd.activeOrderBlocks || [];
 
     var obSetup = goldOrderBlockRetest(rows, index, structure);
-    out.obSetup = obSetup;
+    var obGate = __applyObCvdGate(obSetup, out.context.tickBuffer);
+    out.obSetup = obGate.setup;
+    out.obCvdCheck = obGate.check;
+    obSetup = obGate.setup;
     if (obSetup && obSetup.trigger){
       out.activeTriggers.push('ORDER_BLOCK_RETEST');
       out.agreeingReads++;
@@ -3581,6 +3723,8 @@ function evaluateScalp(m15Data, ctx){
     var tickBuf = out.context.tickBuffer;
     if (tickBuf && typeof tickBuf.getCVD === 'function') out.cvd = tickBuf.getCVD();
 
+    __wireSmtYieldGuards(out.context, index, out, obSetup);
+
     return out;
   }catch(e){ return out; }
 }
@@ -3598,6 +3742,11 @@ function evaluateSwing(h4Data, ctx){
     fundingTally: 0,
     confluenceTally: 0,
     cvd: null,
+    smt: { smtActive: false },
+    yieldGuard: null,
+    obCvdCheck: null,
+    valid: true,
+    vetoReason: null,
     context: ctx || {},
     reads: []
   };
@@ -3622,7 +3771,10 @@ function evaluateSwing(h4Data, ctx){
     out.activeOrderBlocks = zoneUpd.activeOrderBlocks || [];
 
     var obSetup = goldOrderBlockRetest(rows, index, structure);
-    out.obSetup = obSetup;
+    var obGateSw = __applyObCvdGate(obSetup, out.context.tickBuffer);
+    out.obSetup = obGateSw.setup;
+    out.obCvdCheck = obGateSw.check;
+    obSetup = obGateSw.setup;
     if (obSetup && obSetup.trigger){
       out.activeTriggers.push('ORDER_BLOCK_RETEST');
       out.agreeingReads++;
@@ -3648,6 +3800,8 @@ function evaluateSwing(h4Data, ctx){
     }
     var tickBuf = out.context.tickBuffer;
     if (tickBuf && typeof tickBuf.getCVD === 'function') out.cvd = tickBuf.getCVD();
+
+    __wireSmtYieldGuards(out.context, index, out, obSetup);
 
     return out;
   }catch(e){ return out; }
@@ -3724,6 +3878,11 @@ W.evaluateFundingRate = evaluateFundingRate;
 W.TickBuffer = TickBuffer;
 W.handleOrderUpdate = handleOrderUpdate;
 W.EXTREME_FUNDING_PCT = EXTREME_FUNDING_PCT;
+W.detectSMTDivergence = detectSMTDivergence;
+W.goldSMTDivergence = detectSMTDivergence;
+W.validateYieldCorrelation = validateYieldCorrelation;
+W.goldYieldGuard = validateYieldCorrelation;
+W.validateOBWithCVD = validateOBWithCVD;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;
