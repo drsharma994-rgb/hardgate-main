@@ -2811,6 +2811,83 @@ function __applyObCvdGate(obSetup, tickBuffer){
   }catch(e){ return { setup: obSetup, check: { triggerValid: true } }; }
 }
 
+function __yieldTrendFromRows(rows){
+  try{
+    if (!rows || rows.length < 5) return null;
+    var cur = rows[rows.length - 1].c;
+    var prior = rows[rows.length - 5].c;
+    if (!isFinite(cur) || !isFinite(prior)) return null;
+    if (cur > prior) return 'spiking';
+    if (cur < prior) return 'dropping';
+    return 'flat';
+  }catch(e){ return null; }
+}
+
+function __publishBrainGoldMacro(ctx, out){
+  try{
+    if (ctx && ctx.us10yCandles){
+      var yRows = __rows(ctx.us10yCandles);
+      var yt = __yieldTrendFromRows(yRows);
+      if (yt) W.__hgGoldYieldState = { trend: yt, at: Date.now() };
+    }
+    if (out && out.smt){
+      var div = null;
+      if (out.smt.smtActive){
+        div = out.smt.type === 'BEARISH_SMT' ? 'BEARISH' : 'BULLISH';
+      }
+      W.__hgGoldSmtState = {
+        divergence: div,
+        smtActive: !!out.smt.smtActive,
+        type: out.smt.type || null,
+        at: Date.now()
+      };
+    }
+  }catch(e){ /* never throw */ }
+}
+
+function hgYieldState(){
+  try{
+    if (W.__hgGoldYieldState && typeof W.__hgGoldYieldState === 'object'
+        && typeof W.__hgGoldYieldState.trend === 'string'){
+      return W.__hgGoldYieldState;
+    }
+    if (W.__hgUs10yCandles){
+      var yt = __yieldTrendFromRows(__rows(W.__hgUs10yCandles));
+      if (yt) return { trend: yt, source: 'us10y-stash' };
+    }
+    var m = (typeof W.getGoldMacroCached === 'function') ? W.getGoldMacroCached() : null;
+    if (m && m.tnxTrend){
+      var trend = m.tnxTrend === 'RISING' ? 'spiking'
+        : (m.tnxTrend === 'FALLING' ? 'dropping' : 'flat');
+      return { trend: trend, tnx: m.tnx, source: 'macro-cache' };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+function hgSmtState(){
+  try{
+    if (W.__hgGoldSmtState && typeof W.__hgGoldSmtState === 'object'){
+      return W.__hgGoldSmtState;
+    }
+    var xau = W.__hgXauCandles || W.__hgGoldXauCandles;
+    var xag = W.__hgXagCandles || W.__hgGoldXagCandles;
+    if (xau && xag){
+      var smt = detectSMTDivergence(xau, xag);
+      if (smt && smt.smtActive){
+        return {
+          divergence: smt.type === 'BEARISH_SMT' ? 'BEARISH' : 'BULLISH',
+          smtActive: true,
+          type: smt.type,
+          source: 'candle-stash'
+        };
+      }
+      return { divergence: null, smtActive: false, source: 'candle-stash' };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
 function __wireSmtYieldGuards(ctx, index, out, obSetup){
   try{
     ctx = ctx || {};
@@ -2843,6 +2920,7 @@ function __wireSmtYieldGuards(ctx, index, out, obSetup){
           : out.yieldGuard.reason;
       }
     }
+    __publishBrainGoldMacro(ctx, out);
   }catch(e){ /* never throw */ }
 }
 
@@ -4064,6 +4142,8 @@ W.calculateOrderBookImbalance = calculateOrderBookImbalance;
 W.validateDomLiquidity = validateDomLiquidity;
 W.evaluateTimeDecay = evaluateTimeDecay;
 W.calculateDynamicThresholds = calculateDynamicThresholds;
+W.hgYieldState = hgYieldState;
+W.hgSmtState = hgSmtState;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;

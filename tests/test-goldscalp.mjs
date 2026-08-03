@@ -523,6 +523,14 @@ console.log('== 10f) SMT, yield guard, OB/CVD ==');
   });
   assert(ev.valid === false && /MACRO VETO/.test(ev.vetoReason), 'evaluateScalp: yield guard hard veto');
   assert(ev.smt && ev.smt.smtActive, 'evaluateScalp: wires SMT divergence read');
+  assert(W.__hgGoldYieldState && W.__hgGoldYieldState.trend === 'spiking',
+         'evaluateScalp: publishes yield trend for BRAIN snapshot');
+  assert(W.__hgGoldSmtState && W.__hgGoldSmtState.divergence === 'BEARISH',
+         'evaluateScalp: publishes SMT divergence for BRAIN snapshot');
+  assert(typeof W.hgYieldState === 'function' && W.hgYieldState().trend === 'spiking',
+         'hgYieldState: reads published yield trend');
+  assert(typeof W.hgSmtState === 'function' && W.hgSmtState().divergence === 'BEARISH',
+         'hgSmtState: reads published SMT divergence');
 }
 
 /* =========================================================================

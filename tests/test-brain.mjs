@@ -288,6 +288,26 @@ ok(r.votes.some(function(x){ return x.layer === 'golddeep' && x.vote === 'long' 
 ok(r.votes.some(function(x){ return x.layer === 'goldbasis' && x.vote === 'long' && x.text.indexOf('shorts crowding') >= 0; }),
    'gold lane: shorts-crowding basis -> long fade vote (positioning)');
 ok(r.unavailable.length === 0, 'gold lane fully fed -> nothing unavailable');
+r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false, events: [], note: 'clear' },
+              gold: { setup: { dir: 'long', aside: false, confidence: 'STRONG', reason: 'structure + macro + positioning aligned' },
+                      deep: { label: 'BULLISH', score: 71, dir: 'long', ts: 1 },
+                      basis: { basisPct: -0.2, verdict: 'shorts-crowding' } },
+              yield: { trend: 'dropping' }, smt: { divergence: null } });
+ok(r.votes.some(function(x){ return x.layer === 'yield' && x.vote === 'long' && x.strong === true; }),
+   'gold lane: dropping yields -> long macro tailwind vote');
+ok(r.votes.some(function(x){ return x.layer === 'smt' && x.vote === 'neutral' && x.text.indexOf('aligned') >= 0; }),
+   'gold lane: no SMT divergence -> neutral structural vote');
+r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false },
+              gold: { setup: { dir: 'long', aside: false, confidence: 'STRONG', reason: 'edge' },
+                      deep: { label: 'BULLISH', score: 71, dir: 'long' },
+                      basis: { basisPct: 0, verdict: 'balanced' } },
+              yield: { trend: 'spiking' }, smt: { divergence: 'BEARISH' } });
+ok(r.votes.some(function(x){ return x.layer === 'yield' && x.vote === 'short' && x.caution === true; }),
+   'gold lane: spiking yields -> short caution vote (headwind for longs)');
+ok(r.votes.some(function(x){ return x.layer === 'smt' && x.vote === 'veto'; }),
+   'gold lane: BEARISH SMT -> veto vote');
+var dGold = DECIDE(r.votes, { unavailable: r.unavailable });
+ok(dGold.tier === 'ASIDE' && dGold.vetoes.length >= 1, 'gold lane: SMT veto demotes to ASIDE');
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false },
               gold: { setup: { aside: true, reason: 'timeframes disagree' }, deep: { label: 'MIXED', score: 40, dir: null },
                       basis: { basisPct: 0.3, verdict: 'longs-crowding' } } });
@@ -298,6 +318,8 @@ ok(r.votes.some(function(x){ return x.layer === 'goldbasis' && x.vote === 'short
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false } });
 ok(r.unavailable.indexOf('goldsetup') >= 0 && r.unavailable.indexOf('golddeep') >= 0 && r.unavailable.indexOf('goldbasis') >= 0,
    'gold lane with no gold inputs -> all three gold layers named unavailable');
+ok(r.silent.indexOf('yield') >= 0 && r.silent.indexOf('smt') >= 0,
+   'gold lane: yield/smt absent -> silent (not dark)');
 
 /* ================= K) tier boundaries ================= */
 console.log('== tier boundaries ==');
@@ -2158,16 +2180,18 @@ console.log('== click-to-audit: builder, ledger content, lazy toggles, gold lane
   ok(ahV.indexOf('>VETO</span>') >= 0 && ahV.indexOf('engine veto @ G4') >= 0,
      'AH: a vetoed row shows the VETO verdict + the killing gate');
 
-  /* gold lane: its own 4-layer ledger, no crypto-only layers */
+  /* gold lane: its own 6-layer ledger, no crypto-only layers */
   const colG = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', note: 'clear' }, tape: null,
     gold: { setup: { dir: 'long', confidence: 'STRONG', reason: 'composite long edge' },
             deep: { dir: 'long', label: 'BULLISH', score: 71 },
-            basis: { basisPct: 0.01, verdict: 'balanced' } } });
+            basis: { basisPct: 0.01, verdict: 'balanced' } },
+    yield: { trend: 'flat' }, smt: { divergence: null } });
   const ahG = W.rowAuditHTML({ sym: 'XAU', lane: 'gold', col: colG,
                               dec: DECIDE(colV.votes, { unavailable: [] }) });
   ok(ahG.indexOf('>GOLDSETUP<') >= 0 && ahG.indexOf('>GOLDDEEP<') >= 0 && ahG.indexOf('>GOLDBASIS<') >= 0
+     && ahG.indexOf('>YIELD<') >= 0 && ahG.indexOf('>SMT<') >= 0
      && ahG.indexOf('>NEWS<') >= 0 && ahG.indexOf('>FUNDING<') === -1 && ahG.indexOf('>TREND4H<') === -1,
-     'AH: the gold lane renders its own 4-layer ledger — no crypto-only layers');
+     'AH: the gold lane renders its own 6-layer ledger — no crypto-only layers');
   ok(ahG.indexOf('composite long edge') >= 0 && ahG.indexOf('positioning balanced') >= 0,
      'AH: gold evidence strings land verbatim');
   ok(W.rowAuditHTML(null) !== '' && W.rowAuditHTML({}).indexOf('audit') >= 0,
@@ -3481,14 +3505,17 @@ console.log('== AV) wick-adaptive stops + CVD ==');
   ok(WB(null, 1, true) === 0.75 && WB([], 1, true) === 0.75 && WB(calm, NaN, true) === 0.75,
      'AV: garbage/NaN inputs -> the floor, never throws');
 
-  /* CVD: rising buyer control reads long, seller control short, flat null */
+  /* CVD: severe traps veto; confirmsLong/Short when flow aligns */
   const mkTaker = (vals) => vals.map(function(v, i){ return { buySellRatio: v, t: i }; });
   const bulls = mkTaker([1,1,1,1,1,1,1,1, 1.1,1.15,1.2,1.1,1.15,1.2,1.25,1.3]);
-  ok(CV(bulls).dir === 'long' && CV(bulls).ratio > 1, 'AV: rising taker buy dominance -> CVD long');
+  ok(CV(bulls).confirmsLong === true && CV(bulls).ratio > 1, 'AV: rising taker buy dominance -> confirmsLong');
   const bears = mkTaker([1,1,1,1,1,1,1,1, 0.9,0.85,0.8,0.9,0.85,0.8,0.75,0.7]);
-  ok(CV(bears).dir === 'short', 'AV: rising taker sell dominance -> CVD short');
+  ok(CV(bears).confirmsShort === true, 'AV: rising taker sell dominance -> confirmsShort');
+  const trapLong = mkTaker([1,1,1,1,1,1,1,1, 0.8,0.82,0.84,0.83,0.81,0.8,0.79,0.78]);
+  ok(CV(trapLong).severeLongTrap === true, 'AV: seller-absorption ratio -> severeLongTrap');
   const flat = mkTaker([1,1,1,1,1,1,1,1, 1,1.02,0.98,1,1.01,0.99,1,1.01]);
-  ok(CV(flat).dir === null, 'AV: balanced flow -> no CVD direction, never invented');
+  ok(!CV(flat).confirmsLong && !CV(flat).confirmsShort && !CV(flat).severeLongTrap,
+     'AV: balanced flow -> no trap/confirm flags, never invented');
   ok(CV(null) === null && CV(mkTaker([1,1,1])) === null, 'AV: garbage/thin series -> null, never throws');
 }
 
