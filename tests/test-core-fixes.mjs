@@ -206,7 +206,7 @@ assert(html.includes('class="navgroups" id="navGroups"'), 'group row container (
 assert(/\.navgroups\{[^}]*overflow-x\s*:\s*auto/.test(html), 'group row CSS: overflow-x:auto (mobile-safe)');
 assert(/\.navgroups button\.on\{[^}]*background\s*:\s*var\(--gold\)/.test(html), 'active group chip styled like the xtoggle chips (gold fill)');
 assert(html.includes('const HG_NAV_GROUPS = ['), 'HG_NAV_GROUPS group model defined inline');
-assert(html.includes("'strats','meanrev','edge','best','pine','pine-msb','pine-sqz','carry'"), 'STRATEGIES group pre-maps all pine tabs');
+assert(html.includes("'strats','meanrev','edge','best','pine','pine-msb','pine-sqz','pine-smf','carry'"), 'STRATEGIES group pre-maps all pine tabs');
 assert(html.includes("const HG_TAB_GROUP = {}") && html.includes("HG_TAB_GROUP[t] = g.id"),
   'HG_TAB_GROUP id→group map built from the model');
 assert(/function setHgGroup\(gid, openFirst\)/.test(html), 'setHgGroup(gid, openFirst) group switcher present');

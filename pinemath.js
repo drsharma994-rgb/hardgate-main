@@ -431,4 +431,53 @@ function pineSqueezeMomentum(rows, opts){
 
 G.pineSqueezeMomentum = pineSqueezeMomentum;
 
+/** Pine: Smart Money Flow ratio cross ±threshold. */
+function pineSmartMoneyFlow(rows, opts){
+  opts = opts || {};
+  var length = opts.length || 21;
+  var threshold = opts.threshold !== undefined ? +opts.threshold : 0.10;
+  try{
+    if (!rows || rows.length < length + 2) return null;
+    var n = rows.length;
+    var mfVol = new Array(n);
+    for (var i = 0; i < n; i++){
+      var r = rows[i];
+      var hl = r.h - r.l;
+      var mult = hl !== 0 ? ((r.c - r.l) - (r.h - r.c)) / hl : 0;
+      mfVol[i] = mult * (r.v || 0);
+    }
+    var smfArr = new Array(n).fill(NaN);
+    for (var j = length - 1; j < n; j++){
+      var sumMf = 0, sumVol = 0;
+      for (var k = j - length + 1; k <= j; k++){
+        sumMf += mfVol[k] || 0;
+        sumVol += rows[k].v || 0;
+      }
+      smfArr[j] = sumVol !== 0 ? sumMf / sumVol : 0;
+    }
+    var bi = n - 1;
+    var prev = bi > 0 ? smfArr[bi - 1] : NaN;
+    var smf = smfArr[bi];
+    var longCondition = isFinite(prev) && isFinite(smf) && prev <= threshold && smf > threshold;
+    var shortCondition = isFinite(prev) && isFinite(smf) && prev >= -threshold && smf < -threshold;
+    var newLong = longCondition;
+    var newShort = shortCondition;
+    var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    return {
+      dir: dir,
+      smf: smf,
+      prevSmf: prev,
+      threshold: threshold,
+      length: length,
+      longCondition: longCondition,
+      shortCondition: shortCondition,
+      newLong: newLong,
+      newShort: newShort,
+      price: rows[bi].c
+    };
+  }catch(e){ return null; }
+}
+
+G.pineSmartMoneyFlow = pineSmartMoneyFlow;
+
 })();
