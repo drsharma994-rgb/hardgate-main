@@ -1,6 +1,6 @@
 /* HARDGATE — pinegate.js
-   Intersect sym+dir pairs that pass ALL scanner gates before Pine math runs:
-   SWING · SCALP · EDGE · BEST · BRAIN · REGIME · TREND MATRIX.
+   Intersect sym+dir pairs for Pine math. Default universe: SWING CLEAN (+ REGIME).
+   Modes: swing (default) · relaxed · strict (all six scanners).
    Pure exports never throw. */
 (function(){
 'use strict';
@@ -149,7 +149,7 @@ function pineTrendMatrixPairs(rows, minScore){
   return out;
 }
 
-/** Pure gate intersection from explicit snapshots (Node-testable). opts.mode: strict | relaxed */
+/** Pure gate intersection from explicit snapshots (Node-testable). opts.mode: strict | relaxed | swing */
 function pineGateIntersect(snap, opts){
   opts = opts || {};
   var mode = opts.mode || 'strict';
@@ -196,7 +196,14 @@ function pineGateIntersect(snap, opts){
 
   var gateMaps = [swingMap, scalpMap, edgeMap, bestMap, brainMap, tmMap];
   var raw = [];
-  if (mode === 'relaxed'){
+  if (mode === 'swing'){
+    funnel.mode = 'swing';
+    raw = Object.keys(swingMap).map(function(k){
+      return { sym: swingMap[k].sym, dir: swingMap[k].dir, gateHits: 1 };
+    });
+    funnel.intersectRaw = raw.length;
+    missing = funnel.swing ? [] : ['SWING'];
+  } else if (mode === 'relaxed'){
     funnel.minHits = opts.minHits !== undefined ? +opts.minHits : 2;
     raw = pineGateRelaxedPairs(gateMaps, { minHits: funnel.minHits, requireCore: true });
     funnel.intersectRaw = raw.length;
@@ -216,16 +223,20 @@ function pineGateIntersect(snap, opts){
   }
 
   var regime = snap.regime || null;
+  var applyRegime = opts.applyRegime !== false;
   var eligible = [];
   for (var j = 0; j < raw.length; j++){
     var item = raw[j];
-    var rg = pineRegimeAllows(item.dir, regime);
-    if (!rg.ok){ funnel.regimeBlocked++; continue; }
+    var rg = { ok: true, note: applyRegime ? 'regime unknown — not blocking' : 'skipped' };
+    if (applyRegime){
+      rg = pineRegimeAllows(item.dir, regime);
+      if (!rg.ok){ funnel.regimeBlocked++; continue; }
+    }
     var pk = pairKey(item.sym, item.dir);
     eligible.push({
       sym: item.sym,
       dir: item.dir,
-      gateHits: item.gateHits || 6,
+      gateHits: item.gateHits || (mode === 'swing' ? 1 : 6),
       gates: {
         swing: !!swingMap[pk],
         scalp: !!scalpMap[pk],
@@ -233,7 +244,7 @@ function pineGateIntersect(snap, opts){
         best: !!bestMap[pk],
         brain: !!brainMap[pk],
         trendmx: !!tmMap[pk],
-        regime: rg.note
+        regime: applyRegime ? rg.note : 'skipped'
       }
     });
   }
@@ -242,10 +253,11 @@ function pineGateIntersect(snap, opts){
   return { eligible: eligible, funnel: funnel, missing: missing, at: Date.now() };
 }
 
-/** Live read from window scan getters. opts.mode strict (default) or relaxed for combined PINE tab. */
+/** Live read from window scan getters. Default mode swing (SWING CLEAN universe). */
 function pineGateLive(win, opts){
   win = win || G;
   opts = opts || {};
+  if (!opts.mode) opts.mode = 'swing';
   var saved = G;
   if (win) G = win;
   try{
@@ -291,7 +303,10 @@ function pineFunnelRows(funnel){
     { k: 'BRAIN tiered pairs', v: String(funnel.brain || 0) },
     { k: 'TREND MATRIX aligned', v: String(funnel.trendmx || 0) }
   ];
-  if (funnel.mode === 'relaxed'){
+  if (funnel.mode === 'swing'){
+    rows.push({ k: 'Gate mode', v: 'SWING CLEAN only (+ REGIME)' });
+    rows.push({ k: 'Swing universe', v: String(funnel.intersectRaw || 0) });
+  } else if (funnel.mode === 'relaxed'){
     rows.push({ k: 'Gate mode', v: 'relaxed (≥' + (funnel.minHits || 2) + ' scanners + core)' });
     rows.push({ k: 'Relaxed matches', v: String(funnel.intersectRaw || 0) });
     if (funnel.fallbackTier) rows.push({ k: 'Fallback tier', v: String(funnel.fallbackTier) });

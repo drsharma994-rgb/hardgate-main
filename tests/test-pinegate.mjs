@@ -68,8 +68,21 @@ const partial = {
 const relaxed = G.pineGateIntersect(partial, { mode: 'relaxed', minHits: 2 });
 assert(relaxed.eligible.length === 1 && relaxed.eligible[0].sym === 'BTCUSD', 'relaxed: swing+scalp passes');
 assert(relaxed.funnel.mode === 'relaxed', 'funnel records relaxed mode');
-const strictPartial = G.pineGateIntersect(partial);
+const strictPartial = G.pineGateIntersect(partial, { mode: 'strict' });
 assert(strictPartial.eligible.length === 0, 'strict still requires all six gates');
+
+const swingOnly = G.pineGateIntersect({
+  swingCands: [{ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110 }],
+  scalpCands: [],
+  edgeCands: [],
+  bestClean: [],
+  brainRows: [],
+  trendmxRows: [],
+  regime: { playbook: { bias: 'BOTH' } }
+}, { mode: 'swing' });
+assert(swingOnly.eligible.length === 1, 'swing-only passes without brain/scalp');
+assert(swingOnly.funnel.mode === 'swing', 'funnel records swing mode');
+assert(swingOnly.missing.length === 0, 'swing-only does not list brain as missing');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
