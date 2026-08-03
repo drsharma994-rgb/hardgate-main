@@ -506,6 +506,12 @@ function macroGoldPlan(macro){
   }catch(e){ return null; }
 }
 
+/* Sync read of the last getGoldMacro() result — for brain snapshotLayers only. */
+function getGoldMacroCached(){
+  try{ return __macroCacheGet('macro') || null; }catch(e){ return null; }
+}
+
 if (typeof window !== 'undefined'){
   window.macroGoldPlan = macroGoldPlan;
+  window.getGoldMacroCached = getGoldMacroCached;
 }

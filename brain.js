@@ -186,6 +186,8 @@ Layer state contracts consumed (ALL feature-checked; any may be absent):
   window.__hgGoldDeepVerdict -> {label, score, dir, ts}
   window.__hgGoldSetupDecision -> goldSetupDecision output (when the GOLD tab
                              has run; optional, layer degrades honestly)
+  window.hgYieldState() -> {trend:'spiking'|'dropping'|'flat'} | null
+  window.hgSmtState()   -> {divergence:'BEARISH'|'BULLISH'|null} | null
   plans via window.smartSetup / window.hgPlanLevels only — never invented.
 
 QUICK RESCAN (button beside RUN): re-votes + refetches candles ONLY for
@@ -284,7 +286,8 @@ var LAYER_KIND = {
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
-  carry: 'context', termbasis: 'context'
+  carry: 'context', termbasis: 'context',
+  yield: 'context', smt: 'structural'
 };
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
 
@@ -466,6 +469,28 @@ function brainCollect(inputs){
         else
           push('goldbasis', 'neutral', bTxt + ' — positioning balanced');
       }
+    }
+    if (!inp.yield || typeof inp.yield !== 'object'){
+      hush('yield', 'no US10Y macro data — yield correlation unread');
+    }else{
+      var yd = inp.yield;
+      if (yd.trend === 'spiking')
+        push('yield', 'short', 'US10Y yields spiking — macro headwind for gold longs', { caution: true });
+      else if (yd.trend === 'dropping')
+        push('yield', 'long', 'US10Y yields dropping — macro tailwind for gold longs', { strong: true });
+      else
+        push('yield', 'neutral', 'US10Y yields flat — neutral macro tide');
+    }
+    if (!inp.smt || typeof inp.smt !== 'object'){
+      hush('smt', 'no Silver data — SMT divergence unread');
+    }else{
+      var sm = inp.smt;
+      if (sm.divergence === 'BEARISH')
+        push('smt', 'veto', 'BEARISH SMT Divergence — Gold swept high but Silver failed (liquidity trap)');
+      else if (sm.divergence === 'BULLISH')
+        push('smt', 'veto', 'BULLISH SMT Divergence — Gold swept low but Silver failed (liquidity trap)');
+      else
+        push('smt', 'neutral', 'Gold/Silver structurally aligned');
     }
     return { sym: sym, lane: lane, votes: votes, unavailable: unavailable, silent: silent, notes: notes };
   }
@@ -1055,12 +1080,14 @@ function snapshotLayers(){
             engine: undefined, oiflow: undefined, squeeze: undefined,
             liqSnap: undefined, liqSetup: undefined, tape: undefined,
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
+            yieldSnap: undefined, smtSnap: undefined,
             newsState: undefined, fng: null, carry: undefined, termbasis: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
                   engine: 'engineState', oiflow: 'oiflowState', squeeze: 'squeezeState',
                   goldBasis: 'goldspotState', newsState: 'hgNewsState',
-                  carry: 'carryState', termbasis: 'termBasisState' };
+                  carry: 'carryState', termbasis: 'termBasisState',
+                  yieldSnap: 'hgYieldState', smtSnap: 'hgSmtState' };
   for (var k in getters){
     if (!Object.prototype.hasOwnProperty.call(getters, k)) continue;
     try{ o[k] = grab(getters[k])(); }catch(e){ o[k] = undefined; }
@@ -1464,7 +1491,9 @@ function judgeGold(snap){
     sym: 'XAU', lane: 'gold',
     news: newsFor('XAUUSDT'),
     tape: null, /* tape is the crypto 24h momentum read — not a gold-lane layer */
-    gold: { setup: snap.goldSetup, deep: snap.goldDeep, basis: snap.goldBasis }
+    gold: { setup: snap.goldSetup, deep: snap.goldDeep, basis: snap.goldBasis },
+    yield: snap.yieldSnap,
+    smt: snap.smtSnap
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
   return { sym: 'XAU', base: 'XAU', exchange: null, turnoverUsd: null,
@@ -1962,31 +1991,27 @@ function applyBook(rows){
       var bk = row.bookDepth;
       if (!bk || !(+bk.bidUsd >= 0) || !(+bk.askUsd >= 0)){
         row.col.silent.push('book');
-        colNote(row.col, 'book', 'SILENT', 'no Binance depth for this asset — book unread');
+        colNote(row.col, 'book', 'SILENT', 'book unread');
         continue;
       }
-      var tot = +bk.bidUsd + +bk.askUsd, dir = row.dec.dir;
+      var bid = +bk.bidUsd, ask = +bk.askUsd, tot = bid + ask, dir = row.dec.dir;
       if (tot < 200000){
-        var thin = 'thin book — $' + FMT(tot / 1000, 0) + 'k top-20 depth, slippage on the limit fill (Binance proxy)';
-        row.col.votes.push({ layer: 'book', vote: 'neutral', kind: 'context', caution: true, text: thin });
-        colNote(row.col, 'book', 'CAUTION', thin);
+        row.col.votes.push({ layer: 'book', vote: 'neutral', kind: 'context', caution: true,
+          text: 'thin book — $' + FMT(tot / 1000, 0) + 'k top-20 depth, slippage on the limit fill (Binance proxy)' });
+        colNote(row.col, 'book', 'CAUTION', 'thin book');
         continue;
       }
-      var ratio = (+bk.askUsd > 0) ? (+bk.bidUsd) / (+bk.askUsd) : 99;
-      var against = (dir === 'long' && ratio <= 0.67) || (dir === 'short' && ratio >= 1.5);
-      var supported = (dir === 'long' && ratio >= 1.5) || (dir === 'short' && ratio <= 0.67);
-      if (against){
-        var ctxt = 'book stacked against — ' + (dir === 'long' ? 'asks' : 'bids') + ' '
-          + FMT(dir === 'long' ? 1 / ratio : ratio, 1) + 'x ' + (dir === 'long' ? 'bids' : 'asks')
-          + ' (Binance proxy) — the pullback may overshoot the limit';
-        row.col.votes.push({ layer: 'book', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
-        colNote(row.col, 'book', 'CAUTION', ctxt);
-      }else if (supported){
-        colNote(row.col, 'book', 'NEUTRAL', 'book supported — ' + (dir === 'long' ? 'bids' : 'asks')
-          + ' ' + FMT(dir === 'long' ? ratio : 1 / ratio, 1) + 'x ' + (dir === 'long' ? 'asks' : 'bids') + ' (Binance proxy)');
+      var obi = (bid - ask) / tot;
+      var spoofTrap = (dir === 'long' && obi <= -0.33) || (dir === 'short' && obi >= 0.33);
+      if (spoofTrap){
+        row.col.votes.push({ layer: 'book', vote: 'neutral', kind: 'context', caution: true,
+          text: 'book stacked against (OBI ' + FMT(obi, 2) + ') — limit fill overshoot risk / spoofing trap' });
+        colNote(row.col, 'book', 'CAUTION', 'book stacked against (OBI ' + FMT(obi, 2) + ')');
+      }else if ((dir === 'long' && obi >= 0.33) || (dir === 'short' && obi <= -0.33)){
+        colNote(row.col, 'book', 'NEUTRAL', 'book supported (OBI ' + FMT(obi, 2) + ')');
       }else{
         row.col.silent.push('book');
-        colNote(row.col, 'book', 'SILENT', 'book balanced at ' + FMT(ratio, 2) + ' bid/ask — no edge claimed');
+        colNote(row.col, 'book', 'SILENT', 'book balanced (OBI ' + FMT(obi, 2) + ')');
       }
     }
   }catch(e){}
@@ -2098,9 +2123,13 @@ function cvdAssess(series){
     for (i = n - 16; i < n - 8; i++){ prior += +series[i].buySellRatio || 0; }
     prior /= 8;
     if (!(prior > 0) || !(recent > 0)) return null;
-    if (recent >= 1.05 && recent >= prior - 0.05) return { dir: 'long', ratio: recent };
-    if (recent <= 0.95 && recent <= prior + 0.05) return { dir: 'short', ratio: recent };
-    return { dir: null, ratio: recent };
+    return {
+      ratio: recent,
+      severeLongTrap: recent <= 0.85,
+      severeShortTrap: recent >= 1.15,
+      confirmsLong: recent >= 1.05 && recent >= prior - 0.05,
+      confirmsShort: recent <= 0.95 && recent <= prior + 0.05
+    };
   }catch(e){ return null; }
 }
 function applyCvd(rows){
@@ -2116,17 +2145,21 @@ function applyCvd(rows){
         colNote(row.col, 'cvd', 'SILENT', 'no taker-flow series for this asset — CVD unread');
         continue;
       }
-      if (a.dir === dir){
-        row.col.votes.push({ layer: 'cvd', vote: dir, kind: 'context',
-          text: 'CVD confirms — taker buy/sell ' + FMT(a.ratio, 2) + ' and ' + (dir === 'long' ? 'buyers' : 'sellers') + ' in control' });
-        colNote(row.col, 'cvd', String(dir).toUpperCase(), 'flow with the bias — ratio ' + FMT(a.ratio, 2));
+      if (dir === 'long' && a.severeLongTrap){
+        row.col.votes.push({ layer: 'cvd', vote: 'veto',
+          text: 'SEVERE CVD DIVERGENCE — taker buy/sell ' + FMT(a.ratio, 2) + '. Sellers absorbing limit zone.' });
+        colNote(row.col, 'cvd', 'VETO', 'severe CVD divergence — sellers absorbing');
         row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
-      }else if (a.dir && a.dir !== dir){
-        var ctxt = 'CVD against — taker buy/sell ' + FMT(a.ratio, 2) + ' shows '
-          + (a.dir === 'long' ? 'buyers' : 'sellers') + ' in control against the ' + dir.toUpperCase()
-          + ' bias — a setup fighting its own order flow is a stop-out candidate';
-        row.col.votes.push({ layer: 'cvd', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
-        colNote(row.col, 'cvd', 'CAUTION', ctxt);
+      }else if (dir === 'short' && a.severeShortTrap){
+        row.col.votes.push({ layer: 'cvd', vote: 'veto',
+          text: 'SEVERE CVD DIVERGENCE — taker buy/sell ' + FMT(a.ratio, 2) + '. Buyers absorbing limit zone.' });
+        colNote(row.col, 'cvd', 'VETO', 'severe CVD divergence — buyers absorbing');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if ((dir === 'long' && a.confirmsLong) || (dir === 'short' && a.confirmsShort)){
+        row.col.votes.push({ layer: 'cvd', vote: dir, kind: 'context',
+          text: 'CVD confirms — ratio ' + FMT(a.ratio, 2) });
+        colNote(row.col, 'cvd', String(dir).toUpperCase(), 'CVD confirms — ratio ' + FMT(a.ratio, 2));
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
       }else{
         row.col.silent.push('cvd');
         colNote(row.col, 'cvd', 'SILENT', 'flow balanced at ' + FMT(a.ratio, 2) + ' — no CVD edge');
@@ -3686,7 +3719,7 @@ Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
                           'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','fundz','btcrel','div','meanrev','poc','book','cvd','session'];
-var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis'];
+var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis','yield','smt'];
 
 function auditLineHTML(label, status, text){
   var st = String(status || 'SILENT').toUpperCase();
