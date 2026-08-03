@@ -29,5 +29,11 @@ services:
         value: https://hardgate-main.onrender.com/
       - key: HARDGATE_DAEMON_DRY_RUN
         value: "1"
+      - key: HARDGATE_STATE_FILE
+        value: /var/data/hardgate-daemon-state.json
       - key: NODE_ENV
         value: production
+    disk:
+      name: hardgate-daemon-state
+      mountPath: /var/data
+      sizeGB: 1

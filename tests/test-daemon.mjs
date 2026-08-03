@@ -2,7 +2,8 @@
 import { StateDatabase } from '../lib/daemon-state.mjs';
 import { filterExecutableBrainRows, brainRowToLockSetup, runMarketScan } from '../lib/daemon-loop.mjs';
 import { symToBinanceKlineSymbol } from '../lib/daemon-market.mjs';
-import { loadConvictionLockManager } from '../lib/daemon-conviction.mjs';
+import { convictionUnwindAction, inferSetupTypeFromBrainRow, unwindConvictionOnExchange } from '../lib/daemon-unwind.mjs';
+import { loadConvictionLockManager, hydrateConvictionManager } from '../lib/daemon-conviction.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -67,6 +68,48 @@ console.log('== dry-run market scan ==');
 console.log('== symbol map ==');
 {
   ok(symToBinanceKlineSymbol('B-BTC_USDT') === 'BTCUSDT', 'Delta sym maps to Binance kline symbol');
+}
+
+console.log('== unwind routing ==');
+{
+  ok(convictionUnwindAction('EXPIRED') === 'cancel_entry', 'EXPIRED cancels entry');
+  ok(convictionUnwindAction('MOMENTUM DECAY') === 'close_position', 'momentum decay closes');
+  ok(convictionUnwindAction('TARGET HIT') === 'noop', 'target hit noop');
+  ok(inferSetupTypeFromBrainRow({ plan: { type: 'swing', entry: 1, stop: 2, t1: 3 } }) === 'swing', 'plan.type swing');
+  ok(inferSetupTypeFromBrainRow({ evidence: ['TREND4H: bullish'], plan: { entry: 1, stop: 2, t1: 3 } }) === 'swing', '4H evidence -> swing');
+}
+
+console.log('== unwind dry run ==');
+{
+  var calls = [];
+  var fake = {
+    cancelOrder: async function(){ calls.push('cancel'); return { success: true }; },
+    closePosition: async function(){ calls.push('close'); return { success: true }; },
+  };
+  await unwindConvictionOnExchange(
+    { id: 'x', sym: 'BTCUSDT', orderId: 'o1', dir: 'long' },
+    'EXPIRED', fake, { log: function(){} });
+  ok(calls.length === 1 && calls[0] === 'cancel', 'EXPIRED triggers cancelOrder');
+  calls = [];
+  await unwindConvictionOnExchange(
+    { id: 'y', sym: 'BTCUSDT', dir: 'long', fillSize: 1 },
+    'MOMENTUM DECAY', fake, { log: function(){} });
+  ok(calls.length === 1 && calls[0] === 'close', 'MOMENTUM DECAY triggers closePosition');
+}
+
+console.log('== hydrate order metadata ==');
+{
+  var Mgr3 = loadConvictionLockManager();
+  var mgr3 = new Mgr3({ type: 'scalp' });
+  hydrateConvictionManager(mgr3, {
+    convictions: [{
+      id: 'brain|long|100|BTCUSDT', dir: 'long', type: 'scalp',
+      entry: 100, stop: 95, t1: 110, sym: 'BTCUSDT',
+      orderId: 'ord-99', ccxtSymbol: 'BTC/USDT:USDT', fillSize: 0.5,
+    }],
+  });
+  var h = mgr3.activeConvictions.get('brain|long|100|BTCUSDT');
+  ok(h && h.orderId === 'ord-99' && h.fillSize === 0.5, 'hydrate restores CCXT metadata');
 }
 
 console.log('\n' + pass + ' assertions passed');

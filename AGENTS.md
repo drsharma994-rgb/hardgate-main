@@ -52,6 +52,8 @@ Not required for local dev or core UI:
 1. Set `EXECUTE_CCXT_EXCHANGE`, `EXECUTE_CCXT_API_KEY`, `EXECUTE_CCXT_SECRET` on the **worker** service.
 2. Set `HARDGATE_DAEMON_DRY_RUN=0` when ready for live orders (defaults to `1`).
 3. Worker `buildCommand` installs Puppeteer + Chrome for headless BRAIN scans against `HARDGATE_URL`.
+4. On conviction invalidation (EXPIRED / STOPPED / MOMENTUM DECAY), the daemon calls CCXT `cancelOrder` or `closePosition` via `lib/daemon-unwind.mjs` when not in dry run.
+5. Optional Render **persistent disk** mount at `HARDGATE_STATE_FILE` path so `hardgate-daemon-state.json` survives redeploys.
 
 Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `scripts/server.mjs`.
 | `EXECUTE_FILL_POLL_URL` | Broker fill polling endpoint |
