@@ -200,6 +200,17 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + htJson;
   }
+  if (sig.scriptId === 'smc-core'){
+    var smcAction = sig.dir === 'long' ? 'limit_buy' : 'limit_sell';
+    var smcJson = '{"action":"' + smcAction + '","ticker":"' + sig.sym + '","zone_entry":' + sig.entry
+      + ',"stop_loss":' + sig.stop + ',"script":"smc-core"}';
+    return '🌲 PINE SMC · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nSMC CHoCH + FVG limit @ zone'
+      + '\nZONE ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price) + ' · pivot ' + (sig.pivotLength || 5)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + smcJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
