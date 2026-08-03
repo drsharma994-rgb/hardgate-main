@@ -70,6 +70,7 @@ function buildPayload(plan){
     source: plan.source || 'hardgate-trade-plan',
     idempotencyKey: idem,
     positionId: plan.positionId || undefined,
+    entry: isFinite(plan.entry) ? +plan.entry : undefined,
   };
 }
 

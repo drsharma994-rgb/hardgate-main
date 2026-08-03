@@ -1,5 +1,5 @@
 /* HARDGATE — bracket execution payload + API tests */
-import { hgBuildBracketPayload, hgExecuteBackendTarget, hgExecuteIdempotencyKey, hgParseExecuteFillResponse } from '../lib/execute-core.mjs';
+import { hgBuildBracketPayload, hgExecuteBackendTarget, hgExecuteIdempotencyKey, hgParseExecuteFillResponse, hgExecuteCcxtConfigured } from '../lib/execute-core.mjs';
 import { executeCapabilities } from '../lib/execute-api.mjs';
 import { hgExecuteFillPollTarget, hgBuildFillPollQuery, hgPollExecuteFill } from '../lib/execute-poll.mjs';
 import fs from 'node:fs';
@@ -20,6 +20,8 @@ ok(p && p.idempotencyKey && String(p.idempotencyKey).indexOf('hgx-') === 0, 'bra
 var p2 = hgBuildBracketPayload({ sym: 'BTCUSD', side: 'long', qty: 0.5, stop: 99000, t1: 105000, t2: 112000 });
 ok(p2 && p2.bracket.takeProfit === 105000 && p2.bracket.takeProfit2 === 112000, 'bracket payload includes optional T2');
 ok(hgBuildBracketPayload({ sym: 'X', side: 'long', qty: 0 }) === null, 'invalid qty -> null');
+var pEntry = hgBuildBracketPayload({ sym: 'PAXGUSDT', side: 'long', qty: 1, stop: 2640, t1: 2660, entry: 2650.5 });
+ok(pEntry && pEntry.entry === 2650.5, 'bracket payload includes optional entry for CCXT limit');
 
 var fillParsed = hgParseExecuteFillResponse('{"filledQty":0.5,"qty":1,"avgPrice":100}');
 ok(fillParsed && fillParsed.filledQty === 0.5 && fillParsed.qty === 1, 'parse execute fill response JSON');
@@ -65,6 +67,7 @@ ok(executeJs.indexOf('execute-blotter') >= 0, 'execute.js records blotter after 
 ok(executeJs.indexOf('execute-fill') >= 0 && executeJs.indexOf('parseExecuteFill') >= 0,
   'execute.js auto-records fill when backend returns fill fields');
 ok(executeJs.indexOf('plan.fund') >= 0, 'execute.js routes blotter to position fund');
+ok(executeJs.indexOf('entry: isFinite(plan.entry)') >= 0, 'execute.js forwards entry/limit to bracket payload');
 ok(executeJs.indexOf('skipConfirm') >= 0, 'execute.js supports silent auto-exec path');
 
 var bookJs = fs.readFileSync(path.join(root, 'book.js'), 'utf8');

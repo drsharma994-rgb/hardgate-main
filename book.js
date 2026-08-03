@@ -293,6 +293,7 @@ function bookBuildExecutePlan(position, source){
     sym: position.sym,
     side: position.dir,
     qty: qty,
+    entry: isFinite(position.entry) ? position.entry : mark,
     lev: 1,
     stop: position.stop,
     t1: t1,
