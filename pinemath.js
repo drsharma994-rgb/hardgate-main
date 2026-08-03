@@ -133,6 +133,10 @@ function pineLorentzianKernel(rows, opts){
     var longSig = smoothed >= scoreLimit && !(prevSmoothed >= scoreLimit);
     var shortSig = smoothed <= -scoreLimit && !(prevSmoothed <= -scoreLimit);
     var dir = longSig ? 'long' : (shortSig ? 'short' : null);
+    if (!dir && opts.includeContext){
+      if (smoothed >= scoreLimit) dir = 'long';
+      else if (smoothed <= -scoreLimit) dir = 'short';
+    }
     return {
       mlScore: mlHist.length ? mlHist[mlHist.length - 1] : 0,
       smoothedScore: smoothed,
@@ -244,8 +248,27 @@ function pineMsbOb(rows, opts){
           lastSh: lastSh,
           lastSl: lastSl,
           leftBars: left,
-          rightBars: right
+          rightBars: right,
+          longAligned: trend === 1,
+          shortAligned: trend === -1
         };
+        if (opts.includeContext && !dir){
+          if (trend === 1 && isFinite(lastBearHigh) && isFinite(lastBearLow)){
+            lastResult.dir = 'long';
+            lastResult.entry = lastBearHigh;
+            lastResult.stop = lastBearLow;
+            var riskL = Math.abs(lastBearHigh - lastBearLow);
+            lastResult.t1 = lastBearHigh + 2 * riskL;
+            lastResult.t2 = lastBearHigh + 3.5 * riskL;
+          } else if (trend === -1 && isFinite(lastBullLow) && isFinite(lastBullHigh)){
+            lastResult.dir = 'short';
+            lastResult.entry = lastBullLow;
+            lastResult.stop = lastBullHigh;
+            var riskS = Math.abs(lastBullLow - lastBullHigh);
+            lastResult.t1 = lastBullLow - 2 * riskS;
+            lastResult.t2 = lastBullLow - 3.5 * riskS;
+          }
+        }
       }
 
       prevBullMsb = bullMsb;
@@ -428,6 +451,10 @@ function pineSqueezeMomentum(rows, opts){
     var newLong = longCondition;
     var newShort = shortCondition;
     var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    if (!dir && opts.includeContext && isFinite(momentum) && !sqzOn[bi]){
+      if (momentum > 0) dir = 'long';
+      else if (momentum < 0) dir = 'short';
+    }
     return {
       dir: dir,
       sqzOn: sqzOn[bi],
@@ -479,6 +506,10 @@ function pineSmartMoneyFlow(rows, opts){
     var newLong = longCondition;
     var newShort = shortCondition;
     var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    if (!dir && opts.includeContext && isFinite(smf)){
+      if (smf > threshold) dir = 'long';
+      else if (smf < -threshold) dir = 'short';
+    }
     return {
       dir: dir,
       smf: smf,
@@ -573,6 +604,10 @@ function pineHalfTrend(rows, opts){
     var newLong = trend === 1 && prevTrend === -1;
     var newShort = trend === -1 && prevTrend === 1;
     var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    if (!dir && opts.includeContext){
+      if (trend === 1) dir = 'long';
+      else if (trend === -1) dir = 'short';
+    }
     var stop = ht;
     var entry = closes[bi];
     var risk = Math.abs(entry - stop);
@@ -584,8 +619,8 @@ function pineHalfTrend(rows, opts){
       trailingStop: ht,
       newLong: newLong,
       newShort: newShort,
-      longCondition: newLong,
-      shortCondition: newShort,
+      longCondition: newLong || (opts.includeContext && trend === 1),
+      shortCondition: newShort || (opts.includeContext && trend === -1),
       price: entry,
       stop: stop,
       entry: entry,
@@ -605,6 +640,7 @@ function pineSmcCore(rows, opts){
   opts = opts || {};
   var pivotLen = opts.pivotLength || 5;
   var atrLen = opts.atrLen || 14;
+  var recentBars = opts.recentBars || 0;
   try{
     if (!rows || rows.length < pivotLen * 2 + 10) return null;
     var n = rows.length;
@@ -616,6 +652,7 @@ function pineSmcCore(rows, opts){
     var lastSh = NaN, lastSl = NaN, trend = 1;
     var bullFvgTop = NaN, bullFvgBot = NaN, bearFvgTop = NaN, bearFvgBot = NaN;
     var signal = null;
+    var recentSignal = null;
 
     for (var i = 0; i < n; i++){
       var ph = pivotHighAt(highs, i, pivotLen, pivotLen);
@@ -660,7 +697,27 @@ function pineSmcCore(rows, opts){
             price: c,
             lastSh: lastSh,
             lastSl: lastSl,
-            pivotLength: pivotLen
+            pivotLength: pivotLen,
+            barsAgo: 0
+          };
+        } else if (recentBars > 0 && i >= n - 1 - recentBars && isFinite(limitEntry) && isFinite(stopLoss) && limitEntry !== stopLoss){
+          var riskLR = Math.abs(limitEntry - stopLoss);
+          recentSignal = {
+            dir: 'long',
+            newLong: false,
+            newShort: false,
+            entry: limitEntry,
+            stop: stopLoss,
+            zoneEntry: limitEntry,
+            zoneTop: bullFvgTop,
+            zoneBot: bullFvgBot,
+            t1: limitEntry + 2 * riskLR,
+            t2: limitEntry + 3.5 * riskLR,
+            price: c,
+            lastSh: lastSh,
+            lastSl: lastSl,
+            pivotLength: pivotLen,
+            barsAgo: n - 1 - i
           };
         }
       }
@@ -684,12 +741,64 @@ function pineSmcCore(rows, opts){
             price: c,
             lastSh: lastSh,
             lastSl: lastSl,
-            pivotLength: pivotLen
+            pivotLength: pivotLen,
+            barsAgo: 0
+          };
+        } else if (recentBars > 0 && i >= n - 1 - recentBars && isFinite(limitEntryS) && isFinite(stopLossS) && limitEntryS !== stopLossS){
+          var riskSR = Math.abs(limitEntryS - stopLossS);
+          recentSignal = {
+            dir: 'short',
+            newLong: false,
+            newShort: false,
+            entry: limitEntryS,
+            stop: stopLossS,
+            zoneEntry: limitEntryS,
+            zoneTop: bearFvgTop,
+            zoneBot: bearFvgBot,
+            t1: limitEntryS - 2 * riskSR,
+            t2: limitEntryS - 3.5 * riskSR,
+            price: c,
+            lastSh: lastSh,
+            lastSl: lastSl,
+            pivotLength: pivotLen,
+            barsAgo: n - 1 - i
           };
         }
       }
     }
 
+    if (!signal && recentSignal) signal = recentSignal;
+    if (!signal && opts.includeContext && trend === 1 && isFinite(bullFvgTop) && isFinite(bullFvgBot)){
+      var riskCtx = Math.abs(bullFvgTop - bullFvgBot);
+      if (riskCtx > 0){
+        signal = {
+          dir: 'long',
+          newLong: false,
+          newShort: false,
+          entry: bullFvgTop,
+          stop: bullFvgBot - (isFinite(atrArr[n - 1]) ? atrArr[n - 1] : 0),
+          zoneEntry: bullFvgTop,
+          price: closes[n - 1],
+          t1: bullFvgTop + 2 * riskCtx,
+          aligned: true
+        };
+      }
+    } else if (!signal && opts.includeContext && trend === -1 && isFinite(bearFvgTop) && isFinite(bearFvgBot)){
+      var riskCtxS = Math.abs(bearFvgTop - bearFvgBot);
+      if (riskCtxS > 0){
+        signal = {
+          dir: 'short',
+          newLong: false,
+          newShort: false,
+          entry: bearFvgBot,
+          stop: bearFvgTop + (isFinite(atrArr[n - 1]) ? atrArr[n - 1] : 0),
+          zoneEntry: bearFvgBot,
+          price: closes[n - 1],
+          t1: bearFvgBot - 2 * riskCtxS,
+          aligned: true
+        };
+      }
+    }
     if (!signal) return null;
     return signal;
   }catch(e){ return null; }
@@ -704,6 +813,7 @@ function pineVumanchuCipher(rows, opts){
   var wtN2 = opts.wtAvgLen || 21;
   var osLevel = opts.osLevel !== undefined ? +opts.osLevel : -53;
   var obLevel = opts.obLevel !== undefined ? +opts.obLevel : 53;
+  var recentBars = opts.recentBars || 0;
   try{
     if (!rows || rows.length < wtN2 + wtN1 + 10) return null;
     var n = rows.length;
@@ -721,6 +831,7 @@ function pineVumanchuCipher(rows, opts){
     var lastSwingLowPrice = NaN, lastSwingLowWt = NaN;
     var lastSwingHighPrice = NaN, lastSwingHighWt = NaN;
     var signal = null;
+    var recentSignal = null;
 
     for (var i = 1; i < n; i++){
       var w1 = wt1[i], w2 = wt2[i];
@@ -765,7 +876,8 @@ function pineVumanchuCipher(rows, opts){
           obLevel: obLevel,
           lastSwingLowPrice: lastSwingLowPrice,
           lastSwingLowWt: lastSwingLowWt,
-          price: cl
+          price: cl,
+          barsAgo: 0
         };
       } else if (i === n - 1 && bearDiv){
         signal = {
@@ -779,11 +891,73 @@ function pineVumanchuCipher(rows, opts){
           obLevel: obLevel,
           lastSwingHighPrice: lastSwingHighPrice,
           lastSwingHighWt: lastSwingHighWt,
-          price: cl
+          price: cl,
+          barsAgo: 0
+        };
+      } else if (recentBars > 0 && i >= n - 1 - recentBars && bullDiv){
+        recentSignal = {
+          dir: 'long',
+          signalType: 'bull_div',
+          newLong: false,
+          newShort: false,
+          wt1: w1,
+          wt2: w2,
+          osLevel: osLevel,
+          obLevel: obLevel,
+          lastSwingLowPrice: lastSwingLowPrice,
+          lastSwingLowWt: lastSwingLowWt,
+          price: cl,
+          barsAgo: n - 1 - i
+        };
+      } else if (recentBars > 0 && i >= n - 1 - recentBars && bearDiv){
+        recentSignal = {
+          dir: 'short',
+          signalType: 'bear_div',
+          newLong: false,
+          newShort: false,
+          wt1: w1,
+          wt2: w2,
+          osLevel: osLevel,
+          obLevel: obLevel,
+          lastSwingHighPrice: lastSwingHighPrice,
+          lastSwingHighWt: lastSwingHighWt,
+          price: cl,
+          barsAgo: n - 1 - i
         };
       }
     }
 
+    if (!signal && recentSignal) signal = recentSignal;
+    if (!signal && opts.includeContext){
+      var w1Last = wt1[n - 1], w2Last = wt2[n - 1];
+      if (isFinite(w1Last) && w1Last <= osLevel){
+        signal = {
+          dir: 'long',
+          signalType: 'os_zone',
+          newLong: false,
+          newShort: false,
+          wt1: w1Last,
+          wt2: w2Last,
+          osLevel: osLevel,
+          obLevel: obLevel,
+          price: rows[n - 1].c,
+          aligned: true
+        };
+      } else if (isFinite(w1Last) && w1Last >= obLevel){
+        signal = {
+          dir: 'short',
+          signalType: 'ob_zone',
+          newLong: false,
+          newShort: false,
+          wt1: w1Last,
+          wt2: w2Last,
+          osLevel: osLevel,
+          obLevel: obLevel,
+          price: rows[n - 1].c,
+          aligned: true
+        };
+      }
+    }
     if (!signal) return null;
     return signal;
   }catch(e){ return null; }
@@ -837,7 +1011,22 @@ function pineRangeFilter(rows, opts){
     var prevTrend = bi > 0 ? trendArr[bi - 1] : 0;
     var longCondition = trend === 1 && prevTrend === -1;
     var shortCondition = trend === -1 && prevTrend === 1;
-    if (!longCondition && !shortCondition) return null;
+    if (!longCondition && !shortCondition){
+      if (!opts.includeContext || trend === 0) return null;
+      return {
+        dir: trend === 1 ? 'long' : 'short',
+        newLong: false,
+        newShort: false,
+        trend: trend,
+        prevTrend: prevTrend,
+        filterLevel: rfArr[bi],
+        rng: rngArr[bi],
+        period: per,
+        mult: mult,
+        price: source[bi],
+        aligned: true
+      };
+    }
 
     return {
       dir: longCondition ? 'long' : 'short',

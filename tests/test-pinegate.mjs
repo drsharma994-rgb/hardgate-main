@@ -97,5 +97,30 @@ assert(edgeOnly.eligible.length === 1 && edgeOnly.eligible[0].sym === 'ETHUSD', 
 assert(edgeOnly.funnel.mode === 'edge', 'funnel records edge mode');
 assert(edgeOnly.missing.length === 0, 'edge-only does not list swing as missing');
 
+const edgePlus = G.pineGateIntersect({
+  swingCands: [{ sym: 'SOLUSD', dir: 'long', entry: 50, stop: 48, t1: 55 }],
+  scalpCands: [],
+  edgeCands: [],
+  edgeForming: [{ sym: 'SOLUSD', dir: 'long', note: 'forming' }, { sym: 'AVAXUSD', dir: 'short' }],
+  bestClean: [],
+  brainRows: [],
+  trendmxRows: [],
+  regime: { playbook: { bias: 'BOTH' } }
+}, { mode: 'edge' });
+assert(edgePlus.eligible.length === 2, 'edge mode includes forming watchlist');
+assert(edgePlus.funnel.edgeForming === 2, 'funnel counts forming');
+
+const edgeFallback = G.pineGateIntersect({
+  swingCands: [{ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110 }],
+  scalpCands: [],
+  edgeCands: [],
+  edgeForming: [],
+  bestClean: [],
+  brainRows: [],
+  trendmxRows: [],
+  regime: { playbook: { bias: 'BOTH' } }
+}, { mode: 'edge' });
+assert(edgeFallback.eligible.length === 1 && edgeFallback.eligible[0].swingFallback, 'edge falls back to SWING CLEAN');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
