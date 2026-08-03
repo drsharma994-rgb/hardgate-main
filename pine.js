@@ -1,5 +1,5 @@
 /* HARDGATE — pine.js
-   PINE tab: all ported Pine scripts on SWING CLEAN universe (+ REGIME).
+   PINE tab: all ported Pine scripts on EDGE ticket universe (+ REGIME).
    Alerts fire immediately on new Pine setups. */
 (function(){
 'use strict';
@@ -13,7 +13,7 @@ var CHUNK_SLEEP_MS = 120;
 var LS_ALERT = 'hg_pine_alert_keys';
 var ALERT_GAP_MS = 15 * 60 * 1000;
 
-var PINE_GATE_OPTS = { mode: 'swing' };
+var PINE_GATE_OPTS = { mode: 'edge' };
 
 var PINE_SCRIPTS = [
   { id: 'lorentzian-kernel', label: 'ML: Lorentzian + Kernel', fn: 'pineLorentzianKernel', minBars: 260,
@@ -420,7 +420,7 @@ function cardHTML(sig){
   var cls = sig.dir === 'long' ? 'long' : 'short';
   var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>' : '';
   var gateNote = sig.gates && sig.gates.regime ? esc(sig.gates.regime) : '';
-  var hits = sig.gates && sig.gates.swing ? ' · SWING' : '';
+  var hits = sig.gates && sig.gates.edge ? ' · EDGE' : (sig.gates && sig.gates.swing ? ' · SWING' : '');
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
     + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · ' + esc(sig.scriptLabel) + badge + '</span></h2>'
     + '<div class="note">' + sigNoteLine(sig)
@@ -443,13 +443,13 @@ var __pineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · SWING CLEAN universe</span></h2>'
-    + '<div class="note">Runs <b>every ported Pine script</b> on <b>SWING CLEAN</b> pairs only (plus REGIME bias). '
-    + 'Does <b>not</b> require BRAIN, SCALP, EDGE, BEST, or TREND MATRIX — run <b>SWING</b> first. '
+    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · EDGE universe</span></h2>'
+    + '<div class="note">Runs <b>every ported Pine script</b> on <b>EDGE</b> tickets only (tally ≥3, valid plan, plus REGIME bias). '
+    + 'Does <b>not</b> require SWING, BRAIN, SCALP, BEST, or TREND MATRIX — run <b>EDGE</b> first. '
     + 'New bar-close setups alert immediately.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="pineRun">RUN ALL PINE SCAN</button>'
-    + '<span class="note" id="pineStat">Run SWING scan first, then scan.</span>'
+    + '<span class="note" id="pineStat">Run EDGE scan first, then scan.</span>'
     + '</div>'
     + '<div class="prog" id="pineProg"><i></i></div>'
     + '<div id="pineFunnel" style="margin-top:8px"></div>'
@@ -480,18 +480,18 @@ function mount(el){
     var status = 'refreshed';
     var t0 = Date.now();
     try{
-      if (stat) stat.textContent = 'Building SWING Pine universe…';
+      if (stat) stat.textContent = 'Building EDGE Pine universe…';
       var gate = (typeof W.pineGateLive === 'function')
         ? W.pineGateLive(null, PINE_GATE_OPTS)
         : { eligible: [], funnel: {}, missing: ['pinegate'] };
       if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (SWING CLEAN + REGIME)',
+        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (EDGE tickets + REGIME)',
           W.pineFunnelRows(gate.funnel), 'pineGateFunnel');
       }
       if (!gate.eligible || !gate.eligible.length){
-        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'SWING empty';
-        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No SWING CLEAN pairs in the Pine universe. '
-          + 'Run <b>SWING</b> scan first. Missing: '
+        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'EDGE empty';
+        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No EDGE tickets in the Pine universe. '
+          + 'Run <b>EDGE</b> scan first. Missing: '
           + esc(miss) + '.</div>';
         if (stat) stat.textContent = 'done · 0 eligible · ' + miss;
         __pineSnap = { at: Date.now(), signals: [], gate: gate, stat: stat ? stat.textContent : '' };

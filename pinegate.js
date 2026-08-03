@@ -1,6 +1,6 @@
 /* HARDGATE — pinegate.js
-   Intersect sym+dir pairs for Pine math. Default universe: SWING CLEAN (+ REGIME).
-   Modes: swing (default) · relaxed · strict (all six scanners).
+   Intersect sym+dir pairs for Pine math. Default universe: EDGE tickets (+ REGIME).
+   Modes: edge (default) · swing · relaxed · strict (all six scanners).
    Pure exports never throw. */
 (function(){
 'use strict';
@@ -149,7 +149,7 @@ function pineTrendMatrixPairs(rows, minScore){
   return out;
 }
 
-/** Pure gate intersection from explicit snapshots (Node-testable). opts.mode: strict | relaxed | swing */
+/** Pure gate intersection from explicit snapshots (Node-testable). opts.mode: strict | relaxed | swing | edge */
 function pineGateIntersect(snap, opts){
   opts = opts || {};
   var mode = opts.mode || 'strict';
@@ -203,6 +203,13 @@ function pineGateIntersect(snap, opts){
     });
     funnel.intersectRaw = raw.length;
     missing = funnel.swing ? [] : ['SWING'];
+  } else if (mode === 'edge'){
+    funnel.mode = 'edge';
+    raw = Object.keys(edgeMap).map(function(k){
+      return { sym: edgeMap[k].sym, dir: edgeMap[k].dir, gateHits: 1 };
+    });
+    funnel.intersectRaw = raw.length;
+    missing = funnel.edge ? [] : ['EDGE'];
   } else if (mode === 'relaxed'){
     funnel.minHits = opts.minHits !== undefined ? +opts.minHits : 2;
     raw = pineGateRelaxedPairs(gateMaps, { minHits: funnel.minHits, requireCore: true });
@@ -236,7 +243,7 @@ function pineGateIntersect(snap, opts){
     eligible.push({
       sym: item.sym,
       dir: item.dir,
-      gateHits: item.gateHits || (mode === 'swing' ? 1 : 6),
+      gateHits: item.gateHits || ((mode === 'swing' || mode === 'edge') ? 1 : 6),
       gates: {
         swing: !!swingMap[pk],
         scalp: !!scalpMap[pk],
@@ -253,11 +260,11 @@ function pineGateIntersect(snap, opts){
   return { eligible: eligible, funnel: funnel, missing: missing, at: Date.now() };
 }
 
-/** Live read from window scan getters. Default mode swing (SWING CLEAN universe). */
+/** Live read from window scan getters. Default mode edge (EDGE ticket universe). */
 function pineGateLive(win, opts){
   win = win || G;
   opts = opts || {};
-  if (!opts.mode) opts.mode = 'swing';
+  if (!opts.mode) opts.mode = 'edge';
   var saved = G;
   if (win) G = win;
   try{
@@ -306,6 +313,9 @@ function pineFunnelRows(funnel){
   if (funnel.mode === 'swing'){
     rows.push({ k: 'Gate mode', v: 'SWING CLEAN only (+ REGIME)' });
     rows.push({ k: 'Swing universe', v: String(funnel.intersectRaw || 0) });
+  } else if (funnel.mode === 'edge'){
+    rows.push({ k: 'Gate mode', v: 'EDGE tickets only (tally ≥3 + plan + REGIME)' });
+    rows.push({ k: 'Edge universe', v: String(funnel.intersectRaw || 0) });
   } else if (funnel.mode === 'relaxed'){
     rows.push({ k: 'Gate mode', v: 'relaxed (≥' + (funnel.minHits || 2) + ' scanners + core)' });
     rows.push({ k: 'Relaxed matches', v: String(funnel.intersectRaw || 0) });
