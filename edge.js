@@ -760,6 +760,27 @@ function edgeEnrich(sig, rows, item, candleSrc){
         out.tally += 1;
       }
     }
+    /* --- ANCHOR CLUSTERING REWARD --- */
+    var entryPrice = +sig.entry;
+    if (isFinite(entryPrice)){
+      var Acluster = computeArrays(rows);
+      if (Acluster && Acluster.atr){
+        var lastIdx = rows.length - 1;
+        var atCluster = Acluster.atr[lastIdx];
+        if (isFinite(atCluster) && atCluster > 0){
+          var clusterCount = 0;
+          var atrClusterTolerance = atCluster * 0.3;
+          if (Math.abs(entryPrice - Acluster.e9[lastIdx]) <= atrClusterTolerance) clusterCount++;
+          if (Math.abs(entryPrice - Acluster.e21[lastIdx]) <= atrClusterTolerance) clusterCount++;
+          if (Math.abs(entryPrice - Acluster.e50[lastIdx]) <= atrClusterTolerance) clusterCount++;
+          if (Math.abs(entryPrice - Acluster.dc.mid[lastIdx]) <= atrClusterTolerance) clusterCount++;
+          if (clusterCount >= 2){
+            out.parts.push({ label: 'Golden Confluence: ' + clusterCount + ' anchors cluster at entry', pts: 2 });
+            out.tally += 2;
+          }
+        }
+      }
+    }
     /* --- STANDARD ENRICHMENTS --- */
     out.parts.push({ label: 'SWING 4H cascade + HTF agree — ' + dir.toUpperCase(), pts: 2 });
     out.tally += 2;

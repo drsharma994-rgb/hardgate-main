@@ -159,6 +159,26 @@ console.log('== volume decay validator ==');
   assert(W.isCorrectivePullback(volA, 14, 'long') === false, 'heavy pullback vs light impulse fails');
   assert(W.isCorrectivePullback(volA, 3, 'long') === true, 'short history passes by default');
 }
+
+console.log('== anchor clustering reward ==');
+{
+  var rows = trendSeries('long', 260);
+  var flat = rows[rows.length - 1].c;
+  for (var i = rows.length - 80; i < rows.length; i++){
+    rows[i].o = flat;
+    rows[i].h = flat + 0.05;
+    rows[i].l = flat - 0.05;
+    rows[i].c = flat;
+  }
+  var bias = W.edgeSwingBias(rows);
+  var sig = { dir: bias.dir, entry: flat, edge: 'EMA21 PULLBACK', swept: false, barAge: 0, volumeCorrective: true };
+  var en = W.edgeEnrich(sig, rows, null, null);
+  assert(en.parts.some(function(p){ return p.label.indexOf('Golden Confluence') >= 0; }),
+    '2+ structural anchors at entry awards Golden Confluence');
+  var enFar = W.edgeEnrich(Object.assign({}, sig, { entry: flat + 50 }), rows, null, null);
+  assert(!enFar.parts.some(function(p){ return p.label.indexOf('Golden Confluence') >= 0; }),
+    'entry far from anchors skips cluster reward');
+}
 {
   var tab = W.HG_tabs.filter(function(t){ return t.id === 'edge'; })[0];
   assert(tab.refresh() === 'skipped: not run yet', 'refresh before scan skipped');
