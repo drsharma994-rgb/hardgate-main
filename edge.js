@@ -468,18 +468,19 @@ function trySetupAt(A, i, biasDir){
     if (!isFinite(c) || !isFinite(at) || !(at > 0)) return null;
     var closePos = barClosePos(h, l, c);
     var tol = PULL_ATR * at;
+    /* Volume validation — hard veto (falling knife / violent counter-trend vol) */
+    if (!isCorrectivePullback(A, i, biasDir, PULLBACK_VOL_LOOKBACK)) return null;
     var k, extremeL, extremeH, stopL, stopS, pL, pS, sq, ote, impulseLo, impulseHi;
 
     if (biasDir === 'long'){
       if (!(isFinite(e50) && c > e50)) return null;
       if (isFinite(rsi) && (rsi > 68 || rsi < 32)) return null;
-      var volOkLong = isCorrectivePullback(A, i, 'long');
 
       /* 1) EMA21 pullback — primary trend entry */
       if (isFinite(e21) && l <= e21 + tol && c >= e21 - tol * 0.5){
         var hold = isFinite(closePos) && closePos >= 0.52 && isFinite(o) && c >= o;
         var pbOk = !isFinite(pb) || pb <= 0.55;
-        if (hold && pbOk && volOkLong){
+        if (hold && pbOk){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = Math.min(extremeL, l) - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -492,7 +493,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 2) EMA9 pullback when extended from fast MA (swingTryClean parity) */
       if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
-        if (l <= e9 + tol && c >= e9 - tol * 0.5 && isFinite(closePos) && closePos >= 0.5 && volOkLong){
+        if (l <= e9 + tol && c >= e9 - tol * 0.5 && isFinite(closePos) && closePos >= 0.5){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = Math.min(extremeL, l) - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -504,7 +505,7 @@ function trySetupAt(A, i, biasDir){
       }
 
       /* 3) EMA50 sweep + reclaim — trap filter in uptrend */
-      if (isFinite(e50) && l < e50 && c > e50 && isFinite(closePos) && closePos >= 0.55 && volOkLong){
+      if (isFinite(e50) && l < e50 && c > e50 && isFinite(closePos) && closePos >= 0.55){
         extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
         stopL = edgeSweepStop('long', l, at);
         if (!isFinite(stopL)) stopL = extremeL - STOP_ATR * at;
@@ -551,7 +552,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 5) Aligned range-bottom touch (only in uptrend — at lower Donchian) */
       if (isFinite(dcLo) && l <= dcLo + tol && c > dcLo && isFinite(pb) && pb <= 0.35){
-        if (isFinite(closePos) && closePos >= 0.5 && volOkLong){
+        if (isFinite(closePos) && closePos >= 0.5){
           extremeL = isFinite(A.loExt[i]) ? A.loExt[i] : l;
           stopL = extremeL - STOP_ATR * at;
           pL = finalizeSetup('long', A, i, {
@@ -566,13 +567,12 @@ function trySetupAt(A, i, biasDir){
     if (biasDir === 'short'){
       if (!(isFinite(e50) && c < e50)) return null;
       if (isFinite(rsi) && (rsi < 32 || rsi > 68)) return null;
-      var volOkShort = isCorrectivePullback(A, i, 'short');
 
       /* 1) EMA21 rally rejection */
       if (isFinite(e21) && h >= e21 - tol && c <= e21 + tol * 0.5){
         var reject = isFinite(closePos) && closePos <= 0.48 && isFinite(o) && c <= o;
         var pbHiOk = !isFinite(pb) || pb >= 0.45;
-        if (reject && pbHiOk && volOkShort){
+        if (reject && pbHiOk){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = Math.max(extremeH, h) + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
@@ -585,7 +585,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 2) EMA9 rejection when extended from fast MA */
       if (isFinite(e9) && isFinite(e21) && Math.abs(c - e9) / at > EMA9_PULL_ATR){
-        if (h >= e9 - tol && c <= e9 + tol * 0.5 && isFinite(closePos) && closePos <= 0.5 && volOkShort){
+        if (h >= e9 - tol && c <= e9 + tol * 0.5 && isFinite(closePos) && closePos <= 0.5){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = Math.max(extremeH, h) + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
@@ -597,7 +597,7 @@ function trySetupAt(A, i, biasDir){
       }
 
       /* 3) EMA50 sweep + fail in downtrend */
-      if (isFinite(e50) && h > e50 && c < e50 && isFinite(closePos) && closePos <= 0.45 && volOkShort){
+      if (isFinite(e50) && h > e50 && c < e50 && isFinite(closePos) && closePos <= 0.45){
         extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
         stopS = edgeSweepStop('short', h, at);
         if (!isFinite(stopS)) stopS = extremeH + STOP_ATR * at;
@@ -644,7 +644,7 @@ function trySetupAt(A, i, biasDir){
 
       /* 5) Aligned range-top rejection */
       if (isFinite(dcHi) && h >= dcHi - tol && c < dcHi && isFinite(pb) && pb >= 0.65){
-        if (isFinite(closePos) && closePos <= 0.5 && volOkShort){
+        if (isFinite(closePos) && closePos <= 0.5){
           extremeH = isFinite(A.hiExt[i]) ? A.hiExt[i] : h;
           stopS = extremeH + STOP_ATR * at;
           pS = finalizeSetup('short', A, i, {
