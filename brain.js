@@ -2680,7 +2680,12 @@ function bucketRows(rows){
     else asides.push(rows[r]);
   }
   var byAgree = function(a, b){ return (b.dec.agree - a.dec.agree) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0); };
-  primes.sort(byAgree); highs.sort(byAgree); watches.sort(byAgree);
+  var byRank = function(a, b){
+    var ra = (typeof G.brainRowRank === 'function') ? G.brainRowRank(a) : (a.dec.agree || 0);
+    var rb = (typeof G.brainRowRank === 'function') ? G.brainRowRank(b) : (b.dec.agree || 0);
+    return (rb - ra) || (a.sym < b.sym ? -1 : a.sym > b.sym ? 1 : 0);
+  };
+  primes.sort(byRank); highs.sort(byRank); watches.sort(byAgree);
   return { primes: primes, highs: highs, watches: watches, asides: asides };
 }
 
@@ -2772,9 +2777,14 @@ function buildSnapshot(rows, readTxt, at){
         if (vs[a]) ev.push(vs[a].layer.toUpperCase() + ': ' + vs[a].text);
       }
       var p = r.plan;
+      var liveEl = (typeof G.brainLiveEligible === 'function') ? G.brainLiveEligible(r) : { ok: true, reasons: [] };
+      var layerSig = (typeof G.hgBrainLayerSigFromRow === 'function') ? G.hgBrainLayerSigFromRow(r) : '';
       out.rows.push({
         sym: r.sym, dir: r.dec.dir || null, tier: r.dec.tier,
         evidence: ev,
+        liveOk: liveEl.ok,
+        liveReasons: liveEl.reasons || [],
+        layerSig: layerSig,
         plan: (p && isFinite(p.entry) && isFinite(p.stop) && isFinite(p.t1))
               ? { entry: p.entry, stop: p.stop, t1: p.t1, t2: (isFinite(p.t2) ? p.t2 : null) }
               : null
@@ -3861,6 +3871,7 @@ function cardHTML(row){
     + '<span class="dir"><span class="stamp pass">' + dir.toUpperCase() + '</span> ' + dec.tier
     + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + venueStamp
     + (typeof G.hgTripleStackChipHtml === 'function' ? G.hgTripleStackChipHtml(row.sym, dir) : '')
+    + (typeof G.brainLiveChipHtml === 'function' ? G.brainLiveChipHtml(row) : '')
     + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">verdict</span><span>' + esc(dec.reasons[0] || '') + '</span>'
@@ -4078,6 +4089,14 @@ function brainRowBookOpts(row){
     var dec = row && row.dec;
     if (!dec || (dec.tier !== 'PRIME' && dec.tier !== 'HIGH') || !isDir(dec.dir)) return null;
     if (brainAutoBookPrimeOnlyOn() && dec.tier !== 'PRIME') return null;
+    if (typeof G.brainLiveModeOn === 'function' && G.brainLiveModeOn()){
+      if (typeof G.brainLiveEligible === 'function'){
+        var live = G.brainLiveEligible(row);
+        if (!live.ok) return null;
+      }else if (dec.tier !== 'PRIME'){
+        return null;
+      }
+    }
     var plan = row.plan;
     if (!plan || !isFinite(plan.entry) || !isFinite(plan.stop)) return null;
     if (!familyEvOk(plan)) return null;
@@ -4133,6 +4152,13 @@ async function brainAutoBookRecord(setups){
         if (r && r.ok){
           seen[key] = now;
           out.added++;
+          if (typeof G.hgBrainBookLayerRecord === 'function'){
+            G.hgBrainBookLayerRecord({
+              fund: opts.fund, sym: opts.sym, dir: opts.dir, tier: opts.tier,
+              layers: opts.layers,
+              layerSig: (typeof G.hgBrainLayerSigFromRow === 'function') ? G.hgBrainLayerSigFromRow(setups[i]) : ''
+            });
+          }
           if (r.position){
             var fp = r.position;
             if (r.fundId || opts.fund){
@@ -4148,6 +4174,9 @@ async function brainAutoBookRecord(setups){
       }catch(e){ out.skipped++; }
     }
     brainAutoBookSeenSave(seen);
+    if (out.added && typeof G.bookRefreshMarks === 'function'){
+      try{ await G.bookRefreshMarks(); }catch(eMarks){}
+    }
     if (brainAutoExecAfterBookOn() && addedPositions.length
       && typeof G.bookExecuteBatchPositions === 'function'
       && typeof G.executeBackendReady === 'function' && G.executeBackendReady()){
@@ -4571,6 +4600,12 @@ async function runBrain(el){
     /* LIQPOOL guard — post-plan pass: pools need the plan's stop/T1 */
     if (combined) applyLiqpool(planSet);
     else applyLiqpool(setups);
+    if (typeof G.applyPrimeCrowdingVeto === 'function'){
+      G.applyPrimeCrowdingVeto(rows);
+      bk = bucketRows(rows);
+      primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
+      setups = primes.concat(highs);
+    }
 
     /* render */
     var readTxt = marketRead(snap);
@@ -4616,6 +4651,22 @@ async function runBrain(el){
       gatedLiq: gatedLiq,
       gatedOver: gatedOver
     });
+    try{
+      if (typeof G.hgBrainInvAlertsFromRows === 'function'){
+        G.hgBrainInvAlertsFromRows(rows.map(function(r){
+          var ev = [];
+          var vs = (r.col && Array.isArray(r.col.votes)) ? r.col.votes : [];
+          for (var vi = 0; vi < vs.length; vi++){
+            if (vs[vi]) ev.push(vs[vi].layer.toUpperCase() + ': ' + vs[vi].text);
+          }
+          return {
+            sym: r.sym, dir: r.dec && r.dec.dir, tier: r.dec && r.dec.tier,
+            layerSig: (typeof G.hgBrainLayerSigFromRow === 'function') ? G.hgBrainLayerSigFromRow(r) : '',
+            evidence: ev
+          };
+        }));
+      }
+    }catch(eInv){}
 
     /* scorecard hook — PRIME/HIGH only, fire-and-forget, after plans land */
     scoreRecord(setups);
@@ -5057,6 +5108,10 @@ function mount(el){
       + '<input type="checkbox" id="brainAutoBookPrime"> PRIME only</label>'
       + '<label class="note" id="brainAutoExecWrap" title="After auto-add, send EXEC brackets for newly added positions (requires /api/execute)">'
       + '<input type="checkbox" id="brainAutoExec"> Auto EXEC after auto-add</label>'
+      + '<label class="note" id="brainLiveModeWrap" title="Book/EXEC only when PRIME + TRIPLE STACK + confirmed plan + no liqpool stop-run caution">'
+      + '<input type="checkbox" id="brainLiveMode"> Crypto LIVE mode (strict gate)</label>'
+      + '<label class="note" id="brainInvAlertsWrap" title="Telegram/ntfy when a booked symbol demotes or layers flip against your position">'
+      + '<input type="checkbox" id="brainInvAlerts"> Post-entry invalidation alerts</label>'
       + '<select id="brainVenue" style="display:none" title="venue filter — combined multi-exchange universe">'
       + '<option value="ALL">ALL VENUES</option><option value="DELTA">DELTA ONLY</option>'
       + '<option value="CDCX">COINDCX ONLY</option><option value="STARTRADER">STARTRADER ONLY</option></select>'
@@ -5162,6 +5217,20 @@ function mount(el){
       aeChk.disabled = !(typeof G.executeBackendReady === 'function' && G.executeBackendReady());
       aeChk.addEventListener('change', function(){
         brainSetAutoExecAfterBook(aeChk.checked);
+      });
+    }
+    var liveChk = el.querySelector('#brainLiveMode');
+    if (liveChk){
+      liveChk.checked = (typeof G.brainLiveModeOn === 'function') && G.brainLiveModeOn();
+      liveChk.addEventListener('change', function(){
+        if (typeof G.brainSetLiveMode === 'function') G.brainSetLiveMode(liveChk.checked);
+      });
+    }
+    var invChk = el.querySelector('#brainInvAlerts');
+    if (invChk){
+      invChk.checked = (typeof G.brainInvAlertsOn === 'function') && G.brainInvAlertsOn();
+      invChk.addEventListener('change', function(){
+        if (typeof G.brainSetInvAlerts === 'function') G.brainSetInvAlerts(invChk.checked);
       });
     }
   }catch(e){}
@@ -5281,6 +5350,7 @@ G.__hgBrainPlanFamily = planFamily;
 G.__hgBrainFamStats = familyStats;
 G.__hgBrainEstWin = estWinRate;
 G.__hgBrainProfitBoost = profitRankBoost;
+G.familyEvOk = familyEvOk;
 /* sniper-grade seam: the current hit set (read-only; alert channels consume) */
 G.hgSniperState = function(){ try{ return __lastSniperHits; }catch(e){ return []; } };
 G.__hgBrainSniperHits = sniperHitsFrom;
