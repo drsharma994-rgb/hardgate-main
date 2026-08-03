@@ -1,24 +1,20 @@
 /* =========================================================================
 HARDGATE — edge.js
-EDGE tab v5: SWING-aligned entry scanner (Delta India + CoinDCX).
-
+EDGE tab v6: SWING-aligned entry scanner + Institutional Order Flow
+(Delta India + CoinDCX).
 Finds high-quality continuation entries that AGREE with SWING SCAN
 (cryptogates swingGateMatrix G1–G3 when loaded; G5/G6 scored in enrich):
   LONG  — 4H cascade bullish + HTF above EMA200 + pullback to value
           (LIMIT @ EMA21/EMA9/EMA50, sweep-reclaim or OTE 62–79%, Donchian edge)
   SHORT — 4H cascade bearish + HTF below EMA200 + rally into resistance
           (LIMIT @ EMA21/EMA9/EMA50, sweep-fail or OTE 62–79%, Donchian edge)
-
 Sweep quality (2025/26 SMC): wick through level + reclaim close within 1–3 bars;
 stop beyond sweep wick + 0.5 ATR. OTE limit at 70.5% of impulse leg after sweep.
-
-Every card names one EXACT resting entry (structure level, not bar close)
-plus IN-ZONE / LIMIT guidance vs the live mark.
-
-Technical: Donchian, %B, RSI, EMA stack, structure gate, liquidity pools,
-TTM squeeze, vol regime, mean-reversion layer.
-Fundamental: venue turnover, native funding (Delta), cross-venue listing.
-
+INSTITUTIONAL UPGRADES V6:
+- CVD (Cumulative Volume Delta) Trap Vetoes
+- L2 Order Book Imbalance (OBI) Spoof Detection
+- SMT Divergence Hard Vetoes (Gold/Silver correlation)
+- US10Y Yield Macro Vetoes
 Pure exports (never throw):
   edgeSignal, edgeEnrich, edgeAssess, edgePlan, edgeBacktest,
   edgeMaxSafeLev, edgeUseLev, edgeSwingRead, edgeSwingBias,
@@ -26,6 +22,8 @@ Pure exports (never throw):
 ========================================================================= */
 (function(){
 'use strict';
+
+var W = (typeof window !== 'undefined') ? window : this;
 
 var MIN_TURNOVER  = 100000;
 var MAX_UNIVERSE  = 120;
@@ -668,14 +666,75 @@ function edgeSignal(rows){
   }catch(e){ return null; }
 }
 
+/* =========================================================================
+   EDGE ENRICHMENT & INSTITUTIONAL ALPHA GUARDS
+   Evaluates CVD Traps, SMT Divergence, Yield Correlation, and OBI.
+========================================================================= */
 function edgeEnrich(sig, rows, item, candleSrc){
-  var out = { tally: 0, parts: [], notes: [], candleSrc: candleSrc || null, swingAligned: true };
+  var out = { tally: 0, parts: [], notes: [], candleSrc: candleSrc || null, swingAligned: true, veto: false };
   try{
     if (!sig || !rows) return out;
     var dir = sig.dir;
     var bias = edgeSwingBias(rows);
     if (!bias || bias.dir !== dir) return out;
-
+    var symStr = item ? String(item.sym || '').toUpperCase() : '';
+    /* --- INSTITUTIONAL MACRO GUARDS --- */
+    if (typeof W.hgSmtState === 'function') {
+      var smt = W.hgSmtState();
+      if (smt && smt.divergence === 'BEARISH' && dir === 'long') {
+        out.parts.push({ label: 'BEARISH SMT Divergence — Trap VETO', pts: -99 });
+        out.veto = true; return out;
+      }
+      if (smt && smt.divergence === 'BULLISH' && dir === 'short') {
+        out.parts.push({ label: 'BULLISH SMT Divergence — Trap VETO', pts: -99 });
+        out.veto = true; return out;
+      }
+    }
+    if ((symStr.includes('XAU') || symStr.includes('GOLD')) && typeof W.hgYieldState === 'function') {
+      var yd = W.hgYieldState();
+      if (yd && yd.trend === 'spiking' && dir === 'long') {
+        out.parts.push({ label: 'US10Y Yield Spiking — Macro VETO', pts: -99 });
+        out.veto = true; return out;
+      }
+      if (yd && yd.trend === 'dropping' && dir === 'short') {
+        out.parts.push({ label: 'US10Y Yield Dropping — Macro VETO', pts: -99 });
+        out.veto = true; return out;
+      }
+    }
+    /* --- ORDER FLOW & MICROSTRUCTURE GUARDS --- */
+    var cvdFn = (typeof W.cvdAssess === 'function') ? W.cvdAssess : W.__hgBrainCvd;
+    if (item && item.taker && typeof cvdFn === 'function') {
+      var cvd = cvdFn(item.taker);
+      if (cvd) {
+        if (dir === 'long' && cvd.severeLongTrap) {
+          out.parts.push({ label: 'SEVERE CVD Divergence — Sellers Absorbing (VETO)', pts: -99 });
+          out.veto = true; return out;
+        }
+        if (dir === 'short' && cvd.severeShortTrap) {
+          out.parts.push({ label: 'SEVERE CVD Divergence — Buyers Absorbing (VETO)', pts: -99 });
+          out.veto = true; return out;
+        }
+        if ((dir === 'long' && cvd.confirmsLong) || (dir === 'short' && cvd.confirmsShort)) {
+          out.parts.push({ label: 'CVD Order Flow Confirms Trend', pts: 2 });
+          out.tally += 2;
+        } else if ((dir === 'long' && cvd.ratio < 1.0) || (dir === 'short' && cvd.ratio > 1.0)){
+          out.parts.push({ label: 'CVD Taker Flow Against Bias', pts: -1 });
+          out.tally -= 1;
+        }
+      }
+    }
+    if (item && item.bookDepth && typeof W.calculateOrderBookImbalance === 'function') {
+      var obi = W.calculateOrderBookImbalance(item.bookDepth);
+      var spoofTrap = (dir === 'long' && obi.obiValue <= -0.33) || (dir === 'short' && obi.obiValue >= 0.33);
+      if (spoofTrap) {
+        out.parts.push({ label: 'L2 Book Stacked Against Limit (Spoof Trap)', pts: -1 });
+        out.tally -= 1;
+      } else if ((dir === 'long' && obi.obiValue >= 0.33) || (dir === 'short' && obi.obiValue <= -0.33)) {
+        out.parts.push({ label: 'L2 Book Liquidity Supports Fill', pts: 1 });
+        out.tally += 1;
+      }
+    }
+    /* --- STANDARD ENRICHMENTS --- */
     out.parts.push({ label: 'SWING 4H cascade + HTF agree — ' + dir.toUpperCase(), pts: 2 });
     out.tally += 2;
     out.parts.push({ label: sig.edge + (sig.swept ? ' · liquidity sweep' : ' · value entry'), pts: 2 });
@@ -701,16 +760,16 @@ function edgeEnrich(sig, rows, item, candleSrc){
       out.tally += 1;
     }
 
-    if (typeof detectRegime === 'function'){
-      var regE = detectRegime(rows);
+    if (typeof W.detectRegime === 'function'){
+      var regE = W.detectRegime(rows);
       if (regE && (regE.regime === 'trend' || regE.regime === 'weak_trend' || regE.regime === 'compression')){
         out.parts.push({ label: 'regime ' + regE.label + ' — continuation friendly', pts: 1 });
         out.tally += 1;
       }
     }
 
-    if (typeof volRegime === 'function'){
-      var vr = volRegime(rows, 50);
+    if (typeof W.volRegime === 'function'){
+      var vr = W.volRegime(rows, 50);
       if (vr === 'COMPRESSING'){
         out.parts.push({ label: 'vol COMPRESSING — coil before expansion', pts: 1 });
         out.tally += 1;
@@ -719,8 +778,8 @@ function edgeEnrich(sig, rows, item, candleSrc){
       }
     }
 
-    if (typeof hgStructureGate === 'function'){
-      var sg = hgStructureGate(rows, dir);
+    if (typeof W.hgStructureGate === 'function'){
+      var sg = W.hgStructureGate(rows, dir);
       if (sg && sg.bos){
         out.parts.push({ label: sg.note || 'BOS confirms ' + dir.toUpperCase(), pts: 2 });
         out.tally += 2;
@@ -731,25 +790,25 @@ function edgeEnrich(sig, rows, item, candleSrc){
       }
     }
 
-    if (typeof meanrevAssess === 'function'){
-      var mr = meanrevAssess(rows);
+    if (typeof W.meanrevAssess === 'function'){
+      var mr = W.meanrevAssess(rows);
       if (mr && mr.dir === dir){
         out.parts.push({ label: 'mean-reversion layer supports pullback direction', pts: 1 });
         out.tally += 1;
       }
     }
 
-    if (typeof findLiquidityPools === 'function'){
-      findLiquidityPools(rows);
-      var tgt = (typeof liquidityTargetText === 'function') ? liquidityTargetText(rows, dir) : null;
+    if (typeof W.findLiquidityPools === 'function'){
+      W.findLiquidityPools(rows);
+      var tgt = (typeof W.liquidityTargetText === 'function') ? W.liquidityTargetText(rows, dir) : null;
       if (tgt && tgt !== '—'){
         out.parts.push({ label: 'liquidity target — ' + tgt, pts: 1 });
         out.tally += 1;
       }
     }
 
-    if (typeof ttmSqueeze === 'function'){
-      var sq = ttmSqueeze(rows);
+    if (typeof W.ttmSqueeze === 'function'){
+      var sq = W.ttmSqueeze(rows);
       if (sq && sq.on){
         out.parts.push({ label: 'TTM squeeze ON', pts: 1 });
         out.tally += 1;
@@ -880,8 +939,8 @@ function edgePlanHtml(p, sig){
   return head + ' · STOP <b>' + pxF(p.stop) + '</b>'
     + ' · T1 ' + pxF(p.t1) + ' (' + fmtF(p.rr1, 1) + 'R)' + t2
     + ' · risk ' + fmtF(p.riskPct, 2) + '%' + levLine
-    + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(p.entry, p.stop) : '')
-    + (typeof hgSessionChip === 'function' ? hgSessionChip() : '')
+    + (typeof W.hgSafeLevChip === 'function' ? W.hgSafeLevChip(p.entry, p.stop) : '')
+    + (typeof W.hgSessionChip === 'function' ? W.hgSessionChip() : '')
     + guide;
 }
 
@@ -907,15 +966,18 @@ function cardHTML(r){
     ? 'SETUP RECORD: ' + bt.n + ' trades · ' + Math.round(bt.winPct) + '% win · avg ' + fmtSignedR(bt.avgR) + ' · PF ' + fmtPF(bt.pf)
     : (bt.n > 0 ? 'THIN RECORD: ' + bt.n + ' · avg ' + fmtSignedR(bt.avgR)
       : 'THIN RECORD: no historical trend-edge entries on these bars');
-  var gates = (en.parts || []).filter(function(pt){ return pt.pts > 0; }).slice(0, 6)
-    .map(function(pt){ return '<span class="gpip ok">' + esc(pt.label) + '</span>'; }).join('');
+  var gates = (en.parts || []).filter(function(pt){ return pt.pts !== 0; }).slice(0, 8)
+    .map(function(pt){
+      var cssClass = (pt.pts > 0) ? 'gpip ok' : 'gpip warn';
+      return '<span class="' + cssClass + '">' + esc(pt.label) + '</span>';
+    }).join('');
   var planBlock = p
     ? '<div class="plan">' + edgePlanHtml(p, sig)
       + ' — SWING-aligned <b>' + esc(venueLabel(r.item)) + '</b>'
       + (r.candleSrc ? ' · ' + esc(r.candleSrc) : '')
       + '</div>' : '<div class="plan">levels unavailable</div>';
   var sym = r.item ? r.item.sym : r.sym;
-  var btn = (p && typeof toTrade === 'function')
+  var btn = (p && typeof W.toTrade === 'function')
     ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(p.dir)
       + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')">SEND TO TRADE PLAN</button>' : '';
   var edgeKlass = (r.item && r.item.klass) || null;
@@ -925,8 +987,8 @@ function cardHTML(r){
     if (k === 'fx' || k === 'index' || k === 'commodity') return 'macro';
     return 'swing';
   })();
-  var bookBtn = (p && typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(sym, p.dir, p.entry, p.stop, p.t1, {
+  var bookBtn = (p && typeof W.bookBtnHTML === 'function')
+    ? W.bookBtnHTML(sym, p.dir, p.entry, p.stop, p.t1, {
       scanner: 'edge',
       fund: edgeFund,
       strategy: 'edge', klass: edgeKlass, venue: 'startrader',
@@ -971,6 +1033,14 @@ function publishEdgeScan(found){
 
 /* Shared EDGE scan loop — same logic as the EDGE tab; callers supply universe
    rows + async candle fetcher (xuCandles, startraderCandles, etc.). */
+function getBinanceSymFor(item) {
+  if (!item) return null;
+  var s = item.sym || '';
+  if (s.includes('XAU') || s.includes('PAXG')) return 'PAXGUSDT';
+  if (s.includes('B-')) s = s.split('_')[0].replace('B-', '');
+  if (!s.endsWith('USDT')) s = s + 'USDT';
+  return s;
+}
 async function edgeScanList(list, fetchCandles, hooks){
   hooks = hooks || {};
   var setProg = hooks.setProg || function(){};
@@ -1004,6 +1074,13 @@ async function edgeScanList(list, fetchCandles, hooks){
         if (!rows || rows.length < 210){ skipped++; return; }
         if (!edgeSwingBias(rows)){ noBias++; return; }
         if (!edgeSignal(rows)){ noTrig++; return; }
+        var binanceSym = getBinanceSymFor(item);
+        if (typeof W.binanceTakerRatio === 'function') {
+          try { item.taker = await W.binanceTakerRatio(binanceSym, '1h', 25); } catch(e){}
+        }
+        if (typeof W.binanceDepth === 'function') {
+          try { item.bookDepth = await W.binanceDepth(binanceSym, 20); } catch(e){}
+        }
         var assessed = edgeAssess(rows, item, src);
         if (!assessed){ tallyFail++; return; }
         var bt = edgeBacktest(rows);
@@ -1024,17 +1101,16 @@ async function edgeScanList(list, fetchCandles, hooks){
 function mount(el){
   if (!el) return;
   var missing = [];
-  if (typeof xuUniverse !== 'function') missing.push('xuUniverse');
-  if (typeof xuCandles !== 'function') missing.push('xuCandles');
-  if (typeof donchian !== 'function') missing.push('donchian');
+  if (typeof W.xuUniverse !== 'function') missing.push('xuUniverse');
+  if (typeof W.xuCandles !== 'function') missing.push('xuCandles');
+  if (typeof W.donchian !== 'function') missing.push('donchian');
 
   el.innerHTML = '<div class="panel">'
-    + '<h2>EDGE Scanner <span>SWING-aligned entries · Delta + CoinDCX</span></h2>'
-    + '<p class="note">Only shows setups that <b>agree with SWING SCAN</b> (G1 cascade+spread · G2 EMA200 side · G3 RSI — same as cryptogates when loaded).'
-    + ' Strategies: <b>LIMIT @ EMA21/EMA9/EMA50</b>, <b>sweep reclaim/fail (1–3 bar)</b>, <b>OTE 62–79%</b>, <b>Donchian range edge</b>.'
-    + ' Sweeps use wick-through + reclaim filter; stop beyond sweep wick + 0.5 ATR.'
-    + ' Each card names the exact resting entry (structure level, not bar close) plus in-zone guidance.'
-    + ' Confluence: structure BOS, vol regime, liquidity, TTM squeeze, funding, turnover.'
+    + '<h2>EDGE Scanner <span>SWING-aligned entries · Institutional Execution</span></h2>'
+    + '<p class="note">Finds continuation setups that agree with SWING SCAN.'
+    + ' Strategies: <b>LIMIT @ EMA21/EMA9/EMA50</b>, <b>sweep reclaim/fail</b>, <b>OTE 62–79%</b>.'
+    + ' Confluence: structure BOS, vol regime, liquidity, TTM squeeze.'
+    + ' <b>INSTITUTIONAL LAYER:</b> Hard-vetoes setups fighting severe CVD Divergence, L2 DOM Spoof walls, and Macro Yield/SMT traps.'
     + ' Min R:R ' + MIN_RR + ' · tally ≥ ' + MIN_TALLY + ' · <b>USE Nx</b> = 50% max-safe.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — SWING-aligned · top ' + MAX_UNIVERSE + '</span></div>'
@@ -1071,16 +1147,16 @@ function mount(el){
     emptyEl.style.display = 'none';
     setProg(0);
     try{
-      var uni = await xuUniverse(true);
-      var note = (typeof xuUniverseNote === 'function') ? xuUniverseNote() : null;
+      var uni = await W.xuUniverse(true);
+      var note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
       if (!uni || !uni.length){
         publishEdgeScan([]);
         setStat('universe empty — ' + (note || 'exchange fetch failed'), true);
         return;
       }
       var res = await edgeScanList(uni, function(item, tf, n){
-        return xuCandles(item, tf, n).then(function(rows){
-          return { rows: rows, src: xuCandles.lastSource || item.exchange };
+        return W.xuCandles(item, tf, n).then(function(rows){
+          return { rows: rows, src: W.xuCandles.lastSource || item.exchange };
         });
       }, { setProg: setProg, setStat: setStat });
       var found = res.found;
@@ -1090,7 +1166,7 @@ function mount(el){
       if (!found.length){
         emptyEl.style.display = 'block';
         setStat('done — 0 setups / ' + list.length + ' · ' + st.noBias + ' no SWING bias · '
-          + st.noTrig + ' no trigger · ' + st.tallyFail + ' below tally · ' + st.skipped + ' thin · '
+          + st.noTrig + ' no trigger · ' + st.tallyFail + ' failed gates (inc. Traps) · ' + st.skipped + ' thin · '
           + Math.floor((Date.now() - st.t0) / 1000) + 's');
         return;
       }
@@ -1132,7 +1208,7 @@ async function edgeWarm(opts){
         && Date.now() - __edgeScanSnap.at < 14 * 60 * 1000) return 'fresh';
   }catch(e0){}
   if (__edge.busy) return 'busy';
-  if (typeof xuUniverse !== 'function' || typeof xuCandles !== 'function') return 'unavailable';
+  if (typeof W.xuUniverse !== 'function' || typeof W.xuCandles !== 'function') return 'unavailable';
   if (typeof __edge.run === 'function' && __edge.ranOnce){
     return await __edge.run();
   }
@@ -1148,7 +1224,6 @@ async function edgeWarm(opts){
   return __edgeScanSnap ? 'warmed' : 'unavailable';
 }
 
-var W = (typeof window !== 'undefined') ? window : this;
 W.edgeSignal = edgeSignal;
 W.edgeEnrich = edgeEnrich;
 W.edgeAssess = edgeAssess;
