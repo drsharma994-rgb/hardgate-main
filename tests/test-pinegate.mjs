@@ -84,5 +84,18 @@ assert(swingOnly.eligible.length === 1, 'swing-only passes without brain/scalp')
 assert(swingOnly.funnel.mode === 'swing', 'funnel records swing mode');
 assert(swingOnly.missing.length === 0, 'swing-only does not list brain as missing');
 
+const edgeOnly = G.pineGateIntersect({
+  swingCands: [],
+  scalpCands: [],
+  edgeCands: [{ sym: 'ETHUSD', dir: 'short', entry: 2000, stop: 2100, t1: 1800, tally: 4 }],
+  bestClean: [],
+  brainRows: [],
+  trendmxRows: [],
+  regime: { playbook: { bias: 'BOTH' } }
+}, { mode: 'edge' });
+assert(edgeOnly.eligible.length === 1 && edgeOnly.eligible[0].sym === 'ETHUSD', 'edge-only passes without swing/brain');
+assert(edgeOnly.funnel.mode === 'edge', 'funnel records edge mode');
+assert(edgeOnly.missing.length === 0, 'edge-only does not list swing as missing');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
