@@ -378,6 +378,14 @@ async function addToBook(opts){
     if (!body.sym || !body.dir || !isFinite(body.entry) || !isFinite(body.stop)){
       return { ok: false, reason: 'invalid plan' };
     }
+    if ((opts.scanner === 'brain' || opts.strategy === 'brain')
+        && typeof W.brainLiveModeOn === 'function' && W.brainLiveModeOn()
+        && typeof W.brainLiveEligible === 'function' && opts._brainRow){
+      var liveGate = W.brainLiveEligible(opts._brainRow);
+      if (!liveGate.ok){
+        return { ok: false, veto: true, reasons: ['LIVE MODE: ' + (liveGate.reasons || []).join(' · ')] };
+      }
+    }
     if (!isFinite(body.t1)){
       var risk = Math.abs(body.entry - body.stop);
       body.t1 = body.dir === 'short' ? body.entry - risk : body.entry + risk;
@@ -388,6 +396,15 @@ async function addToBook(opts){
         await bookPull();
         bookScoreRecord(body);
         __book.lastAt = Date.now();
+        try{
+          if ((opts.scanner === 'brain' || body.strategy === 'brain') && typeof W.hgBrainBookLayerRecord === 'function'){
+            W.hgBrainBookLayerRecord({
+              fund: body.fund, sym: body.sym, dir: body.dir, tier: body.tier,
+              layers: body.layers || [],
+              layerSig: opts.layerSig || ''
+            });
+          }
+        }catch(eRec){}
         try{
           if (r.json.position){
             var autoPos = r.json.position;

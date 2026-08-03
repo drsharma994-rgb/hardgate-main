@@ -178,10 +178,12 @@ ConvictionLockManager.prototype.evaluateSetup = function(setup, currentCandle, i
     /* TP1 — wicks count (no close required). Hardgate status label uses a space. */
     if (dir === 'long' && isFinite(tp1) && isFinite(high) && high >= tp1){
       if (this.debug) console.log('[TARGET HIT] ' + setup.id + ' — TP1 reached.');
+      setup.tp1Hit = true;
       return 'TARGET HIT';
     }
     if (dir === 'short' && isFinite(tp1) && isFinite(low) && low <= tp1){
       if (this.debug) console.log('[TARGET HIT] ' + setup.id + ' — TP1 reached.');
+      setup.tp1Hit = true;
       return 'TARGET HIT';
     }
 
@@ -196,6 +198,24 @@ ConvictionLockManager.prototype.evaluateSetup = function(setup, currentCandle, i
       if (td && td.action === 'TRAIL_SL_TIGHT'){
         setup.trailSlTight = true;
         setup.momentumWarning = td.reason;
+      }
+    }
+
+    /* BRAIN crypto — exit if TP1 not reached within N bars (dead promotion). */
+    if ((setup.stratKey === 'brain' || setup.strategy === 'brain') && isFinite(barIndex) && isFinite(setup.executionBarIndex)){
+      var maxBars = setup.maxBarsToTp1;
+      if (!isFinite(maxBars)){
+        maxBars = (type === 'swing') ? (W.BRAIN_TP1_BARS_SWING || 12) : (W.BRAIN_TP1_BARS_SCALP || 24);
+      }
+      var barsElapsed = barIndex - setup.executionBarIndex;
+      if (barsElapsed >= maxBars){
+        var tp1Hit = setup.tp1Hit === true;
+        if (!tp1Hit && dir === 'long' && isFinite(tp1) && isFinite(high) && high >= tp1) tp1Hit = true;
+        if (!tp1Hit && dir === 'short' && isFinite(tp1) && isFinite(low) && low <= tp1) tp1Hit = true;
+        if (!tp1Hit){
+          if (this.debug) console.log('[TIME STOP] ' + setup.id + ' — TP1 not hit in ' + barsElapsed + ' bars.');
+          return 'TIME_STOP';
+        }
       }
     }
     return null;
