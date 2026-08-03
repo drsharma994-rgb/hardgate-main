@@ -237,6 +237,18 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + rfJson;
   }
+  if (sig.scriptId === 'nw-envelope'){
+    var nwAction = sig.dir === 'long' ? 'revert_long' : 'revert_short';
+    var nwJson = '{"action":"' + nwAction + '","ticker":"' + sig.sym + '","price":' + sig.price
+      + ',"mean_target":' + fmtF(sig.meanTarget || sig.nwCenter, 6) + ',"script":"nw-envelope"}';
+    return '🌲 PINE NW · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nNW Envelope snap-back · bandwidth ' + fmtF(sig.bandwidth || 8, 1) + ' · ATR×' + fmtF(sig.mult || 2.5, 1)
+      + '\nMEAN ' + pxF(sig.meanTarget || sig.nwCenter) + ' · upper ' + pxF(sig.upper) + ' · lower ' + pxF(sig.lower)
+      + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + nwJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
