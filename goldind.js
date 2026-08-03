@@ -96,7 +96,8 @@ Exports (all on window):
                              + Asian breakout + ADR fade on the last bar
                              -> {volProfile, sweepData, fvgData, obSetup, asianSetup,
                              adrFade, adrData, session, asianRange, swings, structure,
-                             activeOrderBlocks, activeTriggers, agreeingReads, context, reads}
+                             activeOrderBlocks, activeTriggers, agreeingReads, macroHint,
+                             context, reads}
   HardgateGoldEngine.evaluateSwing(h4, ctx?) — 4h swing evaluator (structure + OB retest)
   goldSwings(rows, left?, right?) — fractal swing highs/lows -> {highs, lows}
   goldMarketStructure(rows, swings?, left?, right?) — HH/HL BOS + CHOCH vs swings
@@ -108,6 +109,10 @@ Exports (all on window):
   updateActiveZones / detectOrderBlockRetest — robust OB retest aliases
   getMarketSession(ts) / calculateAsianRange(rows, index?) / calculateADRExhaustion(daily, current?, lb?)
                              — session weights, Asian H/L tracker, daily ADR exhaustion (≥80%)
+  calculateMacroHint(dxyCandles, currentDxy?) — intraday DXY open/close hint for gold:
+                             bearish DXY bar -> TAILWIND (weak dollar favors longs);
+                             bullish DXY bar -> HEADWIND; else NEUTRAL
+  goldCalculateMacroHint — alias of calculateMacroHint
   goldAsianBreakout / goldADRFade — volume-validated Asian breakout + ADR exhaustion fade
   detectAsianBreakout / detectADRFade — session & exhaustion trigger aliases
   goldMarketSession / goldAsianRangeAt / goldADRExhaustion — session module aliases
@@ -1178,6 +1183,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
       demoted: demoted, offSession: offSess, stamps: stamps, gateNotes: gateNotes,
       zone: zone || { lo: D.entry - 0.25*D.a15, hi: D.entry + 0.25*D.a15 },
       why: why, invalidates: invalidates,
+      macroHint: D.macroHint || null,
       notes: (D.notes || []).concat([lv.stopNote])
     };
   }catch(e){ return null; }
@@ -1185,7 +1191,7 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
 
 /* detector bundle + the shared agreeing-reads ledger (same read logic as the
    goldScalpSetup composite, exposed once for all strategy candidates). */
-function __goldBundle(rows, rows1h, rows4h, entry, a15){
+function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   var D = { entry: entry, a15: a15, reads: [], notes: [] };
   function add(side, tag, label, ctx){ D.reads.push({ side: side, tag: tag, label: label, ctx: !!ctx }); }
   var i, z;
@@ -1197,7 +1203,13 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15){
 
   var sw = D.sw = goldSweeps(rows);
   /* microstructure landscape + V2 triggers (HardgateGoldEngine.evaluateScalp) */
-  D.scalpEval = evaluateScalp(rows, { nearestStructure: null, entry: entry, atr15: a15 });
+  bundleOpts = bundleOpts || {};
+  var scalpCtx = { nearestStructure: null, entry: entry, atr15: a15 };
+  if (bundleOpts.dxyCandles) scalpCtx.dxyCandles = bundleOpts.dxyCandles;
+  if (bundleOpts.currentDxy) scalpCtx.currentDxy = bundleOpts.currentDxy;
+  if (bundleOpts.macroHint) scalpCtx.macroHint = bundleOpts.macroHint;
+  D.scalpEval = evaluateScalp(rows, scalpCtx);
+  D.macroHint = D.scalpEval.macroHint || bundleOpts.macroHint || null;
   D.vprof = D.scalpEval.volProfile || goldVolumeProfile(rows, 100, 50);
   D.volSpike = goldVolumeSpike(rows);
   D.volSpikeSweep = false;
@@ -1516,7 +1528,11 @@ function goldScalpSetups(inp){
     }
     var news = __newsCaution(newsState, nowMs);
 
-    var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
+    var bundleOpts = {};
+    if (inp.dxyCandles) bundleOpts.dxyCandles = inp.dxyCandles;
+    if (inp.currentDxy) bundleOpts.currentDxy = inp.currentDxy;
+    if (inp.macroHint) bundleOpts.macroHint = inp.macroHint;
+    var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15, bundleOpts);
     D.kz = kz; D.news = news;
 
     /* quality-gate context shared by every strategy candidate:
@@ -2408,6 +2424,26 @@ var goldMarketSession = getMarketSession;
 var goldAsianRangeAt = calculateAsianRange;
 var goldADRExhaustion = calculateADRExhaustion;
 
+/* Intraday DXY open/close hint for gold positioning. Weak dollar (close < open)
+   -> TAILWIND for gold longs; strong dollar -> HEADWIND. Never throws. */
+function calculateMacroHint(dxyCandles, currentDxy){
+  try{
+    var candles = __rows(dxyCandles);
+    if (!candles || candles.length < 2) return 'NEUTRAL';
+    var cur = currentDxy;
+    if (!cur) cur = candles[candles.length - 1];
+    if (!cur) return 'NEUTRAL';
+    var o = isFinite(cur.o) ? cur.o : cur.open;
+    var c = isFinite(cur.c) ? cur.c : cur.close;
+    if (!isFinite(o) || !isFinite(c)) return 'NEUTRAL';
+    if (c < o) return 'TAILWIND';
+    if (c > o) return 'HEADWIND';
+    return 'NEUTRAL';
+  }catch(e){ return 'NEUTRAL'; }
+}
+
+var goldCalculateMacroHint = calculateMacroHint;
+
 function __aggregateDailyFromRows(rows){
   var out = [], days = {}, keys = [], i, r, t, sec, ds, key, d;
   try{
@@ -3097,6 +3133,7 @@ function evaluateScalp(m15Data, ctx){
     adrData: null,
     session: null,
     asianRange: null,
+    macroHint: 'NEUTRAL',
     swings: null,
     structure: null,
     activeOrderBlocks: [],
@@ -3236,6 +3273,16 @@ function evaluateScalp(m15Data, ctx){
           + adrFade.anchor.toFixed(2) + ')'
       });
     }
+
+    /* Macro hint — intraday DXY open/close (ctx override or computed from DXY bars). */
+    if (out.context.macroHint === 'TAILWIND' || out.context.macroHint === 'HEADWIND'
+        || out.context.macroHint === 'NEUTRAL'){
+      out.macroHint = out.context.macroHint;
+    } else if (out.context.dxyCandles || out.context.currentDxy){
+      out.macroHint = calculateMacroHint(out.context.dxyCandles, out.context.currentDxy);
+      out.context.macroHint = out.macroHint;
+    }
+
     return out;
   }catch(e){ return out; }
 }
@@ -3353,6 +3400,8 @@ W.detectOrderBlockRetest = goldOrderBlockRetest;
 W.getMarketSession = getMarketSession;
 W.calculateAsianRange = calculateAsianRange;
 W.calculateADRExhaustion = calculateADRExhaustion;
+W.calculateMacroHint = calculateMacroHint;
+W.goldCalculateMacroHint = goldCalculateMacroHint;
 W.goldMarketSession = goldMarketSession;
 W.goldAsianRangeAt = goldAsianRangeAt;
 W.goldADRExhaustion = goldADRExhaustion;

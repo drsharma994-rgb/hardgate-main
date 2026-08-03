@@ -84,6 +84,7 @@ ConvictionLockManager.prototype.fromCandidate = function(c, setupType){
       anchor: anchor
     },
     tally: isFinite(c.tally) ? c.tally : 0,
+    macroHint: c.macroHint || null,
     timestamp: isFinite(c.issuedAt) ? c.issuedAt : Date.now(),
     status: 'ACTIVE'
   };
@@ -224,6 +225,7 @@ ConvictionLockManager.prototype.hydrateFromRecord = function(rec, storageKey){
       anchor: anchor
     },
     tally: rec.tally,
+    macroHint: rec.macroHint || null,
     timestamp: rec.issuedAt,
     issuedAt: rec.issuedAt,
     lastConfirmedAt: rec.lastConfirmedAt,
@@ -249,6 +251,7 @@ ConvictionLockManager.prototype.toRecord = function(setup){
     issuedAt: setup.timestamp || setup.issuedAt,
     lastConfirmedAt: setup.lastConfirmedAt,
     tally: setup.tally,
+    macroHint: setup.macroHint || null,
     anchor: setup.levels.anchor
   };
 };
@@ -333,6 +336,7 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
         }
         c.venue = rec.venue; c.sym = rec.sym;
         c.locked = true; c.issuedAt = rec.issuedAt;
+        if (rec.macroHint) c.macroHint = rec.macroHint;
       } else {
         var atr = (isFinite(c.atr) && c.atr > 0) ? c.atr : NaN;
         var setupCand = mgr.fromCandidate(c, type);
@@ -366,6 +370,7 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
           if (rec){
             rec.anchor = isFinite(c.anchor) ? c.anchor : null;
             rec.tally = isFinite(c.tally) ? c.tally : 0;
+            if (c.macroHint) rec.macroHint = c.macroHint;
             if (venueScoped) store.live[cKey] = rec;
             else store.live[c.id] = rec;
           }
