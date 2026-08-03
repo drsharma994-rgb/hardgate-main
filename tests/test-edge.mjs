@@ -140,6 +140,18 @@ console.log('== cryptogates bias parity ==');
   var b = W.edgeSwingBias(bull);
   assert(b && b.dir === 'long', 'bias with cryptogates loaded');
 }
+
+console.log('== volume decay validator ==');
+{
+  assert(typeof W.isCorrectivePullback === 'function', 'isCorrectivePullback exported');
+  var volA = {
+    volumes: [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 50, 50, 50, 50, 50]
+  };
+  assert(W.isCorrectivePullback(volA, 14, 'long') === true, 'light pullback vs heavy impulse passes');
+  volA.volumes = [50, 50, 50, 50, 50, 100, 100, 100, 100, 100, 200, 200, 200, 200, 200];
+  assert(W.isCorrectivePullback(volA, 14, 'long') === false, 'heavy pullback vs light impulse fails');
+  assert(W.isCorrectivePullback(volA, 3, 'long') === true, 'short history passes by default');
+}
 {
   var tab = W.HG_tabs.filter(function(t){ return t.id === 'edge'; })[0];
   assert(tab.refresh() === 'skipped: not run yet', 'refresh before scan skipped');
