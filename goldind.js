@@ -2851,6 +2851,10 @@ function hgYieldState(){
         && typeof W.__hgGoldYieldState.trend === 'string'){
       return W.__hgGoldYieldState;
     }
+    if (W.__hgYieldState && typeof W.__hgYieldState === 'object'
+        && typeof W.__hgYieldState.trend === 'string'){
+      return W.__hgYieldState;
+    }
     if (W.__hgUs10yCandles){
       var yt = __yieldTrendFromRows(__rows(W.__hgUs10yCandles));
       if (yt) return { trend: yt, source: 'us10y-stash' };
@@ -2869,6 +2873,9 @@ function hgSmtState(){
   try{
     if (W.__hgGoldSmtState && typeof W.__hgGoldSmtState === 'object'){
       return W.__hgGoldSmtState;
+    }
+    if (W.__hgSmtState && typeof W.__hgSmtState === 'object'){
+      return W.__hgSmtState;
     }
     var xau = W.__hgXauCandles || W.__hgGoldXauCandles;
     var xag = W.__hgXagCandles || W.__hgGoldXagCandles;
