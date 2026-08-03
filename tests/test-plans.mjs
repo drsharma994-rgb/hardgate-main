@@ -67,14 +67,23 @@ console.log('== liquidity sweep ==');
   var rows = mkRows(30, 100);
   var n = rows.length;
   rows[n - 3].l = 95;
+  rows[n - 3].o = 95.5;
   rows[n - 3].c = 96;
   rows[n - 2].c = 98;
+  rows[n - 1].o = 97;
   rows[n - 1].c = 99;
-  var A = { lows: rows.map(function(r){ return r.l; }), highs: rows.map(function(r){ return r.h; }),
-            closes: rows.map(function(r){ return r.c; }) };
   var priorLo = 97;
+  var atrArr = rows.map(function(){ return 1; });
+  var A = { rows: rows, lows: rows.map(function(r){ return r.l; }), highs: rows.map(function(r){ return r.h; }),
+            closes: rows.map(function(r){ return r.c; }), atr: atrArr };
   var sq = W.hgDetectLiquiditySweep(A, n - 1, 'long', priorLo);
-  assert(sq === null || sq.swept === true, 'sweep detect');
+  assert(sq && sq.swept === true, 'displacement reclaim detects sweep');
+  rows[n - 2].o = 97.95;
+  rows[n - 2].c = 98;
+  rows[n - 1].o = 98.95;
+  rows[n - 1].c = 99;
+  sq = W.hgDetectLiquiditySweep(A, n - 1, 'long', priorLo);
+  assert(sq === null, 'weak reclaim body rejected without displacement');
 }
 
 console.log('== swing parity ==');

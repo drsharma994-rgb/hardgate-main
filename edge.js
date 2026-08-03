@@ -8,8 +8,8 @@ Finds high-quality continuation entries that AGREE with SWING SCAN
           (LIMIT @ EMA21/EMA9/EMA50, sweep-reclaim or OTE 62–79%, Donchian edge)
   SHORT — 4H cascade bearish + HTF below EMA200 + rally into resistance
           (LIMIT @ EMA21/EMA9/EMA50, sweep-fail or OTE 62–79%, Donchian edge)
-Sweep quality (2025/26 SMC): wick through level + reclaim close within 1–3 bars;
-stop beyond sweep wick + 0.5 ATR. OTE limit at 70.5% of impulse leg after sweep.
+Sweep quality (2025/26 SMC): wick through level + reclaim close within 1–3 bars
+with displacement (body > 0.8× ATR on reclaim); stop beyond sweep wick + 0.5 ATR.
 INSTITUTIONAL UPGRADES V6:
 - CVD (Cumulative Volume Delta) Trap Vetoes
 - L2 Order Book Imbalance (OBI) Spoof Detection
@@ -40,6 +40,7 @@ var SWEEP_STOP_ATR = 0.5;
 var PULL_ATR      = 0.4;
 var EMA9_PULL_ATR = 0.25;
 var SWEEP_RECLAIM_MAX = 3;
+var SWEEP_RECLAIM_BODY_ATR = 0.8;
 var OTE_LO        = 0.62;
 var OTE_HI        = 0.79;
 var OTE_MID       = 0.705;
@@ -235,27 +236,28 @@ function edgeOteZone(impulseLo, impulseHi, dir){
   }catch(e){ return null; }
 }
 
-/* Wick through level + reclaim close within 1–3 bars (delegates to plans.js). */
+/* Wick through level + reclaim close with displacement (body > 0.8× ATR). */
 function edgeSweepQuality(A, i, dir, priorLevel){
   try{
     if (typeof hgDetectLiquiditySweep === 'function'){
-      return hgDetectLiquiditySweep(A, i, dir, priorLevel, { maxBars: SWEEP_RECLAIM_MAX });
+      return hgDetectLiquiditySweep(A, i, dir, priorLevel, {
+        maxBars: SWEEP_RECLAIM_MAX,
+        minBodyAtr: SWEEP_RECLAIM_BODY_ATR,
+      });
     }
     var maxBack = Math.min(SWEEP_RECLAIM_MAX, i);
     var sweepBar = -1, sweepExtreme = NaN, reclaimBar = -1;
     for (var b = 0; b <= maxBack; b++){
       var j = i - b;
-      var lj = A.lows[j], hj = A.highs[j], cj = A.closes[j];
+      var lj = A.lows[j], hj = A.highs[j];
       if (dir === 'long'){
         if (!(isFinite(lj) && lj < priorLevel)) continue;
         sweepBar = j;
         sweepExtreme = lj;
-        if (isFinite(cj) && cj > priorLevel){
-          reclaimBar = j;
-          break;
-        }
-        for (var r = j + 1; r <= i && r - j <= SWEEP_RECLAIM_MAX; r++){
-          if (isFinite(A.closes[r]) && A.closes[r] > priorLevel){
+        for (var r = j; r <= i && r - j <= SWEEP_RECLAIM_MAX; r++){
+          var cr = A.closes[r], or = A.rows[r].o, atrr = A.atr[r];
+          var bodySize = Math.abs(cr - or);
+          if (isFinite(cr) && cr > priorLevel && isFinite(atrr) && bodySize > SWEEP_RECLAIM_BODY_ATR * atrr){
             reclaimBar = r;
             break;
           }
@@ -265,12 +267,10 @@ function edgeSweepQuality(A, i, dir, priorLevel){
         if (!(isFinite(hj) && hj > priorLevel)) continue;
         sweepBar = j;
         sweepExtreme = hj;
-        if (isFinite(cj) && cj < priorLevel){
-          reclaimBar = j;
-          break;
-        }
-        for (var r2 = j + 1; r2 <= i && r2 - j <= SWEEP_RECLAIM_MAX; r2++){
-          if (isFinite(A.closes[r2]) && A.closes[r2] < priorLevel){
+        for (var r2 = j; r2 <= i && r2 - j <= SWEEP_RECLAIM_MAX; r2++){
+          var cr2 = A.closes[r2], or2 = A.rows[r2].o, atrr2 = A.atr[r2];
+          var bodySize2 = Math.abs(cr2 - or2);
+          if (isFinite(cr2) && cr2 < priorLevel && isFinite(atrr2) && bodySize2 > SWEEP_RECLAIM_BODY_ATR * atrr2){
             reclaimBar = r2;
             break;
           }
