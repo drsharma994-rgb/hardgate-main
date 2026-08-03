@@ -1404,10 +1404,21 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
       }
       D.nearestHVN = nearH;
       if (isFinite(nearH) && nearD <= 0.5*a15){
+        var hvnTouch = nearD <= 0.25*a15;
         if (entry >= nearH){
           add('long', 'hvn', 'price retesting HVN support at ' + nearH.toFixed(2) + ' — high-volume node holding');
+          if (hvnTouch){
+            add('long', 'hvn', 'inside the HVN retest band (≤0.25×ATR) — session volume node actively defending', true);
+          }
         } else {
           add('short', 'hvn', 'price retesting HVN resistance at ' + nearH.toFixed(2) + ' — high-volume node capping');
+          if (hvnTouch){
+            add('short', 'hvn', 'inside the HVN retest band (≤0.25×ATR) — session volume node actively capping', true);
+          }
+        }
+        if (D.volSpike && hvnTouch){
+          var hSide = (entry >= nearH) ? 'long' : 'short';
+          add(hSide, 'hvn', 'volume climax on the HVN retest bar — absorption confirms institutional defense at the node', true);
         }
       }
     }
@@ -1858,8 +1869,10 @@ function goldScalpSetups(inp){
     }
 
     /* --- 12) HVN / volume-node retest (session volume profile) --- */
-    if (D.vpOk && D.vprof && isFinite(D.nearestHVN) && Math.abs(entry - D.nearestHVN) <= 0.5*a15
-        && (D.volSpike || D.volSpikeSweep)){
+    var hvnDist = isFinite(D.nearestHVN) ? Math.abs(entry - D.nearestHVN) : Infinity;
+    var hvnTouch = hvnDist <= 0.25*a15;
+    if (D.vpOk && D.vprof && isFinite(D.nearestHVN) && hvnDist <= 0.5*a15
+        && (D.volSpike || D.volSpikeSweep || hvnTouch)){
       var hvn = D.nearestHVN;
       var hdir = (entry >= hvn) ? 'long' : 'short';
       var hWhy = 'price retesting the high-volume node at ' + hvn.toFixed(2);
@@ -2052,6 +2065,9 @@ function goldWatch(inp){
            risk-off gold long; extreme greed >=75 backs a short)
      +0..2 structural R:R bonus (≥2R = +1, ≥2.5R = +2) when c.rr is finite
      +/-N  scorecard expectancy boost via window.hgProfitRankHint (gold lane)
+   OFF-SESSION render bar uses STRUCTURAL tally only (agreeing reads +
+   killzone weight >= +2); macro/news/positioning shrink the displayed tally
+   but never suppress the card.
    Sort: tally desc, then grade, then killzone weight, then agreeing reads
    (stable). -> {ranked:[cand + {tally, tallyParts:[{label,pts}]}], best} —
    {ranked:[], best:null} on any failure.
@@ -2188,13 +2204,16 @@ function goldRankSetups(cands, ctx){
         }
       }catch(e){}
       /* (1) OFF-SESSION tally bar: demoted off-session candidates must clear
-         +2 above the normal render bar or they are held back with a named
-         reason line (never silently dropped). */
-      if (c.demoted && c.offSession && tally < GS_OFFSESSION_BAR){
+         +2 on STRUCTURAL confluence (agreeing reads + killzone weight only).
+         Macro/news/positioning penalties shrink the displayed tally and can
+         never lead (demoted) but must not suppress the card entirely — users
+         still need to see forming off-hours structure. */
+      var structTally = agree + kzw;
+      if (c.demoted && c.offSession && structTally < GS_OFFSESSION_BAR){
         out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
                             dir: c.dir, venue: c.venue || null, sym: c.sym || null,
-                            reason: 'OFF-SESSION — outside every ICT killzone; confluence tally '
-                                    + (tally > 0 ? '+' : '') + tally + ' below the raised bar (+'
+                            reason: 'OFF-SESSION — outside every ICT killzone; structural confluence '
+                                    + (structTally > 0 ? '+' : '') + structTally + ' below the raised bar (+'
                                     + GS_OFFSESSION_BAR + ')' });
         continue;
       }

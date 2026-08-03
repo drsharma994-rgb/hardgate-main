@@ -39,9 +39,10 @@ RANKING TALLY (shown on every card):
 QUALITY GATES (win-rate first; every gate names its reason on the card or on
 a small reason line — nothing is dropped silently):
   1) OFF-SESSION — detected outside every ICT killzone (killzone weight 0):
-     demoted (can never be MOST PROBABLE, stamped OFF-SESSION) and must clear
-     tally >= +2 (normal render bar 0 + 2) to render at all. The Asian-range
-     breakout strategy is allowed its own 00:00-07:00 GMT session.
+     demoted (can never be MOST PROBABLE, stamped OFF-SESSION). The render bar
+     uses STRUCTURAL confluence only (agreeing reads + killzone weight >= +2);
+     macro/news penalties shrink the displayed tally but never suppress the card.
+     The Asian-range breakout strategy is allowed its own 00:00-07:00 GMT session.
   2) COUNTER-TREND — longs below a FALLING 200-EMA-15m with a bearish 4H
      EMA50/200 stack (mirrored for shorts) are demoted; a liquidity-sweep
      trigger is the only sanctioned counter-trend play (exempt).

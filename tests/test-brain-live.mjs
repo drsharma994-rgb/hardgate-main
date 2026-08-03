@@ -465,6 +465,7 @@ console.log('== F1) bounded warm-wait: slow layer votes, stuck layer named-dark 
   W.liqAgg = function(){ return { snapshot: function(){ return { imbalance: { cls: 'balanced', ratio: 1, text: 'BALANCED' }, top: [], window: { ms: 3.6e6 }, spikeUsd: 0 }; } }; };
   W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
   W.brainTunables.warmColdMs = 400;
+  W.brainTunables.layerWarmMs = 400;   /* match test-brain.mjs — layer patience uses the same cap */
   W.HG_warmups = [
     { id: 'regime', label: 'REGIME', run: function(){
         return new Promise(function(res){
@@ -862,6 +863,7 @@ console.log('== H) auto-warm into synthesis at scale: cold layers vote, accounti
   W.goldspotState = function(){ return { basisPct: 0, verdict: 'balanced' }; };
   W.binanceTickers24h = async function(){ return {}; };   /* tape live, sub-threshold everywhere — never dark */
   W.brainTunables.warmColdMs = 400;
+  W.brainTunables.layerWarmMs = 400;
   const hCalls = [], hProg = [];
   let PH = null;                               /* assigned before any hook can fire (mount -> run) */
   W.HG_warmups = [
@@ -919,7 +921,7 @@ console.log('== H) auto-warm into synthesis at scale: cold layers vote, accounti
          'H: the progress stat names the exact hook order + the cold cap while the starters run — got "' + hProg[0] + '"');
   assert(hSnaps[0] === 'auto-warmed: regime, oiflow, engine'
          + ' · still dark: squeeze (starter failed: melted) · rotation (still running — lands in its own time)'
-         + ' · reading every intelligence layer…',
+         + ' · building universe…',
          'H: accounting prefix — three cold layers warmed into voting, the rejection + the stuck hook named — got "' + hSnaps[0] + '"');
   const hStat = PH.stubs['#brainStat'].textContent;
   const hCards = PH.stubs['#brainCards'].innerHTML;
@@ -951,7 +953,7 @@ console.log('== H) auto-warm into synthesis at scale: cold layers vote, accounti
 
   /* re-run inside the 60s freshness window — starters skipped, no prefix */
   await runAndWait(PH.stubs);
-  assert(hCalls.length === 5 && hSnaps[hSnaps.length - 1] === 'reading every intelligence layer…'
+  assert(hCalls.length === 5 && hSnaps[hSnaps.length - 1] === 'building universe…'
          && PH.stubs['#brainStat'].textContent.indexOf('done · 0 PRIME · 1 HIGH · 2 watch · 38 aside') === 0,
          'H: the freshness window skips starter invocation entirely — same buckets, no accounting prefix');
   delete globalThis.S;
