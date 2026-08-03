@@ -313,6 +313,35 @@ function squeezeBody(rows) {
     + '\nlevels on the SQUEEZE tab — entry/stop/targets live there.';
 }
 
+/* ---------------- BEST tab setups (server-side) ----------------
+   Key semantics mirror in-browser bestAlertKey: sym|dir|entry. The CI runner
+   reads S.lastBestTop after runBestAlertCycle. bestNotified tracks which keys
+   actually reached Telegram — separate from legacy delta/coindcx restore keys
+   so pre-seeded alert-state never blocks the first real push. */
+function bestSetupKey(s) {
+  if (!s || !s.sym || !s.dir) return null;
+  const e = +s.entry;
+  if (!Number.isFinite(e)) return null;
+  const entryPart = String(parseFloat(e.toFixed(8)));
+  return String(s.sym) + '|' + String(s.dir) + '|' + entryPart;
+}
+function bestLegKey(legSnap) {
+  if (!legSnap) return null;
+  if (legSnap.key) return String(legSnap.key);
+  return bestSetupKey(legSnap);
+}
+function bestBody(leg, snap) {
+  if (!snap) return '';
+  const exLabel = leg === 'delta' ? 'Delta India' : (leg === 'coindcx' ? 'CoinDCX' : String(leg));
+  const t1 = Number.isFinite(+snap.t1) ? snap.t1 : null;
+  return snap.sym + ' ' + String(snap.dir || '').toUpperCase() + ' (' + exLabel + ')\n'
+    + 'entry ' + snap.entry + ' · stop ' + snap.stop
+    + (t1 !== null ? ' · target ' + t1 : '')
+    + '\nR:R ' + (Number.isFinite(+snap.rr) ? (+snap.rr).toFixed(2) : '?')
+    + ' · ' + (snap.famScore != null ? snap.famScore : '?') + '/9 families'
+    + ' · ' + (snap.robScore != null ? snap.robScore : '?') + '/2 robust';
+}
+
 /* ---------------- confirmed setups sweep (server-side) ----------------
    Every 15-min run collects VALID + CONFIRMED setups WITH levels from the
    page's own state seams: BRAIN PRIME/HIGH rows with plans, and EXECUTE
@@ -499,6 +528,7 @@ async function main() {
     try { tabAlerts = JSON.parse(localStorage.getItem('hg_tabalert_keys') || 'null'); } catch (e) { tabAlerts = null; }
     return {
       state: { delta: S.lastAlertKey.delta, coindcx: S.lastAlertKey.coindcx, gold: S.lastAlertKey.gold ?? null },
+      best: (S.lastBestTop && typeof S.lastBestTop === 'object') ? S.lastBestTop : {},
       email: email,
       tabAlerts: tabAlerts,
       edge: edgeInfo
@@ -713,6 +743,41 @@ async function main() {
   } else if (prevState.squeeze !== undefined) {
     newState.squeeze = prevState.squeeze;   /* degraded run: keep, change nothing */
   }
+
+  /* BEST tab push: server-side Telegram when #1 setup key changes. bestNotified
+     is the delivery ledger — separate from legacy delta/coindcx keys restored
+     into the page (those only dedupe the in-browser path). Pre-seeded state
+     without a matching bestNotified entry still pushes on the next run. */
+  const bestTop = (result.best && typeof result.best === 'object') ? result.best : {};
+  const prevNotified = (prevState.bestNotified && typeof prevState.bestNotified === 'object')
+    ? prevState.bestNotified : {};
+  const nextNotified = Object.assign({}, prevNotified);
+  for (const leg of ['delta', 'coindcx']) {
+    const snap = bestTop[leg] || null;
+    const key = bestLegKey(snap);
+    if (!key) {
+      if (nextNotified[leg] !== undefined) delete nextNotified[leg];
+      console.log('BEST ' + leg + ': no CLEAN #1 setup.');
+      continue;
+    }
+    console.log('BEST ' + leg + ': ' + key + ' · notified: ' + (prevNotified[leg] || 'never'));
+    if (prevNotified[leg] === key) {
+      console.log('BEST ' + leg + ': unchanged — no push.');
+      continue;
+    }
+    const inPageDelivered = !!(result.email && result.email.ok === true
+      && JSON.stringify(prevState[leg] ?? null) !== JSON.stringify(newState[leg] ?? null));
+    if (inPageDelivered) {
+      console.log('BEST ' + leg + ': in-page alert already delivered this cycle — skipping server duplicate.');
+      nextNotified[leg] = key;
+      continue;
+    }
+    const pushResult = await sendAlertCi(offHoursPrefix() + '🚨 HARDGATE BEST (Strategies)',
+      bestBody(leg, snap) + offHoursTag());
+    console.log('BEST ALERT ' + leg + ' — push: ' + pushResult);
+    if (String(pushResult).indexOf('sent') >= 0) nextNotified[leg] = key;
+  }
+  newState.bestNotified = nextNotified;
 
   /* news-blackout transition push: ACTIVE→clear pings once so the owner knows
      setups can form again; clear→ACTIVE pings once so a quiet board is
@@ -1013,6 +1078,7 @@ export { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
+         bestSetupKey, bestLegKey, bestBody,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          bookExecSnapshot, bookExecKey, bookExecAlertDue, bookExecBody, BOOK_EXEC_ALERT_MS,
