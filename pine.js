@@ -165,6 +165,18 @@ function formatPineAlert(sig){
       + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
       + '\n' + json;
   }
+  if (sig.scriptId === 'squeeze-momentum'){
+    var sqAction = sig.dir === 'long' ? 'buy' : 'sell';
+    var sqJson = '{"action":"' + sqAction + '","ticker":"' + sig.sym + '","price":' + sig.price
+      + ',"momentum_val":' + fmtF(sig.momentum, 4) + ',"script":"squeeze-momentum"}';
+    return '🌲 PINE SQZ · ' + sig.sym + ' ' + sig.dir.toUpperCase()
+      + '\nSqueeze Momentum · squeeze fired OFF'
+      + '\nmomentum ' + fmtF(sig.momentum, 4)
+      + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
+      + '\nmark ' + pxF(sig.price)
+      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\n' + sqJson;
+  }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
   var json = '{"action":"' + action + '","ticker":"' + sig.sym + '","price":' + sig.price
     + ',"ml_confidence":' + fmtF(sig.smoothedScore, 2) + ',"script":"' + sig.scriptId + '"}';
