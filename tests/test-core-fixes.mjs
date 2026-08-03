@@ -97,6 +97,8 @@ assert(html.includes("$('ntfyTopic').value = t"), 'ntfy topic prefilled on load 
   const iPush1 = rba.indexOf('await sendAlertPush(', iEmail);
   assert(iEmail !== -1 && iPush1 > iEmail, 'BEST alert path: Telegram (sendAlertPush) fires alongside sendAlertEmail');
   assert(html.includes('HG_BEST_ALERT_MS = 15 * 60 * 1000'), 'BEST tab Telegram cadence is 15 minutes');
+  assert(html.includes('function bestAlertKey(w)'), 'BEST dedupe uses sym|dir|entry via bestAlertKey');
+  assert(html.includes('S.lastBestTop'), 'BEST alert cycle publishes S.lastBestTop for CI reads');
   const rac = grabFn('runAlertCycle');
   const iGoldEmail = rac.indexOf('await sendGoldAlertEmail(g);');
   const iPush2 = rac.indexOf('await sendAlertPush(', iGoldEmail);

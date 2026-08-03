@@ -4829,13 +4829,30 @@ async function sendGoldAlertEmail(g){
   }
 }
 
+/* Dedupe key for BEST alerts: sym|dir|entry so a moved entry re-alerts.
+   Entry rounded to 8 dp then trailing zeros stripped for stable keys. */
+function bestAlertKey(w){
+  if (!w || !w.t || !w.t.symbol || !w.dir) return null;
+  const e = +w.entry;
+  if (!Number.isFinite(e)) return null;
+  const entryPart = String(parseFloat(e.toFixed(8)));
+  return String(w.t.symbol) + '|' + String(w.dir) + '|' + entryPart;
+}
+function bestAlertSnapshot(w){
+  if (!w || !w.t) return null;
+  const t1 = (w.t1 != null && isFinite(w.t1)) ? +w.t1 : null;
+  return { sym: String(w.t.symbol), dir: String(w.dir), entry: +w.entry, stop: +w.stop, t1: t1,
+           famScore: w.famScore, robScore: w.robScore, rr: w.rr, key: bestAlertKey(w) };
+}
 async function runBestAlertCycle(){
+  S.lastBestTop = S.lastBestTop || {};
   const exchanges = ['delta','coindcx'];
   for (const ex of exchanges){
     try{
       const clean = await silentBestScan(ex);
       const w = clean && clean.length ? clean[0] : null;
-      const key = w ? (w.t.symbol + '|' + w.dir) : null;
+      const key = bestAlertKey(w);
+      S.lastBestTop[ex] = bestAlertSnapshot(w);
       if (key && key !== S.lastAlertKey[ex]){
         await sendAlertEmail(w, ex);
         await sendAlertPush('HARDGATE BEST (Strategies): ' + w.t.symbol + ' ' + w.dir.toUpperCase(),

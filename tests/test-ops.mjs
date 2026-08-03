@@ -14,6 +14,7 @@ import { needsHeartbeat, emailVerdict, HEARTBEAT_MS,
          sendTelegramCi, sendAlertCi,
          engineVerdict, engineAlertDue, ENGINE_STALE_MS, ENGINE_ALERT_MS,
          fallbackLegs, sniperKey, sniperBody, squeezeKey, squeezeBody,
+         bestSetupKey, bestLegKey, bestBody,
          mergeSetups, setupKey, freshSetups, setupsBody, SETUP_REMIND_MS,
          digestDue, digestBody, ticketLine, DIGEST_HOUR_UTC, DIGEST_MIN_UTC,
          bookExecSnapshot, bookExecKey, bookExecAlertDue, bookExecBody, BOOK_EXEC_ALERT_MS,
@@ -342,6 +343,23 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
        && sniperBody([{ sym: 'ACE', dir: 'short', entry: 0.085, stop: 0.089, t1: 0.077, lev: 24, state: 'IN ZONE' }])
        .indexOf('24h limit validity') >= 0,
      'sniper body: the 24h validity window is named so the owner knows the fill window');
+}
+
+/* ---------------- alert-check.mjs BEST tab helpers ---------------- */
+
+{
+  ok(bestSetupKey(null) === null && bestSetupKey({ sym: 'X', dir: 'long' }) === null,
+     'best key: null / entry-less -> null');
+  ok(bestSetupKey({ sym: 'EDENUSD', dir: 'short', entry: 0.123456789 }) === 'EDENUSD|short|0.12345679',
+     'best key: sym|dir|entry with stable rounding');
+  ok(bestSetupKey({ sym: 'A', dir: 'long', entry: 1 }) !== bestSetupKey({ sym: 'A', dir: 'long', entry: 1.01 }),
+     'best key: moved entry changes the key (re-alerts)');
+  ok(bestLegKey({ key: 'X|long|1', sym: 'X', dir: 'long', entry: 1 }) === 'X|long|1',
+     'best leg key: prefers embedded key field');
+  const body = bestBody('delta', { sym: 'EDENUSD', dir: 'short', entry: 0.12, stop: 0.13, t1: 0.10, rr: 2.5, famScore: 7, robScore: 2 });
+  ok(body.indexOf('EDENUSD SHORT (Delta India)') >= 0 && body.indexOf('entry 0.12 · stop 0.13 · target 0.1') >= 0
+     && body.indexOf('7/9 families') >= 0,
+     'best body: exchange label + levels + family score');
 }
 
 /* ---------------- alert-check.mjs daily digest helpers ---------------- */
