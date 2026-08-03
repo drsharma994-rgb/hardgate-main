@@ -14,6 +14,7 @@ var LS_ALERT = 'hg_pine_alert_keys';
 var ALERT_GAP_MS = 15 * 60 * 1000;
 
 var PINE_GATE_OPTS = { mode: 'edge' };
+var PINE_SCAN_OPTS = { includeContext: true, recentBars: 5 };
 
 var PINE_SCRIPTS = [
   { id: 'lorentzian-kernel', label: 'ML: Lorentzian + Kernel', fn: 'pineLorentzianKernel', minBars: 260,
@@ -27,9 +28,9 @@ var PINE_SCRIPTS = [
   { id: 'half-trend', label: 'HalfTrend', fn: 'pineHalfTrend', minBars: 120,
     opts: { amplitude: 2, atrMult: 2.0, atrLen: 100 } },
   { id: 'smc-core', label: 'SMC: Core Math', fn: 'pineSmcCore', minBars: 30,
-    opts: { pivotLength: 5, atrLen: 14 } },
+    opts: { pivotLength: 5, atrLen: 14, recentBars: 5 } },
   { id: 'vumanchu-cipher', label: 'VuManChu Cipher B', fn: 'pineVumanchuCipher', minBars: 40,
-    opts: { wtChannelLen: 9, wtAvgLen: 21, osLevel: -53, obLevel: 53 } },
+    opts: { wtChannelLen: 9, wtAvgLen: 21, osLevel: -53, obLevel: 53, recentBars: 5 } },
   { id: 'range-filter', label: 'Range Filter', fn: 'pineRangeFilter', minBars: 210,
     opts: { period: 100, mult: 3.0 } },
   { id: 'nw-envelope', label: 'NW Envelope', fn: 'pineNwEnvelope', minBars: 60,
@@ -148,6 +149,9 @@ function signalFromScript(item, script, res, rows){
   var price = res.price;
   var entry, stop, t1, t2, planSrc;
   var sid = script.id;
+  var isFresh = !!(res.newLong || res.newShort);
+  var isRecent = !isFresh && fin(+res.barsAgo) && res.barsAgo > 0 && res.barsAgo <= (PINE_SCAN_OPTS.recentBars || 5);
+  var isContext = !isFresh && !isRecent && !!(res.aligned || res.aligned === undefined && !res.newLong && !res.newShort);
 
   if (sid === 'msb-ob' || sid === 'smc-core'){
     if (!fin(+res.entry) || !fin(+res.stop) || res.entry === res.stop) return null;
@@ -188,7 +192,12 @@ function signalFromScript(item, script, res, rows){
     gateHits: item.gateHits,
     newLong: !!res.newLong,
     newShort: !!res.newShort,
-    isNew: !!(res.newLong || res.newShort),
+    isNew: isFresh,
+    isRecent: isRecent,
+    isContext: isContext && !isRecent,
+    barsAgo: fin(+res.barsAgo) ? +res.barsAgo : 0,
+    edgeForming: !!item.edgeForming,
+    edgeTicket: !!item.edgeTicket,
     price: price,
     entry: entry,
     stop: stop,
@@ -227,7 +236,8 @@ function runPineScript(script, rows){
   try{
     var fn = W[script.fn];
     if (typeof fn !== 'function') return null;
-    return fn(rows, script.opts || {});
+    var opts = Object.assign({}, PINE_SCAN_OPTS, script.opts || {});
+    return fn(rows, opts);
   }catch(e){ return null; }
 }
 
@@ -418,9 +428,12 @@ async function pineFireAlerts(fresh, opts){
 
 function cardHTML(sig){
   var cls = sig.dir === 'long' ? 'long' : 'short';
-  var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>' : '';
+  var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>'
+    : (sig.isRecent ? '<span class="stamp" style="margin-left:6px">RECENT −' + sig.barsAgo + 'b</span>'
+      : (sig.isContext ? '<span class="stamp" style="margin-left:6px">ALIGNED</span>' : ''));
   var gateNote = sig.gates && sig.gates.regime ? esc(sig.gates.regime) : '';
-  var hits = sig.gates && sig.gates.edge ? ' · EDGE' : (sig.gates && sig.gates.swing ? ' · SWING' : '');
+  var hits = sig.edgeTicket ? ' · EDGE ticket'
+    : (sig.edgeForming ? ' · EDGE forming' : (sig.gates && sig.gates.swing ? ' · SWING' : ''));
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
     + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · ' + esc(sig.scriptLabel) + badge + '</span></h2>'
     + '<div class="note">' + sigNoteLine(sig)
@@ -443,10 +456,11 @@ var __pineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · EDGE universe</span></h2>'
-    + '<div class="note">Runs <b>every ported Pine script</b> on <b>EDGE</b> tickets only (tally ≥3, valid plan, plus REGIME bias). '
-    + 'Does <b>not</b> require SWING, BRAIN, SCALP, BEST, or TREND MATRIX — run <b>EDGE</b> first. '
-    + 'New bar-close setups alert immediately.</div>'
+    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · EDGE+ universe</span></h2>'
+    + '<div class="note">Runs <b>every ported Pine script</b> on the expanded <b>EDGE</b> universe: tickets (tally ≥3 + plan), '
+    + '<b>forming</b> watchlist, soft tally ≥2, plus REGIME — falls back to <b>SWING CLEAN</b> if EDGE is empty. '
+    + 'Shows <b>NEW</b> bar flips, <b>RECENT</b> signals (last 5 bars), and <b>ALIGNED</b> trend/context matches. '
+    + 'Run <b>EDGE</b> scan first. New setups alert immediately.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="pineRun">RUN ALL PINE SCAN</button>'
     + '<span class="note" id="pineStat">Run EDGE scan first, then scan.</span>'
@@ -485,7 +499,7 @@ function mount(el){
         ? W.pineGateLive(null, PINE_GATE_OPTS)
         : { eligible: [], funnel: {}, missing: ['pinegate'] };
       if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (EDGE tickets + REGIME)',
+        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (EDGE tickets + forming + REGIME)',
           W.pineFunnelRows(gate.funnel), 'pineGateFunnel');
       }
       if (!gate.eligible || !gate.eligible.length){
@@ -529,6 +543,8 @@ function mount(el){
 
       signals.sort(function(a, b){
         if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
+        if (a.isRecent !== b.isRecent) return a.isRecent ? -1 : 1;
+        if (a.isContext !== b.isContext) return a.isContext ? 1 : -1;
         var gh = (fin(+b.gateHits) ? +b.gateHits : 0) - (fin(+a.gateHits) ? +a.gateHits : 0);
         if (gh) return gh;
         return Math.abs(b.smoothedScore || b.momentum || b.smf || 0) - Math.abs(a.smoothedScore || a.momentum || a.smf || 0);
@@ -542,15 +558,18 @@ function mount(el){
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
       if (!signals.length){
-        if (out) out.innerHTML = '<div class="empty">' + eligible.length + ' gate-passing contracts scanned — no Pine setup on the latest bar.</div>';
+        if (out) out.innerHTML = '<div class="empty">' + eligible.length + ' gate-passing contracts scanned — no Pine match (NEW, RECENT, or ALIGNED).</div>';
       } else {
         if (out) out.innerHTML = signals.map(cardHTML).join('');
       }
 
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       var newN = freshNew.length;
+      var ctxN = signals.filter(function(s){ return s.isContext || s.isRecent; }).length;
       if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + signals.length + ' Pine signal(s)'
-        + (newN ? (' · ' + newN + ' NEW alerted') : '') + ' · failed ' + failed + ' · ' + dt + 's';
+        + (newN ? (' · ' + newN + ' NEW alerted') : '')
+        + (ctxN ? (' · ' + ctxN + ' context/recent') : '')
+        + ' · failed ' + failed + ' · ' + dt + 's';
       __pineSnap.stat = stat ? stat.textContent : '';
     }catch(e){
       status = 'error: ' + ((e && e.message) || e);
@@ -582,6 +601,7 @@ W.pineFireAlerts = pineFireAlerts;
 W.pineEvalEligible = pineEvalEligible;
 W.PINE_SCRIPTS = PINE_SCRIPTS;
 W.PINE_GATE_OPTS = PINE_GATE_OPTS;
+W.PINE_SCAN_OPTS = PINE_SCAN_OPTS;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'pine', label: 'PINE', mount: mount, refresh: pineRefresh });

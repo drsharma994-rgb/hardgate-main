@@ -78,6 +78,34 @@ function pineUnionMaps(maps){
   return Object.keys(out).map(function(k){ return out[k]; });
 }
 
+/** EDGE forming watchlist → sym+dir pairs (no plan required). */
+function pinePairsFromForming(forming){
+  var out = {};
+  if (!Array.isArray(forming)) return out;
+  for (var i = 0; i < forming.length; i++){
+    var f = forming[i];
+    if (!f || !f.sym) continue;
+    var dir = String(f.dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') continue;
+    var k = pairKey(f.sym, dir);
+    out[k] = { sym: String(f.sym), dir: dir, forming: true, note: f.note || f.regime || 'forming' };
+  }
+  return out;
+}
+
+function pineMergePairMaps(){
+  var out = {};
+  for (var m = 0; m < arguments.length; m++){
+    var map = arguments[m] || {};
+    for (var k in map){
+      if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      if (!out[k]) out[k] = map[k];
+      else out[k] = Object.assign({}, out[k], map[k]);
+    }
+  }
+  return out;
+}
+
 var PINE_GATE_NAMES = ['swing', 'scalp', 'edge', 'best', 'brain', 'trendmx'];
 
 /** Relaxed: sym+dir must hit minHits gate tabs; default requires a core scanner (swing/scalp/best). */
@@ -154,7 +182,7 @@ function pineGateIntersect(snap, opts){
   opts = opts || {};
   var mode = opts.mode || 'strict';
   var funnel = {
-    swing: 0, scalp: 0, edge: 0, best: 0, brain: 0, trendmx: 0,
+    swing: 0, scalp: 0, edge: 0, edgeForming: 0, edgeSoft: 0, best: 0, brain: 0, trendmx: 0,
     intersectRaw: 0, regimeBlocked: 0, eligible: 0,
     mode: mode, minHits: opts.minHits, fallbackTier: null
   };
@@ -170,7 +198,11 @@ function pineGateIntersect(snap, opts){
 
   var edgeMap = pinePairsFromCands(snap.edgeCands || [], { minTally: 3, requirePlan: true });
   funnel.edge = Object.keys(edgeMap).length;
-  if (!funnel.edge) missing.push('EDGE');
+  var edgeFormingMap = pinePairsFromForming(snap.edgeForming || []);
+  funnel.edgeForming = Object.keys(edgeFormingMap).length;
+  var edgeSoftMap = pinePairsFromCands(snap.edgeCands || [], { minTally: 2, requirePlan: false });
+  funnel.edgeSoft = Object.keys(edgeSoftMap).length;
+  if (!funnel.edge && !funnel.edgeForming) missing.push('EDGE');
 
   var bestMap = pinePairsFromCands(snap.bestClean || [], { requirePlan: true });
   funnel.best = Object.keys(bestMap).length;
@@ -205,11 +237,29 @@ function pineGateIntersect(snap, opts){
     missing = funnel.swing ? [] : ['SWING'];
   } else if (mode === 'edge'){
     funnel.mode = 'edge';
-    raw = Object.keys(edgeMap).map(function(k){
-      return { sym: edgeMap[k].sym, dir: edgeMap[k].dir, gateHits: 1 };
+    var edgeUniverse = pineMergePairMaps(edgeMap, edgeFormingMap, edgeSoftMap);
+    raw = Object.keys(edgeUniverse).map(function(k){
+      var u = edgeUniverse[k];
+      var hits = 1;
+      if (edgeMap[k]) hits = 2;
+      if (edgeMap[k] && edgeFormingMap[k]) hits = 3;
+      return {
+        sym: u.sym,
+        dir: u.dir,
+        gateHits: hits,
+        edgeTicket: !!edgeMap[k],
+        edgeForming: !!edgeFormingMap[k],
+        edgeSoft: !!edgeSoftMap[k] && !edgeMap[k]
+      };
     });
     funnel.intersectRaw = raw.length;
-    missing = funnel.edge ? [] : ['EDGE'];
+    if (!raw.length && opts.fallback !== false && funnel.swing){
+      raw = Object.keys(swingMap).map(function(k){
+        return { sym: swingMap[k].sym, dir: swingMap[k].dir, gateHits: 1, swingFallback: true };
+      });
+      funnel.fallbackTier = 'SWING CLEAN';
+    }
+    missing = raw.length ? [] : (funnel.edge || funnel.edgeForming ? [] : ['EDGE']);
   } else if (mode === 'relaxed'){
     funnel.minHits = opts.minHits !== undefined ? +opts.minHits : 2;
     raw = pineGateRelaxedPairs(gateMaps, { minHits: funnel.minHits, requireCore: true });
@@ -244,10 +294,14 @@ function pineGateIntersect(snap, opts){
       sym: item.sym,
       dir: item.dir,
       gateHits: item.gateHits || ((mode === 'swing' || mode === 'edge') ? 1 : 6),
+      edgeTicket: !!item.edgeTicket,
+      edgeForming: !!item.edgeForming,
+      edgeSoft: !!item.edgeSoft,
+      swingFallback: !!item.swingFallback,
       gates: {
-        swing: !!swingMap[pk],
+        swing: !!swingMap[pk] || !!item.swingFallback,
         scalp: !!scalpMap[pk],
-        edge: !!edgeMap[pk],
+        edge: !!edgeMap[pk] || !!item.edgeForming || !!item.edgeSoft,
         best: !!bestMap[pk],
         brain: !!brainMap[pk],
         trendmx: !!tmMap[pk],
@@ -288,6 +342,7 @@ function pineGateLive(win, opts){
       swingCands: swing && swing.cands,
       scalpCands: scalp && scalp.cands,
       edgeCands: edge && edge.cands,
+      edgeForming: edge && edge.forming,
       bestClean: best && best.clean,
       brainRows: brain && brain.rows,
       trendmxRows: tm && tm.rows,
@@ -306,6 +361,8 @@ function pineFunnelRows(funnel){
     { k: 'SWING CLEAN pairs', v: String(funnel.swing || 0) },
     { k: 'SCALP CLEAN pairs', v: String(funnel.scalp || 0) },
     { k: 'EDGE tickets (tally ≥3)', v: String(funnel.edge || 0) },
+    { k: 'EDGE forming watch', v: String(funnel.edgeForming || 0) },
+    { k: 'EDGE soft (tally ≥2)', v: String(funnel.edgeSoft || 0) },
     { k: 'BEST CLEAN pairs', v: String(funnel.best || 0) },
     { k: 'BRAIN tiered pairs', v: String(funnel.brain || 0) },
     { k: 'TREND MATRIX aligned', v: String(funnel.trendmx || 0) }
@@ -314,8 +371,9 @@ function pineFunnelRows(funnel){
     rows.push({ k: 'Gate mode', v: 'SWING CLEAN only (+ REGIME)' });
     rows.push({ k: 'Swing universe', v: String(funnel.intersectRaw || 0) });
   } else if (funnel.mode === 'edge'){
-    rows.push({ k: 'Gate mode', v: 'EDGE tickets only (tally ≥3 + plan + REGIME)' });
+    rows.push({ k: 'Gate mode', v: 'EDGE tickets + forming + soft tally (REGIME)' });
     rows.push({ k: 'Edge universe', v: String(funnel.intersectRaw || 0) });
+    if (funnel.fallbackTier) rows.push({ k: 'Fallback tier', v: String(funnel.fallbackTier) });
   } else if (funnel.mode === 'relaxed'){
     rows.push({ k: 'Gate mode', v: 'relaxed (≥' + (funnel.minHits || 2) + ' scanners + core)' });
     rows.push({ k: 'Relaxed matches', v: String(funnel.intersectRaw || 0) });
@@ -334,7 +392,7 @@ G.pineGateLive = pineGateLive;
 G.pineFunnelRows = pineFunnelRows;
 
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { pineNormSym, pineGateIntersect, pineGateLive, pineFunnelRows, pinePairsFromCands, pineTrendMatrixPairs, pineGateRelaxedPairs };
+  module.exports = { pineNormSym, pineGateIntersect, pineGateLive, pineFunnelRows, pinePairsFromCands, pinePairsFromForming, pineTrendMatrixPairs, pineGateRelaxedPairs };
 }
 
 })();
