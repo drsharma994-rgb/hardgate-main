@@ -1,6 +1,7 @@
 /* HARDGATE — daemon unit tests (no puppeteer / ccxt required). */
 import { StateDatabase } from '../lib/daemon-state.mjs';
 import { filterExecutableBrainRows, brainRowToLockSetup, runMarketScan } from '../lib/daemon-loop.mjs';
+import { symToBinanceKlineSymbol } from '../lib/daemon-market.mjs';
 import { loadConvictionLockManager } from '../lib/daemon-conviction.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,6 +62,11 @@ console.log('== dry-run market scan ==');
     log: function(){},
   });
   ok(res.ok && res.executed === 0 && res.skipped === 1, 'dry run skips live execute');
+}
+
+console.log('== symbol map ==');
+{
+  ok(symToBinanceKlineSymbol('B-BTC_USDT') === 'BTCUSDT', 'Delta sym maps to Binance kline symbol');
 }
 
 console.log('\n' + pass + ' assertions passed');

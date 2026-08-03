@@ -1,10 +1,9 @@
 # HARDGATE on Render — one-click blueprint.
-# New → Blueprint → pick this repo: Render reads this file and creates the
-# web service (static app + /api/proxy on the same origin, zero deps).
-# Paid plans stay always-on; free tier sleeps after ~15 min idle (~30s cold start).
-# Optional: set GH_DISPATCH_TOKEN on Render to fire alert-notify.yml every 13 min
-# (more reliable than GitHub cron). When armed, set repo variable
-# RENDER_DISPATCH_PRIMARY=true to skip the GitHub schedule (see README Alerts).
+# Creates:
+#   1) hardgate-main — web (static app + /api/proxy + /api/execute)
+#   2) hardgate-daemon — background worker (app.js 24/7 brain + CCXT loop)
+# Set EXECUTE_CCXT_* on the worker (and web if using /api/execute proxy).
+# Default HARDGATE_DAEMON_DRY_RUN=1 until you confirm keys + disable dry run.
 services:
   - type: web
     name: hardgate-main
@@ -12,7 +11,23 @@ services:
     plan: starter
     region: singapore
     branch: main
-    buildCommand: ""
+    buildCommand: npm install
     startCommand: node scripts/server.mjs
     autoDeploy: true
     healthCheckPath: /
+  - type: worker
+    name: hardgate-daemon
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    buildCommand: npm install && npx puppeteer browsers install chrome
+    startCommand: node app.js
+    autoDeploy: true
+    envVars:
+      - key: HARDGATE_URL
+        value: https://hardgate-main.onrender.com/
+      - key: HARDGATE_DAEMON_DRY_RUN
+        value: "1"
+      - key: NODE_ENV
+        value: production

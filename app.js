@@ -4,7 +4,7 @@
 import { StateDatabase } from './lib/daemon-state.mjs';
 import { loadConvictionLockManager, hydrateConvictionManager } from './lib/daemon-conviction.mjs';
 import { runBrainSynthesis } from './lib/daemon-brain.mjs';
-import { runMarketScan } from './lib/daemon-loop.mjs';
+import { runMarketScan as executeMarketScan } from './lib/daemon-loop.mjs';
 import { hgCcxtExecutorFromEnv } from './lib/hardgate-executor.mjs';
 
 const SCAN_MS = +(process.env.HARDGATE_SCAN_MS || 15 * 60 * 1000);
@@ -38,10 +38,11 @@ async function bootHardgate(){
 
   var siteUrl = process.env.HARDGATE_URL || process.env.RENDER_EXTERNAL_URL || 'http://127.0.0.1:10000/';
 
-  async function tick(){
+  async function runMarketScan(){
+    log('[SCAN START] ' + new Date().toISOString());
     try{
       var brainResult = await runBrainSynthesis(siteUrl);
-      await runMarketScan({
+      return await executeMarketScan({
         brainResult: brainResult,
         convictionManager: convictionManager,
         db: db,
@@ -50,14 +51,15 @@ async function bootHardgate(){
         atr: +(process.env.HARDGATE_DAEMON_ATR || 15),
         log: log,
       });
-    }catch(err){
-      log('[FATAL LOOP ERROR] ' + ((err && err.message) || err));
+    }catch(error){
+      log('[FATAL LOOP ERROR] ' + ((error && error.message) || error));
+      return { ok: false };
     }
   }
 
   log('[BOOT] scan interval ' + (SCAN_MS / 60000) + ' min · site ' + siteUrl);
-  setInterval(tick, SCAN_MS);
-  await tick();
+  setInterval(runMarketScan, SCAN_MS);
+  await runMarketScan();
 }
 
 bootHardgate().catch(function(e){
