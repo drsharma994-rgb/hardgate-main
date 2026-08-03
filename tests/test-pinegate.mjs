@@ -56,5 +56,20 @@ assert(block.funnel.regimeBlocked === 1, 'regime blocked counted');
 const empty = G.pineGateIntersect({ swingCands: [], scalpCands: baseCands });
 assert(empty.eligible.length === 0 && empty.missing.indexOf('SWING') >= 0, 'missing swing reported');
 
+const partial = {
+  swingCands: [{ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, tally: 4 }],
+  scalpCands: [{ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, tally: 4 }],
+  edgeCands: [],
+  bestClean: [],
+  brainRows: [],
+  trendmxRows: [],
+  regime: { playbook: { bias: 'BOTH' } }
+};
+const relaxed = G.pineGateIntersect(partial, { mode: 'relaxed', minHits: 2 });
+assert(relaxed.eligible.length === 1 && relaxed.eligible[0].sym === 'BTCUSD', 'relaxed: swing+scalp passes');
+assert(relaxed.funnel.mode === 'relaxed', 'funnel records relaxed mode');
+const strictPartial = G.pineGateIntersect(partial);
+assert(strictPartial.eligible.length === 0, 'strict still requires all six gates');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
