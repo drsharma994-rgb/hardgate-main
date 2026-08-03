@@ -259,4 +259,176 @@ G.pineMsbOb = pineMsbOb;
 G.pinePivotHighAt = pivotHighAt;
 G.pinePivotLowAt = pivotLowAt;
 
+function pineSma(arr, len){
+  if (typeof G.sma === 'function') return G.sma(arr, len);
+  var out = new Array(arr.length).fill(NaN);
+  for (var i = len - 1; i < arr.length; i++){
+    var sum = 0, ok = true;
+    for (var k = i - len + 1; k <= i; k++){
+      if (!isFinite(arr[k])){ ok = false; break; }
+      sum += arr[k];
+    }
+    if (ok) out[i] = sum / len;
+  }
+  return out;
+}
+
+function pineStdev(arr, len){
+  if (typeof G.stdev === 'function') return G.stdev(arr, len);
+  var out = new Array(arr.length).fill(NaN);
+  for (var i = len - 1; i < arr.length; i++){
+    var sum = 0, ok = true;
+    for (var k = i - len + 1; k <= i; k++){
+      if (!isFinite(arr[k])){ ok = false; break; }
+      sum += arr[k];
+    }
+    if (!ok) continue;
+    var m = sum / len, sq = 0;
+    for (var j = i - len + 1; j <= i; j++) sq += Math.pow(arr[j] - m, 2);
+    out[i] = Math.sqrt(sq / len);
+  }
+  return out;
+}
+
+function pineHighest(arr, len){
+  if (typeof G.highest === 'function') return G.highest(arr, len);
+  var out = new Array(arr.length).fill(NaN);
+  for (var i = len - 1; i < arr.length; i++){
+    var m = -Infinity, ok = true;
+    for (var k = i - len + 1; k <= i; k++){
+      if (!isFinite(arr[k])){ ok = false; break; }
+      if (arr[k] > m) m = arr[k];
+    }
+    if (ok) out[i] = m;
+  }
+  return out;
+}
+
+function pineLowest(arr, len){
+  if (typeof G.lowest === 'function') return G.lowest(arr, len);
+  var out = new Array(arr.length).fill(NaN);
+  for (var i = len - 1; i < arr.length; i++){
+    var m = Infinity, ok = true;
+    for (var k = i - len + 1; k <= i; k++){
+      if (!isFinite(arr[k])){ ok = false; break; }
+      if (arr[k] < m) m = arr[k];
+    }
+    if (ok) out[i] = m;
+  }
+  return out;
+}
+
+function pineTrSeries(rows){
+  var out = new Array(rows.length).fill(NaN);
+  for (var i = 0; i < rows.length; i++){
+    if (i === 0){ out[i] = rows[i].h - rows[i].l; continue; }
+    var h = rows[i].h, l = rows[i].l, pc = rows[i - 1].c;
+    out[i] = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+  }
+  return out;
+}
+
+/** Pine ta.linreg(source, length, 0) — regression value at current bar. */
+function pineLinreg(source, len){
+  if (typeof G.linregCurve === 'function') return G.linregCurve(source, len);
+  var out = new Array(source.length).fill(NaN);
+  if (len < 2) return out;
+  var sx = len * (len - 1) / 2;
+  var sxx = len * (len - 1) * (2 * len - 1) / 6;
+  var denom = len * sxx - sx * sx;
+  for (var i = len - 1; i < source.length; i++){
+    var sy = 0, sxy = 0, ok = true;
+    for (var k = 0; k < len; k++){
+      var y = source[i - len + 1 + k];
+      if (!isFinite(y)){ ok = false; break; }
+      sy += y;
+      sxy += k * y;
+    }
+    if (!ok) continue;
+    var slope = (len * sxy - sx * sy) / denom;
+    var intercept = (sy - slope * sx) / len;
+    out[i] = intercept + slope * (len - 1);
+  }
+  return out;
+}
+
+/** Pine: Squeeze Momentum (LazyBear BB/KC squeeze fire + linreg momentum). */
+function pineSqueezeMomentum(rows, opts){
+  opts = opts || {};
+  var length = opts.length || 20;
+  var bbMult = opts.bbMult || 2;
+  var kcMult = opts.kcMult || 1.5;
+  try{
+    if (!rows || rows.length < length + 5) return null;
+    var closes = rows.map(function(r){ return r.c; });
+    var highs = rows.map(function(r){ return r.h; });
+    var lows = rows.map(function(r){ return r.l; });
+    var n = rows.length;
+
+    var basis = pineSma(closes, length);
+    var devArr = pineStdev(closes, length);
+    var upperBB = new Array(n), lowerBB = new Array(n);
+    for (var i = 0; i < n; i++){
+      if (!isFinite(basis[i]) || !isFinite(devArr[i])){
+        upperBB[i] = lowerBB[i] = NaN;
+      } else {
+        upperBB[i] = basis[i] + bbMult * devArr[i];
+        lowerBB[i] = basis[i] - bbMult * devArr[i];
+      }
+    }
+
+    var kcBasis = pineSma(closes, length);
+    var rangeMa = pineSma(pineTrSeries(rows), length);
+    var upperKC = new Array(n), lowerKC = new Array(n);
+    for (var j = 0; j < n; j++){
+      if (!isFinite(kcBasis[j]) || !isFinite(rangeMa[j])){
+        upperKC[j] = lowerKC[j] = NaN;
+      } else {
+        upperKC[j] = kcBasis[j] + rangeMa[j] * kcMult;
+        lowerKC[j] = kcBasis[j] - rangeMa[j] * kcMult;
+      }
+    }
+
+    var sqzOn = new Array(n);
+    for (var s = 0; s < n; s++){
+      sqzOn[s] = isFinite(lowerBB[s]) && isFinite(upperBB[s]) && isFinite(lowerKC[s]) && isFinite(upperKC[s])
+        && lowerBB[s] > lowerKC[s] && upperBB[s] < upperKC[s];
+    }
+
+    var hh = pineHighest(highs, length);
+    var ll = pineLowest(lows, length);
+    var smaClose = pineSma(closes, length);
+    var src = new Array(n);
+    for (var x = 0; x < n; x++){
+      if (!isFinite(hh[x]) || !isFinite(ll[x]) || !isFinite(smaClose[x]) || !isFinite(closes[x])) src[x] = NaN;
+      else src[x] = closes[x] - ((hh[x] + ll[x]) / 2 + smaClose[x]) / 2;
+    }
+    var momentumArr = pineLinreg(src, length);
+    var bi = n - 1;
+    var sqzFired = bi > 0 && sqzOn[bi - 1] && !sqzOn[bi];
+    var momentum = momentumArr[bi];
+    var longCondition = sqzFired && isFinite(momentum) && momentum > 0;
+    var shortCondition = sqzFired && isFinite(momentum) && momentum < 0;
+    var newLong = longCondition;
+    var newShort = shortCondition;
+    var dir = newLong ? 'long' : (newShort ? 'short' : null);
+    return {
+      dir: dir,
+      sqzOn: sqzOn[bi],
+      sqzFired: sqzFired,
+      momentum: momentum,
+      longCondition: longCondition,
+      shortCondition: shortCondition,
+      newLong: newLong,
+      newShort: newShort,
+      price: closes[bi],
+      length: length,
+      bbMult: bbMult,
+      kcMult: kcMult
+    };
+  }catch(e){ return null; }
+}
+
+G.pineSqueezeMomentum = pineSqueezeMomentum;
+
 })();
