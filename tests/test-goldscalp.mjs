@@ -81,6 +81,7 @@ console.log('== 0) exports + tab registration ==');
                  'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
                  'updateActiveZones','detectOrderBlockRetest',
                  'getMarketSession','calculateAsianRange','calculateADRExhaustion',
+                 'calculateMacroHint','goldCalculateMacroHint',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -338,6 +339,35 @@ console.log('== 10b) session & volatility module ==');
   const eng = W.HardgateGoldEngine;
   const abEv = eng.evaluateScalp(abRows, { atr15: 1 });
   assert(abEv.activeTriggers.indexOf('ASIAN_RANGE_BREAKOUT') >= 0, 'evaluateScalp: Asian breakout trigger');
+}
+
+/* =========================================================================
+   10c) calculateMacroHint — intraday DXY open/close tilt
+========================================================================= */
+console.log('== 10c) calculateMacroHint ==');
+{
+  const dxy = [
+    { t: DAY, o: 104.5, h: 104.8, l: 104.2, c: 104.6, v: 1 },
+    { t: DAY + 3600, o: 104.6, h: 104.7, l: 104.0, c: 104.1, v: 1 }
+  ];
+  assert(W.calculateMacroHint(dxy, dxy[1]) === 'TAILWIND', 'DXY close < open -> TAILWIND (weak dollar)');
+  const dxyBull = [
+    { t: DAY, o: 104.0, h: 104.2, l: 103.8, c: 104.1, v: 1 },
+    { t: DAY + 3600, o: 104.1, h: 104.6, l: 104.0, c: 104.5, v: 1 }
+  ];
+  assert(W.calculateMacroHint(dxyBull, dxyBull[1]) === 'HEADWIND', 'DXY close > open -> HEADWIND');
+  assert(W.calculateMacroHint([dxy[0]]) === 'NEUTRAL', 'single DXY bar -> NEUTRAL');
+  assert(W.calculateMacroHint(null) === 'NEUTRAL', 'null dxyCandles -> NEUTRAL');
+  assert(W.goldCalculateMacroHint === W.calculateMacroHint, 'goldCalculateMacroHint alias');
+  const rows = flatRows(35, 100, 0.5, DAY);
+  const ev = W.evaluateScalp(rows, {
+    atr15: 1,
+    dxyCandles: dxy,
+    currentDxy: dxy[1]
+  });
+  assert(ev.macroHint === 'TAILWIND', 'evaluateScalp: wires DXY bars into macroHint');
+  const ev2 = W.evaluateScalp(rows, { atr15: 1, macroHint: 'HEADWIND' });
+  assert(ev2.macroHint === 'HEADWIND', 'evaluateScalp: respects ctx.macroHint override');
 }
 
 /* =========================================================================
@@ -611,6 +641,7 @@ console.log('== 18) bare-environment never-throws sweep ==');
                  'goldActiveOrderBlocks','goldUpdateActiveZones','goldOrderBlockRetest',
                  'updateActiveZones','detectOrderBlockRetest',
                  'getMarketSession','calculateAsianRange','calculateADRExhaustion',
+                 'calculateMacroHint','goldCalculateMacroHint',
                  'goldAsianBreakout','goldADRFade','detectAsianBreakout','detectADRFade',
                  'goldMarketSession','goldAsianRangeAt','goldADRExhaustion',
                  'detectSwings','detectMarketStructure','detectOrderBlocks','goldDetectorReads'];
@@ -1706,6 +1737,14 @@ console.log('== conviction lock manager ==');
       levels: { stopLoss: 99, tp1: 101 } },
     { t: DAY, o: 100, h: 101.5, l: 99.5, c: 100.2, v: 1 }, true, false, Date.now());
   assert(tpHit === 'TARGET HIT', 'evaluateSetup: TP1 wick hit without close through tp1');
+  const fromCand = mgr.fromCandidate({ dir: 'long', stratKey: 'ob', entry: 100, stop: 99, t1: 102,
+    macroHint: 'TAILWIND' }, 'scalp');
+  assert(fromCand.macroHint === 'TAILWIND', 'fromCandidate: preserves macroHint');
+  const rec = mgr.toRecord(fromCand);
+  assert(rec.macroHint === 'TAILWIND', 'toRecord: persists macroHint');
+  mgr.hydrateFromRecord(rec, rec.id);
+  const hydrated = mgr.activeConvictions.get(rec.id);
+  assert(hydrated && hydrated.macroHint === 'TAILWIND', 'hydrateFromRecord: restores macroHint');
 }
 
 /* =========================================================================
