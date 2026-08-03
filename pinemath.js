@@ -273,6 +273,22 @@ function pineSma(arr, len){
   return out;
 }
 
+function pineEma(arr, len){
+  if (typeof G.ema === 'function') return G.ema(arr, len);
+  var out = new Array(arr.length).fill(NaN);
+  if (arr.length < len) return out;
+  var k = 2 / (len + 1);
+  var sum = 0;
+  for (var i = 0; i < len; i++) sum += arr[i];
+  var e = sum / len;
+  out[len - 1] = e;
+  for (var j = len; j < arr.length; j++){
+    e = arr[j] * k + e * (1 - k);
+    out[j] = e;
+  }
+  return out;
+}
+
 function pineStdev(arr, len){
   if (typeof G.stdev === 'function') return G.stdev(arr, len);
   var out = new Array(arr.length).fill(NaN);
@@ -680,5 +696,99 @@ function pineSmcCore(rows, opts){
 }
 
 G.pineSmcCore = pineSmcCore;
+
+/** Pine: VuManChu Cipher B — WaveTrend + zero-lag divergence (bull_div / bear_div). */
+function pineVumanchuCipher(rows, opts){
+  opts = opts || {};
+  var wtN1 = opts.wtChannelLen || 9;
+  var wtN2 = opts.wtAvgLen || 21;
+  var osLevel = opts.osLevel !== undefined ? +opts.osLevel : -53;
+  var obLevel = opts.obLevel !== undefined ? +opts.obLevel : 53;
+  try{
+    if (!rows || rows.length < wtN2 + wtN1 + 10) return null;
+    var n = rows.length;
+    var ap = rows.map(function(r){ return (r.h + r.l + r.c) / 3; });
+    var esa = pineEma(ap, wtN1);
+    var dSrc = ap.map(function(v, i){ return isFinite(esa[i]) ? Math.abs(v - esa[i]) : NaN; });
+    var dArr = pineEma(dSrc, wtN1);
+    var ci = ap.map(function(v, i){
+      if (!isFinite(esa[i]) || !isFinite(dArr[i]) || dArr[i] === 0) return NaN;
+      return (v - esa[i]) / (0.015 * dArr[i]);
+    });
+    var wt1 = pineEma(ci, wtN2);
+    var wt2 = pineSma(wt1, 4);
+
+    var lastSwingLowPrice = NaN, lastSwingLowWt = NaN;
+    var lastSwingHighPrice = NaN, lastSwingHighWt = NaN;
+    var signal = null;
+
+    for (var i = 1; i < n; i++){
+      var w1 = wt1[i], w2 = wt2[i];
+      var w1p = wt1[i - 1], w2p = wt2[i - 1];
+      if (!isFinite(w1) || !isFinite(w2) || !isFinite(w1p) || !isFinite(w2p)) continue;
+
+      var greenDot = w1p <= w2p && w1 > w2;
+      var redDot = w1p >= w2p && w1 < w2;
+
+      if (i >= 2){
+        var gdPrev = isFinite(wt1[i - 2]) && isFinite(wt2[i - 2])
+          && wt1[i - 2] <= wt2[i - 2] && wt1[i - 1] > wt2[i - 1];
+        var rdPrev = isFinite(wt1[i - 2]) && isFinite(wt2[i - 2])
+          && wt1[i - 2] >= wt2[i - 2] && wt1[i - 1] < wt2[i - 1];
+        if (gdPrev){
+          lastSwingLowPrice = rows[i - 1].l;
+          lastSwingLowWt = wt1[i - 1];
+        }
+        if (rdPrev){
+          lastSwingHighPrice = rows[i - 1].h;
+          lastSwingHighWt = wt1[i - 1];
+        }
+      }
+
+      var lo = rows[i].l, hi = rows[i].h, cl = rows[i].c;
+      var bullDiv = greenDot && w1 <= osLevel
+        && isFinite(lastSwingLowPrice) && isFinite(lastSwingLowWt)
+        && lo < lastSwingLowPrice && w1 > lastSwingLowWt;
+      var bearDiv = redDot && w1 >= obLevel
+        && isFinite(lastSwingHighPrice) && isFinite(lastSwingHighWt)
+        && hi > lastSwingHighPrice && w1 < lastSwingHighWt;
+
+      if (i === n - 1 && bullDiv){
+        signal = {
+          dir: 'long',
+          signalType: 'bull_div',
+          newLong: true,
+          newShort: false,
+          wt1: w1,
+          wt2: w2,
+          osLevel: osLevel,
+          obLevel: obLevel,
+          lastSwingLowPrice: lastSwingLowPrice,
+          lastSwingLowWt: lastSwingLowWt,
+          price: cl
+        };
+      } else if (i === n - 1 && bearDiv){
+        signal = {
+          dir: 'short',
+          signalType: 'bear_div',
+          newLong: false,
+          newShort: true,
+          wt1: w1,
+          wt2: w2,
+          osLevel: osLevel,
+          obLevel: obLevel,
+          lastSwingHighPrice: lastSwingHighPrice,
+          lastSwingHighWt: lastSwingHighWt,
+          price: cl
+        };
+      }
+    }
+
+    if (!signal) return null;
+    return signal;
+  }catch(e){ return null; }
+}
+
+G.pineVumanchuCipher = pineVumanchuCipher;
 
 })();
