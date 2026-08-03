@@ -44,6 +44,16 @@ Not required for local dev or core UI:
 | `HARDGATE_SCAN_MS` | Daemon scan interval (default 15 min) |
 | `HARDGATE_DAEMON_DRY_RUN=1` | Run daemon loop without CCXT orders |
 | `HARDGATE_STATE_FILE` | JSON conviction persistence path (default `hardgate-daemon-state.json`) |
+
+### Render daemon worker
+
+`render.yaml` defines a **background worker** `hardgate-daemon` (`node app.js`). After blueprint sync:
+
+1. Set `EXECUTE_CCXT_EXCHANGE`, `EXECUTE_CCXT_API_KEY`, `EXECUTE_CCXT_SECRET` on the **worker** service.
+2. Set `HARDGATE_DAEMON_DRY_RUN=0` when ready for live orders (defaults to `1`).
+3. Worker `buildCommand` installs Puppeteer + Chrome for headless BRAIN scans against `HARDGATE_URL`.
+
+Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `scripts/server.mjs`.
 | `EXECUTE_FILL_POLL_URL` | Broker fill polling endpoint |
 | `BOOK_EXECUTE_FILL_SECRET` | Webhook auth for fill updates |
 | `BOOK_MAX_DAILY_LOSS_PCT` | Daily loss halt threshold (default 2%) |

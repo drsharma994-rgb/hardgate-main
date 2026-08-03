@@ -7,6 +7,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fork } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
@@ -111,6 +112,20 @@ startSqueezeWatch();
 startGhDispatch();
 
 startBookDigestWatch();
+
+/* Optional co-located daemon (dev / single-service): HARDGATE_DAEMON_AUTOSTART=1 */
+if (process.env.HARDGATE_DAEMON_AUTOSTART === '1' || process.env.HARDGATE_DAEMON_AUTOSTART === 'true'){
+  try{
+    var daemonPath = fileURLToPath(new URL('../app.js', import.meta.url));
+    var child = fork(daemonPath, [], { stdio: 'inherit', env: process.env });
+    child.on('exit', function(code){
+      console.warn('[daemon] exited with code ' + code);
+    });
+    console.log('[daemon] autostart forked — app.js (set HARDGATE_DAEMON_AUTOSTART=0 to disable)');
+  }catch(e){
+    console.warn('[daemon] autostart failed:', (e && e.message) || e);
+  }
+}
 
 /* keep-alive self-ping — on Render free tier the service sleeps after ~15 min idle.
    Paid plans stay always-on; the ping is harmless and keeps squeeze-watch + gh-dispatch
