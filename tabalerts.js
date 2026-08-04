@@ -399,7 +399,7 @@ function hgTabAlertsCollect(win){
     }catch(e){}
     collectGold(out, 'scalp', 'GOLD SCALP', goldMin);
     collectGold(out, 'swing', 'GOLD SWING', goldMin);
-    collectGoldPine(out, Math.max(5, goldMin - 4));
+    collectGoldPine(out, 8);
   }finally{
     if (win) W = saved;
   }

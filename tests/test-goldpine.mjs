@@ -34,7 +34,9 @@ const G = ctx.window;
 
 assert(typeof G.pineGoldConfluence === 'function', 'pineGoldConfluence exported');
 assert(typeof G.pineGoldGrade === 'function', 'pineGoldGrade exported');
-assert(G.pineGoldGrade(12, 16) === 'A+', 'grade A+ at 75%');
+assert(G.pineGoldGrade(18, 24) === 'A+', 'grade A+ at 75% of 24');
+assert(typeof G.pineGoldNativeBundle === 'function', 'pineGoldNativeBundle exported');
+assert(typeof G.pineGoldOuZscore === 'function', 'pineGoldOuZscore exported');
 
 {
   const rows4h = mkRows(300, 2400, 0.5);

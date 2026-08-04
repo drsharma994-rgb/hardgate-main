@@ -7,7 +7,8 @@
 var W = (typeof window !== 'undefined') ? window : globalThis;
 
 var KL_15M = 240, KL_1H = 200, KL_4H = 220, KL_1D = 260;
-var SWING_MIN = 6, SCALP_MIN = 5;
+var SWING_MIN = 10, SCALP_MIN = 8;
+var PINE_GOLD_MAX = 24;
 
 function esc(s){
   return String(s || '').replace(/[&<>"]/g, function(c){
@@ -73,29 +74,40 @@ function setupFromEval(evalRes, mode, source){
     rr: evalRes.rr,
     planSrc: evalRes.planSrc,
     isNew: evalRes.isNew,
-    atr: evalRes.atr
+    atr: evalRes.atr,
+    familyCount: evalRes.familyCount
   };
 }
 
-function runGoldPineScan(bars){
+function runGoldPineScan(bars, ctx){
+  ctx = ctx || {};
   var confFn = gfn('pineGoldConfluence');
   var lvFn = gfn('pineGoldLevelsFromBars');
   if (typeof confFn !== 'function') return { swing: [], scalp: [], error: 'pinegoldmath' };
 
   var levels = lvFn ? lvFn(bars.rows1d, bars.rows15m) : {};
   var source = SRC_LABEL[bars.source] || bars.source || 'GOLD';
+  var macro = ctx.macro || null;
+  var spot = ctx.spot || null;
+  try{
+    if (!spot){
+      var gs = gfn('goldspotState');
+      if (gs) spot = gs();
+    }
+  }catch(e){}
 
   var swing = [];
   var scalp = [];
+  var scanOpts = { macro: macro, spot: spot, levels: levels };
 
   if (bars.rows4h && bars.rows4h.length >= 60){
-    var sw = confFn(bars.rows4h, { mode: 'swing', htfRows: bars.rows1d, levels: levels });
+    var sw = confFn(bars.rows4h, Object.assign({ mode: 'swing', htfRows: bars.rows1d }, scanOpts));
     if (sw.long && sw.long.pass && sw.long.score >= SWING_MIN) swing.push(setupFromEval(sw.long, 'swing', source));
     if (sw.short && sw.short.pass && sw.short.score >= SWING_MIN) swing.push(setupFromEval(sw.short, 'swing', source));
   }
 
   if (bars.rows15m && bars.rows15m.length >= 40){
-    var sc = confFn(bars.rows15m, { mode: 'scalp', htfRows: bars.rows1h || bars.rows4h, levels: levels });
+    var sc = confFn(bars.rows15m, Object.assign({ mode: 'scalp', htfRows: bars.rows1h || bars.rows4h }, scanOpts));
     if (sc.long && sc.long.pass && sc.long.score >= SCALP_MIN) scalp.push(setupFromEval(sc.long, 'scalp', source));
     if (sc.short && sc.short.pass && sc.short.score >= SCALP_MIN) scalp.push(setupFromEval(sc.short, 'scalp', source));
   }
@@ -129,6 +141,7 @@ function cardHTML(s){
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + badge + '</span></h2>'
     + '<div class="note">Confluence <b>' + s.score + '/' + s.maxScore + '</b>'
+    + ' · families <b>' + (s.familyCount != null ? s.familyCount : '—') + '</b>'
     + ' · mark ' + pxF(s.price) + ' · ' + esc(s.source)
     + (fin(+s.rr) ? (' · R:R ' + fmtF(s.rr, 2)) : '')
     + '</div>'
@@ -158,11 +171,10 @@ var __goldPineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>GOLD PINE <span>10 Pine scripts + gold SMC/session confluence</span></h2>'
-    + '<div class="note">Unified math from ported Pine layers (Lorentzian, MSB/OB, Squeeze, SMF, HalfTrend, SMC, Cipher, Range Filter, NW, Weekly AVWAP) '
-    + 'cross-scored with gold ICT session, liquidity sweeps, HTF EMA bias, ADX, and PDH/PDL/Asia levels. '
-    + '<b>SWING</b> = 4H primary + 1D bias (score ≥' + SWING_MIN + '). '
-    + '<b>SCALP</b> = 15m primary + 1H bias (score ≥' + SCALP_MIN + ').</div>'
+    + '<h2>GOLD PINE <span>Pine + goldind SMC · dual-family gate</span></h2>'
+    + '<div class="note">10 ported Pine layers cross-scored with native gold detectors: BOS/CHoCH, premium/discount, OB retest, '
+    + 'Sweep V2, FVG+HVN, session VWAP, Asian range, RSI div, macro real-rate, PAXG basis, OU exhaustion, chop veto. '
+    + 'Setup requires <b>≥2 evidence families</b> and score ≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp (max ' + PINE_GOLD_MAX + ').</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="goldPineRun">RUN GOLD PINE SCAN</button>'
     + '<span class="note" id="goldPineStat">Fetches XAU/PAXG candles then scores swing + scalp.</span>'
@@ -193,8 +205,13 @@ function mount(el){
     setProg(0.05);
     var t0 = Date.now();
     try{
-      if (stat) stat.textContent = 'Fetching gold candles…';
+      if (stat) stat.textContent = 'Fetching gold candles + macro…';
       var bars = await fetchGoldBars();
+      var macro = null;
+      try{
+        var mg = gfn('getGoldMacro');
+        if (mg) macro = await mg();
+      }catch(eM){}
       setProg(0.35);
       if (!bars.rows4h.length && !bars.rows15m.length){
         if (out) out.innerHTML = '<div class="empty">No gold candle data — check network / macro.js feeds.</div>';
@@ -202,7 +219,7 @@ function mount(el){
         return 'failed';
       }
       if (stat) stat.textContent = 'Scoring Pine + gold confluence…';
-      var result = runGoldPineScan(bars);
+      var result = runGoldPineScan(bars, { macro: macro });
       setProg(0.9);
       __goldPineSnap = result;
 
@@ -213,9 +230,9 @@ function mount(el){
       }
 
       var html = sectionHTML('GOLD PINE — SWING SETUPS (4H)', result.swing,
-          'No swing confluence ≥' + SWING_MIN + ' on 4H — HTF may oppose or layers not aligned.')
+          'No swing setup — need ≥2 families, score ≥' + SWING_MIN + ', R:R ≥1.2, HTF aligned.')
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', result.scalp,
-          'No scalp confluence ≥' + SCALP_MIN + ' on 15m — try during London/NY overlap.');
+          'No scalp setup — try London/NY overlap with sweep V2 or OB retest.');
 
       if (out) out.innerHTML = html;
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
