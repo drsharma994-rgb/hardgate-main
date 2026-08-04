@@ -8,6 +8,12 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var PINE_GOLD_MAX = 24;
 
+/** Display tiers: primary = strict gate; aligned = watch/context (relaxed vetoes). */
+var PINE_GOLD_TIER = {
+  swing: { primary: 10, aligned: 6, rrPrimary: 1.2, rrAligned: 0.85 },
+  scalp: { primary: 8, aligned: 5, rrPrimary: 1.2, rrAligned: 0.85 }
+};
+
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 function gfn(name){
   try{ if (typeof G[name] === 'function') return G[name]; }catch(e){}
@@ -292,6 +298,11 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
     if ((dir === 'long' && native.pd.zone === 'DISCOUNT') || (dir === 'short' && native.pd.zone === 'PREMIUM')){
       score += 2; families.goldSMC = true;
       factors.push({ cat: 'Location', ok: true, pts: 2, note: 'Premium/discount ' + native.pd.zone + ' (' + (native.pd.pct * 100).toFixed(0) + '% range)' });
+    } else if (native.pd.zone === 'NEUTRAL' && fin(+native.pd.pct)){
+      if ((dir === 'long' && native.pd.pct <= 0.42) || (dir === 'short' && native.pd.pct >= 0.58)){
+        score += 1; families.goldSMC = true;
+        factors.push({ cat: 'Location', ok: true, pts: 1, note: 'PD lean ' + (native.pd.pct * 100).toFixed(0) + '% (neutral band)' });
+      }
     }
   }
   if (native.obRetest && native.obRetest.trigger && native.obRetest.direction === dir){
@@ -433,17 +444,28 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
   var familyCount = (families.htf ? 1 : 0) + (families.goldSMC ? 1 : 0) + (families.pine ? 1 : 0)
     + (families.session ? 1 : 0) + (families.macro ? 1 : 0);
 
-  var minScore = mode === 'swing' ? 10 : 8;
+  var tierCfg = PINE_GOLD_TIER[mode] || PINE_GOLD_TIER.swing;
+  var minScore = tierCfg.primary;
   var hasSweep = native.sweepV2 && native.sweepV2.trigger && native.sweepV2.dir === dir;
+  var hasOb = native.obRetest && native.obRetest.trigger && native.obRetest.direction === dir;
+  var hasFvg = native.fvgV2 && native.fvgV2.trigger && native.fvgV2.dir === dir;
+  var hasNativeTrigger = hasSweep || hasOb || hasFvg;
+  var okFactorCount = 0;
+  for (var fi = 0; fi < factors.length; fi++){
+    if (factors[fi].ok && factors[fi].cat !== 'Veto') okFactorCount++;
+  }
+
   var pass = score >= minScore && familyCount >= 2;
   if (mode === 'scalp' && !families.session && !hasSweep && familyCount < 3){
     pass = pass && score >= minScore + 2;
   }
-  if (htf.dir && htf.dir !== dir && !hasSweep && !(native.obRetest && native.obRetest.trigger)){
+  var htfOppose = htf.dir && htf.dir !== dir && !hasSweep && !hasOb;
+  if (htfOppose){
     pass = false;
     factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'HTF opposes without sweep/OB trigger' });
   }
-  if (mode === 'scalp' && native.rangeBound && native.rangeBound.isRangeBound && meanRevHeavy){
+  var chopVeto = mode === 'scalp' && native.rangeBound && native.rangeBound.isRangeBound && meanRevHeavy;
+  if (chopVeto){
     pass = false;
     factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'Chop range — mean-reversion demoted on scalp' });
   }
@@ -463,17 +485,35 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
   }
   var plan = pineGoldBuildPlan(dir, price, primaryRows, bestHint, nativeHint);
   var rr = Math.abs(plan.t1 - plan.entry) / Math.abs(plan.entry - plan.stop);
-  if (fin(rr) && rr < 1.2){
+  var rrFailPrimary = fin(rr) && rr < tierCfg.rrPrimary;
+  if (rrFailPrimary){
     pass = false;
-    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'R:R ' + rr.toFixed(2) + ' < 1.2 min' });
+    factors.push({ cat: 'Veto', ok: false, pts: 0, note: 'R:R ' + rr.toFixed(2) + ' < ' + tierCfg.rrPrimary + ' min' });
   }
 
   var isNew = false;
+  var isRecent = false;
+  var recentBars = PINE_GOLD_SCAN.recentBars || 5;
   PINE_GOLD_LAYERS.forEach(function(layer){
     var lr = layerResults[layer.id];
-    if (lr && lr.dir === dir && (lr.newLong || lr.newShort)) isNew = true;
+    if (!lr || lr.dir !== dir) return;
+    if (lr.newLong || lr.newShort) isNew = true;
+    else if (fin(+lr.barsAgo) && lr.barsAgo > 0 && lr.barsAgo <= recentBars) isRecent = true;
   });
-  if (hasSweep || (native.obRetest && native.obRetest.trigger)) isNew = true;
+  if (hasSweep || hasOb) isNew = true;
+
+  var alignedMin = tierCfg.aligned;
+  var alignedPass = score >= alignedMin && okFactorCount >= 2
+    && (familyCount >= 2 || score >= alignedMin + 2 || hasNativeTrigger);
+  if (mode === 'scalp' && !families.session && !hasSweep && familyCount < 2){
+    alignedPass = alignedPass && score >= alignedMin + 2;
+  }
+  if (htfOppose && !hasNativeTrigger && score < 7) alignedPass = false;
+  if (chopVeto && score < 6) alignedPass = false;
+  if (fin(rr) && rr < tierCfg.rrAligned) alignedPass = false;
+
+  var tier = pass ? 'primary' : (alignedPass ? 'aligned' : null);
+  var display = tier !== null;
 
   return {
     dir: dir,
@@ -481,6 +521,8 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
     maxScore: maxScore,
     grade: pineGoldGrade(score, maxScore),
     pass: pass,
+    tier: tier,
+    display: display,
     factors: factors,
     families: families,
     familyCount: familyCount,
@@ -492,6 +534,8 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
     rr: fin(rr) ? rr : null,
     planSrc: plan.planSrc,
     isNew: isNew,
+    isRecent: isRecent && !isNew,
+    isContext: tier === 'aligned' && !isNew && !isRecent,
     atr: atr,
     layerResults: layerResults,
     native: native
@@ -543,6 +587,7 @@ function pineGoldLevelsFromBars(rows1d, rows15m){
 G.PINE_GOLD_LAYERS = PINE_GOLD_LAYERS;
 G.PINE_GOLD_SCAN = PINE_GOLD_SCAN;
 G.PINE_GOLD_MAX = PINE_GOLD_MAX;
+G.PINE_GOLD_TIER = PINE_GOLD_TIER;
 G.pineGoldConfluence = pineGoldConfluence;
 G.pineGoldHtfBias = pineGoldHtfBias;
 G.pineGoldGrade = pineGoldGrade;
@@ -553,7 +598,7 @@ G.pineGoldOuZscore = pineGoldOuZscore;
 
 if (typeof module !== 'undefined' && module.exports){
   module.exports = {
-    PINE_GOLD_LAYERS, PINE_GOLD_SCAN, PINE_GOLD_MAX, pineGoldConfluence, pineGoldHtfBias,
+    PINE_GOLD_LAYERS, PINE_GOLD_SCAN, PINE_GOLD_MAX, PINE_GOLD_TIER, pineGoldConfluence, pineGoldHtfBias,
     pineGoldGrade, pineGoldLevelsFromBars, pineGoldEvalDir, pineGoldNativeBundle, pineGoldOuZscore
   };
 }

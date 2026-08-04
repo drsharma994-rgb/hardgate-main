@@ -54,5 +54,18 @@ assert(typeof G.pineGoldOuZscore === 'function', 'pineGoldOuZscore exported');
   assert(res.long && res.short, 'scalp mode evaluates both directions');
 }
 
+assert(G.PINE_GOLD_TIER && G.PINE_GOLD_TIER.swing.primary === 10, 'tier thresholds exported');
+{
+  const rows4h = mkRows(300, 2400, 0.5);
+  const rows1d = mkRows(280, 2200, 2);
+  const res = G.pineGoldConfluence(rows4h, { mode: 'swing', htfRows: rows1d, levels: {} });
+  const ev = res.long || res.short;
+  if (ev){
+    assert(typeof ev.tier === 'string' || ev.tier === null, 'eval has tier field');
+    assert(typeof ev.display === 'boolean', 'eval has display flag');
+    if (ev.display) assert(ev.tier === 'primary' || ev.tier === 'aligned', 'display tier is primary or aligned');
+  }
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

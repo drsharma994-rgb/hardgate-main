@@ -1621,6 +1621,19 @@ W.goldswingState = function(){
 W.goldswingScan = function(){
   try{ return __scanSnap ? __stateView(__scanSnap) : null; }catch(e){ return null; }
 };
+W.goldswingCollectCandidates = function(leg, ctx){
+  try{
+    ctx = ctx || {};
+    var now = ctx.now || Date.now();
+    var newsC = ctx.news || { caution: false, title: null };
+    var macro = ctx.macro || null;
+    var got = buildCandidates(leg, now, newsC, macro, 'n/a', 'GOLD', 'XAUUSD');
+    var cands = [];
+    for (var i = 0; i < got.length; i++) cands.push(got[i]);
+    var rk = rankSetups(cands, ctx);
+    return rk.ranked || cands;
+  }catch(e){ return []; }
+};
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldswing', label: 'GOLD SWING', mount: mount, refresh: goldswingRefresh });
 W.HG_warmups = W.HG_warmups || [];
