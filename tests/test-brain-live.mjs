@@ -221,7 +221,7 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   /* --- 3 fake warm hooks: engine registered FIRST (must run LAST), one throws --- */
   const ran = [];
   W.HG_warmups = [
-    { id: 'engine', label: 'EXECUTE', run: async function(){ ran.push('engine'); return 'warmed'; } },
+    { id: 'engine', label: 'GATES', run: async function(){ ran.push('engine'); return 'warmed'; } },
     { id: 'news',   label: 'NEWS',    run: async function(){ ran.push('news'); return 'warmed'; } },
     { id: 'boom',   label: 'BOOM',    run: async function(){ ran.push('boom'); throw new Error('kaboom'); } }
   ];
@@ -254,7 +254,7 @@ console.log('== B) #brainWarm -> warm-up ledger -> auto-fired synthesis at scale
   assert(ran.join(',') === 'news,boom,engine', 'warm hooks ran in order, engine LAST despite being registered first — got ' + ran.join(','));
   assert(bDeps.indexOf('BOOM: error: kaboom') >= 0,
          'throwing hook captured as error: in #brainDeps, never kills the run — got "' + bDeps + '"');
-  assert(bDeps.indexOf('warm-up ·') >= 0 && bDeps.indexOf('NEWS: warmed') >= 0 && bDeps.indexOf('EXECUTE: warmed') >= 0,
+  assert(bDeps.indexOf('warm-up ·') >= 0 && bDeps.indexOf('NEWS: warmed') >= 0 && bDeps.indexOf('GATES: warmed') >= 0,
          'warm-up ledger names every hook result — got "' + bDeps + '"');
   assert(PB.stubs['#brainWarm'].disabled === false, '#brainWarm re-enabled at the end');
   assert(PB.stubs['#brainRun'].disabled === false, '#brainRun re-enabled at the end');

@@ -889,8 +889,24 @@ function edgeEnrich(sig, rows, item, candleSrc){
     }
 
     if (candleSrc === 'binance-fallback') out.notes.push('candles via Binance twin');
+    out.flowCvd = (item && item.taker) ? 'ok' : 'na';
+    out.flowObi = (item && item.bookDepth) ? 'ok' : 'na';
+    if (out.flowCvd === 'na' && out.flowObi === 'na'){
+      out.parts.push({ label: 'CVD/OBI flow data unavailable — microstructure gates skipped', pts: 0 });
+    }
     return out;
   }catch(e){ return out; }
+}
+
+function edgeFlowChip(en){
+  en = en || {};
+  if (en.flowCvd === 'ok' && en.flowObi === 'ok'){
+    return '<span class="statuschip ok" title="Binance taker + L2 depth loaded">FLOW OK</span>';
+  }
+  if (en.flowCvd === 'ok' || en.flowObi === 'ok'){
+    return '<span class="statuschip" title="Partial flow data — some microstructure gates skipped">FLOW PARTIAL</span>';
+  }
+  return '<span class="statuschip warn" title="No Binance taker/L2 — CVD and OBI vetoes not applied">FLOW N/A</span>';
 }
 
 function edgeAssess(rows, item, candleSrc){
@@ -1050,7 +1066,8 @@ function cardHTML(r){
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
     + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + ' '
-    + edgeFreshnessChip(sig.barAge) + '</span>'
+    + edgeFreshnessChip(sig.barAge) + ' ' + edgeFlowChip(en) + '</span>'
+    + (typeof W.hgBookStampHTML === 'function' ? W.hgBookStampHTML(sym, sig.dir, edgeFund) : '')
     + (typeof W.hgTripleStackChipHtml === 'function' ? W.hgTripleStackChipHtml(sym, sig.dir) : '')
     + '</div>'
     + '<div class="mini">'
@@ -1243,7 +1260,7 @@ function mount(el){
     + '<p class="note">Finds continuation setups that agree with SWING SCAN.'
     + ' Strategies: <b>LIMIT @ EMA21/EMA9/EMA50</b>, <b>sweep reclaim/fail</b>, <b>OTE 62–79%</b>.'
     + ' Confluence: structure BOS, vol regime, liquidity, TTM squeeze.'
-    + ' <b>INSTITUTIONAL LAYER:</b> Hard-vetoes setups fighting severe CVD Divergence, L2 DOM Spoof walls, and Macro Yield/SMT traps.'
+    + ' <b>INSTITUTIONAL LAYER:</b> CVD/OBI vetoes when Binance flow legs load; SMT + yield traps always on. Cards show <b>FLOW OK / PARTIAL / N/A</b>.'
     + ' Min R:R ' + MIN_RR + ' · tally ≥ ' + MIN_TALLY + ' · <b>USE Nx</b> = 50% max-safe.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — SWING-aligned · top ' + MAX_UNIVERSE + '</span></div>'
@@ -1370,6 +1387,7 @@ async function edgeWarm(opts){
 
 W.edgeSignal = edgeSignal;
 W.edgeEnrich = edgeEnrich;
+W.edgeFlowChip = edgeFlowChip;
 W.edgeAssess = edgeAssess;
 W.edgePlan = edgePlan;
 W.edgeBacktest = edgeBacktest;

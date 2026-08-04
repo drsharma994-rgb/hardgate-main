@@ -636,6 +636,12 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         at: Date.now(),
         topSpread: cards.length ? cards[0].sp.spreadAPR : null,
         topBase: cards.length ? cards[0].base : null,
+        topCard: cards.length ? {
+          base: cards[0].base,
+          pair: cards[0].pair,
+          spreadAPR: cards[0].sp.spreadAPR,
+          levels: cards[0].levels || null
+        } : null,
         count: cards.length
       };
       __renderCards(ui, cards);

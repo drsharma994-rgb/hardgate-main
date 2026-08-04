@@ -130,6 +130,22 @@ const pineRun = await WP.hgTabAlertsRunPine();
 assert(pineRun.pushed === 2 && WP._tg && WP._tg.indexOf('Tab/source: PINE') >= 0,
        'hgTabAlertsRunPine pushes pine setups to Telegram');
 
+const WS = loadWithWindow({
+  __hgSmartResults: {
+    results: [{
+      sym: 'SOLUSD',
+      setup: { dir: 'long', confirmed: true, entry: 10, stop: 9, t1: 12, rr1: 2 }
+    }]
+  },
+  sendTelegram: async (t) => { WS._tg = t; return true; }
+});
+WS.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const smartCollected = WS.hgTabAlertsCollect();
+assert(smartCollected.length === 1 && smartCollected[0].src === 'SMART $' && smartCollected[0].prime === true,
+       'collectSmart includes confirmed SMART setups');
+const smartRun = await WS.hgTabAlertsRun({ sources: { smart: true } });
+assert(smartRun.pushed === 1 && WS._tg && WS._tg.indexOf('SMART') >= 0, 'hgTabAlertsRun smart source filter');
+
 const run = await W.hgTabAlertsRun();
 assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
 

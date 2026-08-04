@@ -1418,7 +1418,7 @@ function mount(el){
     __el = el;
     el.innerHTML =
       '<div class="panel">'
-      + '<h2>EXECUTE — master gate engine <span>6-stage funnel · gates, not scores · every verdict shows its trail</span></h2>'
+      + '<h2>GATES — master gate engine <span>6-stage funnel · gates, not scores · every verdict shows its trail</span></h2>'
       + '<div class="row"><button class="btn" id="engineRun">RUN THE GATES</button>'
       + '<button class="btn" id="engineQuick" title="cached universe, no refetch — re-gates only last scan’s survivors + new listings on fresh candles; everything else keeps its verdict">QUICK RESCAN</button>'
       + '<span class="note" id="engineStat"></span></div>'
@@ -1536,8 +1536,8 @@ async function engineWarm(){
 }
 
 G.HG_tabs = G.HG_tabs || [];
-G.HG_tabs.push({ id: 'execute', label: 'EXECUTE', mount: function(el){ mount(el); }, refresh: refresh });
+G.HG_tabs.push({ id: 'execute', label: 'GATES', mount: function(el){ mount(el); }, refresh: refresh });
 G.HG_warmups = G.HG_warmups || [];
-G.HG_warmups.push({ id: 'engine', label: 'EXECUTE', run: engineWarm });
+G.HG_warmups.push({ id: 'engine', label: 'GATES', run: engineWarm });
 
 })();

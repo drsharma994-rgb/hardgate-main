@@ -241,7 +241,7 @@ assert(sandbox.__refreshLog.join(',') === 'modOk,modSkip,modBusy,modBoom,modAfte
 
 /* counts: inline 15 refreshed + 1 failed (COIL); modules modOk+modAfter refreshed,
    modSkip+modBusy skipped, modBoom failed; modPlain ignored */
-assert(/^refreshed 17 · skipped 2 · failed 2 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
+assert(/^refreshed 18 · skipped 2 · failed 2 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
   'chip reports honest refreshed/skipped/failed counts + timestamp — got: "' + chip.textContent + '"');
 assert(chip.textContent.indexOf('all tabs refreshed') === -1 && chip.textContent.indexOf('all refreshed') === -1,
   'chip never claims "all refreshed" while failures exist');
@@ -255,7 +255,7 @@ setStub('runCoilScan', async function(){ bump('runCoilScan'); });
 run("HG_TAB_MODS.modBoom.refresh = async function(){ window.__refreshLog.push('modBoom'); return 'refreshed'; };");
 chip.textContent = ''; chip.title = '';
 await run('hardRefreshAll()');
-assert(/^refreshed 19 · skipped 2 · failed 0 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
+assert(/^refreshed 20 · skipped 2 · failed 0 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
   'clean run reports failed 0 accurately — got: "' + chip.textContent + '"');
 assert(chip.title === 'no failures', 'clean run chip title admits no failures');
 
@@ -285,7 +285,7 @@ assert(run('HG_REFRESH_BUSY') === false && btn.disabled === false,
 /* busy guard works again on the NEXT run (flag not stuck) */
 chip.textContent = '';
 await run('hardRefreshAll()');
-assert(/^refreshed 19 · skipped 2 · failed 0 · /.test(chip.textContent),
+assert(/^refreshed 20 · skipped 2 · failed 0 · /.test(chip.textContent),
   'subsequent run executes normally — busy flag not stuck');
 
 /* ---------------- 5. theme wiring: bright.css linked + precached ---------------- */

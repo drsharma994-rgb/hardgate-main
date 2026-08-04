@@ -17,6 +17,7 @@ var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
 var __book = { snap: null, desk: null, busy: false, lastAt: 0, autoTimer: null, autoLog: [], liveReady: false, digestReady: false, consolidatedAll: null };
+var __bookOpenKeys = {};
 var BOOK_AUTO_MS = 45000;
 var BOOK_MAX_HEAT_PCT = 0.06;
 var BOOK_MAX_DAILY_LOSS_PCT = 0.02;
@@ -497,6 +498,32 @@ async function bookPullAfterAutoExec(){
   if ((__book.funds || []).length > 1){
     try{ __book.consolidatedAll = await bookFetchAllPositions(); }catch(e){}
   }
+}
+
+async function bookRefreshOpenKeys(){
+  try{
+    __bookOpenKeys = await bookFetchOpenKeys();
+    W.__hgBookOpenKeys = __bookOpenKeys;
+  }catch(e){
+    __bookOpenKeys = {};
+    W.__hgBookOpenKeys = __bookOpenKeys;
+  }
+  return __bookOpenKeys;
+}
+
+function hgBookStampHTML(sym, dir, fund){
+  if (!sym || (dir !== 'long' && dir !== 'short')) return '';
+  fund = fund || 'main';
+  var keys = __bookOpenKeys || W.__hgBookOpenKeys || {};
+  var k = bookPositionKey(fund, sym, dir);
+  if (!keys[k]){
+    for (var fk in keys){
+      if (!Object.prototype.hasOwnProperty.call(keys, fk)) continue;
+      if (fk.indexOf(':' + String(sym).toUpperCase() + ':' + dir) >= 0) return '<span class="statuschip" title="Open in paper book">IN BOOK</span>';
+    }
+    return '';
+  }
+  return '<span class="statuschip" title="Open in ' + esc(fund) + ' fund">IN BOOK</span>';
 }
 
 async function bookFetchOpenKeys(){
@@ -1806,6 +1833,7 @@ function mount(el){
       await bookPull();
       if (typeof W.hgRefreshExecuteCap === 'function') await W.hgRefreshExecuteCap();
       await bookRefreshMarks();
+      try{ await bookRefreshOpenKeys(); }catch(eKeys){}
       try{
         var ax = await bookMaybeAutoExecPending(__book.snap);
         if (ax && (ax.ok || ax.fail)) await bookPullAfterAutoExec();
@@ -2101,6 +2129,8 @@ W.bookAutoExecScope = bookAutoExecScope;
 W.bookResolveFund = bookResolveFund;
 W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
+W.bookRefreshOpenKeys = bookRefreshOpenKeys;
+W.hgBookStampHTML = hgBookStampHTML;
 W.bookExecTargets = bookExecTargets;
 W.bookBuildExecutePlan = bookBuildExecutePlan;
 W.bookExecuteBatchPositions = bookExecuteBatchPositions;

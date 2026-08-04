@@ -174,6 +174,10 @@ G.fetchUS10YYield = fetchUS10YYield;
 G.updateMacroFeeds = updateMacroFeeds;
 G.startMacroFeeds = startMacroFeeds;
 G.stopMacroFeeds = stopMacroFeeds;
+G.HG_warmups = G.HG_warmups || [];
+G.HG_warmups.push({ id: 'macro', label: 'MACRO FEEDS', run: function(){
+  return updateMacroFeeds().then(function(){ return 'warmed'; }).catch(function(){ return 'unavailable'; });
+}});
 
 if (!G.__hgMacroFeedsNoAuto){
   if (G.document && G.document.readyState === 'loading'){

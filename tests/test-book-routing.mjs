@@ -54,6 +54,11 @@ ok(bookScannerFund('gold-scalp', {}) === 'gold', 'gold-scalp scanner → gold fu
 ok(bookScannerFund('gold-deep-swing', {}) === 'gold', 'gold-deep-swing → gold fund');
 ok(bookScannerFund('gold-setup', {}) === 'gold', 'gold-setup → gold fund');
 ok(bookScannerFund('finder-swing', {}) === 'swing', 'finder-swing → swing fund');
+ok(bookScannerFund('pine', {}) === 'swing', 'pine scanner → swing fund');
+ok(bookScannerFund('goldpine', { strategy: 'swing' }) === 'swing', 'goldpine swing → swing fund');
+ok(bookScannerFund('goldpine', { strategy: 'scalp' }) === 'gold', 'goldpine scalp → gold fund');
+ok(bookScannerFund('strats', {}) === 'main', 'strats scanner → main fund');
+ok(bookScannerFund('scorecard', {}) === 'main', 'scorecard scanner → main fund');
 ok(bookScannerFund('finder', {}) === 'swing', 'generic finder → swing fund');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
