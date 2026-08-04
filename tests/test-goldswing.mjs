@@ -817,12 +817,13 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
 {
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const gLine = (html.match(/\{ id:'gold'[^\n]*\n?/) || [''])[0];
-  assert(/tabs:\['gold','goldpro','goldspot','goldscalp','goldswing','signallog'\]/.test(gLine),
-         'GOLD group gains goldswing + signallog after goldscalp — got: ' + gLine.trim());
+  assert(/tabs:\['gold','goldpro','goldspot','goldscalp','goldswing','goldpine','signallog'\]/.test(gLine),
+         'GOLD group gains goldswing + goldpine + signallog — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');
-  assert(sw.indexOf("'./goldswing.js'") !== -1 && sw.indexOf("'./signallog.js'") !== -1,
-         'goldswing.js + signallog.js added to the HG_SHELL precache list');
+  assert(sw.indexOf("'./goldswing.js'") !== -1 && sw.indexOf("'./goldpine.js'") !== -1
+         && sw.indexOf("'./pinegoldmath.js'") !== -1 && sw.indexOf("'./signallog.js'") !== -1,
+         'goldswing.js + goldpine.js + pinegoldmath.js + signallog.js in HG_SHELL precache');
 }
 
 /* =========================================================================

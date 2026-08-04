@@ -287,6 +287,35 @@ function collectPineAvwap(out){
   }
 }
 
+function collectGoldPine(out, minScore){
+  minScore = minScore !== undefined ? +minScore : 6;
+  var fn = gfn('goldPineScan');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  if (!val) return;
+  var kinds = [{ key: 'swing', src: 'GOLD PINE SWING' }, { key: 'scalp', src: 'GOLD PINE SCALP' }];
+  for (var k = 0; k < kinds.length; k++){
+    var list = val[kinds[k].key];
+    if (!Array.isArray(list)) continue;
+    for (var i = 0; i < list.length; i++){
+      var c = list[i];
+      if (!c || !fin(+c.score) || +c.score < minScore) continue;
+      pushSetup(out, kinds[k].src, {
+        sym: c.sym || 'XAUUSD',
+        dir: c.dir,
+        entry: c.entry,
+        stop: c.stop,
+        t1: c.t1,
+        t2: c.t2,
+        rr: c.rr,
+        tally: c.score,
+        grade: c.grade
+      }, { tally: c.score, tier: c.grade || 'PINE' });
+    }
+  }
+}
+
 function collectGold(out, kind, src, minTally){
   var fn = gfn(kind === 'scalp' ? 'goldscalpScan' : 'goldswingScan');
   if (!fn) return;
@@ -370,6 +399,7 @@ function hgTabAlertsCollect(win){
     }catch(e){}
     collectGold(out, 'scalp', 'GOLD SCALP', goldMin);
     collectGold(out, 'swing', 'GOLD SWING', goldMin);
+    collectGoldPine(out, Math.max(5, goldMin - 4));
   }finally{
     if (win) W = saved;
   }
