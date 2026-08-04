@@ -9,6 +9,7 @@ var W = (typeof window !== 'undefined') ? window : globalThis;
 var KL_15M = 280, KL_1H = 220, KL_4H = 280, KL_1D = 280;
 var SWING_MIN = 10, SCALP_MIN = 8;
 var PINE_GOLD_MAX = 24;
+var TOP_SETUPS = 2;
 
 function esc(s){
   return String(s || '').replace(/[&<>"]/g, function(c){
@@ -165,6 +166,8 @@ function dedupeSetups(list){
 
 function sortSetups(list){
   list.sort(function(a, b){
+    var pr = probScore(b) - probScore(a);
+    if (pr) return pr;
     var tr = tierRank(a.tier) - tierRank(b.tier);
     if (tr) return tr;
     if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
@@ -172,6 +175,36 @@ function sortSetups(list){
     return (b.score - a.score) || 0;
   });
   return list;
+}
+
+function gradeRank(g){
+  if (g === 'A+') return 5;
+  if (g === 'A') return 4;
+  if (g === 'B') return 3;
+  if (g === 'C') return 2;
+  return 0;
+}
+
+function probScore(s){
+  if (!s) return -1;
+  var base = fin(+s.score) && fin(+s.maxScore) && s.maxScore > 0
+    ? (+s.score / s.maxScore) * 100
+    : (+s.score || 0);
+  var form = 0;
+  if (s.isNew) form += 30;
+  else if (s.isRecent) form += 22;
+  else if (s.tier === 'forming') form += 18;
+  else if (s.tier === 'primary') form += 12;
+  else if (s.tier === 'native') form += 8;
+  var rr = fin(+s.rr) ? Math.min(+s.rr, 4) * 2 : 0;
+  var fam = fin(+s.familyCount) ? +s.familyCount * 1.5 : 0;
+  return base + form + gradeRank(s.grade) * 3 + rr + fam;
+}
+
+function topProbSetups(list, limit){
+  limit = (limit > 0) ? limit : TOP_SETUPS;
+  if (!list || !list.length) return [];
+  return sortSetups(list.slice()).slice(0, limit);
 }
 
 function collectNativeScalp(bars, ctx, source){
@@ -308,8 +341,9 @@ function factorsHTML(factors){
   return parts.join('<br>');
 }
 
-function cardHTML(s){
+function cardHTML(s, rank){
   var cls = s.dir === 'long' ? 'long' : 'short';
+  var rankBadge = rank ? '<span class="stamp pass" style="margin-left:6px">#' + rank + ' PICK</span>' : '';
   var badge = s.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>'
     : (s.isRecent ? '<span class="stamp" style="margin-left:6px">RECENT</span>'
       : (s.tier === 'native' ? '<span class="stamp pass" style="margin-left:6px">NATIVE</span>'
@@ -322,7 +356,7 @@ function cardHTML(s){
   else if (s.nativeStrategy) modeLabel += ' · ' + esc(s.nativeStrategy);
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
-    + badge + '</span></h2>'
+    + rankBadge + badge + '</span></h2>'
     + '<div class="note">Confluence <b>' + s.score + '/' + s.maxScore + '</b>'
     + tierNote
     + ' · families <b>' + (s.familyCount != null ? s.familyCount : '—') + '</b>'
@@ -340,13 +374,18 @@ function cardHTML(s){
     + '</div>';
 }
 
-function sectionHTML(title, setups, emptyMsg){
+function sectionHTML(title, setups, emptyMsg, opts){
+  opts = opts || {};
   if (!setups.length){
     return '<div class="panel"><h2>' + esc(title) + '</h2>'
       + '<div class="empty">' + esc(emptyMsg) + '</div></div>';
   }
-  return '<div class="panel"><h2>' + esc(title) + ' <span>' + setups.length + ' setup(s)</span></h2></div>'
-    + setups.map(cardHTML).join('');
+  var total = fin(+opts.total) ? +opts.total : setups.length;
+  var hdr = (total > setups.length)
+    ? ('Top ' + setups.length + ' of ' + total + ' · highest-probability formation')
+    : (setups.length + ' setup(s)');
+  return '<div class="panel"><h2>' + esc(title) + ' <span>' + hdr + '</span></h2></div>'
+    + setups.map(function(s, i){ return cardHTML(s, i + 1); }).join('');
 }
 
 var __goldPineSnap = null;
@@ -357,7 +396,8 @@ function mount(el){
     '<div class="panel">'
     + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
     + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
-    + 'plus native GOLD SWING/SCALP candidates and forming rejects. '
+    + 'plus native GOLD SWING/SCALP candidates. UI shows the <b>top ' + TOP_SETUPS + ' highest-probability formations</b> per section '
+    + '(NEW/RECENT/FORMING weighted). '
     + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
     + '<b>ALIGNED</b> = per-layer or watch context. <b>NATIVE</b> = goldind strategies.</div>'
     + '<div class="row" style="margin-top:10px">'
@@ -406,6 +446,10 @@ function mount(el){
       if (stat) stat.textContent = 'Scoring Pine + gold confluence…';
       var result = runGoldPineScan(bars, { macro: macro });
       setProg(0.9);
+      var swingTop = topProbSetups(result.swing, TOP_SETUPS);
+      var scalpTop = topProbSetups(result.scalp, TOP_SETUPS);
+      result.swingTop = swingTop;
+      result.scalpTop = scalpTop;
       __goldPineSnap = result;
 
       if (lvEl && result.levels){
@@ -414,15 +458,17 @@ function mount(el){
           + '</b> · Asia <b>' + pxF(lv.asiaLo) + '–' + pxF(lv.asiaHi) + '</b> · feed <b>' + esc(result.source) + '</b></div>';
       }
 
-      var html = sectionHTML('GOLD PINE — SWING SETUPS (4H)', result.swing,
-          'No swing cards — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.')
-        + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', result.scalp,
-          'No scalp cards — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.');
+      var html = sectionHTML('GOLD PINE — SWING SETUPS (4H)', swingTop,
+          'No swing formations — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.',
+          { total: result.swing.length })
+        + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', scalpTop,
+          'No scalp formations — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.',
+          { total: result.scalp.length });
 
       if (out) out.innerHTML = html;
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
-      if (stat) stat.textContent = 'done · ' + result.swing.length + ' swing · ' + result.scalp.length
-        + ' scalp · ' + dt + 's';
+      if (stat) stat.textContent = 'done · top ' + swingTop.length + '/' + result.swing.length + ' swing · top '
+        + scalpTop.length + '/' + result.scalp.length + ' scalp · ' + dt + 's';
       setProg(null);
       return 'refreshed';
     }catch(e){
@@ -454,6 +500,9 @@ async function goldPineRefresh(){
 }
 
 W.runGoldPineScan = runGoldPineScan;
+W.topProbSetups = topProbSetups;
+W.goldPineProbScore = probScore;
+W.GOLD_PINE_TOP_SETUPS = TOP_SETUPS;
 W.goldPineScan = function(){
   try{ return __goldPineSnap; }catch(e){ return null; }
 };
