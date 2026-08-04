@@ -79,7 +79,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Use the Node server, not `file://`:** Direct file open skips `/api/proxy`.
 - **No runtime npm dependencies:** `npm install` is a no-op.
 - **Node 18+ required**
-- **Shared setup plans (`plans.js`):** Loaded after `cryptogates.js`. `hgApplyExactEntry` unifies EDGE-parity exact entries (EMA21/9, sweep, OTE via `edgeSignal` when loaded) across SWING/SCALP/SMART/EXECUTE and scanner tabs. Also: `hgStructureStop`, `hgPlanSwingTargets`, `hgEnrichSwingClean`, `hgSwingParity`, etc.
+- **EDGE tab:** Cards show **FRESH / ACTIVE / STALE** from `barAge` (closed 4H bars since trigger). **FORMING NOW** lists bias-aligned symbols with **×ATR distance to EMA21**; `tabalerts.js` pushes **EDGE FORMING** watch rows (≤1.25×ATR) and skips **STALE** EDGE tickets (`barAge > 2`) from Telegram. `scripts/edge-diagnose.mjs` uses `HARDGATE_SITE` for `/api/proxy` when run from Node.
 - **Alert dual clocks:** Set `RENDER_DISPATCH_PRIMARY=true` on GitHub when Render dispatches alerts every 13 min.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins IST clock for session gates.
 

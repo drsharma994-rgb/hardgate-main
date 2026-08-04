@@ -179,6 +179,17 @@ console.log('== anchor clustering reward ==');
   assert(!enFar.parts.some(function(p){ return p.label.indexOf('Golden Confluence') >= 0; }),
     'entry far from anchors skips cluster reward');
 }
+console.log('== edge freshness + forming approach ==');
+{
+  assert(typeof W.edgeFreshnessChip === 'function', 'edgeFreshnessChip exported');
+  assert(typeof W.edgeFormingApproach === 'function', 'edgeFormingApproach exported');
+  assert(W.edgeFreshnessChip(0).indexOf('FRESH') >= 0, 'barAge 0 -> FRESH chip');
+  assert(W.edgeFreshnessChip(4).indexOf('STALE') >= 0, 'barAge 4 -> STALE chip');
+  var bull2 = trendSeries('long', 260);
+  var bias2 = W.edgeSwingBias(bull2);
+  var appr = bias2 ? W.edgeFormingApproach(bull2, bias2.dir) : null;
+  assert(!bias2 || (appr && isFinite(appr.distAtr) && appr.note), 'forming approach returns distance note');
+}
 {
   var tab = W.HG_tabs.filter(function(t){ return t.id === 'edge'; })[0];
   assert(tab.refresh() === 'skipped: not run yet', 'refresh before scan skipped');

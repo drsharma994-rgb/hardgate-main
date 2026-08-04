@@ -1042,14 +1042,15 @@ function cardHTML(r){
     ? W.bookBtnHTML(sym, p.dir, p.entry, p.stop, p.t1, {
       scanner: 'edge',
       fund: edgeFund,
-      strategy: 'edge', klass: edgeKlass, venue: 'startrader',
+      strategy: 'edge', klass: edgeKlass, venue: (r.item && r.item.exchange) || 'delta',
       layers: ['EDGE', 'SWING'],
       t2: p.t2
     }) : '';
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
-    + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + '</span>'
+    + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + ' '
+    + edgeFreshnessChip(sig.barAge) + '</span>'
     + (typeof W.hgTripleStackChipHtml === 'function' ? W.hgTripleStackChipHtml(sym, sig.dir) : '')
     + '</div>'
     + '<div class="mini">'
@@ -1068,6 +1069,35 @@ function cardHTML(r){
 var __edge = { busy: false, ranOnce: false, run: null };
 var __edgeScanSnap = null;
 
+function edgeFreshnessChip(barAge){
+  if (!isFinite(barAge)) return '';
+  if (barAge === 0){
+    return '<span class="statuschip ok" title="Trigger on the latest closed 4H bar">FRESH</span>';
+  }
+  if (barAge <= 2){
+    return '<span class="statuschip" title="Trigger ' + barAge + ' closed 4H bar(s) ago">ACTIVE</span>';
+  }
+  return '<span class="statuschip warn" title="Trigger ' + barAge + ' closed 4H bars ago — consider stale">STALE</span>';
+}
+
+/** Distance from mark to EMA21 value zone — early watch copy for FORMING NOW rows. */
+function edgeFormingApproach(rows, biasDir){
+  try{
+    if (!rows || rows.length < 55 || !biasDir) return null;
+    var A = computeArrays(rows);
+    if (!A) return null;
+    var i = rows.length - 1;
+    var c = A.closes[i], at = A.atr[i], e21 = A.e21[i];
+    if (!isFinite(c) || !isFinite(at) || !(at > 0) || !isFinite(e21)) return null;
+    var distAtr = biasDir === 'long' ? (c - e21) / at : (e21 - c) / at;
+    var note;
+    if (distAtr <= 0.35) note = 'at EMA21 value — wait 4H trigger bar';
+    else if (distAtr <= 1.0) note = distAtr.toFixed(2) + '×ATR to EMA21 — approaching value';
+    else note = distAtr.toFixed(2) + '×ATR from EMA21 — pullback needed';
+    return { mark: c, level: e21, distAtr: distAtr, note: note };
+  }catch(e){ return null; }
+}
+
 function publishEdgeScan(found, meta){
   meta = meta || {};
   try{
@@ -1078,7 +1108,7 @@ function publishEdgeScan(found, meta){
         sym: r.sym || (r.item && r.item.sym),
         dir: sig.dir || p.dir,
         entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2,
-        rr: sig.rr, tally: r.tally
+        rr: sig.rr, tally: r.tally, barAge: sig.barAge
       });
     }
     __edgeScanSnap = {
@@ -1162,10 +1192,14 @@ async function edgeScanList(list, fetchCandles, hooks){
         if (!edgeSignal(rows)){
           noTrig++;
           if (forming.length < 16){
+            var approach = edgeFormingApproach(rows, bias.dir);
             forming.push({
               sym: item.sym, dir: bias.dir,
               regime: bias.regime || (typeof W.hgTapeRegimeLabel === 'function' ? W.hgTapeRegimeLabel(rows) : ''),
-              note: 'SWING bias OK — waiting for Donchian/OTE/sweep trigger in lookback'
+              note: approach ? approach.note : 'SWING bias OK — waiting for Donchian/OTE/sweep trigger',
+              mark: approach ? approach.mark : null,
+              level: approach ? approach.level : null,
+              distAtr: approach ? approach.distAtr : null
             });
           }
           return;
@@ -1351,6 +1385,8 @@ W.isCorrectivePullback = isCorrectivePullback;
 W.edgeScanList = edgeScanList;
 W.edgeCardHTML = cardHTML;
 W.edgeDropForming = edgeDropForming;
+W.edgeFreshnessChip = edgeFreshnessChip;
+W.edgeFormingApproach = edgeFormingApproach;
 W.edgeScan = function(){ try{ return __edgeScanSnap; }catch(e){ return null; } };
 W.edgeWarm = edgeWarm;
 W.HG_tabs = W.HG_tabs || [];

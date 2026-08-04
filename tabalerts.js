@@ -94,7 +94,30 @@ function collectEdge(out){
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
     if (c && fin(+c.tally) && +c.tally < 3) continue;
+    if (c && fin(+c.barAge) && +c.barAge > 2) continue;
     pushSetup(out, 'EDGE', c, { tally: c && c.tally });
+  }
+}
+
+function collectEdgeForming(out){
+  var fn = gfn('edgeScan');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var forming = (val && Array.isArray(val.forming)) ? val.forming : [];
+  for (var i = 0; i < forming.length; i++){
+    var w = forming[i];
+    if (!w || !w.sym || (w.dir !== 'long' && w.dir !== 'short')) continue;
+    if (!fin(+w.level) || !fin(+w.mark)) continue;
+    if (fin(+w.distAtr) && +w.distAtr > 1.25) continue;
+    pushWatch(out, 'EDGE FORMING', {
+      state: 'armed',
+      sym: w.sym,
+      dir: w.dir,
+      level: +w.level,
+      condition: w.note || 'SWING bias — waiting for 4H trigger',
+      gatesPassed: fin(+w.distAtr) ? Math.max(0, Math.round((1.25 - +w.distAtr) * 4)) : 1
+    });
   }
 }
 
@@ -381,6 +404,7 @@ function hgTabAlertsCollect(win){
     collectCrypto(out, 'scalp', 'SCALP');
     collectCryptoWatch(out);
     collectEdge(out);
+    collectEdgeForming(out);
     collectBrain(out);
     collectPine(out);
     collectPineMsb(out);
