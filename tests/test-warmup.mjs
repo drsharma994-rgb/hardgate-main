@@ -106,7 +106,7 @@ console.log('== C) warm-up orchestration ==');
   const ran = [];
   /* deliberately shuffled: engine first in the array — must still run LAST */
   W.HG_warmups = [
-    { id: 'engine', label: 'EXECUTE', run: async function(){ ran.push('engine'); await sleep(5); return 'warmed'; } },
+    { id: 'engine', label: 'GATES', run: async function(){ ran.push('engine'); await sleep(5); return 'warmed'; } },
     { id: 'news', label: 'NEWS', run: async function(){ ran.push('news'); return 'warmed'; } },
     { id: 'boom', label: 'BOOM', run: async function(){ ran.push('boom'); throw new Error('kaboom'); } },
     { id: 'regime', label: 'REGIME', run: async function(){ ran.push('regime'); return 'fresh'; } },
@@ -125,7 +125,7 @@ console.log('== C) warm-up orchestration ==');
   const deps = M.stubs['#brainDeps'].textContent;
   assert(deps.indexOf('warm-up ·') >= 0, 'deps note carries the warm-up ledger — got "' + deps + '"');
   assert(deps.indexOf('BOOM: error: kaboom') >= 0, 'throwing hook captured as error, never kills the run — got "' + deps + '"');
-  assert(deps.indexOf('NEWS: warmed') >= 0 && deps.indexOf('REGIME: fresh') >= 0 && deps.indexOf('EXECUTE: warmed') >= 0,
+  assert(deps.indexOf('NEWS: warmed') >= 0 && deps.indexOf('REGIME: fresh') >= 0 && deps.indexOf('GATES: warmed') >= 0,
          'per-layer results named verbatim in the ledger');
   assert(M.stubs['#brainRun'].disabled === false && M.stubs['#brainQuick'].disabled === false,
          'RUN + QUICK RESCAN re-enabled after warm-up');
@@ -173,7 +173,7 @@ console.log('== F) real layer modules publish honest warm hooks ==');
     ['regime.js', 'regime', 'REGIME'],
     ['rotation.js', 'rotation', 'ROTATION'],
     ['oiflow.js', 'oiflow', 'OI FLOW'],
-    ['engine.js', 'engine', 'EXECUTE'],
+    ['engine.js', 'engine', 'GATES'],
     ['onchain.js', 'onchain', 'ON-CHAIN'],
     ['news.js', 'news', 'NEWS'],
     ['liqs.js', 'liqs', 'LIQS'],

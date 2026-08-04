@@ -139,8 +139,8 @@ console.log('== load + registration ==');
 ok(typeof gateCandidate === 'function', 'window.gateCandidate exposed');
 ok(Array.isArray(globalThis.window.HG_tabs) && globalThis.window.HG_tabs.length === 1, 'HG_tabs array created with one entry');
 const tab = globalThis.window.HG_tabs[0];
-ok(tab.id === 'execute' && tab.label === 'EXECUTE' && typeof tab.mount === 'function',
-   'HG_tabs entry = {id:execute, label:EXECUTE, mount}');
+ok(tab.id === 'execute' && tab.label === 'GATES' && typeof tab.mount === 'function',
+   'HG_tabs entry = {id:execute, label:GATES, mount}');
 ok(['bias','regime','trendmx','swing','scalp','squeeze','smart','oiflow','liqs','coil','apex','trap','smc','ob','div','gold','goldpro','strats','meanrev','best','carry','basis','search','log','trade','finder'].indexOf(tab.id) === -1,
    'tab id "execute" does not collide with any taken id');
 ok(globalThis.window.runScan === undefined && globalThis.window.gatherSymbol === undefined
@@ -167,8 +167,8 @@ function freshPane(){
 }
 const K0 = freshPane();
 tab.mount(K0.pane);
-ok(K0.pane._html.indexOf('class="panel"') >= 0 && K0.pane._html.indexOf('<h2>EXECUTE — master gate engine') >= 0,
-   'mount builds .panel with EXECUTE h2');
+ok(K0.pane._html.indexOf('class="panel"') >= 0 && K0.pane._html.indexOf('<h2>GATES — master gate engine') >= 0,
+   'mount builds .panel with GATES h2');
 ok(K0.pane._html.indexOf('id="engineRun"') >= 0 && K0.pane._html.indexOf('RUN THE GATES') >= 0, 'RUN .btn present');
 ok(K0.pane._html.indexOf('id="engineStat"') >= 0 && K0.pane._html.indexOf('id="engineProg"') >= 0
    && K0.pane._html.indexOf('id="engineCards"') >= 0 && K0.pane._html.indexOf('id="engineEmpty"') >= 0,

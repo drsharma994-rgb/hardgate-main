@@ -741,7 +741,7 @@ window.bestScan = function(){ return __hgBestSnap; };
 const HG_ALERTS_FORCED_ON = true;
 const HG_BEST_ALERT_MS = 15 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
-const HG_EDGE_ALERT_MS = 15 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram on new setups */
+const HG_EDGE_ALERT_MS = 3 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram (aligned with 3-min alert cycle) */
 const HG_ALERTS_AUTO_REFRESH_MS = 180000;
 
 function hgExLabel(ex){
@@ -1941,6 +1941,7 @@ async function runSmartScan(){
       + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
       + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0,5);
     if (!results.length) emptyEl.style.display = 'block';
+    window.__hgSmartResults = { results: results, at: Date.now() };
   }catch(e){
     statEl.textContent = 'smart scan failed: ' + e.message;
   }finally{ setProg('smartProg', null); btn.disabled = false; }
@@ -3344,16 +3345,26 @@ async function cryptoScanWarm(kind){
   try{ await runScan(kind, { quiet: true }); return 'warmed'; }
   catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
+async function hgWarmLayerIds(ids){
+  const reg = (typeof HG_warmups !== 'undefined' && Array.isArray(HG_warmups)) ? HG_warmups : [];
+  for (const w of reg){
+    if (!w || typeof w.run !== 'function') continue;
+    if (ids && ids.length && ids.indexOf(w.id) < 0) continue;
+    try{ await w.run({ quiet: true }); }catch(e){ console.warn('warm ' + (w.id || '?'), e); }
+  }
+}
 async function runTabAlertScans(){
+  try{ if (typeof updateMacroFeeds === 'function') await updateMacroFeeds(); }catch(e){ console.warn('tab alert macro', e); }
   try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
   try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
   try{ if (typeof gsWarm === 'function') await gsWarm(); }catch(e){ console.warn('tab alert gold scalp', e); }
   try{ if (typeof gwWarm === 'function') await gwWarm(); }catch(e){ console.warn('tab alert gold swing', e); }
   try{ if (typeof edgeWarm === 'function') await edgeWarm({ quiet: true }); }catch(e){ console.warn('tab alert edge warm', e); }
   try{ if (typeof pineWarm === 'function') await pineWarm({ quiet: true }); }catch(e){ console.warn('tab alert pine warm', e); }
+  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
 }
 
-/* EDGE tab — quiet universe scan every 15 min; Telegram when a setup is new
+/* EDGE tab — quiet scan every 3 min; Telegram when a setup is new
    (15-min dedup per sym:dir@entry via tabalerts.js hg_tabalert_keys). */
 async function runEdgeAlertCycle(){
   const now = Date.now();
@@ -5166,12 +5177,15 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; PINE via pineWarm+pineFireAlerts; EDGE 15-min */
+    /* tab scanners — SWING/SCALP/GOLD/BRAIN/SMART/OI/LIQS/SQZ/CARRY every 3 min; PINE via pineFireAlerts */
     try{
       await runTabAlertScans();
       await runEdgeAlertCycle();
       if (typeof hgTabAlertsRun === 'function'){
-        await hgTabAlertsRun({ sources: { swing: true, scalp: true, brain: true, gold: true } });
+        await hgTabAlertsRun({ sources: {
+          swing: true, scalp: true, brain: true, gold: true,
+          smart: true, oiflow: true, liqs: true, squeeze: true, carry: true, termbasis: true, watch: true
+        } });
       }
     }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
     S.lastAlertCheck = Date.now();
@@ -6254,6 +6268,10 @@ async function hardRefreshAll(){
   try{
   let refreshed = 0, skipped = 0, failed = 0;
   const failedNames = [];
+  try{
+    if (chip) chip.textContent = 'refreshing MACRO FEEDS…';
+    if (typeof updateMacroFeeds === 'function') await updateMacroFeeds();
+  }catch(eM){ console.warn('macro feeds refresh', eM); }
   /* undefined return = refreshed; strings starting with 'skip' or 'busy' = skipped */
   const tally = function(status){
     const s = (typeof status === 'string' && status) ? status.toLowerCase() : 'refreshed';
@@ -6302,6 +6320,14 @@ async function hardRefreshAll(){
       }
     }
   }catch(e){ /* registry unreadable — inline counts still reported honestly */ }
+  try{
+    if (chip) chip.textContent = 'warming layer tabs…';
+    await hgWarmLayerIds(['macro', 'engine', 'edge', 'oiflow', 'squeeze', 'carry', 'termbasis', 'pine']);
+    refreshed++;
+  }catch(eWarm){
+    failed++; failedNames.push('LAYER WARM');
+    console.warn('layer warm refresh failed', eWarm);
+  }
   if (chip){
     chip.textContent = 'refreshed ' + refreshed + ' \u00b7 skipped ' + skipped + ' \u00b7 failed ' + failed
       + ' \u00b7 ' + new Date().toTimeString().slice(0,8);

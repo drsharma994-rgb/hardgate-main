@@ -346,6 +346,106 @@ function collectCryptoWatch(out){
   }catch(e){}
 }
 
+function collectSmart(out){
+  var bag = W.__hgSmartResults;
+  if (!bag || !Array.isArray(bag.results)) return;
+  for (var i = 0; i < bag.results.length; i++){
+    var r = bag.results[i];
+    if (!r || !r.setup) continue;
+    var s = r.setup;
+    if (s.dir !== 'long' && s.dir !== 'short') continue;
+    if (!fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) continue;
+    pushSetup(out, 'SMART $', {
+      sym: r.sym, dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2, rr: s.rr1
+    }, { prime: !!s.confirmed, tier: s.confirmed ? 'CONFIRMED' : 'SMART' });
+  }
+}
+
+function collectOiflow(out){
+  var fn = gfn('oiflowState');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var rows = (val && val.results) ? val.results : [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || !r.setup) continue;
+    var d = (r.setup.dir || (r.cls && r.cls.dir));
+    if (d !== 'long' && d !== 'short') continue;
+    var s = r.setup;
+    if (!fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) continue;
+    pushSetup(out, 'OI FLOW', { sym: r.sym, dir: d, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2 },
+      { prime: (r.cls && fin(+r.cls.score) && +r.cls.score >= 4), tier: 'OI' });
+  }
+}
+
+function collectLiqs(out){
+  var fn = gfn('liqsState');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var s = val && val.setup;
+  if (!s || (s.dir !== 'long' && s.dir !== 'short')) return;
+  if (!fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) return;
+  pushSetup(out, 'LIQS', {
+    sym: s.sym || 'FLUSH', dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2
+  }, { prime: true, tier: 'LIQ FLUSH' });
+}
+
+function collectSqueeze(out){
+  var fn = gfn('squeezeState');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var rows = (val && val.results) ? val.results : [];
+  var planFn = gfn('squeezePlan');
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || (r.kind !== 'fired' && r.kind !== 'break')) continue;
+    if (r.dir !== 'long' && r.dir !== 'short') continue;
+    var p = null;
+    if (planFn){
+      try{ p = planFn({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h }); }catch(eP){}
+    }
+    if (!p || !fin(+p.entry) || !fin(+p.stop) || !fin(+p.t1)) continue;
+    pushSetup(out, 'SQUEEZE', { sym: r.sym, dir: r.dir, entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2 },
+      { prime: r.kind === 'fired', tier: r.kind === 'fired' ? 'FIRED' : 'BREAK' });
+  }
+}
+
+function collectCarry(out){
+  var fn = gfn('carryState');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var tc = val && val.topCard;
+  if (!tc || !fin(+tc.spreadAPR) || +tc.spreadAPR < 25) return;
+  var lv = tc.levels || {};
+  if (!fin(+lv.entry) || !fin(+lv.stop) || !fin(+lv.t1)) return;
+  pushSetup(out, 'CARRY', {
+    sym: String(tc.base || 'CARRY') + 'USD',
+    dir: 'short',
+    entry: +lv.entry, stop: +lv.stop, t1: +lv.t1, t2: fin(+lv.t2) ? +lv.t2 : null
+  }, { prime: +tc.spreadAPR >= 40, tier: 'SPREAD ' + Math.round(+tc.spreadAPR) + '% APR' });
+}
+
+function collectTermBasisWatch(out){
+  var fn = gfn('termBasisState');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var top = val && val.top;
+  if (!top || !top.pair) return;
+  var reg = String(top.regime || '').toLowerCase();
+  pushWatch(out, 'TERM BASIS', {
+    state: 'watch',
+    sym: top.pair,
+    dir: (reg.indexOf('back') >= 0) ? 'long' : 'short',
+    level: fin(+top.spreadCur) ? +top.spreadCur : 0,
+    condition: (top.regime || 'curve') + ' · score ' + (top.score != null ? top.score : '—')
+  });
+}
+
 function hgTabAlertsCollect(win){
   var out = [];
   var root = win || W;
@@ -376,6 +476,12 @@ function hgTabAlertsCollect(win){
     collectGold(out, 'scalp', 'GOLD SCALP', goldMin);
     collectGold(out, 'swing', 'GOLD SWING', goldMin);
     collectGoldPine(out, 8);
+    collectSmart(out);
+    collectOiflow(out);
+    collectLiqs(out);
+    collectSqueeze(out);
+    collectCarry(out);
+    collectTermBasisWatch(out);
   }finally{
     if (win) W = saved;
   }
@@ -489,6 +595,13 @@ async function hgTabAlertsRun(opts){
       if (s.src === 'EDGE' && allow.edge) return true;
       if (s.src.indexOf('PINE') >= 0 && allow.pine) return true;
       if (s.src.indexOf('GOLD') >= 0 && allow.gold) return true;
+      if (s.src.indexOf('SMART') >= 0 && allow.smart) return true;
+      if (s.src === 'OI FLOW' && allow.oiflow) return true;
+      if (s.src === 'LIQS' && allow.liqs) return true;
+      if (s.src === 'SQUEEZE' && allow.squeeze) return true;
+      if (s.src === 'CARRY' && allow.carry) return true;
+      if (s.src.indexOf('TERM BASIS') >= 0 && allow.termbasis) return true;
+      if (s.watch && allow.watch) return true;
       return false;
     });
   }
