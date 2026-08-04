@@ -81,6 +81,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Node 18+ required**
 - **EDGE tab:** Cards show **FRESH / ACTIVE / STALE** from `barAge` (closed 4H bars since trigger). **FORMING NOW** lists bias-aligned symbols with **×ATR distance to EMA21**; `tabalerts.js` pushes **EDGE FORMING** watch rows (≤1.25×ATR) and skips **STALE** EDGE tickets (`barAge > 2`) from Telegram. `scripts/edge-diagnose.mjs` uses `HARDGATE_SITE` for `/api/proxy` when run from Node.
 - **PINE tab:** Background `pineWarm` runs every **3 min** with the alert cycle (after `edgeWarm` for universe). `pineFireAlerts` Telegrams on **NEW** bar flips and **RECENT** forming signals (last 5 bars); 15-min dedup per `script:sym:dir:phase` in `hg_pine_alert_keys`. Requires **Alerts ON** and Telegram configured (`sendTelegram` / `TELEGRAM_*` env). Rich per-script messages come from `pine.js`; `hgTabAlertsRunPine` is available for aggregate tabalerts pushes.
+- **GOLD PINE tab:** Displays the **top 2 highest-probability formations** per SWING (4H) and SCALP (15m) section (`topProbSetups` in `goldpine.js`); full scored universe remains in `goldPineScan()` for alerts.
 - **Alert dual clocks:** Set `RENDER_DISPATCH_PRIMARY=true` on GitHub when Render dispatches alerts every 13 min.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins IST clock for session gates.
 
