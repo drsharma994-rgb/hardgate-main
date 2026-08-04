@@ -405,6 +405,9 @@ async function pineFireAlerts(fresh, opts){
   for (var j = 0; j < toSend.length; j++){
     var s = toSend[j];
     var body = formatPineAlert(s);
+    if (body.indexOf('Tab:') < 0){
+      body = '🌲 HARDGATE PINE tab\nSignal: NEW · ' + s.scriptLabel + '\n' + body;
+    }
     var title = 'HARDGATE PINE: ' + s.sym + ' ' + s.dir.toUpperCase();
     try{
       if (typeof W.logSetup === 'function') W.logSetup(s.sym, s.dir, 'pine-' + s.scriptId, s.entry, s.stop, s.t1);

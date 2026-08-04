@@ -390,6 +390,8 @@ function onTicket(snap){
        the 2026-07-27 gap: ticket changes chimed but never reached Telegram
        when only ntfy was wired. Fire-and-forget; results never block. */
     var tickTxt = 'HARDGATE entry ticket changed\n'
+      + 'Tab: hgalert (entry ticket board)\n'
+      + 'Signal: #1 long/short ticket pair changed on the live board\n'
       + 'Long: ' + ((snap.long && snap.long.sym) ? snap.long.sym + ' @ ' + (+snap.long.entry) : '—')
       + '\nShort: ' + ((snap.short && snap.short.sym) ? snap.short.sym + ' @ ' + (+snap.short.entry) : '—')
       + offHoursTag()
@@ -476,7 +478,10 @@ function onSniper(hits){
       validUntil = '\nvalid until ~' + ('0' + vu.getHours()).slice(-2) + ':' + ('0' + vu.getMinutes()).slice(-2)
         + ' tomorrow (24h limit validity, or until structure breaks)';
     }catch(e){}
-    var txt = '🎯 HARDGATE SNIPER SETUP\n' + __sniperDesc
+    var txt = '🎯 HARDGATE SNIPER SETUP\n'
+      + 'Tab: BRAIN tab (sniper board)\n'
+      + 'Signal: 20x-grade resting limit in/approaching zone\n'
+      + __sniperDesc
       + '\n20x-grade resting limit, mark in/approaching the zone.' + validUntil
       + offHoursTag()
       + '\nhttps://hardgate-main.onrender.com/';
@@ -552,7 +557,10 @@ function onSqueeze(hits){
     if (__muted){ suffix = ' (muted)'; }
     else if (playChime()){ suffix = ''; }
     else { suffix = ' (sound failed)'; }
-    var txt = '🌀 HARDGATE SQUEEZE\n' + desc
+    var txt = '🌀 HARDGATE SQUEEZE\n'
+      + 'Tab: SQUEEZE tab\n'
+      + 'Signal: TTM squeeze fired or Donchian break\n'
+      + desc
       + '\nTTM squeeze fired / Donchian break — momentum release, confirm on the SQUEEZE tab.'
       + offHoursTag()
       + '\nhttps://hardgate-main.onrender.com/';

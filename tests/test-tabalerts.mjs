@@ -48,6 +48,7 @@ assert(fr3.fresh.length === 1, 'same setup after 15 min can alert again');
 
 const body = hgTabAlertsFormat([{ src: 'BRAIN PRIME', sym: 'ETHUSD', dir: 'short', entry: 2000, stop: 2050, t1: 1900, prime: true, tier: 'PRIME' }]);
 assert(body.indexOf('STRONG SETUP') >= 0 && body.indexOf('PRIME') >= 0, 'PRIME rows tagged strong');
+assert(body.indexOf('Tab/source: BRAIN PRIME') >= 0, 'format names tab/source per row');
 
 function loadWithWindow(W){
   const sandbox = {
@@ -94,7 +95,7 @@ const edgeOnly = WE.hgTabAlertsCollect();
 assert(edgeOnly.length === 1 && edgeOnly[0].src === 'EDGE' && edgeOnly[0].sym === 'SOLUSD',
        'collectEdge picks up edgeScan cands with tally >= 3');
 const edgeRun = await WE.hgTabAlertsRunEdge();
-assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('[EDGE]') >= 0,
+assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('Tab/source: EDGE') >= 0,
        'hgTabAlertsRunEdge pushes only EDGE setups to Telegram');
 
 const run = await W.hgTabAlertsRun();

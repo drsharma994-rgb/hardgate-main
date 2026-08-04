@@ -103,11 +103,19 @@ function hgBrainInvAlertsFromRows(rows){
   if (!lines.length) return 0;
   var title = 'HARDGATE BRAIN invalidation';
   var body = lines.slice(0, 8).join('\n');
+  var text = (typeof G.hgTelegramFormat === 'function')
+    ? G.hgTelegramFormat({
+        headline: '⚠️ ' + title,
+        tab: 'BRAIN tab',
+        signal: 'Booked position layer/tier drift vs latest BRAIN synthesis',
+        body: body + '\n\nReview open book — not a new entry signal.'
+      })
+    : (title + '\nTab: BRAIN tab\n' + body + '\nhttps://hardgate-main.onrender.com/');
   try{
-    if (typeof G.sendTelegram === 'function') G.sendTelegram(title, body);
+    if (typeof G.sendTelegram === 'function') G.sendTelegram(text);
   }catch(e){}
   try{
-    if (typeof G.sendAlertPush === 'function') G.sendAlertPush(title, body, { priority: 5 });
+    if (typeof G.sendAlertPush === 'function') G.sendAlertPush(title, text, { priority: 5 });
   }catch(e){}
   return lines.length;
 }
