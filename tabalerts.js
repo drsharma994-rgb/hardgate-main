@@ -451,8 +451,9 @@ function hgTabAlertsFormat(fresh){
     if (s.tally !== null) extra += ' · tally ' + (s.tally > 0 ? '+' : '') + s.tally;
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';
-    lines.push(tag + s.sym + ' ' + s.dir.toUpperCase() + ' [' + s.src + ']'
-      + ' @ ' + s.entry + ' · SL ' + s.stop + ' · TP ' + s.t1
+    lines.push(tag + s.sym + ' ' + s.dir.toUpperCase()
+      + '\n  Tab/source: ' + s.src
+      + '\n  @ ' + s.entry + ' · SL ' + s.stop + ' · TP ' + s.t1
       + (s.t2 !== null ? ' · T2 ' + s.t2 : '')
       + levHint(s.entry, s.stop) + extra);
   }
@@ -462,8 +463,11 @@ function hgTabAlertsFormat(fresh){
     : (fresh.some(function(x){ return x.prime; })
         ? '🔥 HARDGATE — ' + fresh.length + ' SETUPS (incl. strong)'
         : '📊 HARDGATE — ' + fresh.length + ' SETUPS');
-  return hdr + '\n' + lines.join('\n')
-    + '\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
+  return hdr
+    + '\nTab: 15-min alert cycle (tabalerts.js)'
+    + '\nSignal: fresh scanner hits from tabs listed per row below'
+    + '\n\n' + lines.join('\n\n')
+    + '\n\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
     + '\n' + SITE;
 }
 

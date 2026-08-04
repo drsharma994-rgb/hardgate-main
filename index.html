@@ -672,7 +672,6 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="signallog.js"></script>
 <script src="hgalert.js"></script>
 <script src="tabalerts.js"></script>
-<script src="hggateflip.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
 <script src="book-routing.js?v=55"></script>
@@ -3282,7 +3281,7 @@ async function runScanLeg(kind, opts){
       if (nb) cardsEl.insertAdjacentHTML('afterbegin', nb);
     }
     try{ await refreshCryptoWatch(kind, uni, cands.map(function(c){ return c.sym; }), { quiet: quiet }); }catch(e){ console.warn('crypto watch', e); }
-    if (!quiet && typeof hgGateFlipAlerts === 'function' && flipRecords.length){
+    if (typeof hgGateFlipAlerts === 'function' && flipRecords.length){
       try{ hgGateFlipAlerts(kind, flipVenue, flipRecords); }catch(eFlip){}
     }
     return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands };
@@ -4913,10 +4912,29 @@ function tgCreds(){
   if (!chat && HG_TG_DEFAULT.chat) chat = HG_TG_DEFAULT.chat;
   return (token && chat) ? { token: token, chat: chat } : null;
 }
-async function sendTelegram(text){
+/** Standard Telegram body: headline + Tab + Signal + optional venue + body + site link. */
+function hgTelegramFormat(opts){
+  opts = opts || {};
+  const parts = [];
+  if (opts.headline) parts.push(String(opts.headline));
+  else if (opts.title) parts.push(String(opts.title));
+  if (opts.tab) parts.push('Tab: ' + opts.tab);
+  if (opts.signal) parts.push('Signal: ' + opts.signal);
+  if (opts.venue) parts.push('Venue: ' + opts.venue);
+  if (opts.body) parts.push('', String(opts.body));
+  parts.push('', 'https://hardgate-main.onrender.com/');
+  return parts.join('\n');
+}
+async function sendTelegram(textOrTitle, bodyOptional){
   try{
     const c = tgCreds();
     if (!c) return 'not-configured';
+    let text = String(textOrTitle || '');
+    if (arguments.length >= 2 && bodyOptional != null && bodyOptional !== ''){
+      text = (typeof hgTelegramFormat === 'function')
+        ? hgTelegramFormat({ title: textOrTitle, body: bodyOptional })
+        : (String(textOrTitle) + '\n' + String(bodyOptional) + '\nhttps://hardgate-main.onrender.com/');
+    }
     /* Token goes in the path raw — encodeURIComponent breaks the colon segment. */
     const res = await fetch('https://api.telegram.org/bot' + c.token + '/sendMessage', {
       method: 'POST',
@@ -5001,6 +5019,8 @@ async function sendAlertEmail(w, exchange){
     time: new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'})
   };
   const tgText = '🚨 HARDGATE BEST (Strategies)\n'
+    + 'Tab: STRATEGIES / BEST tab\n'
+    + 'Signal: new #1 ranked setup (families + robustness)\n'
     + params.symbol + ' ' + params.direction + ' (' + params.exchange + ')\n'
     + 'entry ' + params.entry + ' · stop ' + params.stop + ' · target ' + params.target + '\n'
     + 'R:R ' + params.rr + ' · ' + params.families + '/9 families · ' + params.robustness + '/2 robust · ' + params.time + '\n'
@@ -5047,6 +5067,8 @@ async function sendGoldAlertEmail(g){
     time: new Date().toLocaleString('en-IN', {timeZone:'Asia/Kolkata'})
   };
   const tgText = '🚨 HARDGATE GOLD SETUP\n'
+    + 'Tab: GOLD tab (legacy GS1–GS7 swing gates)\n'
+    + 'Signal: all gold swing gates clean with full plan\n'
     + params.symbol + ' ' + params.direction + ' (' + params.exchange + ')\n'
     + 'entry ' + params.entry + ' · stop ' + params.stop + ' · target ' + params.target + '\n'
     + 'R:R ' + params.rr + ' · gates ' + params.families + ' · ' + params.time + '\n'
