@@ -98,6 +98,19 @@ const edgeRun = await WE.hgTabAlertsRunEdge();
 assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('Tab/source: EDGE') >= 0,
        'hgTabAlertsRunEdge pushes only EDGE setups to Telegram');
 
+const WF = loadWithWindow({
+  edgeScan: () => ({
+    cands: [{ sym: 'OLDUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: 5, barAge: 4 }],
+    forming: [{ sym: 'NEARUSD', dir: 'short', mark: 100, level: 101, distAtr: 0.5, note: '0.50×ATR to EMA21' }]
+  }),
+  sendTelegram: async (t) => { WF._tg = t; return true; }
+});
+WF.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const edgeFilter = WF.hgTabAlertsCollect();
+assert(edgeFilter.length === 1 && edgeFilter[0].src === 'EDGE FORMING' && edgeFilter[0].sym === 'NEARUSD',
+       'collectEdge skips stale tickets and includes near forming watch');
+assert(!edgeFilter.some(c => c.sym === 'OLDUSD'), 'stale EDGE (barAge>2) excluded from alerts');
+
 const run = await W.hgTabAlertsRun();
 assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
 
