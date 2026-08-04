@@ -111,6 +111,25 @@ assert(edgeFilter.length === 1 && edgeFilter[0].src === 'EDGE FORMING' && edgeFi
        'collectEdge skips stale tickets and includes near forming watch');
 assert(!edgeFilter.some(c => c.sym === 'OLDUSD'), 'stale EDGE (barAge>2) excluded from alerts');
 
+const WP = loadWithWindow({
+  pineScan: () => ({
+    signals: [
+      { sym: 'BTCUSD', dir: 'long', isNew: true, entry: 100, stop: 95, t1: 110, rr: 2, smoothedScore: 2.1 },
+      { sym: 'ETHUSD', dir: 'short', isRecent: true, barsAgo: 2, entry: 50, stop: 52, t1: 45, rr: 2.5 }
+    ]
+  }),
+  sendTelegram: async (t) => { WP._tg = t; return true; }
+});
+WP.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const pineCollected = WP.hgTabAlertsCollect();
+assert(pineCollected.length === 2, 'collectPine includes NEW and RECENT forming signals');
+assert(pineCollected.some(c => c.src === 'PINE' && c.sym === 'BTCUSD'), 'pine NEW collected');
+assert(pineCollected.some(c => c.sym === 'ETHUSD' && String(c.tier || '').indexOf('FORMING') >= 0),
+       'pine RECENT tagged as FORMING tier');
+const pineRun = await WP.hgTabAlertsRunPine();
+assert(pineRun.pushed === 2 && WP._tg && WP._tg.indexOf('Tab/source: PINE') >= 0,
+       'hgTabAlertsRunPine pushes pine setups to Telegram');
+
 const run = await W.hgTabAlertsRun();
 assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
 

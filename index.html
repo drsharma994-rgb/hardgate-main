@@ -3349,6 +3349,8 @@ async function runTabAlertScans(){
   try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
   try{ if (typeof gsWarm === 'function') await gsWarm(); }catch(e){ console.warn('tab alert gold scalp', e); }
   try{ if (typeof gwWarm === 'function') await gwWarm(); }catch(e){ console.warn('tab alert gold swing', e); }
+  try{ if (typeof edgeWarm === 'function') await edgeWarm({ quiet: true }); }catch(e){ console.warn('tab alert edge warm', e); }
+  try{ if (typeof pineWarm === 'function') await pineWarm({ quiet: true }); }catch(e){ console.warn('tab alert pine warm', e); }
 }
 
 /* EDGE tab — quiet universe scan every 15 min; Telegram when a setup is new
@@ -5164,7 +5166,7 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; BEST every 15 min; EDGE on its own 15-min clock */
+    /* tab scanners — SWING/SCALP/GOLD/BRAIN every 3 min; PINE via pineWarm+pineFireAlerts; EDGE 15-min */
     try{
       await runTabAlertScans();
       await runEdgeAlertCycle();

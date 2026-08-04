@@ -66,8 +66,20 @@ function saveAlertKeys(keys){
   try{ localStorage.setItem(LS_ALERT, JSON.stringify(keys || {})); }catch(e){}
 }
 
-function alertKey(scriptId, sym, dir){
-  return String(scriptId) + ':' + String(sym).toUpperCase() + ':' + String(dir).toLowerCase();
+function pineAlertPhase(sig){
+  if (!sig) return null;
+  if (sig.isNew) return 'new';
+  if (sig.isRecent) return 'recent';
+  return null;
+}
+
+function pineAlertable(sig){
+  return !!pineAlertPhase(sig);
+}
+
+function alertKey(scriptId, sym, dir, phase){
+  return String(scriptId) + ':' + String(sym).toUpperCase() + ':' + String(dir).toLowerCase()
+    + ':' + String(phase || 'new');
 }
 
 function pruneKeys(keys, now, gap){
@@ -392,8 +404,9 @@ async function pineFireAlerts(fresh, opts){
   var toSend = [];
   for (var i = 0; i < fresh.length; i++){
     var sig = fresh[i];
-    if (!sig.isNew) continue;
-    var k = alertKey(sig.scriptId, sig.sym, sig.dir);
+    var phase = pineAlertPhase(sig);
+    if (!phase) continue;
+    var k = alertKey(sig.scriptId, sig.sym, sig.dir, phase);
     if (keys[k] !== undefined) continue;
     toSend.push(sig);
     keys[k] = now;
@@ -404,11 +417,12 @@ async function pineFireAlerts(fresh, opts){
   var sent = 0;
   for (var j = 0; j < toSend.length; j++){
     var s = toSend[j];
+    var phaseLabel = s.isNew ? 'NEW' : ('FORMING −' + (s.barsAgo || '?') + 'b');
     var body = formatPineAlert(s);
     if (body.indexOf('Tab:') < 0){
-      body = '🌲 HARDGATE PINE tab\nSignal: NEW · ' + s.scriptLabel + '\n' + body;
+      body = '🌲 HARDGATE PINE tab\nSignal: ' + phaseLabel + ' · ' + s.scriptLabel + '\n' + body;
     }
-    var title = 'HARDGATE PINE: ' + s.sym + ' ' + s.dir.toUpperCase();
+    var title = 'HARDGATE PINE' + (s.isRecent ? ' FORMING' : '') + ': ' + s.sym + ' ' + s.dir.toUpperCase();
     try{
       if (typeof W.logSetup === 'function') W.logSetup(s.sym, s.dir, 'pine-' + s.scriptId, s.entry, s.stop, s.t1);
     }catch(eLog){}
@@ -553,9 +567,9 @@ function mount(el){
         return Math.abs(b.smoothedScore || b.momentum || b.smf || 0) - Math.abs(a.smoothedScore || a.momentum || a.smf || 0);
       });
 
-      var freshNew = signals.filter(function(s){ return s.isNew; });
-      if (!opts.quiet && freshNew.length){
-        try{ await pineFireAlerts(freshNew); }catch(eAl){ console.warn('pine alert', eAl); }
+      var alertable = signals.filter(pineAlertable);
+      if (alertable.length){
+        try{ await pineFireAlerts(alertable, opts); }catch(eAl){ console.warn('pine alert', eAl); }
       }
 
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
@@ -567,10 +581,13 @@ function mount(el){
       }
 
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
-      var newN = freshNew.length;
-      var ctxN = signals.filter(function(s){ return s.isContext || s.isRecent; }).length;
+      var newN = signals.filter(function(s){ return s.isNew; }).length;
+      var formN = signals.filter(function(s){ return s.isRecent; }).length;
+      var ctxN = signals.filter(function(s){ return s.isContext; }).length;
       if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + signals.length + ' Pine signal(s)'
-        + (newN ? (' · ' + newN + ' NEW alerted') : '')
+        + (newN ? (' · ' + newN + ' NEW') : '')
+        + (formN ? (' · ' + formN + ' forming') : '')
+        + (alertable.length ? (' · ' + alertable.length + ' alerted') : '')
         + (ctxN ? (' · ' + ctxN + ' context/recent') : '')
         + ' · failed ' + failed + ' · ' + dt + 's';
       __pineSnap.stat = stat ? stat.textContent : '';
@@ -600,13 +617,45 @@ async function pineRefresh(){
   }
 }
 
+var PINE_WARM_MS = 2.5 * 60 * 1000;
+
+async function pineWarm(opts){
+  opts = (opts && typeof opts === 'object') ? opts : {};
+  try{
+    if (!opts.force && __pineSnap && __pineSnap.at
+        && Date.now() - __pineSnap.at < PINE_WARM_MS) return 'fresh';
+  }catch(e0){}
+  if (__pineTab.busy) return 'busy';
+  if (typeof W.getCandles !== 'function') return 'unavailable';
+  if (typeof __pineTab.run === 'function' && __pineTab.hasRun){
+    return await __pineTab.run(Object.assign({ quiet: true }, opts));
+  }
+  var pane = document.createElement('div');
+  pane.style.display = 'none';
+  document.body.appendChild(pane);
+  try{
+    mount(pane);
+    if (typeof __pineTab.run === 'function'){
+      return await __pineTab.run(Object.assign({ quiet: true }, opts));
+    }
+  }finally{
+    try{ pane.remove(); }catch(e){}
+  }
+  return __pineSnap ? 'warmed' : 'unavailable';
+}
+
 W.pineFireAlerts = pineFireAlerts;
+W.pineAlertable = pineAlertable;
+W.pineAlertPhase = pineAlertPhase;
 W.pineEvalEligible = pineEvalEligible;
 W.PINE_SCRIPTS = PINE_SCRIPTS;
 W.PINE_GATE_OPTS = PINE_GATE_OPTS;
 W.PINE_SCAN_OPTS = PINE_SCAN_OPTS;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
+W.pineWarm = pineWarm;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'pine', label: 'PINE', mount: mount, refresh: pineRefresh });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'pine', label: 'PINE', run: pineWarm });
 
 })();

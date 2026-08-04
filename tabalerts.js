@@ -140,6 +140,18 @@ function collectBrain(out){
   }
 }
 
+function pinePushSignal(out, src, s, extra){
+  if (!s || (!s.isNew && !s.isRecent)) return;
+  extra = extra || {};
+  var tier = extra.tier || 'PINE';
+  if (!s.isNew) tier = tier + ' FORMING';
+  pushSetup(out, src, {
+    sym: s.sym, dir: s.dir,
+    entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
+    rr: s.rr
+  }, Object.assign({}, extra, { prime: true, tier: tier }));
+}
+
 function collectPine(out){
   var fn = gfn('pineScan');
   if (!fn) return;
@@ -147,13 +159,7 @@ function collectPine(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'PINE', mlScore: s.smoothedScore });
+    pinePushSignal(out, 'PINE', sigs[i], { tier: 'PINE', mlScore: sigs[i].smoothedScore });
   }
 }
 
@@ -164,13 +170,7 @@ function collectPineMsb(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE MSB/OB', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'MSB' });
+    pinePushSignal(out, 'PINE MSB/OB', sigs[i], { tier: 'MSB' });
   }
 }
 
@@ -181,13 +181,7 @@ function collectPineSqz(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE SQZ', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'SQZ', mlScore: s.momentum });
+    pinePushSignal(out, 'PINE SQZ', sigs[i], { tier: 'SQZ', mlScore: sigs[i].momentum });
   }
 }
 
@@ -198,13 +192,7 @@ function collectPineSmf(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE SMF', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'SMF', mlScore: s.smf });
+    pinePushSignal(out, 'PINE SMF', sigs[i], { tier: 'SMF', mlScore: sigs[i].smf });
   }
 }
 
@@ -215,13 +203,7 @@ function collectPineHt(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE HT', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'HT' });
+    pinePushSignal(out, 'PINE HT', sigs[i], { tier: 'HT' });
   }
 }
 
@@ -232,13 +214,7 @@ function collectPineSmc(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE SMC', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'SMC' });
+    pinePushSignal(out, 'PINE SMC', sigs[i], { tier: 'SMC' });
   }
 }
 
@@ -249,13 +225,7 @@ function collectPineCipher(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE CIPHER', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'CIPHER' });
+    pinePushSignal(out, 'PINE CIPHER', sigs[i], { tier: 'CIPHER' });
   }
 }
 
@@ -266,13 +236,7 @@ function collectPineRf(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE RF', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'RF' });
+    pinePushSignal(out, 'PINE RF', sigs[i], { tier: 'RF' });
   }
 }
 
@@ -283,13 +247,7 @@ function collectPineNw(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE NW', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'NW' });
+    pinePushSignal(out, 'PINE NW', sigs[i], { tier: 'NW' });
   }
 }
 
@@ -300,13 +258,7 @@ function collectPineAvwap(out){
   try{ val = fn(); }catch(e){ return; }
   var sigs = (val && val.signals) ? val.signals : [];
   for (var i = 0; i < sigs.length; i++){
-    var s = sigs[i];
-    if (!s || !s.isNew) continue;
-    pushSetup(out, 'PINE AVWAP', {
-      sym: s.sym, dir: s.dir,
-      entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
-      rr: s.rr
-    }, { prime: true, tier: 'AVWAP' });
+    pinePushSignal(out, 'PINE AVWAP', sigs[i], { tier: 'AVWAP' });
   }
 }
 
@@ -535,6 +487,7 @@ async function hgTabAlertsRun(opts){
       if (s.src.indexOf('SWING') >= 0 && allow.swing) return true;
       if (s.src.indexOf('SCALP') >= 0 && allow.scalp) return true;
       if (s.src === 'EDGE' && allow.edge) return true;
+      if (s.src.indexOf('PINE') >= 0 && allow.pine) return true;
       if (s.src.indexOf('GOLD') >= 0 && allow.gold) return true;
       return false;
     });
@@ -580,6 +533,10 @@ W.hgTabAlertsCheckLive = function(){
 W.hgTabAlertsRunEdge = function(opts){
   opts = opts || {};
   return hgTabAlertsRun(Object.assign({ sources: { edge: true } }, opts));
+};
+W.hgTabAlertsRunPine = function(opts){
+  opts = opts || {};
+  return hgTabAlertsRun(Object.assign({ sources: { pine: true } }, opts));
 };
 
 /* Node test / CI exports */
