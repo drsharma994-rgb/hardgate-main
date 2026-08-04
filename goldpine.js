@@ -6,7 +6,7 @@
 
 var W = (typeof window !== 'undefined') ? window : globalThis;
 
-var KL_15M = 240, KL_1H = 200, KL_4H = 220, KL_1D = 260;
+var KL_15M = 280, KL_1H = 220, KL_4H = 280, KL_1D = 280;
 var SWING_MIN = 10, SCALP_MIN = 8;
 var PINE_GOLD_MAX = 24;
 
@@ -43,12 +43,18 @@ async function fetchGoldBars(){
     try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length){ out.rows4h = c.rows; if (!out.source) out.source = c.source; } }catch(e3){}
     try{ var d = await ggc('1d', KL_1D);  if (d && d.rows && d.rows.length){ out.rows1d = d.rows; if (!out.source) out.source = d.source; } }catch(e4){}
   }
-  if (!out.rows15m.length){
-    var bk = gfn('binanceKlines');
-    if (bk){
-      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.source = 'binance-paxg'; } }catch(e5){}
+  var bk = gfn('binanceKlines');
+  if (bk){
+    if (!out.rows15m.length){
+      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.source = out.source || 'binance-paxg'; } }catch(e5){}
+    }
+    if (!out.rows1h.length){
       try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) out.rows1h = q; }catch(e6){}
-      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length) out.rows4h = z; }catch(e7){}
+    }
+    if (!out.rows4h.length){
+      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length){ out.rows4h = z; out.source = out.source || 'binance-paxg'; } }catch(e7){}
+    }
+    if (!out.rows1d.length){
       try{ var y = await bk('PAXGUSDT', '1d', KL_1D);  if (y && y.length) out.rows1d = y; }catch(e8){}
     }
   }
@@ -78,15 +84,23 @@ function setupFromEval(evalRes, mode, source){
     isContext: evalRes.isContext,
     tier: evalRes.tier || 'primary',
     atr: evalRes.atr,
-    familyCount: evalRes.familyCount
+    familyCount: evalRes.familyCount,
+    layerLabel: evalRes.layerLabel || null,
+    kind: evalRes.kind || 'confluence'
   };
 }
 
-function setupFromNative(c, mode, source){
+function setupFromUniverseItem(item, mode, source){
+  if (!item || !item.display || !item.dir) return null;
+  return setupFromEval(item, mode, source);
+}
+
+function setupFromNative(c, mode, source, forming){
   if (!c || !c.dir) return null;
   var tally = fin(+c.tally) ? +c.tally : (fin(+c.agree) ? +c.agree : 0);
   var note = c.strategy || c.stratKey || 'native gold detector';
-  if (c.why) note += ' — ' + String(c.why).slice(0, 80);
+  if (forming && c.reason) note = (c.strategy || c.stratKey || 'native') + ' — ' + c.reason;
+  else if (c.why) note += ' — ' + String(c.why).slice(0, 80);
   return {
     mode: mode,
     dir: c.dir,
@@ -95,7 +109,7 @@ function setupFromNative(c, mode, source){
     grade: c.grade || '—',
     score: tally,
     maxScore: PINE_GOLD_MAX,
-    factors: [{ cat: 'Native', ok: true, pts: tally, note: note }],
+    factors: [{ cat: forming ? 'Forming' : 'Native', ok: true, pts: tally, note: note }],
     price: fin(+c.entry) ? +c.entry : null,
     entry: c.entry,
     stop: c.stop,
@@ -105,11 +119,12 @@ function setupFromNative(c, mode, source){
     planSrc: c.strategy || 'GOLD native',
     isNew: false,
     isRecent: false,
-    isContext: false,
-    tier: 'native',
+    isContext: !!forming,
+    tier: forming ? 'forming' : 'native',
     atr: fin(+c.atr) ? +c.atr : null,
     familyCount: fin(+c.agree) ? +c.agree : null,
-    nativeStrategy: c.strategy || c.stratKey || null
+    nativeStrategy: c.strategy || c.stratKey || null,
+    kind: 'native'
   };
 }
 
@@ -117,7 +132,12 @@ function tierRank(t){
   if (t === 'primary') return 0;
   if (t === 'native') return 1;
   if (t === 'aligned') return 2;
-  return 3;
+  if (t === 'forming') return 3;
+  return 4;
+}
+
+function setupKey(s){
+  return (s.kind || 'x') + ':' + (s.layerLabel || s.nativeStrategy || 'conf') + ':' + s.mode + ':' + s.dir;
 }
 
 function dedupeSetups(list){
@@ -126,20 +146,16 @@ function dedupeSetups(list){
   for (var i = 0; i < list.length; i++){
     var s = list[i];
     if (!s || !s.dir) continue;
-    var k = s.mode + ':' + s.dir;
+    var k = setupKey(s);
     var prev = keys[k];
     if (prev){
-      var atr = fin(+s.atr) ? +s.atr : (fin(+s.price) ? s.price * 0.008 : 2);
-      var gap = Math.abs(+s.entry - +prev.entry);
-      if (fin(gap) && gap <= 0.35 * atr){
-        if (tierRank(s.tier) < tierRank(prev.tier) || (s.tier === prev.tier && +s.score > +prev.score)){
-          keys[k] = s;
-          for (var j = 0; j < out.length; j++){
-            if (out[j] === prev){ out[j] = s; break; }
-          }
+      if (tierRank(s.tier) < tierRank(prev.tier) || (s.tier === prev.tier && +s.score > +prev.score)){
+        keys[k] = s;
+        for (var j = 0; j < out.length; j++){
+          if (out[j] === prev){ out[j] = s; break; }
         }
-        continue;
       }
+      continue;
     }
     keys[k] = s;
     out.push(s);
@@ -160,9 +176,18 @@ function sortSetups(list){
 
 function collectNativeScalp(bars, ctx, source){
   var out = [];
+  var cached = null;
+  try{ var sc = gfn('goldscalpScan'); if (sc) cached = sc(); }catch(e0){}
+  if (cached && Array.isArray(cached.cands) && cached.cands.length){
+    for (var ci = 0; ci < cached.cands.length && out.length < 6; ci++){
+      var s0 = setupFromNative(cached.cands[ci], 'scalp', source, false);
+      if (s0) out.push(s0);
+    }
+    if (out.length) return out;
+  }
   var fn = gfn('goldScalpSetups');
   var rankFn = gfn('goldRankSetups');
-  if (!fn || !bars.rows15m || bars.rows15m.length < 40) return out;
+  if (!fn || !bars.rows15m || bars.rows15m.length < 30) return out;
   var got = null;
   try{
     got = fn({ rows15m: bars.rows15m, rows1h: bars.rows1h, rows4h: bars.rows4h,
@@ -170,39 +195,71 @@ function collectNativeScalp(bars, ctx, source){
   }catch(e){ return out; }
   if (!Array.isArray(got)) return out;
   var ranked = got;
+  var rejected = got.rejected || [];
   if (rankFn){
     try{
       var rk = rankFn(got, ctx);
       ranked = rk && rk.ranked ? rk.ranked : got;
+      if (rk && rk.rejected) rejected = rejected.concat(rk.rejected);
     }catch(e2){}
   }
-  for (var i = 0; i < ranked.length && out.length < 4; i++){
-    var s = setupFromNative(ranked[i], 'scalp', source);
+  for (var i = 0; i < ranked.length && out.length < 6; i++){
+    var s = setupFromNative(ranked[i], 'scalp', source, false);
     if (s) out.push(s);
+  }
+  for (var r = 0; r < rejected.length && out.length < 8; r++){
+    var rf = setupFromNative(rejected[r], 'scalp', source, true);
+    if (rf && fin(+rf.entry) && fin(+rf.stop)) out.push(rf);
   }
   return out;
 }
 
 function collectNativeSwing(bars, ctx, source){
   var out = [];
+  var cached = null;
+  try{ var sw = gfn('goldswingScan'); if (sw) cached = sw(); }catch(e0){}
+  if (cached && Array.isArray(cached.cands) && cached.cands.length){
+    for (var ci = 0; ci < cached.cands.length && out.length < 6; ci++){
+      var s0 = setupFromNative(cached.cands[ci], 'swing', source, false);
+      if (s0) out.push(s0);
+    }
+    if (out.length) return out;
+  }
   var fn = gfn('goldswingCollectCandidates');
   if (!fn || !bars.rows4h || bars.rows4h.length < 60) return out;
   var leg = { rows4h: bars.rows4h, rows1d: bars.rows1d, rows1h: bars.rows1h };
   var got = null;
   try{ got = fn(leg, ctx); }catch(e){ return out; }
   if (!Array.isArray(got)) return out;
-  for (var i = 0; i < got.length && out.length < 4; i++){
-    var s = setupFromNative(got[i], 'swing', source);
+  for (var i = 0; i < got.length && out.length < 6; i++){
+    var s = setupFromNative(got[i], 'swing', source, false);
     if (s) out.push(s);
   }
   return out;
 }
 
+function collectPineUniverse(bars, mode, scanOpts, source){
+  var uniFn = gfn('pineGoldUniverse');
+  if (typeof uniFn !== 'function') return [];
+  var rows = mode === 'swing' ? bars.rows4h : bars.rows15m;
+  var htf = mode === 'swing' ? bars.rows1d : (bars.rows1h || bars.rows4h);
+  var min = mode === 'swing' ? 60 : 30;
+  if (!rows || rows.length < min) return [];
+  var u = uniFn(rows, Object.assign({ mode: mode, htfRows: htf }, scanOpts));
+  var list = [];
+  (u.setups || []).forEach(function(item){
+    var s = setupFromUniverseItem(item, mode, source);
+    if (s) list.push(s);
+  });
+  return list;
+}
+
 function runGoldPineScan(bars, ctx){
   ctx = ctx || {};
-  var confFn = gfn('pineGoldConfluence');
   var lvFn = gfn('pineGoldLevelsFromBars');
-  if (typeof confFn !== 'function') return { swing: [], scalp: [], error: 'pinegoldmath' };
+  if (typeof gfn('pineGoldUniverse') !== 'function' && typeof gfn('pineGoldConfluence') !== 'function'){
+    return { swing: [], scalp: [], error: 'pinegoldmath' };
+  }
 
   var levels = lvFn ? lvFn(bars.rows1d, bars.rows15m) : {};
   var source = SRC_LABEL[bars.source] || bars.source || 'GOLD';
@@ -219,17 +276,8 @@ function runGoldPineScan(bars, ctx){
   var scalp = [];
   var scanOpts = { macro: macro, spot: spot, levels: levels };
 
-  if (bars.rows4h && bars.rows4h.length >= 60){
-    var sw = confFn(bars.rows4h, Object.assign({ mode: 'swing', htfRows: bars.rows1d }, scanOpts));
-    if (sw.long && sw.long.display) swing.push(setupFromEval(sw.long, 'swing', source));
-    if (sw.short && sw.short.display) swing.push(setupFromEval(sw.short, 'swing', source));
-  }
-
-  if (bars.rows15m && bars.rows15m.length >= 40){
-    var sc = confFn(bars.rows15m, Object.assign({ mode: 'scalp', htfRows: bars.rows1h || bars.rows4h }, scanOpts));
-    if (sc.long && sc.long.display) scalp.push(setupFromEval(sc.long, 'scalp', source));
-    if (sc.short && sc.short.display) scalp.push(setupFromEval(sc.short, 'scalp', source));
-  }
+  swing = swing.concat(collectPineUniverse(bars, 'swing', scanOpts, source));
+  scalp = scalp.concat(collectPineUniverse(bars, 'scalp', scanOpts, source));
 
   var scanCtx = { macro: macro, spot: spot, now: Date.now(), news: null };
   try{
@@ -265,10 +313,13 @@ function cardHTML(s){
   var badge = s.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>'
     : (s.isRecent ? '<span class="stamp" style="margin-left:6px">RECENT</span>'
       : (s.tier === 'native' ? '<span class="stamp pass" style="margin-left:6px">NATIVE</span>'
-        : (s.isContext || s.tier === 'aligned' ? '<span class="stamp" style="margin-left:6px">ALIGNED</span>' : '')));
-  var tierNote = s.tier === 'primary' ? ' · PRIMARY' : (s.tier === 'native' ? ' · NATIVE' : (s.tier === 'aligned' ? ' · WATCH' : ''));
+        : (s.tier === 'forming' ? '<span class="stamp" style="margin-left:6px">FORMING</span>'
+          : ((s.isContext || s.tier === 'aligned') ? '<span class="stamp" style="margin-left:6px">ALIGNED</span>' : ''))));
+  var tierNote = s.tier === 'primary' ? ' · PRIMARY' : (s.tier === 'native' ? ' · NATIVE'
+    : (s.tier === 'forming' ? ' · FORMING' : (s.tier === 'aligned' ? ' · WATCH' : '')));
   var modeLabel = s.mode === 'swing' ? 'SWING · 4H' : 'SCALP · 15m';
-  if (s.nativeStrategy) modeLabel += ' · ' + esc(s.nativeStrategy);
+  if (s.layerLabel) modeLabel += ' · ' + esc(s.layerLabel);
+  else if (s.nativeStrategy) modeLabel += ' · ' + esc(s.nativeStrategy);
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + badge + '</span></h2>'
@@ -304,12 +355,11 @@ var __goldPineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>GOLD PINE <span>Pine + goldind SMC · primary + aligned + native</span></h2>'
-    + '<div class="note">10 ported Pine layers cross-scored with native gold detectors: BOS/CHoCH, premium/discount, OB retest, '
-    + 'Sweep V2, FVG+HVN, session VWAP, Asian range, RSI div, macro real-rate, PAXG basis, OU exhaustion, chop veto. '
-    + '<b>PRIMARY</b> = strict gate (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp, ≥2 families, R:R ≥1.2). '
-    + '<b>ALIGNED</b> = relaxed watch tier (≥6 swing / ≥5 scalp). '
-    + '<b>NATIVE</b> = top ranked GOLD SWING / GOLD SCALP detector candidates merged here.</div>'
+    + '<h2>GOLD PINE <span>Pine layers + confluence + native gold detectors</span></h2>'
+    + '<div class="note">Universe scan: every aligned Pine layer (NEW/RECENT/ALIGNED), HTF bias, confluence PRIMARY/ALIGNED/FORMING, '
+    + 'plus native GOLD SWING/SCALP candidates and forming rejects. '
+    + '<b>PRIMARY</b> = strict (≥' + SWING_MIN + ' swing / ≥' + SCALP_MIN + ' scalp). '
+    + '<b>ALIGNED</b> = per-layer or watch context. <b>NATIVE</b> = goldind strategies.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="goldPineRun">RUN GOLD PINE SCAN</button>'
     + '<span class="note" id="goldPineStat">Fetches XAU/PAXG candles then scores swing + scalp.</span>'
@@ -365,9 +415,9 @@ function mount(el){
       }
 
       var html = sectionHTML('GOLD PINE — SWING SETUPS (4H)', result.swing,
-          'No swing setup — primary needs ≥2 families, score ≥' + SWING_MIN + '; aligned watch ≥6; native swing detectors also scanned.')
+          'No swing cards — check gold feed (4h bars). Layers need ~280×4h for full Pine stack.')
         + sectionHTML('GOLD PINE — SCALP SETUPS (15m)', result.scalp,
-          'No scalp setup — primary needs killzone/sweep or score ≥' + (SCALP_MIN + 2) + ' off-session; aligned watch ≥5; native scalp detectors also scanned.');
+          'No scalp cards — check gold feed (15m bars). Native strategies need 15m/1h/4h legs.');
 
       if (out) out.innerHTML = html;
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
@@ -388,6 +438,9 @@ function mount(el){
 
   if (btn) btn.addEventListener('click', function(){ runScan(); });
   __goldPineTab.run = runScan;
+  setTimeout(function(){
+    if (!__goldPineTab.hasRun && !__goldPineTab.busy) runScan();
+  }, 150);
 }
 
 async function goldPineRefresh(){

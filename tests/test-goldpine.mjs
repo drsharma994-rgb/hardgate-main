@@ -55,16 +55,13 @@ assert(typeof G.pineGoldOuZscore === 'function', 'pineGoldOuZscore exported');
 }
 
 assert(G.PINE_GOLD_TIER && G.PINE_GOLD_TIER.swing.primary === 10, 'tier thresholds exported');
+assert(typeof G.pineGoldUniverse === 'function', 'pineGoldUniverse exported');
 {
   const rows4h = mkRows(300, 2400, 0.5);
   const rows1d = mkRows(280, 2200, 2);
-  const res = G.pineGoldConfluence(rows4h, { mode: 'swing', htfRows: rows1d, levels: {} });
-  const ev = res.long || res.short;
-  if (ev){
-    assert(typeof ev.tier === 'string' || ev.tier === null, 'eval has tier field');
-    assert(typeof ev.display === 'boolean', 'eval has display flag');
-    if (ev.display) assert(ev.tier === 'primary' || ev.tier === 'aligned', 'display tier is primary or aligned');
-  }
+  const uni = G.pineGoldUniverse(rows4h, { mode: 'swing', htfRows: rows1d, levels: {} });
+  assert(uni && Array.isArray(uni.setups), 'universe returns setups array');
+  assert(uni.setups.length >= 1, 'universe populates at least one swing card on trend data');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -10,8 +10,8 @@ var PINE_GOLD_MAX = 24;
 
 /** Display tiers: primary = strict gate; aligned = watch/context (relaxed vetoes). */
 var PINE_GOLD_TIER = {
-  swing: { primary: 10, aligned: 6, rrPrimary: 1.2, rrAligned: 0.85 },
-  scalp: { primary: 8, aligned: 5, rrPrimary: 1.2, rrAligned: 0.85 }
+  swing: { primary: 10, aligned: 4, forming: 3, rrPrimary: 1.2, rrAligned: 0.75 },
+  scalp: { primary: 8, aligned: 3, forming: 2, rrPrimary: 1.2, rrAligned: 0.75 }
 };
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
@@ -503,16 +503,18 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
   if (hasSweep || hasOb) isNew = true;
 
   var alignedMin = tierCfg.aligned;
-  var alignedPass = score >= alignedMin && okFactorCount >= 2
-    && (familyCount >= 2 || score >= alignedMin + 2 || hasNativeTrigger);
-  if (mode === 'scalp' && !families.session && !hasSweep && familyCount < 2){
-    alignedPass = alignedPass && score >= alignedMin + 2;
+  var formingMin = tierCfg.forming || 3;
+  var alignedPass = score >= alignedMin && okFactorCount >= 1
+    && (familyCount >= 1 || hasNativeTrigger || okFactorCount >= 2);
+  if (mode === 'scalp' && !families.session && !hasSweep && familyCount < 1){
+    alignedPass = alignedPass && score >= alignedMin + 1;
   }
-  if (htfOppose && !hasNativeTrigger && score < 7) alignedPass = false;
-  if (chopVeto && score < 6) alignedPass = false;
-  if (fin(rr) && rr < tierCfg.rrAligned) alignedPass = false;
+  if (chopVeto && score < 4) alignedPass = false;
+  if (fin(rr) && rr < tierCfg.rrAligned && score < alignedMin + 2) alignedPass = false;
 
-  var tier = pass ? 'primary' : (alignedPass ? 'aligned' : null);
+  var formingPass = !pass && !alignedPass && score >= formingMin && okFactorCount >= 1;
+
+  var tier = pass ? 'primary' : (alignedPass ? 'aligned' : (formingPass ? 'forming' : null));
   var display = tier !== null;
 
   return {
@@ -535,7 +537,7 @@ function pineGoldEvalDir(dir, primaryRows, layerResults, opts){
     planSrc: plan.planSrc,
     isNew: isNew,
     isRecent: isRecent && !isNew,
-    isContext: tier === 'aligned' && !isNew && !isRecent,
+    isContext: (tier === 'aligned' || tier === 'forming') && !isNew && !isRecent,
     atr: atr,
     layerResults: layerResults,
     native: native
@@ -559,6 +561,108 @@ function pineGoldConfluence(primaryRows, opts){
   out.long = pineGoldEvalDir('long', primaryRows, layerResults, opts);
   out.short = pineGoldEvalDir('short', primaryRows, layerResults, opts);
   return out;
+}
+
+function pineGoldLayerSetup(layer, res, dir, primaryRows, mode){
+  if (!res || !primaryRows || !primaryRows.length) return null;
+  var d = String(dir).toLowerCase();
+  var al = pineGoldLayerAlign(layer, res, d);
+  if (!al.ok) return null;
+  var isFresh = !!(al.isNew || res.newLong || res.newShort);
+  var recentBars = PINE_GOLD_SCAN.recentBars || 5;
+  var isRecent = !isFresh && fin(+res.barsAgo) && res.barsAgo > 0 && res.barsAgo <= recentBars;
+  var price = fin(+res.price) ? +res.price : primaryRows[primaryRows.length - 1].c;
+  var plan = pineGoldBuildPlan(d, price, primaryRows, res, null);
+  var rr = Math.abs(plan.t1 - plan.entry) / Math.abs(plan.entry - plan.stop);
+  return {
+    kind: 'layer',
+    layerId: layer.id,
+    layerLabel: layer.label,
+    dir: d,
+    mode: mode,
+    tier: isFresh ? 'primary' : 'aligned',
+    display: true,
+    score: Math.max(1, al.pts || 1),
+    maxScore: PINE_GOLD_MAX,
+    grade: pineGoldGrade(Math.max(1, al.pts || 1), PINE_GOLD_MAX),
+    factors: [{ cat: 'Pine', ok: true, pts: al.pts || 1, note: al.note || layer.label }],
+    price: price,
+    entry: plan.entry,
+    stop: plan.stop,
+    t1: plan.t1,
+    t2: plan.t2,
+    rr: fin(rr) ? rr : null,
+    planSrc: plan.planSrc,
+    isNew: isFresh,
+    isRecent: isRecent,
+    isContext: !isFresh && !isRecent,
+    familyCount: 1,
+    pass: false
+  };
+}
+
+function pineGoldUniverse(primaryRows, opts){
+  opts = opts || {};
+  var mode = opts.mode || 'swing';
+  var out = [];
+  var conf = pineGoldConfluence(primaryRows, opts);
+
+  function pushEval(ev){
+    if (!ev) return;
+    if (ev.display){
+      out.push(Object.assign({ kind: 'confluence' }, ev));
+    } else if (ev.score >= (PINE_GOLD_TIER[mode] || PINE_GOLD_TIER.swing).forming){
+      out.push(Object.assign({}, ev, {
+        kind: 'confluence', tier: 'forming', display: true,
+        isContext: true, pass: false
+      }));
+    }
+  }
+  pushEval(conf.long);
+  pushEval(conf.short);
+
+  var htf = pineGoldHtfBias(opts.htfRows || []);
+  if (htf.dir){
+    var priceH = primaryRows[primaryRows.length - 1].c;
+    var planH = pineGoldBuildPlan(htf.dir, priceH, primaryRows, null, null);
+    var rrH = Math.abs(planH.t1 - planH.entry) / Math.abs(planH.entry - planH.stop);
+    out.push({
+      kind: 'htf',
+      layerLabel: 'HTF Bias',
+      dir: htf.dir,
+      mode: mode,
+      tier: 'aligned',
+      display: true,
+      score: 2,
+      maxScore: PINE_GOLD_MAX,
+      grade: pineGoldGrade(2, PINE_GOLD_MAX),
+      factors: [{ cat: 'Structure', ok: true, pts: 2, note: htf.note }],
+      price: priceH,
+      entry: planH.entry,
+      stop: planH.stop,
+      t1: planH.t1,
+      t2: planH.t2,
+      rr: fin(rrH) ? rrH : null,
+      planSrc: 'HTF bias',
+      isNew: false,
+      isRecent: false,
+      isContext: true,
+      familyCount: 1,
+      pass: false
+    });
+  }
+
+  for (var i = 0; i < PINE_GOLD_LAYERS.length; i++){
+    var layer = PINE_GOLD_LAYERS[i];
+    var lr = conf.layers[layer.id];
+    if (!lr) continue;
+    var longS = pineGoldLayerSetup(layer, lr, 'long', primaryRows, mode);
+    var shortS = pineGoldLayerSetup(layer, lr, 'short', primaryRows, mode);
+    if (longS) out.push(longS);
+    if (shortS) out.push(shortS);
+  }
+
+  return { setups: out, confluence: conf, at: Date.now() };
 }
 
 function pineGoldLevelsFromBars(rows1d, rows15m){
@@ -588,6 +692,8 @@ G.PINE_GOLD_LAYERS = PINE_GOLD_LAYERS;
 G.PINE_GOLD_SCAN = PINE_GOLD_SCAN;
 G.PINE_GOLD_MAX = PINE_GOLD_MAX;
 G.PINE_GOLD_TIER = PINE_GOLD_TIER;
+G.pineGoldUniverse = pineGoldUniverse;
+G.pineGoldLayerSetup = pineGoldLayerSetup;
 G.pineGoldConfluence = pineGoldConfluence;
 G.pineGoldHtfBias = pineGoldHtfBias;
 G.pineGoldGrade = pineGoldGrade;
@@ -599,7 +705,8 @@ G.pineGoldOuZscore = pineGoldOuZscore;
 if (typeof module !== 'undefined' && module.exports){
   module.exports = {
     PINE_GOLD_LAYERS, PINE_GOLD_SCAN, PINE_GOLD_MAX, PINE_GOLD_TIER, pineGoldConfluence, pineGoldHtfBias,
-    pineGoldGrade, pineGoldLevelsFromBars, pineGoldEvalDir, pineGoldNativeBundle, pineGoldOuZscore
+    pineGoldGrade, pineGoldLevelsFromBars, pineGoldEvalDir, pineGoldNativeBundle, pineGoldOuZscore,
+    pineGoldUniverse, pineGoldLayerSetup
   };
 }
 
