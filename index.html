@@ -664,6 +664,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldscalp.js"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
+<script src="pinegoldmath.js"></script>
+<script src="goldpine.js"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -2288,7 +2290,7 @@ async function runObScanLeg(opts){
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
-  { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','signallog'] },
+  { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','goldpine','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','termbasis','scorecard'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','log','trade','finder'] },
 ];
@@ -2468,6 +2470,11 @@ const HG_TAB_AUTO_SCAN = {
     const runBtn = pane && pane.querySelector('#pineAvwapRun');
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
+  goldpine: async function(){
+    const pane = document.getElementById('tab_goldpine');
+    const runBtn = pane && pane.querySelector('#goldPineRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
   brain: async function(){
     const pane = document.getElementById('tab_brain');
     const runBtn = pane && pane.querySelector('#brainRun');
@@ -2512,7 +2519,8 @@ function scheduleTabAutoScan(t){
           const autoRunBtn = {
             brain: '#brainRun',
             goldscalp: '#gsRun',
-            goldswing: '#gwRun'
+            goldswing: '#gwRun',
+            goldpine: '#goldPineRun'
           }[t];
           if (autoRunBtn){
             const pane = document.getElementById('tab_' + t);
