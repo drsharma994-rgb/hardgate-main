@@ -5556,6 +5556,7 @@ G.__hgBrainAudit = function(sym){
    synthesis (full or quick), null before the first scan. Never throws. */
 G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };
 G.hgBrainAutoWarm = hgBrainAutoWarm;
+G.brainAlertWarm = brainRefresh;
 G.brainAutoBookOn = brainAutoBookOn;
 G.brainSetAutoBook = brainSetAutoBook;
 G.brainAutoBookPrimeOnlyOn = brainAutoBookPrimeOnlyOn;

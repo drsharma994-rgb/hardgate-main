@@ -70,8 +70,15 @@ console.log('== lockConviction / records ==');
   const cand = mgr.fromCandidate({ dir: 'short', stratKey: 'sweep', entry: 50, stop: 52, t1: 48, macroHint: 'HEADWIND' }, 'scalp');
   ok(cand.macroHint === 'HEADWIND', 'fromCandidate preserves macroHint');
   const rec = mgr.toRecord(cand);
+  const candG = mgr.fromCandidate({ dir: 'long', stratKey: 'ob', entry: 100, stop: 99, t1: 102, grade: 'A' }, 'scalp');
+  const recG = mgr.toRecord(candG);
+  ok(recG && recG.grade === 'A', 'toRecord persists grade');
   mgr.hydrateFromRecord(rec, rec.id);
   ok(mgr.activeConvictions.get(rec.id)?.macroHint === 'HEADWIND', 'hydrate roundtrip macroHint');
+  ok(typeof W.mergeLiveConvictionCards === 'function', 'mergeLiveConvictionCards exported');
+  const mergedLive = W.mergeLiveConvictionCards([], { live: { k1: recG } }, { strategyDefault: 'SCALP' });
+  ok(mergedLive.length === 1 && mergedLive[0].locked === true && mergedLive[0].grade === 'A',
+    'mergeLiveConvictionCards restores locked grade-A card when scan empty');
 }
 
 console.log('== evaluateSetup lifecycle ==');

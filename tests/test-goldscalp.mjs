@@ -1867,9 +1867,10 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
                          issuedAt: FIXED, tally: 5 } }, history: [] }));
   await tab4.refresh();
   const cScan = C4.goldscalpScan();
-  assert(cScan.whySilent.indexOf('1 live conviction already locked — re-confirmations, not new issuance') === 0
-      && /· nearest armed trigger:/.test(cScan.whySilent),
-         'convictions lead + nearest-armed tail — got "' + cScan.whySilent + '"');
+  assert(cScan.cands.length === 1 && cScan.cands[0].locked === true,
+         'live conviction merged into scan snap when zero new candidates qualify');
+  assert(cScan.whySilent === null,
+         'whySilent null when locked convictions are displayed (not silent)');
   ls4.removeItem('hgGoldscalpConviction');
 
   /* feeds failed: the empty state itself carries the WHY SILENT reason */

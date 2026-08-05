@@ -913,6 +913,19 @@ async function runScan(ui){
       var bc = ranked[i2];
       if (bc && !bc.demoted && !bc.vetoed){ best = bc; break; }
     }
+
+    var mergeFn = (typeof mergeLiveConvictionCards === 'function') ? mergeLiveConvictionCards
+      : ((typeof W !== 'undefined' && W) ? W.mergeLiveConvictionCards : null);
+    var display = mergeFn ? mergeFn(cards, lock.store, { strategyDefault: 'SCALP SETUP' }) : cards.slice();
+    var displayBest = best;
+    if (!displayBest && display.length){
+      for (var db = 0; db < display.length; db++){
+        var dc0 = display[db];
+        if (dc0 && !dc0.demoted && !dc0.vetoed){ displayBest = dc0; break; }
+      }
+    }
+    if (!displayBest && display.length) displayBest = display[0];
+
     if (lock.transitions.length){
       legs.push(lock.transitions.length + ' conviction' + (lock.transitions.length === 1 ? '' : 's')
         + ' closed (' + lock.transitions.map(function(t){ return t.status; }).join(', ').toLowerCase() + ')');
@@ -923,7 +936,7 @@ async function runScan(ui){
     /* WHY SILENT — the honest lead reason when zero candidates qualify.
        Session context for the killzone case (same goldKillzone the gates use). */
     var whySilent = null;
-    if (!cards.length){
+    if (!display.length){
       var kzW = null, kzL = null;
       var kzFn2 = gfn('goldKillzone');
       if (kzFn2){
@@ -942,10 +955,10 @@ async function runScan(ui){
 
     /* render */
     if (ui && ui.cards && ui.empty){
-      if (cards.length){
+      if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = bannerHTML(best, cards)
-          + cards.map(function(c){ return cardHTML(c, !!(best && c.id === best.id), season && season.note); }).join('')
+        ui.cards.innerHTML = bannerHTML(displayBest, display)
+          + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
           + historyHTML(lock.store.history);
@@ -970,8 +983,8 @@ async function runScan(ui){
             !gold.rows15m.length && !dx.rows15m.length);
     setProg(ui, null);
     if (gold.rows15m.length || dx.rows15m.length){
-      publishState(cards);                        /* only a real data run overwrites the snapshots */
-      publishScan(cards, best, lock.store.history, now, rejectedAll, armedAll, whySilent);
+      publishState(display);
+      publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
     }
     return 'refreshed';
   }catch(e){

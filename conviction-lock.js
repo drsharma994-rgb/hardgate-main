@@ -75,6 +75,7 @@ ConvictionLockManager.prototype.fromCandidate = function(c, setupType){
     sym: c.sym,
     venue: c.venue,
     strategy: c.strategy,
+    grade: c.grade || null,
     levels: {
       entry: c.entry,
       stopLoss: c.stop,
@@ -280,6 +281,7 @@ ConvictionLockManager.prototype.toRecord = function(setup){
     dir: setup.direction || setup.dir,
     type: setup.type,
     strategy: setup.strategy,
+    grade: setup.grade || null,
     entry: setup.levels.entry,
     stop: setup.levels.stopLoss,
     t1: setup.levels.tp1,
@@ -290,6 +292,19 @@ ConvictionLockManager.prototype.toRecord = function(setup){
     issuedAt: setup.timestamp || setup.issuedAt,
     lastConfirmedAt: setup.lastConfirmedAt,
     tally: setup.tally,
+    agree: setup.agree,
+    oppose: setup.oppose,
+    tallyParts: setup.tallyParts,
+    why: setup.why,
+    invalidates: setup.invalidates,
+    stratKey: setup.stratKey,
+    zone: setup.zone,
+    session: setup.session,
+    confluence: setup.confluence,
+    reads: setup.reads,
+    atr: setup.atr,
+    newsCaution: setup.newsCaution,
+    newsStamp: setup.newsStamp,
     macroHint: setup.macroHint || null,
     executionBarIndex: setup.executionBarIndex,
     executionState: setup.executionState || null,
@@ -378,6 +393,7 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
         }
         c.venue = rec.venue; c.sym = rec.sym;
         c.locked = true; c.issuedAt = rec.issuedAt;
+        if (rec.grade) c.grade = rec.grade;
         if (rec.macroHint) c.macroHint = rec.macroHint;
       } else {
         var atr = (isFinite(c.atr) && c.atr > 0) ? c.atr : NaN;
@@ -412,6 +428,7 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
           if (rec){
             rec.anchor = isFinite(c.anchor) ? c.anchor : null;
             rec.tally = isFinite(c.tally) ? c.tally : 0;
+            if (c.grade) rec.grade = c.grade;
             if (c.macroHint) rec.macroHint = c.macroHint;
             if (venueScoped) store.live[cKey] = rec;
             else store.live[c.id] = rec;
@@ -428,8 +445,76 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
   return { store: store, transitions: transitions };
 }
 
+/** Restore a live conviction record as a display card (gold tabs + Telegram snap). */
+function convictionCardFromLiveRec(rec, defaults){
+  defaults = defaults || {};
+  if (!rec || !rec.id || (rec.dir !== 'long' && rec.dir !== 'short')) return null;
+  if (!isFinite(rec.entry) || !isFinite(rec.stop) || !isFinite(rec.t1)) return null;
+  var risk = Math.abs(rec.entry - rec.stop);
+  var strategyDefault = defaults.strategyDefault || 'SETUP';
+  var card = {
+    id: rec.id,
+    dir: rec.dir,
+    strategy: rec.strategy || strategyDefault,
+    stratKey: rec.stratKey || (rec.id ? String(rec.id).split('|')[0] : 'live'),
+    entry: rec.entry, stop: rec.stop, t1: rec.t1, t2: rec.t2, t3: rec.t3,
+    venue: rec.venue || null, sym: rec.sym || null,
+    locked: true, issuedAt: rec.issuedAt,
+    grade: rec.grade || 'B',
+    agree: isFinite(rec.agree) ? rec.agree : 2,
+    oppose: isFinite(rec.oppose) ? rec.oppose : 0,
+    tally: isFinite(rec.tally) ? rec.tally : 0,
+    tallyParts: Array.isArray(rec.tallyParts) ? rec.tallyParts : [],
+    why: rec.why || 'conviction locked — original levels restored verbatim on re-scan',
+    invalidates: rec.invalidates || 'a close beyond the stop',
+    session: rec.session || 'n/a',
+    anchor: isFinite(rec.anchor) ? rec.anchor : rec.entry,
+    zone: (rec.zone && isFinite(rec.zone.lo) && isFinite(rec.zone.hi))
+      ? rec.zone : { lo: rec.entry - 1, hi: rec.entry + 1 },
+    notes: [],
+    newsCaution: !!rec.newsCaution,
+    newsStamp: rec.newsStamp || null,
+    confluence: Array.isArray(rec.confluence) ? rec.confluence : [],
+    reads: (rec.reads && typeof rec.reads === 'object')
+      ? rec.reads
+      : { long: (rec.dir === 'long') ? (isFinite(rec.agree) ? rec.agree : 2) : 0,
+          short: (rec.dir === 'short') ? (isFinite(rec.agree) ? rec.agree : 2) : 0 },
+    atr: isFinite(rec.atr) ? rec.atr : NaN,
+    rr: risk > 0 ? Math.abs(rec.t1 - rec.entry) / risk : NaN,
+    rr2: risk > 0 && isFinite(rec.t2) ? Math.abs(rec.t2 - rec.entry) / risk : NaN,
+    rr3: (risk > 0 && isFinite(rec.t3)) ? Math.abs(rec.t3 - rec.entry) / risk : NaN
+  };
+  try{
+    card.asOf = isFinite(card.issuedAt)
+      ? new Date(card.issuedAt).toISOString().slice(11, 16) + ' UTC' : '';
+  }catch(eA){ card.asOf = ''; }
+  return card;
+}
+
+/** When a scan finds zero new candidates, still surface live locked convictions. */
+function mergeLiveConvictionCards(ranked, store, defaults){
+  var out = (ranked || []).slice(), seen = {}, i;
+  for (i = 0; i < out.length; i++){
+    if (!out[i] || !out[i].id) continue;
+    if (out[i].venue) seen[out[i].venue + '|' + out[i].id] = true;
+    seen[out[i].id] = true;
+  }
+  if (!store || !store.live) return out;
+  for (var k in store.live){
+    if (!Object.prototype.hasOwnProperty.call(store.live, k)) continue;
+    if (seen[k]) continue;
+    var rec = store.live[k];
+    if (rec && rec.id && seen[rec.id]) continue;
+    var card = convictionCardFromLiveRec(rec, defaults);
+    if (card){ out.push(card); seen[k] = true; if (card.id) seen[card.id] = true; }
+  }
+  return out;
+}
+
 W.ConvictionLockManager = ConvictionLockManager;
 W.applyHardgateConvictionLock = applyHardgateConvictionLock;
+W.convictionCardFromLiveRec = convictionCardFromLiveRec;
+W.mergeLiveConvictionCards = mergeLiveConvictionCards;
 W.SCALP_CONVICTION_EXPIRY_MS = SCALP_EXPIRY_MS;
 W.SWING_CONVICTION_EXPIRY_MS = SWING_EXPIRY_MS;
 
