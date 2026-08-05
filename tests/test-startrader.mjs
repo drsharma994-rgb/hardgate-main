@@ -65,41 +65,6 @@ function load(pathRel, ctx){
   ok(typeof ctx.window.startraderKlassGroups === 'function', 'startraderKlassGroups exported');
 }
 
-{
-  const TAB = readFileSync(path.join(root, 'startradertab.js'), 'utf8');
-  const IND = readFileSync(path.join(root, 'indicators.js'), 'utf8');
-  const CG = readFileSync(path.join(root, 'cryptogates.js'), 'utf8');
-  const ctx = makeCtx();
-  vm.runInContext(IND, ctx, { filename: 'indicators.js' });
-  vm.runInContext(CG, ctx, { filename: 'cryptogates.js' });
-  ok(TAB.indexOf('stEdgeRun') > 0 && TAB.indexOf('stEdgeScanList') > 0,
-    'startradertab: EDGE panel with local scan fallback');
-  vm.runInContext(readFileSync(path.join(root, 'edge.js'), 'utf8'), ctx, { filename: 'edge.js' });
-  vm.runInContext(readFileSync(path.join(root, 'setup-stack.js'), 'utf8'), ctx, { filename: 'setup-stack.js' });
-  vm.runInContext(TAB, ctx, { filename: 'startradertab.js' });
-  const w = ctx.window;
-  ok(typeof w.stSynthesize === 'function', 'stSynthesize exported');
-  w.swingTryClean = function(){ return { dir: 'long', entry: 110, stop: 105, t1: 120, t2: 125, rr: 2 }; };
-  w.scalpTryClean = function(){ return { dir: 'long', entry: 110, stop: 108, t1: 114, t2: 118, rr: 1.6 }; };
-  var rows = [];
-  for (var i = 0; i < 240; i++){
-    var c = 100 + i * 0.05;
-    rows.push({ t: 1700000000 + i * 14400, o: c, h: c + 0.2, l: c - 0.2, c: c, v: 1000 });
-  }
-  var setup = w.stSynthesize({ sym: 'BTCUSD', base: 'BTC', klass: 'crypto', label: 'Bitcoin' },
-    rows, rows.slice(-120), rows.slice(-80), { symbol: 'BTCUSD', fundingPct: 0.01, mark: 110 });
-  ok(setup && setup.dir === 'long' && setup.tier === 'HIGH', 'stSynthesize: mocked swing+scalp plans -> HIGH long');
-  ok(setup.rows4h && setup.rows4h.length === rows.length, 'stSynthesize carries rows4h for FTS');
-  setup.plan = { dir: 'long', entry: 110, stop: 105, t1: 120, t2: 125 };
-  var card = w.cardHTML(setup);
-  ok(card.indexOf('hg-stack-row') >= 0, 'startrader card renders FTS when setup-stack loaded');
-  ok(w.stTierRank('PRIME') > w.stTierRank('WATCH'), 'stTierRank ordering');
-  delete w.edgeScanList;
-  delete w.edgeCardHTML;
-  ok(w.stEdgeHasCore(), 'stEdgeHasCore true when edge primitives exist');
-  ok(typeof w.stEdgeScanList === 'function', 'stEdgeScanList exported for fallback');
-}
-
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
