@@ -26,7 +26,8 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 | Task | Command | Notes |
 |------|---------|-------|
 | Unit + integration tests | `npm test` | Offline gate; full suite chain (includes daemon, CCXT executor, macro-feeds); no network required |
-| Live data smoke test | `node tests/test-data-layer.mjs` | Optional; Binance legs skip on HTTP 451; exits 0 |
+| Deploy cache check | `npm run check:prod` | Compare local `sw.js` `HG_CACHE` vs `HARDGATE_SITE` (default Render); LIVE vs STALE |
+| Live data smoke test | `npm run test:data-layer` | Optional; Binance legs skip on HTTP 451 / timeout; exits 0 |
 | Additional suites | `node tests/test-<name>.mjs` | See README Tests section |
 | Lint | *(none)* | No ESLint or formatter configured |
 
@@ -56,6 +57,9 @@ Not required for local dev or core UI:
 5. Optional Render **persistent disk** mount at `HARDGATE_STATE_FILE` path so `hardgate-daemon-state.json` survives redeploys.
 
 Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `scripts/server.mjs`.
+
+| Variable | Purpose |
+|----------|---------|
 | `EXECUTE_FILL_POLL_URL` | Broker fill polling endpoint |
 | `BOOK_EXECUTE_FILL_SECRET` | Webhook auth for fill updates |
 | `BOOK_MAX_DAILY_LOSS_PCT` | Daily loss halt threshold (default 2%) |
@@ -90,7 +94,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Alert dual clocks:** Set `RENDER_DISPATCH_PRIMARY=true` on GitHub when Render dispatches alerts every 13 min.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins IST clock for session gates. `tests/test-brain-robust.mjs` guards browser `brainrobust.js` LIVE eligibility vs daemon `brain-robust.mjs` (`liveOk` on `__hgBrainLast` rows). `tests/test-brain-invalidation.mjs` covers booked-layer snapshots and PRIME→WATCH / direction-flip invalidation alerts in `braininvalidation.js`. **`tabalerts.js`** calls `hgBrainInvAlertsFromLast` on each 15-min setup cycle when post-entry invalidation is ON (uses latest `__hgBrainLast` snapshot).
 - **Data layer CI:** `.github/workflows/data-layer-smoke.yml` runs `npm run test:data-layer` on push/PR to `main` (optional live-network smoke; exits 0 on Binance HTTP 451).
-- **Deploy check:** `node scripts/check-production.mjs` compares local `sw.js` `HG_CACHE` to `HARDGATE_SITE` (default Render). Mismatch means production has not picked up the latest merge yet.
+- **Deploy check:** `npm run check:prod` / `node scripts/check-production.mjs` compares local `sw.js` `HG_CACHE` to `HARDGATE_SITE` (default Render). Mismatch means production has not picked up the latest merge yet. `tests/test-check-production.mjs` guards alert timing, README thresholds, and `HG_SHELL` ↔ `index.html` script parity.
 - **Daemon brain:** `tests/test-daemon-brain.mjs` contract-smokes `lib/daemon-brain.mjs` (headless synthesis seam + fast-fail on dead port). `tests/test-book-routing.mjs` includes browser `book-routing.js` ↔ `lib/book-routing.mjs` parity cases.
 - **Bybit legs:** `tests/test-bybit.mjs` mocks Bybit v5 public REST (`bybitFunding`, OI history, account ratio, snapshot, linear tickers map) — used by SMART $ / CARRY cross-checks.
 

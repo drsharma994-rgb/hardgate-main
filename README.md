@@ -134,7 +134,8 @@ While armed, every 15 minutes a silent tab-alert cycle runs:
    full plan), deduped the same way.
 3. **SWING / SCALP / EDGE / BRAIN / GOLD SCALP / GOLD SWING**: quiet rescans of each tab, then Telegram
    for any **new** setup with entry, stop, and target. Gold scalp/swing require **tally ≥ 10** (editable in
-   the bell panel). BRAIN rows need **HIGH** or **PRIME** tier with a plan. EDGE uses tally ≥ 3. Each setup
+   the bell panel). BRAIN rows need **HIGH** or **PRIME** tier with a plan. EDGE uses **tally ≥ 6** (and
+   skips stale tickets with `barAge > 2`). Each setup
    key dedupes for 15 minutes; PRIME / very-high confluence lines are tagged 🔥.
 
 Between 15-min cycles, the alert bell’s 60s evaluate also pushes **live BRAIN + GOLD** tab setups to
@@ -173,11 +174,9 @@ npm run check:prod                # compare local sw.js HG_CACHE vs live Render 
 node tests/test-data-layer.mjs    # optional live-network smoke (Binance legs skip on HTTP 451)
 ```
 
-Daemon worker, CCXT executor, macro-feeds, signallog, goldspot, scorecard export, and backtest UX suites are included in `npm test`.
+Daemon worker, CCXT executor, macro-feeds, signallog, goldspot, scorecard export, and backtest UX suites are included in `npm test`. Only **`test-data-layer.mjs`** is intentionally outside the main gate (also run via `.github/workflows/data-layer-smoke.yml`).
 
-Optional live-network smoke (Binance legs skip on HTTP 451): `npm run test:data-layer`.
-
-Additional suites (not in `npm test`): `test-data-layer.mjs` (optional live smoke via `npm run test:data-layer`), and others under `tests/`.
+`tests/test-check-production.mjs` guards deploy script wiring, 15-min alert constants, README thresholds, and **`HG_SHELL` ↔ `index.html` script parity**.
 
 ## Repo layout
 
