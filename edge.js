@@ -1127,7 +1127,8 @@ function publishEdgeScan(found, meta){
         sym: r.sym || (r.item && r.item.sym),
         dir: sig.dir || p.dir,
         entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2,
-        rr: sig.rr, tally: r.tally, barAge: sig.barAge
+        rr: sig.rr, tally: r.tally, barAge: sig.barAge,
+        clean: true, gatesPassed: 7, gatesTotal: 7
       });
     }
     __edgeScanSnap = {

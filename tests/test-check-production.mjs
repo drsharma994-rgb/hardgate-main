@@ -59,6 +59,8 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/GAP_MS = 15 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 15 minutes');
   ok(/GOLD_MIN_TALLY = 10/.test(tabalerts), 'tabalerts gold min tally is 10');
   ok(/\+c\.tally < 6/.test(tabalerts), 'tabalerts EDGE setup filter uses tally >= 6');
+  ok(/LS_CLEAN_ONLY = 'hgAlertCleanOnly'/.test(tabalerts), 'tabalerts clean-only localStorage key');
+  ok(/cleanOnly: true/.test(html), 'index runTabSetupAlerts passes cleanOnly true');
 }
 
 console.log('== HG_SHELL vs index.html scripts ==');
