@@ -76,6 +76,9 @@ function coilWatchItems(cw){
 }
 
 function cryptoFormingNowHTML(items){
+  if (typeof hgFormingWatchHTML === 'function'){
+    return hgFormingWatchHTML(items, { title: 'FORMING NOW', subtitle: '≥5/7 gates, not CLEAN — watch only' });
+  }
   items = items || [];
   if (!items.length){
     return '<div class="hgwatch"><div class="hgwatch-h">FORMING NOW <span>≥5/7 gates, not CLEAN — watch only</span></div>'

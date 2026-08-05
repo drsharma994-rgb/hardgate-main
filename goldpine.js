@@ -350,6 +350,18 @@ function factorsHTML(factors){
 }
 
 function cardHTML(s, rank){
+  var tier = (s.tier === 'forming' || s.isRecent) ? 'forming'
+    : ((s.tier === 'aligned' || s.isContext) ? 'near' : 'clean');
+  if (typeof W.hgSetupPanelHTML === 'function' && (s.tier === 'forming' || s.isRecent || s.isContext)){
+    var sig = {
+      sym: 'XAUUSD', dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2,
+      price: s.price, planSrc: s.planSrc || 'Gold Pine', isNew: s.isNew, isRecent: s.isRecent,
+      isContext: s.isContext, tier: s.tier, scriptLabel: (s.mode === 'swing' ? 'GOLD PINE SWING' : 'GOLD PINE SCALP')
+    };
+    var html = W.hgSetupPanelHTML(sig, { scanner: 'goldpine', label: sig.scriptLabel });
+    if (rank) html = html.replace('</h2>', ' <span class="stamp pass">#' + rank + ' PICK</span></h2>');
+    return html;
+  }
   var cls = s.dir === 'long' ? 'long' : 'short';
   var rankBadge = rank ? '<span class="stamp pass" style="margin-left:6px">#' + rank + ' PICK</span>' : '';
   var badge = s.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>'
@@ -362,7 +374,7 @@ function cardHTML(s, rank){
   var modeLabel = s.mode === 'swing' ? 'SWING · 4H' : 'SCALP · 15m';
   if (s.layerLabel) modeLabel += ' · ' + esc(s.layerLabel);
   else if (s.nativeStrategy) modeLabel += ' · ' + esc(s.nativeStrategy);
-  return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
+  return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + rankBadge + badge + '</span></h2>'
     + '<div class="note">Confluence <b>' + s.score + '/' + s.maxScore + '</b>'
@@ -414,6 +426,7 @@ function mount(el){
     + '</div>'
     + '<div class="prog" id="goldPineProg"><i></i></div>'
     + '<div id="goldPineLevels" style="margin-top:8px"></div>'
+    + '<div id="goldPineDesk"></div>'
     + '<div id="goldPineOut" style="margin-top:12px"><div class="empty">Press RUN GOLD PINE SCAN.</div></div>'
     + '</div>';
 
@@ -422,6 +435,14 @@ function mount(el){
   var prog = el.querySelector('#goldPineProg');
   var out = el.querySelector('#goldPineOut');
   var lvEl = el.querySelector('#goldPineLevels');
+
+  try{
+    var gpDesk = el.querySelector('#goldPineDesk');
+    if (gpDesk && typeof W.hgSetupDeskBannerHTML === 'function'){
+      gpDesk.innerHTML = W.hgSetupDeskBannerHTML({ kind: 'goldpine', tab: 'GOLD PINE', note: 'PRIMARY = ticket · ALIGNED/FORMING = watch · top picks by probability score.' });
+    }
+    if (typeof W.hgSetupInjectStyles === 'function') W.hgSetupInjectStyles();
+  }catch(eGp){}
 
   function setProg(p){
     if (!prog) return;

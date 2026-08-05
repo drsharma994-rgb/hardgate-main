@@ -1139,6 +1139,16 @@ function publishEdgeScan(found, meta){
 }
 
 function edgeFormingHTML(forming){
+  if (typeof W.hgFormingWatchHTML === 'function'){
+    var items = (forming || []).slice(0, 12).map(function(w){
+      return {
+        state: 'armed', sym: w.sym, dir: w.dir, strategy: 'EDGE 4H',
+        condition: (w.note || 'bias OK — waiting for trigger') + (w.regime ? (' · ' + w.regime) : ''),
+        gatesPassed: 5, gatesTotal: 7
+      };
+    });
+    return hgFormingWatchHTML(items, { title: 'EDGE FORMING NOW', subtitle: 'SWING bias OK, no ticket yet (watch only)' });
+  }
   if (!forming || !forming.length) return '';
   var rows = forming.slice(0, 12).map(function(w){
     return '<div class="note" style="margin:4px 0;padding:6px 8px;border-left:3px solid var(--gold)">'
@@ -1266,6 +1276,7 @@ function mount(el){
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
     + '<span class="note" id="edgeStat">idle — SWING-aligned · top ' + MAX_UNIVERSE + '</span></div>'
     + '<div class="prog" id="edgeProg"><i></i></div>'
+    + '<div id="edgeDesk"></div>'
     + '<div id="edgeFunnel"></div>'
     + '<div id="edgeForming"></div>'
     + '<div class="cards" id="edgeCards"></div>'
@@ -1277,6 +1288,13 @@ function mount(el){
       emptyEl = el.querySelector('#edgeEmpty'), funnelEl = el.querySelector('#edgeFunnel'),
       formingEl = el.querySelector('#edgeForming');
   if (!btn || !statEl) return;
+  try{
+    var edgeDesk = el.querySelector('#edgeDesk');
+    if (edgeDesk && typeof W.hgSetupDeskBannerHTML === 'function'){
+      edgeDesk.innerHTML = W.hgSetupDeskBannerHTML({ kind: 'edge', tab: 'EDGE', note: 'CLEAN = tally ≥6 + trap pass + plan. FORMING = bias OK, trigger pending.' });
+    }
+    if (typeof W.hgSetupInjectStyles === 'function') W.hgSetupInjectStyles();
+  }catch(eDesk){}
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
   function setProg(f){
