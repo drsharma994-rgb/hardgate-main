@@ -479,7 +479,8 @@ function cardHTML(c, isBest, season){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
-    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2 }) : '';
+    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
+  var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span></div>'
@@ -509,6 +510,7 @@ function cardHTML(c, isBest, season){
     + gateLine
     + lockLine
     + newsBanner + notes + seasonLine
+    + stackHtml
     + tradeBtn
     + bookBtn
     + '</div>';
@@ -759,7 +761,7 @@ async function runScan(ui){
     var season = seasonFn ? seasonFn(now) : null;
 
     /* ranking context legs — every one optional, every one catch-isolated */
-    var ctx = { now: now, news: news, season: season, macro: null, spot: null, fng: null };
+    var ctx = { now: now, news: news, season: season, macro: null, spot: null, fng: null, style: 'goldscalp' };
     var gm = gfn('getGoldMacro');
     if (gm){
       setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');

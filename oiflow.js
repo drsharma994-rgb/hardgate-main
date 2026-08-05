@@ -389,7 +389,8 @@ function cardHTML(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'oiflow', strategy: 'oiflow', t2: s.t2 }) : '';
+    ? bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'oiflow', strategy: 'oiflow', t2: s.t2, stack: s.stack }) : '';
+  var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';
   var chartBox = s ? '<div class="oiflowChart" data-sym="' + r.sym + '" style="height:180px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dirLow + tierCls + '">'
     + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge + '</span></div>'
@@ -407,6 +408,7 @@ function cardHTML(r){
     + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('')
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
+    + stackHtml
     + chartBox
     + tradeBtn
     + bookBtn
@@ -532,6 +534,16 @@ async function runScan(el){
           var kl = await fetchSetupKlines(sym);
           r.rows4h = kl.rows4h; r.rows1h = kl.rows1h;
           r.setup = oiflowSetup(r.cls, r.rows4h, r.rows1h);
+          if (r.setup && typeof hgSetupStackAttachPlan === 'function' && !r.setup.stack){
+            var oiEv = (r.cls.dir === 'LONG' ? r.cls.longEv : r.cls.shortEv) || [];
+            hgSetupStackAttachPlan(r.setup, {
+              sym: r.sym, style: 'smart', rows4h: r.rows4h, rows1h: r.rows1h,
+              ticker: { fundingPct: r.fundingPct },
+              clean: r.setup.confirmed === true, nearClean: r.setup.confirmed !== true,
+              gatesPassed: r.setup.confirmed ? 7 : 6, gatesTotal: 7,
+              positioning: { items: oiEv.slice(0, 6).map(function(e){ return { label: 'OI evidence', detail: e, align: 'with' }; }) }
+            });
+          }
           results.push(r);
         }catch(e){ failed++; }
       }));

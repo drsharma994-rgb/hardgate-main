@@ -3060,6 +3060,17 @@ function votePip(v, decidedDir){
     + label + ': ' + esc(v.text) + '</span>';
 }
 
+function attachBrainStacks(rows){
+  if (!rows || !rows.length || typeof G.hgSetupStackFromBrainRow !== 'function') return;
+  for (var i = 0; i < rows.length; i++){
+    try{
+      var row = rows[i];
+      if (!row || !row.dec || !row.dec.dir) continue;
+      row.stack = G.hgSetupStackFromBrainRow(row, { rows4h: row.rows });
+    }catch(e){}
+  }
+}
+
 function planLine(plan){
   if (!plan) return 'levels unavailable — size down';
   /* structure-anchored limit: the patient-entry render — anchor, invalidation
@@ -3887,8 +3898,10 @@ function cardHTML(row){
       fund: row.lane === 'gold' ? 'gold' : 'main',
       strategy: 'brain', tier: dec.tier, klass: row.lane === 'gold' ? 'metal' : 'crypto',
       t2: isFinite(plan.t2) ? plan.t2 : null,
-      layers: row.col.votes.filter(function(v){ return v.vote === dir; }).map(function(v){ return v.layer; })
+      layers: row.col.votes.filter(function(v){ return v.vote === dir; }).map(function(v){ return v.layer; }),
+      stack: row.stack
     }) : '';
+  var stackHtml = (row.stack && typeof G.hgSetupStackMiniHtml === 'function') ? G.hgSetupStackMiniHtml(row.stack) : '';
   var chartBox = (plan && row.rows)
     ? '<div class="hgchart brainChart" data-sym="' + esc(row.sym) + '" style="height:190px;margin-top:8px"></div>' : '';
   var setupTier = (typeof G.hgBrainSetupTier === 'function') ? G.hgBrainSetupTier(dec.tier) : 'clean';
@@ -3912,6 +3925,7 @@ function cardHTML(row){
     + '</div>'
     + '<div class="gates">' + row.col.votes.map(function(v){ return votePip(v, dir); }).join('') + '</div>'
     + '<div class="plan">' + planLine(plan) + '</div>'
+    + stackHtml
     + chartBox
     + tradeBtn
     + bookBtn
@@ -4612,6 +4626,7 @@ async function runBrain(el){
           planSet[sx].plan = gotx.plan; planSet[sx].rows = gotx.rows;
         }catch(e){ planSet[sx].plan = null; planSet[sx].rows = null; }
       }
+      attachBrainStacks(rows);
     }else{
       /* legacy mode — today's flow, unchanged: bounded kline fetches per setup */
       for (var s = 0; s < setups.length; s++){
@@ -4623,6 +4638,7 @@ async function runBrain(el){
           setups[s].plan = got.plan; setups[s].rows = got.rows;
         }catch(e){ setups[s].plan = null; setups[s].rows = null; }
       }
+      attachBrainStacks(setups);
     }
 
     /* LIQPOOL guard — post-plan pass: pools need the plan's stop/T1 */

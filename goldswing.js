@@ -552,7 +552,8 @@ function cardHTML(c, isBest, season){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
-    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2 }) : '';
+    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
+  var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span></div>'
@@ -580,6 +581,7 @@ function cardHTML(c, isBest, season){
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + lockLine
     + newsBanner + notes + seasonLine
+    + stackHtml
     + tradeBtn
     + bookBtn
     + '</div>';
@@ -1310,6 +1312,26 @@ function rankSetups(cands, ctx){
       for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
       rc.tally = tally;
       rc.tallyParts = parts;
+      if (typeof hgSetupStackFromTallyParts === 'function'){
+        try{
+          var macroIn = null;
+          if (hint === 'TAILWIND' || hint === 'HEADWIND'){
+            macroIn = { hint: hint === 'TAILWIND' ? 'tailwind for longs' : 'headwind for longs' };
+          }
+          var goldPos = null;
+          if (verdict === 'longs-crowding' && c.dir === 'long'){
+            goldPos = { warn: 'PAXG longs crowding — fade risk' };
+          } else if (verdict === 'shorts-crowding' && c.dir === 'short'){
+            goldPos = { warn: 'PAXG shorts crowding — squeeze risk' };
+          }
+          rc.stack = hgSetupStackFromTallyParts(parts, {
+            dir: c.dir, sym: c.sym || 'XAUUSD', style: (ctx.style || 'goldswing'),
+            asset: 'gold', tally: tally, grade: c.grade,
+            macro: macroIn, goldPositioning: goldPos,
+            fng: fng
+          });
+        }catch(eSt){}
+      }
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };
@@ -1400,7 +1422,7 @@ async function runScan(ui){
 
     /* ranking context legs — every one optional, every one catch-isolated */
     var ctx = { now: now, news: newsC, season: season, macro: null, spot: null, fng: null,
-                fundingRate: null };
+                fundingRate: null, style: 'goldswing' };
     var gm = gfn('getGoldMacro');
     if (gm){
       setStat(ui, 'reading macro tilt (DXY · US10Y · gold/silver ratio)…');

@@ -64,5 +64,18 @@ const hit = { sym: 'BTCUSD', dir: 'long', clean: true, rows: rows };
 W.hgSetupStackAttach(hit, { style: 'swing', rows4h: rows, ticker: { fundingPct: 0.01 }, gatesPassed: 7, gatesTotal: 7 });
 assert(hit.stack && hit.stack.summary, 'attach merges stack onto hit object');
 
+const tallyParts = [
+  { label: '3 independent agreeing reads', pts: 3 },
+  { label: 'macro tailwind — favors longs', pts: 2 }
+];
+const goldStack = W.hgSetupStackFromTallyParts(tallyParts, { dir: 'long', asset: 'gold', tally: 5, grade: 'A' });
+assert(goldStack && goldStack.summary, 'gold tally parts -> FTS stack');
+
+const brainStack = W.hgSetupStackFromBrainRow({
+  sym: 'BTCUSD', lane: 'crypto', dec: { dir: 'long', tier: 'PRIME', agree: 5, vetoes: [] },
+  col: { votes: [{ layer: 'tape', vote: 'long', text: 'bullish tape' }] }
+});
+assert(brainStack && /T:/.test(brainStack.summary), 'brain row -> FTS stack');
+
 console.log(fail ? '\nTESTS FAILED' : '\nALL SETUP-STACK TESTS PASSED');
 process.exit(fail ? 1 : 0);

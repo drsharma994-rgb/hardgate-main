@@ -251,7 +251,7 @@ function squeezePlan(inp){
           if (typeof hgApplyExactEntry === 'function'){
             s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
           }
-          return s;
+          return _squeezeAttachStack(s, inp);
         }
       }catch(eSmart){ /* a broken smartSetup degrades to the house fallback */ }
     }
@@ -263,14 +263,37 @@ function squeezePlan(inp){
     var st = fallbackStop(dir, entry, a, rows);
     var risk = Math.abs(entry - st.stop);
     if (!(risk > 0)) return null;
-    return {
+    return _squeezeAttachStack({
       type: 'ATR', dir: dir, entry: entry, stop: st.stop,
       t1: (dir === 'long') ? entry + T1_R * risk : entry - T1_R * risk,
       t2: (dir === 'long') ? entry + T2_R * risk : entry - T2_R * risk,
       rr1: T1_R, rr2: T2_R, riskPct: risk / entry * 100,
       confirmed: null, note: st.note
-    };
+    }, inp);
   }catch(e){ return null; }
+}
+
+function _squeezeAttachStack(s, inp){
+  try{
+    if (!s || s.stack || typeof hgSetupStackAttachPlan !== 'function') return s;
+    var rows = inp.rows4h;
+    var cls = inp.cls || {};
+    var trendAgree = cls.trendAgree;
+    var positioning = null;
+    if (trendAgree === false){
+      positioning = { items: [{ label: '1D trend', detail: 'against squeeze direction', align: 'caution' }] };
+    } else if (trendAgree === true){
+      positioning = { items: [{ label: '1D trend', detail: 'agrees with squeeze', align: 'with' }] };
+    }
+    hgSetupStackAttachPlan(s, {
+      sym: inp.sym, style: 'squeeze', rows4h: rows, rows1h: inp.rows1h,
+      clean: inp.kind === 'fired' && cls.trendAgree !== false,
+      nearClean: inp.kind === 'break' || cls.trendAgree === false,
+      gatesPassed: (inp.kind === 'fired' && cls.trendAgree !== false) ? 7 : 6,
+      gatesTotal: 7, positioning: positioning
+    });
+  }catch(e){}
+  return s;
 }
 
 /* plan line, same markup as oiflow.js:
@@ -303,8 +326,9 @@ function squeezePlanBlock(inp, extra){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function' && inp && inp.sym)
-    ? bookBtnHTML(inp.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'squeeze', strategy: 'squeeze', t2: s.t2 }) : '';
-  return '<div class="plan">' + inner + '</div>' + btn + bookBtn;
+    ? bookBtnHTML(inp.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'squeeze', strategy: 'squeeze', t2: s.t2, stack: s.stack }) : '';
+  var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';
+  return '<div class="plan">' + inner + '</div>' + stackHtml + btn + bookBtn;
 }
 
 /* BUILDING cards carry no direction, so an ENTRY/STOP pair would be a
@@ -387,7 +411,7 @@ function cardHTML(r){
       + '<span class="k">turnover 24h</span><span>' + turnover + '</span>'
       + '</div>'
       + '<div class="gates">' + chips + '</div>'
-      + squeezePlanBlock({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h }, notes.join('; '))
+      + squeezePlanBlock({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind }, notes.join('; '))
       + '</div>';
   }
 
@@ -405,7 +429,7 @@ function cardHTML(r){
     + '<span class="gpip ok">VOL z≥' + DC_BREAK_Z + '</span>'
     + (cls.state === 'BUILDING' ? '<span class="gpip">SQZ BUILDING</span>' : '')
     + '</div>'
-    + squeezePlanBlock({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h }, 'Donchian breakout — momentum continuation')
+    + squeezePlanBlock({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind }, 'Donchian breakout — momentum continuation')
     + '</div>';
 }
 
