@@ -27,11 +27,20 @@ function loadTabAlerts(){
 }
 
 const lib = loadTabAlerts();
-const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY } = lib;
+const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY,
+  tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN } = lib;
 
 assert(typeof hgTabAlertsFresh === 'function', 'hgTabAlertsFresh exported');
 assert(GAP_MS === 15 * 60 * 1000, '15-min dedup gap');
 assert(GOLD_MIN_TALLY === 10, 'gold min tally default 10');
+
+const throttleStore = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const nowT = 1_700_000_000_000;
+tabAlertsMarkRun({ localStorage: throttleStore });
+assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === false, '15-min cycle throttle blocks immediate re-run');
+assert(tabAlertsShouldRun({ localStorage: throttleStore }, true) === true, 'force bypasses cycle throttle');
+throttleStore.setItem(LS_LAST_RUN, String(nowT - GAP_MS - 1));
+assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === true, 'cycle throttle opens after 15 min');
 
 const now = 1_700_000_000_000;
 const s1 = { src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110 };
@@ -94,7 +103,7 @@ WE.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null;
 const edgeOnly = WE.hgTabAlertsCollect();
 assert(edgeOnly.length === 1 && edgeOnly[0].src === 'EDGE' && edgeOnly[0].sym === 'SOLUSD',
        'collectEdge picks up edgeScan cands with tally >= 5');
-const edgeRun = await WE.hgTabAlertsRunEdge();
+const edgeRun = await WE.hgTabAlertsRunEdge({ force: true });
 assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('Tab/source: EDGE') >= 0,
        'hgTabAlertsRunEdge pushes only EDGE setups to Telegram');
 
@@ -126,7 +135,7 @@ assert(pineCollected.length === 2, 'collectPine includes NEW and RECENT forming 
 assert(pineCollected.some(c => c.src === 'PINE' && c.sym === 'BTCUSD'), 'pine NEW collected');
 assert(pineCollected.some(c => c.sym === 'ETHUSD' && String(c.tier || '').indexOf('FORMING') >= 0),
        'pine RECENT tagged as FORMING tier');
-const pineRun = await WP.hgTabAlertsRunPine();
+const pineRun = await WP.hgTabAlertsRunPine({ force: true });
 assert(pineRun.pushed === 2 && WP._tg && WP._tg.indexOf('Tab/source: PINE') >= 0,
        'hgTabAlertsRunPine pushes pine setups to Telegram');
 
@@ -143,10 +152,10 @@ WS.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null;
 const smartCollected = WS.hgTabAlertsCollect();
 assert(smartCollected.length === 1 && smartCollected[0].src === 'SMART $' && smartCollected[0].prime === true,
        'collectSmart includes confirmed SMART setups');
-const smartRun = await WS.hgTabAlertsRun({ sources: { smart: true } });
+const smartRun = await WS.hgTabAlertsRun({ sources: { smart: true }, force: true });
 assert(smartRun.pushed === 1 && WS._tg && WS._tg.indexOf('SMART') >= 0, 'hgTabAlertsRun smart source filter');
 
-const run = await W.hgTabAlertsRun();
+const run = await W.hgTabAlertsRun({ force: true });
 assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

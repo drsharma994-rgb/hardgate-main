@@ -528,7 +528,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
-      <span class="note">Telegram: new #1 BEST setup pinged every 15 min (built-in bot defaults in header — hit TEST).</span>
+      <span class="note">Telegram: every new setup from all tabs, one batch every 15 min (tabalerts.js dedup).</span>
     </div>
     <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer. The #1 panel shows <b>4H regime</b> (STRONG TREND / WEAK TREND / …) — per-symbol tape context, not the market-wide REGIME tab.</div>
     <div class="prog" id="bestProg"><i></i></div>
@@ -737,11 +737,12 @@ window.bestScan = function(){ return __hgBestSnap; };
 
 /* Owner policy: alerts always armed in this browser.
    BEST (Strategies tab): Telegram on new #1 setup every 15 min (server CI matches).
-   Other tab scanners: 3-min quiet cycle; EDGE has its own 15-min clock. */
+   All tab setups (SWING/SCALP/EDGE/PINE/BRAIN/GOLD/…): one unified Telegram
+   batch every 15 min via tabalerts.js (per-setup dedup in hg_tabalert_keys). */
 const HG_ALERTS_FORCED_ON = true;
 const HG_BEST_ALERT_MS = 15 * 60 * 1000;
-const HG_ALERT_CYCLE_MS = 3 * 60 * 1000;
-const HG_EDGE_ALERT_MS = 3 * 60 * 1000;   /* EDGE tab: quiet scan + Telegram (aligned with 3-min alert cycle) */
+const HG_TAB_ALERT_MS = 15 * 60 * 1000;
+const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
 const HG_ALERTS_AUTO_REFRESH_MS = 180000;
 
 function hgExLabel(ex){
@@ -3364,23 +3365,22 @@ async function runTabAlertScans(){
   try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
 }
 
-/* EDGE tab — quiet scan every 3 min; Telegram when a setup is new
-   (15-min dedup per sym:dir@entry via tabalerts.js hg_tabalert_keys). */
-async function runEdgeAlertCycle(){
+/* Unified 15-min setup Telegram — warm scanners then push all tabs once. */
+async function runTabSetupAlerts(){
   const now = Date.now();
-  if (S.lastEdgeAlertCheck && now - S.lastEdgeAlertCheck < HG_EDGE_ALERT_MS) return;
-  if (S.edgeAlertBusy || S.alertBusy || isManualScanBusy()) return;
-  S.edgeAlertBusy = true;
+  if (S.lastTabAlertCheck && now - S.lastTabAlertCheck < HG_TAB_ALERT_MS) return;
   try{
-    if (typeof edgeWarm === 'function') await edgeWarm({ force: true, quiet: true });
-    if (typeof hgTabAlertsRunEdge === 'function'){
-      await hgTabAlertsRunEdge();
-    }else if (typeof hgTabAlertsRun === 'function'){
-      await hgTabAlertsRun({ sources: { edge: true } });
+    await runTabAlertScans();
+    if (typeof hgTabAlertsRun === 'function'){
+      await hgTabAlertsRun({ allSources: true });
     }
-    S.lastEdgeAlertCheck = now;
-  }catch(e){ console.warn('edge alert cycle', e); }
-  finally{ S.edgeAlertBusy = false; }
+    S.lastTabAlertCheck = now;
+  }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
+}
+
+/* Legacy hook — EDGE now rides the unified 15-min tabalerts batch. */
+async function runEdgeAlertCycle(){
+  return runTabSetupAlerts();
 }
 window.runEdgeAlertCycle = runEdgeAlertCycle;
 
@@ -5177,17 +5177,8 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* tab scanners — SWING/SCALP/GOLD/BRAIN/SMART/OI/LIQS/SQZ/CARRY every 3 min; PINE via pineFireAlerts */
-    try{
-      await runTabAlertScans();
-      await runEdgeAlertCycle();
-      if (typeof hgTabAlertsRun === 'function'){
-        await hgTabAlertsRun({ sources: {
-          swing: true, scalp: true, brain: true, gold: true,
-          smart: true, oiflow: true, liqs: true, squeeze: true, carry: true, termbasis: true, watch: true
-        } });
-      }
-    }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
+    /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 15 min */
+    try{ await runTabSetupAlerts(); }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
     S.lastAlertCheck = Date.now();
   } finally {
     S.alertBusy = false;
