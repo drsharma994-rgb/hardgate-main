@@ -4019,6 +4019,7 @@ function cardHTML(row){
     + '<div class="chead"><span class="sym">' + esc(row.lane === 'gold' ? 'XAU · GOLD' : row.sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + dir.toUpperCase() + '</span> ' + dec.tier
     + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + tierBadge + venueStamp
+    + (typeof G.hgBookStampForMeta === 'function' ? G.hgBookStampForMeta(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, { scanner: 'brain', strategy: 'brain', fund: row.lane === 'gold' ? 'gold' : 'main', klass: row.lane === 'gold' ? 'metal' : 'crypto' }) : '')
     + (typeof G.hgTripleStackChipHtml === 'function' ? G.hgTripleStackChipHtml(row.sym, dir) : '')
     + (typeof G.brainLiveChipHtml === 'function' ? G.brainLiveChipHtml(row) : '')
     + '</span></div>'

@@ -404,7 +404,9 @@ function cardHTML(r){
     var trendTxt = cls.trendAgree === true ? 'agree' : (cls.trendAgree === false ? 'AGAINST' : 'n/a');
     return '<div class="card ' + r.dir + '">'
       + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · SQZ FIRED'
-      + (cls.trendAgree === false ? ' · AGAINST TREND' : '') + '</span></div>'
+      + (cls.trendAgree === false ? ' · AGAINST TREND' : '') + '</span>'
+      + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
+      + '</div>'
       + '<div class="mini">'
       + '<span class="k">last</span><span>' + pxF(lastC) + '</span>'
       + '<span class="k">fired</span><span>' + cls.firedAgo + ' bar' + (cls.firedAgo === 1 ? '' : 's') + ' ago</span>'
@@ -421,7 +423,9 @@ function cardHTML(r){
   /* kind === 'break' */
   var dUp = cls.donchianBreak === 'LONG';
   return '<div class="card ' + r.dir + '">'
-    + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · DC' + DC_LEN + ' BREAKOUT</span></div>'
+    + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · DC' + DC_LEN + ' BREAKOUT</span>'
+    + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
+    + '</div>'
     + '<div class="mini">'
     + '<span class="k">last</span><span>' + pxF(lastC) + '</span>'
     + '<span class="k">broke</span><span>' + (dUp ? 'above' : 'below') + ' ' + pxF(r.dcLevel) + '</span>'

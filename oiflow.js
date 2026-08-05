@@ -396,7 +396,9 @@ function cardHTML(r){
   var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';
   var chartBox = s ? '<div class="oiflowChart" data-sym="' + r.sym + '" style="height:180px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dirLow + tierCls + '">'
-    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge + '</span></div>'
+    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge
+      + (s && typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(r.sym, s.dir, { scanner: 'oiflow', strategy: 'oiflow' }) : '')
+      + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">mark</span><span>' + PX(r.price) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.pxChg !== null ? PCT(r.pxChg, 2) : '—') + '</span>'

@@ -526,6 +526,12 @@ function hgBookStampHTML(sym, dir, fund){
   return '<span class="statuschip" title="Open in ' + esc(fund) + ' fund">IN BOOK</span>';
 }
 
+/** IN BOOK chip with fund resolved from scanner/strategy meta (same as ADD TO BOOK). */
+function hgBookStampForMeta(sym, dir, meta){
+  if (!sym || (dir !== 'long' && dir !== 'short')) return '';
+  return hgBookStampHTML(sym, dir, bookResolveFund(meta || {}));
+}
+
 async function bookFetchOpenKeys(){
   var keys = {};
   if (!bookApiOn()) return keys;
@@ -2135,6 +2141,7 @@ W.bookPositionKey = bookPositionKey;
 W.bookFetchOpenKeys = bookFetchOpenKeys;
 W.bookRefreshOpenKeys = bookRefreshOpenKeys;
 W.hgBookStampHTML = hgBookStampHTML;
+W.hgBookStampForMeta = hgBookStampForMeta;
 W.bookExecTargets = bookExecTargets;
 W.bookBuildExecutePlan = bookBuildExecutePlan;
 W.bookExecuteBatchPositions = bookExecuteBatchPositions;

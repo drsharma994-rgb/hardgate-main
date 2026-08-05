@@ -559,7 +559,9 @@ function cardHTML(r){
   return '<div class="card ' + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="gpip">' + klassChip(r.klass) + '</span>'
-    + '<span class="dir">' + r.dir.toUpperCase() + ' · ' + r.tier + '</span></div>'
+    + '<span class="dir">' + r.dir.toUpperCase() + ' · ' + r.tier + '</span>'
+    + (typeof W.hgBookStampForMeta === 'function' ? W.hgBookStampForMeta(r.sym, r.dir, { scanner: 'startrader', strategy: 'startrader', fund: stFund, klass: r.klass }) : '')
+    + '</div>'
     + '<div class="cbody">'
     + '<span class="k">asset</span><span>' + esc(r.label) + '</span>'
     + '<span class="k">confluence</span><span>' + r.points + ' pts · ' + r.votes.length + ' reads agree</span>'

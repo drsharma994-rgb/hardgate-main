@@ -486,7 +486,9 @@ function cardHTML(c, isBest, season){
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
-    + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span></div>'
+    + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
+    + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(c.sym, c.dir, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold' }) : '')
+    + '</div>'
     + '<div class="gsx-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
     + '<div class="mini">'
     + '<span class="k">venue</span><span>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'

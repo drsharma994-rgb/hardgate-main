@@ -131,14 +131,17 @@ function hgSetupEmptyHTML(opts){
   return '<div class="hg-setup-empty"><b>' + suEsc(title) + '</b><br>' + suEsc(body) + '</div>';
 }
 
-function hgSetupCardHead(sym, dir, tier, extraBadges, venue){
+function hgSetupCardHead(sym, dir, tier, extraBadges, venue, bookMeta){
   tier = String(tier || 'clean').toLowerCase();
   var symHtml = suEsc(sym);
   var venueHtml = venue ? '<span class="stamp na">' + suEsc(venue) + '</span> ' : '';
   var tierLabel = hgSetupTierLabel(tier);
   var badges = (extraBadges || []).join('');
+  var bookStamp = (bookMeta && typeof W.hgBookStampForMeta === 'function')
+    ? W.hgBookStampForMeta(sym, dir, bookMeta) : '';
   return venueHtml + '<span class="sym">' + symHtml + '</span>'
-    + '<span class="dir">' + suEsc(String(dir || '').toUpperCase()) + ' · ' + tierLabel + '</span>' + badges;
+    + '<span class="dir">' + suEsc(String(dir || '').toUpperCase()) + ' · ' + tierLabel + '</span>'
+    + bookStamp + badges;
 }
 
 /** Full setup card — wraps index cardHTML when present, else standalone markup. */
@@ -193,7 +196,7 @@ function hgSetupCardHTML(setup){
     ? '<button class="toTrade" onclick="' + onclickAttr + '">SEND TO TRADE PLAN →</button>' : '';
 
   return '<div class="card ' + suEsc(dir) + tierCls + '">'
-    + '<div class="chead">' + hgSetupCardHead(sym, dir, tier, [tripleChip], bookMeta.venue) + '</div>'
+    + '<div class="chead">' + hgSetupCardHead(sym, dir, tier, [tripleChip], bookMeta.venue, bookMeta) + '</div>'
     + (miniHtml ? '<div class="mini">' + miniHtml + '</div>' : '')
     + (gateHtml ? '<div class="gates">' + gateHtml + '</div>' : '')
     + stackHtml
@@ -247,7 +250,11 @@ function hgSetupPanelHTML(sig, opts){
 
   return '<div class="panel ' + cls + tierCls + '" style="margin-bottom:12px">'
     + '<h2>' + suEsc(sig.sym) + ' <span>' + suEsc(String(sig.dir || '').toUpperCase()) + ' · ' + suEsc(label)
-    + badge + ' ' + hgSetupTierBadge(tier) + '</span></h2>'
+    + badge + ' ' + hgSetupTierBadge(tier)
+    + ((typeof W.hgBookStampForMeta === 'function')
+      ? W.hgBookStampForMeta(sig.sym, sig.dir, { scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine' })
+      : '')
+    + '</span></h2>'
     + '<div class="note">' + noteHtml
     + ' · mark ' + pxF(sig.price || sig.entry) + hits
     + (gateNote ? ' · ' + gateNote : '')
