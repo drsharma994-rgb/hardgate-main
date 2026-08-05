@@ -3,6 +3,10 @@
 
 (function(){
   var G = (typeof window !== 'undefined') ? window : globalThis;
+  var CG_SWING_ANCHOR_ATR = 1.25;
+  var CG_G5_VZ_MIN = 0.75;
+  var CG_SWING_CASCADE_MIN = 4;
+  var CG_SCALP_RR_MIN = 2.25;
   function cgEsc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   function swingGateMatrix(rows, ticker){
@@ -17,7 +21,7 @@
 
     var a4 = last(atr(rows, 14));
     var gates = [];
-    var g1 = isFinite(a4) && Math.abs(e21 - e50) >= 0.25 * a4;
+    var g1 = isFinite(a4) && Math.abs(e21 - e50) >= 0.30 * a4;
     gates.push(['G1 cascade+spread', g1]);
     var g2 = dir === 'long' ? p > e200 : p < e200;
     gates.push(['G2 HTF side', g2]);
@@ -39,7 +43,7 @@
           var _rA = rsi(c, 14);
           var _rP = _rA[_rA.length - 4];
           var slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
-          var ok = (vz > 0.5) && closeOK;
+          var ok = (vz > CG_G5_VZ_MIN) && closeOK;
           return { ok: ok, closeOK: closeOK, quiet: false };
         })();
     var g5 = g5r.ok;
@@ -61,7 +65,7 @@
     gates.push(['G7 CUSUM', g7]);
     var passed = gates.filter(function(g){ return g[1]; }).length;
     var distToAnchor = isFinite(a4) ? Math.abs(p - e21) / a4 : NaN;
-    var anchorOK = isFinite(distToAnchor) && distToAnchor <= 1.5;
+    var anchorOK = isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR;
     var clean = passed >= 7 && anchorOK;
     return {
       dir: dir, gates: gates, passed: passed, gatesTotal: 7,
@@ -117,7 +121,7 @@
     var _rL = _rA[_rA.length - 1];
     var _rP = _rA[_rA.length - 4];
     var slopeOK = (isFinite(_rL) && isFinite(_rP)) ? (dir === 'long' ? _rL > _rP : _rL < _rP) : false;
-    var g6 = (vz > 0.5) || (closeOK && slopeOK);
+    var g6 = (vz > CG_G5_VZ_MIN) && closeOK;
     var entry = c15[n - 1];
     var stop = (swept && reclaimed)
       ? (dir === 'long' ? localLow - (a * 0.5) : localHigh + (a * 0.5))
@@ -126,7 +130,7 @@
     var risk = Math.abs(entry - stop);
     var expectedMove = a * 2.5;
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
-    var g7 = dynamicRR >= 2.0;
+    var g7 = dynamicRR >= CG_SCALP_RR_MIN;
     var gates = [
       ['G1 1H trend', true],
       ['G2 sweep+reclaim / EMA21 hold', g2],
@@ -134,7 +138,7 @@
       ['G4 funding', g4],
       ['G5 settle>25m', g4b],
       ['G6 vol+wick commit', g6 && closeOK],
-      ['G7 2R vol-capped', g7]
+      ['G7 ' + CG_SCALP_RR_MIN + 'R vol-capped', g7]
     ];
     var passed = gates.filter(function(g){ return g[1]; }).length;
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
@@ -176,7 +180,7 @@
     if (!(dynamicRR >= 2.5)) return null;
     if (typeof cascadeAge === 'function' && m.rows && m.rows.length){
       var cAge = cascadeAge(m.rows.map(function(r){ return r.c; }), dir);
-      if (isFinite(cAge) && cAge < 3) return null;
+      if (isFinite(cAge) && cAge < CG_SWING_CASCADE_MIN) return null;
     }
     var out = { sym: ticker && ticker.symbol, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
       rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev, mark: p };
@@ -210,6 +214,10 @@
     } else if (typeof hgApplyExactEntry === 'function'){
       out = hgApplyExactEntry(Object.assign({ type: 'SCALP' }, out), m15, { style: 'scalp', m15: m15 }) || out;
     }
+    if (typeof hgScalpPostEnrichValid === 'function'){
+      out = hgScalpPostEnrichValid(out, { rows: m15, a: m.a, minRr: CG_SCALP_RR_MIN });
+      if (!out) return null;
+    }
     return out;
   }
 
@@ -218,7 +226,7 @@
     if (!m || !m.dir || m.clean) return null;
     if (m.passed < 6) return null;
     var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
-    if (!(isFinite(distToAnchor) && distToAnchor <= 1.5)) return null;
+    if (!(isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR)) return null;
     var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
     return {
       sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
@@ -237,7 +245,7 @@
       if (!m.gates[gi][1]){ fail = m.gates[gi][0]; break; }
     }
     if (fail) return { ok: false, reason: fail + ' failed', matrix: m, failedGate: fail };
-    if (!m.anchorOK) return { ok: false, reason: 'EMA21 anchor >1.5×ATR — anti-chase', matrix: m, failedGate: 'anchor' };
+    if (!m.anchorOK) return { ok: false, reason: 'EMA21 anchor >' + CG_SWING_ANCHOR_ATR + '×ATR — anti-chase', matrix: m, failedGate: 'anchor' };
     return { ok: true, dir: m.dir, matrix: m, reason: 'SWING 7/7 + anchor (cryptogates)' };
   }
 
