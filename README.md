@@ -173,10 +173,11 @@ npm run check:prod                # compare local sw.js HG_CACHE vs live Render 
 node tests/test-data-layer.mjs    # optional live-network smoke (Binance legs skip on HTTP 451)
 ```
 
-Daemon worker, CCXT executor, and macro-feeds suites are included in `npm test` (see `tests/test-daemon.mjs`,
-`tests/test-hardgate-executor.mjs`, `tests/test-macro-feeds.mjs`).
+Daemon worker, CCXT executor, macro-feeds, signallog, goldspot, scorecard export, and backtest UX suites are included in `npm test`.
 
-Additional suites (not all in `npm test`): `test-data-layer.mjs`, `test-signallog.mjs`, and others under `tests/`.
+Optional live-network smoke (Binance legs skip on HTTP 451): `npm run test:data-layer`.
+
+Additional suites (not in `npm test`): `test-inline-plans.mjs` (stale — needs fixture refresh), `test-data-layer.mjs`, and others under `tests/`.
 
 ## Repo layout
 
