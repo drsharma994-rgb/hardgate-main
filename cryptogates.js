@@ -39,8 +39,8 @@
           var _rA = rsi(c, 14);
           var _rP = _rA[_rA.length - 4];
           var slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
-          var ok = ((vz > 0.5) || (closeOK && slopeOK)) && closeOK;
-          return { ok: ok, closeOK: closeOK, quiet: !((vz > 0.5)) && closeOK && slopeOK };
+          var ok = (vz > 0.5) && closeOK;
+          return { ok: ok, closeOK: closeOK, quiet: false };
         })();
     var g5 = g5r.ok;
     gates.push(['G5 vol+wick', g5]);
@@ -48,14 +48,14 @@
     var entry = p;
     /* G6 uses the same ATR-capped stop as swingTryClean — uncapped structure
        stops were failing R:R in the matrix while the ticket would cap. */
-    if (isFinite(a4) && a4 > 0 && Math.abs(entry - stop) > 1.5 * a4){
-      stop = dir === 'long' ? entry - 1.5 * a4 : entry + 1.5 * a4;
+    if (isFinite(a4) && a4 > 0 && Math.abs(entry - stop) > 2.0 * a4){
+      stop = dir === 'long' ? entry - 2.0 * a4 : entry + 2.0 * a4;
     }
     var risk = Math.abs(entry - stop);
     var expectedMove = a4 * 3.5;
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
-    var g6 = dynamicRR >= 2;
-    gates.push(['G6 R:R≥2', g6]);
+    var g6 = dynamicRR >= 2.5;
+    gates.push(['G6 R:R≥2.5', g6]);
     var ev = cusumLast(c.slice(-120), 1);
     var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
     gates.push(['G7 CUSUM', g7]);
@@ -120,13 +120,13 @@
     var g6 = (vz > 0.5) || (closeOK && slopeOK);
     var entry = c15[n - 1];
     var stop = (swept && reclaimed)
-      ? (dir === 'long' ? localLow - (a * 0.25) : localHigh + (a * 0.25))
-      : (dir === 'long' ? Math.min.apply(null, m15.slice(n - 8, n - 1).map(function(r){ return r.l; })) - (a * 0.25)
-        : Math.max.apply(null, m15.slice(n - 8, n - 1).map(function(r){ return r.h; })) + (a * 0.25));
+      ? (dir === 'long' ? localLow - (a * 0.5) : localHigh + (a * 0.5))
+      : (dir === 'long' ? Math.min.apply(null, m15.slice(n - 8, n - 1).map(function(r){ return r.l; })) - (a * 0.5)
+        : Math.max.apply(null, m15.slice(n - 8, n - 1).map(function(r){ return r.h; })) + (a * 0.5));
     var risk = Math.abs(entry - stop);
     var expectedMove = a * 2.5;
     var dynamicRR = risk > 0 ? expectedMove / risk : 0;
-    var g7 = dynamicRR >= 1.5;
+    var g7 = dynamicRR >= 2.0;
     var gates = [
       ['G1 1H trend', true],
       ['G2 sweep+reclaim / EMA21 hold', g2],
@@ -134,7 +134,7 @@
       ['G4 funding', g4],
       ['G5 settle>25m', g4b],
       ['G6 vol+wick commit', g6 && closeOK],
-      ['G7 1.5R vol-capped', g7]
+      ['G7 2R vol-capped', g7]
     ];
     var passed = gates.filter(function(g){ return g[1]; }).length;
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
@@ -162,8 +162,8 @@
     }
     var entry = plannedEntry;
     var stop = m.stop;
-    if (Math.abs(entry - stop) > 1.5 * a4){
-      stop = dir === 'long' ? entry - 1.5 * a4 : entry + 1.5 * a4;
+    if (Math.abs(entry - stop) > 2.0 * a4){
+      stop = dir === 'long' ? entry - 2.0 * a4 : entry + 2.0 * a4;
       entryType += ' · ATR-capped stop';
     }
     var risk = Math.abs(entry - stop);
@@ -173,7 +173,11 @@
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
     var t2 = dir === 'long' ? entry + maxExcursion : entry - maxExcursion;
     var dynamicRR = expectedMove / risk;
-    if (!(dynamicRR >= 2)) return null;
+    if (!(dynamicRR >= 2.5)) return null;
+    if (typeof cascadeAge === 'function' && m.rows && m.rows.length){
+      var cAge = cascadeAge(m.rows.map(function(r){ return r.c; }), dir);
+      if (isFinite(cAge) && cAge < 3) return null;
+    }
     var out = { sym: ticker && ticker.symbol, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
       rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev, mark: p };
     if (typeof hgEnrichSwingClean === 'function'){

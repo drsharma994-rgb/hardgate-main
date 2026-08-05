@@ -63,12 +63,12 @@ ok(typeof globalThis.swingTryNear === 'function', 'swingTryNear exported');
   wide[n].c = wide[n].c - 100;
   const tm = globalThis.swingGateMatrix(wide, ticker);
   if (tm && tm.dir && isFinite(tm.a4) && tm.a4 > 0){
-    const capDist = 1.5 * tm.a4;
-    ok(Math.abs(tm.p - tm.stop) <= capDist + 1e-6, 'swingGateMatrix G6 stop is ATR-capped at 1.5×ATR');
+    const capDist = 2.0 * tm.a4;
+    ok(Math.abs(tm.p - tm.stop) <= capDist + 1e-6, 'swingGateMatrix G6 stop is ATR-capped at 2.0×ATR');
     const uncapped = typeof lastSwing === 'function' ? lastSwing(wide, tm.dir, 30) : null;
     if (uncapped != null && Math.abs(tm.p - uncapped) > capDist){
       const uncappedRR = tm.expectedMove / Math.abs(tm.p - uncapped);
-      ok(tm.dynamicRR >= 2 || uncappedRR < 2, 'wide stop: matrix RR uses cap not uncapped structure stop');
+      ok(tm.dynamicRR >= 2.5 || uncappedRR < 2.5, 'wide stop: matrix RR uses cap not uncapped structure stop');
     } else {
       ok(true, 'wide-stop fixture did not widen beyond cap — cap parity still holds');
     }

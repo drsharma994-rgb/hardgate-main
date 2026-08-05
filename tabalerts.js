@@ -82,7 +82,13 @@ function collectCrypto(out, kind, src){
   var val = null;
   try{ val = fn(); }catch(e){ return; }
   var cands = rowsFrom(val);
-  for (var i = 0; i < cands.length; i++) pushSetup(out, src, cands[i]);
+  var minRr = kind === 'swing' ? 2.5 : 2.0;
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
+    if (fin(rr) && rr < minRr) continue;
+    pushSetup(out, src, c);
+  }
 }
 
 function collectEdge(out){
@@ -93,7 +99,7 @@ function collectEdge(out){
   var cands = rowsFrom(val);
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
-    if (c && fin(+c.tally) && +c.tally < 3) continue;
+    if (c && fin(+c.tally) && +c.tally < 5) continue;
     if (c && fin(+c.barAge) && +c.barAge > 2) continue;
     pushSetup(out, 'EDGE', c, { tally: c && c.tally });
   }

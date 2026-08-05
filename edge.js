@@ -35,7 +35,7 @@ var BB_LEN        = 20;
 var BB_MULT       = 2;
 var ATR_LEN       = 14;
 var EXT_LEN       = 8;
-var STOP_ATR      = 1.5;
+var STOP_ATR      = 2.0;
 var SWEEP_STOP_ATR = 0.5;
 var PULL_ATR      = 0.4;
 var EMA9_PULL_ATR = 0.25;
@@ -46,7 +46,7 @@ var OTE_HI        = 0.79;
 var OTE_MID       = 0.705;
 var MIN_IMPULSE_ATR = 1.5;
 var MIN_RR        = 2.0;
-var MIN_TALLY     = 3;
+var MIN_TALLY     = 5;
 var SIGNAL_LOOKBACK = 6;
 var MAX_HOLD      = 12;
 var MIN_RECORD    = 3;
@@ -803,7 +803,7 @@ function edgeEnrich(sig, rows, item, candleSrc){
       out.tally += 1;
     }
     if (bias && bias.g6 === true){
-      out.parts.push({ label: 'G6 dynamic R:R ≥2 (cryptogates)', pts: 1 });
+      out.parts.push({ label: 'G6 dynamic R:R ≥2.5 (cryptogates)', pts: 1 });
       out.tally += 1;
     }
 
@@ -913,8 +913,9 @@ function edgeAssess(rows, item, candleSrc){
   try{
     var sig = edgeSignal(rows);
     if (!sig) return null;
+    if (isFinite(sig.barAge) && sig.barAge > 1) return null;
     var biasPre = edgeSwingBias(rows);
-    if (biasPre && biasPre.g5 === false && biasPre.g6 === false) return null;
+    if (biasPre && (biasPre.g5 !== true || biasPre.g6 !== true)) return null;
     var en = edgeEnrich(sig, rows, item, candleSrc);
     if (en.veto) return null;
     if (en.tally < MIN_TALLY) return null;

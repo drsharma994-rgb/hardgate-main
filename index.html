@@ -1714,8 +1714,8 @@ function smartSetup(cls, rows4h, rows1h){
       stop = isFinite(sw) ? (dir === 'long' ? sw - 0.25*a4 : sw + 0.25*a4) : NaN;
       risk = dir === 'long' ? entry - stop : stop - entry;
       if (isFinite(risk) && risk > 2.5*a4){
-        stop = dir === 'long' ? entry - 1.5*a4 : entry + 1.5*a4;
-        risk = 1.5*a4;
+        stop = dir === 'long' ? entry - 2.0*a4 : entry + 2.0*a4;
+        risk = 2.0*a4;
         note = 'stop capped: structure beyond 2.5×ATR';
       }
       if (!(risk > 0)) return null;
@@ -1723,7 +1723,7 @@ function smartSetup(cls, rows4h, rows1h){
     t1 = dir === 'long' ? entry + 2*risk : entry - 2*risk;
     t2 = dir === 'long' ? entry + 3.5*risk : entry - 3.5*risk;
     const rr1 = Math.abs(t1 - entry)/risk;
-    if (rr1 < 1.5) return null;
+    if (rr1 < 2.0) return null;
     var out = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              rr1: rr1, rr2: Math.abs(t2 - entry)/risk, riskPct: risk/entry*100,
              confirmed: confirmed, note: note, targetPolicy: 'R-multiples (2R/3.5R)', planSrc: planSrc };
@@ -4403,7 +4403,7 @@ function bestProfitBoost(s){
 }
 
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 5);
+  const strong = clean.filter(s => s.famScore >= 6);
   return strong.length ? strong : clean;
 }
 
