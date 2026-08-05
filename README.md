@@ -121,11 +121,12 @@ since 2026-07-29; `vercel --prod --yes` resumes it if billing is reactivated.
 ## Alerts
 
 Toggle the 🔔 chip in the header. **This deployment forces alerts ON** in the browser
-(`HG_ALERTS_FORCED_ON`) on every page load, with a **3-minute** silent cycle
-(`HG_ALERT_CYCLE_MS`) and **3-minute AUTO hard refresh** so scanners stay warm.
+(`HG_ALERTS_FORCED_ON`) on every page load, with a **15-minute** silent tab-alert cycle
+(`HG_ALERT_CYCLE_MS`, same as `HG_TAB_ALERT_MS`) and **15-minute AUTO hard refresh**
+(`HG_ALERTS_AUTO_REFRESH_MS`) so scanners stay warm.
 The 🔔 toggle cannot turn alerts off while forced-on is set.
 
-While armed, every 3 minutes a silent cycle runs:
+While armed, every 15 minutes a silent tab-alert cycle runs:
 
 1. **Delta** and **CoinDCX**: full best-setup scan — alerts the top CLEAN pick when it changes
    (deduped by symbol+direction).
@@ -167,12 +168,15 @@ so the GitHub schedule skips and you do not run two Puppeteer sweeps against pro
 **CI gate (push/PR to `main`):** `npm test` — offline suites, no network.
 
 ```
-npm test                          # full gate (brain, engine, scorecard, goldswing, …)
+npm test                          # full gate (brain, engine, daemon, CCXT executor, …)
+npm run check:prod                # compare local sw.js HG_CACHE vs live Render deploy
 node tests/test-data-layer.mjs    # optional live-network smoke (Binance legs skip on HTTP 451)
 ```
 
-Additional suites (not all in `npm test` yet): `test-squeeze.mjs`, `test-regime.mjs`, `test-goldpro.mjs`,
-`test-carry.mjs`, `test-oiflow.mjs`, and others under `tests/`.
+Daemon worker, CCXT executor, and macro-feeds suites are included in `npm test` (see `tests/test-daemon.mjs`,
+`tests/test-hardgate-executor.mjs`, `tests/test-macro-feeds.mjs`).
+
+Additional suites (not all in `npm test`): `test-data-layer.mjs`, `test-signallog.mjs`, and others under `tests/`.
 
 ## Repo layout
 
