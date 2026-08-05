@@ -177,7 +177,7 @@ Daemon worker, CCXT executor, macro-feeds, signallog, goldspot, scorecard export
 
 Optional live-network smoke (Binance legs skip on HTTP 451): `npm run test:data-layer`.
 
-Additional suites (not in `npm test`): `test-inline-plans.mjs` (stale — needs fixture refresh), `test-data-layer.mjs`, and others under `tests/`.
+Additional suites (not in `npm test`): `test-data-layer.mjs` (optional live smoke via `npm run test:data-layer`), and others under `tests/`.
 
 ## Repo layout
 
