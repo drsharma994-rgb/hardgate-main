@@ -283,7 +283,7 @@ function hgToTradePlan(sym, dir, entry, stop, t1, meta){
       sym: sym, dir: dir, entry: +entry, stop: +stop, t1: +t1,
       t2: meta.t2, stack: meta.stack || null,
       scanner: meta.scanner || null, strategy: meta.strategy || null,
-      venue: meta.venue || null, at: Date.now()
+      venue: meta.venue || null, source: meta.source || null, at: Date.now()
     };
     W._hgTradeHandoffPending = true;
   }catch(e){
@@ -305,6 +305,31 @@ function hgTradeHandoffFor(sym, dir, entry, stop){
   if (isFinite(h.entry) && isFinite(+entry) && Math.abs(h.entry - +entry) > 1e-6) return null;
   if (isFinite(h.stop) && isFinite(+stop) && Math.abs(h.stop - +stop) > 1e-6) return null;
   return h;
+}
+
+/** Minimal FTS row for open book positions (layers + strategy). */
+function hgTradeStackFromBookPosition(p){
+  p = p || {};
+  var layers = Array.isArray(p.layers) ? p.layers.filter(Boolean) : [];
+  var strat = p.strategy ? String(p.strategy) : '';
+  if (!layers.length && !strat) return null;
+  var label = layers.length ? layers.slice(0, 4).join(' · ') : strat;
+  return { summary: 'BOOK · ' + label, tierHint: 'clean', vetoes: [] };
+}
+
+/** MANAGE button → TRADE PLAN with book position context. */
+function hgToTradePlanFromBook(p){
+  if (!p || !p.sym || !p.dir) return;
+  var scanner = (p.layers && p.layers.length) ? p.layers[0] : (p.strategy || 'book');
+  var meta = {
+    t2: p.t2,
+    stack: hgTradeStackFromBookPosition(p),
+    scanner: scanner,
+    strategy: p.strategy || 'book',
+    venue: p.venue || null,
+    source: 'book'
+  };
+  hgToTradePlan(p.sym, p.dir, p.entry, p.stop, p.t1, meta);
 }
 
 /** Map positioning-tab confirmed flag → CLEAN / NEAR tier. */
@@ -432,6 +457,8 @@ W.hgToTradePlanOnclickJs = hgToTradePlanOnclickJs;
 W.hgToTradePlanOnclickAttr = hgToTradePlanOnclickAttr;
 W.hgToTradePlan = hgToTradePlan;
 W.hgTradeHandoffFor = hgTradeHandoffFor;
+W.hgTradeStackFromBookPosition = hgTradeStackFromBookPosition;
+W.hgToTradePlanFromBook = hgToTradePlanFromBook;
 
 try{ hgSetupInjectStyles(); }catch(e){}
 
