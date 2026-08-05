@@ -316,6 +316,14 @@ function cardHTML(r){
      fallback when the band/ATR ingredients are missing. */
   var lv = meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: st.extreme,
                          atr: st.atr, mean: sig.target, oppBand: st.oppBand });
+  var mrStack = null;
+  if (lv && typeof hgSetupStackForInlineScan === 'function'){
+    try{
+      mrStack = hgSetupStackForInlineScan({ dir: sig.dir, sym: r.sym, rows4h: r.rows, style: 'meanrev',
+        ticker: r.tick, clean: true });
+    }catch(eSt){}
+  }
+  var stackHtml = (mrStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(mrStack) : '';
   var planBlock = lv
     ? '<div class="plan">' + meanrevPlanHtml(lv)
       + ' — limit at the stretch · stop beyond the ' + EXT_LEN + '-bar '
@@ -329,7 +337,7 @@ function cardHTML(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (lv && typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev', t2: lv.t2 }) : '';
+    ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev', t2: lv.t2, stack: mrStack }) : '';
 
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
@@ -348,6 +356,7 @@ function cardHTML(r){
     + '<span class="gpip ok">R:R ' + fmtF(sig.rr, 2) + ' ≥ ' + MIN_RR + ' (replay gate)</span>'
     + '</div>'
     + planBlock
+    + stackHtml
     + '<div class="plan">' + record + '</div>'
     + tradeBtn
     + bookBtn
@@ -439,7 +448,7 @@ function mount(el){
             var exLow = lowest(rows.map(function(r){ return r.l; }), EXT_LEN)[k];
             var exHigh = highest(rows.map(function(r){ return r.h; }), EXT_LEN)[k];
             results.push({
-              sym: sym, sig: sig, bt: bt, tick: ticks[sym],
+              sym: sym, sig: sig, bt: bt, tick: ticks[sym], rows: rows,
               stats: {
                 last: rows[k].c,
                 rsi2: rsi(closes, RSI_LEN)[k],

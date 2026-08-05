@@ -77,5 +77,8 @@ const brainStack = W.hgSetupStackFromBrainRow({
 });
 assert(brainStack && /T:/.test(brainStack.summary), 'brain row -> FTS stack');
 
+const inline = W.hgSetupStackForInlineScan({ dir: 'long', sym: 'ETHUSDT', style: 'div', clean: true, rows4h: rows });
+assert(inline && inline.summary, 'inline scan helper builds FTS');
+
 console.log(fail ? '\nTESTS FAILED' : '\nALL SETUP-STACK TESTS PASSED');
 process.exit(fail ? 1 : 0);

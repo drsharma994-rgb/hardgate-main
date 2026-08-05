@@ -224,9 +224,15 @@ function hgSetupPanelHTML(sig, opts){
   var planHtml = typeof W.planBlock === 'function'
     ? W.planBlock(sig.dir, sig.entry, sig.stop, sig.t1, sig.t2, sig.planSrc || '')
     : ('ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · T1 ' + pxF(sig.t1));
+  var stack = sig.stack;
+  if (!stack && typeof W.hgSetupStackForPineSig === 'function'){
+    try{ stack = W.hgSetupStackForPineSig(sig); }catch(eSt){}
+  }
+  var stackHtml = (stack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(stack) : '';
   var bookBtn = (tier === 'clean' && typeof W.hgBookBtn === 'function')
     ? W.hgBookBtn(sig.sym, sig.dir, sig.entry, sig.stop, sig.t1, {
-      scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine', t2: sig.t2
+      scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine', t2: sig.t2,
+      stack: stack
     }) : '';
   var tradeBtn = (tier === 'clean')
     ? '<button class="toTrade" onclick="toTrade(\'' + suEsc(sig.sym) + '\',\'' + sig.dir + '\',' + sig.entry + ',' + sig.stop + ',' + sig.t1 + ')">SEND TO TRADE PLAN →</button>'
@@ -239,6 +245,7 @@ function hgSetupPanelHTML(sig, opts){
     + ' · mark ' + pxF(sig.price || sig.entry) + hits
     + (gateNote ? ' · ' + gateNote : '')
     + '</div>'
+    + stackHtml
     + '<div class="plan">' + planHtml + '</div>'
     + tradeBtn + bookBtn
     + '</div>';

@@ -356,6 +356,34 @@ function hgSetupStackAttachPlan(plan, opts){
   return plan;
 }
 
+/** Inline scanner tabs (COIL/DIV/APEX/TRAP/SMC/OB/PINE): one-call FTS attach. */
+function hgSetupStackForInlineScan(opts){
+  opts = opts || {};
+  if (typeof hgSetupStack !== 'function') return null;
+  var snap = (typeof hgSetupStackSnap === 'function') ? hgSetupStackSnap() : {};
+  var forming = opts.forming === true;
+  var clean = opts.clean === true && !forming;
+  var nearClean = opts.nearClean === true || forming;
+  return hgSetupStack(Object.assign({}, snap, opts, {
+    clean: clean,
+    nearClean: nearClean && !clean,
+    gatesPassed: clean ? 7 : (nearClean ? 6 : 5),
+    gatesTotal: 7
+  }));
+}
+
+function hgSetupStackForPineSig(sig, opts){
+  opts = opts || {};
+  if (!sig || !sig.dir) return null;
+  var forming = sig.isRecent || sig.isContext || sig.edgeForming;
+  var clean = sig.isNew === true || sig.edgeTicket === true;
+  return hgSetupStackForInlineScan(Object.assign({
+    dir: sig.dir, sym: sig.sym, style: 'pine', asset: 'crypto',
+    clean: clean, nearClean: !clean && forming, forming: forming && !clean,
+    gatesPassed: clean ? 7 : (forming ? 6 : 5), gatesTotal: 7
+  }, opts || {}));
+}
+
 function hgSetupStackMiniHtml(stack){
   try{
     if (!stack || !stack.summary) return '';
@@ -381,6 +409,8 @@ G.hgSetupStackAttachPlan = hgSetupStackAttachPlan;
 G.hgSetupStackEvidenceItems = hgSetupStackEvidenceItems;
 G.hgSetupStackFromTallyParts = hgSetupStackFromTallyParts;
 G.hgSetupStackFromBrainRow = hgSetupStackFromBrainRow;
+G.hgSetupStackForInlineScan = hgSetupStackForInlineScan;
+G.hgSetupStackForPineSig = hgSetupStackForPineSig;
 G.hgSetupStackMiniHtml = hgSetupStackMiniHtml;
 
 })();
