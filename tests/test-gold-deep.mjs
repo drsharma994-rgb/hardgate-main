@@ -68,17 +68,18 @@ globalThis.goldSession = () => {
 globalThis.utcDayStart = () => { const d = new Date(); return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 1000); };
 globalThis.getXAUCandles = async (res, count) => {
   const sec = { '15m': 900, '1h': 3600, '2h': 7200, '4h': 14400, '1d': 86400 }[res] || 3600;
+  const minBars = { '15m': 40, '1h': 60, '4h': 210, '1d': 60, '2h': 60 }[res] || 60;
   try{
     const out = await globalThis.getGoldCandles(res, count);
     if (out.rows.length){
       globalThis.S.goldDataSource = out.source;
       let rows = out.rows;
       if (rows.length && sec && (globalThis.nowSec() - rows[rows.length - 1].t < sec)) rows = rows.slice(0, -1);
-      return rows;
+      if (rows.length >= minBars) return rows;
     }
   }catch(e){}
-  /* CI/offline fallback — keep gate ledger coverage when public gold feeds fail */
-  const n = Math.min(count || 200, 220);
+  /* CI/offline fallback — keep gate ledger coverage when public gold feeds fail or return thin history */
+  const n = Math.min(Math.max(count || 200, minBars), 360);
   const rows = [];
   let p = 2400;
   const t0 = globalThis.nowSec() - n * sec;
@@ -89,6 +90,14 @@ globalThis.getXAUCandles = async (res, count) => {
   globalThis.S.goldDataSource = 'synthetic-test';
   return rows;
 };
+/* Thin live feeds must not skip the deep ledger — assert fallback supplies 4h depth offline. */
+{
+  const orig = globalThis.getGoldCandles;
+  globalThis.getGoldCandles = async () => ({ rows: [{ t: 1, o: 1, h: 1, l: 1, c: 1, v: 1 }], source: 'thin-live' });
+  const probe = await globalThis.getXAUCandles('4h', 300);
+  if (probe.length < 210) throw new Error('getXAUCandles fallback failed on thin live feed');
+  globalThis.getGoldCandles = orig;
+}
 let macroPanelArgs = null;
 globalThis.renderGoldMacroAuto = (macro, source) => { macroPanelArgs = { macro, source }; };
 
@@ -98,7 +107,10 @@ if (typeof globalThis.window.runGoldDeep !== 'function') throw new Error('runGol
 
 // ---- RUN 1: live data + live macro ----
 await globalThis.window.runGoldDeep();
-if (!elements.goldDeepOut) throw new Error('runGoldDeep did not render #goldDeepOut');
+if (!elements.goldDeepOut){
+  const stat = elements.goldDeepStat ? elements.goldDeepStat.textContent : '(no stat)';
+  throw new Error('runGoldDeep did not render #goldDeepOut — stat: ' + stat);
+}
 const out = elements.goldDeepOut.innerHTML;
 const gGates = (out.match(/GATE:G\d+\|/g) || []).length;
 const cGates = (out.match(/GATE:C\d+\|/g) || []).length;
