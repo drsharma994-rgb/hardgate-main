@@ -10,6 +10,15 @@ const GOLDAPI = 'https://api.gold-api.com';
 
 let binanceSkipped = 0;
 let binanceAttempted = 0;
+let networkSkipped = 0;
+
+function networkSkipLabel(label, err){
+  const cause = err && err.cause;
+  const code = (cause && cause.code) || err.code;
+  const msg = code || (err && err.message) || String(err);
+  console.log('\n== ' + (label || 'fetch') + ' ==\nSKIP — network unavailable (' + msg + ')');
+  networkSkipped++;
+}
 
 async function j(url, label, opts){
   opts = opts || {};
@@ -31,6 +40,14 @@ async function j(url, label, opts){
       if (isBinance) binanceSkipped++;
       console.log('\n== ' + (label || url) + ' ==\nSKIP — fetch timeout/abort'
         + (isBinance ? ' (Binance unavailable in this region)' : ''));
+      networkSkipped++;
+      return null;
+    }
+    const cause = e && e.cause;
+    const code = (cause && cause.code) || e.code;
+    if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'EAI_AGAIN'
+        || (e && String(e.message || '').indexOf('fetch failed') >= 0)){
+      networkSkipLabel(label || url, e);
       return null;
     }
     throw e;
@@ -117,8 +134,17 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
       if (r.ok){ const txt = await r.text(); if (txt && txt.trim()){ csv = txt; usedYear = y; break; } }
     }
   }catch(e){
-    if (!(e && (e.name === 'AbortError' || e.code === 'ABORT_ERR'))) throw e;
-    console.log('\n== Treasury daily CSV US10Y ==\nSKIP — fetch timeout/abort');
+    if (!(e && (e.name === 'AbortError' || e.code === 'ABORT_ERR'))){
+      const cause = e && e.cause;
+      const code = (cause && cause.code) || e.code;
+      if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'EAI_AGAIN'
+          || String(e.message || '').indexOf('fetch failed') >= 0){
+        networkSkipLabel('Treasury daily CSV US10Y', e);
+      } else throw e;
+    } else {
+      console.log('\n== Treasury daily CSV US10Y ==\nSKIP — fetch timeout/abort');
+      networkSkipped++;
+    }
   } finally { clearTimeout(t); }
   if (!csv){
     console.log('\n== Treasury daily CSV US10Y ==\nSKIP — unavailable (timeout or empty)');
@@ -147,6 +173,8 @@ if (binanceAttempted > 0 && binanceSkipped === binanceAttempted){
   console.log('\nALL SMOKE TESTS PASSED — Binance legs skipped (' + binanceSkipped + '/' + binanceAttempted + ' HTTP 451 geo-block; non-Binance feeds OK)');
 } else if (binanceSkipped > 0){
   console.log('\nALL SMOKE TESTS PASSED (Binance partial skip: ' + binanceSkipped + '/' + binanceAttempted + ' geo-blocked; remaining legs OK)');
+} else if (networkSkipped > 0){
+  console.log('\nALL SMOKE TESTS PASSED (network skip: ' + networkSkipped + ' leg(s) unavailable; remaining OK)');
 } else {
   console.log('\nALL SMOKE TESTS PASSED');
 }

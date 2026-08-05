@@ -351,6 +351,30 @@ assert(W.hgStructure === G.hgStructure && W.hgAVWAP === G.hgAVWAP && W.hgAtrPerc
          'hgAtrPercentile: NaN when fewer than 2 finite ATR values exist');
 }
 
+/* ---------------- 14) hgStructureGate + hgAtrLocal fallback ---------------- */
+{
+  const origStruct = G.hgStructure;
+  G.hgStructure = function(){ return { choch: true, dir: 'short' }; };
+  const legacy = G.hgStructureGate([], 'long');
+  assert(legacy.veto === true && legacy.choch === true && legacy.note.indexOf('CHoCH') >= 0,
+    'hgStructureGate: legacy mock CHoCH vetoes opposing cascade');
+  G.hgStructure = origStruct;
+
+  const bosLong = G.hgStructureGate(mkC(stairCloses(6)), 'long', { maxBars: 30 });
+  assert(bosLong.bos === true && bosLong.veto === false, 'hgStructureGate: uptrend BOS confirms long');
+
+  const revRows = mkC(stairCloses(5).concat([20.5, 21.0, 21.5, 22.0, 20.0, 18.8, 17.9]));
+  const chVeto = G.hgStructureGate(revRows, 'long', { maxBars: 30 });
+  assert(chVeto.veto === true && chVeto.choch === true, 'hgStructureGate: bearish CHoCH vetoes long cascade');
+
+  const ctxLocal = vm.createContext(Object.create(null));
+  ctxLocal.window = {};
+  vm.runInContext(readFileSync(path.join(root, 'indicators2.js'), 'utf8'), ctxLocal, { filename: 'indicators2-only.js' });
+  assert(typeof ctxLocal.atr === 'undefined', 'hgAtrLocal path: indicators.js not loaded');
+  approx(ctxLocal.hgAtrPercentile(flatRows(60, 50, 1, 0), 14, 100), 0, 1e-9,
+    'hgAtrPercentile: hgAtrLocal fallback ranks flat series ~0');
+}
+
 /* ---------------- summary ---------------- */
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail > 0){ console.error('TESTS FAILED'); process.exit(1); }
