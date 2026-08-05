@@ -92,6 +92,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Data layer CI:** `.github/workflows/data-layer-smoke.yml` runs `npm run test:data-layer` on push/PR to `main` (optional live-network smoke; exits 0 on Binance HTTP 451).
 - **Deploy check:** `node scripts/check-production.mjs` compares local `sw.js` `HG_CACHE` to `HARDGATE_SITE` (default Render). Mismatch means production has not picked up the latest merge yet.
 - **Daemon brain:** `tests/test-daemon-brain.mjs` contract-smokes `lib/daemon-brain.mjs` (headless synthesis seam + fast-fail on dead port). `tests/test-book-routing.mjs` includes browser `book-routing.js` ↔ `lib/book-routing.mjs` parity cases.
+- **Bybit legs:** `tests/test-bybit.mjs` mocks Bybit v5 public REST (`bybitFunding`, OI history, account ratio, snapshot, linear tickers map) — used by SMART $ / CARRY cross-checks.
 
 ### Strategy → book plugin checklist
 
