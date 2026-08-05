@@ -120,6 +120,7 @@ ok(bookJs.indexOf('poll-fill') >= 0 && bookJs.indexOf('/api/book/poll-fill') >= 
 ok(bookJs.indexOf('bookDailyLossHalted') >= 0 && bookJs.indexOf('DAY HALT') >= 0
   && bookJs.indexOf('bookDayHalt') >= 0,
   'book.js daily loss halt banner + status chip');
+ok(bookJs.indexOf('hgBookStampForMeta') >= 0, 'book.js exports hgBookStampForMeta fund-aware stamp');
 ok(bookJs.indexOf('hgToTradePlanFromBook') >= 0, 'book MANAGE uses hgToTradePlanFromBook handoff');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
@@ -138,6 +139,7 @@ ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtn
 ok(indexHtml.indexOf('hgTradeHandoffFor') >= 0 && indexHtml.indexOf('handoff.stack') >= 0,
   'trade plan passes FTS stack from card handoff');
 ok(indexHtml.indexOf('MANAGE from book') >= 0, 'trade plan labels book MANAGE handoff');
+ok(indexHtml.indexOf('hgBookStampForMeta') >= 0, 'index cardHTML shows IN BOOK stamp');
 ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
   'swing and scalp scans use distinct scanner ids');
 
@@ -147,6 +149,9 @@ var macroJs = fs.readFileSync(path.join(root, 'macro.js'), 'utf8');
 ok(squeezeJs.indexOf("t2: s.t2") >= 0, 'squeeze book CTA passes T2 runner');
 ok(edgeJs.indexOf('t2: p.t2') >= 0, 'edge book CTA passes T2 runner');
 ok(edgeJs.indexOf('hgToTradePlanOnclickAttr') >= 0 || edgeJs.indexOf('hgToTradePlan') >= 0, 'edge trade handoff uses hgToTradePlan helper');
+ok(edgeJs.indexOf('hgBookStampForMeta') >= 0, 'edge cards use hgBookStampForMeta');
+var brainJs = fs.readFileSync(path.join(root, 'brain.js'), 'utf8');
+ok(brainJs.indexOf('hgBookStampForMeta') >= 0, 'brain cards use IN BOOK stamp');
 ok(macroJs.indexOf('t2: t2') >= 0 && macroJs.indexOf('macroGoldPlan') >= 0,
   'macro gold plan includes T2 for book add');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,

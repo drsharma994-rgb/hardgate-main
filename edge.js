@@ -1069,7 +1069,7 @@ function cardHTML(r){
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
     + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + ' '
     + edgeFreshnessChip(sig.barAge) + ' ' + edgeFlowChip(en) + '</span>'
-    + (typeof W.hgBookStampHTML === 'function' ? W.hgBookStampHTML(sym, sig.dir, edgeFund) : '')
+    + (typeof W.hgBookStampForMeta === 'function' ? W.hgBookStampForMeta(sym, sig.dir, { scanner: 'edge', strategy: 'edge', fund: edgeFund, klass: edgeKlass }) : '')
     + (typeof W.hgTripleStackChipHtml === 'function' ? W.hgTripleStackChipHtml(sym, sig.dir) : '')
     + '</div>'
     + '<div class="mini">'

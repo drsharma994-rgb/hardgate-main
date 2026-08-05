@@ -795,7 +795,9 @@ function setupCardHTML(setup){
       { scanner: 'liqs', strategy: 'liqs', t2: setup.t2, stack: liqStack }) : '';
   return '<div class="card ' + setup.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(setup.sym || 'MULTI') + '</span>'
-    + '<span class="dir">' + dirUp + ' · FADE THE FLUSH</span></div>'
+    + '<span class="dir">' + dirUp + ' · FADE THE FLUSH</span>'
+    + (hasPlan && typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(setup.sym, setup.dir, { scanner: 'liqs', strategy: 'liqs' }) : '')
+    + '</div>'
     + '<div class="mini">'
     + '<span class="k">flushed side</span><span>' + setup.flushSide.toUpperCase() + 'S LIQUIDATED</span>'
     + '<span class="k">1h imbalance</span><span>' + fmtRatio(flushX) + '×</span>'
