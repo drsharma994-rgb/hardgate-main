@@ -593,6 +593,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 
 <!-- ================= TRADE ================= -->
 <section id="tab_trade" class="tabpane">
+  <div id="tradeDesk"></div>
   <div class="grid2">
     <div class="panel">
       <h2>Entry Planner <span>plan is computed here; execution stays server-side (delta-trader.ts) or manual</span></h2>
@@ -2470,6 +2471,15 @@ function showTab(t){
   /* scanner tabs: restore the last-scan memory line when the pane is idle */
   if ((t === 'swing' || t === 'scalp') && typeof scanLastHint === 'function') scanLastHint(t);
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
+  if (t === 'trade'){
+    var td = document.getElementById('tradeDesk');
+    if (td && typeof hgSetupDeskBannerHTML === 'function'){
+      td.innerHTML = hgSetupDeskBannerHTML({
+        kind: 'trade', tab: 'TRADE PLAN',
+        note: 'SEND TO TRADE PLAN from any CLEAN card carries FTS stack + scanner id into sizing and ADD TO BOOK.'
+      });
+    }
+  }
 }
 
 /* Auto-scan Delta + CoinDCX when opening a tab (default on). */
@@ -2961,12 +2971,17 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const tier = (bookMeta.tier || 'clean').toLowerCase();
   const tierCls = tier === 'near' ? ' tier-near' : (tier === 'forming' ? ' tier-forming' : '');
   const tierLabel = (typeof hgSetupTierLabel === 'function') ? hgSetupTierLabel(tier) : (tier === 'near' ? 'NEAR' : 'CLEAN');
-  const tradeable = tier === 'clean' && isFinite(entry) && isFinite(stop) && isFinite(t1);
-  const onclickJs = tradeable ? `toTrade(${JSON.stringify(sym)},${JSON.stringify(dir)},${entry},${stop},${t1})` : '';
-  const onclickAttr = onclickJs.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
   const scanId = bookMeta.scanner || 'swing-scalp';
   const stratId = bookMeta.strategy || scanId;
+  const tradeable = tier === 'clean' && isFinite(entry) && isFinite(stop) && isFinite(t1);
+  const tradeMeta = { t2: bookMeta.t2, stack: bookMeta.stack, scanner: scanId, strategy: stratId, venue: bookMeta.venue };
+  const onclickJs = tradeable
+    ? (typeof hgToTradePlanOnclickJs === 'function'
+      ? hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, tradeMeta)
+      : `toTrade(${JSON.stringify(sym)},${JSON.stringify(dir)},${entry},${stop},${t1})`)
+    : '';
+  const onclickAttr = onclickJs.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
   const venueHtml = bookMeta.venue ? '<span class="stamp na">' + String(bookMeta.venue).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span> ' : '';
   const bookBtn = tradeable && typeof bookBtnHTML === 'function'
     ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: scanId, strategy: stratId, t2: bookMeta.t2, stack: bookMeta.stack }) : '';
@@ -2984,6 +2999,10 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   </div>`;
 }
 function toTrade(sym,dir,entry,stop,t1,t2){
+  if (typeof window !== 'undefined' && !window._hgTradeHandoffPending){
+    window._hgTradeHandoff = null;
+  }
+  if (typeof window !== 'undefined') window._hgTradeHandoffPending = false;
   $('tSym').value=sym; $('tSide').value=dir; $('tEntry').value=entry; $('tStop').value=stop;
   /* only set T1 when a target arg actually exists — writing undefined produced
      the string "undefined" → NaN rr → permanent P2 veto on gold handoffs */
@@ -3553,6 +3572,14 @@ function planTrade(){
   g.push(['P5','Discipline checklist complete', checksDone?'pass':'veto', checksDone?'':'tick every box on the left — SKYAI/HYPE/GOAT were checklist failures, not signal failures']);
 
   const vet = g.some(x=>x[2]==='veto');
+  var handoff = (typeof hgTradeHandoffFor === 'function')
+    ? hgTradeHandoffFor($('tSym').value || '', side, entry, stop) : null;
+  var stackHtml = (handoff && handoff.stack && typeof hgSetupStackMiniHtml === 'function')
+    ? hgSetupStackMiniHtml(handoff.stack) : '';
+  var handoffNote = handoff && (handoff.scanner || handoff.strategy)
+    ? '<div class="note" style="margin-bottom:8px">Handoff from '
+      + String(handoff.scanner || handoff.strategy).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      + (handoff.stack && handoff.stack.summary ? ' · FTS carried' : '') + '</div>' : '';
   const ticket =
 `${side.toUpperCase()} ${$('tSym').value||'—'}  (${S.exchange==='delta'?'Delta India':'CoinDCX'})
 entry     ${px(entry)}
@@ -3564,6 +3591,7 @@ T2        ${px(t2)}  →  runner trail (defaults to 3R when blank)
 liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
 
   out.innerHTML = `
+    ${handoffNote}${stackHtml}
     <div class="ledger">${g.map(x=>gateRow(...x)).join('')}</div>
     <div class="verdict ${vet?'aside':side}">
       <div class="vword">${vet?'DO NOT ENTER':'PLAN VALID'}</div>
@@ -3574,7 +3602,13 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side);
   if (!vet && typeof bookBtnHTML === 'function'){
     var symVal = $('tSym').value || '';
-    var bookBtn = bookBtnHTML(symVal, side, entry, stop, t1, { scanner: 'trade-plan', strategy: 'trade-plan', t2: t2 });
+    var bookMeta = { scanner: 'trade-plan', strategy: 'trade-plan', t2: t2 };
+    if (handoff){
+      if (handoff.stack) bookMeta.stack = handoff.stack;
+      if (handoff.scanner) bookMeta.scanner = handoff.scanner;
+      if (handoff.strategy) bookMeta.strategy = handoff.strategy;
+    }
+    var bookBtn = bookBtnHTML(symVal, side, entry, stop, t1, bookMeta);
     if (bookBtn) out.insertAdjacentHTML('beforeend', '<div style="margin-top:8px">' + bookBtn + '</div>');
   }
   if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }

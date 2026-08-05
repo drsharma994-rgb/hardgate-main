@@ -135,6 +135,8 @@ ok(bookJs.indexOf('bookClosedTitle') >= 0 && bookJs.indexOf('consolidated.closed
 var indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtnHTML') >= 0,
   'trade plan exposes ADD TO BOOK when plan valid');
+ok(indexHtml.indexOf('hgTradeHandoffFor') >= 0 && indexHtml.indexOf('handoff.stack') >= 0,
+  'trade plan passes FTS stack from card handoff');
 ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
   'swing and scalp scans use distinct scanner ids');
 
