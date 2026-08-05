@@ -374,6 +374,16 @@ function cardHTML(s, rank){
   var modeLabel = s.mode === 'swing' ? 'SWING · 4H' : 'SCALP · 15m';
   if (s.layerLabel) modeLabel += ' · ' + esc(s.layerLabel);
   else if (s.nativeStrategy) modeLabel += ' · ' + esc(s.nativeStrategy);
+  var gpStack = s.stack;
+  if (!gpStack && typeof W.hgSetupStackForPineSig === 'function'){
+    try{
+      gpStack = W.hgSetupStackForPineSig({
+        sym: 'XAUUSD', dir: s.dir, isNew: s.tier === 'primary' || s.tier === 'native',
+        isRecent: s.isRecent, isContext: s.isContext || s.tier === 'aligned', tier: s.tier
+      }, { style: 'goldpine', asset: 'gold' });
+    }catch(eGp){}
+  }
+  var gpStackHtml = (gpStack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(gpStack) : '';
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + rankBadge + badge + '</span></h2>'
@@ -384,12 +394,13 @@ function cardHTML(s, rank){
     + (fin(+s.rr) ? (' · R:R ' + fmtF(s.rr, 2)) : '')
     + '</div>'
     + '<div class="note" style="margin-top:6px;font-size:11px">' + factorsHTML(s.factors) + '</div>'
+    + gpStackHtml
     + '<div class="plan">' + (typeof W.planBlock === 'function'
       ? W.planBlock(s.dir, s.entry, s.stop, s.t1, s.t2, s.planSrc || 'Gold Pine')
       : ('ENTRY ' + pxF(s.entry) + ' · SL ' + pxF(s.stop) + ' · T1 ' + pxF(s.t1))) + '</div>'
     + '<button class="toTrade" onclick="toTrade(\'XAUUSD\',\'' + s.dir + '\',' + s.entry + ',' + s.stop + ',' + s.t1 + ')">SEND TO TRADE PLAN →</button>'
     + (typeof W.hgBookBtn === 'function'
-      ? W.hgBookBtn('XAUUSD', s.dir, s.entry, s.stop, s.t1, { scanner: 'goldpine', strategy: s.mode, t2: s.t2 })
+      ? W.hgBookBtn('XAUUSD', s.dir, s.entry, s.stop, s.t1, { scanner: 'goldpine', strategy: s.mode, t2: s.t2, stack: gpStack })
       : '')
     + '</div>';
 }

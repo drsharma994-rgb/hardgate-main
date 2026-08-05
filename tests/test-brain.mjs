@@ -43,6 +43,10 @@ const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep)
 
 /* ---- load the module in a pristine global scope: only a window stub ---- */
 globalThis.window = {};
+globalThis.window.swingScan = function(){ return { cands: [] }; };
+globalThis.window.bestScan = function(){ return { clean: [] }; };
+globalThis.window.goldswingState = function(){ return { results: [] }; };
+globalThis.window.goldscalpState = function(){ return { results: [] }; };
 /* SNIPER suite default OFF: the shipped default is ON (owner mandate), but
    every fixture board below asserts the UNFILTERED render — the AO section
    verifies the shipped default + the toggle/persistence logic separately */
@@ -261,6 +265,18 @@ ok(r.votes.some(function(x){ return x.layer === 'squeeze' && x.vote === 'neutral
 r = COLLECT({ sym: 'BTCUSDT', squeeze: null });
 ok(r.unavailable.indexOf('squeeze') >= 0, 'squeezeState() null -> unavailable');
 
+console.log('== swing/best tab votes ==');
+r = COLLECT({ sym: 'BTCUSDT' });
+W.swingScan = function(){ return { cands: [{ sym: 'BTCUSDT', dir: 'long' }] }; };
+W.bestScan = function(){ return { clean: [{ sym: 'BTCUSDT', dir: 'long', famScore: 7 }] }; };
+r = COLLECT({ sym: 'BTCUSDT' });
+ok(r.votes.some(function(x){ return x.layer === 'swingtab' && x.vote === 'long'; }),
+   'swingScan CLEAN list -> swingtab vote');
+ok(r.votes.some(function(x){ return x.layer === 'besttab' && x.vote === 'long'; }),
+   'bestScan CLEAN pool -> besttab vote');
+W.swingScan = function(){ return { cands: [] }; };
+W.bestScan = function(){ return { clean: [] }; };
+
 /* ================= I) liqs flush-reversal votes ================= */
 console.log('== liqs votes ==');
 r = COLLECT({ sym: 'BTCUSDT', liq: { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 } });
@@ -277,6 +293,8 @@ ok(r.unavailable.indexOf('liqs') >= 0, 'liq input absent (liqAgg/liqFlushSetup m
 
 /* ================= J) gold lane ================= */
 console.log('== gold lane ==');
+W.goldswingState = function(){ return { results: [{ dir: 'long', grade: 'A', strategy: 'pullback' }] }; };
+W.goldscalpState = function(){ return { results: [{ dir: 'long', grade: 'A', strategy: 'ict' }] }; };
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false, events: [], note: 'clear' },
               gold: { setup: { dir: 'long', aside: false, confidence: 'STRONG', reason: 'structure + macro + positioning aligned' },
                       deep: { label: 'BULLISH', score: 71, dir: 'long', ts: 1 },
@@ -288,6 +306,10 @@ ok(r.votes.some(function(x){ return x.layer === 'golddeep' && x.vote === 'long' 
 ok(r.votes.some(function(x){ return x.layer === 'goldbasis' && x.vote === 'long' && x.text.indexOf('shorts crowding') >= 0; }),
    'gold lane: shorts-crowding basis -> long fade vote (positioning)');
 ok(r.unavailable.length === 0, 'gold lane fully fed -> nothing unavailable');
+ok(r.votes.some(function(x){ return x.layer === 'goldswingtab' && x.vote === 'long'; }),
+   'gold lane: goldswingState -> structural vote');
+ok(r.votes.some(function(x){ return x.layer === 'goldscalptab' && x.vote === 'long'; }),
+   'gold lane: goldscalpState -> structural vote');
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false, events: [], note: 'clear' },
               gold: { setup: { dir: 'long', aside: false, confidence: 'STRONG', reason: 'structure + macro + positioning aligned' },
                       deep: { label: 'BULLISH', score: 71, dir: 'long', ts: 1 },
@@ -315,9 +337,13 @@ ok(r.votes.some(function(x){ return x.layer === 'goldsetup' && x.vote === 'neutr
    'gold lane: aside decision -> neutral caution with the reason, never a direction');
 ok(r.votes.some(function(x){ return x.layer === 'goldbasis' && x.vote === 'short'; }),
    'gold lane: longs-crowding basis -> short fade vote');
+W.goldswingState = function(){ return { results: [] }; };
+W.goldscalpState = function(){ return { results: [] }; };
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false } });
 ok(r.unavailable.indexOf('goldsetup') >= 0 && r.unavailable.indexOf('golddeep') >= 0 && r.unavailable.indexOf('goldbasis') >= 0,
    'gold lane with no gold inputs -> all three gold layers named unavailable');
+ok(r.silent.indexOf('goldswingtab') >= 0 && r.silent.indexOf('goldscalptab') >= 0,
+   'gold swing/scalp tabs silent when scan ran empty');
 ok(r.silent.indexOf('yield') >= 0 && r.silent.indexOf('smt') >= 0,
    'gold lane: yield/smt absent -> silent (not dark)');
 

@@ -738,7 +738,8 @@ function publishBestSnap(clean, meta){
         t2: w.t2,
         rr: w.rr,
         famScore: w.famScore,
-        robScore: w.robScore
+        robScore: w.robScore,
+        stack: w.stack || null
       };
     }),
     meta: meta || {}
@@ -1353,6 +1354,7 @@ async function runCoilScanLeg(opts){
         found++;
         coilList.push({symbol: t.symbol, dir: "long", coilLow: coilLow, coilHigh: coilHigh});
         const pl = hgPlanLevels('long', rows, coilLow);
+        const coilStack = inlineScanStack('long', t.symbol, rows, { style: 'coil', ticker: t, forming: true, nearClean: true });
         __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag),'long',
           [['mark',px(t.mark||p)],['24h',t.chg24!=null?pct(t.chg24,2):'—'],
            ['BB width',fmt(currentWidth,2)+'% (avg '+fmt(avgWidth,2)+'%)'],['vol z',fmt(vz,2)],
@@ -1361,7 +1363,7 @@ async function runCoilScanLeg(opts){
           (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
           pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
-          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null }));
+          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack }));
       }catch(e){}
       await sleep(120);
     }
@@ -1413,11 +1415,12 @@ async function runExpansionCheck(){
         found++;
         const t1 = entry + 2*risk;
         const t2 = entry + 3*risk;
+        const expStack = inlineScanStack('long', w.symbol, rows, { style: 'coil', clean: true });
         __cardsHtml.push(cardHTML(w.symbol,"long",
           [["mark",px(entry)],["coil high",px(w.coilHigh)],["coil low",px(w.coilLow)],["vol z",fmt(vz,2)],["watch age",fmt((nowSec()-watch.at)/3600,1)+"h"]],
           ["G1 was on coil watchlist","G2 closed above range","G3 vol z>2"],
           planBlock("long",entry,stop,t1,t2), entry, stop, t1, null,
-          { scanner: 'coil-expansion', strategy: 'coil-expansion', t2: t2 }));
+          { scanner: 'coil-expansion', strategy: 'coil-expansion', t2: t2, stack: expStack }));
         logSetup(w.symbol,"long","coil-expansion",entry,stop,t1);
       }catch(e){}
       await sleep(120);
@@ -1513,12 +1516,13 @@ async function runDivScanLeg(opts){
     entry = plObj.entry; stop = plObj.stop; t1 = plObj.t1; t2 = plObj.t2;
     found++;
     const reg = detectRegime(rows);
+    const divStack = inlineScanStack(dir, t.symbol, rows, { style: 'swing', ticker: t, clean: true });
     __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
       [["mark",px(t.mark||p)],["type",kindLabel],["RSI 4H",fmt(rv[n-1],1)],["span",(pivB.i-pivA.i)+" bars"],
        ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
       ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
       planBlockExact(plObj, plObj.note), entry, stop, t1, null,
-      { scanner: 'divergence', strategy: 'divergence', t2: t2 }));
+      { scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack }));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);
@@ -2050,13 +2054,14 @@ async function runApexScanLeg(opts){
     results.sort((a,b)=>b.spread24-a.spread24);
     results.forEach(r=>{
       const pl = hgPlanLevels('long', r.rows, r.mark);
+      const apexStack = inlineScanStack('long', r.sym, r.rows, { style: 'apex', forming: true, nearClean: true });
       __cardsHtml.push(cardHTML(hgCardVenueSym(r.sym, venueTag),'long',
         [['mark',px(r.mark)],['BTC 24h',pct(btcRet24,2)],['asset 24h',pct(r.ret24,2)],['RS spread',pct(r.spread24,2)],['Nearest OB',nearestOBText(r.rows,'long')],['Liquidity Target',liquidityTargetText(r.rows,'long')]],
         ['G1 BTC headwind','G2 spread ≥5%','G3 1H EMA50 intact'],
         (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
-        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null }));
+        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack }));
     });
     statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done — ${results.length} Apex assets found`;
     if (!results.length && opts.dualLast !== false) emptyEl.style.display='block';
@@ -2150,6 +2155,7 @@ const t2 = dir==='long' ? uOuter : lOuter;   // stretch target: opposite extreme
 var trapPl = applyExactEntry({ dir: dir, type: 'SCALP', entry: p, stop: stop, t1: t1, t2: t2,
   note: 'mean reversion — stop tight behind the wick; target the mean first' },
   rows, { style: 'scalp', m15: rows, poiLevel: dir==='long' ? lInner : uInner, poiLabel: 'inner band' });
+const trapStack = inlineScanStack(dir, t.symbol, rows, { style: 'scalp', ticker: t, clean: true });
 __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 [['mark',px(p)],['RSI now',fmt(rNow,1)],['RSI at sweep',fmt(rsiAtSweep,1)],['vol (ATR%)',fmt(atrPct,2)+'%'],
 [fmt(outerSD,1)+' SD swept ('+(rows.length-1-(dir==='long'?sweptLowAt:sweptHighAt))+'b ago)', dir==='long'?px(rows[sweptLowAt].l):px(rows[sweptHighAt].h)],
@@ -2158,7 +2164,7 @@ __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
 planBlockExact(trapPl, trapPl.note)
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2 }));
+trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack }));
 }catch(e){}
 await sleep(100);
 }
@@ -2236,6 +2242,7 @@ async function runSmcScanLeg(opts){
         var smcPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the FVG; T1 = nearest liquidity' }, rows,
           { poiLevel: (fvg.top + fvg.bottom) / 2, poiLabel: 'FVG mid', preferEdge: true });
+        const smcStack = inlineScanStack(dir, t.symbol, rows, { style: 'swing', ticker: t, clean: true, nearClean: true });
         __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir, [
           ['mark', px(p)], ['Gap Age', `${fvg.age} bars (4H)`],
           ['FVG Top', px(fvg.top)], ['FVG Bottom', px(fvg.bottom)],
@@ -2243,7 +2250,7 @@ async function runSmcScanLeg(opts){
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlockExact(smcPl, smcPl.note)
         + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', smcPl.entry, smcPl.stop, smcPl.t1, null,
-        { scanner: 'smc', strategy: 'smc', t2: smcPl.t2 }));
+        { scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2308,6 +2315,7 @@ async function runObScanLeg(opts){
         var obPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the OB; T1 = nearest liquidity' }, rows,
           { poiLevel: obEntry, poiLabel: 'OB edge', preferEdge: true });
+        const obStack = inlineScanStack(dir, t.symbol, rows, { style: 'swing', ticker: t, clean: true, nearClean: true });
         __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir, [
           ['mark', px(p)], ['OB Age', `${ob.age} bars (4H)`],
           ['OB Top', px(ob.top)], ['OB Bottom', px(ob.bottom)],
@@ -2315,7 +2323,7 @@ async function runObScanLeg(opts){
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlockExact(obPl, obPl.note)
         + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', obPl.entry, obPl.stop, obPl.t1, null,
-        { scanner: 'ob', strategy: 'ob', t2: obPl.t2 }));
+        { scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2939,6 +2947,11 @@ function hgPlanBlock(dir, rows, entryOverride, extraNote){
 }
 window.hgPlanLevels = hgPlanLevels;
 window.hgPlanBlock = hgPlanBlock;
+function inlineScanStack(dir, sym, rows, opts){
+  if (typeof hgSetupStackForInlineScan !== 'function') return null;
+  var asset = (sym && String(sym).toUpperCase().indexOf('XAU') >= 0) ? 'gold' : 'crypto';
+  return hgSetupStackForInlineScan(Object.assign({ dir: dir, sym: sym, rows4h: rows, asset: asset }, opts || {}));
+}
 function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMeta){
   const symHtml = String(sym).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   bookMeta = bookMeta || {};
@@ -4688,34 +4701,15 @@ async function runCascadeCore(uni){
                 binanceTakerRatio(symStr, '1h', 25).catch(()=>null),
                 binanceDepth(symStr, 20).catch(()=>null)
             ]);
-            let cvdRatio = NaN, obiVal = NaN, cvdAligned = false, obiAligned = false;
-
-            if (tk && tk.series && tk.series.length >= 16) {
-                let recent = 0, prior = 0, tC = 0;
-                for (let k = tk.series.length - 8; k < tk.series.length; k++) { recent += +tk.series[k].buySellRatio||0; tC++; }
-                recent /= tC||1;
-                for (let k = tk.series.length - 16; k < tk.series.length - 8; k++) prior += +tk.series[k].buySellRatio||0;
-                prior /= 8;
-                cvdRatio = recent;
-
-                if (want > 0 && recent <= 0.85) { isCvdTrap = true; trapReason = 'SEVERE CVD DIVERGENCE: Sellers dumping into long'; }
-                if (want < 0 && recent >= 1.15) { isCvdTrap = true; trapReason = 'SEVERE CVD DIVERGENCE: Buyers squeezing short'; }
-
-                if (want > 0 && recent >= 1.05 && recent >= prior - 0.05) cvdAligned = true;
-                if (want < 0 && recent <= 0.95 && recent <= prior + 0.05) cvdAligned = true;
+            const ft = (typeof hgFlowTrapAssess === 'function')
+              ? hgFlowTrapAssess(tk && tk.series ? tk.series : null, bk, s.dir)
+              : null;
+            if (ft){
+              isCvdTrap = ft.veto === true;
+              trapReason = ft.reason || '';
+              f8 = ft.flowOk === true;
+              f8Detail = 'CVD ' + (ft.cvdAligned ? '✓' : '✗') + ' · OBI ' + (ft.obiAligned ? '✓' : '✗');
             }
-            if (bk && isFinite(+bk.bidUsd) && isFinite(+bk.askUsd)) {
-                const bid = +bk.bidUsd, ask = +bk.askUsd, tot = bid + ask;
-                if (tot > 200000) {
-                    obiVal = (bid - ask) / tot;
-                    if (want > 0 && obiVal >= 0.33) obiAligned = true;
-                    if (want < 0 && obiVal <= -0.33) obiAligned = true;
-                    if (want > 0 && obiVal <= -0.33) { isCvdTrap = true; trapReason = 'SPOOF TRAP: Heavy ASK wall blocking long'; }
-                    if (want < 0 && obiVal >= 0.33) { isCvdTrap = true; trapReason = 'SPOOF TRAP: Heavy BID wall blocking short'; }
-                }
-            }
-            f8 = cvdAligned || obiAligned;
-            f8Detail = `CVD ${isFinite(cvdRatio)?fmt(cvdRatio,2):'n/a'} ${cvdAligned?'✓':'✗'} · OBI ${isFinite(obiVal)?fmt(obiVal,2):'n/a'} ${obiAligned?'✓':'✗'}`;
         }
     } catch(e) {}
 

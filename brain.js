@@ -284,8 +284,8 @@ var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with 
    least one agreeing structural AND one agreeing positioning vote. */
 var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
-  goldsetup: 'structural', golddeep: 'structural',
-  trend4h: 'structural',
+  goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural',
+  trend4h: 'structural', swingtab: 'structural', besttab: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
@@ -472,6 +472,43 @@ function brainCollect(inputs){
         else
           push('goldbasis', 'neutral', bTxt + ' — positioning balanced');
       }
+    }
+    /* gold swing / scalp tab snapshots (confluence engines) */
+    var gsw = (typeof G.goldswingState === 'function') ? G.goldswingState() : null;
+    if (!gsw || !Array.isArray(gsw.results)){
+      dark('goldswingtab', 'GOLD SWING tab has not published candidates — run GOLD SWING once');
+    }else if (!gsw.results.length){
+      hush('goldswingtab', 'GOLD SWING ran — no directional candidate on the board');
+    }else{
+      var gswHit = false;
+      for (var gsi = 0; gsi < gsw.results.length; gsi++){
+        var gr = gsw.results[gsi];
+        if (gr && isDir(gr.dir)){
+          push('goldswingtab', gr.dir,
+               'GOLD SWING ' + gr.dir.toUpperCase() + ' · grade ' + (gr.grade || 'n/a')
+               + (gr.strategy ? ' · ' + gr.strategy : ''));
+          gswHit = true; break;
+        }
+      }
+      if (!gswHit) hush('goldswingtab', 'GOLD SWING ran — no directional candidate on the board');
+    }
+    var gsx = (typeof G.goldscalpState === 'function') ? G.goldscalpState() : null;
+    if (!gsx || !Array.isArray(gsx.results)){
+      dark('goldscalptab', 'GOLD SCALP tab has not published candidates — run GOLD SCALP once');
+    }else if (!gsx.results.length){
+      hush('goldscalptab', 'GOLD SCALP ran — no directional candidate on the board');
+    }else{
+      var gsxHit = false;
+      for (var gci = 0; gci < gsx.results.length; gci++){
+        var gcr = gsx.results[gci];
+        if (gcr && isDir(gcr.dir)){
+          push('goldscalptab', gcr.dir,
+               'GOLD SCALP ' + gcr.dir.toUpperCase() + ' · grade ' + (gcr.grade || 'n/a')
+               + (gcr.strategy ? ' · ' + gcr.strategy : ''));
+          gsxHit = true; break;
+        }
+      }
+      if (!gsxHit) hush('goldscalptab', 'GOLD SCALP ran — no directional candidate on the board');
     }
     if (!inp.yield || typeof inp.yield !== 'object'){
       hush('yield', 'no US10Y macro data — yield correlation unread');
@@ -675,6 +712,37 @@ function brainCollect(inputs){
       }
     }
     if (!sqHit) hush('squeeze', 'no squeeze state names this symbol');
+  }
+
+  /* ---- SWING tab CLEAN snapshot ---- */
+  var swTab = (typeof G.swingScan === 'function') ? G.swingScan() : null;
+  if (!swTab || !Array.isArray(swTab.cands)){ hush('swingtab', 'SWING tab has not published a scan — run SWING once'); }
+  else{
+    var swHit = false;
+    for (var swi = 0; swi < swTab.cands.length; swi++){
+      var swc = swTab.cands[swi];
+      if (swc && named(swc.sym) && isDir(swc.dir)){
+        push('swingtab', swc.dir, 'SWING CLEAN ' + swc.dir.toUpperCase() + ' — 7/7 gates + plan');
+        swHit = true; break;
+      }
+    }
+    if (!swHit) hush('swingtab', 'symbol not in the latest SWING CLEAN list');
+  }
+
+  /* ---- BEST tab #1 snapshot ---- */
+  var bestTab = (typeof G.bestScan === 'function') ? G.bestScan() : null;
+  if (!bestTab || !Array.isArray(bestTab.clean) || !bestTab.clean.length){ hush('besttab', 'BEST tab has not published a winner — run BEST once'); }
+  else{
+    var bHit = false;
+    for (var bi = 0; bi < bestTab.clean.length; bi++){
+      var bw = bestTab.clean[bi];
+      if (bw && named(bw.sym) && isDir(bw.dir)){
+        push('besttab', bw.dir, 'BEST CLEAN ' + bw.dir.toUpperCase()
+          + (isFinite(bw.famScore) ? ' · ' + bw.famScore + '/9 families' : ''));
+        bHit = true; break;
+      }
+    }
+    if (!bHit) hush('besttab', 'symbol not in the latest BEST CLEAN pool');
   }
 
   /* ---- CARRY — cross-venue funding spread context (not a tier alone) ---- */
@@ -2134,6 +2202,40 @@ function cvdAssess(series){
       confirmsShort: recent <= 0.95 && recent <= prior + 0.05
     };
   }catch(e){ return null; }
+}
+
+/** Shared CVD + OBI trap read for BEST / EDGE / BRAIN (BEST policy: hard veto). */
+function flowTrapAssess(takerSeries, bookDepth, dir){
+  try{
+    var out = { veto: false, reason: '', cvdAligned: false, obiAligned: false, flowOk: false };
+    if (dir !== 'long' && dir !== 'short') return out;
+    var a = takerSeries ? cvdAssess(takerSeries) : null;
+    if (a){
+      if (dir === 'long' && a.severeLongTrap){
+        out.veto = true;
+        out.reason = 'SEVERE CVD DIVERGENCE: Sellers dumping into long';
+      } else if (dir === 'short' && a.severeShortTrap){
+        out.veto = true;
+        out.reason = 'SEVERE CVD DIVERGENCE: Buyers squeezing short';
+      }
+      if ((dir === 'long' && a.confirmsLong) || (dir === 'short' && a.confirmsShort)) out.cvdAligned = true;
+    }
+    if (bookDepth && isFinite(+bookDepth.bidUsd) && isFinite(+bookDepth.askUsd)){
+      var bid = +bookDepth.bidUsd, ask = +bookDepth.askUsd, tot = bid + ask;
+      if (tot > 200000){
+        var obiVal = (bid - ask) / tot;
+        if (dir === 'long'){
+          if (obiVal >= 0.33) out.obiAligned = true;
+          if (obiVal <= -0.33){ out.veto = true; out.reason = out.reason || 'SPOOF TRAP: Heavy ASK wall blocking long'; }
+        } else {
+          if (obiVal <= -0.33) out.obiAligned = true;
+          if (obiVal >= 0.33){ out.veto = true; out.reason = out.reason || 'SPOOF TRAP: Heavy BID wall blocking short'; }
+        }
+      }
+    }
+    out.flowOk = out.cvdAligned || out.obiAligned;
+    return out;
+  }catch(e){ return { veto: false, reason: '', cvdAligned: false, obiAligned: false, flowOk: false }; }
 }
 function applyCvd(rows){
   try{
@@ -5421,6 +5523,8 @@ G.__hgBrainRsiDiv = rsiDivergence;
 /* wick-adaptive stop + CVD seams */
 G.__hgBrainWickBuf = wickBuffer;
 G.__hgBrainCvd = cvdAssess;
+G.hgFlowTrapAssess = flowTrapAssess;
+G.flowTrapAssess = flowTrapAssess;
 /* post-fetch layer seams — integration-tested without a full synthesis run */
 G.__hgBrainApplyStructure = applyStructure;
 G.__hgBrainApplyMeanrev = applyMeanrev;
