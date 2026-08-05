@@ -81,8 +81,9 @@ assert(fr3.fresh.length === 1, 'same setup after 15 min can alert again');
 
 const cleanBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true }]);
 assert(cleanBody.indexOf('7/7 CLEAN SETUP') >= 0, 'clean header when all rows are 7/7');
-assert(cleanBody.indexOf('Entry 100') >= 0 && cleanBody.indexOf('SL 95') >= 0 && cleanBody.indexOf('TP1 110') >= 0,
-       'format includes Entry / SL / TP1 labels');
+assert(cleanBody.indexOf('COIN: BTCUSD') >= 0 && cleanBody.indexOf('ENTRY:') >= 0
+       && cleanBody.indexOf('STOP LOSS:') >= 0 && cleanBody.indexOf('TAKE PROFIT 1:') >= 0,
+       'format includes explicit COIN / ENTRY / STOP LOSS / TAKE PROFIT labels');
 
 const body = hgTabAlertsFormat([{ src: 'BRAIN PRIME', sym: 'ETHUSD', dir: 'short', entry: 2000, stop: 2050, t1: 1900, prime: true, tier: 'PRIME', clean7: true }]);
 assert(body.indexOf('STRONG SETUP') >= 0 && body.indexOf('PRIME') >= 0, 'PRIME rows tagged strong');
@@ -148,8 +149,9 @@ assert(goldCollected.length === 2 && goldCollected.every(c => c.goldConvicted),
 assert(!goldCollected.some(c => c.id === 'gs2'), 'non-convicted grade-B scalp skipped');
 const goldRun = await WGold.hgTabAlertsRunGold({ force: true });
 assert(goldRun.pushed === 2 && WGold._tg.indexOf('GOLD CONVICTION') >= 0
-       && WGold._tg.indexOf('Entry 2400') >= 0 && WGold._tg.indexOf('GOLD SCALP') >= 0,
-       'gold conviction telegram batch with entry/SL/TP');
+       && WGold._tg.indexOf('COIN:') >= 0 && WGold._tg.indexOf('STOP LOSS:') >= 0
+       && WGold._tg.indexOf('GOLD SCALP') >= 0,
+       'gold conviction telegram batch with explicit COIN / ENTRY / SL / TP');
 
 const WBrainNoClean = loadWithWindow({
   __hgBrainLast: () => ({

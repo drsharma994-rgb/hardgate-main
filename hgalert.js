@@ -92,6 +92,57 @@ function gfn(name){
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   return null;
 }
+function alertFmtPx(n){
+  var x = +n;
+  if (!(typeof x === 'number' && isFinite(x))) return '—';
+  var a = Math.abs(x);
+  var d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 6 : 8;
+  try{ return Number(x).toLocaleString('en-US', { maximumFractionDigits: d }); }catch(e){ return String(x); }
+}
+/** COIN / ENTRY / STOP LOSS / TAKE PROFIT — shared by sniper + squeeze Telegram pushes. */
+function alertPlanBlock(sym, dir, entry, stop, t1, t2){
+  var ext = gfn('hgTelegramPlanBlock');
+  if (ext){
+    try{ return ext({ sym: sym, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 }); }catch(e){}
+  }
+  var lines = [
+    'COIN: ' + String(sym || '—'),
+    'SIDE: ' + String(dir || '—').toUpperCase(),
+    'ENTRY: ' + alertFmtPx(entry),
+    'STOP LOSS: ' + alertFmtPx(stop),
+    'TAKE PROFIT 1: ' + alertFmtPx(t1)
+  ];
+  if (t2 !== null && t2 !== undefined && isFinite(+t2)) lines.push('TAKE PROFIT 2: ' + alertFmtPx(t2));
+  return lines.join('\n');
+}
+function sniperTelegramBlocks(hits){
+  var blocks = [];
+  for (var i = 0; i < hits.length && blocks.length < 5; i++){
+    var h = hits[i];
+    if (!h || !h.sym) continue;
+    var head = String(h.sym) + ' ' + String(h.dir || '').toUpperCase()
+      + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ')';
+    blocks.push(head + '\n' + alertPlanBlock(h.sym, h.dir, h.entry, h.stop, h.t1, null));
+  }
+  if (hits.length > 5) blocks.push('+' + (hits.length - 5) + ' more on the BRAIN sniper board');
+  return blocks.length ? blocks.join('\n\n') : '—';
+}
+function squeezeTelegramBlocks(hits){
+  var blocks = [];
+  for (var i = 0; i < hits.length && blocks.length < 5; i++){
+    var h = hits[i];
+    if (!h || !h.sym) continue;
+    var head = String(h.sym) + ' ' + String(h.dir || '').toUpperCase()
+      + ' (' + (h.kind === 'break' ? 'DONCHIAN BREAK' : 'FIRED') + ')';
+    var e = (h.entry === null || h.entry === undefined) ? NaN : +h.entry;
+    blocks.push(isFinite(e)
+      ? head + '\n' + alertPlanBlock(h.sym, h.dir, h.entry, h.stop, h.t1, null)
+      : head + '\nCOIN: ' + h.sym + '\nSIDE: ' + String(h.dir || '').toUpperCase()
+        + '\nENTRY / STOP LOSS / TAKE PROFIT: see levels on the SQUEEZE tab');
+  }
+  if (hits.length > 5) blocks.push('+' + (hits.length - 5) + ' more on the SQUEEZE tab');
+  return blocks.length ? blocks.join('\n\n') : '—';
+}
 /* OFF-HOURS tag for ticket/sniper pushes — same windows as brain.js
    sessionWindow (Sunday, or 01:00-06:30 IST). Prefers the brain's own seam
    (__hgBrainSession) so app and alerts never disagree; falls back to the same
@@ -481,7 +532,7 @@ function onSniper(hits){
     var txt = '🎯 HARDGATE SNIPER SETUP\n'
       + 'Tab: BRAIN tab (sniper board)\n'
       + 'Signal: 20x-grade resting limit in/approaching zone\n'
-      + __sniperDesc
+      + sniperTelegramBlocks(hits)
       + '\n20x-grade resting limit, mark in/approaching the zone.' + validUntil
       + offHoursTag()
       + '\nhttps://hardgate-main.onrender.com/';
@@ -560,7 +611,7 @@ function onSqueeze(hits){
     var txt = '🌀 HARDGATE SQUEEZE\n'
       + 'Tab: SQUEEZE tab\n'
       + 'Signal: TTM squeeze fired or Donchian break\n'
-      + desc
+      + squeezeTelegramBlocks(hits)
       + '\nTTM squeeze fired / Donchian break — momentum release, confirm on the SQUEEZE tab.'
       + offHoursTag()
       + '\nhttps://hardgate-main.onrender.com/';

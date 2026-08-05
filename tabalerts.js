@@ -690,6 +690,31 @@ function levHint(entry, stop){
   return ' · lev ~' + lev + 'x';
 }
 
+/** Adaptive price string for Telegram plan rows (mirrors index.html px()). */
+function tabAlertFormatPx(v){
+  var n = +v;
+  if (!fin(n)) return '—';
+  var a = Math.abs(n);
+  var d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 6 : 8;
+  try{
+    return Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
+  }catch(e){ return String(n); }
+}
+
+/** One setup — explicit COIN / ENTRY / STOP LOSS / TAKE PROFIT block. */
+function hgTabAlertsPlanBlock(s){
+  s = s || {};
+  var lines = [
+    'COIN: ' + String(s.sym || '—'),
+    'SIDE: ' + String(s.dir || '—').toUpperCase(),
+    'ENTRY: ' + tabAlertFormatPx(s.entry),
+    'STOP LOSS: ' + tabAlertFormatPx(s.stop),
+    'TAKE PROFIT 1: ' + tabAlertFormatPx(s.t1)
+  ];
+  if (s.t2 !== null && s.t2 !== undefined && fin(+s.t2)) lines.push('TAKE PROFIT 2: ' + tabAlertFormatPx(s.t2));
+  return lines.join('\n');
+}
+
 function hgTabAlertsFormat(fresh){
   var lines = [];
   for (var i = 0; i < (fresh || []).length; i++){
@@ -701,11 +726,13 @@ function hgTabAlertsFormat(fresh){
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';
     if (s.clean7) extra += ' · 7/7 CLEAN';
+    var plan = hgTabAlertsPlanBlock(s).split('\n').map(function(l){ return '  ' + l; }).join('\n');
+    var lev = levHint(s.entry, s.stop);
     lines.push(tag + s.sym + ' ' + s.dir.toUpperCase()
       + '\n  Tab/source: ' + s.src
-      + '\n  Entry ' + s.entry + ' · SL ' + s.stop + ' · TP1 ' + s.t1
-      + (s.t2 !== null ? ' · TP2 ' + s.t2 : '')
-      + levHint(s.entry, s.stop) + extra);
+      + '\n' + plan
+      + (lev ? '\n  ' + lev.replace(/^ · /, '') : '')
+      + extra);
   }
   if (!lines.length) return '';
   var allGoldConv = fresh.length && fresh.every(function(x){ return x.goldConvicted === true; });
@@ -724,8 +751,8 @@ function hgTabAlertsFormat(fresh){
   return hdr
     + '\nTab: 15-min alert cycle (tabalerts.js)'
     + '\nSignal: ' + (allGoldConv
-        ? 'GOLD SCALP / GOLD SWING — MOST PROBABLE banner or grade-A locked conviction only (entry · SL · TP)'
-        : (allClean ? '7/7 gate-clean tickets with entry, stop-loss, and take-profit' : 'fresh scanner hits from tabs listed per row below'))
+        ? 'GOLD SCALP / GOLD SWING — MOST PROBABLE banner or grade-A locked conviction only (each row: COIN · ENTRY · STOP LOSS · TAKE PROFIT)'
+        : (allClean ? '7/7 gate-clean tickets — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT' : 'fresh scanner hits — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT'))
     + '\n\n' + lines.join('\n\n')
     + '\n\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
     + '\n' + SITE;
@@ -872,6 +899,7 @@ W.hgTabAlertsRunGold = function(opts){
 /* Node test / CI exports */
 if (typeof module !== 'undefined' && module.exports){
   module.exports = { hgTabAlertsCollect, hgTabAlertsCollectGold, hgTabAlertsFresh, hgTabAlertsFormat,
+    hgTabAlertsPlanBlock, tabAlertFormatPx,
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
     LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_GOLD_LAST_RUN,
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,

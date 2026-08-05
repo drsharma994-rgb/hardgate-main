@@ -107,7 +107,7 @@ assert(html.includes("$('ntfyTopic').value = t"), 'ntfy topic prefilled on load 
 
 /* ================= 3. email failure visibility (functional, mocked emailjs) ================= */
 {
-  const code = [grabFn('emailErrStr'), grabFn('logAlertLine'), grabFn('sendAlertPush'), grabFn('sendAlertEmail'), grabFn('sendGoldAlertEmail')].join('\n');
+  const code = [grabFn('hgTelegramPlanBlock'), grabFn('emailErrStr'), grabFn('logAlertLine'), grabFn('sendAlertPush'), grabFn('sendAlertEmail'), grabFn('sendGoldAlertEmail')].join('\n');
   const savedLogs = [];
   const fetchCalls = [];
   const loggedSetups = [];
