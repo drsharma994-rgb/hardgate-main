@@ -333,8 +333,8 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
     { sym: 'ACE', dir: 'short', entry: 0.085, stop: 0.089, t1: 0.077, lev: 24, state: 'IN ZONE' },
     { sym: 'B', dir: 'long', entry: 10, stop: 9.7, t1: 10.6, lev: 20, state: 'APPROACHING' }
   ]);
-  ok(body.indexOf('ACE SHORT @ 0.085 (24x, IN ZONE) · stop 0.089 · T1 0.077') >= 0,
-     'sniper body: levels + leverage + state spelled out — got "' + body.split('\n')[0] + '"');
+  ok(body.indexOf('COIN: ACE') >= 0 && body.indexOf('STOP LOSS:') >= 0 && body.indexOf('TAKE PROFIT 1:') >= 0,
+     'sniper body: explicit COIN / ENTRY / SL / TP block — got "' + body.split('\n')[0] + '"');
   ok(sniperBody(Array.from({ length: 7 }, function(_, i){ return { sym: 'S' + i, dir: 'long', entry: i + 1, stop: i, t1: i + 2, lev: 25, state: 'IN ZONE' }; }))
        .indexOf('+2 more') >= 0,
      'sniper body: long hit lists truncate with a +N more tail');
@@ -357,9 +357,10 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(bestLegKey({ key: 'X|long|1', sym: 'X', dir: 'long', entry: 1 }) === 'X|long|1',
      'best leg key: prefers embedded key field');
   const body = bestBody('delta', { sym: 'EDENUSD', dir: 'short', entry: 0.12, stop: 0.13, t1: 0.10, rr: 2.5, famScore: 7, robScore: 2 });
-  ok(body.indexOf('EDENUSD SHORT (Delta India)') >= 0 && body.indexOf('entry 0.12 · stop 0.13 · target 0.1') >= 0
-     && body.indexOf('7/9 families') >= 0,
-     'best body: exchange label + levels + family score');
+  ok(body.indexOf('COIN: EDENUSD') >= 0 && body.indexOf('ENTRY:') >= 0
+     && body.indexOf('STOP LOSS:') >= 0 && body.indexOf('TAKE PROFIT 1:') >= 0
+     && body.indexOf('Venue: Delta India') >= 0 && body.indexOf('7/9 families') >= 0,
+     'best body: explicit plan block + venue + family score');
 }
 
 /* ---------------- alert-check.mjs daily digest helpers ---------------- */
@@ -429,7 +430,11 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   const sb = squeezeBody(rows.filter(r => r.kind !== 'build'));
   ok(sb.indexOf('SOLUSDT LONG (FIRED)') >= 0 && sb.indexOf('ACEUSDT SHORT (DONCHIAN BREAK)') >= 0,
      'squeezeBody: kind spelled honestly (FIRED vs DONCHIAN BREAK)');
-  ok(sb.indexOf('levels on the SQUEEZE tab') >= 0, 'squeezeBody: no levels server-side -> points at the tab');
+  ok(sb.indexOf('ENTRY / STOP LOSS / TAKE PROFIT: open the SQUEEZE tab') >= 0,
+     'squeezeBody: no levels -> honest pointer with labeled fields');
+  const withPlan = squeezeBody([{ sym: 'ONUSDT', dir: 'long', kind: 'fired', entry: 0.316, stop: 0.29, t1: 0.35 }]);
+  ok(withPlan.indexOf('COIN: ONUSDT') >= 0 && withPlan.indexOf('STOP LOSS:') >= 0 && withPlan.indexOf('TAKE PROFIT 1:') >= 0,
+     'squeezeBody: carries full plan when levels are present');
   const many = [];
   for (let i = 0; i < 8; i++) many.push({ sym: 'S' + i, dir: 'long', kind: 'fired' });
   ok(squeezeBody(many).indexOf('+3 more') >= 0, 'squeezeBody: >5 rows summarized honestly');
@@ -449,8 +454,9 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(m.length === 2, 'mergeSetups: invalid rows dropped (null entry/stop/t1, zero risk)');
   ok(m[0].sym === 'BTCUSDT' && m[0].src === 'BRAIN PRIME + EXECUTE STRONG' && m[0].t2 === 110.5,
      'mergeSetups: same sym+dir merges, sources join, t2 survives');
-  ok(setupsBody(m).indexOf('· BTCUSDT LONG [BRAIN PRIME + EXECUTE STRONG] @ 100 · SL 97 · TP 106 · T2 110.5') >= 0,
-     'setupsBody: entry/SL/TP/T2 spelled with both source badges');
+  ok(setupsBody(m).indexOf('COIN: BTCUSDT') >= 0 && setupsBody(m).indexOf('STOP LOSS:') >= 0
+     && setupsBody(m).indexOf('TAKE PROFIT 1:') >= 0 && setupsBody(m).indexOf('BRAIN PRIME + EXECUTE STRONG') >= 0,
+     'setupsBody: explicit plan block with source badges');
   const now = Date.UTC(2026, 6, 29, 12, 0);
   const f1 = freshSetups({}, m, now);
   ok(f1.fresh.length === 2 && Object.keys(f1.keys).length === 2, 'freshSetups: empty memory -> all fresh');
@@ -499,10 +505,10 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
      'fmtL: 6 significant digits, garbage as —');
   const body = watchBody(fires);
   ok(body.indexOf('BNBUSDT SHORT — TTM squeeze FIRED (4h, 0 bars ago)') >= 0
-     && body.indexOf('entry 568.87 · SL 576.511 · TP 553.588') >= 0,
-     'watchBody: fired line + formatted levels');
+     && body.indexOf('COIN: BNBUSDT') >= 0 && body.indexOf('STOP LOSS:') >= 0 && body.indexOf('TAKE PROFIT 1:') >= 0,
+     'watchBody: fired line + explicit plan levels');
   ok(body.indexOf('SPCXUSDT LONG — TTM squeeze FIRED (4h, 2 bars ago)') >= 0
-     && body.indexOf('levels on the SQUEEZE tab') >= 0,
+     && body.indexOf('ENTRY / STOP LOSS / TAKE PROFIT: open the SQUEEZE tab') >= 0,
      'watchBody: plan-less fire honestly points at the tab');
 }
 

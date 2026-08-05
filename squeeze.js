@@ -473,9 +473,23 @@ function publishSqueezeState(results){
     for (i = 0; i < results.length; i++){
       r = results[i];
       if (!r) continue;
-      rows.push({ sym: r.sym,
-                  dir: (r.dir === 'long' || r.dir === 'short') ? r.dir : null,
-                  kind: r.kind });
+      var row = {
+        sym: r.sym,
+        dir: (r.dir === 'long' || r.dir === 'short') ? r.dir : null,
+        kind: r.kind
+      };
+      if ((r.kind === 'fired' || r.kind === 'break') && row.dir){
+        try{
+          var pubPlan = squeezePlan({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind });
+          if (pubPlan && isFinite(+pubPlan.entry) && isFinite(+pubPlan.stop) && isFinite(+pubPlan.t1)){
+            row.entry = +pubPlan.entry;
+            row.stop = +pubPlan.stop;
+            row.t1 = +pubPlan.t1;
+            if (isFinite(+pubPlan.t2)) row.t2 = +pubPlan.t2;
+          }
+        }catch(ePub){}
+      }
+      rows.push(row);
       syms.push(r.sym);
     }
     var at = Date.now();

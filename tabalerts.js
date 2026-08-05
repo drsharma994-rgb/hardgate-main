@@ -549,6 +549,11 @@ function collectLiqs(out){
 }
 
 function collectSqueeze(out){
+  function sqCleanFromRow(r){
+    if (!r || r.kind !== 'fired') return false;
+    if (r.cls && r.cls.trendAgree === false) return false;
+    return true;
+  }
   var fn = gfn('squeezeState');
   if (!fn) return;
   var val = null;
@@ -559,12 +564,22 @@ function collectSqueeze(out){
     var r = rows[i];
     if (!r || (r.kind !== 'fired' && r.kind !== 'break')) continue;
     if (r.dir !== 'long' && r.dir !== 'short') continue;
+    if (fin(+r.entry) && fin(+r.stop) && fin(+r.t1)){
+      pushSetup(out, 'SQUEEZE', { sym: r.sym, dir: r.dir, entry: r.entry, stop: r.stop, t1: r.t1, t2: r.t2 }, {
+        prime: sqCleanFromRow(r),
+        tier: r.kind === 'fired' ? 'FIRED' : 'BREAK',
+        clean7: sqCleanFromRow(r),
+        gatesPassed: sqCleanFromRow(r) ? 7 : 6,
+        gatesTotal: 7
+      });
+      continue;
+    }
     var p = null;
     if (planFn){
-      try{ p = planFn({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h }); }catch(eP){}
+      try{ p = planFn({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind }); }catch(eP){}
     }
     if (!p || !fin(+p.entry) || !fin(+p.stop) || !fin(+p.t1)) continue;
-    var sqClean = r.kind === 'fired' && r.cls && r.cls.trendAgree !== false;
+    var sqClean = sqCleanFromRow(r) || (r.kind === 'fired' && !(r.cls && r.cls.trendAgree === false));
     pushSetup(out, 'SQUEEZE', { sym: r.sym, dir: r.dir, entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2 },
       {
         prime: sqClean,
@@ -876,7 +891,7 @@ W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
-  return hgTabAlertsRun({ allSources: true });
+  return hgTabAlertsRun({ allSources: true, cleanOnly: true });
 };
 W.hgTabAlertsRunEdge = function(opts){
   opts = opts || {};

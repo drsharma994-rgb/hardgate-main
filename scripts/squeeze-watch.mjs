@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { telegramPlanBlock } from '../lib/telegram-plan.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const STATE_FILE = path.join(ROOT, 'scripts', '.squeeze-watch-state.json');
@@ -112,11 +113,14 @@ function watchBody(fires){
   const lines = fires.slice(0, 6).map(function(f){
     const p = f.plan;
     const lev = p ? levIdea(p.entry, p.stop) : null;
-    return '· ' + f.sym + ' ' + f.dir.toUpperCase() + ' — TTM squeeze FIRED (4h, ' + f.firedAgo
-      + ' bar' + (f.firedAgo === 1 ? '' : 's') + ' ago)'
-      + (p ? '\n  entry ' + fmtL(p.entry) + ' · SL ' + fmtL(p.stop) + ' · TP ' + fmtL(p.t1) + ' · T2 ' + fmtL(p.t2)
-             + (lev !== null ? ' · lev ~' + lev + 'x' : '')
-           : '\n  levels on the SQUEEZE tab');
+    const head = '· ' + f.sym + ' ' + f.dir.toUpperCase() + ' — TTM squeeze FIRED (4h, ' + f.firedAgo
+      + ' bar' + (f.firedAgo === 1 ? '' : 's') + ' ago)';
+    if (p && Number.isFinite(+p.entry) && Number.isFinite(+p.stop) && Number.isFinite(+p.t1)){
+      return head + '\n' + telegramPlanBlock({ sym: f.sym, dir: f.dir, entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2 })
+        + (lev !== null ? '\nlev ~' + lev + 'x' : '');
+    }
+    return head + '\nCOIN: ' + f.sym + '\nSIDE: ' + f.dir.toUpperCase()
+      + '\nENTRY / STOP LOSS / TAKE PROFIT: open the SQUEEZE tab';
   });
   return lines.join('\n') + (fires.length > 6 ? '\n+' + (fires.length - 6) + ' more' : '')
     + '\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
