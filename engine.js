@@ -989,11 +989,14 @@ function cardHTML(r){
     ? '<div class="plan">' + planText(s) + safeLevChipHtml(s.entry, s.stop) + '</div>'
     : '<div class="plan">Levels unavailable — size down. All 6 gates passed but neither the setup builder nor the universal hgPlanLevels fallback could compute levels from the 4h structure. Direction is real; levels are not. Do not improvise them.</div>';
   var chartBox = s ? '<div class="engineChart" data-sym="' + symHtml + '" style="height:180px;margin-top:8px"></div>' : '';
-  var tradeBtn = (s && typeof toTrade === 'function')
-    ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+  var tradeOnclick = (s && (typeof G.hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+    ? ((typeof G.hgToTradePlanOnclickAttr === 'function')
+      ? G.hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: exStack, scanner: 'execute', strategy: 'execute' })
+      : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof G.bookBtnHTML === 'function')
     ? G.bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, {
       scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta', t2: s.t2, stack: exStack

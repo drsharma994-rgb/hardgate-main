@@ -271,11 +271,14 @@ function trendmxPlanBlock(r){
   var inner = '<b>' + escH(r.sym) + '</b> ' + dir.toUpperCase() + ' · '
     + (s ? trendmxPlanHTML(s)
          : 'levels unavailable — 4h history was not cached for this row or ATR' + TM_ATR_LEN + ' is not computable; nothing is estimated.');
-  var btn = (s && typeof toTrade === 'function')
-    ? ' <button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+  var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+    ? ((typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: tmStack, scanner: 'trendmx', strategy: 'trendmx' })
+      : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var btn = tradeOnclick
+    ? ' <button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function')
     ? ' ' + bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1,
       { scanner: 'trendmx', strategy: 'trendmx', t2: s.t2, stack: tmStack }) : '';

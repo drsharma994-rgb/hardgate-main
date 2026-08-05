@@ -320,11 +320,14 @@ function squeezePlanBlock(inp, extra){
     ? squeezePlanHTML(s)
     : 'levels unavailable — need a direction, 4h history and a computable ATR' + ATR_LEN + '; nothing is estimated.';
   if (extra) inner += '. ' + extra + '.';
-  var btn = (s && typeof toTrade === 'function' && inp && inp.sym)
-    ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(inp.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+  var tradeOnclick = (s && inp && inp.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+    ? ((typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(inp.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: s.stack, scanner: 'squeeze', strategy: 'squeeze' })
+      : ('toTrade(' + JSON.stringify(inp.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var btn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function' && inp && inp.sym)
     ? bookBtnHTML(inp.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'squeeze', strategy: 'squeeze', t2: s.t2, stack: s.stack }) : '';
   var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';

@@ -331,11 +331,14 @@ function cardHTML(r){
       + ' · T1 = sma' + MEAN_LEN + ' mean · T2 = opposite band(' + BB_LEN + ',' + BB_MULT + ')</div>'
     : '<div class="plan">levels unavailable — ATR/band data missing for ' + esc(r.sym) + '</div>';
 
-  var tradeBtn = (lv && typeof toTrade === 'function')
-    ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(sig.dir) + ',' + lv.entry + ',' + lv.stop + ',' + lv.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+  var tradeOnclick = (lv && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+    ? ((typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { t2: lv.t2, stack: mrStack, scanner: 'meanrev', strategy: 'meanrev' })
+      : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(sig.dir) + ',' + lv.entry + ',' + lv.stop + ',' + lv.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (lv && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(r.sym, sig.dir, lv.entry, lv.stop, lv.t1, { scanner: 'meanrev', strategy: 'meanrev', t2: lv.t2, stack: mrStack }) : '';
 

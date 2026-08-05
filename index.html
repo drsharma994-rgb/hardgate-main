@@ -1831,10 +1831,11 @@ function smartCardHTML(r){
       + (s.entryGuidance ? '<div class="note" style="margin-top:4px;font-size:11px">' + s.entryGuidance + '</div>' : '')
       + (typeof hgPlanMetaLabel === 'function' && hgPlanMetaLabel(s) ? ' <span class="note">(' + hgPlanMetaLabel(s) + ')</span>' : '')
     : regime + 'Direction is an evidence majority, not a signal — confirm 4H structure, funding window and R:R on the SWING/SCALP tab before trading it.';
-  const tradeBtn = s ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+  const tradeOnclick = s ? ((typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: s.stack || null, scanner: 'smart', strategy: 'smart' })
+    : ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')) : '';
+  const tradeBtn = tradeOnclick ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1,
     { scanner: 'smart', strategy: 'smart', t2: s.t2, stack: s.stack || null }) : '';
   const venueChip = r.venue === 'cdcx'
@@ -3706,11 +3707,12 @@ async function runGold(){
         const t1=casc==='long'?entry+2*risk:entry-2*risk, t2=casc==='long'?entry+3*risk:entry-3*risk;
         logSetup(GOLD_SYM, casc, 'gold-swing', entry, stop, t1);
         gsPlan = {dir:casc, entry:entry, stop:stop, t1:t1, t2:t2};
+        const gsStack = inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-swing', clean: true });
         swingPlanHtml = `<div class="plan">${planBlock(casc,entry,stop,t1,t2)}</div>
           <div class="hgchart" id="goldSwingChart"></div>
-          <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop},${t1})">SEND TO TRADE PLAN →</button>`
+          <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(GOLD_SYM,casc,entry,stop,t1,{t2:t2,stack:gsStack,scanner:'gold-swing',strategy:'gold-swing'}):('toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')')}">SEND TO TRADE PLAN →</button>`
           + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-swing', strategy: 'gold-swing', klass: 'metals', fund: 'gold', t2: t2,
-            stack: inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-swing', clean: true }) });
+            stack: gsStack });
       }
     } else {
       sg.push(['GS7','Structural R:R ≥ 2','na','no direction to measure']);
@@ -3783,10 +3785,11 @@ async function runGold(){
           const t1=dir==='long'?lastClose+2*risk:lastClose-2*risk;
           const t2=isFinite(oppo)?oppo:(dir==='long'?lastClose+3*risk:lastClose-3*risk);
           logSetup(GOLD_SYM, dir, 'gold-scalp', lastClose, stop, t1);
+          const gcStack = inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-scalp', clean: true });
           planHtml=`<div class="plan">${planBlock(dir,lastClose,stop,t1,oppo)}</div>
-            <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop},${t1})">SEND TO TRADE PLAN →</button>`
+            <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(GOLD_SYM,dir,lastClose,stop,t1,{t2:t2,stack:gcStack,scanner:'gold-scalp',strategy:'gold-scalp'}):('toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+lastClose+','+stop+','+t1+')')}">SEND TO TRADE PLAN →</button>`
             + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { scanner: 'gold-scalp', strategy: 'gold-scalp', klass: 'metals', fund: 'gold', t2: t2,
-              stack: inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-scalp', clean: true }) });
+              stack: gcStack });
         }
       } else {
         g.push(['GC6','2R fits before the opposite pool','na','needs a completed sweep + reclaim first']);
@@ -4099,9 +4102,10 @@ async function runGoldDeep(){
       swingPlanHtml='<div class="plan">'+planBlock(casc,entry,stop,t1,t2||t1)+'</div>';
       if(score>=60){
         logSetup(GOLD_SYM,casc,'gold-deep-swing',entry,stop,t1);
-        swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')">SEND TO TRADE PLAN →</button>';
+        const gdSwingStack = inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-deep-swing', clean: score>=60, asset: 'gold' });
+        swingPlanHtml+='<button class="toTrade" onclick="' + (typeof hgToTradePlanOnclickAttr === 'function' ? hgToTradePlanOnclickAttr(GOLD_SYM, casc, entry, stop, t1, { t2: t2, stack: gdSwingStack, scanner: 'gold-deep-swing', strategy: 'gold-deep-swing' }) : ('toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')')) + '">SEND TO TRADE PLAN →</button>';
         swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-deep-swing', strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold', t2: t2,
-          stack: inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-deep-swing', clean: score>=60 }) });
+          stack: gdSwingStack });
       }
     }
     setProg('goldDeepProg',0.6);
@@ -4195,9 +4199,10 @@ async function runGoldDeep(){
         planHtml='<div class="plan">'+planBlock(dir,scalpEntry,scalpStop,scalpT1,scalpT2||scalpT1)+'</div>';
         if(scoreC>=50&&swept&&reclaimed){
           logSetup(GOLD_SYM,dir,'gold-deep-scalp',scalpEntry,scalpStop,scalpT1);
-          planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')">SEND TO TRADE PLAN →</button>';
+          const gdScalpStack = inlineScanStack(dir, GOLD_SYM, m15, { style: 'gold-deep-scalp', clean: scoreC>=50, asset: 'gold' });
+          planHtml+='<button class="toTrade" onclick="' + (typeof hgToTradePlanOnclickAttr === 'function' ? hgToTradePlanOnclickAttr(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { t2: scalpT2, stack: gdScalpStack, scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp' }) : ('toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')')) + '">SEND TO TRADE PLAN →</button>';
           planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold', t2: scalpT2,
-            stack: inlineScanStack(dir, GOLD_SYM, m15, { style: 'gold-deep-scalp', clean: scoreC>=50 }) });
+            stack: gdScalpStack });
         }
       }
       return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
@@ -4453,6 +4458,7 @@ async function runGoldSetup(){
     }
     const dir = decision.dir;
     const risk = Math.abs(decision.entry - decision.stop);
+    const gsSetupStack = inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-setup', clean: decision.confidence === 'STRONG', asset: 'gold' });
     out.innerHTML = '<div class="card ' + dir + '">'
       + '<div class="chead"><span class="sym">XAUTUSD · GOLD SETUP</span><span class="dir">' + dir.toUpperCase() + ' · ' + decision.confidence + '</span></div>'
       + '<div class="mini">'
@@ -4465,9 +4471,11 @@ async function runGoldSetup(){
       + '</div>'
       + '<div class="gates">' + stampsHtml + '</div>'
       + '<div class="hgchart" id="goldSetupChart"></div>'
-      + '<button class="toTrade" onclick="toTrade(\'' + GOLD_SYM + '\',\'' + dir + '\',' + decision.entry + ',' + decision.stop + ',' + decision.t1 + ')">SEND TO TRADE PLAN →</button>'
+      + '<button class="toTrade" onclick="' + (typeof hgToTradePlanOnclickAttr === 'function'
+        ? hgToTradePlanOnclickAttr(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { t2: decision.t2, stack: gsSetupStack, scanner: 'gold-setup', strategy: 'gold-setup' })
+        : ('toTrade(\'' + GOLD_SYM + '\',\'' + dir + '\',' + decision.entry + ',' + decision.stop + ',' + decision.t1 + ')')) + '">SEND TO TRADE PLAN →</button>'
       + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { scanner: 'gold-setup', strategy: 'gold-setup', klass: 'metals', fund: 'gold', t2: decision.t2,
-        stack: inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-setup', clean: decision.confidence === 'STRONG' }) })
+        stack: gsSetupStack })
       + '</div>';
     if (typeof hgMiniChart === 'function') hgMiniChart($('goldSetupChart'), h4, { dir: dir, entry: decision.entry, stop: decision.stop, t1: decision.t1, t2: decision.t2 });
     if (stat) stat.textContent = decision.confidence.toLowerCase() + ' ' + dir + ' · closed bars only · ' + new Date().toTimeString().slice(0,5);
@@ -4926,7 +4934,7 @@ async function runBest(opts){
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
-        <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
+        <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
         ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
@@ -4983,7 +4991,7 @@ async function runBest(opts){
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
-        <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
+        <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
         ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
@@ -6171,9 +6179,10 @@ function renderStrategy(label, result, opts){
         Object.assign({}, meta, { t2: result.t2, stack: finderStack })) + '</div>';
     }
     const t2v = isFinite(result.t2) ? result.t2 : '';
-    tradeBtn = '<button class="toTrade" style="margin-top:8px" onclick="toTrade('
-      + JSON.stringify(sym) + ',' + JSON.stringify(result.dir) + ',' + result.entry + ',' + result.stop + ',' + result.t1
-      + (t2v !== '' ? ',' + t2v : '') + ')">SEND TO TRADE PLAN →</button>';
+    const finderTradeOnclick = (typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(sym, result.dir, result.entry, result.stop, result.t1, { t2: t2v || null, stack: finderStack, scanner: meta.scanner || 'finder', strategy: meta.strategy || 'finder' })
+      : ('toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(result.dir) + ',' + result.entry + ',' + result.stop + ',' + result.t1 + (t2v !== '' ? ',' + t2v : '') + ')');
+    tradeBtn = '<button class="toTrade" style="margin-top:8px" onclick="' + finderTradeOnclick + '">SEND TO TRADE PLAN →</button>';
   }
   return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${finderStackHtml}${tradeBtn}${bookBtn}</div>`;
 }

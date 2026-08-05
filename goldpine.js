@@ -398,7 +398,9 @@ function cardHTML(s, rank){
     + '<div class="plan">' + (typeof W.planBlock === 'function'
       ? W.planBlock(s.dir, s.entry, s.stop, s.t1, s.t2, s.planSrc || 'Gold Pine')
       : ('ENTRY ' + pxF(s.entry) + ' · SL ' + pxF(s.stop) + ' · T1 ' + pxF(s.t1))) + '</div>'
-    + '<button class="toTrade" onclick="toTrade(\'XAUUSD\',\'' + s.dir + '\',' + s.entry + ',' + s.stop + ',' + s.t1 + ')">SEND TO TRADE PLAN →</button>'
+    + ((typeof W.hgToTradePlanOnclickAttr === 'function')
+      ? '<button class="toTrade" onclick="' + W.hgToTradePlanOnclickAttr('XAUUSD', s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: gpStack, scanner: 'goldpine', strategy: s.mode || 'goldpine' }) + '">SEND TO TRADE PLAN →</button>'
+      : '<button class="toTrade" onclick="toTrade(\'XAUUSD\',\'' + s.dir + '\',' + s.entry + ',' + s.stop + ',' + s.t1 + ')">SEND TO TRADE PLAN →</button>')
     + (typeof W.hgBookBtn === 'function'
       ? W.hgBookBtn('XAUUSD', s.dir, s.entry, s.stop, s.t1, { scanner: 'goldpine', strategy: s.mode, t2: s.t2, stack: gpStack })
       : '')

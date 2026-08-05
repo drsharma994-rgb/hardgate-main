@@ -383,11 +383,14 @@ function cardHTML(r){
       + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
       + (s.note ? ' — ' + s.note : '')
     : oiflowPlan(r);
-  var tradeBtn = (s && typeof toTrade === 'function')
-    ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+  var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+    ? ((typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: s.stack, scanner: 'oiflow', strategy: 'oiflow' })
+      : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'oiflow', strategy: 'oiflow', t2: s.t2, stack: s.stack }) : '';
   var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';

@@ -145,6 +145,7 @@ var edgeJs = fs.readFileSync(path.join(root, 'edge.js'), 'utf8');
 var macroJs = fs.readFileSync(path.join(root, 'macro.js'), 'utf8');
 ok(squeezeJs.indexOf("t2: s.t2") >= 0, 'squeeze book CTA passes T2 runner');
 ok(edgeJs.indexOf('t2: p.t2') >= 0, 'edge book CTA passes T2 runner');
+ok(edgeJs.indexOf('hgToTradePlanOnclickAttr') >= 0 || edgeJs.indexOf('hgToTradePlan') >= 0, 'edge trade handoff uses hgToTradePlan helper');
 ok(macroJs.indexOf('t2: t2') >= 0 && macroJs.indexOf('macroGoldPlan') >= 0,
   'macro gold plan includes T2 for book add');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,

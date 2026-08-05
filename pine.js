@@ -535,7 +535,9 @@ function cardHTML(sig){
     + '<div class="plan">' + (typeof W.planBlock === 'function'
       ? W.planBlock(sig.dir, sig.entry, sig.stop, sig.t1, sig.t2, sig.planSrc || '')
       : ('ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · T1 ' + pxF(sig.t1))) + '</div>'
-    + '<button class="toTrade" onclick="toTrade(\'' + esc(sig.sym) + '\',\'' + sig.dir + '\',' + sig.entry + ',' + sig.stop + ',' + sig.t1 + ')">SEND TO TRADE PLAN →</button>'
+    + ((typeof W.hgToTradePlanOnclickAttr === 'function')
+      ? '<button class="toTrade" onclick="' + W.hgToTradePlanOnclickAttr(sig.sym, sig.dir, sig.entry, sig.stop, sig.t1, { t2: sig.t2, stack: sig.stack, scanner: 'pine', strategy: sig.scriptId || 'pine' }) + '">SEND TO TRADE PLAN →</button>'
+      : '<button class="toTrade" onclick="toTrade(\'' + esc(sig.sym) + '\',\'' + sig.dir + '\',' + sig.entry + ',' + sig.stop + ',' + sig.t1 + ')">SEND TO TRADE PLAN →</button>')
     + (typeof W.hgBookBtn === 'function'
       ? W.hgBookBtn(sig.sym, sig.dir, sig.entry, sig.stop, sig.t1, { scanner: 'pine', strategy: sig.scriptId, t2: sig.t2 })
       : '')
