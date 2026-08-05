@@ -485,6 +485,8 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       votes: agree,
       allVotes: votes,
       plan: plan,
+      rows4h: rows4h,
+      rows1h: rows1h,
       mark: (ticker && isFinite(ticker.mark)) ? ticker.mark : (rows4h.length ? rows4h[rows4h.length - 1].c : null)
     };
   }catch(e){ return null; }
@@ -496,6 +498,24 @@ function klassChip(k){
     index: 'INDEX', fx: 'FX', etf: 'ETF', share: 'SHARE'
   };
   return labels[k] || String(k || '').toUpperCase();
+}
+
+function stCardStack(r){
+  try{
+    var p = r && r.plan;
+    var stackFn = (typeof W.hgSetupStackForInlineScan === 'function') ? W.hgSetupStackForInlineScan : null;
+    if (!p || !stackFn || !r.dir) return null;
+    var asset = (String(r.klass || '').toLowerCase().indexOf('metal') >= 0) ? 'gold' : 'crypto';
+    var clean = r.tier === 'PRIME' || r.tier === 'HIGH';
+    return stackFn({
+      dir: r.dir, sym: r.sym, rows4h: r.rows4h, style: 'startrader', asset: asset,
+      clean: clean, nearClean: !clean,
+      gatesPassed: clean ? 7 : (r.tier === 'WATCH' ? 5 : 6), gatesTotal: 7,
+      positioning: { items: (r.votes || []).slice(0, 4).map(function(v){
+        return { label: v.src, detail: v.detail || '', align: v.dir === r.dir ? 'with' : 'against' };
+      }) }
+    });
+  }catch(e){ return null; }
 }
 
 function cardHTML(r){
@@ -518,13 +538,16 @@ function cardHTML(r){
     if (k === 'fx' || k === 'index' || k === 'commodity') return 'macro';
     return 'swing';
   })();
+  var stStack = stCardStack(r);
+  var stackHtml = (stStack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(stStack) : '';
   var bookBtn = (entry != null && stop != null && typeof W.bookBtnHTML === 'function')
     ? W.bookBtnHTML(r.sym, r.dir, entry, stop, t1, {
       scanner: 'startrader',
       fund: stFund,
       strategy: 'startrader', tier: r.tier, klass: r.klass, venue: 'startrader',
       layers: (r.votes || []).map(function(v){ return v.src; }),
-      t2: p && isFinite(p.t2) ? p.t2 : null
+      t2: p && isFinite(p.t2) ? p.t2 : null,
+      stack: stStack
     }) : '';
   var tradeBtn = (entry != null && stop != null && typeof W.toTrade === 'function')
     ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir)
@@ -538,7 +561,7 @@ function cardHTML(r){
     + '<span class="k">confluence</span><span>' + r.points + ' pts · ' + r.votes.length + ' reads agree</span>'
     + '<span class="k">strategies</span><span>' + esc(voteTxt) + '</span>'
     + '<span class="k">mark</span><span>' + pxF(r.mark) + '</span>'
-  + '</div>' + planBlk + tradeBtn + bookBtn + '</div>';
+  + '</div>' + planBlk + stackHtml + tradeBtn + bookBtn + '</div>';
 }
 
 var __st = { busy: false, ranOnce: false, run: null };
@@ -784,6 +807,7 @@ W.stEdgeHasCore = stEdgeHasCore;
 W.stBuildContext = stBuildContext;
 W.stContextVotes = stContextVotes;
 W.stWarmContext = stWarmContext;
+W.cardHTML = cardHTML;
 
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'startrader', label: 'STAR TRADER', mount: mount, refresh: startraderTabRefresh });
