@@ -1931,57 +1931,8 @@ console.log('== volume microstructure ==');
 }
 
 /* =========================================================================
-   ConvictionLockManager — unit smoke (conviction-lock.js)
-========================================================================= */
-console.log('== conviction lock manager ==');
-{
-  const Mgr = W.ConvictionLockManager;
-  assert(typeof Mgr === 'function', 'ConvictionLockManager exported');
-  assert(typeof W.applyHardgateConvictionLock === 'function', 'applyHardgateConvictionLock exported');
-  const mgr = new Mgr({ type: 'scalp' });
-  assert(mgr.generateID('sweep', 'long', 2300.5) === 'sweep|long|2301', 'generateID rounds anchor');
-  const setup = {
-    id: 'ob|long|100', type: 'scalp', direction: 'long', sym: 'XAUUSDT',
-    levels: { entry: 100, stopLoss: 99, tp1: 102, tp2: 104, anchor: 100 },
-    tally: 5
-  };
-  const lock1 = mgr.lockConviction(Object.assign({}, setup), Date.now(), 2);
-  assert(lock1.action === 'NEW_LOCK', 'lockConviction: first lock -> NEW_LOCK');
-  const lock2 = mgr.lockConviction(Object.assign({}, setup, { tally: 7 }), Date.now(), 2);
-  assert(lock2.action === 'MERGED' && lock2.setup.tally === 7, 'lockConviction: within 0.5×ATR -> MERGED');
-  const oldSetup = {
-    type: 'scalp', direction: 'long', id: 'x|long|1',
-    levels: { stopLoss: 99, tp1: 102 },
-    timestamp: Date.now() - 7 * 3600 * 1000
-  };
-  const expired = mgr.evaluateSetup(oldSetup, { t: DAY, o: 100, h: 101, l: 99, c: 100.5, v: 1 },
-    true, false, Date.now());
-  assert(expired === 'EXPIRED', 'evaluateSetup: scalp TTL exceeded -> EXPIRED');
-  const tpHit = mgr.evaluateSetup(
-    { type: 'scalp', direction: 'long', id: 'x', timestamp: Date.now(),
-      levels: { stopLoss: 99, tp1: 101 } },
-    { t: DAY, o: 100, h: 101.5, l: 99.5, c: 100.2, v: 1 }, true, false, Date.now());
-  assert(tpHit === 'TARGET HIT', 'evaluateSetup: TP1 wick hit without close through tp1');
-  const fromCand = mgr.fromCandidate({ dir: 'long', stratKey: 'ob', entry: 100, stop: 99, t1: 102,
-    macroHint: 'TAILWIND' }, 'scalp');
-  assert(fromCand.macroHint === 'TAILWIND', 'fromCandidate: preserves macroHint');
-  const rec = mgr.toRecord(fromCand);
-  assert(rec.macroHint === 'TAILWIND', 'toRecord: persists macroHint');
-  mgr.hydrateFromRecord(rec, rec.id);
-  const hydrated = mgr.activeConvictions.get(rec.id);
-  assert(hydrated && hydrated.macroHint === 'TAILWIND', 'hydrateFromRecord: restores macroHint');
-  const decaySetup = {
-    type: 'scalp', direction: 'long', id: 'x|long|100', timestamp: Date.now(),
-    executionState: 'FULL_RISK_ON', executionBarIndex: 0,
-    levels: { stopLoss: 99, tp1: 101, entry: 100, entryPrice: 100 }
-  };
-  const decayStatus = mgr.evaluateSetup(decaySetup,
-    { t: DAY, o: 100, h: 100.2, l: 99.8, c: 99.9, v: 1 }, true, false, Date.now(), 9);
-  assert(decayStatus === 'MOMENTUM DECAY', 'evaluateSetup: time decay closes stale scalp');
-}
-
-/* =========================================================================
    SMC & market structure — goldSwings + goldMarketStructure + goldOrderBlockAt
+   (conviction-lock unit tests live in tests/test-conviction-lock.mjs)
 ========================================================================= */
 console.log('== SMC market structure ==');
 {
