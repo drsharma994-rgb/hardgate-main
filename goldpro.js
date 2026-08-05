@@ -377,10 +377,23 @@ function renderMacroPanel(macro, funding, ls){
 
 /* EXECUTION LEVELS panel: exact ENTRY/STOP/T1/T2 for the live 4H gold setup,
    or an honest reason when no levels can be computed. oiflow.js plan markup. */
+function goldProCardStack(o){
+  try{
+    var p = o && o.plan;
+    if (!p || typeof hgSetupStackForInlineScan !== 'function') return null;
+    return hgSetupStackForInlineScan({
+      dir: p.dir, sym: 'XAUUSDT', rows4h: o.rows4h || null, style: 'goldpro', asset: 'gold',
+      clean: true, gatesPassed: 7, gatesTotal: 7
+    });
+  }catch(e){ return null; }
+}
+
 function renderLevelsPanel(o){
   var h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span></h2>';
   if (!o || !o.plan) return h + '<div class="note warn">' + esc((o && o.reason) || 'levels unavailable.') + '</div></div>';
   var p = o.plan;
+  var gpStack = goldProCardStack(o);
+  var stackHtml = (gpStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(gpStack) : '';
   h += '<div class="row">'
      + '<span class="statuschip">dir <b>' + esc(p.dir.toUpperCase()) + '</b></span>'
      + '<span class="statuschip">4H cascade <b>' + esc(String(o.cascade || '').toUpperCase()) + '</b></span>'
@@ -397,6 +410,7 @@ function renderLevelsPanel(o){
                      : ' — stop = 1.5×ATR14(4H)')
      + '</div>';
   if (o.note) h += '<div class="note" style="margin-top:6px">' + esc(o.note) + '</div>';
+  h += stackHtml;
   if (typeof bookBtnHTML === 'function'){
     h += bookBtnHTML('XAUUSD', p.dir, p.entry, p.stop, p.t1, {
       scanner: 'goldpro',
@@ -404,7 +418,8 @@ function renderLevelsPanel(o){
       strategy: 'goldpro',
       klass: 'metals',
       layers: ['goldpro', '4h-levels'],
-      t2: p.t2
+      t2: p.t2,
+      stack: gpStack
     });
   }
   return h + '</div>';
@@ -587,7 +602,7 @@ async function runGoldPro(ui){
 
     ui.out.innerHTML = renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,
-                                           src: lvSrc, rowsN: lvRowsN, cascade: lvCascade })
+                                           src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows })
                      + renderMacroPanel(macro, funding, ls)
                      + renderCorrPanel(cr, corrErr)
                      + renderVerdictPanel(verdict);

@@ -251,11 +251,23 @@ function trendmxPlanHTML(s){
 
 /* expandable-row block for one matrix row; uses the scan-cached 4h rows —
    never refetches. */
+function trendmxCardStack(r, dir){
+  try{
+    if (!dir || typeof hgSetupStackForInlineScan !== 'function') return null;
+    return hgSetupStackForInlineScan({
+      dir: dir, sym: r.sym, rows4h: r.rows4h, style: 'trendmx', asset: 'crypto',
+      clean: Math.abs(r.score || 0) >= TM_MAJORITY, nearClean: Math.abs(r.score || 0) >= TM_MAJORITY
+    });
+  }catch(e){ return null; }
+}
+
 function trendmxPlanBlock(r){
   var dir = tmDirOf(r);
   if (!dir)
     return '<div class="plan">No majority direction on this row (|score| &lt; ' + TM_MAJORITY + ') — no levels.</div>';
   var s = trendmxPlan({ dir: dir, rows4h: r.rows4h, rows1h: r.rows1h });
+  var tmStack = trendmxCardStack(r, dir);
+  var stackHtml = (tmStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(tmStack) : '';
   var inner = '<b>' + escH(r.sym) + '</b> ' + dir.toUpperCase() + ' · '
     + (s ? trendmxPlanHTML(s)
          : 'levels unavailable — 4h history was not cached for this row or ATR' + TM_ATR_LEN + ' is not computable; nothing is estimated.');
@@ -265,8 +277,9 @@ function trendmxPlanBlock(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function')
-    ? ' ' + bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'trendmx', strategy: 'trendmx', t2: s.t2 }) : '';
-  return '<div class="plan">' + inner + btn + bookBtn + '</div>';
+    ? ' ' + bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1,
+      { scanner: 'trendmx', strategy: 'trendmx', t2: s.t2, stack: tmStack }) : '';
+  return '<div class="plan">' + inner + stackHtml + btn + bookBtn + '</div>';
 }
 
 var COLS = [
