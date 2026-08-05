@@ -198,7 +198,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <div class="header-drawer" id="headerDrawer">
     <div class="header-drawer-inner">
       <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
-      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button></span>
+      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button><button id="autoRef900000" type="button" onclick="setAutoRefresh('900000')">15m</button></span>
       <span class="statuschip" id="autoRefreshCount" style="display:none"></span>
       <span class="statuschip" id="hardRefreshStat"></span>
       <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
@@ -743,7 +743,8 @@ const HG_ALERTS_FORCED_ON = true;
 const HG_BEST_ALERT_MS = 15 * 60 * 1000;
 const HG_TAB_ALERT_MS = 15 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
-const HG_ALERTS_AUTO_REFRESH_MS = 180000;
+const HG_ALERTS_AUTO_REFRESH_MS = 900000;
+const HG_CANDLE_TTL_QUIET = 300;
 
 function hgExLabel(ex){
   ex = ex || S.exchange;
@@ -775,16 +776,29 @@ function hgCardVenueSym(sym, venueTag){
   return '[' + venueTag + '] ' + sym;
 }
 async function withExchange(ex, fn){
-  const prevEx = S.exchange, prevTickers = S.tickers, prevCache = S.candleCache;
+  const prevEx = S.exchange, prevTickers = S.tickers;
   S.exchange = ex;
   S.tickers = [];
-  S.candleCache = {};
+  /* Keep S.candleCache — keys are exchange-prefixed; wiping/restoring dropped
+     every dual-leg fetch and forced redundant network on the second venue. */
   try{ return await fn(); }
   finally{
     S.exchange = prevEx;
     S.tickers = prevTickers;
-    S.candleCache = prevCache;
   }
+}
+function hgMacroFeedsFresh(maxAgeMs){
+  maxAgeMs = (maxAgeMs > 0) ? maxAgeMs : 4 * 60 * 1000;
+  try{
+    const st = window.__hgGoldYieldState;
+    if (st && st.at && Date.now() - st.at < maxAgeMs) return true;
+  }catch(e){}
+  return false;
+}
+function hgCandleCacheTtl(opts){
+  if (opts && opts.quiet) return HG_CANDLE_TTL_QUIET;
+  if ((S.scanQuietDepth || 0) > 0 || S.alertBusy) return HG_CANDLE_TTL_QUIET;
+  return 60;
 }
 async function hgForEachDualExchange(fn, opts){
   opts = opts || {};
@@ -1090,9 +1104,10 @@ function hgBarIsForming(rows, res){
 }
 async function getCandles(sym, res, count, opts){
   opts = opts || {};
+  const ttl = hgCandleCacheTtl(opts);
   const key = `${S.exchange}|${sym}|${res}|${count}|${opts.forming ? 'F' : 'C'}`;
   const hit = S.candleCache[key];
-  if (hit && (nowSec()-hit.at) < 60) return hit.rows;
+  if (hit && (nowSec()-hit.at) < ttl) return hit.rows;
   let raw = S.exchange==='delta' ? await candlesDelta(sym,res,count)
     : (S.exchange==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
   const closed = dropForming(raw, res);
@@ -1141,10 +1156,12 @@ async function waitAlertIdle(statEl){
    the app (GS/GC ledgers, backtests, SMC/OB gold rows, market picture, finder)
    enters through here, so they all inherit the chain + the DATA chip. */
 const GOLD_SRC_LABEL = { 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
-async function getXAUCandles(res, count){
+async function getXAUCandles(res, count, opts){
+  opts = opts || {};
+  const ttl = hgCandleCacheTtl(opts);
   const key = 'xau|' + res + '|' + count;
   const hit = S.candleCache[key];
-  if (hit && (nowSec()-hit.at) < 60) return hit.rows;
+  if (hit && (nowSec()-hit.at) < ttl) return hit.rows;
   if (typeof getGoldCandles !== 'function') throw new Error('macro.js not loaded — gold data layer missing');
   const out = await getGoldCandles(res, count);
   if (!out || !out.rows || !out.rows.length) throw new Error('XAUUSD data unavailable from all sources (Binance PAXG, Twelve Data, Yahoo GC=F)');
@@ -3133,6 +3150,10 @@ async function runScan(kind, opts){
 async function runScanLeg(kind, opts){
   opts = opts || {};
   const quiet = !!(opts && opts.quiet);
+  if (quiet) S.scanQuietDepth = (S.scanQuietDepth || 0) + 1;
+  const scanQuietDone = function(){
+    if (quiet) S.scanQuietDepth = Math.max(0, (S.scanQuietDepth || 1) - 1);
+  };
   const skipUiClear = !!(opts && opts.skipUiClear);
   const venueTag = opts.venueTag || '';
   const dualLast = opts.dualLast !== false;
@@ -3180,7 +3201,7 @@ async function runScanLeg(kind, opts){
     const flipRecords = [];
     const flipVenue = venueTag || S.exchange || '';
     const t0scan = Date.now();
-    const CHUNK_SIZE = 5;
+    const CHUNK_SIZE = quiet ? 8 : 5;
     for (let ci = 0; ci < uni.length; ci += CHUNK_SIZE){
       const chunk = uni.slice(ci, ci + CHUNK_SIZE);
       await Promise.all(chunk.map(async function(t, idxInChunk){
@@ -3228,8 +3249,10 @@ async function runScanLeg(kind, opts){
             }
           } else {
             if (typeof scalpTryClean !== 'function') return;
-            const h1 = await getCandles(t.symbol, '1h', 120);
-            const m15 = await getCandles(t.symbol, '15m', 160);
+            const [h1, m15] = await Promise.all([
+              getCandles(t.symbol, '1h', 120, quiet ? { quiet: true } : undefined),
+              getCandles(t.symbol, '15m', 160, quiet ? { quiet: true } : undefined)
+            ]);
             if (typeof scalpGateMatrix === 'function'){
               const sm = scalpGateMatrix(h1, m15, t, minsToFunding);
               if (sm && sm.dir){
@@ -3255,7 +3278,7 @@ async function runScanLeg(kind, opts){
           }
         }catch(e){ audit.errors++; }
       }));
-      await sleep(150);
+      await sleep(quiet ? 60 : 150);
     }
     const topFail = Object.keys(audit.fail).sort(function(a, b){ return audit.fail[b] - audit.fail[a]; }).slice(0, 3);
     const failNote = topFail.length ? (' · top blocks: ' + topFail.join(', ')) : '';
@@ -3292,6 +3315,7 @@ async function runScanLeg(kind, opts){
     if (!quiet && dualLast) statEl.textContent = 'scan failed: ' + e.message;
     return null;
   }finally{
+    scanQuietDone();
     if (!quiet && dualLast) setProg(isSwing ? 'swingProg' : 'scalpProg', null);
     if (!quiet && dualLast) btn.disabled = false;
   }
@@ -3321,8 +3345,10 @@ async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
         const w = swingWatchEval(rows, t, { unconfirmed: unconf });
         if (w) items.push(w);
       } else {
-        const h1 = await getCandles(t.symbol, '1h', 120);
-        const m15 = await getCandles(t.symbol, '15m', 160, { forming: true });
+        const [h1, m15] = await Promise.all([
+          getCandles(t.symbol, '1h', 120, quiet ? { quiet: true } : undefined),
+          getCandles(t.symbol, '15m', 160, Object.assign({ forming: true }, quiet ? { quiet: true } : {}))
+        ]);
         const unconf = typeof hgBarIsForming === 'function' && hgBarIsForming(m15, '15m');
         const w = scalpWatchEval(h1, m15, t, minsToFunding, { unconfirmed: unconf });
         if (w) items.push(w);
@@ -3349,20 +3375,31 @@ async function cryptoScanWarm(kind){
 }
 async function hgWarmLayerIds(ids){
   const reg = (typeof HG_warmups !== 'undefined' && Array.isArray(HG_warmups)) ? HG_warmups : [];
+  const jobs = [];
   for (const w of reg){
     if (!w || typeof w.run !== 'function') continue;
     if (ids && ids.length && ids.indexOf(w.id) < 0) continue;
-    try{ await w.run({ quiet: true }); }catch(e){ console.warn('warm ' + (w.id || '?'), e); }
+    jobs.push(w.run({ quiet: true }).catch(function(e){ console.warn('warm ' + (w.id || '?'), e); }));
   }
+  if (jobs.length) await Promise.all(jobs);
 }
 async function runTabAlertScans(){
-  try{ if (typeof updateMacroFeeds === 'function') await updateMacroFeeds(); }catch(e){ console.warn('tab alert macro', e); }
+  const macroP = (async function(){
+    try{
+      if (typeof updateMacroFeeds === 'function' && !hgMacroFeedsFresh()) await updateMacroFeeds();
+    }catch(e){ console.warn('tab alert macro', e); }
+  })();
   try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
   try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
-  try{ if (typeof gsWarm === 'function') await gsWarm(); }catch(e){ console.warn('tab alert gold scalp', e); }
-  try{ if (typeof gwWarm === 'function') await gwWarm(); }catch(e){ console.warn('tab alert gold swing', e); }
-  try{ if (typeof edgeWarm === 'function') await edgeWarm({ quiet: true }); }catch(e){ console.warn('tab alert edge warm', e); }
-  try{ if (typeof pineWarm === 'function') await pineWarm({ quiet: true }); }catch(e){ console.warn('tab alert pine warm', e); }
+  await macroP;
+  await Promise.all([
+    (typeof gsWarm === 'function' ? gsWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert gold scalp', e); }),
+    (typeof gwWarm === 'function' ? gwWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert gold swing', e); })
+  ]);
+  await Promise.all([
+    (typeof edgeWarm === 'function' ? edgeWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert edge warm', e); }),
+    (typeof pineWarm === 'function' ? pineWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert pine warm', e); })
+  ]);
   try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
 }
 
@@ -6342,7 +6379,7 @@ async function hardRefreshAll(){
    the next tick. Every step is feature-checked and try-wrapped: this must
    never throw at load or during ticks. */
 const HG_AUTO_KEY = 'hgAutoRefresh';
-const HG_AUTO_CHOICES = { 'off':0, '120000':120000, '180000':180000, '300000':300000 };
+const HG_AUTO_CHOICES = { 'off':0, '120000':120000, '180000':180000, '300000':300000, '900000':900000 };
 let HG_AUTO_MS = 0;        /* 0 = OFF */
 let HG_AUTO_NEXT = 0;      /* epoch ms of the next scheduled tick */
 let HG_AUTO_TIMER = null;  /* the ONE interval handle; null while OFF */
@@ -6357,7 +6394,7 @@ function hgAutoEls(){
 function hgAutoPaint(){
   try{
     const activeId = HG_AUTO_MS > 0 ? ('autoRef' + HG_AUTO_MS) : 'autoRefOff';
-    ['autoRefOff','autoRef120000','autoRef180000','autoRef300000'].forEach(function(id){
+    ['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRef900000'].forEach(function(id){
       let b = null;
       try{
         if (typeof document !== 'undefined' && document && typeof document.getElementById === 'function')

@@ -39,10 +39,18 @@ async function fetchGoldBars(){
   var out = { rows15m: [], rows1h: [], rows4h: [], rows1d: [], source: null };
   var ggc = gfn('getGoldCandles');
   if (ggc){
-    try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.source = a.source; } }catch(e){}
-    try{ var b = await ggc('1h', KL_1H);  if (b && b.rows && b.rows.length){ out.rows1h = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
-    try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length){ out.rows4h = c.rows; if (!out.source) out.source = c.source; } }catch(e3){}
-    try{ var d = await ggc('1d', KL_1D);  if (d && d.rows && d.rows.length){ out.rows1d = d.rows; if (!out.source) out.source = d.source; } }catch(e4){}
+    try{
+      var legs = await Promise.all([
+        ggc('15m', KL_15M).catch(function(){ return null; }),
+        ggc('1h', KL_1H).catch(function(){ return null; }),
+        ggc('4h', KL_4H).catch(function(){ return null; }),
+        ggc('1d', KL_1D).catch(function(){ return null; })
+      ]);
+      if (legs[0] && legs[0].rows && legs[0].rows.length){ out.rows15m = legs[0].rows; out.source = legs[0].source; }
+      if (legs[1] && legs[1].rows && legs[1].rows.length){ out.rows1h = legs[1].rows; if (!out.source) out.source = legs[1].source; }
+      if (legs[2] && legs[2].rows && legs[2].rows.length){ out.rows4h = legs[2].rows; if (!out.source) out.source = legs[2].source; }
+      if (legs[3] && legs[3].rows && legs[3].rows.length){ out.rows1d = legs[3].rows; if (!out.source) out.source = legs[3].source; }
+    }catch(e){}
   }
   var bk = gfn('binanceKlines');
   if (bk){

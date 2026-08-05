@@ -129,16 +129,9 @@ function collectEdge(out){
     if (c && fin(+c.barAge) && +c.barAge > 0) continue;
     pushSetup(out, 'EDGE', c, { tally: c && c.tally });
   }
-}
-
-function collectEdgeForming(out){
-  var fn = gfn('edgeScan');
-  if (!fn) return;
-  var val = null;
-  try{ val = fn(); }catch(e){ return; }
   var forming = (val && Array.isArray(val.forming)) ? val.forming : [];
-  for (var i = 0; i < forming.length; i++){
-    var w = forming[i];
+  for (var j = 0; j < forming.length; j++){
+    var w = forming[j];
     if (!w || !w.sym || (w.dir !== 'long' && w.dir !== 'short')) continue;
     if (!fin(+w.level) || !fin(+w.mark)) continue;
     if (fin(+w.distAtr) && +w.distAtr > 1.25) continue;
@@ -151,6 +144,10 @@ function collectEdgeForming(out){
       gatesPassed: fin(+w.distAtr) ? Math.max(0, Math.round((1.25 - +w.distAtr) * 4)) : 1
     });
   }
+}
+
+function collectEdgeForming(out){
+  /* merged into collectEdge — kept for callers that invoke it directly */
 }
 
 function collectBrain(out){
@@ -491,7 +488,6 @@ function hgTabAlertsCollect(win){
     collectCrypto(out, 'scalp', 'SCALP');
     collectCryptoWatch(out);
     collectEdge(out);
-    collectEdgeForming(out);
     collectBrain(out);
     collectPine(out);
     collectPineMsb(out);
