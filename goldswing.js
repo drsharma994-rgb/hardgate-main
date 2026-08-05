@@ -560,7 +560,7 @@ function cardHTML(c, isBest, season){
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
-    + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(c.sym, c.dir, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold' }) : '')
+    + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold' }) : '')
     + '</div>'
     + '<div class="gsw-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
     + '<div class="mini">'

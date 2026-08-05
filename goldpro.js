@@ -392,6 +392,11 @@ function renderLevelsPanel(o){
   var h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span></h2>';
   if (!o || !o.plan) return h + '<div class="note warn">' + esc((o && o.reason) || 'levels unavailable.') + '</div></div>';
   var p = o.plan;
+  if (p && p.dir && typeof hgBookStampChip === 'function'){
+    h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span>'
+      + hgBookStampChip('XAUUSD', p.dir, { scanner: 'goldpro', strategy: 'goldpro', fund: 'gold', klass: 'metals' })
+      + '</h2>';
+  }
   var gpStack = goldProCardStack(o);
   var stackHtml = (gpStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(gpStack) : '';
   h += '<div class="row">'

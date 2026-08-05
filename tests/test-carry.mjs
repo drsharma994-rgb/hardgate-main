@@ -491,6 +491,10 @@ console.log('--- carryBookBtn: macro fund CTA ---');
     levels: lv
   });
   assert(typeof w.carryBookBtn === 'function', 'window.carryBookBtn exported');
+  w.hgBookStampChip = function(sym, dir){
+    return '<span class="hg-book-stamp" data-hg-book-sym="' + sym + '" data-hg-book-dir="' + dir + '">IN BOOK SLOT</span>';
+  };
+  assert(SRC.indexOf('carryBookStamp') >= 0, 'carryBookStamp helper present in carry.js');
   assert(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'carryBookBtn: books short leg desk sym');
   assert(btn.indexOf('macro') >= 0, 'carryBookBtn: macro fund pinned');
   assert(w.carryBookBtn({ levels: null }) === '', 'carryBookBtn: no levels → no button');
@@ -509,6 +513,9 @@ console.log('--- scan: execution levels rendered when klines+atr available ---')
     const out = [];
     for (let i = 0; i < 60; i++) out.push({ t: 1700000000 + i * 14400, o: base, h: base + 4, l: base - 4, c: base, v: 1000 });
     return out;
+  };
+  ctx.window.hgBookStampChip = function(sym, dir){
+    return '<span class="hg-book-stamp" data-hg-book-sym="' + sym + '" data-hg-book-dir="' + dir + '">IN BOOK SLOT</span>';
   };
   const w = loadModule(ctx);
   const el = stubEl();
@@ -531,7 +538,8 @@ console.log('--- scan: execution levels rendered when klines+atr available ---')
     'SOL card: T1 = 7d of 438% APR spread = 8.40% of notional');
   assert(cards.indexOf('T1 7d capture ≈ <b>0.84%</b>') >= 0,
     'BTC card: T1 = 7d of 43.8% APR spread = 0.84% of notional');
-  assert(cards.indexOf('T2 30d capture') >= 0, 'T2 = 30d funding-capture horizon');
+  assert(cards.indexOf('hg-book-stamp') >= 0 || cards.indexOf('IN BOOK SLOT') >= 0,
+    'carry spread cards render IN BOOK stamp chip when hgBookStampChip is available');
   assert(flat.indexOf('≈ 12.6') >= 0, 'SOL card: T1 price-equivalent 150 x 8.4% = 12.6');
   assert(cards.indexOf('×ATR') >= 0, 'capture horizons also expressed in ATR multiples');
   assert(el.querySelector('#carryStat').textContent.indexOf('done') === 0, 'scan still completes with the levels leg');

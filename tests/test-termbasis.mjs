@@ -46,6 +46,10 @@ globalThis.bookBtnHTML = function(sym, dir, entry, stop, t1, meta){
 const btn = globalThis.termBasisBookBtn({ pair: 'BTCUSDT', mark: 60000, curve: cont });
 ok(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'termBasisBookBtn renders when plan exists');
 
+const tbSrc = fs.readFileSync(root + 'termbasis.js', 'utf8');
+ok(tbSrc.indexOf('termBasisBookStamp') >= 0 && tbSrc.indexOf('hgBookStampChip') >= 0,
+  'term basis cardHTML wires slotted IN BOOK chip');
+
 const tabs = globalThis.window.HG_tabs || [];
 const mod = tabs.find(t => t && t.id === 'termbasis');
 ok(!!mod && mod.label === 'TERM BASIS' && typeof mod.mount === 'function' && typeof mod.refresh === 'function',
