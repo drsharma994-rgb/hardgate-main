@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = ctx; // browser-style global alias the module registers onto
-for (const f of ['indicators.js', 'indicators2.js', 'trendtable.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'setup-stack.js', 'trendtable.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const G = ctx;
@@ -326,6 +326,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   const blkT = G.trendmxPlanBlock(rowObj);
   assert(blkT.indexOf('SEND TO TRADE PLAN') !== -1 && blkT.indexOf('toTrade(&quot;FAKEUSDT&quot;') !== -1,
          'toTrade present -> SEND TO TRADE PLAN button, sym escaped');
+  assert(blkT.indexOf('hg-stack-row') >= 0, 'plan block renders FTS row when setup-stack loaded');
   delete G.toTrade;
 }
 

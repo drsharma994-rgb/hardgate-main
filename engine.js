@@ -949,8 +949,23 @@ function safeLevChipHtml(entry, stop){
   }catch(e){ return ''; }
 }
 
+function executeCardStack(r){
+  try{
+    var res = r && r.res, s = res && res.plan;
+    var stackFn = (typeof G.hgSetupStackForInlineScan === 'function') ? G.hgSetupStackForInlineScan : null;
+    if (!s || !stackFn) return null;
+    return stackFn({
+      dir: s.dir, sym: r.sym, rows4h: r.rows4h, style: 'execute', asset: 'crypto',
+      clean: true, gatesPassed: res.gatesPassed || 6, gatesTotal: 6,
+      ticker: { turnoverUsd: r.turnoverUsd, fundingPct: r.fundingPct, exchange: r.exchange || 'delta' }
+    });
+  }catch(e){ return null; }
+}
+
 function cardHTML(r){
   var res = r.res, dir = res.dir, s = res.plan;
+  var exStack = executeCardStack(r);
+  var stackHtml = (exStack && typeof G.hgSetupStackMiniHtml === 'function') ? G.hgSetupStackMiniHtml(exStack) : '';
   var symHtml = esc(r.sym);
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
@@ -980,12 +995,14 @@ function cardHTML(r){
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (s && typeof G.bookBtnHTML === 'function')
-    ? G.bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta', t2: s.t2 }) : '';
+    ? G.bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, {
+      scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta', t2: s.t2, stack: exStack
+    }) : '';
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
     + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
-    + verdict + mini + trailHtml + planHtml + chartBox + tradeBtn + bookBtn
+    + verdict + mini + trailHtml + planHtml + stackHtml + chartBox + tradeBtn + bookBtn
     + '</div>';
 }
 
