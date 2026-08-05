@@ -25,7 +25,7 @@ tmux -f /exec-daemon/tmux.portal.conf new-session -d -s hardgate-dev-server -c /
 
 | Task | Command | Notes |
 |------|---------|-------|
-| Unit + integration tests | `npm test` | Offline gate; full suite chain; no network required |
+| Unit + integration tests | `npm test` | Offline gate; full suite chain (includes daemon, CCXT executor, macro-feeds); no network required |
 | Live data smoke test | `node tests/test-data-layer.mjs` | Optional; Binance legs skip on HTTP 451; exits 0 |
 | Additional suites | `node tests/test-<name>.mjs` | See README Tests section |
 | Lint | *(none)* | No ESLint or formatter configured |

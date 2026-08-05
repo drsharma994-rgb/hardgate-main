@@ -1,6 +1,7 @@
 /* HARDGATE — daemon unit tests (no puppeteer / ccxt required). */
 import { StateDatabase } from '../lib/daemon-state.mjs';
 import { filterExecutableBrainRows, brainRowToLockSetup, runMarketScan } from '../lib/daemon-loop.mjs';
+import { brainLiveEligibleRow, filterDaemonBrainRows } from '../lib/brain-robust.mjs';
 import { symToBinanceKlineSymbol } from '../lib/daemon-market.mjs';
 import { convictionUnwindAction, inferSetupTypeFromBrainRow, unwindConvictionOnExchange } from '../lib/daemon-unwind.mjs';
 import { loadConvictionLockManager, hydrateConvictionManager } from '../lib/daemon-conviction.mjs';
@@ -110,6 +111,41 @@ console.log('== hydrate order metadata ==');
   });
   var h = mgr3.activeConvictions.get('brain|long|100|BTCUSDT');
   ok(h && h.orderId === 'ord-99' && h.fillSize === 0.5, 'hydrate restores CCXT metadata');
+}
+
+console.log('== brain live eligibility ==');
+{
+  var primeOk = { tier: 'PRIME', dir: 'long', plan: { entry: 100, stop: 95, t1: 110 }, liveOk: true };
+  var elOk = brainLiveEligibleRow(primeOk);
+  ok(elOk.ok, 'PRIME + liveOk passes brainLiveEligibleRow');
+
+  var primeBadLive = { tier: 'PRIME', dir: 'long', plan: { entry: 100, stop: 95, t1: 110 },
+    liveOk: false, liveReasons: ['spread too wide'] };
+  var elBad = brainLiveEligibleRow(primeBadLive);
+  ok(!elBad.ok && elBad.reasons.indexOf('spread too wide') >= 0, 'liveOk false merges liveReasons');
+
+  var highRow = { tier: 'HIGH', dir: 'long', plan: { entry: 100, stop: 95, t1: 110 }, liveOk: true };
+  ok(!brainLiveEligibleRow(highRow).ok, 'non-PRIME tier rejected in live eligibility');
+
+  var batch = [
+    primeOk,
+    primeBadLive,
+    { sym: 'ETHUSDT', tier: 'PRIME', dir: 'short', plan: { entry: 50, stop: 52, t1: 46 }, liveOk: true },
+    { sym: 'SOLUSDT', tier: 'HIGH', dir: 'long', plan: { entry: 20, stop: 19, t1: 22 }, liveOk: true },
+  ];
+  var liveFiltered = filterDaemonBrainRows(batch, { liveMode: true, tiers: ['PRIME'] });
+  ok(liveFiltered.length === 2, 'liveMode keeps PRIME rows with liveOk true only');
+
+  var prevLive = process.env.HARDGATE_BRAIN_LIVE;
+  process.env.HARDGATE_BRAIN_LIVE = '1';
+  var execLive = filterExecutableBrainRows(batch);
+  ok(execLive.length === 2 && execLive.every(function(r){ return r.tier === 'PRIME'; }),
+    'filterExecutableBrainRows honors HARDGATE_BRAIN_LIVE=1');
+  delete process.env.HARDGATE_BRAIN_LIVE;
+  var execDefault = filterExecutableBrainRows(batch);
+  ok(execDefault.length === 4, 'default filter allows PRIME + HIGH without live gate');
+  if (prevLive === undefined) delete process.env.HARDGATE_BRAIN_LIVE;
+  else process.env.HARDGATE_BRAIN_LIVE = prevLive;
 }
 
 console.log('\n' + pass + ' assertions passed');
