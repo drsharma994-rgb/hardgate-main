@@ -16,13 +16,24 @@ const ok = (cond, label) => {
   console.log('  ok —', label);
 };
 
-function loadBrainRobust(){
+function memStore(){
+  const m = {};
+  return {
+    getItem(k){ return Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null; },
+    setItem(k, v){ m[k] = String(v); },
+    removeItem(k){ delete m[k]; },
+  };
+}
+
+function loadBrainRobust(extra){
+  extra = extra || {};
+  globalThis.localStorage = memStore();
   globalThis.window = globalThis.window || {};
   const W = globalThis.window;
-  W.familyEvOk = function(plan){
+  W.familyEvOk = extra.familyEvOk !== undefined ? extra.familyEvOk : function(plan){
     return !!(plan && isFinite(plan.entry) && isFinite(plan.stop));
   };
-  W.hgTripleStackMatch = function(sym, dir){
+  W.hgTripleStackMatch = extra.hgTripleStackMatch || function(sym, dir){
     return sym === 'BTCUSDT' && dir === 'long';
   };
   vm.runInThisContext(fs.readFileSync(root + 'brainrobust.js', 'utf8'), { filename: 'brainrobust.js' });
@@ -33,7 +44,7 @@ function primeBrowserRow(opts){
   opts = opts || {};
   return {
     sym: opts.sym || 'BTCUSDT',
-    lane: 'crypto',
+    lane: opts.lane || 'crypto',
     dec: { tier: opts.tier || 'PRIME', dir: opts.dir || 'long', agree: 8 },
     plan: opts.plan || { entry: 100, stop: 95, t1: 110, t2: 117.5, confirmed: true, rr1: 2 },
     col: { votes: opts.votes || [], notes: opts.notes || {} },
@@ -127,6 +138,72 @@ console.log('== brainRowRank LIVE boost ==');
   var ineligible = primeBrowserRow({ sym: 'ETHUSDT' });
   ok(W.brainRowRank(eligible) > W.brainRowRank(ineligible),
     'LIVE-eligible PRIME ranks above blocked PRIME');
+}
+
+console.log('== live mode + inv alert toggles ==');
+{
+  const W = loadBrainRobust();
+  W.brainSetLiveMode(true);
+  ok(W.brainLiveModeOn(), 'brainSetLiveMode(true) persists');
+  W.brainSetLiveMode(false);
+  ok(!W.brainLiveModeOn(), 'brainSetLiveMode(false) clears');
+  W.brainSetInvAlerts(true);
+  ok(W.brainInvAlertsOn(), 'brainSetInvAlerts(true) persists when live off');
+  W.brainSetLiveMode(true);
+  ok(W.brainInvAlertsOn(), 'brainInvAlertsOn defaults true when live mode on');
+}
+
+console.log('== brainLiveChipHtml + plan confirm + EV gate ==');
+{
+  const W = loadBrainRobust();
+  var good = primeBrowserRow({});
+  W.brainSetLiveMode(true);
+  ok(W.brainLiveChipHtml(good).indexOf('LIVE OK') >= 0, 'brainLiveChipHtml eligible -> LIVE OK');
+  W.brainSetLiveMode(false);
+  ok(W.brainLiveChipHtml(primeBrowserRow({ sym: 'ETHUSDT' })) === '', 'brainLiveChipHtml blocked hidden when live off');
+  W.brainSetLiveMode(true);
+  ok(W.brainLiveChipHtml(primeBrowserRow({ sym: 'ETHUSDT' })).indexOf('LIVE blocked') >= 0,
+    'brainLiveChipHtml blocked when live mode on');
+
+  W.hgConfirmedCascade = function(){ return true; };
+  ok(W.brainRowPlanConfirmed(primeBrowserRow({ plan: { entry: 1, stop: 2, confirmed: undefined } })),
+    'brainRowPlanConfirmed uses hgConfirmedCascade fallback');
+
+  const W2 = loadBrainRobust({ familyEvOk: () => false });
+  ok(!W2.brainLiveEligible(primeBrowserRow({})).ok, 'familyEvOk false blocks LIVE');
+
+  const W3 = loadBrainRobust({
+    hgTripleStackMatch: (sym, dir) => sym === 'XAUTUSD' && dir === 'long',
+  });
+  var gold = primeBrowserRow({ sym: 'XAUUSD', lane: 'gold' });
+  ok(W3.brainLiveEligible(gold).ok, 'gold lane resolves XAUTUSD for triple stack');
+}
+
+console.log('== crowding partial + liqpool vote + rank boost + constants ==');
+{
+  const W = loadBrainRobust();
+  var fundOnly = primeBrowserRow({
+    votes: [{ layer: 'fundz', vote: 'long', caution: true, text: 'crowded' }],
+  });
+  fundOnly.xu = { fundingPct: 0.002 };
+  W.applyPrimeCrowdingVeto([fundOnly]);
+  ok(fundOnly.dec.tier === 'PRIME', 'funding crowding alone keeps PRIME');
+
+  var oiOnly = primeBrowserRow({
+    votes: [{ layer: 'oiflow', vote: 'long', text: 'NEW LONGS crowded' }],
+  });
+  W.applyPrimeCrowdingVeto([oiOnly]);
+  ok(oiOnly.dec.tier === 'PRIME', 'OI crowding alone keeps PRIME');
+
+  var liqVote = primeBrowserRow({ votes: [{ layer: 'liqpool', vote: 'long', caution: true }] });
+  ok(!W.brainLiveEligible(liqVote).ok, 'liqpool vote caution blocks LIVE');
+
+  var boosted = primeBrowserRow({});
+  var baseRank = W.brainRowRank(boosted);
+  W.hgProfitRankHint = function(){ return { boost: 25 }; };
+  ok(W.brainRowRank(boosted) > baseRank, 'hgProfitRankHint boost raises brainRowRank');
+
+  ok(W.BRAIN_TP1_BARS_SWING === 12 && W.BRAIN_TP1_BARS_SCALP === 24, 'TIME_STOP bar constants exported');
 }
 
 console.log('\n' + pass + ' passed');
