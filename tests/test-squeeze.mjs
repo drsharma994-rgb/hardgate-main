@@ -441,7 +441,7 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   P1.stubs['#sqRun']._handler();
   await waitSq(P1.stubs);
   assert(uniCalls === 1 && P1.stubs['#sqStat'].textContent.indexOf('building 1') >= 0
-         && P1.stubs['#sqCards'].innerHTML.indexOf('BUILDING · WATCH') >= 0,
+         && P1.stubs['#sqCards'].innerHTML.indexOf('BUILDING · FORMING') >= 0,
          '12: user FIND SQUEEZES scan completes with a BUILDING card');
   const sRef1 = await tab2.refresh();
   assert(sRef1 === 'refreshed', '12: refresh after a completed run -> "refreshed" (got "' + sRef1 + '")');
@@ -477,7 +477,7 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   throwAll1d = true;
   const sRef3 = await tab2.refresh();
   const sStat3 = P1.stubs['#sqStat'].textContent, sHtml3 = P1.stubs['#sqCards'].innerHTML;
-  assert(sRef3 === 'refreshed' && sStat3.indexOf('failed 0') >= 0 && sHtml3.indexOf('BUILDING · WATCH') >= 0,
+  assert(sRef3 === 'refreshed' && sStat3.indexOf('failed 0') >= 0 && sHtml3.indexOf('BUILDING · FORMING') >= 0,
          '12: 1d kline outage tolerated (failed 0, BUILDING card survives, trend unknown)');
   throwAll1d = false;
 

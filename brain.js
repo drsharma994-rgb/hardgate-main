@@ -3655,6 +3655,9 @@ function boardCardHTML(c, stamp){
    the plan qualifies — the desk is a radar, never a signal. */
 function watchDeskHTML(rows){
   try{
+    if (typeof G.hgBrainWatchDeskHTML === 'function'){
+      return G.hgBrainWatchDeskHTML(rows, displaySym);
+    }
     rows = Array.isArray(rows) ? rows : [];
     var ws = [], i;
     for (i = 0; i < rows.length; i++){
@@ -3888,10 +3891,13 @@ function cardHTML(row){
     }) : '';
   var chartBox = (plan && row.rows)
     ? '<div class="hgchart brainChart" data-sym="' + esc(row.sym) + '" style="height:190px;margin-top:8px"></div>' : '';
-  return '<div class="card ' + dir + '">'
+  var setupTier = (typeof G.hgBrainSetupTier === 'function') ? G.hgBrainSetupTier(dec.tier) : 'clean';
+  var tierCls = setupTier === 'near' ? ' tier-near' : (setupTier === 'forming' ? ' tier-forming' : '');
+  var tierBadge = (typeof G.hgSetupTierBadge === 'function') ? (' ' + G.hgSetupTierBadge(setupTier, dec.tier)) : '';
+  return '<div class="card ' + dir + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(row.lane === 'gold' ? 'XAU · GOLD' : row.sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + dir.toUpperCase() + '</span> ' + dec.tier
-    + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + venueStamp
+    + ' · ' + dec.agree + ' LAYER' + (dec.agree === 1 ? '' : 'S') + tierBadge + venueStamp
     + (typeof G.hgTripleStackChipHtml === 'function' ? G.hgTripleStackChipHtml(row.sym, dir) : '')
     + (typeof G.brainLiveChipHtml === 'function' ? G.brainLiveChipHtml(row) : '')
     + '</span></div>'
@@ -5163,6 +5169,7 @@ function mount(el){
       + 'Candles are fetched lazily, only for WATCH-or-better candidates (cap 40/scan). '
       + 'The TAPE layer reads 24h Binance momentum + turnover for every overlapping listing (±8% with ≥$10M behind it; ±25% flags fade, never a chase) — no extra fetch.</div>'
       + '</div>'
+      + '<div id="brainDesk"></div>'
       + '<div class="panel" id="brainReadWrap" style="display:none;margin-top:10px"><h2>MARKET READ <span id="brainReadUni"></span></h2>'
       + '<div class="note" id="brainRead" style="font-size:12px;line-height:1.7"></div></div>'
       + '<div class="panel" id="brainTicketWrap" style="display:none;margin-top:10px">'
@@ -5191,6 +5198,12 @@ function mount(el){
       + '<div class="empty" id="brainEmpty" style="display:none">No high-probability setups right now — standing aside is a position.</div>'
       + '<div id="brainFunnel"></div>';
     __mountedEl = el;
+    try{
+      if (typeof G.hgSetupPaintDesk === 'function'){
+        G.hgSetupPaintDesk('brainDesk', { kind: 'brain', tab: 'BRAIN',
+          note: 'PRIME/HIGH = CLEAN tickets with plans. WATCH = FORMING radar — standing aside is a position.' });
+      }else if (typeof G.hgSetupInjectStyles === 'function') G.hgSetupInjectStyles();
+    }catch(eD){}
     ensureStalenessTimer();   /* staleness guard ticks every 60s from first mount */
   }catch(e){
     try{ el.textContent = 'brain mount failed: ' + errMsg(e) + ' — reload the tab'; }catch(e2){}

@@ -370,6 +370,9 @@ function cardHTML(r){
   if (r.fundingZ !== null) fundTxt += ' · z ' + (r.fundingZ >= 0 ? '+' : '') + r.fundingZ.toFixed(2);
   var contra = cls.dir === 'LONG' ? cls.shortEv : cls.longEv;
   var s = r.setup || null;
+  var tier = s ? (s.confirmed ? 'clean' : 'near') : 'forming';
+  var tierCls = tier === 'near' ? ' tier-near' : (tier === 'forming' ? ' tier-forming' : '');
+  var tierLabel = (typeof hgSetupTierLabel === 'function') ? hgSetupTierLabel(tier) : (tier === 'near' ? 'NEAR' : 'CLEAN');
   /* setup badge in the chead, same shape as the SMART $ cards */
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
@@ -388,8 +391,8 @@ function cardHTML(r){
   var bookBtn = (s && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'oiflow', strategy: 'oiflow', t2: s.t2 }) : '';
   var chartBox = s ? '<div class="oiflowChart" data-sym="' + r.sym + '" style="height:180px;margin-top:8px"></div>' : '';
-  return '<div class="card ' + dirLow + '">'
-    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE' + badge + '</span></div>'
+  return '<div class="card ' + dirLow + tierCls + '">'
+    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">mark</span><span>' + PX(r.price) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.pxChg !== null ? PCT(r.pxChg, 2) : '—') + '</span>'
@@ -581,6 +584,7 @@ function mount(el){
       + 'Cards with a readable 4H/1H book get a full plan (ENTRY · STOP · T1 2R · T2 3.5R) from the SMART $ setup builder — local ATR fallback when it is unavailable — plus a chart and one-tap handoff to TRADE PLAN; confirmed setups (4H EMA20/50 cascade) rank first.</div>'
       + '<div class="prog" id="oiflowProg"><i></i></div>'
       + '</div>'
+      + '<div id="oiflowDesk"></div>'
       + '<div class="cards" id="oiflowCards"></div>'
       + '<div class="empty" id="oiflowEmpty" style="display:none">No positioning edges right now — books are balanced.</div>';
     __mountedEl = el;
@@ -596,6 +600,12 @@ function mount(el){
     }
     var btn = el.querySelector('#oiflowRun');
     if (btn) btn.addEventListener('click', function(){ runScan(el); });
+    try{
+      if (typeof hgSetupPaintDesk === 'function'){
+        hgSetupPaintDesk('oiflowDesk', { kind: 'oiflow', tab: 'OI FLOW',
+          note: 'CONFIRMED cascade = CLEAN. UNCONFIRMED positioning edge = NEAR watch-only.' });
+      }else if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+    }catch(eD){}
   }catch(e){ /* never throw at mount */ }
 }
 
