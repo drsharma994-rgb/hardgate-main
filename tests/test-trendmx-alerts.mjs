@@ -28,11 +28,13 @@ function loadTabAlerts(){
 const lib = loadTabAlerts().module.exports;
 const {
   trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
-  hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, LS_TRENDMX_CROSS
+  hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,
+  LS_TRENDMX_LAST_RUN, tabAlertsShouldRun, tabAlertsMarkRun
 } = lib;
 
 assert(typeof hgTrendmxCrossAlertsRun === 'function', 'hgTrendmxCrossAlertsRun exported');
 assert(TRENDMX_CROSS_GAP_MS === 10 * 24 * 60 * 60 * 1000, '10-day golden-cross dedup window');
+assert(TRENDMX_ALERT_CYCLE_MS === 15 * 60 * 1000, '15-min trend matrix alert cycle');
 
 const setup = {
   sym: 'SOLUSDT', dir: 'long', entry: 100, stop: 95, t1: 110, t2: 117.5,
@@ -55,6 +57,13 @@ assert(body.indexOf('COIN: SOLUSDT') >= 0 && body.indexOf('STOP LOSS:') >= 0
        && body.indexOf('TAKE PROFIT 1:') >= 0, 'format includes plan levels');
 assert(body.indexOf('STRONG CONVICTION') >= 0, 'format includes conviction');
 
+assert(body.indexOf('15-min alert cycle') >= 0, 'format states 15-min cycle');
+
+const throttleStore = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+tabAlertsMarkRun({ localStorage: throttleStore }, LS_TRENDMX_LAST_RUN);
+assert(tabAlertsShouldRun({ localStorage: throttleStore }, false, LS_TRENDMX_LAST_RUN, TRENDMX_ALERT_CYCLE_MS) === false,
+       'trendmx 15-min cycle throttle blocks immediate re-run');
+
 const W = loadTabAlerts();
 W.window.trendmxCrossState = () => ({
   at: Date.now(),
@@ -71,7 +80,7 @@ assert(run.pushed === 2 && W._msgs.length === 2, 'sends one Telegram per fresh g
 assert(W._msgs[0] !== W._msgs[1], 'each alert is a separate message');
 
 const run2 = await W.window.hgTrendmxCrossAlertsRun({ skipWarm: true, window: W.window });
-assert(run2.pushed === 0, 'second cycle does not re-alert same symbols');
+assert(run2.pushed === 0 && run2.status === 'throttled-15m', 'second call inside 15-min cycle is throttled');
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

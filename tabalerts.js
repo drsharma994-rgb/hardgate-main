@@ -98,14 +98,15 @@ function tabAlertSourcesAll(){
   };
 }
 
-function tabAlertsShouldRun(root, force, lastRunKey){
+function tabAlertsShouldRun(root, force, lastRunKey, cycleMs){
   if (force) return true;
   lastRunKey = lastRunKey || LS_LAST_RUN;
+  var gap = (cycleMs > 0) ? cycleMs : GAP_MS;
   try{
     var ls = (root && root.localStorage) ? root.localStorage : null;
     if (!ls) return true;
     var t = parseInt(ls.getItem(lastRunKey) || '0', 10);
-    return !(isFinite(t) && t > 0) || (Date.now() - t >= GAP_MS);
+    return !(isFinite(t) && t > 0) || (Date.now() - t >= gap);
   }catch(e){ return true; }
 }
 
@@ -923,10 +924,11 @@ async function hgTabAlertsRun(opts){
 
 /* ---------------- TREND MATRIX golden / bull cross alerts ----------------
    One Telegram message per fresh ⚡GOLDEN setup (not batched). Dedup per symbol
-   for the fresh-cross window (~10 daily bars). Runs after trendmxWarm on the
-   5-min alert cycle. */
+   for the fresh-cross window (~10 daily bars). Scans + pushes every 15 minutes. */
 var LS_TRENDMX_CROSS = 'hg_trendmx_cross_keys';
+var LS_TRENDMX_LAST_RUN = 'hg_trendmx_alert_last_run';
 var TRENDMX_CROSS_GAP_MS = 10 * 24 * 60 * 60 * 1000;
+var TRENDMX_ALERT_CYCLE_MS = 15 * 60 * 1000;
 
 function loadTrendmxCrossKeys(root){
   try{
@@ -978,7 +980,7 @@ function hgTrendmxCrossAlertFormat(s){
   var conv = s.conviction ? String(s.conviction) : (s.tier || 'CONVICTION');
   var extra = s.note ? (' · ' + s.note) : '';
   return tag + 'HARDGATE — TREND MATRIX GOLDEN CROSS\n'
-    + 'Tab: TREND MATRIX · ⚡GOLDEN (EMA50/200 bull cross ≤10 daily bars)\n'
+    + 'Tab: TREND MATRIX · ⚡GOLDEN fresh cross · 15-min alert cycle\n'
     + 'Conviction: ' + conv + ' · ' + sc + ' · ' + adx + extra + '\n\n'
     + s.sym + ' LONG\n'
     + '  Tab/source: TREND MATRIX\n'
@@ -1037,6 +1039,10 @@ function collectTrendmxGolden(out){
 async function hgTrendmxCrossAlertsRun(opts){
   opts = opts || {};
   var root = opts.window || W;
+  if (!tabAlertsShouldRun(root, !!opts.force, LS_TRENDMX_LAST_RUN, TRENDMX_ALERT_CYCLE_MS)){
+    return { pushed: 0, fresh: [], keys: loadTrendmxCrossKeys(root), status: 'throttled-15m' };
+  }
+  if (!opts.dryRun) tabAlertsMarkRun(root, LS_TRENDMX_LAST_RUN);
   var warmFn = gfn('trendmxWarm');
   if (warmFn && !opts.skipWarm){
     try{ await warmFn({ quiet: true, force: !!(opts && opts.force) }); }catch(e){}
@@ -1118,7 +1124,8 @@ if (typeof module !== 'undefined' && module.exports){
     tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
     tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced,
     trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
-    collectTrendmxGolden, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, LS_TRENDMX_CROSS };
+    collectTrendmxGolden, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,
+    LS_TRENDMX_CROSS, LS_TRENDMX_LAST_RUN };
 }
 
 })();

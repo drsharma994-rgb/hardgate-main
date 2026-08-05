@@ -66,6 +66,9 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/LS_GOLD_SEPARATE = 'hgAlertGoldSeparate'/.test(tabalerts), 'tabalerts gold separate batch key');
   ok(/hgTabAlertsRunGold/.test(tabalerts), 'tabalerts exposes hgTabAlertsRunGold');
   ok(/hgTabAlertsRunGold\(\)/.test(html), 'index calls hgTabAlertsRunGold on 5-min cycle');
+  ok(/HG_TRENDMX_ALERT_MS = 15 \* 60 \* 1000/.test(html), 'HG_TRENDMX_ALERT_MS is 15 minutes');
+  ok(/runTrendmxCrossAlerts/.test(html), 'index runs trend matrix cross alerts on 15-min cycle');
+  ok(/TRENDMX_ALERT_CYCLE_MS = 15 \* 60 \* 1000/.test(tabalerts), 'tabalerts trendmx cycle is 15 minutes');
   ok(/hgTrendmxCrossAlertsRun\(\)/.test(html), 'index calls trend matrix golden-cross alerts');
   ok(/trendmxGoldenCrossSetups/.test(fs.readFileSync(root + 'trendtable.js', 'utf8')),
     'trendtable exposes golden cross setup builder');
