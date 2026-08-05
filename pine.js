@@ -255,15 +255,18 @@ function pineUniverseWatchHTML(gate){
   });
 }
 
-function renderPineOut(signals, gate){
+function renderPineOut(signals, gate, opts){
+  opts = opts || {};
+  var cardFn = opts.cardFn || cardHTML;
+  var emptyDetail = opts.emptyDetail
+    || 'none fired NEW, RECENT, or ALIGNED on this scan. Try after the next 4H close or expand EDGE forming watch.';
   var visible = (signals || []).filter(pineSignalVisible);
   if (!visible.length){
     var watch = pineUniverseWatchHTML(gate);
     var n = (gate && gate.eligible) ? gate.eligible.length : 0;
     var tail = n
       ? ('<div class="hg-setup-empty" style="margin-top:12px"><b>No Pine script match on latest bars.</b><br>'
-        + n + ' sym+dir pair(s) in universe — none fired NEW, RECENT, or ALIGNED on this scan. '
-        + 'Try after the next 4H close or expand EDGE forming watch.</div>')
+        + n + ' sym+dir pair(s) in universe — ' + emptyDetail + '</div>')
       : '<div class="empty">No Pine setups.</div>';
     return watch ? (watch + tail) : tail;
   }
@@ -278,17 +281,17 @@ function renderPineOut(signals, gate){
   if (clean.length){
     html += '<div class="hg-setup-near-h" style="color:#047857;border-color:rgba(5,150,105,.35);background:rgba(5,150,105,.08)">'
       + 'CLEAN · ' + clean.length + ' ticket(s) — NEW or EDGE ticket + Pine confirm</div>';
-    html += clean.map(cardHTML).join('');
+    html += clean.map(cardFn).join('');
   }
   if (forming.length){
     html += '<div class="hg-setup-near-h" style="margin-top:14px">FORMING · ' + forming.length
       + ' RECENT bar signal(s) — watch only</div>';
-    html += forming.map(cardHTML).join('');
+    html += forming.map(cardFn).join('');
   }
   if (near.length){
     html += '<div class="hg-setup-near-h" style="margin-top:14px">ALIGNED · ' + near.length
       + ' context match(es) — NEAR watch</div>';
-    html += near.map(cardHTML).join('');
+    html += near.map(cardFn).join('');
   }
   return html;
 }
@@ -352,7 +355,7 @@ function formatPineAlert(sig){
       + '\nMSB + Order Block · limit @ OB'
       + '\nLIMIT ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price) + ' · structure trend ' + (sig.trend > 0 ? 'BULL' : (sig.trend < 0 ? 'BEAR' : 'NEUT'))
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + json;
   }
   if (sig.scriptId === 'squeeze-momentum'){
@@ -364,7 +367,7 @@ function formatPineAlert(sig){
       + '\nmomentum ' + fmtF(sig.momentum, 4)
       + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + sqJson;
   }
   if (sig.scriptId === 'smart-money-flow'){
@@ -376,7 +379,7 @@ function formatPineAlert(sig){
       + '\nflow strength ' + fmtF(sig.smf, 4)
       + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + smfJson;
   }
   if (sig.scriptId === 'half-trend'){
@@ -387,7 +390,7 @@ function formatPineAlert(sig){
       + '\nHalfTrend flip · amplitude ' + (sig.amplitude || 2)
       + '\nENTRY ' + pxF(sig.entry) + ' · trailing SL ' + pxF(sig.trailingStop || sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + htJson;
   }
   if (sig.scriptId === 'smc-core'){
@@ -398,7 +401,7 @@ function formatPineAlert(sig){
       + '\nSMC CHoCH + FVG limit @ zone'
       + '\nZONE ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price) + ' · pivot ' + (sig.pivotLength || 5)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + smcJson;
   }
   if (sig.scriptId === 'vumanchu-cipher'){
@@ -412,7 +415,7 @@ function formatPineAlert(sig){
       + ' · OS ' + (sig.osLevel || -53) + ' · OB ' + (sig.obLevel || 53)
       + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + cipherJson;
   }
   if (sig.scriptId === 'range-filter'){
@@ -424,7 +427,7 @@ function formatPineAlert(sig){
       + '\nFILTER ' + pxF(sig.filterLevel) + ' · rng ' + pxF(sig.rng)
       + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + rfJson;
   }
   if (sig.scriptId === 'nw-envelope'){
@@ -436,7 +439,7 @@ function formatPineAlert(sig){
       + '\nMEAN ' + pxF(sig.meanTarget || sig.nwCenter) + ' · upper ' + pxF(sig.upper) + ' · lower ' + pxF(sig.lower)
       + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + nwJson;
   }
   if (sig.scriptId === 'weekly-avwap'){
@@ -448,7 +451,7 @@ function formatPineAlert(sig){
       + '\nVWAP ' + pxF(sig.targetVwap || sig.vwap) + ' · upper ' + pxF(sig.upper) + ' · lower ' + pxF(sig.lower)
       + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
       + '\nmark ' + pxF(sig.price)
-      + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+      + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
       + '\n' + avJson;
   }
   var action = sig.dir === 'long' ? 'buy' : 'sell';
@@ -458,7 +461,7 @@ function formatPineAlert(sig){
     + '\n' + sig.scriptLabel
     + '\nML score ' + fmtF(sig.smoothedScore, 2) + ' (limit ±' + (sig.scoreLimit || 2) + ')'
     + '\nENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · TP ' + pxF(sig.t1)
-    + '\n7-gate universe: SWING+SCALP+EDGE+BEST+BRAIN+REGIME+TRENDMX'
+    + '\nEDGE+ Pine universe (tickets · forming · soft · SWING fallback)'
     + '\n' + json;
 }
 
@@ -545,7 +548,7 @@ var __pineTab = { busy: false, hasRun: false, run: null };
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
-    + '<h2>PINE SCRIPTS <span>All 10 Pine strategies · EDGE+ universe</span></h2>'
+    + '<h2>CRYPTO PINE <span>All 10 Pine strategies · EDGE+ universe</span></h2>'
     + '<div class="note">Runs <b>every ported Pine script</b> on the expanded <b>EDGE</b> universe: tickets (tally ≥3 + plan), '
     + '<b>forming</b> watchlist, soft tally ≥2, plus REGIME — falls back to <b>SWING CLEAN</b> if EDGE is empty. '
     + 'Shows <b>NEW</b> bar flips, <b>RECENT</b> signals (last 5 bars), and <b>ALIGNED</b> trend/context matches. '
@@ -733,7 +736,7 @@ W.PINE_SCAN_OPTS = PINE_SCAN_OPTS;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
 W.pineWarm = pineWarm;
 W.HG_tabs = W.HG_tabs || [];
-W.HG_tabs.push({ id: 'pine', label: 'PINE', mount: mount, refresh: pineRefresh });
+W.HG_tabs.push({ id: 'pine', label: 'CRYPTO PINE', mount: mount, refresh: pineRefresh });
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'pine', label: 'PINE', run: pineWarm });
 
