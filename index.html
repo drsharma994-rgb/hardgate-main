@@ -3543,7 +3543,7 @@ async function runTabAlertScans(){
     (typeof edgeWarm === 'function' ? edgeWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert edge warm', e); }),
     (typeof pineWarm === 'function' ? pineWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert pine warm', e); })
   ]);
-  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
+  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis', 'trendmx']); }catch(e){ console.warn('tab alert layer warm', e); }
 }
 
 /* Unified 5-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
@@ -3557,6 +3557,9 @@ async function runTabSetupAlerts(){
     }
     if (typeof hgTabAlertsRunGold === 'function'){
       await hgTabAlertsRunGold();
+    }
+    if (typeof hgTrendmxCrossAlertsRun === 'function'){
+      await hgTrendmxCrossAlertsRun();
     }
     S.lastTabAlertCheck = now;
   }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }

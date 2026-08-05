@@ -330,6 +330,30 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   delete G.toTrade;
 }
 
+/* ---------------- 10b) golden-cross alert rows ---------------- */
+{
+  assert(typeof G.trendmxGoldenCrossSetups === 'function', 'trendmxGoldenCrossSetups exported');
+  assert(typeof G.trendmxConviction === 'function', 'trendmxConviction exported');
+  const cxDn = lin(240, 300, -0.8);
+  const cxUp = [];
+  for (let i = 1; i <= 80; i++) cxUp.push(108.8 + i * 2.5);
+  const cxAll = cxDn.concat(cxUp);
+  const gi = G.crossOver(G.ema(cxAll, 50), G.ema(cxAll, 200)).lastIndexOf(true);
+  const cxRows = mkRows(cxAll);
+  const ts = G.trendScore(cxRows.slice(0, gi + 1 + 5), up4);
+  const row = { sym: 'GOLDUSDT', score: ts.score, comps: ts.comps, freshCross: ts.freshCross,
+    adx: ts.adx, price: cxRows[cxRows.length - 1].c, rows4h: up4, rows1h: null };
+  assert(ts.freshCross === 'GOLDEN', 'fixture row has fresh golden cross');
+  const conv = G.trendmxConviction(row);
+  assert(conv && conv.label, 'conviction label for golden row');
+  const setups = G.trendmxGoldenCrossSetups([row]);
+  assert(setups.length >= 1, 'golden cross row yields at least one alert setup');
+  assert(setups[0].entry && setups[0].stop && setups[0].t1, 'setup has entry/stop/t1');
+  assert(setups[0].dir === 'long', 'golden cross setup is long');
+  const flat = G.trendmxGoldenCrossSetups([{ sym: 'X', score: 0, freshCross: null, comps: {}, rows4h: up4 }]);
+  assert(flat.length === 0, 'non-golden rows produce no alert setups');
+}
+
 /* ---------------- 11) HARD REFRESH contract: refresh field + status paths ---------------- */
 {
   const __unhandled = [];

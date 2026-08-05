@@ -177,7 +177,8 @@ console.log('== F) real layer modules publish honest warm hooks ==');
     ['onchain.js', 'onchain', 'ON-CHAIN'],
     ['news.js', 'news', 'NEWS'],
     ['liqs.js', 'liqs', 'LIQS'],
-    ['squeeze.js', 'squeeze', 'SQUEEZE']
+    ['squeeze.js', 'squeeze', 'SQUEEZE'],
+    ['trendtable.js', 'trendmx', 'TREND MATRIX']
   ];
   for (const [file, id, label] of mods){
     globalThis.window = {};

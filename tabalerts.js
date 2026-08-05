@@ -921,6 +921,166 @@ async function hgTabAlertsRun(opts){
   return { pushed: 0, fresh: fr.fresh, keys: prev, status: 'push-failed:' + push, invalidation: invCount };
 }
 
+/* ---------------- TREND MATRIX golden / bull cross alerts ----------------
+   One Telegram message per fresh ⚡GOLDEN setup (not batched). Dedup per symbol
+   for the fresh-cross window (~10 daily bars). Runs after trendmxWarm on the
+   5-min alert cycle. */
+var LS_TRENDMX_CROSS = 'hg_trendmx_cross_keys';
+var TRENDMX_CROSS_GAP_MS = 10 * 24 * 60 * 60 * 1000;
+
+function loadTrendmxCrossKeys(root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (!ls) return {};
+    var raw = ls.getItem(LS_TRENDMX_CROSS);
+    return raw ? JSON.parse(raw) : {};
+  }catch(e){ return {}; }
+}
+
+function saveTrendmxCrossKeys(keys, root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (ls) ls.setItem(LS_TRENDMX_CROSS, JSON.stringify(keys || {}));
+  }catch(e){}
+}
+
+function trendmxCrossSetupKey(s){
+  return 'TRENDMX:GOLDEN:' + String(s.sym || '') + ':long';
+}
+
+function trendmxCrossFreshKeys(prevKeys, list, now, gapMs){
+  var keys = {}, fresh = [];
+  var gap = (gapMs > 0) ? gapMs : TRENDMX_CROSS_GAP_MS;
+  var cutoff = now - gap;
+  var prev = prevKeys || {};
+  for (var k in prev){
+    if (!Object.prototype.hasOwnProperty.call(prev, k)) continue;
+    var t = +prev[k];
+    if (isFinite(t) && t > cutoff) keys[k] = t;
+  }
+  for (var i = 0; i < (list || []).length; i++){
+    var s = list[i];
+    var key = trendmxCrossSetupKey(s);
+    if (keys[key] === undefined){
+      fresh.push(s);
+      keys[key] = now;
+    }
+  }
+  return { fresh: fresh, keys: keys };
+}
+
+function hgTrendmxCrossAlertFormat(s){
+  s = s || {};
+  var tag = s.prime ? '🔥 ' : '📈 ';
+  var plan = hgTabAlertsPlanBlock(s).split('\n').map(function(l){ return '  ' + l; }).join('\n');
+  var adx = fin(+s.adx) ? ('ADX ' + Number(s.adx).toFixed(1)) : 'ADX —';
+  var sc = fin(+s.score) ? (s.score > 0 ? '+' : '') + s.score + '/5 composite' : 'composite —';
+  var conv = s.conviction ? String(s.conviction) : (s.tier || 'CONVICTION');
+  var extra = s.note ? (' · ' + s.note) : '';
+  return tag + 'HARDGATE — TREND MATRIX GOLDEN CROSS\n'
+    + 'Tab: TREND MATRIX · ⚡GOLDEN (EMA50/200 bull cross ≤10 daily bars)\n'
+    + 'Conviction: ' + conv + ' · ' + sc + ' · ' + adx + extra + '\n\n'
+    + s.sym + ' LONG\n'
+    + '  Tab/source: TREND MATRIX\n'
+    + plan
+    + (s.rr !== null && fin(+s.rr) ? '\n  Target: ' + Number(s.rr).toFixed(1) + 'R to T1' : '')
+    + '\n\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)\n'
+    + SITE;
+}
+
+function collectTrendmxGolden(out){
+  var stFn = gfn('trendmxCrossState');
+  if (stFn){
+    try{
+      var st = stFn();
+      var bag = (st && Array.isArray(st.goldenCross)) ? st.goldenCross : [];
+      for (var i = 0; i < bag.length; i++){
+        var c = bag[i];
+        pushSetup(out, 'TREND MATRIX', c, {
+          prime: c.prime === true || c.tier === 'STRONG',
+          tier: c.tier || 'GOLDEN',
+          clean7: false,
+          note: c.note || '⚡GOLDEN CROSS',
+          conviction: c.conviction,
+          score: c.score,
+          adx: c.adx
+        });
+      }
+      if (bag.length) return;
+    }catch(e){}
+  }
+  var rowsFn = gfn('trendmxGoldenCrossSetups');
+  var scanFn = gfn('trendmxScan');
+  if (!rowsFn) return;
+  var rows = [];
+  if (scanFn){
+    try{
+      var snap = scanFn();
+      if (snap && Array.isArray(snap.goldenCross)) rows = snap.goldenCross;
+      else if (snap && Array.isArray(snap.rows)) rows = rowsFn(snap.rows);
+    }catch(e){}
+  }
+  for (var j = 0; j < rows.length; j++){
+    var r = rows[j];
+    pushSetup(out, 'TREND MATRIX', r, {
+      prime: r.prime === true || r.tier === 'STRONG',
+      tier: r.tier || 'GOLDEN',
+      clean7: false,
+      note: r.note || '⚡GOLDEN CROSS',
+      conviction: r.conviction,
+      score: r.score,
+      adx: r.adx
+    });
+  }
+}
+
+async function hgTrendmxCrossAlertsRun(opts){
+  opts = opts || {};
+  var root = opts.window || W;
+  var warmFn = gfn('trendmxWarm');
+  if (warmFn && !opts.skipWarm){
+    try{ await warmFn({ quiet: true, force: !!(opts && opts.force) }); }catch(e){}
+  }
+  var list = [];
+  collectTrendmxGolden(list);
+  var now = Date.now();
+  var prev = opts.prevKeys || loadTrendmxCrossKeys(root);
+  var fr = trendmxCrossFreshKeys(prev, list, now, opts.gapMs || TRENDMX_CROSS_GAP_MS);
+  if (!fr.fresh.length){
+    return { pushed: 0, fresh: [], keys: fr.keys, status: 'none-new-golden-cross' };
+  }
+  if (opts.dryRun){
+    return {
+      pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'dry-run',
+      bodies: fr.fresh.map(hgTrendmxCrossAlertFormat)
+    };
+  }
+  var sent = 0, lastStatus = 'no-channel';
+  for (var i = 0; i < fr.fresh.length; i++){
+    var body = hgTrendmxCrossAlertFormat(fr.fresh[i]);
+    if (!body) continue;
+    var push = await pushTelegram(body);
+    if (push === 'sent'){
+      sent++;
+      lastStatus = 'sent';
+      continue;
+    }
+    var nt = gfn('sendAlertPush');
+    if (nt){
+      try{
+        await nt('HARDGATE GOLDEN CROSS: ' + fr.fresh[i].sym, body,
+          { priority: fr.fresh[i].prime ? 5 : 4 });
+        sent++;
+        lastStatus = 'ntfy-fallback';
+        continue;
+      }catch(eN){}
+    }
+    lastStatus = 'push-failed:' + push;
+  }
+  if (sent > 0) saveTrendmxCrossKeys(fr.keys, root);
+  return { pushed: sent, fresh: fr.fresh, keys: sent > 0 ? fr.keys : prev, status: lastStatus };
+}
+
 /* browser globals */
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
@@ -945,6 +1105,7 @@ W.hgTabAlertsRunGold = function(opts){
     skipInvalidation: true
   }, opts));
 };
+W.hgTrendmxCrossAlertsRun = function(opts){ return hgTrendmxCrossAlertsRun(opts || {}); };
 
 /* Node test / CI exports */
 if (typeof module !== 'undefined' && module.exports){
@@ -955,7 +1116,9 @@ if (typeof module !== 'undefined' && module.exports){
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
     setupIsClean7, setupIsNearClean6, setupIsTelegramEligible,
     tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
-    tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced };
+    tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced,
+    trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
+    collectTrendmxGolden, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, LS_TRENDMX_CROSS };
 }
 
 })();
