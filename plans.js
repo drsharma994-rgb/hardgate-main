@@ -101,8 +101,8 @@ function hgSwingG5OK(dir, rows, c, r14, vz){
     var slopeOK = isFinite(_rP) && isFinite(r14) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
     if (isFinite(vz) && vz <= -1.5 && !closeOK) return { ok: false, closeOK: closeOK, quiet: false };
     var volOK = isFinite(vz) && vz > 0.5;
-    var quiet = !volOK && closeOK && slopeOK;
-    var ok = (volOK || quiet) && closeOK;
+    var quiet = false;
+    var ok = volOK && closeOK;
     return { ok: ok, closeOK: closeOK, quiet: quiet };
   }catch(e){ return { ok: false, closeOK: false, quiet: false }; }
 }
@@ -712,8 +712,20 @@ function hgEnrichSwingClean(hit, rows, matrix){
     }
 
     var stop = hit.stop;
-    if (isFinite(entry) && isFinite(stop) && isFinite(a4) && Math.abs(entry - stop) > 1.5 * a4){
-      stop = (dir === 'long') ? entry - 1.5 * a4 : entry + 1.5 * a4;
+    if (typeof hgStructureStop === 'function' && rows && rows.length){
+      var st = hgStructureStop(dir, entry, rows, { atrLen: 14, look: 40, buffer: 0.5 });
+      if (st && isFinite(st.stop)){
+        var floorDist = 2.0 * a4;
+        if (dir === 'long'){
+          var wideCap = entry - floorDist;
+          stop = Math.min(st.stop, wideCap);
+        } else {
+          stop = Math.max(st.stop, entry + floorDist);
+        }
+        entryType += ' · structure stop';
+      }
+    } else if (isFinite(entry) && isFinite(stop) && isFinite(a4) && Math.abs(entry - stop) > 2.0 * a4){
+      stop = (dir === 'long') ? entry - 2.0 * a4 : entry + 2.0 * a4;
       entryType += ' · ATR-capped stop';
     }
     var risk = Math.abs(entry - stop);

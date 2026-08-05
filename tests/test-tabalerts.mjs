@@ -65,7 +65,7 @@ function loadWithWindow(W){
 }
 
 const W = loadWithWindow({
-  swingScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, rr: 2 }] }),
+  swingScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12.6, rr: 2.6 }] }),
   scalpScan: () => null,
   edgeScan: () => null,
   __hgBrainLast: () => ({ rows: [{ sym: 'XRPUSD', dir: 'short', tier: 'HIGH', plan: { entry: 1, stop: 1.1, t1: 0.8 } }] }),
@@ -84,7 +84,7 @@ assert(!collected.some(c => c.src === 'GOLD SWING'), 'gold swing below 10 exclud
 const WE = loadWithWindow({
   swingScan: () => null,
   scalpScan: () => null,
-  edgeScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: 4, rr: 2 }] }),
+  edgeScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: 5, rr: 2 }] }),
   __hgBrainLast: () => null,
   goldscalpScan: () => null,
   goldswingScan: () => null,
@@ -93,7 +93,7 @@ const WE = loadWithWindow({
 WE.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const edgeOnly = WE.hgTabAlertsCollect();
 assert(edgeOnly.length === 1 && edgeOnly[0].src === 'EDGE' && edgeOnly[0].sym === 'SOLUSD',
-       'collectEdge picks up edgeScan cands with tally >= 3');
+       'collectEdge picks up edgeScan cands with tally >= 5');
 const edgeRun = await WE.hgTabAlertsRunEdge();
 assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('Tab/source: EDGE') >= 0,
        'hgTabAlertsRunEdge pushes only EDGE setups to Telegram');

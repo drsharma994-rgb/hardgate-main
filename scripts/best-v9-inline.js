@@ -12,7 +12,7 @@ function bestProfitBoost(s){
 }
 
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 5);
+  const strong = clean.filter(s => s.famScore >= 6);
   return strong.length ? strong : clean;
 }
 
