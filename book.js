@@ -538,6 +538,11 @@ function hgBookStampSlot(sym, dir, meta){
   return '<span class="hg-book-stamp" data-hg-book-sym="' + esc(String(sym)) + '" data-hg-book-dir="' + dir + '" data-hg-book-meta="' + metaAttr + '">' + html + '</span>';
 }
 
+/** UI-facing IN BOOK chip — slotted for live refresh via hgBookStampRepaintDom. */
+function hgBookStampChip(sym, dir, meta){
+  return hgBookStampSlot(sym, dir, meta || {});
+}
+
 function hgBookStampRefreshThrottled(force){
   if (!bookApiOn()) return Promise.resolve(__bookOpenKeys || {});
   var now = Date.now();
@@ -1123,8 +1128,6 @@ function bookManagePosition(p){
     if (tEq && isFinite(eq)) tEq.value = Math.round(eq);
     if (typeof W.hgToTradePlanFromBook === 'function'){
       W.hgToTradePlanFromBook(p);
-    } else if (typeof W.toTrade === 'function'){
-      W.toTrade(p.sym, p.dir, p.entry, p.stop, p.t1, p.t2);
     }
   }catch(e){}
 }
@@ -2181,6 +2184,7 @@ W.bookRefreshOpenKeys = bookRefreshOpenKeys;
 W.hgBookStampHTML = hgBookStampHTML;
 W.hgBookStampForMeta = hgBookStampForMeta;
 W.hgBookStampSlot = hgBookStampSlot;
+W.hgBookStampChip = hgBookStampChip;
 W.hgBookStampRepaintDom = hgBookStampRepaintDom;
 W.hgBookStampRefreshThrottled = hgBookStampRefreshThrottled;
 W.bookExecTargets = bookExecTargets;

@@ -121,8 +121,7 @@ the user runs a scan once.
       var plan = termBasisPlan(row);
       if (!plan) return '';
       var meta = { scanner: 'termbasis', fund: 'macro', strategy: 'termbasis', klass: 'macro' };
-      if (typeof G.hgBookStampSlot === 'function') return G.hgBookStampSlot(plan.sym, plan.dir, meta);
-      if (typeof G.hgBookStampForMeta === 'function') return G.hgBookStampForMeta(plan.sym, plan.dir, meta);
+      if (typeof G.hgBookStampChip === 'function') return G.hgBookStampChip(plan.sym, plan.dir, meta);
       return '';
     }catch(e){ return ''; }
   }

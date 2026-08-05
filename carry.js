@@ -165,13 +165,8 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       var hi = c.sp && c.sp.shortVenue;
       var sym = __deskSym(__venueSym(c, hi));
       if (!sym || sym === '—') return '';
-      if (typeof window.hgBookStampSlot === 'function'){
-        return window.hgBookStampSlot(sym, 'short', {
-          scanner: 'carry', fund: 'macro', strategy: 'carry', klass: 'macro'
-        });
-      }
-      if (typeof window.hgBookStampForMeta === 'function'){
-        return window.hgBookStampForMeta(sym, 'short', {
+      if (typeof window.hgBookStampChip === 'function'){
+        return window.hgBookStampChip(sym, 'short', {
           scanner: 'carry', fund: 'macro', strategy: 'carry', klass: 'macro'
         });
       }
