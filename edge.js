@@ -1061,8 +1061,10 @@ function cardHTML(r){
       fund: edgeFund,
       strategy: 'edge', klass: edgeKlass, venue: (r.item && r.item.exchange) || 'delta',
       layers: ['EDGE', 'SWING'],
-      t2: p.t2
+      t2: p.t2,
+      stack: r.stack
     }) : '';
+  var stackHtml = (r.stack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(r.stack) : '';
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
@@ -1081,7 +1083,7 @@ function cardHTML(r){
     + '<div class="gates">' + gates
     + '<span class="gpip ok">SWING aligned</span>'
     + '<span class="gpip ok">R:R ' + fmtF(sig.rr, 2) + ' · USE ' + (p ? p.useLev : '—') + 'x</span></div>'
-    + planBlock + '<div class="plan">' + record + '</div>' + btn + bookBtn + '</div>';
+    + planBlock + '<div class="plan">' + record + '</div>' + stackHtml + btn + bookBtn + '</div>';
 }
 
 var __edge = { busy: false, ranOnce: false, run: null };
@@ -1242,9 +1244,21 @@ async function edgeScanList(list, fetchCandles, hooks){
         var assessed = edgeAssess(rows, item, src);
         if (!assessed){ tallyFail++; return; }
         var bt = edgeBacktest(rows);
+        if (typeof W.hgSetupStack === 'function'){
+          try{
+            assessed.stack = W.hgSetupStack(Object.assign({},
+              typeof W.hgSetupStackSnap === 'function' ? W.hgSetupStackSnap() : {},
+              {
+                dir: assessed.sig.dir, style: 'edge', asset: 'crypto', sym: item.sym,
+                rows4h: rows, clean: true, gatesPassed: 7, gatesTotal: 7,
+                ticker: item, positioning: W.hgSetupStackEvidenceItems(assessed.enrich.parts || [])
+              }));
+          }catch(eSt){}
+        }
         found.push({
           item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
-          enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src
+          enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src,
+          stack: assessed.stack || null
         });
       }catch(e){ skipped++; }
     }));

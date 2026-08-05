@@ -266,6 +266,96 @@ function hgSetupStackAttach(hit, opts){
   return hit;
 }
 
+function _ptsAlign(pts){
+  if (!isFinite(+pts)) return 'neutral';
+  if (+pts > 0) return 'with';
+  if (+pts < 0) return 'against';
+  return 'neutral';
+}
+
+/** Map confluence tally parts (gold) or edge parts into positioning items. */
+function hgSetupStackEvidenceItems(parts){
+  try{
+    if (!parts || !parts.length) return null;
+    var items = [];
+    for (var i = 0; i < parts.length; i++){
+      var p = parts[i];
+      if (!p) continue;
+      items.push(_item(p.label || 'read', p.detail || '', p.align || _ptsAlign(p.pts)));
+    }
+    return items.length ? { items: items } : null;
+  }catch(e){ return null; }
+}
+
+/** Gold swing/scalp: evaluate FTS from transparent tallyParts + macro context. */
+function hgSetupStackFromTallyParts(parts, opts){
+  opts = opts || {};
+  var snap = (typeof hgSetupStackSnap === 'function') ? hgSetupStackSnap() : {};
+  var tally = isFinite(+opts.tally) ? +opts.tally : 0;
+  var clean = opts.clean;
+  if (clean === undefined) clean = tally >= 2 && opts.grade === 'A';
+  var nearClean = opts.nearClean;
+  if (nearClean === undefined) nearClean = !clean && tally >= 1;
+  return hgSetupStack(Object.assign({}, snap, opts, {
+    positioning: hgSetupStackEvidenceItems(parts),
+    clean: clean === true,
+    nearClean: nearClean === true,
+    gatesPassed: clean ? 7 : (nearClean ? 6 : (tally >= 0 ? 5 : 4)),
+    gatesTotal: 7
+  }));
+}
+
+/** BRAIN row: layer votes + tier map into FTS pillars. */
+function hgSetupStackFromBrainRow(row, opts){
+  opts = opts || {};
+  if (!row || !row.dec) return null;
+  var dec = row.dec, dir = dec.dir;
+  if (dir !== 'long' && dir !== 'short') return null;
+  var setupTier = (typeof G.hgBrainSetupTier === 'function') ? G.hgBrainSetupTier(dec.tier) : 'clean';
+  var posItems = [];
+  if (row.col && row.col.votes){
+    for (var i = 0; i < row.col.votes.length; i++){
+      var v = row.col.votes[i];
+      if (!v || v.vote === 'neutral') continue;
+      var align = 'neutral';
+      if (v.vote === 'veto' || v.veto) align = 'veto';
+      else if (v.caution) align = 'caution';
+      else if (v.vote === dir) align = 'with';
+      else align = 'against';
+      posItems.push(_item(v.layer || 'layer', v.text || v.kind || '', align));
+    }
+  }
+  if (dec.vetoes && dec.vetoes.length){
+    for (var vi = 0; vi < dec.vetoes.length; vi++){
+      posItems.push(_item('veto', dec.vetoes[vi], 'veto'));
+    }
+  }
+  var snap = (typeof hgSetupStackSnap === 'function') ? hgSetupStackSnap() : {};
+  return hgSetupStack(Object.assign({}, snap, opts, {
+    dir: dir,
+    style: 'brain',
+    asset: row.lane === 'gold' ? 'gold' : 'crypto',
+    sym: row.sym,
+    rows4h: row.rows || opts.rows4h,
+    clean: setupTier === 'clean',
+    nearClean: setupTier === 'near',
+    gatesPassed: setupTier === 'clean' ? 7 : (setupTier === 'near' ? 6 : 5),
+    gatesTotal: 7,
+    positioning: posItems.length ? { items: posItems } : undefined
+  }));
+}
+
+function hgSetupStackAttachPlan(plan, opts){
+  try{
+    if (!plan || !plan.dir) return plan;
+    if (plan.stack) return plan;
+    var hit = { dir: plan.dir, sym: opts && opts.sym, clean: !!(opts && opts.clean), nearClean: !!(opts && opts.nearClean) };
+    hgSetupStackAttach(hit, opts || {});
+    if (hit.stack) plan.stack = hit.stack;
+  }catch(e){}
+  return plan;
+}
+
 function hgSetupStackMiniHtml(stack){
   try{
     if (!stack || !stack.summary) return '';
@@ -287,6 +377,10 @@ G.hgSetupStackSnap = hgSetupStackSnap;
 G.hgSetupStack = hgSetupStack;
 G.hgSetupStackFromHit = hgSetupStackFromHit;
 G.hgSetupStackAttach = hgSetupStackAttach;
+G.hgSetupStackAttachPlan = hgSetupStackAttachPlan;
+G.hgSetupStackEvidenceItems = hgSetupStackEvidenceItems;
+G.hgSetupStackFromTallyParts = hgSetupStackFromTallyParts;
+G.hgSetupStackFromBrainRow = hgSetupStackFromBrainRow;
 G.hgSetupStackMiniHtml = hgSetupStackMiniHtml;
 
 })();

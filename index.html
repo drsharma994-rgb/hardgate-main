@@ -4590,7 +4590,7 @@ async function runCascadeCore(uni){
           distToAnchor, stop: tc.stop, risk, rr: tc.rr, t1: tc.t1, t2: tc.t2,
           vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: isStale, cascadeAgeBars: cascadeAgeBars, staleReason: staleReason,
           tapeRegime: (typeof hgTapeRegimeLabel === 'function') ? hgTapeRegimeLabel(rows) : 'n/a',
-          targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean'});
+          targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean', stack: tc.stack || null});
         funnel.cleanRaw++;
       }catch(e){}
     }));
@@ -4813,6 +4813,12 @@ function bestFunnelHtml(funnel, cleanLen, uniLen){
   const rows = bestFunnelRows(funnel, cleanLen, uniLen);
   return hgFunnelPanelHTML('WHY EMPTY — BEST funnel (7/7 → evidence → vetoes)', rows, 'bestFunnelPanel');
 }
+
+function bestStackHtml(w){
+  if (!w || !w.stack || typeof hgSetupStackMiniHtml !== 'function') return '';
+  return hgSetupStackMiniHtml(w.stack);
+}
+
 async function runBest(opts){
   opts = opts || {};
   if (!opts._singleLeg && !opts.singleExchange && typeof hgDualScanEnabled === 'function' && hgDualScanEnabled()){
@@ -4881,9 +4887,9 @@ async function runBest(opts){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 }):''}
+        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
@@ -4938,9 +4944,9 @@ async function runBest(opts){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 }):''}
+        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
