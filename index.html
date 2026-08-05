@@ -3531,6 +3531,9 @@ async function runTabSetupAlerts(){
     if (typeof hgTabAlertsRun === 'function'){
       await hgTabAlertsRun({ allSources: true, cleanOnly: true });
     }
+    if (typeof hgTabAlertsRunGold === 'function'){
+      await hgTabAlertsRunGold();
+    }
     S.lastTabAlertCheck = now;
   }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
 }
