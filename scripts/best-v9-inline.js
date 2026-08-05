@@ -12,8 +12,8 @@ function bestProfitBoost(s){
 }
 
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 6);
-  return strong.length ? strong : clean;
+  const strong = clean.filter(s => s.famScore >= 7 && s.robScore >= 1);
+  return strong.length ? strong : clean.filter(s => s.famScore >= 6 && s.robScore >= 1);
 }
 
 function bestSessionActive(){

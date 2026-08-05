@@ -399,10 +399,10 @@ ok(r.pass === true && r.trail[4].note.indexOf('turnover n/a') >= 0, 'turnover un
 globalThis.ema = function(vals, p){ const lc = vals[vals.length-1]; const t = {9:lc+12, 21:lc+10, 50:lc-6, 200:lc-16}; return vals.map(function(){ return t[p]; }); };
 r = gateCandidate(longInp());
 ok(r.pass === false && r.vetoGate === 'G4' && r.trail[4].note.indexOf('too extended') >= 0,
-   'price 5xATR from EMA21 > 1.5 → anti-chase anchor veto');
-globalThis.ema = function(vals, p){ const lc = vals[vals.length-1]; const t = {9:lc+5, 21:lc+3, 50:lc-6, 200:lc-16}; return vals.map(function(){ return t[p]; }); };
+   'price 5xATR from EMA21 > 1.25 → anti-chase anchor veto');
+globalThis.ema = function(vals, p){ const lc = vals[vals.length-1]; const t = {9:lc+4, 21:lc+2.5, 50:lc-6, 200:lc-16}; return vals.map(function(){ return t[p]; }); };
 r = gateCandidate(longInp());
-ok(r.pass === true, 'price exactly 1.5xATR from EMA21 → boundary passes');
+ok(r.pass === true, 'price exactly 1.25xATR from EMA21 → boundary passes');
 stubIndicators();
 
 /* ================= G) G5 NEWS RISK ================= */

@@ -46,8 +46,8 @@ var OTE_HI        = 0.79;
 var OTE_MID       = 0.705;
 var MIN_IMPULSE_ATR = 1.5;
 var MIN_RR        = 2.0;
-var MIN_TALLY     = 5;
-var SIGNAL_LOOKBACK = 6;
+var MIN_TALLY     = 6;
+var SIGNAL_LOOKBACK = 4;
 var MAX_HOLD      = 12;
 var MIN_RECORD    = 3;
 var CHUNK         = 4;
@@ -913,7 +913,7 @@ function edgeAssess(rows, item, candleSrc){
   try{
     var sig = edgeSignal(rows);
     if (!sig) return null;
-    if (isFinite(sig.barAge) && sig.barAge > 1) return null;
+    if (isFinite(sig.barAge) && sig.barAge > 0) return null;
     var biasPre = edgeSwingBias(rows);
     if (biasPre && (biasPre.g5 !== true || biasPre.g6 !== true)) return null;
     var en = edgeEnrich(sig, rows, item, candleSrc);

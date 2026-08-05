@@ -1751,8 +1751,9 @@ function smartSetup(cls, rows4h, rows1h){
     scalpNote += ' · stop capped at 1.5×ATR';
   }
   if (!(sRisk > 0)) return null;
-  t1 = dir === 'long' ? entry + 1.5*sRisk : entry - 1.5*sRisk;
-  t2 = dir === 'long' ? entry + 2.5*sRisk : entry - 2.5*sRisk;
+  t1 = dir === 'long' ? entry + 2.0*sRisk : entry - 2.0*sRisk;
+  t2 = dir === 'long' ? entry + 3.0*sRisk : entry - 3.0*sRisk;
+  if (Math.abs(t1 - entry)/sRisk < 2.0) return null;
   if (src === rows4h) scalpNote += ' · 4H-based (1H history short)';
   var fadeOut = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
            rr1: Math.abs(t1 - entry)/sRisk, rr2: Math.abs(t2 - entry)/sRisk, riskPct: sRisk/entry*100,
@@ -2962,7 +2963,7 @@ function hgScanFunnelRows(audit, kind){
     { k: 'At 6/7+ gates', v: String(audit.pass6 || 0) },
     { k: 'CLEAN tickets', v: String(audit.found || 0) }
   ];
-  if (kind === 'swing' && audit.pass7noAnchor) rows.push({ k: '7/7 but anchor miss', v: String(audit.pass7noAnchor) + ' (EMA21 >1.5×ATR away — not a ticket)' });
+  if (kind === 'swing' && audit.pass7noAnchor) rows.push({ k: '7/7 but anchor miss', v: String(audit.pass7noAnchor) + ' (EMA21 >1.25×ATR away — not a ticket)' });
   if (audit.nearFound) rows.push({ k: 'NEAR CLEAN (6/7)', v: String(audit.nearFound) + ' watch-only' });
   if (audit.histShort) rows.push({ k: 'Thin history (<210 bars)', v: String(audit.histShort) });
   if (audit.errors) rows.push({ k: 'Fetch errors', v: String(audit.errors) });
@@ -3273,7 +3274,7 @@ async function runScanLeg(kind, opts){
       const blk = topFail.length ? (' Most common gate failures: ' + topFail.join(', ') + '.') : '';
       emptyEl.textContent = (isSwing
         ? ('No CLEAN swing setups (7/7 + EMA21 anchor). Choppy tape often blocks G5 vol+wick and G7 CUSUM.'
-          + (audit.pass7noAnchor ? (' ' + audit.pass7noAnchor + ' had 7/7 gates but failed EMA21 anchor (>1.5×ATR).') : '')
+          + (audit.pass7noAnchor ? (' ' + audit.pass7noAnchor + ' had 7/7 gates but failed EMA21 anchor (>1.25×ATR).') : '')
           + blk + ' Expand WHY EMPTY funnel below. NEAR CLEAN and FORMING NOW are watch-only.')
         : ('No CLEAN scalp triggers (7/7). Funding window, sweep quality, or vol commit often block entries.' + blk + ' Expand WHY EMPTY funnel below.'));
       emptyEl.style.display = nearFound ? 'none' : 'block';
@@ -4403,8 +4404,8 @@ function bestProfitBoost(s){
 }
 
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 6);
-  return strong.length ? strong : clean;
+  const strong = clean.filter(s => s.famScore >= 7 && s.robScore >= 1);
+  return strong.length ? strong : clean.filter(s => s.famScore >= 6 && s.robScore >= 1);
 }
 
 function bestTapeRegimeLabel(w){
@@ -4645,10 +4646,10 @@ async function runCascadeCore(uni){
 
     /* R2 ROBUSTNESS */
     const age = cascadeAge(c, s.dir);
-    const r2 = age>=3;
+    const r2 = age>=4;
 
     s.fam=[
-      ['G0','Anti-Chase Guard — price to EMA21 distance', true, `${fmt(s.distToAnchor,2)} ATR (limit ≤ 1.5, entry: ${s.entryType})`],
+      ['G0','Anti-Chase Guard — price to EMA21 distance', true, `${fmt(s.distToAnchor,2)} ATR (limit ≤ 1.25, entry: ${s.entryType})`],
       ['F1','TREND family — 2-of-3 majority: TSMOM · 1D side · CUSUM', f1, `${trendVotes}/3 → TSMOM ${mTs?'✓':'✗'} (${tsD}) · 1D ${mD1?'✓':'✗'} · CUSUM ${mCu?'✓':'✗'}${s.ev?` (${s.ev.dir.toUpperCase()} ${s.ev.barsAgo} bars ago)`:''}`],
       ['F2','POSITIONING family — funding tailwind (crowd pays you)', f2, s.fr!==null?`${fmt(s.fr,4)}%/interval`:'n/a'],
       ['F3','PARTICIPATION family — volume z > 1.0 or VWAP side', f3, `z ${fmt(s.vz,2)} · ${vwapDetail}`],
@@ -4659,7 +4660,7 @@ async function runCascadeCore(uni){
       ['F8','ORDER FLOW family — CVD / Order Book Imbalance aligned', f8, f8Detail],
       ['F9','ANCHOR CLUSTER family — ≥2 structure levels overlap', f9, f9Detail],
       ['R1','ROBUSTNESS — cascade also holds on 2H (anti curve-fit)', r1, r1D],
-      ['R2','ROBUSTNESS — cascade age ≥3 closed 4H bars (anti flicker)', r2, `${age} bars`],
+      ['R2','ROBUSTNESS — cascade age ≥4 closed 4H bars (anti flicker)', r2, `${age} bars`],
     ];
     s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0)+(f8?1:0)+(f9?1:0);
     s.robScore=(r1?1:0)+(r2?1:0);

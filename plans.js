@@ -100,7 +100,7 @@ function hgSwingG5OK(dir, rows, c, r14, vz){
     var _rP = _rA.length >= 4 ? _rA[_rA.length - 4] : NaN;
     var slopeOK = isFinite(_rP) && isFinite(r14) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
     if (isFinite(vz) && vz <= -1.5 && !closeOK) return { ok: false, closeOK: closeOK, quiet: false };
-    var volOK = isFinite(vz) && vz > 0.5;
+    var volOK = isFinite(vz) && vz > 0.75;
     var quiet = false;
     var ok = volOK && closeOK;
     return { ok: ok, closeOK: closeOK, quiet: quiet };
@@ -429,7 +429,7 @@ function hgEnrichScalpExact(hit, m15, opts){
     var stop = hit.stop;
     if (!(isFinite(stop))) return hit;
     var pr = hgPlanFromRisk(dir, entry, stop, {
-      t1R: HG_SCALP_T1_R, t2R: HG_SCALP_T2_R, minRr: 1.5,
+      t1R: HG_SCALP_T1_R, t2R: HG_SCALP_T2_R, minRr: 2.25,
       targetPolicy: 'scalp R-multiples (1.5R/2.5R)'
     });
     return Object.assign({}, hit, {
@@ -615,6 +615,40 @@ function hgPlanMetaLabel(plan){
     if (plan.entryType) parts.push(plan.entryType);
     return parts.join(' · ');
   }catch(e){ return ''; }
+}
+
+function hgScalpPostEnrichValid(hit, opts){
+  opts = opts || {};
+  try{
+    if (!hit || !hit.dir) return null;
+    var dir = hit.dir;
+    var entry = +hit.entry, stop = +hit.stop;
+    if (!isFinite(entry) || !isFinite(stop)) return null;
+    if (dir === 'long' && stop >= entry) return null;
+    if (dir === 'short' && stop <= entry) return null;
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    var a = opts.a;
+    if (!isFinite(a) && opts.rows && typeof atr === 'function'){
+      a = _last(atr(opts.rows, 14));
+    }
+    if (!isFinite(a) || a <= 0) return null;
+    var minRr = opts.minRr !== undefined ? opts.minRr : 2.25;
+    var expectedMove = a * 2.5;
+    var dynamicRR = expectedMove / risk;
+    if (dynamicRR < minRr) return null;
+    var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
+    var t2 = dir === 'long' ? entry + (a * 4) : entry - (a * 4);
+    var rr1 = Math.abs(t1 - entry) / risk;
+    if (rr1 < minRr) return null;
+    var out = Object.assign({}, hit);
+    out.entry = entry; out.stop = stop;
+    out.t1 = t1; out.t2 = t2;
+    out.rr = dynamicRR; out.rr1 = rr1;
+    out.rr2 = Math.abs(t2 - entry) / risk;
+    out.riskPct = risk / entry * 100;
+    return out;
+  }catch(e){ return null; }
 }
 
 /* --- post-enrichment swing ticket validation (G6 parity after enrich) --- */
@@ -873,6 +907,7 @@ G.hgSwingParity = hgSwingParity;
 G.hgSwingPostEnrichValid = hgSwingPostEnrichValid;
 G.hgSwingHitToPlan = hgSwingHitToPlan;
 G.hgSwingCleanPlan = hgSwingCleanPlan;
+G.hgScalpPostEnrichValid = hgScalpPostEnrichValid;
 G.HG_GOLD_T1_R = HG_GOLD_T1_R;
 G.HG_GOLD_T2_R = HG_GOLD_T2_R;
 G.HG_GOLD_T3_R = HG_GOLD_T3_R;
