@@ -353,6 +353,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <div class="prog" id="divProg"><i></i></div>
     </div>
     <div class="note" style="margin-bottom:10px">Gates: G1 valid pivot structure (price vs RSI disagree over 2 swing points) &middot; G2 span&ge;10 bars between pivots, newest pivot &le;15 bars old &middot; G3 funding not extreme/opposing &middot; G4 no opposing CUSUM event in last 10 bars &middot; G5 R:R&ge;2. Regular divergence favors range/reversal contexts; hidden divergence favors trending continuation — shown as regime context, not a veto.</div>
+    <div id="divDesk"></div>
     <div class="cards" id="divCards"></div>
     <div class="empty" id="divEmpty" style="display:none">No qualifying divergence found.</div>
   </section>
@@ -381,6 +382,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <div class="prog" id="apexProg"><i></i></div>
       </div>
       <div class="note" style="margin-bottom:10px">Gates: G1 BTC not bullish (24h return ≤ 1.5%, macro headwind present) · G2 Asset is outperforming BTC by ≥ 5% over 24h (the RS spread) · G3 Asset holding above its 1H EMA50 (short-term structure intact despite BTC bleeding). Action: Watch Bitcoin, not the altcoin. The minute BTC prints a 15m bullish sweep/reclaim, manually buy the #1 Apex asset.</div>
+      <div id="apexDesk"></div>
       <div class="cards" id="apexCards"></div>
       <div class="empty" id="apexEmpty" style="display:none">No valid Apex setups. Either BTC is currently bullish (no headwind to test against), or no assets are showing true relative strength.</div>
     </section>
@@ -396,6 +398,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <div class="prog" id="trapProg"><i></i></div>
       </div>
       <div class="note" style="margin-bottom:10px">Gates: G1 Extreme excursion — price pierced a volatility-scaled outer Bollinger Band (2.5–4.5 SD, wider for higher-ATR% assets) · G2 The rejection — candle closed back inside a volatility-scaled inner band (1.8–3.0 SD) · G3 Momentum exhaustion (RSI < 30 or > 70). Action: The crowd is trapped at the extreme. You are fading them. Buy/sell the reclaim, stop goes just past the liquidation wick, target the mean.</div>
+      <div id="trapDesk"></div>
       <div class="cards" id="trapCards"></div>
       <div class="empty" id="trapEmpty" style="display:none">No active liquidity traps. The market is currently respecting its boundaries.</div>
     </section>
@@ -410,6 +413,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
           <div class="prog" id="smcProg"><i></i></div>
         </div>
         <div class="note" style="margin-bottom:10px">Gates: G1 Displacement (a valid 3-candle Fair Value Gap was created recently) · G2 Unmitigated (the gap has not been fully filled or invalidated by subsequent closes) · G3 The Tap (current price has pulled back and is trading inside the FVG zone) · G4 HTF Context (aligned with the 4H/200 EMA trend — note: this scan runs on 4H candles, not 1D). Action: the asset is currently sitting in an institutional Point of Interest (POI). Drop to a 5m/15m chart. Wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.</div>
+        <div id="smcDesk"></div>
         <div class="cards" id="smcCards"></div>
         <div class="empty" id="smcEmpty" style="display:none">No assets are currently tapping an unmitigated 4H FVG.</div>
       </section>
@@ -424,6 +428,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
           <div class="prog" id="obProg"><i></i></div>
         </div>
         <div class="note" style="margin-bottom:10px">Gates: G1 Valid Order Block (the last opposite-colored 4H candle before a displacement candle that broke recent structure) · G2 Unmitigated (no subsequent candle has fully closed/wicked through the block) · G3 Price inside OB (current price has pulled back and is trading inside the block) · G4 HTF Context (aligned with the 4H/200 EMA trend). Liquidity Target shows the nearest unswept equal-high/low pool in your direction. Action: drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH), then execute.</div>
+        <div id="obDesk"></div>
         <div class="cards" id="obCards"></div>
         <div class="empty" id="obEmpty" style="display:none">No assets are currently tapping an unmitigated 4H Order Block.</div>
       </section>
@@ -517,6 +522,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <div class="note" style="margin-top:8px">Evidence, not signals — now with executable plans. Every card tallies independent positioning reads: <b>price/OI regime</b> (new-longs trend fuel · short-covering fade · new-shorts fuel · long capitulation), <b>funding crowding</b> (|f| ≥ 0.05%/8h — fade the crowded side), <b>retail contrarian</b> (≥65% / ≤35% long), <b>smart-money divergence</b> (top traders vs retail ≥15pp — follow top traders), <b>taker imbalance</b> (≥1.1 / ≤0.9). Direction = evidence majority; cards with a majority get a <b>SWING</b> (continuation — 4H structure stop, 2R/3.5R) or <b>SCALP</b> (reversion — stop beyond the 24h extreme, 1.5R/2.5R, 24h time-stop) plan with entry · stop · targets and a one-click handoff to TRADE PLAN; CONFIRMED means the 4H EMA20/50 cascade agrees. Universe: the full Binance USDT-perp list with ≥$5M 24h turnover, screened to |24h move| ≥ 2% or top-120 turnover. Funding/OI/retail positioning exists only on Binance — Delta/CoinDCX expose no such fields; their full perp universes are structure-scanned on the SWING/SCALP tabs. <b>+COINDCX mode</b>: every CoinDCX contract with a Binance twin is scanned through the twin (positioning is a property of the asset — the card says so and hands off to CoinDCX); contracts with no twin are named honestly, never fabricated.</div>
     <div class="prog" id="smartProg"><i></i></div>
   </div>
+  <div id="smartDesk"></div>
   <div id="smartGold"></div>
   <div class="cards" id="smartCards"></div>
   <div class="empty" id="smartEmpty" style="display:none">No positioning edges right now — the market is balanced.</div>
@@ -1789,6 +1795,9 @@ function smartCardHTML(r){
   const ev = r.cls.dir === 'long' ? r.cls.longEv : r.cls.shortEv;
   const contra = r.cls.dir === 'long' ? r.cls.shortEv : r.cls.longEv;
   const s = r.setup || null;
+  const tier = s ? (s.confirmed ? 'clean' : 'near') : 'forming';
+  const tierCls = tier === 'near' ? ' tier-near' : (tier === 'forming' ? ' tier-forming' : '');
+  const tierLabel = (typeof hgSetupTierLabel === 'function') ? hgSetupTierLabel(tier) : (tier === 'near' ? 'NEAR' : (tier === 'forming' ? 'FORMING' : 'CLEAN'));
   const badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
   const regime = r.cls.regime.length ? r.cls.regime.join(' · ') + '. ' : '';
@@ -1808,8 +1817,8 @@ function smartCardHTML(r){
   const venueChip = r.venue === 'cdcx'
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
-  return '<div class="card ' + r.cls.dir + '">'
-    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE' + badge
+  return '<div class="card ' + r.cls.dir + tierCls + '">'
+    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE · ' + tierLabel + badge
       + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
     + '<div class="mini">'
     + '<span class="k">mark</span><span>' + px(r.markPrice) + '</span>'

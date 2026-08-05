@@ -242,22 +242,106 @@ function hgSetupPanelHTML(sig, opts){
     + '</div>';
 }
 
+/** Map positioning-tab confirmed flag → CLEAN / NEAR tier. */
+function hgSetupTierFromConfirmed(confirmed){
+  return confirmed ? HG_SETUP_TIER.CLEAN : HG_SETUP_TIER.NEAR;
+}
+
+/** Map BRAIN verdict tier → unified setup tier (PRIME/HIGH = CLEAN, WATCH = FORMING). */
+function hgBrainSetupTier(decTier){
+  var t = String(decTier || '').toUpperCase();
+  if (t === 'PRIME' || t === 'HIGH') return HG_SETUP_TIER.CLEAN;
+  if (t === 'WATCH') return HG_SETUP_TIER.FORMING;
+  return HG_SETUP_TIER.FORMING;
+}
+
+/** Paint one desk slot by element id or node — safe to call from tab mount(). */
+function hgSetupPaintDesk(elOrId, opts){
+  try{
+    if (typeof document === 'undefined') return;
+    hgSetupInjectStyles();
+    var el = (typeof elOrId === 'string') ? document.getElementById(elOrId) : elOrId;
+    if (!el || el.dataset.hgPainted) return;
+    el.innerHTML = hgSetupDeskBannerHTML(opts || {});
+    el.dataset.hgPainted = '1';
+  }catch(e){}
+}
+
+/** Gold swing/scalp armed rows → shared FORMING watch panel. */
+function hgGoldFormingWatchHTML(armed, opts){
+  opts = opts || {};
+  var items = (armed || []).map(function(w){
+    if (!w) return null;
+    return {
+      state: w.state,
+      sym: w.venue || 'GOLD',
+      strategy: w.strategy || 'SETUP',
+      condition: w.state === 'armed'
+        ? (w.condition || 'watching')
+        : (w.reason || w.condition || 'no trigger in range'),
+      level: w.level
+    };
+  }).filter(Boolean);
+  return hgFormingWatchHTML(items, {
+    title: opts.title || 'FORMING NOW',
+    subtitle: opts.subtitle || 'armed setups are watch items, not entries',
+    idleText: opts.idleText || 'Run SCAN — armed rows appear when a strategy trigger is in range but has not yet qualified as a CLEAN ticket.'
+  });
+}
+
+/** BRAIN WATCH-tier rows on the limit board → shared FORMING watch panel. */
+function hgBrainWatchDeskHTML(rows, symFn){
+  try{
+    rows = Array.isArray(rows) ? rows : [];
+    var items = [], i;
+    for (i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (!r || !r.dec || String(r.dec.tier || '').toUpperCase() !== 'WATCH' || !r.dec.dir) continue;
+      var sym = (typeof symFn === 'function') ? symFn(r) : (r.sym || '?');
+      items.push({
+        state: 'armed',
+        sym: sym,
+        strategy: 'BRAIN · ' + String(r.dec.dir).toUpperCase(),
+        condition: (r.dec.reasons && r.dec.reasons[0]) ? r.dec.reasons[0] : 'forming',
+        reason: (isFinite(r.dec.agree) ? r.dec.agree : 0) + ' layers agree'
+      });
+    }
+    if (!items.length) return '';
+    items.sort(function(a, b){
+      var ra = String(a.reason || ''), rb = String(b.reason || '');
+      return rb.localeCompare(ra);
+    });
+    items = items.slice(0, 12);
+    return hgFormingWatchHTML(items, {
+      title: 'FORMING · WATCH DESK',
+      subtitle: 'layers still missing — not executable; limit cards above qualify on their own'
+    });
+  }catch(e){ return ''; }
+}
+
+var HG_SETUP_DESKS = [
+  { id: 'swingDesk', kind: 'swing', tab: 'SWING', note: '4H gates G1–G7 + EMA21 anchor. Cards = CLEAN only.' },
+  { id: 'scalpDesk', kind: 'scalp', tab: 'SCALP', note: '15m trigger in 1H context. NEAR = 6/7 watch rows.' },
+  { id: 'coilDesk', kind: 'coil', tab: 'COIL', note: 'Compression watchlist — expansion is manual confirm.' },
+  { id: 'brainDesk', kind: 'brain', tab: 'BRAIN', note: 'PRIME/HIGH = CLEAN tickets with plans. WATCH = FORMING radar — standing aside is a position.' },
+  { id: 'gwDesk', kind: 'goldswing', tab: 'GOLD SWING', note: 'Grade-A 4h/1d candidates = CLEAN. FORMING NOW = armed strategy watches, not entries.' },
+  { id: 'gsDesk', kind: 'goldscalp', tab: 'GOLD SCALP', note: 'Grade-A 15m candidates = CLEAN. FORMING NOW = armed ICT watches, not entries.' },
+  { id: 'sqDesk', kind: 'squeeze', tab: 'SQUEEZE', note: 'FIRED + Donchian break = CLEAN direction tickets. BUILDING = FORMING — no direction yet.' },
+  { id: 'oiflowDesk', kind: 'oiflow', tab: 'OI FLOW', note: 'CONFIRMED cascade = CLEAN. UNCONFIRMED positioning edge = NEAR watch-only.' },
+  { id: 'smartDesk', kind: 'smart', tab: 'SMART $', note: 'CONFIRMED 4H cascade = CLEAN. UNCONFIRMED evidence majority = NEAR watch-only.' },
+  { id: 'divDesk', kind: 'div', tab: 'DIVERGENCE', note: 'Qualifying divergence + plan = CLEAN. Context-only reads = FORMING watch.' },
+  { id: 'apexDesk', kind: 'apex', tab: 'APEX', note: 'Relative-strength leaders with manual macro confirm = CLEAN context cards.' },
+  { id: 'trapDesk', kind: 'trap', tab: 'TRAP', note: 'Liquidation snapback with plan = CLEAN fade ticket.' },
+  { id: 'smcDesk', kind: 'smc', tab: 'SMC', note: 'Unmitigated FVG tap aligned with HTF = CLEAN POI watch.' },
+  { id: 'obDesk', kind: 'ob', tab: 'ORDER BLOCKS', note: 'OB retest at liquidity pool = CLEAN institutional POI.' }
+];
+
 function hgSetupPaintTabDesks(){
   try{
     if (typeof document === 'undefined') return;
     hgSetupInjectStyles();
-    var desks = [
-      { id: 'swingDesk', kind: 'swing', tab: 'SWING', note: '4H gates G1–G7 + EMA21 anchor. Cards = CLEAN only.' },
-      { id: 'scalpDesk', kind: 'scalp', tab: 'SCALP', note: '15m trigger in 1H context. NEAR = 6/7 watch rows.' },
-      { id: 'coilDesk', kind: 'coil', tab: 'COIL', note: 'Compression watchlist — expansion is manual confirm.' }
-    ];
-    for (var i = 0; i < desks.length; i++){
-      var d = desks[i];
-      var el = document.getElementById(d.id);
-      if (el && !el.dataset.hgPainted){
-        el.innerHTML = hgSetupDeskBannerHTML(d);
-        el.dataset.hgPainted = '1';
-      }
+    for (var i = 0; i < HG_SETUP_DESKS.length; i++){
+      hgSetupPaintDesk(HG_SETUP_DESKS[i].id, HG_SETUP_DESKS[i]);
     }
   }catch(e){}
 }
@@ -273,6 +357,11 @@ W.hgSetupEmptyHTML = hgSetupEmptyHTML;
 W.hgSetupCardHead = hgSetupCardHead;
 W.hgSetupCardHTML = hgSetupCardHTML;
 W.hgSetupPanelHTML = hgSetupPanelHTML;
+W.hgSetupTierFromConfirmed = hgSetupTierFromConfirmed;
+W.hgBrainSetupTier = hgBrainSetupTier;
+W.hgSetupPaintDesk = hgSetupPaintDesk;
+W.hgGoldFormingWatchHTML = hgGoldFormingWatchHTML;
+W.hgBrainWatchDeskHTML = hgBrainWatchDeskHTML;
 W.hgSetupPaintTabDesks = hgSetupPaintTabDesks;
 
 try{ hgSetupInjectStyles(); }catch(e){}

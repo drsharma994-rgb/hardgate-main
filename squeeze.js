@@ -343,8 +343,8 @@ function cardHTML(r){
   var lastC = r.rows4h[r.rows4h.length - 1].c;
 
   if (r.kind === 'build'){
-    return '<div class="card">'
-      + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">BUILDING · WATCH</span></div>'
+    return '<div class="card tier-forming">'
+      + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">BUILDING · FORMING</span></div>'
       + '<div class="mini">'
       + '<span class="k">last</span><span>' + pxF(lastC) + '</span>'
       + '<span class="k">squeeze on-bars</span><span>' + r.onRun + '</span>'
@@ -502,10 +502,11 @@ function mount(el){
     + '<div class="row"><button class="btn" id="sqRun">FIND SQUEEZES</button>'
     + '<span class="note" id="sqStat">idle — Binance perps ≥ $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover, top ' + MAX_UNIVERSE + '</span></div>'
     + '<div class="prog" id="sqProg"><i></i></div>'
+    + '</div>'
+    + '<div id="sqDesk"></div>'
     + '<div class="cards" id="sqCards"></div>'
     + '<div id="sqFunnel"></div>'
-    + '<div class="empty" id="sqEmpty" style="display:none">No squeezes fired, building, or Donchian breakouts right now.</div>'
-    + '</div>';
+    + '<div class="empty" id="sqEmpty" style="display:none">No squeezes fired, building, or Donchian breakouts right now.</div>';
 
   var btn = el.querySelector('#sqRun'), statEl = el.querySelector('#sqStat'),
       progEl = el.querySelector('#sqProg'), cardsEl = el.querySelector('#sqCards'),
@@ -526,6 +527,12 @@ function mount(el){
 
   btn.addEventListener('click', function(){ runScan(); });
   __scan.run = runScan;   /* publish for the hard-refresh contract */
+  try{
+    if (typeof hgSetupPaintDesk === 'function'){
+      hgSetupPaintDesk('sqDesk', { kind: 'squeeze', tab: 'SQUEEZE',
+        note: 'FIRED + Donchian break = CLEAN direction tickets. BUILDING = FORMING — no direction yet.' });
+    }else if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+  }catch(eD){}
 
   function sqFunnelHTML(meta){
     if (!meta || typeof W.hgFunnelPanelHTML !== 'function') return '';

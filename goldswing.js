@@ -619,6 +619,22 @@ function historyHTML(history){
    buildWatch (same detector math as the candidates). Armed setups are
    watch items, NOT entries. */
 function formingNowHTML(armed){
+  if (typeof hgGoldFormingWatchHTML === 'function'){
+    return hgGoldFormingWatchHTML(armed);
+  }
+  if (typeof hgFormingWatchHTML === 'function'){
+    var items = (armed || []).map(function(w){
+      if (!w) return null;
+      return {
+        state: w.state,
+        sym: w.venue || 'GOLD',
+        strategy: w.strategy || 'SETUP',
+        condition: w.state === 'armed' ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range'),
+        level: w.level
+      };
+    }).filter(Boolean);
+    return hgFormingWatchHTML(items, { title: 'FORMING NOW', subtitle: 'armed setups are watch items, not entries' });
+  }
   if (!armed || !armed.length) return '';
   var rows = armed.map(function(w){
     if (!w) return '';
@@ -1564,6 +1580,7 @@ function mount(el){
       + 'setups stay visible as history.</div>'
       + '<div class="prog" id="gwProg"><i></i></div>'
       + '</div>'
+      + '<div id="gwDesk"></div>'
       + '<div class="cards" id="gwCards"></div>'
       + '<div class="empty" id="gwEmpty" style="display:none">no qualifying 4h/1d swing confluence right now — gold respects levels; let the structure come to you.</div>';
 
@@ -1583,6 +1600,12 @@ function mount(el){
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + '.', true);
 
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui); });
+    try{
+      if (typeof hgSetupPaintDesk === 'function'){
+        hgSetupPaintDesk('gwDesk', { kind: 'goldswing', tab: 'GOLD SWING',
+          note: 'Grade-A 4h/1d candidates = CLEAN. FORMING NOW = armed strategy watches, not entries.' });
+      }else if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+    }catch(eD){}
   }catch(e){ /* never throw at mount */ }
 }
 

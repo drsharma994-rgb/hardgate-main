@@ -19,6 +19,8 @@ assert(typeof W.hgSetupCardHTML === 'function', 'hgSetupCardHTML exported');
 assert(typeof W.hgFormingWatchHTML === 'function', 'hgFormingWatchHTML exported');
 assert(typeof W.hgSetupPanelHTML === 'function', 'hgSetupPanelHTML exported');
 assert(typeof W.hgSetupDeskBannerHTML === 'function', 'hgSetupDeskBannerHTML exported');
+assert(typeof W.hgBrainSetupTier === 'function', 'hgBrainSetupTier exported');
+assert(W.hgBrainSetupTier('PRIME') === 'clean' && W.hgBrainSetupTier('WATCH') === 'forming', 'brain tier mapping');
 
 const watch = W.hgFormingWatchHTML([
   { state: 'armed', sym: 'BTCUSD', strategy: 'SWING 4H', condition: '6/7 gates', gatesPassed: 6, gatesTotal: 7 }

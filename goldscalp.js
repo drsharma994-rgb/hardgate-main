@@ -547,6 +547,22 @@ function historyHTML(history){
    ARMED/IDLE rows with the exact live trigger condition + real level from
    goldind.js's goldWatch. Armed setups are watch items, NOT entries. */
 function formingNowHTML(armed){
+  if (typeof hgGoldFormingWatchHTML === 'function'){
+    return hgGoldFormingWatchHTML(armed);
+  }
+  if (typeof hgFormingWatchHTML === 'function'){
+    var items = (armed || []).map(function(w){
+      if (!w) return null;
+      return {
+        state: w.state,
+        sym: w.venue || 'GOLD',
+        strategy: w.strategy || 'SETUP',
+        condition: w.state === 'armed' ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range'),
+        level: w.level
+      };
+    }).filter(Boolean);
+    return hgFormingWatchHTML(items, { title: 'FORMING NOW', subtitle: 'armed setups are watch items, not entries' });
+  }
   if (!armed || !armed.length) return '';
   var rows = armed.map(function(w){
     if (!w) return '';
@@ -989,6 +1005,7 @@ function mount(el){
       + '— every gate names its reason on the card or on a held-back line below.</div>'
       + '<div class="prog" id="gsProg"><i></i></div>'
       + '</div>'
+      + '<div id="gsDesk"></div>'
       + '<div class="cards" id="gsCards"></div>'
       + '<div class="empty" id="gsEmpty" style="display:none">no A-grade confluence right now — gold respects levels; wait for the sweep.</div>';
 
@@ -1007,6 +1024,12 @@ function mount(el){
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + ' — check script load order.', true);
 
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui); });
+    try{
+      if (typeof hgSetupPaintDesk === 'function'){
+        hgSetupPaintDesk('gsDesk', { kind: 'goldscalp', tab: 'GOLD SCALP',
+          note: 'Grade-A 15m candidates = CLEAN. FORMING NOW = armed ICT watches, not entries.' });
+      }else if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+    }catch(eD){}
   }catch(e){ /* never throw at mount */ }
 }
 
