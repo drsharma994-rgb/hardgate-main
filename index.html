@@ -4225,7 +4225,9 @@ async function runGoldDeep(){
       }
       return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
         +'<div class="ledger" style="margin-bottom:10px">'+g.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('')+'</div>'
-        +'<div class="verdict '+scalpColor+'" style="margin:0 0 16px"><div class="vword" style="font-size:16px">'+scalpLabel+'</div>'
+        +'<div class="verdict '+scalpColor+'" style="margin:0 0 16px"><div class="vword" style="font-size:16px">'+scalpLabel
+        + (scoreC>=50&&swept&&reclaimed&&typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,dir,{scanner:'gold-deep-scalp',strategy:'gold-deep-scalp',fund:'gold',klass:'metals'}):'')
+        + '</div>'
         +'<div class="vwhy" style="font-size:10px">Score '+fmt(scoreC,0)+'% · '+passC+' pass · '+vetoC+' veto</div></div>'+planHtml;
     }
     setProg('goldDeepProg',0.8);
@@ -4243,11 +4245,15 @@ async function runGoldDeep(){
           const bRisk=Math.abs(priceNow-bbMid);
           const bT1=breakDir==='long'?priceNow+2*bRisk:priceNow-2*bRisk;
           const bT2=breakDir==='long'?priceNow+3*bRisk:priceNow-3*bRisk;
-          breakoutHtml='<div class="panel"><h2>Breakout Strategy <span>Bollinger squeeze + ADX expansion</span></h2>'
+          const gdBreakStack = inlineScanStack(breakDir, GOLD_SYM, h4, { style: 'gold-breakout', clean: true });
+          const gdBreakMeta = { scanner: 'gold-breakout', strategy: 'gold-breakout', klass: 'metals', fund: 'gold', t2: bT2, stack: gdBreakStack };
+          breakoutHtml='<div class="panel"><h2>Breakout Strategy <span>Bollinger squeeze + ADX expansion</span>'
+            + (typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,breakDir,gdBreakMeta):'')
+            + '</h2>'
             +'<div class="note">Squeeze detected. ADX '+fmt(adxVal,1)+'. Price closed outside the band. Momentum expansion play.</div>'
             +'<div class="plan">'+planBlock(breakDir,priceNow,bbMid,bT1,bT2)+'</div>'
-            +hgBookBtn(GOLD_SYM, breakDir, priceNow, bbMid, bT1, { scanner: 'gold-breakout', strategy: 'gold-breakout', klass: 'metals', fund: 'gold', t2: bT2,
-              stack: inlineScanStack(breakDir, GOLD_SYM, h4, { style: 'gold-breakout', clean: true }) })
+            + (typeof hgToTradePlanOnclickAttr==='function'?'<button class="toTrade" onclick="'+hgToTradePlanOnclickAttr(GOLD_SYM,breakDir,priceNow,bbMid,bT1,gdBreakMeta)+'">SEND TO TRADE PLAN →</button>':'')
+            + hgBookBtn(GOLD_SYM, breakDir, priceNow, bbMid, bT1, gdBreakMeta)
             +'</div>';
         }
       }
@@ -4257,11 +4263,15 @@ async function runGoldDeep(){
         const mRisk=Math.abs(priceNow-bbMid);
         const mT1=revDir==='long'?priceNow+1.5*mRisk:priceNow-1.5*mRisk;
         const mT2=revDir==='long'?priceNow+3*mRisk:priceNow-3*mRisk;
-        meanRevHtml='<div class="panel"><h2>Mean Reversion <span>band touch + reversal candle + RSI extreme</span></h2>'
+        const gdMrStack = inlineScanStack(revDir, GOLD_SYM, h4, { style: 'gold-meanrev', clean: true });
+        const gdMrMeta = { scanner: 'gold-meanrev', strategy: 'gold-meanrev', klass: 'metals', fund: 'gold', t2: mT2, stack: gdMrStack };
+        meanRevHtml='<div class="panel"><h2>Mean Reversion <span>band touch + reversal candle + RSI extreme</span>'
+          + (typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,revDir,gdMrMeta):'')
+          + '</h2>'
           +'<div class="note">Price at band edge. '+(pat.engulfing||'no engulf')+' · '+(pat.pinBar?'pin bar':'no pin')+' · RSI '+fmt(r4,1)+'. Counter-trend scalp.</div>'
           +'<div class="plan">'+planBlock(revDir,priceNow,bbMid,mT1,mT2)+'</div>'
-          +hgBookBtn(GOLD_SYM, revDir, priceNow, bbMid, mT1, { scanner: 'gold-meanrev', strategy: 'gold-meanrev', klass: 'metals', fund: 'gold', t2: mT2,
-            stack: inlineScanStack(revDir, GOLD_SYM, h4, { style: 'gold-meanrev', clean: true }) })
+          + (typeof hgToTradePlanOnclickAttr==='function'?'<button class="toTrade" onclick="'+hgToTradePlanOnclickAttr(GOLD_SYM,revDir,priceNow,bbMid,mT1,gdMrMeta)+'">SEND TO TRADE PLAN →</button>':'')
+          +hgBookBtn(GOLD_SYM, revDir, priceNow, bbMid, mT1, gdMrMeta)
           +'</div>';
       }
     }
@@ -4285,7 +4295,9 @@ async function runGoldDeep(){
     $('goldDeepOut').innerHTML=
         '<div class="panel"><h2>Swing — 37-gate ledger <span>weekly + 1D + 4H · macro gates auto</span></h2>'
       + '<div class="ledger">'+sg.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('')+'</div>'
-      + '<div class="verdict '+verdictColor+'"><div class="vword">'+verdictLabel+'</div>'
+      + '<div class="verdict '+verdictColor+'"><div class="vword">'+verdictLabel
+      + (casc!=='mixed'&&score>=60&&typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,casc,{scanner:'gold-deep-swing',strategy:'gold-deep-swing',fund:'gold',klass:'metals'}):'')
+      + '</div>'
       + '<div class="vwhy">Score: '+fmt(score,0)+'% · '+passCount+' pass · '+vetoCount+' veto · '+naCount+' n/a · '+verdictWhy+'</div></div>'
       + swingPlanHtml+'</div>'
       + '<div class="panel" style="margin-top:10px"><h2>Scalp — 20-gate ledgers <span>15m sweep-and-reclaim</span></h2>'

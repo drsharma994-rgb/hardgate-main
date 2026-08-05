@@ -177,7 +177,10 @@ ok(termbasisJs.indexOf('termBasisBookStamp') >= 0, 'term basis cards use IN BOOK
 ok(goldproJs.indexOf('hgBookStampChip') >= 0, 'goldpro execution levels panel uses IN BOOK chip');
 ok(goldproJs.indexOf('hgToTradePlanOnclickAttr') >= 0 && goldproJs.indexOf('SEND TO TRADE PLAN') >= 0,
   'goldpro execution levels wire trade handoff');
-ok(carryJs.indexOf('carryTradeBtn') >= 0, 'carry cards wire trade handoff');
+ok(indexHtml.indexOf("scanner: 'gold-deep-swing'") >= 0 && indexHtml.indexOf('hgBookStampChip(GOLD_SYM,casc,{scanner:\'gold-deep-swing\'') >= 0,
+  'gold deep swing verdict uses IN BOOK chip');
+ok(indexHtml.indexOf("scanner: 'gold-breakout'") >= 0 && indexHtml.indexOf('hgToTradePlanOnclickAttr(GOLD_SYM,breakDir') >= 0,
+  'gold deep breakout wires trade handoff');
 ok(macroJs.indexOf('t2: t2') >= 0 && macroJs.indexOf('macroGoldPlan') >= 0,
   'macro gold plan includes T2 for book add');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,

@@ -93,7 +93,8 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 ### Strategy → book plugin checklist
 
 1. **Plan shape** — `entry`, `stop`, `t1`, optional `t2`
-2. **CTA** — `bookBtnHTML(..., { scanner, strategy, layers })`
-3. **Routing** — `lib/book-routing.mjs` + `tests/test-book-routing.mjs`
-4. **Tests** — `tests/test-<tab>.mjs`; run `npm test`
-5. **Ship** — bump cache in `sw.js` / script `?v=` when needed
+2. **CTA** — `bookBtnHTML(..., { scanner, strategy, layers, stack })` + `hgToTradePlanOnclickAttr` (or `hgSetupPanelHTML` / `carryTradeBtn` pattern)
+3. **IN BOOK** — `hgBookStampChip(sym, dir, meta)` on card/panel headers (repaints via `hgBookStampRepaintDom` after tab switch / ADD TO BOOK)
+4. **Routing** — `lib/book-routing.mjs` + `tests/test-book-routing.mjs`
+5. **Tests** — `tests/test-<tab>.mjs`, `tests/test-handoff-coverage.mjs`; run `npm test`
+6. **Ship** — bump cache in `sw.js` / script `?v=` when needed
