@@ -137,8 +137,8 @@ function hgSetupCardHead(sym, dir, tier, extraBadges, venue, bookMeta){
   var venueHtml = venue ? '<span class="stamp na">' + suEsc(venue) + '</span> ' : '';
   var tierLabel = hgSetupTierLabel(tier);
   var badges = (extraBadges || []).join('');
-  var bookStamp = (bookMeta && typeof W.hgBookStampForMeta === 'function')
-    ? W.hgBookStampForMeta(sym, dir, bookMeta) : '';
+  var bookStamp = (bookMeta && typeof W.hgBookStampChip === 'function')
+    ? W.hgBookStampChip(sym, dir, bookMeta) : '';
   return venueHtml + '<span class="sym">' + symHtml + '</span>'
     + '<span class="dir">' + suEsc(String(dir || '').toUpperCase()) + ' · ' + tierLabel + '</span>'
     + bookStamp + badges;
@@ -251,8 +251,8 @@ function hgSetupPanelHTML(sig, opts){
   return '<div class="panel ' + cls + tierCls + '" style="margin-bottom:12px">'
     + '<h2>' + suEsc(sig.sym) + ' <span>' + suEsc(String(sig.dir || '').toUpperCase()) + ' · ' + suEsc(label)
     + badge + ' ' + hgSetupTierBadge(tier)
-    + ((typeof W.hgBookStampForMeta === 'function')
-      ? W.hgBookStampForMeta(sig.sym, sig.dir, { scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine' })
+    + ((typeof W.hgBookStampChip === 'function')
+      ? W.hgBookStampChip(sig.sym, sig.dir, { scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine' })
       : '')
     + '</span></h2>'
     + '<div class="note">' + noteHtml

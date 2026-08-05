@@ -59,7 +59,7 @@ assert(indexHtml.indexOf('tradeDesk') >= 0, 'trade tab has desk banner slot');
 assert(indexHtml.indexOf('_hgTradeHandoffPending') >= 0, 'toTrade clears stale handoff');
 
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
-assert(/hg-v146/.test(sw), 'sw cache bumped for IN BOOK stamp polish');
+assert(/hg-v149/.test(sw), 'sw cache bumped for macro/pine/trade IN BOOK stamps');
 
 console.log(fail ? '\nTESTS FAILED' : '\nALL TRADE-PLAN TESTS PASSED');
 process.exit(fail ? 1 : 0);
