@@ -114,6 +114,7 @@ console.log('== npm test chain vs tests/*.mjs ==');
   ok(chain.includes('tests/test-indicators.mjs'), 'npm test includes indicators.js tests');
   ok(chain.includes('tests/test-store.mjs'), 'npm test includes store.js tests');
   ok(chain.includes('tests/test-conviction-lock.mjs'), 'npm test includes conviction-lock tests');
+  ok(chain.includes('tests/test-startradertab.mjs'), 'npm test includes startradertab tests');
 }
 
 console.log('\n' + pass + ' passed');
