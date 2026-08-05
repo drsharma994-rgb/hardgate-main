@@ -308,6 +308,95 @@ var COLS = [
    invocations can't double-fetch. */
 var tmTab = { run: null, busy: false, hasRun: false, missing: 0 };
 var __tmSnap = null;
+var __tmScanSnap = null;
+
+function trendmxConviction(row){
+  var sc = (row && typeof row.score === 'number' && isFinite(row.score)) ? row.score : 0;
+  if (sc >= 4) return { tier: 'STRONG', label: 'STRONG CONVICTION', prime: true };
+  if (sc >= TM_MAJORITY) return { tier: 'CONVICTION', label: 'CONVICTION', prime: false };
+  return null;
+}
+
+/** Rows with fresh ⚡GOLDEN (EMA50/200 cross ≤10d) + bull cross + long plan + conviction. Pure. */
+function trendmxGoldenCrossSetups(rows){
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || r.freshCross !== 'GOLDEN') continue;
+    if (!r.comps || r.comps.d1Cross <= 0) continue;
+    var dir = tmDirOf(r);
+    if (dir !== 'long') continue;
+    var conv = trendmxConviction(r);
+    if (!conv) continue;
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price });
+    if (!tmValidSetup(plan)) continue;
+    out.push({
+      sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
+      freshCross: 'GOLDEN', conviction: conv.label, tier: conv.tier, prime: conv.prime,
+      comps: r.comps, note: '⚡GOLDEN CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
+    });
+  }
+  return out;
+}
+
+function fin(v){ return typeof v === 'number' && isFinite(v); }
+
+async function trendmxScanCore(){
+  var need = ['binancePerpUniverse', 'binanceTickers24h', 'binanceKlines'];
+  for (var m = 0; m < need.length; m++){
+    if (typeof W[need[m]] !== 'function') throw new Error('missing ' + need[m]);
+  }
+  var uni = await W.binancePerpUniverse();
+  var tick = await W.binanceTickers24h();
+  if (!Array.isArray(uni) || !uni.length) throw new Error('Binance perp universe unavailable');
+  if (!tick) throw new Error('Binance 24h tickers unavailable');
+  var syms = uni.filter(function(s){
+    return tick[s] && isFinite(tick[s].turnoverUsd) && tick[s].turnoverUsd >= TURNOVER_FLOOR;
+  }).sort(function(a, b){ return tick[b].turnoverUsd - tick[a].turnoverUsd; }).slice(0, TOP_N);
+  var results = [], failed = 0;
+  for (var i = 0; i < syms.length; i += CHUNK){
+    var chunk = syms.slice(i, i + CHUNK);
+    var rs = await Promise.all(chunk.map(function(s){
+      return Promise.all([W.binanceKlines(s, '1d', 260), W.binanceKlines(s, '4h', 120)])
+        .then(function(rr){
+          var r1 = rr[0], r4 = rr[1];
+          if (!r1 || !r1.length || !r4 || !r4.length) return null;
+          var ts = trendScore(r1, r4);
+          return { sym: s, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+            price: r1[r1.length - 1].c, rows4h: r4, rows1h: null };
+        }).catch(function(){ return null; });
+    }));
+    for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
+    if (i + CHUNK < syms.length) await sleepMs(CHUNK_SLEEP_MS);
+  }
+  return { rows: results, failed: failed, uniLen: uni.length, scanned: syms.length, at: Date.now() };
+}
+
+async function trendmxScan(opts){
+  opts = opts || {};
+  var maxAge = (opts.maxAgeMs > 0) ? opts.maxAgeMs : (5 * 60 * 1000);
+  if (!opts.force && __tmScanSnap && __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < maxAge){
+    return __tmScanSnap;
+  }
+  var core = await trendmxScanCore();
+  var golden = trendmxGoldenCrossSetups(core.rows);
+  __tmScanSnap = {
+    at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
+    goldenCross: golden
+  };
+  publishTrendmxSnap(core.rows);
+  return __tmScanSnap;
+}
+
+async function trendmxWarm(opts){
+  try{
+    var r = await trendmxScan({ force: !!(opts && opts.force) });
+    if (r && r.rows && r.rows.length) return 'warmed';
+    return 'unavailable: trend matrix scan returned no rows';
+  }catch(e){ return 'error: ' + ((e && e.message) || e); }
+}
 
 function publishTrendmxSnap(rows){
   try{
@@ -347,7 +436,7 @@ function mountTrendMatrix(el){
   el.innerHTML =
     '<div class="panel">' +
       '<h2>Trend Matrix <span>multi-TF trend composite · top 60 Binance perps by 24h turnover (≥ $20M)</span></h2>' +
-      '<div class="note">Five signed components (−1/0/+1): <b>1D TREND</b> close vs EMA200 · <b>CROSS</b> EMA50 vs EMA200 with a ⚡GOLDEN / ⚡DEATH marker when the cross is ≤10 bars old · <b>4H CASCADE</b> EMA9&gt;EMA21&gt;EMA50 full alignment · <b>CLOUD</b> Ichimoku price vs cloud · <b>ADX</b> ≥25 adds one point in the direction of the trend sum. Composite −5…+5. Click a column header to sort asc/desc. The <b>LEVELS</b> cell expands a trade plan per row: direction from the composite (≥ +2 long / ≤ −2 short), ENTRY · STOP · T1 2R · T2 3.5R computed from the scan-cached 4H rows (SMART $ setup builder when available, structure/ATR fallback otherwise — never refetched, never fabricated).</div>' +
+      '<div class="note">Five signed components (−1/0/+1): <b>1D TREND</b> close vs EMA200 · <b>CROSS</b> EMA50 vs EMA200 with a ⚡GOLDEN / ⚡DEATH marker when the cross is ≤10 bars old · <b>4H CASCADE</b> EMA9&gt;EMA21&gt;EMA50 full alignment · <b>CLOUD</b> Ichimoku price vs cloud · <b>ADX</b> ≥25 adds one point in the direction of the trend sum. Composite −5…+5. Click a column header to sort asc/desc. The <b>LEVELS</b> cell expands a trade plan per row: direction from the composite (≥ +2 long / ≤ −2 short), ENTRY · STOP · T1 2R · T2 3.5R computed from the scan-cached 4H rows (SMART $ setup builder when available, structure/ATR fallback otherwise — never refetched, never fabricated). <b>Telegram:</b> each fresh ⚡GOLDEN bull cross with conviction gets its own alert (COIN · ENTRY · STOP LOSS · TAKE PROFIT) on the 5-min cycle.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<span class="spacer"></span>' +
@@ -511,53 +600,18 @@ function mountTrendMatrix(el){
     btn.disabled = true;
     var t0 = Date.now();
     try{
-      setProg(0.02);
-      setStatus('Loading perp universe + 24h tickers…');
-      var uni  = await binancePerpUniverse();
-      var tick = await binanceTickers24h();
-      if (!Array.isArray(uni) || !uni.length) throw new Error('Binance perp universe unavailable');
-      if (!tick) throw new Error('Binance 24h tickers unavailable');
-
-      var syms = uni.filter(function(s){
-                      return tick[s] && isFinite(tick[s].turnoverUsd) &&
-                             tick[s].turnoverUsd >= TURNOVER_FLOOR;
-                    })
-                    .sort(function(a, b){ return tick[b].turnoverUsd - tick[a].turnoverUsd; })
-                    .slice(0, TOP_N);
-      if (!syms.length){
-        state.rows = [];
-        out.innerHTML = '<div class="empty">No symbols above the $20M turnover floor.</div>';
-        setStatus('universe ' + uni.length + ' perps · none above the $20M turnover floor.');
-        return;
-      }
-
-      var results = [], failed = 0;
-      for (var i = 0; i < syms.length; i += CHUNK){
-        var chunk = syms.slice(i, i + CHUNK);
-        var rs = await Promise.all(chunk.map(function(s){
-          return Promise.all([binanceKlines(s, '1d', 260), binanceKlines(s, '4h', 120)])
-            .then(function(rr){
-              var r1 = rr[0], r4 = rr[1];
-              if (!r1 || !r1.length || !r4 || !r4.length) return null;
-              var ts = trendScore(r1, r4);
-              return { sym: s, score: ts.score, comps: ts.comps,
-                       freshCross: ts.freshCross, adx: ts.adx,
-                       price: r1[r1.length - 1].c,
-                       rows4h: r4, rows1h: null }; // cached for the LEVELS plan — no refetch
-            })
-            .catch(function(){ return null; }); // per-symbol failure: counted, skipped
-        }));
-        for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
-        setProg((i + chunk.length) / syms.length);
-        setStatus('Scanning ' + Math.min(i + chunk.length, syms.length) + '/' + syms.length + '…');
-        if (i + CHUNK < syms.length) await sleepMs(CHUNK_SLEEP_MS);
-      }
+      setProg(0.05);
+      setStatus('Scanning top ' + TOP_N + ' Binance USDT-M symbols (≥ $20M turnover)…');
+      var snap = await trendmxScan({ force: true });
+      var results = (snap && snap.rows) ? snap.rows : [];
+      var failed = (snap && snap.failed) ? snap.failed : 0;
+      var symsLen = (snap && snap.scanned) ? snap.scanned : results.length;
+      var uniLen = (snap && snap.uniLen) ? snap.uniLen : symsLen;
 
       state.rows = results;
-      publishTrendmxSnap(results);
       render();
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
-      setStatus('universe ' + uni.length + ' perps · top ' + syms.length +
+      setStatus('universe ' + uniLen + ' perps · top ' + symsLen +
                 ' by turnover (≥ $20M) · ' + results.length + ' ok / ' + failed +
                 ' failed · ' + dt + 's', results.length === 0);
       if (!results.length){
@@ -587,10 +641,29 @@ W.tmDirOf = tmDirOf;
 W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;
+W.trendmxConviction = trendmxConviction;
+W.trendmxGoldenCrossSetups = trendmxGoldenCrossSetups;
+W.trendmxScan = trendmxScan;
+W.trendmxWarm = trendmxWarm;
+W.trendmxCrossState = function(){
+  try{
+    if (!__tmScanSnap) return null;
+    return {
+      at: __tmScanSnap.at,
+      scanned: __tmScanSnap.scanned,
+      goldenCross: (__tmScanSnap.goldenCross || []).map(function(s){
+        return { sym: s.sym, dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, score: s.score,
+          conviction: s.conviction, tier: s.tier, freshCross: s.freshCross };
+      })
+    };
+  }catch(e){ return null; }
+};
 W.trendmxState = function(){
   try{ return __tmSnap ? JSON.parse(JSON.stringify(__tmSnap)) : null; }catch(e){ return null; }
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'trendmx', label: 'TREND MATRIX', mount: mountTrendMatrix, refresh: refreshTrendMatrix });
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'trendmx', label: 'TREND MATRIX', run: trendmxWarm });
 
 })();
