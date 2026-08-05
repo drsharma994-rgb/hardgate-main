@@ -1004,7 +1004,7 @@ function cardHTML(r){
   return '<div class="card ' + dir + '">'
     + '<div class="chead"><span class="sym">' + symHtml + '</span><span class="dir">' + dir.toUpperCase() + ' · EXECUTE'
     + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
-    + (typeof G.hgBookStampForMeta === 'function' ? G.hgBookStampForMeta(r.sym, dir, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta' }) : '')
+    + (typeof G.hgBookStampChip === 'function' ? G.hgBookStampChip(r.sym, dir, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta' }) : '')
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
     + verdict + mini + trailHtml + planHtml + stackHtml + chartBox + tradeBtn + bookBtn
     + '</div>';

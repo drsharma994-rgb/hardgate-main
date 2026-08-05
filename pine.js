@@ -527,7 +527,11 @@ function cardHTML(sig){
   var hits = sig.edgeTicket ? ' · EDGE ticket'
     : (sig.edgeForming ? ' · EDGE forming' : (sig.gates && sig.gates.swing ? ' · SWING' : ''));
   return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
-    + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · ' + esc(sig.scriptLabel) + badge + '</span></h2>'
+    + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · ' + esc(sig.scriptLabel) + badge
+    + ((typeof W.hgBookStampChip === 'function')
+      ? W.hgBookStampChip(sig.sym, sig.dir, { scanner: 'pine', strategy: sig.scriptId || 'pine' })
+      : '')
+    + '</span></h2>'
     + '<div class="note">' + sigNoteLine(sig)
     + ' · mark ' + pxF(sig.price) + hits
     + (gateNote ? ' · ' + gateNote : '')

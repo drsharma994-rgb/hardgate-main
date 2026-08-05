@@ -392,6 +392,11 @@ function renderLevelsPanel(o){
   var h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span></h2>';
   if (!o || !o.plan) return h + '<div class="note warn">' + esc((o && o.reason) || 'levels unavailable.') + '</div></div>';
   var p = o.plan;
+  if (p && p.dir && typeof hgBookStampChip === 'function'){
+    h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span>'
+      + hgBookStampChip('XAUUSD', p.dir, { scanner: 'goldpro', strategy: 'goldpro', fund: 'gold', klass: 'metals' })
+      + '</h2>';
+  }
   var gpStack = goldProCardStack(o);
   var stackHtml = (gpStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(gpStack) : '';
   h += '<div class="row">'
@@ -411,16 +416,15 @@ function renderLevelsPanel(o){
      + '</div>';
   if (o.note) h += '<div class="note" style="margin-top:6px">' + esc(o.note) + '</div>';
   h += stackHtml;
+  var gpMeta = {
+    scanner: 'goldpro', fund: 'gold', strategy: 'goldpro', klass: 'metals',
+    layers: ['goldpro', '4h-levels'], t2: p.t2, stack: gpStack
+  };
+  if (typeof hgToTradePlanOnclickAttr === 'function'){
+    h += '<button class="toTrade" onclick="' + hgToTradePlanOnclickAttr('XAUUSD', p.dir, p.entry, p.stop, p.t1, gpMeta) + '">SEND TO TRADE PLAN →</button>';
+  }
   if (typeof bookBtnHTML === 'function'){
-    h += bookBtnHTML('XAUUSD', p.dir, p.entry, p.stop, p.t1, {
-      scanner: 'goldpro',
-      fund: 'gold',
-      strategy: 'goldpro',
-      klass: 'metals',
-      layers: ['goldpro', '4h-levels'],
-      t2: p.t2,
-      stack: gpStack
-    });
+    h += bookBtnHTML('XAUUSD', p.dir, p.entry, p.stop, p.t1, gpMeta);
   }
   return h + '</div>';
 }

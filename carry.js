@@ -158,30 +158,61 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     }catch(e){ return null; }
   }
 
-  function carryBookBtn(c, stack){
+  function carryBookStamp(c){
     try{
       var lv = c && c.levels;
-      if (!lv || typeof bookBtnHTML !== 'function') return '';
+      if (!lv) return '';
+      var hi = c.sp && c.sp.shortVenue;
+      var sym = __deskSym(__venueSym(c, hi));
+      if (!sym || sym === '—') return '';
+      if (typeof window.hgBookStampChip === 'function'){
+        return window.hgBookStampChip(sym, 'short', {
+          scanner: 'carry', fund: 'macro', strategy: 'carry', klass: 'macro'
+        });
+      }
+      return '';
+    }catch(e){ return ''; }
+  }
+
+  function carryPlanMeta(c, stack){
+    try{
+      var lv = c && c.levels;
+      if (!lv) return null;
       var hi = c.sp && c.sp.shortVenue;
       var lo = c.sp && c.sp.longVenue;
       var sym = __deskSym(__venueSym(c, hi));
-      if (!sym || sym === '—') return '';
+      if (!sym || sym === '—') return null;
       var entry = lv.entry;
       var stop = lv.stopShort;
       var t1 = entry - lv.t1Px;
       var t2 = isFinite(lv.t2Px) ? entry - lv.t2Px : null;
-      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return '';
+      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return null;
       var st = stack || carryCardStack(c);
-      return bookBtnHTML(sym, 'short', entry, stop, t1, {
-        scanner: 'carry',
-        fund: 'macro',
-        strategy: 'carry',
-        klass: 'macro',
-        venue: hi || 'carry',
-        layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')],
-        t2: t2,
-        stack: st
-      });
+      return {
+        sym: sym, dir: 'short', entry: entry, stop: stop, t1: t1, t2: t2,
+        meta: {
+          scanner: 'carry', fund: 'macro', strategy: 'carry', klass: 'macro',
+          venue: hi || 'carry',
+          layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')],
+          t2: t2, stack: st
+        }
+      };
+    }catch(e){ return null; }
+  }
+
+  function carryTradeBtn(c, stack){
+    try{
+      var pm = carryPlanMeta(c, stack);
+      if (!pm || typeof window.hgToTradePlanOnclickAttr !== 'function') return '';
+      return '<button class="toTrade" onclick="' + window.hgToTradePlanOnclickAttr(pm.sym, pm.dir, pm.entry, pm.stop, pm.t1, pm.meta) + '">SEND TO TRADE PLAN →</button>';
+    }catch(e){ return ''; }
+  }
+
+  function carryBookBtn(c, stack){
+    try{
+      var pm = carryPlanMeta(c, stack);
+      if (!pm || typeof bookBtnHTML !== 'function') return '';
+      return bookBtnHTML(pm.sym, pm.dir, pm.entry, pm.stop, pm.t1, pm.meta);
     }catch(e){ return ''; }
   }
 
@@ -419,12 +450,13 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       const carryStackHtml = (carryStack && typeof hgSetupStackMiniHtml === 'function')
         ? hgSetupStackMiniHtml(carryStack) : '';
       return '<div class="card long">'
-        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span></div>'
+        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span>' + carryBookStamp(c) + '</div>'
         + '<div class="mini">' + mini.map(function(kv){ return '<span class="k">' + kv[0] + '</span><span>' + kv[1] + '</span>'; }).join('') + '</div>'
         + '<div class="gates">' + gates.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('') + '</div>'
         + '<div class="plan">' + plan + '</div>'
         + '<div class="plan">' + lvTxt + '</div>'
         + carryStackHtml
+        + carryTradeBtn(c, carryStack)
         + carryBookBtn(c, carryStack)
         + '</div>';
     }).join('');
@@ -799,6 +831,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     window.carryBybitCrossCheck = carryBybitCrossCheck;
     window.carryPlan = carryPlan;             // per-card execution levels (SL/TP audit)
     window.carryBookBtn = carryBookBtn;       // paper book CTA (short carry leg → macro fund)
+    window.carryTradeBtn = carryTradeBtn;     // TRADE PLAN handoff (short carry leg)
     window.carryState = function carryState(){
       try{ return __carrySnap ? JSON.parse(JSON.stringify(__carrySnap)) : null; }catch(e){ return null; }
     };

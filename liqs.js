@@ -796,7 +796,7 @@ function setupCardHTML(setup){
   return '<div class="card ' + setup.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(setup.sym || 'MULTI') + '</span>'
     + '<span class="dir">' + dirUp + ' · FADE THE FLUSH</span>'
-    + (hasPlan && typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(setup.sym, setup.dir, { scanner: 'liqs', strategy: 'liqs' }) : '')
+    + (hasPlan && typeof hgBookStampChip === 'function' ? hgBookStampChip(setup.sym, setup.dir, { scanner: 'liqs', strategy: 'liqs' }) : '')
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">flushed side</span><span>' + setup.flushSide.toUpperCase() + 'S LIQUIDATED</span>'
