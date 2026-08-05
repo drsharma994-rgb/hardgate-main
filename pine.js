@@ -96,7 +96,8 @@ function pruneKeys(keys, now, gap){
 function buildPlan(dir, price, rows){
   try{
     if (typeof W.smartSetup === 'function' && rows && rows.length){
-      var ss = W.smartSetup(rows, dir, TF);
+      var cls = { dir: dir, longEv: dir === 'long' ? ['pine signal'] : [], shortEv: dir === 'short' ? ['pine signal'] : [], score: 1 };
+      var ss = W.smartSetup(cls, rows, rows);
       if (ss && fin(+ss.entry) && fin(+ss.stop) && fin(+ss.t1)) return ss;
     }
     if (typeof W.hgStructureStop === 'function' && rows && rows.length){
