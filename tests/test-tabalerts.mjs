@@ -158,5 +158,31 @@ assert(smartRun.pushed === 1 && WS._tg && WS._tg.indexOf('SMART') >= 0, 'hgTabAl
 const run = await W.hgTabAlertsRun({ force: true });
 assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
 
+const WI = loadWithWindow({
+  swingScan: () => null,
+  scalpScan: () => null,
+  edgeScan: () => null,
+  __hgBrainLast: () => ({ rows: [{ sym: 'BOOKED', dir: 'long', tier: 'ASIDE', evidence: [] }] }),
+  brainInvAlertsOn: () => true,
+  hgBrainInvAlertsFromLast: function(){
+    WI._invCalled = true;
+    return 1;
+  },
+  sendTelegram: async () => true
+});
+WI.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const invRun = await WI.hgTabAlertsRun({ force: true });
+assert(WI._invCalled === true, 'hgTabAlertsRun calls hgBrainInvAlertsFromLast when inv alerts ON');
+assert(invRun.invalidation === 1, 'invalidation count returned on cycle run');
+
+const WOff = loadWithWindow({
+  brainInvAlertsOn: () => false,
+  hgBrainInvAlertsFromLast: function(){ WOff._invCalled = true; return 1; },
+  sendTelegram: async () => true
+});
+WOff.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+await WOff.hgTabAlertsRun({ force: true });
+assert(WOff._invCalled !== true, 'brainInvAlertsOn false skips invalidation hook');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);

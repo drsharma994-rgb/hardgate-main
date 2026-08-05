@@ -641,9 +641,16 @@ async function main() {
           blackout = { active: !!(nr && nr.blackout), note: String((nr && nr.note) || '').slice(0, 160) };
         }
       } catch (e) { blackout = null; }
+      let invCount = 0;
+      try {
+        if (typeof window.brainInvAlertsOn === 'function' && window.brainInvAlertsOn()
+            && typeof window.hgBrainInvAlertsFromLast === 'function'){
+          invCount = window.hgBrainInvAlertsFromLast() || 0;
+        }
+      } catch (e) { invCount = 0; }
       return { ok: /^done/i.test(stat), stat: String(stat).slice(0, 160), ticket: snap, engine: engine,
                sniper: sniper, squeeze: squeeze, setups: setups, read: String(read).slice(0, 300), top: top,
-               blackout: blackout };
+               blackout: blackout, invCount: invCount };
     } catch (e) {
       return { ok: false, err: (e && e.message) ? e.message : String(e) };
     }
@@ -683,6 +690,9 @@ async function main() {
   console.log('Ticket synthesis:', ticketResult.ok
     ? 'ok — ' + (ticketResult.stat || '')
     : 'degraded — ' + (ticketResult.err || ticketResult.stat || 'no detail'));
+  if (ticketResult.ok && Number(ticketResult.invCount) > 0){
+    console.log('BRAIN invalidation alerts fired:', ticketResult.invCount);
+  }
   if (ticketResult.ok && ticketResult.ticket) {
     const nextTicket = ticketSnapshot(ticketResult.ticket);
     console.log('Ticket now:', JSON.stringify(nextTicket), '· previous:', JSON.stringify(prevState.ticket ?? null));

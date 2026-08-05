@@ -92,4 +92,34 @@ console.log('== hgBrainInvAlertsFromLast ==');
   ok(W.hgBrainInvAlertsFromLast() === 1 && sent.length === 1, 'fromLast reads __hgBrainLast rows');
 }
 
+console.log('== PRIME→HIGH demotion ==');
+{
+  var sent = [];
+  const W = loadBrainInv({ sendTelegram: function(t){ sent.push(t); } });
+  W.hgBrainBookLayerRecord({ sym: 'AVAXUSDT', dir: 'short', tier: 'PRIME', layerSig: 'p' });
+  ok(W.hgBrainInvAlertsFromRows([{ sym: 'AVAXUSDT', dir: 'short', tier: 'HIGH', layerSig: 'p' }]) === 1,
+    'PRIME→HIGH demotion fires tighten alert');
+  ok(sent.length === 1 && sent[0].indexOf('PRIME → HIGH') >= 0, 'demotion text in telegram body');
+}
+
+console.log('== symbol dropped from scan ==');
+{
+  var sent = [];
+  const W = loadBrainInv({ sendTelegram: function(t){ sent.push(t); } });
+  W.hgBrainBookLayerRecord({ sym: 'DOGEUSDT', dir: 'long', tier: 'HIGH', layerSig: 'd' });
+  ok(W.hgBrainInvAlertsFromRows([]) === 1, 'missing sym in fresh rows triggers review alert');
+  ok(sent[0].indexOf('no longer in BRAIN scan') >= 0, 'drop copy in telegram body');
+}
+
+console.log('== layer evidence drift ==');
+{
+  var sent = [];
+  const W = loadBrainInv({ sendTelegram: function(t){ sent.push(t); } });
+  W.hgBrainBookLayerRecord({ sym: 'LINKUSDT', dir: 'long', tier: 'HIGH', layerSig: 'regime:long' });
+  ok(W.hgBrainInvAlertsFromRows([
+    { sym: 'LINKUSDT', dir: 'long', tier: 'HIGH', evidence: ['REGIME: risk-off'] },
+  ]) === 1, 'layer sig drift on non-PRIME tier fires review stop');
+  ok(sent[0].indexOf('layer evidence shifted') >= 0, 'drift copy in telegram body');
+}
+
 console.log('\n' + pass + ' passed');

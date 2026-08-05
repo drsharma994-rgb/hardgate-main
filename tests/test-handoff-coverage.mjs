@@ -34,4 +34,11 @@ for (const f of bookFiles){
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
 ok(/hg-v15[0-9]/.test(sw), 'sw.js cache bumped for handoff stack');
 
+const brainJs = fs.readFileSync(root + 'brain.js', 'utf8');
+ok(brainJs.indexOf('hgBrainInvAlertsFromRows') >= 0, 'brain.js fires invalidation after synthesis');
+const bookJs = fs.readFileSync(root + 'book.js', 'utf8');
+ok(bookJs.indexOf('hgBrainBookLayerRecord') >= 0, 'book.js records brain layer snapshot on ADD TO BOOK');
+ok(fs.readFileSync(root + 'tabalerts.js', 'utf8').indexOf('hgBrainInvAlertsMaybeRun') >= 0,
+  'tabalerts.js runs invalidation on 15-min cycle');
+
 console.log('\n' + passed + ' passed');
