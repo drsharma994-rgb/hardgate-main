@@ -234,13 +234,31 @@
     var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
     if (!(isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR)) return null;
     var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    var dir = m.dir, p = m.p, e9 = m.e9, a4 = m.a4;
+    var entry = p;
+    var distToFast = isFinite(a4) && a4 > 0 ? Math.abs(p - e9) / a4 : NaN;
+    if (isFinite(distToFast) && distToFast > 0.25){
+      entry = dir === 'long' ? Math.min(p, e9) : Math.max(p, e9);
+    }
+    var stop = m.stop;
+    if (isFinite(a4) && a4 > 0 && Math.abs(entry - stop) > 2.0 * a4){
+      stop = dir === 'long' ? entry - 2.0 * a4 : entry + 2.0 * a4;
+    }
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    var expectedMove = a4 * 3.5;
+    var maxExcursion = a4 * 4.9;
+    var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
+    var t2 = dir === 'long' ? entry + maxExcursion : entry - maxExcursion;
+    var dynamicRR = expectedMove / risk;
     var near = {
-      sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
-      missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: m.p,
-      level: m.level, dynamicRR: m.dynamicRR, nearClean: true
+      sym: ticker && ticker.symbol, dir: dir, passed: m.passed, gatesPassed: m.passed,
+      gatesTotal: m.gatesTotal, missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: p,
+      level: m.level, dynamicRR: dynamicRR, nearClean: true,
+      entry: entry, stop: stop, t1: t1, t2: t2, rr: dynamicRR
     };
     if (typeof hgSetupStackAttach === 'function'){
-      hgSetupStackAttach(near, { style: 'swing', rows4h: rows, ticker: ticker, nearClean: true });
+      hgSetupStackAttach(near, { style: 'swing', rows4h: rows, ticker: ticker, nearClean: true, gatesPassed: m.passed, gatesTotal: m.gatesTotal });
     }
     return near;
   }
@@ -265,12 +283,13 @@
     if (m.passed < 6) return null;
     var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
     var near = {
-      sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
-      missing: missing, rows: m.m15 || m15, r14: m.r15, vz: null, mark: m.mark,
-      level: m.level, dynamicRR: m.dynamicRR, nearClean: true
+      sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesPassed: m.passed,
+      gatesTotal: m.gatesTotal, missing: missing, rows: m.m15 || m15, r14: m.r15, vz: null, mark: m.mark,
+      level: m.level, dynamicRR: m.dynamicRR, nearClean: true,
+      entry: m.entry, stop: m.stop, t1: m.t1, t2: m.t2, rr: m.dynamicRR
     };
     if (typeof hgSetupStackAttach === 'function'){
-      hgSetupStackAttach(near, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, nearClean: true });
+      hgSetupStackAttach(near, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, nearClean: true, gatesPassed: m.passed, gatesTotal: m.gatesTotal });
     }
     return near;
   }

@@ -4,11 +4,11 @@ TELEGRAM SETUP ALERTS for tab scanners: crypto SWING, crypto SCALP, EDGE,
 BRAIN (HIGH/PRIME with 7/7 swing evidence), BEST (7/7 clean), GOLD when
 gate-clean, plus optional PINE/layers when hgAlertCleanOnly=0.
 
-Default: only 7/7 CLEAN setups (entry + SL + TP) every 15 minutes.
+Default: 7/7 CLEAN + 6/7 NEAR (watch) setups (entry + SL + TP) every 5 minutes.
 
-Runs on the 15-min alert cycle (index.html runAlertCycle) after quiet scans,
+Runs on the 5-min alert cycle (index.html runAlertCycle) after quiet scans,
 and on hgalert's 60s evaluate() for live BRAIN/GOLD reads between cycles.
-Dedup: one push per setup key (source:sym:dir@entry) per 15 minutes via
+Dedup: one push per setup key (source:sym:dir@entry) per 5 minutes via
 localStorage hg_tabalert_keys. PRIME / very-high confluence lines are tagged
 🔥 in the message body.
 
@@ -33,7 +33,7 @@ var LS_CLEAN_ONLY = 'hgAlertCleanOnly';
 var LS_GOLD_SEPARATE = 'hgAlertGoldSeparate';
 var LS_GOLD_CONVICTED = 'hgAlertGoldConvictedOnly';
 var LS_GOLD_LAST_RUN = 'hg_tabalert_gold_last_run';
-var GAP_MS = 15 * 60 * 1000;
+var GAP_MS = 5 * 60 * 1000;
 var GOLD_MIN_TALLY = 10;
 var EDGE_STRONG_TALLY = 5;
 var SITE = 'https://hardgate-main.onrender.com/';
@@ -144,7 +144,7 @@ function goldIsMostConvinced(c, scanVal){
   return false;
 }
 
-/** Default ON: Telegram 15-min batch only pushes 7/7 CLEAN tickets (entry + SL + TP). Set hgAlertCleanOnly=0 to restore all tabs. */
+/** Default ON: Telegram 5-min batch pushes 7/7 CLEAN + 6/7 NEAR (SWING/SCALP watch rows with levels). Set hgAlertCleanOnly=0 for all tabs. */
 function tabAlertsCleanOnlyEnabled(root){
   try{
     var ls = (root && root.localStorage) ? root.localStorage : null;
@@ -156,7 +156,7 @@ function tabAlertsCleanOnlyEnabled(root){
 }
 
 function setupIsClean7(s){
-  if (!s || s.watch) return false;
+  if (!s || s.watch || s.nearClean === true) return false;
   if (s.goldConvicted === true) return true;
   if (s.clean7 === true || s.clean === true) return true;
   if (fin(+s.gatesPassed) && fin(+s.gatesTotal) && +s.gatesPassed >= 7 && +s.gatesTotal >= 7) return true;
@@ -166,8 +166,19 @@ function setupIsClean7(s){
   return false;
 }
 
+function setupIsNearClean6(s){
+  if (!s || s.watch || setupIsClean7(s)) return false;
+  if (s.nearClean !== true) return false;
+  var gp = fin(+s.gatesPassed) ? +s.gatesPassed : (fin(+s.passed) ? +s.passed : 0);
+  return gp >= 6;
+}
+
+function setupIsTelegramEligible(s){
+  return setupIsClean7(s) || setupIsNearClean6(s);
+}
+
 function tabAlertsFilterClean7(list){
-  return (list || []).filter(setupIsClean7);
+  return (list || []).filter(setupIsTelegramEligible);
 }
 
 function collectCrypto(out, kind, src){
@@ -182,6 +193,22 @@ function collectCrypto(out, kind, src){
     var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
     if (fin(rr) && rr < minRr) continue;
     pushSetup(out, src, c, { clean7: true, gatesPassed: 7, gatesTotal: 7 });
+  }
+  var nearCands = (val && Array.isArray(val.nearCands)) ? val.nearCands : [];
+  for (var j = 0; j < nearCands.length; j++){
+    var n = nearCands[j];
+    var nrr = fin(+n.rr) ? +n.rr : NaN;
+    if (fin(nrr) && nrr < minRr * 0.9) continue;
+    var gp = fin(+n.gatesPassed) ? +n.gatesPassed : (fin(+n.passed) ? +n.passed : 6);
+    var miss = Array.isArray(n.missing) ? n.missing.join(', ') : '';
+    pushSetup(out, src, n, {
+      nearClean: true,
+      clean7: false,
+      gatesPassed: gp,
+      gatesTotal: fin(+n.gatesTotal) ? +n.gatesTotal : 7,
+      tier: '6/7 NEAR',
+      note: miss ? ('missing: ' + miss + ' — watch only, not a ticket') : '6/7 gates — watch only, not a ticket'
+    });
   }
 }
 
@@ -740,7 +767,9 @@ function hgTabAlertsFormat(fresh){
     if (s.tally !== null) extra += ' · tally ' + (s.tally > 0 ? '+' : '') + s.tally;
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';
-    if (s.clean7) extra += ' · 7/7 CLEAN';
+    if (s.nearClean) extra += ' · 6/7 NEAR (watch — not ticket yet)';
+    else if (s.clean7) extra += ' · 7/7 CLEAN';
+    if (s.note && !s.watch) extra += ' · ' + s.note;
     var plan = hgTabAlertsPlanBlock(s).split('\n').map(function(l){ return '  ' + l; }).join('\n');
     var lev = levHint(s.entry, s.stop);
     lines.push(tag + s.sym + ' ' + s.dir.toUpperCase()
@@ -752,22 +781,28 @@ function hgTabAlertsFormat(fresh){
   if (!lines.length) return '';
   var allGoldConv = fresh.length && fresh.every(function(x){ return x.goldConvicted === true; });
   var allClean = fresh.every(setupIsClean7);
+  var anyNear = fresh.some(setupIsNearClean6);
   var hdr = fresh.length === 1
     ? (fresh[0].prime && !allGoldConv ? '🔥 HARDGATE — STRONG SETUP'
         : (allGoldConv ? '🥇 HARDGATE — GOLD CONVICTION SETUP'
-          : (allClean ? '✅ HARDGATE — 7/7 CLEAN SETUP' : '📊 HARDGATE — SETUP')))
+          : (allClean ? '✅ HARDGATE — 7/7 CLEAN SETUP'
+            : (fresh[0].nearClean ? '👁 HARDGATE — 6/7 NEAR (WATCH)' : '📊 HARDGATE — SETUP'))))
     : (allGoldConv
         ? '🥇 HARDGATE — ' + fresh.length + ' GOLD CONVICTION SETUPS (SCALP / SWING)'
         : (fresh.some(function(x){ return x.prime; })
             ? '🔥 HARDGATE — ' + fresh.length + ' SETUPS (incl. strong)'
             : (allClean
                 ? '✅ HARDGATE — ' + fresh.length + ' × 7/7 CLEAN SETUPS'
-                : '📊 HARDGATE — ' + fresh.length + ' SETUPS')));
+                : (anyNear && !allClean
+                    ? '👁 HARDGATE — ' + fresh.length + ' SETUPS (incl. 6/7 NEAR watch)'
+                    : '📊 HARDGATE — ' + fresh.length + ' SETUPS'))));
   return hdr
-    + '\nTab: 15-min alert cycle (tabalerts.js)'
+    + '\nTab: 5-min alert cycle (tabalerts.js)'
     + '\nSignal: ' + (allGoldConv
         ? 'GOLD SCALP / GOLD SWING — MOST PROBABLE banner or grade-A locked conviction only (each row: COIN · ENTRY · STOP LOSS · TAKE PROFIT)'
-        : (allClean ? '7/7 gate-clean tickets — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT' : 'fresh scanner hits — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT'))
+        : (allClean ? '7/7 gate-clean tickets — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT'
+          : (anyNear ? '7/7 CLEAN tickets + 6/7 NEAR watch rows — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT (NEAR = not a ticket yet)'
+            : 'fresh scanner hits — each row lists COIN, ENTRY, STOP LOSS, and TAKE PROFIT')))
     + '\n\n' + lines.join('\n\n')
     + '\n\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
     + '\n' + SITE;
@@ -821,7 +856,7 @@ async function hgTabAlertsRun(opts){
   var root = opts.window || W;
   var lastRunKey = opts.goldOnly ? LS_GOLD_LAST_RUN : LS_LAST_RUN;
   if (!tabAlertsShouldRun(root, !!opts.force, lastRunKey)){
-    return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-15m', invalidation: 0 };
+    return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-5m', invalidation: 0 };
   }
   if (!opts.dryRun) tabAlertsMarkRun(root, lastRunKey);
   var invCount = 0;
@@ -858,7 +893,7 @@ async function hgTabAlertsRun(opts){
   var fr = hgTabAlertsFresh(prev, list, now, gap);
   if (!fr.fresh.length){
     var emptySt = opts.goldOnly ? 'none-new-gold-conviction'
-      : (cleanOnly ? 'none-new-clean7' : 'none-new');
+      : (cleanOnly ? 'none-new-clean7-or-near' : 'none-new');
     return { pushed: 0, fresh: [], keys: fr.keys, status: emptySt, invalidation: invCount };
   }
   var body = hgTabAlertsFormat(fr.fresh);
@@ -918,7 +953,8 @@ if (typeof module !== 'undefined' && module.exports){
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
     LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_GOLD_LAST_RUN,
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
-    setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
+    setupIsClean7, setupIsNearClean6, setupIsTelegramEligible,
+    tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
     tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced };
 }
 

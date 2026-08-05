@@ -39,7 +39,7 @@ ok(brainJs.indexOf('hgBrainInvAlertsFromRows') >= 0, 'brain.js fires invalidatio
 const bookJs = fs.readFileSync(root + 'book.js', 'utf8');
 ok(bookJs.indexOf('hgBrainBookLayerRecord') >= 0, 'book.js records brain layer snapshot on ADD TO BOOK');
 ok(fs.readFileSync(root + 'tabalerts.js', 'utf8').indexOf('hgBrainInvAlertsMaybeRun') >= 0,
-  'tabalerts.js runs invalidation on 15-min cycle');
+  'tabalerts.js runs invalidation on 5-min cycle');
 
 const swShell = fs.readFileSync(root + 'sw.js', 'utf8');
 ok(swShell.indexOf("'./hghost.js'") >= 0, 'sw.js precaches hghost.js');

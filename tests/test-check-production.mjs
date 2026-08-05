@@ -53,16 +53,19 @@ console.log('== check-production script ==');
 
 console.log('== alert cycle constants (README alignment) ==');
 {
-  ok(/HG_TAB_ALERT_MS = 15 \* 60 \* 1000/.test(html), 'HG_TAB_ALERT_MS is 15 minutes');
+  ok(/HG_TAB_ALERT_MS = 5 \* 60 \* 1000/.test(html), 'HG_TAB_ALERT_MS is 5 minutes');
   ok(/HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS/.test(html), 'HG_ALERT_CYCLE_MS aliases tab alert ms');
   ok(/HG_ALERTS_AUTO_REFRESH_MS = 900000/.test(html), 'HG_ALERTS_AUTO_REFRESH_MS is 15 minutes');
-  ok(/GAP_MS = 15 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 15 minutes');
+  ok(/GAP_MS = 5 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 5 minutes');
+  ok(/forceScanAll: true/.test(html), 'alert warm scans whole exchange');
+  ok(/nearCands/.test(html), 'quiet scan stores near-clean candidates');
+  ok(/6\/7 NEAR/.test(tabalerts), 'tabalerts labels near-clean rows honestly');
   ok(/GOLD_MIN_TALLY = 10/.test(tabalerts), 'tabalerts gold min tally is 10');
   ok(/\+c\.tally < 6/.test(tabalerts), 'tabalerts EDGE setup filter uses tally >= 6');
   ok(/LS_CLEAN_ONLY = 'hgAlertCleanOnly'/.test(tabalerts), 'tabalerts clean-only localStorage key');
   ok(/LS_GOLD_SEPARATE = 'hgAlertGoldSeparate'/.test(tabalerts), 'tabalerts gold separate batch key');
   ok(/hgTabAlertsRunGold/.test(tabalerts), 'tabalerts exposes hgTabAlertsRunGold');
-  ok(/hgTabAlertsRunGold\(\)/.test(html), 'index calls hgTabAlertsRunGold on 15-min cycle');
+  ok(/hgTabAlertsRunGold\(\)/.test(html), 'index calls hgTabAlertsRunGold on 5-min cycle');
   ok(/cleanOnly: true/.test(html), 'index runTabSetupAlerts passes cleanOnly true');
 }
 
@@ -82,7 +85,7 @@ console.log('== HG_SHELL vs index.html scripts ==');
 
 console.log('== README doc guards ==');
 {
-  ok(readme.indexOf('15-minute') >= 0 || readme.indexOf('15 min') >= 0, 'README documents 15-min alert cycle');
+  ok(readme.indexOf('5-minute') >= 0 || readme.indexOf('5 min') >= 0, 'README documents 5-min alert cycle');
   ok(!/EDGE uses tally ≥ 3/.test(readme) && !/EDGE uses tally >= 3/.test(readme),
     'README does not stale-document EDGE tally >= 3');
   ok(/tally.*6|≥ 6|>= 6/.test(readme), 'README documents EDGE tally >= 6');

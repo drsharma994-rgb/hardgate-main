@@ -537,7 +537,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
-      <span class="note">Telegram: 7/7 CLEAN setups (COIN · ENTRY · STOP LOSS · TAKE PROFIT per row) from all tabs — one batch every 15 min (tabalerts.js dedup). Set localStorage hgAlertCleanOnly=0 for all-tab alerts.</span>
+      <span class="note">Telegram: 7/7 CLEAN + 6/7 NEAR watch (COIN · ENTRY · STOP LOSS · TAKE PROFIT per row) from all tabs — one batch every 5 min (tabalerts.js dedup). Alert warm scans whole exchange. Set localStorage hgAlertCleanOnly=0 for all-tab alerts.</span>
     </div>
     <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer. The #1 panel shows <b>4H regime</b> (STRONG TREND / WEAK TREND / …) — per-symbol tape context, not the market-wide REGIME tab.</div>
     <div class="prog" id="bestProg"><i></i></div>
@@ -750,12 +750,12 @@ function publishBestSnap(clean, meta){
 window.bestScan = function(){ return __hgBestSnap; };
 
 /* Owner policy: alerts always armed in this browser.
-   BEST (Strategies tab): Telegram on new #1 setup every 15 min (server CI matches).
+   BEST (Strategies tab): Telegram on new #1 setup every 5 min (server CI matches).
    All tab setups (SWING/SCALP/EDGE/PINE/BRAIN/GOLD/…): one unified Telegram
-   batch every 15 min via tabalerts.js (per-setup dedup in hg_tabalert_keys). */
+   batch every 5 min via tabalerts.js (per-setup dedup in hg_tabalert_keys). */
 const HG_ALERTS_FORCED_ON = true;
-const HG_BEST_ALERT_MS = 15 * 60 * 1000;
-const HG_TAB_ALERT_MS = 15 * 60 * 1000;
+const HG_BEST_ALERT_MS = 5 * 60 * 1000;
+const HG_TAB_ALERT_MS = 5 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
 const HG_ALERTS_AUTO_REFRESH_MS = 900000;
 const HG_CANDLE_TTL_QUIET = 300;
@@ -3278,7 +3278,7 @@ async function runScanLeg(kind, opts){
   const isSwing = kind === 'swing';
   const st0 = $(isSwing ? 'swingStat' : 'scalpStat');
   if (!quiet && !skipUiClear && !(await waitAlertIdle(st0))) return null;
-  const scanAll = $(isSwing ? 'swingAll' : 'scalpAll').checked;
+  const scanAll = !!(opts && opts.forceScanAll) || $(isSwing ? 'swingAll' : 'scalpAll').checked;
   const N = Math.max(5, Math.min(500, +$(isSwing ? 'swingN' : 'scalpN').value || 30));
   const minTurn = isSwing ? (+$('swingTurn').value || 0) : 0;
   const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards'), emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty'), statEl = $(isSwing ? 'swingStat' : 'scalpStat');
@@ -3305,6 +3305,7 @@ async function runScanLeg(kind, opts){
     cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
   }
   let cands = [];
+  let nearCands = [];
   let uni = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
@@ -3355,16 +3356,20 @@ async function runScanLeg(kind, opts){
               renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag);
               return;
             }
-            if (!quiet && typeof swingTryNear === 'function'){
+            if (typeof swingTryNear === 'function'){
               const near = swingTryNear(rows, t);
-              if (near){
-                nearFound++;
-                if (nearFound === 1){
-                  const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
-                    ? hgSetupNearHeaderHTML(1, 'swing') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only. These are not tickets until all seven gates pass.</div>';
-                  cardsEl.insertAdjacentHTML('beforeend', nearHdr);
+              if (near && near.entry != null && near.stop != null && near.t1 != null){
+                if (quiet){
+                  nearCands.push(Object.assign({ sym: t.symbol }, near));
+                } else {
+                  nearFound++;
+                  if (nearFound === 1){
+                    const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
+                      ? hgSetupNearHeaderHTML(1, 'swing') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only. These are not tickets until all seven gates pass.</div>';
+                    cardsEl.insertAdjacentHTML('beforeend', nearHdr);
+                  }
+                  renderNearCleanCard(t, near, cardsEl, 'swing', venueTag);
                 }
-                renderNearCleanCard(t, near, cardsEl, 'swing', venueTag);
               }
             }
           } else {
@@ -3394,16 +3399,20 @@ async function runScanLeg(kind, opts){
               found++;
               cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
               renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag);
-            } else if (!quiet && typeof scalpTryNear === 'function'){
+            } else if (typeof scalpTryNear === 'function'){
               const nearS = scalpTryNear(h1, m15, t, minsToFunding);
-              if (nearS){
-                nearFound++;
-                if (nearFound === 1){
-                  const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
-                    ? hgSetupNearHeaderHTML(1, 'scalp') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only.</div>';
-                  cardsEl.insertAdjacentHTML('beforeend', nearHdr);
+              if (nearS && nearS.entry != null && nearS.stop != null && nearS.t1 != null){
+                if (quiet){
+                  nearCands.push(Object.assign({ sym: t.symbol }, nearS));
+                } else {
+                  nearFound++;
+                  if (nearFound === 1){
+                    const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
+                      ? hgSetupNearHeaderHTML(1, 'scalp') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only.</div>';
+                    cardsEl.insertAdjacentHTML('beforeend', nearHdr);
+                  }
+                  renderNearCleanCard(t, nearS, cardsEl, 'scalp', venueTag);
                 }
-                renderNearCleanCard(t, nearS, cardsEl, 'scalp', venueTag);
               }
             }
           }
@@ -3421,7 +3430,7 @@ async function runScanLeg(kind, opts){
       + (audit.errors ? (' · ' + audit.errors + ' fetch errors') : '');
     if (!quiet && dualLast) statEl.textContent = statText;
     if (!quiet && dualLast) try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
-    const snap = { at: Date.now(), cands: cands, stat: statText, audit: Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }) };
+    const snap = { at: Date.now(), cands: cands, nearCands: nearCands, stat: statText, audit: Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }) };
     if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
     if (!quiet && dualLast) hgPaintScanFunnel(kind, snap.audit);
     if (!quiet && dualLast && !found){
@@ -3453,7 +3462,7 @@ async function runScanLeg(kind, opts){
 }
 
 
-/* Quiet background scans for the 15-min Telegram alert cycle — no UI churn. */
+/* Quiet background scans for the 5-min Telegram alert cycle — no UI churn. */
 async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
   const quiet = !!(opts && opts.quiet);
   const elId = kind === 'swing' ? 'swingWatch' : 'scalpWatch';
@@ -3504,7 +3513,7 @@ async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
 }
 
 async function cryptoScanWarm(kind){
-  try{ await runScan(kind, { quiet: true }); return 'warmed'; }
+  try{ await runScan(kind, { quiet: true, forceScanAll: true }); return 'warmed'; }
   catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
 async function hgWarmLayerIds(ids){
@@ -3537,7 +3546,7 @@ async function runTabAlertScans(){
   try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
 }
 
-/* Unified 15-min setup Telegram — warm scanners then push all tabs once. */
+/* Unified 5-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
 async function runTabSetupAlerts(){
   const now = Date.now();
   if (S.lastTabAlertCheck && now - S.lastTabAlertCheck < HG_TAB_ALERT_MS) return;
@@ -3553,7 +3562,7 @@ async function runTabSetupAlerts(){
   }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
 }
 
-/* Legacy hook — EDGE now rides the unified 15-min tabalerts batch. */
+/* Legacy hook — EDGE now rides the unified 5-min tabalerts batch. */
 async function runEdgeAlertCycle(){
   return runTabSetupAlerts();
 }
@@ -5390,7 +5399,7 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 15 min */
+    /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 5 min */
     try{ await runTabSetupAlerts(); }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
     S.lastAlertCheck = Date.now();
   } finally {

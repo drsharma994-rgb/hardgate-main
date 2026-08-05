@@ -121,24 +121,25 @@ since 2026-07-29; `vercel --prod --yes` resumes it if billing is reactivated.
 ## Alerts
 
 Toggle the 🔔 chip in the header. **This deployment forces alerts ON** in the browser
-(`HG_ALERTS_FORCED_ON`) on every page load, with a **15-minute** silent tab-alert cycle
+(`HG_ALERTS_FORCED_ON`) on every page load, with a **5-minute** silent tab-alert cycle
 (`HG_ALERT_CYCLE_MS`, same as `HG_TAB_ALERT_MS`) and **15-minute AUTO hard refresh**
 (`HG_ALERTS_AUTO_REFRESH_MS`) so scanners stay warm.
 The 🔔 toggle cannot turn alerts off while forced-on is set.
 
-While armed, every 15 minutes a silent tab-alert cycle runs:
+While armed, every 5 minutes a silent tab-alert cycle runs (whole-exchange SWING/SCALP warm):
 
 1. **Delta** and **CoinDCX**: full best-setup scan — alerts the top CLEAN pick when it changes
    (deduped by symbol+direction).
 2. **Gold**: silent swing-gate read — alerts only on a fresh STRONG verdict (all GS gates clean with a
    full plan), deduped the same way.
 3. **SWING / SCALP / EDGE / BRAIN / GOLD SCALP / GOLD SWING**: quiet rescans of each tab, then Telegram
-   for any **new** setup with entry, stop, and target. Gold scalp/swing require **tally ≥ 10** (editable in
-   the bell panel). BRAIN rows need **HIGH** or **PRIME** tier with a plan. EDGE uses **tally ≥ 6** (and
-   skips stale tickets with `barAge > 2`). Each setup
-   key dedupes for 15 minutes; PRIME / very-high confluence lines are tagged 🔥.
+   for any **new** setup with entry, stop, and target. Default batch includes **7/7 CLEAN** tickets plus
+   **6/7 NEAR** watch rows from SWING/SCALP (honestly labeled — not tickets). Gold scalp/swing require
+   **tally ≥ 10** (editable in the bell panel). BRAIN rows need **HIGH** or **PRIME** tier with a plan.
+   EDGE uses **tally ≥ 6** (and skips stale tickets with `barAge > 2`). Each setup
+   key dedupes for 5 minutes; PRIME / very-high confluence lines are tagged 🔥.
 
-Between 15-min cycles, the alert bell’s 60s evaluate also pushes **live BRAIN + GOLD** tab setups to
+Between 5-min cycles, the alert bell’s 60s evaluate also pushes **live BRAIN + GOLD** tab setups to
 Telegram when they first appear (same dedup keys).
 
 **Telegram is the primary alert channel** (free Bot API, no quota) — save your bot token + chat id in the
@@ -176,7 +177,7 @@ node tests/test-data-layer.mjs    # optional live-network smoke (Binance legs sk
 
 Daemon worker, CCXT executor, macro-feeds, signallog, goldspot, scorecard export, and backtest UX suites are included in `npm test`. Only **`test-data-layer.mjs`** is intentionally outside the main gate (also run via `.github/workflows/data-layer-smoke.yml`).
 
-`tests/test-check-production.mjs` guards deploy script wiring, 15-min alert constants, README thresholds, and **`HG_SHELL` ↔ `index.html` script parity**.
+`tests/test-check-production.mjs` guards deploy script wiring, 5-min alert constants, README thresholds, and **`HG_SHELL` ↔ `index.html` script parity**.
 
 ## Repo layout
 

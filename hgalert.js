@@ -20,7 +20,7 @@ plays a short synthesized musical phrase so the owner knows to come enter:
       sighting after load seeds silently; 'no qualified entry' is a real
       state — a side appearing or vanishing IS a change. When armed, the
       chime fires AND an ntfy push goes out via window.sendAlertPush (when
-      a topic is configured); the 15-min class throttle covers both.
+      a topic is configured); the 5-min class throttle covers both.
   (d) SNIPER — the highest-priority alert: 20x-grade resting limits with
       the mark IN ZONE or APPROACHING, pushed by brain.js after every
       paint via window.hgAlertSniper(hits). New card or moved entry fires
@@ -39,10 +39,10 @@ persists in localStorage 'hgAlertEnabled'; on later loads a previously-
 enabled bell shows 'armed — plays after your next click' until a gesture
 unlocks it — it never pretends it can play before one.
 
-THROTTLE: minimum 15 min between chimes of the same class ('brain' /
+THROTTLE: minimum 5 min between chimes of the same class ('brain' /
 'gold') even if conditions persist; the classes chime independently. A
 trigger consumed by the throttle or by MUTE is acknowledged in the last-
-alert line ('chime held by 15-min throttle' / 'muted') — never silent
+alert line ('chime held by 5-min throttle' / 'muted') — never silent
 about having fired.
 
 UI: bell button states off / click-to-enable / armed / muted, plus a small
@@ -78,7 +78,7 @@ var LS_MUTED   = 'hgAlertMuted';
 var LS_GOLDMIN = 'hgAlertGoldMin';
 
 var INTERVAL_MS       = 60*1000;         /* evaluation cadence */
-var CHIME_GAP_MS      = 15*60*1000;      /* per-class chime throttle */
+var CHIME_GAP_MS      = 5*60*1000;      /* per-class chime throttle */
 var BRAIN_REALERT_MS  = 30*60*1000;      /* same-set brain re-alert */
 var GOLD_MIN_DEFAULT  = 10;
 
@@ -312,7 +312,7 @@ function playChime(){
 }
 
 /* per-class chime gate: MUTE suppresses evaluation chimes (TEST bypasses —
-   it calls playChime directly); 15 min minimum between same-class chimes. */
+   it calls playChime directly); 5 min minimum between same-class chimes. */
 function tryChime(cls){
   if (__muted) return 'muted';
   var now = 0;
@@ -428,7 +428,7 @@ function onTicket(snap){
     var now = 0;
     try{ now = Date.now(); }catch(e){ now = 0; }
     if (now - (__lastChime.ticket || 0) < CHIME_GAP_MS){
-      __lastTicketLine = line + ' (alert held by 15-min throttle)';
+      __lastTicketLine = line + ' (alert held by 5-min throttle)';
       renderUI();
       return 'throttled';
     }
@@ -470,7 +470,7 @@ function onTicket(snap){
    [{sym, dir, entry, stop, t1, lev, state}]. Alert on a CHANGED set (new
    card, moved entry, card vanished is noted silently); first sighting
    seeds silently. Push cascade: Telegram first (sendTelegram, index.html),
-   ntfy second (sendAlertPush at priority 5). 15-min class throttle covers
+   ntfy second (sendAlertPush at priority 5). 5-min class throttle covers
    both. Never throws. */
 function sniperKeyOf(hits){
   var parts = [];
@@ -510,7 +510,7 @@ function onSniper(hits){
     var now = 0;
     try{ now = Date.now(); }catch(e){ now = 0; }
     if (now - (__lastChime.sniper || 0) < CHIME_GAP_MS){
-      __lastSniperLine = line + ' (alert held by 15-min throttle)';
+      __lastSniperLine = line + ' (alert held by 5-min throttle)';
       renderUI();
       return 'throttled';
     }
@@ -555,7 +555,7 @@ function onSniper(hits){
    null when the publisher had no candles (sqWarm path); the message then
    honestly points at the SQUEEZE tab. Same semantics as SNIPER: first
    sighting seeds silently, a changed NON-EMPTY set chimes + pushes
-   (Telegram first, ntfy p4 second), an empty set clears silently, 15-min
+   (Telegram first, ntfy p4 second), an empty set clears silently, 5-min
    class throttle. Push-only class: no panel row. Never throws. */
 function squeezeKeyOf(hits){
   var parts = [];
@@ -600,7 +600,7 @@ function onSqueeze(hits){
     var now = 0;
     try{ now = Date.now(); }catch(e){ now = 0; }
     if (now - (__lastChime.squeeze || 0) < CHIME_GAP_MS){
-      __lastSqueezeLine = line + ' (alert held by 15-min throttle)';
+      __lastSqueezeLine = line + ' (alert held by 5-min throttle)';
       return 'throttled';
     }
     __lastChime.squeeze = now;
@@ -723,7 +723,7 @@ function evaluate(){
       } else if (rb === 'muted'){
         __lastBrainLine = line + ' (muted)';
       } else if (rb === 'throttled'){
-        __lastBrainLine = line + ' (chime held by 15-min throttle)';
+        __lastBrainLine = line + ' (chime held by 5-min throttle)';
       } else {
         __lastBrainLine = line + ' (sound failed)';
       }
@@ -746,7 +746,7 @@ function evaluate(){
       } else if (rg === 'muted'){
         __lastGoldLine = gline + ' (muted)';
       } else if (rg === 'throttled'){
-        __lastGoldLine = gline + ' (chime held by 15-min throttle)';
+        __lastGoldLine = gline + ' (chime held by 5-min throttle)';
       } else {
         __lastGoldLine = gline + ' (sound failed)';
       }
@@ -761,7 +761,7 @@ function evaluate(){
                scalpLive: gc.scalpLive, swingLive: gc.swingLive, armed: __goldArmed };
   st.note = st.chimed.length ? ('chimed: ' + st.chimed.join(', ')) : 'checked — no new alert conditions';
   maybeFamDigest();   /* daily family-record push (21:05-21:35 IST, once/day) */
-  /* live BRAIN/GOLD tab-setup Telegram between 15-min scan cycles */
+  /* live BRAIN/GOLD tab-setup Telegram between 5-min scan cycles */
   try{
     var tabLive = gfn('hgTabAlertsCheckLive');
     if (tabLive) Promise.resolve(tabLive()).catch(function(){});
