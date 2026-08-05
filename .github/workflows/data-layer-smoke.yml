@@ -1,0 +1,24 @@
+# HARDGATE — optional live-network smoke for public data endpoints.
+# Always exits 0 when Binance is geo-blocked (HTTP 451); fails only on hard fetch errors.
+name: Data layer smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  data-layer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm run test:data-layer
+        run: npm run test:data-layer
