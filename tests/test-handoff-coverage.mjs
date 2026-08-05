@@ -41,4 +41,9 @@ ok(bookJs.indexOf('hgBrainBookLayerRecord') >= 0, 'book.js records brain layer s
 ok(fs.readFileSync(root + 'tabalerts.js', 'utf8').indexOf('hgBrainInvAlertsMaybeRun') >= 0,
   'tabalerts.js runs invalidation on 15-min cycle');
 
+const swShell = fs.readFileSync(root + 'sw.js', 'utf8');
+ok(swShell.indexOf("'./hghost.js'") >= 0, 'sw.js precaches hghost.js');
+ok(swShell.indexOf("'./conviction-lock.js'") >= 0, 'sw.js precaches conviction-lock.js');
+ok(swShell.indexOf("'./macro-feeds.js'") >= 0, 'sw.js precaches macro-feeds.js');
+
 console.log('\n' + passed + ' passed');

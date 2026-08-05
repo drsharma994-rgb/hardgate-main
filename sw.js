@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v152';
+const HG_CACHE = 'hg-v153';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -17,12 +17,14 @@ const HG_SHELL = [
   './index.html',
   './manifest.webmanifest',
   './icon.svg', './bright.css', './mobile.css',
+  './hghost.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './startrader.js', './bybit.js', './positioning.js', './cryptowatch.js', './macro.js',
   './setup-ui.js', './plans.js', './setup-stack.js', './cryptogates.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './termbasis.js',
   './goldpro.js', './strats.js', './meanrev.js', './edge.js', './startradertab.js', './book-routing.js', './book.js', './execute.js', './liqs.js', './xuniverse.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
+  './conviction-lock.js', './macro-feeds.js',
   './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './brain.js', './scorecard.js',
   './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'
 ];
