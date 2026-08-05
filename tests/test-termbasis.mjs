@@ -46,9 +46,17 @@ globalThis.bookBtnHTML = function(sym, dir, entry, stop, t1, meta){
 const btn = globalThis.termBasisBookBtn({ pair: 'BTCUSDT', mark: 60000, curve: cont });
 ok(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'termBasisBookBtn renders when plan exists');
 
+globalThis.hgToTradePlanOnclickAttr = function(sym, dir, entry, stop, t1, meta){
+  return 'hgToTradePlan(' + JSON.stringify(sym) + ')';
+};
+const tbTrade = globalThis.termBasisTradeBtn({ pair: 'BTCUSDT', mark: 60000, curve: cont });
+ok(tbTrade.indexOf('SEND TO TRADE PLAN') >= 0 && tbTrade.indexOf('hgToTradePlan') >= 0,
+  'termBasisTradeBtn renders trade handoff');
+
 const tbSrc = fs.readFileSync(root + 'termbasis.js', 'utf8');
 ok(tbSrc.indexOf('termBasisBookStamp') >= 0 && tbSrc.indexOf('hgBookStampChip') >= 0,
   'term basis cardHTML wires slotted IN BOOK chip');
+ok(tbSrc.indexOf('termBasisTradeBtn') >= 0, 'term basis cards wire trade handoff');
 
 const tabs = globalThis.window.HG_tabs || [];
 const mod = tabs.find(t => t && t.id === 'termbasis');

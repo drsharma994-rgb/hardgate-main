@@ -498,6 +498,17 @@ console.log('--- carryBookBtn: macro fund CTA ---');
   assert(btn.indexOf('toBook') >= 0 && btn.indexOf('BTCUSD') >= 0, 'carryBookBtn: books short leg desk sym');
   assert(btn.indexOf('macro') >= 0, 'carryBookBtn: macro fund pinned');
   assert(w.carryBookBtn({ levels: null }) === '', 'carryBookBtn: no levels → no button');
+  w.hgToTradePlanOnclickAttr = function(sym, dir, entry, stop, t1, meta){
+    return 'hgToTradePlan(' + JSON.stringify(sym) + ')';
+  };
+  const tradeBtn = w.carryTradeBtn({
+    sp: { shortVenue: 'delta', longVenue: 'binance' },
+    del: { symbol: 'BTCUSD' }, bin: { symbol: 'BTCUSDT' }, pair: 'bin-delta',
+    levels: lv
+  });
+  assert(typeof w.carryTradeBtn === 'function', 'window.carryTradeBtn exported');
+  assert(tradeBtn.indexOf('toTrade') >= 0 && tradeBtn.indexOf('SEND TO TRADE PLAN') >= 0, 'carryTradeBtn: trade handoff button');
+  assert(tradeBtn.indexOf('hgToTradePlan') >= 0, 'carryTradeBtn: uses hgToTradePlan handoff');
 }
 
 /* ================================================================

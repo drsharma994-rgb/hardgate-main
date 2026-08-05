@@ -89,21 +89,34 @@ the user runs a scan once.
     }catch(e){ return null; }
   }
 
-  function termBasisBookBtn(row, stack){
+  function termBasisPlanMeta(row, stack){
     try{
       var plan = termBasisPlan(row);
-      if (!plan || typeof bookBtnHTML !== 'function') return '';
+      if (!plan) return null;
       var st = stack || termBasisCardStack(row);
-      return bookBtnHTML(plan.sym, plan.dir, plan.entry, plan.stop, plan.t1, {
-        scanner: 'termbasis',
-        fund: 'macro',
-        strategy: 'termbasis',
-        klass: 'macro',
-        venue: 'binance',
-        layers: ['termbasis', plan.regime || 'curve'],
-        t2: plan.t2,
-        stack: st
-      });
+      return {
+        sym: plan.sym, dir: plan.dir, entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+        meta: {
+          scanner: 'termbasis', fund: 'macro', strategy: 'termbasis', klass: 'macro',
+          venue: 'binance', layers: ['termbasis', plan.regime || 'curve'], t2: plan.t2, stack: st
+        }
+      };
+    }catch(e){ return null; }
+  }
+
+  function termBasisTradeBtn(row, stack){
+    try{
+      var pm = termBasisPlanMeta(row, stack);
+      if (!pm || typeof G.hgToTradePlanOnclickAttr !== 'function') return '';
+      return '<button class="toTrade" onclick="' + G.hgToTradePlanOnclickAttr(pm.sym, pm.dir, pm.entry, pm.stop, pm.t1, pm.meta) + '">SEND TO TRADE PLAN →</button>';
+    }catch(e){ return ''; }
+  }
+
+  function termBasisBookBtn(row, stack){
+    try{
+      var pm = termBasisPlanMeta(row, stack);
+      if (!pm || typeof bookBtnHTML !== 'function') return '';
+      return bookBtnHTML(pm.sym, pm.dir, pm.entry, pm.stop, pm.t1, pm.meta);
     }catch(e){ return ''; }
   }
 
@@ -145,6 +158,7 @@ the user runs a scan once.
       + '<div class="kv"><span class="k">24h turnover</span><span class="v">' + (row.turnoverUsd ? ('$' + fmtN(row.turnoverUsd, 0)) : '—') + '</span></div>'
       + '<div class="note" style="margin-top:8px">' + esc(c.note) + '</div>'
       + stackHtml
+      + termBasisTradeBtn(row, tbStack)
       + termBasisBookBtn(row, tbStack)
       + '</div></div>';
   }
@@ -327,6 +341,7 @@ the user runs a scan once.
   G.termBasisScore = termBasisScore;
   G.termBasisPlan = termBasisPlan;
   G.termBasisBookBtn = termBasisBookBtn;
+  G.termBasisTradeBtn = termBasisTradeBtn;
   G.termBasisState = function termBasisState(){
     try{ return __tbSnap ? JSON.parse(JSON.stringify(__tbSnap)) : null; }catch(e){ return null; }
   };

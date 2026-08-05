@@ -416,16 +416,15 @@ function renderLevelsPanel(o){
      + '</div>';
   if (o.note) h += '<div class="note" style="margin-top:6px">' + esc(o.note) + '</div>';
   h += stackHtml;
+  var gpMeta = {
+    scanner: 'goldpro', fund: 'gold', strategy: 'goldpro', klass: 'metals',
+    layers: ['goldpro', '4h-levels'], t2: p.t2, stack: gpStack
+  };
+  if (typeof hgToTradePlanOnclickAttr === 'function'){
+    h += '<button class="toTrade" onclick="' + hgToTradePlanOnclickAttr('XAUUSD', p.dir, p.entry, p.stop, p.t1, gpMeta) + '">SEND TO TRADE PLAN →</button>';
+  }
   if (typeof bookBtnHTML === 'function'){
-    h += bookBtnHTML('XAUUSD', p.dir, p.entry, p.stop, p.t1, {
-      scanner: 'goldpro',
-      fund: 'gold',
-      strategy: 'goldpro',
-      klass: 'metals',
-      layers: ['goldpro', '4h-levels'],
-      t2: p.t2,
-      stack: gpStack
-    });
+    h += bookBtnHTML('XAUUSD', p.dir, p.entry, p.stop, p.t1, gpMeta);
   }
   return h + '</div>';
 }

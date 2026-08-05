@@ -175,6 +175,9 @@ var goldproJs = fs.readFileSync(path.join(root, 'goldpro.js'), 'utf8');
 ok(carryJs.indexOf('carryBookStamp') >= 0, 'carry cards use carryBookStamp');
 ok(termbasisJs.indexOf('termBasisBookStamp') >= 0, 'term basis cards use IN BOOK stamp');
 ok(goldproJs.indexOf('hgBookStampChip') >= 0, 'goldpro execution levels panel uses IN BOOK chip');
+ok(goldproJs.indexOf('hgToTradePlanOnclickAttr') >= 0 && goldproJs.indexOf('SEND TO TRADE PLAN') >= 0,
+  'goldpro execution levels wire trade handoff');
+ok(carryJs.indexOf('carryTradeBtn') >= 0, 'carry cards wire trade handoff');
 ok(macroJs.indexOf('t2: t2') >= 0 && macroJs.indexOf('macroGoldPlan') >= 0,
   'macro gold plan includes T2 for book add');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,
