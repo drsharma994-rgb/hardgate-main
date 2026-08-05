@@ -269,6 +269,12 @@ function hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, meta){
     + entry + ',' + stop + ',' + t1 + ')';
 }
 
+/** HTML-escaped onclick attr for SEND TO TRADE PLAN buttons. */
+function hgToTradePlanOnclickAttr(sym, dir, entry, stop, t1, meta){
+  return hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, meta)
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 /** Cache FTS stack + scanner meta, then hand off to TRADE PLAN tab. */
 function hgToTradePlan(sym, dir, entry, stop, t1, meta){
   meta = meta || {};
@@ -423,6 +429,7 @@ W.hgGoldFormingWatchHTML = hgGoldFormingWatchHTML;
 W.hgBrainWatchDeskHTML = hgBrainWatchDeskHTML;
 W.hgSetupPaintTabDesks = hgSetupPaintTabDesks;
 W.hgToTradePlanOnclickJs = hgToTradePlanOnclickJs;
+W.hgToTradePlanOnclickAttr = hgToTradePlanOnclickAttr;
 W.hgToTradePlan = hgToTradePlan;
 W.hgTradeHandoffFor = hgTradeHandoffFor;
 

@@ -3279,12 +3279,13 @@ function ticketSymTxt(row){
 function ticketTradeBtn(row, dir){
   try{
     var p = row.plan;
-    if (!p || typeof G.toTrade !== 'function') return '';
-    return '<button class="toTrade" style="margin-top:8px" onclick="'
-      + ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ','
-         + JSON.stringify(dir) + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')')
-        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>';
+    if (!p || (typeof G.hgToTradePlanOnclickAttr !== 'function' && typeof G.toTrade !== 'function')) return '';
+    var sym = row.lane === 'gold' ? 'XAUTUSD' : row.sym;
+    var tradeOnclick = (typeof G.hgToTradePlanOnclickAttr === 'function')
+      ? G.hgToTradePlanOnclickAttr(sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: row.stack, scanner: 'brain', strategy: 'brain' })
+      : ('toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(dir) + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<button class="toTrade" style="margin-top:8px" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>';
   }catch(e){ return ''; }
 }
 function ticketHTML(row, dir){
@@ -3987,13 +3988,18 @@ function cardHTML(row){
   var darkTxt = row.col.unavailable.length ? row.col.unavailable.join(', ') + ' dark' : '';
   var venueStamp = (row.exchange === 'delta') ? ' <span class="stamp na">DELTA</span>'
                  : (row.exchange === 'cdcx') ? ' <span class="stamp na">COINDCX</span>' : '';
-  var tradeBtn = (plan && typeof G.toTrade === 'function')
-    ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ',' + JSON.stringify(dir) + ','
+  var tradeOnclick = (plan && (typeof G.hgToTradePlanOnclickAttr === 'function' || typeof G.toTrade === 'function'))
+    ? ((typeof G.hgToTradePlanOnclickAttr === 'function')
+      ? G.hgToTradePlanOnclickAttr(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, plan.entry, plan.stop, plan.t1, {
+        t2: isFinite(plan.t2) ? plan.t2 : null, stack: row.stack, scanner: 'brain', strategy: 'brain'
+      })
+      : ('toTrade(' + JSON.stringify(row.lane === 'gold' ? 'XAUTUSD' : row.sym) + ',' + JSON.stringify(dir) + ','
          + plan.entry + ',' + plan.stop + ',' + plan.t1
          + (isFinite(plan.t2) ? ',' + plan.t2 : '') + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (plan && typeof G.bookBtnHTML === 'function')
     ? G.bookBtnHTML(row.lane === 'gold' ? 'XAUTUSD' : row.sym, dir, plan.entry, plan.stop, plan.t1, {
       scanner: 'brain',

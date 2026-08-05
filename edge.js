@@ -1039,9 +1039,14 @@ function cardHTML(r){
       + (r.candleSrc ? ' · ' + esc(r.candleSrc) : '')
       + '</div>' : '<div class="plan">levels unavailable</div>';
   var sym = r.item ? r.item.sym : r.sym;
-  var btn = (p && typeof W.toTrade === 'function')
-    ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(p.dir)
-      + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')">SEND TO TRADE PLAN</button>' : '';
+  var tradeOnclick = (p && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
+    ? ((typeof W.hgToTradePlanOnclickAttr === 'function')
+      ? W.hgToTradePlanOnclickAttr(sym, p.dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: r.stack, scanner: 'edge', strategy: 'edge' })
+      : ('toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(p.dir) + ',' + p.entry + ',' + p.stop + ',' + p.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
+    : '';
+  var btn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN</button>' : '';
   var edgeKlass = (r.item && r.item.klass) || null;
   var edgeFund = (function(){
     var k = String(edgeKlass || '').toLowerCase();

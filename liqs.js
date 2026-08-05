@@ -771,11 +771,6 @@ function setupCardHTML(setup){
       + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(setup.entry, setup.stop) : '')
       + (setup.note ? ' — ' + esc(setup.note) : '')
     : 'no tradeable levels — ' + esc(setup.note);
-  var tradeBtn = (hasPlan && setup.sym && typeof toTrade === 'function')
-    ? '<button class="toTrade" onclick="'
-      + ('toTrade(' + JSON.stringify(setup.sym) + ',' + JSON.stringify(setup.dir) + ',' + setup.entry + ',' + setup.stop + ',' + setup.t1 + ')')
-          .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      + '">SEND TO TRADE PLAN →</button>' : '';
   var setupRows = (S.setupRows && S.setupRows.sym === setup.sym) ? S.setupRows.rows : null;
   var liqStack = null;
   if (hasPlan && typeof hgSetupStackForInlineScan === 'function'){
@@ -784,6 +779,16 @@ function setupCardHTML(setup){
         style: 'liqs', clean: true });
     }catch(eSt){}
   }
+  var tradeOnclick = '';
+  if (hasPlan && setup.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function')){
+    tradeOnclick = (typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(setup.sym, setup.dir, setup.entry, setup.stop, setup.t1,
+        { t2: setup.t2, stack: liqStack, scanner: 'liqs', strategy: 'liqs' })
+      : ('toTrade(' + JSON.stringify(setup.sym) + ',' + JSON.stringify(setup.dir) + ',' + setup.entry + ',' + setup.stop + ',' + setup.t1 + ')')
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var stackHtml = (liqStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(liqStack) : '';
   var bookBtn = (hasPlan && setup.sym && typeof bookBtnHTML === 'function')
     ? bookBtnHTML(setup.sym, setup.dir, setup.entry, setup.stop, setup.t1,

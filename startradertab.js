@@ -549,9 +549,13 @@ function cardHTML(r){
       t2: p && isFinite(p.t2) ? p.t2 : null,
       stack: stStack
     }) : '';
-  var tradeBtn = (entry != null && stop != null && typeof W.toTrade === 'function')
-    ? '<button class="toTrade" onclick="toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir)
-      + ',' + entry + ',' + stop + ',' + (t1 != null ? t1 : 'null') + ')">SEND TO TRADE PLAN →</button>' : '';
+  var tradeOnclick = (entry != null && stop != null && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
+    ? ((typeof W.hgToTradePlanOnclickAttr === 'function')
+      ? W.hgToTradePlanOnclickAttr(r.sym, r.dir, entry, stop, t1, { t2: p && isFinite(p.t2) ? p.t2 : null, stack: stStack, scanner: 'startrader', strategy: 'startrader' })
+      : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir) + ',' + entry + ',' + stop + ',' + (t1 != null ? t1 : 'null') + ')'))
+    : '';
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   return '<div class="card ' + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="gpip">' + klassChip(r.klass) + '</span>'

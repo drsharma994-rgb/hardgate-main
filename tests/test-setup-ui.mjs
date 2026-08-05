@@ -42,7 +42,7 @@ const panelEdge = W.hgSetupPanelHTML({
 }, { scanner: 'pine' });
 assert(/toTrade/.test(panelEdge) && /CLEAN/.test(panelEdge), 'edge ticket stays CLEAN tier with trade button');
 
-assert(typeof W.hgToTradePlan === 'function', 'hgToTradePlan exported from setup-ui');
+assert(typeof W.hgToTradePlanOnclickAttr === 'function', 'hgToTradePlanOnclickAttr exported');
 
 console.log(fail ? '\nTESTS FAILED' : '\nALL SETUP-UI TESTS PASSED');
 process.exit(fail ? 1 : 0);
