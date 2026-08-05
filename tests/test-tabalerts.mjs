@@ -33,7 +33,7 @@ const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY,
   tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced } = lib;
 
 assert(typeof hgTabAlertsFresh === 'function', 'hgTabAlertsFresh exported');
-assert(GAP_MS === 15 * 60 * 1000, '15-min dedup gap');
+assert(GAP_MS === 5 * 60 * 1000, '5-min dedup gap');
 assert(GOLD_MIN_TALLY === 10, 'gold min tally default 10');
 assert(tabAlertsCleanOnlyEnabled({ localStorage: { getItem: () => null } }) === true,
        'clean-only Telegram default ON');
@@ -48,7 +48,7 @@ assert(!goldIsMostConvinced({ id: 'x', grade: 'B', tally: 8 }, { bestId: 'y' }),
 const goldThrottle = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 tabAlertsMarkRun({ localStorage: goldThrottle }, LS_GOLD_LAST_RUN);
 assert(tabAlertsShouldRun({ localStorage: goldThrottle }, false, LS_GOLD_LAST_RUN) === false,
-       'gold batch has its own 15-min throttle');
+       'gold batch has its own 5-min throttle');
 
 assert(setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2 }), 'SWING rows are clean7');
 assert(setupIsClean7({ src: 'EDGE', clean7: true, gatesPassed: 7, gatesTotal: 7 }), 'explicit clean7 passes');
@@ -61,10 +61,10 @@ assert(tabAlertsFilterClean7([
 const throttleStore = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const nowT = 1_700_000_000_000;
 tabAlertsMarkRun({ localStorage: throttleStore });
-assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === false, '15-min cycle throttle blocks immediate re-run');
+assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === false, '5-min cycle throttle blocks immediate re-run');
 assert(tabAlertsShouldRun({ localStorage: throttleStore }, true) === true, 'force bypasses cycle throttle');
 throttleStore.setItem(LS_LAST_RUN, String(nowT - GAP_MS - 1));
-assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === true, 'cycle throttle opens after 15 min');
+assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === true, 'cycle throttle opens after 5 min');
 
 const now = 1_700_000_000_000;
 const s1 = { src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true };
@@ -74,10 +74,14 @@ assert(fr1.fresh.length === 1 && fr1.fresh[0].sym === 'BTCUSD', 'first sighting 
 assert(fr1.keys[k1] === now, 'key stamped');
 
 const fr2 = hgTabAlertsFresh(fr1.keys, [s1], now + 60000, GAP_MS);
-assert(fr2.fresh.length === 0, 'same setup inside 15-min window is not re-alerted');
+assert(fr2.fresh.length === 0, 'same setup inside 5-min window is not re-alerted');
 
 const fr3 = hgTabAlertsFresh(fr1.keys, [s1], now + GAP_MS + 1, GAP_MS);
-assert(fr3.fresh.length === 1, 'same setup after 15 min can alert again');
+assert(fr3.fresh.length === 1, 'same setup after 5 min can alert again');
+
+const nearBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'NEARUSD', dir: 'long', entry: 50, stop: 48, t1: 55, nearClean: true, gatesPassed: 6, tier: '6/7 NEAR', note: 'missing: G7 CUSUM — watch only' }]);
+assert(nearBody.indexOf('6/7 NEAR') >= 0, 'near-clean header labels 6/7 honestly');
+assert(!/· 7\/7 CLEAN/.test(nearBody), 'near row extra line is not tagged 7/7 CLEAN');
 
 const cleanBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true }]);
 assert(cleanBody.indexOf('7/7 CLEAN SETUP') >= 0, 'clean header when all rows are 7/7');

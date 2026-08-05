@@ -13,7 +13,7 @@
    detection + new-symbol-set de-dup + 30-min re-alert + dark-set re-arm;
    gold threshold crossing + re-arm + absent/throwing sources counted 0 and
    named; threshold editing + persistence; MUTE suppressing evaluation
-   chimes while TEST still plays; 15-min per-class throttle with independent
+   chimes while TEST still plays; 5-min per-class throttle with independent
    classes; persisted enabled/muted/goldMin restoration; single guarded
    60s interval (unref'd); never-throws sweep in hostile + bare envs.
 
@@ -315,8 +315,8 @@ console.log('== 4) brain set de-dup + re-alert + re-arm ==');
   W.__hgBrainLast = () => brainRowsAB();
   st = W.hgAlertCheck();
   assert(st.chimed.length === 0 && inst.__osc.length === base + 3
-      && /\(chime held by 15-min throttle\)$/.test(ui.q('#hgAlertLastB').textContent),
-         'the returning set is new, but the chime is held by the 15-min throttle — and says so');
+      && /\(chime held by 5-min throttle\)$/.test(ui.q('#hgAlertLastB').textContent),
+         'the returning set is new, but the chime is held by the 5-min throttle — and says so');
   T += 13*60*1000;                                                   /* t=16min since first chime */
   st = W.hgAlertCheck();
   assert(st.chimed.length === 0, 'same set still quiet (30-min re-alert not reached)');
@@ -477,7 +477,7 @@ console.log('== 6) mute behavior ==');
 }
 
 /* =========================================================================
-   7) 15-min per-class throttle: classes chime independently
+   7) 5-min per-class throttle: classes chime independently
 ========================================================================= */
 console.log('== 7) per-class throttle independence ==');
 {
@@ -500,20 +500,14 @@ console.log('== 7) per-class throttle independence ==');
   W.goldswingScan = () => ({ cands: goldCands(5) });                 /* 11 >= 10 */
   st = W.hgAlertCheck();
   assert(st.chimed.join(',') === 'gold' && inst.__osc.length === base + 6,
-         'gold chimes 5 min later — the 15-min throttle is per-class, not global');
+         'gold chimes 5 min later — the 5-min throttle is per-class, not global');
 
-  T += 7*60*1000;                                                    /* brain: +12 min */
+  T += 1*60*1000;                                                    /* brain: +6 min */
   W.__hgBrainLast = () => ({ rows: [{ sym: 'FRESH', dir: 'long', tier: 'HIGH' }] });
-  W.goldswingScan = () => ({ cands: goldCands(4) });                 /* 10, but crossing already consumed */
-  st = W.hgAlertCheck();
-  assert(st.chimed.length === 0 && inst.__osc.length === base + 6,
-         'a new brain set inside its own 15-min window stays held; gold does not re-fire either');
-
-  T += 3*60*1000;                                                    /* brain: +15 min */
-  W.__hgBrainLast = () => ({ rows: [{ sym: 'OTHER', dir: 'long', tier: 'PRIME' }] });
+  W.goldswingScan = () => ({ cands: goldCands(4) });
   st = W.hgAlertCheck();
   assert(st.chimed.join(',') === 'brain' && inst.__osc.length === base + 9,
-         'a new brain set chimes once its own 15-min window has passed');
+         'a new brain set chimes once its own 5-min window has passed; gold does not re-fire');
   Date.now = REAL_DATE_NOW;
 }
 
@@ -612,7 +606,7 @@ console.log('== 9) hostile env never-throws ==');
 
 /* =========================================================================
    10) TICKET — entry-ticket change alerts (sym/entry key, seed → change
-       → chime + ntfy push → 15-min throttle; unarmed + garbage honesty)
+       → chime + ntfy push → 5-min throttle; unarmed + garbage honesty)
 ========================================================================= */
 console.log('== 10) ticket change alerts ==');
 {
@@ -654,7 +648,7 @@ console.log('== 10) ticket change alerts ==');
   /* telegram-first cascade: when sendTelegram exists, the ticket goes there first */
   const tgTicket = [];
   env.W.sendTelegram = (t) => { tgTicket.push(t); return Promise.resolve(true); };
-  Date.now = () => REAL_DATE_NOW() + 16 * 60 * 1000;   /* past the throttle */
+  Date.now = () => REAL_DATE_NOW() + 6 * 60 * 1000;   /* past the 5-min throttle */
   const r3b = env.W.hgAlertTicket({ at: 4, long: { sym: 'BTC', entry: 102 }, short: null });
   assert(r3b === 'alerted' && tgTicket.length === 1 && tgTicket[0].indexOf('BTC @ 102') >= 0
       && pushes.length === 1,
@@ -662,7 +656,7 @@ console.log('== 10) ticket change alerts ==');
   Date.now = REAL_DATE_NOW;
   delete env.W.sendTelegram;
 
-  /* a side appearing is a change — but the 15-min class throttle holds it */
+  /* a side appearing is a change — but the 5-min class throttle holds it */
   const r4 = env.W.hgAlertTicket({ at: 4, long: { sym: 'BTC', entry: 101 }, short: { sym: 'ACE', entry: 0.085 } });
   assert(r4 === 'throttled' && pushes.length === 1,
          'side appearing inside the throttle window -> held, honestly named');
@@ -724,7 +718,7 @@ console.log('== 11) sniper hit-set alerts ==');
 
   /* moved entry inside the throttle window -> held, honestly named */
   const r4 = env.W.hgAlertSniper([hit('ACE', 0.086), hit('DOGE', 0.069)]);
-  assert(r4 === 'throttled' && tgCalls.length === 1, 'moved entry inside 15-min throttle -> held');
+  assert(r4 === 'throttled' && tgCalls.length === 1, 'moved entry inside 5-min throttle -> held');
 
   /* board clearing is noted, never chimed */
   const r5 = env.W.hgAlertSniper([]);
@@ -883,7 +877,7 @@ console.log('== 14) squeeze alerts ==');
 
   /* moved entry inside the throttle window -> held */
   assert(env.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', 101), sq('ACEUSDT', 'short', 'break', 0.085)]) === 'throttled'
-      && tgCalls.length === 1, 'changed set inside 15-min throttle -> held');
+      && tgCalls.length === 1, 'changed set inside 5-min throttle -> held');
 
   /* null levels (sqWarm path) -> honest pointer, still a valid key */
   const env2 = loadHgalert({ doc: stubDocument(), ls: (() => { const l = memLocalStorage(); l.setItem('hgAlertEnabled', '1'); return l; })(), audio: true });

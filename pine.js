@@ -11,7 +11,7 @@ var TF = '4h';
 var CHUNK = 4;
 var CHUNK_SLEEP_MS = 120;
 var LS_ALERT = 'hg_pine_alert_keys';
-var ALERT_GAP_MS = 15 * 60 * 1000;
+var ALERT_GAP_MS = 5 * 60 * 1000;
 
 var PINE_GATE_OPTS = { mode: 'edge' };
 var PINE_SCAN_OPTS = { includeContext: true, recentBars: 5 };
