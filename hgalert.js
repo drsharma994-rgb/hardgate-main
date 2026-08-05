@@ -374,6 +374,17 @@ function brainSyms(hits){
    Combined qualifying count; absent/throwing sources count 0 and are named. */
 function goldCount(){
   var out = { count: 0, scalp: 0, swing: 0, scalpLive: false, swingLive: false };
+  var convictedOnly = true;
+  try{
+    var convFn = gfn('tabAlertsGoldConvictedOnlyEnabled');
+    if (convFn) convictedOnly = convFn(W);
+    else {
+      var v = null;
+      try{ v = localStorage.getItem('hgAlertGoldConvicted'); }catch(e){}
+      if (v !== null && v !== undefined && v !== '') convictedOnly = (v === '1' || String(v).toLowerCase() === 'true');
+    }
+  }catch(e){ convictedOnly = true; }
+  var isMostFn = gfn('goldIsMostConvinced');
   var srcs = [['scalp', 'goldscalpScan'], ['swing', 'goldswingScan']];
   for (var s = 0; s < srcs.length; s++){
     var fn = gfn(srcs[s][1]);
@@ -384,7 +395,14 @@ function goldCount(){
     var cands = Array.isArray(val) ? val
               : (val && typeof val === 'object' && Array.isArray(val.cands)) ? val.cands : [];
     var n = 0;
-    for (var i = 0; i < cands.length; i++) if (cands[i] && typeof cands[i] === 'object') n++;
+    for (var i = 0; i < cands.length; i++){
+      var c = cands[i];
+      if (!c || typeof c !== 'object') continue;
+      if (convictedOnly && isMostFn){
+        try{ if (!isMostFn(c, val)) continue; }catch(eM){ continue; }
+      }
+      n++;
+    }
     out[srcs[s][0]] = n;
     out[srcs[s][0] + 'Live'] = true;
     out.count += n;

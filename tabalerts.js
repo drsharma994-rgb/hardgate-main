@@ -145,6 +145,22 @@ function goldIsMostConvinced(c, scanVal){
   return false;
 }
 
+function cryptoSetupId(c){
+  if (!c) return '';
+  if (c.id) return c.id;
+  var fn = gfn('hgCryptoSetupId');
+  if (fn) try{ return fn(c); }catch(e){}
+  var v = c.venueTag || c.venue || '';
+  var sym = c.sym || '';
+  var e = +c.entry;
+  return (v ? v + '|' : '') + sym + '|' + (c.dir || '') + '@' + (fin(e) ? e : '');
+}
+
+function cryptoIsMostProbable(c, scanVal){
+  if (!c || !scanVal || !scanVal.bestId) return false;
+  return cryptoSetupId(c) === scanVal.bestId;
+}
+
 /** Default ON: Telegram 5-min batch pushes 7/7 CLEAN + 6/7 NEAR (SWING/SCALP watch rows with levels). Set hgAlertCleanOnly=0 for all tabs. */
 function tabAlertsCleanOnlyEnabled(root){
   try{
@@ -193,7 +209,11 @@ function collectCrypto(out, kind, src){
     var c = cands[i];
     var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
     if (fin(rr) && rr < minRr) continue;
-    pushSetup(out, src, c, { clean7: true, gatesPassed: 7, gatesTotal: 7 });
+    var mp = cryptoIsMostProbable(c, val);
+    pushSetup(out, src, c, {
+      clean7: true, gatesPassed: 7, gatesTotal: 7,
+      prime: mp, tier: mp ? 'MOST PROBABLE' : null
+    });
   }
   var nearCands = (val && Array.isArray(val.nearCands)) ? val.nearCands : [];
   for (var j = 0; j < nearCands.length; j++){
@@ -219,15 +239,23 @@ function collectEdge(out){
   var val = null;
   try{ val = fn(); }catch(e){ return; }
   var cands = rowsFrom(val);
+  var edgeRows = [];
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
     if (c && fin(+c.tally) && +c.tally < 6) continue;
     if (c && fin(+c.barAge) && +c.barAge > 0) continue;
-    pushSetup(out, 'EDGE', c, {
-      tally: c && c.tally,
-      clean7: !!(c && (c.clean === true || c.clean7 === true || (+c.gatesPassed >= 7))),
-      gatesPassed: (c && fin(+c.gatesPassed)) ? +c.gatesPassed : 7,
-      gatesTotal: 7
+    edgeRows.push(c);
+  }
+  edgeRows.sort(function(a, b){ return (fin(+b.tally) ? +b.tally : 0) - (fin(+a.tally) ? +a.tally : 0); });
+  for (var ei = 0; ei < edgeRows.length && ei < 3; ei++){
+    var ec = edgeRows[ei];
+    pushSetup(out, 'EDGE', ec, {
+      tally: ec && ec.tally,
+      clean7: !!(ec && (ec.clean === true || ec.clean7 === true || (+ec.gatesPassed >= 7))),
+      gatesPassed: (ec && fin(+ec.gatesPassed)) ? +ec.gatesPassed : 7,
+      gatesTotal: 7,
+      tier: ei === 0 ? 'MOST PROBABLE' : null,
+      prime: ei === 0
     });
   }
   var forming = (val && Array.isArray(val.forming)) ? val.forming : [];
@@ -263,9 +291,12 @@ function collectBrain(out){
     var tier = String(r.tier || '').toUpperCase();
     if (tier !== 'HIGH' && tier !== 'PRIME') continue;
     var ev = Array.isArray(r.evidence) ? r.evidence.join(' ') : '';
-    var hasCleanSwing = ev.indexOf('7/7') >= 0 || ev.indexOf('SWING CLEAN') >= 0
-      || (r.votes && r.votes.some(function(v){ return v && String(v.detail || '').indexOf('7/7') >= 0; }));
-    if (!hasCleanSwing) continue;
+    var hasCleanEvidence = ev.indexOf('7/7') >= 0 || ev.indexOf('SWING CLEAN') >= 0 || ev.indexOf('SCALP CLEAN') >= 0
+      || (r.votes && r.votes.some(function(v){
+        var d = String(v && v.detail || '');
+        return d.indexOf('7/7') >= 0 || d.indexOf('CLEAN') >= 0;
+      }));
+    if (!hasCleanEvidence) continue;
     pushSetup(out, 'BRAIN ' + tier, {
       sym: r.sym, dir: r.dir,
       entry: r.plan.entry, stop: r.plan.stop, t1: r.plan.t1, t2: r.plan.t2,
@@ -431,10 +462,11 @@ function collectBest(out){
   var val = null;
   try{ val = fn(); }catch(e){ return; }
   var clean = (val && Array.isArray(val.clean)) ? val.clean : [];
-  for (var i = 0; i < clean.length; i++){
-    var c = clean[i];
-    pushSetup(out, 'BEST', c, { clean7: true, gatesPassed: 7, gatesTotal: 7, prime: true, tier: 'CLEAN' });
-  }
+  if (!clean.length) return;
+  var c = clean[0];
+  pushSetup(out, 'BEST', c, {
+    clean7: true, gatesPassed: 7, gatesTotal: 7, prime: true, tier: 'MOST PROBABLE #1'
+  });
 }
 
 function collectGold(out, kind, src, opts){
@@ -526,15 +558,21 @@ function collectCryptoWatch(out){
 function collectSmart(out){
   var bag = W.__hgSmartResults;
   if (!bag || !Array.isArray(bag.results)) return;
-  for (var i = 0; i < bag.results.length; i++){
-    var r = bag.results[i];
-    if (!r || !r.setup) continue;
+  var rows = bag.results.filter(function(r){
+    return r && r.setup && (r.setup.dir === 'long' || r.setup.dir === 'short')
+      && fin(+r.setup.entry) && fin(+r.setup.stop) && fin(+r.setup.t1);
+  });
+  rows.sort(function(a, b){
+    var ta = a.setup ? (a.setup.confirmed ? 0 : 1) : 2;
+    var tb = b.setup ? (b.setup.confirmed ? 0 : 1) : 2;
+    return (ta - tb) || ((b.cls && b.cls.score) || 0) - ((a.cls && a.cls.score) || 0);
+  });
+  for (var i = 0; i < rows.length && i < 3; i++){
+    var r = rows[i];
     var s = r.setup;
-    if (s.dir !== 'long' && s.dir !== 'short') continue;
-    if (!fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) continue;
     pushSetup(out, 'SMART $', {
       sym: r.sym, dir: s.dir, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2, rr: s.rr1
-    }, { prime: !!s.confirmed, tier: s.confirmed ? 'CONFIRMED' : 'SMART' });
+    }, { prime: !!s.confirmed, tier: (i === 0 ? 'MOST PROBABLE' : (s.confirmed ? 'CONFIRMED' : 'SMART')) });
   }
 }
 
@@ -1092,8 +1130,13 @@ W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
-  return hgTabAlertsRun({ allSources: true, cleanOnly: true });
+  var p = hgTabAlertsRun({ allSources: true, cleanOnly: true });
+  var g = hgTabAlertsRunGold();
+  return Promise.all([p, g]);
 };
+W.goldIsMostConvinced = goldIsMostConvinced;
+W.tabAlertsGoldConvictedOnlyEnabled = tabAlertsGoldConvictedOnlyEnabled;
+W.cryptoIsMostProbable = cryptoIsMostProbable;
 W.hgTabAlertsRunEdge = function(opts){
   opts = opts || {};
   return hgTabAlertsRun(Object.assign({ sources: { edge: true } }, opts));
@@ -1123,6 +1166,7 @@ if (typeof module !== 'undefined' && module.exports){
     setupIsClean7, setupIsNearClean6, setupIsTelegramEligible,
     tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
     tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced,
+    cryptoSetupId, cryptoIsMostProbable,
     trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
     collectTrendmxGolden, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,
     LS_TRENDMX_CROSS, LS_TRENDMX_LAST_RUN };

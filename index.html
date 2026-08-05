@@ -1918,15 +1918,17 @@ function setSmartVenue(v){
   }catch(e){}
 }
 
-async function runSmartScan(){
+async function runSmartScan(opts){
+  opts = opts || {};
+  const quiet = !!opts.quiet;
   const btn = $('smartRun'), cardsEl = $('smartCards'), emptyEl = $('smartEmpty'), statEl = $('smartStat'), goldEl = $('smartGold');
-  btn.disabled = true; cardsEl.innerHTML = ''; goldEl.innerHTML = ''; emptyEl.style.display = 'none';
+  if (!quiet){ btn.disabled = true; cardsEl.innerHTML = ''; goldEl.innerHTML = ''; emptyEl.style.display = 'none'; }
   const t0 = Date.now();
   try{
-    statEl.textContent = 'loading Binance perp universe…';
+    if (!quiet) statEl.textContent = 'loading Binance perp universe…';
     const res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
     const perps = res[0], ticks = res[1];
-    if (!perps.length || !ticks){ statEl.textContent = 'Binance universe unavailable (network issue?)'; return; }
+    if (!perps.length || !ticks){ if (!quiet) statEl.textContent = 'Binance universe unavailable (network issue?)'; return; }
     const scr = smartScreenCandidates(perps, ticks);
     const uni = scr.universe;
     let cands = scr.candidates;
@@ -1945,7 +1947,7 @@ async function runSmartScan(){
         if (cdcxInfo.extras.length) cands = cands.concat(cdcxInfo.extras);
       }catch(e){ cdcxInfo = { twinOf: {}, extras: [], noTwin: [], error: true }; }
     }
-    statEl.textContent = 'universe ' + uni.length + ' perps ≥$5M · ' + cands.length + ' screened'
+    if (!quiet) statEl.textContent = 'universe ' + uni.length + ' perps ≥$5M · ' + cands.length + ' screened'
       + (cdcxInfo ? ' · +' + Object.keys(cdcxInfo.twinOf).length + ' CoinDCX twins (' + cdcxInfo.extras.length + ' extra) · '
         + cdcxInfo.noTwin.length + ' CoinDCX-only (no positioning data anywhere)' : '') + ' — deep scanning…';
     const results = []; let failed = 0;
@@ -1955,7 +1957,7 @@ async function runSmartScan(){
       await Promise.all(chunk.map(async function(sym, k){
         const i = ci + k;
         setProg('smartProg', (i+1)/cands.length);
-        statEl.textContent = 'scanning ' + (i+1) + '/' + cands.length + ' · ' + sym;
+        if (!quiet) statEl.textContent = 'scanning ' + (i+1) + '/' + cands.length + ' · ' + sym;
         try{
           const r = await smartScanSymbolWithCross(sym, ticks[sym]);
           if (!r){ failed++; return; }
@@ -1976,57 +1978,62 @@ async function runSmartScan(){
       return (ta - tb) || (b.cls.score - a.cls.score) || (b.cls.total - a.cls.total)
           || ((b.tick ? b.tick.turnoverUsd : 0) - (a.tick ? a.tick.turnoverUsd : 0));
     });
-    // gold callout: XAU perp positioning extreme? (funding or retail ratio)
-    try{
-      const gxTick = ticks['XAUUSDT'] || { symbol: 'XAUUSDT', mark: NaN, chg24: null, turnoverUsd: 0 };
-      const gx = await smartScanSymbolWithCross('XAUUSDT', gxTick);
-      if (gx){
-        gx.cls = smartClassify(smartClsInput(gx));
-        const extreme = (gx.fundingPct !== null && Math.abs(gx.fundingPct) >= 0.05)
-                     || (gx.retailLongPct !== null && (gx.retailLongPct >= 65 || gx.retailLongPct <= 35));
-        if (extreme){
-          const gSetup = gx.cls.dir ? smartSetup(gx.cls, gx.rows4h, gx.rows1h) : null;
-          goldEl.innerHTML = '<div class="card" style="border-left:3px solid var(--gold)">'
-            + '<div class="chead"><span class="sym">XAUUSDT · GOLD PERP</span><span class="dir" style="color:var(--gold)">POSITIONING EXTREME'
-            + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
-            + '<div class="mini">'
-            + '<span class="k">funding 8h</span><span>' + (gx.fundingPct !== null ? fmt(gx.fundingPct, 4) + '%' : 'n/a') + '</span>'
-            + '<span class="k">retail long</span><span>' + (gx.retailLongPct !== null ? fmt(gx.retailLongPct, 1) + '%' : 'n/a') + '</span>'
-            + '<span class="k">top traders long</span><span>' + (gx.topLongPct !== null ? fmt(gx.topLongPct, 1) + '%' : 'n/a') + '</span>'
-            + '<span class="k">OI 24h Δ</span><span>' + (gx.oiChgPct !== null ? pct(gx.oiChgPct, 1) : 'n/a') + '</span>'
-            + '</div>'
-            + '<div class="plan">Gold positioning is stretched on Binance — ' + (gx.cls.regime.join(' · ') || 'extreme reading')
-            + '. Crowded gold-perp longs = squeeze risk on spot gold; feeds straight into the GOLD tab macro picture.'
-            + (gSetup ? '<br>' + (gx.cls.dir === 'long' ? 'LONG' : 'SHORT') + ' ' + gSetup.type + ' plan: ENTRY <b>' + px(gSetup.entry)
-              + '</b> · STOP <b>' + px(gSetup.stop) + '</b> · T1 <b>' + px(gSetup.t1) + '</b> (' + fmt(gSetup.rr1, 1) + 'R) · T2 <b>'
-              + px(gSetup.t2) + '</b> (' + fmt(gSetup.rr2, 1) + 'R) · risk ' + fmt(gSetup.riskPct, 2) + '%'
-              + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(gSetup.entry, gSetup.stop) : '')
-              + (gSetup.note ? ' — ' + gSetup.note : '') : '')
-            + '</div>' + (gSetup ? '<div class="hgchart" id="hgchart-smartgold"></div>' : '') + '</div>';
-          if (gSetup && gx.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smartgold'), gx.rows4h,
-            { dir: gSetup.dir, entry: gSetup.entry, stop: gSetup.stop, t1: gSetup.t1, t2: gSetup.t2 });
+    if (!quiet){
+      try{
+        const gxTick = ticks['XAUUSDT'] || { symbol: 'XAUUSDT', mark: NaN, chg24: null, turnoverUsd: 0 };
+        const gx = await smartScanSymbolWithCross('XAUUSDT', gxTick);
+        if (gx){
+          gx.cls = smartClassify(smartClsInput(gx));
+          const extreme = (gx.fundingPct !== null && Math.abs(gx.fundingPct) >= 0.05)
+                       || (gx.retailLongPct !== null && (gx.retailLongPct >= 65 || gx.retailLongPct <= 35));
+          if (extreme){
+            const gSetup = gx.cls.dir ? smartSetup(gx.cls, gx.rows4h, gx.rows1h) : null;
+            goldEl.innerHTML = '<div class="card" style="border-left:3px solid var(--gold)">'
+              + '<div class="chead"><span class="sym">XAUUSDT · GOLD PERP</span><span class="dir" style="color:var(--gold)">POSITIONING EXTREME'
+              + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
+              + '<div class="mini">'
+              + '<span class="k">funding 8h</span><span>' + (gx.fundingPct !== null ? fmt(gx.fundingPct, 4) + '%' : 'n/a') + '</span>'
+              + '<span class="k">retail long</span><span>' + (gx.retailLongPct !== null ? fmt(gx.retailLongPct, 1) + '%' : 'n/a') + '</span>'
+              + '<span class="k">top traders long</span><span>' + (gx.topLongPct !== null ? fmt(gx.topLongPct, 1) + '%' : 'n/a') + '</span>'
+              + '<span class="k">OI 24h Δ</span><span>' + (gx.oiChgPct !== null ? pct(gx.oiChgPct, 1) : 'n/a') + '</span>'
+              + '</div>'
+              + '<div class="plan">Gold positioning is stretched on Binance — ' + (gx.cls.regime.join(' · ') || 'extreme reading')
+              + '. Crowded gold-perp longs = squeeze risk on spot gold; feeds straight into the GOLD tab macro picture.'
+              + (gSetup ? '<br>' + (gx.cls.dir === 'long' ? 'LONG' : 'SHORT') + ' ' + gSetup.type + ' plan: ENTRY <b>' + px(gSetup.entry)
+                + '</b> · STOP <b>' + px(gSetup.stop) + '</b> · T1 <b>' + px(gSetup.t1) + '</b> (' + fmt(gSetup.rr1, 1) + 'R) · T2 <b>'
+                + px(gSetup.t2) + '</b> (' + fmt(gSetup.rr2, 1) + 'R) · risk ' + fmt(gSetup.riskPct, 2) + '%'
+                + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(gSetup.entry, gSetup.stop) : '')
+                + (gSetup.note ? ' — ' + gSetup.note : '') : '')
+              + '</div>' + (gSetup ? '<div class="hgchart" id="hgchart-smartgold"></div>' : '') + '</div>';
+            if (gSetup && gx.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smartgold'), gx.rows4h,
+              { dir: gSetup.dir, entry: gSetup.entry, stop: gSetup.stop, t1: gSetup.t1, t2: gSetup.t2 });
+          }
         }
-      }
-    }catch(e){}
-    cardsEl.innerHTML = results.map(smartCardHTML).join('');
-    results.forEach(function(r){
-      if (r.setup && r.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')), r.rows4h,
-        { dir: r.setup.dir, entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1, t2: r.setup.t2 });
-    });
+      }catch(e){}
+      cardsEl.innerHTML = results.map(smartCardHTML).join('');
+      results.forEach(function(r){
+        if (r.setup && r.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')), r.rows4h,
+          { dir: r.setup.dir, entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1, t2: r.setup.t2 });
+      });
+    }
     const nSetup = results.filter(function(r){ return !!r.setup; }).length;
     const nConf = results.filter(function(r){ return r.setup && r.setup.confirmed; }).length;
     const nCdcx = results.filter(function(r){ return r.venue === 'cdcx'; }).length;
-    statEl.textContent = 'done · ' + nSetup + ' setups (' + nConf + ' confirmed) · ' + (results.length - nSetup) + ' context'
-      + ' · universe ' + uni.length + ' perps ≥$5M (' + cands.length + ' screened)'
-      + (cdcxInfo ? ' · ' + nCdcx + ' CoinDCX-covered via Binance twin'
-        + (cdcxInfo.noTwin.length ? ' · ' + cdcxInfo.noTwin.length + ' CoinDCX-only: no positioning data exists for them (structure-only on BRAIN/SWING/SCALP)' : '') : '')
-      + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
-      + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0,5);
-    if (!results.length) emptyEl.style.display = 'block';
+    if (!quiet){
+      statEl.textContent = 'done · ' + nSetup + ' setups (' + nConf + ' confirmed) · ' + (results.length - nSetup) + ' context'
+        + ' · universe ' + uni.length + ' perps ≥$5M (' + cands.length + ' screened)'
+        + (cdcxInfo ? ' · ' + nCdcx + ' CoinDCX-covered via Binance twin'
+          + (cdcxInfo.noTwin.length ? ' · ' + cdcxInfo.noTwin.length + ' CoinDCX-only: no positioning data exists for them (structure-only on BRAIN/SWING/SCALP)' : '') : '')
+        + (failed ? ' · ' + failed + ' symbols failed (skipped)' : '')
+        + ' · ' + ((Date.now() - t0)/1000).toFixed(0) + 's · ' + new Date().toTimeString().slice(0,5);
+      if (!results.length) emptyEl.style.display = 'block';
+    }
     window.__hgSmartResults = { results: results, at: Date.now() };
   }catch(e){
-    statEl.textContent = 'smart scan failed: ' + e.message;
-  }finally{ setProg('smartProg', null); btn.disabled = false; }
+    if (!quiet) statEl.textContent = 'smart scan failed: ' + e.message;
+  }finally{
+    if (!quiet){ setProg('smartProg', null); btn.disabled = false; }
+  }
 }
 /* <<< SMART MONEY END <<< */
 
@@ -3226,6 +3233,49 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
   if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
 }
 
+function hgCryptoSetupId(c){
+  if (!c) return '';
+  if (c.id) return c.id;
+  const v = c.venueTag || c.venue || '';
+  const sym = c.sym || '';
+  const dir = c.dir || '';
+  const e = +c.entry;
+  return (v ? v + '|' : '') + sym + '|' + dir + '@' + (Number.isFinite(e) ? e : '');
+}
+function hgCryptoCandRow(t, hit, venueTag){
+  const row = { sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr,
+    venueTag: venueTag || '', venue: venueTag || '', turnoverUsd: t.turnoverUsd || 0 };
+  row.id = hgCryptoSetupId(row);
+  return row;
+}
+function hgRankCryptoCands(cands){
+  const sorted = (cands || []).slice().sort(function(a, b){
+    const rra = Number.isFinite(+a.rr) ? +a.rr : (Number.isFinite(+a.rr1) ? +a.rr1 : 0);
+    const rrb = Number.isFinite(+b.rr) ? +b.rr : (Number.isFinite(+b.rr1) ? +b.rr1 : 0);
+    if (rrb !== rra) return rrb - rra;
+    const ta = Number.isFinite(+a.turnoverUsd) ? +a.turnoverUsd : 0;
+    const tb = Number.isFinite(+b.turnoverUsd) ? +b.turnoverUsd : 0;
+    if (tb !== ta) return tb - ta;
+    return String(a.sym || '').localeCompare(String(b.sym || ''));
+  });
+  const bestId = sorted.length ? hgCryptoSetupId(sorted[0]) : null;
+  return { cands: sorted, bestId: bestId };
+}
+function hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit){
+  const ranked = hgRankCryptoCands(cands);
+  return { at: Date.now(), cands: ranked.cands, nearCands: nearCands || [], bestId: ranked.bestId,
+    stat: statText, audit: audit };
+}
+function hgAssignCryptoScanSnap(kind, snap){
+  if (kind === 'swing') __hgSwingScan = snap; else __hgScalpScan = snap;
+}
+function hgPublishCryptoScanSnap(kind, cands, nearCands, statText, audit){
+  const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit);
+  hgAssignCryptoScanSnap(kind, snap);
+  return snap;
+}
+window.hgCryptoSetupId = hgCryptoSetupId;
+
 async function runScan(kind, opts){
   opts = opts || {};
   if (!opts._singleLeg && !opts.singleExchange && !opts.exchange && hgDualScanEnabled()){
@@ -3240,25 +3290,45 @@ async function runScan(kind, opts){
         _singleLeg: true, skipUiClear: !leg.first, venueTag: leg.venueTag, dualLast: leg.last
       }));
     }, opts);
+    let found = 0, nearFound = 0, scanned = 0;
+    const parts = [];
+    let mergedCands = [], mergedNear = [];
+    const mergedAudit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0 };
+    (legs || []).forEach(function(L){
+      if (!L) return;
+      found += L.found || 0;
+      nearFound += L.nearFound || 0;
+      scanned += L.uniLen || 0;
+      if (L.statPart) parts.push(L.statPart);
+      if (Array.isArray(L.cands)) mergedCands = mergedCands.concat(L.cands);
+      if (Array.isArray(L.nearCands)) mergedNear = mergedNear.concat(L.nearCands);
+      if (L.audit){
+        mergedAudit.cascade += L.audit.cascade || 0;
+        mergedAudit.pass6 += L.audit.pass6 || 0;
+        mergedAudit.pass7noAnchor += L.audit.pass7noAnchor || 0;
+        mergedAudit.histShort += L.audit.histShort || 0;
+        mergedAudit.errors += L.audit.errors || 0;
+        if (L.audit.fail){
+          for (const fk in L.audit.fail){
+            if (Object.prototype.hasOwnProperty.call(L.audit.fail, fk))
+              mergedAudit.fail[fk] = (mergedAudit.fail[fk] || 0) + L.audit.fail[fk];
+          }
+        }
+      }
+    });
+    mergedAudit.found = found;
+    mergedAudit.nearFound = nearFound;
+    mergedAudit.uniLen = scanned;
+    const statText = 'done — ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
+      + ' / ' + scanned + ' scanned · BOTH venues (Delta + CoinDCX)'
+      + (parts.length ? (' · ' + parts.join(' · ')) : '');
+    hgPublishCryptoScanSnap(kind, mergedCands, mergedNear, statText, mergedAudit);
     if (!quiet && legs && legs.length){
-      const isSwing = kind === 'swing';
       const statEl = $(isSwing ? 'swingStat' : 'scalpStat');
       const emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty');
-      let found = 0, nearFound = 0, scanned = 0;
-      const parts = [];
-      legs.forEach(function(L){
-        if (!L) return;
-        found += L.found || 0;
-        nearFound += L.nearFound || 0;
-        scanned += L.uniLen || 0;
-        if (L.statPart) parts.push(L.statPart);
-      });
-      statEl.textContent = 'done — ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
-        + ' / ' + scanned + ' scanned · BOTH venues (Delta + CoinDCX) · ' + parts.join(' · ');
+      statEl.textContent = statText;
       try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
-      if (!found){
-        emptyEl.style.display = nearFound ? 'none' : 'block';
-      }
+      if (!found) emptyEl.style.display = nearFound ? 'none' : 'block';
     }
     return;
   }
@@ -3353,7 +3423,7 @@ async function runScanLeg(kind, opts){
             const hit = swingTryClean(rows, t);
             if (hit){
               found++;
-              cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
+              cands.push(hgCryptoCandRow(t, hit, venueTag));
               renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag);
               return;
             }
@@ -3398,7 +3468,7 @@ async function runScanLeg(kind, opts){
             const hit = scalpTryClean(h1, m15, t, minsToFunding);
             if (hit){
               found++;
-              cands.push({ sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr });
+              cands.push(hgCryptoCandRow(t, hit, venueTag));
               renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag);
             } else if (typeof scalpTryNear === 'function'){
               const nearS = scalpTryNear(h1, m15, t, minsToFunding);
@@ -3431,8 +3501,8 @@ async function runScanLeg(kind, opts){
       + (audit.errors ? (' · ' + audit.errors + ' fetch errors') : '');
     if (!quiet && dualLast) statEl.textContent = statText;
     if (!quiet && dualLast) try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
-    const snap = { at: Date.now(), cands: cands, nearCands: nearCands, stat: statText, audit: Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }) };
-    if (isSwing) __hgSwingScan = snap; else __hgScalpScan = snap;
+    const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }));
+    if (!opts._singleLeg) hgAssignCryptoScanSnap(kind, snap);
     if (!quiet && dualLast) hgPaintScanFunnel(kind, snap.audit);
     if (!quiet && dualLast && !found){
       const blk = topFail.length ? (' Most common gate failures: ' + topFail.join(', ') + '.') : '';
@@ -3451,7 +3521,7 @@ async function runScanLeg(kind, opts){
     if (typeof hgGateFlipAlerts === 'function' && flipRecords.length){
       try{ hgGateFlipAlerts(kind, flipVenue, flipRecords); }catch(eFlip){}
     }
-    return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands };
+    return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands, nearCands: nearCands, audit: audit, statText: statText };
   }catch(e){
     if (!quiet && dualLast) statEl.textContent = 'scan failed: ' + e.message;
     return null;
@@ -3517,6 +3587,26 @@ async function cryptoScanWarm(kind){
   try{ await runScan(kind, { quiet: true, forceScanAll: true }); return 'warmed'; }
   catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
+async function bestScanWarm(){
+  try{
+    const merged = [];
+    for (const ex of ['delta', 'coindcx']){
+      const clean = await silentBestScan(ex);
+      if (clean && clean.length){
+        for (let i = 0; i < clean.length; i++){
+          const w = clean[i];
+          if (w) merged.push(Object.assign({}, w, { _venueLabel: ex === 'delta' ? 'Delta India' : 'CoinDCX' }));
+        }
+      }
+    }
+    merged.sort(function(a, b){
+      return (b.profitBoost || 0) - (a.profitBoost || 0) || b.famScore - a.famScore
+        || b.robScore - a.robScore || b.rr - a.rr;
+    });
+    publishBestSnap(merged, { dual: true });
+    return 'warmed';
+  }catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
+}
 async function hgWarmLayerIds(ids){
   const reg = (typeof HG_warmups !== 'undefined' && Array.isArray(HG_warmups)) ? HG_warmups : [];
   const jobs = [];
@@ -3543,6 +3633,11 @@ async function runTabAlertScans(){
   await Promise.all([
     (typeof edgeWarm === 'function' ? edgeWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert edge warm', e); }),
     (typeof pineWarm === 'function' ? pineWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert pine warm', e); })
+  ]);
+  await Promise.all([
+    (typeof brainAlertWarm === 'function' ? brainAlertWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert brain', e); }),
+    bestScanWarm().catch(function(e){ console.warn('tab alert best', e); }),
+    runSmartScan({ quiet: true }).catch(function(e){ console.warn('tab alert smart', e); })
   ]);
   try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
 }

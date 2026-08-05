@@ -128,7 +128,26 @@ W.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; 
 const collected = W.hgTabAlertsCollect();
 assert(collected.length === 3, 'collects swing + best + brain(7/7); gold separate by default');
 assert(collected.some(c => c.src === 'SWING' && c.clean7), 'swing marked clean7');
-assert(collected.some(c => c.src === 'BEST' && c.clean7), 'best clean rows marked clean7');
+assert(collected.some(c => c.src === 'BEST' && c.clean7 && c.tier === 'MOST PROBABLE #1'), 'best collect is #1 only with tier tag');
+
+const WDual = loadWithWindow({
+  swingScan: () => ({
+    bestId: 'Delta India|BTCUSD|long@95000',
+    cands: [
+      { id: 'Delta India|BTCUSD|long@95000', sym: 'BTCUSD', dir: 'long', entry: 95000, stop: 94000, t1: 97500, rr: 2.5 },
+      { id: 'CoinDCX|ETHUSD|long@3500', sym: 'ETHUSD', dir: 'long', entry: 3500, stop: 3400, t1: 3700, rr: 2 }
+    ]
+  }),
+  scalpScan: () => null,
+  edgeScan: () => null,
+  bestScan: () => ({ clean: [] }),
+  __hgBrainLast: () => null,
+  goldscalpScan: () => null,
+  goldswingScan: () => null
+});
+assert(WDual.hgTabAlertsCollect().some(c => c.src === 'SWING' && c.tier === 'MOST PROBABLE'),
+       'swing MOST PROBABLE tier from bestId');
+assert(typeof W.hgTabAlertsCheckLive === 'function', 'hgTabAlertsCheckLive exported');
 assert(collected.some(c => c.src.indexOf('BRAIN') >= 0 && c.clean7), 'brain 7/7 evidence included');
 assert(!collected.some(c => c.src.indexOf('GOLD') >= 0), 'gold excluded from unified collect when separate');
 

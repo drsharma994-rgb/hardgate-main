@@ -59,7 +59,7 @@ assert(indexHtml.indexOf('tradeDesk') >= 0, 'trade tab has desk banner slot');
 assert(indexHtml.indexOf('_hgTradeHandoffPending') >= 0, 'toTrade clears stale handoff');
 
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
-assert(/hg-v160/.test(sw), 'sw cache bumped for trendmx 15-min alerts');
+assert(/hg-v161/.test(sw), 'sw cache bumped for most-probable fixes');
 
 console.log(fail ? '\nTESTS FAILED' : '\nALL TRADE-PLAN TESTS PASSED');
 process.exit(fail ? 1 : 0);
