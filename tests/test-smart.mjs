@@ -4,7 +4,7 @@
    - runBias B1 row: PASS (agree) / VETO (opposite) / N/A (no data)
    - runSmartScan end-to-end with stubbed binance legs, incl. per-symbol failure
      tolerance, setup-vs-context ranking and the XAUUSDT gold-perp callout.
-   - smartSetup: SWING continuation / SCALP reversion plans, stop geometry,
+   - smartSetup: SWING continuation / FADE mean-reversion plans, stop geometry,
      ATR fallback, confirmed cascade, reject paths
    - smartScreenCandidates: ≥$5M universe + |chg24|≥2 / top-120 screening
    - smartCardHTML: setup badge, plan line, toTrade handoff
@@ -251,7 +251,7 @@ function mkRows(n, start, step, stepSec, range){
   const a1 = lastOf(atr(rows1h, 14)), mark = rows1h[rows1h.length - 1].c;
   const e21 = lastOf(ema(rows1h.map(r => r.c), 21));
   const exHi = Math.max(...rows1h.slice(-24).map(r => r.h));
-  ok(!!s && s.type === 'SCALP' && s.dir === 'short', 'scalp: covering-rally reversion → SCALP short');
+  ok(!!s && s.type === 'FADE' && s.dir === 'short', 'fade: covering-rally reversion → FADE short');
   ok(s.entryType && s.entryGuidance, 'scalp: exact entry metadata present');
   ok(Math.abs(s.entry - e21) < 1e-6 || Math.abs(s.entry - mark) < 1e-9, 'scalp: entry at 1H EMA21 or in-zone mark');
   ok(s.stop > s.entry && s.entry > s.t1 && s.t1 > s.t2, 'scalp short: stop > entry > T1 > T2');
@@ -265,7 +265,7 @@ function mkRows(n, start, step, stepSec, range){
   const s = SU(cls, rows4h, mkRows(10, 160, 0.1, 3600));
   const entry4 = rows4h[rows4h.length - 1].c;
   const e21_4 = lastOf(ema(rows4h.map(r => r.c), 21));
-  ok(!!s && s.type === 'SCALP' && s.dir === 'long', 'scalp: capitulation evidence → SCALP long');
+  ok(!!s && s.type === 'FADE' && s.dir === 'long', 'fade: capitulation evidence → FADE long');
   ok(s.note.indexOf('4H-based') !== -1 && s.entryType, 'scalp: <30 1H bars → 4H-based + exact entry metadata');
   ok(Math.abs(s.entry - e21_4) < 1e-6 || Math.abs(s.entry - entry4) < 1e-9, 'scalp: 4H fallback uses EMA21 limit or in-zone mark');
   ok(s.stop < s.entry && s.t1 > s.entry && s.t2 > s.t1, 'scalp long: stop < entry < T1 < T2');

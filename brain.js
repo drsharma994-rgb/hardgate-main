@@ -2879,6 +2879,16 @@ async function cryptoPlan(row, snap){
     }catch(e){ /* the 4h result stands */ }
   }
   if (ap && ap.plan) return { plan: ap.plan, rows: kl.rows4h };
+  if (typeof G.hgSwingCleanPlan === 'function' && kl.rows4h && kl.rows4h.length >= 210){
+    try{
+      var markSc = kl.rows4h[kl.rows4h.length - 1].c;
+      var fpSc = (row.tick && row.tick.fundingPct != null) ? row.tick.fundingPct
+        : (row.fundingPct != null ? row.fundingPct : null);
+      var scHit = G.hgSwingCleanPlan(kl.rows4h, { symbol: row.sym, fundingPct: fpSc, mark: markSc }, row.dec.dir);
+      var scNp = normalizePlan(scHit, 'swingTryClean SWING', fbNote);
+      if (scNp) return { plan: scNp, rows: kl.rows4h };
+    }catch(e){ /* fall through to smartSetup */ }
+  }
   if (typeof G.smartSetup === 'function' && kl.rows4h && kl.rows4h.length >= 60){
     try{
       var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
@@ -2942,6 +2952,16 @@ async function cryptoPlanXu(row, snap){
     }
   }
   if (ap && ap.plan) return { plan: ap.plan, rows: rows };
+  if (typeof G.hgSwingCleanPlan === 'function' && rows.length >= 210){
+    try{
+      var markXu = rows[rows.length - 1].c;
+      var fpXu = (row.tick && row.tick.fundingPct != null) ? row.tick.fundingPct
+        : (row.fundingPct != null ? row.fundingPct : null);
+      var scXu = G.hgSwingCleanPlan(rows, { symbol: row.sym, fundingPct: fpXu, mark: markXu }, row.dec.dir);
+      var npSc = normalizePlan(scXu, 'swingTryClean SWING', fbNote);
+      if (npSc) return { plan: npSc, rows: rows };
+    }catch(e){ /* fall through to smartSetup */ }
+  }
   if (typeof G.smartSetup === 'function' && rows.length >= 60){
     try{
       var agreeing = row.col.votes.filter(function(v){ return v.vote === row.dec.dir; });
@@ -3295,7 +3315,9 @@ function planFamily(p){
     if (/pool/i.test(an)) return 'pool-limit';
     if (/AVWAP/i.test(an)) return 'avwap-limit';
     var src = String(p.src || '');
-    if (/smartSetup\s*SCALP/i.test(src)) return 'smart-scalp';
+    if (/swingTryClean/i.test(src)) return 'swing-clean';
+    if (/smartSetup\s*FADE/i.test(src)) return 'smart-fade';
+    if (/smartSetup\s*SCALP/i.test(src)) return 'smart-fade';
     if (/smartSetup\s*SWING/i.test(src)) return 'smart-swing';
     if (/engine/i.test(src)) return 'engine-plan';
     if (/hgPlanLevels/i.test(src)) return 'gate-levels';
@@ -3306,8 +3328,8 @@ function planFamily(p){
 var FAMILY_LABEL = {
   'fvg-limit': 'FVG limits', 'ob-limit': 'OB limits', 'ema-limit': 'EMA limits',
   'swing-zone-limit': 'swing-zone limits', 'pool-limit': 'pool limits',
-  'avwap-limit': 'AVWAP limits', 'smart-scalp': 'smart scalps',
-  'smart-swing': 'smart swings', 'engine-plan': 'engine plans',
+  'avwap-limit': 'AVWAP limits', 'smart-fade': 'smart fades', 'smart-scalp': 'smart fades (legacy)',
+  'smart-swing': 'smart swings', 'swing-clean': 'SWING 7/7 tickets', 'engine-plan': 'engine plans',
   'gate-levels': 'gate levels', 'gold-plan': 'gold plans',
   'anchored-limit': 'anchored limits', 'unknown': 'this family'
 };

@@ -375,10 +375,10 @@ function hgEnrichGenericExact(plan, rows, opts){
     }
     var risk = Math.abs(entry - stop);
     if (!(risk > 0)) return plan;
-    var minRr = opts.minRr || (plan.type === 'SCALP' ? 1.5 : HG_MIN_RR_DEFAULT);
+    var minRr = opts.minRr || (plan.type === 'SCALP' || plan.type === 'FADE' ? 1.5 : HG_MIN_RR_DEFAULT);
     var pr = hgPlanFromRisk(dir, entry, stop, {
-      t1R: plan.type === 'SCALP' ? HG_SCALP_T1_R : HG_T1_R,
-      t2R: plan.type === 'SCALP' ? HG_SCALP_T2_R : HG_T2_R,
+      t1R: (plan.type === 'SCALP' || plan.type === 'FADE') ? HG_SCALP_T1_R : HG_T1_R,
+      t2R: (plan.type === 'SCALP' || plan.type === 'FADE') ? HG_SCALP_T2_R : HG_T2_R,
       minRr: minRr,
       targetPolicy: plan.targetPolicy || 'R-multiples'
     });
@@ -452,7 +452,7 @@ function hgApplyExactEntry(plan, rows4h, opts){
     var markClose = +rows4h[rows4h.length - 1].c;
 
     if (typeof edgeSignal === 'function' && opts.preferEdge !== false
-        && style !== 'scalp' && style !== 'meanrev'){
+        && style !== 'scalp' && style !== 'fade' && style !== 'meanrev'){
       try{
         var sig = edgeSignal(rows4h);
         if (sig && sig.dir === dir){
@@ -615,6 +615,72 @@ function hgPlanMetaLabel(plan){
     if (plan.entryType) parts.push(plan.entryType);
     return parts.join(' · ');
   }catch(e){ return ''; }
+}
+
+/* --- post-enrichment swing ticket validation (G6 parity after enrich) --- */
+function hgSwingPostEnrichValid(hit, opts){
+  opts = opts || {};
+  try{
+    if (!hit || !hit.dir) return null;
+    var dir = hit.dir;
+    var entry = +hit.entry, stop = +hit.stop;
+    if (!isFinite(entry) || !isFinite(stop)) return null;
+    if (dir === 'long' && stop >= entry) return null;
+    if (dir === 'short' && stop <= entry) return null;
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    var a4 = opts.a4;
+    if (!isFinite(a4) && opts.rows && typeof atr === 'function'){
+      a4 = _last(atr(opts.rows, 14));
+    }
+    if (!isFinite(a4) || a4 <= 0) return null;
+    var minRr = opts.minRr !== undefined ? opts.minRr : 2.5;
+    var expMult = opts.expMult !== undefined ? opts.expMult : 3.5;
+    var dynamicRR = (a4 * expMult) / risk;
+    if (dynamicRR < minRr) return null;
+    var tg = hgPlanSwingTargets(dir, entry, stop, a4, opts.targetOpts || {});
+    if (!tg || tg.rr1 < minRr) return null;
+    var out = Object.assign({}, hit);
+    out.entry = entry; out.stop = stop;
+    out.t1 = tg.t1; out.t2 = tg.t2;
+    out.rr = dynamicRR; out.rr1 = tg.rr1; out.rr2 = tg.rr2;
+    out.riskPct = risk / entry * 100;
+    out.targetPolicy = out.targetPolicy || tg.targetPolicy;
+    return out;
+  }catch(e){ return null; }
+}
+
+function hgSwingHitToPlan(hit){
+  try{
+    if (!hit || !hit.dir) return null;
+    var entry = +hit.entry, stop = +hit.stop, t1 = +hit.t1, t2 = +hit.t2;
+    if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return null;
+    var dir = hit.dir;
+    if (dir === 'long' && stop >= entry) return null;
+    if (dir === 'short' && stop <= entry) return null;
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    var rr1 = isFinite(hit.rr1) ? hit.rr1 : (isFinite(hit.rr) ? hit.rr : Math.abs(t1 - entry) / risk);
+    return {
+      type: 'SWING', dir: dir, entry: entry, stop: stop, t1: t1, t2: isFinite(t2) ? t2 : null,
+      rr1: rr1, rr2: isFinite(hit.rr2) ? hit.rr2 : (isFinite(t2) ? Math.abs(t2 - entry) / risk : null),
+      riskPct: isFinite(hit.riskPct) ? hit.riskPct : risk / entry * 100,
+      confirmed: true,
+      note: hit.entryType || 'swingTryClean 7/7',
+      entryType: hit.entryType, entryGuidance: hit.entryGuidance,
+      planSrc: 'swingTryClean', targetPolicy: hit.targetPolicy,
+      _swingClean: true
+    };
+  }catch(e){ return null; }
+}
+
+function hgSwingCleanPlan(rows, ticker, dir){
+  try{
+    if (typeof swingTryClean !== 'function' || !rows || !dir) return null;
+    var hit = swingTryClean(rows, ticker || null);
+    if (!hit || hit.dir !== dir) return null;
+    return hgSwingHitToPlan(hit);
+  }catch(e){ return null; }
 }
 
 /* --- swing parity from cryptogates (EXECUTE / cards) --- */
@@ -804,6 +870,9 @@ G.hgOteZone = hgOteZone;
 G.hgRefineEntry = hgRefineEntry;
 G.hgPlanMetaLabel = hgPlanMetaLabel;
 G.hgSwingParity = hgSwingParity;
+G.hgSwingPostEnrichValid = hgSwingPostEnrichValid;
+G.hgSwingHitToPlan = hgSwingHitToPlan;
+G.hgSwingCleanPlan = hgSwingCleanPlan;
 G.HG_GOLD_T1_R = HG_GOLD_T1_R;
 G.HG_GOLD_T2_R = HG_GOLD_T2_R;
 G.HG_GOLD_T3_R = HG_GOLD_T3_R;

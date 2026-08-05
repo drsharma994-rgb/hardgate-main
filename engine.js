@@ -345,16 +345,31 @@ function sanePlanSides(plan, dir){
    'levels unavailable — size down' block). When smartSetup is absent as a
    global, the local ATR fallback handles it (never happens in the browser —
    index.html defines smartSetup inline — kept for standalone/vm use). */
-function buildPlan(dir, cls, rows4h, rows1h){
-  function finish(plan){
+function buildPlan(dir, cls, rows4h, rows1h, meta){
+  meta = meta || {};
+  function finish(plan, skipExact){
     if (!plan || !sanePlanSides(plan, dir)) return null;
-    if (typeof hgApplyExactEntry === 'function'){
+    if (!skipExact && !plan._swingClean && typeof hgApplyExactEntry === 'function'){
       try{
         var style = plan.type ? String(plan.type).toLowerCase() : 'swing';
-        plan = hgApplyExactEntry(plan, rows4h, { rows1h: rows1h, style: style, preferEdge: true }) || plan;
+        plan = hgApplyExactEntry(plan, rows4h, { rows1h: rows1h, style: style, preferEdge: style === 'swing' }) || plan;
       }catch(eExact){}
     }
     return (plan && sanePlanSides(plan, dir)) ? plan : null;
+  }
+  /* SWING tab parity — 7/7 CLEAN ticket wins over smartSetup / FADE routing */
+  if (typeof hgSwingCleanPlan === 'function' && rows4h && rows4h.length >= 210){
+    try{
+      var markPx = rows4h[rows4h.length - 1].c;
+      var tkr = {
+        symbol: meta.sym || 'ENGINE',
+        fundingPct: (meta.fundingPct !== undefined && meta.fundingPct !== null) ? meta.fundingPct : null,
+        mark: markPx,
+        turnoverUsd: (meta.turnoverUsd !== undefined && meta.turnoverUsd !== null) ? meta.turnoverUsd : null
+      };
+      var scPlan = hgSwingCleanPlan(rows4h, tkr, dir);
+      if (scPlan){ var fsc = finish(scPlan, true); if (fsc) return fsc; }
+    }catch(eSc){}
   }
   if (typeof smartSetup === 'function'){
     var c = cls || { dir: dir, longEv: [], shortEv: [], regime: [], score: 0, total: 0 };
@@ -655,7 +670,7 @@ function gateCandidate(inp){
         res.swingGates = swPar.label;
         res.swingClean = swPar.clean;
         if (!swPar.g6)
-          return die(5, 'SWING G6 dynamic R:R < 2 — EXECUTE requires swing parity (plans.js)');
+          return die(5, 'SWING G6 dynamic R:R < 2.5 — EXECUTE requires swing parity (plans.js)');
         if (!swPar.g7)
           return die(5, 'SWING G7 CUSUM against direction — EXECUTE requires swing parity (plans.js)');
       }
@@ -666,7 +681,11 @@ function gateCandidate(inp){
   res.pass = true;
   res.gatesPassed = countTrue();
   res.conviction = res.gatesPassed >= GATES.length ? 'STRONG' : 'MODERATE';
-  res.plan = buildPlan(dir, cls, rows4h, inp.rows1h);
+  res.plan = buildPlan(dir, cls, rows4h, inp.rows1h, {
+    sym: sym,
+    fundingPct: numOrNull(inp.fundingPct),
+    turnoverUsd: numOrNull(inp.turnoverUsd)
+  });
   if (res.plan){
     if (res.swingGates) res.plan.swingGates = res.swingGates;
     if (res.swingClean !== undefined) res.plan.swingClean = res.swingClean;
