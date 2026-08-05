@@ -98,6 +98,8 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Daemon brain:** `tests/test-daemon-brain.mjs` contract-smokes `lib/daemon-brain.mjs` (headless synthesis seam + fast-fail on dead port).
 - **Book runtime:** `tests/test-book.mjs` offline-smokes `book.js` (`addToBook` vetoes/success, IN BOOK stamps, fund routing, brain layer snapshot on add). `tests/test-book-routing.mjs` includes browser `book-routing.js` ↔ `lib/book-routing.mjs` parity cases.
 - **Bybit legs:** `tests/test-bybit.mjs` mocks Bybit v5 public REST (`bybitFunding`, OI history, account ratio, snapshot, linear tickers map) — used by SMART $ / CARRY cross-checks.
+- **Indicators:** `tests/test-indicators.mjs` covers core `indicators.js` math (EMA/RSI/ATR, MACD, OB/liquidity pools, regime/vol profile). `tests/test-indicators2.mjs` covers `indicators2.js` helpers + `hgStructure` / `hgAVWAP`.
+- **Store pub/sub:** `tests/test-store.mjs` offline-smokes `store.js` subscribe/publish/unsub error isolation (WS decoupling seam in `index.html`).
 - **Binance fapi:** `tests/test-binance.mjs` mocks USD-M public REST (`binanceKlines`, funding, OI, long/short, depth, fundingInfo) — core data layer for scanners.
 
 ### Strategy → book plugin checklist
