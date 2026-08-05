@@ -297,7 +297,7 @@ async function runBest(opts){
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = `
       <div class="panel">
-        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampForMeta==='function'?hgBookStampForMeta(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
+        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
@@ -349,7 +349,7 @@ async function runBest(opts){
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = `
       <div class="panel">
-        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampForMeta==='function'?hgBookStampForMeta(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
+        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>

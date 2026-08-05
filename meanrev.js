@@ -345,7 +345,7 @@ function cardHTML(r){
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="dir">' + dirUp + ' · MEAN REV · exp ' + fmtSignedR(bt.expR) + '</span>'
-    + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(r.sym, sig.dir, { scanner: 'meanrev', strategy: 'meanrev' }) : '')
+    + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, sig.dir, { scanner: 'meanrev', strategy: 'meanrev' }) : '')
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">last</span><span>' + pxF(st.last) + '</span>'

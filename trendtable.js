@@ -279,8 +279,8 @@ function trendmxPlanBlock(r){
     : '';
   var btn = tradeOnclick
     ? ' <button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookStamp = (s && typeof hgBookStampForMeta === 'function')
-    ? hgBookStampForMeta(r.sym, s.dir, { scanner: 'trendmx', strategy: 'trendmx' }) : '';
+  var bookStamp = (s && typeof hgBookStampChip === 'function')
+    ? hgBookStampChip(r.sym, s.dir, { scanner: 'trendmx', strategy: 'trendmx' }) : '';
   var bookBtn = (s && typeof bookBtnHTML === 'function')
     ? ' ' + bookBtnHTML(r.sym, s.dir, s.entry, s.stop, s.t1,
       { scanner: 'trendmx', strategy: 'trendmx', t2: s.t2, stack: tmStack }) : '';

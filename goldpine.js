@@ -387,8 +387,8 @@ function cardHTML(s, rank){
   return '<div class="panel ' + cls + ' tier-' + tier + '" style="margin-bottom:12px">'
     + '<h2>XAUUSD <span>' + esc(s.dir.toUpperCase()) + ' · ' + modeLabel + ' · Grade ' + esc(s.grade)
     + rankBadge + badge
-    + ((typeof W.hgBookStampForMeta === 'function')
-      ? W.hgBookStampForMeta('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
+    + ((typeof W.hgBookStampChip === 'function')
+      ? W.hgBookStampChip('XAUUSD', s.dir, { scanner: 'goldpine', strategy: s.mode || 'goldpine', klass: 'metals', fund: 'gold' })
       : '')
     + '</span></h2>'
     + '<div class="note">Confluence <b>' + s.score + '/' + s.maxScore + '</b>'

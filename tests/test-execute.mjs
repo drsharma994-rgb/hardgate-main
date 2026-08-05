@@ -122,6 +122,10 @@ ok(bookJs.indexOf('bookDailyLossHalted') >= 0 && bookJs.indexOf('DAY HALT') >= 0
   'book.js daily loss halt banner + status chip');
 ok(bookJs.indexOf('hgBookStampRefreshThrottled') >= 0, 'book.js refreshes open keys for IN BOOK stamps');
 ok(bookJs.indexOf('hgBookStampForMeta') >= 0, 'book.js exports hgBookStampForMeta fund-aware stamp');
+ok(bookJs.indexOf('hgBookStampChip') >= 0 && bookJs.indexOf('hgBookStampSlot') >= 0,
+  'book.js exports slotted hgBookStampChip for scanner UI');
+ok(bookJs.indexOf('hgBookStampRepaintDom') >= 0, 'book.js repaints slotted stamps after key sync');
+ok(bookJs.indexOf('W.toTrade(p.sym') < 0, 'book MANAGE no longer falls back to bare toTrade');
 ok(bookJs.indexOf('hgToTradePlanFromBook') >= 0, 'book MANAGE uses hgToTradePlanFromBook handoff');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
@@ -140,8 +144,19 @@ ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtn
 ok(indexHtml.indexOf('hgTradeHandoffFor') >= 0 && indexHtml.indexOf('handoff.stack') >= 0,
   'trade plan passes FTS stack from card handoff');
 ok(indexHtml.indexOf('MANAGE from book') >= 0, 'trade plan labels book MANAGE handoff');
-ok(indexHtml.indexOf('hgBookStampForMeta') >= 0, 'index cardHTML shows IN BOOK stamp');
+ok(indexHtml.indexOf('hgBookStampChip') >= 0, 'index cardHTML shows slotted IN BOOK chip');
 ok(indexHtml.indexOf('hgBookStampRefreshThrottled') >= 0, 'showTab triggers throttled book key refresh');
+ok(indexHtml.indexOf("scanner: 'gold-setup'") >= 0 && indexHtml.indexOf('hgBookStampChip') >= 0,
+  'inline gold setup uses IN BOOK stamp chip');
+ok(indexHtml.indexOf("scanner: 'gold-swing'") >= 0 && indexHtml.indexOf("scanner: 'gold-scalp'") >= 0,
+  'inline gold swing/scalp verdicts use IN BOOK stamps');
+ok(indexHtml.indexOf('renderGoldMacroAuto') >= 0 && indexHtml.indexOf("scanner: 'macro'") >= 0
+  && indexHtml.indexOf('hgToTradePlanOnclickAttr(mgp.sym') >= 0,
+  'gold macro AUTO panel has IN BOOK stamp + trade handoff');
+ok(indexHtml.indexOf('tradeBookStamp') >= 0 && indexHtml.indexOf('planTrade') >= 0,
+  'trade plan ledger shows IN BOOK chip on valid plan');
+var pineJs = fs.readFileSync(path.join(root, 'pine.js'), 'utf8');
+ok(pineJs.indexOf('hgBookStampChip') >= 0, 'pine fallback cardHTML uses IN BOOK chip');
 ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
   'swing and scalp scans use distinct scanner ids');
 
@@ -151,9 +166,21 @@ var macroJs = fs.readFileSync(path.join(root, 'macro.js'), 'utf8');
 ok(squeezeJs.indexOf("t2: s.t2") >= 0, 'squeeze book CTA passes T2 runner');
 ok(edgeJs.indexOf('t2: p.t2') >= 0, 'edge book CTA passes T2 runner');
 ok(edgeJs.indexOf('hgToTradePlanOnclickAttr') >= 0 || edgeJs.indexOf('hgToTradePlan') >= 0, 'edge trade handoff uses hgToTradePlan helper');
-ok(edgeJs.indexOf('hgBookStampForMeta') >= 0, 'edge cards use hgBookStampForMeta');
+ok(edgeJs.indexOf('hgBookStampChip') >= 0, 'edge cards use hgBookStampChip');
 var brainJs = fs.readFileSync(path.join(root, 'brain.js'), 'utf8');
-ok(brainJs.indexOf('hgBookStampForMeta') >= 0, 'brain cards use IN BOOK stamp');
+ok(brainJs.indexOf('hgBookStampChip') >= 0, 'brain cards use slotted IN BOOK chip');
+var carryJs = fs.readFileSync(path.join(root, 'carry.js'), 'utf8');
+var termbasisJs = fs.readFileSync(path.join(root, 'termbasis.js'), 'utf8');
+var goldproJs = fs.readFileSync(path.join(root, 'goldpro.js'), 'utf8');
+ok(carryJs.indexOf('carryBookStamp') >= 0, 'carry cards use carryBookStamp');
+ok(termbasisJs.indexOf('termBasisBookStamp') >= 0, 'term basis cards use IN BOOK stamp');
+ok(goldproJs.indexOf('hgBookStampChip') >= 0, 'goldpro execution levels panel uses IN BOOK chip');
+ok(goldproJs.indexOf('hgToTradePlanOnclickAttr') >= 0 && goldproJs.indexOf('SEND TO TRADE PLAN') >= 0,
+  'goldpro execution levels wire trade handoff');
+ok(indexHtml.indexOf("scanner: 'gold-deep-swing'") >= 0 && indexHtml.indexOf('hgBookStampChip(GOLD_SYM,casc,{scanner:\'gold-deep-swing\'') >= 0,
+  'gold deep swing verdict uses IN BOOK chip');
+ok(indexHtml.indexOf("scanner: 'gold-breakout'") >= 0 && indexHtml.indexOf('hgToTradePlanOnclickAttr(GOLD_SYM,breakDir') >= 0,
+  'gold deep breakout wires trade handoff');
 ok(macroJs.indexOf('t2: t2') >= 0 && macroJs.indexOf('macroGoldPlan') >= 0,
   'macro gold plan includes T2 for book add');
 ok(bookJs.indexOf('bookDigestExecuteSummary') >= 0 && bookJs.indexOf('BRAIN auto-book') >= 0,
