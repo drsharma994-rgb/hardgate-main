@@ -1,261 +1,66 @@
-/* HARDGATE — pinesqz.js
-   PINE SQZ tab: Squeeze Momentum (BB inside KC fire + linreg momentum) on 7-gate universe. */
+/* HARDGATE — pinesqz.js — Squeeze Momentum on EDGE+ Pine universe. */
 (function(){
 'use strict';
-
 var W = (typeof window !== 'undefined') ? window : globalThis;
-
-var KL_BARS = 120;
-var TF = '4h';
-var CHUNK = 4;
-var CHUNK_SLEEP_MS = 120;
-var SQZ_SCRIPT = {
-  id: 'squeeze-momentum',
-  label: 'Squeeze Momentum',
-  fn: 'pineSqueezeMomentum',
-  opts: { length: 20, bbMult: 2, kcMult: 1.5 }
-};
-
-function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
-function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+var SQZ_SCRIPT = { id: 'squeeze-momentum', label: 'Squeeze Momentum', fn: 'pineSqueezeMomentum', opts: { length: 20, bbMult: 2, kcMult: 1.5 } };
+var EDGE_NOTE = W.PINE_EDGE_UNIVERSE_NOTE || 'Run EDGE scan first.';
 function fin(v){ return typeof v === 'number' && isFinite(v); }
-
-function pxF(n){
-  if (typeof W.px === 'function') return W.px(n);
-  if (!fin(+n)) return '—';
-  return String(+n);
-}
-
-function fmtF(n, d){
-  if (typeof W.fmt === 'function') return W.fmt(n, d);
-  if (!fin(+n)) return '—';
-  return (+n).toFixed(d === undefined ? 2 : d);
-}
-
-function buildPlan(dir, price, rows){
-  try{
-    if (typeof W.smartSetup === 'function' && rows && rows.length){
-      var ss = W.smartSetup(rows, dir, TF);
-      if (ss && fin(+ss.entry) && fin(+ss.stop) && fin(+ss.t1)) return ss;
-    }
-    if (typeof W.hgStructureStop === 'function' && rows && rows.length){
-      var st = W.hgStructureStop(dir, price, rows, { atrLen: 14, look: 30 });
-      if (st && fin(+st.stop)){
-        var risk = Math.abs(price - st.stop);
-        if (risk > 0){
-          return {
-            entry: price, stop: st.stop,
-            t1: dir === 'long' ? price + 2 * risk : price - 2 * risk,
-            t2: dir === 'long' ? price + 3.5 * risk : price - 3.5 * risk,
-            planSrc: st.note || 'structure'
-          };
-        }
-      }
-    }
-  }catch(e){}
-  var atrFn = W.atr;
-  var a = (typeof atrFn === 'function' && rows && rows.length) ? atrFn(rows, 14) : null;
-  var av = a && a.length ? a[a.length - 1] : NaN;
-  if (!fin(av)) av = price * 0.015;
-  var stop = dir === 'long' ? price - 1.5 * av : price + 1.5 * av;
-  var risk = Math.abs(price - stop);
-  return {
-    entry: price, stop: stop,
-    t1: dir === 'long' ? price + 2 * risk : price - 2 * risk,
-    t2: dir === 'long' ? price + 3.5 * risk : price - 3.5 * risk,
-    planSrc: '1.5×ATR fallback'
-  };
-}
-
-function runSqz(rows){
-  try{
-    var fn = W[SQZ_SCRIPT.fn];
-    if (typeof fn !== 'function') return null;
-    return fn(rows, SQZ_SCRIPT.opts || {});
-  }catch(e){ return null; }
-}
+function fmtF(n, d){ return (typeof W.fmt === 'function') ? W.fmt(n, d) : (fin(+n) ? (+n).toFixed(d === undefined ? 2 : d) : '—'); }
 
 function signalFromResult(item, res, rows){
-  if (!res || !res.dir) return null;
-  if (String(res.dir).toLowerCase() !== item.dir) return null;
-  var plan = buildPlan(item.dir, res.price, rows);
+  if (!res || !res.dir || String(res.dir).toLowerCase() !== item.dir) return null;
+  var plan = (typeof W.pineSubBuildPlan === 'function') ? W.pineSubBuildPlan(item.dir, res.price, rows) : null;
+  if (!plan) return null;
   var sig = {
-    sym: item.sym,
-    dir: item.dir,
-    scriptId: SQZ_SCRIPT.id,
-    scriptLabel: SQZ_SCRIPT.label,
-    momentum: res.momentum,
-    sqzOn: res.sqzOn,
-    sqzFired: res.sqzFired,
-    newLong: !!res.newLong,
-    newShort: !!res.newShort,
-    isNew: !!(res.newLong || res.newShort),
-    price: res.price,
-    entry: plan.entry,
-    stop: plan.stop,
-    t1: plan.t1,
-    t2: plan.t2,
-    planSrc: plan.planSrc,
-    gates: item.gates,
-    rows: rows
+    sym: item.sym, dir: item.dir, scriptId: SQZ_SCRIPT.id, scriptLabel: SQZ_SCRIPT.label,
+    momentum: res.momentum, sqzOn: res.sqzOn, sqzFired: res.sqzFired,
+    newLong: !!res.newLong, newShort: !!res.newShort, isNew: !!(res.newLong || res.newShort),
+    price: res.price, entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+    planSrc: plan.planSrc, gates: item.gates, rows: rows
   };
   sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
-  return sig;
+  return (typeof W.pineSubEnrichSignal === 'function') ? W.pineSubEnrichSignal(sig, item, res) : sig;
 }
+function sqzNote(sig){ return 'Squeeze fired · momentum ' + fmtF(sig.momentum, 4); }
+function cardHTML(sig){ return W.pineSubCardHTML(sig, { scanner: 'pine-sqz', noteFn: sqzNote }); }
 
-function cardHTML(sig){
-  var cls = sig.dir === 'long' ? 'long' : 'short';
-  var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">SQZ FIRED</span>' : '';
-  var gateNote = sig.gates && sig.gates.regime ? esc(sig.gates.regime) : '';
-  return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
-    + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · Squeeze Momentum' + badge + '</span></h2>'
-    + '<div class="note">Squeeze transition ON→OFF · momentum <b>' + fmtF(sig.momentum, 4) + '</b>'
-    + ' · mark ' + pxF(sig.price)
-    + (gateNote ? ' · ' + gateNote : '')
-    + '</div>'
-    + '<div class="plan">' + (typeof W.planBlock === 'function'
-      ? W.planBlock(sig.dir, sig.entry, sig.stop, sig.t1, sig.t2, sig.planSrc || '')
-      : ('ENTRY ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · T1 ' + pxF(sig.t1))) + '</div>'
-    + '<button class="toTrade" onclick="toTrade(\'' + esc(sig.sym) + '\',\'' + sig.dir + '\',' + sig.entry + ',' + sig.stop + ',' + sig.t1 + ')">SEND TO TRADE PLAN →</button>'
-    + (typeof W.hgBookBtn === 'function'
-      ? W.hgBookBtn(sig.sym, sig.dir, sig.entry, sig.stop, sig.t1, { scanner: 'pine-sqz', strategy: sig.scriptId, t2: sig.t2 })
-      : '')
-    + '</div>';
-}
-
-var __pineSqzSnap = null;
-var __pineSqzTab = { busy: false, hasRun: false, run: null };
+var __snap = { current: null };
+var __tab = { busy: false, hasRun: false, run: null };
 
 function mount(el){
-  el.innerHTML =
-    '<div class="panel">'
-    + '<h2>PINE SQZ <span>Squeeze Momentum · BB/KC squeeze fire + linreg momentum · ch 20</span></h2>'
-    + '<div class="note">LazyBear-style squeeze: BB entirely inside KC = squeeze ON. '
-    + 'When squeeze <b>fires</b> (ON→OFF) with momentum sign agreeing, a breakout setup triggers. '
-    + 'Same 7-gate intersection as other Pine tabs. Telegram + push on new fire at bar close.</div>'
-    + '<div class="row" style="margin-top:10px">'
-    + '<button class="btn" id="pineSqzRun">RUN SQZ SCAN</button>'
-    + '<span class="note" id="pineSqzStat">Run gate tabs first, then scan.</span>'
-    + '</div>'
-    + '<div class="prog" id="pineSqzProg"><i></i></div>'
-    + '<div id="pineSqzFunnel" style="margin-top:8px"></div>'
-    + '<div id="pineSqzOut" style="margin-top:12px"><div class="empty">Press RUN SQZ SCAN after gate tabs have run.</div></div>'
-    + '</div>';
-
-  var btn = el.querySelector('#pineSqzRun');
-  var stat = el.querySelector('#pineSqzStat');
-  var prog = el.querySelector('#pineSqzProg');
-  var out = el.querySelector('#pineSqzOut');
-  var funnelEl = el.querySelector('#pineSqzFunnel');
-
-  function setProg(p){
-    if (!prog) return;
-    if (p === null || p === undefined){ prog.classList.remove('on'); prog.querySelector('i').style.width = '0'; return; }
-    prog.classList.add('on');
-    prog.querySelector('i').style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + '%';
-  }
-
+  el.innerHTML = '<div class="panel"><h2>PINE SQZ <span>Squeeze Momentum · BB/KC fire + linreg · ch 20</span></h2>'
+    + '<div class="note">LazyBear squeeze: BB inside KC = ON. Signal when squeeze <b>fires</b> (ON→OFF) with momentum agreeing. '
+    + EDGE_NOTE + '</div>'
+    + '<div class="row" style="margin-top:10px"><button class="btn" id="pineSqzRun">RUN SQZ SCAN</button>'
+    + '<span class="note" id="pineSqzStat">Run EDGE scan first, then scan.</span></div>'
+    + '<div class="prog" id="pineSqzProg"><i></i></div><div id="pineSqzFunnel" style="margin-top:8px"></div>'
+    + '<div id="pineSqzDesk"></div><div id="pineSqzOut" style="margin-top:12px">'
+    + '<div class="empty">Press RUN SQZ SCAN after EDGE has run.</div></div></div>';
+  var ui = { btn: el.querySelector('#pineSqzRun'), stat: el.querySelector('#pineSqzStat'), prog: el.querySelector('#pineSqzProg'),
+    out: el.querySelector('#pineSqzOut'), funnelEl: el.querySelector('#pineSqzFunnel') };
+  if (typeof W.pineSubMountDesk === 'function') W.pineSubMountDesk(el.querySelector('#pineSqzDesk'), 'PINE SQZ');
   async function runScan(opts){
-    opts = opts || {};
-    if (__pineSqzTab.busy) return 'busy';
-    __pineSqzTab.busy = true;
-    __pineSqzTab.hasRun = true;
-    if (btn) btn.disabled = true;
-    setProg(0.02);
-    if (out) out.innerHTML = '';
-    var status = 'refreshed';
-    var t0 = Date.now();
-    try{
-      if (stat) stat.textContent = 'Building 7-gate universe…';
-      var gate = (typeof W.pineGateLive === 'function') ? W.pineGateLive() : { eligible: [], funnel: {}, missing: ['pinegate'] };
-      if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('SQZ gate funnel (all tabs must agree on sym+dir)',
-          W.pineFunnelRows(gate.funnel), 'pineSqzGateFunnel');
-      }
-      if (!gate.eligible || !gate.eligible.length){
-        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'none aligned';
-        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No contracts pass all seven gates. Missing: '
-          + esc(miss) + '.</div>';
-        if (stat) stat.textContent = 'done · 0 eligible · ' + miss;
-        __pineSqzSnap = { at: Date.now(), signals: [], gate: gate, stat: stat ? stat.textContent : '' };
-        return status;
-      }
-      if (typeof W.getCandles !== 'function'){
-        if (out) out.innerHTML = '<div class="empty">getCandles unavailable.</div>';
-        return 'failed: no getCandles';
-      }
-
-      var eligible = gate.eligible.slice();
-      var signals = [];
-      var failed = 0;
-      for (var ci = 0; ci < eligible.length; ci += CHUNK){
-        var chunk = eligible.slice(ci, ci + CHUNK);
-        await Promise.all(chunk.map(async function(item, ix){
-          var n = ci + ix + 1;
-          if (stat) stat.textContent = 'SQZ ' + n + '/' + eligible.length + ' · ' + item.sym + ' ' + item.dir.toUpperCase();
-          setProg(0.05 + 0.9 * (n / eligible.length));
-          try{
-            var rows = await W.getCandles(item.sym, TF, KL_BARS);
-            if (!rows || rows.length < 30){ failed++; return; }
-            var res = runSqz(rows);
-            var sig = signalFromResult(item, res, rows);
-            if (sig) signals.push(sig);
-          }catch(e){ failed++; }
-        }));
-        if (ci + CHUNK < eligible.length) await sleep(CHUNK_SLEEP_MS);
-      }
-
-      signals.sort(function(a, b){
+    return W.pineSubRunScan({
+      ui: ui, state: __tab, snap: __snap, script: SQZ_SCRIPT, signalFn: signalFromResult, cardFn: cardHTML,
+      statLabel: 'SQZ', klBars: 120, funnelId: 'pineSqzGateFunnel',
+      funnelTitle: 'SQZ · PINE universe (EDGE tickets + forming + REGIME)',
+      emptyDetail: 'no squeeze fire NEW, RECENT, or ALIGNED match on this scan.',
+      sortFn: function(a, b){
         if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
+        if (a.isRecent !== b.isRecent) return a.isRecent ? -1 : 1;
         return Math.abs(b.momentum || 0) - Math.abs(a.momentum || 0);
-      });
-
-      var freshNew = signals.filter(function(s){ return s.isNew; });
-      if (!opts.quiet && freshNew.length && typeof W.pineFireAlerts === 'function'){
-        try{ await W.pineFireAlerts(freshNew); }catch(eAl){ console.warn('pine sqz alert', eAl); }
       }
-
-      __pineSqzSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
-
-      if (!signals.length){
-        if (out) out.innerHTML = '<div class="empty">' + eligible.length + ' gated contracts — no squeeze fire on latest bar.</div>';
-      } else {
-        if (out) out.innerHTML = signals.map(cardHTML).join('');
-      }
-
-      var dt = ((Date.now() - t0) / 1000).toFixed(1);
-      var newN = freshNew.length;
-      if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + signals.length + ' SQZ signal(s)'
-        + (newN ? (' · ' + newN + ' NEW alerted') : '') + ' · failed ' + failed + ' · ' + dt + 's';
-      __pineSqzSnap.stat = stat ? stat.textContent : '';
-    }catch(e){
-      status = 'error: ' + ((e && e.message) || e);
-      if (stat) stat.textContent = status;
-      if (out) out.innerHTML = '<div class="empty">SQZ scan failed: ' + esc(status) + '</div>';
-    }finally{
-      if (btn) btn.disabled = false;
-      setProg(null);
-      __pineSqzTab.busy = false;
-    }
-    return status;
+    }, opts);
   }
-
-  if (btn) btn.addEventListener('click', function(){ runScan(); });
-  __pineSqzTab.run = runScan;
+  if (ui.btn) ui.btn.addEventListener('click', function(){ runScan(); });
+  __tab.run = runScan;
 }
-
 async function pineSqzRefresh(){
-  try{
-    if (__pineSqzTab.busy) return 'busy';
-    if (!__pineSqzTab.hasRun || typeof __pineSqzTab.run !== 'function') return 'skipped: not run yet';
-    return await __pineSqzTab.run({ quiet: false });
-  }catch(e){
-    return 'error: ' + ((e && e.message) || e);
-  }
+  if (__tab.busy) return 'busy';
+  if (!__tab.hasRun || typeof __tab.run !== 'function') return 'skipped: not run yet';
+  return __tab.run({ quiet: false });
 }
-
-W.pineSqzScan = function(){ try{ return __pineSqzSnap; }catch(e){ return null; } };
+W.pineSqzScan = function(){ try{ return __snap.current; }catch(e){ return null; } };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'pine-sqz', label: 'PINE SQZ', mount: mount, refresh: pineSqzRefresh });
-
 })();

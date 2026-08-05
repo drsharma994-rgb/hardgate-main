@@ -1,6 +1,6 @@
 /* HARDGATE — pinemsb.js
-   PINE MSB/OB tab: Market Structure Break + Order Block on the 7-gate universe.
-   Separate tab from PINE ML (Lorentzian). Alerts on new MSB bar close. */
+   PINE MSB/OB tab: Market Structure Break + Order Block on EDGE+ universe.
+   Separate tab from PINE ML (Lorentzian). Alerts on new Pine setups. */
 (function(){
 'use strict';
 
@@ -16,6 +16,7 @@ var MSB_SCRIPT = {
   fn: 'pineMsbOb',
   opts: { leftBars: 5, rightBars: 5 }
 };
+var EDGE_NOTE = W.PINE_EDGE_UNIVERSE_NOTE || 'Run EDGE scan first.';
 
 function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -25,20 +26,6 @@ function pxF(n){
   if (typeof W.px === 'function') return W.px(n);
   if (!fin(+n)) return '—';
   return String(+n);
-}
-
-function fmtF(n, d){
-  if (typeof W.fmt === 'function') return W.fmt(n, d);
-  if (!fin(+n)) return '—';
-  return (+n).toFixed(d === undefined ? 2 : d);
-}
-
-function runMsb(rows){
-  try{
-    var fn = W[MSB_SCRIPT.fn];
-    if (typeof fn !== 'function') return null;
-    return fn(rows, MSB_SCRIPT.opts || {});
-  }catch(e){ return null; }
 }
 
 function signalFromResult(item, res, rows){
@@ -68,27 +55,17 @@ function signalFromResult(item, res, rows){
     rows: rows
   };
   sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
-  return sig;
+  return (typeof W.pineSubEnrichSignal === 'function') ? W.pineSubEnrichSignal(sig, item, res) : sig;
+}
+
+function msbNote(sig){
+  return 'Limit @ OB · SH ' + pxF(sig.lastSh) + ' · SL ' + pxF(sig.lastSl);
 }
 
 function cardHTML(sig){
-  var cls = sig.dir === 'long' ? 'long' : 'short';
-  var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW MSB</span>' : '';
-  var gateNote = sig.gates && sig.gates.regime ? esc(sig.gates.regime) : '';
-  return '<div class="panel ' + cls + '" style="margin-bottom:12px">'
-    + '<h2>' + esc(sig.sym) + ' <span>' + esc(sig.dir.toUpperCase()) + ' · MSB + OB' + badge + '</span></h2>'
-    + '<div class="note">Limit entry at order block · SH ' + pxF(sig.lastSh) + ' · SL ' + pxF(sig.lastSl)
-    + ' · mark ' + pxF(sig.price)
-    + (gateNote ? ' · ' + gateNote : '')
-    + '</div>'
-    + '<div class="plan">' + (typeof W.planBlock === 'function'
-      ? W.planBlock(sig.dir, sig.entry, sig.stop, sig.t1, sig.t2, sig.planSrc || '')
-      : ('LIMIT ' + pxF(sig.entry) + ' · SL ' + pxF(sig.stop) + ' · T1 ' + pxF(sig.t1))) + '</div>'
-    + '<button class="toTrade" onclick="toTrade(\'' + esc(sig.sym) + '\',\'' + sig.dir + '\',' + sig.entry + ',' + sig.stop + ',' + sig.t1 + ')">SEND TO TRADE PLAN →</button>'
-    + (typeof W.hgBookBtn === 'function'
-      ? W.hgBookBtn(sig.sym, sig.dir, sig.entry, sig.stop, sig.t1, { scanner: 'pine-msb', strategy: sig.scriptId, t2: sig.t2 })
-      : '')
-    + '</div>';
+  return (typeof W.pineSubCardHTML === 'function')
+    ? W.pineSubCardHTML(sig, { scanner: 'pine-msb', noteFn: msbNote })
+    : '';
 }
 
 var __pineMsbSnap = null;
@@ -98,17 +75,17 @@ function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>PINE MSB/OB <span>Market Structure Break + Order Block · pivot 5/5 · limit @ OB</span></h2>'
-    + '<div class="note">Runs only on the same <b>7-gate intersection</b> as PINE ML (SWING, SCALP, EDGE, BEST, BRAIN, REGIME, TREND MATRIX). '
-    + 'Bull MSB: close breaks last swing high → limit long at last bear candle high, stop at bear low. '
+    + '<div class="note">Bull MSB: close breaks last swing high → limit long at last bear candle high, stop at bear low. '
     + 'Bear MSB: close breaks last swing low → limit short at last bull candle low, stop at bull high. '
-    + 'Telegram + push alert on <b>new</b> MSB at bar close.</div>'
+    + EDGE_NOTE + '</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="pineMsbRun">RUN MSB/OB SCAN</button>'
-    + '<span class="note" id="pineMsbStat">Run gate tabs first, then scan.</span>'
+    + '<span class="note" id="pineMsbStat">Run EDGE scan first, then scan.</span>'
     + '</div>'
     + '<div class="prog" id="pineMsbProg"><i></i></div>'
     + '<div id="pineMsbFunnel" style="margin-top:8px"></div>'
-    + '<div id="pineMsbOut" style="margin-top:12px"><div class="empty">Press RUN MSB/OB SCAN after gate tabs have run.</div></div>'
+    + '<div id="pineMsbDesk"></div>'
+    + '<div id="pineMsbOut" style="margin-top:12px"><div class="empty">Press RUN MSB/OB SCAN after EDGE has run.</div></div>'
     + '</div>';
 
   var btn = el.querySelector('#pineMsbRun');
@@ -116,6 +93,9 @@ function mount(el){
   var prog = el.querySelector('#pineMsbProg');
   var out = el.querySelector('#pineMsbOut');
   var funnelEl = el.querySelector('#pineMsbFunnel');
+  if (typeof W.pineSubMountDesk === 'function'){
+    W.pineSubMountDesk(el.querySelector('#pineMsbDesk'), 'PINE MSB/OB');
+  }
 
   function setProg(p){
     if (!prog) return;
@@ -135,16 +115,17 @@ function mount(el){
     var status = 'refreshed';
     var t0 = Date.now();
     try{
-      if (stat) stat.textContent = 'Building 7-gate universe…';
-      var gate = (typeof W.pineGateLive === 'function') ? W.pineGateLive() : { eligible: [], funnel: {}, missing: ['pinegate'] };
+      if (stat) stat.textContent = 'Building EDGE Pine universe…';
+      var gate = (typeof W.pineSubGate === 'function') ? W.pineSubGate() : { eligible: [], funnel: {}, missing: ['pinegate'] };
       if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('MSB/OB gate funnel (all tabs must agree on sym+dir)',
+        funnelEl.innerHTML = W.hgFunnelPanelHTML('MSB/OB · PINE universe (EDGE tickets + forming + REGIME)',
           W.pineFunnelRows(gate.funnel), 'pineMsbGateFunnel');
       }
       if (!gate.eligible || !gate.eligible.length){
-        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'none aligned';
-        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No contracts pass all seven gates. Missing: '
-          + esc(miss) + '.</div>';
+        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'EDGE empty';
+        if (out) out.innerHTML = (typeof W.pineSubGateEmptyHTML === 'function')
+          ? W.pineSubGateEmptyHTML(miss)
+          : '<div class="empty">WAIT — run EDGE first.</div>';
         if (stat) stat.textContent = 'done · 0 eligible · ' + miss;
         __pineMsbSnap = { at: Date.now(), signals: [], gate: gate, stat: stat ? stat.textContent : '' };
         return status;
@@ -166,7 +147,7 @@ function mount(el){
           try{
             var rows = await W.getCandles(item.sym, TF, KL_BARS);
             if (!rows || rows.length < 30){ failed++; return; }
-            var res = runMsb(rows);
+            var res = (typeof W.pineSubRunScript === 'function') ? W.pineSubRunScript(MSB_SCRIPT, rows) : null;
             var sig = signalFromResult(item, res, rows);
             if (sig) signals.push(sig);
           }catch(e){ failed++; }
@@ -176,26 +157,27 @@ function mount(el){
 
       signals.sort(function(a, b){
         if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
+        if (a.isRecent !== b.isRecent) return a.isRecent ? -1 : 1;
         return Math.abs(b.entry - b.price) - Math.abs(a.entry - a.price);
       });
 
-      var freshNew = signals.filter(function(s){ return s.isNew; });
-      if (!opts.quiet && freshNew.length && typeof W.pineFireAlerts === 'function'){
-        try{ await W.pineFireAlerts(freshNew); }catch(eAl){ console.warn('pine msb alert', eAl); }
+      if (typeof W.pineSubAlertBatch === 'function'){
+        try{ await W.pineSubAlertBatch(signals, opts); }catch(eAl){ console.warn('pine msb alert', eAl); }
       }
 
       __pineMsbSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
-      if (!signals.length){
-        if (out) out.innerHTML = '<div class="empty">' + eligible.length + ' gated contracts — no MSB/OB setup on latest bar.</div>';
-      } else {
-        if (out) out.innerHTML = signals.map(cardHTML).join('');
+      if (out){
+        out.innerHTML = (typeof W.pineSubRenderOut === 'function')
+          ? W.pineSubRenderOut(signals, gate, cardHTML, 'no MSB/OB NEW, RECENT, or ALIGNED match on this scan.')
+          : '';
       }
 
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
-      var newN = freshNew.length;
-      if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + signals.length + ' MSB signal(s)'
-        + (newN ? (' · ' + newN + ' NEW alerted') : '') + ' · failed ' + failed + ' · ' + dt + 's';
+      var visN = (typeof W.pineSubVisibleCount === 'function') ? W.pineSubVisibleCount(signals) : signals.length;
+      var newN = signals.filter(function(s){ return s.isNew; }).length;
+      if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + visN + ' MSB signal(s)'
+        + (newN ? (' · ' + newN + ' NEW') : '') + ' · failed ' + failed + ' · ' + dt + 's';
       __pineMsbSnap.stat = stat ? stat.textContent : '';
     }catch(e){
       status = 'error: ' + ((e && e.message) || e);
