@@ -36,5 +36,11 @@ const panel = W.hgSetupPanelHTML({
 }, { scanner: 'pine' });
 assert(/FORMING/.test(panel) && /ETHUSD/.test(panel), 'panel marks recent as forming tier');
 
+const panelEdge = W.hgSetupPanelHTML({
+  sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, t2: 115,
+  isContext: true, edgeTicket: true, scriptLabel: 'PINE TEST', price: 100
+}, { scanner: 'pine' });
+assert(/toTrade/.test(panelEdge) && /CLEAN/.test(panelEdge), 'edge ticket stays CLEAN tier with trade button');
+
 console.log(fail ? '\nTESTS FAILED' : '\nALL SETUP-UI TESTS PASSED');
 process.exit(fail ? 1 : 0);

@@ -206,8 +206,9 @@ function hgSetupPanelHTML(sig, opts){
   opts = opts || {};
   sig = sig || {};
   var tier = 'clean';
-  if (sig.isRecent || sig.tier === 'forming' || sig.edgeForming) tier = 'forming';
-  else if (sig.isContext && !sig.isNew) tier = 'near';
+  if (sig.isNew || sig.edgeTicket) tier = 'clean';
+  else if (sig.isRecent || sig.tier === 'forming' || sig.edgeForming) tier = 'forming';
+  else if (sig.isContext) tier = 'near';
   var cls = sig.dir === 'long' ? 'long' : 'short';
   var tierCls = ' tier-' + tier;
   var badge = '';
@@ -216,7 +217,7 @@ function hgSetupPanelHTML(sig, opts){
   else if (sig.isContext) badge = '<span class="stamp" style="margin-left:6px">ALIGNED</span>';
   else if (sig.tier === 'forming') badge = '<span class="stamp" style="margin-left:6px">FORMING</span>';
   var label = opts.label || sig.scriptLabel || sig.planSrc || 'SETUP';
-  var noteLine = typeof opts.noteFn === 'function' ? opts.noteFn(sig) : (opts.note || '');
+  var noteHtml = typeof opts.noteFn === 'function' ? opts.noteFn(sig) : suEsc(opts.note || '');
   var hits = sig.edgeTicket ? ' · EDGE ticket'
     : (sig.edgeForming ? ' · EDGE forming' : (sig.gates && sig.gates.swing ? ' · SWING' : ''));
   var gateNote = sig.gates && sig.gates.regime ? suEsc(sig.gates.regime) : '';
@@ -241,7 +242,7 @@ function hgSetupPanelHTML(sig, opts){
   return '<div class="panel ' + cls + tierCls + '" style="margin-bottom:12px">'
     + '<h2>' + suEsc(sig.sym) + ' <span>' + suEsc(String(sig.dir || '').toUpperCase()) + ' · ' + suEsc(label)
     + badge + ' ' + hgSetupTierBadge(tier) + '</span></h2>'
-    + '<div class="note">' + suEsc(noteLine)
+    + '<div class="note">' + noteHtml
     + ' · mark ' + pxF(sig.price || sig.entry) + hits
     + (gateNote ? ' · ' + gateNote : '')
     + '</div>'

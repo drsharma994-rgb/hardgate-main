@@ -225,7 +225,72 @@ function signalFromScript(item, script, res, rows){
     if (sig[k] === undefined) sig[k] = res[k];
   });
   sig.rr = Math.abs(sig.t1 - sig.entry) / Math.abs(sig.entry - sig.stop);
+  if (!isFresh && !isRecent && !isContext) return null;
   return sig;
+}
+
+function pineSignalVisible(sig){
+  return !!(sig && (sig.isNew || sig.isRecent || sig.isContext));
+}
+
+function pineUniverseWatchHTML(gate){
+  if (!gate || !gate.eligible || !gate.eligible.length) return '';
+  if (typeof W.hgFormingWatchHTML !== 'function') return '';
+  var items = gate.eligible.slice(0, 16).map(function(u){
+    var strat = u.edgeTicket ? 'EDGE ticket'
+      : (u.edgeForming ? 'EDGE forming' : (u.swingFallback ? 'SWING fallback' : 'EDGE soft'));
+    return {
+      state: u.edgeTicket ? 'armed' : 'idle',
+      sym: u.sym,
+      strategy: strat + ' · ' + String(u.dir || '').toUpperCase(),
+      condition: (u.gates && u.gates.regime) ? u.gates.regime : 'awaiting Pine script match',
+      gatesPassed: fin(+u.gateHits) ? +u.gateHits : 1,
+      gatesTotal: 7
+    };
+  });
+  return W.hgFormingWatchHTML(items, {
+    title: 'PINE UNIVERSE',
+    subtitle: 'gate-passing sym+dir pairs — matches listed below when scripts align',
+    idleText: 'Run EDGE or SWING scan first to populate the Pine universe.'
+  });
+}
+
+function renderPineOut(signals, gate){
+  var visible = (signals || []).filter(pineSignalVisible);
+  if (!visible.length){
+    var watch = pineUniverseWatchHTML(gate);
+    var n = (gate && gate.eligible) ? gate.eligible.length : 0;
+    var tail = n
+      ? ('<div class="hg-setup-empty" style="margin-top:12px"><b>No Pine script match on latest bars.</b><br>'
+        + n + ' sym+dir pair(s) in universe — none fired NEW, RECENT, or ALIGNED on this scan. '
+        + 'Try after the next 4H close or expand EDGE forming watch.</div>')
+      : '<div class="empty">No Pine setups.</div>';
+    return watch ? (watch + tail) : tail;
+  }
+  var clean = visible.filter(function(s){ return s.isNew || s.edgeTicket; });
+  var forming = visible.filter(function(s){
+    return !(s.isNew || s.edgeTicket) && (s.isRecent || s.edgeForming);
+  });
+  var near = visible.filter(function(s){
+    return !(s.isNew || s.edgeTicket) && !(s.isRecent || s.edgeForming) && s.isContext;
+  });
+  var html = '';
+  if (clean.length){
+    html += '<div class="hg-setup-near-h" style="color:#047857;border-color:rgba(5,150,105,.35);background:rgba(5,150,105,.08)">'
+      + 'CLEAN · ' + clean.length + ' ticket(s) — NEW or EDGE ticket + Pine confirm</div>';
+    html += clean.map(cardHTML).join('');
+  }
+  if (forming.length){
+    html += '<div class="hg-setup-near-h" style="margin-top:14px">FORMING · ' + forming.length
+      + ' RECENT bar signal(s) — watch only</div>';
+    html += forming.map(cardHTML).join('');
+  }
+  if (near.length){
+    html += '<div class="hg-setup-near-h" style="margin-top:14px">ALIGNED · ' + near.length
+      + ' context match(es) — NEAR watch</div>';
+    html += near.map(cardHTML).join('');
+  }
+  return html;
 }
 
 function sigNoteLine(sig){
@@ -445,6 +510,9 @@ async function pineFireAlerts(fresh, opts){
 }
 
 function cardHTML(sig){
+  if (!sig.stack && typeof W.hgSetupStackForPineSig === 'function'){
+    try{ sig.stack = W.hgSetupStackForPineSig(sig); }catch(eSt){}
+  }
   if (typeof W.hgSetupPanelHTML === 'function'){
     return W.hgSetupPanelHTML(sig, { scanner: 'pine', label: sig.scriptLabel, noteFn: sigNoteLine });
   }
@@ -586,17 +654,14 @@ function mount(el){
 
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
-      if (!signals.length){
-        if (out) out.innerHTML = '<div class="empty">' + eligible.length + ' gate-passing contracts scanned — no Pine match (NEW, RECENT, or ALIGNED).</div>';
-      } else {
-        if (out) out.innerHTML = signals.map(cardHTML).join('');
-      }
+      if (out) out.innerHTML = renderPineOut(signals, gate);
 
+      var visibleN = signals.filter(pineSignalVisible).length;
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       var newN = signals.filter(function(s){ return s.isNew; }).length;
       var formN = signals.filter(function(s){ return s.isRecent; }).length;
       var ctxN = signals.filter(function(s){ return s.isContext; }).length;
-      if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + signals.length + ' Pine signal(s)'
+      if (stat) stat.textContent = 'done · ' + eligible.length + ' gated · ' + visibleN + ' Pine signal(s)'
         + (newN ? (' · ' + newN + ' NEW') : '')
         + (formN ? (' · ' + formN + ' forming') : '')
         + (alertable.length ? (' · ' + alertable.length + ' alerted') : '')
@@ -660,6 +725,8 @@ W.pineFireAlerts = pineFireAlerts;
 W.pineAlertable = pineAlertable;
 W.pineAlertPhase = pineAlertPhase;
 W.pineEvalEligible = pineEvalEligible;
+W.pineSignalVisible = pineSignalVisible;
+W.renderPineOut = renderPineOut;
 W.PINE_SCRIPTS = PINE_SCRIPTS;
 W.PINE_GATE_OPTS = PINE_GATE_OPTS;
 W.PINE_SCAN_OPTS = PINE_SCAN_OPTS;
