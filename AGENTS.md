@@ -91,6 +91,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins IST clock for session gates. `tests/test-brain-robust.mjs` guards browser `brainrobust.js` LIVE eligibility vs daemon `brain-robust.mjs` (`liveOk` on `__hgBrainLast` rows). `tests/test-brain-invalidation.mjs` covers booked-layer snapshots and PRIME→WATCH / direction-flip invalidation alerts in `braininvalidation.js`. **`tabalerts.js`** calls `hgBrainInvAlertsFromLast` on each 15-min setup cycle when post-entry invalidation is ON (uses latest `__hgBrainLast` snapshot).
 - **Data layer CI:** `.github/workflows/data-layer-smoke.yml` runs `npm run test:data-layer` on push/PR to `main` (optional live-network smoke; exits 0 on Binance HTTP 451).
 - **Deploy check:** `node scripts/check-production.mjs` compares local `sw.js` `HG_CACHE` to `HARDGATE_SITE` (default Render). Mismatch means production has not picked up the latest merge yet.
+- **Daemon brain:** `tests/test-daemon-brain.mjs` contract-smokes `lib/daemon-brain.mjs` (headless synthesis seam + fast-fail on dead port). `tests/test-book-routing.mjs` includes browser `book-routing.js` ↔ `lib/book-routing.mjs` parity cases.
 
 ### Strategy → book plugin checklist
 

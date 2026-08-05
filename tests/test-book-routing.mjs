@@ -1,5 +1,20 @@
 /* HARDGATE — scanner → fund routing tests */
+import fs from 'node:fs';
+import vm from 'node:vm';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { bookRouteFund, bookScannerFund } from '../lib/book-routing.mjs';
+
+const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
+
+function loadBrowserBookRouting(){
+  const sandbox = { console, Math, JSON, String, Object, Array };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(root, 'book-routing.js'), 'utf8'), sandbox, { filename: 'book-routing.js' });
+  return sandbox.window;
+}
 
 let pass = 0, fail = 0;
 function ok(cond, msg){
@@ -63,6 +78,40 @@ ok(bookScannerFund('goldpine', { strategy: 'scalp' }) === 'gold', 'goldpine scal
 ok(bookScannerFund('strats', {}) === 'main', 'strats scanner → main fund');
 ok(bookScannerFund('scorecard', {}) === 'main', 'scorecard scanner → main fund');
 ok(bookScannerFund('finder', {}) === 'swing', 'generic finder → swing fund');
+
+console.log('\n== browser book-routing.js parity ==');
+{
+  const W = loadBrowserBookRouting();
+  ok(typeof W.bookRouteFund === 'function', 'browser bookRouteFund exported');
+  ok(typeof W.hgBookScannerFund === 'function', 'browser hgBookScannerFund exported');
+
+  const parityCases = [
+    ['bookRouteFund', [{ fund: 'gold' }], 'gold'],
+    ['bookRouteFund', [{ strategy: 'carry' }], 'macro'],
+    ['bookRouteFund', [{ strategy: 'goldswing' }], 'swing'],
+    ['bookRouteFund', [{ klass: 'metals' }], 'gold'],
+    ['bookRouteFund', [{ fund: '!!!' }, 'swing'], 'swing'],
+    ['bookScannerFund', ['brain', { lane: 'gold' }], 'gold'],
+    ['bookScannerFund', ['brain', { lane: 'crypto' }], 'main'],
+    ['bookScannerFund', ['edge', { klass: 'metal' }], 'gold'],
+    ['bookScannerFund', ['edge', { klass: 'index' }], 'macro'],
+    ['bookScannerFund', ['carry', {}], 'macro'],
+    ['bookScannerFund', ['goldpine', { strategy: 'scalp' }], 'gold'],
+    ['bookScannerFund', ['goldpine', { strategy: 'swing' }], 'swing'],
+    ['bookScannerFund', ['smart', {}], 'main'],
+    ['bookScannerFund', ['squeeze', {}], 'swing'],
+    ['bookScannerFund', ['gold-scalp', {}], 'gold'],
+    ['bookScannerFund', ['finder-gold', { klass: 'metals' }], 'gold'],
+    ['bookScannerFund', ['trade-plan', {}], 'swing'],
+  ];
+
+  for (const [fn, args, expect] of parityCases){
+    const libVal = fn === 'bookRouteFund' ? bookRouteFund(...args) : bookScannerFund(...args);
+    const browserVal = fn === 'bookRouteFund' ? W.bookRouteFund(...args) : W.hgBookScannerFund(...args);
+    ok(libVal === expect && browserVal === expect && libVal === browserVal,
+      'parity ' + fn + '(' + JSON.stringify(args) + ') → ' + expect);
+  }
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exitCode = 1;
