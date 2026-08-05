@@ -78,10 +78,22 @@ the user runs a scan once.
     }catch(e){ return null; }
   }
 
-  function termBasisBookBtn(row){
+  function termBasisCardStack(row){
+    try{
+      var plan = termBasisPlan(row);
+      if (!plan || typeof hgSetupStackForInlineScan !== 'function') return null;
+      return hgSetupStackForInlineScan({
+        dir: plan.dir, sym: row.pair, style: 'termbasis', asset: 'crypto', clean: true,
+        ticker: { turnoverUsd: row.turnoverUsd, exchange: 'binance' }
+      });
+    }catch(e){ return null; }
+  }
+
+  function termBasisBookBtn(row, stack){
     try{
       var plan = termBasisPlan(row);
       if (!plan || typeof bookBtnHTML !== 'function') return '';
+      var st = stack || termBasisCardStack(row);
       return bookBtnHTML(plan.sym, plan.dir, plan.entry, plan.stop, plan.t1, {
         scanner: 'termbasis',
         fund: 'macro',
@@ -89,7 +101,8 @@ the user runs a scan once.
         klass: 'macro',
         venue: 'binance',
         layers: ['termbasis', plan.regime || 'curve'],
-        t2: plan.t2
+        t2: plan.t2,
+        stack: st
       });
     }catch(e){ return ''; }
   }
@@ -107,6 +120,8 @@ the user runs a scan once.
     var c = row.curve;
     var tag = (c.regime || 'flat').toUpperCase();
     var tagCls = (c.regime === 'contango') ? 'long' : ((c.regime === 'backwardation') ? 'short' : '');
+    var tbStack = termBasisCardStack(row);
+    var stackHtml = (tbStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(tbStack) : '';
     return '<div class="card">'
       + '<div class="card-h"><span class="sym">' + esc(row.pair) + '</span>'
       + '<span class="tag ' + tagCls + '">' + esc(tag) + '</span></div>'
@@ -119,7 +134,8 @@ the user runs a scan once.
       + '<div class="kv"><span class="k">Mark</span><span class="v">' + fmtN(row.mark, 2) + '</span></div>'
       + '<div class="kv"><span class="k">24h turnover</span><span class="v">' + (row.turnoverUsd ? ('$' + fmtN(row.turnoverUsd, 0)) : '—') + '</span></div>'
       + '<div class="note" style="margin-top:8px">' + esc(c.note) + '</div>'
-      + termBasisBookBtn(row)
+      + stackHtml
+      + termBasisBookBtn(row, tbStack)
       + '</div></div>';
   }
 

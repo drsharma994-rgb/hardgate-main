@@ -147,7 +147,18 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     return sym;
   }
 
-  function carryBookBtn(c){
+  function carryCardStack(c){
+    try{
+      if (!c || !c.levels || typeof hgSetupStackForInlineScan !== 'function') return null;
+      return hgSetupStackForInlineScan({
+        dir: 'short', sym: c.bin && c.bin.symbol, rows4h: c.rows4h || null,
+        style: 'carry', asset: 'crypto', clean: true,
+        ticker: { turnoverUsd: null, fundingPct: c.bin && c.bin.cur8hPct, exchange: 'binance' }
+      });
+    }catch(e){ return null; }
+  }
+
+  function carryBookBtn(c, stack){
     try{
       var lv = c && c.levels;
       if (!lv || typeof bookBtnHTML !== 'function') return '';
@@ -160,6 +171,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       var t1 = entry - lv.t1Px;
       var t2 = isFinite(lv.t2Px) ? entry - lv.t2Px : null;
       if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return '';
+      var st = stack || carryCardStack(c);
       return bookBtnHTML(sym, 'short', entry, stop, t1, {
         scanner: 'carry',
         fund: 'macro',
@@ -167,7 +179,8 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         klass: 'macro',
         venue: hi || 'carry',
         layers: [c.pair || 'carry', String(hi || '') + '+' + String(lo || '')],
-        t2: t2
+        t2: t2,
+        stack: st
       });
     }catch(e){ return ''; }
   }
@@ -402,13 +415,17 @@ is in flight it reports 'busy' (overlaps never double-fetch).
           + ' · T2 ' + lv.t2Days + 'd capture ≈ <b>' + F(lv.t2CapturePct, 2) + '%</b> ≈ ' + FP(lv.t2Px) + ' ≈ ' + F(lv.t2Atr, 1) + '×ATR'
         : 'LEVELS unavailable — 4h candles or the ATR layer are missing for ' + esc(c.bin.symbol)
           + '; funding-capture horizons and price invalidation cannot be quantified.';
+      const carryStack = carryCardStack(c);
+      const carryStackHtml = (carryStack && typeof hgSetupStackMiniHtml === 'function')
+        ? hgSetupStackMiniHtml(carryStack) : '';
       return '<div class="card long">'
         + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span></div>'
         + '<div class="mini">' + mini.map(function(kv){ return '<span class="k">' + kv[0] + '</span><span>' + kv[1] + '</span>'; }).join('') + '</div>'
         + '<div class="gates">' + gates.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('') + '</div>'
         + '<div class="plan">' + plan + '</div>'
         + '<div class="plan">' + lvTxt + '</div>'
-        + carryBookBtn(c)
+        + carryStackHtml
+        + carryBookBtn(c, carryStack)
         + '</div>';
     }).join('');
   }
@@ -627,6 +644,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
               const pm = prem[c.bin.symbol];
               const mark = (pm && isFinite(pm.mark) && pm.mark > 0) ? pm.mark
                 : ((kRows[kRows.length - 1] && isFinite(kRows[kRows.length - 1].c)) ? kRows[kRows.length - 1].c : NaN);
+              c.rows4h = kRows;
               c.levels = carryPlan({ entry: mark, atr: a4, spreadAPR: c.sp.spreadAPR, intervalHours: c.bin.intervalHours });
             }
           }catch(e){ /* c.levels stays unset -> honest fallback on the card */ }

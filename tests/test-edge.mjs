@@ -179,7 +179,20 @@ console.log('== anchor clustering reward ==');
   assert(!enFar.parts.some(function(p){ return p.label.indexOf('Golden Confluence') >= 0; }),
     'entry far from anchors skips cluster reward');
 }
-console.log('== edge freshness + forming approach ==');
+console.log('== edge flow trap seam ==');
+{
+  W.hgFlowTrapAssess = function(taker, book, dir){
+    return { veto: dir === 'long', reason: 'SEVERE CVD DIVERGENCE: Sellers dumping into long',
+      cvdAligned: false, obiAligned: false, flowOk: false };
+  };
+  var rowsFt = trendSeries('long', 260);
+  var biasFt = W.edgeSwingBias(rowsFt);
+  var sigFt = { dir: biasFt.dir, entry: rowsFt[rowsFt.length - 1].c, edge: 'EMA21 PULLBACK', swept: false, barAge: 0 };
+  var enFt = W.edgeEnrich(sigFt, rowsFt, { taker: [1], bookDepth: { bidUsd: 1e6, askUsd: 1e6 } }, null);
+  assert(enFt.veto === true && enFt.parts.some(function(p){ return p.label.indexOf('SEVERE CVD') >= 0; }),
+    'edgeEnrich delegates CVD/OBI veto to hgFlowTrapAssess');
+  delete W.hgFlowTrapAssess;
+}
 {
   assert(typeof W.edgeFreshnessChip === 'function', 'edgeFreshnessChip exported');
   assert(typeof W.edgeFormingApproach === 'function', 'edgeFormingApproach exported');
