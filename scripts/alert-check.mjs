@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { pathToFileURL } from 'url';
+import { telegramPlanBlock, hasPlanLevels } from '../lib/telegram-plan.mjs';
 
 const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com/';
 const STATE_FILE = 'alert-state.json';
@@ -276,8 +277,9 @@ function sniperKey(hits) {
 }
 function sniperBody(hits) {
   var lines = hits.slice(0, 5).map(function(h){
-    return h.sym + ' ' + String(h.dir || '').toUpperCase() + ' @ ' + h.entry
-      + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ') · stop ' + h.stop + ' · T1 ' + h.t1;
+    var head = String(h.sym) + ' ' + String(h.dir || '').toUpperCase()
+      + ' (' + (h.lev || '?') + 'x, ' + (h.state || '?') + ')';
+    return head + '\n' + telegramPlanBlock(h);
   });
   var body = lines.join('\n') + (hits.length > 5 ? '\n+' + (hits.length - 5) + ' more' : '');
   try{
@@ -306,11 +308,14 @@ function squeezeKey(rows) {
 }
 function squeezeBody(rows) {
   var lines = rows.slice(0, 5).map(function(r){
-    return r.sym + ' ' + String(r.dir || '').toUpperCase()
+    var head = r.sym + ' ' + String(r.dir || '').toUpperCase()
       + ' (' + (r.kind === 'break' ? 'DONCHIAN BREAK' : 'FIRED') + ')';
+    if (hasPlanLevels(r)) return head + '\n' + telegramPlanBlock(r);
+    return head + '\nCOIN: ' + r.sym
+      + '\nSIDE: ' + String(r.dir || '').toUpperCase()
+      + '\nENTRY / STOP LOSS / TAKE PROFIT: open the SQUEEZE tab for live levels';
   });
-  return lines.join('\n') + (rows.length > 5 ? '\n+' + (rows.length - 5) + ' more' : '')
-    + '\nlevels on the SQUEEZE tab — entry/stop/targets live there.';
+  return lines.join('\n\n') + (rows.length > 5 ? '\n+' + (rows.length - 5) + ' more' : '');
 }
 
 /* ---------------- BEST tab setups (server-side) ----------------
@@ -334,9 +339,11 @@ function bestBody(leg, snap) {
   if (!snap) return '';
   const exLabel = leg === 'delta' ? 'Delta India' : (leg === 'coindcx' ? 'CoinDCX' : String(leg));
   const t1 = Number.isFinite(+snap.t1) ? snap.t1 : null;
-  return snap.sym + ' ' + String(snap.dir || '').toUpperCase() + ' (' + exLabel + ')\n'
-    + 'entry ' + snap.entry + ' · stop ' + snap.stop
-    + (t1 !== null ? ' · target ' + t1 : '')
+  const plan = telegramPlanBlock({
+    sym: snap.sym, dir: snap.dir, entry: snap.entry, stop: snap.stop, t1: t1, t2: snap.t2
+  });
+  return plan
+    + '\nVenue: ' + exLabel
     + '\nR:R ' + (Number.isFinite(+snap.rr) ? (+snap.rr).toFixed(2) : '?')
     + ' · ' + (snap.famScore != null ? snap.famScore : '?') + '/9 families'
     + ' · ' + (snap.robScore != null ? snap.robScore : '?') + '/2 robust';
@@ -397,12 +404,12 @@ function levText(entry, stop) {
 }
 function setupsBody(list) {
   const lines = list.slice(0, 8).map(function(s){
-    return '· ' + s.sym + ' ' + String(s.dir || '').toUpperCase() + ' [' + s.src + ']'
-      + ' @ ' + s.entry + ' · SL ' + s.stop + ' · TP ' + s.t1
-      + (s.t2 !== null ? ' · T2 ' + s.t2 : '')
+    var head = '· ' + s.sym + ' ' + String(s.dir || '').toUpperCase() + ' [' + s.src + ']';
+    var plan = telegramPlanBlock(s);
+    return head + '\n' + plan.split('\n').map(function(l){ return '  ' + l; }).join('\n')
       + levText(s.entry, s.stop);
   });
-  return lines.join('\n') + (list.length > 8 ? '\n+' + (list.length - 8) + ' more' : '')
+  return lines.join('\n\n') + (list.length > 8 ? '\n+' + (list.length - 8) + ' more' : '')
     + '\nlev ~Nx = stop-out ≈ 1% of account (cap 30x) — size down if you risk less.';
 }
 
@@ -590,7 +597,12 @@ async function main() {
           return r && r.sym && (r.dir === 'long' || r.dir === 'short')
             && (r.kind === 'fired' || r.kind === 'break');
         }).map(function(r){
-          return { sym: String(r.sym), dir: String(r.dir), kind: String(r.kind || 'fired') };
+          var o = { sym: String(r.sym), dir: String(r.dir), kind: String(r.kind || 'fired') };
+          if (Number.isFinite(+r.entry) && Number.isFinite(+r.stop) && Number.isFinite(+r.t1)){
+            o.entry = +r.entry; o.stop = +r.stop; o.t1 = +r.t1;
+            if (Number.isFinite(+r.t2)) o.t2 = +r.t2;
+          }
+          return o;
         });
       } catch (e) { squeeze = []; }
       /* daily digest reads: the market-read line + up to 3 top planned rows
@@ -1028,13 +1040,18 @@ async function main() {
     const need = fallbackLegs(prevState, result.state);
     const prevFb = (prevState && typeof prevState.ntfyFallback === 'object' && prevState.ntfyFallback) || {};
     const fb = Object.assign({}, prevFb);
+    const bestTop = (result.best && typeof result.best === 'object') ? result.best : {};
     let covered = 0;
     for (const item of need) {
       const label = item.leg.toUpperCase() + ' setup: ' + JSON.stringify(item.key);
+      const snap = bestTop[item.leg] || null;
+      const planLine = (snap && hasPlanLevels(snap))
+        ? '\n' + telegramPlanBlock(snap)
+        : '\nLevels: open the site for entry / stop / take-profit.';
       const pushResult = await sendAlertCi('HARDGATE ' + label,
         'New ' + item.leg + ' setup ' + JSON.stringify(item.key)
-          + ' — the email channel failed (' + verdict.err
-          + '); this ntfy is the free fallback. Levels: open the site.');
+          + planLine
+          + '\nEmail channel failed (' + verdict.err + '); this Telegram/ntfy message is the fallback.');
       console.log('ntfy fallback ' + item.leg + ' ' + JSON.stringify(item.key) + ': ' + pushResult);
       /* only a real 'sent' covers the alert — 'skipped: no NTFY_TOPIC'
          means the alert went NOWHERE; the run must go red and say so,

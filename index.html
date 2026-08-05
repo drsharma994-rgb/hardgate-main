@@ -5342,9 +5342,11 @@ async function runBestAlertCycle(){
       S.lastBestTop[ex] = bestAlertSnapshot(w);
       if (key && key !== S.lastAlertKey[ex]){
         await sendAlertEmail(w, ex);
+        const t1 = (w.t1 != null && isFinite(w.t1)) ? w.t1 : (w.dir === 'long' ? w.entry + 2 * w.risk : w.entry - 2 * w.risk);
         await sendAlertPush('HARDGATE BEST (Strategies): ' + w.t.symbol + ' ' + w.dir.toUpperCase(),
-          w.t.symbol + ' ' + w.dir.toUpperCase() + ' on ' + (ex==='delta' ? 'Delta India' : 'CoinDCX')
-            + ' — entry ' + px(w.entry) + ' · stop ' + px(w.stop) + ' · ' + w.famScore + '/9 families · ' + fmt(w.rr,2) + 'R');
+          hgTelegramPlanBlock({ sym: w.t.symbol, dir: w.dir, entry: w.entry, stop: w.stop, t1: t1 })
+            + '\nVenue: ' + (ex === 'delta' ? 'Delta India' : 'CoinDCX')
+            + '\n' + w.famScore + '/9 families · ' + fmt(w.rr, 2) + 'R');
         S.lastAlertKey[ex] = key;
       } else if (!key){
         S.lastAlertKey[ex] = null;
@@ -5380,7 +5382,8 @@ async function runAlertCycle(){
         if (gkey && gkey !== S.lastAlertKey.gold){
           await sendGoldAlertEmail(g);
           await sendAlertPush('HARDGATE GOLD STRONG: ' + g.dir.toUpperCase() + ' XAUUSD',
-            'entry ' + px(g.entry) + ' · stop ' + px(g.stop) + ' · target ' + px(g.t1) + ' · swing gates GS1–GS7 all clean');
+            hgTelegramPlanBlock({ sym: 'XAUUSD', dir: g.dir, entry: g.entry, stop: g.stop, t1: g.t1 })
+              + '\nGOLD · swing gates GS1–GS7 all clean');
           S.lastAlertKey.gold = gkey;
         } else if (!gkey){
           S.lastAlertKey.gold = null;

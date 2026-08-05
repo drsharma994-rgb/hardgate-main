@@ -559,13 +559,14 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   const st = W3.squeezeState();
   assert(st && Array.isArray(st.results) && typeof st.at === 'number' && isFinite(st.at),
          '13: shape = {results:[], at:<epochMs>} after the successful scan');
-  assert(st.results.length === 2
-         && Object.keys(st.results[0]).sort().join(',') === 'dir,kind,sym',
-         '13: one row per card, keys exactly {sym, dir, kind}');
+  assert(st.results.length === 2,
+         '13: one row per card in published state');
   assert(st.results[0].sym === 'FLATUSDT' && st.results[0].kind === 'build' && st.results[0].dir === null,
          '13: BUILDING watch card carries dir null (no direction to fabricate)');
   assert(st.results[1].sym === 'BRKUSDT' && st.results[1].kind === 'break' && st.results[1].dir === 'long',
          '13: Donchian-break card carries kind "break" + dir "long"');
+  assert(Number.isFinite(+st.results[1].entry) && Number.isFinite(+st.results[1].stop) && Number.isFinite(+st.results[1].t1),
+         '13: actionable squeeze rows publish entry/stop/t1 for Telegram alerts');
   assert(Object.isFrozen(st) && Object.isFrozen(st.results) && Object.isFrozen(st.results[0]),
          '13: the view is deep-frozen (state, results, rows all frozen)');
   const st2 = W3.squeezeState();
