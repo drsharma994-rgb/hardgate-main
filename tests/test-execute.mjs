@@ -150,6 +150,13 @@ ok(indexHtml.indexOf("scanner: 'gold-setup'") >= 0 && indexHtml.indexOf('hgBookS
   'inline gold setup uses IN BOOK stamp chip');
 ok(indexHtml.indexOf("scanner: 'gold-swing'") >= 0 && indexHtml.indexOf("scanner: 'gold-scalp'") >= 0,
   'inline gold swing/scalp verdicts use IN BOOK stamps');
+ok(indexHtml.indexOf('renderGoldMacroAuto') >= 0 && indexHtml.indexOf("scanner: 'macro'") >= 0
+  && indexHtml.indexOf('hgToTradePlanOnclickAttr(mgp.sym') >= 0,
+  'gold macro AUTO panel has IN BOOK stamp + trade handoff');
+ok(indexHtml.indexOf('tradeBookStamp') >= 0 && indexHtml.indexOf('planTrade') >= 0,
+  'trade plan ledger shows IN BOOK chip on valid plan');
+var pineJs = fs.readFileSync(path.join(root, 'pine.js'), 'utf8');
+ok(pineJs.indexOf('hgBookStampChip') >= 0, 'pine fallback cardHTML uses IN BOOK chip');
 ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
   'swing and scalp scans use distinct scanner ids');
 
