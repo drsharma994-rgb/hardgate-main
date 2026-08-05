@@ -52,6 +52,9 @@ globalThis.hgBookBtn = function(sym, dir, entry, stop, t1, meta){
   if (!isFinite(entry) || !isFinite(stop)) return '';
   return bookBtnHTML(sym, dir, entry, stop, t1, meta);
 };
+globalThis.inlineScanStack = function(){ return null; };
+globalThis.hgSetupStackForInlineScan = function(){ return null; };
+globalThis.hgSetupStackMiniHtml = function(){ return ''; };
 globalThis.planBlock = (dir, entry, stop, t1, t2) => `PLAN:${dir} entry=${entry} stop=${stop} t1=${t1} t2=${t2}`;
 const logged = [];
 globalThis.logSetup = (sym, dir, kind, entry, stop, t1) => logged.push({ sym, dir, kind, entry });

@@ -1215,7 +1215,8 @@ function renderGoldMacroAuto(m, source){
         macroBook = '<div style="margin-top:8px">' + bookBtnHTML(mgp.sym, mgp.dir, mgp.entry, mgp.stop, mgp.t1, {
           scanner: 'macro', fund: 'gold', strategy: 'macro', klass: 'metals',
           layers: [mgp.hint || 'macro', 'real-rate'],
-          t2: mgp.t2
+          t2: mgp.t2,
+          stack: inlineScanStack(mgp.dir, mgp.sym || 'XAUUSDT', null, { style: 'macro', clean: true })
         }) + '</div>';
       }
     }
@@ -1832,7 +1833,8 @@ function smartCardHTML(r){
       + ('toTrade(' + JSON.stringify(r.venueSym || r.sym) + ',' + JSON.stringify(s.dir) + ',' + s.entry + ',' + s.stop + ',' + s.t1 + ')')
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       + '">SEND TO TRADE PLAN →</button>' : '';
-  const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, { scanner: 'smart', strategy: 'smart', t2: s.t2 }) : '';
+  const bookBtn = s ? hgBookBtn(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1,
+    { scanner: 'smart', strategy: 'smart', t2: s.t2, stack: s.stack || null }) : '';
   const venueChip = r.venue === 'cdcx'
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
@@ -3672,7 +3674,8 @@ async function runGold(){
         swingPlanHtml = `<div class="plan">${planBlock(casc,entry,stop,t1,t2)}</div>
           <div class="hgchart" id="goldSwingChart"></div>
           <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${casc}',${entry},${stop},${t1})">SEND TO TRADE PLAN →</button>`
-          + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-swing', strategy: 'gold-swing', klass: 'metals', fund: 'gold', t2: t2 });
+          + hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-swing', strategy: 'gold-swing', klass: 'metals', fund: 'gold', t2: t2,
+            stack: inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-swing', clean: true }) });
       }
     } else {
       sg.push(['GS7','Structural R:R ≥ 2','na','no direction to measure']);
@@ -3747,7 +3750,8 @@ async function runGold(){
           logSetup(GOLD_SYM, dir, 'gold-scalp', lastClose, stop, t1);
           planHtml=`<div class="plan">${planBlock(dir,lastClose,stop,t1,oppo)}</div>
             <button class="toTrade" onclick="toTrade('${GOLD_SYM}','${dir}',${lastClose},${stop},${t1})">SEND TO TRADE PLAN →</button>`
-            + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { scanner: 'gold-scalp', strategy: 'gold-scalp', klass: 'metals', fund: 'gold', t2: t2 });
+            + hgBookBtn(GOLD_SYM, dir, lastClose, stop, t1, { scanner: 'gold-scalp', strategy: 'gold-scalp', klass: 'metals', fund: 'gold', t2: t2,
+              stack: inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-scalp', clean: true }) });
         }
       } else {
         g.push(['GC6','2R fits before the opposite pool','na','needs a completed sweep + reclaim first']);
@@ -4061,7 +4065,8 @@ async function runGoldDeep(){
       if(score>=60){
         logSetup(GOLD_SYM,casc,'gold-deep-swing',entry,stop,t1);
         swingPlanHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')">SEND TO TRADE PLAN →</button>';
-        swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-deep-swing', strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold', t2: t2 });
+        swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-deep-swing', strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold', t2: t2,
+          stack: inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-deep-swing', clean: score>=60 }) });
       }
     }
     setProg('goldDeepProg',0.6);
@@ -4156,7 +4161,8 @@ async function runGoldDeep(){
         if(scoreC>=50&&swept&&reclaimed){
           logSetup(GOLD_SYM,dir,'gold-deep-scalp',scalpEntry,scalpStop,scalpT1);
           planHtml+='<button class="toTrade" onclick="toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')">SEND TO TRADE PLAN →</button>';
-          planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold', t2: scalpT2 });
+          planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold', t2: scalpT2,
+            stack: inlineScanStack(dir, GOLD_SYM, m15, { style: 'gold-deep-scalp', clean: scoreC>=50 }) });
         }
       }
       return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
@@ -4182,7 +4188,8 @@ async function runGoldDeep(){
           breakoutHtml='<div class="panel"><h2>Breakout Strategy <span>Bollinger squeeze + ADX expansion</span></h2>'
             +'<div class="note">Squeeze detected. ADX '+fmt(adxVal,1)+'. Price closed outside the band. Momentum expansion play.</div>'
             +'<div class="plan">'+planBlock(breakDir,priceNow,bbMid,bT1,bT2)+'</div>'
-            +hgBookBtn(GOLD_SYM, breakDir, priceNow, bbMid, bT1, { scanner: 'gold-breakout', strategy: 'gold-breakout', klass: 'metals', fund: 'gold', t2: bT2 })
+            +hgBookBtn(GOLD_SYM, breakDir, priceNow, bbMid, bT1, { scanner: 'gold-breakout', strategy: 'gold-breakout', klass: 'metals', fund: 'gold', t2: bT2,
+              stack: inlineScanStack(breakDir, GOLD_SYM, h4, { style: 'gold-breakout', clean: true }) })
             +'</div>';
         }
       }
@@ -4195,7 +4202,8 @@ async function runGoldDeep(){
         meanRevHtml='<div class="panel"><h2>Mean Reversion <span>band touch + reversal candle + RSI extreme</span></h2>'
           +'<div class="note">Price at band edge. '+(pat.engulfing||'no engulf')+' · '+(pat.pinBar?'pin bar':'no pin')+' · RSI '+fmt(r4,1)+'. Counter-trend scalp.</div>'
           +'<div class="plan">'+planBlock(revDir,priceNow,bbMid,mT1,mT2)+'</div>'
-          +hgBookBtn(GOLD_SYM, revDir, priceNow, bbMid, mT1, { scanner: 'gold-meanrev', strategy: 'gold-meanrev', klass: 'metals', fund: 'gold', t2: mT2 })
+          +hgBookBtn(GOLD_SYM, revDir, priceNow, bbMid, mT1, { scanner: 'gold-meanrev', strategy: 'gold-meanrev', klass: 'metals', fund: 'gold', t2: mT2,
+            stack: inlineScanStack(revDir, GOLD_SYM, h4, { style: 'gold-meanrev', clean: true }) })
           +'</div>';
       }
     }
@@ -4423,7 +4431,8 @@ async function runGoldSetup(){
       + '<div class="gates">' + stampsHtml + '</div>'
       + '<div class="hgchart" id="goldSetupChart"></div>'
       + '<button class="toTrade" onclick="toTrade(\'' + GOLD_SYM + '\',\'' + dir + '\',' + decision.entry + ',' + decision.stop + ',' + decision.t1 + ')">SEND TO TRADE PLAN →</button>'
-      + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { scanner: 'gold-setup', strategy: 'gold-setup', klass: 'metals', fund: 'gold', t2: decision.t2 })
+      + hgBookBtn(GOLD_SYM, dir, decision.entry, decision.stop, decision.t1, { scanner: 'gold-setup', strategy: 'gold-setup', klass: 'metals', fund: 'gold', t2: decision.t2,
+        stack: inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-setup', clean: decision.confidence === 'STRONG' }) })
       + '</div>';
     if (typeof hgMiniChart === 'function') hgMiniChart($('goldSetupChart'), h4, { dir: dir, entry: decision.entry, stop: decision.stop, t1: decision.t1, t2: decision.t2 });
     if (stat) stat.textContent = decision.confidence.toLowerCase() + ' ' + dir + ' · closed bars only · ' + new Date().toTimeString().slice(0,5);
@@ -6116,19 +6125,22 @@ function renderStrategy(label, result, opts){
     : '';
   let bookBtn = '';
   let tradeBtn = '';
+  let finderStackHtml = '';
   const sym = opts.sym;
   if (!result.veto && result.dir && sym && isFinite(result.entry) && isFinite(result.stop) && isFinite(result.t1)){
     const meta = finderBookMeta(label, opts.assetType);
+    const finderStack = inlineScanStack(result.dir, sym, result.rows, { style: meta.strategy || 'finder', clean: !result.veto });
+    finderStackHtml = (finderStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(finderStack) : '';
     if (typeof hgBookBtn === 'function'){
       bookBtn = '<div style="margin-top:8px">' + hgBookBtn(sym, result.dir, result.entry, result.stop, result.t1,
-        Object.assign({}, meta, { t2: result.t2 })) + '</div>';
+        Object.assign({}, meta, { t2: result.t2, stack: finderStack })) + '</div>';
     }
     const t2v = isFinite(result.t2) ? result.t2 : '';
     tradeBtn = '<button class="toTrade" style="margin-top:8px" onclick="toTrade('
       + JSON.stringify(sym) + ',' + JSON.stringify(result.dir) + ',' + result.entry + ',' + result.stop + ',' + result.t1
       + (t2v !== '' ? ',' + t2v : '') + ')">SEND TO TRADE PLAN →</button>';
   }
-  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${tradeBtn}${bookBtn}</div>`;
+  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${finderStackHtml}${tradeBtn}${bookBtn}</div>`;
 }
 
 function finderTypeChanged(){
