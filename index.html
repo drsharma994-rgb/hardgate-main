@@ -721,7 +721,7 @@ const S = {
   fng: null, dom: null,
   cdcxBlocked: false,
   cdcxViaProxy: false,
-  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, lastBestAlertCheck: null, lastEdgeAlertCheck: null, edgeAlertBusy: false, alertTimer: null,
+  alertsOn: false, alertBusy: false, alertBusySince: null, lastAlertKey: {delta:null, coindcx:null, gold:null}, lastAlertCheck: null, lastBestAlertCheck: null, lastTabAlertCheck: null, lastTrendmxAlertCheck: null, lastEdgeAlertCheck: null, edgeAlertBusy: false, alertTimer: null,
 };
 let __hgSwingScan = null, __hgScalpScan = null;
 window.swingScan = function(){ return __hgSwingScan; };
@@ -757,6 +757,7 @@ const HG_ALERTS_FORCED_ON = true;
 const HG_BEST_ALERT_MS = 5 * 60 * 1000;
 const HG_TAB_ALERT_MS = 5 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
+const HG_TRENDMX_ALERT_MS = 15 * 60 * 1000;
 const HG_ALERTS_AUTO_REFRESH_MS = 900000;
 const HG_CANDLE_TTL_QUIET = 300;
 
@@ -3543,7 +3544,7 @@ async function runTabAlertScans(){
     (typeof edgeWarm === 'function' ? edgeWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert edge warm', e); }),
     (typeof pineWarm === 'function' ? pineWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert pine warm', e); })
   ]);
-  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis', 'trendmx']); }catch(e){ console.warn('tab alert layer warm', e); }
+  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
 }
 
 /* Unified 5-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
@@ -3558,11 +3559,19 @@ async function runTabSetupAlerts(){
     if (typeof hgTabAlertsRunGold === 'function'){
       await hgTabAlertsRunGold();
     }
+    S.lastTabAlertCheck = now;
+  }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
+}
+
+async function runTrendmxCrossAlerts(){
+  const now = Date.now();
+  if (S.lastTrendmxAlertCheck && now - S.lastTrendmxAlertCheck < HG_TRENDMX_ALERT_MS) return;
+  try{
     if (typeof hgTrendmxCrossAlertsRun === 'function'){
       await hgTrendmxCrossAlertsRun();
     }
-    S.lastTabAlertCheck = now;
-  }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
+    S.lastTrendmxAlertCheck = now;
+  }catch(e){ console.error('HARDGATE trend matrix cross alerts failed', e); }
 }
 
 /* Legacy hook — EDGE now rides the unified 5-min tabalerts batch. */
@@ -5404,6 +5413,8 @@ async function runAlertCycle(){
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
     /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 5 min */
     try{ await runTabSetupAlerts(); }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
+    /* TREND MATRIX fresh ⚡GOLDEN crosses — own 15-min scan + Telegram (one msg per coin) */
+    try{ await runTrendmxCrossAlerts(); }catch(e){ console.error('HARDGATE trend matrix cross alerts failed', e); }
     S.lastAlertCheck = Date.now();
   } finally {
     S.alertBusy = false;

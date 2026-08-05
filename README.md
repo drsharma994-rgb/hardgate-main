@@ -144,8 +144,8 @@ Telegram when they first appear (same dedup keys).
 
 **TREND MATRIX golden cross:** each fresh **⚡GOLDEN** bull cross (EMA50/200 on 1D, ≤10 bars old) with
 conviction (composite ≥ +2) triggers its **own Telegram message** with COIN · ENTRY · STOP LOSS ·
-TAKE PROFIT — one alert per symbol, deduped for the fresh-cross window (~10 days). Scanned on the same
-5-min alert warm cycle (top 60 Binance perps ≥ $20M turnover).
+TAKE PROFIT — one alert per symbol, deduped for the fresh-cross window (~10 days). Scanned on a
+**15-minute** alert cycle (top 60 Binance perps ≥ $20M turnover).
 
 **Telegram is the primary alert channel** (free Bot API, no quota) — save your bot token + chat id in the
 header (stored in this browser only) and hit TEST. EmailJS is the automatic fallback when Telegram is not
