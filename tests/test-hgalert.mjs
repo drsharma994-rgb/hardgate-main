@@ -877,8 +877,9 @@ console.log('== 14) squeeze alerts ==');
   await new Promise(r2 => setTimeout(r2, 30));
   assert(r === 'alerted' && tgCalls.length === 1, 'new squeeze card -> alerted, one telegram push');
   assert(tgCalls[0].indexOf('HARDGATE SQUEEZE') >= 0 && tgCalls[0].indexOf('ACEUSDT SHORT (DONCHIAN BREAK)') >= 0
-      && tgCalls[0].indexOf('SL') >= 0 && tgCalls[0].indexOf('hardgate-main.onrender.com') >= 0,
-         'push carries kind, levels and the site link');
+      && tgCalls[0].indexOf('STOP LOSS:') >= 0 && tgCalls[0].indexOf('TAKE PROFIT 1:') >= 0
+      && tgCalls[0].indexOf('hardgate-main.onrender.com') >= 0,
+         'push carries kind, explicit plan levels, and the site link');
 
   /* moved entry inside the throttle window -> held */
   assert(env.W.hgAlertSqueeze([sq('SOLUSDT', 'long', 'fired', 101), sq('ACEUSDT', 'short', 'break', 0.085)]) === 'throttled'
