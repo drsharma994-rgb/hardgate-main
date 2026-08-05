@@ -727,35 +727,29 @@ function edgeEnrich(sig, rows, item, candleSrc){
         out.veto = true; return out;
       }
     }
-    /* --- ORDER FLOW & MICROSTRUCTURE GUARDS --- */
-    var cvdFn = (typeof W.cvdAssess === 'function') ? W.cvdAssess : W.__hgBrainCvd;
-    if (item && item.taker && typeof cvdFn === 'function') {
-      var cvd = cvdFn(item.taker);
-      if (cvd) {
-        if (dir === 'long' && cvd.severeLongTrap) {
-          out.parts.push({ label: 'SEVERE CVD Divergence — Sellers Absorbing (VETO)', pts: -99 });
-          out.veto = true; return out;
-        }
-        if (dir === 'short' && cvd.severeShortTrap) {
-          out.parts.push({ label: 'SEVERE CVD Divergence — Buyers Absorbing (VETO)', pts: -99 });
-          out.veto = true; return out;
-        }
-        if ((dir === 'long' && cvd.confirmsLong) || (dir === 'short' && cvd.confirmsShort)) {
-          out.parts.push({ label: 'CVD Order Flow Confirms Trend', pts: 2 });
-          out.tally += 2;
-        } else if ((dir === 'long' && cvd.ratio < 1.0) || (dir === 'short' && cvd.ratio > 1.0)){
-          out.parts.push({ label: 'CVD Taker Flow Against Bias', pts: -1 });
-          out.tally -= 1;
+    /* --- ORDER FLOW & MICROSTRUCTURE GUARDS (shared hgFlowTrapAssess seam) --- */
+    var flowFn = (typeof W.hgFlowTrapAssess === 'function') ? W.hgFlowTrapAssess
+      : ((typeof W.flowTrapAssess === 'function') ? W.flowTrapAssess : null);
+    if (item && flowFn && (item.taker || item.bookDepth)) {
+      var ft = flowFn(item.taker || null, item.bookDepth || null, dir);
+      if (ft && ft.veto) {
+        out.parts.push({ label: (ft.reason || 'flow trap') + ' (VETO)', pts: -99 });
+        out.veto = true; return out;
+      }
+      if (ft && ft.cvdAligned) {
+        out.parts.push({ label: 'CVD Order Flow Confirms Trend', pts: 2 });
+        out.tally += 2;
+      } else if (item.taker) {
+        var cvdFn = (typeof W.cvdAssess === 'function') ? W.cvdAssess : W.__hgBrainCvd;
+        if (typeof cvdFn === 'function') {
+          var cvd = cvdFn(item.taker);
+          if (cvd && ((dir === 'long' && cvd.ratio < 1.0) || (dir === 'short' && cvd.ratio > 1.0))) {
+            out.parts.push({ label: 'CVD Taker Flow Against Bias', pts: -1 });
+            out.tally -= 1;
+          }
         }
       }
-    }
-    if (item && item.bookDepth && typeof W.calculateOrderBookImbalance === 'function') {
-      var obi = W.calculateOrderBookImbalance(item.bookDepth);
-      var spoofTrap = (dir === 'long' && obi.obiValue <= -0.33) || (dir === 'short' && obi.obiValue >= 0.33);
-      if (spoofTrap) {
-        out.parts.push({ label: 'L2 Book Stacked Against Limit (Spoof Trap)', pts: -1 });
-        out.tally -= 1;
-      } else if ((dir === 'long' && obi.obiValue >= 0.33) || (dir === 'short' && obi.obiValue <= -0.33)) {
+      if (ft && ft.obiAligned) {
         out.parts.push({ label: 'L2 Book Liquidity Supports Fill', pts: 1 });
         out.tally += 1;
       }
