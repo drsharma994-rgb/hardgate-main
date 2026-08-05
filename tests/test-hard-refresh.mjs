@@ -297,7 +297,7 @@ const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
 assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(swSrc), 'service worker cache name is hg-vN (clients pick up the new shell)');
 assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
 
-/* ---------------- 6. auto-refresh control: forced 3m when alerts hard-armed ---------------- */
+/* ---------------- 6. auto-refresh control: forced 15m when alerts hard-armed ---------------- */
 const iHrdBtn = html.indexOf('id="hardRefreshBtn"');
 const iAuto = html.indexOf('id="autoRefreshCtl"');
 const iHrdStat = html.indexOf('id="hardRefreshStat"');
@@ -305,16 +305,16 @@ assert(iHrdBtn !== -1 && iAuto !== -1 && iHrdBtn < iAuto,
   'AUTO segmented control renders in the header after #hardRefreshBtn');
 assert(iHrdStat !== -1 && iAuto < iHrdStat,
   'AUTO control sits immediately after the button (before the refresh status chip)');
-['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRefreshCount'].forEach(function(id){
+['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRef900000','autoRefreshCount'].forEach(function(id){
   assert(html.indexOf('id="' + id + '"') !== -1, 'header contains #' + id);
 });
 const autoCount = documentStub.getElementById('autoRefreshCount');
-assert(run('HG_AUTO_MS') === 180000 && storeMem.get('hgAutoRefresh') === '180000',
-  'auto refresh defaults to 3m (HG_ALERTS_FORCED_ON) after hgAutoInit on load');
-assert(run("document.getElementById('autoRef180000').classList.contains('on')") === true,
-  '3m segment is painted active by default when forced-on');
-assert(autoCount.style.display !== 'none', 'countdown chip visible while forced 3m');
-assert(run('HG_AUTO_TIMER !== null') === true, 'interval lives while forced 3m');
+assert(run('HG_AUTO_MS') === 900000 && storeMem.get('hgAutoRefresh') === '900000',
+  'auto refresh defaults to 15m (HG_ALERTS_FORCED_ON) after hgAutoInit on load');
+assert(run("document.getElementById('autoRef900000').classList.contains('on')") === true,
+  '15m segment is painted active by default when forced-on');
+assert(autoCount.style.display !== 'none', 'countdown chip visible while forced 15m');
+assert(run('HG_AUTO_TIMER !== null') === true, 'interval lives while forced 15m');
 
 /* ---------------- 7. choice → interval mapping + persistence ---------------- */
 run("setAutoRefresh('120000')");
@@ -341,16 +341,16 @@ assert(run('HG_AUTO_TIMER') === null && autoCount.style.display === 'none',
   'interval cleared and countdown hidden when set to OFF');
 
 /* ---------------- 8. restore on load ---------------- */
-storeMem.set('hgAutoRefresh', '180000');
+storeMem.set('hgAutoRefresh', '900000');
 run('hgAutoInit()');
-assert(run('HG_AUTO_MS') === 180000 && run('HG_AUTO_TIMER !== null') === true,
-  'saved 3m choice restores on load and resumes automatically');
-assert(run("document.getElementById('autoRef180000').classList.contains('on')") === true,
+assert(run('HG_AUTO_MS') === 900000 && run('HG_AUTO_TIMER !== null') === true,
+  'saved 15m choice restores on load and resumes automatically');
+assert(run("document.getElementById('autoRef900000').classList.contains('on')") === true,
   'restored segment painted active');
 storeMem.set('hgAutoRefresh', 'garbage');
 run('hgAutoInit()');
-assert(run('HG_AUTO_MS') === 180000 && run('HG_AUTO_TIMER !== null') === true,
-  'corrupt saved value still forces 3m when HG_ALERTS_FORCED_ON');
+assert(run('HG_AUTO_MS') === 900000 && run('HG_AUTO_TIMER !== null') === true,
+  'corrupt saved value still forces 15m when HG_ALERTS_FORCED_ON');
 storeMem.delete('hgAutoRefresh');
 
 /* ---------------- 9. scheduled fire → the EXISTING hardRefreshAll ---------------- */

@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v130';
+const HG_CACHE = 'hg-v131';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -38,6 +38,18 @@ function hgNeverCache(req, url){
     if ((url.href || '').indexOf('/api/proxy') !== -1) return true;/* proxy passthroughs */
     return false;
   }catch(e){ return true; }
+}
+function hgIsShellRequest(url){
+  try{
+    if (!url || url.origin !== self.location.origin) return false;
+    const p = url.pathname || '';
+    const rel = (p === '/' || p === '') ? './' : ('.' + (p.endsWith('/') ? p.slice(0, -1) : p));
+    for (let i = 0; i < HG_SHELL.length; i++){
+      const s = HG_SHELL[i];
+      if (s === rel || s === './' + p.replace(/^\//, '') || s === p) return true;
+    }
+    return false;
+  }catch(e){ return false; }
 }
 
 self.addEventListener('install', function(ev){
@@ -76,7 +88,7 @@ self.addEventListener('fetch', function(ev){
     fetch(req).then(function(res){
       try{
         const cc = (res && res.headers && res.headers.get('cache-control')) || '';
-        if (cacheable && res && res.ok && !/no-store|private/i.test(cc)){
+        if (cacheable && res && res.ok && !/no-store|private/i.test(cc) && hgIsShellRequest(url)){
           const copy = res.clone();
           caches.open(HG_CACHE).then(function(c){ c.put(req, copy); }).catch(function(){});
         }
