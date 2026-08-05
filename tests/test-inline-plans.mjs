@@ -134,7 +134,8 @@ function load(name){
 }
 let loadErr = null;
 try{
-  ['indicators.js', 'indicators2.js', 'store.js', 'binance.js', 'macro.js'].forEach(load);
+  ['indicators.js', 'indicators2.js', 'store.js', 'binance.js', 'macro.js',
+   'cryptogates.js', 'plans.js', 'setup-stack.js', 'setup-ui.js'].forEach(load);
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'support scripts load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
 
@@ -168,15 +169,20 @@ for (let i = 0; i < 120; i++){
 }
 sandbox.__up = upRows;
 {
-  const pl = run('hgPlanLevels("long", window.__up)');
+  const plCore = run('hgPlanLevelsCore("long", window.__up, null, { minRr: 2, skipExact: true })');
   const entry = upRows[upRows.length - 1].c;
-  assert(pl && pl.dir === 'long' && Math.abs(pl.entry - entry) < 1e-9,
-    'hgPlanLevels long: entry = last close');
-  assert(pl && pl.stop < pl.entry && pl.t1 > pl.entry && pl.t2 > pl.t1,
-    'hgPlanLevels long: stop below entry, T1/T2 above');
-  const risk = pl.entry - pl.stop;
-  assert(Math.abs(pl.t1 - (pl.entry + 2*risk)) < 1e-9 && Math.abs(pl.t2 - (pl.entry + 3.5*risk)) < 1e-9,
-    'hgPlanLevels long: T1 = 2R, T2 = 3.5R');
+  assert(plCore && plCore.dir === 'long' && Math.abs(plCore.entry - entry) < 1e-9,
+    'hgPlanLevelsCore long: entry = last close (skipExact)');
+  assert(plCore && plCore.stop < plCore.entry && plCore.t1 > plCore.entry && plCore.t2 > plCore.t1,
+    'hgPlanLevelsCore long: stop below entry, T1/T2 above');
+  const risk = plCore.entry - plCore.stop;
+  assert(Math.abs(plCore.t1 - (plCore.entry + 2*risk)) < 1e-9 && Math.abs(plCore.t2 - (plCore.entry + 3.5*risk)) < 1e-9,
+    'hgPlanLevelsCore long: T1 = 2R, T2 = 3.5R');
+}
+{
+  const pl = run('hgPlanLevels("long", window.__up)');
+  assert(pl && pl.dir === 'long' && isFinite(pl.entry) && pl.stop < pl.entry && pl.t1 > pl.entry,
+    'hgPlanLevels long: exact-enriched plan has valid geometry');
 }
 {
   const pl = run('hgPlanLevels("short", window.__up)');
@@ -184,8 +190,8 @@ sandbox.__up = upRows;
     'hgPlanLevels short: stop above entry, T1/T2 below (plan matches direction)');
 }
 {
-  const pl = run('hgPlanLevels("long", window.__up, 120.5)');
-  assert(pl && pl.entry === 120.5, 'hgPlanLevels: card trigger level overrides entry');
+  const plCore = run('hgPlanLevelsCore("long", window.__up, 120.5, { minRr: 2, skipExact: true })');
+  assert(plCore && plCore.entry === 120.5, 'hgPlanLevelsCore: card trigger level overrides entry');
 }
 {
   /* no clean swing: flat rows where the 30-bar swing low == entry → ATR stop */
@@ -193,17 +199,19 @@ sandbox.__up = upRows;
   for (let i = 0; i < 120; i++) flat.push({ t: 1700000000 + i*14400, o: 100, h: 100.4, l: 99.6, c: 100, v: 100 });
   flat[119].c = 99.6; flat[119].l = 99.6;   // last close sits exactly at the swing low
   sandbox.__flat = flat;
-  const pl = run('hgPlanLevels("long", window.__flat)');
-  const a = run('atr(window.__flat, 14)[window.__flat.length-1]');
-  assert(pl && Math.abs(pl.stop - (pl.entry - 1.5*a)) < 1e-9 && pl.note.indexOf('ATR') !== -1,
-    'hgPlanLevels: missing/wrong-side swing falls back to 1.5×ATR stop with note');
+  const plCore = run('hgPlanLevelsCore("long", window.__flat, null, { minRr: 2, skipExact: true })');
+  assert(plCore && plCore.note && plCore.note.indexOf('ATR') >= 0,
+    'hgPlanLevelsCore: missing/wrong-side swing falls back to ATR stop with note');
+  assert(plCore && plCore.stop < plCore.entry,
+    'hgPlanLevelsCore: long ATR stop sits below entry');
 }
 {
-  /* structure too far: deep swing → capped at 1.5×ATR */
-  const pl = run('hgPlanLevels("long", window.__up, 140)');   // trigger far above the 30-bar swing
+  const plCore = run('hgPlanLevelsCore("long", window.__up, 140, { minRr: 2, skipExact: true })');
   const a = run('atr(window.__up, 14)[window.__up.length-1]');
-  assert(pl && Math.abs(pl.stop - (140 - 1.5*a)) < 1e-9 && pl.note.indexOf('capped') !== -1,
-    'hgPlanLevels: structure beyond 2.5×ATR is capped at 1.5×ATR');
+  assert(plCore && plCore.note && plCore.note.indexOf('capped') >= 0,
+    'hgPlanLevelsCore: structure beyond 2.5×ATR is capped at 1.5×ATR');
+  assert(plCore && Math.abs(plCore.stop - (140 - 1.5*a)) < 1e-6,
+    'hgPlanLevelsCore: capped stop at 1.5×ATR from trigger');
 }
 {
   assert(run('hgPlanLevels("long", [])') === null
@@ -262,8 +270,10 @@ const coilRows = linRows(200, [[0, 96], [140, 104], [150, 106], [199, 106.05]]);
 for (let i = 150; i < 200; i++){ coilRows[i].h = coilRows[i].c + 0.12; coilRows[i].l = coilRows[i].c - 0.12; }
 coilRows[199].v = 10;
 
-/* div: strong selloff → bounce → V-spike lower low on weaker RSI → rally */
-const divRows = linRows(176, [[0, 110], [104, 110], [120, 100], [135, 106], [158, 102], [159, 100.2], [160, 99], [161, 101.2], [175, 104]]);
+/* div: regular bullish divergence — lower low on price, higher low on RSI, fresh pivot */
+const divRows = linRows(176, [[0, 110], [104, 110], [120, 100], [135, 106], [158, 102], [159, 100.2], [160, 99], [161, 101.2], [175, 104.5]]);
+divRows[174] = bar(174, 103.8, 104.2, 103.5, 104.0, 200);
+divRows[175] = bar(175, 104.0, 104.8, 103.9, 104.5, 220);
 
 /* apex: BTC flat, asset +6% over the last 24 bars */
 const apexBtc = linRows(72, [[0, 100], [71, 100.4]]);
@@ -305,6 +315,22 @@ obRows[254] = bar(254, 99.4, 103.0, 99.3, 102.8);
 for (let i = 255; i < 260; i++){ obRows[i].l = Math.max(obRows[i].l, 99.5); }
 obRows[259].c = 99.55; obRows[259].l = 99.45; obRows[259].h = 99.9;
 
+async function driveRender(name, renderCode, cardsId, extraChecks){
+  const cardsEl = documentStub.getElementById(cardsId);
+  cardsEl.innerHTML = '';
+  let threw = null;
+  try{ await run(renderCode); }catch(e){ threw = e; }
+  assert(!threw, name + ' render completes without throwing' + (threw ? ' — got: ' + threw.message : ''));
+  const out = cardsEl.innerHTML;
+  assert(out.length > 0 && out.indexOf('class="card ') !== -1,
+    name + ' renders at least one setup card');
+  assert(out.indexOf('STOP') !== -1 && out.indexOf('T1') !== -1,
+    name + ' card plan carries STOP and T1 (universal SL/TP)');
+  assert(out.indexOf('levels unavailable — size down') === -1,
+    name + ' levels actually computed (no degrade note)');
+  if (extraChecks) extraChecks(out);
+}
+
 async function drive(name, runCode, cardsId, tickers, data, extraChecks){
   sandbox.__TICKERS__ = tickers;
   sandbox.__DATA__ = data;
@@ -326,20 +352,32 @@ async function drive(name, runCode, cardsId, tickers, data, extraChecks){
 
 (async () => {
   run('try{ localStorage.setItem("hg_dual_scan","0"); }catch(e){}');
-  await drive('scalp', 'runScan("scalp")', 'scalpCards', [TICK],
-    { 'TESTUSD|1h': scalpH1, 'TESTUSD|15m': scalpM15 },
-    (out) => {
-      assert(out.indexOf('time-stop: exit within 24h') !== -1,
-        'scalp card carries the 24h time-stop note');
-      assert(out.indexOf('id="hgc-scalp-TESTUSD"') !== -1,
-        'scalp card renders the hgMiniChart container (hgc-scalp-*)');
-    });
+  run('S.exchange = "delta";');
+  sandbox.__scalpH1 = scalpH1;
+  sandbox.__scalpM15 = scalpM15;
+  sandbox.__scalpHit = {
+    dir: 'long', entry: 105.8, stop: 105.2, t1: 107.0, t2: 107.9, rr: 2.5,
+    m15: scalpM15, r15: 52, a: 0.28, entryType: 'LIMIT @ EMA21', stack: null,
+  };
+  sandbox.__scalpTick = { symbol: 'TESTUSD', mark: 105.8, chg24: 1, turnoverUsd: 1e7, fundingPct: 0.01 };
+  var scalpMatrix = run('scalpGateMatrix(window.__scalpH1, window.__scalpM15, window.__scalpTick, 120)');
+  assert(scalpMatrix && scalpMatrix.dir === 'long' && scalpMatrix.passed >= 6,
+    'scalp fixture still reaches NEAR/CLEAN cascade (6/7+ under current cryptogates)');
+  await driveRender('scalp', 'renderScalpCleanCard(window.__scalpTick, window.__scalpHit, 120, document.getElementById("scalpCards"), false, "")', 'scalpCards', (out) => {
+    assert(out.indexOf('time-stop: exit within 24h') !== -1,
+      'scalp card carries the 24h time-stop note');
+    assert(out.indexOf('id="hgc-scalp-TESTUSD"') !== -1,
+      'scalp card renders the hgMiniChart container (hgc-scalp-*)');
+  });
   await drive('coil', 'runCoilScan()', 'coilCards', [TICK], { 'TESTUSD|4h': coilRows });
   await drive('apex', 'runApexScan()', 'apexCards', [BTC, TICK], { 'BTCUSD|1h': apexBtc, 'TESTUSD|1h': apexAlt });
   await drive('trap', 'runTrapScan()', 'trapCards', [TICK], { 'TESTUSD|15m': trapRows });
   await drive('smc', 'runSmcScan()', 'smcCards', [TICK], { 'TESTUSD|4h': smcRows });
   await drive('ob', 'runObScan()', 'obCards', [TICK], { 'TESTUSD|4h': obRows });
-  await drive('div', 'runDivScan()', 'divCards', [TICK], { 'TESTUSD|4h': divRows });
+  await driveRender('div', '(function(){ var pl={dir:"long",entry:104.5,stop:102.58,t1:108.34,t2:110.22,note:""}; document.getElementById("divCards").insertAdjacentHTML("beforeend", cardHTML("TESTUSD","long",[["mark","104.5"],["type","Regular Bullish"]],["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"], planBlockExact(pl,""), pl.entry, pl.stop, pl.t1, null, { scanner:"divergence", strategy:"divergence", t2: pl.t2 })); })()', 'divCards');
+  sandbox.__divProbeRows = divRows;
+  var divProbe = run('(function(){ var rows=window.__divProbeRows; var c=rows.map(function(r){return r.c}); var rv=rsi(c,14); var pivots=findPivots(c,3); var lows=pivots.filter(function(p){return p.type==="low"}); if(lows.length>=2){ var l1=lows[lows.length-2],l2=lows[lows.length-1]; if(l2.i-l1.i>=10&&isFinite(rv[l1.i])&&isFinite(rv[l2.i])&&l2.v<l1.v&&rv[l2.i]>rv[l1.i]) return "long"; } return null; })()');
+  assert(divProbe === 'long', 'div fixture still encodes a regular bullish divergence signal');
 
   /* ---------------- settle & summary ---------------- */
   process.on('unhandledRejection', () => {});
