@@ -413,6 +413,7 @@ async function addToBook(opts){
             await bookMaybeAutoExecute(autoPos);
           }
         }catch(eAuto){}
+        try{ await bookRefreshOpenKeys(); __hgBookKeysRefreshAt = Date.now(); }catch(eKeys){}
         if (!opts.silent && typeof W.showTab === 'function') W.showTab('book');
         return r.json;
       }
@@ -509,6 +510,16 @@ async function bookRefreshOpenKeys(){
     W.__hgBookOpenKeys = __bookOpenKeys;
   }
   return __bookOpenKeys;
+}
+
+var __hgBookKeysRefreshAt = 0;
+/** Throttled open-key refresh so IN BOOK stamps work without visiting BOOK tab first. */
+function hgBookStampRefreshThrottled(force){
+  if (!bookApiOn()) return Promise.resolve(__bookOpenKeys || {});
+  var now = Date.now();
+  if (!force && now - __hgBookKeysRefreshAt < 45000) return Promise.resolve(__bookOpenKeys || {});
+  __hgBookKeysRefreshAt = now;
+  return bookRefreshOpenKeys();
 }
 
 function hgBookStampHTML(sym, dir, fund){
@@ -2142,6 +2153,7 @@ W.bookFetchOpenKeys = bookFetchOpenKeys;
 W.bookRefreshOpenKeys = bookRefreshOpenKeys;
 W.hgBookStampHTML = hgBookStampHTML;
 W.hgBookStampForMeta = hgBookStampForMeta;
+W.hgBookStampRefreshThrottled = hgBookStampRefreshThrottled;
 W.bookExecTargets = bookExecTargets;
 W.bookBuildExecutePlan = bookBuildExecutePlan;
 W.bookExecuteBatchPositions = bookExecuteBatchPositions;

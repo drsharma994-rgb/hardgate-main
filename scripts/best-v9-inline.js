@@ -297,15 +297,15 @@ async function runBest(opts){
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = `
       <div class="panel">
-        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampForMeta==='function'?hgBookStampForMeta(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
-        <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 }):''}
+        <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
+        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
@@ -349,15 +349,15 @@ async function runBest(opts){
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = `
       <div class="panel">
-        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span></h2>
+        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampForMeta==='function'?hgBookStampForMeta(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
-        <button class="toTrade" onclick="toTrade('${w.t.symbol}','${w.dir}',${w.entry},${w.stop},${t1})">SEND TO TRADE PLAN →</button>
-        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2 }):''}
+        <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
+        ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
