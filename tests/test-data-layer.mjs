@@ -26,6 +26,14 @@ async function j(url, label, opts){
     }
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return await r.json();
+  }catch(e){
+    if (e && (e.name === 'AbortError' || e.code === 'ABORT_ERR')){
+      if (isBinance) binanceSkipped++;
+      console.log('\n== ' + (label || url) + ' ==\nSKIP — fetch timeout/abort'
+        + (isBinance ? ' (Binance unavailable in this region)' : ''));
+      return null;
+    }
+    throw e;
   } finally { clearTimeout(t); }
 }
 const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
@@ -108,8 +116,13 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
       const r = await fetch(`https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${y}/all?type=daily_treasury_yield_curve&field_tdr_date_value=${y}&page&_format=csv`, { signal: ctrl.signal });
       if (r.ok){ const txt = await r.text(); if (txt && txt.trim()){ csv = txt; usedYear = y; break; } }
     }
+  }catch(e){
+    if (!(e && (e.name === 'AbortError' || e.code === 'ABORT_ERR'))) throw e;
+    console.log('\n== Treasury daily CSV US10Y ==\nSKIP — fetch timeout/abort');
   } finally { clearTimeout(t); }
-  if (!csv) throw new Error('Treasury CSV fetch failed for ' + yr + ' and ' + (yr - 1));
+  if (!csv){
+    console.log('\n== Treasury daily CSV US10Y ==\nSKIP — unavailable (timeout or empty)');
+  } else {
   const lines = csv.split(/\r?\n/).filter(l => l.trim());
   const header = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
   const ci = header.indexOf('10 Yr');
@@ -117,6 +130,7 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
   const newest = lines[1].split(',');
   const oldest = lines[lines.length - 1].split(',');
   show('Treasury daily CSV US10Y', `year=${usedYear}  rows=${lines.length - 1}  col=${ci}\nnewest: ${newest[0]} -> ${newest[ci]}\noldest: ${oldest[0]} -> ${oldest[ci]}`);
+  }
 }
 
 // 9) gold-api.com spot XAU + XAG (silver price + gold/silver ratio legs)
