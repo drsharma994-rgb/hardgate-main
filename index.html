@@ -3743,7 +3743,7 @@ async function runGold(){
     }catch(e){}
     $('goldSwingOut').innerHTML = `<div class="ledger">${sg.map(x=>gateRow(...x)).join('')}</div>
       <div class="verdict ${sVerdict==='aside'?'aside':sVerdict}">
-        <div class="vword">${sVerdict==='aside'?'STAND ASIDE':sVerdict.toUpperCase()}</div>
+        <div class="vword">${sVerdict==='aside'?'STAND ASIDE':sVerdict.toUpperCase()}${sVerdict!=='aside' && typeof hgBookStampSlot==='function'?hgBookStampSlot(GOLD_SYM,casc,{scanner:'gold-swing',strategy:'gold-swing',fund:'gold',klass:'metals'}):(sVerdict!=='aside' && typeof hgBookStampForMeta==='function'?hgBookStampForMeta(GOLD_SYM,casc,{scanner:'gold-swing',strategy:'gold-swing',fund:'gold',klass:'metals'}):'')}</div>
         <div class="vwhy">${sVerdict==='aside'
           ?('Gold swing gates did not all clear. Check MACRO (AUTO) above — DXY and 10Y yields load automatically now; the event calendar stays manual.'+nearMissSwing)
           :'All swing gates cleared. Cross-check MACRO (AUTO) above (DXY, 10Y yield, real-rate hint) and the event calendar before sizing.'}</div>
@@ -3823,7 +3823,7 @@ async function runGold(){
     const nearMissScalp = vet ? ('<div class="vwhy">Nearest miss: '+g.filter(x=>x[2]==='pass').length+'/'+g.length+' gates cleared — blocked by '+g.filter(x=>x[2]==='veto').map(x=>x[0]).join(', ')+'.</div>') : '';
       return `<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--${dir==='long'?'long':'short'})">${dir.toUpperCase()} SCENARIO</div>
         <div class="ledger" style="margin-bottom:10px">${g.map(x=>gateRow(...x)).join('')}</div>
-        <div class="verdict ${vet?'aside':dir}" style="margin:0 0 16px"><div class="vword" style="font-size:16px">${vet?'NO TRADE':dir.toUpperCase()+' VALID'}${nearMissScalp}</div>${cEvidenceHtml}</div>${planHtml}`;
+        <div class="verdict ${vet?'aside':dir}" style="margin:0 0 16px"><div class="vword" style="font-size:16px">${vet?'NO TRADE':dir.toUpperCase()+' VALID'}${!vet && typeof hgBookStampSlot==='function'?hgBookStampSlot(GOLD_SYM,dir,{scanner:'gold-scalp',strategy:'gold-scalp',fund:'gold',klass:'metals'}):(!vet && typeof hgBookStampForMeta==='function'?hgBookStampForMeta(GOLD_SYM,dir,{scanner:'gold-scalp',strategy:'gold-scalp',fund:'gold',klass:'metals'}):'')}${nearMissScalp}</div>${cEvidenceHtml}</div>${planHtml}`;
     }
     $('goldScalpOut').innerHTML = scalpLedger('long') + scalpLedger('short');
     try{ renderGoldMacroAuto(await __macroP, S.goldDataSource); }catch(e){}
@@ -4467,7 +4467,13 @@ async function runGoldSetup(){
     const risk = Math.abs(decision.entry - decision.stop);
     const gsSetupStack = inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-setup', clean: decision.confidence === 'STRONG', asset: 'gold' });
     out.innerHTML = '<div class="card ' + dir + '">'
-      + '<div class="chead"><span class="sym">XAUTUSD · GOLD SETUP</span><span class="dir">' + dir.toUpperCase() + ' · ' + decision.confidence + '</span></div>'
+      + '<div class="chead"><span class="sym">XAUTUSD · GOLD SETUP</span><span class="dir">' + dir.toUpperCase() + ' · ' + decision.confidence + '</span>'
+      + (typeof hgBookStampSlot === 'function'
+        ? hgBookStampSlot(GOLD_SYM, dir, { scanner: 'gold-setup', strategy: 'gold-setup', fund: 'gold', klass: 'metals' })
+        : (typeof hgBookStampForMeta === 'function'
+          ? hgBookStampForMeta(GOLD_SYM, dir, { scanner: 'gold-setup', strategy: 'gold-setup', fund: 'gold', klass: 'metals' })
+          : ''))
+      + '</div>'
       + '<div class="mini">'
       + '<span class="k">entry</span><span>' + px(decision.entry) + ' <span class="note">' + decision.entryType + '</span></span>'
       + '<span class="k">stop</span><span>' + px(decision.stop) + ' · ' + px(risk) + '/unit (' + fmt(decision.riskPct, 2) + '%)</span>'

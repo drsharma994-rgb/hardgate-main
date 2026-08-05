@@ -116,6 +116,17 @@ the user runs a scan once.
     }catch(e){}
   }
 
+  function termBasisBookStamp(row){
+    try{
+      var plan = termBasisPlan(row);
+      if (!plan) return '';
+      var meta = { scanner: 'termbasis', fund: 'macro', strategy: 'termbasis', klass: 'macro' };
+      if (typeof G.hgBookStampSlot === 'function') return G.hgBookStampSlot(plan.sym, plan.dir, meta);
+      if (typeof G.hgBookStampForMeta === 'function') return G.hgBookStampForMeta(plan.sym, plan.dir, meta);
+      return '';
+    }catch(e){ return ''; }
+  }
+
   function cardHTML(row){
     var c = row.curve;
     var tag = (c.regime || 'flat').toUpperCase();
@@ -124,7 +135,7 @@ the user runs a scan once.
     var stackHtml = (tbStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(tbStack) : '';
     return '<div class="card">'
       + '<div class="card-h"><span class="sym">' + esc(row.pair) + '</span>'
-      + '<span class="tag ' + tagCls + '">' + esc(tag) + '</span></div>'
+      + '<span class="tag ' + tagCls + '">' + esc(tag) + '</span>' + termBasisBookStamp(row) + '</div>'
       + '<div class="card-b">'
       + '<div class="kv"><span class="k">Perp ann.</span><span class="v">' + fmtN(c.perp, 2) + '%</span></div>'
       + '<div class="kv"><span class="k">Current Q</span><span class="v">' + fmtN(c.cur, 2) + '%</span></div>'

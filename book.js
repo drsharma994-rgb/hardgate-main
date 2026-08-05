@@ -413,7 +413,7 @@ async function addToBook(opts){
             await bookMaybeAutoExecute(autoPos);
           }
         }catch(eAuto){}
-        try{ await bookRefreshOpenKeys(); __hgBookKeysRefreshAt = Date.now(); }catch(eKeys){}
+        try{ await bookRefreshOpenKeys(); __hgBookKeysRefreshAt = Date.now(); hgBookStampRepaintDom(); }catch(eKeys){}
         if (!opts.silent && typeof W.showTab === 'function') W.showTab('book');
         return r.json;
       }
@@ -514,12 +514,39 @@ async function bookRefreshOpenKeys(){
 
 var __hgBookKeysRefreshAt = 0;
 /** Throttled open-key refresh so IN BOOK stamps work without visiting BOOK tab first. */
+function hgBookStampRepaintDom(){
+  try{
+    var nodes = document.querySelectorAll('.hg-book-stamp[data-hg-book-sym][data-hg-book-dir]');
+    for (var i = 0; i < nodes.length; i++){
+      var n = nodes[i];
+      var sym = n.getAttribute('data-hg-book-sym');
+      var dir = n.getAttribute('data-hg-book-dir');
+      var metaRaw = n.getAttribute('data-hg-book-meta') || '{}';
+      var meta = {};
+      try{ meta = JSON.parse(metaRaw); }catch(e){}
+      n.innerHTML = hgBookStampHTML(sym, dir, bookResolveFund(meta));
+    }
+  }catch(e){}
+}
+
+/** IN BOOK chip wrapped for live DOM refresh after open-key sync. */
+function hgBookStampSlot(sym, dir, meta){
+  if (!sym || (dir !== 'long' && dir !== 'short')) return '';
+  var html = hgBookStampForMeta(sym, dir, meta || {});
+  var metaAttr = '{}';
+  try{ metaAttr = esc(JSON.stringify(meta || {})); }catch(e){}
+  return '<span class="hg-book-stamp" data-hg-book-sym="' + esc(String(sym)) + '" data-hg-book-dir="' + dir + '" data-hg-book-meta="' + metaAttr + '">' + html + '</span>';
+}
+
 function hgBookStampRefreshThrottled(force){
   if (!bookApiOn()) return Promise.resolve(__bookOpenKeys || {});
   var now = Date.now();
   if (!force && now - __hgBookKeysRefreshAt < 45000) return Promise.resolve(__bookOpenKeys || {});
   __hgBookKeysRefreshAt = now;
-  return bookRefreshOpenKeys();
+  return bookRefreshOpenKeys().then(function(keys){
+    hgBookStampRepaintDom();
+    return keys;
+  });
 }
 
 function hgBookStampHTML(sym, dir, fund){
@@ -2153,6 +2180,8 @@ W.bookFetchOpenKeys = bookFetchOpenKeys;
 W.bookRefreshOpenKeys = bookRefreshOpenKeys;
 W.hgBookStampHTML = hgBookStampHTML;
 W.hgBookStampForMeta = hgBookStampForMeta;
+W.hgBookStampSlot = hgBookStampSlot;
+W.hgBookStampRepaintDom = hgBookStampRepaintDom;
 W.hgBookStampRefreshThrottled = hgBookStampRefreshThrottled;
 W.bookExecTargets = bookExecTargets;
 W.bookBuildExecutePlan = bookBuildExecutePlan;
