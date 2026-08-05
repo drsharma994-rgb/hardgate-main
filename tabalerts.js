@@ -613,13 +613,31 @@ async function pushTelegram(text){
   }catch(e){ return 'error'; }
 }
 
+/** Post-entry BRAIN invalidation — separate channel from setup batch. */
+function hgBrainInvAlertsMaybeRun(root){
+  root = root || W;
+  try{
+    var invOn = (root && typeof root.brainInvAlertsOn === 'function') ? root.brainInvAlertsOn
+      : gfn('brainInvAlertsOn');
+    if (typeof invOn === 'function' && !invOn()) return 0;
+    var fromLast = (root && typeof root.hgBrainInvAlertsFromLast === 'function') ? root.hgBrainInvAlertsFromLast
+      : gfn('hgBrainInvAlertsFromLast');
+    if (typeof fromLast !== 'function') return 0;
+    return fromLast() || 0;
+  }catch(e){ return 0; }
+}
+
 async function hgTabAlertsRun(opts){
   opts = opts || {};
   var root = opts.window || W;
   if (!tabAlertsShouldRun(root, !!opts.force)){
-    return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-15m' };
+    return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-15m', invalidation: 0 };
   }
   if (!opts.dryRun) tabAlertsMarkRun(root);
+  var invCount = 0;
+  if (!opts.dryRun && !opts.skipInvalidation){
+    invCount = hgBrainInvAlertsMaybeRun(root);
+  }
   var list = hgTabAlertsCollect(root);
   var allow = opts.sources;
   if (opts.allSources || !allow) allow = tabAlertSourcesAll();
@@ -646,11 +664,11 @@ async function hgTabAlertsRun(opts){
   var gap = opts.gapMs || GAP_MS;
   var fr = hgTabAlertsFresh(prev, list, now, gap);
   if (!fr.fresh.length){
-    return { pushed: 0, fresh: [], keys: fr.keys, status: 'none-new' };
+    return { pushed: 0, fresh: [], keys: fr.keys, status: 'none-new', invalidation: invCount };
   }
   var body = hgTabAlertsFormat(fr.fresh);
-  if (!body) return { pushed: 0, fresh: [], keys: fr.keys, status: 'empty-body' };
-  if (opts.dryRun) return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'dry-run', body: body };
+  if (!body) return { pushed: 0, fresh: [], keys: fr.keys, status: 'empty-body', invalidation: invCount };
+  if (opts.dryRun) return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'dry-run', body: body, invalidation: invCount };
   var push = await pushTelegram(body);
   if (push === 'sent'){
     saveKeys(fr.keys, root);
@@ -659,7 +677,7 @@ async function hgTabAlertsRun(opts){
         W.__hgLastEmail = { ok: true, err: null, ts: now, channel: 'telegram-tab' };
       }
     }catch(e){}
-    return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'sent' };
+    return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'sent', invalidation: invCount };
   }
   var nt = gfn('sendAlertPush');
   if (nt){
@@ -667,10 +685,10 @@ async function hgTabAlertsRun(opts){
       await nt(fr.fresh[0].prime ? 'HARDGATE STRONG SETUP' : 'HARDGATE SETUP', body,
         { priority: fr.fresh[0].prime ? 5 : 4 });
       saveKeys(fr.keys, root);
-      return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'ntfy-fallback' };
+      return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'ntfy-fallback', invalidation: invCount };
     }catch(e){}
   }
-  return { pushed: 0, fresh: fr.fresh, keys: prev, status: 'push-failed:' + push };
+  return { pushed: 0, fresh: fr.fresh, keys: prev, status: 'push-failed:' + push, invalidation: invCount };
 }
 
 /* browser globals */
@@ -692,7 +710,7 @@ W.hgTabAlertsRunPine = function(opts){
 if (typeof module !== 'undefined' && module.exports){
   module.exports = { hgTabAlertsCollect, hgTabAlertsFresh, hgTabAlertsFormat,
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, tabAlertSourcesAll,
-    tabAlertsShouldRun, tabAlertsMarkRun };
+    tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun };
 }
 
 })();
