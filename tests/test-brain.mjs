@@ -3289,9 +3289,11 @@ console.log('== AR) family hit-rates ==');
   ok(PF({ anchorName: 'swing-high zone' }) === 'swing-zone-limit', 'AR: swing zone -> swing-zone-limit');
   ok(PF({ anchorName: 'sell-side equal-lows pool' }) === 'pool-limit', 'AR: pool anchor -> pool-limit');
   ok(PF({ anchorName: 'AVWAP from the last swing low' }) === 'avwap-limit', 'AR: AVWAP anchor -> avwap-limit');
-  ok(PF({ src: 'smartSetup SCALP levels' }) === 'smart-scalp'
+  ok(PF({ src: 'smartSetup FADE levels' }) === 'smart-fade'
+     && PF({ src: 'smartSetup SCALP levels' }) === 'smart-fade'
+     && PF({ src: 'swingTryClean SWING' }) === 'swing-clean'
      && PF({ src: 'smartSetup SWING levels' }) === 'smart-swing',
-     'AR: smartSetup srcs split scalp vs swing');
+     'AR: smartSetup srcs split fade vs swing; swingTryClean mapped');
   ok(PF({ src: 'gate engine' }) === 'engine-plan' && PF({ src: 'hgPlanLevels' }) === 'gate-levels',
      'AR: engine and gate-levels sources map');
   ok(PF(null) === 'unknown' && PF({}) === 'anchored-limit', 'AR: garbage -> safe tags, never throws');

@@ -186,7 +186,11 @@
     }
     if (typeof hgApplyExactEntry === 'function'){
       var exact = hgApplyExactEntry(out, rows, { style: 'swing', preferEdge: true });
-      if (exact) return exact;
+      if (exact) out = exact;
+    }
+    if (typeof hgSwingPostEnrichValid === 'function'){
+      out = hgSwingPostEnrichValid(out, { rows: rows, a4: a4, minRr: 2.5 });
+      if (!out) return null;
     }
     return out;
   }

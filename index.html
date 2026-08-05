@@ -1677,12 +1677,12 @@ function smartClsInput(r){
 /* Setup builder — PURE (testable like smartClassify). cls = smartClassify result,
    rows4h/rows1h = kline rows (or null/[]). Returns null (no tradeable setup —
    card still renders as positioning context) or
-   { type:'SWING'|'SCALP', dir, entry, stop, t1, t2, rr1, rr2, riskPct, confirmed, note }.
+   { type:'SWING'|'FADE', dir, entry, stop, t1, t2, rr1, rr2, riskPct, confirmed, note }.
    SWING = continuation: trend-fuel / smart-$ divergence fired AND the last ~24h of
    4h closes agrees with dir — 4H structure stop, 2R/3.5R targets.
-   SCALP = reversion: capitulation / funding-extreme / retail-fade against the 24h
+   FADE = mean-reversion: capitulation / funding-extreme / retail-fade against the 24h
    move (or no continuation read) — 1H-based, stop beyond the 24h extreme,
-   1.5R/2.5R targets, 24h time-stop. */
+   1.5R/2.5R targets, 24h time-stop. (Legacy alias: type SCALP in old cards.) */
 function smartSetup(cls, rows4h, rows1h){
   if (!cls || !cls.dir || !rows4h || rows4h.length < 60) return null;
   const dir = cls.dir, n4 = rows4h.length;
@@ -1690,7 +1690,7 @@ function smartSetup(cls, rows4h, rows1h){
   const hasCont = ev.some(function(e){ return e.indexOf('trend fuel') !== -1 || e.indexOf('smart $') !== -1; });
   const winChg = (n4 >= 8 && rows4h[n4-8].c > 0) ? (rows4h[n4-1].c / rows4h[n4-8].c - 1) * 100 : 0;
   const trendAgree = dir === 'long' ? winChg > 0 : winChg < 0;
-  const type = (hasCont && trendAgree) ? 'SWING' : 'SCALP';
+  const type = (hasCont && trendAgree) ? 'SWING' : 'FADE';
   /* confirmed = 4h EMA20/50 cascade on the side of dir */
   const c4 = rows4h.map(function(r){ return r.c; });
   const e20 = last(ema(c4, 20)), e50 = last(ema(c4, 50));
@@ -1732,7 +1732,7 @@ function smartSetup(cls, rows4h, rows1h){
     }
     return out;
   }
-  /* SCALP — 1H when there is enough history, else 4H-based fallback */
+  /* FADE — 1H when there is enough history, else 4H-based fallback (mean-reversion; not the SCALP tab) */
   const src = (rows1h && rows1h.length >= 30) ? rows1h : rows4h;
   const ns = src.length;
   entry = src[ns-1].c;
@@ -1743,7 +1743,7 @@ function smartSetup(cls, rows4h, rows1h){
   const exHi = Math.max.apply(null, win.map(function(r){ return r.h; }));
   stop = dir === 'long' ? exLo - 0.5*a1 : exHi + 0.5*a1;
   let sRisk = dir === 'long' ? entry - stop : stop - entry;
-  let scalpNote = 'time-stop: exit within 24h';
+  let scalpNote = 'mean-reversion fade · time-stop: exit within 24h';
   if (sRisk > 2*a1){                                  // extreme too far — cap at 1.5×ATR
     stop = dir === 'long' ? entry - 1.5*a1 : entry + 1.5*a1;
     sRisk = 1.5*a1;
@@ -1753,13 +1753,13 @@ function smartSetup(cls, rows4h, rows1h){
   t1 = dir === 'long' ? entry + 1.5*sRisk : entry - 1.5*sRisk;
   t2 = dir === 'long' ? entry + 2.5*sRisk : entry - 2.5*sRisk;
   if (src === rows4h) scalpNote += ' · 4H-based (1H history short)';
-  var scalpOut = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
+  var fadeOut = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
            rr1: Math.abs(t1 - entry)/sRisk, rr2: Math.abs(t2 - entry)/sRisk, riskPct: sRisk/entry*100,
            confirmed: confirmed, note: scalpNote, planSrc: planSrc };
   if (typeof hgApplyExactEntry === 'function'){
-    scalpOut = hgApplyExactEntry(scalpOut, src, { rows1h: rows1h, style: 'scalp', m15: src }) || scalpOut;
+    fadeOut = hgApplyExactEntry(fadeOut, src, { rows1h: rows1h, style: 'fade', m15: src }) || fadeOut;
   }
-  return scalpOut;
+  return fadeOut;
 }
 
 function smartCardHTML(r){
