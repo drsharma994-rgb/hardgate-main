@@ -405,7 +405,7 @@ function cardHTML(r){
     return '<div class="card ' + r.dir + '">'
       + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · SQZ FIRED'
       + (cls.trendAgree === false ? ' · AGAINST TREND' : '') + '</span>'
-      + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
+      + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
       + '</div>'
       + '<div class="mini">'
       + '<span class="k">last</span><span>' + pxF(lastC) + '</span>'
@@ -424,7 +424,7 @@ function cardHTML(r){
   var dUp = cls.donchianBreak === 'LONG';
   return '<div class="card ' + r.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · DC' + DC_LEN + ' BREAKOUT</span>'
-    + (typeof hgBookStampForMeta === 'function' ? hgBookStampForMeta(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
+    + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
     + '</div>'
     + '<div class="mini">'
     + '<span class="k">last</span><span>' + pxF(lastC) + '</span>'
