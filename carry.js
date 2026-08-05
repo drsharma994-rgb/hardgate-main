@@ -158,6 +158,27 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     }catch(e){ return null; }
   }
 
+  function carryBookStamp(c){
+    try{
+      var lv = c && c.levels;
+      if (!lv) return '';
+      var hi = c.sp && c.sp.shortVenue;
+      var sym = __deskSym(__venueSym(c, hi));
+      if (!sym || sym === '—') return '';
+      if (typeof window.hgBookStampSlot === 'function'){
+        return window.hgBookStampSlot(sym, 'short', {
+          scanner: 'carry', fund: 'macro', strategy: 'carry', klass: 'macro'
+        });
+      }
+      if (typeof window.hgBookStampForMeta === 'function'){
+        return window.hgBookStampForMeta(sym, 'short', {
+          scanner: 'carry', fund: 'macro', strategy: 'carry', klass: 'macro'
+        });
+      }
+      return '';
+    }catch(e){ return ''; }
+  }
+
   function carryBookBtn(c, stack){
     try{
       var lv = c && c.levels;
@@ -419,7 +440,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
       const carryStackHtml = (carryStack && typeof hgSetupStackMiniHtml === 'function')
         ? hgSetupStackMiniHtml(carryStack) : '';
       return '<div class="card long">'
-        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span></div>'
+        + '<div class="chead"><span class="sym">' + esc(c.base) + '</span><span class="dir">CARRY · ' + esc(pairLbl) + '</span>' + carryBookStamp(c) + '</div>'
         + '<div class="mini">' + mini.map(function(kv){ return '<span class="k">' + kv[0] + '</span><span>' + kv[1] + '</span>'; }).join('') + '</div>'
         + '<div class="gates">' + gates.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('') + '</div>'
         + '<div class="plan">' + plan + '</div>'
