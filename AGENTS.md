@@ -82,18 +82,20 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **EDGE tab:** Cards show **FRESH / ACTIVE / STALE** from `barAge` (closed 4H bars since trigger). **FORMING NOW** lists bias-aligned symbols with **×ATR distance to EMA21**; Telegram via unified **15-min** `tabalerts.js` batch (EDGE + EDGE FORMING watch rows). `scripts/edge-diagnose.mjs` uses `HARDGATE_SITE` for `/api/proxy` when run from Node.
 - **PINE tab:** Background `pineWarm` runs every **15 min** with the alert cycle (after `edgeWarm` for universe). Telegram for NEW/RECENT signals via unified **tabalerts** batch (`collectPine*`); manual PINE scan still uses `pineFireAlerts` directly. Requires **Alerts ON** and Telegram configured (`sendTelegram` / `TELEGRAM_*` env).
 - **GOLD PINE tab:** Displays the **top 2 highest-probability formations** per SWING (4H) and SCALP (15m) section (`topProbSetups` in `goldpine.js`); full scored universe remains in `goldPineScan()` for alerts.
-- **Non-live upgrades:** EDGE cards show **FLOW OK / PARTIAL / N/A** when Binance CVD/OBI legs missing; tabalerts cover SMART $, OI FLOW, LIQS, SQUEEZE, CARRY, TERM BASIS watch on the **15-min** cycle; `hardRefreshAll` warms macro + layer tabs; static GitHub Pages shows proxy banner via `hghost.js`; gate funnel tab labeled **GATES** (id `execute`); scanner cards can show **IN BOOK** via `hgBookStampHTML`.
+- **Non-live upgrades:** EDGE cards show **FLOW OK / PARTIAL / N/A** when Binance CVD/OBI legs missing; tabalerts cover SMART $, OI FLOW, LIQS, SQUEEZE, CARRY, TERM BASIS watch on the **15-min** cycle; `hardRefreshAll` warms macro + layer tabs; static GitHub Pages shows proxy banner via `hghost.js`; gate funnel tab labeled **GATES** (id `execute`); scanner cards show **IN BOOK** via `hgBookStampChip` (slotted; repaints on tab switch / after ADD TO BOOK).
 - **Crypto setup accuracy (hg-v127):** SWING stops cap at **2.0×ATR** (was 1.5); G5 requires **volZ > 0.5 + wick commit** (no quiet-tape path); G6 floor **R:R ≥ 2.5**; `swingTryClean` needs **cascadeAge ≥ 3**; SCALP stop buffer **0.5×ATR** and G7 **≥ 2R**; EDGE needs **G5+G6**, tally **≥ 5**, **barAge ≤ 1**, **2.0×ATR** stops; SWING/SCALP Telegram alerts skip tickets below **2.5R / 2R**; `smartSetup` SWING min **2R**; BEST ranks **famScore ≥ 6** first.
 - **Plan alignment (hg-v128):** EXECUTE/BRAIN prefer **`swingTryClean` SWING** over `smartSetup` when 7/7 CLEAN; post-enrichment **G6 re-check** (`hgSwingPostEnrichValid`); smartSetup mean-reversion branch is **`FADE`** (not the SCALP tab).
 - **Telegram setups (hg-v129):** Unified **15-min** batch via `tabalerts.js` for **all tabs** (SWING, SCALP, EDGE, PINE, BRAIN, GOLD, SMART, layers, watches). Per-setup dedup in `hg_tabalert_keys`; cycle throttle in `hg_tabalert_last_run`. `HG_ALERT_CYCLE_MS` = 15 min. PINE quiet warm skips duplicate `pineFireAlerts` (tabalerts handles PINE).
 - **Setup accuracy v2 (hg-v130):** SWING anchor **≤1.25×ATR** (was 1.5); G5 volZ **>0.75**; G1 spread **≥0.3×ATR**; cascadeAge **≥4**; SCALP G6 **volZ+wick** (no OR slope); scalp R:R **≥2.25** + post-enrich check; EDGE **tally≥6**, **barAge=0** only; BEST pool **fam≥7 & rob≥1**; FADE min **2R**; watch alerts need **≥6/7 gates**.
 - **Alert dual clocks:** Set `RENDER_DISPATCH_PRIMARY=true` on GitHub when Render dispatches alerts every 13 min.
 - **BRAIN live tests:** `tests/test-brain-live.mjs` pins IST clock for session gates.
+- **Deploy check:** `node scripts/check-production.mjs` compares local `sw.js` `HG_CACHE` to `HARDGATE_SITE` (default Render). Mismatch means production has not picked up the latest merge yet.
 
 ### Strategy → book plugin checklist
 
 1. **Plan shape** — `entry`, `stop`, `t1`, optional `t2`
-2. **CTA** — `bookBtnHTML(..., { scanner, strategy, layers })`
-3. **Routing** — `lib/book-routing.mjs` + `tests/test-book-routing.mjs`
-4. **Tests** — `tests/test-<tab>.mjs`; run `npm test`
-5. **Ship** — bump cache in `sw.js` / script `?v=` when needed
+2. **CTA** — `bookBtnHTML(..., { scanner, strategy, layers, stack })` + `hgToTradePlanOnclickAttr` (or `hgSetupPanelHTML` / `carryTradeBtn` pattern)
+3. **IN BOOK** — `hgBookStampChip(sym, dir, meta)` on card/panel headers (repaints via `hgBookStampRepaintDom` after tab switch / ADD TO BOOK)
+4. **Routing** — `lib/book-routing.mjs` + `tests/test-book-routing.mjs`
+5. **Tests** — `tests/test-<tab>.mjs`, `tests/test-handoff-coverage.mjs`; run `npm test`
+6. **Ship** — bump cache in `sw.js` / script `?v=` when needed

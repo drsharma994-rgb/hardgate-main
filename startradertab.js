@@ -560,7 +560,7 @@ function cardHTML(r){
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="gpip">' + klassChip(r.klass) + '</span>'
     + '<span class="dir">' + r.dir.toUpperCase() + ' · ' + r.tier + '</span>'
-    + (typeof W.hgBookStampForMeta === 'function' ? W.hgBookStampForMeta(r.sym, r.dir, { scanner: 'startrader', strategy: 'startrader', fund: stFund, klass: r.klass }) : '')
+    + (typeof W.hgBookStampChip === 'function' ? W.hgBookStampChip(r.sym, r.dir, { scanner: 'startrader', strategy: 'startrader', fund: stFund, klass: r.klass }) : '')
     + '</div>'
     + '<div class="cbody">'
     + '<span class="k">asset</span><span>' + esc(r.label) + '</span>'
