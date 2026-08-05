@@ -644,6 +644,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="positioning.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
+<script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
 <script src="cryptowatch.js"></script>
 <script src="macro.js"></script>
@@ -1758,6 +1759,13 @@ function smartSetup(cls, rows4h, rows1h){
     if (typeof hgApplyExactEntry === 'function'){
       out = hgApplyExactEntry(out, rows4h, { rows1h: rows1h, style: 'swing', preferEdge: true }) || out;
     }
+    if (typeof hgSetupStack === 'function'){
+      out.stack = hgSetupStack(Object.assign({}, typeof hgSetupStackSnap === 'function' ? hgSetupStackSnap() : {}, {
+        dir: dir, style: 'smart', rows4h: rows4h, rows1h: rows1h,
+        clean: confirmed, gatesPassed: confirmed ? 7 : 6, gatesTotal: 7,
+        positioning: { items: ev.slice(0, 4).map(function(e){ return { label: 'evidence', detail: e, align: 'with' }; }) }
+      }));
+    }
     return out;
   }
   /* FADE — 1H when there is enough history, else 4H-based fallback (mean-reversion; not the SCALP tab) */
@@ -1787,6 +1795,13 @@ function smartSetup(cls, rows4h, rows1h){
            confirmed: confirmed, note: scalpNote, planSrc: planSrc };
   if (typeof hgApplyExactEntry === 'function'){
     fadeOut = hgApplyExactEntry(fadeOut, src, { rows1h: rows1h, style: 'fade', m15: src }) || fadeOut;
+  }
+  if (typeof hgSetupStack === 'function'){
+    fadeOut.stack = hgSetupStack(Object.assign({}, typeof hgSetupStackSnap === 'function' ? hgSetupStackSnap() : {}, {
+      dir: dir, style: 'smart', rows4h: rows4h, rows1h: rows1h,
+      clean: confirmed, gatesPassed: confirmed ? 7 : 6, gatesTotal: 7,
+      positioning: { items: ev.slice(0, 4).map(function(e){ return { label: 'evidence', detail: e, align: 'with' }; }) }
+    }));
   }
   return fadeOut;
 }
@@ -1833,6 +1848,7 @@ function smartCardHTML(r){
     + (r.cross && typeof positioningCrossHTML === 'function' ? positioningCrossHTML(r.cross) : '')
     + '<div class="gates">' + ev.map(function(g){ return '<span class="gpip ok">' + g + '</span>'; }).join('')
       + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('') + '</div>'
+    + (s && s.stack && typeof hgSetupStackMiniHtml === 'function' ? hgSetupStackMiniHtml(s.stack) : '')
     + '<div class="plan">' + planTxt + '</div>'
     + (s ? '<div class="hgchart" id="hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '') + '"></div>' : '')
     + tradeBtn
@@ -2937,11 +2953,13 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const stratId = bookMeta.strategy || scanId;
   const venueHtml = bookMeta.venue ? '<span class="stamp na">' + String(bookMeta.venue).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span> ' : '';
   const bookBtn = tradeable && typeof bookBtnHTML === 'function'
-    ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: scanId, strategy: stratId, t2: bookMeta.t2 }) : '';
+    ? bookBtnHTML(sym, dir, entry, stop, t1, { scanner: scanId, strategy: stratId, t2: bookMeta.t2, stack: bookMeta.stack }) : '';
   const tripleChip = (tier === 'clean' && typeof hgTripleStackChipHtml === 'function') ? hgTripleStackChipHtml(sym, dir) : '';
+  const stackHtml = (bookMeta.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(bookMeta.stack) : '';
   return `<div class="card ${dir}${tierCls}">
     <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${tripleChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
+    ${stackHtml}
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
     ${cid?`<div class="hgchart" id="${cid}"></div>`:''}
@@ -3075,7 +3093,7 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
     ['Liquidity Target', liquidityTargetText(rows, dir)]
   ], gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
     entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
-  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag }));
+  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
 }
@@ -3099,7 +3117,7 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
   ], ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
     planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
       entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
-    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag }));
+    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), m15, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
 }
@@ -3121,7 +3139,7 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
       ],
       gates: ['NEAR CLEAN — 6/7 · not a ticket'],
       plan: nearPlan, chartId: chartId,
-      bookMeta: { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near' }
+      bookMeta: { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near', stack: hit.stack }
     }));
     if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
     return;

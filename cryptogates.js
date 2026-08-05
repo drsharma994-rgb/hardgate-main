@@ -196,6 +196,9 @@
       out = hgSwingPostEnrichValid(out, { rows: rows, a4: a4, minRr: 2.5 });
       if (!out) return null;
     }
+    if (typeof hgSetupStackAttach === 'function'){
+      hgSetupStackAttach(out, { style: 'swing', rows4h: rows, ticker: ticker, gatesPassed: 7, gatesTotal: 7, clean: true });
+    }
     return out;
   }
 
@@ -218,6 +221,9 @@
       out = hgScalpPostEnrichValid(out, { rows: m15, a: m.a, minRr: CG_SCALP_RR_MIN });
       if (!out) return null;
     }
+    if (typeof hgSetupStackAttach === 'function'){
+      hgSetupStackAttach(out, { style: 'scalp', rows4h: h1, rows1h: h1, rows: m15, ticker: ticker, gatesPassed: m.passed, gatesTotal: m.gatesTotal, clean: true });
+    }
     return out;
   }
 
@@ -228,11 +234,15 @@
     var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
     if (!(isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR)) return null;
     var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
-    return {
+    var near = {
       sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
       missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: m.p,
       level: m.level, dynamicRR: m.dynamicRR, nearClean: true
     };
+    if (typeof hgSetupStackAttach === 'function'){
+      hgSetupStackAttach(near, { style: 'swing', rows4h: rows, ticker: ticker, nearClean: true });
+    }
+    return near;
   }
 
   /* Shared 7-gate eval — single source for SWING tab, BEST (swingTryClean), ENGINE parity */
@@ -254,11 +264,15 @@
     if (!m || !m.dir || m.clean) return null;
     if (m.passed < 6) return null;
     var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
-    return {
+    var near = {
       sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
       missing: missing, rows: m.m15 || m15, r14: m.r15, vz: null, mark: m.mark,
       level: m.level, dynamicRR: m.dynamicRR, nearClean: true
     };
+    if (typeof hgSetupStackAttach === 'function'){
+      hgSetupStackAttach(near, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, nearClean: true });
+    }
+    return near;
   }
 
   G.swingGateMatrix = swingGateMatrix;

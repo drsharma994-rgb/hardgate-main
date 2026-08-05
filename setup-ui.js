@@ -185,6 +185,7 @@ function hgSetupCardHTML(setup){
   }).join('');
   var cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
   var note = setup.note ? '<div class="note warn" style="margin-top:6px">' + setup.note + '</div>' : '';
+  var stackHtml = (setup.stack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(setup.stack) : '';
   var tradeBtn = (tier === 'clean' && onclickAttr)
     ? '<button class="toTrade" onclick="' + onclickAttr + '">SEND TO TRADE PLAN →</button>' : '';
 
@@ -192,6 +193,7 @@ function hgSetupCardHTML(setup){
     + '<div class="chead">' + hgSetupCardHead(sym, dir, tier, [tripleChip], bookMeta.venue) + '</div>'
     + (miniHtml ? '<div class="mini">' + miniHtml + '</div>' : '')
     + (gateHtml ? '<div class="gates">' + gateHtml + '</div>' : '')
+    + stackHtml
     + (plan ? '<div class="plan">' + plan + '</div>' : '')
     + note
     + (cid ? '<div class="hgchart" id="' + cid + '"></div>' : '')
