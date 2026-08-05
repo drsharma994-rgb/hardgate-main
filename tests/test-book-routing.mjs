@@ -52,6 +52,9 @@ ok(bookScannerFund('liq-trap', {}) === 'swing', 'liq-trap scanner → swing fund
 ok(bookScannerFund('gold-swing', {}) === 'gold', 'gold-swing scanner → gold fund');
 ok(bookScannerFund('gold-scalp', {}) === 'gold', 'gold-scalp scanner → gold fund');
 ok(bookScannerFund('gold-deep-swing', {}) === 'gold', 'gold-deep-swing → gold fund');
+ok(bookScannerFund('gold-deep-scalp', {}) === 'gold', 'gold-deep-scalp → gold fund');
+ok(bookScannerFund('gold-breakout', {}) === 'gold', 'gold-breakout → gold fund');
+ok(bookScannerFund('gold-meanrev', {}) === 'gold', 'gold-meanrev → gold fund');
 ok(bookScannerFund('gold-setup', {}) === 'gold', 'gold-setup → gold fund');
 ok(bookScannerFund('finder-swing', {}) === 'swing', 'finder-swing → swing fund');
 ok(bookScannerFund('pine', {}) === 'swing', 'pine scanner → swing fund');
