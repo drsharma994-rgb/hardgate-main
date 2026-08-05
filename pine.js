@@ -568,7 +568,7 @@ function mount(el){
       });
 
       var alertable = signals.filter(pineAlertable);
-      if (alertable.length){
+      if (alertable.length && !opts.quiet){
         try{ await pineFireAlerts(alertable, opts); }catch(eAl){ console.warn('pine alert', eAl); }
       }
 

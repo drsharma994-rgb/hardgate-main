@@ -25,6 +25,7 @@ var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined') ? globalThis : {};
 
 var LS_KEYS = 'hg_tabalert_keys';
+var LS_LAST_RUN = 'hg_tabalert_last_run';
 var GAP_MS = 15 * 60 * 1000;
 var GOLD_MIN_TALLY = 10;
 var EDGE_STRONG_TALLY = 5;
@@ -74,6 +75,31 @@ function pushSetup(out, src, row, extra){
     o.prime = true;
   }
   out.push(o);
+}
+
+function tabAlertSourcesAll(){
+  return {
+    swing: true, scalp: true, brain: true, gold: true, edge: true, pine: true,
+    smart: true, oiflow: true, liqs: true, squeeze: true, carry: true,
+    termbasis: true, watch: true
+  };
+}
+
+function tabAlertsShouldRun(root, force){
+  if (force) return true;
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (!ls) return true;
+    var t = parseInt(ls.getItem(LS_LAST_RUN) || '0', 10);
+    return !(isFinite(t) && t > 0) || (Date.now() - t >= GAP_MS);
+  }catch(e){ return true; }
+}
+
+function tabAlertsMarkRun(root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (ls) ls.setItem(LS_LAST_RUN, String(Date.now()));
+  }catch(e){}
 }
 
 function collectCrypto(out, kind, src){
@@ -591,14 +617,19 @@ async function pushTelegram(text){
 async function hgTabAlertsRun(opts){
   opts = opts || {};
   var root = opts.window || W;
+  if (!tabAlertsShouldRun(root, !!opts.force)){
+    return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-15m' };
+  }
+  if (!opts.dryRun) tabAlertsMarkRun(root);
   var list = hgTabAlertsCollect(root);
-  if (opts.sources && typeof opts.sources === 'object' && !Array.isArray(opts.sources)){
-    var allow = opts.sources;
+  var allow = opts.sources;
+  if (opts.allSources || !allow) allow = tabAlertSourcesAll();
+  if (allow && typeof allow === 'object' && !Array.isArray(allow)){
     list = list.filter(function(s){
       if (s.src.indexOf('BRAIN') >= 0 && allow.brain) return true;
       if (s.src.indexOf('SWING') >= 0 && allow.swing) return true;
       if (s.src.indexOf('SCALP') >= 0 && allow.scalp) return true;
-      if (s.src === 'EDGE' && allow.edge) return true;
+      if (s.src.indexOf('EDGE') >= 0 && allow.edge) return true;
       if (s.src.indexOf('PINE') >= 0 && allow.pine) return true;
       if (s.src.indexOf('GOLD') >= 0 && allow.gold) return true;
       if (s.src.indexOf('SMART') >= 0 && allow.smart) return true;
@@ -647,7 +678,7 @@ async function hgTabAlertsRun(opts){
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
-  return hgTabAlertsRun({ sources: { brain: true, gold: true, edge: true } });
+  return hgTabAlertsRun({ allSources: true });
 };
 W.hgTabAlertsRunEdge = function(opts){
   opts = opts || {};
@@ -661,7 +692,8 @@ W.hgTabAlertsRunPine = function(opts){
 /* Node test / CI exports */
 if (typeof module !== 'undefined' && module.exports){
   module.exports = { hgTabAlertsCollect, hgTabAlertsFresh, hgTabAlertsFormat,
-    setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS };
+    setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, tabAlertSourcesAll,
+    tabAlertsShouldRun, tabAlertsMarkRun };
 }
 
 })();
