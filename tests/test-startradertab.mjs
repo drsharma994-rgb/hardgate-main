@@ -90,6 +90,98 @@ console.log('== stSynthesize ==');
   ok(card.indexOf('hg-stack-row') >= 0, 'cardHTML renders FTS stack when setup-stack loaded');
   ok(card.indexOf('BTCUSD') >= 0 || card.indexOf('Bitcoin') >= 0, 'cardHTML includes symbol/label');
   ok(card.indexOf('HIGH') >= 0, 'cardHTML includes tier chip');
+
+  W.edgeSwingBias = () => true;
+  W.edgeSignal = () => ({ dir: 'long' });
+  W.edgeAssess = () => ({
+    sig: { dir: 'long' }, tally: 5,
+    plan: { entry: 110, stop: 105, t1: 120, t2: 125, rr: 2.5 },
+  });
+  W.swingGateMatrix = () => ({ dir: 'long', clean: true, passed: 7 });
+  W.hgNewsRisk = () => ({ risk: 'low' });
+  const primeCtx = {
+    regime: { label: 'RISK ON', playbook: { bias: 'LONG-ONLY' } },
+    newsState: { fng: { value: 45 } },
+  };
+  const prime = W.stSynthesize(
+    { sym: 'BTCUSD', base: 'BTC', klass: 'crypto', label: 'Bitcoin' },
+    rows4h, rows1h, rows15m, { symbol: 'BTCUSD', fundingPct: 0.01, mark: 110 }, primeCtx);
+  ok(prime && prime.tier === 'PRIME', 'stSynthesize swing+scalp+edge+regime -> PRIME');
+  ok(prime.points >= 7, 'PRIME setup agreePts >= 7');
+  ok(W.cardHTML(prime).indexOf('prime') >= 0, 'cardHTML PRIME tier class');
+}
+
+console.log('== stSynthesize real cryptogates path ==');
+{
+  function synthRows(n, start, stepSec){
+    const out = [];
+    for (let i = 0; i < n; i++){
+      const c = start + i * 10;
+      out.push({ t: 1700000000 + i * stepSec, o: c, h: c + 5, l: c - 5, c: c, v: 1000 });
+    }
+    return out;
+  }
+  const deep = makeCtx();
+  loadStack(deep, [
+    'indicators.js', 'indicators2.js', 'cryptogates.js', 'plans.js',
+    'edge.js', 'setup-stack.js', 'startradertab.js',
+  ]);
+  const DW = deep.window;
+  const rows4h = synthRows(260, 50000, 14400);
+  const rows1h = synthRows(120, 50000, 3600);
+  const rows15m = synthRows(80, 50000, 900);
+  const ticker = { symbol: 'BTCUSD', fundingPct: 0.01, mark: rows4h[rows4h.length - 1].c };
+  const rawMatrix = DW.swingGateMatrix(rows4h, ticker);
+  ok(rawMatrix && rawMatrix.dir === 'long' && rawMatrix.passed >= 1,
+    'cryptogates uptrend fixture yields directional swing matrix');
+
+  let matrixCalls = 0;
+  const origSwing = DW.swingGateMatrix;
+  DW.swingGateMatrix = function(r, t){
+    matrixCalls++;
+    const m = origSwing(r, t);
+    if (m && m.dir && m.passed >= 1 && m.passed < 6) return Object.assign({}, m, { passed: 6 });
+    return m;
+  };
+  const hit = DW.stSynthesize(
+    { sym: 'BTCUSD', base: 'BTC', klass: 'crypto', label: 'Bitcoin' },
+    rows4h, rows1h, rows15m, ticker);
+  ok(matrixCalls >= 1, 'stSynthesize invokes real swingGateMatrix');
+  ok(hit && hit.dir === 'long', 'real matrix-backed synthesis yields long setup');
+  ok(hit.allVotes.some(v => v.src === 'SWING'), 'SWING vote from cryptogates matrix');
+  ok(['WATCH', 'HIGH', 'PRIME'].includes(hit.tier), 'real path assigns tier label');
+}
+
+console.log('== stSynthesize squeeze + meanrev families ==');
+{
+  const rows4h = trendRows(240, 14400);
+  const rows1h = rows4h.slice(-120);
+  const rows15m = rows4h.slice(-80);
+  W.swingTryClean = () => ({ dir: 'long', entry: 110, stop: 105, t1: 120, rr: 2 });
+  W.scalpTryClean = () => ({ dir: 'long', entry: 110, stop: 108, t1: 114, rr: 1.6 });
+  W.squeezeClassify = () => ({ state: 'FIRED_LONG' });
+  W.mrSignal = () => ({ dir: 'long', kind: 'MR dip' });
+  const fam = W.stSynthesize(
+    { sym: 'BTCUSD', klass: 'crypto' }, rows4h, rows1h, rows15m, { mark: 110 });
+  ok(fam && fam.allVotes.some(v => v.src === 'SQUEEZE'), 'stSynthesize wires squeezeClassify vote');
+  ok(fam.allVotes.some(v => v.src === 'MEAN REV'), 'stSynthesize wires mrSignal vote');
+  ok(fam.votes.filter(v => v.dir === fam.dir).length >= 3, 'squeeze+MR agree with majority dir');
+}
+
+console.log('== stSynthesize context veto ==');
+{
+  const vctx = makeCtx();
+  loadStack(vctx, ['indicators.js', 'cryptogates.js', 'edge.js', 'setup-stack.js', 'startradertab.js']);
+  const VW = vctx.window;
+  VW.swingTryClean = () => ({ dir: 'long', entry: 110, stop: 105, t1: 120, rr: 2 });
+  VW.hgNewsRisk = () => ({ blackout: true, note: 'macro event' });
+  const rows = trendRows(240, 14400);
+  ok(VW.stSynthesize(
+    { sym: 'BTCUSD', klass: 'crypto' },
+    rows, rows.slice(-120), rows.slice(-80),
+    { mark: 100 },
+    { regime: { playbook: { bias: 'BOTH' } } },
+  ) === null, 'stSynthesize returns null when context veto fires');
 }
 
 console.log('== stContextVotes / stBuildContext ==');
