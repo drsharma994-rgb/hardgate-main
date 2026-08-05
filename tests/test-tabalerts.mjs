@@ -28,16 +28,27 @@ function loadTabAlerts(){
 
 const lib = loadTabAlerts();
 const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY,
-  tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN, LS_CLEAN_ONLY,
-  setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled } = lib;
+  tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN, LS_CLEAN_ONLY, LS_GOLD_LAST_RUN,
+  setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
+  tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced } = lib;
 
 assert(typeof hgTabAlertsFresh === 'function', 'hgTabAlertsFresh exported');
 assert(GAP_MS === 15 * 60 * 1000, '15-min dedup gap');
 assert(GOLD_MIN_TALLY === 10, 'gold min tally default 10');
 assert(tabAlertsCleanOnlyEnabled({ localStorage: { getItem: () => null } }) === true,
        'clean-only Telegram default ON');
-assert(tabAlertsCleanOnlyEnabled({ localStorage: { getItem: (k) => k === LS_CLEAN_ONLY ? '0' : null } }) === false,
-       'hgAlertCleanOnly=0 disables clean filter');
+assert(tabAlertsGoldSeparateEnabled({ localStorage: { getItem: () => null } }) === true,
+       'gold separate alert batch default ON');
+assert(tabAlertsGoldConvictedOnlyEnabled({ localStorage: { getItem: () => null } }) === true,
+       'gold convicted-only default ON');
+assert(goldIsMostConvinced({ id: 'a', grade: 'A', locked: true, vetoed: false }, { bestId: 'b' }) === true,
+       'grade-A locked counts as most convinced');
+assert(!goldIsMostConvinced({ id: 'x', grade: 'B', tally: 8 }, { bestId: 'y' }), 'grade-B non-best excluded');
+
+const goldThrottle = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+tabAlertsMarkRun({ localStorage: goldThrottle }, LS_GOLD_LAST_RUN);
+assert(tabAlertsShouldRun({ localStorage: goldThrottle }, false, LS_GOLD_LAST_RUN) === false,
+       'gold batch has its own 15-min throttle');
 
 assert(setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2 }), 'SWING rows are clean7');
 assert(setupIsClean7({ src: 'EDGE', clean7: true, gatesPassed: 7, gatesTotal: 7 }), 'explicit clean7 passes');
@@ -103,18 +114,42 @@ const W = loadWithWindow({
       plan: { entry: 1, stop: 1.1, t1: 0.8 }
     }]
   }),
-  goldscalpScan: () => ({ cands: [{ sym: 'XAUUSD', dir: 'long', entry: 2400, stop: 2390, t1: 2420, tally: 11 }] }),
-  goldswingScan: () => ({ cands: [{ sym: 'XAUUSD', dir: 'long', entry: 2400, stop: 2380, t1: 2440, tally: 8 }] }),
+  goldscalpScan: () => null,
+  goldswingScan: () => null,
   sendTelegram: async (t) => { W._tg = t; return true; }
 });
 W.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 
 const collected = W.hgTabAlertsCollect();
-assert(collected.length === 4, 'collects swing + best + brain(7/7) + gold scalp tally');
+assert(collected.length === 3, 'collects swing + best + brain(7/7); gold separate by default');
 assert(collected.some(c => c.src === 'SWING' && c.clean7), 'swing marked clean7');
 assert(collected.some(c => c.src === 'BEST' && c.clean7), 'best clean rows marked clean7');
 assert(collected.some(c => c.src.indexOf('BRAIN') >= 0 && c.clean7), 'brain 7/7 evidence included');
-assert(!collected.some(c => c.src === 'GOLD SWING'), 'gold swing below 10 excluded');
+assert(!collected.some(c => c.src.indexOf('GOLD') >= 0), 'gold excluded from unified collect when separate');
+
+const WGold = loadWithWindow({
+  goldscalpScan: () => ({
+    bestId: 'gs1',
+    cands: [
+      { id: 'gs1', sym: 'XAUUSD', dir: 'long', entry: 2400, stop: 2390, t1: 2420, tally: 11, grade: 'A', locked: true },
+      { id: 'gs2', sym: 'XAUUSD', dir: 'short', entry: 2410, stop: 2420, t1: 2390, tally: 9, grade: 'B' }
+    ]
+  }),
+  goldswingScan: () => ({
+    bestId: 'gw1',
+    cands: [{ id: 'gw1', sym: 'XAUUSD', dir: 'long', entry: 2380, stop: 2360, t1: 2440, tally: 12, grade: 'A' }]
+  }),
+  sendTelegram: async (t) => { WGold._tg = t; return true; }
+});
+WGold.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const goldCollected = WGold.hgTabAlertsCollectGold();
+assert(goldCollected.length === 2 && goldCollected.every(c => c.goldConvicted),
+       'gold collect keeps only MOST PROBABLE scalp + swing');
+assert(!goldCollected.some(c => c.id === 'gs2'), 'non-convicted grade-B scalp skipped');
+const goldRun = await WGold.hgTabAlertsRunGold({ force: true });
+assert(goldRun.pushed === 2 && WGold._tg.indexOf('GOLD CONVICTION') >= 0
+       && WGold._tg.indexOf('Entry 2400') >= 0 && WGold._tg.indexOf('GOLD SCALP') >= 0,
+       'gold conviction telegram batch with entry/SL/TP');
 
 const WBrainNoClean = loadWithWindow({
   __hgBrainLast: () => ({
@@ -188,7 +223,7 @@ assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0 && W._tg.indexO
 assert(W._tg.indexOf('7/7 CLEAN') >= 0, 'telegram body tags 7/7 clean batch');
 
 const runAll = await W.hgTabAlertsRun({ force: true, cleanOnly: false, prevKeys: {} });
-assert(runAll.pushed === 4 && W._tg.indexOf('XAUUSD') >= 0, 'cleanOnly false includes gold tally setups');
+assert(runAll.pushed === 3, 'unified batch without gold when separate mode on');
 
 const WI = loadWithWindow({
   swingScan: () => null,

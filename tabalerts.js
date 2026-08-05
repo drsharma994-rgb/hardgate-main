@@ -30,6 +30,9 @@ var W = (typeof window !== 'undefined') ? window
 var LS_KEYS = 'hg_tabalert_keys';
 var LS_LAST_RUN = 'hg_tabalert_last_run';
 var LS_CLEAN_ONLY = 'hgAlertCleanOnly';
+var LS_GOLD_SEPARATE = 'hgAlertGoldSeparate';
+var LS_GOLD_CONVICTED = 'hgAlertGoldConvictedOnly';
+var LS_GOLD_LAST_RUN = 'hg_tabalert_gold_last_run';
 var GAP_MS = 15 * 60 * 1000;
 var GOLD_MIN_TALLY = 10;
 var EDGE_STRONG_TALLY = 5;
@@ -95,21 +98,50 @@ function tabAlertSourcesAll(){
   };
 }
 
-function tabAlertsShouldRun(root, force){
+function tabAlertsShouldRun(root, force, lastRunKey){
   if (force) return true;
+  lastRunKey = lastRunKey || LS_LAST_RUN;
   try{
     var ls = (root && root.localStorage) ? root.localStorage : null;
     if (!ls) return true;
-    var t = parseInt(ls.getItem(LS_LAST_RUN) || '0', 10);
+    var t = parseInt(ls.getItem(lastRunKey) || '0', 10);
     return !(isFinite(t) && t > 0) || (Date.now() - t >= GAP_MS);
   }catch(e){ return true; }
 }
 
-function tabAlertsMarkRun(root){
+function tabAlertsMarkRun(root, lastRunKey){
+  lastRunKey = lastRunKey || LS_LAST_RUN;
   try{
     var ls = (root && root.localStorage) ? root.localStorage : null;
-    if (ls) ls.setItem(LS_LAST_RUN, String(Date.now()));
+    if (ls) ls.setItem(lastRunKey, String(Date.now()));
   }catch(e){}
+}
+
+function tabAlertsGoldSeparateEnabled(root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (!ls) return true;
+    var v = ls.getItem(LS_GOLD_SEPARATE);
+    if (v === null || v === undefined || v === '') return true;
+    return v === '1' || String(v).toLowerCase() === 'true';
+  }catch(e){ return true; }
+}
+
+function tabAlertsGoldConvictedOnlyEnabled(root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (!ls) return true;
+    var v = ls.getItem(LS_GOLD_CONVICTED);
+    if (v === null || v === undefined || v === '') return true;
+    return v === '1' || String(v).toLowerCase() === 'true';
+  }catch(e){ return true; }
+}
+
+function goldIsMostConvinced(c, scanVal){
+  if (!c || c.vetoed || c.demoted) return false;
+  if (scanVal && scanVal.bestId && c.id && c.id === scanVal.bestId) return true;
+  if (c.locked === true && String(c.grade || '').toUpperCase() === 'A') return true;
+  return false;
 }
 
 /** Default ON: Telegram 15-min batch only pushes 7/7 CLEAN tickets (entry + SL + TP). Set hgAlertCleanOnly=0 to restore all tabs. */
@@ -125,6 +157,7 @@ function tabAlertsCleanOnlyEnabled(root){
 
 function setupIsClean7(s){
   if (!s || s.watch) return false;
+  if (s.goldConvicted === true) return true;
   if (s.clean7 === true || s.clean === true) return true;
   if (fin(+s.gatesPassed) && fin(+s.gatesTotal) && +s.gatesPassed >= 7 && +s.gatesTotal >= 7) return true;
   if (fin(+s.passed) && +s.passed >= 7) return true;
@@ -376,7 +409,10 @@ function collectBest(out){
   }
 }
 
-function collectGold(out, kind, src, minTally){
+function collectGold(out, kind, src, opts){
+  opts = (opts && typeof opts === 'object') ? opts : { minTally: opts };
+  var minTally = fin(+opts.minTally) ? +opts.minTally : GOLD_MIN_TALLY;
+  var convictedOnly = (opts.convictedOnly !== undefined) ? !!opts.convictedOnly : true;
   var fn = gfn(kind === 'scalp' ? 'goldscalpScan' : 'goldswingScan');
   if (!fn) return;
   var val = null;
@@ -385,16 +421,35 @@ function collectGold(out, kind, src, minTally){
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
     if (!c || c.vetoed) continue;
-    var t = fin(+c.tally) ? +c.tally : null;
-    if (t === null || t < minTally) continue;
-    var extra = { tally: t };
+    if (convictedOnly){
+      if (!goldIsMostConvinced(c, val)) continue;
+    } else {
+      var t = fin(+c.tally) ? +c.tally : null;
+      if (t === null || t < minTally) continue;
+    }
+    var tier = (val && val.bestId && c.id === val.bestId) ? 'MOST PROBABLE'
+      : ('GRADE ' + String(c.grade || 'A') + ' LOCK');
+    var extra = {
+      tally: fin(+c.tally) ? +c.tally : null,
+      prime: true,
+      goldConvicted: true,
+      tier: tier,
+      clean7: true
+    };
     if (c.clean === true || c.clean7 === true || (fin(+c.gatesPassed) && +c.gatesPassed >= 7)){
-      extra.clean7 = true;
       extra.gatesPassed = fin(+c.gatesPassed) ? +c.gatesPassed : 7;
       extra.gatesTotal = fin(+c.gatesTotal) ? +c.gatesTotal : 7;
     }
     pushSetup(out, src, c, extra);
   }
+}
+
+function hgTabAlertsCollectGold(root){
+  var out = [];
+  var convicted = tabAlertsGoldConvictedOnlyEnabled(root);
+  collectGold(out, 'scalp', 'GOLD SCALP', { convictedOnly: convicted });
+  collectGold(out, 'swing', 'GOLD SWING', { convictedOnly: convicted });
+  return out;
 }
 
 function pushWatch(out, src, row){
@@ -577,13 +632,17 @@ function hgTabAlertsCollect(win){
     collectPineNw(out);
     collectPineAvwap(out);
     var goldMin = GOLD_MIN_TALLY;
-    try{
-      var gn = parseInt((root.localStorage && root.localStorage.getItem('hgAlertGoldMin')) || '', 10);
-      if (isFinite(gn) && gn >= 1 && gn <= 99) goldMin = gn;
-    }catch(e){}
-    collectGold(out, 'scalp', 'GOLD SCALP', goldMin);
-    collectGold(out, 'swing', 'GOLD SWING', goldMin);
-    collectGoldPine(out, 8);
+    var goldSeparate = tabAlertsGoldSeparateEnabled(root);
+    if (!goldSeparate){
+      try{
+        var gn = parseInt((root.localStorage && root.localStorage.getItem('hgAlertGoldMin')) || '', 10);
+        if (isFinite(gn) && gn >= 1 && gn <= 99) goldMin = gn;
+      }catch(e){}
+      var goldConv = tabAlertsGoldConvictedOnlyEnabled(root);
+      collectGold(out, 'scalp', 'GOLD SCALP', { minTally: goldMin, convictedOnly: goldConv });
+      collectGold(out, 'swing', 'GOLD SWING', { minTally: goldMin, convictedOnly: goldConv });
+      collectGoldPine(out, 8);
+    }
     collectSmart(out);
     collectOiflow(out);
     collectLiqs(out);
@@ -649,17 +708,24 @@ function hgTabAlertsFormat(fresh){
       + levHint(s.entry, s.stop) + extra);
   }
   if (!lines.length) return '';
+  var allGoldConv = fresh.length && fresh.every(function(x){ return x.goldConvicted === true; });
   var allClean = fresh.every(setupIsClean7);
   var hdr = fresh.length === 1
-    ? (fresh[0].prime ? '🔥 HARDGATE — STRONG SETUP' : (allClean ? '✅ HARDGATE — 7/7 CLEAN SETUP' : '📊 HARDGATE — SETUP'))
-    : (fresh.some(function(x){ return x.prime; })
-        ? '🔥 HARDGATE — ' + fresh.length + ' SETUPS (incl. strong)'
-        : (allClean
-            ? '✅ HARDGATE — ' + fresh.length + ' × 7/7 CLEAN SETUPS'
-            : '📊 HARDGATE — ' + fresh.length + ' SETUPS'));
+    ? (fresh[0].prime && !allGoldConv ? '🔥 HARDGATE — STRONG SETUP'
+        : (allGoldConv ? '🥇 HARDGATE — GOLD CONVICTION SETUP'
+          : (allClean ? '✅ HARDGATE — 7/7 CLEAN SETUP' : '📊 HARDGATE — SETUP')))
+    : (allGoldConv
+        ? '🥇 HARDGATE — ' + fresh.length + ' GOLD CONVICTION SETUPS (SCALP / SWING)'
+        : (fresh.some(function(x){ return x.prime; })
+            ? '🔥 HARDGATE — ' + fresh.length + ' SETUPS (incl. strong)'
+            : (allClean
+                ? '✅ HARDGATE — ' + fresh.length + ' × 7/7 CLEAN SETUPS'
+                : '📊 HARDGATE — ' + fresh.length + ' SETUPS')));
   return hdr
     + '\nTab: 15-min alert cycle (tabalerts.js)'
-    + '\nSignal: ' + (allClean ? '7/7 gate-clean tickets with entry, stop-loss, and take-profit' : 'fresh scanner hits from tabs listed per row below')
+    + '\nSignal: ' + (allGoldConv
+        ? 'GOLD SCALP / GOLD SWING — MOST PROBABLE banner or grade-A locked conviction only (entry · SL · TP)'
+        : (allClean ? '7/7 gate-clean tickets with entry, stop-loss, and take-profit' : 'fresh scanner hits from tabs listed per row below'))
     + '\n\n' + lines.join('\n\n')
     + '\n\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
     + '\n' + SITE;
@@ -711,15 +777,16 @@ function hgBrainInvAlertsMaybeRun(root){
 async function hgTabAlertsRun(opts){
   opts = opts || {};
   var root = opts.window || W;
-  if (!tabAlertsShouldRun(root, !!opts.force)){
+  var lastRunKey = opts.goldOnly ? LS_GOLD_LAST_RUN : LS_LAST_RUN;
+  if (!tabAlertsShouldRun(root, !!opts.force, lastRunKey)){
     return { pushed: 0, fresh: [], keys: loadKeys(root), status: 'throttled-15m', invalidation: 0 };
   }
-  if (!opts.dryRun) tabAlertsMarkRun(root);
+  if (!opts.dryRun) tabAlertsMarkRun(root, lastRunKey);
   var invCount = 0;
-  if (!opts.dryRun && !opts.skipInvalidation){
+  if (!opts.dryRun && !opts.skipInvalidation && !opts.goldOnly){
     invCount = hgBrainInvAlertsMaybeRun(root);
   }
-  var list = hgTabAlertsCollect(root);
+  var list = opts.goldOnly ? hgTabAlertsCollectGold(root) : hgTabAlertsCollect(root);
   var cleanOnly = (opts.cleanOnly !== undefined) ? !!opts.cleanOnly : tabAlertsCleanOnlyEnabled(root);
   if (cleanOnly) list = tabAlertsFilterClean7(list);
   var allow = opts.sources;
@@ -748,7 +815,9 @@ async function hgTabAlertsRun(opts){
   var gap = opts.gapMs || GAP_MS;
   var fr = hgTabAlertsFresh(prev, list, now, gap);
   if (!fr.fresh.length){
-    return { pushed: 0, fresh: [], keys: fr.keys, status: cleanOnly ? 'none-new-clean7' : 'none-new', invalidation: invCount };
+    var emptySt = opts.goldOnly ? 'none-new-gold-conviction'
+      : (cleanOnly ? 'none-new-clean7' : 'none-new');
+    return { pushed: 0, fresh: [], keys: fr.keys, status: emptySt, invalidation: invCount };
   }
   var body = hgTabAlertsFormat(fr.fresh);
   if (!body) return { pushed: 0, fresh: [], keys: fr.keys, status: 'empty-body', invalidation: invCount };
@@ -758,7 +827,7 @@ async function hgTabAlertsRun(opts){
     saveKeys(fr.keys, root);
     try{
       if (typeof W.__hgLastEmail === 'object'){
-        W.__hgLastEmail = { ok: true, err: null, ts: now, channel: 'telegram-tab' };
+        W.__hgLastEmail = { ok: true, err: null, ts: now, channel: opts.goldOnly ? 'telegram-gold' : 'telegram-tab' };
       }
     }catch(e){}
     return { pushed: fr.fresh.length, fresh: fr.fresh, keys: fr.keys, status: 'sent', invalidation: invCount };
@@ -777,6 +846,7 @@ async function hgTabAlertsRun(opts){
 
 /* browser globals */
 W.hgTabAlertsCollect = function(){ return hgTabAlertsCollect(W); };
+W.hgTabAlertsCollectGold = function(){ return hgTabAlertsCollectGold(W); };
 W.hgTabAlertsRun = function(opts){ return hgTabAlertsRun(opts || {}); };
 W.hgTabAlertsCheckLive = function(){
   return hgTabAlertsRun({ allSources: true });
@@ -789,13 +859,24 @@ W.hgTabAlertsRunPine = function(opts){
   opts = opts || {};
   return hgTabAlertsRun(Object.assign({ sources: { pine: true } }, opts));
 };
+W.hgTabAlertsRunGold = function(opts){
+  opts = opts || {};
+  return hgTabAlertsRun(Object.assign({
+    goldOnly: true,
+    sources: { gold: true },
+    cleanOnly: false,
+    skipInvalidation: true
+  }, opts));
+};
 
 /* Node test / CI exports */
 if (typeof module !== 'undefined' && module.exports){
-  module.exports = { hgTabAlertsCollect, hgTabAlertsFresh, hgTabAlertsFormat,
+  module.exports = { hgTabAlertsCollect, hgTabAlertsCollectGold, hgTabAlertsFresh, hgTabAlertsFormat,
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
+    LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_GOLD_LAST_RUN,
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
-    setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled };
+    setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
+    tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced };
 }
 
 })();

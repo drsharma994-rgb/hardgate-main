@@ -60,6 +60,9 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/GOLD_MIN_TALLY = 10/.test(tabalerts), 'tabalerts gold min tally is 10');
   ok(/\+c\.tally < 6/.test(tabalerts), 'tabalerts EDGE setup filter uses tally >= 6');
   ok(/LS_CLEAN_ONLY = 'hgAlertCleanOnly'/.test(tabalerts), 'tabalerts clean-only localStorage key');
+  ok(/LS_GOLD_SEPARATE = 'hgAlertGoldSeparate'/.test(tabalerts), 'tabalerts gold separate batch key');
+  ok(/hgTabAlertsRunGold/.test(tabalerts), 'tabalerts exposes hgTabAlertsRunGold');
+  ok(/hgTabAlertsRunGold\(\)/.test(html), 'index calls hgTabAlertsRunGold on 15-min cycle');
   ok(/cleanOnly: true/.test(html), 'index runTabSetupAlerts passes cleanOnly true');
 }
 
