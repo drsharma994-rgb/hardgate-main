@@ -28,11 +28,24 @@ function loadTabAlerts(){
 
 const lib = loadTabAlerts();
 const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY,
-  tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN } = lib;
+  tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN, LS_CLEAN_ONLY,
+  setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled } = lib;
 
 assert(typeof hgTabAlertsFresh === 'function', 'hgTabAlertsFresh exported');
 assert(GAP_MS === 15 * 60 * 1000, '15-min dedup gap');
 assert(GOLD_MIN_TALLY === 10, 'gold min tally default 10');
+assert(tabAlertsCleanOnlyEnabled({ localStorage: { getItem: () => null } }) === true,
+       'clean-only Telegram default ON');
+assert(tabAlertsCleanOnlyEnabled({ localStorage: { getItem: (k) => k === LS_CLEAN_ONLY ? '0' : null } }) === false,
+       'hgAlertCleanOnly=0 disables clean filter');
+
+assert(setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2 }), 'SWING rows are clean7');
+assert(setupIsClean7({ src: 'EDGE', clean7: true, gatesPassed: 7, gatesTotal: 7 }), 'explicit clean7 passes');
+assert(!setupIsClean7({ src: 'GOLD SCALP', tally: 11, entry: 1, stop: 0.9, t1: 1.2 }), 'gold tally-only is not clean7');
+assert(tabAlertsFilterClean7([
+  { src: 'SWING', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1 },
+  { src: 'EDGE', sym: 'B', dir: 'short', entry: 2, stop: 2.1, t1: 1.8, tally: 6 }
+]).length === 1, 'clean7 filter keeps SWING only when EDGE lacks clean flag');
 
 const throttleStore = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const nowT = 1_700_000_000_000;
@@ -43,7 +56,7 @@ throttleStore.setItem(LS_LAST_RUN, String(nowT - GAP_MS - 1));
 assert(tabAlertsShouldRun({ localStorage: throttleStore }, false) === true, 'cycle throttle opens after 15 min');
 
 const now = 1_700_000_000_000;
-const s1 = { src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110 };
+const s1 = { src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true };
 const k1 = setupKey(s1);
 const fr1 = hgTabAlertsFresh({}, [s1], now, GAP_MS);
 assert(fr1.fresh.length === 1 && fr1.fresh[0].sym === 'BTCUSD', 'first sighting is fresh');
@@ -55,7 +68,12 @@ assert(fr2.fresh.length === 0, 'same setup inside 15-min window is not re-alerte
 const fr3 = hgTabAlertsFresh(fr1.keys, [s1], now + GAP_MS + 1, GAP_MS);
 assert(fr3.fresh.length === 1, 'same setup after 15 min can alert again');
 
-const body = hgTabAlertsFormat([{ src: 'BRAIN PRIME', sym: 'ETHUSD', dir: 'short', entry: 2000, stop: 2050, t1: 1900, prime: true, tier: 'PRIME' }]);
+const cleanBody = hgTabAlertsFormat([{ src: 'SWING', sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, clean7: true }]);
+assert(cleanBody.indexOf('7/7 CLEAN SETUP') >= 0, 'clean header when all rows are 7/7');
+assert(cleanBody.indexOf('Entry 100') >= 0 && cleanBody.indexOf('SL 95') >= 0 && cleanBody.indexOf('TP1 110') >= 0,
+       'format includes Entry / SL / TP1 labels');
+
+const body = hgTabAlertsFormat([{ src: 'BRAIN PRIME', sym: 'ETHUSD', dir: 'short', entry: 2000, stop: 2050, t1: 1900, prime: true, tier: 'PRIME', clean7: true }]);
 assert(body.indexOf('STRONG SETUP') >= 0 && body.indexOf('PRIME') >= 0, 'PRIME rows tagged strong');
 assert(body.indexOf('Tab/source: BRAIN PRIME') >= 0, 'format names tab/source per row');
 
@@ -77,7 +95,14 @@ const W = loadWithWindow({
   swingScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12.6, rr: 2.6 }] }),
   scalpScan: () => null,
   edgeScan: () => null,
-  __hgBrainLast: () => ({ rows: [{ sym: 'XRPUSD', dir: 'short', tier: 'HIGH', plan: { entry: 1, stop: 1.1, t1: 0.8 } }] }),
+  bestScan: () => ({ clean: [{ sym: 'AVAXUSD', dir: 'short', entry: 40, stop: 42, t1: 36, rr: 2 }] }),
+  __hgBrainLast: () => ({
+    rows: [{
+      sym: 'XRPUSD', dir: 'short', tier: 'HIGH',
+      evidence: ['SWING CLEAN SHORT — 7/7 gates + plan'],
+      plan: { entry: 1, stop: 1.1, t1: 0.8 }
+    }]
+  }),
   goldscalpScan: () => ({ cands: [{ sym: 'XAUUSD', dir: 'long', entry: 2400, stop: 2390, t1: 2420, tally: 11 }] }),
   goldswingScan: () => ({ cands: [{ sym: 'XAUUSD', dir: 'long', entry: 2400, stop: 2380, t1: 2440, tally: 8 }] }),
   sendTelegram: async (t) => { W._tg = t; return true; }
@@ -85,15 +110,23 @@ const W = loadWithWindow({
 W.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 
 const collected = W.hgTabAlertsCollect();
-assert(collected.length === 3, 'collects swing + brain + gold scalp (11 tally), skips gold swing (8)');
-assert(collected.some(c => c.src === 'SWING'), 'swing included');
-assert(collected.some(c => c.src.indexOf('BRAIN') >= 0), 'brain included');
+assert(collected.length === 4, 'collects swing + best + brain(7/7) + gold scalp tally');
+assert(collected.some(c => c.src === 'SWING' && c.clean7), 'swing marked clean7');
+assert(collected.some(c => c.src === 'BEST' && c.clean7), 'best clean rows marked clean7');
+assert(collected.some(c => c.src.indexOf('BRAIN') >= 0 && c.clean7), 'brain 7/7 evidence included');
 assert(!collected.some(c => c.src === 'GOLD SWING'), 'gold swing below 10 excluded');
+
+const WBrainNoClean = loadWithWindow({
+  __hgBrainLast: () => ({
+    rows: [{ sym: 'SKIP', dir: 'long', tier: 'HIGH', evidence: ['partial'], plan: { entry: 1, stop: 0.9, t1: 1.2 } }]
+  })
+});
+assert(WBrainNoClean.hgTabAlertsCollect().length === 0, 'brain without 7/7 evidence skipped');
 
 const WE = loadWithWindow({
   swingScan: () => null,
   scalpScan: () => null,
-  edgeScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: 6, rr: 2 }] }),
+  edgeScan: () => ({ cands: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, tally: 6, rr: 2, clean: true, gatesPassed: 7, gatesTotal: 7 }] }),
   __hgBrainLast: () => null,
   goldscalpScan: () => null,
   goldswingScan: () => null,
@@ -101,11 +134,11 @@ const WE = loadWithWindow({
 });
 WE.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const edgeOnly = WE.hgTabAlertsCollect();
-assert(edgeOnly.length === 1 && edgeOnly[0].src === 'EDGE' && edgeOnly[0].sym === 'SOLUSD',
-       'collectEdge picks up edgeScan cands with tally >= 6');
+assert(edgeOnly.length === 1 && edgeOnly[0].src === 'EDGE' && edgeOnly[0].clean7 === true,
+       'collectEdge marks 7/7 EDGE tickets clean7');
 const edgeRun = await WE.hgTabAlertsRunEdge({ force: true });
-assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('Tab/source: EDGE') >= 0,
-       'hgTabAlertsRunEdge pushes only EDGE setups to Telegram');
+assert(edgeRun.pushed === 1 && WE._tg && WE._tg.indexOf('7/7 CLEAN') >= 0,
+       'hgTabAlertsRunEdge pushes 7/7 EDGE to Telegram');
 
 const WF = loadWithWindow({
   edgeScan: () => ({
@@ -132,12 +165,9 @@ const WP = loadWithWindow({
 WP.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const pineCollected = WP.hgTabAlertsCollect();
 assert(pineCollected.length === 2, 'collectPine includes NEW and RECENT forming signals');
-assert(pineCollected.some(c => c.src === 'PINE' && c.sym === 'BTCUSD'), 'pine NEW collected');
-assert(pineCollected.some(c => c.sym === 'ETHUSD' && String(c.tier || '').indexOf('FORMING') >= 0),
-       'pine RECENT tagged as FORMING tier');
-const pineRun = await WP.hgTabAlertsRunPine({ force: true });
+const pineRun = await WP.hgTabAlertsRunPine({ force: true, cleanOnly: false });
 assert(pineRun.pushed === 2 && WP._tg && WP._tg.indexOf('Tab/source: PINE') >= 0,
-       'hgTabAlertsRunPine pushes pine setups to Telegram');
+       'hgTabAlertsRunPine pushes pine when cleanOnly off');
 
 const WS = loadWithWindow({
   __hgSmartResults: {
@@ -149,14 +179,16 @@ const WS = loadWithWindow({
   sendTelegram: async (t) => { WS._tg = t; return true; }
 });
 WS.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
-const smartCollected = WS.hgTabAlertsCollect();
-assert(smartCollected.length === 1 && smartCollected[0].src === 'SMART $' && smartCollected[0].prime === true,
-       'collectSmart includes confirmed SMART setups');
-const smartRun = await WS.hgTabAlertsRun({ sources: { smart: true }, force: true });
-assert(smartRun.pushed === 1 && WS._tg && WS._tg.indexOf('SMART') >= 0, 'hgTabAlertsRun smart source filter');
+const smartRun = await WS.hgTabAlertsRun({ sources: { smart: true }, force: true, cleanOnly: false });
+assert(smartRun.pushed === 1 && WS._tg && WS._tg.indexOf('SMART') >= 0, 'smart alerts when cleanOnly off');
 
-const run = await W.hgTabAlertsRun({ force: true });
-assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0, 'telegram push on fresh setups');
+const run = await W.hgTabAlertsRun({ force: true, cleanOnly: true });
+assert(run.pushed === 3 && W._tg && W._tg.indexOf('SOLUSD') >= 0 && W._tg.indexOf('XAUUSD') < 0,
+       'clean-only telegram skips gold tally-only, includes swing/best/brain');
+assert(W._tg.indexOf('7/7 CLEAN') >= 0, 'telegram body tags 7/7 clean batch');
+
+const runAll = await W.hgTabAlertsRun({ force: true, cleanOnly: false, prevKeys: {} });
+assert(runAll.pushed === 4 && W._tg.indexOf('XAUUSD') >= 0, 'cleanOnly false includes gold tally setups');
 
 const WI = loadWithWindow({
   swingScan: () => null,

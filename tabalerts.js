@@ -1,7 +1,10 @@
 /* =========================================================================
 HARDGATE — tabalerts.js
 TELEGRAM SETUP ALERTS for tab scanners: crypto SWING, crypto SCALP, EDGE,
-BRAIN (HIGH/PRIME with plans), GOLD SCALP + GOLD SWING (tally ≥ threshold).
+BRAIN (HIGH/PRIME with 7/7 swing evidence), BEST (7/7 clean), GOLD when
+gate-clean, plus optional PINE/layers when hgAlertCleanOnly=0.
+
+Default: only 7/7 CLEAN setups (entry + SL + TP) every 15 minutes.
 
 Runs on the 15-min alert cycle (index.html runAlertCycle) after quiet scans,
 and on hgalert's 60s evaluate() for live BRAIN/GOLD reads between cycles.
@@ -26,6 +29,7 @@ var W = (typeof window !== 'undefined') ? window
 
 var LS_KEYS = 'hg_tabalert_keys';
 var LS_LAST_RUN = 'hg_tabalert_last_run';
+var LS_CLEAN_ONLY = 'hgAlertCleanOnly';
 var GAP_MS = 15 * 60 * 1000;
 var GOLD_MIN_TALLY = 10;
 var EDGE_STRONG_TALLY = 5;
@@ -67,9 +71,15 @@ function pushSetup(out, src, row, extra){
     rr: fin(+row.rr) ? +row.rr : null,
     tally: fin(+row.tally) ? +row.tally : null,
     tier: row.tier ? String(row.tier).toUpperCase() : null,
-    prime: false
+    prime: false,
+    clean7: false,
+    gatesPassed: fin(+row.gatesPassed) ? +row.gatesPassed : (fin(+row.passed) ? +row.passed : null),
+    gatesTotal: fin(+row.gatesTotal) ? +row.gatesTotal : 7
   };
+  if (row.clean === true || row.clean7 === true) o.clean7 = true;
+  if (fin(+o.gatesPassed) && +o.gatesPassed >= 7) o.clean7 = true;
   if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k];
+  if (extra && extra.clean7 === true) o.clean7 = true;
   if (o.tier === 'PRIME' || (o.tally !== null && o.tally >= 12)
       || (o.src.indexOf('EDGE') >= 0 && o.tally !== null && o.tally >= EDGE_STRONG_TALLY + 1)){
     o.prime = true;
@@ -81,7 +91,7 @@ function tabAlertSourcesAll(){
   return {
     swing: true, scalp: true, brain: true, gold: true, edge: true, pine: true,
     smart: true, oiflow: true, liqs: true, squeeze: true, carry: true,
-    termbasis: true, watch: true
+    termbasis: true, watch: true, best: true
   };
 }
 
@@ -102,6 +112,31 @@ function tabAlertsMarkRun(root){
   }catch(e){}
 }
 
+/** Default ON: Telegram 15-min batch only pushes 7/7 CLEAN tickets (entry + SL + TP). Set hgAlertCleanOnly=0 to restore all tabs. */
+function tabAlertsCleanOnlyEnabled(root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (!ls) return true;
+    var v = ls.getItem(LS_CLEAN_ONLY);
+    if (v === null || v === undefined || v === '') return true;
+    return v === '1' || String(v).toLowerCase() === 'true';
+  }catch(e){ return true; }
+}
+
+function setupIsClean7(s){
+  if (!s || s.watch) return false;
+  if (s.clean7 === true || s.clean === true) return true;
+  if (fin(+s.gatesPassed) && fin(+s.gatesTotal) && +s.gatesPassed >= 7 && +s.gatesTotal >= 7) return true;
+  if (fin(+s.passed) && +s.passed >= 7) return true;
+  var src = String(s.src || '');
+  if (src === 'SWING' || src === 'SCALP') return true;
+  return false;
+}
+
+function tabAlertsFilterClean7(list){
+  return (list || []).filter(setupIsClean7);
+}
+
 function collectCrypto(out, kind, src){
   var fn = gfn(kind === 'swing' ? 'swingScan' : 'scalpScan');
   if (!fn) return;
@@ -113,7 +148,7 @@ function collectCrypto(out, kind, src){
     var c = cands[i];
     var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
     if (fin(rr) && rr < minRr) continue;
-    pushSetup(out, src, c);
+    pushSetup(out, src, c, { clean7: true, gatesPassed: 7, gatesTotal: 7 });
   }
 }
 
@@ -127,7 +162,12 @@ function collectEdge(out){
     var c = cands[i];
     if (c && fin(+c.tally) && +c.tally < 6) continue;
     if (c && fin(+c.barAge) && +c.barAge > 0) continue;
-    pushSetup(out, 'EDGE', c, { tally: c && c.tally });
+    pushSetup(out, 'EDGE', c, {
+      tally: c && c.tally,
+      clean7: !!(c && (c.clean === true || c.clean7 === true || (+c.gatesPassed >= 7))),
+      gatesPassed: (c && fin(+c.gatesPassed)) ? +c.gatesPassed : 7,
+      gatesTotal: 7
+    });
   }
   var forming = (val && Array.isArray(val.forming)) ? val.forming : [];
   for (var j = 0; j < forming.length; j++){
@@ -161,11 +201,15 @@ function collectBrain(out){
     if (!r || !r.plan) continue;
     var tier = String(r.tier || '').toUpperCase();
     if (tier !== 'HIGH' && tier !== 'PRIME') continue;
+    var ev = Array.isArray(r.evidence) ? r.evidence.join(' ') : '';
+    var hasCleanSwing = ev.indexOf('7/7') >= 0 || ev.indexOf('SWING CLEAN') >= 0
+      || (r.votes && r.votes.some(function(v){ return v && String(v.detail || '').indexOf('7/7') >= 0; }));
+    if (!hasCleanSwing) continue;
     pushSetup(out, 'BRAIN ' + tier, {
       sym: r.sym, dir: r.dir,
       entry: r.plan.entry, stop: r.plan.stop, t1: r.plan.t1, t2: r.plan.t2,
       tier: tier
-    });
+    }, { clean7: true, gatesPassed: 7, gatesTotal: 7 });
   }
 }
 
@@ -320,6 +364,18 @@ function collectGoldPine(out, minScore){
   }
 }
 
+function collectBest(out){
+  var fn = gfn('bestScan');
+  if (!fn) return;
+  var val = null;
+  try{ val = fn(); }catch(e){ return; }
+  var clean = (val && Array.isArray(val.clean)) ? val.clean : [];
+  for (var i = 0; i < clean.length; i++){
+    var c = clean[i];
+    pushSetup(out, 'BEST', c, { clean7: true, gatesPassed: 7, gatesTotal: 7, prime: true, tier: 'CLEAN' });
+  }
+}
+
 function collectGold(out, kind, src, minTally){
   var fn = gfn(kind === 'scalp' ? 'goldscalpScan' : 'goldswingScan');
   if (!fn) return;
@@ -331,7 +387,13 @@ function collectGold(out, kind, src, minTally){
     if (!c || c.vetoed) continue;
     var t = fin(+c.tally) ? +c.tally : null;
     if (t === null || t < minTally) continue;
-    pushSetup(out, src, c, { tally: t });
+    var extra = { tally: t };
+    if (c.clean === true || c.clean7 === true || (fin(+c.gatesPassed) && +c.gatesPassed >= 7)){
+      extra.clean7 = true;
+      extra.gatesPassed = fin(+c.gatesPassed) ? +c.gatesPassed : 7;
+      extra.gatesTotal = fin(+c.gatesTotal) ? +c.gatesTotal : 7;
+    }
+    pushSetup(out, src, c, extra);
   }
 }
 
@@ -406,8 +468,15 @@ function collectOiflow(out){
     if (d !== 'long' && d !== 'short') continue;
     var s = r.setup;
     if (!fin(+s.entry) || !fin(+s.stop) || !fin(+s.t1)) continue;
+    var oiClean = s.confirmed === true;
     pushSetup(out, 'OI FLOW', { sym: r.sym, dir: d, entry: s.entry, stop: s.stop, t1: s.t1, t2: s.t2 },
-      { prime: (r.cls && fin(+r.cls.score) && +r.cls.score >= 4), tier: 'OI' });
+      {
+        prime: oiClean || (r.cls && fin(+r.cls.score) && +r.cls.score >= 4),
+        tier: oiClean ? 'CONFIRMED' : 'OI',
+        clean7: oiClean,
+        gatesPassed: oiClean ? 7 : 6,
+        gatesTotal: 7
+      });
   }
 }
 
@@ -440,8 +509,15 @@ function collectSqueeze(out){
       try{ p = planFn({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h }); }catch(eP){}
     }
     if (!p || !fin(+p.entry) || !fin(+p.stop) || !fin(+p.t1)) continue;
+    var sqClean = r.kind === 'fired' && r.cls && r.cls.trendAgree !== false;
     pushSetup(out, 'SQUEEZE', { sym: r.sym, dir: r.dir, entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2 },
-      { prime: r.kind === 'fired', tier: r.kind === 'fired' ? 'FIRED' : 'BREAK' });
+      {
+        prime: sqClean,
+        tier: r.kind === 'fired' ? 'FIRED' : 'BREAK',
+        clean7: sqClean,
+        gatesPassed: sqClean ? 7 : 6,
+        gatesTotal: 7
+      });
   }
 }
 
@@ -488,6 +564,7 @@ function hgTabAlertsCollect(win){
     collectCrypto(out, 'scalp', 'SCALP');
     collectCryptoWatch(out);
     collectEdge(out);
+    collectBest(out);
     collectBrain(out);
     collectPine(out);
     collectPineMsb(out);
@@ -564,21 +641,25 @@ function hgTabAlertsFormat(fresh){
     if (s.tally !== null) extra += ' · tally ' + (s.tally > 0 ? '+' : '') + s.tally;
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';
+    if (s.clean7) extra += ' · 7/7 CLEAN';
     lines.push(tag + s.sym + ' ' + s.dir.toUpperCase()
       + '\n  Tab/source: ' + s.src
-      + '\n  @ ' + s.entry + ' · SL ' + s.stop + ' · TP ' + s.t1
-      + (s.t2 !== null ? ' · T2 ' + s.t2 : '')
+      + '\n  Entry ' + s.entry + ' · SL ' + s.stop + ' · TP1 ' + s.t1
+      + (s.t2 !== null ? ' · TP2 ' + s.t2 : '')
       + levHint(s.entry, s.stop) + extra);
   }
   if (!lines.length) return '';
+  var allClean = fresh.every(setupIsClean7);
   var hdr = fresh.length === 1
-    ? (fresh[0].prime ? '🔥 HARDGATE — STRONG SETUP' : '📊 HARDGATE — SETUP')
+    ? (fresh[0].prime ? '🔥 HARDGATE — STRONG SETUP' : (allClean ? '✅ HARDGATE — 7/7 CLEAN SETUP' : '📊 HARDGATE — SETUP'))
     : (fresh.some(function(x){ return x.prime; })
         ? '🔥 HARDGATE — ' + fresh.length + ' SETUPS (incl. strong)'
-        : '📊 HARDGATE — ' + fresh.length + ' SETUPS');
+        : (allClean
+            ? '✅ HARDGATE — ' + fresh.length + ' × 7/7 CLEAN SETUPS'
+            : '📊 HARDGATE — ' + fresh.length + ' SETUPS'));
   return hdr
     + '\nTab: 15-min alert cycle (tabalerts.js)'
-    + '\nSignal: fresh scanner hits from tabs listed per row below'
+    + '\nSignal: ' + (allClean ? '7/7 gate-clean tickets with entry, stop-loss, and take-profit' : 'fresh scanner hits from tabs listed per row below')
     + '\n\n' + lines.join('\n\n')
     + '\n\nlev ~Nx = stop-out ≈ 1% of account (cap 30x)'
     + '\n' + SITE;
@@ -639,6 +720,8 @@ async function hgTabAlertsRun(opts){
     invCount = hgBrainInvAlertsMaybeRun(root);
   }
   var list = hgTabAlertsCollect(root);
+  var cleanOnly = (opts.cleanOnly !== undefined) ? !!opts.cleanOnly : tabAlertsCleanOnlyEnabled(root);
+  if (cleanOnly) list = tabAlertsFilterClean7(list);
   var allow = opts.sources;
   if (opts.allSources || !allow) allow = tabAlertSourcesAll();
   if (allow && typeof allow === 'object' && !Array.isArray(allow)){
@@ -649,6 +732,7 @@ async function hgTabAlertsRun(opts){
       if (s.src.indexOf('EDGE') >= 0 && allow.edge) return true;
       if (s.src.indexOf('PINE') >= 0 && allow.pine) return true;
       if (s.src.indexOf('GOLD') >= 0 && allow.gold) return true;
+      if (s.src === 'BEST' && allow.best) return true;
       if (s.src.indexOf('SMART') >= 0 && allow.smart) return true;
       if (s.src === 'OI FLOW' && allow.oiflow) return true;
       if (s.src === 'LIQS' && allow.liqs) return true;
@@ -664,7 +748,7 @@ async function hgTabAlertsRun(opts){
   var gap = opts.gapMs || GAP_MS;
   var fr = hgTabAlertsFresh(prev, list, now, gap);
   if (!fr.fresh.length){
-    return { pushed: 0, fresh: [], keys: fr.keys, status: 'none-new', invalidation: invCount };
+    return { pushed: 0, fresh: [], keys: fr.keys, status: cleanOnly ? 'none-new-clean7' : 'none-new', invalidation: invCount };
   }
   var body = hgTabAlertsFormat(fr.fresh);
   if (!body) return { pushed: 0, fresh: [], keys: fr.keys, status: 'empty-body', invalidation: invCount };
@@ -709,8 +793,9 @@ W.hgTabAlertsRunPine = function(opts){
 /* Node test / CI exports */
 if (typeof module !== 'undefined' && module.exports){
   module.exports = { hgTabAlertsCollect, hgTabAlertsFresh, hgTabAlertsFormat,
-    setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, tabAlertSourcesAll,
-    tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun };
+    setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
+    tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
+    setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled };
 }
 
 })();
