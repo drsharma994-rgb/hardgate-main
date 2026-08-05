@@ -167,7 +167,10 @@ function hgSetupCardHTML(setup){
   var onclickAttr = '';
   var bookBtn = '';
   if (tier === 'clean' && isFinite(entry) && isFinite(stop) && isFinite(t1)){
-    onclickJs = "toTrade(" + JSON.stringify(sym) + "," + JSON.stringify(dir) + "," + entry + "," + stop + "," + t1 + ")";
+    onclickJs = hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, {
+      t2: bookMeta.t2, stack: setup.stack, scanner: bookMeta.scanner, strategy: bookMeta.strategy,
+      venue: bookMeta.venue
+    });
     onclickAttr = onclickJs.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     if (typeof W.hgBookBtn === 'function'){
       bookBtn = W.hgBookBtn(sym, dir, entry, stop, t1, bookMeta);
@@ -235,8 +238,11 @@ function hgSetupPanelHTML(sig, opts){
       scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine', t2: sig.t2,
       stack: stack
     }) : '';
+  var tradeOnclick = hgToTradePlanOnclickJs(sig.sym, sig.dir, sig.entry, sig.stop, sig.t1, {
+    t2: sig.t2, stack: stack, scanner: opts.scanner || 'pine', strategy: sig.scriptId || opts.scanner || 'pine'
+  }).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   var tradeBtn = (tier === 'clean')
-    ? '<button class="toTrade" onclick="toTrade(\'' + suEsc(sig.sym) + '\',\'' + sig.dir + '\',' + sig.entry + ',' + sig.stop + ',' + sig.t1 + ')">SEND TO TRADE PLAN →</button>'
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>'
     : '<div class="note warn" style="margin-top:8px">' + (tier === 'forming' ? 'FORMING — wait for NEW bar or full confluence before sizing.' : 'WATCH tier — not a ticket yet.') + '</div>';
 
   return '<div class="panel ' + cls + tierCls + '" style="margin-bottom:12px">'
@@ -250,6 +256,49 @@ function hgSetupPanelHTML(sig, opts){
     + '<div class="plan">' + planHtml + '</div>'
     + tradeBtn + bookBtn
     + '</div>';
+}
+
+/** Build onclick JS for SEND TO TRADE PLAN — carries FTS stack when helper exists. */
+function hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, meta){
+  meta = meta || {};
+  if (typeof W.hgToTradePlan === 'function'){
+    return 'hgToTradePlan(' + JSON.stringify(sym) + ',' + JSON.stringify(dir) + ','
+      + entry + ',' + stop + ',' + t1 + ',' + JSON.stringify(meta) + ')';
+  }
+  return 'toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(dir) + ','
+    + entry + ',' + stop + ',' + t1 + ')';
+}
+
+/** Cache FTS stack + scanner meta, then hand off to TRADE PLAN tab. */
+function hgToTradePlan(sym, dir, entry, stop, t1, meta){
+  meta = meta || {};
+  try{
+    W._hgTradeHandoff = {
+      sym: sym, dir: dir, entry: +entry, stop: +stop, t1: +t1,
+      t2: meta.t2, stack: meta.stack || null,
+      scanner: meta.scanner || null, strategy: meta.strategy || null,
+      venue: meta.venue || null, at: Date.now()
+    };
+    W._hgTradeHandoffPending = true;
+  }catch(e){
+    W._hgTradeHandoff = null;
+    W._hgTradeHandoffPending = false;
+  }
+  if (typeof W.toTrade === 'function'){
+    W.toTrade(sym, dir, entry, stop, t1, meta.t2);
+  }
+}
+
+/** Return active handoff when form fields match a recent card send. */
+function hgTradeHandoffFor(sym, dir, entry, stop){
+  var h = W._hgTradeHandoff;
+  if (!h || !h.at) return null;
+  if (Date.now() - h.at > 600000) return null;
+  if (String(h.sym) !== String(sym || '')) return null;
+  if (String(h.dir) !== String(dir || '')) return null;
+  if (isFinite(h.entry) && isFinite(+entry) && Math.abs(h.entry - +entry) > 1e-6) return null;
+  if (isFinite(h.stop) && isFinite(+stop) && Math.abs(h.stop - +stop) > 1e-6) return null;
+  return h;
 }
 
 /** Map positioning-tab confirmed flag → CLEAN / NEAR tier. */
@@ -373,6 +422,9 @@ W.hgSetupPaintDesk = hgSetupPaintDesk;
 W.hgGoldFormingWatchHTML = hgGoldFormingWatchHTML;
 W.hgBrainWatchDeskHTML = hgBrainWatchDeskHTML;
 W.hgSetupPaintTabDesks = hgSetupPaintTabDesks;
+W.hgToTradePlanOnclickJs = hgToTradePlanOnclickJs;
+W.hgToTradePlan = hgToTradePlan;
+W.hgTradeHandoffFor = hgTradeHandoffFor;
 
 try{ hgSetupInjectStyles(); }catch(e){}
 
