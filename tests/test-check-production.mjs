@@ -86,4 +86,33 @@ console.log('== README doc guards ==');
   ok(!/not in `npm test`.*daemon/.test(readme), 'README does not claim daemon suite is outside npm test');
 }
 
+console.log('== npm test chain vs tests/*.mjs ==');
+{
+  const pkg = JSON.parse(fs.readFileSync(root + 'package.json', 'utf8'));
+  const chain = (pkg.scripts && pkg.scripts.test || '')
+    .split(' && ')
+    .map(s => s.trim().replace(/^node /, ''))
+    .filter(Boolean);
+  ok(chain.length >= 80, 'npm test chain has expected breadth (' + chain.length + ' steps)');
+
+  const missingFiles = chain.filter(rel => !fs.existsSync(path.join(root, rel)));
+  ok(missingFiles.length === 0, 'every npm test step resolves to a file'
+    + (missingFiles.length ? ' — missing: ' + missingFiles.join(', ') : ''));
+
+  const testFiles = fs.readdirSync(path.join(root, 'tests'))
+    .filter(f => f.startsWith('test-') && f.endsWith('.mjs'))
+    .sort();
+  const chainSet = new Set(chain.map(p => p.replace(/^tests\//, '')));
+  const optionalOutside = new Set(['test-data-layer.mjs']);
+  const notInChain = testFiles.filter(f => !chainSet.has(f) && !optionalOutside.has(f));
+  ok(notInChain.length === 0, 'every tests/test-*.mjs is in npm test (except optional smoke)'
+    + (notInChain.length ? ' — add: ' + notInChain.map(f => 'tests/' + f).join(', ') : ''));
+
+  ok(chain.includes('tests/extract-inline.mjs'), 'npm test includes extract-inline.mjs');
+  ok(chain.includes('tests/test-check-production.mjs'), 'npm test includes deploy guard suite');
+  ok(chain.includes('tests/test-book.mjs'), 'npm test includes book.js runtime tests');
+  ok(chain.includes('tests/test-indicators.mjs'), 'npm test includes indicators.js tests');
+  ok(chain.includes('tests/test-store.mjs'), 'npm test includes store.js tests');
+}
+
 console.log('\n' + pass + ' passed');
