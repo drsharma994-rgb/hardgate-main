@@ -387,7 +387,7 @@ async function addToBook(opts){
         return { ok: false, veto: true, reasons: ['LIVE MODE: ' + (liveGate.reasons || []).join(' · ')] };
       }
     }
-    if (!isFinite(body.t1)){
+    if (body.t1 == null || !isFinite(body.t1)){
       var risk = Math.abs(body.entry - body.stop);
       body.t1 = body.dir === 'short' ? body.entry - risk : body.entry + risk;
     }
