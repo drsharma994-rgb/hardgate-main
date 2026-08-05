@@ -33,7 +33,7 @@ const ticker = { symbol: 'BTCUSDT', fundingPct: 0.01, mark: rows[rows.length - 1
 const m = globalThis.swingGateMatrix(rows, ticker);
 ok(m && m.dir === 'long' && m.passed >= 1, 'swingGateMatrix returns aligned long with gate tally');
 ok(typeof globalThis.swingTryClean === 'function', 'swingTryClean exported');
-ok(typeof globalThis.swingTryNear === 'function', 'swingTryNear exported');
+ok(typeof globalThis.scalpTryNear === 'function', 'scalpTryNear exported');
 {
   const hit = globalThis.swingTryClean(rows, ticker);
   if (hit){

@@ -444,6 +444,9 @@ async function pineFireAlerts(fresh, opts){
 }
 
 function cardHTML(sig){
+  if (typeof W.hgSetupPanelHTML === 'function'){
+    return W.hgSetupPanelHTML(sig, { scanner: 'pine', label: sig.scriptLabel, noteFn: sigNoteLine });
+  }
   var cls = sig.dir === 'long' ? 'long' : 'short';
   var badge = sig.isNew ? '<span class="stamp pass" style="margin-left:6px">NEW</span>'
     : (sig.isRecent ? '<span class="stamp" style="margin-left:6px">RECENT −' + sig.barsAgo + 'b</span>'
@@ -484,6 +487,7 @@ function mount(el){
     + '</div>'
     + '<div class="prog" id="pineProg"><i></i></div>'
     + '<div id="pineFunnel" style="margin-top:8px"></div>'
+    + '<div id="pineDesk"></div>'
     + '<div id="pineOut" style="margin-top:12px"><div class="empty">Press RUN PINE SCAN after gate tabs have run.</div></div>'
     + '</div>';
 
@@ -492,6 +496,13 @@ function mount(el){
   var prog = el.querySelector('#pineProg');
   var out = el.querySelector('#pineOut');
   var funnelEl = el.querySelector('#pineFunnel');
+  try{
+    var pineDesk = el.querySelector('#pineDesk');
+    if (pineDesk && typeof W.hgSetupDeskBannerHTML === 'function'){
+      pineDesk.innerHTML = W.hgSetupDeskBannerHTML({ kind: 'pine', tab: 'PINE', note: 'NEW = CLEAN ticket · RECENT/ALIGNED = FORMING/NEAR watch tiers.' });
+    }
+    if (typeof W.hgSetupInjectStyles === 'function') W.hgSetupInjectStyles();
+  }catch(eP){}
 
   function setProg(p){
     if (!prog) return;

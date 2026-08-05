@@ -249,10 +249,23 @@
     return { ok: true, dir: m.dir, matrix: m, reason: 'SWING 7/7 + anchor (cryptogates)' };
   }
 
+  function scalpTryNear(h1, m15, ticker, minsToFunding){
+    var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
+    if (!m || !m.dir || m.clean) return null;
+    if (m.passed < 6) return null;
+    var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    return {
+      sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesTotal: m.gatesTotal,
+      missing: missing, rows: m.m15 || m15, r14: m.r15, vz: null, mark: m.mark,
+      level: m.level, dynamicRR: m.dynamicRR, nearClean: true
+    };
+  }
+
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
   G.swingTryNear = swingTryNear;
+  G.scalpTryNear = scalpTryNear;
   G.scalpTryClean = scalpTryClean;
   G.swingSevenGateCheck = swingSevenGateCheck;
 })();
