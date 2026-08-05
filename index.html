@@ -2473,6 +2473,9 @@ function showTab(t){
   /* scanner tabs: restore the last-scan memory line when the pane is idle */
   if ((t === 'swing' || t === 'scalp') && typeof scanLastHint === 'function') scanLastHint(t);
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
+  if (tabSwitch && t !== 'book' && typeof hgBookStampRefreshThrottled === 'function'){
+    hgBookStampRefreshThrottled();
+  }
   if (t === 'trade'){
     var td = document.getElementById('tradeDesk');
     if (td && typeof hgSetupDeskBannerHTML === 'function'){
@@ -4929,7 +4932,7 @@ async function runBest(opts){
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, totalUni) + `
       <div class="panel">
-        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}</h2>
+        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampForMeta==='function'?hgBookStampForMeta(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
         ${bestRegimeMiniHtml(w)}
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
@@ -4986,7 +4989,7 @@ async function runBest(opts){
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, uni.length) + `
       <div class="panel">
-        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}</h2>
+        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampForMeta==='function'?hgBookStampForMeta(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
         ${bestRegimeMiniHtml(w)}
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
@@ -6188,7 +6191,7 @@ function renderStrategy(label, result, opts){
       : ('toTrade(' + JSON.stringify(sym) + ',' + JSON.stringify(result.dir) + ',' + result.entry + ',' + result.stop + ',' + result.t1 + (t2v !== '' ? ',' + t2v : '') + ')');
     tradeBtn = '<button class="toTrade" style="margin-top:8px" onclick="' + finderTradeOnclick + '">SEND TO TRADE PLAN →</button>';
   }
-  return `<div class="panel"><h2>${label}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${finderStackHtml}${tradeBtn}${bookBtn}</div>`;
+  return `<div class="panel"><h2>${label}${(!result.veto && result.dir && sym && typeof hgBookStampForMeta === 'function') ? hgBookStampForMeta(sym, result.dir, finderBookMeta(label, opts.assetType)) : ''}</h2><div class="ledger">${ledger}</div><div class="verdict ${result.veto?'aside':(result.dir||'aside')}"><div class="vword">${verdict}</div></div>${planHtml}${finderStackHtml}${tradeBtn}${bookBtn}</div>`;
 }
 
 function finderTypeChanged(){
