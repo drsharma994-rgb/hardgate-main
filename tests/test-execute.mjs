@@ -120,7 +120,7 @@ ok(bookJs.indexOf('poll-fill') >= 0 && bookJs.indexOf('/api/book/poll-fill') >= 
 ok(bookJs.indexOf('bookDailyLossHalted') >= 0 && bookJs.indexOf('DAY HALT') >= 0
   && bookJs.indexOf('bookDayHalt') >= 0,
   'book.js daily loss halt banner + status chip');
-ok(bookJs.indexOf('W.bookRefresh = bookRefresh') >= 0, 'book.js exports bookRefresh for blotter sync');
+ok(bookJs.indexOf('hgToTradePlanFromBook') >= 0, 'book MANAGE uses hgToTradePlanFromBook handoff');
 ok(bookJs.indexOf('deskExecStatusHTML') >= 0 && bookJs.indexOf('closedRowHTML') >= 0,
   'book.js desk exec status bar + closed trade source chips');
 ok(bookJs.indexOf('opts.silent') >= 0 && bookJs.indexOf('bookFetchOpenKeys') >= 0,
@@ -137,6 +137,7 @@ ok(indexHtml.indexOf("scanner: 'trade-plan'") >= 0 && indexHtml.indexOf('bookBtn
   'trade plan exposes ADD TO BOOK when plan valid');
 ok(indexHtml.indexOf('hgTradeHandoffFor') >= 0 && indexHtml.indexOf('handoff.stack') >= 0,
   'trade plan passes FTS stack from card handoff');
+ok(indexHtml.indexOf('MANAGE from book') >= 0, 'trade plan labels book MANAGE handoff');
 ok(indexHtml.indexOf("scanner: 'swing'") >= 0 && indexHtml.indexOf("scanner: 'scalp'") >= 0,
   'swing and scalp scans use distinct scanner ids');
 

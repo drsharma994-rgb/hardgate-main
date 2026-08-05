@@ -1077,7 +1077,11 @@ function bookManagePosition(p){
     var eq = snap && snap.summary ? snap.summary.equityUsd : null;
     var tEq = document.getElementById('tEq');
     if (tEq && isFinite(eq)) tEq.value = Math.round(eq);
-    if (typeof W.toTrade === 'function') W.toTrade(p.sym, p.dir, p.entry, p.stop, p.t1);
+    if (typeof W.hgToTradePlanFromBook === 'function'){
+      W.hgToTradePlanFromBook(p);
+    } else if (typeof W.toTrade === 'function'){
+      W.toTrade(p.sym, p.dir, p.entry, p.stop, p.t1, p.t2);
+    }
   }catch(e){}
 }
 

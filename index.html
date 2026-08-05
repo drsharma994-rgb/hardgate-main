@@ -3578,7 +3578,7 @@ function planTrade(){
   var stackHtml = (handoff && handoff.stack && typeof hgSetupStackMiniHtml === 'function')
     ? hgSetupStackMiniHtml(handoff.stack) : '';
   var handoffNote = handoff && (handoff.scanner || handoff.strategy)
-    ? '<div class="note" style="margin-bottom:8px">Handoff from '
+    ? '<div class="note" style="margin-bottom:8px">' + (handoff.source === 'book' ? 'MANAGE from book · ' : 'Handoff from ')
       + String(handoff.scanner || handoff.strategy).replace(/&/g,'&amp;').replace(/</g,'&lt;')
       + (handoff.stack && handoff.stack.summary ? ' · FTS carried' : '') + '</div>' : '';
   const ticket =

@@ -45,13 +45,21 @@ assert(!miss, 'hgTradeHandoffFor rejects wrong sym');
 const onclick = W.hgToTradePlanOnclickJs('BTCUSD', 'long', 100, 95, 110, { scanner: 'pine', stack });
 assert(/hgToTradePlan\(/.test(onclick) && /pine/.test(onclick), 'onclick builder uses hgToTradePlan');
 
+assert(typeof W.hgToTradePlanFromBook === 'function', 'hgToTradePlanFromBook exported');
+
+const bookStack = W.hgTradeStackFromBookPosition({ strategy: 'edge', layers: ['edge', 'SWING'] });
+assert(bookStack && /BOOK/.test(bookStack.summary) && /edge/.test(bookStack.summary), 'book position stack summary');
+
+W.hgToTradePlanFromBook({ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, t2: 115, strategy: 'edge', layers: ['edge'] });
+assert(W._hgTradeHandoff && W._hgTradeHandoff.source === 'book', 'book manage sets handoff source');
+
 const indexHtml = fs.readFileSync(root + 'index.html', 'utf8');
 assert(indexHtml.indexOf('hgTradeHandoffFor') >= 0, 'planTrade reads handoff');
 assert(indexHtml.indexOf('tradeDesk') >= 0, 'trade tab has desk banner slot');
 assert(indexHtml.indexOf('_hgTradeHandoffPending') >= 0, 'toTrade clears stale handoff');
 
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
-assert(/hg-v143/.test(sw), 'sw cache bumped for trade handoff rollout');
+assert(/hg-v144/.test(sw), 'sw cache bumped for book manage handoff');
 
 console.log(fail ? '\nTESTS FAILED' : '\nALL TRADE-PLAN TESTS PASSED');
 process.exit(fail ? 1 : 0);
