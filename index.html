@@ -759,7 +759,12 @@ const HG_TAB_ALERT_MS = 5 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
 const HG_TRENDMX_ALERT_MS = 15 * 60 * 1000;
 const HG_ALERTS_AUTO_REFRESH_MS = 900000;
-const HG_CANDLE_TTL_QUIET = 300;
+/* Was 300 — identical to HG_TAB_ALERT_MS, so a cached candle expired at the
+   exact moment the next cycle asked for it and nothing was ever reused. 420
+   spans the cycle boundary, so the second consumer of a symbol inside a cycle
+   and the next cycle's first look both hit cache. Gates still only ever see
+   CLOSED candles, so no signal is lost — a 4H bar does not change in 2 min. */
+const HG_CANDLE_TTL_QUIET = 420;
 
 function hgExLabel(ex){
   ex = ex || S.exchange;
@@ -3829,7 +3834,68 @@ function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return N
     else { const r=await getCandles(sym,'15m',5); if(r.length) $('tEntry').value = last(r).c; }
   }catch(e){ alert('mark pull failed: '+e.message); }
 }
+/* =============================================================================
+   CONTRACT SIZE — Delta's order form takes CONTRACTS (lots), not coins.
+   BTCUSD is 1 lot = 0.001 BTC, ETHUSD is 0.01 ETH, and every symbol differs.
+   The ticket used to print size in COIN units. Because contract_value is < 1
+   on the majors, the coin figure is SMALLER than the lot figure — typing it
+   into Delta's lots field UNDER-sizes by 1/contract_value (1000x on BTCUSD,
+   100x on ETHUSD). You would believe you risked 1% and have risked 0.001%.
+   It only over-sizes on a symbol whose contract_value exceeds 1.
+   /v2/products is public and needs no key. Orders are placed by hand in this
+   build, so this is a display fix — but it is a display the hand copies from.
+   ============================================================================= */
+const HG_CONTRACT_TTL = 24*3600;
+function hgContractCacheLoad(){
+  try{
+    const raw = JSON.parse(localStorage.getItem('hg_contract_specs') || 'null');
+    if (raw && raw.at && (nowSec() - raw.at) < HG_CONTRACT_TTL && raw.map) return raw.map;
+  }catch(e){}
+  return null;
+}
+async function hgLoadContractSpecs(){
+  const r = await fetch(`${DELTA}/v2/products?contract_types=perpetual_futures&states=live&page_size=1000`);
+  if (!r.ok) throw new Error('Delta products HTTP ' + r.status);
+  const j = await r.json();
+  const map = {};
+  (j.result || []).forEach(function(prod){
+    if (!prod || !prod.symbol) return;
+    const cv = parseFloat(prod.contract_value);
+    const ts = parseFloat(prod.tick_size);
+    if (isFinite(cv) && cv > 0) map[prod.symbol] = { cv: cv, tick: isFinite(ts) ? ts : null, unit: prod.contract_unit_currency || '' };
+  });
+  if (!Object.keys(map).length) throw new Error('Delta products returned no perpetual specs');
+  try{ localStorage.setItem('hg_contract_specs', JSON.stringify({ at: nowSec(), map: map })); }catch(e){}
+  return map;
+}
+/* Lazy load + one repaint when it lands. Never blocks the ticket: an unknown
+   spec prints "—" rather than a guessed lot count. */
+function hgEnsureContractSpecs(){
+  if (S.contractSpecs) return;
+  if (!S.contractSpecs) S.contractSpecs = hgContractCacheLoad();
+  if (S.contractSpecs || S.contractSpecsLoading) return;
+  S.contractSpecsLoading = true;
+  hgLoadContractSpecs().then(function(map){
+    S.contractSpecs = map;
+    S.contractSpecsLoading = false;
+    if (document.getElementById('ticketTxt') && typeof planTrade === 'function') planTrade();
+  }).catch(function(){ S.contractSpecsLoading = false; });
+}
+function hgContractSpec(sym){
+  try{ return (S.contractSpecs && S.contractSpecs[String(sym || '').trim()]) || null; }catch(e){ return null; }
+}
+/* Coin qty -> whole contracts, plus the coin qty that number really represents
+   (rounding down is deliberate: never size ABOVE the risk you approved). */
+function hgQtyToContracts(sym, coinQty){
+  const spec = hgContractSpec(sym);
+  if (!spec || !(coinQty > 0)) return null;
+  const raw = coinQty / spec.cv;
+  const lots = Math.floor(raw);
+  return { lots: lots, raw: raw, cv: spec.cv, unit: spec.unit, tick: spec.tick,
+           coinActual: lots * spec.cv, shortfallPct: raw > 0 ? (1 - lots / raw) * 100 : 0 };
+}
 function planTrade(){
+  hgEnsureContractSpecs();
   const side=$('tSide').value, entry=+$('tEntry').value, stop=+$('tStop').value;
   const eq=+$('tEq').value, riskPct=+$('tRisk').value, mmr=(+$('tMmr').value||0.5)/100;
   const scaleOut=Math.min(100,Math.max(0,+$('tScale').value||50));
@@ -3890,7 +3956,14 @@ function planTrade(){
 `${side.toUpperCase()} ${$('tSym').value||'—'}  (${S.exchange==='delta'?'Delta India':'CoinDCX'})
 entry     ${px(entry)}
 stop      ${px(stop)}   (structural, isolated, auto top-up OFF)
-size      ${fmt(qty,6)} @ ${lev}x  →  notional $${fmt(notional,2)}, margin $${fmt(margin,2)}
+size      ${fmt(qty,6)} ${(hgContractSpec($('tSym').value||'')||{}).unit||''} @ ${lev}x  →  notional $${fmt(notional,2)}, margin $${fmt(margin,2)}
+CONTRACTS ${(function(){
+  const c = hgQtyToContracts($('tSym').value||'', qty);
+  if (!c) return '— (Delta contract spec not loaded — do NOT type the coin size into the lots field)';
+  if (c.lots < 1) return '0 lots — 1 lot = ' + c.cv + ' ' + c.unit + ' is ALREADY bigger than this position. Risk less per trade or pick a cheaper symbol.';
+  return c.lots + ' lots  (1 lot = ' + c.cv + ' ' + c.unit + ')  → real size ' + fmt(c.coinActual,6) + ' ' + c.unit
+    + (c.shortfallPct > 1 ? '  · rounded DOWN ' + fmt(c.shortfallPct,1) + '% — real risk is that much smaller' : '');
+})()}   ← THIS is the number Delta's order form wants
 risk      $${fmt(riskUsd,2)}  (${riskPct}% of equity)  ·  1R = ${px(riskUnit)}
 T1        ${px(t1)}  →  close ${scaleOut}%, stop to breakeven
 T2        ${px(t2)}  →  runner trail (defaults to 3R when blank)
