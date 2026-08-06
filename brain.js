@@ -235,7 +235,6 @@ var BASE_SYMS   = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];   /* always in the universe
 var TOP_ALTS    = 10;                                   /* extra alts by 24h turnover (legacy mode) */
 var KLINES_4H   = 120;
 var KLINES_1H   = 120;
-var PLAN_MIN_TIER = 'HIGH';                             /* plans only for PRIME/HIGH cards */
 /* fiat/stable + metal perps are not alts for the rotation universe */
 var ALT_BLOCK   = { USDCUSDT:1, FDUSDUSDT:1, TUSDUSDT:1, BUSDUSDT:1, USDPUSDT:1,
                     DAIUSDT:1, EURUSDT:1, GBPUSDT:1, XAUUSDT:1, PAXGUSDT:1 };
