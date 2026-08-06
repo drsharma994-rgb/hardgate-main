@@ -290,6 +290,13 @@ ok(r.votes.some(function(x){ return x.layer === 'pinetab' && x.vote === 'long'; 
 W.edgeScan = function(){ return { cands: [] }; };
 W.pineScan = function(){ return { signals: [] }; };
 
+console.log('== smarttab vote ==');
+W.__hgSmartResults = { results: [{ sym: 'ETHUSDT', setup: { dir: 'long', type: 'SWING', confirmed: true } }] };
+r = COLLECT({ sym: 'ETHUSDT' });
+ok(r.votes.some(function(x){ return x.layer === 'smarttab' && x.vote === 'long'; }),
+   'SMART $ confirmed setup -> smarttab vote');
+W.__hgSmartResults = { results: [] };
+
 /* ================= I) liqs flush-reversal votes ================= */
 console.log('== liqs votes ==');
 r = COLLECT({ sym: 'BTCUSDT', liq: { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 } });

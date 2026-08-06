@@ -142,13 +142,33 @@ Returns {dir, score, evidence, longEv, shortEv, regime, total}:
   evidence = majority-side evidence strings (exact spec labels first)
 ========================================================================= */
 function oiflowClassify(d){
+  if (typeof hgPositioningClassify === 'function'){
+    var r = hgPositioningClassify(d, {
+      pxDeadzone: PX_DEADZONE,
+      oiDeadzone: OI_DEADZONE,
+      fundingZExtreme: FUND_Z_EXTREME,
+      takerBuy: TAKER_BUY,
+      takerSell: TAKER_SELL,
+      dirCase: 'upper',
+      style: 'oiflow'
+    });
+    return {
+      dir: r.dir,
+      score: r.dir === 'LONG' ? r.longEv.length : (r.dir === 'SHORT' ? r.shortEv.length : 0),
+      evidence: r.evidence,
+      longEv: r.longEv,
+      shortEv: r.shortEv,
+      regime: r.regime && r.regime.length ? r.regime[0] : null,
+      total: r.total,
+      fundingFade: r.fundingFade
+    };
+  }
   d = d || {};
   function num(x){ return (typeof x === 'number' && isFinite(x)) ? x : null; }
   var fundingZ = num(d.fundingZ), oiChg = num(d.oiChg), pxChg = num(d.pxChg),
       takerAvg = num(d.takerAvg), longPct = num(d.longPct);
   var longEv = [], shortEv = [], regime = null;
 
-  /* price x OI quadrant — both legs must be outside their deadzones */
   if (pxChg !== null && oiChg !== null){
     var up = pxChg >= PX_DEADZONE, dn = pxChg <= -PX_DEADZONE;
     var oiUp = oiChg >= OI_DEADZONE, oiDn = oiChg <= -OI_DEADZONE;
@@ -159,7 +179,6 @@ function oiflowClassify(d){
     else if (dn && oiDn){ regime = 'LONG FLUSH (capitulation)'; longEv.push(regime + qdetail); }
   }
 
-  /* funding z-score crowding — fade the crowded side */
   if (fundingZ !== null){
     if (fundingZ >= FUND_Z_EXTREME)
       shortEv.push('CROWDED LONG (squeeze-down risk) · funding z +' + fundingZ.toFixed(2));
@@ -167,7 +186,6 @@ function oiflowClassify(d){
       longEv.push('CROWDED SHORT (squeeze-up risk) · funding z ' + fundingZ.toFixed(2));
   }
 
-  /* retail positioning — contrarian fade */
   if (longPct !== null){
     if (longPct >= RETAIL_MAX_LONG)
       shortEv.push('RETAIL MAX LONG (fade) · ' + longPct.toFixed(1) + '% long');
@@ -175,7 +193,6 @@ function oiflowClassify(d){
       longEv.push('RETAIL MAX SHORT (fade) · ' + longPct.toFixed(1) + '% long');
   }
 
-  /* taker flow imbalance */
   if (takerAvg !== null){
     if (takerAvg >= TAKER_BUY)
       longEv.push('AGGRESSIVE BUYERS · taker ' + takerAvg.toFixed(3));
@@ -190,7 +207,8 @@ function oiflowClassify(d){
   return {
     dir: dir, score: score, evidence: evidence,
     longEv: longEv, shortEv: shortEv, regime: regime,
-    total: longEv.length + shortEv.length
+    total: longEv.length + shortEv.length,
+    fundingFade: false
   };
 }
 
@@ -532,13 +550,17 @@ async function runScan(el){
           stat.textContent = 'scanning ' + (i+1) + '/' + uni.length + ' · ' + sym;
           var r = await oiflowScanSymbol(sym, ticks[sym]);
           if (!r){ failed++; return; }
-          r.cls = oiflowClassify({ fundingZ: r.fundingZ, oiChg: r.oiChg, pxChg: r.pxChg,
+          r.cls = oiflowClassify({ fundingZ: r.fundingZ, fundingPct: r.fundingPct, oiChg: r.oiChg, pxChg: r.pxChg,
                                    takerAvg: r.takerAvg, longPct: r.longPct });
           if (!(r.cls.dir && r.cls.score >= MIN_EVIDENCE)) return;
           /* candidate: pull 4h/1h for the plan — kline failure = context-only card */
           var kl = await fetchSetupKlines(sym);
           r.rows4h = kl.rows4h; r.rows1h = kl.rows1h;
           r.setup = oiflowSetup(r.cls, r.rows4h, r.rows1h);
+          if (r.setup && r.cls && r.cls.fundingFade){
+            r.setup.fundingFade = true;
+            if (r.setup.type === 'FADE') r.setup.planSrc = 'funding fade';
+          }
           if (r.setup && typeof hgSetupStackAttachPlan === 'function' && !r.setup.stack){
             var oiEv = (r.cls.dir === 'LONG' ? r.cls.longEv : r.cls.shortEv) || [];
             hgSetupStackAttachPlan(r.setup, {

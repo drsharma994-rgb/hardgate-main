@@ -286,7 +286,7 @@ var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
   goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural',
   trend4h: 'structural', swingtab: 'structural', scalptab: 'structural', besttab: 'structural',
-  edgetab: 'structural', pinetab: 'structural',
+  edgetab: 'structural', pinetab: 'structural', smarttab: 'positioning',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
@@ -792,6 +792,24 @@ function brainCollect(inputs){
       pineHit = true; break;
     }
     if (!pineHit) hush('pinetab', 'symbol not in the latest PINE alertable list');
+  }
+
+  /* ---- SMART $ tab confirmed setup snapshot ---- */
+  var smartTab = (inp.smart && Array.isArray(inp.smart.results)) ? inp.smart
+    : ((G.__hgSmartResults && Array.isArray(G.__hgSmartResults.results)) ? G.__hgSmartResults : null);
+  if (!smartTab || !Array.isArray(smartTab.results)){ hush('smarttab', 'SMART $ tab has not published a scan — run SMART $ once'); }
+  else{
+    var smartHit = false;
+    for (var sti = 0; sti < smartTab.results.length; sti++){
+      var sr = smartTab.results[sti];
+      if (!sr || !named(sr.sym) || !sr.setup || !isDir(sr.setup.dir)) continue;
+      if (sr.setup.confirmed !== true) continue;
+      push('smarttab', sr.setup.dir, 'SMART $ CONFIRMED ' + sr.setup.dir.toUpperCase()
+        + (sr.setup.type ? ' · ' + sr.setup.type : '')
+        + (sr.setup.fundingFade ? ' · funding fade' : ''));
+      smartHit = true; break;
+    }
+    if (!smartHit) hush('smarttab', 'symbol not in the latest SMART $ confirmed list');
   }
 
   /* ---- CARRY — cross-venue funding spread context (not a tier alone) ---- */
