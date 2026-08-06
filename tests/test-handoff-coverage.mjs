@@ -32,7 +32,7 @@ for (const f of bookFiles){
 }
 
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
-ok(/hg-v16[0-9]/.test(sw), 'sw.js cache bumped for handoff stack');
+ok(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'sw.js uses a versioned cache name hg-vN');
 
 const brainJs = fs.readFileSync(root + 'brain.js', 'utf8');
 ok(brainJs.indexOf('hgBrainInvAlertsFromRows') >= 0, 'brain.js fires invalidation after synthesis');

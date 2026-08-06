@@ -150,6 +150,7 @@ var CLOSEPOS_LONG    = 0.60;     // close >= 60% up the bar for longs
 var CLOSEPOS_SHORT   = 0.40;     // close <= 40% up the bar for shorts
 var FUND_HARD        = 0.05;     // |funding %/8h| hard veto (swing G4)
 var FUND_DIR         = 0.04;     // funding against dir veto (swing G4)
+var FUND_SANITY      = 0.30;     // data-sanity bound only — MUST equal cryptogates CG_FUND_SANITY
 var ATRPCT_MIN       = 0.05;     // ATR < 0.05% of price = dead book
 var ATRPCT_MAX       = 25;       // ATR > 25% of price = untradeable
 var ANCHOR_MAX_ATR   = 1.5;      // max distance from EMA21 in ATRs (swing)
@@ -587,7 +588,10 @@ function gateCandidate(inp){
     note_(3, null, 'no positioning legs (funding n/a, smartClassify absent) — gate cannot evaluate');
   }else{
     if (fr !== null){
-      if (Math.abs(fr) > FUND_HARD - 1e-9){
+      var frPays = (dir === 'long' && fr < 0) || (dir === 'short' && fr > 0);
+      if (Math.abs(fr) > FUND_SANITY){
+        return die(3, 'funding ' + sp(fr, 4) + '%/8h beyond the ' + FUND_SANITY + ' sanity bound — feed suspect, not a crowd read (swing G4)');
+      } else if (Math.abs(fr) > FUND_HARD - 1e-9 && !frPays){
         var fadeDir = fr > 0 ? 'short' : 'long';
         var fadeScore = (cls && cls.dir === fadeDir) ? (cls.score || 0) : 0;
         if (!fadeScore && cls && cls.fundingFade && cls.dir === fadeDir) fadeScore = cls.score || 2;
@@ -597,7 +601,7 @@ function gateCandidate(inp){
           res.fundingFade = true;
           scNote = 'funding fade path — crowded book, positioning favors ' + fadeDir.toUpperCase();
         } else {
-          return die(3, 'funding ' + sp(fr, 4) + '%/8h — |fr| >= 0.05, book crowded both ways (swing G4)');
+          return die(3, 'funding ' + sp(fr, 4) + '%/8h — |fr| >= 0.05 AGAINST ' + dir.toUpperCase() + ', book crowded (swing G4)');
         }
       } else if (dir === 'long' && fr >= FUND_DIR){
         return die(3, 'funding ' + sp(fr, 4) + '%/8h >= +0.04 — longs paying to hold, crowded side (swing G4)');

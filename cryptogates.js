@@ -15,6 +15,9 @@
   var CG_SWING_MAX_EXC_ATR = 4.9;
   var CG_FUND_HARD = 0.05;
   var CG_FUND_DIR = 0.04;
+  /* Data-sanity bound only. It is NOT a crowd read: funding that PAYS you is
+     never a reason to skip a trade, however large. */
+  var CG_FUND_SANITY = 0.30;
   /* Max non-G4 gate failures tolerated by the counter-trend funding fade.
      Applies ALWAYS — it used to be skipped once |funding| >= CG_FUND_HARD,
      which let a setup with every other gate down still emit a ticket. */
@@ -184,7 +187,13 @@
     var g4 = true;
     if (ticker && ticker.fundingPct !== null){
       var fr = ticker.fundingPct;
-      g4 = Math.abs(fr) <= 0.05 + 1e-9 && !((dir === 'long' && fr >= 0.04) || (dir === 'short' && fr <= -0.04));
+      /* DIRECTIONAL. The old |fr| <= 0.05 cap vetoed a LONG at funding -0.06%
+         — shorts paying you, on a setup where short crowding is squeeze fuel.
+         That filtered out the better longs, not the worse ones. Veto only when
+         funding runs AGAINST the trade; the absolute bound is now a data-sanity
+         check for a broken feed. */
+      var frAgainst = (dir === 'long' && fr >= CG_FUND_DIR) || (dir === 'short' && fr <= -CG_FUND_DIR);
+      g4 = isFinite(fr) && Math.abs(fr) <= CG_FUND_SANITY && !frAgainst;
     }
     gates.push(['G4 funding', g4]);
     var g5r = (typeof hgSwingG5OK === 'function')
@@ -261,7 +270,13 @@
     var g4 = true;
     if (ticker && ticker.fundingPct !== null){
       var fr = ticker.fundingPct;
-      g4 = Math.abs(fr) <= 0.05 + 1e-9 && !((dir === 'long' && fr >= 0.04) || (dir === 'short' && fr <= -0.04));
+      /* DIRECTIONAL. The old |fr| <= 0.05 cap vetoed a LONG at funding -0.06%
+         — shorts paying you, on a setup where short crowding is squeeze fuel.
+         That filtered out the better longs, not the worse ones. Veto only when
+         funding runs AGAINST the trade; the absolute bound is now a data-sanity
+         check for a broken feed. */
+      var frAgainst = (dir === 'long' && fr >= CG_FUND_DIR) || (dir === 'short' && fr <= -CG_FUND_DIR);
+      g4 = isFinite(fr) && Math.abs(fr) <= CG_FUND_SANITY && !frAgainst;
     }
     var g4b = !(minsToFunding < 25);
     var atrArr = atr(m15, 14);
