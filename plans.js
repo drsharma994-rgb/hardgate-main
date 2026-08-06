@@ -17,6 +17,7 @@ var HG_SCALP_T1_R = 1.5;
 var HG_SCALP_T2_R = 2.5;
 var HG_MIN_RR_SWING = 1.5;
 var HG_MIN_RR_DEFAULT = 2.0;
+var HG_G5_VOLZ_MIN = 0.5;      /* MUST equal engine.js VOLZ_MIN — see tests/test-gate-parity.mjs */
 var HG_SPREAD_MIN_ATR = 0.25;
 
 function _last(arr){
@@ -100,10 +101,14 @@ function hgSwingG5OK(dir, rows, c, r14, vz){
     var _rP = _rA.length >= 4 ? _rA[_rA.length - 4] : NaN;
     var slopeOK = isFinite(_rP) && isFinite(r14) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
     if (isFinite(vz) && vz <= -1.5 && !closeOK) return { ok: false, closeOK: closeOK, quiet: false };
-    var volOK = isFinite(vz) && vz > 0.75;
-    var quiet = false;
-    var ok = volOK && closeOK;
-    return { ok: ok, closeOK: closeOK, quiet: quiet };
+    var volOK = isFinite(vz) && vz > HG_G5_VOLZ_MIN;
+    /* ENGINE PARITY (engine.js G5): on a quiet tape RSI slope running with the
+       trade + a strong close location stand in for volume expansion. slopeOK
+       used to be computed here and thrown away, which silently rejected ~32%
+       of aligned cascades that engine.js accepts. */
+    var ok = closeOK && (volOK || slopeOK);
+    var quiet = ok && !volOK;
+    return { ok: ok, closeOK: closeOK, quiet: quiet, slopeOK: slopeOK, volOK: volOK };
   }catch(e){ return { ok: false, closeOK: false, quiet: false }; }
 }
 
@@ -721,7 +726,7 @@ function hgSwingPostEnrichValid(hit, opts){
       a4 = _last(atr(opts.rows, 14));
     }
     if (!isFinite(a4) || a4 <= 0) return null;
-    var minRr = opts.minRr !== undefined ? opts.minRr : 2.5;
+    var minRr = opts.minRr !== undefined ? opts.minRr : HG_MIN_RR_DEFAULT;
     var expMult = opts.expMult !== undefined ? opts.expMult : 3.5;
     var dynamicRR = (a4 * expMult) / risk;
     if (dynamicRR < minRr) return null;

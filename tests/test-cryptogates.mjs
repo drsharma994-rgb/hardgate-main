@@ -110,29 +110,46 @@ console.log('\n== scalp gate matrix ==');
 
 console.log('\n== funding-fade swing/scalp path ==');
 {
-  function fadeRows(n, start){
-    const out = [];
-    for (let i = 0; i < n; i++){
-      const c = start + i * 10;
-      out.push({ t: i, o: c, h: c + 5, l: c - 5, c: c, v: 1000 + i * 20 });
+  /* Deterministic LCG uptrend. This seed lands a long cascade whose ONLY
+     non-G4 failure is G6 — i.e. a genuine crowded-funding fade candidate, not
+     a pathological straight-line ramp that fails half the matrix. */
+  function fadeRows(){
+    let s = 182137;
+    const rnd = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+    const out = []; let p = 100;
+    for (let i = 0; i < 280; i++){
+      const o = p;
+      p = p * (1 + (rnd() - 0.5) * 0.02 + 0.003);
+      out.push({ t: i * 14400, o,
+        h: Math.max(o, p) * (1 + rnd() * 0.008),
+        l: Math.min(o, p) * (1 - rnd() * 0.008),
+        c: p, v: 1000 + rnd() * 500 });
     }
     return out;
   }
-  const frRows = fadeRows(260, 50000);
+  const frRows = fadeRows();
   globalThis.hgPositioningClassify = function(){
     return { dir: 'short', longEv: [], shortEv: ['funding extreme +0.0600%/8h — longs pay', 'CROWDED'], score: 2, total: 2, fundingFade: true };
   };
   globalThis.smartSetup = function(cls, rows4h){
     if (!cls || cls.dir !== 'short') return null;
     const entry = rows4h[rows4h.length - 1].c;
-    const stop = entry + 500;
+    const stop = entry * 1.02;
     const risk = stop - entry;
     return { type: 'FADE', dir: 'short', entry, stop, t1: entry - 2 * risk, t2: entry - 3 * risk, rr1: 2, rr2: 3, confirmed: false, note: 'fade test' };
   };
   const crowded = { symbol: 'BTCUSDT', fundingPct: 0.06, mark: frRows[frRows.length - 1].c };
-  const fadeHit = globalThis.swingTryClean(frRows, crowded);
+  /* CONTRACT: swingTryClean returns CLEAN TREND tickets only. A counter-trend
+     funding fade off a FAILED matrix must never leak through it — BEST,
+     STARTRADER and hgSwingCleanPlan all treat a non-null return as 7/7 clean. */
+  const leak = globalThis.swingTryClean(frRows, crowded);
+  ok(!leak || leak.fundingFade !== true,
+     'swingTryClean NEVER returns a funding fade (clean-ticket contract holds)');
+  const fadeHit = globalThis.swingTryFundingFade(frRows, crowded);
   ok(fadeHit && fadeHit.fundingFade === true && fadeHit.dir === 'short',
-     'swingTryClean funding-fade when G4 crowded and positioning favors fade');
+     'swingTryFundingFade returns the fade on its own opted-in entry point');
+  ok(!fadeHit.stack || fadeHit.stack.tierHint !== 'clean',
+     'funding fade is NOT stamped CLEAN — the matrix did not go 7/7');
   delete globalThis.hgPositioningClassify;
   delete globalThis.smartSetup;
 }

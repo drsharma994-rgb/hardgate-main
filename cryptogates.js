@@ -3,8 +3,11 @@
 
 (function(){
   var G = (typeof window !== 'undefined') ? window : globalThis;
-  var CG_SWING_ANCHOR_ATR = 1.25;
-  var CG_G5_VZ_MIN = 0.75;
+  /* PARITY BLOCK — these four MUST equal engine.js's tunables of the same name.
+     engine.js is the source of truth; tests/test-gate-parity.mjs enforces it. */
+  var CG_SWING_ANCHOR_ATR = 1.5;    /* engine ANCHOR_MAX_ATR */
+  var CG_G5_VZ_MIN = 0.5;           /* engine VOLZ_MIN */
+  var CG_G1_SPREAD_ATR = 0.25;      /* engine SPREAD_MIN_ATR */
   var CG_SWING_CASCADE_MIN = 4;
   var CG_SCALP_RR_MIN = 2.25;
   var CG_SWING_EXP_ATR = 3.5;
@@ -12,6 +15,10 @@
   var CG_SWING_MAX_EXC_ATR = 4.9;
   var CG_FUND_HARD = 0.05;
   var CG_FUND_DIR = 0.04;
+  /* Max non-G4 gate failures tolerated by the counter-trend funding fade.
+     Applies ALWAYS — it used to be skipped once |funding| >= CG_FUND_HARD,
+     which let a setup with every other gate down still emit a ticket. */
+  var CG_FADE_MAX_OTHER_FAILS = 1;
   function cgEsc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   function cgPositioningCls(ticker){
@@ -71,7 +78,9 @@
     }
     var fr = ticker && ticker.fundingPct !== null ? Math.abs(+ticker.fundingPct) : 0;
     if (!g4fail && fr < CG_FUND_HARD - 1e-9) return null;
-    if (nonG4Fails > 1 && fr < CG_FUND_HARD - 1e-9) return null;
+    /* ceiling applies ALWAYS. It used to short-circuit once |fr| >= 0.05, which
+       let a setup with every other gate down still emit a ticket. */
+    if (nonG4Fails > CG_FADE_MAX_OTHER_FAILS) return null;
     var cls = cgPositioningCls(ticker);
     var sp = cgBuildFadePlan(cls, rows, null, fadeDir);
     if (!sp) return null;
@@ -84,7 +93,11 @@
       targetPolicy: sp.targetPolicy || 'R-multiples (fade)', note: sp.note || 'crowded funding fade'
     };
     if (typeof hgSetupStackAttach === 'function'){
-      hgSetupStackAttach(out, { style: 'swing', rows4h: rows, ticker: ticker, gatesPassed: 7, gatesTotal: 7, clean: true, fundingFade: true });
+      /* HONEST STAMP: the matrix did NOT go 7/7 — report what actually passed.
+         clean:true here used to print "CLEAN 7/7" on a 4/7 counter-trend trade. */
+      hgSetupStackAttach(out, { style: 'swing', rows4h: rows, ticker: ticker,
+        gatesPassed: m.passed, gatesTotal: m.gatesTotal, clean: false, nearClean: false,
+        fundingFade: true, vetoes: ['counter-trend funding fade — SWING matrix ' + m.passed + '/' + m.gatesTotal] });
     }
     return out;
   }
@@ -111,7 +124,9 @@
       entryType: 'FUNDING-FADE · scalp fade', note: sp.note || 'crowded funding fade'
     };
     if (typeof hgSetupStackAttach === 'function'){
-      hgSetupStackAttach(out, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, gatesPassed: 7, gatesTotal: 7, clean: true, fundingFade: true });
+      hgSetupStackAttach(out, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker,
+        gatesPassed: m.passed, gatesTotal: m.gatesTotal, clean: false, nearClean: false,
+        fundingFade: true, vetoes: ['counter-trend funding fade — SCALP matrix ' + m.passed + '/' + m.gatesTotal] });
     }
     return out;
   }
@@ -160,7 +175,7 @@
 
     var a4 = last(atr(rows, 14));
     var gates = [];
-    var g1 = isFinite(a4) && Math.abs(e21 - e50) >= 0.30 * a4;
+    var g1 = isFinite(a4) && Math.abs(e21 - e50) >= CG_G1_SPREAD_ATR * a4;
     gates.push(['G1 cascade+spread', g1]);
     var g2 = dir === 'long' ? p > e200 : p < e200;
     gates.push(['G2 HTF side', g2]);
@@ -182,8 +197,10 @@
           var _rA = rsi(c, 14);
           var _rP = _rA[_rA.length - 4];
           var slopeOK = isFinite(_rP) ? (dir === 'long' ? r14 > _rP : r14 < _rP) : false;
-          var ok = (vz > CG_G5_VZ_MIN) && closeOK;
-          return { ok: ok, closeOK: closeOK, quiet: false };
+          var volOK = isFinite(vz) && vz > CG_G5_VZ_MIN;
+          if (isFinite(vz) && vz <= -1.5 && !closeOK) return { ok: false, closeOK: closeOK, quiet: false };
+          var ok = closeOK && (volOK || slopeOK);
+          return { ok: ok, closeOK: closeOK, quiet: !volOK && ok };
         })();
     var g5 = g5r.ok;
     gates.push(['G5 vol+wick', g5]);
@@ -296,12 +313,12 @@
 
   function swingTryClean(rows, ticker){
     var m = swingGateMatrix(rows, ticker);
-    if (!m || !m.dir) return null;
-    if (!m.clean){
-      var fadeSw = cgTrySwingFundingFade(rows, ticker, m);
-      if (fadeSw) return fadeSw;
-      return null;
-    }
+    /* CONTRACT: a non-null return from swingTryClean is a 7/7 CLEAN TREND
+       ticket in the cascade direction. BEST, SWING, STARTRADER and
+       hgSwingCleanPlan all rely on that. The funding fade is a counter-trend
+       trade off a FAILED matrix — it is exposed as swingTryFundingFade() and
+       must never leak out of here. */
+    if (!m || !m.dir || !m.clean) return null;
     var dir = m.dir, p = m.p, e9 = m.e9, e21 = m.e21, a4 = m.a4;
     if (!cgMacroOk(ticker, dir)) return null;
     var plannedEntry = p;
@@ -347,12 +364,7 @@
 
   function scalpTryClean(h1, m15, ticker, minsToFunding){
     var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
-    if (!m || !m.dir) return null;
-    if (!m.clean){
-      var fadeSc = cgTryScalpFundingFade(h1, m15, ticker, m);
-      if (fadeSc) return fadeSc;
-      return null;
-    }
+    if (!m || !m.dir || !m.clean) return null;
     if (!cgMacroOk(ticker, m.dir)) return null;
     var sweepLevel = (m.swept && m.reclaimed)
       ? (m.dir === 'long' ? m.localLow : m.localHigh) : null;
@@ -453,4 +465,14 @@
   G.scalpTryNear = scalpTryNear;
   G.scalpTryClean = scalpTryClean;
   G.swingSevenGateCheck = swingSevenGateCheck;
+  /* Counter-trend funding fade — NOT a clean swing/scalp ticket. Exposed so a
+     caller can opt in deliberately; never returned by swingTryClean/scalpTryClean. */
+  G.swingTryFundingFade = function(rows, ticker){
+    var m = swingGateMatrix(rows, ticker);
+    return m ? cgTrySwingFundingFade(rows, ticker, m) : null;
+  };
+  G.scalpTryFundingFade = function(h1, m15, ticker, minsToFunding){
+    var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
+    return m ? cgTryScalpFundingFade(h1, m15, ticker, m) : null;
+  };
 })();
