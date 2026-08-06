@@ -586,7 +586,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     </div>
     <div class="note" id="logSummary">—</div>
     <hr class="sep">
-    <div class="note">Grading rules, stated so the numbers can't flatter you: outcome = first touch of T1 or stop on closed candles after log time. If both print inside the same bar, it counts as <b>SL</b> (conservative — intrabar order is unknowable). No fees, no slippage, no funding paid — so real results will be WORSE than this log. Open &gt;14 days → EXPIRED, excluded from hit rate. ΣR assumes -1R on SL, +R:R on TP1, ignores runners. This is a signal audit, not a PnL statement. Data lives in this browser only — EXPORT before clearing cache or switching devices.</div>
+    <div class="note">Grading rules, stated so the numbers can't flatter you: outcome = first touch of T1 or stop on closed candles after log time. If both print inside the same bar, it counts as <b>SL</b> (conservative — intrabar order is unknowable). Fees ARE modelled: Delta taker 0.05% / maker 0.02% +18% GST, charged on notional — entries are limits (maker), TP1 exits limits (maker), SL exits market (taker). <b>Funding and slippage are still NOT modelled</b>, so net remains optimistic. Costs override in Settings if your volume tier differs. Open &gt;14 days → EXPIRED, excluded from hit rate. ΣR gross assumes -1R on SL, +R:R on TP1; ΣR NET subtracts round-trip fees. This is a signal audit, not a PnL statement. Data lives in this browser only — EXPORT before clearing cache or switching devices.</div>
   </div>
   <div class="panel" style="overflow-x:auto" id="logTable"></div>
 </section>
@@ -4807,6 +4807,86 @@ window.runGoldSetup = runGoldSetup;
    Conservative same-bar rule: stop and target in one bar counts as SL.
    localStorage only; EXPORT before clearing browser data.
    ============================================================================= */
+/* =============================================================================
+   TRADING COSTS — Delta India futures. taker 0.05%, maker 0.02%, +18% GST on
+   the fee itself. A round trip is charged on NOTIONAL, so its cost in R is
+   costPct / stopDistancePct — which means the tighter the stop, the larger the
+   bite. On a 3% swing stop it is ~0.04R. On a 0.35% scalp stop it is ~0.34R,
+   i.e. a third of the edge, and it moves the breakeven hit rate on a 2R target
+   from 33.3% to 44.6%. Gross ledgers cannot tell those two apart.
+   Override in Settings if your 30-day volume tier differs.
+   ============================================================================= */
+const HG_FEE_TAKER_PCT = 0.05;
+const HG_FEE_MAKER_PCT = 0.02;
+const HG_FEE_GST_MULT  = 1.18;
+function hgFeeRates(){
+  try{
+    const t = parseFloat(localStorage.getItem('hg_fee_taker'));
+    const m = parseFloat(localStorage.getItem('hg_fee_maker'));
+    const g = parseFloat(localStorage.getItem('hg_fee_gst'));
+    return {
+      taker: (isFinite(t) && t >= 0) ? t : HG_FEE_TAKER_PCT,
+      maker: (isFinite(m) && m >= 0) ? m : HG_FEE_MAKER_PCT,
+      gst:   (isFinite(g) && g >= 1) ? g : HG_FEE_GST_MULT
+    };
+  }catch(e){ return { taker: HG_FEE_TAKER_PCT, maker: HG_FEE_MAKER_PCT, gst: HG_FEE_GST_MULT }; }
+}
+/* Round-trip cost as a % of notional, by how each side actually filled.
+   HARDGATE entries are LIMIT @ EMA21/EMA9 -> maker. A T1 exit is a limit ->
+   maker. A stop exit is a market order -> taker. So the two outcomes cost
+   DIFFERENT amounts, and assuming one rate for both is wrong in both
+   directions. entrySide/exitSide are 'maker' | 'taker'. */
+function hgRoundTripPct(entrySide, exitSide){
+  const f = hgFeeRates();
+  const side = (s) => (s === 'taker' ? f.taker : f.maker);
+  return (side(entrySide) + side(exitSide)) * f.gst;
+}
+/* Cost of one round trip expressed in R. riskPct = |entry-stop|/entry*100.
+   Returns 0 when the stop distance is unknown — never a guessed number. */
+function hgCostR(entry, stop, entrySide, exitSide){
+  const e = +entry, st = +stop;
+  if (!(isFinite(e) && e > 0 && isFinite(st))) return 0;
+  const riskPct = Math.abs(e - st) / e * 100;
+  if (!(riskPct > 0)) return 0;
+  return hgRoundTripPct(entrySide, exitSide) / riskPct;
+}
+/* Net R for a settled log row. Entries are limits (maker); a TP1 exit is a
+   limit (maker), an SL exit is a market stop (taker). Funding is NOT modelled
+   here — it depends on settlements crossed, which the log does not store, so
+   the note says so rather than the number pretending. */
+function hgNetR(e){
+  if (!e) return 0;
+  if (e.status === 'tp'){
+    const gross = isFinite(+e.rr) ? +e.rr : 2;
+    return gross - hgCostR(e.entry, e.stop, 'maker', 'maker');
+  }
+  if (e.status === 'sl') return -1 - hgCostR(e.entry, e.stop, 'maker', 'taker');
+  if (e.status === 'time_stop'){
+    const gross = isFinite(+e.rr) ? +e.rr : -0.1;
+    return gross - hgCostR(e.entry, e.stop, 'maker', 'taker');
+  }
+  return 0;
+}
+/* Wilson score interval — the honest replacement for "n is too small".
+   At 9/15 it returns roughly 35-80%: indistinguishable from a coin flip.
+   At 55/100 it returns roughly 45-65%. Normal-approximation intervals break
+   down at small n and near 0/1; Wilson does not. */
+function hgWilson(wins, n, z){
+  z = isFinite(z) ? z : 1.96;
+  wins = +wins; n = +n;
+  if (!(n > 0) || !(wins >= 0) || wins > n) return null;
+  const p = wins / n, z2 = z * z;
+  const denom = 1 + z2 / n;
+  const centre = (p + z2 / (2 * n)) / denom;
+  const half = (z / denom) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
+  return { lo: Math.max(0, centre - half), hi: Math.min(1, centre + half), p: p };
+}
+/* Breakeven hit rate for a given payoff, before and after costs. */
+function hgBreakevenHit(rr, costR){
+  const R = isFinite(+rr) && +rr > 0 ? +rr : 2;
+  const c = isFinite(+costR) ? +costR : 0;
+  return (1 + c) / (1 + R);
+}
 const LOG_KEY='hardgate_log_v1';
 function loadLog(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY)||'[]'); }catch(e){ return []; } }
 function saveLog(l){ try{ if (l.length>1000) l = l.slice(l.length-1000); localStorage.setItem(LOG_KEY, JSON.stringify(l)); }catch(e){} }
@@ -4869,13 +4949,25 @@ function renderLog(){
         op=l.filter(e=>e.status==='open').length, ex=l.filter(e=>e.status==='exp').length; const tsStop = l.filter(e=>e.status==='time_stop').length; const unf = l.filter(e=>e.status==='unfilled').length;
   const closed=tp+sl;
   const sumR=l.reduce((a,e)=> a + (e.status==='tp' ? (e.rr||2) : e.status==='sl' ? -1 : e.status==='time_stop' ? (e.rr||-0.1) : 0), 0);
-  $('logSummary').innerHTML = `logged <b>${l.length}</b> · open <b>${op}</b> · TP <b class="pos">${tp}</b> · SL <b class="neg">${sl}</b> · expired <b>${ex}</b> · time-stop <b>${tsStop}</b> · unfilled <b>${unf}</b> · hit rate <b>${closed?fmt(tp/closed*100,1)+'%':'—'}</b> · ΣR <b class="${sumR>=0?'pos':'neg'}">${fmt(sumR,2)}R</b>${closed>0&&closed<30?' · <span style="color:var(--gold)">n='+closed+' closed — far too small to call an edge</span>':''}`;
-  $('logTable').innerHTML = l.length ? `<table><tr><th>time IST</th><th>sym</th><th>kind</th><th>dir</th><th>entry</th><th>stop</th><th>T1</th><th>R:R</th><th>status</th></tr>${
+  /* NET is the number that decides whether a setup type is worth trading.
+     GROSS is kept beside it so the cost drag is visible, not buried. */
+  const netR = l.reduce((a,e)=> a + hgNetR(e), 0);
+  const settledN = closed + tsStop;
+  const netExp = settledN ? netR/settledN : null;
+  const ci = hgWilson(tp, closed);
+  const ciTxt = ci ? ' · 95% CI <b>'+fmt(ci.lo*100,1)+'–'+fmt(ci.hi*100,1)+'%</b>' : '';
+  const costs = l.filter(e=>e.status==='tp'||e.status==='sl'||e.status==='time_stop')
+                 .map(e=>hgCostR(e.entry,e.stop,'maker',e.status==='tp'?'maker':'taker'))
+                 .filter(v=>v>0).sort((a,b)=>a-b);
+  const medCost = costs.length ? costs[Math.floor(costs.length/2)] : null;
+  const costTxt = medCost!==null ? ' · median cost <b>'+fmt(medCost,3)+'R</b>/trade' : '';
+  $('logSummary').innerHTML = `logged <b>${l.length}</b> · open <b>${op}</b> · TP <b class="pos">${tp}</b> · SL <b class="neg">${sl}</b> · expired <b>${ex}</b> · time-stop <b>${tsStop}</b> · unfilled <b>${unf}</b> · hit rate <b>${closed?fmt(tp/closed*100,1)+'%':'—'}</b>${ciTxt} · ΣR gross <b class="${sumR>=0?'pos':'neg'}">${fmt(sumR,2)}R</b> · <b>ΣR NET</b> <b class="${netR>=0?'pos':'neg'}">${fmt(netR,2)}R</b>${netExp!==null?' · net/trade <b class="'+(netExp>=0?'pos':'neg')+'">'+fmt(netExp,3)+'R</b>':''}${costTxt}${ci&&closed?' · <span style="color:var(--gold)">the CI is the verdict, not the point estimate</span>':''}`;
+  $('logTable').innerHTML = l.length ? `<table><tr><th>time IST</th><th>sym</th><th>kind</th><th>dir</th><th>entry</th><th>stop</th><th>T1</th><th>R:R</th><th>net R</th><th>status</th></tr>${
     l.map(e=>{
       const d=new Date((e.ts+19800)*1000).toISOString().slice(5,16).replace('T',' ');
-      if (e.status==='note') return `<tr><td>${d}</td><td colspan="8" style="text-align:left;color:var(--veto)">${String(e.note||'')}</td></tr>`;
+      if (e.status==='note') return `<tr><td>${d}</td><td colspan="9" style="text-align:left;color:var(--veto)">${String(e.note||'')}</td></tr>`;
       const st=e.status==='tp'?'<b class="pos">TP</b>':e.status==='sl'?'<b class="neg">SL</b>':e.status==='exp'?'<span style="color:var(--dim)">EXP</span>':e.status==='time_stop'?'<span style="color:var(--dim)">TIME_STOP</span>':e.status==='unfilled'?'<span style="color:var(--dim)">UNFILLED</span>':'open';
-      return `<tr><td>${d}</td><td>${e.sym}</td><td>${e.kind}</td><td>${e.dir.toUpperCase()}</td><td>${px(e.entry)}</td><td>${px(e.stop)}</td><td>${px(e.t1)}</td><td>${fmt(e.rr,2)}</td><td>${st}</td></tr>`;
+      return `<tr><td>${d}</td><td>${e.sym}</td><td>${e.kind}</td><td>${e.dir.toUpperCase()}</td><td>${px(e.entry)}</td><td>${px(e.stop)}</td><td>${px(e.t1)}</td><td>${fmt(e.rr,2)}</td><td>${(e.status==='tp'||e.status==='sl'||e.status==='time_stop')?'<b class="'+(hgNetR(e)>=0?'pos':'neg')+'">'+fmt(hgNetR(e),2)+'</b>':'—'}</td><td>${st}</td></tr>`;
     }).join('')}</table>` : '<div class="empty">Nothing logged yet. Run any scan — every CLEAN setup lands here automatically.</div>';
 }
 function exportLog(){
