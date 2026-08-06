@@ -2502,7 +2502,10 @@ function showTab(t){
     try{ mod.mount(document.getElementById('tab_'+t)); }catch(e){ console.error('HARDGATE tab mount failed:', t, e); }
   }
   /* scanner tabs: restore the last-scan memory line when the pane is idle */
-  if ((t === 'swing' || t === 'scalp') && typeof scanLastHint === 'function') scanLastHint(t);
+  if (t === 'swing' || t === 'scalp'){
+    if (typeof hgMaybeSyncCryptoDeskFromSnap === 'function') hgMaybeSyncCryptoDeskFromSnap(t);
+    if (typeof scanLastHint === 'function') scanLastHint(t);
+  }
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
   if (tabSwitch && t !== 'book' && typeof hgBookStampRefreshThrottled === 'function'){
     hgBookStampRefreshThrottled();
@@ -2604,7 +2607,6 @@ const HG_TAB_AUTO_SCAN = {
   finder: function(){ return runFinder(); }
 };
 function scheduleTabAutoScan(t){
-  if (!hgDualScanEnabled()) return;
   const seq = ++__hgTabScanSeq;
   setTimeout(async function(){
     if (seq !== __hgTabScanSeq) return;
@@ -3274,6 +3276,70 @@ function hgPublishCryptoScanSnap(kind, cands, nearCands, statText, audit){
   hgAssignCryptoScanSnap(kind, snap);
   return snap;
 }
+/** Paint SWING/SCALP cards from the last scan snap (alert warm / tab open). Full RUN SCAN still adds charts + gate detail. */
+function hgSnapFreshMs(snap, maxMs){
+  return !!(snap && snap.at && (Date.now() - snap.at) < (maxMs || 20 * 60 * 1000));
+}
+function hgCryptoDeskHasCards(kind){
+  const el = $(kind === 'swing' ? 'swingCards' : 'scalpCards');
+  return !!(el && el.children && el.children.length);
+}
+function hgPaintCryptoDeskFromSnap(kind){
+  if (typeof isManualScanBusy === 'function' && isManualScanBusy()) return;
+  const isSwing = kind === 'swing';
+  const snap = isSwing ? __hgSwingScan : __hgScalpScan;
+  const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards');
+  const emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty');
+  const statEl = $(isSwing ? 'swingStat' : 'scalpStat');
+  if (!cardsEl || !hgSnapFreshMs(snap)) return;
+  if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+  if (snap.audit && typeof hgPaintScanFunnel === 'function') hgPaintScanFunnel(kind, snap.audit);
+  const cands = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
+  const near = (snap && Array.isArray(snap.nearCands)) ? snap.nearCands : [];
+  if (!cands.length && !near.length){
+    if (emptyEl){ emptyEl.style.display = 'block'; emptyEl.textContent = (snap && snap.stat) ? snap.stat : 'No 7/7 CLEAN setups in the latest background scan.'; }
+    if (statEl && snap && snap.stat) statEl.textContent = snap.stat;
+    return;
+  }
+  const bestId = snap.bestId;
+  let html = '';
+  if (cands.length){
+    html += '<div class="note" style="margin:0 0 10px"><b>7/7 CONVICTION TICKETS</b> — synced from the latest alert scan (Delta + CoinDCX). RUN SCAN refreshes charts and full gate readout.</div>';
+    cands.forEach(function(c){
+      if (!c || !c.sym || !c.dir) return;
+      const sym = hgCardVenueSym(c.sym, c.venueTag || c.venue || '');
+      const isBest = bestId && (c.id === bestId || hgCryptoSetupId(c) === bestId);
+      const gateLbl = isBest ? '★ MOST PROBABLE · 7/7 CLEAN' : '7/7 CLEAN';
+      html += cardHTML(sym, c.dir, [
+        ['ENTRY', px(c.entry)], ['STOP', px(c.stop)], ['T1', px(c.t1)],
+        ['R:R', fmt(c.rr, 2) + 'R']
+      ], [gateLbl], planBlock(c.dir, c.entry, c.stop, c.t1, c.t2, isSwing ? 'swingTryClean' : 'scalpTryClean'),
+        c.entry, c.stop, c.t1, null, { scanner: kind, strategy: kind, venue: c.venueTag || c.venue, tier: isBest ? 'best' : 'clean' });
+    });
+  }
+  if (near.length){
+    html += (typeof hgSetupNearHeaderHTML === 'function' ? hgSetupNearHeaderHTML(near.length, kind) : '');
+    near.forEach(function(n){
+      if (!n || !n.sym || !n.dir) return;
+      const nsym = hgCardVenueSym(n.sym, n.venueTag || n.venue || '');
+      const gp = n.gatesPassed || 6;
+      html += cardHTML(nsym, n.dir, [
+        ['ENTRY', px(n.entry)], ['STOP', px(n.stop)], ['T1', px(n.t1)],
+        ['gates', gp + '/7 — watch only']
+      ], ['6/7 NEAR — not a ticket'], planBlock(n.dir, n.entry, n.stop, n.t1, n.t2),
+        n.entry, n.stop, n.t1, null, { scanner: kind + '-near', strategy: kind + '-near', tier: 'near' });
+    });
+  }
+  cardsEl.innerHTML = html;
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (statEl && snap.stat) statEl.textContent = snap.stat + ' · desk synced (' + cands.length + ' CLEAN' + (near.length ? (' · ' + near.length + ' near') : '') + ')';
+}
+function hgMaybeSyncCryptoDeskFromSnap(kind){
+  if (hgCryptoDeskHasCards(kind)) return;
+  hgPaintCryptoDeskFromSnap(kind);
+}
+window.hgPaintCryptoDeskFromSnap = hgPaintCryptoDeskFromSnap;
+window.hgMaybeSyncCryptoDeskFromSnap = hgMaybeSyncCryptoDeskFromSnap;
 window.hgCryptoSetupId = hgCryptoSetupId;
 
 async function runScan(kind, opts){
@@ -3431,7 +3497,8 @@ async function runScanLeg(kind, opts){
               const near = swingTryNear(rows, t);
               if (near && near.entry != null && near.stop != null && near.t1 != null){
                 if (quiet){
-                  nearCands.push(Object.assign({ sym: t.symbol }, near));
+                  nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, near));
+                  nearFound++;
                 } else {
                   nearFound++;
                   if (nearFound === 1){
@@ -3474,7 +3541,8 @@ async function runScanLeg(kind, opts){
               const nearS = scalpTryNear(h1, m15, t, minsToFunding);
               if (nearS && nearS.entry != null && nearS.stop != null && nearS.t1 != null){
                 if (quiet){
-                  nearCands.push(Object.assign({ sym: t.symbol }, nearS));
+                  nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, nearS));
+                  nearFound++;
                 } else {
                   nearFound++;
                   if (nearFound === 1){
@@ -3584,7 +3652,11 @@ async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
 }
 
 async function cryptoScanWarm(kind){
-  try{ await runScan(kind, { quiet: true, forceScanAll: true }); return 'warmed'; }
+  try{
+    await runScan(kind, { quiet: true, forceScanAll: true });
+    hgPaintCryptoDeskFromSnap(kind);
+    return 'warmed';
+  }
   catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
 async function bestScanWarm(){

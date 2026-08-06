@@ -729,6 +729,21 @@ function brainCollect(inputs){
     if (!swHit) hush('swingtab', 'symbol not in the latest SWING CLEAN list');
   }
 
+  /* ---- SCALP tab CLEAN snapshot ---- */
+  var scTab = (typeof G.scalpScan === 'function') ? G.scalpScan() : null;
+  if (!scTab || !Array.isArray(scTab.cands)){ hush('scalptab', 'SCALP tab has not published a scan — run SCALP once'); }
+  else{
+    var scHit = false;
+    for (var sci = 0; sci < scTab.cands.length; sci++){
+      var scc = scTab.cands[sci];
+      if (scc && named(scc.sym) && isDir(scc.dir)){
+        push('scalptab', scc.dir, 'SCALP CLEAN ' + scc.dir.toUpperCase() + ' — 7/7 gates + plan');
+        scHit = true; break;
+      }
+    }
+    if (!scHit) hush('scalptab', 'symbol not in the latest SCALP CLEAN list');
+  }
+
   /* ---- BEST tab #1 snapshot ---- */
   var bestTab = (typeof G.bestScan === 'function') ? G.bestScan() : null;
   if (!bestTab || !Array.isArray(bestTab.clean) || !bestTab.clean.length){ hush('besttab', 'BEST tab has not published a winner — run BEST once'); }
