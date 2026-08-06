@@ -3496,11 +3496,9 @@ async function runScanLeg(kind, opts){
             if (typeof swingTryNear === 'function'){
               const near = swingTryNear(rows, t);
               if (near && near.entry != null && near.stop != null && near.t1 != null){
-                if (quiet){
-                  nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, near));
-                  nearFound++;
-                } else {
-                  nearFound++;
+                nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, near));
+                nearFound++;
+                if (!quiet){
                   if (nearFound === 1){
                     const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
                       ? hgSetupNearHeaderHTML(1, 'swing') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only. These are not tickets until all seven gates pass.</div>';
@@ -3540,11 +3538,9 @@ async function runScanLeg(kind, opts){
             } else if (typeof scalpTryNear === 'function'){
               const nearS = scalpTryNear(h1, m15, t, minsToFunding);
               if (nearS && nearS.entry != null && nearS.stop != null && nearS.t1 != null){
-                if (quiet){
-                  nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, nearS));
-                  nearFound++;
-                } else {
-                  nearFound++;
+                nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, nearS));
+                nearFound++;
+                if (!quiet){
                   if (nearFound === 1){
                     const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
                       ? hgSetupNearHeaderHTML(1, 'scalp') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only.</div>';

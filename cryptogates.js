@@ -232,8 +232,11 @@
     if (!m || !m.dir || m.clean) return null;
     if (m.passed < 6) return null;
     var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
-    if (!(isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR)) return null;
+    var anchorOK = isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR;
+    /* 6/7 must be anchor-close; 7/7 with only anchor miss still gets levels + Telegram NEAR row */
+    if (!anchorOK && m.passed < 7) return null;
     var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    if (!anchorOK && m.passed >= 7) missing.push('EMA21 anchor (>1.25×ATR away)');
     var dir = m.dir, p = m.p, e9 = m.e9, a4 = m.a4;
     var entry = p;
     var distToFast = isFinite(a4) && a4 > 0 ? Math.abs(p - e9) / a4 : NaN;

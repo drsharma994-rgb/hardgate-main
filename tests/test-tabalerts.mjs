@@ -50,13 +50,17 @@ tabAlertsMarkRun({ localStorage: goldThrottle }, LS_GOLD_LAST_RUN);
 assert(tabAlertsShouldRun({ localStorage: goldThrottle }, false, LS_GOLD_LAST_RUN) === false,
        'gold batch has its own 5-min throttle');
 
-assert(setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2 }), 'SWING rows are clean7');
+assert(setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2, clean7: true }), 'SWING rows with clean7 flag pass');
+assert(!setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2, nearClean: true, gatesPassed: 6 }), 'SWING near rows are not clean7');
 assert(setupIsClean7({ src: 'EDGE', clean7: true, gatesPassed: 7, gatesTotal: 7 }), 'explicit clean7 passes');
 assert(!setupIsClean7({ src: 'GOLD SCALP', tally: 11, entry: 1, stop: 0.9, t1: 1.2 }), 'gold tally-only is not clean7');
 assert(tabAlertsFilterClean7([
-  { src: 'SWING', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1 },
+  { src: 'SWING', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1, clean7: true },
   { src: 'EDGE', sym: 'B', dir: 'short', entry: 2, stop: 2.1, t1: 1.8, tally: 6 }
-]).length === 1, 'clean7 filter keeps SWING only when EDGE lacks clean flag');
+]).length === 1, 'clean7 filter keeps flagged SWING when EDGE lacks clean flag');
+assert(tabAlertsFilterClean7([
+  { src: 'SWING', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1, nearClean: true, gatesPassed: 6 }
+]).length === 1, 'clean7 filter keeps 6/7 NEAR rows');
 
 const throttleStore = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const nowT = 1_700_000_000_000;
@@ -150,6 +154,30 @@ assert(WDual.hgTabAlertsCollect().some(c => c.src === 'SWING' && c.tier === 'MOS
 assert(typeof W.hgTabAlertsCheckLive === 'function', 'hgTabAlertsCheckLive exported');
 assert(collected.some(c => c.src.indexOf('BRAIN') >= 0 && c.clean7), 'brain 7/7 evidence included');
 assert(!collected.some(c => c.src.indexOf('GOLD') >= 0), 'gold excluded from unified collect when separate');
+
+const WNear = loadWithWindow({
+  swingScan: () => ({
+    cands: [],
+    nearCands: [{
+      sym: 'NEARUSD', dir: 'long', entry: 100, stop: 98, t1: 106, rr: 2.5,
+      nearClean: true, gatesPassed: 6, gatesTotal: 7, missing: ['G7 CUSUM']
+    }]
+  }),
+  scalpScan: () => null,
+  bestScan: () => ({ clean: [] }),
+  __hgBrainLast: () => null,
+  goldscalpScan: () => null,
+  goldswingScan: () => null,
+  sendTelegram: async (t) => { WNear._tg = t; return true; }
+});
+WNear.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const nearCol = WNear.hgTabAlertsCollect();
+assert(nearCol.length === 1 && nearCol[0].nearClean === true && nearCol[0].entry === 100,
+       'collectCrypto pulls 6/7 nearCands from swingScan snap with levels');
+const nearRun = await WNear.hgTabAlertsRun({ force: true, allSources: false, sources: { swing: true, scalp: false, brain: false, gold: false, edge: false, pine: false, smart: false, oiflow: false, liqs: false, squeeze: false, carry: false, termbasis: false, watch: false, best: false } });
+assert(nearRun.pushed === 1 && WNear._tg.indexOf('ENTRY:') >= 0 && WNear._tg.indexOf('STOP LOSS:') >= 0
+       && WNear._tg.indexOf('TAKE PROFIT 1:') >= 0 && WNear._tg.indexOf('6/7') >= 0,
+       '6/7 NEAR Telegram includes COIN entry stop tp');
 
 const WGold = loadWithWindow({
   goldscalpScan: () => ({
