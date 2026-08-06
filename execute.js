@@ -12,6 +12,22 @@ Exports on window:
 'use strict';
 
 var W = (typeof window !== 'undefined') ? window : globalThis;
+/* ===================== LIVE TRADING: DISABLED AT SOURCE =====================
+   Owner decision: HARDGATE is a signal + paper-measurement terminal. It does
+   not place orders. This flag is the single kill switch — it is checked before
+   any capability read, any button render and any network call, so no Render
+   env var, no localStorage entry and no saved desk override can re-arm the
+   path. Setting it back to true restores the previous behaviour exactly.
+   Consequences, all intentional:
+     - executeBackendReady() is false, so the TRADE PLAN EXECUTE BRACKET button
+       and the BOOK EXEC button never render, and the auto-exec toggles stay
+       disabled.
+     - executeTrade() refuses without ever calling fetch (defence in depth for
+       any caller that skips the readiness check).
+     - The lot/contract-size hazard cannot reach a broker, because nothing
+       reaches a broker. Sizing is now a display concern only.
+   ========================================================================= */
+var HG_LIVE_TRADING_ENABLED = false;
 var __cap = { ready: false, mode: 'none', proxyPath: '/api/execute' };
 var LS_KEY = 'hg_execute_backend_url';
 var EXEC_RETRY = 1;
@@ -34,6 +50,7 @@ function proxyUrl(){
 }
 
 function executeBackendReady(){
+  if (!HG_LIVE_TRADING_ENABLED) return false;
   var override = deskOverride();
   if (override) return true;
   return !!proxyUrl();
@@ -163,6 +180,7 @@ async function postExecute(url, payload){
 }
 
 async function hgRefreshExecuteCap(){
+  if (!HG_LIVE_TRADING_ENABLED) return __cap;   /* never probe a route we will not use */
   if (typeof W.hgApiAvailable === 'function' && !W.hgApiAvailable()) return __cap;
   try{
     var r = await fetch('/api/execute/capabilities');
@@ -174,6 +192,11 @@ async function hgRefreshExecuteCap(){
 
 async function executeTrade(plan, opts){
   opts = (opts && typeof opts === 'object') ? opts : {};
+  if (!HG_LIVE_TRADING_ENABLED){
+    /* Hard refuse BEFORE any payload is built or any fetch is made. */
+    try{ alert('Live order routing is disabled in this build. HARDGATE is a signal + paper terminal — place the ticket on Delta yourself.'); }catch(e){}
+    return { ok: false, reason: 'live trading disabled at source (HG_LIVE_TRADING_ENABLED)' };
+  }
   if (!plan || plan.vetoed){
     try{ alert('Cannot execute a vetoed plan.'); }catch(e){}
     return { ok: false, reason: 'vetoed' };
@@ -231,6 +254,7 @@ W.hgRefreshExecuteCap = hgRefreshExecuteCap;
 W.saveExecuteBackendUrl = saveExecuteBackendUrl;
 W.hgExecuteCapabilities = function(){ return __cap; };
 W.hgExecuteIdempotencyKey = executeIdempotencyKey;
+W.hgLiveTradingEnabled = function(){ return HG_LIVE_TRADING_ENABLED; };
 
 if (document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', function(){

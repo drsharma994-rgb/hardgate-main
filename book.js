@@ -223,7 +223,8 @@ async function bookPull(){
     var r = await bookFetch('/api/book' + bookFundQuery());
     if (r.json && r.json.ok){
       __book.snap = r.json;
-      __book.liveReady = !!(r.json.capabilities && r.json.capabilities.liveExecute);
+      /* The server may advertise liveExecute; this build declines it. */
+      __book.liveReady = bookLiveAllowed() && !!(r.json.capabilities && r.json.capabilities.liveExecute);
       __book.digestReady = !!(r.json.capabilities && (r.json.capabilities.digestSend || r.json.capabilities.digestWebhook));
       if (r.json.fundId) bookSetFund(r.json.fundId);
       __book.funds = r.json.funds || [];
@@ -773,6 +774,10 @@ function deskHeaderHTML(desk){
 
 async function bookLivePosition(id, fundId){
   if (!bookApiOn()) return;
+  if (!bookLiveAllowed()){
+    try{ alert('Live order routing is disabled in this build. HARDGATE is a signal + paper terminal.'); }catch(e){}
+    return;
+  }
   if (!__book.liveReady){
     try{ alert('Live execute not configured — set EXECUTE_WEBHOOK_URL on Render.'); }catch(e){}
     return;
@@ -793,7 +798,14 @@ async function bookLivePosition(id, fundId){
   if (pane && pane.querySelector('#bookRefresh')) pane.querySelector('#bookRefresh').click();
 }
 
+/* Single source of truth for whether this build may route real orders.
+   Mirrors execute.js HG_LIVE_TRADING_ENABLED; defaults to DISABLED when
+   execute.js is absent, so a missing script can never open the path. */
+function bookLiveAllowed(){
+  return typeof W.hgLiveTradingEnabled === 'function' && W.hgLiveTradingEnabled() === true;
+}
 function bookExecuteReady(){
+  if (!bookLiveAllowed()) return false;
   return typeof W.executeBackendReady === 'function' && W.executeBackendReady();
 }
 
