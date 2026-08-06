@@ -915,6 +915,10 @@ function edgeAssess(rows, item, candleSrc){
     if (en.tally < MIN_TALLY) return null;
     var plan = edgePlan(sig);
     if (!plan) return null;
+    if (typeof W.hgMacroAllowsCrypto === 'function'){
+      var mac = W.hgMacroAllowsCrypto(item && item.sym, sig.dir);
+      if (mac && mac.allow === false) return null;
+    }
     return { sig: sig, enrich: en, plan: plan, tally: en.tally, parts: en.parts };
   }catch(e){ return null; }
 }

@@ -765,6 +765,8 @@ console.log('== BRAIN state getter (window.regimeState) ==');
   assert(st.playbook && st.playbook.regime === 'RISK-ON' && st.playbook.bias === 'LONG-ONLY'
          && st.playbook.cls === 'long' && Array.isArray(st.playbook.setups),
          'state: playbook is the window.regimePlaybook output (bias LONG-ONLY, setups array)');
+  assert(st.btcdPct === 45 && st.dxyTrend === 'FALLING',
+         'state: btcdPct + dxyTrend exposed for macro alt filters');
   assert(Object.isFrozen(st) && Object.isFrozen(st.playbook) && Object.isFrozen(st.playbook.setups),
          'state: the view is deep-frozen (state, playbook, setups all frozen)');
   const st2 = W3.regimeState();

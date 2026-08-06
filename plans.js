@@ -145,6 +145,60 @@ function hgNormSym(s){
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function hgCryptoBase(sym){
+  try{
+    sym = String(sym || '').toUpperCase();
+    var dm = sym.match(/^B-([A-Z0-9]+)_USDT$/);
+    if (dm && dm[1]) return dm[1];
+    if (sym.endsWith('USDT')) return sym.slice(0, -4);
+    return sym.replace(/USDT$/, '');
+  }catch(e){ return hgNormSym(sym); }
+}
+
+function hgIsCryptoMajor(sym){
+  var base = hgCryptoBase(sym);
+  return base === 'BTC' || base === 'ETH' || base === 'SOL';
+}
+
+function hgBtcdPct(){
+  try{
+    if (typeof G.regimeState === 'function'){
+      var rs = G.regimeState();
+      if (rs && isFinite(+rs.btcdPct)) return +rs.btcdPct;
+    }
+    if (typeof G.hgBtcdPctOverride === 'number' && isFinite(G.hgBtcdPctOverride)) return G.hgBtcdPctOverride;
+    return null;
+  }catch(e){ return null; }
+}
+
+function hgDxyTrend(){
+  try{
+    if (typeof G.regimeState === 'function'){
+      var rs = G.regimeState();
+      if (rs && typeof rs.dxyTrend === 'string') return rs.dxyTrend;
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+/* BTC.D + DXY macro gate for crypto alts (majors always pass; null macro = no block). */
+function hgMacroAllowsCrypto(sym, dir){
+  try{
+    dir = String(dir || '').toLowerCase();
+    if (!(dir === 'long' || dir === 'short')) return { allow: true, reason: null };
+    if (hgIsCryptoMajor(sym)) return { allow: true, reason: null };
+    var btcd = hgBtcdPct();
+    if (btcd !== null && btcd > 55 && dir === 'long'){
+      return { allow: false, reason: 'BTC.D ' + btcd.toFixed(1) + '% > 55% — risk-off for alt longs' };
+    }
+    var dxy = hgDxyTrend();
+    if (dxy === 'UP' && dir === 'long'){
+      return { allow: false, reason: 'DXY rising — USD strength headwind for alt longs' };
+    }
+    return { allow: true, reason: null };
+  }catch(e){ return { allow: true, reason: null }; }
+}
+
 function hgTripleStackMatch(sym, dir){
   try{
     sym = hgNormSym(sym);
@@ -887,6 +941,9 @@ G.hgPlanMeta = hgPlanMeta;
 G.hgFormatEntryType = hgFormatEntryType;
 G.hgConfirmedCascade = hgConfirmedCascade;
 G.hgRegimeAllowsSetup = hgRegimeAllowsSetup;
+G.hgMacroAllowsCrypto = hgMacroAllowsCrypto;
+G.hgBtcdPct = hgBtcdPct;
+G.hgIsCryptoMajor = hgIsCryptoMajor;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
 G.hgSwingG5OK = hgSwingG5OK;
 G.hgRegimeRouteHint = hgRegimeRouteHint;

@@ -626,15 +626,22 @@ function __rgStateView(v){
   Object.freeze(out);
   return out;
 }
-function setRgSnapshot(v){
+function setRgSnapshot(v, components){
   try{
     if (!v || typeof v !== 'object') return;
     var pb = null;
     try{ pb = regimePlaybook(v); }catch(ePb){ pb = null; }
+    var btcdPct = null, dxyTrend = null;
+    if (components && typeof components === 'object'){
+      if (components.btcd && isFinite(+components.btcd.pct)) btcdPct = +components.btcd.pct;
+      if (components.dxy && typeof components.dxy.trend20 === 'string') dxyTrend = components.dxy.trend20;
+    }
     __rgSnap = {
       label: (typeof v.word === 'string' && v.word) ? v.word : 'UNKNOWN',
       score: (typeof v.score === 'number' && isFinite(v.score)) ? v.score : 0,
       playbook: pb,
+      btcdPct: btcdPct,
+      dxyTrend: dxyTrend,
       at: Date.now()
     };
   }catch(e){ /* snapshotting must never break the scan */ }
@@ -678,7 +685,7 @@ async function rgRun(els){
 
     var v = regimeVerdict(components);
     rgRender(els.out, v, { fails: fails, total: 8 });
-    setRgSnapshot(v); /* BRAIN: cache the successful scan (catch path below never reaches here) */
+    setRgSnapshot(v, components); /* BRAIN: cache the successful scan (catch path below never reaches here) */
     if (els.stat) els.stat.textContent = 'updated ' + new Date().toISOString().slice(11, 19) +
       ' UTC · ' + (8 - fails) + '/8 sources ok · cached 60s (stables 10m)';
     rgSetProg(els.prog, 1);

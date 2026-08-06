@@ -285,7 +285,8 @@ var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with 
 var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
   goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural',
-  trend4h: 'structural', swingtab: 'structural', besttab: 'structural',
+  trend4h: 'structural', swingtab: 'structural', scalptab: 'structural', besttab: 'structural',
+  edgetab: 'structural', pinetab: 'structural',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
@@ -758,6 +759,39 @@ function brainCollect(inputs){
       }
     }
     if (!bHit) hush('besttab', 'symbol not in the latest BEST CLEAN pool');
+  }
+
+  /* ---- EDGE tab CLEAN snapshot ---- */
+  var edgeTab = (typeof G.edgeScan === 'function') ? G.edgeScan() : null;
+  if (!edgeTab || !Array.isArray(edgeTab.cands)){ hush('edgetab', 'EDGE tab has not published a scan — run EDGE once'); }
+  else{
+    var edgeHit = false;
+    for (var ei = 0; ei < edgeTab.cands.length; ei++){
+      var ec = edgeTab.cands[ei];
+      if (ec && named(ec.sym) && isDir(ec.dir)){
+        push('edgetab', ec.dir, 'EDGE CLEAN ' + ec.dir.toUpperCase()
+          + (isFinite(ec.tally) ? ' · tally ' + ec.tally : '') + ' — institutional continuation');
+        edgeHit = true; break;
+      }
+    }
+    if (!edgeHit) hush('edgetab', 'symbol not in the latest EDGE CLEAN list');
+  }
+
+  /* ---- PINE tab signal snapshot (alertable / fresh scripts only) ---- */
+  var pineTab = (typeof G.pineScan === 'function') ? G.pineScan() : null;
+  if (!pineTab || !Array.isArray(pineTab.signals)){ hush('pinetab', 'PINE tab has not published a scan — run PINE once'); }
+  else{
+    var pineHit = false;
+    var pineFn = (typeof G.pineAlertable === 'function') ? G.pineAlertable : null;
+    for (var pi = 0; pi < pineTab.signals.length; pi++){
+      var ps = pineTab.signals[pi];
+      if (!ps || !named(ps.sym) || !isDir(ps.dir)) continue;
+      if (pineFn && !pineFn(ps)) continue;
+      push('pinetab', ps.dir, 'PINE ' + (ps.scriptLabel || ps.scriptId || 'script') + ' '
+        + ps.dir.toUpperCase() + (ps.isNew ? ' — fresh bar flip' : ''));
+      pineHit = true; break;
+    }
+    if (!pineHit) hush('pinetab', 'symbol not in the latest PINE alertable list');
   }
 
   /* ---- CARRY — cross-venue funding spread context (not a tier alone) ---- */

@@ -77,6 +77,14 @@ ok(typeof globalThis.scalpTryNear === 'function', 'scalpTryNear exported');
   }
 }
 
+{
+  globalThis.regimeState = function(){ return { btcdPct: 58, dxyTrend: 'FLAT' }; };
+  const altTicker = { symbol: 'DOGEUSDT', fundingPct: 0.01, mark: rows[rows.length - 1].c };
+  const altHit = globalThis.swingTryClean(rows, altTicker);
+  ok(altHit === null, 'swingTryClean blocks alt long when BTC.D > 55%');
+  globalThis.regimeState = function(){ return null; };
+}
+
 console.log('\n== scalp gate matrix ==');
 {
   function synthTf(n, start, step, sec){
