@@ -236,7 +236,7 @@ function collectCrypto(out, kind, src){
   var val = null;
   try{ val = fn(); }catch(e){ return; }
   var cands = rowsFrom(val);
-  var minRr = kind === 'swing' ? 2.5 : 2.25;
+  var minRr = kind === 'swing' ? 2.0 : 2.25;
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
     var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);

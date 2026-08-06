@@ -55,25 +55,18 @@ ok(typeof globalThis.scalpTryNear === 'function', 'scalpTryNear exported');
   }
 }
 {
-  /* G6 must use ATR-capped stop (same as swingTryClean), not uncapped lastSwing. */
+  /* G6 must not cap wide structure stops — veto honestly when R:R fails. */
   const wide = synthRows(260, 50000);
-  const n = wide.length - 1;
-  wide[n].l = wide[n].c - 5000;
-  wide[n].h = wide[n].c + 50;
-  wide[n].c = wide[n].c - 100;
+  const k = wide.length - 11;
+  wide[k] = Object.assign({}, wide[k], { l: wide[k].l * 0.80 });
   const tm = globalThis.swingGateMatrix(wide, ticker);
   if (tm && tm.dir && isFinite(tm.a4) && tm.a4 > 0){
-    const capDist = 2.0 * tm.a4;
-    ok(Math.abs(tm.p - tm.stop) <= capDist + 1e-6, 'swingGateMatrix G6 stop is ATR-capped at 2.0×ATR');
-    const uncapped = typeof lastSwing === 'function' ? lastSwing(wide, tm.dir, 30) : null;
-    if (uncapped != null && Math.abs(tm.p - uncapped) > capDist){
-      const uncappedRR = tm.expectedMove / Math.abs(tm.p - uncapped);
-      ok(tm.dynamicRR >= 2.5 || uncappedRR < 2.5, 'wide stop: matrix RR uses cap not uncapped structure stop');
-    } else {
-      ok(true, 'wide-stop fixture did not widen beyond cap — cap parity still holds');
-    }
+    ok(Math.abs(tm.dynamicRR - 1.75) > 1e-6 || tm.dynamicRR >= 2.0,
+       'wide stop: dynamicRR is not pinned at dead 1.75 cap artifact');
+    ok(Math.abs(tm.entry - tm.stop) / tm.a4 > 1.75 - 1e-9 || !tm.gates.find(function(g){ return g[0].indexOf('G6')===0 && g[1]; }),
+       'wide stop: structure distance reported without 2.0xATR cap');
   } else {
-    ok(true, 'wide-stop fixture did not align — G6 cap test skipped');
+    ok(true, 'wide-stop fixture did not align — G6 veto test skipped');
   }
 }
 

@@ -322,10 +322,9 @@ function hgPlanFromRisk(dir, entry, stop, opts){
       rew1 = t1R * risk;
     }
     var rr1 = rew1 / risk;
-    if (rr1 < minRr){
-      t1 = (dir === 'long') ? entry + minRr * risk : entry - minRr * risk;
-      rr1 = minRr;
-    }
+    /* A supplied structural hint that falls short of minRr is a REJECT.
+       Only the no-hint case may use the R-multiple policy target above. */
+    if (rr1 < minRr) return null;
     var t2 = opts.t2Hint;
     var rew2 = (isFinite(t2)) ? ((dir === 'long') ? (t2 - entry) : (entry - t2)) : NaN;
     if (!(isFinite(t2) && rew2 > 0)){
@@ -867,20 +866,11 @@ function hgEnrichSwingClean(hit, rows, matrix){
 
     var stop = hit.stop;
     if (typeof hgStructureStop === 'function' && rows && rows.length){
-      var st = hgStructureStop(dir, entry, rows, { atrLen: 14, look: 40, buffer: 0.5 });
-      if (st && isFinite(st.stop)){
-        var floorDist = 2.0 * a4;
-        if (dir === 'long'){
-          var wideCap = entry - floorDist;
-          stop = Math.min(st.stop, wideCap);
-        } else {
-          stop = Math.max(st.stop, entry + floorDist);
-        }
+      var st = hgStructureStop(dir, entry, rows, { atrLen: 14, look: 30, buffer: 0 });
+      if (st && isFinite(st.stop) && (dir === 'long' ? st.stop < entry : st.stop > entry)){
+        stop = st.stop;
         entryType += ' · structure stop';
       }
-    } else if (isFinite(entry) && isFinite(stop) && isFinite(a4) && Math.abs(entry - stop) > 2.0 * a4){
-      stop = (dir === 'long') ? entry - 2.0 * a4 : entry + 2.0 * a4;
-      entryType += ' · ATR-capped stop';
     }
     var risk = Math.abs(entry - stop);
     if (!(risk > 0)) return hit;

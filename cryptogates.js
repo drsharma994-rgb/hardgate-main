@@ -7,6 +7,9 @@
   var CG_G5_VZ_MIN = 0.75;
   var CG_SWING_CASCADE_MIN = 4;
   var CG_SCALP_RR_MIN = 2.25;
+  var CG_SWING_EXP_ATR = 3.5;
+  var CG_SWING_RR_MIN = 2.0;
+  var CG_SWING_MAX_EXC_ATR = 4.9;
   var CG_FUND_HARD = 0.05;
   var CG_FUND_DIR = 0.04;
   function cgEsc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -186,16 +189,13 @@
     gates.push(['G5 vol+wick', g5]);
     var stop = lastSwing(rows, dir, 30);
     var entry = p;
-    /* G6 uses the same ATR-capped stop as swingTryClean — uncapped structure
-       stops were failing R:R in the matrix while the ticket would cap. */
-    if (isFinite(a4) && a4 > 0 && Math.abs(entry - stop) > 2.0 * a4){
-      stop = dir === 'long' ? entry - 2.0 * a4 : entry + 2.0 * a4;
-    }
+    /* G6 is a VETO, never an adjustment. The stop stays where structure put it;
+       if structure is wider than EXP/RR_MIN ATR the setup fails honestly. */
     var risk = Math.abs(entry - stop);
-    var expectedMove = a4 * 3.5;
-    var dynamicRR = risk > 0 ? expectedMove / risk : 0;
-    var g6 = dynamicRR >= 2.5;
-    gates.push(['G6 R:R≥2.5', g6]);
+    var expectedMove = a4 * CG_SWING_EXP_ATR;
+    var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
+    var g6 = dynamicRR >= CG_SWING_RR_MIN;
+    gates.push(['G6 R:R≥' + CG_SWING_RR_MIN, g6]);
     var ev = cusumLast(c.slice(-120), 1);
     var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
     gates.push(['G7 CUSUM', g7]);
@@ -313,18 +313,14 @@
     }
     var entry = plannedEntry;
     var stop = m.stop;
-    if (Math.abs(entry - stop) > 2.0 * a4){
-      stop = dir === 'long' ? entry - 2.0 * a4 : entry + 2.0 * a4;
-      entryType += ' · ATR-capped stop';
-    }
     var risk = Math.abs(entry - stop);
     if (!(risk > 0)) return null;
-    var expectedMove = a4 * 3.5;
-    var maxExcursion = a4 * 4.9;
+    var expectedMove = a4 * CG_SWING_EXP_ATR;
+    var maxExcursion = a4 * CG_SWING_MAX_EXC_ATR;
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
     var t2 = dir === 'long' ? entry + maxExcursion : entry - maxExcursion;
     var dynamicRR = expectedMove / risk;
-    if (!(dynamicRR >= 2.5)) return null;
+    if (!(dynamicRR >= CG_SWING_RR_MIN)) return null;
     if (typeof cascadeAge === 'function' && m.rows && m.rows.length){
       var cAge = cascadeAge(m.rows.map(function(r){ return r.c; }), dir);
       if (isFinite(cAge) && cAge < CG_SWING_CASCADE_MIN) return null;
@@ -336,11 +332,11 @@
       if (enriched) out = enriched;
     }
     if (typeof hgApplyExactEntry === 'function'){
-      var exact = hgApplyExactEntry(out, rows, { style: 'swing', preferEdge: true });
+      var exact = hgApplyExactEntry(out, rows, { style: 'swing', preferEdge: false });
       if (exact) out = exact;
     }
     if (typeof hgSwingPostEnrichValid === 'function'){
-      out = hgSwingPostEnrichValid(out, { rows: rows, a4: a4, minRr: 2.5 });
+      out = hgSwingPostEnrichValid(out, { rows: rows, a4: a4, minRr: CG_SWING_RR_MIN, expMult: CG_SWING_EXP_ATR });
       if (!out) return null;
     }
     if (typeof hgSetupStackAttach === 'function'){
