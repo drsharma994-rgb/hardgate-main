@@ -77,12 +77,18 @@ function pushSetup(out, src, row, extra){
     prime: false,
     clean7: false,
     gatesPassed: fin(+row.gatesPassed) ? +row.gatesPassed : (fin(+row.passed) ? +row.passed : null),
-    gatesTotal: fin(+row.gatesTotal) ? +row.gatesTotal : 7
+    gatesTotal: fin(+row.gatesTotal) ? +row.gatesTotal : 7,
+    nearClean: row.nearClean === true,
+    note: row.note ? String(row.note) : null
   };
-  if (row.clean === true || row.clean7 === true) o.clean7 = true;
-  if (fin(+o.gatesPassed) && +o.gatesPassed >= 7) o.clean7 = true;
   if (extra) for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k];
-  if (extra && extra.clean7 === true) o.clean7 = true;
+  if (o.nearClean === true){
+    o.clean7 = false;
+  } else {
+    if (row.clean === true || row.clean7 === true) o.clean7 = true;
+    if (fin(+o.gatesPassed) && fin(+o.gatesTotal) && +o.gatesPassed >= 7 && +o.gatesTotal >= 7) o.clean7 = true;
+    if (extra && extra.clean7 === true) o.clean7 = true;
+  }
   if (o.tier === 'PRIME' || (o.tally !== null && o.tally >= 12)
       || (o.src.indexOf('EDGE') >= 0 && o.tally !== null && o.tally >= EDGE_STRONG_TALLY + 1)){
     o.prime = true;
@@ -178,8 +184,6 @@ function setupIsClean7(s){
   if (s.clean7 === true || s.clean === true) return true;
   if (fin(+s.gatesPassed) && fin(+s.gatesTotal) && +s.gatesPassed >= 7 && +s.gatesTotal >= 7) return true;
   if (fin(+s.passed) && +s.passed >= 7) return true;
-  var src = String(s.src || '');
-  if (src === 'SWING' || src === 'SCALP') return true;
   return false;
 }
 
@@ -222,13 +226,14 @@ function collectCrypto(out, kind, src){
     if (fin(nrr) && nrr < minRr * 0.9) continue;
     var gp = fin(+n.gatesPassed) ? +n.gatesPassed : (fin(+n.passed) ? +n.passed : 6);
     var miss = Array.isArray(n.missing) ? n.missing.join(', ') : '';
+    var nearTier = gp >= 7 ? '7/7 NEAR (anchor/watch)' : '6/7 NEAR';
     pushSetup(out, src, n, {
       nearClean: true,
       clean7: false,
       gatesPassed: gp,
       gatesTotal: fin(+n.gatesTotal) ? +n.gatesTotal : 7,
-      tier: '6/7 NEAR',
-      note: miss ? ('missing: ' + miss + ' — watch only, not a ticket') : '6/7 gates — watch only, not a ticket'
+      tier: nearTier,
+      note: miss ? ('missing: ' + miss + ' — watch only, not a ticket') : (gp >= 7 ? '7/7 gates — anchor or final gate pending' : '6/7 gates — watch only, not a ticket')
     });
   }
 }
@@ -738,6 +743,7 @@ function hgTabAlertsCollect(win){
 
 function setupKey(s){
   if (s.watch) return s.src + ':watch:' + s.sym + ':' + s.dir + '@' + (s.tally || s.gatesPassed || 0);
+  if (s.nearClean) return s.src + ':near:' + s.sym + ':' + s.dir + '@' + s.entry + ':' + (s.gatesPassed || 6);
   return s.src + ':' + s.sym + ':' + s.dir + '@' + s.entry;
 }
 
@@ -806,7 +812,7 @@ function hgTabAlertsFormat(fresh){
     if (s.tally !== null) extra += ' · tally ' + (s.tally > 0 ? '+' : '') + s.tally;
     if (s.tier) extra += ' · ' + s.tier;
     if (s.rr !== null) extra += ' · ' + Number(s.rr).toFixed(2) + 'R';
-    if (s.nearClean) extra += ' · 6/7 NEAR (watch — not ticket yet)';
+    if (s.nearClean) extra += ' · ' + (s.gatesPassed >= 7 ? '7/7 NEAR' : '6/7 NEAR') + ' (watch — not ticket yet)';
     else if (s.clean7) extra += ' · 7/7 CLEAN';
     if (s.note && !s.watch) extra += ' · ' + s.note;
     var plan = hgTabAlertsPlanBlock(s).split('\n').map(function(l){ return '  ' + l; }).join('\n');
