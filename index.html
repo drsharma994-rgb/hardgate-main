@@ -3697,6 +3697,7 @@ async function runTabAlertScans(){
       if (typeof updateMacroFeeds === 'function' && !hgMacroFeedsFresh()) await updateMacroFeeds();
     }catch(e){ console.warn('tab alert macro', e); }
   })();
+  try{ await hgWarmLayerIds(['regime']); }catch(e){ console.warn('tab alert regime warm', e); }
   try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
   try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
   await macroP;
@@ -6722,7 +6723,7 @@ async function hardRefreshAll(){
   }catch(e){ /* registry unreadable — inline counts still reported honestly */ }
   try{
     if (chip) chip.textContent = 'warming layer tabs…';
-    await hgWarmLayerIds(['macro', 'engine', 'edge', 'oiflow', 'squeeze', 'carry', 'termbasis', 'pine']);
+    await hgWarmLayerIds(['regime', 'macro', 'engine', 'edge', 'oiflow', 'squeeze', 'carry', 'termbasis', 'pine']);
     refreshed++;
   }catch(eWarm){
     failed++; failedNames.push('LAYER WARM');

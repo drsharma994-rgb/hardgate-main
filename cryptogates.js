@@ -7,7 +7,111 @@
   var CG_G5_VZ_MIN = 0.75;
   var CG_SWING_CASCADE_MIN = 4;
   var CG_SCALP_RR_MIN = 2.25;
+  var CG_FUND_HARD = 0.05;
+  var CG_FUND_DIR = 0.04;
   function cgEsc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function cgPositioningCls(ticker){
+    if (!ticker) return null;
+    var d = {
+      chg24: ticker.chg24, oiChgPct: ticker.oiChgPct, fundingPct: ticker.fundingPct,
+      retailLongPct: ticker.retailLongPct, topLongPct: ticker.topLongPct,
+      takerRatio: ticker.takerRatio
+    };
+    if (typeof G.hgPositioningClassify === 'function'){
+      try{ return G.hgPositioningClassify(d, { style: 'smart' }); }catch(e){}
+    }
+    if (typeof G.smartClassify === 'function'){
+      try{ return G.smartClassify(d); }catch(e){}
+    }
+    return null;
+  }
+
+  /* Crowded-book fade side when |fr|>=0.05 or trend-aligned crowd — positioning score >= 2 (ENGINE parity). */
+  function cgFundingFadeDir(ticker, trendDir){
+    if (!ticker || ticker.fundingPct === null || ticker.fundingPct === undefined) return null;
+    var fr = +ticker.fundingPct;
+    if (!isFinite(fr)) return null;
+    var hard = Math.abs(fr) >= CG_FUND_HARD - 1e-9;
+    var dirCrowd = (trendDir === 'long' && fr >= CG_FUND_DIR) || (trendDir === 'short' && fr <= -CG_FUND_DIR);
+    if (!hard && !dirCrowd) return null;
+    var fadeDir = fr > 0 ? 'short' : 'long';
+    var cls = cgPositioningCls(ticker);
+    if (!cls) return null;
+    var score = (cls.dir === fadeDir) ? (cls.score || 0) : 0;
+    if (!score && cls.fundingFade && cls.dir === fadeDir) score = cls.score || 2;
+    if (score < 2) return null;
+    return fadeDir;
+  }
+
+  function cgBuildFadePlan(cls, rows4h, rows1h, fadeDir){
+    if (typeof G.smartSetup !== 'function' || !cls) return null;
+    var fadeCls = Object.assign({}, cls, { dir: fadeDir, fundingFade: true });
+    try{
+      var sp = G.smartSetup(fadeCls, rows4h, rows1h || []);
+      if (!sp || sp.type !== 'FADE' || !(+sp.rr1 >= 2.0)) return null;
+      return sp;
+    }catch(e){ return null; }
+  }
+
+  function cgTrySwingFundingFade(rows, ticker, m){
+    if (!m || !m.dir || !rows) return null;
+    var fadeDir = cgFundingFadeDir(ticker, m.dir);
+    if (!fadeDir || !cgMacroOk(ticker, fadeDir)) return null;
+    var g4fail = false, nonG4Fails = 0;
+    for (var gi = 0; gi < (m.gates || []).length; gi++){
+      var g = m.gates[gi];
+      if (!g[1]){
+        if (g[0].indexOf('G4 funding') === 0) g4fail = true;
+        else nonG4Fails++;
+      }
+    }
+    var fr = ticker && ticker.fundingPct !== null ? Math.abs(+ticker.fundingPct) : 0;
+    if (!g4fail && fr < CG_FUND_HARD - 1e-9) return null;
+    if (nonG4Fails > 1 && fr < CG_FUND_HARD - 1e-9) return null;
+    var cls = cgPositioningCls(ticker);
+    var sp = cgBuildFadePlan(cls, rows, null, fadeDir);
+    if (!sp) return null;
+    var out = {
+      sym: ticker && ticker.symbol, dir: fadeDir,
+      entry: sp.entry, stop: sp.stop, t1: sp.t1, t2: sp.t2, rr: sp.rr1,
+      entryType: 'FUNDING-FADE · mean-reversion',
+      rows: m.rows, r14: m.r14, vz: m.vz, mark: m.p,
+      fundingFade: true, planSrc: 'funding fade', type: 'FADE',
+      targetPolicy: sp.targetPolicy || 'R-multiples (fade)', note: sp.note || 'crowded funding fade'
+    };
+    if (typeof hgSetupStackAttach === 'function'){
+      hgSetupStackAttach(out, { style: 'swing', rows4h: rows, ticker: ticker, gatesPassed: 7, gatesTotal: 7, clean: true, fundingFade: true });
+    }
+    return out;
+  }
+
+  function cgTryScalpFundingFade(h1, m15, ticker, m){
+    if (!m || !m.dir) return null;
+    var fadeDir = cgFundingFadeDir(ticker, m.dir);
+    if (!fadeDir || !cgMacroOk(ticker, fadeDir)) return null;
+    var g4fail = false;
+    for (var gi = 0; gi < (m.gates || []).length; gi++){
+      var g = m.gates[gi];
+      if (!g[1] && g[0] === 'G4 funding') g4fail = true;
+    }
+    var fr = ticker && ticker.fundingPct !== null ? Math.abs(+ticker.fundingPct) : 0;
+    if (!g4fail && fr < CG_FUND_HARD - 1e-9) return null;
+    var cls = cgPositioningCls(ticker);
+    var sp = cgBuildFadePlan(cls, h1, m15, fadeDir);
+    if (!sp) return null;
+    var out = {
+      sym: ticker && ticker.symbol, dir: fadeDir,
+      entry: sp.entry, stop: sp.stop, t1: sp.t1, t2: sp.t2, rr: sp.rr1,
+      m15: m15, r15: m.r15, a: m.a, mark: sp.entry,
+      fundingFade: true, planSrc: 'funding fade', type: 'FADE',
+      entryType: 'FUNDING-FADE · scalp fade', note: sp.note || 'crowded funding fade'
+    };
+    if (typeof hgSetupStackAttach === 'function'){
+      hgSetupStackAttach(out, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, gatesPassed: 7, gatesTotal: 7, clean: true, fundingFade: true });
+    }
+    return out;
+  }
 
   function cgCryptoKillzone(){
     try{
@@ -192,7 +296,12 @@
 
   function swingTryClean(rows, ticker){
     var m = swingGateMatrix(rows, ticker);
-    if (!m || !m.dir || !m.clean) return null;
+    if (!m || !m.dir) return null;
+    if (!m.clean){
+      var fadeSw = cgTrySwingFundingFade(rows, ticker, m);
+      if (fadeSw) return fadeSw;
+      return null;
+    }
     var dir = m.dir, p = m.p, e9 = m.e9, e21 = m.e21, a4 = m.a4;
     if (!cgMacroOk(ticker, dir)) return null;
     var plannedEntry = p;
@@ -242,7 +351,12 @@
 
   function scalpTryClean(h1, m15, ticker, minsToFunding){
     var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
-    if (!m || !m.dir || !m.clean) return null;
+    if (!m || !m.dir) return null;
+    if (!m.clean){
+      var fadeSc = cgTryScalpFundingFade(h1, m15, ticker, m);
+      if (fadeSc) return fadeSc;
+      return null;
+    }
     if (!cgMacroOk(ticker, m.dir)) return null;
     var sweepLevel = (m.swept && m.reclaimed)
       ? (m.dir === 'long' ? m.localLow : m.localHigh) : null;

@@ -115,5 +115,34 @@ console.log('\n== scalp gate matrix ==');
   ok(badFund && badFund.gates.some(g => g[0] === 'G4 funding' && g[1] === false), 'scalpGateMatrix: extreme funding fails G4');
 }
 
+console.log('\n== funding-fade swing/scalp path ==');
+{
+  function fadeRows(n, start){
+    const out = [];
+    for (let i = 0; i < n; i++){
+      const c = start + i * 10;
+      out.push({ t: i, o: c, h: c + 5, l: c - 5, c: c, v: 1000 + i * 20 });
+    }
+    return out;
+  }
+  const frRows = fadeRows(260, 50000);
+  globalThis.hgPositioningClassify = function(){
+    return { dir: 'short', longEv: [], shortEv: ['funding extreme +0.0600%/8h — longs pay', 'CROWDED'], score: 2, total: 2, fundingFade: true };
+  };
+  globalThis.smartSetup = function(cls, rows4h){
+    if (!cls || cls.dir !== 'short') return null;
+    const entry = rows4h[rows4h.length - 1].c;
+    const stop = entry + 500;
+    const risk = stop - entry;
+    return { type: 'FADE', dir: 'short', entry, stop, t1: entry - 2 * risk, t2: entry - 3 * risk, rr1: 2, rr2: 3, confirmed: false, note: 'fade test' };
+  };
+  const crowded = { symbol: 'BTCUSDT', fundingPct: 0.06, mark: frRows[frRows.length - 1].c };
+  const fadeHit = globalThis.swingTryClean(frRows, crowded);
+  ok(fadeHit && fadeHit.fundingFade === true && fadeHit.dir === 'short',
+     'swingTryClean funding-fade when G4 crowded and positioning favors fade');
+  delete globalThis.hgPositioningClassify;
+  delete globalThis.smartSetup;
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -4443,6 +4443,42 @@ async function brainRefresh(){
   }catch(e){ return 'error'; }
 }
 
+/* Headless synthesis for the 5-min alert cycle — stub-mounts BRAIN off-screen when
+   the tab was never opened, so __hgBrainLast populates for tabalerts collectBrain. */
+var __alertWarmEl = null;
+var __alertWarmMounted = false;
+var BRAIN_ALERT_FRESH_MS = 4 * 60 * 1000;
+
+async function brainAlertWarm(){
+  try{
+    if (__busy && !brainBusyStuck()) return 'busy';
+    if (__lastSnap && __lastSnap.at && (Date.now() - __lastSnap.at) < BRAIN_ALERT_FRESH_MS) return 'fresh';
+    var el = __mountedEl;
+    if (!el || !__hasRun){
+      try{
+        if (!__alertWarmEl && G.document && G.document.body){
+          __alertWarmEl = G.document.createElement('div');
+          __alertWarmEl.id = 'brainAlertWarmPane';
+          __alertWarmEl.setAttribute('aria-hidden', 'true');
+          __alertWarmEl.style.cssText = 'position:fixed;left:-9999px;top:0;width:800px;height:600px;overflow:hidden;pointer-events:none;opacity:0;';
+          G.document.body.appendChild(__alertWarmEl);
+        }
+        if (__alertWarmEl){
+          el = __alertWarmEl;
+          if (!__alertWarmMounted){
+            mount(el);
+            __alertWarmMounted = true;
+          }
+        }
+      }catch(eMount){ return 'unavailable: headless mount failed'; }
+    }
+    if (!el) return 'skipped: not run yet';
+    await runBrain(el);
+    var snap = (typeof G.__hgBrainLast === 'function') ? G.__hgBrainLast() : __lastSnap;
+    return (snap && snap.rows && snap.rows.length) ? 'warmed' : 'unavailable: synthesis empty';
+  }catch(e){ return 'error: ' + errMsg(e); }
+}
+
 /* ---------------- AUTO-WARM AT SYNTHESIS START ----------------
    RUN SYNTHESIS first INVOKES the same warm starters WARM UP LAYERS uses —
    one shared collection (warmHooksOrdered, engine LAST, the slow leg) so
@@ -5623,7 +5659,7 @@ G.__hgBrainAudit = function(sym){
    synthesis (full or quick), null before the first scan. Never throws. */
 G.__hgBrainLast = function(){ try{ return __lastSnap; }catch(e){ return null; } };
 G.hgBrainAutoWarm = hgBrainAutoWarm;
-G.brainAlertWarm = brainRefresh;
+G.brainAlertWarm = brainAlertWarm;
 G.brainAutoBookOn = brainAutoBookOn;
 G.brainSetAutoBook = brainSetAutoBook;
 G.brainAutoBookPrimeOnlyOn = brainAutoBookPrimeOnlyOn;
