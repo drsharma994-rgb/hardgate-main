@@ -120,5 +120,19 @@ console.log('== apply exact entry ==');
   assert(exact.entry !== 110 || exact.entryType.indexOf('MARKET') >= 0, 'EMA21 limit or in-zone market');
 }
 
+console.log('== macro alt filter (BTC.D / DXY) ==');
+{
+  W.regimeState = function(){ return { btcdPct: 56.2, dxyTrend: 'FLAT' }; };
+  var altBlock = W.hgMacroAllowsCrypto('DOGEUSDT', 'long');
+  assert(altBlock.allow === false && /BTC\.D/.test(altBlock.reason), 'alt long blocked when BTC.D > 55%');
+  var majorOk = W.hgMacroAllowsCrypto('BTCUSDT', 'long');
+  assert(majorOk.allow === true, 'BTC long passes regardless of BTC.D');
+  W.regimeState = function(){ return { btcdPct: 52, dxyTrend: 'UP' }; };
+  var dxyBlock = W.hgMacroAllowsCrypto('LINKUSDT', 'long');
+  assert(dxyBlock.allow === false && /DXY/.test(dxyBlock.reason), 'alt long blocked when DXY rising');
+  W.regimeState = function(){ return null; };
+  assert(W.hgMacroAllowsCrypto('DOGEUSDT', 'long').allow === true, 'null regime never blocks');
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

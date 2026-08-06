@@ -112,6 +112,17 @@ console.log('== adx / stochRsi / vwapDev / cascadeAge ==');
   const dev = G.vwapDev(vw, 20);
   assert(isFinite(dev) && dev > 0, 'vwapDev: close above VWAP => positive % dev');
 
+  const reclaimRows = trendRows(30, 100, 0.2);
+  const rn = reclaimRows.length;
+  reclaimRows[rn - 3].l = reclaimRows[rn - 3].c - 2;
+  reclaimRows[rn - 3].c = reclaimRows[rn - 3].o + 0.1;
+  reclaimRows[rn - 2].c = reclaimRows[rn - 2].o + 0.3;
+  reclaimRows[rn - 1].c = reclaimRows[rn - 1].o + 0.8;
+  reclaimRows[rn - 1].h = reclaimRows[rn - 1].c + 0.2;
+  const vr = G.vwapReclaim(reclaimRows, 20, 'long');
+  assert(vr && typeof vr.ok === 'boolean', 'vwapReclaim: returns shape');
+  assert(typeof G.vwapAt === 'function', 'vwapAt exported');
+
   const cas = trendRows(120, 50, 0.4).map(r => r.c);
   assert(G.cascadeAge(cas, 'long') >= 5, 'cascadeAge: uptrend => stacked EMA age > 0');
 }

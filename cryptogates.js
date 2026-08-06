@@ -9,6 +9,38 @@
   var CG_SCALP_RR_MIN = 2.25;
   function cgEsc(s){ return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+  function cgCryptoKillzone(){
+    try{
+      var d = new Date();
+      var h = d.getUTCHours() + d.getUTCMinutes() / 60;
+      if (h >= 7 && h < 10) return { name: 'LONDON', kz: true };
+      if (h >= 12 && h < 15) return { name: 'NY', kz: true };
+      return { name: 'OFF', kz: false };
+    }catch(e){ return { name: 'OFF', kz: false }; }
+  }
+
+  function cgSessionOrbBreak(m15, dir){
+    try{
+      dir = String(dir || '').toLowerCase();
+      if (!m15 || m15.length < 20) return { ok: false, detail: 'n/a' };
+      var sess = cgCryptoKillzone();
+      if (!sess.kz) return { ok: false, detail: 'outside London/NY kill zone' };
+      var orFn = (typeof G.goldOpeningRange === 'function') ? G.goldOpeningRange : null;
+      if (!orFn) return { ok: false, detail: 'opening-range helper unavailable' };
+      var or = orFn(m15, sess.name === 'LONDON' ? 'london' : 'ny');
+      if (!or || !(or.hi > or.lo)) return { ok: false, detail: sess.name + ' OR not built yet' };
+      if (dir === 'long' && or.state === 'LONG_BREAK') return { ok: true, detail: or.session + ' OR break above ' + or.hi.toFixed(4) };
+      if (dir === 'short' && or.state === 'SHORT_BREAK') return { ok: true, detail: or.session + ' OR break below ' + or.lo.toFixed(4) };
+      return { ok: false, detail: or.session + ' OR inside ' + or.lo.toFixed(4) + '–' + or.hi.toFixed(4) };
+    }catch(e){ return { ok: false, detail: 'n/a' }; }
+  }
+
+  function cgMacroOk(sym, dir){
+    if (typeof G.hgMacroAllowsCrypto !== 'function') return true;
+    var mac = G.hgMacroAllowsCrypto(sym && (sym.symbol || sym), dir);
+    return mac && mac.allow !== false;
+  }
+
   function swingGateMatrix(rows, ticker){
     if (!rows || rows.length < 210) return null;
     var c = rows.map(function(r){ return r.c; });
@@ -98,7 +130,11 @@
       : (c15[n - 1] < e9a[n - 1] && e9a[n - 1] < e21a[n - 1]);
     var pullbackHold = (dir === 'long' ? (m15[n - 1].l <= e21a[n - 1] && c15[n - 1] > e21a[n - 1])
       : (m15[n - 1].h >= e21a[n - 1] && c15[n - 1] < e21a[n - 1])) && reclaimed;
-    var g2 = (swept && reclaimed) || pullbackHold;
+    var orb = cgSessionOrbBreak(m15, dir);
+    var vwr = (typeof vwapReclaim === 'function') ? vwapReclaim(m15, 20, dir) : { ok: false };
+    var g2 = (swept && reclaimed) || pullbackHold || orb.ok || (vwr && vwr.ok);
+    var g2Detail = (swept && reclaimed) ? 'sweep+reclaim'
+      : (pullbackHold ? 'EMA21 hold' : (orb.ok ? orb.detail : (vwr && vwr.ok ? vwr.detail : 'no trigger')));
     var r15 = last(rsi(c15, 14));
     var g3 = dir === 'long' ? (r15 >= 40 && r15 <= 65) : (r15 >= 35 && r15 <= 60);
     var g4 = true;
@@ -133,7 +169,7 @@
     var g7 = dynamicRR >= CG_SCALP_RR_MIN;
     var gates = [
       ['G1 1H trend', true],
-      ['G2 sweep+reclaim / EMA21 hold', g2],
+      ['G2 sweep/reclaim · ORB · VWAP', g2],
       ['G3 RSI band', g3],
       ['G4 funding', g4],
       ['G5 settle>25m', g4b],
@@ -149,7 +185,8 @@
       entry: entry, stop: stop, t1: t1, t2: t2, dynamicRR: dynamicRR,
       r15: r15, a: a, m15: m15, h1: h1, swept: swept, reclaimed: reclaimed,
       localLow: localLow, localHigh: localHigh,
-      e21: e21a[n], mark: c15[n - 1]
+      e21: e21a[n], mark: c15[n - 1], g2Detail: g2Detail,
+      orb: orb, vwapReclaim: vwr
     };
   }
 
@@ -157,6 +194,7 @@
     var m = swingGateMatrix(rows, ticker);
     if (!m || !m.dir || !m.clean) return null;
     var dir = m.dir, p = m.p, e9 = m.e9, e21 = m.e21, a4 = m.a4;
+    if (!cgMacroOk(ticker, dir)) return null;
     var plannedEntry = p;
     var entryType = 'MARKET';
     var distToFast = Math.abs(p - e9) / a4;
@@ -205,6 +243,7 @@
   function scalpTryClean(h1, m15, ticker, minsToFunding){
     var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
     if (!m || !m.dir || !m.clean) return null;
+    if (!cgMacroOk(ticker, m.dir)) return null;
     var sweepLevel = (m.swept && m.reclaimed)
       ? (m.dir === 'long' ? m.localLow : m.localHigh) : null;
     var out = { sym: ticker && ticker.symbol, dir: m.dir, entry: m.entry, stop: m.stop,

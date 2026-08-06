@@ -277,6 +277,19 @@ ok(r.votes.some(function(x){ return x.layer === 'besttab' && x.vote === 'long'; 
 W.swingScan = function(){ return { cands: [] }; };
 W.bestScan = function(){ return { clean: [] }; };
 
+console.log('== edge/pine tab votes ==');
+W.edgeScan = function(){ return { cands: [{ sym: 'ETHUSDT', dir: 'short', tally: 7 }] }; };
+W.pineScan = function(){ return { signals: [{ sym: 'SOLUSDT', dir: 'long', scriptId: 'msb-ob', scriptLabel: 'MSB+OB', isNew: true }] }; };
+W.pineAlertable = function(){ return true; };
+r = COLLECT({ sym: 'ETHUSDT' });
+ok(r.votes.some(function(x){ return x.layer === 'edgetab' && x.vote === 'short'; }),
+   'edgeScan CLEAN list -> edgetab vote');
+r = COLLECT({ sym: 'SOLUSDT' });
+ok(r.votes.some(function(x){ return x.layer === 'pinetab' && x.vote === 'long'; }),
+   'pineScan alertable signal -> pinetab vote');
+W.edgeScan = function(){ return { cands: [] }; };
+W.pineScan = function(){ return { signals: [] }; };
+
 /* ================= I) liqs flush-reversal votes ================= */
 console.log('== liqs votes ==');
 r = COLLECT({ sym: 'BTCUSDT', liq: { dir: 'long', flushSide: 'short', sym: 'BTCUSDT', flushUsd: 5e6 } });

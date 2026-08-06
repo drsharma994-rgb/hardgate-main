@@ -178,6 +178,48 @@ return k; }
 function vwapDev(rows, look){ look=look||20; const n=rows.length; if (n<look) return NaN;
 let pv=0, vv=0; for (let i=n-look;i<n;i++){ const typ=(rows[i].h+rows[i].l+rows[i].c)/3; pv+=typ*rows[i].v; vv+=rows[i].v; }
 if (vv<=0) return NaN; const vwap=pv/vv; return (rows[n-1].c-vwap)/vwap*100; }
+
+/* Rolling VWAP at bar index (typical price, volume-weighted). */
+function vwapAt(rows, endIdx, look){
+  look = look || 20;
+  if (!rows || endIdx < 0 || endIdx >= rows.length) return NaN;
+  var start = Math.max(0, endIdx - look + 1);
+  var pv = 0, vv = 0;
+  for (var j = start; j <= endIdx; j++){
+    var typ = (rows[j].h + rows[j].l + rows[j].c) / 3;
+    pv += typ * (rows[j].v || 0);
+    vv += (rows[j].v || 0);
+  }
+  return vv > 0 ? pv / vv : NaN;
+}
+
+/* VWAP reclaim trigger (ICT-style): wick through rolling VWAP within the last
+   few bars, then a directional close back on the trend side. Used by SCALP/EDGE. */
+function vwapReclaim(rows, look, dir){
+  look = look || 20;
+  dir = String(dir || '').toLowerCase();
+  if (!rows || rows.length < look + 2) return { ok: false, vwap: NaN, detail: 'thin history' };
+  var n = rows.length;
+  var last = rows[n - 1];
+  var vNow = vwapAt(rows, n - 1, look);
+  if (!isFinite(vNow)) return { ok: false, vwap: NaN, detail: 'no volume' };
+  var maxBack = Math.min(6, n - look - 1);
+  for (var back = 1; back <= maxBack; back++){
+    var idx = n - 1 - back;
+    var vPrev = vwapAt(rows, idx, look);
+    if (!isFinite(vPrev)) continue;
+    if (dir === 'long'){
+      if (rows[idx].l < vPrev && last.c > vNow && last.c >= last.o){
+        return { ok: true, vwap: vNow, detail: 'VWAP reclaim long — pierced ' + back + ' bar(s) ago' };
+      }
+    } else if (dir === 'short'){
+      if (rows[idx].h > vPrev && last.c < vNow && last.c <= last.o){
+        return { ok: true, vwap: vNow, detail: 'VWAP reclaim short — pierced ' + back + ' bar(s) ago' };
+      }
+    }
+  }
+  return { ok: false, vwap: vNow, detail: 'no reclaim' };
+}
 function cascadeAge(closes, dir){
 const e9=ema(closes,9), e21=ema(closes,21), e50=ema(closes,50);
 let n=0;
