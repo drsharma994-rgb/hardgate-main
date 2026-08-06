@@ -797,7 +797,7 @@ function edgeEnrich(sig, rows, item, candleSrc){
       out.tally += 1;
     }
     if (bias && bias.g6 === true){
-      out.parts.push({ label: 'G6 dynamic R:R ≥2.5 (cryptogates)', pts: 1 });
+      out.parts.push({ label: 'G6 dynamic R:R clears the swing floor (cryptogates)', pts: 1 });
       out.tally += 1;
     }
 

@@ -682,7 +682,9 @@ function gateCandidate(inp){
         res.swingGates = swPar.label;
         res.swingClean = swPar.clean;
         if (!swPar.g6)
-          return die(5, 'SWING G6 dynamic R:R < 2.5 — EXECUTE requires swing parity (plans.js)');
+          return die(5, 'SWING G6 dynamic R:R below the swing floor ('
+                      + (isFinite(swPar.dynamicRR) ? n2(swPar.dynamicRR) : 'n/a')
+                      + 'R) — EXECUTE requires swing parity (cryptogates.js)');
         if (!swPar.g7)
           return die(5, 'SWING G7 CUSUM against direction — EXECUTE requires swing parity (plans.js)');
       }
