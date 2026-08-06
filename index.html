@@ -537,7 +537,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
-      <span class="note">Telegram: 7/7 CLEAN + 6/7 NEAR watch (COIN · ENTRY · STOP LOSS · TAKE PROFIT per row) from all tabs — one batch every 5 min (tabalerts.js dedup). Alert warm scans whole exchange. Set localStorage hgAlertCleanOnly=0 for all-tab alerts.</span>
+      <span class="note">Telegram: crypto 7/7 CLEAN + 6/7 NEAR (default) — convicted-only mode (hgAlertCryptoConvictedOnly=1, default) sends gate-clean MOST PROBABLE only, no NEAR. Gold uses separate 15-min batch. Set hgAlertCleanOnly=0 or hgAlertCryptoConvictedOnly=0 to widen.</span>
     </div>
     <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer. The #1 panel shows <b>4H regime</b> (STRONG TREND / WEAK TREND / …) — per-symbol tape context, not the market-wide REGIME tab.</div>
     <div class="prog" id="bestProg"><i></i></div>
@@ -1647,6 +1647,11 @@ function smartScreenCandidates(perps, ticks){
    regime, score, total}. Thresholds per the brief; price deadzone ±0.25%/24h,
    OI deadzone ±1%/24h so flat books don't fabricate regimes. */
 function smartClassify(d){
+  if (typeof hgPositioningClassify === 'function'){
+    var r = hgPositioningClassify(d, { style: 'smart' });
+    return { dir: r.dir, longEv: r.longEv, shortEv: r.shortEv, regime: r.regime,
+             score: r.score, total: r.total, fundingFade: r.fundingFade };
+  }
   const longEv = [], shortEv = [], regime = [];
   const up   = d.chg24 !== null && d.chg24 >= 0.25,  dn = d.chg24 !== null && d.chg24 <= -0.25;
   const oiUp = d.oiChgPct !== null && d.oiChgPct >= 1, oiDn = d.oiChgPct !== null && d.oiChgPct <= -1;
@@ -1823,7 +1828,8 @@ function smartSetup(cls, rows4h, rows1h){
   if (src === rows4h) scalpNote += ' · 4H-based (1H history short)';
   var fadeOut = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
            rr1: Math.abs(t1 - entry)/sRisk, rr2: Math.abs(t2 - entry)/sRisk, riskPct: sRisk/entry*100,
-           confirmed: confirmed, note: scalpNote, planSrc: planSrc };
+           confirmed: confirmed, note: scalpNote, planSrc: planSrc,
+           fundingFade: !!(cls.fundingFade || ev.some(function(e){ return e.indexOf('funding extreme') >= 0 || e.indexOf('CROWDED') >= 0; })) };
   if (typeof hgApplyExactEntry === 'function'){
     fadeOut = hgApplyExactEntry(fadeOut, src, { rows1h: rows1h, style: 'fade', m15: src }) || fadeOut;
   }

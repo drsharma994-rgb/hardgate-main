@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const load = f => vm.runInThisContext(fs.readFileSync(root + f, 'utf8'), { filename: f });
-load('indicators.js'); load('binance.js'); load('macro.js'); load('cryptogates.js'); load('plans.js');
+load('indicators.js'); load('binance.js'); load('macro.js'); load('cryptogates.js'); load('plans.js'); load('positioning.js');
 
 const html = fs.readFileSync(root + 'index.html', 'utf8');
 const smartBlock = html.match(/\/\* >>> SMART MONEY \(BINANCE\) >>>[\s\S]*?<<< SMART MONEY END <<< \*\//);

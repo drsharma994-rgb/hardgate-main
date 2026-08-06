@@ -575,40 +575,52 @@ function gateCandidate(inp){
   var fr = numOrNull(inp.fundingPct);
   var scFn = (typeof smartClassify === 'function') ? smartClassify : null;
   var cls = null;
+  var scNote = 'smartClassify unavailable — funding-only read';
+  if (scFn){
+    try{
+      cls = scFn({ chg24: numOrNull(inp.chg24), oiChgPct: numOrNull(inp.oiChgPct), fundingPct: fr,
+                   retailLongPct: numOrNull(inp.retailLongPct), topLongPct: numOrNull(inp.topLongPct),
+                   takerRatio: numOrNull(inp.takerRatio) }) || null;
+    }catch(e){ cls = null; scNote = 'smartClassify errored — funding-only read'; }
+  }
   if (fr === null && !scFn){
     note_(3, null, 'no positioning legs (funding n/a, smartClassify absent) — gate cannot evaluate');
   }else{
     if (fr !== null){
-      if (Math.abs(fr) > FUND_HARD - 1e-9)
-        return die(3, 'funding ' + sp(fr, 4) + '%/8h — |fr| >= 0.05, book crowded both ways (swing G4)');
-      if (dir === 'long' && fr >= FUND_DIR)
-        return die(3, 'funding ' + sp(fr, 4) + '%/8h >= +0.04 — longs paying to hold, crowded side (swing G4)');
-      if (dir === 'short' && fr <= -FUND_DIR)
-        return die(3, 'funding ' + sp(fr, 4) + '%/8h <= -0.04 — shorts paying to hold, crowded side (swing G4)');
-    }
-    var scNote = 'smartClassify unavailable — funding-only read';
-    if (scFn){
-      try{
-        cls = scFn({ chg24: numOrNull(inp.chg24), oiChgPct: numOrNull(inp.oiChgPct), fundingPct: fr,
-                     retailLongPct: numOrNull(inp.retailLongPct), topLongPct: numOrNull(inp.topLongPct),
-                     takerRatio: numOrNull(inp.takerRatio) }) || null;
-      }catch(e){ cls = null; scNote = 'smartClassify errored — funding-only read'; }
-      if (cls && cls.dir){
-        var scScore = (typeof cls.score === 'number' && isFinite(cls.score)) ? cls.score : 0;
-        if (cls.dir !== dir){
-          if (scScore >= 2){
-            var against = (cls.dir === 'long' ? cls.longEv : cls.shortEv) || [];
-            return die(3, 'smart $ ' + scScore + 'v' + Math.max(0, (cls.total || 0) - scScore) + ' AGAINST — '
-                        + (against[0] || 'positioning evidence opposes'));
-          }
-          scNote = 'smart $ mildly against (' + scScore + ' evidence) — noted, not a veto';
-        }else{
-          scNote = 'smart $ confirms ' + dir.toUpperCase() + ' (' + scScore + ' evidence)';
+      if (Math.abs(fr) > FUND_HARD - 1e-9){
+        var fadeDir = fr > 0 ? 'short' : 'long';
+        var fadeScore = (cls && cls.dir === fadeDir) ? (cls.score || 0) : 0;
+        if (!fadeScore && cls && cls.fundingFade && cls.dir === fadeDir) fadeScore = cls.score || 2;
+        if (fadeScore >= 2){
+          dir = fadeDir;
+          res.dir = fadeDir;
+          res.fundingFade = true;
+          scNote = 'funding fade path — crowded book, positioning favors ' + fadeDir.toUpperCase();
+        } else {
+          return die(3, 'funding ' + sp(fr, 4) + '%/8h — |fr| >= 0.05, book crowded both ways (swing G4)');
         }
-      }else if (cls){ scNote = 'smart $ split — no majority'; }
+      } else if (dir === 'long' && fr >= FUND_DIR){
+        return die(3, 'funding ' + sp(fr, 4) + '%/8h >= +0.04 — longs paying to hold, crowded side (swing G4)');
+      } else if (dir === 'short' && fr <= -FUND_DIR){
+        return die(3, 'funding ' + sp(fr, 4) + '%/8h <= -0.04 — shorts paying to hold, crowded side (swing G4)');
+      }
     }
+    if (cls && cls.dir){
+      var scScore = (typeof cls.score === 'number' && isFinite(cls.score)) ? cls.score : 0;
+      if (cls.dir !== dir){
+        if (scScore >= 2){
+          var against = (cls.dir === 'long' ? cls.longEv : cls.shortEv) || [];
+          return die(3, 'smart $ ' + scScore + 'v' + Math.max(0, (cls.total || 0) - scScore) + ' AGAINST — '
+                      + (against[0] || 'positioning evidence opposes'));
+        }
+        scNote = 'smart $ mildly against (' + scScore + ' evidence) — noted, not a veto';
+      }else if (!res.fundingFade){
+        scNote = 'smart $ confirms ' + dir.toUpperCase() + ' (' + scScore + ' evidence)';
+      }
+    }else if (cls){ scNote = 'smart $ split — no majority'; }
     note_(3, true, (fr !== null ? 'funding ' + sp(fr, 4) + '%/8h ok' : 'funding n/a')
           + (numOrNull(inp.oiChgPct) !== null ? ' · OI Δ24h ' + sp(inp.oiChgPct, 1) + '%' : '')
+          + (res.fundingFade ? ' · FUNDING-FADE ticket' : '')
           + ' · ' + scNote);
   }
 

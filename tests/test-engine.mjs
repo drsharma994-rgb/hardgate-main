@@ -329,6 +329,13 @@ stubIndicators();
 console.log('== G3 POSITIONING ==');
 r = gateCandidate(longInp({ fundingPct: 0.05 }));
 ok(r.pass === false && r.vetoGate === 'G3' && r.trail[3].note.indexOf('|fr| >= 0.05') >= 0, '|funding| = 0.05 → hard crowded veto');
+globalThis.smartClassify = function(){
+  return { dir: 'short', longEv: [], shortEv: ['funding extreme +0.0500%/8h — longs pay', 'CROWDED'], regime: [], score: 2, total: 2, fundingFade: true };
+};
+r = gateCandidate(longInp({ fundingPct: 0.05 }));
+ok(r.pass === true && r.fundingFade === true && r.dir === 'short',
+   'funding fade path when |fr|>=0.05 and smart $ favors fade direction');
+delete globalThis.smartClassify;
 r = gateCandidate(shortInp({ fundingPct: 0.0499 }));
 ok(r.pass === true, 'funding +0.0499 on a short → inside the hard band and not against dir, passes');
 r = gateCandidate(longInp({ fundingPct: 0.04 }));

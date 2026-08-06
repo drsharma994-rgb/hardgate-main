@@ -29,8 +29,9 @@ function loadTabAlerts(){
 const lib = loadTabAlerts();
 const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY,
   tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN, LS_CLEAN_ONLY, LS_GOLD_LAST_RUN,
-  setupIsClean7, tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
-  tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced } = lib;
+  setupIsClean7, tabAlertsFilterClean7, tabAlertsFilterCryptoConvicted, tabAlertsCleanOnlyEnabled,
+  tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled,
+  tabAlertsCryptoConvictedOnlyEnabled, goldIsMostConvinced } = lib;
 
 assert(typeof hgTabAlertsFresh === 'function', 'hgTabAlertsFresh exported');
 assert(GAP_MS === 5 * 60 * 1000, '5-min dedup gap');
@@ -41,6 +42,25 @@ assert(tabAlertsGoldSeparateEnabled({ localStorage: { getItem: () => null } }) =
        'gold separate alert batch default ON');
 assert(tabAlertsGoldConvictedOnlyEnabled({ localStorage: { getItem: () => null } }) === true,
        'gold convicted-only default ON');
+assert(tabAlertsCryptoConvictedOnlyEnabled({ localStorage: { getItem: () => null } }) === true,
+       'crypto convicted-only default ON');
+assert(tabAlertsFilterCryptoConvicted([
+  { src: 'SWING', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1, clean7: true, cryptoConvicted: true },
+  { src: 'SWING', sym: 'B', dir: 'long', entry: 2, stop: 1.9, t1: 2.2, clean7: true, cryptoConvicted: false },
+  { src: 'SWING', sym: 'C', dir: 'long', entry: 3, stop: 2.9, t1: 3.2, nearClean: true, gatesPassed: 6 }
+]).length === 1, 'crypto convicted keeps only MOST PROBABLE clean SWING, drops NEAR');
+
+const WNearBlock = loadWithWindow({
+  swingScan: () => ({
+    cands: [],
+    nearCands: [{ sym: 'NEARUSD', dir: 'long', entry: 100, stop: 98, t1: 106, nearClean: true, gatesPassed: 6, gatesTotal: 7 }]
+  }),
+  scalpScan: () => null,
+  sendTelegram: async () => true
+});
+WNearBlock.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+const nearBlockRun = await WNearBlock.hgTabAlertsRun({ force: true, sources: { swing: true } });
+assert(nearBlockRun.pushed === 0, 'crypto convicted default blocks 6/7 NEAR from Telegram');
 assert(goldIsMostConvinced({ id: 'a', grade: 'A', locked: true, vetoed: false }, { bestId: 'b' }) === true,
        'grade-A locked counts as most convinced');
 assert(!goldIsMostConvinced({ id: 'x', grade: 'B', tally: 8 }, { bestId: 'y' }), 'grade-B non-best excluded');
@@ -170,7 +190,7 @@ const WNear = loadWithWindow({
   goldswingScan: () => null,
   sendTelegram: async (t) => { WNear._tg = t; return true; }
 });
-WNear.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+WNear.localStorage = { _m: { hgAlertCryptoConvictedOnly: '0' }, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const nearCol = WNear.hgTabAlertsCollect();
 assert(nearCol.length === 1 && nearCol[0].nearClean === true && nearCol[0].entry === 100,
        'collectCrypto pulls 6/7 nearCands from swingScan snap with levels');
@@ -250,7 +270,7 @@ const WP = loadWithWindow({
   }),
   sendTelegram: async (t) => { WP._tg = t; return true; }
 });
-WP.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+WP.localStorage = { _m: { hgAlertCryptoConvictedOnly: '0' }, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const pineCollected = WP.hgTabAlertsCollect();
 assert(pineCollected.length === 2, 'collectPine includes NEW and RECENT forming signals');
 const pineRun = await WP.hgTabAlertsRunPine({ force: true, cleanOnly: false });
@@ -266,7 +286,7 @@ const WS = loadWithWindow({
   },
   sendTelegram: async (t) => { WS._tg = t; return true; }
 });
-WS.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+WS.localStorage = { _m: { hgAlertCryptoConvictedOnly: '0' }, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
 const smartRun = await WS.hgTabAlertsRun({ sources: { smart: true }, force: true, cleanOnly: false });
 assert(smartRun.pushed === 1 && WS._tg && WS._tg.indexOf('SMART') >= 0, 'smart alerts when cleanOnly off');
 

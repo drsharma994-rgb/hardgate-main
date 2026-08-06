@@ -32,6 +32,7 @@ var LS_LAST_RUN = 'hg_tabalert_last_run';
 var LS_CLEAN_ONLY = 'hgAlertCleanOnly';
 var LS_GOLD_SEPARATE = 'hgAlertGoldSeparate';
 var LS_GOLD_CONVICTED = 'hgAlertGoldConvictedOnly';
+var LS_CRYPTO_CONVICTED = 'hgAlertCryptoConvictedOnly';
 var LS_GOLD_LAST_RUN = 'hg_tabalert_gold_last_run';
 var GAP_MS = 5 * 60 * 1000;
 var GOLD_MIN_TALLY = 10;
@@ -144,6 +145,18 @@ function tabAlertsGoldConvictedOnlyEnabled(root){
   }catch(e){ return true; }
 }
 
+/** Default ON: crypto Telegram batch = 7/7 CLEAN gate tickets only (no 6/7 NEAR;
+    SWING/SCALP require MOST PROBABLE when bestId is set). Set hgAlertCryptoConvictedOnly=0 to widen. */
+function tabAlertsCryptoConvictedOnlyEnabled(root){
+  try{
+    var ls = (root && root.localStorage) ? root.localStorage : null;
+    if (!ls) return true;
+    var v = ls.getItem(LS_CRYPTO_CONVICTED);
+    if (v === null || v === undefined || v === '') return true;
+    return v === '1' || String(v).toLowerCase() === 'true';
+  }catch(e){ return true; }
+}
+
 function goldIsMostConvinced(c, scanVal){
   if (!c || c.vetoed || c.demoted) return false;
   if (scanVal && scanVal.bestId && c.id && c.id === scanVal.bestId) return true;
@@ -202,6 +215,21 @@ function tabAlertsFilterClean7(list){
   return (list || []).filter(setupIsTelegramEligible);
 }
 
+function tabAlertsFilterCryptoConvicted(list){
+  return (list || []).filter(function(s){
+    if (!s || s.watch || s.nearClean) return false;
+    if (!setupIsClean7(s)) return false;
+    if (s.goldConvicted) return true;
+    if (s.src.indexOf('SWING') >= 0 || s.src.indexOf('SCALP') >= 0){
+      return s.cryptoConvicted === true;
+    }
+    if (s.src === 'BEST') return true;
+    if (s.src.indexOf('EDGE') >= 0) return true;
+    if (s.src.indexOf('BRAIN') >= 0) return true;
+    return false;
+  });
+}
+
 function collectCrypto(out, kind, src){
   var fn = gfn(kind === 'swing' ? 'swingScan' : 'scalpScan');
   if (!fn) return;
@@ -214,9 +242,11 @@ function collectCrypto(out, kind, src){
     var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
     if (fin(rr) && rr < minRr) continue;
     var mp = cryptoIsMostProbable(c, val);
+    var hasBest = !!(val && val.bestId);
     pushSetup(out, src, c, {
       clean7: true, gatesPassed: 7, gatesTotal: 7,
-      prime: mp, tier: mp ? 'MOST PROBABLE' : null
+      prime: mp, tier: mp ? 'MOST PROBABLE' : null,
+      cryptoConvicted: mp || !hasBest
     });
   }
   var nearCands = (val && Array.isArray(val.nearCands)) ? val.nearCands : [];
@@ -911,6 +941,9 @@ async function hgTabAlertsRun(opts){
   var list = opts.goldOnly ? hgTabAlertsCollectGold(root) : hgTabAlertsCollect(root);
   var cleanOnly = (opts.cleanOnly !== undefined) ? !!opts.cleanOnly : tabAlertsCleanOnlyEnabled(root);
   if (cleanOnly) list = tabAlertsFilterClean7(list);
+  if (!opts.goldOnly && tabAlertsCryptoConvictedOnlyEnabled(root)){
+    list = tabAlertsFilterCryptoConvicted(list);
+  }
   var allow = opts.sources;
   if (opts.allSources || !allow) allow = tabAlertSourcesAll();
   if (allow && typeof allow === 'object' && !Array.isArray(allow)){
@@ -938,7 +971,7 @@ async function hgTabAlertsRun(opts){
   var fr = hgTabAlertsFresh(prev, list, now, gap);
   if (!fr.fresh.length){
     var emptySt = opts.goldOnly ? 'none-new-gold-conviction'
-      : (cleanOnly ? 'none-new-clean7-or-near' : 'none-new');
+      : (cleanOnly ? 'none-new-crypto-conviction-or-near' : 'none-new');
     return { pushed: 0, fresh: [], keys: fr.keys, status: emptySt, invalidation: invCount };
   }
   var body = hgTabAlertsFormat(fr.fresh);
@@ -1167,11 +1200,12 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = { hgTabAlertsCollect, hgTabAlertsCollectGold, hgTabAlertsFresh, hgTabAlertsFormat,
     hgTabAlertsPlanBlock, tabAlertFormatPx,
     setupKey, GAP_MS, GOLD_MIN_TALLY, LS_KEYS, LS_LAST_RUN, LS_CLEAN_ONLY,
-    LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_GOLD_LAST_RUN,
+    LS_GOLD_SEPARATE, LS_GOLD_CONVICTED, LS_CRYPTO_CONVICTED, LS_GOLD_LAST_RUN,
     tabAlertSourcesAll, tabAlertsShouldRun, tabAlertsMarkRun, hgBrainInvAlertsMaybeRun,
     setupIsClean7, setupIsNearClean6, setupIsTelegramEligible,
-    tabAlertsFilterClean7, tabAlertsCleanOnlyEnabled,
-    tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled, goldIsMostConvinced,
+    tabAlertsFilterClean7, tabAlertsFilterCryptoConvicted, tabAlertsCleanOnlyEnabled,
+    tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled,
+    tabAlertsCryptoConvictedOnlyEnabled, goldIsMostConvinced,
     cryptoSetupId, cryptoIsMostProbable,
     trendmxCrossSetupKey, trendmxCrossFreshKeys, hgTrendmxCrossAlertFormat,
     collectTrendmxGolden, hgTrendmxCrossAlertsRun, TRENDMX_CROSS_GAP_MS, TRENDMX_ALERT_CYCLE_MS,

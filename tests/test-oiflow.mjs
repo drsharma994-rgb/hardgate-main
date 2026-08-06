@@ -27,6 +27,7 @@ const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep)
 
 /* ---- load the module in a pristine global scope: only a window stub ---- */
 globalThis.window = {};
+vm.runInThisContext(fs.readFileSync(root + 'positioning.js', 'utf8'), { filename: 'positioning.js' });
 vm.runInThisContext(fs.readFileSync(root + 'oiflow.js', 'utf8'), { filename: 'oiflow.js' });
 
 let passed = 0;

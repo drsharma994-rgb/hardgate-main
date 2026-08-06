@@ -96,3 +96,119 @@ function positioningCrossHTML(cross){
 function escPos(s){
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+/* Unified positioning classifier — shared by SMART $ (smartClassify) and OI FLOW
+   (oiflowClassify). Accepts chg24/pxChg, oiChgPct/oiChg, fundingPct, fundingZ,
+   retailLongPct/longPct, topLongPct, takerRatio/takerAvg. Returns lowercase dir
+   for smartSetup plus optional dirUpper for legacy OI FLOW cards. */
+function hgPositioningClassify(d, opts){
+  opts = opts || {};
+  d = d || {};
+  function num(x){ return (typeof x === 'number' && isFinite(x)) ? x : null; }
+  var pxDead = (opts.pxDeadzone !== undefined) ? +opts.pxDeadzone : 0.25;
+  var oiDead = (opts.oiDeadzone !== undefined) ? +opts.oiDeadzone : 1;
+  var fundExt = (opts.fundingExtreme !== undefined) ? +opts.fundingExtreme : FUNDING_EXTREME;
+  var fundZExt = (opts.fundingZExtreme !== undefined) ? +opts.fundingZExtreme : 2;
+  var pxChg = num(d.chg24); if (pxChg === null) pxChg = num(d.pxChg);
+  var oiChg = num(d.oiChgPct); if (oiChg === null) oiChg = num(d.oiChg);
+  var fundingPct = num(d.fundingPct);
+  var fundingZ = num(d.fundingZ);
+  var retailLongPct = num(d.retailLongPct); if (retailLongPct === null) retailLongPct = num(d.longPct);
+  var topLongPct = num(d.topLongPct);
+  var takerRatio = num(d.takerRatio); if (takerRatio === null) takerRatio = num(d.takerAvg);
+
+  var longEv = [], shortEv = [], regime = [];
+  var up = pxChg !== null && pxChg >= pxDead, dn = pxChg !== null && pxChg <= -pxDead;
+  var oiUp = oiChg !== null && oiChg >= oiDead, oiDn = oiChg !== null && oiChg <= -oiDead;
+  var fundExtreme = fundingPct !== null && Math.abs(fundingPct) >= fundExt;
+
+  if (pxChg !== null && oiChg !== null){
+    var qdetail = ' · px ' + (pxChg >= 0 ? '+' : '') + pxChg.toFixed(1) + '% / OI ' + (oiChg >= 0 ? '+' : '') + oiChg.toFixed(1) + '%';
+    if (opts.style === 'oiflow'){
+      if (up && oiUp){ regime.push('NEW LONGS (trend fuel)'); longEv.push('NEW LONGS (trend fuel)' + qdetail); }
+      else if (up && oiDn){ regime.push('SHORT COVERING (weak rally)'); shortEv.push('SHORT COVERING (weak rally)' + qdetail); }
+      else if (dn && oiUp){ regime.push('NEW SHORTS (trend fuel)'); shortEv.push('NEW SHORTS (trend fuel)' + qdetail); }
+      else if (dn && oiDn){ regime.push('LONG FLUSH (capitulation)'); longEv.push('LONG FLUSH (capitulation)' + qdetail); }
+    } else {
+      if (up && oiUp){ regime.push('new longs entering'); if (!fundExtreme) longEv.push('trend fuel: price+OI rising'); }
+      else if (up && oiDn){ regime.push('short-covering rally — fade risk'); shortEv.push('covering rally: price up, OI down'); }
+      else if (dn && oiUp){ regime.push('new shorts entering'); if (!fundExtreme) shortEv.push('trend fuel: price down, OI rising'); }
+      else if (dn && oiDn){ regime.push('long liquidation — capitulation watch'); longEv.push('capitulation: price down, OI down'); }
+    }
+  }
+
+  if (fundingZ !== null){
+    if (fundingZ >= fundZExt) shortEv.push('CROWDED LONG (squeeze-down risk) · funding z +' + fundingZ.toFixed(2));
+    else if (fundingZ <= -fundZExt) longEv.push('CROWDED SHORT (squeeze-up risk) · funding z ' + fundingZ.toFixed(2));
+  }
+  if (fundExtreme){
+    if (fundingPct > 0){
+      regime.push('longs crowded (funding)');
+      shortEv.push('funding extreme +' + fundingPct.toFixed(4) + '%/8h — longs pay');
+    } else {
+      regime.push('shorts crowded (funding)');
+      longEv.push('funding extreme ' + fundingPct.toFixed(4) + '%/8h — shorts pay');
+    }
+  }
+
+  if (retailLongPct !== null){
+    if (retailLongPct >= RETAIL_EXTREME_HI){
+      regime.push(opts.style === 'oiflow' ? 'retail extremely long' : 'retail extremely long');
+      if (opts.style === 'oiflow'){
+        shortEv.push('RETAIL MAX LONG (fade) · ' + retailLongPct.toFixed(1) + '% long');
+      } else {
+        shortEv.push('retail ' + retailLongPct.toFixed(1) + '% long (≥65) — contrarian');
+      }
+    } else if (retailLongPct <= RETAIL_EXTREME_LO){
+      regime.push('retail extremely short');
+      if (opts.style === 'oiflow'){
+        longEv.push('RETAIL MAX SHORT (fade) · ' + retailLongPct.toFixed(1) + '% long');
+      } else {
+        longEv.push('retail ' + retailLongPct.toFixed(1) + '% long (≤35) — contrarian');
+      }
+    }
+  }
+
+  if (topLongPct !== null && retailLongPct !== null){
+    var diff = topLongPct - retailLongPct;
+    if (diff >= 15){ regime.push('top traders long vs retail'); longEv.push('smart $: top−retail +' + diff.toFixed(1) + 'pp — follow top traders'); }
+    else if (diff <= -15){ regime.push('top traders short vs retail'); shortEv.push('smart $: top−retail ' + diff.toFixed(1) + 'pp — follow top traders'); }
+  }
+
+  if (takerRatio !== null){
+    var tBuy = (opts.takerBuy !== undefined) ? +opts.takerBuy : 1.1;
+    var tSell = (opts.takerSell !== undefined) ? +opts.takerSell : 0.9;
+    if (opts.style === 'oiflow'){
+      if (takerRatio >= tBuy) longEv.push('AGGRESSIVE BUYERS · taker ' + takerRatio.toFixed(3));
+      else if (takerRatio <= tSell) shortEv.push('AGGRESSIVE SELLERS · taker ' + takerRatio.toFixed(3));
+    } else {
+      if (takerRatio >= tBuy) longEv.push('taker buy/sell ' + takerRatio.toFixed(2) + ' (≥' + tBuy + ') — aggressive buyers');
+      else if (takerRatio <= tSell) shortEv.push('taker buy/sell ' + takerRatio.toFixed(2) + ' (≤' + tSell + ') — aggressive sellers');
+    }
+  }
+
+  var dir = longEv.length > shortEv.length ? 'long' : (shortEv.length > longEv.length ? 'short' : null);
+  var score = Math.abs(longEv.length - shortEv.length);
+  var evidence = dir === 'long' ? longEv.slice() : (dir === 'short' ? shortEv.slice() : []);
+  var fundingFade = fundExtreme || (fundingZ !== null && Math.abs(fundingZ) >= fundZExt);
+  var out = {
+    dir: dir,
+    dirUpper: dir ? dir.toUpperCase() : null,
+    longEv: longEv,
+    shortEv: shortEv,
+    regime: regime,
+    score: score,
+    total: longEv.length + shortEv.length,
+    evidence: evidence,
+    fundingFade: fundingFade
+  };
+  if (opts.dirCase === 'upper'){
+    out.dir = out.dirUpper;
+  }
+  return out;
+}
+
+var Gpos = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
+Gpos.hgPositioningClassify = hgPositioningClassify;
+Gpos.positioningCrossCheck = positioningCrossCheck;
+Gpos.positioningCrossHTML = positioningCrossHTML;
