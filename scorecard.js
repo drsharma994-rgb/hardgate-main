@@ -47,6 +47,10 @@ SETTLEMENT (walk rules — the whole honesty of the ledger lives here):
       t1+t2 spanned by ONE bar .... 'T2' (no stop in that bar -> fill-through)
       t1 first, 14d window ends ... 'T1'      r = r(t1)
       nothing touched in 14d ...... 'EXPIRED' r = mark-to-market at last close
+      limit never traded .......... 'UNFILLED' r = null (NOT a trade; excluded
+                                      from every expectancy figure, but counted
+                                      so a high rate is visible — it means the
+                                      limit entries sit too far from the tape)
       rows end before 14d ......... 'OPEN'    r = live mark-to-market
                                       (provisional; closedAt=null)
       malformed record ............ 'INVALID' r = null (zero risk, wrong-side
@@ -96,6 +100,14 @@ var EXPIRE_MS  = 14 * 86400 * 1000;      /* 14-day settlement window */
 var MIN_DATA   = 5;                      /* 'not enough data' below this many settled */
 var SETTLE_TF  = '1h';
 var SETTLE_SEC = 3600;
+/* A HARDGATE entry is a LIMIT (EMA21/EMA9 for swings, the sweep level for
+   scalps), so it sits AWAY from the mark. A plan whose entry price never
+   traded is not a trade — it must never be scored. Without this, an unfilled
+   long-limit that ran straight to T1 was booked as a T1/T2 WIN, and the bias
+   is one-directional: an unfilled long-limit that runs DOWN has to pass back
+   through the entry to reach the stop, so it fills. Only the winners were
+   phantom. FILL_BARS matches the LOG's fill window in index.html. */
+var FILL_BARS = 12;
 var MAX_BARS   = 500;                    /* candle fetch cap (> 14d of 1h bars) */
 
 /* ---------------- module state ---------------- */
@@ -110,6 +122,17 @@ function errMsg(e){ return (e && e.message) ? e.message : String(e); }
 function fin(x){
   var n = (typeof x === 'number') ? x : parseFloat(x);
   return isFinite(n) ? n : null;
+}
+function hgScoreNetR(rec, state, grossR){
+  try{
+    var W2 = (typeof window !== 'undefined') ? window : null;
+    if (!W2 || typeof W2.hgCostR !== 'function') return null;
+    if (typeof grossR !== 'number' || !isFinite(grossR)) return null;
+    var exitSide = (state === 'SL' || state === 'EXPIRED') ? 'taker' : 'maker';
+    var cost = W2.hgCostR(rec.entry, rec.stop, 'maker', exitSide);
+    if (typeof cost !== 'number' || !isFinite(cost)) return null;
+    return grossR - cost;
+  }catch(e){ return null; }
 }
 function round4(x){
   return (typeof x === 'number' && isFinite(x)) ? Math.round(x * 10000) / 10000 : null;
@@ -316,10 +339,27 @@ function hgScoreWalk(record, rows){
     }
     var deadline = at + EXPIRE_MS;
     var touchedT1 = false, walked = 0, lastClose = null, lastT = null, expired = false;
+    var filled = false, fillWait = 0, sawBars = 0;
     for (var k = 0; k < bars.length; k++){
       var bar = bars[k];
       if ((bar.t + dur) * 1000 <= at) continue;      /* closed at/before entry -> pre-entry */
       if (bar.t * 1000 >= deadline){ expired = true; break; }
+      sawBars++;
+      /* FILL GATE — the plan is only live once price actually trades to the
+         limit. Evaluate the fill bar itself for stop/target too: a bar that
+         reaches the entry can also reach a level in the same bar. */
+      if (!filled){
+        var touched = (bar.l !== null && bar.h !== null)
+          && (dir === 'long' ? bar.l <= entry : bar.h >= entry);
+        if (touched){ filled = true; }
+        else {
+          fillWait++;
+          if (fillWait >= FILL_BARS){
+            return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: bar.t };
+          }
+          continue;
+        }
+      }
       walked++;
       lastT = bar.t;
       if (bar.c !== null) lastClose = bar.c;
@@ -346,6 +386,17 @@ function hgScoreWalk(record, rows){
       if (expired) return { state: 'T1', r: rOf(t1), bars: walked, closedAt: lastT };
       return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null };
     }
+    if (!filled){
+      /* NO DATA is not the same as NOT FILLED. When zero in-window bars were
+         inspected we know nothing about the fill, so fall through to the
+         pre-existing OPEN / EXPIRED behaviour rather than asserting a fill
+         verdict we cannot support. Only claim PENDING_FILL / UNFILLED when
+         bars were actually examined and none of them reached the limit. */
+      if (sawBars > 0){
+        if (expired) return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: lastT };
+        return { state: 'PENDING_FILL', r: null, bars: fillWait, closedAt: null };
+      }
+    }
     if (expired) return { state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT };
     return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null };
   }catch(e){ return INVALID; }
@@ -355,8 +406,9 @@ function hgScoreWalk(record, rows){
    Buckets count SETTLED records with a finite R only; null-R settlements
    stay visible in `settled` but never leak into a rate or average. */
 function hgScoreStats(records){
-  var empty = { open: 0, settled: 0, wins: 0, losses: 0, counted: 0,
-                winRate: null, avgR: null, expectancy: null, enoughData: false,
+  var empty = { open: 0, settled: 0, wins: 0, losses: 0, counted: 0, countedNet: 0,
+                winRate: null, avgR: null, avgNetR: null,
+                expectancy: null, expectancyNet: null, enoughData: false,
                 byTier: { PRIME: { n: 0, wins: 0, winRate: null, avgR: null },
                           HIGH:  { n: 0, wins: 0, winRate: null, avgR: null } },
                 byLane: { crypto: { n: 0, wins: 0, winRate: null, avgR: null },
@@ -378,34 +430,40 @@ function hgScoreStats(records){
         open++;
       }
     }
-    function bucket(){ return { n: 0, wins: 0, sumR: 0 }; }
+    function bucket(){ return { n: 0, wins: 0, sumR: 0, nNet: 0, sumNet: 0 }; }
     function finish(b){
       return { n: b.n, wins: b.wins,
                winRate: b.n ? b.wins / b.n : null,
-               avgR: b.n ? b.sumR / b.n : null };
+               avgR: b.n ? b.sumR / b.n : null,
+               /* null when the cost model was unavailable — never a gross
+                  number wearing a net label */
+               avgNetR: b.nNet ? b.sumNet / b.nNet : null, nNet: b.nNet };
     }
+    function addNet(b, rn){ if (typeof rn === 'number' && isFinite(rn)){ b.nNet++; b.sumNet += rn; } }
     var byTier = { PRIME: bucket(), HIGH: bucket() };
     var byLane = { crypto: bucket(), gold: bucket() };
     var byDir = { long: bucket(), short: bucket() };
     var byLayer = {};
-    var wins = 0, losses = 0, sumR = 0;
+    var wins = 0, losses = 0, sumR = 0, nNetAll = 0, sumNetAll = 0;
     for (var j = 0; j < rs.length; j++){
       var rec = rs[j], rr = rec.r;
+      var rn = (typeof rec.rNet === 'number' && isFinite(rec.rNet)) ? rec.rNet : null;
       if (rr > 0) wins++; else if (rr < 0) losses++;
       sumR += rr;
+      if (rn !== null){ nNetAll++; sumNetAll += rn; }
       var tier = (typeof rec.tier === 'string' && rec.tier) ? rec.tier.toUpperCase() : 'UNTIERED';
       if (!byTier[tier]) byTier[tier] = bucket();
-      byTier[tier].n++; byTier[tier].sumR += rr; if (rr > 0) byTier[tier].wins++;
+      byTier[tier].n++; byTier[tier].sumR += rr; if (rr > 0) byTier[tier].wins++; addNet(byTier[tier], rn);
       var lane = (rec.lane === 'gold') ? 'gold' : 'crypto';
-      byLane[lane].n++; byLane[lane].sumR += rr; if (rr > 0) byLane[lane].wins++;
+      byLane[lane].n++; byLane[lane].sumR += rr; if (rr > 0) byLane[lane].wins++; addNet(byLane[lane], rn);
       var dir = (rec.dir === 'short') ? 'short' : 'long';
-      byDir[dir].n++; byDir[dir].sumR += rr; if (rr > 0) byDir[dir].wins++;
+      byDir[dir].n++; byDir[dir].sumR += rr; if (rr > 0) byDir[dir].wins++; addNet(byDir[dir], rn);
       var layers = Array.isArray(rec.layers) ? rec.layers : [];
       for (var li = 0; li < layers.length; li++){
         var ln = String(layers[li] == null ? '' : layers[li]).trim().toUpperCase();
         if (!ln) continue;
         if (!byLayer[ln]) byLayer[ln] = bucket();
-        byLayer[ln].n++; byLayer[ln].sumR += rr; if (rr > 0) byLayer[ln].wins++;
+        byLayer[ln].n++; byLayer[ln].sumR += rr; if (rr > 0) byLayer[ln].wins++; addNet(byLayer[ln], rn);
       }
     }
     var counted = rs.length;
@@ -414,7 +472,10 @@ function hgScoreStats(records){
       open: open, settled: settled, wins: wins, losses: losses, counted: counted,
       winRate: counted ? wins / counted : null,
       avgR: avgR,
-      expectancy: avgR,   /* mean R per settled trade — the per-trade edge */
+      avgNetR: nNetAll ? sumNetAll / nNetAll : null,
+      countedNet: nNetAll,
+      expectancy: avgR,   /* mean R per settled trade — the per-trade edge, GROSS */
+      expectancyNet: nNetAll ? sumNetAll / nNetAll : null,  /* the one that decides */
       enoughData: settled >= MIN_DATA,
       byTier: {}, byLane: {}, byDir: {}, byLayer: {}
     };
@@ -442,10 +503,17 @@ function hgProfitRankHint(input){
 
     function addBucket(label, bucket){
       if (!bucket || bucket.n < HINT_MIN_N || bucket.avgR === null || !isFinite(bucket.avgR)) return;
+      /* Weight by NET expectancy when the cost model is loaded. This boost
+         feeds back into ranking, so scoring it gross would tune the app to
+         maximise pre-fee edge — which is how a setup family that dies after
+         costs keeps getting promoted. Falls back to gross only when the cost
+         model is genuinely unavailable. */
+      var useR = (bucket.nNet >= HINT_MIN_N && typeof bucket.avgNetR === 'number' && isFinite(bucket.avgNetR))
+        ? bucket.avgNetR : bucket.avgR;
       var w = Math.min(bucket.n, 20);
-      parts.push({ label: label, n: bucket.n, avgR: bucket.avgR, w: w });
+      parts.push({ label: label, n: bucket.n, avgR: bucket.avgR, avgNetR: bucket.avgNetR, usedR: useR, w: w });
       sumW += w;
-      sumE += bucket.avgR * w;
+      sumE += useR * w;
     }
 
     var st = hgScoreStats(store);
@@ -633,14 +701,29 @@ async function hgScoreSettle(fetchCandles){
           continue;
         }
         rec.bars = w.bars;
-        if (w.state === 'OPEN'){
+        if (w.state === 'PENDING_FILL'){
+          rec.mtm = null;
+          rec.note = 'limit not reached yet (' + w.bars + ' bars) — not a trade until it fills';
+          out.open++;
+        }else if (w.state === 'OPEN'){
           rec.mtm = round4(w.r);
           rec.note = null;
           out.open++;
+        }else if (w.state === 'UNFILLED'){
+          rec.status = 'settled';
+          rec.outcome = 'UNFILLED';
+          rec.r = null;                 /* null => excluded from every avgR/winRate */
+          rec.closedAt = w.closedAt;
+          rec.settledAt = Date.now();
+          rec.mtm = null;
+          rec.note = 'limit never traded — excluded from expectancy';
+          out.unfilled = (out.unfilled || 0) + 1;
+          out.settled++;
         }else{
           rec.status = 'settled';
           rec.outcome = w.state;
           rec.r = round4(w.r);
+          rec.rNet = round4(hgScoreNetR(rec, w.state, w.r));
           rec.bars = w.bars;
           rec.closedAt = w.closedAt;
           rec.settledAt = Date.now();
@@ -687,8 +770,12 @@ function boardHtml(st){
     + '<div class="big">' + pct(st.winRate) + '</div>'
     + '<div class="note">r-scored ' + st.counted + ' of ' + st.settled + ' settled</div></div>'
     + '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">AVG R</span></div>'
-    + '<div class="big">' + fmtR(st.avgR) + '</div>'
-    + '<div class="note">expectancy ' + fmtR(st.expectancy) + ' per settled trade</div></div>'
+    + '<div class="big">' + (st.expectancyNet !== null ? fmtR(st.expectancyNet) : fmtR(st.avgR)) + '</div>'
+    + '<div class="note">'
+      + (st.expectancyNet !== null
+          ? 'NET expectancy per settled trade (after Delta fees) · gross ' + fmtR(st.avgR)
+          : 'expectancy ' + fmtR(st.expectancy) + ' per settled trade · <b>GROSS</b> — cost model not loaded')
+      + '</div></div>'
     + honesty;
 }
 function statTableHtml(title, sub, rows, emptyNote){
@@ -855,7 +942,8 @@ async function refreshScorecard(){
 function exportLine(k, b){
   return String(k).toUpperCase() + '  n=' + b.n
     + '  win ' + pct(b.winRate)
-    + '  avgR ' + fmtR(b.avgR);
+    + '  avgR ' + fmtR(b.avgR)
+    + (typeof b.avgNetR === 'number' && isFinite(b.avgNetR) ? '  net ' + fmtR(b.avgNetR) : '');
 }
 function buildExportText(){
   try{
@@ -865,7 +953,8 @@ function buildExportText(){
     L.push('ledger: ' + st.settled + ' settled · ' + st.open + ' open'
       + ' · win rate ' + pct(st.winRate)
       + ' · avg R ' + fmtR(st.avgR)
-      + ' · expectancy ' + fmtR(st.expectancy) + '/trade');
+      + ' · expectancy ' + fmtR(st.expectancy) + '/trade GROSS'
+      + (st.expectancyNet !== null ? ' · ' + fmtR(st.expectancyNet) + '/trade NET' : ' · net n/a'));
     L.push(st.settled === 0
       ? 'evidence: no settled trades yet'
       : (st.enoughData
@@ -1059,6 +1148,7 @@ try{
   G.hgScoreSettle = hgScoreSettle;
   G.hgScoreWalk = hgScoreWalk;
   G.hgScoreStats = hgScoreStats;
+  G.hgScoreNetR = hgScoreNetR;
   G.hgProfitRankHint = hgProfitRankHint;
   G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
   G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };
