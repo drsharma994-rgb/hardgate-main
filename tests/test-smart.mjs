@@ -283,13 +283,12 @@ function mkRows(n, start, step, stepSec, range){
   const flat = [];
   for (let i = 0; i < 120; i++) flat.push({ t: 1700000000 + i * 14400, o: 100, h: 100, l: 100, c: 100, v: 1 });
   ok(SU(longCls, flat, null) === null, 'zero ATR (flat tape) → null (no fabricated risk)');
-  /* the two defensive guards (wrong-side stop → risk ≤ 0, and rr1 < 2.0) are
-     unreachable through real kline geometry — the trendAgree gate flips broken
-     structures to SCALP, and T1 is 2R by construction — so they are pinned at
-     source level instead of through a contrived fixture. */
   ok(/!\(risk > 0\)/.test(smartBlock[0]) && /!\(sRisk > 0\)/.test(smartBlock[0]),
      'defensive risk ≤ 0 rejects present in source (swing + scalp)');
-  ok(/rr1 < 2\.0/.test(smartBlock[0]), 'defensive rr1 < 2.0 reject present in source');
+  /* R:R is now measured against the ATR excursion, so the reject is REACHABLE:
+     a stop wider than expMove/2 must return null instead of pushing T1 out. */
+  ok(/expMove \/ risk >= 2\.0/.test(smartBlock[0]) && /fadeMove \/ sRisk >= 2\.0/.test(smartBlock[0]),
+     'R:R reject measured against ATR excursion, not a multiple of risk');
 }
 
 /* ================= 6) smartScreenCandidates — full-universe 2-pass filter ================= */

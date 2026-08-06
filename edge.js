@@ -446,10 +446,10 @@ function planFromRisk(dir, entry, stop, t1Hint, t2Hint){
   rew1 = (dir === 'long') ? (t1 - entry) : (entry - t1);
   if (!(rew1 > 0)) return null;
   var rr = rew1 / risk;
-  if (rr < MIN_RR){
-    t1 = (dir === 'long') ? entry + MIN_RR * risk : entry - MIN_RR * risk;
-    rr = MIN_RR;
-  }
+  /* A structural target that falls short of MIN_RR is a REJECT, not a target
+     to be pushed further out. Moving T1 to manufacture the minimum is what
+     made every EDGE ticket read '2.00R'. */
+  if (rr < MIN_RR) return null;
   var t2 = t2Hint;
   if (!isFinite(t2) || (dir === 'long' ? t2 <= t1 : t2 >= t1)){
     t2 = (dir === 'long') ? entry + 3.5 * risk : entry - 3.5 * risk;

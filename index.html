@@ -1785,10 +1785,13 @@ function smartSetup(cls, rows4h, rows1h){
       }
       if (!(risk > 0)) return null;
     }
-    t1 = dir === 'long' ? entry + 2*risk : entry - 2*risk;
-    t2 = dir === 'long' ? entry + 3.5*risk : entry - 3.5*risk;
+    /* Target is the structural excursion the tape actually offers (3.5xATR),
+       NOT a multiple of risk. If that excursion does not clear 2R, reject. */
+    const expMove = 3.5 * a4;
+    if (!(expMove / risk >= 2.0)) return null;
+    t1 = dir === 'long' ? entry + expMove : entry - expMove;
+    t2 = dir === 'long' ? entry + 4.9*a4 : entry - 4.9*a4;
     const rr1 = Math.abs(t1 - entry)/risk;
-    if (rr1 < 2.0) return null;
     var out = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
              rr1: rr1, rr2: Math.abs(t2 - entry)/risk, riskPct: risk/entry*100,
              confirmed: confirmed, note: note, targetPolicy: 'R-multiples (2R/3.5R)', planSrc: planSrc };
@@ -1822,9 +1825,10 @@ function smartSetup(cls, rows4h, rows1h){
     scalpNote += ' · stop capped at 1.5×ATR';
   }
   if (!(sRisk > 0)) return null;
-  t1 = dir === 'long' ? entry + 2.0*sRisk : entry - 2.0*sRisk;
-  t2 = dir === 'long' ? entry + 3.0*sRisk : entry - 3.0*sRisk;
-  if (Math.abs(t1 - entry)/sRisk < 2.0) return null;
+  const fadeMove = 2.0 * a1;
+  if (!(fadeMove / sRisk >= 2.0)) return null;
+  t1 = dir === 'long' ? entry + fadeMove : entry - fadeMove;
+  t2 = dir === 'long' ? entry + 3.0*a1 : entry - 3.0*a1;
   if (src === rows4h) scalpNote += ' · 4H-based (1H history short)';
   var fadeOut = { type: type, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
            rr1: Math.abs(t1 - entry)/sRisk, rr2: Math.abs(t2 - entry)/sRisk, riskPct: sRisk/entry*100,
@@ -3697,6 +3701,7 @@ async function runTabAlertScans(){
       if (typeof updateMacroFeeds === 'function' && !hgMacroFeedsFresh()) await updateMacroFeeds();
     }catch(e){ console.warn('tab alert macro', e); }
   })();
+  try{ await hgWarmLayerIds(['regime']); }catch(e){ console.warn('tab alert regime warm', e); }
   try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
   try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
   await macroP;
@@ -3782,13 +3787,17 @@ function planTrade(){
   const liq = side==='long' ? entry*(1 - 1/lev + mmr) : entry*(1 + 1/lev - mmr);
   const liqDist = Math.abs(entry-liq)/entry;
   const clearance = liqDist/stopDist; // want ≥ 1.5×
-  const t1 = $('tT1').value ? +$('tT1').value : (side==='long'?entry+2*riskUnit:entry-2*riskUnit);
+  const t1Given = !!$('tT1').value;
+  const t1 = t1Given ? +$('tT1').value : (side==='long'?entry+2*riskUnit:entry-2*riskUnit);
   const t2 = $('tT2').value ? +$('tT2').value : (side==='long'?entry+3*riskUnit:entry-3*riskUnit);
   const rr = Math.abs(t1-entry)/riskUnit;
+  const t1Valid = t1Given && (side==='long' ? t1 > entry : t1 < entry);
 
   const g=[];
   g.push(['P1','Stop on the correct side of entry', dirOk?'pass':'veto', dirOk?'':'stop must be '+(side==='long'?'below':'above')+' entry']);
-  g.push(['P2','R:R ≥ 2 to T1', rr>=2?'pass':'veto', `${fmt(rr,2)}R to T1 ${px(t1)} — never move the stop to fix this; move the trade`]);
+  g.push(['P2','R:R ≥ 2 to a REAL T1', (t1Valid && rr>=2)?'pass':'veto',
+    t1Valid ? `${fmt(rr,2)}R to T1 ${px(t1)} — never move the stop to fix this; move the trade`
+            : 'enter a structural T1 — a blank field auto-fills 2R and would fake this gate']);
   g.push(['P3','Liquidation clearance auto-scaled (>= 1.5x stop)', clearance>=1.45?'pass':'veto',
     `liq ≈ ${px(liq)} · leverage auto-set to ${lev}x to yield ${fmt(clearance,2)}× stop clearance`]);
   g.push(['P4','Margin sanity (margin ≤ 25% equity)', margin<=eq*0.25?'pass':'veto', `margin $${fmt(margin,2)} of $${fmt(eq,2)}`]);
@@ -4745,7 +4754,7 @@ function logSetup(sym,dir,kind,entry,stop,t1){
   if (l.some(e=>e.sym===sym&&e.dir===dir&&e.kind===kind&&e.ts>cut)) return; // dedupe: same setup within 12h
   const res = kind.includes('scalp') ? '15m' : '4h';   // grade each setup on its own timeframe
   l.push({ id:Date.now().toString(36)+Math.floor(Math.random()*1e4), ts:nowSec(), ex:S.exchange,
-           sym, dir, kind, entry, stop, t1, res, rr:Math.abs(t1-entry)/Math.abs(entry-stop), status:'open' });
+           sym, dir, kind, entry, stop, t1, res, rr:Math.abs(t1-entry)/Math.abs(entry-stop), status:'open', filledTs:null });
   saveLog(l); renderLogBadge();
 }
 async function checkOutcomes(){
@@ -4765,7 +4774,18 @@ async function checkOutcomes(){
       const maxTimeAllowed = e.ts + (maxBars * secPer);
       const want = Math.min(300, Math.ceil(age/secPer)+5);
       const rows = (isGold ? await getXAUCandles(res, want) : await getCandles(e.sym,res,want)).filter(r=>r.t>=e.ts);
+      const FILL_BARS = 12;   /* limit order expires unfilled after 12 bars */
+      let barIdx = -1;
       for (const b of rows){
+        barIdx++;
+        /* FILL GATE — an entry is only live once price actually trades to it.
+           Without this, a LIMIT that price never returned to still gets graded,
+           and unfilled long-limit runners were being counted as TP. */
+        if (!e.filledTs){
+          const touched = e.dir==='long' ? b.l<=e.entry : b.h>=e.entry;
+          if (touched){ e.filledTs = b.t; }
+          else { if (barIdx >= FILL_BARS){ e.status='unfilled'; e.doneTs=b.t; break; } continue; }
+        }
         const hitSL = e.dir==='long' ? b.l<=e.stop : b.h>=e.stop;
         const hitTP = e.dir==='long' ? b.h>=e.t1  : b.l<=e.t1; if (hitSL && hitTP && res!=='15m'){ try{ const sub = isGold ? (await getXAUCandles('15m', Math.ceil(secPer/900)+10)).filter(r=>r.t>=b.t && r.t<b.t+secPer) : await candlesRangeRaw(e.sym, '15m', b.t, b.t+secPer); let rS=null, rT=null; for (const sb of sub){ const subSL = e.dir==='long' ? sb.l<=e.stop : sb.h>=e.stop; const subTP = e.dir==='long' ? sb.h>=e.t1 : sb.l<=e.t1; if (subSL){ rS='sl'; rT=sb.t; break; } if (subTP){ rS='tp'; rT=sb.t; break; } } if (rS){ e.status=rS; e.doneTs=rT; break; } }catch(err){} }
         if (hitSL){ e.status='sl'; e.doneTs=b.t; break; }   // same-bar ambiguity → SL, always
@@ -4783,15 +4803,15 @@ async function checkOutcomes(){
 function renderLog(){
   const l=loadLog().slice().sort((a,b)=>b.ts-a.ts);
   const tp=l.filter(e=>e.status==='tp').length, sl=l.filter(e=>e.status==='sl').length,
-        op=l.filter(e=>e.status==='open').length, ex=l.filter(e=>e.status==='exp').length; const tsStop = l.filter(e=>e.status==='time_stop').length;
+        op=l.filter(e=>e.status==='open').length, ex=l.filter(e=>e.status==='exp').length; const tsStop = l.filter(e=>e.status==='time_stop').length; const unf = l.filter(e=>e.status==='unfilled').length;
   const closed=tp+sl;
   const sumR=l.reduce((a,e)=> a + (e.status==='tp' ? (e.rr||2) : e.status==='sl' ? -1 : e.status==='time_stop' ? (e.rr||-0.1) : 0), 0);
-  $('logSummary').innerHTML = `logged <b>${l.length}</b> · open <b>${op}</b> · TP <b class="pos">${tp}</b> · SL <b class="neg">${sl}</b> · expired <b>${ex}</b> · time-stop <b>${tsStop}</b> · hit rate <b>${closed?fmt(tp/closed*100,1)+'%':'—'}</b> · ΣR <b class="${sumR>=0?'pos':'neg'}">${fmt(sumR,2)}R</b>${closed>0&&closed<30?' · <span style="color:var(--gold)">n='+closed+' closed — far too small to call an edge</span>':''}`;
+  $('logSummary').innerHTML = `logged <b>${l.length}</b> · open <b>${op}</b> · TP <b class="pos">${tp}</b> · SL <b class="neg">${sl}</b> · expired <b>${ex}</b> · time-stop <b>${tsStop}</b> · unfilled <b>${unf}</b> · hit rate <b>${closed?fmt(tp/closed*100,1)+'%':'—'}</b> · ΣR <b class="${sumR>=0?'pos':'neg'}">${fmt(sumR,2)}R</b>${closed>0&&closed<30?' · <span style="color:var(--gold)">n='+closed+' closed — far too small to call an edge</span>':''}`;
   $('logTable').innerHTML = l.length ? `<table><tr><th>time IST</th><th>sym</th><th>kind</th><th>dir</th><th>entry</th><th>stop</th><th>T1</th><th>R:R</th><th>status</th></tr>${
     l.map(e=>{
       const d=new Date((e.ts+19800)*1000).toISOString().slice(5,16).replace('T',' ');
       if (e.status==='note') return `<tr><td>${d}</td><td colspan="8" style="text-align:left;color:var(--veto)">${String(e.note||'')}</td></tr>`;
-      const st=e.status==='tp'?'<b class="pos">TP</b>':e.status==='sl'?'<b class="neg">SL</b>':e.status==='exp'?'<span style="color:var(--dim)">EXP</span>':e.status==='time_stop'?'<span style="color:var(--dim)">TIME_STOP</span>':'open';
+      const st=e.status==='tp'?'<b class="pos">TP</b>':e.status==='sl'?'<b class="neg">SL</b>':e.status==='exp'?'<span style="color:var(--dim)">EXP</span>':e.status==='time_stop'?'<span style="color:var(--dim)">TIME_STOP</span>':e.status==='unfilled'?'<span style="color:var(--dim)">UNFILLED</span>':'open';
       return `<tr><td>${d}</td><td>${e.sym}</td><td>${e.kind}</td><td>${e.dir.toUpperCase()}</td><td>${px(e.entry)}</td><td>${px(e.stop)}</td><td>${px(e.t1)}</td><td>${fmt(e.rr,2)}</td><td>${st}</td></tr>`;
     }).join('')}</table>` : '<div class="empty">Nothing logged yet. Run any scan — every CLEAN setup lands here automatically.</div>';
 }
@@ -6722,7 +6742,7 @@ async function hardRefreshAll(){
   }catch(e){ /* registry unreadable — inline counts still reported honestly */ }
   try{
     if (chip) chip.textContent = 'warming layer tabs…';
-    await hgWarmLayerIds(['macro', 'engine', 'edge', 'oiflow', 'squeeze', 'carry', 'termbasis', 'pine']);
+    await hgWarmLayerIds(['regime', 'macro', 'engine', 'edge', 'oiflow', 'squeeze', 'carry', 'termbasis', 'pine']);
     refreshed++;
   }catch(eWarm){
     failed++; failedNames.push('LAYER WARM');

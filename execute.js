@@ -45,11 +45,12 @@ function resolvePostUrl(){
 
 function executeIdempotencyKey(plan){
   if (plan && plan.idempotencyKey) return String(plan.idempotencyKey);
-  var bucket = Math.floor(Date.now() / 60000);
-  var raw = [plan.sym, plan.side, plan.qty, plan.stop, plan.t1, plan.t2, plan.positionId || '', bucket].join('|');
+  /* NO time component: a retry on the next refresh cycle must reuse the same
+     key, or a soft broker error becomes a duplicate live position. */
+  var raw = [plan.sym, plan.side, plan.qty, plan.stop, plan.t1, plan.t2, plan.positionId || ''].join('|');
   var h = 0;
   for (var i = 0; i < raw.length; i++) h = ((h << 5) - h + raw.charCodeAt(i)) | 0;
-  return 'hgx-' + Math.abs(h).toString(36) + '-' + bucket;
+  return 'hgx-' + Math.abs(h).toString(36);
 }
 
 function buildPayload(plan){
