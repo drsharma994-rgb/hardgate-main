@@ -142,10 +142,14 @@ function hgScoreNetR(rec, state, grossR, closedAtSec){
     var atMs = fin(rec && rec.at);
     var closed = fin(closedAtSec);
     if (closed === null && rec && rec.closedAt != null) closed = fin(rec.closedAt);
-    if (fp !== null && atMs !== null && closed !== null && typeof W2.hgFundingCostR === 'function'){
-      var holdSec = closed - atMs / 1000;
-      if (holdSec > 0){
-        var fund = W2.hgFundingCostR(rec.entry, rec.stop, rec.dir, fp, holdSec);
+    /* Charge funding from the FILL, not from the signal. With the fill gate in
+       place a plan can sit unfilled for hours, and funding accrues on a
+       position, not on an intention. filledAt comes from hgScoreWalk. */
+    var fillSec = fin(rec && rec.filledAt);
+    if (fillSec === null && atMs !== null) fillSec = atMs / 1000;
+    if (fp !== null && fillSec !== null && closed !== null && typeof W2.hgFundingCostR === 'function'){
+      if (closed > fillSec){
+        var fund = W2.hgFundingCostR(rec.entry, rec.stop, rec.dir, fp, fillSec, closed);
         if (typeof fund === 'number' && isFinite(fund)) net -= fund;
       }
     }
@@ -357,7 +361,7 @@ function hgScoreWalk(record, rows){
     }
     var deadline = at + EXPIRE_MS;
     var touchedT1 = false, walked = 0, lastClose = null, lastT = null, expired = false;
-    var filled = false, fillWait = 0, sawBars = 0;
+    var filled = false, fillWait = 0, sawBars = 0, filledAt = null;
     for (var k = 0; k < bars.length; k++){
       var bar = bars[k];
       if ((bar.t + dur) * 1000 <= at) continue;      /* closed at/before entry -> pre-entry */
@@ -369,7 +373,7 @@ function hgScoreWalk(record, rows){
       if (!filled){
         var touched = (bar.l !== null && bar.h !== null)
           && (dir === 'long' ? bar.l <= entry : bar.h >= entry);
-        if (touched){ filled = true; }
+        if (touched){ filled = true; filledAt = bar.t; }
         else {
           fillWait++;
           if (fillWait >= FILL_BARS){
@@ -388,21 +392,21 @@ function hgScoreWalk(record, rows){
       var t2Hit = (t2 !== null && bar.l !== null && bar.h !== null)
         && (dir === 'long' ? bar.h >= t2 : bar.l <= t2);
       if (!touchedT1){
-        if (stopHit) return { state: 'SL', r: -1, bars: walked, closedAt: bar.t };
+        if (stopHit) return { state: 'SL', r: -1, bars: walked, closedAt: bar.t, filledAt: filledAt };
         if (t1Hit){
-          if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
+          if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt };
           touchedT1 = true;
           continue;
         }
-        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
+        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt };
       }else{
-        if (stopHit) return { state: 'T1S', r: rOf(t1) * scaleFrac(rec), bars: walked, closedAt: bar.t };
-        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
+        if (stopHit) return { state: 'T1S', r: rOf(t1) * scaleFrac(rec), bars: walked, closedAt: bar.t, filledAt: filledAt };
+        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt };
       }
     }
     if (touchedT1){
-      if (expired) return { state: 'T1', r: rOf(t1), bars: walked, closedAt: lastT };
-      return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null };
+      if (expired) return { state: 'T1', r: rOf(t1), bars: walked, closedAt: lastT, filledAt: filledAt };
+      return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null, filledAt: filledAt };
     }
     if (!filled){
       /* NO DATA is not the same as NOT FILLED. When zero in-window bars were
@@ -412,11 +416,11 @@ function hgScoreWalk(record, rows){
          bars were actually examined and none of them reached the limit. */
       if (sawBars > 0){
         if (expired) return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: lastT };
-        return { state: 'PENDING_FILL', r: null, bars: fillWait, closedAt: null };
+        return { state: 'PENDING_FILL', r: null, bars: fillWait, closedAt: null, filledAt: filledAt };
       }
     }
-    if (expired) return { state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT };
-    return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null };
+    if (expired) return { state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT, filledAt: filledAt };
+    return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null, filledAt: filledAt };
   }catch(e){ return INVALID; }
 }
 
@@ -745,6 +749,7 @@ async function hgScoreSettle(fetchCandles){
           rec.status = 'settled';
           rec.outcome = w.state;
           rec.r = round4(w.r);
+          rec.filledAt = (w.filledAt != null) ? w.filledAt : null;
           rec.rNet = round4(hgScoreNetR(rec, w.state, w.r, w.closedAt));
           rec.bars = w.bars;
           rec.closedAt = w.closedAt;

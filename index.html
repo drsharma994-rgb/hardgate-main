@@ -5033,19 +5033,39 @@ function hgCostR(entry, stop, entrySide, exitSide){
   return hgRoundTripPct(entrySide, exitSide) / riskPct;
 }
 const HG_FUNDING_INTERVAL_SEC = 8 * 3600;
-/* Funding drag/benefit in R. fundingPct is % per 8h interval (Delta units).
-   Positive funding: longs pay shorts. holdSec is live position duration.
-   Returns R-units to SUBTRACT from gross (positive = cost, negative = rebate). */
-function hgFundingCostR(entry, stop, dir, fundingPct, holdSec){
+/* Funding is charged AT a settlement, not per elapsed hour. Delta settles on
+   the 8h UTC grid (00:00 / 08:00 / 16:00); Unix epoch 0 is 00:00 UTC, so
+   floor(t / 28800) buckets align with that grid exactly.
+   The previous Math.ceil(hold / 8h) billed by DURATION, charging a full
+   funding period to a position held for even a second:
+       hold      ceil()   settlements expected   over-charge
+       15 min      1            0.031               32x
+       1 hour      1            0.125                8x
+       4 hours     1            0.500                2x
+       9 hours     2            1.125              1.8x
+   Every 15m scalp was billed a full 8h of funding, making net R PESSIMISTIC
+   exactly where the fee model already bites hardest — which is how a working
+   scalp book gets abandoned on a measurement artefact. */
+function hgFundingSettlements(fromSec, toSec){
+  const a = +fromSec, b = +toSec;
+  if (!(isFinite(a) && isFinite(b) && b > a)) return null;
+  return Math.floor(b / HG_FUNDING_INTERVAL_SEC) - Math.floor(a / HG_FUNDING_INTERVAL_SEC);
+}
+function hgFundingCostR(entry, stop, dir, fundingPct, fromSec, toSec){
   const e = +entry, st = +stop;
   if (!(isFinite(e) && e > 0 && isFinite(st))) return 0;
   const riskPct = Math.abs(e - st) / e * 100;
   if (!(riskPct > 0)) return 0;
   const fp = +fundingPct;
   if (!isFinite(fp) || fp === 0) return 0;
-  const hold = +holdSec;
-  if (!isFinite(hold) || hold <= 0) return 0;
-  const n = Math.ceil(hold / HG_FUNDING_INTERVAL_SEC);
+  let n = hgFundingSettlements(fromSec, toSec);
+  if (n === null){
+    /* legacy 5-arg call carrying a DURATION: use the unbiased expectation
+       (hold / interval), never ceil — a rounded-up guess is a real cost. */
+    const hold = +fromSec;
+    if (!isFinite(hold) || hold <= 0) return 0;
+    n = hold / HG_FUNDING_INTERVAL_SEC;
+  }
   if (!(n > 0)) return 0;
   const paySign = (String(dir).toLowerCase() === 'short') ? -1 : 1;
   return (paySign * fp * n) / riskPct;
@@ -5067,7 +5087,8 @@ function hgNetR(e){
   let net = gross - hgCostR(e.entry, e.stop, 'maker', exitSide);
   const ft = +e.filledTs, dt = +e.doneTs;
   if (isFinite(ft) && isFinite(dt) && dt > ft && e.fundingPct != null && isFinite(+e.fundingPct)){
-    net -= hgFundingCostR(e.entry, e.stop, e.dir, e.fundingPct, dt - ft);
+    /* pass the TIMESTAMPS, not the duration — settlements crossed, not hours held */
+    net -= hgFundingCostR(e.entry, e.stop, e.dir, e.fundingPct, ft, dt);
   }
   return net;
 }
