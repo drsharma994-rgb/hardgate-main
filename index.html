@@ -3927,7 +3927,57 @@ window.runEdgeAlertCycle = runEdgeAlertCycle;
 /* =========================================================================
    TRADE PLAN — sizing, liquidation clearance, ticket. No execution here.
    ========================================================================= */
-function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return NaN; const ma=a.slice(0,n).reduce(function(x,y){return x+y;},0)/n; const mb=b.slice(0,n).reduce(function(x,y){return x+y;},0)/n; let num=0,da=0,db=0; for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; } const den=Math.sqrt(da*db); return den>0?num/den:NaN; } async function updatePortfolioHeat(sym,dir){ const elRow=$('portfolioHeatRow'); if(!elRow) return; try{ const base=(sym||'').replace(/USD$/,'').replace(/^B-/,'').replace(/_USDT$/,''); if(base==='BTC'){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">n/a (BTC itself)</span>'; return; } const btcSym = S.exchange==='delta' ? 'BTCUSD' : 'B-BTC_USDT'; const rowsSym = await getCandles(sym,'1d',31); const rowsBtc = await getCandles(btcSym,'1d',31); if(rowsSym.length<25||rowsBtc.length<25){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">not enough history</span>'; return; } const n=Math.min(rowsSym.length,rowsBtc.length); const rs=rowsSym.slice(-n), rb=rowsBtc.slice(-n); const retA=[],retB=[]; for(let i=1;i<n;i++){ retA.push(rs[i].c/rs[i-1].c-1); retB.push(rb[i].c/rb[i-1].c-1); } const r=pearsonCorr(retA,retB); const openLog=loadLog().filter(function(e){return e.status==='open';}); const btcOpen=openLog.find(function(e){return e.sym===btcSym;}); const highCorr=isFinite(r)&&r>0.75; let warn=''; if(highCorr&&btcOpen&&btcOpen.dir===dir){ warn=' <b style="color:var(--gold)">— taking this stacks beta, consider adjusting risk or standing aside</b>'; } elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">r='+(isFinite(r)?r.toFixed(2):'n/a')+' vs BTC 30d'+warn+'</span>'; }catch(e){ elRow.innerHTML='<span class="k">Portfolio Heat</span><span class="v">check failed</span>'; } } async function pullMark(){
+function pearsonCorr(a,b){ const n=Math.min(a.length,b.length); if(n<2) return NaN; const ma=a.slice(0,n).reduce(function(x,y){return x+y;},0)/n; const mb=b.slice(0,n).reduce(function(x,y){return x+y;},0)/n; let num=0,da=0,db=0; for(let i=0;i<n;i++){ const xa=a[i]-ma, xb=b[i]-mb; num+=xa*xb; da+=xa*xa; db+=xb*xb; } const den=Math.sqrt(da*db); return den>0?num/den:NaN; } async function updatePortfolioHeat(sym,dir){
+  const elRow=$('portfolioHeatRow'); if(!elRow) return;
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  try{
+    /* Was: correlation of the NEW symbol vs BTC, warning only if a BTC position
+       happened to be open. That misses the case that actually hurts — four alt
+       longs that are the same trade. The book caps heat at 6% NAV and sums it
+       as if every position were an independent bet; this reports how many bets
+       are really there. */
+    const openLog = loadLog().filter(e => e.status === 'open');
+    const cand = { sym: sym, dir: dir, riskPct: 0.01 };
+    const all = openLog.map(e => ({ sym: e.sym, dir: e.dir, riskPct: 0.01 })).concat([cand]);
+    const uniq = [];
+    all.forEach(p => { if (!uniq.some(u => u.sym === p.sym && u.dir === p.dir)) uniq.push(p); });
+    if (uniq.length < 2){
+      elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">no other open position — this is your only bet</span>';
+      return;
+    }
+    const seriesBySym = {};
+    for (const p of uniq){
+      try{
+        const rows = await getCandles(p.sym, '1d', 90);
+        if (rows && rows.length >= 21) seriesBySym[p.sym] = rows;
+      }catch(e){}
+    }
+    if (typeof hgCorrMatrix !== 'function' || typeof hgPortfolioConcentration !== 'function'){
+      elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">concentration module not loaded</span>';
+      return;
+    }
+    const corr = hgCorrMatrix(seriesBySym);
+    const k = hgPortfolioConcentration(uniq, corr);
+    if (k.effectiveBets === null){
+      elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">' + esc(k.note) + '</span>';
+      return;
+    }
+    const conc = k.nominalHeat > 0 ? (k.effectiveHeat / k.nominalHeat) : 0;
+    const warn = conc >= 0.80
+      ? ' <b style="color:var(--gold)">— these are ONE trade. Size them as one.</b>'
+      : (conc >= 0.60 ? ' <b style="color:var(--gold)">— heavily overlapping</b>' : '');
+    const wp = k.worstPair
+      ? ' · tightest pair ' + esc(k.worstPair.a) + '/' + esc(k.worstPair.b) + ' r=' + fmt(k.worstPair.r, 2)
+      : '';
+    elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">'
+      + uniq.length + ' positions incl. this one → <b>' + fmt(k.effectiveBets, 2) + '</b> effective bets'
+      + ' · you carry <b>' + fmt(conc * 100, 0) + '%</b> of nominal heat on one idea'
+      + wp + warn + '</span>';
+  }catch(e){
+    elRow.innerHTML = '<span class="k">Portfolio Heat</span><span class="v">check failed</span>';
+  }
+}
+async function pullMark(){
   const sym=($('tSym').value||'').trim(); if(!sym) return;
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
