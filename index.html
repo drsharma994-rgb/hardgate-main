@@ -772,6 +772,10 @@ const HG_ALERTS_AUTO_REFRESH_MS = 900000;
 const HG_CANDLE_TTL_QUIET = 420;
 /* symbols replayed by CALIBRATE — 40 x 500 bars is ~90s and enough to see a shape */
 const HG_DIAG_SYMBOLS = 40;
+/* the lookback sweep re-runs the whole replay once per value, so it uses a
+   smaller symbol set — 12 x 6 lookbacks is already 72 full replays */
+const HG_DIAG_LOOK_SYMBOLS = 12;
+const HG_DIAG_LOOKS = [5, 8, 10, 15, 20, 30];
 const HG_POS_SNAP_TTL = 420;   /* reuse positioning snapshots across 5-min alert cycles */
 function hgScanRateOk(){
   try{ return !(S.binanceBackoffUntil && Date.now() < S.binanceBackoffUntil); }catch(e){ return true; }
@@ -3555,7 +3559,7 @@ async function runGateDiagnostics(){
       let uni = [];
       try{ uni = (await getTickers()) || []; }catch(e){}
       uni = uni.filter(t => t && t.symbol).slice(0, HG_DIAG_SYMBOLS);
-      const samples = []; let clean = 0, scanned = 0;
+      const samples = []; const cachedRows = []; let clean = 0, scanned = 0;
       for (const t of uni){
         if (!hgScanRateOk()) break;
         stat.textContent = 'calibrating ' + (scanned + 1) + '/' + uni.length + ' — ' + t.symbol;
@@ -3564,7 +3568,37 @@ async function runGateDiagnostics(){
           if (!rows || rows.length < 300) continue;
           const rp = cgGateReplay(rows, t, {});
           samples.push(...rp.samples); clean += rp.clean; scanned++;
+          if (cachedRows.length < HG_DIAG_LOOK_SYMBOLS) cachedRows.push({ rows: rows, t: t });
         }catch(e){}
+      }
+      /* ---- 1b. THE SWING LOOKBACK — the root-cause parameter ----
+         Cannot be derived from recorded gate values the way a threshold can:
+         the stop DISTANCE itself changes with it, so the replay has to be
+         re-run per lookback. Candles are already cached, so this costs CPU
+         and not network. */
+      if (cachedRows.length){
+        const lookRows = [];
+        for (const L of HG_DIAG_LOOKS){
+          let n = 0, settled = 0, sumR = 0, wins = 0, med = [];
+          for (const cr of cachedRows){
+            const rp = cgGateReplay(cr.rows, cr.t, { swingLook: L });
+            for (const smp of rp.samples){
+              const allOk = Object.keys(smp.pass).every(k => smp.pass[k]);
+              if (smp.vals.G6 !== null && isFinite(smp.vals.G6)) med.push(3.5 / smp.vals.G6);
+              if (!allOk) continue;
+              n++;
+              if (smp.r !== null){ settled++; sumR += smp.r; if (smp.r > 0) wins++; }
+            }
+          }
+          med.sort((a, b) => a - b);
+          lookRows.push({ k: L + ' bars (' + fmt(L * 4 / 24, 1) + 'd)',
+            v: n + ' CLEAN · ' + settled + ' settled · '
+               + (settled ? fmt(100 * wins / settled, 1) + '% hit · ' + fmt(sumR / settled, 3) + 'R' : 'no settled')
+               + ' · median stop ' + (med.length ? fmt(med[Math.floor(med.length / 2)], 2) : '—') + ' ATR'
+               + (L === CG_SWING_LOOK ? '   ← current' : '') });
+        }
+        panels.push(hgFunnelPanelHTML('SWING LOOKBACK — CG_SWING_LOOK, the stop horizon (currently '
+          + CG_SWING_LOOK + ')', lookRows, 'diagLook'));
       }
       if (!samples.length){
         panels.push(hgFunnelPanelHTML('CALIBRATION — no data',
