@@ -571,6 +571,196 @@
     }catch(e){ return null; }
   }
   G.cgSoleBlocker = cgSoleBlocker;
+  /* ===================== WALK-FORWARD GATE REPLAY =====================
+     Pack 17 answers "how many setups would relaxing this gate ADD".
+     Pack 15 answers "what would a different stop have PAID".
+     Neither answers the one that decides a threshold: BOTH AT ONCE.
+     This replays the gate matrix bar by bar over history, with NO look-ahead —
+     the matrix at bar i only ever sees rows[0..i] — records the RAW value each
+     gate was measuring, and then settles the hypothetical trade against the
+     bars that came after. One pass produces enough to re-derive what ANY
+     threshold on those gates would have produced, in count AND in R.
+     Raw values are stored, not pass/fail and not margins, so a sweep needs no
+     knowledge of what the threshold was when the replay ran.
+     Outcomes carry the ledger's discipline — a limit must be touched before
+     stop or target are read, and a bar reaching both counts as the stop — but
+     note the replay uses the MATRIX entry, which is the mark, NOT the EMA21
+     limit hgEnrichSwingClean puts on a live ticket. That is deliberate: it
+     isolates the GATE decision from fill behaviour, which is exactly what a
+     threshold sweep needs, since otherwise a threshold change and a fill-rate
+     change move together and neither can be read. The consequence is that
+     replay expectancy is a MARKET-ENTRY figure and will differ from what your
+     live limit tickets realise.
+     Trades can overlap — the same leg may be sampled on several bars. That
+     inflates n identically at every threshold, so comparisons hold while the
+     absolute expectancy is optimistic. Stated rather than hidden. */
+  function cgGateReplay(rows, ticker, opts){
+    var out = { n: 0, aligned: 0, clean: 0, settled: 0, samples: [], note: '' };
+    try{
+      opts = opts || {};
+      var warm = opts.warmup || 210;
+      var horizon = opts.horizon || 84;          /* 84 x 4h = 14 days */
+      var fillBars = opts.fillBars || 12;
+      if (!Array.isArray(rows) || rows.length < warm + horizon + 5){
+        out.note = 'needs ' + (warm + horizon + 5) + '+ bars, got ' + (rows ? rows.length : 0);
+        return out;
+      }
+      for (var i = warm; i < rows.length - horizon; i++){
+        out.n++;
+        var hist = rows.slice(0, i + 1);
+        var m = swingGateMatrix(hist, ticker);
+        if (!m || !m.dir) continue;
+        out.aligned++;
+        if (m.clean) out.clean++;
+        var pass = {};
+        for (var g = 0; g < m.gates.length; g++) pass[String(m.gates[g][0]).split(' ')[0]] = !!m.gates[g][1];
+        pass.ANCHOR = !!m.anchorOK;
+        var a4 = m.a4;
+        var vals = {
+          G1: (isFinite(a4) && a4 > 0) ? Math.abs(m.e21 - m.e50) / a4 : null,
+          G3: (m.dir === 'long') ? (70 - m.r14) : (m.r14 - 30),
+          G5: isFinite(m.vz) ? m.vz : null,
+          G6: isFinite(m.dynamicRR) ? m.dynamicRR : null,
+          ANCHOR: (isFinite(a4) && a4 > 0) ? Math.abs(m.p - m.e21) / a4 : null
+        };
+        var r = cgReplaySettle(rows, i, m.dir, m.entry, m.stop, m.t1 || null, horizon, fillBars, m);
+        if (r.r !== null) out.settled++;
+        out.samples.push({ i: i, dir: m.dir, pass: pass, vals: vals,
+                           entry: m.entry, stop: m.stop, r: r.r, state: r.state });
+      }
+      out.note = out.aligned + ' aligned bars of ' + out.n + ' replayed · ' + out.clean
+        + ' CLEAN · ' + out.settled + ' settled';
+      return out;
+    }catch(e){ out.note = 'replay failed: ' + (e && e.message); return out; }
+  }
+  /* forward settle from bar i+1; LIMIT fill required first */
+  function cgReplaySettle(rows, i, dir, entry, stop, t1, horizon, fillBars, m){
+    try{
+      if (!isFinite(entry) || !isFinite(stop) || Math.abs(entry - stop) <= 0) return { r: null, state: 'no-plan' };
+      var risk = Math.abs(entry - stop);
+      /* isFinite(null) === true in JS — null coerces to 0, which would make the
+         target 0 and turn every long into an instant 7R "win". Same trap as the
+         gold basis guard in pack 3; check the VALUE, not just finiteness.
+         The target is the matrix's own ATR excursion, so the replay measures
+         the ticket policy that actually ships. */
+      var tgt;
+      if (t1 !== null && t1 !== undefined && isFinite(t1) && t1 !== 0) tgt = t1;
+      else if (m && isFinite(m.expectedMove) && m.expectedMove > 0) tgt = (dir === 'long') ? entry + m.expectedMove : entry - m.expectedMove;
+      else tgt = (dir === 'long') ? entry + 2 * risk : entry - 2 * risk;
+      if (!isFinite(tgt) || (dir === 'long' ? tgt <= entry : tgt >= entry)) return { r: null, state: 'bad-target' };
+      var filled = false, wait = 0;
+      for (var k = i + 1; k <= i + horizon && k < rows.length; k++){
+        var b = rows[k];
+        if (!b) continue;
+        if (!filled){
+          var touched = (dir === 'long') ? b.l <= entry : b.h >= entry;
+          if (touched) filled = true;
+          else { wait++; if (wait >= fillBars) return { r: null, state: 'unfilled' }; continue; }
+        }
+        var sl = (dir === 'long') ? b.l <= stop : b.h >= stop;
+        var tp = (dir === 'long') ? b.h >= tgt : b.l <= tgt;
+        if (sl) return { r: -1, state: 'SL' };                 /* same-bar -> SL, as the ledger does */
+        if (tp) return { r: Math.abs(tgt - entry) / risk, state: 'TP' };
+      }
+      return { r: null, state: filled ? 'open' : 'unfilled' };
+    }catch(e){ return { r: null, state: 'err' }; }
+  }
+  /* What WOULD a different threshold on one gate have produced?
+     dir: 'min' = value must be >= t (G1, G5, G6, G3)
+          'max' = value must be <= t (ANCHOR) */
+  function cgReplaySweep(replay, gate, thresholds, cmp){
+    var out = { gate: gate, rows: [], note: '' };
+    try{
+      var samples = (replay && replay.samples) || [];
+      if (!samples.length){ out.note = 'no replay samples'; return out; }
+      var isMax = (cmp === 'max');
+      for (var a = 0; a < thresholds.length; a++){
+        var t = thresholds[a];
+        var n = 0, settled = 0, sumR = 0, wins = 0;
+        for (var s = 0; s < samples.length; s++){
+          var smp = samples[s];
+          var othersOk = true;
+          for (var k in smp.pass){ if (k !== gate && !smp.pass[k]) { othersOk = false; break; } }
+          if (!othersOk) continue;
+          var v = smp.vals[gate];
+          if (v === null || !isFinite(v)) continue;
+          if (isMax ? !(v <= t) : !(v >= t)) continue;
+          n++;
+          if (smp.r !== null){ settled++; sumR += smp.r; if (smp.r > 0) wins++; }
+        }
+        out.rows.push({ t: t, setups: n, settled: settled,
+                        hitPct: settled ? wins / settled : null,
+                        expectancyR: settled ? sumR / settled : null });
+      }
+      out.note = samples.length + ' aligned samples swept on ' + gate;
+      return out;
+    }catch(e){ out.note = 'sweep failed'; return out; }
+  }
+  function cgReplaySweepTableHTML(sweep, label){
+    try{
+      if (!sweep || !Array.isArray(sweep.rows) || !sweep.rows.length) return '';
+      var cap = label || ('Gate ' + (sweep.gate || ''));
+      var h = '<table class="hg-replay-table" style="width:100%;border-collapse:collapse;font-size:10px;margin:8px 0">'
+        + '<caption style="text-align:left;font-weight:800;letter-spacing:.08em;margin-bottom:4px">' + cap + '</caption>'
+        + '<thead><tr style="border-bottom:1px solid var(--line,#E2E8F0)">'
+        + '<th style="text-align:left;padding:4px 6px">threshold</th>'
+        + '<th style="text-align:right;padding:4px 6px">setups</th>'
+        + '<th style="text-align:right;padding:4px 6px">hit%</th>'
+        + '<th style="text-align:right;padding:4px 6px">E[R]</th></tr></thead><tbody>';
+      for (var i = 0; i < sweep.rows.length; i++){
+        var r = sweep.rows[i];
+        var hit = (r.hitPct !== null && isFinite(r.hitPct)) ? (r.hitPct * 100).toFixed(1) + '%' : '—';
+        var er = (r.expectancyR !== null && isFinite(r.expectancyR)) ? r.expectancyR.toFixed(3) : '—';
+        var cur = (sweep.gate === 'G6' && Math.abs(r.t - CG_SWING_RR_MIN) < 1e-9)
+          || (sweep.gate === 'G5' && Math.abs(r.t - CG_G5_VZ_MIN) < 1e-9)
+          || (sweep.gate === 'ANCHOR' && Math.abs(r.t - CG_SWING_ANCHOR_ATR) < 1e-9);
+        h += '<tr' + (cur ? ' style="background:#FFFBEB;font-weight:700"' : '') + '>'
+          + '<td style="padding:4px 6px">' + r.t + (cur ? ' ← current' : '') + '</td>'
+          + '<td style="text-align:right;padding:4px 6px">' + r.setups + '</td>'
+          + '<td style="text-align:right;padding:4px 6px">' + hit + '</td>'
+          + '<td style="text-align:right;padding:4px 6px">' + er + '</td></tr>';
+      }
+      return h + '</tbody></table>';
+    }catch(e){ return ''; }
+  }
+  function cgGateReplayPanelHTML(replay, soleMap){
+    try{
+      if (!replay || !Array.isArray(replay.samples) || !replay.samples.length) return '';
+      soleMap = soleMap || {};
+      var topGate = null, topN = 0;
+      for (var k in soleMap){
+        if (Object.prototype.hasOwnProperty.call(soleMap, k) && soleMap[k] > topN){
+          topN = soleMap[k]; topGate = k;
+        }
+      }
+      var gates = [{ gate: 'G6', thresholds: [1.50, 1.75, 2.00, 2.25, 2.50], cmp: 'min', label: 'G6 R:R floor' }];
+      if (topGate && topGate !== 'G6'){
+        if (topGate === 'G5') gates.push({ gate: 'G5', thresholds: [0.00, 0.25, 0.50, 0.75, 1.00], cmp: 'min', label: 'G5 vol-z floor (top ONLY blocker)' });
+        else if (topGate === 'G1') gates.push({ gate: 'G1', thresholds: [0.10, 0.15, 0.20, 0.25, 0.30], cmp: 'min', label: 'G1 spread floor (top ONLY blocker)' });
+        else gates.push({ gate: topGate, thresholds: [1.00, 1.50, 2.00], cmp: (topGate === 'ANCHOR' ? 'max' : 'min'), label: topGate + ' (top ONLY blocker)' });
+      }
+      gates.push({ gate: 'ANCHOR', thresholds: [1.00, 1.25, 1.50, 2.00, 3.00], cmp: 'max', label: 'ANCHOR EMA21 cap' });
+      var body = '';
+      for (var gi = 0; gi < gates.length; gi++){
+        var g = gates[gi];
+        var sw = cgReplaySweep(replay, g.gate, g.thresholds, g.cmp);
+        body += cgReplaySweepTableHTML(sw, g.label);
+      }
+      return '<details class="hg-funnel" id="swingReplayPanel" style="margin:10px 0;padding:8px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel)">'
+        + '<summary style="cursor:pointer;font-weight:800;letter-spacing:.06em">GATE REPLAY — threshold sweep (walk-forward · no look-ahead)</summary>'
+        + '<div class="note" style="margin:8px 0;line-height:1.55">Replays ' + replay.samples.length
+        + ' aligned bars from this scan\'s universe · ' + (replay.clean || 0) + ' CLEAN at current settings · '
+        + (replay.settled || 0) + ' settled. Market-entry measure (matrix mark, not EMA21 limit). '
+        + 'Overlapping samples inflate n equally at every threshold — compare curves, not absolute E[R]. '
+        + (topGate ? ('Sweep highlights <b>' + topGate + '</b> (top ONLY blocker: ' + topN + ' symbols). ') : '')
+        + 'Read count AND expectancy together before changing a constant.</div>'
+        + body + '</details>';
+    }catch(e){ return ''; }
+  }
+  G.cgGateReplay = cgGateReplay;
+  G.cgReplaySweep = cgReplaySweep;
+  G.cgReplaySweepTableHTML = cgReplaySweepTableHTML;
+  G.cgGateReplayPanelHTML = cgGateReplayPanelHTML;
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
