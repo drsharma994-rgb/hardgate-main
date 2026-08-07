@@ -48,11 +48,14 @@ function world(seed, n){
 const T = { symbol: 'X', fundingPct: 0.005 };
 console.log('== the default is unchanged ==');
 {
-  ok(ctx.CG_SWING_LOOK === 30, 'CG_SWING_LOOK is still 30 — this pack changes no behaviour by default');
+  /* Pack 21 introduced the parameter at 30. Pack 22 moved it to 20 on outcome
+     evidence — two independent 120-symbol samples where 30 produced only 19
+     settled trades and an expectancy that swung 0.848R / 0.218R between them. */
+  ok(ctx.CG_SWING_LOOK === 20, 'CG_SWING_LOOK is 20 since fix pack 22');
   const a = ctx.swingGateMatrix(world(7919, 300), T);
   const b = ctx.swingGateMatrix(world(7919, 300), T, {});
-  const c = ctx.swingGateMatrix(world(7919, 300), T, { swingLook: 30 });
-  ok(a.stop === b.stop && b.stop === c.stop, 'no opts, empty opts and an explicit 30 all agree');
+  const c = ctx.swingGateMatrix(world(7919, 300), T, { swingLook: ctx.CG_SWING_LOOK });
+  ok(a.stop === b.stop && b.stop === c.stop, 'no opts, empty opts and an explicit CG_SWING_LOOK all agree');
   ok(ctx.swingGateMatrix(world(7919, 300), T, { swingLook: 0 }).stop === a.stop, 'a nonsense lookback falls back to the default');
   ok(ctx.swingGateMatrix(world(7919, 300), T, { swingLook: -5 }).stop === a.stop, 'negative too');
 }

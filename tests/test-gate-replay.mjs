@@ -77,7 +77,12 @@ console.log('== outcomes are bounded and use the fill gate ==');
   ok(rs.length > 500, rs.length + ' settled samples');
   ok(Math.min.apply(null, rs) === -1, 'the worst outcome is exactly -1R, never worse');
   /* target is the matrix ATR excursion; risk varies, so R is bounded but not constant */
-  ok(Math.max.apply(null, rs) < 10, 'the best outcome is bounded (' + Math.max.apply(null, rs).toFixed(2) + 'R)');
+  /* Bound raised from 10 to 25 in pack 22. Not a regression: the target is a
+     fixed 3.5xATR excursion, so a TIGHTER stop makes the same move a larger R
+     multiple — at CG_SWING_LOOK 20 a 0.35xATR stop yields ~10R, which is real.
+     The assertion still exists to catch a genuinely UNBOUNDED value, which is
+     the isFinite(null) class of bug that produced 136R while writing pack 19. */
+  ok(Math.max.apply(null, rs) < 25, 'the best outcome is bounded (' + Math.max.apply(null, rs).toFixed(2) + 'R)');
   /* The replay deliberately uses the MATRIX entry, which is the mark — not the
      EMA21 limit that hgEnrichSwingClean puts on a live ticket. That isolates
      the GATE decision from fill behaviour, which is what a threshold sweep
@@ -98,7 +103,11 @@ console.log('== isFinite(null) is TRUE in JS — the target guard must check the
   const all = [];
   for (let s = 1; s <= 20; s++) all.push(...ctx.cgGateReplay(world(s * 7919, 420), T, {}).samples);
   const rs = all.filter(x => x.r !== null).map(x => x.r);
-  ok(!rs.some(r => r > 5), 'no sample reports an absurd multi-R win from a zero target');
+  /* Bound raised 5 -> 25 with CG_SWING_LOOK 20: a legitimately tight stop makes
+     the fixed 3.5xATR target a large R multiple, and ~10R is real. The zero-
+     target bug this guards against produced 136R, because r became entry/risk
+     rather than a move/risk — so 25 still catches it by a wide margin. */
+  ok(!rs.some(r => r > 25), 'no sample reports an absurd multi-R win from a zero target');
   ok(rs.filter(r => r > 0).length > 0, 'wins still exist — the guard did not just zero everything out');
 }
 console.log('== a sweep re-prices a threshold in COUNT and in R ==');
@@ -120,13 +129,19 @@ console.log('== a sweep re-prices a threshold in COUNT and in R ==');
     ok(g6.rows[i].setups <= g6.rows[i - 1].setups, 'monotone at t=' + g6.rows[i].t);
   ok(g6.rows.every(r => r.expectancyR === null || (r.expectancyR >= -1 && r.expectancyR < 10)),
      'every expectancy is inside the possible range');
-  /* ANCHOR is inert given the other gates — pack 12 found it by correlation,
-     pack 17 by sole-blocker count, and here it shows up a third way: the
-     threshold can move 3x and change nothing at all. */
+  /* ANCHOR is inert in ONE direction, and the original assertion was sloppy
+     about which. RELAXING the cap adds nothing — confirmed three ways now
+     (pack 12 correlation, pack 17 sole-blocker, this replay), and the
+     sole-blocker count for ANCHOR is still exactly 0 at CG_SWING_LOOK 20.
+     TIGHTENING it can still remove setups, because a clean setup may sit
+     between the tighter and the current cap. At look 30 there were too few
+     CLEAN setups for that to show; at 20 there are, which is what caught it. */
   const an = ctx.cgReplaySweep({ samples: all }, 'ANCHOR', [1.00, 1.50, 3.00], 'max');
-  ok(an.rows[0].setups === an.rows[2].setups,
-     'tripling the ANCHOR cap changes the setup count by zero');
-  ok(an.rows[0].expectancyR === an.rows[2].expectancyR, 'and changes expectancy by zero');
+  const cur = an.rows[1], loose = an.rows[2], tight = an.rows[0];
+  ok(loose.setups === cur.setups,
+     'RELAXING the ANCHOR cap 1.50 -> 3.00 adds exactly zero setups');
+  ok(loose.expectancyR === cur.expectancyR, 'and changes expectancy by zero');
+  ok(tight.setups <= cur.setups, 'TIGHTENING it can only remove setups, never add');
 }
 console.log('== it degrades honestly ==');
 {

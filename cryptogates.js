@@ -18,10 +18,11 @@
      being measured over TWICE the horizon the R:R is scaled to, so the median
      setup could not reach even 1:1 — G6 was not "tight", it was arithmetically
      asking for a rare geometry.
-     Left at 30 by default. Changing it changes which setups pass, and that is
-     yours to decide from the CALIBRATE sweep on your own tape, not mine to
-     decide from synthetic data. But it is now a PARAMETER, so it can be swept. */
-  var CG_SWING_LOOK = 30;
+  /* CHANGED 30 -> 20 in fix pack 22, on outcome evidence from two independent
+     120-symbol walk-forward samples (see the pack notes). 30 produced 19
+     settled trades per sample — a number you cannot measure anything from, and
+     the reason this app has shown zero setups for twenty-one packs. */
+  var CG_SWING_LOOK = 20;
   var CG_SWING_ANCHOR_ATR = 1.5;    /* engine ANCHOR_MAX_ATR */
   var CG_G5_VZ_MIN = 0.5;           /* engine VOLZ_MIN */
   var CG_G1_SPREAD_ATR = 0.25;      /* engine SPREAD_MIN_ATR */
