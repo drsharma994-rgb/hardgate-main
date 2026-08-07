@@ -406,7 +406,15 @@ var GS_CSS = ''
 + '#tab_goldscalp .gsx-wrow.armed .gsx-wst{color:#A67C12;border-color:rgba(201,146,26,.45);background:rgba(201,146,26,.12)}'
 + '#tab_goldscalp .gsx-wrow.idle .gsx-wst{color:#475569;border-color:#E2E8F0;background:#F8FAFC}'
 + '#tab_goldscalp .gsx-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
-+ '#tab_goldscalp .gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}';
++ '#tab_goldscalp .gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
++ '#tab_goldscalp .gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
++ '#tab_goldscalp .gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
++ '#tab_goldscalp .gsx-weekend b,.gsx-weekend b{letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '#tab_goldscalp .gsx-weekend-detail,.gsx-weekend-detail{margin-top:6px;font-weight:500}'
++ '#tab_goldscalp .gsx-weekend-ok,.gsx-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
++ '#tab_goldscalp .gsx-weekend-muted,.gsx-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#475569}'
++ '#tab_goldscalp .gsx-weekend-caution,.gsx-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
++ '#tab_goldscalp .gsx-weekend-warn,.gsx-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -649,6 +657,34 @@ function whySilentText(o){
 }
 function whySilentHTML(ws){
   return '<div class="gsx-silent"><b>WHY SILENT</b> — ' + esc(ws) + '</div>';
+}
+
+function goldWeekendPanelHTML(ro){
+  if (!ro || (!ro.headline && !ro.detail)) return '';
+  var lvl = ro.level || 'muted';
+  return '<div class="gsx-weekend gsx-weekend-' + lvl + '"><b>WEEKEND EXPOSURE</b> — ' + esc(ro.headline)
+    + (ro.detail ? '<div class="gsx-weekend-detail">' + esc(ro.detail) + '</div>' : '') + '</div>';
+}
+function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
+  if (!ui || !ui.weekend) return;
+  try{
+    var roFn = gfn('hgGoldWeekendReadout');
+    if (!roFn || !rows || !rows.length){ ui.weekend.style.display = 'none'; ui.weekend.innerHTML = ''; return; }
+    var aArr = _atr(rows, 14);
+    var atrVal = (aArr && aArr.length) ? aArr[aArr.length - 1] : NaN;
+    var stopAtr = 1.5;
+    if (bestCandidate && isFinite(bestCandidate.entry) && isFinite(bestCandidate.stop)
+        && isFinite(atrVal) && atrVal > 0){
+      stopAtr = Math.abs(bestCandidate.entry - bestCandidate.stop) / atrVal;
+    }
+    var ro = roFn(rows, atrVal, stopAtr, Math.floor((nowMs || Date.now()) / 1000));
+    var html = goldWeekendPanelHTML(ro);
+    ui.weekend.innerHTML = html;
+    ui.weekend.style.display = html ? '' : 'none';
+  }catch(e){
+    ui.weekend.style.display = 'none';
+    ui.weekend.innerHTML = '';
+  }
 }
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
@@ -996,6 +1032,8 @@ async function runScan(ui, scanSt){
     }
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
+    var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
+    paintGoldWeekendPanel(ui, wkRows, now, displayBest);
     /* render */
     if (ui && ui.cards && ui.empty){
       if (display.length){
@@ -1077,6 +1115,7 @@ function goldscalpMountInto(el, scanSt, cfg){
       + deskNote
       + '<div class="prog" id="' + p + 'Prog"><i></i></div>'
       + '</div>'
+      + '<div id="' + p + 'Weekend" class="gsx-weekend-wrap" style="display:none"></div>'
       + '<div id="' + p + 'Desk"></div>'
       + '<div class="cards" id="' + p + 'Cards"></div>'
       + '<div class="empty" id="' + p + 'Empty" style="display:none">' + emptyMsg + '</div>';
@@ -1086,7 +1125,8 @@ function goldscalpMountInto(el, scanSt, cfg){
       stat:  el.querySelector('#' + p + 'Stat'),
       prog:  el.querySelector('#' + p + 'Prog'),
       cards: el.querySelector('#' + p + 'Cards'),
-      empty: el.querySelector('#' + p + 'Empty')
+      empty: el.querySelector('#' + p + 'Empty'),
+      weekend: el.querySelector('#' + p + 'Weekend')
     };
     scanSt.ui = ui;
     scanSt.useStartraderRouting = !!cfg.useStartraderRouting;

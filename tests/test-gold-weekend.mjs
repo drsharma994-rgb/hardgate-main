@@ -105,4 +105,26 @@ console.log('== it degrades honestly and never invents a number ==');
   ok(ctx.hgGoldWeekendRisk(null, 1.5).exceedPct === null, 'no stats -> null, not 0%');
   ok(ctx.hgGoldWeekendRisk({ moves: [1, 2] }, 0).exceedPct === null, 'no stop distance -> null');
 }
+console.log('== readout picks warn level from measured history ==');
+{
+  ok(typeof ctx.hgGoldWeekendReadout === 'function', 'hgGoldWeekendReadout exported');
+  const ATR = 20;
+  function build(jumpAtr){
+    const start = U(2026, 2, 2, 0);
+    const rows = []; let p = 4000, wasWk = false;
+    for (let i = 0; i < 20 * 42; i++){
+      const t = start + i * 14400;
+      const inWk = ctx.hgInGoldWeekend(t);
+      if (inWk && !wasWk) p += jumpAtr * ATR;
+      wasWk = inWk; rows.push({ t, o: p, h: p, l: p, c: p, v: 1 });
+    }
+    return rows;
+  }
+  const quiet = ctx.hgGoldWeekendReadout(build(0.2), ATR, 1.5, U(2026, 7, 7, 20));
+  ok(quiet.level === 'ok' || quiet.level === 'muted' || quiet.level === 'caution', 'quiet weekends read calm');
+  ok(/2\.0h to Fri 22:00/.test(quiet.headline), 'Fri 20:00 countdown in headline');
+  const violent = ctx.hgGoldWeekendReadout(build(2.5), ATR, 1.5, U(2026, 7, 8, 12));
+  ok(violent.level === 'warn', 'violent history inside closure warns');
+  ok(/inside spot\/CME closure/.test(violent.headline), 'inside closure headline');
+}
 console.log('\n' + passed + ' passed, 0 failed');
