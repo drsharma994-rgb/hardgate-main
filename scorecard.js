@@ -41,9 +41,9 @@ SETTLEMENT (walk rules — the whole honesty of the ledger lives here):
     plans score their ACTUAL multiple — never a fabricated one):
       stop first .................. 'SL'      r = -1 (exactly, by construction)
       t1 first, then t2 ........... 'T2'      r = r(t2)   ("T1-then-T2 = full")
-      t1 first, then stop ......... 'T1S'     r = r(t1)/2 (partial-bank
-                                      convention: half banked at t1, runner
-                                      died at breakeven -> +1R on house plans)
+      t1 first, then stop ......... 'T1S'     r = r(t1) * scalePct/100
+                                      (partial-bank at t1; default 50% =
+                                      TRADE PLAN tScale when recorded)
       t1+t2 spanned by ONE bar .... 'T2' (no stop in that bar -> fill-through)
       t1 first, 14d window ends ... 'T1'      r = r(t1)
       nothing touched in 14d ...... 'EXPIRED' r = mark-to-market at last close
@@ -119,6 +119,12 @@ var __sc = { busy: false, ranOnce: false, ui: null };
 
 /* ---------------- small pure helpers ---------------- */
 function errMsg(e){ return (e && e.message) ? e.message : String(e); }
+function scaleFrac(rec){
+  var sp = fin(rec && rec.scalePct);
+  if (sp === null || sp <= 0) return 0.5;
+  if (sp > 100) return 1;
+  return sp / 100;
+}
 function fin(x){
   var n = (typeof x === 'number') ? x : parseFloat(x);
   return isFinite(n) ? n : null;
@@ -378,7 +384,7 @@ function hgScoreWalk(record, rows){
         }
         if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
       }else{
-        if (stopHit) return { state: 'T1S', r: rOf(t1) / 2, bars: walked, closedAt: bar.t };
+        if (stopHit) return { state: 'T1S', r: rOf(t1) * scaleFrac(rec), bars: walked, closedAt: bar.t };
         if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t };
       }
     }
@@ -577,6 +583,8 @@ function hgScoreRecord(input){
     if (dir === 'short' && !(t1 < entry)) return { ok: false, reason: 'short t1 must be below entry' };
     var t2 = null;
     if (t2raw !== null && ((dir === 'long' && t2raw > entry) || (dir === 'short' && t2raw < entry))) t2 = t2raw;
+    var scaleRaw = fin(inp.scalePct);
+    var scalePct = (scaleRaw !== null && scaleRaw > 0 && scaleRaw <= 100) ? scaleRaw : 50;
     /* wrong-side/non-finite t2 -> dropped to null, never invented */
     var at = fin(inp.at);
     at = (at !== null && at > 0) ? Math.floor(at) : Date.now();
@@ -592,7 +600,7 @@ function hgScoreRecord(input){
       sym: sym, dir: dir,
       tier: (typeof inp.tier === 'string' && inp.tier.trim()) ? inp.tier.trim().toUpperCase().slice(0, 16) : null,
       lane: laneOf(sym, inp.lane),
-      entry: entry, stop: stop, t1: t1, t2: t2,
+      entry: entry, stop: stop, t1: t1, t2: t2, scalePct: scalePct,
       layers: sanitizeLayers(inp.layers),
       at: at,
       status: 'open',
@@ -845,7 +853,7 @@ function settledHtml(records){
   var done = [];
   for (var i = 0; i < records.length; i++) if (records[i] && records[i].status === 'settled') done.push(records[i]);
   done.sort(function(a, b){ return (b.settledAt || 0) - (a.settledAt || 0); });
-  var h = '<div class="note" style="margin:10px 0 4px"><b>SETTLED</b> <span>last 50 · SL −1R · T1 +2R · T2 +3.5R · T1S +1R (house plans) · EXPIRED marked to market</span></div>';
+  var h = '<div class="note" style="margin:10px 0 4px"><b>SETTLED</b> <span>last 50 · SL −1R · T1 +2R · T2 +3.5R · T1S partial at scalePct (default 50%, from TRADE PLAN tScale) · EXPIRED marked to market</span></div>';
   if (!records.length){
     return h + '<div class="empty">No setups recorded yet — the BRAIN and EXECUTE tabs log their PRIME/HIGH setups here after each scan. This ledger stays empty until real setups exist; nothing is backfilled or simulated.</div>';
   }
