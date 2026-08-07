@@ -544,11 +544,141 @@ function hgRelStrength(symRows, refRows, dir, look){
   }catch(e){ out.note = 'rs failed'; return out; }
 }
 
+/* =============================================================================
+   PORTFOLIO CONCENTRATION — how many bets do you ACTUALLY have?
+   The paper book caps total heat at 6% NAV and sums it as if every position
+   were an independent bet. It is not. Four alt longs at 1.5% risk each read as
+   "6% across four names"; if they run 0.90 correlated they are one idea at
+   about 5.7%. That is the ordinary way a genuinely good win rate still
+   produces a drawdown that feels impossible — the entries were right, the
+   sizing was wrong, and nothing in the app could see it.
+   pbBucket is a blunt proxy: it drops every crypto perp into one 'crypto'
+   bucket at 35% NAV. That catches "all in crypto" and nothing finer. SOL and
+   AVAX and LINK are the same trade; SOL and a XAUTUSD short usually are not.
+   The maths, with w_i = each position's risk as a fraction of NAV, SIGNED by
+   direction so a hedge subtracts instead of adding:
+       nominal heat   H     = sum |w_i|                (what the book counts)
+       correlated heat H_eff = sqrt( w' C w )          (what you actually carry)
+       effective bets  N_eff = (sum |w_i|)^2 / (w' C w)
+   All correlations 1  -> w'Cw = (sum w)^2 -> H_eff = H and N_eff = 1.
+   All correlations 0, equal size -> N_eff = n.
+   Both limits fall out of the formula rather than being special-cased.
+   Free: daily candles for open positions are already fetched and cached.
+   ============================================================================= */
+function hgCorrMatrix(seriesBySym, syms){
+  var out = { syms: [], m: [], n: 0, note: '' };
+  try{
+    var keys = Array.isArray(syms) ? syms.slice() : Object.keys(seriesBySym || {});
+    var rets = [], used = [];
+    for (var a = 0; a < keys.length; a++){
+      var rows = seriesBySym[keys[a]];
+      if (!Array.isArray(rows) || rows.length < 21) continue;
+      var r = [];
+      for (var i = 1; i < rows.length; i++){
+        var p0 = +rows[i - 1].c, p1 = +rows[i].c;
+        if (!(isFinite(p0) && p0 > 0 && isFinite(p1))) { r.push(null); continue; }
+        r.push(p1 / p0 - 1);
+      }
+      rets.push(r); used.push(keys[a]);
+    }
+    if (used.length < 2){ out.note = 'needs 2+ positions with 21+ daily bars'; return out; }
+    var len = Math.min.apply(null, rets.map(function(x){ return x.length; }));
+    var M = [];
+    for (var x = 0; x < used.length; x++){
+      M.push([]);
+      for (var y = 0; y < used.length; y++){
+        M[x].push(x === y ? 1 : hgPairCorr(rets[x], rets[y], len));
+      }
+    }
+    out.syms = used; out.m = M; out.n = used.length;
+    out.note = used.length + ' positions over ' + len + ' aligned daily returns';
+    return out;
+  }catch(e){ out.note = 'correlation failed'; return out; }
+}
+/* Pearson over the last `len` aligned pairs; 0 (not NaN) when unmeasurable, so
+   an unknown pair is treated as INDEPENDENT rather than silently dropped —
+   and the note says how many pairs fell back. */
+function hgPairCorr(a, b, len){
+  try{
+    var xa = a.slice(a.length - len), xb = b.slice(b.length - len);
+    var pa = [], pb = [];
+    for (var i = 0; i < len; i++){
+      if (xa[i] === null || xb[i] === null || !isFinite(xa[i]) || !isFinite(xb[i])) continue;
+      pa.push(xa[i]); pb.push(xb[i]);
+    }
+    if (pa.length < 10) return 0;
+    var ma = 0, mb = 0, j;
+    for (j = 0; j < pa.length; j++){ ma += pa[j]; mb += pb[j]; }
+    ma /= pa.length; mb /= pb.length;
+    var num = 0, da = 0, db = 0;
+    for (j = 0; j < pa.length; j++){
+      var u = pa[j] - ma, v = pb[j] - mb;
+      num += u * v; da += u * u; db += v * v;
+    }
+    var den = Math.sqrt(da * db);
+    if (!(den > 0)) return 0;
+    var r = num / den;
+    return Math.max(-1, Math.min(1, r));
+  }catch(e){ return 0; }
+}
+/* positions: [{ sym, dir, riskPct }]  riskPct = risk as a FRACTION of NAV. */
+function hgPortfolioConcentration(positions, corr){
+  var out = { n: 0, nominalHeat: 0, effectiveHeat: null, effectiveBets: null,
+              worstPair: null, note: '' };
+  try{
+    var list = Array.isArray(positions) ? positions : [];
+    var idx = {}, i;
+    if (corr && Array.isArray(corr.syms)) for (i = 0; i < corr.syms.length; i++) idx[corr.syms[i]] = i;
+    var w = [], names = [];
+    for (i = 0; i < list.length; i++){
+      var p = list[i];
+      if (!p || idx[p.sym] === undefined) continue;
+      var rp = +p.riskPct;
+      if (!(isFinite(rp) && rp > 0)) continue;
+      w.push((p.dir === 'short' ? -1 : 1) * rp);
+      names.push(p.sym);
+    }
+    out.n = w.length;
+    var absSum = 0;
+    for (i = 0; i < w.length; i++) absSum += Math.abs(w[i]);
+    out.nominalHeat = absSum;
+    if (w.length < 2){ out.note = 'fewer than 2 sized positions — nothing to concentrate'; return out; }
+    var q = 0, worst = null;
+    for (i = 0; i < w.length; i++){
+      for (var j = 0; j < w.length; j++){
+        var c = corr.m[idx[names[i]]][idx[names[j]]];
+        if (!isFinite(c)) c = 0;
+        q += w[i] * w[j] * c;
+        if (i < j){
+          /* the pair that contributes most to concentration, sign-aware */
+          var contrib = w[i] * w[j] * c;
+          if (!worst || contrib > worst.contrib) worst = { a: names[i], b: names[j], r: c, contrib: contrib };
+        }
+      }
+    }
+    if (!(q > 0)){ out.note = 'positions net to a hedge — no directional concentration'; out.effectiveHeat = 0; out.effectiveBets = null; return out; }
+    out.effectiveHeat = Math.sqrt(q);
+    /* N_eff cannot physically exceed the number of positions. Sampling noise in
+       the correlation estimate can push it slightly over (4 truly independent
+       names measured 4.26 on 120 daily returns), and a number like that reads
+       as free diversification that does not exist. Cap it and say so. */
+    var neff = (absSum * absSum) / q;
+    out.effectiveBets = Math.min(neff, w.length);
+    out.capped = neff > w.length + 1e-9;
+    out.worstPair = worst;
+    out.note = out.n + ' positions · ' + out.effectiveBets.toFixed(2) + ' effective bets';
+    return out;
+  }catch(e){ out.note = 'concentration failed'; return out; }
+}
+
 /* window exports for the browser and for vm test contexts that stub window; the bare function
    declarations above already land on the global object in both environments, so this attach is
    guarded and never throws when window is absent. */
 if (typeof window !== 'undefined' && window){
 window.hgRelStrength = hgRelStrength;
+window.hgCorrMatrix = hgCorrMatrix;
+window.hgPairCorr = hgPairCorr;
+window.hgPortfolioConcentration = hgPortfolioConcentration;
 window.HG_RS_LOOK = HG_RS_LOOK;
 window.hgStructure = hgStructure;
 window.hgStructureGate = hgStructureGate;
