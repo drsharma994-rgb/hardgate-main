@@ -5,6 +5,23 @@
   var G = (typeof window !== 'undefined') ? window : globalThis;
   /* PARITY BLOCK — these four MUST equal engine.js's tunables of the same name.
      engine.js is the source of truth; tests/test-gate-parity.mjs enforces it. */
+  /* ===================== THE SWING LOOKBACK =====================
+     This is the most consequential number in the swing path and it was a
+     hardcoded 30. Measured over 3,346 aligned cascades:
+       lookback  ~days   median stop   within the 1.75xATR G6 cap   max R:R at median
+            5     0.8      1.39 ATR            62.8%                     2.53R
+            8     1.3      1.87 ATR            45.9%                     1.87R
+           10     1.7      2.14 ATR            38.3%                     1.64R
+           20     3.3      3.43 ATR            12.7%                     1.02R
+           30     5.0      4.53 ATR             3.6%                     0.77R   <- was here
+     ATR(14) on 4H spans about 2.3 days. A 30-bar swing spans 5. The stop was
+     being measured over TWICE the horizon the R:R is scaled to, so the median
+     setup could not reach even 1:1 — G6 was not "tight", it was arithmetically
+     asking for a rare geometry.
+     Left at 30 by default. Changing it changes which setups pass, and that is
+     yours to decide from the CALIBRATE sweep on your own tape, not mine to
+     decide from synthetic data. But it is now a PARAMETER, so it can be swept. */
+  var CG_SWING_LOOK = 30;
   var CG_SWING_ANCHOR_ATR = 1.5;    /* engine ANCHOR_MAX_ATR */
   var CG_G5_VZ_MIN = 0.5;           /* engine VOLZ_MIN */
   var CG_G1_SPREAD_ATR = 0.25;      /* engine SPREAD_MIN_ATR */
@@ -166,7 +183,8 @@
     return mac && mac.allow !== false;
   }
 
-  function swingGateMatrix(rows, ticker){
+  function swingGateMatrix(rows, ticker, opts){
+    var swingLook = (opts && opts.swingLook > 1) ? Math.floor(opts.swingLook) : CG_SWING_LOOK;
     if (!rows || rows.length < 210) return null;
     var c = rows.map(function(r){ return r.c; });
     var e9 = last(ema(c, 9)), e21 = last(ema(c, 21)), e50 = last(ema(c, 50)), e200 = last(ema(c, 200));
@@ -213,7 +231,7 @@
         })();
     var g5 = g5r.ok;
     gates.push(['G5 vol+wick', g5]);
-    var stop = lastSwing(rows, dir, 30);
+    var stop = lastSwing(rows, dir, swingLook);
     var entry = p;
     /* G6 is a VETO, never an adjustment. The stop stays where structure put it;
        if structure is wider than EXP/RR_MIN ATR the setup fails honestly. */
@@ -608,7 +626,7 @@
       for (var i = warm; i < rows.length - horizon; i++){
         out.n++;
         var hist = rows.slice(0, i + 1);
-        var m = swingGateMatrix(hist, ticker);
+        var m = swingGateMatrix(hist, ticker, opts);
         if (!m || !m.dir) continue;
         out.aligned++;
         if (m.clean) out.clean++;
@@ -765,6 +783,7 @@
   G.CG_G5_VZ_MIN = CG_G5_VZ_MIN;
   G.CG_G1_SPREAD_ATR = CG_G1_SPREAD_ATR;
   G.CG_SWING_ANCHOR_ATR = CG_SWING_ANCHOR_ATR;
+  G.CG_SWING_LOOK = CG_SWING_LOOK;
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
