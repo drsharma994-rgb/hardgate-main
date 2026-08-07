@@ -671,11 +671,115 @@ function hgPortfolioConcentration(positions, corr){
   }catch(e){ out.note = 'concentration failed'; return out; }
 }
 
+/* =============================================================================
+   WEEKEND EXPOSURE ON GOLD — the one risk XAUTUSD carries that no gate sees.
+   Spot gold and CME futures close Friday 22:00 UTC and reopen Sunday 22:00 UTC.
+   Saturday is a full closure. XAUTUSD does NOT close — it trades 24/7/365 and
+   becomes the ONLY venue where gold is priced during that window, on a book
+   that is a fraction of its weekday depth.
+   So a gold position held across a weekend is exposed twice over:
+     - it can be moved on thin liquidity while nothing else is trading, at
+       hours you are not watching
+     - it must then reconcile with the LBMA/CME reopen, and any premium or
+       discount that built up over the weekend gets closed
+   Neither is a gate failure. Both happen after the ticket is issued and the
+   stop is set, and a stop is worth much less on a book that thin.
+   This measures what XAUTUSD ACTUALLY DID across past closure windows, in ATR
+   units, on your own candles. No assumption about the mechanism is needed —
+   if weekends are quiet on your instrument the numbers say so and nothing
+   fires. The data decides.
+   ============================================================================= */
+var HG_GOLD_CLOSE_DOW = 5;    /* Friday */
+var HG_GOLD_CLOSE_UTC_H = 22; /* 22:00 UTC */
+var HG_GOLD_OPEN_DOW = 0;     /* Sunday */
+var HG_GOLD_OPEN_UTC_H = 22;
+/* Is this instant inside the spot-gold closure? */
+function hgInGoldWeekend(tsSec){
+  try{
+    var t = +tsSec;
+    if (!isFinite(t)) return false;
+    var d = new Date(t * 1000);
+    var dow = d.getUTCDay(), h = d.getUTCHours();
+    if (dow === 6) return true;                                  /* all Saturday */
+    if (dow === HG_GOLD_CLOSE_DOW && h >= HG_GOLD_CLOSE_UTC_H) return true;
+    if (dow === HG_GOLD_OPEN_DOW && h < HG_GOLD_OPEN_UTC_H) return true;
+    return false;
+  }catch(e){ return false; }
+}
+/* Seconds until the next Friday 22:00 UTC close. 0 when already inside one. */
+function hgSecsToGoldWeekend(tsSec){
+  try{
+    var t = +tsSec;
+    if (!isFinite(t)) return null;
+    if (hgInGoldWeekend(t)) return 0;
+    var probe = t;
+    for (var i = 0; i < 8 * 24 * 60; i += 5){          /* 5-minute steps, 8 days */
+      probe = t + i * 60;
+      if (hgInGoldWeekend(probe)) return probe - t;
+    }
+    return null;
+  }catch(e){ return null; }
+}
+/* Move across each past closure window, in ATR units.
+   rows: candles with { t, c } at any resolution finer than a day. */
+function hgGoldWeekendMoves(rows, atrVal){
+  var out = { n: 0, moves: [], p50: null, p90: null, max: null, overStop: null, note: '' };
+  try{
+    if (!Array.isArray(rows) || rows.length < 50){ out.note = 'needs 50+ bars'; return out; }
+    var atr = +atrVal;
+    if (!(isFinite(atr) && atr > 0)){ out.note = 'no ATR to scale by'; return out; }
+    var i, inWk = false, lastBefore = null, moves = [];
+    for (i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if (!r || !isFinite(+r.t) || !isFinite(+r.c)) continue;
+      var now = hgInGoldWeekend(+r.t);
+      if (!inWk && now){ inWk = true; }                       /* closure begins */
+      else if (inWk && !now){                                  /* closure ends */
+        inWk = false;
+        if (lastBefore !== null && lastBefore > 0){
+          moves.push(Math.abs(+r.c - lastBefore) / atr);
+        }
+      }
+      if (!now) lastBefore = +r.c;                             /* last weekday close */
+    }
+    if (!moves.length){ out.note = 'no complete closure window in this history'; return out; }
+    var sorted = moves.slice().sort(function(a, b){ return a - b; });
+    function q(p){ return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * p)))]; }
+    out.n = moves.length;
+    out.moves = moves;
+    out.p50 = Math.round(q(0.50) * 1000) / 1000;
+    out.p90 = Math.round(q(0.90) * 1000) / 1000;
+    out.max = Math.round(q(1) * 1000) / 1000;
+    out.note = moves.length + ' closure windows measured on this instrument';
+    return out;
+  }catch(e){ out.note = 'weekend scan failed'; return out; }
+}
+/* Share of past closures that moved further than the planned stop. */
+function hgGoldWeekendRisk(stats, stopAtr){
+  var out = { exceedPct: null, n: 0, note: '' };
+  try{
+    if (!stats || !Array.isArray(stats.moves) || !stats.moves.length){ out.note = stats ? stats.note : 'no stats'; return out; }
+    var s = +stopAtr;
+    if (!(isFinite(s) && s > 0)){ out.note = 'no stop distance in ATR'; return out; }
+    var over = 0;
+    for (var i = 0; i < stats.moves.length; i++) if (stats.moves[i] >= s) over++;
+    out.n = stats.moves.length;
+    out.exceedPct = over / stats.moves.length;
+    out.note = over + ' of ' + stats.moves.length + ' weekend closures moved further than a '
+      + s.toFixed(2) + 'xATR stop';
+    return out;
+  }catch(e){ out.note = 'risk read failed'; return out; }
+}
+
 /* window exports for the browser and for vm test contexts that stub window; the bare function
    declarations above already land on the global object in both environments, so this attach is
    guarded and never throws when window is absent. */
 if (typeof window !== 'undefined' && window){
 window.hgRelStrength = hgRelStrength;
+window.hgInGoldWeekend = hgInGoldWeekend;
+window.hgSecsToGoldWeekend = hgSecsToGoldWeekend;
+window.hgGoldWeekendMoves = hgGoldWeekendMoves;
+window.hgGoldWeekendRisk = hgGoldWeekendRisk;
 window.hgCorrMatrix = hgCorrMatrix;
 window.hgPairCorr = hgPairCorr;
 window.hgPortfolioConcentration = hgPortfolioConcentration;
