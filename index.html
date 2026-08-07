@@ -3210,9 +3210,20 @@ function hgScanFunnelRows(audit, kind){
   if (audit.histShort) rows.push({ k: 'Thin history (<210 bars)', v: String(audit.histShort) });
   if (audit.errors) rows.push({ k: 'Fetch errors', v: String(audit.errors) });
   const fail = audit.fail || {};
+  const sole = audit.sole || {};
   Object.keys(fail).sort(function(a, b){ return fail[b] - fail[a]; }).slice(0, 7).forEach(function(g){
-    rows.push({ k: 'Block · ' + g, v: fail[g] + ' symbols' });
+    rows.push({ k: 'Block · ' + g, v: fail[g] + ' symbols (may also be failing others)' });
   });
+  const soleKeys = Object.keys(sole).sort(function(a, b){ return sole[b] - sole[a]; });
+  if (soleKeys.length){
+    rows.push({ k: '— ONLY blocker —', v: 'symbols where THIS gate alone stood between you and a ticket' });
+    soleKeys.slice(0, 7).forEach(function(g){
+      rows.push({ k: 'Only · ' + g, v: sole[g] + ' symbols — relaxing this gate would add ' + sole[g] });
+    });
+    rows.push({ k: 'Gates worth 0', v: 'any gate absent from the ONLY list adds nothing if relaxed — it never blocks alone' });
+  } else if (audit.cascade){
+    rows.push({ k: '— ONLY blocker —', v: 'none — every blocked symbol failed 2+ gates, so no single relaxation helps' });
+  }
   return rows;
 }
 
@@ -3642,6 +3653,11 @@ async function runScanLeg(kind, opts){
                 if (!m.clean){
                   for (let gi = 0; gi < m.gates.length; gi++){
                     if (!m.gates[gi][1]) audit.fail[m.gates[gi][0]] = (audit.fail[m.gates[gi][0]] || 0) + 1;
+                  }
+                  /* the ONLY number that says what relaxing a gate would buy */
+                  if (typeof cgSoleBlocker === 'function'){
+                    const sb = cgSoleBlocker(m);
+                    if (sb){ audit.sole = audit.sole || {}; audit.sole[sb] = (audit.sole[sb] || 0) + 1; }
                   }
                 }
                 if (typeof hgGateFlipRecord === 'function'){
