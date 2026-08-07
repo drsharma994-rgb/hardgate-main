@@ -229,12 +229,59 @@
     var distToAnchor = isFinite(a4) ? Math.abs(p - e21) / a4 : NaN;
     var anchorOK = isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR;
     var clean = passed >= 7 && anchorOK;
+    /* ===================== GATE CLEARANCE =====================
+       A pass/fail badge cannot separate a setup that cleared every gate with
+       room from one that scraped through three of them, and those are not the
+       same conviction. Each margin below is the RAW distance to that gate's
+       own threshold, in that gate's own unit — no composite, no weighting.
+       Measured context (20,910 aligned cascades): G3 and ANCHOR jointly block
+       ZERO setups the other six do not already block, because G6's risk cap
+       (risk <= EXP/RR_MIN x ATR) already forces price to sit near structure.
+       They are consequences of G6, not independent confirmations, so they are
+       flagged `implied` and kept OUT of the binding count instead of inflating
+       it. They stay visible — an implied fact is still worth seeing, it just
+       must not be counted as a separate confirmation. */
+    var margins = [];
+    function mg(name, ok, margin, unit, tight, implied){
+      margins.push({ gate: name, ok: !!ok, margin: isFinite(margin) ? margin : null,
+                     unit: unit, tight: !!tight, implied: !!implied });
+    }
+    var spreadAtr = (isFinite(a4) && a4 > 0) ? Math.abs(e21 - e50) / a4 : NaN;
+    mg('G1', g1, spreadAtr - CG_G1_SPREAD_ATR, 'ATR of E21-E50 spread past the floor',
+       spreadAtr < CG_G1_SPREAD_ATR * 1.5);
+    var htfAtr = (isFinite(a4) && a4 > 0) ? Math.abs(p - e200) / a4 : NaN;
+    mg('G2', g2, htfAtr, 'ATR past EMA200', htfAtr < 0.5);
+    var rsiRoom = (dir === 'long') ? (70 - r14) : (r14 - 30);
+    mg('G3', g3, rsiRoom, 'RSI points from the band', rsiRoom < 5, true);
+    var frNow = (ticker && ticker.fundingPct !== null && ticker.fundingPct !== undefined
+                 && isFinite(ticker.fundingPct)) ? ticker.fundingPct : null;
+    var frRoom = (frNow === null) ? NaN : ((dir === 'long') ? (CG_FUND_DIR - frNow) : (frNow + CG_FUND_DIR));
+    mg('G4', g4, frRoom, '% funding from the against-side veto', isFinite(frRoom) && frRoom < 0.01);
+    mg('G5', g5, isFinite(vz) ? vz - CG_G5_VZ_MIN : NaN, 'volume z above the floor',
+       isFinite(vz) && vz >= CG_G5_VZ_MIN && vz - CG_G5_VZ_MIN < 0.25);
+    mg('G6', g6, dynamicRR - CG_SWING_RR_MIN, 'R above the R:R floor',
+       dynamicRR - CG_SWING_RR_MIN < CG_SWING_RR_MIN * 0.10);
+    /* G7 margin = how far the last OPPOSING CUSUM break is past the 20-bar
+       veto window. No opposing break at all is unbounded clearance, reported
+       as null rather than a made-up large number. */
+    var oppose = (ev && ev.dir !== dir) ? ev : null;
+    mg('G7', g7, oppose ? (oppose.barsAgo - 20) : NaN,
+       'bars past the opposing-CUSUM veto window',
+       !!oppose && oppose.barsAgo - 20 < 5);
+    mg('ANCHOR', anchorOK, CG_SWING_ANCHOR_ATR - distToAnchor, 'ATR of room before the anchor cap',
+       CG_SWING_ANCHOR_ATR - distToAnchor < 0.25, true);
+    var tightList = margins.filter(function(x){ return x.ok && x.tight && !x.implied; });
     return {
       dir: dir, gates: gates, passed: passed, gatesTotal: 7,
       level: isFinite(e21) ? e21 : p, clean: clean,
       p: p, e9: e9, e21: e21, a4: a4, r14: r14, vz: vz,
       stop: stop, entry: entry, risk: risk, expectedMove: expectedMove,
-      dynamicRR: dynamicRR, ev: ev, anchorOK: anchorOK, rows: rows
+      dynamicRR: dynamicRR, ev: ev, anchorOK: anchorOK, rows: rows,
+      margins: margins,
+      tightCount: tightList.length,
+      tightGates: tightList.map(function(x){ return x.gate; }),
+      bindingTotal: margins.filter(function(x){ return !x.implied; }).length,
+      e50: e50, e200: e200, fr: frNow
     };
   }
 
@@ -358,7 +405,11 @@
       if (isFinite(cAge) && cAge < CG_SWING_CASCADE_MIN) return null;
     }
     var out = { sym: ticker && ticker.symbol, dir: dir, entry: entry, stop: stop, t1: t1, t2: t2,
-      rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev, mark: p };
+      rr: dynamicRR, entryType: entryType, rows: m.rows, r14: m.r14, vz: m.vz, ev: m.ev, mark: p,
+      /* clearance travels WITH the ticket: 58% of 7/7 CLEAN setups scrape at
+         least one binding gate, and the badge alone cannot show which. */
+      margins: m.margins, tightCount: m.tightCount, tightGates: m.tightGates,
+      bindingTotal: m.bindingTotal };
     if (typeof hgEnrichSwingClean === 'function'){
       var enriched = hgEnrichSwingClean(out, rows, m);
       if (enriched) out = enriched;
@@ -473,6 +524,21 @@
     return near;
   }
 
+  /* Pure formatter — plain text so it works in a card, a Telegram alert or a
+     console line. Returns '' when clearance was never computed, so an older
+     ticket shape degrades to silence rather than to a fake all-clear. */
+  function cgClearanceLine(o){
+    try{
+      if (!o || !Array.isArray(o.margins) || !o.margins.length) return '';
+      var total = isFinite(o.bindingTotal) ? o.bindingTotal : 6;
+      var tight = isFinite(o.tightCount) ? o.tightCount : 0;
+      if (tight === 0) return 'CLEARANCE — all ' + total + ' binding gates cleared with room';
+      var names = (o.tightGates || []).join(', ');
+      return 'CLEARANCE — ' + tight + ' of ' + total + ' binding gates only just cleared ('
+        + names + '). Same badge, thinner setup.';
+    }catch(e){ return ''; }
+  }
+  G.cgClearanceLine = cgClearanceLine;
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
