@@ -5201,8 +5201,12 @@ function bestProfitBoost(s){
 }
 
 function bestSortPool(clean){
-  const strong = clean.filter(s => s.famScore >= 7 && s.robScore >= 1);
-  return strong.length ? strong : clean.filter(s => s.famScore >= 6 && s.robScore >= 1);
+  /* Bars scale with the denominator so adding F10 does not silently LOOSEN
+     selection: 7/9 = 0.778 becomes 8/10 = 0.80, 6/9 = 0.667 becomes 7/10 = 0.70.
+     A symbol whose F10 could not be measured keeps famMax 9 and the old bars. */
+  const bar = (s, nine, ten) => ((s.famMax || 9) >= 10 ? ten : nine);
+  const strong = clean.filter(s => s.famScore >= bar(s, 7, 8) && s.robScore >= 1);
+  return strong.length ? strong : clean.filter(s => s.famScore >= bar(s, 6, 7) && s.robScore >= 1);
 }
 
 function bestTapeRegimeLabel(w){
@@ -5443,6 +5447,23 @@ async function runCascadeCore(uni){
     const age = cascadeAge(c, s.dir);
     const r2 = age>=4;
 
+    /* F10 RELATIVE STRENGTH — the only measured-orthogonal family in the set.
+       BTC itself has no benchmark, so it is EXCLUDED from the denominator
+       rather than scored as a pass or a fail (see famMax below). */
+    let f10=false, f10Detail='n/a', f10Counts=true;
+    try{
+      const isBtc = /^B?-?BTC/.test(s.t.symbol.replace(/^B-/,'BTC'))
+        || s.t.symbol==='BTCUSD' || s.t.symbol==='B-BTC_USDT';
+      if (isBtc){ f10Counts=false; f10Detail='BTC is the benchmark — no relative measure exists'; }
+      else if (typeof hgRelStrength==='function'){
+        const btcSym = s.t.symbol.indexOf('B-')===0 ? 'B-BTC_USDT' : 'BTCUSD';
+        const btcRows = await getCandles(btcSym,'4h',HG_RS_LOOK+40);
+        const rsr = hgRelStrength(s.rows, btcRows, s.dir, HG_RS_LOOK);
+        if (!rsr.available){ f10Counts=false; f10Detail=rsr.note; }
+        else { f10=rsr.ok; f10Detail=rsr.note; s.rsEdge=rsr.edge; }
+      } else { f10Counts=false; f10Detail='hgRelStrength unavailable'; }
+    }catch(e){ f10Counts=false; f10Detail='RS leg failed — not scored'; }
+
     s.fam=[
       ['G0','Anti-Chase Guard — price to EMA21 distance', true, `${fmt(s.distToAnchor,2)} ATR (limit ≤ 1.25, entry: ${s.entryType})`],
       ['F1','TREND family — 2-of-3 majority: TSMOM · 1D side · CUSUM', f1, `${trendVotes}/3 → TSMOM ${mTs?'✓':'✗'} (${tsD}) · 1D ${mD1?'✓':'✗'} · CUSUM ${mCu?'✓':'✗'}${s.ev?` (${s.ev.dir.toUpperCase()} ${s.ev.barsAgo} bars ago)`:''}`],
@@ -5454,10 +5475,14 @@ async function runCascadeCore(uni){
       ['F7','VALUE AREA family — price at 70% volume-profile edge', f7, f7Detail],
       ['F8','ORDER FLOW family — CVD / Order Book Imbalance aligned', f8, f8Detail],
       ['F9','ANCHOR CLUSTER family — ≥2 structure levels overlap', f9, f9Detail],
+      ['F10','RELATIVE STRENGTH family — outpacing BTC over ' + HG_RS_LOOK + ' × 4H (measured orthogonal, max |r| 0.21)', f10Counts ? f10 : null, f10Detail],
       ['R1','ROBUSTNESS — cascade also holds on 2H (anti curve-fit)', r1, r1D],
       ['R2','ROBUSTNESS — cascade age ≥4 closed 4H bars (anti flicker)', r2, `${age} bars`],
     ];
-    s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0)+(f8?1:0)+(f9?1:0);
+    s.famScore=(f1?1:0)+(f2?1:0)+(f3?1:0)+(f4?1:0)+(f5?1:0)+(f6?1:0)+(f7?1:0)+(f8?1:0)+(f9?1:0)+((f10Counts&&f10)?1:0);
+    /* denominator shrinks when a family genuinely cannot be measured, so a
+       symbol is never marked down for a fact that does not exist for it */
+    s.famMax = 9 + (f10Counts ? 1 : 0);
     s.robScore=(r1?1:0)+(r2?1:0);
     s.profitBoost = bestProfitBoost(s);
 
@@ -5480,7 +5505,8 @@ async function runCascadeCore(uni){
   // Apply Master Vetoes (drop stale momentum and CVD traps from final pool)
   clean = clean.filter(s => !s.veto);
 
-  clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore || b.rr-a.rr);
+  clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore
+    || ((b.rsEdge||0)-(a.rsEdge||0)) || b.rr-a.rr);
   return {clean, breadth:{bull:breadthBull, total:breadthTotal}, funnel:funnel};
 }
 
@@ -5565,7 +5591,7 @@ async function runBest(opts){
       }
       const t1=w.t1; const t2=w.t2;
       if (typeof logSetup === 'function') logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-      const others = pool.slice(1,6).map(s=>(s._venueLabel?'['+s._venueLabel+'] ':'')+`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/9 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+      const others = pool.slice(1,6).map(s=>(s._venueLabel?'['+s._venueLabel+'] ':'')+`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/${s.famMax||9} families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, totalUni) + `
       <div class="panel">
@@ -5574,7 +5600,7 @@ async function runBest(opts){
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/${w.famMax||9} FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
@@ -5622,7 +5648,7 @@ async function runBest(opts){
     }
     const t1=w.t1; const t2=w.t2;
     if (typeof logSetup === 'function') logSetup(w.t.symbol,w.dir,'best',w.entry,w.stop,t1);
-    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/9 families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
+    const others = pool.slice(1,6).map(s=>`${s.t.symbol} ${s.dir.toUpperCase()} — ${s.famScore}/${s.famMax||9} families · ${s.robScore}/2 robustness · ${fmt(s.rr,2)}R${s.profitBoost?` · +${fmt(s.profitBoost,1)} profit rank`:''}`).join('<br>') || 'none';
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, uni.length) + `
       <div class="panel">
@@ -5631,7 +5657,7 @@ async function runBest(opts){
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
         <div class="verdict ${w.dir}">
-          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/9 FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
+          <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/${w.famMax||9} FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
         <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
@@ -5931,7 +5957,7 @@ async function runBestAlertCycle(){
         await sendAlertPush('HARDGATE BEST (Strategies): ' + w.t.symbol + ' ' + w.dir.toUpperCase(),
           hgTelegramPlanBlock({ sym: w.t.symbol, dir: w.dir, entry: w.entry, stop: w.stop, t1: t1 })
             + '\nVenue: ' + (ex === 'delta' ? 'Delta India' : 'CoinDCX')
-            + '\n' + w.famScore + '/9 families · ' + fmt(w.rr, 2) + 'R');
+            + '\n' + w.famScore + '/' + (w.famMax||9) + ' families · ' + fmt(w.rr, 2) + 'R');
         S.lastAlertKey[ex] = key;
       } else if (!key){
         S.lastAlertKey[ex] = null;

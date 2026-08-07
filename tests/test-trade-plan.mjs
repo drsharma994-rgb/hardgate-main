@@ -60,7 +60,7 @@ assert(indexHtml.indexOf('_hgTradeHandoffPending') >= 0, 'toTrade clears stale h
 
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
 const swVer = sw.match(/const HG_CACHE = 'hg-v(\d+)'/);
-assert(swVer && +swVer[1] >= 176, 'sw cache at least hg-v176 (pack 10+)');
+assert(swVer && +swVer[1] >= 178, 'sw cache at least hg-v178 (RS fix pack 11+)');
 
 console.log(fail ? '\nTESTS FAILED' : '\nALL TRADE-PLAN TESTS PASSED');
 process.exit(fail ? 1 : 0);

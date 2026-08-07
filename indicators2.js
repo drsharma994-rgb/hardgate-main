@@ -495,10 +495,61 @@ for (let k=base;k<vals.length-1;k++){ if (vals[k]<cur) below++; }
 return 100*below/(m-1);
 }
 
+/* =============================================================================
+   RELATIVE STRENGTH vs the benchmark (BTC).
+   WHY THIS AND NOT MORE TREND EVIDENCE. The eight swing gates were measured
+   for independence across 19,837 aligned cascades: they carry only ~6.0
+   effective independent dimensions, and G3 x ANCHOR alone correlate at 0.923
+   — the same "price is not extended" fact counted twice. Adding another trend
+   confirmation raises the badge number without raising conviction.
+   RS is the cheapest genuinely ORTHOGONAL fact available: an alt can be in a
+   clean 4H cascade while still losing ground to BTC, which is exactly the
+   setup that stalls. Measured max |r| against any existing gate:
+       lookback   pass%   info      max|r|   partner
+        6 bars    68.4%   0.900     0.353    ANCHOR   <- too short, tracks extension
+       30 bars    86.0%   0.584     0.207    G2       <- chosen
+      180 bars    80.6%   0.710     0.505    G2       <- collapses into trend
+   30 x 4H = 5 days is the orthogonality minimum. Longer windows stop measuring
+   relative strength and start re-measuring the trend G2 already owns.
+   ============================================================================= */
+var HG_RS_LOOK = 30;
+function hgRelStrength(symRows, refRows, dir, look){
+  look = (typeof look === 'number' && look > 1) ? Math.floor(look) : HG_RS_LOOK;
+  var out = { ok: false, available: false, sym: null, ref: null, edge: null, look: look, note: '' };
+  try{
+    if (!Array.isArray(symRows) || !Array.isArray(refRows)){ out.note = 'no candles'; return out; }
+    if (symRows.length < look + 1 || refRows.length < look + 1){
+      out.note = 'needs ' + (look + 1) + ' bars on both legs';
+      return out;
+    }
+    if (dir !== 'long' && dir !== 'short'){ out.note = 'no direction'; return out; }
+    function ret(rows){
+      var a = rows[rows.length - 1 - look], b = rows[rows.length - 1];
+      if (!a || !b) return null;
+      var pa = +a.c, pb = +b.c;
+      if (!isFinite(pa) || !isFinite(pb) || pa <= 0) return null;
+      return pb / pa - 1;
+    }
+    var rs = ret(symRows), rr = ret(refRows);
+    if (rs === null || rr === null){ out.note = 'bad candle data'; return out; }
+    var sign = (dir === 'long') ? 1 : -1;
+    var edge = sign * (rs - rr);
+    out.available = true;
+    out.sym = rs; out.ref = rr; out.edge = edge;
+    out.ok = edge > 0;
+    out.note = (rs * 100).toFixed(2) + '% vs BTC ' + (rr * 100).toFixed(2) + '% over ' + look
+      + ' bars → ' + (edge >= 0 ? '+' : '') + (edge * 100).toFixed(2) + '% '
+      + (out.ok ? 'with' : 'against') + ' the trade';
+    return out;
+  }catch(e){ out.note = 'rs failed'; return out; }
+}
+
 /* window exports for the browser and for vm test contexts that stub window; the bare function
    declarations above already land on the global object in both environments, so this attach is
    guarded and never throws when window is absent. */
 if (typeof window !== 'undefined' && window){
+window.hgRelStrength = hgRelStrength;
+window.HG_RS_LOOK = HG_RS_LOOK;
 window.hgStructure = hgStructure;
 window.hgStructureGate = hgStructureGate;
 window.hgAVWAP = hgAVWAP;
