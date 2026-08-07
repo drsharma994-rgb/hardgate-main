@@ -286,12 +286,66 @@ var LAYER_KIND = {
   goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural',
   trend4h: 'structural', swingtab: 'structural', scalptab: 'structural', besttab: 'structural',
   edgetab: 'structural', pinetab: 'structural', smarttab: 'positioning',
-  oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning',
+  oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning', bybitpos: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
   carry: 'context', termbasis: 'context',
   yield: 'context', smt: 'structural'
 };
+
+/* SMART $ cross-venue pack for brainCollect bybitpos layer. */
+function smartCrossForAliases(aliasSet){
+  try{
+    var pack = (typeof G.__hgSmartResults === 'object' && G.__hgSmartResults) ? G.__hgSmartResults : null;
+    if (!pack || !Array.isArray(pack.results)) return null;
+    for (var i = 0; i < pack.results.length; i++){
+      var sr = pack.results[i];
+      if (!sr || !sr.sym) continue;
+      if (aliasSet[sr.sym] !== 1) continue;
+      return {
+        cross: sr.cross || null,
+        bin: { fundingPct: sr.fundingPct, retailLongPct: sr.retailLongPct, oiChgPct: sr.oiChgPct }
+      };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+function positioningCrossTailwindDir(bin){
+  try{
+    if (!bin || typeof bin !== 'object') return null;
+    var fp = bin.fundingPct;
+    if (fp !== null && fp !== undefined && isFinite(+fp) && Math.abs(+fp) >= 0.05){
+      return (+fp > 0) ? 'short' : 'long';
+    }
+    var rp = bin.retailLongPct;
+    if (rp !== null && rp !== undefined && isFinite(+rp)){
+      if (+rp >= 65) return 'short';
+      if (+rp <= 35) return 'long';
+    }
+    return null;
+  }catch(e){ return null; }
+}
+function brainConvictionMesh(col, dir){
+  try{
+    if (!col || typeof col !== 'object') return null;
+    var agree = 0, disagree = 0;
+    var votes = Array.isArray(col.votes) ? col.votes : [];
+    for (var i = 0; i < votes.length; i++){
+      var v = votes[i];
+      if (!v || v.vote === 'neutral' || v.vote === 'veto') continue;
+      if (dir === 'long' || dir === 'short'){
+        if (v.vote === dir) agree++;
+        else if (v.vote === 'long' || v.vote === 'short') disagree++;
+      }
+    }
+    return {
+      agree: agree,
+      disagree: disagree,
+      dark: Array.isArray(col.unavailable) ? col.unavailable.length : 0,
+      silent: Array.isArray(col.silent) ? col.silent.length : 0
+    };
+  }catch(e){ return null; }
+}
 var TIER_RANK = { ASIDE: 0, WATCH: 1, HIGH: 2, PRIME: 3 };
 
 /* TREND4H structural layer — evaluated post-fetch on the lazily fetched 4h
@@ -543,14 +597,19 @@ function brainCollect(inputs){
     var rg = inp.regime, pb = (rg.playbook && typeof rg.playbook === 'object') ? rg.playbook : {};
     var rl = (typeof rg.label === 'string' && rg.label) ? rg.label : 'regime';
     var sc = isFinite(rg.score) ? ' (' + (rg.score > 0 ? '+' : '') + rg.score + ')' : '';
+    var fredNote = '';
+    if (inp.macro && inp.macro.dxyOfficial && isFinite(+inp.macro.dxyOfficial.value)){
+      fredNote = ' · FRED DXY ' + FMT(+inp.macro.dxyOfficial.value, 2)
+        + (inp.macro.dxyOfficial.trend20 ? ' ' + inp.macro.dxyOfficial.trend20 : '');
+    }
     var sz = (typeof pb.sizeNote === 'string' && pb.sizeNote) ? pb.sizeNote
            : ((typeof pb.size === 'string' && pb.size) ? 'size ' + pb.size : '');
     /* playbook.bias comes as 'LONG-ONLY'/'SHORT-ONLY'/'BOTH'/'STAND-ASIDE'
        from regime.js (raw 'long'/'short' also accepted per contract) */
     var rb = (typeof pb.bias === 'string') ? pb.bias.toUpperCase() : '';
-    if (rb === 'LONG' || rb === 'LONG-ONLY')  push('regime', 'long',  rl + sc + ' — playbook: longs' + (sz ? ' · ' + sz : ''));
-    else if (rb === 'SHORT' || rb === 'SHORT-ONLY') push('regime', 'short', rl + sc + ' — playbook: shorts' + (sz ? ' · ' + sz : ''));
-    else push('regime', 'neutral', rl + sc + ' — playbook has no directional edge' + (sz ? ' · ' + sz : ''));
+    if (rb === 'LONG' || rb === 'LONG-ONLY')  push('regime', 'long',  rl + sc + fredNote + ' — playbook: longs' + (sz ? ' · ' + sz : ''));
+    else if (rb === 'SHORT' || rb === 'SHORT-ONLY') push('regime', 'short', rl + sc + fredNote + ' — playbook: shorts' + (sz ? ' · ' + sz : ''));
+    else push('regime', 'neutral', rl + sc + fredNote + ' — playbook has no directional edge' + (sz ? ' · ' + sz : ''));
   }
 
   /* ---- ROTATION season ---- */
@@ -809,6 +868,31 @@ function brainCollect(inputs){
       smartHit = true; break;
     }
     if (!smartHit) hush('smarttab', 'symbol not in the latest SMART $ confirmed list');
+  }
+
+  /* ---- BYBIT cross-venue positioning (SMART $ Binance+Bybit leg) ---- */
+  var crossPack = smartCrossForAliases(aliasSet);
+  if (!crossPack){
+    hush('bybitpos', 'no Binance+Bybit cross-check for this symbol — run SMART $ once');
+  }else{
+    var cross = crossPack.cross;
+    if (!cross || cross.status === 'bybit-dark'){
+      hush('bybitpos', 'Bybit leg dark — Binance-only positioning (not a veto)');
+    }else if (cross.status === 'conflict'){
+      push('bybitpos', 'neutral', 'cross-venue positioning CONFLICT — '
+        + ((cross.notes && cross.notes[0]) ? cross.notes[0] : 'venues disagree'), { caution: true });
+    }else if (cross.status === 'confirmed'){
+      var tailDir = positioningCrossTailwindDir(crossPack.bin);
+      var cTxt = (cross.notes && cross.notes.length) ? cross.notes.join(' · ') : 'dual-venue agree';
+      if (tailDir){
+        push('bybitpos', tailDir, 'Binance+Bybit positioning confirmed · ' + cTxt, { strong: true });
+      }else{
+        push('bybitpos', 'neutral', 'cross-venue confirmed · ' + cTxt);
+      }
+    }else{
+      push('bybitpos', 'neutral', 'partial cross-venue read · '
+        + ((cross.notes && cross.notes[0]) ? cross.notes[0] : 'one leg agrees'));
+    }
   }
 
   /* ---- CARRY — cross-venue funding spread context (not a tier alone) ---- */
@@ -1217,7 +1301,7 @@ function snapshotLayers(){
             engine: undefined, oiflow: undefined, squeeze: undefined,
             liqSnap: undefined, liqSetup: undefined, tape: undefined,
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
-            yieldSnap: undefined, smtSnap: undefined,
+            yieldSnap: undefined, smtSnap: undefined, macro: undefined,
             newsState: undefined, fng: null, carry: undefined, termbasis: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
@@ -1264,6 +1348,9 @@ function snapshotLayers(){
   /* gold lane verdicts stashed by the GOLD tab (both optional) */
   try{ o.goldDeep = G.__hgGoldDeepVerdict || undefined; }catch(e){ o.goldDeep = undefined; }
   try{ o.goldSetup = G.__hgGoldSetupDecision || undefined; }catch(e){ o.goldSetup = undefined; }
+  try{
+    if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached();
+  }catch(e){ o.macro = undefined; }
   /* fear & greed from the inline app state (const S — lexical global, not window.S) */
   try{ if (typeof S !== 'undefined' && S && S.fng) o.fng = S.fng; }catch(e){ o.fng = null; }
   return o;
@@ -1584,6 +1671,7 @@ function judgeCrypto(cand, snap){
     sym: cand.sym, aliases: cand.aliases, lane: 'crypto',
     news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
+    macro: snap.macro,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     tape: snap.tape, fng: snap.fng,
     carry: snap.carry, termbasis: snap.termbasis,
@@ -2205,9 +2293,11 @@ function applyMeanrev(rows){
         colNote(row.col, 'meanrev', String(m.dir).toUpperCase(), rec);
         row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
       }else if (m.dir !== row.dec.dir){
-        row.col.votes.push({ layer: 'meanrev', vote: 'neutral', kind: 'structural', caution: true,
-          text: 'mean-reversion signal ' + m.dir.toUpperCase() + ' opposes the ' + row.dec.dir.toUpperCase() + ' bias · ' + rec });
-        colNote(row.col, 'meanrev', 'CAUTION', 'MR trigger opposes bias');
+        row.col.votes.push({ layer: 'meanrev', vote: m.dir, kind: 'structural',
+          text: 'mean-reversion ' + m.dir.toUpperCase() + ' opposes the ' + row.dec.dir.toUpperCase()
+            + ' bias · ' + rec });
+        colNote(row.col, 'meanrev', String(m.dir).toUpperCase(), 'MR opposes bias — setup conflict');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
       }else{
         row.col.silent.push('meanrev');
         colNote(row.col, 'meanrev', 'SILENT', 'MR trigger aligns but regime is ' + (regime ? regime.label : 'unknown') + ' — trend systems only');
@@ -3936,7 +4026,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','fundz','btcrel','div','meanrev','poc','book','cvd','session'];
+                          'engine','oiflow','bybitpos','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','fundz','btcrel','div','meanrev','poc','book','cvd','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis','yield','smt'];
 
 function auditLineHTML(label, status, text){
@@ -4076,6 +4166,8 @@ function cardHTML(row){
       stack: row.stack
     }) : '';
   var stackHtml = (row.stack && typeof G.hgSetupStackMiniHtml === 'function') ? G.hgSetupStackMiniHtml(row.stack) : '';
+  var meshHtml = (typeof G.hgSetupConvictionMeshHtml === 'function')
+    ? G.hgSetupConvictionMeshHtml(brainConvictionMesh(row.col, dir)) : '';
   var chartBox = (plan && row.rows)
     ? '<div class="hgchart brainChart" data-sym="' + esc(row.sym) + '" style="height:190px;margin-top:8px"></div>' : '';
   var setupTier = (typeof G.hgBrainSetupTier === 'function') ? G.hgBrainSetupTier(dec.tier) : 'clean';
@@ -4101,6 +4193,7 @@ function cardHTML(row){
     + '<div class="gates">' + row.col.votes.map(function(v){ return votePip(v, dir); }).join('') + '</div>'
     + '<div class="plan">' + planLine(plan) + '</div>'
     + stackHtml
+    + meshHtml
     + chartBox
     + tradeBtn
     + bookBtn
@@ -5592,6 +5685,9 @@ function mount(el){
 G.brainCollect = brainCollect;
 G.brainDecide = brainDecide;
 G.brainSetupConflict = brainSetupConflict;
+G.brainConvictionMesh = brainConvictionMesh;
+G.smartCrossForAliases = smartCrossForAliases;
+G.positioningCrossTailwindDir = positioningCrossTailwindDir;
 G.brainUniverse = brainUniverse;
 /* structure-anchored limit seam: the pure planner — (dir, rows4h) ->
    {plan, note}; rows4h math only, never throws */

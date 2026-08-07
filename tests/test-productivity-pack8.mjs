@@ -41,7 +41,7 @@ ok(/binanceBackoffUntil/.test(brain), 'brainAlertWarm respects rate limit');
 console.log('== cache bump ==');
 {
   const m = sw.match(/const HG_CACHE = 'hg-v(\d+)'/);
-  ok(m && +m[1] >= 174, 'sw cache at least hg-v174 (pack 8+)');
+  ok(m && +m[1] >= 175, 'sw cache at least hg-v175 (pack 9+)');
 }
 
 console.log('\n' + passed + ' passed');
