@@ -761,6 +761,10 @@
   G.cgReplaySweep = cgReplaySweep;
   G.cgReplaySweepTableHTML = cgReplaySweepTableHTML;
   G.cgGateReplayPanelHTML = cgGateReplayPanelHTML;
+  G.CG_SWING_RR_MIN = CG_SWING_RR_MIN;
+  G.CG_G5_VZ_MIN = CG_G5_VZ_MIN;
+  G.CG_G1_SPREAD_ATR = CG_G1_SPREAD_ATR;
+  G.CG_SWING_ANCHOR_ATR = CG_SWING_ANCHOR_ATR;
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;

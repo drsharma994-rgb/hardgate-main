@@ -282,6 +282,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <label class="f">MIN 24H TURNOVER $<input id="swingTurn" type="number" value="200000" style="width:110px"></label>
       <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="swingAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="swingRun" onclick="runScan('swing')">SCAN</button>
+      <button class="btn" id="swingDiag" onclick="runGateDiagnostics()">CALIBRATE</button>
       <span class="note" id="swingStat"></span>
     </div>
     <div class="prog" id="swingProg"><i></i></div>
@@ -289,6 +290,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <div class="note" style="margin-bottom:10px">Gates: G1 4H EMA cascade aligned (9&gt;21&gt;50 or inverse) with real spread — |EMA21−EMA50| ≥ 0.25×ATR, so flat-tape cascades don't count · G2 price on correct side of 4H EMA200 (HTF proxy) · G3 RSI-14 not exhausted (blocks &gt;70 long / &lt;30 short) · G4 |funding| ≤ 0.05% and not paying against you · G5 volume expansion vs 20-bar mean · G6 structural R:R ≥ 2 from last swing · G7 no opposing CUSUM event in last 20 bars (the one feature your own walk-forward validated OOS, AUC ≈0.58). All gates on CLOSED bars only — nothing repaints. Zero results is a valid, honest result. Each card shows <b>regime</b> — the 4H tape read (STRONG TREND / WEAK TREND / RANGE / COMPRESSION / VOLATILE EXPANSION), same as EDGE and DIVERGENCE.</div>
   <div id="swingDesk"></div>
   <div class="cards" id="swingCards"></div>
+  <div id="swingDiagOut"></div>
   <div id="swingWatch"></div>
   <div class="empty" id="swingEmpty" style="display:none">No CLEAN swing setups. Standing aside is a position.</div>
 </section>
@@ -768,6 +770,8 @@ const HG_ALERTS_AUTO_REFRESH_MS = 900000;
    and the next cycle's first look both hit cache. Gates still only ever see
    CLOSED candles, so no signal is lost — a 4H bar does not change in 2 min. */
 const HG_CANDLE_TTL_QUIET = 420;
+/* symbols replayed by CALIBRATE — 40 x 500 bars is ~90s and enough to see a shape */
+const HG_DIAG_SYMBOLS = 40;
 const HG_POS_SNAP_TTL = 420;   /* reuse positioning snapshots across 5-min alert cycles */
 function hgScanRateOk(){
   try{ return !(S.binanceBackoffUntil && Date.now() < S.binanceBackoffUntil); }catch(e){ return true; }
@@ -3527,6 +3531,114 @@ function hgMaybeSyncCryptoDeskFromSnap(kind){
 window.hgPaintCryptoDeskFromSnap = hgPaintCryptoDeskFromSnap;
 window.hgMaybeSyncCryptoDeskFromSnap = hgMaybeSyncCryptoDeskFromSnap;
 window.hgCryptoSetupId = hgCryptoSetupId;
+
+/* =============================================================================
+   CALIBRATE — the diagnostics that were console-only until now.
+   Packs 15-19 shipped five measurement tools and wired NONE of them to a
+   button: hgStopSweep, hgHeatProfile, hgGoldWeekendMoves, hgGoldWeekendRisk
+   and cgReplaySweep are each called exactly zero times anywhere in this file.
+   Every one of them came with a "run this from the console" note.
+   A tool nobody opens is worth nothing, and after nineteen packs the funnel
+   is still empty while every instrument built to explain WHY sits behind a
+   console prompt. This adds no new measurement. It puts the existing ones on
+   screen.
+   ============================================================================= */
+async function runGateDiagnostics(){
+  const out = $('swingDiagOut'); const btn = $('swingDiag'); const stat = $('swingStat');
+  if (!out) return;
+  btn.disabled = true;
+  out.innerHTML = '<div class="note">calibrating…</div>';
+  const panels = [];
+  try{
+    /* ---- 1. gate thresholds, replayed over history ---- */
+    if (typeof cgGateReplay === 'function' && typeof cgReplaySweep === 'function'){
+      let uni = [];
+      try{ uni = (await getTickers()) || []; }catch(e){}
+      uni = uni.filter(t => t && t.symbol).slice(0, HG_DIAG_SYMBOLS);
+      const samples = []; let clean = 0, scanned = 0;
+      for (const t of uni){
+        if (!hgScanRateOk()) break;
+        stat.textContent = 'calibrating ' + (scanned + 1) + '/' + uni.length + ' — ' + t.symbol;
+        try{
+          const rows = await getCandles(t.symbol, '4h', 500);
+          if (!rows || rows.length < 300) continue;
+          const rp = cgGateReplay(rows, t, {});
+          samples.push(...rp.samples); clean += rp.clean; scanned++;
+        }catch(e){}
+      }
+      if (!samples.length){
+        panels.push(hgFunnelPanelHTML('CALIBRATION — no data',
+          [{ k: 'Result', v: 'no symbol returned 300+ 4H bars — nothing to replay' }], 'diagNone'));
+      } else {
+        const rep = { samples: samples };
+        panels.push(hgFunnelPanelHTML('CALIBRATION — ' + scanned + ' symbols · ' + samples.length
+          + ' aligned bars · ' + clean + ' CLEAN at current settings',
+          [{ k: 'Read the SHAPE, not the winner',
+             v: 'more setups AND equal-or-better R means the gate is too tight. More setups and WORSE R means it is doing its job. A flat or jagged column means too little data — replay more symbols.' }],
+          'diagHead'));
+        [['G6', [1.50,1.75,2.00,2.25,2.50], 'min', 'G6 · R:R floor (CG_SWING_RR_MIN = ' + CG_SWING_RR_MIN + ')'],
+         ['G5', [0.00,0.25,0.50,0.75,1.00], 'min', 'G5 · volume-z floor (CG_G5_VZ_MIN = ' + CG_G5_VZ_MIN + ')'],
+         ['G1', [0.15,0.25,0.35,0.50,0.75], 'min', 'G1 · cascade spread in ATR (CG_G1_SPREAD_ATR = ' + CG_G1_SPREAD_ATR + ')'],
+         ['ANCHOR', [1.00,1.25,1.50,2.00,3.00], 'max', 'ANCHOR · EMA21 cap in ATR (CG_SWING_ANCHOR_ATR = ' + CG_SWING_ANCHOR_ATR + ')']
+        ].forEach(function(cfg){
+          const sw = cgReplaySweep(rep, cfg[0], cfg[1], cfg[2]);
+          const rows = sw.rows.map(function(r){
+            return { k: (cfg[2] === 'max' ? '≤ ' : '≥ ') + r.t.toFixed(2),
+                     v: r.setups + ' setups · ' + r.settled + ' settled · '
+                        + (r.hitPct !== null ? fmt(r.hitPct * 100, 1) + '% hit' : 'no hit data') + ' · '
+                        + (r.expectancyR !== null ? fmt(r.expectancyR, 3) + 'R' : 'no R') };
+          });
+          if (rows.length) panels.push(hgFunnelPanelHTML(cfg[3], rows, 'diag_' + cfg[0]));
+        });
+      }
+    }
+    /* ---- 2. stop placement, from your own settled ledger ---- */
+    if (typeof hgHeatProfile === 'function' && typeof hgScoreRecords === 'function'){
+      const recs = hgScoreRecords() || [];
+      const heat = hgHeatProfile(recs);
+      const rows = [];
+      if (heat.winners){
+        rows.push({ k: 'Winner heat (MAE)', v: 'p50 ' + heat.winners.p50 + 'R · p90 ' + heat.winners.p90 + 'R · worst ' + heat.winners.max + 'R' });
+        rows.push({ k: 'Stop margin', v: heat.stopMarginR + 'R left above p90 winner heat'
+          + (heat.stopMarginR !== null && heat.stopMarginR < 0.15 ? ' — TIGHT, ordinary noise is taking correct calls' : '') });
+      }
+      if (heat.losers) rows.push({ k: 'Loser reach (MFE)', v: 'p50 +' + heat.losers.p50 + 'R · p90 +' + heat.losers.p90 + 'R — a partial here scratches losses' });
+      rows.push({ k: 'Sample', v: heat.note });
+      if (typeof hgStopSweep === 'function'){
+        const sw = hgStopSweep(recs);
+        sw.rows.forEach(function(r){
+          rows.push({ k: 'Stop × ' + r.k.toFixed(2), v: fmt(r.stoppedPct * 100, 1) + '% stopped · ' + fmt(r.expectancyR, 3) + 'R' });
+        });
+        if (!sw.rows.length) rows.push({ k: 'Stop sweep', v: sw.note });
+      }
+      panels.push(hgFunnelPanelHTML('STOP PLACEMENT — from your settled ledger', rows, 'diagStop'));
+    }
+    /* ---- 3. gold weekend exposure ---- */
+    if (typeof hgGoldWeekendMoves === 'function'){
+      try{
+        const g = await getXAUCandles('4h', 500);
+        const a = last(atr(g, 14));
+        const st = hgGoldWeekendMoves(g, a);
+        const rows = [];
+        if (st.p50 !== null){
+          rows.push({ k: 'Weekend move', v: 'p50 ' + st.p50 + '×ATR · p90 ' + st.p90 + '×ATR · worst ' + st.max + '×ATR' });
+          [1.0, 1.5, 2.0].forEach(function(k){
+            const r = hgGoldWeekendRisk(st, k);
+            if (r.exceedPct !== null) rows.push({ k: 'vs a ' + k.toFixed(1) + '×ATR stop', v: fmt(r.exceedPct * 100, 0) + '% of weekends moved further' });
+          });
+        }
+        rows.push({ k: 'Sample', v: st.note });
+        panels.push(hgFunnelPanelHTML('GOLD — weekend exposure on ' + GOLD_SYM, rows, 'diagGold'));
+      }catch(e){}
+    }
+    out.innerHTML = panels.join('') || '<div class="note">no diagnostics available yet</div>';
+    stat.textContent = 'calibration done';
+  }catch(e){
+    out.innerHTML = '<div class="note">calibration failed: ' + esc(String(e && e.message || e)) + '</div>';
+  }
+  btn.disabled = false;
+}
+window.runGateDiagnostics = runGateDiagnostics;
 
 async function runScan(kind, opts){
   opts = opts || {};
