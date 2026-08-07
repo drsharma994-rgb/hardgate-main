@@ -641,8 +641,10 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="indicators2.js"></script>
 <script src="store.js"></script>
 <script src="binance.js"></script>
+<script src="spot-perp.js"></script>
 <script src="startrader.js"></script>
 <script src="bybit.js"></script>
+<script src="deribit-vol.js"></script>
 <script src="positioning.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
@@ -5369,24 +5371,28 @@ async function runCascadeCore(uni){
       }
     }catch(e){}
 
-    /* F8 ORDER FLOW & MICROSTRUCTURE TRAP VETO (Binance Proxy + Bybit cross) */
+    /* F8 ORDER FLOW & MICROSTRUCTURE TRAP VETO (Binance perp + spot + Bybit cross) */
     let f8 = false, f8Detail = 'CVD/L2 unread', isCvdTrap = false, trapReason = '';
     let f8Cross = false;
     try {
         if (typeof binanceTakerRatio === 'function' && typeof binanceDepth === 'function') {
             const symStr = s.t.symbol.replace(/USDT$/, '') + 'USDT';
-            const [tk, bk] = await Promise.all([
+            const spotFn = (typeof binanceSpotTakerFlow === 'function') ? binanceSpotTakerFlow : null;
+            const [tk, bk, stSpot] = await Promise.all([
                 binanceTakerRatio(symStr, '1h', 25).catch(()=>null),
-                binanceDepth(symStr, 20).catch(()=>null)
+                binanceDepth(symStr, 20).catch(()=>null),
+                spotFn ? spotFn(symStr, '1h', 25).catch(()=>null) : Promise.resolve(null)
             ]);
+            const spotSeries = (stSpot && stSpot.series) ? stSpot.series : null;
             const ft = (typeof hgFlowTrapAssess === 'function')
-              ? hgFlowTrapAssess(tk && tk.series ? tk.series : null, bk, s.dir)
+              ? hgFlowTrapAssess(tk && tk.series ? tk.series : null, bk, s.dir, spotSeries)
               : null;
             if (ft){
               isCvdTrap = ft.veto === true;
               trapReason = ft.reason || '';
               f8 = ft.flowOk === true;
-              f8Detail = 'CVD ' + (ft.cvdAligned ? '✓' : '✗') + ' · OBI ' + (ft.obiAligned ? '✓' : '✗');
+              f8Detail = 'CVD ' + (ft.cvdAligned ? '✓' : '✗') + ' · OBI ' + (ft.obiAligned ? '✓' : '✗')
+                + ' · SPOT ' + (ft.spotPerpAligned ? '✓' : (spotSeries ? '✗' : '—'));
             }
             if (typeof bybitPositioningSnapshot === 'function' && typeof positioningCrossCheck === 'function'){
               const byb = await bybitPositioningSnapshot(symStr).catch(()=>null);

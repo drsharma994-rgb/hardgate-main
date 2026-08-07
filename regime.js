@@ -284,7 +284,17 @@ async function rgFetchStablecoins(){
       n++;
     }
     if (!n || !(now > 0)) return null;
-    var out = { totalUSD: now, delta7dUSD: null, delta30dUSD: null };
+    var usdt = 0, usdc = 0;
+    for (var j = 0; j < arr.length; j++){
+      var asset = arr[j];
+      if (!asset || typeof asset !== 'object') continue;
+      var sym = (typeof asset.symbol === 'string') ? asset.symbol.toUpperCase() : '';
+      var peg = rgPegUsd(asset.circulating);
+      if (sym === 'USDT') usdt += peg;
+      else if (sym === 'USDC') usdc += peg;
+    }
+    var out = { totalUSD: now, delta7dUSD: null, delta30dUSD: null,
+                usdtUSD: usdt > 0 ? usdt : null, usdcUSD: usdc > 0 ? usdc : null };
     if (wk > 0) out.delta7dUSD = now - wk;   /* no valid week-ago baseline => null */
     if (mo > 0) out.delta30dUSD = now - mo;
     return rgCachePut(key, out);
@@ -631,10 +641,23 @@ function setRgSnapshot(v, components){
     if (!v || typeof v !== 'object') return;
     var pb = null;
     try{ pb = regimePlaybook(v); }catch(ePb){ pb = null; }
-    var btcdPct = null, dxyTrend = null;
+    var btcdPct = null, dxyTrend = null, stables = null;
     if (components && typeof components === 'object'){
       if (components.btcd && isFinite(+components.btcd.pct)) btcdPct = +components.btcd.pct;
       if (components.dxy && typeof components.dxy.trend20 === 'string') dxyTrend = components.dxy.trend20;
+      if (components.stable && typeof components.stable === 'object'){
+        var st = components.stable;
+        var totS = isFinite(+st.totalUSD) ? +st.totalUSD : null;
+        var d7 = isFinite(+st.delta7dUSD) ? +st.delta7dUSD : null;
+        var wkBase = (totS !== null && d7 !== null && (totS - d7) > 0) ? (totS - d7) : null;
+        stables = {
+          totalUSD: totS,
+          delta7dUSD: d7,
+          delta7dPct: (wkBase && d7 !== null) ? (d7 / wkBase) * 100 : null,
+          usdtUSD: isFinite(+st.usdtUSD) ? +st.usdtUSD : null,
+          usdcUSD: isFinite(+st.usdcUSD) ? +st.usdcUSD : null
+        };
+      }
     }
     __rgSnap = {
       label: (typeof v.word === 'string' && v.word) ? v.word : 'UNKNOWN',
@@ -642,6 +665,7 @@ function setRgSnapshot(v, components){
       playbook: pb,
       btcdPct: btcdPct,
       dxyTrend: dxyTrend,
+      stables: stables,
       at: Date.now()
     };
   }catch(e){ /* snapshotting must never break the scan */ }

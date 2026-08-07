@@ -289,7 +289,8 @@ var LAYER_KIND = {
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning', bybitpos: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
-  carry: 'context', termbasis: 'context',
+  carry: 'context', termbasis: 'context', dvol: 'context', stables: 'context',
+  spotperp: 'context',
   yield: 'context', smt: 'structural'
 };
 
@@ -610,6 +611,50 @@ function brainCollect(inputs){
     if (rb === 'LONG' || rb === 'LONG-ONLY')  push('regime', 'long',  rl + sc + fredNote + ' — playbook: longs' + (sz ? ' · ' + sz : ''));
     else if (rb === 'SHORT' || rb === 'SHORT-ONLY') push('regime', 'short', rl + sc + fredNote + ' — playbook: shorts' + (sz ? ' · ' + sz : ''));
     else push('regime', 'neutral', rl + sc + fredNote + ' — playbook has no directional edge' + (sz ? ' · ' + sz : ''));
+  }
+
+  /* ---- STABLECOIN FLOWS (DeFiLlama dry powder — R8 exposed to BRAIN) ---- */
+  if (!inp.stables || typeof inp.stables !== 'object'){
+    hush('stables', 'stablecoin flow snapshot unavailable — warm REGIME once');
+  }else{
+    var sb = inp.stables;
+    var totSb = isFinite(+sb.totalUSD) ? +sb.totalUSD : null;
+    var d7Sb = isFinite(+sb.delta7dUSD) ? +sb.delta7dUSD : null;
+    var pctSb = isFinite(+sb.delta7dPct) ? +sb.delta7dPct
+              : ((totSb !== null && d7Sb !== null && (totSb - d7Sb) > 0)
+                  ? (d7Sb / (totSb - d7Sb)) * 100 : null);
+    var usdtNote = isFinite(+sb.usdtUSD) ? ' · USDT ' + FMT(+sb.usdtUSD / 1e9, 1) + 'B' : '';
+    var usdcNote = isFinite(+sb.usdcUSD) ? ' · USDC ' + FMT(+sb.usdcUSD / 1e9, 1) + 'B' : '';
+    if (pctSb === null){
+      hush('stables', 'stablecoin 7d delta unavailable');
+    }else if (pctSb > 0.5){
+      push('stables', 'long', 'dry powder IN (+7d ' + FMT(pctSb, 2) + '%)' + usdtNote + usdcNote
+        + ' — stables expanding, risk-on liquidity');
+    }else if (pctSb < -0.5){
+      push('stables', 'short', 'dry powder OUT (7d ' + FMT(pctSb, 2) + '%)' + usdtNote + usdcNote
+        + ' — stables draining, risk-off');
+    }else{
+      push('stables', 'neutral', 'stablecoin flows flat (7d ' + FMT(pctSb, 2) + '%)' + usdtNote + usdcNote);
+    }
+  }
+
+  /* ---- DERIBIT DVOL implied-vol regime (BTC/ETH index, context) ---- */
+  if (!inp.dvol || typeof inp.dvol !== 'object'){
+    hush('dvol', 'Deribit DVOL unavailable — optional vol-regime layer sits out');
+  }else{
+    var dv = inp.dvol;
+    var dvolV = isFinite(+dv.dvol) ? +dv.dvol : null;
+    var dvReg = (typeof dv.regime === 'string') ? dv.regime : '';
+    if (dvolV === null){
+      hush('dvol', 'DVOL print missing');
+    }else if (dvReg === 'extreme' || dvReg === 'high'){
+      push('dvol', 'neutral', 'DVOL ' + FMT(dvolV, 1) + ' (' + dvReg
+        + ') — elevated implied vol, size down / widen stops', { caution: true });
+    }else if (dvReg === 'low'){
+      push('dvol', 'neutral', 'DVOL ' + FMT(dvolV, 1) + ' (compressed) — vol coiled, breakout fuel');
+    }else{
+      push('dvol', 'neutral', 'DVOL ' + FMT(dvolV, 1) + ' — normal implied-vol band');
+    }
   }
 
   /* ---- ROTATION season ---- */
@@ -1302,7 +1347,8 @@ function snapshotLayers(){
             liqSnap: undefined, liqSetup: undefined, tape: undefined,
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
             yieldSnap: undefined, smtSnap: undefined, macro: undefined,
-            newsState: undefined, fng: null, carry: undefined, termbasis: undefined };
+            newsState: undefined, fng: null, carry: undefined, termbasis: undefined,
+            stables: undefined, dvol: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
                   engine: 'engineState', oiflow: 'oiflowState', squeeze: 'squeezeState',
@@ -1351,6 +1397,14 @@ function snapshotLayers(){
   try{
     if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached();
   }catch(e){ o.macro = undefined; }
+  try{
+    if (o.regime && typeof o.regime === 'object' && o.regime.stables){
+      o.stables = o.regime.stables;
+    }
+  }catch(e){ o.stables = undefined; }
+  try{
+    if (typeof G.deribitVolState === 'function') o.dvol = G.deribitVolState();
+  }catch(e){ o.dvol = undefined; }
   /* fear & greed from the inline app state (const S — lexical global, not window.S) */
   try{ if (typeof S !== 'undefined' && S && S.fng) o.fng = S.fng; }catch(e){ o.fng = null; }
   return o;
@@ -1644,7 +1698,9 @@ async function fetchCandleQueue(rows, uni, stat, t0){
         fetchBook(crow).then(function(bk){ crow.bookDepth = bk; },
                              function(){ crow.bookDepth = null; }),
         fetchTaker(crow).then(function(tk){ crow.taker = tk; },
-                             function(){ crow.taker = null; })
+                             function(){ crow.taker = null; }),
+        fetchSpotTaker(crow).then(function(st){ crow.spotTaker = st; },
+                                  function(){ crow.spotTaker = null; })
       ]);
     }));
     out.fetched += chunk.length;
@@ -1671,7 +1727,7 @@ function judgeCrypto(cand, snap){
     sym: cand.sym, aliases: cand.aliases, lane: 'crypto',
     news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
-    macro: snap.macro,
+    macro: snap.macro, stables: snap.stables, dvol: snap.dvol,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     tape: snap.tape, fng: snap.fng,
     carry: snap.carry, termbasis: snap.termbasis,
@@ -2038,6 +2094,15 @@ async function fetchTaker(cand){
     return (r && Array.isArray(r.series) && r.series.length >= 8) ? r.series : null;
   }catch(e){ return null; }
 }
+async function fetchSpotTaker(cand){
+  try{
+    if (typeof G.binanceSpotTakerFlow !== 'function') return null;
+    var sym = binanceSymFor(cand);
+    if (!sym) return null;
+    var r = await withTimeout(G.binanceSpotTakerFlow(sym, '1h', 25), TUN.fetchMs);
+    return (r && Array.isArray(r.series) && r.series.length >= 8) ? r.series : null;
+  }catch(e){ return null; }
+}
 function fundingZ(hist){
   try{
     if (!Array.isArray(hist) || hist.length < 10) return NaN;
@@ -2360,10 +2425,11 @@ function cvdAssess(series){
   }catch(e){ return null; }
 }
 
-/** Shared CVD + OBI trap read for BEST / EDGE / BRAIN (BEST policy: hard veto). */
-function flowTrapAssess(takerSeries, bookDepth, dir){
+/** Shared CVD + OBI + spot-perp trap read for BEST / EDGE / BRAIN (BEST policy: hard veto). */
+function flowTrapAssess(takerSeries, bookDepth, dir, spotSeries){
   try{
-    var out = { veto: false, reason: '', cvdAligned: false, obiAligned: false, flowOk: false };
+    var out = { veto: false, reason: '', cvdAligned: false, obiAligned: false,
+                spotPerpAligned: false, flowOk: false };
     if (dir !== 'long' && dir !== 'short') return out;
     var a = takerSeries ? cvdAssess(takerSeries) : null;
     if (a){
@@ -2389,9 +2455,21 @@ function flowTrapAssess(takerSeries, bookDepth, dir){
         }
       }
     }
-    out.flowOk = out.cvdAligned || out.obiAligned;
+    var spFn = (typeof G.spotPerpFlowAssess === 'function') ? G.spotPerpFlowAssess : null;
+    if (spFn && takerSeries && spotSeries){
+      var sp = spFn(takerSeries, spotSeries, dir);
+      if (sp && sp.veto){
+        out.veto = true;
+        out.reason = sp.reason || out.reason;
+      }
+      if (sp && sp.spotPerpAligned) out.spotPerpAligned = true;
+    }
+    out.flowOk = out.cvdAligned || out.obiAligned || out.spotPerpAligned;
     return out;
-  }catch(e){ return { veto: false, reason: '', cvdAligned: false, obiAligned: false, flowOk: false }; }
+  }catch(e){
+    return { veto: false, reason: '', cvdAligned: false, obiAligned: false,
+             spotPerpAligned: false, flowOk: false };
+  }
 }
 function applyCvd(rows){
   try{
@@ -2424,6 +2502,55 @@ function applyCvd(rows){
       }else{
         row.col.silent.push('cvd');
         colNote(row.col, 'cvd', 'SILENT', 'flow balanced at ' + FMT(a.ratio, 2) + ' — no CVD edge');
+      }
+    }
+  }catch(e){}
+}
+
+/* SPOT-PERP layer ('spotperp', context) — spot klines vs perp taker ratio.
+   Perp-only flow can lie; spot leg confirms or flags a trap. */
+function applySpotPerp(rows){
+  try{
+    var spFn = (typeof G.spotPerpDivergence === 'function') ? G.spotPerpDivergence : null;
+    if (!spFn) return;
+    for (var i = 0; i < rows.length; i++){
+      var row = rows[i];
+      if (!row || row.lane !== 'crypto' || !row.dec || !row.col) continue;
+      if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) continue;
+      if (!row.dec.dir) continue;
+      var dir = row.dec.dir;
+      if (!row.taker || !row.spotTaker){
+        row.col.silent.push('spotperp');
+        colNote(row.col, 'spotperp', 'SILENT', 'spot or perp taker series missing');
+        continue;
+      }
+      var sp = spFn(row.taker, row.spotTaker);
+      if (sp.trap){
+        if ((dir === 'long' && sp.perpRatio >= 1.12 && sp.spotRatio <= 0.92)
+            || (dir === 'short' && sp.perpRatio <= 0.88 && sp.spotRatio >= 1.08)){
+          row.col.votes.push({ layer: 'spotperp', vote: 'veto', kind: 'context',
+            text: sp.reason || 'spot-perp flow trap' });
+          colNote(row.col, 'spotperp', 'VETO', sp.reason || 'spot-perp trap');
+          row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+        }else{
+          row.col.votes.push({ layer: 'spotperp', vote: 'neutral', kind: 'context', caution: true,
+            text: sp.reason || 'spot-perp mismatch' });
+          colNote(row.col, 'spotperp', 'CAUTION', sp.reason || 'spot-perp mismatch');
+        }
+      }else if (sp.confirms && ((dir === 'long' && sp.perpRatio >= 1.05 && sp.spotRatio >= 1.03)
+               || (dir === 'short' && sp.perpRatio <= 0.95 && sp.spotRatio <= 0.97))){
+        row.col.votes.push({ layer: 'spotperp', vote: dir, kind: 'context',
+          text: 'spot+perp taker flow aligned · perp ' + FMT(sp.perpRatio, 2)
+            + ' · spot ' + FMT(sp.spotRatio, 2) });
+        colNote(row.col, 'spotperp', String(dir).toUpperCase(), 'spot+perp flow confirms');
+        row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+      }else if (sp.diverged){
+        row.col.votes.push({ layer: 'spotperp', vote: 'neutral', kind: 'context', caution: true,
+          text: sp.reason || 'spot-perp flow diverged' });
+        colNote(row.col, 'spotperp', 'CAUTION', sp.reason || 'spot-perp diverged');
+      }else{
+        row.col.silent.push('spotperp');
+        colNote(row.col, 'spotperp', 'SILENT', 'spot and perp flow in band');
       }
     }
   }catch(e){}
@@ -4026,7 +4153,7 @@ dark reason. A layer with nothing recorded says 'no evidence recorded'.
 Never throws.
 ========================================================================= */
 var AUDIT_ORDER_CRYPTO = ['news','regime','rotation','onchain','fng','funding',
-                          'engine','oiflow','bybitpos','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','fundz','btcrel','div','meanrev','poc','book','cvd','session'];
+                          'engine','oiflow','bybitpos','squeeze','tape','liqs','liqpool','trend4h','structure','mtf','volreg','dvol','stables','fundz','btcrel','div','meanrev','poc','book','cvd','spotperp','session'];
 var AUDIT_ORDER_GOLD   = ['news','goldsetup','golddeep','goldbasis','yield','smt'];
 
 function auditLineHTML(label, status, text){
@@ -4632,7 +4759,7 @@ function warmHooksOrdered(){
 var WARM_LAYER_KEY = { news: 'newsState', regime: 'regime', rotation: 'rotation',
                        onchain: 'onchain', engine: 'engine', oiflow: 'oiflow',
                        squeeze: 'squeeze', liqs: 'liqSnap', carry: 'carry',
-                       termbasis: 'termbasis' };
+                       termbasis: 'termbasis', dvol: 'dvol' };
 
 async function enrichLiqSetup(snap){
   try{
@@ -4915,6 +5042,7 @@ async function runBrain(el){
       applyPoc(rows);
       applyBook(rows);
       applyCvd(rows);
+      applySpotPerp(rows);
       applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
       bk = bucketRows(rows);   /* re-bucket after promotions/dark caps */
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
@@ -5207,6 +5335,7 @@ async function runQuick(el){
       applyPoc(rows);
       applyBook(rows);
       applyCvd(rows);
+      applySpotPerp(rows);
       applySessionHaircut(rows);   /* off-hours haircut — last word before bucketing */
       bk = bucketRows(rows);
       primes = bk.primes; highs = bk.highs; watches = bk.watches; asides = bk.asides;
@@ -5737,6 +5866,7 @@ G.flowTrapAssess = flowTrapAssess;
 G.__hgBrainApplyStructure = applyStructure;
 G.__hgBrainApplyMeanrev = applyMeanrev;
 G.__hgBrainApplyPoc = applyPoc;
+G.__hgBrainApplySpotPerp = applySpotPerp;
 G.hgLimitState = hgLimitState;
 /* last painted ticket snapshot (alert/diagnostic seam, read-only) */
 G.__hgBrainTicketNow = function(){ try{ return __lastTicketSnap; }catch(e){ return null; } };

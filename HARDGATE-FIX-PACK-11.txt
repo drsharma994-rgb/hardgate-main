@@ -1,0 +1,24 @@
+================================================================================
+HARDGATE FIX PACK 11 — VOL MESH (DVOL + spot-perp + stablecoin BRAIN)
+================================================================================
+Baseline: hg-v176 → target hg-v177
+Branch: cursor/fix-pack-11-vol-spot-stables-2f4b
+
+PATCH 1 — Deribit DVOL vol-regime layer
+  deribit-vol.js: public get_volatility_index_data (BTC DVOL)
+  brain.js: dvol context vote + snapshotLayers + judgeCrypto + HG_warmups
+
+PATCH 2 — Spot vs perp CVD divergence
+  binance.js: binanceSpotTakerFlow (spot klines taker-buy proxy)
+  spot-perp.js: spotPerpDivergence + spotPerpFlowAssess
+  brain.js: flowTrapAssess 4th arg, applySpotPerp, fetchSpotTaker
+  index.html BEST F8: spot leg + SPOT chip on F8 detail
+
+PATCH 3 — DeFiLlama stablecoin flow on BRAIN
+  regime.js: USDT/USDC breakdown + stables on regimeState snapshot
+  brain.js: stables context vote (R8 dry-powder bands)
+
+PATCH 4 — Tests + cache hg-v177
+  tests/test-fix-pack-11.mjs
+
+================================================================================
