@@ -3245,6 +3245,27 @@ function hgPaintScanFunnel(kind, audit){
   }catch(e){}
 }
 
+function hgPaintGateReplayPanel(audit){
+  try{
+    if (!audit || !audit.replaySamples || !audit.replaySamples.length) return;
+    if (typeof cgGateReplayPanelHTML !== 'function') return;
+    const elId = 'swingReplay';
+    let el = document.getElementById(elId);
+    const host = $('swingWatch');
+    if (!host) return;
+    if (!el){
+      el = document.createElement('div');
+      el.id = elId;
+      host.parentNode.insertBefore(el, host);
+    }
+    el.innerHTML = cgGateReplayPanelHTML({
+      samples: audit.replaySamples,
+      clean: audit.replayClean || 0,
+      settled: audit.replaySettled || 0
+    }, audit.sole || {});
+  }catch(e){}
+}
+
 
 function scanMomentumDetail(candles, rows, dir){
   let momDetail = 'n/a';
@@ -3458,6 +3479,7 @@ function hgPaintCryptoDeskFromSnap(kind){
   if (!cardsEl || !hgSnapFreshMs(snap)) return;
   if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
   if (snap.audit && typeof hgPaintScanFunnel === 'function') hgPaintScanFunnel(kind, snap.audit);
+  if (kind === 'swing' && snap.audit && typeof hgPaintGateReplayPanel === 'function') hgPaintGateReplayPanel(snap.audit);
   const cands = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
   const near = (snap && Array.isArray(snap.nearCands)) ? snap.nearCands : [];
   if (!cands.length && !near.length){
@@ -3617,7 +3639,8 @@ async function runScanLeg(kind, opts){
     const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
     let found = 0, nearFound = 0;
-    let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0, fadeFound: 0 };
+    let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0, fadeFound: 0,
+      replaySamples: [], replayClean: 0, replaySettled: 0 };
     const flipRecords = [];
     const flipVenue = venueTag || S.exchange || '';
     const t0scan = Date.now();
@@ -3642,8 +3665,19 @@ async function runScanLeg(kind, opts){
         try{
           if (isSwing){
             if (typeof swingTryClean !== 'function') return;
-            const rows = await getCandles(t.symbol, '4h', 260);
+            const swingBars = (typeof cgGateReplay === 'function') ? 500 : 260;
+            const rows = await getCandles(t.symbol, '4h', swingBars);
             if (!rows || rows.length < 210){ audit.histShort++; return; }
+            if (typeof cgGateReplay === 'function' && rows.length >= 299){
+              try{
+                const rp = cgGateReplay(rows, t, {});
+                if (rp && rp.samples && rp.samples.length){
+                  audit.replaySamples.push.apply(audit.replaySamples, rp.samples);
+                  audit.replayClean += rp.clean || 0;
+                  audit.replaySettled += rp.settled || 0;
+                }
+              }catch(eRp){}
+            }
             if (typeof swingGateMatrix === 'function'){
               const m = swingGateMatrix(rows, t);
               if (m && m.dir){
@@ -3764,6 +3798,7 @@ async function runScanLeg(kind, opts){
     const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }));
     if (!opts._singleLeg) hgAssignCryptoScanSnap(kind, snap);
     if (!quiet && dualLast) hgPaintScanFunnel(kind, snap.audit);
+    if (!quiet && dualLast && isSwing) hgPaintGateReplayPanel(snap.audit);
     if (!quiet && dualLast && !found){
       const blk = topFail.length ? (' Most common gate failures: ' + topFail.join(', ') + '.') : '';
       emptyEl.textContent = (isSwing
