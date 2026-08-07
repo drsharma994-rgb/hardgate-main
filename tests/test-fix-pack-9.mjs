@@ -87,7 +87,8 @@ console.log('== scorecard board shows Wilson CI when hgWilson is loaded ==');
 console.log('== sw cache bumped for fix pack 9 ==');
 {
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  ok(/hg-v175/.test(sw), 'sw cache hg-v175');
+  const m = sw.match(/const HG_CACHE = 'hg-v(\d+)'/);
+  ok(m && +m[1] >= 175, 'sw cache at least hg-v175 (pack 9+)');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

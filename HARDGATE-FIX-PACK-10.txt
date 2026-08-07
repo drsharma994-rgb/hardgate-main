@@ -1,0 +1,26 @@
+================================================================================
+HARDGATE FIX PACK 10 — CONVICTION MESH (free cross-checks on every formation)
+================================================================================
+Baseline: hg-v175 → target hg-v176
+Branch: cursor/fix-pack-10-conviction-mesh-2f4b
+
+PATCH 1 — Mean-reversion ASIDE on conflict
+  brain.js applyMeanrev: opposing MR vote is structural → brainSetupConflict → ASIDE
+
+PATCH 2 — Bybit cross-venue positioning
+  brain.js: bybitpos layer from SMART $ cross (positioningCrossCheck)
+  index.html BEST F8: Binance flow OR Bybit cross confirmed/partial
+
+PATCH 3 — FRED macro in conviction stack
+  snapshotLayers + judgeCrypto pass macro (getGoldMacroCached)
+  setup-stack.js: DXY FRED + DFII10 real yield on crypto FTS fundamental leg
+  brain regime vote annotates FRED DXY when configured
+
+PATCH 4 — Conviction mesh on setup cards
+  brainConvictionMesh + hgSetupConvictionMeshHtml (agree/oppose/dark/silent)
+  BRAIN cards + hgSetupCardHTML optional convictionMesh field
+
+PATCH 5 — Tests + cache hg-v176
+  tests/test-fix-pack-10.mjs
+
+================================================================================

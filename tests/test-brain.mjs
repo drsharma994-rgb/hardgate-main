@@ -3613,9 +3613,12 @@ console.log('== AW) post-fetch structure / meanrev / poc integration ==');
 
   WB.meanrevAssess = function(){ return { signal: true, dir: 'short', n: 8, winPct: 62, expR: 0.4 }; };
   const rMrOpp = mkRow('WATCH', 'long');
+  rMrOpp.col.votes.push({ layer: 'engine', vote: 'long', kind: 'structural', text: 'continuation long' });
   AM([rMrOpp]);
-  ok(rMrOpp.col.votes.some(function(v){ return v.layer === 'meanrev' && v.caution; }),
-     'AW: opposing meanrev trigger -> CAUTION');
+  ok(rMrOpp.col.votes.some(function(v){ return v.layer === 'meanrev' && v.vote === 'short'; }),
+     'AW: opposing meanrev trigger -> structural vote against bias');
+  ok(rMrOpp.dec.tier === 'ASIDE' && rMrOpp.dec.reasons[0].indexOf('setup conflict') >= 0,
+     'AW: opposing meanrev with continuation layers -> ASIDE via setup conflict');
 
   globalThis.volumeProfile = function(){ return { poc: 100, val: 98, vah: 102 }; };
   const rPoc = mkRow('WATCH', 'long');

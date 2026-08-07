@@ -54,6 +54,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.hgNewsState === 'function') o.news = G.hgNewsState(); }catch(e3){}
     try{ if (typeof G.onchainState === 'function') o.onchain = G.onchainState(); }catch(e4){}
     try{ if (typeof G.rotationState === 'function') o.rotation = G.rotationState(); }catch(e5){}
+    try{ if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached(); }catch(e6){}
     return o;
   }catch(e){ return {}; }
 }
@@ -194,6 +195,22 @@ function hgSetupStack(inp){
       _bump(fundamental, _item('macro', inp.macro.veto, 'veto'), vetoes, cautions);
     } else if (inp.macro.hint){
       _bump(fundamental, _item('macro', inp.macro.hint, 'neutral'), vetoes, cautions);
+    }
+  }
+
+  var macroSnap = inp.macro;
+  if (macroSnap && hasDir && asset === 'crypto'){
+    if (macroSnap.dxyOfficial && macroSnap.dxyOfficial.trend20 === 'RISING' && dir === 'long'){
+      _bump(fundamental, _item('DXY FRED', 'DTWEXBGS rising — headwind for risk-on longs', 'caution'), vetoes, cautions);
+    } else if (macroSnap.dxyOfficial && macroSnap.dxyOfficial.trend20 === 'FALLING' && dir === 'long'){
+      _bump(fundamental, _item('DXY FRED', 'DTWEXBGS falling — tailwind', 'with'), vetoes, cautions);
+    } else if (macroSnap.dxyOfficial && macroSnap.dxyOfficial.trend20 === 'RISING' && dir === 'short'){
+      _bump(fundamental, _item('DXY FRED', 'DTWEXBGS rising — supports USD shorts', 'with'), vetoes, cautions);
+    }
+    if (isFinite(+macroSnap.realYield10Y) && macroSnap.realYieldTrend === 'RISING' && dir === 'long'){
+      _bump(fundamental, _item('real yield FRED', 'DFII10 ' + (+macroSnap.realYield10Y).toFixed(2) + '% rising', 'caution'), vetoes, cautions);
+    } else if (isFinite(+macroSnap.realYield10Y) && macroSnap.realYieldTrend === 'FALLING' && dir === 'long'){
+      _bump(fundamental, _item('real yield FRED', 'DFII10 falling — gold/crypto long tailwind', 'with'), vetoes, cautions);
     }
   }
 

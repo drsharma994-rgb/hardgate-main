@@ -5369,8 +5369,9 @@ async function runCascadeCore(uni){
       }
     }catch(e){}
 
-    /* F8 ORDER FLOW & MICROSTRUCTURE TRAP VETO (Binance Proxy) */
+    /* F8 ORDER FLOW & MICROSTRUCTURE TRAP VETO (Binance Proxy + Bybit cross) */
     let f8 = false, f8Detail = 'CVD/L2 unread', isCvdTrap = false, trapReason = '';
+    let f8Cross = false;
     try {
         if (typeof binanceTakerRatio === 'function' && typeof binanceDepth === 'function') {
             const symStr = s.t.symbol.replace(/USDT$/, '') + 'USDT';
@@ -5387,6 +5388,18 @@ async function runCascadeCore(uni){
               f8 = ft.flowOk === true;
               f8Detail = 'CVD ' + (ft.cvdAligned ? '✓' : '✗') + ' · OBI ' + (ft.obiAligned ? '✓' : '✗');
             }
+            if (typeof bybitPositioningSnapshot === 'function' && typeof positioningCrossCheck === 'function'){
+              const byb = await bybitPositioningSnapshot(symStr).catch(()=>null);
+              const cross = positioningCrossCheck(
+                { fundingPct: s.fr, retailLongPct: null, oiChgPct: null },
+                byb
+              );
+              if (cross && (cross.status === 'confirmed' || cross.status === 'partial')){
+                f8Cross = true;
+                f8Detail += ' · CROSS ' + (cross.status === 'confirmed' ? '✓' : '~');
+              }
+            }
+            f8 = f8 || f8Cross;
         }
     } catch(e) {}
 

@@ -144,6 +144,23 @@ function hgSetupCardHead(sym, dir, tier, extraBadges, venue, bookMeta){
     + bookStamp + badges;
 }
 
+/** Conviction mesh chip — agree / oppose / dark / silent layer counts. */
+function hgSetupConvictionMeshHtml(mesh){
+  try{
+    if (!mesh || typeof mesh !== 'object') return '';
+    var a = +mesh.agree || 0, d = +mesh.disagree || 0, dk = +mesh.dark || 0, s = +mesh.silent || 0;
+    if (!(a + d + dk + s)) return '';
+    var esc = function(x){ return String(x == null ? '' : x); };
+    return '<div class="mini hg-conviction-mesh" style="margin-top:4px">'
+      + '<span class="k">conviction mesh</span><span>'
+      + '<b class="pos">' + esc(a) + ' agree</b>'
+      + (d ? ' · <b class="neg">' + esc(d) + ' oppose</b>' : '')
+      + (dk ? ' · <span style="color:var(--dim)">' + esc(dk) + ' dark</span>' : '')
+      + (s ? ' · <span style="color:var(--dim)">' + esc(s) + ' silent</span>' : '')
+      + '</span></div>';
+  }catch(e){ return ''; }
+}
+
 /** Full setup card — wraps index cardHTML when present, else standalone markup. */
 function hgSetupCardHTML(setup){
   setup = setup || {};
@@ -192,6 +209,8 @@ function hgSetupCardHTML(setup){
   var cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
   var note = setup.note ? '<div class="note warn" style="margin-top:6px">' + setup.note + '</div>' : '';
   var stackHtml = (setup.stack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(setup.stack) : '';
+  var meshHtml = (setup.convictionMesh && typeof hgSetupConvictionMeshHtml === 'function')
+    ? hgSetupConvictionMeshHtml(setup.convictionMesh) : '';
   var tradeBtn = (tier === 'clean' && onclickAttr)
     ? '<button class="toTrade" onclick="' + onclickAttr + '">SEND TO TRADE PLAN →</button>' : '';
 
@@ -200,6 +219,7 @@ function hgSetupCardHTML(setup){
     + (miniHtml ? '<div class="mini">' + miniHtml + '</div>' : '')
     + (gateHtml ? '<div class="gates">' + gateHtml + '</div>' : '')
     + stackHtml
+    + meshHtml
     + (plan ? '<div class="plan">' + plan + '</div>' : '')
     + note
     + (cid ? '<div class="hgchart" id="' + cid + '"></div>' : '')
@@ -453,6 +473,7 @@ W.hgFormingWatchHTML = hgFormingWatchHTML;
 W.hgSetupEmptyHTML = hgSetupEmptyHTML;
 W.hgSetupCardHead = hgSetupCardHead;
 W.hgSetupCardHTML = hgSetupCardHTML;
+W.hgSetupConvictionMeshHtml = hgSetupConvictionMeshHtml;
 W.hgSetupPanelHTML = hgSetupPanelHTML;
 W.hgSetupTierFromConfirmed = hgSetupTierFromConfirmed;
 W.hgBrainSetupTier = hgBrainSetupTier;
