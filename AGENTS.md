@@ -99,7 +99,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Fix Pack 15 (hg-v182):** **MAE/MFE excursions** on settle (`maeR`/`mfeR` to exit, `maeFullR`/`mfeFullR` full window); **`hgHeatProfile`**, **`hgStopSweep`**. Console-only — no tab yet. **`tests/test-excursions.mjs`**.
 - **Fix Pack 16 (hg-v183):** **Portfolio concentration** — `hgCorrMatrix`, `hgPortfolioConcentration`; TRADE PLAN heat row shows effective bets vs nominal. **`tests/test-portfolio-concentration.mjs`**.
 - **Fix Pack 17 (hg-v184):** **Sole blocker funnel** — `cgSoleBlocker`; WHY EMPTY panel shows ONLY-blocker column (what relaxing a gate would buy). **`tests/test-sole-blocker.mjs`**.
-- **StarTrader gold tabs (hg-v185):** STAR TRADER sub-tabs **GOLD SCALP** / **GOLD SWING** embed the same engines as the GOLD-group tabs via `goldscalpMountSection` / `goldswingMountSection`.
+- **StarTrader gold tabs (hg-v187):** STAR TRADER sub-tabs **GOLD SCALP** / **GOLD SWING** embed the same strategy engines as the GOLD-group tabs via `goldscalpMountSection` / `goldswingMountSection`, with **`useStartraderRouting`** — primary feed is **`getXAUCandles`** (same chain as confluence), setups stamped **`XAUUSD`**, proxy basis note when applicable.
 - **Fix Pack 18 (hg-v186):** **Gold weekend exposure** — `hgInGoldWeekend`, `hgSecsToGoldWeekend`, `hgGoldWeekendMoves`, `hgGoldWeekendRisk` (console-only; no ticket wiring yet). **`tests/test-gold-weekend.mjs`**.
 - **Contract sizing on ticket (hg-v171):** TRADE PLAN ticket prints **CONTRACTS** (lots) from Delta `/v2/products` via `hgQtyToContracts` — rounds DOWN; sub-lot positions called out.
 - **Cache reuse (hg-v171):** `HG_CANDLE_TTL_QUIET = 420` (> 5-min alert cycle) so quiet scans reuse candles across cycles.
