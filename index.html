@@ -5286,7 +5286,8 @@ async function runCascadeCore(uni){
           distToAnchor, stop: tc.stop, risk, rr: tc.rr, t1: tc.t1, t2: tc.t2,
           vz: tc.vz, fr: t.fundingPct, ev: tc.ev, veto: isStale, cascadeAgeBars: cascadeAgeBars, staleReason: staleReason,
           tapeRegime: (typeof hgTapeRegimeLabel === 'function') ? hgTapeRegimeLabel(rows) : 'n/a',
-          targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean', stack: tc.stack || null});
+          targetPolicy: 'ATR excursion (3.5×/4.9×)', planSrc: 'swingTryClean', stack: tc.stack || null,
+          hit: tc});
         funnel.cleanRaw++;
       }catch(e){}
     }));
@@ -5466,6 +5467,12 @@ async function runCascadeCore(uni){
 
     s.fam=[
       ['G0','Anti-Chase Guard — price to EMA21 distance', true, `${fmt(s.distToAnchor,2)} ATR (limit ≤ 1.25, entry: ${s.entryType})`],
+      /* CLEARANCE — not a gate, a read on HOW the gates were passed. Measured:
+         58% of 7/7 CLEAN setups scrape at least one binding gate, and G6 is the
+         scraped one in 49% of them. Null verdict = informational row, never a
+         tick or a cross, because it does not gate anything. */
+      ['GC','GATE CLEARANCE — how much room the binding gates had', null,
+        (typeof cgClearanceLine==='function' && cgClearanceLine(s.hit)) || 'clearance not computed for this ticket'],
       ['F1','TREND family — 2-of-3 majority: TSMOM · 1D side · CUSUM', f1, `${trendVotes}/3 → TSMOM ${mTs?'✓':'✗'} (${tsD}) · 1D ${mD1?'✓':'✗'} · CUSUM ${mCu?'✓':'✗'}${s.ev?` (${s.ev.dir.toUpperCase()} ${s.ev.barsAgo} bars ago)`:''}`],
       ['F2','POSITIONING family — funding tailwind (crowd pays you)', f2, s.fr!==null?`${fmt(s.fr,4)}%/interval`:'n/a'],
       ['F3','PARTICIPATION family — volume z > 1.0 or VWAP side', f3, `z ${fmt(s.vz,2)} · ${vwapDetail}`],
