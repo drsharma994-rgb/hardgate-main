@@ -325,6 +325,42 @@ function enforceCap(){
      - after t1 is touched, the walk keeps watching the SAME fixed levels
        (no stop-management simulation): stop -> 'T1S' at r(t1)/2, t2 -> 'T2'
        at r(t2) ("T1-then-T2 = full"). */
+/* ===================== ADVERSE / FAVOURABLE EXCURSION =====================
+   MAE (how far a trade went AGAINST you before it resolved) and MFE (how far
+   it went FOR you) are the two numbers a discretionary book is tuned on, and
+   this ledger had neither. Everything measured so far answers "did the setup
+   work"; MAE/MFE answer "was the stop in the right place" — which is the
+   lever that actually moves a win rate.
+   Both are reported TWICE:
+     maeR / mfeR          up to the actual exit — what the trade really did
+     maeFullR / mfeFullR  over the whole settlement window, ignoring the exit
+                          — what the trade WOULD have done on a wider stop
+   The second pair is what makes the stop sweep honest. Without it you can only
+   see which winners a tighter stop would have killed, never which losers a
+   wider one would have saved, and a one-sided sweep always argues for wider
+   stops. Both branches are observable here because the walk already holds
+   every bar in the window.
+   All values are in R of the ORIGINAL plan, so they stay comparable across
+   symbols and position sizes. */
+function hgScoreExcursions(bars, startIdx, entry, stop, dir, deadline){
+  var out = { maeR: 0, mfeR: 0, maeFullR: 0, mfeFullR: 0 };
+  try{
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0) || !Array.isArray(bars)) return out;
+    var sign = (dir === 'long') ? 1 : -1;
+    for (var i = startIdx; i < bars.length; i++){
+      var b = bars[i];
+      if (!b || b.t * 1000 >= deadline) break;
+      if (b.h === null || b.l === null) continue;
+      /* favourable = the best price seen in the trade's direction */
+      var fav = sign * ((sign > 0 ? b.h : b.l) - entry) / risk;
+      var adv = -sign * ((sign > 0 ? b.l : b.h) - entry) / risk;
+      if (fav > out.mfeFullR) out.mfeFullR = fav;
+      if (adv > out.maeFullR) out.maeFullR = adv;
+    }
+    return out;
+  }catch(e){ return out; }
+}
 function hgScoreWalk(record, rows){
   var INVALID = { state: 'INVALID', r: null, bars: 0, closedAt: null };
   try{
@@ -361,7 +397,22 @@ function hgScoreWalk(record, rows){
     }
     var deadline = at + EXPIRE_MS;
     var touchedT1 = false, walked = 0, lastClose = null, lastT = null, expired = false;
-    var filled = false, fillWait = 0, sawBars = 0, filledAt = null;
+    var filled = false, fillWait = 0, sawBars = 0, filledAt = null, fillIdx = -1;
+    var maeR = 0, mfeR = 0;
+    var exSign = (dir === 'long') ? 1 : -1;
+    function noteExcursion(b){
+      if (!b || b.h === null || b.l === null || !(risk > 0)) return;
+      var fav = exSign * ((exSign > 0 ? b.h : b.l) - entry) / risk;
+      var adv = -exSign * ((exSign > 0 ? b.l : b.h) - entry) / risk;
+      if (fav > mfeR) mfeR = fav;
+      if (adv > maeR) maeR = adv;
+    }
+    function ex(){
+      var full = hgScoreExcursions(bars, fillIdx < 0 ? 0 : fillIdx, entry, stop, dir, deadline);
+      return { maeR: Math.round(maeR * 1000) / 1000, mfeR: Math.round(mfeR * 1000) / 1000,
+               maeFullR: Math.round(full.maeFullR * 1000) / 1000,
+               mfeFullR: Math.round(full.mfeFullR * 1000) / 1000 };
+    }
     for (var k = 0; k < bars.length; k++){
       var bar = bars[k];
       if ((bar.t + dur) * 1000 <= at) continue;      /* closed at/before entry -> pre-entry */
@@ -373,7 +424,7 @@ function hgScoreWalk(record, rows){
       if (!filled){
         var touched = (bar.l !== null && bar.h !== null)
           && (dir === 'long' ? bar.l <= entry : bar.h >= entry);
-        if (touched){ filled = true; filledAt = bar.t; }
+        if (touched){ filled = true; filledAt = bar.t; fillIdx = k; }
         else {
           fillWait++;
           if (fillWait >= FILL_BARS){
@@ -383,6 +434,7 @@ function hgScoreWalk(record, rows){
         }
       }
       walked++;
+      noteExcursion(bar);
       lastT = bar.t;
       if (bar.c !== null) lastClose = bar.c;
       var stopHit = (bar.l !== null && bar.h !== null)
@@ -392,21 +444,21 @@ function hgScoreWalk(record, rows){
       var t2Hit = (t2 !== null && bar.l !== null && bar.h !== null)
         && (dir === 'long' ? bar.h >= t2 : bar.l <= t2);
       if (!touchedT1){
-        if (stopHit) return { state: 'SL', r: -1, bars: walked, closedAt: bar.t, filledAt: filledAt };
+        if (stopHit) return Object.assign({ state: 'SL', r: -1, bars: walked, closedAt: bar.t, filledAt: filledAt }, ex());
         if (t1Hit){
-          if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt };
+          if (t2Hit) return Object.assign({ state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt }, ex());
           touchedT1 = true;
           continue;
         }
-        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt };
+        if (t2Hit) return Object.assign({ state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt }, ex());
       }else{
-        if (stopHit) return { state: 'T1S', r: rOf(t1) * scaleFrac(rec), bars: walked, closedAt: bar.t, filledAt: filledAt };
-        if (t2Hit) return { state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt };
+        if (stopHit) return Object.assign({ state: 'T1S', r: rOf(t1) * scaleFrac(rec), bars: walked, closedAt: bar.t, filledAt: filledAt }, ex());
+        if (t2Hit) return Object.assign({ state: 'T2', r: rOf(t2), bars: walked, closedAt: bar.t, filledAt: filledAt }, ex());
       }
     }
     if (touchedT1){
-      if (expired) return { state: 'T1', r: rOf(t1), bars: walked, closedAt: lastT, filledAt: filledAt };
-      return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null, filledAt: filledAt };
+      if (expired) return Object.assign({ state: 'T1', r: rOf(t1), bars: walked, closedAt: lastT, filledAt: filledAt }, ex());
+      return Object.assign({ state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null, filledAt: filledAt }, ex());
     }
     if (!filled){
       /* NO DATA is not the same as NOT FILLED. When zero in-window bars were
@@ -419,8 +471,8 @@ function hgScoreWalk(record, rows){
         return { state: 'PENDING_FILL', r: null, bars: fillWait, closedAt: null, filledAt: filledAt };
       }
     }
-    if (expired) return { state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT, filledAt: filledAt };
-    return { state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null, filledAt: filledAt };
+    if (expired) return Object.assign({ state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT, filledAt: filledAt }, ex());
+    return Object.assign({ state: 'OPEN', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: null, filledAt: filledAt }, ex());
   }catch(e){ return INVALID; }
 }
 
@@ -509,6 +561,130 @@ function hgScoreStats(records){
   }catch(e){ return empty; }
 }
 
+/* ===================== HEAT PROFILE (PURE) =====================
+   The two questions a stop and a target should be set from, answered off your
+   own ledger instead of an ATR multiple:
+     MAE on WINNERS  how much heat did the trades that WORKED take first?
+                     If p90 sits at 0.9R against a 1.0R stop, you are keeping
+                     your winners by 0.1R and ordinary noise will start taking
+                     them.
+     MFE on LOSERS   how far did the trades that FAILED run in your favour
+                     before turning? If the median loser reached +0.7R, a
+                     partial there converts a chunk of full losses into
+                     scratches without touching entry selection at all.
+   Both use the TO-EXIT pair, because this describes trades as they were
+   actually taken. The sweep uses the full-window pair; they are different
+   questions and must not be mixed. */
+function hgHeatProfile(records){
+  var out = { winners: null, losers: null, nWin: 0, nLoss: 0, stopMarginR: null, note: '' };
+  try{
+    var list = Array.isArray(records) ? records : [];
+    var winMae = [], lossMfe = [];
+    for (var i = 0; i < list.length; i++){
+      var r = list[i];
+      if (!r || r.status !== 'settled') continue;
+      if (typeof r.r !== 'number' || !isFinite(r.r)) continue;
+      if (r.r > 0 && typeof r.maeR === 'number' && isFinite(r.maeR)) winMae.push(r.maeR);
+      if (r.r < 0 && typeof r.mfeR === 'number' && isFinite(r.mfeR)) lossMfe.push(r.mfeR);
+    }
+    function pct(arr, q){
+      if (!arr.length) return null;
+      var a = arr.slice().sort(function(x, y){ return x - y; });
+      var idx = Math.min(a.length - 1, Math.max(0, Math.floor(a.length * q)));
+      return Math.round(a[idx] * 1000) / 1000;
+    }
+    out.nWin = winMae.length; out.nLoss = lossMfe.length;
+    if (winMae.length) out.winners = { p50: pct(winMae, 0.50), p75: pct(winMae, 0.75), p90: pct(winMae, 0.90), max: pct(winMae, 1) };
+    if (lossMfe.length) out.losers  = { p50: pct(lossMfe, 0.50), p75: pct(lossMfe, 0.75), p90: pct(lossMfe, 0.90), max: pct(lossMfe, 1) };
+    /* the stop sits at exactly 1.0R by definition — margin is what is left
+       above the heat your winners actually take */
+    if (out.winners) out.stopMarginR = Math.round((1 - out.winners.p90) * 1000) / 1000;
+    var n = Math.min(winMae.length, lossMfe.length);
+    out.note = (n < 20)
+      ? 'thin sample (' + winMae.length + ' winners, ' + lossMfe.length + ' losers) — shape only, not a decision'
+      : winMae.length + ' winners, ' + lossMfe.length + ' losers';
+    return out;
+  }catch(e){ return out; }
+}
+/* ===================== STOP-DISTANCE SWEEP (PURE) =====================
+   The question no ledger in this app could answer before: IS THE STOP IN THE
+   RIGHT PLACE?
+   For a stop multiplier k, R itself rescales. Risk becomes k times larger, so
+   a loss is still exactly -1R by definition, but a target that paid +2R now
+   pays +2/k R because the same price move is a smaller multiple of a bigger
+   risk. That is the trade-off a wider stop actually makes, and it is why
+   "wider stops win more" is only half an argument.
+   A trade's fate under multiplier k is read off its FULL-WINDOW excursions:
+     stopped   if maeFullR >= k          (it went that far against you)
+     otherwise it reaches whatever mfeFullR it reached, capped at its own
+     target in R, and pays that divided by k
+   Using maeFullR / mfeFullR — not the to-exit pair — is what makes this
+   two-sided: a trade that really got stopped at -1R may have run to +3R
+   afterwards, and only the full-window numbers can see it. A sweep built on
+   to-exit data alone can only ever show you which winners a tighter stop
+   would have killed, so it always argues for wider stops.
+   This is descriptive, not predictive. It reports what the recorded tape
+   would have paid. It cannot know how a different stop would have changed
+   your own behaviour, and with a small ledger the differences between
+   multipliers are inside the noise — which is why every row reports n. */
+function hgStopSweep(records, multipliers){
+  var out = { n: 0, rows: [], best: null, note: '' };
+  try{
+    var ks = Array.isArray(multipliers) && multipliers.length
+      ? multipliers.slice() : [0.6, 0.8, 1.0, 1.25, 1.5, 2.0];
+    var list = Array.isArray(records) ? records : [];
+    var usable = [];
+    for (var i = 0; i < list.length; i++){
+      var r = list[i];
+      if (!r || r.status !== 'settled') continue;
+      if (typeof r.maeFullR !== 'number' || !isFinite(r.maeFullR)) continue;
+      if (typeof r.mfeFullR !== 'number' || !isFinite(r.mfeFullR)) continue;
+      /* target in R of the ORIGINAL plan */
+      var tgt = null;
+      var e = fin(r.entry), st = fin(r.stop), t1 = fin(r.t1);
+      if (e !== null && st !== null && t1 !== null && Math.abs(e - st) > 0){
+        tgt = Math.abs(t1 - e) / Math.abs(e - st);
+      }
+      if (tgt === null || !(tgt > 0)) continue;
+      usable.push({ mae: r.maeFullR, mfe: r.mfeFullR, tgt: tgt });
+    }
+    out.n = usable.length;
+    if (!usable.length){
+      out.note = 'no settled record carries full-window excursions yet — they are '
+        + 'written from fix pack 15 onward, so this fills in as trades settle';
+      return out;
+    }
+    for (var a = 0; a < ks.length; a++){
+      var k = ks[a];
+      if (!(k > 0)) continue;
+      var sum = 0, wins = 0, stopped = 0;
+      for (var b = 0; b < usable.length; b++){
+        var u = usable[b];
+        if (u.mae >= k){ sum += -1; stopped++; continue; }
+        /* survived: it pays the smaller of what it reached and its own target */
+        var reached = Math.min(u.mfe, u.tgt);
+        if (reached <= 0){ sum += 0; continue; }
+        sum += reached / k;
+        if (reached >= u.tgt) wins++;
+      }
+      out.rows.push({
+        k: k, n: usable.length,
+        stoppedPct: stopped / usable.length,
+        hitPct: wins / usable.length,
+        expectancyR: sum / usable.length
+      });
+    }
+    var best = null;
+    for (var c = 0; c < out.rows.length; c++){
+      if (!best || out.rows[c].expectancyR > best.expectancyR) best = out.rows[c];
+    }
+    out.best = best;
+    out.note = (usable.length < 30)
+      ? 'n=' + usable.length + ' — the gaps between multipliers here are inside the noise; read this as a shape, not a decision'
+      : 'n=' + usable.length + ' settled trades with full-window excursions';
+    return out;
+  }catch(e){ return out; }
+}
 /* ================= profit rank hint (PURE — live-ranking seam) =================
    Turns settled-ledger evidence into a small sort boost for BRAIN tickets, BEST
    cascade, and gold ranker. Unproven buckets contribute 0 — never penalize
@@ -801,6 +977,10 @@ async function hgScoreSettle(fetchCandles){
           rec.outcome = w.state;
           rec.r = round4(w.r);
           rec.filledAt = (w.filledAt != null) ? w.filledAt : null;
+          rec.maeR = (w.maeR != null) ? w.maeR : null;
+          rec.mfeR = (w.mfeR != null) ? w.mfeR : null;
+          rec.maeFullR = (w.maeFullR != null) ? w.maeFullR : null;
+          rec.mfeFullR = (w.mfeFullR != null) ? w.mfeFullR : null;
           rec.rNet = round4(hgScoreNetR(rec, w.state, w.r, w.closedAt));
           rec.bars = w.bars;
           rec.closedAt = w.closedAt;
@@ -1237,6 +1417,9 @@ try{
   G.hgScoreNetR = hgScoreNetR;
   G.hgScoreBoardHtml = boardHtml;
   G.hgProfitRankHint = hgProfitRankHint;
+  G.hgStopSweep = hgStopSweep;
+  G.hgHeatProfile = hgHeatProfile;
+  G.hgScoreExcursions = hgScoreExcursions;
   G.hgHintShrink = hintShrink;
   G.hgHintSigma = hintSigma;
   G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
