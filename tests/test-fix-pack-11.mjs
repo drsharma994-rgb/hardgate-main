@@ -103,7 +103,8 @@ console.log('== regime stable components ==');
 console.log('== sw cache bumped for fix pack 11 ==');
 {
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  ok(/const HG_CACHE = 'hg-v177'/.test(sw), 'sw cache hg-v177');
+  const m = sw.match(/const HG_CACHE = 'hg-v(\d+)'/);
+  ok(m && +m[1] >= 177, 'sw cache at least hg-v177 (pack 11+)');
   ok(sw.indexOf('deribit-vol.js') >= 0 && sw.indexOf('spot-perp.js') >= 0, 'HG_SHELL includes new modules');
 }
 
