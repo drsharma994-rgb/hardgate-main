@@ -1,0 +1,233 @@
+================================================================================
+HARDGATE FIX PACK 7 — SECRETS PURGE + MEASUREMENT ALIGNMENT
+================================================================================
+Baseline: main @ hg-v172 (Fix Pack 6 merged, production LIVE)
+Target cache: hg-v173
+Branch: cursor/telegram-secrets-fix-pack-7-2f4b
+Priority: P0 security first, then P1 measurement honesty
+
+Owner pre-step (MANUAL — before merge):
+  1. Open Telegram @BotFather → revoke the bot token currently baked into the
+     public repo (index.html HG_TG_DEFAULT + scripts/alert-check.mjs).
+  2. Create a NEW bot token (or reuse a fresh secret never committed).
+  3. Set Render env: TELEGRAM_TOKEN + TELEGRAM_CHAT_ID
+  4. Set GitHub repo secrets: TELEGRAM_TOKEN + TELEGRAM_CHAT_ID (alert workflow)
+  5. In browser: Settings → save token/chat to localStorage OR rely on env only
+     for CI alert-check.mjs — browser users configure once via UI.
+
+================================================================================
+WHY (audit findings after Fix Pack 6)
+================================================================================
+  A. SECURITY — Public repo still ships live Telegram bot token + chat ID as
+     fallback defaults in index.html and scripts/alert-check.mjs. README line
+     ~110 claims "Nothing secret is exposed" — FALSE. Anyone can spam alerts
+     or impersonate the bot until BotFather revoke + purge.
+
+  B. GOLD BASIS — getXAUCandles() stamps PROXY + basis on goldDataSrc chip when
+     Delta XAUT fails, and hgGoldBasisNote() exists + is tested, but TRADE PLAN
+     gold tickets, BRAIN gold handoffs, and GOLD backtest headers do NOT show the
+     warning. User can copy proxy levels as if they were XAUTUSD.
+
+  C. SCORECARD SCALE-OUT — TRADE PLAN has tScale (default 50%). Scorecard T1S
+     hardcodes r(t1)/2 (50% bank at T1). If user sets tScale=30 or 70, net
+     expectancy and hint boost lie about partial exits.
+
+  D. EXECUTE COPY — HG_LIVE_TRADING_ENABLED=false kills orders correctly, but
+     Settings still shows Execute URL field with no "live trading disabled"
+     banner. Reduces operator confusion.
+
+================================================================================
+PATCH 1 — Remove baked Telegram defaults from index.html
+================================================================================
+File: index.html (~5564–5620, ~6064–6065)
+
+  DELETE const HG_TG_DEFAULT = { token: '...', chat: '...' };
+
+  REPLACE tgCreds() fallback:
+    - Return null when localStorage hg_tg_token / hg_tg_chat unset.
+    - Do NOT read any hardcoded token/chat.
+
+  REPLACE Settings pre-fill:
+    - $('tgToken') / $('tgChat') only load from localStorage, never defaults.
+
+  REPLACE sendTelegram / alert paths that read HG_TG_DEFAULT:
+    - Same rule: no fallback.
+
+  UX: When creds missing, sendTelegram returns a clear string like
+  "Telegram not configured — save token + chat in Settings" (never throws).
+
+================================================================================
+PATCH 2 — Remove baked Telegram defaults from alert-check.mjs
+================================================================================
+File: scripts/alert-check.mjs (~7–11, ~107–111, ~495–502)
+
+  DELETE HG_TG_DEFAULT_TOKEN and HG_TG_DEFAULT_CHAT constants entirely.
+
+  alertCheckTelegram():
+    - Require process.env.TELEGRAM_TOKEN AND process.env.TELEGRAM_CHAT_ID.
+    - If either missing → return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID'
+      (same message as today, but NO fallback send).
+
+  Remove the branch that sends via HG_TG_DEFAULT_* when env unset.
+
+================================================================================
+PATCH 3 — README security honesty
+================================================================================
+File: README.md (~108–112)
+
+  REPLACE "Nothing secret is exposed" with accurate text:
+    - Public repo must NOT contain Telegram tokens, API keys, or webhook secrets.
+    - Client-side EmailJS keys may be visible (document if still used).
+    - Telegram: configure via Render/GitHub secrets + browser Settings only.
+    - If a token was ever committed, revoke via BotFather before rotating.
+
+================================================================================
+PATCH 4 — Secret scan test (CI gate)
+================================================================================
+File: tests/test-no-baked-secrets.mjs (NEW)
+
+  Static grep over tracked source (exclude node_modules):
+    - Fail if any line matches Telegram bot token pattern:
+      /\d{8,10}:[A-Za-z0-9_-]{30,}/
+    - Fail if HG_TG_DEFAULT or HG_TG_DEFAULT_TOKEN appears in index.html,
+      scripts/*.mjs, *.js (except this test's fixture strings if any).
+    - Fail if README still contains "Nothing secret is exposed" verbatim.
+
+  Wire into package.json npm test chain (after test-no-live-trading.mjs or
+  near test-ops.mjs).
+
+  Assertions: ~6–10
+
+================================================================================
+PATCH 5 — Wire hgGoldBasisNote() into gold surfaces
+================================================================================
+File: index.html
+
+  A. TRADE PLAN ticket render (renderTradePlan / ticket HTML block ~3960+):
+     When asset is gold OR sym matches GOLD_SYM / XAUTUSD:
+       if (typeof hgGoldBasisNote === 'function'){
+         const note = hgGoldBasisNote();
+         if (note) insert <div class="note" style="color:var(--gold)">…note…</div>
+         above entry/stop/target block.
+       }
+
+  B. GOLD tab evaluate output (goldDeepOut assemble ~4648+):
+     After contextHtml or in swing verdict panel, same note when non-empty.
+
+  C. BRAIN gold row handoff chip area (if brain renders gold lane with levels):
+     One-line basis suffix when hgGoldBasisNote() non-empty.
+
+  D. Backtest summary headers (~6751, ~6844):
+     Append basis note to subtitle when proxy.
+
+  Rule: hgGoldBasisNote() already returns '' on delta-xaut — no change needed
+  on happy path. PROXY path must scream on every copy surface.
+
+================================================================================
+PATCH 6 — Scorecard tScale alignment
+================================================================================
+File: scorecard.js (~381)
+
+  Today T1S: return { state: 'T1S', r: rOf(t1) / 2, ... }
+
+  ADD optional scalePct on scorecard records (0–100, default 50):
+    - When book/add or trade-plan handoff stamps a plan, pass scalePct from
+      $('tScale') if available (index.html book path) OR default 50.
+
+  CHANGE T1S partial R:
+    rPartial = rOf(t1) * (scalePct / 100)
+    Remaining runner to T2 unchanged (full rOf(t2) on T2 hit — document in
+    scorecard header note).
+
+  File: index.html — when ADD TO BOOK or scorecard ingest reads plan meta,
+  include scalePct: +($('tScale').value||50).
+
+  File: tests/test-scorecard-fill.mjs — add case:
+    scalePct=30 → T1S r = r(t1)*0.3 not r(t1)/2.
+
+================================================================================
+PATCH 7 — Live-trading-disabled banner (copy only)
+================================================================================
+File: index.html
+
+  TRADE PLAN panel (~3977): static note always visible:
+    "Live order routing is DISABLED in this build (HG_LIVE_TRADING_ENABLED).
+     Copy levels to Delta manually. EXECUTE BRACKET will not render."
+
+  Settings Execute URL row (~211–214): append id="executeDisabledNote" note:
+    "Saved URL is ignored while live trading is disabled at source."
+
+  No execute.js flag change — display only.
+
+================================================================================
+PATCH 8 — Cache bump + test wiring
+================================================================================
+File: sw.js
+  HG_CACHE = 'hg-v173'
+
+File: package.json
+  Add: node tests/test-no-baked-secrets.mjs
+  Add: extend test-scorecard-fill if PATCH 6 landed
+
+File: tests/test-trade-plan.mjs (or test-check-production.mjs)
+  Assert sw cache hg-v173 when this pack ships.
+
+File: AGENTS.md
+  Document: no baked Telegram defaults; hgGoldBasisNote on tickets; scorecard
+  tScale; secret scan test.
+
+================================================================================
+TEST PLAN
+================================================================================
+  node tests/test-no-baked-secrets.mjs     — all pass, grep finds zero tokens
+  node tests/test-scorecard-fill.mjs       — T1S scalePct case green
+  node tests/test-gold-venue.mjs           — hgGoldBasisNote unchanged behaviour
+  npm test                                 — full chain green
+  npm run check:prod                       — LIVE on hg-v173 after merge
+
+Manual smoke (Render):
+  1. Hard-refresh PWA (cache hg-v173)
+  2. Settings: clear localStorage tg keys → Telegram send shows "not configured"
+  3. Set Render TELEGRAM_* → alert-check / CI push works
+  4. Force gold proxy (mock or block Delta in dev) → TRADE PLAN shows PROXY note
+  5. TRADE PLAN: confirm no EXECUTE BRACKET button; disabled banner visible
+
+================================================================================
+SHIP CHECKLIST
+================================================================================
+  [ ] BotFather revoke OLD token (owner, before or immediately after merge)
+  [ ] Patches 1–8 committed on cursor/telegram-secrets-fix-pack-7-2f4b
+  [ ] PR → main → Render auto-deploy
+  [ ] npm run check:prod → LIVE hg-v173
+  [ ] Rotate NEW token into Render + GitHub secrets only (never commit)
+
+================================================================================
+OUT OF SCOPE — FIX PACK 8 (backlog)
+================================================================================
+  • Funding settlements in hgNetR / hgScoreNetR (holdBars × frPct model)
+  • hgQtyToContracts on BOOK rows (not just TRADE PLAN ticket)
+  • Symbol-keyed positioning snapshot for gate matrix G4 enrichment
+  • Funding-fade dedicated UI chip on SWING cards (swingTryFundingFade opt-in)
+  • Auto-max leverage line on TRADE PLAN ticket
+  • tabalerts.js 429 backoff for brainAlertWarm / Binance batch
+  • Prune stale cursor/* branches on origin
+
+================================================================================
+FILE TOUCH SUMMARY
+================================================================================
+  index.html                  — patches 1, 5, 6, 7
+  scripts/alert-check.mjs     — patch 2
+  README.md                   — patch 3
+  scorecard.js                — patch 6
+  sw.js                       — patch 8
+  package.json                — patch 8
+  tests/test-no-baked-secrets.mjs — NEW patch 4
+  tests/test-scorecard-fill.mjs   — patch 6
+  AGENTS.md                   — patch 8
+
+Estimated assertions added: ~15–25
+Risk: LOW (mostly deletes + display); security impact HIGH if owner skips revoke
+
+================================================================================
+END FIX PACK 7
+================================================================================

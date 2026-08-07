@@ -291,9 +291,8 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   let defCall = null, defSent;
   await withFetch(async (url, opts) => { defCall = { url, opts }; return fetchOk('{}', 200)(url, opts); },
     async () => { defSent = await sendTelegramCi('x'); });
-  ok(defSent === 'sent' && defCall && defCall.url.indexOf('api.telegram.org/bot') >= 0
-     && JSON.parse(defCall.opts.body).chat_id === '1004014764',
-     'telegram: no env secrets -> baked-in owner defaults used (not skipped)');
+  ok(defSent === 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured',
+     'telegram: no env secrets -> skipped (no baked defaults)');
   process.env.TELEGRAM_TOKEN = 'tok'; process.env.TELEGRAM_CHAT_ID = '42';
   let tgSent, tgCall = null;
   await withFetch(async (url, opts) => { tgCall = { url, opts }; return fetchOk('{}', 200)(url, opts); },
@@ -313,8 +312,8 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   delete process.env.NTFY_TOPIC;
   let casc2;
   await withFetch(fetchOk('{}', 200), async () => { casc2 = await sendAlertCi('t', 'b'); });
-  ok(casc2 === 'telegram: sent',
-     'cascade: env unset -> baked-in telegram defaults still deliver — got "' + casc2 + '"');
+  ok(typeof casc2 === 'string' && casc2.indexOf('telegram skipped') >= 0,
+     'cascade: env unset -> telegram skipped — got "' + casc2 + '"');
   if (savedT !== undefined) process.env.TELEGRAM_TOKEN = savedT;
   if (savedC !== undefined) process.env.TELEGRAM_CHAT_ID = savedC;
   if (savedN !== undefined) process.env.NTFY_TOPIC = savedN;

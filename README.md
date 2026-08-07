@@ -107,9 +107,7 @@ since 2026-07-29; `vercel --prod --yes` resumes it if billing is reactivated.
 
 ### Hosting state (decided 2026-07-24)
 
-- **Repo visibility: PUBLIC** (`github.com/drsharma994-rgb/hardgate-main`). Nothing secret is exposed —
-  the EmailJS keys are client-side and already visible on the live site. Bonus: scheduled Actions are
-  free/unlimited on public repos.
+- **Repo visibility: PUBLIC** (`github.com/drsharma994-rgb/hardgate-main`). Do **not** commit Telegram bot tokens, API keys, or webhook secrets — configure `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID` on Render / GitHub Actions and in the browser Settings panel only. Client-side EmailJS keys may be visible in the static bundle. If a token was ever committed, revoke it via @BotFather before rotating. Bonus: scheduled Actions are free/unlimited on public repos.
 - **GitHub Pages mirror: ENABLED — owner decided to KEEP it** at
   https://drsharma994-rgb.github.io/hardgate-main/ — serves the same `main` as Vercel and rebuilds on
   every push, but STATIC-only: `/api/proxy` does not exist there, so CoinDCX and Yahoo macro reads

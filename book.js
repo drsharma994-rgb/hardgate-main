@@ -265,6 +265,7 @@ function bookScoreRecord(opts){
       stop: +opts.stop,
       t1: +opts.t1,
       t2: isFinite(opts.t2) ? +opts.t2 : null,
+      scalePct: isFinite(opts.scalePct) ? +opts.scalePct : null,
       layers: opts.layers || [],
       at: Date.now()
     });
@@ -375,6 +376,7 @@ async function addToBook(opts){
       tier: opts.tier || null,
       fund: bookResolveFund(opts),
       layers: bookMetaLayers(opts),
+      scalePct: isFinite(opts.scalePct) ? +opts.scalePct : null,
       newsBlackout: false,
     };
     if (!body.sym || !body.dir || !isFinite(body.entry) || !isFinite(body.stop)){
@@ -610,6 +612,7 @@ function bookBtnHTML(sym, dir, entry, stop, t1, meta){
     sym: sym, dir: dir, entry: entry, stop: stop,
     t1: (t1 !== undefined && isFinite(t1)) ? t1 : null,
     t2: (meta.t2 !== undefined && isFinite(meta.t2)) ? meta.t2 : null,
+    scalePct: (meta.scalePct !== undefined && isFinite(meta.scalePct)) ? meta.scalePct : null,
     strategy: meta.strategy || meta.source || 'scanner',
     tier: meta.tier || null,
     klass: meta.klass || null,

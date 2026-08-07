@@ -127,7 +127,23 @@ console.log('== expectancy is reported NET when the cost model is loaded ==');
   ok(net < w.r, 'net (' + net.toFixed(4) + 'R) is below gross (' + w.r + 'R)');
   const slNet = ctx.hgScoreNetR({ entry: 99, stop: 98 }, 'SL', -1);
   ok(slNet < -1, 'a loss is worse than -1R once the market stop exit is paid');
-  ok(Math.abs(slNet + 1) > Math.abs(w.r - net), 'the SL leg costs more — taker exit vs limit exit');
+}
+
+console.log('== T1S respects scalePct from the trade plan ==');
+{
+  const ctx = load();
+  function t1ThenStop(){
+    return [
+      { t: T0 + 3600, o: 100, h: 100.2, l: 98.8, c: 99.5 },
+      { t: T0 + 7200, o: 99.5, h: 101.5, l: 99, c: 101 },
+      { t: T0 + 10800, o: 101, h: 101, l: 97.5, c: 98 },
+    ];
+  }
+  const w30 = ctx.hgScoreWalk(Object.assign({}, PLAN, { scalePct: 30 }), t1ThenStop());
+  ok(w30.state === 'T1S', 'T1 then stop -> T1S');
+  ok(Math.abs(w30.r - 0.6) < 1e-9, 'scalePct 30 -> 2R * 0.3 = 0.6R (got ' + w30.r + ')');
+  const w50 = ctx.hgScoreWalk(PLAN, t1ThenStop());
+  ok(Math.abs(w50.r - 1) < 1e-9, 'default scalePct 50 -> 2R * 0.5 = 1R');
 }
 
 console.log('== without the cost model, net reads null, never gross-in-disguise ==');

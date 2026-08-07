@@ -212,6 +212,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <input id="executeBackendUrl" placeholder="/api/execute or https://…" title="Optional direct bracket endpoint; leave empty to use Render EXECUTE_BACKEND_URL proxy">
         <button class="btn ghost header-field-btn" type="button" onclick="saveExecuteBackendUrl()">SAVE</button>
         <span class="note" id="executeBackendStat"></span>
+        <span class="note" id="executeDisabledNote" style="color:var(--mut)">Live trading disabled — saved Execute URL is ignored.</span>
       </label>
       <label class="header-field" title="Telegram alerts: bot token from @BotFather + chat id. Stored in this browser only.">
         <span class="header-field-label">telegram</span>
@@ -1225,6 +1226,15 @@ function hgGoldBasisNote(){
   return (b !== null && isFinite(b))
     ? head + 'Basis ' + (b>=0?'+':'') + b.toFixed(2) + '% — shift entry/stop/T1 by that much before placing, or size down.'
     : head + 'Basis UNMEASURED (' + GOLD_SYM + ' candles unavailable) — do not place these levels as-is.';
+}
+function hgGoldBasisNoteHtml(){
+  const note = hgGoldBasisNote();
+  if (!note) return '';
+  return '<div class="note" style="color:var(--gold);margin:8px 0">' + note.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
+}
+function hgGoldBasisSubtitle(sub){
+  const note = (typeof hgGoldBasisNote === 'function') ? hgGoldBasisNote() : '';
+  return note ? (sub + ' · ' + note) : sub;
 }
 async function getXAUCandles(res, count, opts){
   opts = opts || {};
@@ -3943,7 +3953,7 @@ function planTrade(){
       + String(handoff.scanner || handoff.strategy).replace(/&/g,'&amp;').replace(/</g,'&lt;')
       + (handoff.stack && handoff.stack.summary ? ' · FTS carried' : '') + '</div>' : '';
   var symVal = $('tSym').value || '';
-  var tradeBookMeta = { scanner: 'trade-plan', strategy: 'trade-plan', t2: t2 };
+  var tradeBookMeta = { scanner: 'trade-plan', strategy: 'trade-plan', t2: t2, scalePct: scaleOut };
   if (handoff){
     if (handoff.stack) tradeBookMeta.stack = handoff.stack;
     if (handoff.scanner) tradeBookMeta.scanner = handoff.scanner;
@@ -3969,13 +3979,18 @@ T1        ${px(t1)}  →  close ${scaleOut}%, stop to breakeven
 T2        ${px(t2)}  →  runner trail (defaults to 3R when blank)
 liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
 
+  var goldBasisHtml = '';
+  if (symVal === GOLD_SYM || symVal === 'XAUUSD' || (handoff && handoff.fund === 'gold')){
+    goldBasisHtml = hgGoldBasisNoteHtml();
+  }
   out.innerHTML = `
-    ${handoffNote}${stackHtml}
+    ${handoffNote}${stackHtml}${goldBasisHtml}
     <div class="ledger">${g.map(x=>gateRow(...x)).join('')}</div>
     <div class="verdict ${vet?'aside':side}">
       <div class="vword">${vet?'DO NOT ENTER':'PLAN VALID'}${tradeBookStamp}</div>
-      <div class="vwhy">${vet?'Fix the vetoed rows or skip the trade. A vetoed plan executed anyway is how the tradelog sample gets poisoned.':'Execute via delta-trader.ts bracket route or manually. Log fixed-R.'}</div>
+      <div class="vwhy">${vet?'Fix the vetoed rows or skip the trade. A vetoed plan executed anyway is how the tradelog sample gets poisoned.':'Copy levels to Delta manually. Log fixed-R.'}</div>
     </div>
+    <div class="note" style="margin-top:8px">Live order routing is <b>DISABLED</b> in this build (<code>HG_LIVE_TRADING_ENABLED</code>). EXECUTE BRACKET will not render.</div>
     <hr class="sep">
     <div class="ticket" id="ticketTxt">${ticket}</div>
     <button class="btn ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('ticketTxt').innerText)" ${vet?'disabled title="Fix the vetoed gates before copying this ticket"':''}>COPY TICKET</button><div class="kv" id="portfolioHeatRow" style="margin-top:8px"><span class="k">Portfolio Heat</span><span class="v">checking…</span></div>`; updatePortfolioHeat($('tSym').value||'', side);
@@ -3983,7 +3998,7 @@ liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;
     var bookBtn = bookBtnHTML(symVal, side, entry, stop, t1, tradeBookMeta);
     if (bookBtn) out.insertAdjacentHTML('beforeend', '<div style="margin-top:8px">' + bookBtn + '</div>');
   }
-  if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2+',vetoed:false})">EXECUTE BRACKET</button>'); } else if(!vet){ out.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:8px">EXECUTE BRACKET — set <b>EXECUTE_BACKEND_URL</b> on Render or save an Execute URL in Settings.</div>'); }
+  if(!vet && typeof executeBackendReady==='function' && executeBackendReady()){ out.insertAdjacentHTML('beforeend', '<button class="btn" style="margin-top:8px" onclick="executeTrade({sym:'+JSON.stringify($('tSym').value)+',side:'+JSON.stringify(side)+',qty:'+qty+',lev:'+lev+',stop:'+stop+',t1:'+t1+',t2:'+t2+',vetoed:false})">EXECUTE BRACKET</button>'); }
 }
 
 /* =============================================================================
@@ -4657,7 +4672,8 @@ async function runGoldDeep(){
       + deepScalpLedger('long')+deepScalpLedger('short')+'</div>'
       + (breakoutHtml||'<div class="panel" style="margin-top:10px"><h2>Breakout Strategy <span>Bollinger squeeze + ADX expansion</span></h2><div class="empty">No breakout setup — no squeeze + expansion right now.</div></div>')
       + (meanRevHtml||'')
-      + contextHtml;
+      + contextHtml
+      + (typeof hgGoldBasisNoteHtml === 'function' ? hgGoldBasisNoteHtml() : '');
     try{ window.__hgGoldDeepVerdict = { label: verdictLabel, score: score, dir: (casc==='mixed'?null:casc), ts: Date.now() }; }catch(e){}
     $('goldDeepStat').textContent='deep scan · swing score '+fmt(score,0)+'% · '+srcTxt+' · '+new Date().toTimeString().slice(0,5);
     setProg('goldDeepProg',0.95);
@@ -4843,6 +4859,7 @@ async function runGoldSetup(){
     const risk = Math.abs(decision.entry - decision.stop);
     const gsSetupStack = inlineScanStack(dir, GOLD_SYM, h4, { style: 'gold-setup', clean: decision.confidence === 'STRONG', asset: 'gold' });
     out.innerHTML = '<div class="card ' + dir + '">'
+      + (typeof hgGoldBasisNoteHtml === 'function' ? hgGoldBasisNoteHtml() : '')
       + '<div class="chead"><span class="sym">XAUTUSD · GOLD SETUP</span><span class="dir">' + dir.toUpperCase() + ' · ' + decision.confidence + '</span>'
       + (typeof hgBookStampChip === 'function'
         ? hgBookStampChip(GOLD_SYM, dir, { scanner: 'gold-setup', strategy: 'gold-setup', fund: 'gold', klass: 'metals' })
@@ -5556,21 +5573,14 @@ function saveNtfyTopic(){
   }catch(e){ $('ntfyTopicStat').textContent = 'save failed'; }
 }
 
-/* Telegram alerts — the PRIMARY channel (free Bot API, no quota, CORS-open).
-   Owner defaults below are used when hg_tg_token / hg_tg_chat are unset in
-   this browser; localStorage overrides still win if you SAVE different values.
-   Plain-text messages; returns true on delivery, an error string otherwise.
-   Never throws. */
-const HG_TG_DEFAULT = {
-  token: '8678184060:AAGKhoukjgitAAk8kMzPHRF3WF6U8oXaNcc',
-  chat: '1004014764'
-};
+/* Telegram alerts — Bot API (free, CORS-open). Token + chat id live in
+   localStorage only (Settings → SAVE). No baked-in defaults in a public
+   repo. Plain-text messages; returns true on delivery, an error string
+   otherwise. Never throws. */
 function tgCreds(){
   let token = null, chat = null;
   try{ token = localStorage.getItem('hg_tg_token'); }catch(e){}
   try{ chat = localStorage.getItem('hg_tg_chat'); }catch(e){}
-  if (!token && HG_TG_DEFAULT.token) token = HG_TG_DEFAULT.token;
-  if (!chat && HG_TG_DEFAULT.chat) chat = HG_TG_DEFAULT.chat;
   return (token && chat) ? { token: token, chat: chat } : null;
 }
 /** Standard Telegram body: headline + Tab + Signal + optional venue + body + site link. */
@@ -5589,7 +5599,7 @@ function hgTelegramFormat(opts){
 async function sendTelegram(textOrTitle, bodyOptional){
   try{
     const c = tgCreds();
-    if (!c) return 'not-configured';
+    if (!c) return 'Telegram not configured — save token + chat in Settings';
     let text = String(textOrTitle || '');
     if (arguments.length >= 2 && bodyOptional != null && bodyOptional !== ''){
       text = (typeof hgTelegramFormat === 'function')
@@ -5616,9 +5626,9 @@ function resetTelegramDefaults(){
     localStorage.removeItem('hg_tg_chat');
   }catch(e){}
   try{
-    if ($('tgToken') && HG_TG_DEFAULT.token) $('tgToken').value = HG_TG_DEFAULT.token;
-    if ($('tgChat') && HG_TG_DEFAULT.chat) $('tgChat').value = HG_TG_DEFAULT.chat;
-    if ($('tgStat')) $('tgStat').textContent = 'reset to built-in defaults — hit TEST';
+    if ($('tgToken')) $('tgToken').value = '';
+    if ($('tgChat')) $('tgChat').value = '';
+    if ($('tgStat')) $('tgStat').textContent = 'cleared — enter token + chat and SAVE';
   }catch(e){}
 }
 function saveTelegram(){
@@ -6061,8 +6071,8 @@ function initAlerts(){
   try{ emailjs.init({publicKey:'TrHdawQ8xirRSOZps'}); }catch(e){}
   try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
   try{
-    const tt = localStorage.getItem('hg_tg_token') || (HG_TG_DEFAULT && HG_TG_DEFAULT.token) || '';
-    const tc = localStorage.getItem('hg_tg_chat') || (HG_TG_DEFAULT && HG_TG_DEFAULT.chat) || '';
+    const tt = localStorage.getItem('hg_tg_token') || '';
+    const tc = localStorage.getItem('hg_tg_chat') || '';
     if ($('tgToken')) $('tgToken').value = tt;
     if ($('tgChat')) $('tgChat').value = tc;
   }catch(e){}
@@ -6748,8 +6758,8 @@ async function runFinderGoldBacktest(){
     const swingRes = await backtestGoldSwingTD(d1, h4, ctl);
     ctl.prog = f => setProg('finderBtProg', 0.6 + f*0.38);
     const judasRes = await backtestJudasTD(d1, h1, m15, ctl);
-    out.innerHTML = backtestSummaryHTML2('GOLD SWING', h4, swingRes, "Replays this app's own gold SWING gates (GS1-GS7) bar-by-bar on real " + (GOLD_SRC_LABEL[S.goldDataSource] || 'AUTO-SOURCED') + " 4H history.")
-      + backtestSummaryHTML2('GOLD JUDAS SWEEP', m15, judasRes, "Replays the kill-zone liquidity-sweep-and-reclaim gates (JS1-JS6) bar-by-bar on real " + (GOLD_SRC_LABEL[S.goldDataSource] || 'AUTO-SOURCED') + " 15m history.");
+    out.innerHTML = backtestSummaryHTML2('GOLD SWING', h4, swingRes, hgGoldBasisSubtitle("Replays this app's own gold SWING gates (GS1-GS7) bar-by-bar on real " + (GOLD_SRC_LABEL[S.goldDataSource] || 'AUTO-SOURCED') + " 4H history."))
+      + backtestSummaryHTML2('GOLD JUDAS SWEEP', m15, judasRes, hgGoldBasisSubtitle("Replays the kill-zone liquidity-sweep-and-reclaim gates (JS1-JS6) bar-by-bar on real " + (GOLD_SRC_LABEL[S.goldDataSource] || 'AUTO-SOURCED') + " 15m history."));
   }catch(e){ out.innerHTML = '<div class="note warn">'+((e && e.cancelled) ? 'Backtest cancelled.' : e.message)+'</div>'; }
   finally{
     btCtlDone('finder');
@@ -6842,8 +6852,8 @@ async function runGoldBacktest(){
     ctl.prog = f => setProg('goldBtProg', 0.6 + f*0.38);
     const judasRes = await backtestJudasTD(d1, h1, m15, ctl);
     const __srcL = (GOLD_SRC_LABEL[S.goldDataSource] || 'AUTO-SOURCED');
-    out.innerHTML = backtestSummaryHTML2('GOLD SWING', h4, swingRes, "Replays this app's own gold SWING gates (GS1\u2013GS7) bar-by-bar on real " + __srcL + " 4H history.")
-      + backtestSummaryHTML2('GOLD JUDAS SWEEP', m15, judasRes, "Replays the kill-zone liquidity-sweep-and-reclaim gates (JS1\u2013JS6) bar-by-bar on real " + __srcL + " 15m history \u2014 the same sweep-and-reclaim pattern gold's live SCALP ledger already trades.");
+    out.innerHTML = backtestSummaryHTML2('GOLD SWING', h4, swingRes, hgGoldBasisSubtitle("Replays this app's own gold SWING gates (GS1\u2013GS7) bar-by-bar on real " + __srcL + " 4H history."))
+      + backtestSummaryHTML2('GOLD JUDAS SWEEP', m15, judasRes, hgGoldBasisSubtitle("Replays the kill-zone liquidity-sweep-and-reclaim gates (JS1\u2013JS6) bar-by-bar on real " + __srcL + " 15m history \u2014 the same sweep-and-reclaim pattern gold's live SCALP ledger already trades."));
   }catch(e){ out.innerHTML = '<div class="note warn">'+((e && e.cancelled) ? 'Backtest cancelled.' : e.message)+'</div>'; }
   finally{
     btCtlDone('goldbt');
