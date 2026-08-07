@@ -1,0 +1,26 @@
+================================================================================
+HARDGATE FIX PACK 8 — PRODUCTIVITY (manual desk speed)
+================================================================================
+Baseline: hg-v173 → target hg-v174
+Branch: cursor/productivity-fix-pack-8-2f4b
+
+PATCH 1 — BOOK Lots column (Delta manual entry)
+  book.js: bookContractsCell() → hgQtyToContracts; table column "Lots"
+  book refresh calls hgEnsureContractSpecs()
+
+PATCH 2 — FUNDING FADE on SWING/SCALP scans
+  index.html: renderFadeSetupCard(); swingTryFundingFade / scalpTryFundingFade
+  after CLEAN + NEAR paths; audit.fadeFound in funnel
+
+PATCH 3 — Positioning snapshot cache
+  smartScanSymbol: S.posSnapCache, HG_POS_SNAP_TTL=420
+
+PATCH 4 — Binance rate-limit backoff
+  binance.js: 418/429 → S.binanceBackoffUntil (+90s)
+  index.html: hgScanRateOk pauses crypto scans
+  brain.js: brainAlertWarm skips while backoff active
+
+PATCH 5 — Tests + cache hg-v174
+  tests/test-productivity-pack8.mjs, test-book.mjs lots case
+
+================================================================================

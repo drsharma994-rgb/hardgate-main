@@ -1581,6 +1581,19 @@ function closedRowHTML(c, opts){
     + new Date(c.closedAt).toLocaleString() + '</td></tr>';
 }
 
+function bookContractsCell(p){
+  try{
+    if (!p || typeof W.hgQtyToContracts !== 'function') return '—';
+    var mark = isFinite(p.mark) ? p.mark : p.entry;
+    var coinQty = (mark > 0 && p.notionalUsd > 0) ? p.notionalUsd / mark : 0;
+    if (!(coinQty > 0)) return '—';
+    var c = W.hgQtyToContracts(p.sym, coinQty);
+    if (!c) return '—';
+    if (c.lots < 1) return '0 (<1 lot)';
+    return String(c.lots);
+  }catch(e){ return '—'; }
+}
+
 function posRowHTML(p, blotter, opts){
   blotter = blotter || [];
   opts = opts || {};
@@ -1589,6 +1602,7 @@ function posRowHTML(p, blotter, opts){
   var uplCls = upl >= 0 ? 'ok' : 'warn';
   var rVal = posR(p);
   var rCls = (rVal != null && rVal >= 0) ? 'ok' : 'warn';
+  var lotsTxt = bookContractsCell(p);
   var liveBtn = __book.liveReady
     ? '<button class="btn" data-live="' + esc(p.id) + '"' + fundAttr + ' title="Send bracket to EXECUTE_WEBHOOK_URL">LIVE</button>' : '';
   var execBtn = bookExecuteReady()
@@ -1599,6 +1613,7 @@ function posRowHTML(p, blotter, opts){
     + '<td>' + esc((p.dir || '').toUpperCase()) + '</td>'
     + '<td>' + esc(p.strategy || '—') + posSourceChip(p) + '</td>'
     + '<td>' + fmtUsd(p.notionalUsd) + '</td>'
+    + '<td title="Delta order form uses lots, not coin size">' + esc(lotsTxt) + '</td>'
     + '<td>' + pxF(p.entry) + '</td>'
     + '<td>' + pxF(p.mark) + '</td>'
     + '<td class="' + rCls + '">' + (rVal != null ? fmtF(rVal, 2) + 'R' : '—') + '</td>'
@@ -1675,7 +1690,7 @@ function mount(el){
     + '</div>'
     + '<div class="panel"><h3>Open positions</h3>'
     + '<div style="overflow-x:auto"><table class="booktbl" id="bookTable">'
-    + '<thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Entry</th><th>Mark</th><th>R</th><th>UPL</th><th>Risk</th><th>Bracket</th><th>OMS</th></tr></thead>'
+    + '<thead><tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Notional</th><th>Lots</th><th>Entry</th><th>Mark</th><th>R</th><th>UPL</th><th>Risk</th><th>Bracket</th><th>OMS</th></tr></thead>'
     + '<tbody id="bookBody"></tbody></table></div>'
     + '<div class="empty" id="bookEmpty" style="display:none">No open paper positions — add from a scanner card.</div>'
     + '</div>'
@@ -1896,6 +1911,7 @@ function mount(el){
     __book.busy = true;
     setStat('loading…');
     try{
+      if (typeof W.hgEnsureContractSpecs === 'function') W.hgEnsureContractSpecs();
       await bookPull();
       if (typeof W.hgRefreshExecuteCap === 'function') await W.hgRefreshExecuteCap();
       await bookRefreshMarks();
@@ -2169,6 +2185,7 @@ function bookRefresh(){
 
 function bookState(){ return __book.snap; }
 
+W.bookContractsCell = bookContractsCell;
 W.addToBook = addToBook;
 W.bookBtnHTML = bookBtnHTML;
 W.bookRefreshMarks = bookRefreshMarks;

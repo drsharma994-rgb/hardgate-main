@@ -70,7 +70,20 @@ console.log('== exports ==');
   ok(typeof W.hgBookStampForMeta === 'function', 'hgBookStampForMeta exported');
   ok(typeof W.hgBookStampChip === 'function', 'hgBookStampChip exported');
   ok(typeof W.bookPositionKey === 'function', 'bookPositionKey exported');
-  ok(typeof W.bookRefreshOpenKeys === 'function', 'bookRefreshOpenKeys exported');
+  ok(typeof W.bookContractsCell === 'function', 'bookContractsCell exported');
+}
+
+console.log('== bookContractsCell ==');
+{
+  const W = loadBookStack({
+    hgQtyToContracts: (sym, qty) => (sym === 'BTCUSD' && qty > 0)
+      ? { lots: 23, cv: 0.001, unit: 'BTC', coinActual: 0.023, shortfallPct: 0 }
+      : null,
+  });
+  ok(W.bookContractsCell({ sym: 'BTCUSD', mark: 100, notionalUsd: 2300 }) === '23',
+     'lots column shows rounded-down Delta contracts');
+  ok(W.bookContractsCell({ sym: 'BTCUSD', mark: 0, notionalUsd: 0 }) === '—',
+     'missing sizing returns em dash');
 }
 
 console.log('== bookResolveFund + bookBtnHTML ==');
