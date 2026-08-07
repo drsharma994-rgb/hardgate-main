@@ -35,6 +35,7 @@ function makeTokenBucket(ratePerSec, burst){
 }
 
 const BINANCE_FAPI = 'https://fapi.binance.com';
+const BINANCE_SPOT = 'https://api.binance.com';
 const __binBucket = makeTokenBucket(6, 6); // gentle smoothing; fapi allows far more
 const __BIN_CACHE = new Map();
 const BIN_CACHE_MS = 60*1000;
@@ -345,6 +346,32 @@ async function binanceFundingHist(symbol, limit){
       .sort(function(a,b){ return a.t - b.t; });
     if (rows.length < 10) return null;
     return __binCachePut(key, rows);
+  }catch(e){ return null; }
+}
+
+/* GET /api/v3/klines -> spot taker buy/sell proxy from taker-buy-base volume.
+   Same {latest, series:[{buySellRatio,t}]} shape as binanceTakerRatio for
+   spot-perp divergence reads. null on failure; 60s cached. */
+async function binanceSpotTakerFlow(symbol, interval, limit){
+  try{
+    if (!symbol) return null;
+    interval = interval || '1h';
+    limit = Math.max(8, Math.min(500, limit || 25));
+    const key = 'spotTaker|' + symbol + '|' + interval + '|' + limit;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const url = BINANCE_SPOT + '/api/v3/klines?symbol=' + encodeURIComponent(symbol)
+      + '&interval=' + encodeURIComponent(interval) + '&limit=' + limit;
+    const raw = await __binFetchJson(url);
+    if (!Array.isArray(raw) || raw.length < 8) return null;
+    const series = raw.map(function(d){
+      const vol = +d[5], takerBuy = +d[9];
+      const sell = vol - takerBuy;
+      const ratio = (isFinite(takerBuy) && isFinite(sell) && sell > 0) ? (takerBuy / sell) : NaN;
+      return { buySellRatio: ratio, t: Math.floor((+d[0]) / 1000) };
+    }).filter(function(r){ return isFinite(r.t) && isFinite(r.buySellRatio) && r.buySellRatio > 0; })
+      .sort(function(a,b){ return a.t - b.t; });
+    if (series.length < 8) return null;
+    return __binCachePut(key, { latest: series[series.length - 1], series: series });
   }catch(e){ return null; }
 }
 

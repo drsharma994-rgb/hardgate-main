@@ -84,7 +84,8 @@ console.log('== setup-stack FRED macro leg on crypto ==');
 console.log('== sw cache bumped for fix pack 10 ==');
 {
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  ok(/const HG_CACHE = 'hg-v176'/.test(sw), 'sw cache hg-v176');
+  const m = sw.match(/const HG_CACHE = 'hg-v(\d+)'/);
+  ok(m && +m[1] >= 176, 'sw cache at least hg-v176 (pack 10+)');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
