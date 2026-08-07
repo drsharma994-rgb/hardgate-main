@@ -161,8 +161,27 @@ function __atrLocal(rows, p){
 var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F' };
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
+                  'delta-xaut': 'DELTA XAUTUSD' };
+var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
+function stGoldVenueLabel(){
+  try{
+    if (typeof S !== 'undefined' && S && S.goldDataSource){
+      if (S.goldDataSource === 'delta-xaut') return 'STAR TRADER ' + ST_GOLD_SYM + ' · XAUTUSD';
+      var lbl = SRC_LABEL[S.goldDataSource];
+      if (lbl) return 'STAR TRADER ' + ST_GOLD_SYM + ' · ' + lbl + ' proxy';
+    }
+  }catch(e){}
+  return 'STAR TRADER ' + ST_GOLD_SYM;
+}
+function stGoldBasisHtml(){
+  try{
+    var fn = gfn('hgGoldBasisNoteHtml');
+    if (fn) return fn() || '';
+  }catch(e){}
+  return '';
+}
 
 /* ---------------- BRAIN state snapshot ---------------- */
 var __snap = null;
@@ -652,6 +671,24 @@ async function fetchGoldKlines(){
   return out;
 }
 
+/* StarTrader XAUUSD — same candle chain as confluence (getXAUCandles → proxy + basis). */
+async function fetchStartraderGoldKlines(){
+  var out = { rows15m: [], rows1h: [], rows4h: [], source: 'startrader-xau' };
+  var fetch = gfn('getXAUCandles');
+  if (!fetch){
+    var stc = gfn('startraderCandles');
+    if (stc) fetch = function(tf, n){ return stc(ST_GOLD_SYM, tf, n); };
+  }
+  if (!fetch) return out;
+  try{ var a = await fetch('15m', KL_15M); if (Array.isArray(a) && a.length) out.rows15m = a; }catch(e){}
+  try{ var b = await fetch('1h', KL_1H);  if (Array.isArray(b) && b.length) out.rows1h = b; }catch(e2){}
+  try{ var c = await fetch('4h', KL_4H); if (Array.isArray(c) && c.length) out.rows4h = c; }catch(e3){}
+  try{
+    if (typeof S !== 'undefined' && S && S.goldDataSource) out.source = S.goldDataSource;
+  }catch(e4){}
+  return out;
+}
+
 /* Delta XAUTUSD perp leg — only when the xuniverse layer exists and lists it */
 async function fetchDeltaXaut(){
   var out = { rows15m: [], rows1h: [], rows4h: [], item: null };
@@ -798,12 +835,13 @@ async function runScan(ui, scanSt){
       }catch(eW){}
     }
 
-    /* leg 1: primary gold feed (getGoldCandles chain -> PAXGUSDT fallback) */
-    var gold = await fetchGoldKlines();
+    var stRoute = !!(scanSt && scanSt.useStartraderRouting);
+    /* leg 1: primary gold feed */
+    var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
     setProg(ui, 0.45);
     if (gold.rows15m.length){
-      var v = venueLabel(gold.source);
-      var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
+      var v = stRoute ? stGoldVenueLabel() : venueLabel(gold.source);
+      var sym1 = stRoute ? ST_GOLD_SYM : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       var zonesFn = gfn('goldUpdateActiveZones');
       var evalFn = gfn('HardgateGoldEngine');
       if (zonesFn){
@@ -832,22 +870,25 @@ async function runScan(ui, scanSt){
       legs.push('primary gold feed: no 15m klines from any source (macro chain + PAXGUSDT both failed)');
     }
 
-    /* leg 2: Delta XAUTUSD perp (best-effort second venue) */
-    setStat(ui, 'checking Delta XAUTUSD perp…');
-    var dx = await fetchDeltaXaut();
-    setProg(ui, 0.75);
-    if (dx.item && dx.rows15m.length){
-      venueRows['DELTA XAUTUSD'] = { rows15m: dx.rows15m };
-      var got2 = buildCandidates(dx, now, news, 'DELTA XAUTUSD', 'XAUTUSD');
-      collectWatch(dx.rows15m, dx.rows1h, dx.rows4h, 'DELTA XAUTUSD');
-      for (i = 0; i < got2.length; i++) cands.push(got2[i]);
-      for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
-      legs.push('DELTA XAUTUSD: ' + dx.rows15m.length + ' 15m bars — '
-        + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
-    } else if (dx.item){
-      legs.push('DELTA XAUTUSD: listed but candles unavailable');
-    } else {
-      legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
+    /* leg 2: Delta XAUTUSD perp (standalone tab only — StarTrader route already uses getXAUCandles) */
+    var dx = { rows15m: [], rows1h: [], rows4h: [], item: null };
+    if (!stRoute){
+      setStat(ui, 'checking Delta XAUTUSD perp…');
+      dx = await fetchDeltaXaut();
+      setProg(ui, 0.75);
+      if (dx.item && dx.rows15m.length){
+        venueRows['DELTA XAUTUSD'] = { rows15m: dx.rows15m };
+        var got2 = buildCandidates(dx, now, news, 'DELTA XAUTUSD', 'XAUTUSD');
+        collectWatch(dx.rows15m, dx.rows1h, dx.rows4h, 'DELTA XAUTUSD');
+        for (i = 0; i < got2.length; i++) cands.push(got2[i]);
+        for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
+        legs.push('DELTA XAUTUSD: ' + dx.rows15m.length + ' 15m bars — '
+          + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
+      } else if (dx.item){
+        legs.push('DELTA XAUTUSD: listed but candles unavailable');
+      } else {
+        legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
+      }
     }
 
     /* ranking: transparent confluence tally across ALL venues */
@@ -948,17 +989,18 @@ async function runScan(ui, scanSt){
       }
       whySilent = whySilentText({
         newsVeto: newsVeto, newsVetoTitle: newsVetoTitle,
-        feedsFailed: !gold.rows15m.length && !dx.rows15m.length,
+        feedsFailed: stRoute ? !gold.rows15m.length : (!gold.rows15m.length && !dx.rows15m.length),
         kzWeight: kzW, kzLabel: kzL,
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
     }
 
+    var basisHtml = stRoute ? stGoldBasisHtml() : '';
     /* render */
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
@@ -967,13 +1009,13 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
         /* literally nothing (feeds failed): the empty state carries the reason */
-        ui.cards.innerHTML = '';
+        ui.cards.innerHTML = basisHtml;
         if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent);
         ui.empty.style.display = 'block';
       }
@@ -981,9 +1023,9 @@ async function runScan(ui, scanSt){
     var secs = ((Date.now() - t0)/1000).toFixed(1);
     setStat(ui, legs.join(' · ') + ' · ' + liveN + ' live conviction' + (liveN === 1 ? '' : 's')
             + ' · ' + secs + 's · ' + new Date().toISOString().slice(11, 19) + ' UTC',
-            !gold.rows15m.length && !dx.rows15m.length);
+            stRoute ? !gold.rows15m.length : (!gold.rows15m.length && !dx.rows15m.length));
     setProg(ui, null);
-    if (gold.rows15m.length || dx.rows15m.length){
+    if (gold.rows15m.length || (!stRoute && dx.rows15m.length)){
       publishState(display);
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
     }
@@ -1047,10 +1089,15 @@ function goldscalpMountInto(el, scanSt, cfg){
       empty: el.querySelector('#' + p + 'Empty')
     };
     scanSt.ui = ui;
+    scanSt.useStartraderRouting = !!cfg.useStartraderRouting;
 
     var missing = [];
     if (!gfn('goldScalpSetups') && !gfn('goldScalpSetup')) missing.push('goldScalpSetups/goldScalpSetup (goldind.js)');
-    if (!gfn('getGoldCandles') && !gfn('binanceKlines')) missing.push('gold klines (macro.js getGoldCandles / binance.js binanceKlines)');
+    if (cfg.useStartraderRouting){
+      if (!gfn('getXAUCandles') && !gfn('startraderCandles')) missing.push('XAUUSD candles (getXAUCandles / startraderCandles)');
+    } else if (!gfn('getGoldCandles') && !gfn('binanceKlines')){
+      missing.push('gold klines (macro.js getGoldCandles / binance.js binanceKlines)');
+    }
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + ' — check script load order.', true);
 
     if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui, scanSt); });
@@ -1120,9 +1167,10 @@ W.goldscalpMountSection = function(el, opts){
   return goldscalpMountInto(el, scanSt, Object.assign({
     prefix: 'stGs',
     heading: 'GOLD SCALP',
-    subheading: 'same engine as the GOLD SCALP tab · XAU feeds via STAR TRADER routing',
-    statIdle: 'idle — 15m/1h/4h multi-strategy scalp engine (identical logic to the GOLD SCALP tab)',
+    subheading: 'XAUUSD · same multi-strategy engine as GOLD SCALP · getXAUCandles / StarTrader routing',
+    statIdle: 'idle — XAUUSD 15m/1h/4h scalp engine (identical strategy logic to the GOLD SCALP tab)',
     showDeskNote: false,
+    useStartraderRouting: true,
     deskKind: 'goldscalp',
     deskTab: 'STAR TRADER · GOLD SCALP'
   }, opts));

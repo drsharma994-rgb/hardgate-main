@@ -130,8 +130,27 @@ function gfn(name){
 }
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
-                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F' };
+                  'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
+                  'delta-xaut': 'DELTA XAUTUSD' };
+var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
+function stGoldVenueLabel(){
+  try{
+    if (typeof S !== 'undefined' && S && S.goldDataSource){
+      if (S.goldDataSource === 'delta-xaut') return 'STAR TRADER ' + ST_GOLD_SYM + ' · XAUTUSD';
+      var lbl = SRC_LABEL[S.goldDataSource];
+      if (lbl) return 'STAR TRADER ' + ST_GOLD_SYM + ' · ' + lbl + ' proxy';
+    }
+  }catch(e){}
+  return 'STAR TRADER ' + ST_GOLD_SYM;
+}
+function stGoldBasisHtml(){
+  try{
+    var fn = gfn('hgGoldBasisNoteHtml');
+    if (fn) return fn() || '';
+  }catch(e){}
+  return '';
+}
 
 /* ---------------- local indicator fallbacks (identical math to indicators.js
    / goldind.js's own local copies — goldind.js does NOT export an ATR, so
@@ -718,6 +737,23 @@ async function fetchGoldKlines(){
       try{ var q = await bk('PAXGUSDT', '1d', KL_1D); if (q && q.length) out.rows1d = q; }catch(e4){}
     }
   }
+  return out;
+}
+
+/* StarTrader XAUUSD — same candle chain as confluence (getXAUCandles → proxy + basis). */
+async function fetchStartraderGoldKlines(){
+  var out = { rows4h: [], rows1d: [], source: 'startrader-xau' };
+  var fetch = gfn('getXAUCandles');
+  if (!fetch){
+    var stc = gfn('startraderCandles');
+    if (stc) fetch = function(tf, n){ return stc(ST_GOLD_SYM, tf, n); };
+  }
+  if (!fetch) return out;
+  try{ var a = await fetch('4h', KL_4H); if (Array.isArray(a) && a.length) out.rows4h = a; }catch(e){}
+  try{ var b = await fetch('1d', KL_1D); if (Array.isArray(b) && b.length) out.rows1d = b; }catch(e2){}
+  try{
+    if (typeof S !== 'undefined' && S && S.goldDataSource) out.source = S.goldDataSource;
+  }catch(e3){}
   return out;
 }
 
@@ -1379,7 +1415,13 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards) ui.cards.innerHTML = '';
     if (ui && ui.empty) ui.empty.style.display = 'none';
     setProg(ui, 0);
-    if (!gfn('getGoldCandles') && !gfn('binanceKlines')){
+    var stRouteEarly = !!(scanSt && scanSt.useStartraderRouting);
+    if (stRouteEarly){
+      if (!gfn('getXAUCandles') && !gfn('startraderCandles')){
+        setStat(ui, 'XAUUSD candle layer missing — getXAUCandles / startraderCandles not loaded (check script order).', true);
+        return 'error: no XAUUSD klines layer';
+      }
+    } else if (!gfn('getGoldCandles') && !gfn('binanceKlines')){
       setStat(ui, 'gold klines layer missing — macro.js getGoldCandles / binance.js binanceKlines not loaded (check script order).', true);
       return 'error: no klines layer';
     }
@@ -1462,12 +1504,13 @@ async function runScan(ui, scanSt){
       }catch(eW){}
     }
 
-    /* leg 1: primary gold feed (getGoldCandles chain -> PAXGUSDT fallback) */
-    var gold = await fetchGoldKlines();
+    var stRoute = !!(scanSt && scanSt.useStartraderRouting);
+    /* leg 1: primary gold feed */
+    var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
     setProg(ui, 0.45);
     if (gold.rows4h.length){
-      var v = venueLabel(gold.source);
-      var sym1 = (gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT';
+      var v = stRoute ? stGoldVenueLabel() : venueLabel(gold.source);
+      var sym1 = stRoute ? ST_GOLD_SYM : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       venueRows[v] = { rows4h: gold.rows4h };
       var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1);
       collectWatch(gold, v);
@@ -1479,22 +1522,25 @@ async function runScan(ui, scanSt){
       legs.push('primary gold feed: no 4h klines from any source (macro chain + PAXGUSDT both failed)');
     }
 
-    /* leg 2: Delta XAUTUSD perp (best-effort second venue) */
-    setStat(ui, 'checking Delta XAUTUSD perp…');
-    var dx = await fetchDeltaXaut();
-    setProg(ui, 0.75);
-    if (dx.item && dx.rows4h.length){
-      venueRows['DELTA XAUTUSD'] = { rows4h: dx.rows4h };
-      var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD');
-      collectWatch(dx, 'DELTA XAUTUSD');
-      for (i = 0; i < got2.length; i++) cands.push(got2[i]);
-      for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
-      legs.push('DELTA XAUTUSD: ' + dx.rows4h.length + ' 4h bars — '
-        + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
-    } else if (dx.item){
-      legs.push('DELTA XAUTUSD: listed but candles unavailable');
-    } else {
-      legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
+    /* leg 2: Delta XAUTUSD perp (standalone tab only — StarTrader route already uses getXAUCandles) */
+    var dx = { rows4h: [], rows1d: [], item: null };
+    if (!stRoute){
+      setStat(ui, 'checking Delta XAUTUSD perp…');
+      dx = await fetchDeltaXaut();
+      setProg(ui, 0.75);
+      if (dx.item && dx.rows4h.length){
+        venueRows['DELTA XAUTUSD'] = { rows4h: dx.rows4h };
+        var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD');
+        collectWatch(dx, 'DELTA XAUTUSD');
+        for (i = 0; i < got2.length; i++) cands.push(got2[i]);
+        for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
+        legs.push('DELTA XAUTUSD: ' + dx.rows4h.length + ' 4h bars — '
+          + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
+      } else if (dx.item){
+        legs.push('DELTA XAUTUSD: listed but candles unavailable');
+      } else {
+        legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
+      }
     }
 
     /* ranking: transparent confluence tally across ALL venues */
@@ -1533,16 +1579,17 @@ async function runScan(ui, scanSt){
     if (!display.length){
       whySilent = whySilentText({
         newsCaution: !!(newsC && newsC.caution), newsTitle: newsC ? newsC.title : null,
-        feedsFailed: !gold.rows4h.length && !dx.rows4h.length,
+        feedsFailed: stRoute ? !gold.rows4h.length : (!gold.rows4h.length && !dx.rows4h.length),
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
     }
 
+    var basisHtml = stRoute ? stGoldBasisHtml() : '';
     /* render */
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
@@ -1551,13 +1598,13 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + (whySilent ? whySilentHTML(whySilent) : '')
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
       } else {
         /* literally nothing (feeds failed): the empty state carries the reason */
-        ui.cards.innerHTML = '';
+        ui.cards.innerHTML = basisHtml;
         if (whySilent) ui.empty.innerHTML = '<b>WHY SILENT</b> — ' + esc(whySilent);
         ui.empty.style.display = 'block';
       }
@@ -1565,9 +1612,9 @@ async function runScan(ui, scanSt){
     var secs = ((Date.now() - t0)/1000).toFixed(1);
     setStat(ui, legs.join(' · ') + ' · ' + liveN + ' live conviction' + (liveN === 1 ? '' : 's')
             + ' · ' + secs + 's · ' + new Date().toISOString().slice(11, 19) + ' UTC',
-            !gold.rows4h.length && !dx.rows4h.length);
+            stRoute ? !gold.rows4h.length : (!gold.rows4h.length && !dx.rows4h.length));
     setProg(ui, null);
-    if (gold.rows4h.length || dx.rows4h.length){
+    if (gold.rows4h.length || (!stRoute && dx.rows4h.length)){
       publishState(display);                        /* only a real data run overwrites the snapshots */
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
     }
@@ -1629,9 +1676,14 @@ function goldswingMountInto(el, scanSt, cfg){
       empty: el.querySelector('#' + p + 'Empty')
     };
     scanSt.ui = ui;
+    scanSt.useStartraderRouting = !!cfg.useStartraderRouting;
 
     var missing = [];
-    if (!gfn('getGoldCandles') && !gfn('binanceKlines')) missing.push('gold klines (macro.js getGoldCandles / binance.js binanceKlines)');
+    if (cfg.useStartraderRouting){
+      if (!gfn('getXAUCandles') && !gfn('startraderCandles')) missing.push('XAUUSD candles (getXAUCandles / startraderCandles)');
+    } else if (!gfn('getGoldCandles') && !gfn('binanceKlines')){
+      missing.push('gold klines (macro.js getGoldCandles / binance.js binanceKlines)');
+    }
     if (!gfn('goldSweeps') && !gfn('goldOrderBlocks') && !gfn('goldFVG') && !gfn('goldVWAP'))
       missing.push('goldind.js detectors (sweep/OB/FVG/VWAP evidence offline — trend-pullback, weekly-range and macro strategies still run on local math)');
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + '.', true);
@@ -1715,9 +1767,10 @@ W.goldswingMountSection = function(el, opts){
   return goldswingMountInto(el, scanSt, Object.assign({
     prefix: 'stGw',
     heading: 'GOLD SWING',
-    subheading: 'same engine as the GOLD SWING tab · XAU feeds via STAR TRADER routing',
-    statIdle: 'idle — 4h/1d multi-strategy swing engine (identical logic to the GOLD SWING tab)',
+    subheading: 'XAUUSD · same multi-strategy engine as GOLD SWING · getXAUCandles / StarTrader routing',
+    statIdle: 'idle — XAUUSD 4h/1d swing engine (identical strategy logic to the GOLD SWING tab)',
     showDeskNote: false,
+    useStartraderRouting: true,
     deskKind: 'goldswing',
     deskTab: 'STAR TRADER · GOLD SWING'
   }, opts));

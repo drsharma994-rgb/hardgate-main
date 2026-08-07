@@ -258,6 +258,9 @@ console.log('== startrader gold sub-tabs ==');
   };
   var sec = goldCtx.window.goldscalpMountSection(stubEl);
   ok(sec && typeof sec.refresh === 'function' && sec.scanSt, 'goldscalpMountSection returns refreshable section');
+  ok(sec.scanSt.useStartraderRouting === true, 'goldscalpMountSection enables XAUUSD StarTrader routing');
+  var secSw = goldCtx.window.goldswingMountSection(stubEl);
+  ok(secSw && secSw.scanSt && secSw.scanSt.useStartraderRouting === true, 'goldswingMountSection enables XAUUSD StarTrader routing');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
