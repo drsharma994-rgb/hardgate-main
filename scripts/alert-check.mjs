@@ -340,7 +340,7 @@ function bestBody(leg, snap) {
   return plan
     + '\nVenue: ' + exLabel
     + '\nR:R ' + (Number.isFinite(+snap.rr) ? (+snap.rr).toFixed(2) : '?')
-    + ' · ' + (snap.famScore != null ? snap.famScore : '?') + '/9 families'
+    + ' · ' + (snap.famScore != null ? snap.famScore : '?') + '/' + (snap.famMax != null ? snap.famMax : 9) + ' families'
     + ' · ' + (snap.robScore != null ? snap.robScore : '?') + '/2 robust';
 }
 
@@ -838,6 +838,52 @@ async function main() {
     newState.setups = { keys: keys, at: new Date().toISOString() };
   } else if (prevState.setups !== undefined) {
     newState.setups = prevState.setups;   /* degraded run: keep, change nothing */
+  }
+  /* ---------------- degraded-run watchdog ----------------
+     A degraded run preserves the previous setups/newsBlackout state and moves
+     on. That is the right behaviour — inventing state from a failed page read
+     would be worse — but it is SILENT, and silence here is indistinguishable
+     from "the funnel found nothing".
+     It cost real time: alert-state.json read `setups: {}` for over 25 hours
+     while every 15-minute run took this branch, and that empty object was read
+     as evidence about gate thresholds when it actually meant the BRAIN
+     synthesis never reached `done`. ticketResult.ok is /^done/i.test(stat), so
+     any timeout or error in the CI browser lands here.
+     The count and the first-seen stamp now persist, so a glance at the state
+     file answers "is this pipeline seeing anything at all". After
+     DEGRADED_ALERT_RUNS consecutive failures it pushes, then repeats no more
+     than once per DEGRADED_REMIND_MS so a long outage does not spam. */
+  const DEGRADED_ALERT_RUNS = 4;                 /* 4 x 15min = 1 hour blind */
+  const DEGRADED_REMIND_MS = 6 * 3600 * 1000;
+  if (ticketResult.ok) {
+    if (prevState.degraded && prevState.degraded.count) {
+      console.log('Ticket synthesis RECOVERED after ' + prevState.degraded.count + ' degraded run(s).');
+      if (prevState.degraded.count >= DEGRADED_ALERT_RUNS) {
+        await sendAlertCi('✅ HARDGATE pipeline recovered',
+          'BRAIN synthesis is reaching done again after ' + prevState.degraded.count
+          + ' degraded run(s) since ' + (prevState.degraded.since || '?')
+          + '.\nSetup detection was BLIND for that window — treat any "no setups" reading from it as unknown, not as empty.');
+      }
+    }
+    newState.degraded = { count: 0, since: null, lastErr: null };
+  } else {
+    const prevDeg = prevState.degraded || { count: 0, since: null };
+    const count = (prevDeg.count || 0) + 1;
+    const since = prevDeg.since || new Date().toISOString();
+    const lastErr = String(ticketResult.err || ticketResult.stat || 'no detail').slice(0, 200);
+    console.log('DEGRADED run ' + count + ' (since ' + since + ') — ' + lastErr);
+    const lastAlertAt = prevDeg.alertAt ? Date.parse(prevDeg.alertAt) : 0;
+    let alertAt = prevDeg.alertAt || null;
+    if (count >= DEGRADED_ALERT_RUNS && (!lastAlertAt || (Date.now() - lastAlertAt) > DEGRADED_REMIND_MS)) {
+      const push = await sendAlertCi('🚨 HARDGATE pipeline BLIND',
+        'BRAIN synthesis has not reached done for ' + count + ' consecutive runs (since ' + since + ').\n\n'
+        + 'Last status: ' + lastErr + '\n\n'
+        + 'Setup detection is NOT running. An empty setups list right now means UNKNOWN, not none.\n'
+        + 'Check the newest alert-notify run log for the "Ticket synthesis: degraded" line.');
+      console.log('DEGRADED alert — push: ' + push);
+      alertAt = new Date().toISOString();
+    }
+    newState.degraded = { count: count, since: since, lastErr: lastErr, alertAt: alertAt };
   }
 
   /* engine-outage watchdog: verdict over the post-synthesis engine read;
