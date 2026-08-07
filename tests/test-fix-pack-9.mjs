@@ -28,7 +28,7 @@ console.log('== hgFundingCostR models 8h settlements in R ==');
   const rebate = ctx.hgFundingCostR(100, 99.65, 'short', 0.01, 16 * 3600);
   ok(rebate < 0, 'short receives when funding is positive');
   ok(near(rebate, -cost, 1e-9), 'short rebate mirrors long cost');
-  ok(ctx.hgFundingCostR(100, 99.65, 'long', 0.01, 3600) > 0, 'partial interval counts one settlement (ceil)');
+  ok(ctx.hgFundingCostR(100, 99.65, 'long', 0.01, 3600) > 0, 'legacy duration uses unbiased hold/interval, not ceil');
 }
 
 console.log('== hgNetR subtracts funding from settled log rows ==');
