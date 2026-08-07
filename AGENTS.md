@@ -99,6 +99,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Fix Pack 15 (hg-v182):** **MAE/MFE excursions** on settle (`maeR`/`mfeR` to exit, `maeFullR`/`mfeFullR` full window); **`hgHeatProfile`**, **`hgStopSweep`**. Console-only — no tab yet. **`tests/test-excursions.mjs`**.
 - **Fix Pack 16 (hg-v183):** **Portfolio concentration** — `hgCorrMatrix`, `hgPortfolioConcentration`; TRADE PLAN heat row shows effective bets vs nominal. **`tests/test-portfolio-concentration.mjs`**.
 - **Fix Pack 17 (hg-v184):** **Sole blocker funnel** — `cgSoleBlocker`; WHY EMPTY panel shows ONLY-blocker column (what relaxing a gate would buy). **`tests/test-sole-blocker.mjs`**.
+- **StarTrader gold tabs (hg-v185):** STAR TRADER sub-tabs **GOLD SCALP** / **GOLD SWING** embed the same engines as the GOLD-group tabs via `goldscalpMountSection` / `goldswingMountSection`.
 - **Contract sizing on ticket (hg-v171):** TRADE PLAN ticket prints **CONTRACTS** (lots) from Delta `/v2/products` via `hgQtyToContracts` — rounds DOWN; sub-lot positions called out.
 - **Cache reuse (hg-v171):** `HG_CANDLE_TTL_QUIET = 420` (> 5-min alert cycle) so quiet scans reuse candles across cycles.
 - **Directional funding G4 (hg-v170):** `cryptogates.js` / `engine.js` veto funding only when it runs **against** the trade; `CG_FUND_SANITY` / `FUND_SANITY` = 0.30 is a broken-feed check, not a crowd cap. Favorable funding (long at negative fr) no longer blocked.

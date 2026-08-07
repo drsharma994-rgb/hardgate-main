@@ -241,5 +241,24 @@ console.log('== stEdge helpers ==');
   ok(scan.stats.skipped === 0 || scan.found.length > 0, 'stEdgeScanList completes scan pass');
 }
 
+console.log('== startrader gold sub-tabs ==');
+{
+  const tabHtml = readFileSync(path.join(root, 'startradertab.js'), 'utf8');
+  ok(/stPaneGoldScalp/.test(tabHtml) && /stPaneGoldSwing/.test(tabHtml), 'startradertab mounts gold scalp and swing panes');
+  ok(/goldscalpMountSection/.test(tabHtml) && /goldswingMountSection/.test(tabHtml), 'startradertab wires gold mount helpers');
+  const goldCtx = makeCtx();
+  loadStack(goldCtx, ['goldind.js', 'goldscalp.js', 'goldswing.js']);
+  ok(typeof goldCtx.window.goldscalpMountSection === 'function', 'goldscalpMountSection exported');
+  ok(typeof goldCtx.window.goldswingMountSection === 'function', 'goldswingMountSection exported');
+  const host = { innerHTML: '', querySelector: function(sel){ return null; } };
+  /* mountInto needs real DOM-ish el — use minimal stub that returns null from querySelector until innerHTML set */
+  var stubEl = {
+    innerHTML: '',
+    querySelector: function(){ return null; }
+  };
+  var sec = goldCtx.window.goldscalpMountSection(stubEl);
+  ok(sec && typeof sec.refresh === 'function' && sec.scanSt, 'goldscalpMountSection returns refreshable section');
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 if (fail) process.exit(1);
