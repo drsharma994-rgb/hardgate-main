@@ -539,6 +539,38 @@
     }catch(e){ return ''; }
   }
   G.cgClearanceLine = cgClearanceLine;
+  /* ===================== SOLE BLOCKER =====================
+     The scan funnel already tallies how many symbols each gate BLOCKS. That
+     number cannot be acted on, because a gate that blocks a lot may be
+     blocking symbols three other gates were failing anyway.
+     Measured over 20,910 aligned cascades (27 CLEAN):
+         gate     blocks    ONLY blocker
+         G6        20153        1795
+         G5        13169          50
+         G7         8138           9
+         ANCHOR     7453           0   <- relaxing it adds NOTHING
+         G4         4221           5
+         G3         4016           0   <- relaxing it adds NOTHING
+         G2         2035           3
+         G1         1728           4
+     ANCHOR and G3 look like major constraints in the left column and are
+     worth exactly zero setups in the right one. G6 is the only real lever.
+     Relaxing a gate is only worth considering when its SOLE count is large.
+     Returns the one gate holding a setup back, or null when zero or several
+     gates failed. The EMA21 anchor is included because `clean` requires it. */
+  function cgSoleBlocker(m){
+    try{
+      if (!m || !m.dir || !Array.isArray(m.gates)) return null;
+      if (m.clean) return null;
+      var failed = [];
+      for (var i = 0; i < m.gates.length; i++){
+        if (!m.gates[i][1]) failed.push(String(m.gates[i][0]).split(' ')[0]);
+      }
+      if (!m.anchorOK) failed.push('ANCHOR');
+      return (failed.length === 1) ? failed[0] : null;
+    }catch(e){ return null; }
+  }
+  G.cgSoleBlocker = cgSoleBlocker;
   G.swingGateMatrix = swingGateMatrix;
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
