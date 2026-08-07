@@ -4450,6 +4450,7 @@ var BRAIN_ALERT_FRESH_MS = 4 * 60 * 1000;
 
 async function brainAlertWarm(){
   try{
+    if (G.S && G.S.binanceBackoffUntil && Date.now() < G.S.binanceBackoffUntil) return 'rate-limited';
     if (__busy && !brainBusyStuck()) return 'busy';
     if (__lastSnap && __lastSnap.at && (Date.now() - __lastSnap.at) < BRAIN_ALERT_FRESH_MS) return 'fresh';
     var el = __mountedEl;

@@ -46,6 +46,13 @@ async function __binFetchJson(url, timeoutMs){
     const w = __binBucket.take();
     if (w > 0) await new Promise(function(r){ setTimeout(r, Math.min(w, 2000)); });
     const res = await fetch(url, { signal: ctrl.signal });
+    if (res.status === 418 || res.status === 429){
+      try{
+        var root = (typeof globalThis !== 'undefined') ? globalThis : window;
+        if (root && root.S) root.S.binanceBackoffUntil = Date.now() + 90000;
+      }catch(e){}
+      return null;
+    }
     if (!res.ok) return null;
     return await res.json();
   }catch(e){ return null; }

@@ -766,6 +766,17 @@ const HG_ALERTS_AUTO_REFRESH_MS = 900000;
    and the next cycle's first look both hit cache. Gates still only ever see
    CLOSED candles, so no signal is lost — a 4H bar does not change in 2 min. */
 const HG_CANDLE_TTL_QUIET = 420;
+const HG_POS_SNAP_TTL = 420;   /* reuse positioning snapshots across 5-min alert cycles */
+function hgScanRateOk(){
+  try{ return !(S.binanceBackoffUntil && Date.now() < S.binanceBackoffUntil); }catch(e){ return true; }
+}
+function hgScanRateLimitNote(){
+  if (hgScanRateOk()) return '';
+  try{
+    var left = Math.max(1, Math.ceil((S.binanceBackoffUntil - Date.now()) / 1000));
+    return 'Binance rate-limited — pausing scans ~' + left + 's';
+  }catch(e){ return 'Binance rate-limited — pausing scans'; }
+}
 
 function hgExLabel(ex){
   ex = ex || S.exchange;
@@ -1769,6 +1780,13 @@ function smartClassify(d){
    (every leg null) so the caller can count it as failed; partial data is fine —
    evidence built from nulls simply doesn't fire. */
 async function smartScanSymbol(sym, tick){
+  const key = String(sym || '').toUpperCase();
+  const ttl = (typeof HG_POS_SNAP_TTL !== 'undefined') ? HG_POS_SNAP_TTL : 420;
+  try{
+    if (!S.posSnapCache) S.posSnapCache = {};
+    const hit = S.posSnapCache[key];
+    if (hit && hit.at && (nowSec() - hit.at) < ttl) return hit.data;
+  }catch(e){}
   const res = await Promise.all([
     binanceFunding(sym), binanceOIHistory(sym, '1h', 25),
     binanceLongShort(sym, '1h', 2), binanceTopTraders(sym, '1h', 2), binanceTakerRatio(sym, '1h', 2)
@@ -1784,7 +1802,7 @@ async function smartScanSymbol(sym, tick){
   const oiNow = (oih && oih.latest) ? oih.latest.oi : null;
   const oiFirst = (oih && oih.series && oih.series.length >= 2) ? oih.series[0].oi : null;
   const oiChgPct = (oiNow !== null && oiFirst && oiFirst > 0) ? (oiNow/oiFirst - 1)*100 : null;
-  return {
+  const out = {
     sym: sym, tick: tick,
     markPrice: (fnd && isFinite(fnd.markPrice)) ? fnd.markPrice : (tick ? tick.mark : NaN),
     fundingPct: fnd ? fnd.fundingPct : null,
@@ -1795,6 +1813,11 @@ async function smartScanSymbol(sym, tick){
     takerRatio: (tk && tk.latest) ? tk.latest.buySellRatio : null,
     rows4h: kls[0] || [], rows1h: kls[1] || []
   };
+  try{
+    if (!S.posSnapCache) S.posSnapCache = {};
+    S.posSnapCache[key] = { at: nowSec(), data: out };
+  }catch(e){}
+  return out;
 }
 async function smartScanSymbolWithCross(sym, tick){
   const r = await smartScanSymbol(sym, tick);
@@ -3181,6 +3204,7 @@ function hgScanFunnelRows(audit, kind){
   ];
   if (kind === 'swing' && audit.pass7noAnchor) rows.push({ k: '7/7 but anchor miss', v: String(audit.pass7noAnchor) + ' (EMA21 >1.25×ATR away — not a ticket)' });
   if (audit.nearFound) rows.push({ k: 'NEAR CLEAN (6/7)', v: String(audit.nearFound) + ' watch-only' });
+  if (audit.fadeFound) rows.push({ k: 'FUNDING FADE (counter-trend)', v: String(audit.fadeFound) + ' opt-in tickets' });
   if (audit.histShort) rows.push({ k: 'Thin history (<210 bars)', v: String(audit.histShort) });
   if (audit.errors) rows.push({ k: 'Fetch errors', v: String(audit.errors) });
   const fail = audit.fail || {};
@@ -3260,6 +3284,45 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
   }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
+}
+
+function renderFadeSetupCard(t, hit, cardsEl, quiet, venueTag, kind){
+  const isSwing = kind === 'swing';
+  const rows = hit.rows || hit.m15 || [];
+  const momDetail = rows.length ? scanMomentumDetail(rows.map(function(r){ return r.c; }), rows, hit.dir) : 'n/a';
+  const tally = (hit.stack && hit.stack.gatesPassed != null && hit.stack.gatesTotal)
+    ? (hit.stack.gatesPassed + '/' + hit.stack.gatesTotal + ' gates')
+    : 'fade path';
+  const chartId = 'hgc-fade-' + kind + '-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
+  const cardSym = hgCardVenueSym(t.symbol, venueTag);
+  if (quiet) return;
+  if (cardsEl.querySelector && !cardsEl.querySelector('[data-fade-hdr="' + kind + '"]')){
+    cardsEl.insertAdjacentHTML('beforeend',
+      '<div class="note warn" data-fade-hdr="' + kind + '" style="margin:10px 0 6px"><b>FUNDING FADE</b> — counter-trend mean-reversion. '
+      + 'NOT 7/7 CLEAN — honest gate tally on each card.</div>');
+  }
+  const mini = [
+    ['type', 'FUNDING FADE · not CLEAN 7/7'],
+    ['gates', tally],
+    ['mark', px(t.mark || hit.mark || hit.entry)],
+    ['order', hit.entryType || 'FUNDING-FADE'],
+    ['funding', t.fundingPct !== null ? fmt(t.fundingPct, 4) + '%' : 'n/a'],
+    ['note', hit.note || 'crowded book fade'],
+    ['context: momentum', momDetail]
+  ];
+  if (isSwing && hit.r14 != null) mini.splice(4, 0, ['RSI 4H', fmt(hit.r14, 1)]);
+  if (!isSwing && hit.r15 != null) mini.splice(4, 0, ['RSI 15m', fmt(hit.r15, 1)]);
+  cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, hit.dir, mini,
+    ['counter-trend fade', 'positioning ≥2', 'honest tally'],
+    planBlock(hit.dir, hit.entry, hit.stop, hit.t1, hit.t2, hit.planSrc || 'funding fade', {
+      entryType: hit.entryType, targetPolicy: hit.targetPolicy
+    }), hit.entry, hit.stop, hit.t1, chartId, {
+      scanner: kind, strategy: 'funding-fade', t2: hit.t2, venue: venueTag, stack: hit.stack, fund: 'main'
+    }));
+  if (typeof hgMiniChart === 'function'){
+    hgMiniChart($(chartId), rows, { dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2 });
+  }
+  logSetup(t.symbol, hit.dir, kind + '-fade', hit.entry, hit.stop, hit.t1);
 }
 
 function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
@@ -3541,12 +3604,23 @@ async function runScanLeg(kind, opts){
     const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
     let found = 0, nearFound = 0;
-    let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0 };
+    let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0, fadeFound: 0 };
     const flipRecords = [];
     const flipVenue = venueTag || S.exchange || '';
     const t0scan = Date.now();
     const CHUNK_SIZE = quiet ? 8 : 5;
+    if (!hgScanRateOk()){
+      statEl.textContent = (venueTag ? venueTag + ' · ' : '') + hgScanRateLimitNote();
+      if (!quiet){ emptyEl.style.display = 'block'; emptyEl.textContent = hgScanRateLimitNote(); }
+      setProg(isSwing ? 'swingProg' : 'scalpProg', null);
+      btn.disabled = false;
+      return;
+    }
     for (let ci = 0; ci < uni.length; ci += CHUNK_SIZE){
+      if (!hgScanRateOk()){
+        statEl.textContent = (venueTag ? venueTag + ' · ' : '') + hgScanRateLimitNote();
+        break;
+      }
       const chunk = uni.slice(ci, ci + CHUNK_SIZE);
       await Promise.all(chunk.map(async function(t, idxInChunk){
         const i = ci + idxInChunk;
@@ -3596,6 +3670,14 @@ async function runScanLeg(kind, opts){
                 }
               }
             }
+            if (typeof swingTryFundingFade === 'function'){
+              const fade = swingTryFundingFade(rows, t);
+              if (fade){
+                audit.fadeFound++;
+                cands.push(hgCryptoCandRow(t, fade, venueTag));
+                renderFadeSetupCard(t, fade, cardsEl, quiet, venueTag, 'swing');
+              }
+            }
           } else {
             if (typeof scalpTryClean !== 'function') return;
             const [h1, m15] = await Promise.all([
@@ -3636,6 +3718,14 @@ async function runScanLeg(kind, opts){
                   }
                   renderNearCleanCard(t, nearS, cardsEl, 'scalp', venueTag);
                 }
+              }
+            }
+            if (typeof scalpTryFundingFade === 'function'){
+              const fadeS = scalpTryFundingFade(h1, m15, t, minsToFunding);
+              if (fadeS){
+                audit.fadeFound++;
+                cands.push(hgCryptoCandRow(t, fadeS, venueTag));
+                renderFadeSetupCard(t, fadeS, cardsEl, quiet, venueTag, 'scalp');
               }
             }
           }
