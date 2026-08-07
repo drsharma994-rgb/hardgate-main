@@ -1,0 +1,21 @@
+================================================================================
+HARDGATE FIX PACK 9 — FUNDING IN NET R + WILSON ON SCORECARD
+================================================================================
+Baseline: hg-v174 → target hg-v175
+Branch: cursor/fix-pack-9-net-r-wilson-2f4b
+
+PATCH 1 — Funding cost model (index.html)
+  hgFundingCostR(entry, stop, dir, fundingPct, holdSec)
+  hgNetR: subtract funding using log fundingPct + filledTs→doneTs hold
+  logSetup: store fundingPct (arg or ticker fallback)
+
+PATCH 2 — Scorecard net R + Wilson board
+  scorecard.js: hgScoreNetR uses hgFundingCostR + closedAt hold
+  hgScoreRecord stores fundingPct; brain scoreRecord passes ticker funding
+  boardHtml: Wilson 95% CI on WIN RATE card (uses window.hgWilson)
+
+PATCH 3 — Tests + cache hg-v175
+  tests/test-fix-pack-9.mjs
+  sw.js hg-v175; test-trade-plan.mjs cache assert
+
+================================================================================

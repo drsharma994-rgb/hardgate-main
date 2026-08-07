@@ -5030,22 +5030,44 @@ function hgCostR(entry, stop, entrySide, exitSide){
   if (!(riskPct > 0)) return 0;
   return hgRoundTripPct(entrySide, exitSide) / riskPct;
 }
+const HG_FUNDING_INTERVAL_SEC = 8 * 3600;
+/* Funding drag/benefit in R. fundingPct is % per 8h interval (Delta units).
+   Positive funding: longs pay shorts. holdSec is live position duration.
+   Returns R-units to SUBTRACT from gross (positive = cost, negative = rebate). */
+function hgFundingCostR(entry, stop, dir, fundingPct, holdSec){
+  const e = +entry, st = +stop;
+  if (!(isFinite(e) && e > 0 && isFinite(st))) return 0;
+  const riskPct = Math.abs(e - st) / e * 100;
+  if (!(riskPct > 0)) return 0;
+  const fp = +fundingPct;
+  if (!isFinite(fp) || fp === 0) return 0;
+  const hold = +holdSec;
+  if (!isFinite(hold) || hold <= 0) return 0;
+  const n = Math.ceil(hold / HG_FUNDING_INTERVAL_SEC);
+  if (!(n > 0)) return 0;
+  const paySign = (String(dir).toLowerCase() === 'short') ? -1 : 1;
+  return (paySign * fp * n) / riskPct;
+}
 /* Net R for a settled log row. Entries are limits (maker); a TP1 exit is a
-   limit (maker), an SL exit is a market stop (taker). Funding is NOT modelled
-   here — it depends on settlements crossed, which the log does not store, so
-   the note says so rather than the number pretending. */
+   limit (maker), an SL exit is a market stop (taker). Funding uses the rate
+   stored at log time and hold from fill to settlement. */
 function hgNetR(e){
   if (!e) return 0;
+  let gross = 0, exitSide = 'taker';
   if (e.status === 'tp'){
-    const gross = isFinite(+e.rr) ? +e.rr : 2;
-    return gross - hgCostR(e.entry, e.stop, 'maker', 'maker');
+    gross = isFinite(+e.rr) ? +e.rr : 2;
+    exitSide = 'maker';
+  }else if (e.status === 'sl'){
+    gross = -1;
+  }else if (e.status === 'time_stop'){
+    gross = isFinite(+e.rr) ? +e.rr : -0.1;
+  }else return 0;
+  let net = gross - hgCostR(e.entry, e.stop, 'maker', exitSide);
+  const ft = +e.filledTs, dt = +e.doneTs;
+  if (isFinite(ft) && isFinite(dt) && dt > ft && e.fundingPct != null && isFinite(+e.fundingPct)){
+    net -= hgFundingCostR(e.entry, e.stop, e.dir, e.fundingPct, dt - ft);
   }
-  if (e.status === 'sl') return -1 - hgCostR(e.entry, e.stop, 'maker', 'taker');
-  if (e.status === 'time_stop'){
-    const gross = isFinite(+e.rr) ? +e.rr : -0.1;
-    return gross - hgCostR(e.entry, e.stop, 'maker', 'taker');
-  }
-  return 0;
+  return net;
 }
 /* Wilson score interval — the honest replacement for "n is too small".
    At 9/15 it returns roughly 35-80%: indistinguishable from a coin flip.
@@ -5070,14 +5092,20 @@ function hgBreakevenHit(rr, costR){
 const LOG_KEY='hardgate_log_v1';
 function loadLog(){ try{ return JSON.parse(localStorage.getItem(LOG_KEY)||'[]'); }catch(e){ return []; } }
 function saveLog(l){ try{ if (l.length>1000) l = l.slice(l.length-1000); localStorage.setItem(LOG_KEY, JSON.stringify(l)); }catch(e){} }
-function logSetup(sym,dir,kind,entry,stop,t1){
+function logSetup(sym,dir,kind,entry,stop,t1,fundingPct){
   if (!(isFinite(entry)&&isFinite(stop)&&isFinite(t1)&&Math.abs(entry-stop)>0)) return;
   const l=loadLog();
   const cut=nowSec()-12*3600;
   if (l.some(e=>e.sym===sym&&e.dir===dir&&e.kind===kind&&e.ts>cut)) return; // dedupe: same setup within 12h
   const res = kind.includes('scalp') ? '15m' : '4h';   // grade each setup on its own timeframe
+  let fp = fundingPct;
+  if (fp === undefined || fp === null){
+    const tk = (S.tickers || []).find(t => t.symbol === sym);
+    fp = (tk && tk.fundingPct !== null && isFinite(+tk.fundingPct)) ? +tk.fundingPct : null;
+  }else if (isFinite(+fp)) fp = +fp; else fp = null;
   l.push({ id:Date.now().toString(36)+Math.floor(Math.random()*1e4), ts:nowSec(), ex:S.exchange,
-           sym, dir, kind, entry, stop, t1, res, rr:Math.abs(t1-entry)/Math.abs(entry-stop), status:'open', filledTs:null });
+           sym, dir, kind, entry, stop, t1, res, fundingPct: fp,
+           rr:Math.abs(t1-entry)/Math.abs(entry-stop), status:'open', filledTs:null });
   saveLog(l); renderLogBadge();
 }
 async function checkOutcomes(){

@@ -4242,6 +4242,8 @@ function scoreRecord(setups){
             source: 'brain', sym: row.sym, dir: dec.dir, tier: dec.tier,
             entry: p ? p.entry : null, stop: p ? p.stop : null,
             t1: p ? p.t1 : null, t2: p ? p.t2 : null,
+            fundingPct: (row.xu && row.xu.fundingPct != null) ? row.xu.fundingPct
+              : ((row.tick && row.tick.fundingPct != null) ? row.tick.fundingPct : null),
             layers: agreeing, at: Date.now()
           });
           if (ret && typeof ret.then === 'function') ret.then(null, function(){});
