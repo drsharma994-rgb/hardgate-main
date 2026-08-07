@@ -534,19 +534,22 @@ console.log('\n== G) hgProfitRankHint ==');
 
   const R = w.hgScoreRecord, SETTLE = w.hgScoreSettle;
   const DAY_MS = 25 * 3600 * 1000; /* >24h dedupe window */
-  for (let i = 0; i < 4; i++){
+  /* HINT_MIN_N is 10 since fix pack 14 — a 4-record bucket is deliberately
+     NOT evidence any more, so these fixtures seed a real sample. */
+  for (let i = 0; i < 12; i++){
     R({ source: 'brain', sym: 'BTCUSDT', dir: 'long', tier: 'PRIME',
       entry: 100, stop: 90, t1: 120, layers: ['TREND'], at: T0 * 1000 + i * DAY_MS });
     const rec = w.hgScoreRecords().find(function(r){ return r && r.sym === 'BTCUSDT' && r.at === T0 * 1000 + i * DAY_MS; });
     rec.status = 'settled';
-    rec.r = (i < 3) ? 1.5 : -1;
-    rec.state = (i < 3) ? 'T1' : 'SL';
+    /* keep the ORIGINAL 3-of-4 win ratio while scaling the sample to 12 */
+    rec.r = (i < 9) ? 1.5 : -1;
+    rec.state = (i < 9) ? 'T1' : 'SL';
   }
   const h = w.hgProfitRankHint({ sym: 'BTCUSDT', dir: 'long', tier: 'PRIME', layers: ['TREND'], lane: 'crypto' });
   assert(h.enough === true && h.boost > 0, 'G3 winning sym+dir history -> positive boost (got ' + h.boost + ')');
   assert(Array.isArray(h.parts) && h.parts.length > 0, 'G4 parts array names contributing buckets');
 
-  for (let j = 0; j < 4; j++){
+  for (let j = 0; j < 12; j++){
     R({ source: 'brain', sym: 'ETHUSDT', dir: 'short', tier: 'HIGH',
       entry: 200, stop: 210, t1: 180, layers: ['REGIME'], at: T0 * 1000 + 200 * DAY_MS + j * DAY_MS });
   }
