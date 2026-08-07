@@ -129,7 +129,7 @@ function fin(x){
   var n = (typeof x === 'number') ? x : parseFloat(x);
   return isFinite(n) ? n : null;
 }
-function hgScoreNetR(rec, state, grossR){
+function hgScoreNetR(rec, state, grossR, closedAtSec){
   try{
     var W2 = (typeof window !== 'undefined') ? window : null;
     if (!W2 || typeof W2.hgCostR !== 'function') return null;
@@ -137,7 +137,19 @@ function hgScoreNetR(rec, state, grossR){
     var exitSide = (state === 'SL' || state === 'EXPIRED') ? 'taker' : 'maker';
     var cost = W2.hgCostR(rec.entry, rec.stop, 'maker', exitSide);
     if (typeof cost !== 'number' || !isFinite(cost)) return null;
-    return grossR - cost;
+    var net = grossR - cost;
+    var fp = fin(rec && rec.fundingPct);
+    var atMs = fin(rec && rec.at);
+    var closed = fin(closedAtSec);
+    if (closed === null && rec && rec.closedAt != null) closed = fin(rec.closedAt);
+    if (fp !== null && atMs !== null && closed !== null && typeof W2.hgFundingCostR === 'function'){
+      var holdSec = closed - atMs / 1000;
+      if (holdSec > 0){
+        var fund = W2.hgFundingCostR(rec.entry, rec.stop, rec.dir, fp, holdSec);
+        if (typeof fund === 'number' && isFinite(fund)) net -= fund;
+      }
+    }
+    return net;
   }catch(e){ return null; }
 }
 function round4(x){
@@ -594,6 +606,7 @@ function hgScoreRecord(input){
         return { ok: false, reason: 'duplicate: ' + sym + ' ' + dir + ' already recorded within 24h', dupOf: e.id };
       }
     }
+    var fpIn = fin(inp.fundingPct);
     var rec = {
       id: 'sc_' + at.toString(36) + '_' + (idCounter++).toString(36) + '_' + sym,
       source: (typeof inp.source === 'string' && inp.source.trim()) ? inp.source.trim().toLowerCase().slice(0, 24) : 'unknown',
@@ -601,6 +614,7 @@ function hgScoreRecord(input){
       tier: (typeof inp.tier === 'string' && inp.tier.trim()) ? inp.tier.trim().toUpperCase().slice(0, 16) : null,
       lane: laneOf(sym, inp.lane),
       entry: entry, stop: stop, t1: t1, t2: t2, scalePct: scalePct,
+      fundingPct: fpIn,
       layers: sanitizeLayers(inp.layers),
       at: at,
       status: 'open',
@@ -731,7 +745,7 @@ async function hgScoreSettle(fetchCandles){
           rec.status = 'settled';
           rec.outcome = w.state;
           rec.r = round4(w.r);
-          rec.rNet = round4(hgScoreNetR(rec, w.state, w.r));
+          rec.rNet = round4(hgScoreNetR(rec, w.state, w.r, w.closedAt));
           rec.bars = w.bars;
           rec.closedAt = w.closedAt;
           rec.settledAt = Date.now();
@@ -766,22 +780,30 @@ function rCell(r){
   return '<span class="' + (r > 0 ? 'pos' : (r < 0 ? 'neg' : '')) + '">' + fmtR(r) + '</span>';
 }
 function boardHtml(st){
+  var W2 = (typeof window !== 'undefined') ? window : null;
+  var ci = null;
+  if (W2 && typeof W2.hgWilson === 'function' && st.counted > 0){
+    ci = W2.hgWilson(st.wins, st.counted);
+  }
+  var ciTxt = (ci && typeof ci.lo === 'number' && typeof ci.hi === 'number')
+    ? ' · 95% CI <b>' + (ci.lo * 100).toFixed(1) + '–' + (ci.hi * 100).toFixed(1) + '%</b>'
+    : '';
   var honesty = st.settled === 0
     ? '<div class="note warn" style="margin-top:8px">no settled trades yet — the engine has no track record to show. Run BRAIN/EXECUTE scans, let the setups live, then RE-SETTLE.</div>'
     : (!st.enoughData
       ? '<div class="note warn" style="margin-top:8px">not enough data — ' + st.settled + ' settled (need ≥ ' + MIN_DATA + '). Below that, win rate and expectancy are anecdote, not evidence.</div>'
-      : '');
+      : (ci ? '<div class="note" style="margin-top:8px;color:var(--gold)">the CI is the verdict, not the point estimate</div>' : ''));
   return '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">SETTLED</span></div>'
     + '<div class="big">' + st.settled + '</div>'
     + '<div class="note">open ' + st.open + ' · wins ' + st.wins + ' · losses ' + st.losses + '</div></div>'
     + '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">WIN RATE</span></div>'
     + '<div class="big">' + pct(st.winRate) + '</div>'
-    + '<div class="note">r-scored ' + st.counted + ' of ' + st.settled + ' settled</div></div>'
+    + '<div class="note">r-scored ' + st.counted + ' of ' + st.settled + ' settled' + ciTxt + '</div></div>'
     + '<div class="card"><div class="chead"><span class="k" style="color:var(--mut);font-size:10px;letter-spacing:.14em">AVG R</span></div>'
     + '<div class="big">' + (st.expectancyNet !== null ? fmtR(st.expectancyNet) : fmtR(st.avgR)) + '</div>'
     + '<div class="note">'
       + (st.expectancyNet !== null
-          ? 'NET expectancy per settled trade (after Delta fees) · gross ' + fmtR(st.avgR)
+          ? 'NET expectancy per settled trade (after Delta fees + funding) · gross ' + fmtR(st.avgR)
           : 'expectancy ' + fmtR(st.expectancy) + ' per settled trade · <b>GROSS</b> — cost model not loaded')
       + '</div></div>'
     + honesty;
@@ -1157,6 +1179,7 @@ try{
   G.hgScoreWalk = hgScoreWalk;
   G.hgScoreStats = hgScoreStats;
   G.hgScoreNetR = hgScoreNetR;
+  G.hgScoreBoardHtml = boardHtml;
   G.hgProfitRankHint = hgProfitRankHint;
   G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
   G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };

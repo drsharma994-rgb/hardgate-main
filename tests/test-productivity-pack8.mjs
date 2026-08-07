@@ -39,6 +39,9 @@ ok(/function hgScanRateOk/.test(html), 'hgScanRateOk gate for scans');
 ok(/binanceBackoffUntil/.test(brain), 'brainAlertWarm respects rate limit');
 
 console.log('== cache bump ==');
-ok(/hg-v174/.test(sw), 'sw cache hg-v174 for pack 8');
+{
+  const m = sw.match(/const HG_CACHE = 'hg-v(\d+)'/);
+  ok(m && +m[1] >= 174, 'sw cache at least hg-v174 (pack 8+)');
+}
 
 console.log('\n' + passed + ' passed');
