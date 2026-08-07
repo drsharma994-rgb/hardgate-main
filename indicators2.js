@@ -770,6 +770,51 @@ function hgGoldWeekendRisk(stats, stopAtr){
     return out;
   }catch(e){ out.note = 'risk read failed'; return out; }
 }
+function hgFormatGoldWeekendCountdown(secs){
+  try{
+    if (secs === null || !isFinite(+secs)) return 'countdown unavailable';
+    if (+secs === 0) return 'inside spot/CME closure now — XAUTUSD is the only live gold book';
+    var h = +secs / 3600;
+    var txt = (h < 48 ? (h < 10 ? h.toFixed(1) : String(Math.round(h))) : String(Math.round(h))) + 'h to Fri 22:00 UTC close';
+    return txt;
+  }catch(e){ return 'countdown unavailable'; }
+}
+/* Structured readout for UI panels — data decides warn level, never assumes quiet weekends. */
+function hgGoldWeekendReadout(rows, atrVal, stopAtr, tsSec){
+  var out = { inWeekend: false, secsToClose: null, stats: null, risk: null, stopAtr: null,
+              level: 'muted', headline: '', detail: '' };
+  try{
+    var t = isFinite(+tsSec) ? +tsSec : Math.floor(Date.now() / 1000);
+    out.inWeekend = hgInGoldWeekend(t);
+    out.secsToClose = hgSecsToGoldWeekend(t);
+    var s = +stopAtr;
+    if (!(isFinite(s) && s > 0)) s = 1.5;
+    out.stopAtr = s;
+    out.stats = hgGoldWeekendMoves(rows, atrVal);
+    if (out.stats && Array.isArray(out.stats.moves) && out.stats.moves.length)
+      out.risk = hgGoldWeekendRisk(out.stats, s);
+    if (out.inWeekend){
+      out.headline = hgFormatGoldWeekendCountdown(0);
+      out.level = 'warn';
+    } else if (out.secsToClose !== null && out.secsToClose <= 8 * 3600){
+      out.headline = hgFormatGoldWeekendCountdown(out.secsToClose);
+      out.level = 'caution';
+    } else if (out.secsToClose !== null){
+      out.headline = hgFormatGoldWeekendCountdown(out.secsToClose);
+      out.level = 'muted';
+    }
+    if (out.stats && out.stats.p90 !== null){
+      out.detail = out.stats.n + ' past closures on this feed · p50 ' + out.stats.p50 + '×ATR · p90 '
+        + out.stats.p90 + '×ATR · max ' + out.stats.max + '×ATR · vs your '
+        + s.toFixed(2) + '×ATR stop: ' + (out.risk && out.risk.note ? out.risk.note : 'n/a');
+      if (out.stats.p90 >= s * 0.9 || (out.risk && out.risk.exceedPct >= 0.5)) out.level = 'warn';
+      else if (out.stats.p90 < s * 0.5) out.level = (out.level === 'warn' || out.level === 'caution') ? out.level : 'ok';
+    } else if (out.stats && out.stats.note){
+      out.detail = out.stats.note;
+    }
+    return out;
+  }catch(e){ out.detail = 'weekend readout failed'; return out; }
+}
 
 /* window exports for the browser and for vm test contexts that stub window; the bare function
    declarations above already land on the global object in both environments, so this attach is
@@ -780,6 +825,8 @@ window.hgInGoldWeekend = hgInGoldWeekend;
 window.hgSecsToGoldWeekend = hgSecsToGoldWeekend;
 window.hgGoldWeekendMoves = hgGoldWeekendMoves;
 window.hgGoldWeekendRisk = hgGoldWeekendRisk;
+window.hgGoldWeekendReadout = hgGoldWeekendReadout;
+window.hgFormatGoldWeekendCountdown = hgFormatGoldWeekendCountdown;
 window.hgCorrMatrix = hgCorrMatrix;
 window.hgPairCorr = hgPairCorr;
 window.hgPortfolioConcentration = hgPortfolioConcentration;
