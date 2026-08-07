@@ -871,7 +871,16 @@ function hgEnrichSwingClean(hit, rows, matrix){
 
     var stop = hit.stop;
     if (typeof hgStructureStop === 'function' && rows && rows.length){
-      var st = hgStructureStop(dir, entry, rows, { atrLen: 14, look: 30, buffer: 0 });
+      /* Read the LIVE lookback rather than a second hardcoded 30. Pack 2 fixed
+         exactly this shape once already: the matrix gated on one stop and the
+         enricher then computed a different one, so the ticket you would have
+         placed was never the ticket that passed. Measured on 3,000 tapes with
+         the matrix at 20 and this left at 30: 14 tickets instead of 16.
+         plans.js loads BEFORE cryptogates.js, so this must be read at CALL
+         time off window — not captured at load, when it does not exist yet. */
+      var swLook = (typeof window !== 'undefined' && window.CG_SWING_LOOK > 1)
+        ? window.CG_SWING_LOOK : 30;
+      var st = hgStructureStop(dir, entry, rows, { atrLen: 14, look: swLook, buffer: 0 });
       if (st && isFinite(st.stop) && (dir === 'long' ? st.stop < entry : st.stop > entry)){
         stop = st.stop;
         entryType += ' · structure stop';
@@ -914,7 +923,9 @@ function hgEnrichSmartPlan(plan, rows4h){
     plan.anchor = e21;
     plan.planSrc = plan.planSrc || 'smartSetup';
     if (!plan.targetPolicy) plan.targetPolicy = 'R-multiples (2R/3.5R)';
-    var st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: 30 });
+    var swLook2 = (typeof window !== 'undefined' && window.CG_SWING_LOOK > 1)
+      ? window.CG_SWING_LOOK : 30;
+    var st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: swLook2 });
     if (st){
       plan.stop = st.stop;
       var pr = hgPlanFromRisk(dir, entry, st.stop, { minRr: HG_MIN_RR_SWING, targetPolicy: plan.targetPolicy });
