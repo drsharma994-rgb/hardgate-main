@@ -1369,9 +1369,10 @@ function setProg(ui, f){
   if (f !== null && ui.prog.firstElementChild) ui.prog.firstElementChild.style.width = (f*100).toFixed(1) + '%';
 }
 
-async function runScan(ui){
-  if (__scan.busy) return 'busy';
-  __scan.busy = true;
+async function runScan(ui, scanSt){
+  scanSt = scanSt || __scan;
+  if (scanSt.busy) return 'busy';
+  scanSt.busy = true;
   var t0 = Date.now();
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
@@ -1575,24 +1576,23 @@ async function runScan(ui){
     setStat(ui, 'scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
     return 'error: ' + ((e && e.message) ? e.message : String(e));
   }finally{
-    __scan.busy = false;
-    __scan.hasRun = true;
+    scanSt.busy = false;
+    scanSt.hasRun = true;
     try{ if (ui && ui.btn) ui.btn.disabled = false; }catch(e2){}
     setProg(ui, null);
   }
 }
 
 /* ---------------- mount / refresh / warm-up ---------------- */
-function mount(el){
-  if (!el) return;
-  try{
-    el.innerHTML =
-      '<style>' + GW_CSS + '</style>'
-      + '<div class="panel">'
-      + '<h2>GOLD SWING <span>multi-strategy 4h/1d swing engine · EMA50/200 pullbacks · weekly-range breaks · OB retests · macro-aligned continuation</span></h2>'
-      + '<div class="row"><button class="btn" id="gwRun">RUN SCAN</button>'
-      + '<span class="note" id="gwStat">idle — composes per-strategy swing candidates on 4h/1d, ranks them by a transparent tally, and locks issued levels for up to 5 days.</span></div>'
-      + '<div class="note" style="margin-top:8px">Desk note: gold respects levels — on the swing horizon it respects them for days. '
+function goldswingMountInto(el, scanSt, cfg){
+  cfg = cfg || {};
+  if (!el || !scanSt) return null;
+  var p = cfg.prefix || 'gw';
+  var h2 = cfg.heading || 'GOLD SWING';
+  var span = cfg.subheading || 'multi-strategy 4h/1d swing engine · EMA50/200 pullbacks · weekly-range breaks · OB retests · macro-aligned continuation';
+  var statIdle = cfg.statIdle || 'idle — composes per-strategy swing candidates on 4h/1d, ranks them by a transparent tally, and locks issued levels for up to 5 days.';
+  var deskNote = cfg.showDeskNote !== false
+    ? ('<div class="note" style="margin-top:8px">Desk note: gold respects levels — on the swing horizon it respects them for days. '
       + 'The engine composes ONE candidate per strategy trigger — <b>4h trend pullback</b> into the EMA50/200 confluence, '
       + '<b>weekly-range breakout</b> (prior week\u2019s high/low swept + reclaimed, or broken with displacement), '
       + '<b>4h order-block retest</b> at the origin of a structure break, and <b>macro-aligned trend continuation</b> '
@@ -1604,21 +1604,31 @@ function mount(el){
       + 'never tighter, anchored beyond the structure (OB edge / weekly-range edge / 200-EMA); targets 1.5R / 2.5R / 4R. '
       + 'Issued setups are <b>CONVICTION-LOCKED</b>: re-scans restore the original levels verbatim — they only move on '
       + 'invalidation against the latest 4h close (beyond stop → STOPPED, TP1 → TARGET HIT, 5 days → EXPIRED), and closed '
-      + 'setups stay visible as history.</div>'
-      + '<div class="prog" id="gwProg"><i></i></div>'
+      + 'setups stay visible as history.</div>')
+    : '';
+  var emptyMsg = cfg.emptyMsg || 'no qualifying 4h/1d swing confluence right now — gold respects levels; let the structure come to you.';
+  try{
+    el.innerHTML =
+      '<style>' + GW_CSS + '</style>'
+      + '<div class="panel">'
+      + '<h2>' + h2 + ' <span>' + span + '</span></h2>'
+      + '<div class="row"><button class="btn" id="' + p + 'Run">RUN SCAN</button>'
+      + '<span class="note" id="' + p + 'Stat">' + statIdle + '</span></div>'
+      + deskNote
+      + '<div class="prog" id="' + p + 'Prog"><i></i></div>'
       + '</div>'
-      + '<div id="gwDesk"></div>'
-      + '<div class="cards" id="gwCards"></div>'
-      + '<div class="empty" id="gwEmpty" style="display:none">no qualifying 4h/1d swing confluence right now — gold respects levels; let the structure come to you.</div>';
+      + '<div id="' + p + 'Desk"></div>'
+      + '<div class="cards" id="' + p + 'Cards"></div>'
+      + '<div class="empty" id="' + p + 'Empty" style="display:none">' + emptyMsg + '</div>';
 
     var ui = {
-      btn:   el.querySelector('#gwRun'),
-      stat:  el.querySelector('#gwStat'),
-      prog:  el.querySelector('#gwProg'),
-      cards: el.querySelector('#gwCards'),
-      empty: el.querySelector('#gwEmpty')
+      btn:   el.querySelector('#' + p + 'Run'),
+      stat:  el.querySelector('#' + p + 'Stat'),
+      prog:  el.querySelector('#' + p + 'Prog'),
+      cards: el.querySelector('#' + p + 'Cards'),
+      empty: el.querySelector('#' + p + 'Empty')
     };
-    __scan.ui = ui;
+    scanSt.ui = ui;
 
     var missing = [];
     if (!gfn('getGoldCandles') && !gfn('binanceKlines')) missing.push('gold klines (macro.js getGoldCandles / binance.js binanceKlines)');
@@ -1626,21 +1636,36 @@ function mount(el){
       missing.push('goldind.js detectors (sweep/OB/FVG/VWAP evidence offline — trend-pullback, weekly-range and macro strategies still run on local math)');
     if (missing.length) setStat(ui, 'missing: ' + missing.join(', ') + '.', true);
 
-    if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui); });
+    if (ui.btn) ui.btn.addEventListener('click', function(){ return runScan(ui, scanSt); });
     try{
       if (typeof hgSetupPaintDesk === 'function'){
-        hgSetupPaintDesk('gwDesk', { kind: 'goldswing', tab: 'GOLD SWING',
-          note: 'Grade-A 4h/1d candidates = CLEAN. FORMING NOW = armed strategy watches, not entries.' });
+        hgSetupPaintDesk(p + 'Desk', { kind: cfg.deskKind || 'goldswing', tab: cfg.deskTab || 'GOLD SWING',
+          note: cfg.deskNote || 'Grade-A 4h/1d candidates = CLEAN. FORMING NOW = armed strategy watches, not entries.' });
       }else if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
     }catch(eD){}
-  }catch(e){ /* never throw at mount */ }
+
+    return {
+      scanSt: scanSt,
+      refresh: async function(){
+        if (scanSt.busy) return 'busy';
+        if (!scanSt.hasRun || !scanSt.ui) return 'skipped: not run yet';
+        return runScan(scanSt.ui, scanSt);
+      },
+      run: function(){ return runScan(ui, scanSt); }
+    };
+  }catch(e){ return null; }
+}
+
+function mount(el){
+  if (!el) return;
+  try{ goldswingMountInto(el, __scan, { prefix: 'gw', showDeskNote: true }); }catch(e){ /* never throw at mount */ }
 }
 
 async function goldswingRefresh(){
   try{
     if (__scan.busy) return 'busy';
     if (!__scan.hasRun || !__scan.ui) return 'skipped: not run yet';
-    return await runScan(__scan.ui);
+    return await runScan(__scan.ui, __scan);
   }catch(e){ return 'error: ' + ((e && e.message) ? e.message : String(e)); }
 }
 
@@ -1683,6 +1708,19 @@ W.goldswingCollectCandidates = function(leg, ctx){
     var rk = rankSetups(cands, ctx);
     return rk.ranked || cands;
   }catch(e){ return []; }
+};
+W.goldswingMountSection = function(el, opts){
+  opts = opts || {};
+  var scanSt = { busy: false, hasRun: false, ui: null };
+  return goldswingMountInto(el, scanSt, Object.assign({
+    prefix: 'stGw',
+    heading: 'GOLD SWING',
+    subheading: 'same engine as the GOLD SWING tab · XAU feeds via STAR TRADER routing',
+    statIdle: 'idle — 4h/1d multi-strategy swing engine (identical logic to the GOLD SWING tab)',
+    showDeskNote: false,
+    deskKind: 'goldswing',
+    deskTab: 'STAR TRADER · GOLD SWING'
+  }, opts));
 };
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'goldswing', label: 'GOLD SWING', mount: mount, refresh: goldswingRefresh });

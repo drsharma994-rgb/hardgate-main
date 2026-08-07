@@ -572,6 +572,8 @@ function cardHTML(r){
 
 var __st = { busy: false, ranOnce: false, run: null };
 var __stEdge = { busy: false, ranOnce: false, run: null };
+var __stGoldScalp = { section: null };
+var __stGoldSwing = { section: null };
 
 function stEdgeUniverse(contracts, tickers){
   var tmap = {};
@@ -600,7 +602,14 @@ function stEdgeCandleSrc(sym){
 
 function mount(el){
   el.innerHTML =
-    '<div class="panel">'
+    '<div class="row st-subnav" style="margin-bottom:12px;flex-wrap:wrap;gap:6px">'
+    + '<button type="button" class="btn ghost st-subtab active" data-st-pane="main">CONFLUENCE</button>'
+    + '<button type="button" class="btn ghost st-subtab" data-st-pane="edge">EDGE</button>'
+    + '<button type="button" class="btn ghost st-subtab" data-st-pane="goldscalp">GOLD SCALP</button>'
+    + '<button type="button" class="btn ghost st-subtab" data-st-pane="goldswing">GOLD SWING</button>'
+    + '</div>'
+    + '<div id="stPaneMain">'
+    + '<div class="panel">'
     + '<h2>STAR TRADER <span>crypto · metals · commodities · indices · forex · ETFs · shares · multi-factor confluence</span></h2>'
     + '<div class="note" style="margin-bottom:10px">Scans the full STARTRADER CFD universe with every gate the app ships: '
     + '<b>SWING</b> · <b>SCALP</b> · <b>EDGE</b> · <b>SQUEEZE</b> · <b>MEAN REV</b> plus '
@@ -614,7 +623,9 @@ function mount(el){
     + '</div>'
     + '<div class="cards" id="stCards"></div>'
     + '<div class="empty" id="stEmpty" style="display:none">No solid STARTRADER setups right now. Standing aside is a position.</div>'
-    + '<div class="panel" style="margin-top:18px">'
+    + '</div>'
+    + '<div id="stPaneEdge" style="display:none">'
+    + '<div class="panel">'
     + '<h2>STAR TRADER EDGE <span>same SWING-aligned EDGE logic as the EDGE tab · full CFD universe</span></h2>'
     + '<p class="note">Runs the <b>identical EDGE scanner</b> as the main EDGE tab: 4H SWING cascade bias, pullback/sweep/range entries,'
     + ' confluence tally, backtest record, and trade-plan levels — scoped to every STARTRADER contract.'
@@ -624,7 +635,51 @@ function mount(el){
     + '<div class="prog" id="stEdgeProg"><i></i></div>'
     + '</div>'
     + '<div class="cards" id="stEdgeCards"></div>'
-    + '<div class="empty" id="stEdgeEmpty" style="display:none">No SWING-aligned EDGE entries on STARTRADER right now.</div>';
+    + '<div class="empty" id="stEdgeEmpty" style="display:none">No SWING-aligned EDGE entries on STARTRADER right now.</div>'
+    + '</div>'
+    + '<div id="stPaneGoldScalp" style="display:none"></div>'
+    + '<div id="stPaneGoldSwing" style="display:none"></div>';
+
+  function stShowPane(name){
+    el.querySelectorAll('.st-subtab').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-st-pane') === name);
+    });
+    var panes = { main: 'stPaneMain', edge: 'stPaneEdge', goldscalp: 'stPaneGoldScalp', goldswing: 'stPaneGoldSwing' };
+    Object.keys(panes).forEach(function(k){
+      var pane = el.querySelector('#' + panes[k]);
+      if (pane) pane.style.display = (k === name) ? '' : 'none';
+    });
+    if (name === 'goldscalp') stEnsureGoldScalp();
+    if (name === 'goldswing') stEnsureGoldSwing();
+  }
+
+  function stEnsureGoldScalp(){
+    if (__stGoldScalp.section) return;
+    var host = el.querySelector('#stPaneGoldScalp');
+    if (!host) return;
+    if (typeof W.goldscalpMountSection !== 'function'){
+      host.innerHTML = '<p class="note warn">goldscalp.js not loaded — check script order.</p>';
+      return;
+    }
+    __stGoldScalp.section = W.goldscalpMountSection(host);
+  }
+
+  function stEnsureGoldSwing(){
+    if (__stGoldSwing.section) return;
+    var host = el.querySelector('#stPaneGoldSwing');
+    if (!host) return;
+    if (typeof W.goldswingMountSection !== 'function'){
+      host.innerHTML = '<p class="note warn">goldswing.js not loaded — check script order.</p>';
+      return;
+    }
+    __stGoldSwing.section = W.goldswingMountSection(host);
+  }
+
+  el.querySelectorAll('.st-subtab').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      stShowPane(btn.getAttribute('data-st-pane') || 'main');
+    });
+  });
 
   var btn = el.querySelector('#stRun');
   var stat = el.querySelector('#stStat');
@@ -797,9 +852,19 @@ function mount(el){
 function startraderTabRefresh(){
   try{
     if (__st.busy || __stEdge.busy) return 'busy';
+    if (__stGoldScalp.section && __stGoldScalp.section.scanSt && __stGoldScalp.section.scanSt.busy) return 'busy';
+    if (__stGoldSwing.section && __stGoldSwing.section.scanSt && __stGoldSwing.section.scanSt.busy) return 'busy';
     var tasks = [];
     if (__st.ranOnce && typeof __st.run === 'function') tasks.push(__st.run());
     if (__stEdge.ranOnce && typeof __stEdge.run === 'function') tasks.push(__stEdge.run());
+    if (__stGoldScalp.section && __stGoldScalp.section.scanSt && __stGoldScalp.section.scanSt.hasRun
+        && typeof __stGoldScalp.section.refresh === 'function'){
+      tasks.push(__stGoldScalp.section.refresh());
+    }
+    if (__stGoldSwing.section && __stGoldSwing.section.scanSt && __stGoldSwing.section.scanSt.hasRun
+        && typeof __stGoldSwing.section.refresh === 'function'){
+      tasks.push(__stGoldSwing.section.refresh());
+    }
     if (!tasks.length) return 'skipped: not run yet';
     return Promise.all(tasks).then(function(){ return 'refreshed'; });
   }catch(e){ return 'refreshed'; }
