@@ -1,0 +1,35 @@
+# HARDGATE pipeline heartbeat — the watchdog that lives OUTSIDE the thing it watches.
+#
+# alert-notify.yml skips every scheduled run when RENDER_DISPATCH_PRIMARY=true,
+# leaving Render's 13-min dispatch as the only clock. Render free instances sleep.
+# When that happens the pipeline stops with no schedule, no dispatch and no signal.
+#
+# This job therefore has NO dispatch-primary guard, on purpose. It must keep
+# ticking precisely when the main pipeline has stopped. It runs no browser and
+# commits nothing — it reads alert-state.json and shouts if it has gone cold.
+name: HARDGATE Pipeline Heartbeat
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: hardgate-pipeline-heartbeat
+  cancel-in-progress: false
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check pipeline pulse
+        env:
+          HEARTBEAT_STALE_HOURS: '2'
+          RENDER_DISPATCH_PRIMARY: ${{ vars.RENDER_DISPATCH_PRIMARY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node scripts/pipeline-heartbeat.mjs
