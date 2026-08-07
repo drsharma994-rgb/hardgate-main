@@ -514,8 +514,54 @@ function hgScoreStats(records){
    cascade, and gold ranker. Unproven buckets contribute 0 — never penalize
    absence. Proven-negative expectancy demotes; proven-positive promotes.
    boost is in rank points on brain's ~0–3050 scale (capped ±25). */
-var HINT_MIN_N   = 3;
+/* ================= WHY THIS IS SHRUNK, NOT JUST THRESHOLDED =================
+   HINT_MIN_N used to be 3. Fed a ledger with EXACTLY ZERO true edge (2R target
+   at a 33.3% hit rate, so expectancy is 0 by construction), the real
+   hgProfitRankHint returned a boost of +/-10 or more 55.5% of the time:
+       n     mean|boost|   P(>= +10)   P(<= -10)   max     min
+       3        6.05        25.6%       29.9%     +20.0   -10.0
+       5        5.23         4.6%       12.9%     +20.0   -10.0
+      10        3.76         2.6%        1.8%     +14.0   -10.0
+      20        2.54         0.2%        0.0%     +12.5    -8.5
+      80        1.29         0.0%        0.0%      +6.5    -4.8
+   That is the app promoting noise into its own live ranking, from a ledger the
+   ranking then feeds. A hard threshold alone is a cliff — n=9 counts for
+   nothing and n=10 counts fully — so the estimate is SHRUNK toward zero in
+   proportion to its own unreliability instead.
+       weight = n / (n + k),   k = sigma^2 / tau^2
+   sigma is measured from the ledger's own settled R spread, not assumed. tau
+   is the prior spread of a genuinely real per-trade edge: 0.30R. A bucket with
+   n = k contributes half its estimate; n >> k contributes nearly all of it.
+   Standard empirical-Bayes shrinkage, and it degrades smoothly. */
+var HINT_MIN_N   = 10;
 var HINT_BOOST_CAP = 25;
+var HINT_EDGE_PRIOR_R = 0.30;   /* tau — what a genuinely good edge looks like */
+var HINT_SIGMA_FALLBACK = 1.40; /* SD of a 2R/-1R book; used only when the ledger is too thin to measure */
+/* Per-trade R spread, measured from the settled ledger itself. */
+function hintSigma(records){
+  try{
+    var rs = [], i;
+    for (i = 0; i < records.length; i++){
+      var v = records[i] && records[i].r;
+      if (typeof v === 'number' && isFinite(v)) rs.push(v);
+    }
+    if (rs.length < 8) return HINT_SIGMA_FALLBACK;
+    var mu = 0, j;
+    for (j = 0; j < rs.length; j++) mu += rs[j];
+    mu /= rs.length;
+    var ss = 0;
+    for (j = 0; j < rs.length; j++) ss += (rs[j] - mu) * (rs[j] - mu);
+    var sd = Math.sqrt(ss / rs.length);
+    return (isFinite(sd) && sd > 0.05) ? sd : HINT_SIGMA_FALLBACK;
+  }catch(e){ return HINT_SIGMA_FALLBACK; }
+}
+/* Empirical-Bayes weight in [0,1): how much of this bucket's estimate survives. */
+function hintShrink(n, sigma){
+  var tau = HINT_EDGE_PRIOR_R;
+  var k = (sigma * sigma) / (tau * tau);
+  if (!(isFinite(k) && k > 0) || !(n > 0)) return 0;
+  return n / (n + k);
+}
 
 function hgProfitRankHint(input){
   var zero = { boost: 0, enough: false, expectancy: null, parts: [] };
@@ -532,13 +578,18 @@ function hgProfitRankHint(input){
          model is genuinely unavailable. */
       var useR = (bucket.nNet >= HINT_MIN_N && typeof bucket.avgNetR === 'number' && isFinite(bucket.avgNetR))
         ? bucket.avgNetR : bucket.avgR;
+      /* shrink toward zero by this bucket's own reliability before it votes */
+      var shrink = hintShrink(bucket.n, sigma);
+      var shrunkR = useR * shrink;
       var w = Math.min(bucket.n, 20);
-      parts.push({ label: label, n: bucket.n, avgR: bucket.avgR, avgNetR: bucket.avgNetR, usedR: useR, w: w });
+      parts.push({ label: label, n: bucket.n, avgR: bucket.avgR, avgNetR: bucket.avgNetR,
+                   shrink: Math.round(shrink * 1000) / 1000, usedR: shrunkR, w: w });
       sumW += w;
-      sumE += useR * w;
+      sumE += shrunkR * w;
     }
 
     var st = hgScoreStats(store);
+    var sigma = hintSigma(store);
     var sym = String(inp.sym == null ? '' : inp.sym).toUpperCase().trim();
     var dir = (inp.dir === 'short') ? 'short' : ((inp.dir === 'long') ? 'long' : null);
     var tier = String(inp.tier == null ? '' : inp.tier).toUpperCase().trim();
@@ -1186,6 +1237,8 @@ try{
   G.hgScoreNetR = hgScoreNetR;
   G.hgScoreBoardHtml = boardHtml;
   G.hgProfitRankHint = hgProfitRankHint;
+  G.hgHintShrink = hintShrink;
+  G.hgHintSigma = hintSigma;
   G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
   G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };
   G.HG_tabs = G.HG_tabs || [];
