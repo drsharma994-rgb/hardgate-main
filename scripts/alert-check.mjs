@@ -549,13 +549,39 @@ async function main() {
       mod.mount(pane);
       const runBtn = pane.querySelector('#brainRun');
       if (!runBtn) return { ok: false, err: 'brain pane incomplete: #brainRun' };
+      /* THE COLLISION THIS HANDLES.
+         runAlertCycle() above warms BRAIN, which takes brain.js's module-level
+         __busy lock. This pane then clicks #brainRun, the re-entrancy guard
+         refuses it, and the pane's own #brainStat is set to
+         "synthesis already running — wait for done or reload after ~8 min".
+
+         That string matches NEITHER /^done/ nor /^failed/, so the old loop
+         polled a status that could never change for the full 360s, burned six
+         minutes of a fifteen-minute job, and returned ok:false. Recorded in
+         alert-state.json as exactly that lastErr.
+
+         The lock DOES release when the warm-up finishes (brain.js clears it in
+         a finally, plus an ~8min stuck-escape). So the fix is to keep taking
+         our turn: re-click on each tick while the guard is still refusing, up
+         to a bounded number of attempts. Once accepted the status moves off
+         "already running" and the normal done/failed wait takes over. */
       runBtn.click();
       const t0 = Date.now();
       let stat = '';
+      let retries = 0;
+      const MAX_RETRIES = 40;               /* 40 x 4s = the full window if needed */
       while (Date.now() - t0 < 360000) {
         await new Promise((r) => setTimeout(r, 4000));
         stat = (pane.querySelector('#brainStat') || {}).textContent || '';
         if (/^done|failed/i.test(stat)) break;
+        if (/already running/i.test(stat) && retries < MAX_RETRIES) {
+          retries++;
+          runBtn.click();                   /* the warm-up may have released by now */
+        }
+      }
+      if (/already running/i.test(stat)) {
+        return { ok: false, stat: String(stat).slice(0, 160),
+                 err: 'synthesis lock never released after ' + retries + ' attempts in 6 min' };
       }
       const snap = (typeof window.__hgBrainTicketNow === 'function') ? window.__hgBrainTicketNow() : null;
       /* engine-outage watchdog read: after a COMPLETED synthesis the gate
