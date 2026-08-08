@@ -109,7 +109,7 @@ await withFetch(fetchOk('{}'), async () => {
 }
 
 // every allowlisted host passes + passthrough status/body/headers
-for (const host of ['api.coindcx.com', 'public.coindcx.com', 'query1.finance.yahoo.com', 'query2.finance.yahoo.com']){
+for (const host of ['api.india.delta.exchange', 'api.coindcx.com', 'public.coindcx.com', 'query1.finance.yahoo.com', 'query2.finance.yahoo.com']){
   let sawSignal = false, sawGet = false;
   await withFetch(async (url, opts) => {
     sawSignal = opts && opts.signal instanceof AbortSignal;

@@ -283,6 +283,11 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     }catch(e){ return null; }
     finally{ clearTimeout(timer); }
   }
+  async function __fetchDelta(path){
+    const url = DELTA_API + path;
+    const proxied = '/api/proxy?url=' + encodeURIComponent(url);
+    return (await __fetchJson(proxied)) || (await __fetchJson(url));
+  }
   function __sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
   /* ============ formatters — feature-checked against index.html ============
@@ -349,7 +354,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
      funding_rate is already percent units per 8h interval — NO *100. */
   async function __deltaPerps(){
     const hit = __cget('deltaPerps'); if (hit !== undefined) return hit;
-    const j = await __fetchJson(DELTA_API + '/v2/tickers?contract_types=perpetual_futures');
+    const j = await __fetchDelta('/v2/tickers?contract_types=perpetual_futures');
     if (!j || !Array.isArray(j.result)) return null;
     const map = {};
     for (let i = 0; i < j.result.length; i++){

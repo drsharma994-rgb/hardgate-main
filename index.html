@@ -697,6 +697,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
 <script src="formation.js"></script>
+<script src="walkforward-ui.js"></script>
 <script src="book-routing.js?v=55"></script>
 <script src="api-client.js?v=1"></script>
 <script src="book.js?v=56"></script>
@@ -902,7 +903,7 @@ const CDCX_PUBLIC_PROXIES = [
    then direct (Node/tests), then public CORS backups as last resort. */
 
 /* ---------------- lightweight rate-limit tracking (client-side estimate only) ---------------- */
-const RateTrack = { td: [], cdcx: [] };
+const RateTrack = { td: [], cdcx: [], delta: [] };
 /* Twelve Data free tier = 8 calls/min. Sliding-window bucket (7/min to keep
    headroom) — every TD network call (crypto backtests + gold fallback leg)
    awaits this before fetching, so a FINDER gold burst can never blow the quota.
@@ -929,6 +930,9 @@ function trackCall(bucket){
       const minAgo = arr.filter(function(t){ return now-t<=60000; }).length;
       const el = document.getElementById('goldStat');
       if (el) el.title = 'Twelve Data usage (client-side estimate): '+arr.length+'/800 today · '+minAgo+'/8 this minute';
+    } else if (bucket==='delta'){
+      const el = document.getElementById('chipConn');
+      if (el) el.title = 'Delta proxy/API calls in the last 60s: '+arr.length;
     } else {
       const el = document.getElementById('chipConn');
       if (el) el.title = 'CoinDCX proxy/API calls in the last 60s: '+arr.length;
@@ -964,6 +968,32 @@ async function cdcxGet(url){
     try{ return await tryPublic(build); }catch(e){}
   }
   throw new Error('CoinDCX unreachable — reload and retry, or use https://hardgate-main.onrender.com (full /api/proxy)');
+}
+
+/* Delta fetch: same-origin /api/proxy first (browser CORS blocks direct on
+   hardgate-main.onrender.com and many static hosts), then direct for Node/tests. */
+async function deltaGet(url){
+  trackCall('delta');
+  async function readJson(r, via){
+    if (!r.ok) throw new Error((via || 'fetch') + ' HTTP ' + r.status);
+    const j = await r.json();
+    S.deltaViaProxy = via;
+    return j;
+  }
+  async function tryOrigin(){
+    let r = await fetch(CDCX_PROXY(url));
+    if (r.status === 429){
+      await sleep(400);
+      r = await fetch(CDCX_PROXY(url));
+    }
+    return readJson(r, 'api');
+  }
+  async function tryDirect(){
+    return readJson(await fetch(url), false);
+  }
+  try{ return await tryOrigin(); }catch(e){}
+  try{ return await tryDirect(); }catch(e){}
+  throw new Error('Delta unreachable — reload and retry, or use https://hardgate-main.onrender.com (full /api/proxy)');
 }
 
 /* ---------------- utils ---------------- */
@@ -1078,9 +1108,7 @@ Store.subscribe('PRICE_UPDATE', function(d){ updateTradePlanPriceUI(d.symbol, d.
   }catch(e){}
 }
 async function loadTickersDelta(){
-  const r = await fetch(`${DELTA}/v2/tickers?contract_types=perpetual_futures`);
-  if (!r.ok) throw new Error('Delta tickers HTTP ' + r.status);
-  const j = await r.json();
+  const j = await deltaGet(`${DELTA}/v2/tickers?contract_types=perpetual_futures`);
   return (j.result||[]).map(t=>({
     symbol: t.symbol,
     mark: parseFloat(t.mark_price ?? t.close),
@@ -1094,9 +1122,7 @@ const DELTA_RES = {'15m':'15m','1h':'1h','2h':'2h','4h':'4h','1d':'1d'};
 async function candlesDelta(sym, res, count){
   const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
   const end = nowSec(), start = end - secPer*(count+3);
-  const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
-  if (!r.ok) throw new Error('Delta candles HTTP ' + r.status + ' for ' + sym + ' ' + res);
-  const j = await r.json();
+  const j = await deltaGet(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
   const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}));
   rows.sort((a,b)=>a.t-b.t);
   return rows;
@@ -1128,8 +1154,7 @@ async function candlesStartrader(sym, res, count){
 
 async function candlesRangeRaw(sym, res, start, end){
   if (S.exchange==='delta'){
-    const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
-    const j = await r.json();
+    const j = await deltaGet(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
     const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}));
     rows.sort((a,b)=>a.t-b.t);
     return rows;
@@ -1229,9 +1254,7 @@ async function deltaXautCandles(res, count){
     const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
     if (!secPer || !DELTA_RES[res]) return [];
     const end = nowSec(), start = end - secPer*(count+3);
-    const r = await fetch(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${GOLD_SYM}&start=${start}&end=${end}`);
-    if (!r.ok) return [];
-    const j = await r.json();
+    const j = await deltaGet(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${GOLD_SYM}&start=${start}&end=${end}`);
     const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}))
       .filter(c=>isFinite(c.t) && isFinite(c.c) && c.c>0);
     rows.sort((a,b)=>a.t-b.t);
@@ -1431,10 +1454,11 @@ async function setExchange(x){
     $('chipConn').innerHTML = `<b>${S.tickers.length}</b> ${exLabel} ${x==='startrader' ? 'crypto CFDs' : 'perps'}`;
     if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`;
     if (x==='startrader') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(Binance USD-M proxy for candles/funding — trade on STARTRADER)</b>`;
+    if (x==='delta') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.deltaViaProxy==='public'?'via backup proxy · ':S.deltaViaProxy?'via proxy · ':''}live WS + REST)</b>`;
     if (x==='delta') initDeltaWS();
   }catch(e){
     $('chipConn').classList.add('warn');
-    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':(x==='startrader'?'STARTRADER catalog could not load Binance enrichment — retry.':'Delta unreachable.')}`;
+    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':(x==='startrader'?'STARTRADER catalog could not load Binance enrichment — retry.':'Delta direct + same-origin proxy failed — reload or retry.')}`;
     S.tickers = [];
   }
   renderBiasChips();
@@ -4354,9 +4378,7 @@ function hgContractCacheLoad(){
   return null;
 }
 async function hgLoadContractSpecs(){
-  const r = await fetch(`${DELTA}/v2/products?contract_types=perpetual_futures&states=live&page_size=1000`);
-  if (!r.ok) throw new Error('Delta products HTTP ' + r.status);
-  const j = await r.json();
+  const j = await deltaGet(`${DELTA}/v2/products?contract_types=perpetual_futures&states=live&page_size=1000`);
   const map = {};
   (j.result || []).forEach(function(prod){
     if (!prod || !prod.symbol) return;

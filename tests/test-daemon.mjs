@@ -1,6 +1,7 @@
 /* HARDGATE — daemon unit tests (no puppeteer / ccxt required). */
 import { StateDatabase } from '../lib/daemon-state.mjs';
 import { filterExecutableBrainRows, brainRowToLockSetup, brainRowToTradePlan, runMarketScan } from '../lib/daemon-loop.mjs';
+import { cooldownCheck } from '../lib/cooldown.mjs';
 import { brainLiveEligibleRow, filterDaemonBrainRows } from '../lib/brain-robust.mjs';
 import { symToBinanceKlineSymbol, evaluateActiveConvictions } from '../lib/daemon-market.mjs';
 import { convictionUnwindAction, inferSetupTypeFromBrainRow, unwindConvictionOnExchange } from '../lib/daemon-unwind.mjs';
@@ -21,6 +22,22 @@ console.log('== filter executable rows ==');
   ];
   var ex = filterExecutableBrainRows(rows);
   ok(ex.length === 1 && ex[0].sym === 'BTCUSDT', 'only PRIME/HIGH with valid plans pass');
+}
+
+console.log('== cooldown gate ==');
+{
+  var now = Date.now();
+  var outs = [
+    { sym: 'BTCUSDT', r: -1, closedAt: now - 3e6 },
+    { sym: 'BTCUSDT', r: -1, closedAt: now - 1e6 },
+  ];
+  var rows = [
+    { sym: 'BTCUSDT', dir: 'long', tier: 'PRIME', plan: { entry: 100, stop: 95, t1: 110 } },
+    { sym: 'ETHUSDT', dir: 'long', tier: 'PRIME', plan: { entry: 50, stop: 48, t1: 55 } },
+  ];
+  var blocked = filterExecutableBrainRows(rows, undefined, { outcomes: outs, nowMs: now });
+  ok(blocked.length === 1 && blocked[0].sym === 'ETHUSDT', 'symbol in cooldown skipped');
+  ok(cooldownCheck('BTCUSDT', outs, null, now).blocked === true, 'cooldownCheck blocks BTC');
 }
 
 console.log('== conviction lock integration ==');

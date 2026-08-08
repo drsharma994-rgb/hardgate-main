@@ -54,8 +54,10 @@ function fetchRecorder(routes){
   const urls = [];
   const fn = async function(url){
     urls.push(String(url));
+    const raw = String(url);
+    const dec = (function(){ try{ return decodeURIComponent(raw); }catch(e){ return raw; } })();
     for (const r of routes){
-      if (String(url).indexOf(r.match) >= 0){
+      if (raw.indexOf(r.match) >= 0 || dec.indexOf(r.match) >= 0){
         if (r.fail) throw new Error(r.failMsg || 'network down');
         if (r.httpFail) return { ok: false, status: r.httpFail, json: async function(){ return null; } };
         const body = (typeof r.body === 'function') ? r.body(url) : r.body;
@@ -245,8 +247,9 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   const uni = await w.xuUniverse();
   assert(uni.length === 9, 'universe: combined deduped list = 9 contracts (got ' + uni.length + ')');
   assert(f.urls.length === 3, 'universe: three network legs fired (delta + cdcx instruments + cdcx marks companion)');
-  assert(f.urls[0].indexOf('https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures') === 0,
-         'universe: Delta leg fetched DIRECT (CORS-proven), not proxied');
+  assert(f.urls[0].indexOf('/api/proxy?url=') === 0, 'universe: Delta leg routed through same-origin /api/proxy');
+  assert(decodeURIComponent(f.urls[0]).indexOf('https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures') >= 0,
+         'universe: proxy wraps the real Delta tickers endpoint');
   assert(f.urls[1].indexOf('/api/proxy?url=') === 0, 'universe: CoinDCX leg routed through the same-origin /api/proxy');
   const dec = decodeURIComponent(f.urls[1]);
   assert(dec.indexOf('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments') >= 0 &&
@@ -383,9 +386,11 @@ const BINANCE_CANDLES = [
   assert(rows[0].o === 100 && rows[0].h === 102 && rows[0].l === 99 && rows[0].c === 101 && rows[0].v === 10,
          'candles: delta {t,o,h,l,c,v} mapped from {time,open,high,low,close,volume} strings');
   const du = f.urls[0];
-  assert(du.indexOf('https://api.india.delta.exchange/v2/history/candles') === 0, 'candles: delta fetched DIRECT');
-  assert(du.indexOf('resolution=4h') >= 0 && du.indexOf('symbol=BTCUSD') >= 0, 'candles: delta DELTA_RES 4h->4h and symbol in query');
-  const m = /[?&]start=(\d+)&end=(\d+)/.exec(du);
+  assert(du.indexOf('/api/proxy?url=') === 0, 'candles: delta routed via same-origin proxy');
+  const duDec = decodeURIComponent(du);
+  assert(duDec.indexOf('https://api.india.delta.exchange/v2/history/candles') >= 0, 'candles: proxy wraps delta candles URL');
+  assert(duDec.indexOf('resolution=4h') >= 0 && duDec.indexOf('symbol=BTCUSD') >= 0, 'candles: delta DELTA_RES 4h->4h and symbol in query');
+  const m = /[?&]start=(\d+)&end=(\d+)/.exec(duDec);
   assert(m && (+m[2] - +m[1]) === 14400 * 53, 'candles: delta window = secPer(4h) * (n+3) = 14400*53s');
 
   const cItem = { sym: 'B-BTC_USDT', base: 'BTC', exchange: 'coindcx' };
@@ -402,9 +407,9 @@ const BINANCE_CANDLES = [
   assert(cm && (+cm[2] - +cm[1]) === 3600 * 13, 'candles: cdcx window = secPer(1h) * (n+3)');
 
   /* resolution maps verbatim for the other timeframes */
-  await w.xuCandles(dItem, '15m', 5); assert(f.urls[f.urls.length-1].indexOf('resolution=15m') >= 0, 'candles: delta 15m->15m');
-  await w.xuCandles(dItem, '2h', 5);  assert(f.urls[f.urls.length-1].indexOf('resolution=2h') >= 0, 'candles: delta 2h->2h');
-  await w.xuCandles(dItem, '1d', 5);  assert(f.urls[f.urls.length-1].indexOf('resolution=1d') >= 0, 'candles: delta 1d->1d');
+  await w.xuCandles(dItem, '15m', 5); assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=15m') >= 0, 'candles: delta 15m->15m');
+  await w.xuCandles(dItem, '2h', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=2h') >= 0, 'candles: delta 2h->2h');
+  await w.xuCandles(dItem, '1d', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=1d') >= 0, 'candles: delta 1d->1d');
   await w.xuCandles(cItem, '15m', 5); assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=15') >= 0, 'candles: cdcx 15m->15');
   await w.xuCandles(cItem, '2h', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=120') >= 0, 'candles: cdcx 2h->120');
   await w.xuCandles(cItem, '4h', 5);  assert(decodeURIComponent(f.urls[f.urls.length-1]).indexOf('resolution=240') >= 0, 'candles: cdcx 4h->240');

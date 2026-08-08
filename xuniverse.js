@@ -81,7 +81,8 @@ EXPORTS (all on window, all feature-checkable, none ever throw):
       legs were healthy.
 
 DATA PATHS (verified against index.html ~line 744-786):
-  Delta perps:   GET https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures  (direct)
+  Delta perps:   GET https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures
+                 via /api/proxy?url=<encoded> (direct fallback in Node/tests)
   Delta candles: GET https://api.india.delta.exchange/v2/history/candles?resolution=<DELTA_RES>&symbol=&start=&end=
                  -> {result:[{time,open,high,low,close,volume}]}, time seconds
   CoinDCX list:  GET https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT
@@ -113,6 +114,7 @@ var DELTA    = 'https://api.india.delta.exchange';
 var CDCX_PUB = 'https://public.coindcx.com';
 var CDCX_API = 'https://api.coindcx.com';
 var CDCX_PROXY = function(u){ return '/api/proxy?url=' + encodeURIComponent(u); };
+var DELTA_PROXY = CDCX_PROXY;
 var DELTA_RES = {'15m':'15m','1h':'1h','2h':'2h','4h':'4h','1d':'1d'};
 var CDCX_RES  = {'15m':'15','1h':'60','2h':'120','4h':'240','1d':'1D'};
 var SEC_PER   = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400};
@@ -366,10 +368,18 @@ function xuNormBinanceExt(tickers, coveredBases){
   }catch(e){ return []; }
 }
 
+/* Same-origin proxy first — browser CORS blocks direct Delta REST on Render. */
+async function deltaFetch(url){
+  var r = await timedFetch(DELTA_PROXY(url));
+  if (r && r.ok) return r;
+  r = await timedFetch(url);
+  if (r && r.ok) return r;
+  throw new Error('Delta HTTP ' + (r ? r.status : '?'));
+}
+
 /* ---------------- network legs ---------------- */
 async function fetchDeltaLeg(){
-  var r = await timedFetch(DELTA + '/v2/tickers?contract_types=perpetual_futures');
-  if (!r || !r.ok) throw new Error('Delta tickers HTTP ' + (r ? r.status : '?'));
+  var r = await deltaFetch(DELTA + '/v2/tickers?contract_types=perpetual_futures');
   return xuNormDelta(await r.json());
 }
 async function fetchCdcxLeg(){
@@ -551,7 +561,7 @@ async function xuCandles(item, tf, n){
       src = 'delta';
       try{
         var end = nowSec(), start = end - secPer * (count + 3);
-        var r2 = await timedFetch(DELTA + '/v2/history/candles?resolution=' + DELTA_RES[tf] +
+        var r2 = await deltaFetch(DELTA + '/v2/history/candles?resolution=' + DELTA_RES[tf] +
                                   '&symbol=' + encodeURIComponent(item.sym) + '&start=' + start + '&end=' + end);
         if (r2 && r2.ok){
           var j2 = await r2.json();
