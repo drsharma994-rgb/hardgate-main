@@ -85,13 +85,16 @@ console.log('== wiring in index.html ==');
   ok(/hgFormTicket\(hit/.test(html), 'scan calls hgFormTicket');
   ok(/hgSaveFormationParams/.test(html), 'CALIBRATE saves formation params');
   ok(/formationScore/.test(html), 'rank uses formationScore');
+  ok(/walkforward-ui\.js/.test(html), 'walkforward-ui.js script tag');
+  ok(/hgAnchorIndex|hgAnchoredVWAP/.test(fs.readFileSync(path.join(ROOT, 'formation.js'), 'utf8')), 'formation exports aVWAP helpers');
 }
 
 console.log('== sw.js shell ==');
 {
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/formation\.js/.test(sw), 'HG_SHELL includes formation.js');
-  ok(/hg-v201/.test(sw), 'cache hg-v201');
+  ok(/walkforward-ui\.js/.test(sw), 'HG_SHELL includes walkforward-ui.js');
+  ok(/hg-v202/.test(sw), 'cache hg-v202');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

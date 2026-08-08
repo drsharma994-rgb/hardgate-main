@@ -386,6 +386,29 @@ function goldKillzone(d){
   }catch(e){ return { zone: 'OFF', weight: 0, hourGMT: NaN, label: 'OFF-HOURS' }; }
 }
 
+/** Prefer London-open (07:00 UTC) anchor when in window; else UTC session day. */
+function goldSessionAnchor(rows){
+  try{
+    rows = __rows(rows);
+    if (!rows || !rows.length) return -1;
+    var G = (typeof window !== 'undefined') ? window : globalThis;
+    if (typeof G.hgAnchorIndex === 'function'){
+      var londonIdx = G.hgAnchorIndex(rows, 'london');
+      if (londonIdx >= 0 && londonIdx < rows.length) return londonIdx;
+      var sessIdx = G.hgAnchorIndex(rows, 'session');
+      if (sessIdx >= 0 && sessIdx < rows.length) return sessIdx;
+    }
+    var n = rows.length, tl = rows[n - 1].t;
+    if (!isFinite(tl)) return 0;
+    var ds = Math.floor(tl / 86400) * 86400;
+    for (var ai = n - 1; ai >= 0; ai--){
+      var tt = rows[ai].t;
+      if (!isFinite(tt) || tt < ds) return Math.min(n - 1, ai + 1);
+    }
+    return 0;
+  }catch(e){ return -1; }
+}
+
 /* ============================ 5) Anchored VWAP ============================
    Typical-price VWAP from anchorIndex to the last bar, +/-1 volume-weighted
    sigma bands; pos = last close vs value ('AT' within 0.25 sigma).
@@ -838,16 +861,8 @@ function goldScalpSetup(inp){
       }
     }
 
-    /* --- 4) session VWAP (anchored 00:00 GMT) --- */
-    var anchor = -1, tl = lastBar.t;
-    if (isFinite(tl)){
-      var ds = Math.floor(tl/86400)*86400;
-      for (var ai = n - 1; ai >= 0; ai--){
-        var tt = rows[ai].t;
-        if (!isFinite(tt) || tt < ds){ anchor = ai + 1; break; }
-      }
-      if (anchor < 0 || anchor >= n) anchor = 0;
-    }
+    /* --- 4) session VWAP (London-open anchor when available) --- */
+    var anchor = goldSessionAnchor(rows);
     if (anchor >= 0){
       var vw = goldVWAP(rows, anchor);
       if (vw){
@@ -1323,16 +1338,8 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     }
   }
 
-  /* session VWAP anchored 00:00 GMT of the last bar's UTC day */
-  var n = rows.length, anchor = -1, tl = rows[n-1].t;
-  if (isFinite(tl)){
-    var ds = Math.floor(tl/86400)*86400;
-    for (var ai = n - 1; ai >= 0; ai--){
-      var tt = rows[ai].t;
-      if (!isFinite(tt) || tt < ds){ anchor = ai + 1; break; }
-    }
-    if (anchor < 0 || anchor >= n) anchor = 0;
-  }
+  /* session VWAP — London-open anchor when available */
+  var anchor = goldSessionAnchor(rows);
   D.anchor = anchor;
   var vw = D.vw = (anchor >= 0) ? goldVWAP(rows, anchor) : null;
   if (vw){
