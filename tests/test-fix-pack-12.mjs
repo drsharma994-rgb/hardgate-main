@@ -28,15 +28,18 @@ console.log('== CSP ==');
 {
   const server = fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8');
   ok(server.indexOf('Content-Security-Policy') >= 0, 'server CSP header');
+  ok(server.indexOf('wss://public-socket.india.delta.exchange') >= 0, 'CSP allows Delta India public WS');
+  ok(server.indexOf('https://api.india.delta.exchange') >= 0, 'CSP allows Delta India REST');
   const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
   ok(vercel.indexOf('"public": true') < 0, 'vercel.json not public listing');
   ok(vercel.indexOf('Content-Security-Policy') >= 0, 'vercel CSP');
+  ok(vercel.indexOf('wss://public-socket.india.delta.exchange') >= 0, 'vercel CSP allows Delta India public WS');
 }
 
 console.log('== cache ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v203/.test(sw), 'cache hg-v203');
+  ok(/hg-v204/.test(sw), 'cache hg-v204');
   ok(sw.indexOf('api-client.js') >= 0, 'sw shell includes api-client.js');
 }
 
