@@ -52,7 +52,7 @@ function baseHeaders(res){
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    "connect-src 'self' https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov wss://socket.india.delta.exchange https://ntfy.sh",
+    "connect-src 'self' https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "object-src 'none'",
