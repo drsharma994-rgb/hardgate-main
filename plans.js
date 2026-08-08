@@ -88,6 +88,94 @@ function hgTapeRegimeLabel(rows){
   }catch(e){ return 'n/a'; }
 }
 
+/* --- Binance twin funding for CoinDCX / thin tickers (G4 stays honest) --- */
+async function hgEnrichTickerFundingTwin(ticker){
+  try{
+    if (!ticker) return ticker;
+    if (ticker.fundingPct !== null && ticker.fundingPct !== undefined && isFinite(+ticker.fundingPct)) return ticker;
+    var mapFn = (typeof G.biasBinanceSymbol === 'function') ? G.biasBinanceSymbol : null;
+    var fundFn = (typeof G.binanceFunding === 'function') ? G.binanceFunding : null;
+    if (!mapFn || !fundFn) return ticker;
+    var bSym = mapFn(ticker.symbol);
+    if (!bSym) return ticker;
+    var bf = await fundFn(bSym);
+    if (!bf || !isFinite(+bf.fundingPct)) return ticker;
+    return Object.assign({}, ticker, { fundingPct: +bf.fundingPct, fundingTwin: bSym });
+  }catch(e){ return ticker; }
+}
+
+function hgIsBtcSymbol(sym){
+  try{
+    var s = String(sym || '').replace(/^B-/, '').replace(/_/g, '');
+    return /^BTC/i.test(s) || s === 'BTCUSD' || s === 'BTCUSDT';
+  }catch(e){ return false; }
+}
+
+function hgBtcCandleSymbol(ticker){
+  try{
+    if (!ticker || !ticker.symbol) return 'BTCUSD';
+    return String(ticker.symbol).indexOf('B-') === 0 ? 'B-BTC_USDT' : 'BTCUSD';
+  }catch(e){ return 'BTCUSD'; }
+}
+
+/* Stale cascade with no displacement — same rule as BEST time-decay veto. */
+function hgStaleMomentumVeto(rows, dir, entry){
+  try{
+    if (!rows || rows.length < 60 || !dir || !isFinite(+entry)) return { veto: false };
+    var c = rows.map(function(r){ return r.c; });
+    var p = +c[c.length - 1];
+    var a4 = (typeof last === 'function' && typeof atr === 'function') ? last(atr(rows, 14)) : NaN;
+    var e9a = ema(c, 9), e21a = ema(c, 21), e50a = ema(c, 50);
+    var cascadeAgeBars = 0;
+    for (var b = c.length - 1; b >= 0; b--){
+      if (dir === 'long' && (e9a[b] <= e21a[b] || e21a[b] <= e50a[b])) break;
+      if (dir === 'short' && (e9a[b] >= e21a[b] || e21a[b] >= e50a[b])) break;
+      cascadeAgeBars++;
+    }
+    if (cascadeAgeBars > 6 && isFinite(a4) && a4 > 0){
+      if (Math.abs(p - entry) < a4 * 1.0){
+        return { veto: true, reason: 'STALE MOMENTUM: cascade ' + cascadeAgeBars + ' bars old, displacement < 1×ATR' };
+      }
+    }
+    return { veto: false };
+  }catch(e){ return { veto: false }; }
+}
+
+/* Post-gate vetoes — flow trap, BTC relative strength, stale momentum. Gates unchanged. */
+async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
+  try{
+    style = String(style || 'swing').toLowerCase();
+    if (!hit || !hit.dir) return { ok: true };
+    var dir = hit.dir;
+    var sym = ticker && ticker.symbol;
+    var stale = hgStaleMomentumVeto(rows, dir, hit.entry);
+    if (stale.veto) return { ok: false, reason: stale.reason, tag: 'stale' };
+    var flowFn = (typeof G.hgFlowTrapAssess === 'function') ? G.hgFlowTrapAssess : null;
+    if (flowFn && sym && typeof G.biasBinanceSymbol === 'function'){
+      var bSym = G.biasBinanceSymbol(sym);
+      if (bSym && typeof G.binanceTakerRatio === 'function' && typeof G.binanceDepth === 'function'){
+        var spotFn = (typeof G.binanceSpotTakerFlow === 'function') ? G.binanceSpotTakerFlow : null;
+        var legs = await Promise.all([
+          G.binanceTakerRatio(bSym, '1h', 25).catch(function(){ return null; }),
+          G.binanceDepth(bSym, 20).catch(function(){ return null; }),
+          spotFn ? spotFn(bSym, '1h', 25).catch(function(){ return null; }) : Promise.resolve(null)
+        ]);
+        var spotSeries = (legs[2] && legs[2].series) ? legs[2].series : null;
+        var ft = flowFn(legs[0] && legs[0].series ? legs[0].series : null, legs[1], dir, spotSeries);
+        if (ft && ft.veto) return { ok: false, reason: ft.reason || 'flow trap', tag: 'flow' };
+      }
+    }
+    if (!hgIsBtcSymbol(sym) && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){
+      var tf = style === 'scalp' ? '1h' : '4h';
+      var look = (typeof G.HG_RS_LOOK === 'number') ? G.HG_RS_LOOK : 30;
+      var btcRows = await getCandles(hgBtcCandleSymbol(ticker), tf, look + 40);
+      var rsr = hgRelStrength(rows, btcRows, dir, look);
+      if (rsr.available && !rsr.ok) return { ok: false, reason: rsr.note || 'lagging BTC', tag: 'rs' };
+    }
+    return { ok: true };
+  }catch(e){ return { ok: true }; }
+}
+
 /* --- G5 vol+wick participation (ENGINE quiet-tape parity for SWING/SCALP) --- */
 function hgSwingG5OK(dir, rows, c, r14, vz){
   try{
@@ -951,6 +1039,11 @@ G.hgMacroAllowsCrypto = hgMacroAllowsCrypto;
 G.hgBtcdPct = hgBtcdPct;
 G.hgIsCryptoMajor = hgIsCryptoMajor;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
+G.hgEnrichTickerFundingTwin = hgEnrichTickerFundingTwin;
+G.hgPostGateSetupVeto = hgPostGateSetupVeto;
+G.hgStaleMomentumVeto = hgStaleMomentumVeto;
+G.hgIsBtcSymbol = hgIsBtcSymbol;
+G.hgBtcCandleSymbol = hgBtcCandleSymbol;
 G.hgSwingG5OK = hgSwingG5OK;
 G.hgRegimeRouteHint = hgRegimeRouteHint;
 G.hgRegimeRouteHintHtml = hgRegimeRouteHintHtml;
