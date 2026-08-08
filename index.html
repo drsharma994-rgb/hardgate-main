@@ -3311,6 +3311,30 @@ function scanMomentumDetail(candles, rows, dir){
   return momDetail;
 }
 
+function hgSetupCardExtras(hit, t, kind){
+  const extras = [];
+  try{
+    if (typeof cgClearanceLine === 'function' && hit && hit.margins){
+      const cl = cgClearanceLine(hit);
+      if (cl) extras.push(['gate clearance', cl]);
+    } else if (hit && hit.tightGates && hit.tightGates.length){
+      extras.push(['binding', hit.tightGates.join(', ')]);
+    }
+    if (hit && hit.flowDetail) extras.push(['flow', hit.flowDetail]);
+    else if (hit && hit.flowNA) extras.push(['flow', 'FLOW N/A']);
+    if (typeof brainConvictionMesh === 'function' && typeof hgSetupConvictionMeshHtml === 'function'){
+      const last = (typeof __hgBrainLast !== 'undefined' && __hgBrainLast) ? __hgBrainLast : null;
+      if (last && last.col){
+        const mesh = brainConvictionMesh(last.col, hit && hit.dir);
+        if (mesh && (mesh.agree + mesh.disagree + mesh.dark + mesh.silent) > 0){
+          extras.push(['conviction', hgSetupConvictionMeshHtml(mesh).replace(/<[^>]+>/g, ' ').trim()]);
+        }
+      }
+    }
+  }catch(e){}
+  return extras;
+}
+
 function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
   const { dir, entry, stop, t1, t2, rr: dynamicRR, rows, r14, vz, ev, entryType } = hit;
   const momDetail = scanMomentumDetail(rows.map(function(r){ return r.c; }), rows, dir);
@@ -3319,7 +3343,7 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
   const chartId = 'hgc-swing-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const orderLbl = entryType || 'MARKET';
   const cardSym = hgCardVenueSym(t.symbol, venueTag);
-  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, [
+  const cardMini = [
     ['mark', px(t.mark || entry)],
     ['order', orderLbl],
     ['24h', t.chg24 !== null ? pct(t.chg24, 2) : '-'],
@@ -3335,7 +3359,8 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
     ['context: momentum', momDetail],
     ['Nearest OB', nearestOBText(rows, dir)],
     ['Liquidity Target', liquidityTargetText(rows, dir)]
-  ], gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
+  ].concat(hgSetupCardExtras(hit, t, 'swing'));
+  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, cardMini, gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
     entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
   }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack }));
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
@@ -3386,7 +3411,7 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
   const momDetail = scanMomentumDetail(m15.map(function(r){ return r.c; }), m15, dir);
   const chartId = 'hgc-scalp-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const cardSym = hgCardVenueSym(t.symbol, venueTag);
-  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, [
+  const cardMini = [
     ['mark', px(t.mark || entry)],
     ['1H trend', dir.toUpperCase()],
     ['RSI 15m', fmt(r15, 1)],
@@ -3397,7 +3422,9 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
     ['context: momentum', momDetail],
     ['Nearest OB', nearestOBText(m15, dir)],
     ['Liquidity Target', liquidityTargetText(m15, dir)]
-  ], ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
+  ].concat(hgSetupCardExtras(hit, t, 'scalp'));
+  if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, cardMini,
+  ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
     planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
       entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
     }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack }));
@@ -3410,7 +3437,10 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
   const chartId = 'hgc-near-' + kind + '-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const miss = (hit.missing || []).join(', ');
   const cardSym = hgCardVenueSym(t.symbol, venueTag);
-  const nearPlan = '<span class="note warn">NEAR CLEAN ' + hit.passed + '/7 — waiting: ' + miss + '. Do not trade until all 7 hard gates pass.</span>';
+  const nearPlan = '<span class="note warn">NEAR CLEAN ' + hit.passed + '/7 — waiting: ' + miss + '. Do not trade until all 7 hard gates pass.</span>'
+    + (hit.qualityHint && hit.qualityHint.lines && hit.qualityHint.lines.length
+      ? ('<div class="note" style="margin-top:4px">Quality read (hypothetical CLEAN): ' + hit.qualityHint.lines.join(' · ') + '</div>') : '')
+    + (hit.qualityHint && hit.qualityHint.wouldVeto ? '<div class="note warn" style="margin-top:4px">Would fail post-gate as CLEAN — watch only.</div>' : '');
   if (typeof hgSetupCardHTML === 'function'){
     cardsEl.insertAdjacentHTML('beforeend', hgSetupCardHTML({
       tier: 'near', sym: cardSym, dir: hit.dir,
@@ -3451,17 +3481,33 @@ function hgCryptoSetupId(c){
   const e = +c.entry;
   return (v ? v + '|' : '') + sym + '|' + dir + '@' + (Number.isFinite(e) ? e : '');
 }
-function hgCryptoCandRow(t, hit, venueTag){
+function hgCryptoCandRow(t, hit, venueTag, vetoMeta){
   const row = { sym: t.symbol, dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr,
     venueTag: venueTag || '', venue: venueTag || '', turnoverUsd: t.turnoverUsd || 0 };
+  if (vetoMeta){
+    row.rsEdge = vetoMeta.rsEdge;
+    row.flowOk = vetoMeta.flowOk;
+    row.crossOk = vetoMeta.crossOk;
+    row.flowDetail = vetoMeta.flowDetail;
+    row.flowNA = vetoMeta.flowNA;
+  }
+  if (typeof hgCryptoRankBoost === 'function'){
+    row.rankBoost = hgCryptoRankBoost(t.symbol, hit.dir, hit.rr, vetoMeta || {});
+  }
   row.id = hgCryptoSetupId(row);
   return row;
 }
 function hgRankCryptoCands(cands){
   const sorted = (cands || []).slice().sort(function(a, b){
+    const rb = (b.rankBoost || 0) - (a.rankBoost || 0);
+    if (rb) return rb;
     const rra = Number.isFinite(+a.rr) ? +a.rr : (Number.isFinite(+a.rr1) ? +a.rr1 : 0);
     const rrb = Number.isFinite(+b.rr) ? +b.rr : (Number.isFinite(+b.rr1) ? +b.rr1 : 0);
     if (rrb !== rra) return rrb - rra;
+    const re = (b.rsEdge || 0) - (a.rsEdge || 0);
+    if (re) return re;
+    const fb = (b.flowOk ? 1 : 0) - (a.flowOk ? 1 : 0);
+    if (fb) return fb;
     const ta = Number.isFinite(+a.turnoverUsd) ? +a.turnoverUsd : 0;
     const tb = Number.isFinite(+b.turnoverUsd) ? +b.turnoverUsd : 0;
     if (tb !== ta) return tb - ta;
@@ -3784,6 +3830,7 @@ async function runScanLeg(kind, opts){
     return;
   }
   if (!quiet && !skipUiClear){ cardsEl.innerHTML = ''; emptyEl.style.display = 'none'; emptyEl.textContent = ''; btn.disabled = true; }
+  try{ if (typeof hgWarmLayerIds === 'function') await hgWarmLayerIds(['regime']); }catch(eRg){}
   if (!quiet && skipUiClear && venueTag){
     cardsEl.insertAdjacentHTML('beforeend', '<div class="note" style="margin:12px 0 6px"><b>' + venueTag + '</b></div>');
   }
@@ -3875,15 +3922,20 @@ async function runScanLeg(kind, opts){
                   audit.qualitySkip[qv.tag || 'quality'] = (audit.qualitySkip[qv.tag || 'quality'] || 0) + 1;
                   return;
                 }
+                hit.flowDetail = qv.flowDetail; hit.flowNA = qv.flowNA; hit.flowOk = qv.flowOk;
+                hit.crossOk = qv.crossOk; hit.rsEdge = qv.rsEdge;
               }
               found++;
-              cands.push(hgCryptoCandRow(t, hit, venueTag));
+              cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
               renderSwingCleanCard(tScan, hit, cardsEl, quiet, venueTag);
               return;
             }
             if (typeof swingTryNear === 'function'){
               const near = swingTryNear(rows, tScan);
               if (near && near.entry != null && near.stop != null && near.t1 != null){
+                if (typeof hgNearQualityHint === 'function'){
+                  near.qualityHint = hgNearQualityHint(near, rows, tScan, 'swing');
+                }
                 nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, near));
                 nearFound++;
                 if (!quiet){
@@ -3940,13 +3992,18 @@ async function runScanLeg(kind, opts){
                   audit.qualitySkip[qv.tag || 'quality'] = (audit.qualitySkip[qv.tag || 'quality'] || 0) + 1;
                   return;
                 }
+                hit.flowDetail = qv.flowDetail; hit.flowNA = qv.flowNA; hit.flowOk = qv.flowOk;
+                hit.crossOk = qv.crossOk; hit.rsEdge = qv.rsEdge;
               }
               found++;
-              cands.push(hgCryptoCandRow(t, hit, venueTag));
+              cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
               renderScalpCleanCard(tScan, hit, minsToFunding, cardsEl, quiet, venueTag);
             } else if (typeof scalpTryNear === 'function'){
               const nearS = scalpTryNear(h1, m15, tScan, minsToFunding);
               if (nearS && nearS.entry != null && nearS.stop != null && nearS.t1 != null){
+                if (typeof hgNearQualityHint === 'function'){
+                  nearS.qualityHint = hgNearQualityHint(nearS, h1, tScan, 'scalp');
+                }
                 nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, nearS));
                 nearFound++;
                 if (!quiet){
