@@ -589,6 +589,52 @@
       return (failed.length === 1) ? failed[0] : null;
     }catch(e){ return null; }
   }
+  /* ===================== IS ZERO NORMAL? =====================
+     On 2026-08-08 the pipeline finally ran clean — degraded count 0, setups.at
+     moving — and reported ZERO setups. For six packs before that I had read
+     the same zero off a frozen field and called it a broken funnel.
+     Measured at CG_SWING_LOOK 20 over 6,000 independent symbol snapshots, the
+     probability that any one symbol is a live ticket at any one instant is
+     0.500%. Which means:
+         universe   expected tickets/scan   P(scan returns ZERO)
+             40            0.20                    81.8%
+             87            0.43                    64.7%
+            200            1.00                    36.7%
+     On a Delta-sized universe, ZERO IS THE SINGLE MOST LIKELY OUTCOME OF ANY
+     GIVEN SCAN. A board showing nothing is the normal state of a selective
+     system, and reading it as breakage — as I did, repeatedly — is a mistake
+     the UI was actively inviting by displaying a bare 0.
+     So this converts the count into a bounded statement using the scan's own
+     numbers rather than my synthetic constant. With 0 of 87 the Wilson upper
+     bound says the true per-scan rate is at most ~4%, which is a fact; "the
+     funnel is broken" is not.
+     The rate worth judging is per DAY, not per scan. */
+  var CG_SYNTHETIC_TICKET_RATE = 0.005;   /* measured, see table above */
+  function cgScanRateNote(universe, clean){
+    try{
+      var u = Math.floor(+universe), c = Math.floor(+clean);
+      if (!(isFinite(u) && u > 0)) return '';
+      if (!(isFinite(c) && c >= 0)) c = 0;
+      /* Wilson 95% on the observed rate — with c = 0 the lower bound is 0 and
+         the UPPER bound is the informative half. */
+      var out = '';
+      if (typeof hgWilson === 'function'){
+        var w = hgWilson(c, u, 1.96);
+        if (w && isFinite(w.hi)){
+          out += 'observed ' + c + '/' + u + ' · 95% CI on the per-scan rate '
+               + (100 * Math.max(0, w.lo)).toFixed(1) + '–' + (100 * w.hi).toFixed(1) + '%';
+        }
+      }
+      var exp = u * CG_SYNTHETIC_TICKET_RATE;
+      var pZero = Math.pow(1 - CG_SYNTHETIC_TICKET_RATE, u);
+      out += (out ? ' · ' : '') + 'at the measured base rate expect ~' + exp.toFixed(2)
+           + ' per scan, and ZERO on ' + (100 * pZero).toFixed(0) + '% of scans';
+      if (c === 0 && pZero > 0.5) out += ' — zero here is the MOST LIKELY outcome, not a fault';
+      return out;
+    }catch(e){ return ''; }
+  }
+  G.cgScanRateNote = cgScanRateNote;
+  G.CG_SYNTHETIC_TICKET_RATE = CG_SYNTHETIC_TICKET_RATE;
   G.cgSoleBlocker = cgSoleBlocker;
   /* ===================== WALK-FORWARD GATE REPLAY =====================
      Pack 17 answers "how many setups would relaxing this gate ADD".

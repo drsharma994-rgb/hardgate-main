@@ -3217,6 +3217,14 @@ function hgScanFunnelRows(audit, kind){
   if (audit.fadeFound) rows.push({ k: 'FUNDING FADE (counter-trend)', v: String(audit.fadeFound) + ' opt-in tickets' });
   if (audit.histShort) rows.push({ k: 'Thin history (<210 bars)', v: String(audit.histShort) });
   if (audit.errors) rows.push({ k: 'Fetch errors', v: String(audit.errors) });
+  /* Turn a bare 0 into a bounded statement. On an 87-symbol universe at the
+     current thresholds, zero is the MOST LIKELY single-scan outcome (65%) —
+     and a UI that just prints "0" invites reading a selective system as a
+     broken one. It invited exactly that from me for six fix packs. */
+  if (typeof cgScanRateNote === 'function' && audit.cascade) {
+    const note = cgScanRateNote(audit.cascade, audit.clean || 0);
+    if (note) rows.push({ k: 'Is zero normal?', v: note });
+  }
   const fail = audit.fail || {};
   const sole = audit.sole || {};
   Object.keys(fail).sort(function(a, b){ return fail[b] - fail[a]; }).slice(0, 7).forEach(function(g){
@@ -3785,7 +3793,7 @@ async function runScanLeg(kind, opts){
     const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
     let found = 0, nearFound = 0;
-    let audit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0, fadeFound: 0,
+    let audit = { cascade: 0, clean: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0, fadeFound: 0,
       replaySamples: [], replayClean: 0, replaySettled: 0 };
     const flipRecords = [];
     const flipVenue = venueTag || S.exchange || '';
@@ -3829,6 +3837,7 @@ async function runScanLeg(kind, opts){
               if (m && m.dir){
                 audit.cascade++;
                 if (m.passed >= 6) audit.pass6++;
+                if (m.clean) audit.clean = (audit.clean || 0) + 1;
                 if (m.passed >= 7 && !m.clean) audit.pass7noAnchor++;
                 if (!m.clean){
                   for (let gi = 0; gi < m.gates.length; gi++){
