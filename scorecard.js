@@ -685,6 +685,19 @@ function hgStopSweep(records, multipliers){
     return out;
   }catch(e){ return out; }
 }
+/* Live stop width from settled-ledger stop sweep (Fix Pack 15 → tickets). */
+function hgLiveStopScale(){
+  try{
+    if (typeof hgScoreRecords !== 'function' || typeof hgStopSweep !== 'function') return 1;
+    var recs = hgScoreRecords() || [];
+    var sw = hgStopSweep(recs);
+    if (sw && sw.best && sw.n >= 30 && isFinite(sw.best.k) && sw.best.k > 0){
+      return Math.max(0.6, Math.min(2.0, sw.best.k));
+    }
+    return 1;
+  }catch(e){ return 1; }
+}
+
 /* ================= profit rank hint (PURE — live-ranking seam) =================
    Turns settled-ledger evidence into a small sort boost for BRAIN tickets, BEST
    cascade, and gold ranker. Unproven buckets contribute 0 — never penalize
@@ -1418,6 +1431,7 @@ try{
   G.hgScoreBoardHtml = boardHtml;
   G.hgProfitRankHint = hgProfitRankHint;
   G.hgStopSweep = hgStopSweep;
+  G.hgLiveStopScale = hgLiveStopScale;
   G.hgHeatProfile = hgHeatProfile;
   G.hgScoreExcursions = hgScoreExcursions;
   G.hgHintShrink = hintShrink;

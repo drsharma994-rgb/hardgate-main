@@ -35,7 +35,10 @@ console.log('== exports on plans.js ==');
   ok(typeof W.hgEnrichTickerFundingTwin === 'function', 'hgEnrichTickerFundingTwin exported');
   ok(typeof W.hgPostGateSetupVeto === 'function', 'hgPostGateSetupVeto exported');
   ok(typeof W.hgStaleMomentumVeto === 'function', 'hgStaleMomentumVeto exported');
-  ok(typeof W.hgIsBtcSymbol === 'function', 'hgIsBtcSymbol exported');
+  ok(typeof W.hgPostGateGoldVeto === 'function', 'hgPostGateGoldVeto exported');
+  ok(typeof W.hgAssessFlowTrap === 'function', 'hgAssessFlowTrap exported');
+  ok(typeof W.hgNearQualityHint === 'function', 'hgNearQualityHint exported');
+  ok(typeof W.hgFilterGoldPostGate === 'function', 'hgFilterGoldPostGate exported');
 }
 
 console.log('== Binance twin funding for thin tickers (G4 honest) ==');
@@ -143,6 +146,23 @@ console.log('== gold GS4 reads Binance XAUUSDT funding ==');
   ok(/XAUUSDT perp/.test(html), 'GS4 detail cites Binance crowd read');
   ok(!/fr = null/.test(html.slice(html.indexOf('async function runGold'), html.indexOf('async function runGold') + 800)),
      'runGold no longer hardcodes fr = null');
+}
+
+console.log('== accuracy pack wiring (hg-v198) ==');
+{
+  ok(/hgWarmLayerIds\(\['regime'\]\)/.test(html), 'scan warms REGIME before crypto leg');
+  ok(/hgNearQualityHint/.test(html), 'NEAR path runs quality hint');
+  ok(/rankBoost/.test(html), 'multi-CLEAN rank uses rankBoost');
+  ok(/hgSetupCardExtras/.test(html), 'CLEAN cards show clearance/flow extras');
+  ok(/hgFilterGoldPostGate/.test(fs.readFileSync(path.join(ROOT, 'goldscalp.js'), 'utf8')),
+     'goldscalp calls hgFilterGoldPostGate');
+  ok(/hgApplyGoldWeekendDemotes/.test(fs.readFileSync(path.join(ROOT, 'goldswing.js'), 'utf8')),
+     'goldswing applies weekend demotion');
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'scorecard.js'), 'utf8'), ctx, { filename: 'scorecard.js' });
+  ok(typeof W.hgLiveStopScale === 'function', 'hgLiveStopScale exported');
+  ok(W.hgLiveStopScale() === 1, 'thin ledger -> unit stop scale');
+  ok(W.hgFlowBinanceSymbol('XAUTUSD') === 'XAUUSDT', 'gold maps to XAUUSDT flow leg');
+  ok(W.hgFlowBinanceSymbol('B-ETH_USDT') === 'ETHUSDT', 'CoinDCX maps to Binance twin');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

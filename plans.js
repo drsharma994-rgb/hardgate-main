@@ -141,6 +141,71 @@ function hgStaleMomentumVeto(rows, dir, entry){
   }catch(e){ return { veto: false }; }
 }
 
+/* Map venue symbol → Binance USD-M leg for flow/funding twins (free public REST). */
+function hgFlowBinanceSymbol(sym){
+  try{
+    if (!sym) return null;
+    var s = String(sym).toUpperCase();
+    if (/^XAU|^XAUT|^GOLD/.test(s.replace(/[^A-Z]/g, '')) || s.indexOf('XAU') === 0) return 'XAUUSDT';
+    if (typeof G.biasBinanceSymbol === 'function'){
+      var twin = G.biasBinanceSymbol(sym);
+      if (twin) return twin;
+    }
+    if (/^B-[A-Z0-9]+_USDT$/.test(s)) return s.replace(/^B-/, '').replace('_', '');
+    if (/USDT$/.test(s) && s.indexOf('B-') !== 0) return s;
+    return s.replace(/[^A-Z0-9]/g, '') + 'USDT';
+  }catch(e){ return null; }
+}
+
+/* Shared flow trap + Bybit cross (BEST F8 parity). */
+async function hgAssessFlowTrap(sym, dir, fundingPct, tf){
+  var out = { veto: false, flowOk: false, flowNA: false, flowDetail: 'FLOW N/A', crossOk: false, reason: null };
+  try{
+    tf = tf || '1h';
+    dir = String(dir || '').toLowerCase();
+    var bSym = hgFlowBinanceSymbol(sym);
+    var flowFn = (typeof G.hgFlowTrapAssess === 'function') ? G.hgFlowTrapAssess : null;
+    if (!bSym || !flowFn || typeof G.binanceTakerRatio !== 'function' || typeof G.binanceDepth !== 'function'){
+      out.flowNA = true;
+      out.flowDetail = 'FLOW N/A — no Binance twin for ' + String(sym || '—');
+      return out;
+    }
+    var spotFn = (typeof G.binanceSpotTakerFlow === 'function') ? G.binanceSpotTakerFlow : null;
+    var legs = await Promise.all([
+      G.binanceTakerRatio(bSym, tf, 25).catch(function(){ return null; }),
+      G.binanceDepth(bSym, 20).catch(function(){ return null; }),
+      spotFn ? spotFn(bSym, tf, 25).catch(function(){ return null; }) : Promise.resolve(null)
+    ]);
+    var spotSeries = (legs[2] && legs[2].series) ? legs[2].series : null;
+    var ft = flowFn(legs[0] && legs[0].series ? legs[0].series : null, legs[1], dir, spotSeries);
+    if (ft){
+      out.veto = ft.veto === true;
+      out.flowOk = ft.flowOk === true;
+      out.reason = ft.reason || null;
+      out.flowDetail = 'CVD ' + (ft.cvdAligned ? '✓' : '✗') + ' · OBI ' + (ft.obiAligned ? '✓' : '✗')
+        + ' · SPOT ' + (ft.spotPerpAligned ? '✓' : (spotSeries ? '✗' : '—'));
+    }
+    if (typeof G.bybitPositioningSnapshot === 'function' && typeof G.positioningCrossCheck === 'function'){
+      var byb = await G.bybitPositioningSnapshot(bSym).catch(function(){ return null; });
+      var cross = G.positioningCrossCheck(
+        { fundingPct: fundingPct, retailLongPct: null, oiChgPct: null },
+        byb
+      );
+      if (cross){
+        if (cross.status === 'confirmed' || cross.status === 'partial'){
+          out.crossOk = true;
+          out.flowDetail += ' · CROSS ' + (cross.status === 'confirmed' ? '✓' : '~');
+          out.flowOk = out.flowOk || out.crossOk;
+        } else if (cross.status === 'conflict' && ft && !ft.veto){
+          out.flowDetail += ' · CROSS conflict';
+        }
+      }
+    }
+    if (!ft && !out.crossOk){ out.flowNA = true; out.flowDetail = 'FLOW PARTIAL — legs thin'; }
+    return out;
+  }catch(e){ out.flowNA = true; return out; }
+}
+
 /* Post-gate vetoes — flow trap, BTC relative strength, stale momentum. Gates unchanged. */
 async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
   try{
@@ -150,30 +215,148 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
     var sym = ticker && ticker.symbol;
     var stale = hgStaleMomentumVeto(rows, dir, hit.entry);
     if (stale.veto) return { ok: false, reason: stale.reason, tag: 'stale' };
-    var flowFn = (typeof G.hgFlowTrapAssess === 'function') ? G.hgFlowTrapAssess : null;
-    if (flowFn && sym && typeof G.biasBinanceSymbol === 'function'){
-      var bSym = G.biasBinanceSymbol(sym);
-      if (bSym && typeof G.binanceTakerRatio === 'function' && typeof G.binanceDepth === 'function'){
-        var spotFn = (typeof G.binanceSpotTakerFlow === 'function') ? G.binanceSpotTakerFlow : null;
-        var legs = await Promise.all([
-          G.binanceTakerRatio(bSym, '1h', 25).catch(function(){ return null; }),
-          G.binanceDepth(bSym, 20).catch(function(){ return null; }),
-          spotFn ? spotFn(bSym, '1h', 25).catch(function(){ return null; }) : Promise.resolve(null)
-        ]);
-        var spotSeries = (legs[2] && legs[2].series) ? legs[2].series : null;
-        var ft = flowFn(legs[0] && legs[0].series ? legs[0].series : null, legs[1], dir, spotSeries);
-        if (ft && ft.veto) return { ok: false, reason: ft.reason || 'flow trap', tag: 'flow' };
-      }
-    }
-    if (!hgIsBtcSymbol(sym) && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){
-      var tf = style === 'scalp' ? '1h' : '4h';
+    var tf = (style === 'scalp' || style === 'gold-scalp') ? '1h' : '4h';
+    var fr = (ticker && ticker.fundingPct != null && isFinite(+ticker.fundingPct)) ? +ticker.fundingPct : null;
+    var flow = await hgAssessFlowTrap(sym, dir, fr, tf);
+    if (flow.veto) return { ok: false, reason: flow.reason || 'flow trap', tag: 'flow', flowDetail: flow.flowDetail };
+    var rsEdge = null;
+    if (!hgIsBtcSymbol(sym) && style.indexOf('gold') < 0 && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){
       var look = (typeof G.HG_RS_LOOK === 'number') ? G.HG_RS_LOOK : 30;
       var btcRows = await getCandles(hgBtcCandleSymbol(ticker), tf, look + 40);
       var rsr = hgRelStrength(rows, btcRows, dir, look);
       if (rsr.available && !rsr.ok) return { ok: false, reason: rsr.note || 'lagging BTC', tag: 'rs' };
+      if (rsr.available && isFinite(rsr.edge)) rsEdge = rsr.edge;
     }
-    return { ok: true };
+    return {
+      ok: true, flowOk: flow.flowOk, flowNA: flow.flowNA, flowDetail: flow.flowDetail,
+      crossOk: flow.crossOk, rsEdge: rsEdge
+    };
   }catch(e){ return { ok: true }; }
+}
+
+/* Gold tabs — stale + XAUUSDT flow (no BTC RS). */
+async function hgPostGateGoldVeto(cand, hit, rows15m, rows4h, style){
+  try{
+    style = String(style || 'gold-scalp').toLowerCase();
+    if (!hit || !hit.dir) return { ok: true };
+    var dir = hit.dir;
+    var rows = (style === 'gold-scalp' && rows15m && rows15m.length >= 60) ? rows15m : rows4h;
+    if (rows && rows.length >= 60){
+      var stale = hgStaleMomentumVeto(rows, dir, hit.entry);
+      if (stale.veto) return { ok: false, reason: stale.reason, tag: 'stale' };
+    }
+    var sym = (cand && cand.sym) ? cand.sym : 'XAUUSDT';
+    var flow = await hgAssessFlowTrap(sym, dir, null, style === 'gold-scalp' ? '1h' : '4h');
+    if (flow.veto) return { ok: false, reason: flow.reason || 'flow trap', tag: 'flow', flowDetail: flow.flowDetail };
+    return { ok: true, flowOk: flow.flowOk, flowNA: flow.flowNA, flowDetail: flow.flowDetail };
+  }catch(e){ return { ok: true }; }
+}
+
+async function hgFilterGoldPostGate(ranked, venueRows, defaultRows4h, style){
+  try{
+    if (!Array.isArray(ranked)) return ranked;
+    for (var i = 0; i < ranked.length; i++){
+      var c = ranked[i];
+      if (!c || c.demoted || c.vetoed) continue;
+      var vr = venueRows ? venueRows[c.venue] : null;
+      var r15 = vr && vr.rows15m;
+      var r4 = (vr && vr.rows4h && vr.rows4h.length) ? vr.rows4h : defaultRows4h;
+      var hit = { dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1 || c.tp1 };
+      var qv = await hgPostGateGoldVeto(c, hit, r15, r4, style);
+      if (!qv.ok){
+        c.demoted = true;
+        c.postGateVeto = qv.tag || 'quality';
+        var stamp = 'POST-GATE ' + String(qv.tag || 'quality').toUpperCase();
+        c.stamps = Array.isArray(c.stamps) ? c.stamps.concat([stamp]) : [stamp];
+        c.demoteReason = qv.reason || stamp;
+      } else if (qv.flowDetail){
+        c.flowDetail = qv.flowDetail;
+      }
+    }
+    return ranked;
+  }catch(e){ return ranked; }
+}
+
+var HG_GOLD_WEEKEND_EXCEED_MAX = 0.35;
+
+function hgGoldWeekendConvictionDemote(cand, rows4h, atrVal, stopAtr, nowSec){
+  try{
+    if (!cand || cand.demoted || cand.vetoed) return false;
+    if (typeof G.hgGoldWeekendReadout !== 'function') return false;
+    var ro = G.hgGoldWeekendReadout(rows4h, atrVal, stopAtr, nowSec);
+    if (!ro) return false;
+    var demote = false, reason = '';
+    if (ro.inWeekend && ro.level === 'warn'){
+      demote = true;
+      reason = 'WEEKEND EXPOSURE — inside spot/CME closure';
+    } else if (ro.risk && ro.risk.exceedPct != null && ro.risk.exceedPct >= HG_GOLD_WEEKEND_EXCEED_MAX){
+      demote = true;
+      reason = 'WEEKEND GAP — ' + Math.round(ro.risk.exceedPct * 100) + '% of past closures exceeded '
+        + (stopAtr || 1.5).toFixed(2) + '×ATR stop';
+    } else if (ro.stats && ro.stats.p90 != null && isFinite(stopAtr) && ro.stats.p90 >= stopAtr * 0.9){
+      demote = true;
+      reason = 'WEEKEND HEAT — p90 closure move ' + ro.stats.p90 + '×ATR vs ' + stopAtr.toFixed(2) + '×ATR stop';
+    }
+    if (!demote) return false;
+    cand.demoted = true;
+    cand.weekendDemote = true;
+    cand.stamps = Array.isArray(cand.stamps) ? cand.stamps.concat(['WEEKEND']) : ['WEEKEND'];
+    cand.demoteReason = reason;
+    return true;
+  }catch(e){ return false; }
+}
+
+function hgApplyGoldWeekendDemotes(ranked, rows4h, atrVal, nowMs){
+  try{
+    if (!Array.isArray(ranked) || !rows4h || !rows4h.length) return;
+    var nowSec = Math.floor((nowMs || Date.now()) / 1000);
+    for (var i = 0; i < ranked.length; i++){
+      var c = ranked[i];
+      if (!c || c.demoted || c.vetoed || c.locked) continue;
+      var entry = +c.entry, stop = +c.stop;
+      var stopAtr = 1.5;
+      if (isFinite(entry) && isFinite(stop) && isFinite(atrVal) && atrVal > 0){
+        stopAtr = Math.abs(entry - stop) / atrVal;
+      }
+      hgGoldWeekendConvictionDemote(c, rows4h, atrVal, stopAtr, nowSec);
+    }
+  }catch(e){}
+}
+
+/* NEAR CLEAN honesty — would a hypothetical CLEAN fail post-gate checks? */
+function hgNearQualityHint(hit, rows, ticker, style){
+  try{
+    if (!hit || !hit.dir || !rows || !rows.length) return { wouldVeto: false, lines: [] };
+    var lines = [];
+    var stale = hgStaleMomentumVeto(rows, hit.dir, hit.entry != null ? hit.entry : +rows[rows.length - 1].c);
+    if (stale.veto) lines.push(stale.reason || 'stale momentum');
+    if (typeof cgClearanceLine === 'function' && hit.margins){
+      var cl = cgClearanceLine(hit);
+      if (cl) lines.push('clearance: ' + cl);
+    } else if (hit.bindingTotal != null && hit.tightGates && hit.tightGates.length){
+      lines.push('binding gates: ' + hit.tightGates.join(', '));
+    }
+    if (typeof cgMacroOk === 'function' && ticker){
+      var mk = cgMacroOk(ticker, hit.dir);
+      if (mk && !mk.ok) lines.push('macro: ' + (mk.reason || 'blocked'));
+    }
+    return { wouldVeto: lines.some(function(l){ return /STALE|macro|trap/i.test(l); }), lines: lines };
+  }catch(e){ return { wouldVeto: false, lines: [] }; }
+}
+
+function hgCryptoRankBoost(sym, dir, rr, vetoMeta){
+  try{
+    var boost = 0;
+    if (vetoMeta && vetoMeta.rsEdge != null && isFinite(vetoMeta.rsEdge)) boost += Math.min(15, Math.max(-5, vetoMeta.rsEdge * 100));
+    if (vetoMeta && vetoMeta.flowOk) boost += 5;
+    if (vetoMeta && vetoMeta.crossOk) boost += 3;
+    if (typeof G.hgProfitRankHint === 'function'){
+      var pr = G.hgProfitRankHint({ sym: sym, dir: dir, tier: 'clean', rr1: rr, lane: 'crypto' });
+      if (pr && isFinite(pr.boost)) boost += pr.boost;
+    }
+    if (typeof G.bestSessionActive === 'function' && G.bestSessionActive()) boost += 2;
+    return boost;
+  }catch(e){ return 0; }
 }
 
 /* --- G5 vol+wick participation (ENGINE quiet-tape parity for SWING/SCALP) --- */
@@ -972,6 +1155,16 @@ function hgEnrichSwingClean(hit, rows, matrix){
       if (st && isFinite(st.stop) && (dir === 'long' ? st.stop < entry : st.stop > entry)){
         stop = st.stop;
         entryType += ' · structure stop';
+        var scaleFn = (typeof G.hgLiveStopScale === 'function') ? G.hgLiveStopScale : null;
+        if (scaleFn){
+          var sc = scaleFn();
+          if (isFinite(sc) && sc > 0 && Math.abs(sc - 1) > 0.02){
+            var risk0 = Math.abs(entry - stop);
+            var risk1 = risk0 * sc;
+            stop = dir === 'long' ? entry - risk1 : entry + risk1;
+            entryType += ' · ledger stop ×' + (Math.round(sc * 100) / 100);
+          }
+        }
       }
     }
     var risk = Math.abs(entry - stop);
@@ -1041,6 +1234,15 @@ G.hgIsCryptoMajor = hgIsCryptoMajor;
 G.hgTapeRegimeLabel = hgTapeRegimeLabel;
 G.hgEnrichTickerFundingTwin = hgEnrichTickerFundingTwin;
 G.hgPostGateSetupVeto = hgPostGateSetupVeto;
+G.hgPostGateGoldVeto = hgPostGateGoldVeto;
+G.hgFilterGoldPostGate = hgFilterGoldPostGate;
+G.hgAssessFlowTrap = hgAssessFlowTrap;
+G.hgFlowBinanceSymbol = hgFlowBinanceSymbol;
+G.hgNearQualityHint = hgNearQualityHint;
+G.hgCryptoRankBoost = hgCryptoRankBoost;
+G.hgGoldWeekendConvictionDemote = hgGoldWeekendConvictionDemote;
+G.hgApplyGoldWeekendDemotes = hgApplyGoldWeekendDemotes;
+G.HG_GOLD_WEEKEND_EXCEED_MAX = HG_GOLD_WEEKEND_EXCEED_MAX;
 G.hgStaleMomentumVeto = hgStaleMomentumVeto;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;

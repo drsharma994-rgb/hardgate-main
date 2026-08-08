@@ -1584,6 +1584,21 @@ async function runScan(ui, scanSt){
     var ranked = rk.ranked, best = rk.best;
     for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
 
+    var filterFn = gfn('hgFilterGoldPostGate');
+    if (filterFn){
+      try{
+        ranked = await filterFn(ranked, venueRows, gold.rows4h, 'gold-swing');
+      }catch(ePg){}
+    }
+    var wkFn = gfn('hgApplyGoldWeekendDemotes');
+    if (wkFn && gold.rows4h && gold.rows4h.length){
+      try{
+        var aArrW = _atr(gold.rows4h, 14);
+        var atrW = (aArrW && aArrW.length) ? aArrW[aArrW.length - 1] : NaN;
+        wkFn(ranked, gold.rows4h, atrW, now);
+      }catch(eWk){}
+    }
+
     /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
        invalidation against the latest 4h close (STOPPED / TARGET HIT /
        EXPIRED after 5 days); never re-pick levels for a live conviction */

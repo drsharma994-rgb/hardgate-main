@@ -948,6 +948,21 @@ async function runScan(ui, scanSt){
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
 
+    var filterFn = gfn('hgFilterGoldPostGate');
+    if (filterFn){
+      try{
+        ranked = await filterFn(ranked, venueRows, gold.rows4h, 'gold-scalp');
+      }catch(ePg){}
+    }
+    var wkFn = gfn('hgApplyGoldWeekendDemotes');
+    if (wkFn && gold.rows4h && gold.rows4h.length){
+      try{
+        var aArrW = _atr(gold.rows15m.length ? gold.rows15m : gold.rows4h, 14);
+        var atrW = (aArrW && aArrW.length) ? aArrW[aArrW.length - 1] : NaN;
+        wkFn(ranked, gold.rows4h, atrW, now);
+      }catch(eWk){}
+    }
+
     /* (5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new
        conviction is issued; already-live convictions keep running untouched */
     var newsVeto = false, newsVetoTitle = null;
