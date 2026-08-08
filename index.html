@@ -3225,6 +3225,12 @@ function hgScanFunnelRows(audit, kind){
     const note = cgScanRateNote(audit.cascade, audit.clean || 0);
     if (note) rows.push({ k: 'Is zero normal?', v: note });
   }
+  if (audit.regimeSkip) rows.push({ k: 'Regime filter', v: audit.regimeSkip + ' symbols skipped (compression/volatile — same as BEST/ENGINE)' });
+  if (audit.qualitySkip){
+    Object.keys(audit.qualitySkip).sort(function(a, b){ return (audit.qualitySkip[b] || 0) - (audit.qualitySkip[a] || 0); }).forEach(function(k){
+      rows.push({ k: 'Quality filter · ' + k, v: audit.qualitySkip[k] + ' CLEAN blocked post-gate (flow · RS · stale — gates unchanged)' });
+    });
+  }
   const fail = audit.fail || {};
   const sole = audit.sole || {};
   Object.keys(fail).sort(function(a, b){ return fail[b] - fail[a]; }).slice(0, 7).forEach(function(g){
@@ -3794,6 +3800,7 @@ async function runScanLeg(kind, opts){
     const minsToFunding = tickClock();
     let found = 0, nearFound = 0;
     let audit = { cascade: 0, clean: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0, fadeFound: 0,
+      regimeSkip: 0, qualitySkip: {},
       replaySamples: [], replayClean: 0, replaySettled: 0 };
     const flipRecords = [];
     const flipVenue = venueTag || S.exchange || '';
@@ -3819,12 +3826,17 @@ async function runScanLeg(kind, opts){
         try{
           if (isSwing){
             if (typeof swingTryClean !== 'function') return;
+            const tScan = (typeof hgEnrichTickerFundingTwin === 'function') ? await hgEnrichTickerFundingTwin(t) : t;
             const swingBars = (typeof cgGateReplay === 'function') ? 500 : 260;
             const rows = await getCandles(t.symbol, '4h', swingBars);
             if (!rows || rows.length < 210){ audit.histShort++; return; }
+            if (typeof hgRegimeAllowsSetup === 'function'){
+              const rg = hgRegimeAllowsSetup(rows, 'swing');
+              if (rg && !rg.allow){ audit.regimeSkip++; return; }
+            }
             if (typeof cgGateReplay === 'function' && rows.length >= 299){
               try{
-                const rp = cgGateReplay(rows, t, {});
+                const rp = cgGateReplay(rows, tScan, {});
                 if (rp && rp.samples && rp.samples.length){
                   audit.replaySamples.push.apply(audit.replaySamples, rp.samples);
                   audit.replayClean += rp.clean || 0;
@@ -3833,7 +3845,7 @@ async function runScanLeg(kind, opts){
               }catch(eRp){}
             }
             if (typeof swingGateMatrix === 'function'){
-              const m = swingGateMatrix(rows, t);
+              const m = swingGateMatrix(rows, tScan);
               if (m && m.dir){
                 audit.cascade++;
                 if (m.passed >= 6) audit.pass6++;
@@ -3855,15 +3867,22 @@ async function runScanLeg(kind, opts){
                 }
               }
             }
-            const hit = swingTryClean(rows, t);
+            const hit = swingTryClean(rows, tScan);
             if (hit){
+              if (typeof hgPostGateSetupVeto === 'function'){
+                const qv = await hgPostGateSetupVeto(tScan, hit, rows, 'swing', getCandles);
+                if (!qv.ok){
+                  audit.qualitySkip[qv.tag || 'quality'] = (audit.qualitySkip[qv.tag || 'quality'] || 0) + 1;
+                  return;
+                }
+              }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag));
-              renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag);
+              renderSwingCleanCard(tScan, hit, cardsEl, quiet, venueTag);
               return;
             }
             if (typeof swingTryNear === 'function'){
-              const near = swingTryNear(rows, t);
+              const near = swingTryNear(rows, tScan);
               if (near && near.entry != null && near.stop != null && near.t1 != null){
                 nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, near));
                 nearFound++;
@@ -3878,7 +3897,7 @@ async function runScanLeg(kind, opts){
               }
             }
             if (typeof swingTryFundingFade === 'function'){
-              const fade = swingTryFundingFade(rows, t);
+              const fade = swingTryFundingFade(rows, tScan);
               if (fade){
                 audit.fadeFound++;
                 cands.push(hgCryptoCandRow(t, fade, venueTag));
@@ -3887,15 +3906,21 @@ async function runScanLeg(kind, opts){
             }
           } else {
             if (typeof scalpTryClean !== 'function') return;
+            const tScan = (typeof hgEnrichTickerFundingTwin === 'function') ? await hgEnrichTickerFundingTwin(t) : t;
             const [h1, m15] = await Promise.all([
               getCandles(t.symbol, '1h', 120, quiet ? { quiet: true } : undefined),
               getCandles(t.symbol, '15m', 160, quiet ? { quiet: true } : undefined)
             ]);
+            if (typeof hgRegimeAllowsSetup === 'function' && h1 && h1.length >= 60){
+              const rg = hgRegimeAllowsSetup(h1, 'scalp');
+              if (rg && !rg.allow){ audit.regimeSkip++; return; }
+            }
             if (typeof scalpGateMatrix === 'function'){
-              const sm = scalpGateMatrix(h1, m15, t, minsToFunding);
+              const sm = scalpGateMatrix(h1, m15, tScan, minsToFunding);
               if (sm && sm.dir){
                 audit.cascade++;
                 if (sm.passed >= 6) audit.pass6++;
+                if (sm.clean) audit.clean = (audit.clean || 0) + 1;
                 if (!sm.clean){
                   for (let gi = 0; gi < sm.gates.length; gi++){
                     if (!sm.gates[gi][1]) audit.fail[sm.gates[gi][0]] = (audit.fail[sm.gates[gi][0]] || 0) + 1;
@@ -3907,13 +3932,20 @@ async function runScanLeg(kind, opts){
                 }
               }
             }
-            const hit = scalpTryClean(h1, m15, t, minsToFunding);
+            const hit = scalpTryClean(h1, m15, tScan, minsToFunding);
             if (hit){
+              if (typeof hgPostGateSetupVeto === 'function'){
+                const qv = await hgPostGateSetupVeto(tScan, hit, h1, 'scalp', getCandles);
+                if (!qv.ok){
+                  audit.qualitySkip[qv.tag || 'quality'] = (audit.qualitySkip[qv.tag || 'quality'] || 0) + 1;
+                  return;
+                }
+              }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag));
-              renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag);
+              renderScalpCleanCard(tScan, hit, minsToFunding, cardsEl, quiet, venueTag);
             } else if (typeof scalpTryNear === 'function'){
-              const nearS = scalpTryNear(h1, m15, t, minsToFunding);
+              const nearS = scalpTryNear(h1, m15, tScan, minsToFunding);
               if (nearS && nearS.entry != null && nearS.stop != null && nearS.t1 != null){
                 nearCands.push(Object.assign({ sym: t.symbol, venueTag: venueTag }, nearS));
                 nearFound++;
@@ -3928,7 +3960,7 @@ async function runScanLeg(kind, opts){
               }
             }
             if (typeof scalpTryFundingFade === 'function'){
-              const fadeS = scalpTryFundingFade(h1, m15, t, minsToFunding);
+              const fadeS = scalpTryFundingFade(h1, m15, tScan, minsToFunding);
               if (fadeS){
                 audit.fadeFound++;
                 cands.push(hgCryptoCandRow(t, fadeS, venueTag));
@@ -4371,6 +4403,7 @@ async function runGold(){
   const btn=$('goldRun'); btn.disabled=true; setProg('goldProg',0.1);
   $('goldStat').textContent='';
   const __macroP = (typeof getGoldMacro==='function') ? getGoldMacro().catch(function(){ return null; }) : Promise.resolve(null); // auto macro loads in parallel — never blocks the ledgers
+  const __xauFundP = (typeof binanceFunding==='function') ? binanceFunding('XAUUSDT').catch(function(){ return null; }) : Promise.resolve(null);
   try{
     const d1 = await getXAUCandles('1d',260);  setProg('goldProg',0.35);
     const h4 = await getXAUCandles('4h',300);  setProg('goldProg',0.6);
@@ -4396,7 +4429,8 @@ async function runGold(){
     const a4=last(atr(h4,14));
     const e50d=last(ema(c1,50)), pd=last(c1);
     const r4=last(rsi(c4,14));
-    const fr = null; // real spot XAUUSD has no futures funding rate
+    const xauFund = await __xauFundP;
+    const fr = (xauFund && isFinite(xauFund.fundingPct)) ? xauFund.fundingPct : null;
     const casc = e9>e21&&e21>e50 ? 'long' : (e9<e21&&e21<e50 ? 'short' : 'mixed');
     const spreadOk = isFinite(a4) && Math.abs(e21-e50) >= 0.25*a4;
     const dSide = pd>e50d ? 'long' : 'short';
@@ -4409,7 +4443,7 @@ async function runGold(){
     let gs4='na', gs4d='funding n/a on this feed';
     if (fr!==null){
       const bad = Math.abs(fr)>0.05-1e-9 || (casc==='long'&&fr>=0.04) || (casc==='short'&&fr<=-0.04);
-      gs4 = bad?'veto':'pass'; gs4d = `${fmt(fr,4)}%/interval`;
+      gs4 = bad?'veto':'pass'; gs4d = 'XAUUSDT perp ' + fmt(fr,4) + '%/interval (Binance crowd read)';
     }
     sg.push(['GS4','Funding clean (crowding veto)', gs4, gs4d]);
     const r30g=roc(c1,30), r90g=roc(c1,90);

@@ -25,8 +25,8 @@ ok(/hgEnsureContractSpecs/.test(book), 'book refresh loads contract specs');
 
 console.log('== funding fade discoverability ==');
 ok(/function renderFadeSetupCard/.test(html), 'renderFadeSetupCard defined');
-ok(/swingTryFundingFade\(rows, t\)/.test(html), 'SWING scan calls swingTryFundingFade');
-ok(/scalpTryFundingFade\(h1, m15, t, minsToFunding\)/.test(html), 'SCALP scan calls scalpTryFundingFade');
+ok(/swingTryFundingFade\(rows, tScan\)/.test(html), 'SWING scan calls swingTryFundingFade with enriched ticker');
+ok(/scalpTryFundingFade\(h1, m15, tScan, minsToFunding\)/.test(html), 'SCALP scan calls scalpTryFundingFade with enriched ticker');
 ok(/fadeFound/.test(html), 'scan audit tracks fadeFound');
 
 console.log('== positioning snapshot cache ==');
