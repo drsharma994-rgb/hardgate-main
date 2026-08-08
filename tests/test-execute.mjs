@@ -37,6 +37,7 @@ ok(hgExecuteBackendTarget().indexOf('example.com') >= 0, 'backend target from en
 ok(hgExecuteFillPollTarget() === 'https://example.com/fill-status', 'fill poll target derived from execute URL');
 var caps = executeCapabilities();
 ok(caps.ready && caps.mode === 'proxy' && caps.fillPoll, 'capabilities ready + fill poll when env set');
+ok(caps.authRequired === true, 'capabilities authRequired');
 process.env.EXECUTE_FILL_POLL_URL = 'https://custom.example/poll';
 ok(hgExecuteFillPollTarget() === 'https://custom.example/poll', 'fill poll target env override');
 delete process.env.EXECUTE_FILL_POLL_URL;

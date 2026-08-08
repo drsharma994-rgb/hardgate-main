@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { pathToFileURL } from 'url';
 import { telegramPlanBlock, hasPlanLevels } from '../lib/telegram-plan.mjs';
+import { apiAuthHeaders } from '../lib/api-auth.mjs';
 
 const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com/';
 const STATE_FILE = 'alert-state.json';
@@ -202,7 +203,7 @@ async function bookTryPollFills(siteUrl) {
     const timer = setTimeout(function(){ ctrl.abort(); }, 25000);
     const res = await fetch(new URL('/api/book/poll-fills', siteUrl).href, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiAuthHeaders(),
       body: JSON.stringify({ allFunds: true }),
       signal: ctrl.signal,
     });

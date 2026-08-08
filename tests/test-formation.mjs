@@ -91,7 +91,7 @@ console.log('== sw.js shell ==');
 {
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/formation\.js/.test(sw), 'HG_SHELL includes formation.js');
-  ok(/hg-v200/.test(sw), 'cache hg-v200');
+  ok(/hg-v201/.test(sw), 'cache hg-v201');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

@@ -54,14 +54,19 @@ function fetchOk(body, status, ct){
   });
 }
 
+const PROXY_ORIGIN = 'https://hardgate-main.onrender.com';
+function proxyReq(extra){
+  return Object.assign({ method: 'GET', query: {}, headers: { origin: PROXY_ORIGIN } }, extra || {});
+}
+
 /* ---------------- api/proxy.js ---------------- */
 
-// OPTIONS preflight -> 204 + ACAO + allow methods/headers
+// OPTIONS preflight -> 204 + ACAO for allowlisted origin
 {
   const res = mockRes();
-  await proxy({ method: 'OPTIONS' }, res);
+  await proxy(proxyReq({ method: 'OPTIONS' }), res);
   ok(res.statusCode === 204, 'proxy OPTIONS -> 204');
-  ok(res.headers['access-control-allow-origin'] === '*', 'proxy OPTIONS sets ACAO *');
+  ok(res.headers['access-control-allow-origin'] === PROXY_ORIGIN, 'proxy OPTIONS sets ACAO for allowlisted origin');
   ok(/GET/.test(res.headers['access-control-allow-methods'] || ''), 'proxy OPTIONS allows GET');
   ok(typeof res.headers['access-control-allow-headers'] === 'string', 'proxy OPTIONS sets allow-headers');
 }
@@ -69,7 +74,7 @@ function fetchOk(body, status, ct){
 // missing url -> 400 JSON
 {
   const res = mockRes();
-  await proxy({ method: 'GET', query: {} }, res);
+  await proxy(proxyReq({ method: 'GET', query: {} }), res);
   ok(res.statusCode === 400, 'proxy missing url -> 400');
   ok(typeof JSON.parse(res.body).error === 'string', 'proxy missing url -> JSON error');
 }
@@ -77,14 +82,14 @@ function fetchOk(body, status, ct){
 // invalid url -> 400
 {
   const res = mockRes();
-  await proxy({ method: 'GET', query: { url: 'not a url' } }, res);
+  await proxy(proxyReq({ method: 'GET', query: { url: 'not a url' } }), res);
   ok(res.statusCode === 400, 'proxy invalid url -> 400');
 }
 
 // non-allowlisted host -> 403 {error:'host not allowed'}, upstream never called
 await withFetch(fetchOk('{}'), async () => {
   const res = mockRes();
-  await proxy({ method: 'GET', query: { url: 'https://evil.example.com/steal' } }, res);
+  await proxy(proxyReq({ method: 'GET', query: { url: 'https://evil.example.com/steal' } }), res);
   ok(res.statusCode === 403, 'proxy foreign host -> 403');
   ok(JSON.parse(res.body).error === 'host not allowed', 'proxy foreign host -> exact error message');
 });
@@ -92,14 +97,14 @@ await withFetch(fetchOk('{}'), async () => {
 // allowlisted host over plain http -> 403 (https only)
 {
   const res = mockRes();
-  await proxy({ method: 'GET', query: { url: 'http://api.coindcx.com/x' } }, res);
+  await proxy(proxyReq({ method: 'GET', query: { url: 'http://api.coindcx.com/x' } }), res);
   ok(res.statusCode === 403, 'proxy http:// on allowlisted host -> 403');
 }
 
 // non-GET -> 405
 {
   const res = mockRes();
-  await proxy({ method: 'POST', query: { url: 'https://api.coindcx.com/x' } }, res);
+  await proxy(proxyReq({ method: 'POST', query: { url: 'https://api.coindcx.com/x' } }), res);
   ok(res.statusCode === 405, 'proxy POST -> 405');
 }
 
@@ -112,9 +117,9 @@ for (const host of ['api.coindcx.com', 'public.coindcx.com', 'query1.finance.yah
     return { status: 200, text: async () => '{"ok":1}', headers: { get: () => 'application/json' } };
   }, async () => {
     const res = mockRes();
-    await proxy({ method: 'GET', query: { url: 'https://' + host + '/some/path?x=1' } }, res);
+    await proxy(proxyReq({ method: 'GET', query: { url: 'https://' + host + '/some/path?x=1' } }), res);
     ok(res.statusCode === 200 && res.body === '{"ok":1}', 'proxy passes ' + host);
-    ok(res.headers['access-control-allow-origin'] === '*'
+    ok(res.headers['access-control-allow-origin'] === PROXY_ORIGIN
       && res.headers['cache-control'] === 's-maxage=30, stale-while-revalidate=60',
        'proxy sets ACAO + Cache-Control for ' + host);
     ok(res.headers['content-type'] === 'application/json', 'proxy forwards content-type for ' + host);
@@ -125,21 +130,21 @@ for (const host of ['api.coindcx.com', 'public.coindcx.com', 'query1.finance.yah
 // upstream non-200 passes through untouched
 await withFetch(fetchOk('{"e":"rate limited"}', 429), async () => {
   const res = mockRes();
-  await proxy({ method: 'GET', query: { url: 'https://api.coindcx.com/x' } }, res);
+  await proxy(proxyReq({ method: 'GET', query: { url: 'https://api.coindcx.com/x' } }), res);
   ok(res.statusCode === 429 && res.body === '{"e":"rate limited"}', 'proxy passes upstream 429 through');
 });
 
 // req.url fallback parsing (plain-node style request, no req.query)
 await withFetch(fetchOk('[1,2,3]'), async () => {
   const res = mockRes();
-  await proxy({ method: 'GET', url: '/api/proxy?url=' + encodeURIComponent('https://public.coindcx.com/market_data/v3/current_prices/futures/rt') }, res);
+  await proxy(proxyReq({ method: 'GET', url: '/api/proxy?url=' + encodeURIComponent('https://public.coindcx.com/market_data/v3/current_prices/futures/rt') }), res);
   ok(res.statusCode === 200 && res.body === '[1,2,3]', 'proxy parses url from req.url when req.query absent');
 });
 
 // upstream throw -> 502 JSON
 await withFetch(async () => { throw new Error('socket hangup'); }, async () => {
   const res = mockRes();
-  await proxy({ method: 'GET', query: { url: 'https://api.coindcx.com/x' } }, res);
+  await proxy(proxyReq({ method: 'GET', query: { url: 'https://api.coindcx.com/x' } }), res);
   ok(res.statusCode === 502, 'proxy upstream failure -> 502');
   ok(JSON.parse(res.body).error === 'socket hangup', 'proxy 502 carries error message');
 });
@@ -147,7 +152,7 @@ await withFetch(async () => { throw new Error('socket hangup'); }, async () => {
 // abort -> 502 timeout message
 await withFetch(async () => { const e = new Error('The operation was aborted'); e.name = 'AbortError'; throw e; }, async () => {
   const res = mockRes();
-  await proxy({ method: 'GET', query: { url: 'https://api.coindcx.com/x' } }, res);
+  await proxy(proxyReq({ method: 'GET', query: { url: 'https://api.coindcx.com/x' } }), res);
   ok(res.statusCode === 502 && /timeout/.test(JSON.parse(res.body).error), 'proxy abort -> 502 timeout message');
 });
 

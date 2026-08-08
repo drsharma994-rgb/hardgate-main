@@ -31,8 +31,11 @@ const EXCLUDED = {
     'this file — it is chained, the self-reference is expected',
 };
 const chain = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts.test;
-const inChain = new Set([...chain.matchAll(/node (tests\/[\w.-]+\.mjs)/g)].map(m => m[1].replace('tests/', '')));
+const usesRunner = chain.indexOf('run-tests.mjs') >= 0;
 const onDisk = fs.readdirSync(TESTS).filter(f => f.endsWith('.mjs'));
+const inChain = usesRunner
+  ? new Set(onDisk.filter(f => (f.startsWith('test-') && !EXCLUDED[f]) || f === 'extract-inline.mjs'))
+  : new Set([...chain.matchAll(/node (tests\/[\w.-]+\.mjs)/g)].map(m => m[1].replace('tests/', '')));
 console.log('== nothing is orphaned by accident ==');
 {
   const orphans = onDisk.filter(f => !inChain.has(f) && !EXCLUDED[f]);
@@ -63,6 +66,7 @@ console.log('== every chained file exists and can actually fail ==');
        Each was found by this check failing on a file that was actually fine. */
     if (!/\b(assert|ok|equal|throws)\s*\(|throw new Error|process\.exit\s*\(/.test(src)) silent.push(f);
   }
+  ok(usesRunner, 'npm test uses scripts/run-tests.mjs aggregator');
   ok(empty.length === 0,
      'no chained test file is empty or a stub' + (empty.length ? ' — EMPTY: ' + empty.join(', ') : ''));
   ok(silent.length === 0,

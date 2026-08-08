@@ -11,6 +11,7 @@ import { lpDigestDue } from '../lib/paperbook-core.mjs';
 import {
   digestChannelsReady, loadDigestState, DIGEST_STATE_FILE,
 } from '../lib/paperbook-digest.mjs';
+import { apiAuthHeaders } from '../lib/api-auth.mjs';
 
 const INTERVAL_MS = 15 * 60 * 1000;
 const PORT = +(process.env.PORT || 10000);
@@ -36,7 +37,7 @@ async function cycle(){
     }
     var res = await fetch(localDigestUrl(), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: apiAuthHeaders(),
       body: JSON.stringify({ period: 'week', cron: true }),
     });
     var j = null;
