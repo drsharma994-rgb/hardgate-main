@@ -177,6 +177,44 @@ function stMajorityDir(votes){
   return votes.length ? votes[0].dir : null;
 }
 
+/* Draft entry/SL/TP when confluence agrees but no 7/7 CLEAN plan — reuses swingTryNear/scalpTryNear. */
+function stNearPlan(contract, dir, rows4h, rows1h, rows15m, ticker){
+  try{
+    contract = contract || {};
+    if (!dir) return null;
+    var isCrypto = contract.klass === 'crypto';
+    var mins = 120;
+    if (isCrypto && typeof W.tickClock === 'function'){
+      try{ mins = W.tickClock(); }catch(e){}
+    }
+    var tk = isCrypto ? (ticker || { symbol: contract.sym, fundingPct: null })
+      : { symbol: contract.sym, fundingPct: null };
+    var best = null;
+    if (typeof W.swingTryNear === 'function' && rows4h && rows4h.length >= MIN_BARS_4H){
+      var sn = W.swingTryNear(rows4h, tk);
+      if (sn && sn.dir === dir && isFinite(sn.entry) && isFinite(sn.stop)){
+        best = Object.assign({}, sn, { planSrc: 'SWING NEAR', planDraft: true, nearClean: true });
+      }
+    }
+    if (!best && typeof W.scalpTryNear === 'function' && rows1h && rows15m
+        && rows1h.length >= 60 && rows15m.length >= 60){
+      var scn = W.scalpTryNear(rows1h, rows15m, tk, mins);
+      if (scn && scn.dir === dir && isFinite(scn.entry) && isFinite(scn.stop)){
+        best = Object.assign({}, scn, { planSrc: 'SCALP NEAR', planDraft: true, nearClean: true });
+      }
+    }
+    return best;
+  }catch(e){ return null; }
+}
+
+function stNearPlanNote(p){
+  if (!p || !p.planDraft) return '';
+  var gp = isFinite(p.gatesPassed) ? p.gatesPassed : p.passed;
+  var gt = isFinite(p.gatesTotal) ? p.gatesTotal : 7;
+  var miss = (p.missing && p.missing.length) ? (' · missing ' + p.missing.join(', ')) : '';
+  return 'NEAR ' + (gp || '?') + '/' + gt + ' — draft levels, not trade-ready' + miss;
+}
+
 function stNewsSym(contract){
   contract = contract || {};
   if (contract.gold || contract.sym === 'XAUUSD') return 'XAUUSD';
@@ -473,6 +511,11 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       if (agree[p].plan){ plan = agree[p].plan; break; }
     }
     if (!plan && agree[0] && agree[0].edge && agree[0].edge.plan) plan = agree[0].edge.plan;
+    var planDraft = false;
+    if (!plan){
+      var near = stNearPlan(contract, dir, rows4h, rows1h, rows15m, ticker);
+      if (near){ plan = near; planDraft = true; }
+    }
 
     return {
       sym: contract.sym,
@@ -485,6 +528,7 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       votes: agree,
       allVotes: votes,
       plan: plan,
+      planDraft: planDraft,
       rows4h: rows4h,
       rows1h: rows1h,
       mark: (ticker && isFinite(ticker.mark)) ? ticker.mark : (rows4h.length ? rows4h[rows4h.length - 1].c : null)
@@ -506,11 +550,13 @@ function stCardStack(r){
     var stackFn = (typeof W.hgSetupStackForInlineScan === 'function') ? W.hgSetupStackForInlineScan : null;
     if (!p || !stackFn || !r.dir) return null;
     var asset = (String(r.klass || '').toLowerCase().indexOf('metal') >= 0) ? 'gold' : 'crypto';
-    var clean = r.tier === 'PRIME' || r.tier === 'HIGH';
+    var clean = !r.planDraft && (r.tier === 'PRIME' || r.tier === 'HIGH');
+    var nearClean = !!r.planDraft || p.nearClean === true;
+    var gp = isFinite(p.gatesPassed) ? p.gatesPassed : (nearClean ? 6 : (r.tier === 'WATCH' ? 5 : 6));
     return stackFn({
       dir: r.dir, sym: r.sym, rows4h: r.rows4h, style: 'startrader', asset: asset,
-      clean: clean, nearClean: !clean,
-      gatesPassed: clean ? 7 : (r.tier === 'WATCH' ? 5 : 6), gatesTotal: 7,
+      clean: clean, nearClean: nearClean,
+      gatesPassed: gp, gatesTotal: isFinite(p.gatesTotal) ? p.gatesTotal : 7,
       positioning: { items: (r.votes || []).slice(0, 4).map(function(v){
         return { label: v.src, detail: v.detail || '', align: v.dir === r.dir ? 'with' : 'against' };
       }) }
@@ -520,6 +566,7 @@ function stCardStack(r){
 
 function cardHTML(r){
   var p = r.plan;
+  var draft = !!(r.planDraft || (p && p.planDraft));
   var entry = p && isFinite(p.entry) ? p.entry : null;
   var stop = p && isFinite(p.stop) ? p.stop : null;
   var t1 = p && isFinite(p.t1) ? p.t1 : null;
@@ -527,10 +574,15 @@ function cardHTML(r){
   var voteTxt = r.votes.map(function(v){ return v.src + ' (' + v.detail + ')'; }).join(' · ');
   var planBlk = '';
   if (entry != null && stop != null && typeof W.planBlock === 'function'){
-    planBlk = W.planBlock(r.dir, entry, stop, t1, p && p.t2, r.tier + ' multi-strategy confluence');
+    var planLbl = draft ? stNearPlanNote(p) : (r.tier + ' multi-strategy confluence');
+    planBlk = W.planBlock(r.dir, entry, stop, t1, p && p.t2, planLbl);
   } else if (entry != null && stop != null){
     planBlk = '<div class="plan">entry ' + pxF(entry) + ' · stop ' + pxF(stop)
       + (t1 != null ? ' · T1 ' + pxF(t1) : '') + '</div>';
+  }
+  if (draft && entry != null && stop != null){
+    planBlk += '<div class="note warn" style="margin-top:6px">' + esc(stNearPlanNote(p))
+      + ' — wait for PRIME/HIGH or 7/7 CLEAN before booking.</div>';
   }
   var stFund = (function(){
     var k = String(r.klass || '').toLowerCase();
@@ -540,7 +592,7 @@ function cardHTML(r){
   })();
   var stStack = stCardStack(r);
   var stackHtml = (stStack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(stStack) : '';
-  var bookBtn = (entry != null && stop != null && typeof W.bookBtnHTML === 'function')
+  var bookBtn = (!draft && entry != null && stop != null && typeof W.bookBtnHTML === 'function')
     ? W.bookBtnHTML(r.sym, r.dir, entry, stop, t1, {
       scanner: 'startrader',
       fund: stFund,
@@ -549,7 +601,7 @@ function cardHTML(r){
       t2: p && isFinite(p.t2) ? p.t2 : null,
       stack: stStack
     }) : '';
-  var tradeOnclick = (entry != null && stop != null && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
+  var tradeOnclick = (!draft && entry != null && stop != null && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
     ? ((typeof W.hgToTradePlanOnclickAttr === 'function')
       ? W.hgToTradePlanOnclickAttr(r.sym, r.dir, entry, stop, t1, { t2: p && isFinite(p.t2) ? p.t2 : null, stack: stStack, scanner: 'startrader', strategy: 'startrader' })
       : ('toTrade(' + JSON.stringify(r.sym) + ',' + JSON.stringify(r.dir) + ',' + entry + ',' + stop + ',' + (t1 != null ? t1 : 'null') + ')'))
@@ -616,7 +668,8 @@ function mount(el){
     + '<b>NEWS</b> · <b>REGIME</b> · <b>SENTIMENT</b> (F&amp;G) · <b>MACRO</b> (DXY/yields for USD assets) · '
     + '<b>GOLD</b> layers on XAU/GLD · <b>STRUCTURE</b> · <b>SMART $</b> / <b>OI FLOW</b> on crypto. '
     + 'News blackout = hard veto. Crypto: Binance proxy; metals/commodities/FX/indices/ETFs/shares: Yahoo via /api/proxy. '
-    + '<b>PRIME</b> = 3+ strategy families + regime/macro/gold context; <b>HIGH</b> = 2+ families with a clean plan.</div>'
+    + '<b>PRIME</b> = 3+ strategy families + regime/macro/gold context; <b>HIGH</b> = 2+ families with a clean plan. '
+    + '<b>WATCH</b> cards may show <b>NEAR draft</b> entry/SL/TP (6/7 gates) — levels only, not bookable until CLEAN.</div>'
     + '<div class="row"><button class="btn" id="stRun">SCAN STAR TRADER</button>'
     + '<span class="note" id="stStat"></span></div>'
     + '<div class="prog" id="stProg"><i></i></div>'
@@ -871,6 +924,8 @@ function startraderTabRefresh(){
 }
 
 W.stDropForming = stDropForming;
+W.stNearPlan = stNearPlan;
+W.stNearPlanNote = stNearPlanNote;
 W.stSynthesize = stSynthesize;
 W.stTierRank = stTierRank;
 W.stEdgeScanList = stEdgeScanList;

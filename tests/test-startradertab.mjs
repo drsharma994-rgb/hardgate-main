@@ -46,6 +46,8 @@ const W = ctx.window;
 {
   ok(typeof W.stDropForming === 'function', 'stDropForming exported');
   ok(typeof W.stSynthesize === 'function', 'stSynthesize exported');
+  ok(typeof W.stNearPlan === 'function', 'stNearPlan exported');
+  ok(typeof W.stNearPlanNote === 'function', 'stNearPlanNote exported');
   ok(typeof W.stTierRank === 'function', 'stTierRank exported');
   ok(typeof W.stEdgeScanList === 'function', 'stEdgeScanList exported');
   ok(typeof W.stEdgeHasCore === 'function', 'stEdgeHasCore exported');
@@ -150,6 +152,34 @@ console.log('== stSynthesize real cryptogates path ==');
   ok(hit && hit.dir === 'long', 'real matrix-backed synthesis yields long setup');
   ok(hit.allVotes.some(v => v.src === 'SWING'), 'SWING vote from cryptogates matrix');
   ok(['WATCH', 'HIGH', 'PRIME'].includes(hit.tier), 'real path assigns tier label');
+}
+
+console.log('== stNearPlan draft on WATCH ==');
+{
+  const rows4h = trendRows(240, 14400);
+  const rows1h = rows4h.slice(-120);
+  const rows15m = rows4h.slice(-80);
+  W.swingTryClean = () => null;
+  W.scalpTryClean = () => null;
+  W.edgeSwingBias = () => false;
+  W.squeezeClassify = () => null;
+  W.mrSignal = () => null;
+  W.swingGateMatrix = () => ({ dir: 'long', passed: 6, gatesTotal: 7, clean: false });
+  W.scalpGateMatrix = () => ({ dir: 'long', passed: 5, gatesTotal: 7, clean: false });
+  W.swingTryNear = () => ({
+    dir: 'long', entry: 108, stop: 105, t1: 118, t2: 122, rr: 2.1,
+    gatesPassed: 6, gatesTotal: 7, missing: ['G5 vol+wick'], planDraft: true, nearClean: true,
+  });
+  W.scalpTryNear = () => null;
+  const watch = W.stSynthesize(
+    { sym: 'EURUSD', base: 'EUR', klass: 'fx', label: 'Euro / USD' },
+    rows4h, rows1h, rows15m, { symbol: 'EURUSD', fundingPct: null, mark: 110 });
+  ok(watch && watch.tier === 'WATCH' && watch.planDraft === true, 'stSynthesize attaches NEAR draft when no clean plan');
+  ok(watch && watch.plan && watch.plan.entry === 108 && watch.plan.stop === 105, 'NEAR draft carries entry/stop');
+  const card = watch ? W.cardHTML(watch) : '';
+  ok(card.indexOf('NEAR 6/7') >= 0, 'cardHTML labels NEAR draft');
+  ok(card.indexOf('SEND TO TRADE PLAN') < 0, 'cardHTML hides trade handoff on draft');
+  ok(card.indexOf('not trade-ready') >= 0 || card.indexOf('before booking') >= 0, 'cardHTML warns draft not bookable');
 }
 
 console.log('== stSynthesize squeeze + meanrev families ==');
