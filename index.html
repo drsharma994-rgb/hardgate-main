@@ -691,6 +691,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
+<script src="formation.js"></script>
 <script src="book-routing.js?v=55"></script>
 <script src="book.js?v=55"></script>
 <script src="execute.js?v=55"></script>
@@ -3322,6 +3323,12 @@ function hgSetupCardExtras(hit, t, kind){
     }
     if (hit && hit.flowDetail) extras.push(['flow', hit.flowDetail]);
     else if (hit && hit.flowNA) extras.push(['flow', 'FLOW N/A']);
+    if (hit && hit.poiLabel) extras.push(['POI', String(hit.poi || '') + ' · ' + hit.poiLabel]);
+    if (hit && hit.fillNote) extras.push(['fill est.', hit.fillNote]);
+    if (hit && hit.t1Source) extras.push(['T1 source', hit.t1Source + (hit.t2Source ? ' · T2 ' + hit.t2Source : '')]);
+    if (hit && hit.partialPolicy) extras.push(['partials', hit.partialPolicy]);
+    if (hit && hit.formationScore != null) extras.push(['formation', String(hit.formationScore) + '/100']);
+    if (hit && hit.sessionNote) extras.push(['session', hit.sessionNote]);
     if (typeof brainConvictionMesh === 'function' && typeof hgSetupConvictionMeshHtml === 'function'){
       const last = (typeof __hgBrainLast !== 'undefined' && __hgBrainLast) ? __hgBrainLast : null;
       if (last && last.col){
@@ -3490,6 +3497,9 @@ function hgCryptoCandRow(t, hit, venueTag, vetoMeta){
     row.crossOk = vetoMeta.crossOk;
     row.flowDetail = vetoMeta.flowDetail;
     row.flowNA = vetoMeta.flowNA;
+    row.formationScore = vetoMeta.formationScore;
+    row.poi = vetoMeta.poi;
+    row.poiLabel = vetoMeta.poiLabel;
   }
   if (typeof hgCryptoRankBoost === 'function'){
     row.rankBoost = hgCryptoRankBoost(t.symbol, hit.dir, hit.rr, vetoMeta || {});
@@ -3499,6 +3509,8 @@ function hgCryptoCandRow(t, hit, venueTag, vetoMeta){
 }
 function hgRankCryptoCands(cands){
   const sorted = (cands || []).slice().sort(function(a, b){
+    const fs = (b.formationScore || 0) - (a.formationScore || 0);
+    if (fs) return fs;
     const rb = (b.rankBoost || 0) - (a.rankBoost || 0);
     if (rb) return rb;
     const rra = Number.isFinite(+a.rr) ? +a.rr : (Number.isFinite(+a.rr1) ? +a.rr1 : 0);
@@ -3659,6 +3671,25 @@ async function runGateDiagnostics(){
         }
         panels.push(hgFunnelPanelHTML('SWING LOOKBACK — CG_SWING_LOOK, the stop horizon (currently '
           + CG_SWING_LOOK + ')', lookRows, 'diagLook'));
+        if (typeof hgSaveFormationParams === 'function' && lookRows.length){
+          let bestL = CG_SWING_LOOK, bestExp = -Infinity;
+          for (const L of HG_DIAG_LOOKS){
+            let settled = 0, sumR = 0;
+            for (const cr of cachedRows){
+              const rp = cgGateReplay(cr.rows, cr.t, { swingLook: L });
+              for (const smp of rp.samples){
+                const allOk = Object.keys(smp.pass).every(k => smp.pass[k]);
+                if (!allOk) continue;
+                if (smp.r !== null){ settled++; sumR += smp.r; }
+              }
+            }
+            if (settled >= 5){
+              const exp = sumR / settled;
+              if (exp > bestExp){ bestExp = exp; bestL = L; }
+            }
+          }
+          hgSaveFormationParams({ swingLook: bestL, calibrateExp: bestExp });
+        }
       }
       if (!samples.length){
         panels.push(hgFunnelPanelHTML('CALIBRATION — no data',
@@ -3925,6 +3956,14 @@ async function runScanLeg(kind, opts){
                 hit.flowDetail = qv.flowDetail; hit.flowNA = qv.flowNA; hit.flowOk = qv.flowOk;
                 hit.crossOk = qv.crossOk; hit.rsEdge = qv.rsEdge;
               }
+              if (typeof hgFormTicket === 'function'){
+                const fm = hgFormTicket(hit, { rows: rows, style: 'swing', ticker: tScan, a4: hit.a4 });
+                if (!fm.ok){
+                  audit.qualitySkip[fm.tag || 'formation'] = (audit.qualitySkip[fm.tag || 'formation'] || 0) + 1;
+                  return;
+                }
+                Object.assign(hit, fm.hit);
+              }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
               renderSwingCleanCard(tScan, hit, cardsEl, quiet, venueTag);
@@ -3994,6 +4033,14 @@ async function runScanLeg(kind, opts){
                 }
                 hit.flowDetail = qv.flowDetail; hit.flowNA = qv.flowNA; hit.flowOk = qv.flowOk;
                 hit.crossOk = qv.crossOk; hit.rsEdge = qv.rsEdge;
+              }
+              if (typeof hgFormTicket === 'function'){
+                const fm = hgFormTicket(hit, { rows: h1, m15: m15, style: 'scalp', ticker: tScan, a: hit.a });
+                if (!fm.ok){
+                  audit.qualitySkip[fm.tag || 'formation'] = (audit.qualitySkip[fm.tag || 'formation'] || 0) + 1;
+                  return;
+                }
+                Object.assign(hit, fm.hit);
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
@@ -5619,8 +5666,13 @@ async function runCascadeCore(uni){
           if (dr && dr.regime === 'compression'){ funnel.regimeSkip++; return; }
         }
         if (typeof swingTryClean !== 'function') return;
-        const tc = swingTryClean(rows, t);
+        let tc = swingTryClean(rows, t);
         if (!tc || !tc.dir) return;
+        if (typeof hgFormTicket === 'function'){
+          const fm = hgFormTicket(tc, { rows: rows, style: 'swing', ticker: t, a4: last(atr(rows, 14)) });
+          if (!fm.ok){ funnel.formationSkip = (funnel.formationSkip || 0) + 1; return; }
+          tc = fm.hit;
+        }
         const c=rows.map(r=>r.c);
         const e21=last(ema(c,21)), p=last(c), a4=last(atr(rows,14));
         const distToAnchor = (isFinite(a4) && a4 > 0) ? Math.abs(p - e21) / a4 : NaN;

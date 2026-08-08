@@ -954,13 +954,39 @@ async function runScan(ui, scanSt){
         ranked = await filterFn(ranked, venueRows, gold.rows4h, 'gold-scalp');
       }catch(ePg){}
     }
+    var atrW = NaN;
+    if (gold.rows4h && gold.rows4h.length){
+      try{
+        var aArrW0 = _atr(gold.rows15m.length ? gold.rows15m : gold.rows4h, 14);
+        atrW = (aArrW0 && aArrW0.length) ? aArrW0[aArrW0.length - 1] : NaN;
+      }catch(eA){}
+    }
     var wkFn = gfn('hgApplyGoldWeekendDemotes');
     if (wkFn && gold.rows4h && gold.rows4h.length){
       try{
-        var aArrW = _atr(gold.rows15m.length ? gold.rows15m : gold.rows4h, 14);
-        var atrW = (aArrW && aArrW.length) ? aArrW[aArrW.length - 1] : NaN;
         wkFn(ranked, gold.rows4h, atrW, now);
       }catch(eWk){}
+    }
+    var formFn = gfn('hgFormTicket');
+    if (formFn){
+      for (var fi = 0; fi < ranked.length; fi++){
+        var gc = ranked[fi];
+        if (!gc || gc.demoted || gc.vetoed) continue;
+        var vrF = venueRows[gc.venue];
+        var rF = (vrF && vrF.rows15m && vrF.rows15m.length) ? vrF.rows15m : gold.rows15m;
+        try{
+          var gHit = { dir: gc.dir, entry: gc.entry, stop: gc.stop, t1: gc.t1 || gc.tp1, t2: gc.t2, mark: gc.pxNow };
+          var gfm = formFn(gHit, { rows: rF, style: 'gold-scalp', a4: atrW });
+          if (!gfm.ok){ gc.demoted = true; gc.demoteReason = gfm.reason || 'formation'; continue; }
+          if (gfm.hit){
+            if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
+            if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
+            if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
+            gc.formationScore = gfm.formationScore;
+            gc.entryType = gfm.hit.entryType;
+          }
+        }catch(eGf){}
+      }
     }
 
     /* (5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new

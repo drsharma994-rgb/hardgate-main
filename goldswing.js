@@ -1596,6 +1596,24 @@ async function runScan(ui, scanSt){
         var aArrW = _atr(gold.rows4h, 14);
         var atrW = (aArrW && aArrW.length) ? aArrW[aArrW.length - 1] : NaN;
         wkFn(ranked, gold.rows4h, atrW, now);
+        var formFn = gfn('hgFormTicket');
+        if (formFn){
+          for (var fi = 0; fi < ranked.length; fi++){
+            var gc = ranked[fi];
+            if (!gc || gc.demoted || gc.vetoed) continue;
+            try{
+              var gHit = { dir: gc.dir, entry: gc.entry, stop: gc.stop, t1: gc.t1 || gc.tp1, t2: gc.t2 };
+              var gfm = formFn(gHit, { rows: gold.rows4h, style: 'gold-swing', a4: atrW });
+              if (!gfm.ok){ gc.demoted = true; gc.demoteReason = gfm.reason || 'formation'; continue; }
+              if (gfm.hit){
+                if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
+                if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
+                if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
+                gc.formationScore = gfm.formationScore;
+              }
+            }catch(eGf){}
+          }
+        }
       }catch(eWk){}
     }
 
