@@ -31,9 +31,20 @@ function hgFormationParams(){
       if (isFinite(sc) && sc > 0) p.stopScale = sc;
     }
     if (typeof G.hgHeatProfile === 'function' && typeof G.hgScoreRecords === 'function'){
-      var heat = G.hgHeatProfile(G.hgScoreRecords() || []);
-      if (heat && heat.winners && isFinite(heat.winners.p90)){
+      var recs = (typeof G.hgScoreRecords === 'function' ? G.hgScoreRecords() : []) || [];
+      var sorted = recs.slice().sort(function(a, b){ return (+a.closedAt || 0) - (+b.closedAt || 0); });
+      var cut = Math.floor(sorted.length * 0.7);
+      var trainRecs = sorted.slice(0, cut);
+      var heat = G.hgHeatProfile(trainRecs);
+      var wf = (typeof G.hgWalkForward === 'function') ? G.hgWalkForward(sorted) : null;
+      if (heat && heat.winners && isFinite(heat.winners.p90) && (!wf || wf.verdict === 'HOLDS')){
         p.buffer = Math.max(0.15, Math.min(0.45, (1 - heat.winners.p90) + 0.05));
+        p.source = 'walkforward+ledger';
+      } else if (wf && wf.verdict !== 'HOLDS'){
+        p.source = 'defaults (walk-forward ' + wf.verdict + ')';
+      }
+      if (heat && heat.winners && isFinite(heat.winners.p90) && heat.winners.p90 < 0.5){
+        p.stopHint = 'winners p90 MAE ' + heat.winners.p90.toFixed(2) + 'R — stops likely too wide';
       }
     }
     if (typeof localStorage !== 'undefined'){
@@ -87,7 +98,57 @@ function hgFillProbability(rows, entry, dir, zone, maxBars){
   }catch(e){ return out; }
 }
 
-/* --- rank entry POIs (sweep > FVG/EDGE > OTE > EMA) --- */
+/* --- rank entry POIs (sweep > FVG/EDGE > OTE > aVWAP > EMA) --- */
+function hgAnchorIndex(rows, mode){
+  try{
+    if (!rows || !rows.length) return -1;
+    var n = rows.length - 1;
+    if (mode === 'swingHigh' || mode === 'swingLow'){
+      var seg = Math.min(60, rows.length);
+      var best = -1, bv = (mode === 'swingHigh') ? -Infinity : Infinity;
+      for (var i = rows.length - seg; i <= n; i++){
+        if (i < 0 || !rows[i]) continue;
+        var v = (mode === 'swingHigh') ? +rows[i].h : +rows[i].l;
+        if (!isFinite(v)) continue;
+        if ((mode === 'swingHigh' && v > bv) || (mode === 'swingLow' && v < bv)){ bv = v; best = i; }
+      }
+      return best;
+    }
+    var lastT = +(rows[n].t || rows[n].time || 0);
+    if (!isFinite(lastT) || lastT <= 0) return Math.max(0, rows.length - 24);
+    var ms = lastT < 1e12 ? lastT * 1000 : lastT;
+    var dayStart = Math.floor(ms / 86400000) * 86400000;
+    if (mode === 'london') dayStart += 7 * 3600000;
+    for (var j = n; j >= 0; j--){
+      var tj = +(rows[j].t || rows[j].time || 0);
+      var mj = tj < 1e12 ? tj * 1000 : tj;
+      if (mj < dayStart) return Math.min(n, j + 1);
+    }
+    return 0;
+  }catch(e){ return -1; }
+}
+
+function hgAnchoredVWAP(rows, anchorIdx){
+  try{
+    if (!rows || anchorIdx < 0 || anchorIdx >= rows.length) return null;
+    var pv = 0, vol = 0, sq = 0, cnt = 0;
+    for (var i = anchorIdx; i < rows.length; i++){
+      var r = rows[i];
+      if (!r) continue;
+      var tp = (+r.h + +r.l + +r.c) / 3;
+      var v = isFinite(+r.v) && +r.v > 0 ? +r.v : 1;
+      if (!isFinite(tp)) continue;
+      pv += tp * v; vol += v; sq += tp * tp * v; cnt++;
+    }
+    if (!(vol > 0) || cnt < 3) return null;
+    var vwap = pv / vol;
+    var varr = Math.max(0, sq / vol - vwap * vwap);
+    var sd = Math.sqrt(varr);
+    return { vwap: vwap, sd: sd, bars: cnt, anchorIdx: anchorIdx,
+             lower1: vwap - sd, upper1: vwap + sd };
+  }catch(e){ return null; }
+}
+
 function hgRankEntryPOI(rows, dir, style, mark, atrVal, params){
   params = params || hgFormationParams();
   try{
@@ -143,6 +204,29 @@ function hgRankEntryPOI(rows, dir, style, mark, atrVal, params){
         });
       }
     }
+
+    /* anchored VWAP: session anchor for scalp, swing-extreme anchor for swing */
+    try{
+      var avMode = (style === 'scalp' || style === 'fade')
+        ? 'session'
+        : (dir === 'long' ? 'swingLow' : 'swingHigh');
+      var avIdx = hgAnchorIndex(rows, avMode);
+      var av = hgAnchoredVWAP(rows, avIdx);
+      if (av && isFinite(av.vwap)){
+        var avEntry = (dir === 'long')
+          ? ((mark > av.vwap) ? av.vwap : av.lower1)
+          : ((mark < av.vwap) ? av.vwap : av.upper1);
+        if (isFinite(avEntry)){
+          cands.push({
+            score: (style === 'scalp') ? 84 : 80,
+            entry: avEntry,
+            label: 'aVWAP ' + avMode + ' (' + av.bars + 'b)',
+            poi: 'avwap',
+            zone: { lo: avEntry - tol * 0.4, hi: avEntry + tol * 0.4 }
+          });
+        }
+      }
+    }catch(eAv){}
 
     /* EMA21 / EMA9 fallback */
     if (typeof ema === 'function'){
@@ -241,6 +325,7 @@ function hgFormationScore(plan, ctx){
     if (plan.poi === 'sweep') s += 18;
     else if (plan.poi === 'fvg') s += 15;
     else if (plan.poi === 'ote') s += 12;
+    else if (plan.poi === 'avwap') s += 14;
     else if (plan.poi === 'ema21') s += 8;
     if (plan.flowOk) s += 10;
     if (plan.crossOk) s += 5;
@@ -359,6 +444,8 @@ function hgFormTicket(hit, ctx){
 G.hgFormationParams = hgFormationParams;
 G.hgSaveFormationParams = hgSaveFormationParams;
 G.hgFillProbability = hgFillProbability;
+G.hgAnchorIndex = hgAnchorIndex;
+G.hgAnchoredVWAP = hgAnchoredVWAP;
 G.hgRankEntryPOI = hgRankEntryPOI;
 G.hgStructureTargets = hgStructureTargets;
 G.hgFormationScore = hgFormationScore;

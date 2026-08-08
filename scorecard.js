@@ -1151,7 +1151,12 @@ function render(ui){
     if (!ui) return;
     var st = hgScoreStats(store);
     if (ui.board) ui.board.innerHTML = boardHtml(st);
-    if (ui.breaks) ui.breaks.innerHTML = breakdownsHtml(st);
+    if (ui.breaks){
+      var breaks = '';
+      if (typeof G.hgValidationPanelHtml === 'function') breaks += G.hgValidationPanelHtml(store);
+      breaks += breakdownsHtml(st);
+      ui.breaks.innerHTML = breaks;
+    }
     if (ui.openWrap) ui.openWrap.innerHTML = openHtml(store);
     if (ui.settledWrap) ui.settledWrap.innerHTML = settledHtml(store);
   }catch(e){
