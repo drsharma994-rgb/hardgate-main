@@ -5,6 +5,7 @@
    CommonJS, zero deps, Node 18+ global fetch. Never throws at load. */
 
 const ALLOWED_HOSTS = new Set([
+  'api.india.delta.exchange',
   'api.coindcx.com',
   'public.coindcx.com',
   'query1.finance.yahoo.com',

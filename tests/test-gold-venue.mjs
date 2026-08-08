@@ -46,8 +46,20 @@ function run(scenario){
     getGoldCandles: async () => ({ rows: mkRows(260, 4200), source: 'binance-xau' }),
   };
   ctx.window = ctx; ctx.globalThis = ctx;
+  ctx.CDCX_PROXY = (u) => '/api/proxy?url=' + encodeURIComponent(u);
+  ctx.sleep = async () => {};
+  ctx.trackCall = () => {};
+  ctx.deltaGet = async (url) => {
+    async function readJson(r){
+      if (!r || !r.ok) throw new Error('delta HTTP fail');
+      return r.json();
+    }
+    try{ return await readJson(await ctx.fetch(ctx.CDCX_PROXY(url))); }catch(e){}
+    return readJson(await ctx.fetch(url));
+  };
   ctx.fetch = async (url) => {
-    if (String(url).indexOf('delta.exchange') < 0) return { ok: false };
+    const probe = (function(){ try{ return decodeURIComponent(String(url)); }catch(e){ return String(url); } })();
+    if (probe.indexOf('delta.exchange') < 0 && String(url).indexOf('delta.exchange') < 0) return { ok: false };
     if (scenario === 'down') return { ok: false };
     const n = scenario === 'thin' ? 40 : 260;
     return { ok: true, json: async () => ({
