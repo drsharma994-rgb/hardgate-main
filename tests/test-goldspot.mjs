@@ -127,6 +127,9 @@ assert(W.HG_tabs[0].id === 'goldspot' && W.HG_tabs[0].label === 'GOLD SPOT'
   assert(src.indexOf("'api.gold-api.com'") > -1, 'api/proxy.js ALLOWED_HOSTS lists api.gold-api.com');
 
   const proxy = require('../api/proxy.js');
+  function proxyReq(extra){
+    return Object.assign({ method: 'GET', query: {}, headers: { origin: 'https://hardgate-main.onrender.com' } }, extra || {});
+  }
   function mockRes(){
     return { statusCode: 200, headers: {}, body: undefined,
              setHeader(k, v){ this.headers[k.toLowerCase()] = v; }, end(b){ this.body = b; } };
@@ -140,18 +143,18 @@ assert(W.HG_tabs[0].id === 'goldspot' && W.HG_tabs[0].label === 'GOLD SPOT'
   };
   try{
     const res = mockRes();
-    await proxy({ method: 'GET', query: { url: 'https://api.gold-api.com/price/XAU' } }, res);
+    await proxy(proxyReq({ method: 'GET', query: { url: 'https://api.gold-api.com/price/XAU' } }), res);
     assert(res.statusCode === 200 && res.body === '{"price":3123.45,"symbol":"XAU"}',
            'proxy passes api.gold-api.com (200 passthrough)');
     assert(calledWith === 'https://api.gold-api.com/price/XAU', 'proxy forwards the exact upstream URL');
-    assert(res.headers['access-control-allow-origin'] === '*' && res.headers['content-type'] === 'application/json',
+    assert(res.headers['access-control-allow-origin'] === 'https://hardgate-main.onrender.com' && res.headers['content-type'] === 'application/json',
            'proxy sets ACAO + forwards content-type for api.gold-api.com');
     const res403 = mockRes();
-    await proxy({ method: 'GET', query: { url: 'https://evil.example.com/price/XAU' } }, res403);
+    await proxy(proxyReq({ method: 'GET', query: { url: 'https://evil.example.com/price/XAU' } }), res403);
     assert(res403.statusCode === 403 && JSON.parse(res403.body).error === 'host not allowed',
            'non-allowlisted host still 403 "host not allowed"');
     const resHttp = mockRes();
-    await proxy({ method: 'GET', query: { url: 'http://api.gold-api.com/price/XAU' } }, resHttp);
+    await proxy(proxyReq({ method: 'GET', query: { url: 'http://api.gold-api.com/price/XAU' } }), resHttp);
     assert(resHttp.statusCode === 403, 'http:// (not https) on api.gold-api.com still 403');
   } finally { globalThis.fetch = origFetch; }
 }

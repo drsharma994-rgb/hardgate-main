@@ -15,6 +15,8 @@ import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
 import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch.mjs';
 import { createPaperbookApi } from '../lib/paperbook-api.mjs';
 import { createExecuteApi } from '../lib/execute-api.mjs';
+import { createNotifyApi } from '../lib/notify-api.mjs';
+import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
@@ -24,6 +26,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));   /* repo root (tra
 const PORT = +(process.env.PORT || 10000);
 const paperbookHandler = createPaperbookApi(ROOT);
 const executeHandler = createExecuteApi();
+const notifyHandler = createNotifyApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -40,10 +43,20 @@ const MIME = {
   '.map':  'application/json; charset=utf-8',
 };
 
-/* vercel.json parity — the two security headers on every response */
+/* vercel.json parity — security headers on every response */
 function baseHeaders(res){
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "connect-src 'self' https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov wss://socket.india.delta.exchange https://ntfy.sh",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join('; '));
 }
 
 const server = http.createServer(async (req, res) => {
@@ -75,7 +88,10 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/book' || u.pathname.indexOf('/api/book/') === 0){
       return paperbookHandler(req, res);
     }
-    if (u.pathname === '/api/execute' || u.pathname === '/api/execute/capabilities'){
+    if (u.pathname === '/api/notify' || u.pathname === '/api/notify/capabilities'){
+      return notifyHandler(req, res);
+    }
+    if (u.pathname === '/api/execute' || u.pathname.indexOf('/api/execute/') === 0){
       return executeHandler(req, res);
     }
 
@@ -102,6 +118,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => console.log('HARDGATE listening on :' + PORT));
+
+hgAssertCcxtBoot().then(function(r){
+  if (!r.ok) console.error('[EXEC FATAL] ' + r.reason);
+}).catch(function(e){
+  console.error('[EXEC FATAL] ccxt boot check failed', e && e.message);
+});
 
 /* 5-minute fired-squeeze Telegram watch (arms only with TELEGRAM_TOKEN +
    TELEGRAM_CHAT_ID in the environment; logs its status either way) */

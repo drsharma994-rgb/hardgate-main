@@ -113,7 +113,7 @@ async function recordExecuteBlotter(plan, payload, result){
     });
     await fetch('/api/book/execute-blotter', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: (typeof W.hgApiHeaders === 'function') ? W.hgApiHeaders() : { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (typeof W.bookRefresh === 'function') W.bookRefresh();
@@ -150,7 +150,7 @@ async function recordExecuteFill(plan, fill){
     var body = W.bookFundBody(Object.assign({ fund: plan.fund }, fill));
     await fetch('/api/book/execute-fill', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: (typeof W.hgApiHeaders === 'function') ? W.hgApiHeaders() : { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     if (typeof W.bookRefresh === 'function') W.bookRefresh();
@@ -159,13 +159,14 @@ async function recordExecuteFill(plan, fill){
 
 async function postExecute(url, payload){
   var body = url.indexOf('/api/execute') >= 0 ? { plan: payload, idempotencyKey: payload.idempotencyKey } : payload;
+  var hdrs = (typeof W.hgApiHeaders === 'function') ? W.hgApiHeaders() : { 'Content-Type': 'application/json' };
   var last = { ok: false, status: 0, json: null, reason: 'network error' };
   for (var attempt = 0; attempt <= EXEC_RETRY; attempt++){
     if (attempt) await sleep(500);
     try{
       var res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: hdrs,
         body: JSON.stringify(body),
       });
       var j = null;

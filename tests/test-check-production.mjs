@@ -102,32 +102,24 @@ console.log('== README doc guards ==');
 console.log('== npm test chain vs tests/*.mjs ==');
 {
   const pkg = JSON.parse(fs.readFileSync(root + 'package.json', 'utf8'));
-  const chain = (pkg.scripts && pkg.scripts.test || '')
-    .split(' && ')
-    .map(s => s.trim().replace(/^node /, ''))
-    .filter(Boolean);
-  ok(chain.length >= 80, 'npm test chain has expected breadth (' + chain.length + ' steps)');
-
-  const missingFiles = chain.filter(rel => !fs.existsSync(path.join(root, rel)));
-  ok(missingFiles.length === 0, 'every npm test step resolves to a file'
-    + (missingFiles.length ? ' — missing: ' + missingFiles.join(', ') : ''));
+  const testScript = (pkg.scripts && pkg.scripts.test) || '';
+  const usesRunner = testScript.indexOf('run-tests.mjs') >= 0;
+  ok(usesRunner, 'npm test uses scripts/run-tests.mjs aggregator');
+  ok(fs.existsSync(path.join(root, 'scripts/run-tests.mjs')), 'run-tests.mjs exists');
 
   const testFiles = fs.readdirSync(path.join(root, 'tests'))
     .filter(f => f.startsWith('test-') && f.endsWith('.mjs'))
     .sort();
-  const chainSet = new Set(chain.map(p => p.replace(/^tests\//, '')));
   const optionalOutside = new Set(['test-data-layer.mjs']);
-  const notInChain = testFiles.filter(f => !chainSet.has(f) && !optionalOutside.has(f));
-  ok(notInChain.length === 0, 'every tests/test-*.mjs is in npm test (except optional smoke)'
-    + (notInChain.length ? ' — add: ' + notInChain.map(f => 'tests/' + f).join(', ') : ''));
+  ok(testFiles.filter(f => !optionalOutside.has(f)).length >= 100,
+    'tests/ still has full file count (' + testFiles.length + ')');
 
-  ok(chain.includes('tests/extract-inline.mjs'), 'npm test includes extract-inline.mjs');
-  ok(chain.includes('tests/test-check-production.mjs'), 'npm test includes deploy guard suite');
-  ok(chain.includes('tests/test-book.mjs'), 'npm test includes book.js runtime tests');
-  ok(chain.includes('tests/test-indicators.mjs'), 'npm test includes indicators.js tests');
-  ok(chain.includes('tests/test-store.mjs'), 'npm test includes store.js tests');
-  ok(chain.includes('tests/test-conviction-lock.mjs'), 'npm test includes conviction-lock tests');
-  ok(chain.includes('tests/test-startradertab.mjs'), 'npm test includes startradertab tests');
+  const runnerSrc = fs.readFileSync(path.join(root, 'scripts/run-tests.mjs'), 'utf8');
+  ok(runnerSrc.indexOf('extract-inline.mjs') >= 0, 'run-tests includes extract-inline.mjs');
+  ok(runnerSrc.indexOf('test-suite-integrity.mjs') >= 0, 'run-tests includes suite integrity');
+  ok(testFiles.includes('test-check-production.mjs'), 'test-check-production.mjs on disk');
+  ok(testFiles.includes('test-api-auth.mjs'), 'test-api-auth.mjs on disk');
+  ok(testFiles.includes('test-fix-pack-12.mjs'), 'test-fix-pack-12.mjs on disk');
 }
 
 console.log('\n' + pass + ' passed');

@@ -11,7 +11,7 @@ services:
     plan: starter
     region: singapore
     branch: main
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: node scripts/server.mjs
     autoDeploy: true
     healthCheckPath: /
@@ -21,7 +21,7 @@ services:
     plan: starter
     region: singapore
     branch: main
-    buildCommand: npm install && npx puppeteer browsers install chrome
+    buildCommand: npm ci && npx puppeteer browsers install chrome
     startCommand: node app.js
     autoDeploy: true
     envVars:

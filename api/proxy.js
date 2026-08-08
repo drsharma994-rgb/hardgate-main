@@ -21,8 +21,22 @@ const UPSTREAM_TIMEOUT_MS = 15000;
 /* Scans fire parallel CoinDCX candle fetches — keep a generous ceiling so
    whole-exchange sweeps never 429 themselves; abuse is still bounded. */
 const RATE_WINDOW_MS = 60000;
-const RATE_MAX_PER_WINDOW = 3000;
+const RATE_MAX_PER_WINDOW = 300;
 const __rateBuckets = new Map();
+
+const ALLOWED_ORIGINS = new Set([
+  'https://hardgate-main.onrender.com',
+  'http://localhost:10000',
+  'http://127.0.0.1:10000',
+]);
+
+function corsOrigin(req){
+  try{
+    var o = req.headers && (req.headers.origin || req.headers.Origin);
+    if (o && ALLOWED_ORIGINS.has(String(o))) return String(o);
+  }catch(e){}
+  return null;
+}
 
 function clientKey(req){
   try{
@@ -43,24 +57,29 @@ function rateLimited(key){
   return false;
 }
 
-function send(res, status, body, extraHeaders){
+function send(res, status, body, extraHeaders, req){
+  const origin = req ? corsOrigin(req) : null;
   const headers = Object.assign({
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': origin || 'null',
+    'Vary': 'Origin',
     'Cache-Control': 's-maxage=30, stale-while-revalidate=60',
   }, extraHeaders || {});
+  if (!origin) delete headers['Access-Control-Allow-Origin'];
   for (const k of Object.keys(headers)) res.setHeader(k, headers[k]);
   res.statusCode = status;
   res.end(body);
 }
 
-function sendJson(res, status, obj){
-  send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8' });
+function sendJson(res, status, obj, req){
+  send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8' }, req);
 }
 
 module.exports = async (req, res) => {
   // CORS preflight
   if (req.method === 'OPTIONS'){
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    var o = corsOrigin(req);
+    if (o) res.setHeader('Access-Control-Allow-Origin', o);
+    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Max-Age', '86400');
@@ -68,7 +87,7 @@ module.exports = async (req, res) => {
     res.end();
     return;
   }
-  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' });
+  if (req.method !== 'GET') return sendJson(res, 405, { error: 'method not allowed' }, req);
 
   // target url: Vercel parses req.query; fall back to a manual parse so the
   // handler also works under a plain Node http server (and in tests).
@@ -77,15 +96,15 @@ module.exports = async (req, res) => {
     try { raw = new URL(req.url, 'http://localhost').searchParams.get('url'); } catch (e) {}
   }
   if (Array.isArray(raw)) raw = raw[0];
-  if (!raw) return sendJson(res, 400, { error: 'missing url param' });
+  if (!raw) return sendJson(res, 400, { error: 'missing url param' }, req);
 
   let target;
-  try { target = new URL(raw); } catch (e) { return sendJson(res, 400, { error: 'invalid url param' }); }
+  try { target = new URL(raw); } catch (e) { return sendJson(res, 400, { error: 'invalid url param' }, req); }
   if (target.protocol !== 'https:' || !ALLOWED_HOSTS.has(target.hostname)){
-    return sendJson(res, 403, { error: 'host not allowed' });
+    return sendJson(res, 403, { error: 'host not allowed' }, req);
   }
   if (rateLimited(clientKey(req))){
-    return sendJson(res, 429, { error: 'rate limit exceeded — try again shortly' });
+    return sendJson(res, 429, { error: 'rate limit exceeded — try again shortly' }, req);
   }
 
   const ctrl = new AbortController();
@@ -106,12 +125,12 @@ module.exports = async (req, res) => {
     // decoded any gzip, so content-length/encoding must NOT be forwarded)
     send(res, upstream.status, text, {
       'Content-Type': upstream.headers.get('content-type') || 'text/plain; charset=utf-8',
-    });
+    }, req);
   }catch(e){
     const msg = e && e.name === 'AbortError'
       ? 'upstream timeout after ' + UPSTREAM_TIMEOUT_MS + 'ms'
       : String((e && e.message) || e);
-    sendJson(res, 502, { error: msg });
+    sendJson(res, 502, { error: msg }, req);
   }finally{
     clearTimeout(timer);
   }

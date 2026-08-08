@@ -205,7 +205,10 @@ function bookTabVisible(){
 
 async function bookFetch(path, opts){
   opts = opts || {};
-  var res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
+  var baseHeaders = (typeof hgApiHeaders === 'function') ? hgApiHeaders() : { 'Content-Type': 'application/json' };
+  var merged = Object.assign({}, opts);
+  merged.headers = Object.assign({}, baseHeaders, opts.headers || {});
+  var res = await fetch(path, merged);
   var j = null;
   try{ j = await res.json(); }catch(e){}
   return { res: res, json: j };

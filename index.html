@@ -214,10 +214,15 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <span class="note" id="executeBackendStat"></span>
         <span class="note" id="executeDisabledNote" style="color:var(--mut)">Live trading disabled — saved Execute URL is ignored.</span>
       </label>
-      <label class="header-field" title="Telegram alerts: bot token from @BotFather + chat id. Stored in this browser only.">
+      <label class="header-field" title="Server API key for /api/book and /api/execute mutations. Set HARDGATE_API_SECRET on Render to match. Stored in this browser only.">
+        <span class="header-field-label">api key</span>
+        <input id="hgApiKey" type="password" placeholder="HARDGATE_API_SECRET" autocomplete="off">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveHgApiKey()">SAVE</button>
+        <span class="note" id="hgApiKeyStat"></span>
+      </label>
+      <label class="header-field" title="Telegram alerts via server /api/notify — set TELEGRAM_TOKEN + TELEGRAM_CHAT_ID on Render. Optional chat override stored locally.">
         <span class="header-field-label">telegram</span>
-        <input id="tgToken" placeholder="bot token" title="bot token from @BotFather">
-        <input id="tgChat" placeholder="chat id" title="your Telegram chat id">
+        <input id="tgChat" placeholder="chat id override (optional)" title="optional chat id override; server TELEGRAM_CHAT_ID used when empty">
         <button class="btn ghost header-field-btn" type="button" onclick="saveTelegram()">SAVE</button>
         <button class="btn ghost header-field-btn" type="button" onclick="resetTelegramDefaults()">RESET</button>
         <button class="btn ghost header-field-btn" type="button" onclick="testTelegram()">TEST</button>
@@ -693,8 +698,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="scorecard.js"></script>
 <script src="formation.js"></script>
 <script src="book-routing.js?v=55"></script>
-<script src="book.js?v=55"></script>
-<script src="execute.js?v=55"></script>
+<script src="api-client.js?v=1"></script>
+<script src="book.js?v=56"></script>
+<script src="execute.js?v=56"></script>
 <script src="pinemath.js"></script>
 <script src="pinegoldmath.js"></script>
 <script src="goldpine.js"></script>
@@ -6163,15 +6169,12 @@ function saveNtfyTopic(){
   }catch(e){ $('ntfyTopicStat').textContent = 'save failed'; }
 }
 
-/* Telegram alerts — Bot API (free, CORS-open). Token + chat id live in
-   localStorage only (Settings → SAVE). No baked-in defaults in a public
-   repo. Plain-text messages; returns true on delivery, an error string
-   otherwise. Never throws. */
+/* Telegram alerts — server-side /api/notify (token on Render, not in browser).
+   Optional chat id override in localStorage. Never throws. */
 function tgCreds(){
-  let token = null, chat = null;
-  try{ token = localStorage.getItem('hg_tg_token'); }catch(e){}
+  let chat = null;
   try{ chat = localStorage.getItem('hg_tg_chat'); }catch(e){}
-  return (token && chat) ? { token: token, chat: chat } : null;
+  return chat ? { chat: chat } : {};
 }
 /** Standard Telegram body: headline + Tab + Signal + optional venue + body + site link. */
 function hgTelegramFormat(opts){
@@ -6188,45 +6191,46 @@ function hgTelegramFormat(opts){
 }
 async function sendTelegram(textOrTitle, bodyOptional){
   try{
-    const c = tgCreds();
-    if (!c) return 'Telegram not configured — save token + chat in Settings';
     let text = String(textOrTitle || '');
     if (arguments.length >= 2 && bodyOptional != null && bodyOptional !== ''){
       text = (typeof hgTelegramFormat === 'function')
         ? hgTelegramFormat({ title: textOrTitle, body: bodyOptional })
         : (String(textOrTitle) + '\n' + String(bodyOptional) + '\nhttps://hardgate-main.onrender.com/');
     }
-    /* Token goes in the path raw — encodeURIComponent breaks the colon segment. */
-    const res = await fetch('https://api.telegram.org/bot' + c.token + '/sendMessage', {
+    const c = tgCreds();
+    const body = { text: String(text || '') };
+    if (c.chat) body.chat_id = c.chat;
+    const res = await fetch('/api/notify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: c.chat, text: String(text || ''), disable_web_page_preview: true })
+      headers: typeof hgApiHeaders === 'function' ? hgApiHeaders() : { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     const j = await res.json().catch(function(){ return null; });
     if (!res || !res.ok){
-      const desc = (j && j.description) ? String(j.description) : '';
-      return 'HTTP ' + (res && res.status) + (desc ? ' — ' + desc : '');
+      const reason = (j && j.reason) ? String(j.reason) : ('HTTP ' + (res && res.status));
+      if (res && res.status === 503 && reason.indexOf('TELEGRAM') >= 0){
+        return 'Telegram not configured on server — set TELEGRAM_TOKEN + TELEGRAM_CHAT_ID on Render';
+      }
+      if (res && res.status === 401) return 'API key required — save HARDGATE_API_SECRET match in Settings → api key';
+      return reason;
     }
     return (j && j.ok) ? true : ('api: ' + JSON.stringify(j).slice(0, 120));
   }catch(e){ return emailErrStr(e); }
 }
 function resetTelegramDefaults(){
   try{
-    localStorage.removeItem('hg_tg_token');
     localStorage.removeItem('hg_tg_chat');
   }catch(e){}
   try{
-    if ($('tgToken')) $('tgToken').value = '';
     if ($('tgChat')) $('tgChat').value = '';
-    if ($('tgStat')) $('tgStat').textContent = 'cleared — enter token + chat and SAVE';
+    if ($('tgStat')) $('tgStat').textContent = 'cleared — server TELEGRAM_CHAT_ID used when chat empty';
   }catch(e){}
 }
 function saveTelegram(){
-  const t = ($('tgToken').value||'').trim(), c = ($('tgChat').value||'').trim();
+  const c = ($('tgChat').value||'').trim();
   try{
-    if (t) localStorage.setItem('hg_tg_token', t); else localStorage.removeItem('hg_tg_token');
     if (c) localStorage.setItem('hg_tg_chat', c); else localStorage.removeItem('hg_tg_chat');
-    $('tgStat').textContent = (t && c) ? 'saved' : (t || c ? 'partial — need both' : 'cleared');
+    $('tgStat').textContent = c ? 'chat override saved' : 'using server TELEGRAM_CHAT_ID';
   }catch(e){ $('tgStat').textContent = 'save failed'; }
 }
 async function testTelegram(){
@@ -6661,11 +6665,10 @@ function initAlerts(){
   try{ emailjs.init({publicKey:'TrHdawQ8xirRSOZps'}); }catch(e){}
   try{ const t = localStorage.getItem('hg_ntfy_topic'); if (t && $('ntfyTopic')) $('ntfyTopic').value = t; }catch(e){}
   try{
-    const tt = localStorage.getItem('hg_tg_token') || '';
     const tc = localStorage.getItem('hg_tg_chat') || '';
-    if ($('tgToken')) $('tgToken').value = tt;
     if ($('tgChat')) $('tgChat').value = tc;
   }catch(e){}
+  try{ if (typeof initHgApiKey === 'function') initHgApiKey(); }catch(e){}
   try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
   if (HG_ALERTS_FORCED_ON){
     armAlertCycle();
