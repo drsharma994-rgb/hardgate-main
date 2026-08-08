@@ -10,11 +10,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-08T15:31:42.758Z"
+    "at": "2026-08-08T16:05:02.304Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-08T15:31:42.759Z"
+    "at": "2026-08-08T16:05:02.304Z"
   },
   "degraded": {
     "count": 0,
@@ -35,7 +35,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-08T15:31:43.026Z"
+    "at": "2026-08-08T16:05:02.622Z"
   },
   "bookFill": {
     "key": "u0|p0",
@@ -46,7 +46,7 @@
     },
     "at": "2026-08-01T13:22:36.755Z"
   },
-  "digestAt": "2026-08-01T15:46:45.767Z",
+  "digestAt": "2026-08-08T16:05:03.241Z",
   "digestTicket": {
     "long": null,
     "short": null
