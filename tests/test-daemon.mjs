@@ -283,4 +283,20 @@ console.log('== evaluateActiveConvictions invalidation ==');
   ok(closed.closed === 1 && mgr7.activeConvictions.size === 0, 'stop hit closes active conviction');
 }
 
+console.log('== formation instrumentation (report-only) ==');
+{
+  var { processFormationCandidates, brainRowToCandidate } = await import('../lib/formation-instr.mjs');
+  var rows = [
+    { sym: 'BTCUSDT', dir: 'long', tier: 'PRIME', plan: { entry: 100, stop: 95, t1: 110 },
+      evidence: ['TREND4H: bullish', 'a', 'b'], poiKind: 'fvg' },
+    { sym: 'PEPEUSDT', dir: 'long', tier: 'PRIME', plan: { entry: 1, stop: 0.9, t1: 1.2 },
+      evidence: [], poiKind: 'ema9', htfAlign: false },
+  ];
+  var cands = rows.map(function(r){ return brainRowToCandidate(r); }).filter(Boolean);
+  var formed = processFormationCandidates(cands, { ledgerRows: [], env: {} });
+  ok(formed.passed.length === 2, 'default env does not gate (report-only)');
+  ok(formed.passed[0].fqs >= (formed.passed[1].fqs || 0), 'candidates ranked by FQS');
+  ok(formed.passed[0].fpKey && formed.passed[0].fpKey.indexOf('btc|') === 0, 'fingerprint attached');
+}
+
 console.log('\n' + pass + ' assertions passed');
