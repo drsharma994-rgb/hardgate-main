@@ -19,6 +19,101 @@ function toEsc(s){
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
+function agentPx(n){
+  if (!fin(+n)) return '—';
+  if (typeof W.PX === 'function') return W.PX(+n);
+  var x = Math.abs(+n);
+  if (x >= 10000) return (+n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (x >= 100) return (+n).toFixed(2);
+  if (x >= 1) return (+n).toFixed(4);
+  return (+n).toFixed(6);
+}
+
+function agentPct(n, digits){
+  digits = digits != null ? digits : 2;
+  if (!fin(+n)) return '—';
+  return (+n >= 0 ? '+' : '') + (+n).toFixed(digits) + '%';
+}
+
+function agentRr(entry, stop, t1){
+  if (!fin(+entry) || !fin(+stop) || !fin(+t1) || +entry === +stop) return null;
+  return Math.abs(+t1 - +entry) / Math.abs(+entry - +stop);
+}
+
+function hasSetupLevels(f){
+  return f && fin(+f.entry) && fin(+f.stop) && fin(+f.t1) && +f.entry !== +f.stop;
+}
+
+function setupLevelsTag(f){
+  if (!hasSetupLevels(f)) return '';
+  var rr = f.rr != null && fin(+f.rr) ? +f.rr : agentRr(f.entry, f.stop, f.t1);
+  var h = 'ENTRY <b class="hg-num">' + agentPx(f.entry) + '</b>'
+    + ' · SL <b class="hg-num">' + agentPx(f.stop) + '</b>'
+    + ' · TP1 <b class="hg-num">' + agentPx(f.t1) + '</b>';
+  if (fin(+f.t2)) h += ' · TP2 <b class="hg-num">' + agentPx(f.t2) + '</b>';
+  if (rr != null) h += ' · <span class="hg-num">' + rr.toFixed(2) + 'R</span>';
+  return h;
+}
+
+function collectSetupsForDisplay(desk){
+  var out = [];
+  var seen = {};
+  function add(f, extra){
+    if (!f || !f.sym || !f.dir) return;
+    var key = (f.agentId || f.agentLabel || '') + '|' + f.sym + '|' + f.dir + '@' + (fin(+f.entry) ? f.entry : 'na');
+    if (seen[key]) return;
+    seen[key] = true;
+    out.push(Object.assign({}, f, extra || {}));
+  }
+  var top = (desk && desk.topFindings) ? desk.topFindings : [];
+  for (var i = 0; i < top.length; i++) add(top[i]);
+  if (desk && desk.agents){
+    for (var id in desk.agents){
+      if (!Object.prototype.hasOwnProperty.call(desk.agents, id)) continue;
+      var finds = desk.agents[id].findings || [];
+      for (var j = 0; j < finds.length; j++){
+        add(finds[j], { agentId: id, agentLabel: desk.agents[id].label });
+      }
+    }
+  }
+  var atomicFn = gfn('getAtomicDeskCached');
+  if (atomicFn){
+    try{
+      var ad = atomicFn();
+      var best = (ad && ad.bestSetups) ? ad.bestSetups : [];
+      for (var k = 0; k < best.length; k++){
+        var s = best[k];
+        add({
+          sym: s.sym,
+          dir: s.dir,
+          entry: s.entry,
+          stop: s.stop,
+          t1: s.t1,
+          t2: s.t2,
+          rr: s.rr,
+          style: s.style,
+          venue: s.bestVenue || s.exchange,
+          exchange: s.bestVenue || s.exchange,
+          clean7: !!(s.clean7 || s.clean),
+          nearClean: !!s.nearClean,
+          score: s.score,
+          note: s.note,
+          agentLabel: 'Atomic ' + (s.bestVenue || s.exchange || 'ranker'),
+          src: 'ATOMIC',
+        });
+      }
+    }catch(e1){}
+  }
+  out.sort(function(a, b){
+    var la = hasSetupLevels(a) ? 1000 : 0;
+    var lb = hasSetupLevels(b) ? 1000 : 0;
+    var sa = la + (a.clean7 ? 100 : 0) + (fin(+a.score) ? +a.score : 0);
+    var sb = lb + (b.clean7 ? 100 : 0) + (fin(+b.score) ? +b.score : 0);
+    return sb - sa;
+  });
+  return out;
+}
+
 function gfn(name){
   try{ if (typeof W[name] === 'function') return W[name]; }catch(e){}
   return null;
@@ -353,6 +448,8 @@ function atomicFindingsFromDesk(desk, venueFilter){
       entry: s.entry,
       stop: s.stop,
       t1: s.t1,
+      t2: s.t2,
+      rr: s.rr,
       style: s.style,
       clean7: !!(s.clean7 || s.clean),
       score: s.score != null ? s.score : 10,
@@ -525,6 +622,59 @@ function renderAgentCards(desk){
     if (rep && rep.summary){
       h += '<div class="note" style="margin-top:4px;line-height:1.4;font-size:11px">' + toEsc(rep.summary) + '</div>';
     }
+    if (rep && Array.isArray(rep.findings)){
+      for (var fi = 0; fi < rep.findings.length && fi < 2; fi++){
+        var ff = rep.findings[fi];
+        if (!hasSetupLevels(ff)) continue;
+        h += '<div class="note" style="margin-top:6px;font-size:11px;line-height:1.5;border-left:2px solid var(--border);padding-left:8px">'
+          + '<b>' + toEsc(ff.sym) + '</b> <span class="' + (ff.dir === 'long' ? 'pos' : 'neg') + '">' + toEsc(ff.dir) + '</span><br>'
+          + setupLevelsTag(ff) + '</div>';
+      }
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function renderSetupDetailCards(desk){
+  var setups = collectSetupsForDisplay(desk);
+  if (!setups.length) return '';
+  var withLevels = setups.filter(hasSetupLevels);
+  var h = '<div class="hg-panel__legend" style="margin-top:14px">Setup tickets · exact entry · SL · TP</div>';
+  if (!withLevels.length){
+    h += '<div class="note warn" style="margin-top:6px">' + setups.length + ' setup(s) found but no entry/SL/TP yet — run <b>WARM UP</b> then <b>SWARM SCAN</b> or <b>ATOMIC DELTA+CDCX</b>.</div>';
+    return h;
+  }
+  h += '<div class="hg-agent-setups" style="display:flex;flex-direction:column;gap:10px;margin-top:8px">';
+  for (var i = 0; i < withLevels.length && i < 12; i++){
+    var f = withLevels[i];
+    var rr = f.rr != null && fin(+f.rr) ? +f.rr : agentRr(f.entry, f.stop, f.t1);
+    var riskPct = fin(+f.entry) && fin(+f.stop) ? Math.abs(+f.entry - +f.stop) / Math.abs(+f.entry) * 100 : null;
+    var tier = f.clean7 ? '7/7 CLEAN' : (f.nearClean ? '6/7 NEAR' : (f.tier || 'SETUP'));
+    h += '<div class="hg-panel" style="padding:12px;margin:0">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline">'
+      + '<span style="font-weight:700;font-size:14px">' + toEsc(f.sym) + '</span>'
+      + '<span class="' + (f.dir === 'long' ? 'pos' : 'neg') + '" style="font-weight:600">' + toEsc(String(f.dir || '').toUpperCase()) + '</span>'
+      + '<span class="gpip ' + (f.clean7 ? 'ok' : '') + '">' + toEsc(tier) + '</span>'
+      + (f.venue || f.exchange ? '<span class="note" style="margin:0">' + toEsc(f.venue || f.exchange) + '</span>' : '')
+      + (f.style ? '<span class="note" style="margin:0">' + toEsc(f.style) + '</span>' : '')
+      + '</div>'
+      + '<div class="note" style="margin-top:4px">' + toEsc(f.agentLabel || f.agentId || f.src || 'agent')
+      + (f.score != null ? ' · score <span class="hg-num">' + f.score + '</span>' : '') + '</div>'
+      + '<table class="hg-table" style="margin-top:8px;font-size:12px"><tbody>'
+      + '<tr><td style="width:72px;opacity:0.75">ENTRY</td><td class="hg-num" style="font-weight:700">' + agentPx(f.entry) + '</td></tr>'
+      + '<tr><td style="opacity:0.75">SL</td><td class="hg-num" style="font-weight:700;color:var(--short)">' + agentPx(f.stop) + '</td></tr>'
+      + '<tr><td style="opacity:0.75">TP1</td><td class="hg-num" style="font-weight:700;color:var(--long)">' + agentPx(f.t1) + '</td></tr>';
+    if (fin(+f.t2)){
+      h += '<tr><td style="opacity:0.75">TP2</td><td class="hg-num" style="font-weight:700;color:var(--long)">' + agentPx(f.t2) + '</td></tr>';
+    }
+    h += '<tr><td style="opacity:0.75">R:R</td><td class="hg-num">' + (rr != null ? rr.toFixed(2) + 'R' : '—') + '</td></tr>';
+    if (riskPct != null){
+      h += '<tr><td style="opacity:0.75">Risk</td><td class="hg-num">' + riskPct.toFixed(2) + '% to SL</td></tr>';
+    }
+    h += '</tbody></table>';
+    if (f.note) h += '<div class="note" style="margin-top:6px;font-size:11px">' + toEsc(f.note) + '</div>';
     h += '</div>';
   }
   h += '</div>';
@@ -533,16 +683,23 @@ function renderAgentCards(desk){
 
 function renderTopFindings(desk){
   desk = desk || __agent.lastDesk;
-  var top = (desk && desk.topFindings) ? desk.topFindings : [];
+  var top = collectSetupsForDisplay(desk);
   if (!top.length) return '<div class="note" style="margin-top:10px">No findings yet — run SWARM SCAN (WARM UP first for best coverage).</div>';
-  var h = '<table class="hg-table" style="margin-top:10px"><thead><tr><th>agent</th><th>sym</th><th>dir</th><th>score</th><th>note</th></tr></thead><tbody>';
-  for (var i = 0; i < top.length; i++){
+  var h = '<table class="hg-table" style="margin-top:10px;font-size:12px"><thead><tr>'
+    + '<th>agent</th><th>sym</th><th>dir</th><th>entry</th><th>SL</th><th>TP1</th><th>TP2</th><th>R:R</th><th>score</th>'
+    + '</tr></thead><tbody>';
+  for (var i = 0; i < top.length && i < 15; i++){
     var f = top[i];
+    var rr = f.rr != null && fin(+f.rr) ? +f.rr : agentRr(f.entry, f.stop, f.t1);
     h += '<tr><td>' + toEsc(f.agentLabel || f.agentId || '—') + '</td>'
       + '<td>' + toEsc(f.sym || '—') + '</td>'
       + '<td class="' + (f.dir === 'long' ? 'pos' : 'neg') + '">' + toEsc(f.dir || '—') + '</td>'
-      + '<td class="hg-num">' + (f.score != null ? f.score : '—') + '</td>'
-      + '<td>' + toEsc(f.note || f.src || '') + '</td></tr>';
+      + '<td class="hg-num">' + (hasSetupLevels(f) ? agentPx(f.entry) : '—') + '</td>'
+      + '<td class="hg-num">' + (hasSetupLevels(f) ? agentPx(f.stop) : '—') + '</td>'
+      + '<td class="hg-num">' + (hasSetupLevels(f) ? agentPx(f.t1) : '—') + '</td>'
+      + '<td class="hg-num">' + (fin(+f.t2) ? agentPx(f.t2) : '—') + '</td>'
+      + '<td class="hg-num">' + (rr != null ? rr.toFixed(2) : '—') + '</td>'
+      + '<td class="hg-num">' + (f.score != null ? f.score : '—') + '</td></tr>';
   }
   h += '</tbody></table>';
   return h;
@@ -558,7 +715,8 @@ function renderDesk(ui, desk){
       + '</span> · gold <span class="hg-num">' + (desk.goldSetups != null ? desk.goldSetups : 0) + '</span></div>';
   }
   h += renderAgentCards(desk);
-  h += '<div class="hg-panel__legend" style="margin-top:14px">Top findings · crypto + gold</div>';
+  h += renderSetupDetailCards(desk);
+  h += '<div class="hg-panel__legend" style="margin-top:14px">All findings · levels summary</div>';
   h += renderTopFindings(desk);
   if (typeof W.hgAtomicDeskPanelHtml === 'function'){
     h += W.hgAtomicDeskPanelHtml();
