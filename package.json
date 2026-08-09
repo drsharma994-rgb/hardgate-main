@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "ccxt": "^4.4.82"
+    "ccxt": "^4.5.71"
   },
   "optionalDependencies": {
     "puppeteer": "^24.0.0"
