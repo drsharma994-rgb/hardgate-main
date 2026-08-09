@@ -2,7 +2,7 @@
   "delta": "EDENUSD|short",
   "coindcx": "B-HYPE_USDT|short",
   "gold": null,
-  "lastRunAt": "2026-08-08T02:11:16.877Z",
+  "lastRunAt": "2026-08-09T02:12:01.743Z",
   "ticket": {
     "long": null,
     "short": null
@@ -10,11 +10,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-08T23:58:53.491Z"
+    "at": "2026-08-09T02:12:01.744Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-08T23:58:53.491Z"
+    "at": "2026-08-09T02:12:01.744Z"
   },
   "degraded": {
     "count": 0,
@@ -35,7 +35,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-08T23:58:53.815Z"
+    "at": "2026-08-09T02:12:02.072Z"
   },
   "bookFill": {
     "key": "u0|p0",
