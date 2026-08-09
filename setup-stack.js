@@ -56,6 +56,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.rotationState === 'function') o.rotation = G.rotationState(); }catch(e5){}
     try{ if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached(); }catch(e6){}
     try{ if (typeof G.getDeskMacroCached === 'function') o.desk = G.getDeskMacroCached(); }catch(e7){}
+    try{ if (typeof G.getCcxtDeskCached === 'function') o.ccxt = G.getCcxtDeskCached(); }catch(e8){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
@@ -229,6 +230,22 @@ function hgSetupStack(inp){
       }
       if (desk.vix && isFinite(+desk.vix.last) && +desk.vix.last >= 26 && dir === 'long'){
         _bump(fundamental, _item('VIX', 'VIX ' + (+desk.vix.last).toFixed(1) + ' elevated — size down', 'caution'), vetoes, cautions);
+      }
+    }
+    var ccxtDesk = inp.ccxt;
+    if (ccxtDesk && asset === 'crypto' && typeof G.ccxtDeskFormationBoost === 'function'){
+      var cLeg = null;
+      if (/ETH/i.test(sym) && ccxtDesk.eth) cLeg = ccxtDesk.eth;
+      else if (ccxtDesk.btc) cLeg = ccxtDesk.btc;
+      if (cLeg && cLeg.fundingRate != null){
+        var cBoost = G.ccxtDeskFormationBoost(dir, sym, ccxtDesk);
+        var ann = cLeg.fundingAnnualPct != null ? cLeg.fundingAnnualPct : (cLeg.fundingRate * 3 * 365 * 100);
+        var carry = cLeg.carry || 'NEUTRAL';
+        if (cBoost >= 7){
+          _bump(fundamental, _item('CCXT funding', carry + ' ann~' + (+ann).toFixed(1) + '% — carry tailwind', 'with'), vetoes, cautions);
+        } else if (cBoost <= -7){
+          _bump(fundamental, _item('CCXT funding', carry + ' ann~' + (+ann).toFixed(1) + '% — crowded carry', 'caution'), vetoes, cautions);
+        }
       }
     }
   }

@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v210';
+const HG_CACHE = 'hg-v211';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -18,7 +18,7 @@ const HG_SHELL = [
   './manifest.webmanifest',
   './icon.svg', './bright.css', './mobile.css', './annunciator.css',
   './hghost.js',
-  './indicators.js', './indicators2.js', './store.js', './binance.js', './spot-perp.js', './startrader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js',
+  './indicators.js', './indicators2.js', './store.js', './binance.js', './spot-perp.js', './startrader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js',
   './setup-ui.js', './plans.js', './setup-stack.js', './cryptogates.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './termbasis.js',
   './goldpro.js', './strats.js', './meanrev.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './book.js', './execute.js', './liqs.js', './xuniverse.js',
