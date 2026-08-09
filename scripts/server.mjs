@@ -21,6 +21,7 @@ import { createOpenbbApi } from '../lib/openbb-api.mjs';
 import { createCcxtApi } from '../lib/ccxt-market-api.mjs';
 import { createHeyLensApi } from '../lib/hey-lens-api.mjs';
 import { createHardgateMcpApi } from '../lib/hardgate-mcp-api.mjs';
+import { createWorldmonitorApi } from '../lib/worldmonitor-api.mjs';
 import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -37,6 +38,7 @@ const openbbHandler = createOpenbbApi();
 const ccxtHandler = createCcxtApi();
 const heyHandler = createHeyLensApi();
 const hardgateMcpHandler = createHardgateMcpApi();
+const worldmonitorHandler = createWorldmonitorApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -63,7 +65,7 @@ function baseHeaders(res){
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data:",
-    "connect-src 'self' https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
+    "connect-src 'self' https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov https://api.hyperliquid.xyz https://api.worldmonitor.app wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "object-src 'none'",
@@ -119,6 +121,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/hardgate' || u.pathname.indexOf('/api/hardgate/') === 0){
       return hardgateMcpHandler(req, res);
+    }
+    if (u.pathname === '/api/worldmonitor' || u.pathname.indexOf('/api/worldmonitor/') === 0){
+      return worldmonitorHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style

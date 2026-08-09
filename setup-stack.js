@@ -57,6 +57,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached(); }catch(e6){}
     try{ if (typeof G.getDeskMacroCached === 'function') o.desk = G.getDeskMacroCached(); }catch(e7){}
     try{ if (typeof G.getCcxtDeskCached === 'function') o.ccxt = G.getCcxtDeskCached(); }catch(e8){}
+    try{ if (typeof G.getWorldMonitorDeskCached === 'function') o.wm = G.getWorldMonitorDeskCached(); }catch(e8b){}
     try{ if (typeof G.getHeyDeskCached === 'function') o.hey = G.getHeyDeskCached(); }catch(e9){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
@@ -269,6 +270,36 @@ function hgSetupStack(inp){
       _bump(sentiment, _item('XAU positioning', inp.goldPositioning.veto, 'veto'), vetoes, cautions);
     } else if (inp.goldPositioning.warn){
       _bump(sentiment, _item('XAU positioning', inp.goldPositioning.warn, 'caution'), vetoes, cautions);
+    }
+  }
+
+  var wmDesk = inp.wm;
+  if (wmDesk && typeof G.wmDeskFormationBoost === 'function' && hasDir){
+    var wmBoost = G.wmDeskFormationBoost(dir, sym, wmDesk, asset);
+    if (wmDesk.macro && !wmDesk.macro.unavailable){
+      var wmVerdict = wmDesk.macro.verdict || 'UNKNOWN';
+      if (wmBoost >= 7){
+        _bump(fundamental, _item('World Monitor', wmVerdict + ' macro · formation tailwind', 'with'), vetoes, cautions);
+      } else if (wmBoost <= -7){
+        _bump(fundamental, _item('World Monitor', wmVerdict + ' macro · defensive', 'caution'), vetoes, cautions);
+      } else if (wmVerdict === 'CASH' && dir === 'long'){
+        _bump(fundamental, _item('World Monitor', 'macro CASH — prefer patience', 'caution'), vetoes, cautions);
+      }
+    }
+    if (wmDesk.stress && wmDesk.stress.label && (wmDesk.stress.label === 'Elevated' || wmDesk.stress.label === 'Severe' || wmDesk.stress.label === 'Critical')){
+      _bump(fundamental, _item('WM stress', wmDesk.stress.label + (wmDesk.stress.vix != null ? ' · VIX ' + (+wmDesk.stress.vix).toFixed(1) : ''), 'caution'), vetoes, cautions);
+    }
+    if (asset === 'gold' && wmDesk.gold && !wmDesk.gold.unavailable && wmBoost >= 4){
+      _bump(fundamental, _item('WM gold desk', 'flow/price context with ' + dir, 'with'), vetoes, cautions);
+    }
+    if (wmDesk.hyperliquid && wmDesk.hyperliquid.assets){
+      for (var wmi = 0; wmi < wmDesk.hyperliquid.assets.length; wmi++){
+        var wma = wmDesk.hyperliquid.assets[wmi];
+        if (wma && wma.alert){
+          _bump(sentiment, _item('HL perp', (wma.display || wma.symbol) + ' stress ' + wma.score, 'caution'), vetoes, cautions);
+          break;
+        }
+      }
     }
   }
 
