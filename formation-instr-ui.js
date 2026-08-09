@@ -76,6 +76,9 @@ function hgFormationPanelHtml(records){
     } else {
       h += '<div class="note">no settled R-scored trades yet — FQS/edge table fills as scorecard settles</div>';
     }
+    if (typeof G.hgFtEdgePanelHtml === 'function'){
+      h += G.hgFtEdgePanelHtml(settled);
+    }
     if (gates && gates.rows && gates.rows.length){
       h += '<div class="hg-panel__legend" style="margin-top:12px">Gate attrib</div>';
       h += '<div class="hg-gaterow hg-gaterow--wrap" style="margin-bottom:8px">';
