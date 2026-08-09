@@ -10,11 +10,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-09T09:03:53.955Z"
+    "at": "2026-08-09T09:58:31.595Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-09T09:03:53.955Z"
+    "at": "2026-08-09T09:58:31.595Z"
   },
   "degraded": {
     "count": 0,
@@ -35,7 +35,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-09T09:03:54.256Z"
+    "at": "2026-08-09T09:58:31.937Z"
   },
   "bookFill": {
     "key": "u0|p0",
