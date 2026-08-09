@@ -913,8 +913,24 @@ const CDCX_PUBLIC_PROXIES = [
   u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
 ];
 
-/* CoinDCX fetch: same-origin /api/proxy first (browser CORS blocks direct),
-   then direct (Node/tests), then public CORS backups as last resort. */
+function cdcxDeskPath(url){
+  if (url.indexOf('/active_instruments') !== -1) return '/api/coindcx/instruments';
+  if (url.indexOf('/current_prices/futures/rt') !== -1) return '/api/coindcx/marks';
+  var q = url.split('?')[1];
+  if (url.indexOf('/market_data/candlesticks') !== -1 && q) return '/api/coindcx/candles?' + q;
+  return null;
+}
+function hgHasCoindcxDesk(){
+  try{
+    var h = location.hostname;
+    if (/hardgate-main\.onrender\.com$/i.test(h)) return true;
+    if (h === 'localhost' || h === '127.0.0.1') return true;
+  }catch(e){}
+  return false;
+}
+
+/* CoinDCX fetch: cached /api/coindcx desk first (Render), then same-origin
+   /api/proxy, then direct (Node/tests), public CORS backups only off-desk hosts. */
 
 /* ---------------- lightweight rate-limit tracking (client-side estimate only) ---------------- */
 const RateTrack = { td: [], cdcx: [], delta: [] };
@@ -956,32 +972,45 @@ function trackCall(bucket){
 
 async function cdcxGet(url){
   trackCall('cdcx');
-  async function readJson(r, via){
-    if (!r.ok) throw new Error((via || 'fetch') + ' HTTP ' + r.status);
-    const j = await r.json();
+  async function unwrap(j, via){
     S.cdcxViaProxy = via;
+    if (j && j.ok === true && j.data != null) return j.data;
     return j;
   }
-  async function tryOrigin(){
-    let r = await fetch(CDCX_PROXY(url));
-    if (r.status === 429){
-      await sleep(400);
-      r = await fetch(CDCX_PROXY(url));
+  async function readJson(r, via){
+    if (!r.ok) throw new Error((via || 'fetch') + ' HTTP ' + r.status);
+    return unwrap(await r.json(), via);
+  }
+  async function fetchWithRetry(fetchFn, via, tries){
+    tries = tries || 4;
+    let last;
+    for (let i = 0; i < tries; i++){
+      try{
+        const r = await fetchFn();
+        if (r.status === 429 && i < tries - 1){
+          await sleep(Math.min(6000, 350 * Math.pow(2, i)));
+          continue;
+        }
+        return await readJson(r, via);
+      }catch(e){
+        last = e;
+        if (i < tries - 1) await sleep(Math.min(6000, 350 * Math.pow(2, i)));
+      }
     }
-    return readJson(r, 'api');
+    throw last || new Error((via || 'fetch') + ' failed');
   }
-  async function tryDirect(){
-    return readJson(await fetch(url), false);
+  const desk = cdcxDeskPath(url);
+  if (desk){
+    try{ return await fetchWithRetry(() => fetch(desk), 'desk'); }catch(e){}
   }
-  async function tryPublic(build){
-    return readJson(await fetch(build(url)), 'public');
+  try{ return await fetchWithRetry(() => fetch(CDCX_PROXY(url)), 'api'); }catch(e){}
+  try{ return await readJson(await fetch(url), false); }catch(e){}
+  if (!hgHasCoindcxDesk()){
+    for (const build of CDCX_PUBLIC_PROXIES){
+      try{ return await fetchWithRetry(() => fetch(build(url)), 'public'); }catch(e){}
+    }
   }
-  try{ return await tryOrigin(); }catch(e){}
-  try{ return await tryDirect(); }catch(e){}
-  for (const build of CDCX_PUBLIC_PROXIES){
-    try{ return await tryPublic(build); }catch(e){}
-  }
-  throw new Error('CoinDCX unreachable — reload and retry, or use https://hardgate-main.onrender.com (full /api/proxy)');
+  throw new Error('CoinDCX unreachable — reload and retry, or use https://hardgate-main.onrender.com (/api/coindcx desk)');
 }
 
 /* Delta fetch: same-origin /api/proxy first (browser CORS blocks direct on
@@ -1466,13 +1495,13 @@ async function setExchange(x){
     S.tickers = await getTickers();
     $('chipConn').classList.remove('warn');
     $('chipConn').innerHTML = `<b>${S.tickers.length}</b> ${exLabel} ${x==='startrader' ? 'crypto CFDs' : 'perps'}`;
-    if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`;
+    if (x==='coindcx') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.cdcxViaProxy==='desk'?'via CoinDCX desk · ':S.cdcxViaProxy==='public'?'via backup proxy · ':S.cdcxViaProxy?'via proxy · ':''}no funding/turnover fields — gates degrade honestly)</b>`;
     if (x==='startrader') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(Binance USD-M proxy for candles/funding — trade on STARTRADER)</b>`;
     if (x==='delta') $('chipConn').innerHTML += ` <b style="color:var(--gold)">(${S.deltaViaProxy==='public'?'via backup proxy · ':S.deltaViaProxy?'via proxy · ':''}live WS + REST)</b>`;
     if (x==='delta') initDeltaWS();
   }catch(e){
     $('chipConn').classList.add('warn');
-    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX direct + all proxies (same-origin + backups) failed. The backup proxies are rate-limited public services — wait a moment and retry.':(x==='startrader'?'STARTRADER catalog could not load Binance enrichment — retry.':'Delta direct + same-origin proxy failed — reload or retry.')}`;
+    $('chipConn').innerHTML = `<b>API blocked</b> — ${x==='coindcx'?'CoinDCX desk + proxy failed — wait a moment and retry. On Render, /api/coindcx serves cached server-side data (no public proxy needed).':(x==='startrader'?'STARTRADER catalog could not load Binance enrichment — retry.':'Delta direct + same-origin proxy failed — reload or retry.')}`;
     S.tickers = [];
   }
   renderBiasChips();

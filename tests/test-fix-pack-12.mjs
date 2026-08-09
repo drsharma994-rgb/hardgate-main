@@ -10,7 +10,8 @@ const ok = (c, m) => { if (!c) throw new Error('FAIL: ' + m); pass++; console.lo
 console.log('== proxy hardening ==');
 {
   const proxy = fs.readFileSync(path.join(root, 'api/proxy.js'), 'utf8');
-  ok(proxy.indexOf('RATE_MAX_PER_WINDOW = 300') >= 0, 'proxy rate 300/min');
+  ok(proxy.indexOf('RATE_MAX_DEFAULT = 300') >= 0, 'proxy rate 300/min default');
+  ok(proxy.indexOf('RATE_MAX_COINDCX = 800') >= 0, 'proxy coindcx rate 800/min');
   ok(proxy.indexOf('ALLOWED_ORIGINS') >= 0, 'proxy origin allowlist');
   ok(proxy.indexOf("'Access-Control-Allow-Origin': '*'") < 0, 'no ACAO *');
 }

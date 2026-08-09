@@ -61,7 +61,8 @@ function fetchRecorder(routes){
         if (r.fail) throw new Error(r.failMsg || 'network down');
         if (r.httpFail) return { ok: false, status: r.httpFail, json: async function(){ return null; } };
         const body = (typeof r.body === 'function') ? r.body(url) : r.body;
-        return { ok: true, status: 200, json: async function(){ return body; } };
+        const payload = (raw.indexOf('/api/coindcx/') >= 0) ? { ok: true, data: body } : body;
+        return { ok: true, status: 200, json: async function(){ return payload; } };
       }
     }
     return { ok: false, status: 404, json: async function(){ return null; } };
@@ -241,7 +242,8 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
 {
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: {} }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   const uni = await w.xuUniverse();
@@ -250,14 +252,9 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   assert(f.urls[0].indexOf('/api/proxy?url=') === 0, 'universe: Delta leg routed through same-origin /api/proxy');
   assert(decodeURIComponent(f.urls[0]).indexOf('https://api.india.delta.exchange/v2/tickers?contract_types=perpetual_futures') >= 0,
          'universe: proxy wraps the real Delta tickers endpoint');
-  assert(f.urls[1].indexOf('/api/proxy?url=') === 0, 'universe: CoinDCX leg routed through the same-origin /api/proxy');
-  const dec = decodeURIComponent(f.urls[1]);
-  assert(dec.indexOf('https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments') >= 0 &&
-         dec.indexOf('margin_currency_short_name[]=USDT') >= 0,
-         'universe: proxy wraps the real CoinDCX active_instruments USDT endpoint');
-  assert(f.urls[2].indexOf('/api/proxy?url=') === 0 &&
-         decodeURIComponent(f.urls[2]).indexOf('https://public.coindcx.com/market_data/v3/current_prices/futures/rt') >= 0,
-         'universe: companion marks leg wraps the CoinDCX current_prices/futures/rt endpoint');
+  assert(f.urls[1].indexOf('/api/coindcx/instruments') === 0, 'universe: CoinDCX leg routed through cached /api/coindcx desk');
+  assert(f.urls[2].indexOf('/api/coindcx/marks') === 0,
+         'universe: companion marks leg uses /api/coindcx/marks');
   const st = w.xuState();
   assert(st && st.count === 9 && st.delta === 6 && st.cdcx === 6 && typeof st.at === 'number',
          'universe: xuState reports {count:9, delta:6, cdcx:6, at}');
@@ -283,6 +280,7 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   /* CoinDCX leg down -> Delta-only list with honest note */
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
+    { match: '/api/coindcx/', fail: true, failMsg: 'desk down' },
     { match: '/api/proxy?url=', fail: true, failMsg: 'proxy 502' }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
@@ -296,7 +294,8 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   /* Delta leg down -> CoinDCX-only list with honest note */
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', httpFail: 503 },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: {} }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   const uni = await w.xuUniverse();
@@ -308,6 +307,7 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   /* total outage with no cache -> [] + honest note; with cache -> stale rows kept */
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/coindcx/', fail: true, failMsg: 'desk down' },
     { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
@@ -320,13 +320,15 @@ const CDCX_MARKS_BODY = { ts: 1784547924253, vs: 346946280, prices: {
   /* good cache survives a later forced total outage (good data never replaced) */
   const good = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: {} }
   ]);
   const ctx = makeCtx({ fetch: good, AbortController: AbortController });
   const w = loadModule(ctx);
   await w.xuUniverse();
   ctx.fetch = fetchRecorder([
     { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/coindcx/', fail: true, failMsg: 'desk down' },
     { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
   ]);
   const uni = await w.xuUniverse(true);
@@ -375,7 +377,7 @@ const BINANCE_CANDLES = [
 {
   const f = fetchRecorder([
     { match: 'delta.exchange/v2/history/candles', body: DELTA_CANDLES },
-    { match: '/api/proxy?url=', body: CDCX_CANDLES }
+    { match: '/api/coindcx/candles', body: CDCX_CANDLES }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
 
@@ -398,12 +400,10 @@ const BINANCE_CANDLES = [
   assert(crows.length === 2, 'candles: cdcx rows returned');
   assert(crows[0].t === 1700000000 && crows[1].t === 1700003600, 'candles: cdcx time ms -> floored to seconds, ascending');
   assert(crows[1].v === 21 && crows[0].v === 0, 'candles: cdcx volume parsed, missing volume -> 0');
-  const cu = decodeURIComponent(f.urls[1]);
-  assert(f.urls[1].indexOf('/api/proxy?url=') === 0, 'candles: cdcx routed via the same-origin proxy');
-  assert(cu.indexOf('https://public.coindcx.com/market_data/candlesticks') >= 0 &&
-         cu.indexOf('pair=B-BTC_USDT') >= 0 && cu.indexOf('resolution=60') >= 0 && cu.indexOf('pcode=f') >= 0,
-         'candles: cdcx CDCX_RES 1h->60, pair and pcode=f in proxied URL');
-  const cm = /[?&]from=(\d+)&to=(\d+)/.exec(cu);
+  assert(f.urls[1].indexOf('/api/coindcx/candles') === 0, 'candles: cdcx routed via /api/coindcx desk');
+  assert(f.urls[1].indexOf('pair=B-BTC_USDT') >= 0 && f.urls[1].indexOf('resolution=60') >= 0 && f.urls[1].indexOf('pcode=f') >= 0,
+         'candles: cdcx CDCX_RES 1h->60, pair and pcode=f in desk URL');
+  const cm = /[?&]from=(\d+)&to=(\d+)/.exec(f.urls[1]);
   assert(cm && (+cm[2] - +cm[1]) === 3600 * 13, 'candles: cdcx window = secPer(1h) * (n+3)');
 
   /* resolution maps verbatim for the other timeframes */
@@ -426,6 +426,7 @@ const BINANCE_CANDLES = [
 {
   const f = fetchRecorder([
     { match: 'delta.exchange', fail: true, failMsg: 'timeout' },
+    { match: '/api/coindcx/candles', httpFail: 500 },
     { match: '/api/proxy?url=', httpFail: 500 }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
@@ -518,12 +519,12 @@ const BINANCE_CANDLES = [
 {
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
-    { match: 'current_prices', body: CDCX_MARKS_BODY },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: CDCX_MARKS_BODY }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   const uni = await w.xuUniverse();
-  assert(f.urls.length === 3 && f.urls[1].indexOf('active_instruments') >= 0 && f.urls[2].indexOf('current_prices') >= 0,
+  assert(f.urls.length === 3 && f.urls[1].indexOf('/api/coindcx/instruments') >= 0 && f.urls[2].indexOf('/api/coindcx/marks') >= 0,
          'marksE2E: instruments list fetched before the marks companion leg');
   const xrp = uni.filter(function(r){ return r.base === 'XRP'; })[0];
   assert(xrp && xrp.mark === 0.62 && xrp.turnoverUsd === 125000000,
@@ -543,8 +544,8 @@ const BINANCE_CANDLES = [
   /* marks leg down -> universe unaffected, honest note, nulls preserved */
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
-    { match: 'current_prices', fail: true, failMsg: 'rt 502' },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/marks', fail: true, failMsg: 'rt 502' },
+    { match: '/api/coindcx/instruments', body: CDCX_BODY }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   const uni = await w.xuUniverse();
@@ -559,8 +560,8 @@ const BINANCE_CANDLES = [
   /* marks failure + delta failure: primary leg note still leads */
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', httpFail: 503 },
-    { match: 'current_prices', fail: true, failMsg: 'rt 502' },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/marks', fail: true, failMsg: 'rt 502' },
+    { match: '/api/coindcx/instruments', body: CDCX_BODY }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   const uni = await w.xuUniverse();
@@ -575,8 +576,8 @@ const BINANCE_CANDLES = [
 {
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange/v2/tickers', body: DELTA_BODY },
-    { match: 'current_prices', body: CDCX_MARKS_BODY },
-    { match: '/api/proxy?url=', body: CDCX_BODY }
+    { match: '/api/coindcx/instruments', body: CDCX_BODY },
+    { match: '/api/coindcx/marks', body: CDCX_MARKS_BODY }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));
   await w.xuUniverse();
@@ -599,6 +600,7 @@ const BINANCE_CANDLES = [
   await w2.xuUniverse();
   ctx.fetch = fetchRecorder([
     { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/coindcx/', fail: true, failMsg: 'desk down' },
     { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
   ]);
   const uni = await w2.xuUniverse(true);
@@ -610,6 +612,7 @@ const BINANCE_CANDLES = [
   /* empty-cache outage -> positioning null, never throws */
   const f = fetchRecorder([
     { match: 'api.india.delta.exchange', fail: true, failMsg: 'dns' },
+    { match: '/api/coindcx/', fail: true, failMsg: 'desk down' },
     { match: '/api/proxy?url=', fail: true, failMsg: 'proxy down' }
   ]);
   const w = loadModule(makeCtx({ fetch: f, AbortController: AbortController }));

@@ -71,10 +71,11 @@ assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
   'public CORS proxies kept as last resort after same-origin /api/proxy');
 {
   const cg = grabFn('cdcxGet');
+  const iDesk = cg.indexOf("return '/api/coindcx/instruments'");
   const iApi = cg.indexOf('await fetch(CDCX_PROXY(url))');
   const iPublic = cg.indexOf('CDCX_PUBLIC_PROXIES');
-  assert(iApi !== -1 && iPublic !== -1 && iApi < iPublic,
-    'cdcxGet order: same-origin /api/proxy first, public backups last');
+  assert(iDesk !== -1 && iApi !== -1 && iPublic !== -1 && iDesk < iApi && iApi < iPublic,
+    'cdcxGet order: /api/coindcx desk first, same-origin /api/proxy second, public backups last');
 }
 assert(html.includes('function executeBackendReady') || html.includes('execute.js?v='),
   'EXECUTE BRACKET gated via executeBackendReady (execute.js or inline)');
