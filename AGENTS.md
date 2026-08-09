@@ -47,6 +47,15 @@ Not required for local dev or core UI:
 | `HARDGATE_SCAN_MS` | Daemon scan interval (default 15 min) |
 | `HARDGATE_DAEMON_DRY_RUN=1` | Run daemon loop without CCXT orders |
 | `HARDGATE_STATE_FILE` | JSON conviction persistence path (default `hardgate-daemon-state.json`) |
+| `HARDGATE_KILL_SWITCH` | Manual trading halt (`1` / `true` blocks CCXT execute + daemon orders) |
+| `HARDGATE_KILL_SWITCH_PCT` | Auto halt when session PnL % falls below threshold (e.g. `-2` for −2%) |
+| `HARDGATE_TRADING_HALT` | Alias for manual halt (same as `HARDGATE_KILL_SWITCH`) |
+| `EXECUTE_TWAP_SLICES` | Split CCXT orders into N TWAP slices (default `1` = single order) |
+| `EXECUTE_TWAP_INTERVAL_MS` | Delay between TWAP slices in ms (default `0`) |
+| `HARDGATE_STATE_ENCRYPTION_KEY` / `HARDGATE_STATE_PASSPHRASE` | AES-256-GCM encrypt daemon state at rest (32-byte key or passphrase-derived) |
+| `HARDGATE_WEBHOOK_SECRET` | HMAC-SHA256 secret for signed webhook payloads |
+| `HARDGATE_WEBHOOK_SECRET_PREVIOUS` | Previous webhook secret during key rotation (both accepted) |
+| `HARDGATE_FQS_GATE`, `HARDGATE_EDGE_GATE`, `HARDGATE_FT_EDGE_GATE` | Daemon formation quality gates (see Render worker section) |
 
 ### Render daemon worker
 
@@ -120,7 +129,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Setup accuracy pack (hg-v198):** **Gold post-gate** (`hgPostGateGoldVeto`, `hgFilterGoldPostGate` on GOLD SCALP/SWING); **Bybit cross** in **`hgAssessFlowTrap`**; **ledger stop sweep** → live stops via **`hgLiveStopScale`**; **multi-CLEAN rank** (`rankBoost`, profit rank, RS, flow); **NEAR quality hints**; **CLEAN card clearance/flow**; **gold weekend conviction demote** (`hgApplyGoldWeekendDemotes`); **REGIME warm** before scans.
 - **Formation pipeline (hg-v199):** **`formation.js`** — **`hgFormTicket`** unified POI entry → structure stop → structure T1/T2 → fill gate → **`hgFormationScore`**; **`hgRankEntryPOI`**, **`hgStructureTargets`**, **`hgFillProbability`**, **`hgFormationParams`** (+ CALIBRATE save). Wired on SWING/SCALP/BEST/GOLD SCALP. **`tests/test-formation.mjs`**.
 - **STAR TRADER NEAR levels (hg-v200):** WATCH confluence cards show **draft entry/SL/T1/T2** via **`stNearPlan`** (`swingTryNear` / `scalpTryNear`) when no 7/7 CLEAN plan — labeled **NEAR · not trade-ready**; book/trade handoff disabled until PRIME/HIGH CLEAN.
-- **Fix Pack 12 (hg-v201):** **`lib/api-auth.mjs`** fail-closed mutating API gate (`HARDGATE_API_SECRET`); **`/api/notify`** server-side Telegram; same-bar unwind fix (`excludeIds` / `freshLocks`); CSP + proxy origin allowlist + 300/min rate; **`scripts/run-tests.mjs`** aggregator; **ccxt** moved to dependencies; **`npm ci`** on Render. **`tests/test-api-auth.mjs`**, **`tests/test-fix-pack-12.mjs`**.
+- **Multi-repo phases (hg-v213):** Hummingbot/StockSharp-style **kill switch**, **budget checker**, **risk rules**, **triple barrier**, **TWAP executor** (`lib/kill-switch.mjs`, `lib/budget-checker.mjs`, `lib/risk-rules.mjs`, `lib/triple-barrier.mjs`, `lib/twap-executor.mjs`); QuantDinger-style **OOS gate replay** (`lib/gate-replay-oos.mjs`, `gate-replay-oos.js`); **5+5 bps/side** cost model in **`strats.js`**; Hummingbot-style **funding arb signals** + **VWAP sizing** + **composite book** (`lib/ccxt-funding-arb.mjs`, `lib/vwap-sizing.mjs`, `lib/composite-book.mjs`); eliza/Tink-style **HMAC webhooks**, **encrypted daemon state**, **MCP read-only API** (`/api/hardgate/capabilities`, `/api/hardgate/mcp`, `/api/hardgate/replay-oos`, `/api/hardgate/funding-arb`). **`tests/test-multi-repo-phases.mjs`** (21 assertions).
 - **Fix Pack 13 (hg-v202):** **Loss cooldown** (`lib/cooldown.mjs` → `filterExecutableBrainRows` + daemon `outcomes` ledger); **correlation clusters** (`lib/clusters.mjs` → paperbook cluster/beta heat caps); **walk-forward + Monte Carlo** (`lib/walkforward.mjs`, **`walkforward-ui.js`** scorecard VALIDATION panel, formation buffer calibration on train-only 70%); **anchored VWAP POI** in **`formation.js`** (+ London-open gold VWAP anchor in **`goldind.js`**). Env: `HARDGATE_COOLDOWN_*`, `HARDGATE_GLOBAL_COOLDOWN_*`. **`tests/test-clusters.mjs`**.
 - **Fix Pack 19 (hg-v189):** **Gate replay / threshold sweep** — `cgGateReplay`, `cgReplaySettle`, `cgReplaySweep`, `cgGateReplayPanelHTML`. Walk-forward replay on SWING scan (500×4h bars); **GATE REPLAY** panel under WHY EMPTY with G6 / top ONLY-blocker / ANCHOR tables. Console: `cgGateReplay` + `cgReplaySweep`. **`tests/test-gate-replay.mjs`** (28 assertions).
 - **Fix Pack 18 (hg-v186 / UI hg-v188):** **Gold weekend exposure** — `hgInGoldWeekend`, `hgSecsToGoldWeekend`, `hgGoldWeekendMoves`, `hgGoldWeekendRisk`, `hgGoldWeekendReadout`. **WEEKEND EXPOSURE** panel on GOLD SCALP / SWING (and StarTrader gold sub-tabs) after RUN SCAN; not stamped on tickets until your instrument numbers justify it. **`tests/test-gold-weekend.mjs`**.

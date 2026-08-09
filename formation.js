@@ -58,6 +58,8 @@ function hgFormationParams(){
       }catch(eSt){}
     }
   }catch(e){}
+  p.minRr = p.minRr != null ? Math.max(1.5, Math.min(3, +p.minRr)) : 2.0;
+  p.fqsFloor = p.fqsFloor != null ? Math.max(50, Math.min(80, +p.fqsFloor)) : 62;
   return p;
 }
 

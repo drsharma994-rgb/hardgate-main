@@ -12,7 +12,7 @@
         mean-reversion trades
      6. Donchian: flat -> rally -> crash series generates breakout trades
      7. stats math on a hand-computed 3-trade fixture
-     8. R math: r == signed(exit-entry)/|entry-stop| for every trade above
+     8. R math: r == cost-adjusted signed(exit-entry)/|entry-stop| (5+5 bps/side)
    Run: node tests/test-strats.mjs */
 
 import { readFileSync } from 'node:fs';
@@ -115,11 +115,15 @@ function expectZero(res, label){
   const s = res && res.stats;
   assert(!!s && ZERO_KEYS.every(k => s[k] === 0), label + ': zeroed stats');
 }
+const SG_COST_R = ((5 + 5) / 10000) * 2;
+function sgCostAdjustR(r){ return isFinite(r) ? r - SG_COST_R : r; }
 function checkRMath(tr, label){
   const risk = tr.dir === 'long' ? (tr.entry - tr.stop) : (tr.stop - tr.entry);
   const pnl  = tr.dir === 'long' ? (tr.exit - tr.entry) : (tr.entry - tr.exit);
-  assert(risk > 0 && isFinite(tr.r) && Math.abs(tr.r - pnl / risk) < 1e-9,
-         label + ': r == signed(exit-entry)/|entry-stop| (' + tr.dir + ', r=' + tr.r.toFixed(3) + ')');
+  const rawR = pnl / risk;
+  const want = sgCostAdjustR(rawR);
+  assert(risk > 0 && isFinite(tr.r) && Math.abs(tr.r - want) < 1e-9,
+         label + ': r == cost-adjusted signed(exit-entry)/|entry-stop| (' + tr.dir + ', r=' + tr.r.toFixed(3) + ')');
 }
 const REASONS = { ema: ['stop', 'target', 'cross', 'eod'], connors: ['stop', 'rsi', 'time', 'eod'], donchian: ['stop', 'band', 'time', 'eod'] };
 
@@ -194,7 +198,7 @@ const REASONS = { ema: ['stop', 'target', 'cross', 'eod'], connors: ['stop', 'rs
   const tr = res2.trades[0];
   assert(Math.abs(tr.entry - t0.entry) < 1e-9 && tr.dir === t0.dir, 'stop-first fixture: same entry reproduced');
   assert(tr.reason === 'stop', 'stop-first: bar touching stop AND target resolves to STOP (got ' + tr.reason + ')');
-  approx(tr.r, -1, 1e-9, 'stop-first: r == -1 (filled at stop, no gap)');
+  approx(tr.r, sgCostAdjustR(-1), 1e-9, 'stop-first: r == cost-adjusted -1 (filled at stop, no gap)');
   assert(Math.abs(tr.exit - t0.stop) < 1e-9, 'stop-first: exit price == stop price');
 }
 

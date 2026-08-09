@@ -159,6 +159,14 @@ function sgComputeStats(trades, totalBars){
   z.maxLoseStreak = maxLoseRun;
   return z;
 }
+var SG_FEE_BPS = 5;
+var SG_SLIP_BPS = 5;
+
+function sgCostAdjustR(r){
+  if (!isFinite(r)) return r;
+  var rt = (SG_FEE_BPS + SG_SLIP_BPS) / 10000;
+  return r - rt * 2;
+}
 function sgResult(trades, totalBars){
   return { trades: trades, stats: sgComputeStats(trades, totalBars) };
 }
@@ -186,6 +194,7 @@ function sgRunLoop(rows, sigAt, exitAt){
         var pnl = (sig.dir === 'long') ? (exitPx - entry) : (entry - exitPx);
         var r = pnl / risk;
         if (isFinite(r)){
+          r = sgCostAdjustR(r);
           trades.push({
             t: rows[i].t, tExit: rows[j].t, dir: sig.dir,
             entry: entry, exit: exitPx, stop: sig.stop,
@@ -746,7 +755,7 @@ async function sgRun(els){
     }
     html += '<div class="note" style="margin-top:8px">' + rows.length + ' closed bars · ' +
             sgTime(rows[0].t) + ' → ' + sgTime(rows[rows.length - 1].t) +
-            ' UTC · <b>no fees/slippage — real results will be worse</b> · signals on closed bars only · ' +
+            ' UTC · <b>~' + SG_FEE_BPS + '+' + SG_SLIP_BPS + ' bps/side cost model — scorecard funding separate</b> · signals on closed bars only · ' +
             'entries at signal-bar close · stops checked first per bar (conservative).</div>';
     els.out.innerHTML = html;
     /* charts mount only after the DOM exists; fallback strip renders inline */
