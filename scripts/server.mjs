@@ -20,6 +20,7 @@ import { createTradeosMcpApi } from '../lib/tradeos-mcp-api.mjs';
 import { createOpenbbApi } from '../lib/openbb-api.mjs';
 import { createCcxtApi } from '../lib/ccxt-market-api.mjs';
 import { createHeyLensApi } from '../lib/hey-lens-api.mjs';
+import { createHardgateMcpApi } from '../lib/hardgate-mcp-api.mjs';
 import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -35,6 +36,7 @@ const tradeosHandler = createTradeosMcpApi();
 const openbbHandler = createOpenbbApi();
 const ccxtHandler = createCcxtApi();
 const heyHandler = createHeyLensApi();
+const hardgateMcpHandler = createHardgateMcpApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -114,6 +116,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/hey' || u.pathname.indexOf('/api/hey/') === 0){
       return heyHandler(req, res);
+    }
+    if (u.pathname === '/api/hardgate' || u.pathname.indexOf('/api/hardgate/') === 0){
+      return hardgateMcpHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style

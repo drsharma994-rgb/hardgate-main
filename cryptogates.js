@@ -818,7 +818,15 @@
         + (replay.settled || 0) + ' settled. Market-entry measure (matrix mark, not EMA21 limit). '
         + 'Overlapping samples inflate n equally at every threshold — compare curves, not absolute E[R]. '
         + (topGate ? ('Sweep highlights <b>' + topGate + '</b> (top ONLY blocker: ' + topN + ' symbols). ') : '')
-        + 'Read count AND expectancy together before changing a constant.</div>'
+        + 'Read count AND expectancy together before changing a constant.'
+        + (typeof G.hgReplaySweepOos === 'function'
+          ? (' OOS (70/30): ' + (function(){
+              try{
+                var o = G.hgReplaySweepOos(replay, 'G6', [1.50, 1.75, 2.00, 2.25, 2.50], 'min');
+                return o.oos ? ('best G6≥' + o.oos.threshold + ' · test E[R] ' + (o.oos.expectancyR != null ? o.oos.expectancyR.toFixed(3) : '—') + ' · ' + o.oos.verdict) : 'n/a';
+              }catch(e){ return 'n/a'; }
+            })()) : '')
+        + '</div>'
         + body + '</details>';
     }catch(e){ return ''; }
   }
