@@ -55,6 +55,9 @@ function hgSetupStackSnap(){
     try{ if (typeof G.onchainState === 'function') o.onchain = G.onchainState(); }catch(e4){}
     try{ if (typeof G.rotationState === 'function') o.rotation = G.rotationState(); }catch(e5){}
     try{ if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached(); }catch(e6){}
+    try{ if (typeof G.getDeskMacroCached === 'function') o.desk = G.getDeskMacroCached(); }catch(e7){}
+    if (o.desk && !o.macro) o.macro = o.desk;
+    else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
   }catch(e){ return {}; }
 }
@@ -209,8 +212,24 @@ function hgSetupStack(inp){
     }
     if (isFinite(+macroSnap.realYield10Y) && macroSnap.realYieldTrend === 'RISING' && dir === 'long'){
       _bump(fundamental, _item('real yield FRED', 'DFII10 ' + (+macroSnap.realYield10Y).toFixed(2) + '% rising', 'caution'), vetoes, cautions);
-    } else if (isFinite(+macroSnap.realYield10Y) && macroSnap.realYieldTrend === 'FALLING' && dir === 'long'){
+    } else     if (isFinite(+macroSnap.realYield10Y) && macroSnap.realYieldTrend === 'FALLING' && dir === 'long'){
       _bump(fundamental, _item('real yield FRED', 'DFII10 falling — gold/crypto long tailwind', 'with'), vetoes, cautions);
+    }
+    var desk = inp.desk || macroSnap;
+    if (desk && isFinite(+desk.riskOnScore)){
+      var ros = +desk.riskOnScore;
+      if (ros >= 25 && dir === 'long'){
+        _bump(fundamental, _item('OpenBB desk', 'SPY/VIX/desk RISK-ON (' + ros + ') — tailwind', 'with'), vetoes, cautions);
+      } else if (ros <= -25 && dir === 'long'){
+        _bump(fundamental, _item('OpenBB desk', 'desk RISK-OFF (' + ros + ') — headwind', 'caution'), vetoes, cautions);
+      } else if (ros <= -25 && dir === 'short'){
+        _bump(fundamental, _item('OpenBB desk', 'desk RISK-OFF — supports short beta', 'with'), vetoes, cautions);
+      } else if (ros >= 25 && dir === 'short'){
+        _bump(fundamental, _item('OpenBB desk', 'desk RISK-ON — against short', 'caution'), vetoes, cautions);
+      }
+      if (desk.vix && isFinite(+desk.vix.last) && +desk.vix.last >= 26 && dir === 'long'){
+        _bump(fundamental, _item('VIX', 'VIX ' + (+desk.vix.last).toFixed(1) + ' elevated — size down', 'caution'), vetoes, cautions);
+      }
     }
   }
 
