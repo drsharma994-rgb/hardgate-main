@@ -1,0 +1,286 @@
+/* ==========================================================================
+   HARDGATE — Design Tokens & Annunciator Components
+   v1.0
+
+   DESIGN THESIS
+   HARDGATE is an interlock annunciator panel, not a trading dashboard.
+   Legends sit DARK when a gate passes. Only a BLOCKING gate illuminates.
+   With ~10 gates x 120 symbols, green checkmarks are noise; the entire
+   information content is in the vetoes.
+
+   THREE STATE AXES — never share a color between them:
+     1. Gate verdict     lamps: unlit = pass, steady amber = veto
+     2. Pipeline health  lamps: flashing amber = trip/stale, slate = no data
+     3. Direction        typographic only: green LONG / red SHORT, no glow
+
+   SAFE TO ADD
+   Every token and class is prefixed hg- / --hg-. Adding this file changes
+   nothing until markup opts in. Deploy it alone, verify green, then adopt
+   one panel at a time.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. TYPEFACES
+   Add this line to <head> BEFORE this stylesheet:
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+   -------------------------------------------------------------------------- */
+:root {
+  --hg-font-legend: "Archivo", system-ui, -apple-system, sans-serif;
+  --hg-font-num:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* --------------------------------------------------------------------------
+   2. COLOR — warm charcoal fascia, not blue-black
+   -------------------------------------------------------------------------- */
+:root {
+  --hg-panel-0:     #16120F;
+  --hg-panel-1:     #1F1A16;
+  --hg-panel-2:     #2A2320;
+  --hg-panel-3:     #352C27;
+  --hg-engrave:     #3A322D;
+  --hg-engrave-lo:  #2B2420;
+  --hg-text:        #E8E2DA;
+  --hg-text-dim:    #9A9088;
+  --hg-text-faint:  #6B625B;
+  --hg-lamp-amber:      #E8A33D;
+  --hg-lamp-amber-bg:   rgba(232, 163, 61, 0.13);
+  --hg-lamp-amber-glow: rgba(232, 163, 61, 0.30);
+  --hg-lamp-white:      #F5F0E6;
+  --hg-lamp-white-bg:   rgba(245, 240, 230, 0.10);
+  --hg-lamp-white-glow: rgba(245, 240, 230, 0.26);
+  --hg-lamp-cold:       #5C7A88;
+  --hg-lamp-cold-bg:    rgba(92, 122, 136, 0.14);
+  --hg-long:        #5FBF8A;
+  --hg-short:       #CC5F66;
+  --hg-focus:       #E8A33D;
+}
+
+/* --------------------------------------------------------------------------
+   3. TYPE SCALE
+   -------------------------------------------------------------------------- */
+:root {
+  --hg-size-xs:   11px;
+  --hg-size-sm:   13px;
+  --hg-size-base: 14px;
+  --hg-size-md:   17px;
+  --hg-size-lg:   22px;
+  --hg-size-xl:   30px;
+  --hg-lh-tight:  1.15;
+  --hg-lh-base:   1.5;
+  --hg-track-legend: 0.09em;
+}
+
+/* --------------------------------------------------------------------------
+   4. SPACING, RADII, BORDERS
+   -------------------------------------------------------------------------- */
+:root {
+  --hg-s1: 4px;
+  --hg-s2: 8px;
+  --hg-s3: 12px;
+  --hg-s4: 16px;
+  --hg-s5: 24px;
+  --hg-s6: 32px;
+  --hg-s7: 48px;
+  --hg-radius:    2px;
+  --hg-radius-lg: 4px;
+  --hg-hairline: 1px solid var(--hg-engrave);
+  --hg-duration: 140ms;
+  --hg-ease:     cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* --------------------------------------------------------------------------
+   5. NUMERICS
+   -------------------------------------------------------------------------- */
+.hg-num {
+  font-family: var(--hg-font-num);
+  font-size: var(--hg-size-sm);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: 0;
+}
+.hg-num--lg { font-size: var(--hg-size-xl); font-weight: 500; }
+
+/* --------------------------------------------------------------------------
+   6. DIRECTION
+   -------------------------------------------------------------------------- */
+.hg-dir {
+  font-family: var(--hg-font-num);
+  font-size: var(--hg-size-xs);
+  font-weight: 600;
+  letter-spacing: var(--hg-track-legend);
+  text-transform: uppercase;
+  padding-left: var(--hg-s2);
+  border-left: 2px solid currentColor;
+}
+.hg-dir--long  { color: var(--hg-long); }
+.hg-dir--short { color: var(--hg-short); }
+
+/* --------------------------------------------------------------------------
+   7. LAMPS
+   -------------------------------------------------------------------------- */
+.hg-lamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.5ch;
+  padding: 3px var(--hg-s2);
+  border: 1px solid var(--hg-engrave-lo);
+  border-radius: var(--hg-radius);
+  background: transparent;
+  font-family: var(--hg-font-legend);
+  font-size: var(--hg-size-xs);
+  font-weight: 600;
+  letter-spacing: var(--hg-track-legend);
+  text-transform: uppercase;
+  color: var(--hg-text-faint);
+  transition: color var(--hg-duration) var(--hg-ease),
+              background-color var(--hg-duration) var(--hg-ease),
+              box-shadow var(--hg-duration) var(--hg-ease);
+}
+.hg-lamp--pass {
+  color: var(--hg-text-faint);
+  background: transparent;
+  border-color: var(--hg-engrave-lo);
+}
+.hg-lamp--veto {
+  color: var(--hg-lamp-amber);
+  background: var(--hg-lamp-amber-bg);
+  border-color: var(--hg-lamp-amber);
+  box-shadow: 0 0 12px var(--hg-lamp-amber-glow),
+              inset 0 0 8px rgba(232, 163, 61, 0.10);
+}
+.hg-lamp--sole {
+  color: var(--hg-panel-0);
+  background: var(--hg-lamp-amber);
+  border-color: var(--hg-lamp-amber);
+  box-shadow: 0 0 16px var(--hg-lamp-amber-glow);
+}
+.hg-lamp--armed {
+  color: var(--hg-lamp-white);
+  background: var(--hg-lamp-white-bg);
+  border-color: var(--hg-lamp-white);
+  box-shadow: 0 0 14px var(--hg-lamp-white-glow),
+              inset 0 0 10px rgba(245, 240, 230, 0.08);
+}
+.hg-lamp--stale {
+  color: var(--hg-lamp-cold);
+  background: var(--hg-lamp-cold-bg);
+  border-color: var(--hg-lamp-cold);
+  border-style: dashed;
+}
+.hg-lamp--trip {
+  color: var(--hg-lamp-amber);
+  background: var(--hg-lamp-amber-bg);
+  border-color: var(--hg-lamp-amber);
+  animation: hg-annunciate 1.1s steps(1, end) infinite;
+}
+@keyframes hg-annunciate {
+  0%, 49%   { background: var(--hg-lamp-amber);
+              color: var(--hg-panel-0);
+              box-shadow: 0 0 18px var(--hg-lamp-amber-glow); }
+  50%, 100% { background: var(--hg-lamp-amber-bg);
+              color: var(--hg-lamp-amber);
+              box-shadow: none; }
+}
+
+/* --------------------------------------------------------------------------
+   8. GATE ROW
+   -------------------------------------------------------------------------- */
+.hg-gaterow {
+  display: flex;
+  gap: var(--hg-s1);
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.hg-gaterow--wrap { flex-wrap: wrap; row-gap: var(--hg-s1); }
+
+/* --------------------------------------------------------------------------
+   9. STALENESS
+   -------------------------------------------------------------------------- */
+.hg-stale       { opacity: 0.55; filter: saturate(0.4); }
+.hg-stale-age {
+  font-family: var(--hg-font-num);
+  font-size: var(--hg-size-xs);
+  color: var(--hg-lamp-cold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   10. PANEL SURFACES
+   -------------------------------------------------------------------------- */
+.hg-panel {
+  background: var(--hg-panel-1);
+  border: var(--hg-hairline);
+  border-radius: var(--hg-radius-lg);
+  padding: var(--hg-s4);
+}
+.hg-panel__legend {
+  font-family: var(--hg-font-legend);
+  font-size: var(--hg-size-xs);
+  font-weight: 600;
+  letter-spacing: var(--hg-track-legend);
+  text-transform: uppercase;
+  color: var(--hg-text-dim);
+  margin-bottom: var(--hg-s3);
+}
+
+/* --------------------------------------------------------------------------
+   11. TABLE
+   -------------------------------------------------------------------------- */
+.hg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--hg-font-legend);
+  font-size: var(--hg-size-base);
+  color: var(--hg-text);
+}
+.hg-table th {
+  font-size: var(--hg-size-xs);
+  font-weight: 600;
+  letter-spacing: var(--hg-track-legend);
+  text-transform: uppercase;
+  color: var(--hg-text-dim);
+  text-align: left;
+  padding: var(--hg-s2) var(--hg-s3);
+  border-bottom: var(--hg-hairline);
+  position: sticky;
+  top: 0;
+  background: var(--hg-panel-1);
+  z-index: 1;
+}
+.hg-table td {
+  padding: var(--hg-s2) var(--hg-s3);
+  border-bottom: 1px solid var(--hg-engrave-lo);
+  vertical-align: middle;
+}
+.hg-table tbody tr:hover { background: var(--hg-panel-2); }
+.hg-table td.hg-right    { text-align: right; }
+
+/* --------------------------------------------------------------------------
+   12. QUALITY FLOOR
+   -------------------------------------------------------------------------- */
+.hg-panel :is(a, button, [tabindex]):focus-visible,
+.hg-table :is(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--hg-focus);
+  outline-offset: 2px;
+  border-radius: var(--hg-radius);
+}
+:is(button, a, [role="button"]).hg-lamp { cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hg-lamp { transition: none; }
+  .hg-lamp--trip {
+    animation: none;
+    background: var(--hg-lamp-amber);
+    color: var(--hg-panel-0);
+    border-style: double;
+    border-width: 3px;
+  }
+}
+@media (max-width: 640px) {
+  :root { --hg-size-base: 15px; }
+  .hg-gaterow { flex-wrap: wrap; row-gap: var(--hg-s1); }
+  .hg-table th, .hg-table td { padding: var(--hg-s2); }
+}

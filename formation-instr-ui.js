@@ -44,6 +44,13 @@ function loadGateStats(){
   }catch(e){ return null; }
 }
 
+function gateLampClass(vetoRate){
+  var v = +vetoRate || 0;
+  if (v >= 80) return 'hg-lamp--sole';
+  if (v >= 25) return 'hg-lamp--veto';
+  return 'hg-lamp--pass';
+}
+
 function hgFormationPanelHtml(records){
   try{
     var settled = [];
@@ -53,31 +60,40 @@ function hgFormationPanelHtml(records){
     }
     var tbl = buildSimpleEdgeTable(settled);
     var gates = loadGateStats();
-    var h = '<div class="note" style="margin:10px 0 4px"><b>FORMATION INSTR</b>'
-      + ' <span>FQS + per-family edge from scorecard ledger · gates from local hg_gate_v1 when present</span></div>';
-    h += '<div class="note" style="line-height:1.6">GLOBAL&nbsp; n=' + tbl.global.n
-      + ' · E[R] ' + (tbl.global.expR >= 0 ? '+' : '') + (tbl.global.expR || 0).toFixed(2) + '</div>';
+    var h = '<div class="hg-panel" style="margin:10px 0 4px">'
+      + '<div class="hg-panel__legend">Formation instr · edge table</div>';
+    h += '<div class="note" style="line-height:1.6">GLOBAL&nbsp; <span class="hg-num">n=' + tbl.global.n
+      + '</span> · E[R] <span class="hg-num">' + (tbl.global.expR >= 0 ? '+' : '') + (tbl.global.expR || 0).toFixed(2) + '</span></div>';
     if (tbl.rows.length){
-      h += '<table class="tbl" style="margin-top:6px"><tr><th>family</th><th>n</th><th>win%</th><th>E[R]</th></tr>';
+      h += '<table class="hg-table" style="margin-top:6px"><thead><tr><th>family</th><th>n</th><th>win%</th><th class="hg-right">E[R]</th></tr></thead><tbody>';
       var show = tbl.rows.slice(0, 5).concat(tbl.rows.length > 10 ? tbl.rows.slice(-5) : []);
       for (var j = 0; j < show.length; j++){
         var row = show[j];
-        h += '<tr><td>' + row.key + '</td><td>' + row.n + '</td><td>' + Math.round(row.winRate * 100) + '</td><td>'
+        h += '<tr><td>' + row.key + '</td><td class="hg-num">' + row.n + '</td><td class="hg-num">' + Math.round(row.winRate * 100) + '</td><td class="hg-num hg-right">'
           + (row.expR >= 0 ? '+' : '') + row.expR.toFixed(2) + '</td></tr>';
       }
-      h += '</table>';
+      h += '</tbody></table>';
     } else {
       h += '<div class="note">no settled R-scored trades yet — FQS/edge table fills as scorecard settles</div>';
     }
     if (gates && gates.rows && gates.rows.length){
-      h += '<div class="note" style="margin-top:8px"><b>GATE ATTRIB</b></div><table class="tbl"><tr><th>gate</th><th>pass</th><th>veto</th><th>veto%</th></tr>';
+      h += '<div class="hg-panel__legend" style="margin-top:12px">Gate attrib</div>';
+      h += '<div class="hg-gaterow hg-gaterow--wrap" style="margin-bottom:8px">';
+      for (var gi = 0; gi < gates.rows.length; gi++){
+        var gRow = gates.rows[gi];
+        h += '<span class="hg-lamp ' + gateLampClass(gRow.vetoRate) + '" title="pass ' + gRow.pass + ' · veto ' + gRow.veto + '">'
+          + String(gRow.gate || '').toUpperCase().slice(0, 8) + '</span>';
+      }
+      h += '</div>';
+      h += '<table class="hg-table"><thead><tr><th>gate</th><th>pass</th><th>veto</th><th class="hg-right">veto%</th></tr></thead><tbody>';
       for (var g = 0; g < gates.rows.length; g++){
         var gr = gates.rows[g];
-        h += '<tr><td>' + gr.gate + '</td><td>' + gr.pass + '</td><td>' + gr.veto + '</td><td>' + gr.vetoRate + '%</td></tr>';
+        h += '<tr><td>' + gr.gate + '</td><td class="hg-num">' + gr.pass + '</td><td class="hg-num">' + gr.veto + '</td><td class="hg-num hg-right">' + gr.vetoRate + '%</td></tr>';
       }
-      h += '</table>';
+      h += '</tbody></table>';
     }
     h += '<div class="note" style="margin-top:6px">Daemon: set HARDGATE_FQS_GATE=1 / HARDGATE_EDGE_GATE=1 on Render to enable vetoes (default report-only).</div>';
+    h += '</div>';
     return h;
   }catch(e){ return ''; }
 }
