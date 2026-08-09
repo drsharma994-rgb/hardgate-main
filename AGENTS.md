@@ -64,6 +64,7 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `BOOK_EXECUTE_FILL_SECRET` | Webhook auth for fill updates |
 | `BOOK_MAX_DAILY_LOSS_PCT` | Daily loss halt threshold (default 2%) |
 | `FRED_API_KEY` | `/api/fred` macro series (DGS10, DTWEXBGS, DFII10) |
+| `TRADEOS_ACCESS_TOKEN` | TradeOS MCP OAuth bearer for `/api/tradeos/*` (run `npx -y @tradeos/tradeos-mcp oauth`) |
 | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Alert pushes (also overridable in browser localStorage) |
 | `GH_DISPATCH_TOKEN` | GitHub Actions workflow dispatch from Render |
 | `RENDER_EXTERNAL_URL` / `SELF_PING_URL` | Render keep-alive ping |

@@ -262,7 +262,7 @@ const EXPECTED_GROUPS = {
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp', 'goldswing', 'goldpine', 'signallog'],
   strategies: ['strats', 'meanrev', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'carry', 'termbasis', 'scorecard'],
-  tools:      ['basis', 'search', 'log', 'trade', 'finder']
+  tools:      ['basis', 'search', 'tradeos', 'log', 'trade', 'finder']
 };
 assert(run('Array.isArray(HG_NAV_GROUPS)') === true && run('HG_NAV_GROUPS.length') === 5,
   'HG_NAV_GROUPS defines exactly 5 groups');

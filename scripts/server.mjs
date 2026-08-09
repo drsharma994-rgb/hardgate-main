@@ -16,6 +16,7 @@ import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch
 import { createPaperbookApi } from '../lib/paperbook-api.mjs';
 import { createExecuteApi } from '../lib/execute-api.mjs';
 import { createNotifyApi } from '../lib/notify-api.mjs';
+import { createTradeosMcpApi } from '../lib/tradeos-mcp-api.mjs';
 import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -27,6 +28,7 @@ const PORT = +(process.env.PORT || 10000);
 const paperbookHandler = createPaperbookApi(ROOT);
 const executeHandler = createExecuteApi();
 const notifyHandler = createNotifyApi();
+const tradeosHandler = createTradeosMcpApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -94,6 +96,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/execute' || u.pathname.indexOf('/api/execute/') === 0){
       return executeHandler(req, res);
+    }
+    if (u.pathname === '/api/tradeos' || u.pathname.indexOf('/api/tradeos/') === 0){
+      return tradeosHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
