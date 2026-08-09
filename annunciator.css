@@ -34,26 +34,26 @@
    2. COLOR — warm charcoal fascia, not blue-black
    -------------------------------------------------------------------------- */
 :root {
-  --hg-panel-0:     #16120F;
-  --hg-panel-1:     #1F1A16;
-  --hg-panel-2:     #2A2320;
-  --hg-panel-3:     #352C27;
-  --hg-engrave:     #3A322D;
-  --hg-engrave-lo:  #2B2420;
+  --hg-panel-0:     #020617;
+  --hg-panel-1:     #0F172A;
+  --hg-panel-2:     #1A2332;
+  --hg-panel-3:     #243044;
+  --hg-engrave:     #334155;
+  --hg-engrave-lo:  #1E293B;
   --hg-text:        #E8E2DA;
   --hg-text-dim:    #9A9088;
   --hg-text-faint:  #6B625B;
-  --hg-lamp-amber:      #E8A33D;
-  --hg-lamp-amber-bg:   rgba(232, 163, 61, 0.13);
-  --hg-lamp-amber-glow: rgba(232, 163, 61, 0.30);
-  --hg-lamp-white:      #F5F0E6;
-  --hg-lamp-white-bg:   rgba(245, 240, 230, 0.10);
-  --hg-lamp-white-glow: rgba(245, 240, 230, 0.26);
-  --hg-lamp-cold:       #5C7A88;
-  --hg-lamp-cold-bg:    rgba(92, 122, 136, 0.14);
-  --hg-long:        #5FBF8A;
-  --hg-short:       #CC5F66;
-  --hg-focus:       #E8A33D;
+  --hg-lamp-amber:      #FB923C;
+  --hg-lamp-amber-bg:   rgba(251, 146, 60, 0.14);
+  --hg-lamp-amber-glow: rgba(251, 146, 60, 0.32);
+  --hg-lamp-white:      #E0F2FE;
+  --hg-lamp-white-bg:   rgba(56, 189, 248, 0.12);
+  --hg-lamp-white-glow: rgba(34, 211, 238, 0.28);
+  --hg-lamp-cold:       #64748B;
+  --hg-lamp-cold-bg:    rgba(100, 116, 139, 0.16);
+  --hg-long:        #34D399;
+  --hg-short:       #F87171;
+  --hg-focus:       #22D3EE;
 }
 
 /* --------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#FFFFFF">
+<meta name="theme-color" content="#020617">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,14 +14,14 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@700;800;900&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#F8FAFC; --panel:#FFFFFF; --panel2:#F1F5F9; --line:#E2E8F0;
-  --gold:#C9921A; --gold-dim:#A67C12;
-  --long:#059669; --short:#DC2626; --veto:#DC2626; --pass:#059669;
-  --txt:#020617; --mut:#334155; --dim:#475569;
-  --mono:'IBM Plex Mono',monospace; --disp:'Space Grotesk',sans-serif;
+  --ink:#020617; --panel:#0F172A; --panel2:#1E293B; --line:#334155;
+  --gold:#38BDF8; --gold-dim:#0EA5E9;
+  --long:#34D399; --short:#F87171; --veto:#FB923C; --pass:#34D399;
+  --txt:#F1F5F9; --mut:#94A3B8; --dim:#64748B;
+  --mono:'JetBrains Mono','IBM Plex Mono',monospace; --disp:'Orbitron','Space Grotesk',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--ink);color:var(--txt);font-family:var(--mono);font-size:13px;font-weight:500;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -50,7 +50,7 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 .brand small{display:block;font-family:var(--mono);font-weight:600;font-size:9px;letter-spacing:.18em;color:var(--mut)}
 .xtoggle{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
 .xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em;font-weight:600}
-.xtoggle button.on{background:var(--gold);color:#14100A;font-weight:600}
+.xtoggle button.on{background:linear-gradient(180deg,#67E8F9,#22D3EE);color:#042F2E;font-weight:600}
 .statuschip{font-size:10px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:4px;white-space:nowrap;font-weight:600}
 .statuschip b{color:var(--txt);font-weight:700}
 .statuschip.warn b{color:var(--short)}
@@ -61,7 +61,7 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 .navgroups::-webkit-scrollbar{height:4px}
 .navgroups button{flex:none;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:600;transition:color .15s,border-color .15s,background .15s}
 .navgroups button:hover{color:var(--txt);border-color:var(--gold-dim)}
-.navgroups button.on{background:var(--gold);border-color:var(--gold);color:#14100A;font-weight:600}
+.navgroups button.on{background:linear-gradient(180deg,#67E8F9,#22D3EE);border-color:#22D3EE;color:#042F2E;font-weight:600}
 .navgroups button .cnt{opacity:.6;font-weight:400;margin-left:6px}
 nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--ink);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 nav::-webkit-scrollbar{height:4px}

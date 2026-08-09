@@ -204,7 +204,7 @@ assert((html.match(/@media/g) || []).length === 1, 'still exactly one @media que
 /* ================= 4b. grouped two-tier nav ================= */
 assert(html.includes('class="navgroups" id="navGroups"'), 'group row container (#navGroups.navgroups) present above the nav');
 assert(/\.navgroups\{[^}]*overflow-x\s*:\s*auto/.test(html), 'group row CSS: overflow-x:auto (mobile-safe)');
-assert(/\.navgroups button\.on\{[^}]*background\s*:\s*var\(--gold\)/.test(html), 'active group chip styled like the xtoggle chips (gold fill)');
+assert(/\.navgroups button\.on\{[^}]*background\s*:\s*linear-gradient/.test(html), 'active group chip uses futuristic gradient fill');
 assert(html.includes('const HG_NAV_GROUPS = ['), 'HG_NAV_GROUPS group model defined inline');
 assert(html.includes("'strats','meanrev','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry'"), 'STRATEGIES group pre-maps all pine tabs');
 assert(html.includes("const HG_TAB_GROUP = {}") && html.includes("HG_TAB_GROUP[t] = g.id"),
