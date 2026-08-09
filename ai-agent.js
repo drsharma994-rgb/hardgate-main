@@ -724,7 +724,7 @@ function renderDesk(ui, desk){
   h += '<div class="note" style="margin-top:10px;line-height:1.5">Workforce inspired by '
     + '<a href="https://github.com/ruvnet/ruflo" target="_blank" rel="noopener">Ruflo</a> · Atomic pipeline '
     + '<a href="https://github.com/Eigenwise/atomic-agents" target="_blank" rel="noopener">atomic-agents</a> scans Delta India + CoinDCX for gate-clean setups. '
-    + 'Set <code>HARDGATE_AGENT_SWARM=1</code> on the daemon for 24/7 headless cycles.</div>';
+    + 'Telegram alerts fire on the 5-min cycle when a great setup forms (ENTRY · SL · TP). Server watch runs 24/7 when TELEGRAM_* is set on Render.</div>';
   ui.out.innerHTML = h;
 }
 
@@ -836,6 +836,7 @@ async function refreshAiAgent(){
 
 W.hgAgentRunOne = hgAgentRunOne;
 W.hgAgentSwarmRun = hgAgentSwarmRun;
+W.hgAgentWorkforceCollect = function(){ return collectSetupsForDisplay(__agent.lastDesk); };
 W.hgAgentWorkforceDesk = function(){ return __agent.lastDesk; };
 W.getAgentDeskCached = getAgentDeskCached;
 W.aiAgentState = aiAgentState;

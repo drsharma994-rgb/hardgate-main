@@ -11,6 +11,7 @@ import { fork } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startSqueezeWatch, squeezeWatchStatus } from './squeeze-watch.mjs';
+import { startAgentWatch, agentWatchStatus } from '../lib/agent-watch.mjs';
 import { startGhDispatch, ghDispatchStatus } from './gh-dispatch.mjs';
 import { startBookDigestWatch, bookDigestWatchStatus } from './book-digest-watch.mjs';
 import { createPaperbookApi } from '../lib/paperbook-api.mjs';
@@ -88,6 +89,12 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cache-Control', 'no-store');
       res.statusCode = 200;
       return res.end(JSON.stringify(squeezeWatchStatus()));
+    }
+    if (u.pathname === '/api/agent-watch'){
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.statusCode = 200;
+      return res.end(JSON.stringify(agentWatchStatus()));
     }
     /* gh-dispatch status: armed? last dispatch result? — no secrets, counts only */
     if (u.pathname === '/api/gh-dispatch'){
@@ -169,6 +176,8 @@ hgAssertCcxtBoot().then(function(r){
 /* 5-minute fired-squeeze Telegram watch (arms only with TELEGRAM_TOKEN +
    TELEGRAM_CHAT_ID in the environment; logs its status either way) */
 startSqueezeWatch();
+
+startAgentWatch();
 
 /* GitHub cron replacement: fires alert-notify.yml via workflow_dispatch every
    13 min (arms only with GH_DISPATCH_TOKEN in the environment; logs either way) */
