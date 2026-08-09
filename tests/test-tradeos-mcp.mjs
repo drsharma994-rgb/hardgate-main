@@ -91,7 +91,7 @@ console.log('== wiring ==');
   ok(idx.indexOf('tradeos.js') >= 0, 'index.html loads tradeos.js');
   ok(idx.indexOf("'tradeos'") >= 0, 'index.html nav includes tradeos');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(sw.indexOf('hg-v211') >= 0, 'sw.js cache hg-v211');
+  ok(sw.indexOf('hg-v212') >= 0, 'sw.js cache hg-v212');
 }
 
 console.log('\n' + pass + ' passed');

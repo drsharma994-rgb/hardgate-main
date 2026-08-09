@@ -42,6 +42,7 @@ Not required for local dev or core UI:
 | `EXECUTE_CCXT_EXCHANGE` + `EXECUTE_CCXT_API_KEY` + `EXECUTE_CCXT_SECRET` | In-process CCXT executor (Bybit / Binance / Delta) — takes priority over `EXECUTE_BACKEND_URL` |
 | `EXECUTE_CCXT_SANDBOX`, `EXECUTE_CCXT_PASSWORD`, `EXECUTE_RISK_PCT`, `EXECUTE_CCXT_DEFAULT_TYPE` | CCXT sandbox mode, exchange password, default 1% risk sizing when qty omitted, override `defaultType` |
 | `CCXT_MARKET_EXCHANGE`, `CCXT_MARKET_SYMBOLS` | Public CCXT desk at `/api/ccxt/desk` (default `binanceusdm`, BTC+ETH funding) — no API keys |
+| `HEY_LENS_API_URL`, `HEY_LENS_AUTHORS` | Hey/Lens social desk at `/api/hey/desk` (default `https://api.lens.xyz/graphql`, authors `stani`) — no wallet |
 | `HARDGATE_URL` | Daemon / CI Puppeteer target (default `http://127.0.0.1:10000/` or `RENDER_EXTERNAL_URL`) |
 | `HARDGATE_SCAN_MS` | Daemon scan interval (default 15 min) |
 | `HARDGATE_DAEMON_DRY_RUN=1` | Run daemon loop without CCXT orders |

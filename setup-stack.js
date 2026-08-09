@@ -57,6 +57,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.getGoldMacroCached === 'function') o.macro = G.getGoldMacroCached(); }catch(e6){}
     try{ if (typeof G.getDeskMacroCached === 'function') o.desk = G.getDeskMacroCached(); }catch(e7){}
     try{ if (typeof G.getCcxtDeskCached === 'function') o.ccxt = G.getCcxtDeskCached(); }catch(e8){}
+    try{ if (typeof G.getHeyDeskCached === 'function') o.hey = G.getHeyDeskCached(); }catch(e9){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
@@ -246,6 +247,19 @@ function hgSetupStack(inp){
         } else if (cBoost <= -7){
           _bump(fundamental, _item('CCXT funding', carry + ' ann~' + (+ann).toFixed(1) + '% — crowded carry', 'caution'), vetoes, cautions);
         }
+      }
+    }
+    var heyDesk = inp.hey;
+    if (heyDesk && asset === 'crypto' && isFinite(+heyDesk.socialRiskScore)){
+      var hs = +heyDesk.socialRiskScore;
+      if (hs >= 25 && dir === 'long'){
+        _bump(sentiment, _item('Hey Lens', 'Lens social BULL (' + hs + ') — crowd tailwind', 'with'), vetoes, cautions);
+      } else if (hs <= -25 && dir === 'long'){
+        _bump(sentiment, _item('Hey Lens', 'Lens social BEAR (' + hs + ') — crowd headwind', 'caution'), vetoes, cautions);
+      } else if (hs <= -25 && dir === 'short'){
+        _bump(sentiment, _item('Hey Lens', 'Lens social BEAR — supports short', 'with'), vetoes, cautions);
+      } else if (hs >= 25 && dir === 'short'){
+        _bump(sentiment, _item('Hey Lens', 'Lens social BULL — against short', 'caution'), vetoes, cautions);
       }
     }
   }
