@@ -358,6 +358,14 @@ function hgSetupStack(inp){
     tierHint = 'near';
   }
 
+  /* Gate clearance (cryptogates margins): setups that scraped through with
+     tight binding margins are downgraded — public TA/SMC literature treats
+     marginal geometry as lower conviction than wide clearance. */
+  var tightN = isFinite(+inp.tightCount) ? +inp.tightCount : 0;
+  if (tightN >= 3 && tierHint === 'clean') tierHint = 'near';
+  else if (tightN >= 2 && tierHint === 'clean') tierHint = 'near';
+  else if (tightN >= 3 && tierHint === 'near') tierHint = 'forming';
+
   return {
     dir: dir, style: style, asset: asset, sym: sym,
     fundamental: fundamental, technical: technical, sentiment: sentiment,
@@ -380,6 +388,9 @@ function hgSetupStackFromHit(hit, opts){
     ticker: opts.ticker,
     gatesPassed: hit.passed != null ? hit.passed : (hit.clean ? 7 : undefined),
     gatesTotal: hit.gatesTotal || 7,
+    tightCount: hit.tightCount,
+    tightGates: hit.tightGates,
+    margins: hit.margins,
     clean: hit.clean === true,
     nearClean: hit.nearClean === true,
     macro: opts.macro,

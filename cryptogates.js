@@ -195,6 +195,29 @@
     else if (e9 < e21 && e21 < e50) dir = 'short';
     if (!dir) return { dir: null, gates: [], passed: 0, gatesTotal: 7, level: null, clean: false };
 
+    var sgFn = (typeof G.hgStructureGate === 'function') ? G.hgStructureGate
+             : (typeof hgStructureGate === 'function') ? hgStructureGate : null;
+    if (sgFn){
+      try{
+        var sg0 = sgFn(rows, dir);
+        if (sg0 && sg0.veto){
+          return { dir: null, gates: [], passed: 0, gatesTotal: 7, level: null, clean: false,
+            structureVeto: true, structureNote: sg0.note || ('CHoCH against ' + dir + ' cascade') };
+        }
+      }catch(e){}
+    }
+    var drFn = (typeof G.detectRegime === 'function') ? G.detectRegime
+             : (typeof detectRegime === 'function') ? detectRegime : null;
+    if (drFn){
+      try{
+        var dr0 = drFn(rows);
+        if (dr0 && dr0.regime === 'compression'){
+          return { dir: null, gates: [], passed: 0, gatesTotal: 7, level: null, clean: false,
+            regimeVeto: true, regimeNote: dr0.label || 'compression chop' };
+        }
+      }catch(e){}
+    }
+
     var a4 = last(atr(rows, 14));
     var gates = [];
     var g1 = isFinite(a4) && Math.abs(e21 - e50) >= CG_G1_SPREAD_ATR * a4;
@@ -237,7 +260,17 @@
     /* G6 is a VETO, never an adjustment. The stop stays where structure put it;
        if structure is wider than EXP/RR_MIN ATR the setup fails honestly. */
     var risk = Math.abs(entry - stop);
-    var expectedMove = a4 * CG_SWING_EXP_ATR;
+    var expAtr = CG_SWING_EXP_ATR;
+    var drG6Fn = (typeof G.detectRegime === 'function') ? G.detectRegime
+               : (typeof detectRegime === 'function') ? detectRegime : null;
+    if (drG6Fn){
+      try{
+        var drG6 = drG6Fn(rows);
+        if (drG6 && drG6.regime === 'weak_trend') expAtr = 3.0;
+        else if (drG6 && drG6.regime === 'volatile') expAtr = 4.0;
+      }catch(e){}
+    }
+    var expectedMove = a4 * expAtr;
     var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
     var g6 = dynamicRR >= CG_SWING_RR_MIN;
     gates.push(['G6 R:R≥' + CG_SWING_RR_MIN, g6]);
