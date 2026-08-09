@@ -11,7 +11,11 @@ import { hgCcxtExecutorFromEnv } from './lib/hardgate-executor.mjs';
 
 const SCAN_MS = +(process.env.HARDGATE_SCAN_MS || 15 * 60 * 1000);
 const DRY_RUN = process.env.HARDGATE_DAEMON_DRY_RUN === '1' || process.env.HARDGATE_DAEMON_DRY_RUN === 'true';
-const AGENT_SWARM = process.env.HARDGATE_AGENT_SWARM === '1' || process.env.HARDGATE_AGENT_SWARM === 'true';
+const AGENT_SWARM = (function(){
+  if (process.env.HARDGATE_AGENT_SWARM === '0' || process.env.HARDGATE_AGENT_SWARM === 'false') return false;
+  if (process.env.HARDGATE_AGENT_SWARM === '1' || process.env.HARDGATE_AGENT_SWARM === 'true') return true;
+  return !!(process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_CHAT_ID);
+})();
 
 function log(msg){
   try{ console.log(msg); }catch(e){}

@@ -68,7 +68,7 @@ console.log('== wiring ==');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('atomic-agent-desk.js') >= 0, 'index loads atomic desk');
   ok(/atomic-agent-desk\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell atomic');
   ok(fs.readFileSync(path.join(root, 'ai-agent.js'), 'utf8').indexOf('Setup tickets') >= 0, 'ai-agent setup detail cards');
-  ok(/hg-v218/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v218');
+  ok(/hg-v219/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v219');
   ok(fs.readFileSync(path.join(root, 'ai-agent.js'), 'utf8').indexOf('atomic-delta') >= 0, 'ai-agent atomic runners');
   ok(fs.readFileSync(path.join(root, 'ai-agent.js'), 'utf8').indexOf('ATOMIC DELTA+CDCX') >= 0, 'atomic UI button');
 }

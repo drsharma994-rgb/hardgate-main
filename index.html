@@ -713,6 +713,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="hey-lens.js"></script>
 <script src="atomic-agent-desk.js"></script>
 <script src="ai-agent.js"></script>
+<script src="agent-alerts.js"></script>
 <script src="book.js?v=56"></script>
 <script src="execute.js?v=56"></script>
 <script src="pinemath.js"></script>
@@ -4273,7 +4274,10 @@ async function runTabAlertScans(){
     bestScanWarm().catch(function(e){ console.warn('tab alert best', e); }),
     runSmartScan({ quiet: true }).catch(function(e){ console.warn('tab alert smart', e); })
   ]);
-  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis']); }catch(e){ console.warn('tab alert layer warm', e); }
+  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis', 'aiagent']); }catch(e){ console.warn('tab alert layer warm', e); }
+  try{
+    if (typeof refreshAtomicDesk === 'function') await refreshAtomicDesk(true);
+  }catch(e){ console.warn('tab alert atomic desk', e); }
 }
 
 /* Unified 5-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
@@ -4287,6 +4291,9 @@ async function runTabSetupAlerts(){
     }
     if (typeof hgTabAlertsRunGold === 'function'){
       await hgTabAlertsRunGold();
+    }
+    if (typeof hgAgentAlertsRun === 'function'){
+      await hgAgentAlertsRun({ force: false });
     }
     S.lastTabAlertCheck = now;
   }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
