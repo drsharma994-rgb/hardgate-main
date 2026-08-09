@@ -60,6 +60,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.getWorldMonitorDeskCached === 'function') o.wm = G.getWorldMonitorDeskCached(); }catch(e8b){}
     try{ if (typeof G.getHeyDeskCached === 'function') o.hey = G.getHeyDeskCached(); }catch(e9){}
     try{ if (typeof G.getAgentDeskCached === 'function') o.agents = G.getAgentDeskCached(); }catch(e9b){}
+    try{ if (typeof G.getAtomicDeskCached === 'function') o.atomic = G.getAtomicDeskCached(); }catch(e9c){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
@@ -314,6 +315,21 @@ function hgSetupStack(inp){
       if (afSym && symU && afSym !== symU && afSym.indexOf(symU.replace(/USD$/, '')) < 0 && symU.indexOf(afSym.replace(/USD$/, '')) < 0) continue;
       if (af.clean7 || (af.score != null && +af.score >= 10)){
         _bump(sentiment, _item('AI workforce', (af.agentLabel || af.src || 'agent') + ' · ' + (af.note || 'confluence'), 'with'), vetoes, cautions);
+        break;
+      }
+    }
+  }
+
+  var atomicDesk = inp.atomic;
+  if (atomicDesk && hasDir && Array.isArray(atomicDesk.bestSetups)){
+    for (var axi = 0; axi < atomicDesk.bestSetups.length; axi++){
+      var ax = atomicDesk.bestSetups[axi];
+      if (!ax || String(ax.dir || '').toLowerCase() !== dir) continue;
+      var axBase = String(ax.base || ax.sym || '').toUpperCase().replace(/USD(T)?$/, '').replace(/^B-/, '').replace(/_USDT$/, '');
+      var symBase = String(sym || '').toUpperCase().replace(/USD(T)?$/, '').replace(/^B-/, '').replace(/_USDT$/, '');
+      if (axBase && symBase && axBase !== symBase && axBase.indexOf(symBase) < 0 && symBase.indexOf(axBase) < 0) continue;
+      if (ax.clean7 || ax.clean || (ax.score != null && +ax.score >= 40)){
+        _bump(technical, _item('Atomic ' + (ax.bestVenue || ax.exchange || 'venue'), (ax.style || 'setup') + ' · ' + (ax.bestVenue || ''), 'with'), vetoes, cautions);
         break;
       }
     }

@@ -33,6 +33,9 @@ var AGENTS = [
   { id: 'strategy-lab', label: 'Strategy Lab', role: 'backtest-engineer', focus: 'crypto' },
   { id: 'funding-hunter', label: 'Funding Hunter', role: 'risk-analyst', focus: 'crypto' },
   { id: 'brain-echo', label: 'Brain Echo', role: 'trading-strategist', focus: 'all' },
+  { id: 'atomic-delta', label: 'Atomic Delta Scout', role: 'venue-scout', focus: 'delta' },
+  { id: 'atomic-coindcx', label: 'Atomic CoinDCX Scout', role: 'venue-scout', focus: 'coindcx' },
+  { id: 'atomic-best', label: 'Atomic Best Setup', role: 'composer', focus: 'delta+coindcx' },
 ];
 
 var __agent = {
@@ -334,6 +337,57 @@ function runBrainEcho(){
   return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' brain tier row(s)' };
 }
 
+function atomicFindingsFromDesk(desk, venueFilter){
+  var finds = [];
+  if (!desk) return finds;
+  var list = desk.topFindings || desk.bestSetups || [];
+  for (var i = 0; i < list.length; i++){
+    var s = list[i];
+    if (!s) continue;
+    var v = s.bestVenue || s.venue || s.exchange;
+    if (venueFilter && v !== venueFilter) continue;
+    finds.push(finding(s.sym, s.dir, {
+      src: 'ATOMIC ' + (v || 'ranker').toUpperCase(),
+      venue: v,
+      exchange: v,
+      entry: s.entry,
+      stop: s.stop,
+      t1: s.t1,
+      style: s.style,
+      clean7: !!(s.clean7 || s.clean),
+      score: s.score != null ? s.score : 10,
+      note: s.note || ((s.style || 'setup') + ' · ' + (v || 'venue')),
+    }));
+  }
+  return finds;
+}
+
+async function runAtomicPipelineAgent(venueFilter, summaryLabel){
+  try{
+    var refreshFn = gfn('refreshAtomicDesk');
+    var desk = refreshFn ? await refreshFn(true) : null;
+    if (!desk){
+      var res = await fetch('/api/atomic/desk?refresh=1', { cache: 'no-store' });
+      var j = await res.json();
+      desk = j && j.desk ? j.desk : null;
+    }
+    if (!desk) return { ok: true, findings: [], summary: 'atomic pipeline warming — retry' };
+    var finds = atomicFindingsFromDesk(desk, venueFilter);
+    return {
+      ok: true,
+      findings: finds.slice(0, 8),
+      summary: summaryLabel + ' · ' + finds.length + ' setup(s) · score ' + (desk.swarmScore != null ? desk.swarmScore : '—'),
+      atomicDesk: desk,
+    };
+  }catch(e){
+    return { ok: false, findings: [], summary: 'atomic scan failed' };
+  }
+}
+
+function runAtomicDelta(){ return runAtomicPipelineAgent('delta', 'Delta India atomic scout'); }
+function runAtomicCoindcx(){ return runAtomicPipelineAgent('coindcx', 'CoinDCX atomic scout'); }
+function runAtomicBest(){ return runAtomicPipelineAgent(null, 'Cross-venue best setup'); }
+
 var RUNNERS = {
   'gate-hunter': runGateHunter,
   'market-analyst': runMarketAnalyst,
@@ -343,6 +397,9 @@ var RUNNERS = {
   'strategy-lab': runStrategyLab,
   'funding-hunter': runFundingHunter,
   'brain-echo': runBrainEcho,
+  'atomic-delta': runAtomicDelta,
+  'atomic-coindcx': runAtomicCoindcx,
+  'atomic-best': runAtomicBest,
 };
 
 async function hgAgentRunOne(agentId){
@@ -503,8 +560,12 @@ function renderDesk(ui, desk){
   h += renderAgentCards(desk);
   h += '<div class="hg-panel__legend" style="margin-top:14px">Top findings · crypto + gold</div>';
   h += renderTopFindings(desk);
-  h += '<div class="note" style="margin-top:10px;line-height:1.5">Inspired by '
-    + '<a href="https://github.com/ruvnet/ruflo" target="_blank" rel="noopener">Ruflo</a> agent roles — runs natively on HARDGATE gates, pine, gold, brain, CCXT, World Monitor. '
+  if (typeof W.hgAtomicDeskPanelHtml === 'function'){
+    h += W.hgAtomicDeskPanelHtml();
+  }
+  h += '<div class="note" style="margin-top:10px;line-height:1.5">Workforce inspired by '
+    + '<a href="https://github.com/ruvnet/ruflo" target="_blank" rel="noopener">Ruflo</a> · Atomic pipeline '
+    + '<a href="https://github.com/Eigenwise/atomic-agents" target="_blank" rel="noopener">atomic-agents</a> scans Delta India + CoinDCX for gate-clean setups. '
     + 'Set <code>HARDGATE_AGENT_SWARM=1</code> on the daemon for 24/7 headless cycles.</div>';
   ui.out.innerHTML = h;
 }
@@ -542,9 +603,10 @@ function mountAiAgent(el){
   root.innerHTML = ''
     + '<div class="hg-panel">'
     + '<div class="hg-panel__head"><span class="hg-panel__title">AI AGENT · workforce</span></div>'
-    + '<div class="note">Eight specialist agents scan crypto + gold 24/7 using every HARDGATE strategy layer — gates, pine, gold, brain, funding, macro.</div>'
+    + '<div class="note">Specialist agents scan crypto + gold 24/7. Atomic Agents pipeline searches <b>Delta India</b> + <b>CoinDCX</b> for the best gate-clean setup per asset.</div>'
     + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
     + '<button type="button" class="hg-btn" id="agentSwarmBtn">SWARM SCAN</button>'
+    + '<button type="button" class="hg-btn ghost" id="agentAtomicBtn">ATOMIC DELTA+CDCX</button>'
     + '<button type="button" class="btn ghost" id="agentDeskBtn">Refresh desk</button>'
     + '</div>'
     + '<div class="note" id="agentStat" style="margin-top:6px">idle</div>'
@@ -555,16 +617,31 @@ function mountAiAgent(el){
     stat: root.querySelector('#agentStat'),
     out: root.querySelector('#agentOut'),
     swarm: root.querySelector('#agentSwarmBtn'),
+    atomic: root.querySelector('#agentAtomicBtn'),
     desk: root.querySelector('#agentDeskBtn'),
   };
 
   fetch('/api/agents/capabilities', { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(caps){
     if (ui.stat && caps && caps.agents){
-      ui.stat.textContent = caps.agents.length + ' agents armed · Ruflo-inspired roles';
+      ui.stat.textContent = caps.agents.length + ' workforce agents + 3 atomic venue agents';
     }
   }).catch(function(){});
 
+  async function runAtomicOnly(){
+    if (ui.stat) ui.stat.textContent = 'atomic pipeline scanning Delta + CoinDCX…';
+    try{
+      await runAtomicBest();
+      if (typeof W.refreshAtomicDesk === 'function') await W.refreshAtomicDesk(true);
+      await hgAgentSwarmRun(true);
+      renderDesk(ui, __agent.lastDesk);
+      if (ui.stat) ui.stat.textContent = __agent.stat;
+    }catch(e){
+      if (ui.stat) ui.stat.textContent = 'atomic error: ' + ((e && e.message) || e);
+    }
+  }
+
   if (ui.swarm) ui.swarm.addEventListener('click', function(){ return refreshAgentTab(ui, true); });
+  if (ui.atomic) ui.atomic.addEventListener('click', function(){ return runAtomicOnly(); });
   if (ui.desk) ui.desk.addEventListener('click', function(){ return refreshAgentTab(ui, false); });
   refreshAgentTab(ui, false);
 }
