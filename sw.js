@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v205';
+const HG_CACHE = 'hg-v206';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -16,7 +16,7 @@ const HG_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon.svg', './bright.css', './mobile.css',
+  './icon.svg', './bright.css', './mobile.css', './annunciator.css',
   './hghost.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './spot-perp.js', './startrader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js',
   './setup-ui.js', './plans.js', './setup-stack.js', './cryptogates.js',
