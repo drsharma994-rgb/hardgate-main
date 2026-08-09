@@ -65,6 +65,9 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `BOOK_MAX_DAILY_LOSS_PCT` | Daily loss halt threshold (default 2%) |
 | `FRED_API_KEY` | `/api/fred` macro series (DGS10, DTWEXBGS, DFII10) |
 | `TRADEOS_ACCESS_TOKEN` | TradeOS MCP OAuth bearer for `/api/tradeos/*` (run `npx -y @tradeos/tradeos-mcp oauth`) |
+| `HARDGATE_FT_EDGE_GATE` | Enable Freqtrade expectancy gate on daemon formation (default off) |
+| `HARDGATE_FT_PROTECT` | Enable Freqtrade cooldown + stoploss guard on formation (default off) |
+| `HARDGATE_FT_MIN_EXPECTANCY` | Minimum Freqtrade expectancy to pass edge gate (default `0`) |
 | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Alert pushes (also overridable in browser localStorage) |
 | `GH_DISPATCH_TOKEN` | GitHub Actions workflow dispatch from Render |
 | `RENDER_EXTERNAL_URL` / `SELF_PING_URL` | Render keep-alive ping |

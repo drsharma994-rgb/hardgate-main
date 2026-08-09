@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v208';
+const HG_CACHE = 'hg-v209';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -25,7 +25,7 @@ const HG_SHELL = [
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
   './conviction-lock.js', './macro-feeds.js',
-  './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './brain.js', './scorecard.js', './formation.js', './walkforward-ui.js', './formation-instr-ui.js',
+  './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './brain.js', './scorecard.js', './formation.js', './freqtrade-formation.js', './walkforward-ui.js', './formation-instr-ui.js',
   './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'
 ];
 

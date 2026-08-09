@@ -86,7 +86,8 @@ console.log('== wiring in index.html ==');
   ok(/hgSaveFormationParams/.test(html), 'CALIBRATE saves formation params');
   ok(/formationScore/.test(html), 'rank uses formationScore');
   ok(/walkforward-ui\.js/.test(html), 'walkforward-ui.js script tag');
-  ok(/hgAnchorIndex|hgAnchoredVWAP/.test(fs.readFileSync(path.join(ROOT, 'formation.js'), 'utf8')), 'formation exports aVWAP helpers');
+  ok(/freqtrade-formation\.js/.test(html), 'freqtrade-formation.js script tag');
+  ok(/hgFtFormationBoost/.test(fs.readFileSync(path.join(ROOT, 'formation.js'), 'utf8')), 'formation uses ft boost');
 }
 
 console.log('== sw.js shell ==');
@@ -94,7 +95,7 @@ console.log('== sw.js shell ==');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/formation\.js/.test(sw), 'HG_SHELL includes formation.js');
   ok(/walkforward-ui\.js/.test(sw), 'HG_SHELL includes walkforward-ui.js');
-  ok(/hg-v208/.test(sw), 'cache hg-v208');
+  ok(/hg-v209/.test(sw), 'cache hg-v209');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
