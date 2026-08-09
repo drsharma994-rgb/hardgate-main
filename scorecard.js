@@ -1154,6 +1154,7 @@ function render(ui){
     if (ui.breaks){
       var breaks = '';
       if (typeof G.hgValidationPanelHtml === 'function') breaks += G.hgValidationPanelHtml(store);
+      if (typeof G.hgFormationPanelHtml === 'function') breaks += G.hgFormationPanelHtml(store);
       breaks += breakdownsHtml(st);
       ui.breaks.innerHTML = breaks;
     }
