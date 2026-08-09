@@ -59,6 +59,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.getCcxtDeskCached === 'function') o.ccxt = G.getCcxtDeskCached(); }catch(e8){}
     try{ if (typeof G.getWorldMonitorDeskCached === 'function') o.wm = G.getWorldMonitorDeskCached(); }catch(e8b){}
     try{ if (typeof G.getHeyDeskCached === 'function') o.hey = G.getHeyDeskCached(); }catch(e9){}
+    try{ if (typeof G.getAgentDeskCached === 'function') o.agents = G.getAgentDeskCached(); }catch(e9b){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
@@ -299,6 +300,21 @@ function hgSetupStack(inp){
           _bump(sentiment, _item('HL perp', (wma.display || wma.symbol) + ' stress ' + wma.score, 'caution'), vetoes, cautions);
           break;
         }
+      }
+    }
+  }
+
+  var agentDesk = inp.agents;
+  if (agentDesk && hasDir && Array.isArray(agentDesk.topFindings)){
+    var symU = String(sym || '').toUpperCase();
+    for (var ai = 0; ai < agentDesk.topFindings.length; ai++){
+      var af = agentDesk.topFindings[ai];
+      if (!af || String(af.dir || '').toLowerCase() !== dir) continue;
+      var afSym = String(af.sym || '').toUpperCase();
+      if (afSym && symU && afSym !== symU && afSym.indexOf(symU.replace(/USD$/, '')) < 0 && symU.indexOf(afSym.replace(/USD$/, '')) < 0) continue;
+      if (af.clean7 || (af.score != null && +af.score >= 10)){
+        _bump(sentiment, _item('AI workforce', (af.agentLabel || af.src || 'agent') + ' · ' + (af.note || 'confluence'), 'with'), vetoes, cautions);
+        break;
       }
     }
   }
