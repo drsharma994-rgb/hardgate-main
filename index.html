@@ -711,6 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="api-client.js?v=1"></script>
 <script src="tradeos.js"></script>
 <script src="hey-lens.js"></script>
+<script src="ai-agent.js"></script>
 <script src="book.js?v=56"></script>
 <script src="execute.js?v=56"></script>
 <script src="pinemath.js"></script>
@@ -2548,7 +2549,7 @@ const HG_NAV_GROUPS = [
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','goldpine','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','termbasis','scorecard'] },
-  { id:'tools',      label:'TOOLS',        tabs:['basis','search','tradeos','hey','log','trade','finder'] },
+  { id:'tools',      label:'TOOLS',        tabs:['basis','search','tradeos','hey','aiagent','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
 HG_NAV_GROUPS.forEach(function(g){ g.tabs.forEach(function(t){ HG_TAB_GROUP[t] = g.id; }); });

@@ -22,6 +22,7 @@ import { createCcxtApi } from '../lib/ccxt-market-api.mjs';
 import { createHeyLensApi } from '../lib/hey-lens-api.mjs';
 import { createHardgateMcpApi } from '../lib/hardgate-mcp-api.mjs';
 import { createWorldmonitorApi } from '../lib/worldmonitor-api.mjs';
+import { createAgentApi } from '../lib/agent-api.mjs';
 import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -39,6 +40,7 @@ const ccxtHandler = createCcxtApi();
 const heyHandler = createHeyLensApi();
 const hardgateMcpHandler = createHardgateMcpApi();
 const worldmonitorHandler = createWorldmonitorApi();
+const agentHandler = createAgentApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -124,6 +126,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/worldmonitor' || u.pathname.indexOf('/api/worldmonitor/') === 0){
       return worldmonitorHandler(req, res);
+    }
+    if (u.pathname === '/api/agents' || u.pathname.indexOf('/api/agents/') === 0){
+      return agentHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style
