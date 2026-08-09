@@ -63,6 +63,7 @@ Not required for local dev or core UI:
 | `HARDGATE_AGENT_SWARM` | Daemon (`app.js`) headless workforce each cycle — default **ON** when `TELEGRAM_*` set; set `0` to disable |
 | `HARDGATE_AGENT_WATCH_MS` | Server **agent-watch** interval ms (default 5 min) — 24/7 swarm + Atomic scan + Telegram |
 | `HARDGATE_AGENT_ALERT_MIN_SCORE` | Minimum quality score for AI AGENT Telegram push (default 35) |
+| `/api/coindcx/*` | Cached server-side CoinDCX desk (instruments, marks, candles) — avoids public CORS proxy rate limits on Render |
 | `ATOMIC_SCAN_TOP` | Top N contracts per venue for **Atomic Agents** Delta+CoinDCX pipeline (default 18) |
 | `HARDGATE_FQS_GATE`, `HARDGATE_EDGE_GATE`, `HARDGATE_FT_EDGE_GATE` | Daemon formation quality gates (see Render worker section) |
 

@@ -22,8 +22,31 @@ const UPSTREAM_TIMEOUT_MS = 15000;
 /* Scans fire parallel CoinDCX candle fetches — keep a generous ceiling so
    whole-exchange sweeps never 429 themselves; abuse is still bounded. */
 const RATE_WINDOW_MS = 60000;
-const RATE_MAX_PER_WINDOW = 300;
+const RATE_MAX_DEFAULT = 300;
+const RATE_MAX_COINDCX = 800;
 const __rateBuckets = new Map();
+const __responseCache = new Map();
+
+function coindcxCacheTtl(urlStr){
+  if (!urlStr || urlStr.indexOf('coindcx.com') === -1) return 0;
+  if (urlStr.indexOf('active_instruments') !== -1) return 15 * 60 * 1000;
+  if (urlStr.indexOf('current_prices/futures/rt') !== -1) return 90 * 1000;
+  if (urlStr.indexOf('candlesticks') !== -1) return 45 * 1000;
+  return 0;
+}
+
+function cacheGet(urlStr){
+  var ttl = coindcxCacheTtl(urlStr);
+  if (!ttl) return null;
+  var hit = __responseCache.get(urlStr);
+  if (!hit || (Date.now() - hit.at) > ttl) return null;
+  return hit;
+}
+
+function cacheSet(urlStr, status, text, contentType){
+  if (!coindcxCacheTtl(urlStr)) return;
+  __responseCache.set(urlStr, { at: Date.now(), status: status, text: text, contentType: contentType });
+}
 
 const ALLOWED_ORIGINS = new Set([
   'https://hardgate-main.onrender.com',
@@ -48,12 +71,14 @@ function clientKey(req){
   return 'local';
 }
 
-function rateLimited(key){
+function rateLimited(key, hostname){
   const now = Date.now();
-  let bucket = __rateBuckets.get(key);
-  if (!bucket){ bucket = []; __rateBuckets.set(key, bucket); }
+  const bucketKey = key + '|' + (hostname || '*');
+  const max = (hostname && hostname.indexOf('coindcx.com') !== -1) ? RATE_MAX_COINDCX : RATE_MAX_DEFAULT;
+  let bucket = __rateBuckets.get(bucketKey);
+  if (!bucket){ bucket = []; __rateBuckets.set(bucketKey, bucket); }
   while (bucket.length && now - bucket[0] > RATE_WINDOW_MS) bucket.shift();
-  if (bucket.length >= RATE_MAX_PER_WINDOW) return true;
+  if (bucket.length >= max) return true;
   bucket.push(now);
   return false;
 }
@@ -104,7 +129,16 @@ module.exports = async (req, res) => {
   if (target.protocol !== 'https:' || !ALLOWED_HOSTS.has(target.hostname)){
     return sendJson(res, 403, { error: 'host not allowed' }, req);
   }
-  if (rateLimited(clientKey(req))){
+
+  const cached = cacheGet(target.toString());
+  if (cached){
+    return send(res, cached.status, cached.text, {
+      'Content-Type': cached.contentType || 'application/json; charset=utf-8',
+      'X-HG-Cache': 'hit',
+    }, req);
+  }
+
+  if (rateLimited(clientKey(req), target.hostname)){
     return sendJson(res, 429, { error: 'rate limit exceeded — try again shortly' }, req);
   }
 
@@ -122,10 +156,12 @@ module.exports = async (req, res) => {
       },
     });
     const text = await upstream.text();
+    const ctype = upstream.headers.get('content-type') || 'text/plain; charset=utf-8';
+    if (upstream.ok) cacheSet(target.toString(), upstream.status, text, ctype);
     // pass through status + body; forward only content-type (fetch already
     // decoded any gzip, so content-length/encoding must NOT be forwarded)
     send(res, upstream.status, text, {
-      'Content-Type': upstream.headers.get('content-type') || 'text/plain; charset=utf-8',
+      'Content-Type': ctype,
     }, req);
   }catch(e){
     const msg = e && e.name === 'AbortError'

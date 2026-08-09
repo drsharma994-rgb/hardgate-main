@@ -115,6 +115,37 @@ var CDCX_PUB = 'https://public.coindcx.com';
 var CDCX_API = 'https://api.coindcx.com';
 var CDCX_PROXY = function(u){ return '/api/proxy?url=' + encodeURIComponent(u); };
 var DELTA_PROXY = CDCX_PROXY;
+function cdcxDeskPath(url){
+  if (url.indexOf('/active_instruments') !== -1) return '/api/coindcx/instruments';
+  if (url.indexOf('/current_prices/futures/rt') !== -1) return '/api/coindcx/marks';
+  var q = url.split('?')[1];
+  if (url.indexOf('/market_data/candlesticks') !== -1 && q) return '/api/coindcx/candles?' + q;
+  return null;
+}
+async function cdcxFetchUrl(url){
+  var desk = cdcxDeskPath(url);
+  var paths = desk ? [desk, CDCX_PROXY(url)] : [CDCX_PROXY(url)];
+  var lastErr = null;
+  for (var pi = 0; pi < paths.length; pi++){
+    for (var attempt = 0; attempt < 4; attempt++){
+      try{
+        var r = await timedFetch(paths[pi]);
+        if (r && r.status === 429 && attempt < 3){
+          await new Promise(function(ok){ setTimeout(ok, Math.min(6000, 350 * Math.pow(2, attempt))); });
+          continue;
+        }
+        if (!r || !r.ok) throw new Error('HTTP ' + (r ? r.status : '?'));
+        var j = await r.json();
+        if (j && j.ok === true && j.data != null) return j.data;
+        return j;
+      }catch(e){
+        lastErr = e;
+        if (attempt < 3) await new Promise(function(ok){ setTimeout(ok, Math.min(6000, 350 * Math.pow(2, attempt))); });
+      }
+    }
+  }
+  throw lastErr || new Error('CoinDCX fetch failed');
+}
 var DELTA_RES = {'15m':'15m','1h':'1h','2h':'2h','4h':'4h','1d':'1d'};
 var CDCX_RES  = {'15m':'15','1h':'60','2h':'120','4h':'240','1d':'1D'};
 var SEC_PER   = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400};
@@ -383,18 +414,14 @@ async function fetchDeltaLeg(){
   return xuNormDelta(await r.json());
 }
 async function fetchCdcxLeg(){
-  var r = await timedFetch(CDCX_PROXY(CDCX_API + '/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT'));
-  if (!r || !r.ok) throw new Error('CoinDCX instruments HTTP ' + (r ? r.status : '?'));
-  return xuNormCdcx(await r.json());
+  return xuNormCdcx(await cdcxFetchUrl(CDCX_API + '/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT'));
 }
 /* Companion marks leg — CoinDCX futures realtime prices (mark + 24h USDT
    turnover per B-XXX_USDT). Optional by design: its failure must NEVER
    block or empty the universe; callers merge it with xuMergeCdcxMarks and
    surface an honest note instead. */
 async function fetchCdcxMarksLeg(){
-  var r = await timedFetch(CDCX_PROXY(CDCX_PUB + '/market_data/v3/current_prices/futures/rt'));
-  if (!r || !r.ok) throw new Error('CoinDCX marks HTTP ' + (r ? r.status : '?'));
-  return r.json();
+  return cdcxFetchUrl(CDCX_PUB + '/market_data/v3/current_prices/futures/rt');
 }
 async function fetchStartraderLeg(){
   if (typeof G.startraderUniverseRows === 'function') return G.startraderUniverseRows();
@@ -546,10 +573,10 @@ async function xuCandles(item, tf, n){
         var to = nowSec(), from = to - secPer * (count + 3);
         var url = CDCX_PUB + '/market_data/candlesticks?pair=' + encodeURIComponent(item.sym) +
                   '&from=' + from + '&to=' + to + '&resolution=' + CDCX_RES[tf] + '&pcode=f';
-        var r = await timedFetch(CDCX_PROXY(url));
-        if (r && r.ok){
-          var j = await r.json();
-          rows = ((j && j.data) || []).map(function(c){
+        var j = await cdcxFetchUrl(url);
+        var arr = (j && j.data) ? j.data : j;
+        if (Array.isArray(arr)){
+          rows = arr.map(function(c){
             return { t: Math.floor((c.time !== undefined && c.time !== null ? c.time : c.t) / 1000),
                      o: +c.open, h: +c.high, l: +c.low, c: +c.close, v: +(c.volume !== undefined && c.volume !== null ? c.volume : 0) };
           }).filter(function(c){ return isFinite(c.t); });
