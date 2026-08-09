@@ -3172,9 +3172,14 @@ function buildSnapshot(rows, readTxt, at){
         layerSig: layerSig,
         plan: (p && isFinite(p.entry) && isFinite(p.stop) && isFinite(p.t1))
               ? { entry: p.entry, stop: p.stop, t1: p.t1, t2: (isFinite(p.t2) ? p.t2 : null) }
-              : null
+              : null,
+        gstackRecommend: r.gstackRecommend || null,
+        gstackSummary: r.gstackSummary || null,
+        gstackShipReady: !!(r.gstack && r.gstack.ship && r.gstack.ship.ready)
       });
     }
+    if (typeof G.__hgGstackLast !== 'undefined' && G.__hgGstackLast)
+      out.gstack = G.__hgGstackLast;
     return deepFreeze(out);
   }catch(e){ return null; }
 }
@@ -3454,6 +3459,14 @@ function attachBrainStacks(rows){
       row.stack = G.hgSetupStackFromBrainRow(row, { rows4h: row.rows });
     }catch(e){}
   }
+}
+
+/* gstack sprint review — virtual engineering team on PRIME/HIGH/WATCH rows;
+   recommend-only: never overrides brainDecide tier or direction */
+function applyGstackBrain(rows){
+  try{
+    if (typeof G.gstackBrainApplyRows === 'function') G.gstackBrainApplyRows(rows);
+  }catch(e){}
 }
 
 function planLine(plan){
@@ -4293,6 +4306,7 @@ function cardHTML(row){
       stack: row.stack
     }) : '';
   var stackHtml = (row.stack && typeof G.hgSetupStackMiniHtml === 'function') ? G.hgSetupStackMiniHtml(row.stack) : '';
+  var gstackHtml = (typeof G.gstackBrainRenderMini === 'function') ? G.gstackBrainRenderMini(row) : '';
   var meshHtml = (typeof G.hgSetupConvictionMeshHtml === 'function')
     ? G.hgSetupConvictionMeshHtml(brainConvictionMesh(row.col, dir)) : '';
   var chartBox = (plan && row.rows)
@@ -4321,6 +4335,7 @@ function cardHTML(row){
     + '<div class="plan">' + planLine(plan) + '</div>'
     + stackHtml
     + meshHtml
+    + gstackHtml
     + chartBox
     + tradeBtn
     + bookBtn
@@ -4355,7 +4370,9 @@ function watchRowHTML(row){
     + '<span class="gdetail">' + row.dec.agree + ' agree' + (row.dec.disagree ? ' · ' + row.dec.disagree + ' contra' : '')
     + (row.col.unavailable.length ? ' · ' + row.col.unavailable.length + ' dark' : '')
     + (path ? ' · ' + esc(path) : '') + '</span>'
-    + '<span class="stamp na">WATCH</span>' + age + auditToggleHTML(row) + '</div>';
+    + '<span class="stamp na">WATCH</span>' + age
+    + ((typeof G.gstackBrainRenderMini === 'function') ? G.gstackBrainRenderMini(row) : '')
+    + auditToggleHTML(row) + '</div>';
 }
 
 function asideRowHTML(row){
@@ -5062,6 +5079,7 @@ async function runBrain(el){
         }catch(e){ planSet[sx].plan = null; planSet[sx].rows = null; }
       }
       attachBrainStacks(rows);
+      applyGstackBrain(rows);
     }else{
       /* legacy mode — today's flow, unchanged: bounded kline fetches per setup */
       for (var s = 0; s < setups.length; s++){
@@ -5074,6 +5092,7 @@ async function runBrain(el){
         }catch(e){ setups[s].plan = null; setups[s].rows = null; }
       }
       attachBrainStacks(setups);
+      applyGstackBrain(rows);
     }
 
     /* LIQPOOL guard — post-plan pass: pools need the plan's stop/T1 */
@@ -5130,6 +5149,7 @@ async function runBrain(el){
       gatedLiq: gatedLiq,
       gatedOver: gatedOver
     });
+    paintGstackDashboard(el, rows);
     try{
       if (typeof G.hgBrainInvAlertsFromRows === 'function'){
         G.hgBrainInvAlertsFromRows(rows.map(function(r){
@@ -5371,6 +5391,8 @@ async function runQuick(el){
 
     /* LIQPOOL guard — post-plan pass over the freshly planned set */
     applyLiqpool(combined ? qPlanSet : setups);
+    attachBrainStacks(rows);
+    applyGstackBrain(rows);
 
     /* unchanged verdicts carry over with an honest AS OF age stamp */
     for (var u = 0; u < unchanged.length; u++){
@@ -5403,6 +5425,7 @@ async function runQuick(el){
       gatedLiq: 0,
       gatedOver: 0
     });
+    paintGstackDashboard(el, rows);
 
     /* scorecard hook — fresh PRIME/HIGH cards earn a record, unchanged never do */
     scoreRecord(setups);
@@ -5464,6 +5487,16 @@ function paintBrainFunnel(el, meta){
     var funnelEl = el.querySelector('#brainFunnel');
     if (!funnelEl) return;
     funnelEl.innerHTML = brainFunnelHTML(meta);
+  }catch(e){}
+}
+
+function paintGstackDashboard(el, rows){
+  try{
+    var wrap = el.querySelector('#brainGstackWrap');
+    var body = el.querySelector('#brainGstackBody');
+    if (!wrap || !body || typeof G.gstackBrainRenderDashboard !== 'function') return;
+    wrap.style.display = 'block';
+    body.innerHTML = G.gstackBrainRenderDashboard(rows);
   }catch(e){}
 }
 
@@ -5648,6 +5681,9 @@ function mount(el){
       + '<div class="panel" id="brainAsideWrap" style="display:none;margin-top:10px"><h2>ASIDE <span>vetoed · tied · contested · thin — standing aside is a position</span></h2>'
       + '<div id="brainAside"></div></div>'
       + '<div class="empty" id="brainEmpty" style="display:none">No high-probability setups right now — standing aside is a position.</div>'
+      + '<div class="panel" id="brainGstackWrap" style="display:none;margin-top:10px">'
+      + '<h2>GSTACK BRAIN <span>virtual engineering team · THINK→PLAN→REVIEW→SHIP — recommend only, your tier stays yours</span></h2>'
+      + '<div id="brainGstackBody"></div></div>'
       + '<div id="brainFunnel"></div>';
     __mountedEl = el;
     try{
