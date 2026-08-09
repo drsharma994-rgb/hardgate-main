@@ -338,6 +338,9 @@ function hgFormationScore(plan, ctx){
       var recs = (typeof G.hgScoreRecords === 'function') ? G.hgScoreRecords() : [];
       s += G.hgFtFormationBoost(plan, recs);
     }
+    if (typeof G.hgDeskFormationBoost === 'function'){
+      s += G.hgDeskFormationBoost(plan.dir, typeof G.getDeskMacroCached === 'function' ? G.getDeskMacroCached() : null);
+    }
     if (ctx && ctx.rankBoost) s += Math.min(25, Math.max(-10, ctx.rankBoost));
     return Math.round(s);
   }catch(e){ return 0; }

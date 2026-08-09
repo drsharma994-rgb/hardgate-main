@@ -68,6 +68,9 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `HARDGATE_FT_EDGE_GATE` | Enable Freqtrade expectancy gate on daemon formation (default off) |
 | `HARDGATE_FT_PROTECT` | Enable Freqtrade cooldown + stoploss guard on formation (default off) |
 | `HARDGATE_FT_MIN_EXPECTANCY` | Minimum Freqtrade expectancy to pass edge gate (default `0`) |
+| `OPENBB_API_URL` | Optional self-hosted OpenBB REST backend (e.g. `http://127.0.0.1:6900`) |
+| `OPENBB_API_USERNAME` / `OPENBB_API_PASSWORD` | Basic auth for OpenBB backend |
+| `OPENBB_API_KEY` | Optional API key header for OpenBB backend |
 | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Alert pushes (also overridable in browser localStorage) |
 | `GH_DISPATCH_TOKEN` | GitHub Actions workflow dispatch from Render |
 | `RENDER_EXTERNAL_URL` / `SELF_PING_URL` | Render keep-alive ping |

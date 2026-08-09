@@ -61,6 +61,13 @@ function collectHardgateContext(){
       if (W.S.goldDataSource) ctx.goldSource = W.S.goldDataSource;
       if (W.S.goldBasisPct != null && isFinite(+W.S.goldBasisPct)) ctx.goldBasisPct = +W.S.goldBasisPct;
     }
+    if (typeof W.getDeskMacroCached === 'function'){
+      var desk = W.getDeskMacroCached();
+      if (desk){
+        ctx.desk = { riskOnScore: desk.riskOnScore, riskOnLabel: desk.riskOnLabel,
+          spxTrend: desk.spx && desk.spx.trend20, vix: desk.vix && desk.vix.last };
+      }
+    }
   }catch(e){}
   return ctx;
 }
