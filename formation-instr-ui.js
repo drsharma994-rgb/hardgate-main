@@ -82,6 +82,9 @@ function hgFormationPanelHtml(records){
     if (typeof G.hgOpenbbDeskPanelHtml === 'function'){
       h += G.hgOpenbbDeskPanelHtml();
     }
+    if (typeof G.hgCcxtDeskPanelHtml === 'function'){
+      h += G.hgCcxtDeskPanelHtml();
+    }
     if (gates && gates.rows && gates.rows.length){
       h += '<div class="hg-panel__legend" style="margin-top:12px">Gate attrib</div>';
       h += '<div class="hg-gaterow hg-gaterow--wrap" style="margin-bottom:8px">';
