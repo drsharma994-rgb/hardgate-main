@@ -2,9 +2,12 @@
   "name": "hardgate-main",
   "version": "1.0.0",
   "private": true,
-  "description": "HARDGATE crypto + gold trading terminal — static app + same-origin /api/proxy (zero runtime deps)",
-  "engines": { "node": ">=18" },
+  "description": "HARDGATE crypto + gold trading terminal — static app + same-origin API (proxy, book, TradeOS MCP)",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "ccxt": "^4.4.82"
   },
   "optionalDependencies": {
