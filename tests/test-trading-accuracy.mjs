@@ -78,7 +78,21 @@ console.log('== gold swing formation wiring ==');
     'formation runs on all ranked candidates after weekend demotes');
 }
 
-console.log('== wiring ==');
+console.log('== gold formation preserves strategy levels ==');
+{
+  const ctx = vm.createContext({ console, Math, JSON, Number, String, Boolean, Array, Object, isFinite, NaN, Date, parseFloat });
+  ctx.window = ctx; ctx.globalThis = ctx;
+  vm.runInContext(fs.readFileSync(path.join(root, 'formation.js'), 'utf8'), ctx, { filename: 'formation.js' });
+  const rows = [{ t: 0, o: 100, h: 101, l: 99, c: 100, v: 1 }];
+  for (let i = 1; i < 80; i++){
+    rows.push({ t: i * 900, o: 100 + i * 0.1, h: 100 + i * 0.1 + 1, l: 100 + i * 0.1 - 0.5, c: 100 + i * 0.1, v: 100 });
+  }
+  const hit = { dir: 'long', entry: 108, stop: 106, t1: 111, t2: 113, rr: 1.5 };
+  const r = ctx.hgFormTicket(hit, { rows: rows, style: 'gold-scalp', a4: 2 });
+  ok(r && r.ok && r.hit && r.hit.entry === 108 && r.hit.stop === 106 && r.hit.t1 === 111,
+    'gold-scalp formation keeps goldind strategy entry/stop/t1 verbatim');
+}
+
 ok(/hgStructureGate/.test(fs.readFileSync(path.join(root, 'cryptogates.js'), 'utf8')), 'cryptogates calls hgStructureGate');
 ok(/tightCount/.test(fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8')), 'setup-stack reads tightCount');
 
