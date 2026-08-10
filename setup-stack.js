@@ -310,12 +310,16 @@ function hgSetupStack(inp){
     var vBoost = G.hgChartVisionFormationBoost(dir, inp.vision);
     var vBias = inp.vision.bias ? String(inp.vision.bias).toLowerCase() : null;
     var vConf = isFinite(+inp.vision.confidence) ? Math.round(+inp.vision.confidence * 100) : null;
+    var vPred = typeof G.hgChartVisionPredictionLine === 'function'
+      ? G.hgChartVisionPredictionLine(inp.vision)
+      : (inp.vision.outcomeLean || inp.vision.predictedPath || '');
+    var vDetail = vPred || inp.vision.nextMove || 'aligned';
     if (vBoost >= 7){
-      _bump(technical, _item('Chart vision', (vBias || '?') + ' ' + (vConf != null ? vConf + '%' : '') + ' · ' + (inp.vision.nextMove || 'aligned'), 'with'), vetoes, cautions);
+      _bump(technical, _item('Chart vision', (vBias || '?') + ' ' + (vConf != null ? vConf + '%' : '') + ' · ' + vDetail, 'with'), vetoes, cautions);
     } else if (vBoost <= -7){
-      _bump(technical, _item('Chart vision', (vBias || '?') + ' conflicts · ' + (inp.vision.note || inp.vision.nextMove || ''), 'against'), vetoes, cautions);
-    } else if (inp.vision.nextMove){
-      _bump(technical, _item('Chart vision', inp.vision.nextMove, 'neutral'), vetoes, cautions);
+      _bump(technical, _item('Chart vision', (vBias || '?') + ' conflicts · ' + (inp.vision.note || vDetail), 'against'), vetoes, cautions);
+    } else if (vDetail){
+      _bump(technical, _item('Chart vision', vDetail, 'neutral'), vetoes, cautions);
     }
   }
 

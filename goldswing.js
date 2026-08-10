@@ -594,8 +594,9 @@ function cardHTML(c, isBest, season){
   if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
   if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
   if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
-  var visionLine = (c.visionNextMove)
-    ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(c.visionNextMove) + '</div>' : '';
+  var visionText = [c.visionNextMove, c.visionPrediction].filter(Boolean).join(' · ');
+  var visionLine = visionText
+    ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'

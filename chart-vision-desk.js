@@ -49,14 +49,27 @@ function getChartVisionCached(key){
   }catch(e){ return null; }
 }
 
+function visionPredictionLine(analysis){
+  if (!analysis) return '';
+  var parts = [];
+  if (analysis.predictedPath) parts.push(analysis.predictedPath);
+  if (analysis.outcomeLean) parts.push(analysis.outcomeLean);
+  if (fin(+analysis.outcomeProb)) parts.push(Math.round(+analysis.outcomeProb * 100) + '% setup edge');
+  if (analysis.horizonBars) parts.push('~' + analysis.horizonBars + ' bars');
+  return parts.join(' · ');
+}
+
 function visionChip(analysis){
   if (!analysis) return '';
   var pct = fin(+analysis.confidence) ? Math.round(+analysis.confidence * 100) : 0;
+  var edge = fin(+analysis.outcomeProb) ? Math.round(+analysis.outcomeProb * 100) : null;
   if (!analysis.bias){
-    return pct >= 55 ? ('VISION MIXED ' + pct + '%') : '';
+    return pct >= 55 ? ('VISION MIXED ' + pct + '%' + (edge != null ? ' · ' + edge + '% edge' : '')) : '';
   }
-  return 'VISION ' + String(analysis.bias).toUpperCase() + ' ' + pct + '%'
+  var chip = 'VISION ' + String(analysis.bias).toUpperCase() + ' ' + pct + '%'
     + (analysis.pattern ? ' · ' + analysis.pattern : '');
+  if (edge != null && edge >= 52) chip += ' · ' + edge + '% edge';
+  return chip;
 }
 
 function hgChartVisionRefreshStack(setup){
@@ -144,6 +157,7 @@ function hgChartVisionApply(setup, analysis){
   setup.vision = analysis;
   setup.visionChip = visionChip(analysis);
   setup.visionNextMove = analysis.nextMove || '';
+  setup.visionPrediction = visionPredictionLine(analysis);
   var boost = hgChartVisionFormationBoost(setup.dir, analysis);
   if (boost && fin(+setup.formationScore)) setup.formationScore = Math.round(+setup.formationScore + boost);
   else if (boost && !fin(+setup.formationScore)) setup.formationScore = Math.max(0, boost);
@@ -209,6 +223,7 @@ function hgChartVisionEnrichEngineSurvivors(survivors, cardsEl, cardHTML, paintC
         w.__ref.visionChip = w.visionChip;
         w.__ref.vision = w.vision;
         w.__ref.visionNextMove = w.visionNextMove;
+        w.__ref.visionPrediction = w.visionPrediction;
       }
     }
     if (cardsEl){
@@ -228,5 +243,6 @@ G.hgChartVisionAnalyze = hgChartVisionAnalyze;
 G.hgChartVisionApply = hgChartVisionApply;
 G.hgChartVisionEnrichSetups = hgChartVisionEnrichSetups;
 G.hgChartVisionChip = visionChip;
+G.hgChartVisionPredictionLine = visionPredictionLine;
 
 })();

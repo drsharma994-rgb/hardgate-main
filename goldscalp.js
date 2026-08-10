@@ -521,8 +521,9 @@ function cardHTML(c, isBest, season){
   if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
   if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
   if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
-  var visionLine = (c.visionNextMove)
-    ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(c.visionNextMove) + '</div>' : '';
+  var visionText = [c.visionNextMove, c.visionPrediction].filter(Boolean).join(' · ');
+  var visionLine = visionText
+    ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
   return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
