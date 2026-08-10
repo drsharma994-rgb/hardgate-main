@@ -10,18 +10,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-09T23:47:57.415Z"
+    "at": "2026-08-10T01:51:30.038Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-09T23:47:57.416Z"
+    "at": "2026-08-10T01:51:30.038Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-09T23:47:59.263Z",
+  "engineAlertAt": "2026-08-10T01:51:32.454Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -36,7 +36,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-09T23:47:59.546Z"
+    "at": "2026-08-10T01:51:32.761Z"
   },
   "bookFill": {
     "key": "u0|p0",
