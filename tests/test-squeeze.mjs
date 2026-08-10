@@ -416,7 +416,8 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
     const stubs = {};
     const pane = { _html: '',
       set innerHTML(v){ this._html = v; }, get innerHTML(){ return this._html; },
-      querySelector: function(sel){ if (!stubs[sel]) stubs[sel] = sqStubEl(); return stubs[sel]; } };
+      querySelector: function(sel){ if (!stubs[sel]) stubs[sel] = sqStubEl(); return stubs[sel]; },
+      querySelectorAll: function(){ return []; } };
     return { pane: pane, stubs: stubs };
   }
   async function waitSq(stubs){
@@ -441,8 +442,8 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   P1.stubs['#sqRun']._handler();
   await waitSq(P1.stubs);
   assert(uniCalls === 1 && P1.stubs['#sqStat'].textContent.indexOf('building 1') >= 0
-         && P1.stubs['#sqCards'].innerHTML.indexOf('BUILDING · FORMING') >= 0,
-         '12: user FIND SQUEEZES scan completes with a BUILDING card');
+         && P1.stubs['#sqForming'].innerHTML.indexOf('BUILDING · FORMING') >= 0,
+         '12: user FIND SQUEEZES scan completes with a BUILDING card in forming desk');
   const sRef1 = await tab2.refresh();
   assert(sRef1 === 'refreshed', '12: refresh after a completed run -> "refreshed" (got "' + sRef1 + '")');
   assert(uniCalls === 2, '12: refresh re-ran the existing runScan (universe fetched again)');
@@ -466,19 +467,19 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   /* --- per-symbol 4h throw stays isolated inside the scan loop --- */
   throw4hFor = 'BADUSDT';
   const sRef2 = await tab2.refresh();
-  const sStat2 = P1.stubs['#sqStat'].textContent, sHtml2 = P1.stubs['#sqCards'].innerHTML;
+  const sStat2 = P1.stubs['#sqStat'].textContent, sHtml2 = P1.stubs['#sqForming'].innerHTML;
   assert(sRef2 === 'refreshed' && sStat2.indexOf('failed 1') >= 0,
          '12: one symbol\'s 4h throw never aborts the scan (counted failed 1)');
   assert(sHtml2.indexOf('FLATUSDT') >= 0 && sHtml2.indexOf('BADUSDT') === -1,
-         '12: surviving symbol still renders its card; failed symbol absent');
+         '12: surviving symbol still renders its forming card; failed symbol absent');
   throw4hFor = null;
 
   /* --- 1d throw tolerated: trend simply unknown, symbol NOT failed --- */
   throwAll1d = true;
   const sRef3 = await tab2.refresh();
-  const sStat3 = P1.stubs['#sqStat'].textContent, sHtml3 = P1.stubs['#sqCards'].innerHTML;
+  const sStat3 = P1.stubs['#sqStat'].textContent, sHtml3 = P1.stubs['#sqForming'].innerHTML;
   assert(sRef3 === 'refreshed' && sStat3.indexOf('failed 0') >= 0 && sHtml3.indexOf('BUILDING · FORMING') >= 0,
-         '12: 1d kline outage tolerated (failed 0, BUILDING card survives, trend unknown)');
+         '12: 1d kline outage tolerated (failed 0, BUILDING card survives in forming desk, trend unknown)');
   throwAll1d = false;
 
   /* --- never throws: sabotaged DOM -> 'error', busy flag recovers --- */
@@ -522,7 +523,8 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
     const stubs = {};
     const pane = { _html: '',
       set innerHTML(v){ this._html = v; }, get innerHTML(){ return this._html; },
-      querySelector: function(sel){ if (!stubs[sel]) stubs[sel] = sqStubEl13(); return stubs[sel]; } };
+      querySelector: function(sel){ if (!stubs[sel]) stubs[sel] = sqStubEl13(); return stubs[sel]; },
+      querySelectorAll: function(){ return []; } };
     return { pane: pane, stubs: stubs };
   }
   async function waitSq13(stubs){
@@ -600,6 +602,21 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(!sThrew && sGot === null,
          '13: getter never throws with sabotaged internals (Array.isArray removed) — returns null');
   assert(W3.squeezeState() !== null, '13: getter recovers once internals are restored');
+}
+
+/* ---------------- wiring + advanced desk ---------------- */
+{
+  const sq = readFileSync(path.join(root, 'squeeze.js'), 'utf8');
+  assert(/squeezeGateEval/.test(sq), 'squeeze gate eval wired');
+  assert(/hgFormTicket/.test(sq), 'squeeze formation ticket path');
+  assert(/FIRED DESK/.test(sq), 'fired desk panel wired');
+  assert(/LIMIT BOARD/.test(sq), 'limit board wired');
+  assert(/hgPaintSqueezeFromSnap/.test(sq), 'snap restore export wired');
+  assert(/#sqForming/.test(sq), 'forming desk mount point');
+  const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
+  assert(/hg-v227/.test(sw), 'cache hg-v227');
+  const html = readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert(html.indexOf('squeeze:') >= 0, 'HG_TAB_AUTO_SCAN squeeze');
 }
 
 /* ---------------- summary ---------------- */

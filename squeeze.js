@@ -230,6 +230,80 @@ function validSetup(s){
             && isFinite(s.t1) && isFinite(s.t2) && Math.abs(s.entry - s.stop) > 0);
 }
 
+function sqMinRr(){
+  try{
+    if (typeof W !== 'undefined' && typeof W.CG_SWING_RR_MIN === 'number') return W.CG_SWING_RR_MIN;
+  }catch(e){}
+  return 2.0;
+}
+
+function sqValidSetup(s){
+  if (!validSetup(s)) return false;
+  var rr = isFinite(s.rr1) ? s.rr1 : Math.abs(s.t1 - s.entry) / Math.abs(s.entry - s.stop);
+  return isFinite(rr) && rr >= sqMinRr() - 1e-9;
+}
+
+function squeezeTicker(inp){
+  inp = inp || {};
+  var mark = (inp.rows4h && inp.rows4h.length) ? inp.rows4h[inp.rows4h.length - 1].c : null;
+  return { symbol: inp.sym, fundingPct: (inp.tick && inp.tick.fundingPct), mark: mark };
+}
+
+function squeezeGateEval(inp, dir){
+  try{
+    if (!dir || !inp || !inp.rows4h || !inp.rows4h.length) return null;
+    var ticker = squeezeTicker(inp);
+    var out = {
+      gatesPassed: 0, gatesTotal: 7, clean7: false, nearClean: false,
+      hit: null, label: 'squeeze only', veto: null
+    };
+    if (typeof swingTryClean === 'function'){
+      var clean = swingTryClean(inp.rows4h, ticker);
+      if (clean && clean.dir === dir){
+        out.hit = clean;
+        out.clean7 = clean.clean === true || (+clean.passed >= 7);
+        out.gatesPassed = clean.passed != null ? +clean.passed : 7;
+        out.label = out.clean7 ? '7/7 CLEAN' : (out.gatesPassed + '/7');
+        out.nearClean = !out.clean7 && out.gatesPassed >= 6;
+        return out;
+      }
+    }
+    if (typeof swingTryNear === 'function'){
+      var near = swingTryNear(inp.rows4h, ticker);
+      if (near && near.dir === dir){
+        out.hit = near;
+        out.nearClean = true;
+        out.gatesPassed = near.passed != null ? +near.passed : 6;
+        out.label = out.gatesPassed + '/7 NEAR';
+        return out;
+      }
+    }
+    if (typeof hgSwingParity === 'function'){
+      var par = hgSwingParity(inp.rows4h, ticker, dir);
+      if (par && par.aligned){
+        out.gatesPassed = par.passed || 0;
+        out.clean7 = par.clean === true;
+        out.nearClean = !par.clean && par.passed >= 6;
+        out.label = par.label || (par.passed + '/7');
+      }
+    }
+    return out;
+  }catch(e){ return null; }
+}
+
+function sqAttachMeta(plan, gate, extra){
+  if (!plan) return plan;
+  if (gate){
+    plan.gatesPassed = gate.gatesPassed;
+    plan.clean7 = gate.clean7;
+    plan.nearClean = gate.nearClean;
+    plan.gateLabel = gate.label;
+  }
+  if (extra && extra.formationScore != null) plan.formationScore = extra.formationScore;
+  if (!plan.planSrc) plan.planSrc = 'squeeze';
+  return plan;
+}
+
 function squeezePlan(inp){
   try{
     inp = inp || {};
@@ -239,6 +313,34 @@ function squeezePlan(inp){
     if (!Array.isArray(rows) || !rows.length) return null;
     var lastBar = rows[rows.length - 1];
     if (!lastBar) return null;
+    var gate = inp.gate || squeezeGateEval(inp, dir);
+    var ticker = squeezeTicker(inp);
+
+    if (gate && gate.hit && !gate.veto && typeof hgFormTicket === 'function'){
+      try{
+        var fm = hgFormTicket(gate.hit, {
+          rows: rows, style: 'swing', a4: gate.hit.a4,
+          rows1h: inp.rows1h, ticker: ticker
+        });
+        if (fm && fm.ok && fm.hit && sqValidSetup(fm.hit)){
+          return sqAttachMeta(_squeezeAttachStack(fm.hit, inp), gate, { formationScore: fm.formationScore });
+        }
+      }catch(eForm){}
+    }
+
+    if (typeof hgSwingCleanPlan === 'function'){
+      try{
+        var sc = hgSwingCleanPlan(rows, ticker, dir);
+        if (sqValidSetup(sc)) return sqAttachMeta(_squeezeAttachStack(sc, inp), gate);
+      }catch(eSc){}
+    }
+
+    if (typeof hgPlanLevelsCore === 'function'){
+      try{
+        var pl = hgPlanLevelsCore(dir, rows, null, { minRr: sqMinRr(), style: 'swing', type: 'SQUEEZE' });
+        if (sqValidSetup(pl)) return sqAttachMeta(_squeezeAttachStack(pl, inp), gate);
+      }catch(ePl){}
+    }
 
     /* preferred: index.html SMART $ setup builder */
     if (typeof smartSetup === 'function'){
@@ -247,11 +349,11 @@ function squeezePlan(inp){
         var s = smartSetup({ dir: dir, longEv: c.longEv, shortEv: c.shortEv,
                              regime: c.regime, score: c.score, total: c.total },
                            rows, inp.rows1h);
-        if (validSetup(s)){
+        if (sqValidSetup(s)){
           if (typeof hgApplyExactEntry === 'function'){
             s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
           }
-          return _squeezeAttachStack(s, inp);
+          return sqAttachMeta(_squeezeAttachStack(s, inp), gate);
         }
       }catch(eSmart){ /* a broken smartSetup degrades to the house fallback */ }
     }
@@ -263,13 +365,15 @@ function squeezePlan(inp){
     var st = fallbackStop(dir, entry, a, rows);
     var risk = Math.abs(entry - st.stop);
     if (!(risk > 0)) return null;
-    return _squeezeAttachStack({
+    var fb = {
       type: 'ATR', dir: dir, entry: entry, stop: st.stop,
       t1: (dir === 'long') ? entry + T1_R * risk : entry - T1_R * risk,
       t2: (dir === 'long') ? entry + T2_R * risk : entry - T2_R * risk,
       rr1: T1_R, rr2: T2_R, riskPct: risk / entry * 100,
       confirmed: null, note: st.note
-    }, inp);
+    };
+    if (!sqValidSetup(fb)) return null;
+    return sqAttachMeta(_squeezeAttachStack(fb, inp), gate);
   }catch(e){ return null; }
 }
 
@@ -353,6 +457,207 @@ function squeezeLevelsNote(rows4h){
 }
 
 /* ---------------- scanner (UI) ---------------- */
+/* ---------------- desk helpers (advanced tab UI) ---------------- */
+function sqVolOk(cls){
+  return cls && isFinite(cls.volZ) && cls.volZ >= VOL_CONFIRM_Z;
+}
+
+function sqPrimeFired(r){
+  return r && r.kind === 'fired' && r.cls && r.cls.trendAgree === true && sqVolOk(r.cls);
+}
+
+function sqRowTier(r){
+  if (!r) return 'forming';
+  if (r.kind === 'build') return 'forming';
+  if (!r.dir) return 'forming';
+  var plan = squeezePlan({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind, gate: r.gate, tick: r.tick });
+  if (r.gate && r.gate.veto) return 'forming';
+  if (plan && sqValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
+  if (r.kind === 'fired' && r.cls && r.cls.trendAgree === false) return 'near';
+  if (r.kind === 'fired' && !sqVolOk(r.cls)) return 'near';
+  if (r.gate && r.gate.nearClean) return 'near';
+  if (r.kind === 'break') return (plan && sqValidSetup(plan) && r.gate && r.gate.clean7) ? 'clean' : 'near';
+  return 'forming';
+}
+
+function sqSummaryLine(results){
+  results = results || [];
+  var fired = 0, brk = 0, build = 0, clean = 0, near = 0, prime = 0;
+  for (var i = 0; i < results.length; i++){
+    var r = results[i];
+    if (!r) continue;
+    if (r.kind === 'fired') fired++;
+    else if (r.kind === 'break') brk++;
+    else if (r.kind === 'build') build++;
+    if (sqPrimeFired(r)) prime++;
+    var tier = sqRowTier(r);
+    if (tier === 'clean') clean++;
+    else if (tier === 'near') near++;
+  }
+  return 'scanned ' + results.length + ' · fired ' + fired + ' · breakouts ' + brk
+    + ' · building ' + build + ' · prime fired ' + prime + ' · CLEAN ' + clean + ' · NEAR ' + near;
+}
+
+function sqSignalPipsHtml(r){
+  if (!r || !r.cls) return '';
+  var cls = r.cls;
+  var chips = '';
+  if (r.kind === 'fired') chips += '<span class="gpip ok" title="TTM fired">FIR</span>';
+  else if (r.kind === 'break') chips += '<span class="gpip ok" title="Donchian break">DC</span>';
+  else if (r.kind === 'build') chips += '<span class="gpip" title="Squeeze building">BLD</span>';
+  if (cls.trendAgree === true) chips += '<span class="gpip ok" title="1D trend agree">1D</span>';
+  else if (cls.trendAgree === false) chips += '<span class="gpip bad" title="Against 1D trend">1D</span>';
+  if (sqVolOk(cls)) chips += '<span class="gpip ok" title="Volume confirm">VOL</span>';
+  else if (isFinite(cls.volZ)) chips += '<span class="gpip" title="Weak volume">VOL</span>';
+  if (cls.donchianBreak) chips += '<span class="gpip ok" title="Donchian break">DC</span>';
+  return chips;
+}
+
+function sqFiredDeskHTML(items){
+  items = (items || []).slice(0, 4);
+  if (!items.length) return '';
+  var cards = '';
+  for (var i = 0; i < items.length; i++){
+    var r = items[i], plan = squeezePlan({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind, gate: r.gate, tick: r.tick });
+    if (!plan) continue;
+    var col = r.dir === 'long' ? '#047857' : '#dc2626';
+    var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(r.sym, r.dir, plan.entry, plan.stop, plan.t1, { t2: plan.t2, stack: plan.stack, scanner: 'squeeze', strategy: 'squeeze-fired' }) : '';
+    cards += '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(5,150,105,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:rgba(5,150,105,.06)">'
+      + '<div><b>' + esc(r.sym) + '</b> · ' + r.dir.toUpperCase() + ' · <span class="stamp pass">SQZ FIRED</span></div>'
+      + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin:6px 0">' + pxF(plan.entry) + '</div>'
+      + '<div class="plan">' + squeezePlanHTML(plan) + '</div>'
+      + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
+      + '</div>';
+  }
+  if (!cards) return '';
+  return '<div class="panel tier-clean" style="margin:12px 0"><h2>🔥 FIRED DESK <span>TTM squeeze fire + 1D trend agree + volume confirm · prime entries</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div></div>';
+}
+
+function sqLimitBoardHTML(results){
+  var cands = [];
+  for (var i = 0; i < results.length; i++){
+    var r = results[i];
+    if (!r || !r.dir || r.kind === 'build') continue;
+    if (r.gate && r.gate.veto) continue;
+    var plan = squeezePlan({ sym: r.sym, dir: r.dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind, gate: r.gate, tick: r.tick });
+    if (!sqValidSetup(plan)) continue;
+    if (!(sqPrimeFired(r) || (r.gate && r.gate.clean7))) continue;
+    cands.push({ row: r, plan: plan, dir: r.dir, rank: (r.gate && r.gate.clean7 ? 1000 : 0) + (sqPrimeFired(r) ? 500 : 0) + (r.tick ? r.tick.turnoverUsd / 1e8 : 0) });
+  }
+  cands.sort(function(a, b){ return b.rank - a.rank; });
+  cands = cands.slice(0, 8);
+  if (!cands.length) return '';
+  var cards = cands.map(function(item){
+    var p = item.plan, r = item.row, dir = item.dir;
+    var col = dir === 'long' ? '#047857' : '#dc2626';
+    var stHtml = '';
+    if (typeof hgLimitState === 'function'){
+      var a = (r.rows4h && typeof atr === 'function') ? atr(r.rows4h, ATR_LEN) : null;
+      var atrL = (a && a.length) ? a[a.length - 1] : NaN;
+      var st = hgLimitState(p, r.rows4h[r.rows4h.length - 1].c, atrL);
+      if (st && st.label) stHtml = '<span class="stamp" style="margin-left:6px">' + esc(st.label) + '</span>';
+    }
+    var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+      ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: p.stack, scanner: 'squeeze', strategy: 'squeeze' }) : '';
+    return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
+      + '<div><b>' + esc(r.sym) + '</b> · ' + dir.toUpperCase() + stHtml + '</div>'
+      + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxF(p.entry) + '</div>'
+      + '<div class="note">' + squeezePlanHTML(p) + '</div>'
+      + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
+      + '</div>';
+  }).join('');
+  return '<div class="panel" style="margin:12px 0"><h2>LIMIT BOARD <span>CLEAN + prime fired rows · exact resting limits</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div></div>';
+}
+
+function sqSetupCardHTML(r, tier){
+  if (tier === 'forming' || r.kind === 'build') return cardHTML(r);
+  var dir = r.dir;
+  if (!dir) return cardHTML(r);
+  var plan = squeezePlan({ sym: r.sym, dir: dir, cls: r.cls, rows4h: r.rows4h, rows1h: r.rows1h, kind: r.kind, gate: r.gate, tick: r.tick });
+  if (typeof hgSetupCardHTML === 'function' && tier === 'clean' && plan){
+    var mini = [
+      ['KIND', r.kind === 'fired' ? 'SQZ FIRED' : 'DC BREAK'],
+      ['ENTRY', pxF(plan.entry)], ['R:R', fmtF(plan.rr1, 1) + 'R']
+    ];
+    var gates = r.gate ? [[r.gate.label, r.gate.clean7 && !r.gate.veto]] : [];
+    return hgSetupCardHTML({
+      sym: r.sym, dir: dir, tier: tier, mini: mini, gates: gates,
+      plan: squeezePlanHTML(plan), entry: plan.entry, stop: plan.stop, t1: plan.t1,
+      chartId: 'sq_' + String(r.sym).replace(/[^A-Za-z0-9]/g, ''),
+      stack: plan.stack,
+      bookMeta: { scanner: 'squeeze', strategy: 'squeeze', t2: plan.t2, venue: 'BINANCE' },
+      note: tier === 'near' ? 'NEAR — against trend, weak vol, or 6/7 gates — watch only.' : null
+    });
+  }
+  return cardHTML(r);
+}
+
+function sqPaintMiniCharts(el, rows){
+  try{
+    if (!el || typeof hgMiniChart !== 'function') return;
+    var nodes = el.querySelectorAll('.hgchart');
+    for (var i = 0; i < nodes.length; i++){
+      var node = nodes[i], id = node.id || '', symGuess = id.replace(/^sq_/, ''), row = null;
+      for (var j = 0; j < rows.length; j++){
+        if (rows[j] && String(rows[j].sym).replace(/[^A-Za-z0-9]/g, '') === symGuess){ row = rows[j]; break; }
+      }
+      if (!row || !row.rows4h) continue;
+      var plan = squeezePlan({ sym: row.sym, dir: row.dir, cls: row.cls, rows4h: row.rows4h, rows1h: row.rows1h, kind: row.kind, gate: row.gate, tick: row.tick });
+      hgMiniChart(node, row.rows4h, { dir: row.dir, entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null, t2: plan ? plan.t2 : null });
+    }
+  }catch(e){}
+}
+
+function sqPaintDeskSections(refs, results, filterFn){
+  results = results || [];
+  if (refs.summary) refs.summary.textContent = results.length ? sqSummaryLine(results) : 'Idle — run a scan to build the desk.';
+  var prime = results.filter(sqPrimeFired).sort(function(a, b){ return rankOf(a) - rankOf(b); });
+  if (refs.firedDesk) refs.firedDesk.innerHTML = sqFiredDeskHTML(prime);
+  var clean = [], near = [], forming = [];
+  for (var i = 0; i < results.length; i++){
+    var r = results[i], tier = sqRowTier(r);
+    if (tier === 'clean') clean.push(r);
+    else if (tier === 'near') near.push(r);
+    else forming.push(r);
+  }
+  clean.sort(function(a, b){ return rankOf(a) - rankOf(b); });
+  near.sort(function(a, b){ return rankOf(a) - rankOf(b); });
+  if (refs.cards){
+    var shown = clean.filter(filterFn || function(){ return true; });
+    if (!shown.length){
+      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
+        ? hgSetupEmptyHTML({ title: 'No CLEAN squeeze tickets right now.', body: 'Prime fired desk + limit board surface the best rows. NEAR and BUILDING sections are watch-only.' })
+        : '<div class="empty">No CLEAN tickets.</div>';
+    } else {
+      refs.cards.innerHTML = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + sqMinRr() + '.</div>'
+        + shown.map(function(r){ return sqSetupCardHTML(r, 'clean'); }).join('');
+      sqPaintMiniCharts(refs.cards, shown);
+    }
+  }
+  if (refs.near){
+    var nearShown = near.filter(filterFn || function(){ return true; });
+    refs.near.innerHTML = nearShown.length
+      ? ((typeof hgSetupNearHeaderHTML === 'function' ? hgSetupNearHeaderHTML(nearShown.length, 'squeeze') : '')
+        + nearShown.slice(0, 8).map(function(r){ return sqSetupCardHTML(r, 'near'); }).join(''))
+      : '';
+  }
+  if (refs.forming){
+    var formShown = forming.filter(filterFn || function(){ return true; });
+    refs.forming.innerHTML = formShown.length
+      ? (formShown.map(function(r){
+          if (r.kind === 'build') return cardHTML(r);
+          return sqSetupCardHTML(r, 'forming');
+        }).join(''))
+      : ((typeof hgFormingWatchHTML === 'function')
+        ? hgFormingWatchHTML([], { title: 'FORMING · SQUEEZE BUILD', subtitle: 'compression without a fire yet', idleText: 'Run FIND SQUEEZES — building rows appear when BB inside KC for ≥3 bars.' })
+        : '');
+  }
+  if (refs.limit) refs.limit.innerHTML = sqLimitBoardHTML(results);
+}
+
 /* sort: fired+trend-agree+vol-confirm first, then other fired, then building,
    then donchian breakouts (secondary strategy ranks last). */
 function rankOf(r){
@@ -447,7 +752,8 @@ function cardHTML(r){
    string, busy-guards overlapping invocations, and never fires a first-time
    full-universe scan on its own — a global refresh must stay cheap for tabs
    the user has never run (skip instead). */
-var __scan = { run: null, busy: false, hasRun: false };
+var __scan = { run: null, busy: false, hasRun: false, mountEl: null };
+var __sqScanSnap = null;
 
 /* ---------------- BRAIN state snapshot (window.squeezeState + HG_squeezeResults)
    Last SUCCESSFUL scan's result rows, cached for the BRAIN meta-engine and
@@ -521,6 +827,102 @@ function publishSqueezeState(results){
   }catch(e){ /* state publishing must never break the scan */ }
 }
 
+async function squeezeScanCore(){
+  var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
+  var perps = res[0] || [], ticks = res[1];
+  if (!perps.length || !ticks) throw new Error('Binance universe unavailable');
+  var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
+                 .sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
+                 .slice(0, MAX_UNIVERSE);
+  if (!uni.length) throw new Error('no perps above turnover floor');
+  var results = [], failed = 0;
+  for (var ci = 0; ci < uni.length; ci += CHUNK){
+    var chunk = uni.slice(ci, ci + CHUNK);
+    await Promise.all(chunk.map(async function(sym){
+      try{
+        var rows4h = null, rows1d = [];
+        try{ rows4h = await binanceKlines(sym, '4h', KL_4H_LIMIT); }catch(e4){ rows4h = null; }
+        if (!rows4h || !rows4h.length){ failed++; return; }
+        try{ rows1d = await binanceKlines(sym, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
+        rows1d = rows1d || [];
+        var cls = squeezeClassify(rows4h, rows1d);
+        var r = null;
+        if (cls.state === 'FIRED_LONG' || cls.state === 'FIRED_SHORT'){
+          r = { sym: sym, kind: 'fired', dir: cls.state === 'FIRED_LONG' ? 'long' : 'short',
+                cls: cls, rows4h: rows4h, tick: ticks[sym] };
+        } else if (cls.donchianBreak){
+          var dcn = donchian(rows4h, DC_LEN);
+          r = { sym: sym, kind: 'break', dir: cls.donchianBreak === 'LONG' ? 'long' : 'short',
+                cls: cls, rows4h: rows4h, tick: ticks[sym],
+                dcLevel: cls.donchianBreak === 'LONG' ? dcn.up[rows4h.length - 2] : dcn.lo[rows4h.length - 2] };
+        } else if (cls.state === 'BUILDING'){
+          var tt = ttmSqueeze(rows4h), run = 0;
+          for (var k = rows4h.length - 1; k >= 0 && tt.on[k]; k--) run++;
+          r = { sym: sym, kind: 'build', dir: null, cls: cls, rows4h: rows4h, tick: ticks[sym], onRun: run };
+        }
+        if (r && r.kind !== 'build'){
+          try{
+            var r1h = await binanceKlines(sym, '1h', KL_1H_LIMIT);
+            r.rows1h = (r1h && r1h.length) ? r1h : null;
+          }catch(e1){ r.rows1h = null; }
+          r.gate = squeezeGateEval(r, r.dir);
+        }
+        if (r) results.push(r);
+      }catch(e){ failed++; }
+    }));
+    if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
+  }
+  results.sort(function(a,b){
+    var ra = rankOf(a), rb = rankOf(b);
+    if (ra !== rb) return ra - rb;
+    var ta = a.tick ? a.tick.turnoverUsd : 0, tb = b.tick ? b.tick.turnoverUsd : 0;
+    return tb - ta;
+  });
+  var nFired = 0, nBuild = 0, nBreak = 0;
+  results.forEach(function(r){
+    if (r.kind === 'fired') nFired++;
+    else if (r.kind === 'build') nBuild++;
+    else nBreak++;
+  });
+  return { results: results, failed: failed, uniLen: uni.length, fired: nFired, build: nBuild, break: nBreak };
+}
+
+async function squeezeScan(opts){
+  opts = opts || {};
+  var maxAge = (opts.maxAgeMs > 0) ? opts.maxAgeMs : (5 * 60 * 1000);
+  if (!opts.force && __sqScanSnap && __sqScanSnap.at && (Date.now() - __sqScanSnap.at) < maxAge) return __sqScanSnap;
+  var core = await squeezeScanCore();
+  __sqScanSnap = { at: Date.now(), results: core.results, failed: core.failed, uniLen: core.uniLen,
+    fired: core.fired, build: core.build, break: core.break };
+  publishSqueezeState(core.results);
+  return __sqScanSnap;
+}
+
+function hgPaintSqueezeFromSnap(){
+  try{
+    if (!__sqScanSnap || !__sqScanSnap.results || !__scan.mountEl) return;
+    var refs = {
+      summary: __scan.mountEl.querySelector('#sqSummary'),
+      firedDesk: __scan.mountEl.querySelector('#sqFiredDesk'),
+      cards: __scan.mountEl.querySelector('#sqCards'),
+      near: __scan.mountEl.querySelector('#sqNear'),
+      forming: __scan.mountEl.querySelector('#sqForming'),
+      limit: __scan.mountEl.querySelector('#sqLimit'),
+      funnel: __scan.mountEl.querySelector('#sqFunnel')
+    };
+    sqPaintDeskSections(refs, __sqScanSnap.results, __scan._filterFn || null);
+    if (refs.funnel && typeof W.hgFunnelPanelHTML === 'function'){
+      refs.funnel.innerHTML = W.hgFunnelPanelHTML('WHY EMPTY — SQUEEZE funnel', [
+        { k: 'Universe scanned', v: String(__sqScanSnap.uniLen || 0) },
+        { k: 'Thin / fetch failed', v: String(__sqScanSnap.failed || 0) },
+        { k: 'TTM fired (long+short)', v: String(__sqScanSnap.fired || 0) },
+        { k: 'Donchian breakout', v: String(__sqScanSnap.break || 0) },
+        { k: 'Building (squeeze on)', v: String(__sqScanSnap.build || 0) }
+      ], 'sqFunnelPanel');
+    }
+  }catch(e){}
+}
+
 async function squeezeRefresh(){
   try{
     if (__scan.busy) return 'busy';
@@ -532,6 +934,7 @@ async function squeezeRefresh(){
 
 function mount(el){
   if (!el) return;
+  __scan.mountEl = el;
   var missing = [];
   if (typeof binancePerpUniverse !== 'function') missing.push('binancePerpUniverse');
   if (typeof binanceTickers24h !== 'function') missing.push('binanceTickers24h');
@@ -542,21 +945,51 @@ function mount(el){
   if (typeof ema !== 'function') missing.push('ema');
   if (typeof atr !== 'function') missing.push('atr');
 
-  el.innerHTML = '<div class="panel">'
-    + '<h2>Squeeze Scanner <span>TTM squeeze 4H · fired + building · Donchian ' + DC_LEN + ' breakout · 1D trend filter</span></h2>'
-    + '<div class="row"><button class="btn" id="sqRun">FIND SQUEEZES</button>'
-    + '<span class="note" id="sqStat">idle — Binance perps ≥ $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover, top ' + MAX_UNIVERSE + '</span></div>'
-    + '<div class="prog" id="sqProg"><i></i></div>'
-    + '</div>'
+  el.innerHTML = '<div class="panel hg-panel">'
+    + '<h2>SQUEEZE <span>advanced TTM squeeze desk · 4H fire + Donchian ' + DC_LEN + ' break · 1D trend filter</span></h2>'
     + '<div id="sqDesk"></div>'
+    + '<div class="row" style="margin-top:10px">'
+    + '<button class="btn" id="sqRun">FIND SQUEEZES</button>'
+    + '<button class="btn sec" id="sqSync">SYNC DESK</button>'
+    + '<span class="spacer"></span>'
+    + '<button class="chip on" data-f="ALL">ALL</button>'
+    + '<button class="chip" data-f="CL">CLEAN 7/7</button>'
+    + '<button class="chip" data-f="NR">NEAR</button>'
+    + '<button class="chip" data-f="FR">🔥 FIRED</button>'
+    + '<button class="chip" data-f="PR">PRIME FIRED</button>'
+    + '<button class="chip" data-f="BR">DC BREAK</button>'
+    + '<button class="chip" data-f="BL">BUILDING</button>'
+    + '<button class="chip" data-f="LG">LONG</button>'
+    + '<button class="chip" data-f="SH">SHORT</button>'
+    + '</div>'
+    + '<div class="prog" id="sqProg"><i></i></div>'
+    + '<div class="note" id="sqSummary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>'
+    + '<span class="note" id="sqStat">Binance perps ≥ $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover, top ' + MAX_UNIVERSE + '</span>'
+    + '</div>'
+    + '<div id="sqFiredDesk"></div>'
     + '<div class="cards" id="sqCards"></div>'
+    + '<div id="sqNear"></div>'
+    + '<div id="sqForming"></div>'
+    + '<div id="sqLimit"></div>'
     + '<div id="sqFunnel"></div>'
     + '<div class="empty" id="sqEmpty" style="display:none">No squeezes fired, building, or Donchian breakouts right now.</div>';
 
-  var btn = el.querySelector('#sqRun'), statEl = el.querySelector('#sqStat'),
+  var btn = el.querySelector('#sqRun'), syncBtn = el.querySelector('#sqSync'),
+      statEl = el.querySelector('#sqStat'), summaryEl = el.querySelector('#sqSummary'),
       progEl = el.querySelector('#sqProg'), cardsEl = el.querySelector('#sqCards'),
       emptyEl = el.querySelector('#sqEmpty'), funnelEl = el.querySelector('#sqFunnel');
-  if (!btn || !statEl || !progEl || !cardsEl || !emptyEl) return;
+  var refs = {
+    summary: summaryEl,
+    firedDesk: el.querySelector('#sqFiredDesk'),
+    cards: cardsEl,
+    near: el.querySelector('#sqNear'),
+    forming: el.querySelector('#sqForming'),
+    limit: el.querySelector('#sqLimit'),
+    funnel: funnelEl
+  };
+  var chips = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
+  var state = { filter: 'ALL', results: [] };
+  __scan._filterFn = function(r){ return sqPassFilter(r, state.filter); };
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
   function setProg(f){
@@ -570,120 +1003,65 @@ function mount(el){
     return;
   }
 
-  btn.addEventListener('click', function(){ runScan(); });
-  __scan.run = runScan;   /* publish for the hard-refresh contract */
   try{
+    if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
     if (typeof hgSetupPaintDesk === 'function'){
       hgSetupPaintDesk('sqDesk', { kind: 'squeeze', tab: 'SQUEEZE',
-        note: 'FIRED + Donchian break = CLEAN direction tickets. BUILDING = FORMING — no direction yet.' });
-    }else if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+        note: 'FIRED + Donchian break + 7/7 gates = CLEAN tickets. BUILDING = FORMING — no direction yet.' });
+    }
   }catch(eD){}
+
+  chips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.filter = ch.getAttribute('data-f');
+      chips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      sqPaintDeskSections(refs, state.results, __scan._filterFn);
+    });
+  });
+
+  btn.addEventListener('click', function(){ runScan(); });
+  if (syncBtn) syncBtn.addEventListener('click', function(){
+    sqPaintDeskSections(refs, state.results, __scan._filterFn);
+    setStat('desk repainted from latest scan.');
+  });
+  __scan.run = runScan;
 
   function sqFunnelHTML(meta){
     if (!meta || typeof W.hgFunnelPanelHTML !== 'function') return '';
-    var rows = [
+    return W.hgFunnelPanelHTML('WHY EMPTY — SQUEEZE funnel', [
       { k: 'Universe scanned', v: String(meta.uni || 0) },
       { k: 'Thin / fetch failed', v: String(meta.failed || 0) },
       { k: 'TTM fired (long+short)', v: String(meta.fired || 0) },
       { k: 'Donchian breakout', v: String(meta.break || 0) },
       { k: 'Building (squeeze on)', v: String(meta.build || 0) },
       { k: 'Cards shown', v: String(meta.shown || 0) }
-    ];
-    return W.hgFunnelPanelHTML('WHY EMPTY — SQUEEZE funnel', rows, 'sqFunnelPanel');
+    ], 'sqFunnelPanel');
   }
 
   async function runScan(){
-    if (__scan.busy) return;              /* busy guard — never double-fetch */
+    if (__scan.busy) return;
     __scan.busy = true;
     var t0 = Date.now();
     try{
       btn.disabled = true;
       cardsEl.innerHTML = '';
       emptyEl.style.display = 'none';
-      setProg(0);
+      setProg(0.05);
       setStat('loading Binance perp universe…');
-      var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
-      var perps = res[0] || [], ticks = res[1];
-      if (!perps.length || !ticks){ setStat('Binance universe unavailable (network issue?)', true); return; }
-      var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
-                     .sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
-                     .slice(0, MAX_UNIVERSE);
-      if (!uni.length){ setStat('no perps above $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M 24h turnover', true); return; }
-
-      var results = [], failed = 0, started = 0;
-      for (var ci = 0; ci < uni.length; ci += CHUNK){
-        var chunk = uni.slice(ci, ci + CHUNK);
-        await Promise.all(chunk.map(async function(sym){
-          var my = ++started;
-          try{
-            setStat('scanning ' + my + '/' + uni.length + ' · ' + sym);
-            /* kline legs individually catch-isolated: a 4h outage skips the
-               symbol; a 1d outage just means trend unknown — neither kills
-               the scan or rejects the chunk. */
-            var rows4h = null, rows1d = [];
-            try{ rows4h = await binanceKlines(sym, '4h', KL_4H_LIMIT); }catch(e4){ rows4h = null; }
-            if (!rows4h || !rows4h.length){ failed++; return; }
-            try{ rows1d = await binanceKlines(sym, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
-            rows1d = rows1d || []; /* empty 1d is tolerated: trend simply unknown */
-            var cls = squeezeClassify(rows4h, rows1d);
-            var r = null;
-            if (cls.state === 'FIRED_LONG' || cls.state === 'FIRED_SHORT'){
-              r = { sym: sym, kind: 'fired', dir: cls.state === 'FIRED_LONG' ? 'long' : 'short',
-                    cls: cls, rows4h: rows4h, tick: ticks[sym] };
-            } else if (cls.donchianBreak){
-              var dcn = donchian(rows4h, DC_LEN);
-              r = { sym: sym, kind: 'break', dir: cls.donchianBreak === 'LONG' ? 'long' : 'short',
-                    cls: cls, rows4h: rows4h, tick: ticks[sym],
-                    dcLevel: cls.donchianBreak === 'LONG' ? dcn.up[rows4h.length - 2] : dcn.lo[rows4h.length - 2] };
-            } else if (cls.state === 'BUILDING'){
-              var tt = ttmSqueeze(rows4h), run = 0;
-              for (var k = rows4h.length - 1; k >= 0 && tt.on[k]; k--) run++;
-              r = { sym: sym, kind: 'build', dir: null, cls: cls, rows4h: rows4h, tick: ticks[sym], onRun: run };
-            }
-            if (r && r.kind !== 'build'){
-              /* 1H context for the SMART $ setup builder (SCALP branch) —
-                 catch-isolated: failure just means the 4H-only plan. */
-              try{
-                var r1h = await binanceKlines(sym, '1h', KL_1H_LIMIT);
-                r.rows1h = (r1h && r1h.length) ? r1h : null;
-              }catch(e1){ r.rows1h = null; }
-            }
-            if (r) results.push(r);
-          }catch(e){ failed++; }
-        }));
-        setProg(Math.min(1, (ci + chunk.length) / uni.length));
-        if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
-      }
-
-      results.sort(function(a,b){
-        var ra = rankOf(a), rb = rankOf(b);
-        if (ra !== rb) return ra - rb;
-        var ta = a.tick ? a.tick.turnoverUsd : 0, tb = b.tick ? b.tick.turnoverUsd : 0;
-        return tb - ta;
-      });
-
-      var nFired = 0, nBuild = 0, nBreak = 0;
-      results.forEach(function(r){
-        if (r.kind === 'fired') nFired++;
-        else if (r.kind === 'build') nBuild++;
-        else nBreak++;
-      });
-
-      var shown = results.filter(function(r){ return r.kind !== 'build'; }).length;
+      var snap = await squeezeScan({ force: true });
+      state.results = (snap && snap.results) ? snap.results : [];
+      sqPaintDeskSections(refs, state.results, __scan._filterFn);
       if (funnelEl){
         funnelEl.innerHTML = sqFunnelHTML({
-          uni: uni.length, failed: failed, fired: nFired, break: nBreak,
-          build: nBuild, shown: shown
+          uni: snap.uniLen, failed: snap.failed, fired: snap.fired,
+          break: snap.break, build: snap.build,
+          shown: state.results.filter(function(r){ return r.kind !== 'build'; }).length
         });
       }
-
-      if (!results.length) emptyEl.style.display = 'block';
-      else cardsEl.innerHTML = results.map(cardHTML).join('');
-
+      if (!state.results.length) emptyEl.style.display = 'block';
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
-      setStat('universe ' + uni.length + ' · fired ' + nFired + ' · building ' + nBuild
-              + ' · breakouts ' + nBreak + ' · failed ' + failed + ' · ' + secs + 's');
-      publishSqueezeState(results);   /* BRAIN: cache + publish the successful scan (aborts above never reach here) */
+      setStat('universe ' + (snap.uniLen || 0) + ' · fired ' + (snap.fired || 0) + ' · building ' + (snap.build || 0)
+              + ' · breakouts ' + (snap.break || 0) + ' · failed ' + (snap.failed || 0) + ' · ' + secs + 's');
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
     }finally{
@@ -693,15 +1071,39 @@ function mount(el){
       setProg(null);
     }
   }
+
+  if (__sqScanSnap && __sqScanSnap.results && __sqScanSnap.results.length &&
+      __sqScanSnap.at && (Date.now() - __sqScanSnap.at) < (5 * 60 * 1000)){
+    state.results = __sqScanSnap.results;
+    __scan.hasRun = true;
+    sqPaintDeskSections(refs, state.results, __scan._filterFn);
+    setStat('restored from cache · ' + sqSummaryLine(state.results)
+      + ' · age ' + Math.round((Date.now() - __sqScanSnap.at) / 1000) + 's');
+  }
+}
+
+function sqPassFilter(r, filter){
+  if (filter === 'CL') return sqRowTier(r) === 'clean';
+  if (filter === 'NR') return sqRowTier(r) === 'near';
+  if (filter === 'FR') return r.kind === 'fired';
+  if (filter === 'PR') return sqPrimeFired(r);
+  if (filter === 'BR') return r.kind === 'break';
+  if (filter === 'BL') return r.kind === 'build';
+  if (filter === 'LG') return r.dir === 'long';
+  if (filter === 'SH') return r.dir === 'short';
+  return true;
 }
 
 /* ---------------- registration ---------------- */
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined') ? globalThis : {};
 W.squeezeClassify = squeezeClassify;
+W.squeezeGateEval = squeezeGateEval;
 W.squeezePlan = squeezePlan;
 W.squeezePlanHTML = squeezePlanHTML;
 W.squeezePlanBlock = squeezePlanBlock;
+W.squeezeScan = squeezeScan;
+W.hgPaintSqueezeFromSnap = hgPaintSqueezeFromSnap;
 /* ---------------- BRAIN warm-up hook ----------------
    runScan lives inside mount (it closes over the pane nodes), so the BRAIN
    cannot reuse it unmounted. sqWarm duplicates the scan core headless and
@@ -720,37 +1122,9 @@ async function sqWarm(){
   }
   __scan.busy = true;
   try{
-    var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
-    var perps = res[0] || [], ticks = res[1];
-    if (!perps.length || !ticks) return 'unavailable: Binance universe fetch failed';
-    var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
-                   .sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
-                   .slice(0, MAX_UNIVERSE);
-    if (!uni.length) return 'skipped: no perps above the 24h turnover floor';
-    var results = [];
-    for (var ci = 0; ci < uni.length; ci += CHUNK){
-      var chunk = uni.slice(ci, ci + CHUNK);
-      await Promise.all(chunk.map(async function(sym){
-        try{
-          var rows4h = await binanceKlines(sym, '4h', KL_4H_LIMIT);
-          if (!rows4h || !rows4h.length) return;
-          var rows1d = [];
-          try{ rows1d = await binanceKlines(sym, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
-          var cls = squeezeClassify(rows4h, rows1d || []);
-          if (cls.state === 'FIRED_LONG' || cls.state === 'FIRED_SHORT'){
-            results.push({ sym: sym, kind: 'fired', dir: cls.state === 'FIRED_LONG' ? 'long' : 'short' });
-          } else if (cls.donchianBreak){
-            results.push({ sym: sym, kind: 'break', dir: cls.donchianBreak === 'LONG' ? 'long' : 'short' });
-          } else if (cls.state === 'BUILDING'){
-            results.push({ sym: sym, kind: 'build', dir: null });
-          }
-        }catch(e){ /* one symbol's failure never kills the warm-up */ }
-      }));
-      if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
-    }
-    publishSqueezeState(results);
+    var snap = await squeezeScan({ force: true });
     __scan.hasRun = true;
-    return 'warmed · ' + results.length + ' squeezes across ' + uni.length + ' perps';
+    return 'warmed · ' + ((snap && snap.results) ? snap.results.length : 0) + ' squeezes';
   }catch(e){
     return 'error: ' + ((e && e.message) || e);
   }finally{
