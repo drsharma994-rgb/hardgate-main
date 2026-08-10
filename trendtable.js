@@ -1,7 +1,8 @@
 /* =========================================================================
 HARDGATE — trendtable.js
-TREND MATRIX tab (id 'trendmx'): multi-timeframe trend dashboard for the
-top 60 Binance USDT-M perps by 24h turnover (>= $20M floor).
+TREND MATRIX tab (id 'trendmx'): multi-timeframe trend dashboard across the
+full combined universe (Delta + CoinDCX + Binance extension via xuniverse.js,
+≥ $5M turnover floor, no top-N cap; Binance-only fallback when xu absent).
 
 Per symbol: binanceKlines 1d x260 + 4h x120 -> five signed components
 (-1/0/+1), composite score -5..+5:
@@ -121,10 +122,20 @@ function trendScore(rows1d, rows4h){
 
 /* ---------------- tab UI ---------------- */
 
-var TURNOVER_FLOOR = 20e6;   // >= $20M 24h quote volume
-var TOP_N = 60;              // top 60 perps by turnover
+var TURNOVER_FLOOR = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
 var CHUNK = 5;               // paced bulk fetch chunk size
 var CHUNK_SLEEP_MS = 150;
+
+function tmVenueChip(item){
+  return (typeof W.hgDeskVenueChipHTML === 'function') ? W.hgDeskVenueChipHTML(item) : '';
+}
+function tmSymLabel(row){
+  if (!row) return '';
+  return (typeof W.hgDeskSymLabel === 'function') ? W.hgDeskSymLabel(row) : (row.sym || '');
+}
+function tmRowVenue(row){
+  return row && row.exchange ? String(row.exchange).toLowerCase() : 'binance';
+}
 
 function sleepMs(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 
@@ -516,42 +527,48 @@ function trendmxGoldenCrossSetups(rows){
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
-async function trendmxScanCore(){
-  var need = ['binancePerpUniverse', 'binanceTickers24h', 'binanceKlines'];
-  for (var m = 0; m < need.length; m++){
-    if (typeof W[need[m]] !== 'function') throw new Error('missing ' + need[m]);
+async function trendmxScanCore(hooks){
+  hooks = hooks || {};
+  var fetchK = (typeof W.hgDeskFetchKlines === 'function') ? W.hgDeskFetchKlines.bind(W)
+    : function(it, tf, n){ return W.binanceKlines(it.sym || it, tf, n); };
+  if (typeof W.hgDeskLoadUniverse !== 'function'
+      && (typeof W.binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
+    throw new Error('missing universe layer (hgDeskLoadUniverse or binancePerpUniverse)');
   }
-  var uni = await W.binancePerpUniverse();
-  var tick = await W.binanceTickers24h();
-  if (!Array.isArray(uni) || !uni.length) throw new Error('Binance perp universe unavailable');
-  if (!tick) throw new Error('Binance 24h tickers unavailable');
-  var syms = uni.filter(function(s){
-    return tick[s] && isFinite(tick[s].turnoverUsd) && tick[s].turnoverUsd >= TURNOVER_FLOOR;
-  }).sort(function(a, b){ return tick[b].turnoverUsd - tick[a].turnoverUsd; }).slice(0, TOP_N);
+  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: TURNOVER_FLOOR });
+  var items = uniPack.items || [];
+  if (!items.length) throw new Error('universe empty' + (uniPack.note ? ' — ' + uniPack.note : ''));
   var results = [], failed = 0;
-  for (var i = 0; i < syms.length; i += CHUNK){
-    var chunk = syms.slice(i, i + CHUNK);
-    var rs = await Promise.all(chunk.map(function(s){
-      return Promise.all([W.binanceKlines(s, '1d', 260), W.binanceKlines(s, '4h', 120), W.binanceKlines(s, '1h', 120)])
-        .then(function(rr){
-          var r1 = rr[0], r4 = rr[1], r1h = rr[2];
-          if (!r1 || !r1.length || !r4 || !r4.length) return null;
-          var ts = trendScore(r1, r4);
-          var tk = tick[s] || {};
-          var row = {
-            sym: s, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
-            price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
-            fundingPct: tk.fundingPct, turnoverUsd: tk.turnoverUsd
-          };
-          var dir = tmDirOf(row);
-          row.gate = dir ? trendmxGateEval(row, dir) : null;
-          return row;
+  for (var i = 0; i < items.length; i += CHUNK){
+    var chunk = items.slice(i, i + CHUNK);
+    if (typeof hooks.setProg === 'function') hooks.setProg((i + chunk.length) / items.length);
+    var rs = await Promise.all(chunk.map(function(item){
+      return fetchK(item, '4h', 120).then(function(r4){
+          if (!r4 || !r4.length) return null;
+          return Promise.all([fetchK(item, '1d', 260), fetchK(item, '1h', 120)]).then(function(rr){
+            var r1 = rr[0], r1h = rr[1];
+            if (!r1 || !r1.length) return null;
+            var ts = trendScore(r1, r4);
+            var row = {
+              sym: item.sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn,
+              xu: item, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+              price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
+              fundingPct: item.fundingPct, turnoverUsd: item.turnoverUsd, mark: item.mark
+            };
+            var dir = tmDirOf(row);
+            row.gate = dir ? trendmxGateEval(row, dir) : null;
+            return row;
+          });
         }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
-    if (i + CHUNK < syms.length) await sleepMs(CHUNK_SLEEP_MS);
+    if (i + CHUNK < items.length) await sleepMs(CHUNK_SLEEP_MS);
   }
-  return { rows: results, failed: failed, uniLen: uni.length, scanned: syms.length, at: Date.now() };
+  return {
+    rows: results, failed: failed, uniLen: uniPack.rawLen || items.length,
+    scanned: items.length, at: Date.now(), note: uniPack.note, source: uniPack.source,
+    venueCounts: uniPack.venueCounts
+  };
 }
 
 async function trendmxScan(opts){
@@ -560,11 +577,11 @@ async function trendmxScan(opts){
   if (!opts.force && __tmScanSnap && __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < maxAge){
     return __tmScanSnap;
   }
-  var core = await trendmxScanCore();
+  var core = await trendmxScanCore(opts);
   var golden = trendmxGoldenCrossSetups(core.rows);
   __tmScanSnap = {
     at: core.at, rows: core.rows, failed: core.failed, uniLen: core.uniLen, scanned: core.scanned,
-    goldenCross: golden
+    goldenCross: golden, note: core.note, source: core.source, venueCounts: core.venueCounts
   };
   publishTrendmxSnap(core.rows);
   return __tmScanSnap;
@@ -596,7 +613,7 @@ function trendmxRowTier(r, plan){
   return 'forming';
 }
 
-function trendmxSummaryLine(rows, golden){
+function trendmxSummaryLine(rows, golden, venueCounts){
   rows = rows || [];
   golden = golden || [];
   var sl = 0, ss = 0, fx = 0, clean = 0, near = 0;
@@ -612,7 +629,10 @@ function trendmxSummaryLine(rows, golden){
     if (tier === 'clean') clean++;
     else if (tier === 'near') near++;
   }
-  return 'scanned ' + rows.length + ' · golden ' + golden.length
+  var vc = venueCounts || {};
+  var ven = ' · Δ' + (vc.delta || 0) + ' · CDX' + (vc.coindcx || 0) + ' · BN' + (vc.binance || 0);
+  return 'scanned ' + rows.length + ven
+    + ' · golden ' + golden.length
     + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
     + ' · CLEAN ' + clean + ' · NEAR ' + near;
 }
@@ -628,7 +648,7 @@ function trendmxGoldenCardHTML(g){
     ? bookBtnHTML(g.sym, g.dir, g.entry, g.stop, g.t1, { scanner: 'trendmx', strategy: 'trendmx-golden', t2: g.t2 }) : '';
   return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(5,150,105,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:rgba(5,150,105,.06)">'
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
-    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + tmVenueChip(g) + '</span>'
     + '<span class="stamp pass">⚡GOLDEN</span>'
     + '<span class="stamp pass">' + escH(g.conviction || g.tier || 'CONVICTION') + '</span>'
     + '</div>'
@@ -663,7 +683,7 @@ function trendmxLimitCardHTML(item){
   var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
     ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
   return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-    + '<div><b>' + escH(r.sym) + '</b> · ' + dir.toUpperCase() + stHtml + '</div>'
+    + '<div><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + '</div>'
     + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
     + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
     + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -710,7 +730,7 @@ function trendmxSetupCardHTML(r, tier){
   var gates = [];
   if (r.gate) gates.push([r.gate.label, r.gate.clean7 && !r.gate.veto]);
   if (typeof hgSetupCardHTML !== 'function'){
-    return '<div class="card ' + dir + '"><b>' + escH(r.sym) + '</b> · ' + dir.toUpperCase() + '</div>';
+    return '<div class="card ' + dir + '"><b>' + escH(r.sym) + '</b>' + tmVenueChip(r) + ' · ' + dir.toUpperCase() + '</div>';
   }
   return hgSetupCardHTML({
     sym: r.sym, dir: dir, tier: tier,
@@ -719,7 +739,8 @@ function trendmxSetupCardHTML(r, tier){
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
-    bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null, venue: 'BINANCE' },
+    bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null,
+      venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE' },
     note: tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null
   });
 }
@@ -745,8 +766,19 @@ function trendmxPaintMiniCharts(cardsEl, rows){
 }
 
 function trendmxPaintDeskSections(refs, state){
-  var rows = state.rows || [], golden = state.golden || [];
-  if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden) : 'Idle — run a scan to build the desk.';
+  var allRows = state.rows || [], golden = state.golden || [];
+  var rows = allRows;
+  if (state.venue && state.venue !== 'ALL'){
+    rows = allRows.filter(function(r){ return tmRowVenue(r) === state.venue; });
+    golden = golden.filter(function(g){
+      for (var gi = 0; gi < allRows.length; gi++){
+        if (allRows[gi].sym === g.sym && tmRowVenue(allRows[gi]) === state.venue) return true;
+      }
+      return false;
+    });
+  }
+  var vc = state.venueCounts || null;
+  if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden, vc) : 'Idle — run a scan to build the desk.';
   if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
   var clean = [], near = [], forming = [];
   for (var i = 0; i < rows.length; i++){
@@ -852,16 +884,19 @@ function mountTrendMatrix(el){
   tmTab.mountEl = el;
   if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
 
-  var need = ['binancePerpUniverse', 'binanceTickers24h', 'binanceKlines',
-              'ema', 'adx', 'ichimokuState', 'crossOver', 'crossUnder', 'crossedRecently'];
+  var need = ['ema', 'adx', 'ichimokuState', 'crossOver', 'crossUnder', 'crossedRecently'];
   var missing = [];
   for (var m = 0; m < need.length; m++){
     if (typeof W[need[m]] !== 'function') missing.push(need[m]);
   }
+  var hasUniverse = (typeof W.xuUniverse === 'function')
+    || (typeof W.binancePerpUniverse === 'function' && typeof W.binanceKlines === 'function');
+  if (!hasUniverse) missing.push('xuUniverse|binancePerpUniverse');
 
+  var floorM = (TURNOVER_FLOOR / 1e6).toFixed(0);
   el.innerHTML =
     '<div class="panel hg-panel">' +
-      '<h2>TREND MATRIX <span>advanced multi-TF desk · top ' + TOP_N + ' Binance perps (≥ $20M turnover)</span></h2>' +
+      '<h2>TREND MATRIX <span>advanced multi-TF desk · full universe (Delta + CoinDCX + Binance · ≥ $' + floorM + 'M turnover)</span></h2>' +
       '<div id="trendmxDesk"></div>' +
       '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m.</div>' +
       '<div class="row" style="margin-top:10px">' +
@@ -876,6 +911,11 @@ function mountTrendMatrix(el){
         '<button class="chip" data-f="SL">STRONG LONG</button>' +
         '<button class="chip" data-f="SS">STRONG SHORT</button>' +
         '<button class="chip" data-f="FX">FRESH CROSSES</button>' +
+        '<span class="spacer"></span>' +
+        '<button class="chip on" data-v="ALL">ALL VENUES</button>' +
+        '<button class="chip" data-v="delta">DELTA</button>' +
+        '<button class="chip" data-v="coindcx">COINDCX</button>' +
+        '<button class="chip" data-v="binance">BINANCE</button>' +
       '</div>' +
       '<div class="prog" data-r="prog"><i></i></div>' +
       '<div class="note" data-r="summary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>' +
@@ -913,8 +953,9 @@ function mountTrendMatrix(el){
     status: status
   };
   var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
+  var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
 
-  var state = { rows: [], golden: [], filter: 'ALL', sortKey: 'score', sortDir: -1, running: false };
+  var state = { rows: [], golden: [], filter: 'ALL', venue: 'ALL', sortKey: 'score', sortDir: -1, running: false };
   tmTab._state = state;
 
   function setProg(f){
@@ -939,6 +980,13 @@ function mountTrendMatrix(el){
       renderMatrix();
     });
   });
+  vChips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.venue = ch.getAttribute('data-v');
+      vChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      renderAll();
+    });
+  });
   btn.addEventListener('click', runScan);
   if (syncBtn) syncBtn.addEventListener('click', function(){ renderAll(); setStatus('desk repainted from latest scan.'); });
 
@@ -950,7 +998,12 @@ function mountTrendMatrix(el){
     if (k === 'price') return r.price;
     return r.comps[k] || 0;
   }
+  function passVenue(r){
+    if (!state.venue || state.venue === 'ALL') return true;
+    return tmRowVenue(r) === state.venue;
+  }
   function passFilter(r){
+    if (!passVenue(r)) return false;
     var dir = tmDirOf(r);
     var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
     var tier = trendmxRowTier(r, plan);
@@ -1016,7 +1069,7 @@ function mountTrendMatrix(el){
       var pdir = tmDirOf(r);
       h += '<tr>' +
         '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
-        '<td><b>' + r.sym + '</b></td>' +
+        '<td><b>' + r.sym + '</b>' + tmVenueChip(r) + '</td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
         '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span></td>' +
         '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
@@ -1079,20 +1132,23 @@ function mountTrendMatrix(el){
     var t0 = Date.now();
     try{
       setProg(0.05);
-      setStatus('Scanning top ' + TOP_N + ' Binance USDT-M symbols (≥ $20M turnover)…');
+      setStatus('Scanning full universe (≥ $' + floorM + 'M turnover · Delta + CoinDCX + Binance)…');
       var snap = await trendmxScan({ force: true });
       var results = (snap && snap.rows) ? snap.rows : [];
       var failed = (snap && snap.failed) ? snap.failed : 0;
       var symsLen = (snap && snap.scanned) ? snap.scanned : results.length;
       var uniLen = (snap && snap.uniLen) ? snap.uniLen : symsLen;
+      var vc = (snap && snap.venueCounts) ? snap.venueCounts : {};
 
       state.rows = results;
       state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
+      state.venueCounts = vc;
       renderAll();
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
-      setStatus('universe ' + uniLen + ' perps · top ' + symsLen +
-                ' by turnover (≥ $20M) · ' + results.length + ' ok / ' + failed +
-                ' failed · ' + dt + 's', results.length === 0);
+      var venNote = ' · Δ' + (vc.delta || 0) + ' CDX' + (vc.coindcx || 0) + ' BN' + (vc.binance || 0);
+      setStatus('raw ' + uniLen + ' · scanned ' + symsLen + venNote
+                + ' (≥ $' + floorM + 'M) · ' + results.length + ' ok / ' + failed +
+                ' failed · ' + dt + 's' + (snap && snap.note ? ' · ' + snap.note : ''), results.length === 0);
       if (!results.length){
         out.innerHTML = '<div class="empty">All symbol fetches failed — check connection.</div>';
       }

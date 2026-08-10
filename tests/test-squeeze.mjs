@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = {};                                  // module exposes squeezeClassify + HG_tabs here
-for (const f of ['indicators.js', 'indicators2.js', 'squeeze.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'desk-scan-universe.js', 'squeeze.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const G = ctx;
@@ -381,9 +381,9 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(typeof W.HG_tabs[0].refresh === 'function', '12: original registration carries a refresh fn');
 
   const ctx2 = vm.createContext(Object.create(null));
-  ctx2.window = {};
+  ctx2.window = ctx2;
   ctx2.setTimeout = setTimeout;            /* module sleep() needs it inside runScan */
-  for (const f of ['indicators.js', 'indicators2.js', 'squeeze.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'desk-scan-universe.js', 'squeeze.js']){
     vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx2, { filename: f });
   }
   const tab2 = ctx2.window.HG_tabs[0];
@@ -507,9 +507,9 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
    never throws with sabotaged internals. */
 {
   const ctx3 = vm.createContext(Object.create(null));
-  ctx3.window = {};
+  ctx3.window = ctx3;
   ctx3.setTimeout = setTimeout;
-  for (const f of ['indicators.js', 'indicators2.js', 'squeeze.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'desk-scan-universe.js', 'squeeze.js']){
     vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx3, { filename: f });
   }
   const W3 = ctx3.window;
@@ -613,8 +613,10 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(/LIMIT BOARD/.test(sq), 'limit board wired');
   assert(/hgPaintSqueezeFromSnap/.test(sq), 'snap restore export wired');
   assert(/#sqForming/.test(sq), 'forming desk mount point');
+  assert(/hgDeskLoadUniverse/.test(sq), 'full universe via hgDeskLoadUniverse');
+  assert(/data-v="coindcx"/.test(sq), 'venue filter chips wired');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v227/.test(sw), 'cache hg-v227');
+  assert(/hg-v228/.test(sw), 'cache hg-v228');
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(html.indexOf('squeeze:') >= 0, 'HG_TAB_AUTO_SCAN squeeze');
 }

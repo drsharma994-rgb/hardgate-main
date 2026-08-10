@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
 ctx.window = ctx; // browser-style global alias the module registers onto
-for (const f of ['indicators.js', 'indicators2.js', 'setup-stack.js', 'trendtable.js']){
+for (const f of ['indicators.js', 'indicators2.js', 'setup-stack.js', 'desk-scan-universe.js', 'trendtable.js']){
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const G = ctx;
@@ -412,7 +412,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   let settled = false;
   for (let i = 0; i < 200; i++){
     const t = status.textContent || '';
-    if (t.indexOf('perps') > -1 || t.indexOf('Scan failed') > -1){ settled = true; break; }
+    if (t.indexOf('scanned') > -1 || t.indexOf('Scan failed') > -1){ settled = true; break; }
     await new Promise(res => setTimeout(res, 25));
   }
   assert(settled && uniCalls === 1 && out.innerHTML.indexOf('AAAUSDT') > -1,
@@ -445,7 +445,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   /* missing data layer: a second, deps-less context -> honest skip, no fabricated scan */
   const ctx2 = vm.createContext(Object.create(null));
   ctx2.window = ctx2;
-  for (const f of ['indicators.js', 'indicators2.js', 'trendtable.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'desk-scan-universe.js', 'trendtable.js']){
     vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx2, { filename: f });
   }
   const tab2 = ctx2.HG_tabs[0];
@@ -454,7 +454,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   tab2.mount(tmFakeEl());
   r2 = await tab2.refresh();
   assert(r2 === 'skipped: data layer missing',
-         'mounted without the binance data layer -> "skipped: data layer missing" (got "' + r2 + '")');
+         'mounted without universe backend -> "skipped: data layer missing" (got "' + r2 + '")');
 
   await new Promise(res => setTimeout(res, 100));
   assert(__unhandled.length === 0, 'no unhandled rejections on any refresh path');
@@ -466,14 +466,17 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/trendmxGateEval/.test(tt), 'trend matrix gate eval wired');
   assert(/hgFormTicket/.test(tt), 'trend matrix formation ticket path');
   assert(/label: 'GATES'/.test(tt), 'GATES column in matrix table');
-  assert(/binanceKlines\(s, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
+  assert(/hgDeskLoadUniverse/.test(tt), 'full universe via hgDeskLoadUniverse');
+  assert(/fetchK\(item, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
+  assert(/data-v="delta"/.test(tt), 'venue filter chips wired');
   assert(/GOLDEN CROSS DESK/.test(tt), 'golden cross desk wired');
   assert(/LIMIT BOARD/.test(tt), 'limit board wired');
   assert(/data-r="cards"/.test(tt), 'clean ticket cards mount');
   assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');
   assert(/trendmxDesk/.test(readFileSync(path.join(root, 'setup-ui.js'), 'utf8')), 'trendmx desk in setup-ui');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v227/.test(sw), 'cache hg-v227');
+  assert(/hg-v228/.test(sw), 'cache hg-v228');
+  assert(/desk-scan-universe\.js/.test(readFileSync(path.join(root, 'index.html'), 'utf8')), 'desk-scan-universe script wired');
 }
 
 /* ---------------- summary ---------------- */

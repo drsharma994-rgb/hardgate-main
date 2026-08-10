@@ -1,7 +1,7 @@
 /* =========================================================================
 HARDGATE — squeeze.js
-SQUEEZE tab: TTM-squeeze + Donchian-breakout scanner on the Binance perp
-universe (4H signals, 1D trend filter).
+SQUEEZE tab: TTM-squeeze + Donchian-breakout scanner on the full combined
+universe (Delta + CoinDCX + Binance via xuniverse.js, ≥ $5M turnover, no cap).
 
 Classic-script module, no build step. Loads AFTER indicators.js,
 indicators2.js and binance.js; registers itself on window.HG_tabs — an
@@ -71,6 +71,9 @@ An aborted/failed re-run keeps the PREVIOUS good snapshot with its original
 (function(){
 'use strict';
 
+var W = (typeof window !== 'undefined') ? window
+      : (typeof globalThis !== 'undefined') ? globalThis : this;
+
 /* ---------------- thresholds / tuning ---------------- */
 var FIRE_WINDOW   = 3;      // a fire counts if it happened within the last 3 bars (firedAgo 0..2)
 var BUILD_MIN_ON  = 3;      // consecutive squeeze-on bars required for BUILDING
@@ -80,10 +83,16 @@ var DC_LEN        = 20;     // donchian length
 var DC_BREAK_Z    = 1;      // current-bar volume z required for a donchian breakout
 var ATR_LEN       = 14;
 var STOP_ATR      = 1.5, T1_R = 2, T2_R = 3.5;
-var MIN_TURNOVER  = 30e6;   // $30M 24h quote-volume floor
-var MAX_UNIVERSE  = 60;
+var MIN_TURNOVER  = (typeof W.hgDeskMinTurnover === 'function') ? W.hgDeskMinTurnover() : 5e6;
 var KL_4H_LIMIT   = 220, KL_1D_LIMIT = 120, KL_1H_LIMIT = 120;
 var CHUNK         = 5, CHUNK_SLEEP_MS = 120;
+
+function sqVenueChip(item){
+  return (typeof W.hgDeskVenueChipHTML === 'function') ? W.hgDeskVenueChipHTML(item) : '';
+}
+function sqRowVenue(r){
+  return r && r.exchange ? String(r.exchange).toLowerCase() : 'binance';
+}
 
 /* ---------------- tiny local helpers (no DOM touched at load time) ---------------- */
 function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
@@ -562,7 +571,7 @@ function sqLimitBoardHTML(results){
     var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: p.stack, scanner: 'squeeze', strategy: 'squeeze' }) : '';
     return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
-      + '<div><b>' + esc(r.sym) + '</b> · ' + dir.toUpperCase() + stHtml + '</div>'
+      + '<div><b>' + esc(r.sym) + '</b>' + sqVenueChip(r) + ' · ' + dir.toUpperCase() + stHtml + '</div>'
       + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxF(p.entry) + '</div>'
       + '<div class="note">' + squeezePlanHTML(p) + '</div>'
       + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
@@ -588,7 +597,8 @@ function sqSetupCardHTML(r, tier){
       plan: squeezePlanHTML(plan), entry: plan.entry, stop: plan.stop, t1: plan.t1,
       chartId: 'sq_' + String(r.sym).replace(/[^A-Za-z0-9]/g, ''),
       stack: plan.stack,
-      bookMeta: { scanner: 'squeeze', strategy: 'squeeze', t2: plan.t2, venue: 'BINANCE' },
+      bookMeta: { scanner: 'squeeze', strategy: 'squeeze', t2: plan.t2,
+        venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE' },
       note: tier === 'near' ? 'NEAR — against trend, weak vol, or 6/7 gates — watch only.' : null
     });
   }
@@ -676,7 +686,7 @@ function cardHTML(r){
 
   if (r.kind === 'build'){
     return '<div class="card tier-forming">'
-      + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">BUILDING · FORMING</span></div>'
+      + '<div class="chead"><span class="sym">' + esc(r.sym) + sqVenueChip(r) + '</span><span class="dir">BUILDING · FORMING</span></div>'
       + '<div class="mini">'
       + '<span class="k">last</span><span>' + pxF(lastC) + '</span>'
       + '<span class="k">squeeze on-bars</span><span>' + r.onRun + '</span>'
@@ -708,7 +718,7 @@ function cardHTML(r){
     if (cls.donchianBreak) chips += '<span class="gpip ok">DC' + DC_LEN + ' BREAK ' + cls.donchianBreak + '</span>';
     var trendTxt = cls.trendAgree === true ? 'agree' : (cls.trendAgree === false ? 'AGAINST' : 'n/a');
     return '<div class="card ' + r.dir + '">'
-      + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · SQZ FIRED'
+      + '<div class="chead"><span class="sym">' + esc(r.sym) + sqVenueChip(r) + '</span><span class="dir">' + dirUp + ' · SQZ FIRED'
       + (cls.trendAgree === false ? ' · AGAINST TREND' : '') + '</span>'
       + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
       + '</div>'
@@ -728,7 +738,7 @@ function cardHTML(r){
   /* kind === 'break' */
   var dUp = cls.donchianBreak === 'LONG';
   return '<div class="card ' + r.dir + '">'
-    + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span><span class="dir">' + dirUp + ' · DC' + DC_LEN + ' BREAKOUT</span>'
+    + '<div class="chead"><span class="sym">' + esc(r.sym) + sqVenueChip(r) + '</span><span class="dir">' + dirUp + ' · DC' + DC_LEN + ' BREAKOUT</span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, r.dir, { scanner: 'squeeze', strategy: 'squeeze' }) : '')
     + '</div>'
     + '<div class="mini">'
@@ -827,42 +837,54 @@ function publishSqueezeState(results){
   }catch(e){ /* state publishing must never break the scan */ }
 }
 
-async function squeezeScanCore(){
-  var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
-  var perps = res[0] || [], ticks = res[1];
-  if (!perps.length || !ticks) throw new Error('Binance universe unavailable');
-  var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
-                 .sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
-                 .slice(0, MAX_UNIVERSE);
-  if (!uni.length) throw new Error('no perps above turnover floor');
+async function squeezeScanCore(hooks){
+  hooks = hooks || {};
+  var fetchK = (typeof W.hgDeskFetchKlines === 'function') ? W.hgDeskFetchKlines.bind(W)
+    : function(it, tf, n){ return binanceKlines(it.sym || it, tf, n); };
+  if (typeof W.hgDeskLoadUniverse !== 'function'
+      && (typeof binancePerpUniverse !== 'function' || typeof binanceKlines !== 'function')){
+    throw new Error('no universe source (hgDeskLoadUniverse or binancePerpUniverse)');
+  }
+  var uniPack = await W.hgDeskLoadUniverse({ force: true, minTurnover: MIN_TURNOVER });
+  var uni = uniPack.items || [];
+  if (!uni.length) throw new Error('no contracts above turnover floor');
   var results = [], failed = 0;
   for (var ci = 0; ci < uni.length; ci += CHUNK){
     var chunk = uni.slice(ci, ci + CHUNK);
-    await Promise.all(chunk.map(async function(sym){
+    if (typeof hooks.setProg === 'function') hooks.setProg((ci + chunk.length) / uni.length);
+    await Promise.all(chunk.map(async function(item){
+      var sym = item.sym;
       try{
         var rows4h = null, rows1d = [];
-        try{ rows4h = await binanceKlines(sym, '4h', KL_4H_LIMIT); }catch(e4){ rows4h = null; }
+        try{ rows4h = await fetchK(item, '4h', KL_4H_LIMIT); }catch(e4){ rows4h = null; }
         if (!rows4h || !rows4h.length){ failed++; return; }
-        try{ rows1d = await binanceKlines(sym, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
+        try{ rows1d = await fetchK(item, '1d', KL_1D_LIMIT); }catch(e1d){ rows1d = []; }
         rows1d = rows1d || [];
         var cls = squeezeClassify(rows4h, rows1d);
+        var tick = {
+          turnoverUsd: item.turnoverUsd, mark: item.mark, fundingPct: item.fundingPct,
+          chg24: null
+        };
         var r = null;
         if (cls.state === 'FIRED_LONG' || cls.state === 'FIRED_SHORT'){
-          r = { sym: sym, kind: 'fired', dir: cls.state === 'FIRED_LONG' ? 'long' : 'short',
-                cls: cls, rows4h: rows4h, tick: ticks[sym] };
+          r = { sym: sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn, xu: item,
+                kind: 'fired', dir: cls.state === 'FIRED_LONG' ? 'long' : 'short',
+                cls: cls, rows4h: rows4h, tick: tick };
         } else if (cls.donchianBreak){
           var dcn = donchian(rows4h, DC_LEN);
-          r = { sym: sym, kind: 'break', dir: cls.donchianBreak === 'LONG' ? 'long' : 'short',
-                cls: cls, rows4h: rows4h, tick: ticks[sym],
+          r = { sym: sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn, xu: item,
+                kind: 'break', dir: cls.donchianBreak === 'LONG' ? 'long' : 'short',
+                cls: cls, rows4h: rows4h, tick: tick,
                 dcLevel: cls.donchianBreak === 'LONG' ? dcn.up[rows4h.length - 2] : dcn.lo[rows4h.length - 2] };
         } else if (cls.state === 'BUILDING'){
           var tt = ttmSqueeze(rows4h), run = 0;
           for (var k = rows4h.length - 1; k >= 0 && tt.on[k]; k--) run++;
-          r = { sym: sym, kind: 'build', dir: null, cls: cls, rows4h: rows4h, tick: ticks[sym], onRun: run };
+          r = { sym: sym, base: item.base, exchange: item.exchange || 'binance', alsoOn: item.alsoOn, xu: item,
+                kind: 'build', dir: null, cls: cls, rows4h: rows4h, tick: tick, onRun: run };
         }
         if (r && r.kind !== 'build'){
           try{
-            var r1h = await binanceKlines(sym, '1h', KL_1H_LIMIT);
+            var r1h = await fetchK(item, '1h', KL_1H_LIMIT);
             r.rows1h = (r1h && r1h.length) ? r1h : null;
           }catch(e1){ r.rows1h = null; }
           r.gate = squeezeGateEval(r, r.dir);
@@ -876,7 +898,7 @@ async function squeezeScanCore(){
     var ra = rankOf(a), rb = rankOf(b);
     if (ra !== rb) return ra - rb;
     var ta = a.tick ? a.tick.turnoverUsd : 0, tb = b.tick ? b.tick.turnoverUsd : 0;
-    return tb - ta;
+    return (tb || 0) - (ta || 0);
   });
   var nFired = 0, nBuild = 0, nBreak = 0;
   results.forEach(function(r){
@@ -884,7 +906,10 @@ async function squeezeScanCore(){
     else if (r.kind === 'build') nBuild++;
     else nBreak++;
   });
-  return { results: results, failed: failed, uniLen: uni.length, fired: nFired, build: nBuild, break: nBreak };
+  return {
+    results: results, failed: failed, uniLen: uni.length, fired: nFired, build: nBuild, break: nBreak,
+    note: uniPack.note, source: uniPack.source, venueCounts: uniPack.venueCounts
+  };
 }
 
 async function squeezeScan(opts){
@@ -893,7 +918,8 @@ async function squeezeScan(opts){
   if (!opts.force && __sqScanSnap && __sqScanSnap.at && (Date.now() - __sqScanSnap.at) < maxAge) return __sqScanSnap;
   var core = await squeezeScanCore();
   __sqScanSnap = { at: Date.now(), results: core.results, failed: core.failed, uniLen: core.uniLen,
-    fired: core.fired, build: core.build, break: core.break };
+    fired: core.fired, build: core.build, break: core.break, note: core.note, source: core.source,
+    venueCounts: core.venueCounts };
   publishSqueezeState(core.results);
   return __sqScanSnap;
 }
@@ -936,17 +962,18 @@ function mount(el){
   if (!el) return;
   __scan.mountEl = el;
   var missing = [];
-  if (typeof binancePerpUniverse !== 'function') missing.push('binancePerpUniverse');
-  if (typeof binanceTickers24h !== 'function') missing.push('binanceTickers24h');
-  if (typeof binanceKlines !== 'function') missing.push('binanceKlines');
+  var hasUniverse = (typeof W.hgDeskLoadUniverse === 'function')
+    || (typeof binancePerpUniverse === 'function' && typeof binanceKlines === 'function');
+  if (!hasUniverse) missing.push('hgDeskLoadUniverse|binancePerpUniverse');
   if (typeof ttmSqueeze !== 'function') missing.push('ttmSqueeze');
   if (typeof donchian !== 'function') missing.push('donchian');
   if (typeof volZ !== 'function') missing.push('volZ');
   if (typeof ema !== 'function') missing.push('ema');
   if (typeof atr !== 'function') missing.push('atr');
 
+  var floorM = (MIN_TURNOVER / 1e6).toFixed(0);
   el.innerHTML = '<div class="panel hg-panel">'
-    + '<h2>SQUEEZE <span>advanced TTM squeeze desk · 4H fire + Donchian ' + DC_LEN + ' break · 1D trend filter</span></h2>'
+    + '<h2>SQUEEZE <span>full universe · Delta + CoinDCX + Binance · 4H fire + Donchian ' + DC_LEN + ' break</span></h2>'
     + '<div id="sqDesk"></div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="sqRun">FIND SQUEEZES</button>'
@@ -961,10 +988,15 @@ function mount(el){
     + '<button class="chip" data-f="BL">BUILDING</button>'
     + '<button class="chip" data-f="LG">LONG</button>'
     + '<button class="chip" data-f="SH">SHORT</button>'
+    + '<span class="spacer"></span>'
+    + '<button class="chip on" data-v="ALL">ALL VENUES</button>'
+    + '<button class="chip" data-v="delta">DELTA</button>'
+    + '<button class="chip" data-v="coindcx">COINDCX</button>'
+    + '<button class="chip" data-v="binance">BINANCE</button>'
     + '</div>'
     + '<div class="prog" id="sqProg"><i></i></div>'
     + '<div class="note" id="sqSummary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>'
-    + '<span class="note" id="sqStat">Binance perps ≥ $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover, top ' + MAX_UNIVERSE + '</span>'
+    + '<span class="note" id="sqStat">Full universe ≥ $' + floorM + 'M turnover · Delta + CoinDCX + Binance (no cap)</span>'
     + '</div>'
     + '<div id="sqFiredDesk"></div>'
     + '<div class="cards" id="sqCards"></div>'
@@ -988,8 +1020,12 @@ function mount(el){
     funnel: funnelEl
   };
   var chips = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
-  var state = { filter: 'ALL', results: [] };
-  __scan._filterFn = function(r){ return sqPassFilter(r, state.filter); };
+  var vChips = Array.prototype.slice.call(el.querySelectorAll('[data-v]'));
+  var state = { filter: 'ALL', venue: 'ALL', results: [] };
+  __scan._filterFn = function(r){
+    if (state.venue && state.venue !== 'ALL' && sqRowVenue(r) !== state.venue) return false;
+    return sqPassFilter(r, state.filter);
+  };
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
   function setProg(f){
@@ -1015,6 +1051,13 @@ function mount(el){
     ch.addEventListener('click', function(){
       state.filter = ch.getAttribute('data-f');
       chips.forEach(function(c){ c.classList.toggle('on', c === ch); });
+      sqPaintDeskSections(refs, state.results, __scan._filterFn);
+    });
+  });
+  vChips.forEach(function(ch){
+    ch.addEventListener('click', function(){
+      state.venue = ch.getAttribute('data-v');
+      vChips.forEach(function(c){ c.classList.toggle('on', c === ch); });
       sqPaintDeskSections(refs, state.results, __scan._filterFn);
     });
   });
@@ -1047,7 +1090,7 @@ function mount(el){
       cardsEl.innerHTML = '';
       emptyEl.style.display = 'none';
       setProg(0.05);
-      setStat('loading Binance perp universe…');
+      setStat('loading full universe (≥ $' + floorM + 'M · Delta + CoinDCX + Binance)…');
       var snap = await squeezeScan({ force: true });
       state.results = (snap && snap.results) ? snap.results : [];
       sqPaintDeskSections(refs, state.results, __scan._filterFn);
@@ -1060,8 +1103,11 @@ function mount(el){
       }
       if (!state.results.length) emptyEl.style.display = 'block';
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
-      setStat('universe ' + (snap.uniLen || 0) + ' · fired ' + (snap.fired || 0) + ' · building ' + (snap.build || 0)
-              + ' · breakouts ' + (snap.break || 0) + ' · failed ' + (snap.failed || 0) + ' · ' + secs + 's');
+      var vc = snap.venueCounts || {};
+      var venNote = ' · Δ' + (vc.delta || 0) + ' CDX' + (vc.coindcx || 0) + ' BN' + (vc.binance || 0);
+      setStat('universe ' + (snap.uniLen || 0) + venNote + ' · fired ' + (snap.fired || 0) + ' · building ' + (snap.build || 0)
+              + ' · breakouts ' + (snap.break || 0) + ' · failed ' + (snap.failed || 0) + ' · ' + secs + 's'
+              + (snap.note ? ' · ' + snap.note : ''));
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
     }finally{
@@ -1095,8 +1141,6 @@ function sqPassFilter(r, filter){
 }
 
 /* ---------------- registration ---------------- */
-var W = (typeof window !== 'undefined') ? window
-      : (typeof globalThis !== 'undefined') ? globalThis : {};
 W.squeezeClassify = squeezeClassify;
 W.squeezeGateEval = squeezeGateEval;
 W.squeezePlan = squeezePlan;
@@ -1116,9 +1160,9 @@ async function sqWarm(){
     if (W.squeezeState && W.squeezeState()) return 'fresh';
   }catch(e0){}
   if (__scan.busy) return 'busy';
-  if (typeof binancePerpUniverse !== 'function' || typeof binanceTickers24h !== 'function'
-      || typeof binanceKlines !== 'function'){
-    return 'unavailable: Binance data layer not loaded';
+  if (typeof W.xuUniverse !== 'function'
+      && (typeof binancePerpUniverse !== 'function' || typeof W.binanceKlines !== 'function')){
+    return 'unavailable: universe layer not loaded';
   }
   __scan.busy = true;
   try{
