@@ -962,9 +962,9 @@ function mount(el){
   if (!el) return;
   __scan.mountEl = el;
   var missing = [];
-  var hasUniverse = (typeof W.hgDeskLoadUniverse === 'function')
+  var hasUniverse = (typeof W.xuUniverse === 'function')
     || (typeof binancePerpUniverse === 'function' && typeof binanceKlines === 'function');
-  if (!hasUniverse) missing.push('hgDeskLoadUniverse|binancePerpUniverse');
+  if (!hasUniverse) missing.push('xuUniverse|binancePerpUniverse');
   if (typeof ttmSqueeze !== 'function') missing.push('ttmSqueeze');
   if (typeof donchian !== 'function') missing.push('donchian');
   if (typeof volZ !== 'function') missing.push('volZ');
