@@ -28,6 +28,20 @@ function hasLevels(s){
   return s && fin(+s.entry) && fin(+s.stop) && fin(+s.t1) && +s.entry !== +s.stop;
 }
 
+function setupRr(s){
+  if (!s) return null;
+  if (fin(+s.rr)) return +s.rr;
+  if (hasLevels(s) && +s.entry !== +s.stop){
+    return Math.abs(+s.t1 - +s.entry) / Math.abs(+s.entry - +s.stop);
+  }
+  return null;
+}
+
+function setupMinRr(s){
+  var st = String((s && s.style) || '').toLowerCase();
+  return st === 'scalp' ? 2.25 : 2.0;
+}
+
 function setupScore(s){
   if (!s) return 0;
   var score = 0;
@@ -35,15 +49,27 @@ function setupScore(s){
   else if (s.nearClean) score += 25;
   if (s.prime) score += 20;
   if (fin(+s.score)) score += Math.min(30, +s.score);
+  if (fin(+s.rr)) score += Math.min(15, +s.rr * 4);
+  else {
+    var rr = setupRr(s);
+    if (rr != null) score += Math.min(15, rr * 4);
+  }
   if (/PRIME|HIGH/i.test(String(s.tier || ''))) score += 15;
   if (hasLevels(s)) score += 10;
+  if (s.confluence >= 2) score += (s.confluence - 1) * 8;
   return score;
 }
 
 function isGreatSetup(s){
   if (!hasLevels(s)) return false;
   if (s.dir !== 'long' && s.dir !== 'short') return false;
-  return setupScore(s) >= MIN_SCORE;
+  var rr = setupRr(s);
+  if (rr != null && rr < setupMinRr(s)) return false;
+  var score = setupScore(s);
+  if (s.clean7 || s.clean) return score >= MIN_SCORE;
+  if (s.nearClean) return score >= 55;
+  if (/PRIME|HIGH/i.test(String(s.tier || ''))) return score >= 45;
+  return false;
 }
 
 function setupKey(s){
@@ -183,6 +209,12 @@ async function hgAgentAlertsRun(opts){
         await W.hgWarmLayerIds(['regime', 'engine', 'goldscalp', 'goldswing', 'pine', 'carry', 'brain', 'aiagent']);
       }
     }catch(e1){}
+    try{
+      if (typeof W.cryptoScanWarm === 'function'){
+        await W.cryptoScanWarm('swing');
+        await W.cryptoScanWarm('scalp');
+      }
+    }catch(e1b){}
     try{
       if (typeof W.refreshAtomicDesk === 'function') await W.refreshAtomicDesk(true);
     }catch(e2){}
