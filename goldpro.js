@@ -173,18 +173,29 @@ function setP(ui, f){
 
 /* ================= Frankfurter daily DXY series (60s cache) ================= */
 var __gpCorrCache = { at: 0, key: null, val: null };
+async function __gpFetchFrankfurterJson(url){
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, 12000);
+  try{
+    var res = await fetch(url, { signal: ctrl.signal });
+    if (res && res.ok) return await res.json();
+  }catch(e){}
+  finally{ clearTimeout(timer); }
+  var ctrl2 = new AbortController();
+  var timer2 = setTimeout(function(){ ctrl2.abort(); }, 12000);
+  try{
+    var prox = '/api/proxy?url=' + encodeURIComponent(url);
+    var res2 = await fetch(prox, { signal: ctrl2.signal });
+    if (res2 && res2.ok) return await res2.json();
+  }catch(e){}
+  finally{ clearTimeout(timer2); }
+  return null;
+}
 async function fetchDxyRange(fromIso, toIso){
   var key = fromIso + '..' + toIso;
   if (__gpCorrCache.key === key && __gpCorrCache.val && (Date.now() - __gpCorrCache.at) < 60000) return __gpCorrCache.val;
   var url = 'https://api.frankfurter.dev/v1/' + key + '?base=USD&symbols=EUR,JPY,GBP,CAD,SEK,CHF';
-  var ctrl = new AbortController();
-  var timer = setTimeout(function(){ ctrl.abort(); }, 12000);
-  var j = null;
-  try{
-    var res = await fetch(url, { signal: ctrl.signal });
-    if (res && res.ok) j = await res.json();
-  }catch(e){ j = null; }
-  finally{ clearTimeout(timer); }
+  var j = await __gpFetchFrankfurterJson(url);
   if (!j || !j.rates) return null; // failures are NOT cached
   var out = {};
   var dts = Object.keys(j.rates).sort();

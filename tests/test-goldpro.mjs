@@ -294,6 +294,27 @@ globalThis.fetch = async (url) => {
   assert(!/Regime:/.test(out), 'flow C: no regime line under the guard');
 }
 
+/* --- flow C2: direct Frankfurter blocked (CSP) -> proxy fallback succeeds --- */
+{
+  let proxyHit = false;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/api/proxy') && u.includes('frankfurter')){
+      proxyHit = true;
+      return { ok: true, json: async () => frankfurterPayload(65) };
+    }
+    if (/frankfurter/.test(u)) throw new TypeError('Failed to fetch');
+    throw new Error('unexpected fetch in flow C2: ' + url);
+  };
+  const { nodes } = makeFakePane();
+  tab.mount({ innerHTML: '', querySelector: (s) => nodes[s] || (nodes[s] = { innerHTML: '', textContent: '', className: '', disabled: false, style: {}, firstElementChild: { style: {} }, addEventListener(ev, fn){ this._click = fn; } }) });
+  await nodes['[data-gp="run"]']._click();
+  const out = nodes['[data-gp="out"]'].innerHTML;
+  assert(proxyHit, 'flow C2: direct Frankfurter failure retried via /api/proxy');
+  assert(/<span class="big">(-?\d\.\d\d)<\/span>/.test(out), 'flow C2: correlation computed via proxy fallback');
+  assert(!/correlation unavailable/.test(out), 'flow C2: no correlation-unavailable warn when proxy succeeds');
+}
+
 /* --- flow D: frankfurter alive (65 fixes) -> corr computed + regime --- */
 globalThis.fetch = async (url) => {
   if (!/frankfurter/.test(String(url))) throw new Error('unexpected fetch in test: ' + url);
