@@ -1701,8 +1701,8 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
   const rows = compLongRows();
   const wl = W.goldWatch({ rows15m: rows, now: OFF_NOW, tf: '15m' });
   assert(Array.isArray(wl) && wl.length === 8, 'goldWatch: one watch item per scalp strategy (8)');
-  assert(wl.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,stratKey,strategy'),
-         'goldWatch: every item carries EXACTLY {stratKey, strategy, state, level, condition, reason}');
+  assert(wl.every(w => Object.keys(w).sort().join(',') === 'condition,dir,level,reason,state,stratKey,strategy'),
+         'goldWatch: every item carries {stratKey, strategy, state, level, condition, reason, dir}');
   assert(wl.every(w => (w.state === 'armed' && typeof w.condition === 'string' && w.condition.length > 10)
                     || (w.state === 'idle' && typeof w.reason === 'string' && w.reason.length > 5)),
          'goldWatch: armed items carry a live trigger condition, idle items carry the honest reason');
@@ -2029,9 +2029,12 @@ console.log('== 28) hg-v232 gold enhancement exports ==');
   for (let i = 0; i < 6; i++) yld.push({ t: DAY + i * 86400, o: 4 + i * 0.05, h: 4.1, l: 3.9, c: 4 + i * 0.05, v: 1 });
   const mv = W.__gsMicroVeto('long', 'ob', { scalpEval: {} }, { us10yCandles: yld });
   assert(mv && /MACRO VETO/.test(mv.reason), '__gsMicroVeto: yield guard blocks gold long');
-  const armed = [{ stratKey: 'sweep', strategy: 'SWEEP', state: 'armed', level: 100, condition: 'watch' }];
+  const armed = [{ stratKey: 'sweep', strategy: 'SWEEP', state: 'armed', dir: 'long', level: 100, condition: 'watch' }];
   const promoted = W.goldWatchPromote([{ stratKey: 'sweep', dir: 'long' }], armed);
   assert(promoted[0].state === 'promoted', 'goldWatchPromote: armed -> promoted when candidate fires');
+  const armedShort = [{ stratKey: 'sweep', strategy: 'SWEEP', state: 'armed', dir: 'short', level: 100, condition: 'watch' }];
+  const notPromoted = W.goldWatchPromote([{ stratKey: 'sweep', dir: 'long' }], armedShort);
+  assert(notPromoted[0].state === 'armed', 'goldWatchPromote: opposite direction stays armed');
   const bridge = W.hgGoldInlineBridge({ rows15m: flatRows(60, 100, 1, DAY) });
   assert(bridge && typeof bridge.scalp === 'object', 'hgGoldInlineBridge: returns scalp summary object');
   const proCtx = { goldPro: { word: 'STRUCTURAL BEAR' } };

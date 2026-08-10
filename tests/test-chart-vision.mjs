@@ -104,6 +104,7 @@ console.log('== wiring ==');
   ok(/G\.hgChartVisionFormationBoost\s=/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'formation boost on window');
   ok(/hgChartVisionRefreshGoldCards/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser gold card refresh helper');
   ok(/hgChartVisionPredictionLine/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser prediction line helper');
+  ok(/visionVetoed|VISION VETO/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser applies vision veto demote');
   var caps = chartVisionCapabilities({});
   ok(caps.analyzeRoute === '/api/chart-vision/analyze' && caps.outcomePrediction, 'capabilities route + prediction');
 }

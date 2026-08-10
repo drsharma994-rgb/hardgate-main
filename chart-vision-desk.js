@@ -90,7 +90,7 @@ function hgChartVisionRefreshStack(setup){
       return setup;
     }
     if (typeof G.hgSetupStackAttach === 'function'){
-      G.hgSetupStackAttach(Object.assign({}, setup), {
+      G.hgSetupStackAttach(setup, {
         style: setup.style,
         sym: setup.sym,
         vision: setup.vision,
@@ -158,6 +158,13 @@ function hgChartVisionApply(setup, analysis){
   setup.visionChip = visionChip(analysis);
   setup.visionNextMove = analysis.nextMove || '';
   setup.visionPrediction = visionPredictionLine(analysis);
+  if (analysis.veto){
+    setup.visionVetoed = true;
+    setup.demoted = true;
+    setup.demoteReason = analysis.note || 'chart vision conflict';
+    setup.visionChip = (setup.visionChip ? setup.visionChip + ' · ' : '') + 'VISION VETO';
+    return setup;
+  }
   var boost = hgChartVisionFormationBoost(setup.dir, analysis);
   if (boost && fin(+setup.formationScore)) setup.formationScore = Math.round(+setup.formationScore + boost);
   else if (boost && !fin(+setup.formationScore)) setup.formationScore = Math.max(0, boost);

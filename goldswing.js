@@ -1725,6 +1725,11 @@ async function runScan(ui, scanSt){
 
     var microOpts = {};
     if (ctx.macro && ctx.macro.us10yCandles) microOpts.us10yCandles = ctx.macro.us10yCandles;
+    if (typeof W !== 'undefined' && W){
+      if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
+      if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
+      if (isFinite(W.__hgGoldDomDepth)) microOpts.domDepth = W.__hgGoldDomDepth;
+    }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};
@@ -1805,7 +1810,10 @@ async function runScan(ui, scanSt){
       try{ wkFn(ranked, gold.rows4h, atrW, now); }catch(eWk){}
     }
     var promoteFn = gfn('goldWatchPromote');
-    if (promoteFn) armedAll = promoteFn(cands, armedAll);
+    if (promoteFn){
+      var promoteCands = ranked.filter(function(c){ return c && !c.demoted && !c.vetoed && !c.dropped; });
+      armedAll = promoteFn(promoteCands, armedAll);
+    }
     if (ctx.goldPro && ctx.goldPro.word){
       for (var gp = 0; gp < ranked.length; gp++){
         var gc0 = ranked[gp];

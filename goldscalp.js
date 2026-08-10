@@ -1008,7 +1008,10 @@ async function runScan(ui, scanSt){
       }catch(eWk){}
     }
     var promoteFn = gfn('goldWatchPromote');
-    if (promoteFn) armedAll = promoteFn(cands, armedAll);
+    if (promoteFn){
+      var promoteCands = ranked.filter(function(c){ return c && !c.demoted && !c.vetoed && !c.dropped; });
+      armedAll = promoteFn(promoteCands, armedAll);
+    }
     if (ctx.goldPro && ctx.goldPro.word){
       for (var gp = 0; gp < ranked.length; gp++){
         var gc0 = ranked[gp];

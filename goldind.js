@@ -1976,8 +1976,9 @@ function goldWatch(inp){
     if (!isFinite(entry) || !(entry > 0)) return [];
     var tf = (typeof inp.tf === 'string' && inp.tf) ? inp.tf : '15m';
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
-    function emit(key, state, level, condition, reason){
+    function emit(key, state, level, condition, reason, dir){
       out.push({ stratKey: key, strategy: GST_NAME[key] || key,
+                 dir: dir || null,
                  state: (state === 'armed') ? 'armed' : 'idle',
                  level: (typeof level === 'number' && isFinite(level)) ? level : null,
                  condition: condition || '', reason: reason || null });
@@ -1995,7 +1996,8 @@ function goldWatch(inp){
         var nearLow = Math.abs(entry - sL) <= Math.abs(sH - entry);
         emit('sweep', 'armed', nearLow ? sL : sH,
           'watching ' + (nearLow ? sL : sH).toFixed(2) + ' (last ' + tf + ' swing ' + (nearLow ? 'low' : 'high')
-            + ') — fires on a wick ' + (nearLow ? 'below + reclaim close' : 'above + rejection close'), null);
+            + ') — fires on a wick ' + (nearLow ? 'below + reclaim close' : 'above + rejection close'), null,
+          nearLow ? 'long' : 'short');
       } else emit('sweep', 'idle', null, '', 'no levels available (swing high/low not computable)');
     } else emit('sweep', 'idle', null, '', 'not enough bars for a 25-bar swing — no levels available');
 
@@ -2020,7 +2022,8 @@ function goldWatch(inp){
           : ((entry > obNear.top) ? obNear.top : obNear.bottom);
         emit('ob', 'armed', obEdge,
           'watching the unmitigated ' + obNear.dir + ' ' + tf + ' order block ' + obNear.bottom.toFixed(2) + '–'
-            + obNear.top.toFixed(2) + ' — fires on a retest (price within 0.5×ATR of the zone)', null);
+            + obNear.top.toFixed(2) + ' — fires on a retest (price within 0.5×ATR of the zone)', null,
+          obNear.dir === 'bullish' ? 'long' : 'short');
       } else {
         emit('ob', 'idle', null, '', 'no unmitigated ' + tf + ' order block within 1.5×ATR of price');
       }
@@ -2047,7 +2050,8 @@ function goldWatch(inp){
         : ((entry > fvgNear.top) ? fvgNear.top : fvgNear.bottom);
       emit('fvg', 'armed', fEdge,
         'watching the unmitigated ' + fvgTf + ' FVG ' + fvgNear.bottom.toFixed(2) + '–' + fvgNear.top.toFixed(2)
-          + ' — fires on a retrace into the gap', null);
+          + ' — fires on a retrace into the gap', null,
+        fvgNear.dir === 'bullish' ? 'long' : 'short');
     } else emit('fvg', 'idle', null, '', 'no unfilled ' + tf + ' imbalance nearby (within 1.5×ATR)');
 
     /* 4) session VWAP — always armed when computable: fair value is always
@@ -2064,7 +2068,8 @@ function goldWatch(inp){
     if (rb && (rb.mode === 'BULL' || rb.mode === 'BEAR') && isFinite(rb.e20)){
       emit('ribbon', 'armed', rb.e20,
         'watching the 20-EMA ' + rb.e20.toFixed(2) + ' — fires on a pullback into it (within 0.5×ATR) inside a '
-          + rb.mode + ' 20/50/200 ribbon', null);
+          + rb.mode + ' 20/50/200 ribbon', null,
+        rb.mode === 'BULL' ? 'long' : 'short');
     } else if (!rb || !isFinite(rb.e20)){
       emit('ribbon', 'idle', null, '', 'no levels available (20-EMA not computable on these bars)');
     } else {
@@ -2078,7 +2083,8 @@ function goldWatch(inp){
       var aNearLow = Math.abs(entry - asian.lo) <= Math.abs(asian.hi - entry);
       emit('asian', 'armed', aNearLow ? asian.lo : asian.hi,
         'armed 00:00–07:00 GMT: box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ' (' + asian.dayIso
-          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London break + close outside', null);
+          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London break + close outside', null,
+        aNearLow ? 'long' : 'short');
     } else emit('asian', 'idle', null, '', 'no Asian-range box yet (needs >=3 bars inside 00:00–07:00 GMT) — no levels available');
 
     /* 7) RSI 75/25 divergence — always watching while RSI is computable;
@@ -2186,15 +2192,20 @@ function goldCrossVenueMap(cands){
 function goldWatchPromote(cands, armed){
   try{
     if (!Array.isArray(armed) || !armed.length) return armed || [];
-    var fired = {}, i, c;
+    var fired = {}, i, c, k;
     for (i = 0; i < (cands || []).length; i++){
       c = cands[i];
-      if (c && c.stratKey && !c.dropped) fired[c.stratKey] = true;
+      if (!c || !c.stratKey || c.dropped || c.demoted || c.vetoed) continue;
+      k = c.stratKey + '|' + String(c.dir || '').toLowerCase();
+      fired[k] = true;
     }
     return armed.map(function(w){
-      if (!w || w.state !== 'armed' || !w.stratKey || !fired[w.stratKey]) return w;
+      if (!w || w.state !== 'armed' || !w.stratKey) return w;
+      var wd = w.dir ? String(w.dir).toLowerCase() : null;
+      var match = wd ? fired[w.stratKey + '|' + wd] : fired[w.stratKey + '|long'] || fired[w.stratKey + '|short'];
+      if (!match) return w;
       var nw = {};
-      for (var k in w){ if (Object.prototype.hasOwnProperty.call(w, k)) nw[k] = w[k]; }
+      for (var kk in w){ if (Object.prototype.hasOwnProperty.call(w, kk)) nw[kk] = w[kk]; }
       nw.state = 'promoted';
       nw.promoteNote = 'trigger fired this scan — see the qualifying candidate card above';
       return nw;
