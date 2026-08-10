@@ -27,6 +27,8 @@ vm.createContext(ctx);
 for (const f of ['indicators.js', 'indicators2.js', 'plans.js', 'cryptogates.js']) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
 }
+ctx.hgStructureGate = () => ({ veto: false, bos: true });
+ctx.detectRegime = () => ({ regime: 'trend', label: 'trend' });
 
 function tape(seed){
   let s = seed;
