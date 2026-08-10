@@ -16,6 +16,9 @@ const ALLOWED_HOSTS = new Set([
   'www.coindesk.com',
   // goldspot.js: gold-api.com spot XAU fallback when the direct CORS fetch fails
   'api.gold-api.com',
+  // macro.js / goldpro.js: Frankfurter ECB FX fixes (DXY + gold/DXY correlation)
+  'api.frankfurter.dev',
+  'api.frankfurter.app',
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;

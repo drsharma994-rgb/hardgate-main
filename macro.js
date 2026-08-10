@@ -30,16 +30,24 @@ const MACRO_CACHE_MS = 5*60*1000;
 const DXY_CACHE_MS = 6*60*60*1000;
 const __macroBucket = (typeof makeTokenBucket === 'function') ? makeTokenBucket(2, 2) : { take: function(){ return 0; } };
 
-async function __macroFetchJson(url, timeoutMs){
+async function __macroFetchJson(url, timeoutMs, proxyTried){
   const ctrl = new AbortController();
   const timer = setTimeout(function(){ ctrl.abort(); }, timeoutMs || 10000);
   try{
     const w = __macroBucket.take();
     if (w > 0) await new Promise(function(r){ setTimeout(r, Math.min(w, 2000)); });
     const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) return null;
-    return await res.json();
-  }catch(e){ return null; }
+    if (res.ok) return await res.json();
+    if (!proxyTried && String(url).indexOf('frankfurter') !== -1){
+      return __macroFetchJson('/api/proxy?url=' + encodeURIComponent(url), timeoutMs, true);
+    }
+    return null;
+  }catch(e){
+    if (!proxyTried && String(url).indexOf('frankfurter') !== -1){
+      return __macroFetchJson('/api/proxy?url=' + encodeURIComponent(url), timeoutMs, true);
+    }
+    return null;
+  }
   finally{ clearTimeout(timer); }
 }
 
