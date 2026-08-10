@@ -467,8 +467,13 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/hgFormTicket/.test(tt), 'trend matrix formation ticket path');
   assert(/label: 'GATES'/.test(tt), 'GATES column in matrix table');
   assert(/binanceKlines\(s, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
+  assert(/GOLDEN CROSS DESK/.test(tt), 'golden cross desk wired');
+  assert(/LIMIT BOARD/.test(tt), 'limit board wired');
+  assert(/data-r="cards"/.test(tt), 'clean ticket cards mount');
+  assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');
+  assert(/trendmxDesk/.test(readFileSync(path.join(root, 'setup-ui.js'), 'utf8')), 'trendmx desk in setup-ui');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v225/.test(sw), 'cache hg-v225');
+  assert(/hg-v226/.test(sw), 'cache hg-v226');
 }
 
 /* ---------------- summary ---------------- */

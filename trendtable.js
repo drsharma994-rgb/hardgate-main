@@ -475,7 +475,7 @@ var COLS = [
    full-universe scan on a tab that was never used — it skips honestly.
    busy mirrors runScan's own state.running guard so overlapping refresh
    invocations can't double-fetch. */
-var tmTab = { run: null, busy: false, hasRun: false, missing: 0 };
+var tmTab = { run: null, busy: false, hasRun: false, missing: 0, mountEl: null };
 var __tmSnap = null;
 var __tmScanSnap = null;
 
@@ -578,6 +578,249 @@ async function trendmxWarm(opts){
   }catch(e){ return 'error: ' + ((e && e.message) || e); }
 }
 
+function trendmxCompPipsHtml(comps){
+  comps = comps || {};
+  return ''
+    + '<span class="gpip ' + (comps.d1Trend > 0 ? 'ok' : (comps.d1Trend < 0 ? 'bad' : '')) + '" title="1D trend">1D</span>'
+    + '<span class="gpip ' + (comps.d1Cross > 0 ? 'ok' : (comps.d1Cross < 0 ? 'bad' : '')) + '" title="EMA cross">X</span>'
+    + '<span class="gpip ' + (comps.h4Cascade > 0 ? 'ok' : (comps.h4Cascade < 0 ? 'bad' : '')) + '" title="4H cascade">4H</span>'
+    + '<span class="gpip ' + (comps.cloud > 0 ? 'ok' : (comps.cloud < 0 ? 'bad' : '')) + '" title="Cloud">CL</span>'
+    + '<span class="gpip ' + (comps.adxPt !== 0 ? 'ok' : '') + '" title="ADX strength">ADX</span>';
+}
+
+function trendmxRowTier(r, plan){
+  if (!r) return 'forming';
+  if (r.gate && r.gate.veto) return 'forming';
+  if (plan && tmValidSetup(plan) && r.gate && r.gate.clean7) return 'clean';
+  if (r.gate && r.gate.nearClean) return 'near';
+  return 'forming';
+}
+
+function trendmxSummaryLine(rows, golden){
+  rows = rows || [];
+  golden = golden || [];
+  var sl = 0, ss = 0, fx = 0, clean = 0, near = 0;
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r) continue;
+    if (r.score >= 4) sl++;
+    if (r.score <= -4) ss++;
+    if (r.freshCross) fx++;
+    var dir = tmDirOf(r);
+    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
+    var tier = trendmxRowTier(r, plan);
+    if (tier === 'clean') clean++;
+    else if (tier === 'near') near++;
+  }
+  return 'scanned ' + rows.length + ' · golden ' + golden.length
+    + ' · strong +' + sl + '/−' + ss + ' · fresh crosses ' + fx
+    + ' · CLEAN ' + clean + ' · NEAR ' + near;
+}
+
+function trendmxGoldenCardHTML(g){
+  if (!g || !fin(+g.entry) || !fin(+g.stop) || !fin(+g.t1)) return '';
+  var col = '#047857';
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(g.sym, g.dir, g.entry, g.stop, g.t1, { t2: g.t2, scanner: 'trendmx', strategy: 'trendmx-golden' })
+    : '';
+  var tradeBtn = tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(g.sym, g.dir, g.entry, g.stop, g.t1, { scanner: 'trendmx', strategy: 'trendmx-golden', t2: g.t2 }) : '';
+  return '<div style="flex:1 1 280px;max-width:380px;border:1px solid rgba(5,150,105,.45);border-left:4px solid ' + col + ';border-radius:8px;padding:12px;background:rgba(5,150,105,.06)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:14px;font-weight:800">' + escH(g.sym) + '</span>'
+    + '<span class="stamp pass">⚡GOLDEN</span>'
+    + '<span class="stamp pass">' + escH(g.conviction || g.tier || 'CONVICTION') + '</span>'
+    + '</div>'
+    + '<div style="margin-top:6px;font-size:10px;color:#64748B">' + escH(g.note || '') + '</div>'
+    + '<div style="font-size:22px;font-weight:800;color:' + col + ';margin-top:6px">' + pxFmt(g.entry) + '</div>'
+    + '<div class="plan" style="margin-top:6px">' + trendmxPlanHTML(g) + '</div>'
+    + tradeBtn + bookBtn
+    + '</div>';
+}
+
+function trendmxGoldenDeskHTML(golden){
+  golden = golden || [];
+  if (!golden.length) return '';
+  var cards = '';
+  for (var i = 0; i < Math.min(golden.length, 4); i++) cards += trendmxGoldenCardHTML(golden[i]);
+  return '<div class="panel tier-clean" style="margin:12px 0">'
+    + '<h2>⚡ GOLDEN CROSS DESK <span>fresh EMA50/200 bull cross ≤10 daily bars · conviction + valid plan · Telegram every 15m</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cards + '</div></div>';
+}
+
+function trendmxLimitCardHTML(item){
+  if (!item || !item.plan) return '';
+  var p = item.plan, r = item.row, dir = item.dir;
+  var col = dir === 'long' ? '#047857' : '#dc2626';
+  var stHtml = '';
+  if (typeof hgLimitState === 'function'){
+    var a = (r.rows4h && typeof atr === 'function') ? atr(r.rows4h, TM_ATR_LEN) : null;
+    var atrL = (a && a.length) ? a[a.length - 1] : NaN;
+    var st = hgLimitState(p, r.price, atrL);
+    if (st && st.label) stHtml = '<span class="stamp" style="margin-left:6px">' + escH(st.label) + '</span>';
+  }
+  var tradeOn = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(r.sym, dir, p.entry, p.stop, p.t1, { t2: p.t2, stack: item.stack, scanner: 'trendmx', strategy: 'trendmx' }) : '';
+  return '<div style="flex:1 1 260px;max-width:360px;border:1px solid #E2E8F0;border-left:3px solid ' + col + ';border-radius:8px;padding:10px 12px;background:#fff">'
+    + '<div><b>' + escH(r.sym) + '</b> · ' + dir.toUpperCase() + stHtml + '</div>'
+    + '<div style="font-size:18px;font-weight:800;color:' + col + ';margin:4px 0">' + pxFmt(p.entry) + '</div>'
+    + '<div class="note">' + trendmxPlanHTML(p) + '</div>'
+    + (tradeOn ? '<button class="toTrade" onclick="' + tradeOn + '">SEND TO TRADE PLAN →</button>' : '')
+    + '</div>';
+}
+
+function trendmxLimitBoardHTML(rows){
+  var cands = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r || !r.gate || r.gate.veto) continue;
+    var dir = tmDirOf(r);
+    if (!dir) continue;
+    var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+    if (!tmValidSetup(plan)) continue;
+    if (!(r.gate.clean7 || trendmxConviction(r))) continue;
+    cands.push({
+      row: r, plan: plan, dir: dir, stack: trendmxCardStack(r, dir),
+      rank: (r.gate.clean7 ? 1000 : 0) + Math.abs(r.score) * 10 + (r.gate.gatesPassed || 0)
+    });
+  }
+  cands.sort(function(a, b){ return b.rank - a.rank; });
+  cands = cands.slice(0, 8);
+  if (!cands.length) return '';
+  return '<div class="panel" style="margin:12px 0">'
+    + '<h2>LIMIT BOARD <span>CLEAN + conviction rows · exact resting limits · sorted by gates + composite</span></h2>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap">' + cands.map(trendmxLimitCardHTML).join('') + '</div></div>';
+}
+
+function trendmxSetupCardHTML(r, tier){
+  tier = tier || 'clean';
+  var dir = tmDirOf(r);
+  if (!dir) return '';
+  var plan = trendmxPlan(Object.assign({}, r, { dir: dir }));
+  var stack = trendmxCardStack(r, dir);
+  var cls = trendmxClassify(r, dir);
+  var conv = trendmxConviction(r);
+  var mini = [
+    ['SCORE', (r.score > 0 ? '+' : '') + r.score + '/5'],
+    ['ADX', isFinite(r.adx) ? r.adx.toFixed(1) : '—'],
+    ['REGIME', cls.regime || '—']
+  ];
+  if (plan) mini.push(['ENTRY', pxFmt(plan.entry)], ['R:R', fmtN(plan.rr1, 1) + 'R']);
+  var gates = [];
+  if (r.gate) gates.push([r.gate.label, r.gate.clean7 && !r.gate.veto]);
+  if (typeof hgSetupCardHTML !== 'function'){
+    return '<div class="card ' + dir + '"><b>' + escH(r.sym) + '</b> · ' + dir.toUpperCase() + '</div>';
+  }
+  return hgSetupCardHTML({
+    sym: r.sym, dir: dir, tier: tier,
+    mini: mini, gates: gates,
+    plan: plan ? trendmxPlanHTML(plan) : '',
+    entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
+    chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
+    stack: stack,
+    bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null, venue: 'BINANCE' },
+    note: tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null
+  });
+}
+
+function trendmxPaintMiniCharts(cardsEl, rows){
+  try{
+    if (!cardsEl || typeof hgMiniChart !== 'function') return;
+    var nodes = cardsEl.querySelectorAll('.hgchart');
+    for (var i = 0; i < nodes.length; i++){
+      var node = nodes[i], id = node.id || '', symGuess = id.replace(/^tmx_/, ''), row = null;
+      for (var j = 0; j < rows.length; j++){
+        if (rows[j] && String(rows[j].sym).replace(/[^A-Za-z0-9]/g, '') === symGuess){ row = rows[j]; break; }
+      }
+      if (!row || !row.rows4h) continue;
+      var dir = tmDirOf(row);
+      var plan = dir ? trendmxPlan(Object.assign({}, row, { dir: dir })) : null;
+      hgMiniChart(node, row.rows4h, {
+        dir: dir, entry: plan ? plan.entry : null, stop: plan ? plan.stop : null,
+        t1: plan ? plan.t1 : null, t2: plan ? plan.t2 : null
+      });
+    }
+  }catch(e){}
+}
+
+function trendmxPaintDeskSections(refs, state){
+  var rows = state.rows || [], golden = state.golden || [];
+  if (refs.summary) refs.summary.textContent = rows.length ? trendmxSummaryLine(rows, golden) : 'Idle — run a scan to build the desk.';
+  if (refs.golden) refs.golden.innerHTML = trendmxGoldenDeskHTML(golden);
+  var clean = [], near = [], forming = [];
+  for (var i = 0; i < rows.length; i++){
+    var r = rows[i];
+    if (!r) continue;
+    var dir = tmDirOf(r);
+    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
+    var tier = trendmxRowTier(r, plan);
+    if (tier === 'clean') clean.push(r);
+    else if (tier === 'near') near.push(r);
+    else if (r.freshCross || Math.abs(r.score) >= TM_MAJORITY || (r.gate && r.gate.gatesPassed >= 5)) forming.push(r);
+  }
+  clean.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
+  near.sort(function(a, b){ return (b.gate ? b.gate.gatesPassed : 0) - (a.gate ? a.gate.gatesPassed : 0); });
+  forming.sort(function(a, b){ return Math.abs(b.score) - Math.abs(a.score); });
+  if (refs.cards){
+    if (!clean.length){
+      refs.cards.innerHTML = (typeof hgSetupEmptyHTML === 'function')
+        ? hgSetupEmptyHTML({ title: 'No CLEAN trend tickets right now.', body: 'NEAR and FORMING rows below are watch-only. Golden cross desk and limit board surface actionable rows when gates + plan align.' })
+        : '<div class="empty">No CLEAN tickets.</div>';
+    } else {
+      var ch = '<div class="note" style="margin:0 0 10px"><b>CLEAN TICKETS</b> — 7/7 gates + valid plan + min R:R ' + TM_MIN_RR + '.</div>';
+      for (var ci = 0; ci < Math.min(clean.length, 12); ci++) ch += trendmxSetupCardHTML(clean[ci], 'clean');
+      refs.cards.innerHTML = ch;
+      trendmxPaintMiniCharts(refs.cards, clean);
+    }
+  }
+  if (refs.near){
+    refs.near.innerHTML = near.length
+      ? ((typeof hgSetupNearHeaderHTML === 'function' ? hgSetupNearHeaderHTML(near.length, 'trendmx') : '')
+        + near.slice(0, 8).map(function(r){ return trendmxSetupCardHTML(r, 'near'); }).join(''))
+      : '';
+  }
+  if (refs.forming){
+    refs.forming.innerHTML = (typeof hgFormingWatchHTML === 'function')
+      ? hgFormingWatchHTML(forming.slice(0, 12).map(function(r){
+          return {
+            state: (r.gate && r.gate.gatesPassed >= 5) ? 'armed' : 'idle',
+            sym: r.sym, strategy: 'TRENDMX',
+            condition: (r.freshCross ? '⚡' + r.freshCross + ' · ' : '') + 'composite ' + (r.score > 0 ? '+' : '') + r.score + '/5',
+            gatesPassed: r.gate ? r.gate.gatesPassed : null, gatesTotal: 7
+          };
+        }), { title: 'FORMING · TREND RADAR', subtitle: 'fresh crosses + strong composite without CLEAN ticket yet' })
+      : '';
+  }
+  if (refs.limit) refs.limit.innerHTML = trendmxLimitBoardHTML(rows);
+}
+
+function hgPaintTrendmxFromSnap(){
+  try{
+    if (!__tmScanSnap || !__tmScanSnap.rows || !__tmScanSnap.rows.length || !tmTab.mountEl) return;
+    var el = tmTab.mountEl;
+    var refs = {
+      summary: el.querySelector('[data-r="summary"]'),
+      golden: el.querySelector('[data-r="golden"]'),
+      cards: el.querySelector('[data-r="cards"]'),
+      near: el.querySelector('[data-r="near"]'),
+      forming: el.querySelector('[data-r="forming"]'),
+      limit: el.querySelector('[data-r="limit"]'),
+      out: el.querySelector('[data-r="out"]'),
+      status: el.querySelector('[data-r="status"]')
+    };
+    var state = { rows: __tmScanSnap.rows, golden: __tmScanSnap.goldenCross || [], filter: 'ALL', sortKey: 'score', sortDir: -1 };
+    tmTab._state = state;
+    trendmxPaintDeskSections(refs, state);
+    if (refs.status && __tmScanSnap.at){
+      refs.status.textContent = 'desk synced from cache · ' + trendmxSummaryLine(state.rows, state.golden)
+        + ' · age ' + Math.round((Date.now() - __tmScanSnap.at) / 1000) + 's';
+    }
+    if (typeof tmTab._renderMatrix === 'function') tmTab._renderMatrix();
+  }catch(e){}
+}
+W.hgPaintTrendmxFromSnap = hgPaintTrendmxFromSnap;
+
 function publishTrendmxSnap(rows){
   try{
     if (!rows || !rows.length){ __tmSnap = null; return; }
@@ -606,6 +849,9 @@ async function refreshTrendMatrix(){
 }
 
 function mountTrendMatrix(el){
+  tmTab.mountEl = el;
+  if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
+
   var need = ['binancePerpUniverse', 'binanceTickers24h', 'binanceKlines',
               'ema', 'adx', 'ichimokuState', 'crossOver', 'crossUnder', 'crossedRecently'];
   var missing = [];
@@ -614,29 +860,62 @@ function mountTrendMatrix(el){
   }
 
   el.innerHTML =
-    '<div class="panel">' +
-      '<h2>Trend Matrix <span>multi-TF trend composite · top 60 Binance perps by 24h turnover (≥ $20M)</span></h2>' +
-      '<div class="note">Five signed components (−1/0/+1): <b>1D TREND</b> close vs EMA200 · <b>CROSS</b> EMA50 vs EMA200 with a ⚡GOLDEN / ⚡DEATH marker when the cross is ≤10 bars old · <b>4H CASCADE</b> EMA9&gt;EMA21&gt;EMA50 full alignment · <b>CLOUD</b> Ichimoku price vs cloud · <b>ADX</b> ≥25 adds one point in the direction of the trend sum. Composite −5…+5. <b>GATES</b> runs the same 7-gate swing matrix when trend direction is clear (structure/regime vetoes named). Click a column header to sort asc/desc. The <b>LEVELS</b> cell expands a trade plan: formation ticket when 7/7 clean, else hgPlanLevels / SMART $ / structure fallback — min R:R ' + TM_MIN_RR + ', 1h klines for exact entry, FTS stack on every ticket. <b>Telegram:</b> each fresh ⚡GOLDEN bull cross with conviction + valid plan gets its own alert every <b>15 minutes</b>.</div>' +
+    '<div class="panel hg-panel">' +
+      '<h2>TREND MATRIX <span>advanced multi-TF desk · top ' + TOP_N + ' Binance perps (≥ $20M turnover)</span></h2>' +
+      '<div id="trendmxDesk"></div>' +
+      '<div class="note">Five signed components (−1/0/+1) composite −5…+5 · 7-gate swing matrix · formation ticket cascade · golden cross Telegram every 15m.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
+        '<button class="btn sec" data-r="sync">SYNC DESK</button>' +
         '<span class="spacer"></span>' +
         '<button class="chip on" data-f="ALL">ALL</button>' +
-        '<button class="chip" data-f="SL">STRONG LONG ≥ +4</button>' +
-        '<button class="chip" data-f="SS">STRONG SHORT ≤ −4</button>' +
+        '<button class="chip" data-f="CL">CLEAN 7/7</button>' +
+        '<button class="chip" data-f="NR">NEAR 6/7</button>' +
+        '<button class="chip" data-f="GD">⚡ GOLDEN</button>' +
+        '<button class="chip" data-f="CV">CONVICTION</button>' +
+        '<button class="chip" data-f="SL">STRONG LONG</button>' +
+        '<button class="chip" data-f="SS">STRONG SHORT</button>' +
         '<button class="chip" data-f="FX">FRESH CROSSES</button>' +
       '</div>' +
       '<div class="prog" data-r="prog"><i></i></div>' +
-      '<div class="note" data-r="status" style="margin-top:8px">Idle — run a scan to build the matrix.</div>' +
-      '<div data-r="out" style="margin-top:12px"><div class="empty">Press RUN SCAN to build the matrix.</div></div>' +
+      '<div class="note" data-r="summary" style="margin-top:8px;font-weight:600">Idle — run a scan to build the desk.</div>' +
+      '<div class="note" data-r="status" style="margin-top:4px">Press RUN SCAN to warm the full matrix + ticket desk.</div>' +
+      '<div data-r="golden"></div>' +
+      '<div class="cards" data-r="cards"></div>' +
+      '<div data-r="near"></div>' +
+      '<div data-r="forming"></div>' +
+      '<div data-r="limit"></div>' +
+      '<h3 style="margin:16px 0 8px;font-size:11px;letter-spacing:.14em;color:#475569">FULL MATRIX · sortable · expandable plans</h3>' +
+      '<div data-r="out"><div class="empty">Press RUN SCAN to build the matrix.</div></div>' +
     '</div>';
 
+  if (typeof hgSetupPaintDesk === 'function'){
+    hgSetupPaintDesk(el.querySelector('#trendmxDesk'), {
+      kind: 'trendmx', tab: 'TREND MATRIX',
+      note: 'CLEAN = 7/7 + plan + min R:R. Golden cross desk + limit board promote the best rows. NEAR/FORMING are watch-only.'
+    });
+  }
+
   var btn    = el.querySelector('[data-r="run"]');
+  var syncBtn = el.querySelector('[data-r="sync"]');
   var prog   = el.querySelector('[data-r="prog"]');
+  var summary = el.querySelector('[data-r="summary"]');
   var status = el.querySelector('[data-r="status"]');
   var out    = el.querySelector('[data-r="out"]');
+  var refs = {
+    summary: summary,
+    golden: el.querySelector('[data-r="golden"]'),
+    cards: el.querySelector('[data-r="cards"]'),
+    near: el.querySelector('[data-r="near"]'),
+    forming: el.querySelector('[data-r="forming"]'),
+    limit: el.querySelector('[data-r="limit"]'),
+    out: out,
+    status: status
+  };
   var chips  = Array.prototype.slice.call(el.querySelectorAll('[data-f]'));
 
-  var state = { rows: [], filter: 'ALL', sortKey: 'score', sortDir: -1, running: false };
+  var state = { rows: [], golden: [], filter: 'ALL', sortKey: 'score', sortDir: -1, running: false };
+  tmTab._state = state;
 
   function setProg(f){
     if (!prog) return;
@@ -657,10 +936,11 @@ function mountTrendMatrix(el){
     ch.addEventListener('click', function(){
       state.filter = ch.getAttribute('data-f');
       chips.forEach(function(c){ c.classList.toggle('on', c === ch); });
-      render();
+      renderMatrix();
     });
   });
   btn.addEventListener('click', runScan);
+  if (syncBtn) syncBtn.addEventListener('click', function(){ renderAll(); setStatus('desk repainted from latest scan.'); });
 
   function sortVal(r, k){
     if (k === 'sym')   return r.sym;
@@ -671,6 +951,13 @@ function mountTrendMatrix(el){
     return r.comps[k] || 0;
   }
   function passFilter(r){
+    var dir = tmDirOf(r);
+    var plan = dir ? trendmxPlan(Object.assign({}, r, { dir: dir })) : null;
+    var tier = trendmxRowTier(r, plan);
+    if (state.filter === 'CL') return tier === 'clean';
+    if (state.filter === 'NR') return tier === 'near';
+    if (state.filter === 'GD') return r.freshCross === 'GOLDEN';
+    if (state.filter === 'CV') return !!trendmxConviction(r);
     if (state.filter === 'SL') return r.score >= 4;
     if (state.filter === 'SS') return r.score <= -4;
     if (state.filter === 'FX') return !!r.freshCross;
@@ -687,7 +974,7 @@ function mountTrendMatrix(el){
     return '<span>INSIDE</span>';
   }
 
-  function render(){
+  function renderMatrix(){
     if (!state.rows.length){
       out.innerHTML = '<div class="empty">No results — run a scan.</div>';
       return;
@@ -703,7 +990,8 @@ function mountTrendMatrix(el){
       return state.sortDir * c;
     });
 
-    var h = '<table><thead><tr>';
+    var h = '<table class="hg-table"><thead><tr>';
+    h += '<th>COMP</th>';
     COLS.forEach(function(col){
       var arrow = (!col.nosort && state.sortKey === col.k) ? (state.sortDir > 0 ? ' ▲' : ' ▼') : '';
       h += col.nosort
@@ -727,6 +1015,7 @@ function mountTrendMatrix(el){
       var gateCls = gate && gate.clean7 ? 'ok' : (gate && gate.veto ? 'bad' : '');
       var pdir = tmDirOf(r);
       h += '<tr>' +
+        '<td>' + trendmxCompPipsHtml(r.comps) + '</td>' +
         '<td><b>' + r.sym + '</b></td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
         '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span></td>' +
@@ -740,7 +1029,7 @@ function mountTrendMatrix(el){
           ? '<button class="chip tmPlanBtn" data-sym="' + escH(r.sym) + '">' + pdir.toUpperCase() + ' PLAN ▸</button>'
           : '<span class="note">—</span>') + '</td>' +
       '</tr>' +
-      '<tr class="tmPlanRow" data-sym="' + escH(r.sym) + '" style="display:none"><td colspan="' + COLS.length + '"></td></tr>';
+      '<tr class="tmPlanRow" data-sym="' + escH(r.sym) + '" style="display:none"><td colspan="' + (COLS.length + 1) + '"></td></tr>';
     });
     h += '</tbody></table>';
     out.innerHTML = h;
@@ -750,24 +1039,28 @@ function mountTrendMatrix(el){
         var k = th.getAttribute('data-k');
         if (state.sortKey === k) state.sortDir = -state.sortDir;
         else { state.sortKey = k; state.sortDir = (k === 'sym') ? 1 : -1; }
-        render();
+        renderMatrix();
       });
     });
     Array.prototype.slice.call(out.querySelectorAll('.tmPlanBtn')).forEach(function(b){
       b.addEventListener('click', function(){ togglePlan(b.getAttribute('data-sym')); });
     });
   }
+  tmTab._renderMatrix = renderMatrix;
 
-  /* expand/collapse the per-row LEVELS plan (computed lazily from the
-     scan-cached 4h rows on first open). */
+  function renderAll(){
+    trendmxPaintDeskSections(refs, state);
+    renderMatrix();
+  }
+
   function togglePlan(sym){
     var row = out.querySelector('tr.tmPlanRow[data-sym="' + sym + '"]');
     if (!row) return;
-    var btn = out.querySelector('.tmPlanBtn[data-sym="' + sym + '"]');
+    var btnEl = out.querySelector('.tmPlanBtn[data-sym="' + sym + '"]');
     var open = row.style.display !== 'none';
     if (open){
       row.style.display = 'none';
-      if (btn) btn.textContent = btn.textContent.replace('▾', '▸');
+      if (btnEl) btnEl.textContent = btnEl.textContent.replace('▾', '▸');
       return;
     }
     var r = null;
@@ -775,13 +1068,13 @@ function mountTrendMatrix(el){
     var td = row.querySelector('td');
     if (td && r) td.innerHTML = trendmxPlanBlock(r);
     row.style.display = '';
-    if (btn) btn.textContent = btn.textContent.replace('▸', '▾');
+    if (btnEl) btnEl.textContent = btnEl.textContent.replace('▸', '▾');
   }
 
   async function runScan(){
     if (state.running || missing.length) return;
     state.running = true;
-    tmTab.busy = true; /* module-level mirror for the hard-refresh busy guard */
+    tmTab.busy = true;
     btn.disabled = true;
     var t0 = Date.now();
     try{
@@ -794,7 +1087,8 @@ function mountTrendMatrix(el){
       var uniLen = (snap && snap.uniLen) ? snap.uniLen : symsLen;
 
       state.rows = results;
-      render();
+      state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
+      renderAll();
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       setStatus('universe ' + uniLen + ' perps · top ' + symsLen +
                 ' by turnover (≥ $20M) · ' + results.length + ' ok / ' + failed +
@@ -808,15 +1102,24 @@ function mountTrendMatrix(el){
     }finally{
       state.running = false;
       tmTab.busy = false;
-      tmTab.hasRun = true; /* attempted counts as run — even a failed scan is not 'not run yet' */
+      tmTab.hasRun = true;
       btn.disabled = missing.length > 0;
       setProg(null);
     }
   }
 
-  /* hand the mounted scan to the hard-refresh contract (latest mount wins) */
   tmTab.run = runScan;
   tmTab.missing = missing.length;
+
+  if (__tmScanSnap && __tmScanSnap.rows && __tmScanSnap.rows.length &&
+      __tmScanSnap.at && (Date.now() - __tmScanSnap.at) < (5 * 60 * 1000)){
+    state.rows = __tmScanSnap.rows;
+    state.golden = __tmScanSnap.goldenCross || [];
+    tmTab.hasRun = true;
+    renderAll();
+    setStatus('restored from cache · ' + trendmxSummaryLine(state.rows, state.golden)
+      + ' · age ' + Math.round((Date.now() - __tmScanSnap.at) / 1000) + 's');
+  }
 }
 
 /* ---------------- exports + tab registration ---------------- */

@@ -7,10 +7,10 @@ const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep)
 let pass = 0;
 const ok = (cond, msg) => { if (!cond) throw new Error('FAIL: ' + msg); pass++; console.log('  ok —', msg); };
 
-console.log('== hg-v225 shell ==');
+console.log('== hg-v226 shell ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v225/.test(sw), 'cache hg-v225');
+  ok(/hg-v226/.test(sw), 'cache hg-v226');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain');
   ok(sw.indexOf('trendtable.js') >= 0, 'sw precaches trendtable');
 }
@@ -42,6 +42,17 @@ console.log('== tab alert warm chain ==');
 {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(html.indexOf('trendmxWarm') >= 0, 'tab alerts warm trend matrix');
+  ok(html.indexOf('trendmx:') >= 0, 'HG_TAB_AUTO_SCAN trendmx');
+}
+
+console.log('== advanced trend matrix desk ==');
+{
+  const trend = fs.readFileSync(path.join(root, 'trendtable.js'), 'utf8');
+  ok(/GOLDEN CROSS DESK/.test(trend), 'golden cross desk panel');
+  ok(/LIMIT BOARD/.test(trend), 'limit board panel');
+  ok(/data-r="cards"/.test(trend), 'clean ticket cards mount');
+  ok(/hgPaintTrendmxFromSnap/.test(trend), 'snap restore helper');
+  ok(fs.readFileSync(path.join(root, 'setup-ui.js'), 'utf8').indexOf('trendmxDesk') >= 0, 'setup-ui trendmx desk');
 }
 
 console.log('\n' + pass + ' integration checks passed');

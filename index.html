@@ -2801,7 +2801,13 @@ const HG_TAB_AUTO_SCAN = {
   search: function(){ return runSearch(); },
   smart: function(){ return runSmartScan(); },
   gold: function(){ return runGold(); },
-  finder: function(){ return runFinder(); }
+  finder: function(){ return runFinder(); },
+  trendmx: async function(){
+    const pane = document.getElementById('tab_trendmx');
+    const runBtn = pane && pane.querySelector('[data-r="run"]');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof hgPaintTrendmxFromSnap === 'function') hgPaintTrendmxFromSnap();
+  }
 };
 function scheduleTabAutoScan(t){
   const seq = ++__hgTabScanSeq;
