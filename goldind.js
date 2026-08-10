@@ -1057,6 +1057,30 @@ var GST_NAME = {
   hvn:      'HVN / VOLUME NODE RETEST'
 };
 
+/* limit-at-zone entry: when price has extended beyond the setup zone, anchor
+   the entry at the structural edge instead of the last 15m close. */
+function __gsEntryFromZone(dir, mark, zone, anchor){
+  try{
+    dir = (dir === 'short') ? 'short' : 'long';
+    mark = +mark;
+    if (!isFinite(mark)) return { entry: NaN, inZone: false };
+    var entry = mark, inZone = true;
+    if (zone && isFinite(zone.lo) && isFinite(zone.hi)){
+      if (mark >= zone.lo && mark <= zone.hi){ entry = mark; inZone = true; }
+      else if (isFinite(anchor)){
+        entry = anchor;
+        if (dir === 'long' && mark > zone.hi) entry = Math.min(anchor, zone.hi);
+        else if (dir === 'short' && mark < zone.lo) entry = Math.max(anchor, zone.lo);
+        inZone = false;
+      } else {
+        entry = (dir === 'long') ? (mark > zone.hi ? zone.hi : zone.lo) : (mark < zone.lo ? zone.lo : zone.hi);
+        inZone = false;
+      }
+    }
+    return { entry: entry, inZone: inZone };
+  }catch(e){ return { entry: mark, inZone: true }; }
+}
+
 /* shared ATR-survival level builder: stop 1.5-2x ATR14(15m) (never tighter),
    optionally extended to sit beyond a structure price; TP1 1.5R / TP2 2.5R
    with TP1 snapped to the NEAREST opposing structure between entry and TP1
@@ -1151,7 +1175,11 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     var myEv = (dir === 'long') ? longEv : shortEv;
     var oppose = (dir === 'long') ? shortEv.length : longEv.length;
     if (myEv.length < 2 || myEv.length <= oppose) return null;
-    var lv = __gsLevels(dir, D.entry, D.a15, structStop, snapLvls);
+    var mark = D.entry;
+    var entRef = __gsEntryFromZone(dir, mark, zone, anchor);
+    var useEntry = entRef.entry;
+    if (!isFinite(useEntry) || !(useEntry > 0)) return null;
+    var lv = __gsLevels(dir, useEntry, D.a15, structStop, snapLvls);
     var bucket = String(isFinite(anchor) ? Math.round(anchor) : Math.round(D.entry));
     /* (3) MIN R:R AFTER SNAPPING — opposing structure too close to pay for
        the trade: dropped with a named reason, never silently. */
@@ -1203,7 +1231,8 @@ function __gsCand(key, dir, D, structStop, snapLvls, why, invalidates, zone, anc
     return {
       id: key + '|' + dir + '|' + bucket,
       strategy: GST_NAME[key] || key, stratKey: key, dir: dir,
-      entry: D.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr, rr2: lv.rr2,
+      entry: useEntry, pxNow: mark, mark: mark, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr, rr2: lv.rr2,
+      structStop: structStop, snapLvls: snapLvls,
       grade: grade, confluence: conf, agree: myEv.length, oppose: oppose,
       reads: { long: longEv.length, short: shortEv.length },
       killzone: D.kz.label + ' · ' + hh, killzoneWeight: D.kz.weight,
@@ -4115,6 +4144,7 @@ W.goldStochRSI = goldStochRSI;
 W.goldSeason = goldSeason;
 W.goldScalpSetup = goldScalpSetup;
 W.goldScalpSetups = goldScalpSetups;
+W.goldScalpLevels = __gsLevels;
 W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
 W.goldNewsCaution = __newsCaution;

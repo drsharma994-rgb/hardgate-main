@@ -348,6 +348,164 @@ function hgFormationScore(plan, ctx){
   }catch(e){ return 0; }
 }
 
+function hgGoldPoiFromStrat(stratKey){
+  var k = String(stratKey || '').toLowerCase();
+  if (k === 'sweep') return 'sweep';
+  if (k === 'fvg' || k === 'ob') return 'fvg';
+  if (k === 'vwap' || k === 'vwapband') return 'avwap';
+  if (k === 'ribbon') return 'ema21';
+  if (k === 'rsidiv' || k === 'adrfade') return 'ote';
+  if (k === 'asian' || k === 'openrange' || k === 'bosalign' || k === 'hvn') return 'fvg';
+  return 'ema21';
+}
+
+function hgGoldEntryRefine(hit, mark, atrVal){
+  try{
+    var dir = String(hit.dir || '').toLowerCase();
+    mark = isFinite(mark) ? +mark : (isFinite(hit.pxNow) ? +hit.pxNow : +hit.entry);
+    var zone = hit.zone;
+    var anchor = hit.anchor;
+    var stratEntry = +hit.entry;
+    if (!isFinite(stratEntry)) stratEntry = mark;
+    if (typeof G.goldScalpLevels !== 'function' && typeof G.__gsEntryFromZone === 'function'){
+      return G.__gsEntryFromZone(dir, mark, zone, anchor);
+    }
+    if (!zone || !isFinite(zone.lo) || !isFinite(zone.hi)){
+      return { entry: stratEntry, inZone: true, zone: zone };
+    }
+    var entry = stratEntry, inZone = true;
+    if (isFinite(mark)){
+      if (mark >= zone.lo && mark <= zone.hi){ entry = mark; inZone = true; }
+      else if (isFinite(anchor)){
+        entry = anchor;
+        if (dir === 'long' && mark > zone.hi) entry = Math.min(anchor, zone.hi);
+        else if (dir === 'short' && mark < zone.lo) entry = Math.max(anchor, zone.lo);
+        inZone = false;
+      } else {
+        entry = (dir === 'long') ? (mark > zone.hi ? zone.hi : zone.lo) : (mark < zone.lo ? zone.lo : zone.hi);
+        inZone = false;
+      }
+    }
+    return { entry: entry, inZone: inZone, zone: zone };
+  }catch(e){ return { entry: hit.entry, inZone: true, zone: hit.zone }; }
+}
+
+function hgGoldFormationScore(plan, hit, ctx){
+  try{
+    var s = hgFormationScore(plan, ctx);
+    if (hit){
+      if (hit.agree >= 5) s += 12;
+      else if (hit.agree >= 3) s += 8;
+      if (hit.grade === 'A') s += 10;
+      else if (hit.grade === 'B') s += 5;
+      if (hit.killzoneWeight >= 2) s += 8;
+      else if (hit.killzoneWeight >= 1) s += 4;
+      if (hit.stratKey === 'sweep') s += 6;
+      if (hit.confluence && hit.confluence.length >= 4) s += 5;
+    }
+    return Math.round(s);
+  }catch(e){ return hgFormationScore(plan, ctx); }
+}
+
+function hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyle, minRr){
+  var plan = Object.assign({}, hit);
+  var stratEntry = +hit.entry, stratStop = +hit.stop, stratT1 = +(hit.t1 || hit.tp1), stratT2 = +hit.t2;
+  if (hit.notes && hit.notes.length) plan.stopNote = hit.notes.join('; ');
+  else if (hit.stopNote) plan.stopNote = hit.stopNote;
+
+  var ent = hgGoldEntryRefine(hit, mark, a4);
+  var entryMoved = isFinite(ent.entry) && isFinite(stratEntry)
+    && Math.abs(ent.entry - stratEntry) > a4 * 0.02;
+  if (entryMoved && ent.entry > 0) plan.entry = ent.entry;
+  if (ent.zone) plan.zone = ent.zone;
+
+  plan.poi = hgGoldPoiFromStrat(hit.stratKey);
+  plan.poiLabel = hit.strategy || hit.stratKey || plan.poi;
+
+  var lvFn = (baseStyle === 'scalp' && typeof G.goldScalpLevels === 'function')
+    ? G.goldScalpLevels
+    : ((baseStyle === 'swing' && typeof G.goldSwingLevels === 'function') ? G.goldSwingLevels : null);
+  if (entryMoved && lvFn){
+    try{
+      var lv0 = lvFn(dir, plan.entry, a4, hit.structStop || hit.anchor, hit.snapLvls);
+      if (lv0 && isFinite(lv0.stop) && isFinite(lv0.t1)){
+        plan.stop = lv0.stop; plan.t1 = lv0.t1;
+        if (isFinite(lv0.t2)) plan.t2 = lv0.t2;
+        plan.rr = lv0.rr; plan.rr2 = lv0.rr2;
+        if (lv0.stopNote) plan.stopNote = lv0.stopNote;
+      }
+    }catch(eLv){}
+  }
+
+  var stop = +plan.stop;
+  if (!isFinite(hit.structStop) && typeof G.hgStructureStop === 'function'){
+    try{
+      var st = G.hgStructureStop(dir, plan.entry, rows, {
+        look: params.swingLook, buffer: params.buffer, capDist: params.capDist
+      });
+      if (st && isFinite(st.stop)){
+        if (dir === 'long' && st.stop < stop){ stop = st.stop; plan.stopNote = (plan.stopNote ? plan.stopNote + '; ' : '') + (st.note || ''); }
+        else if (dir === 'short' && st.stop > stop){ stop = st.stop; plan.stopNote = (plan.stopNote ? plan.stopNote + '; ' : '') + (st.note || ''); }
+      }
+    }catch(eSt){}
+  }
+  if (entryMoved && isFinite(params.stopScale) && params.stopScale > 0 && Math.abs(params.stopScale - 1) > 0.02){
+    var r0 = Math.abs(plan.entry - stop);
+    stop = dir === 'long' ? plan.entry - r0 * params.stopScale : plan.entry + r0 * params.stopScale;
+  }
+  plan.stop = stop;
+
+  var risk = Math.abs(plan.entry - stop);
+  if (!(risk > 0)) return { ok: false, reason: 'invalid strategy levels', tag: 'formation' };
+
+  if (entryMoved){
+    var tg = hgStructureTargets(dir, plan.entry, stop, rows, a4, { minRr: minRr, style: baseStyle });
+    if (tg){
+      var stratRr = isFinite(stratT1) ? Math.abs(stratT1 - plan.entry) / risk : minRr;
+      plan.t1 = tg.t1;
+      if (Math.abs(plan.t1 - plan.entry) / risk < stratRr - 1e-9 && isFinite(stratT1)) plan.t1 = stratT1;
+      plan.t2 = isFinite(stratT2) ? stratT2 : tg.t2;
+      plan.rr = Math.abs(plan.t1 - plan.entry) / risk;
+      plan.rr1 = plan.rr;
+      plan.rr2 = isFinite(plan.t2) ? Math.abs(plan.t2 - plan.entry) / risk : tg.rr2;
+      plan.t1Source = tg.t1Source; plan.t2Source = tg.t2Source;
+      plan.targetPolicy = tg.targetPolicy;
+    }
+  } else {
+    plan.t1 = stratT1;
+    plan.t2 = stratT2;
+    plan.rr = isFinite(stratT1) ? Math.abs(stratT1 - plan.entry) / risk : hit.rr;
+  }
+
+  if (typeof G.hgRefineEntry === 'function'){
+    var ref = G.hgRefineEntry(mark, plan.entry, plan.zone, dir);
+    if (typeof G.hgFormatEntryType === 'function'){
+      plan.entryType = ref.inZone ? G.hgFormatEntryType('MARKET', plan.poiLabel)
+        : G.hgFormatEntryType('LIMIT', plan.poiLabel);
+    } else {
+      plan.entryType = (ref.inZone ? 'MARKET @ ' : 'LIMIT @ ') + plan.poiLabel;
+    }
+    plan.entryGuidance = ref.guidance || plan.entryGuidance;
+  }
+
+  var fillBars = baseStyle === 'scalp' ? params.fillBarsScalp : params.fillBarsSwing;
+  var fill = hgFillProbability(rows, plan.entry, dir, plan.zone, fillBars);
+  plan.fillProb = fill.pct;
+  plan.fillNote = fill.note;
+
+  var gRr = isFinite(plan.t1) ? Math.abs(plan.t1 - plan.entry) / risk : NaN;
+  if (!isFinite(gRr) || gRr < minRr - 1e-9){
+    return { ok: false, reason: 'min R:R ' + minRr + ' not met (' + (isFinite(gRr) ? gRr.toFixed(2) : 'n/a') + 'R)', tag: 'formation' };
+  }
+  if (dir === 'long' && stop >= plan.entry) return { ok: false, reason: 'long stop above entry', tag: 'formation' };
+  if (dir === 'short' && stop <= plan.entry) return { ok: false, reason: 'short stop below entry', tag: 'formation' };
+
+  plan.formationScore = hgGoldFormationScore(plan, hit, ctx);
+  plan.formationParams = params.source;
+  plan.planSrc = 'gold ' + baseStyle + ' · ' + (hit.stratKey || 'strategy');
+  return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
+}
+
 /* --- unified ticket formation pipeline --- */
 function hgFormTicket(hit, ctx){
   ctx = ctx || {};
@@ -370,23 +528,12 @@ function hgFormTicket(hit, ctx){
       : (baseStyle === 'scalp' ? 2.25 : (typeof G.CG_SWING_RR_MIN === 'number' ? G.CG_SWING_RR_MIN : 2));
     var entryBefore = plan.entry;
 
-    /* Gold scalp/swing tabs already compute strategy-native entry/stop/targets
-       in goldind.js / goldswing.js — never overwrite with generic POI/stops. */
+    /* Gold scalp/swing: strategy-native levels from goldind.js / goldswing.js,
+       then zone entry refinement, structure stop widen, structure targets,
+       fill probability, and confluence-weighted formation score — never
+       overwrite with generic crypto POI picks. */
     if (isGold || ctx.preserveLevels){
-      var gEntry = +plan.entry, gStop = +plan.stop, gT1 = +(plan.t1 || plan.tp1);
-      var gRisk = Math.abs(gEntry - gStop);
-      if (!isFinite(gEntry) || !isFinite(gStop) || !(gRisk > 0)){
-        return { ok: false, reason: 'invalid strategy levels', tag: 'formation' };
-      }
-      if (dir === 'long' && gStop >= gEntry) return { ok: false, reason: 'long stop above entry', tag: 'formation' };
-      if (dir === 'short' && gStop <= gEntry) return { ok: false, reason: 'short stop below entry', tag: 'formation' };
-      var gRr = isFinite(gT1) ? Math.abs(gT1 - gEntry) / gRisk : (isFinite(plan.rr) ? +plan.rr : NaN);
-      if (!isFinite(gRr) || gRr < minRr - 1e-9){
-        return { ok: false, reason: 'min R:R ' + minRr + ' not met (' + (isFinite(gRr) ? gRr.toFixed(2) : 'n/a') + 'R)', tag: 'formation' };
-      }
-      plan.formationScore = hgFormationScore(plan, ctx);
-      plan.formationParams = params.source;
-      return { ok: true, hit: plan, formationScore: plan.formationScore };
+      return hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyle, minRr);
     }
 
     var poi = null;

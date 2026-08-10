@@ -819,7 +819,11 @@ var SW_NAME = {
   pullback: '4H TREND PULLBACK (EMA50/200)',
   wkbreak:  'WEEKLY RANGE BREAKOUT',
   ob:       '4H ORDER BLOCK RETEST',
-  macro:    'MACRO-ALIGNED TREND CONTINUATION'
+  macro:    'MACRO-ALIGNED TREND CONTINUATION',
+  sweep:    '4H LIQUIDITY SWEEP REVERSAL',
+  fvg:      '4H FVG FILL',
+  bos:      '4H BOS / CHOCH ALIGNMENT',
+  ribbon:   '4H EMA RIBBON PULLBACK'
 };
 var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing levels unchanged (size accordingly)';
 
@@ -848,6 +852,28 @@ function __swLevels(dir, entry, a4, structStop){
            t2: (dir === 'long') ? entry + gT2*risk : entry - gT2*risk,
            t3: (dir === 'long') ? entry + gT3*risk : entry - gT3*risk,
            rr: gT1, rr2: gT2, rr3: gT3, stopNote: stopNote, targetPolicy: 'gold ladder ' + gT1 + 'R/' + gT2 + 'R/' + gT3 + 'R' };
+}
+
+function __swEntryFromZone(dir, mark, zone, anchor){
+  try{
+    dir = (dir === 'short') ? 'short' : 'long';
+    mark = +mark;
+    if (!isFinite(mark)) return { entry: NaN, inZone: false };
+    var entry = mark, inZone = true;
+    if (zone && isFinite(zone.lo) && isFinite(zone.hi)){
+      if (mark >= zone.lo && mark <= zone.hi){ entry = mark; inZone = true; }
+      else if (isFinite(anchor)){
+        entry = anchor;
+        if (dir === 'long' && mark > zone.hi) entry = Math.min(anchor, zone.hi);
+        else if (dir === 'short' && mark < zone.lo) entry = Math.max(anchor, zone.lo);
+        inZone = false;
+      } else {
+        entry = (dir === 'long') ? (mark > zone.hi ? zone.hi : zone.lo) : (mark < zone.lo ? zone.lo : zone.hi);
+        inZone = false;
+      }
+    }
+    return { entry: entry, inZone: inZone };
+  }catch(e){ return { entry: mark, inZone: true }; }
 }
 
 /* per-venue candidate composition. Every detector is feature-checked and
@@ -1032,7 +1058,22 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
                    reason: 'trigger fired but confluence insufficient — ' + L.mine.length + ' agreeing vs '
                            + L.oppose + ' opposing read(s) (need >= 2 agreeing and a majority)' };
         }
-        var lv = __swLevels(dir, entry, a4, structStop);
+        var hint = (macro && typeof macro === 'object') ? macro.realRateHint : null;
+        if (hint === 'HEADWIND' && trend1 === 'bull' && dir === 'long'){
+          return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
+                   venue: venue, sym: sym,
+                   reason: 'macro headwind against the daily bull stack — long setup suppressed (real-rate backdrop favors shorts)' };
+        }
+        if (hint === 'TAILWIND' && trend1 === 'bear' && dir === 'short'){
+          return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
+                   venue: venue, sym: sym,
+                   reason: 'macro tailwind against the daily bear stack — short setup suppressed (real-rate backdrop favors longs)' };
+        }
+        var mark = entry;
+        var entRef = __swEntryFromZone(dir, mark, zone, anchor);
+        var useEntry = entRef.entry;
+        if (!isFinite(useEntry) || !(useEntry > 0)) return null;
+        var lv = __swLevels(dir, useEntry, a4, structStop);
         if (lv.rr < 1.2){
           return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
                    venue: venue, sym: sym,
@@ -1044,7 +1085,8 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
         for (var j = 0; j < L.mine.length; j++) conf.push(L.mine[j].label);
         return {
           id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
-          entry: entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, t3: lv.t3,
+          entry: useEntry, pxNow: mark, mark: mark, stop: lv.stop, t1: lv.t1, t2: lv.t2, t3: lv.t3,
+          structStop: structStop,
           rr: lv.rr, rr2: lv.rr2, rr3: lv.rr3,
           grade: grade, confluence: conf, agree: L.mine.length, oppose: L.oppose,
           reads: L.counts,
@@ -1180,6 +1222,67 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
           { side: mdir, tag: 'macro', label: 'macro ' + hint.toLowerCase() + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
             + ' — real-rate backdrop favors ' + mdir + 's' }));
       }
+    }
+
+    /* 5) 4h liquidity sweep reversal (volume-validated) */
+    if (sw && sw.dir && sw.barsAgo !== null && sw.barsAgo <= 10){
+      var swVolOk = !volFn || volFn(rows4, n - 1 - sw.barsAgo, 20, 1.5);
+      if (swVolOk){
+        var sdir = (sw.dir === 'bullish') ? 'long' : 'short';
+        push(mkCand('sweep', sdir, sw.level, sw.level, undefined,
+          '4h liquidity sweep of ' + sw.level.toFixed(2) + ' + '
+            + (sdir === 'long' ? 'reclaim' : 'rejection') + ' (' + sw.barsAgo + 'b ago) — volume-validated stop hunt',
+          'a 4h close back ' + (sdir === 'long' ? 'below' : 'above') + ' ' + sw.level.toFixed(2) + ' negates the sweep',
+          { side: sdir, tag: 'sweep4h', label: '4h sweep + reclaim at ' + sw.level.toFixed(2) + ' (volume-validated)' }));
+      }
+    }
+
+    /* 6) 4h FVG fill — HVN-defended when profile is wide */
+    if (fvg && fvg.length){
+      var gf = fvg[0];
+      if (gf.age <= 25){
+        var tolF = 0.5 * a4;
+        if (entry >= gf.bottom - tolF && entry <= gf.top + tolF){
+          var fdir = (gf.dir === 'bullish') ? 'long' : 'short';
+          var fStop = fdir === 'long' ? gf.bottom : gf.top;
+          push(mkCand('fvg', fdir, fStop, fStop, { lo: gf.bottom, hi: gf.top },
+            'price inside unmitigated 4h FVG ' + gf.bottom.toFixed(2) + '–' + gf.top.toFixed(2)
+              + (vpOk4 ? ' — HVN defends the gap' : ''),
+            'a 4h close ' + (fdir === 'long' ? 'below gap base ' : 'above gap top ') + fStop.toFixed(2) + ' fails the imbalance',
+            { side: fdir, tag: 'fvg4h', label: '4h FVG fill ' + gf.bottom.toFixed(2) + '–' + gf.top.toFixed(2) }));
+        }
+      }
+    }
+
+    /* 7) 4h BOS alignment — fresh break with trend stack agreement */
+    if (ms4 && ms4.bos && isFinite(ms4.level) && trend4){
+      var bdir = (ms4.trend === 'bullish') ? 'long' : ((ms4.trend === 'bearish') ? 'short' : null);
+      if (bdir && ((bdir === 'long' && trend4 === 'bull') || (bdir === 'short' && trend4 === 'bear'))
+          && Math.abs(entry - ms4.level) <= 0.75 * a4){
+        push(mkCand('bos', bdir, ms4.level, ms4.level, undefined,
+          '4h fractal BOS ' + ms4.trend + ' — structure break at ' + ms4.level.toFixed(2) + ' with the 4h EMA trend stack',
+          'a 4h close back through ' + ms4.level.toFixed(2) + ' negates the break',
+          { side: bdir, tag: 'bos', label: '4h BOS ' + ms4.trend + ' at ' + ms4.level.toFixed(2) + ' with EMA stack' }));
+      }
+    }
+
+    /* 8) 4h EMA ribbon pullback (goldind.js) */
+    var ribbonFn = gfn('goldRibbon');
+    if (ribbonFn){
+      try{
+        var rb4 = ribbonFn(rows4);
+        if (rb4 && rb4.pullback20 && (rb4.mode === 'BULL' || rb4.mode === 'BEAR')){
+          var rdir = (rb4.mode === 'BULL') ? 'long' : 'short';
+          if (isFinite(rb4.e20) && Math.abs(entry - rb4.e20) <= 0.75 * a4){
+            push(mkCand('ribbon', rdir, rb4.e20, (isFinite(rb4.e50) ? rb4.e50 : rb4.e20),
+              { lo: rb4.e20 - 0.25 * a4, hi: rb4.e20 + 0.25 * a4 },
+              'pullback into the 4h 20-EMA (' + rb4.e20.toFixed(2) + ') inside a ' + rb4.mode.toLowerCase()
+                + ' 20/50/200 ribbon — trend continuation at the moving-average shelf',
+              'a 4h close through the 50-EMA ' + (isFinite(rb4.e50) ? rb4.e50.toFixed(2) : 'n/a') + ' breaks the ribbon pullback',
+              { side: rdir, tag: 'ribbon', label: '4h ribbon pullback to 20-EMA ' + rb4.e20.toFixed(2) }));
+          }
+        }
+      }catch(eRb){}
     }
   }catch(e){}
   return out;
@@ -1607,15 +1710,26 @@ async function runScan(ui, scanSt){
         var gc = ranked[fi];
         if (!gc || gc.demoted || gc.vetoed) continue;
         try{
-          var gHit = { dir: gc.dir, entry: gc.entry, stop: gc.stop, t1: gc.t1 || gc.tp1, t2: gc.t2, mark: gc.pxNow };
-          var gfm = formFn(gHit, { rows: gold.rows4h, style: 'gold-swing', a4: atrW });
+          var gHit = Object.assign({}, gc, {
+            mark: gc.pxNow || (gold.rows4h.length ? gold.rows4h[gold.rows4h.length - 1].c : gc.entry),
+            structStop: gc.structStop || gc.anchor
+          });
+          var gfm = formFn(gHit, { rows: gold.rows4h, style: 'gold-swing', a4: atrW,
+            rankBoost: (gc.agree || 0) });
           if (!gfm.ok){ gc.demoted = true; gc.demoteReason = gfm.reason || 'formation'; continue; }
           if (gfm.hit){
-            if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
-            if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
-            if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
             gc.formationScore = gfm.formationScore;
             gc.entryType = gfm.hit.entryType;
+            gc.entryGuidance = gfm.hit.entryGuidance;
+            gc.fillProb = gfm.hit.fillProb;
+            gc.fillNote = gfm.hit.fillNote;
+            gc.planSrc = gfm.hit.planSrc;
+            if (!gc.locked){
+              if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
+              if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
+              if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
+              if (isFinite(gfm.hit.t2)) gc.t2 = gfm.hit.t2;
+            }
           }
         }catch(eGf){}
       }
@@ -1818,6 +1932,7 @@ async function gwWarm(){
 }
 
 /* ---------------- registration ---------------- */
+W.goldSwingLevels = __swLevels;
 W.goldswingState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };

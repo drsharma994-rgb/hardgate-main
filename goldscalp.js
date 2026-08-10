@@ -975,15 +975,26 @@ async function runScan(ui, scanSt){
         var vrF = venueRows[gc.venue];
         var rF = (vrF && vrF.rows15m && vrF.rows15m.length) ? vrF.rows15m : gold.rows15m;
         try{
-          var gHit = { dir: gc.dir, entry: gc.entry, stop: gc.stop, t1: gc.t1 || gc.tp1, t2: gc.t2, mark: gc.pxNow };
-          var gfm = formFn(gHit, { rows: rF, style: 'gold-scalp', a4: atrW });
+          var gHit = Object.assign({}, gc, {
+            mark: gc.pxNow || (rF.length ? rF[rF.length - 1].c : gc.entry),
+            structStop: gc.structStop || gc.anchor
+          });
+          var gfm = formFn(gHit, { rows: rF, style: 'gold-scalp', a4: atrW, m15: rF,
+            rankBoost: (gc.agree || 0) + (gc.killzoneWeight || 0) });
           if (!gfm.ok){ gc.demoted = true; gc.demoteReason = gfm.reason || 'formation'; continue; }
           if (gfm.hit){
-            if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
-            if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
-            if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
             gc.formationScore = gfm.formationScore;
             gc.entryType = gfm.hit.entryType;
+            gc.entryGuidance = gfm.hit.entryGuidance;
+            gc.fillProb = gfm.hit.fillProb;
+            gc.fillNote = gfm.hit.fillNote;
+            gc.planSrc = gfm.hit.planSrc;
+            if (!gc.locked){
+              if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
+              if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
+              if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
+              if (isFinite(gfm.hit.t2)) gc.t2 = gfm.hit.t2;
+            }
           }
         }catch(eGf){}
       }
