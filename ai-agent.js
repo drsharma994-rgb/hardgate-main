@@ -72,6 +72,7 @@ function collectSetupsForDisplay(desk){
       if (!Object.prototype.hasOwnProperty.call(desk.agents, id)) continue;
       var finds = desk.agents[id].findings || [];
       for (var j = 0; j < finds.length; j++){
+        if (!hasSetupLevels(finds[j])) continue;
         add(finds[j], { agentId: id, agentLabel: desk.agents[id].label });
       }
     }
@@ -104,19 +105,131 @@ function collectSetupsForDisplay(desk){
       }
     }catch(e1){}
   }
+  var trendFn = gfn('trendmxCrossState');
+  if (trendFn){
+    try{
+      var tx = trendFn();
+      var golden = (tx && tx.goldenCross) ? tx.goldenCross : [];
+      for (var ti = 0; ti < golden.length; ti++){
+        var g = golden[ti];
+        if (!g || !hasSetupLevels(g)) continue;
+        add({
+          sym: g.sym, dir: g.dir, entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
+          rr: g.rr, score: g.score, clean7: !!g.clean7, nearClean: false,
+          prime: !!g.prime, tier: g.tier || g.conviction,
+          style: 'swing', agentLabel: 'Trend Matrix', src: 'TRENDMX GOLDEN',
+          note: g.note || ('⚡GOLDEN · composite ' + g.score),
+        });
+      }
+    }catch(eTx){}
+  }
+  applyAgentConfluence(out);
   out.sort(function(a, b){
     var la = hasSetupLevels(a) ? 1000 : 0;
     var lb = hasSetupLevels(b) ? 1000 : 0;
-    var sa = la + (a.clean7 ? 100 : 0) + (fin(+a.score) ? +a.score : 0);
-    var sb = lb + (b.clean7 ? 100 : 0) + (fin(+b.score) ? +b.score : 0);
+    var ca = (a.confluence || 0) * 50;
+    var cb = (b.confluence || 0) * 50;
+    var sa = la + ca + (a.clean7 ? 100 : 0) + (fin(+a.score) ? +a.score : 0) + (fin(+a.formationScore) ? +a.formationScore * 0.2 : 0);
+    var sb = lb + cb + (b.clean7 ? 100 : 0) + (fin(+b.score) ? +b.score : 0) + (fin(+b.formationScore) ? +b.formationScore * 0.2 : 0);
     return sb - sa;
   });
   return out;
 }
 
+function symDirKey(f){
+  return String(f && f.sym || '') + '|' + String(f && f.dir || '');
+}
+
+function applyAgentConfluence(list){
+  if (!list || !list.length) return;
+  var groups = {};
+  for (var i = 0; i < list.length; i++){
+    var f = list[i];
+    if (!f || !hasSetupLevels(f)) continue;
+    var k = symDirKey(f);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(f);
+  }
+  for (var gk in groups){
+    if (!Object.prototype.hasOwnProperty.call(groups, gk)) continue;
+    var g = groups[gk];
+    if (g.length < 2) continue;
+    for (var gi = 0; gi < g.length; gi++){
+      g[gi].confluence = g.length;
+      g[gi].score = (fin(+g[gi].score) ? +g[gi].score : 0) + (g.length - 1) * 8;
+    }
+  }
+}
+
 function gfn(name){
   try{ if (typeof W[name] === 'function') return W[name]; }catch(e){}
   return null;
+}
+
+async function warmAgentGateScans(){
+  var warm = gfn('cryptoScanWarm');
+  var jobs = [];
+  if (warm){
+    jobs.push(warm('swing').catch(function(){}));
+    jobs.push(warm('scalp').catch(function(){}));
+  }
+  var tmWarm = gfn('trendmxWarm');
+  if (tmWarm) jobs.push(tmWarm({ quiet: true }).catch(function(){}));
+  if (jobs.length) await Promise.all(jobs);
+}
+
+function runTrendmxScout(){
+  var finds = [];
+  var crossFn = gfn('trendmxCrossState');
+  var scanFn = gfn('trendmxScan');
+  if (crossFn){
+    try{
+      var cs = crossFn();
+      var golden = (cs && cs.goldenCross) ? cs.goldenCross : [];
+      for (var i = 0; i < golden.length; i++){
+        var g = golden[i];
+        if (!g || !hasSetupLevels(g)) continue;
+        finds.push(finding(g.sym, g.dir, {
+          src: 'TRENDMX GOLDEN', entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
+          rr: g.rr, score: g.score != null ? g.score : 12, clean7: !!g.clean7,
+          tier: g.tier || g.conviction, prime: !!g.prime,
+          note: g.note || ('⚡GOLDEN · composite ' + g.score),
+        }));
+      }
+    }catch(e1){}
+  }
+  if (!finds.length && scanFn){
+    try{
+      var snap = scanFn({ maxAgeMs: 5 * 60 * 1000 });
+      if (snap && typeof snap.then === 'function'){
+        return snap.then(function(s){
+          return runTrendmxScoutFromRows((s && s.rows) ? s.rows : []);
+        });
+      }
+      return runTrendmxScoutFromRows((snap && snap.rows) ? snap.rows : []);
+    }catch(e2){}
+  }
+  return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' trend matrix setup(s)' };
+}
+
+function runTrendmxScoutFromRows(rows){
+  var finds = [];
+  var goldenFn = gfn('trendmxGoldenCrossSetups');
+  if (goldenFn){
+    try{
+      var list = goldenFn(rows) || [];
+      for (var i = 0; i < list.length; i++){
+        var g = list[i];
+        if (!g || !hasSetupLevels(g)) continue;
+        finds.push(finding(g.sym, g.dir, {
+          src: 'TRENDMX GOLDEN', entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
+          rr: g.rr, score: g.score != null ? g.score : 12, clean7: !!g.clean7,
+          tier: g.tier || g.conviction, prime: !!g.prime, note: g.note,
+        }));
+      }
+    }catch(e){}
+  }
+  return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' trend matrix golden setup(s)' };
 }
 
 var AGENTS = [
@@ -128,6 +241,7 @@ var AGENTS = [
   { id: 'strategy-lab', label: 'Strategy Lab', role: 'backtest-engineer', focus: 'crypto' },
   { id: 'funding-hunter', label: 'Funding Hunter', role: 'risk-analyst', focus: 'crypto' },
   { id: 'brain-echo', label: 'Brain Echo', role: 'trading-strategist', focus: 'all' },
+  { id: 'trend-scout', label: 'Trend Scout', role: 'trading-strategist', focus: 'crypto' },
   { id: 'atomic-delta', label: 'Atomic Delta Scout', role: 'venue-scout', focus: 'delta' },
   { id: 'atomic-coindcx', label: 'Atomic CoinDCX Scout', role: 'venue-scout', focus: 'coindcx' },
   { id: 'atomic-best', label: 'Atomic Best Setup', role: 'composer', focus: 'delta+coindcx' },
@@ -420,12 +534,15 @@ function runBrainEcho(){
     var r = rows[i];
     if (!r || !r.plan) continue;
     var tier = String(r.tier || '').toUpperCase();
-    if (tier !== 'HIGH' && tier !== 'PRIME' && tier !== 'MEDIUM') continue;
+    if (tier !== 'HIGH' && tier !== 'PRIME') continue;
+    var ev = Array.isArray(r.evidence) ? r.evidence.join(' ') : '';
+    var hasCleanEvidence = ev.indexOf('7/7') >= 0 || ev.indexOf('SWING CLEAN') >= 0 || ev.indexOf('SCALP CLEAN') >= 0;
+    if (!hasCleanEvidence) continue;
     finds.push(finding(r.sym, r.dir, {
       src: 'BRAIN ' + tier,
       entry: r.plan.entry, stop: r.plan.stop, t1: r.plan.t1, t2: r.plan.t2,
-      tier: tier, liveOk: r.liveOk,
-      score: tier === 'PRIME' ? 15 : (tier === 'HIGH' ? 12 : 8),
+      tier: tier, liveOk: r.liveOk, clean7: true,
+      score: tier === 'PRIME' ? 15 : 12,
       note: (r.marketRead || val.marketRead || '').slice(0, 80),
     }));
   }
@@ -494,6 +611,7 @@ var RUNNERS = {
   'strategy-lab': runStrategyLab,
   'funding-hunter': runFundingHunter,
   'brain-echo': runBrainEcho,
+  'trend-scout': runTrendmxScout,
   'atomic-delta': runAtomicDelta,
   'atomic-coindcx': runAtomicCoindcx,
   'atomic-best': runAtomicBest,
@@ -547,13 +665,19 @@ function buildDeskFromAgents(agents){
     for (var i = 0; i < finds.length; i++){
       var f = finds[i];
       if (!f) continue;
-      top.push(Object.assign({ agentId: id, agentLabel: agents[id].label }, f));
+      if (hasSetupLevels(f)){
+        top.push(Object.assign({ agentId: id, agentLabel: agents[id].label }, f));
+      }
       if (f.asset === 'gold' || /GOLD|XAU/i.test(String(f.sym || ''))) gold++;
       else crypto++;
     }
   }
+  applyAgentConfluence(top);
   top.sort(function(a, b){
-    return ((b.clean7 ? 100 : 0) + (fin(+b.score) ? +b.score : 0)) - ((a.clean7 ? 100 : 0) + (fin(+a.score) ? +a.score : 0));
+    var ca = (a.confluence || 0) * 50;
+    var cb = (b.confluence || 0) * 50;
+    return ((b.clean7 ? 100 : 0) + ca + (fin(+b.score) ? +b.score : 0))
+         - ((a.clean7 ? 100 : 0) + ca + (fin(+a.score) ? +a.score : 0));
   });
   return {
     at: new Date().toISOString(),
@@ -575,6 +699,7 @@ async function hgAgentSwarmRun(force){
     if (typeof W.hgWarmLayerIds === 'function'){
       await W.hgWarmLayerIds(['regime', 'engine', 'goldscalp', 'goldswing', 'pine', 'carry', 'brain']);
     }
+    await warmAgentGateScans();
     for (var i = 0; i < AGENTS.length; i++){
       var id = AGENTS[i].id;
       __agent.stat = 'agent ' + AGENTS[i].label + '…';
@@ -659,6 +784,7 @@ function renderSetupDetailCards(desk){
       + '<span class="gpip ' + (f.clean7 ? 'ok' : '') + '">' + toEsc(tier) + '</span>'
       + (f.venue || f.exchange ? '<span class="note" style="margin:0">' + toEsc(f.venue || f.exchange) + '</span>' : '')
       + (f.style ? '<span class="note" style="margin:0">' + toEsc(f.style) + '</span>' : '')
+      + (f.confluence >= 2 ? '<span class="gpip ok" title="Multiple agents agree on this sym+dir">' + f.confluence + '-agent confluence</span>' : '')
       + '</div>'
       + '<div class="note" style="margin-top:4px">' + toEsc(f.agentLabel || f.agentId || f.src || 'agent')
       + (f.score != null ? ' · score <span class="hg-num">' + f.score + '</span>' : '') + '</div>'

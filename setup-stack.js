@@ -61,6 +61,7 @@ function hgSetupStackSnap(){
     try{ if (typeof G.getHeyDeskCached === 'function') o.hey = G.getHeyDeskCached(); }catch(e9){}
     try{ if (typeof G.getAgentDeskCached === 'function') o.agents = G.getAgentDeskCached(); }catch(e9b){}
     try{ if (typeof G.getAtomicDeskCached === 'function') o.atomic = G.getAtomicDeskCached(); }catch(e9c){}
+    try{ if (typeof G.trendmxState === 'function') o.trendmx = G.trendmxState(); }catch(e9d){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
@@ -85,7 +86,7 @@ function hgSetupStack(inp){
   var hasDir = (dir === 'long' || dir === 'short');
 
   if (hasDir){
-    var cascStyle = (style === 'scalp') ? 'smart' : ((style === 'swing' || style === 'best' || style === 'cryptogates') ? 'swing' : style);
+    var cascStyle = (style === 'scalp') ? 'smart' : ((style === 'swing' || style === 'best' || style === 'cryptogates' || style === 'trendmx') ? 'swing' : style);
     if (typeof G.hgConfirmedCascade === 'function' && rows4h.length){
       var casc = G.hgConfirmedCascade(rows4h, cascStyle);
       if (casc && casc.confirmed && casc.dir === dir){
@@ -330,6 +331,25 @@ function hgSetupStack(inp){
       if (axBase && symBase && axBase !== symBase && axBase.indexOf(symBase) < 0 && symBase.indexOf(axBase) < 0) continue;
       if (ax.clean7 || ax.clean || (ax.score != null && +ax.score >= 40)){
         _bump(technical, _item('Atomic ' + (ax.bestVenue || ax.exchange || 'venue'), (ax.style || 'setup') + ' · ' + (ax.bestVenue || ''), 'with'), vetoes, cautions);
+        break;
+      }
+    }
+  }
+
+  var trendSnap = inp.trendmx;
+  if (trendSnap && hasDir && Array.isArray(trendSnap.rows)){
+    var symBase = String(sym || '').toUpperCase().replace(/USD(T)?$/, '');
+    for (var ti = 0; ti < trendSnap.rows.length; ti++){
+      var tr = trendSnap.rows[ti];
+      if (!tr || String(tr.dir || '').toLowerCase() !== dir) continue;
+      var trSym = String(tr.sym || '').toUpperCase();
+      if (trSym && symBase && trSym !== symBase && trSym.indexOf(symBase.replace(/USDT$/, '')) < 0) continue;
+      var tsc = (typeof tr.score === 'number' && isFinite(tr.score)) ? tr.score : 0;
+      if ((dir === 'long' && tsc >= 4) || (dir === 'short' && tsc <= -4)){
+        _bump(fundamental, _item('Trend matrix', 'composite ' + (tsc > 0 ? '+' : '') + tsc + '/5 STRONG', 'with'), vetoes, cautions);
+        break;
+      } else if ((dir === 'long' && tsc >= 2) || (dir === 'short' && tsc <= -2)){
+        _bump(fundamental, _item('Trend matrix', 'composite ' + (tsc > 0 ? '+' : '') + tsc + '/5', 'with'), vetoes, cautions);
         break;
       }
     }

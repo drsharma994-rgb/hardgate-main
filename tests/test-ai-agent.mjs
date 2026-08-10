@@ -63,10 +63,14 @@ console.log('== browser swarm helpers ==');
   ok(typeof mod.hgAgentRunOne === 'function', 'hgAgentRunOne exported');
   ok(typeof mod.buildDeskFromAgents === 'function', 'buildDeskFromAgents exported');
   var agents = {
-    'gate-hunter': { ok: true, label: 'Gate Hunter', findings: [{ sym: 'SOLUSD', dir: 'long', score: 8 }] },
+    'gate-hunter': {
+      ok: true,
+      label: 'Gate Hunter',
+      findings: [{ sym: 'SOLUSD', dir: 'long', score: 8, entry: 100, stop: 95, t1: 110, clean7: true }],
+    },
   };
   var d = mod.buildDeskFromAgents(agents);
-  ok(d.topFindings.length === 1, 'browser desk builder');
+  ok(d.topFindings.length === 1, 'browser desk builder (actionable levels only)');
   var gate = await mod.hgAgentRunOne('gate-hunter');
   ok(gate && gate.agentId === 'gate-hunter', 'gate-hunter offline run');
 }
@@ -76,7 +80,7 @@ console.log('== wiring ==');
   ok(/createAgentApi/.test(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8')), 'server mounts agent api');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('ai-agent.js') >= 0, 'index loads ai-agent');
   ok(/ai-agent\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell ai-agent');
-  ok(/hg-v221/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v221');
+  ok(/hg-v226/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v226');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf("'aiagent'") >= 0, 'nav aiagent tab');
   ok(fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8').indexOf('AI workforce') >= 0, 'setup-stack agent bump');
   ok(/HARDGATE_AGENT_SWARM/.test(fs.readFileSync(path.join(root, 'app.js'), 'utf8')), 'daemon agent swarm hook');

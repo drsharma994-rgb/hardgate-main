@@ -230,6 +230,16 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(rTiny.score === 0, 'zero trend-sum deadzone => score 0 despite high adx');
 }
 
+/* ---------------- 9b) gate eval + formation exports ---------------- */
+{
+  assert(typeof G.trendmxGateEval === 'function', 'trendmxGateEval exported');
+  assert(typeof G.trendmxClassify === 'function', 'trendmxClassify exported');
+  var cls = G.trendmxClassify({ score: 4, comps: { d1Trend: 1, d1Cross: 1, h4Cascade: 1, cloud: 0, adxPt: 1 }, rows4h: up4 }, 'long');
+  assert(cls && cls.dir === 'long' && cls.longEv.length >= 3, 'classify builds long evidence from components');
+  var gateOnly = G.trendmxGateEval({ sym: 'TEST', rows4h: up4, price: up4[up4.length - 1].c }, 'long');
+  assert(gateOnly === null || typeof gateOnly.label === 'string', 'gate eval returns label object or null without cryptogates');
+}
+
 /* ---------------- 10) window.trendmxPlan: universal SL/TP levels ---------------- */
 {
   assert(typeof G.trendmxPlan === 'function', 'window.trendmxPlan exported as a function');
@@ -448,6 +458,22 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
 
   await new Promise(res => setTimeout(res, 100));
   assert(__unhandled.length === 0, 'no unhandled rejections on any refresh path');
+}
+
+/* ---------------- wiring + cache ---------------- */
+{
+  const tt = readFileSync(path.join(root, 'trendtable.js'), 'utf8');
+  assert(/trendmxGateEval/.test(tt), 'trend matrix gate eval wired');
+  assert(/hgFormTicket/.test(tt), 'trend matrix formation ticket path');
+  assert(/label: 'GATES'/.test(tt), 'GATES column in matrix table');
+  assert(/binanceKlines\(s, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
+  assert(/GOLDEN CROSS DESK/.test(tt), 'golden cross desk wired');
+  assert(/LIMIT BOARD/.test(tt), 'limit board wired');
+  assert(/data-r="cards"/.test(tt), 'clean ticket cards mount');
+  assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');
+  assert(/trendmxDesk/.test(readFileSync(path.join(root, 'setup-ui.js'), 'utf8')), 'trendmx desk in setup-ui');
+  const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
+  assert(/hg-v226/.test(sw), 'cache hg-v226');
 }
 
 /* ---------------- summary ---------------- */

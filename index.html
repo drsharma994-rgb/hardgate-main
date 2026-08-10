@@ -696,6 +696,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
+<!-- gstack-brain.js: Garry Tan gstack sprint thinking for BRAIN — recommend-only, before brain.js -->
+<script src="gstack-brain.js"></script>
 <script src="brain.js"></script>
 <!-- signallog.js: SIGNAL LOG tab (5-min journal; feature-checks brain/scalp/swing sources at snapshot time) -->
 <script src="signallog.js"></script>
@@ -2799,7 +2801,13 @@ const HG_TAB_AUTO_SCAN = {
   search: function(){ return runSearch(); },
   smart: function(){ return runSmartScan(); },
   gold: function(){ return runGold(); },
-  finder: function(){ return runFinder(); }
+  finder: function(){ return runFinder(); },
+  trendmx: async function(){
+    const pane = document.getElementById('tab_trendmx');
+    const runBtn = pane && pane.querySelector('[data-r="run"]');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof hgPaintTrendmxFromSnap === 'function') hgPaintTrendmxFromSnap();
+  }
 };
 function scheduleTabAutoScan(t){
   const seq = ++__hgTabScanSeq;
@@ -4301,7 +4309,8 @@ async function runTabAlertScans(){
   await Promise.all([
     (typeof brainAlertWarm === 'function' ? brainAlertWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert brain', e); }),
     bestScanWarm().catch(function(e){ console.warn('tab alert best', e); }),
-    runSmartScan({ quiet: true }).catch(function(e){ console.warn('tab alert smart', e); })
+    runSmartScan({ quiet: true }).catch(function(e){ console.warn('tab alert smart', e); }),
+    (typeof trendmxWarm === 'function' ? trendmxWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert trendmx', e); })
   ]);
   try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis', 'aiagent']); }catch(e){ console.warn('tab alert layer warm', e); }
   try{

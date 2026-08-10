@@ -450,7 +450,8 @@ var HG_SETUP_DESKS = [
   { id: 'apexDesk', kind: 'apex', tab: 'APEX', note: 'Relative-strength leaders with manual macro confirm = CLEAN context cards.' },
   { id: 'trapDesk', kind: 'trap', tab: 'TRAP', note: 'Liquidation snapback with plan = CLEAN fade ticket.' },
   { id: 'smcDesk', kind: 'smc', tab: 'SMC', note: 'Unmitigated FVG tap aligned with HTF = CLEAN POI watch.' },
-  { id: 'obDesk', kind: 'ob', tab: 'ORDER BLOCKS', note: 'OB retest at liquidity pool = CLEAN institutional POI.' }
+  { id: 'obDesk', kind: 'ob', tab: 'ORDER BLOCKS', note: 'OB retest at liquidity pool = CLEAN institutional POI.' },
+  { id: 'trendmxDesk', kind: 'trendmx', tab: 'TREND MATRIX', note: 'CLEAN = 7/7 + plan. Golden cross desk + limit board promote the best rows. NEAR/FORMING are watch-only.' }
 ];
 
 function hgSetupPaintTabDesks(){
