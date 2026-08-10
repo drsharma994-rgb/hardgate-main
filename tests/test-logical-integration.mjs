@@ -7,10 +7,20 @@ const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep)
 let pass = 0;
 const ok = (cond, msg) => { if (!cond) throw new Error('FAIL: ' + msg); pass++; console.log('  ok —', msg); };
 
-console.log('== hg-v226 shell ==');
+console.log('== advanced squeeze desk ==');
+{
+  const sq = fs.readFileSync(path.join(root, 'squeeze.js'), 'utf8');
+  ok(/FIRED DESK/.test(sq), 'squeeze fired desk panel');
+  ok(/LIMIT BOARD/.test(sq), 'squeeze limit board panel');
+  ok(/squeezeGateEval/.test(sq), 'squeeze gate eval');
+  ok(/hgPaintSqueezeFromSnap/.test(sq), 'squeeze snap restore helper');
+  ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('squeeze:') >= 0, 'tab auto-scan squeeze');
+}
+
+console.log('== hg-v227 shell ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v226/.test(sw), 'cache hg-v226');
+  ok(/hg-v227/.test(sw), 'cache hg-v227');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain');
   ok(sw.indexOf('trendtable.js') >= 0, 'sw precaches trendtable');
 }

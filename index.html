@@ -2807,6 +2807,12 @@ const HG_TAB_AUTO_SCAN = {
     const runBtn = pane && pane.querySelector('[data-r="run"]');
     if (runBtn && !runBtn.disabled) runBtn.click();
     else if (typeof hgPaintTrendmxFromSnap === 'function') hgPaintTrendmxFromSnap();
+  },
+  squeeze: async function(){
+    const pane = document.getElementById('tab_squeeze');
+    const runBtn = pane && pane.querySelector('#sqRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof hgPaintSqueezeFromSnap === 'function') hgPaintSqueezeFromSnap();
   }
 };
 function scheduleTabAutoScan(t){
