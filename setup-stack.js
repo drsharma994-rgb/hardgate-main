@@ -85,7 +85,7 @@ function hgSetupStack(inp){
   var hasDir = (dir === 'long' || dir === 'short');
 
   if (hasDir){
-    var cascStyle = (style === 'scalp') ? 'smart' : ((style === 'swing' || style === 'best' || style === 'cryptogates') ? 'swing' : style);
+    var cascStyle = (style === 'scalp') ? 'smart' : ((style === 'swing' || style === 'best' || style === 'cryptogates' || style === 'trendmx') ? 'swing' : style);
     if (typeof G.hgConfirmedCascade === 'function' && rows4h.length){
       var casc = G.hgConfirmedCascade(rows4h, cascStyle);
       if (casc && casc.confirmed && casc.dir === dir){

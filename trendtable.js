@@ -147,6 +147,7 @@ function escH(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'
 /* ---------------- universal trade plan (SL/TP levels) ---------------- */
 var TM_STOP_ATR = 1.5, TM_T1_R = 2, TM_T2_R = 3.5, TM_ATR_LEN = 14;
 var TM_MAJORITY = 2;   // |composite| >= 2 = the row's own majority signal
+var TM_MIN_RR = (typeof W.CG_SWING_RR_MIN === 'number') ? W.CG_SWING_RR_MIN : 2.0;
 
 /* majority direction from the row's own composite score; an explicit
    lowercase/uppercase dir always wins over the score. */
@@ -180,8 +181,114 @@ function tmFallbackStop(dir, entry, a, rows){
 }
 
 function tmValidSetup(s){
-  return !!(s && isFinite(s.entry) && s.entry > 0 && isFinite(s.stop)
-            && isFinite(s.t1) && isFinite(s.t2) && Math.abs(s.entry - s.stop) > 0);
+  if (!s || !isFinite(s.entry) || s.entry <= 0 || !isFinite(s.stop) || !isFinite(s.t1)) return false;
+  if (Math.abs(s.entry - s.stop) <= 0) return false;
+  var rr = isFinite(s.rr1) ? s.rr1
+    : Math.abs(s.t1 - s.entry) / Math.abs(s.entry - s.stop);
+  return isFinite(rr) && rr >= TM_MIN_RR - 1e-9;
+}
+
+function trendmxTicker(inp){
+  inp = inp || {};
+  var mark = isFinite(inp.price) ? inp.price
+    : (inp.rows4h && inp.rows4h.length ? inp.rows4h[inp.rows4h.length - 1].c : null);
+  return { symbol: inp.sym, fundingPct: inp.fundingPct, mark: mark };
+}
+
+function trendmxClassify(inp, dir){
+  var c = (inp && inp.comps) ? inp.comps : {};
+  var longEv = [], shortEv = [];
+  if (c.d1Trend > 0) longEv.push('1D above EMA200');
+  else if (c.d1Trend < 0) shortEv.push('1D below EMA200');
+  if (c.d1Cross > 0) longEv.push('EMA50>EMA200');
+  else if (c.d1Cross < 0) shortEv.push('EMA50<EMA200');
+  if (c.h4Cascade > 0) longEv.push('4H cascade bull');
+  else if (c.h4Cascade < 0) shortEv.push('4H cascade bear');
+  if (c.cloud > 0) longEv.push('above cloud');
+  else if (c.cloud < 0) shortEv.push('below cloud');
+  if (c.adxPt > 0) longEv.push('ADX strength bull');
+  else if (c.adxPt < 0) shortEv.push('ADX strength bear');
+  var regime = '';
+  try{
+    if (typeof hgTapeRegimeLabel === 'function' && inp.rows4h && inp.rows4h.length)
+      regime = hgTapeRegimeLabel(inp.rows4h) || '';
+  }catch(e){}
+  return {
+    dir: dir,
+    longEv: longEv,
+    shortEv: shortEv,
+    regime: regime,
+    score: Math.abs((inp && inp.score) || 0),
+    total: 5
+  };
+}
+
+/* cryptogates parity for the row's trend direction — never throws */
+function trendmxGateEval(inp, dir){
+  try{
+    if (!dir || !inp || !inp.rows4h || !inp.rows4h.length) return null;
+    var ticker = trendmxTicker(inp);
+    var out = {
+      gatesPassed: 0, gatesTotal: 7, clean7: false, nearClean: false,
+      hit: null, label: 'trend only', veto: null
+    };
+    if (typeof swingTryClean === 'function'){
+      var clean = swingTryClean(inp.rows4h, ticker);
+      if (clean && clean.dir === dir){
+        out.hit = clean;
+        out.clean7 = clean.clean === true || (+clean.passed >= 7);
+        out.gatesPassed = clean.passed != null ? +clean.passed : 7;
+        out.label = out.clean7 ? '7/7 CLEAN' : (out.gatesPassed + '/7');
+        out.nearClean = !out.clean7 && out.gatesPassed >= 6;
+        return out;
+      }
+    }
+    if (typeof swingTryNear === 'function'){
+      var near = swingTryNear(inp.rows4h, ticker);
+      if (near && near.dir === dir){
+        out.hit = near;
+        out.nearClean = true;
+        out.gatesPassed = near.passed != null ? +near.passed : 6;
+        out.label = out.gatesPassed + '/7 NEAR';
+        return out;
+      }
+    }
+    if (typeof hgSwingParity === 'function'){
+      var par = hgSwingParity(inp.rows4h, ticker, dir);
+      if (par && par.aligned){
+        out.gatesPassed = par.passed || 0;
+        out.clean7 = par.clean === true;
+        out.nearClean = !par.clean && par.passed >= 6;
+        out.label = par.label || (par.passed + '/7');
+      }
+    } else if (typeof swingGateMatrix === 'function'){
+      var m = swingGateMatrix(inp.rows4h, ticker);
+      if (m && m.regimeVeto){ out.veto = 'regime'; out.label = 'regime veto'; return out; }
+      if (m && m.structureVeto){ out.veto = 'structure'; out.label = 'CHoCH veto'; return out; }
+      if (m && m.dir === dir){
+        out.gatesPassed = m.passed || 0;
+        out.clean7 = m.clean === true;
+        out.nearClean = !m.clean && m.passed >= 6;
+        out.label = (m.passed || 0) + '/7' + (m.clean ? ' CLEAN' : (m.passed >= 6 ? ' NEAR' : ''));
+      } else if (m && m.dir){
+        out.label = 'gates ' + m.dir + ' vs trend';
+      }
+    }
+    return out;
+  }catch(e){ return null; }
+}
+
+function trendmxAttachMeta(plan, gate, extra){
+  if (!plan) return plan;
+  if (gate){
+    plan.gatesPassed = gate.gatesPassed;
+    plan.clean7 = gate.clean7;
+    plan.nearClean = gate.nearClean;
+    plan.gateLabel = gate.label;
+  }
+  if (extra && extra.formationScore != null) plan.formationScore = extra.formationScore;
+  if (!plan.planSrc) plan.planSrc = 'trendmx';
+  return plan;
 }
 
 /* window.trendmxPlan({dir?|score?, cls?, rows4h, rows1h?, entry?}) -> plan|null.
@@ -199,38 +306,79 @@ function trendmxPlan(inp){
     if (!Array.isArray(rows) || !rows.length) return null;
     var lastBar = rows[rows.length - 1];
     if (!lastBar) return null;
+    var ticker = trendmxTicker(inp);
+    var gate = inp.gate || trendmxGateEval(inp, dir);
 
-    /* preferred: index.html SMART $ setup builder (smartClassify shape,
-       lowercase dir) */
+    /* 1) gate-clean hit + unified formation ticket (same as GATES scan) */
+    if (gate && gate.hit && !gate.veto && typeof hgFormTicket === 'function'){
+      try{
+        var fm = hgFormTicket(gate.hit, {
+          rows: rows, style: 'swing', a4: gate.hit.a4,
+          rows1h: inp.rows1h, ticker: ticker
+        });
+        if (fm && fm.ok && fm.hit && tmValidSetup(fm.hit)){
+          return trendmxAttachMeta(fm.hit, gate, { formationScore: fm.formationScore });
+        }
+      }catch(eForm){}
+    }
+
+    /* 2) swing clean plan from cryptogates */
+    if (typeof hgSwingCleanPlan === 'function'){
+      try{
+        var sc = hgSwingCleanPlan(rows, ticker, dir);
+        if (tmValidSetup(sc)) return trendmxAttachMeta(sc, gate);
+      }catch(eSc){}
+    }
+
+    /* 3) structure-based hgPlanLevels with min R:R */
+    if (typeof hgPlanLevelsCore === 'function'){
+      try{
+        var pl = hgPlanLevelsCore(dir, rows, null, { minRr: TM_MIN_RR, style: 'swing', type: 'TRENDMX' });
+        if (tmValidSetup(pl)) return trendmxAttachMeta(pl, gate);
+      }catch(ePl){}
+    }
+
+    /* 4) SMART $ builder with trend-derived evidence */
     if (typeof smartSetup === 'function'){
       try{
-        var c = (inp.cls && typeof inp.cls === 'object') ? inp.cls : {};
-        var s = smartSetup({ dir: dir, longEv: c.longEv, shortEv: c.shortEv,
-                             regime: c.regime, score: c.score, total: c.total },
-                           rows, inp.rows1h);
+        var cls = trendmxClassify(inp, dir);
+        var s = smartSetup(cls, rows, inp.rows1h);
         if (tmValidSetup(s)){
           if (typeof hgApplyExactEntry === 'function'){
             s = hgApplyExactEntry(s, rows, { rows1h: inp.rows1h, style: s.type || 'swing', preferEdge: true }) || s;
           }
-          return s;
+          return trendmxAttachMeta(s, gate);
         }
-      }catch(eSmart){ /* a broken smartSetup degrades to the house fallback */ }
+      }catch(eSmart){}
     }
 
-    /* house fallback */
+    /* 5) house fallback — structure stop + structure targets when available */
     var entry = +((inp.entry !== undefined && inp.entry !== null) ? inp.entry : lastBar.c);
     var a = (typeof atr === 'function') ? atr(rows, TM_ATR_LEN)[rows.length - 1] : NaN;
     if (!isFinite(entry) || entry <= 0 || !isFinite(a) || a <= 0) return null;
     var st = tmFallbackStop(dir, entry, a, rows);
     var risk = Math.abs(entry - st.stop);
     if (!(risk > 0)) return null;
-    return {
-      type: 'ATR', dir: dir, entry: entry, stop: st.stop,
-      t1: (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk,
-      t2: (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk,
-      rr1: TM_T1_R, rr2: TM_T2_R, riskPct: risk / entry * 100,
-      confirmed: null, note: st.note
+    var t1 = (dir === 'long') ? entry + TM_T1_R * risk : entry - TM_T1_R * risk;
+    var t2 = (dir === 'long') ? entry + TM_T2_R * risk : entry - TM_T2_R * risk;
+    if (typeof hgStructureTargets === 'function'){
+      try{
+        var tg = hgStructureTargets(dir, entry, st.stop, rows, a, { minRr: TM_MIN_RR, style: 'swing' });
+        if (tg && isFinite(tg.t1)){
+          t1 = tg.t1;
+          if (isFinite(tg.t2)) t2 = tg.t2;
+        }
+      }catch(eTg){}
+    }
+    var fb = {
+      type: 'ATR', dir: dir, entry: entry, stop: st.stop, t1: t1, t2: t2,
+      rr1: Math.abs(t1 - entry) / risk,
+      rr2: Math.abs(t2 - entry) / risk,
+      riskPct: risk / entry * 100,
+      confirmed: null, note: st.note, planSrc: 'trendmx-fallback'
     };
+    if (!tmValidSetup(fb)) return null;
+    return trendmxAttachMeta(fb, gate);
   }catch(e){ return null; }
 }
 
@@ -253,10 +401,27 @@ function trendmxPlanHTML(s){
    never refetches. */
 function trendmxCardStack(r, dir){
   try{
-    if (!dir || typeof hgSetupStackForInlineScan !== 'function') return null;
+    if (!dir) return null;
+    var gate = r.gate || trendmxGateEval(r, dir);
+    var ticker = trendmxTicker(r);
+    if (gate && gate.hit && typeof hgSetupStackFromHit === 'function'){
+      var hit = Object.assign({}, gate.hit, { sym: r.sym });
+      if (typeof hgSetupStackAttach === 'function'){
+        hgSetupStackAttach(hit, {
+          sym: r.sym, style: 'swing', rows4h: r.rows4h, rows1h: r.rows1h, ticker: ticker
+        });
+        return hit.stack || null;
+      }
+    }
+    if (typeof hgSetupStackForInlineScan !== 'function') return null;
     return hgSetupStackForInlineScan({
-      dir: dir, sym: r.sym, rows4h: r.rows4h, style: 'trendmx', asset: 'crypto',
-      clean: Math.abs(r.score || 0) >= TM_MAJORITY, nearClean: Math.abs(r.score || 0) >= TM_MAJORITY
+      dir: dir, sym: r.sym, rows4h: r.rows4h, rows1h: r.rows1h,
+      style: 'swing', asset: 'crypto', ticker: ticker,
+      clean: !!(gate && gate.clean7),
+      nearClean: !!(gate && gate.nearClean),
+      gatesPassed: gate ? gate.gatesPassed : undefined,
+      gatesTotal: 7,
+      tightCount: gate && gate.hit ? gate.hit.tightCount : undefined
     });
   }catch(e){ return null; }
 }
@@ -265,12 +430,15 @@ function trendmxPlanBlock(r){
   var dir = tmDirOf(r);
   if (!dir)
     return '<div class="plan">No majority direction on this row (|score| &lt; ' + TM_MAJORITY + ') — no levels.</div>';
-  var s = trendmxPlan({ dir: dir, rows4h: r.rows4h, rows1h: r.rows1h });
+  var s = trendmxPlan(Object.assign({}, r, { dir: dir }));
   var tmStack = trendmxCardStack(r, dir);
   var stackHtml = (tmStack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(tmStack) : '';
   var inner = '<b>' + escH(r.sym) + '</b> ' + dir.toUpperCase() + ' · '
     + (s ? trendmxPlanHTML(s)
          : 'levels unavailable — 4h history was not cached for this row or ATR' + TM_ATR_LEN + ' is not computable; nothing is estimated.');
+  if (s && s.gateLabel){
+    inner += ' · <span class="gpip ' + (s.clean7 ? 'ok' : (s.nearClean ? '' : '')) + '">' + escH(s.gateLabel) + '</span>';
+  }
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(r.sym, s.dir, s.entry, s.stop, s.t1, { t2: s.t2, stack: tmStack, scanner: 'trendmx', strategy: 'trendmx' })
@@ -290,6 +458,7 @@ function trendmxPlanBlock(r){
 var COLS = [
   { k: 'sym',       label: 'SYMBOL' },
   { k: 'score',     label: 'SCORE' },
+  { k: 'gates',     label: 'GATES' },
   { k: 'd1Trend',   label: '1D TREND' },
   { k: 'd1Cross',   label: 'CROSS' },
   { k: 'h4Cascade', label: '4H CASCADE' },
@@ -329,13 +498,17 @@ function trendmxGoldenCrossSetups(rows){
     if (dir !== 'long') continue;
     var conv = trendmxConviction(r);
     if (!conv) continue;
-    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price });
+    if (r.gate && r.gate.veto) continue;
+    var plan = trendmxPlan({ dir: dir, score: r.score, rows4h: r.rows4h, rows1h: r.rows1h, entry: r.price, gate: r.gate, comps: r.comps, sym: r.sym, fundingPct: r.fundingPct });
     if (!tmValidSetup(plan)) continue;
     out.push({
       sym: r.sym, dir: 'long', entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       rr: fin(+plan.rr1) ? +plan.rr1 : TM_T1_R, score: r.score, adx: r.adx,
+      clean7: !!(plan.clean7 || (r.gate && r.gate.clean7)),
       freshCross: 'GOLDEN', conviction: conv.label, tier: conv.tier, prime: conv.prime,
-      comps: r.comps, note: '⚡GOLDEN CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
+      comps: r.comps, gateLabel: plan.gateLabel || (r.gate && r.gate.label),
+      note: '⚡GOLDEN CROSS (EMA50/200 · ≤10 daily bars) · composite ' + (r.score > 0 ? '+' : '') + r.score + '/5'
+        + (plan.gateLabel ? ' · ' + plan.gateLabel : '')
     });
   }
   return out;
@@ -359,13 +532,20 @@ async function trendmxScanCore(){
   for (var i = 0; i < syms.length; i += CHUNK){
     var chunk = syms.slice(i, i + CHUNK);
     var rs = await Promise.all(chunk.map(function(s){
-      return Promise.all([W.binanceKlines(s, '1d', 260), W.binanceKlines(s, '4h', 120)])
+      return Promise.all([W.binanceKlines(s, '1d', 260), W.binanceKlines(s, '4h', 120), W.binanceKlines(s, '1h', 120)])
         .then(function(rr){
-          var r1 = rr[0], r4 = rr[1];
+          var r1 = rr[0], r4 = rr[1], r1h = rr[2];
           if (!r1 || !r1.length || !r4 || !r4.length) return null;
           var ts = trendScore(r1, r4);
-          return { sym: s, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
-            price: r1[r1.length - 1].c, rows4h: r4, rows1h: null };
+          var tk = tick[s] || {};
+          var row = {
+            sym: s, score: ts.score, comps: ts.comps, freshCross: ts.freshCross, adx: ts.adx,
+            price: r1[r1.length - 1].c, rows4h: r4, rows1h: (r1h && r1h.length) ? r1h : null,
+            fundingPct: tk.fundingPct, turnoverUsd: tk.turnoverUsd
+          };
+          var dir = tmDirOf(row);
+          row.gate = dir ? trendmxGateEval(row, dir) : null;
+          return row;
         }).catch(function(){ return null; });
     }));
     for (var j = 0; j < rs.length; j++){ if (rs[j]) results.push(rs[j]); else failed++; }
@@ -436,7 +616,7 @@ function mountTrendMatrix(el){
   el.innerHTML =
     '<div class="panel">' +
       '<h2>Trend Matrix <span>multi-TF trend composite · top 60 Binance perps by 24h turnover (≥ $20M)</span></h2>' +
-      '<div class="note">Five signed components (−1/0/+1): <b>1D TREND</b> close vs EMA200 · <b>CROSS</b> EMA50 vs EMA200 with a ⚡GOLDEN / ⚡DEATH marker when the cross is ≤10 bars old · <b>4H CASCADE</b> EMA9&gt;EMA21&gt;EMA50 full alignment · <b>CLOUD</b> Ichimoku price vs cloud · <b>ADX</b> ≥25 adds one point in the direction of the trend sum. Composite −5…+5. Click a column header to sort asc/desc. The <b>LEVELS</b> cell expands a trade plan per row: direction from the composite (≥ +2 long / ≤ −2 short), ENTRY · STOP · T1 2R · T2 3.5R computed from the scan-cached 4H rows (SMART $ setup builder when available, structure/ATR fallback otherwise — never refetched, never fabricated). <b>Telegram:</b> each fresh ⚡GOLDEN bull cross with conviction gets its own alert (COIN · ENTRY · STOP LOSS · TAKE PROFIT) every <b>15 minutes</b>.</div>' +
+      '<div class="note">Five signed components (−1/0/+1): <b>1D TREND</b> close vs EMA200 · <b>CROSS</b> EMA50 vs EMA200 with a ⚡GOLDEN / ⚡DEATH marker when the cross is ≤10 bars old · <b>4H CASCADE</b> EMA9&gt;EMA21&gt;EMA50 full alignment · <b>CLOUD</b> Ichimoku price vs cloud · <b>ADX</b> ≥25 adds one point in the direction of the trend sum. Composite −5…+5. <b>GATES</b> runs the same 7-gate swing matrix when trend direction is clear (structure/regime vetoes named). Click a column header to sort asc/desc. The <b>LEVELS</b> cell expands a trade plan: formation ticket when 7/7 clean, else hgPlanLevels / SMART $ / structure fallback — min R:R ' + TM_MIN_RR + ', 1h klines for exact entry, FTS stack on every ticket. <b>Telegram:</b> each fresh ⚡GOLDEN bull cross with conviction + valid plan gets its own alert every <b>15 minutes</b>.</div>' +
       '<div class="row" style="margin-top:10px">' +
         '<button class="btn" data-r="run">RUN SCAN</button>' +
         '<span class="spacer"></span>' +
@@ -485,6 +665,7 @@ function mountTrendMatrix(el){
   function sortVal(r, k){
     if (k === 'sym')   return r.sym;
     if (k === 'score') return r.score;
+    if (k === 'gates') return (r.gate && isFinite(r.gate.gatesPassed)) ? r.gate.gatesPassed : -1;
     if (k === 'adx')   return isFinite(r.adx) ? r.adx : -Infinity;
     if (k === 'price') return r.price;
     return r.comps[k] || 0;
@@ -541,10 +722,14 @@ function mountTrendMatrix(el){
       var adxTxt = isFinite(r.adx) ? r.adx.toFixed(1) : '—';
       var adxMark = r.comps.adxPt > 0 ? ' <span class="pos">▲</span>'
                   : (r.comps.adxPt < 0 ? ' <span class="neg">▼</span>' : '');
+      var gate = r.gate;
+      var gateTxt = gate ? gate.label : '—';
+      var gateCls = gate && gate.clean7 ? 'ok' : (gate && gate.veto ? 'bad' : '');
       var pdir = tmDirOf(r);
       h += '<tr>' +
         '<td><b>' + r.sym + '</b></td>' +
         '<td class="' + scls + '"><b>' + (sc > 0 ? '+' : '') + sc + '</b></td>' +
+        '<td><span class="gpip ' + gateCls + '">' + escH(gateTxt) + '</span></td>' +
         '<td>' + tri(r.comps.d1Trend, '▲ UP', '▼ DOWN') + '</td>' +
         '<td><span class="' + xcls + '">' + xtxt + '</span>' + fx + '</td>' +
         '<td>' + tri(r.comps.h4Cascade, '▲ ALIGN', '▼ INVERSE') + '</td>' +
@@ -638,6 +823,8 @@ function mountTrendMatrix(el){
 
 W.trendScore = trendScore;
 W.tmDirOf = tmDirOf;
+W.trendmxGateEval = trendmxGateEval;
+W.trendmxClassify = trendmxClassify;
 W.trendmxPlan = trendmxPlan;
 W.trendmxPlanHTML = trendmxPlanHTML;
 W.trendmxPlanBlock = trendmxPlanBlock;
