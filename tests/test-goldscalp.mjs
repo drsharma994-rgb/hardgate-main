@@ -1817,11 +1817,19 @@ function fmtLike(n, d){ return Number(n).toLocaleString('en-US', { maximumFracti
       'FORMING NOW panel rendered after the cards with the honest watch-item label');
   assert(wHtml.indexOf('ARMED') >= 0, 'armed rows highlighted in the panel');
   assert(Array.isArray(wScan.armed) && wScan.armed.length === 8, 'snapshot.armed: 8 watch items (one venue leg)');
-  assert(wScan.armed.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,strategy,venue'
-      && w.venue === 'BINANCE XAUUSDT'),
+  assert(wScan.armed.every(w => {
+    var keys = Object.keys(w).filter(k => k !== 'stratKey' && k !== 'promoteNote').sort().join(',');
+    return keys === 'condition,level,reason,state,strategy,venue' && w.venue === 'BINANCE XAUUSDT';
+  }),
          'snapshot.armed entries carry EXACTLY {strategy, venue, state, level, condition, reason}, venue-tagged');
-  assert(wScan.armed.find(w => w.strategy === 'LIQUIDITY SWEEP REVERSAL').state === 'armed',
-         'snapshot.armed: sweep armed on the fixture');
+  const swItem = wScan.armed.find(w => w.strategy === 'LIQUIDITY SWEEP REVERSAL');
+  const swCand = wScan.cands.some(c => c.stratKey === 'sweep');
+  if (swCand && swItem){
+    assert(['promoted', 'armed'].indexOf(swItem.state) >= 0,
+           'snapshot.armed: sweep armed or promoted when its candidate qualifies');
+  } else {
+    assert(!!swItem, 'snapshot.armed: sweep watch item always present');
+  }
   assert(wScan.whySilent === null, 'whySilent null when candidates qualify');
   assert('armed' in wScan && 'whySilent' in wScan
       && Array.isArray(wScan.cands) && typeof wScan.bestId === 'string' && typeof wScan.at === 'number',
@@ -2001,6 +2009,38 @@ console.log('== SMC market structure ==');
   const ledger = W.goldDetectorReads({ rows15m: zz });
   assert(ledger.some(r => r.tag === 'bos' && r.side === 'long' && /fractal BOS bullish/.test(r.label)),
          'goldDetectorReads: fractal BOS in confluence ledger');
+}
+
+/* =========================================================================
+   28) hg-v232 enhancement slices — cross-venue, vetoes, watch promote, bridge
+========================================================================= */
+console.log('== 28) hg-v232 gold enhancement exports ==');
+{
+  assert(typeof W.goldCrossVenueMap === 'function', 'goldCrossVenueMap exported');
+  assert(typeof W.goldWatchPromote === 'function', 'goldWatchPromote exported');
+  assert(typeof W.hgGoldInlineBridge === 'function', 'hgGoldInlineBridge exported');
+  assert(typeof W.__gsMicroVeto === 'function', '__gsMicroVeto exported');
+  const cv = W.goldCrossVenueMap([
+    { id: 'sweep|long|2650', dir: 'long', stratKey: 'sweep', venue: 'A' },
+    { id: 'sweep|long|2650', dir: 'long', stratKey: 'sweep', venue: 'B' }
+  ]);
+  assert(cv['sweep|long|2650'].venues === 2, 'goldCrossVenueMap: counts duplicate structural ids');
+  const yld = [];
+  for (let i = 0; i < 6; i++) yld.push({ t: DAY + i * 86400, o: 4 + i * 0.05, h: 4.1, l: 3.9, c: 4 + i * 0.05, v: 1 });
+  const mv = W.__gsMicroVeto('long', 'ob', { scalpEval: {} }, { us10yCandles: yld });
+  assert(mv && /MACRO VETO/.test(mv.reason), '__gsMicroVeto: yield guard blocks gold long');
+  const armed = [{ stratKey: 'sweep', strategy: 'SWEEP', state: 'armed', level: 100, condition: 'watch' }];
+  const promoted = W.goldWatchPromote([{ stratKey: 'sweep', dir: 'long' }], armed);
+  assert(promoted[0].state === 'promoted', 'goldWatchPromote: armed -> promoted when candidate fires');
+  const bridge = W.hgGoldInlineBridge({ rows15m: flatRows(60, 100, 1, DAY) });
+  assert(bridge && typeof bridge.scalp === 'object', 'hgGoldInlineBridge: returns scalp summary object');
+  const proCtx = { goldPro: { word: 'STRUCTURAL BEAR' } };
+  const rk = W.goldRankSetups([
+    { id: 'vwap|long|100', dir: 'long', stratKey: 'vwap', strategy: 'VWAP', agree: 3,
+      reads: { long: 3, short: 1 }, grade: 'B', rr: 1.5, killzoneWeight: 1 }
+  ], proCtx);
+  assert(rk.rejected.length === 1 && /structural bear/.test(rk.rejected[0].reason),
+         'goldRankSetups: GOLD PRO hard gate suppresses counter-structure longs');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

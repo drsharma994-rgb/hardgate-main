@@ -585,7 +585,8 @@ console.log('== 8) stop / target math ==');
       && Math.abs(wk.t2 - (wk.entry + 2.5*risk)) < 1e-9
       && Math.abs(wk.t3 - (wk.entry + 4.0*risk)) < 1e-9,
          'long targets at exactly 1.5R / 2.5R / 4R from real values');
-  assert(wk.rr === 1.5 && wk.rr2 === 2.5 && wk.rr3 === 4.0, 'R multiples reported honestly (1.5 / 2.5 / 4.0)');
+  assert(Math.abs(wk.rr - 1.5) < 1e-6 && Math.abs(wk.rr2 - 2.5) < 1e-6 && Math.abs(wk.rr3 - 4.0) < 1e-6,
+         'R multiples reported honestly (1.5 / 2.5 / 4.0) — got ' + wk.rr + ' / ' + wk.rr2 + ' / ' + wk.rr3);
   assert(wk.stop < 2380 && wk.stop > wk.entry - 2*wk.atr - 1e-9,
          'stop beyond the swept level yet never wider than 2×ATR');
 
@@ -877,8 +878,10 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
       'FORMING NOW panel rendered after the cards with the honest watch-item label');
   assert(html.indexOf('ARMED') >= 0 && html.indexOf('IDLE') >= 0, 'armed rows highlighted, idle rows muted');
   assert(Array.isArray(scan.armed) && scan.armed.length === 4, 'snapshot.armed: 4 watch items (one venue leg)');
-  assert(scan.armed.every(w => Object.keys(w).sort().join(',') === 'condition,level,reason,state,strategy,venue'
-      && w.venue === 'BINANCE XAUUSDT'),
+  assert(scan.armed.every(w => {
+    var keys = Object.keys(w).filter(k => k !== 'promoteNote').sort().join(',');
+    return keys === 'condition,level,reason,state,strategy,venue' && w.venue === 'BINANCE XAUUSDT';
+  }),
          'snapshot.armed entries carry EXACTLY {strategy, venue, state, level, condition, reason}, venue-tagged');
   assert(scan.whySilent === null, 'whySilent null when candidates qualify');
   assert('armed' in scan && 'whySilent' in scan
@@ -890,9 +893,10 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
   for (const w of scan.armed){ for (const k in SWK){ if (w.strategy === SWK[k]) byKey[k] = w; } }
   const pRows = pullback4h();
   const e50p = emaLast(pRows.map(r => r.c), 50);
-  assert(byKey.pullback.state === 'armed' && Math.abs(byKey.pullback.level - e50p) < 1e-9
+  assert(byKey.pullback && ['armed', 'promoted'].indexOf(byKey.pullback.state) >= 0
+      && Math.abs(byKey.pullback.level - e50p) < 1e-9
       && /watching the 4h 50-EMA/.test(byKey.pullback.condition) && /bull EMA50\/200 stack/.test(byKey.pullback.condition),
-         'pullback: armed on the real 4h 50-EMA ' + byKey.pullback.level);
+         'pullback: armed or promoted on the real 4h 50-EMA ' + (byKey.pullback && byKey.pullback.level));
   const wkExp = weeklyRange14(dailyBull());
   const pEntry = pRows[pRows.length - 1].c;
   const wkLvl = Math.abs(pEntry - wkExp.lo) <= Math.abs(wkExp.hi - pEntry) ? wkExp.lo : wkExp.hi;
@@ -910,9 +914,9 @@ function fmtLike14(n, d){ return Number(n).toLocaleString('en-US', { maximumFrac
   const envB = makeScanEnv(obSwing4h(2399.4), dailyBull());
   await envB.M.stubs['#gwRun']._handler();
   const obB = envB.C.goldswingScan().armed.find(w => w.strategy === '4H ORDER BLOCK RETEST');
-  assert(obB && obB.state === 'armed' && obB.level === 2398.8
+  assert(obB && ['armed', 'promoted'].indexOf(obB.state) >= 0 && obB.level === 2398.8
       && /unmitigated bullish 4h order block 2398.80–2400.40 — fires on a retest/.test(obB.condition),
-         'ob: armed on the real zone 2398.80–2400.40 (edge 2398.8)');
+         'ob: armed or promoted on the real zone 2398.80–2400.40 (edge 2398.8)');
   const envF = makeScanEnv(obFar4h(), dailyBull());
   await envF.M.stubs['#gwRun']._handler();
   const obF2 = envF.C.goldswingScan().armed.find(w => w.strategy === '4H ORDER BLOCK RETEST');

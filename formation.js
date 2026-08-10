@@ -359,6 +359,16 @@ function hgGoldPoiFromStrat(stratKey){
   return 'ema21';
 }
 
+function hgGoldOteInZone(dir, zone){
+  try{
+    if (!zone || !isFinite(zone.lo) || !isFinite(zone.hi)) return NaN;
+    var span = zone.hi - zone.lo;
+    if (!(span > 0)) return NaN;
+    var mid = 0.705;
+    return (dir === 'long') ? (zone.hi - span * mid) : (zone.lo + span * mid);
+  }catch(e){ return NaN; }
+}
+
 function hgGoldEntryRefine(hit, mark, atrVal){
   try{
     var dir = String(hit.dir || '').toLowerCase();
@@ -374,6 +384,15 @@ function hgGoldEntryRefine(hit, mark, atrVal){
       return { entry: stratEntry, inZone: true, zone: zone };
     }
     var entry = stratEntry, inZone = true;
+    var poi = hgGoldPoiFromStrat(hit.stratKey);
+    if (poi === 'ote'){
+      var otePx = hgGoldOteInZone(dir, zone);
+      if (isFinite(otePx) && isFinite(mark)){
+        if (mark >= zone.lo && mark <= zone.hi){ entry = mark; inZone = true; }
+        else { entry = otePx; inZone = false; }
+        return { entry: entry, inZone: inZone, zone: zone, ote: true };
+      }
+    }
     if (isFinite(mark)){
       if (mark >= zone.lo && mark <= zone.hi){ entry = mark; inZone = true; }
       else if (isFinite(anchor)){
