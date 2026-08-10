@@ -2802,6 +2802,12 @@ const HG_TAB_AUTO_SCAN = {
   search: function(){ return runSearch(); },
   smart: function(){ return runSmartScan(); },
   gold: function(){ return runGold(); },
+  goldpro: async function(){
+    const pane = document.getElementById('tab_goldpro');
+    const runBtn = pane && pane.querySelector('[data-gp="run"]');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof refreshGoldPro === 'function') await refreshGoldPro();
+  },
   finder: function(){ return runFinder(); },
   trendmx: async function(){
     const pane = document.getElementById('tab_trendmx');
@@ -2835,6 +2841,7 @@ function scheduleTabAutoScan(t){
         if (st && String(st).indexOf('skip') === 0){
           const autoRunBtn = {
             brain: '#brainRun',
+            goldpro: '[data-gp="run"]',
             goldscalp: '#gsRun',
             goldswing: '#gwRun',
             goldpine: '#goldPineRun'

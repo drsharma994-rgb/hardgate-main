@@ -356,6 +356,8 @@ function hgFormTicket(hit, ctx){
     var rows = ctx.rows;
     if (!rows || !rows.length) return { ok: false, reason: 'no rows', tag: 'formation' };
     var style = String(ctx.style || 'swing').toLowerCase();
+    var isGold = style.indexOf('gold-') === 0;
+    var baseStyle = style.indexOf('scalp') >= 0 ? 'scalp' : (style.indexOf('swing') >= 0 ? 'swing' : style);
     var params = hgFormationParams();
     var dir = hit.dir;
     var mark = isFinite(hit.mark) ? +hit.mark : +rows[rows.length - 1].c;
@@ -364,11 +366,32 @@ function hgFormTicket(hit, ctx){
     if (!(isFinite(a4) && a4 > 0)) return { ok: false, reason: 'no ATR', tag: 'formation' };
 
     var plan = Object.assign({}, hit);
-    var minRr = style === 'scalp' ? 2.25 : (typeof G.CG_SWING_RR_MIN === 'number' ? G.CG_SWING_RR_MIN : 2);
+    var minRr = isGold ? 1.2
+      : (baseStyle === 'scalp' ? 2.25 : (typeof G.CG_SWING_RR_MIN === 'number' ? G.CG_SWING_RR_MIN : 2));
     var entryBefore = plan.entry;
 
+    /* Gold scalp/swing tabs already compute strategy-native entry/stop/targets
+       in goldind.js / goldswing.js — never overwrite with generic POI/stops. */
+    if (isGold || ctx.preserveLevels){
+      var gEntry = +plan.entry, gStop = +plan.stop, gT1 = +(plan.t1 || plan.tp1);
+      var gRisk = Math.abs(gEntry - gStop);
+      if (!isFinite(gEntry) || !isFinite(gStop) || !(gRisk > 0)){
+        return { ok: false, reason: 'invalid strategy levels', tag: 'formation' };
+      }
+      if (dir === 'long' && gStop >= gEntry) return { ok: false, reason: 'long stop above entry', tag: 'formation' };
+      if (dir === 'short' && gStop <= gEntry) return { ok: false, reason: 'short stop below entry', tag: 'formation' };
+      var gRr = isFinite(gT1) ? Math.abs(gT1 - gEntry) / gRisk : (isFinite(plan.rr) ? +plan.rr : NaN);
+      if (!isFinite(gRr) || gRr < minRr - 1e-9){
+        return { ok: false, reason: 'min R:R ' + minRr + ' not met (' + (isFinite(gRr) ? gRr.toFixed(2) : 'n/a') + 'R)', tag: 'formation' };
+      }
+      plan.formationScore = hgFormationScore(plan, ctx);
+      plan.formationParams = params.source;
+      return { ok: true, hit: plan, formationScore: plan.formationScore };
+    }
+
+    var poi = null;
     if (!ctx.skipPoi && !(hit.planSrc && hit.entryType)){
-    var poi = hgRankEntryPOI(rows, dir, style, mark, a4, params);
+    poi = hgRankEntryPOI(rows, dir, style, mark, a4, params);
     if (poi){
       plan.entry = poi.entry;
       plan.anchor = poi.entry;
@@ -416,17 +439,17 @@ function hgFormTicket(hit, ctx){
       plan.targetPolicy = tg.targetPolicy; plan.partialPolicy = tg.partialPolicy;
     }
 
-    if (style === 'swing' && typeof G.hgSwingPostEnrichValid === 'function'){
+    if (baseStyle === 'swing' && typeof G.hgSwingPostEnrichValid === 'function'){
       var v = G.hgSwingPostEnrichValid(plan, { rows: rows, a4: a4, minRr: minRr });
       if (!v) return { ok: false, reason: 'post-enrich G6 / min R:R failed', tag: 'formation' };
       plan = v;
-    } else if (style === 'scalp' && typeof G.hgScalpPostEnrichValid === 'function'){
+    } else if (baseStyle === 'scalp' && typeof G.hgScalpPostEnrichValid === 'function'){
       var vs = G.hgScalpPostEnrichValid(plan, { m15: ctx.m15 || rows, a: a4, minRr: minRr });
       if (!vs) return { ok: false, reason: 'scalp post-enrich failed', tag: 'formation' };
       plan = vs;
     }
 
-    var fillBars = style === 'scalp' ? params.fillBarsScalp : params.fillBarsSwing;
+    var fillBars = baseStyle === 'scalp' ? params.fillBarsScalp : params.fillBarsSwing;
     var fill = hgFillProbability(rows, plan.entry, dir, plan.zone, fillBars);
     plan.fillProb = fill.pct;
     plan.fillNote = fill.note;
@@ -442,7 +465,7 @@ function hgFormTicket(hit, ctx){
       plan.sessionNote = 'off-session — limit only (no market chase)';
     }
 
-    plan.expiresBars = style === 'scalp' ? 96 : null;
+    plan.expiresBars = baseStyle === 'scalp' ? 96 : null;
     plan.formationScore = hgFormationScore(plan, ctx);
     plan.formationParams = params.source;
 
