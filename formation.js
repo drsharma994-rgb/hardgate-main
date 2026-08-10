@@ -343,6 +343,9 @@ function hgFormationScore(plan, ctx){
     if (typeof G.hgDeskFormationBoost === 'function'){
       s += G.hgDeskFormationBoost(plan.dir, typeof G.getDeskMacroCached === 'function' ? G.getDeskMacroCached() : null);
     }
+    if (typeof G.hgChartVisionFormationBoost === 'function' && ctx && ctx.vision){
+      s += G.hgChartVisionFormationBoost(plan.dir, ctx.vision);
+    }
     if (ctx && ctx.rankBoost) s += Math.min(25, Math.max(-10, ctx.rankBoost));
     return Math.round(s);
   }catch(e){ return 0; }

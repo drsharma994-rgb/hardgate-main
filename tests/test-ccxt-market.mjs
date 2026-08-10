@@ -56,7 +56,7 @@ console.log('== api + shell wiring ==');
   var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(html.indexOf('ccxt-desk.js') >= 0, 'index loads ccxt-desk.js');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v232/.test(sw), 'cache hg-v232');
+  ok(/hg-v233/.test(sw), 'cache hg-v233');
   var pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   ok(pkg.dependencies && pkg.dependencies.ccxt === '^4.5.71', 'ccxt dep bumped');
 }

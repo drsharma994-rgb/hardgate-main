@@ -592,7 +592,10 @@ function cardHTML(c, isBest, season){
   if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
   if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
   if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
   if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  var visionLine = (c.visionNextMove)
+    ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(c.visionNextMove) + '</div>' : '';
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
@@ -619,6 +622,7 @@ function cardHTML(c, isBest, season){
     + ' · TP3 <b>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
     + '</div>'
     + (c.why ? '<div class="gsw-whyline">' + esc(c.why) + '</div>' : '')
+    + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + lockLine
     + newsBanner + notes + seasonLine
@@ -1636,6 +1640,8 @@ async function runScan(ui, scanSt){
   scanSt = scanSt || __scan;
   if (scanSt.busy) return 'busy';
   scanSt.busy = true;
+  scanSt.visionGen = (scanSt.visionGen || 0) + 1;
+  var visionGen = scanSt.visionGen;
   var t0 = Date.now();
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
@@ -1916,6 +1922,25 @@ async function runScan(ui, scanSt){
     if (gold.rows4h.length || (!stRoute && dx.rows4h.length)){
       publishState(display);                        /* only a real data run overwrites the snapshots */
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
+      var visionEnrichGw = gfn('hgChartVisionEnrichSetups');
+      var visionRefreshGw = gfn('hgChartVisionRefreshGoldCards');
+      if (visionEnrichGw && display.length && ui && ui.cards){
+        visionEnrichGw(display, function(c){
+          var vr = venueRows[c.venue];
+          return (vr && vr.rows4h && vr.rows4h.length) ? vr.rows4h : gold.rows4h;
+        }, { limit: 3 }).then(function(){
+          if (scanSt.visionGen !== visionGen) return;
+          if (typeof visionRefreshGw === 'function'){
+            visionRefreshGw({
+              scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
+              basisHtml: basisHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
+              armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
+              seasonNote: season && season.note,
+            });
+          }
+        });
+      }
     }
     return 'refreshed';
   }catch(e){

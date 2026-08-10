@@ -306,6 +306,19 @@ function hgSetupStack(inp){
     }
   }
 
+  if (hasDir && inp.vision && typeof G.hgChartVisionFormationBoost === 'function'){
+    var vBoost = G.hgChartVisionFormationBoost(dir, inp.vision);
+    var vBias = inp.vision.bias ? String(inp.vision.bias).toLowerCase() : null;
+    var vConf = isFinite(+inp.vision.confidence) ? Math.round(+inp.vision.confidence * 100) : null;
+    if (vBoost >= 7){
+      _bump(technical, _item('Chart vision', (vBias || '?') + ' ' + (vConf != null ? vConf + '%' : '') + ' · ' + (inp.vision.nextMove || 'aligned'), 'with'), vetoes, cautions);
+    } else if (vBoost <= -7){
+      _bump(technical, _item('Chart vision', (vBias || '?') + ' conflicts · ' + (inp.vision.note || inp.vision.nextMove || ''), 'against'), vetoes, cautions);
+    } else if (inp.vision.nextMove){
+      _bump(technical, _item('Chart vision', inp.vision.nextMove, 'neutral'), vetoes, cautions);
+    }
+  }
+
   var agentDesk = inp.agents;
   if (agentDesk && hasDir && Array.isArray(agentDesk.topFindings)){
     var symU = String(sym || '').toUpperCase();
@@ -415,7 +428,8 @@ function hgSetupStackFromHit(hit, opts){
     nearClean: hit.nearClean === true,
     macro: opts.macro,
     goldPositioning: opts.goldPositioning,
-    positioning: opts.positioning
+    positioning: opts.positioning,
+    vision: hit.vision || opts.vision
   }, opts.layers || {}));
 }
 
@@ -462,7 +476,8 @@ function hgSetupStackFromTallyParts(parts, opts){
     clean: clean === true,
     nearClean: nearClean === true,
     gatesPassed: clean ? 7 : (nearClean ? 6 : (tally >= 0 ? 5 : 4)),
-    gatesTotal: 7
+    gatesTotal: 7,
+    vision: opts.vision
   }));
 }
 

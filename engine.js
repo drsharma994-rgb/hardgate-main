@@ -987,6 +987,7 @@ function cardHTML(r){
   var symHtml = esc(r.sym);
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
+  if (r.visionChip) badge += ' <span class="gpip ok">' + esc(r.visionChip) + '</span>';
   var verdict = '<div class="verdict ' + dir + '"><div class="vword">' + dir.toUpperCase() + '</div>'
     + '<div class="vwhy"><b>' + res.conviction + ' CONVICTION</b> — ' + res.gatesPassed + ' of 6 gates passed'
     + ' · suggested risk <b>' + FMT(res.riskPct, 2) + '%</b> of equity'
@@ -1224,6 +1225,9 @@ function paintResults(el, survivors, rejected, isXu){
   if (cards){
     cards.innerHTML = survivors.map(cardHTML).join('');
     paintCharts(cards, survivors);
+    if (typeof G.hgChartVisionEnrichEngineSurvivors === 'function'){
+      G.hgChartVisionEnrichEngineSurvivors(survivors, cards, cardHTML, paintCharts);
+    }
   }
   if (asidePanel && asideList){
     asideList.innerHTML = asideHTML(rejected);

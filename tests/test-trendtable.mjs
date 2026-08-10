@@ -475,7 +475,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');
   assert(/trendmxDesk/.test(readFileSync(path.join(root, 'setup-ui.js'), 'utf8')), 'trendmx desk in setup-ui');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v232/.test(sw), 'cache hg-v232');
+  assert(/hg-v233/.test(sw), 'cache hg-v233');
   assert(/desk-scan-universe\.js/.test(readFileSync(path.join(root, 'index.html'), 'utf8')), 'desk-scan-universe script wired');
 }
 

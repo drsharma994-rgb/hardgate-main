@@ -61,7 +61,7 @@ console.log('== wiring ==');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('hgAgentAlertsRun') >= 0, 'alert cycle calls agent alerts');
   ok(/hgAgentWorkforceCollect/.test(fs.readFileSync(path.join(root, 'ai-agent.js'), 'utf8')), 'workforce collect export');
   ok(/agent-alerts\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell agent-alerts');
-  ok(/hg-v232/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v232');
+  ok(/hg-v233/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v233');
 }
 
 console.log('\n' + pass + ' assertions passed');
