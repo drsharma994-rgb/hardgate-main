@@ -468,7 +468,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/label: 'GATES'/.test(tt), 'GATES column in matrix table');
   assert(/binanceKlines\(s, '1h', 120\)/.test(tt), 'scan fetches 1h klines for exact entry');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v224/.test(sw), 'cache hg-v224');
+  assert(/hg-v225/.test(sw), 'cache hg-v225');
 }
 
 /* ---------------- summary ---------------- */

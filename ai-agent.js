@@ -105,6 +105,24 @@ function collectSetupsForDisplay(desk){
       }
     }catch(e1){}
   }
+  var trendFn = gfn('trendmxCrossState');
+  if (trendFn){
+    try{
+      var tx = trendFn();
+      var golden = (tx && tx.goldenCross) ? tx.goldenCross : [];
+      for (var ti = 0; ti < golden.length; ti++){
+        var g = golden[ti];
+        if (!g || !hasSetupLevels(g)) continue;
+        add({
+          sym: g.sym, dir: g.dir, entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
+          rr: g.rr, score: g.score, clean7: !!g.clean7, nearClean: false,
+          prime: !!g.prime, tier: g.tier || g.conviction,
+          style: 'swing', agentLabel: 'Trend Matrix', src: 'TRENDMX GOLDEN',
+          note: g.note || ('⚡GOLDEN · composite ' + g.score),
+        });
+      }
+    }catch(eTx){}
+  }
   applyAgentConfluence(out);
   out.sort(function(a, b){
     var la = hasSetupLevels(a) ? 1000 : 0;
@@ -143,16 +161,75 @@ function applyAgentConfluence(list){
   }
 }
 
-async function warmAgentGateScans(){
-  var warm = gfn('cryptoScanWarm');
-  if (!warm) return;
-  try{ await warm('swing'); }catch(e){}
-  try{ await warm('scalp'); }catch(e){}
-}
-
 function gfn(name){
   try{ if (typeof W[name] === 'function') return W[name]; }catch(e){}
   return null;
+}
+
+async function warmAgentGateScans(){
+  var warm = gfn('cryptoScanWarm');
+  var jobs = [];
+  if (warm){
+    jobs.push(warm('swing').catch(function(){}));
+    jobs.push(warm('scalp').catch(function(){}));
+  }
+  var tmWarm = gfn('trendmxWarm');
+  if (tmWarm) jobs.push(tmWarm({ quiet: true }).catch(function(){}));
+  if (jobs.length) await Promise.all(jobs);
+}
+
+function runTrendmxScout(){
+  var finds = [];
+  var crossFn = gfn('trendmxCrossState');
+  var scanFn = gfn('trendmxScan');
+  if (crossFn){
+    try{
+      var cs = crossFn();
+      var golden = (cs && cs.goldenCross) ? cs.goldenCross : [];
+      for (var i = 0; i < golden.length; i++){
+        var g = golden[i];
+        if (!g || !hasSetupLevels(g)) continue;
+        finds.push(finding(g.sym, g.dir, {
+          src: 'TRENDMX GOLDEN', entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
+          rr: g.rr, score: g.score != null ? g.score : 12, clean7: !!g.clean7,
+          tier: g.tier || g.conviction, prime: !!g.prime,
+          note: g.note || ('⚡GOLDEN · composite ' + g.score),
+        }));
+      }
+    }catch(e1){}
+  }
+  if (!finds.length && scanFn){
+    try{
+      var snap = scanFn({ maxAgeMs: 5 * 60 * 1000 });
+      if (snap && typeof snap.then === 'function'){
+        return snap.then(function(s){
+          return runTrendmxScoutFromRows((s && s.rows) ? s.rows : []);
+        });
+      }
+      return runTrendmxScoutFromRows((snap && snap.rows) ? snap.rows : []);
+    }catch(e2){}
+  }
+  return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' trend matrix setup(s)' };
+}
+
+function runTrendmxScoutFromRows(rows){
+  var finds = [];
+  var goldenFn = gfn('trendmxGoldenCrossSetups');
+  if (goldenFn){
+    try{
+      var list = goldenFn(rows) || [];
+      for (var i = 0; i < list.length; i++){
+        var g = list[i];
+        if (!g || !hasSetupLevels(g)) continue;
+        finds.push(finding(g.sym, g.dir, {
+          src: 'TRENDMX GOLDEN', entry: g.entry, stop: g.stop, t1: g.t1, t2: g.t2,
+          rr: g.rr, score: g.score != null ? g.score : 12, clean7: !!g.clean7,
+          tier: g.tier || g.conviction, prime: !!g.prime, note: g.note,
+        }));
+      }
+    }catch(e){}
+  }
+  return { ok: true, findings: finds.slice(0, 6), summary: finds.length + ' trend matrix golden setup(s)' };
 }
 
 var AGENTS = [
@@ -164,6 +241,7 @@ var AGENTS = [
   { id: 'strategy-lab', label: 'Strategy Lab', role: 'backtest-engineer', focus: 'crypto' },
   { id: 'funding-hunter', label: 'Funding Hunter', role: 'risk-analyst', focus: 'crypto' },
   { id: 'brain-echo', label: 'Brain Echo', role: 'trading-strategist', focus: 'all' },
+  { id: 'trend-scout', label: 'Trend Scout', role: 'trading-strategist', focus: 'crypto' },
   { id: 'atomic-delta', label: 'Atomic Delta Scout', role: 'venue-scout', focus: 'delta' },
   { id: 'atomic-coindcx', label: 'Atomic CoinDCX Scout', role: 'venue-scout', focus: 'coindcx' },
   { id: 'atomic-best', label: 'Atomic Best Setup', role: 'composer', focus: 'delta+coindcx' },
@@ -533,6 +611,7 @@ var RUNNERS = {
   'strategy-lab': runStrategyLab,
   'funding-hunter': runFundingHunter,
   'brain-echo': runBrainEcho,
+  'trend-scout': runTrendmxScout,
   'atomic-delta': runAtomicDelta,
   'atomic-coindcx': runAtomicCoindcx,
   'atomic-best': runAtomicBest,
