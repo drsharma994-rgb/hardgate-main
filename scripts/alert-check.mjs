@@ -112,7 +112,8 @@ async function sendTelegramCi(text) {
       body: JSON.stringify({ chat_id: c, text: String(text || ''), disable_web_page_preview: true })
     });
     return (res && (res.ok === true || (res.status >= 200 && res.status < 300))) ? 'sent'
-      : 'failed: HTTP ' + (res && (res.status !== undefined ? res.status : '?'));
+      : 'failed: HTTP ' + (res && (res.status !== undefined ? res.status : '?'))
+        + (res && res.status === 401 ? ' — token invalid/revoked; update TELEGRAM_TOKEN via @BotFather on Render + GitHub secrets' : '');
   } catch (e) {
     return 'failed: ' + ((e && e.message) ? e.message : String(e));
   }

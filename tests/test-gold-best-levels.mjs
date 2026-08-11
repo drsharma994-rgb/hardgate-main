@@ -95,7 +95,7 @@ console.log('== wiring ==');
   ok(/gold-best-levels\.js/.test(ix), 'index loads gold-best-levels.js');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp uses hgApplyGoldBestLevels');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing uses hgApplyGoldBestLevels');
-  ok(/hg-v242/.test(sw), 'cache hg-v242');
+  ok(/hg-v243/.test(sw), 'cache hg-v243');
 }
 
 console.log('\n' + pass + ' passed, 0 failed');
