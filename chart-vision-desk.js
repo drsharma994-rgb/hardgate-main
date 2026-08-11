@@ -72,6 +72,7 @@ function hgChartVisionIsConfirmed(setup){
   if (setup.confirmed === false) return false;
   if (setup.tier && String(setup.tier).toLowerCase() !== 'clean') return false;
   if (setup.clean7 || setup.clean || setup.gateClean) return true;
+  if (setup.nearClean && fin(+setup.gatesPassed) && +setup.gatesPassed >= 6) return true;
   if (setup.plan && setup.plan.confirmed) return true;
   if (setup.res && setup.res.plan && setup.res.plan.confirmed) return true;
   /* 7/7 cryptogates clean hits and gold confirmed cards default true when dir present */

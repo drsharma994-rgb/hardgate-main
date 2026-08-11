@@ -118,6 +118,8 @@ console.log('== wiring ==');
   ok(/hgChartVisionEnrichDeskRows/.test(fs.readFileSync(path.join(root, 'oiflow.js'), 'utf8')), 'oiflow tab vision enrich');
   ok(/hgChartVisionEnrichDeskRows/.test(fs.readFileSync(path.join(root, 'startradertab.js'), 'utf8')), 'startrader tab vision enrich');
   ok(/bestEnrichVision/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'best tab vision enrich');
+  ok(/chartvision-tab\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell chartvision tab');
+  ok(/id: 'chartvision'/.test(fs.readFileSync(path.join(root, 'chartvision-tab.js'), 'utf8')), 'chartvision tab module');
   var caps = chartVisionCapabilities({});
   ok(caps.analyzeRoute === '/api/chart-vision/analyze' && caps.outcomePrediction && caps.vetoEnabled, 'capabilities route + prediction + veto default');
 }
