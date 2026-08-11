@@ -97,7 +97,7 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `GEMINI_MODEL` | Gemini model for chart vision (default `gemini-3-flash-preview`; production Render sets this explicitly) |
 | `CHART_VISION_VETO` | **On by default.** Set `0` / `false` to disable high-confidence vision conflict demotes |
 | `CHART_VISION_PNG` | Set `0` / `false` to skip Puppeteer PNG render (Gemini falls back to SVG text) |
-| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Alert pushes (also overridable in browser localStorage) |
+| `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Alert pushes (also overridable in browser localStorage). Update Render: `RENDER_API_KEY=… TELEGRAM_TOKEN=… node scripts/set-render-telegram-env.mjs` |
 | `GH_DISPATCH_TOKEN` | GitHub Actions workflow dispatch from Render |
 | `RENDER_EXTERNAL_URL` / `SELF_PING_URL` | Render keep-alive ping |
 
