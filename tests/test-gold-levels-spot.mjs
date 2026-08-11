@@ -13,6 +13,7 @@ console.log('== gold levels vs live spot ==');
   const gw = fs.readFileSync(root + 'goldswing.js', 'utf8');
   ok(/goldLiveSpotRef/.test(gs) && /goldLiveSpotRef/.test(gw), 'live spot ref fetch');
   ok(/goldAlignLevelsToSpot/.test(gs) && /goldPurgeStaleConvictions/.test(gs), 'spot align + purge stale locks');
+  ok(/goldSpotGuardAfterLock/.test(gs), 'post-lock spot guard on scalp');
   ok(/DELTA XAUTUSD: skipped — gold scalp uses broker-aligned/.test(gs), 'goldscalp skips XAUT leg');
   ok(/DELTA XAUTUSD: skipped — gold swing uses broker-aligned/.test(gw), 'goldswing skips XAUT leg');
   ok(/stGoldVenueLabel\(gold\.source\)/.test(gs), 'venue label from scan feed not S.goldDataSource');
