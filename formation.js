@@ -668,7 +668,12 @@ function hgFormTicket(hit, ctx){
     plan.formationScore = hgFormationScore(plan, ctx);
     plan.formationParams = params.source;
 
-    return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
+    if (typeof G.hgMetaLabel === 'function'){
+      var recs = (typeof G.hgScoreRecords === 'function') ? G.hgScoreRecords() : [];
+      plan.metaLabel = G.hgMetaLabel(plan, ctx, recs);
+    }
+
+    return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note, metaLabel: plan.metaLabel || null };
   }catch(e){ return { ok: true, hit: hit, formationScore: 0 }; }
 }
 
