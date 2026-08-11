@@ -6,6 +6,7 @@ import {
   chartVisionHeuristic,
   chartVisionFormationBoost,
   chartVisionShouldVeto,
+  chartVisionVetoEnabled,
   chartVisionParseModelText,
   chartVisionNormalizeRows,
   chartVisionCacheKey,
@@ -48,8 +49,11 @@ console.log('== chart vision core ==');
   ok(h.confidence >= 0.5, 'heuristic confidence >= 0.5');
   ok(chartVisionFormationBoost('long', h) >= 4, 'formation boost when aligned');
   ok(chartVisionFormationBoost('short', h) <= -3, 'formation penalty when against');
-  ok(!chartVisionShouldVeto('long', h, {}), 'no veto by default env');
-  ok(chartVisionShouldVeto('short', { bias: 'long', confidence: 0.85, veto: false }, { CHART_VISION_VETO: '1' }), 'veto high-conf conflict when enabled');
+  ok(!chartVisionShouldVeto('long', h, {}), 'no veto when aligned (default on)');
+  ok(chartVisionShouldVeto('short', { bias: 'long', confidence: 0.85, veto: false }, {}), 'veto high-conf conflict by default');
+  ok(!chartVisionShouldVeto('short', { bias: 'long', confidence: 0.85, veto: false }, { CHART_VISION_VETO: '0' }), 'veto disabled when CHART_VISION_VETO=0');
+  ok(chartVisionVetoEnabled({}) === true, 'veto enabled by default');
+  ok(chartVisionVetoEnabled({ CHART_VISION_VETO: '0' }) === false, 'veto opt-out with CHART_VISION_VETO=0');
   var partial = chartVisionHeuristic(synthUptrend(30), 'long', {});
   ok(partial.bias === 'long', 'partial 9/21 cascade yields bias before EMA50 warmup');
 }
@@ -106,7 +110,7 @@ console.log('== wiring ==');
   ok(/hgChartVisionPredictionLine/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser prediction line helper');
   ok(/visionVetoed|VISION VETO/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser applies vision veto demote');
   var caps = chartVisionCapabilities({});
-  ok(caps.analyzeRoute === '/api/chart-vision/analyze' && caps.outcomePrediction, 'capabilities route + prediction');
+  ok(caps.analyzeRoute === '/api/chart-vision/analyze' && caps.outcomePrediction && caps.vetoEnabled, 'capabilities route + prediction + veto default');
 }
 
 console.log('== HTTP handler ==');
