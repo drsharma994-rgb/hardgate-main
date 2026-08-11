@@ -107,6 +107,16 @@ function hgFormationPanelHtml(records){
       }
       h += '</tbody></table>';
     }
+    if (typeof G.hgMetaLabel === 'function' && settled.length){
+      var takeN = 0, skipN = 0;
+      for (var mi = 0; mi < Math.min(settled.length, 40); mi++){
+        var ml = G.hgMetaLabel(settled[mi], {}, settled);
+        if (ml && ml.take) takeN++; else skipN++;
+      }
+      h += '<div class="hg-panel__legend" style="margin-top:12px">Meta-label (MLFinLab)</div>';
+      h += '<div class="note">Last ' + Math.min(settled.length, 40) + ' settled · TAKE ' + takeN + ' · SKIP ' + skipN
+        + ' · floor ' + Math.round((G.HG_META_FLOOR || 0.52) * 100) + '%</div>';
+    }
     h += '<div class="note" style="margin-top:6px">Daemon: set HARDGATE_FQS_GATE=1 / HARDGATE_EDGE_GATE=1 on Render to enable vetoes (default report-only).</div>';
     h += '</div>';
     return h;
