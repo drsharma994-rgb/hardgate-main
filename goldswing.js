@@ -1828,41 +1828,62 @@ async function runScan(ui, scanSt){
         else if (ctx.goldPro.word !== 'NEUTRAL') gc0.goldProChip = 'GOLD PRO conflict';
       }
     }
-    var formFn = gfn('hgFormTicket');
-    if (formFn && gold.rows4h && gold.rows4h.length){
+    var applyBlFn = gfn('hgApplyGoldBestLevels');
+    if (applyBlFn && gold.rows4h && gold.rows4h.length){
       for (var fi = 0; fi < ranked.length; fi++){
         var gc = ranked[fi];
         if (!gc || gc.demoted || gc.vetoed) continue;
         try{
-          var gHit = Object.assign({}, gc, {
-            mark: gc.pxNow || (gold.rows4h.length ? gold.rows4h[gold.rows4h.length - 1].c : gc.entry),
-            structStop: gc.structStop || gc.anchor
+          applyBlFn(gc, {
+            style: 'gold-swing',
+            rows: gold.rows4h,
+            rows4h: gold.rows4h,
+            rows1h: gold.rows1h,
+            rows1d: gold.rows1d,
+            atrW: atrW,
+            nowMs: now,
+            rankBoost: (gc.agree || 0),
+            vision: gc.vision,
           });
-          var gfm = formFn(gHit, { rows: gold.rows4h, style: 'gold-swing', a4: atrW,
-            rankBoost: (gc.agree || 0) });
-          if (!gfm.ok){ gc.demoted = true; gc.demoteReason = gfm.reason || 'formation'; continue; }
-          if (gfm.hit){
-            gc.formationScore = gfm.formationScore;
-            gc.entryType = gfm.hit.entryType;
-            gc.entryGuidance = gfm.hit.entryGuidance;
-            gc.fillProb = gfm.hit.fillProb;
-            gc.fillNote = gfm.hit.fillNote;
-            gc.planSrc = gfm.hit.planSrc;
-            if (!gc.locked){
-              if (isFinite(gfm.hit.entry)) gc.entry = gfm.hit.entry;
-              if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
-              if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
-              if (isFinite(gfm.hit.t2)) gc.t2 = gfm.hit.t2;
-            }
-            var rskFs = Math.abs(gc.entry - gc.stop);
-            if (rskFs > 0){
-              if (isFinite(gc.t1)) gc.rr = Math.abs(gc.t1 - gc.entry) / rskFs;
-              if (isFinite(gc.t2)) gc.rr2 = Math.abs(gc.t2 - gc.entry) / rskFs;
-              if (isFinite(gc.t3)) gc.rr3 = Math.abs(gc.t3 - gc.entry) / rskFs;
-            }
-          }
         }catch(eGf){}
       }
+    } else {
+    var formFn = gfn('hgFormTicket');
+    if (formFn && gold.rows4h && gold.rows4h.length){
+      for (var fi2 = 0; fi2 < ranked.length; fi2++){
+        var gc2 = ranked[fi2];
+        if (!gc2 || gc2.demoted || gc2.vetoed) continue;
+        try{
+          var gHit2 = Object.assign({}, gc2, {
+            mark: gc2.pxNow || (gold.rows4h.length ? gold.rows4h[gold.rows4h.length - 1].c : gc2.entry),
+            structStop: gc2.structStop || gc2.anchor
+          });
+          var gfm2 = formFn(gHit2, { rows: gold.rows4h, style: 'gold-swing', a4: atrW,
+            rankBoost: (gc2.agree || 0) });
+          if (!gfm2.ok){ gc2.demoted = true; gc2.demoteReason = gfm2.reason || 'formation'; continue; }
+          if (gfm2.hit){
+            gc2.formationScore = gfm2.formationScore;
+            gc2.entryType = gfm2.hit.entryType;
+            gc2.entryGuidance = gfm2.hit.entryGuidance;
+            gc2.fillProb = gfm2.hit.fillProb;
+            gc2.fillNote = gfm2.hit.fillNote;
+            gc2.planSrc = gfm2.hit.planSrc;
+            if (!gc2.locked){
+              if (isFinite(gfm2.hit.entry)) gc2.entry = gfm2.hit.entry;
+              if (isFinite(gfm2.hit.stop)) gc2.stop = gfm2.hit.stop;
+              if (isFinite(gfm2.hit.t1)) gc2.t1 = gfm2.hit.t1;
+              if (isFinite(gfm2.hit.t2)) gc2.t2 = gfm2.hit.t2;
+            }
+            var rskFs2 = Math.abs(gc2.entry - gc2.stop);
+            if (rskFs2 > 0){
+              if (isFinite(gc2.t1)) gc2.rr = Math.abs(gc2.t1 - gc2.entry) / rskFs2;
+              if (isFinite(gc2.t2)) gc2.rr2 = Math.abs(gc2.t2 - gc2.entry) / rskFs2;
+              if (isFinite(gc2.t3)) gc2.rr3 = Math.abs(gc2.t3 - gc2.entry) / rskFs2;
+            }
+          }
+        }catch(eGf2){}
+      }
+    }
     }
 
     /* CONVICTION LOCK — restore issued levels verbatim; transitions only on
