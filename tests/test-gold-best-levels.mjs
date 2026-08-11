@@ -95,7 +95,7 @@ console.log('== wiring ==');
   ok(/gold-best-levels\.js/.test(ix), 'index loads gold-best-levels.js');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp uses hgApplyGoldBestLevels');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing uses hgApplyGoldBestLevels');
-  ok(/hg-v248/.test(sw), 'cache hg-v248');
+  ok(/hg-v249/.test(sw), 'cache hg-v249');
 }
 
 console.log('== gold card text contrast ==');

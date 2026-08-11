@@ -36,7 +36,7 @@ console.log('== CSP fonts ==');
 console.log('== cache ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v248/.test(sw), 'cache hg-v248');
+  ok(/hg-v249/.test(sw), 'cache hg-v249');
   ok(sw.indexOf('annunciator.css') >= 0, 'sw precaches annunciator.css');
 }
 
