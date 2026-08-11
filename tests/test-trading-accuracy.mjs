@@ -71,8 +71,8 @@ console.log('== FTS tightCount downgrade ==');
 console.log('== gold swing formation wiring ==');
 {
   const gs = fs.readFileSync(path.join(root, 'goldswing.js'), 'utf8');
-  ok(gs.indexOf("style: 'gold-swing'") >= 0 && gs.indexOf('hgFormTicket') >= 0, 'goldswing uses hgFormTicket');
-  const iForm = gs.indexOf('var formFn = gfn(\'hgFormTicket\')');
+  ok(gs.indexOf("style: 'gold-swing'") >= 0 && gs.indexOf('hgApplyGoldBestLevels') >= 0, 'goldswing uses hgApplyGoldBestLevels');
+  const iForm = gs.indexOf('var applyBlFn = gfn(\'hgApplyGoldBestLevels\')');
   const iWk = gs.indexOf('hgApplyGoldWeekendDemotes');
   ok(iForm > iWk && gs.indexOf('for (var fi = 0; fi < ranked.length; fi++)', iForm) >= 0,
     'formation runs on all ranked candidates after weekend demotes');

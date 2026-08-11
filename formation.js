@@ -575,7 +575,8 @@ function hgFormTicket(hit, ctx){
     if (!(isFinite(a4) && a4 > 0)) return { ok: false, reason: 'no ATR', tag: 'formation' };
 
     var plan = Object.assign({}, hit);
-    var minRr = isGold ? 1.2
+    var minRr = isGold
+      ? (isFinite(+ctx.goldMinRr) ? +ctx.goldMinRr : 1.2)
       : (baseStyle === 'scalp' ? 2.25 : (typeof G.CG_SWING_RR_MIN === 'number' ? G.CG_SWING_RR_MIN : 2));
     var entryBefore = plan.entry;
 
