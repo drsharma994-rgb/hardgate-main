@@ -23,6 +23,8 @@ console.log('== package + render ==');
   ok(pkg.scripts.test.indexOf('run-tests.mjs') >= 0, 'npm test uses run-tests.mjs');
   const render = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
   ok(render.indexOf('npm ci') >= 0, 'render.yaml uses npm ci');
+  ok(render.indexOf('TELEGRAM_TOKEN') >= 0, 'render.yaml documents TELEGRAM_TOKEN');
+  ok(render.indexOf('TELEGRAM_CHAT_ID') >= 0, 'render.yaml documents TELEGRAM_CHAT_ID');
 }
 
 console.log('== CSP ==');
@@ -40,7 +42,7 @@ console.log('== CSP ==');
 console.log('== cache ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v242/.test(sw), 'cache hg-v242');
+  ok(/hg-v243/.test(sw), 'cache hg-v243');
   ok(sw.indexOf('api-client.js') >= 0, 'sw shell includes api-client.js');
 }
 

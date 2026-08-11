@@ -1,7 +1,7 @@
 /* HARDGATE — api-auth.mjs + notify-api wiring (fix pack 12). */
 import { checkApiAuth, apiSecret, apiAuthHeaders } from '../lib/api-auth.mjs';
 import { executeCapabilities } from '../lib/execute-api.mjs';
-import { notifyCapabilities } from '../lib/notify-api.mjs';
+import { notifyCapabilities, telegramTokenHealth } from '../lib/notify-api.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +42,23 @@ console.log('== wiring ==');
   const loop = fs.readFileSync(path.join(root, 'lib/daemon-loop.mjs'), 'utf8');
   ok(loop.indexOf('freshLocks') >= 0 && loop.indexOf('excludeIds') >= 0, 'daemon-loop freshLocks + excludeIds');
   ok(typeof notifyCapabilities().telegram === 'boolean', 'notify capabilities');
+  ok(notifyCapabilities().authRequired === false, 'notify does not require HARDGATE_API_SECRET');
   ok(apiAuthHeaders()['Content-Type'] === 'application/json', 'apiAuthHeaders content-type');
+  ok(idx.indexOf('/api/notify/capabilities') >= 0, 'index.html checks notify capabilities');
+  const notifySrc = fs.readFileSync(path.join(root, 'lib/notify-api.mjs'), 'utf8');
+  ok(notifySrc.indexOf('telegramTokenHealth') >= 0, 'notify-api token health check');
+  ok(notifySrc.indexOf('checkApiAuth(req)') < 0, 'notify POST does not gate on api secret');
+}
+
+console.log('== telegram token health (no env) ==');
+{
+  const prevT = process.env.TELEGRAM_TOKEN;
+  const prevC = process.env.TELEGRAM_CHAT_ID;
+  delete process.env.TELEGRAM_TOKEN;
+  delete process.env.TELEGRAM_CHAT_ID;
+  ok((await telegramTokenHealth()).configured === false, 'health unconfigured when env missing');
+  if (prevT) process.env.TELEGRAM_TOKEN = prevT; else delete process.env.TELEGRAM_TOKEN;
+  if (prevC) process.env.TELEGRAM_CHAT_ID = prevC; else delete process.env.TELEGRAM_CHAT_ID;
 }
 
 console.log('\n' + pass + ' passed');
