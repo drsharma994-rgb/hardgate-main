@@ -589,8 +589,9 @@ async function runAtomicPipelineAgent(venueFilter, summaryLabel){
     var finds = atomicFindingsFromDesk(desk, venueFilter);
     return {
       ok: true,
-      findings: finds.slice(0, 8),
-      summary: summaryLabel + ' · ' + finds.length + ' setup(s) · score ' + (desk.swarmScore != null ? desk.swarmScore : '—'),
+      findings: finds,
+      summary: summaryLabel + ' · ' + finds.length + ' setup(s) · full universe scan · score '
+        + (desk.swarmScore != null ? desk.swarmScore : '—'),
       atomicDesk: desk,
     };
   }catch(e){
@@ -685,7 +686,7 @@ function buildDeskFromAgents(agents){
     swarmScore: swarmScoreFromAgents(agents),
     cryptoSetups: crypto,
     goldSetups: gold,
-    topFindings: top.slice(0, 12),
+    topFindings: top.slice(0, 48),
     agents: agents,
   };
 }
@@ -814,7 +815,7 @@ function renderTopFindings(desk){
   var h = '<table class="hg-table" style="margin-top:10px;font-size:12px"><thead><tr>'
     + '<th>agent</th><th>sym</th><th>dir</th><th>entry</th><th>SL</th><th>TP1</th><th>TP2</th><th>R:R</th><th>score</th>'
     + '</tr></thead><tbody>';
-  for (var i = 0; i < top.length && i < 15; i++){
+  for (var i = 0; i < top.length && i < 40; i++){
     var f = top[i];
     var rr = f.rr != null && fin(+f.rr) ? +f.rr : agentRr(f.entry, f.stop, f.t1);
     h += '<tr><td>' + toEsc(f.agentLabel || f.agentId || '—') + '</td>'
@@ -849,7 +850,7 @@ function renderDesk(ui, desk){
   }
   h += '<div class="note" style="margin-top:10px;line-height:1.5">Workforce inspired by '
     + '<a href="https://github.com/ruvnet/ruflo" target="_blank" rel="noopener">Ruflo</a> · Atomic pipeline '
-    + '<a href="https://github.com/Eigenwise/atomic-agents" target="_blank" rel="noopener">atomic-agents</a> scans Delta India + CoinDCX for gate-clean setups. '
+    + '<a href="https://github.com/Eigenwise/atomic-agents" target="_blank" rel="noopener">atomic-agents</a> scans the full Delta India + CoinDCX universe for gate-clean setups. '
     + 'Telegram alerts fire on the 5-min cycle when a great setup forms (ENTRY · SL · TP). Server watch runs 24/7 when TELEGRAM_* is set on Render.</div>';
   ui.out.innerHTML = h;
 }
@@ -887,7 +888,7 @@ function mountAiAgent(el){
   root.innerHTML = ''
     + '<div class="hg-panel">'
     + '<div class="hg-panel__head"><span class="hg-panel__title">AI AGENT · workforce</span></div>'
-    + '<div class="note">Specialist agents scan crypto + gold 24/7. Atomic Agents pipeline searches <b>Delta India</b> + <b>CoinDCX</b> for the best gate-clean setup per asset.</div>'
+    + '<div class="note">Specialist agents scan crypto + gold 24/7. Atomic Agents pipeline scans the <b>full Delta India + CoinDCX</b> perpetual universe (every contract, not top-18) for gate-clean setups.</div>'
     + '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">'
     + '<button type="button" class="hg-btn" id="agentSwarmBtn">SWARM SCAN</button>'
     + '<button type="button" class="hg-btn ghost" id="agentAtomicBtn">ATOMIC DELTA+CDCX</button>'

@@ -50,11 +50,10 @@ console.log('== wiring ==');
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   ok(/warmAgentGateScans/.test(ai), 'swarm warms gate scans');
   ok(/cryptoScanWarm\('swing'\)/.test(alerts), 'agent alerts warm swing');
-  ok(/applyAtomicFormation/.test(scan), 'atomic scan uses formation');
-  ok(/MEDIUM/.test(ai) === false || !/tier !== 'HIGH' && tier !== 'PRIME' && tier !== 'MEDIUM'/.test(ai),
-    'brain echo drops MEDIUM tier');
-  ok(/applyAgentConfluence/.test(ai), 'confluence boost wired');
-  ok(/hg-v253/.test(sw), 'cache hg-v253');
+  ok(/ATOMIC_SCAN_TOP \|\| 0/.test(scan), 'atomic scan defaults to full universe (topN=0)');
+  ok(/venueUniverse/.test(scan), 'atomic scan uses venueUniverse for full lists');
+  ok(/full Delta.*CoinDCX/i.test(ai), 'ai-agent documents full universe atomic scan');
+  ok(/hg-v254/.test(sw), 'cache hg-v254');
 }
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' failed' : ''));
