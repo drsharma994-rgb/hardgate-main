@@ -92,7 +92,7 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `OPENBB_API_URL` | Optional self-hosted OpenBB REST backend (e.g. `http://127.0.0.1:6900`) |
 | `OPENBB_API_USERNAME` / `OPENBB_API_PASSWORD` | Basic auth for OpenBB backend |
 | `OPENBB_API_KEY` | Optional API key header for OpenBB backend |
-| `GEMINI_API_KEY` | Chart vision (`/api/chart-vision/analyze`) — Gemini multimodal; heuristic fallback when unset |
+| `GEMINI_API_KEY` | Chart vision (`/api/chart-vision/analyze`) — Gemini multimodal; heuristic fallback when unset. **Set on Render `hardgate-main` → Environment** (persists across deploys) or run `RENDER_API_KEY=… GEMINI_API_KEY=… node scripts/set-render-gemini-env.mjs` |
 | `GEMINI_MODEL` | Gemini model for chart vision (default `gemini-2.0-flash`) |
 | `CHART_VISION_VETO` | **On by default.** Set `0` / `false` to disable high-confidence vision conflict demotes |
 | `CHART_VISION_PNG` | Set `0` / `false` to skip Puppeteer PNG render (Gemini falls back to SVG text) |
