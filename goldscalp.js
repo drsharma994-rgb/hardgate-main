@@ -259,10 +259,12 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
     for (var wq = 0; wq < (armed || []).length; wq++){
       var w0 = armed[wq];
       if (!w0) continue;
+      var wSt = (w0.state === 'promoted') ? 'promoted' : ((w0.state === 'armed') ? 'armed' : 'idle');
       arm.push({ strategy: w0.strategy || null, venue: w0.venue || null,
-                 state: (w0.state === 'armed') ? 'armed' : 'idle',
+                 state: wSt,
                  level: (typeof w0.level === 'number' && isFinite(w0.level)) ? w0.level : null,
-                 condition: w0.condition || '', reason: w0.reason || null });
+                 condition: w0.condition || '', reason: w0.reason || null,
+                 promoteNote: w0.promoteNote || null });
     }
     __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej,
                    armed: arm, whySilent: (typeof whySilent === 'string' && whySilent) ? whySilent : null, at: at };
@@ -404,6 +406,8 @@ var GS_CSS = ''
 + '#tab_goldscalp .gsx-wrow.armed{border-left-color:#C9921A;color:#020617;background:#FFFBEB}'
 + '#tab_goldscalp .gsx-wst{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:4px;margin-right:6px;border:1px solid;font-weight:700}'
 + '#tab_goldscalp .gsx-wrow.armed .gsx-wst{color:#A67C12;border-color:rgba(201,146,26,.45);background:rgba(201,146,26,.12)}'
++ '#tab_goldscalp .gsx-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
++ '#tab_goldscalp .gsx-wrow.promoted .gsx-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
 + '#tab_goldscalp .gsx-wrow.idle .gsx-wst{color:#475569;border-color:#E2E8F0;background:#F8FAFC}'
 + '#tab_goldscalp .gsx-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
 + '#tab_goldscalp .gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
@@ -511,6 +515,15 @@ function cardHTML(c, isBest, season){
   var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
+  var metaChips = '';
+  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
+  if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
+  if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
+  if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  var visionText = [c.visionNextMove, c.visionPrediction].filter(Boolean).join(' · ');
+  var visionLine = visionText
+    ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
   return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
@@ -527,7 +540,7 @@ function cardHTML(c, isBest, season){
     + '<div class="gates">'
     + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
     + '<span class="gpip">' + esc(c.killzone) + '</span>'
-    + chips
+    + chips + metaChips
     + '</div>'
     + tallyChips(c)
     + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
@@ -538,6 +551,7 @@ function cardHTML(c, isBest, season){
     + '</div>'
     + mgmtBlock + guideBlock
     + (c.why ? '<div class="gsx-whyline">' + esc(c.why) + '</div>' : '')
+    + visionLine
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine
     + lockLine
@@ -600,14 +614,16 @@ function formingNowHTML(armed){
   if (!armed || !armed.length) return '';
   var rows = armed.map(function(w){
     if (!w) return '';
-    var st = w.state === 'armed';
+    var st = w.state === 'armed' || w.state === 'promoted';
+    var cls = w.state === 'promoted' ? 'promoted' : (st ? 'armed' : 'idle');
     var lvlNum = (typeof w.level === 'number' && isFinite(w.level));
-    return '<div class="gsx-wrow ' + (st ? 'armed' : 'idle') + '">'
-      + '<span class="gsx-wst">' + (st ? 'ARMED' : 'IDLE') + '</span>'
+    return '<div class="gsx-wrow ' + cls + '">'
+      + '<span class="gsx-wst">' + (w.state === 'promoted' ? 'PROMOTED' : (st ? 'ARMED' : 'IDLE')) + '</span>'
       + '<b>' + esc(w.strategy || 'SETUP') + '</b>'
       + (w.venue ? ' · ' + esc(w.venue) : '')
       + (lvlNum ? ' · $' + pxF(w.level) : '')
-      + ' — ' + esc(st ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range'))
+      + ' — ' + esc(w.state === 'promoted' ? (w.promoteNote || 'trigger fired — see candidate card')
+              : (st ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range')))
       + '</div>';
   }).join('');
   return '<div class="gsx-hist gsx-watch"><div class="gsx-hhead">FORMING NOW — what the engine is watching'
@@ -750,14 +766,20 @@ async function fetchDeltaXaut(){
 /* per-venue candidate composition (multi-strategy first, composite fallback).
    Hard-gated setups ride the .rejected side-channel so the scan can render
    named reason lines — nothing is dropped silently. */
-function buildCandidates(leg, now, news, venue, sym){
+function buildCandidates(leg, now, news, venue, sym, bundleExtra){
   var out = [];
   out.rejected = [];
   try{
     var setupsFn = gfn('goldScalpSetups');
     if (setupsFn){
       var got = null;
-      try{ got = setupsFn({ rows15m: leg.rows15m, rows1h: leg.rows1h, rows4h: leg.rows4h, now: now, news: news }); }
+      var inp = { rows15m: leg.rows15m, rows1h: leg.rows1h, rows4h: leg.rows4h, now: now, news: news };
+      bundleExtra = bundleExtra || {};
+      var bk;
+      for (bk in bundleExtra){
+        if (Object.prototype.hasOwnProperty.call(bundleExtra, bk)) inp[bk] = bundleExtra[bk];
+      }
+      try{ got = setupsFn(inp); }
       catch(e){ got = null; }
       if (Array.isArray(got)){
         for (var i = 0; i < got.length; i++){
@@ -821,6 +843,8 @@ async function runScan(ui, scanSt){
   scanSt = scanSt || __scan;
   if (scanSt.busy) return 'busy';
   scanSt.busy = true;
+  scanSt.visionGen = (scanSt.visionGen || 0) + 1;
+  var visionGen = scanSt.visionGen;
   var t0 = Date.now();
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
@@ -851,6 +875,13 @@ async function runScan(ui, scanSt){
     try{ if (typeof S !== 'undefined' && S && S.fng) ctx.fng = S.fng; }catch(eF){ ctx.fng = null; }
     var gps = gfn('goldProState');
     if (gps){ try{ ctx.goldPro = gps(); }catch(eGp){ ctx.goldPro = null; } }
+    var bf = gfn('binanceFunding');
+    if (bf){
+      try{
+        var frLeg = await bf('PAXGUSDT');
+        if (frLeg && isFinite(frLeg.fundingPct)) ctx.fundingRate = frLeg.fundingPct;
+      }catch(eFr){}
+    }
 
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};
@@ -875,6 +906,13 @@ async function runScan(ui, scanSt){
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
     setProg(ui, 0.45);
+    var scalpBundle = {};
+    if (ctx.macro && ctx.macro.us10yCandles) scalpBundle.us10yCandles = ctx.macro.us10yCandles;
+    if (typeof W !== 'undefined' && W){
+      if (W.__hgGoldTickBuffer) scalpBundle.tickBuffer = W.__hgGoldTickBuffer;
+      if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
+    }
+    if (gold && gold.rows1d && gold.rows1d.length) scalpBundle.dailyCandles = gold.rows1d;
     if (gold.rows15m.length){
       var v = stRoute ? stGoldVenueLabel() : venueLabel(gold.source);
       var sym1 = stRoute ? ST_GOLD_SYM : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
@@ -896,7 +934,7 @@ async function runScan(ui, scanSt){
         }catch(eEv){ if (typeof W !== 'undefined' && W) W.hgLastScalpEval = null; }
       }
       venueRows[v] = { rows15m: gold.rows15m };
-      var got = buildCandidates(gold, now, news, v, sym1);
+      var got = buildCandidates(gold, now, news, v, sym1, scalpBundle);
       collectWatch(gold.rows15m, gold.rows1h, gold.rows4h, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
@@ -914,7 +952,7 @@ async function runScan(ui, scanSt){
       setProg(ui, 0.75);
       if (dx.item && dx.rows15m.length){
         venueRows['DELTA XAUTUSD'] = { rows15m: dx.rows15m };
-        var got2 = buildCandidates(dx, now, news, 'DELTA XAUTUSD', 'XAUTUSD');
+        var got2 = buildCandidates(dx, now, news, 'DELTA XAUTUSD', 'XAUTUSD', scalpBundle);
         collectWatch(dx.rows15m, dx.rows1h, dx.rows4h, 'DELTA XAUTUSD');
         for (i = 0; i < got2.length; i++) cands.push(got2[i]);
         for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
@@ -929,6 +967,8 @@ async function runScan(ui, scanSt){
 
     /* ranking: transparent confluence tally across ALL venues */
     var ranked = cands, best = null;
+    var cvFn = gfn('goldCrossVenueMap');
+    if (cvFn) ctx.crossVenue = cvFn(cands);
     if (rankFn){
       var rk = null;
       try{ rk = rankFn(cands, ctx); }catch(eR){ rk = null; }
@@ -967,6 +1007,21 @@ async function runScan(ui, scanSt){
         wkFn(ranked, gold.rows4h, atrW, now);
       }catch(eWk){}
     }
+    var promoteFn = gfn('goldWatchPromote');
+    if (promoteFn){
+      var promoteCands = ranked.filter(function(c){ return c && !c.demoted && !c.vetoed && !c.dropped; });
+      armedAll = promoteFn(promoteCands, armedAll);
+    }
+    if (ctx.goldPro && ctx.goldPro.word){
+      for (var gp = 0; gp < ranked.length; gp++){
+        var gc0 = ranked[gp];
+        if (!gc0) continue;
+        var fav = (ctx.goldPro.word === 'STRUCTURAL BULL') ? 'long'
+                : ((ctx.goldPro.word === 'STRUCTURAL BEAR') ? 'short' : null);
+        if (fav && gc0.dir === fav) gc0.goldProChip = 'GOLD PRO ' + ctx.goldPro.word;
+        else if (ctx.goldPro.word !== 'NEUTRAL') gc0.goldProChip = 'GOLD PRO conflict';
+      }
+    }
     var formFn = gfn('hgFormTicket');
     if (formFn){
       for (var fi = 0; fi < ranked.length; fi++){
@@ -994,6 +1049,13 @@ async function runScan(ui, scanSt){
               if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
               if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
               if (isFinite(gfm.hit.t2)) gc.t2 = gfm.hit.t2;
+              if (isFinite(gfm.hit.t3)) gc.t3 = gfm.hit.t3;
+            }
+            var rskF = Math.abs(gc.entry - gc.stop);
+            if (rskF > 0){
+              if (isFinite(gc.t1)) gc.rr = Math.abs(gc.t1 - gc.entry) / rskF;
+              if (isFinite(gc.t2)) gc.rr2 = Math.abs(gc.t2 - gc.entry) / rskF;
+              if (isFinite(gc.t3)) gc.rr3 = Math.abs(gc.t3 - gc.entry) / rskF;
             }
           }
         }catch(eGf){}
@@ -1118,6 +1180,25 @@ async function runScan(ui, scanSt){
     if (gold.rows15m.length || (!stRoute && dx.rows15m.length)){
       publishState(display);
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
+      var visionEnrich = gfn('hgChartVisionEnrichSetups');
+      var visionRefresh = gfn('hgChartVisionRefreshGoldCards');
+      if (visionEnrich && display.length && ui && ui.cards){
+        visionEnrich(display, function(c){
+          var vr = venueRows[c.venue];
+          return (vr && vr.rows15m && vr.rows15m.length) ? vr.rows15m : gold.rows15m;
+        }, { limit: 3 }).then(function(){
+          if (scanSt.visionGen !== visionGen) return;
+          if (typeof visionRefresh === 'function'){
+            visionRefresh({
+              scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
+              basisHtml: basisHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
+              armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
+              seasonNote: season && season.note,
+            });
+          }
+        });
+      }
     }
     return 'refreshed';
   }catch(e){

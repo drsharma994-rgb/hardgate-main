@@ -70,11 +70,16 @@ assert(!html.includes('hardgate-proxy.onrender.com'), 'dead Render proxy host fu
 assert(html.includes('allorigins.win') && html.includes('codetabs.com'),
   'public CORS proxies kept as last resort after same-origin /api/proxy');
 {
+  const deskFn = grabFn('cdcxDeskPath');
   const cg = grabFn('cdcxGet');
-  const iDesk = cg.indexOf("return '/api/coindcx/instruments'");
-  const iApi = cg.indexOf('await fetch(CDCX_PROXY(url))');
+  assert(deskFn.indexOf("return '/api/coindcx/instruments'") !== -1,
+    'cdcxDeskPath maps active_instruments to /api/coindcx/instruments');
+  const iDesk = cg.indexOf('cdcxDeskPath(url)');
+  const iDeskFetch = cg.indexOf('fetch(desk)');
+  const iApi = cg.indexOf('fetch(CDCX_PROXY(url))');
   const iPublic = cg.indexOf('CDCX_PUBLIC_PROXIES');
-  assert(iDesk !== -1 && iApi !== -1 && iPublic !== -1 && iDesk < iApi && iApi < iPublic,
+  assert(iDesk !== -1 && iDeskFetch !== -1 && iApi !== -1 && iPublic !== -1
+    && iDesk < iDeskFetch && iDeskFetch < iApi && iApi < iPublic,
     'cdcxGet order: /api/coindcx desk first, same-origin /api/proxy second, public backups last');
 }
 assert(html.includes('function executeBackendReady') || html.includes('execute.js?v='),

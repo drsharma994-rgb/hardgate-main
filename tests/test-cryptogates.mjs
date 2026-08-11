@@ -12,6 +12,8 @@ load('indicators.js');
 load('indicators2.js');
 load('cryptogates.js');
 load('plans.js');
+globalThis.hgStructureGate = () => ({ veto: false, bos: true });
+globalThis.detectRegime = () => ({ regime: 'trend', label: 'trend' });
 
 let pass = 0, fail = 0;
 function ok(cond, msg){

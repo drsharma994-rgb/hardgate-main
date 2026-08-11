@@ -318,10 +318,12 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
     for (var wq = 0; wq < (armed || []).length; wq++){
       var w0 = armed[wq];
       if (!w0) continue;
+      var wSt = (w0.state === 'promoted') ? 'promoted' : ((w0.state === 'armed') ? 'armed' : 'idle');
       arm.push({ strategy: w0.strategy || null, venue: w0.venue || null,
-                 state: (w0.state === 'armed') ? 'armed' : 'idle',
+                 state: wSt,
                  level: (typeof w0.level === 'number' && isFinite(w0.level)) ? w0.level : null,
-                 condition: w0.condition || '', reason: w0.reason || null });
+                 condition: w0.condition || '', reason: w0.reason || null,
+                 promoteNote: w0.promoteNote || null });
     }
     __scanSnap = { cands: cands, bestId: best ? (best.id || null) : null, history: hist, rejected: rej,
                    armed: arm, whySilent: (typeof whySilent === 'string' && whySilent) ? whySilent : null, at: at };
@@ -502,6 +504,8 @@ var GW_CSS = ''
 + '#tab_goldswing .gsw-wrow.armed{border-left-color:#059669;color:#020617;background:rgba(5,150,105,.05)}'
 + '#tab_goldswing .gsw-wst{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:4px;margin-right:6px;border:1px solid;font-weight:700}'
 + '#tab_goldswing .gsw-wrow.armed .gsw-wst{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
++ '#tab_goldswing .gsw-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
++ '#tab_goldswing .gsw-wrow.promoted .gsw-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
 + '#tab_goldswing .gsw-wrow.idle .gsw-wst{color:#475569;border-color:#E2E8F0;background:#F8FAFC}'
 + '#tab_goldswing .gsw-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
 + '#tab_goldswing .gsw-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
@@ -584,6 +588,15 @@ function cardHTML(c, isBest, season){
   var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
+  var metaChips = '';
+  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
+  if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
+  if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
+  if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  var visionText = [c.visionNextMove, c.visionPrediction].filter(Boolean).join(' · ');
+  var visionLine = visionText
+    ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
     + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
@@ -599,7 +612,7 @@ function cardHTML(c, isBest, season){
     + '</div>'
     + '<div class="gates">'
     + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
-    + chips
+    + chips + metaChips
     + '</div>'
     + tallyChips(c)
     + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
@@ -610,6 +623,7 @@ function cardHTML(c, isBest, season){
     + ' · TP3 <b>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
     + '</div>'
     + (c.why ? '<div class="gsw-whyline">' + esc(c.why) + '</div>' : '')
+    + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + lockLine
     + newsBanner + notes + seasonLine
@@ -672,14 +686,16 @@ function formingNowHTML(armed){
   if (!armed || !armed.length) return '';
   var rows = armed.map(function(w){
     if (!w) return '';
-    var st = w.state === 'armed';
+    var st = w.state === 'armed' || w.state === 'promoted';
+    var cls = w.state === 'promoted' ? 'promoted' : (st ? 'armed' : 'idle');
     var lvlNum = (typeof w.level === 'number' && isFinite(w.level));
-    return '<div class="gsw-wrow ' + (st ? 'armed' : 'idle') + '">'
-      + '<span class="gsw-wst">' + (st ? 'ARMED' : 'IDLE') + '</span>'
+    return '<div class="gsw-wrow ' + cls + '">'
+      + '<span class="gsw-wst">' + (w.state === 'promoted' ? 'PROMOTED' : (st ? 'ARMED' : 'IDLE')) + '</span>'
       + '<b>' + esc(w.strategy || 'SETUP') + '</b>'
       + (w.venue ? ' · ' + esc(w.venue) : '')
       + (lvlNum ? ' · $' + pxF(w.level) : '')
-      + ' — ' + esc(st ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range'))
+      + ' — ' + esc(w.state === 'promoted' ? (w.promoteNote || 'trigger fired — see candidate card')
+              : (st ? (w.condition || 'watching') : (w.reason || w.condition || 'no trigger in range')))
       + '</div>';
   }).join('');
   return '<div class="gsw-hist gsw-watch"><div class="gsw-hhead">FORMING NOW — what the engine is watching'
@@ -829,7 +845,7 @@ var SW_NEWS_STAMP = 'NEWS WINDOW — expect a fade around the release; swing lev
 
 /* swing risk model: stop 1.5-2x ATR14(4h), never tighter, extended beyond
    the structure when wider (capped 2x); targets fixed at 1.5R / 2.5R / 4R. */
-function __swLevels(dir, entry, a4, structStop){
+function __swLevels(dir, entry, a4, structStop, snapLvls){
   var stopDist = 1.5*a4, stopNote = 'stop 1.5×ATR14(4h)';
   if (isFinite(structStop)){
     var d = (dir === 'long') ? (entry - structStop) : (structStop - entry);
@@ -847,11 +863,48 @@ function __swLevels(dir, entry, a4, structStop){
   var gT1 = (typeof HG_GOLD_T1_R === 'number') ? HG_GOLD_T1_R : 1.5;
   var gT2 = (typeof HG_GOLD_T2_R === 'number') ? HG_GOLD_T2_R : 2.5;
   var gT3 = (typeof HG_GOLD_T3_R === 'number') ? HG_GOLD_T3_R : 4.0;
-  return { stop: stop,
-           t1: (dir === 'long') ? entry + gT1*risk : entry - gT1*risk,
-           t2: (dir === 'long') ? entry + gT2*risk : entry - gT2*risk,
-           t3: (dir === 'long') ? entry + gT3*risk : entry - gT3*risk,
-           rr: gT1, rr2: gT2, rr3: gT3, stopNote: stopNote, targetPolicy: 'gold ladder ' + gT1 + 'R/' + gT2 + 'R/' + gT3 + 'R' };
+  var t1 = (dir === 'long') ? entry + gT1*risk : entry - gT1*risk;
+  var t2 = (dir === 'long') ? entry + gT2*risk : entry - gT2*risk;
+  var t3 = (dir === 'long') ? entry + gT3*risk : entry - gT3*risk;
+  if (snapLvls && snapLvls.length){
+    var bestLvl = NaN, bestR = Infinity, si;
+    for (si = 0; si < snapLvls.length; si++){
+      var L = snapLvls[si];
+      if (!isFinite(L)) continue;
+      var onSide = (dir === 'long') ? (L > entry && L < t1) : (L < entry && L > t1);
+      if (!onSide) continue;
+      var rL = Math.abs(L - entry)/risk;
+      if (rL < bestR){ bestR = rL; bestLvl = L; }
+    }
+    if (isFinite(bestLvl)){
+      t1 = bestLvl;
+      stopNote += '; TP1 snapped to opposing structure ' + bestLvl.toFixed(2);
+    }
+  }
+  var rr1 = Math.abs(t1 - entry)/risk;
+  return { stop: stop, t1: t1, t2: t2, t3: t3,
+           rr: rr1, rr2: Math.abs(t2 - entry)/risk, rr3: Math.abs(t3 - entry)/risk,
+           stopNote: stopNote, targetPolicy: 'gold ladder ' + gT1 + 'R/' + gT2 + 'R/' + gT3 + 'R (structure-native TP1)' };
+}
+
+function __swSnapLvls(sw, ob, entry, dir){
+  var out = [];
+  try{
+    if (sw){
+      var L = (dir === 'long') ? (sw.highSweep ? sw.highSweep.level : NaN)
+                               : (sw.lowSweep ? sw.lowSweep.level : NaN);
+      if (isFinite(L)) out.push(L);
+    }
+    if (ob){
+      var zones = (dir === 'long') ? ob.bearish : ob.bullish;
+      var zi, edge;
+      for (zi = 0; zi < zones.length; zi++){
+        edge = (dir === 'long') ? zones[zi].bottom : zones[zi].top;
+        if (isFinite(edge) && ((dir === 'long' && edge > entry) || (dir === 'short' && edge < entry))) out.push(edge);
+      }
+    }
+  }catch(e){}
+  return out;
 }
 
 function __swEntryFromZone(dir, mark, zone, anchor){
@@ -879,9 +932,10 @@ function __swEntryFromZone(dir, mark, zone, anchor){
 /* per-venue candidate composition. Every detector is feature-checked and
    read-only; triggers without enough agreement ride the .rejected side-
    channel with the reason named. */
-function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
+function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, microOpts){
   var out = [];
   out.rejected = [];
+  microOpts = microOpts || {};
   try{
     var rows4 = __rows(leg.rows4h);
     if (!rows4 || rows4.length < MIN_4H) return out;
@@ -993,11 +1047,16 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
     } else if (!swFn) notes.push('goldSweeps unavailable (goldind.js) — sweep evidence skipped');
 
     /* 4h fractal BOS / CHOCH + OB zone eval (HardgateGoldEngine.evaluateSwing) */
-    var ms4 = null, obRetest4 = null;
+    var ms4 = null, obRetest4 = null, swingEval = null;
     var engFn = gfn('HardgateGoldEngine');
     if (engFn && typeof engFn.evaluateSwing === 'function'){
       try{
-        var swingEval = engFn.evaluateSwing(rows4, { atr4: a4, nearestStructure: null, entry: entry });
+        var swingCtx = { atr4: a4, nearestStructure: null, entry: entry };
+        if (microOpts.us10yCandles) swingCtx.us10yCandles = microOpts.us10yCandles;
+        if (microOpts.tickBuffer) swingCtx.tickBuffer = microOpts.tickBuffer;
+        if (microOpts.l2OrderBook) swingCtx.l2OrderBook = microOpts.l2OrderBook;
+        if (isFinite(microOpts.domDepth)) swingCtx.domDepth = microOpts.domDepth;
+        swingEval = engFn.evaluateSwing(rows4, swingCtx);
         ms4 = swingEval.structure;
         obRetest4 = swingEval.obSetup;
       }catch(eEng){ /* skip */ }
@@ -1069,11 +1128,21 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
                    venue: venue, sym: sym,
                    reason: 'macro tailwind against the daily bear stack — short setup suppressed (real-rate backdrop favors longs)' };
         }
+        var mvFn = gfn('__swMicroVeto');
+        if (mvFn){
+          var mv = mvFn(dir, key, swingEval, microOpts);
+          if (mv){
+            return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
+                     venue: venue, sym: sym, reason: mv.reason || 'microstructure veto' };
+          }
+        }
         var mark = entry;
         var entRef = __swEntryFromZone(dir, mark, zone, anchor);
         var useEntry = entRef.entry;
         if (!isFinite(useEntry) || !(useEntry > 0)) return null;
-        var lv = __swLevels(dir, useEntry, a4, structStop);
+        var snapLvls = (key === 'wkbreak' || key === 'macro' || key === 'pullback')
+          ? [] : __swSnapLvls(sw, ob, useEntry, dir);
+        var lv = __swLevels(dir, useEntry, a4, structStop, snapLvls);
         if (lv.rr < 1.2){
           return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
                    venue: venue, sym: sym,
@@ -1086,7 +1155,7 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym){
         return {
           id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
           entry: useEntry, pxNow: mark, mark: mark, stop: lv.stop, t1: lv.t1, t2: lv.t2, t3: lv.t3,
-          structStop: structStop,
+          structStop: structStop, snapLvls: snapLvls,
           rr: lv.rr, rr2: lv.rr2, rr3: lv.rr3,
           grade: grade, confluence: conf, agree: L.mine.length, oppose: L.oppose,
           reads: L.counts,
@@ -1414,6 +1483,30 @@ function buildWatch(leg, nowMs, macro, venue){
 }
 
 /* ---------------- ranking: transparent confluence tally ---------------- */
+function goldSwingSetups(inp){
+  try{
+    inp = inp || {};
+    var rows4 = __rows(inp.rows4h);
+    if (!rows4 || rows4.length < MIN_4H) return { ranked: [], best: null, rejected: [] };
+    var nowMs = inp.now;
+    if (!isFinite(nowMs)) nowMs = Date.now();
+    var newsC = { caution: false, title: null };
+    if (inp.news){
+      var ncFn = gfn('goldNewsCaution');
+      if (ncFn){ try{ newsC = ncFn(inp.news, nowMs) || newsC; }catch(eN){} }
+    }
+    var leg = { rows4h: rows4, rows1d: __rows(inp.rows1d) };
+    var microOpts = inp.microOpts || {};
+    if (inp.us10yCandles) microOpts.us10yCandles = inp.us10yCandles;
+    var got = buildCandidates(leg, nowMs, newsC, inp.macro || null, 'n/a', 'INLINE', 'XAUUSD', microOpts);
+    var cvFn = gfn('goldCrossVenueMap');
+    var ctx = { now: nowMs, news: newsC, macro: inp.macro || null, goldPro: inp.goldPro || null,
+                season: inp.season || null, spot: inp.spot || null, fng: inp.fng || null,
+                fundingRate: inp.fundingRate, crossVenue: cvFn ? cvFn(got) : null };
+    return rankSetups(got, ctx);
+  }catch(e){ return { ranked: [], best: null, rejected: [] }; }
+}
+
 function rankSetups(cands, ctx){
   try{
     if (typeof window !== 'undefined' && typeof window.goldRankSetups === 'function')
@@ -1548,6 +1641,8 @@ async function runScan(ui, scanSt){
   scanSt = scanSt || __scan;
   if (scanSt.busy) return 'busy';
   scanSt.busy = true;
+  scanSt.visionGen = (scanSt.visionGen || 0) + 1;
+  var visionGen = scanSt.visionGen;
   var t0 = Date.now();
   try{
     if (ui && ui.btn) ui.btn.disabled = true;
@@ -1628,6 +1723,14 @@ async function runScan(ui, scanSt){
       }catch(eFr){}
     }
 
+    var microOpts = {};
+    if (ctx.macro && ctx.macro.us10yCandles) microOpts.us10yCandles = ctx.macro.us10yCandles;
+    if (typeof W !== 'undefined' && W){
+      if (W.__hgGoldTickBuffer) microOpts.tickBuffer = W.__hgGoldTickBuffer;
+      if (W.__hgGoldL2Book) microOpts.l2OrderBook = W.__hgGoldL2Book;
+      if (isFinite(W.__hgGoldDomDepth)) microOpts.domDepth = W.__hgGoldDomDepth;
+    }
+
     var cands = [], legs = [], venueRows = {}, rejectedAll = [], i;
     var armedAll = [], watchMeta = {};
     function collectWatch(leg, venue){
@@ -1651,7 +1754,7 @@ async function runScan(ui, scanSt){
       var v = stRoute ? stGoldVenueLabel() : venueLabel(gold.source);
       var sym1 = stRoute ? ST_GOLD_SYM : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       venueRows[v] = { rows4h: gold.rows4h };
-      var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1);
+      var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1, microOpts);
       collectWatch(gold, v);
       for (i = 0; i < got.length; i++) cands.push(got[i]);
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
@@ -1669,7 +1772,7 @@ async function runScan(ui, scanSt){
       setProg(ui, 0.75);
       if (dx.item && dx.rows4h.length){
         venueRows['DELTA XAUTUSD'] = { rows4h: dx.rows4h };
-        var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD');
+        var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD', microOpts);
         collectWatch(dx, 'DELTA XAUTUSD');
         for (i = 0; i < got2.length; i++) cands.push(got2[i]);
         for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
@@ -1683,6 +1786,8 @@ async function runScan(ui, scanSt){
     }
 
     /* ranking: transparent confluence tally across ALL venues */
+    var cvFn = gfn('goldCrossVenueMap');
+    if (cvFn) ctx.crossVenue = cvFn(cands);
     var rk = rankSetups(cands, ctx);
     var ranked = rk.ranked, best = rk.best;
     for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
@@ -1703,6 +1808,21 @@ async function runScan(ui, scanSt){
     }
     if (wkFn && gold.rows4h && gold.rows4h.length){
       try{ wkFn(ranked, gold.rows4h, atrW, now); }catch(eWk){}
+    }
+    var promoteFn = gfn('goldWatchPromote');
+    if (promoteFn){
+      var promoteCands = ranked.filter(function(c){ return c && !c.demoted && !c.vetoed && !c.dropped; });
+      armedAll = promoteFn(promoteCands, armedAll);
+    }
+    if (ctx.goldPro && ctx.goldPro.word){
+      for (var gp = 0; gp < ranked.length; gp++){
+        var gc0 = ranked[gp];
+        if (!gc0) continue;
+        var fav = (ctx.goldPro.word === 'STRUCTURAL BULL') ? 'long'
+                : ((ctx.goldPro.word === 'STRUCTURAL BEAR') ? 'short' : null);
+        if (fav && gc0.dir === fav) gc0.goldProChip = 'GOLD PRO ' + ctx.goldPro.word;
+        else if (ctx.goldPro.word !== 'NEUTRAL') gc0.goldProChip = 'GOLD PRO conflict';
+      }
     }
     var formFn = gfn('hgFormTicket');
     if (formFn && gold.rows4h && gold.rows4h.length){
@@ -1729,6 +1849,12 @@ async function runScan(ui, scanSt){
               if (isFinite(gfm.hit.stop)) gc.stop = gfm.hit.stop;
               if (isFinite(gfm.hit.t1)) gc.t1 = gfm.hit.t1;
               if (isFinite(gfm.hit.t2)) gc.t2 = gfm.hit.t2;
+            }
+            var rskFs = Math.abs(gc.entry - gc.stop);
+            if (rskFs > 0){
+              if (isFinite(gc.t1)) gc.rr = Math.abs(gc.t1 - gc.entry) / rskFs;
+              if (isFinite(gc.t2)) gc.rr2 = Math.abs(gc.t2 - gc.entry) / rskFs;
+              if (isFinite(gc.t3)) gc.rr3 = Math.abs(gc.t3 - gc.entry) / rskFs;
             }
           }
         }catch(eGf){}
@@ -1805,6 +1931,25 @@ async function runScan(ui, scanSt){
     if (gold.rows4h.length || (!stRoute && dx.rows4h.length)){
       publishState(display);                        /* only a real data run overwrites the snapshots */
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
+      var visionEnrichGw = gfn('hgChartVisionEnrichSetups');
+      var visionRefreshGw = gfn('hgChartVisionRefreshGoldCards');
+      if (visionEnrichGw && display.length && ui && ui.cards){
+        visionEnrichGw(display, function(c){
+          var vr = venueRows[c.venue];
+          return (vr && vr.rows4h && vr.rows4h.length) ? vr.rows4h : gold.rows4h;
+        }, { limit: 3 }).then(function(){
+          if (scanSt.visionGen !== visionGen) return;
+          if (typeof visionRefreshGw === 'function'){
+            visionRefreshGw({
+              scanSt: scanSt, scanGen: visionGen, ui: ui, display: display, displayBest: displayBest,
+              basisHtml: basisHtml, bannerHTML: bannerHTML, cardHTML: cardHTML,
+              formingNowHTML: formingNowHTML, rejectedHTML: rejectedHTML, historyHTML: historyHTML,
+              armedAll: armedAll, rejectedAll: rejectedAll, history: lock.store.history,
+              seasonNote: season && season.note,
+            });
+          }
+        });
+      }
     }
     return 'refreshed';
   }catch(e){
@@ -1933,6 +2078,7 @@ async function gwWarm(){
 
 /* ---------------- registration ---------------- */
 W.goldSwingLevels = __swLevels;
+W.goldSwingSetups = goldSwingSetups;
 W.goldswingState = function(){
   try{ return __snap ? __stateView(__snap) : null; }catch(e){ return null; }
 };

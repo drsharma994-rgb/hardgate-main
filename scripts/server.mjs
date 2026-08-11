@@ -26,6 +26,7 @@ import { createWorldmonitorApi } from '../lib/worldmonitor-api.mjs';
 import { createAgentApi } from '../lib/agent-api.mjs';
 import { createAtomicAgentApi } from '../lib/atomic-agent-api.mjs';
 import { createCoindcxApi } from '../lib/coindcx-api.mjs';
+import { createChartVisionApi } from '../lib/chart-vision-api.mjs';
 import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -46,6 +47,7 @@ const worldmonitorHandler = createWorldmonitorApi();
 const agentHandler = createAgentApi();
 const atomicHandler = createAtomicAgentApi();
 const coindcxHandler = createCoindcxApi();
+const chartVisionHandler = createChartVisionApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -72,7 +74,7 @@ function baseHeaders(res){
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data:",
-    "connect-src 'self' https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.frankfurter.dev https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov https://api.hyperliquid.xyz https://api.worldmonitor.app wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
+    "connect-src 'self' https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.frankfurter.dev https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov https://api.hyperliquid.xyz https://api.worldmonitor.app https://generativelanguage.googleapis.com wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "object-src 'none'",
@@ -146,6 +148,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/coindcx' || u.pathname.indexOf('/api/coindcx/') === 0){
       return coindcxHandler(req, res);
+    }
+    if (u.pathname === '/api/chart-vision' || u.pathname.indexOf('/api/chart-vision/') === 0){
+      return chartVisionHandler(req, res);
     }
 
     /* static: resolve safely inside ROOT, index.html at '/', cleanUrls-style

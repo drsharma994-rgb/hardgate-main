@@ -665,6 +665,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="openbb-desk.js"></script>
 <script src="ccxt-desk.js"></script>
 <script src="worldmonitor-desk.js"></script>
+<script src="chart-vision-desk.js"></script>
 <script src="hey-desk.js"></script>
 <script src="squeeze.js"></script>
 <script src="trendtable.js"></script>
@@ -4792,7 +4793,24 @@ async function runGold(){
     }
     $('goldScalpOut').innerHTML = scalpLedger('long') + scalpLedger('short');
     try{ renderGoldMacroAuto(await __macroP, S.goldDataSource); }catch(e){}
-    $('goldStat').textContent = `evaluated · closed bars only · ${new Date().toTimeString().slice(0,5)}`;
+    var tabBridge = '';
+    if (typeof hgGoldInlineBridge === 'function'){
+      try{
+        var macroNow = await __macroP;
+        var gpsFn = (typeof goldProState === 'function') ? goldProState : null;
+        var bridge = hgGoldInlineBridge({
+          rows15m: m15, rows1h: h1, rows4h: h4, rows1d: d1,
+          now: Date.now(), macro: macroNow,
+          goldPro: gpsFn ? gpsFn() : null
+        });
+        if (bridge && bridge.scalp && bridge.scalp.best){
+          tabBridge = ' · tab scalp: ' + bridge.scalp.best.dir.toUpperCase()
+            + ' ' + bridge.scalp.best.strategy
+            + (isFinite(bridge.scalp.best.tally) ? (' tally +' + bridge.scalp.best.tally) : '');
+        }
+      }catch(eBr){}
+    }
+    $('goldStat').textContent = `evaluated · closed bars only · ${new Date().toTimeString().slice(0,5)}${tabBridge}`;
   }catch(e){
     $('goldStat').textContent = 'gold eval failed: '+e.message;
   }finally{ setProg('goldProg',null); setTimeout(()=>{ btn.disabled=false; }, 10000); }

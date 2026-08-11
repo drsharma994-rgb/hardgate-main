@@ -1273,6 +1273,13 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   if (bundleOpts.newsGuard) scalpCtx.newsGuard = bundleOpts.newsGuard;
   if (bundleOpts.news) scalpCtx.news = bundleOpts.news;
   if (bundleOpts.newsWindowMinutes) scalpCtx.newsWindowMinutes = bundleOpts.newsWindowMinutes;
+  if (bundleOpts.us10yCandles) scalpCtx.us10yCandles = bundleOpts.us10yCandles;
+  if (bundleOpts.tickBuffer) scalpCtx.tickBuffer = bundleOpts.tickBuffer;
+  if (bundleOpts.l2OrderBook) scalpCtx.l2OrderBook = bundleOpts.l2OrderBook;
+  if (isFinite(bundleOpts.domDepth)) scalpCtx.domDepth = bundleOpts.domDepth;
+  if (bundleOpts.dailyCandles) scalpCtx.dailyCandles = bundleOpts.dailyCandles;
+  if (bundleOpts.xauCandles) scalpCtx.xauCandles = bundleOpts.xauCandles;
+  if (bundleOpts.xagCandles) scalpCtx.xagCandles = bundleOpts.xagCandles;
   D.scalpEval = evaluateScalp(rows, scalpCtx);
   D.macroHint = D.scalpEval.macroHint || bundleOpts.macroHint || null;
   D.ker = D.scalpEval.ker || calculateKaufmanER(rows, 20);
@@ -1608,6 +1615,14 @@ function goldScalpSetups(inp){
     if (isFinite(inp.spotXauPrice)) bundleOpts.spotXauPrice = inp.spotXauPrice;
     if (inp.newsGuard) bundleOpts.newsGuard = inp.newsGuard;
     if (inp.news) bundleOpts.news = inp.news;
+    if (inp.us10yCandles) bundleOpts.us10yCandles = inp.us10yCandles;
+    if (inp.tickBuffer) bundleOpts.tickBuffer = inp.tickBuffer;
+    if (inp.l2OrderBook) bundleOpts.l2OrderBook = inp.l2OrderBook;
+    if (isFinite(inp.domDepth)) bundleOpts.domDepth = inp.domDepth;
+    if (inp.dailyCandles) bundleOpts.dailyCandles = inp.dailyCandles;
+    if (inp.xauCandles) bundleOpts.xauCandles = inp.xauCandles;
+    if (inp.xagCandles) bundleOpts.xagCandles = inp.xagCandles;
+    if (isFinite(inp.newsWindowMinutes)) bundleOpts.newsWindowMinutes = inp.newsWindowMinutes;
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15, bundleOpts);
     D.kz = kz; D.news = news;
 
@@ -1634,6 +1649,13 @@ function goldScalpSetups(inp){
     function push(c){
       if (!c) return;
       if (c.dropped){ rejected.push(c); return; }
+      var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
+      if (mv){
+        rejected.push({ dropped: true, id: c.id || null, strategy: c.strategy || null,
+                        stratKey: c.stratKey || null, dir: c.dir,
+                        reason: mv.reason || 'microstructure veto' });
+        return;
+      }
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
     var tol = 0.5*a15;
@@ -1954,8 +1976,9 @@ function goldWatch(inp){
     if (!isFinite(entry) || !(entry > 0)) return [];
     var tf = (typeof inp.tf === 'string' && inp.tf) ? inp.tf : '15m';
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15);
-    function emit(key, state, level, condition, reason){
+    function emit(key, state, level, condition, reason, dir){
       out.push({ stratKey: key, strategy: GST_NAME[key] || key,
+                 dir: dir || null,
                  state: (state === 'armed') ? 'armed' : 'idle',
                  level: (typeof level === 'number' && isFinite(level)) ? level : null,
                  condition: condition || '', reason: reason || null });
@@ -1973,7 +1996,8 @@ function goldWatch(inp){
         var nearLow = Math.abs(entry - sL) <= Math.abs(sH - entry);
         emit('sweep', 'armed', nearLow ? sL : sH,
           'watching ' + (nearLow ? sL : sH).toFixed(2) + ' (last ' + tf + ' swing ' + (nearLow ? 'low' : 'high')
-            + ') — fires on a wick ' + (nearLow ? 'below + reclaim close' : 'above + rejection close'), null);
+            + ') — fires on a wick ' + (nearLow ? 'below + reclaim close' : 'above + rejection close'), null,
+          nearLow ? 'long' : 'short');
       } else emit('sweep', 'idle', null, '', 'no levels available (swing high/low not computable)');
     } else emit('sweep', 'idle', null, '', 'not enough bars for a 25-bar swing — no levels available');
 
@@ -1998,7 +2022,8 @@ function goldWatch(inp){
           : ((entry > obNear.top) ? obNear.top : obNear.bottom);
         emit('ob', 'armed', obEdge,
           'watching the unmitigated ' + obNear.dir + ' ' + tf + ' order block ' + obNear.bottom.toFixed(2) + '–'
-            + obNear.top.toFixed(2) + ' — fires on a retest (price within 0.5×ATR of the zone)', null);
+            + obNear.top.toFixed(2) + ' — fires on a retest (price within 0.5×ATR of the zone)', null,
+          obNear.dir === 'bullish' ? 'long' : 'short');
       } else {
         emit('ob', 'idle', null, '', 'no unmitigated ' + tf + ' order block within 1.5×ATR of price');
       }
@@ -2025,7 +2050,8 @@ function goldWatch(inp){
         : ((entry > fvgNear.top) ? fvgNear.top : fvgNear.bottom);
       emit('fvg', 'armed', fEdge,
         'watching the unmitigated ' + fvgTf + ' FVG ' + fvgNear.bottom.toFixed(2) + '–' + fvgNear.top.toFixed(2)
-          + ' — fires on a retrace into the gap', null);
+          + ' — fires on a retrace into the gap', null,
+        fvgNear.dir === 'bullish' ? 'long' : 'short');
     } else emit('fvg', 'idle', null, '', 'no unfilled ' + tf + ' imbalance nearby (within 1.5×ATR)');
 
     /* 4) session VWAP — always armed when computable: fair value is always
@@ -2042,7 +2068,8 @@ function goldWatch(inp){
     if (rb && (rb.mode === 'BULL' || rb.mode === 'BEAR') && isFinite(rb.e20)){
       emit('ribbon', 'armed', rb.e20,
         'watching the 20-EMA ' + rb.e20.toFixed(2) + ' — fires on a pullback into it (within 0.5×ATR) inside a '
-          + rb.mode + ' 20/50/200 ribbon', null);
+          + rb.mode + ' 20/50/200 ribbon', null,
+        rb.mode === 'BULL' ? 'long' : 'short');
     } else if (!rb || !isFinite(rb.e20)){
       emit('ribbon', 'idle', null, '', 'no levels available (20-EMA not computable on these bars)');
     } else {
@@ -2056,7 +2083,8 @@ function goldWatch(inp){
       var aNearLow = Math.abs(entry - asian.lo) <= Math.abs(asian.hi - entry);
       emit('asian', 'armed', aNearLow ? asian.lo : asian.hi,
         'armed 00:00–07:00 GMT: box ' + asian.lo.toFixed(2) + '–' + asian.hi.toFixed(2) + ' (' + asian.dayIso
-          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London break + close outside', null);
+          + (asian.state === 'BUILDING' ? ', still building' : '') + ') — fires on a London break + close outside', null,
+        aNearLow ? 'long' : 'short');
     } else emit('asian', 'idle', null, '', 'no Asian-range box yet (needs >=3 bars inside 00:00–07:00 GMT) — no levels available');
 
     /* 7) RSI 75/25 divergence — always watching while RSI is computable;
@@ -2083,6 +2111,141 @@ function goldWatch(inp){
 
     return out;
   }catch(e){ return []; }
+}
+
+/* Per-direction microstructure vetoes (yield / DOM / OB-CVD). News windows are
+   handled at tab conviction level — never veto the whole bundle here. */
+function __gsMicroVeto(dir, stratKey, D, opts){
+  try{
+    opts = opts || {};
+    if (dir !== 'long' && dir !== 'short') return null;
+    if (opts.us10yCandles){
+      var yg = validateYieldCorrelation(opts.us10yCandles, dir);
+      if (yg && !yg.valid) return { reason: yg.reason };
+    } else if (D.scalpEval && D.scalpEval.yieldGuard && !D.scalpEval.yieldGuard.valid){
+      var yg2 = D.scalpEval.yieldGuard;
+      if ((dir === 'long' && /Do not buy Gold/.test(yg2.reason || ''))
+          || (dir === 'short' && /Do not short Gold/.test(yg2.reason || ''))){
+        return { reason: yg2.reason };
+      }
+    }
+    if (opts.l2OrderBook){
+      var dom = validateDomLiquidity(dir, opts.l2OrderBook, opts.domDepth);
+      if (dom && !dom.triggerValid) return { reason: dom.reason };
+    }
+    if (stratKey === 'ob' && D.obRetest && D.obRetest.trigger && D.obRetest.direction === dir){
+      var cvd = D.scalpEval && D.scalpEval.obCvdCheck;
+      if (cvd && !cvd.triggerValid) return { reason: cvd.reason };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+/* swing-horizon mirror of __gsMicroVeto for evaluateSwing wiring. */
+function __swMicroVeto(dir, stratKey, swingEval, opts){
+  try{
+    opts = opts || {};
+    if (dir !== 'long' && dir !== 'short') return null;
+    if (opts.us10yCandles){
+      var yg = validateYieldCorrelation(opts.us10yCandles, dir);
+      if (yg && !yg.valid) return { reason: yg.reason };
+    } else if (swingEval && swingEval.yieldGuard && !swingEval.yieldGuard.valid){
+      var yg3 = swingEval.yieldGuard;
+      if ((dir === 'long' && /Do not buy Gold/.test(yg3.reason || ''))
+          || (dir === 'short' && /Do not short Gold/.test(yg3.reason || ''))){
+        return { reason: yg3.reason };
+      }
+    }
+    if (opts.l2OrderBook){
+      var dom = validateDomLiquidity(dir, opts.l2OrderBook, opts.domDepth);
+      if (dom && !dom.triggerValid) return { reason: dom.reason };
+    }
+    if (stratKey === 'ob' && swingEval && swingEval.obSetup && swingEval.obSetup.trigger
+        && swingEval.obSetup.direction === dir){
+      var cvd2 = swingEval.obCvdCheck;
+      if (cvd2 && !cvd2.triggerValid) return { reason: cvd2.reason };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+/* Count how many venues print the same structural conviction id. */
+function goldCrossVenueMap(cands){
+  var map = {};
+  try{
+    if (!Array.isArray(cands)) return map;
+    var i, c, rec;
+    for (i = 0; i < cands.length; i++){
+      c = cands[i];
+      if (!c || !c.id || c.dropped) continue;
+      rec = map[c.id];
+      if (!rec) rec = map[c.id] = { venues: 0, names: [] };
+      rec.venues++;
+      if (c.venue && rec.names.indexOf(c.venue) < 0) rec.names.push(c.venue);
+    }
+  }catch(e){}
+  return map;
+}
+
+/* When an ARMED watch item's strategy fired as a qualifying candidate, mark
+   it promoted (still not an entry — the candidate card carries the plan). */
+function goldWatchPromote(cands, armed){
+  try{
+    if (!Array.isArray(armed) || !armed.length) return armed || [];
+    var fired = {}, i, c, k;
+    for (i = 0; i < (cands || []).length; i++){
+      c = cands[i];
+      if (!c || !c.stratKey || c.dropped || c.demoted || c.vetoed) continue;
+      k = c.stratKey + '|' + String(c.dir || '').toLowerCase();
+      fired[k] = true;
+    }
+    return armed.map(function(w){
+      if (!w || w.state !== 'armed' || !w.stratKey) return w;
+      var wd = w.dir ? String(w.dir).toLowerCase() : null;
+      var match = wd ? fired[w.stratKey + '|' + wd] : fired[w.stratKey + '|long'] || fired[w.stratKey + '|short'];
+      if (!match) return w;
+      var nw = {};
+      for (var kk in w){ if (Object.prototype.hasOwnProperty.call(w, kk)) nw[kk] = w[kk]; }
+      nw.state = 'promoted';
+      nw.promoteNote = 'trigger fired this scan — see the qualifying candidate card above';
+      return nw;
+    });
+  }catch(e){ return armed || []; }
+}
+
+/* Inline GOLD / Deep Scan bridge — same tab engines, read-only summary. */
+function hgGoldInlineBridge(inp){
+  var empty = { scalp: null, swing: null, at: Date.now() };
+  try{
+    inp = inp || {};
+    var out = { scalp: null, swing: null, at: Date.now() };
+    var nowMs = __toMs(inp.now);
+    if (!isFinite(nowMs)) nowMs = Date.now();
+    var setupsFn = goldScalpSetups;
+    var rankFn = goldRankSetups;
+    if (typeof setupsFn === 'function'){
+      var got = setupsFn(inp);
+      var cands = Array.isArray(got) ? got : [];
+      var ctx = { now: nowMs, macro: inp.macro || null, goldPro: inp.goldPro || null,
+                  crossVenue: goldCrossVenueMap(cands) };
+      var rk = rankFn ? rankFn(cands, ctx) : { ranked: cands, best: cands[0] || null };
+      out.scalp = {
+        count: (rk.ranked || []).length,
+        best: rk.best ? { dir: rk.best.dir, strategy: rk.best.strategy, tally: rk.best.tally, grade: rk.best.grade } : null,
+        rejected: (got.rejected || []).length + ((rk.rejected || []).length)
+      };
+    }
+    if (typeof W.goldSwingSetups === 'function'){
+      try{
+        var sw = W.goldSwingSetups(inp);
+        if (sw && sw.best){
+          out.swing = { count: (sw.ranked || []).length, best: { dir: sw.best.dir, strategy: sw.best.strategy,
+            tally: sw.best.tally, grade: sw.best.grade } };
+        }
+      }catch(eSw){}
+    }
+    return out;
+  }catch(e){ return empty; }
 }
 
 /* =========================================================================
@@ -2219,6 +2382,30 @@ function goldRankSetups(cands, ctx){
         parts.push({ label: 'GOLD PRO ' + pro.word.replace('STRUCTURAL ', '').toLowerCase()
                        + ' — institutional structure/macro alignment', pts: pPts });
         tally += pPts;
+      }
+      /* GOLD PRO hard gate — structural bear/bull suppresses counter-structure
+         plays except sanctioned sweep / exhaustion / weekly reclaim / macro. */
+      var proExempt = { sweep: 1, adrfade: 1, wkbreak: 1, macro: 1 };
+      if (pro && pro.word === 'STRUCTURAL BULL' && c.dir === 'short'
+          && !proExempt[c.stratKey]){
+        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                            reason: 'GOLD PRO structural bull — shorts suppressed (only sweep / ADR exhaustion fades allowed)' });
+        continue;
+      }
+      if (pro && pro.word === 'STRUCTURAL BEAR' && c.dir === 'long'
+          && !proExempt[c.stratKey]){
+        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
+                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
+                            reason: 'GOLD PRO structural bear — longs suppressed (only sweep / ADR exhaustion fades allowed)' });
+        continue;
+      }
+      var cvMap = (ctx.crossVenue && typeof ctx.crossVenue === 'object') ? ctx.crossVenue : null;
+      if (cvMap && cvMap[c.id] && cvMap[c.id].venues >= 2){
+        var cvN = cvMap[c.id].venues;
+        parts.push({ label: 'cross-venue confirmation — ' + cvN + ' feed' + (cvN === 1 ? '' : 's')
+                       + ' printing the same structure (' + (cvMap[c.id].names || []).join(' · ') + ')', pts: 2 });
+        tally += 2;
       }
       var rrVal = isFinite(c.rr) ? +c.rr : (isFinite(c.rr1) ? +c.rr1 : NaN);
       if (isFinite(rrVal) && rrVal >= 2){
@@ -4147,6 +4334,11 @@ W.goldScalpSetups = goldScalpSetups;
 W.goldScalpLevels = __gsLevels;
 W.goldWatch = goldWatch;
 W.goldRankSetups = goldRankSetups;
+W.goldCrossVenueMap = goldCrossVenueMap;
+W.goldWatchPromote = goldWatchPromote;
+W.hgGoldInlineBridge = hgGoldInlineBridge;
+W.__gsMicroVeto = __gsMicroVeto;
+W.__swMicroVeto = __swMicroVeto;
 W.goldNewsCaution = __newsCaution;
 /* v54 GOLD MASTERCLASS exports */
 W.goldVWAPBands = goldVWAPBands;
