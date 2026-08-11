@@ -20,6 +20,7 @@ import {
   chartVisionNextBarLine,
 } from '../lib/chart-vision-predict.mjs';
 import { createChartVisionApi } from '../lib/chart-vision-api.mjs';
+import { chartVisionTaStats, CHART_VISION_SKILL_REF } from '../lib/chart-vision-skill.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,6 +102,14 @@ console.log('== analyze offline ==');
   ok(out.visionMode === 'heuristic', 'offline visionMode heuristic');
 }
 
+console.log('== chart vision skill ==');
+{
+  var rows = synthUptrend(60);
+  var stats = chartVisionTaStats(rows, { entry: rows[rows.length - 1].c });
+  ok(stats.ok && stats.bias === 'long', 'skill TA stats long bias');
+  ok(CHART_VISION_SKILL_REF.indexOf('LLM_trader') >= 0, 'skill cites LLM_trader');
+}
+
 console.log('== wiring ==');
 {
   var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -122,6 +131,11 @@ console.log('== wiring ==');
   ok(/id: 'chartvision'/.test(fs.readFileSync(path.join(root, 'chartvision-tab.js'), 'utf8')), 'chartvision tab module');
   var caps = chartVisionCapabilities({});
   ok(caps.analyzeRoute === '/api/chart-vision/analyze' && caps.outcomePrediction && caps.vetoEnabled, 'capabilities route + prediction + veto default');
+  ok(caps.clientPngAccepted === true && caps.skillRef, 'capabilities client PNG + skill ref');
+  ok(fs.existsSync(path.join(root, 'lib/chart-vision-skill.mjs')), 'skill module exists');
+  ok(/hgChartVisionSvgBlock/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser svg chart block');
+  ok(/sequential/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'sequential enrich option');
+  ok(/pngBase64/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser sends client PNG');
 }
 
 console.log('== HTTP handler ==');

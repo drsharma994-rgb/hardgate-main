@@ -23,7 +23,6 @@ var KL_4H = 280;
 var KL_1H = 120;
 var KL_15M = 160;
 var MAX_SHOW = 36;
-var VISION_LIMIT = 24;
 
 function esc(s){
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -205,6 +204,8 @@ function cvCardHTML(r){
   var gateLbl = cvGateLabel(r);
   var visionChip = r.visionChip ? ' <span class="gpip ok">' + esc(r.visionChip) + '</span>' : '';
   var visionHtml = (typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(r) : '';
+  var visionOnlySvg = (!visionHtml && r.visionSvg && typeof W.hgChartVisionSvgBlock === 'function')
+    ? W.hgChartVisionSvgBlock(r) : '';
   var chartId = 'cv_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '') + '_' + String(r.style || 'swing');
   var note = r.tier === 'near'
     ? '<div class="note warn" style="margin-top:6px"><b>6/7 NEAR</b> — watch-only until all seven gates pass. Chart read is independent of the gate tally.</div>'
@@ -242,7 +243,7 @@ function cvCardHTML(r){
     + (fin(+r.rr) ? ('<span class="k">R:R</span><span>' + pxF(r.rr) + '</span>') : '')
     + '</div>'
     + '<div class="gates">' + cvGateHtml(r) + '</div>'
-    + cvPlanHtml(r) + clr + miss + note + visionHtml
+    + cvPlanHtml(r) + clr + miss + note + visionHtml + visionOnlySvg
     + '<div class="hgchart" id="' + chartId + '"></div>'
     + tradeBtn + bookBtn
     + '</div>';
@@ -415,7 +416,7 @@ async function cvRunScan(opts){
     if (funnel){
       funnel.innerHTML = cvFunnelHTML({
         uniLen: items.length, hits: results.length, clean7: clean7n, near: nearN,
-        vision: Math.min(VISION_LIMIT, shown.length), note: uniPack.note || uniPack.source
+        vision: shown.length, note: uniPack.note || uniPack.source
       });
     }
 
@@ -432,14 +433,21 @@ async function cvRunScan(opts){
           timeframe: r.timeframe || '4h', __ref: r
         };
       });
+      var visDone = 0;
       W.hgChartVisionEnrichDeskRows(wraps, function(w){ return w.rows; }, {
-        limit: VISION_LIMIT,
+        limit: shown.length,
         confirmedOnly: false,
+        sequential: true,
+        onEach: function(){
+          visDone++;
+          if (stat) stat.textContent = 'chart vision ' + visDone + '/' + shown.length + ' · '
+            + Math.floor((Date.now() - t0) / 1000) + 's';
+        },
         repaint: function(){
           cards.innerHTML = shown.map(cvCardHTML).join('');
           cvPaintCharts(cards, shown);
           if (funnel){
-            var visN = shown.filter(function(r){ return r.visionNextBar || r.visionChip; }).length;
+            var visN = shown.filter(function(r){ return r.visionSvg || r.visionNextBar || r.visionChip; }).length;
             funnel.innerHTML = cvFunnelHTML({
               uniLen: items.length, hits: results.length, clean7: clean7n, near: nearN,
               vision: visN, note: uniPack.note || uniPack.source
@@ -465,7 +473,7 @@ function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
     + '<h2>CHART VISION <span>6/7 NEAR + 7/7 CLEAN · independent next-bar reads on gate-qualified setups</span></h2>'
-    + '<p class="note">Scans the full futures universe, keeps contracts that pass <b>6/7</b> or <b>7/7</b> of the shared hard gates, renders the chart, then asks chart vision for an <b>independent NEXT BAR</b> opinion (heuristic OHLCV read; optional Gemini multimodal when <code>GEMINI_API_KEY</code> is set). NEAR cards are watch-only — not tickets until 7/7.</p>'
+    + '<p class="note">Scans the full futures universe, keeps contracts that pass <b>6/7</b> or <b>7/7</b> of the shared hard gates, renders the chart, then runs chart vision on <b>every card shown</b> for an independent <b>NEXT BAR</b> opinion (hybrid TA skill — <code>qrak/LLM_trader</code> + <code>TauricResearch/TradingAgents</code>; optional Gemini multimodal PNG when <code>GEMINI_API_KEY</code> is set). NEAR cards are watch-only — not tickets until 7/7.</p>'
     + '<div class="row">'
     + '<button class="btn" id="cvRun">RUN SCAN</button>'
     + '<label class="note" style="margin-left:10px">Style '
