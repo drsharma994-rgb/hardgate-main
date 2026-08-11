@@ -177,10 +177,49 @@ function stGoldVenueLabel(){
 }
 function stGoldBasisHtml(){
   try{
-    var fn = gfn('hgGoldBasisNoteHtml');
-    if (fn) return fn() || '';
+    if (typeof S !== 'undefined' && S && S.goldDataSource === 'delta-xaut'){
+      var fn = gfn('hgGoldBasisNoteHtml');
+      if (fn) return fn() || '';
+    }
   }catch(e){}
   return '';
+}
+
+var XAUT_SPOT_BASIS_WARN_PCT = 0.35;
+var XAUT_SPOT_BEST_MAX_BASIS = 0.5;
+
+function goldSpotRefFromRows(rows){
+  if (!rows || !rows.length) return NaN;
+  var lc = rows[rows.length - 1];
+  return (lc && isFinite(lc.c)) ? +lc.c : NaN;
+}
+
+function goldAnnotateXautBasis(cands, spotRef){
+  if (!Array.isArray(cands) || !isFinite(spotRef) || !(spotRef > 0)) return;
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    if (!c || c.sym !== 'XAUTUSD' || !isFinite(c.entry)) continue;
+    c.spotRef = spotRef;
+    c.xautBasisPct = (c.entry / spotRef - 1) * 100;
+  }
+}
+
+function goldPickSpotAlignedBest(ranked, spotRef){
+  if (!Array.isArray(ranked) || !ranked.length) return null;
+  for (var i = 0; i < ranked.length; i++){
+    var bc = ranked[i];
+    if (!bc || bc.demoted || bc.vetoed) continue;
+    if (bc.sym !== 'XAUTUSD') return bc;
+    if (isFinite(spotRef) && isFinite(bc.entry)){
+      var basis = Math.abs(bc.entry / spotRef - 1) * 100;
+      if (basis <= XAUT_SPOT_BEST_MAX_BASIS) return bc;
+    }
+  }
+  for (var j = 0; j < ranked.length; j++){
+    var fb = ranked[j];
+    if (fb && !fb.demoted && !fb.vetoed) return fb;
+  }
+  return null;
 }
 
 /* ---------------- BRAIN state snapshot ---------------- */
@@ -548,6 +587,11 @@ function cardHTML(c, isBest, season){
     ? '<div class="gsx-gateline"><b>⚠ ' + esc(c.stamps.join(' · ')) + '</b> — '
       + esc((Array.isArray(c.gateNotes) ? c.gateNotes : []).join(' · '))
       + ' — demoted by quality gate: can never be MOST PROBABLE.</div>' : '';
+  var xautBasisLine = (c.sym === 'XAUTUSD' && isFinite(c.spotRef) && isFinite(c.xautBasisPct)
+    && Math.abs(c.xautBasisPct) > XAUT_SPOT_BASIS_WARN_PCT)
+    ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important">XAUT instrument ~$' + pxF(c.entry)
+      + ' vs spot XAU ~$' + pxF(c.spotRef) + ' (' + (c.xautBasisPct >= 0 ? '+' : '') + fmtF(c.xautBasisPct, 2)
+      + '%). Levels valid on <b>Delta XAUTUSD</b> only — not spot/StarTrader XAUUSD.</div>' : '';
   var tradeOnclick = (c.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(c.sym, c.dir, c.entry, c.stop, c.t1, { t2: c.t2, stack: c.stack, scanner: 'goldscalp', strategy: 'goldscalp' })
@@ -602,6 +646,7 @@ function cardHTML(c, isBest, season){
     + visionLine
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine
+    + xautBasisLine
     + lockLine
     + newsBanner + notes + seasonLine
     + stackHtml
@@ -771,21 +816,11 @@ async function fetchGoldKlines(){
   return out;
 }
 
-/* StarTrader XAUUSD — same candle chain as confluence (getXAUCandles → proxy + basis). */
+/* StarTrader XAUUSD CFD — spot-aligned proxy chain (NOT Delta XAUTUSD).
+   XAUT trades ~1–1.5% below spot; StarTrader XAUUSD tracks spot ~4388 not XAUT ~4330. */
 async function fetchStartraderGoldKlines(){
-  var out = { rows15m: [], rows1h: [], rows4h: [], source: 'startrader-xau' };
-  var fetch = gfn('getXAUCandles');
-  if (!fetch){
-    var stc = gfn('startraderCandles');
-    if (stc) fetch = function(tf, n){ return stc(ST_GOLD_SYM, tf, n); };
-  }
-  if (!fetch) return out;
-  try{ var a = await fetch('15m', KL_15M); if (Array.isArray(a) && a.length) out.rows15m = a; }catch(e){}
-  try{ var b = await fetch('1h', KL_1H);  if (Array.isArray(b) && b.length) out.rows1h = b; }catch(e2){}
-  try{ var c = await fetch('4h', KL_4H); if (Array.isArray(c) && c.length) out.rows4h = c; }catch(e3){}
-  try{
-    if (typeof S !== 'undefined' && S && S.goldDataSource) out.source = S.goldDataSource;
-  }catch(e4){}
+  var out = await fetchGoldKlines();
+  if (!out.source) out.source = 'startrader-xau';
   return out;
 }
 
@@ -1015,6 +1050,7 @@ async function runScan(ui, scanSt){
 
     /* ranking: transparent confluence tally across ALL venues */
     var ranked = cands, best = null;
+    var spotRef = goldSpotRefFromRows(gold.rows15m);
     var cvFn = gfn('goldCrossVenueMap');
     if (cvFn) ctx.crossVenue = cvFn(cands);
     if (rankFn){
@@ -1035,6 +1071,7 @@ async function runScan(ui, scanSt){
       best = ranked.length ? ranked[0] : null;
       legs.push('goldRankSetups unavailable — ordered by grade/killzone only');
     }
+    goldAnnotateXautBasis(ranked, spotRef);
 
     var filterFn = gfn('hgFilterGoldPostGate');
     if (filterFn){
@@ -1169,12 +1206,17 @@ async function runScan(ui, scanSt){
     }
     if (newsVeto) legs.push('high-impact news window — new convictions held (existing ones keep running)');
 
-    /* MOST PROBABLE = first non-demoted, non-vetoed candidate (may be null —
-       an honest 'nothing leads' when every setup is gate-demoted) */
-    best = null;
+    /* MOST PROBABLE = spot-aligned leader when XAUT basis is wide vs spot ref */
+    var naiveBest = null;
     for (i2 = 0; i2 < ranked.length; i2++){
-      var bc = ranked[i2];
-      if (bc && !bc.demoted && !bc.vetoed){ best = bc; break; }
+      var nbc = ranked[i2];
+      if (nbc && !nbc.demoted && !nbc.vetoed){ naiveBest = nbc; break; }
+    }
+    best = goldPickSpotAlignedBest(ranked, spotRef);
+    if (naiveBest && best && naiveBest.sym === 'XAUTUSD' && best.sym !== 'XAUTUSD' && isFinite(spotRef)){
+      legs.push('MOST PROBABLE: ' + best.venue + ' ~$' + pxF(best.entry)
+        + ' (spot ref ~$' + pxF(spotRef) + ') — not Delta XAUTUSD ~$' + pxF(naiveBest.entry)
+        + ' (XAUT trades at a discount to spot)');
     }
 
     var mergeFn = (typeof mergeLiveConvictionCards === 'function') ? mergeLiveConvictionCards
