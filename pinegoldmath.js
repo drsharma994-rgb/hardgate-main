@@ -217,7 +217,7 @@ function pineGoldBuildPlan(dir, price, rows, resHint, nativeHint){
   }
   try{
     if (typeof G.hgStructureStop === 'function' && rows && rows.length){
-      var st = G.hgStructureStop(dir, price, rows, { atrLen: 14, look: 30 });
+      var st = G.hgStructureStop(dir, price, rows, { atrLen: 14, look: 20 });
       if (st && fin(+st.stop)){
         var stopS = +st.stop;
         var riskS = Math.abs(price - stopS);

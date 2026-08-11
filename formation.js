@@ -8,6 +8,14 @@ var LS_FORMATION = 'hgFormationParams_v1';
 var HG_FILL_MIN = 0.20;
 var HG_ANCHOR_MAX_ATR = 1.25;
 
+function hgAnchorMaxAtr(){
+  try{
+    if (typeof G.hgSwingAnchorMax === 'function') return G.hgSwingAnchorMax();
+    if (typeof G.CG_SWING_ANCHOR_ATR === 'number') return G.CG_SWING_ANCHOR_ATR;
+  }catch(e){}
+  return HG_ANCHOR_MAX_ATR;
+}
+
 function _last(arr){
   if (typeof last === 'function') return last(arr);
   return (arr && arr.length) ? arr[arr.length - 1] : NaN;
@@ -160,7 +168,28 @@ function hgRankEntryPOI(rows, dir, style, mark, atrVal, params){
     var cands = [];
     var n = rows.length - 1;
     var tol = 0.4 * atrVal;
-    var anchorMax = HG_ANCHOR_MAX_ATR * atrVal;
+    var anchorMax = hgAnchorMaxAtr() * atrVal;
+
+    if (typeof G.hgDetectOrderBlock === 'function'){
+      var ob = G.hgDetectOrderBlock(rows, dir);
+      if (ob && fin(+ob.entry)){
+        cands.push({
+          score: style === 'scalp' ? 92 : 90,
+          entry: ob.entry, label: ob.label || 'order block', poi: 'ob',
+          zone: ob.zone || { lo: ob.entry - tol * 0.5, hi: ob.entry + tol * 0.25 },
+        });
+      }
+    }
+    if (typeof G.hgDetectFvg === 'function'){
+      var fvgD = G.hgDetectFvg(rows, dir);
+      if (fvgD && fin(+fvgD.entry)){
+        cands.push({
+          score: style === 'scalp' ? 91 : 87,
+          entry: fvgD.entry, label: fvgD.label || 'FVG', poi: 'fvg',
+          zone: fvgD.zone || { lo: fvgD.entry - tol * 0.5, hi: fvgD.entry + tol * 0.25 },
+        });
+      }
+    }
 
     /* sweep + reclaim (scalp priority) */
     if (typeof G.hgDetectLiquiditySweep === 'function'){

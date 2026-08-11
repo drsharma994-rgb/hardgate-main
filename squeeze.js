@@ -215,16 +215,18 @@ function squeezeClassify(rows4h, rows1d){
    directionless/malformed input or uncomputable levels => null and the UI
    prints an honest 'levels unavailable' note instead of numbers. */
 function fallbackStop(dir, entry, a, rows){
+  var stopOpts = (typeof hgStructureStopOpts === 'function') ? hgStructureStopOpts({ atrLen: ATR_LEN }) : { atrLen: ATR_LEN, look: 20 };
   if (typeof hgStructureStop === 'function'){
-    var st = hgStructureStop(dir, entry, rows, { atrLen: ATR_LEN, look: 30 });
+    var st = hgStructureStop(dir, entry, rows, stopOpts);
     if (st) return { stop: st.stop, note: st.note };
   }
+  var look = stopOpts.look || 20;
   var stop = NaN, note = '';
-  var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, 30) : NaN;
+  var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, look) : NaN;
   if (isFinite(sw)){
     var s = (dir === 'long') ? sw - 0.25 * a : sw + 0.25 * a;
     var r = (dir === 'long') ? entry - s : s - entry;
-    if (r > 0 && r <= 2.5 * a){ stop = s; note = 'stop: lastSwing(4h,30) structure buffered 0.25×ATR' + ATR_LEN; }
+    if (r > 0 && r <= 2.5 * a){ stop = s; note = 'stop: lastSwing(4h,' + look + ') structure buffered 0.25×ATR' + ATR_LEN; }
     else if (r > 2.5 * a) note = 'stop capped: structure beyond 2.5×ATR — ' + STOP_ATR + '×ATR' + ATR_LEN + ' used';
   }
   if (!isFinite(stop)){
@@ -314,6 +316,25 @@ function sqAttachMeta(plan, gate, extra){
 }
 
 function squeezePlan(inp){
+  try{
+    inp = inp || {};
+    var dir = (typeof inp.dir === 'string') ? inp.dir.toLowerCase() : null;
+    if (dir !== 'long' && dir !== 'short') return null;
+    if (typeof hgBestLevels === 'function'){
+      var gate = inp.gate || squeezeGateEval(inp, dir);
+      var bl = hgBestLevels(Object.assign({}, inp, {
+        tab: 'squeeze', style: 'swing', dir: dir, gate: gate,
+      }));
+      if (bl && bl.ok && bl.plan && sqValidSetup(bl.plan)){
+        return sqAttachMeta(_squeezeAttachStack(bl.plan, inp), bl.gate || gate, { formationScore: bl.formationScore });
+      }
+      if (bl && bl.veto) return null;
+    }
+    return squeezePlanLegacy(inp);
+  }catch(e){ return null; }
+}
+
+function squeezePlanLegacy(inp){
   try{
     inp = inp || {};
     var dir = (typeof inp.dir === 'string') ? inp.dir.toLowerCase() : null;

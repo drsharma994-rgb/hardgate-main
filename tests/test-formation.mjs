@@ -95,7 +95,7 @@ console.log('== sw.js shell ==');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/formation\.js/.test(sw), 'HG_SHELL includes formation.js');
   ok(/walkforward-ui\.js/.test(sw), 'HG_SHELL includes walkforward-ui.js');
-  ok(/hg-v238/.test(sw), 'cache hg-v238');
+  ok(/hg-v239/.test(sw), 'cache hg-v239');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

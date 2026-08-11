@@ -294,17 +294,17 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(G.trendmxPlan({ score: 5, rows4h: up4 }) === null, 'atr global missing -> null, no throw');
   G.atr = keepAtr;
 
-  /* lastSwing structure preferred when it sits within 2.5×ATR */
+  /* structure stop path via hgBestLevels (unified lookback 20) */
   const rowsLS = mkRows(lin(90, 50, 0.5).concat(lin(30, 95, 0)));
-  const aLS = G.atr(rowsLS, 14)[rowsLS.length - 1];
-  const swLS = G.lastSwing(rowsLS, 'long', 30);
   const pLS = G.trendmxPlan({ score: 4, rows4h: rowsLS });
-  assert(pLS && Math.abs(pLS.stop - (swLS - 0.25 * aLS)) < 1e-9,
-         'structure within 2.5×ATR -> lastSwing stop (buffered 0.25×ATR)');
-  assert(Math.abs(pLS.t1 - (pLS.entry + 2 * (pLS.entry - pLS.stop))) < 1e-9, 'structural stop: T1 exactly 2R');
-  assert(Math.abs(pLS.t2 - (pLS.entry + 3.5 * (pLS.entry - pLS.stop))) < 1e-9, 'structural stop: T2 exactly 3.5R');
+  assert(pLS && isFinite(pLS.stop) && isFinite(pLS.t1),
+         'hgBestLevels produces valid plan on structure rows');
+  const riskLS = Math.abs(pLS.entry - pLS.stop);
+  assert(riskLS > 0 && Math.abs(pLS.t1 - pLS.entry) / riskLS >= 1.99, 'structure plan: min ~2R');
 
-  /* smartSetup preference */
+  /* smartSetup preference (legacy path when hgBestLevels absent) */
+  const keepBL = G.hgBestLevels;
+  G.hgBestLevels = undefined;
   const fakeS = { type:'SWING', dir:'long', entry:50, stop:48, t1:54, t2:57, rr1:2, rr2:3.5, riskPct:4, confirmed:true, note:'stub' };
   G.smartSetup = function(){ return fakeS; };
   assert(G.trendmxPlan({ score: 5, rows4h: up4 }) === fakeS, 'smartSetup preferred when it returns a valid plan');
@@ -312,6 +312,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(G.trendmxPlan({ score: 5, rows4h: up4 }).type === 'ATR', 'smartSetup declining -> house fallback');
   G.smartSetup = function(){ throw new Error('x'); };
   assert(G.trendmxPlan({ score: 5, rows4h: up4 }) !== null, 'smartSetup throwing -> fallback survives, never throws');
+  G.hgBestLevels = keepBL;
   delete G.smartSetup;
 
   /* markup: expandable-row plan block */
@@ -475,7 +476,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');
   assert(/trendmxDesk/.test(readFileSync(path.join(root, 'setup-ui.js'), 'utf8')), 'trendmx desk in setup-ui');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v238/.test(sw), 'cache hg-v238');
+  assert(/hg-v239/.test(sw), 'cache hg-v239');
   assert(/desk-scan-universe\.js/.test(readFileSync(path.join(root, 'index.html'), 'utf8')), 'desk-scan-universe script wired');
 }
 

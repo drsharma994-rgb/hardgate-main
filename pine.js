@@ -95,13 +95,18 @@ function pruneKeys(keys, now, gap){
 
 function buildPlan(dir, price, rows){
   try{
+    if (typeof W.hgBestLevels === 'function' && rows && rows.length){
+      var bl = W.hgBestLevels({ dir: dir, rows4h: rows, style: 'swing', tab: 'pine', sym: 'pine' });
+      if (bl && bl.ok && bl.plan) return bl.plan;
+    }
     if (typeof W.smartSetup === 'function' && rows && rows.length){
       var cls = { dir: dir, longEv: dir === 'long' ? ['pine signal'] : [], shortEv: dir === 'short' ? ['pine signal'] : [], score: 1 };
       var ss = W.smartSetup(cls, rows, rows);
       if (ss && fin(+ss.entry) && fin(+ss.stop) && fin(+ss.t1)) return ss;
     }
     if (typeof W.hgStructureStop === 'function' && rows && rows.length){
-      var st = W.hgStructureStop(dir, price, rows, { atrLen: 14, look: 30 });
+      var stopOpts = (typeof W.hgStructureStopOpts === 'function') ? W.hgStructureStopOpts() : { atrLen: 14, look: 20 };
+      var st = W.hgStructureStop(dir, price, rows, stopOpts);
       if (st && fin(+st.stop)){
         var risk = Math.abs(price - st.stop);
         if (risk > 0){
@@ -134,7 +139,8 @@ function buildPlanWithTarget(dir, price, rows, target, bandStop){
   var stopBand = fin(+bandStop) ? +bandStop : null;
   try{
     if (typeof W.hgStructureStop === 'function' && rows && rows.length){
-      var st = W.hgStructureStop(dir, price, rows, { atrLen: 14, look: 30 });
+      var stopOpts = (typeof W.hgStructureStopOpts === 'function') ? W.hgStructureStopOpts() : { atrLen: 14, look: 20 };
+      var st = W.hgStructureStop(dir, price, rows, stopOpts);
       if (st && fin(+st.stop)){
         var stop = +st.stop;
         if (stopBand !== null){

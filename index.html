@@ -658,6 +658,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
+<script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
 <script src="cryptowatch.js"></script>
@@ -710,6 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="scorecard.js"></script>
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
+<script src="best-levels.js"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="book-routing.js?v=55"></script>
@@ -1959,13 +1961,13 @@ function smartSetup(cls, rows4h, rows1h){
     if (!isFinite(a4) || a4 <= 0) return null;
     let risk, note = '';
     if (typeof hgStructureStop === 'function'){
-      const st = hgStructureStop(dir, entry, rows4h, { atrLen: 14, look: 30 });
+      const st = hgStructureStop(dir, entry, rows4h, (typeof hgStructureStopOpts === 'function') ? hgStructureStopOpts({ atrLen: 14 }) : { atrLen: 14, look: 20 });
       if (!st) return null;
       stop = st.stop;
       risk = st.risk;
       note = st.note || '';
     } else {
-      const sw = lastSwing(rows4h, dir, 30);
+      const sw = lastSwing(rows4h, dir, (typeof hgSwingLook === 'function') ? hgSwingLook() : 20);
       stop = isFinite(sw) ? (dir === 'long' ? sw - 0.25*a4 : sw + 0.25*a4) : NaN;
       risk = dir === 'long' ? entry - stop : stop - entry;
       if (isFinite(risk) && risk > 2.5*a4){

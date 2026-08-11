@@ -314,6 +314,15 @@ function oiflowSetup(cls, rows4h, rows1h){
     if (!cls || !cls.dir) return null;
     var dirLow = String(cls.dir).toLowerCase();
     if (dirLow !== 'long' && dirLow !== 'short') return null;
+    if (typeof hgBestLevels === 'function' && rows4h && rows4h.length){
+      var bl = hgBestLevels({
+        dir: dirLow, rows4h: rows4h, rows1h: rows1h, style: 'swing', tab: 'oiflow',
+        cls: { dir: dirLow, longEv: cls.longEv, shortEv: cls.shortEv, regime: cls.regime, score: cls.score, total: cls.total },
+        allowFade: true,
+      });
+      if (bl && bl.ok && bl.plan) return bl.plan;
+      if (bl && bl.veto) return null;
+    }
     if (typeof smartSetup === 'function'){
       var setup = smartSetup({ dir: dirLow, longEv: cls.longEv, shortEv: cls.shortEv,
                           regime: cls.regime, score: cls.score, total: cls.total },
