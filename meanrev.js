@@ -60,7 +60,7 @@ flight it reports 'busy' (overlaps never double-fetch).
 
 /* ---------------- thresholds / tuning ---------------- */
 var MIN_TURNOVER  = 20e6;    // $20M 24h quote-volume floor
-var MAX_UNIVERSE  = 45;      // top N by turnover
+var MAX_UNIVERSE  = 0;      // 0 = full Delta + CoinDCX desk (no top-N cap)
 var KL_LIMIT      = 300;     // 4h bars per symbol
 var REGIME_LEN    = 200;     // SMA regime filter
 var MEAN_LEN      = 20;      // the mean (target)
@@ -387,7 +387,7 @@ function mount(el){
     + REGIME_LEN + ' regime · 4H · every signal mini-backtested</span></h2>'
     + '<div class="row"><button class="btn" id="mrRun">FIND REVERSIONS</button>'
     + '<span class="note" id="mrStat">idle — Binance perps ≥ $' + fmtF(MIN_TURNOVER / 1e6, 0)
-    + 'M turnover, top ' + MAX_UNIVERSE + ' · R:R ≥ ' + MIN_RR + ' · sorted by expectancy</span></div>'
+    + 'M turnover · full Delta + CoinDCX desk · R:R ≥ ' + MIN_RR + ' · sorted by expectancy</span></div>'
     + '<div class="prog" id="mrProg"><i></i></div>'
     + '<div class="cards" id="mrCards"></div>'
     + '<div class="empty" id="mrEmpty" style="display:none">No RSI(' + RSI_LEN + ')/%B extremes against the SMA'
@@ -424,23 +424,32 @@ function mount(el){
     var t0 = Date.now();
     var status = 'refreshed';
     try{
-      setStat('loading Binance perp universe…');
-      var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
-      var perps = res[0] || [], ticks = res[1];
-      if (!perps.length || !ticks){ setStat('Binance universe unavailable (network issue?)', true); status = 'failed: universe unavailable'; return status; }
-      var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
-                     .sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
-                     .slice(0, MAX_UNIVERSE);
-      if (!uni.length){ setStat('no perps above $' + fmtF(MIN_TURNOVER / 1e6, 0) + 'M 24h turnover', true); return status; }
+      setStat('loading Delta + CoinDCX desk universe…');
+      var items = [];
+      if (typeof hgDeskLoadDeltaCoinDCX === 'function'){
+        var desk = await hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: true });
+        items = (desk && desk.items) ? desk.items : [];
+      } else if (typeof binancePerpUniverse === 'function' && typeof binanceTickers24h === 'function'){
+        var res0 = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
+        var perps0 = res0[0] || [], ticks0 = res0[1];
+        items = perps0.filter(function(s){ return ticks0[s] && ticks0[s].turnoverUsd >= MIN_TURNOVER; })
+          .map(function(s){ return { sym: s, exchange: 'binance', turnoverUsd: ticks0[s].turnoverUsd }; });
+      }
+      if (MAX_UNIVERSE > 0) items = items.slice(0, MAX_UNIVERSE);
+      if (!items.length){ setStat('desk universe unavailable (network issue?)', true); status = 'failed: universe unavailable'; return status; }
+      var uni = items;
 
       var results = [], failed = 0, started = 0;
       for (var ci = 0; ci < uni.length; ci += CHUNK){
         var chunk = uni.slice(ci, ci + CHUNK);
-        await Promise.all(chunk.map(async function(sym){
+        await Promise.all(chunk.map(async function(item){
+          var sym = (item && item.sym) ? item.sym : String(item);
           var my = ++started;
           setStat('scanning ' + my + '/' + uni.length + ' · ' + sym);
           try{
-            var rows = await binanceKlines(sym, '4h', KL_LIMIT);
+            var rows = null;
+            if (typeof hgDeskFetchKlines === 'function') rows = await hgDeskFetchKlines(item, '4h', KL_LIMIT);
+            else if (typeof binanceKlines === 'function') rows = await binanceKlines(sym, '4h', KL_LIMIT);
             if (!rows || !rows.length){ failed++; return; }
             var sig = mrSignal(rows);
             if (!sig) return;
@@ -452,8 +461,9 @@ function mount(el){
             var atrArr = atr(rows, ATR_LEN);
             var exLow = lowest(rows.map(function(r){ return r.l; }), EXT_LEN)[k];
             var exHigh = highest(rows.map(function(r){ return r.h; }), EXT_LEN)[k];
+            var tick = { symbol: sym, turnoverUsd: item.turnoverUsd, mark: rows[k].c, chg24: null };
             results.push({
-              sym: sym, sig: sig, bt: bt, tick: ticks[sym], rows: rows,
+              sym: sym, sig: sig, bt: bt, tick: tick, rows: rows, venue: item.exchange || null,
               stats: {
                 last: rows[k].c,
                 rsi2: rsi(closes, RSI_LEN)[k],

@@ -17,6 +17,7 @@ function assert(cond, msg){
 }
 
 assert(typeof G.hgDeskLoadUniverse === 'function', 'exports hgDeskLoadUniverse');
+assert(typeof G.hgDeskLoadDeltaCoinDCX === 'function', 'exports hgDeskLoadDeltaCoinDCX');
 assert(G.hgDeskMinTurnover() === 5e6, 'default turnover floor $5M');
 
 /* xu path: no cap, turnover filter */
@@ -35,6 +36,9 @@ assert(G.hgDeskMinTurnover() === 5e6, 'default turnover floor $5M');
   assert(pack.filteredLen === 3, 'keeps ≥$5M + unknown-turnover CoinDCX row (3 symbols)');
   assert(pack.venueCounts.delta === 1 && pack.venueCounts.coindcx === 2 && pack.venueCounts.binance === 0,
          'venue counts split correctly (SHIB below floor excluded)');
+  const dcx = await G.hgDeskLoadDeltaCoinDCX({ force: true });
+  assert(dcx.items.length === 3 && dcx.venueCounts.delta === 1 && dcx.venueCounts.coindcx === 2,
+         'hgDeskLoadDeltaCoinDCX keeps only Delta + CoinDCX rows');
 }
 
 /* binance fallback when xu absent */
