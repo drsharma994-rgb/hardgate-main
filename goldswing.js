@@ -146,10 +146,49 @@ function stGoldVenueLabel(){
 }
 function stGoldBasisHtml(){
   try{
-    var fn = gfn('hgGoldBasisNoteHtml');
-    if (fn) return fn() || '';
+    if (typeof S !== 'undefined' && S && S.goldDataSource === 'delta-xaut'){
+      var fn = gfn('hgGoldBasisNoteHtml');
+      if (fn) return fn() || '';
+    }
   }catch(e){}
   return '';
+}
+
+var XAUT_SPOT_BASIS_WARN_PCT = 0.35;
+var XAUT_SPOT_BEST_MAX_BASIS = 0.5;
+
+function goldSpotRefFromRows(rows){
+  if (!rows || !rows.length) return NaN;
+  var lc = rows[rows.length - 1];
+  return (lc && isFinite(lc.c)) ? +lc.c : NaN;
+}
+
+function goldAnnotateXautBasis(cands, spotRef){
+  if (!Array.isArray(cands) || !isFinite(spotRef) || !(spotRef > 0)) return;
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    if (!c || c.sym !== 'XAUTUSD' || !isFinite(c.entry)) continue;
+    c.spotRef = spotRef;
+    c.xautBasisPct = (c.entry / spotRef - 1) * 100;
+  }
+}
+
+function goldPickSpotAlignedBest(ranked, spotRef){
+  if (!Array.isArray(ranked) || !ranked.length) return null;
+  for (var i = 0; i < ranked.length; i++){
+    var bc = ranked[i];
+    if (!bc || bc.demoted || bc.vetoed) continue;
+    if (bc.sym !== 'XAUTUSD') return bc;
+    if (isFinite(spotRef) && isFinite(bc.entry)){
+      var basis = Math.abs(bc.entry / spotRef - 1) * 100;
+      if (basis <= XAUT_SPOT_BEST_MAX_BASIS) return bc;
+    }
+  }
+  for (var j = 0; j < ranked.length; j++){
+    var fb = ranked[j];
+    if (fb && !fb.demoted && !fb.vetoed) return fb;
+  }
+  return null;
 }
 
 /* ---------------- local indicator fallbacks (identical math to indicators.js
@@ -644,6 +683,11 @@ function cardHTML(c, isBest, season){
   }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
+  var xautBasisLine = (c.sym === 'XAUTUSD' && isFinite(c.spotRef) && isFinite(c.xautBasisPct)
+    && Math.abs(c.xautBasisPct) > XAUT_SPOT_BASIS_WARN_PCT)
+    ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important">XAUT instrument ~$' + pxF(c.entry)
+      + ' vs spot XAU ~$' + pxF(c.spotRef) + ' (' + (c.xautBasisPct >= 0 ? '+' : '') + fmtF(c.xautBasisPct, 2)
+      + '%). Levels valid on <b>Delta XAUTUSD</b> only — not spot/StarTrader XAUUSD.</div>' : '';
   return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '"' + gswSt(GSW_CARD) + '>'
     + '<div class="chead"><span class="sym"' + gswSt(GSW_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
@@ -672,6 +716,7 @@ function cardHTML(c, isBest, season){
     + (c.why ? '<div class="gsw-whyline"' + gswSt(GSW_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
+    + xautBasisLine
     + lockLine
     + newsBanner + notes + seasonLine
     + stackHtml
@@ -839,20 +884,10 @@ async function fetchGoldKlines(){
   return out;
 }
 
-/* StarTrader XAUUSD — same candle chain as confluence (getXAUCandles → proxy + basis). */
+/* StarTrader XAUUSD CFD — spot-aligned proxy chain (NOT Delta XAUTUSD). */
 async function fetchStartraderGoldKlines(){
-  var out = { rows4h: [], rows1d: [], source: 'startrader-xau' };
-  var fetch = gfn('getXAUCandles');
-  if (!fetch){
-    var stc = gfn('startraderCandles');
-    if (stc) fetch = function(tf, n){ return stc(ST_GOLD_SYM, tf, n); };
-  }
-  if (!fetch) return out;
-  try{ var a = await fetch('4h', KL_4H); if (Array.isArray(a) && a.length) out.rows4h = a; }catch(e){}
-  try{ var b = await fetch('1d', KL_1D); if (Array.isArray(b) && b.length) out.rows1d = b; }catch(e2){}
-  try{
-    if (typeof S !== 'undefined' && S && S.goldDataSource) out.source = S.goldDataSource;
-  }catch(e3){}
+  var out = await fetchGoldKlines();
+  if (!out.source) out.source = 'startrader-xau';
   return out;
 }
 
@@ -1838,6 +1873,15 @@ async function runScan(ui, scanSt){
     var rk = rankSetups(cands, ctx);
     var ranked = rk.ranked, best = rk.best;
     for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
+    var spotRef = goldSpotRefFromRows(gold.rows4h);
+    goldAnnotateXautBasis(ranked, spotRef);
+    var naiveBest = best;
+    best = goldPickSpotAlignedBest(ranked, spotRef);
+    if (naiveBest && best && naiveBest.sym === 'XAUTUSD' && best.sym !== 'XAUTUSD' && isFinite(spotRef)){
+      legs.push('MOST PROBABLE: ' + best.venue + ' ~$' + pxF(best.entry)
+        + ' (spot ref ~$' + pxF(spotRef) + ') — not Delta XAUTUSD ~$' + pxF(naiveBest.entry)
+        + ' (XAUT trades at a discount to spot)');
+    }
 
     var filterFn = gfn('hgFilterGoldPostGate');
     if (filterFn){
