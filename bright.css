@@ -16,9 +16,9 @@
   --short:#F87171;
   --veto:#FB923C;
   --pass:#34D399;
-  --txt:#F1F5F9;
-  --mut:#94A3B8;
-  --dim:#64748B;
+  --txt:#FFFFFF;
+  --mut:#CBD5E1;
+  --dim:#94A3B8;
   --cyan:#22D3EE;
   --magenta:#E879F9;
   --purple:#A78BFA;
@@ -35,7 +35,7 @@
 }
 
 /* ---------- 2. page background — deep space mesh ---------- */
-html,body{background:#020617;color:#F1F5F9;font-weight:500}
+html,body{background:#020617;color:#FFFFFF;font-weight:500}
 body{
   background:
     radial-gradient(ellipse 1000px 600px at 85% -10%, rgba(34,211,238,.14), transparent 55%),
@@ -48,7 +48,7 @@ body{
 a{color:#67E8F9}
 ::selection{background:rgba(34,211,238,.28);color:#F8FAFC}
 ::-webkit-scrollbar-thumb{background:#475569;border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:#64748B}
+::-webkit-scrollbar-thumb:hover{background:#CBD5E1}
 
 /* ---------- 3. motion primitives ---------- */
 @keyframes hgFadeIn{
@@ -111,7 +111,7 @@ header,.hg-header{
   text-shadow:0 0 20px rgba(34,211,238,.35);
   font-family:'Orbitron',var(--disp,'Space Grotesk'),sans-serif;
 }
-.brand small{color:#94A3B8;font-weight:600}
+.brand small{color:#CBD5E1;font-weight:600}
 .header-chips .statuschip:nth-child(1){border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.08)}
 .header-chips .statuschip:nth-child(2){border-color:rgba(167,139,250,.32);background:rgba(167,139,250,.07)}
 .header-chips .statuschip:nth-child(3){border-color:rgba(251,146,60,.30);background:rgba(251,146,60,.06)}
@@ -132,7 +132,7 @@ header,.hg-header{
 
 /* exchange toggle */
 .xtoggle{border-color:var(--line);background:rgba(15,23,42,.9);box-shadow:var(--shadow-sm)}
-.xtoggle button{color:#94A3B8;transition:color .2s,background .2s}
+.xtoggle button{color:#CBD5E1;transition:color .2s,background .2s}
 .xtoggle button:hover{color:#F1F5F9}
 .xtoggle button.on{
   background:linear-gradient(180deg,#67E8F9,#22D3EE 55%,#0EA5E9);
@@ -142,7 +142,7 @@ header,.hg-header{
 
 /* status chips */
 .statuschip{
-  color:#94A3B8;
+  color:#CBD5E1;
   border-color:var(--line);
   background:rgba(15,23,42,.75);
   transition:border-color .2s,box-shadow .2s,transform .15s var(--ease-spring);
@@ -163,7 +163,7 @@ header,.hg-header{
   box-shadow:inset 0 -1px 0 rgba(34,211,238,.04);
 }
 .navgroups button{
-  color:#94A3B8;
+  color:#CBD5E1;
   border-color:#334155;
   background:rgba(2,6,23,.5);
   transition:color .2s,border-color .2s,background .2s,transform .15s var(--ease-spring),box-shadow .2s;
@@ -197,7 +197,7 @@ header,.hg-header{
 
 /* ---------- 6. nav tabs ---------- */
 nav{background:rgba(2,6,23,.6);border-bottom-color:var(--line)}
-nav button{color:#94A3B8;transition:color .2s}
+nav button{color:#CBD5E1;transition:color .2s}
 nav button:hover{color:#F1F5F9}
 nav button.on{color:#67E8F9;text-shadow:0 0 10px rgba(103,232,249,.35)}
 nav button::after{background:linear-gradient(90deg,#22D3EE,#A78BFA,#E879F9)}
@@ -217,7 +217,7 @@ nav button.on::after{box-shadow:0 1px 8px rgba(34,211,238,.45)}
   border-color:rgba(56,189,248,.25);
 }
 .panel h2{color:#F1F5F9;font-family:'Orbitron',var(--disp,'Space Grotesk'),sans-serif}
-.panel h2 span{color:#94A3B8}
+.panel h2 span{color:#CBD5E1}
 
 .card{
   background:rgba(15,23,42,.78);
@@ -243,15 +243,15 @@ nav button.on::after{box-shadow:0 1px 8px rgba(34,211,238,.45)}
 .card .sym{color:#F1F5F9}
 .card.long .dir{color:#34D399;text-shadow:0 0 8px rgba(52,211,153,.25)}
 .card.short .dir{color:#F87171;text-shadow:0 0 8px rgba(248,113,113,.2)}
-.card .mini .k{color:#94A3B8}
+.card .mini .k{color:#CBD5E1}
 .card .plan{background:rgba(30,41,59,.65);border-color:#334155;color:#CBD5E1}
 .card .plan b{color:#67E8F9}
 .hgchart{background:rgba(2,6,23,.5);border-color:#334155}
 
 /* ---------- 8. gate pips ---------- */
-.gpip{background:rgba(30,41,59,.5);border-color:#334155;color:#64748B}
+.gpip{background:rgba(30,41,59,.5);border-color:#334155;color:#CBD5E1}
 .gpip.ok{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.45);color:#6EE7B7}
-.gpip.na{background:rgba(100,116,139,.12);border-color:rgba(100,116,139,.35);color:#94A3B8}
+.gpip.na{background:rgba(100,116,139,.12);border-color:rgba(100,116,139,.35);color:#CBD5E1}
 .gpip.veto{background:rgba(251,146,60,.12);border-color:rgba(251,146,60,.45);color:#FDBA74}
 .gpip.caution{background:rgba(56,189,248,.10);border-color:rgba(56,189,248,.40);color:#7DD3FC}
 
@@ -259,7 +259,7 @@ nav button.on::after{box-shadow:0 1px 8px rgba(34,211,238,.45)}
 .stamp{box-shadow:var(--shadow-sm)}
 .stamp.pass,.stamp.ok{background:linear-gradient(180deg,#6EE7B7,#34D399);border-color:#A7F3D0;color:#042F2E}
 .stamp.veto{background:linear-gradient(180deg,#FCA5A5,#F87171);border-color:#FECACA;color:#450A0A}
-.stamp.na{background:linear-gradient(180deg,#334155,#1E293B);border-color:#475569;color:#94A3B8}
+.stamp.na{background:linear-gradient(180deg,#334155,#1E293B);border-color:#475569;color:#CBD5E1}
 .stamp.caution{background:linear-gradient(180deg,#FDE68A,#FBBF24);border-color:#FEF3C7;color:#78350F}
 
 /* ---------- 10. verdict blocks ---------- */
@@ -276,8 +276,8 @@ nav button.on::after{box-shadow:0 1px 8px rgba(34,211,238,.45)}
   box-shadow:0 4px 24px -8px rgba(248,113,113,.18);
 }
 .verdict.short .vword{color:#F87171;text-shadow:0 0 16px rgba(248,113,113,.2)}
-.verdict.aside .vword{color:#94A3B8}
-.verdict .vwhy{color:#94A3B8}
+.verdict.aside .vword{color:#CBD5E1}
+.verdict .vwhy{color:#CBD5E1}
 
 /* ---------- 11. buttons ---------- */
 .btn{
@@ -292,17 +292,17 @@ nav button.on::after{box-shadow:0 1px 8px rgba(34,211,238,.45)}
   transform:translateY(-1px);
 }
 .btn:active:not(:disabled){transform:translateY(0) scale(.98)}
-.btn:disabled{background:#334155;color:#64748B;box-shadow:none}
+.btn:disabled{background:#334155;color:#CBD5E1;box-shadow:none}
 .btn.ghost{background:transparent;border-color:#475569;color:#CBD5E1}
 .btn.ghost:hover{background:rgba(34,211,238,.08);border-color:#22D3EE;color:#67E8F9;box-shadow:var(--shadow-sm)}
 .card .toTrade{border-color:#38BDF8;color:#67E8F9;background:rgba(34,211,238,.06)}
 .card .toTrade:hover{background:rgba(34,211,238,.14);border-color:#67E8F9;box-shadow:0 0 16px rgba(34,211,238,.15)}
 
-.chip{border-color:#334155;color:#94A3B8;transition:border-color .2s,color .2s,background .2s}
+.chip{border-color:#334155;color:#CBD5E1;transition:border-color .2s,color .2s,background .2s}
 .chip.on{border-color:#A78BFA;color:#C4B5FD;background:rgba(167,139,250,.12)}
 
 /* ---------- 12. notes / inputs / ledger ---------- */
-.note{color:#94A3B8}
+.note{color:#CBD5E1}
 .note.warn{color:#FBBF24}
 input,select{
   background:rgba(15,23,42,.9);
@@ -310,7 +310,7 @@ input,select{
   color:#F1F5F9;
   transition:border-color .2s,box-shadow .2s;
 }
-input::placeholder{color:#64748B}
+input::placeholder{color:#CBD5E1}
 input:focus,select:focus{
   outline-color:#22D3EE;
   border-color:#22D3EE;
@@ -321,7 +321,7 @@ input:focus,select:focus{
 .lrow:hover{background:rgba(30,41,59,.85)}
 .lrow .gid{color:#22D3EE}
 .lrow .gname{color:#F1F5F9}
-.lrow .gdetail{color:#94A3B8}
+.lrow .gdetail{color:#CBD5E1}
 .prog{background:#334155;border-radius:3px;overflow:hidden}
 .prog i{
   background:linear-gradient(90deg,#A78BFA,#22D3EE,#34D399,#E879F9);
@@ -330,20 +330,20 @@ input:focus,select:focus{
   border-radius:2px;
 }
 hr.sep{border-top-color:#334155}
-.kv .k{color:#94A3B8}
+.kv .k{color:#CBD5E1}
 .kv .v{color:#F1F5F9}
 .big{color:#F1F5F9}
 .pos{color:#34D399}
 .neg{color:#F87171}
 .checklist label{color:#CBD5E1}
 .ticket{background:rgba(30,41,59,.6);border-color:#334155;color:#CBD5E1}
-.empty{color:#94A3B8;border-color:#475569;background:rgba(15,23,42,.5)}
+.empty{color:#CBD5E1;border-color:#475569;background:rgba(15,23,42,.5)}
 th{color:#22D3EE}
 td,th{border-bottom-color:#1E293B}
 table tr:nth-child(even) td{background:rgba(15,23,42,.35)}
 table tr:hover td{background:rgba(34,211,238,.06)}
 .hgauto{border-color:#334155;background:rgba(15,23,42,.85)}
-.hgauto .hgalabel{color:#64748B;border-right-color:#334155}
+.hgauto .hgalabel{color:#CBD5E1;border-right-color:#334155}
 .hgauto button.on{background:linear-gradient(180deg,#C4B5FD,#A78BFA);color:#1E1033}
 
 .convictionGold{color:#67E8F9;animation:convictionGoldShimmer 2.6s ease-in-out infinite}
@@ -378,4 +378,21 @@ th{font-weight:700}
   border-color:#334155!important;
   color:#E8E2DA;
 }
-.hg-panel .note{color:#94A3B8}
+.hg-panel .note{color:#CBD5E1}
+
+/* ---------- 15. text contrast — stronger alphabets (readable on dark HUD) ---------- */
+body,.panel,.card,.ticket,.lrow .gname,.card .sym,.panel h2,.big,.kv .v,td,.checklist label{
+  color:var(--txt);
+  font-weight:600;
+}
+.note,.panel h2 span,.kv .k,.card .mini .k,.lrow .gdetail,.verdict .vwhy,.empty,.statuschip,.chip,label.f,.brand small,.xtoggle button:not(.on),nav button:not(.on),.navgroups button:not(.on){
+  color:var(--mut);
+  font-weight:600;
+}
+.card .plan,.ticket,.checklist label{color:#E2E8F0;font-weight:600}
+.lrow .gid,.hgauto .hgalabel,.gpip.na{color:var(--dim);font-weight:600}
+.market-picture-bar{color:#E2E8F0}
+.market-picture-bar .note{color:var(--mut)}
+.card .plan b,.lrow .gname{font-weight:700}
+th{color:#67E8F9;font-weight:800}
+td{font-weight:700;color:var(--txt)}
