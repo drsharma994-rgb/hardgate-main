@@ -292,7 +292,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <div class="row">
       <label class="f">SCAN TOP (BY TURNOVER)<input id="swingN" type="number" value="30" min="5" max="500" style="width:80px"></label>
       <label class="f">MIN 24H TURNOVER $<input id="swingTurn" type="number" value="200000" style="width:110px"></label>
-      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="swingAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="swingAll" type="checkbox" style="width:auto" checked> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="swingRun" onclick="runScan('swing')">SCAN</button>
       <button class="btn" id="swingDiag" onclick="runGateDiagnostics()">CALIBRATE</button>
       <span class="note" id="swingStat"></span>
@@ -313,7 +313,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <h2>Scalp Scanner <span>15m trigger inside 1H context · ATR targets · funding-window aware</span></h2>
     <div class="row">
       <label class="f">SCAN TOP (BY TURNOVER)<input id="scalpN" type="number" value="20" min="5" max="500" style="width:80px"></label>
-      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="scalpAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="scalpAll" type="checkbox" style="width:auto" checked> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="scalpRun" onclick="runScan('scalp')">SCAN</button>
       <span class="note" id="scalpStat"></span>
     </div>
@@ -549,7 +549,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <h2>Best Setup <span>hard gates are the ticket in · ranking = tally of independent aligned confirmations · WAIT is a first-class answer</span></h2>
     <div class="row" style="margin-bottom:10px">
       <label class="f">SCAN TOP (BY TURNOVER)<input id="bestN" type="number" value="30" min="5" max="500" style="width:80px"></label>
-      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto" checked> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
       <span class="note">Telegram: crypto 7/7 CLEAN + 6/7 NEAR (default) — convicted-only mode (hgAlertCryptoConvictedOnly=1, default) sends gate-clean MOST PROBABLE only, no NEAR. Gold uses separate 15-min batch. Set hgAlertCleanOnly=0 or hgAlertCryptoConvictedOnly=0 to widen.</span>
@@ -912,6 +912,15 @@ async function hgDualCryptoScanLoop(fn, opts){
       dualLast: i === HG_DUAL_CRYPTO_EX.length - 1
     })));
   }
+}
+/* Full per-venue ticker list for dual-exchange scans (no top-N cap). */
+function hgVenueFullUni(excludeSym){
+  let uni = (S.tickers || []).slice();
+  if (excludeSym) uni = uni.filter(function(t){ return t.symbol !== excludeSym; });
+  return uni.sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
+}
+function hgScanWholeExchange(opts, checkboxEl){
+  return !!(opts && opts.forceScanAll) || !!(checkboxEl && checkboxEl.checked) || hgDualScanEnabled();
 }
 
 const DELTA = 'https://api.india.delta.exchange';
@@ -1564,7 +1573,7 @@ async function runCoilScanLeg(opts){
   let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers=await getTickers();
-    const uni = S.exchange==='delta' ? S.tickers.filter(t=>t.turnoverUsd>=500000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
+    const uni = hgVenueFullUni();
     let found=0;
     let coilList = [];
     for (let i=0;i<uni.length;i++){
@@ -1688,7 +1697,7 @@ async function runDivScanLeg(opts){
   let __cardsHtml = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
-    const uni = S.exchange==="delta" ? S.tickers.filter(function(t){ return t.turnoverUsd>=500000; }).sort(function(a,b){ return b.turnoverUsd-a.turnoverUsd; }) : S.tickers.slice();
+    const uni = hgVenueFullUni();
     let found=0;
     for (let i=0;i<uni.length;i++){
       const t = uni[i];
@@ -1834,23 +1843,27 @@ function biasBinanceSymbol(sym){
   return base + 'USDT';
 }
 
-const SMART_MIN_TURNOVER = 5e6, SMART_TOP_TURNOVER = 120, SMART_MIN_ABS_CHG24 = 2;
+const SMART_MIN_TURNOVER = 5e6, SMART_TOP_TURNOVER = 0, SMART_MIN_ABS_CHG24 = 2;
 
 /* Pass-1 screen — PURE so tests can drive synthetic ticker maps through it.
    Universe = every USDT perp with 24h turnover >= $5M (no hard cap).
-   Candidates = |chg24| >= 2% ( movers ) OR inside the top-120 by turnover.
+   Candidates = full universe (Delta + CoinDCX desk scans use hgDeskLoadUniverse
+   elsewhere; SMART $ scans every ≥$5M Binance perp plus CoinDCX twins in +COINDCX mode).
    Returns { universe, candidates } — candidates keep turnover-desc order. */
 function smartScreenCandidates(perps, ticks){
   const universe = (perps || []).filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= SMART_MIN_TURNOVER; });
   const byTurn = universe.slice().sort(function(a,b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; });
-  const top = {};
-  byTurn.slice(0, SMART_TOP_TURNOVER).forEach(function(s){ top[s] = true; });
-  const keep = {};
-  byTurn.forEach(function(s){
-    const mv = ticks[s].chg24;
-    if (top[s] || (mv !== null && mv !== undefined && isFinite(mv) && Math.abs(mv) >= SMART_MIN_ABS_CHG24)) keep[s] = true;
-  });
-  return { universe: universe, candidates: byTurn.filter(function(s){ return keep[s]; }) };
+  if (SMART_TOP_TURNOVER > 0){
+    const top = {};
+    byTurn.slice(0, SMART_TOP_TURNOVER).forEach(function(s){ top[s] = true; });
+    const keep = {};
+    byTurn.forEach(function(s){
+      const mv = ticks[s].chg24;
+      if (top[s] || (mv !== null && mv !== undefined && isFinite(mv) && Math.abs(mv) >= SMART_MIN_ABS_CHG24)) keep[s] = true;
+    });
+    return { universe: universe, candidates: byTurn.filter(function(s){ return keep[s]; }) };
+  }
+  return { universe: universe, candidates: byTurn };
 }
 
 /* Pure positioning classifier. d = {chg24, oiChgPct, fundingPct, retailLongPct,
@@ -2320,7 +2333,7 @@ async function runApexScanLeg(opts){
       statEl.textContent = `skipped — BTC bullish (+${fmt(btcRet24,2)}%)`;
       return;
     }
-    const uni = S.exchange==='delta' ? S.tickers.filter(t=>t.turnoverUsd>=500000 && t.symbol!==btcSym) : S.tickers.filter(t=>t.symbol!==btcSym);
+    const uni = hgVenueFullUni(btcSym);
     let results=[];
     for (let i=0;i<uni.length;i++){
       const t=uni[i];
@@ -2381,7 +2394,7 @@ async function runTrapScanLeg(opts){
   let __cardsHtml = [];
   try{
 if (!S.tickers.length) S.tickers=await getTickers();
-const uni = S.exchange==='delta' ? S.tickers.filter(t=>t.turnoverUsd>=300000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd) : S.tickers.slice();
+const uni = hgVenueFullUni();
 let found=0;
 for (let i=0;i<uni.length;i++){
 const t=uni[i];
@@ -4005,7 +4018,7 @@ async function runScanLeg(kind, opts){
   const isSwing = kind === 'swing';
   const st0 = $(isSwing ? 'swingStat' : 'scalpStat');
   if (!quiet && !skipUiClear && !(await waitAlertIdle(st0))) return null;
-  const scanAll = !!(opts && opts.forceScanAll) || $(isSwing ? 'swingAll' : 'scalpAll').checked;
+  const scanAll = hgScanWholeExchange(opts, $(isSwing ? 'swingAll' : 'scalpAll'));
   const N = Math.max(5, Math.min(500, +$(isSwing ? 'swingN' : 'scalpN').value || 30));
   const minTurn = isSwing ? (+$('swingTurn').value || 0) : 0;
   const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards'), emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty'), statEl = $(isSwing ? 'swingStat' : 'scalpStat');
@@ -6194,7 +6207,7 @@ async function runBest(opts){
       for (let ei = 0; ei < HG_DUAL_CRYPTO_EX.length; ei++){
         const ex = HG_DUAL_CRYPTO_EX[ei];
         await withExchange(ex, async function(){
-          const scanAll = $('bestAll').checked;
+          const scanAll = hgScanWholeExchange(opts, $('bestAll'));
           const N = Math.max(5, Math.min(500, +$('bestN').value||30));
           if (!S.tickers.length) S.tickers=await getTickers();
           let uni = S.exchange==='delta'
@@ -6269,7 +6282,7 @@ async function runBest(opts){
   const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
   const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='';
   try{
-    const scanAll = $('bestAll').checked;
+    const scanAll = hgScanWholeExchange(opts, $('bestAll'));
     const N = Math.max(5, Math.min(500, +$('bestN').value||30)); if (!S.tickers.length) S.tickers=await getTickers();
     let uni = S.exchange==='delta'
       ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)

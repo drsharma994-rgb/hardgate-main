@@ -1,7 +1,7 @@
 /* =========================================================================
 HARDGATE — oiflow.js
-OI FLOW tab: deep positioning / squeeze scanner over the top 40 Binance
-USDT-M perps by 24h turnover (>= $30M).
+OI FLOW tab: deep positioning / squeeze scanner over the full Delta +
+CoinDCX desk (≥ $30M turnover; no top-N cap). Binance twin feeds OI/funding
 
 Per symbol it gathers:
   - current funding, percent units (binanceFunding -> lastFundingRate*100)
@@ -62,7 +62,7 @@ var G = (typeof window !== 'undefined') ? window
 
 /* ---------------- tunables (per brief) ---------------- */
 var MIN_TURNOVER     = 30e6;    // $30M 24h quote turnover floor
-var MAX_UNIVERSE     = 40;      // top N symbols by turnover
+var MAX_UNIVERSE     = 0;      // 0 = full Delta + CoinDCX desk (no top-N cap)
 var PX_DEADZONE      = 0.5;     // |pxChg %| below this = dead
 var OI_DEADZONE      = 2.0;     // |oiChg %| below this = dead
 var FUND_Z_EXTREME   = 2.0;     // |fundingZ| >= this = crowded
@@ -87,6 +87,20 @@ var PCT   = (typeof pct   === 'function') ? pct   : _pctFb;
 var SLEEP = (typeof sleep === 'function') ? sleep : function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
 
 function __last(a){ return (a && a.length) ? a[a.length - 1] : NaN; }
+
+function oiflowBinanceTwin(item){
+  if (!item) return null;
+  if (String(item.exchange || '').toLowerCase() === 'binance') return item.sym;
+  var s = String(item.sym || '');
+  if (/^B-/.test(s)){
+    var base = s.split('_')[0].replace(/^B-/, '');
+    return base + 'USDT';
+  }
+  if (item.base) return String(item.base).replace(/[^A-Z0-9]/gi, '') + 'USDT';
+  if (/USDT$/.test(s)) return s;
+  if (/USD$/.test(s)) return s.replace(/USD$/, 'USDT');
+  return s ? s + 'USDT' : null;
+}
 
 /* ---------------- tiny fetch/cache layer (binance.js discipline) ---------------- */
 var __bucket = (typeof makeTokenBucket === 'function') ? makeTokenBucket(6, 6) : { take: function(){ return 0; } };
@@ -539,28 +553,38 @@ async function runScan(el){
       stat.textContent = 'Binance data layer (binance.js) not loaded — check script order.';
       return;
     }
-    stat.textContent = 'loading Binance perp universe…';
-    var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
-    var perps = res[0] || [], ticks = res[1];
-    if (!perps.length || !ticks){ stat.textContent = 'Binance universe unavailable (network issue?)'; return; }
-    var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
-                   .sort(function(a, b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
-                   .slice(0, MAX_UNIVERSE);
-    if (!uni.length){
-      stat.textContent = 'no perps above $30M 24h turnover right now';
-      empty.style.display = 'block';
-      return;
+    stat.textContent = 'loading Delta + CoinDCX desk universe…';
+    var items = [];
+    if (typeof hgDeskLoadDeltaCoinDCX === 'function'){
+      var desk = await hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: true });
+      items = (desk && desk.items) ? desk.items : [];
+    } else if (typeof binancePerpUniverse === 'function' && typeof binanceTickers24h === 'function'){
+      var res0 = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
+      var perps0 = res0[0] || [], ticks0 = res0[1];
+      items = perps0.filter(function(s){ return ticks0[s] && ticks0[s].turnoverUsd >= MIN_TURNOVER; })
+        .map(function(s){ return { sym: s, exchange: 'binance', turnoverUsd: ticks0[s].turnoverUsd }; });
     }
+    if (MAX_UNIVERSE > 0) items = items.slice(0, MAX_UNIVERSE);
+    var ticks = (typeof binanceTickers24h === 'function') ? await binanceTickers24h() : {};
+    if (!items.length){ stat.textContent = 'desk universe unavailable (network issue?)'; return; }
+    var uni = items;
     var results = [], failed = 0;
     for (var ci = 0; ci < uni.length; ci += CHUNK){
       var chunk = uni.slice(ci, ci + CHUNK);
-      await Promise.all(chunk.map(async function(sym, k){
+      await Promise.all(chunk.map(async function(item, k){
         var i = ci + k;
+        var sym = (item && item.sym) ? item.sym : String(item);
+        var binSym = oiflowBinanceTwin(item) || sym;
         try{
           setProg(el, (i+1)/uni.length);
           stat.textContent = 'scanning ' + (i+1) + '/' + uni.length + ' · ' + sym;
-          var r = await oiflowScanSymbol(sym, ticks[sym]);
+          var tick = (ticks && ticks[binSym]) ? ticks[binSym] : {
+            symbol: binSym, mark: item.mark, chg24: null, turnoverUsd: item.turnoverUsd
+          };
+          var r = await oiflowScanSymbol(binSym, tick);
           if (!r){ failed++; return; }
+          r.sym = sym;
+          r.venue = item.exchange || null;
           r.cls = oiflowClassify({ fundingZ: r.fundingZ, fundingPct: r.fundingPct, oiChg: r.oiChg, pxChg: r.pxChg,
                                    takerAvg: r.takerAvg, longPct: r.longPct });
           if (!(r.cls.dir && r.cls.score >= MIN_EVIDENCE)) return;
@@ -638,7 +662,7 @@ function mount(el){
   try{
     el.innerHTML =
       '<div class="panel">'
-      + '<h2>OI FLOW — positioning &amp; squeeze scanner <span>top 40 Binance perps ≥$30M · funding z(90) · OI Δ24h · taker 24h · retail</span></h2>'
+      + '<h2>OI FLOW — positioning &amp; squeeze scanner <span>full Delta + CoinDCX desk ≥$30M · funding z(90) · OI Δ24h · taker 24h · retail</span></h2>'
       + '<div class="row"><button class="btn" id="oiflowRun">RUN SCAN</button>'
       + '<span class="note" id="oiflowStat"></span></div>'
       + '<div class="note" id="oiflowDeps" style="margin-top:8px"></div>'

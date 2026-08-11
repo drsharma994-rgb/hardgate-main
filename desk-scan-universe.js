@@ -14,6 +14,8 @@ EXPORTS (window, never throw):
   hgDeskVenueCounts(items) -> { delta, coindcx, binance, startrader, other }
   hgDeskLoadUniverse(opts?) -> Promise<{ items, note, source, rawLen,
       filteredLen, venueCounts }>
+  hgDeskLoadDeltaCoinDCX(opts?) -> same shape, Delta + CoinDCX rows only
+  hgDeskFilterVenues(items, venues?) -> filtered item[]
   hgDeskFetchKlines(item, tf, n) -> Promise<rows [{t,o,h,l,c,v}] asc>
 ========================================================================= */
 (function(){
@@ -100,6 +102,30 @@ function binanceItem(sym, tick){
   };
 }
 
+function hgDeskFilterVenues(items, venues){
+  venues = venues || ['delta', 'coindcx'];
+  var allow = {};
+  for (var i = 0; i < venues.length; i++){
+    var v = String(venues[i] || '').toLowerCase();
+    allow[v] = 1;
+    if (v === 'coindcx') allow.cdcx = 1;
+  }
+  return (items || []).filter(function(it){
+    if (!it) return false;
+    var ex = String(it.exchange || '').toLowerCase();
+    return !!allow[ex];
+  });
+}
+
+async function hgDeskLoadDeltaCoinDCX(opts){
+  var pack = await hgDeskLoadUniverse(opts);
+  pack.items = hgDeskFilterVenues(pack.items, ['delta', 'coindcx']);
+  pack.filteredLen = pack.items.length;
+  pack.venueCounts = hgDeskVenueCounts(pack.items);
+  pack.source = pack.source + '+delta-coindcx';
+  return pack;
+}
+
 async function hgDeskLoadUniverse(opts){
   opts = opts || {};
   var minTurn = (opts.minTurnover !== undefined) ? opts.minTurnover : DESK_MIN_TURNOVER;
@@ -171,6 +197,8 @@ try{
   G.hgDeskSymLabel = hgDeskSymLabel;
   G.hgDeskVenueCounts = hgDeskVenueCounts;
   G.hgDeskLoadUniverse = hgDeskLoadUniverse;
+  G.hgDeskLoadDeltaCoinDCX = hgDeskLoadDeltaCoinDCX;
+  G.hgDeskFilterVenues = hgDeskFilterVenues;
   G.hgDeskFetchKlines = hgDeskFetchKlines;
 }catch(e){}
 

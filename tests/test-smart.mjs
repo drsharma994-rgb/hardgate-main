@@ -306,9 +306,9 @@ console.log('== smartScreenCandidates ==');
   ticks.LOWUSDT = { symbol: 'LOWUSDT', mark: 1, chg24: 40, turnoverUsd: 4e6 }; // below $5M
   const scr = globalThis.smartScreenCandidates(perps, ticks);
   ok(scr.universe.length === 130, 'universe = all perps ≥$5M (sub-$5M mover excluded despite |chg24|=40)');
-  ok(scr.candidates.length === 122, 'candidates = top-120 turnover + 2 movers = 122');
-  ok(scr.candidates.includes('S125USDT') && scr.candidates.includes('S129USDT'), '|chg24| ≥ 2 pulls in movers outside top-120');
-  ok(!scr.candidates.includes('S120USDT') && !scr.candidates.includes('LOWUSDT'), 'flat sub-top-120 and sub-$5M excluded');
+  ok(scr.candidates.length === 130, 'candidates = full ≥$5M universe (no top-N cap)');
+  ok(scr.candidates.includes('S125USDT') && scr.candidates.includes('S129USDT'), 'full-universe scan includes sub-top movers');
+  ok(!scr.candidates.includes('LOWUSDT'), 'sub-$5M excluded from universe');
   ok(scr.candidates[0] === 'S0USDT' && scr.candidates.indexOf('S125USDT') < scr.candidates.indexOf('S129USDT'),
      'candidates stay turnover-descending');
 }

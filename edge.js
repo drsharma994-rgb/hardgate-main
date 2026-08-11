@@ -27,8 +27,8 @@ Pure exports (never throw):
 
 var W = (typeof window !== 'undefined') ? window : this;
 
-var MIN_TURNOVER  = 100000;
-var MAX_UNIVERSE  = 120;
+var MIN_TURNOVER  = 5e6;
+var MAX_UNIVERSE  = 0;
 var KL_LIMIT      = 300;
 var DON_LEN       = 55;
 var BB_LEN        = 20;
@@ -1295,7 +1295,7 @@ function mount(el){
     + ' <b>INSTITUTIONAL LAYER:</b> CVD/OBI vetoes when Binance flow legs load; SMT + yield traps always on. Cards show <b>FLOW OK / PARTIAL / N/A</b>.'
     + ' Min R:R ' + MIN_RR + ' · tally ≥ ' + MIN_TALLY + ' · <b>USE Nx</b> = 50% max-safe.</p>'
     + '<div class="row"><button class="btn" id="edgeRun">FIND EDGE SETUPS</button>'
-    + '<span class="note" id="edgeStat">idle — SWING-aligned · top ' + MAX_UNIVERSE + '</span></div>'
+    + '<span class="note" id="edgeStat">idle — SWING-aligned · full Delta + CoinDCX desk</span></div>'
     + '<div class="prog" id="edgeProg"><i></i></div>'
     + '<div id="edgeDesk"></div>'
     + '<div id="edgeFunnel"></div>'
@@ -1342,8 +1342,21 @@ function mount(el){
     if (formingEl) formingEl.innerHTML = '';
     setProg(0);
     try{
-      var uni = await W.xuUniverse(true);
-      var note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
+      var uni = null, note = null;
+      if (typeof W.hgDeskLoadDeltaCoinDCX === 'function'){
+        var desk = await W.hgDeskLoadDeltaCoinDCX({ force: true, minTurnover: MIN_TURNOVER, includeUnknown: true });
+        uni = desk && desk.items ? desk.items : [];
+        note = desk && desk.note ? desk.note : note;
+      }
+      if (!uni || !uni.length) uni = await W.xuUniverse(true);
+      if (uni && uni.length){
+        uni = uni.filter(function(it){
+          if (!it || !it.sym) return false;
+          var ex = String(it.exchange || '').toLowerCase();
+          return ex === 'delta' || ex === 'coindcx' || ex === 'cdcx';
+        });
+      }
+      if (!note) note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
       if (!uni || !uni.length){
         publishEdgeScan([], { stats: { skipped: 0, noBias: 0, noTrig: 0, tallyFail: 0, pass: 0 } });
         setStat('universe empty — ' + (note || 'exchange fetch failed'), true);

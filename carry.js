@@ -259,7 +259,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
   /* ============================ config ============================ */
   const BINANCE_FAPI = 'https://fapi.binance.com';
   const DELTA_API = 'https://api.india.delta.exchange';
-  const TOP_N = 30;               // top |lastFundingRate| perps to deep-scan
+  const TOP_N = 0;               // 0 = all symbols passing turnover gate
   const MIN_TURNOVER_USD = 20e6;  // 24h quote-volume gate
   const SPREAD_MIN_APR = 25;      // cross-venue card threshold (% APR)
   const LIST_N = 12;              // rows in the binance-only payers table
@@ -553,7 +553,7 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         });
       }
       uni.sort(function(a, b){ return Math.abs(prem[b].pct8h) - Math.abs(prem[a].pct8h); });
-      const top = uni.slice(0, TOP_N);
+      const top = TOP_N > 0 ? uni.slice(0, TOP_N) : uni;
       if (!top.length){
         setStat('no binance perps to scan');
         __showEmpty(ui, 'no binance USDT perps pass the $20M turnover gate right now.');
@@ -785,8 +785,9 @@ is in flight it reports 'busy' (overlaps never double-fetch).
     el.innerHTML =
       '<div class="panel">'
       + '<h2>Carry — funding arbitrage <span>delta-neutral · binance vs delta india · APR = rate × (24 ÷ funding interval) × 365</span></h2>'
-      + '<div class="note" style="margin-bottom:10px">LEG A — Binance: all-symbols premiumIndex, top ' + TOP_N +
-        ' by |lastFundingRate| with ≥ $20M 24h turnover, plus the last ' + HIST_LIMIT +
+      + '<div class="note" style="margin-bottom:10px">LEG A — Binance: all-symbols premiumIndex, '
+      + (TOP_N > 0 ? ('top ' + TOP_N) : 'full universe')
+      + ' by |lastFundingRate| with ≥ $20M 24h turnover, plus the last ' + HIST_LIMIT +
         ' funding prints per symbol for an average rate. LEG B — Delta India perp tickers (funding_rate is already percent per 8h interval). ' +
         'LEG C — Bybit linear perps (current funding, 8h). Matched by base asset; the best spread per base wins (Binance↔Delta, Binance↔Bybit, or Delta↔Bybit). Cross-venue cards need |APR spread| ≥ ' + SPREAD_MIN_APR +
         '%. Carry is not free money — funding flips, bases drift, fees eat thin spreads.' + hostNote + '</div>'
