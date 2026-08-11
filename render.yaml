@@ -24,6 +24,10 @@ services:
         sync: false
       - key: XM_GOLD_SYMBOL
         value: XAUUSD
+      - key: CCXT_MARKET_EXCHANGE
+        value: binanceusdm
+      - key: CCXT_MARKET_SYMBOLS
+        value: BTC/USDT:USDT,ETH/USDT:USDT
       - key: GEMINI_MODEL
         value: gemini-3-flash-preview
       - key: TELEGRAM_TOKEN
@@ -44,6 +48,10 @@ services:
         value: https://hardgate-main.onrender.com/
       - key: HARDGATE_DAEMON_DRY_RUN
         value: "1"
+      - key: CCXT_MARKET_EXCHANGE
+        value: binanceusdm
+      - key: CCXT_MARKET_SYMBOLS
+        value: BTC/USDT:USDT,ETH/USDT:USDT
       - key: HARDGATE_STATE_FILE
         value: /var/data/hardgate-daemon-state.json
       - key: NODE_ENV

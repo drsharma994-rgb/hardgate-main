@@ -671,6 +671,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="xm-trader.js"></script>
 <script src="openbb-desk.js"></script>
 <script src="ccxt-desk.js"></script>
+<script src="trading-stack.js"></script>
 <script src="worldmonitor-desk.js"></script>
 <script src="chart-vision-desk.js"></script>
 <script src="chartvision-tab.js"></script>
@@ -1301,11 +1302,9 @@ async function waitAlertIdle(statEl){
    fails — so failure behavior in the GOLD tab is unchanged. Every gold flow in
    the app (GS/GC ledgers, backtests, SMC/OB gold rows, market picture, finder)
    enters through here, so they all inherit the chain + the DATA chip. */
-const GOLD_SRC_LABEL = { 'delta-xaut': 'DELTA XAUTUSD', 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
-/* Delta India XAUTUSD candles — the instrument every gold TICKET is actually
-   placed on (GOLD_SYM, brain gold lane, book, /api/execute). Levels derived
-   from Binance XAUUSDT and then stamped XAUTUSD are off by the XAUT basis,
-   which runs 0.5-2% of price — the same order as a 1.5xATR gold stop. */
+const GOLD_SRC_LABEL = { 'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD', 'binance-xau': 'BINANCE XAU', 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWELVE DATA', 'yahoo': 'YAHOO GC=F' };
+/* Spot-aligned gold candles — broker/XM and macro.js proxy chain first (matches goldscalp/goldswing).
+   Delta XAUTUSD (~1–2% below spot) is opt-in via opts.preferDeltaXaut or last-resort only. */
 async function deltaXautCandles(res, count){
   try{
     const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
@@ -1347,47 +1346,71 @@ function hgGoldBasisSubtitle(sub){
 async function getXAUCandles(res, count, opts){
   opts = opts || {};
   const ttl = hgCandleCacheTtl(opts);
-  const key = 'xau|' + res + '|' + count;
+  const mode = opts.preferDeltaXaut ? 'xaut' : 'spot';
+  const key = 'xau|' + res + '|' + count + '|' + mode;
   const hit = S.candleCache[key];
   if (hit && (nowSec()-hit.at) < ttl) return hit.rows;
-  /* PRIMARY: the instrument the order lands on. Only enough history counts —
-     a short XAUT listing must not silently hand the job back to the proxy. */
   const need = Math.min(count, 210);
-  const xaut = dropForming(await deltaXautCandles(res, count), res);
-  if (xaut.length >= need){
-    S.goldDataSource = 'delta-xaut';
-    S.goldBasisPct = null;
-    const chipD = $('goldDataSrc');
-    if (chipD) chipD.innerHTML = 'DATA <b>' + GOLD_SRC_LABEL['delta-xaut'] + '</b>';
-    S.candleCache[key] = { rows: xaut, at: nowSec() };
-    return xaut;
-  }
-  if (typeof getGoldCandles !== 'function') throw new Error('macro.js not loaded — gold data layer missing');
-  const out = await getGoldCandles(res, count);
-  if (!out || !out.rows || !out.rows.length) throw new Error('XAUUSD data unavailable from all sources (Delta XAUTUSD, Binance PAXG, Twelve Data, Yahoo GC=F)');
-  // TD quota tracking + throttling happen inside macro.js's Twelve Data leg, at the network call itself
-  S.goldDataSource = out.source;
-  const rows = dropForming(out.rows, res);
-  /* FALLBACK: proxy levels. Measure the basis so the ticket can declare it
-     instead of pretending the two instruments are the same price. */
-  S.goldBasisPct = null;
-  try{
-    /* isFinite(null) === true — guard the value, not just its finiteness. */
-    const px = xaut.length ? +xaut[xaut.length-1].c : NaN;
-    const py = rows.length ? +rows[rows.length-1].c : NaN;
-    if (isFinite(px) && px > 0 && isFinite(py) && py > 0) S.goldBasisPct = (px/py - 1) * 100;
-  }catch(e){}
   const chip = $('goldDataSrc');
-  if (chip){
-    const b = S.goldBasisPct;
-    chip.innerHTML = 'DATA <b>' + (GOLD_SRC_LABEL[out.source] || out.source.toUpperCase()) + '</b>'
-      + ' <b style="color:var(--gold)">PROXY</b>'
-      + ((b !== null && isFinite(b))
-          ? ' <span style="color:var(--gold)">basis ' + (b>=0?'+':'') + b.toFixed(2) + '%</span>'
-          : ' <span style="color:var(--gold)">basis UNMEASURED</span>');
+
+  function finish(rows, source, basisPct){
+    S.goldDataSource = source;
+    S.goldBasisPct = (basisPct === undefined) ? null : basisPct;
+    if (chip){
+      if (source === 'delta-xaut'){
+        chip.innerHTML = 'DATA <b>' + GOLD_SRC_LABEL['delta-xaut'] + '</b>';
+      } else {
+        const b = S.goldBasisPct;
+        chip.innerHTML = 'DATA <b>' + (GOLD_SRC_LABEL[source] || String(source || '').toUpperCase()) + '</b>'
+          + (source === 'xm-xauusd' ? '' : ' <b style="color:var(--gold)">SPOT</b>')
+          + ((b !== null && isFinite(b))
+              ? ' <span style="color:var(--gold)">ΔXAUT ' + (b>=0?'+':'') + b.toFixed(2) + '%</span>'
+              : '');
+      }
+    }
+    S.candleCache[key] = { rows: rows, at: nowSec() };
+    return rows;
   }
-  S.candleCache[key] = { rows: rows, at: nowSec() };
-  return rows;
+
+  async function xautBasisToSpot(spotRows){
+    if (!spotRows || !spotRows.length) return null;
+    try{
+      const xaut = dropForming(await deltaXautCandles(res, 5), res);
+      const px = xaut.length ? +xaut[xaut.length-1].c : NaN;
+      const py = spotRows.length ? +spotRows[spotRows.length-1].c : NaN;
+      if (isFinite(px) && px > 0 && isFinite(py) && py > 0) return (px/py - 1) * 100;
+    }catch(e){}
+    return null;
+  }
+
+  if (!opts.preferDeltaXaut && typeof getXmGoldCandles === 'function'){
+    try{
+      const xm = await getXmGoldCandles(res, count);
+      if (xm && xm.rows && xm.rows.length >= need){
+        return finish(dropForming(xm.rows, res), xm.source || 'xm-xauusd', null);
+      }
+    }catch(e){}
+  }
+
+  if (!opts.preferDeltaXaut && typeof getGoldCandles === 'function'){
+    const out = await getGoldCandles(res, count);
+    if (out && out.rows && out.rows.length){
+      const rows = dropForming(out.rows, res);
+      if (rows.length >= Math.min(need, 40)){
+        const basis = await xautBasisToSpot(rows);
+        return finish(rows, out.source || 'binance-xau', basis);
+      }
+    }
+  }
+
+  const xaut = dropForming(await deltaXautCandles(res, count), res);
+  if (xaut.length >= need || (opts.preferDeltaXaut && xaut.length >= Math.min(need, 40))){
+    if (xaut.length >= Math.min(need, 40)){
+      return finish(xaut, 'delta-xaut', null);
+    }
+  }
+
+  throw new Error('XAUUSD data unavailable from all sources (XM, spot proxies, Delta XAUTUSD)');
 }
 
 /* MACRO (AUTO) panel — renders getGoldMacro() output. Yahoo legs are nullable;

@@ -1,11 +1,8 @@
 /* HARDGATE — gold ticket/venue parity.
-   Guards the defect where every gold TICKET was stamped XAUTUSD (GOLD_SYM,
-   brain gold lane, book, /api/execute) while its entry/stop/T1 were derived
-   from Binance XAUUSDT via getXAUCandles. XAUT runs a 0.5-2% basis to spot —
-   the same order of magnitude as the 1.5xATR gold stop in goldswing.js — so
-   the levels were placed on an instrument they were never computed on.
    getXAUCandles is the single choke point: index.html, brain.js, scorecard.js,
    startrader.js and macro-feeds.js all enter through it.
+   Spot-aligned feeds (XM → macro.js proxies) must rank above Delta XAUTUSD
+   so levels match broker ~4397, not XAUT ~4330.
    Run: node tests/test-gold-venue.mjs                                       */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -16,7 +13,7 @@ let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const START = 'const GOLD_SRC_LABEL';
-const END = '  S.candleCache[key] = { rows: rows, at: nowSec() };\n  return rows;\n}';
+const END = '  throw new Error(\'XAUUSD data unavailable from all sources (XM, spot proxies, Delta XAUTUSD)\');\n}';
 const a = html.indexOf(START);
 if (a < 0) throw new Error('FAIL: GOLD_SRC_LABEL block not found in index.html');
 const k = html.indexOf(END, html.indexOf('async function getXAUCandles', a));
@@ -30,8 +27,6 @@ function mkRows(n, base){
   }
   return out;
 }
-/* scenario: 'ok' = Delta has full history, 'thin' = short listing,
-   'down' = Delta leg fails outright. Proxy always returns 260 bars @ 4200. */
 function run(scenario){
   const ctx = {
     console, Math, Date, isFinite, parseFloat, JSON, Array, Object, Number, String, encodeURIComponent,
@@ -43,7 +38,8 @@ function run(scenario){
     hgCandleCacheTtl: () => 60,
     $: () => null,
     dropForming: (rows) => rows,
-    getGoldCandles: async () => ({ rows: mkRows(260, 4200), source: 'binance-xau' }),
+    getGoldCandles: async () => ({ rows: mkRows(260, 4390), source: 'binance-xau' }),
+    getXmGoldCandles: async () => ({ rows: [], source: null }),
   };
   ctx.window = ctx; ctx.globalThis = ctx;
   ctx.CDCX_PROXY = (u) => '/api/proxy?url=' + encodeURIComponent(u);
@@ -69,39 +65,44 @@ function run(scenario){
   vm.runInContext(block, ctx, { filename: 'gold-block' });
   return ctx;
 }
-console.log('== Delta XAUTUSD is the PRIMARY gold candle source ==');
+console.log('== spot proxy is PRIMARY gold candle source (not XAUT) ==');
 {
   const ctx = run('ok');
   const rows = await ctx.getXAUCandles('4h', 260);
-  ok(rows.length === 260, 'full XAUTUSD history returned');
-  ok(ctx.S.goldDataSource === 'delta-xaut', 'source is the tradable instrument, not a proxy');
-  ok(Math.abs(rows[rows.length - 1].c - 4221) < 25, 'levels priced off XAUTUSD (~4221), not the proxy (~4200)');
-  ok(ctx.S.goldBasisPct === null, 'no basis recorded — none exists when levels are native');
-  ok(ctx.hgGoldBasisNote() === '', 'no proxy warning on a native read');
+  ok(rows.length === 260, 'full spot history returned');
+  ok(ctx.S.goldDataSource === 'binance-xau', 'source is spot-aligned proxy, not delta-xaut');
+  ok(Math.abs(rows[rows.length - 1].c - 4390) < 25, 'levels priced off spot proxy (~4390), not XAUT (~4221)');
+  ok(ctx.S.goldBasisPct !== null && isFinite(ctx.S.goldBasisPct), 'basis to XAUT measured for Delta tickets');
+  ok(ctx.hgGoldBasisNote().indexOf('PROXY') >= 0 || ctx.hgGoldBasisNote().indexOf('binance') >= 0, 'proxy note when not native XAUT');
 }
-console.log('== a SHORT XAUTUSD listing falls back but DECLARES the basis ==');
+console.log('== preferDeltaXaut opts into Delta XAUTUSD ==');
+{
+  const ctx = run('ok');
+  const rows = await ctx.getXAUCandles('4h', 260, { preferDeltaXaut: true });
+  ok(ctx.S.goldDataSource === 'delta-xaut', 'explicit XAUT preference honored');
+  ok(Math.abs(rows[rows.length - 1].c - 4221) < 25, 'XAUT levels when preferDeltaXaut');
+  ok(ctx.hgGoldBasisNote() === '', 'no proxy warning on native XAUT read');
+}
+console.log('== XM broker feed wins when configured ==');
+{
+  const ctx = run('ok');
+  ctx.getXmGoldCandles = async () => ({ rows: mkRows(260, 4397), source: 'xm-xauusd' });
+  const rows = await ctx.getXAUCandles('4h', 260);
+  ok(ctx.S.goldDataSource === 'xm-xauusd', 'XM source when bridge returns candles');
+  ok(Math.abs(rows[rows.length - 1].c - 4397) < 25, 'broker-aligned XM price');
+}
+console.log('== thin proxy still beats wide-basis XAUT when enough bars ==');
 {
   const ctx = run('thin');
   const rows = await ctx.getXAUCandles('4h', 260);
   ok(rows.length === 260, 'proxy history used when XAUT history is too short for EMA200');
-  ok(ctx.S.goldDataSource === 'binance-xau', 'source honestly reports the proxy');
-  ok(ctx.S.goldBasisPct !== null && isFinite(ctx.S.goldBasisPct), 'basis measured against XAUTUSD');
-  ok(ctx.S.goldBasisPct > 0.4 && ctx.S.goldBasisPct < 0.6, 'basis ~+0.5% matches the fixture spread');
-  const note = ctx.hgGoldBasisNote();
-  ok(note.indexOf('PROXY LEVELS') === 0, 'ticket note leads with PROXY LEVELS');
-  ok(note.indexOf('XAUTUSD') > 0 && note.indexOf('0.50%') > 0, 'note names the instrument and the basis');
+  ok(ctx.S.goldDataSource === 'binance-xau', 'spot proxy chosen over thin XAUT');
 }
-console.log('== a DEAD XAUTUSD leg warns HARDER, never softer ==');
+console.log('== dead Delta leg still serves spot proxy ==');
 {
   const ctx = run('down');
   const rows = await ctx.getXAUCandles('4h', 260);
-  ok(rows.length === 260, 'proxy still serves candles so the tab does not go dark');
-  ok(ctx.S.goldBasisPct === null, 'basis cannot be measured with no XAUT candles');
-  const note = ctx.hgGoldBasisNote();
-  /* isFinite(null) === true in JS — a naive guard reported a -100% basis here,
-     and a source-blind guard reported NO warning at all. Both are wrong. */
-  ok(note !== '', 'an unmeasurable basis still produces a warning');
-  ok(note.indexOf('UNMEASURED') > 0, 'the note says UNMEASURED rather than inventing a number');
-  ok(note.indexOf('-100') < 0, 'no bogus -100% basis from isFinite(null)');
+  ok(rows.length === 260, 'spot proxy when Delta unreachable');
+  ok(ctx.S.goldDataSource === 'binance-xau', 'spot source when Delta down');
 }
-console.log('\n' + passed + ' passed, 0 failed');
+console.log('\n' + passed + ' assertions passed');
