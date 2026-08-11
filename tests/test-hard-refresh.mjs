@@ -185,8 +185,8 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
 assert(groupTabs('overview') === 'brain,book,startrader,execute,bias,regime,trendmx,rotation,news',
   'OVERVIEW group gains book after brain');
-assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,onchain,coil,apex,trap,smc,ob,div',
-  'CRYPTO group gains onchain after liqs');
+assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,chartvision,onchain,coil,apex,trap,smc,ob,div',
+  'CRYPTO group includes chartvision after liqs');
 assert(groupTabs('gold') === 'gold,goldpro,goldspot,goldscalp,goldswing,goldpine,signallog',
   'GOLD group becomes gold,goldpro,goldspot,goldscalp,goldswing,goldpine,signallog');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'

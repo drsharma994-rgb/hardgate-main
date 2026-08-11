@@ -259,7 +259,7 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
 /* ---------------- group model ---------------- */
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'startrader', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
-  crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
+  crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'chartvision', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldspot', 'goldscalp', 'goldswing', 'goldpine', 'signallog'],
   strategies: ['strats', 'meanrev', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'carry', 'termbasis', 'scorecard'],
   tools:      ['basis', 'search', 'tradeos', 'hey', 'aiagent', 'log', 'trade', 'finder']
@@ -271,7 +271,7 @@ assert(run("HG_NAV_GROUPS.map(function(g){ return g.id; }).join(',')") === 'over
 assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
-const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', regime:'overview',
+const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', chartvision:'crypto', regime:'overview',
                    carry:'strategies', termbasis:'strategies', goldpro:'gold', strats:'strategies', meanrev:'strategies', edge:'strategies', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
                    scorecard:'strategies',
                    brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
