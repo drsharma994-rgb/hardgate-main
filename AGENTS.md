@@ -66,6 +66,7 @@ Not required for local dev or core UI:
 | `/api/coindcx/*` | Cached server-side CoinDCX desk (instruments, marks, candles) — avoids public CORS proxy rate limits on Render |
 | `ATOMIC_SCAN_TOP` | Top N contracts per venue for **Atomic Agents** Delta+CoinDCX pipeline (default 18) |
 | `HARDGATE_FQS_GATE`, `HARDGATE_EDGE_GATE`, `HARDGATE_FT_EDGE_GATE` | Daemon formation quality gates (see Render worker section) |
+| `/api/trading-stack/status` | Unified CCXT + OpenBB + Freqtrade + XM + execute status (see README Trading stack) |
 
 ### Render daemon worker
 

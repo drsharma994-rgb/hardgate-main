@@ -60,7 +60,24 @@ modules that register on `window.HG_tabs` and get a nav button + pane at boot, m
 
 The Binance **XAUUSDT TradFi perp** is the primary gold instrument (klines, funding and open interest on
 `fapi`), with candle fallbacks **Binance PAXG → Twelve Data → Yahoo `GC=F`**; the active source is shown on
-the GOLD tab's DATA chip and in backtest footers.
+the GOLD tab's DATA chip and in backtest footers. App-wide `getXAUCandles()` prefers **XM broker** (when
+`XM_MT5_URL` is set) then spot proxies — not Delta XAUTUSD (~1–2% below spot). Use `{ preferDeltaXaut: true }`
+when placing on Delta XAUTUSD perps.
+
+## Trading stack (best-repo patterns)
+
+HARDGATE ports concepts from leading open-source trading repos without running them as separate services:
+
+| Pattern | Upstream | HARDGATE surface |
+|---------|----------|------------------|
+| **CCXT** | [ccxt/ccxt](https://github.com/ccxt/ccxt) | `/api/ccxt/desk` (public funding, no keys) + in-process `/api/execute` |
+| **Freqtrade** | [freqtrade/freqtrade](https://github.com/freqtrade/freqtrade) | Expectancy edge + cooldown/stoploss guard on formation (`HARDGATE_FT_*`) |
+| **OpenBB** | [OpenBB-finance/OpenBB](https://github.com/OpenBB-finance/OpenBB) | `/api/openbb/desk` (Yahoo macro fallback; optional `OPENBB_API_URL` backend) |
+| **XM / MT5** | Broker bridge | `/api/xm/candles` for broker-aligned XAUUSD |
+
+Unified status: **`GET /api/trading-stack/status`**. The SCORECARD formation panel shows CCXT/OpenBB/XM/EXEC
+lamps via `trading-stack.js`. Enable daemon gates on the Render worker after scorecard settles: `HARDGATE_FQS_GATE=1`,
+`HARDGATE_EDGE_GATE=1`, then `HARDGATE_FT_EDGE_GATE=1` / `HARDGATE_FT_PROTECT=1`. See `AGENTS.md` for env vars.
 
 ## Paper fund book (BOOK tab)
 
