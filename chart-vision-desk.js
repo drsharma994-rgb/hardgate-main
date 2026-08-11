@@ -52,11 +52,78 @@ function getChartVisionCached(key){
 function visionPredictionLine(analysis){
   if (!analysis) return '';
   var parts = [];
+  if (analysis.nextBarOpinion) parts.push(analysis.nextBarOpinion);
   if (analysis.predictedPath) parts.push(analysis.predictedPath);
   if (analysis.outcomeLean) parts.push(analysis.outcomeLean);
   if (fin(+analysis.outcomeProb)) parts.push(Math.round(+analysis.outcomeProb * 100) + '% setup edge');
   if (analysis.horizonBars) parts.push('~' + analysis.horizonBars + ' bars');
   return parts.join(' · ');
+}
+
+function visionNextBarLine(analysis){
+  if (!analysis) return '';
+  return analysis.nextBarOpinion || '';
+}
+
+function hgChartVisionIsConfirmed(setup){
+  setup = setup || {};
+  if (!setup.dir) return false;
+  if (setup.demoted || setup.vetoed || setup.visionVetoed) return false;
+  if (setup.confirmed === false) return false;
+  if (setup.tier && String(setup.tier).toLowerCase() !== 'clean') return false;
+  if (setup.clean7 || setup.clean || setup.gateClean) return true;
+  if (setup.plan && setup.plan.confirmed) return true;
+  if (setup.res && setup.res.plan && setup.res.plan.confirmed) return true;
+  /* 7/7 cryptogates clean hits and gold confirmed cards default true when dir present */
+  return true;
+}
+
+function hgChartVisionCopyFields(target, analysis){
+  if (!target || !analysis) return target;
+  target.vision = analysis;
+  target.visionChip = visionChip(analysis);
+  target.visionNextMove = analysis.nextMove || '';
+  target.visionNextBar = visionNextBarLine(analysis);
+  target.visionPrediction = visionPredictionLine(analysis);
+  return target;
+}
+
+function hgChartVisionCardBlock(setup){
+  setup = setup || {};
+  if (!setup.visionNextBar && !setup.visionNextMove && !setup.visionPrediction && !setup.visionChip) return '';
+  var esc = function(s){
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+  var chip = setup.visionChip
+    ? '<span class="gpip ok">' + esc(setup.visionChip) + '</span> ' : '';
+  var lines = [];
+  if (setup.visionNextBar) lines.push('<b>NEXT BAR:</b> ' + esc(setup.visionNextBar));
+  else if (setup.visionNextMove) lines.push('<b>NEXT:</b> ' + esc(setup.visionNextMove));
+  if (setup.visionPrediction && setup.visionPrediction !== setup.visionNextBar) {
+    lines.push('<b>PATH:</b> ' + esc(setup.visionPrediction));
+  }
+  return '<div class="hg-vision-block" style="margin-top:8px">'
+    + (chip ? '<div class="gates">' + chip + '</div>' : '')
+    + '<div class="note hg-vision-line">' + lines.join('<br>') + '</div></div>';
+}
+
+function hgChartVisionPatchCardByChartId(chartId, setup){
+  if (!chartId || !setup) return;
+  try{
+    var anchor = document.getElementById(String(chartId).replace(/[^A-Za-z0-9_-]/g, ''));
+    if (!anchor) return;
+    var card = anchor.closest ? anchor.closest('.card') : null;
+    if (!card) return;
+    var old = card.querySelector('.hg-vision-block');
+    if (old) old.remove();
+    var html = hgChartVisionCardBlock(setup);
+    if (!html) return;
+    anchor.insertAdjacentHTML('afterend', html);
+    var chead = card.querySelector('.chead');
+    if (chead && setup.visionChip && !/\bVISION\b/.test(chead.textContent || '')){
+      chead.insertAdjacentHTML('beforeend', ' <span class="gpip ok">' + String(setup.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>');
+    }
+  }catch(e){}
 }
 
 function visionChip(analysis){
@@ -154,10 +221,7 @@ async function hgChartVisionAnalyze(setup){
 
 function hgChartVisionApply(setup, analysis){
   if (!setup || !analysis) return setup;
-  setup.vision = analysis;
-  setup.visionChip = visionChip(analysis);
-  setup.visionNextMove = analysis.nextMove || '';
-  setup.visionPrediction = visionPredictionLine(analysis);
+  hgChartVisionCopyFields(setup, analysis);
   if (analysis.veto){
     setup.visionVetoed = true;
     setup.demoted = true;
@@ -171,21 +235,88 @@ function hgChartVisionApply(setup, analysis){
   return hgChartVisionRefreshStack(setup);
 }
 
-/** Enrich top N ranked setups asynchronously; calls onDone when finished. */
+function hgChartVisionApplyToRef(setup, ref){
+  if (!ref || !setup) return ref;
+  ref.vision = setup.vision;
+  ref.visionChip = setup.visionChip;
+  ref.visionNextMove = setup.visionNextMove;
+  ref.visionNextBar = setup.visionNextBar;
+  ref.visionPrediction = setup.visionPrediction;
+  if (setup.demoted) ref.demoted = true;
+  if (setup.demoteReason) ref.demoteReason = setup.demoteReason;
+  return ref;
+}
+
+/** Enrich confirmed setups asynchronously (default: all clean up to limit). */
 function hgChartVisionEnrichSetups(setups, getRowsFn, opts){
   opts = opts || {};
-  var limit = opts.limit != null ? +opts.limit : 3;
-  var list = (setups || []).filter(function(s){ return s && s.dir && !s.demoted && !s.vetoed; }).slice(0, limit);
+  var limit = opts.limit != null ? +opts.limit : 12;
+  var confirmedOnly = opts.confirmedOnly !== false;
+  var list = (setups || []).filter(function(s){
+    if (!s || !s.dir || s.demoted || s.vetoed) return false;
+    return confirmedOnly ? hgChartVisionIsConfirmed(s) : true;
+  }).slice(0, limit);
   if (!list.length) return Promise.resolve([]);
 
   return Promise.all(list.map(function(s){
-    var rows = typeof getRowsFn === 'function' ? getRowsFn(s) : (s.rows || []);
+    var rows = typeof getRowsFn === 'function' ? getRowsFn(s) : (s.rows || s.rows15m || s.rows4h || []);
     if (!rows || rows.length < 21) return Promise.resolve(s);
     return hgChartVisionAnalyze(Object.assign({}, s, { rows: rows })).then(function(r){
-      if (r && r.ok && r.analysis) hgChartVisionApply(s, r.analysis);
+      if (r && r.ok && r.analysis){
+        hgChartVisionApply(s, r.analysis);
+        if (s.__ref) hgChartVisionApplyToRef(s, s.__ref);
+        if (s.__hitRef) hgChartVisionApplyToRef(s, s.__hitRef);
+      }
       return s;
     }).catch(function(){ return s; });
   }));
+}
+
+/** SWING/SCALP scan hook — enrich all clean hits and patch cards in place. */
+function hgChartVisionEnrichCryptoScan(opts){
+  opts = opts || {};
+  var hits = opts.cleanHits || [];
+  if (!hits.length) return Promise.resolve([]);
+  var isSwing = opts.kind === 'swing';
+  var wraps = hits.map(function(h){
+    var hit = h.hit || h;
+    return {
+      sym: (h.t && h.t.symbol) || hit.sym || hit.symbol,
+      dir: hit.dir,
+      rows: isSwing ? hit.rows : (hit.m15 || hit.rows),
+      entry: hit.entry,
+      stop: hit.stop,
+      t1: hit.t1,
+      timeframe: isSwing ? '4h' : '15m',
+      style: opts.kind || 'swing',
+      asset: 'crypto',
+      clean7: true,
+      formationScore: hit.formationScore,
+      __hitRef: hit,
+      __chartId: hit.__visionChartId,
+    };
+  }).filter(function(w){ return w.dir && w.rows && w.rows.length >= 21; });
+
+  return hgChartVisionEnrichSetups(wraps, function(w){ return w.rows; }, {
+    limit: opts.limit != null ? opts.limit : 12,
+    confirmedOnly: true,
+  }).then(function(){
+    for (var i = 0; i < wraps.length; i++){
+      var w = wraps[i];
+      if (w.__chartId) hgChartVisionPatchCardByChartId(w.__chartId, w.__hitRef || w);
+    }
+    if (typeof opts.onDone === 'function') opts.onDone(wraps);
+    return wraps;
+  });
+}
+
+/** Generic desk hook: enrich + optional repaint callback. */
+function hgChartVisionEnrichDeskRows(rows, getRowsFn, opts){
+  opts = opts || {};
+  return hgChartVisionEnrichSetups(rows, getRowsFn, opts).then(function(out){
+    if (typeof opts.repaint === 'function') opts.repaint(out);
+    return out;
+  });
 }
 
 /** Re-render gold scan cards after async vision (guards against stale scan generations). */
@@ -206,7 +337,8 @@ function hgChartVisionRefreshGoldCards(opts){
 }
 
 /** Enrich EXECUTE (engine.js) survivors with chart vision chips. */
-function hgChartVisionEnrichEngineSurvivors(survivors, cardsEl, cardHTML, paintCharts){
+function hgChartVisionEnrichEngineSurvivors(survivors, cardsEl, cardHTML, paintCharts, opts){
+  opts = opts || {};
   if (!survivors || !survivors.length || typeof cardHTML !== 'function') return Promise.resolve([]);
   var wraps = survivors.map(function(r){
     var plan = r.res && r.res.plan;
@@ -223,14 +355,11 @@ function hgChartVisionEnrichEngineSurvivors(survivors, cardsEl, cardHTML, paintC
       __ref: r,
     };
   }).filter(function(w){ return w.dir && w.rows && w.rows.length; });
-  return hgChartVisionEnrichSetups(wraps, function(w){ return w.rows; }, { limit: 3 }).then(function(){
+  return hgChartVisionEnrichSetups(wraps, function(w){ return w.rows; }, { limit: opts.limit != null ? opts.limit : 12, confirmedOnly: true }).then(function(){
     for (var i = 0; i < wraps.length; i++){
       var w = wraps[i];
       if (w.__ref && w.visionChip){
-        w.__ref.visionChip = w.visionChip;
-        w.__ref.vision = w.vision;
-        w.__ref.visionNextMove = w.visionNextMove;
-        w.__ref.visionPrediction = w.visionPrediction;
+        hgChartVisionApplyToRef(w, w.__ref);
       }
     }
     if (cardsEl){
@@ -249,7 +378,13 @@ G.getChartVisionCached = getChartVisionCached;
 G.hgChartVisionAnalyze = hgChartVisionAnalyze;
 G.hgChartVisionApply = hgChartVisionApply;
 G.hgChartVisionEnrichSetups = hgChartVisionEnrichSetups;
+G.hgChartVisionEnrichCryptoScan = hgChartVisionEnrichCryptoScan;
+G.hgChartVisionEnrichDeskRows = hgChartVisionEnrichDeskRows;
+G.hgChartVisionIsConfirmed = hgChartVisionIsConfirmed;
+G.hgChartVisionCardBlock = hgChartVisionCardBlock;
+G.hgChartVisionPatchCardByChartId = hgChartVisionPatchCardByChartId;
 G.hgChartVisionChip = visionChip;
 G.hgChartVisionPredictionLine = visionPredictionLine;
+G.hgChartVisionNextBarLine = visionNextBarLine;
 
 })();

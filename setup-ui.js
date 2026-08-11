@@ -209,6 +209,7 @@ function hgSetupCardHTML(setup){
   var cid = chartId ? String(chartId).replace(/[^A-Za-z0-9_-]/g,'') : '';
   var note = setup.note ? '<div class="note warn" style="margin-top:6px">' + setup.note + '</div>' : '';
   var stackHtml = (setup.stack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(setup.stack) : '';
+  var visionHtml = (typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(setup) : '';
   var meshHtml = (setup.convictionMesh && typeof hgSetupConvictionMeshHtml === 'function')
     ? hgSetupConvictionMeshHtml(setup.convictionMesh) : '';
   var tradeBtn = (tier === 'clean' && onclickAttr)
@@ -221,6 +222,7 @@ function hgSetupCardHTML(setup){
     + stackHtml
     + meshHtml
     + (plan ? '<div class="plan">' + plan + '</div>' : '')
+    + visionHtml
     + note
     + (cid ? '<div class="hgchart" id="' + cid + '"></div>' : '')
     + tradeBtn + bookBtn

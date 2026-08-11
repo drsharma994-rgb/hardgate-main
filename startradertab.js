@@ -608,10 +608,12 @@ function cardHTML(r){
     : '';
   var tradeBtn = tradeOnclick
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
+  var visionChip = (!draft && r.visionChip) ? ' <span class="gpip ok">' + esc(r.visionChip) + '</span>' : '';
+  var visionHtml = (!draft && typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(r) : '';
   return '<div class="card ' + tierCls + '">'
     + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
     + '<span class="gpip">' + klassChip(r.klass) + '</span>'
-    + '<span class="dir">' + r.dir.toUpperCase() + ' · ' + r.tier + '</span>'
+    + '<span class="dir">' + r.dir.toUpperCase() + ' · ' + r.tier + visionChip + '</span>'
     + (typeof W.hgBookStampChip === 'function' ? W.hgBookStampChip(r.sym, r.dir, { scanner: 'startrader', strategy: 'startrader', fund: stFund, klass: r.klass }) : '')
     + '</div>'
     + '<div class="cbody">'
@@ -619,7 +621,7 @@ function cardHTML(r){
     + '<span class="k">confluence</span><span>' + r.points + ' pts · ' + r.votes.length + ' reads agree</span>'
     + '<span class="k">strategies</span><span>' + esc(voteTxt) + '</span>'
     + '<span class="k">mark</span><span>' + pxF(r.mark) + '</span>'
-  + '</div>' + planBlk + stackHtml + tradeBtn + bookBtn + '</div>';
+  + '</div>' + planBlk + visionHtml + stackHtml + tradeBtn + bookBtn + '</div>';
 }
 
 var __st = { busy: false, ranOnce: false, run: null };
@@ -831,6 +833,23 @@ function mount(el){
         return;
       }
       cards.innerHTML = show.map(cardHTML).join('');
+      if (typeof W.hgChartVisionEnrichDeskRows === 'function'){
+        var stWraps = show.filter(function(r){
+          return !r.planDraft && r.rows4h && (r.tier === 'PRIME' || r.tier === 'HIGH');
+        }).map(function(r){
+          var p = r.plan || {};
+          return {
+            sym: r.sym, dir: r.dir, rows4h: r.rows4h,
+            entry: p.entry, stop: p.stop, t1: p.t1,
+            clean: true, tier: 'clean', style: 'startrader', asset: 'crypto', timeframe: '4h',
+            __ref: r
+          };
+        });
+        W.hgChartVisionEnrichDeskRows(stWraps, function(w){ return w.rows4h; }, {
+          limit: 12,
+          repaint: function(){ cards.innerHTML = show.map(cardHTML).join(''); }
+        });
+      }
       var primes = show.filter(function(x){ return x.tier === 'PRIME'; }).length;
       var highs = show.filter(function(x){ return x.tier === 'HIGH'; }).length;
       setStat('done — ' + show.length + ' shown (' + primes + ' PRIME · ' + highs + ' HIGH) / '

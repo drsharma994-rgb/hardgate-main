@@ -521,7 +521,11 @@ function cardHTML(c, isBest, season){
   if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
   if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
   if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
-  var visionText = [c.visionNextMove, c.visionPrediction].filter(Boolean).join(' · ');
+  var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
+    if (!v) return false;
+    if (i > 0 && v === a[0]) return false;
+    return true;
+  }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
   return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
