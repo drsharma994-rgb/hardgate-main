@@ -95,7 +95,7 @@ console.log('== wiring ==');
   ok(/gold-best-levels\.js/.test(ix), 'index loads gold-best-levels.js');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp uses hgApplyGoldBestLevels');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing uses hgApplyGoldBestLevels');
-  ok(/hg-v243/.test(sw), 'cache hg-v243');
+  ok(/hg-v244/.test(sw), 'cache hg-v244');
 }
 
 console.log('== gold card text contrast ==');
@@ -103,10 +103,10 @@ console.log('== gold card text contrast ==');
   const gs = fs.readFileSync(root + 'goldscalp.js', 'utf8');
   const gw = fs.readFileSync(root + 'goldswing.js', 'utf8');
   const bright = fs.readFileSync(root + 'bright.css', 'utf8');
-  ok(/tab_goldscalp \.card\.gsx-card \.sym\{color:#020617/.test(gs), 'goldscalp card sym dark text');
-  ok(/tab_goldscalp \.card\.gsx-card \.gpip\.ok\{.*color:#047857/.test(gs), 'goldscalp gpip ok dark green');
-  ok(/tab_goldswing \.card\.gsw-card \.sym\{color:#020617/.test(gw), 'goldswing card sym dark text');
-  ok(/gold setup cards — dark text on white/.test(bright), 'bright.css gold card contrast block');
+  ok(/\.card\.gsx-card\{color:#F1F5F9/.test(gs), 'goldscalp card uses dark HUD text');
+  ok(!/tab_goldscalp \.gsx-card/.test(gs), 'goldscalp styles unscoped (StarTrader embed)');
+  ok(/\.card\.gsw-card\{color:#F1F5F9/.test(gw), 'goldswing card uses dark HUD text');
+  ok(/gold setup cards — dark HUD panels/.test(bright), 'bright.css gold card contrast block');
 }
 
 console.log('\n' + pass + ' passed, 0 failed');
