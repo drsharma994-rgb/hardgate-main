@@ -36,9 +36,12 @@ ok(W.rsConviction({ triggers: ['sweep'] }) === 4, 'rsConviction: sweep = 4');
 ok(W.rsConviction({ triggers: ['meanrev', 'drawdown'], bt: { n: 5, expR: 0.5, winPct: 60 } }) >= 6,
    'rsConviction: meanrev + drawdown + paying bt');
 
-ok(/hg-v253/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v253');
-ok(/reversalsniper/.test(readFileSync(path.join(root, 'index.html'), 'utf8')),
-   'index.html wires reversalsniper tab');
+ok(W.rsIsDeskVenue('delta') && W.rsIsDeskVenue('coindcx') && !W.rsIsDeskVenue('binance'),
+   'rsIsDeskVenue: delta + coindcx only');
+ok(typeof W.rsLoadUniverse === 'function', 'rsLoadUniverse exported');
+ok(/hg-v254/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v254');
+ok(/Delta.*CoinDCX.*full universe/i.test(readFileSync(path.join(root, 'reversalsniper.js'), 'utf8')),
+   'reversalsniper scans Delta + CoinDCX full universe');
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));
 process.exit(fail ? 1 : 0);

@@ -18,7 +18,7 @@ Pure exports (never throw):
   rsConviction(setup) -> number
 
 Classic script; loads after indicators.js, indicators2.js, plans.js,
-meanrev.js, binance.js. Registers window.HG_tabs.
+meanrev.js, desk-scan-universe.js, xuniverse.js, binance.js. Registers window.HG_tabs.
 ========================================================================= */
 (function(){
 'use strict';
@@ -29,11 +29,11 @@ var W = (typeof window !== 'undefined') ? window
 var MIN_LEV         = 30;
 var MIN_RR          = 1.5;
 var MIN_CONVICTION  = 4;
-var MIN_TURNOVER    = 20e6;
-var MAX_UNIVERSE    = 40;
+var MIN_TURNOVER    = 5e6;
+var MAX_UNIVERSE    = 0;
 var KL_LIMIT        = 300;
-var CHUNK           = 5;
-var CHUNK_SLEEP_MS  = 120;
+var CHUNK           = 4;
+var CHUNK_SLEEP_MS  = 150;
 var SWING_LOOKBACK  = 30;
 var SWING_EXCLUDE   = 4;
 var MIN_DRAWDOWN    = 0.02;
@@ -247,6 +247,52 @@ function rsAssess(rows, opts){
   }catch(e){ return null; }
 }
 
+function rsIsDeskVenue(ex){
+  ex = String(ex == null ? '' : ex).toLowerCase();
+  return ex === 'delta' || ex === 'coindcx' || ex === 'cdcx';
+}
+
+async function rsLoadUniverse(force){
+  try{
+    var loadFn = (typeof W.hgDeskLoadUniverse === 'function') ? W.hgDeskLoadUniverse : null;
+    if (loadFn){
+      var u = await loadFn({ force: !!force, minTurnover: MIN_TURNOVER, includeUnknown: true });
+      var items = (u.items || []).filter(function(it){ return it && rsIsDeskVenue(it.exchange); });
+      if (MAX_UNIVERSE > 0) items = items.slice(0, MAX_UNIVERSE);
+      return {
+        items: items,
+        note: u.note,
+        source: u.source || 'xu',
+        venueCounts: (typeof W.hgDeskVenueCounts === 'function') ? W.hgDeskVenueCounts(items) : null
+      };
+    }
+    if (typeof W.xuUniverse === 'function'){
+      var raw = await W.xuUniverse(!!force);
+      var filtered = (raw || []).filter(function(it){ return it && rsIsDeskVenue(it.exchange); });
+      if (MAX_UNIVERSE > 0) filtered = filtered.slice(0, MAX_UNIVERSE);
+      return { items: filtered, note: null, source: 'xu', venueCounts: null };
+    }
+    return { items: [], note: 'xuUniverse / hgDeskLoadUniverse unavailable', source: 'none', venueCounts: null };
+  }catch(e){
+    return { items: [], note: (e && e.message) ? e.message : 'universe load failed', source: 'error', venueCounts: null };
+  }
+}
+
+async function rsFetchKlines(item, tf, n){
+  try{
+    if (typeof W.hgDeskFetchKlines === 'function'){
+      return await W.hgDeskFetchKlines(item, tf, n);
+    }
+    if (typeof W.xuCandles === 'function'){
+      return await W.xuCandles(item, tf, n);
+    }
+    if (typeof binanceKlines === 'function' && item && item.sym){
+      return await binanceKlines(item.sym, tf, n);
+    }
+  }catch(e){}
+  return [];
+}
+
 function rsBacktest(rows){
   try{
     if (typeof W.mrBacktest === 'function') return W.mrBacktest(rows);
@@ -268,7 +314,11 @@ function triggerChips(triggers){
 
 function cardHTML(r){
   var s = r.setup, bt = s.bt || {};
-  var turnover = r.tick ? '$' + fmtF(r.tick.turnoverUsd / 1e6, 0) + 'M' : '—';
+  var item = r.item || {};
+  var symLab = (typeof W.hgDeskSymLabel === 'function') ? W.hgDeskSymLabel(item) : (r.sym || item.sym || '—');
+  var venueChip = (typeof W.hgDeskVenueChipHTML === 'function') ? W.hgDeskVenueChipHTML(item) : '';
+  var toVal = item.turnoverUsd;
+  var turnover = (toVal != null && isFinite(+toVal)) ? ('$' + fmtF(+toVal / 1e6, 0) + 'M') : '—';
   var levCol = s.lev >= MIN_LEV ? '#5fbf8f' : '#d8a24a';
   var record = bt.n >= 3
     ? 'MEAN-REV RECORD: ' + bt.n + ' trades · ' + Math.round(bt.winPct) + '% win · avg '
@@ -278,23 +328,23 @@ function cardHTML(r){
   var stackHtml = '';
   if (typeof hgSetupStackMiniHtml === 'function' && typeof hgSetupStackForInlineScan === 'function'){
     try{
-      var st = hgSetupStackForInlineScan({ dir: 'long', sym: r.sym, rows4h: r.rows, style: 'reversal-sniper',
-        ticker: r.tick, clean: true });
+      var st = hgSetupStackForInlineScan({ dir: 'long', sym: symLab, rows4h: r.rows, style: 'reversal-sniper',
+        ticker: item, clean: true });
       stackHtml = hgSetupStackMiniHtml(st);
     }catch(eSt){}
   }
 
   var safeChip = (typeof hgSafeLevChip === 'function') ? hgSafeLevChip(s.entry, s.stop) : '';
   var tradeOnclick = (typeof hgToTradePlanOnclickAttr === 'function')
-    ? hgToTradePlanOnclickAttr(r.sym, 'long', s.entry, s.stop, s.t1, { t2: s.t2, scanner: 'reversalsniper', strategy: 'reversalsniper' })
+    ? hgToTradePlanOnclickAttr(symLab, 'long', s.entry, s.stop, s.t1, { t2: s.t2, scanner: 'reversalsniper', strategy: 'reversalsniper' })
     : '';
   var tradeBtn = tradeOnclick
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
   var bookBtn = (typeof bookBtnHTML === 'function')
-    ? bookBtnHTML(r.sym, 'long', s.entry, s.stop, s.t1, { scanner: 'reversalsniper', strategy: 'reversalsniper', t2: s.t2 }) : '';
+    ? bookBtnHTML(symLab, 'long', s.entry, s.stop, s.t1, { scanner: 'reversalsniper', strategy: 'reversalsniper', t2: s.t2 }) : '';
 
   return '<div class="card long' + (r.best ? ' best' : '') + '">'
-    + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
+    + '<div class="chead"><span class="sym">' + esc(symLab) + venueChip + '</span>'
     + '<span class="dir">LONG · REVERSAL SNIPER · conviction ' + s.conviction + '</span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, 'long', { scanner: 'reversalsniper', strategy: 'reversalsniper' }) : '')
     + '</div>'
@@ -324,14 +374,14 @@ var __rs = { busy: false, ranOnce: false };
 function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
-    + '<h2>Reversal Sniper <span>long bounces after a down move · sweep reclaim + mean-reversion + RSI stretch · '
-    + '≥' + MIN_LEV + '× max-safe leverage (stop ≤ ~1.9%) · 4H Binance perps</span></h2>'
-    + '<div class="note" style="margin-bottom:8px">Finds post-drop long reversals with tight structural stops. '
-    + 'Conviction = agreeing triggers + paying mean-rev backtest. <b>Nothing here guarantees the stop holds</b> — '
-    + 'use TRADE PLAN clearance gates and size conservatively.</div>'
+    + '<h2>Reversal Sniper <span>long bounces after a down move · Delta India + CoinDCX full universe · '
+    + '≥' + MIN_LEV + '× max-safe leverage · 4H</span></h2>'
+    + '<div class="note" style="margin-bottom:8px">Scans every Delta India + CoinDCX USDT perpetual (≥ $'
+    + fmtF(MIN_TURNOVER / 1e6, 0) + 'M turnover when known). Conviction = agreeing triggers + paying mean-rev backtest. '
+    + '<b>Nothing here guarantees the stop holds</b> — use TRADE PLAN clearance gates.</div>'
     + '<div class="row"><button class="btn" id="rsRun">SCAN REVERSALS</button>'
-    + '<span class="note" id="rsStat">idle — top ' + MAX_UNIVERSE + ' Binance perps ≥ $'
-    + fmtF(MIN_TURNOVER / 1e6, 0) + 'M · conviction ≥ ' + MIN_CONVICTION + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
+    + '<span class="note" id="rsStat">idle — full Delta + CoinDCX universe · conviction ≥ ' + MIN_CONVICTION
+    + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
     + '<div class="prog" id="rsProg"><i></i></div>'
     + '<div class="cards" id="rsCards"></div>'
     + '<div class="empty" id="rsEmpty" style="display:none">No sniper-grade long reversals right now — '
@@ -363,32 +413,30 @@ function mount(el){
     setProg(0);
     var status = 'refreshed';
     try{
-      if (typeof binancePerpUniverse !== 'function' || typeof binanceKlines !== 'function'){
-        setStat('missing binance.js — cannot scan', true);
-        return 'error: binance missing';
+      setStat('loading Delta + CoinDCX universe…');
+      var uniPack = await rsLoadUniverse(true);
+      var uni = uniPack.items || [];
+      if (!uni.length){
+        setStat(uniPack.note || 'Delta + CoinDCX universe unavailable — check xuniverse.js / network', true);
+        return 'failed: universe';
       }
-      setStat('loading Binance perp universe…');
-      var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
-      var perps = res[0] || [], ticks = res[1];
-      if (!perps.length || !ticks){ setStat('Binance universe unavailable', true); return 'failed: universe'; }
-
-      var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
-        .sort(function(a, b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
-        .slice(0, MAX_UNIVERSE);
+      var vc = uniPack.venueCounts || {};
+      var venueNote = 'Δ ' + (vc.delta || 0) + ' · CDCX ' + (vc.coindcx || 0);
 
       var results = [], failed = 0, started = 0;
       for (var ci = 0; ci < uni.length; ci += CHUNK){
         var chunk = uni.slice(ci, ci + CHUNK);
-        await Promise.all(chunk.map(async function(sym){
+        await Promise.all(chunk.map(async function(item){
           var my = ++started;
-          setStat('scanning ' + my + '/' + uni.length + ' · ' + sym);
+          var symLab = (typeof W.hgDeskSymLabel === 'function') ? W.hgDeskSymLabel(item) : (item.sym || '?');
+          setStat('scanning ' + my + '/' + uni.length + ' · ' + symLab + ' (' + venueNote + ')');
           setProg(my / uni.length);
           try{
-            var rows = await binanceKlines(sym, '4h', KL_LIMIT);
+            var rows = await rsFetchKlines(item, '4h', KL_LIMIT);
             if (!rows || !rows.length){ failed++; return; }
             var setup = rsAssess(rows);
             if (!setup) return;
-            results.push({ sym: sym, setup: setup, rows: rows, tick: ticks[sym] });
+            results.push({ item: item, sym: symLab, setup: setup, rows: rows, tick: item });
           }catch(e){ failed++; }
         }));
         if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
@@ -405,7 +453,7 @@ function mount(el){
         emptyEl.style.display = 'block';
       }
       setStat(results.length + ' sniper-grade reversal' + (results.length === 1 ? '' : 's')
-        + ' · ' + uni.length + ' scanned · ' + failed + ' failed · '
+        + ' · ' + uni.length + ' contracts scanned (' + venueNote + ') · ' + failed + ' failed · '
         + new Date().toISOString().slice(11, 19) + ' UTC');
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
@@ -435,6 +483,8 @@ W.rsMaxSafeLev = rsMaxSafeLev;
 W.rsAssess = rsAssess;
 W.rsBacktest = rsBacktest;
 W.rsConviction = rsConviction;
+W.rsLoadUniverse = rsLoadUniverse;
+W.rsIsDeskVenue = rsIsDeskVenue;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'reversalsniper', label: 'REVERSAL SNIPER', mount: mount, refresh: rsRefresh });
 

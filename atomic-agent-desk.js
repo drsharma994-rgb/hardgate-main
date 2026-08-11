@@ -60,12 +60,15 @@ function hgAtomicDeskPanelHtml(){
   var h = '<div class="hg-panel__legend" style="margin-top:10px">Atomic Agents · Delta + CoinDCX · exact levels</div>';
   h += '<div class="note">Score <span class="hg-num">' + (d.swarmScore != null ? d.swarmScore : '—')
     + '</span> · Delta <span class="hg-num">' + (d.delta && d.delta.count != null ? d.delta.count : 0)
-    + '</span> · CoinDCX <span class="hg-num">' + (d.coindcx && d.coindcx.count != null ? d.coindcx.count : 0)
-    + '</span> · <button type="button" class="btn ghost" style="padding:2px 8px;font-size:11px;vertical-align:baseline" onclick="refreshAtomicDesk(true).then(function(){location.reload()})">RESCAN</button></div>';
+    + '</span> setup(s) / <span class="hg-num">' + (d.delta && d.delta.universe != null ? d.delta.universe : (d.delta && d.delta.scanned) || 0)
+    + '</span> scanned · CoinDCX <span class="hg-num">' + (d.coindcx && d.coindcx.count != null ? d.coindcx.count : 0)
+    + '</span> setup(s) / <span class="hg-num">' + (d.coindcx && d.coindcx.universe != null ? d.coindcx.universe : (d.coindcx && d.coindcx.scanned) || 0)
+    + '</span> scanned · full universe'
+    + ' · <button type="button" class="btn ghost" style="padding:2px 8px;font-size:11px;vertical-align:baseline" onclick="refreshAtomicDesk(true).then(function(){location.reload()})">RESCAN</button></div>';
   if (d.bestSetups && d.bestSetups.length){
     h += '<table class="hg-table" style="margin-top:6px;font-size:12px"><thead><tr>'
       + '<th>sym</th><th>venue</th><th>dir</th><th>style</th><th>entry</th><th>SL</th><th>TP1</th><th>TP2</th><th>R:R</th></tr></thead><tbody>';
-    for (var i = 0; i < Math.min(d.bestSetups.length, 10); i++){
+    for (var i = 0; i < Math.min(d.bestSetups.length, 25); i++){
       var s = d.bestSetups[i];
       var rr = s.rr != null && fin(+s.rr) ? +s.rr : atomicRr(s.entry, s.stop, s.t1);
       h += '<tr><td>' + (s.sym || '—') + '</td><td>' + (s.bestVenue || s.exchange || '—') + '</td>'
