@@ -54,7 +54,7 @@ console.log('== wiring ==');
   ok(/MEDIUM/.test(ai) === false || !/tier !== 'HIGH' && tier !== 'PRIME' && tier !== 'MEDIUM'/.test(ai),
     'brain echo drops MEDIUM tier');
   ok(/applyAgentConfluence/.test(ai), 'confluence boost wired');
-  ok(/hg-v251/.test(sw), 'cache hg-v251');
+  ok(/hg-v252/.test(sw), 'cache hg-v252');
 }
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' failed' : ''));

@@ -2028,7 +2028,7 @@ console.log('== 28) hg-v232 gold enhancement exports ==');
   const yld = [];
   for (let i = 0; i < 6; i++) yld.push({ t: DAY + i * 86400, o: 4 + i * 0.05, h: 4.1, l: 3.9, c: 4 + i * 0.05, v: 1 });
   const mv = W.__gsMicroVeto('long', 'ob', { scalpEval: {} }, { us10yCandles: yld });
-  assert(mv && /MACRO VETO/.test(mv.reason), '__gsMicroVeto: yield guard blocks gold long');
+  assert(mv && mv.demote === true && /MACRO VETO/.test(mv.reason), '__gsMicroVeto: yield guard demotes gold long (does not hide)');
   const armed = [{ stratKey: 'sweep', strategy: 'SWEEP', state: 'armed', dir: 'long', level: 100, condition: 'watch' }];
   const promoted = W.goldWatchPromote([{ stratKey: 'sweep', dir: 'long' }], armed);
   assert(promoted[0].state === 'promoted', 'goldWatchPromote: armed -> promoted when candidate fires');
@@ -2042,8 +2042,21 @@ console.log('== 28) hg-v232 gold enhancement exports ==');
     { id: 'vwap|long|100', dir: 'long', stratKey: 'vwap', strategy: 'VWAP', agree: 3,
       reads: { long: 3, short: 1 }, grade: 'B', rr: 1.5, killzoneWeight: 1 }
   ], proCtx);
-  assert(rk.rejected.length === 1 && /structural bear/.test(rk.rejected[0].reason),
-         'goldRankSetups: GOLD PRO hard gate suppresses counter-structure longs');
+  assert(rk.ranked.length === 1 && rk.ranked[0].demoted === true
+      && rk.ranked[0].stamps.indexOf('GOLD PRO CONFLICT') >= 0,
+         'goldRankSetups: GOLD PRO gate demotes counter-structure longs (still visible on tab)');
+
+  /* STRUCTURAL BULL + dropping yields must not zero out short cards */
+  const yldDrop = [];
+  for (let i = 0; i < 6; i++) yldDrop.push({ t: DAY + i * 86400, o: 4.3 - i * 0.05, h: 4.4, l: 4.2, c: 4.3 - i * 0.05, v: 1 });
+  const bullShortRows = mirrorRows(compLongRows(), 2300);
+  const bullShortCands = W.goldScalpSetups({ rows15m: bullShortRows, now: OFF_NOW, us10yCandles: yldDrop });
+  const bullShortRank = W.goldRankSetups(bullShortCands, { goldPro: { word: 'STRUCTURAL BULL' }, now: OFF_NOW });
+  const shortCards = bullShortRank.ranked.filter(c => c && c.dir === 'short');
+  assert(shortCards.length >= 1,
+         'gold scalp: short setups survive STRUCTURAL BULL + falling-yield demotion (got ' + shortCards.length + ')');
+  assert(shortCards.every(c => c.demoted === true),
+         'gold scalp: counter-structure / macro-yield shorts are demoted, not hidden');
 }
 
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));
