@@ -1098,9 +1098,9 @@ function loadConvictionStore(ls){
   const tab = C.HG_tabs.find(t => t.id === 'goldscalp');
   const M = freshPane();
   tab.mount(M.pane);
-  assert(M.pane._html.indexOf('<style>') >= 0 && M.pane._html.indexOf('#tab_goldscalp .gsx-banner') >= 0
-      && M.pane._html.indexOf('tab_goldscalp .gsx-card.long') >= 0,
-      'pane-scoped colorful styles injected from goldscalp.js (scoped under #tab_goldscalp)');
+  assert(M.pane._html.indexOf('<style>') >= 0 && M.pane._html.indexOf('.gsx-banner{') >= 0
+      && M.pane._html.indexOf('.gsx-card.long{') >= 0,
+      'gsx styles injected from goldscalp.js (unscoped for tab + StarTrader embed)');
 
   const r1 = await M.stubs['#gsRun']._handler();
   assert(r1 === 'refreshed', 'scan 1 completes with the seeded gold feed (got "' + r1 + '")');

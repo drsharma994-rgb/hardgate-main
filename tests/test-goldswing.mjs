@@ -265,7 +265,7 @@ console.log('== 1) bare-environment never-throws + honest degradation ==');
   assert(!mountThrew, 'mount in a bare env never throws');
   assert(M.pane._html.indexOf('GOLD SWING') >= 0 && M.pane._html.indexOf('id="gwRun"') >= 0,
          'mount renders the panel + RUN SCAN button');
-  assert(M.pane._html.indexOf('#tab_goldswing .gsw-banner') >= 0, 'pane-scoped styles injected under #tab_goldswing');
+  assert(M.pane._html.indexOf('.gsw-banner{') >= 0, 'gsw styles injected (unscoped for tab + StarTrader embed)');
   assert(M.pane._html.indexOf('let the structure come to you') >= 0, 'honest empty state rendered (no fabricated setups)');
   assert(/gold klines/.test(M.stubs['#gwStat'].textContent) && /goldind\.js detectors/.test(M.stubs['#gwStat'].textContent),
          'mount names BOTH missing layers in plain language — got "' + M.stubs['#gwStat'].textContent + '"');

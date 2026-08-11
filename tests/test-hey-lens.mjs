@@ -61,7 +61,7 @@ console.log('== api + shell wiring ==');
   ok(html.indexOf('hey-desk.js') >= 0 && html.indexOf('hey-lens.js') >= 0, 'index loads hey scripts');
   ok(/tabs:\['basis','search','tradeos','hey'/.test(html), 'hey tab in TOOLS nav');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v242/.test(sw), 'cache hg-v242');
+  ok(/hg-v245/.test(sw), 'cache hg-v245');
 }
 
 console.log('\n' + pass + ' assertions passed');

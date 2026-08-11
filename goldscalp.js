@@ -344,81 +344,125 @@ function applyConviction(ranked, venueRows, nowMs, noMint){
 
 /* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
 var GS_CSS = ''
-+ '#tab_goldscalp .gsx-banner{position:relative;border-radius:12px;padding:3px;margin:16px 0 18px;'
++ '.gsx-banner{position:relative;border-radius:12px;padding:3px;margin:16px 0 18px;'
 + 'background:linear-gradient(120deg,#A67C12,#F5D77A 25%,#EA580C 50%,#E8B42A 75%,#A67C12);'
 + 'box-shadow:0 12px 32px -12px rgba(201,146,26,.28)}'
-+ '#tab_goldscalp .gsx-banner-in{background:linear-gradient(180deg,#FFFFFF,#FFFBEB);border-radius:10px;padding:16px 18px;color:#020617}'
-+ '#tab_goldscalp .gsx-eye{font-size:10px;letter-spacing:.3em;color:#A67C12;font-weight:800}'
-+ '#tab_goldscalp .gsx-dir{font-family:var(--disp,inherit);font-size:26px;font-weight:800;letter-spacing:.06em;margin-top:4px}'
-+ '#tab_goldscalp .gsx-dir.long{color:#047857;text-shadow:none}'
-+ '#tab_goldscalp .gsx-dir.short{color:#B91C1C;text-shadow:none}'
-+ '#tab_goldscalp .gsx-dir span{display:block;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.14em;color:#0F172A;margin-top:4px}'
-+ '#tab_goldscalp .gsx-plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:12px 0 4px}'
-+ '#tab_goldscalp .gsx-plan>div{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:9px 11px}'
-+ '#tab_goldscalp .gsx-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:#1E293B;font-weight:700}'
-+ '#tab_goldscalp .gsx-plan b{display:block;font-size:16px;color:#A67C12;font-weight:800;margin:3px 0}'
-+ '#tab_goldscalp .gsx-plan u{text-decoration:none;font-size:10px;color:#0F172A;opacity:1;font-weight:500;line-height:1.45}'
-+ '#tab_goldscalp .gsx-why{font-size:11px;margin-top:8px;color:#0F172A;font-weight:600}'
-+ '#tab_goldscalp .gsx-why b{color:#A67C12;letter-spacing:.12em;font-size:10px;font-weight:800}'
-+ '#tab_goldscalp .gsx-tally{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}'
-+ '#tab_goldscalp .gsx-tp{font-size:9px;letter-spacing:.03em;padding:3px 8px;border-radius:4px;border:1px solid;font-weight:600}'
-+ '#tab_goldscalp .gsx-tp.pos{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
-+ '#tab_goldscalp .gsx-tp.neg{color:#B91C1C;border-color:rgba(220,38,38,.40);background:rgba(220,38,38,.08)}'
-+ '#tab_goldscalp .gsx-inv{font-size:11px;color:#0F172A;margin-top:8px;line-height:1.55;font-weight:500}'
-+ '#tab_goldscalp .gsx-inv b{color:#B91C1C;letter-spacing:.12em;font-size:10px;font-weight:800}'
-+ '#tab_goldscalp .gsx-lock{margin-top:10px;font-size:10px;letter-spacing:.08em;color:#A67C12;font-weight:600;border-top:1px dashed #FDE68A;padding-top:8px}'
-+ '#tab_goldscalp .gsx-lock.new{color:#1E293B}'
-+ '#tab_goldscalp .gsx-card.long{border-left:4px solid #059669;background:linear-gradient(180deg,rgba(5,150,105,.06),transparent 42%),#FFFFFF}'
-+ '#tab_goldscalp .gsx-card.short{border-left:4px solid #DC2626;background:linear-gradient(180deg,rgba(220,38,38,.05),transparent 42%),#FFFFFF}'
-+ '#tab_goldscalp .gsx-card.best{box-shadow:0 0 0 2px rgba(201,146,26,.40),0 12px 28px -14px rgba(201,146,26,.20)}'
-+ '#tab_goldscalp .gsx-strat{color:#A67C12;font-size:10px;font-weight:800;letter-spacing:.12em}'
-+ '#tab_goldscalp .gsx-grade{font-weight:800}'
-+ '#tab_goldscalp .gsx-grade.A{color:#A67C12}'
-+ '#tab_goldscalp .gsx-grade.B{color:#047857}'
-+ '#tab_goldscalp .gsx-grade.C{color:#1E293B}'
-+ '#tab_goldscalp .gsx-tallynum{font-weight:800}'
-+ '#tab_goldscalp .gsx-tallynum.up{color:#047857}'
-+ '#tab_goldscalp .gsx-tallynum.dn{color:#B91C1C}'
-+ '#tab_goldscalp .gsx-lockline{font-size:9px;color:#A67C12;letter-spacing:.1em;margin-top:6px;font-weight:700}'
-+ '#tab_goldscalp .gsx-whyline{font-size:11px;color:#020617;margin-top:8px;line-height:1.6;font-weight:500}'
-+ '#tab_goldscalp .gsx-invline{font-size:10px;color:#0F172A;margin-top:5px;line-height:1.55;font-weight:500}'
-+ '#tab_goldscalp .gsx-invline b{color:#B91C1C;letter-spacing:.08em;font-weight:800}'
-+ '#tab_goldscalp .gsx-hist{margin-top:18px}'
-+ '#tab_goldscalp .gsx-hhead{font-size:10px;letter-spacing:.2em;color:#1E293B;margin-bottom:6px;font-weight:700}'
-+ '#tab_goldscalp .gsx-hrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
-+ '#tab_goldscalp .gsx-hrow.stopped{border-left-color:#DC2626}'
-+ '#tab_goldscalp .gsx-hrow.target{border-left-color:#059669}'
-+ '#tab_goldscalp .gsx-hrow.expired{border-left-color:#A67C12}'
-+ '#tab_goldscalp .gsx-hrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
-+ '#tab_goldscalp .gsx-hrow.rej{border-left-color:#EA580C}'
-+ '#tab_goldscalp .gsx-gateline{font-size:10px;color:#9A3412;letter-spacing:.04em;margin-top:8px;'
++ '.gsx-banner-in{background:linear-gradient(180deg,#FFFFFF,#FFFBEB);border-radius:10px;padding:16px 18px;color:#020617}'
++ '.gsx-eye{font-size:10px;letter-spacing:.3em;color:#A67C12;font-weight:800}'
++ '.gsx-dir{font-family:var(--disp,inherit);font-size:26px;font-weight:800;letter-spacing:.06em;margin-top:4px}'
++ '.gsx-dir.long{color:#047857;text-shadow:none}'
++ '.gsx-dir.short{color:#B91C1C;text-shadow:none}'
++ '.gsx-dir span{display:block;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.14em;color:#0F172A;margin-top:4px}'
++ '.gsx-plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:12px 0 4px}'
++ '.gsx-plan>div{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:9px 11px}'
++ '.gsx-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:#1E293B;font-weight:700}'
++ '.gsx-plan b{display:block;font-size:16px;color:#A67C12;font-weight:800;margin:3px 0}'
++ '.gsx-plan u{text-decoration:none;font-size:10px;color:#0F172A;opacity:1;font-weight:500;line-height:1.45}'
++ '.gsx-why{font-size:11px;margin-top:8px;color:#0F172A;font-weight:600}'
++ '.gsx-why b{color:#A67C12;letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '.gsx-tally{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}'
++ '.gsx-tp{font-size:9px;letter-spacing:.03em;padding:3px 8px;border-radius:4px;border:1px solid;font-weight:600}'
++ '.gsx-tp.pos{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
++ '.gsx-tp.neg{color:#B91C1C;border-color:rgba(220,38,38,.40);background:rgba(220,38,38,.08)}'
++ '.gsx-inv{font-size:11px;color:#0F172A;margin-top:8px;line-height:1.55;font-weight:500}'
++ '.gsx-inv b{color:#B91C1C;letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '.gsx-lock{margin-top:10px;font-size:10px;letter-spacing:.08em;color:#A67C12;font-weight:600;border-top:1px dashed #FDE68A;padding-top:8px}'
++ '.gsx-lock.new{color:#1E293B}'
++ '.gsx-card.long{border-left:4px solid #059669;background:linear-gradient(180deg,rgba(5,150,105,.14),transparent 48%),rgba(15,23,42,.94);color:#F1F5F9}'
++ '.gsx-card.short{border-left:4px solid #DC2626;background:linear-gradient(180deg,rgba(220,38,38,.12),transparent 48%),rgba(15,23,42,.94);color:#F1F5F9}'
++ '.gsx-card.best{box-shadow:0 0 0 2px rgba(201,146,26,.40),0 12px 28px -14px rgba(201,146,26,.20)}'
++ '.card.gsx-card{color:#F1F5F9!important}'
++ '.card.gsx-card .sym{color:#F8FAFC!important;font-weight:800}'
++ '.card.gsx-card .dir{text-shadow:none!important}'
++ '.card.gsx-card .mini{color:#E2E8F0!important}'
++ '.card.gsx-card .mini .k{color:#94A3B8!important;font-weight:700}'
++ '.card.gsx-card .mini span:not(.k){color:#F8FAFC!important;font-weight:600}'
++ '.card.gsx-card .gpip{background:rgba(30,41,59,.75)!important;border-color:#475569!important;color:#CBD5E1!important}'
++ '.card.gsx-card .gpip.ok{background:rgba(52,211,153,.14)!important;border-color:rgba(52,211,153,.5)!important;color:#6EE7B7!important;font-weight:700}'
++ '.card.gsx-card .plan{background:rgba(30,41,59,.8)!important;border-color:#475569!important;color:#E2E8F0!important}'
++ '.card.gsx-card .plan b{color:#67E8F9!important}'
++ '.card.gsx-card .note{color:#CBD5E1!important}'
++ '.card.gsx-card .gsx-strat{color:#FBBF24!important}'
++ '.card.gsx-card .gsx-whyline{color:#E2E8F0!important}'
++ '.card.gsx-card .gsx-invline{color:#CBD5E1!important}'
++ '.card.gsx-card .gsx-lockline{color:#FDE68A!important}'
++ '.card.gsx-card .toTrade{color:#67E8F9!important;border-color:#38BDF8!important;background:rgba(34,211,238,.08)!important}'
++ '.card.gsx-card .toBook{color:#67E8F9!important;border-color:#0891B2!important;background:rgba(8,145,178,.08)!important}'
++ '.gsx-strat{color:#A67C12;font-size:10px;font-weight:800;letter-spacing:.12em}'
++ '.gsx-grade{font-weight:800}'
++ '.gsx-grade.A{color:#A67C12}'
++ '.gsx-grade.B{color:#047857}'
++ '.gsx-grade.C{color:#1E293B}'
++ '.gsx-tallynum{font-weight:800}'
++ '.gsx-tallynum.up{color:#047857}'
++ '.gsx-tallynum.dn{color:#B91C1C}'
++ '.gsx-lockline{font-size:9px;color:#A67C12;letter-spacing:.1em;margin-top:6px;font-weight:700}'
++ '.gsx-whyline{font-size:11px;color:#020617;margin-top:8px;line-height:1.6;font-weight:500}'
++ '.gsx-invline{font-size:10px;color:#0F172A;margin-top:5px;line-height:1.55;font-weight:500}'
++ '.gsx-invline b{color:#B91C1C;letter-spacing:.08em;font-weight:800}'
++ '.gsx-hist{margin-top:18px}'
++ '.gsx-hhead{font-size:10px;letter-spacing:.2em;color:#1E293B;margin-bottom:6px;font-weight:700}'
++ '.gsx-hrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
++ '.gsx-hrow.stopped{border-left-color:#DC2626}'
++ '.gsx-hrow.target{border-left-color:#059669}'
++ '.gsx-hrow.expired{border-left-color:#A67C12}'
++ '.gsx-hrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
++ '.gsx-hrow.rej{border-left-color:#EA580C}'
++ '.gsx-gateline{font-size:10px;color:#9A3412;letter-spacing:.04em;margin-top:8px;'
 + 'border:1px solid rgba(234,88,12,.30);border-radius:6px;padding:6px 9px;line-height:1.55;background:#FFF7ED;font-weight:500}'
-+ '#tab_goldscalp .gsx-gateline b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
-+ '#tab_goldscalp .gsx-mgmt{font-size:10px;margin-top:8px;padding:6px 9px;border-radius:6px;line-height:1.55;'
++ '.gsx-gateline b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
++ '.gsx-mgmt{font-size:10px;margin-top:8px;padding:6px 9px;border-radius:6px;line-height:1.55;'
 + 'color:#020617;border:1px dashed #FDE68A;background:#FFFBEB;font-weight:500}'
-+ '#tab_goldscalp .gsx-mgmt b{color:#A67C12;letter-spacing:.12em;font-size:9px;font-weight:800}'
-+ '#tab_goldscalp .gsx-guide{font-size:10px;margin-top:6px;letter-spacing:.03em;color:#0F172A;line-height:1.55;font-weight:500}'
-+ '#tab_goldscalp .gsx-guide b{letter-spacing:.12em;font-size:9px;font-weight:800}'
-+ '#tab_goldscalp .gsx-guide.in{color:#047857;font-weight:600}'
-+ '#tab_goldscalp .gsx-guide.out{color:#9A3412;font-weight:600}'
-+ '#tab_goldscalp .gsx-wrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
-+ '#tab_goldscalp .gsx-wrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
-+ '#tab_goldscalp .gsx-wrow.armed{border-left-color:#C9921A;color:#020617;background:#FFFBEB}'
-+ '#tab_goldscalp .gsx-wst{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:4px;margin-right:6px;border:1px solid;font-weight:700}'
-+ '#tab_goldscalp .gsx-wrow.armed .gsx-wst{color:#A67C12;border-color:rgba(201,146,26,.45);background:rgba(201,146,26,.12)}'
-+ '#tab_goldscalp .gsx-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
-+ '#tab_goldscalp .gsx-wrow.promoted .gsx-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
-+ '#tab_goldscalp .gsx-wrow.idle .gsx-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
-+ '#tab_goldscalp .gsx-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
-+ '#tab_goldscalp .gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
-+ '#tab_goldscalp .gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
-+ '#tab_goldscalp .gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
-+ '#tab_goldscalp .gsx-weekend b,.gsx-weekend b{letter-spacing:.12em;font-size:10px;font-weight:800}'
-+ '#tab_goldscalp .gsx-weekend-detail,.gsx-weekend-detail{margin-top:6px;font-weight:500}'
-+ '#tab_goldscalp .gsx-weekend-ok,.gsx-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
-+ '#tab_goldscalp .gsx-weekend-muted,.gsx-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#1E293B}'
-+ '#tab_goldscalp .gsx-weekend-caution,.gsx-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
-+ '#tab_goldscalp .gsx-weekend-warn,.gsx-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
++ '.gsx-mgmt b{color:#A67C12;letter-spacing:.12em;font-size:9px;font-weight:800}'
++ '.gsx-guide{font-size:10px;margin-top:6px;letter-spacing:.03em;color:#0F172A;line-height:1.55;font-weight:500}'
++ '.gsx-guide b{letter-spacing:.12em;font-size:9px;font-weight:800}'
++ '.gsx-guide.in{color:#047857;font-weight:600}'
++ '.gsx-guide.out{color:#9A3412;font-weight:600}'
++ '.gsx-wrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
++ '.gsx-wrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
++ '.gsx-wrow.armed{border-left-color:#C9921A;color:#020617;background:#FFFBEB}'
++ '.gsx-wst{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:4px;margin-right:6px;border:1px solid;font-weight:700}'
++ '.gsx-wrow.armed .gsx-wst{color:#A67C12;border-color:rgba(201,146,26,.45);background:rgba(201,146,26,.12)}'
++ '.gsx-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
++ '.gsx-wrow.promoted .gsx-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
++ '.gsx-wrow.idle .gsx-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
++ '.gsx-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
++ '.gsx-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
++ '.gsx-weekend-wrap,.gsx-weekend-wrap{margin:0 0 12px}'
++ '.gsx-weekend,.gsx-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
++ '.gsx-weekend b,.gsx-weekend b{letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '.gsx-weekend-detail,.gsx-weekend-detail{margin-top:6px;font-weight:500}'
++ '.gsx-weekend-ok,.gsx-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
++ '.gsx-weekend-muted,.gsx-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#1E293B}'
++ '.gsx-weekend-caution,.gsx-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
++ '.gsx-weekend-warn,.gsx-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
+
+function gsxSt(s){ return ' style="' + s + '"'; }
+var GSX_CARD = 'background:#0F172A!important;color:#F8FAFC!important;border-color:#334155!important';
+var GSX_SYM = 'color:#F8FAFC!important;font-weight:800';
+var GSX_STRAT = 'color:#FBBF24!important;font-weight:800';
+var GSX_MINI = 'color:#E2E8F0!important';
+var GSX_K = 'color:#94A3B8!important;font-weight:700';
+var GSX_V = 'color:#F8FAFC!important;font-weight:600';
+var GSX_PLAN = 'background:#1E293B!important;border:1px solid #475569!important;color:#E2E8F0!important';
+var GSX_PLAN_B = 'color:#67E8F9!important';
+var GSX_NOTE = 'color:#CBD5E1!important';
+var GSX_GPIP = 'background:rgba(30,41,59,.85)!important;border:1px solid #475569!important;color:#CBD5E1!important';
+var GSX_GPIP_OK = 'background:rgba(52,211,153,.18)!important;border:1px solid rgba(52,211,153,.55)!important;color:#6EE7B7!important';
+var GSX_WHY = 'color:#E2E8F0!important';
+function gsxPipAttr(ok){ return gsxSt(ok ? GSX_GPIP_OK : GSX_GPIP); }
+
+(function hgInjectGsCss(){
+  try{
+    if (typeof document === 'undefined') return;
+    var id = 'hg-gsx-styles';
+    if (document.getElementById(id)) return;
+    var el = document.createElement('style');
+    el.id = id;
+    el.textContent = GS_CSS;
+    (document.head || document.documentElement).appendChild(el);
+  }catch(e){}
+})();
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -466,8 +510,8 @@ function bannerHTML(best, ranked){
 function cardHTML(c, isBest, season){
   var dirUp = c.dir.toUpperCase();
   var gradeCls = c.grade === 'A' ? 'ok' : '';
-  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok">' + esc(x) + '</span>'; }).join('');
-  if (c.oppose > 0) chips += '<span class="gpip">' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
+  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(x) + '</span>'; }).join('');
+  if (c.oppose > 0) chips += '<span class="gpip"' + gsxPipAttr(false) + '>' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
   var newsBanner = c.newsCaution
     ? '<div class="note warn" style="margin-top:8px">NEWS-FADE — ' + esc(c.newsStamp || '') + '</div>' : '';
   var notes = (c.notes && c.notes.length)
@@ -516,11 +560,11 @@ function cardHTML(c, isBest, season){
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
-  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
-  if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
-  if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
-  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
-  if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>formation ' + c.formationScore + '</span>';
+  if (isFinite(c.fillProb)) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>fill ~' + Math.round(c.fillProb * 100) + '%</span>';
+  if (c.goldProChip) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(c.visionChip) + '</span>';
+  if (c.entryType) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.entryType) + '</span>';
   var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
     if (!v) return false;
     if (i > 0 && v === a[0]) return false;
@@ -528,33 +572,33 @@ function cardHTML(c, isBest, season){
   }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
-  return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
-    + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
+  return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '"' + gsxSt(GSX_CARD) + '>'
+    + '<div class="chead"><span class="sym"' + gsxSt(GSX_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold' }) : '')
     + '</div>'
-    + '<div class="gsx-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
-    + '<div class="mini">'
-    + '<span class="k">venue</span><span>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
-    + '<span class="k">reads</span><span>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
-    + '<span class="k">killzone</span><span>' + esc(c.killzone) + '</span>'
-    + '<span class="k">ATR14 15m</span><span>' + pxF(c.atr) + '</span>'
-    + '<span class="k">R:R</span><span>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2)</span>'
+    + '<div class="gsx-strat"' + gsxSt(GSX_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
+    + '<div class="mini"' + gsxSt(GSX_MINI) + '>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>venue</span><span' + gsxSt(GSX_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>reads</span><span' + gsxSt(GSX_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>killzone</span><span' + gsxSt(GSX_V) + '>' + esc(c.killzone) + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>ATR14 15m</span><span' + gsxSt(GSX_V) + '>' + pxF(c.atr) + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>R:R</span><span' + gsxSt(GSX_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2)</span>'
     + '</div>'
     + '<div class="gates">'
-    + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
-    + '<span class="gpip">' + esc(c.killzone) + '</span>'
+    + '<span class="gpip ' + gradeCls + '"' + gsxPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
+    + '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.killzone) + '</span>'
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
-    + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
-    + ' · ENTRY <b>$' + pxF(c.entry) + '</b>'
-    + ' · STOP <b>$' + pxF(c.stop) + '</b>'
-    + ' · TP1 <b>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
-    + ' · TP2 <b>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
+    + '<div class="plan"' + gsxSt(GSX_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
+    + ' · ENTRY <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
+    + ' · STOP <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.stop) + '</b>'
+    + ' · TP1 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
+    + ' · TP2 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + '</div>'
     + mgmtBlock + guideBlock
-    + (c.why ? '<div class="gsx-whyline">' + esc(c.why) + '</div>' : '')
+    + (c.why ? '<div class="gsx-whyline"' + gsxSt(GSX_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine

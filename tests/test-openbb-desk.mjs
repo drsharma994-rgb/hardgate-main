@@ -71,7 +71,7 @@ console.log('== wiring ==');
   var fq = fs.readFileSync(path.join(root, 'lib/formation-quality.mjs'), 'utf8');
   ok(fq.indexOf('obbDeskMacroScore') >= 0, 'FQS uses desk macro');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v242/.test(sw), 'cache hg-v242');
+  ok(/hg-v245/.test(sw), 'cache hg-v245');
 }
 
 console.log('\n' + pass + ' passed');

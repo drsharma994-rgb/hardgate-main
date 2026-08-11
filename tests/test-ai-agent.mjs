@@ -80,7 +80,7 @@ console.log('== wiring ==');
   ok(/createAgentApi/.test(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8')), 'server mounts agent api');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('ai-agent.js') >= 0, 'index loads ai-agent');
   ok(/ai-agent\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell ai-agent');
-  ok(/hg-v242/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v242');
+  ok(/hg-v245/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v245');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf("'aiagent'") >= 0, 'nav aiagent tab');
   ok(fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8').indexOf('AI workforce') >= 0, 'setup-stack agent bump');
   ok(/HARDGATE_AGENT_SWARM/.test(fs.readFileSync(path.join(root, 'app.js'), 'utf8')), 'daemon agent swarm hook');

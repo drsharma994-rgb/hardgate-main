@@ -452,71 +452,114 @@ function mergeLiveDisplayCards(ranked, store){
 
 /* ---------------- pane-scoped styles (injected from here ONLY) ---------------- */
 var GW_CSS = ''
-+ '#tab_goldswing .gsw-banner{position:relative;border-radius:12px;padding:3px;margin:16px 0 18px;'
++ '.gsw-banner{position:relative;border-radius:12px;padding:3px;margin:16px 0 18px;'
 + 'background:linear-gradient(120deg,#A67C12,#E8B42A 25%,#059669 50%,#C9921A 75%,#A67C12);'
 + 'box-shadow:0 12px 32px -12px rgba(5,150,105,.22)}'
-+ '#tab_goldswing .gsw-banner-in{background:linear-gradient(180deg,#FFFFFF,#F8FAFC);border-radius:10px;padding:16px 18px;color:#020617}'
-+ '#tab_goldswing .gsw-eye{font-size:10px;letter-spacing:.3em;color:#A67C12;font-weight:800}'
-+ '#tab_goldswing .gsw-dir{font-family:var(--disp,inherit);font-size:26px;font-weight:800;letter-spacing:.06em;margin-top:4px}'
-+ '#tab_goldswing .gsw-dir.long{color:#047857;text-shadow:none}'
-+ '#tab_goldswing .gsw-dir.short{color:#B91C1C;text-shadow:none}'
-+ '#tab_goldswing .gsw-dir span{display:block;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.14em;color:#0F172A;margin-top:4px}'
-+ '#tab_goldswing .gsw-plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0 4px}'
-+ '#tab_goldswing .gsw-plan>div{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:9px 11px}'
-+ '#tab_goldswing .gsw-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:#1E293B;font-weight:700}'
-+ '#tab_goldswing .gsw-plan b{display:block;font-size:16px;color:#047857;font-weight:800;margin:3px 0}'
-+ '#tab_goldswing .gsw-plan u{text-decoration:none;font-size:10px;color:#0F172A;opacity:1;font-weight:500;line-height:1.45}'
-+ '#tab_goldswing .gsw-why{font-size:11px;margin-top:8px;color:#0F172A;font-weight:600}'
-+ '#tab_goldswing .gsw-why b{color:#A67C12;letter-spacing:.12em;font-size:10px;font-weight:800}'
-+ '#tab_goldswing .gsw-tally{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}'
-+ '#tab_goldswing .gsw-tp{font-size:9px;letter-spacing:.03em;padding:3px 8px;border-radius:4px;border:1px solid;font-weight:600}'
-+ '#tab_goldswing .gsw-tp.pos{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
-+ '#tab_goldswing .gsw-tp.neg{color:#B91C1C;border-color:rgba(220,38,38,.40);background:rgba(220,38,38,.08)}'
-+ '#tab_goldswing .gsw-inv{font-size:11px;color:#0F172A;margin-top:8px;line-height:1.55;font-weight:500}'
-+ '#tab_goldswing .gsw-inv b{color:#B91C1C;letter-spacing:.12em;font-size:10px;font-weight:800}'
-+ '#tab_goldswing .gsw-lock{margin-top:10px;font-size:10px;letter-spacing:.08em;color:#047857;font-weight:600;border-top:1px dashed #BBF7D0;padding-top:8px}'
-+ '#tab_goldswing .gsw-lock.new{color:#1E293B}'
-+ '#tab_goldswing .gsw-card.long{border-left:4px solid #059669;background:linear-gradient(180deg,rgba(5,150,105,.06),transparent 42%),#FFFFFF}'
-+ '#tab_goldswing .gsw-card.short{border-left:4px solid #DC2626;background:linear-gradient(180deg,rgba(220,38,38,.05),transparent 42%),#FFFFFF}'
-+ '#tab_goldswing .gsw-card.best{box-shadow:0 0 0 2px rgba(5,150,105,.35),0 12px 28px -14px rgba(5,150,105,.18)}'
-+ '#tab_goldswing .gsw-strat{color:#A67C12;font-size:10px;font-weight:800;letter-spacing:.12em}'
-+ '#tab_goldswing .gsw-grade{font-weight:800}'
-+ '#tab_goldswing .gsw-grade.A{color:#047857}'
-+ '#tab_goldswing .gsw-grade.B{color:#0891B2}'
-+ '#tab_goldswing .gsw-grade.C{color:#1E293B}'
-+ '#tab_goldswing .gsw-tallynum{font-weight:800}'
-+ '#tab_goldswing .gsw-tallynum.up{color:#047857}'
-+ '#tab_goldswing .gsw-tallynum.dn{color:#B91C1C}'
-+ '#tab_goldswing .gsw-lockline{font-size:9px;color:#047857;letter-spacing:.1em;margin-top:6px;font-weight:700}'
-+ '#tab_goldswing .gsw-whyline{font-size:11px;color:#020617;margin-top:8px;line-height:1.6;font-weight:500}'
-+ '#tab_goldswing .gsw-invline{font-size:10px;color:#0F172A;margin-top:5px;line-height:1.55;font-weight:500}'
-+ '#tab_goldswing .gsw-invline b{color:#B91C1C;letter-spacing:.08em;font-weight:800}'
-+ '#tab_goldswing .gsw-hist{margin-top:18px}'
-+ '#tab_goldswing .gsw-hhead{font-size:10px;letter-spacing:.2em;color:#1E293B;margin-bottom:6px;font-weight:700}'
-+ '#tab_goldswing .gsw-hrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
-+ '#tab_goldswing .gsw-hrow.stopped{border-left-color:#DC2626}'
-+ '#tab_goldswing .gsw-hrow.target{border-left-color:#059669}'
-+ '#tab_goldswing .gsw-hrow.expired{border-left-color:#A67C12}'
-+ '#tab_goldswing .gsw-hrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
-+ '#tab_goldswing .gsw-hrow.rej{border-left-color:#EA580C}'
-+ '#tab_goldswing .gsw-wrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
-+ '#tab_goldswing .gsw-wrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
-+ '#tab_goldswing .gsw-wrow.armed{border-left-color:#059669;color:#020617;background:rgba(5,150,105,.05)}'
-+ '#tab_goldswing .gsw-wst{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:4px;margin-right:6px;border:1px solid;font-weight:700}'
-+ '#tab_goldswing .gsw-wrow.armed .gsw-wst{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
-+ '#tab_goldswing .gsw-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
-+ '#tab_goldswing .gsw-wrow.promoted .gsw-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
-+ '#tab_goldswing .gsw-wrow.idle .gsw-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
-+ '#tab_goldswing .gsw-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
-+ '#tab_goldswing .gsw-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
-+ '#tab_goldswing .gsw-weekend-wrap,.gsw-weekend-wrap{margin:0 0 12px}'
-+ '#tab_goldswing .gsw-weekend,.gsw-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
-+ '#tab_goldswing .gsw-weekend b,.gsw-weekend b{letter-spacing:.12em;font-size:10px;font-weight:800}'
-+ '#tab_goldswing .gsw-weekend-detail,.gsw-weekend-detail{margin-top:6px;font-weight:500}'
-+ '#tab_goldswing .gsw-weekend-ok,.gsw-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
-+ '#tab_goldswing .gsw-weekend-muted,.gsw-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#1E293B}'
-+ '#tab_goldswing .gsw-weekend-caution,.gsw-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
-+ '#tab_goldswing .gsw-weekend-warn,.gsw-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
++ '.gsw-banner-in{background:linear-gradient(180deg,#FFFFFF,#F8FAFC);border-radius:10px;padding:16px 18px;color:#020617}'
++ '.gsw-eye{font-size:10px;letter-spacing:.3em;color:#A67C12;font-weight:800}'
++ '.gsw-dir{font-family:var(--disp,inherit);font-size:26px;font-weight:800;letter-spacing:.06em;margin-top:4px}'
++ '.gsw-dir.long{color:#047857;text-shadow:none}'
++ '.gsw-dir.short{color:#B91C1C;text-shadow:none}'
++ '.gsw-dir span{display:block;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.14em;color:#0F172A;margin-top:4px}'
++ '.gsw-plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0 4px}'
++ '.gsw-plan>div{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:9px 11px}'
++ '.gsw-plan i{display:block;font-style:normal;font-size:9px;letter-spacing:.16em;color:#1E293B;font-weight:700}'
++ '.gsw-plan b{display:block;font-size:16px;color:#047857;font-weight:800;margin:3px 0}'
++ '.gsw-plan u{text-decoration:none;font-size:10px;color:#0F172A;opacity:1;font-weight:500;line-height:1.45}'
++ '.gsw-why{font-size:11px;margin-top:8px;color:#0F172A;font-weight:600}'
++ '.gsw-why b{color:#A67C12;letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '.gsw-tally{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}'
++ '.gsw-tp{font-size:9px;letter-spacing:.03em;padding:3px 8px;border-radius:4px;border:1px solid;font-weight:600}'
++ '.gsw-tp.pos{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
++ '.gsw-tp.neg{color:#B91C1C;border-color:rgba(220,38,38,.40);background:rgba(220,38,38,.08)}'
++ '.gsw-inv{font-size:11px;color:#0F172A;margin-top:8px;line-height:1.55;font-weight:500}'
++ '.gsw-inv b{color:#B91C1C;letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '.gsw-lock{margin-top:10px;font-size:10px;letter-spacing:.08em;color:#047857;font-weight:600;border-top:1px dashed #BBF7D0;padding-top:8px}'
++ '.gsw-lock.new{color:#1E293B}'
++ '.gsw-card.long{border-left:4px solid #059669;background:linear-gradient(180deg,rgba(5,150,105,.14),transparent 48%),rgba(15,23,42,.94);color:#F1F5F9}'
++ '.gsw-card.short{border-left:4px solid #DC2626;background:linear-gradient(180deg,rgba(220,38,38,.12),transparent 48%),rgba(15,23,42,.94);color:#F1F5F9}'
++ '.gsw-card.best{box-shadow:0 0 0 2px rgba(5,150,105,.35),0 12px 28px -14px rgba(5,150,105,.18)}'
++ '.card.gsw-card{color:#F1F5F9!important}'
++ '.card.gsw-card .sym{color:#F8FAFC!important;font-weight:800}'
++ '.card.gsw-card .dir{text-shadow:none!important}'
++ '.card.gsw-card .mini{color:#E2E8F0!important}'
++ '.card.gsw-card .mini .k{color:#94A3B8!important;font-weight:700}'
++ '.card.gsw-card .mini span:not(.k){color:#F8FAFC!important;font-weight:600}'
++ '.card.gsw-card .gpip{background:rgba(30,41,59,.75)!important;border-color:#475569!important;color:#CBD5E1!important}'
++ '.card.gsw-card .gpip.ok{background:rgba(52,211,153,.14)!important;border-color:rgba(52,211,153,.5)!important;color:#6EE7B7!important;font-weight:700}'
++ '.card.gsw-card .plan{background:rgba(30,41,59,.8)!important;border-color:#475569!important;color:#E2E8F0!important}'
++ '.card.gsw-card .plan b{color:#67E8F9!important}'
++ '.card.gsw-card .note{color:#CBD5E1!important}'
++ '.card.gsw-card .gsw-strat{color:#FBBF24!important}'
++ '.card.gsw-card .gsw-whyline{color:#E2E8F0!important}'
++ '.card.gsw-card .gsw-invline{color:#CBD5E1!important}'
++ '.card.gsw-card .gsw-lockline{color:#6EE7B7!important}'
++ '.card.gsw-card .toTrade{color:#67E8F9!important;border-color:#38BDF8!important;background:rgba(34,211,238,.08)!important}'
++ '.card.gsw-card .toBook{color:#67E8F9!important;border-color:#0891B2!important;background:rgba(8,145,178,.08)!important}'
++ '.gsw-strat{color:#A67C12;font-size:10px;font-weight:800;letter-spacing:.12em}'
++ '.gsw-grade{font-weight:800}'
++ '.gsw-grade.A{color:#047857}'
++ '.gsw-grade.B{color:#0891B2}'
++ '.gsw-grade.C{color:#1E293B}'
++ '.gsw-tallynum{font-weight:800}'
++ '.gsw-tallynum.up{color:#047857}'
++ '.gsw-tallynum.dn{color:#B91C1C}'
++ '.gsw-lockline{font-size:9px;color:#047857;letter-spacing:.1em;margin-top:6px;font-weight:700}'
++ '.gsw-whyline{font-size:11px;color:#020617;margin-top:8px;line-height:1.6;font-weight:500}'
++ '.gsw-invline{font-size:10px;color:#0F172A;margin-top:5px;line-height:1.55;font-weight:500}'
++ '.gsw-invline b{color:#B91C1C;letter-spacing:.08em;font-weight:800}'
++ '.gsw-hist{margin-top:18px}'
++ '.gsw-hhead{font-size:10px;letter-spacing:.2em;color:#1E293B;margin-bottom:6px;font-weight:700}'
++ '.gsw-hrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
++ '.gsw-hrow.stopped{border-left-color:#DC2626}'
++ '.gsw-hrow.target{border-left-color:#059669}'
++ '.gsw-hrow.expired{border-left-color:#A67C12}'
++ '.gsw-hrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
++ '.gsw-hrow.rej{border-left-color:#EA580C}'
++ '.gsw-wrow{font-size:10px;padding:6px 10px;border-left:3px solid #E2E8F0;margin-bottom:4px;color:#0F172A;line-height:1.55;font-weight:500}'
++ '.gsw-wrow b{letter-spacing:.08em;font-weight:700;color:#020617}'
++ '.gsw-wrow.armed{border-left-color:#059669;color:#020617;background:rgba(5,150,105,.05)}'
++ '.gsw-wst{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:4px;margin-right:6px;border:1px solid;font-weight:700}'
++ '.gsw-wrow.armed .gsw-wst{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
++ '.gsw-wrow.promoted{border-left-color:#0891B2;background:rgba(8,145,178,.06)}'
++ '.gsw-wrow.promoted .gsw-wst{color:#0891B2;border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.10)}'
++ '.gsw-wrow.idle .gsw-wst{color:#1E293B;border-color:#E2E8F0;background:#F8FAFC}'
++ '.gsw-silent{font-size:11px;color:#9A3412;border:1px solid rgba(234,88,12,.35);border-radius:6px;padding:9px 11px;margin:12px 0;line-height:1.55;background:#FFF7ED;font-weight:500}'
++ '.gsw-silent b{letter-spacing:.12em;font-weight:800;color:#9A3412}'
++ '.gsw-weekend-wrap,.gsw-weekend-wrap{margin:0 0 12px}'
++ '.gsw-weekend,.gsw-weekend{font-size:11px;border-radius:8px;padding:10px 12px;line-height:1.55;margin:12px 0;border:1px solid}'
++ '.gsw-weekend b,.gsw-weekend b{letter-spacing:.12em;font-size:10px;font-weight:800}'
++ '.gsw-weekend-detail,.gsw-weekend-detail{margin-top:6px;font-weight:500}'
++ '.gsw-weekend-ok,.gsw-weekend-ok{border-color:#BBF7D0;background:#F0FDF4;color:#047857}'
++ '.gsw-weekend-muted,.gsw-weekend-muted{border-color:#E2E8F0;background:#F8FAFC;color:#1E293B}'
++ '.gsw-weekend-caution,.gsw-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
++ '.gsw-weekend-warn,.gsw-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
+
+function gswSt(s){ return ' style="' + s + '"'; }
+var GSW_CARD = 'background:#0F172A!important;color:#F8FAFC!important;border-color:#334155!important';
+var GSW_SYM = 'color:#F8FAFC!important;font-weight:800';
+var GSW_STRAT = 'color:#FBBF24!important;font-weight:800';
+var GSW_MINI = 'color:#E2E8F0!important';
+var GSW_K = 'color:#94A3B8!important;font-weight:700';
+var GSW_V = 'color:#F8FAFC!important;font-weight:600';
+var GSW_PLAN = 'background:#1E293B!important;border:1px solid #475569!important;color:#E2E8F0!important';
+var GSW_PLAN_B = 'color:#67E8F9!important';
+var GSW_GPIP = 'background:rgba(30,41,59,.85)!important;border:1px solid #475569!important;color:#CBD5E1!important';
+var GSW_GPIP_OK = 'background:rgba(52,211,153,.18)!important;border:1px solid rgba(52,211,153,.55)!important;color:#6EE7B7!important';
+var GSW_WHY = 'color:#E2E8F0!important';
+function gswPipAttr(ok){ return gswSt(ok ? GSW_GPIP_OK : GSW_GPIP); }
+
+(function hgInjectGswCss(){
+  try{
+    if (typeof document === 'undefined') return;
+    var id = 'hg-gsw-styles';
+    if (document.getElementById(id)) return;
+    var el = document.createElement('style');
+    el.id = id;
+    el.textContent = GSW_CSS;
+    (document.head || document.documentElement).appendChild(el);
+  }catch(e){}
+})();
 
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
@@ -565,8 +608,8 @@ function bannerHTML(best, ranked){
 function cardHTML(c, isBest, season){
   var dirUp = c.dir.toUpperCase();
   var gradeCls = c.grade === 'A' ? 'ok' : '';
-  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok">' + esc(x) + '</span>'; }).join('');
-  if (c.oppose > 0) chips += '<span class="gpip">' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
+  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(x) + '</span>'; }).join('');
+  if (c.oppose > 0) chips += '<span class="gpip"' + gswPipAttr(false) + '>' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
   var newsBanner = c.newsCaution
     ? '<div class="note warn" style="margin-top:8px">NEWS-FADE — ' + esc(c.newsStamp || '') + '</div>' : '';
   var notes = (c.notes && c.notes.length)
@@ -589,11 +632,11 @@ function cardHTML(c, isBest, season){
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
-  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
-  if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
-  if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
-  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
-  if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>formation ' + c.formationScore + '</span>';
+  if (isFinite(c.fillProb)) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>fill ~' + Math.round(c.fillProb * 100) + '%</span>';
+  if (c.goldProChip) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(c.visionChip) + '</span>';
+  if (c.entryType) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>' + esc(c.entryType) + '</span>';
   var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
     if (!v) return false;
     if (i > 0 && v === a[0]) return false;
@@ -601,32 +644,32 @@ function cardHTML(c, isBest, season){
   }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
-  return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
-    + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
+  return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '"' + gswSt(GSW_CARD) + '>'
+    + '<div class="chead"><span class="sym"' + gswSt(GSW_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold' }) : '')
     + '</div>'
-    + '<div class="gsw-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
-    + '<div class="mini">'
-    + '<span class="k">venue</span><span>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
-    + '<span class="k">reads</span><span>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
-    + '<span class="k">session</span><span>' + esc(c.session || 'n/a') + ' (context — swing entries are not session-gated)</span>'
-    + '<span class="k">ATR14 4h</span><span>' + pxF(c.atr) + '</span>'
-    + '<span class="k">R:R</span><span>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2) · 1 : ' + fmtF(c.rr3, 1) + ' (T3)</span>'
+    + '<div class="gsw-strat"' + gswSt(GSW_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
+    + '<div class="mini"' + gswSt(GSW_MINI) + '>'
+    + '<span class="k"' + gswSt(GSW_K) + '>venue</span><span' + gswSt(GSW_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>reads</span><span' + gswSt(GSW_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>session</span><span' + gswSt(GSW_V) + '>' + esc(c.session || 'n/a') + ' (context — swing entries are not session-gated)</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>ATR14 4h</span><span' + gswSt(GSW_V) + '>' + pxF(c.atr) + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>R:R</span><span' + gswSt(GSW_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2) · 1 : ' + fmtF(c.rr3, 1) + ' (T3)</span>'
     + '</div>'
     + '<div class="gates">'
-    + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
+    + '<span class="gpip ' + gradeCls + '"' + gswPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
-    + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
-    + ' · ENTRY <b>$' + pxF(c.entry) + '</b>'
-    + ' · STOP <b>$' + pxF(c.stop) + '</b>'
-    + ' · TP1 <b>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
-    + ' · TP2 <b>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
-    + ' · TP3 <b>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
+    + '<div class="plan"' + gswSt(GSW_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
+    + ' · ENTRY <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
+    + ' · STOP <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.stop) + '</b>'
+    + ' · TP1 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
+    + ' · TP2 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
+    + ' · TP3 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
     + '</div>'
-    + (c.why ? '<div class="gsw-whyline">' + esc(c.why) + '</div>' : '')
+    + (c.why ? '<div class="gsw-whyline"' + gswSt(GSW_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + lockLine

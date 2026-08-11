@@ -95,7 +95,19 @@ console.log('== wiring ==');
   ok(/gold-best-levels\.js/.test(ix), 'index loads gold-best-levels.js');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp uses hgApplyGoldBestLevels');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing uses hgApplyGoldBestLevels');
-  ok(/hg-v242/.test(sw), 'cache hg-v242');
+  ok(/hg-v245/.test(sw), 'cache hg-v245');
+}
+
+console.log('== gold card text contrast ==');
+{
+  const gs = fs.readFileSync(root + 'goldscalp.js', 'utf8');
+  const gw = fs.readFileSync(root + 'goldswing.js', 'utf8');
+  const bright = fs.readFileSync(root + 'bright.css', 'utf8');
+  ok(/\.card\.gsx-card\{color:#F1F5F9/.test(gs), 'goldscalp card uses dark HUD text');
+  ok(/background:#0F172A!important;color:#F8FAFC/.test(gs), 'goldscalp card inline dark styles');
+  ok(/hgInjectGsCss/.test(gs), 'goldscalp injects global gsx stylesheet');
+  ok(/\.card\.gsw-card\{color:#F1F5F9/.test(gw), 'goldswing card uses dark HUD text');
+  ok(/gold setup cards — dark HUD panels/.test(bright), 'bright.css gold card contrast block');
 }
 
 console.log('\n' + pass + ' passed, 0 failed');

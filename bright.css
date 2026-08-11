@@ -396,3 +396,20 @@ body,.panel,.card,.ticket,.lrow .gname,.card .sym,.panel h2,.big,.kv .v,td,.chec
 .card .plan b,.lrow .gname{font-weight:700}
 th{color:#67E8F9;font-weight:800}
 td{font-weight:700;color:var(--txt)}
+
+/* ---------- 16. gold setup cards — dark HUD panels, unscoped (GOLD tab + StarTrader embed) ---------- */
+.card.gsx-card,.card.gsw-card{background:rgba(15,23,42,.94)!important;color:#F1F5F9!important;border-color:#334155!important}
+.card.gsx-card .sym,.card.gsw-card .sym{color:#F8FAFC!important;font-weight:800}
+.card.gsx-card .dir,.card.gsw-card .dir{text-shadow:none!important}
+.card.gsx-card .mini,.card.gsw-card .mini{color:#E2E8F0!important}
+.card.gsx-card .mini .k,.card.gsw-card .mini .k{color:#94A3B8!important;font-weight:700}
+.card.gsx-card .mini span:not(.k),.card.gsw-card .mini span:not(.k){color:#F8FAFC!important;font-weight:600}
+.card.gsx-card .gpip,.card.gsw-card .gpip{background:rgba(30,41,59,.75)!important;border-color:#475569!important;color:#CBD5E1!important}
+.card.gsx-card .gpip.ok,.card.gsw-card .gpip.ok{background:rgba(52,211,153,.14)!important;border-color:rgba(52,211,153,.5)!important;color:#6EE7B7!important;font-weight:700}
+.card.gsx-card .plan,.card.gsw-card .plan{background:rgba(30,41,59,.8)!important;border-color:#475569!important;color:#E2E8F0!important}
+.card.gsx-card .plan b,.card.gsw-card .plan b{color:#67E8F9!important}
+.card.gsx-card .note,.card.gsw-card .note{color:#CBD5E1!important}
+.card.gsx-card .gsx-strat,.card.gsw-card .gsw-strat{color:#FBBF24!important}
+.card.gsx-card .gsx-whyline,.card.gsw-card .gsw-whyline{color:#E2E8F0!important}
+.card.gsx-card .toTrade,.card.gsw-card .toTrade{color:#67E8F9!important;border-color:#38BDF8!important;background:rgba(34,211,238,.08)!important}
+.card.gsx-card .toBook,.card.gsw-card .toBook{color:#67E8F9!important;border-color:#0891B2!important;background:rgba(8,145,178,.08)!important}
