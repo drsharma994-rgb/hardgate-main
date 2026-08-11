@@ -15,6 +15,11 @@ services:
     startCommand: node scripts/server.mjs
     autoDeploy: true
     healthCheckPath: /
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3-flash-preview
   - type: worker
     name: hardgate-daemon
     runtime: node

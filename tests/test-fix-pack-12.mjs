@@ -40,7 +40,7 @@ console.log('== CSP ==');
 console.log('== cache ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v239/.test(sw), 'cache hg-v239');
+  ok(/hg-v240/.test(sw), 'cache hg-v240');
   ok(sw.indexOf('api-client.js') >= 0, 'sw shell includes api-client.js');
 }
 
