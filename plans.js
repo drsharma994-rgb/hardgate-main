@@ -550,7 +550,7 @@ function hgStructureStop(dir, entry, rows, opts){
     if (!(dir === 'long' || dir === 'short') || !(isFinite(entry) && entry > 0)) return null;
     if (!rows || !rows.length || typeof atr !== 'function') return null;
     var atrLen = opts.atrLen || 14;
-    var look = opts.look || 30;
+    var look = opts.look || ((typeof G.hgSwingLook === 'function') ? G.hgSwingLook() : 20);
     var buffer = (opts.buffer !== undefined) ? opts.buffer : HG_STOP_BUFFER_ATR;
     var capDist = (opts.capDist !== undefined) ? opts.capDist : HG_STOP_CAP_DIST_ATR;
     var fallback = (opts.fallback !== undefined) ? opts.fallback : HG_STOP_FALLBACK_ATR;

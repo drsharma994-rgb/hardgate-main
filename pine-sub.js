@@ -61,7 +61,7 @@ function pineSubBuildPlan(dir, price, rows){
       if (ss && fin(+ss.entry) && fin(+ss.stop) && fin(+ss.t1)) return ss;
     }
     if (typeof W.hgStructureStop === 'function' && rows && rows.length){
-      var st = W.hgStructureStop(dir, price, rows, { atrLen: 14, look: 30 });
+      var st = W.hgStructureStop(dir, price, rows, { atrLen: 14, look: 20 });
       if (st && fin(+st.stop)){
         var risk = Math.abs(price - st.stop);
         if (risk > 0){

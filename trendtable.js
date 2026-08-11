@@ -172,16 +172,18 @@ function tmDirOf(inp){
 }
 
 function tmFallbackStop(dir, entry, a, rows){
+  var stopOpts = (typeof hgStructureStopOpts === 'function') ? hgStructureStopOpts({ atrLen: TM_ATR_LEN }) : { atrLen: TM_ATR_LEN, look: 20 };
   if (typeof hgStructureStop === 'function'){
-    var st = hgStructureStop(dir, entry, rows, { atrLen: TM_ATR_LEN, look: 30 });
+    var st = hgStructureStop(dir, entry, rows, stopOpts);
     if (st) return { stop: st.stop, note: st.note };
   }
+  var look = stopOpts.look || 20;
   var stop = NaN, note = '';
-  var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, 30) : NaN;
+  var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, look) : NaN;
   if (isFinite(sw)){
     var s = (dir === 'long') ? sw - 0.25 * a : sw + 0.25 * a;
     var r = (dir === 'long') ? entry - s : s - entry;
-    if (r > 0 && r <= 2.5 * a){ stop = s; note = 'stop: lastSwing(4h,30) structure buffered 0.25×ATR' + TM_ATR_LEN; }
+    if (r > 0 && r <= 2.5 * a){ stop = s; note = 'stop: lastSwing(4h,' + look + ') structure buffered 0.25×ATR' + TM_ATR_LEN; }
     else if (r > 2.5 * a) note = 'stop capped: structure beyond 2.5×ATR — ' + TM_STOP_ATR + '×ATR' + TM_ATR_LEN + ' used';
   }
   if (!isFinite(stop)){
@@ -309,6 +311,25 @@ function trendmxAttachMeta(plan, gate, extra){
    within 2.5xATR else 1.5xATR against dir, T1 = 2R, T2 = 3.5R. null when
    there is no majority direction or levels cannot be computed honestly. */
 function trendmxPlan(inp){
+  try{
+    inp = inp || {};
+    var dir = tmDirOf(inp);
+    if (!dir) return null;
+    if (typeof hgBestLevels === 'function'){
+      var gate = inp.gate || trendmxGateEval(inp, dir);
+      var bl = hgBestLevels(Object.assign({}, inp, {
+        tab: 'trendmx', style: 'swing', dir: dir, gate: gate,
+      }));
+      if (bl && bl.ok && bl.plan && tmValidSetup(bl.plan)){
+        return trendmxAttachMeta(bl.plan, bl.gate || gate, { formationScore: bl.formationScore });
+      }
+      if (bl && bl.veto) return null;
+    }
+    return trendmxPlanLegacy(inp);
+  }catch(e){ return null; }
+}
+
+function trendmxPlanLegacy(inp){
   try{
     inp = inp || {};
     var dir = tmDirOf(inp);

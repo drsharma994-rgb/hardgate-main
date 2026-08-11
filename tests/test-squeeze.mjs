@@ -332,7 +332,9 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   const pTrig = W.squeezePlan({ dir: 'long', rows4h: rows, entry: 999 });
   assert(pTrig && pTrig.entry === 999 && pTrig.stop < 999, 'entry override (trigger price) honoured');
 
-  /* smartSetup preference + classification adaptation */
+  /* smartSetup preference + classification adaptation (legacy path) */
+  const keepBL = G.hgBestLevels;
+  G.hgBestLevels = undefined;
   const fake = { type:'SWING', dir:'long', entry:100, stop:95, t1:110, t2:117.5, rr1:2, rr2:3.5, riskPct:5, confirmed:true, note:'stub' };
   let seenCls = null, seenR1 = null;
   G.smartSetup = function(cls, r4, r1){ seenCls = cls; seenR1 = r1; return fake; };
@@ -348,6 +350,7 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(W.squeezePlan({ dir: 'long', rows4h: rows }).type === 'ATR', 'smartSetup with zero risk rejected -> fallback');
   G.smartSetup = function(){ throw new Error('boom'); };
   assert(W.squeezePlan({ dir: 'long', rows4h: rows }) !== null, 'smartSetup throwing -> fallback survives, never throws');
+  G.hgBestLevels = keepBL;
   delete G.smartSetup;
 
   /* markup: oiflow-style plan block */
@@ -616,7 +619,7 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(/hgDeskLoadUniverse/.test(sq), 'full universe via hgDeskLoadUniverse');
   assert(/data-v="coindcx"/.test(sq), 'venue filter chips wired');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v238/.test(sw), 'cache hg-v238');
+  assert(/hg-v239/.test(sw), 'cache hg-v239');
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(html.indexOf('squeeze:') >= 0, 'HG_TAB_AUTO_SCAN squeeze');
 }
