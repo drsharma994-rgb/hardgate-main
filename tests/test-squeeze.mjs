@@ -619,7 +619,7 @@ const fIdx = ttmFull.fired.findIndex(Boolean);
   assert(/hgDeskLoadUniverse/.test(sq), 'full universe via hgDeskLoadUniverse');
   assert(/data-v="coindcx"/.test(sq), 'venue filter chips wired');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v250/.test(sw), 'cache hg-v250');
+  assert(/hg-v251/.test(sw), 'cache hg-v251');
   const html = readFileSync(path.join(root, 'index.html'), 'utf8');
   assert(html.indexOf('squeeze:') >= 0, 'HG_TAB_AUTO_SCAN squeeze');
 }

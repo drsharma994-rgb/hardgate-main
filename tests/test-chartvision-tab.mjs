@@ -16,7 +16,7 @@ console.log('== chartvision tab wiring ==');
 {
   ok(html.indexOf('chartvision-tab.js') >= 0, 'index loads chartvision-tab.js');
   ok(/chartvision-tab\.js/.test(sw), 'sw shell lists chartvision-tab.js');
-  ok(/hg-v250/.test(sw), 'cache hg-v250');
+  ok(/hg-v251/.test(sw), 'cache hg-v251');
   ok(/chartvision/.test(html) && html.indexOf("'chartvision'") >= 0, 'HG_NAV_GROUPS includes chartvision');
   ok(/HG_tabs\.push\(\{ id: 'chartvision'/.test(tabJs), 'registers chartvision tab');
   ok(/cvEvalSwing/.test(tabJs) && /m\.passed < 6/.test(tabJs), 'filters below 6/7');

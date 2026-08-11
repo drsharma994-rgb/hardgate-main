@@ -153,6 +153,34 @@ function stGoldBasisHtml(){
 
 var XAUT_SPOT_BASIS_WARN_PCT = 0.35;
 var XAUT_SPOT_BEST_MAX_BASIS = 0.5;
+var GOLD_SPOT_DRIFT_PURGE_PCT = 1.0;
+
+function goldSpotDriftPct(entry, spot){
+  if (!isFinite(entry) || !isFinite(spot) || !(spot > 0)) return NaN;
+  return Math.abs(entry / spot - 1) * 100;
+}
+
+function goldScaleOneCandidate(c, fromRef, liveRef){
+  if (!c || !isFinite(fromRef) || !isFinite(liveRef) || !(fromRef > 0)) return;
+  var ratio = liveRef / fromRef;
+  if (Math.abs(ratio - 1) * 100 < 0.35) return;
+  var keys = ['entry', 'stop', 't1', 't2', 't3', 'anchor'];
+  for (var k = 0; k < keys.length; k++){
+    if (isFinite(c[keys[k]])) c[keys[k]] = c[keys[k]] * ratio;
+  }
+  if (c.zone){
+    if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
+    if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
+  }
+  var risk = Math.abs(c.entry - c.stop);
+  if (risk > 0){
+    if (isFinite(c.t1)) c.rr = Math.abs(c.t1 - c.entry) / risk;
+    if (isFinite(c.t2)) c.rr2 = Math.abs(c.t2 - c.entry) / risk;
+    if (isFinite(c.t3)) c.rr3 = Math.abs(c.t3 - c.entry) / risk;
+  }
+  c.spotRealigned = true;
+  c.spotAlignRatio = ratio;
+}
 
 function goldSpotRefFromRows(rows){
   if (!rows || !rows.length) return NaN;
@@ -212,8 +240,35 @@ function goldPurgeStaleConvictions(store, liveSpot){
     if (rec.sym === 'XAUTUSD' || (rec.venue && /XAUT/i.test(rec.venue))){
       delete store.live[id]; n++; continue;
     }
-    if (rec.entry < liveSpot * 0.985){
+    var drift = goldSpotDriftPct(rec.entry, liveSpot);
+    if (isFinite(drift) && drift > GOLD_SPOT_DRIFT_PURGE_PCT){
       delete store.live[id]; n++;
+    }
+  }
+  return n;
+}
+
+function goldSpotGuardAfterLock(store, ranked, liveSpot){
+  if (!isFinite(liveSpot) || !(liveSpot > 0)) return 0;
+  var n = goldPurgeStaleConvictions(store, liveSpot);
+  for (var i = 0; i < (ranked || []).length; i++){
+    var c = ranked[i];
+    if (!c || !isFinite(c.entry)) continue;
+    var drift = goldSpotDriftPct(c.entry, liveSpot);
+    if (!isFinite(drift)) continue;
+    if (drift > GOLD_SPOT_DRIFT_PURGE_PCT){
+      if (c.locked){
+        c.vetoed = true;
+        c.locked = false;
+        c.why = 'levels cleared — ' + drift.toFixed(1) + '% off live spot ~$' + pxF(liveSpot) + ' (re-scan for fresh setup)';
+      }
+      if (store && store.live && c.id){
+        if (store.live[c.id]) delete store.live[c.id];
+        else if (c.venue && store.live[c.venue + '|' + c.id]) delete store.live[c.venue + '|' + c.id];
+      }
+      n++;
+    } else if (drift >= 0.35){
+      goldScaleOneCandidate(c, c.entry, liveSpot);
     }
   }
   return n;
@@ -2037,8 +2092,19 @@ async function runScan(ui, scanSt){
        invalidation against the latest 4h close (STOPPED / TARGET HIT /
        EXPIRED after 5 days); never re-pick levels for a live conviction */
     var lock = applyConviction(ranked, venueRows, now);
+    if (isFinite(liveSpot) && liveSpot > 0){
+      var guardedSw = goldSpotGuardAfterLock(lock.store, ranked, liveSpot);
+      if (guardedSw){
+        saveConvictions(lock.store);
+        legs.push('spot guard — cleared/realigned ' + guardedSw + ' off-spot conviction' + (guardedSw === 1 ? '' : 's'));
+      }
+    }
 
     var display = mergeLiveDisplayCards(ranked, lock.store);
+    if (isFinite(liveSpot) && liveSpot > 0 && display.length){
+      goldSpotGuardAfterLock(lock.store, display, liveSpot);
+      display = display.filter(function(c){ return c && !c.vetoed; });
+    }
     var displayBest = best;
     if (!displayBest && display.length) displayBest = display[0];
     if (newsC && newsC.caution){
