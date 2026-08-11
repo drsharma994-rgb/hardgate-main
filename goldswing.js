@@ -2237,7 +2237,7 @@ W.goldswingMountSection = function(el, opts){
   return goldswingMountInto(el, scanSt, Object.assign({
     prefix: 'stGw',
     heading: 'GOLD SWING',
-    subheading: 'XAUUSD · same multi-strategy engine as GOLD SWING · getXAUCandles / StarTrader routing',
+    subheading: 'XAUUSD · XM MT5 prices when configured · else spot proxy chain',
     statIdle: 'idle — XAUUSD 4h/1d swing engine (identical strategy logic to the GOLD SWING tab)',
     showDeskNote: false,
     useStartraderRouting: true,
