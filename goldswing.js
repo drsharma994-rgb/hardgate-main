@@ -134,13 +134,10 @@ var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAX
                   'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
-function stGoldVenueLabel(){
+function stGoldVenueLabel(goldSource){
   try{
-    if (typeof S !== 'undefined' && S && S.goldDataSource){
-      if (S.goldDataSource === 'delta-xaut') return 'STAR TRADER ' + ST_GOLD_SYM + ' · XAUTUSD';
-      var lbl = SRC_LABEL[S.goldDataSource];
-      if (lbl) return 'STAR TRADER ' + ST_GOLD_SYM + ' · ' + lbl + ' proxy';
-    }
+    if (goldSource === 'xm-xauusd') return 'XM ' + ST_GOLD_SYM;
+    if (goldSource && SRC_LABEL[goldSource]) return 'STAR TRADER ' + ST_GOLD_SYM + ' · ' + SRC_LABEL[goldSource];
   }catch(e){}
   return 'STAR TRADER ' + ST_GOLD_SYM;
 }
@@ -175,20 +172,71 @@ function goldAnnotateXautBasis(cands, spotRef){
 
 function goldPickSpotAlignedBest(ranked, spotRef){
   if (!Array.isArray(ranked) || !ranked.length) return null;
+  var xautFallback = null;
   for (var i = 0; i < ranked.length; i++){
     var bc = ranked[i];
     if (!bc || bc.demoted || bc.vetoed) continue;
-    if (bc.sym !== 'XAUTUSD') return bc;
+    var isXaut = bc.sym === 'XAUTUSD' || (bc.venue && /XAUT/i.test(bc.venue));
+    if (!isXaut) return bc;
     if (isFinite(spotRef) && isFinite(bc.entry)){
       var basis = Math.abs(bc.entry / spotRef - 1) * 100;
       if (basis <= XAUT_SPOT_BEST_MAX_BASIS) return bc;
     }
-  }
-  for (var j = 0; j < ranked.length; j++){
-    var fb = ranked[j];
-    if (fb && !fb.demoted && !fb.vetoed) return fb;
+    if (!xautFallback) xautFallback = bc;
   }
   return null;
+}
+
+async function goldLiveSpotRef(klineHint){
+  try{
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ ctrl.abort(); }, 10000);
+    var r = await fetch('https://api.gold-api.com/price/XAU', { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(t);
+    if (!r.ok) return NaN;
+    var j = await r.json();
+    var p = j && +j.price;
+    if (!(isFinite(p) && p > 0)) return NaN;
+    if (isFinite(klineHint) && klineHint > 0 && Math.abs(p / klineHint - 1) * 100 > 8) return NaN;
+    return p;
+  }catch(e){ return NaN; }
+}
+
+function goldPurgeStaleConvictions(store, liveSpot){
+  if (!store || !store.live || !isFinite(liveSpot) || !(liveSpot > 0)) return 0;
+  var n = 0;
+  for (var id in store.live){
+    if (!Object.prototype.hasOwnProperty.call(store.live, id)) continue;
+    var rec = store.live[id];
+    if (!rec || !isFinite(rec.entry)) continue;
+    if (rec.sym === 'XAUTUSD' || (rec.venue && /XAUT/i.test(rec.venue))){
+      delete store.live[id]; n++; continue;
+    }
+    if (rec.entry < liveSpot * 0.985){
+      delete store.live[id]; n++;
+    }
+  }
+  return n;
+}
+
+function goldAlignLevelsToSpot(cands, klineRef, liveRef){
+  if (!Array.isArray(cands) || !isFinite(klineRef) || !isFinite(liveRef) || !(klineRef > 0)) return;
+  var ratio = liveRef / klineRef;
+  if (Math.abs(ratio - 1) * 100 < 0.35) return;
+  for (var i = 0; i < cands.length; i++){
+    var c = cands[i];
+    if (!c || c.sym === 'XAUTUSD') continue;
+    var keys = ['entry', 'stop', 't1', 't2', 't3', 'anchor'];
+    for (var k = 0; k < keys.length; k++){
+      if (isFinite(c[keys[k]])) c[keys[k]] = c[keys[k]] * ratio;
+    }
+    if (c.zone){
+      if (isFinite(c.zone.lo)) c.zone.lo *= ratio;
+      if (isFinite(c.zone.hi)) c.zone.hi *= ratio;
+    }
+    c.spotAligned = true;
+    c.spotAlignRatio = ratio;
+  }
 }
 
 /* ---------------- local indicator fallbacks (identical math to indicators.js
@@ -1851,7 +1899,7 @@ async function runScan(ui, scanSt){
     setProg(ui, 0.45);
     if (gold.rows4h.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
-        : (stRoute ? stGoldVenueLabel() : venueLabel(gold.source));
+        : (stRoute ? stGoldVenueLabel(gold.source) : venueLabel(gold.source));
       var sym1 = (gold.source === 'xm-xauusd' || stRoute) ? ST_GOLD_SYM
         : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       venueRows[v] = { rows4h: gold.rows4h };
@@ -1865,36 +1913,27 @@ async function runScan(ui, scanSt){
       legs.push('primary gold feed: no 4h klines from any source (macro chain + PAXGUSDT both failed)');
     }
 
-    /* leg 2: Delta XAUTUSD perp (standalone only; skipped when XM MT5 feed is live) */
-    var dx = { rows4h: [], rows1d: [], item: null };
-    if (!stRoute && gold.source !== 'xm-xauusd'){
-      setStat(ui, 'checking Delta XAUTUSD perp…');
-      dx = await fetchDeltaXaut();
-      setProg(ui, 0.75);
-      if (dx.item && dx.rows4h.length){
-        venueRows['DELTA XAUTUSD'] = { rows4h: dx.rows4h };
-        var got2 = buildCandidates(dx, now, newsC, ctx.macro, sessionTxt, 'DELTA XAUTUSD', 'XAUTUSD', microOpts);
-        collectWatch(dx, 'DELTA XAUTUSD');
-        for (i = 0; i < got2.length; i++) cands.push(got2[i]);
-        for (i = 0; i < (got2.rejected || []).length; i++) rejectedAll.push(got2.rejected[i]);
-        legs.push('DELTA XAUTUSD: ' + dx.rows4h.length + ' 4h bars — '
-          + (got2.length ? got2.length + ' strategy candidate' + (got2.length === 1 ? '' : 's') : 'no qualifying confluence'));
-      } else if (dx.item){
-        legs.push('DELTA XAUTUSD: listed but candles unavailable');
-      } else {
-        legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
-      }
-    } else if (!stRoute && gold.source === 'xm-xauusd'){
-      legs.push('DELTA XAUTUSD: skipped — GOLD SWING uses XM XAUUSD prices');
-    }
+    legs.push('DELTA XAUTUSD: skipped — gold swing uses broker-aligned XAUUSD spot only');
 
     /* ranking: transparent confluence tally across ALL venues */
     var cvFn = gfn('goldCrossVenueMap');
     if (cvFn) ctx.crossVenue = cvFn(cands);
+    var klineSpot = goldSpotRefFromRows(gold.rows4h);
+    var liveSpot = await goldLiveSpotRef(klineSpot);
+    var spotRef = (isFinite(liveSpot) && liveSpot > 0) ? liveSpot : klineSpot;
+    if (isFinite(liveSpot) && isFinite(klineSpot) && Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
+      legs.push('spot anchor ~$' + pxF(liveSpot) + ' (klines ~$' + pxF(klineSpot) + ') — levels scaled to live spot');
+      goldAlignLevelsToSpot(cands, klineSpot, liveSpot);
+    } else if (isFinite(liveSpot)){
+      legs.push('spot anchor ~$' + pxF(liveSpot) + ' (gold-api.com)');
+    }
+    var convPre = loadConvictions();
+    var purged = goldPurgeStaleConvictions(convPre, liveSpot);
+    if (purged) saveConvictions(convPre);
+    if (purged) legs.push('cleared ' + purged + ' stale conviction' + (purged === 1 ? '' : 's') + ' (XAUT / off-spot locks)');
     var rk = rankSetups(cands, ctx);
     var ranked = rk.ranked, best = rk.best;
     for (i = 0; i < (rk.rejected || []).length; i++) rejectedAll.push(rk.rejected[i]);
-    var spotRef = goldSpotRefFromRows(gold.rows4h);
     goldAnnotateXautBasis(ranked, spotRef);
     var naiveBest = best;
     best = goldPickSpotAlignedBest(ranked, spotRef);
@@ -2025,7 +2064,7 @@ async function runScan(ui, scanSt){
     if (!display.length){
       whySilent = whySilentText({
         newsCaution: !!(newsC && newsC.caution), newsTitle: newsC ? newsC.title : null,
-        feedsFailed: stRoute ? !gold.rows4h.length : (!gold.rows4h.length && !dx.rows4h.length),
+        feedsFailed: !gold.rows4h.length,
         liveN: liveN, armed: armedAll, watchMeta: watchMeta
       });
     }
@@ -2059,9 +2098,9 @@ async function runScan(ui, scanSt){
     var secs = ((Date.now() - t0)/1000).toFixed(1);
     setStat(ui, legs.join(' · ') + ' · ' + liveN + ' live conviction' + (liveN === 1 ? '' : 's')
             + ' · ' + secs + 's · ' + new Date().toISOString().slice(11, 19) + ' UTC',
-            stRoute ? !gold.rows4h.length : (!gold.rows4h.length && !dx.rows4h.length));
+            !gold.rows4h.length);
     setProg(ui, null);
-    if (gold.rows4h.length || (!stRoute && dx.rows4h.length)){
+    if (gold.rows4h.length){
       publishState(display);                        /* only a real data run overwrites the snapshots */
       publishScan(display, displayBest, lock.store.history, now, rejectedAll, armedAll, whySilent);
       var visionEnrichGw = gfn('hgChartVisionEnrichSetups');

@@ -789,9 +789,9 @@ console.log('== 11) honest empty state ==');
 }
 
 /* =========================================================================
-   12) Delta XAUTUSD second venue (best-effort leg)
+   12) Delta XAUTUSD leg skipped (broker-aligned XAUUSD only)
 ========================================================================= */
-console.log('== 12) Delta second venue ==');
+console.log('== 12) Delta leg skipped ==');
 {
   const realDateNow = Date.now;
   Date.now = () => MAR_NOW;
@@ -800,13 +800,10 @@ console.log('== 12) Delta second venue ==');
   env.C.xuCandles = async (item, tf) => cloneRows(tf === '4h' ? obSwing4h(2399.4) : dailyBull());
   await env.M.stubs['#gwRun']._handler();
   const scan = env.C.goldswingScan();
-  assert(!!scan && scan.cands.some(c => c.venue === 'DELTA XAUTUSD'),
-         'Delta XAUTUSD scanned as a second venue with its own candidates');
+  assert(!!scan && !scan.cands.some(c => c.venue === 'DELTA XAUTUSD'),
+         'Delta XAUTUSD no longer scanned — broker-aligned XAUUSD only');
   assert(scan.cands.some(c => c.venue === 'BINANCE XAUUSDT'), 'primary venue candidates intact');
-  const venues = env.C.goldswingState().results.map(r => r.venue);
-  assert(venues.indexOf('BINANCE XAUUSDT') >= 0 && venues.indexOf('DELTA XAUTUSD') >= 0,
-         'BRAIN results cover both venues');
-  assert(/DELTA XAUTUSD/.test(env.M.stubs['#gwStat'].textContent), 'stat line reports the Delta leg');
+  assert(/DELTA XAUTUSD: skipped/.test(env.M.stubs['#gwStat'].textContent), 'stat line reports XAUT skipped');
   Date.now = realDateNow;
   cleanup();
 }

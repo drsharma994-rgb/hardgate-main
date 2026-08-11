@@ -18,7 +18,7 @@ console.log('== gold spot vs XAUT routing ==');
   ok(/xm-xauusd/.test(gs), 'goldscalp labels XM XAUUSD source');
   ok(/goldPickSpotAlignedBest/.test(gs) && /goldAnnotateXautBasis/.test(gs),
     'goldscalp spot-aligned MOST PROBABLE picker');
-  ok(/Delta XAUTUSD<\/b> only — not spot\/StarTrader XAUUSD/.test(gs), 'goldscalp card warns on XAUT basis');
+  ok(/goldPurgeStaleConvictions/.test(gs), 'goldscalp purges stale XAUT convictions');
 }
 
 console.log('\n' + pass + ' passed, 0 failed');
