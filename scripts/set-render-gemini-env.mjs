@@ -5,7 +5,7 @@
    Optional:
      RENDER_SERVICE_ID=srv-...  (auto-resolved from service name if omitted)
      RENDER_SERVICE_NAME=hardgate-main
-     GEMINI_MODEL=gemini-2.5-flash
+     GEMINI_MODEL=gemini-3-flash-preview
      TRIGGER_DEPLOY=1  (default: trigger deploy after update)
 */
 import { spawnSync } from 'node:child_process';
@@ -15,7 +15,7 @@ const apiKey = process.env.RENDER_API_KEY;
 const geminiKey = process.env.GEMINI_API_KEY;
 const serviceId = process.env.RENDER_SERVICE_ID;
 const serviceName = process.env.RENDER_SERVICE_NAME || 'hardgate-main';
-const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 const triggerDeploy = process.env.TRIGGER_DEPLOY !== '0';
 
 function die(msg){ console.error(msg); process.exit(1); }
