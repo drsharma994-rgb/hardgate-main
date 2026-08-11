@@ -19,7 +19,7 @@ console.log('== futuristic theme ==');
   ok(html.indexOf('--ink:#020617') >= 0, 'inline :root dark tokens');
   ok(fs.existsSync(path.join(root, 'design-system/hardgate/MASTER.md')), 'design system MASTER persisted');
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v249/.test(sw), 'cache hg-v249');
+  ok(/hg-v250/.test(sw), 'cache hg-v250');
 }
 
 console.log('\n' + pass + ' passed');
