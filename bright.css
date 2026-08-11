@@ -396,3 +396,29 @@ body,.panel,.card,.ticket,.lrow .gname,.card .sym,.panel h2,.big,.kv .v,td,.chec
 .card .plan b,.lrow .gname{font-weight:700}
 th{color:#67E8F9;font-weight:800}
 td{font-weight:700;color:var(--txt)}
+
+/* ---------- 16. gold setup cards — dark text on white/light panels (overrides dark HUD) ---------- */
+#tab_goldscalp .card.gsx-card,
+#tab_goldswing .card.gsw-card{color:#0F172A}
+#tab_goldscalp .card.gsx-card .sym,
+#tab_goldswing .card.gsw-card .sym{color:#020617!important;font-weight:800}
+#tab_goldscalp .card.gsx-card .mini,
+#tab_goldswing .card.gsw-card .mini{color:#0F172A}
+#tab_goldscalp .card.gsx-card .mini .k,
+#tab_goldswing .card.gsw-card .mini .k{color:#475569!important;font-weight:700}
+#tab_goldscalp .card.gsx-card .mini span:not(.k),
+#tab_goldswing .card.gsw-card .mini span:not(.k){color:#020617!important;font-weight:600}
+#tab_goldscalp .card.gsx-card .gpip,
+#tab_goldswing .card.gsw-card .gpip{background:#F1F5F9!important;border-color:#CBD5E1!important;color:#334155!important}
+#tab_goldscalp .card.gsx-card .gpip.ok,
+#tab_goldswing .card.gsw-card .gpip.ok{background:#ECFDF5!important;border-color:#059669!important;color:#047857!important;font-weight:700}
+#tab_goldscalp .card.gsx-card .plan{background:#FFFBEB!important;border-color:#FDE68A!important;color:#0F172A!important}
+#tab_goldswing .card.gsw-card .plan{background:#F0FDF4!important;border-color:#BBF7D0!important;color:#0F172A!important}
+#tab_goldscalp .card.gsx-card .plan b{color:#A67C12!important}
+#tab_goldswing .card.gsw-card .plan b{color:#047857!important}
+#tab_goldscalp .card.gsx-card .note,
+#tab_goldswing .card.gsw-card .note{color:#334155!important}
+#tab_goldscalp .card.gsx-card .toTrade,
+#tab_goldswing .card.gsw-card .toTrade{color:#047857!important;border-color:#059669!important;background:rgba(5,150,105,.08)!important}
+#tab_goldscalp .card.gsx-card .toBook,
+#tab_goldswing .card.gsw-card .toBook{color:#0891B2!important;border-color:#0891B2!important;background:rgba(8,145,178,.06)!important}
