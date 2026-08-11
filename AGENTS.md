@@ -93,7 +93,7 @@ Optional single-process dev: `HARDGATE_DAEMON_AUTOSTART=1` forks `app.js` from `
 | `OPENBB_API_USERNAME` / `OPENBB_API_PASSWORD` | Basic auth for OpenBB backend |
 | `OPENBB_API_KEY` | Optional API key header for OpenBB backend |
 | `GEMINI_API_KEY` | Chart vision (`/api/chart-vision/analyze`) — Gemini multimodal; heuristic fallback when unset. **Set on Render `hardgate-main` → Environment** (persists across deploys) or run `RENDER_API_KEY=… GEMINI_API_KEY=… node scripts/set-render-gemini-env.mjs` |
-| `GEMINI_MODEL` | Gemini model for chart vision (default `gemini-2.0-flash`) |
+| `GEMINI_MODEL` | Gemini model for chart vision (default `gemini-3-flash-preview`; production Render sets this explicitly) |
 | `CHART_VISION_VETO` | **On by default.** Set `0` / `false` to disable high-confidence vision conflict demotes |
 | `CHART_VISION_PNG` | Set `0` / `false` to skip Puppeteer PNG render (Gemini falls back to SVG text) |
 | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | Alert pushes (also overridable in browser localStorage) |
@@ -113,7 +113,8 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Dual venue scan (default):** Opening a crypto scan tab auto-runs **Delta India + CoinDCX** (`hg_dual_scan` localStorage `0` disables). Header exchange toggle still sets desk context for TRADE PLAN / bias chips.
 - **Binance geo-blocking (HTTP 451):** Cloud VMs may not reach `fapi.binance.com`. `npm test` passes offline. `tests/test-data-layer.mjs` skips Binance legs on 451 and exits 0.
 - **Use the Node server, not `file://`:** Direct file open skips `/api/proxy`.
-- **No runtime npm dependencies:** `npm install` is a no-op.
+- **`npm install`:** Installs `ccxt`, `@modelcontextprotocol/sdk`, and optional `@resvg/resvg-js` / `puppeteer`. Re-run after pull if imports fail.
+- **Stale dev server on `:10000`:** If `/api/chart-vision/capabilities` returns `not found`, kill the old `node scripts/server.mjs` process and restart (`npm start` in tmux) — an older instance may still be bound to the port.
 - **Node 18+ required**
 - **EDGE tab:** Cards show **FRESH / ACTIVE / STALE** from `barAge` (closed 4H bars since trigger). **FORMING NOW** lists bias-aligned symbols with **×ATR distance to EMA21**; Telegram via unified **15-min** `tabalerts.js` batch (EDGE + EDGE FORMING watch rows). `scripts/edge-diagnose.mjs` uses `HARDGATE_SITE` for `/api/proxy` when run from Node.
 - **PINE tab:** Background `pineWarm` runs every **15 min** with the alert cycle (after `edgeWarm` for universe). Telegram for NEW/RECENT signals via unified **tabalerts** batch (`collectPine*`); manual PINE scan still uses `pineFireAlerts` directly. Requires **Alerts ON** and Telegram configured (`sendTelegram` / `TELEGRAM_*` env). **`tests/test-pine-tab.mjs`** smoke-tests `mount` / `refresh` / `pineWarm`, empty vs gated scan, and `HG_tabs` registration; **`tests/test-pine-scan.mjs`** covers signal eval/render math.
