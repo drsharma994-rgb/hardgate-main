@@ -1,0 +1,441 @@
+/* =========================================================================
+HARDGATE — reversalsniper.js
+REVERSAL SNIPER tab: long-only bounce setups after a down move on Binance
+USDT perps. Composes existing detectors (liquidity sweep reclaim, mean
+reversion, RSI stretch) and filters for SNIPER-grade leverage (≥30× max
+safe — stop ≤ ~1.9% from entry).
+
+Every card shows exact ENTRY · STOP · TP1 · TP2, a transparent conviction
+score, and a per-symbol mini-backtest when mean-reversion rules apply.
+
+Honest mandate: this tab stacks the odds — it does NOT guarantee the stop
+never gets hit. Same liquidation-clearance math as BRAIN SNIPER / TRADE PLAN.
+
+Pure exports (never throw):
+  rsMaxSafeLev(entry, stop, mmr?)
+  rsAssess(rows, opts?) -> setup | null
+  rsBacktest(rows) -> { n, winPct, avgR, pf, expR }  (mean-rev long replay)
+  rsConviction(setup) -> number
+
+Classic script; loads after indicators.js, indicators2.js, plans.js,
+meanrev.js, binance.js. Registers window.HG_tabs.
+========================================================================= */
+(function(){
+'use strict';
+
+var W = (typeof window !== 'undefined') ? window
+      : (typeof globalThis !== 'undefined' ? globalThis : this);
+
+var MIN_LEV         = 30;
+var MIN_RR          = 1.5;
+var MIN_CONVICTION  = 4;
+var MIN_TURNOVER    = 20e6;
+var MAX_UNIVERSE    = 40;
+var KL_LIMIT        = 300;
+var CHUNK           = 5;
+var CHUNK_SLEEP_MS  = 120;
+var SWING_LOOKBACK  = 30;
+var SWING_EXCLUDE   = 4;
+var MIN_DRAWDOWN    = 0.02;
+var SNIPER_MMR      = 0.005;
+var RR1             = 2.0;
+var RR2             = 3.5;
+var ATR_LEN         = 14;
+var EXT_LEN         = 5;
+
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function pxF(n){
+  if (typeof px === 'function') return px(n);
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  var a = Math.abs(n);
+  var d = a >= 1000 ? 1 : a >= 100 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 6 : 8;
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
+}
+function fmtF(n, d){
+  if (typeof fmt === 'function') return fmt(n, d);
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits: (d === undefined ? 2 : d) });
+}
+function fmtSignedR(r){
+  if (!isFinite(r)) return '—';
+  return (r > 0 ? '+' : '') + r.toFixed(2) + 'R';
+}
+function fmtPF(pf){
+  if (pf === Infinity) return '∞';
+  if (!isFinite(pf)) return '—';
+  return pf.toFixed(1);
+}
+
+function rsMaxSafeLev(entry, stop, mmr){
+  try{
+    entry = +entry; stop = +stop;
+    if (!isFinite(entry) || !isFinite(stop) || entry <= 0 || entry === stop) return 1;
+    var sd = Math.abs(entry - stop) / entry;
+    var lev = Math.floor(1 / (sd * 1.5 + (isFinite(+mmr) && +mmr > 0 ? +mmr : SNIPER_MMR)));
+    return Math.max(1, Math.min(100, lev));
+  }catch(e){ return 1; }
+}
+
+function rsSwingLow(rows, lookback, excludeRecent){
+  try{
+    if (!rows || !rows.length) return NaN;
+    var n = rows.length;
+    var start = Math.max(0, n - (lookback || SWING_LOOKBACK));
+    var end = Math.max(start, n - (excludeRecent || SWING_EXCLUDE));
+    var lo = Infinity;
+    for (var i = start; i < end; i++){
+      if (rows[i] && isFinite(rows[i].l) && rows[i].l < lo) lo = rows[i].l;
+    }
+    return isFinite(lo) ? lo : NaN;
+  }catch(e){ return NaN; }
+}
+
+function rsDrawdownPct(rows, len){
+  try{
+    if (!rows || !rows.length) return 0;
+    var n = rows.length;
+    var k = Math.max(0, n - (len || 20));
+    var hi = -Infinity, last = rows[n - 1].c;
+    for (var i = k; i < n; i++){
+      if (rows[i] && isFinite(rows[i].h) && rows[i].h > hi) hi = rows[i].h;
+    }
+    if (!isFinite(hi) || !isFinite(last) || !(hi > 0)) return 0;
+    return (hi - last) / hi;
+  }catch(e){ return 0; }
+}
+
+function rsBuildPlan(entry, stop, rr1, rr2){
+  try{
+    entry = +entry; stop = +stop;
+    if (!isFinite(entry) || !isFinite(stop) || !(entry > stop)) return null;
+    var risk = entry - stop;
+    if (!(risk > 0)) return null;
+    rr1 = isFinite(rr1) ? rr1 : RR1;
+    rr2 = isFinite(rr2) ? rr2 : RR2;
+    var t1 = entry + rr1 * risk;
+    var t2 = entry + rr2 * risk;
+    var lev = rsMaxSafeLev(entry, stop);
+    return {
+      dir: 'long', entry: entry, stop: stop, t1: t1, t2: t2,
+      risk: risk, riskPct: risk / entry * 100,
+      rr1: rr1, rr2: rr2, lev: lev
+    };
+  }catch(e){ return null; }
+}
+
+function rsConviction(setup){
+  try{
+    if (!setup) return 0;
+    var c = 0;
+    var tr = setup.triggers || [];
+    for (var i = 0; i < tr.length; i++){
+      if (tr[i] === 'sweep') c += 4;
+      else if (tr[i] === 'meanrev') c += 3;
+      else if (tr[i] === 'rsi') c += 1;
+      else if (tr[i] === 'drawdown') c += 1;
+    }
+    var bt = setup.bt;
+    if (bt && bt.n >= 3){
+      if (isFinite(bt.expR) && bt.expR > 0) c += 2;
+      if (isFinite(bt.winPct) && bt.winPct >= 50) c += 1;
+    }
+    return c;
+  }catch(e){ return 0; }
+}
+
+function rsAssess(rows, opts){
+  try{
+    opts = opts || {};
+    if (!Array.isArray(rows) || rows.length < 60) return null;
+    var n = rows.length;
+    var last = rows[n - 1];
+    var entry = last && isFinite(last.c) ? last.c : NaN;
+    if (!isFinite(entry) || !(entry > 0)) return null;
+
+    var dd = rsDrawdownPct(rows, 20);
+    if (dd < MIN_DRAWDOWN && !opts.relaxDrawdown) return null;
+
+    var triggers = [];
+    if (dd >= MIN_DRAWDOWN) triggers.push('drawdown');
+
+    var atrFn = (typeof atr === 'function') ? atr : null;
+    var atArr = atrFn ? atrFn(rows, ATR_LEN) : null;
+    var a14 = (atArr && atArr.length) ? atArr[n - 1] : NaN;
+
+    var sweepFn = (typeof W.hgDetectLiquiditySweep === 'function') ? W.hgDetectLiquiditySweep : null;
+    var sweepStopFn = (typeof W.hgSweepStop === 'function') ? W.hgSweepStop : null;
+    var swingLo = rsSwingLow(rows, SWING_LOOKBACK, SWING_EXCLUDE);
+    var sweep = null;
+    if (sweepFn && isFinite(swingLo)){
+      sweep = sweepFn(rows, n - 1, 'long', swingLo, {});
+      if (sweep && sweep.swept) triggers.push('sweep');
+    }
+
+    var mrFn = (typeof W.mrSignal === 'function') ? W.mrSignal : null;
+    var mr = mrFn ? mrFn(rows) : null;
+    if (mr && mr.dir === 'long') triggers.push('meanrev');
+
+    if (typeof rsi === 'function'){
+      var closes = rows.map(function(r){ return r.c; });
+      var r2 = rsi(closes, 2);
+      var rv = (r2 && r2.length) ? r2[n - 1] : NaN;
+      if (isFinite(rv) && rv <= 12) triggers.push('rsi');
+    }
+
+    if (!triggers.length) return null;
+    if (triggers.indexOf('sweep') < 0 && triggers.indexOf('meanrev') < 0
+        && triggers.indexOf('rsi') < 0) return null;
+
+    var plan = null;
+    if (sweep && sweep.swept && sweepStopFn && isFinite(a14)){
+      var stp = sweepStopFn('long', sweep.sweepExtreme, a14);
+      plan = rsBuildPlan(entry, stp, RR1, RR2);
+    }
+    if (!plan && mr && mr.dir === 'long' && typeof W.meanrevPlan === 'function'){
+      var lo5 = (typeof lowest === 'function') ? lowest(rows.map(function(r){ return r.l; }), EXT_LEN) : null;
+      var extreme = (lo5 && lo5.length) ? lo5[n - 1] : NaN;
+      var bb = (typeof bollinger === 'function') ? bollinger(rows.map(function(r){ return r.c; }), 20, 2) : null;
+      var opp = (bb && bb.upper && bb.upper.length) ? bb.upper[n - 1] : NaN;
+      var mrp = W.meanrevPlan({ dir: 'long', entry: mr.entry, extreme: extreme,
+                                atr: a14, mean: mr.target, oppBand: opp });
+      if (mrp) plan = rsBuildPlan(mrp.entry, mrp.stop, mrp.rr1, mrp.rr2);
+    }
+    if (!plan && triggers.indexOf('rsi') >= 0 && isFinite(a14)){
+      var lo5b = (typeof lowest === 'function') ? lowest(rows.map(function(r){ return r.l; }), EXT_LEN) : null;
+      var ex = (lo5b && lo5b.length) ? lo5b[n - 1] : NaN;
+      if (isFinite(ex)){
+        var tightStop = ex - 1.5 * a14;
+        plan = rsBuildPlan(entry, tightStop, RR1, RR2);
+      }
+    }
+    if (!plan) return null;
+    if (!(plan.lev >= MIN_LEV)) return null;
+    if (!(plan.rr1 >= MIN_RR)) return null;
+
+    var btFn = (typeof W.mrBacktest === 'function') ? W.mrBacktest : null;
+    var bt = btFn ? btFn(rows) : { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 };
+
+    var setup = {
+      dir: 'long',
+      entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      risk: plan.risk, riskPct: plan.riskPct,
+      rr1: plan.rr1, rr2: plan.rr2, lev: plan.lev,
+      triggers: triggers, drawdownPct: dd * 100,
+      sweep: sweep, meanrev: mr, bt: bt
+    };
+    setup.conviction = rsConviction(setup);
+    if (setup.conviction < MIN_CONVICTION) return null;
+
+    if (typeof W.hgApplyExactEntry === 'function'){
+      var enriched = W.hgApplyExactEntry({
+        dir: 'long', entry: setup.entry, stop: setup.stop, t1: setup.t1, t2: setup.t2
+      }, rows, { style: 'reversal-sniper' });
+      if (enriched && isFinite(enriched.entry)){
+        if (isFinite(enriched.entry)) setup.entry = enriched.entry;
+        if (isFinite(enriched.stop)) setup.stop = enriched.stop;
+        if (isFinite(enriched.t1)) setup.t1 = enriched.t1;
+        if (isFinite(enriched.t2)) setup.t2 = enriched.t2;
+        if (enriched.entryType) setup.entryType = enriched.entryType;
+        if (enriched.entryGuidance) setup.entryGuidance = enriched.entryGuidance;
+        setup.lev = rsMaxSafeLev(setup.entry, setup.stop);
+        setup.riskPct = (setup.entry - setup.stop) / setup.entry * 100;
+        if (!(setup.lev >= MIN_LEV)) return null;
+      }
+    }
+    return setup;
+  }catch(e){ return null; }
+}
+
+function rsBacktest(rows){
+  try{
+    if (typeof W.mrBacktest === 'function') return W.mrBacktest(rows);
+    return { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 };
+  }catch(e){ return { n: 0, winPct: 0, avgR: 0, pf: 0, expR: 0 }; }
+}
+
+function triggerChips(triggers){
+  var labels = {
+    sweep: 'LIQUIDITY SWEEP RECLAIM',
+    meanrev: 'MEAN REV STRETCH',
+    rsi: 'RSI(2) OVERSOLD',
+    drawdown: 'POST-DROPDOWN'
+  };
+  return (triggers || []).map(function(t){
+    return '<span class="gpip ok">' + esc(labels[t] || t) + '</span>';
+  }).join('');
+}
+
+function cardHTML(r){
+  var s = r.setup, bt = s.bt || {};
+  var turnover = r.tick ? '$' + fmtF(r.tick.turnoverUsd / 1e6, 0) + 'M' : '—';
+  var levCol = s.lev >= MIN_LEV ? '#5fbf8f' : '#d8a24a';
+  var record = bt.n >= 3
+    ? 'MEAN-REV RECORD: ' + bt.n + ' trades · ' + Math.round(bt.winPct) + '% win · avg '
+      + fmtSignedR(bt.expR) + ' · PF ' + fmtPF(bt.pf)
+    : (bt.n > 0 ? 'THIN RECORD (n=' + bt.n + ')' : 'NO MEAN-REV HISTORY ON THESE BARS');
+
+  var stackHtml = '';
+  if (typeof hgSetupStackMiniHtml === 'function' && typeof hgSetupStackForInlineScan === 'function'){
+    try{
+      var st = hgSetupStackForInlineScan({ dir: 'long', sym: r.sym, rows4h: r.rows, style: 'reversal-sniper',
+        ticker: r.tick, clean: true });
+      stackHtml = hgSetupStackMiniHtml(st);
+    }catch(eSt){}
+  }
+
+  var safeChip = (typeof hgSafeLevChip === 'function') ? hgSafeLevChip(s.entry, s.stop) : '';
+  var tradeOnclick = (typeof hgToTradePlanOnclickAttr === 'function')
+    ? hgToTradePlanOnclickAttr(r.sym, 'long', s.entry, s.stop, s.t1, { t2: s.t2, scanner: 'reversalsniper', strategy: 'reversalsniper' })
+    : '';
+  var tradeBtn = tradeOnclick
+    ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
+  var bookBtn = (typeof bookBtnHTML === 'function')
+    ? bookBtnHTML(r.sym, 'long', s.entry, s.stop, s.t1, { scanner: 'reversalsniper', strategy: 'reversalsniper', t2: s.t2 }) : '';
+
+  return '<div class="card long' + (r.best ? ' best' : '') + '">'
+    + '<div class="chead"><span class="sym">' + esc(r.sym) + '</span>'
+    + '<span class="dir">LONG · REVERSAL SNIPER · conviction ' + s.conviction + '</span>'
+    + (typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, 'long', { scanner: 'reversalsniper', strategy: 'reversalsniper' }) : '')
+    + '</div>'
+    + '<div class="mini">'
+    + '<span class="k">drawdown</span><span>' + fmtF(s.drawdownPct, 1) + '% off 20b high</span>'
+    + '<span class="k">max safe lev</span><span style="color:' + levCol + ';font-weight:700">' + s.lev + '×</span>'
+    + '<span class="k">stop dist</span><span>' + fmtF(s.riskPct, 2) + '%</span>'
+    + '<span class="k">turnover 24h</span><span>' + turnover + '</span>'
+    + '</div>'
+    + '<div class="gates">' + triggerChips(s.triggers)
+    + '<span class="gpip ok">CONVICTION ' + s.conviction + '</span>'
+    + '<span class="gpip ok">≥' + MIN_LEV + '× SAFE</span></div>'
+    + '<div class="plan">BUY · ENTRY <b>' + pxF(s.entry) + '</b> · STOP <b>' + pxF(s.stop) + '</b>'
+    + ' · TP1 <b>' + pxF(s.t1) + '</b> (' + fmtF(s.rr1, 1) + 'R) · TP2 <b>' + pxF(s.t2) + '</b> (' + fmtF(s.rr2, 1) + 'R)'
+    + safeChip + '</div>'
+    + (s.entryGuidance ? '<div class="note">' + esc(s.entryGuidance) + '</div>' : '')
+    + stackHtml
+    + '<div class="note warn" style="margin-top:6px">SNIPER GRADE — stop ≤ ~1.9% enables ≥30× max-safe leverage. '
+    + 'This stacks reversal confluence; <b>stops can still be hit</b>. Size below max safe.</div>'
+    + '<div class="plan">' + record + '</div>'
+    + tradeBtn + bookBtn
+    + '</div>';
+}
+
+var __rs = { busy: false, ranOnce: false };
+
+function mount(el){
+  if (!el) return;
+  el.innerHTML = '<div class="panel">'
+    + '<h2>Reversal Sniper <span>long bounces after a down move · sweep reclaim + mean-reversion + RSI stretch · '
+    + '≥' + MIN_LEV + '× max-safe leverage (stop ≤ ~1.9%) · 4H Binance perps</span></h2>'
+    + '<div class="note" style="margin-bottom:8px">Finds post-drop long reversals with tight structural stops. '
+    + 'Conviction = agreeing triggers + paying mean-rev backtest. <b>Nothing here guarantees the stop holds</b> — '
+    + 'use TRADE PLAN clearance gates and size conservatively.</div>'
+    + '<div class="row"><button class="btn" id="rsRun">SCAN REVERSALS</button>'
+    + '<span class="note" id="rsStat">idle — top ' + MAX_UNIVERSE + ' Binance perps ≥ $'
+    + fmtF(MIN_TURNOVER / 1e6, 0) + 'M · conviction ≥ ' + MIN_CONVICTION + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
+    + '<div class="prog" id="rsProg"><i></i></div>'
+    + '<div class="cards" id="rsCards"></div>'
+    + '<div class="empty" id="rsEmpty" style="display:none">No sniper-grade long reversals right now — '
+    + 'need a post-drop setup with a stop tight enough for ≥' + MIN_LEV + '×.</div>'
+    + '</div>';
+
+  var btn = el.querySelector('#rsRun');
+  var statEl = el.querySelector('#rsStat');
+  var progEl = el.querySelector('#rsProg');
+  var cardsEl = el.querySelector('#rsCards');
+  var emptyEl = el.querySelector('#rsEmpty');
+  if (!btn || !statEl) return;
+
+  function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
+  function setProg(f){
+    progEl.style.display = (f === null) ? 'none' : 'block';
+    if (f !== null && progEl.firstElementChild) progEl.firstElementChild.style.width = (f * 100).toFixed(1) + '%';
+  }
+
+  btn.addEventListener('click', function(){ runScan(); });
+
+  async function runScan(){
+    if (__rs.busy) return 'busy';
+    __rs.busy = true;
+    __rs.ranOnce = true;
+    btn.disabled = true;
+    cardsEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+    setProg(0);
+    var status = 'refreshed';
+    try{
+      if (typeof binancePerpUniverse !== 'function' || typeof binanceKlines !== 'function'){
+        setStat('missing binance.js — cannot scan', true);
+        return 'error: binance missing';
+      }
+      setStat('loading Binance perp universe…');
+      var res = await Promise.all([binancePerpUniverse(), binanceTickers24h()]);
+      var perps = res[0] || [], ticks = res[1];
+      if (!perps.length || !ticks){ setStat('Binance universe unavailable', true); return 'failed: universe'; }
+
+      var uni = perps.filter(function(s){ return ticks[s] && ticks[s].turnoverUsd >= MIN_TURNOVER; })
+        .sort(function(a, b){ return ticks[b].turnoverUsd - ticks[a].turnoverUsd; })
+        .slice(0, MAX_UNIVERSE);
+
+      var results = [], failed = 0, started = 0;
+      for (var ci = 0; ci < uni.length; ci += CHUNK){
+        var chunk = uni.slice(ci, ci + CHUNK);
+        await Promise.all(chunk.map(async function(sym){
+          var my = ++started;
+          setStat('scanning ' + my + '/' + uni.length + ' · ' + sym);
+          setProg(my / uni.length);
+          try{
+            var rows = await binanceKlines(sym, '4h', KL_LIMIT);
+            if (!rows || !rows.length){ failed++; return; }
+            var setup = rsAssess(rows);
+            if (!setup) return;
+            results.push({ sym: sym, setup: setup, rows: rows, tick: ticks[sym] });
+          }catch(e){ failed++; }
+        }));
+        if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
+      }
+
+      results.sort(function(a, b){ return b.setup.conviction - a.setup.conviction; });
+      if (results.length) results[0].best = true;
+
+      if (results.length){
+        cardsEl.innerHTML = '<div class="note ok" style="margin-bottom:8px">★ '
+          + esc(results[0].sym) + ' — highest conviction (' + results[0].setup.conviction + ')</div>'
+          + results.map(cardHTML).join('');
+      } else {
+        emptyEl.style.display = 'block';
+      }
+      setStat(results.length + ' sniper-grade reversal' + (results.length === 1 ? '' : 's')
+        + ' · ' + uni.length + ' scanned · ' + failed + ' failed · '
+        + new Date().toISOString().slice(11, 19) + ' UTC');
+    }catch(e){
+      setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
+      status = 'error';
+    }finally{
+      __rs.busy = false;
+      btn.disabled = false;
+      setProg(null);
+    }
+    return status;
+  }
+}
+
+async function rsRefresh(){
+  try{
+    if (__rs.busy) return 'busy';
+    if (!__rs.ranOnce) return 'skipped: not run yet';
+    var pane = document.getElementById('tab_reversalsniper');
+    if (!pane) return 'skipped: pane missing';
+    var btn = pane.querySelector('#rsRun');
+    if (btn) btn.click();
+    return 'refreshed';
+  }catch(e){ return 'error'; }
+}
+
+W.rsMaxSafeLev = rsMaxSafeLev;
+W.rsAssess = rsAssess;
+W.rsBacktest = rsBacktest;
+W.rsConviction = rsConviction;
+W.HG_tabs = W.HG_tabs || [];
+W.HG_tabs.push({ id: 'reversalsniper', label: 'REVERSAL SNIPER', mount: mount, refresh: rsRefresh });
+
+})();

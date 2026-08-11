@@ -82,7 +82,7 @@ console.log('== shell wiring ==');
 {
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const idx = fs.readFileSync(root + 'index.html', 'utf8');
-  ok(/hg-v252/.test(sw), 'cache hg-v252');
+  ok(/hg-v253/.test(sw), 'cache hg-v253');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain.js');
   ok(/gstack-brain\.js/.test(idx) && /brain\.js/.test(idx)
     && idx.indexOf('src="gstack-brain.js"') < idx.indexOf('src="brain.js"'),
