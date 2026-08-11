@@ -359,7 +359,7 @@ console.log('--- risk classification ---');
 console.log('--- hgNewsRefresh pipeline ---');
 {
   const fetchStub = async (url) => {
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
     if (url.indexOf('alternative.me') >= 0) return { ok: true, text: async () => FNG_JSON, json: async () => JSON.parse(FNG_JSON) };
     if (url.indexOf('cointelegraph.com') >= 0) return { ok: true, text: async () => RSS_CT };
     if (url.indexOf('coindesk.com') >= 0) return { ok: false, status: 403, text: async () => '' };
@@ -368,7 +368,8 @@ console.log('--- hgNewsRefresh pipeline ---');
   const w = loadModule(makeCtx({ fetch: fetchStub, AbortController }));
   const st = await w.hgNewsRefresh(true);
   assert(st.loaded === true, 'refresh marks the cache loaded');
-  assert(st.events.length === 7, 'calendar leg populated through the proxy');
+  assert(st.calendarOk === true, 'calendar leg marks calendarOk');
+  assert(st.events.length === 7, 'calendar leg populated through /api/news/calendar');
   assert(st.fng && st.fng.value === 18 && st.fng.classification === 'Extreme Fear', 'fear/greed leg parsed (18, Extreme Fear)');
   assert(st.headlines.length === 3, '3 cointelegraph headlines parsed (coindesk 403 tolerated)');
   assert(st.headlines[0].title.indexOf('SEC lawsuit') >= 0 && st.headlines[0].score >= st.headlines[1].score,
@@ -446,6 +447,19 @@ console.log('--- mount smoke ---');
   assert(el2.innerHTML.indexOf('WATCHLIST NEWS RISK') >= 0 && el2.innerHTML.indexOf('HEADLINE IMPACT SCAN') >= 0,
     'ribbon + headline sections present');
   assert(el2.innerHTML.indexOf('Binance hack drains hot wallet') >= 0, 'impact headline rendered');
+
+  // calendar fetch failed but headlines/fng loaded -> honest warn, not "no events"
+  const w3 = loadModule(makeCtx({ fetch: async (url) => {
+    if (url.indexOf('/api/news/calendar') >= 0) return { ok: false, status: 502, text: async () => '' };
+    if (url.indexOf('alternative.me') >= 0) return { ok: true, text: async () => FNG_JSON };
+    if (url.indexOf('cointelegraph.com') >= 0) return { ok: true, text: async () => RSS_CT };
+    return { ok: false, status: 404, text: async () => '' };
+  }, AbortController }));
+  await w3.hgNewsRefresh(true);
+  const el3 = stubEl();
+  w3.HG_tabs[0].mount(el3);
+  assert(el3.innerHTML.indexOf('calendar fetch failed') >= 0, 'calendar failure shows warn, not empty-week message');
+  assert(el3.innerHTML.indexOf('no high/medium USD events') < 0, 'calendar failure does not claim zero events');
 }
 
 /* ================================================================
@@ -463,7 +477,7 @@ console.log('--- hard-refresh contract ---');
   /* force bypasses the 15-min cache window */
   let calCalls = 0, fngCalls = 0, fngValue = '18';
   const countingFetch = async (url) => {
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0){ calCalls++; return { ok: true, text: async () => FF_XML }; }
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0){ calCalls++; return { ok: true, text: async () => FF_XML }; }
     if (url.indexOf('alternative.me') >= 0){
       fngCalls++;
       const body = JSON.stringify({ data: [{ value: fngValue, value_classification: 'Fear', timestamp: '1783000000' }] });
@@ -487,7 +501,7 @@ console.log('--- hard-refresh contract ---');
   let resolveCal;
   const calGate = new Promise(r => { resolveCal = r; });
   const slowFetch = (url) => {
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0) return calGate.then(() => ({ ok: true, text: async () => FF_XML }));
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0) return calGate.then(() => ({ ok: true, text: async () => FF_XML }));
     if (url.indexOf('alternative.me') >= 0) return Promise.resolve({ ok: true, text: async () => FNG_JSON });
     if (url.indexOf('cointelegraph.com') >= 0) return Promise.resolve({ ok: true, text: async () => RSS_CT });
     return Promise.resolve({ ok: false, status: 404, text: async () => '' });
@@ -504,7 +518,7 @@ console.log('--- hard-refresh contract ---');
 
   /* per-leg failure tolerance: each leg fails independently */
   const wcal = loadModule(makeCtx({ fetch: async (url) => {
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: false, status: 500, text: async () => '' };
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: false, status: 500, text: async () => '' };
     if (url.indexOf('alternative.me') >= 0) return { ok: true, text: async () => FNG_JSON };
     if (url.indexOf('cointelegraph.com') >= 0) return { ok: true, text: async () => RSS_CT };
     return { ok: false, status: 404, text: async () => '' };
@@ -516,7 +530,7 @@ console.log('--- hard-refresh contract ---');
 
   const wfng = loadModule(makeCtx({ fetch: async (url) => {
     if (url.indexOf('alternative.me') >= 0) throw new Error('fng boom');
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
     if (url.indexOf('cointelegraph.com') >= 0) return { ok: true, text: async () => RSS_CT };
     return { ok: false, status: 404, text: async () => '' };
   }, AbortController }));
@@ -527,7 +541,7 @@ console.log('--- hard-refresh contract ---');
 
   const wrss = loadModule(makeCtx({ fetch: async (url) => {
     if (url.indexOf('coindesk.com') >= 0) throw new Error('coindesk boom');
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
     if (url.indexOf('alternative.me') >= 0) return { ok: true, text: async () => FNG_JSON };
     if (url.indexOf('cointelegraph.com') >= 0) return { ok: true, text: async () => RSS_CT };
     return { ok: false, status: 404, text: async () => '' };
@@ -538,7 +552,7 @@ console.log('--- hard-refresh contract ---');
 
   const wrss2 = loadModule(makeCtx({ fetch: async (url) => {
     if (url.indexOf('cointelegraph.com') >= 0 || url.indexOf('coindesk.com') >= 0) return { ok: false, status: 503, text: async () => '' };
-    if (url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
+    if (url.indexOf('/api/news/calendar') >= 0 || url.indexOf('ff_calendar_thisweek.xml') >= 0) return { ok: true, text: async () => FF_XML };
     if (url.indexOf('alternative.me') >= 0) return { ok: true, text: async () => FNG_JSON };
     return { ok: false, status: 404, text: async () => '' };
   }, AbortController }));

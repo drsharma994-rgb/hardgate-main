@@ -38,16 +38,36 @@ function coindcxCacheTtl(urlStr){
   return 0;
 }
 
-function cacheGet(urlStr){
-  var ttl = coindcxCacheTtl(urlStr);
+function proxyCacheTtl(urlStr){
+  var coindcx = coindcxCacheTtl(urlStr);
+  if (coindcx) return coindcx;
+  if (!urlStr) return 0;
+  if (urlStr.indexOf('faireconomy.media') !== -1 && urlStr.indexOf('ff_calendar') !== -1) return 30 * 60 * 1000;
+  if (urlStr.indexOf('cointelegraph.com') !== -1 || urlStr.indexOf('coindesk.com') !== -1) return 10 * 60 * 1000;
+  return 0;
+}
+
+function proxyCacheStaleMax(urlStr){
+  if (!urlStr) return 0;
+  if (urlStr.indexOf('faireconomy.media') !== -1) return 7 * 24 * 3600 * 1000;
+  if (urlStr.indexOf('cointelegraph.com') !== -1 || urlStr.indexOf('coindesk.com') !== -1) return 24 * 3600 * 1000;
+  var ttl = proxyCacheTtl(urlStr);
+  return ttl ? ttl * 4 : 0;
+}
+
+function cacheGet(urlStr, allowStale){
+  var ttl = proxyCacheTtl(urlStr);
   if (!ttl) return null;
   var hit = __responseCache.get(urlStr);
-  if (!hit || (Date.now() - hit.at) > ttl) return null;
-  return hit;
+  if (!hit) return null;
+  var age = Date.now() - hit.at;
+  if (age <= ttl) return hit;
+  if (allowStale && proxyCacheStaleMax(urlStr) && age <= proxyCacheStaleMax(urlStr)) return hit;
+  return null;
 }
 
 function cacheSet(urlStr, status, text, contentType){
-  if (!coindcxCacheTtl(urlStr)) return;
+  if (!proxyCacheTtl(urlStr)) return;
   __responseCache.set(urlStr, { at: Date.now(), status: status, text: text, contentType: contentType });
 }
 
@@ -133,7 +153,7 @@ module.exports = async (req, res) => {
     return sendJson(res, 403, { error: 'host not allowed' }, req);
   }
 
-  const cached = cacheGet(target.toString());
+  const cached = cacheGet(target.toString(), false);
   if (cached){
     return send(res, cached.status, cached.text, {
       'Content-Type': cached.contentType || 'application/json; charset=utf-8',
@@ -160,7 +180,17 @@ module.exports = async (req, res) => {
     });
     const text = await upstream.text();
     const ctype = upstream.headers.get('content-type') || 'text/plain; charset=utf-8';
-    if (upstream.ok) cacheSet(target.toString(), upstream.status, text, ctype);
+    const urlKey = target.toString();
+    if (upstream.ok) cacheSet(urlKey, upstream.status, text, ctype);
+    if (!upstream.ok && (upstream.status === 429 || upstream.status >= 500)){
+      const stale = cacheGet(urlKey, true);
+      if (stale){
+        return send(res, stale.status, stale.text, {
+          'Content-Type': stale.contentType || ctype,
+          'X-HG-Cache': 'stale',
+        }, req);
+      }
+    }
     // pass through status + body; forward only content-type (fetch already
     // decoded any gzip, so content-length/encoding must NOT be forwarded)
     send(res, upstream.status, text, {

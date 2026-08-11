@@ -34,6 +34,7 @@ import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 const require = createRequire(import.meta.url);
 const proxyHandler = require('../api/proxy.js');
 const fredHandler = require('../api/fred.js');
+const newsCalendarHandler = require('../api/news-calendar.js');
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));   /* repo root (trailing sep) */
 const PORT = +(process.env.PORT || 10000);
@@ -91,6 +92,7 @@ const server = http.createServer(async (req, res) => {
     const u = new URL(req.url || '/', 'http://localhost');
     if (u.pathname === '/api/proxy') return proxyHandler(req, res);
     if (u.pathname === '/api/fred') return fredHandler(req, res);
+    if (u.pathname === '/api/news/calendar') return newsCalendarHandler(req, res);
     /* squeeze-watch status: armed? last cycle? fires? — no secrets, counts only */
     if (u.pathname === '/api/squeeze-watch'){
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -185,7 +187,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log('HARDGATE listening on :' + PORT));
+server.listen(PORT, function(){
+  console.log('HARDGATE listening on :' + PORT);
+  if (typeof newsCalendarHandler.warmNewsCalendar === 'function'){
+    setTimeout(function(){
+      newsCalendarHandler.warmNewsCalendar().then(function(ok){
+        console.log('[news] calendar warm ' + (ok ? 'ok' : 'deferred (will retry on first tab open)'));
+      }).catch(function(){});
+    }, 1200);
+  }
+});
 
 hgAssertCcxtBoot().then(function(r){
   if (!r.ok) console.error('[EXEC FATAL] ' + r.reason);

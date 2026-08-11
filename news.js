@@ -7,8 +7,9 @@ the rest of the terminal consumes via window.hgNewsRisk(symbol).
 Sources (all free, no key, all CORS-safe):
   1) ForexFactory weekly calendar XML
        https://nfs.faireconomy.media/ff_calendar_thisweek.xml
-     fetched via the same-origin /api/proxy?url=<encoded> (host allowlisted
-     in api/proxy.js). High/medium-impact events are parsed; USD events flag
+     fetched via same-origin /api/news/calendar (deduplicated server cache;
+     one upstream fetch per 30 min per instance — avoids FF rate limits on the
+     shared Render egress IP). High/medium-impact events are parsed; USD events
      ALL crypto symbols AND gold (XAU/PAXG). Times are US Eastern (ET);
      converted to UTC with the US DST rule (2nd Sun Mar -> 1st Sun Nov).
   2) alternative.me Fear & Greed  https://api.alternative.me/fng/?limit=1
@@ -51,7 +52,7 @@ var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined' ? globalThis : this);
 
 /* ---------------- tunables ---------------- */
-var FF_URL      = 'https://nfs.faireconomy.media/ff_calendar_thisweek.xml';
+var FF_URL      = '/api/news/calendar';
 var FNG_URL     = 'https://api.alternative.me/fng/?limit=1';
 var RSS_SOURCES = [
   { url: 'https://cointelegraph.com/rss',                          source: 'cointelegraph' },
@@ -70,6 +71,7 @@ var GOLD_BASES = { XAU:1, PAXG:1, GOLD:1, XAUUSD:1 };
 /* ---------------- module cache (the ONLY async-fed state) ---------------- */
 var NEWS = {
   loaded: false,          // true once at least one calendar/headline leg landed
+  calendarOk: false,    // true once a calendar XML leg parsed with events
   at: 0,                  // Date.now() of last successful refresh
   events: [],             // parsed FF calendar events (all impacts kept; filtered later)
   headlines: [],          // scored headlines, sorted by score desc
@@ -382,15 +384,24 @@ async function hgNewsRefresh(force){
     var errors = [];
     var gotSomething = false;
 
-    // leg 1: ForexFactory weekly calendar via the same-origin proxy
+    // leg 1: ForexFactory weekly calendar via deduplicated same-origin endpoint
     try{
-      var xml = await __fetchText(PROXY(FF_URL));
+      var xml = await __fetchText(FF_URL);
       if (xml){
         var evs = parseFFCalendar(xml);
-        if (evs.length){ NEWS.events = evs; gotSomething = true; }
-        else errors.push('calendar: no events parsed');
-      } else errors.push('calendar: proxy fetch failed');
-    }catch(e){ errors.push('calendar: ' + (e && e.message)); }
+        if (evs.length){ NEWS.events = evs; gotSomething = true; NEWS.calendarOk = true; }
+        else {
+          errors.push('calendar: no events parsed');
+          NEWS.calendarOk = NEWS.events.length > 0;
+        }
+      } else {
+        errors.push('calendar: fetch failed');
+        NEWS.calendarOk = NEWS.events.length > 0;
+      }
+    }catch(e){
+      errors.push('calendar: ' + (e && e.message));
+      NEWS.calendarOk = NEWS.events.length > 0;
+    }
 
     // leg 2: alternative.me fear & greed (direct, CORS-open)
     try{
@@ -481,7 +492,7 @@ function renderNews(el){
         ? '<div class="note warn" style="margin-top:6px">degraded legs: ' + esc(NEWS.errors.join(' · ')) + '</div>'
         : '')
     + '<div class="note" style="margin-top:6px">Blackout rule: no new entries 1h before → 1h after high-impact USD events. '
-    + 'USD events flag ALL crypto symbols and gold (XAU/PAXG). Sources: ForexFactory weekly calendar (via /api/proxy), '
+    + 'USD events flag ALL crypto symbols and gold (XAU/PAXG). Sources: ForexFactory weekly calendar (via /api/news/calendar), '
     + 'alternative.me F&amp;G, CoinTelegraph/CoinDesk RSS.</div>'
     + '</div>';
 
@@ -492,7 +503,7 @@ function renderNews(el){
     var v = NEWS.fng.value;
     html += '<div class="row" style="align-items:baseline">'
       + '<span class="big" style="color:' + fngColor(v) + '">' + v + '</span>'
-      + '<span class="gpip' + ((v <= 25 || v >= 75) ? '' : ' ok') + '" style="font-size:11px">' + esc(NEWS.fng.classification.toUpperCase() || '—') + '</span>'
+      + '<span class="gpip' + ((v <= 25 || v >= 75) ? '' : ' ok') + '" style="font-size:11px">' + esc(String(NEWS.fng.classification || '').toUpperCase() || '—') + '</span>'
       + '</div>'
       + '<div class="prog" style="display:block;margin-top:10px"><i style="width:' + Math.max(0, Math.min(100, v)) + '%;background:' + fngColor(v) + '"></i></div>'
       + '<div class="note" style="margin-top:6px">&lt;25 extreme fear (contrarian long tail) · &gt;75 extreme greed (crowded longs). Context only — never a standalone signal.</div>';
@@ -528,7 +539,10 @@ function renderNews(el){
     return (e.impact === 'high' || e.impact === 'med') && e.country === 'USD';
   });
   if (!NEWS.loaded){
-    html += '<div class="empty">calendar not loaded — REFRESH NEWS fetches this week\'s events via the same-origin proxy.</div>';
+    html += '<div class="empty">calendar not loaded — REFRESH NEWS fetches this week\'s events via /api/news/calendar.</div>';
+  } else if (!NEWS.calendarOk){
+    html += '<div class="empty warn">calendar fetch failed — ForexFactory may be rate-limiting the server. '
+      + 'Fear/greed and headlines still load; hit REFRESH NEWS in a minute or two.</div>';
   } else if (!evs.length){
     html += '<div class="empty">no high/medium USD events on this week\'s calendar.</div>';
   } else {
@@ -569,7 +583,7 @@ function renderNews(el){
           var sentCls = h.sentiment === 'bullish' ? 'pass' : (h.sentiment === 'bearish' ? 'veto' : 'na');
           var age = h.t ? __countdown(h.t, nowMs).replace('in ', '') : '—';
           return '<div class="lrow">'
-            + '<span class="gid">' + esc(h.source.slice(0, 4).toUpperCase()) + '</span>'
+            + '<span class="gid">' + esc(String(h.source || 'rss').slice(0, 4).toUpperCase()) + '</span>'
             + '<span class="gname">' + (h.link ? '<a href="' + esc(h.link) + '" target="_blank" rel="noopener" style="color:inherit">' + esc(h.title) + '</a>' : esc(h.title)) + '</span>'
             + '<span class="gdetail">' + esc(age) + (h.tags.length ? ' · ' + esc(h.tags.join(', ')) : '') + '</span>'
             + '<span class="stamp ' + sentCls + '">' + h.sentiment.toUpperCase() + '</span>'
@@ -633,7 +647,7 @@ W.__hgNewsSeed = function(events, fng, headlines){
   return NEWS;
 };
 W.__hgNewsReset = function(){
-  NEWS.loaded = false; NEWS.at = 0; NEWS.events = []; NEWS.headlines = []; NEWS.fng = null; NEWS.errors = [];
+  NEWS.loaded = false; NEWS.calendarOk = false; NEWS.at = 0; NEWS.events = []; NEWS.headlines = []; NEWS.fng = null; NEWS.errors = [];
 };
 
 /* BRAIN warm-up hook: force a fresh calendar/F&G/headline fetch so the
