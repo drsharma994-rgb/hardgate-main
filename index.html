@@ -2045,6 +2045,7 @@ function smartCardHTML(r){
   const tierLabel = (typeof hgSetupTierLabel === 'function') ? hgSetupTierLabel(tier) : (tier === 'near' ? 'NEAR' : (tier === 'forming' ? 'FORMING' : 'CLEAN'));
   const badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
+  const visionChip = (r.visionChip && s && s.confirmed) ? ' <span class="gpip ok">' + String(r.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
   const regime = r.cls.regime.length ? r.cls.regime.join(' · ') + '. ' : '';
   const planTxt = s
     ? regime + (s.entryType ? String(s.entryType) + ' ' : 'ENTRY ') + '<b>' + px(s.entry) + '</b> · STOP <b>' + px(s.stop) + '</b> · T1 <b>' + px(s.t1) + '</b> (' + fmt(s.rr1, 1) + 'R)'
@@ -2065,7 +2066,7 @@ function smartCardHTML(r){
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
   return '<div class="card ' + r.cls.dir + tierCls + '">'
-    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE · ' + tierLabel + badge
+    + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE · ' + tierLabel + badge + visionChip
       + (s && typeof hgBookStampChip === 'function' ? hgBookStampChip(r.venueSym || r.sym, s.dir, { scanner: 'smart', strategy: 'smart' }) : '')
       + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
     + '<div class="mini">'
@@ -2083,6 +2084,7 @@ function smartCardHTML(r){
       + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('') + '</div>'
     + (s && s.stack && typeof hgSetupStackMiniHtml === 'function' ? hgSetupStackMiniHtml(s.stack) : '')
     + '<div class="plan">' + planTxt + '</div>'
+    + (s && s.confirmed && typeof hgChartVisionCardBlock === 'function' ? hgChartVisionCardBlock(r) : '')
     + (s ? '<div class="hgchart" id="hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '') + '"></div>' : '')
     + tradeBtn
     + bookBtn
@@ -2214,6 +2216,24 @@ async function runSmartScan(opts){
         if (r.setup && r.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')), r.rows4h,
           { dir: r.setup.dir, entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1, t2: r.setup.t2 });
       });
+      if (typeof hgChartVisionEnrichDeskRows === 'function'){
+        var smartWraps = results.filter(function(r){ return r.setup && r.setup.confirmed && r.rows4h; }).map(function(r){
+          return {
+            sym: r.sym, dir: r.setup.dir, rows: r.rows4h, entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1,
+            clean7: true, style: 'smart', asset: 'crypto', timeframe: '4h', formationScore: r.setup.formationScore, __ref: r
+          };
+        });
+        hgChartVisionEnrichDeskRows(smartWraps, function(w){ return w.rows; }, {
+          limit: 12,
+          repaint: function(){
+            cardsEl.innerHTML = results.map(smartCardHTML).join('');
+            results.forEach(function(r){
+              if (r.setup && r.rows4h && typeof hgMiniChart === 'function') hgMiniChart($('hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')), r.rows4h,
+                { dir: r.setup.dir, entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1, t2: r.setup.t2 });
+            });
+          }
+        });
+      }
     }
     const nSetup = results.filter(function(r){ return !!r.setup; }).length;
     const nConf = results.filter(function(r){ return r.setup && r.setup.confirmed; }).length;
@@ -3246,12 +3266,23 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const bookStamp = (typeof hgBookStampChip === 'function')
     ? hgBookStampChip(sym, dir, { scanner: scanId, strategy: stratId, t2: bookMeta.t2, stack: bookMeta.stack, fund: bookMeta.fund, klass: bookMeta.klass, venue: bookMeta.venue })
     : '';
+  const visionHtml = (typeof hgChartVisionCardBlock === 'function')
+    ? hgChartVisionCardBlock({
+        visionChip: bookMeta.visionChip,
+        visionNextBar: bookMeta.visionNextBar,
+        visionNextMove: bookMeta.visionNextMove,
+        visionPrediction: bookMeta.visionPrediction
+      })
+    : '';
+  const visionChipHtml = bookMeta.visionChip
+    ? ' <span class="gpip ok">' + String(bookMeta.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
   return `<div class="card ${dir}${tierCls}">
-    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}</div>
+    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     ${stackHtml}
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
+    ${visionHtml}
     ${cid?`<div class="hgchart" id="${cid}"></div>`:''}
     ${tradeable ? `<button class="toTrade" onclick="${onclickAttr}">SEND TO TRADE PLAN →</button>` : ''}
     ${bookBtn}
@@ -3424,6 +3455,8 @@ function hgSetupCardExtras(hit, t, kind){
     if (hit && hit.t1Source) extras.push(['T1 source', hit.t1Source + (hit.t2Source ? ' · T2 ' + hit.t2Source : '')]);
     if (hit && hit.partialPolicy) extras.push(['partials', hit.partialPolicy]);
     if (hit && hit.formationScore != null) extras.push(['formation', String(hit.formationScore) + '/100']);
+    if (hit && hit.visionNextBar) extras.push(['next bar', hit.visionNextBar]);
+    else if (hit && hit.visionNextMove) extras.push(['chart vision', hit.visionNextMove]);
     if (hit && hit.sessionNote) extras.push(['session', hit.sessionNote]);
     if (typeof brainConvictionMesh === 'function' && typeof hgSetupConvictionMeshHtml === 'function'){
       const last = (typeof __hgBrainLast !== 'undefined' && __hgBrainLast) ? __hgBrainLast : null;
@@ -3465,7 +3498,9 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
   ].concat(hgSetupCardExtras(hit, t, 'swing'));
   if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, cardMini, gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
     entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
-  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack }));
+  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack,
+    visionChip: hit.visionChip, visionNextBar: hit.visionNextBar, visionNextMove: hit.visionNextMove, visionPrediction: hit.visionPrediction }));
+  hit.__visionChartId = chartId;
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
 }
@@ -3530,7 +3565,9 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
   ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
     planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
       entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
-    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack }));
+    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack,
+    visionChip: hit.visionChip, visionNextBar: hit.visionNextBar, visionNextMove: hit.visionNextMove, visionPrediction: hit.visionPrediction }));
+  hit.__visionChartId = chartId;
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), m15, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
 }
@@ -3963,6 +4000,7 @@ async function runScanLeg(kind, opts){
   }
   let cands = [];
   let nearCands = [];
+  let cleanHits = [];
   let uni = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
@@ -4062,6 +4100,7 @@ async function runScanLeg(kind, opts){
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
+              cleanHits.push({ t: tScan, hit: hit, venueTag: venueTag });
               renderSwingCleanCard(tScan, hit, cardsEl, quiet, venueTag);
               return;
             }
@@ -4140,6 +4179,7 @@ async function runScanLeg(kind, opts){
               }
               found++;
               cands.push(hgCryptoCandRow(t, hit, venueTag, hit));
+              cleanHits.push({ t: tScan, hit: hit, venueTag: venueTag });
               renderScalpCleanCard(tScan, hit, minsToFunding, cardsEl, quiet, venueTag);
             } else if (typeof scalpTryNear === 'function'){
               const nearS = scalpTryNear(h1, m15, tScan, minsToFunding);
@@ -4202,6 +4242,9 @@ async function runScanLeg(kind, opts){
     try{ await refreshCryptoWatch(kind, uni, cands.map(function(c){ return c.sym; }), { quiet: quiet }); }catch(e){ console.warn('crypto watch', e); }
     if (typeof hgGateFlipAlerts === 'function' && flipRecords.length){
       try{ hgGateFlipAlerts(kind, flipVenue, flipRecords); }catch(eFlip){}
+    }
+    if (!quiet && dualLast && cleanHits.length && typeof hgChartVisionEnrichCryptoScan === 'function'){
+      hgChartVisionEnrichCryptoScan({ kind: kind, cleanHits: cleanHits, limit: 12 });
     }
     return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands, nearCands: nearCands, audit: audit, statText: statText };
   }catch(e){
@@ -6080,6 +6123,31 @@ function bestStackHtml(w){
   return hgSetupStackMiniHtml(w.stack);
 }
 
+function bestVisionChipHtml(w){
+  if (!w || !w.visionChip) return '';
+  return ' <span class="gpip ok">' + String(w.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
+}
+
+function bestEnrichVision(pool){
+  if (!pool || !pool.length || typeof hgChartVisionEnrichDeskRows !== 'function') return;
+  var wraps = pool.slice(0, 6).map(function(w){
+    return {
+      sym: w.t.symbol, dir: w.dir, rows: w.rows, entry: w.entry, stop: w.stop, t1: w.t1,
+      clean7: true, style: 'best', asset: 'crypto', timeframe: '4h', __ref: w
+    };
+  }).filter(function(b){ return b.dir && b.rows && b.rows.length >= 21; });
+  if (!wraps.length) return;
+  hgChartVisionEnrichDeskRows(wraps, function(b){ return b.rows; }, {
+    limit: 6,
+    repaint: function(){
+      var block = $('bestVisionBlock');
+      if (block && pool[0] && typeof hgChartVisionCardBlock === 'function'){
+        block.innerHTML = hgChartVisionCardBlock(pool[0]) || '';
+      }
+    }
+  });
+}
+
 async function runBest(opts){
   opts = opts || {};
   if (!opts._singleLeg && !opts.singleExchange && typeof hgDualScanEnabled === 'function' && hgDualScanEnabled()){
@@ -6140,7 +6208,7 @@ async function runBest(opts){
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, totalUni) + `
       <div class="panel">
-        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
+        <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}${bestVisionChipHtml(w)}</h2>
         ${bestRegimeMiniHtml(w)}
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
@@ -6148,13 +6216,14 @@ async function runBest(opts){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/${w.famMax||9} FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div id="bestVisionBlock"></div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
         ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
       if (typeof hgMiniChart === 'function') hgMiniChart($('bestChart'), w.rows, {dir:w.dir, entry:w.entry, stop:w.stop, t1:t1, t2:t2});
+      bestEnrichVision(pool);
       $('bestStat').textContent=`done · ${clean.length} CLEAN of ${totalUni} scanned (${universeLabel}) · ${bestFunnel.cleanRaw||clean.length} passed 7/7 · ${(bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)} vetoed`;
     }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
     finally{ setProg('bestProg',null); btn.disabled=false; }
@@ -6197,7 +6266,7 @@ async function runBest(opts){
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, uni.length) + `
       <div class="panel">
-        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}</h2>
+        <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}${bestVisionChipHtml(w)}</h2>
         ${bestRegimeMiniHtml(w)}
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
         <div class="ledger">${w.fam.map(x=>gateRow(x[0], x[1], x[2]?'pass':'na', x[3])).join('')}</div>
@@ -6205,13 +6274,14 @@ async function runBest(opts){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/${w.famMax||9} FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div id="bestVisionBlock"></div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
         ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
         <div class="note"><b>Runners-up (also CLEAN):</b><br>${others}</div>
       </div>`;
     if (typeof hgMiniChart === 'function') hgMiniChart($('bestChart'), w.rows, {dir:w.dir, entry:w.entry, stop:w.stop, t1:t1, t2:t2});
+    bestEnrichVision(pool);
     $('bestStat').textContent=`done · ${clean.length} CLEAN of ${uni.length} scanned (${universeLabel}) · ${(bestFunnel && bestFunnel.cleanRaw) || clean.length} passed 7/7 · ${((bestFunnel && bestFunnel.vetoStale) || 0)+((bestFunnel && bestFunnel.vetoTrap) || 0)} vetoed`;
   }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
   finally{ setProg('bestProg',null); btn.disabled=false; }

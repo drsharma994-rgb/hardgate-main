@@ -1068,11 +1068,14 @@ function cardHTML(r){
       stack: r.stack
     }) : '';
   var stackHtml = (r.stack && typeof W.hgSetupStackMiniHtml === 'function') ? W.hgSetupStackMiniHtml(r.stack) : '';
+  var visionChip = r.visionChip
+    ? ' <span class="gpip ok">' + esc(r.visionChip) + '</span>' : '';
+  var visionHtml = (typeof W.hgChartVisionCardBlock === 'function') ? W.hgChartVisionCardBlock(r) : '';
   return '<div class="card ' + sig.dir + '">'
     + '<div class="chead"><span class="sym">' + esc(sym) + '</span>'
     + '<span class="dir"><span class="stamp pass">' + sig.dir.toUpperCase() + '</span>'
     + ' EDGE · tally ' + (r.tally || 0) + ' · exp ' + fmtSignedR(bt.expR) + ' '
-    + edgeFreshnessChip(sig.barAge) + ' ' + edgeFlowChip(en) + '</span>'
+    + edgeFreshnessChip(sig.barAge) + ' ' + edgeFlowChip(en) + visionChip + '</span>'
     + (typeof W.hgBookStampChip === 'function' ? W.hgBookStampChip(sym, sig.dir, { scanner: 'edge', strategy: 'edge', fund: edgeFund, klass: edgeKlass }) : '')
     + (typeof W.hgTripleStackChipHtml === 'function' ? W.hgTripleStackChipHtml(sym, sig.dir) : '')
     + '</div>'
@@ -1086,7 +1089,7 @@ function cardHTML(r){
     + '<div class="gates">' + gates
     + '<span class="gpip ok">SWING aligned</span>'
     + '<span class="gpip ok">R:R ' + fmtF(sig.rr, 2) + ' · USE ' + (p ? p.useLev : '—') + 'x</span></div>'
-    + planBlock + '<div class="plan">' + record + '</div>' + stackHtml + btn + bookBtn + '</div>';
+    + planBlock + visionHtml + '<div class="plan">' + record + '</div>' + stackHtml + btn + bookBtn + '</div>';
 }
 
 var __edge = { busy: false, ranOnce: false, run: null };
@@ -1262,7 +1265,7 @@ async function edgeScanList(list, fetchCandles, hooks){
         found.push({
           item: item, sym: item.sym, sig: assessed.sig, plan: assessed.plan,
           enrich: assessed.enrich, tally: assessed.tally, bt: bt, candleSrc: src,
-          stack: assessed.stack || null
+          stack: assessed.stack || null, rows4h: rows
         });
       }catch(e){ skipped++; }
     }));
@@ -1368,6 +1371,28 @@ function mount(el){
       var longs = found.filter(function(x){ return x.sig.dir === 'long'; }).length;
       var shorts = found.length - longs;
       cardsEl.innerHTML = found.map(cardHTML).join('');
+      if (typeof W.hgChartVisionEnrichDeskRows === 'function'){
+        var edgeWraps = found.map(function(r){
+          var p = r.plan || {};
+          return {
+            sym: r.sym || (r.item && r.item.sym),
+            dir: r.sig && r.sig.dir,
+            rows4h: r.rows4h,
+            entry: p.entry,
+            stop: p.stop,
+            t1: p.t1,
+            clean7: true,
+            style: 'edge',
+            asset: 'crypto',
+            timeframe: '4h',
+            __ref: r
+          };
+        }).filter(function(w){ return w.dir && w.rows4h && w.rows4h.length >= 21; });
+        W.hgChartVisionEnrichDeskRows(edgeWraps, function(w){ return w.rows4h; }, {
+          limit: 12,
+          repaint: function(){ cardsEl.innerHTML = found.map(cardHTML).join(''); }
+        });
+      }
       setStat('done — ' + found.length + ' SWING-aligned (' + longs + 'L/' + shorts + 'S) · '
         + Math.floor((Date.now() - st.t0) / 1000) + 's');
     }catch(e){

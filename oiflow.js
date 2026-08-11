@@ -394,6 +394,7 @@ function cardHTML(r){
   /* setup badge in the chead, same shape as the SMART $ cards */
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
+  var visionChip = (r.visionChip && s && s.confirmed) ? ' <span class="gpip ok">' + String(r.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
   var planTxt = s
     ? 'ENTRY <b>' + PX(s.entry) + '</b> · STOP <b>' + PX(s.stop) + '</b>'
       + ' · T1 ' + PX(s.t1) + ' (' + FMT(s.rr1, 1) + 'R) · T2 ' + PX(s.t2) + ' (' + FMT(s.rr2, 1) + 'R)'
@@ -414,7 +415,7 @@ function cardHTML(r){
   var stackHtml = (s && s.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(s.stack) : '';
   var chartBox = s ? '<div class="oiflowChart" data-sym="' + r.sym + '" style="height:180px;margin-top:8px"></div>' : '';
   return '<div class="card ' + dirLow + tierCls + '">'
-    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge
+    + '<div class="chead"><span class="sym">' + r.sym + '</span><span class="dir">' + cls.dir + ' · ' + cls.score + ' EVIDENCE · ' + tierLabel + badge + visionChip
       + (s && typeof hgBookStampChip === 'function' ? hgBookStampChip(r.sym, s.dir, { scanner: 'oiflow', strategy: 'oiflow' }) : '')
       + '</span></div>'
     + '<div class="mini">'
@@ -431,6 +432,7 @@ function cardHTML(r){
     + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('')
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
+    + (s && s.confirmed && typeof hgChartVisionCardBlock === 'function' ? hgChartVisionCardBlock(r) : '')
     + stackHtml
     + chartBox
     + tradeBtn
@@ -584,6 +586,23 @@ async function runScan(el){
     });
     cards.innerHTML = results.map(cardHTML).join('');
     paintCharts(cards, results);
+    if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
+      var oiWraps = results.filter(function(r){ return r.setup && r.setup.confirmed && r.rows4h; }).map(function(r){
+        return {
+          sym: r.sym, dir: r.setup.dir, rows4h: r.rows4h,
+          entry: r.setup.entry, stop: r.setup.stop, t1: r.setup.t1,
+          clean7: true, style: 'oiflow', asset: 'crypto', timeframe: '4h',
+          formationScore: r.setup.formationScore, __ref: r
+        };
+      });
+      globalThis.hgChartVisionEnrichDeskRows(oiWraps, function(w){ return w.rows4h; }, {
+        limit: 12,
+        repaint: function(){
+          cards.innerHTML = results.map(cardHTML).join('');
+          paintCharts(cards, results);
+        }
+      });
+    }
     var nSetup = 0, nConf = 0;
     for (var ri = 0; ri < results.length; ri++){
       if (results[ri].setup){ nSetup++; if (results[ri].setup.confirmed) nConf++; }

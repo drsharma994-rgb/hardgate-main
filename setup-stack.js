@@ -313,7 +313,7 @@ function hgSetupStack(inp){
     var vPred = typeof G.hgChartVisionPredictionLine === 'function'
       ? G.hgChartVisionPredictionLine(inp.vision)
       : (inp.vision.outcomeLean || inp.vision.predictedPath || '');
-    var vDetail = vPred || inp.vision.nextMove || 'aligned';
+    var vDetail = (inp.vision.outcomeLean || inp.vision.nextBarOpinion || inp.vision.predictedPath || inp.vision.nextMove || vPred || 'aligned');
     if (vBoost >= 7){
       _bump(technical, _item('Chart vision', (vBias || '?') + ' ' + (vConf != null ? vConf + '%' : '') + ' · ' + vDetail, 'with'), vetoes, cautions);
     } else if (vBoost <= -7){

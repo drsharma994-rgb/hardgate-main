@@ -739,8 +739,10 @@ function trendmxSetupCardHTML(r, tier){
     entry: plan ? plan.entry : null, stop: plan ? plan.stop : null, t1: plan ? plan.t1 : null,
     chartId: (tier === 'clean' && plan) ? ('tmx_' + String(r.sym).replace(/[^A-Za-z0-9]/g, '')) : '',
     stack: stack,
+    visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction,
     bookMeta: { scanner: 'trendmx', strategy: 'trendmx', t2: plan ? plan.t2 : null,
-      venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE' },
+      venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE',
+      visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction },
     note: tier !== 'clean' ? (tier === 'near' ? '6/7 NEAR — watch only, not a ticket.' : 'FORMING — trend signal without CLEAN ticket.') : null
   });
 }
@@ -1144,6 +1146,18 @@ function mountTrendMatrix(el){
       state.golden = (snap && snap.goldenCross) ? snap.goldenCross : [];
       state.venueCounts = vc;
       renderAll();
+      if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
+        var tmClean = state.rows.filter(function(r){
+          var d = tmDirOf(r);
+          if (!d || !r.rows4h) return false;
+          var plan = trendmxPlan(Object.assign({}, r, { dir: d }));
+          return trendmxRowTier(r, plan) === 'clean';
+        });
+        globalThis.hgChartVisionEnrichDeskRows(tmClean, function(r){ return r.rows4h; }, {
+          limit: 12,
+          repaint: function(){ renderAll(); }
+        });
+      }
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       var venNote = ' · Δ' + (vc.delta || 0) + ' CDX' + (vc.coindcx || 0) + ' BN' + (vc.binance || 0);
       setStatus('raw ' + uniLen + ' · scanned ' + symsLen + venNote

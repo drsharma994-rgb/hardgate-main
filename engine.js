@@ -988,6 +988,9 @@ function cardHTML(r){
   var badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
       + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
   if (r.visionChip) badge += ' <span class="gpip ok">' + esc(r.visionChip) + '</span>';
+  var visionLine = (r.visionNextBar || r.visionNextMove)
+    ? '<div class="note hg-vision-line" style="margin-top:6px"><b>NEXT BAR:</b> ' + esc(r.visionNextBar || r.visionNextMove)
+      + (r.visionPrediction && r.visionPrediction !== r.visionNextBar ? '<br><b>PATH:</b> ' + esc(r.visionPrediction) : '') + '</div>' : '';
   var verdict = '<div class="verdict ' + dir + '"><div class="vword">' + dir.toUpperCase() + '</div>'
     + '<div class="vwhy"><b>' + res.conviction + ' CONVICTION</b> — ' + res.gatesPassed + ' of 6 gates passed'
     + ' · suggested risk <b>' + FMT(res.riskPct, 2) + '%</b> of equity'
@@ -1025,7 +1028,7 @@ function cardHTML(r){
     + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
     + (typeof G.hgBookStampChip === 'function' ? G.hgBookStampChip(r.sym, dir, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta' }) : '')
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
-    + verdict + mini + trailHtml + planHtml + stackHtml + chartBox + tradeBtn + bookBtn
+    + verdict + mini + trailHtml + planHtml + stackHtml + visionLine + chartBox + tradeBtn + bookBtn
     + '</div>';
 }
 

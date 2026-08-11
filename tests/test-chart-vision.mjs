@@ -16,6 +16,8 @@ import {
   chartVisionPredictOutcome,
   chartVisionMergePrediction,
   chartVisionPredictionLine,
+  chartVisionNextBarOpinion,
+  chartVisionNextBarLine,
 } from '../lib/chart-vision-predict.mjs';
 import { createChartVisionApi } from '../lib/chart-vision-api.mjs';
 import fs from 'node:fs';
@@ -65,6 +67,9 @@ console.log('== outcome prediction ==');
   ok(pred.outcomeLean.indexOf('TP1') >= 0, 'outcome lean favors TP1 when aligned');
   ok(pred.predictedPath.indexOf('T1') >= 0, 'predicted path mentions T1');
   ok(pred.horizonBars >= 1, 'horizon bars set');
+  var nb = chartVisionNextBarOpinion('long', 'long', 'bull continuation', synthUptrend(30), {});
+  ok(nb.indexOf('next bar') >= 0, 'next bar opinion string');
+  ok(chartVisionNextBarLine({ nextBarOpinion: nb }) === nb, 'next bar line helper');
   var merged = chartVisionMergePrediction({ bias: 'long' }, pred);
   ok(merged.outcomeProb === pred.outcomeProb, 'merge prediction fields');
   var line = chartVisionPredictionLine(merged);
@@ -108,7 +113,11 @@ console.log('== wiring ==');
   ok(/G\.hgChartVisionFormationBoost\s=/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'formation boost on window');
   ok(/hgChartVisionRefreshGoldCards/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser gold card refresh helper');
   ok(/hgChartVisionPredictionLine/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser prediction line helper');
-  ok(/visionVetoed|VISION VETO/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'browser applies vision veto demote');
+  ok(/hgChartVisionEnrichCryptoScan/.test(fs.readFileSync(path.join(root, 'chart-vision-desk.js'), 'utf8')), 'crypto scan enrich hook');
+  ok(/hgChartVisionEnrichDeskRows/.test(fs.readFileSync(path.join(root, 'edge.js'), 'utf8')), 'edge tab vision enrich');
+  ok(/hgChartVisionEnrichDeskRows/.test(fs.readFileSync(path.join(root, 'oiflow.js'), 'utf8')), 'oiflow tab vision enrich');
+  ok(/hgChartVisionEnrichDeskRows/.test(fs.readFileSync(path.join(root, 'startradertab.js'), 'utf8')), 'startrader tab vision enrich');
+  ok(/bestEnrichVision/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'best tab vision enrich');
   var caps = chartVisionCapabilities({});
   ok(caps.analyzeRoute === '/api/chart-vision/analyze' && caps.outcomePrediction && caps.vetoEnabled, 'capabilities route + prediction + veto default');
 }

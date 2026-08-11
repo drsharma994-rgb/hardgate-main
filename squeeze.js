@@ -597,8 +597,10 @@ function sqSetupCardHTML(r, tier){
       plan: squeezePlanHTML(plan), entry: plan.entry, stop: plan.stop, t1: plan.t1,
       chartId: 'sq_' + String(r.sym).replace(/[^A-Za-z0-9]/g, ''),
       stack: plan.stack,
+      visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction,
       bookMeta: { scanner: 'squeeze', strategy: 'squeeze', t2: plan.t2,
-        venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE' },
+        venue: (typeof W.hgDeskVenueLabel === 'function') ? W.hgDeskVenueLabel(r.exchange) : 'BINANCE',
+        visionChip: r.visionChip, visionNextBar: r.visionNextBar, visionNextMove: r.visionNextMove, visionPrediction: r.visionPrediction },
       note: tier === 'near' ? 'NEAR — against trend, weak vol, or 6/7 gates — watch only.' : null
     });
   }
@@ -1094,6 +1096,13 @@ function mount(el){
       var snap = await squeezeScan({ force: true });
       state.results = (snap && snap.results) ? snap.results : [];
       sqPaintDeskSections(refs, state.results, __scan._filterFn);
+      if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
+        var sqClean = state.results.filter(function(r){ return sqRowTier(r) === 'clean' && r.dir && r.rows4h; });
+        globalThis.hgChartVisionEnrichDeskRows(sqClean, function(r){ return r.rows4h; }, {
+          limit: 12,
+          repaint: function(){ sqPaintDeskSections(refs, state.results, __scan._filterFn); }
+        });
+      }
       if (funnelEl){
         funnelEl.innerHTML = sqFunnelHTML({
           uni: snap.uniLen, failed: snap.failed, fired: snap.fired,
