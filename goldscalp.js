@@ -437,6 +437,33 @@ var GS_CSS = ''
 + '.gsx-weekend-caution,.gsx-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
 + '.gsx-weekend-warn,.gsx-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
 
+function gsxSt(s){ return ' style="' + s + '"'; }
+var GSX_CARD = 'background:#0F172A!important;color:#F8FAFC!important;border-color:#334155!important';
+var GSX_SYM = 'color:#F8FAFC!important;font-weight:800';
+var GSX_STRAT = 'color:#FBBF24!important;font-weight:800';
+var GSX_MINI = 'color:#E2E8F0!important';
+var GSX_K = 'color:#94A3B8!important;font-weight:700';
+var GSX_V = 'color:#F8FAFC!important;font-weight:600';
+var GSX_PLAN = 'background:#1E293B!important;border:1px solid #475569!important;color:#E2E8F0!important';
+var GSX_PLAN_B = 'color:#67E8F9!important';
+var GSX_NOTE = 'color:#CBD5E1!important';
+var GSX_GPIP = 'background:rgba(30,41,59,.85)!important;border:1px solid #475569!important;color:#CBD5E1!important';
+var GSX_GPIP_OK = 'background:rgba(52,211,153,.18)!important;border:1px solid rgba(52,211,153,.55)!important;color:#6EE7B7!important';
+var GSX_WHY = 'color:#E2E8F0!important';
+function gsxPipAttr(ok){ return gsxSt(ok ? GSX_GPIP_OK : GSX_GPIP); }
+
+(function hgInjectGsCss(){
+  try{
+    if (typeof document === 'undefined') return;
+    var id = 'hg-gsx-styles';
+    if (document.getElementById(id)) return;
+    var el = document.createElement('style');
+    el.id = id;
+    el.textContent = GS_CSS;
+    (document.head || document.documentElement).appendChild(el);
+  }catch(e){}
+})();
+
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
   if (!Array.isArray(c.tallyParts) || !c.tallyParts.length) return '';
@@ -483,8 +510,8 @@ function bannerHTML(best, ranked){
 function cardHTML(c, isBest, season){
   var dirUp = c.dir.toUpperCase();
   var gradeCls = c.grade === 'A' ? 'ok' : '';
-  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok">' + esc(x) + '</span>'; }).join('');
-  if (c.oppose > 0) chips += '<span class="gpip">' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
+  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(x) + '</span>'; }).join('');
+  if (c.oppose > 0) chips += '<span class="gpip"' + gsxPipAttr(false) + '>' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
   var newsBanner = c.newsCaution
     ? '<div class="note warn" style="margin-top:8px">NEWS-FADE — ' + esc(c.newsStamp || '') + '</div>' : '';
   var notes = (c.notes && c.notes.length)
@@ -533,11 +560,11 @@ function cardHTML(c, isBest, season){
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
-  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
-  if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
-  if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
-  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
-  if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>formation ' + c.formationScore + '</span>';
+  if (isFinite(c.fillProb)) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>fill ~' + Math.round(c.fillProb * 100) + '%</span>';
+  if (c.goldProChip) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(c.visionChip) + '</span>';
+  if (c.entryType) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.entryType) + '</span>';
   var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
     if (!v) return false;
     if (i > 0 && v === a[0]) return false;
@@ -545,33 +572,33 @@ function cardHTML(c, isBest, season){
   }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsx-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
-  return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '">'
-    + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
+  return '<div class="card gsx-card ' + c.dir + (isBest ? ' best' : '') + '"' + gsxSt(GSX_CARD) + '>'
+    + '<div class="chead"><span class="sym"' + gsxSt(GSX_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsx-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold' }) : '')
     + '</div>'
-    + '<div class="gsx-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
-    + '<div class="mini">'
-    + '<span class="k">venue</span><span>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
-    + '<span class="k">reads</span><span>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
-    + '<span class="k">killzone</span><span>' + esc(c.killzone) + '</span>'
-    + '<span class="k">ATR14 15m</span><span>' + pxF(c.atr) + '</span>'
-    + '<span class="k">R:R</span><span>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2)</span>'
+    + '<div class="gsx-strat"' + gsxSt(GSX_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
+    + '<div class="mini"' + gsxSt(GSX_MINI) + '>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>venue</span><span' + gsxSt(GSX_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>reads</span><span' + gsxSt(GSX_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>killzone</span><span' + gsxSt(GSX_V) + '>' + esc(c.killzone) + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>ATR14 15m</span><span' + gsxSt(GSX_V) + '>' + pxF(c.atr) + '</span>'
+    + '<span class="k"' + gsxSt(GSX_K) + '>R:R</span><span' + gsxSt(GSX_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2)</span>'
     + '</div>'
     + '<div class="gates">'
-    + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
-    + '<span class="gpip">' + esc(c.killzone) + '</span>'
+    + '<span class="gpip ' + gradeCls + '"' + gsxPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
+    + '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.killzone) + '</span>'
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
-    + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
-    + ' · ENTRY <b>$' + pxF(c.entry) + '</b>'
-    + ' · STOP <b>$' + pxF(c.stop) + '</b>'
-    + ' · TP1 <b>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
-    + ' · TP2 <b>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
+    + '<div class="plan"' + gsxSt(GSX_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
+    + ' · ENTRY <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
+    + ' · STOP <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.stop) + '</b>'
+    + ' · TP1 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
+    + ' · TP2 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + '</div>'
     + mgmtBlock + guideBlock
-    + (c.why ? '<div class="gsx-whyline">' + esc(c.why) + '</div>' : '')
+    + (c.why ? '<div class="gsx-whyline"' + gsxSt(GSX_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine

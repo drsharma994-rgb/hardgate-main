@@ -535,6 +535,32 @@ var GW_CSS = ''
 + '.gsw-weekend-caution,.gsw-weekend-caution{border-color:#FDE68A;background:#FFFBEB;color:#92400E}'
 + '.gsw-weekend-warn,.gsw-weekend-warn{border-color:rgba(220,38,38,.35);background:#FEF2F2;color:#B91C1C}';
 
+function gswSt(s){ return ' style="' + s + '"'; }
+var GSW_CARD = 'background:#0F172A!important;color:#F8FAFC!important;border-color:#334155!important';
+var GSW_SYM = 'color:#F8FAFC!important;font-weight:800';
+var GSW_STRAT = 'color:#FBBF24!important;font-weight:800';
+var GSW_MINI = 'color:#E2E8F0!important';
+var GSW_K = 'color:#94A3B8!important;font-weight:700';
+var GSW_V = 'color:#F8FAFC!important;font-weight:600';
+var GSW_PLAN = 'background:#1E293B!important;border:1px solid #475569!important;color:#E2E8F0!important';
+var GSW_PLAN_B = 'color:#67E8F9!important';
+var GSW_GPIP = 'background:rgba(30,41,59,.85)!important;border:1px solid #475569!important;color:#CBD5E1!important';
+var GSW_GPIP_OK = 'background:rgba(52,211,153,.18)!important;border:1px solid rgba(52,211,153,.55)!important;color:#6EE7B7!important';
+var GSW_WHY = 'color:#E2E8F0!important';
+function gswPipAttr(ok){ return gswSt(ok ? GSW_GPIP_OK : GSW_GPIP); }
+
+(function hgInjectGswCss(){
+  try{
+    if (typeof document === 'undefined') return;
+    var id = 'hg-gsw-styles';
+    if (document.getElementById(id)) return;
+    var el = document.createElement('style');
+    el.id = id;
+    el.textContent = GSW_CSS;
+    (document.head || document.documentElement).appendChild(el);
+  }catch(e){}
+})();
+
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
   if (!Array.isArray(c.tallyParts) || !c.tallyParts.length) return '';
@@ -582,8 +608,8 @@ function bannerHTML(best, ranked){
 function cardHTML(c, isBest, season){
   var dirUp = c.dir.toUpperCase();
   var gradeCls = c.grade === 'A' ? 'ok' : '';
-  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok">' + esc(x) + '</span>'; }).join('');
-  if (c.oppose > 0) chips += '<span class="gpip">' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
+  var chips = (c.confluence || []).map(function(x){ return '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(x) + '</span>'; }).join('');
+  if (c.oppose > 0) chips += '<span class="gpip"' + gswPipAttr(false) + '>' + c.oppose + ' opposing read' + (c.oppose === 1 ? '' : 's') + ' on the books</span>';
   var newsBanner = c.newsCaution
     ? '<div class="note warn" style="margin-top:8px">NEWS-FADE — ' + esc(c.newsStamp || '') + '</div>' : '';
   var notes = (c.notes && c.notes.length)
@@ -606,11 +632,11 @@ function cardHTML(c, isBest, season){
     ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
-  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok">formation ' + c.formationScore + '</span>';
-  if (isFinite(c.fillProb)) metaChips += '<span class="gpip">fill ~' + Math.round(c.fillProb * 100) + '%</span>';
-  if (c.goldProChip) metaChips += '<span class="gpip ok">' + esc(c.goldProChip) + '</span>';
-  if (c.visionChip) metaChips += '<span class="gpip ok">' + esc(c.visionChip) + '</span>';
-  if (c.entryType) metaChips += '<span class="gpip">' + esc(c.entryType) + '</span>';
+  if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>formation ' + c.formationScore + '</span>';
+  if (isFinite(c.fillProb)) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>fill ~' + Math.round(c.fillProb * 100) + '%</span>';
+  if (c.goldProChip) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(c.goldProChip) + '</span>';
+  if (c.visionChip) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(c.visionChip) + '</span>';
+  if (c.entryType) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>' + esc(c.entryType) + '</span>';
   var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
     if (!v) return false;
     if (i > 0 && v === a[0]) return false;
@@ -618,32 +644,32 @@ function cardHTML(c, isBest, season){
   }).join(' · ');
   var visionLine = visionText
     ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
-  return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '">'
-    + '<div class="chead"><span class="sym">' + esc(c.venue) + '</span>'
+  return '<div class="card gsw-card ' + c.dir + (isBest ? ' best' : '') + '"' + gswSt(GSW_CARD) + '>'
+    + '<div class="chead"><span class="sym"' + gswSt(GSW_SYM) + '>' + esc(c.venue) + '</span>'
     + '<span class="dir">' + dirUp + ' · <span class="gsw-grade ' + esc(c.grade) + '">GRADE ' + esc(c.grade) + '</span></span>'
     + (typeof hgBookStampChip === 'function' ? hgBookStampChip(c.sym, c.dir, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold' }) : '')
     + '</div>'
-    + '<div class="gsw-strat">' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
-    + '<div class="mini">'
-    + '<span class="k">venue</span><span>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
-    + '<span class="k">reads</span><span>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
-    + '<span class="k">session</span><span>' + esc(c.session || 'n/a') + ' (context — swing entries are not session-gated)</span>'
-    + '<span class="k">ATR14 4h</span><span>' + pxF(c.atr) + '</span>'
-    + '<span class="k">R:R</span><span>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2) · 1 : ' + fmtF(c.rr3, 1) + ' (T3)</span>'
+    + '<div class="gsw-strat"' + gswSt(GSW_STRAT) + '>' + esc(c.strategy) + (isBest ? ' · ★ MOST PROBABLE' : '') + '</div>'
+    + '<div class="mini"' + gswSt(GSW_MINI) + '>'
+    + '<span class="k"' + gswSt(GSW_K) + '>venue</span><span' + gswSt(GSW_V) + '>' + esc(c.venue) + (c.sym ? ' · ' + esc(c.sym) : '') + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>reads</span><span' + gswSt(GSW_V) + '>' + c.reads.long + ' long / ' + c.reads.short + ' short · ' + tallyNum + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>session</span><span' + gswSt(GSW_V) + '>' + esc(c.session || 'n/a') + ' (context — swing entries are not session-gated)</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>ATR14 4h</span><span' + gswSt(GSW_V) + '>' + pxF(c.atr) + '</span>'
+    + '<span class="k"' + gswSt(GSW_K) + '>R:R</span><span' + gswSt(GSW_V) + '>1 : ' + fmtF(c.rr, 1) + ' (T1) · 1 : ' + fmtF(c.rr2, 1) + ' (T2) · 1 : ' + fmtF(c.rr3, 1) + ' (T3)</span>'
     + '</div>'
     + '<div class="gates">'
-    + '<span class="gpip ' + gradeCls + '">GRADE ' + c.grade + '</span>'
+    + '<span class="gpip ' + gradeCls + '"' + gswPipAttr(gradeCls === 'ok') + '>GRADE ' + c.grade + '</span>'
     + chips + metaChips
     + '</div>'
     + tallyChips(c)
-    + '<div class="plan">' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
-    + ' · ENTRY <b>$' + pxF(c.entry) + '</b>'
-    + ' · STOP <b>$' + pxF(c.stop) + '</b>'
-    + ' · TP1 <b>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
-    + ' · TP2 <b>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
-    + ' · TP3 <b>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
+    + '<div class="plan"' + gswSt(GSW_PLAN) + '>' + (c.dir === 'long' ? 'BUY' : 'SELL') + ' <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.zone ? c.zone.lo : c.entry) + '–$' + pxF(c.zone ? c.zone.hi : c.entry) + '</b>'
+    + ' · ENTRY <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.entry) + '</b>'
+    + ' · STOP <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.stop) + '</b>'
+    + ' · TP1 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
+    + ' · TP2 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
+    + ' · TP3 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
     + '</div>'
-    + (c.why ? '<div class="gsw-whyline">' + esc(c.why) + '</div>' : '')
+    + (c.why ? '<div class="gsw-whyline"' + gswSt(GSW_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + lockLine
