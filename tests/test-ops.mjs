@@ -156,6 +156,35 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(res.statusCode === 502 && /timeout/.test(JSON.parse(res.body).error), 'proxy abort -> 502 timeout message');
 });
 
+/* ---------------- api/news-calendar.js ---------------- */
+{
+  const newsCal = require('../api/news-calendar.js');
+  const FF_BODY = '<?xml version="1.0"?><weeklyevents><event><title>CPI</title></weeklyevents>';
+  if (typeof newsCal.__testReset === 'function') newsCal.__testReset();
+
+  await withFetch(fetchOk('rate limited', 429, 'text/html'), async () => {
+    const res = mockRes();
+    await newsCal({ method: 'GET' }, res);
+    ok(res.statusCode === 502, 'news calendar cold 429 -> 502 json');
+  });
+
+  if (typeof newsCal.__testReset === 'function') newsCal.__testReset();
+
+  await withFetch(fetchOk(FF_BODY, 200, 'application/xml'), async () => {
+    const res = mockRes();
+    await newsCal({ method: 'GET' }, res);
+    ok(res.statusCode === 200 && res.body === FF_BODY, 'news calendar first fetch -> 200 xml');
+    ok(res.headers['x-hg-cache'] === 'miss' || res.headers['x-hg-cache'] === 'hit', 'news calendar sets X-HG-Cache');
+    let upstreamCalls = 0;
+    await withFetch(async () => { upstreamCalls++; return { status: 200, text: async () => FF_BODY, headers: { get: () => 'application/xml' } }; }, async () => {
+      const res2 = mockRes();
+      await newsCal({ method: 'GET' }, res2);
+      ok(res2.statusCode === 200 && res2.body === FF_BODY, 'news calendar cached fetch -> 200 without re-fetch');
+      ok(upstreamCalls === 0, 'news calendar cache hit skips upstream');
+    });
+  });
+}
+
 /* ---------------- scripts/alert-check.mjs helpers ---------------- */
 
 {
@@ -560,7 +589,7 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   ok(alertSrc.indexOf('bookTryPollFills') >= 0 && alertSrc.indexOf('caps.fillPoll') >= 0,
     'alert-check auto poll-fills when fillPoll configured');
 }
-for (const f of ['../api/proxy.js', '../api/fred.js', '../scripts/alert-check.mjs', '../scripts/server.mjs', '../lib/digest-email.mjs', '../lib/execute-api.mjs']){
+for (const f of ['../api/proxy.js', '../api/news-calendar.js', '../api/fred.js', '../scripts/alert-check.mjs', '../scripts/server.mjs', '../lib/digest-email.mjs', '../lib/execute-api.mjs']){
   try{
     execFileSync(process.execPath, ['--check', fileURLToPath(new URL(f, import.meta.url))], { stdio: 'pipe' });
     ok(true, 'node --check ' + f);

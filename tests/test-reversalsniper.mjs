@@ -39,7 +39,7 @@ ok(W.rsConviction({ triggers: ['meanrev', 'drawdown'], bt: { n: 5, expR: 0.5, wi
 ok(W.rsIsDeskVenue('delta') && W.rsIsDeskVenue('coindcx') && !W.rsIsDeskVenue('binance'),
    'rsIsDeskVenue: delta + coindcx only');
 ok(typeof W.rsLoadUniverse === 'function', 'rsLoadUniverse exported');
-ok(/hg-v254/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v254');
+ok(/hg-v255/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v255');
 ok(/Delta.*CoinDCX.*full universe/i.test(readFileSync(path.join(root, 'reversalsniper.js'), 'utf8')),
    'reversalsniper scans Delta + CoinDCX full universe');
 
