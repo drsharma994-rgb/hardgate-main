@@ -26,6 +26,10 @@ services:
         value: XAUUSD
       - key: GEMINI_MODEL
         value: gemini-3-flash-preview
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
   - type: worker
     name: hardgate-daemon
     runtime: node

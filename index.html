@@ -6400,10 +6400,14 @@ async function sendTelegram(textOrTitle, bodyOptional){
     const j = await res.json().catch(function(){ return null; });
     if (!res || !res.ok){
       const reason = (j && j.reason) ? String(j.reason) : ('HTTP ' + (res && res.status));
+      const hint = (j && j.hint) ? String(j.hint) : '';
       if (res && res.status === 503 && reason.indexOf('TELEGRAM') >= 0){
         return 'Telegram not configured on server — set TELEGRAM_TOKEN + TELEGRAM_CHAT_ID on Render';
       }
-      if (res && res.status === 401) return 'API key required — save HARDGATE_API_SECRET match in Settings → api key';
+      if (res && res.status === 502 && (reason.indexOf('401') >= 0 || reason.toLowerCase().indexOf('unauthorized') >= 0)){
+        return 'Telegram token invalid/revoked — @BotFather → new token → Render + GitHub secrets TELEGRAM_TOKEN';
+      }
+      if (hint) return hint;
       return reason;
     }
     return (j && j.ok) ? true : ('api: ' + JSON.stringify(j).slice(0, 120));
@@ -6427,12 +6431,24 @@ function saveTelegram(){
 }
 async function testTelegram(){
   const stat = $('tgStat');
+  if (stat) stat.textContent = 'checking…';
+  try{
+    const cap = await fetch('/api/notify/capabilities').then(function(r){ return r.json(); }).catch(function(){ return null; });
+    if (cap && cap.telegram === false){
+      if (stat) stat.textContent = 'not configured — set TELEGRAM_TOKEN + TELEGRAM_CHAT_ID on Render';
+      return;
+    }
+    if (cap && cap.tokenOk === false){
+      if (stat) stat.textContent = (cap.tokenHint || cap.tokenError || 'Telegram token invalid') + ' — fix on Render, then TEST again';
+      return;
+    }
+  }catch(eCap){}
   if (stat) stat.textContent = 'sending…';
   const r = await sendTelegram('HARDGATE — Telegram alerts connected ✅ (' + new Date().toTimeString().slice(0, 8) + ')');
   if (stat){
     if (r === true) stat.textContent = 'test sent ✓';
-    else if (String(r).indexOf('401') >= 0){
-      stat.textContent = 'test failed: ' + r + ' — token invalid/revoked; get a fresh one from @BotFather → RESET → TEST. For groups: add the bot + send any message first.';
+    else if (String(r).indexOf('401') >= 0 || String(r).indexOf('invalid') >= 0 || String(r).indexOf('revoked') >= 0){
+      stat.textContent = 'test failed: ' + r + ' — @BotFather → new token → Render + GitHub secrets';
     } else stat.textContent = 'test failed: ' + r;
   }
 }
