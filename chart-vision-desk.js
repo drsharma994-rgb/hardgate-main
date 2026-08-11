@@ -6,7 +6,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var __visionCache = {};
 var __visionBusy = {};
+var __visionCaps = null;
 var VISION_TTL = 8 * 60 * 1000;
+var CAPS_TTL = 60 * 1000;
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
@@ -40,12 +42,105 @@ function hgChartVisionFormationBoost(dir, analysis){
   return -3;
 }
 
+function visionModeBadge(mode){
+  mode = String(mode || 'heuristic').toLowerCase();
+  if (mode.indexOf('gemini-png') >= 0) return 'GEMINI PNG';
+  if (mode.indexOf('gemini') >= 0) return 'GEMINI';
+  return 'HEURISTIC';
+}
+
+function hgChartVisionClientSvg(rows, plan){
+  rows = rows || [];
+  plan = plan || {};
+  if (rows.length < 8) return '';
+  var slice = rows.slice(-80);
+  var w = 820, h = 420, pad = 28;
+  var lo = Infinity, hi = -Infinity;
+  for (var i = 0; i < slice.length; i++){
+    if (slice[i].l < lo) lo = slice[i].l;
+    if (slice[i].h > hi) hi = slice[i].h;
+  }
+  if (fin(+plan.entry)){ lo = Math.min(lo, +plan.entry); hi = Math.max(hi, +plan.entry); }
+  if (fin(+plan.stop)){ lo = Math.min(lo, +plan.stop); hi = Math.max(hi, +plan.stop); }
+  if (fin(+plan.t1)){ lo = Math.min(lo, +plan.t1); hi = Math.max(hi, +plan.t1); }
+  if (!(hi > lo)) return '';
+  var span = hi - lo;
+  function yPrice(v){ return pad + (hi - v) / span * (h - pad * 2); }
+  function xBar(i){ return pad + i / Math.max(1, slice.length - 1) * (w - pad * 2); }
+  var bw = Math.max(2, (w - pad * 2) / slice.length * 0.55);
+  var body = '';
+  for (var k = 0; k < slice.length; k++){
+    var b = slice[k];
+    var cx = xBar(k);
+    var col = b.c >= b.o ? '#22c55e' : '#ef4444';
+    body += '<line x1="' + cx + '" y1="' + yPrice(b.h) + '" x2="' + cx + '" y2="' + yPrice(b.l)
+      + '" stroke="' + col + '" stroke-width="1"/>';
+    var yo = yPrice(Math.max(b.o, b.c));
+    var yc = yPrice(Math.min(b.o, b.c));
+    body += '<rect x="' + (cx - bw / 2) + '" y="' + yc + '" width="' + bw + '" height="' + Math.max(1, yo - yc)
+      + '" fill="' + col + '"/>';
+  }
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h
+    + '" viewBox="0 0 ' + w + ' ' + h + '" style="background:#0d1117">' + body + '</svg>';
+}
+
+async function hgChartVisionSvgToPngBase64(svg){
+  if (!svg || typeof document === 'undefined') return null;
+  try{
+    var blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var img = new Image();
+    await new Promise(function(resolve, reject){
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = url;
+    });
+    var canvas = document.createElement('canvas');
+    canvas.width = 820;
+    canvas.height = 420;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    return canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+  }catch(e){ return null; }
+}
+
+async function hgChartVisionCaps(){
+  if (__visionCaps && Date.now() - __visionCaps.at < CAPS_TTL) return __visionCaps.data;
+  try{
+    var res = await fetch('/api/chart-vision/capabilities');
+    var j = await res.json();
+    __visionCaps = { at: Date.now(), data: j || {} };
+    return __visionCaps.data;
+  }catch(e){
+    return { gemini: false };
+  }
+}
+
+function hgChartVisionSvgBlock(setup){
+  setup = setup || {};
+  var svg = setup.visionSvg;
+  if (!svg || String(svg).indexOf('<svg') < 0) return '';
+  var esc = function(s){
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  };
+  var badge = setup.visionModeBadge
+    ? '<span class="gpip ' + (setup.visionMode && String(setup.visionMode).indexOf('gemini') >= 0 ? 'ok' : '') + '">'
+      + esc(setup.visionModeBadge) + '</span> ' : '';
+  return '<div class="hg-vision-chart" style="margin-top:8px">'
+    + (badge ? '<div class="gates" style="margin-bottom:4px">' + badge + '</div>' : '')
+    + '<div class="hg-vision-svg" style="max-width:100%;overflow:auto;border-radius:6px;border:1px solid rgba(148,163,184,0.25)">'
+    + svg + '</div></div>';
+}
+
 function getChartVisionCached(key){
   try{
     var hit = __visionCache[key];
     if (!hit) return null;
     if (Date.now() - hit.at > VISION_TTL) return null;
-    return hit.analysis;
+    return hit;
   }catch(e){ return null; }
 }
 
@@ -79,19 +174,27 @@ function hgChartVisionIsConfirmed(setup){
   return true;
 }
 
-function hgChartVisionCopyFields(target, analysis){
+function hgChartVisionCopyFields(target, analysis, extras){
   if (!target || !analysis) return target;
+  extras = extras || {};
   target.vision = analysis;
   target.visionChip = visionChip(analysis);
   target.visionNextMove = analysis.nextMove || '';
   target.visionNextBar = visionNextBarLine(analysis);
   target.visionPrediction = visionPredictionLine(analysis);
+  if (extras.svg) target.visionSvg = extras.svg;
+  if (extras.visionMode){
+    target.visionMode = extras.visionMode;
+    target.visionModeBadge = visionModeBadge(extras.visionMode);
+  }
   return target;
 }
 
 function hgChartVisionCardBlock(setup){
   setup = setup || {};
-  if (!setup.visionNextBar && !setup.visionNextMove && !setup.visionPrediction && !setup.visionChip) return '';
+  var hasVision = setup.visionNextBar || setup.visionNextMove || setup.visionPrediction || setup.visionChip;
+  var svgBlock = (typeof hgChartVisionSvgBlock === 'function') ? hgChartVisionSvgBlock(setup) : '';
+  if (!hasVision && !svgBlock) return '';
   var esc = function(s){
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   };
@@ -103,9 +206,11 @@ function hgChartVisionCardBlock(setup){
   if (setup.visionPrediction && setup.visionPrediction !== setup.visionNextBar) {
     lines.push('<b>PATH:</b> ' + esc(setup.visionPrediction));
   }
+  var textBlock = lines.length
+    ? ('<div class="note hg-vision-line">' + lines.join('<br>') + '</div>') : '';
   return '<div class="hg-vision-block" style="margin-top:8px">'
     + (chip ? '<div class="gates">' + chip + '</div>' : '')
-    + '<div class="note hg-vision-line">' + lines.join('<br>') + '</div></div>';
+    + textBlock + svgBlock + '</div>';
 }
 
 function hgChartVisionPatchCardByChartId(chartId, setup){
@@ -172,7 +277,16 @@ async function hgChartVisionAnalyze(setup){
   setup = setup || {};
   var key = visionKey(setup);
   var cached = getChartVisionCached(key);
-  if (cached) return { ok: true, analysis: cached, cached: true, key: key };
+  if (cached && cached.analysis){
+    return {
+      ok: true,
+      analysis: cached.analysis,
+      svg: cached.svg,
+      visionMode: cached.visionMode,
+      cached: true,
+      key: key,
+    };
+  }
 
   if (__visionBusy[key]){
     try{ return await __visionBusy[key]; }catch(e){ return { ok: false, reason: (e && e.message) || String(e) }; }
@@ -183,32 +297,54 @@ async function hgChartVisionAnalyze(setup){
 
   var p = (async function(){
     try{
-      var res = await fetch('/api/chart-vision/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          asset: setup.asset || (/(XAU|XAUT|GOLD|PAXG)/i.test(String(setup.sym || '')) ? 'gold' : 'crypto'),
-          symbol: setup.sym || setup.symbol,
-          timeframe: setup.timeframe || setup.tf || setup.style,
-          dir: setup.dir,
-          rows: rows,
+      var caps = await hgChartVisionCaps();
+      var pngBase64 = null;
+      if (caps && caps.gemini && caps.clientPngAccepted !== false){
+        var clientSvg = setup.visionSvg || hgChartVisionClientSvg(rows, {
+          entry: setup.entry, stop: setup.stop, t1: setup.t1,
+        });
+        if (clientSvg) pngBase64 = await hgChartVisionSvgToPngBase64(clientSvg);
+      }
+      var payload = {
+        asset: setup.asset || (/(XAU|XAUT|GOLD|PAXG)/i.test(String(setup.sym || '')) ? 'gold' : 'crypto'),
+        symbol: setup.sym || setup.symbol,
+        timeframe: setup.timeframe || setup.tf || setup.style,
+        dir: setup.dir,
+        rows: rows,
+        entry: setup.entry,
+        stop: setup.stop,
+        t1: setup.t1,
+        context: {
+          gateClean: !!setup.clean || !!setup.clean7,
+          gatesPassed: setup.gatesPassed,
+          formationScore: setup.formationScore,
           entry: setup.entry,
           stop: setup.stop,
           t1: setup.t1,
-          context: {
-            gateClean: !!setup.clean || !!setup.clean7,
-            formationScore: setup.formationScore,
-            entry: setup.entry,
-            stop: setup.stop,
-            t1: setup.t1,
-            dir: setup.dir,
-          },
-        }),
+          dir: setup.dir,
+        },
+      };
+      if (pngBase64) payload.pngBase64 = pngBase64;
+      var res = await fetch('/api/chart-vision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       var j = await res.json();
       if (!j || !j.ok || !j.analysis) return { ok: false, reason: (j && j.reason) || 'analyze failed' };
-      __visionCache[key] = { at: Date.now(), analysis: j.analysis };
-      return { ok: true, analysis: j.analysis, cached: !!j.cached, key: key, ms: j.ms };
+      __visionCache[key] = { at: Date.now(), analysis: j.analysis, svg: j.svg, visionMode: j.visionMode };
+      return {
+        ok: true,
+        analysis: j.analysis,
+        svg: j.svg,
+        visionMode: j.visionMode,
+        geminiError: j.geminiError,
+        geminiModel: j.geminiModel,
+        pngUsed: j.pngUsed,
+        cached: !!j.cached,
+        key: key,
+        ms: j.ms,
+      };
     }catch(e){
       return { ok: false, reason: (e && e.message) || String(e) };
     }finally{
@@ -220,9 +356,9 @@ async function hgChartVisionAnalyze(setup){
   return p;
 }
 
-function hgChartVisionApply(setup, analysis){
+function hgChartVisionApply(setup, analysis, extras){
   if (!setup || !analysis) return setup;
-  hgChartVisionCopyFields(setup, analysis);
+  hgChartVisionCopyFields(setup, analysis, extras);
   if (analysis.veto){
     setup.visionVetoed = true;
     setup.demoted = true;
@@ -243,6 +379,9 @@ function hgChartVisionApplyToRef(setup, ref){
   ref.visionNextMove = setup.visionNextMove;
   ref.visionNextBar = setup.visionNextBar;
   ref.visionPrediction = setup.visionPrediction;
+  ref.visionSvg = setup.visionSvg;
+  ref.visionMode = setup.visionMode;
+  ref.visionModeBadge = setup.visionModeBadge;
   if (setup.demoted) ref.demoted = true;
   if (setup.demoteReason) ref.demoteReason = setup.demoteReason;
   return ref;
@@ -259,18 +398,31 @@ function hgChartVisionEnrichSetups(setups, getRowsFn, opts){
   }).slice(0, limit);
   if (!list.length) return Promise.resolve([]);
 
-  return Promise.all(list.map(function(s){
+  function enrichOne(s){
     var rows = typeof getRowsFn === 'function' ? getRowsFn(s) : (s.rows || s.rows15m || s.rows4h || []);
     if (!rows || rows.length < 21) return Promise.resolve(s);
     return hgChartVisionAnalyze(Object.assign({}, s, { rows: rows })).then(function(r){
       if (r && r.ok && r.analysis){
-        hgChartVisionApply(s, r.analysis);
+        hgChartVisionApply(s, r.analysis, { svg: r.svg, visionMode: r.visionMode });
         if (s.__ref) hgChartVisionApplyToRef(s, s.__ref);
         if (s.__hitRef) hgChartVisionApplyToRef(s, s.__hitRef);
+        if (typeof opts.onEach === 'function') opts.onEach(s, r);
       }
       return s;
     }).catch(function(){ return s; });
-  }));
+  }
+
+  if (opts.sequential){
+    var seq = Promise.resolve();
+    for (var i = 0; i < list.length; i++){
+      (function(item){
+        seq = seq.then(function(){ return enrichOne(item); });
+      })(list[i]);
+    }
+    return seq.then(function(){ return list; });
+  }
+
+  return Promise.all(list.map(enrichOne));
 }
 
 /** SWING/SCALP scan hook — enrich all clean hits and patch cards in place. */
@@ -386,6 +538,10 @@ G.hgChartVisionCardBlock = hgChartVisionCardBlock;
 G.hgChartVisionPatchCardByChartId = hgChartVisionPatchCardByChartId;
 G.hgChartVisionChip = visionChip;
 G.hgChartVisionPredictionLine = visionPredictionLine;
+G.hgChartVisionSvgBlock = hgChartVisionSvgBlock;
+G.hgChartVisionCaps = hgChartVisionCaps;
+G.hgChartVisionSvgToPngBase64 = hgChartVisionSvgToPngBase64;
+G.hgChartVisionClientSvg = hgChartVisionClientSvg;
 G.hgChartVisionNextBarLine = visionNextBarLine;
 
 })();

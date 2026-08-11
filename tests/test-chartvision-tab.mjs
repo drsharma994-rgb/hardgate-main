@@ -16,11 +16,14 @@ console.log('== chartvision tab wiring ==');
 {
   ok(html.indexOf('chartvision-tab.js') >= 0, 'index loads chartvision-tab.js');
   ok(/chartvision-tab\.js/.test(sw), 'sw shell lists chartvision-tab.js');
-  ok(/hg-v237/.test(sw), 'cache hg-v237');
+  ok(/hg-v238/.test(sw), 'cache hg-v238');
   ok(/chartvision/.test(html) && html.indexOf("'chartvision'") >= 0, 'HG_NAV_GROUPS includes chartvision');
   ok(/HG_tabs\.push\(\{ id: 'chartvision'/.test(tabJs), 'registers chartvision tab');
   ok(/cvEvalSwing/.test(tabJs) && /m\.passed < 6/.test(tabJs), 'filters below 6/7');
   ok(/hgChartVisionEnrichDeskRows/.test(tabJs), 'async chart vision enrich');
+  ok(/sequential:\s*true/.test(tabJs), 'sequential chart vision enrich');
+  ok(/shown\.length/.test(tabJs) && !/VISION_LIMIT/.test(tabJs), 'enriches all shown cards');
+  ok(/hgChartVisionSvgBlock|visionSvg/.test(tabJs), 'tab shows server vision chart');
   ok(/6\/7 NEAR \+ 7\/7 CLEAN/.test(tabJs), 'tab describes gate tiers');
 }
 
