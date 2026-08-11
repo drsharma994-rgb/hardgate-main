@@ -27,6 +27,7 @@ import { createAgentApi } from '../lib/agent-api.mjs';
 import { createAtomicAgentApi } from '../lib/atomic-agent-api.mjs';
 import { createCoindcxApi } from '../lib/coindcx-api.mjs';
 import { createChartVisionApi } from '../lib/chart-vision-api.mjs';
+import { createXmTraderApi } from '../lib/xm-trader-api.mjs';
 import { hgAssertCcxtBoot } from '../lib/hardgate-executor.mjs';
 
 const require = createRequire(import.meta.url);
@@ -48,6 +49,7 @@ const agentHandler = createAgentApi();
 const atomicHandler = createAtomicAgentApi();
 const coindcxHandler = createCoindcxApi();
 const chartVisionHandler = createChartVisionApi();
+const xmTraderHandler = createXmTraderApi();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -148,6 +150,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/coindcx' || u.pathname.indexOf('/api/coindcx/') === 0){
       return coindcxHandler(req, res);
+    }
+    if (u.pathname === '/api/xm' || u.pathname.indexOf('/api/xm/') === 0){
+      return xmTraderHandler(req, res);
     }
     if (u.pathname === '/api/chart-vision' || u.pathname.indexOf('/api/chart-vision/') === 0){
       return chartVisionHandler(req, res);

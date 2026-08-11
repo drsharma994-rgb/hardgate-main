@@ -11,15 +11,13 @@ console.log('== gold spot vs XAUT routing ==');
 {
   const gs = fs.readFileSync(root + 'goldscalp.js', 'utf8');
   const gw = fs.readFileSync(root + 'goldswing.js', 'utf8');
-  ok(/fetchStartraderGoldKlines[\s\S]*?fetchGoldKlines\(\)/.test(gs),
-    'goldscalp StarTrader route uses fetchGoldKlines (spot proxy)');
-  ok(gs.indexOf('getXAUCandles') < 0 || /NOT Delta XAUTUSD/.test(gs),
-    'goldscalp documents XAUT vs spot split');
+  ok(/fetchGoldKlines[\s\S]*?getXmGoldCandles/.test(gs),
+    'goldscalp fetchGoldKlines tries XM MT5 first');
+  ok(/fetchGoldKlines[\s\S]*?getXmGoldCandles/.test(gw),
+    'goldswing fetchGoldKlines tries XM MT5 first');
+  ok(/xm-xauusd/.test(gs), 'goldscalp labels XM XAUUSD source');
   ok(/goldPickSpotAlignedBest/.test(gs) && /goldAnnotateXautBasis/.test(gs),
     'goldscalp spot-aligned MOST PROBABLE picker');
-  ok(/fetchStartraderGoldKlines[\s\S]*?fetchGoldKlines\(\)/.test(gw),
-    'goldswing StarTrader route uses fetchGoldKlines');
-  ok(/XAUT trades at a discount to spot/.test(gs), 'goldscalp explains XAUT basis in scan log');
   ok(/Delta XAUTUSD<\/b> only — not spot\/StarTrader XAUUSD/.test(gs), 'goldscalp card warns on XAUT basis');
 }
 

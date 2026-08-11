@@ -131,7 +131,7 @@ function gfn(name){
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
                   'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
-                  'delta-xaut': 'DELTA XAUTUSD' };
+                  'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
 function stGoldVenueLabel(){
@@ -868,11 +868,28 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
 async function fetchGoldKlines(){
-  var out = { rows4h: [], rows1d: [], source: null };
+  var out = { rows4h: [], rows1d: [], source: null, xmSymbol: null };
+  var xgc = gfn('getXmGoldCandles');
+  if (xgc){
+    try{
+      var xa = await xgc('4h', KL_4H);
+      if (xa && xa.rows && xa.rows.length){ out.rows4h = xa.rows; out.source = xa.source || 'xm-xauusd'; out.xmSymbol = xa.symbol || 'XAUUSD'; }
+    }catch(eXm){}
+    if (!out.rows1d.length){
+      try{
+        var xb = await xgc('1d', KL_1D);
+        if (xb && xb.rows && xb.rows.length){ out.rows1d = xb.rows; if (!out.source) out.source = xb.source || 'xm-xauusd'; }
+      }catch(eXm2){}
+    }
+  }
   var ggc = gfn('getGoldCandles');
   if (ggc){
-    try{ var a = await ggc('4h', KL_4H); if (a && a.rows && a.rows.length){ out.rows4h = a.rows; out.source = a.source; } }catch(e){}
-    try{ var b = await ggc('1d', KL_1D); if (b && b.rows && b.rows.length){ out.rows1d = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
+    if (!out.rows4h.length){
+      try{ var a = await ggc('4h', KL_4H); if (a && a.rows && a.rows.length){ out.rows4h = a.rows; out.source = a.source; } }catch(e){}
+    }
+    if (!out.rows1d.length){
+      try{ var b = await ggc('1d', KL_1D); if (b && b.rows && b.rows.length){ out.rows1d = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
+    }
   }
   if (!out.rows4h.length){
     var bk = gfn('binanceKlines');
@@ -884,10 +901,10 @@ async function fetchGoldKlines(){
   return out;
 }
 
-/* StarTrader XAUUSD CFD — spot-aligned proxy chain (NOT Delta XAUTUSD). */
+/* StarTrader / XM XAUUSD CFD — XM MT5 bridge first, then spot proxy chain. */
 async function fetchStartraderGoldKlines(){
   var out = await fetchGoldKlines();
-  if (!out.source) out.source = 'startrader-xau';
+  if (!out.source) out.source = 'xm-xauusd';
   return out;
 }
 
@@ -1833,8 +1850,10 @@ async function runScan(ui, scanSt){
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
     setProg(ui, 0.45);
     if (gold.rows4h.length){
-      var v = stRoute ? stGoldVenueLabel() : venueLabel(gold.source);
-      var sym1 = stRoute ? ST_GOLD_SYM : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
+      var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
+        : (stRoute ? stGoldVenueLabel() : venueLabel(gold.source));
+      var sym1 = (gold.source === 'xm-xauusd' || stRoute) ? ST_GOLD_SYM
+        : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       venueRows[v] = { rows4h: gold.rows4h };
       var got = buildCandidates(gold, now, newsC, ctx.macro, sessionTxt, v, sym1, microOpts);
       collectWatch(gold, v);
@@ -1846,9 +1865,9 @@ async function runScan(ui, scanSt){
       legs.push('primary gold feed: no 4h klines from any source (macro chain + PAXGUSDT both failed)');
     }
 
-    /* leg 2: Delta XAUTUSD perp (standalone tab only — StarTrader route already uses getXAUCandles) */
+    /* leg 2: Delta XAUTUSD perp (standalone only; skipped when XM MT5 feed is live) */
     var dx = { rows4h: [], rows1d: [], item: null };
-    if (!stRoute){
+    if (!stRoute && gold.source !== 'xm-xauusd'){
       setStat(ui, 'checking Delta XAUTUSD perp…');
       dx = await fetchDeltaXaut();
       setProg(ui, 0.75);
@@ -1865,6 +1884,8 @@ async function runScan(ui, scanSt){
       } else {
         legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
       }
+    } else if (!stRoute && gold.source === 'xm-xauusd'){
+      legs.push('DELTA XAUTUSD: skipped — GOLD SWING uses XM XAUUSD prices');
     }
 
     /* ranking: transparent confluence tally across ALL venues */
