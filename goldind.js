@@ -1651,10 +1651,19 @@ function goldScalpSetups(inp){
       if (c.dropped){ rejected.push(c); return; }
       var mv = __gsMicroVeto(c.dir, c.stratKey, D, bundleOpts);
       if (mv){
-        rejected.push({ dropped: true, id: c.id || null, strategy: c.strategy || null,
-                        stratKey: c.stratKey || null, dir: c.dir,
-                        reason: mv.reason || 'microstructure veto' });
-        return;
+        if (mv.demote){
+          c.demoted = true;
+          if (!Array.isArray(c.stamps)) c.stamps = [];
+          if (c.stamps.indexOf('MACRO YIELD') < 0) c.stamps.push('MACRO YIELD');
+          var gnMv = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+          gnMv.push(mv.reason || 'macro yield conflict — demoted, can never lead');
+          c.gateNotes = gnMv;
+        } else {
+          rejected.push({ dropped: true, id: c.id || null, strategy: c.strategy || null,
+                          stratKey: c.stratKey || null, dir: c.dir,
+                          reason: mv.reason || 'microstructure veto' });
+          return;
+        }
       }
       if (!seen[c.id]){ seen[c.id] = true; out.push(c); }
     }
@@ -2121,12 +2130,12 @@ function __gsMicroVeto(dir, stratKey, D, opts){
     if (dir !== 'long' && dir !== 'short') return null;
     if (opts.us10yCandles){
       var yg = validateYieldCorrelation(opts.us10yCandles, dir);
-      if (yg && !yg.valid) return { reason: yg.reason };
+      if (yg && !yg.valid) return { demote: true, reason: yg.reason };
     } else if (D.scalpEval && D.scalpEval.yieldGuard && !D.scalpEval.yieldGuard.valid){
       var yg2 = D.scalpEval.yieldGuard;
       if ((dir === 'long' && /Do not buy Gold/.test(yg2.reason || ''))
           || (dir === 'short' && /Do not short Gold/.test(yg2.reason || ''))){
-        return { reason: yg2.reason };
+        return { demote: true, reason: yg2.reason };
       }
     }
     if (opts.l2OrderBook){
@@ -2383,22 +2392,28 @@ function goldRankSetups(cands, ctx){
                        + ' — institutional structure/macro alignment', pts: pPts });
         tally += pPts;
       }
-      /* GOLD PRO hard gate — structural bear/bull suppresses counter-structure
-         plays except sanctioned sweep / exhaustion / weekly reclaim / macro. */
+      /* GOLD PRO alignment gate — structural bear/bull demotes counter-structure
+         plays (never MOST PROBABLE) except sanctioned sweep / exhaustion fades. */
       var proExempt = { sweep: 1, adrfade: 1, wkbreak: 1, macro: 1 };
       if (pro && pro.word === 'STRUCTURAL BULL' && c.dir === 'short'
           && !proExempt[c.stratKey]){
-        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
-                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
-                            reason: 'GOLD PRO structural bull — shorts suppressed (only sweep / ADR exhaustion fades allowed)' });
-        continue;
+        c.demoted = true;
+        if (!Array.isArray(c.stamps)) c.stamps = [];
+        if (c.stamps.indexOf('GOLD PRO CONFLICT') < 0) c.stamps.push('GOLD PRO CONFLICT');
+        var gnPro = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+        gnPro.push('GOLD PRO structural bull — counter-structure short demoted (sweep / ADR exhaustion fades still lead-eligible)');
+        c.gateNotes = gnPro;
+        parts.push({ label: 'GOLD PRO structural bull — counter-structure short demoted', pts: 0 });
       }
       if (pro && pro.word === 'STRUCTURAL BEAR' && c.dir === 'long'
           && !proExempt[c.stratKey]){
-        out.rejected.push({ id: c.id || null, strategy: c.strategy || null, stratKey: c.stratKey || null,
-                            dir: c.dir, venue: c.venue || null, sym: c.sym || null,
-                            reason: 'GOLD PRO structural bear — longs suppressed (only sweep / ADR exhaustion fades allowed)' });
-        continue;
+        c.demoted = true;
+        if (!Array.isArray(c.stamps)) c.stamps = [];
+        if (c.stamps.indexOf('GOLD PRO CONFLICT') < 0) c.stamps.push('GOLD PRO CONFLICT');
+        var gnPro2 = Array.isArray(c.gateNotes) ? c.gateNotes.slice() : [];
+        gnPro2.push('GOLD PRO structural bear — counter-structure long demoted (sweep / ADR exhaustion fades still lead-eligible)');
+        c.gateNotes = gnPro2;
+        parts.push({ label: 'GOLD PRO structural bear — counter-structure long demoted', pts: 0 });
       }
       var cvMap = (ctx.crossVenue && typeof ctx.crossVenue === 'object') ? ctx.crossVenue : null;
       if (cvMap && cvMap[c.id] && cvMap[c.id].venues >= 2){
