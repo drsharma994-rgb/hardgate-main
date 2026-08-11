@@ -243,6 +243,12 @@ async function startraderCandles(sym, tf, n){
       return Array.isArray(cr) ? cr : [];
     }
     if (c.gold){
+      if (typeof G.getXmGoldCandles === 'function'){
+        try{
+          var xm = await G.getXmGoldCandles(tf, n);
+          if (xm && xm.rows && xm.rows.length) return xm.rows.slice(-n);
+        }catch(e0){}
+      }
       if (typeof G.getXAUCandles === 'function'){
         try{ return await G.getXAUCandles(tf, n); }catch(e1){}
       }

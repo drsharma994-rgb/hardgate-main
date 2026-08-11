@@ -37,7 +37,7 @@ console.log('== wiring ==');
   ok(/createWorldmonitorApi/.test(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8')), 'server mounts wm api');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('worldmonitor-desk.js') >= 0, 'index loads wm desk');
   ok(/worldmonitor-desk\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell wm desk');
-  ok(/hg-v246/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v246');
+  ok(/hg-v247/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v247');
   ok(fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8').indexOf('World Monitor') >= 0, 'setup-stack wm bumps');
   ok(fs.readFileSync(path.join(root, 'formation-instr-ui.js'), 'utf8').indexOf('hgWorldMonitorDeskPanelHtml') >= 0, 'formation panel wm');
   var caps = worldmonitorCapabilities({});

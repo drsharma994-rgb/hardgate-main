@@ -18,6 +18,12 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: XM_MT5_URL
+        sync: false
+      - key: XM_MT5_TOKEN
+        sync: false
+      - key: XM_GOLD_SYMBOL
+        value: XAUUSD
       - key: GEMINI_MODEL
         value: gemini-3-flash-preview
   - type: worker

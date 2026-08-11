@@ -162,7 +162,7 @@ var _atr = (typeof atr === 'function') ? atr : __atrLocal;
 
 var SRC_LABEL = { 'binance-xau': 'BINANCE XAUUSDT', 'binance-paxg': 'BINANCE PAXGUSDT',
                   'twelvedata': 'TWELVE DATA XAU/USD', 'yahoo': 'YAHOO GC=F',
-                  'delta-xaut': 'DELTA XAUTUSD' };
+                  'delta-xaut': 'DELTA XAUTUSD', 'xm-xauusd': 'XM XAUUSD' };
 var ST_GOLD_SYM = 'XAUUSD';
 function venueLabel(src){ return SRC_LABEL[src] || 'PAXGUSDT · BINANCE'; }
 function stGoldVenueLabel(){
@@ -798,12 +798,37 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
 async function fetchGoldKlines(){
-  var out = { rows15m: [], rows1h: [], rows4h: [], source: null };
+  var out = { rows15m: [], rows1h: [], rows4h: [], source: null, xmSymbol: null };
+  var xgc = gfn('getXmGoldCandles');
+  if (xgc){
+    try{
+      var xa = await xgc('15m', KL_15M);
+      if (xa && xa.rows && xa.rows.length){ out.rows15m = xa.rows; out.source = xa.source || 'xm-xauusd'; out.xmSymbol = xa.symbol || 'XAUUSD'; }
+    }catch(eXm){}
+    if (!out.rows1h.length){
+      try{
+        var xb = await xgc('1h', KL_1H);
+        if (xb && xb.rows && xb.rows.length){ out.rows1h = xb.rows; if (!out.source) out.source = xb.source || 'xm-xauusd'; }
+      }catch(eXm2){}
+    }
+    if (!out.rows4h.length){
+      try{
+        var xc = await xgc('4h', KL_4H);
+        if (xc && xc.rows && xc.rows.length){ out.rows4h = xc.rows; if (!out.source) out.source = xc.source || 'xm-xauusd'; }
+      }catch(eXm3){}
+    }
+  }
   var ggc = gfn('getGoldCandles');
   if (ggc){
-    try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.source = a.source; } }catch(e){}
-    try{ var b = await ggc('1h', KL_1H);  if (b && b.rows && b.rows.length){ out.rows1h = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
-    try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length){ out.rows4h = c.rows; if (!out.source) out.source = c.source; } }catch(e3){}
+    if (!out.rows15m.length){
+      try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.source = a.source; } }catch(e){}
+    }
+    if (!out.rows1h.length){
+      try{ var b = await ggc('1h', KL_1H);  if (b && b.rows && b.rows.length){ out.rows1h = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
+    }
+    if (!out.rows4h.length){
+      try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length){ out.rows4h = c.rows; if (!out.source) out.source = c.source; } }catch(e3){}
+    }
   }
   if (!out.rows15m.length){
     var bk = gfn('binanceKlines');
@@ -816,11 +841,10 @@ async function fetchGoldKlines(){
   return out;
 }
 
-/* StarTrader XAUUSD CFD — spot-aligned proxy chain (NOT Delta XAUTUSD).
-   XAUT trades ~1–1.5% below spot; StarTrader XAUUSD tracks spot ~4388 not XAUT ~4330. */
+/* StarTrader / XM XAUUSD CFD — XM MT5 bridge first, then spot proxy chain. */
 async function fetchStartraderGoldKlines(){
   var out = await fetchGoldKlines();
-  if (!out.source) out.source = 'startrader-xau';
+  if (!out.source) out.source = 'xm-xauusd';
   return out;
 }
 
@@ -997,8 +1021,10 @@ async function runScan(ui, scanSt){
     }
     if (gold && gold.rows1d && gold.rows1d.length) scalpBundle.dailyCandles = gold.rows1d;
     if (gold.rows15m.length){
-      var v = stRoute ? stGoldVenueLabel() : venueLabel(gold.source);
-      var sym1 = stRoute ? ST_GOLD_SYM : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
+      var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
+        : (stRoute ? stGoldVenueLabel() : venueLabel(gold.source));
+      var sym1 = (gold.source === 'xm-xauusd' || stRoute) ? ST_GOLD_SYM
+        : ((gold.source === 'binance-paxg') ? 'PAXGUSDT' : 'XAUUSDT');
       var zonesFn = gfn('goldUpdateActiveZones');
       var evalFn = gfn('HardgateGoldEngine');
       if (zonesFn){
@@ -1027,9 +1053,9 @@ async function runScan(ui, scanSt){
       legs.push('primary gold feed: no 15m klines from any source (macro chain + PAXGUSDT both failed)');
     }
 
-    /* leg 2: Delta XAUTUSD perp (standalone tab only — StarTrader route already uses getXAUCandles) */
+    /* leg 2: Delta XAUTUSD perp (standalone only; skipped when XM MT5 feed is live) */
     var dx = { rows15m: [], rows1h: [], rows4h: [], item: null };
-    if (!stRoute){
+    if (!stRoute && gold.source !== 'xm-xauusd'){
       setStat(ui, 'checking Delta XAUTUSD perp…');
       dx = await fetchDeltaXaut();
       setProg(ui, 0.75);
@@ -1046,6 +1072,8 @@ async function runScan(ui, scanSt){
       } else {
         legs.push(gfn('xuUniverse') ? 'DELTA XAUTUSD: not listed in the cross-venue universe' : 'DELTA XAUTUSD: xuniverse layer not loaded');
       }
+    } else if (!stRoute && gold.source === 'xm-xauusd'){
+      legs.push('DELTA XAUTUSD: skipped — GOLD SCALP uses XM XAUUSD prices');
     }
 
     /* ranking: transparent confluence tally across ALL venues */
@@ -1453,7 +1481,7 @@ W.goldscalpMountSection = function(el, opts){
   return goldscalpMountInto(el, scanSt, Object.assign({
     prefix: 'stGs',
     heading: 'GOLD SCALP',
-    subheading: 'XAUUSD · same multi-strategy engine as GOLD SCALP · getXAUCandles / StarTrader routing',
+    subheading: 'XAUUSD · XM MT5 prices when configured · else spot proxy chain',
     statIdle: 'idle — XAUUSD 15m/1h/4h scalp engine (identical strategy logic to the GOLD SCALP tab)',
     showDeskNote: false,
     useStartraderRouting: true,
