@@ -186,7 +186,7 @@ console.log('== tally audit ==');
 console.log('== sw cache + execute disarmed ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(sw.includes("'hg-v265'"), 'sw.js cache hg-v265');
+  ok(sw.includes("'hg-v266'"), 'sw.js cache hg-v266');
   ok(sw.includes('fixpack15-core.js'), 'fixpack15-core precached');
   ok(sw.includes('venuepremium.js'), 'venuepremium.js precached');
   const exec = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');

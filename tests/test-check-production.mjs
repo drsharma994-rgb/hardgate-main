@@ -55,7 +55,8 @@ console.log('== alert cycle constants (README alignment) ==');
 {
   ok(/HG_TAB_ALERT_MS = 5 \* 60 \* 1000/.test(html), 'HG_TAB_ALERT_MS is 5 minutes');
   ok(/HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS/.test(html), 'HG_ALERT_CYCLE_MS aliases tab alert ms');
-  ok(/HG_ALERTS_AUTO_REFRESH_MS = 900000/.test(html), 'HG_ALERTS_AUTO_REFRESH_MS is 15 minutes');
+  ok(/HG_ALERTS_AUTO_REFRESH_MS = 120000/.test(html), 'HG_ALERTS_AUTO_REFRESH_MS is 2 minutes');
+  ok(/HG_AUTO_REFRESH_HARDCODED_MS = 120000/.test(html), 'HG_AUTO_REFRESH_HARDCODED_MS is 2 minutes');
   ok(/GAP_MS = 5 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 5 minutes');
   ok(/forceScanAll: true/.test(html), 'alert warm scans whole exchange');
   ok(/nearCands/.test(html), 'quiet scan stores near-clean candidates');

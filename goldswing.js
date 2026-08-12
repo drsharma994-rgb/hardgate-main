@@ -2472,20 +2472,24 @@ function mount(el){
   try{ goldswingMountInto(el, __scan, { prefix: 'gw', showDeskNote: true }); }catch(e){ /* never throw at mount */ }
 }
 
-async function goldswingRefresh(){
-  try{
-    if (__scan.busy) return 'busy';
-    if (!__scan.hasRun || !__scan.ui) return 'skipped: not run yet';
-    return await runScan(__scan.ui, __scan);
-  }catch(e){ return 'error: ' + ((e && e.message) ? e.message : String(e)); }
-}
-
 /* BRAIN warm-up hook — headless scan against inert stub elements (oiflow.js
    oiflowWarm pattern). Shares __scan.busy with the mounted scan. Never throws. */
 function __gwWarmShim(){
   return { innerHTML: '', textContent: '', className: '', disabled: false,
            style: {}, firstElementChild: { style: {} },
            querySelector: function(){ return null; } };
+}
+
+async function goldswingRefresh(){
+  try{
+    if (__scan.busy) return 'busy';
+    var ui = __scan.ui;
+    if (!ui){
+      ui = { btn: __gwWarmShim(), stat: __gwWarmShim(), prog: __gwWarmShim(),
+             cards: __gwWarmShim(), empty: __gwWarmShim() };
+    }
+    return await runScan(ui, __scan);
+  }catch(e){ return 'error: ' + ((e && e.message) ? e.message : String(e)); }
 }
 async function gwWarm(){
   try{

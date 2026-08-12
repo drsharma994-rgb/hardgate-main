@@ -830,7 +830,7 @@ function freshPane(){
   assert(/gold klines/i.test(M.stubs['#gsStat'].textContent) === false || true, 'stat line initialized (deps note tolerated)');
 
   const r1 = await tab.refresh();
-  assert(r1 === 'skipped: not run yet', 'refresh before first run -> "skipped: not run yet" (got "' + r1 + '")');
+  assert(r1 === 'refreshed', 'refresh before first run runs headless scan (got "' + r1 + '")');
 
   const warm = (W.HG_warmups || []).find(t => t.id === 'goldscalp');
   let wOut = null, wThrew = null;
