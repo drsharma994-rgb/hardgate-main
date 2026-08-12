@@ -735,6 +735,16 @@ function bannerHTML(best, ranked){
     + '<div class="gsw-plan">'
     + '<div><i>' + act + '</i><b>$' + pxF(best.zone ? best.zone.lo : best.entry) + ' – $' + pxF(best.zone ? best.zone.hi : best.entry) + '</b><u>entry $' + pxF(best.entry) + '</u></div>'
     + '<div><i>STOP</i><b>$' + pxF(best.stop) + '</b><u>4h close beyond it kills the idea</u></div>'
+    + (function(){
+      try{
+        var vp = W.__hgGoldVolPack;
+        if (vp && typeof W.hgStopVolChip === 'function'){
+          var vc = W.hgStopVolChip(best.entry, best.stop, vp);
+          return vc && vc.chip ? '<div class="note" style="grid-column:1/-1">' + esc(vc.chip) + '</div>' : '';
+        }
+      }catch(eV){}
+      return '';
+    })()
     + '<div><i>TP1</i><b>$' + pxF(best.t1) + '</b><u>' + fmtF(best.rr, 1) + 'R — trim / de-risk</u></div>'
     + '<div><i>TP2</i><b>$' + pxF(best.t2) + '</b><u>' + fmtF(best.rr2, 1) + 'R — swing core</u></div>'
     + '<div><i>TP3</i><b>$' + pxF(best.t3) + '</b><u>' + fmtF(best.rr3, 1) + 'R — runner</u></div>'
@@ -1961,6 +1971,11 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    try{
+      if (typeof W.hgVolFromCloses === 'function' && gold.rows4h && gold.rows4h.length >= 30){
+        W.__hgGoldVolPack = W.hgVolFromCloses(gold.rows4h.map(function(r){ return r.c; }));
+      }
+    }catch(eVol){}
     setProg(ui, 0.45);
     if (gold.rows4h.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)

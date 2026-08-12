@@ -33,9 +33,14 @@ function walkForwardSplit(records, trainFrac){
   var train = wfExpectancy(rs.slice(0, cut));
   var test = wfExpectancy(rs.slice(cut));
   var decay = (train.expectancy !== 0) ? (test.expectancy - train.expectancy) / Math.abs(train.expectancy) : 0;
+  var effN = (typeof G.hgEffectiveN === 'function' && typeof G.hgEventsFromRecords === 'function')
+    ? G.hgEffectiveN(G.hgEventsFromRecords(arr)) : rs.length;
+  var minTestN = Math.max(12, Math.ceil(effN * 0.15));
   return {
     train: train, test: test, decayPct: decay * 100,
-    verdict: (test.n < 20) ? 'INSUFFICIENT'
+    effectiveN: effN,
+    nLabel: 'n=' + rs.length + ' (effective n=' + (Math.round(effN * 10) / 10) + ')',
+    verdict: (test.n < minTestN) ? 'INSUFFICIENT'
            : (test.expectancy <= 0) ? 'OVERFIT'
            : (decay < -0.5) ? 'DEGRADED' : 'HOLDS',
   };
@@ -112,6 +117,7 @@ function hgValidationPanelHtml(records){
     var wfCls = (wf.verdict === 'HOLDS') ? 'pos' : ((wf.verdict === 'INSUFFICIENT') ? '' : 'neg');
     var wfLine = 'WALK-FORWARD&nbsp; train E[R] ' + fmtR(wf.train.expectancy) + ' (n=' + wf.train.n + ')'
       + ' → test E[R] ' + fmtR(wf.test.expectancy) + ' (n=' + wf.test.n + ')'
+      + (wf.nLabel ? ' · ' + wf.nLabel : '')
       + ' · decay ' + (isFinite(wf.decayPct) ? wf.decayPct.toFixed(0) : '—') + '%'
       + ' · <span class="' + wfCls + '">' + wf.verdict + '</span>';
     var mcLine = mc.ok

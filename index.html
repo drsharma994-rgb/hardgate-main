@@ -694,6 +694,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="carry.js"></script>
 <script src="termbasis.js"></script>
 <script src="goldpro.js"></script>
+<script src="goldcoint.js"></script>
 <script src="strats.js"></script>
 <script src="meanrev.js"></script>
 <script src="liqs.js"></script>
@@ -729,6 +730,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
 <script src="fixpack13-core.js"></script>
+<script src="fixpack14-core.js"></script>
 <script src="reliability.js"></script>
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
@@ -2667,7 +2669,7 @@ async function runObScanLeg(opts){
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','chartvision','onchain','coil','apex','trap','smc','ob','div'] },
-  { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','goldpine','signallog'] },
+  { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldcoint','goldspot','goldscalp','goldswing','goldpine','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','reversalsniper','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','termbasis','scorecard','reliability','formationlab'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','tradeos','hey','aiagent','log','trade','finder'] },
 ];
@@ -4626,6 +4628,16 @@ function planTrade(){
   const rr = Math.abs(t1-entry)/riskUnit;
   const t1Valid = t1Given && (side==='long' ? t1 > entry : t1 < entry);
 
+  var betSizeLine = '';
+  try{
+    if (typeof hgBetSize === 'function' && typeof hgMetaLabel === 'function'){
+      var __recs = (typeof hgScoreRecords === 'function') ? hgScoreRecords() : [];
+      var __ml = hgMetaLabel({ sym: symVal || $('tSym').value, dir: side, entry: entry, stop: stop, t1: t1, rr1: rr }, {}, __recs);
+      var __bs = hgBetSize({ prob: __ml.prob, floor: (typeof HG_META_FLOOR === 'number') ? HG_META_FLOOR : 0.52, rr1: rr, maxR: 1.0 });
+      betSizeLine = 'fixed 1.0R  ·  suggested ' + __bs.sizeR.toFixed(1) + 'R (meta p=' + __ml.prob.toFixed(2) + ')';
+    }
+  }catch(eBet){ betSizeLine = ''; }
+
   const g=[];
   g.push(['P1','Stop on the correct side of entry', dirOk?'pass':'veto', dirOk?'':'stop must be '+(side==='long'?'below':'above')+' entry']);
   g.push(['P2','R:R ≥ 2 to a REAL T1', (t1Valid && rr>=2)?'pass':'veto',
@@ -4668,7 +4680,7 @@ CONTRACTS ${(function(){
   return c.lots + ' lots  (1 lot = ' + c.cv + ' ' + c.unit + ')  → real size ' + fmt(c.coinActual,6) + ' ' + c.unit
     + (c.shortfallPct > 1 ? '  · rounded DOWN ' + fmt(c.shortfallPct,1) + '% — real risk is that much smaller' : '');
 })()}   ← THIS is the number Delta's order form wants
-risk      $${fmt(riskUsd,2)}  (${riskPct}% of equity)  ·  1R = ${px(riskUnit)}
+risk      $${fmt(riskUsd,2)}  (${riskPct}% of equity)  ·  1R = ${px(riskUnit)}${betSizeLine ? '\n' + betSizeLine : ''}
 T1        ${px(t1)}  →  close ${scaleOut}%, stop to breakeven
 T2        ${px(t2)}  →  runner trail (defaults to 3R when blank)
 liq est   ${px(liq)}  (${fmt(clearance,2)}× stop clearance)`;

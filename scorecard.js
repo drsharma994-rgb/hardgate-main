@@ -9,7 +9,8 @@ money, measured — never assumed.
 
 CALLERS (brain.js / engine.js, both feature-check first):
   window.hgScoreRecord({source:'brain'|'execute', sym, dir, tier,
-                        entry, stop, t1, t2, layers:[names], at})
+                        entry, stop, t1, t2, layers:[names], layerVals:{LAYER:strength},
+                        at})
     -> {ok:true, record, persisted, note?} | {ok:false, reason, dupOf?}
     Validates the plan (dir long|short; long: stop<entry<t1; short mirrors;
     t1 required; wrong-side/missing t2 -> null, never invented), DEDUPES
@@ -189,6 +190,25 @@ function sanitizeLayers(x){
     }
     return out;
   }catch(e){ return []; }
+}
+function sanitizeLayerVals(layers, vals){
+  try{
+    if (!vals || typeof vals !== 'object') return null;
+    var out = {};
+    var names = sanitizeLayers(layers);
+    for (var i = 0; i < names.length; i++){
+      var ln = names[i];
+      var v = fin(vals[ln]);
+      if (v === null){
+        for (var k in vals){
+          if (!Object.prototype.hasOwnProperty.call(vals, k)) continue;
+          if (String(k).trim().toUpperCase() === ln.toUpperCase()){ v = fin(vals[k]); break; }
+        }
+      }
+      if (v !== null) out[ln.toUpperCase()] = v;
+    }
+    return Object.keys(out).length ? out : null;
+  }catch(e){ return null; }
 }
 
 /* ---------------- formatters (display only; null -> honest dash) ---------------- */
@@ -863,6 +883,7 @@ function hgScoreRecord(input){
       rr1: fin(inp.rr1) !== null ? fin(inp.rr1) : (rr1 !== null ? round4(rr1) : null),
       fundingPct: fpIn,
       layers: sanitizeLayers(inp.layers),
+      layerVals: sanitizeLayerVals(inp.layers, inp.layerVals),
       at: at,
       status: 'open',
       outcome: null, r: null, bars: 0, closedAt: null, settledAt: null,

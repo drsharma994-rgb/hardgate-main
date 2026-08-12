@@ -73,13 +73,17 @@ function tearSheetHtml(recs){
     return '<div class="note">' + esc(ts.note || 'no data') + ' — log trades on SCORECARD first</div>';
   }
   var pf = ts.profitFactor === Infinity ? '∞' : (isFinite(ts.profitFactor) ? ts.profitFactor.toFixed(2) : '—');
+  var nSub = ts.nLabel || (ts.n + ' settled');
   var h = '<div class="grid3" style="margin-top:8px">';
-  h += tile('Win rate', fmtPct(ts.winRate), ts.n + ' settled');
+  h += tile('Win rate', fmtPct(ts.winRate), nSub);
   h += tile('Expectancy', fmtR(ts.expectancy), 'avg R per trade');
   h += tile('Profit factor', pf, 'gross win / gross loss');
   h += tile('Total R', fmtR(ts.totalR), 'cumulative edge');
   h += tile('Max DD', fmtR(ts.maxDrawdownR), 'peak-to-trough on R curve');
   h += tile('Sharpe proxy', ts.sharpeProxy != null ? ts.sharpeProxy.toFixed(2) : '—', 'mean/std on R');
+  if (ts.deflatedSharpe && ts.deflatedSharpe.deflated != null){
+    h += tile('Deflated Sharpe', ts.deflatedSharpe.deflated.toFixed(2), 'Bailey & LdP · trials=' + ts.deflatedSharpe.numTrials);
+  }
   h += tile('Sortino proxy', ts.sortinoProxy === Infinity ? '∞' : (ts.sortinoProxy != null ? ts.sortinoProxy.toFixed(2) : '—'), 'downside-adjusted');
   h += tile('Win streak', String(ts.maxWinStreak), 'longest green run');
   h += tile('Loss streak', String(ts.maxLossStreak), 'longest red run');

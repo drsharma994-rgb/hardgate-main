@@ -67,8 +67,11 @@ function hgTearSheet(records){
   var sharpe = sharpeProxy(rs);
   var sortino = sortinoProxy(rs);
   var calmar = maxDD > 0 ? (sum(rs) / maxDD) : null;
+  var effectiveN = (typeof G.hgEffectiveN === 'function' && typeof G.hgEventsFromRecords === 'function')
+    ? G.hgEffectiveN(G.hgEventsFromRecords(records)) : n;
   return {
-    ok: true, n: n, wins: wins.length, losses: losses.length,
+    ok: true, n: n, effectiveN: effectiveN,
+    nLabel: 'n=' + n + ' (effective n=' + (Math.round(effectiveN * 10) / 10) + ')', wins: wins.length, losses: losses.length,
     winRate: winRate, expectancy: expectancy,
     avgWin: wins.length ? grossWin / wins.length : 0,
     avgLoss: losses.length ? grossLoss / losses.length : 0,
