@@ -72,10 +72,12 @@ console.log('== gold swing formation wiring ==');
 {
   const gs = fs.readFileSync(path.join(root, 'goldswing.js'), 'utf8');
   ok(gs.indexOf("style: 'gold-swing'") >= 0 && gs.indexOf('hgApplyGoldBestLevels') >= 0, 'goldswing uses hgApplyGoldBestLevels');
-  const iForm = gs.indexOf('var applyBlFn = gfn(\'hgApplyGoldBestLevels\')');
   const iWk = gs.indexOf('hgApplyGoldWeekendDemotes');
-  ok(iForm > iWk && gs.indexOf('for (var fi = 0; fi < ranked.length; fi++)', iForm) >= 0,
+  const iBatch = gs.indexOf('function goldApplyBestLevelsBatch');
+  ok(iBatch >= 0 && gs.indexOf('for (var fi = 0; fi < ranked.length; fi++)', iBatch) >= 0,
     'formation runs on all ranked candidates after weekend demotes');
+  const iRun = gs.indexOf('goldApplyBestLevelsBatch(ranked, gold, atrW, now);', iWk);
+  ok(iRun > iWk, 'runScan calls formation batch after weekend demotes');
 }
 
 console.log('== gold formation enriches strategy setups ==');
