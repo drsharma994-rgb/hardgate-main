@@ -491,6 +491,14 @@ async function getGoldMacro(){
     const dxy = await getDXY(); // {value, date, trend20, change20Pct} | null
     const dxyOfficial = await getDXYOfficial();
     const realYield = await getRealYield10Y();
+    let dfii10Rows = null;
+    try{
+      dfii10Rows = await __fredSeries('DFII10', 30);
+    }catch(eDf){ dfii10Rows = null; }
+    let t10yieRows = null;
+    try{
+      t10yieRows = await __fredSeries('T10YIE', 30);
+    }catch(eBe){ t10yieRows = null; }
 
     // US10Y: FRED DGS10 primary (in getUST10Y); Treasury CSV; Yahoo ^TNX last resort.
     let tnx = null, tnxTrend = null, tnxChange20Pct = null;
@@ -555,6 +563,26 @@ async function getGoldMacro(){
     if ((realDown && (dxyDown || tnxDown)) || (dxyDown && tnxDown)) realRateHint = 'TAILWIND';
     else if ((realUp && (dxyUp || tnxUp)) || (dxyUp && tnxUp)) realRateHint = 'HEADWIND';
 
+    var realRateMeasured = null;
+    var realRateSource = 'hint';
+    try{
+      if (typeof hgRealRate === 'function'){
+        realRateMeasured = hgRealRate({ dfii10Rows: dfii10Rows, t10yieRows: t10yieRows });
+      }else if (dfii10Rows && dfii10Rows.length){
+        var lvl = dfii10Rows[0].value;
+        var chg20 = (dfii10Rows.length > 20) ? lvl - dfii10Rows[20].value : null;
+        var tr = 'FLAT';
+        if (chg20 !== null){ if (chg20 <= -0.05) tr = 'FALLING'; else if (chg20 >= 0.05) tr = 'RISING'; }
+        realRateMeasured = { level: lvl, chg20d: chg20, trend: tr, asOf: dfii10Rows[0].date, measured: true, stale: false, source: 'fred-dfii10' };
+      }
+      if (realRateMeasured && realRateMeasured.measured){
+        realRateSource = 'fred-dfii10';
+        if (realRateMeasured.trend === 'FALLING') realRateHint = 'TAILWIND';
+        else if (realRateMeasured.trend === 'RISING') realRateHint = 'HEADWIND';
+        else realRateHint = 'NEUTRAL';
+      }
+    }catch(eRR){ realRateMeasured = null; }
+
     return __macroCachePut('macro', {
       dxy: dxy,
       dxyOfficial: dxyOfficial,
@@ -568,12 +596,16 @@ async function getGoldMacro(){
       silver: silver,
       goldPx: goldPx,
       goldSilverRatio: goldSilverRatio,
-      realRateHint: realRateHint
+      realRateHint: realRateHint,
+      realRateMeasured: realRateMeasured,
+      realRateSource: realRateSource,
+      dfii10Rows: dfii10Rows
     });
   }catch(e){
     return { dxy: null, dxyOfficial: null, tnx: null, tnxTrend: null, tnxChange20Pct: null,
              tnxSource: null, realYield10Y: null, realYieldTrend: null, realYieldChange20Pct: null,
-             silver: null, goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL' };
+             silver: null, goldPx: null, goldSilverRatio: null, realRateHint: 'NEUTRAL',
+             realRateMeasured: null, realRateSource: 'hint' };
   }
 }
 

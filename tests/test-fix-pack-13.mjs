@@ -141,7 +141,7 @@ console.log('== gold COT + stand down ==');
 console.log('== cache + proxy ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v261/.test(sw), 'cache hg-v261');
+  ok(/hg-v262/.test(sw), 'cache hg-v262');
   ok(sw.indexOf('fixpack13-core.js') >= 0 && sw.indexOf('reliability.js') >= 0,
     'sw precaches fixpack13-core.js and reliability.js');
   const proxy = fs.readFileSync(path.join(root, 'api/proxy.js'), 'utf8');

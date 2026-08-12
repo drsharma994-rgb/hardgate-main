@@ -176,7 +176,7 @@ assert(!loadErr, 'support scripts load without throwing' + (loadErr ? ' — got:
 
 loadErr = null;
 try{
-  ['squeeze.js', 'trendtable.js', 'oiflow.js', 'regime.js', 'carry.js', 'termbasis.js', 'goldpro.js'].forEach(load);
+  ['squeeze.js', 'trendtable.js', 'oiflow.js', 'regime.js', 'carry.js', 'venuepremium.js', 'termbasis.js', 'goldpro.js'].forEach(load);
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'feature-tab modules load without throwing' + (loadErr ? ' — got: ' + loadErr.message : ''));
 
@@ -187,6 +187,7 @@ const REQUIRED_TABS = [
   ['oiflow', 'OI FLOW'],
   ['regime', 'REGIME'],
   ['carry', 'CARRY'],
+  ['venueprem', 'VENUE'],
   ['termbasis', 'TERM BASIS'],
   ['goldpro', 'GOLD PRO']
 ];
@@ -261,7 +262,7 @@ const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'startrader', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
   crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'chartvision', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
   gold:       ['gold', 'goldpro', 'goldcoint', 'goldspot', 'goldscalp', 'goldswing', 'goldpine', 'signallog'],
-  strategies: ['strats', 'meanrev', 'reversalsniper', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'carry', 'termbasis', 'scorecard', 'reliability', 'formationlab'],
+  strategies: ['strats', 'meanrev', 'reversalsniper', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'carry', 'venueprem', 'termbasis', 'scorecard', 'reliability', 'formationlab'],
   tools:      ['basis', 'search', 'tradeos', 'hey', 'aiagent', 'log', 'trade', 'finder']
 };
 assert(run('Array.isArray(HG_NAV_GROUPS)') === true && run('HG_NAV_GROUPS.length') === 5,
@@ -272,7 +273,7 @@ assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', chartvision:'crypto', regime:'overview',
-                   carry:'strategies', termbasis:'strategies', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', reversalsniper:'strategies', edge:'strategies', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
+                   carry:'strategies', venueprem:'strategies', termbasis:'strategies', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', reversalsniper:'strategies', edge:'strategies', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
                    scorecard:'strategies', reliability:'strategies', formationlab:'strategies',
                    brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
@@ -334,7 +335,7 @@ assert(navEl.children.filter(c => c.id === 'tabB_coil')[0].getAttribute('data-g'
     && navEl.children.filter(c => c.id === 'tabB_best')[0].getAttribute('data-g') === 'strategies',
   'static buttons tagged with their groups too (coil→crypto, best→strategies)');
 const EXPECTED_ORDER = ['tabB_regime', 'tabB_trendmx', 'tabB_squeeze', 'tabB_oiflow', 'tabB_coil',
-                        'tabB_goldpro', 'tabB_best', 'tabB_carry', 'tabB_termbasis', 'tabB_dash'];
+                        'tabB_goldpro', 'tabB_best', 'tabB_carry', 'tabB_venueprem', 'tabB_termbasis', 'tabB_dash'];
 assert(navIds.join(',') === EXPECTED_ORDER.join(','),
   'row-2 buttons ordered by group sequence, then group tab order (unassigned last): ' + navIds.join(', '));
 

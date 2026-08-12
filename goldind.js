@@ -2330,8 +2330,16 @@ function goldRankSetups(cands, ctx){
         var mWhy = [];
         if (macro.dxy && macro.dxy.trend20) mWhy.push('DXY ' + String(macro.dxy.trend20).toLowerCase());
         if (macro.tnxTrend) mWhy.push('US10Y ' + String(macro.tnxTrend).toLowerCase());
-        parts.push({ label: 'macro ' + hint.toLowerCase() + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
-                       + ' — ' + (mPts > 0 ? 'favors ' + c.dir + 's' : 'works against ' + c.dir + 's'), pts: mPts });
+        var macroLabel = 'macro ' + hint.toLowerCase();
+        if (macro.realRateSource === 'fred-dfii10' && macro.realRateMeasured && macro.realRateMeasured.measured){
+          macroLabel = 'FRED DFII10 ' + (macro.realRateMeasured.trend || '').toLowerCase()
+            + (macro.realRateMeasured.asOf ? (' (asOf ' + macro.realRateMeasured.asOf + ')') : '');
+          if (macro.realRateMeasured.stale) macroLabel += ' STALE';
+        } else if (macro.realRateSource !== 'fred-dfii10'){
+          macroLabel += ' [fallback hint — not measured]';
+        }
+        parts.push({ label: macroLabel + (mWhy.length ? ' (' + mWhy.join(', ') + ')' : '')
+                       + ' — ' + (mPts > 0 ? 'favors ' + c.dir + 's' : 'works against ' + c.dir + 's'), pts: mPts, leg: 'macro' });
         tally += mPts;
       }
       if (verdict === 'longs-crowding' || verdict === 'shorts-crowding'){

@@ -1096,6 +1096,14 @@ var __edge = { busy: false, ranOnce: false, run: null };
 var __edgeScanSnap = null;
 
 function edgeFreshnessChip(barAge){
+  try{
+    if (typeof W.hgBarFreshnessChip === 'function'){
+      var c = W.hgBarFreshnessChip(barAge, '4h');
+      if (!c || !c.html) return '';
+      var cls = c.stale ? 'warn' : (c.html === 'FRESH' ? 'ok' : '');
+      return '<span class="statuschip ' + cls + '" title="Trigger bar age">' + c.html + '</span>';
+    }
+  }catch(e){}
   if (!isFinite(barAge)) return '';
   if (barAge === 0){
     return '<span class="statuschip ok" title="Trigger on the latest closed 4H bar">FRESH</span>';
