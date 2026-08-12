@@ -270,7 +270,7 @@ console.log('== 1) bare-environment never-throws + honest degradation ==');
   assert(/gold klines/.test(M.stubs['#gwStat'].textContent) && /goldind\.js detectors/.test(M.stubs['#gwStat'].textContent),
          'mount names BOTH missing layers in plain language — got "' + M.stubs['#gwStat'].textContent + '"');
   const r1 = await tab.refresh();
-  assert(r1 === 'skipped: not run yet', 'refresh before first run -> "skipped: not run yet" (got "' + r1 + '")');
+  assert(r1 === 'error: no klines layer', 'refresh before first run runs headless scan (got "' + r1 + '")');
   const r2 = await M.stubs['#gwRun']._handler();
   assert(r2 === 'error: no klines layer', 'scan with no klines layer resolves an honest error string (got "' + r2 + '")');
   assert(B.goldswingState() === null && B.goldswingScan() === null, 'no snapshot published without data');

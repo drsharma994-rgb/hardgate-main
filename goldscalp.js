@@ -1695,20 +1695,24 @@ function mount(el){
   try{ goldscalpMountInto(el, __scan, { prefix: 'gs', showDeskNote: true }); }catch(e){ /* never throw at mount */ }
 }
 
-async function goldscalpRefresh(){
-  try{
-    if (__scan.busy) return 'busy';
-    if (!__scan.hasRun || !__scan.ui) return 'skipped: not run yet';
-    return await runScan(__scan.ui, __scan);
-  }catch(e){ return 'error: ' + ((e && e.message) ? e.message : String(e)); }
-}
-
 /* BRAIN warm-up hook — headless scan against inert stub elements (oiflow.js
    oiflowWarm pattern). Shares __scan.busy with the mounted scan. Never throws. */
 function __gsWarmShim(){
   return { innerHTML: '', textContent: '', className: '', disabled: false,
            style: {}, firstElementChild: { style: {} },
            querySelector: function(){ return null; } };
+}
+
+async function goldscalpRefresh(){
+  try{
+    if (__scan.busy) return 'busy';
+    var ui = __scan.ui;
+    if (!ui){
+      ui = { btn: __gsWarmShim(), stat: __gsWarmShim(), prog: __gsWarmShim(),
+             cards: __gsWarmShim(), empty: __gsWarmShim() };
+    }
+    return await runScan(ui, __scan);
+  }catch(e){ return 'error: ' + ((e && e.message) ? e.message : String(e)); }
 }
 async function gsWarm(){
   try{

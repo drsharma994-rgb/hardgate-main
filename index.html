@@ -205,7 +205,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <div class="header-drawer" id="headerDrawer">
     <div class="header-drawer-inner">
       <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
-      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh — re-runs ⟳ HARD REFRESH on a schedule; a tick landing mid-refresh is skipped honestly and the countdown simply continues"><span class="hgalabel">AUTO</span><button id="autoRefOff" class="on" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button><button id="autoRef900000" type="button" onclick="setAutoRefresh('900000')">15m</button></span>
+      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh locked at 2 minutes — re-runs ⟳ HARD REFRESH on every tab (including GOLD SCALP/SWING); a tick landing mid-refresh is skipped honestly and the countdown continues"><span class="hgalabel">AUTO 2m</span><button id="autoRefOff" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" class="on" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button><button id="autoRef900000" type="button" onclick="setAutoRefresh('900000')">15m</button></span>
       <span class="statuschip" id="autoRefreshCount" style="display:none"></span>
       <span class="statuschip" id="hardRefreshStat"></span>
       <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
@@ -824,7 +824,11 @@ const HG_BEST_ALERT_MS = 5 * 60 * 1000;
 const HG_TAB_ALERT_MS = 5 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
 const HG_TRENDMX_ALERT_MS = 15 * 60 * 1000;
-const HG_ALERTS_AUTO_REFRESH_MS = 900000;
+const HG_ALERTS_AUTO_REFRESH_MS = 120000;
+/* Hard-coded app-wide auto hard refresh — every tab (incl. GOLD SCALP/SWING via
+   hardRefreshAll → HG_TAB_MODS.refresh). Not user-disableable; localStorage OFF
+   is ignored. */
+const HG_AUTO_REFRESH_HARDCODED_MS = 120000;
 /* Was 300 — identical to HG_TAB_ALERT_MS, so a cached candle expired at the
    exact moment the next cycle asked for it and nothing was ever reused. 420
    spans the cycle boundary, so the second consumer of a symbol inside a cycle
@@ -8020,8 +8024,12 @@ function hgAutoTick(){
 }
 function setAutoRefresh(v){
   try{
-    const key = (v === undefined || v === null) ? 'off' : String(v);
-    const ms = (typeof HG_AUTO_CHOICES[key] === 'number') ? HG_AUTO_CHOICES[key] : 0;  /* unknown → OFF, honest */
+    var key = (v === undefined || v === null) ? 'off' : String(v);
+    var ms = (typeof HG_AUTO_CHOICES[key] === 'number') ? HG_AUTO_CHOICES[key] : 0;
+    if (typeof HG_AUTO_REFRESH_HARDCODED_MS === 'number' && HG_AUTO_REFRESH_HARDCODED_MS > 0){
+      ms = HG_AUTO_REFRESH_HARDCODED_MS;
+      key = String(HG_AUTO_REFRESH_HARDCODED_MS);
+    }
     HG_AUTO_MS = ms;
     try{
       if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.setItem === 'function')
@@ -8040,6 +8048,11 @@ function setAutoRefresh(v){
 }
 function hgAutoInit(){
   try{
+    if (typeof HG_AUTO_REFRESH_HARDCODED_MS === 'number' && HG_AUTO_REFRESH_HARDCODED_MS > 0
+        && typeof setAutoRefresh === 'function'){
+      setAutoRefresh(String(HG_AUTO_REFRESH_HARDCODED_MS));
+      return;
+    }
     if (HG_ALERTS_FORCED_ON && typeof setAutoRefresh === 'function'){
       setAutoRefresh(String(HG_ALERTS_AUTO_REFRESH_MS));
       return;
