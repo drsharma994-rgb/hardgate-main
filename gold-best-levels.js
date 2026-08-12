@@ -9,7 +9,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 var GB_REF = 'hgFormGold + opencrypto OB/FVG + MTF + regime + vision veto';
 var HG_GOLD_SCALP_MIN_RR = 1.2;
-var HG_GOLD_SWING_MIN_RR = 1.2;
+var HG_GOLD_SWING_MIN_RR = 2.0;
 var HG_GOLD_HIGH_VOL_MIN_RR = 1.5;
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
@@ -383,9 +383,96 @@ function hgBestLevelsGold(inp){
 }
 
 /** Apply unified gold levels onto a scan candidate (mutates gc). */
+/** Recompute structural R:R tally leg after hgApplyGoldBestLevels mutates rr. */
+function hgGoldRefreshTallyRr(c){
+  if (!c || !Array.isArray(c.tallyParts)) return c;
+  try{
+    var rrVal = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
+    var rrPts = (fin(rrVal) && rrVal >= 2) ? (rrVal >= 2.5 ? 2 : 1) : 0;
+    var found = false, i, p, oldPts;
+    for (i = 0; i < c.tallyParts.length; i++){
+      p = c.tallyParts[i];
+      if (!p || !/structural R:R/.test(String(p.label || ''))) continue;
+      found = true;
+      oldPts = fin(+p.pts) ? +p.pts : 0;
+      c.tally = (fin(+c.tally) ? +c.tally : 0) - oldPts + rrPts;
+      p.pts = rrPts;
+      if (fin(rrVal)){
+        p.label = 'structural R:R ' + rrVal.toFixed(1) + 'R — reward/risk geometry';
+      }
+      break;
+    }
+    if (!found && rrPts > 0 && fin(rrVal)){
+      c.tallyParts.push({ label: 'structural R:R ' + rrVal.toFixed(1) + 'R — reward/risk geometry', pts: rrPts });
+      c.tally = (fin(+c.tally) ? +c.tally : 0) + rrPts;
+    }
+  }catch(e){}
+  return c;
+}
+
+/** Grade from confluence score — same thresholds as goldind __gsCand (A≥8, B≥5). */
+function hgGoldGradeFromScore(score, newsCaution){
+  var s = fin(+score) ? +score : 0;
+  var grade = (s >= 8) ? 'A' : ((s >= 5) ? 'B' : 'C');
+  if (newsCaution){
+    if (grade === 'A') grade = 'B';
+    else if (grade === 'B') grade = 'C';
+  }
+  return grade;
+}
+
+/** Sync displayed grade from tally (or structural reads + killzone when tally absent). */
+function hgGoldSyncCandidateGrade(c){
+  if (!c) return c;
+  try{
+    var score = fin(+c.tally) ? +c.tally
+      : ((fin(+c.agree) ? +c.agree : 0) + (fin(+c.killzoneWeight) ? +c.killzoneWeight : 0));
+    c.grade = hgGoldGradeFromScore(score, !!(c.newsCaution));
+  }catch(e){}
+  return c;
+}
+
+/** HTF alignment + ER for A+ / scorecard (never throws). */
+function hgGoldAnnotateCandidateMeta(c, inp){
+  inp = inp || {};
+  if (!c || (c.dir !== 'long' && c.dir !== 'short')) return c;
+  try{
+    var style = gbStyle(inp);
+    if (typeof hgGoldMtfGate === 'function'){
+      var mtf = hgGoldMtfGate(c.dir, {
+        style: style,
+        stratKey: c.stratKey,
+        exemptMtf: c.stratKey === 'sweep' || c.stratKey === 'asian',
+        rows4h: inp.rows4h,
+        rows1h: inp.rows1h,
+        rows1d: inp.rows1d,
+      });
+      if (mtf && mtf.aligned === true) c.htfAlign = true;
+      else if (mtf && mtf.aligned === false) c.htfAlign = false;
+    }
+    if (!fin(+c.barAge) && fin(+c.barsAgo)) c.barAge = +c.barsAgo;
+    if (!fin(+c.barAge) && fin(+c.triggerBarsAgo)) c.barAge = +c.triggerBarsAgo;
+    var formRows = (style === 'gold-swing' && inp.rows4h && inp.rows4h.length) ? inp.rows4h
+      : ((inp.rows15m && inp.rows15m.length) ? inp.rows15m : inp.rows);
+    if (formRows && formRows.length >= 25 && typeof kaufmanER === 'function'){
+      var er = kaufmanER(formRows, 20);
+      if (fin(er)) c.er = er;
+    }
+  }catch(e){}
+  return c;
+}
+
+function hgGoldPostApplyRefresh(c, metaInp){
+  if (!c) return c;
+  hgGoldRefreshTallyRr(c);
+  hgGoldSyncCandidateGrade(c);
+  hgGoldAnnotateCandidateMeta(c, metaInp);
+  return c;
+}
+
 function hgApplyGoldBestLevels(gc, inp){
   inp = inp || {};
-  if (!gc || gc.demoted || gc.vetoed) return gc;
+  if (!gc || gc.vetoed) return gc;
   try{
     var bl = hgBestLevelsGold(Object.assign({ hit: gc, dir: gc.dir }, inp));
     if (bl.veto){
@@ -447,5 +534,10 @@ G.hgGoldCalibrateCtx = hgGoldCalibrateCtx;
 G.HG_GOLD_BEST_LEVELS_REF = GB_REF;
 G.HG_GOLD_SCALP_MIN_RR = HG_GOLD_SCALP_MIN_RR;
 G.HG_GOLD_SWING_MIN_RR = HG_GOLD_SWING_MIN_RR;
+G.hgGoldGradeFromScore = hgGoldGradeFromScore;
+G.hgGoldSyncCandidateGrade = hgGoldSyncCandidateGrade;
+G.hgGoldRefreshTallyRr = hgGoldRefreshTallyRr;
+G.hgGoldAnnotateCandidateMeta = hgGoldAnnotateCandidateMeta;
+G.hgGoldPostApplyRefresh = hgGoldPostApplyRefresh;
 
 })();

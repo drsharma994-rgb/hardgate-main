@@ -39,6 +39,7 @@ ok(typeof W.hgGoldMtfGate === 'function', 'hgGoldMtfGate export');
 ok(typeof W.hgGoldPoiQuality === 'function', 'hgGoldPoiQuality export');
 ok(typeof W.hgGoldRegime === 'function', 'hgGoldRegime export');
 ok(W.HG_GOLD_SCALP_MIN_RR === 1.2, 'scalp min R:R 1.2');
+ok(W.HG_GOLD_SWING_MIN_RR === 2.0, 'swing min R:R 2.0');
 
 console.log('== phase 2 MTF ==');
 {
@@ -83,6 +84,9 @@ console.log('== phase 1 apply on candidate ==');
   const out = W.hgApplyGoldBestLevels(gc, {
     style: 'gold-scalp', rows, rows15m: rows, rows4h: rows, rows1h: rows, atrW,
   });
+  ok(typeof W.hgGoldGradeFromScore === 'function', 'hgGoldGradeFromScore export');
+  ok(W.hgGoldGradeFromScore(6, false) === 'B', 'grade B at tally 6');
+  ok(W.hgGoldGradeFromScore(3, false) === 'C', 'grade C at tally 3');
   ok(out === gc, 'apply returns candidate');
   ok(isFinite(gc.entry) && isFinite(gc.stop) && isFinite(gc.t1), 'levels set after apply');
 }
@@ -95,7 +99,10 @@ console.log('== wiring ==');
   ok(/gold-best-levels\.js/.test(ix), 'index loads gold-best-levels.js');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp uses hgApplyGoldBestLevels');
   ok(/hgApplyGoldBestLevels/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing uses hgApplyGoldBestLevels');
-  ok(/hg-v264/.test(sw), 'cache hg-v264');
+  ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp post-apply refresh');
+  ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing post-apply refresh');
+  ok(/candleSource/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp passes candleSource');
+  ok(/hg-v265/.test(sw), 'cache hg-v265');
 }
 
 console.log('== gold card text contrast ==');

@@ -706,10 +706,141 @@ function gswPipAttr(ok){ return gswSt(ok ? GSW_GPIP_OK : GSW_GPIP); }
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
   if (!Array.isArray(c.tallyParts) || !c.tallyParts.length) return '';
+  var audit = (typeof W !== 'undefined' && W) ? W.__hgGoldTallyAudit : null;
   return '<div class="gsw-tally">' + c.tallyParts.map(function(p){
     if (!p) return '';
-    return '<span class="gsw-tp ' + (p.pts >= 0 ? 'pos' : 'neg') + '">' + (p.pts >= 0 ? '+' : '') + p.pts + ' · ' + esc(p.label) + '</span>';
+    var strike = '';
+    if (audit && Array.isArray(audit)){
+      var leg = audit.find(function(a){ return p.label && String(p.label).toLowerCase().indexOf(String(a.leg).toLowerCase()) >= 0; });
+      if (leg && leg.verdict === 'NOISE') strike = ' style="text-decoration:line-through;opacity:.65"';
+    }
+    var meas = '';
+    if (audit && Array.isArray(audit)){
+      var leg2 = audit.find(function(a){ return p.label && String(p.label).toLowerCase().indexOf(String(a.leg).toLowerCase()) >= 0; });
+      if (leg2 && leg2.liftR !== null && leg2.nWith >= 8){
+        meas = ' <span class="gsw-measured">[measured: ' + (leg2.liftR >= 0 ? '+' : '') + leg2.liftR.toFixed(2) + 'R over ' + leg2.nWith + ' — ' + leg2.verdict + ']</span>';
+      }
+    }
+    return '<span class="gsw-tp ' + (p.pts >= 0 ? 'pos' : 'neg') + '"' + strike + '>' + (p.pts >= 0 ? '+' : '') + p.pts + ' · ' + esc(p.label) + meas + '</span>';
   }).join('') + '</div>';
+}
+
+function goldMixedFeedBannerHtml(gold){
+  try{
+    if (!gold || !gold.mixed) return '';
+    var mixTxt = (typeof hgGoldSrcMixedLabel === 'function') ? hgGoldSrcMixedLabel(gold.src) : 'per-timeframe sources differ';
+    return '<div class="note warn" style="margin:8px 0;padding:8px 10px;border:1px solid #F59E0B;border-radius:6px">'
+      + '<b>MIXED FEED</b> — ' + esc(mixTxt)
+      + ' · cross-timeframe alignment may compare two markets; A+ HTF leg is dark until feeds unify.</div>';
+  }catch(e){ return ''; }
+}
+
+function goldBuildAPlusCtx(ctx, gold, now, newsC){
+  var out = { style: 'goldswing', news: newsC, newsCaution: !!(newsC && newsC.caution), mixedFeed: !!(gold && gold.mixed) };
+  try{
+    if (ctx && ctx.macro){
+      out.realRate = (ctx.macro.realRateMeasured && ctx.macro.realRateMeasured.measured)
+        ? ctx.macro.realRateMeasured : null;
+      if (!out.realRate && ctx.macro.realRateSource !== 'fred-dfii10') out.realRateFallback = ctx.macro.realRateHint;
+    }
+    var mcFn = gfn('hgMetalsComplex');
+    if (mcFn && ctx && ctx.macro){
+      out.metalsComplex = mcFn({
+        dir: 'long',
+        xagTrend: ctx.macro.silver ? null : null,
+        dxy: ctx.macro.dxy,
+        real10y: out.realRate,
+        ratioTrend: ctx.macro.goldSilverRatio ? null : null
+      });
+    }
+    out.cot = (typeof W !== 'undefined' && W) ? W.__hgGoldCot : null;
+    var cashOpen = true;
+    var wkFn = gfn('hgInGoldWeekend');
+    if (wkFn) cashOpen = !wkFn(Math.floor((now || Date.now()) / 1000));
+    var gvsFn = gfn('hgGoldVenueSpread');
+    if (gvsFn && ctx && ctx.spot){
+      out.goldVenueSpread = gvsFn({ spot: ctx.spot.spotPx, paxg: ctx.spot.perpPx, cashOpen: cashOpen });
+    }
+    if (typeof W !== 'undefined' && W && W.__hgGoldVolPack && typeof W.hgVolRegime === 'function'){
+      out.volRegime = W.hgVolRegime(W.__hgGoldVolPack);
+    }
+    if (typeof W !== 'undefined' && W && typeof W.hgScoreRecords === 'function'){
+      out.edgeRecords = W.hgScoreRecords();
+    }
+  }catch(e){}
+  return out;
+}
+
+function goldEvalAPlusBatch(ranked, ctxPack){
+  var aplusFn = gfn('hgGoldAPlus');
+  if (!aplusFn) return { today: 0, nearest: null, panel: '' };
+  var today = 0, nearest = null, bestMiss = -1;
+  for (var i = 0; i < (ranked || []).length; i++){
+    var c = ranked[i];
+    if (!c || c.demoted || c.vetoed) continue;
+    var edge = null;
+    if (ctxPack.edgeRecords && typeof W !== 'undefined' && W.hgEdgeFor){
+      edge = W.hgEdgeFor({ symbol: c.sym, side: c.dir, poiKind: c.stratKey, rr: c.rr, ts: Date.now() }, ctxPack.edgeRecords);
+    }
+    var apCtx = Object.assign({}, ctxPack, { edge: edge });
+    c.aplusRead = aplusFn(c, apCtx);
+    if (c.aplusRead && c.aplusRead.aplus) today++;
+    else if (c.aplusRead && c.aplusRead.passN > bestMiss){
+      bestMiss = c.aplusRead.passN;
+      nearest = c.aplusRead;
+    }
+  }
+  var panel = goldAPlusPanelHTML(today, nearest, ranked);
+  return { today: today, nearest: nearest, panel: panel };
+}
+
+function goldAPlusPanelHTML(today, nearest, ranked){
+  var nearCount = 0;
+  for (var i = 0; i < (ranked || []).length; i++){
+    var r = ranked[i] && ranked[i].aplusRead;
+    if (r && !r.aplus && r.passN >= 11) nearCount++;
+  }
+  var h = '<div class="gsw-aplus note" style="margin:8px 0;padding:10px 12px;border:1px solid #B45309;border-radius:6px">';
+  h += '<b>GOLD A+</b> · ' + today + ' today · A+ is a ~few-per-month event by construction.';
+  if (nearCount) h += ' ' + nearCount + ' candidate' + (nearCount === 1 ? '' : 's') + ' at 11/13+.';
+  if (nearest && nearest.soleBlocker){
+    h += ' Nearest miss sole blocker: <b>' + esc(nearest.soleBlocker) + '</b>.';
+  } else if (nearest && nearest.note){
+    h += ' ' + esc(nearest.note);
+  }
+  h += '</div>';
+  return h;
+}
+
+function goldApplyBestLevelsBatch(ranked, gold, atrW, now){
+  var applyBlFn = gfn('hgApplyGoldBestLevels');
+  var postFn = gfn('hgGoldPostApplyRefresh');
+  if (!applyBlFn || !gold.rows4h || !gold.rows4h.length) return;
+  for (var fi = 0; fi < ranked.length; fi++){
+    var gc = ranked[fi];
+    if (!gc || gc.vetoed || gc.locked) continue;
+    try{
+      applyBlFn(gc, {
+        style: 'gold-swing',
+        rows: gold.rows4h,
+        rows4h: gold.rows4h,
+        rows1h: gold.rows1h,
+        rows1d: gold.rows1d,
+        atrW: atrW,
+        nowMs: now,
+        rankBoost: (gc.agree || 0),
+        vision: gc.vision,
+      });
+      if (postFn){
+        postFn(gc, {
+          style: 'gold-swing',
+          rows: gold.rows4h,
+          rows4h: gold.rows4h,
+          rows1d: gold.rows1d,
+        });
+      }
+    }catch(eGf){}
+  }
 }
 
 function bannerHTML(best, ranked){
@@ -788,6 +919,9 @@ function cardHTML(c, isBest, season){
   if (isFinite(c.fillProb)) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>fill ~' + Math.round(c.fillProb * 100) + '%</span>';
   if (c.goldProChip) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(c.goldProChip) + '</span>';
   if (c.visionChip) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>' + esc(c.visionChip) + '</span>';
+  if (isFinite(c.goldMinRr)) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>min ' + fmtF(c.goldMinRr, 1) + 'R</span>';
+  if (c.planSrc) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>' + esc(String(c.planSrc).split(' · ')[0]) + '</span>';
+  if (c.goldRegime) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>' + esc(c.goldRegime) + '</span>';
   if (c.entryType) metaChips += '<span class="gpip"' + gswPipAttr(false) + '>' + esc(c.entryType) + '</span>';
   var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
     if (!v) return false;
@@ -1366,13 +1500,20 @@ function buildCandidates(leg, nowMs, newsC, macro, sessionTxt, venue, sym, micro
         var snapLvls = (key === 'wkbreak' || key === 'macro' || key === 'pullback')
           ? [] : __swSnapLvls(sw, ob, useEntry, dir);
         var lv = __swLevels(dir, useEntry, a4, structStop, snapLvls);
-        if (lv.rr < 1.2){
+        var swBuildMinRr = 1.2;
+        if (lv.rr < swBuildMinRr){
           return { dropped: true, id: id, strategy: SW_NAME[key], stratKey: key, dir: dir,
                    venue: venue, sym: sym,
-                   reason: 'structure too close — R:R insufficient (' + lv.rr.toFixed(1) + 'R < 1.2R minimum)' };
+                   reason: 'structure too close — R:R insufficient (' + lv.rr.toFixed(1) + 'R < '
+                           + swBuildMinRr.toFixed(1) + 'R minimum)' };
         }
-        var grade = (L.mine.length >= 5) ? 'A' : ((L.mine.length >= 3) ? 'B' : 'C');
-        if (newsC && newsC.caution) grade = (grade === 'A') ? 'B' : 'C';
+        var gradeFn = gfn('hgGoldGradeFromScore');
+        var grade = gradeFn ? gradeFn(L.mine.length, !!(newsC && newsC.caution))
+          : ((L.mine.length >= 8) ? 'A' : ((L.mine.length >= 5) ? 'B' : 'C'));
+        if (newsC && newsC.caution && !gradeFn){
+          if (grade === 'A') grade = 'B';
+          else if (grade === 'B') grade = 'C';
+        }
         var conf = [];
         for (var j = 0; j < L.mine.length; j++) conf.push(L.mine[j].label);
         return {
@@ -1808,6 +1949,16 @@ function rankSetups(cands, ctx){
       for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
       rc.tally = tally;
       rc.tallyParts = parts;
+      try{
+        var gradeFn = gfn('hgGoldGradeFromScore');
+        if (gradeFn){
+          rc.grade = gradeFn(tally, !!(news.caution || c.newsCaution));
+        } else {
+          rc.grade = (tally >= 8) ? 'A' : ((tally >= 5) ? 'B' : 'C');
+          if ((news.caution || c.newsCaution) && rc.grade === 'A') rc.grade = 'B';
+          else if ((news.caution || c.newsCaution) && rc.grade === 'B') rc.grade = 'C';
+        }
+      }catch(eGr){}
       if (typeof hgSetupStackFromTallyParts === 'function'){
         try{
           var macroIn = null;
@@ -1988,6 +2139,8 @@ async function runScan(ui, scanSt){
       }
     }catch(eVol){}
     setProg(ui, 0.45);
+    if (gold.src && gold.src['4h']) microOpts.candleSource = gold.src['4h'];
+    else if (gold.source) microOpts.candleSource = gold.source;
     if (gold.rows4h.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
         : (stRoute ? stGoldVenueLabel(gold.source) : venueLabel(gold.source));
@@ -2072,23 +2225,7 @@ async function runScan(ui, scanSt){
     }
     var applyBlFn = gfn('hgApplyGoldBestLevels');
     if (applyBlFn && gold.rows4h && gold.rows4h.length){
-      for (var fi = 0; fi < ranked.length; fi++){
-        var gc = ranked[fi];
-        if (!gc || gc.demoted || gc.vetoed) continue;
-        try{
-          applyBlFn(gc, {
-            style: 'gold-swing',
-            rows: gold.rows4h,
-            rows4h: gold.rows4h,
-            rows1h: gold.rows1h,
-            rows1d: gold.rows1d,
-            atrW: atrW,
-            nowMs: now,
-            rankBoost: (gc.agree || 0),
-            vision: gc.vision,
-          });
-        }catch(eGf){}
-      }
+      goldApplyBestLevelsBatch(ranked, gold, atrW, now);
     } else {
     var formFn = gfn('hgFormTicket');
     if (formFn && gold.rows4h && gold.rows4h.length){
@@ -2176,12 +2313,21 @@ async function runScan(ui, scanSt){
     }
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
+    var mixedBanner = goldMixedFeedBannerHtml(gold);
     paintGoldWeekendPanel(ui, gold.rows4h, now, displayBest);
+    var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, newsC);
+    var aplusPack = goldEvalAPlusBatch(ranked, aplusCtx);
+    try{
+      var auditFn = gfn('hgTallyLegAudit');
+      if (auditFn && typeof W !== 'undefined' && W && typeof W.hgScoreRecords === 'function'){
+        W.__hgGoldTallyAudit = auditFn(W.hgScoreRecords().filter(function(r){ return r && r.lane === 'gold'; }));
+      }
+    }catch(eAu){}
     /* render */
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
@@ -2190,7 +2336,7 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + mixedBanner + (whySilent ? whySilentHTML(whySilent) : '')
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);

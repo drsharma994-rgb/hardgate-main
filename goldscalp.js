@@ -628,8 +628,52 @@ function tallyChips(c){
   }).join('') + '</div>';
 }
 
+function goldMixedFeedBannerHtml(gold){
+  try{
+    if (!gold || !gold.mixed) return '';
+    var mixTxt = (typeof hgGoldSrcMixedLabel === 'function') ? hgGoldSrcMixedLabel(gold.src) : 'per-timeframe sources differ';
+    return '<div class="note warn" style="margin:8px 0;padding:8px 10px;border:1px solid #F59E0B;border-radius:6px">'
+      + '<b>MIXED FEED</b> — ' + esc(mixTxt)
+      + ' · cross-timeframe alignment may compare two markets; A+ HTF leg is dark until feeds unify.</div>';
+  }catch(e){ return ''; }
+}
+
+function goldApplyBestLevelsBatch(ranked, venueRows, gold, atrW, now){
+  var applyBlFn = gfn('hgApplyGoldBestLevels');
+  var postFn = gfn('hgGoldPostApplyRefresh');
+  if (!applyBlFn) return;
+  for (var fi = 0; fi < ranked.length; fi++){
+    var gc = ranked[fi];
+    if (!gc || gc.vetoed || gc.locked) continue;
+    var vrF = venueRows[gc.venue];
+    var rF = (vrF && vrF.rows15m && vrF.rows15m.length) ? vrF.rows15m : gold.rows15m;
+    try{
+      applyBlFn(gc, {
+        style: 'gold-scalp',
+        rows: rF,
+        rows15m: rF,
+        rows1h: gold.rows1h,
+        rows4h: gold.rows4h,
+        atrW: atrW,
+        nowMs: now,
+        rankBoost: (gc.agree || 0) + (gc.killzoneWeight || 0),
+        vision: gc.vision,
+      });
+      if (postFn){
+        postFn(gc, {
+          style: 'gold-scalp',
+          rows: rF,
+          rows15m: rF,
+          rows1h: gold.rows1h,
+          rows4h: gold.rows4h,
+        });
+      }
+    }catch(eGf){}
+  }
+}
+
 function goldBuildAPlusCtx(ctx, gold, now, news){
-  var out = { style: 'goldscalp', news: news, newsCaution: !!(news && news.caution) };
+  var out = { style: 'goldscalp', news: news, newsCaution: !!(news && news.caution), mixedFeed: !!(gold && gold.mixed) };
   try{
     if (ctx && ctx.macro){
       out.realRate = (ctx.macro.realRateMeasured && ctx.macro.realRateMeasured.measured)
@@ -801,6 +845,9 @@ function cardHTML(c, isBest, season){
   if (isFinite(c.fillProb)) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>fill ~' + Math.round(c.fillProb * 100) + '%</span>';
   if (c.goldProChip) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(c.goldProChip) + '</span>';
   if (c.visionChip) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>' + esc(c.visionChip) + '</span>';
+  if (isFinite(c.goldMinRr)) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>min ' + fmtF(c.goldMinRr, 1) + 'R</span>';
+  if (c.planSrc) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(String(c.planSrc).split(' · ')[0]) + '</span>';
+  if (c.goldRegime) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.goldRegime) + '</span>';
   if (c.entryType) metaChips += '<span class="gpip"' + gsxPipAttr(false) + '>' + esc(c.entryType) + '</span>';
   var visionText = [c.visionNextBar || c.visionNextMove, c.visionPrediction].filter(function(v, i, a){
     if (!v) return false;
@@ -1229,6 +1276,8 @@ async function runScan(ui, scanSt){
       if (W.__hgGoldL2Book) scalpBundle.l2OrderBook = W.__hgGoldL2Book;
     }
     if (gold && gold.rows1d && gold.rows1d.length) scalpBundle.dailyCandles = gold.rows1d;
+    if (gold.src && gold.src['15m']) scalpBundle.candleSource = gold.src['15m'];
+    else if (gold.source) scalpBundle.candleSource = gold.source;
     if (gold.rows15m.length){
       var v = (gold.source === 'xm-xauusd') ? venueLabel(gold.source)
         : (stRoute ? stGoldVenueLabel(gold.source) : venueLabel(gold.source));
@@ -1342,25 +1391,7 @@ async function runScan(ui, scanSt){
     }
     var applyBlFn = gfn('hgApplyGoldBestLevels');
     if (applyBlFn){
-      for (var fi = 0; fi < ranked.length; fi++){
-        var gc = ranked[fi];
-        if (!gc || gc.demoted || gc.vetoed) continue;
-        var vrF = venueRows[gc.venue];
-        var rF = (vrF && vrF.rows15m && vrF.rows15m.length) ? vrF.rows15m : gold.rows15m;
-        try{
-          applyBlFn(gc, {
-            style: 'gold-scalp',
-            rows: rF,
-            rows15m: rF,
-            rows1h: gold.rows1h,
-            rows4h: gold.rows4h,
-            atrW: atrW,
-            nowMs: now,
-            rankBoost: (gc.agree || 0) + (gc.killzoneWeight || 0),
-            vision: gc.vision,
-          });
-        }catch(eGf){}
-      }
+      goldApplyBestLevelsBatch(ranked, venueRows, gold, atrW, now);
     } else {
     var formFn = gfn('hgFormTicket');
     if (formFn){
@@ -1503,6 +1534,7 @@ async function runScan(ui, scanSt){
     }
 
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
+    var mixedBanner = goldMixedFeedBannerHtml(gold);
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
     var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, news);
@@ -1517,7 +1549,7 @@ async function runScan(ui, scanSt){
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + aplusPack.panel + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + mixedBanner + aplusPack.panel + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)
@@ -1526,7 +1558,7 @@ async function runScan(ui, scanSt){
         /* zero qualifying candidates but something to show: WHY SILENT leads,
            then the watch panel, then the held-back reason lines */
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + (whySilent ? whySilentHTML(whySilent) : '')
+        ui.cards.innerHTML = basisHtml + mixedBanner + (whySilent ? whySilentHTML(whySilent) : '')
           + rejectedHTML(rejectedAll)
           + formingNowHTML(armedAll)
           + historyHTML(lock.store.history);
