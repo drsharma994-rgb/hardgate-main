@@ -9,7 +9,31 @@ import { getAgentStateStore } from './lib/agent-state.mjs';
 import { runMarketScan as executeMarketScan } from './lib/daemon-loop.mjs';
 import { hgCcxtExecutorFromEnv } from './lib/hardgate-executor.mjs';
 
+/* =========================================================================
+   OWNER DECISION — the daemon may NOT route a real order.
+
+   This build is a signal + paper-measurement terminal. Orders are placed BY
+   HAND on Delta. execute.js has carried HG_LIVE_TRADING_ENABLED = false for
+   the browser path, guarded by tests/test-no-live-trading.mjs — but that guard
+   only ever covered execute.js. The daemon was a SECOND, UNGUARDED execution
+   route: setting EXECUTE_CCXT_* on the Render worker and leaving
+   HARDGATE_DAEMON_DRY_RUN unset was enough to arm live orders, and render.yaml
+   documented exactly that as a supported setup step.
+
+   The worker still earns its keep: BRAIN synthesis, the conviction lock, the
+   agent swarm and Telegram alerts all run untouched. Only the broker call is
+   removed. hgCcxtExecutorFromEnv() is never invoked, so no API key is ever
+   read and nothing can reach an exchange regardless of environment, and
+   dryRun is forced true rather than derived from config.
+
+   To re-arm you must edit THIS LINE in source. That is deliberate: it cannot
+   be done from a Render dashboard, an env var, or a blueprint apply.
+   ========================================================================= */
+const HG_DAEMON_EXECUTION_ENABLED = false;
+
 const SCAN_MS = +(process.env.HARDGATE_SCAN_MS || 15 * 60 * 1000);
+/* Kept for logging only. It can no longer weaken anything: dryRun below is
+   hard-true while HG_DAEMON_EXECUTION_ENABLED is false. */
 const DRY_RUN = process.env.HARDGATE_DAEMON_DRY_RUN === '1' || process.env.HARDGATE_DAEMON_DRY_RUN === 'true';
 const AGENT_SWARM = (function(){
   if (process.env.HARDGATE_AGENT_SWARM === '0' || process.env.HARDGATE_AGENT_SWARM === 'false') return false;
@@ -34,8 +58,20 @@ async function bootHardgate(){
   var convictionManager = new ConvictionLockManager({ type: 'scalp', debug: process.env.HARDGATE_DAEMON_DEBUG === '1' });
   hydrateConvictionManager(convictionManager, activeState);
 
-  var executor = hgCcxtExecutorFromEnv();
-  if (!executor && !DRY_RUN){
+  /* Never even construct the executor while execution is disabled — no key is
+     read, no exchange client exists, nothing to pass accidentally downstream. */
+  var executor = HG_DAEMON_EXECUTION_ENABLED ? hgCcxtExecutorFromEnv() : null;
+  if (!HG_DAEMON_EXECUTION_ENABLED){
+    /* The phrase "DRY RUN" is kept deliberately: tests/test-app-boot.mjs
+       asserts the daemon acknowledges it will not trade, and that intent still
+       holds here — more strongly than before, since this state cannot be
+       switched off from the environment at all. */
+    log('[BOOT] DRY RUN — LIVE EXECUTION DISABLED IN SOURCE (owner decision) — signal + paper only.');
+    log('[BOOT] BRAIN synthesis, conviction lock, agent swarm and alerts all run. No broker call is possible.');
+    if (process.env.EXECUTE_CCXT_KEY || process.env.EXECUTE_CCXT_SECRET || process.env.EXECUTE_CCXT_EXCHANGE){
+      log('[BOOT] NOTE: EXECUTE_CCXT_* is set in the environment but IGNORED. Remove it to avoid confusion.');
+    }
+  }else if (!executor){
     log('[BOOT] WARN: EXECUTE_CCXT_* not set — scans will run but orders will not fire (set HARDGATE_DAEMON_DRY_RUN=1 to silence)');
   }else if (DRY_RUN){
     log('[BOOT] DRY RUN — no live orders');
@@ -68,7 +104,9 @@ async function bootHardgate(){
         convictionManager: convictionManager,
         db: db,
         executor: executor,
-        dryRun: DRY_RUN || !executor,
+        /* Hard-true while execution is disabled in source. Not derived from
+           env, so no dashboard change can flip it. */
+        dryRun: !HG_DAEMON_EXECUTION_ENABLED || DRY_RUN || !executor,
         atr: +(process.env.HARDGATE_DAEMON_ATR || 15),
         log: log,
       });

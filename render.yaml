@@ -1,9 +1,15 @@
 # HARDGATE on Render — one-click blueprint.
 # Creates:
-#   1) hardgate-main — web (static app + /api/proxy + /api/execute)
-#   2) hardgate-daemon — background worker (app.js 24/7 brain + CCXT loop)
-# Set EXECUTE_CCXT_* on the worker (and web if using /api/execute proxy).
-# Default HARDGATE_DAEMON_DRY_RUN=1 until you confirm keys + disable dry run.
+#   1) hardgate-main — web (static app + /api/proxy)
+#   2) hardgate-daemon — background worker (app.js 24/7 brain + alerts)
+#
+# LIVE EXECUTION IS DISABLED IN SOURCE. app.js carries
+# HG_DAEMON_EXECUTION_ENABLED = false, so the CCXT executor is never even
+# constructed and no broker call is possible regardless of environment.
+# Do NOT set EXECUTE_CCXT_* here — nothing would read it, and it would only
+# create the false impression that this deployment can trade. Orders are placed
+# BY HAND on Delta; this stack is signal + paper-measurement only.
+# Guarded by tests/test-no-live-trading.mjs (browser path AND daemon path).
 services:
   - type: web
     name: hardgate-main

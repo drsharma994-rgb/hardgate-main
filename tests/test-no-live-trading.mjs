@@ -111,4 +111,28 @@ console.log('== quiet candle cache outlives the alert cycle ==');
   ok(ttl > cycleMs,
      'quiet TTL ' + ttl + 's exceeds the ' + cycleMs + 's cycle — cached candles survive the boundary');
 }
+/* The browser was never the only way out. The Render worker (app.js) imports a
+   CCXT executor and render.yaml used to document arming it via env vars, which
+   meant this whole file guarded one of TWO execution routes. Guard both. */
+console.log('== the daemon cannot route an order either ==');
+{
+  const app = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+  ok(/const HG_DAEMON_EXECUTION_ENABLED = false;/.test(app),
+     'app.js carries the source-level kill switch, set to false');
+  /* The executor must sit behind the switch, not be called unconditionally —
+     constructing it reads API keys and creates an exchange client. */
+  ok(/HG_DAEMON_EXECUTION_ENABLED \? hgCcxtExecutorFromEnv\(\) : null/.test(app),
+     'hgCcxtExecutorFromEnv() is never invoked while the switch is false — no key is read');
+  ok(!/^\s*var executor = hgCcxtExecutorFromEnv\(\);/m.test(app),
+     'the old unconditional executor construction is gone');
+  /* dryRun must not be derivable purely from env, or a Render dashboard edit
+     re-arms live orders with no code review. */
+  ok(/dryRun: !HG_DAEMON_EXECUTION_ENABLED \|\|/.test(app),
+     'dryRun is forced by the source switch, not just by env vars');
+  const yaml = fs.readFileSync(path.join(ROOT, 'render.yaml'), 'utf8');
+  ok(!/^\s*-?\s*key:\s*EXECUTE_CCXT_/m.test(yaml),
+     'render.yaml declares no EXECUTE_CCXT_* key for an operator to fill in');
+  ok(/LIVE EXECUTION IS DISABLED IN SOURCE/.test(yaml),
+     'render.yaml states the constraint instead of documenting how to arm it');
+}
 console.log('\n' + passed + ' passed, 0 failed');
