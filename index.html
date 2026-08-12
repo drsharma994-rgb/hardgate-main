@@ -1110,7 +1110,7 @@ function hgTelegramPlanBlock(opts){
   if (opts.t2 != null && isFinite(+opts.t2)) lines.push('TAKE PROFIT 2: ' + px(opts.t2));
   return lines.join('\n');
 }
-const pct = (n,d=3)=> isFinite(n)? (n>=0?'+':'')+n.toFixed(d)+'%':'—';
+const pct = (n,d=3)=> (n!==null&&n!==undefined&&isFinite(n))? (n>=0?'+':'')+n.toFixed(d)+'%':'—';
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 const nowSec = () => Math.floor(Date.now()/1000);
 function setProg(id, f){ const p=$(id); if(!p) return; p.style.display = f===null?'none':'block'; if(f!==null) p.firstElementChild.style.width=(f*100).toFixed(1)+'%'; }
