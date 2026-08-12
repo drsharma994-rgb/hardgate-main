@@ -4368,6 +4368,7 @@ async function cryptoScanWarm(kind){
   }
   catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
+window.cryptoScanWarm = cryptoScanWarm;
 async function bestScanWarm(){
   try{
     const merged = [];
