@@ -22,7 +22,7 @@ console.log('== index wiring ==');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(html.indexOf('annunciator.css') >= 0, 'annunciator.css linked');
   ok(html.indexOf('fonts.gstatic.com') >= 0, 'gstatic preconnect');
-  ok(html.indexOf('Archivo') >= 0, 'Archivo font');
+  ok(html.indexOf('Inter') >= 0, 'Inter font (base-themes data-dense)');
 }
 
 console.log('== CSP fonts ==');
@@ -36,7 +36,7 @@ console.log('== CSP fonts ==');
 console.log('== cache ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v266/.test(sw), 'cache hg-v266');
+  ok(/hg-v267/.test(sw), 'cache hg-v267');
   ok(sw.indexOf('annunciator.css') >= 0, 'sw precaches annunciator.css');
 }
 

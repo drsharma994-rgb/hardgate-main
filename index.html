@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-style="data-dense" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#020617">
+<meta name="theme-color" content="#f4f6f9">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,14 +14,14 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@700;800;900&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#020617; --panel:#0F172A; --panel2:#1E293B; --line:#334155;
-  --gold:#38BDF8; --gold-dim:#0EA5E9;
-  --long:#34D399; --short:#F87171; --veto:#FB923C; --pass:#34D399;
-  --txt:#FFFFFF; --mut:#CBD5E1; --dim:#94A3B8;
-  --mono:'JetBrains Mono','IBM Plex Mono',monospace; --disp:'Orbitron','Space Grotesk',sans-serif;
+  --ink:#f4f6f9; --panel:#ffffff; --panel2:#edf1f6; --line:#d7dee8; --line-strong:#aab7c8;
+  --gold:#0f5cc0; --gold-dim:#0b4aa0;
+  --long:#15803d; --short:#dc2626; --veto:#c2410c; --pass:#15803d;
+  --txt:#172033; --mut:#536175; --dim:#65758c;
+  --mono:'JetBrains Mono','IBM Plex Mono',monospace; --disp:'Inter','Space Grotesk',system-ui,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--ink);color:var(--txt);font-family:var(--mono);font-size:13px;font-weight:500;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -32,7 +32,7 @@ input:focus,select:focus{outline:1px solid var(--gold-dim)}
 ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
 
 /* ---------- top bar ---------- */
-header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:50}
+header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:50;box-shadow:0 1px 2px rgba(23,32,51,.06)}
 .header-primary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%}
 .header-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;width:100%;padding-top:6px}
 .header-drawer{width:100%}
@@ -50,7 +50,7 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 .brand small{display:block;font-family:var(--mono);font-weight:600;font-size:9px;letter-spacing:.18em;color:var(--mut)}
 .xtoggle{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
 .xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em;font-weight:600}
-.xtoggle button.on{background:linear-gradient(180deg,#67E8F9,#22D3EE);color:#042F2E;font-weight:600}
+.xtoggle button.on{background:linear-gradient(180deg,#2563eb,#0f5cc0);color:#fff;font-weight:600}
 .statuschip{font-size:10px;letter-spacing:.08em;color:var(--mut);border:1px solid var(--line);padding:4px 9px;border-radius:4px;white-space:nowrap;font-weight:600}
 .statuschip b{color:var(--txt);font-weight:700}
 .statuschip.warn b{color:var(--short)}
@@ -59,11 +59,11 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 /* ---------- tabs (two-tier: group row + active group's tab row) ---------- */
 .navgroups{display:flex;gap:8px;padding:8px 16px 0;border-bottom:1px solid var(--line);background:var(--panel2);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .navgroups::-webkit-scrollbar{height:4px}
-.navgroups button{flex:none;background:transparent;border:1px solid var(--line);border-radius:5px;color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:600;transition:color .15s,border-color .15s,background .15s}
-.navgroups button:hover{color:var(--txt);border-color:var(--gold-dim)}
-.navgroups button.on{background:linear-gradient(180deg,#67E8F9,#22D3EE);border-color:#22D3EE;color:#042F2E;font-weight:600}
-.navgroups button .cnt{opacity:.6;font-weight:400;margin-left:6px}
-nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--ink);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.navgroups button{flex:none;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm,6px);color:var(--mut);padding:6px 14px;font-size:11px;letter-spacing:.12em;font-weight:600;transition:color .15s,border-color .15s,background .15s,box-shadow .15s}
+.navgroups button:hover{color:var(--txt);border-color:var(--line-strong)}
+.navgroups button.on{background:linear-gradient(180deg,#2563eb,#0f5cc0);border-color:#0f5cc0;color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(15,92,192,.18)}
+.navgroups button .cnt{opacity:.65;font-weight:500;margin-left:6px}
+nav{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel);overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 nav::-webkit-scrollbar{height:4px}
 nav button{position:relative;background:transparent;border:0;color:var(--mut);padding:11px 18px;font-size:12px;letter-spacing:.14em;font-weight:600;flex:none;transition:color .15s}
 nav button:hover{color:var(--txt)}
@@ -72,9 +72,10 @@ nav button::after{content:'';position:absolute;left:14px;right:14px;bottom:0;hei
 nav button.on::after{transform:scaleX(1)}
 main{padding:18px 16px 60px;max-width:1280px;margin:0 auto}
 .tabpane{display:none}.tabpane.on{display:block}
+.tabpane:not(.on){content-visibility:hidden;contain-intrinsic-size:0 480px}
 
 /* ---------- panels ---------- */
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(15,23,42,.06),0 8px 24px -12px rgba(15,23,42,.10)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius,8px);padding:16px;margin-bottom:16px;box-shadow:0 1px 2px rgba(23,32,51,.06)}
 .panel h2{font-family:var(--disp);font-size:13px;font-weight:800;letter-spacing:.14em;color:var(--txt);margin-bottom:10px;text-transform:uppercase}
 .panel h2 span{color:var(--mut);font-family:var(--mono);font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:none;margin-left:8px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -106,8 +107,8 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 
 /* ---------- scanner cards ---------- */
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;transition:border-color .15s,box-shadow .15s,transform .15s}
-.card:hover{border-color:var(--gold-dim);box-shadow:0 12px 32px -16px rgba(15,23,42,.14);transform:translateY(-2px)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm,6px);padding:12px 16px;transition:border-color .15s,box-shadow .15s;contain:layout style paint}
+.card:hover{border-color:var(--gold-dim);box-shadow:0 4px 16px -4px rgba(23,32,51,.12);transform:none}
 .card.long{border-left:3px solid var(--long)}
 .card.short{border-left:3px solid var(--short)}
 .card .chead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
@@ -126,10 +127,10 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .card .toBook{margin-top:6px;width:100%;background:transparent;border:1px solid var(--cyan,#3dd6c8);color:var(--cyan,#3dd6c8);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
 .card .toBook:hover{background:rgba(61,214,200,.08)}
 /* gold setup cards — inline-style backup; dark panels readable on any mount point */
-.card.gsx-card,.card.gsw-card{background:#0F172A!important;color:#F8FAFC!important;border-color:#334155!important}
-.card.gsx-card .sym,.card.gsw-card .sym{color:#F8FAFC!important}
-.card.gsx-card .mini .k,.card.gsw-card .mini .k{color:#94A3B8!important}
-.card.gsx-card .mini span:not(.k),.card.gsw-card .mini span:not(.k){color:#F8FAFC!important}
+.card.gsx-card,.card.gsw-card{background:var(--panel)!important;color:var(--txt)!important;border-color:var(--line)!important}
+.card.gsx-card .sym,.card.gsw-card .sym{color:var(--txt)!important}
+.card.gsx-card .mini .k,.card.gsw-card .mini .k{color:var(--dim)!important}
+.card.gsx-card .mini span:not(.k),.card.gsw-card .mini span:not(.k){color:var(--txt)!important}
 table.booktbl{width:100%;border-collapse:collapse;font-size:12px}
 table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);padding:6px 8px;text-align:left}
 .bookExecBar .statuschip.ok{border-color:rgba(61,214,200,.35)}
@@ -149,9 +150,9 @@ table.booktbl th,table.booktbl td{border-bottom:1px solid var(--line,#2a2f3a);pa
 .hgchart{height:190px;margin-top:8px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);overflow:hidden}
 
 /* ---------- controls ---------- */
-.btn{background:var(--gold);color:#14100A;border:0;border-radius:4px;padding:8px 16px;font-weight:700;font-size:12px;letter-spacing:.08em}
-.btn:disabled{background:var(--dim);color:var(--panel)}
-.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:600}
+.btn{background:linear-gradient(180deg,#2563eb,#0f5cc0);color:#fff;border:0;border-radius:var(--radius-sm,6px);padding:8px 16px;font-weight:700;font-size:12px;letter-spacing:.08em;box-shadow:0 2px 8px rgba(15,92,192,.18)}
+.btn:disabled{background:var(--line);color:var(--dim)}
+.btn.ghost{background:var(--panel);border:1px solid var(--line);color:var(--txt);font-weight:600;box-shadow:none}
 .chip{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:12px;padding:4px 11px;font-size:11px;font-weight:600}
 .chip.on{border-color:var(--gold);color:var(--gold)}
 .prog{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px;display:none}
@@ -176,9 +177,11 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 .hgauto .hgalabel{padding:4px 8px;font-size:9px;letter-spacing:.14em;color:var(--dim);border-right:1px solid var(--line);white-space:nowrap;font-weight:700}
 .hgauto button{background:transparent;border:0;color:var(--mut);padding:4px 9px;font-size:10px;letter-spacing:.08em;font-weight:600}
 .hgauto button:hover{color:var(--txt)}
-.hgauto button.on{background:var(--gold);color:#14100A;font-weight:600}
+.hgauto button.on{background:var(--gold);color:#fff;font-weight:600}
 </style>
+<link rel="stylesheet" href="vendor/base-themes/tokens-data-dense-light.css">
 <link rel="stylesheet" href="bright.css">
+<link rel="stylesheet" href="hg-icons.css">
 <link rel="stylesheet" href="mobile.css">
 <link rel="stylesheet" href="annunciator.css">
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
@@ -193,7 +196,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
       <button id="xStar" onclick="setExchange('startrader')">STARTRADER</button>
     </div>
-    <button type="button" class="header-menu-btn" id="headerMenuBtn" aria-expanded="false" aria-controls="headerDrawer" onclick="toggleHeaderDrawer()" title="Tools &amp; alerts">☰</button>
+    <button type="button" class="header-menu-btn" id="headerMenuBtn" aria-expanded="false" aria-controls="headerDrawer" onclick="toggleHeaderDrawer()" title="Tools &amp; alerts"><svg class="hg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   </div>
   <div class="header-chips" id="headerChips">
     <span class="statuschip" id="chipConn"><b>—</b> symbols</span>
@@ -204,11 +207,11 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   </div>
   <div class="header-drawer" id="headerDrawer">
     <div class="header-drawer-inner">
-      <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()">⟳ HARD REFRESH</button>
+      <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()"><svg class="hg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>HARD REFRESH</button>
       <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh locked at 2 minutes — re-runs ⟳ HARD REFRESH on every tab (including GOLD SCALP/SWING); a tick landing mid-refresh is skipped honestly and the countdown continues"><span class="hgalabel">AUTO 2m</span><button id="autoRefOff" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" class="on" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button><button id="autoRef900000" type="button" onclick="setAutoRefresh('900000')">15m</button></span>
       <span class="statuschip" id="autoRefreshCount" style="display:none"></span>
       <span class="statuschip" id="hardRefreshStat"></span>
-      <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><b>🔔</b> ALERTS <b id="alertState">OFF</b></span>
+      <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><svg class="hg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>ALERTS <b id="alertState">OFF</b></span>
       <label class="header-field" title="free push via ntfy.sh — pick an unguessable topic">
         <span class="header-field-label">ntfy</span>
         <input id="ntfyTopic" placeholder="topic" title="free push via ntfy.sh — pick an unguessable topic">

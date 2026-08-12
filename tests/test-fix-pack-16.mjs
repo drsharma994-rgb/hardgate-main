@@ -143,7 +143,7 @@ console.log('== deep gate audit ==');
 console.log('== sw cache + execute ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(sw.includes("'hg-v266'"), 'sw.js cache hg-v266');
+  ok(sw.includes("'hg-v267'"), 'sw.js cache hg-v267');
   ok(sw.includes('fixpack16-core.js'), 'fixpack16-core precached');
   const exec = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
   ok(!/hgFamilyRollup|hgVolumeTrust/.test(exec), 'execute.js stays disarmed');

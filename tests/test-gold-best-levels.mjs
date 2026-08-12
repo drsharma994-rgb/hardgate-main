@@ -102,7 +102,7 @@ console.log('== wiring ==');
   ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp post-apply refresh');
   ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing post-apply refresh');
   ok(/candleSource/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp passes candleSource');
-  ok(/hg-v266/.test(sw), 'cache hg-v266');
+  ok(/hg-v267/.test(sw), 'cache hg-v267');
 }
 
 console.log('== gold card text contrast ==');
@@ -114,7 +114,7 @@ console.log('== gold card text contrast ==');
   ok(/background:#0F172A!important;color:#F8FAFC/.test(gs), 'goldscalp card inline dark styles');
   ok(/hgInjectGsCss/.test(gs), 'goldscalp injects global gsx stylesheet');
   ok(/\.card\.gsw-card\{color:#F1F5F9/.test(gw), 'goldswing card uses dark HUD text');
-  ok(/gold setup cards — dark HUD panels/.test(bright), 'bright.css gold card contrast block');
+  ok(/gold setup cards — light panels/.test(bright), 'bright.css gold card light contrast block');
 }
 
 console.log('\n' + pass + ' passed, 0 failed');

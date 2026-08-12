@@ -28,7 +28,7 @@ console.log('== wiring ==');
   ok(/hgTradingStackPanelHtml/.test(fs.readFileSync(path.join(root, 'formation-instr-ui.js'), 'utf8')), 'formation panel');
   var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(/getXmGoldCandles/.test(html) && /preferDeltaXaut/.test(html), 'getXAUCandles spot-first');
-  ok(/hg-v266/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v266');
+  ok(/hg-v267/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v267');
 }
 
 console.log('\n' + pass + ' assertions passed');

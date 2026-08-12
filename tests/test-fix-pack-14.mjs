@@ -129,7 +129,7 @@ console.log('== gold coint ==');
 console.log('== cache bump ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v266/.test(sw), 'cache hg-v266');
+  ok(/hg-v267/.test(sw), 'cache hg-v267');
   ok(/fixpack14-core\.js/.test(sw), 'fixpack14-core precached');
   ok(/goldcoint\.js/.test(sw), 'goldcoint.js precached');
 }

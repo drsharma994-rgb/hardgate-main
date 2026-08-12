@@ -53,7 +53,7 @@ console.log('== wiring ==');
   ok(/ATOMIC_SCAN_TOP \|\| 0/.test(scan), 'atomic scan defaults to full universe (topN=0)');
   ok(/venueUniverse/.test(scan), 'atomic scan uses venueUniverse for full lists');
   ok(/full Delta.*CoinDCX/i.test(ai), 'ai-agent documents full universe atomic scan');
-  ok(/hg-v266/.test(sw), 'cache hg-v266');
+  ok(/hg-v267/.test(sw), 'cache hg-v267');
 }
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' failed' : ''));
