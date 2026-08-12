@@ -732,6 +732,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="fixpack13-core.js"></script>
 <script src="fixpack14-core.js"></script>
 <script src="fixpack15-core.js"></script>
+<script src="fixpack16-core.js"></script>
 <script src="venuepremium.js"></script>
 <script src="reliability.js"></script>
 <script src="formation.js"></script>
@@ -1386,6 +1387,8 @@ async function getXAUCandles(res, count, opts){
   const chip = $('goldDataSrc');
 
   function finish(rows, source, basisPct){
+    if (!S.goldSrcByTf) S.goldSrcByTf = {};
+    S.goldSrcByTf[res] = source;
     S.goldDataSource = source;
     S.goldBasisPct = (basisPct === undefined) ? null : basisPct;
     if (chip){
@@ -4860,12 +4863,13 @@ async function runGold(){
       }
       const reclaimed = swept && (dir==='long' ? lastClose>sweptLvl : lastClose<sweptLvl);
       const htfOk = dir==='long' ? lastClose>e21h1 : lastClose<e21h1;
+      const gc4Mixed = (typeof hgMixedFeedReason === 'function' && S.goldSrcByTf) ? hgMixedFeedReason(S.goldSrcByTf, '15m', '1h') : null;
       const g=[];
       g.push(['GC1','Kill zone active (London/NY)', sess.kz?'pass':'veto', sess.name]);
       g.push(['GC2',`Liquidity sweep of ${dir==='long'?'Asia low / PDL':'Asia high / PDH'} (last 3h)`, swept?'pass':'veto',
         swept?`swept ${swept} ${px(sweptLvl)} · extreme ${px(ext)}`:'no sweep']);
       g.push(['GC3','Closed 15m bar reclaimed the level', reclaimed?'pass':'veto', swept?`close ${px(lastClose)} vs ${px(sweptLvl)}`:'—']);
-      g.push(['GC4','1H context not fighting you (close vs 1H EMA21)', htfOk?'pass':'veto', `1H EMA21 ${px(e21h1)}`]);
+      g.push(['GC4','1H context not fighting you (close vs 1H EMA21)', gc4Mixed?'na':(htfOk?'pass':'veto'), gc4Mixed||(`1H EMA21 ${px(e21h1)}`)]);
       g.push(['GC5','Volatility alive (15m ATR ≥ 0.8× 24h median)', volAlive?'pass':'veto', `ATR ${px(a15)} · med ${px(aMed)}`]);
       let planHtml='';
       if (swept && reclaimed){
@@ -5062,6 +5066,14 @@ async function runGoldDeep(){
     const piv=pivotPoints(d1), cam=camarilla(d1);
     const hasVol4=h4.some(function(r){return (r.v||0)>0;});
     const hasVol15=m15.some(function(r){return (r.v||0)>0;});
+    if (!S.goldSrcByTf) S.goldSrcByTf = {};
+    const goldSrc = Object.assign({}, S.goldSrcByTf);
+    const mixed14 = (typeof hgMixedFeedReason === 'function') ? hgMixedFeedReason(goldSrc, '1d', '4h') : null;
+    const mixed15h = (typeof hgMixedFeedReason === 'function') ? hgMixedFeedReason(goldSrc, '15m', '1h') : null;
+    const goldMixed = (function(){ var vals = Object.keys(goldSrc).map(function(k){ return goldSrc[k]; }).filter(Boolean); var u = {}; vals.forEach(function(v){ u[v]=1; }); return Object.keys(u).length > 1; })();
+    const volTrust4h = (typeof hgVolumeTrust === 'function') ? hgVolumeTrust(goldSrc['4h'] || S.goldDataSource, '4h') : { trusted: hasVol4, reason: '' };
+    const volFlowOk = hasVol4 && volTrust4h.trusted;
+    const volFlowNaReason = !hasVol4 ? 'no volume on this feed' : (volTrust4h.trusted ? '' : volTrust4h.reason);
     const vreg=volRegimeG(h4,14);
     const wyk=hasVol4?wyckoffPhase(h4):{phase:'na',label:'N/A — no volume on this feed'};
     const wk=weeklyStructure(d1);
@@ -5101,7 +5113,10 @@ async function runGoldDeep(){
     else if(dxyDir!=='n/a'&&casc!=='mixed'){ dxyOk=(casc==='long'&&dxyDir==='bearish')||(casc==='short'&&dxyDir==='bullish')?'pass':'veto'; dxyGateDetail='DXY '+fmt(macro.dxy.value,2)+' '+macro.dxy.trend20+' '+pct(macro.dxy.change20Pct,2)+'/20d'+(casc==='long'?' (gold wants weak DXY)':' (gold wants strong DXY)'); }
     let tnxOk='na', tnxGateDetail='macro feed unavailable';
     if(tnxDir==='flat'){ tnxOk='na'; tnxGateDetail='10Y flat (±2%) over 20d — no edge'; }
-    else if(tnxDir!=='n/a'&&casc!=='mixed'){ tnxOk=(casc==='long'&&tnxDir==='falling')||(casc==='short'&&tnxDir==='rising')?'pass':'veto'; tnxGateDetail='10Y '+fmt(macro.tnx,2)+'% '+macro.tnxTrend+(casc==='long'?' (gold wants yields falling)':' (gold wants yields rising)'); }
+    else if(tnxDir!=='n/a'&&casc!=='mixed'){ tnxOk=(casc==='long'&&tnxDir==='falling')||(casc==='short'&&tnxDir==='rising')?'pass':'veto';
+      const ratesReal = macro && macro.realRateMeasured && macro.realRateMeasured.measured;
+      const ratesLabel = ratesReal ? ('real yield ' + fmt(macro.realRateMeasured.level, 2) + '% · FRED DFII10') : ('nominal 10Y ' + fmt(macro.tnx, 2) + '% · real yield unavailable');
+      tnxGateDetail=ratesLabel + ' ' + (macro.tnxTrend || '') + (casc==='long'?' (gold wants yields falling)':' (gold wants yields rising)'); }
     const rsiVeto=(casc==='long'&&r4>70)||(casc==='short'&&r4<30);
     let willOk=false,willDetail='n/a';
     if(h4.length>=14){ const wr=williamsR(h4,14); const wNow=last(wr); willOk=(casc==='long'&&wNow>-20)||(casc==='short'&&wNow<-80)?false:true; willDetail='W%R '+fmt(wNow,1); }
@@ -5146,9 +5161,13 @@ async function runGoldDeep(){
     if(h4.length>=20){ const ats=atrTrailingStop(h4,14,3); atrStopOk=(casc==='long'&&ats.trend===1)||(casc==='short'&&ats.trend===-1); atrStopVal=ats.stop[ats.stop.length-1]; atrStopDetail='ATR-TS '+px(atrStopVal)+' trend '+(ats.trend===1?'UP':'DOWN'); }
     /* ---- the 37-gate ledger ---- */
     const sg=[];
-    sg.push(['G1','Weekly EMA9/21 structure (calendar weeks)',wStruct!=='mixed'&&wStruct===dSide?'pass':'veto',wStruct.toUpperCase()+' · '+wk.weeks+' wks · 1D '+dSide.toUpperCase()]);
-    sg.push(['G2','4H EMA cascade with real spread',casc!=='mixed'&&spreadOk?'pass':'veto',casc.toUpperCase()+(spreadOk?' · spread ok':' · spread thin')]);
-    sg.push(['G3','1D side agrees (close vs 1D EMA50)',casc!=='mixed'&&casc===dSide?'pass':'veto',dSide.toUpperCase()]);
+    let g1St = wStruct!=='mixed'&&wStruct===dSide?'pass':'veto', g1Det = wStruct.toUpperCase()+' · '+wk.weeks+' wks · 1D '+dSide.toUpperCase();
+    let g2St = casc!=='mixed'&&spreadOk?'pass':'veto', g2Det = casc.toUpperCase()+(spreadOk?' · spread ok':' · spread thin');
+    let g3St = casc!=='mixed'&&casc===dSide?'pass':'veto', g3Det = dSide.toUpperCase();
+    if (mixed14){ g1St = g2St = g3St = 'na'; g1Det = g2Det = g3Det = mixed14; }
+    sg.push(['G1','Weekly EMA9/21 structure (calendar weeks)',g1St,g1Det]);
+    sg.push(['G2','4H EMA cascade with real spread',g2St,g2Det]);
+    sg.push(['G3','1D side agrees (close vs 1D EMA50)',g3St,g3Det]);
     sg.push(['G4','Heikin Ashi (last 3 bars)',haOk?'pass':'veto',haDetail]);
     sg.push(['G5','Hull MA(20) slope',hullOk?'pass':'veto',hullDetail]);
     sg.push(['G6','TEMA(20) slope',temaOk?'pass':'veto',temaDetail]);
@@ -5165,10 +5184,10 @@ async function runGoldDeep(){
     sg.push(['G17','Keltner mid side',keltOk?'pass':'veto',keltDetail]);
     sg.push(['G18','StochRSI not exhausted',srsiOk?'pass':'veto',srsiDetail]);
     sg.push(['G19','MACD hist aligned + rising',macdOk?'pass':'veto',macdDetail]);
-    sg.push(['G20','MFI(14) side',hasVol4?(mfiOk?'pass':'veto'):'na',hasVol4?mfiDetail:'no volume on this feed']);
-    sg.push(['G21','CMF(20) side',hasVol4?(cmfOk?'pass':'veto'):'na',hasVol4?cmfDetail:'no volume on this feed']);
+    sg.push(['G20','MFI(14) side',volFlowOk?(mfiOk?'pass':'veto'):'na',volFlowOk?mfiDetail:volFlowNaReason]);
+    sg.push(['G21','CMF(20) side',volFlowOk?(cmfOk?'pass':'veto'):'na',volFlowOk?cmfDetail:volFlowNaReason]);
     sg.push(['G22','Elder Ray',elderOk?'pass':'veto',elderDetail]);
-    sg.push(['G23','OBV slope',hasVol4?(obvOk?'pass':'veto'):'na',hasVol4?obvDetail:'no volume on this feed']);
+    sg.push(['G23','OBV slope',volFlowOk?(obvOk?'pass':'veto'):'na',volFlowOk?obvDetail:volFlowNaReason]);
     sg.push(['G24','Awesome Oscillator',aoOk?'pass':'veto',aoDetail]);
     sg.push(['G25','Aroon oscillator',aroonOk?'pass':'veto',aroonDetail]);
     sg.push(['G26','TSMOM 30/90d sign',tsmom,'30d '+pct(r30g,1)+' · 90d '+pct(r90g,1)]);
@@ -5187,7 +5206,9 @@ async function runGoldDeep(){
     const vetoCount=sg.filter(function(x){return x[2]==='veto';}).length;
     const naCount=sg.filter(function(x){return x[2]==='na';}).length;
     const totalScored=passCount+vetoCount;
-    const score=totalScored>0?(passCount/totalScored)*100:0;
+    const legacyScore=totalScored>0?(passCount/totalScored)*100:0;
+    const score = legacyScore;
+    let famRollup = (typeof hgFamilyRollup === 'function') ? hgFamilyRollup(sg) : [];
     /* ---- levels (structural, then ATR-TS tightening) ---- */
     let entry=null,stop=null,t1=null,t2=null,risk=null,rr=0;
     if(casc!=='mixed'){
@@ -5204,16 +5225,56 @@ async function runGoldDeep(){
       stop=atrStopVal; risk=Math.abs(entry-stop);
       t1=casc==='short'?entry-2*risk:entry+2*risk; t2=casc==='short'?entry-3*risk:entry+3*risk;
     }
+    const structRrOk = casc!=='mixed' && isFinite(rr) && rr >= 2;
+    const structRrVeto = casc!=='mixed' && isFinite(rr) && rr > 0 && rr < 2;
+    let famVerdict = (typeof hgFamilyVerdict === 'function') ? hgFamilyVerdict(famRollup, { legacyScore: legacyScore, structuralRrVeto: structRrVeto, structuralRrPass: structRrOk }) : null;
+    const gateById = {};
+    for (let gi = 0; gi < sg.length; gi++) gateById[sg[gi][0]] = sg[gi];
+    const decisiveRows = [
+      { k: 'G27 CUSUM', v: (gateById.G27 ? gateById.G27[2].toUpperCase() + ' — ' + gateById.G27[3] : '—') + ' · best measured feature · OOS AUC ~0.58 — a small edge, not a signal', state: gateById.G27 ? gateById.G27[2] : 'na' },
+      { k: 'Structural R:R', v: structRrOk ? fmt(rr,2)+'R ≥ 2 — worth taking' : (structRrVeto ? fmt(rr,2)+'R < 2 — veto' : 'n/a'), state: structRrVeto ? 'veto' : (structRrOk ? 'pass' : 'na') },
+      { k: 'G11 ADX trend strength', v: gateById.G11 ? gateById.G11[3] : '—', state: gateById.G11 ? gateById.G11[2] : 'na' },
+      { k: 'G29 event window', v: gateById.G29 ? gateById.G29[3] : '—', state: gateById.G29 ? gateById.G29[2] : 'na' },
+      { k: 'G30 Fix / NY Close', v: gateById.G30 ? gateById.G30[3] : '—', state: gateById.G30 ? gateById.G30[2] : 'na' },
+      { k: 'G12 DXY', v: gateById.G12 ? gateById.G12[3] : '—', state: gateById.G12 ? gateById.G12[2] : 'na' },
+      { k: 'G13 Rates', v: gateById.G13 ? gateById.G13[3] : '—', state: gateById.G13 ? gateById.G13[2] : 'na' },
+      { k: 'G28 Vol regime', v: gateById.G28 ? gateById.G28[3] : '—', state: gateById.G28 ? gateById.G28[2] : 'na' },
+      { k: 'G37 Squeeze', v: gateById.G37 ? gateById.G37[3] : '—', state: gateById.G37 ? gateById.G37[2] : 'na' }
+    ];
+    const decisiveHtml = (typeof hgRenderDecisiveBlock === 'function') ? hgRenderDecisiveBlock(decisiveRows) : '';
+    const familyLedgerHtml = (typeof hgRenderFamilyLedger === 'function') ? hgRenderFamilyLedger(famRollup, gateRow, {}) : sg.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('');
+    const mixedBanner = goldMixed ? '<div class="note warn" style="margin:8px 0"><b>MIXED FEED</b> — '+(typeof hgGoldSrcMixedLabel==='function'?hgGoldSrcMixedLabel(goldSrc):'')+' · cross-timeframe alignment is comparing two different markets</div>' : '';
     let verdictLabel,verdictColor,verdictWhy;
-    if(score>=80&&vetoCount===0){ verdictLabel='STRONG '+casc.toUpperCase(); verdictColor=casc; verdictWhy='All gates cleared. Highest conviction.'; }
-    else if(score>=60){ verdictLabel='MODERATE '+casc.toUpperCase(); verdictColor=casc; verdictWhy=passCount+'/'+totalScored+' passed. Some vetoes.'; }
-    else if(score>=40){ verdictLabel='WEAK '+casc.toUpperCase(); verdictColor=casc; verdictWhy=passCount+'/'+totalScored+' passed. Reduce size.'; }
-    else if(casc!=='mixed'){ verdictLabel='BIAS ONLY — '+casc.toUpperCase(); verdictColor='aside'; verdictWhy=passCount+'/'+totalScored+' passed. No edge.'; }
-    else { verdictLabel='MIXED / NO EDGE'; verdictColor='aside'; verdictWhy='No clear direction. Consider range.'; }
+    if (famVerdict && famVerdict.tier === 'veto'){
+      verdictLabel = famVerdict.label + (casc !== 'mixed' ? ' — ' + casc.toUpperCase() : '');
+      verdictColor = 'aside';
+      verdictWhy = famVerdict.why;
+    } else if (famVerdict && famVerdict.tier === 'strong' && vetoCount === 0){
+      verdictLabel = 'STRONG ' + casc.toUpperCase();
+      verdictColor = casc;
+      verdictWhy = famVerdict.headline + ' · ' + famVerdict.rareNote;
+    } else if (famVerdict && famVerdict.tier === 'moderate'){
+      verdictLabel = 'MODERATE ' + casc.toUpperCase();
+      verdictColor = casc;
+      verdictWhy = famVerdict.headline;
+    } else if (famVerdict && famVerdict.tier === 'weak'){
+      verdictLabel = 'WEAK ' + casc.toUpperCase();
+      verdictColor = casc;
+      verdictWhy = famVerdict.headline;
+    } else if (casc!=='mixed'){
+      verdictLabel = 'BIAS ONLY — ' + casc.toUpperCase();
+      verdictColor = 'aside';
+      verdictWhy = (famVerdict ? famVerdict.headline : passCount+'/'+totalScored+' legacy gates') + ' · legacy gate count ' + fmt(legacyScore,0) + '%';
+    } else {
+      verdictLabel = 'MIXED / NO EDGE';
+      verdictColor = 'aside';
+      verdictWhy = famVerdict ? famVerdict.headline : 'No clear direction.';
+    }
+    const familyQualifies = famVerdict && (famVerdict.tier === 'strong' || famVerdict.tier === 'moderate');
     let swingPlanHtml='';
     if(casc!=='mixed'&&risk>0&&entry!=null&&stop!=null&&t1!=null){
       swingPlanHtml='<div class="plan">'+planBlock(casc,entry,stop,t1,t2||t1)+'</div>';
-      if(score>=60){
+      if(familyQualifies || score>=60){
         logSetup(GOLD_SYM,casc,'gold-deep-swing',entry,stop,t1);
         const gdSwingStack = inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-deep-swing', clean: score>=60, asset: 'gold' });
         swingPlanHtml+='<button class="toTrade" onclick="' + (typeof hgToTradePlanOnclickAttr === 'function' ? hgToTradePlanOnclickAttr(GOLD_SYM, casc, entry, stop, t1, { t2: t2, stack: gdSwingStack, scanner: 'gold-deep-swing', strategy: 'gold-deep-swing' }) : ('toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')')) + '">SEND TO TRADE PLAN →</button>';
@@ -5264,11 +5325,12 @@ async function runGoldDeep(){
         if(dir==='short'&&Math.max.apply(null,look.map(function(r){return r.h;}))>lv){ swept=nm;sweptLvl=lv;ext=Math.max.apply(null,look.map(function(r){return r.h;})); break; } }
       const reclaimed=swept&&(dir==='long'?lastClose>sweptLvl:lastClose<sweptLvl);
       const htfOk=dir==='long'?lastClose>e21h1:lastClose<e21h1;
+      const gc4Mixed = (typeof hgMixedFeedReason === 'function' && S.goldSrcByTf) ? hgMixedFeedReason(S.goldSrcByTf, '15m', '1h') : null;
       const g=[];
       g.push(['C1','Kill zone active (London/NY)',sess.kz?'pass':'veto',sess.name]);
       g.push(['C2','Liquidity sweep of '+(dir==='long'?'Asia low / PDL':'Asia high / PDH')+' (last 3h)',swept?'pass':'veto',swept?'swept '+swept+' '+px(sweptLvl)+' · extreme '+px(ext):'no sweep']);
       g.push(['C3','Closed 15m bar reclaimed the level',reclaimed?'pass':'veto',swept?px(lastClose)+' vs '+px(sweptLvl):'—']);
-      g.push(['C4','1H EMA21 context',htfOk?'pass':'veto','1H EMA21 '+px(e21h1)]);
+      g.push(['C4','1H EMA21 context',mixed15h?'na':(htfOk?'pass':'veto'),mixed15h||('1H EMA21 '+px(e21h1))]);
       g.push(['C5','Volatility alive (15m ATR ≥ 0.8× 24h median)',volAlive?'pass':'veto','ATR '+px(a15)+' · med '+px(aMed)]);
       g.push(['C6','Heikin Ashi (15m, last 2)',haScalpOk?'pass':'veto',haScalpDetail]);
       g.push(['C7','Williams %R (15m)',will15Ok?'pass':'veto',will15Detail]);
@@ -5372,6 +5434,7 @@ async function runGoldDeep(){
     }
     /* ================= assemble output ================= */
     const srcTxt=(GOLD_SRC_LABEL[S.goldDataSource]||'—');
+    const srcByTfTxt = (typeof hgGoldSrcMixedLabel === 'function') ? hgGoldSrcMixedLabel(goldSrc) : srcTxt;
     const contextHtml='<div class="panel"><h2>Context <span>structure · session · levels</span></h2>'
       +'<div class="kv"><span class="k">Weekly structure</span><span class="v">'+wk.struct.toUpperCase()+' ('+wk.weeks+' wks)</span></div>'
       +'<div class="kv"><span class="k">4-week range</span><span class="v">'+px(wk.wLow)+' – '+px(wk.wHigh)+'</span></div>'
@@ -5386,14 +5449,17 @@ async function runGoldDeep(){
       +'<div class="kv"><span class="k">London Fix / NY Close</span><span class="v">'+(isLondonFix()?'FIX ACTIVE':isNYClose()?'CLOSE ACTIVE':'quiet')+'</span></div>'
       +'<div class="kv"><span class="k">Pivot (last closed day)</span><span class="v">PP '+px(piv.pp)+' · R1 '+px(piv.r1)+' · S1 '+px(piv.s1)+'</span></div>'
       +'<div class="kv"><span class="k">Camarilla</span><span class="v">H4 '+px(cam.h4)+' · L4 '+px(cam.l4)+'</span></div>'
-      +'<div class="kv"><span class="k">Data</span><span class="v">'+srcTxt+'</span></div></div>';
+      +'<div class="kv"><span class="k">Data</span><span class="v">'+srcTxt+(goldMixed?' · per-TF: '+srcByTfTxt:'')+'</span></div></div>';
     $('goldDeepOut').innerHTML=
-        '<div class="panel"><h2>Swing — 37-gate ledger <span>weekly + 1D + 4H · macro gates auto</span></h2>'
-      + '<div class="ledger">'+sg.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('')+'</div>'
+        mixedBanner
+      + decisiveHtml
+      + '<div class="panel"><h2>Swing — 12 information families <span>37 gates grouped · legacy count kept for transition</span></h2>'
+      + '<div class="ledger">'+familyLedgerHtml+'</div>'
       + '<div class="verdict '+verdictColor+'"><div class="vword">'+verdictLabel
-      + (casc!=='mixed'&&score>=60&&typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,casc,{scanner:'gold-deep-swing',strategy:'gold-deep-swing',fund:'gold',klass:'metals'}):'')
+      + (familyQualifies&&typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,casc,{scanner:'gold-deep-swing',strategy:'gold-deep-swing',fund:'gold',klass:'metals'}):'')
       + '</div>'
-      + '<div class="vwhy">Score: '+fmt(score,0)+'% · '+passCount+' pass · '+vetoCount+' veto · '+naCount+' n/a · '+verdictWhy+'</div></div>'
+      + '<div class="vwhy">'+(famVerdict?famVerdict.headline+' · ':'')+verdictWhy+'</div>'
+      + '<div class="vwhy" style="opacity:.75;font-size:10px;margin-top:4px">Legacy gate count: '+fmt(legacyScore,0)+'% · '+passCount+' pass · '+vetoCount+' veto · '+naCount+' n/a (deprecated denominator — families are primary)</div></div>'
       + swingPlanHtml+'</div>'
       + '<div class="panel" style="margin-top:10px"><h2>Scalp — 20-gate ledgers <span>15m sweep-and-reclaim</span></h2>'
       + deepScalpLedger('long')+deepScalpLedger('short')+'</div>'
@@ -5401,8 +5467,8 @@ async function runGoldDeep(){
       + (meanRevHtml||'')
       + contextHtml
       + (typeof hgGoldBasisNoteHtml === 'function' ? hgGoldBasisNoteHtml() : '');
-    try{ window.__hgGoldDeepVerdict = { label: verdictLabel, score: score, dir: (casc==='mixed'?null:casc), ts: Date.now() }; }catch(e){}
-    $('goldDeepStat').textContent='deep scan · swing score '+fmt(score,0)+'% · '+srcTxt+' · '+new Date().toTimeString().slice(0,5);
+    try{ window.__hgGoldDeepVerdict = { label: verdictLabel, score: legacyScore, familyVerdict: famVerdict, legacyScore: legacyScore, dir: (casc==='mixed'?null:casc), mixedFeed: goldMixed, ts: Date.now() }; }catch(e){}
+    $('goldDeepStat').textContent='deep scan · '+((famVerdict&&famVerdict.label)||'eval')+' · legacy '+fmt(legacyScore,0)+'% · '+srcTxt+' · '+new Date().toTimeString().slice(0,5);
     setProg('goldDeepProg',0.95);
   }catch(e){
     $('goldDeepStat').textContent='deep scan failed: '+e.message;

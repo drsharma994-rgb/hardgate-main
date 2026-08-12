@@ -518,8 +518,10 @@ function goldIchimoku(rows){
    driven trend), SQUAT (pink) = volume up + mfi down (high volume, low range
    = manipulation/breakout watch), FAKE = mfi up + volume down, FADE = both down.
    -> {last, mfi, series:[last <=5 labels]}. */
-function goldMFI(rows){
+function goldMFI(rows, opts){
+  opts = opts || {};
   var out = { last: 'NONE', mfi: NaN, series: [] };
+  if (opts.volumeTrusted === false) return out;
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 2) return out;
@@ -546,8 +548,10 @@ function goldMFI(rows){
    BB(20,2) fully inside KC(20,1.5) = squeeze ON; the first bar back outside
    after >=3 on-bars = FIRED — trade the expansion close outside the bands.
    -> {state:'ON'|'FIRED'|'OFF'|'NONE', onRun, firedAgo, dir:'UP'|'DOWN'|null}. */
-function goldVolSqueeze(rows){
+function goldVolSqueeze(rows, opts){
+  opts = opts || {};
   var out = { state: 'NONE', onRun: 0, firedAgo: null, dir: null };
+  if (opts.volumeTrusted === false) return out;
   try{
     rows = __rows(rows);
     if (!rows || rows.length < 30) return out;
@@ -1264,6 +1268,9 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   var sw = D.sw = goldSweeps(rows);
   /* microstructure landscape + V2 triggers (HardgateGoldEngine.evaluateScalp) */
   bundleOpts = bundleOpts || {};
+  var volSrc = bundleOpts.candleSource || bundleOpts.source || null;
+  var volTrusted = !(volSrc && /paxg|xaut|binance-paxg|binance-xaut/i.test(String(volSrc)));
+  var volOpts = { volumeTrusted: volTrusted };
   var scalpCtx = { nearestStructure: null, entry: entry, atr15: a15 };
   if (bundleOpts.dxyCandles) scalpCtx.dxyCandles = bundleOpts.dxyCandles;
   if (bundleOpts.currentDxy) scalpCtx.currentDxy = bundleOpts.currentDxy;
@@ -1391,7 +1398,7 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
   if (ich.state === 'ABOVE') add('long', 'ichimoku', 'price above the cloud (thickness ' + (isFinite(ich.thickness) ? ich.thickness.toFixed(2) : 'n/a') + ')');
   else if (ich.state === 'BELOW') add('short', 'ichimoku', 'price below the cloud (thickness ' + (isFinite(ich.thickness) ? ich.thickness.toFixed(2) : 'n/a') + ')');
 
-  var vsq = D.vsq = goldVolSqueeze(rows);
+  var vsq = D.vsq = goldVolSqueeze(rows, volOpts);
   if (vsq.state === 'FIRED' && vsq.dir){
     add(vsq.dir === 'UP' ? 'long' : 'short', 'squeeze', 'BB/KC squeeze fired ' + vsq.dir.toLowerCase() + ' (' + vsq.firedAgo + 'b ago) — expansion');
   } else if (vsq.state === 'ON' && vsq.onRun >= 3){
@@ -1424,7 +1431,7 @@ function __goldBundle(rows, rows1h, rows4h, entry, a15, bundleOpts){
     add('short', 'stochrsi', 'StochRSI ' + (isFinite(sr.k) ? sr.k.toFixed(0) : 'n/a') + ' stretched inside a bear ribbon — pullback timed');
 
   var lastBar = rows[n-1];
-  var mfi = D.mfi = goldMFI(rows);
+  var mfi = D.mfi = goldMFI(rows, volOpts);
   if (mfi.last === 'GREEN') add(lastBar.c >= lastBar.o ? 'long' : 'short', 'mfi', 'MFI green bar — volume-driven trend');
   else if (mfi.last === 'SQUAT') D.notes.push('MFI pink bar — high volume + low range: manipulation / breakout watch, confirmation required');
 
