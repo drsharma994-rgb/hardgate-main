@@ -4,3 +4,4 @@ scripts/.book-digest-state.json
 data/paperbook.json
 data/shadow-book.json
 snapshots/
+node_modules/

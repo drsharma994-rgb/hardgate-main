@@ -1,5 +1,6 @@
 /* HARDGATE — fix pack 16 regression guards (gold deep families + provenance). */
 import fs from 'node:fs';
+import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -142,10 +143,56 @@ console.log('== deep gate audit ==');
 console.log('== sw cache + execute ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(sw.includes("'hg-v263'"), 'sw.js cache hg-v263');
+  ok(sw.includes("'hg-v264'"), 'sw.js cache hg-v264');
   ok(sw.includes('fixpack16-core.js'), 'fixpack16-core precached');
   const exec = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
   ok(!/hgFamilyRollup|hgVolumeTrust/.test(exec), 'execute.js stays disarmed');
+}
+
+console.log('== browser copy (fixpack16-core.js) matches the daemon copy ==');
+{
+  const core = fs.readFileSync(path.join(root, 'fixpack16-core.js'), 'utf8');
+  const sandbox = { window: {} };
+  vm.createContext(sandbox);
+  vm.runInContext(core, sandbox);
+  const W = sandbox.window;
+  ok(typeof W.hgVolumeTrust === 'function', 'browser copy exports hgVolumeTrust');
+
+  // The browser file is what actually runs in the gold tabs; it must not drift
+  // from lib/volume-trust.mjs (the daemon copy) or the two disagree on live trades.
+  const feeds = ['yahoo', 'xm-xauusd', 'twelvedata', 'delta-xaut', 'binance-paxg',
+    'paxg', 'xaut', 'fred', 'spot', 'gold-api', 'frankfurter', 'brand-new-feed', ''];
+  for (const f of feeds) {
+    ok(W.hgVolumeTrust(f, '4h').trusted === hgVolumeTrust(f, '4h').trusted,
+      'volume trust parity browser/daemon for ' + (f || '(empty)'));
+  }
+
+  ok(W.hgVolumeTrust('delta-xaut', '4h').trusted === false,
+    'delta-xaut is tokenised gold — UNTRUSTED in the browser copy');
+  ok(hgVolumeTrust('delta-xaut', '4h').trusted === false,
+    'delta-xaut is tokenised gold — UNTRUSTED in the daemon copy');
+  ok(W.hgVolumeTrust('yahoo', '4h').trusted === true, 'yahoo GC=F volume still trusted');
+  ok(W.hgVolumeTrust('gold-api', '4h').trusted === false, 'browser copy default-denies unknown feeds');
+
+  // Undefined CSS custom properties fall back to currentColor, which rendered the
+  // 12 family rows with white borders on the dark terminal.
+  const cssVars = new Set((html.match(/--[a-z0-9]+(?=\s*:)/g) || []));
+  for (const v of (core.match(/var\((--[a-z0-9]+)\)/g) || [])) {
+    const name = v.slice(4, -1);
+    ok(cssVars.has(name), 'fixpack16-core CSS var ' + name + ' is defined in index.html');
+  }
+}
+
+console.log('== scalp + swing surface the mixed-feed warning ==');
+{
+  // Provenance was computed in both tabs and then thrown away: neither read .mixed,
+  // so a 15m/4h split across two different markets rendered as clean alignment.
+  for (const [name, src] of [['goldscalp', gs], ['goldswing', gsw]]) {
+    ok(/gold\.mixed/.test(src), name + ' reads the mixed flag it computes');
+    ok(src.includes('MIXED FEED'), name + ' surfaces a MIXED FEED warning');
+    ok(/hgGoldSrcMixedLabel/.test(src), name + ' names the per-timeframe providers');
+    ok(/hgGoldSrcAssign/.test(src), name + ' routes provenance through hgGoldSrcAssign');
+  }
 }
 
 console.log('\nPASS fix-pack-16 — ' + pass + ' assertions');

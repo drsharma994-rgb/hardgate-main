@@ -131,8 +131,11 @@ var UNTRUSTED_VOL = { 'binance-paxg':1, 'binance-xaut':1, 'binance-xau':1, 'paxg
 function hgVolumeTrust(source, tf){
   var src = String(source || '').toLowerCase();
   if (!src) return { trusted: false, reason: 'unknown provider' };
+  // Tokenised-gold venues (PAXG/XAUT, incl. delta-xaut) report token flow, not gold flow.
+  // This deny check runs first and intentionally also covers delta-xaut.
   if (UNTRUSTED_VOL[src] || /paxg|xaut|token/.test(src)) return { trusted: false, reason: 'volume is ' + source + ', not gold flow' };
-  if (src.indexOf('xm-') === 0 || src === 'twelvedata' || src === 'yahoo' || src === 'delta-xaut') return { trusted: true, reason: 'gold venue volume' };
+  if (src.indexOf('xm-') === 0 || src === 'twelvedata' || src === 'yahoo') return { trusted: true, reason: 'gold venue volume' };
+  // Default deny: an unrecognised feed never gets to vote on volume gates.
   return { trusted: false, reason: 'unknown provider' };
 }
 
@@ -179,7 +182,7 @@ function hgRenderFamilyLedger(rollup, gateRowFn, auditGate){
     var dissent = hgFamilyDissentLine(fam);
     var summary = fam.label + ' · ' + fam.verdict + ' · ' + fam.nPass + '/' + scored
       + (fam.nNa ? ' (' + fam.nNa + ' na)' : '') + (dissent ? ' · ' + dissent : '');
-    html += '<details class="hg-fam-row" style="margin:4px 0;border:1px solid var(--border);border-radius:4px;padding:4px 8px">'
+    html += '<details class="hg-fam-row" style="margin:4px 0;border:1px solid var(--line);border-radius:4px;padding:4px 8px">'
       + '<summary style="cursor:pointer;font-size:11px;letter-spacing:.08em">' + summary + '</summary>'
       + '<div class="ledger" style="margin-top:6px">';
     for (var j = 0; j < fam.members.length; j++){

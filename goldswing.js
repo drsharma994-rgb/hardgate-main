@@ -983,6 +983,7 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 async function fetchGoldKlines(){
   var out = { rows4h: [], rows1d: [], src: {}, mixed: false, source: null, xmSymbol: null };
   var srcSet = function(tf, source, rowsKey, rows){
+    if (typeof hgGoldSrcAssign === 'function'){ hgGoldSrcAssign(out, tf, source, rowsKey, rows); return; }
     if (!rows || !rows.length || !source) return;
     out[rowsKey] = rows;
     out.src[tf] = source;
@@ -1999,6 +2000,10 @@ async function runScan(ui, scanSt){
       for (i = 0; i < (got.rejected || []).length; i++) rejectedAll.push(got.rejected[i]);
       legs.push(v + ': ' + gold.rows4h.length + ' 4h bars — '
         + (got.length ? got.length + ' strategy candidate' + (got.length === 1 ? '' : 's') : 'no qualifying confluence'));
+      if (gold.mixed){
+        var mixTxt = (typeof hgGoldSrcMixedLabel === 'function') ? hgGoldSrcMixedLabel(gold.src) : '';
+        legs.push('MIXED FEED — ' + mixTxt + ' · cross-timeframe alignment is comparing two different markets');
+      }
     } else {
       legs.push('primary gold feed: no 4h klines from any source (macro chain + PAXGUSDT both failed)');
     }
