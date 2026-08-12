@@ -778,10 +778,11 @@ function hgApplyExactEntry(plan, rows4h, opts){
     if (!plan || !plan.dir || !rows4h || !rows4h.length) return plan;
     var dir = plan.dir;
     var style = String(opts.style || plan.type || 'swing').toLowerCase();
+    if (opts.skipExact === true || style === 'reversal-sniper') return plan;
     var markClose = +rows4h[rows4h.length - 1].c;
 
     if (typeof edgeSignal === 'function' && opts.preferEdge !== false
-        && style !== 'scalp' && style !== 'fade' && style !== 'meanrev'){
+        && style !== 'scalp' && style !== 'fade' && style !== 'meanrev' && style !== 'reversal-sniper'){
       try{
         var sig = edgeSignal(rows4h);
         if (sig && sig.dir === dir){

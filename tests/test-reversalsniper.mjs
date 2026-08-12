@@ -35,11 +35,24 @@ ok(W.rsAssess(null) === null && W.rsAssess([]) === null, 'rsAssess: null/empty -
 ok(W.rsConviction({ triggers: ['sweep'] }) === 4, 'rsConviction: sweep = 4');
 ok(W.rsConviction({ triggers: ['meanrev', 'drawdown'], bt: { n: 5, expR: 0.5, winPct: 60 } }) >= 6,
    'rsConviction: meanrev + drawdown + paying bt');
+ok(W.rsConviction({ triggers: ['rsi', 'drawdown'], rsi2: 0, drawdownPct: 8 }) >= 4,
+   'rsConviction: extreme RSI + drawdown reaches sniper floor');
 
 ok(W.rsIsDeskVenue('delta') && W.rsIsDeskVenue('coindcx') && !W.rsIsDeskVenue('binance'),
    'rsIsDeskVenue: delta + coindcx only');
 ok(typeof W.rsLoadUniverse === 'function', 'rsLoadUniverse exported');
-ok(/hg-v257/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v257');
+ok(/hg-v258/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v258');
+function tapeOversold(){
+  const out=[]; let p=100;
+  for(let i=0;i<120;i++){
+    if(i>=100) p*=0.985;
+    else if(i>=80) p*=0.995;
+    out.push({t:i*14400,o:p,h:p*1.01,l:p*0.992,c:p,v:1000});
+  }
+  return out;
+}
+const hit = W.rsAssess(tapeOversold());
+ok(hit && hit.conviction >= 4 && hit.lev >= 30, 'rsAssess: oversold dump tape yields sniper setup');
 ok(/Delta.*CoinDCX.*full universe/i.test(readFileSync(path.join(root, 'reversalsniper.js'), 'utf8')),
    'reversalsniper scans Delta + CoinDCX full universe');
 
