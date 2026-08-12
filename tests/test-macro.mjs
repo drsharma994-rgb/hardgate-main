@@ -242,8 +242,8 @@ async function macroOnly(setR, klines){
 /* ================= Part 4: getGoldMacro shape + hints + Yahoo last resort ================= */
 console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==');
 {
-  const SHAPE = ['dxy', 'dxyOfficial', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realYield10Y',
-    'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend'];
+  const SHAPE = ['dfii10Rows', 'dxy', 'dxyOfficial', 'goldPx', 'goldSilverRatio', 'realRateHint', 'realRateMeasured', 'realRateSource',
+    'realYield10Y', 'realYieldChange20Pct', 'realYieldTrend', 'silver', 'tnx', 'tnxChange20Pct', 'tnxSource', 'tnxTrend'];
 
   const m = await macroOnly(macroRoutes('falling', FALLING_YIELDS, 50), async () => synthRows(10, 4000));
   assert(Object.keys(m).sort().join('|') === SHAPE.join('|'), 'exact return shape keys: ' + SHAPE.join(', '));
@@ -264,7 +264,8 @@ console.log('\n== Part 4: getGoldMacro shape, realRateHint, Yahoo last resort ==
   assert(mD.dxy === null && mD.dxyOfficial === null && mD.tnx === null && mD.tnxTrend === null &&
          mD.tnxChange20Pct === null && mD.tnxSource === null && mD.realYield10Y === null &&
          mD.realYieldTrend === null && mD.realYieldChange20Pct === null &&
-         mD.silver === null && mD.goldPx === null && mD.goldSilverRatio === null && mD.realRateHint === 'NEUTRAL',
+         mD.silver === null && mD.goldPx === null && mD.goldSilverRatio === null && mD.realRateHint === 'NEUTRAL'
+         && mD.realRateMeasured === null && mD.realRateSource === 'hint' && mD.dfii10Rows === null,
          'all legs null + NEUTRAL hint when every source is down');
 
   // Yahoo last resort through /api/proxy: Treasury + gold-api + Binance dead
