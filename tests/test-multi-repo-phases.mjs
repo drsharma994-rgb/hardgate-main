@@ -78,7 +78,7 @@ console.log('== wiring ==');
   ok(/createHardgateMcpApi/.test(srv), 'hardgate mcp api mounted');
   ok(/runRiskRules/.test(fs.readFileSync(path.join(root, 'lib/execute-api.mjs'), 'utf8')), 'execute risk rules');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v257/.test(sw), 'cache hg-v257');
+  ok(/hg-v258/.test(sw), 'cache hg-v258');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('gate-replay-oos.js') >= 0, 'gate-replay-oos loaded');
 }
 

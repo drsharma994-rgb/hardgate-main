@@ -38,6 +38,7 @@ var SWING_LOOKBACK  = 30;
 var SWING_EXCLUDE   = 4;
 var MIN_DRAWDOWN    = 0.02;
 var SNIPER_MMR      = 0.005;
+var SNIPER_MAX_STOP_PCT = 0.0188;   /* ~1.88% — enables ≥30× max-safe lev */
 var RR1             = 2.0;
 var RR2             = 3.5;
 var ATR_LEN         = 14;
@@ -105,6 +106,17 @@ function rsDrawdownPct(rows, len){
   }catch(e){ return 0; }
 }
 
+function rsSniperStop(dir, entry, structuralStop){
+  try{
+    entry = +entry; structuralStop = +structuralStop;
+    if (!isFinite(entry) || !isFinite(structuralStop) || !(entry > 0)) return structuralStop;
+    var cap = entry * (1 - SNIPER_MAX_STOP_PCT);
+    if (dir === 'long') return Math.max(structuralStop, cap);
+    var capS = entry * (1 + SNIPER_MAX_STOP_PCT);
+    return Math.min(structuralStop, capS);
+  }catch(e){ return structuralStop; }
+}
+
 function rsBuildPlan(entry, stop, rr1, rr2){
   try{
     entry = +entry; stop = +stop;
@@ -135,6 +147,19 @@ function rsConviction(setup){
       else if (tr[i] === 'rsi') c += 1;
       else if (tr[i] === 'drawdown') c += 1;
     }
+    var rv = setup.rsi2;
+    if (isFinite(rv)){
+      if (rv <= 2) c += 3;
+      else if (rv <= 5) c += 2;
+      else if (rv <= 8) c += 1;
+    }
+    var ddPct = setup.drawdownPct;
+    if (isFinite(ddPct)){
+      if (ddPct >= 10) c += 2;
+      else if (ddPct >= 5) c += 1;
+    }
+    if (tr.indexOf('rsi') >= 0 && tr.indexOf('drawdown') >= 0) c += 1;
+    if (tr.indexOf('sweep') >= 0 && tr.indexOf('drawdown') >= 0) c += 1;
     var bt = setup.bt;
     if (bt && bt.n >= 3){
       if (isFinite(bt.expR) && bt.expR > 0) c += 2;
@@ -176,11 +201,12 @@ function rsAssess(rows, opts){
     var mr = mrFn ? mrFn(rows) : null;
     if (mr && mr.dir === 'long') triggers.push('meanrev');
 
+    var rsi2Val = NaN;
     if (typeof rsi === 'function'){
       var closes = rows.map(function(r){ return r.c; });
       var r2 = rsi(closes, 2);
-      var rv = (r2 && r2.length) ? r2[n - 1] : NaN;
-      if (isFinite(rv) && rv <= 12) triggers.push('rsi');
+      rsi2Val = (r2 && r2.length) ? r2[n - 1] : NaN;
+      if (isFinite(rsi2Val) && rsi2Val <= 12) triggers.push('rsi');
     }
 
     if (!triggers.length) return null;
@@ -189,7 +215,7 @@ function rsAssess(rows, opts){
 
     var plan = null;
     if (sweep && sweep.swept && sweepStopFn && isFinite(a14)){
-      var stp = sweepStopFn('long', sweep.sweepExtreme, a14);
+      var stp = rsSniperStop('long', entry, sweepStopFn('long', sweep.sweepExtreme, a14));
       plan = rsBuildPlan(entry, stp, RR1, RR2);
     }
     if (!plan && mr && mr.dir === 'long' && typeof W.meanrevPlan === 'function'){
@@ -199,13 +225,13 @@ function rsAssess(rows, opts){
       var opp = (bb && bb.upper && bb.upper.length) ? bb.upper[n - 1] : NaN;
       var mrp = W.meanrevPlan({ dir: 'long', entry: mr.entry, extreme: extreme,
                                 atr: a14, mean: mr.target, oppBand: opp });
-      if (mrp) plan = rsBuildPlan(mrp.entry, mrp.stop, mrp.rr1, mrp.rr2);
+      if (mrp) plan = rsBuildPlan(mrp.entry, rsSniperStop('long', mrp.entry, mrp.stop), mrp.rr1, mrp.rr2);
     }
     if (!plan && triggers.indexOf('rsi') >= 0 && isFinite(a14)){
       var lo5b = (typeof lowest === 'function') ? lowest(rows.map(function(r){ return r.l; }), EXT_LEN) : null;
       var ex = (lo5b && lo5b.length) ? lo5b[n - 1] : NaN;
       if (isFinite(ex)){
-        var tightStop = ex - 1.5 * a14;
+        var tightStop = rsSniperStop('long', entry, ex - 1.5 * a14);
         plan = rsBuildPlan(entry, tightStop, RR1, RR2);
       }
     }
@@ -221,16 +247,14 @@ function rsAssess(rows, opts){
       entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
       risk: plan.risk, riskPct: plan.riskPct,
       rr1: plan.rr1, rr2: plan.rr2, lev: plan.lev,
-      triggers: triggers, drawdownPct: dd * 100,
+      triggers: triggers, drawdownPct: dd * 100, rsi2: rsi2Val,
       sweep: sweep, meanrev: mr, bt: bt
     };
-    setup.conviction = rsConviction(setup);
-    if (setup.conviction < MIN_CONVICTION) return null;
 
     if (typeof W.hgApplyExactEntry === 'function'){
       var enriched = W.hgApplyExactEntry({
         dir: 'long', entry: setup.entry, stop: setup.stop, t1: setup.t1, t2: setup.t2
-      }, rows, { style: 'reversal-sniper' });
+      }, rows, { style: 'reversal-sniper', preferEdge: false, skipExact: true });
       if (enriched && isFinite(enriched.entry)){
         if (isFinite(enriched.entry)) setup.entry = enriched.entry;
         if (isFinite(enriched.stop)) setup.stop = enriched.stop;
@@ -243,6 +267,9 @@ function rsAssess(rows, opts){
         if (!(setup.lev >= MIN_LEV)) return null;
       }
     }
+
+    setup.conviction = rsConviction(setup);
+    if (setup.conviction < MIN_CONVICTION) return null;
     return setup;
   }catch(e){ return null; }
 }
@@ -254,7 +281,8 @@ function rsIsDeskVenue(ex){
 
 async function rsLoadUniverse(force){
   try{
-    var loadFn = (typeof W.hgDeskLoadUniverse === 'function') ? W.hgDeskLoadUniverse : null;
+    var loadFn = (typeof W.hgDeskLoadDeltaCoinDCX === 'function') ? W.hgDeskLoadDeltaCoinDCX
+      : ((typeof W.hgDeskLoadUniverse === 'function') ? W.hgDeskLoadUniverse : null);
     if (loadFn){
       var u = await loadFn({ force: !!force, minTurnover: MIN_TURNOVER, includeUnknown: true });
       var items = (u.items || []).filter(function(it){ return it && rsIsDeskVenue(it.exchange); });
@@ -263,7 +291,7 @@ async function rsLoadUniverse(force){
         items: items,
         note: u.note,
         source: u.source || 'xu',
-        venueCounts: (typeof W.hgDeskVenueCounts === 'function') ? W.hgDeskVenueCounts(items) : null
+        venueCounts: u.venueCounts || ((typeof W.hgDeskVenueCounts === 'function') ? W.hgDeskVenueCounts(items) : null)
       };
     }
     if (typeof W.xuUniverse === 'function'){
@@ -369,7 +397,7 @@ function cardHTML(r){
     + '</div>';
 }
 
-var __rs = { busy: false, ranOnce: false };
+var __rs = { busy: false, ranOnce: false, run: null };
 
 function mount(el){
   if (!el) return;
@@ -386,6 +414,7 @@ function mount(el){
     + '<div class="cards" id="rsCards"></div>'
     + '<div class="empty" id="rsEmpty" style="display:none">No sniper-grade long reversals right now — '
     + 'need a post-drop setup with a stop tight enough for ≥' + MIN_LEV + '×.</div>'
+    + '<div class="note" id="rsIdle">Auto-scan starts when you open this tab — or press SCAN REVERSALS.</div>'
     + '</div>';
 
   var btn = el.querySelector('#rsRun');
@@ -393,6 +422,7 @@ function mount(el){
   var progEl = el.querySelector('#rsProg');
   var cardsEl = el.querySelector('#rsCards');
   var emptyEl = el.querySelector('#rsEmpty');
+  var idleEl = el.querySelector('#rsIdle');
   if (!btn || !statEl) return;
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
@@ -410,6 +440,7 @@ function mount(el){
     btn.disabled = true;
     cardsEl.innerHTML = '';
     emptyEl.style.display = 'none';
+    if (idleEl) idleEl.style.display = 'none';
     setProg(0);
     var status = 'refreshed';
     try{
@@ -451,9 +482,11 @@ function mount(el){
           + results.map(cardHTML).join('');
       } else {
         emptyEl.style.display = 'block';
+        emptyEl.textContent = 'No sniper-grade long reversals right now — need post-drop (≥2%) + sweep/mean-rev/RSI(2) confluence, stop tight enough for ≥'
+          + MIN_LEV + '× leverage, conviction ≥ ' + MIN_CONVICTION + '. Quiet tape is normal; re-scan after a flush.';
       }
       setStat(results.length + ' sniper-grade reversal' + (results.length === 1 ? '' : 's')
-        + ' · ' + uni.length + ' contracts scanned (' + venueNote + ') · ' + failed + ' failed · '
+        + ' · ' + uni.length + ' contracts scanned (' + venueNote + ') · ' + failed + ' fetch failures · '
         + new Date().toISOString().slice(11, 19) + ' UTC');
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
@@ -465,17 +498,18 @@ function mount(el){
     }
     return status;
   }
+
+  __rs.run = runScan;
+  setTimeout(function(){
+    if (!__rs.ranOnce && typeof runScan === 'function') runScan();
+  }, 500);
 }
 
 async function rsRefresh(){
   try{
     if (__rs.busy) return 'busy';
-    if (!__rs.ranOnce) return 'skipped: not run yet';
-    var pane = document.getElementById('tab_reversalsniper');
-    if (!pane) return 'skipped: pane missing';
-    var btn = pane.querySelector('#rsRun');
-    if (btn) btn.click();
-    return 'refreshed';
+    if (!__rs.ranOnce || typeof __rs.run !== 'function') return 'skipped: not run yet';
+    return await __rs.run();
   }catch(e){ return 'error'; }
 }
 
