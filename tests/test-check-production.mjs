@@ -87,6 +87,8 @@ console.log('== HG_SHELL vs index.html scripts ==');
   ok(shell.includes('hghost.js'), 'HG_SHELL precaches hghost.js');
   ok(shell.includes('manifest.webmanifest'), 'HG_SHELL precaches manifest');
   ok(shell.includes('bright.css'), 'HG_SHELL precaches bright.css');
+  ok(shell.includes('hg-icons.css'), 'HG_SHELL precaches hg-icons.css');
+  ok(shell.includes('vendor/base-themes/tokens-data-dense-light.css'), 'HG_SHELL precaches base-themes tokens');
 }
 
 console.log('== README doc guards ==');

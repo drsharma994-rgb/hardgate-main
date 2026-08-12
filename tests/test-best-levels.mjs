@@ -64,7 +64,7 @@ console.log('== wiring ==');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   ok(html.indexOf('structure-levels.js') >= 0 && html.indexOf('best-levels.js') >= 0, 'index loads best-levels stack');
   ok(/structure-levels\.js/.test(sw) && /best-levels\.js/.test(sw), 'sw shell lists modules');
-  ok(/hg-v266/.test(sw), 'cache hg-v266');
+  ok(/hg-v267/.test(sw), 'cache hg-v267');
   ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'squeeze.js'), 'utf8')), 'squeeze uses hgBestLevels');
   ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'trendtable.js'), 'utf8')), 'trendmx uses hgBestLevels');
   ok(/hgBestLevels/.test(fs.readFileSync(path.join(root, 'oiflow.js'), 'utf8')), 'oiflow uses hgBestLevels');

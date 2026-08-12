@@ -1,0 +1,45 @@
+/* Adapted from markbang/base-themes — data-dense style, light theme (MIT) */
+html[data-style='data-dense'][data-theme='light']{
+  --bg:#f4f6f9;
+  --surface:#ffffff;
+  --surface-strong:#172033;
+  --surface-muted:#edf1f6;
+  --text:#334155;
+  --text-strong:#172033;
+  --text-muted:#536175;
+  --line:#d7dee8;
+  --line-strong:#aab7c8;
+  --accent:#0f5cc0;
+  --accent-strong:#0b4aa0;
+  --teal:#0f766e;
+  --blue:#2563eb;
+  --green:#15803d;
+  --shadow:0 8px 22px rgba(23,32,51,.08);
+  --shadow-strong:0 6px 18px rgba(23,32,51,.10);
+  --radius:8px;
+  --radius-sm:6px;
+  --topbar-bg:rgba(255,255,255,.94);
+  --topbar-border:rgba(215,222,232,.94);
+  --card-bg:#ffffff;
+  --chip-bg:#edf1f6;
+  --group-bg:#edf1f6;
+  --nav-bg:#edf1f6;
+  --track-bg:#d7dee8;
+  --hero-text:#172033;
+  --scrollbar-thumb:#aab7c8;
+  --scrollbar-thumb-hover:#65758c;
+  --selection-bg:#0f5cc0;
+  --selection-text:#ffffff;
+  --bt-bg:var(--bg);
+  --bt-fg:var(--text-strong);
+  --bt-text:var(--text);
+  --bt-muted-fg:var(--text-muted);
+  --bt-surface:var(--surface);
+  --bt-surface-muted:var(--surface-muted);
+  --bt-border:var(--line);
+  --bt-border-strong:var(--line-strong);
+  --bt-primary:var(--accent);
+  --bt-primary-hover:var(--accent-strong);
+  --bt-radius:var(--radius);
+  --bt-shadow:var(--shadow);
+}

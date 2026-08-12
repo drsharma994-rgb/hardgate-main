@@ -100,7 +100,7 @@ console.log('== wiring ==');
   var idx = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(idx.indexOf('freqtrade-formation.js') >= 0, 'index loads freqtrade-formation.js');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v266/.test(sw), 'cache hg-v266');
+  ok(/hg-v267/.test(sw), 'cache hg-v267');
 }
 
 console.log('\n' + pass + ' passed');

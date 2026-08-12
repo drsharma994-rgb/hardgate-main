@@ -296,6 +296,7 @@ assert(iStyleEnd !== -1 && iBright !== -1 && iStyleEnd < iBright && iBright < ht
 const swSrc = readFileSync(path.join(root, 'sw.js'), 'utf8');
 assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(swSrc), 'service worker cache name is hg-vN (clients pick up the new shell)');
 assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
+assert(swSrc.indexOf("'./hg-icons.css'") !== -1, 'hg-icons.css added to the HG_SHELL precache list');
 
 /* ---------------- 6. auto-refresh control: hard-coded 2m ---------------- */
 const iHrdBtn = html.indexOf('id="hardRefreshBtn"');

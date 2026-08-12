@@ -194,6 +194,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
-### Auto hard refresh — hg-v266
+### Auto hard refresh — hg-v267
 - **`HG_AUTO_REFRESH_HARDCODED_MS = 120000`** in `index.html` — every **2 minutes** the app runs `hardRefreshAll()` on all inline scanners + every `HG_TAB_MODS.refresh()` (including GOLD SCALP/SWING). OFF / 3m / 5m / 15m header buttons are ignored; localStorage `hgAutoRefresh` always stores `120000`.
 - **`goldscalpRefresh` / `goldswingRefresh`:** run a headless scan when the tab was never opened (stub UI, same path as `gsWarm`/`gwWarm`) so the 2m cycle never skips gold tabs cold.
+
+### Light UI theme — hg-v267
+- Theme source: [markbang/base-themes](https://github.com/markbang/base-themes) **`data-dense` / `light`** tokens in `vendor/base-themes/tokens-data-dense-light.css`.
+- `bright.css` maps HARDGATE `--ink` / `--panel` / borders to those tokens; no backdrop blur (faster paint).
+- Header uses Lucide-style inline SVG (`hg-icons.css`), not emoji. Shell: `<html data-style="data-dense" data-theme="light">`.

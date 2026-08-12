@@ -1,0 +1,15 @@
+/* HARDGATE — inline SVG icon sizing (Lucide-style strokes, no emoji icons) */
+.hg-ico{
+  display:inline-block;
+  width:1em;
+  height:1em;
+  vertical-align:-0.125em;
+  flex:none;
+  stroke:currentColor;
+  fill:none;
+  stroke-width:2;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.header-action .hg-ico,.header-menu-btn .hg-ico{margin-right:6px}
+.statuschip.header-action{display:inline-flex;align-items:center;gap:4px}
