@@ -851,6 +851,8 @@ function hgScoreRecord(input){
       }
     }
     var fpIn = fin(inp.fundingPct);
+    var rr1 = null;
+    if (t1 !== null && entry !== stop) rr1 = Math.abs(t1 - entry) / Math.abs(entry - stop);
     var rec = {
       id: 'sc_' + at.toString(36) + '_' + (idCounter++).toString(36) + '_' + sym,
       source: (typeof inp.source === 'string' && inp.source.trim()) ? inp.source.trim().toLowerCase().slice(0, 24) : 'unknown',
@@ -858,6 +860,7 @@ function hgScoreRecord(input){
       tier: (typeof inp.tier === 'string' && inp.tier.trim()) ? inp.tier.trim().toUpperCase().slice(0, 16) : null,
       lane: laneOf(sym, inp.lane),
       entry: entry, stop: stop, t1: t1, t2: t2, scalePct: scalePct,
+      rr1: fin(inp.rr1) !== null ? fin(inp.rr1) : (rr1 !== null ? round4(rr1) : null),
       fundingPct: fpIn,
       layers: sanitizeLayers(inp.layers),
       at: at,
@@ -1444,6 +1447,14 @@ try{
   G.hgHintSigma = hintSigma;
   G.hgScoreExport = function(){ return { text: buildExportText(), json: buildExportJson() }; };
   G.hgScoreRecords = function(){ try{ return store.slice(); }catch(e){ return []; } };
+  G.hgScoreStandDownPeek = function(cfg){
+    try{
+      if (typeof G.hgStandDownState !== 'function') return { tripped: false, reasons: [], note: 'stand-down module not loaded' };
+      var c = cfg;
+      if (!c && typeof G.hgStandDownCfgLoad === 'function') c = G.hgStandDownCfgLoad();
+      return G.hgStandDownState(store, c);
+    }catch(e){ return { tripped: false, reasons: [], note: 'peek failed' }; }
+  };
   G.HG_tabs = G.HG_tabs || [];
   G.HG_tabs.push({ id: 'scorecard', label: 'SCORECARD', mount: mountScorecard, refresh: refreshScorecard });
 }catch(e){}

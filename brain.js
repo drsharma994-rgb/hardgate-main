@@ -4036,7 +4036,19 @@ function boardCardHTML(c, stamp){
       + c.lev + 'x SAFE</span>'
       + '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:' + swCol + ';border:1px solid ' + swCol
       + ';border-radius:3px;padding:1px 5px" title="entry timing window (IST) — gold-lane kill zones; off-hours tape means thinner books and worse fills">'
-      + swTxt + '</span></div>'
+      + swTxt + '</span>'
+      + (function(){
+          try{
+            var symU = String(row.sym || '').toUpperCase();
+            var isG = /XAU|PAXG|GOLD/.test(symU);
+            if (!isG) return '';
+            if (G.hgBoardDiversifier === true){
+              return '<span style="font-size:9px;letter-spacing:.08em;font-weight:700;color:#d8a24a;border:1px solid #d8a24a;border-radius:3px;padding:1px 5px">DIVERSIFIER</span>';
+            }
+          }catch(eD){}
+          return '';
+        })()
+      + '</div>'
       + '<div style="margin-top:6px;font-size:9px;letter-spacing:.1em;color:#9aa6b5">' + headline + '</div>'
       + '<div style="font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;color:' + col + ';line-height:1.25">'
       + PX(p.entry) + '</div>'
@@ -4096,6 +4108,71 @@ function watchDeskHTML(rows){
     return html + '</div></div>';
   }catch(e){ return ''; }
 }
+function paintStandDownBanner(el){
+  try{
+    if (!el) return;
+    var banner = el.querySelector('#brainStandDown');
+    if (!banner) return;
+    if (sessionStorage.getItem('hg_standdown_dismiss') === '1'){
+      banner.style.display = 'none';
+      return;
+    }
+    if (typeof G.hgStandDownState !== 'function'){
+      banner.style.display = 'none';
+      return;
+    }
+    var recs = (typeof G.hgScoreRecords === 'function') ? G.hgScoreRecords() : [];
+    var cfg = (typeof G.hgStandDownCfgLoad === 'function') ? G.hgStandDownCfgLoad() : null;
+    var st = G.hgStandDownState(recs, cfg);
+    if (!st.tripped){
+      banner.style.display = 'none';
+      return;
+    }
+    banner.style.display = 'block';
+    banner.innerHTML = 'STAND DOWN — ' + st.reasons.join(', ')
+      + '. Your own ledger says stop. Scanning continues; nothing here is a recommendation.'
+      + ' <button type="button" class="btn ghost" id="brainStandDownDismiss" style="margin-left:8px;padding:2px 8px;font-size:10px">dismiss session</button>';
+    var btn = banner.querySelector('#brainStandDownDismiss');
+    if (btn) btn.addEventListener('click', function(){
+      try{ sessionStorage.setItem('hg_standdown_dismiss', '1'); banner.style.display = 'none'; }catch(e){}
+    });
+  }catch(e){}
+}
+
+function boardCrowdingBanner(rows){
+  try{
+    var cands = [];
+    var hasGold = false, hasCrypto = false;
+    for (var i = 0; i < (rows || []).length; i++){
+      var bc = boardCandidate(rows[i]);
+      if (!bc) continue;
+      var sym = String(rows[i].sym || '').toUpperCase();
+      var isGold = /XAU|PAXG|GOLD/.test(sym);
+      if (isGold) hasGold = true; else hasCrypto = true;
+      var cl = 'other';
+      if (/^(BTC|WBTC)/.test(sym)) cl = 'btc-beta';
+      else if (/^(ETH|WETH)/.test(sym)) cl = 'eth-beta';
+      else if (/^(SOL|ADA|AVAX|NEAR|DOT|ATOM|SUI|APT|TON|SEI|INJ|TRX|BNB)/.test(sym)) cl = 'l1-alt';
+      else if (/^(DOGE|SHIB|PEPE|WIF|BONK|FLOKI|TRUMP)/.test(sym)) cl = 'meme';
+      cands.push({ sym: sym, cluster: cl });
+      if (cands.length >= 4) break;
+    }
+    var msg = '';
+    if (cands.length >= 2){
+      var clusters = {}, i2;
+      for (i2 = 0; i2 < cands.length; i2++) clusters[cands[i2].cluster] = (clusters[cands[i2].cluster] || 0) + 1;
+      var topCl = null, topN = 0;
+      for (var k in clusters){
+        if (Object.prototype.hasOwnProperty.call(clusters, k) && clusters[k] > topN){ topN = clusters[k]; topCl = k; }
+      }
+      if (topN >= Math.ceil(cands.length * 0.75)){
+        msg = 'TOP ' + cands.length + ' CANDIDATES ARE ONE TRADE — ' + topN + ' of ' + cands.length + ' in ' + topCl;
+      }
+    }
+    return { message: msg, hasGold: hasGold, hasCrypto: hasCrypto, diversifier: hasGold && hasCrypto };
+  }catch(e){ return { message: '', diversifier: false, hasGold: false, hasCrypto: false }; }
+}
+
 function paintLimitBoard(el, rows){
   try{
     if (!el || typeof el.querySelector !== 'function') return;
@@ -4104,6 +4181,11 @@ function paintLimitBoard(el, rows){
     var b = buildLimitBoard(rows);
     var stamp = new Date().toTimeString().slice(0, 8);
     var html = '', i;
+    paintStandDownBanner(el);
+    var crowd = boardCrowdingBanner(rows);
+    if (crowd.message){
+      html += '<div class="note warn" style="margin-bottom:8px;font-size:11.5px">' + esc(crowd.message) + '</div>';
+    }
     /* SNIPER mode: resting limits only, mark IN ZONE/APPROACHING, >= 20x-safe
        stop — market-only rows sit out entirely; an empty read names the three
        requirements honestly instead of relaxing them */
@@ -4138,6 +4220,8 @@ function paintLimitBoard(el, rows){
         html += '</div></div>';
       }
     }
+    var crowd = boardCrowdingBanner(rows);
+    try{ G.hgBoardDiversifier = crowd.diversifier; }catch(eHc){}
     html += watchDeskHTML(rows);
     box.innerHTML = html;
     var age = el.querySelector('#brainBoardAge');
@@ -4479,6 +4563,7 @@ function scoreRecord(setups){
             source: 'brain', sym: row.sym, dir: dec.dir, tier: dec.tier,
             entry: p ? p.entry : null, stop: p ? p.stop : null,
             t1: p ? p.t1 : null, t2: p ? p.t2 : null,
+            rr1: (p && isFinite(p.rr1)) ? p.rr1 : ((p && isFinite(p.rr)) ? p.rr : null),
             fundingPct: (row.xu && row.xu.fundingPct != null) ? row.xu.fundingPct
               : ((row.tick && row.tick.fundingPct != null) ? row.tick.fundingPct : null),
             layers: agreeing, at: Date.now()
@@ -5665,6 +5750,7 @@ function mount(el){
       + '<div class="note warn" id="brainRegimeBanner" style="display:none;margin-top:8px;font-size:11.5px"></div>'
       + '<div class="note" id="brainTicketAge" style="margin-top:6px;font-size:10px"></div></div>'
       + '<div class="panel" id="brainBoardWrap" style="display:none;margin-top:10px">'
+      + '<div class="note warn" id="brainStandDown" style="display:none;margin-bottom:8px;font-size:11.5px"></div>'
       + '<h2>LIMIT BOARD <span>every qualified setup, one exact resting limit each — sorted like the ticket '
       + '(tier · layers · R:R) · the state chip reads a zero-fetch mark, never a new candle fetch · '
       + 'market-entry plans sit separated below with the no-anchor reason named, never dressed up as limits — '

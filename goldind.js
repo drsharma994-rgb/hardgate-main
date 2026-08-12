@@ -2441,6 +2441,16 @@ function goldRankSetups(cands, ctx){
           }
         }
       }catch(e){}
+      try{
+        var cotCtx = (typeof window !== 'undefined') ? window.__hgGoldCot : null;
+        if (cotCtx && cotCtx.crowding === 'SPEC CROWDED LONG' && c.dir === 'long'){
+          parts.push({ label: 'COT spec crowded long — weekly positioning caution (informational)', pts: -1 });
+          tally -= 1;
+        } else if (cotCtx && cotCtx.crowding === 'SPEC CROWDED SHORT' && c.dir === 'short'){
+          parts.push({ label: 'COT spec crowded short — weekly positioning caution (informational)', pts: -1 });
+          tally -= 1;
+        }
+      }catch(eCot){}
       /* (1) OFF-SESSION tally bar: demoted off-session candidates must clear
          +2 on STRUCTURAL confluence (agreeing reads + killzone weight only).
          Macro/news/positioning penalties shrink the displayed tally and can

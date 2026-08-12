@@ -673,6 +673,22 @@ function hgFormTicket(hit, ctx){
       plan.metaLabel = G.hgMetaLabel(plan, ctx, recs);
     }
 
+    if (typeof G.hgTicketFinalGates === 'function'){
+      var tg = G.hgTicketFinalGates(plan, {
+        sym: hit.sym || plan.sym,
+        lane: isGold ? 'gold' : 'crypto',
+        minRr: minRr,
+        atrPct: (a4 && isFinite(mark) && mark > 0) ? a4 / mark * 100 : null,
+        counterTrend: !!(hit.fundingFade || plan.fundingFade),
+        notionalUsd: ctx.notionalUsd,
+        venue: ctx.venue,
+        depthUsd: ctx.depthUsd,
+        spreadBps: ctx.spreadBps,
+      });
+      if (!tg.ok) return { ok: false, reason: tg.reason, tag: tg.tag || 'gate' };
+      if (tg.chips && tg.chips.length) plan.evidenceChips = tg.chips;
+    }
+
     return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note, metaLabel: plan.metaLabel || null };
   }catch(e){ return { ok: true, hit: hit, formationScore: 0 }; }
 }

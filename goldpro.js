@@ -320,7 +320,7 @@ function renderStructurePanel(st, rows1d, rows4h, src){
   return h;
 }
 
-function renderMacroPanel(macro, funding, ls){
+function renderMacroPanel(macro, funding, ls, cot){
   var rows = [];
 
   // M1 — DXY 20d trend (FALLING dollar = gold BULL)
@@ -382,7 +382,17 @@ function renderMacroPanel(macro, funding, ls){
       lp >= 60 ? 'BEAR' : (lp <= 40 ? 'BULL' : 'NEUT')));
   } else rows.push(lrow('M6', 'XAU retail long % (1h)', 'unavailable', 'na', 'N/A'));
 
-  return '<div class="panel"><h2>MACRO LEDGER <span>stamps read for gold: BULL tailwind · BEAR headwind · NEUT/INFO · N/A</span></h2>'
+  if (cot && cot.crowding && cot.crowding !== 'N/A'){
+    var cotDate = cot.reportDate ? new Date(cot.reportDate).toISOString().slice(0, 10) : 'n/a';
+    var cotDetail = (cot.crowding || 'NEUTRAL') + ' · spec net/OI '
+      + (isFinite(cot.specNetPctOi) ? (cot.specNetPctOi * 100).toFixed(1) + '%' : '—')
+      + ' · report ' + cotDate + ' (weekly — not live)';
+    var cotStamp = (cot.crowding === 'SPEC CROWDED LONG') ? 'CAUTION' : ((cot.crowding === 'SPEC CROWDED SHORT') ? 'CAUTION' : 'INFO');
+    rows.push(lrow('M7', 'CFTC COT · managed money (COMEX gold)',
+      cotDetail, 'na', cotStamp));
+  } else rows.push(lrow('M7', 'CFTC COT · managed money (COMEX gold)', (cot && cot.note) ? cot.note : 'unavailable', 'na', 'N/A'));
+
+  return '<div class="panel"><h2>MACRO LEDGER <span>stamps read for gold: BULL tailwind · BEAR headwind · NEUT/INFO · N/A · COT is positioning context only</span></h2>'
        + '<div class="ledger">' + rows.join('') + '</div></div>';
 }
 
@@ -462,6 +472,23 @@ function renderVerdictPanel(v){
 }
 
 /* ============================ scan orchestrator ============================ */
+async function fetchGoldCot(){
+  try{
+    if (typeof fetch !== 'function') return null;
+    var url = '/api/proxy?url=' + encodeURIComponent(
+      'https://publicreporting.cftc.gov/resource/jun7-fc8e.json?$limit=520&$order=report_date_as_yyyy_mm_dd%20DESC');
+    var res = await fetch(url);
+    if (!res || !res.ok) return null;
+    var rows = await res.json();
+    if (!Array.isArray(rows)) return null;
+    var W = (typeof window !== 'undefined') ? window : null;
+    if (W && typeof W.hgGoldCotParse === 'function' && typeof W.hgGoldCotAssess === 'function'){
+      return W.hgGoldCotAssess(W.hgGoldCotParse(rows));
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
 async function runGoldPro(ui){
   if (!ui) return 'skipped: no ui';
   if (ui.running || __gp.busy) return 'busy';
@@ -484,11 +511,12 @@ async function runGoldPro(ui){
     setP(ui, 0.35);
     setNote(ui, 'fetching macro dashboard + XAU perp sentiment…');
 
-    var macro = null, funding = null, ls = null;
+    var macro = null, funding = null, ls = null, cot = null;
     var jobs = [];
     if (typeof getGoldMacro === 'function') jobs.push(Promise.resolve(getGoldMacro()).then(function(m){ macro = m; }, function(){}));
     if (typeof binanceFunding === 'function') jobs.push(Promise.resolve(binanceFunding('XAUUSDT')).then(function(f){ funding = f; }, function(){}));
     if (typeof binanceLongShort === 'function') jobs.push(Promise.resolve(binanceLongShort('XAUUSDT', '1h', 1)).then(function(l){ ls = l; }, function(){}));
+    jobs.push(fetchGoldCot().then(function(c){ cot = c; }, function(){}));
     if (jobs.length){ try{ await Promise.all(jobs); }catch(e){} }
     setP(ui, 0.6);
 
@@ -509,6 +537,7 @@ async function runGoldPro(ui){
     setNote(ui, 'rendering…');
 
     var st = structureState(g1d.rows, g4h.rows);
+    try{ window.__hgGoldCot = cot; }catch(eCot){}
     var verdict = goldProVerdict({
       goldAbove200: st.above200,
       crossState: st.crossState,
@@ -618,7 +647,7 @@ async function runGoldPro(ui){
     ui.out.innerHTML = renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,
                                            src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows })
-                     + renderMacroPanel(macro, funding, ls)
+                     + renderMacroPanel(macro, funding, ls, cot)
                      + renderCorrPanel(cr, corrErr)
                      + renderVerdictPanel(verdict);
 

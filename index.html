@@ -221,6 +221,17 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <span class="note" id="executeBackendStat"></span>
         <span class="note" id="executeDisabledNote" style="color:var(--mut)">Live trading disabled — saved Execute URL is ignored.</span>
       </label>
+      <label class="header-field" title="Stand-down discipline — informational banner only, not a kill switch">
+        <span class="header-field-label">stand down</span>
+        <span class="note">losses</span>
+        <input id="sdMaxLosses" type="number" min="1" max="10" style="width:42px" title="max consecutive losses">
+        <span class="note">day R</span>
+        <input id="sdDayR" type="number" step="0.5" style="width:48px" title="max daily loss R (negative)">
+        <span class="note">week R</span>
+        <input id="sdWeekR" type="number" step="0.5" style="width:48px" title="max weekly loss R (negative)">
+        <button class="btn ghost header-field-btn" type="button" onclick="saveStandDownCfg()">SAVE</button>
+        <span class="note" id="sdStat"></span>
+      </label>
       <label class="header-field" title="Server API key for /api/book and /api/execute mutations. Set HARDGATE_API_SECRET on Render to match. Stored in this browser only.">
         <span class="header-field-label">api key</span>
         <input id="hgApiKey" type="password" placeholder="HARDGATE_API_SECRET" autocomplete="off">
@@ -717,6 +728,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="tabalerts.js"></script>
 <!-- scorecard.js: SCORECARD strategy-tab module (HG_tabs registration, STRATEGIES group) — wired after brain.js so brain globals it may feature-check exist first -->
 <script src="scorecard.js"></script>
+<script src="fixpack13-core.js"></script>
+<script src="reliability.js"></script>
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
@@ -2655,7 +2668,7 @@ const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','chartvision','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldspot','goldscalp','goldswing','goldpine','signallog'] },
-  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','reversalsniper','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','termbasis','scorecard','formationlab'] },
+  { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','reversalsniper','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','termbasis','scorecard','reliability','formationlab'] },
   { id:'tools',      label:'TOOLS',        tabs:['basis','search','tradeos','hey','aiagent','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
@@ -6404,6 +6417,27 @@ function saveNtfyTopic(){
   }catch(e){ $('ntfyTopicStat').textContent = 'save failed'; }
 }
 
+function loadStandDownCfg(){
+  try{
+    const cfg = (typeof hgStandDownCfgLoad === 'function') ? hgStandDownCfgLoad() : { maxConsecutiveLosses: 3, maxDailyLossR: -3, maxWeeklyLossR: -6 };
+    const ml = $('sdMaxLosses'), dr = $('sdDayR'), wr = $('sdWeekR');
+    if (ml) ml.value = cfg.maxConsecutiveLosses;
+    if (dr) dr.value = cfg.maxDailyLossR;
+    if (wr) wr.value = cfg.maxWeeklyLossR;
+  }catch(e){}
+}
+function saveStandDownCfg(){
+  try{
+    const cfg = {
+      maxConsecutiveLosses: parseInt($('sdMaxLosses').value, 10) || 3,
+      maxDailyLossR: parseFloat($('sdDayR').value),
+      maxWeeklyLossR: parseFloat($('sdWeekR').value),
+    };
+    if (typeof hgStandDownCfgSave === 'function') hgStandDownCfgSave(cfg);
+    $('sdStat').textContent = 'saved';
+  }catch(e){ $('sdStat').textContent = 'save failed'; }
+}
+
 /* Telegram alerts — server-side /api/notify (token on Render, not in browser).
    Optional chat id override in localStorage. Never throws. */
 function tgCreds(){
@@ -6920,6 +6954,7 @@ function initAlerts(){
     if ($('tgChat')) $('tgChat').value = tc;
   }catch(e){}
   try{ if (typeof initHgApiKey === 'function') initHgApiKey(); }catch(e){}
+  try{ if (typeof loadStandDownCfg === 'function') loadStandDownCfg(); }catch(e){}
   try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}
   if (HG_ALERTS_FORCED_ON){
     armAlertCycle();
