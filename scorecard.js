@@ -176,6 +176,21 @@ function laneOf(sym, hint){
   if (hint === 'gold' || hint === 'crypto') return hint;
   return (/XAU|PAXG|GOLD/.test(String(sym == null ? '' : sym).toUpperCase())) ? 'gold' : 'crypto';
 }
+function sanitizeLayers(x){
+  try{
+    if (!Array.isArray(x)) return [];
+    var seen = {}, out = [];
+    for (var i = 0; i < x.length; i++){
+      var s = String(x[i] == null ? '' : x[i]).trim();
+      if (!s) continue;
+      s = s.slice(0, 32);
+      var k = s.toUpperCase();
+      if (seen[k]) continue;
+      seen[k] = 1; out.push(s);
+    }
+    return out;
+  }catch(e){ return []; }
+}
 function sanitizeLayerVals(layers, vals){
   try{
     if (!vals || typeof vals !== 'object') return null;
