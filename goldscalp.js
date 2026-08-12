@@ -609,10 +609,100 @@ function gsxPipAttr(ok){ return gsxSt(ok ? GSX_GPIP_OK : GSX_GPIP); }
 /* ---------------- renderers ---------------- */
 function tallyChips(c){
   if (!Array.isArray(c.tallyParts) || !c.tallyParts.length) return '';
+  var audit = (typeof W !== 'undefined' && W) ? W.__hgGoldTallyAudit : null;
   return '<div class="gsx-tally">' + c.tallyParts.map(function(p){
     if (!p) return '';
-    return '<span class="gsx-tp ' + (p.pts >= 0 ? 'pos' : 'neg') + '">' + (p.pts >= 0 ? '+' : '') + p.pts + ' · ' + esc(p.label) + '</span>';
+    var strike = '';
+    if (audit && Array.isArray(audit)){
+      var leg = audit.find(function(a){ return p.label && String(p.label).toLowerCase().indexOf(String(a.leg).toLowerCase()) >= 0; });
+      if (leg && leg.verdict === 'NOISE') strike = ' style="text-decoration:line-through;opacity:.65"';
+    }
+    var meas = '';
+    if (audit && Array.isArray(audit)){
+      var leg2 = audit.find(function(a){ return p.label && String(p.label).toLowerCase().indexOf(String(a.leg).toLowerCase()) >= 0; });
+      if (leg2 && leg2.liftR !== null && leg2.nWith >= 8){
+        meas = ' <span class="gsx-measured">[measured: ' + (leg2.liftR >= 0 ? '+' : '') + leg2.liftR.toFixed(2) + 'R over ' + leg2.nWith + ' — ' + leg2.verdict + ']</span>';
+      }
+    }
+    return '<span class="gsx-tp ' + (p.pts >= 0 ? 'pos' : 'neg') + '"' + strike + '>' + (p.pts >= 0 ? '+' : '') + p.pts + ' · ' + esc(p.label) + meas + '</span>';
   }).join('') + '</div>';
+}
+
+function goldBuildAPlusCtx(ctx, gold, now, news){
+  var out = { style: 'goldscalp', news: news, newsCaution: !!(news && news.caution) };
+  try{
+    if (ctx && ctx.macro){
+      out.realRate = (ctx.macro.realRateMeasured && ctx.macro.realRateMeasured.measured)
+        ? ctx.macro.realRateMeasured : null;
+      if (!out.realRate && ctx.macro.realRateSource !== 'fred-dfii10') out.realRateFallback = ctx.macro.realRateHint;
+    }
+    var mcFn = gfn('hgMetalsComplex');
+    if (mcFn && ctx && ctx.macro){
+      out.metalsComplex = mcFn({
+        dir: 'long',
+        xagTrend: ctx.macro.silver ? null : null,
+        dxy: ctx.macro.dxy,
+        real10y: out.realRate,
+        ratioTrend: ctx.macro.goldSilverRatio ? null : null
+      });
+    }
+    out.cot = (typeof W !== 'undefined' && W) ? W.__hgGoldCot : null;
+    var cashOpen = true;
+    var wkFn = gfn('hgInGoldWeekend');
+    if (wkFn) cashOpen = !wkFn(Math.floor((now || Date.now()) / 1000));
+    var gvsFn = gfn('hgGoldVenueSpread');
+    if (gvsFn && ctx && ctx.spot){
+      out.goldVenueSpread = gvsFn({ spot: ctx.spot.spotPx, paxg: ctx.spot.perpPx, cashOpen: cashOpen });
+    }
+    if (typeof W !== 'undefined' && W && W.__hgGoldVolPack && typeof W.hgVolRegime === 'function'){
+      out.volRegime = W.hgVolRegime(W.__hgGoldVolPack);
+    }
+    if (typeof W !== 'undefined' && W && typeof W.hgScoreRecords === 'function' && typeof W.hgEdgeFor === 'function'){
+      out.edgeRecords = W.hgScoreRecords();
+    }
+  }catch(e){}
+  return out;
+}
+
+function goldEvalAPlusBatch(ranked, ctxPack){
+  var aplusFn = gfn('hgGoldAPlus');
+  if (!aplusFn) return { today: 0, nearest: null, panel: '' };
+  var today = 0, nearest = null, bestMiss = -1;
+  for (var i = 0; i < (ranked || []).length; i++){
+    var c = ranked[i];
+    if (!c || c.demoted || c.vetoed) continue;
+    var edge = null;
+    if (ctxPack.edgeRecords && typeof W !== 'undefined' && W.hgEdgeFor){
+      edge = W.hgEdgeFor({ symbol: c.sym, side: c.dir, poiKind: c.stratKey, rr: c.rr, ts: Date.now() }, ctxPack.edgeRecords);
+    }
+    var apCtx = Object.assign({}, ctxPack, { edge: edge });
+    c.aplusRead = aplusFn(c, apCtx);
+    if (c.aplusRead && c.aplusRead.aplus) today++;
+    else if (c.aplusRead && c.aplusRead.passN > bestMiss){
+      bestMiss = c.aplusRead.passN;
+      nearest = c.aplusRead;
+    }
+  }
+  var panel = goldAPlusPanelHTML(today, nearest, ranked);
+  return { today: today, nearest: nearest, panel: panel };
+}
+
+function goldAPlusPanelHTML(today, nearest, ranked){
+  var nearCount = 0;
+  for (var i = 0; i < (ranked || []).length; i++){
+    var r = ranked[i] && ranked[i].aplusRead;
+    if (r && !r.aplus && r.passN >= 11) nearCount++;
+  }
+  var h = '<div class="gsx-aplus note" style="margin:8px 0;padding:10px 12px;border:1px solid #B45309;border-radius:6px">';
+  h += '<b>GOLD A+</b> · ' + today + ' today · A+ is a ~few-per-month event by construction.';
+  if (nearCount) h += ' ' + nearCount + ' candidate' + (nearCount === 1 ? '' : 's') + ' at 11/13+.';
+  if (nearest && nearest.soleBlocker){
+    h += ' Nearest miss sole blocker: <b>' + esc(nearest.soleBlocker) + '</b>.';
+  } else if (nearest && nearest.note){
+    h += ' ' + esc(nearest.note);
+  }
+  h += '</div>';
+  return h;
 }
 
 function bannerHTML(best, ranked){
@@ -1400,11 +1490,19 @@ async function runScan(ui, scanSt){
     var basisHtml = stRoute ? stGoldBasisHtml() : '';
     var wkRows = gold.rows4h.length ? gold.rows4h : gold.rows15m;
     paintGoldWeekendPanel(ui, wkRows, now, displayBest);
+    var aplusCtx = goldBuildAPlusCtx(ctx, gold, now, news);
+    var aplusPack = goldEvalAPlusBatch(ranked, aplusCtx);
+    try{
+      var auditFn = gfn('hgTallyLegAudit');
+      if (auditFn && typeof W !== 'undefined' && W && typeof W.hgScoreRecords === 'function'){
+        W.__hgGoldTallyAudit = auditFn(W.hgScoreRecords().filter(function(r){ return r && r.lane === 'gold'; }));
+      }
+    }catch(eAu){}
     /* render */
     if (ui && ui.cards && ui.empty){
       if (display.length){
         ui.empty.style.display = 'none';
-        ui.cards.innerHTML = basisHtml + bannerHTML(displayBest, display)
+        ui.cards.innerHTML = basisHtml + aplusPack.panel + bannerHTML(displayBest, display)
           + display.map(function(c){ return cardHTML(c, !!(displayBest && c.id === displayBest.id), season && season.note); }).join('')
           + formingNowHTML(armedAll)
           + rejectedHTML(rejectedAll)

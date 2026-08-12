@@ -509,7 +509,7 @@ function hgScoreStats(records){
                           gold:   { n: 0, wins: 0, winRate: null, avgR: null } },
                 byDir:  { long:  { n: 0, wins: 0, winRate: null, avgR: null },
                           short: { n: 0, wins: 0, winRate: null, avgR: null } },
-                byLayer: {} };
+                byLayer: {}, bySession: {}, byDow: {}, noFingerprint: 0 };
   try{
     var list = Array.isArray(records) ? records : [];
     var rs = [];      /* settled with finite r — the only r-math basis */
@@ -538,9 +538,29 @@ function hgScoreStats(records){
     var byLane = { crypto: bucket(), gold: bucket() };
     var byDir = { long: bucket(), short: bucket() };
     var byLayer = {};
+    var bySession = {};
+    var byDow = {};
+    var noFingerprint = 0;
+    var DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    function fpSessFromRec(rec){
+      try{
+        if (rec.fpParts && rec.fpParts.sess) return rec.fpParts.sess;
+        if (typeof G.hgFingerprint === 'function'){
+          var fp = G.hgFingerprint({ symbol: rec.sym, side: rec.dir, ts: rec.at });
+          return fp && fp.parts ? fp.parts.sess : 'sess-na';
+        }
+        var h = new Date(rec.at).getUTCHours();
+        if (h >= 0 && h < 7) return 'sess-asia';
+        if (h >= 7 && h < 12) return 'sess-london';
+        if (h >= 12 && h < 17) return 'sess-overlap';
+        if (h >= 17 && h < 21) return 'sess-ny-pm';
+        return 'sess-late';
+      }catch(e){ return 'sess-na'; }
+    }
     var wins = 0, losses = 0, sumR = 0, nNetAll = 0, sumNetAll = 0;
     for (var j = 0; j < rs.length; j++){
       var rec = rs[j], rr = rec.r;
+      if (!rec.fpKey) noFingerprint++;
       var rn = (typeof rec.rNet === 'number' && isFinite(rec.rNet)) ? rec.rNet : null;
       if (rr > 0) wins++; else if (rr < 0) losses++;
       sumR += rr;
@@ -559,6 +579,12 @@ function hgScoreStats(records){
         if (!byLayer[ln]) byLayer[ln] = bucket();
         byLayer[ln].n++; byLayer[ln].sumR += rr; if (rr > 0) byLayer[ln].wins++; addNet(byLayer[ln], rn);
       }
+      var sess = fpSessFromRec(rec);
+      if (!bySession[sess]) bySession[sess] = bucket();
+      bySession[sess].n++; bySession[sess].sumR += rr; if (rr > 0) bySession[sess].wins++; addNet(bySession[sess], rn);
+      var dow = DOW[new Date(rec.at).getUTCDay()] || '—';
+      if (!byDow[dow]) byDow[dow] = bucket();
+      byDow[dow].n++; byDow[dow].sumR += rr; if (rr > 0) byDow[dow].wins++; addNet(byDow[dow], rn);
     }
     var counted = rs.length;
     var avgR = counted ? sumR / counted : null;
@@ -571,12 +597,15 @@ function hgScoreStats(records){
       expectancy: avgR,   /* mean R per settled trade — the per-trade edge, GROSS */
       expectancyNet: nNetAll ? sumNetAll / nNetAll : null,  /* the one that decides */
       enoughData: settled >= MIN_DATA,
-      byTier: {}, byLane: {}, byDir: {}, byLayer: {}
+      noFingerprint: noFingerprint,
+      byTier: {}, byLane: {}, byDir: {}, byLayer: {}, bySession: {}, byDow: {}
     };
     for (var tk in byTier) out.byTier[tk] = finish(byTier[tk]);
     for (var lk in byLane) out.byLane[lk] = finish(byLane[lk]);
     for (var dk in byDir) out.byDir[dk] = finish(byDir[dk]);
     for (var nk in byLayer) out.byLayer[nk] = finish(byLayer[nk]);
+    for (var sk in bySession) out.bySession[sk] = finish(bySession[sk]);
+    for (var wk in byDow) out.byDow[wk] = finish(byDow[wk]);
     return out;
   }catch(e){ return empty; }
 }
@@ -873,6 +902,21 @@ function hgScoreRecord(input){
     var fpIn = fin(inp.fundingPct);
     var rr1 = null;
     if (t1 !== null && entry !== stop) rr1 = Math.abs(t1 - entry) / Math.abs(entry - stop);
+    var fpStamp = null;
+    try{
+      if (typeof G.hgFingerprint === 'function'){
+        fpStamp = G.hgFingerprint({
+          symbol: sym, side: dir,
+          poiKind: inp.poiKind || inp.kind || null,
+          regime: inp.regime || null,
+          htfAlign: inp.htfAlign,
+          confluence: inp.confluence,
+          atrPct: inp.atrPct,
+          ts: at,
+          rr: fin(inp.rr1) !== null ? fin(inp.rr1) : rr1
+        });
+      }
+    }catch(eFp){ fpStamp = null; }
     var rec = {
       id: 'sc_' + at.toString(36) + '_' + (idCounter++).toString(36) + '_' + sym,
       source: (typeof inp.source === 'string' && inp.source.trim()) ? inp.source.trim().toLowerCase().slice(0, 24) : 'unknown',
@@ -884,6 +928,9 @@ function hgScoreRecord(input){
       fundingPct: fpIn,
       layers: sanitizeLayers(inp.layers),
       layerVals: sanitizeLayerVals(inp.layers, inp.layerVals),
+      fpKey: fpStamp ? fpStamp.key : null,
+      fpCoarse: fpStamp ? fpStamp.coarse : null,
+      fpParts: fpStamp ? fpStamp.parts : null,
       at: at,
       status: 'open',
       outcome: null, r: null, bars: 0, closedAt: null, settledAt: null,
@@ -1114,7 +1161,27 @@ function breakdownsHtml(st){
   var layer = statTableHtml('BY LAYER — the per-layer edge meter',
     'outcome attribution: every layer that voted for a settled setup carries that result',
     layerRows, 'no settled trades with layer attribution yet');
-  return '<div class="grid2"><div>' + left + '</div><div>' + right + '</div></div>' + layer;
+  var sessRows = [];
+  for (var sk in st.bySession){
+    var sb = st.bySession[sk];
+    sessRows.push([sk.replace('sess-', '').toUpperCase(), sb.n, sb.winRate, sb.avgR]);
+  }
+  sessRows.sort(function(a, b){ return (b[1] - a[1]); });
+  var dowRows = [];
+  for (var wk in st.byDow){
+    var db = st.byDow[wk];
+    dowRows.push([wk, db.n, db.winRate, db.avgR]);
+  }
+  var istNote = 'session buckets use GMT; your decision clock is IST (NY-PM = late evening local)';
+  var sessBlock = statTableHtml('BY SESSION (GMT)', istNote, sessRows, 'no session split yet');
+  var dowBlock = statTableHtml('BY DAY OF WEEK (UTC)', '', dowRows, 'no day split yet');
+  var noFpNote = (st.noFingerprint > 0)
+    ? '<div class="note warn" style="margin-top:8px">' + st.noFingerprint
+      + ' settled record(s) lack fingerprint — excluded from conditional edge lookups (never backfilled)</div>'
+    : '';
+  return '<div class="grid2"><div>' + left + '</div><div>' + right + '</div></div>'
+    + '<div class="grid2"><div>' + sessBlock + '</div><div>' + dowBlock + '</div></div>'
+    + layer + noFpNote;
 }
 function layersPips(layers){
   if (!Array.isArray(layers) || !layers.length) return '';

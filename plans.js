@@ -1258,6 +1258,27 @@ function hgTicketFinalGates(plan, ctx){
       if (vc && vc.chip) chips.push(vc.chip);
     }
 
+    if (typeof G.hgEdgeFor === 'function' && typeof G.hgScoreRecords === 'function'){
+      var edgeCand = {
+        symbol: plan.sym, side: plan.dir,
+        poiKind: plan.planSrc || ctx.poiKind || 'plan',
+        regime: plan.regimeLabel || ctx.regime || null,
+        confluence: ctx.confluence,
+        atrPct: ctx.atrPct,
+        ts: Date.now(),
+        rr: isFinite(plan.rr1) ? plan.rr1 : plan.rr
+      };
+      var edgeRow = G.hgEdgeFor(edgeCand, G.hgScoreRecords());
+      if (edgeRow && edgeRow.tier === 'PROVEN-BAD'){
+        return { ok: false, tag: 'edge', reason: 'VETO — PROVEN-BAD archetype on your ledger' };
+      }
+      if (edgeRow && edgeRow.n > 0 && typeof G.hgEdgeArchetypeLine === 'function'){
+        chips.push(G.hgEdgeArchetypeLine(edgeRow));
+      } else if (edgeRow && edgeRow.noFingerprint > 0){
+        chips.push('edge UNPROVEN — ' + edgeRow.noFingerprint + ' legacy records excluded');
+      }
+    }
+
     return { ok: true, chips: chips };
   }catch(e){ return { ok: true, chips: [] }; }
 }

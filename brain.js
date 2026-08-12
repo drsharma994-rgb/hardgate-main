@@ -290,6 +290,7 @@ var LAYER_KIND = {
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
   carry: 'context', termbasis: 'context', dvol: 'context', stables: 'context',
+  venueprem: 'context',
   familyroute: 'context',
   spotperp: 'context',
   yield: 'context', smt: 'structural'
@@ -655,6 +656,29 @@ function brainCollect(inputs){
       push('dvol', 'neutral', 'DVOL ' + FMT(dvolV, 1) + ' (compressed) — vol coiled, breakout fuel');
     }else{
       push('dvol', 'neutral', 'DVOL ' + FMT(dvolV, 1) + ' — normal implied-vol band');
+    }
+  }
+
+  /* ---- DELTA vs BINANCE venue premium (price, not funding) ---- */
+  if (!inp.venuePrem || typeof inp.venuePrem !== 'object'){
+    hush('venueprem', 'venue premium unavailable — run VENUE tab or refresh universe');
+  }else{
+    var vp = inp.venuePrem;
+    if (vp.z === null || vp.z === undefined){
+      hush('venueprem', vp.note || 'venue premium z-score warming up');
+    }else if (vp.stretched){
+      var vpDir = 'neutral';
+      if (vp.z >= 2) vpDir = 'short';
+      else if (vp.z <= -2) vpDir = 'long';
+      push('venueprem', vpDir, (vp.note || 'Delta premium z=' + FMT(vp.z, 2))
+        + ' — local positioning pressure (z-score, not raw level)', { context: true });
+      if (Math.abs(vp.z) >= 3 && inp.dir){
+        if ((vp.z >= 3 && inp.dir === 'long') || (vp.z <= -3 && inp.dir === 'short')){
+          push('venueprem', 'veto', 'EXTREME venue premium z=' + FMT(vp.z, 2) + ' against ' + inp.dir);
+        }
+      }
+    }else{
+      push('venueprem', 'neutral', 'venue premium z=' + FMT(vp.z, 2) + ' — not stretched');
     }
   }
 
@@ -1363,7 +1387,8 @@ function snapshotLayers(){
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
             yieldSnap: undefined, smtSnap: undefined, macro: undefined,
             newsState: undefined, fng: null, carry: undefined, termbasis: undefined,
-            stables: undefined, dvol: undefined, familyRoute: undefined };
+            stables: undefined, dvol: undefined, familyRoute: undefined,
+            venuePrem: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
                   engine: 'engineState', oiflow: 'oiflowState', squeeze: 'squeezeState',
@@ -1423,6 +1448,9 @@ function snapshotLayers(){
   try{
     if (typeof G.__hgFamilyRoute === 'object') o.familyRoute = G.__hgFamilyRoute;
   }catch(e){ o.familyRoute = undefined; }
+  try{
+    if (typeof G.venuePremiumState === 'function') o.venuePrem = G.venuePremiumState();
+  }catch(e){ o.venuePrem = undefined; }
   /* fear & greed from the inline app state (const S — lexical global, not window.S) */
   try{ if (typeof S !== 'undefined' && S && S.fng) o.fng = S.fng; }catch(e){ o.fng = null; }
   return o;
@@ -1746,7 +1774,7 @@ function judgeCrypto(cand, snap){
     news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     macro: snap.macro, stables: snap.stables, dvol: snap.dvol,
-    familyRoute: snap.familyRoute,
+    familyRoute: snap.familyRoute, venuePrem: snap.venuePrem,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     tape: snap.tape, fng: snap.fng,
     carry: snap.carry, termbasis: snap.termbasis,
@@ -3545,6 +3573,30 @@ function tierRank(t){
   t = String(t || '').toUpperCase();
   return t === 'PRIME' ? 3 : t === 'HIGH' ? 2 : t === 'WATCH' ? 1 : 0;
 }
+function edgeCandFromRow(row, dir, p){
+  try{
+    var dec = row && row.dec;
+    p = p || (row && row.plan) || {};
+    return {
+      symbol: row.sym,
+      side: dir,
+      poiKind: (p.src || p.planSrc || row.lane || 'brain'),
+      regime: (dec && dec.regimeLabel) ? dec.regimeLabel : ((dec && dec.regime) ? dec.regime : null),
+      htfAlign: row.htfAlign,
+      confluence: dec && isFinite(dec.agree) ? dec.agree : null,
+      atrPct: row.atrPct,
+      ts: Date.now(),
+      rr: isFinite(p.rr1) ? p.rr1 : null
+    };
+  }catch(e){ return { symbol: row && row.sym, side: dir }; }
+}
+function edgeArchetypeVeto(row, dir){
+  try{
+    if (typeof G.hgEdgeFor !== 'function' || typeof G.hgScoreRecords !== 'function') return false;
+    var edge = G.hgEdgeFor(edgeCandFromRow(row, dir), G.hgScoreRecords());
+    return edge && edge.tier === 'PROVEN-BAD';
+  }catch(e){ return false; }
+}
 function ticketCandidate(row){
   try{
     if (!row || !row.dec || !row.plan) return null;
@@ -3553,6 +3605,7 @@ function ticketCandidate(row){
     if (dir !== 'long' && dir !== 'short') return null;
     if (!isFinite(p.entry) || !isFinite(p.stop) || !isFinite(p.t1)) return null;
     if (p.entry === p.stop) return null;
+    if (edgeArchetypeVeto(row, dir)) return null;
     var pBoost = profitRankBoost(row, dir);
     return { row: row, dir: dir,
              rank: tierRank(row.dec.tier) * 1000
@@ -3825,6 +3878,14 @@ function profitRankBoost(row, dir){
   try{
     if (!row || !row.plan) return 0;
     var p = row.plan;
+    if (typeof G.hgEdgeFor === 'function' && typeof G.hgScoreRecords === 'function'){
+      var edge = G.hgEdgeFor(edgeCandFromRow(row, dir, p), G.hgScoreRecords());
+      if (edge){
+        if (edge.tier === 'PROVEN-BAD') return -9999;
+        if (isFinite(edge.wilsonLB)) boost += Math.max(-15, Math.min(15, edge.wilsonLB * 40));
+        else if (isFinite(edge.expR)) boost += Math.max(-15, Math.min(15, edge.expR * 8));
+      }
+    }
     if (typeof G.hgProfitRankHint === 'function'){
       var agreeing = [];
       var votes = (row.col && Array.isArray(row.col.votes)) ? row.col.votes : [];
@@ -4584,6 +4645,9 @@ function scoreRecord(setups){
             entry: p ? p.entry : null, stop: p ? p.stop : null,
             t1: p ? p.t1 : null, t2: p ? p.t2 : null,
             rr1: (p && isFinite(p.rr1)) ? p.rr1 : ((p && isFinite(p.rr)) ? p.rr : null),
+            poiKind: p ? (p.src || p.planSrc || 'brain') : 'brain',
+            regime: dec.regimeLabel || null,
+            confluence: isFinite(dec.agree) ? dec.agree : null,
             fundingPct: (row.xu && row.xu.fundingPct != null) ? row.xu.fundingPct
               : ((row.tick && row.tick.fundingPct != null) ? row.tick.fundingPct : null),
             layers: agreeing, at: Date.now()
@@ -4661,6 +4725,7 @@ function brainRowBookOpts(row){
     var plan = row.plan;
     if (!plan || !isFinite(plan.entry) || !isFinite(plan.stop)) return null;
     if (!familyEvOk(plan)) return null;
+    if (edgeArchetypeVeto(row, dir)) return null;
     var dir = dec.dir;
     var sym = row.lane === 'gold' ? 'XAUTUSD' : row.sym;
     var agreeing = [];

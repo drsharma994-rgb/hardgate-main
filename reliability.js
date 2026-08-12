@@ -126,7 +126,22 @@ function render(ui){
     }
 
     if (ui.root){
-      ui.root.innerHTML = header + liftHtml + tierHtml + curveHtml + icHtml
+      var sessHtml = '';
+      if (typeof W.hgScoreStats === 'function'){
+        var st = W.hgScoreStats(recs);
+        if (st && st.bySession){
+          sessHtml = '<h3 style="margin-top:14px;font-size:11px;letter-spacing:.1em">BY SESSION (GMT) — IST decision clock</h3><table><tr><th>session</th><th>n</th><th>win%</th><th>avg R</th></tr>';
+          for (var sk in st.bySession){
+            var sb = st.bySession[sk];
+            sessHtml += '<tr><td>' + esc(String(sk).replace('sess-','').toUpperCase()) + '</td><td>' + sb.n + '</td><td>' + fmtPct(sb.winRate) + '</td><td>' + fmtR(sb.avgR) + '</td></tr>';
+          }
+          sessHtml += '</table>';
+        }
+        if (st && st.noFingerprint > 0){
+          sessHtml += '<div class="note warn">' + st.noFingerprint + ' settled without fingerprint — excluded from conditional edge lookups.</div>';
+        }
+      }
+      ui.root.innerHTML = header + liftHtml + tierHtml + curveHtml + icHtml + sessHtml
         + '<div class="note" style="margin-top:12px">Measurement only' + effNote
         + ' — nothing here changes a gate automatically.</div>';
     }

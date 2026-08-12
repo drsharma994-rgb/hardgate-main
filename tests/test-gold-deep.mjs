@@ -45,7 +45,7 @@ globalThis.GOLD_SRC_LABEL = { 'binance-paxg': 'BINANCE PAXG', 'twelvedata': 'TWE
 globalThis.nowSec = () => Math.floor(Date.now() / 1000);
 globalThis.fmt = (n, d = 2) => (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
 globalThis.px = n => isFinite(n) ? Number(n).toFixed(2) : '—';
-globalThis.pct = (n, d = 1) => isFinite(n) ? (n >= 0 ? '+' : '') + n.toFixed(d) + '%' : '—';
+globalThis.pct = (n, d = 1) => (n !== null && n !== undefined && isFinite(n)) ? (n >= 0 ? '+' : '') + n.toFixed(d) + '%' : '—';
 globalThis.gateRow = (id, name, state, detail) => `GATE:${id}|${state}|${name} :: ${detail}\n`;
 globalThis.bookBtnHTML = (sym, dir, entry, stop, t1, meta) => '<button class="toBook">ADD TO BOOK</button>';
 globalThis.hgBookBtn = function(sym, dir, entry, stop, t1, meta){
