@@ -556,23 +556,118 @@ function cardHTML(sig){
 
 var __pineSnap = null;
 var __pineTab = { busy: false, hasRun: false, run: null };
+var PINE_DESK_FALLBACK_N = 24;
+
+async function pineWarmGateScans(){
+  try{
+    if (typeof W.edgeWarm === 'function') await W.edgeWarm({ quiet: true });
+  }catch(e){}
+  try{
+    if (typeof W.cryptoScanWarm === 'function') await W.cryptoScanWarm('swing');
+  }catch(e){}
+}
+
+async function pineDeskFallbackEligible(limit){
+  limit = limit || PINE_DESK_FALLBACK_N;
+  var out = [];
+  try{
+    var loadFn = (typeof W.hgDeskLoadDeltaCoinDCX === 'function') ? W.hgDeskLoadDeltaCoinDCX : null;
+    if (!loadFn) return out;
+    var u = await loadFn({ minTurnover: 5e6, includeUnknown: true });
+    var items = (u.items || []).slice(0, limit);
+    for (var i = 0; i < items.length; i++){
+      var it = items[i];
+      var sym = (typeof W.hgDeskSymLabel === 'function') ? W.hgDeskSymLabel(it) : (it.sym || '');
+      if (!sym) continue;
+      out.push({
+        sym: sym, dir: 'long', gateHits: 0, deskFallback: true, deskItem: it,
+        gates: { desk: true, regime: 'desk fallback — run EDGE for ticket universe' }
+      });
+      out.push({
+        sym: sym, dir: 'short', gateHits: 0, deskFallback: true, deskItem: it,
+        gates: { desk: true, regime: 'desk fallback' }
+      });
+    }
+  }catch(e){}
+  return out;
+}
+
+async function pineEnsureGate(statEl){
+  var gate = (typeof W.pineGateLive === 'function')
+    ? W.pineGateLive(null, PINE_GATE_OPTS)
+    : { eligible: [], funnel: {}, missing: ['pinegate'] };
+  if (gate.eligible && gate.eligible.length) return gate;
+
+  if (statEl) statEl.textContent = 'Warming EDGE + SWING scans for Pine universe…';
+  await pineWarmGateScans();
+  gate = W.pineGateLive(null, PINE_GATE_OPTS);
+  if (gate.eligible && gate.eligible.length) return gate;
+
+  if (statEl) statEl.textContent = 'Gate universe empty — desk fallback (top turnover)…';
+  var desk = await pineDeskFallbackEligible(PINE_DESK_FALLBACK_N);
+  if (desk.length){
+    gate.eligible = desk;
+    gate.funnel = gate.funnel || {};
+    gate.funnel.eligible = desk.length;
+    gate.funnel.fallbackTier = 'DESK top-' + PINE_DESK_FALLBACK_N + ' × L/S';
+    gate.funnel.intersectRaw = desk.length;
+    gate.missing = [];
+    gate.deskFallback = true;
+  }
+  return gate;
+}
+
+async function pineFetchCandles(item){
+  var sym = (typeof item === 'string') ? item : (item && item.sym);
+  if (typeof W.getCandles === 'function' && sym){
+    try{
+      var rows = await W.getCandles(sym, TF, KL_BARS);
+      if (rows && rows.length >= 20) return rows;
+    }catch(e){}
+  }
+  if (item && item.deskItem && typeof W.hgDeskFetchKlines === 'function'){
+    try{
+      var dk = await W.hgDeskFetchKlines(item.deskItem, TF, KL_BARS);
+      if (dk && dk.length >= 20) return dk;
+    }catch(e2){}
+  }
+  if (sym && typeof W.xuUniverse === 'function' && typeof W.xuCandles === 'function'){
+    try{
+      var uni = await W.xuUniverse(false);
+      var norm = String(sym).toUpperCase();
+      var hit = null;
+      for (var u = 0; u < (uni || []).length; u++){
+        var it = uni[u];
+        if (!it) continue;
+        var s = String(it.sym || '').toUpperCase();
+        var b = String(it.base || '').toUpperCase();
+        if (s === norm || b + 'USDT' === norm || b + 'USD' === norm){ hit = it; break; }
+      }
+      if (hit){
+        var xc = await W.xuCandles(hit, TF, KL_BARS);
+        if (xc && xc.length >= 20) return xc;
+      }
+    }catch(e3){}
+  }
+  return [];
+}
 
 function mount(el){
   el.innerHTML =
     '<div class="panel">'
     + '<h2>CRYPTO PINE <span>All 10 Pine strategies · EDGE+ universe</span></h2>'
     + '<div class="note">Runs <b>every ported Pine script</b> on the expanded <b>EDGE</b> universe: tickets (tally ≥3 + plan), '
-    + '<b>forming</b> watchlist, soft tally ≥2, plus REGIME — falls back to <b>SWING CLEAN</b> if EDGE is empty. '
+    + '<b>forming</b> watchlist, soft tally ≥2, plus REGIME — falls back to <b>SWING CLEAN</b> then <b>desk top turnover</b> if gates are empty. '
     + 'Shows <b>NEW</b> bar flips, <b>RECENT</b> signals (last 5 bars), and <b>ALIGNED</b> trend/context matches. '
-    + 'Run <b>EDGE</b> scan first. New setups alert immediately.</div>'
+    + 'Auto-scans on open (warms EDGE/SWING if needed). New setups alert immediately.</div>'
     + '<div class="row" style="margin-top:10px">'
     + '<button class="btn" id="pineRun">RUN ALL PINE SCAN</button>'
-    + '<span class="note" id="pineStat">Run EDGE scan first, then scan.</span>'
+    + '<span class="note" id="pineStat">Auto-scan on open — warms EDGE/SWING if gate universe is empty.</span>'
     + '</div>'
     + '<div class="prog" id="pineProg"><i></i></div>'
     + '<div id="pineFunnel" style="margin-top:8px"></div>'
     + '<div id="pineDesk"></div>'
-    + '<div id="pineOut" style="margin-top:12px"><div class="empty">Press RUN PINE SCAN after gate tabs have run.</div></div>'
+    + '<div id="pineOut" style="margin-top:12px"><div class="empty">Auto-scan starting…</div></div>'
     + '</div>';
 
   var btn = el.querySelector('#pineRun');
@@ -606,27 +701,25 @@ function mount(el){
     var status = 'refreshed';
     var t0 = Date.now();
     try{
-      if (stat) stat.textContent = 'Building EDGE Pine universe…';
-      var gate = (typeof W.pineGateLive === 'function')
-        ? W.pineGateLive(null, PINE_GATE_OPTS)
-        : { eligible: [], funnel: {}, missing: ['pinegate'] };
+      if (stat) stat.textContent = 'Building Pine universe…';
+      var gate = await pineEnsureGate(stat);
       if (funnelEl && typeof W.hgFunnelPanelHTML === 'function' && typeof W.pineFunnelRows === 'function'){
-        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (EDGE tickets + forming + REGIME)',
+        funnelEl.innerHTML = W.hgFunnelPanelHTML('PINE universe (EDGE tickets + forming + REGIME'
+          + (gate.deskFallback ? ' · desk fallback' : '') + ')',
           W.pineFunnelRows(gate.funnel), 'pineGateFunnel');
       }
       if (!gate.eligible || !gate.eligible.length){
-        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'EDGE empty';
-        if (out) out.innerHTML = '<div class="empty"><b>WAIT.</b> No EDGE tickets in the Pine universe. '
-          + 'Run <b>EDGE</b> scan first. Missing: '
-          + esc(miss) + '.</div>';
+        var miss = (gate.missing && gate.missing.length) ? gate.missing.join(', ') : 'universe empty';
+        if (out) out.innerHTML = '<div class="empty"><b>No Pine universe.</b> Could not load EDGE, SWING, or desk symbols. '
+          + 'Missing: ' + esc(miss) + '. Check network / xuniverse.js.</div>';
         if (stat) stat.textContent = 'done · 0 eligible · ' + miss;
         __pineSnap = { at: Date.now(), signals: [], gate: gate, stat: stat ? stat.textContent : '' };
         return status;
       }
 
-      if (typeof W.getCandles !== 'function'){
-        if (out) out.innerHTML = '<div class="empty">getCandles unavailable — open from HARDGATE app.</div>';
-        return 'failed: no getCandles';
+      if (typeof W.getCandles !== 'function' && typeof W.hgDeskFetchKlines !== 'function'){
+        if (out) out.innerHTML = '<div class="empty">No candle route — open from HARDGATE app.</div>';
+        return 'failed: no candles';
       }
 
       var eligible = gate.eligible.slice();
@@ -639,7 +732,7 @@ function mount(el){
           if (stat) stat.textContent = 'Pine math ' + n + '/' + eligible.length + ' · ' + item.sym + ' ' + item.dir.toUpperCase();
           setProg(0.05 + 0.9 * (n / eligible.length));
           try{
-            var rows = await W.getCandles(item.sym, TF, KL_BARS);
+            var rows = await pineFetchCandles(item);
             if (!rows || rows.length < 20){ failed++; return; }
             for (var s = 0; s < PINE_SCRIPTS.length; s++){
               var script = PINE_SCRIPTS[s];
@@ -697,6 +790,9 @@ function mount(el){
 
   if (btn) btn.addEventListener('click', function(){ runScan(); });
   __pineTab.run = runScan;
+  setTimeout(function(){
+    if (!__pineTab.hasRun && typeof runScan === 'function') runScan({ quiet: true });
+  }, 600);
 }
 
 async function pineRefresh(){
@@ -746,6 +842,8 @@ W.PINE_SCRIPTS = PINE_SCRIPTS;
 W.PINE_GATE_OPTS = PINE_GATE_OPTS;
 W.PINE_SCAN_OPTS = PINE_SCAN_OPTS;
 W.pineScan = function(){ try{ return __pineSnap; }catch(e){ return null; } };
+W.pineEnsureGate = pineEnsureGate;
+W.pineFetchCandles = pineFetchCandles;
 W.pineWarm = pineWarm;
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({ id: 'pine', label: 'CRYPTO PINE', mount: mount, refresh: pineRefresh });

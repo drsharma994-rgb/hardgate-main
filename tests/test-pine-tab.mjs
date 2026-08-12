@@ -143,6 +143,9 @@ console.log('== scan empty universe ==');
 {
   const pane = freshPane();
   W.pineGateLive = () => ({ eligible: [], funnel: {}, missing: ['edge-empty'] });
+  W.edgeWarm = async () => 'warmed';
+  W.cryptoScanWarm = async () => 'warmed';
+  W.hgDeskLoadDeltaCoinDCX = async () => ({ items: [] });
   W.hgFunnelPanelHTML = (title) => '<div class="funnel">' + title + '</div>';
   W.pineFunnelRows = () => [];
   tab.mount(pane.pane);
@@ -152,7 +155,7 @@ console.log('== scan empty universe ==');
   ok(await waitFor(() => pane.stubs['#pineStat'].textContent.indexOf('done') >= 0, 5000),
     'empty scan completes (stat reaches done)');
   const out = pane.stubs['#pineOut'];
-  ok(out.innerHTML.indexOf('No EDGE tickets') >= 0, 'empty universe shows WAIT copy');
+  ok(out.innerHTML.indexOf('No Pine universe') >= 0, 'empty universe shows honest copy');
   const stat = pane.stubs['#pineStat'];
   ok(stat.textContent.indexOf('0 eligible') >= 0, 'stat line reports 0 eligible');
 }
