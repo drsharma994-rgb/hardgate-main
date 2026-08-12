@@ -1630,6 +1630,8 @@ function goldScalpSetups(inp){
     if (inp.xauCandles) bundleOpts.xauCandles = inp.xauCandles;
     if (inp.xagCandles) bundleOpts.xagCandles = inp.xagCandles;
     if (isFinite(inp.newsWindowMinutes)) bundleOpts.newsWindowMinutes = inp.newsWindowMinutes;
+    if (inp.candleSource) bundleOpts.candleSource = inp.candleSource;
+    else if (inp.source) bundleOpts.candleSource = inp.source;
     var D = __goldBundle(rows, __rows(inp.rows1h), __rows(inp.rows4h), entry, a15, bundleOpts);
     D.kz = kz; D.news = news;
 
@@ -2489,6 +2491,16 @@ function goldRankSetups(cands, ctx){
       for (k in c){ if (Object.prototype.hasOwnProperty.call(c, k)) rc[k] = c[k]; }
       rc.tally = tally;
       rc.tallyParts = parts;
+      try{
+        var gradeFn = (typeof window !== 'undefined' && window.hgGoldGradeFromScore) ? window.hgGoldGradeFromScore : null;
+        if (gradeFn){
+          rc.grade = gradeFn(tally, !!(news.caution || c.newsCaution));
+        } else {
+          rc.grade = (tally >= 8) ? 'A' : ((tally >= 5) ? 'B' : 'C');
+          if ((news.caution || c.newsCaution) && rc.grade === 'A') rc.grade = 'B';
+          else if ((news.caution || c.newsCaution) && rc.grade === 'B') rc.grade = 'C';
+        }
+      }catch(eGr){}
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };

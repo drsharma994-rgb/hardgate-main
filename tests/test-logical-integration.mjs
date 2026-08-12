@@ -17,10 +17,10 @@ console.log('== advanced squeeze desk ==');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('squeeze:') >= 0, 'tab auto-scan squeeze');
 }
 
-console.log('== hg-v264 shell ==');
+console.log('== hg-v265 shell ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v264/.test(sw), 'cache hg-v264');
+  ok(/hg-v265/.test(sw), 'cache hg-v265');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain');
   ok(sw.indexOf('trendtable.js') >= 0, 'sw precaches trendtable');
 }

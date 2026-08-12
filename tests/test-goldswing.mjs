@@ -304,7 +304,7 @@ console.log('== 2) 4h trend pullback fires + extended-not-firing ==');
   assert(pb && /^pullback\|long\|\d+$/.test(pb.id), 'structure-anchored conviction id: ' + (pb && pb.id));
   assert(pb && pb.anchor === Math.round(e50) || (pb && Math.abs(pb.anchor - e50) < 1), 'anchor is the real 4h EMA50');
   assert(pb && pb.agree >= 3, 'at least 3 agreeing reads behind it (4h stack + daily stack + trigger) — got ' + (pb && pb.agree));
-  assert(pb && pb.grade === 'B', 'grade B for a 3–4 read ledger (got ' + (pb && pb.grade) + ')');
+  assert(pb && pb.grade === 'C', 'grade C for tally 3–4 in bare ctx (A≥8 · B≥5 · else C) — got ' + (pb && pb.grade));
   assert(pb && /pulling back into the 50-EMA value zone/.test(pb.why), 'evidence named in plain language');
   assert(pb && /4h close below the 200-EMA/.test(pb.invalidates), 'invalidation names the 200-EMA structure');
   const pbHtml = env.M.stubs['#gwCards'].innerHTML;
@@ -343,7 +343,7 @@ console.log('== 3) weekly-range breakout fires + stays silent without a trigger 
   assert(!!wk && wk.dir === 'long' && wk.id === 'wkbreak|long|2380',
          'prior week\u2019s low 2380 swept + reclaimed -> LONG candidate ' + (wk && wk.id));
   assert(wk && wk.agree === 3, 'ledger: sweep-reclaim trigger + 4h sweep read + weekly-VWAP read = 3 (got ' + (wk && wk.agree) + ')');
-  assert(wk && wk.tally === 3 && wk.grade === 'B', 'bare ctx: tally 3, grade B');
+  assert(wk && wk.tally === 3 && wk.grade === 'C', 'bare ctx: tally 3, grade C (unified A≥8/B≥5 thresholds)');
   assert(wk && wk.stop < 2380, 'stop anchored BEYOND the swept weekly low (got ' + (wk && wk.stop) + ')');
   assert(/stop beyond structure 2380/.test(env.M.stubs['#gwCards'].innerHTML), 'stop note names the structure anchor (card HTML)');
   assert(wk && /swept and reclaimed/.test(wk.why) && /weekly range/.test(wk.why), 'evidence named in plain language');
