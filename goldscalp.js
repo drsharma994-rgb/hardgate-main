@@ -991,46 +991,56 @@ function paintGoldWeekendPanel(ui, rows, nowMs, bestCandidate){
 
 /* ---------------- data legs (each catch-isolated) ---------------- */
 async function fetchGoldKlines(){
-  var out = { rows15m: [], rows1h: [], rows4h: [], source: null, xmSymbol: null };
+  var out = { rows15m: [], rows1h: [], rows4h: [], src: {}, mixed: false, source: null, xmSymbol: null };
+  var srcSet = function(tf, source, rowsKey, rows){
+    if (!rows || !rows.length || !source) return;
+    out[rowsKey] = rows;
+    out.src[tf] = source;
+  };
   var xgc = gfn('getXmGoldCandles');
   if (xgc){
     try{
       var xa = await xgc('15m', KL_15M);
-      if (xa && xa.rows && xa.rows.length){ out.rows15m = xa.rows; out.source = xa.source || 'xm-xauusd'; out.xmSymbol = xa.symbol || 'XAUUSD'; }
+      if (xa && xa.rows && xa.rows.length){ srcSet('15m', xa.source || 'xm-xauusd', 'rows15m', xa.rows); out.xmSymbol = xa.symbol || 'XAUUSD'; }
     }catch(eXm){}
     if (!out.rows1h.length){
       try{
         var xb = await xgc('1h', KL_1H);
-        if (xb && xb.rows && xb.rows.length){ out.rows1h = xb.rows; if (!out.source) out.source = xb.source || 'xm-xauusd'; }
+        if (xb && xb.rows && xb.rows.length) srcSet('1h', xb.source || 'xm-xauusd', 'rows1h', xb.rows);
       }catch(eXm2){}
     }
     if (!out.rows4h.length){
       try{
         var xc = await xgc('4h', KL_4H);
-        if (xc && xc.rows && xc.rows.length){ out.rows4h = xc.rows; if (!out.source) out.source = xc.source || 'xm-xauusd'; }
+        if (xc && xc.rows && xc.rows.length) srcSet('4h', xc.source || 'xm-xauusd', 'rows4h', xc.rows);
       }catch(eXm3){}
     }
   }
   var ggc = gfn('getGoldCandles');
   if (ggc){
     if (!out.rows15m.length){
-      try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length){ out.rows15m = a.rows; out.source = a.source; } }catch(e){}
+      try{ var a = await ggc('15m', KL_15M); if (a && a.rows && a.rows.length) srcSet('15m', a.source, 'rows15m', a.rows); }catch(e){}
     }
     if (!out.rows1h.length){
-      try{ var b = await ggc('1h', KL_1H);  if (b && b.rows && b.rows.length){ out.rows1h = b.rows; if (!out.source) out.source = b.source; } }catch(e2){}
+      try{ var b = await ggc('1h', KL_1H);  if (b && b.rows && b.rows.length) srcSet('1h', b.source, 'rows1h', b.rows); }catch(e2){}
     }
     if (!out.rows4h.length){
-      try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length){ out.rows4h = c.rows; if (!out.source) out.source = c.source; } }catch(e3){}
+      try{ var c = await ggc('4h', KL_4H);  if (c && c.rows && c.rows.length) srcSet('4h', c.source, 'rows4h', c.rows); }catch(e3){}
     }
   }
   if (!out.rows15m.length){
     var bk = gfn('binanceKlines');
     if (bk){
-      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length){ out.rows15m = p; out.source = 'binance-paxg'; } }catch(e4){}
-      try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) out.rows1h = q; }catch(e5){}
-      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length) out.rows4h = z; }catch(e6){}
+      try{ var p = await bk('PAXGUSDT', '15m', KL_15M); if (p && p.length) srcSet('15m', 'binance-paxg', 'rows15m', p); }catch(e4){}
+      try{ var q = await bk('PAXGUSDT', '1h', KL_1H);  if (q && q.length) srcSet('1h', 'binance-paxg', 'rows1h', q); }catch(e5){}
+      try{ var z = await bk('PAXGUSDT', '4h', KL_4H);  if (z && z.length) srcSet('4h', 'binance-paxg', 'rows4h', z); }catch(e6){}
     }
   }
+  if (typeof hgGoldSrcFinalize === 'function') return hgGoldSrcFinalize(out, '15m');
+  var prov = [];
+  Object.keys(out.src).forEach(function(k){ if (out.src[k] && prov.indexOf(out.src[k]) < 0) prov.push(out.src[k]); });
+  out.mixed = prov.length > 1;
+  out.source = out.src['15m'] || out.src['4h'] || prov[0] || null;
   return out;
 }
 
