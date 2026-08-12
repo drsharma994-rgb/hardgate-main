@@ -1799,6 +1799,16 @@ function rankSetups(cands, ctx){
           } else if (verdict === 'shorts-crowding' && c.dir === 'short'){
             goldPos = { warn: 'PAXG shorts crowding — squeeze risk' };
           }
+          try{
+            var cotSt = (typeof window !== 'undefined') ? window.__hgGoldCot : null;
+            if (cotSt && cotSt.crowding === 'SPEC CROWDED LONG' && c.dir === 'long'){
+              goldPos = goldPos || {};
+              goldPos.cot = 'COT spec crowded long — weekly positioning caution';
+            } else if (cotSt && cotSt.crowding === 'SPEC CROWDED SHORT' && c.dir === 'short'){
+              goldPos = goldPos || {};
+              goldPos.cot = 'COT spec crowded short — weekly positioning caution';
+            }
+          }catch(eC){}
           rc.stack = hgSetupStackFromTallyParts(parts, {
             dir: c.dir, sym: c.sym || 'XAUUSD', style: (ctx.style || 'goldswing'),
             asset: 'gold', tally: tally, grade: c.grade,

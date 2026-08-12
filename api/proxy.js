@@ -19,6 +19,8 @@ const ALLOWED_HOSTS = new Set([
   // macro.js / goldpro.js: Frankfurter ECB FX fixes (DXY + gold/DXY correlation)
   'api.frankfurter.dev',
   'api.frankfurter.app',
+  // gold COT — CFTC Public Reporting (weekly managed-money positioning)
+  'publicreporting.cftc.gov',
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;
@@ -44,6 +46,7 @@ function proxyCacheTtl(urlStr){
   if (!urlStr) return 0;
   if (urlStr.indexOf('faireconomy.media') !== -1 && urlStr.indexOf('ff_calendar') !== -1) return 30 * 60 * 1000;
   if (urlStr.indexOf('cointelegraph.com') !== -1 || urlStr.indexOf('coindesk.com') !== -1) return 10 * 60 * 1000;
+  if (urlStr.indexOf('publicreporting.cftc.gov') !== -1) return 7 * 24 * 3600 * 1000;
   return 0;
 }
 

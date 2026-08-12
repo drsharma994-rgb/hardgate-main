@@ -28,7 +28,7 @@ ok(html.indexOf('/api/coindcx/instruments') >= 0, 'index cdcx desk instruments')
 ok(html.indexOf('cdcxDeskPath') >= 0, 'index cdcxDeskPath helper');
 ok(fs.readFileSync(path.join(root, 'xuniverse.js'), 'utf8').indexOf('cdcxFetchUrl') >= 0, 'xuniverse cdcxFetchUrl');
 ok(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8').indexOf('createCoindcxApi') >= 0, 'server coindcx api');
-ok(/hg-v259/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v259');
+ok(/hg-v260/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v260');
 
 console.log('== api handler ==');
 const handler = createCoindcxApi();

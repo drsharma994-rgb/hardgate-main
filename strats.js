@@ -24,8 +24,9 @@ user can point at any Binance USDT-M perp on 4h or 1d:
 Conventions (all three): long AND short, symmetric; signals on CLOSED bars
 only; entries at the signal bar's close; one position at a time; stops fill
 at the stop price, or the bar open when gapped through (conservative);
-R = signed (exit-entry) / |entry-stop|. NO fees/slippage — real results
-will be worse.
+R = signed (exit-entry) / |entry-stop|. Round-trip costs use hgCostBps when
+loaded (depth-modelled or ATR-degraded); otherwise SG_FEE_BPS+SG_SLIP_BPS flat
+fallback — real results will be worse than either model.
 
 Visuals: each strategy panel shows a real equity chart (cumulative-R line +
 drawdown histogram, 0R reference, best/worst markers) via lightweight-charts
@@ -161,9 +162,27 @@ function sgComputeStats(trades, totalBars){
 }
 var SG_FEE_BPS = 5;
 var SG_SLIP_BPS = 5;
+var __sgCostMode = 'flat fallback';
 
-function sgCostAdjustR(r){
+function sgCostAdjustR(r, trade){
   if (!isFinite(r)) return r;
+  try{
+    var G = (typeof window !== 'undefined') ? window : globalThis;
+    if (typeof G.hgCostBps === 'function' && trade && isFinite(trade.entry) && isFinite(trade.stop) && trade.entry > 0){
+      var cost = G.hgCostBps({
+        depthUsd: trade.depthUsd != null ? trade.depthUsd : null,
+        atrPct: trade.atrPct != null ? trade.atrPct : 2,
+        spreadBps: trade.spreadBps,
+        venue: trade.venue || 'delta',
+      });
+      var rDistBps = Math.abs(trade.entry - trade.stop) / trade.entry * 10000;
+      if (rDistBps > 0){
+        __sgCostMode = cost.degraded ? 'flat fallback (degraded depth)' : 'depth-modelled';
+        return r - cost.roundTripBps / rDistBps;
+      }
+    }
+  }catch(e){}
+  __sgCostMode = 'flat fallback';
   var rt = (SG_FEE_BPS + SG_SLIP_BPS) / 10000;
   return r - rt * 2;
 }
@@ -194,7 +213,7 @@ function sgRunLoop(rows, sigAt, exitAt){
         var pnl = (sig.dir === 'long') ? (exitPx - entry) : (entry - exitPx);
         var r = pnl / risk;
         if (isFinite(r)){
-          r = sgCostAdjustR(r);
+          r = sgCostAdjustR(r, { entry: entry, stop: sig.stop, atrPct: 2 });
           trades.push({
             t: rows[i].t, tExit: rows[j].t, dir: sig.dir,
             entry: entry, exit: exitPx, stop: sig.stop,
@@ -755,7 +774,7 @@ async function sgRun(els){
     }
     html += '<div class="note" style="margin-top:8px">' + rows.length + ' closed bars · ' +
             sgTime(rows[0].t) + ' → ' + sgTime(rows[rows.length - 1].t) +
-            ' UTC · <b>~' + SG_FEE_BPS + '+' + SG_SLIP_BPS + ' bps/side cost model — scorecard funding separate</b> · signals on closed bars only · ' +
+            ' UTC · <b>' + __sgCostMode + '</b> cost · signals on closed bars only · ' +
             'entries at signal-bar close · stops checked first per bar (conservative).</div>';
     els.out.innerHTML = html;
     /* charts mount only after the DOM exists; fallback strip renders inline */

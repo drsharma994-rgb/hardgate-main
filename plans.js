@@ -1219,6 +1219,44 @@ function hgEnrichSmartPlan(plan, rows4h){
   }catch(e){ return plan; }
 }
 
+function hgTicketFinalGates(plan, ctx){
+  ctx = ctx || {};
+  try{
+    if (!plan || !plan.dir) return { ok: true, chips: [] };
+    var chips = [];
+    var lane = ctx.lane || ((/(XAU|PAXG|GOLD)/i.test(String(plan.sym || ''))) ? 'gold' : 'crypto');
+
+    if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
+      var rs = G.hgRegimeResolveState();
+      var adj = G.hgRegimeAdjust({ minRR: ctx.minRr || 2 }, rs.dark ? null : rs.score, lane);
+      plan.regimeLabel = adj.regimeLabel;
+      plan.regimeApplied = adj.applied;
+      if (rs.dark) chips.push('regime dark');
+      else chips.push('regime ' + adj.regimeLabel);
+      var rr1 = isFinite(plan.rr1) ? plan.rr1 : (isFinite(plan.rr) ? plan.rr : null);
+      if (rr1 !== null && rr1 < adj.thresholds.minRR){
+        return {
+          ok: false, tag: 'regime',
+          reason: 'VETO — minRR ' + adj.thresholds.minRR.toFixed(1) + ' required in ' + adj.regimeLabel
+            + ' (setup ' + rr1.toFixed(1) + 'R)',
+        };
+      }
+      if (adj.thresholds.vetoCounterTrend && ctx.counterTrend === true){
+        return { ok: false, tag: 'regime', reason: 'VETO — counter-trend blocked in ' + adj.regimeLabel };
+      }
+    }
+
+    if (typeof G.hgPlanCostCheck === 'function'){
+      var cc = G.hgPlanCostCheck(plan, ctx);
+      if (!cc.ok) return { ok: false, tag: 'cost', reason: cc.reason || 'cost veto' };
+      if (cc.chip) chips.push(cc.chip);
+      if (cc.cost && cc.cost.degraded) chips.push('cost degraded');
+    }
+    return { ok: true, chips: chips };
+  }catch(e){ return { ok: true, chips: [] }; }
+}
+
+G.hgTicketFinalGates = hgTicketFinalGates;
 G.hgPlanSwingTargets = hgPlanSwingTargets;
 G.hgEnrichSwingClean = hgEnrichSwingClean;
 G.hgEnrichSmartPlan = hgEnrichSmartPlan;
@@ -1272,6 +1310,7 @@ G.HG_GOLD_T2_R = HG_GOLD_T2_R;
 G.HG_GOLD_T3_R = HG_GOLD_T3_R;
 G.HG_T1_R = HG_T1_R;
 G.HG_T2_R = HG_T2_R;
+G.HG_MIN_RR_DEFAULT = HG_MIN_RR_DEFAULT;
 G.HG_SWEEP_RECLAIM_MAX = HG_SWEEP_RECLAIM_MAX;
 
 })();

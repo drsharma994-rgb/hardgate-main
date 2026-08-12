@@ -41,7 +41,7 @@ ok(W.rsConviction({ triggers: ['rsi', 'drawdown'], rsi2: 0, drawdownPct: 8 }) >=
 ok(W.rsIsDeskVenue('delta') && W.rsIsDeskVenue('coindcx') && !W.rsIsDeskVenue('binance'),
    'rsIsDeskVenue: delta + coindcx only');
 ok(typeof W.rsLoadUniverse === 'function', 'rsLoadUniverse exported');
-ok(/hg-v259/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v259');
+ok(/hg-v260/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v260');
 function tapeOversold(){
   const out=[]; let p=100;
   for(let i=0;i<120;i++){

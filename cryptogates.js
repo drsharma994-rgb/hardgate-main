@@ -272,8 +272,15 @@
     }
     var expectedMove = a4 * expAtr;
     var dynamicRR = (isFinite(a4) && a4 > 0 && risk > 0) ? expectedMove / risk : 0;
-    var g6 = dynamicRR >= CG_SWING_RR_MIN;
-    gates.push(['G6 R:R≥' + CG_SWING_RR_MIN, g6]);
+    var rrMin = CG_SWING_RR_MIN;
+    if (typeof G.hgRegimeResolveState === 'function' && typeof G.hgRegimeAdjust === 'function'){
+      try{
+        var rsAdj = G.hgRegimeAdjust({ minRR: CG_SWING_RR_MIN }, G.hgRegimeResolveState().score, 'crypto');
+        rrMin = rsAdj.thresholds.minRR;
+      }catch(eR){}
+    }
+    var g6 = dynamicRR >= rrMin;
+    gates.push(['G6 R:R≥' + (isFinite(rrMin) ? rrMin.toFixed(1) : CG_SWING_RR_MIN), g6]);
     var ev = cusumLast(c.slice(-120), 1);
     var g7 = !(ev && ev.barsAgo <= 20 && ev.dir !== dir);
     gates.push(['G7 CUSUM', g7]);
