@@ -106,9 +106,29 @@ function render(ui){
       curveHtml += '</table>';
     }
 
+    var eff = (typeof W.hgRecordEffectiveN === 'function') ? W.hgRecordEffectiveN(recs) : null;
+    var effNote = eff ? (' · ' + eff.raw + ' settled → effective n=' + (Math.round(eff.effectiveN * 10) / 10)) : '';
+
+    var icRows = (typeof W.hgRelGateIC === 'function') ? W.hgRelGateIC(recs) : [];
+    var icHtml = '<h3 style="margin-top:14px;font-size:11px;letter-spacing:.1em">GATE IC — strength vs realized R (Spearman)</h3>';
+    if (!icRows.length){
+      icHtml += '<div class="note">No layer strength data — log setups with layerVals on SCORECARD.</div>';
+    } else {
+      icHtml += '<table><tr><th>layer</th><th>verdict</th><th>IC</th><th>n</th><th>t</th></tr>';
+      for (var ii = 0; ii < icRows.length; ii++){
+        var ic = icRows[ii];
+        icHtml += '<tr><td>' + esc(ic.layer) + '</td><td><span class="statuschip ' + pipClass(ic.verdict === 'PREDICTIVE' ? 'CARRIES' : 'NEUTRAL') + '">' + esc(ic.verdict) + '</span></td>'
+          + '<td>' + (ic.ic != null ? ic.ic.toFixed(3) : '—') + '</td><td>' + ic.n + '</td>'
+          + '<td>' + (ic.tStat != null ? ic.tStat.toFixed(2) : '—') + '</td></tr>';
+      }
+      icHtml += '</table>';
+      if (icRows.noStrength) icHtml += '<div class="note">Excluded from IC: ' + icRows.noStrength + ' layer reads without strength values.</div>';
+    }
+
     if (ui.root){
-      ui.root.innerHTML = header + liftHtml + tierHtml + curveHtml
-        + '<div class="note" style="margin-top:12px">Measurement only. Nothing here changes a gate automatically — retune by hand in the module that owns the gate.</div>';
+      ui.root.innerHTML = header + liftHtml + tierHtml + curveHtml + icHtml
+        + '<div class="note" style="margin-top:12px">Measurement only' + effNote
+        + ' — nothing here changes a gate automatically.</div>';
     }
   }catch(e){
     if (ui && ui.root) ui.root.innerHTML = '<div class="note warn">render failed: ' + esc(e.message || e) + '</div>';

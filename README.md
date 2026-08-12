@@ -8,6 +8,8 @@ Runs entirely in the browser against free public data. No build step, no backend
 execution endpoint, disabled until you set `EXECUTE_BACKEND_URL` in `index.html`). When deployed on
 Render, a small same-origin handler (`/api/proxy`) covers the CORS-blocked CoinDCX/Yahoo reads.
 
+Licensed under [MIT](LICENSE). Technique provenance for clean-room ports is documented in [PROVENANCE.md](PROVENANCE.md).
+
 ## The 23 tabs
 
 Seventeen tabs are static markup in `index.html`; six more (SQUEEZE through GOLD PRO below) are classic-script

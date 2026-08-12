@@ -290,6 +290,7 @@ var LAYER_KIND = {
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
   tape: 'context', fng: 'context', funding: 'context', guard: 'context',
   carry: 'context', termbasis: 'context', dvol: 'context', stables: 'context',
+  familyroute: 'context',
   spotperp: 'context',
   yield: 'context', smt: 'structural'
 };
@@ -655,6 +656,20 @@ function brainCollect(inputs){
     }else{
       push('dvol', 'neutral', 'DVOL ' + FMT(dvolV, 1) + ' — normal implied-vol band');
     }
+  }
+
+  /* ---- STRATEGY FAMILY ROUTER (Hurst context — does NOT override MR conflict veto) ---- */
+  if (inp.familyRoute && typeof inp.familyRoute === 'object'){
+    var fr = inp.familyRoute;
+    if (fr.favour === 'TREND'){
+      push('familyroute', 'neutral', 'tape favours TREND family · ' + (fr.evidence || []).join(' · '), { context: true });
+    } else if (fr.favour === 'MEANREV'){
+      push('familyroute', 'neutral', 'tape favours MEANREV family · ' + (fr.evidence || []).join(' · '), { context: true });
+    } else {
+      push('familyroute', 'neutral', 'no family edge — ' + ((fr.evidence && fr.evidence[0]) || 'H≈0.5 random walk'), { context: true });
+    }
+  } else {
+    hush('familyroute', 'family router unavailable — optional context layer sits out');
   }
 
   /* ---- ROTATION season ---- */
@@ -1348,7 +1363,7 @@ function snapshotLayers(){
             goldDeep: undefined, goldSetup: undefined, goldBasis: undefined,
             yieldSnap: undefined, smtSnap: undefined, macro: undefined,
             newsState: undefined, fng: null, carry: undefined, termbasis: undefined,
-            stables: undefined, dvol: undefined };
+            stables: undefined, dvol: undefined, familyRoute: undefined };
   function grab(key){ return function(){ return (typeof G[key] === 'function') ? G[key]() : undefined; }; }
   var getters = { regime: 'regimeState', rotation: 'rotationState', onchain: 'onchainState',
                   engine: 'engineState', oiflow: 'oiflowState', squeeze: 'squeezeState',
@@ -1405,6 +1420,9 @@ function snapshotLayers(){
   try{
     if (typeof G.deribitVolState === 'function') o.dvol = G.deribitVolState();
   }catch(e){ o.dvol = undefined; }
+  try{
+    if (typeof G.__hgFamilyRoute === 'object') o.familyRoute = G.__hgFamilyRoute;
+  }catch(e){ o.familyRoute = undefined; }
   /* fear & greed from the inline app state (const S — lexical global, not window.S) */
   try{ if (typeof S !== 'undefined' && S && S.fng) o.fng = S.fng; }catch(e){ o.fng = null; }
   return o;
@@ -1728,6 +1746,7 @@ function judgeCrypto(cand, snap){
     news: newsFor(cand.sym),
     regime: snap.regime, rotation: snap.rotation, onchain: snap.onchain,
     macro: snap.macro, stables: snap.stables, dvol: snap.dvol,
+    familyRoute: snap.familyRoute,
     engine: snap.engine, oiflow: snap.oiflow, squeeze: snap.squeeze,
     tape: snap.tape, fng: snap.fng,
     carry: snap.carry, termbasis: snap.termbasis,
@@ -1774,7 +1793,8 @@ function judgeGold(snap){
     tape: null, /* tape is the crypto 24h momentum read — not a gold-lane layer */
     gold: { setup: snap.goldSetup, deep: snap.goldDeep, basis: snap.goldBasis },
     yield: snap.yieldSnap,
-    smt: snap.smtSnap
+    smt: snap.smtSnap,
+    familyRoute: snap.familyRoute
   });
   var dec = brainDecide(col.votes, { unavailable: col.unavailable });
   return { sym: 'XAU', base: 'XAU', exchange: null, turnoverUsd: null,

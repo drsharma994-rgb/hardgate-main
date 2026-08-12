@@ -1252,6 +1252,12 @@ function hgTicketFinalGates(plan, ctx){
       if (cc.chip) chips.push(cc.chip);
       if (cc.cost && cc.cost.degraded) chips.push('cost degraded');
     }
+
+    if (ctx.volPack && typeof G.hgStopVolChip === 'function'){
+      var vc = G.hgStopVolChip(plan.entry, plan.stop, ctx.volPack);
+      if (vc && vc.chip) chips.push(vc.chip);
+    }
+
     return { ok: true, chips: chips };
   }catch(e){ return { ok: true, chips: [] }; }
 }

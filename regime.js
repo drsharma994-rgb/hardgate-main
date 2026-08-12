@@ -129,7 +129,7 @@ async function rgFetchBtc(){
     if (!rows || rows.length < 205) return null;
     var closes = rows.map(function(r){ return r.c; });
     var e200 = ema(closes, 200), e50 = ema(closes, 50), n = closes.length;
-    var out = { close: +closes[n-1], ema50: +e50[n-1], ema200: +e200[n-1] };
+    var out = { close: +closes[n-1], ema50: +e50[n-1], ema200: +e200[n-1], closes: closes };
     if (!isFinite(out.close) || !isFinite(out.ema50) || !isFinite(out.ema200)) return null;
     return rgCachePut(key, out);
   }catch(e){ return null; }
@@ -606,6 +606,15 @@ function rgRender(out, v, meta){
           '<div class="vwhy">' + rgEsc(v.why) + '</div></div>';
   html += '<div class="note" style="margin-top:8px">' + (RG_MEANING[v.cls] || RG_MEANING.aside) + '</div>';
   html += rgPlaybookHTML(v);
+  if (typeof W.hgHurstRS === 'function' && typeof W.hgFamilyRouter === 'function'
+      && components && components.btc && Array.isArray(components.btc.closes)){
+    var hurst = W.hgHurstRS(components.btc.closes);
+    var route = W.hgFamilyRouter({ hurst: hurst, adx: null, regimeScore: v.score });
+    try{ W.__hgFamilyRoute = route; }catch(eFR){}
+    html += '<div class="panel" style="margin-top:10px"><h2>STRATEGY FAMILY ROUTER <span>Hurst on BTC 1D · context only</span></h2>';
+    html += '<div class="note">favour <b>' + rgEsc(route.favour) + '</b> · confidence ' + route.confidence
+      + ' · ' + rgEsc((route.evidence || []).join(' · ')) + '</div></div>';
+  }
   if (meta && meta.fails > 0){
     html += '<div class="note warn" style="margin-top:6px">' + meta.fails + ' of ' + meta.total +
             ' sources unavailable — those gauges show N/A and score 0.</div>';
