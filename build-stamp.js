@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v270',
+  version: 'hg-v271',
   pack: 'pack 18',
-  built: '2026-08-13T08:50:00Z',
-  note: 'Super Setup tab — risk-first trade builder'
+  built: '2026-08-13T09:05:00Z',
+  note: 'Super Setup v1.1 — chart/scanner sync'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
