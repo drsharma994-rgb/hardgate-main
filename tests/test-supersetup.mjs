@@ -1,4 +1,4 @@
-/* HARDGATE — supersetup.js v1.3 unit tests (Node 18+, no network). */
+/* HARDGATE — supersetup.js v2.0 unit tests (Node 18+, no network). */
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -21,12 +21,16 @@ function ok(c, m){ if (c){ pass++; console.log('ok    - ' + m); } else { fail++;
 ok(typeof W.superSetupBuildSnap === 'function', 'superSetupBuildSnap exported');
 ok(typeof W.superSetupSyncDesk === 'function', 'superSetupSyncDesk exported');
 ok(typeof W.superSetupRunScan === 'function', 'superSetupRunScan exported');
+ok(typeof W.calcSafeMaxLeverage === 'function', 'calcSafeMaxLeverage exported');
+ok(typeof W.refineSuperSetupLevels === 'function', 'refineSuperSetupLevels exported');
+
+ok(W.calcSafeMaxLeverage(100, 98) === 28, 'safe max lev matches hgSafeLevChip formula');
 
 const now = Date.now();
 W.swingScan = function(){
   return {
     at: now - 60 * 60 * 1000,
-    cands: [{ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 98, rr: 2, venueTag: 'Delta India' }],
+    cands: [{ sym: 'BTCUSD', dir: 'long', entry: 100, stop: 98, rr: 2, t1: 104, t2: 106, venueTag: 'Delta India' }],
     nearCands: [],
     audit: { uniLen: 120 }
   };
@@ -34,7 +38,7 @@ W.swingScan = function(){
 W.bestScan = function(){
   return {
     at: now - 30 * 60 * 1000,
-    clean: [{ sym: 'B-ETH_USDT', dir: 'short', entry: 2000, stop: 2050, rr: 2.2 }],
+    clean: [{ sym: 'B-ETH_USDT', dir: 'short', entry: 2000, stop: 2050, rr: 2.2, t1: 1900, venueTag: 'CoinDCX' }],
     meta: { uniLen: 80, dual: true }
   };
 };
@@ -45,14 +49,25 @@ ok(staleSnap.cands.length === 0, 'strict build ignores stale swing snap');
 const hydrated = W.superSetupSyncDesk(W, { balance: 1000, riskPct: 1, maxLeverage: 10 });
 ok(hydrated.cands.length === 2, 'syncDesk hydrates from stale swing + best snaps');
 ok(hydrated.hydrated === true, 'hydrated flag set');
+ok(hydrated.cands.every(function(r){ return Number.isFinite(r.safeMaxLev); }), 'rows carry safeMaxLev');
+ok(hydrated.cands.some(function(r){ return r.minimalLossPass === true; }), 'at least one minimalLossPass row');
 
 const ready = W.superSetupEvaluate(W, {});
 ok(ready.ready === true && ready.mode === 'scanner', 'evaluate opens after hydrate');
+ok(Number.isFinite(ready.safeMaxLev), 'evaluate passes safeMaxLev');
 
 const src = fs.readFileSync(path.join(root, 'supersetup.js'), 'utf8');
-ok(/Super Setup v1\.3\.1/.test(src), 'badge shows v1.3.1');
+ok(/Super Setup v2\.0\.0/.test(src), 'badge shows v2.0.0');
+ok(/refineSuperSetupLevels/.test(src) && /hgBestLevels/.test(src), 'exact entry pipeline wired');
+ok(/minimalLossPass/.test(src) && /calcSafeMaxLeverage/.test(src), 'minimal-loss gate + safe lev');
 ok(/syncDeskFromExisting/.test(src) && /bestScan/.test(src), 'instant hydrate + best desk');
 ok(/scanPromise/.test(src), 'scan queue prevents busy drop');
+ok(/ss-send-trade/.test(src), 'Send to Trade Plan button');
+
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const blIdx = html.indexOf('best-levels.js');
+const ssIdx = html.indexOf('supersetup.js');
+ok(blIdx >= 0 && ssIdx > blIdx, 'supersetup.js loads after best-levels.js');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 ok(swCacheOk(sw), 'sw.js cache matches build-stamp (' + HG_VER + ')');
