@@ -206,11 +206,13 @@ function refineSuperSetupLevels(win, c, hit){
   return { ok: true, veto: false, hit: hit };
 }
 
-/** Desk pill label — NEAR 6/7 with valid sizing is watch-only, not a risk block. */
+/** Desk pill label — NEAR 6/7 is watch-only by tier; block only on unsafe leverage. */
 function superSetupDeskPill(row){
   if (!row) return { cls: 'block', label: 'RISK BLOCK' };
   if (row.minimalLossPass) return { cls: 'minloss', label: 'MIN LOSS PASS' };
-  if ((row.tier === 'near' || row.nearClean) && row.sizingPass){
+  var isNear = row.tier === 'near' || row.nearClean;
+  if (isNear || row.nearWatch){
+    if (row.levUnsafe) return { cls: 'block', label: 'LEV UNSAFE' };
     return { cls: 'watch', label: 'WATCH ONLY' };
   }
   if (row.riskPass || row.sizingPass) return { cls: 'clean', label: 'RISK PASS' };
@@ -265,11 +267,14 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   hit.id = hit.id || c.id || [hit.sym, hit.dir, hit.entry, hit.stop, tier].join('|');
   hit.scanner = meta.scanner || meta.source || 'swing';
   hit.sizingPass = calc.ok && Number.isFinite(safeLev) && calc.impliedLeverage <= safeLev;
+  hit.levUnsafe = Number.isFinite(safeLev) && Number.isFinite(calc.impliedLeverage) && calc.impliedLeverage > safeLev;
+  hit.nearWatch = (hit.tier === 'near' || hit.nearClean) && !hit.levUnsafe
+    && N(hit.entry) > 0 && N(hit.stop) > 0 && hit.entry !== hit.stop;
   hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass;
   hit.riskPass = hit.sizingPass;
   hit.riskReason = hit.minimalLossPass ? 'PASS'
-    : (hit.tier === 'near' && hit.sizingPass ? 'NEAR — watch only (6/7)'
-      : (hit.tier === 'near' ? 'NEAR — sizing blocked' : calc.reason));
+    : (hit.nearWatch ? 'NEAR — watch only (6/7)'
+      : (hit.levUnsafe ? 'Leverage above safe max' : calc.reason));
   hit.calc = calc;
   hit.tp = N(hit.t1) > 0 ? hit.t1 : calc.tp;
   hit.tp2 = N(hit.t2);
@@ -286,7 +291,7 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
   var allowStale = opts.allowStale === true;
   var merged = [];
   var scanned = 0;
-  var audit = { clean: 0, near: 0, riskPass: 0, uniLen: 0, venues: [] };
+  var audit = { clean: 0, near: 0, riskPass: 0, nearWatch: 0, minLoss: 0, uniLen: 0, venues: [] };
 
   function snapFresh(snap){
     if (!snap) return false;
@@ -300,11 +305,11 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
     if (snap.audit && isFinite(snap.audit.uniLen)) audit.uniLen += snap.audit.uniLen;
     (snap.cands || []).forEach(function(c){
       var row = enrichSuperSetupRow(c, 'clean', riskOpts, { source: 'universe', scanner: scanner, at: snap.at });
-      if (row){ merged.push(row); audit.clean++; if (row.riskPass) audit.riskPass++; }
+      if (row){ merged.push(row); audit.clean++; if (row.riskPass) audit.riskPass++; if (row.minimalLossPass) audit.minLoss++; }
     });
     (snap.nearCands || []).forEach(function(c){
       var row = enrichSuperSetupRow(c, 'near', riskOpts, { source: 'universe', scanner: scanner, at: snap.at });
-      if (row){ merged.push(row); audit.near++; if (row.riskPass) audit.riskPass++; }
+      if (row){ merged.push(row); audit.near++; if (row.nearWatch) audit.nearWatch++; if (row.riskPass) audit.riskPass++; }
     });
   }
 
@@ -318,7 +323,7 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
         scanned = Math.max(scanned, best.at || 0);
         best.clean.forEach(function(c){
           var row = enrichSuperSetupRow(c, 'clean', riskOpts, { source: 'universe', scanner: 'best', at: best.at });
-          if (row){ merged.push(row); audit.clean++; if (row.riskPass) audit.riskPass++; }
+          if (row){ merged.push(row); audit.clean++; if (row.riskPass) audit.riskPass++; if (row.minimalLossPass) audit.minLoss++; }
         });
       }
     }catch(e0){}
@@ -358,7 +363,7 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
     audit: audit,
     stat: merged.length
       ? (merged.length + ' setups · ' + audit.clean + ' CLEAN · ' + audit.near + ' NEAR · '
-        + audit.riskPass + ' risk PASS · Delta + CoinDCX universe')
+        + audit.minLoss + ' trade-ready · ' + audit.nearWatch + ' watch · Delta + CoinDCX universe')
       : '0 setups — run Scan all contracts or wait for the 15 min cycle · checked swing/scalp/best desks'
   };
 }
@@ -1021,7 +1026,7 @@ function mount(el){
     '      <div class="hg-title">Super Setup</div>',
     '      <div class="hg-note">Exact entry · structure SL · T1/T2 · max safe leverage · minimal-loss gate on every card.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v2.0.1</div>',
+    '    <div class="hg-super-badge">Super Setup v2.0.2</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -1242,10 +1247,13 @@ function mount(el){
   }
 
   function readRiskOpts(){
+    var balance = N($('#ss-balance') && $('#ss-balance').value);
+    var riskPct = N($('#ss-risk') && $('#ss-risk').value);
+    var maxLev = N($('#ss-lev') && $('#ss-lev').value);
     return {
-      balance: N($('#ss-balance') && $('#ss-balance').value),
-      riskPct: N($('#ss-risk') && $('#ss-risk').value),
-      maxLeverage: N($('#ss-lev') && $('#ss-lev').value),
+      balance: (Number.isFinite(balance) && balance > 0) ? balance : 1000,
+      riskPct: (Number.isFinite(riskPct) && riskPct > 0) ? riskPct : 1,
+      maxLeverage: (Number.isFinite(maxLev) && maxLev > 0) ? maxLev : 5,
       feePct: 0.06,
       slipPct: 0.05
     };
@@ -1302,13 +1310,11 @@ function mount(el){
       return;
     }
     var minPass = rows.filter(function(r){ return r.minimalLossPass; }).length;
-    var nearWatch = rows.filter(function(r){
-      return (r.tier === 'near' || r.nearClean) && r.sizingPass && !r.minimalLossPass;
-    }).length;
+    var nearWatch = rows.filter(function(r){ return r.nearWatch; }).length;
     var deskHint = minPass
       ? ('<div class="hg-note" style="margin-bottom:10px">' + minPass + ' MIN LOSS PASS · trade-ready CLEAN 7/7</div>')
       : ('<div class="hg-note" style="margin-bottom:10px">No CLEAN 7/7 yet'
-        + (nearWatch ? (' · ' + nearWatch + ' NEAR 6/7 watch-only (levels OK — wait for 7/7)') : '')
+        + (nearWatch ? (' · ' + nearWatch + ' NEAR 6/7 on watch (Trade Plan when 7/7 confirms)') : '')
         + '</div>');
     desk.innerHTML = deskHint + rows.map(function(r){
       var tier = (r.tier === 'near' || r.nearClean) ? 'near' : 'clean';
@@ -1448,7 +1454,7 @@ function mount(el){
     if ($('#o-safe-lev')) $('#o-safe-lev').textContent = Number.isFinite(safeLev) ? (fmt(safeLev, 0) + 'x') : '—';
     if ($('#o-rr')) $('#o-rr').textContent = hasNums && Number.isFinite(res.rr) ? ('1:' + fmt(res.rr, 2)) : '—';
     var minLoss = hit && hit.minimalLossPass;
-    var nearWatch = hit && (hit.tier === 'near' || hit.nearClean) && hit.sizingPass && !minLoss;
+    var nearWatch = hit && hit.nearWatch && !minLoss;
     var sizingOk = res.ok && hit && (hit.sizingPass || minLoss);
     if ($('#o-status')){
       if (minLoss){

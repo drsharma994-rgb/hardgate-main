@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v276',
+  version: 'hg-v277',
   pack: 'pack 18',
-  built: '2026-08-13T09:50:00Z',
-  note: 'Super Setup populate fix — instant desk hydrate + scan queue'
+  built: '2026-08-13T10:35:00Z',
+  note: 'Super Setup NEAR 6/7 always WATCH ONLY unless lev unsafe'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
