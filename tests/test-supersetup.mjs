@@ -22,7 +22,9 @@ ok(typeof W.superSetupBuildSnap === 'function', 'superSetupBuildSnap exported');
 ok(typeof W.superSetupSyncDesk === 'function', 'superSetupSyncDesk exported');
 ok(typeof W.superSetupRunScan === 'function', 'superSetupRunScan exported');
 ok(typeof W.calcSafeMaxLeverage === 'function', 'calcSafeMaxLeverage exported');
-ok(typeof W.refineSuperSetupLevels === 'function', 'refineSuperSetupLevels exported');
+ok(typeof W.superSetupDeskPill === 'function', 'superSetupDeskPill exported');
+var watchPill = W.superSetupDeskPill({ tier: 'near', nearClean: true, sizingPass: true, minimalLossPass: false });
+ok(watchPill.label === 'WATCH ONLY' && watchPill.cls === 'watch', 'NEAR 6/7 sizing pass → WATCH ONLY');
 
 ok(W.calcSafeMaxLeverage(100, 98) === 28, 'safe max lev matches hgSafeLevChip formula');
 
@@ -57,7 +59,8 @@ ok(ready.ready === true && ready.mode === 'scanner', 'evaluate opens after hydra
 ok(Number.isFinite(ready.safeMaxLev), 'evaluate passes safeMaxLev');
 
 const src = fs.readFileSync(path.join(root, 'supersetup.js'), 'utf8');
-ok(/Super Setup v2\.0\.0/.test(src), 'badge shows v2.0.0');
+ok(/Super Setup v2\.0\.1/.test(src), 'badge shows v2.0.1');
+ok(/superSetupDeskPill/.test(src) && /WATCH ONLY/.test(src), 'NEAR watch pill not risk block');
 ok(/refineSuperSetupLevels/.test(src) && /hgBestLevels/.test(src), 'exact entry pipeline wired');
 ok(/minimalLossPass/.test(src) && /calcSafeMaxLeverage/.test(src), 'minimal-loss gate + safe lev');
 ok(/syncDeskFromExisting/.test(src) && /bestScan/.test(src), 'instant hydrate + best desk');

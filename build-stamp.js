@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v275',
+  version: 'hg-v276',
   pack: 'pack 18',
   built: '2026-08-13T09:50:00Z',
   note: 'Super Setup populate fix — instant desk hydrate + scan queue'

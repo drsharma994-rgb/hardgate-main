@@ -206,6 +206,17 @@ function refineSuperSetupLevels(win, c, hit){
   return { ok: true, veto: false, hit: hit };
 }
 
+/** Desk pill label — NEAR 6/7 with valid sizing is watch-only, not a risk block. */
+function superSetupDeskPill(row){
+  if (!row) return { cls: 'block', label: 'RISK BLOCK' };
+  if (row.minimalLossPass) return { cls: 'minloss', label: 'MIN LOSS PASS' };
+  if ((row.tier === 'near' || row.nearClean) && row.sizingPass){
+    return { cls: 'watch', label: 'WATCH ONLY' };
+  }
+  if (row.riskPass || row.sizingPass) return { cls: 'clean', label: 'RISK PASS' };
+  return { cls: 'block', label: 'RISK BLOCK' };
+}
+
 /** Gate + risk architecture filter — CLEAN 7/7 or NEAR 6/7+, valid stop, optional risk pass flag. */
 function enrichSuperSetupRow(c, tier, riskOpts, meta){
   meta = meta || {};
@@ -253,10 +264,12 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   });
   hit.id = hit.id || c.id || [hit.sym, hit.dir, hit.entry, hit.stop, tier].join('|');
   hit.scanner = meta.scanner || meta.source || 'swing';
-  hit.minimalLossPass = hit.tier === 'clean' && calc.ok && Number.isFinite(safeLev)
-    && calc.impliedLeverage <= safeLev;
-  hit.riskPass = hit.minimalLossPass;
-  hit.riskReason = hit.minimalLossPass ? 'PASS' : (hit.tier === 'near' ? 'NEAR — watch only' : calc.reason);
+  hit.sizingPass = calc.ok && Number.isFinite(safeLev) && calc.impliedLeverage <= safeLev;
+  hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass;
+  hit.riskPass = hit.sizingPass;
+  hit.riskReason = hit.minimalLossPass ? 'PASS'
+    : (hit.tier === 'near' && hit.sizingPass ? 'NEAR — watch only (6/7)'
+      : (hit.tier === 'near' ? 'NEAR — sizing blocked' : calc.reason));
   hit.calc = calc;
   hit.tp = N(hit.t1) > 0 ? hit.t1 : calc.tp;
   hit.tp2 = N(hit.t2);
@@ -973,6 +986,7 @@ function injectStyles(){
     '.hg-super-setup .hg-pill{font:700 10px/1 var(--mono,monospace);padding:4px 8px;border-radius:999px;border:1px solid var(--line,#d7dee8);background:var(--panel2,#edf1f6)}',
     '.hg-super-setup .hg-pill.clean{color:var(--long,#15803d);border-color:rgba(21,128,61,.25)}',
     '.hg-super-setup .hg-pill.near{color:var(--gold,#a67c12);border-color:rgba(166,124,18,.25)}',
+    '.hg-super-setup .hg-pill.watch{color:var(--gold,#a67c12);border-color:rgba(166,124,18,.35);background:#fffbeb}',
     '.hg-super-setup .hg-pill.block{color:var(--short,#dc2626)}',
     '.hg-super-setup .hg-pill.minloss{color:var(--long,#15803d);border-color:rgba(21,128,61,.35);background:var(--long-bg,#ecfdf5)}',
     '.hg-super-setup .hg-pill.refined{color:#2563eb;border-color:rgba(37,99,235,.25)}',
@@ -1007,7 +1021,7 @@ function mount(el){
     '      <div class="hg-title">Super Setup</div>',
     '      <div class="hg-note">Exact entry · structure SL · T1/T2 · max safe leverage · minimal-loss gate on every card.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v2.0.0</div>',
+    '    <div class="hg-super-badge">Super Setup v2.0.1</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -1057,7 +1071,7 @@ function mount(el){
     '      <div class="hg-actions" style="margin-top:10px">',
     '        <button type="button" class="hg-btn primary" id="ss-send-trade" disabled>Send to Trade Plan</button>',
     '      </div>',
-    '      <div class="hg-note" id="ss-note" style="margin-top:10px">Minimal-loss gate: CLEAN 7/7 + shield pass + implied lev ≤ safe max only.</div>',
+      '      <div class="hg-note" id="ss-note" style="margin-top:10px">CLEAN 7/7 = trade-ready · NEAR 6/7 = watch-only (not blocked).</div>',
     '    </div>',
     '  </div>',
     '</section>'
@@ -1287,12 +1301,20 @@ function mount(el){
       desk.innerHTML = '<div class="hg-note">No CLEAN or NEAR setups passed the gate on the last full-exchange scan. Standing aside is a position.</div>';
       return;
     }
-    desk.innerHTML = rows.map(function(r){
+    var minPass = rows.filter(function(r){ return r.minimalLossPass; }).length;
+    var nearWatch = rows.filter(function(r){
+      return (r.tier === 'near' || r.nearClean) && r.sizingPass && !r.minimalLossPass;
+    }).length;
+    var deskHint = minPass
+      ? ('<div class="hg-note" style="margin-bottom:10px">' + minPass + ' MIN LOSS PASS · trade-ready CLEAN 7/7</div>')
+      : ('<div class="hg-note" style="margin-bottom:10px">No CLEAN 7/7 yet'
+        + (nearWatch ? (' · ' + nearWatch + ' NEAR 6/7 watch-only (levels OK — wait for 7/7)') : '')
+        + '</div>');
+    desk.innerHTML = deskHint + rows.map(function(r){
       var tier = (r.tier === 'near' || r.nearClean) ? 'near' : 'clean';
       var tierLbl = tier === 'near' ? ('NEAR ' + (r.gatesPassed || 6) + '/7') : 'CLEAN 7/7';
-      var riskPill = r.minimalLossPass ? '<span class="hg-pill minloss">MIN LOSS PASS</span>'
-        : (r.riskPass ? '<span class="hg-pill clean">RISK PASS</span>'
-          : '<span class="hg-pill block">RISK BLOCK</span>');
+      var pill = superSetupDeskPill(r);
+      var riskPill = '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>';
       var refinePill = r.refined ? '<span class="hg-pill refined">' + String(r.entryType || 'EXACT').toUpperCase() + '</span>' : '';
       var sel = (__ss.selectedId === r.id) ? ' sel' : '';
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
@@ -1425,19 +1447,34 @@ function mount(el){
     if ($('#o-tp2')) $('#o-tp2').textContent = hit && Number.isFinite(hit.t2) ? fmt(hit.t2, 8) : '—';
     if ($('#o-safe-lev')) $('#o-safe-lev').textContent = Number.isFinite(safeLev) ? (fmt(safeLev, 0) + 'x') : '—';
     if ($('#o-rr')) $('#o-rr').textContent = hasNums && Number.isFinite(res.rr) ? ('1:' + fmt(res.rr, 2)) : '—';
-    var pass = res.ok && (!hit || hit.tier !== 'near' || hit.minimalLossPass);
-    if (hit && hit.minimalLossPass) pass = res.ok;
+    var minLoss = hit && hit.minimalLossPass;
+    var nearWatch = hit && (hit.tier === 'near' || hit.nearClean) && hit.sizingPass && !minLoss;
+    var sizingOk = res.ok && hit && (hit.sizingPass || minLoss);
     if ($('#o-status')){
-      $('#o-status').textContent = pass ? (hit && hit.minimalLossPass ? 'MIN LOSS PASS' : 'PASS')
-        : ('BLOCK: ' + (hit && hit.tier === 'near' && !hit.minimalLossPass ? 'NEAR watch only' : res.reason));
-      $('#o-status').className = 'v ' + (pass ? 'hg-pass' : 'hg-fail');
+      if (minLoss){
+        $('#o-status').textContent = 'MIN LOSS PASS';
+        $('#o-status').className = 'v hg-pass';
+      } else if (nearWatch){
+        $('#o-status').textContent = 'NEAR WATCH';
+        $('#o-status').className = 'v hg-wait';
+      } else if (sizingOk){
+        $('#o-status').textContent = 'PASS';
+        $('#o-status').className = 'v hg-pass';
+      } else {
+        $('#o-status').textContent = 'BLOCK: ' + (res.reason || (hit && hit.riskReason) || 'failed checks');
+        $('#o-status').className = 'v hg-fail';
+      }
     }
     if ($('#ss-note')){
-      $('#ss-note').textContent = pass
-        ? (hit && hit.minimalLossPass
-          ? 'CLEAN 7/7 · shield pass · implied leverage within safe max — ready for Trade Plan.'
-          : 'Setup passes sizing checks.')
-        : ('Setup blocked: ' + (hit && hit.tier === 'near' ? 'NEAR is watch-only until CLEAN' : res.reason) + '.');
+      if (minLoss){
+        $('#ss-note').textContent = 'CLEAN 7/7 · shield pass · implied leverage within safe max — ready for Trade Plan.';
+      } else if (nearWatch){
+        $('#ss-note').textContent = 'NEAR 6/7 — levels and sizing OK. Watch-only until all 7 gates confirm (CLEAN). Trade Plan stays disabled.';
+      } else if (sizingOk){
+        $('#ss-note').textContent = 'Setup passes sizing checks.';
+      } else {
+        $('#ss-note').textContent = 'Setup blocked: ' + (res.reason || (hit && hit.riskReason) || 'failed checks') + '.';
+      }
     }
     if (__ss.lastKey && hit){
       wireSendTrade({ ready: true, sym: hit.sym, side: normalizeSide(hit.dir) }, hit);
@@ -1529,6 +1566,7 @@ function superSetupRepaint(){
 
 W.superSetupCalc = calcTrade;
 W.calcTrade = calcTrade;
+W.superSetupDeskPill = superSetupDeskPill;
 W.calcSafeMaxLeverage = calcSafeMaxLeverage;
 W.refineSuperSetupLevels = refineSuperSetupLevels;
 W.superSetupSafeJson = safeJson;
