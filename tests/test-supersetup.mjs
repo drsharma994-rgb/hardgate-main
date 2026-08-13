@@ -22,7 +22,9 @@ ok(typeof W.superSetupBuildSnap === 'function', 'superSetupBuildSnap exported');
 ok(typeof W.superSetupSyncDesk === 'function', 'superSetupSyncDesk exported');
 ok(typeof W.superSetupRunScan === 'function', 'superSetupRunScan exported');
 ok(typeof W.calcSafeMaxLeverage === 'function', 'calcSafeMaxLeverage exported');
-ok(typeof W.superSetupDeskPill === 'function', 'superSetupDeskPill exported');
+ok(typeof W.runMinimalLossAudit === 'function', 'runMinimalLossAudit exported');
+var auditPass = W.runMinimalLossAudit(W, {}, { sym: 'BTCUSD', dir: 'long', entry: 100, stop: 95, t1: 110, tier: 'clean', scanner: 'swing' }, {});
+ok(auditPass && typeof auditPass.pass === 'boolean', 'audit returns pass boolean');
 var watchPill = W.superSetupDeskPill({ tier: 'near', nearClean: true, sizingPass: false, nearWatch: true });
 ok(watchPill.label === 'WATCH ONLY' && watchPill.cls === 'watch', 'NEAR 6/7 always WATCH ONLY');
 var unsafePill = W.superSetupDeskPill({ tier: 'near', levUnsafe: true });
@@ -61,7 +63,8 @@ ok(ready.ready === true && ready.mode === 'scanner', 'evaluate opens after hydra
 ok(Number.isFinite(ready.safeMaxLev), 'evaluate passes safeMaxLev');
 
 const src = fs.readFileSync(path.join(root, 'supersetup.js'), 'utf8');
-ok(/Super Setup v2\.0\.2/.test(src), 'badge shows v2.0.2');
+ok(/Super Setup v2\.1\.0/.test(src), 'badge shows v2.1.0');
+ok(/runMinimalLossAudit/.test(src) && /hgStandDownState/.test(src), '7-layer minimal-loss audit wired');
 ok(/refineSuperSetupLevels/.test(src) && /hgBestLevels/.test(src), 'exact entry pipeline wired');
 ok(/minimalLossPass/.test(src) && /calcSafeMaxLeverage/.test(src), 'minimal-loss gate + safe lev');
 ok(/syncDeskFromExisting/.test(src) && /bestScan/.test(src), 'instant hydrate + best desk');
@@ -72,7 +75,7 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const blIdx = html.indexOf('best-levels.js');
 const ssIdx = html.indexOf('supersetup.js');
 ok(blIdx >= 0 && ssIdx > blIdx, 'supersetup.js loads after best-levels.js');
-ok(/supersetup\.js\?v=277/.test(html), 'supersetup.js cache-busted in index.html');
+ok(/supersetup\.js\?v=278/.test(html), 'supersetup.js cache-busted in index.html');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 ok(swCacheOk(sw), 'sw.js cache matches build-stamp (' + HG_VER + ')');

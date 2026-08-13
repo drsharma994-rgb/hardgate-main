@@ -91,6 +91,10 @@ function hitFromCand(c, meta){
     clean: tier === 'clean',
     nearClean: tier === 'near' || c.nearClean === true,
     gatesPassed: gatesPassed,
+    tightCount: N(c.tightCount),
+    tightGates: c.tightGates || null,
+    margins: c.margins || null,
+    formationScore: N(c.formationScore),
     venueTag: c.venueTag || meta.venueTag || null,
     id: c.id || null,
     at: meta.at || null
@@ -117,6 +121,109 @@ function calcSafeMaxLeverage(entry, stop){
   return Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
 }
 
+/**
+ * Sync minimal-loss audit — stand-down, regime, structure, macro, stale momentum,
+ * post-enrich geometry, gate clearance, FTS stack, cost. Fail-closed for CLEAN trade-ready.
+ */
+function runMinimalLossAudit(win, c, hit, opts){
+  win = win || W;
+  opts = opts || {};
+  c = c || {};
+  hit = hit || {};
+  var reasons = [];
+  var passed = [];
+  var style = opts.style || (String(hit.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing');
+  var rows = c.rows || c.rows4h || hit.rows || [];
+  var dir = hit.dir;
+  var calc = opts.calc || null;
+
+  if (typeof win.hgStandDownState === 'function'){
+    try{
+      var recs = typeof win.hgScoreRecords === 'function' ? win.hgScoreRecords() : [];
+      var sd = win.hgStandDownState(recs);
+      if (sd && sd.tripped){
+        reasons.push('STAND DOWN: ' + ((sd.reasons || []).join(' · ') || 'drawdown limit'));
+      } else passed.push('stand-down');
+    }catch(e0){}
+  }
+
+  if (rows.length && typeof win.hgRegimeAllowsSetup === 'function'){
+    try{
+      var reg = win.hgRegimeAllowsSetup(rows, style);
+      if (reg && reg.allow === false) reasons.push(reg.reason || 'regime block');
+      else passed.push('regime');
+    }catch(e1){}
+  }
+
+  if (rows.length && typeof win.hgStructureGate === 'function' && dir){
+    try{
+      var sg = win.hgStructureGate(rows, dir, { maxBars: STRUCT_MAX_BARS });
+      if (sg && sg.veto) reasons.push(sg.note || 'structure veto');
+      else passed.push('structure');
+    }catch(e2){}
+  }
+
+  if (typeof win.hgMacroAllowsCrypto === 'function' && hit.sym && dir){
+    try{
+      var mac = win.hgMacroAllowsCrypto(hit.sym, dir);
+      if (mac && mac.allow === false) reasons.push(mac.reason || 'macro block');
+      else passed.push('macro');
+    }catch(e3){}
+  }
+
+  if (rows.length && typeof win.hgStaleMomentumVeto === 'function' && dir){
+    try{
+      var stale = win.hgStaleMomentumVeto(rows, dir, hit.entry);
+      if (stale && stale.veto) reasons.push(stale.reason || 'stale momentum');
+      else passed.push('momentum');
+    }catch(e4){}
+  }
+
+  if (rows.length && dir){
+    try{
+      var validFn = style === 'scalp' ? win.hgScalpPostEnrichValid : win.hgSwingPostEnrichValid;
+      if (typeof validFn === 'function'){
+        var vopts = style === 'scalp'
+          ? { rows: c.rows15m || c.m15, m15: c.rows15m || c.m15 }
+          : { rows: rows };
+        if (!validFn(hit, vopts)) reasons.push('RR/geometry below house minimum');
+        else passed.push('geometry');
+      }
+    }catch(e5){}
+  }
+
+  var tightN = N(c.tightCount != null ? c.tightCount : hit.tightCount);
+  if (Number.isFinite(tightN) && tightN >= 2){
+    reasons.push('tight gate margins (' + tightN + ' binding)');
+  } else if (Number.isFinite(tightN)) passed.push('clearance');
+
+  if (hit.stack){
+    if (hit.stack.tierHint === 'aside'){
+      var v0 = (hit.stack.vetoes && hit.stack.vetoes.length) ? hit.stack.vetoes[0] : 'pillar veto';
+      reasons.push('FTS aside: ' + v0);
+    } else if (hit.tier === 'clean' && hit.stack.tierHint !== 'clean'){
+      reasons.push('FTS tier ' + hit.stack.tierHint);
+    } else passed.push('FTS');
+  }
+
+  if (typeof win.hgPlanCostCheck === 'function' && N(hit.entry) > 0 && N(hit.stop) > 0){
+    try{
+      var costCtx = { sym: hit.sym, venue: hit.venueTag };
+      if (calc && Number.isFinite(calc.notional)) costCtx.notionalUsd = calc.notional;
+      var cc = win.hgPlanCostCheck({ entry: hit.entry, stop: hit.stop }, costCtx);
+      if (cc && cc.veto) reasons.push(cc.reason || 'fees too high vs risk');
+      else if (cc && cc.ok) passed.push('cost');
+    }catch(e6){}
+  }
+
+  return {
+    pass: reasons.length === 0,
+    reasons: reasons,
+    passed: passed,
+    layerSummary: passed.length + ' ok' + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+  };
+}
+
 /** Refine scan row through house formation: exact entry, structure SL, T1/T2, shield veto. */
 function refineSuperSetupLevels(win, c, hit){
   win = win || W;
@@ -128,15 +235,12 @@ function refineSuperSetupLevels(win, c, hit){
   var scanner = String(hit.scanner || 'swing').toLowerCase();
   var style = scanner.indexOf('scalp') >= 0 ? 'scalp' : 'swing';
   var dir = hit.dir;
+  var isClean = hit.tier === 'clean' && !c.nearClean;
 
-  if (rows && rows.length && typeof win.hgShieldGuardVeto === 'function'){
-    try{
-      var sg = win.hgShieldGuardVeto(rows, dir, {});
-      if (sg && sg.veto){
-        return { ok: false, veto: true, reason: sg.reason || 'manipulation shield' };
-      }
-    }catch(e0){}
-  }
+  if (N(c.tightCount) >= 0) hit.tightCount = N(c.tightCount);
+  if (c.margins) hit.margins = c.margins;
+  if (c.tightGates) hit.tightGates = c.tightGates;
+  if (N(c.formationScore) > 0) hit.formationScore = N(c.formationScore);
 
   var plan = null;
   if (typeof win.hgBestLevels === 'function' && rows && rows.length){
@@ -150,9 +254,11 @@ function refineSuperSetupLevels(win, c, hit){
         style: style,
         sym: hit.sym,
         ticker: c.ticker || { symbol: hit.sym },
-        gate: gateHit ? { hit: gateHit, clean7: !c.nearClean, gatesPassed: hit.gatesPassed || 7 } : null,
+        gate: gateHit ? { hit: gateHit, clean7: isClean, gatesPassed: hit.gatesPassed || 7 } : null,
         tab: 'super-setup',
-        preferEdge: true
+        preferEdge: true,
+        ftEdgeGate: isClean,
+        rejectVisionVeto: isClean
       });
       if (bl && bl.veto) return { ok: false, veto: true, reason: bl.reason || 'levels veto' };
       if (bl && bl.ok && bl.plan) plan = bl.plan;
@@ -198,7 +304,11 @@ function refineSuperSetupLevels(win, c, hit){
         ticker: c.ticker || { symbol: hit.sym },
         gatesPassed: hit.gatesPassed,
         gatesTotal: 7,
-        clean: hit.tier === 'clean'
+        clean: hit.tier === 'clean',
+        nearClean: hit.nearClean,
+        tightCount: hit.tightCount,
+        margins: hit.margins,
+        tightGates: hit.tightGates
       });
     }catch(e4){}
   }
@@ -206,7 +316,7 @@ function refineSuperSetupLevels(win, c, hit){
   return { ok: true, veto: false, hit: hit };
 }
 
-/** Desk pill label — NEAR 6/7 is watch-only by tier; block only on unsafe leverage. */
+/** Desk pill label — NEAR 6/7 is watch-only by tier; CLEAN needs full audit for MIN LOSS PASS. */
 function superSetupDeskPill(row){
   if (!row) return { cls: 'block', label: 'RISK BLOCK' };
   if (row.minimalLossPass) return { cls: 'minloss', label: 'MIN LOSS PASS' };
@@ -214,6 +324,9 @@ function superSetupDeskPill(row){
   if (isNear || row.nearWatch){
     if (row.levUnsafe) return { cls: 'block', label: 'LEV UNSAFE' };
     return { cls: 'watch', label: 'WATCH ONLY' };
+  }
+  if (row.tier === 'clean' && row.sizingPass && row.minLossAudit && !row.minLossAudit.pass){
+    return { cls: 'block', label: 'AUDIT HOLD' };
   }
   if (row.riskPass || row.sizingPass) return { cls: 'clean', label: 'RISK PASS' };
   return { cls: 'block', label: 'RISK BLOCK' };
@@ -270,11 +383,16 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   hit.levUnsafe = Number.isFinite(safeLev) && Number.isFinite(calc.impliedLeverage) && calc.impliedLeverage > safeLev;
   hit.nearWatch = (hit.tier === 'near' || hit.nearClean) && !hit.levUnsafe
     && N(hit.entry) > 0 && N(hit.stop) > 0 && hit.entry !== hit.stop;
-  hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass;
+  var style = String(hit.scanner || meta.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing';
+  hit.minLossAudit = runMinimalLossAudit(W, c, hit, { style: style, calc: calc });
+  hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.minLossAudit.pass
+    && (!hit.stack || hit.stack.tierHint === 'clean');
   hit.riskPass = hit.sizingPass;
   hit.riskReason = hit.minimalLossPass ? 'PASS'
     : (hit.nearWatch ? 'NEAR — watch only (6/7)'
-      : (hit.levUnsafe ? 'Leverage above safe max' : calc.reason));
+      : (hit.levUnsafe ? 'Leverage above safe max'
+        : (hit.minLossAudit && hit.minLossAudit.reasons && hit.minLossAudit.reasons.length
+          ? hit.minLossAudit.reasons[0] : calc.reason)));
   hit.calc = calc;
   hit.tp = N(hit.t1) > 0 ? hit.t1 : calc.tp;
   hit.tp2 = N(hit.t2);
@@ -354,6 +472,11 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
     if (bc !== ac) return bc - ac;
     var ae = a.refined ? 1 : 0, be = b.refined ? 1 : 0;
     if (be !== ae) return be - ae;
+    var as = N(a.stack && a.stack.alignScore) || N(a.formationScore) || 0;
+    var bs = N(b.stack && b.stack.alignScore) || N(b.formationScore) || 0;
+    if (bs !== as) return bs - as;
+    var tcA = N(a.tightCount), tcB = N(b.tightCount);
+    if (Number.isFinite(tcA) && Number.isFinite(tcB) && tcA !== tcB) return tcA - tcB;
     return (N(b.rr) || 0) - (N(a.rr) || 0);
   });
 
@@ -855,11 +978,15 @@ function evaluateSetup(win, opts){
       entryGuidance: hit.entryGuidance,
       safeMaxLev: hit.safeMaxLev,
       minimalLossPass: hit.minimalLossPass,
+      minLossAudit: hit.minLossAudit,
       refined: hit.refined,
       setupType: tierLabel + ' · ' + (hit.scanner || hit.source || 'scanner')
         + (hit.refined ? ' · exact entry' : ''),
       note: tierLabel + ' ticket · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
-        + (hit.minimalLossPass ? ' · minimal-loss PASS' : (hit.riskPass === false ? (' · risk ' + (hit.riskReason || 'BLOCK')) : '')),
+        + (hit.minimalLossPass ? ' · minimal-loss PASS'
+          : (hit.minLossAudit && hit.minLossAudit.reasons && hit.minLossAudit.reasons.length
+            ? (' · audit hold: ' + hit.minLossAudit.reasons[0])
+            : (hit.riskPass === false ? (' · risk ' + (hit.riskReason || 'BLOCK')) : ''))),
       hit: hit
     };
   }
@@ -1024,9 +1151,9 @@ function mount(el){
     '  <div class="hg-super-head">',
     '    <div>',
     '      <div class="hg-title">Super Setup</div>',
-    '      <div class="hg-note">Exact entry · structure SL · T1/T2 · max safe leverage · minimal-loss gate on every card.</div>',
+    '      <div class="hg-note">7-layer minimal-loss stack: CLEAN 7/7 + regime + structure + FTS + safe lev only.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v2.0.2</div>',
+    '    <div class="hg-super-badge">Super Setup v2.1.0</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -1076,7 +1203,7 @@ function mount(el){
     '      <div class="hg-actions" style="margin-top:10px">',
     '        <button type="button" class="hg-btn primary" id="ss-send-trade" disabled>Send to Trade Plan</button>',
     '      </div>',
-      '      <div class="hg-note" id="ss-note" style="margin-top:10px">CLEAN 7/7 = trade-ready · NEAR 6/7 = watch-only (not blocked).</div>',
+      '      <div class="hg-note" id="ss-note" style="margin-top:10px">MIN LOSS PASS = CLEAN 7/7 + full audit · NEAR = watch-only.</div>',
     '    </div>',
     '  </div>',
     '</section>'
@@ -1201,7 +1328,13 @@ function mount(el){
       $('#ss-safe-lev').value = Number.isFinite(ev.safeMaxLev) ? (fmt(ev.safeMaxLev, 0) + 'x') : '—';
     }
     if ($('#ss-guidance')){
-      $('#ss-guidance').textContent = ev.entryGuidance || '';
+      var guide = ev.entryGuidance || '';
+      if (ev.minLossAudit && ev.minLossAudit.pass){
+        guide = (guide ? guide + ' · ' : '') + 'Audit: ' + ev.minLossAudit.layerSummary;
+      } else if (ev.minLossAudit && ev.minLossAudit.reasons && ev.minLossAudit.reasons.length){
+        guide = (guide ? guide + ' · ' : '') + 'Hold: ' + ev.minLossAudit.reasons.slice(0, 2).join(' · ');
+      }
+      $('#ss-guidance').textContent = guide;
     }
 
     if ($('#ss-use-chart')) $('#ss-use-chart').disabled = (ev.mode !== 'structure');
@@ -1239,7 +1372,24 @@ function mount(el){
     tryAutoPopulate(!!force);
   }
 
+  function standDownBanner(){
+    if (typeof W.hgStandDownState !== 'function') return '';
+    try{
+      var recs = typeof W.hgScoreRecords === 'function' ? W.hgScoreRecords() : [];
+      var sd = W.hgStandDownState(recs);
+      if (sd && sd.tripped){
+        return 'STAND DOWN — ' + ((sd.reasons || []).join(' · ') || 'drawdown limit') + ' · no new trades';
+      }
+    }catch(e){}
+    return '';
+  }
+
   function syncFromExistingDesks(){
+    var sdNote = standDownBanner();
+    if (sdNote){
+      var idleEl = $('#ss-idle');
+      if (idleEl) idleEl.textContent = sdNote;
+    }
     var snap = syncDeskFromExisting(W, readRiskOpts());
     paintDesk(snap);
     applyFirstSetup(true);
@@ -1285,11 +1435,15 @@ function mount(el){
       entryGuidance: hit.entryGuidance,
       safeMaxLev: hit.safeMaxLev,
       minimalLossPass: hit.minimalLossPass,
+      minLossAudit: hit.minLossAudit,
       refined: hit.refined,
       setupType: tierLabel + ' · ' + (hit.scanner || 'swing')
         + (hit.refined ? ' · exact entry' : ''),
       note: tierLabel + ' · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
-        + (hit.minimalLossPass ? ' · minimal-loss PASS' : (hit.tier === 'near' ? ' · watch only' : ' · risk check')),
+        + (hit.minimalLossPass ? ' · minimal-loss PASS'
+          : (hit.minLossAudit && hit.minLossAudit.reasons && hit.minLossAudit.reasons.length
+            ? (' · audit hold: ' + hit.minLossAudit.reasons[0])
+            : (hit.tier === 'near' ? ' · watch only' : ' · risk check'))),
       hit: hit
     };
   }
@@ -1475,7 +1629,9 @@ function mount(el){
       if (minLoss){
         $('#ss-note').textContent = 'CLEAN 7/7 · shield pass · implied leverage within safe max — ready for Trade Plan.';
       } else if (nearWatch){
-        $('#ss-note').textContent = 'NEAR 6/7 — levels and sizing OK. Watch-only until all 7 gates confirm (CLEAN). Trade Plan stays disabled.';
+        $('#ss-note').textContent = 'NEAR 6/7 — watch list. Levels shown; Trade Plan opens only on CLEAN 7/7 + full audit pass.';
+      } else if (hit && hit.tier === 'clean' && hit.minLossAudit && !hit.minLossAudit.pass){
+        $('#ss-note').textContent = 'CLEAN 7/7 but audit hold: ' + (hit.minLossAudit.reasons || []).slice(0, 2).join(' · ') + '.';
       } else if (sizingOk){
         $('#ss-note').textContent = 'Setup passes sizing checks.';
       } else {
@@ -1573,6 +1729,7 @@ function superSetupRepaint(){
 W.superSetupCalc = calcTrade;
 W.calcTrade = calcTrade;
 W.superSetupDeskPill = superSetupDeskPill;
+W.runMinimalLossAudit = runMinimalLossAudit;
 W.calcSafeMaxLeverage = calcSafeMaxLeverage;
 W.refineSuperSetupLevels = refineSuperSetupLevels;
 W.superSetupSafeJson = safeJson;
