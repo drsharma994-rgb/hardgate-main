@@ -954,16 +954,16 @@ function planText(s){
 /* Max-safe leverage chip on EXECUTE cards — identical formula to the BRAIN
    planner: floor(1 / (stop distance ×1.5 + 0.5% MMR)), liquidation
    clearance ≥1.5× the stop. The owner's stop-out fix, on every card. */
-function safeLevChipHtml(entry, stop){
+function safeLevChipHtml(entry, stop, dir, sym, t1){
   try{
+    if (typeof G.hgCryptoRiskChipHTML === 'function'){
+      return G.hgCryptoRiskChipHTML({ entry: entry, stop: stop, dir: dir, sym: sym, t1: t1, style: 'execute' });
+    }
     entry = +entry; stop = +stop;
     if (!(isFinite(entry) && isFinite(stop)) || entry <= 0 || entry === stop) return '';
     var sd = Math.abs(entry - stop) / entry;
     var lev = Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
-    var col = lev >= 20 ? '#2EE6A8' : (lev >= 10 ? '#F5C542' : '#8B9CC4');
-    return ' · <span style="font-weight:700;color:' + col + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop. Trading above this is how accounts die.">'
-      + lev + 'x SAFE</span>'
-      + (lev >= 20 && sd <= 0.03 ? ' <span style="font-weight:700;color:#2EE6A8" title="stop distance ≤3% — meets the 20x SNIPER discipline">· SNIPER GRADE</span>' : '');
+    return ' · <span style="font-weight:700;color:#8B9CC4" title="ceiling only">' + lev + 'x ceiling</span>';
   }catch(e){ return ''; }
 }
 
@@ -1008,7 +1008,7 @@ function cardHTML(r){
       return gateRowHTML(t.gate, t.name, trailState(t.ok), esc(t.note));
     }).join('') + '</div>';
   var planHtml = s
-    ? '<div class="plan">' + planText(s) + safeLevChipHtml(s.entry, s.stop) + '</div>'
+    ? '<div class="plan">' + planText(s) + safeLevChipHtml(s.entry, s.stop, s.dir, r.sym, s.t1) + '</div>'
     : '<div class="plan">Levels unavailable — size down. All 6 gates passed but neither the setup builder nor the universal hgPlanLevels fallback could compute levels from the 4h structure. Direction is real; levels are not. Do not improvise them.</div>';
   var chartBox = s ? '<div class="engineChart" data-sym="' + symHtml + '" style="height:180px;margin-top:8px"></div>' : '';
   var tradeOnclick = (s && (typeof G.hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
