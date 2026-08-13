@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v272',
+  version: 'hg-v273',
   pack: 'pack 18',
-  built: '2026-08-13T09:15:00Z',
-  note: 'Super Setup v1.2 — structure/scanner gate (idle until valid setup)'
+  built: '2026-08-13T09:25:00Z',
+  note: 'Super Setup v1.3 — Delta+CoinDCX universe desk · 15m scan'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
