@@ -224,6 +224,149 @@ function runMinimalLossAudit(win, c, hit, opts){
   };
 }
 
+/** Normalize symbol for cross-desk matching (Delta / CoinDCX / Binance twin). */
+function superSetupSymBase(sym){
+  sym = String(sym || '').toUpperCase();
+  return sym.replace(/^B-/, '').replace(/_USDT$/, '').replace(/USDT$/, '').replace(/USD$/, '');
+}
+
+function superSetupIsBtcProxy(sym){
+  var b = superSetupSymBase(sym);
+  return b === 'BTC' || /^BTC/.test(String(sym || '').toUpperCase());
+}
+
+/**
+ * External-source audit — public feeds already integrated in HARDGATE:
+ * Binance (OI/liqs/CCXT), mempool.space (on-chain), ForexFactory/news RSS,
+ * World Monitor (macro/VIX/stress). Fail-closed when data opposes direction.
+ */
+function runExternalSourceAudit(win, c, hit){
+  win = win || W;
+  hit = hit || {};
+  var reasons = [];
+  var passed = [];
+  var sources = [];
+  var dir = String(hit.dir || '').toLowerCase();
+
+  if (typeof win.hgNewsRisk === 'function' && hit.sym){
+    try{
+      sources.push('news/calendar');
+      var nr = win.hgNewsRisk(hit.sym);
+      if (nr && nr.blackout){
+        reasons.push('News blackout: ' + (nr.note || 'high-impact window'));
+      } else if (nr && nr.risk === 'high'){
+        reasons.push('News risk high — stand aside');
+      } else passed.push('news');
+    }catch(e0){}
+  }
+
+  if (superSetupIsBtcProxy(hit.sym) && typeof win.onchainSignal === 'function'){
+    try{
+      sources.push('mempool.space');
+      var ocState = typeof win.onchainState === 'function' ? win.onchainState() : null;
+      var ocSnap = ocState && ocState.snap ? ocState.snap : (ocState || {});
+      var oc = win.onchainSignal(ocSnap);
+      if (oc){
+        if (dir === 'long' && oc.bias === 'bearish'){
+          reasons.push('On-chain bearish — ' + (oc.setupColor || 'headwind'));
+        } else if (dir === 'short' && oc.bias === 'bullish'){
+          reasons.push('On-chain bullish — contrarian short risk');
+        } else if (dir === 'long' && oc.flags && oc.flags.feeSpike){
+          reasons.push('BTC fee spike — frothy demand (mempool.space)');
+        } else passed.push('on-chain');
+      }
+    }catch(e1){}
+  }
+
+  if (typeof win.oiflowState === 'function' && hit.sym){
+    try{
+      sources.push('Binance OI/funding/taker');
+      var oi = win.oiflowState();
+      var oiRows = (oi && oi.results) ? oi.results : (Array.isArray(oi) ? oi : []);
+      var base = superSetupSymBase(hit.sym);
+      var match = null;
+      for (var oi_i = 0; oi_i < oiRows.length; oi_i++){
+        var or = oiRows[oi_i];
+        if (or && superSetupSymBase(or.sym) === base){ match = or; break; }
+      }
+      if (match && match.dir){
+        var oiDir = String(match.dir).toLowerCase();
+        if ((oiDir === 'long' || oiDir === 'short') && oiDir !== dir && N(match.evidence) >= 2){
+          reasons.push('OI flow opposes — ' + match.dir + ' positioning (' + (match.cls || 'evidence') + ')');
+        } else passed.push('oi-flow');
+      }
+    }catch(e2){}
+  }
+
+  if (typeof win.liqsState === 'function'){
+    try{
+      sources.push('Binance liquidations WS');
+      var lq = win.liqsState();
+      var cls = lq && lq.snap && lq.snap.imbalance && lq.snap.imbalance.cls;
+      if (cls === 'long-flush' && dir === 'long'){
+        reasons.push('Liq cascade against longs — wait for flush to settle');
+      } else if (cls === 'short-flush' && dir === 'short'){
+        reasons.push('Liq cascade against shorts — wait for flush to settle');
+      } else if (cls) passed.push('liqs');
+    }catch(e3){}
+  }
+
+  if (typeof win.wmDeskFormationBoost === 'function'){
+    try{
+      sources.push('World Monitor');
+      var wm = typeof win.getWorldMonitorDeskCached === 'function' ? win.getWorldMonitorDeskCached() : null;
+      if (wm){
+        var wmBoost = win.wmDeskFormationBoost(dir, hit.sym, wm);
+        var stressLbl = wm.stress && wm.stress.label;
+        if (wmBoost <= -7){
+          reasons.push('Macro stress opposes trade' + (stressLbl ? (' (' + stressLbl + ')') : ''));
+        } else passed.push('world-monitor');
+      }
+    }catch(e4){}
+  }
+
+  if (typeof win.ccxtDeskFormationBoost === 'function'){
+    try{
+      sources.push('CCXT/Binance funding desk');
+      var ccxtDesk = typeof win.getCcxtDeskCached === 'function' ? win.getCcxtDeskCached() : null;
+      if (ccxtDesk){
+        var fundBoost = win.ccxtDeskFormationBoost(dir, hit.sym, ccxtDesk);
+        if (fundBoost <= -7){
+          reasons.push('Funding crowded against direction (CCXT ann %)');
+        } else passed.push('ccxt-funding');
+      }
+    }catch(e5){}
+  }
+
+  if (hit.stack && Array.isArray(hit.stack.vetoes) && hit.stack.vetoes.length){
+    sources.push('FTS pillars');
+    reasons.push('FTS veto: ' + hit.stack.vetoes[0]);
+  }
+
+  return {
+    pass: reasons.length === 0,
+    reasons: reasons,
+    passed: passed,
+    sources: sources,
+    layerSummary: passed.length + ' ext ok' + (reasons.length ? (' · ' + reasons.length + ' ext block') : '')
+  };
+}
+
+/** House + external minimal-loss audit merged. */
+function runFullMinimalLossAudit(win, c, hit, opts){
+  var house = runMinimalLossAudit(win, c, hit, opts);
+  var ext = runExternalSourceAudit(win, c, hit);
+  var reasons = (house.reasons || []).concat(ext.reasons || []);
+  var passed = (house.passed || []).concat(ext.passed || []);
+  return {
+    pass: house.pass && ext.pass,
+    reasons: reasons,
+    passed: passed,
+    externalSources: ext.sources || [],
+    layerSummary: passed.length + ' ok' + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+  };
+}
+
 /** Refine scan row through house formation: exact entry, structure SL, T1/T2, shield veto. */
 function refineSuperSetupLevels(win, c, hit){
   win = win || W;
@@ -384,7 +527,7 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   hit.nearWatch = (hit.tier === 'near' || hit.nearClean) && !hit.levUnsafe
     && N(hit.entry) > 0 && N(hit.stop) > 0 && hit.entry !== hit.stop;
   var style = String(hit.scanner || meta.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing';
-  hit.minLossAudit = runMinimalLossAudit(W, c, hit, { style: style, calc: calc });
+  hit.minLossAudit = runFullMinimalLossAudit(W, c, hit, { style: style, calc: calc });
   hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.minLossAudit.pass
     && (!hit.stack || hit.stack.tierHint === 'clean');
   hit.riskPass = hit.sizingPass;
@@ -561,6 +704,17 @@ async function superSetupRunScanInner(opts){
     if (typeof bestWarm === 'function'){
       try{ await bestWarm(); }catch(eB){}
     }
+    try{
+      var extWarm = [
+        W.refreshCcxtDesk, W.refreshWorldMonitorDesk, W.hgNewsRefresh,
+        W.onchainFetch, W.oiflowWarm
+      ];
+      for (var ew = 0; ew < extWarm.length; ew++){
+        if (typeof extWarm[ew] === 'function'){
+          try{ await extWarm[ew](false); }catch(eW){}
+        }
+      }
+    }catch(eExt){}
     var riskOpts = opts.riskOpts || defaultRiskOpts(W);
     var snap = buildSnapFromCryptoScans(W, riskOpts);
     snap.scanAt = Date.now();
@@ -1151,9 +1305,9 @@ function mount(el){
     '  <div class="hg-super-head">',
     '    <div>',
     '      <div class="hg-title">Super Setup</div>',
-    '      <div class="hg-note">7-layer minimal-loss stack: CLEAN 7/7 + regime + structure + FTS + safe lev only.</div>',
+    '      <div class="hg-note">Minimal-loss: 7/7 gates + house audit + Binance flow/OI/liqs + news + on-chain + macro desks.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v2.1.0</div>',
+    '    <div class="hg-super-badge">Super Setup v2.2.0</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -1203,7 +1357,7 @@ function mount(el){
     '      <div class="hg-actions" style="margin-top:10px">',
     '        <button type="button" class="hg-btn primary" id="ss-send-trade" disabled>Send to Trade Plan</button>',
     '      </div>',
-      '      <div class="hg-note" id="ss-note" style="margin-top:10px">MIN LOSS PASS = CLEAN 7/7 + full audit · NEAR = watch-only.</div>',
+      '      <div class="hg-note" id="ss-note" style="margin-top:10px">MIN LOSS PASS = CLEAN 7/7 + house + external feeds (Binance, news, on-chain, macro).</div>',
     '    </div>',
     '  </div>',
     '</section>'
@@ -1730,6 +1884,9 @@ W.superSetupCalc = calcTrade;
 W.calcTrade = calcTrade;
 W.superSetupDeskPill = superSetupDeskPill;
 W.runMinimalLossAudit = runMinimalLossAudit;
+W.runExternalSourceAudit = runExternalSourceAudit;
+W.runFullMinimalLossAudit = runFullMinimalLossAudit;
+W.superSetupSymBase = superSetupSymBase;
 W.calcSafeMaxLeverage = calcSafeMaxLeverage;
 W.refineSuperSetupLevels = refineSuperSetupLevels;
 W.superSetupSafeJson = safeJson;
