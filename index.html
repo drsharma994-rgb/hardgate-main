@@ -739,6 +739,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="fixpack15-core.js"></script>
 <script src="fixpack16-core.js"></script>
 <script src="fixpack17-core.js"></script>
+<script src="crypto-position-risk.js"></script>
+<script src="risk-tab.js"></script>
 <script src="venuepremium.js"></script>
 <script src="reliability.js"></script>
 <script src="formation.js"></script>
@@ -2133,7 +2135,9 @@ function smartCardHTML(r){
   const planTxt = s
     ? regime + (s.entryType ? String(s.entryType) + ' ' : 'ENTRY ') + '<b>' + px(s.entry) + '</b> · STOP <b>' + px(s.stop) + '</b> · T1 <b>' + px(s.t1) + '</b> (' + fmt(s.rr1, 1) + 'R)'
       + ' · T2 <b>' + px(s.t2) + '</b> (' + fmt(s.rr2, 1) + 'R) · risk ' + fmt(s.riskPct, 2) + '%'
-      + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
+      + (typeof hgSetupRiskChip === 'function'
+        ? hgSetupRiskChip({ entry: s.entry, stop: s.stop, dir: s.dir, sym: r.venueSym || r.sym, t1: s.t1, style: 'smart' })
+        : (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : ''))
       + (s.note ? ' — ' + s.note : '')
       + (s.entryGuidance ? '<div class="note" style="margin-top:4px;font-size:11px">' + s.entryGuidance + '</div>' : '')
       + (typeof hgPlanMetaLabel === 'function' && hgPlanMetaLabel(s) ? ' <span class="note">(' + hgPlanMetaLabel(s) + ')</span>' : '')
@@ -2687,7 +2691,7 @@ const HG_NAV_GROUPS = [
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','chartvision','onchain','coil','apex','trap','smc','ob','div'] },
   { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldcoint','goldspot','goldscalp','goldswing','goldpine','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','super-setup','reversalsniper','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','venueprem','termbasis','scorecard','reliability','formationlab'] },
-  { id:'tools',      label:'TOOLS',        tabs:['basis','search','tradeos','hey','aiagent','log','trade','finder'] },
+  { id:'tools',      label:'TOOLS',        tabs:['risk','basis','search','tradeos','hey','aiagent','log','trade','finder'] },
 ];
 const HG_TAB_GROUP = {};
 HG_NAV_GROUPS.forEach(function(g){ g.tabs.forEach(function(t){ HG_TAB_GROUP[t] = g.id; }); });
@@ -3235,7 +3239,9 @@ function planBlock(dir, entry, stop, t1, t2, note, meta){
     + ' · T1 <b>'+px(t1)+'</b> ('+fmt(Math.abs(t1-entry)/risk,1)+'R)'
     + ' · T2 <b>'+px(t2)+'</b> ('+fmt(Math.abs(t2-entry)/risk,1)+'R)'
     + ' · risk '+fmt(risk/entry*100,2)+'%'
-    + hgSafeLevChip(entry, stop);
+    + (typeof hgSetupRiskChip === 'function'
+      ? hgSetupRiskChip(Object.assign({}, meta, { entry: entry, stop: stop, dir: dir, t1: t1 }))
+      : hgSafeLevChip(entry, stop));
   if (meta.targetPolicy) line += ' <span class="note">('+meta.targetPolicy+')</span>';
   if (note) line += ' — '+note;
   if (meta.entryGuidance) line += '<div class="note" style="margin-top:4px;font-size:11px">'+meta.entryGuidance+'</div>';
@@ -3248,14 +3254,15 @@ function planBlock(dir, entry, stop, t1, t2, note, meta){
    grey below; SNIPER GRADE when the stop also fits the ≤3% discipline. */
 function hgSafeLevChip(entry, stop){
   try{
+    if (typeof hgSetupRiskChip === 'function'){
+      return hgSetupRiskChip({ entry: entry, stop: stop, dir: 'long' });
+    }
+    if (typeof hgSafeLevChipLegacy === 'function') return hgSafeLevChipLegacy(entry, stop);
     entry = +entry; stop = +stop;
     if (!(isFinite(entry) && isFinite(stop)) || entry <= 0 || entry === stop) return '';
     const sd = Math.abs(entry - stop) / entry;
     const lev = Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
-    const col = lev >= 20 ? '#2EE6A8' : (lev >= 10 ? '#F5C542' : '#8B9CC4');
-    return ' · <span style="font-weight:700;color:' + col + '" title="max safe leverage — floor(1 / (stop distance ×1.5 + 0.5% MMR)) — liquidation clearance ≥1.5× the stop. Trading above this is how accounts die.">'
-      + lev + 'x SAFE</span>'
-      + (lev >= 20 && sd <= 0.03 ? ' <span style="font-weight:700;color:#2EE6A8" title="stop distance ≤3% — meets the 20x SNIPER discipline">· SNIPER GRADE</span>' : '');
+    return ' · <span style="font-weight:700;color:#8B9CC4" title="ceiling only">'+ lev + 'x ceiling</span>';
   }catch(e){ return ''; }
 }
 /* Session/kill-zone timing chip — identical windows to brain.js sessionWindow
@@ -3591,7 +3598,7 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
     ['Liquidity Target', liquidityTargetText(rows, dir)]
   ].concat(hgSetupCardExtras(hit, t, 'swing'));
   if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, cardMini, gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
-    entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
+    entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy, sym: t.symbol, style: 'swing'
   }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack,
     visionChip: hit.visionChip, visionNextBar: hit.visionNextBar, visionNextMove: hit.visionNextMove, visionPrediction: hit.visionPrediction }));
   hit.__visionChartId = chartId;
@@ -3658,7 +3665,8 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
   if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, cardMini,
   ['G1 1H trend', 'G2 sweep+reclaim / EMA21 hold', 'G3 RSI band', 'G4 funding', 'G5 settle>25m', 'G6 vol+wick commit', 'G7 1.5R vol-capped'],
     planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
-      entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy
+      entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy,
+      sym: t.symbol, style: 'scalp'
     }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack,
     visionChip: hit.visionChip, visionNextBar: hit.visionNextBar, visionNextMove: hit.visionNextMove, visionPrediction: hit.visionPrediction }));
   hit.__visionChartId = chartId;

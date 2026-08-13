@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v280',
+  version: 'hg-v281',
   pack: 'pack 18',
-  built: '2026-08-13T12:00:00Z',
-  note: 'Super Setup v2.3 — FQS + meta-label + DVOL + post-gate flow/BTC RS'
+  built: '2026-08-13T16:30:00Z',
+  note: 'Pack 18 — crypto position risk engine + RISK tab + inline size/liq/net-R'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

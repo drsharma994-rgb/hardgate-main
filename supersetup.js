@@ -712,6 +712,15 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
     && N(hit.entry) > 0 && N(hit.stop) > 0 && hit.entry !== hit.stop;
   var style = String(hit.scanner || meta.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing';
   hit.minLossAudit = runFullMinimalLossAudit(W, c, hit, { style: style, calc: calc });
+  if (typeof W.hgCryptoAttachPositionSize === 'function'){
+    try{
+      W.hgCryptoAttachPositionSize(hit, riskOpts.balance, riskOpts.riskPct, { style: style });
+      if (hit.positionRisk && hit.tier === 'clean' && !hit.positionRisk.pass){
+        hit.minLossAudit.pass = false;
+        hit.minLossAudit.reasons = (hit.minLossAudit.reasons || []).concat(hit.positionRisk.reasons || []);
+      }
+    }catch(eSz){}
+  }
   hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.minLossAudit.pass
     && (!hit.stack || hit.stack.tierHint === 'clean');
   hit.riskPass = hit.sizingPass;
