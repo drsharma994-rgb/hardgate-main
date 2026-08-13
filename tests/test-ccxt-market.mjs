@@ -12,6 +12,7 @@ import { formationQuality } from '../lib/formation-quality.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -56,7 +57,7 @@ console.log('== api + shell wiring ==');
   var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(html.indexOf('ccxt-desk.js') >= 0, 'index loads ccxt-desk.js');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   var pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   ok(pkg.dependencies && pkg.dependencies.ccxt === '^4.5.71', 'ccxt dep bumped');
 }

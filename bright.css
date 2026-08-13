@@ -355,3 +355,8 @@ table tr:hover td{background:rgba(15,92,192,.05)}
 .card.gsx-card .gsx-whyline,.card.gsw-card .gsw-whyline{color:var(--text,#334155)!important}
 .card.gsx-card .toTrade,.card.gsw-card .toTrade{color:var(--gold)!important;border-color:var(--gold-dim)!important;background:rgba(15,92,192,.05)!important}
 .card.gsx-card .toBook,.card.gsw-card .toBook{color:var(--cyan)!important;border-color:var(--cyan)!important;background:rgba(15,118,110,.05)!important}
+
+/* build stamp chip — red when the tab is running a stale cached copy */
+.statuschip.hg-build-ok  { }
+.statuschip.hg-build-warn{ color: var(--warn, #b8860b); }
+.statuschip.hg-build-bad { color: #fff; background: var(--bad, #c0392b); border-color: var(--bad, #c0392b); }

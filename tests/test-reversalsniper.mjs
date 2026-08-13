@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
@@ -41,7 +42,7 @@ ok(W.rsConviction({ triggers: ['rsi', 'drawdown'], rsi2: 0, drawdownPct: 8 }) >=
 ok(W.rsIsDeskVenue('delta') && W.rsIsDeskVenue('coindcx') && !W.rsIsDeskVenue('binance'),
    'rsIsDeskVenue: delta + coindcx only');
 ok(typeof W.rsLoadUniverse === 'function', 'rsLoadUniverse exported');
-ok(/hg-v268/.test(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v268');
+ok(swCacheOk(readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
 function tapeOversold(){
   const out=[]; let p=100;
   for(let i=0;i<120;i++){

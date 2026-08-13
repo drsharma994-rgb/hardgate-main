@@ -11,6 +11,7 @@ import { hgRegimeAdjust, hgRegimeResolveState } from '../lib/regime-thresholds.m
 import { pbEffectiveBeta, pbRealizedBeta } from '../lib/clusters.mjs';
 import { goldCotAssess, goldCotParse } from '../lib/gold-cot.mjs';
 import { hgStandDownState } from '../lib/stand-down.mjs';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -141,7 +142,7 @@ console.log('== gold COT + stand down ==');
 console.log('== cache + proxy ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('fixpack13-core.js') >= 0 && sw.indexOf('reliability.js') >= 0,
     'sw precaches fixpack13-core.js and reliability.js');
   const proxy = fs.readFileSync(path.join(root, 'api/proxy.js'), 'utf8');

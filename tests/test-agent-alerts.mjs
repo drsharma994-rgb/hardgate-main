@@ -10,6 +10,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -61,7 +62,7 @@ console.log('== wiring ==');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('hgAgentAlertsRun') >= 0, 'alert cycle calls agent alerts');
   ok(/hgAgentWorkforceCollect/.test(fs.readFileSync(path.join(root, 'ai-agent.js'), 'utf8')), 'workforce collect export');
   ok(/agent-alerts\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell agent-alerts');
-ok(/hg-v268/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v268');
+ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
 }
 
 console.log('\n' + pass + ' assertions passed');

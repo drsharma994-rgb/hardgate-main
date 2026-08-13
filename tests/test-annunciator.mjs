@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -36,7 +37,7 @@ console.log('== CSP fonts ==');
 console.log('== cache ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('annunciator.css') >= 0, 'sw precaches annunciator.css');
 }
 

@@ -10,6 +10,7 @@ import { worldmonitorCapabilities } from '../lib/worldmonitor-fetch.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -37,7 +38,7 @@ console.log('== wiring ==');
   ok(/createWorldmonitorApi/.test(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8')), 'server mounts wm api');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('worldmonitor-desk.js') >= 0, 'index loads wm desk');
   ok(/worldmonitor-desk\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell wm desk');
-ok(/hg-v268/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v268');
+ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
   ok(fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8').indexOf('World Monitor') >= 0, 'setup-stack wm bumps');
   ok(fs.readFileSync(path.join(root, 'formation-instr-ui.js'), 'utf8').indexOf('hgWorldMonitorDeskPanelHtml') >= 0, 'formation panel wm');
   var caps = worldmonitorCapabilities({});

@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ctx = vm.createContext(Object.create(null));
@@ -476,7 +477,7 @@ const flat4 = mkRows(lin(120, 50, 0));      // pinned 4h closes
   assert(/hgPaintTrendmxFromSnap/.test(tt), 'snap restore export wired');
   assert(/trendmxDesk/.test(readFileSync(path.join(root, 'setup-ui.js'), 'utf8')), 'trendmx desk in setup-ui');
   const sw = readFileSync(path.join(root, 'sw.js'), 'utf8');
-  assert(/hg-v268/.test(sw), 'cache hg-v268');
+  assert(swCacheOk(sw), 'cache matches build stamp');
   assert(/desk-scan-universe\.js/.test(readFileSync(path.join(root, 'index.html'), 'utf8')), 'desk-scan-universe script wired');
 }
 

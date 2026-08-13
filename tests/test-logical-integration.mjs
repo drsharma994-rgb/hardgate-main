@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -17,10 +18,10 @@ console.log('== advanced squeeze desk ==');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('squeeze:') >= 0, 'tab auto-scan squeeze');
 }
 
-console.log('== hg-v268 shell ==');
+console.log('== HG_VER shell ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain');
   ok(sw.indexOf('trendtable.js') >= 0, 'sw precaches trendtable');
 }

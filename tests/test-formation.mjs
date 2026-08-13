@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -95,7 +96,7 @@ console.log('== sw.js shell ==');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/formation\.js/.test(sw), 'HG_SHELL includes formation.js');
   ok(/walkforward-ui\.js/.test(sw), 'HG_SHELL includes walkforward-ui.js');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

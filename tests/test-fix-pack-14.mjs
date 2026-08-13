@@ -10,6 +10,7 @@ import { hgAvgUniqueness, hgEffectiveN, hgEventsFromRecords } from '../lib/sampl
 import { hgHurstRS, hgFamilyRouter } from '../lib/regime-router.mjs';
 import { hgCoint, hgCointHalfLifeVeto } from '../lib/gold-coint.mjs';
 import { HG_META_FLOOR } from '../lib/meta-label.mjs';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -129,7 +130,7 @@ console.log('== gold coint ==');
 console.log('== cache bump ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(/fixpack14-core\.js/.test(sw), 'fixpack14-core precached');
   ok(/goldcoint\.js/.test(sw), 'goldcoint.js precached');
 }

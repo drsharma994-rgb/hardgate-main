@@ -9,6 +9,7 @@ import {
   coindcxMarksUrl,
 } from '../lib/coindcx-fetch.mjs';
 import { createCoindcxApi } from '../lib/coindcx-api.mjs';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let pass = 0, fail = 0;
@@ -28,7 +29,7 @@ ok(html.indexOf('/api/coindcx/instruments') >= 0, 'index cdcx desk instruments')
 ok(html.indexOf('cdcxDeskPath') >= 0, 'index cdcxDeskPath helper');
 ok(fs.readFileSync(path.join(root, 'xuniverse.js'), 'utf8').indexOf('cdcxFetchUrl') >= 0, 'xuniverse cdcxFetchUrl');
 ok(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8').indexOf('createCoindcxApi') >= 0, 'server coindcx api');
-ok(/hg-v268/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v268');
+ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
 
 console.log('== api handler ==');
 const handler = createCoindcxApi();

@@ -5,6 +5,7 @@ import { finalizeAgentDesk, buildDeskFromStore } from '../lib/agent-workforce.mj
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -80,7 +81,7 @@ console.log('== wiring ==');
   ok(/createAgentApi/.test(fs.readFileSync(path.join(root, 'scripts/server.mjs'), 'utf8')), 'server mounts agent api');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('ai-agent.js') >= 0, 'index loads ai-agent');
   ok(/ai-agent\.js/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw shell ai-agent');
-ok(/hg-v268/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v268');
+ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf("'aiagent'") >= 0, 'nav aiagent tab');
   ok(fs.readFileSync(path.join(root, 'setup-stack.js'), 'utf8').indexOf('AI workforce') >= 0, 'setup-stack agent bump');
   ok(/HARDGATE_AGENT_SWARM/.test(fs.readFileSync(path.join(root, 'app.js'), 'utf8')), 'daemon agent swarm hook');

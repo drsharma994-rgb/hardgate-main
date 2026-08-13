@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -102,7 +103,7 @@ console.log('== wiring ==');
   ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp post-apply refresh');
   ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing post-apply refresh');
   ok(/candleSource/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp passes candleSource');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
 }
 
 console.log('== gold card text contrast ==');

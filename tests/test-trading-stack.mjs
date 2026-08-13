@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tradingStackStatus, TRADING_STACK_REPOS } from '../lib/trading-stack-core.mjs';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -28,7 +29,7 @@ console.log('== wiring ==');
   ok(/hgTradingStackPanelHtml/.test(fs.readFileSync(path.join(root, 'formation-instr-ui.js'), 'utf8')), 'formation panel');
   var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(/getXmGoldCandles/.test(html) && /preferDeltaXaut/.test(html), 'getXAUCandles spot-first');
-  ok(/hg-v268/.test(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache hg-v268');
+  ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'cache matches build stamp');
 }
 
 console.log('\n' + pass + ' assertions passed');

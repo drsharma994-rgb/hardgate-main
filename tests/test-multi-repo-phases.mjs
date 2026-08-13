@@ -16,6 +16,7 @@ import { hgIdempotencyGet, hgIdempotencySet } from '../lib/idempotency.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -78,7 +79,7 @@ console.log('== wiring ==');
   ok(/createHardgateMcpApi/.test(srv), 'hardgate mcp api mounted');
   ok(/runRiskRules/.test(fs.readFileSync(path.join(root, 'lib/execute-api.mjs'), 'utf8')), 'execute risk rules');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(fs.readFileSync(path.join(root, 'index.html'), 'utf8').indexOf('gate-replay-oos.js') >= 0, 'gate-replay-oos loaded');
 }
 

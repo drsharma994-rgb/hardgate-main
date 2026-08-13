@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -23,7 +24,7 @@ console.log('== light theme (base-themes data-dense) ==');
   ok(html.indexOf('vendor/base-themes/tokens-data-dense-light.css') >= 0, 'vendor theme linked');
   ok(fs.existsSync(path.join(root, 'vendor/base-themes/README.md')), 'base-themes attribution README');
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('hg-icons.css') >= 0, 'sw precaches hg-icons.css');
 }
 

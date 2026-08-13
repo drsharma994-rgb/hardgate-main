@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0, fail = 0;
@@ -82,7 +83,7 @@ console.log('== shell wiring ==');
 {
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   const idx = fs.readFileSync(root + 'index.html', 'utf8');
-  ok(/hg-v268/.test(sw), 'cache hg-v268');
+  ok(swCacheOk(sw), 'cache matches build stamp');
   ok(sw.indexOf('gstack-brain.js') >= 0, 'sw precaches gstack-brain.js');
   ok(/gstack-brain\.js/.test(idx) && /brain\.js/.test(idx)
     && idx.indexOf('src="gstack-brain.js"') < idx.indexOf('src="brain.js"'),

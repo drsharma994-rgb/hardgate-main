@@ -13,6 +13,7 @@ import { hgMetalsComplex } from '../lib/metals-complex.mjs';
 import { hgGoldVenueSpread } from '../lib/gold-venue-spread.mjs';
 import { hgTallyLegAudit } from '../lib/gold-tally-audit.mjs';
 import { hgGoldAPlus, hgGoldAPlusAssertNoConvictionWrite } from '../lib/gold-aplus.mjs';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 let pass = 0;
@@ -186,7 +187,7 @@ console.log('== tally audit ==');
 console.log('== sw cache + execute disarmed ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(sw.includes("'hg-v268'"), 'sw.js cache hg-v268');
+  ok(swCacheOk(sw), 'sw.js cache matches build stamp');
   ok(sw.includes('fixpack15-core.js'), 'fixpack15-core precached');
   ok(sw.includes('venuepremium.js'), 'venuepremium.js precached');
   const exec = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');

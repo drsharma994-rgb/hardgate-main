@@ -13,6 +13,7 @@ import {
 } from '../lib/gold-src-provenance.mjs';
 import { hgDeepGateAudit, hgDeepFamilyAudit } from '../lib/gold-tally-audit.mjs';
 import { hgGoldAPlus } from '../lib/gold-aplus.mjs';
+import { swCacheOk } from './helpers/build-version.mjs';
 
 const root = path.join(fileURLToPath(new URL('../', import.meta.url)), path.sep);
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -143,7 +144,7 @@ console.log('== deep gate audit ==');
 console.log('== sw cache + execute ==');
 {
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(sw.includes("'hg-v268'"), 'sw.js cache hg-v268');
+  ok(swCacheOk(sw), 'sw.js cache matches build stamp');
   ok(sw.includes('fixpack16-core.js'), 'fixpack16-core precached');
   const exec = fs.readFileSync(path.join(root, 'execute.js'), 'utf8');
   ok(!/hgFamilyRollup|hgVolumeTrust/.test(exec), 'execute.js stays disarmed');
