@@ -176,6 +176,26 @@ function laneOf(sym, hint){
   if (hint === 'gold' || hint === 'crypto') return hint;
   return (/XAU|PAXG|GOLD/.test(String(sym == null ? '' : sym).toUpperCase())) ? 'gold' : 'crypto';
 }
+/* fix pack 17 — gate states stamped at book time, so family lift can be
+   measured after settlement. Keys are gate ids (C1, G12), values pass|veto.
+   Bounded hard: this rides in localStorage for the life of the ledger. */
+function sanitizeGateStates(x){
+  try{
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
+    var out = {}, n = 0, keys = Object.keys(x);
+    for (var i = 0; i < keys.length; i++){
+      if (n >= 64) break;
+      var k = String(keys[i]).trim().toUpperCase().slice(0, 8);
+      if (!/^[A-Z]{1,3}[0-9]{1,3}$/.test(k)) continue;
+      var v = String(x[keys[i]] == null ? '' : x[keys[i]]).trim().toLowerCase();
+      if (v !== 'pass' && v !== 'veto' && v !== 'na') continue;
+      if (v === 'na') continue; /* absent and 'na' are equivalent downstream */
+      out[k] = v; n++;
+    }
+    return n ? out : null;
+  }catch(e){ return null; }
+}
+
 function sanitizeLayers(x){
   try{
     if (!Array.isArray(x)) return [];
@@ -928,6 +948,7 @@ function hgScoreRecord(input){
       fundingPct: fpIn,
       layers: sanitizeLayers(inp.layers),
       layerVals: sanitizeLayerVals(inp.layers, inp.layerVals),
+      gateStates: sanitizeGateStates(inp.gateStates),
       fpKey: fpStamp ? fpStamp.key : null,
       fpCoarse: fpStamp ? fpStamp.coarse : null,
       fpParts: fpStamp ? fpStamp.parts : null,

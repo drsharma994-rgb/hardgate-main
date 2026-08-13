@@ -98,7 +98,15 @@ function hgFamilyVerdict(rollup, opts){
   }
   if (opts.structuralRrVeto) blockers.push('GS7/GC6');
   var timingVeto = blockers.indexOf('G29') >= 0 || blockers.indexOf('G30') >= 0;
-  var total = FAM_ORDER.length;
+  /* fix pack 17 — was FAM_ORDER.length (a hardcoded 12). hgFamilyRollup skips
+     families with no gates present, so a partial ledger reported "8 of 12"
+     while only 9 families existed: a denominator the read was never measured
+     against. Thresholds are scaled off the same count, so with all 12 present
+     they resolve to exactly the previous 10 / 8 / 6 and nothing changes. */
+  var total = rollup.length;
+  var needStrong = Math.ceil(total * 10 / 12);
+  var needModerate = Math.ceil(total * 8 / 12);
+  var needWeak = Math.ceil(total * 6 / 12);
   var label = 'BIAS ONLY', why = 'Direction exists; family agreement insufficient.', tier = 'bias';
   if (timingVeto){
     label = 'TIMING VETO'; tier = 'veto';
@@ -106,13 +114,13 @@ function hgFamilyVerdict(rollup, opts){
   } else if (opts.structuralRrVeto){
     label = 'STRUCTURAL VETO'; tier = 'veto';
     why = 'Structural R:R < 2 — not worth taking.';
-  } else if (agree >= 10 && oppose === 0 && dark <= 1 && split === 0){
+  } else if (agree >= needStrong && oppose === 0 && dark <= 1 && split === 0){
     label = 'STRONG'; tier = 'strong';
     why = agree + ' of ' + total + ' families agree · oppose 0 · dark ' + dark;
-  } else if (agree >= 8 && oppose <= 1 && split <= 1){
+  } else if (agree >= needModerate && oppose <= 1 && split <= 1){
     label = 'MODERATE'; tier = 'moderate';
     why = agree + ' of ' + total + ' families agree · oppose ' + oppose;
-  } else if (agree >= 6){
+  } else if (agree >= needWeak){
     label = 'WEAK'; tier = 'weak';
     why = agree + ' of ' + total + ' families agree · oppose ' + oppose;
   }

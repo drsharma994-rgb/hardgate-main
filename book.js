@@ -270,6 +270,9 @@ function bookScoreRecord(opts){
       t2: isFinite(opts.t2) ? +opts.t2 : null,
       scalePct: isFinite(opts.scalePct) ? +opts.scalePct : null,
       layers: opts.layers || [],
+      /* fix pack 17 — stamp the gate states that produced this setup so
+         family lift can be measured once the trade settles. */
+      gateStates: (opts.gateStates && typeof opts.gateStates === 'object') ? opts.gateStates : null,
       at: Date.now()
     });
   }catch(e){}
@@ -381,6 +384,8 @@ async function addToBook(opts){
       layers: bookMetaLayers(opts),
       scalePct: isFinite(opts.scalePct) ? +opts.scalePct : null,
       newsBlackout: false,
+      /* fix pack 17 — carried for measurement only; the API body ignores it. */
+      gateStates: (opts.gateStates && typeof opts.gateStates === 'object') ? opts.gateStates : null,
     };
     if (!body.sym || !body.dir || !isFinite(body.entry) || !isFinite(body.stop)){
       return { ok: false, reason: 'invalid plan' };
@@ -621,7 +626,8 @@ function bookBtnHTML(sym, dir, entry, stop, t1, meta){
     klass: meta.klass || null,
     venue: meta.venue || 'paper',
     fund: fund,
-    layers: bookMetaLayers(meta)
+    layers: bookMetaLayers(meta),
+    gateStates: (meta.gateStates && typeof meta.gateStates === 'object') ? meta.gateStates : null
   });
   return '<button class="toBook" title="Add to ' + fund + ' fund" onclick=\'addToBook(' + payload + ')\'>ADD · ' + esc(fund.toUpperCase()) + '</button>';
 }

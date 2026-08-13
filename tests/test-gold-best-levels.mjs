@@ -102,7 +102,7 @@ console.log('== wiring ==');
   ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp post-apply refresh');
   ok(/hgGoldPostApplyRefresh/.test(fs.readFileSync(root + 'goldswing.js', 'utf8')), 'goldswing post-apply refresh');
   ok(/candleSource/.test(fs.readFileSync(root + 'goldscalp.js', 'utf8')), 'goldscalp passes candleSource');
-  ok(/hg-v267/.test(sw), 'cache hg-v267');
+  ok(/hg-v268/.test(sw), 'cache hg-v268');
 }
 
 console.log('== gold card text contrast ==');

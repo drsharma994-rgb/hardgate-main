@@ -736,6 +736,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="fixpack14-core.js"></script>
 <script src="fixpack15-core.js"></script>
 <script src="fixpack16-core.js"></script>
+<script src="fixpack17-core.js"></script>
 <script src="venuepremium.js"></script>
 <script src="reliability.js"></script>
 <script src="formation.js"></script>
@@ -5250,6 +5251,16 @@ async function runGoldDeep(){
     ];
     const decisiveHtml = (typeof hgRenderDecisiveBlock === 'function') ? hgRenderDecisiveBlock(decisiveRows) : '';
     const familyLedgerHtml = (typeof hgRenderFamilyLedger === 'function') ? hgRenderFamilyLedger(famRollup, gateRow, {}) : sg.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('');
+    /* fix pack 17 — measured lift for the swing families. Rendered as its own
+       panel so the pack 16 ledger renderer is left untouched. */
+    let swingLiftHtml='';
+    try{
+      if (typeof hgFamilyLift==='function' && typeof hgRenderFamilyLiftTable==='function'
+          && typeof hgScoreRecords==='function' && typeof hgGateFamilies==='function'){
+        swingLiftHtml = hgRenderFamilyLiftTable(
+          hgFamilyLift(hgScoreRecords(), hgGateFamilies()), 'MEASURED SWING FAMILY LIFT');
+      }
+    }catch(eSwLift){ swingLiftHtml=''; }
     const mixedBanner = goldMixed ? '<div class="note warn" style="margin:8px 0"><b>MIXED FEED</b> — '+(typeof hgGoldSrcMixedLabel==='function'?hgGoldSrcMixedLabel(goldSrc):'')+' · cross-timeframe alignment is comparing two different markets</div>' : '';
     let verdictLabel,verdictColor,verdictWhy;
     if (famVerdict && famVerdict.tier === 'veto'){
@@ -5286,7 +5297,8 @@ async function runGoldDeep(){
         const gdSwingStack = inlineScanStack(casc, GOLD_SYM, h4, { style: 'gold-deep-swing', clean: score>=60, asset: 'gold' });
         swingPlanHtml+='<button class="toTrade" onclick="' + (typeof hgToTradePlanOnclickAttr === 'function' ? hgToTradePlanOnclickAttr(GOLD_SYM, casc, entry, stop, t1, { t2: t2, stack: gdSwingStack, scanner: 'gold-deep-swing', strategy: 'gold-deep-swing' }) : ('toTrade(\''+GOLD_SYM+'\',\''+casc+'\','+entry+','+stop+','+t1+')')) + '">SEND TO TRADE PLAN →</button>';
         swingPlanHtml+=hgBookBtn(GOLD_SYM, casc, entry, stop, t1, { scanner: 'gold-deep-swing', strategy: 'gold-deep-swing', klass: 'metals', fund: 'gold', t2: t2,
-          stack: gdSwingStack });
+          stack: gdSwingStack,
+          gateStates: (typeof hgGateStatesFromLedger==='function') ? hgGateStatesFromLedger(sg) : null });
       }
     }
     setProg('goldDeepProg',0.6);
@@ -5371,28 +5383,56 @@ async function runGoldDeep(){
       }
       const passC=g.filter(function(x){return x[2]==='pass';}).length, vetoC=g.filter(function(x){return x[2]==='veto';}).length, totalC=g.filter(function(x){return x[2]!=='na';}).length;
       const scoreC=totalC>0?(passC/totalC)*100:0;
+      /* fix pack 17 — families are primary. Seven of these twenty gates are
+         oscillators on the same 15m series keyed to the same direction, so the
+         flat percentage counted one condition seven times. */
+      const scalpFams = (typeof hgScalpRollup==='function') ? hgScalpRollup(g) : [];
+      const scalpFv = (scalpFams.length && typeof hgScalpVerdict==='function')
+        ? hgScalpVerdict(scalpFams, { legacyScore: scoreC }) : null;
       let scalpLabel,scalpColor;
-      if(scoreC>=70&&vetoC===0){ scalpLabel=dir.toUpperCase()+' STRONG'; scalpColor=dir; }
+      if(scalpFv){
+        scalpLabel = dir.toUpperCase()+' '+scalpFv.label;
+        scalpColor = (scalpFv.tier==='strong'||scalpFv.tier==='moderate') ? dir
+          : (scalpFv.tier==='veto' ? 'aside' : (scalpFv.tier==='weak' ? dir : 'aside'));
+      }
+      else if(scoreC>=70&&vetoC===0){ scalpLabel=dir.toUpperCase()+' STRONG'; scalpColor=dir; }
       else if(scoreC>=50){ scalpLabel=dir.toUpperCase()+' MODERATE'; scalpColor=dir; }
       else if(scoreC>=30){ scalpLabel=dir.toUpperCase()+' WEAK'; scalpColor=dir; }
       else { scalpLabel=dir.toUpperCase()+' BIAS ONLY'; scalpColor='aside'; }
+      /* Actionable now requires independent family agreement, not a percentage
+         a single momentum condition could carry on its own. */
+      const scalpActionable = scalpFv ? (scalpFv.tier==='strong'||scalpFv.tier==='moderate') : (scoreC>=50);
+      const scalpGateStates = (typeof hgGateStatesFromLedger==='function') ? hgGateStatesFromLedger(g) : null;
       let planHtml='';
       if(scalpRisk>0){
         planHtml='<div class="plan">'+planBlock(dir,scalpEntry,scalpStop,scalpT1,scalpT2||scalpT1)+'</div>';
-        if(scoreC>=50&&swept&&reclaimed){
+        if(scalpActionable&&swept&&reclaimed){
           logSetup(GOLD_SYM,dir,'gold-deep-scalp',scalpEntry,scalpStop,scalpT1);
-          const gdScalpStack = inlineScanStack(dir, GOLD_SYM, m15, { style: 'gold-deep-scalp', clean: scoreC>=50, asset: 'gold' });
+          const gdScalpStack = inlineScanStack(dir, GOLD_SYM, m15, { style: 'gold-deep-scalp', clean: scalpActionable, asset: 'gold' });
           planHtml+='<button class="toTrade" onclick="' + (typeof hgToTradePlanOnclickAttr === 'function' ? hgToTradePlanOnclickAttr(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { t2: scalpT2, stack: gdScalpStack, scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp' }) : ('toTrade(\''+GOLD_SYM+'\',\''+dir+'\','+scalpEntry+','+scalpStop+','+scalpT1+')')) + '">SEND TO TRADE PLAN →</button>';
           planHtml+=hgBookBtn(GOLD_SYM, dir, scalpEntry, scalpStop, scalpT1, { scanner: 'gold-deep-scalp', strategy: 'gold-deep-scalp', klass: 'metals', fund: 'gold', t2: scalpT2,
-            stack: gdScalpStack });
+            stack: gdScalpStack, gateStates: scalpGateStates });
         }
       }
-      return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp</div>'
-        +'<div class="ledger" style="margin-bottom:10px">'+g.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('')+'</div>'
+      /* Measured lift for the scalp families — empty until booked setups settle. */
+      let scalpLiftHtml='';
+      try{
+        if(typeof hgFamilyLift==='function' && typeof hgRenderFamilyLiftTable==='function'
+           && typeof hgScoreRecords==='function'){
+          scalpLiftHtml = hgRenderFamilyLiftTable(hgFamilyLift(hgScoreRecords()), 'MEASURED SCALP FAMILY LIFT');
+        }
+      }catch(eLift){ scalpLiftHtml=''; }
+      const scalpLedgerHtml = (scalpFams.length && typeof hgRenderScalpFamilyLedger==='function')
+        ? hgRenderScalpFamilyLedger(scalpFams, gateRow, {})
+        : '<div class="ledger" style="margin-bottom:10px">'+g.map(function(x){return gateRow(x[0],x[1],x[2],x[3]);}).join('')+'</div>';
+      return '<div style="margin:2px 0 6px;font-size:11px;letter-spacing:.12em;color:var(--'+(dir==='long'?'long':'short')+')">'+scalpLabel+' — 20-gate scalp'+(scalpFv?' · '+scalpFv.total+' families':'')+'</div>'
+        +scalpLedgerHtml
         +'<div class="verdict '+scalpColor+'" style="margin:0 0 16px"><div class="vword" style="font-size:16px">'+scalpLabel
-        + (scoreC>=50&&swept&&reclaimed&&typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,dir,{scanner:'gold-deep-scalp',strategy:'gold-deep-scalp',fund:'gold',klass:'metals'}):'')
+        + (scalpActionable&&swept&&reclaimed&&typeof hgBookStampChip==='function'?hgBookStampChip(GOLD_SYM,dir,{scanner:'gold-deep-scalp',strategy:'gold-deep-scalp',fund:'gold',klass:'metals'}):'')
         + '</div>'
-        +'<div class="vwhy" style="font-size:10px">Score '+fmt(scoreC,0)+'% · '+passC+' pass · '+vetoC+' veto</div></div>'+planHtml;
+        +'<div class="vwhy" style="font-size:10px">'+(scalpFv?scalpFv.why:('Score '+fmt(scoreC,0)+'% · '+passC+' pass · '+vetoC+' veto'))+'</div></div>'
+        +(scalpFv?'<div class="note" style="font-size:10px;opacity:.7;margin:-10px 0 12px">Legacy gate count: '+fmt(scoreC,0)+'% · '+passC+' pass · '+vetoC+' veto'+(g.length-totalC?' · '+(g.length-totalC)+' n/a':'')+' (deprecated denominator — families are primary)</div>':'')
+        +scalpLiftHtml+planHtml;
     }
     setProg('goldDeepProg',0.8);
     /* ================= BREAKOUT & MEAN REVERSION ================= */
@@ -5467,6 +5507,7 @@ async function runGoldDeep(){
       + '</div>'
       + '<div class="vwhy">'+(famVerdict?famVerdict.headline+' · ':'')+verdictWhy+'</div>'
       + '<div class="vwhy" style="opacity:.75;font-size:10px;margin-top:4px">Legacy gate count: '+fmt(legacyScore,0)+'% · '+passCount+' pass · '+vetoCount+' veto · '+naCount+' n/a (deprecated denominator — families are primary)</div></div>'
+      + swingLiftHtml
       + swingPlanHtml+'</div>'
       + '<div class="panel" style="margin-top:10px"><h2>Scalp — 20-gate ledgers <span>15m sweep-and-reclaim</span></h2>'
       + deepScalpLedger('long')+deepScalpLedger('short')+'</div>'

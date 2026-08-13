@@ -23,7 +23,7 @@ console.log('== light theme (base-themes data-dense) ==');
   ok(html.indexOf('vendor/base-themes/tokens-data-dense-light.css') >= 0, 'vendor theme linked');
   ok(fs.existsSync(path.join(root, 'vendor/base-themes/README.md')), 'base-themes attribution README');
   const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-  ok(/hg-v267/.test(sw), 'cache hg-v267');
+  ok(/hg-v268/.test(sw), 'cache hg-v268');
   ok(sw.indexOf('hg-icons.css') >= 0, 'sw precaches hg-icons.css');
 }
 
