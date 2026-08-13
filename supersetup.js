@@ -108,6 +108,104 @@ function defaultRiskOpts(win){
   };
 }
 
+/** Max safe leverage — same formula as hgSafeLevChip / TRADE PLAN (liquidation ≥1.5× stop). */
+function calcSafeMaxLeverage(entry, stop){
+  entry = N(entry);
+  stop = N(stop);
+  if (!(entry > 0 && stop > 0) || entry === stop) return NaN;
+  var sd = Math.abs(entry - stop) / entry;
+  return Math.max(1, Math.min(100, Math.floor(1 / (sd * 1.5 + 0.005))));
+}
+
+/** Refine scan row through house formation: exact entry, structure SL, T1/T2, shield veto. */
+function refineSuperSetupLevels(win, c, hit){
+  win = win || W;
+  c = c || {};
+  if (!hit || !hit.dir) return { ok: false, veto: true, reason: 'no setup' };
+  var rows = c.rows || c.rows4h || hit.rows || null;
+  var rows1h = c.rows1h || null;
+  var rows15m = c.rows15m || c.m15 || null;
+  var scanner = String(hit.scanner || 'swing').toLowerCase();
+  var style = scanner.indexOf('scalp') >= 0 ? 'scalp' : 'swing';
+  var dir = hit.dir;
+
+  if (rows && rows.length && typeof win.hgShieldGuardVeto === 'function'){
+    try{
+      var sg = win.hgShieldGuardVeto(rows, dir, {});
+      if (sg && sg.veto){
+        return { ok: false, veto: true, reason: sg.reason || 'manipulation shield' };
+      }
+    }catch(e0){}
+  }
+
+  var plan = null;
+  if (typeof win.hgBestLevels === 'function' && rows && rows.length){
+    try{
+      var gateHit = c.nearClean ? c : (c.entry != null ? c : null);
+      var bl = win.hgBestLevels({
+        dir: dir,
+        rows4h: rows,
+        rows1h: rows1h,
+        rows15m: rows15m,
+        style: style,
+        sym: hit.sym,
+        ticker: c.ticker || { symbol: hit.sym },
+        gate: gateHit ? { hit: gateHit, clean7: !c.nearClean, gatesPassed: hit.gatesPassed || 7 } : null,
+        tab: 'super-setup',
+        preferEdge: true
+      });
+      if (bl && bl.veto) return { ok: false, veto: true, reason: bl.reason || 'levels veto' };
+      if (bl && bl.ok && bl.plan) plan = bl.plan;
+    }catch(e1){}
+  }
+
+  if (!plan && rows && rows.length && typeof win.hgPlanLevels === 'function'){
+    try{ plan = win.hgPlanLevels(dir, rows, hit.entry); }catch(e2){}
+  }
+
+  if (!plan && typeof win.hgApplyExactEntry === 'function'){
+    try{
+      var base = { dir: dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2, rr: hit.rr };
+      plan = win.hgApplyExactEntry(base, rows || [], {
+        style: style, rows1h: rows1h, rows15m: rows15m, m15: rows15m, preferEdge: true
+      });
+    }catch(e3){}
+  }
+
+  if (plan){
+    if (N(plan.entry) > 0) hit.entry = N(plan.entry);
+    if (N(plan.stop) > 0) hit.stop = N(plan.stop);
+    if (N(plan.t1) > 0) hit.t1 = N(plan.t1);
+    if (N(plan.t2) > 0) hit.t2 = N(plan.t2);
+    if (N(plan.rr) > 0) hit.rr = N(plan.rr);
+    hit.entryType = plan.entryType || hit.entryType || null;
+    hit.entryGuidance = plan.entryGuidance || hit.entryGuidance || null;
+    hit.targetPolicy = plan.targetPolicy || hit.targetPolicy || null;
+    if (plan.formationScore != null) hit.formationScore = plan.formationScore;
+    hit.planSrc = plan.planSrc || 'hgBestLevels';
+    hit.refined = true;
+  }
+
+  hit.safeMaxLev = calcSafeMaxLeverage(hit.entry, hit.stop);
+
+  if (typeof win.hgSetupStackAttach === 'function'){
+    try{
+      win.hgSetupStackAttach(hit, {
+        style: style,
+        rows4h: rows,
+        rows1h: rows1h,
+        rows: rows15m,
+        ticker: c.ticker || { symbol: hit.sym },
+        gatesPassed: hit.gatesPassed,
+        gatesTotal: 7,
+        clean: hit.tier === 'clean'
+      });
+    }catch(e4){}
+  }
+
+  return { ok: true, veto: false, hit: hit };
+}
+
 /** Gate + risk architecture filter — CLEAN 7/7 or NEAR 6/7+, valid stop, optional risk pass flag. */
 function enrichSuperSetupRow(c, tier, riskOpts, meta){
   meta = meta || {};
@@ -127,23 +225,41 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
     at: meta.at
   });
   if (!hit) return null;
+
+  var refined = refineSuperSetupLevels(W, c, hit);
+  if (!refined.ok || refined.veto) return null;
+  hit = refined.hit;
+
   riskOpts = riskOpts || defaultRiskOpts();
+  var safeLev = N(hit.safeMaxLev);
+  var capLev = Number.isFinite(safeLev)
+    ? Math.min(riskOpts.maxLeverage, safeLev)
+    : riskOpts.maxLeverage;
+  var rrForCalc = pickRR(hit);
+  if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
+    var riskDist = Math.abs(hit.entry - hit.stop);
+    if (riskDist > 0) rrForCalc = Math.abs(hit.t1 - hit.entry) / riskDist;
+  }
   var calc = calcTrade({
     balance: riskOpts.balance,
     riskPct: riskOpts.riskPct,
     entry: hit.entry,
     stop: hit.stop,
-    rr: pickRR(hit),
-    maxLeverage: riskOpts.maxLeverage,
+    rr: rrForCalc,
+    tpPrice: N(hit.t1) > 0 ? hit.t1 : null,
+    maxLeverage: capLev,
     feePct: riskOpts.feePct,
     slipPct: riskOpts.slipPct
   });
   hit.id = hit.id || c.id || [hit.sym, hit.dir, hit.entry, hit.stop, tier].join('|');
   hit.scanner = meta.scanner || meta.source || 'swing';
-  hit.riskPass = calc.ok;
-  hit.riskReason = calc.reason;
+  hit.minimalLossPass = hit.tier === 'clean' && calc.ok && Number.isFinite(safeLev)
+    && calc.impliedLeverage <= safeLev;
+  hit.riskPass = hit.minimalLossPass;
+  hit.riskReason = hit.minimalLossPass ? 'PASS' : (hit.tier === 'near' ? 'NEAR — watch only' : calc.reason);
   hit.calc = calc;
-  hit.tp = calc.tp;
+  hit.tp = N(hit.t1) > 0 ? hit.t1 : calc.tp;
+  hit.tp2 = N(hit.t2);
   hit.qty = calc.qty;
   hit.impliedLev = calc.impliedLev;
   hit.missing = Array.isArray(c.missing) ? c.missing.slice() : [];
@@ -212,10 +328,14 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
     return true;
   });
   merged.sort(function(a, b){
+    var am = a.minimalLossPass ? 1 : 0, bm = b.minimalLossPass ? 1 : 0;
+    if (bm !== am) return bm - am;
     var ar = a.riskPass ? 1 : 0, br = b.riskPass ? 1 : 0;
     if (br !== ar) return br - ar;
     var ac = a.tier === 'clean' ? 1 : 0, bc = b.tier === 'clean' ? 1 : 0;
     if (bc !== ac) return bc - ac;
+    var ae = a.refined ? 1 : 0, be = b.refined ? 1 : 0;
+    if (be !== ae) return be - ae;
     return (N(b.rr) || 0) - (N(a.rr) || 0);
   });
 
@@ -244,9 +364,20 @@ function autoSelectFirstSetup(snap){
   snap = snap || superSetupScan();
   if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return null;
   var hit = null;
+  var i;
   if (__ss.selectedId){
-    for (var i = 0; i < snap.cands.length; i++){
+    for (i = 0; i < snap.cands.length; i++){
       if (snap.cands[i] && snap.cands[i].id === __ss.selectedId){ hit = snap.cands[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < snap.cands.length; i++){
+      if (snap.cands[i] && snap.cands[i].minimalLossPass){ hit = snap.cands[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < snap.cands.length; i++){
+      if (snap.cands[i] && snap.cands[i].tier === 'clean'){ hit = snap.cands[i]; break; }
     }
   }
   if (!hit) hit = snap.cands[0];
@@ -670,6 +801,11 @@ function evaluateSetup(win, opts){
   }
   if (!hit){
     for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].minimalLossPass){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < hits.length; i++){
       if (hits[i] && hits[i].tier === 'clean' && hits[i].riskPass !== false){ hit = hits[i]; break; }
     }
   }
@@ -678,6 +814,11 @@ function evaluateSetup(win, opts){
   if (isCleanScannerHit(hit)){
     var scanSide = normalizeSide(hit.dir);
     var tierLabel = (hit.tier === 'near' || hit.nearClean) ? 'NEAR' : 'CLEAN';
+    var scanRr = pickRR(hit);
+    if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
+      var sdist = Math.abs(hit.entry - hit.stop);
+      if (sdist > 0) scanRr = Math.abs(hit.t1 - hit.entry) / sdist;
+    }
     return {
       ready: true,
       idle: false,
@@ -689,10 +830,19 @@ function evaluateSetup(win, opts){
       tf: hit.tf || hit.scanner || '4h',
       entry: hit.entry,
       stop: hit.stop,
-      rr: pickRR(hit),
-      setupType: tierLabel + ' · ' + (hit.scanner || hit.source || 'scanner'),
+      t1: hit.t1,
+      t2: hit.t2,
+      rr: scanRr,
+      entryType: hit.entryType,
+      entryGuidance: hit.entryGuidance,
+      safeMaxLev: hit.safeMaxLev,
+      minimalLossPass: hit.minimalLossPass,
+      refined: hit.refined,
+      setupType: tierLabel + ' · ' + (hit.scanner || hit.source || 'scanner')
+        + (hit.refined ? ' · exact entry' : ''),
       note: tierLabel + ' ticket · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
-        + (hit.riskPass === false ? (' · risk ' + (hit.riskReason || 'BLOCK')) : '')
+        + (hit.minimalLossPass ? ' · minimal-loss PASS' : (hit.riskPass === false ? (' · risk ' + (hit.riskReason || 'BLOCK')) : '')),
+      hit: hit
     };
   }
 
@@ -742,6 +892,7 @@ function calcTrade(opts){
   var maxLeverage = N(opts.maxLeverage != null ? opts.maxLeverage : 5);
   var feePct = N(opts.feePct != null ? opts.feePct : 0.06);
   var slipPct = N(opts.slipPct != null ? opts.slipPct : 0.05);
+  var tpPrice = N(opts.tpPrice);
 
   if (![balance, riskPct, entry, stop, tpRR, maxLeverage].every(Number.isFinite)){
     return { ok: false, reason: 'Missing or invalid inputs' };
@@ -755,7 +906,8 @@ function calcTrade(opts){
   var impliedLeverage = notional / balance;
   var feeBuffer = notional * ((feePct + slipPct) / 100);
   var effectiveRisk = riskDollars + feeBuffer;
-  var tp = entry > stop ? entry + stopDist * tpRR : entry - stopDist * tpRR;
+  var tp = Number.isFinite(tpPrice) ? tpPrice
+    : (entry > stop ? entry + stopDist * tpRR : entry - stopDist * tpRR);
   var levOk = impliedLeverage <= maxLeverage;
   var pass = levOk && effectiveRisk <= riskDollars * 1.15;
 
@@ -822,7 +974,9 @@ function injectStyles(){
     '.hg-super-setup .hg-pill.clean{color:var(--long,#15803d);border-color:rgba(21,128,61,.25)}',
     '.hg-super-setup .hg-pill.near{color:var(--gold,#a67c12);border-color:rgba(166,124,18,.25)}',
     '.hg-super-setup .hg-pill.block{color:var(--short,#dc2626)}',
-    '.hg-super-setup .hg-desk-levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}',
+    '.hg-super-setup .hg-pill.minloss{color:var(--long,#15803d);border-color:rgba(21,128,61,.35);background:var(--long-bg,#ecfdf5)}',
+    '.hg-super-setup .hg-pill.refined{color:#2563eb;border-color:rgba(37,99,235,.25)}',
+    '.hg-super-setup .hg-desk-levels{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}',
     '.hg-super-setup .hg-desk-levels .k{font:600 10px/1.2 var(--mono,monospace);color:var(--dim,#65758c)}',
     '.hg-super-setup .hg-desk-levels .v{font:700 12px/1.2 var(--mono,monospace);margin-top:4px}',
     '.hg-super-setup .hg-scan-stat{font:600 12px/1.45 var(--mono,monospace);color:var(--mut,#536175)}',
@@ -851,9 +1005,9 @@ function mount(el){
     '  <div class="hg-super-head">',
     '    <div>',
     '      <div class="hg-title">Super Setup</div>',
-    '      <div class="hg-note">Full Delta + CoinDCX universe scan every 15 min · CLEAN 7/7 + NEAR 6/7 · risk gate on each card.</div>',
+    '      <div class="hg-note">Exact entry · structure SL · T1/T2 · max safe leverage · minimal-loss gate on every card.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v1.3.1</div>',
+    '    <div class="hg-super-badge">Super Setup v2.0.0</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -876,7 +1030,9 @@ function mount(el){
     '      <div class="hg-field hg-trade-field"><label for="ss-entry">Entry Price</label><input id="ss-entry" type="number" value="" placeholder="—" step="0.00000001" readonly /></div>',
     '      <div class="hg-field hg-trade-field"><label for="ss-stop">Stop Loss</label><input id="ss-stop" type="number" value="" placeholder="—" step="0.00000001" readonly /></div>',
     '      <div class="hg-field hg-trade-field"><label for="ss-rr">Take Profit RR</label><input id="ss-rr" type="number" value="2" step="0.1" readonly /></div>',
-    '      <div class="hg-field"><label for="ss-lev">Max Leverage</label><input id="ss-lev" type="number" value="5" step="0.1" /></div>',
+    '      <div class="hg-field hg-trade-field"><label for="ss-entry-type">Entry Type</label><input id="ss-entry-type" value="—" readonly /></div>',
+    '      <div class="hg-field"><label for="ss-lev">Max Leverage (cap)</label><input id="ss-lev" type="number" value="5" step="0.1" /></div>',
+    '      <div class="hg-field"><label for="ss-safe-lev">Max Safe Leverage</label><input id="ss-safe-lev" value="—" readonly /></div>',
     '    </div></div>',
     '    <div class="hg-card"><h3>Live Structure / Scanner Sync</h3>',
     '      <div class="hg-sync" id="ss-sync">Scanning Hardgate desks for CLEAN tickets and chart structure…</div>',
@@ -891,11 +1047,17 @@ function mount(el){
     '      <div class="hg-metric"><div class="k">Risk $</div><div class="v" id="o-risk">$—</div></div>',
     '      <div class="hg-metric"><div class="k">Position Size</div><div class="v" id="o-size">—</div></div>',
     '      <div class="hg-metric"><div class="k">Implied Leverage</div><div class="v" id="o-lev">—</div></div>',
-    '      <div class="hg-metric"><div class="k">Take Profit</div><div class="v" id="o-tp">—</div></div>',
+    '      <div class="hg-metric"><div class="k">Take Profit T1</div><div class="v" id="o-tp">—</div></div>',
+    '      <div class="hg-metric"><div class="k">Take Profit T2</div><div class="v" id="o-tp2">—</div></div>',
+    '      <div class="hg-metric"><div class="k">Max Safe Lev</div><div class="v" id="o-safe-lev">—</div></div>',
     '      <div class="hg-metric"><div class="k">RR</div><div class="v" id="o-rr">—</div></div>',
     '      <div class="hg-metric"><div class="k">Status</div><div class="v hg-wait" id="o-status">IDLE</div></div>',
     '    </div>',
-    '      <div class="hg-note" id="ss-note" style="margin-top:10px">No structure, no setup. No stop, no setup. Unsafe leverage blocks the trade.</div>',
+    '      <div class="hg-note" id="ss-guidance" style="margin-top:10px"></div>',
+    '      <div class="hg-actions" style="margin-top:10px">',
+    '        <button type="button" class="hg-btn primary" id="ss-send-trade" disabled>Send to Trade Plan</button>',
+    '      </div>',
+    '      <div class="hg-note" id="ss-note" style="margin-top:10px">Minimal-loss gate: CLEAN 7/7 + shield pass + implied lev ≤ safe max only.</div>',
     '    </div>',
     '  </div>',
     '</section>'
@@ -924,19 +1086,27 @@ function mount(el){
   }
 
   function clearTradeFields(){
+    __ss.selectedHit = null;
     if ($('#ss-entry')){ $('#ss-entry').value = ''; }
     if ($('#ss-stop')){ $('#ss-stop').value = ''; }
     if ($('#ss-symbol')){ $('#ss-symbol').value = '—'; }
     if ($('#ss-tf')){ $('#ss-tf').value = '—'; }
     if ($('#ss-setup')){ $('#ss-setup').value = '—'; }
+    if ($('#ss-entry-type')){ $('#ss-entry-type').value = '—'; }
+    if ($('#ss-safe-lev')){ $('#ss-safe-lev').value = '—'; }
     if ($('#ss-side')){
       $('#ss-side').value = '—';
       $('#ss-side').disabled = true;
     }
-    ['#o-risk', '#o-size', '#o-lev', '#o-tp', '#o-rr'].forEach(function(sel){
+    ['#o-risk', '#o-size', '#o-lev', '#o-tp', '#o-tp2', '#o-safe-lev', '#o-rr'].forEach(function(sel){
       var el0 = $(sel);
       if (el0) el0.textContent = sel === '#o-risk' ? '$—' : '—';
     });
+    if ($('#ss-guidance')) $('#ss-guidance').textContent = '';
+    if ($('#ss-send-trade')){
+      $('#ss-send-trade').disabled = true;
+      $('#ss-send-trade').onclick = null;
+    }
     if ($('#o-status')){
       $('#o-status').textContent = 'IDLE';
       $('#o-status').className = 'v hg-wait';
@@ -946,6 +1116,38 @@ function mount(el){
     if ($('#ss-use-scan')) $('#ss-use-scan').disabled = true;
     if ($('#ss-calc')) $('#ss-calc').disabled = true;
     setTriggerChip(null);
+  }
+
+  function wireSendTrade(ev, hit){
+    var btn = $('#ss-send-trade');
+    if (!btn) return;
+    hit = hit || __ss.selectedHit;
+    var canSend = !!(ev && ev.ready && hit && hit.minimalLossPass && N(hit.entry) > 0 && N(hit.stop) > 0);
+    btn.disabled = !canSend;
+    if (!canSend){
+      btn.onclick = null;
+      return;
+    }
+    var sym = ev.sym || hit.sym;
+    var dir = String(ev.side || hit.dir || '').toLowerCase();
+    if (dir === 'long') dir = 'long';
+    else if (dir === 'short') dir = 'short';
+    else dir = (ev.side === 'Long') ? 'long' : 'short';
+    var t1 = N(hit.t1) > 0 ? hit.t1 : (N(hit.tp) > 0 ? hit.tp : ev.t1);
+    btn.onclick = function(){
+      if (typeof W.hgToTradePlan === 'function'){
+        W.hgToTradePlan(sym, dir, hit.entry, hit.stop, t1, {
+          t2: hit.t2 || null,
+          stack: hit.stack || null,
+          scanner: 'super-setup',
+          strategy: hit.scanner || 'super-setup',
+          venue: hit.venueTag || null,
+          source: 'super-setup'
+        });
+      } else if (typeof W.toTrade === 'function'){
+        W.toTrade(sym, dir, hit.entry, hit.stop, t1, hit.t2);
+      }
+    };
   }
 
   function applyEvaluation(ev){
@@ -959,6 +1161,7 @@ function mount(el){
       return null;
     }
 
+    __ss.selectedHit = ev.hit || null;
     root.classList.remove('hg-idle');
     if ($('#ss-side')){
       $('#ss-side').disabled = false;
@@ -970,6 +1173,17 @@ function mount(el){
     if ($('#ss-entry')) $('#ss-entry').value = ev.entry;
     if ($('#ss-stop')) $('#ss-stop').value = ev.stop;
     if ($('#ss-rr') && Number.isFinite(ev.rr)) $('#ss-rr').value = ev.rr;
+    if ($('#ss-entry-type')){
+      $('#ss-entry-type').value = ev.entryType
+        ? String(ev.entryType).toUpperCase() + (ev.refined ? ' · refined' : '')
+        : (ev.refined ? 'REFINED' : '—');
+    }
+    if ($('#ss-safe-lev')){
+      $('#ss-safe-lev').value = Number.isFinite(ev.safeMaxLev) ? (fmt(ev.safeMaxLev, 0) + 'x') : '—';
+    }
+    if ($('#ss-guidance')){
+      $('#ss-guidance').textContent = ev.entryGuidance || '';
+    }
 
     if ($('#ss-use-chart')) $('#ss-use-chart').disabled = (ev.mode !== 'structure');
     if ($('#ss-use-scan')) $('#ss-use-scan').disabled = (ev.mode !== 'scanner');
@@ -977,9 +1191,14 @@ function mount(el){
 
     setIdleBanner('');
     var idleBanner = $('#ss-idle');
-    if (idleBanner) idleBanner.textContent = 'ACTIVE — ' + (ev.note || 'tradeable setup detected');
+    if (idleBanner){
+      idleBanner.textContent = ev.minimalLossPass
+        ? ('MINIMAL LOSS PASS — ' + (ev.note || 'tradeable setup'))
+        : ('ACTIVE — ' + (ev.note || 'tradeable setup detected'));
+    }
     setTriggerChip(ev);
     __ss.lastKey = setupSignalKey(ev);
+    wireSendTrade(ev, __ss.selectedHit);
     return update();
   }
 
@@ -1021,6 +1240,11 @@ function mount(el){
   function hitToEvaluation(hit){
     if (!hit || !isCleanScannerHit(hit)) return { ready: false, idle: true, reason: 'No qualifying setup' };
     var tierLabel = (hit.tier === 'near' || hit.nearClean) ? 'NEAR' : 'CLEAN';
+    var rr = pickRR(hit);
+    if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
+      var rd = Math.abs(hit.entry - hit.stop);
+      if (rd > 0) rr = Math.abs(hit.t1 - hit.entry) / rd;
+    }
     return {
       ready: true,
       idle: false,
@@ -1032,9 +1256,19 @@ function mount(el){
       tf: hit.scanner || '4h',
       entry: hit.entry,
       stop: hit.stop,
-      rr: pickRR(hit),
-      setupType: tierLabel + ' · ' + (hit.scanner || 'swing'),
+      t1: hit.t1,
+      t2: hit.t2,
+      rr: rr,
+      entryType: hit.entryType,
+      entryGuidance: hit.entryGuidance,
+      safeMaxLev: hit.safeMaxLev,
+      minimalLossPass: hit.minimalLossPass,
+      refined: hit.refined,
+      setupType: tierLabel + ' · ' + (hit.scanner || 'swing')
+        + (hit.refined ? ' · exact entry' : ''),
       note: tierLabel + ' · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
+        + (hit.minimalLossPass ? ' · minimal-loss PASS' : (hit.tier === 'near' ? ' · watch only' : ' · risk check')),
+      hit: hit
     };
   }
 
@@ -1056,19 +1290,24 @@ function mount(el){
     desk.innerHTML = rows.map(function(r){
       var tier = (r.tier === 'near' || r.nearClean) ? 'near' : 'clean';
       var tierLbl = tier === 'near' ? ('NEAR ' + (r.gatesPassed || 6) + '/7') : 'CLEAN 7/7';
-      var riskPill = r.riskPass ? '<span class="hg-pill clean">RISK PASS</span>'
-        : '<span class="hg-pill block">RISK BLOCK</span>';
+      var riskPill = r.minimalLossPass ? '<span class="hg-pill minloss">MIN LOSS PASS</span>'
+        : (r.riskPass ? '<span class="hg-pill clean">RISK PASS</span>'
+          : '<span class="hg-pill block">RISK BLOCK</span>');
+      var refinePill = r.refined ? '<span class="hg-pill refined">' + String(r.entryType || 'EXACT').toUpperCase() + '</span>' : '';
       var sel = (__ss.selectedId === r.id) ? ' sel' : '';
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
         + '<div class="hg-desk-top"><div class="hg-desk-sym">' + String(r.sym || '—') + ' · '
         + String(r.dir || '').toUpperCase() + '</div>'
         + '<div class="hg-desk-pills"><span class="hg-pill ' + tier + '">' + tierLbl + '</span>'
+        + refinePill
         + '<span class="hg-pill">' + String(r.venueTag || r.scanner || 'venue') + '</span>' + riskPill + '</div></div>'
         + '<div class="hg-desk-levels">'
         + '<div><div class="k">ENTRY</div><div class="v">' + fmt(r.entry, 8) + '</div></div>'
         + '<div><div class="k">STOP</div><div class="v">' + fmt(r.stop, 8) + '</div></div>'
-        + '<div><div class="k">TP</div><div class="v">' + fmt(r.tp, 8) + '</div></div>'
-        + '<div><div class="k">LEV</div><div class="v">' + fmt(r.impliedLev, 2) + 'x</div></div>'
+        + '<div><div class="k">T1</div><div class="v">' + fmt(r.tp, 8) + '</div></div>'
+        + '<div><div class="k">T2</div><div class="v">' + fmt(r.tp2, 8) + '</div></div>'
+        + '<div><div class="k">IMPL LEV</div><div class="v">' + fmt(r.impliedLev, 2) + 'x</div></div>'
+        + '<div><div class="k">SAFE MAX</div><div class="v">' + (Number.isFinite(r.safeMaxLev) ? fmt(r.safeMaxLev, 0) + 'x' : '—') + '</div></div>'
         + '</div></div>';
     }).join('');
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
@@ -1157,13 +1396,24 @@ function mount(el){
     if (!entryVal || !stopVal){
       return { ok: false, reason: 'Waiting for setup' };
     }
+    var hit = __ss.selectedHit;
+    var userLev = N($('#ss-lev') && $('#ss-lev').value);
+    var safeLev = hit && Number.isFinite(hit.safeMaxLev) ? hit.safeMaxLev : calcSafeMaxLeverage(entryVal, stopVal);
+    var capLev = Number.isFinite(safeLev) ? Math.min(userLev, safeLev) : userLev;
+    var tpPrice = hit && N(hit.t1) > 0 ? hit.t1 : (hit && N(hit.tp) > 0 ? hit.tp : null);
+    var rrVal = $('#ss-rr') && $('#ss-rr').value;
+    if (tpPrice && N(entryVal) > 0 && N(stopVal) > 0){
+      var sd = Math.abs(N(entryVal) - N(stopVal));
+      if (sd > 0) rrVal = Math.abs(tpPrice - N(entryVal)) / sd;
+    }
     var res = calcTrade({
       balance: $('#ss-balance') && $('#ss-balance').value,
       riskPct: $('#ss-risk') && $('#ss-risk').value,
       entry: entryVal,
       stop: stopVal,
-      rr: $('#ss-rr') && $('#ss-rr').value,
-      maxLeverage: $('#ss-lev') && $('#ss-lev').value,
+      rr: rrVal,
+      tpPrice: tpPrice,
+      maxLeverage: capLev,
       feePct: 0.06,
       slipPct: 0.05
     });
@@ -1172,15 +1422,25 @@ function mount(el){
     if ($('#o-size')) $('#o-size').textContent = hasNums && Number.isFinite(res.positionUnits) ? fmt(res.positionUnits, 6) : '—';
     if ($('#o-lev')) $('#o-lev').textContent = hasNums && Number.isFinite(res.impliedLeverage) ? (fmt(res.impliedLeverage, 2) + 'x') : '—';
     if ($('#o-tp')) $('#o-tp').textContent = hasNums && Number.isFinite(res.tp) ? fmt(res.tp, 8) : '—';
+    if ($('#o-tp2')) $('#o-tp2').textContent = hit && Number.isFinite(hit.t2) ? fmt(hit.t2, 8) : '—';
+    if ($('#o-safe-lev')) $('#o-safe-lev').textContent = Number.isFinite(safeLev) ? (fmt(safeLev, 0) + 'x') : '—';
     if ($('#o-rr')) $('#o-rr').textContent = hasNums && Number.isFinite(res.rr) ? ('1:' + fmt(res.rr, 2)) : '—';
+    var pass = res.ok && (!hit || hit.tier !== 'near' || hit.minimalLossPass);
+    if (hit && hit.minimalLossPass) pass = res.ok;
     if ($('#o-status')){
-      $('#o-status').textContent = res.ok ? 'PASS' : ('BLOCK: ' + res.reason);
-      $('#o-status').className = 'v ' + (res.ok ? 'hg-pass' : 'hg-fail');
+      $('#o-status').textContent = pass ? (hit && hit.minimalLossPass ? 'MIN LOSS PASS' : 'PASS')
+        : ('BLOCK: ' + (hit && hit.tier === 'near' && !hit.minimalLossPass ? 'NEAR watch only' : res.reason));
+      $('#o-status').className = 'v ' + (pass ? 'hg-pass' : 'hg-fail');
     }
     if ($('#ss-note')){
-      $('#ss-note').textContent = res.ok
-        ? 'Setup passes all safety checks.'
-        : ('Setup blocked: ' + res.reason + '.');
+      $('#ss-note').textContent = pass
+        ? (hit && hit.minimalLossPass
+          ? 'CLEAN 7/7 · shield pass · implied leverage within safe max — ready for Trade Plan.'
+          : 'Setup passes sizing checks.')
+        : ('Setup blocked: ' + (hit && hit.tier === 'near' ? 'NEAR is watch-only until CLEAN' : res.reason) + '.');
+    }
+    if (__ss.lastKey && hit){
+      wireSendTrade({ ready: true, sym: hit.sym, side: normalizeSide(hit.dir) }, hit);
     }
     return res;
   }
@@ -1269,6 +1529,8 @@ function superSetupRepaint(){
 
 W.superSetupCalc = calcTrade;
 W.calcTrade = calcTrade;
+W.calcSafeMaxLeverage = calcSafeMaxLeverage;
+W.refineSuperSetupLevels = refineSuperSetupLevels;
 W.superSetupSafeJson = safeJson;
 W.superSetupGetScannerContext = getScannerContext;
 W.superSetupGetChartContext = getChartContext;
