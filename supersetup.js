@@ -356,15 +356,199 @@ function runExternalSourceAudit(win, c, hit){
 function runFullMinimalLossAudit(win, c, hit, opts){
   var house = runMinimalLossAudit(win, c, hit, opts);
   var ext = runExternalSourceAudit(win, c, hit);
-  var reasons = (house.reasons || []).concat(ext.reasons || []);
-  var passed = (house.passed || []).concat(ext.passed || []);
+  var prec = runPrecisionSourceAudit(win, c, hit, opts);
+  var reasons = (house.reasons || []).concat(ext.reasons || []).concat(prec.reasons || []);
+  var passed = (house.passed || []).concat(ext.passed || []).concat(prec.passed || []);
   return {
-    pass: house.pass && ext.pass,
+    pass: house.pass && ext.pass && prec.pass,
     reasons: reasons,
     passed: passed,
-    externalSources: ext.sources || [],
+    externalSources: (ext.sources || []).concat(prec.sources || []),
+    precision: prec,
     layerSummary: passed.length + ' ok' + (reasons.length ? (' · ' + reasons.length + ' block') : '')
   };
+}
+
+/** Browser FQS gate — mirrors formation-quality.mjs floors (btc 62, eth 64, alt 70). */
+function superSetupFqsGate(hit, c){
+  hit = hit || {};
+  c = c || {};
+  var base = superSetupSymBase(hit.sym);
+  var cls = base === 'BTC' ? 'btc' : (base === 'ETH' ? 'eth' : 'alt');
+  var floor = cls === 'btc' ? 62 : (cls === 'eth' ? 64 : 70);
+  var rr = pickRR(hit);
+  if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
+    var rd = Math.abs(hit.entry - hit.stop);
+    if (rd > 0) rr = Math.abs(hit.t1 - hit.entry) / rd;
+  }
+  var score = 48;
+  var gates = N(hit.gatesPassed);
+  if (gates >= 7) score += 18;
+  else if (gates >= 6) score += 8;
+  if (hit.refined) score += 10;
+  if (N(hit.formationScore) > 0) score += Math.min(12, N(hit.formationScore) / 4);
+  if (hit.stack && N(hit.stack.alignScore) > 1) score += Math.min(10, N(hit.stack.alignScore) * 2);
+  if (rr >= 3) score += 12;
+  else if (rr >= 2) score += 8;
+  else if (rr < 1.5) score -= 18;
+  if (N(hit.tightCount) >= 2) score -= 12;
+  if (c.nearClean || hit.nearClean) score -= 8;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  var grade = score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 60 ? 'C' : score >= 50 ? 'D' : 'F';
+  return {
+    ok: score >= floor,
+    fqs: score,
+    grade: grade,
+    floor: floor,
+    reason: score >= floor ? ('FQS ok ' + score + '/' + floor + ' ' + grade) : ('FQS low ' + score + '<' + floor + ' (' + grade + ')')
+  };
+}
+
+/**
+ * Precision audit — meta-label ledger, FQS, Deribit DVOL (v2.3).
+ * Post-gate flow/BTC RS applied async via applySuperSetupPostGate.
+ */
+function runPrecisionSourceAudit(win, c, hit, opts){
+  win = win || W;
+  c = c || {};
+  hit = hit || {};
+  opts = opts || {};
+  var reasons = [];
+  var passed = [];
+  var sources = [];
+  var style = opts.style || (String(hit.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing');
+
+  if (typeof win.deribitVolState === 'function'){
+    try{
+      sources.push('Deribit DVOL');
+      var dv = win.deribitVolState();
+      if (dv && dv.regime === 'extreme'){
+        reasons.push('DVOL extreme (' + fmt(dv.dvol, 1) + ') — skip trend trades');
+      } else if (dv && dv.regime === 'high' && style !== 'scalp' && hit.tier === 'clean'){
+        reasons.push('DVOL high (' + fmt(dv.dvol, 1) + ') — elevated implied vol');
+      } else if (dv && dv.regime){
+        passed.push('dvol');
+        hit.dvolRegime = dv.regime;
+      }
+    }catch(e0){}
+  }
+
+  if (hit.tier === 'clean'){
+    try{
+      sources.push('FQS');
+      var fqs = superSetupFqsGate(hit, c);
+      hit.fqs = fqs.fqs;
+      hit.fqsGrade = fqs.grade;
+      if (!fqs.ok) reasons.push(fqs.reason);
+      else passed.push('fqs');
+    }catch(e1){}
+  }
+
+  if (typeof win.hgMetaLabel === 'function' && hit.tier === 'clean'){
+    try{
+      sources.push('meta-label');
+      var recs = typeof win.hgScoreRecords === 'function' ? win.hgScoreRecords() : [];
+      var nr = typeof win.hgNewsRisk === 'function' ? win.hgNewsRisk(hit.sym) : null;
+      var plan = {
+        dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2,
+        rr: hit.rr, rr1: hit.rr, poiKind: hit.entryType, formationScore: hit.formationScore,
+        fqs: hit.fqs, fillProb: hit.fillProb
+      };
+      var ml = win.hgMetaLabel(plan, {
+        newsRisk: nr && nr.risk,
+        metaFloor: N(win.HG_META_FLOOR) > 0 ? N(win.HG_META_FLOOR) : 0.52
+      }, recs);
+      hit.metaLabel = ml;
+      if (ml && !ml.take){
+        reasons.push('Meta-label SKIP (' + Math.round((ml.prob || 0) * 100) + '% · ' + (ml.verdict || 'skip') + ')');
+      } else if (ml && ml.take) passed.push('meta-label');
+    }catch(e2){}
+  }
+
+  var rows = hit.rows || null;
+  if (hit.tier === 'clean' && rows && rows.length && typeof win.hgPostGateSetupVeto === 'function' && !hit.postGate){
+    sources.push('post-gate');
+    reasons.push('Post-gate pending (flow trap · BTC RS)');
+  } else if (hit.postGate && hit.postGate.ok === false){
+    sources.push('post-gate');
+    reasons.push(hit.postGate.reason || 'post-gate veto');
+  } else if (hit.postGate && hit.postGate.ok){
+    passed.push('post-gate');
+  }
+
+  return {
+    pass: reasons.length === 0,
+    reasons: reasons,
+    passed: passed,
+    sources: sources,
+    layerSummary: passed.length + ' precision ok' + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+  };
+}
+
+function superSetupApplyVetoReason(hit, reason){
+  if (!hit) return;
+  if (!hit.minLossAudit) hit.minLossAudit = { pass: true, reasons: [], passed: [] };
+  hit.minLossAudit.pass = false;
+  hit.minLossAudit.reasons = (hit.minLossAudit.reasons || []).concat([reason]);
+  hit.minimalLossPass = false;
+  hit.riskReason = reason;
+}
+
+function superSetupSortCands(cands){
+  if (!Array.isArray(cands)) return;
+  cands.sort(function(a, b){
+    var am = a.minimalLossPass ? 1 : 0, bm = b.minimalLossPass ? 1 : 0;
+    if (bm !== am) return bm - am;
+    var ar = a.riskPass ? 1 : 0, br = b.riskPass ? 1 : 0;
+    if (br !== ar) return br - ar;
+    var ac = a.tier === 'clean' ? 1 : 0, bc = b.tier === 'clean' ? 1 : 0;
+    if (bc !== ac) return bc - ac;
+    var ae = a.refined ? 1 : 0, be = b.refined ? 1 : 0;
+    if (be !== ae) return be - ae;
+    var as = N(a.stack && a.stack.alignScore) || N(a.formationScore) || N(a.fqs) || 0;
+    var bs = N(b.stack && b.stack.alignScore) || N(b.formationScore) || N(b.fqs) || 0;
+    if (bs !== as) return bs - as;
+    return (N(b.rr) || 0) - (N(a.rr) || 0);
+  });
+}
+
+/** Async post-gate — flow trap + BTC relative strength (same as SWING/BEST CLEAN path). */
+async function applySuperSetupPostGate(snap, win){
+  win = win || W;
+  if (!snap || !Array.isArray(snap.cands)) return snap;
+  var vetoFn = win.hgPostGateSetupVeto;
+  if (typeof vetoFn !== 'function') return snap;
+  var getCandles = win.getCandles || win.xuCandles;
+  var i, hit, style, rows, pg;
+  for (i = 0; i < snap.cands.length; i++){
+    hit = snap.cands[i];
+    if (!hit || hit.tier !== 'clean') continue;
+    rows = hit.rows || null;
+    if (!rows || !rows.length) continue;
+    style = String(hit.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing';
+    try{
+      pg = await vetoFn(
+        { symbol: hit.sym, fundingPct: hit.fundingPct },
+        hit, rows, style,
+        typeof getCandles === 'function' ? getCandles : null
+      );
+      hit.postGate = pg;
+      if (pg && !pg.ok){
+        superSetupApplyVetoReason(hit, pg.reason || 'Flow/RS post-gate veto');
+      } else if (hit.minLossAudit){
+        var prec = runPrecisionSourceAudit(win, {}, hit, { style: style });
+        hit.minLossAudit.pass = hit.minLossAudit.pass && prec.pass;
+        if (!prec.pass) hit.minLossAudit.reasons = (hit.minLossAudit.reasons || []).concat(prec.reasons || []);
+        hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.minLossAudit.pass
+          && (!hit.stack || hit.stack.tierHint === 'clean');
+      }
+    }catch(e){}
+  }
+  superSetupSortCands(snap.cands);
+  if (snap.audit){
+    snap.audit.minLoss = snap.cands.filter(function(r){ return r.minimalLossPass; }).length;
+  }
+  return snap;
 }
 
 /** Refine scan row through house formation: exact entry, structure SL, T1/T2, shield veto. */
@@ -606,22 +790,7 @@ function buildSnapFromCryptoScans(win, riskOpts, opts){
     seen[r.id] = true;
     return true;
   });
-  merged.sort(function(a, b){
-    var am = a.minimalLossPass ? 1 : 0, bm = b.minimalLossPass ? 1 : 0;
-    if (bm !== am) return bm - am;
-    var ar = a.riskPass ? 1 : 0, br = b.riskPass ? 1 : 0;
-    if (br !== ar) return br - ar;
-    var ac = a.tier === 'clean' ? 1 : 0, bc = b.tier === 'clean' ? 1 : 0;
-    if (bc !== ac) return bc - ac;
-    var ae = a.refined ? 1 : 0, be = b.refined ? 1 : 0;
-    if (be !== ae) return be - ae;
-    var as = N(a.stack && a.stack.alignScore) || N(a.formationScore) || 0;
-    var bs = N(b.stack && b.stack.alignScore) || N(b.formationScore) || 0;
-    if (bs !== as) return bs - as;
-    var tcA = N(a.tightCount), tcB = N(b.tightCount);
-    if (Number.isFinite(tcA) && Number.isFinite(tcB) && tcA !== tcB) return tcA - tcB;
-    return (N(b.rr) || 0) - (N(a.rr) || 0);
-  });
+  superSetupSortCands(merged);
 
   return {
     at: scanned || Date.now(),
@@ -707,7 +876,7 @@ async function superSetupRunScanInner(opts){
     try{
       var extWarm = [
         W.refreshCcxtDesk, W.refreshWorldMonitorDesk, W.hgNewsRefresh,
-        W.onchainFetch, W.oiflowWarm
+        W.onchainFetch, W.oiflowWarm, W.deribitVolWarm
       ];
       for (var ew = 0; ew < extWarm.length; ew++){
         if (typeof extWarm[ew] === 'function'){
@@ -719,6 +888,9 @@ async function superSetupRunScanInner(opts){
     var snap = buildSnapFromCryptoScans(W, riskOpts);
     snap.scanAt = Date.now();
     snap.at = snap.scanAt;
+    __ss.lastScanMsg = 'Precision pass — post-gate flow/BTC RS…';
+    if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
+    snap = await applySuperSetupPostGate(snap, W);
     publishSuperSetupSnap(snap);
     __ss.lastScanAt = snap.scanAt;
     __ss.lastScanMsg = snap.cands.length
@@ -1305,9 +1477,9 @@ function mount(el){
     '  <div class="hg-super-head">',
     '    <div>',
     '      <div class="hg-title">Super Setup</div>',
-    '      <div class="hg-note">Minimal-loss: 7/7 gates + house audit + Binance flow/OI/liqs + news + on-chain + macro desks.</div>',
+    '      <div class="hg-note">Minimal-loss: 7/7 gates + house audit + external feeds + FQS + meta-label + DVOL + post-gate (flow/BTC RS).</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v2.2.0</div>',
+    '    <div class="hg-super-badge">Super Setup v2.3.0</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -1357,7 +1529,7 @@ function mount(el){
     '      <div class="hg-actions" style="margin-top:10px">',
     '        <button type="button" class="hg-btn primary" id="ss-send-trade" disabled>Send to Trade Plan</button>',
     '      </div>',
-      '      <div class="hg-note" id="ss-note" style="margin-top:10px">MIN LOSS PASS = CLEAN 7/7 + house + external feeds (Binance, news, on-chain, macro).</div>',
+      '      <div class="hg-note" id="ss-note" style="margin-top:10px">MIN LOSS PASS = CLEAN 7/7 + house + external + FQS floor + meta-label + DVOL + post-gate flow/BTC RS.</div>',
     '    </div>',
     '  </div>',
     '</section>'
@@ -1547,6 +1719,13 @@ function mount(el){
     var snap = syncDeskFromExisting(W, readRiskOpts());
     paintDesk(snap);
     applyFirstSetup(true);
+    if (typeof applySuperSetupPostGate === 'function'){
+      applySuperSetupPostGate(snap, W).then(function(updated){
+        publishSuperSetupSnap(updated);
+        paintDesk(updated);
+        applyFirstSetup(false);
+      }).catch(function(){});
+    }
     return snap;
   }
 
@@ -1886,6 +2065,10 @@ W.superSetupDeskPill = superSetupDeskPill;
 W.runMinimalLossAudit = runMinimalLossAudit;
 W.runExternalSourceAudit = runExternalSourceAudit;
 W.runFullMinimalLossAudit = runFullMinimalLossAudit;
+W.superSetupFqsGate = superSetupFqsGate;
+W.runPrecisionSourceAudit = runPrecisionSourceAudit;
+W.applySuperSetupPostGate = applySuperSetupPostGate;
+W.superSetupSortCands = superSetupSortCands;
 W.superSetupSymBase = superSetupSymBase;
 W.calcSafeMaxLeverage = calcSafeMaxLeverage;
 W.refineSuperSetupLevels = refineSuperSetupLevels;
