@@ -20,7 +20,8 @@ var STRUCT_MAX_BARS = 20;
 var __hgSuperSetupSnap = null;
 var __ss = {
   mounted: false, update: null, syncTimer: null, scanTimer: null,
-  root: null, lastKey: '', selectedId: null, scanBusy: false, lastScanAt: 0
+  root: null, lastKey: '', selectedId: null, scanBusy: false, lastScanAt: 0,
+  scanPromise: null, lastScanMsg: ''
 };
 
 function N(v){ return Number(v); }
@@ -149,15 +150,23 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   return hit;
 }
 
-function buildSnapFromCryptoScans(win, riskOpts){
+function buildSnapFromCryptoScans(win, riskOpts, opts){
   win = win || W;
   riskOpts = riskOpts || defaultRiskOpts(win);
+  opts = opts || {};
+  var allowStale = opts.allowStale === true;
   var merged = [];
   var scanned = 0;
   var audit = { clean: 0, near: 0, riskPass: 0, uniLen: 0, venues: [] };
 
+  function snapFresh(snap){
+    if (!snap) return false;
+    if (allowStale) return true;
+    return isFreshAt(snap.at, SNAP_MAX_MS);
+  }
+
   function absorbSnap(snap, scanner){
-    if (!snap || !isFreshAt(snap.at, SNAP_MAX_MS)) return;
+    if (!snapFresh(snap)) return;
     scanned = Math.max(scanned, snap.at || 0);
     if (snap.audit && isFinite(snap.audit.uniLen)) audit.uniLen += snap.audit.uniLen;
     (snap.cands || []).forEach(function(c){
@@ -168,6 +177,22 @@ function buildSnapFromCryptoScans(win, riskOpts){
       var row = enrichSuperSetupRow(c, 'near', riskOpts, { source: 'universe', scanner: scanner, at: snap.at });
       if (row){ merged.push(row); audit.near++; if (row.riskPass) audit.riskPass++; }
     });
+  }
+
+  var bestFn = win.bestScan;
+  if (typeof bestFn === 'function'){
+    try{
+      var best = bestFn();
+      if (snapFresh(best) && Array.isArray(best.clean)){
+        audit.venues.push('best');
+        if (best.meta && isFinite(best.meta.uniLen)) audit.uniLen += best.meta.uniLen;
+        scanned = Math.max(scanned, best.at || 0);
+        best.clean.forEach(function(c){
+          var row = enrichSuperSetupRow(c, 'clean', riskOpts, { source: 'universe', scanner: 'best', at: best.at });
+          if (row){ merged.push(row); audit.clean++; if (row.riskPass) audit.riskPass++; }
+        });
+      }
+    }catch(e0){}
   }
 
   var swingFn = win.swingScan;
@@ -201,8 +226,32 @@ function buildSnapFromCryptoScans(win, riskOpts){
     stat: merged.length
       ? (merged.length + ' setups · ' + audit.clean + ' CLEAN · ' + audit.near + ' NEAR · '
         + audit.riskPass + ' risk PASS · Delta + CoinDCX universe')
-      : '0 setups — no CLEAN/NEAR tickets in latest universe scan'
+      : '0 setups — run Scan all contracts or wait for the 15 min cycle · checked swing/scalp/best desks'
   };
+}
+
+function syncDeskFromExisting(win, riskOpts, opts){
+  win = win || W;
+  opts = opts || {};
+  var snap = buildSnapFromCryptoScans(win, riskOpts, { allowStale: true });
+  snap.scanAt = __ss.lastScanAt || snap.at || Date.now();
+  snap.hydrated = true;
+  publishSuperSetupSnap(snap);
+  return snap;
+}
+
+function autoSelectFirstSetup(snap){
+  snap = snap || superSetupScan();
+  if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return null;
+  var hit = null;
+  if (__ss.selectedId){
+    for (var i = 0; i < snap.cands.length; i++){
+      if (snap.cands[i] && snap.cands[i].id === __ss.selectedId){ hit = snap.cands[i]; break; }
+    }
+  }
+  if (!hit) hit = snap.cands[0];
+  if (hit && hit.id) __ss.selectedId = hit.id;
+  return hit;
 }
 
 function publishSuperSetupSnap(snap){
@@ -215,29 +264,68 @@ function superSetupScan(){
   return __hgSuperSetupSnap;
 }
 
-async function superSetupRunScan(opts){
+async function superSetupRunScanInner(opts){
   opts = opts || {};
-  if (__ss.scanBusy && !opts.force) return 'busy';
   __ss.scanBusy = true;
+  __ss.lastScanMsg = 'Scanning Delta + CoinDCX universe…';
+  if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
   try{
     var warm = W.cryptoScanWarm;
+    var runScan = W.runScan;
     if (typeof warm === 'function'){
+      __ss.lastScanMsg = 'Swing scan — all Delta + CoinDCX contracts…';
+      if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
       await warm('swing');
-      if (opts.includeScalp !== false) await warm('scalp');
+      if (opts.includeScalp !== false){
+        __ss.lastScanMsg = 'Scalp scan — all Delta + CoinDCX contracts…';
+        if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
+        await warm('scalp');
+      }
+    } else if (typeof runScan === 'function'){
+      await runScan('swing', { quiet: true, forceScanAll: true });
+      if (opts.includeScalp !== false) await runScan('scalp', { quiet: true, forceScanAll: true });
+    }
+    var bestWarm = W.bestScanWarm;
+    if (typeof bestWarm === 'function'){
+      try{ await bestWarm(); }catch(eB){}
     }
     var riskOpts = opts.riskOpts || defaultRiskOpts(W);
     var snap = buildSnapFromCryptoScans(W, riskOpts);
     snap.scanAt = Date.now();
+    snap.at = snap.scanAt;
     publishSuperSetupSnap(snap);
     __ss.lastScanAt = snap.scanAt;
+    __ss.lastScanMsg = snap.cands.length
+      ? ('Scan done · ' + snap.cands.length + ' setups')
+      : 'Scan done · 0 CLEAN/NEAR setups (whole exchange scanned)';
     if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(snap);
-    if (__ss.mounted && typeof __ss.tryAutoPopulate === 'function') __ss.tryAutoPopulate(false);
+    if (__ss.mounted && typeof __ss.applyFirstSetup === 'function') __ss.applyFirstSetup(forceFlag(opts));
+    else if (__ss.mounted && typeof __ss.tryAutoPopulate === 'function') __ss.tryAutoPopulate(true);
     return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
   }catch(e){
-    return 'error: ' + ((e && e.message) ? e.message : String(e));
+    __ss.lastScanMsg = 'Scan error: ' + ((e && e.message) ? e.message : String(e));
+    if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
+    return __ss.lastScanMsg;
   }finally{
     __ss.scanBusy = false;
   }
+}
+
+function forceFlag(opts){ return !!(opts && opts.force); }
+
+async function superSetupRunScan(opts){
+  opts = opts || {};
+  if (__ss.scanPromise){
+    if (opts.force){
+      try{ await __ss.scanPromise; }catch(e0){}
+    } else {
+      return __ss.scanPromise;
+    }
+  }
+  __ss.scanPromise = superSetupRunScanInner(opts).finally(function(){
+    __ss.scanPromise = null;
+  });
+  return __ss.scanPromise;
 }
 
 async function superSetupWarm(opts){
@@ -256,7 +344,8 @@ function collectScanHits(win){
   if (typeof ssFn === 'function'){
     try{
       var ss = ssFn();
-      if (ss && isFreshAt(ss.at || ss.scanAt, SNAP_MAX_MS) && Array.isArray(ss.cands)){
+      if (ss && Array.isArray(ss.cands) && ss.cands.length
+          && (ss.hydrated || isFreshAt(ss.at || ss.scanAt, SNAP_MAX_MS))){
         ss.cands.forEach(function(c){ push(c); });
       }
     }catch(eSs){}
@@ -764,7 +853,7 @@ function mount(el){
     '      <div class="hg-title">Super Setup</div>',
     '      <div class="hg-note">Full Delta + CoinDCX universe scan every 15 min · CLEAN 7/7 + NEAR 6/7 · risk gate on each card.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v1.3.0</div>',
+    '    <div class="hg-super-badge">Super Setup v1.3.1</div>',
     '  </div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
@@ -894,6 +983,31 @@ function mount(el){
     return update();
   }
 
+  function setScanStatus(msg){
+    var statEl = $('#ss-scan-stat');
+    if (statEl && msg) statEl.textContent = msg;
+    var idleEl = $('#ss-idle');
+    if (idleEl && __ss.scanBusy) idleEl.textContent = msg || 'Scanning…';
+  }
+
+  function applyFirstSetup(force){
+    var snap = superSetupScan();
+    paintDesk(snap);
+    var hit = autoSelectFirstSetup(snap);
+    if (hit){
+      applyEvaluation(hitToEvaluation(hit));
+      return;
+    }
+    tryAutoPopulate(!!force);
+  }
+
+  function syncFromExistingDesks(){
+    var snap = syncDeskFromExisting(W, readRiskOpts());
+    paintDesk(snap);
+    applyFirstSetup(true);
+    return snap;
+  }
+
   function readRiskOpts(){
     return {
       balance: N($('#ss-balance') && $('#ss-balance').value),
@@ -990,6 +1104,10 @@ function mount(el){
   }
 
   function tryAutoPopulate(force){
+    var snap = superSetupScan();
+    if (!__ss.selectedId && snap && snap.cands && snap.cands.length){
+      __ss.selectedId = snap.cands[0].id;
+    }
     var ev = evaluateSetup(W, { selectedId: __ss.selectedId });
     syncText(ev);
     var key = setupSignalKey(ev);
@@ -1078,34 +1196,39 @@ function mount(el){
       if (__ss.lastKey) update();
     });
   });
-  var scanBtn = $('#ss-run-scan');
-  if (scanBtn) scanBtn.addEventListener('click', function(){
-    scanBtn.disabled = true;
-    scanBtn.textContent = 'Scanning…';
+  var runScanBtn = $('#ss-run-scan');
+  if (runScanBtn) runScanBtn.addEventListener('click', function(){
+    runScanBtn.disabled = true;
+    runScanBtn.textContent = 'Scanning…';
     superSetupRunScan({ force: true, riskOpts: readRiskOpts() }).then(function(msg){
-      scanBtn.disabled = false;
-      scanBtn.textContent = 'Scan all contracts now';
-      if ($('#ss-scan-stat')) $('#ss-scan-stat').textContent = String(msg) + ' · ' + (superSetupScan() && superSetupScan().stat || '');
+      runScanBtn.disabled = false;
+      runScanBtn.textContent = 'Scan all contracts now';
+      setScanStatus(String(msg) + ' · ' + ((superSetupScan() && superSetupScan().stat) || ''));
     });
   });
   var calcBtn = $('#ss-calc');
   if (calcBtn) calcBtn.addEventListener('click', update);
   var chartBtn = $('#ss-use-chart');
   if (chartBtn) chartBtn.addEventListener('click', function(){ fillFromSource('chart'); });
-  var scanBtn = $('#ss-use-scan');
-  if (scanBtn) scanBtn.addEventListener('click', function(){ fillFromSource('scan'); });
+  var useScanBtn = $('#ss-use-scan');
+  if (useScanBtn) useScanBtn.addEventListener('click', function(){ fillFromSource('scan'); });
 
   __ss.mounted = true;
   __ss.paintDesk = paintDesk;
+  __ss.setScanStatus = setScanStatus;
+  __ss.applyFirstSetup = applyFirstSetup;
   __ss.update = function(){
+    syncFromExistingDesks();
     return tryAutoPopulate(true);
   };
   __ss.fillFromSource = fillFromSource;
   __ss.tryAutoPopulate = tryAutoPopulate;
+  __ss.syncFromExistingDesks = syncFromExistingDesks;
 
-  paintDesk(superSetupScan());
-  superSetupRunScan({ riskOpts: readRiskOpts() }).then(function(){
-    tryAutoPopulate(false);
+  syncFromExistingDesks();
+  superSetupRunScan({ riskOpts: readRiskOpts() }).then(function(msg){
+    setScanStatus(String(msg) + ' · ' + ((superSetupScan() && superSetupScan().stat) || ''));
+    applyFirstSetup(true);
   });
 
   __ss.syncTimer = setInterval(function(){
@@ -1121,6 +1244,11 @@ function mount(el){
 
 async function superSetupRefresh(){
   try{
+    if (__ss.mounted && typeof __ss.syncFromExistingDesks === 'function'){
+      __ss.syncFromExistingDesks();
+    } else if (typeof syncDeskFromExisting === 'function'){
+      syncDeskFromExisting(W, defaultRiskOpts());
+    }
     var stale = !__ss.lastScanAt || (Date.now() - __ss.lastScanAt) >= SCAN_INTERVAL_MS;
     if (stale) await superSetupRunScan({ force: true });
     if (!__ss.mounted || typeof __ss.update !== 'function') return stale ? 'scanned' : 'skipped: not run yet';
@@ -1130,6 +1258,13 @@ async function superSetupRefresh(){
   }catch(e){
     return 'error: ' + ((e && e.message) ? e.message : String(e));
   }
+}
+
+function superSetupRepaint(){
+  if (!__ss.mounted) return;
+  var snap = superSetupScan();
+  if (typeof __ss.paintDesk === 'function') __ss.paintDesk(snap);
+  if (typeof __ss.applyFirstSetup === 'function') __ss.applyFirstSetup(false);
 }
 
 W.superSetupCalc = calcTrade;
@@ -1145,6 +1280,8 @@ W.superSetupEvaluateStructure = evaluateStructureTrigger;
 W.superSetupEvaluate = evaluateSetup;
 W.superSetupEnrichRow = enrichSuperSetupRow;
 W.superSetupBuildSnap = buildSnapFromCryptoScans;
+W.superSetupSyncDesk = syncDeskFromExisting;
+W.superSetupRepaint = superSetupRepaint;
 W.superSetupScan = superSetupScan;
 W.superSetupRunScan = superSetupRunScan;
 W.superSetupWarm = superSetupWarm;

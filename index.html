@@ -2808,6 +2808,12 @@ function showTab(t){
     if (typeof hgMaybeSyncCryptoDeskFromSnap === 'function') hgMaybeSyncCryptoDeskFromSnap(t);
     if (typeof scanLastHint === 'function') scanLastHint(t);
   }
+  if (t === 'super-setup'){
+    try{
+      if (typeof window.superSetupSyncDesk === 'function') window.superSetupSyncDesk();
+      if (typeof window.superSetupRepaint === 'function') window.superSetupRepaint();
+    }catch(eSs){}
+  }
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
   if (tabSwitch && t !== 'book' && typeof hgBookStampRefreshThrottled === 'function'){
     hgBookStampRefreshThrottled();
@@ -4405,6 +4411,7 @@ async function cryptoScanWarm(kind){
   catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
 window.cryptoScanWarm = cryptoScanWarm;
+window.runScan = runScan;
 async function bestScanWarm(){
   try{
     const merged = [];
@@ -4425,6 +4432,7 @@ async function bestScanWarm(){
     return 'warmed';
   }catch(e){ return 'error: ' + (e && e.message ? e.message : String(e)); }
 }
+window.bestScanWarm = bestScanWarm;
 async function hgWarmLayerIds(ids){
   const reg = (typeof HG_warmups !== 'undefined' && Array.isArray(HG_warmups)) ? HG_warmups : [];
   const jobs = [];
