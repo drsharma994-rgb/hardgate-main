@@ -14,9 +14,14 @@ var W = (typeof window !== 'undefined') ? window
 
 var TAB_ID = 'super-setup';
 var SYNC_MS = 2500;
-var SNAP_MAX_MS = 20 * 60 * 1000;
+var SCAN_INTERVAL_MS = 15 * 60 * 1000;
+var SNAP_MAX_MS = SCAN_INTERVAL_MS + 5 * 60 * 1000;
 var STRUCT_MAX_BARS = 20;
-var __ss = { mounted: false, update: null, syncTimer: null, root: null, lastKey: '' };
+var __hgSuperSetupSnap = null;
+var __ss = {
+  mounted: false, update: null, syncTimer: null, scanTimer: null,
+  root: null, lastKey: '', selectedId: null, scanBusy: false, lastScanAt: 0
+};
 
 function N(v){ return Number(v); }
 
@@ -68,6 +73,8 @@ function hitFromCand(c, meta){
   var entry = N(c.entry);
   var stop = N(c.stop);
   if (!(entry > 0 && stop > 0)) return null;
+  var tier = meta.tier || (c.nearClean ? 'near' : 'clean');
+  var gatesPassed = N(c.gatesPassed != null ? c.gatesPassed : c.passed);
   return {
     sym: c.sym || c.symbol || c.coin || c.ticker || null,
     dir: c.dir,
@@ -78,17 +85,182 @@ function hitFromCand(c, meta){
     rr: N(c.rr),
     rows: c.rows || c.rows4h || null,
     source: meta.source,
-    tier: meta.tier || 'clean',
-    trigger: meta.trigger || 'clean',
-    clean: meta.tier === 'clean',
+    tier: tier,
+    trigger: meta.trigger || tier,
+    clean: tier === 'clean',
+    nearClean: tier === 'near' || c.nearClean === true,
+    gatesPassed: gatesPassed,
+    venueTag: c.venueTag || meta.venueTag || null,
+    id: c.id || null,
     at: meta.at || null
   };
+}
+
+function defaultRiskOpts(win){
+  win = win || W;
+  return {
+    balance: N(win.__ssDefaultBalance != null ? win.__ssDefaultBalance : 1000),
+    riskPct: N(win.__ssDefaultRiskPct != null ? win.__ssDefaultRiskPct : 1),
+    maxLeverage: N(win.__ssDefaultMaxLev != null ? win.__ssDefaultMaxLev : 5),
+    feePct: 0.06,
+    slipPct: 0.05
+  };
+}
+
+/** Gate + risk architecture filter — CLEAN 7/7 or NEAR 6/7+, valid stop, optional risk pass flag. */
+function enrichSuperSetupRow(c, tier, riskOpts, meta){
+  meta = meta || {};
+  if (!c || !c.dir) return null;
+  tier = tier || (c.nearClean ? 'near' : 'clean');
+  var gatesPassed = N(c.gatesPassed != null ? c.gatesPassed : c.passed);
+  if (tier === 'near'){
+    if (!(c.nearClean === true || gatesPassed >= 6)) return null;
+  } else if (tier !== 'clean' && gatesPassed > 0 && gatesPassed < 7){
+    return null;
+  }
+  var hit = hitFromCand(c, {
+    source: meta.source || 'scan',
+    tier: tier,
+    trigger: tier === 'clean' ? 'clean' : 'near',
+    venueTag: c.venueTag,
+    at: meta.at
+  });
+  if (!hit) return null;
+  riskOpts = riskOpts || defaultRiskOpts();
+  var calc = calcTrade({
+    balance: riskOpts.balance,
+    riskPct: riskOpts.riskPct,
+    entry: hit.entry,
+    stop: hit.stop,
+    rr: pickRR(hit),
+    maxLeverage: riskOpts.maxLeverage,
+    feePct: riskOpts.feePct,
+    slipPct: riskOpts.slipPct
+  });
+  hit.id = hit.id || c.id || [hit.sym, hit.dir, hit.entry, hit.stop, tier].join('|');
+  hit.scanner = meta.scanner || meta.source || 'swing';
+  hit.riskPass = calc.ok;
+  hit.riskReason = calc.reason;
+  hit.calc = calc;
+  hit.tp = calc.tp;
+  hit.qty = calc.qty;
+  hit.impliedLev = calc.impliedLev;
+  hit.missing = Array.isArray(c.missing) ? c.missing.slice() : [];
+  return hit;
+}
+
+function buildSnapFromCryptoScans(win, riskOpts){
+  win = win || W;
+  riskOpts = riskOpts || defaultRiskOpts(win);
+  var merged = [];
+  var scanned = 0;
+  var audit = { clean: 0, near: 0, riskPass: 0, uniLen: 0, venues: [] };
+
+  function absorbSnap(snap, scanner){
+    if (!snap || !isFreshAt(snap.at, SNAP_MAX_MS)) return;
+    scanned = Math.max(scanned, snap.at || 0);
+    if (snap.audit && isFinite(snap.audit.uniLen)) audit.uniLen += snap.audit.uniLen;
+    (snap.cands || []).forEach(function(c){
+      var row = enrichSuperSetupRow(c, 'clean', riskOpts, { source: 'universe', scanner: scanner, at: snap.at });
+      if (row){ merged.push(row); audit.clean++; if (row.riskPass) audit.riskPass++; }
+    });
+    (snap.nearCands || []).forEach(function(c){
+      var row = enrichSuperSetupRow(c, 'near', riskOpts, { source: 'universe', scanner: scanner, at: snap.at });
+      if (row){ merged.push(row); audit.near++; if (row.riskPass) audit.riskPass++; }
+    });
+  }
+
+  var swingFn = win.swingScan;
+  if (typeof swingFn === 'function'){
+    try{ absorbSnap(swingFn(), 'swing'); audit.venues.push('swing'); }catch(e1){}
+  }
+  var scalpFn = win.scalpScan;
+  if (typeof scalpFn === 'function'){
+    try{ absorbSnap(scalpFn(), 'scalp'); audit.venues.push('scalp'); }catch(e2){}
+  }
+
+  var seen = {};
+  merged = merged.filter(function(r){
+    if (!r || !r.id) return false;
+    if (seen[r.id]) return false;
+    seen[r.id] = true;
+    return true;
+  });
+  merged.sort(function(a, b){
+    var ar = a.riskPass ? 1 : 0, br = b.riskPass ? 1 : 0;
+    if (br !== ar) return br - ar;
+    var ac = a.tier === 'clean' ? 1 : 0, bc = b.tier === 'clean' ? 1 : 0;
+    if (bc !== ac) return bc - ac;
+    return (N(b.rr) || 0) - (N(a.rr) || 0);
+  });
+
+  return {
+    at: scanned || Date.now(),
+    cands: merged,
+    audit: audit,
+    stat: merged.length
+      ? (merged.length + ' setups · ' + audit.clean + ' CLEAN · ' + audit.near + ' NEAR · '
+        + audit.riskPass + ' risk PASS · Delta + CoinDCX universe')
+      : '0 setups — no CLEAN/NEAR tickets in latest universe scan'
+  };
+}
+
+function publishSuperSetupSnap(snap){
+  __hgSuperSetupSnap = snap || null;
+  try{ W.HG_superSetupScan = snap; }catch(e){}
+  return snap;
+}
+
+function superSetupScan(){
+  return __hgSuperSetupSnap;
+}
+
+async function superSetupRunScan(opts){
+  opts = opts || {};
+  if (__ss.scanBusy && !opts.force) return 'busy';
+  __ss.scanBusy = true;
+  try{
+    var warm = W.cryptoScanWarm;
+    if (typeof warm === 'function'){
+      await warm('swing');
+      if (opts.includeScalp !== false) await warm('scalp');
+    }
+    var riskOpts = opts.riskOpts || defaultRiskOpts(W);
+    var snap = buildSnapFromCryptoScans(W, riskOpts);
+    snap.scanAt = Date.now();
+    publishSuperSetupSnap(snap);
+    __ss.lastScanAt = snap.scanAt;
+    if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(snap);
+    if (__ss.mounted && typeof __ss.tryAutoPopulate === 'function') __ss.tryAutoPopulate(false);
+    return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
+  }catch(e){
+    return 'error: ' + ((e && e.message) ? e.message : String(e));
+  }finally{
+    __ss.scanBusy = false;
+  }
+}
+
+async function superSetupWarm(opts){
+  opts = opts || {};
+  var stale = !__ss.lastScanAt || (Date.now() - __ss.lastScanAt) >= SCAN_INTERVAL_MS;
+  if (stale || opts.force) return superSetupRunScan({ force: !!opts.force });
+  return 'fresh';
 }
 
 function collectScanHits(win){
   win = win || W;
   var hits = [];
   function push(hit){ if (hit) hits.push(hit); }
+
+  var ssFn = win.superSetupScan;
+  if (typeof ssFn === 'function'){
+    try{
+      var ss = ssFn();
+      if (ss && isFreshAt(ss.at || ss.scanAt, SNAP_MAX_MS) && Array.isArray(ss.cands)){
+        ss.cands.forEach(function(c){ push(c); });
+      }
+    }catch(eSs){}
+  }
 
   var sel = win.HG_selectedSetup || win.HG_currentSetup || win.HG_bestSetup;
   if (sel && typeof sel === 'object'){
@@ -382,12 +554,16 @@ function evaluateStructureTrigger(win, side, rows, chart){
 
 function isCleanScannerHit(hit){
   if (!hit) return false;
-  if (hit.clean === false) return false;
+  if (hit.clean === false && !hit.nearClean) return false;
   var side = normalizeSide(hit.dir);
   if (!side) return false;
   var entry = N(hit.entry);
   var stop = N(hit.stop);
   return entry > 0 && stop > 0 && entry !== stop;
+}
+
+function isNearScannerHit(hit){
+  return isCleanScannerHit(hit) && (hit.nearClean === true || hit.tier === 'near');
 }
 
 /** Main gate: idle until CLEAN scanner or confirmed structure. Pure for tests. */
@@ -396,24 +572,38 @@ function evaluateSetup(win, opts){
   opts = opts || {};
   var chart = getChartContext(win);
   var hits = collectScanHits(win);
-  var hit = hits.length ? hits[0] : null;
+  var hit = null;
+  var i;
+  if (opts.selectedId){
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].id === opts.selectedId){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].tier === 'clean' && hits[i].riskPass !== false){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit && hits.length) hit = hits[0];
 
   if (isCleanScannerHit(hit)){
     var scanSide = normalizeSide(hit.dir);
+    var tierLabel = (hit.tier === 'near' || hit.nearClean) ? 'NEAR' : 'CLEAN';
     return {
       ready: true,
       idle: false,
       mode: 'scanner',
-      trigger: hit.trigger || 'clean',
+      trigger: hit.trigger || (hit.tier === 'near' ? 'near' : 'clean'),
       source: hit.source || 'scanner',
       side: scanSide,
       sym: hit.sym,
-      tf: hit.tf || null,
+      tf: hit.tf || hit.scanner || '4h',
       entry: hit.entry,
       stop: hit.stop,
       rr: pickRR(hit),
-      setupType: 'CLEAN · ' + (hit.source || 'scanner'),
-      note: 'Scanner ticket · ' + (hit.source || 'scan') + ' · ' + (hit.trigger || 'clean')
+      setupType: tierLabel + ' · ' + (hit.scanner || hit.source || 'scanner'),
+      note: tierLabel + ' ticket · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
+        + (hit.riskPass === false ? (' · risk ' + (hit.riskReason || 'BLOCK')) : '')
     };
   }
 
@@ -532,7 +722,22 @@ function injectStyles(){
     '.hg-super-setup.hg-idle .hg-trade-field input{opacity:.55}',
     '.hg-super-setup .hg-idle-banner{padding:12px 14px;border-radius:var(--radius-sm,6px);border:1px dashed var(--line-strong,#aab7c8);background:var(--panel2,#edf1f6);font:600 12px/1.45 var(--mono,monospace);color:var(--mut,#536175)}',
     '.hg-super-setup .hg-trigger{display:inline-block;margin-top:8px;font:700 10px/1 var(--mono,monospace);letter-spacing:.08em;text-transform:uppercase;padding:4px 8px;border-radius:999px;background:var(--long-bg,#ecfdf5);color:var(--long,#15803d);border:1px solid rgba(21,128,61,.25)}',
-    '@media (max-width:900px){.hg-super-setup .hg-form,.hg-super-setup .hg-out{grid-template-columns:1fr}}'
+    '.hg-super-setup .hg-desk{display:grid;gap:10px;max-height:420px;overflow:auto}',
+    '.hg-super-setup .hg-desk-card{border:1px solid var(--line,#d7dee8);border-radius:var(--radius-sm,6px);padding:12px;background:var(--panel,#fff);cursor:pointer}',
+    '.hg-super-setup .hg-desk-card:hover{border-color:var(--line-strong,#aab7c8);box-shadow:var(--shadow-sm,0 1px 2px rgba(23,32,51,.06))}',
+    '.hg-super-setup .hg-desk-card.sel{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}',
+    '.hg-super-setup .hg-desk-top{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}',
+    '.hg-super-setup .hg-desk-sym{font:800 13px/1.2 var(--mono,monospace);color:var(--txt,#172033)}',
+    '.hg-super-setup .hg-desk-pills{display:flex;gap:6px;flex-wrap:wrap}',
+    '.hg-super-setup .hg-pill{font:700 10px/1 var(--mono,monospace);padding:4px 8px;border-radius:999px;border:1px solid var(--line,#d7dee8);background:var(--panel2,#edf1f6)}',
+    '.hg-super-setup .hg-pill.clean{color:var(--long,#15803d);border-color:rgba(21,128,61,.25)}',
+    '.hg-super-setup .hg-pill.near{color:var(--gold,#a67c12);border-color:rgba(166,124,18,.25)}',
+    '.hg-super-setup .hg-pill.block{color:var(--short,#dc2626)}',
+    '.hg-super-setup .hg-desk-levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}',
+    '.hg-super-setup .hg-desk-levels .k{font:600 10px/1.2 var(--mono,monospace);color:var(--dim,#65758c)}',
+    '.hg-super-setup .hg-desk-levels .v{font:700 12px/1.2 var(--mono,monospace);margin-top:4px}',
+    '.hg-super-setup .hg-scan-stat{font:600 12px/1.45 var(--mono,monospace);color:var(--mut,#536175)}',
+    '@media (max-width:900px){.hg-super-setup .hg-form,.hg-super-setup .hg-out,.hg-super-setup .hg-desk-levels{grid-template-columns:1fr}}'
   ].join('\n');
   try{ (document.head || document.documentElement).appendChild(st); }catch(e){}
 }
@@ -541,6 +746,10 @@ function clearSyncTimer(){
   if (__ss.syncTimer != null){
     try{ clearInterval(__ss.syncTimer); }catch(e){}
     __ss.syncTimer = null;
+  }
+  if (__ss.scanTimer != null){
+    try{ clearInterval(__ss.scanTimer); }catch(e2){}
+    __ss.scanTimer = null;
   }
 }
 
@@ -553,12 +762,19 @@ function mount(el){
     '  <div class="hg-super-head">',
     '    <div>',
     '      <div class="hg-title">Super Setup</div>',
-    '      <div class="hg-note">Structure gate — populates only on BOS/CHoCH/zone reaction or CLEAN scanner ticket.</div>',
+    '      <div class="hg-note">Full Delta + CoinDCX universe scan every 15 min · CLEAN 7/7 + NEAR 6/7 · risk gate on each card.</div>',
     '    </div>',
-    '    <div class="hg-super-badge">Super Setup v1.2.0</div>',
+    '    <div class="hg-super-badge">Super Setup v1.3.0</div>',
     '  </div>',
-    '  <div class="hg-idle-banner" id="ss-idle">IDLE — no structure or CLEAN scanner signal yet.</div>',
+    '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
+    '    <div class="hg-card"><h3>Universe Desk · Delta + CoinDCX</h3>',
+    '      <div class="hg-scan-stat" id="ss-scan-stat">Next scan on tab open · 15 min cycle</div>',
+    '      <div class="hg-actions" style="margin-top:8px">',
+    '        <button type="button" class="hg-btn primary" id="ss-run-scan">Scan all contracts now</button>',
+    '      </div>',
+    '      <div class="hg-desk" id="ss-desk" style="margin-top:12px"></div>',
+    '    </div>',
     '    <div class="hg-card"><h3>Trade Context</h3><div class="hg-form">',
     '      <div class="hg-field"><label for="ss-symbol">Symbol</label><input id="ss-symbol" value="—" readonly /></div>',
     '      <div class="hg-field"><label for="ss-side">Direction</label><select id="ss-side" disabled><option>—</option><option>Long</option><option>Short</option></select></div>',
@@ -678,6 +894,81 @@ function mount(el){
     return update();
   }
 
+  function readRiskOpts(){
+    return {
+      balance: N($('#ss-balance') && $('#ss-balance').value),
+      riskPct: N($('#ss-risk') && $('#ss-risk').value),
+      maxLeverage: N($('#ss-lev') && $('#ss-lev').value),
+      feePct: 0.06,
+      slipPct: 0.05
+    };
+  }
+
+  function hitToEvaluation(hit){
+    if (!hit || !isCleanScannerHit(hit)) return { ready: false, idle: true, reason: 'No qualifying setup' };
+    var tierLabel = (hit.tier === 'near' || hit.nearClean) ? 'NEAR' : 'CLEAN';
+    return {
+      ready: true,
+      idle: false,
+      mode: 'scanner',
+      trigger: hit.trigger || hit.tier || 'clean',
+      source: hit.source || 'universe',
+      side: normalizeSide(hit.dir),
+      sym: hit.sym,
+      tf: hit.scanner || '4h',
+      entry: hit.entry,
+      stop: hit.stop,
+      rr: pickRR(hit),
+      setupType: tierLabel + ' · ' + (hit.scanner || 'swing'),
+      note: tierLabel + ' · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
+    };
+  }
+
+  function paintDesk(snap){
+    snap = snap || superSetupScan();
+    var desk = $('#ss-desk');
+    var statEl = $('#ss-scan-stat');
+    if (statEl){
+      var when = snap && snap.scanAt ? new Date(snap.scanAt).toLocaleTimeString() : '—';
+      statEl.textContent = (snap && snap.stat ? snap.stat : 'No scan yet')
+        + ' · last scan ' + when + ' · refresh every 15 min';
+    }
+    if (!desk) return;
+    var rows = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
+    if (!rows.length){
+      desk.innerHTML = '<div class="hg-note">No CLEAN or NEAR setups passed the gate on the last full-exchange scan. Standing aside is a position.</div>';
+      return;
+    }
+    desk.innerHTML = rows.map(function(r){
+      var tier = (r.tier === 'near' || r.nearClean) ? 'near' : 'clean';
+      var tierLbl = tier === 'near' ? ('NEAR ' + (r.gatesPassed || 6) + '/7') : 'CLEAN 7/7';
+      var riskPill = r.riskPass ? '<span class="hg-pill clean">RISK PASS</span>'
+        : '<span class="hg-pill block">RISK BLOCK</span>';
+      var sel = (__ss.selectedId === r.id) ? ' sel' : '';
+      return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
+        + '<div class="hg-desk-top"><div class="hg-desk-sym">' + String(r.sym || '—') + ' · '
+        + String(r.dir || '').toUpperCase() + '</div>'
+        + '<div class="hg-desk-pills"><span class="hg-pill ' + tier + '">' + tierLbl + '</span>'
+        + '<span class="hg-pill">' + String(r.venueTag || r.scanner || 'venue') + '</span>' + riskPill + '</div></div>'
+        + '<div class="hg-desk-levels">'
+        + '<div><div class="k">ENTRY</div><div class="v">' + fmt(r.entry, 8) + '</div></div>'
+        + '<div><div class="k">STOP</div><div class="v">' + fmt(r.stop, 8) + '</div></div>'
+        + '<div><div class="k">TP</div><div class="v">' + fmt(r.tp, 8) + '</div></div>'
+        + '<div><div class="k">LEV</div><div class="v">' + fmt(r.impliedLev, 2) + 'x</div></div>'
+        + '</div></div>';
+    }).join('');
+    desk.querySelectorAll('.hg-desk-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        var id = card.getAttribute('data-id');
+        __ss.selectedId = id;
+        desk.querySelectorAll('.hg-desk-card').forEach(function(c){ c.classList.remove('sel'); });
+        card.classList.add('sel');
+        var hit = rows.find(function(r){ return r.id === id; });
+        if (hit) applyEvaluation(hitToEvaluation(hit));
+      });
+    });
+  }
+
   function syncText(ev){
     var chart = getChartContext();
     var parts = [];
@@ -688,8 +979,10 @@ function mount(el){
     if (Number.isFinite(chart.swingHigh) || Number.isFinite(chart.swingLow)){
       parts.push('Swings: ' + fmt(chart.swingHigh, 8) + ' / ' + fmt(chart.swingLow, 8));
     }
-    var hits = collectScanHits();
-    if (hits.length) parts.push('Scanner hits: ' + hits.length + ' (' + hits[0].source + ')');
+    var snap = superSetupScan();
+    if (snap && Array.isArray(snap.cands) && snap.cands.length){
+      parts.push('Desk: ' + snap.cands.length + ' setups');
+    }
     if (ev && ev.ready) parts.push('Gate: OPEN · ' + ev.trigger);
     else parts.push('Gate: CLOSED');
     var syncEl = $('#ss-sync');
@@ -697,8 +990,7 @@ function mount(el){
   }
 
   function tryAutoPopulate(force){
-    var sym = ($('#ss-symbol') && $('#ss-symbol').value !== '—') ? $('#ss-symbol').value : null;
-    var ev = evaluateSetup(W, { sym: sym });
+    var ev = evaluateSetup(W, { selectedId: __ss.selectedId });
     syncText(ev);
     var key = setupSignalKey(ev);
     if (!ev.ready){
@@ -777,7 +1069,23 @@ function mount(el){
 
   root.querySelectorAll('#ss-balance,#ss-risk,#ss-lev').forEach(function(inp){
     inp.addEventListener('input', function(){
+      W.__ssDefaultBalance = N($('#ss-balance') && $('#ss-balance').value);
+      W.__ssDefaultRiskPct = N($('#ss-risk') && $('#ss-risk').value);
+      W.__ssDefaultMaxLev = N($('#ss-lev') && $('#ss-lev').value);
+      var snap = buildSnapFromCryptoScans(W, readRiskOpts());
+      publishSuperSetupSnap(Object.assign({}, superSetupScan() || {}, { cands: snap.cands, stat: snap.stat, audit: snap.audit }));
+      paintDesk(superSetupScan());
       if (__ss.lastKey) update();
+    });
+  });
+  var scanBtn = $('#ss-run-scan');
+  if (scanBtn) scanBtn.addEventListener('click', function(){
+    scanBtn.disabled = true;
+    scanBtn.textContent = 'Scanning…';
+    superSetupRunScan({ force: true, riskOpts: readRiskOpts() }).then(function(msg){
+      scanBtn.disabled = false;
+      scanBtn.textContent = 'Scan all contracts now';
+      if ($('#ss-scan-stat')) $('#ss-scan-stat').textContent = String(msg) + ' · ' + (superSetupScan() && superSetupScan().stat || '');
     });
   });
   var calcBtn = $('#ss-calc');
@@ -788,24 +1096,37 @@ function mount(el){
   if (scanBtn) scanBtn.addEventListener('click', function(){ fillFromSource('scan'); });
 
   __ss.mounted = true;
+  __ss.paintDesk = paintDesk;
   __ss.update = function(){
     return tryAutoPopulate(true);
   };
   __ss.fillFromSource = fillFromSource;
   __ss.tryAutoPopulate = tryAutoPopulate;
 
-  tryAutoPopulate(false);
+  paintDesk(superSetupScan());
+  superSetupRunScan({ riskOpts: readRiskOpts() }).then(function(){
+    tryAutoPopulate(false);
+  });
 
   __ss.syncTimer = setInterval(function(){
     try{ tryAutoPopulate(false); }catch(e){}
   }, SYNC_MS);
+
+  __ss.scanTimer = setInterval(function(){
+    try{
+      if (!__ss.scanBusy) superSetupRunScan({ riskOpts: readRiskOpts() });
+    }catch(e2){}
+  }, SCAN_INTERVAL_MS);
 }
 
 async function superSetupRefresh(){
   try{
-    if (!__ss.mounted || typeof __ss.update !== 'function') return 'skipped: not run yet';
+    var stale = !__ss.lastScanAt || (Date.now() - __ss.lastScanAt) >= SCAN_INTERVAL_MS;
+    if (stale) await superSetupRunScan({ force: true });
+    if (!__ss.mounted || typeof __ss.update !== 'function') return stale ? 'scanned' : 'skipped: not run yet';
     __ss.update();
-    return 'refreshed';
+    if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(superSetupScan());
+    return stale ? 'scanned+refreshed' : 'refreshed';
   }catch(e){
     return 'error: ' + ((e && e.message) ? e.message : String(e));
   }
@@ -822,6 +1143,13 @@ W.superSetupPickRR = pickRR;
 W.superSetupCollectScanHits = collectScanHits;
 W.superSetupEvaluateStructure = evaluateStructureTrigger;
 W.superSetupEvaluate = evaluateSetup;
+W.superSetupEnrichRow = enrichSuperSetupRow;
+W.superSetupBuildSnap = buildSnapFromCryptoScans;
+W.superSetupScan = superSetupScan;
+W.superSetupRunScan = superSetupRunScan;
+W.superSetupWarm = superSetupWarm;
+W.HG_warmups = W.HG_warmups || [];
+W.HG_warmups.push({ id: 'super-setup', label: 'SUPER SETUP', run: superSetupWarm });
 W.HG_tabs = W.HG_tabs || [];
 W.HG_tabs.push({
   id: TAB_ID,

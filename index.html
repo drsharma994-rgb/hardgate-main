@@ -2924,6 +2924,11 @@ const HG_TAB_AUTO_SCAN = {
     const runBtn = pane && pane.querySelector('#sqRun');
     if (runBtn && !runBtn.disabled) runBtn.click();
     else if (typeof hgPaintSqueezeFromSnap === 'function') hgPaintSqueezeFromSnap();
+  },
+  'super-setup': async function(){
+    if (typeof window.superSetupRunScan === 'function'){
+      await window.superSetupRunScan({ force: true });
+    }
   }
 };
 function scheduleTabAutoScan(t){
