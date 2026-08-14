@@ -746,14 +746,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=284"></script>
+<script src="supersetup.js?v=285"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=284"></script>
-<script src="super-gold.js?v=284"></script>
-<script src="super-best.js?v=284"></script>
-<script src="super-sniper.js?v=284"></script>
-<script src="super-book.js?v=284"></script>
-<script src="super-calibrate.js?v=284"></script>
+<script src="super-desk-common.js?v=285"></script>
+<script src="super-gold.js?v=285"></script>
+<script src="super-best.js?v=285"></script>
+<script src="super-sniper.js?v=285"></script>
+<script src="super-book.js?v=285"></script>
+<script src="super-calibrate.js?v=285"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -6565,6 +6565,7 @@ async function runBest(opts){
   }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
   finally{ setProg('bestProg',null); btn.disabled=false; }
 }
+window.runBest = runBest;
 
 async function silentBestScan(exchangeArg){
   try{

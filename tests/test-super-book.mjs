@@ -36,7 +36,7 @@ ok(/heat 4/.test(snap.stat), 'stat mentions heat');
 const pill = W.superBookDeskPill(snap.cands[0], snap.deskMeta);
 ok(pill.label === 'NEAR STOP', 'NEAR STOP pill');
 
-ok(/super-book\.js\?v=284/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
+ok(/super-book\.js\?v=285/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
 ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw ' + HG_VER);
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));

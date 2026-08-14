@@ -552,9 +552,10 @@ async function applySuperSetupPostGate(snap, win){
 }
 
 /** Refine scan row through house formation: exact entry, structure SL, T1/T2, shield veto. */
-function refineSuperSetupLevels(win, c, hit){
+function refineSuperSetupLevels(win, c, hit, refineOpts){
   win = win || W;
   c = c || {};
+  refineOpts = refineOpts || {};
   if (!hit || !hit.dir) return { ok: false, veto: true, reason: 'no setup' };
   var rows = c.rows || c.rows4h || hit.rows || null;
   var rows1h = c.rows1h || null;
@@ -585,7 +586,7 @@ function refineSuperSetupLevels(win, c, hit){
         tab: 'super-setup',
         preferEdge: true,
         ftEdgeGate: isClean,
-        rejectVisionVeto: isClean
+        rejectVisionVeto: refineOpts.rejectVisionVeto != null ? refineOpts.rejectVisionVeto : isClean
       });
       if (bl && bl.veto) return { ok: false, veto: true, reason: bl.reason || 'levels veto' };
       if (bl && bl.ok && bl.plan) plan = bl.plan;
@@ -679,7 +680,7 @@ function enrichSuperSetupRow(c, tier, riskOpts, meta){
   });
   if (!hit) return null;
 
-  var refined = refineSuperSetupLevels(W, c, hit);
+  var refined = refineSuperSetupLevels(W, c, hit, meta.refineOpts);
   if (!refined.ok || refined.veto) return null;
   hit = refined.hit;
 

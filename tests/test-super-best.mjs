@@ -32,6 +32,10 @@ W.superSetupEnrichRow = function(c, tier, riskOpts, meta){
     minimalLossPass: tier === 'clean', scanner: meta.scanner, famScore: c.famScore
   };
 };
+W.calcTrade = function(opts){
+  return { ok: true, impliedLeverage: 2, qty: 10, tp: opts.tpPrice || opts.entry * 1.02 };
+};
+W.calcSafeMaxLeverage = function(){ return 5; };
 W.bestScan = function(){
   return {
     at: now - 60000,
@@ -45,8 +49,12 @@ W.bestScan = function(){
 const snap = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1 });
 ok(snap.cands.length === 1 && snap.cands[0].minimalLossPass, 'enriches BEST clean row');
 
+W.superSetupEnrichRow = function(){ return null; };
+const snap2 = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1, maxLeverage: 5, feePct: 0.06, slipPct: 0.05 });
+ok(snap2.cands.length === 1, 'lite enrich fallback when superSetupEnrichRow returns null');
+
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-best\.js\?v=284/.test(html), 'super-best in index');
+ok(/super-best\.js\?v=285/.test(html), 'super-best in index');
 ok(/'super-best'/.test(html), 'super-best in nav');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

@@ -154,11 +154,15 @@ async function superSniperRunScanInner(opts){
   opts = opts || {};
   __sn.scanBusy = true;
   try{
-    var mod = (W.HG_TAB_MODS && W.HG_TAB_MODS.reversalsniper) ? W.HG_TAB_MODS.reversalsniper : null;
-    if (mod && typeof mod.refresh === 'function'){
-      await mod.refresh();
-    } else if (typeof W.rsRefresh === 'function'){
-      await W.rsRefresh();
+    if (typeof W.rsRunScan === 'function'){
+      await W.rsRunScan({ quiet: true });
+    } else {
+      var mod = (W.HG_TAB_MODS && W.HG_TAB_MODS.reversalsniper) ? W.HG_TAB_MODS.reversalsniper : null;
+      if (mod && typeof mod.refresh === 'function'){
+        await mod.refresh();
+      } else if (typeof W.rsRefresh === 'function'){
+        await W.rsRefresh();
+      }
     }
     __sn.lastScanAt = Date.now();
     var snap = buildSnapFromRsScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });
