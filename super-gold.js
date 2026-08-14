@@ -47,8 +47,7 @@ function pickRR(hit){
   return (Number.isFinite(rr) && rr > 0) ? rr : 2;
 }
 
-function calcTrade(opts){
-  if (typeof W.calcTrade === 'function') return W.calcTrade(opts);
+function calcTradeLocal(opts){
   opts = opts || {};
   var balance = N(opts.balance), riskPct = N(opts.riskPct);
   var entry = N(opts.entry), stop = N(opts.stop);
@@ -69,6 +68,32 @@ function calcTrade(opts){
     positionUnits: positionUnits, qty: positionUnits, notional: notional,
     impliedLeverage: notional / balance, impliedLev: notional / balance, tp: tp, rr: tpRR
   };
+}
+
+/** Spot gold sizing — never inherit crypto fee-buffer / 5x lev gate from supersetup calcTrade. */
+function goldCalcTrade(riskOpts, hit, rrForCalc){
+  var opts = {
+    balance: riskOpts.balance,
+    riskPct: riskOpts.riskPct,
+    entry: hit.entry,
+    stop: hit.stop,
+    rr: rrForCalc,
+    tpPrice: N(hit.t1) > 0 ? hit.t1 : null,
+    maxLeverage: 30,
+    feePct: 0,
+    slipPct: 0
+  };
+  if (typeof W.calcTrade === 'function') return W.calcTrade(opts);
+  return calcTradeLocal(opts);
+}
+
+function effectiveGoldRr(hit){
+  var rr = pickRR(hit);
+  if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
+    var riskDist = Math.abs(hit.entry - hit.stop);
+    if (riskDist > 0) rr = Math.abs(hit.t1 - hit.entry) / riskDist;
+  }
+  return rr;
 }
 
 function defaultRiskOpts(win){
@@ -185,8 +210,8 @@ function runGoldDeskAudit(win, c, hit){
     }catch(e3){}
   }
 
-  if (c.demoted && hit.tier === 'clean'){
-    reasons.push(c.demoteReason || 'Demoted by best-levels / quality gate');
+  if ((c.demoted || hit.demoted) && hit.tier === 'clean'){
+    reasons.push(c.demoteReason || hit.demoteReason || 'Demoted by best-levels / quality gate');
   }
 
   if (c.stamps && Array.isArray(c.stamps)){
@@ -199,7 +224,8 @@ function runGoldDeskAudit(win, c, hit){
     }
   }
 
-  if (N(hit.rr) > 0 && N(hit.rr) < 1.2 && hit.tier === 'clean'){
+  var effRr = effectiveGoldRr(hit);
+  if (N(effRr) > 0 && N(effRr) < 1.2 && hit.tier === 'clean'){
     reasons.push('R:R below gold house minimum');
   }
 
@@ -212,16 +238,19 @@ function runGoldDeskAudit(win, c, hit){
 }
 
 function superGoldDeskPill(row){
-  if (!row) return { cls: 'block', label: 'RISK BLOCK' };
+  if (!row) return { cls: 'block', label: 'HOLD' };
   if (row.minimalLossPass) return { cls: 'minloss', label: 'GRADE A PASS' };
   if (row.tier === 'near' || row.nearWatch || row.demoted){
     return { cls: 'watch', label: 'WATCH ONLY' };
   }
-  if (row.tier === 'clean' && row.goldAudit && !row.goldAudit.pass){
+  if (row.tier === 'clean' && row.goldAudit && row.goldAudit.pass === false){
     return { cls: 'block', label: 'AUDIT HOLD' };
   }
-  if (row.sizingPass) return { cls: 'clean', label: 'SIZE OK' };
-  return { cls: 'block', label: 'RISK BLOCK' };
+  if (row.sizingPass || (row.positionSize && !row.positionSize.error)){
+    return { cls: 'clean', label: 'LEVELS OK' };
+  }
+  var why = row.riskReason || (row.calc && row.calc.reason) || 'SIZE HOLD';
+  return { cls: 'block', label: String(why).slice(0, 28) };
 }
 
 function refineSuperGoldLevels(win, c, hit){
@@ -303,27 +332,17 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
   var refined = refineSuperGoldLevels(W, c, hit);
   if (!refined.ok || refined.veto) return null;
   hit = refined.hit;
+  if (hit.demoted && hit.tier === 'clean') hit.tier = 'near';
 
   riskOpts = riskOpts || defaultRiskOpts();
-  var rrForCalc = pickRR(hit);
-  if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
-    var riskDist = Math.abs(hit.entry - hit.stop);
-    if (riskDist > 0) rrForCalc = Math.abs(hit.t1 - hit.entry) / riskDist;
-  }
-  var calc = calcTrade({
-    balance: riskOpts.balance,
-    riskPct: riskOpts.riskPct,
-    entry: hit.entry,
-    stop: hit.stop,
-    rr: rrForCalc,
-    tpPrice: N(hit.t1) > 0 ? hit.t1 : null
-  });
+  var rrForCalc = effectiveGoldRr(hit);
+  hit.rr = rrForCalc;
+  var calc = goldCalcTrade(riskOpts, hit, rrForCalc);
 
   hit.id = hit.id || c.id || [hit.sym, hit.dir, hit.entry, hit.stop, tier, meta.scanner].join('|');
   hit.scanner = meta.scanner || meta.source || 'gold-swing';
   hit.goldAudit = runGoldDeskAudit(W, c, hit);
   hit.sizingPass = calc.ok;
-  hit.nearWatch = hit.tier === 'near' && calc.ok && N(hit.entry) > 0 && hit.entry !== hit.stop;
 
   if (typeof W.goldAttachPositionSize === 'function'){
     try{
@@ -332,12 +351,15 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
         hit.sizingPass = false;
         hit.goldAudit.pass = false;
         hit.goldAudit.reasons = (hit.goldAudit.reasons || []).concat([hit.positionSize.error]);
+      } else if (hit.positionSize && !hit.positionSize.error){
+        hit.sizingPass = true;
       }
     }catch(eSz){}
   }
 
   hit.minimalLossPass = hit.tier === 'clean' && hit.sizingPass && hit.goldAudit.pass && !hit.demoted;
   hit.riskPass = hit.sizingPass && hit.goldAudit.pass;
+  hit.nearWatch = hit.tier === 'near' && hit.sizingPass && N(hit.entry) > 0 && hit.entry !== hit.stop;
   hit.riskReason = hit.minimalLossPass ? 'PASS'
     : (hit.nearWatch ? 'WATCH — grade B or demoted'
       : ((hit.goldAudit.reasons && hit.goldAudit.reasons.length)
