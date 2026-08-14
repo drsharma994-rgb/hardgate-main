@@ -296,6 +296,27 @@ function mount(el){
 }
 
 function superCalibrateRepaint(){
+  var snap = superCalibrateScan();
+  var empty = !snap || !snap.panelHtml
+    || !(snap.summary && (snap.summary.samples || snap.summary.clean));
+  if (empty){
+    var cached = superCalibrateReplayFromSwingAudit();
+    if (cached){
+      var sumCached = superCalibrateSummarize(cached.samples);
+      snap = buildSnapFromCalibrateResult({
+        summary: sumCached,
+        panelHtml: superCalibrateBuildPanel(cached, sumCached, cached.scanned || 0,
+          'Synced from latest SWING scan replay cache'),
+        stat: 'SWING replay cache · ' + cached.samples.length + ' bars · ' + sumCached.clean + ' CLEAN',
+        note: sumCached.settled >= 5
+          ? ('Settled ' + sumCached.settled + ' · win ' + fmt((sumCached.winPct || 0) * 100, 1) + '%')
+          : 'Need more settled replay bars for MAE/MFE confidence'
+      });
+      snap.scanned = cached.scanned;
+      snap.source = 'swing-scan';
+      publishSuperCalibrateSnap(snap);
+    }
+  }
   if (__sc.mounted && typeof __sc.paintSnap === 'function'){
     __sc.paintSnap(superCalibrateScan());
   }

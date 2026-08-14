@@ -120,7 +120,7 @@ ok(!/if \(W\.__hgSuperSetupStyles\) return/.test(src), 'no super-setup style ski
 ok(/hg-super-desk hg-super-gold/.test(src), 'super gold uses shared desk shell');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-gold\.js\?v=293/.test(html), 'super-gold.js cache-busted in index.html');
+ok(new RegExp('super-gold\\.js\\?v=' + HG_VER.replace('hg-v', '')).test(html), 'super-gold.js cache-busted in index.html');
 ok(/'super-gold'/.test(html), 'super-gold in nav / hooks');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

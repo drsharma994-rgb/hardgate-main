@@ -31,10 +31,10 @@ ok(kept.cands.length === 1 && kept.stat === '2 setups', 'merge snap keeps popula
 const deskFiles = [
   ['super-best.js', ['superBestAfterScan', 'mergePublishSuperBestSnap', 'warmBestSnapInline']],
   ['super-sniper.js', ['superSniperAfterScan', 'mergePublishSuperSniperSnap']],
-  ['super-gold.js', ['publishSuperGoldSnap', 'paintDesk(snap)']],
+  ['super-gold.js', ['mergePublishSuperGoldSnap', 'superGoldAfterScan', 'publishSuperGoldSnap']],
   ['super-book.js', ['buildSnapFromBook', 'refreshBook']],
-  ['super-calibrate.js', ['paintSnap(snap)', 'superCalibrateRun']],
-  ['supersetup.js', ['paintDesk(snap)', 'superSetupRunScanInner']]
+  ['super-calibrate.js', ['superCalibrateReplayFromSwingAudit', 'superCalibrateRun']],
+  ['supersetup.js', ['mergePublishSuperSetupSnap', 'superSetupAfterScan', 'superSetupRunScanInner']]
 ];
 
 deskFiles.forEach(function(pair){

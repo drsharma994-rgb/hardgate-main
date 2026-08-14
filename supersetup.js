@@ -854,8 +854,28 @@ function publishSuperSetupSnap(snap){
   return snap;
 }
 
+function mergePublishSuperSetupSnap(nextSnap){
+  var prev = superSetupScan() || {};
+  return publishSuperSetupSnap(
+    (typeof W.hgSuperDeskMergeSnap === 'function')
+      ? W.hgSuperDeskMergeSnap(prev, nextSnap || {}, { emptyStatPrefixes: ['0 setups'] })
+      : Object.assign({}, prev, nextSnap || {})
+  );
+}
+
 function superSetupScan(){
   return __hgSuperSetupSnap;
+}
+
+function superSetupAfterScan(snap){
+  snap = snap || superSetupScan();
+  if (!snap) return;
+  mergePublishSuperSetupSnap(snap);
+  __ss.lastScanMsg = snap.stat || 'done';
+  if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
+  if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(superSetupScan());
+  if (__ss.mounted && typeof __ss.applyFirstSetup === 'function') __ss.applyFirstSetup(false);
+  else if (__ss.mounted && typeof __ss.tryAutoPopulate === 'function') __ss.tryAutoPopulate(true);
 }
 
 async function superSetupRunScanInner(opts){
@@ -901,14 +921,8 @@ async function superSetupRunScanInner(opts){
     __ss.lastScanMsg = 'Precision pass — post-gate flow/BTC RS…';
     if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
     snap = await applySuperSetupPostGate(snap, W);
-    publishSuperSetupSnap(snap);
     __ss.lastScanAt = snap.scanAt;
-    __ss.lastScanMsg = snap.cands.length
-      ? ('Scan done · ' + snap.cands.length + ' setups')
-      : 'Scan done · 0 CLEAN/NEAR setups (whole exchange scanned)';
-    if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(snap);
-    if (__ss.mounted && typeof __ss.applyFirstSetup === 'function') __ss.applyFirstSetup(forceFlag(opts));
-    else if (__ss.mounted && typeof __ss.tryAutoPopulate === 'function') __ss.tryAutoPopulate(true);
+    superSetupAfterScan(snap);
     return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
   }catch(e){
     __ss.lastScanMsg = 'Scan error: ' + ((e && e.message) ? e.message : String(e));
@@ -1743,16 +1757,17 @@ function mount(el){
       if (idleEl) idleEl.textContent = sdNote;
     }
     var snap = syncDeskFromExisting(W, readRiskOpts());
-    paintDesk(snap);
+    mergePublishSuperSetupSnap(snap);
+    paintDesk(superSetupScan());
     applyFirstSetup(true);
     if (typeof applySuperSetupPostGate === 'function'){
       applySuperSetupPostGate(snap, W).then(function(updated){
-        publishSuperSetupSnap(updated);
-        paintDesk(updated);
+        mergePublishSuperSetupSnap(updated);
+        paintDesk(superSetupScan());
         applyFirstSetup(false);
       }).catch(function(){});
     }
-    return snap;
+    return superSetupScan();
   }
 
   function readRiskOpts(){
@@ -2030,7 +2045,7 @@ function mount(el){
       W.__ssDefaultRiskPct = N($('#ss-risk') && $('#ss-risk').value);
       W.__ssDefaultMaxLev = N($('#ss-lev') && $('#ss-lev').value);
       var snap = buildSnapFromCryptoScans(W, readRiskOpts());
-      publishSuperSetupSnap(Object.assign({}, superSetupScan() || {}, { cands: snap.cands, stat: snap.stat, audit: snap.audit }));
+      mergePublishSuperSetupSnap(snap);
       paintDesk(superSetupScan());
       if (__ss.lastKey) update();
     });
@@ -2071,7 +2086,13 @@ function mount(el){
   });
 
   __ss.syncTimer = setInterval(function(){
-    try{ tryAutoPopulate(false); }catch(e){}
+    try{
+      var snap = buildSnapFromCryptoScans(W, readRiskOpts(), { allowStale: true });
+      snap.scanAt = (__ss.lastScanAt || (superSetupScan() && superSetupScan().scanAt) || snap.at);
+      mergePublishSuperSetupSnap(snap);
+      if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(superSetupScan());
+      tryAutoPopulate(false);
+    }catch(e){}
   }, SYNC_MS);
 
   __ss.scanTimer = setInterval(function(){
@@ -2102,6 +2123,11 @@ async function superSetupRefresh(){
 function superSetupRepaint(){
   if (!__ss.mounted) return;
   var snap = superSetupScan();
+  if (!snap || !snap.cands || !snap.cands.length){
+    snap = syncDeskFromExisting(W, defaultRiskOpts());
+    mergePublishSuperSetupSnap(snap);
+    snap = superSetupScan();
+  }
   if (typeof __ss.paintDesk === 'function') __ss.paintDesk(snap);
   if (typeof __ss.applyFirstSetup === 'function') __ss.applyFirstSetup(false);
 }
@@ -2129,6 +2155,7 @@ W.superSetupCollectScanHits = collectScanHits;
 W.superSetupEvaluateStructure = evaluateStructureTrigger;
 W.superSetupEvaluate = evaluateSetup;
 W.superSetupEnrichRow = enrichSuperSetupRow;
+W.mergePublishSuperSetupSnap = mergePublishSuperSetupSnap;
 W.superSetupBuildSnap = buildSnapFromCryptoScans;
 W.superSetupSyncDesk = syncDeskFromExisting;
 W.superSetupRepaint = superSetupRepaint;

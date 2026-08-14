@@ -573,6 +573,15 @@ function publishSuperGoldSnap(snap){
   return snap;
 }
 
+function mergePublishSuperGoldSnap(nextSnap){
+  var prev = superGoldScan() || {};
+  return publishSuperGoldSnap(
+    (typeof W.hgSuperDeskMergeSnap === 'function')
+      ? W.hgSuperDeskMergeSnap(prev, nextSnap || {}, { emptyStatPrefixes: ['0 gold setups', '0 setups'] })
+      : Object.assign({}, prev, nextSnap || {})
+  );
+}
+
 function superGoldScan(){
   return __hgSuperGoldSnap;
 }
@@ -610,6 +619,16 @@ function autoSelectFirstSetup(snap){
   return hit;
 }
 
+function superGoldAfterScan(snap){
+  snap = snap || superGoldScan();
+  if (!snap) return;
+  mergePublishSuperGoldSnap(snap);
+  __sg.lastScanMsg = snap.stat || 'done';
+  if (__sg.mounted && typeof __sg.setScanStatus === 'function') __sg.setScanStatus(__sg.lastScanMsg);
+  if (__sg.mounted && typeof __sg.paintDesk === 'function') __sg.paintDesk(superGoldScan());
+  if (__sg.mounted && typeof __sg.applyFirstSetup === 'function') __sg.applyFirstSetup(false);
+}
+
 async function superGoldRunScanInner(opts){
   opts = opts || {};
   __sg.scanBusy = true;
@@ -638,13 +657,8 @@ async function superGoldRunScanInner(opts){
     var snap = buildSnapFromGoldScans(W, riskOpts);
     snap.scanAt = Date.now();
     snap.at = snap.scanAt;
-    publishSuperGoldSnap(snap);
     __sg.lastScanAt = snap.scanAt;
-    __sg.lastScanMsg = snap.cands.length
-      ? ('Scan done · ' + snap.cands.length + ' setups')
-      : 'Scan done · 0 GRADE A/B setups';
-    if (__sg.mounted && typeof __sg.paintDesk === 'function') __sg.paintDesk(snap);
-    if (__sg.mounted && typeof __sg.applyFirstSetup === 'function') __sg.applyFirstSetup(true);
+    superGoldAfterScan(snap);
     return snap.cands.length ? ('ok · ' + snap.cands.length + ' setups') : 'ok · 0 setups';
   }catch(e){
     __sg.lastScanMsg = 'Scan error: ' + ((e && e.message) ? e.message : String(e));
@@ -938,9 +952,9 @@ function mount(el){
 
   function syncFromExistingDesks(){
     var snap = syncDeskFromExisting(W, readRiskOpts());
-    paintDesk(snap);
+    mergePublishSuperGoldSnap(snap);
     applyFirstSetup(true);
-    return snap;
+    return superGoldScan();
   }
 
   $('#sg-balance') && $('#sg-balance').addEventListener('input', function(){
@@ -981,10 +995,9 @@ function mount(el){
   __sg.syncTimer = setInterval(function(){
     try{
       var snap = buildSnapFromGoldScans(W, readRiskOpts(), { allowStale: true });
-      if (snap.cands.length){
-        publishSuperGoldSnap(Object.assign({}, superGoldScan() || {}, snap));
-        paintDesk(superGoldScan());
-      }
+      snap.scanAt = (__sg.lastScanAt || (superGoldScan() && superGoldScan().scanAt) || snap.at);
+      mergePublishSuperGoldSnap(snap);
+      if (__sg.mounted && typeof __sg.paintDesk === 'function') __sg.paintDesk(superGoldScan());
     }catch(e){}
   }, SYNC_MS);
 
@@ -1014,7 +1027,7 @@ function superGoldRepaint(){
   var snap = superGoldScan();
   if (!snap || !snap.cands || !snap.cands.length){
     snap = syncDeskFromExisting(W, defaultRiskOpts());
-    publishSuperGoldSnap(snap);
+    mergePublishSuperGoldSnap(snap);
     snap = superGoldScan();
   }
   if (typeof __sg.paintDesk === 'function') __sg.paintDesk(snap);
@@ -1034,6 +1047,7 @@ W.superGoldSortCands = superGoldSortCands;
 W.enrichSuperGoldRow = enrichSuperGoldRow;
 W.buildSnapFromGoldScans = buildSnapFromGoldScans;
 W.superGoldBuildSnap = buildSnapFromGoldScans;
+W.mergePublishSuperGoldSnap = mergePublishSuperGoldSnap;
 W.superGoldSyncDesk = syncDeskFromExisting;
 W.superGoldRepaint = superGoldRepaint;
 W.superGoldScan = superGoldScan;
