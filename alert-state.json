@@ -4,199 +4,138 @@
   "gold": null,
   "lastRunAt": "2026-08-14T06:01:50.730Z",
   "ticket": {
-    "long": null,
+    "long": {
+      "sym": "B-GWEI_USDT",
+      "entry": 0.025392872634414827
+    },
     "short": null
   },
   "sniper": {
-    "key": "B-ALICE_USDT@0.12270292269704913",
+    "key": "B-1000SHIB_USDT@0.004576994285397971",
     "hits": [
       {
-        "sym": "B-ALICE_USDT",
+        "sym": "B-1000SHIB_USDT",
         "dir": "long",
-        "entry": 0.12270292269704913,
-        "stop": 0.1207617974241589,
-        "t1": 0.1262,
-        "lev": 34,
+        "entry": 0.004576994285397971,
+        "stop": 0.004514775014002292,
+        "t1": 0.004685,
+        "lev": 39,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-14T14:41:48.080Z"
+    "at": "2026-08-14T16:33:52.471Z"
   },
   "squeeze": {
-    "key": "B-AAVE_USDT:short;B-ACE_USDT:long;B-AERO_USDT:short;B-ALICE_USDT:long;B-BCH_USDT:short;B-BTC_USDT:short;B-CAKE_USDT:short;B-CAP_USDT:long;B-CROSS_USDT:long;B-FARTCOIN_USDT:long;B-GRAM_USDT:short;B-H_USDT:long;B-LTC_USDT:short;B-PIXEL_USDT:long;B-PUMP_USDT:long;B-SWARMS_USDT:long;B-TLM_USDT:long;SNDKBUSD:long",
+    "key": "B-1000SHIB_USDT:long;B-AAVE_USDT:short;B-AERO_USDT:short;B-ALICE_USDT:long;B-GRAM_USDT:short;B-GWEI_USDT:long;B-PIXEL_USDT:long;B-PUMP_USDT:long;B-TLM_USDT:long;B-ZAMA_USDT:short",
     "rows": [
-      {
-        "sym": "B-CROSS_USDT",
-        "dir": "long",
-        "kind": "fired"
-      },
       {
         "sym": "B-AERO_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 0.399,
-        "stop": 0.408937810638415,
-        "t1": 0.37912437872317006,
-        "t2": 0.36421766276554757
-      },
-      {
-        "sym": "B-BTC_USDT",
-        "dir": "short",
-        "kind": "fired",
-        "entry": 62739.9,
-        "stop": 63410.63513563842,
-        "t1": 61398.42972872317,
-        "t2": 60392.32702526554
+        "entry": 0.4039,
+        "stop": 0.4135129159556573,
+        "t1": 0.3846741680886853,
+        "t2": 0.37025479415519935
       },
       {
         "sym": "B-PUMP_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.002824,
-        "stop": 0.0026010932995611364,
-        "t1": 0.0032698134008777276,
-        "t2": 0.0036041734515360234
+        "entry": 0.002807,
+        "stop": 0.002601658063879229,
+        "t1": 0.0032176838722415423,
+        "t2": 0.0035256967764226987
       },
       {
         "sym": "B-AAVE_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 85.73,
-        "stop": 87.71970417314407,
-        "t1": 81.75059165371188,
-        "t2": 78.7660353939958
+        "entry": 86.59,
+        "stop": 88.53339878714338,
+        "t1": 82.70320242571324,
+        "t2": 79.78810424499818
       },
       {
-        "sym": "B-FARTCOIN_USDT",
+        "sym": "B-1000SHIB_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.1377,
-        "stop": 0.132015753840419,
-        "t1": 0.14906849231916197,
-        "t2": 0.15759486155853347
+        "entry": 0.004604,
+        "stop": 0.004479625637695976,
+        "t1": 0.004852748724608047,
+        "t2": 0.005039310268064082
+      },
+      {
+        "sym": "B-GWEI_USDT",
+        "dir": "long",
+        "kind": "fired",
+        "entry": 0.02629,
+        "stop": 0.02216599931317238,
+        "t1": 0.034538001373655244,
+        "t2": 0.040724002403896675
       },
       {
         "sym": "B-PIXEL_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.004708,
-        "stop": 0.004459855721399302,
-        "t1": 0.0052042885572013975,
-        "t2": 0.005576504975102445
+        "entry": 0.004974,
+        "stop": 0.004704687456166644,
+        "t1": 0.005512625087666712,
+        "t2": 0.005916593903416745
       },
       {
         "sym": "B-TLM_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.001549,
-        "stop": 0.0014502224381838314,
-        "t1": 0.0017465551236323373,
-        "t2": 0.0018947214663565903
+        "entry": 0.001558,
+        "stop": 0.0014508136940689453,
+        "t1": 0.001772372611862109,
+        "t2": 0.001933152070758691
       },
       {
-        "sym": "B-SWARMS_USDT",
-        "dir": "long",
-        "kind": "fired",
-        "entry": 0.008335,
-        "stop": 0.007371603538605429,
-        "t1": 0.010261792922789142,
-        "t2": 0.011706887614881
-      },
-      {
-        "sym": "B-CAKE_USDT",
+        "sym": "B-ZAMA_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 1.4147,
-        "stop": 1.4386533103571832,
-        "t1": 1.3667933792856337,
-        "t2": 1.330863413749859
+        "entry": 0.047884387228666454,
+        "stop": 0.04871236014523811,
+        "t1": 0.04600193898264725,
+        "t2": 0.04445
       },
       {
         "sym": "B-GRAM_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 1.328,
-        "stop": 1.3539592864747496,
-        "t1": 1.276081427050501,
-        "t2": 1.2371424973383767
-      },
-      {
-        "sym": "B-ACE_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 0.27206,
-        "stop": 0.24110101361606984,
-        "t1": 0.3339779727678604,
-        "t2": 0.38041645234375565
-      },
-      {
-        "sym": "B-BCH_USDT",
-        "dir": "short",
-        "kind": "break",
-        "entry": 200.74,
-        "stop": 204.99038113316007,
-        "t1": 192.2392377336799,
-        "t2": 185.8636660339398
-      },
-      {
-        "sym": "B-CAP_USDT",
-        "dir": "long",
-        "kind": "break"
-      },
-      {
-        "sym": "B-H_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 0.11998,
-        "stop": 0.10850322265809335,
-        "t1": 0.1429335546838133,
-        "t2": 0.16014872069667327
-      },
-      {
-        "sym": "B-LTC_USDT",
-        "dir": "short",
-        "kind": "break",
-        "entry": 44.11,
-        "stop": 44.621687518043075,
-        "t1": 43.08662496391385,
-        "t2": 42.319093686849236
-      },
-      {
-        "sym": "SNDKBUSD",
-        "dir": "long",
-        "kind": "break",
-        "entry": 1612.67,
-        "stop": 1536.1975317863692,
-        "t1": 1765.614936427262,
-        "t2": 1880.3236387477082
+        "entry": 1.327,
+        "stop": 1.3515336234428208,
+        "t1": 1.2779327531143583,
+        "t2": 1.241132317950127
       },
       {
         "sym": "B-ALICE_USDT",
         "dir": "long",
         "kind": "break",
-        "entry": 0.1242,
-        "stop": 0.11935912070803471,
-        "t1": 0.1338817585839306,
-        "t2": 0.14114307752187852
+        "entry": 0.1492,
+        "stop": 0.14141867333836358,
+        "t1": 0.16476265332327283,
+        "t2": 0.17643464331572745
       }
     ],
-    "at": "2026-08-14T14:41:48.095Z"
+    "at": "2026-08-14T16:33:52.472Z"
   },
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-14T15:34:35.972Z"
+    "at": "2026-08-14T16:33:52.472Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-14T15:34:35.972Z"
+    "at": "2026-08-14T16:33:52.472Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-14T13:44:22.300Z",
+  "engineAlertAt": "2026-08-14T16:33:52.472Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -211,7 +150,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-14T15:34:36.412Z"
+    "at": "2026-08-14T16:33:53.277Z"
   },
   "bookFill": {
     "key": "u0|p0",
