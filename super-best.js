@@ -38,9 +38,11 @@ function defaultRiskOpts(win){
 
 function bestCandFromClean(c, at){
   if (!c || !c.dir) return null;
+  var sym = c.sym || (c.t && c.t.symbol) || '';
+  if (!sym) return null;
   return {
-    id: [c.sym, c.dir, c.entry, c.stop, 'best'].join('|'),
-    sym: c.sym,
+    id: [sym, c.dir, c.entry, c.stop, 'best'].join('|'),
+    sym: sym,
     dir: c.dir,
     entry: N(c.entry),
     stop: N(c.stop),
@@ -210,6 +212,57 @@ function publishSuperBestSnap(snap){
   return snap;
 }
 
+function mergePublishSuperBestSnap(nextSnap){
+  var prev = superBestScan() || {};
+  nextSnap = nextSnap || {};
+  if ((!nextSnap.cands || !nextSnap.cands.length) && prev.cands && prev.cands.length){
+    nextSnap.cands = prev.cands;
+    nextSnap.audit = prev.audit || nextSnap.audit;
+    if (prev.stat && String(prev.stat).indexOf('0 BEST CLEAN') !== 0
+        && String(prev.stat).indexOf('0 setups') !== 0){
+      nextSnap.stat = prev.stat;
+    }
+  }
+  return publishSuperBestSnap(Object.assign({}, prev, nextSnap));
+}
+
+async function warmBestSnapInline(win){
+  win = win || W;
+  var warm = win.bestScanWarm;
+  if (typeof warm === 'function'){
+    try{ await warm(); }catch(e0){}
+  }
+  var best = (typeof win.bestScan === 'function') ? win.bestScan() : null;
+  if (best && Array.isArray(best.clean) && best.clean.length) return best;
+  var silent = win.silentBestScan;
+  var publish = win.publishBestSnap;
+  if (typeof silent !== 'function' || typeof publish !== 'function') return best;
+  var merged = [];
+  var exList = ['delta', 'coindcx'];
+  for (var i = 0; i < exList.length; i++){
+    var ex = exList[i];
+    var clean = [];
+    try{ clean = await silent(ex); }catch(e1){ clean = []; }
+    if (clean && clean.length){
+      for (var j = 0; j < clean.length; j++){
+        var w = clean[j];
+        if (!w) continue;
+        merged.push(Object.assign({}, w, {
+          _venueLabel: ex === 'delta' ? 'Delta India' : 'CoinDCX'
+        }));
+      }
+    }
+  }
+  if (merged.length){
+    merged.sort(function(a, b){
+      return (b.profitBoost || 0) - (a.profitBoost || 0) || b.famScore - a.famScore
+        || b.robScore - a.robScore || b.rr - a.rr;
+    });
+    publish(merged, { dual: true, inlineWarm: true });
+  }
+  return (typeof win.bestScan === 'function') ? win.bestScan() : best;
+}
+
 function superBestScan(){ return __hgSuperBestSnap; }
 
 function syncDeskFromExisting(win, riskOpts){
@@ -261,47 +314,62 @@ function autoSelectFirstSetup(snap){
   return hit;
 }
 
+function superBestAfterScan(snap){
+  snap = snap || superBestScan();
+  if (!snap) return;
+  mergePublishSuperBestSnap(snap);
+  __sb.lastScanMsg = snap.stat || 'done';
+  if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
+  if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(snap);
+  if (__sb.mounted && typeof __sb.applyFirstSetup === 'function') __sb.applyFirstSetup(false);
+  if (typeof W.hgSuperDeskEnrichChartVision === 'function' && snap.cands && snap.cands.length){
+    W.hgSuperDeskEnrichChartVision(snap.cands, {
+      style: 'super-best', cleanOnly: true, limit: 6,
+      repaint: __sb.mounted && typeof __sb.paintVision === 'function' ? __sb.paintVision : null
+    });
+  }
+}
+
 async function superBestRunScanInner(opts){
   opts = opts || {};
   __sb.scanBusy = true;
   __sb.lastScanMsg = 'Running BEST scan…';
   if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
   try{
-    if (typeof W.bestScanWarm === 'function'){
-      await W.bestScanWarm();
-    }
+    await warmBestSnapInline(W);
     var bestSnap = (typeof W.bestScan === 'function') ? W.bestScan() : null;
     if ((!bestSnap || !Array.isArray(bestSnap.clean) || !bestSnap.clean.length)
         && typeof W.runBest === 'function'){
       try{ await W.runBest({ quiet: true }); }catch(eRb){}
+      bestSnap = (typeof W.bestScan === 'function') ? W.bestScan() : null;
+    }
+    if ((!bestSnap || !Array.isArray(bestSnap.clean) || !bestSnap.clean.length)){
+      bestSnap = await warmBestSnapInline(W);
     }
     __sb.lastScanAt = Date.now();
     var snap = buildSnapFromBestScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });
     snap.scanAt = __sb.lastScanAt;
     snap.hydrated = true;
-    publishSuperBestSnap(snap);
-    if (typeof W.hgSuperDeskEnrichChartVision === 'function'){
-      W.hgSuperDeskEnrichChartVision(snap.cands, {
-        style: 'super-best', cleanOnly: true, limit: 6,
-        repaint: __sb.mounted && typeof __sb.paintVision === 'function' ? __sb.paintVision : null
-      });
-    }
-    if (__sb.mounted && typeof __sb.syncFromExistingDesks === 'function'){
-      __sb.syncFromExistingDesks();
-    }
-    __sb.lastScanMsg = snap.stat || 'done';
+    superBestAfterScan(snap);
     return __sb.lastScanMsg;
   }catch(e){
     __sb.lastScanMsg = 'scan error: ' + ((e && e.message) ? e.message : String(e));
+    if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
     return __sb.lastScanMsg;
   }finally{
     __sb.scanBusy = false;
   }
 }
 
-function superBestRunScan(opts){
+async function superBestRunScan(opts){
   opts = opts || {};
-  if (__sb.scanPromise && !opts.force) return __sb.scanPromise;
+  if (__sb.scanPromise){
+    if (opts.force){
+      try{ await __sb.scanPromise; }catch(e0){}
+    } else {
+      return __sb.scanPromise;
+    }
+  }
   __sb.scanPromise = superBestRunScanInner(opts).finally(function(){ __sb.scanPromise = null; });
   return __sb.scanPromise;
 }
@@ -464,21 +532,28 @@ function mount(el){
     if (statEl && msg) statEl.textContent = msg;
   }
 
-  function syncFromExistingDesks(){
-    var snap = syncDeskFromExisting(W, readRiskOpts());
+  function applyFirstSetup(force){
+    var snap = superBestScan();
     paintDesk(snap);
     var hit = autoSelectFirstSetup(snap);
     if (hit) applyEvaluation(hitToEvaluation(hit));
-    if (typeof W.hgSuperDeskEnrichChartVision === 'function'){
+    if (force && typeof W.hgSuperDeskEnrichChartVision === 'function' && snap && snap.cands && snap.cands.length){
       W.hgSuperDeskEnrichChartVision(snap.cands, {
         style: 'super-best', cleanOnly: true, limit: 6, repaint: __sb.paintVision
       });
     }
-    return snap;
+  }
+
+  function syncFromExistingDesks(){
+    var snap = syncDeskFromExisting(W, readRiskOpts());
+    mergePublishSuperBestSnap(snap);
+    applyFirstSetup(true);
+    return superBestScan();
   }
 
   __sb.setScanStatus = setScanStatus;
   __sb.paintDesk = paintDesk;
+  __sb.applyFirstSetup = applyFirstSetup;
   __sb.syncFromExistingDesks = syncFromExistingDesks;
   __sb.mounted = true;
 
@@ -492,7 +567,7 @@ function mount(el){
     superBestRunScan({ force: true, riskOpts: readRiskOpts() }).then(function(msg){
       if (btn) btn.disabled = false;
       setScanStatus(String(msg));
-      syncFromExistingDesks();
+      applyFirstSetup(true);
     });
   });
 
@@ -503,7 +578,7 @@ function mount(el){
     try{
       var snap = buildSnapFromBestScan(W, readRiskOpts(), { allowStale: true });
       snap.scanAt = (__sb.lastScanAt || (superBestScan() && superBestScan().scanAt) || snap.at);
-      publishSuperBestSnap(Object.assign({}, superBestScan() || {}, snap));
+      mergePublishSuperBestSnap(snap);
       if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(superBestScan());
     }catch(e){}
   }, SYNC_MS);
@@ -535,6 +610,8 @@ W.enrichSuperBestRow = enrichSuperBestRow;
 W.enrichSuperBestRowLite = enrichSuperBestRowLite;
 W.buildSnapFromBestScan = buildSnapFromBestScan;
 W.superBestSyncDesk = syncDeskFromExisting;
+W.warmBestSnapInline = warmBestSnapInline;
+W.mergePublishSuperBestSnap = mergePublishSuperBestSnap;
 W.superBestScan = superBestScan;
 W.superBestRunScan = superBestRunScan;
 W.superBestWarm = superBestWarm;

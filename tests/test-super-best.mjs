@@ -22,16 +22,10 @@ function ok(c, m){ if (c){ pass++; console.log('ok    - ' + m); } else { fail++;
 
 ok(typeof W.buildSnapFromBestScan === 'function', 'buildSnapFromBestScan exported');
 ok(typeof W.superBestRunScan === 'function', 'superBestRunScan exported');
+ok(typeof W.mergePublishSuperBestSnap === 'function', 'mergePublishSuperBestSnap exported');
+ok(typeof W.warmBestSnapInline === 'function', 'warmBestSnapInline exported');
 
 const now = Date.now();
-W.superSetupEnrichRow = function(c, tier, riskOpts, meta){
-  if (!c || !c.dir) return null;
-  return {
-    id: c.id, sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1,
-    tier: tier, tp: c.t1, rr: c.rr, impliedLev: 2, sizingPass: true,
-    minimalLossPass: tier === 'clean', scanner: meta.scanner, famScore: c.famScore
-  };
-};
 W.calcTrade = function(opts){
   return { ok: true, impliedLeverage: 2, qty: 10, tp: opts.tpPrice || opts.entry * 1.02 };
 };
@@ -49,12 +43,28 @@ W.bestScan = function(){
 const snap = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1 });
 ok(snap.cands.length === 1 && snap.cands[0].minimalLossPass, 'enriches BEST clean row');
 
-W.superSetupEnrichRow = function(){ return null; };
-const snap2 = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1, maxLeverage: 5, feePct: 0.06, slipPct: 0.05 });
-ok(snap2.cands.length === 1, 'lite enrich maps BEST clean row');
+W.bestScan = function(){
+  return {
+    at: now - 60000,
+    clean: [{
+      t: { symbol: 'ETHUSD' }, dir: 'short', entry: 200, stop: 205, t1: 190, rr: 2,
+      famScore: 6, robScore: 1, rows: [{ c: 200, h: 201, l: 199, o: 200 }]
+    }]
+  };
+};
+const snapRaw = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1 });
+ok(snapRaw.cands.length === 1 && snapRaw.cands[0].sym === 'ETHUSD', 'maps raw BEST row with t.symbol');
+
+W.mergePublishSuperBestSnap({
+  at: now, cands: [{ id: 'a', sym: 'BTCUSD', dir: 'long', entry: 1, stop: 2, minimalLossPass: true }],
+  stat: '1 BEST CLEAN'
+});
+W.mergePublishSuperBestSnap({ at: now, cands: [], stat: '0 BEST CLEAN — stale tick' });
+const kept = W.superBestScan();
+ok(kept.cands.length === 1 && kept.stat.indexOf('1 BEST CLEAN') === 0, 'mergePublish keeps prior cands when rebuild empty');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-best\.js\?v=287/.test(html), 'super-best in index');
+ok(new RegExp('super-best\\.js\\?v=' + HG_VER.replace('hg-v', '')).test(html), 'super-best in index');
 ok(/'super-best'/.test(html), 'super-best in nav');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

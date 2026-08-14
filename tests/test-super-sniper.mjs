@@ -39,7 +39,7 @@ const rsSrc = fs.readFileSync(path.join(root, 'reversalsniper.js'), 'utf8');
 ok(/rsRunScan/.test(rsSrc), 'reversalsniper exports headless rsRunScan');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-sniper\.js\?v=287/.test(html), 'super-sniper in index');
+ok(/super-sniper\.js\?v=291/.test(html), 'super-sniper in index');
 ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw ' + HG_VER);
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));

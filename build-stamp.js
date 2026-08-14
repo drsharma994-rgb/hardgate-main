@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v290',
-  pack: 'super gold risk block fix',
-  built: '2026-08-14T20:30:00Z',
-  note: 'SUPER GOLD goldCalcTrade · no false RISK BLOCK · includes v288 UI + v289 telegram off'
+  version: 'hg-v291',
+  pack: 'super best populate fix',
+  built: '2026-08-14T21:00:00Z',
+  note: 'SUPER BEST direct repaint · inline BEST warm · quiet runBest · includes v288–v290 stack'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
