@@ -103,8 +103,13 @@ ok(/goldAttachPositionSize/.test(src), 'spot sizing wired');
 ok(/hgApplyGoldBestLevels/.test(src), 'best-levels refine wired');
 ok(/sg-send-trade/.test(src), 'Send to Trade Plan button');
 
+ok(/sg-open-scalp/.test(src) && /sg-open-swing/.test(src), 'gold scalp/swing nav buttons');
+ok(/hgSuperDeskInjectStyles/.test(src), 'uses shared super desk styles');
+ok(!/if \(W\.__hgSuperSetupStyles\) return/.test(src), 'no super-setup style skip bug');
+ok(/hg-super-desk hg-super-gold/.test(src), 'super gold uses shared desk shell');
+
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-gold\.js\?v=287/.test(html), 'super-gold.js cache-busted in index.html');
+ok(/super-gold\.js\?v=288/.test(html), 'super-gold.js cache-busted in index.html');
 ok(/'super-gold'/.test(html), 'super-gold in nav / hooks');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
