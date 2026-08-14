@@ -23,52 +23,43 @@
     "at": "2026-08-14T18:35:08.420Z"
   },
   "squeeze": {
-    "key": "B-1000SHIB_USDT:long;B-AAVE_USDT:short;B-GWEI_USDT:long;B-WLFI_USDT:long;B-XRP_USDT:short;B-ZAMA_USDT:short",
+    "key": "B-1000SHIB_USDT:long;B-AAVE_USDT:short;B-GWEI_USDT:long;B-XRP_USDT:short;B-ZAMA_USDT:short",
     "rows": [
       {
         "sym": "B-XRP_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 0.9969,
-        "stop": 1.01089965734911,
-        "t1": 0.96890068530178,
-        "t2": 0.947901199278115
+        "entry": 0.9978,
+        "stop": 1.01179965734911,
+        "t1": 0.9698006853017802,
+        "t2": 0.9488011992781153
       },
       {
         "sym": "B-AAVE_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 85.97,
-        "stop": 87.89596216344349,
-        "t1": 82.11807567311303,
-        "t2": 79.2291324279478
-      },
-      {
-        "sym": "B-WLFI_USDT",
-        "dir": "long",
-        "kind": "fired",
-        "entry": 0.05854,
-        "stop": 0.05687199214278298,
-        "t1": 0.06187601571443404,
-        "t2": 0.06437802750025956
+        "entry": 85.7,
+        "stop": 87.66667644915778,
+        "t1": 81.76664710168446,
+        "t2": 78.8166324279478
       },
       {
         "sym": "B-1000SHIB_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.004577,
-        "stop": 0.0044596192144312876,
-        "t1": 0.004811761571137426,
-        "t2": 0.004987832749490495
+        "entry": 0.004568,
+        "stop": 0.004449547785859859,
+        "t1": 0.004804904428280282,
+        "t2": 0.004982582749490494
       },
       {
         "sym": "B-GWEI_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.02725,
-        "stop": 0.024543322746382247,
-        "t1": 0.03266335450723551,
-        "t2": 0.03672337038766214
+        "entry": 0.02708,
+        "stop": 0.024361537032096533,
+        "t1": 0.032516925935806934,
+        "t2": 0.03659462038766213
       },
       {
         "sym": "B-ZAMA_USDT",
@@ -80,23 +71,23 @@
         "t2": 0.04445
       }
     ],
-    "at": "2026-08-14T20:16:14.183Z"
+    "at": "2026-08-14T20:50:35.807Z"
   },
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-14T20:16:14.183Z"
+    "at": "2026-08-14T20:50:35.807Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-14T20:16:14.184Z"
+    "at": "2026-08-14T20:50:35.807Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-14T18:35:08.422Z",
+  "engineAlertAt": "2026-08-14T20:50:35.807Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -111,7 +102,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-14T20:16:14.509Z"
+    "at": "2026-08-14T20:50:36.141Z"
   },
   "bookFill": {
     "key": "u0|p0",
