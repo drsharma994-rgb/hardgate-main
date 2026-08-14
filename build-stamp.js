@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v281',
-  pack: 'pack 18',
-  built: '2026-08-13T16:30:00Z',
-  note: 'Pack 18 — crypto position risk engine + RISK tab + inline size/liq/net-R'
+  version: 'hg-v282',
+  pack: 'super gold',
+  built: '2026-08-14T06:00:00Z',
+  note: 'SUPER GOLD desk — merges GOLD SCALP + GOLD SWING with grade audit + spot sizing'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

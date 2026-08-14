@@ -748,6 +748,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="best-levels.js"></script>
 <script src="supersetup.js?v=280"></script>
 <script src="gold-best-levels.js"></script>
+<script src="super-gold.js?v=282"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2689,7 +2690,7 @@ async function runObScanLeg(opts){
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'OVERVIEW',     tabs:['brain','book','startrader','execute','bias','regime','trendmx','rotation','news'] },
   { id:'crypto',     label:'CRYPTO SCANS', tabs:['swing','scalp','squeeze','smart','oiflow','liqs','chartvision','onchain','coil','apex','trap','smc','ob','div'] },
-  { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldcoint','goldspot','goldscalp','goldswing','goldpine','signallog'] },
+  { id:'gold',       label:'GOLD',         tabs:['gold','goldpro','goldcoint','goldspot','goldscalp','goldswing','super-gold','goldpine','signallog'] },
   { id:'strategies', label:'STRATEGIES',   tabs:['strats','meanrev','super-setup','reversalsniper','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry','venueprem','termbasis','scorecard','reliability','formationlab'] },
   { id:'tools',      label:'TOOLS',        tabs:['risk','basis','search','tradeos','hey','aiagent','log','trade','finder'] },
 ];
@@ -2818,6 +2819,12 @@ function showTab(t){
       if (typeof window.superSetupRepaint === 'function') window.superSetupRepaint();
     }catch(eSs){}
   }
+  if (t === 'super-gold'){
+    try{
+      if (typeof window.superGoldSyncDesk === 'function') window.superGoldSyncDesk();
+      if (typeof window.superGoldRepaint === 'function') window.superGoldRepaint();
+    }catch(eSg){}
+  }
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
   if (tabSwitch && t !== 'book' && typeof hgBookStampRefreshThrottled === 'function'){
     hgBookStampRefreshThrottled();
@@ -2938,6 +2945,11 @@ const HG_TAB_AUTO_SCAN = {
   'super-setup': async function(){
     if (typeof window.superSetupRunScan === 'function'){
       await window.superSetupRunScan({ force: true });
+    }
+  },
+  'super-gold': async function(){
+    if (typeof window.superGoldRunScan === 'function'){
+      await window.superGoldRunScan({ force: true });
     }
   }
 };
