@@ -51,10 +51,10 @@ ok(snap.cands.length === 1 && snap.cands[0].minimalLossPass, 'enriches BEST clea
 
 W.superSetupEnrichRow = function(){ return null; };
 const snap2 = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1, maxLeverage: 5, feePct: 0.06, slipPct: 0.05 });
-ok(snap2.cands.length === 1, 'lite enrich fallback when superSetupEnrichRow returns null');
+ok(snap2.cands.length === 1, 'lite enrich maps BEST clean row');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-best\.js\?v=286/.test(html), 'super-best in index');
+ok(/super-best\.js\?v=287/.test(html), 'super-best in index');
 ok(/'super-best'/.test(html), 'super-best in nav');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
