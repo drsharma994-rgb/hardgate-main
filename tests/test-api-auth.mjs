@@ -42,6 +42,8 @@ console.log('== wiring ==');
   const loop = fs.readFileSync(path.join(root, 'lib/daemon-loop.mjs'), 'utf8');
   ok(loop.indexOf('freshLocks') >= 0 && loop.indexOf('excludeIds') >= 0, 'daemon-loop freshLocks + excludeIds');
   ok(typeof notifyCapabilities().telegram === 'boolean', 'notify capabilities');
+  ok(typeof notifyCapabilities().telegramDisabled === 'boolean', 'notify telegramDisabled flag');
+  ok(fs.existsSync(path.join(root, 'lib/telegram-guard.mjs')), 'lib/telegram-guard.mjs exists');
   ok(notifyCapabilities().authRequired === false, 'notify does not require HARDGATE_API_SECRET');
   ok(apiAuthHeaders()['Content-Type'] === 'application/json', 'apiAuthHeaders content-type');
   ok(idx.indexOf('/api/notify/capabilities') >= 0, 'index.html checks notify capabilities');
