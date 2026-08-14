@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v282',
-  pack: 'super gold',
-  built: '2026-08-14T06:00:00Z',
-  note: 'SUPER GOLD desk — merges GOLD SCALP + GOLD SWING with grade audit + spot sizing'
+  version: 'hg-v283',
+  pack: 'super gold abc',
+  built: '2026-08-14T06:10:00Z',
+  note: 'SUPER GOLD phases A/B/C — rank, spread audit, signallog, brain, evaluate'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

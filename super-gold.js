@@ -169,6 +169,22 @@ function runGoldDeskAudit(win, c, hit){
     }catch(e2){}
   }
 
+  if (typeof win.hgGoldVenueSpread === 'function'){
+    try{
+      var spotSt = typeof win.goldspotState === 'function' ? win.goldspotState() : null;
+      var gvs = win.hgGoldVenueSpread({
+        spot: spotSt && spotSt.spot,
+        paxg: spotSt && spotSt.paxg,
+        xaut: spotSt && spotSt.xaut,
+        cashOpen: !(typeof win.hgInGoldWeekend === 'function'
+          && win.hgInGoldWeekend(Math.floor(Date.now() / 1000)))
+      });
+      if (gvs && gvs.veto && hit.tier === 'clean'){
+        reasons.push(gvs.reason || 'Cross-venue spread guard');
+      } else if (gvs && gvs.ok) passed.push('spread');
+    }catch(e3){}
+  }
+
   if (c.demoted && hit.tier === 'clean'){
     reasons.push(c.demoteReason || 'Demoted by best-levels / quality gate');
   }
@@ -336,17 +352,56 @@ function enrichSuperGoldRow(c, tier, riskOpts, meta){
   return hit;
 }
 
-function buildSnapFromGoldScans(win, riskOpts, opts){
+/** Ranking context — mirrors gold scalp/swing scan legs (all optional). */
+function buildGoldRankCtx(win){
   win = win || W;
-  riskOpts = riskOpts || defaultRiskOpts(win);
+  var ctx = { now: Date.now(), style: 'super-gold' };
+  try{
+    if (typeof win.hgNewsState === 'function') ctx.news = win.hgNewsState();
+  }catch(e0){}
+  try{
+    if (typeof win.goldSeason === 'function') ctx.season = win.goldSeason(ctx.now);
+  }catch(e1){}
+  try{
+    if (typeof win.getGoldMacroCached === 'function') ctx.macro = win.getGoldMacroCached();
+  }catch(e2){}
+  try{
+    if (typeof win.goldspotState === 'function') ctx.spot = win.goldspotState();
+  }catch(e3){}
+  try{
+    if (typeof win.goldProState === 'function') ctx.goldPro = win.goldProState();
+  }catch(e4){}
+  return ctx;
+}
+
+function rankRawGoldCands(win, rawCands, ctx){
+  win = win || W;
+  if (!Array.isArray(rawCands) || !rawCands.length) return rawCands || [];
+  if (typeof win.goldRankSetups !== 'function') return rawCands.slice();
+  try{
+    var ranked = win.goldRankSetups(rawCands, ctx || buildGoldRankCtx(win));
+    if (!ranked || !Array.isArray(ranked.ranked) || !ranked.ranked.length) return rawCands.slice();
+    var byId = {};
+    rawCands.forEach(function(c){ if (c && c.id) byId[c.id] = c; });
+    return ranked.ranked.map(function(c){
+      var orig = (c && c.id && byId[c.id]) ? byId[c.id] : c;
+      var merged = Object.assign({}, orig, c);
+      var origG = orig && orig.grade ? String(orig.grade).toUpperCase() : '';
+      if (origG === 'A' || origG === 'B') merged.grade = orig.grade;
+      merged.__sgScanner = orig.__sgScanner || merged.__sgScanner;
+      merged.__sgAt = orig.__sgAt || merged.__sgAt;
+      if (orig.tally != null && merged.tally == null) merged.tally = orig.tally;
+      return merged;
+    });
+  }catch(e){}
+  return rawCands.slice();
+}
+
+function collectRawGoldDeskCands(win, opts){
+  win = win || W;
   opts = opts || {};
   var allowStale = opts.allowStale === true;
-  var merged = [];
-  var armed = [];
-  var rejected = [];
-  var whySilent = null;
-  var scanned = 0;
-  var audit = { clean: 0, near: 0, minLoss: 0, armedCount: 0, venues: [] };
+  var raw = [], armed = [], rejected = [], whySilent = null, scanned = 0, venues = [];
 
   function snapFresh(snap){
     if (!snap) return false;
@@ -357,6 +412,7 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
   function absorbSnap(snap, scanner){
     if (!snapFresh(snap)) return;
     scanned = Math.max(scanned, snap.at || 0);
+    venues.push(scanner);
     if (snap.whySilent) whySilent = snap.whySilent;
     if (Array.isArray(snap.rejected)) rejected = rejected.concat(snap.rejected);
     if (Array.isArray(snap.armed)){
@@ -365,26 +421,104 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
       }));
     }
     (snap.cands || []).forEach(function(c){
-      if (!c || c.vetoed) return;
-      var tier = goldCandTier(c);
-      if (!tier) return;
-      var row = enrichSuperGoldRow(c, tier, riskOpts, { source: scanner, scanner: scanner, at: snap.at });
-      if (row){
-        merged.push(row);
-        if (tier === 'clean') audit.clean++;
-        else audit.near++;
-        if (row.minimalLossPass) audit.minLoss++;
-      }
+      if (!c || c.vetoed || !goldCandTier(c)) return;
+      raw.push(Object.assign({}, c, { __sgScanner: scanner, __sgAt: snap.at }));
     });
   }
 
   var gsFn = win.goldscalpScan;
-  if (typeof gsFn === 'function'){
-    try{ absorbSnap(gsFn(), 'gold-scalp'); audit.venues.push('gold-scalp'); }catch(e0){}
+  if (typeof gsFn === 'function'){ try{ absorbSnap(gsFn(), 'gold-scalp'); }catch(e0){} }
+  var gwFn = win.goldswingScan;
+  if (typeof gwFn === 'function'){ try{ absorbSnap(gwFn(), 'gold-swing'); }catch(e1){} }
+
+  return { raw: raw, armed: armed, rejected: rejected, whySilent: whySilent, scanned: scanned, venues: venues };
+}
+
+function collectSuperGoldScanHits(win){
+  win = win || W;
+  var hits = [];
+  var sgFn = win.superGoldScan;
+  if (typeof sgFn === 'function'){
+    try{
+      var sg = sgFn();
+      if (sg && Array.isArray(sg.cands) && sg.cands.length
+          && (sg.hydrated || isFreshAt(sg.at || sg.scanAt, SNAP_MAX_MS))){
+        sg.cands.forEach(function(c){ if (c) hits.push(c); });
+      }
+    }catch(e0){}
+  }
+  if (!hits.length){
+    var snap = buildSnapFromGoldScans(win, defaultRiskOpts(win), { allowStale: true });
+    if (snap && Array.isArray(snap.cands)) hits = snap.cands.slice();
+  }
+  return hits;
+}
+
+function superGoldEvaluate(win, opts){
+  win = win || W;
+  opts = opts || {};
+  var hits = collectSuperGoldScanHits(win);
+  var hit = null, i;
+  if (opts.selectedId){
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].id === opts.selectedId){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].minimalLossPass){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < hits.length; i++){
+      if (hits[i] && hits[i].tier === 'clean'){ hit = hits[i]; break; }
+    }
+  }
+  if (!hit && hits.length) hit = hits[0];
+  if (!hit || !(N(hit.entry) > 0 && N(hit.stop) > 0)){
+    return { ready: false, idle: true, reason: 'No SUPER GOLD setup on desk' };
+  }
+  return hitToEvaluation(hit);
+}
+
+function buildSnapFromGoldScans(win, riskOpts, opts){
+  win = win || W;
+  riskOpts = riskOpts || defaultRiskOpts(win);
+  opts = opts || {};
+  var merged = [];
+  var audit = { clean: 0, near: 0, minLoss: 0, armedCount: 0, venues: [] };
+
+  var bag = collectRawGoldDeskCands(win, opts);
+  var armed = bag.armed;
+  var rejected = bag.rejected;
+  var whySilent = bag.whySilent;
+  var scanned = bag.scanned;
+  audit.venues = bag.venues.slice();
+  var rankCtx = (opts && opts.rankCtx) ? opts.rankCtx : buildGoldRankCtx(win);
+  var rankedRaw = rankRawGoldCands(win, bag.raw, rankCtx);
+
+  rankedRaw.forEach(function(c){
+    var tier = goldCandTier(c);
+    if (!tier) return;
+    var scanner = c.__sgScanner || 'gold-swing';
+    var row = enrichSuperGoldRow(c, tier, riskOpts, {
+      source: scanner, scanner: scanner, at: c.__sgAt || scanned
+    });
+    if (row){
+      merged.push(row);
+      if (tier === 'clean') audit.clean++;
+      else audit.near++;
+      if (row.minimalLossPass) audit.minLoss++;
+    }
+  });
+
+  var gsFn = win.goldscalpScan;
+  if (typeof gsFn === 'function' && audit.venues.indexOf('gold-scalp') < 0){
+    try{ audit.venues.push('gold-scalp'); }catch(e0){}
   }
   var gwFn = win.goldswingScan;
-  if (typeof gwFn === 'function'){
-    try{ absorbSnap(gwFn(), 'gold-swing'); audit.venues.push('gold-swing'); }catch(e1){}
+  if (typeof gwFn === 'function' && audit.venues.indexOf('gold-swing') < 0){
+    try{ audit.venues.push('gold-swing'); }catch(e1){}
   }
 
   var seen = {};
@@ -474,6 +608,9 @@ async function superGoldRunScanInner(opts){
     }
     if (typeof W.hgNewsRefresh === 'function'){
       try{ await W.hgNewsRefresh(false); }catch(eN){}
+    }
+    if (typeof W.getGoldMacro === 'function'){
+      try{ await W.getGoldMacro(); }catch(eM){}
     }
     var riskOpts = opts.riskOpts || defaultRiskOpts(W);
     var snap = buildSnapFromGoldScans(W, riskOpts);
@@ -581,6 +718,7 @@ function mount(el){
     '<section class="hg-tab hg-super-gold">',
     '  <div class="hg-title">Super Gold</div>',
     '  <div class="hg-note">Conviction desk — merges GOLD SCALP + GOLD SWING. GRADE A + audit + spot sizing = trade-ready.</div>',
+    '  <div class="hg-note" id="sg-weekend" style="margin-top:8px"></div>',
     '  <div class="hg-card"><h3>Gold Universe Desk</h3>',
     '    <div class="hg-note" id="sg-scan-stat">Next scan on tab open · 15 min cycle</div>',
     '    <button type="button" class="hg-btn primary" id="sg-run-scan" style="margin-top:8px">Scan gold desks now</button>',
@@ -662,7 +800,24 @@ function mount(el){
     }
   }
 
+  function paintWeekendBanner(){
+    var el = $('#sg-weekend');
+    if (!el) return;
+    var txt = '';
+    if (typeof W.hgGoldWeekendReadout === 'function'){
+      try{
+        var rd = W.hgGoldWeekendReadout(Math.floor(Date.now() / 1000));
+        if (rd && rd.line) txt = rd.line;
+      }catch(e0){}
+    } else if (typeof W.hgInGoldWeekend === 'function' && W.hgInGoldWeekend(Math.floor(Date.now() / 1000))){
+      txt = 'Gold weekend closure — WATCH rows only; GRADE A needs session open + audit pass';
+    }
+    el.textContent = txt || '';
+    el.style.display = txt ? 'block' : 'none';
+  }
+
   function paintDesk(snap){
+    paintWeekendBanner();
     snap = snap || superGoldScan();
     var desk = $('#sg-desk');
     var statEl = $('#sg-scan-stat');
@@ -804,10 +959,16 @@ function superGoldRepaint(){
 W.superGoldDeskPill = superGoldDeskPill;
 W.runGoldDeskAudit = runGoldDeskAudit;
 W.goldCandTier = goldCandTier;
+W.buildGoldRankCtx = buildGoldRankCtx;
+W.rankRawGoldCands = rankRawGoldCands;
+W.collectRawGoldDeskCands = collectRawGoldDeskCands;
+W.collectSuperGoldScanHits = collectSuperGoldScanHits;
+W.superGoldEvaluate = superGoldEvaluate;
 W.refineSuperGoldLevels = refineSuperGoldLevels;
 W.superGoldSortCands = superGoldSortCands;
 W.enrichSuperGoldRow = enrichSuperGoldRow;
 W.buildSnapFromGoldScans = buildSnapFromGoldScans;
+W.superGoldBuildSnap = buildSnapFromGoldScans;
 W.superGoldSyncDesk = syncDeskFromExisting;
 W.superGoldRepaint = superGoldRepaint;
 W.superGoldScan = superGoldScan;

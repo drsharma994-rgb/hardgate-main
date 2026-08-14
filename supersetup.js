@@ -958,6 +958,19 @@ function collectScanHits(win){
     }catch(eSs){}
   }
 
+  var sgFn = win.superGoldScan;
+  if (typeof sgFn === 'function'){
+    try{
+      var sg = sgFn();
+      if (sg && Array.isArray(sg.cands) && sg.cands.length
+          && (sg.hydrated || isFreshAt(sg.at || sg.scanAt, SNAP_MAX_MS))){
+        sg.cands.forEach(function(c){
+          if (c && (c.minimalLossPass || c.tier === 'clean')) push(c);
+        });
+      }
+    }catch(eSg){}
+  }
+
   var sel = win.HG_selectedSetup || win.HG_currentSetup || win.HG_bestSetup;
   if (sel && typeof sel === 'object'){
     push(hitFromCand(sel, { source: 'selected', tier: 'clean', trigger: sel.trigger || 'selected' }));

@@ -315,6 +315,7 @@ ok(r.unavailable.indexOf('liqs') >= 0, 'liq input absent (liqAgg/liqFlushSetup m
 console.log('== gold lane ==');
 W.goldswingState = function(){ return { results: [{ dir: 'long', grade: 'A', strategy: 'pullback' }] }; };
 W.goldscalpState = function(){ return { results: [{ dir: 'long', grade: 'A', strategy: 'ict' }] }; };
+W.superGoldScan = function(){ return { cands: [{ dir: 'long', grade: 'A', tier: 'clean', minimalLossPass: true, strategy: 'SUPER GOLD merge' }] }; };
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false, events: [], note: 'clear' },
               gold: { setup: { dir: 'long', aside: false, confidence: 'STRONG', reason: 'structure + macro + positioning aligned' },
                       deep: { label: 'BULLISH', score: 71, dir: 'long', ts: 1 },
@@ -330,6 +331,8 @@ ok(r.votes.some(function(x){ return x.layer === 'goldswingtab' && x.vote === 'lo
    'gold lane: goldswingState -> structural vote');
 ok(r.votes.some(function(x){ return x.layer === 'goldscalptab' && x.vote === 'long'; }),
    'gold lane: goldscalpState -> structural vote');
+ok(r.votes.some(function(x){ return x.layer === 'supergoldtab' && x.vote === 'long'; }),
+   'gold lane: superGoldScan -> structural vote');
 r = COLLECT({ sym: 'XAU', lane: 'gold', news: { risk: 'low', blackout: false, events: [], note: 'clear' },
               gold: { setup: { dir: 'long', aside: false, confidence: 'STRONG', reason: 'structure + macro + positioning aligned' },
                       deep: { label: 'BULLISH', score: 71, dir: 'long', ts: 1 },
@@ -499,6 +502,9 @@ W.binanceTickers24h = async function(){ return {
   SOLUSDT: { symbol: 'SOLUSDT', mark: 20, chg24: 3, turnoverUsd: 2e9 },
   XRPUSDT: { symbol: 'XRPUSDT', mark: 1, chg24: 0.5, turnoverUsd: 1e9 } }; };
 W.toTrade = function(){};
+W.goldswingState = function(){ return null; };
+W.goldscalpState = function(){ return null; };
+W.superGoldScan = function(){ return null; };
 
 const N = freshPane();
 tab.mount(N.pane);

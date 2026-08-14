@@ -283,7 +283,7 @@ var VENUE_KEY   = 'hgEngineVenue';  /* venue filter persistence — SHARED with 
    least one agreeing structural AND one agreeing positioning vote. */
 var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
-  goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural',
+  goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural', supergoldtab: 'structural',
   trend4h: 'structural', swingtab: 'structural', scalptab: 'structural', besttab: 'structural',
   edgetab: 'structural', pinetab: 'structural', smarttab: 'positioning',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning', bybitpos: 'positioning',
@@ -566,6 +566,29 @@ function brainCollect(inputs){
         }
       }
       if (!gsxHit) hush('goldscalptab', 'GOLD SCALP ran — no directional candidate on the board');
+    }
+    var sgd = (typeof G.superGoldScan === 'function') ? G.superGoldScan() : null;
+    if (!sgd || !Array.isArray(sgd.cands) || !sgd.cands.length){
+      dark('supergoldtab', 'SUPER GOLD desk empty — run GOLD SCALP + GOLD SWING or open SUPER GOLD');
+    }else{
+      var sgHit = null, sgi;
+      for (sgi = 0; sgi < sgd.cands.length; sgi++){
+        if (sgd.cands[sgi] && sgd.cands[sgi].minimalLossPass){ sgHit = sgd.cands[sgi]; break; }
+      }
+      if (!sgHit){
+        for (sgi = 0; sgi < sgd.cands.length; sgi++){
+          if (sgd.cands[sgi] && sgd.cands[sgi].tier === 'clean'){ sgHit = sgd.cands[sgi]; break; }
+        }
+      }
+      if (!sgHit) sgHit = sgd.cands[0];
+      if (sgHit && isDir(sgHit.dir)){
+        push('supergoldtab', sgHit.dir,
+             'SUPER GOLD ' + sgHit.dir.toUpperCase() + ' · grade ' + (sgHit.grade || 'n/a')
+             + (sgHit.minimalLossPass ? ' · GRADE A PASS' : (sgHit.tier === 'near' ? ' · WATCH' : ''))
+             + (sgHit.strategy ? ' · ' + sgHit.strategy : ''));
+      } else {
+        hush('supergoldtab', 'SUPER GOLD ran — no directional row on desk');
+      }
     }
     if (!inp.yield || typeof inp.yield !== 'object'){
       hush('yield', 'no US10Y macro data — yield correlation unread');

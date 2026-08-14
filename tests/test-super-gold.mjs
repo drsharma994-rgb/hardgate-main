@@ -24,7 +24,13 @@ ok(typeof W.buildSnapFromGoldScans === 'function', 'buildSnapFromGoldScans expor
 ok(typeof W.enrichSuperGoldRow === 'function', 'enrichSuperGoldRow exported');
 ok(typeof W.superGoldRunScan === 'function', 'superGoldRunScan exported');
 ok(typeof W.runGoldDeskAudit === 'function', 'runGoldDeskAudit exported');
-ok(typeof W.goldCandTier === 'function', 'goldCandTier exported');
+ok(typeof W.collectSuperGoldScanHits === 'function', 'collectSuperGoldScanHits exported');
+ok(typeof W.superGoldEvaluate === 'function', 'superGoldEvaluate exported');
+ok(typeof W.buildGoldRankCtx === 'function', 'buildGoldRankCtx exported');
+ok(typeof W.superGoldBuildSnap === 'function', 'superGoldBuildSnap exported');
+
+var evalIdle = W.superGoldEvaluate(W, {});
+ok(evalIdle.ready === false && /SUPER GOLD/.test(evalIdle.reason || ''), 'evaluate idle when desk empty');
 
 ok(W.goldCandTier({ grade: 'A', demoted: false, vetoed: false }) === 'clean', 'grade A → clean');
 ok(W.goldCandTier({ grade: 'B' }) === 'near', 'grade B → near');
@@ -98,7 +104,7 @@ ok(/hgApplyGoldBestLevels/.test(src), 'best-levels refine wired');
 ok(/sg-send-trade/.test(src), 'Send to Trade Plan button');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-gold\.js\?v=282/.test(html), 'super-gold.js cache-busted in index.html');
+ok(/super-gold\.js\?v=283/.test(html), 'super-gold.js cache-busted in index.html');
 ok(/'super-gold'/.test(html), 'super-gold in nav / hooks');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
