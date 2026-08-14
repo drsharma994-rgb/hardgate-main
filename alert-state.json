@@ -6,72 +6,81 @@
   "ticket": {
     "long": {
       "sym": "B-PUMP_USDT",
-      "entry": 0.002794422703599476
+      "entry": 0.0027922408854176577
     },
     "short": null
   },
   "sniper": {
-    "key": "B-1000SHIB_USDT@0.004578053108927383",
+    "key": "B-1000SHIB_USDT@0.004577543305005814",
     "hits": [
       {
         "sym": "B-1000SHIB_USDT",
         "dir": "long",
-        "entry": 0.004578053108927383,
-        "stop": 0.004515565980388847,
+        "entry": 0.004577543305005814,
+        "stop": 0.004515056176467278,
         "t1": 0.004685,
         "lev": 39,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-14T17:39:39.269Z"
+    "at": "2026-08-14T18:35:08.420Z"
   },
   "squeeze": {
-    "key": "B-1000SHIB_USDT:long;B-AAVE_USDT:short;B-AERO_USDT:short;B-ALICE_USDT:long;B-CROSS_USDT:long;B-MOVE_USDT:long;B-PIXEL_USDT:long;B-PUMP_USDT:long;B-US_USDT:short;B-ZAMA_USDT:short",
+    "key": "B-1000SHIB_USDT:long;B-AAVE_USDT:short;B-ACE_USDT:long;B-AERO_USDT:short;B-ALICE_USDT:long;B-DOLO_USDT:long;B-GWEI_USDT:long;B-MOVE_USDT:long;B-PIXEL_USDT:long;B-PRL_USDT:long;B-PUMP_USDT:long;B-RAVE_USDT:short;B-US_USDT:short;B-ZAMA_USDT:short",
     "rows": [
       {
         "sym": "B-AERO_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 0.3995,
-        "stop": 0.4094557730985145,
-        "t1": 0.37958845380297107,
-        "t2": 0.36465479415519936
+        "entry": 0.3993,
+        "stop": 0.40932005881280015,
+        "t1": 0.37925988237439967,
+        "t2": 0.3642297941551994
       },
       {
         "sym": "B-PUMP_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.002825,
+        "entry": 0.0028,
         "stop": 0.002600800921022086,
-        "t1": 0.003273398157955827,
-        "t2": 0.0036096967764226977
+        "t1": 0.0031983981579558275,
+        "t2": 0.003497196776422698
       },
       {
         "sym": "B-AAVE_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 86.64,
-        "stop": 88.61018450142909,
-        "t1": 82.69963099714182,
-        "t2": 79.74435424499819
+        "entry": 86.43,
+        "stop": 88.4001845014291,
+        "t1": 82.48963099714183,
+        "t2": 79.5343542449982
       },
       {
         "sym": "B-1000SHIB_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.004633,
-        "stop": 0.004508089923410262,
-        "t1": 0.004882820153179476,
-        "t2": 0.005070185268064083
+        "entry": 0.00462,
+        "stop": 0.004495089923410262,
+        "t1": 0.004869820153179476,
+        "t2": 0.005057185268064082
+      },
+      {
+        "sym": "B-GWEI_USDT",
+        "dir": "long",
+        "kind": "fired",
+        "entry": 0.02703,
+        "stop": 0.02422028159331998,
+        "t1": 0.032649436813360036,
+        "t2": 0.03686401442338007
       },
       {
         "sym": "B-PIXEL_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.004675,
-        "stop": 0.004389723170452359,
-        "t1": 0.005245553659095284,
-        "t2": 0.005673468903416746
+        "entry": 0.004615,
+        "stop": 0.004198096718884917,
+        "t1": 0.0054488065622301666,
+        "t2": 0.006074161483902791
       },
       {
         "sym": "B-ZAMA_USDT",
@@ -83,22 +92,22 @@
         "t2": 0.04445
       },
       {
+        "sym": "B-ACE_USDT",
+        "dir": "long",
+        "kind": "break",
+        "entry": 0.30483,
+        "stop": 0.2696242575365184,
+        "t1": 0.37524148492696313,
+        "t2": 0.42805009862218546
+      },
+      {
         "sym": "B-US_USDT",
         "dir": "short",
         "kind": "break",
-        "entry": 0.015415,
-        "stop": 0.02277630010924378,
-        "t1": 0.0006923997815124396,
-        "t2": -0.01034955038235323
-      },
-      {
-        "sym": "B-CROSS_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 0.14415,
-        "stop": 0.13338934034379601,
-        "t1": 0.16567131931240797,
-        "t2": 0.18181230879671395
+        "entry": 0.017412,
+        "stop": 0.02502562153781521,
+        "t1": 0.0021847569243695804,
+        "t2": -0.009235675382353235
       },
       {
         "sym": "B-ALICE_USDT",
@@ -109,29 +118,56 @@
         "sym": "B-MOVE_USDT",
         "dir": "long",
         "kind": "break",
-        "entry": 0.007218,
-        "stop": 0.006831066984748122,
-        "t1": 0.007991866030503756,
-        "t2": 0.008572265553381572
+        "entry": 0.006936,
+        "stop": 0.00654520984189098,
+        "t1": 0.00771758031621804,
+        "t2": 0.008303765553381571
+      },
+      {
+        "sym": "B-DOLO_USDT",
+        "dir": "long",
+        "kind": "break",
+        "entry": 0.02973,
+        "stop": 0.027823067089098104,
+        "t1": 0.03354386582180379,
+        "t2": 0.036404265188156634
+      },
+      {
+        "sym": "B-PRL_USDT",
+        "dir": "long",
+        "kind": "break",
+        "entry": 0.3426,
+        "stop": 0.32435450027438034,
+        "t1": 0.37909099945123936,
+        "t2": 0.4064592490396689
+      },
+      {
+        "sym": "B-RAVE_USDT",
+        "dir": "short",
+        "kind": "break",
+        "entry": 0.2698,
+        "stop": 0.2845256921346573,
+        "t1": 0.2403486157306854,
+        "t2": 0.21826007752869944
       }
     ],
-    "at": "2026-08-14T17:39:39.270Z"
+    "at": "2026-08-14T18:35:08.421Z"
   },
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-14T17:39:39.270Z"
+    "at": "2026-08-14T18:35:08.421Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-14T17:39:39.270Z"
+    "at": "2026-08-14T18:35:08.422Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-14T16:33:52.472Z",
+  "engineAlertAt": "2026-08-14T18:35:08.422Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -146,7 +182,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-14T17:39:39.981Z"
+    "at": "2026-08-14T18:35:08.693Z"
   },
   "bookFill": {
     "key": "u0|p0",
