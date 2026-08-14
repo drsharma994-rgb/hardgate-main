@@ -19,6 +19,7 @@
    to ignore red, which is how you end up not noticing the real outage.
    ============================================================================= */
 import fs from 'node:fs';
+import { telegramAlertsDisabled, sendTelegramMessage } from '../lib/telegram-guard.mjs';
 const STALE_HOURS = Number(process.env.HEARTBEAT_STALE_HOURS || 2);
 const STATE = 'alert-state.json';
 /* Every ISO timestamp anywhere in the state, at any depth. The freshest one is
@@ -41,27 +42,20 @@ function newestStamp(obj, best = 0) {
    ~10 lines, and it is the reason this can still shout when everything else is
    down. Missing secrets print instead of throwing, so the run stays green. */
 async function push(subject, body) {
-  const t = process.env.TELEGRAM_TOKEN;
-  const c = process.env.TELEGRAM_CHAT_ID;
   const text = subject + '\n\n' + body;
-  if (!t || !c) {
+  if (telegramAlertsDisabled()) {
+    console.log('[heartbeat] TELEGRAM_DISABLED — printing instead');
+    console.log(text);
+    return 'disabled';
+  }
+  const r = await sendTelegramMessage(text);
+  if (r.skipped) {
     console.log('[heartbeat] no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID — printing instead');
     console.log(text);
     return 'printed';
   }
-  try {
-    const res = await fetch('https://api.telegram.org/bot' + t + '/sendMessage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: c, text: text, disable_web_page_preview: true })
-    });
-    const okRes = res && (res.ok === true || (res.status >= 200 && res.status < 300));
-    console.log('[heartbeat] telegram: ' + (okRes ? 'sent' : 'failed HTTP ' + (res && res.status)));
-    return okRes ? 'sent' : 'failed';
-  } catch (e) {
-    console.log('[heartbeat] telegram failed: ' + ((e && e.message) ? e.message : String(e)));
-    return 'failed';
-  }
+  console.log('[heartbeat] telegram: ' + (r.ok ? 'sent' : 'failed ' + (r.reason || '')));
+  return r.ok ? 'sent' : 'failed';
 }
 async function main() {
   let raw;

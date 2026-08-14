@@ -337,6 +337,12 @@ await withFetch(async () => { const e = new Error('The operation was aborted'); 
   let tgFail;
   await withFetch(fetchOk('{}', 403), async () => { tgFail = await sendTelegramCi('x'); });
   ok(typeof tgFail === 'string' && tgFail.indexOf('failed') === 0, 'telegram: non-2xx -> honest failure string');
+  process.env.TELEGRAM_DISABLED = '1';
+  let disSent;
+  await withFetch(async (url, opts) => { return fetchOk('{}', 200)(url, opts); },
+    async () => { disSent = await sendTelegramCi('x'); });
+  ok(disSent === 'skipped: TELEGRAM_DISABLED', 'telegram: TELEGRAM_DISABLED -> skipped');
+  delete process.env.TELEGRAM_DISABLED;
   /* cascade: telegram success short-circuits ntfy; telegram failure falls through */
   let casc1, ntfyCalls = 0;
   await withFetch(async () => { ntfyCalls++; return { status: 200, text: async () => '{}', headers: { get: () => null } }; },

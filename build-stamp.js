@@ -21,7 +21,7 @@ var HG_BUILD = {
   version: 'hg-v290',
   pack: 'super gold risk block fix',
   built: '2026-08-14T20:30:00Z',
-  note: 'SUPER GOLD goldCalcTrade · no false RISK BLOCK with supersetup loaded'
+  note: 'SUPER GOLD goldCalcTrade · no false RISK BLOCK · includes v288 UI + v289 telegram off'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
