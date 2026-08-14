@@ -746,14 +746,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=286"></script>
+<script src="supersetup.js?v=287"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=286"></script>
-<script src="super-gold.js?v=286"></script>
-<script src="super-best.js?v=286"></script>
-<script src="super-sniper.js?v=286"></script>
-<script src="super-book.js?v=286"></script>
-<script src="super-calibrate.js?v=286"></script>
+<script src="super-desk-common.js?v=287"></script>
+<script src="super-gold.js?v=287"></script>
+<script src="super-best.js?v=287"></script>
+<script src="super-sniper.js?v=287"></script>
+<script src="super-book.js?v=287"></script>
+<script src="super-calibrate.js?v=287"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -6434,7 +6434,7 @@ function bestEnrichVision(pool){
 async function runBest(opts){
   opts = opts || {};
   if (!opts._singleLeg && !opts.singleExchange && typeof hgDualScanEnabled === 'function' && hgDualScanEnabled()){
-    if (!(await waitAlertIdle($('bestStat')))) return;
+    if (!opts.quiet && !(await waitAlertIdle($('bestStat')))) return;
     const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
     const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='Scanning Delta + CoinDCX…';
     try{
@@ -6514,7 +6514,7 @@ async function runBest(opts){
   }
 
   // Single Exchange Fallback (Legacy)
-  if (!(await waitAlertIdle($('bestStat')))) return;
+  if (!opts.quiet && !(await waitAlertIdle($('bestStat')))) return;
   const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
   const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='';
   try{
@@ -6570,6 +6570,8 @@ async function runBest(opts){
   finally{ setProg('bestProg',null); btn.disabled=false; }
 }
 window.runBest = runBest;
+window.silentBestScan = silentBestScan;
+window.publishBestSnap = publishBestSnap;
 
 async function silentBestScan(exchangeArg){
   try{

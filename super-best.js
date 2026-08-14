@@ -128,14 +128,7 @@ function enrichSuperBestRowLite(c, tier, riskOpts, meta){
 }
 
 function enrichSuperBestRow(c, tier, riskOpts, meta){
-  meta = meta || {};
-  var enrich = W.superSetupEnrichRow;
-  if (typeof enrich === 'function'){
-    var row = enrich(c, tier, riskOpts, Object.assign({}, meta, {
-      refineOpts: { rejectVisionVeto: false }
-    }));
-    if (row) return row;
-  }
+  /* BEST tab already ran 7/7 + evidence — desk uses lite enrich only (no re-veto). */
   return enrichSuperBestRowLite(c, tier, riskOpts, meta);
 }
 
@@ -181,6 +174,7 @@ function buildSnapFromBestScan(win, riskOpts, opts){
     };
   }
   scanned = best.at || Date.now();
+  var rawClean = best.clean.length;
   best.clean.forEach(function(c){
     var raw = bestCandFromClean(c, scanned);
     if (!raw || !(raw.entry > 0 && raw.stop > 0)) return;
@@ -195,14 +189,18 @@ function buildSnapFromBestScan(win, riskOpts, opts){
     }
   });
   superBestSortCands(merged);
+  var statExtra = rawClean && !merged.length
+    ? (' · ' + rawClean + ' in BEST snap but blocked (check entry/stop)')
+    : '';
   return {
     at: scanned,
     cands: merged,
     audit: audit,
     meta: best.meta || {},
+    rawClean: rawClean,
     stat: merged.length
       ? (merged.length + ' BEST CLEAN · ' + audit.minLoss + ' trade-ready · fam/rob ranked')
-      : '0 BEST CLEAN — run FIND BEST across Delta + CoinDCX'
+      : ('0 BEST CLEAN — run FIND BEST across Delta + CoinDCX' + statExtra)
   };
 }
 
@@ -269,15 +267,13 @@ async function superBestRunScanInner(opts){
   __sb.lastScanMsg = 'Running BEST scan…';
   if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
   try{
-    var warm = W.bestScanWarm;
-    var runBestFn = W.runBest;
-    if (typeof warm === 'function'){
-      await warm();
+    if (typeof W.bestScanWarm === 'function'){
+      await W.bestScanWarm();
     }
     var bestSnap = (typeof W.bestScan === 'function') ? W.bestScan() : null;
     if ((!bestSnap || !Array.isArray(bestSnap.clean) || !bestSnap.clean.length)
-        && typeof runBestFn === 'function'){
-      try{ await runBestFn({ quiet: true }); }catch(eRb){}
+        && typeof W.runBest === 'function'){
+      try{ await W.runBest({ quiet: true }); }catch(eRb){}
     }
     __sb.lastScanAt = Date.now();
     var snap = buildSnapFromBestScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });

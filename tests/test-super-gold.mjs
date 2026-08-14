@@ -104,7 +104,7 @@ ok(/hgApplyGoldBestLevels/.test(src), 'best-levels refine wired');
 ok(/sg-send-trade/.test(src), 'Send to Trade Plan button');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-gold\.js\?v=286/.test(html), 'super-gold.js cache-busted in index.html');
+ok(/super-gold\.js\?v=287/.test(html), 'super-gold.js cache-busted in index.html');
 ok(/'super-gold'/.test(html), 'super-gold in nav / hooks');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

@@ -17,7 +17,11 @@ const W = ctx.window;
 let pass = 0, fail = 0;
 function ok(c, m){ if (c){ pass++; console.log('ok    - ' + m); } else { fail++; console.error('FAIL  - ' + m); } }
 
-ok(typeof W.superCalibrateSummarize === 'function', 'summarize exported');
+W.hgFunnelPanelHTML = function(title, rows, id){
+  return '<div id="' + id + '">' + title + ':' + rows.length + '</div>';
+};
+
+ok(typeof W.superCalibrateBuildPanel === 'function', 'buildPanel exported');
 
 const samples = [
   { pass: { G1: true, G2: true }, r: 1.2 },
@@ -27,7 +31,15 @@ const samples = [
 const sum = W.superCalibrateSummarize(samples);
 ok(sum.clean === 2 && sum.settled === 3, 'summarize clean/settled');
 
-ok(/super-calibrate\.js\?v=286/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
+const panel = W.superCalibrateBuildPanel(
+  { samples: [{ pass: { G1: true, G2: true }, r: 1.0 }] },
+  W.superCalibrateSummarize([{ pass: { G1: true, G2: true }, r: 1.0 }]),
+  1,
+  'test'
+);
+ok(typeof panel === 'string' && panel.length > 20, 'buildPanel returns html');
+
+ok(/super-calibrate\.js\?v=287/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
 ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw ' + HG_VER);
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));

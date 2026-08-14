@@ -7,6 +7,7 @@ var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined') ? globalThis : this;
 
 var TAB_ID = 'super-calibrate';
+var DEFAULT_SYMBOLS = 24;
 var __hgSuperCalSnap = null;
 var __sc = { mounted: false, root: null, busy: false, lastAt: 0 };
 
@@ -57,55 +58,144 @@ function publishSuperCalibrateSnap(snap){
 
 function superCalibrateScan(){ return __hgSuperCalSnap; }
 
-function superCalibrateReplayInline(opts){
+function superCalibrateReplayFromSwingAudit(){
+  try{
+    var swingFn = W.swingScan;
+    if (typeof swingFn !== 'function') return null;
+    var snap = swingFn();
+    var audit = snap && snap.audit;
+    if (!audit || !Array.isArray(audit.replaySamples) || !audit.replaySamples.length) return null;
+    return {
+      samples: audit.replaySamples.slice(),
+      clean: audit.replayClean || 0,
+      settled: audit.replaySettled || 0,
+      source: 'swing-scan',
+      scanned: audit.replaySymbols || 0
+    };
+  }catch(e0){ return null; }
+}
+
+function superCalibrateBuildPanel(replay, summary, scanned, note){
+  var parts = [];
+  replay = replay || { samples: [] };
+  summary = summary || superCalibrateSummarize(replay.samples);
+  scanned = scanned || 0;
+
+  if (typeof W.hgFunnelPanelHTML === 'function'){
+    parts.push(W.hgFunnelPanelHTML('SUPER CALIBRATE — gate replay summary', [
+      { k: 'Symbols replayed', v: String(scanned || (replay.source === 'swing-scan' ? 'SWING cache' : '0')) },
+      { k: 'Aligned bars', v: String(summary.samples || 0) },
+      { k: 'CLEAN at settings', v: String(summary.clean || 0) },
+      { k: 'Settled bars', v: String(summary.settled || 0) },
+      { k: 'Expectancy', v: summary.expR != null ? fmt(summary.expR, 3) + 'R' : '—' },
+      { k: 'Win rate', v: summary.winPct != null ? fmt(summary.winPct * 100, 1) + '%' : '—' }
+    ], 'scReplaySummary'));
+  }
+
+  if (typeof W.cgGateReplayPanelHTML === 'function' && replay.samples && replay.samples.length){
+    var sweepHtml = W.cgGateReplayPanelHTML({
+      samples: replay.samples,
+      clean: summary.clean,
+      settled: summary.settled
+    }, {});
+    if (sweepHtml) parts.push(sweepHtml);
+  }
+
+  if (!parts.length || (parts.length === 1 && !(replay.samples && replay.samples.length))){
+    parts.push('<div class="hg-note">' + (note || 'Run calibration or SWING scan to load replay bars.') + '</div>');
+  }
+  return parts.join('');
+}
+
+async function superCalibrateWarmTickers(limit){
+  limit = limit || DEFAULT_SYMBOLS;
+  try{
+    if (typeof W.getTickers === 'function'){
+      var uni = await W.getTickers();
+      if (Array.isArray(uni) && uni.length) return uni.filter(function(t){ return t && t.symbol; }).slice(0, limit);
+    }
+  }catch(e0){}
+  try{
+    if (typeof W.S !== 'undefined' && W.S && Array.isArray(W.S.tickers) && W.S.tickers.length){
+      return W.S.tickers.filter(function(t){ return t && t.symbol; }).slice(0, limit);
+    }
+  }catch(e1){}
+  return [];
+}
+
+async function superCalibrateReplayInline(opts){
   opts = opts || {};
-  var samples = [], scanned = 0, clean = 0;
-  if (typeof W.cgGateReplay !== 'function' || typeof W.getCandles !== 'function' || typeof W.getTickers !== 'function'){
+  var cgReplay = W.cgGateReplay;
+  var getCandles = W.getCandles;
+  if (typeof cgReplay !== 'function' || typeof getCandles !== 'function'){
+    var cached = superCalibrateReplayFromSwingAudit();
+    if (cached){
+      var sumCached = superCalibrateSummarize(cached.samples);
+      return {
+        summary: sumCached,
+        panelHtml: superCalibrateBuildPanel(cached, sumCached, cached.scanned || 0,
+          'Synced from latest SWING scan replay cache'),
+        stat: 'SWING replay cache · ' + cached.samples.length + ' bars · ' + sumCached.clean + ' CLEAN',
+        note: sumCached.settled >= 5
+          ? ('Settled ' + sumCached.settled + ' · win ' + fmt((sumCached.winPct || 0) * 100, 1) + '%')
+          : 'Need more settled replay bars for MAE/MFE confidence',
+        scanned: cached.scanned || 0,
+        source: 'swing-scan'
+      };
+    }
     return {
       summary: null,
-      panelHtml: '',
-      stat: 'No calibration data — cgGateReplay or market feed unavailable',
-      note: 'Run when SWING market feed is online'
+      panelHtml: superCalibrateBuildPanel(null, null, 0, 'cgGateReplay / getCandles not ready — open SWING and scan first'),
+      stat: 'No calibration data — market feed unavailable',
+      note: 'Run SWING scan or gate calibration when online',
+      scanned: 0
     };
   }
-  return (async function(){
-    var uni = [];
-    try{ uni = (await W.getTickers()) || []; }catch(e0){}
-    uni = uni.filter(function(t){ return t && t.symbol; }).slice(0, opts.limit || 12);
-    for (var i = 0; i < uni.length; i++){
-      var t = uni[i];
-      try{
-        var rows = await W.getCandles(t.symbol, '4h', 500);
-        if (!rows || rows.length < 300) continue;
-        var rp = W.cgGateReplay(rows, t, {});
-        samples = samples.concat(rp.samples || []);
-        clean += rp.clean || 0;
-        scanned++;
-      }catch(e1){}
+
+  var samples = [], scanned = 0, clean = 0;
+  var uni = await superCalibrateWarmTickers(opts.limit || DEFAULT_SYMBOLS);
+  for (var i = 0; i < uni.length; i++){
+    var t = uni[i];
+    try{
+      if (typeof W.hgScanRateOk === 'function' && !W.hgScanRateOk()) break;
+      var rows = await getCandles(t.symbol, '4h', 500);
+      if (!rows || rows.length < 300) continue;
+      var rp = cgReplay(rows, t, {});
+      samples = samples.concat(rp.samples || []);
+      clean += rp.clean || 0;
+      scanned++;
+    }catch(e1){}
+  }
+
+  if (!samples.length){
+    var swingCached = superCalibrateReplayFromSwingAudit();
+    if (swingCached){
+      samples = swingCached.samples;
+      clean = swingCached.clean || 0;
+      scanned = swingCached.scanned || scanned;
     }
-    var sum = superCalibrateSummarize(samples);
-    var panelHtml = '';
-    if (typeof W.cgGateReplayPanelHTML === 'function' && samples.length){
-      panelHtml = W.cgGateReplayPanelHTML({
-        samples: samples,
-        clean: sum.clean,
-        settled: sum.settled
-      }, {});
-    }
-    var stat = scanned
-      ? ('Calibrated ' + scanned + ' symbols · ' + samples.length + ' bars · '
-        + sum.clean + ' CLEAN · expR ' + (sum.expR != null ? fmt(sum.expR, 3) : '—'))
-      : 'No calibration data — need 300+ 4H bars from market feed';
-    return {
-      summary: sum,
-      panelHtml: panelHtml,
-      stat: stat,
-      note: sum.settled >= 5
-        ? ('Settled ' + sum.settled + ' · win ' + fmt((sum.winPct || 0) * 100, 1) + '%')
-        : 'Need more settled replay bars for MAE/MFE confidence',
-      scanned: scanned
-    };
-  })();
+  }
+
+  var sum = superCalibrateSummarize(samples);
+  var replay = { samples: samples, clean: sum.clean, settled: sum.settled };
+  var note = sum.settled >= 5
+    ? ('Settled ' + sum.settled + ' · win ' + fmt((sum.winPct || 0) * 100, 1) + '%')
+    : 'Need more settled replay bars for MAE/MFE confidence';
+  var stat = scanned
+    ? ('Calibrated ' + scanned + ' symbols · ' + samples.length + ' bars · '
+      + sum.clean + ' CLEAN · expR ' + (sum.expR != null ? fmt(sum.expR, 3) : '—'))
+    : (samples.length
+      ? ('SWING replay cache · ' + samples.length + ' bars · ' + sum.clean + ' CLEAN')
+      : 'No calibration data — need 300+ 4H bars (run SWING scan)');
+
+  return {
+    summary: sum,
+    panelHtml: superCalibrateBuildPanel(replay, sum, scanned, note),
+    stat: stat,
+    note: note,
+    scanned: scanned,
+    source: samples.length && !scanned ? 'swing-scan' : 'inline'
+  };
 }
 
 async function superCalibrateRunInner(opts){
@@ -114,14 +204,9 @@ async function superCalibrateRunInner(opts){
   __sc.busy = true;
   try{
     var result = await superCalibrateReplayInline(opts);
-    if (typeof W.runGateDiagnostics === 'function'){
-      try{ await W.runGateDiagnostics(); }catch(eDiag){}
-      if (!result.panelHtml && result.scanned === 0){
-        result.stat = 'SWING gate replay ran — market feed returned no replay bars';
-      }
-    }
     var snap = buildSnapFromCalibrateResult(result);
     snap.scanned = result.scanned;
+    snap.source = result.source;
     publishSuperCalibrateSnap(snap);
     __sc.lastAt = Date.now();
     if (__sc.mounted && typeof __sc.paintSnap === 'function') __sc.paintSnap(snap);
@@ -218,12 +303,13 @@ function superCalibrateRepaint(){
 
 async function superCalibrateRefresh(){
   if (!__sc.lastAt) await superCalibrateRun({ force: true });
-  superCalibrateRepaint();
+  else superCalibrateRepaint();
   return 'refreshed';
 }
 
 W.superCalibrateSummarize = superCalibrateSummarize;
 W.superCalibrateReplayInline = superCalibrateReplayInline;
+W.superCalibrateBuildPanel = superCalibrateBuildPanel;
 W.buildSnapFromCalibrateResult = buildSnapFromCalibrateResult;
 W.superCalibrateScan = superCalibrateScan;
 W.superCalibrateRun = superCalibrateRun;
