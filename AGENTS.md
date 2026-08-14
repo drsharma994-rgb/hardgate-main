@@ -202,3 +202,10 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Theme source: [markbang/base-themes](https://github.com/markbang/base-themes) **`data-dense` / `light`** tokens in `vendor/base-themes/tokens-data-dense-light.css`.
 - `bright.css` maps HARDGATE `--ink` / `--panel` / borders to those tokens; no backdrop blur (faster paint).
 - Header uses Lucide-style inline SVG (`hg-icons.css`), not emoji. Shell: `<html data-style="data-dense" data-theme="light">`.
+
+### Super conviction desks — hg-v284
+- **STRATEGIES nav:** `super-setup`, `super-best`, `super-sniper`, `super-book`, `super-calibrate` (plus **GOLD → super-gold**).
+- Shared helpers: **`super-desk-common.js`** (`hgSuperDeskValidationHtml`, SCORECARD link, chart vision enrich).
+- **RISK v2:** TOOLS → RISK — optional **hold hours**, **funding / 8h %**, **India VDA tax + TDS** checkbox; engine in **`lib/crypto-position-risk.mjs`**.
+- Tab open auto-scan hooks in `index.html` `HG_TAB_AUTO_SCAN` for each super tab.
+- Tests: `tests/test-super-best.mjs`, `test-super-sniper.mjs`, `test-super-book.mjs`, `test-super-calibrate.mjs`, `test-super-gold.mjs`.

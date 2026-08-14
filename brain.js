@@ -285,6 +285,7 @@ var LAYER_KIND = {
   engine: 'structural', squeeze: 'structural', structure: 'structural', meanrev: 'structural', poc: 'structural',
   goldsetup: 'structural', golddeep: 'structural', goldswingtab: 'structural', goldscalptab: 'structural', supergoldtab: 'structural',
   trend4h: 'structural', swingtab: 'structural', scalptab: 'structural', besttab: 'structural',
+  superbesttab: 'structural', supersnipertab: 'structural', superbooktab: 'positioning',
   edgetab: 'structural', pinetab: 'structural', smarttab: 'positioning',
   oiflow: 'positioning', liqs: 'positioning', goldbasis: 'positioning', bybitpos: 'positioning',
   news: 'context', regime: 'context', rotation: 'context', onchain: 'context',
@@ -924,6 +925,54 @@ function brainCollect(inputs){
       }
     }
     if (!bHit) hush('besttab', 'symbol not in the latest BEST CLEAN pool');
+  }
+
+  /* ---- SUPER BEST desk ---- */
+  var sbd = (typeof G.superBestScan === 'function') ? G.superBestScan() : null;
+  if (!sbd || !Array.isArray(sbd.cands) || !sbd.cands.length){
+    hush('superbesttab', 'SUPER BEST desk empty — run BEST or open SUPER BEST');
+  }else{
+    var sbHit = null, sbi;
+    for (sbi = 0; sbi < sbd.cands.length; sbi++){
+      if (sbd.cands[sbi] && sbd.cands[sbi].minimalLossPass){ sbHit = sbd.cands[sbi]; break; }
+    }
+    if (!sbHit) sbHit = sbd.cands[0];
+    if (sbHit && isDir(sbHit.dir)){
+      push('superbesttab', sbHit.dir,
+        'SUPER BEST ' + sbHit.dir.toUpperCase()
+        + (sbHit.minimalLossPass ? ' · MIN LOSS PASS' : '')
+        + (isFinite(sbHit.famScore) ? ' · fam ' + sbHit.famScore : ''));
+    } else hush('superbesttab', 'SUPER BEST ran — no directional row');
+  }
+
+  /* ---- SUPER SNIPER desk ---- */
+  var snd = (typeof G.superSniperScan === 'function') ? G.superSniperScan() : null;
+  if (!snd || !Array.isArray(snd.cands) || !snd.cands.length){
+    hush('supersnipertab', 'SUPER SNIPER desk empty — run REVERSAL SNIPER scan');
+  }else{
+    var snHit = snd.cands[0];
+    if (snHit && isDir(snHit.dir)){
+      push('supersnipertab', snHit.dir,
+        'SUPER SNIPER LONG · conv ' + (snHit.conviction || '—')
+        + (snHit.minimalLossPass ? ' · SNIPER PASS' : ''));
+    } else hush('supersnipertab', 'SUPER SNIPER — no row');
+  }
+
+  /* ---- SUPER BOOK heat ---- */
+  var bkd = (typeof G.superBookScan === 'function') ? G.superBookScan() : null;
+  if (!bkd || !bkd.deskMeta){
+    hush('superbooktab', 'SUPER BOOK — book marks not loaded');
+  }else{
+    var heat = isFinite(bkd.deskMeta.heatPct) ? bkd.deskMeta.heatPct : 0;
+    if (bkd.deskMeta.dailyLossHalt){
+      push('superbooktab', 'veto', 'BOOK daily loss halt — stand down', { caution: true });
+    }else if (heat >= 0.06){
+      push('superbooktab', 'veto', 'BOOK heat cap ' + FMT(heat * 100, 1) + '% — no new risk', { caution: true });
+    }else if (heat >= 0.05){
+      push('superbooktab', 'neutral', 'BOOK heat elevated ' + FMT(heat * 100, 1) + '%', { caution: true });
+    }else{
+      push('superbooktab', 'neutral', 'BOOK heat ' + FMT(heat * 100, 1) + '% · ' + (bkd.deskMeta.openCount || 0) + ' open');
+    }
   }
 
   /* ---- EDGE tab CLEAN snapshot ---- */

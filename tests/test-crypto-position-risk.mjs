@@ -10,6 +10,8 @@ import {
   hgCryptoPositionRisk,
   hgCryptoAttachPositionSize,
   hgCryptoRiskGate,
+  hgCryptoFundingCostR,
+  hgCryptoIndiaTaxDragR,
   HG_CRYPTO_LIQ_CLEARANCE_MIN
 } from '../lib/crypto-position-risk.mjs';
 import fs from 'node:fs';
@@ -61,6 +63,17 @@ ok(setup.positionRisk && setup.positionRisk.impliedLeverage === 0.5, 'positionRi
 
 const gate = hgCryptoRiskGate(risk);
 ok(gate.pass === true, 'risk gate passes clean swing');
+
+ok(hgCryptoFundingCostR(5000, 10, 24, 0.0001) > 0, 'funding cost R positive for 24h hold');
+const taxDrag = hgCryptoIndiaTaxDragR(2, 0.1, 100, 98, 5000, 10, { indiaTax: true });
+ok(taxDrag > 0, 'India tax drag on winning R');
+
+const riskV2 = hgCryptoPositionRisk(
+  { dir: 'long', entry: 100, stop: 99.65, t1: 100.35, style: 'scalp' },
+  { balance: 1000, riskPct: 1, holdHours: 24, fundingRate8h: 0.0001, indiaTax: true }
+);
+ok(riskV2.fundingCostR != null && riskV2.fundingCostR > 0, 'v2 funding on worksheet');
+ok(riskV2.indiaTax === true, 'v2 india tax flag');
 
 const ctx = vm.createContext({ window: {}, document: { head: { appendChild: function(){} } } });
 ctx.window = ctx; ctx.globalThis = ctx;

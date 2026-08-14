@@ -1503,6 +1503,7 @@ function mount(el){
     '    </div>',
     '    <div class="hg-super-badge">Super Setup v2.3.0</div>',
     '  </div>',
+    '  <div id="ss-validation"></div>',
     '  <div class="hg-idle-banner" id="ss-idle">Scanning Delta + CoinDCX universe…</div>',
     '  <div class="hg-super-grid">',
     '    <div class="hg-card"><h3>Universe Desk · Delta + CoinDCX</h3>',
@@ -1511,6 +1512,7 @@ function mount(el){
     '        <button type="button" class="hg-btn primary" id="ss-run-scan">Scan all contracts now</button>',
     '      </div>',
     '      <div class="hg-desk" id="ss-desk" style="margin-top:12px"></div>',
+    '      <div id="ss-vision" style="margin-top:10px"></div>',
     '    </div>',
     '    <div class="hg-card"><h3>Trade Context</h3><div class="hg-form">',
     '      <div class="hg-field"><label for="ss-symbol">Symbol</label><input id="ss-symbol" value="—" readonly /></div>',
@@ -1551,6 +1553,7 @@ function mount(el){
     '      <div class="hg-actions" style="margin-top:10px">',
     '        <button type="button" class="hg-btn primary" id="ss-send-trade" disabled>Send to Trade Plan</button>',
     '      </div>',
+    '      <div style="margin-top:10px" id="ss-scorecard-wrap"></div>',
       '      <div class="hg-note" id="ss-note" style="margin-top:10px">MIN LOSS PASS = CLEAN 7/7 + house + external + FQS floor + meta-label + DVOL + post-gate flow/BTC RS.</div>',
     '    </div>',
     '  </div>',
@@ -1804,6 +1807,15 @@ function mount(el){
   }
 
   function paintDesk(snap){
+    var valEl = $('#ss-validation');
+    if (valEl && typeof W.hgSuperDeskValidationHtml === 'function'){
+      valEl.innerHTML = W.hgSuperDeskValidationHtml(W);
+    }
+    var scWrap = $('#ss-scorecard-wrap');
+    if (scWrap && typeof W.hgSuperDeskScorecardLink === 'function'){
+      scWrap.innerHTML = W.hgSuperDeskScorecardLink('super-setup');
+      if (typeof W.hgSuperDeskBindScorecard === 'function') W.hgSuperDeskBindScorecard(scWrap);
+    }
     snap = snap || superSetupScan();
     var desk = $('#ss-desk');
     var statEl = $('#ss-scan-stat');
@@ -1857,6 +1869,18 @@ function mount(el){
         if (hit) applyEvaluation(hitToEvaluation(hit));
       });
     });
+    if (typeof W.hgSuperDeskEnrichChartVision === 'function'){
+      W.hgSuperDeskEnrichChartVision(rows, {
+        style: 'super-setup', cleanOnly: true, limit: 6,
+        repaint: function(){
+          var vEl = $('#ss-vision');
+          var sel = rows.find(function(r){ return r.id === __ss.selectedId; }) || rows[0];
+          if (vEl && sel && typeof W.hgSuperDeskVisionBlock === 'function'){
+            vEl.innerHTML = W.hgSuperDeskVisionBlock(sel) || '';
+          }
+        }
+      });
+    }
   }
 
   function syncText(ev){
