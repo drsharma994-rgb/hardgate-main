@@ -57,7 +57,7 @@ var W = (typeof window !== 'undefined') ? window
 var LS_KEY = 'hgSignalLog';
 var MAX_ENTRIES = 500;
 var INTERVAL_MS = 5*60*1000;             /* every 5 min */
-var SOURCES = ['brain', 'scalp', 'swing'];
+var SOURCES = ['brain', 'scalp', 'swing', 'supergold'];
 
 /* ---------------- tiny helpers ---------------- */
 function esc(s){
@@ -114,7 +114,7 @@ function __lsWipe(){
 /* ---------------- journal state ---------------- */
 var __corrupt = false;                   /* stored JSON unreadable -> noted once in the UI */
 var __journal = loadJournal();
-var __live = { brain: false, scalp: false, swing: false };
+var __live = { brain: false, scalp: false, swing: false, supergold: false };
 var __snapshotted = false;
 var __timer = null;                      /* setInterval handle — started once, guarded */
 var __ui = null;                         /* mounted pane elements, null before mount */
@@ -124,7 +124,7 @@ function normEntry(e){
   var dir = normDir(e.dir);
   if (!dir || !e.sym) return null;
   var src = String(e.source || '');
-  if (src !== 'brain' && src !== 'scalp' && src !== 'swing') return null;
+  if (src !== 'brain' && src !== 'scalp' && src !== 'swing' && src !== 'supergold') return null;
   return {
     t: (typeof e.t === 'string' && e.t) ? e.t : '',
     source: src,
@@ -234,13 +234,42 @@ function pullScan(fnName){
   return { live: true, rows: out };
 }
 
+/* super-gold: window.superGoldScan() -> enriched desk rows. */
+function pullSuperGold(){
+  var fn = gfn('superGoldScan');
+  if (!fn) return { live: false, rows: [] };
+  var val = null;
+  try{ val = fn(); }catch(e){ return { live: false, rows: [] }; }
+  if (val === null || val === undefined) return { live: false, rows: [] };
+  var rows = rowsFrom(val), out = [];
+  for (var i = 0; i < rows.length; i++){
+    var c = rows[i];
+    if (!c || typeof c !== 'object') continue;
+    var dir = normDir(c.dir);
+    var sym = c.sym || c.symbol || 'XAUUSD';
+    if (!dir || !sym) continue;
+    var note = c.strategy || c.scanner || '';
+    if (c.minimalLossPass) note = (note ? note + ' · ' : '') + 'GRADE A PASS';
+    else if (c.goldAudit && c.goldAudit.reasons && c.goldAudit.reasons.length){
+      note = (note ? note + ' · ' : '') + c.goldAudit.reasons[0];
+    }
+    out.push({
+      sym: String(sym), dir: dir,
+      tierOrGrade: c.grade || (c.tier === 'clean' ? 'A' : 'B'),
+      entry: c.entry, stop: c.stop, t1: c.t1 || c.tp,
+      note: note
+    });
+  }
+  return { live: true, rows: out };
+}
+
 /* ---------------- snapshot round ---------------- */
 function snapshotRound(){
   var added = 0;
   try{
     var iso = '';
     try{ iso = new Date().toISOString(); }catch(eD){ iso = ''; }
-    var pulls = [pullBrain(), pullScan('goldscalpScan'), pullScan('goldswingScan')];
+    var pulls = [pullBrain(), pullScan('goldscalpScan'), pullScan('goldswingScan'), pullSuperGold()];
     var seen = {}, fresh = [];
     for (var s = 0; s < SOURCES.length; s++){
       __live[SOURCES[s]] = !!pulls[s].live;
@@ -351,6 +380,7 @@ var SL_CSS = ''
 + '#tab_signallog .sl-badge.brain{color:#b48cff;border-color:rgba(180,140,255,.45);background:rgba(180,140,255,.08)}'
 + '#tab_signallog .sl-badge.scalp{color:#ffd76a;border-color:rgba(255,215,106,.45);background:rgba(255,215,106,.07)}'
 + '#tab_signallog .sl-badge.swing{color:#4ac3ff;border-color:rgba(74,195,255,.45);background:rgba(74,195,255,.07)}'
++ '#tab_signallog .sl-badge.supergold{color:#b8860b;border-color:rgba(184,134,11,.45);background:rgba(184,134,11,.08)}'
 + '#tab_signallog .sl-dir{font-weight:800;letter-spacing:.08em;font-size:10px}'
 + '#tab_signallog .sl-dir.long{color:#19e3a2}'
 + '#tab_signallog .sl-dir.short{color:#ff6b4a}'

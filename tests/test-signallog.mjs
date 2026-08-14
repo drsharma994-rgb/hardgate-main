@@ -118,7 +118,7 @@ console.log('== 1) registration + bare-env contracts ==');
   assert(M.pane._html.indexOf('logs while the app is open · every 5 min + on refresh') >= 0,
          'header states honestly: logs while the app is open · every 5 min + on refresh');
   assert(M.pane._html.indexOf('no signals logged yet') >= 0, 'honest empty state rendered (nothing fabricated)');
-  assert(M.stubs['#slSources'].textContent === 'sources live: none · waiting: brain, scalp, swing',
+  assert(M.stubs['#slSources'].textContent === 'sources live: none · waiting: brain, scalp, swing, supergold',
          'all sources absent -> honest header: "' + M.stubs['#slSources'].textContent + '"');
   assert(M.stubs['#slEmpty'].style.display === 'block', 'empty state visible with zero entries');
   assert(typeof M.stubs['#slClear']._handler === 'function', 'CLEAR JOURNAL wired to a click handler');
@@ -183,7 +183,7 @@ console.log('== 2) all three sources stubbed ==');
       && html.indexOf('>LONG</span>') >= 0 && html.indexOf('>SHORT</span>') >= 0,
          'direction colored LONG/SHORT');
   assert(html.indexOf('60,000') >= 0 && html.indexOf('2,350.5') >= 0, 'entry/stop/TP1 price columns formatted');
-  assert(M.stubs['#slSources'].textContent === 'sources live: brain, scalp, swing',
+  assert(M.stubs['#slSources'].textContent === 'sources live: brain, scalp, swing · waiting: supergold',
          'header: all three live, no waiting line ("' + M.stubs['#slSources'].textContent + '")');
   assert(M.stubs['#slEmpty'].style.display === 'none', 'empty state hidden once entries exist');
   assert(M.stubs['#slCount'].textContent.indexOf('5 / 500') >= 0, 'entry count line rendered ("' + M.stubs['#slCount'].textContent + '")');
@@ -214,18 +214,18 @@ console.log('== 3) source absent + throwing + null ==');
 
   const M = freshPane();
   tabOf(W).mount(M.pane);
-  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: brain, scalp',
+  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: brain, scalp, supergold',
          'honest header names live vs waiting ("' + M.stubs['#slSources'].textContent + '")');
 
   /* a source returning null is "waiting" too; a recovering source flips to live */
   W.goldscalpScan = () => null;
   W.__hgBrainLast = () => null;
   W.signallogSnapshot();
-  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: brain, scalp',
+  assert(M.stubs['#slSources'].textContent === 'sources live: swing · waiting: brain, scalp, supergold',
          'null-returning sources count as waiting, nothing recorded for them');
   W.goldscalpScan = () => scalpSnap();
   const n2 = W.signallogSnapshot();
-  assert(n2 === 3 && M.stubs['#slSources'].textContent === 'sources live: scalp, swing · waiting: brain',
+  assert(n2 === 3 && M.stubs['#slSources'].textContent === 'sources live: scalp, swing · waiting: brain, supergold',
          'recovered source flips to live on the next round (2 scalp + 1 swing, "' + M.stubs['#slSources'].textContent + '")');
 
   /* brain present but not a function -> feature-check says waiting, never throws */
