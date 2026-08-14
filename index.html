@@ -748,14 +748,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=294"></script>
+<script src="supersetup.js?v=295"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=294"></script>
-<script src="super-gold.js?v=294"></script>
-<script src="super-best.js?v=294"></script>
-<script src="super-sniper.js?v=294"></script>
-<script src="super-book.js?v=294"></script>
-<script src="super-calibrate.js?v=294"></script>
+<script src="super-desk-common.js?v=295"></script>
+<script src="super-gold.js?v=295"></script>
+<script src="super-best.js?v=295"></script>
+<script src="super-sniper.js?v=295"></script>
+<script src="super-book.js?v=295"></script>
+<script src="super-calibrate.js?v=295"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -844,11 +844,11 @@ const HG_BEST_ALERT_MS = 5 * 60 * 1000;
 const HG_TAB_ALERT_MS = 5 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
 const HG_TRENDMX_ALERT_MS = 15 * 60 * 1000;
-const HG_ALERTS_AUTO_REFRESH_MS = 120000;
-/* Hard-coded app-wide auto hard refresh — every tab (incl. GOLD SCALP/SWING via
-   hardRefreshAll → HG_TAB_MODS.refresh). Not user-disableable; localStorage OFF
-   is ignored. */
-const HG_AUTO_REFRESH_HARDCODED_MS = 120000;
+const HG_GLOBAL_SCAN_MS = 5 * 60 * 1000;
+const HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS;
+/* Hard-coded app-wide auto scan — every nav tab/subtab + HG_tabs module every 5 min
+   via hardRefreshAll → hgScanAllTabs. Not user-disableable; localStorage OFF ignored. */
+const HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS;
 /* Was 300 — identical to HG_TAB_ALERT_MS, so a cached candle expired at the
    exact moment the next cycle asked for it and nothing was ever reused. 420
    spans the cycle boundary, so the second consumer of a symbol inside a cycle
@@ -3003,8 +3003,204 @@ const HG_TAB_AUTO_SCAN = {
     if (typeof window.superCalibrateRun === 'function'){
       await window.superCalibrateRun({ force: true });
     }
+  },
+  goldswing: async function(){
+    if (typeof gwWarm === 'function') await gwWarm();
+    else if (typeof goldswingRefresh === 'function') await goldswingRefresh({ force: true });
+  },
+  goldscalp: async function(){
+    if (typeof gsWarm === 'function') await gsWarm();
+    else if (typeof goldscalpRefresh === 'function') await goldscalpRefresh({ force: true });
+  },
+  reversalsniper: async function(){
+    if (typeof rsRunScan === 'function') await rsRunScan({ quiet: true });
+    else if (typeof rsRefresh === 'function') await rsRefresh();
+  },
+  news: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.news : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+    else if (typeof hgNewsRefresh === 'function') await hgNewsRefresh(false);
+  },
+  rotation: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.rotation : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  oiflow: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.oiflow : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  onchain: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.onchain : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  chartvision: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.chartvision : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  carry: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.carry : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  venueprem: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.venueprem : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  termbasis: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.termbasis : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  liqs: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.liqs : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  scorecard: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.scorecard : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  aiagent: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.aiagent : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  hey: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.hey : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  tradeos: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.tradeos : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  book: async function(){
+    if (typeof superBookRefresh === 'function') await superBookRefresh();
+    else if (typeof bookRefresh === 'function') await bookRefresh();
   }
 };
+const HG_SCAN_RUN_BTN = {
+  brain: '#brainRun',
+  goldpro: '[data-gp="run"]',
+  goldscalp: '#gsRun',
+  goldswing: '#gwRun',
+  goldpine: '#goldPineRun',
+  trendmx: '[data-r="run"]',
+  squeeze: '#sqRun',
+  pine: '#pineRun',
+  'pine-msb': '#pineMsbRun',
+  'pine-sqz': '#pineSqzRun',
+  'pine-smf': '#pineSmfRun',
+  'pine-ht': '#pineHtRun',
+  'pine-smc': '#pineSmcRun',
+  'pine-cipher': '#pineCipherRun',
+  'pine-rf': '#pineRfRun',
+  'pine-nw': '#pineNwRun',
+  'pine-avwap': '#pineAvwapRun'
+};
+function hgCollectAllScanTabIds(){
+  const seen = {};
+  const out = [];
+  function add(id){
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    out.push(id);
+  }
+  try{
+    if (typeof HG_NAV_GROUPS !== 'undefined' && Array.isArray(HG_NAV_GROUPS)){
+      HG_NAV_GROUPS.forEach(function(g){ (g.tabs || []).forEach(add); });
+    }
+  }catch(e0){}
+  try{
+    if (typeof HG_TAB_AUTO_SCAN !== 'undefined' && HG_TAB_AUTO_SCAN){
+      Object.keys(HG_TAB_AUTO_SCAN).forEach(add);
+    }
+  }catch(e1){}
+  try{
+    if (typeof HG_TAB_MODS !== 'undefined' && HG_TAB_MODS){
+      Object.keys(HG_TAB_MODS).forEach(add);
+    }
+  }catch(e2){}
+  return out;
+}
+async function hgScanOneTab(id, opts){
+  opts = opts || {};
+  try{
+    if (typeof HG_TAB_AUTO_SCAN !== 'undefined' && typeof HG_TAB_AUTO_SCAN[id] === 'function'){
+      await HG_TAB_AUTO_SCAN[id]();
+      return 'refreshed';
+    }
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS[id] : null;
+    if (mod && typeof mod.refresh === 'function'){
+      const st = await mod.refresh({ force: true, quiet: !!opts.quiet });
+      const sl = (typeof st === 'string') ? st.toLowerCase() : '';
+      if (sl.indexOf('skip') === 0 || sl.indexOf('busy') === 0){
+        const sel = HG_SCAN_RUN_BTN[id];
+        if (sel){
+          const pane = document.getElementById('tab_' + id);
+          const runBtn = pane && pane.querySelector(sel);
+          if (runBtn && !runBtn.disabled){ runBtn.click(); return 'refreshed'; }
+        }
+      }
+      return st || 'refreshed';
+    }
+    return 'skip:no-scan';
+  }catch(e){ throw e; }
+}
+async function hgScanAllTabs(opts){
+  opts = opts || {};
+  let refreshed = 0, skipped = 0, failed = 0;
+  const failedNames = [];
+  const tally = function(status){
+    const s = (typeof status === 'string' && status) ? status.toLowerCase() : 'refreshed';
+    if (s.indexOf('skip') === 0 || s.indexOf('busy') === 0) skipped++;
+    else refreshed++;
+  };
+  const chip = opts.chip;
+  if (!opts.skipMacro){
+    try{
+      if (chip) chip.textContent = 'refreshing MACRO FEEDS…';
+      if (typeof updateMacroFeeds === 'function') await updateMacroFeeds();
+      tally('refreshed');
+    }catch(eM){
+      failed++; failedNames.push('MACRO FEEDS');
+      console.warn('macro feeds refresh', eM);
+    }
+  }
+  if (!opts.skipExtras){
+    const extras = [
+      ['MARKET PICTURE', function(){ return runMarketPictureUI(); }],
+      ['GOLD DEEP', function(){ return runGoldDeep(); }],
+      ['GOLD SETUP', function(){ return runGoldSetup(); }]
+    ];
+    for (let ei = 0; ei < extras.length; ei++){
+      const name = extras[ei][0], fn = extras[ei][1];
+      if (chip) chip.textContent = 'scanning ' + name + '…';
+      try{ tally(await fn()); }catch(e){
+        failed++; failedNames.push(name);
+        console.warn(name + ' scan failed', e);
+      }
+    }
+  }
+  const ids = hgCollectAllScanTabIds();
+  for (let i = 0; i < ids.length; i++){
+    const tid = ids[i];
+    if (chip) chip.textContent = 'scanning ' + tid + '…';
+    try{ tally(await hgScanOneTab(tid, opts)); }catch(e){
+      failed++; failedNames.push(tid);
+      console.warn('HARDGATE tab scan', tid, e);
+    }
+  }
+  try{
+    if (chip) chip.textContent = 'warming layer tabs…';
+    if (typeof hgWarmLayerIds === 'function'){
+      await hgWarmLayerIds(null);
+      tally('refreshed');
+    }
+  }catch(eWarm){
+    failed++; failedNames.push('LAYER WARM');
+    console.warn('layer warm refresh failed', eWarm);
+  }
+  return { refreshed: refreshed, skipped: skipped, failed: failed, failedNames: failedNames };
+}
+window.hgCollectAllScanTabIds = hgCollectAllScanTabIds;
+window.hgScanOneTab = hgScanOneTab;
+window.hgScanAllTabs = hgScanAllTabs;
 function scheduleTabAutoScan(t){
   const seq = ++__hgTabScanSeq;
   setTimeout(async function(){
@@ -3022,13 +3218,7 @@ function scheduleTabAutoScan(t){
       if (typeof mod.refresh === 'function'){
         const st = await mod.refresh();
         if (st && String(st).indexOf('skip') === 0){
-          const autoRunBtn = {
-            brain: '#brainRun',
-            goldpro: '[data-gp="run"]',
-            goldscalp: '#gsRun',
-            goldswing: '#gwRun',
-            goldpine: '#goldPineRun'
-          }[t];
+          const autoRunBtn = HG_SCAN_RUN_BTN[t];
           if (autoRunBtn){
             const pane = document.getElementById('tab_' + t);
             const runBtn = pane && pane.querySelector(autoRunBtn);
@@ -4516,34 +4706,13 @@ async function hgWarmLayerIds(ids){
   if (jobs.length) await Promise.all(jobs);
 }
 async function runTabAlertScans(){
-  const macroP = (async function(){
-    try{
-      if (typeof updateMacroFeeds === 'function' && !hgMacroFeedsFresh()) await updateMacroFeeds();
-    }catch(e){ console.warn('tab alert macro', e); }
-  })();
-  try{ await hgWarmLayerIds(['regime']); }catch(e){ console.warn('tab alert regime warm', e); }
-  try{ await cryptoScanWarm('swing'); }catch(e){ console.warn('tab alert swing scan', e); }
-  try{ await cryptoScanWarm('scalp'); }catch(e){ console.warn('tab alert scalp scan', e); }
-  await macroP;
-  await Promise.all([
-    (typeof gsWarm === 'function' ? gsWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert gold scalp', e); }),
-    (typeof gwWarm === 'function' ? gwWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert gold swing', e); })
-  ]);
-  await Promise.all([
-    (typeof edgeWarm === 'function' ? edgeWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert edge warm', e); }),
-    (typeof pineWarm === 'function' ? pineWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert pine warm', e); })
-  ]);
-  await Promise.all([
-    (typeof brainAlertWarm === 'function' ? brainAlertWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert brain', e); }),
-    bestScanWarm().catch(function(e){ console.warn('tab alert best', e); }),
-    (typeof superBestRunScan === 'function' ? superBestRunScan({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert super-best', e); }),
-    runSmartScan({ quiet: true }).catch(function(e){ console.warn('tab alert smart', e); }),
-    (typeof trendmxWarm === 'function' ? trendmxWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert trendmx', e); })
-  ]);
-  try{ await hgWarmLayerIds(['oiflow', 'squeeze', 'carry', 'termbasis', 'aiagent']); }catch(e){ console.warn('tab alert layer warm', e); }
+  if (typeof HG_REFRESH_BUSY !== 'undefined' && HG_REFRESH_BUSY) return;
   try{
-    if (typeof refreshAtomicDesk === 'function') await refreshAtomicDesk(true);
-  }catch(e){ console.warn('tab alert atomic desk', e); }
+    if (typeof hgScanAllTabs === 'function'){
+      await hgScanAllTabs({ quiet: true, skipMacro: false, skipExtras: true });
+      return;
+    }
+  }catch(e){ console.warn('tab alert full scan', e); }
 }
 
 /* Unified 5-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
@@ -8089,73 +8258,20 @@ async function hardRefreshAll(){
   HG_REFRESH_BUSY = true;
   if (btn) btn.disabled = true;
   try{
-  let refreshed = 0, skipped = 0, failed = 0;
-  const failedNames = [];
-  try{
-    if (chip) chip.textContent = 'refreshing MACRO FEEDS…';
-    if (typeof updateMacroFeeds === 'function') await updateMacroFeeds();
-  }catch(eM){ console.warn('macro feeds refresh', eM); }
-  /* undefined return = refreshed; strings starting with 'skip' or 'busy' = skipped */
-  const tally = function(status){
-    const s = (typeof status === 'string' && status) ? status.toLowerCase() : 'refreshed';
-    if (s.indexOf('skip') === 0 || s.indexOf('busy') === 0) skipped++;
-    else refreshed++;
-  };
-  const tasks = [
-    ['MARKET PICTURE', function(){ return runMarketPictureUI(); }],
-    ['BIAS', function(){ return runBias(); }],
-    ['SWING', function(){ return runScan('swing'); }],
-    ['SCALP', function(){ return runScan('scalp'); }],
-    ['GOLD', function(){ return runGold(); }],
-    ['BEST', function(){ return runBest(); }],
-    ['COIL', function(){ return runCoilScan(); }],
-    ['APEX', function(){ return runApexScan(); }],
-    ['TRAP', function(){ return runTrapScan(); }],
-    ['SMC', function(){ return runSmcScan(); }],
-    ['OB', function(){ return runObScan(); }],
-    ['DIV', function(){ return runDivScan(); }],
-    ['BASIS', function(){ return runBasisScan(); }],
-    ['SMART', function(){ return runSmartScan(); }],
-    ['GOLD DEEP', function(){ return runGoldDeep(); }],
-    ['GOLD SETUP', function(){ return runGoldSetup(); }],
-  ];
-  for (const pair of tasks){
-    const name = pair[0], fn = pair[1];
-    if (chip) chip.textContent = 'refreshing ' + name + '\u2026';
-    try{ tally(await fn()); }catch(e){
-      failed++; failedNames.push(name);
-      console.warn(name+' refresh failed', e);
+    let refreshed = 0, skipped = 0, failed = 0;
+    let failedNames = [];
+    if (typeof hgScanAllTabs === 'function'){
+      const res = await hgScanAllTabs({ chip: chip, quiet: false, skipMacro: false, skipExtras: false });
+      refreshed = res.refreshed;
+      skipped = res.skipped;
+      failed = res.failed;
+      failedNames = res.failedNames || [];
     }
-  }
-  /* dynamic HG_tabs module refreshers — registered whole-object in HG_TAB_MODS,
-     so refresh is reachable alongside id/label/mount; each awaited in its own
-     try-catch so one bad module never stops the loop */
-  try{
-    const mods = (typeof HG_TAB_MODS !== 'undefined' && HG_TAB_MODS) ? HG_TAB_MODS : {};
-    for (const id of Object.keys(mods)){
-      const mod = mods[id];
-      if (!mod || typeof mod.refresh !== 'function') continue;
-      const mname = mod.label || id;
-      if (chip) chip.textContent = 'refreshing ' + mname + '\u2026';
-      try{ tally(await mod.refresh()); }catch(e){
-        failed++; failedNames.push(mname);
-        console.warn('module ' + id + ' refresh failed', e);
-      }
+    if (chip){
+      chip.textContent = 'refreshed ' + refreshed + ' \u00b7 skipped ' + skipped + ' \u00b7 failed ' + failed
+        + ' \u00b7 ' + new Date().toTimeString().slice(0,8);
+      chip.title = failedNames.length ? ('failed: ' + failedNames.join(', ')) : 'no failures';
     }
-  }catch(e){ /* registry unreadable — inline counts still reported honestly */ }
-  try{
-    if (chip) chip.textContent = 'warming layer tabs…';
-    await hgWarmLayerIds(['regime', 'macro', 'engine', 'edge', 'oiflow', 'squeeze', 'carry', 'termbasis', 'pine']);
-    refreshed++;
-  }catch(eWarm){
-    failed++; failedNames.push('LAYER WARM');
-    console.warn('layer warm refresh failed', eWarm);
-  }
-  if (chip){
-    chip.textContent = 'refreshed ' + refreshed + ' \u00b7 skipped ' + skipped + ' \u00b7 failed ' + failed
-      + ' \u00b7 ' + new Date().toTimeString().slice(0,8);
-    chip.title = failedNames.length ? ('failed: ' + failedNames.join(', ')) : 'no failures';
-  }
   }finally{
     if (btn) btn.disabled = false;
     HG_REFRESH_BUSY = false;

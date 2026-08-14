@@ -52,7 +52,7 @@ console.log('== AI agent + trend matrix cross-wire ==');
 console.log('== tab alert warm chain ==');
 {
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  ok(html.indexOf('trendmxWarm') >= 0, 'tab alerts warm trend matrix');
+  ok(html.indexOf('hgScanAllTabs') >= 0, 'tab alerts use hgScanAllTabs full sweep');
   ok(html.indexOf('trendmx:') >= 0, 'HG_TAB_AUTO_SCAN trendmx');
 }
 

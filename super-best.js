@@ -8,7 +8,7 @@ var W = (typeof window !== 'undefined') ? window
 
 var TAB_ID = 'super-best';
 var SYNC_MS = 2500;
-var SCAN_INTERVAL_MS = 15 * 60 * 1000;
+var SCAN_INTERVAL_MS = 5 * 60 * 1000;
 var SNAP_MAX_MS = SCAN_INTERVAL_MS + 5 * 60 * 1000;
 var __hgSuperBestSnap = null;
 var __sb = {
