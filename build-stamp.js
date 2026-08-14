@@ -21,7 +21,7 @@ var HG_BUILD = {
   version: 'hg-v289',
   pack: 'telegram alerts off',
   built: '2026-08-14T20:00:00Z',
-  note: 'Master TELEGRAM_DISABLED kill switch · STOP ALERTS in header · auto-off on upgrade'
+  note: 'Master TELEGRAM_DISABLED kill switch · STOP ALERTS in header · auto-off on upgrade · SUPER GOLD UI (v288)'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
