@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v289',
-  pack: 'telegram alerts off',
-  built: '2026-08-14T20:00:00Z',
-  note: 'Master TELEGRAM_DISABLED kill switch · STOP ALERTS in header · auto-off on upgrade · SUPER GOLD UI (v288)'
+  version: 'hg-v290',
+  pack: 'super gold risk block fix',
+  built: '2026-08-14T20:30:00Z',
+  note: 'SUPER GOLD goldCalcTrade · no false RISK BLOCK · includes v288 UI + v289 telegram off'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
