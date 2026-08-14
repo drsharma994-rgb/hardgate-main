@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v287',
-  pack: 'super best calibrate populate',
-  built: '2026-08-14T18:00:00Z',
-  note: 'SUPER BEST lite enrich only · SUPER CALIBRATE panel + SWING replay cache'
+  version: 'hg-v291',
+  pack: 'super best populate fix',
+  built: '2026-08-14T21:00:00Z',
+  note: 'SUPER BEST direct repaint · inline BEST warm · quiet runBest · sync merge guard'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

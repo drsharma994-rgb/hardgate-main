@@ -746,14 +746,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=287"></script>
+<script src="supersetup.js?v=291"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=287"></script>
-<script src="super-gold.js?v=287"></script>
-<script src="super-best.js?v=287"></script>
-<script src="super-sniper.js?v=287"></script>
-<script src="super-book.js?v=287"></script>
-<script src="super-calibrate.js?v=287"></script>
+<script src="super-desk-common.js?v=291"></script>
+<script src="super-gold.js?v=291"></script>
+<script src="super-best.js?v=291"></script>
+<script src="super-sniper.js?v=291"></script>
+<script src="super-book.js?v=291"></script>
+<script src="super-calibrate.js?v=291"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -822,8 +822,10 @@ function publishBestSnap(clean, meta){
         rr: w.rr,
         famScore: w.famScore,
         robScore: w.robScore,
+        profitBoost: w.profitBoost,
         stack: w.stack || null,
-        rows: w.rows || null
+        rows: w.rows || null,
+        _venueLabel: w._venueLabel || null
       };
     }),
     meta: meta || {}
@@ -6434,9 +6436,11 @@ function bestEnrichVision(pool){
 async function runBest(opts){
   opts = opts || {};
   if (!opts._singleLeg && !opts.singleExchange && typeof hgDualScanEnabled === 'function' && hgDualScanEnabled()){
-    if (!opts.quiet && !(await waitAlertIdle($('bestStat')))) return;
-    const btn=$('bestRun'); btn.disabled=true; setProg('bestProg',0.05);
-    const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='Scanning Delta + CoinDCX…';
+    const quiet = !!opts.quiet;
+    if (!quiet && !(await waitAlertIdle($('bestStat')))) return;
+    const btn=$('bestRun'), out=$('bestOut');
+    if (!quiet && btn) btn.disabled=true;
+    if (!quiet){ setProg('bestProg',0.05); if (out) out.innerHTML=''; if ($('bestStat')) $('bestStat').textContent='Scanning Delta + CoinDCX…'; }
     try{
       let allClean = [], breadth = { bull: 0, total: 0 }, totalUni = 0;
       let bestFunnel = { regimeSkip: 0, thin: 0, cleanRaw: 0, vetoStale: 0, vetoTrap: 0 };
@@ -6444,7 +6448,8 @@ async function runBest(opts){
         const ex = HG_DUAL_CRYPTO_EX[ei];
         await withExchange(ex, async function(){
           const scanAll = hgScanWholeExchange(opts, $('bestAll'));
-          const N = Math.max(5, Math.min(500, +$('bestN').value||30));
+          const bestN = $('bestN');
+          const N = Math.max(5, Math.min(500, +(bestN && bestN.value ? bestN.value : 30)));
           if (!S.tickers.length) S.tickers=await getTickers();
           let uni = S.exchange==='delta'
             ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
@@ -6469,10 +6474,11 @@ async function runBest(opts){
       const clean = allClean;
       const universeLabel = 'both Delta India + CoinDCX futures';
       publishBestSnap(clean, { uniLen: totalUni, dual: true, funnel: bestFunnel });
+      if (quiet) return;
       if (!clean.length){
-        out.innerHTML=bestFunnelHtml(bestFunnel, 0, totalUni)
+        if (out) out.innerHTML=bestFunnelHtml(bestFunnel, 0, totalUni)
           + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
-        $('bestStat').textContent='done · 0 CLEAN · dual venue scan · ' + (bestFunnel.cleanRaw || 0) + ' passed gates · ' + ((bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)) + ' vetoed';
+        if ($('bestStat')) $('bestStat').textContent='done · 0 CLEAN · dual venue scan · ' + (bestFunnel.cleanRaw || 0) + ' passed gates · ' + ((bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)) + ' vetoed';
         return;
       }
       const pool = bestSortPool(clean);
@@ -6481,8 +6487,8 @@ async function runBest(opts){
       const breadthPct = breadth.total>=10 ? (breadth.bull/breadth.total*100) : 50;
       const regimeDir = breadth.total>=10 ? (breadthPct<=20?'bear':(breadthPct>=80?'bull':null)) : null;
       if (regimeDir && ((regimeDir==='bear' && w.dir==='long') || (regimeDir==='bull' && w.dir==='short'))){
-        $('bestStat').textContent = 'master veto: regime unsafe';
-        out.innerHTML = `<div class="empty"><b style="color:var(--veto)">MASTER VETO: STAND ASIDE</b><br><br>Market breadth only ${fmt(breadthPct,0)}% bullish (${breadth.bull}/${breadth.total} coins above 200-EMA on 4H) — ${regimeDir} regime, ${w.dir} setups here are ${regimeDir==='bear'?'catching falling knives':'fighting a screaming uptrend'}. Scanning canceled to protect capital.</div>`;
+        if ($('bestStat')) $('bestStat').textContent = 'master veto: regime unsafe';
+        if (out) out.innerHTML = `<div class="empty"><b style="color:var(--veto)">MASTER VETO: STAND ASIDE</b><br><br>Market breadth only ${fmt(breadthPct,0)}% bullish (${breadth.bull}/${breadth.total} coins above 200-EMA on 4H) — ${regimeDir} regime, ${w.dir} setups here are ${regimeDir==='bear'?'catching falling knives':'fighting a screaming uptrend'}. Scanning canceled to protect capital.</div>`;
         return;
       }
       const t1=w.t1; const t2=w.t2;
@@ -6507,9 +6513,12 @@ async function runBest(opts){
       </div>`;
       if (typeof hgMiniChart === 'function') hgMiniChart($('bestChart'), w.rows, {dir:w.dir, entry:w.entry, stop:w.stop, t1:t1, t2:t2});
       bestEnrichVision(pool);
-      $('bestStat').textContent=`done · ${clean.length} CLEAN of ${totalUni} scanned (${universeLabel}) · ${bestFunnel.cleanRaw||clean.length} passed 7/7 · ${(bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)} vetoed`;
-    }catch(e){ out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`; }
-    finally{ setProg('bestProg',null); btn.disabled=false; }
+      if ($('bestStat')) $('bestStat').textContent=`done · ${clean.length} CLEAN of ${totalUni} scanned (${universeLabel}) · ${bestFunnel.cleanRaw||clean.length} passed 7/7 · ${(bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)} vetoed`;
+    }catch(e){
+      if (quiet) console.warn('runBest quiet dual', e);
+      else if (out) out.innerHTML=`<div class="empty">best scan failed: ${e.message}</div>`;
+    }
+    finally{ if (!quiet){ setProg('bestProg',null); if (btn) btn.disabled=false; } }
     return;
   }
 
