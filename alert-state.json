@@ -4,131 +4,195 @@
   "gold": null,
   "lastRunAt": "2026-08-14T06:01:50.730Z",
   "ticket": {
-    "long": null,
+    "long": {
+      "sym": "SNDKBUSD",
+      "entry": 1438.192767895893
+    },
     "short": null
   },
+  "sniper": {
+    "key": "B-ALICE_USDT@0.12270292269704913",
+    "hits": [
+      {
+        "sym": "B-ALICE_USDT",
+        "dir": "long",
+        "entry": 0.12270292269704913,
+        "stop": 0.1207617974241589,
+        "t1": 0.1262,
+        "lev": 34,
+        "state": "APPROACHING"
+      }
+    ],
+    "at": "2026-08-14T14:41:48.080Z"
+  },
   "squeeze": {
-    "key": "B-AAVE_USDT:short;B-AERO_USDT:short;B-BTC_USDT:short;B-CAKE_USDT:short;B-CROSS_USDT:long;B-FARTCOIN_USDT:long;B-GRAM_USDT:short;B-LDO_USDT:long;B-PIXEL_USDT:long;B-PUMP_USDT:long;B-SWARMS_USDT:long;B-TLM_USDT:long",
+    "key": "B-AAVE_USDT:short;B-ACE_USDT:long;B-AERO_USDT:short;B-ALICE_USDT:long;B-BCH_USDT:short;B-BTC_USDT:short;B-CAKE_USDT:short;B-CAP_USDT:long;B-CROSS_USDT:long;B-FARTCOIN_USDT:long;B-GRAM_USDT:short;B-H_USDT:long;B-LTC_USDT:short;B-PIXEL_USDT:long;B-PUMP_USDT:long;B-SWARMS_USDT:long;B-TLM_USDT:long;SNDKBUSD:long",
     "rows": [
       {
         "sym": "B-CROSS_USDT",
         "dir": "long",
-        "kind": "fired",
-        "entry": 0.13475,
-        "stop": 0.12636104775698404,
-        "t1": 0.15152790448603196,
-        "t2": 0.1641113328505559
+        "kind": "fired"
       },
       {
         "sym": "B-AERO_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 0.4014,
-        "stop": 0.4110056677812721,
-        "t1": 0.3821886644374557,
-        "t2": 0.3677801627655475
+        "entry": 0.399,
+        "stop": 0.408937810638415,
+        "t1": 0.37912437872317006,
+        "t2": 0.36421766276554757
       },
       {
         "sym": "B-BTC_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 62809,
-        "stop": 63452.07084992413,
-        "t1": 61522.85830015174,
-        "t2": 60558.252025265545
+        "entry": 62739.9,
+        "stop": 63410.63513563842,
+        "t1": 61398.42972872317,
+        "t2": 60392.32702526554
       },
       {
         "sym": "B-PUMP_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.002856,
-        "stop": 0.0026025754424182793,
-        "t1": 0.0033628491151634415,
-        "t2": 0.0037429859515360226
+        "entry": 0.002824,
+        "stop": 0.0026010932995611364,
+        "t1": 0.0032698134008777276,
+        "t2": 0.0036041734515360234
       },
       {
         "sym": "B-AAVE_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 86,
-        "stop": 87.94577560171548,
-        "t1": 82.10844879656904,
-        "t2": 79.1897853939958
+        "entry": 85.73,
+        "stop": 87.71970417314407,
+        "t1": 81.75059165371188,
+        "t2": 78.7660353939958
       },
       {
         "sym": "B-FARTCOIN_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.1373,
-        "stop": 0.13186218241184758,
-        "t1": 0.14817563517630486,
-        "t2": 0.1563323615585335
-      },
-      {
-        "sym": "B-LDO_USDT",
-        "dir": "long",
-        "kind": "fired",
-        "entry": 0.3012,
-        "stop": 0.2922602765255774,
-        "t1": 0.31907944694884527,
-        "t2": 0.3324890321604792
-      },
-      {
-        "sym": "B-SWARMS_USDT",
-        "dir": "long",
-        "kind": "fired",
-        "entry": 0.008273,
-        "stop": 0.007374621395748286,
-        "t1": 0.01006975720850343,
-        "t2": 0.011417325114881003
+        "entry": 0.1377,
+        "stop": 0.132015753840419,
+        "t1": 0.14906849231916197,
+        "t2": 0.15759486155853347
       },
       {
         "sym": "B-PIXEL_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.00472,
-        "stop": 0.004488462864256444,
-        "t1": 0.005183074271487113,
-        "t2": 0.005530379975102449
-      },
-      {
-        "sym": "B-CAKE_USDT",
-        "dir": "short",
-        "kind": "fired",
-        "entry": 1.4083,
-        "stop": 1.4315783103571833,
-        "t1": 1.3617433792856337,
-        "t2": 1.3268259137498588
-      },
-      {
-        "sym": "B-GRAM_USDT",
-        "dir": "short",
-        "kind": "fired",
-        "entry": 1.326,
-        "stop": 1.3511021436176067,
-        "t1": 1.2757957127647868,
-        "t2": 1.2381424973383768
+        "entry": 0.004708,
+        "stop": 0.004459855721399302,
+        "t1": 0.0052042885572013975,
+        "t2": 0.005576504975102445
       },
       {
         "sym": "B-TLM_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.001641,
-        "stop": 0.0015643346291029888,
-        "t1": 0.0017943307417940227,
-        "t2": 0.0019093287981395398
+        "entry": 0.001549,
+        "stop": 0.0014502224381838314,
+        "t1": 0.0017465551236323373,
+        "t2": 0.0018947214663565903
+      },
+      {
+        "sym": "B-SWARMS_USDT",
+        "dir": "long",
+        "kind": "fired",
+        "entry": 0.008335,
+        "stop": 0.007371603538605429,
+        "t1": 0.010261792922789142,
+        "t2": 0.011706887614881
+      },
+      {
+        "sym": "B-CAKE_USDT",
+        "dir": "short",
+        "kind": "fired",
+        "entry": 1.4147,
+        "stop": 1.4386533103571832,
+        "t1": 1.3667933792856337,
+        "t2": 1.330863413749859
+      },
+      {
+        "sym": "B-GRAM_USDT",
+        "dir": "short",
+        "kind": "fired",
+        "entry": 1.328,
+        "stop": 1.3539592864747496,
+        "t1": 1.276081427050501,
+        "t2": 1.2371424973383767
+      },
+      {
+        "sym": "B-ACE_USDT",
+        "dir": "long",
+        "kind": "break",
+        "entry": 0.27206,
+        "stop": 0.24110101361606984,
+        "t1": 0.3339779727678604,
+        "t2": 0.38041645234375565
+      },
+      {
+        "sym": "B-BCH_USDT",
+        "dir": "short",
+        "kind": "break",
+        "entry": 200.74,
+        "stop": 204.99038113316007,
+        "t1": 192.2392377336799,
+        "t2": 185.8636660339398
+      },
+      {
+        "sym": "B-CAP_USDT",
+        "dir": "long",
+        "kind": "break"
+      },
+      {
+        "sym": "B-H_USDT",
+        "dir": "long",
+        "kind": "break",
+        "entry": 0.11998,
+        "stop": 0.10850322265809335,
+        "t1": 0.1429335546838133,
+        "t2": 0.16014872069667327
+      },
+      {
+        "sym": "B-LTC_USDT",
+        "dir": "short",
+        "kind": "break",
+        "entry": 44.11,
+        "stop": 44.621687518043075,
+        "t1": 43.08662496391385,
+        "t2": 42.319093686849236
+      },
+      {
+        "sym": "SNDKBUSD",
+        "dir": "long",
+        "kind": "break",
+        "entry": 1612.67,
+        "stop": 1536.1975317863692,
+        "t1": 1765.614936427262,
+        "t2": 1880.3236387477082
+      },
+      {
+        "sym": "B-ALICE_USDT",
+        "dir": "long",
+        "kind": "break",
+        "entry": 0.1242,
+        "stop": 0.11935912070803471,
+        "t1": 0.1338817585839306,
+        "t2": 0.14114307752187852
       }
     ],
-    "at": "2026-08-14T12:09:47.842Z"
+    "at": "2026-08-14T14:41:48.095Z"
   },
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-14T13:44:21.966Z"
+    "at": "2026-08-14T14:41:48.095Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-14T13:44:21.966Z"
+    "at": "2026-08-14T14:41:48.095Z"
   },
   "degraded": {
     "count": 0,
@@ -150,7 +214,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-14T13:44:22.591Z"
+    "at": "2026-08-14T14:41:48.770Z"
   },
   "bookFill": {
     "key": "u0|p0",
