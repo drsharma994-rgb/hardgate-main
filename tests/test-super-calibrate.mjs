@@ -27,7 +27,7 @@ const samples = [
 const sum = W.superCalibrateSummarize(samples);
 ok(sum.clean === 2 && sum.settled === 3, 'summarize clean/settled');
 
-ok(/super-calibrate\.js\?v=284/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
+ok(/super-calibrate\.js\?v=286/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
 ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw ' + HG_VER);
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v284',
-  pack: 'super desks all',
-  built: '2026-08-14T12:00:00Z',
-  note: 'SUPER BEST/SNIPER/BOOK/CALIBRATE + RISK v2 + chart vision + SCORECARD links'
+  version: 'hg-v286',
+  pack: 'super desks populate fix v2',
+  built: '2026-08-14T16:00:00Z',
+  note: 'Super desks repaint-after-scan + headless rsRunScan + lite enrich + bookPull'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

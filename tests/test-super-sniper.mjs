@@ -36,10 +36,10 @@ const snap = W.buildSnapFromRsScan(W, { balance: 1000, riskPct: 1 }, { allowStal
 ok(snap.cands.length === 1 && snap.cands[0].minimalLossPass, 'sniper row passes desk');
 
 const rsSrc = fs.readFileSync(path.join(root, 'reversalsniper.js'), 'utf8');
-ok(/publishRsDeskSnap/.test(rsSrc), 'reversalsniper publishes desk snap');
+ok(/rsRunScan/.test(rsSrc), 'reversalsniper exports headless rsRunScan');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-sniper\.js\?v=284/.test(html), 'super-sniper in index');
+ok(/super-sniper\.js\?v=286/.test(html), 'super-sniper in index');
 ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw ' + HG_VER);
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));

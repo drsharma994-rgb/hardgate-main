@@ -87,14 +87,14 @@ function buildSnapFromRsScan(win, riskOpts, opts){
   var snap = null;
   try{ snap = rsFn(); }catch(e0){}
   if (!snap || !Array.isArray(snap.cands)){
-    return { at: Date.now(), cands: [], audit: audit, stat: '0 setups — open REVERSAL SNIPER and scan' };
+    return { at: Date.now(), cands: [], audit: audit, stat: '0 setups — sniper scan not run yet' };
   }
   if (!allowStale && !isFreshAt(snap.at, SNAP_MAX_MS)){
     return { at: snap.at || 0, cands: [], audit: audit, stat: '0 setups — sniper snap stale' };
   }
   scanned = snap.at || Date.now();
+  var rawCount = snap.cands.length;
   snap.cands.forEach(function(c){
-    if (N(c.conviction) < MIN_CONVICTION) return;
     var row = enrichSuperSniperRow(c, riskOpts);
     if (row){
       merged.push(row);
@@ -107,13 +107,17 @@ function buildSnapFromRsScan(win, riskOpts, opts){
     if (bm !== am) return bm - am;
     return (N(b.conviction) || 0) - (N(a.conviction) || 0);
   });
+  var highConv = merged.filter(function(r){ return N(r.conviction) >= MIN_CONVICTION; });
   return {
     at: scanned,
     cands: merged,
     audit: audit,
     stat: merged.length
-      ? (merged.length + ' SNIPER · ' + audit.minLoss + ' trade-ready · ≥' + MIN_CONVICTION + ' conviction')
-      : (snap.stat || '0 sniper setups')
+      ? (highConv.length + ' SNIPER · ' + audit.minLoss + ' trade-ready · '
+        + merged.length + ' on board · ≥' + MIN_CONVICTION + ' conviction preferred')
+      : (rawCount
+        ? (rawCount + ' raw sniper hits — sizing/conviction blocked all rows')
+        : (snap.stat || '0 sniper setups'))
   };
 }
 
@@ -154,16 +158,23 @@ async function superSniperRunScanInner(opts){
   opts = opts || {};
   __sn.scanBusy = true;
   try{
-    var mod = (W.HG_TAB_MODS && W.HG_TAB_MODS.reversalsniper) ? W.HG_TAB_MODS.reversalsniper : null;
-    if (mod && typeof mod.refresh === 'function'){
-      await mod.refresh();
-    } else if (typeof W.rsRefresh === 'function'){
-      await W.rsRefresh();
+    if (typeof W.rsRunScan === 'function'){
+      await W.rsRunScan({ quiet: true });
+    } else {
+      var mod = (W.HG_TAB_MODS && W.HG_TAB_MODS.reversalsniper) ? W.HG_TAB_MODS.reversalsniper : null;
+      if (mod && typeof mod.refresh === 'function'){
+        await mod.refresh();
+      } else if (typeof W.rsRefresh === 'function'){
+        await W.rsRefresh();
+      }
     }
     __sn.lastScanAt = Date.now();
     var snap = buildSnapFromRsScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });
     snap.scanAt = __sn.lastScanAt;
     publishSuperSniperSnap(snap);
+    if (__sn.mounted && typeof __sn.syncFromExisting === 'function'){
+      __sn.syncFromExisting();
+    }
     return snap.stat || 'done';
   }catch(e){
     return 'error: ' + ((e && e.message) ? e.message : String(e));
@@ -312,6 +323,7 @@ function mount(el){
   }
 
   __sn.paintDesk = paintDesk;
+  __sn.syncFromExisting = syncFromExisting;
   __sn.mounted = true;
   if (typeof W.hgSuperDeskBindScorecard === 'function') W.hgSuperDeskBindScorecard(root);
 
@@ -328,7 +340,9 @@ function mount(el){
 
   __sn.syncTimer = setInterval(syncFromExisting, SYNC_MS);
   __sn.scanTimer = setInterval(function(){
-    if (!__sn.scanBusy) superSniperRunScan({ riskOpts: readRiskOpts() });
+    if (!__sn.scanBusy){
+      superSniperRunScan({ riskOpts: readRiskOpts() });
+    }
   }, SCAN_INTERVAL_MS);
 }
 

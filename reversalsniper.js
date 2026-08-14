@@ -436,6 +436,56 @@ function publishRsDeskSnap(results){
   }catch(e){}
 }
 
+/** Headless scan — works before REVERSAL SNIPER tab is mounted (SUPER SNIPER desk). */
+async function rsRunScan(opts){
+  opts = opts || {};
+  if (__rs.busy) return { status: 'busy', results: [], failed: 0, uniLen: 0 };
+  __rs.busy = true;
+  __rs.ranOnce = true;
+  var onProgress = (typeof opts.onProgress === 'function') ? opts.onProgress : function(){};
+  var status = 'refreshed';
+  var results = [], failed = 0, uniLen = 0;
+  try{
+    onProgress({ phase: 'universe', msg: 'loading Delta + CoinDCX universe…' });
+    var uniPack = await rsLoadUniverse(true);
+    var uni = uniPack.items || [];
+    uniLen = uni.length;
+    if (!uni.length){
+      publishRsDeskSnap([]);
+      return { status: 'failed: universe', results: [], failed: 0, uniLen: 0, note: uniPack.note || '' };
+    }
+    var vc = uniPack.venueCounts || {};
+    var venueNote = 'Δ ' + (vc.delta || 0) + ' · CDCX ' + (vc.coindcx || 0);
+    var started = 0;
+    for (var ci = 0; ci < uni.length; ci += CHUNK){
+      var chunk = uni.slice(ci, ci + CHUNK);
+      await Promise.all(chunk.map(async function(item){
+        var my = ++started;
+        var symLab = (typeof W.hgDeskSymLabel === 'function') ? W.hgDeskSymLabel(item) : (item.sym || '?');
+        onProgress({ phase: 'scan', i: my, total: uni.length, sym: symLab, venueNote: venueNote });
+        try{
+          var rows = await rsFetchKlines(item, '4h', KL_LIMIT);
+          if (!rows || !rows.length){ failed++; return; }
+          var setup = rsAssess(rows);
+          if (!setup) return;
+          results.push({ item: item, sym: symLab, setup: setup, rows: rows, tick: item });
+        }catch(e){ failed++; }
+      }));
+      if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
+    }
+    results.sort(function(a, b){ return b.setup.conviction - a.setup.conviction; });
+    if (results.length) results[0].best = true;
+    publishRsDeskSnap(results);
+    status = results.length ? 'refreshed' : 'empty';
+    return { status: status, results: results, failed: failed, uniLen: uniLen, venueNote: venueNote };
+  }catch(e){
+    status = 'error';
+    return { status: status, results: [], failed: failed, uniLen: uniLen, error: (e && e.message) ? e.message : String(e) };
+  }finally{
+    __rs.busy = false;
+  }
+}
+
 function mount(el){
   if (!el) return;
   el.innerHTML = '<div class="panel">'
@@ -472,8 +522,6 @@ function mount(el){
 
   async function runScan(){
     if (__rs.busy) return 'busy';
-    __rs.busy = true;
-    __rs.ranOnce = true;
     btn.disabled = true;
     cardsEl.innerHTML = '';
     emptyEl.style.display = 'none';
@@ -482,39 +530,16 @@ function mount(el){
     var status = 'refreshed';
     try{
       setStat('loading Delta + CoinDCX universe…');
-      var uniPack = await rsLoadUniverse(true);
-      var uni = uniPack.items || [];
-      if (!uni.length){
-        setStat(uniPack.note || 'Delta + CoinDCX universe unavailable — check xuniverse.js / network', true);
-        return 'failed: universe';
-      }
-      var vc = uniPack.venueCounts || {};
-      var venueNote = 'Δ ' + (vc.delta || 0) + ' · CDCX ' + (vc.coindcx || 0);
-
-      var results = [], failed = 0, started = 0;
-      for (var ci = 0; ci < uni.length; ci += CHUNK){
-        var chunk = uni.slice(ci, ci + CHUNK);
-        await Promise.all(chunk.map(async function(item){
-          var my = ++started;
-          var symLab = (typeof W.hgDeskSymLabel === 'function') ? W.hgDeskSymLabel(item) : (item.sym || '?');
-          setStat('scanning ' + my + '/' + uni.length + ' · ' + symLab + ' (' + venueNote + ')');
-          setProg(my / uni.length);
-          try{
-            var rows = await rsFetchKlines(item, '4h', KL_LIMIT);
-            if (!rows || !rows.length){ failed++; return; }
-            var setup = rsAssess(rows);
-            if (!setup) return;
-            results.push({ item: item, sym: symLab, setup: setup, rows: rows, tick: item });
-          }catch(e){ failed++; }
-        }));
-        if (ci + CHUNK < uni.length) await sleep(CHUNK_SLEEP_MS);
-      }
-
-      results.sort(function(a, b){ return b.setup.conviction - a.setup.conviction; });
-      if (results.length) results[0].best = true;
-
-      publishRsDeskSnap(results);
-
+      var pack = await rsRunScan({
+        onProgress: function(p){
+          if (p.phase === 'scan'){
+            setStat('scanning ' + p.i + '/' + p.total + ' · ' + p.sym + ' (' + p.venueNote + ')');
+            setProg(p.i / p.total);
+          }
+        }
+      });
+      status = pack.status || status;
+      var results = pack.results || [];
       if (results.length){
         cardsEl.innerHTML = '<div class="note ok" style="margin-bottom:8px">★ '
           + esc(results[0].sym) + ' — highest conviction (' + results[0].setup.conviction + ')</div>'
@@ -524,14 +549,18 @@ function mount(el){
         emptyEl.textContent = 'No sniper-grade long reversals right now — need post-drop (≥2%) + sweep/mean-rev/RSI(2) confluence, stop tight enough for ≥'
           + MIN_LEV + '× leverage, conviction ≥ ' + MIN_CONVICTION + '. Quiet tape is normal; re-scan after a flush.';
       }
+      if (pack.status === 'failed: universe'){
+        setStat(pack.note || 'Delta + CoinDCX universe unavailable — check xuniverse.js / network', true);
+        return pack.status;
+      }
       setStat(results.length + ' sniper-grade reversal' + (results.length === 1 ? '' : 's')
-        + ' · ' + uni.length + ' contracts scanned (' + venueNote + ') · ' + failed + ' fetch failures · '
+        + ' · ' + (pack.uniLen || 0) + ' contracts scanned (' + (pack.venueNote || '') + ') · '
+        + (pack.failed || 0) + ' fetch failures · '
         + new Date().toISOString().slice(11, 19) + ' UTC');
     }catch(e){
       setStat('scan failed: ' + ((e && e.message) ? e.message : String(e)), true);
       status = 'error';
     }finally{
-      __rs.busy = false;
       btn.disabled = false;
       setProg(null);
     }
@@ -547,8 +576,9 @@ function mount(el){
 async function rsRefresh(){
   try{
     if (__rs.busy) return 'busy';
-    if (!__rs.ranOnce || typeof __rs.run !== 'function') return 'skipped: not run yet';
-    return await __rs.run();
+    if (typeof __rs.run === 'function') return await __rs.run();
+    var pack = await rsRunScan({ quiet: true });
+    return pack.status || 'refreshed';
   }catch(e){ return 'error'; }
 }
 
@@ -557,6 +587,7 @@ W.rsAssess = rsAssess;
 W.rsBacktest = rsBacktest;
 W.rsConviction = rsConviction;
 W.publishRsDeskSnap = publishRsDeskSnap;
+W.rsRunScan = rsRunScan;
 W.reversalSniperScan = function(){ return __rs.snap; };
 W.rsLoadUniverse = rsLoadUniverse;
 W.rsIsDeskVenue = rsIsDeskVenue;

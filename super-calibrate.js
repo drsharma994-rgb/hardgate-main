@@ -57,44 +57,32 @@ function publishSuperCalibrateSnap(snap){
 
 function superCalibrateScan(){ return __hgSuperCalSnap; }
 
-async function superCalibrateRunInner(opts){
+function superCalibrateReplayInline(opts){
   opts = opts || {};
-  if (__sc.busy) return 'busy';
-  __sc.busy = true;
-  try{
-    if (typeof W.runGateDiagnostics === 'function'){
-      await W.runGateDiagnostics();
-      var snap = {
-        at: Date.now(),
-        stat: 'Calibration ran via SWING gate replay — see SWING tab diagnostics output',
-        note: 'Full threshold sweep lives on SWING → CALIBRATE; this desk triggered the same engine.',
-        panelHtml: ''
-      };
-      publishSuperCalibrateSnap(snap);
-      __sc.lastAt = Date.now();
-      return snap.stat;
+  var samples = [], scanned = 0, clean = 0;
+  if (typeof W.cgGateReplay !== 'function' || typeof W.getCandles !== 'function' || typeof W.getTickers !== 'function'){
+    return {
+      summary: null,
+      panelHtml: '',
+      stat: 'No calibration data — cgGateReplay or market feed unavailable',
+      note: 'Run when SWING market feed is online'
+    };
+  }
+  return (async function(){
+    var uni = [];
+    try{ uni = (await W.getTickers()) || []; }catch(e0){}
+    uni = uni.filter(function(t){ return t && t.symbol; }).slice(0, opts.limit || 12);
+    for (var i = 0; i < uni.length; i++){
+      var t = uni[i];
+      try{
+        var rows = await W.getCandles(t.symbol, '4h', 500);
+        if (!rows || rows.length < 300) continue;
+        var rp = W.cgGateReplay(rows, t, {});
+        samples = samples.concat(rp.samples || []);
+        clean += rp.clean || 0;
+        scanned++;
+      }catch(e1){}
     }
-
-    var samples = [];
-    var scanned = 0;
-    var clean = 0;
-    if (typeof W.cgGateReplay === 'function' && typeof W.getCandles === 'function' && typeof W.getTickers === 'function'){
-      var uni = [];
-      try{ uni = (await W.getTickers()) || []; }catch(e0){}
-      uni = uni.filter(function(t){ return t && t.symbol; }).slice(0, opts.limit || 12);
-      for (var i = 0; i < uni.length; i++){
-        var t = uni[i];
-        try{
-          var rows = await W.getCandles(t.symbol, '4h', 500);
-          if (!rows || rows.length < 300) continue;
-          var rp = W.cgGateReplay(rows, t, {});
-          samples = samples.concat(rp.samples || []);
-          clean += rp.clean || 0;
-          scanned++;
-        }catch(e1){}
-      }
-    }
-
     var sum = superCalibrateSummarize(samples);
     var panelHtml = '';
     if (typeof W.cgGateReplayPanelHTML === 'function' && samples.length){
@@ -104,24 +92,40 @@ async function superCalibrateRunInner(opts){
         settled: sum.settled
       }, {});
     }
-
     var stat = scanned
       ? ('Calibrated ' + scanned + ' symbols · ' + samples.length + ' bars · '
         + sum.clean + ' CLEAN · expR ' + (sum.expR != null ? fmt(sum.expR, 3) : '—'))
-      : 'No calibration data — cgGateReplay or market feed unavailable';
-
-    var snap = buildSnapFromCalibrateResult({
+      : 'No calibration data — need 300+ 4H bars from market feed';
+    return {
       summary: sum,
       panelHtml: panelHtml,
       stat: stat,
       note: sum.settled >= 5
         ? ('Settled ' + sum.settled + ' · win ' + fmt((sum.winPct || 0) * 100, 1) + '%')
-        : 'Need more settled replay bars for MAE/MFE confidence'
-    });
-    snap.scanned = scanned;
+        : 'Need more settled replay bars for MAE/MFE confidence',
+      scanned: scanned
+    };
+  })();
+}
+
+async function superCalibrateRunInner(opts){
+  opts = opts || {};
+  if (__sc.busy) return 'busy';
+  __sc.busy = true;
+  try{
+    var result = await superCalibrateReplayInline(opts);
+    if (typeof W.runGateDiagnostics === 'function'){
+      try{ await W.runGateDiagnostics(); }catch(eDiag){}
+      if (!result.panelHtml && result.scanned === 0){
+        result.stat = 'SWING gate replay ran — market feed returned no replay bars';
+      }
+    }
+    var snap = buildSnapFromCalibrateResult(result);
+    snap.scanned = result.scanned;
     publishSuperCalibrateSnap(snap);
     __sc.lastAt = Date.now();
-    return stat;
+    if (__sc.mounted && typeof __sc.paintSnap === 'function') __sc.paintSnap(snap);
+    return snap.stat || 'done';
   }catch(e){
     return 'error: ' + ((e && e.message) ? e.message : String(e));
   }finally{
@@ -199,6 +203,11 @@ function mount(el){
   });
 
   paintSnap(superCalibrateScan());
+  superCalibrateRun({ force: true }).then(function(msg){
+    var statEl = $('#sc-stat');
+    if (statEl && msg) statEl.textContent = String(msg);
+    paintSnap(superCalibrateScan());
+  });
 }
 
 function superCalibrateRepaint(){
@@ -208,11 +217,13 @@ function superCalibrateRepaint(){
 }
 
 async function superCalibrateRefresh(){
+  if (!__sc.lastAt) await superCalibrateRun({ force: true });
   superCalibrateRepaint();
   return 'refreshed';
 }
 
 W.superCalibrateSummarize = superCalibrateSummarize;
+W.superCalibrateReplayInline = superCalibrateReplayInline;
 W.buildSnapFromCalibrateResult = buildSnapFromCalibrateResult;
 W.superCalibrateScan = superCalibrateScan;
 W.superCalibrateRun = superCalibrateRun;

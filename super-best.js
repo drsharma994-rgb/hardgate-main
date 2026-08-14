@@ -63,6 +63,82 @@ function superBestDeskPill(row){
   return { cls: 'block', label: 'RISK BLOCK' };
 }
 
+function enrichSuperBestRowLite(c, tier, riskOpts, meta){
+  if (!c || !c.dir || !(N(c.entry) > 0 && N(c.stop) > 0)) return null;
+  meta = meta || {};
+  tier = tier || 'clean';
+  riskOpts = riskOpts || defaultRiskOpts();
+  var rrForCalc = N(c.rr) || 2;
+  if (N(c.t1) > 0){
+    var riskDist = Math.abs(c.entry - c.stop);
+    if (riskDist > 0) rrForCalc = Math.abs(c.t1 - c.entry) / riskDist;
+  }
+  var calc = null;
+  if (typeof W.calcTrade === 'function'){
+    try{
+      calc = W.calcTrade({
+        balance: riskOpts.balance,
+        riskPct: riskOpts.riskPct,
+        entry: c.entry,
+        stop: c.stop,
+        rr: rrForCalc,
+        tpPrice: N(c.t1) > 0 ? c.t1 : null,
+        maxLeverage: riskOpts.maxLeverage,
+        feePct: riskOpts.feePct,
+        slipPct: riskOpts.slipPct
+      });
+    }catch(e0){}
+  }
+  var safeLev = (typeof W.calcSafeMaxLeverage === 'function')
+    ? W.calcSafeMaxLeverage(c.entry, c.stop) : null;
+  var hit = {
+    id: c.id || [c.sym, c.dir, c.entry, c.stop, 'best'].join('|'),
+    sym: c.sym,
+    dir: c.dir,
+    entry: N(c.entry),
+    stop: N(c.stop),
+    t1: N(c.t1),
+    t2: N(c.t2),
+    rr: N(c.rr) || rrForCalc,
+    tp: N(c.t1),
+    tier: tier,
+    scanner: meta.scanner || 'best',
+    famScore: c.famScore,
+    robScore: c.robScore,
+    stack: c.stack || null,
+    rows: c.rows || null,
+    venueTag: c.venueTag || null,
+    sizingPass: !!(calc && calc.ok),
+    impliedLev: calc && calc.impliedLeverage,
+    safeMaxLev: safeLev,
+    qty: calc && calc.qty,
+    minimalLossPass: tier === 'clean' && !!(calc && calc.ok),
+    riskReason: tier === 'clean' && calc && calc.ok ? 'PASS (lite)' : 'BEST desk lite enrich'
+  };
+  if (typeof W.hgCryptoAttachPositionSize === 'function'){
+    try{
+      W.hgCryptoAttachPositionSize(hit, riskOpts.balance, riskOpts.riskPct, { style: 'swing' });
+      if (hit.positionRisk && tier === 'clean' && hit.positionRisk.pass === false){
+        hit.minimalLossPass = false;
+        hit.sizingPass = false;
+      }
+    }catch(e1){}
+  }
+  return hit;
+}
+
+function enrichSuperBestRow(c, tier, riskOpts, meta){
+  meta = meta || {};
+  var enrich = W.superSetupEnrichRow;
+  if (typeof enrich === 'function'){
+    var row = enrich(c, tier, riskOpts, Object.assign({}, meta, {
+      refineOpts: { rejectVisionVeto: false }
+    }));
+    if (row) return row;
+  }
+  return enrichSuperBestRowLite(c, tier, riskOpts, meta);
+}
+
 function superBestSortCands(cands){
   if (!Array.isArray(cands)) return;
   cands.sort(function(a, b){
@@ -105,14 +181,10 @@ function buildSnapFromBestScan(win, riskOpts, opts){
     };
   }
   scanned = best.at || Date.now();
-  var enrich = win.superSetupEnrichRow;
-  if (typeof enrich !== 'function'){
-    return { at: scanned, cands: [], audit: audit, stat: 'superSetupEnrichRow missing' };
-  }
   best.clean.forEach(function(c){
     var raw = bestCandFromClean(c, scanned);
     if (!raw || !(raw.entry > 0 && raw.stop > 0)) return;
-    var row = enrich(raw, 'clean', riskOpts, { source: 'best', scanner: 'best', at: scanned });
+    var row = enrichSuperBestRow(raw, 'clean', riskOpts, { source: 'best', scanner: 'best', at: scanned });
     if (row){
       row.famScore = c.famScore;
       row.robScore = c.robScore;
@@ -198,11 +270,14 @@ async function superBestRunScanInner(opts){
   if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
   try{
     var warm = W.bestScanWarm;
-    var runBest = W.runBest;
+    var runBestFn = W.runBest;
     if (typeof warm === 'function'){
       await warm();
-    } else if (typeof runBest === 'function'){
-      await runBest({ quiet: true });
+    }
+    var bestSnap = (typeof W.bestScan === 'function') ? W.bestScan() : null;
+    if ((!bestSnap || !Array.isArray(bestSnap.clean) || !bestSnap.clean.length)
+        && typeof runBestFn === 'function'){
+      try{ await runBestFn({ quiet: true }); }catch(eRb){}
     }
     __sb.lastScanAt = Date.now();
     var snap = buildSnapFromBestScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });
@@ -214,6 +289,9 @@ async function superBestRunScanInner(opts){
         style: 'super-best', cleanOnly: true, limit: 6,
         repaint: __sb.mounted && typeof __sb.paintVision === 'function' ? __sb.paintVision : null
       });
+    }
+    if (__sb.mounted && typeof __sb.syncFromExistingDesks === 'function'){
+      __sb.syncFromExistingDesks();
     }
     __sb.lastScanMsg = snap.stat || 'done';
     return __sb.lastScanMsg;
@@ -405,6 +483,7 @@ function mount(el){
 
   __sb.setScanStatus = setScanStatus;
   __sb.paintDesk = paintDesk;
+  __sb.syncFromExistingDesks = syncFromExistingDesks;
   __sb.mounted = true;
 
   if (typeof W.hgSuperDeskBindScorecard === 'function') W.hgSuperDeskBindScorecard(root);
@@ -422,15 +501,14 @@ function mount(el){
   });
 
   syncFromExistingDesks();
-  superBestRunScan({ riskOpts: readRiskOpts() }).then(setScanStatus);
+  superBestRunScan({ riskOpts: readRiskOpts() });
 
   __sb.syncTimer = setInterval(function(){
     try{
       var snap = buildSnapFromBestScan(W, readRiskOpts(), { allowStale: true });
-      if (snap.cands.length){
-        publishSuperBestSnap(Object.assign({}, superBestScan() || {}, snap));
-        paintDesk(superBestScan());
-      }
+      snap.scanAt = (__sb.lastScanAt || (superBestScan() && superBestScan().scanAt) || snap.at);
+      publishSuperBestSnap(Object.assign({}, superBestScan() || {}, snap));
+      if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(superBestScan());
     }catch(e){}
   }, SYNC_MS);
 
@@ -457,6 +535,8 @@ async function superBestRefresh(){
 }
 
 W.superBestDeskPill = superBestDeskPill;
+W.enrichSuperBestRow = enrichSuperBestRow;
+W.enrichSuperBestRowLite = enrichSuperBestRowLite;
 W.buildSnapFromBestScan = buildSnapFromBestScan;
 W.superBestSyncDesk = syncDeskFromExisting;
 W.superBestScan = superBestScan;

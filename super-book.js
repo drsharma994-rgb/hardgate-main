@@ -196,7 +196,8 @@ function mount(el){
 
   async function refreshBook(){
     try{
-      if (typeof W.bookRefreshMarks === 'function') await W.bookRefreshMarks();
+      if (typeof W.bookPull === 'function') await W.bookPull();
+      else if (typeof W.bookRefreshMarks === 'function') await W.bookRefreshMarks();
       else if (typeof W.bookRefresh === 'function') await W.bookRefresh();
     }catch(e){}
     paintDesk(syncDeskFromExisting(W));
@@ -220,7 +221,8 @@ function superBookRepaint(){
 
 async function superBookRefresh(){
   try{
-    if (typeof W.bookRefreshMarks === 'function') await W.bookRefreshMarks();
+    if (typeof W.bookPull === 'function') await W.bookPull();
+    else if (typeof W.bookRefreshMarks === 'function') await W.bookRefreshMarks();
   }catch(e){}
   superBookRepaint();
   return 'refreshed';
