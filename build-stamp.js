@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v291',
-  pack: 'super best populate fix',
-  built: '2026-08-14T21:00:00Z',
-  note: 'SUPER BEST direct repaint · inline BEST warm · quiet runBest · includes v288–v290 stack'
+  version: 'hg-v292',
+  pack: 'nav reorganize',
+  built: '2026-08-14T21:30:00Z',
+  note: 'COMMAND · CRYPTO · GOLD · MODELS · TOOLS — workflow tab order'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

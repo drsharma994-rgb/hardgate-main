@@ -212,7 +212,8 @@ assert(html.includes('class="navgroups" id="navGroups"'), 'group row container (
 assert(/\.navgroups\{[^}]*overflow-x\s*:\s*auto/.test(html), 'group row CSS: overflow-x:auto (mobile-safe)');
 assert(/\.navgroups button\.on\{[^}]*background\s*:\s*linear-gradient/.test(html), 'active group chip uses futuristic gradient fill');
 assert(html.includes('const HG_NAV_GROUPS = ['), 'HG_NAV_GROUPS group model defined inline');
-assert(html.includes("'strats','meanrev','super-setup','super-best','super-sniper','super-book','super-calibrate','reversalsniper','edge','best','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','carry'"), 'STRATEGIES group pre-maps all pine tabs');
+assert(html.includes("'super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap'"), 'MODELS group pre-maps super desks + pine tabs');
+assert(html.includes("label:'COMMAND'") && html.includes("label:'MODELS'"), 'nav chips use workflow labels');
 assert(html.includes("const HG_TAB_GROUP = {}") && html.includes("HG_TAB_GROUP[t] = g.id"),
   'HG_TAB_GROUP id→group map built from the model');
 assert(/function setHgGroup\(gid, openFirst\)/.test(html), 'setHgGroup(gid, openFirst) group switcher present');

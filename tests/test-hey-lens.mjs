@@ -60,7 +60,7 @@ console.log('== api + shell wiring ==');
   ok(/createHeyLensApi/.test(srv) && /\/api\/hey\//.test(srv), 'server mounts hey api');
   var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   ok(html.indexOf('hey-desk.js') >= 0 && html.indexOf('hey-lens.js') >= 0, 'index loads hey scripts');
-  ok(/tabs:\['risk','basis','search','tradeos','hey'/.test(html), 'hey tab in TOOLS nav');
+  ok(/tabs:\['risk','basis','search','finder','tradeos','hey'/.test(html), 'hey tab in TOOLS nav');
   var sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   ok(swCacheOk(sw), 'cache matches build stamp');
 }
