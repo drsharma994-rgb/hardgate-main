@@ -14,7 +14,8 @@ var MIN_CONVICTION = 4;
 var __hgSuperSniperSnap = null;
 var __sn = {
   mounted: false, syncTimer: null, scanTimer: null, root: null,
-  selectedId: null, scanBusy: false, lastScanAt: 0, selectedHit: null
+  selectedId: null, scanBusy: false, lastScanAt: 0, selectedHit: null,
+  scanPromise: null, lastScanMsg: ''
 };
 
 function N(v){ return Number(v); }
@@ -127,6 +128,15 @@ function publishSuperSniperSnap(snap){
   return snap;
 }
 
+function mergePublishSuperSniperSnap(nextSnap){
+  var prev = superSniperScan() || {};
+  return publishSuperSniperSnap(
+    (typeof W.hgSuperDeskMergeSnap === 'function')
+      ? W.hgSuperDeskMergeSnap(prev, nextSnap || {}, { emptyStatPrefixes: ['0 setups', '0 sniper'] })
+      : Object.assign({}, prev, nextSnap || {})
+  );
+}
+
 function superSniperScan(){ return __hgSuperSniperSnap; }
 
 function syncDeskFromExisting(win, riskOpts){
@@ -154,9 +164,40 @@ function hitToEvaluation(hit){
   };
 }
 
+function autoSelectFirstSetup(snap){
+  snap = snap || superSniperScan();
+  if (!snap || !Array.isArray(snap.cands) || !snap.cands.length) return null;
+  var hit = null, i;
+  if (__sn.selectedId){
+    for (i = 0; i < snap.cands.length; i++){
+      if (snap.cands[i] && snap.cands[i].id === __sn.selectedId){ hit = snap.cands[i]; break; }
+    }
+  }
+  if (!hit){
+    for (i = 0; i < snap.cands.length; i++){
+      if (snap.cands[i] && snap.cands[i].minimalLossPass){ hit = snap.cands[i]; break; }
+    }
+  }
+  if (!hit) hit = snap.cands[0];
+  if (hit && hit.id) __sn.selectedId = hit.id;
+  return hit;
+}
+
+function superSniperAfterScan(snap){
+  snap = snap || superSniperScan();
+  if (!snap) return;
+  mergePublishSuperSniperSnap(snap);
+  __sn.lastScanMsg = snap.stat || 'done';
+  if (__sn.mounted && typeof __sn.setScanStatus === 'function') __sn.setScanStatus(__sn.lastScanMsg);
+  if (__sn.mounted && typeof __sn.paintDesk === 'function') __sn.paintDesk(snap);
+  if (__sn.mounted && typeof __sn.applyFirstSetup === 'function') __sn.applyFirstSetup(false);
+}
+
 async function superSniperRunScanInner(opts){
   opts = opts || {};
   __sn.scanBusy = true;
+  __sn.lastScanMsg = 'Running REVERSAL SNIPER scan…';
+  if (__sn.mounted && typeof __sn.setScanStatus === 'function') __sn.setScanStatus(__sn.lastScanMsg);
   try{
     if (typeof W.rsRunScan === 'function'){
       await W.rsRunScan({ quiet: true });
@@ -171,20 +212,29 @@ async function superSniperRunScanInner(opts){
     __sn.lastScanAt = Date.now();
     var snap = buildSnapFromRsScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });
     snap.scanAt = __sn.lastScanAt;
-    publishSuperSniperSnap(snap);
-    if (__sn.mounted && typeof __sn.syncFromExisting === 'function'){
-      __sn.syncFromExisting();
-    }
-    return snap.stat || 'done';
+    snap.hydrated = true;
+    superSniperAfterScan(snap);
+    return __sn.lastScanMsg;
   }catch(e){
-    return 'error: ' + ((e && e.message) ? e.message : String(e));
+    __sn.lastScanMsg = 'scan error: ' + ((e && e.message) ? e.message : String(e));
+    if (__sn.mounted && typeof __sn.setScanStatus === 'function') __sn.setScanStatus(__sn.lastScanMsg);
+    return __sn.lastScanMsg;
   }finally{
     __sn.scanBusy = false;
   }
 }
 
-function superSniperRunScan(opts){
-  return superSniperRunScanInner(opts || {});
+async function superSniperRunScan(opts){
+  opts = opts || {};
+  if (__sn.scanPromise){
+    if (opts.force){
+      try{ await __sn.scanPromise; }catch(e0){}
+    } else {
+      return __sn.scanPromise;
+    }
+  }
+  __sn.scanPromise = superSniperRunScanInner(opts).finally(function(){ __sn.scanPromise = null; });
+  return __sn.scanPromise;
 }
 
 async function superSniperWarm(opts){
@@ -311,17 +361,28 @@ function mount(el){
     });
   }
 
-  function syncFromExisting(){
-    var snap = syncDeskFromExisting(W, readRiskOpts());
-    paintDesk(snap);
-    if (snap.cands && snap.cands.length){
-      var hit = snap.cands[0];
-      if (!__sn.selectedId) __sn.selectedId = hit.id;
-      var sel = snap.cands.find(function(r){ return r.id === __sn.selectedId; }) || hit;
-      applyEvaluation(hitToEvaluation(sel));
-    }
+  function setScanStatus(msg){
+    var statEl = $('#sn-scan-stat');
+    if (statEl && msg) statEl.textContent = msg;
   }
 
+  function applyFirstSetup(force){
+    var snap = superSniperScan();
+    paintDesk(snap);
+    var hit = autoSelectFirstSetup(snap);
+    if (hit) applyEvaluation(hitToEvaluation(hit));
+    if (force && hit) __sn.selectedHit = hit;
+  }
+
+  function syncFromExisting(){
+    var snap = syncDeskFromExisting(W, readRiskOpts());
+    mergePublishSuperSniperSnap(snap);
+    applyFirstSetup(true);
+    return superSniperScan();
+  }
+
+  __sn.setScanStatus = setScanStatus;
+  __sn.applyFirstSetup = applyFirstSetup;
   __sn.paintDesk = paintDesk;
   __sn.syncFromExisting = syncFromExisting;
   __sn.mounted = true;
@@ -330,15 +391,26 @@ function mount(el){
   $('#sn-balance') && $('#sn-balance').addEventListener('input', syncFromExisting);
   $('#sn-risk') && $('#sn-risk').addEventListener('input', syncFromExisting);
   $('#sn-run-scan') && $('#sn-run-scan').addEventListener('click', function(){
-    superSniperRunScan({ force: true, riskOpts: readRiskOpts() }).then(function(){
-      syncFromExisting();
+    var btn = $('#sn-run-scan');
+    if (btn) btn.disabled = true;
+    superSniperRunScan({ force: true, riskOpts: readRiskOpts() }).then(function(msg){
+      if (btn) btn.disabled = false;
+      setScanStatus(String(msg));
+      applyFirstSetup(true);
     });
   });
 
   syncFromExisting();
   superSniperRunScan({ riskOpts: readRiskOpts() });
 
-  __sn.syncTimer = setInterval(syncFromExisting, SYNC_MS);
+  __sn.syncTimer = setInterval(function(){
+    try{
+      var snap = buildSnapFromRsScan(W, readRiskOpts(), { allowStale: true });
+      snap.scanAt = (__sn.lastScanAt || (superSniperScan() && superSniperScan().scanAt) || snap.at);
+      mergePublishSuperSniperSnap(snap);
+      if (__sn.mounted && typeof __sn.paintDesk === 'function') __sn.paintDesk(superSniperScan());
+    }catch(e){}
+  }, SYNC_MS);
   __sn.scanTimer = setInterval(function(){
     if (!__sn.scanBusy){
       superSniperRunScan({ riskOpts: readRiskOpts() });
@@ -347,7 +419,15 @@ function mount(el){
 }
 
 function superSniperRepaint(){
-  if (__sn.mounted && typeof __sn.paintDesk === 'function') __sn.paintDesk(superSniperScan());
+  if (!__sn.mounted) return;
+  var snap = superSniperScan();
+  if (!snap || !snap.cands || !snap.cands.length){
+    snap = syncDeskFromExisting(W, defaultRiskOpts());
+    mergePublishSuperSniperSnap(snap);
+    snap = superSniperScan();
+  }
+  if (typeof __sn.paintDesk === 'function') __sn.paintDesk(snap);
+  if (typeof __sn.applyFirstSetup === 'function') __sn.applyFirstSetup(false);
 }
 
 async function superSniperRefresh(){
@@ -359,6 +439,7 @@ async function superSniperRefresh(){
 W.superSniperDeskPill = superSniperDeskPill;
 W.enrichSuperSniperRow = enrichSuperSniperRow;
 W.buildSnapFromRsScan = buildSnapFromRsScan;
+W.mergePublishSuperSniperSnap = mergePublishSuperSniperSnap;
 W.superSniperSyncDesk = syncDeskFromExisting;
 W.superSniperScan = superSniperScan;
 W.superSniperRunScan = superSniperRunScan;

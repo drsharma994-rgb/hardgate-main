@@ -74,6 +74,28 @@ function hgSuperDeskVisionBlock(row){
   try{ return W.hgChartVisionCardBlock(row) || ''; }catch(e){ return ''; }
 }
 
+function hgSuperDeskMergeSnap(prev, next, opts){
+  opts = opts || {};
+  var listKey = opts.listKey || 'cands';
+  prev = prev || {};
+  next = next || {};
+  var prevList = prev[listKey];
+  var nextList = next[listKey];
+  if ((!nextList || !nextList.length) && prevList && prevList.length){
+    next[listKey] = prevList;
+    if (prev.audit && !next.audit) next.audit = prev.audit;
+    if (prev.deskMeta && !next.deskMeta) next.deskMeta = prev.deskMeta;
+    var pStat = prev.stat != null ? String(prev.stat) : '';
+    var emptyPrefixes = opts.emptyStatPrefixes || ['0 setups', '0 BEST CLEAN', '0 sniper', '0 open'];
+    var i;
+    for (i = 0; i < emptyPrefixes.length; i++){
+      if (pStat.indexOf(emptyPrefixes[i]) === 0) { pStat = ''; break; }
+    }
+    if (pStat) next.stat = prev.stat;
+  }
+  return Object.assign({}, prev, next);
+}
+
 function hgSuperDeskInjectStyles(cssId, extra){
   if (W['__' + cssId]) return;
   W['__' + cssId] = true;
@@ -128,6 +150,7 @@ W.hgSuperDeskBindScorecard = hgSuperDeskBindScorecard;
 W.hgSuperDeskValidationHtml = hgSuperDeskValidationHtml;
 W.hgSuperDeskEnrichChartVision = hgSuperDeskEnrichChartVision;
 W.hgSuperDeskVisionBlock = hgSuperDeskVisionBlock;
+W.hgSuperDeskMergeSnap = hgSuperDeskMergeSnap;
 W.hgSuperDeskInjectStyles = hgSuperDeskInjectStyles;
 
 })();

@@ -1011,7 +1011,13 @@ async function superGoldRefresh(){
 
 function superGoldRepaint(){
   if (!__sg.mounted) return;
-  if (typeof __sg.paintDesk === 'function') __sg.paintDesk(superGoldScan());
+  var snap = superGoldScan();
+  if (!snap || !snap.cands || !snap.cands.length){
+    snap = syncDeskFromExisting(W, defaultRiskOpts());
+    publishSuperGoldSnap(snap);
+    snap = superGoldScan();
+  }
+  if (typeof __sg.paintDesk === 'function') __sg.paintDesk(snap);
   if (typeof __sg.applyFirstSetup === 'function') __sg.applyFirstSetup(false);
 }
 
