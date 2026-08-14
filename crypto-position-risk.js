@@ -14,6 +14,10 @@ var HG_FEE_TAKER_PCT = 0.05;
 var HG_FEE_MAKER_PCT = 0.02;
 var HG_FEE_GST_MULT = 1.18;
 var HG_NET_R_FLOOR = 1.5;
+var HG_INDIA_VDA_TAX_RATE = 0.30;
+var HG_INDIA_VDA_CESS = 0.04;
+var HG_INDIA_TDS_RATE = 0.01;
+var HG_FUNDING_8H_DEFAULT = 0.0001;
 
 function normDir(d){
   var s = String(d || 'long').toLowerCase();
@@ -122,6 +126,28 @@ function hgCryptoMeasuredWinRate(sym, dir){
   }catch(e){ return null; }
 }
 
+function hgCryptoFundingCostR(notionalUSD, riskAmountUSD, holdHours, fundingRate8h){
+  var n = num(notionalUSD), risk = num(riskAmountUSD);
+  var hrs = num(holdHours);
+  var rate = num(fundingRate8h) != null ? num(fundingRate8h) : HG_FUNDING_8H_DEFAULT;
+  if (n === null || risk === null || !(risk > 0) || hrs === null || !(hrs > 0)) return 0;
+  return (n * rate * (hrs / 8)) / risk;
+}
+
+function hgCryptoIndiaTaxDragR(grossR, costR, notionalUSD, riskAmountUSD, opts){
+  opts = opts || {};
+  if (!opts.indiaTax) return 0;
+  grossR = num(grossR); costR = num(costR) || 0;
+  var risk = num(riskAmountUSD), notional = num(notionalUSD);
+  if (grossR === null || risk === null || !(risk > 0)) return 0;
+  var netWinR = grossR - costR;
+  if (!(netWinR > 0)) return 0;
+  var taxRate = num(opts.indiaTaxRate) != null ? num(opts.indiaTaxRate) : HG_INDIA_VDA_TAX_RATE;
+  var cess = num(opts.indiaCess) != null ? num(opts.indiaCess) : HG_INDIA_VDA_CESS;
+  var tds = num(opts.indiaTds) != null ? num(opts.indiaTds) : HG_INDIA_TDS_RATE;
+  return ((netWinR * risk) * (taxRate + cess) + (notional != null ? notional * tds : 0)) / risk;
+}
+
 function hgCryptoDefaultBalance(){
   return num(G.__ssDefaultBalance) != null && num(G.__ssDefaultBalance) > 0 ? num(G.__ssDefaultBalance)
     : (num(G.__hgDefaultBalance) != null ? num(G.__hgDefaultBalance) : 1000);
@@ -156,7 +182,16 @@ function hgCryptoPositionRisk(plan, ctx){
   var grossR = tp != null ? (dir === 'long' ? (tp - e) / Math.abs(e - st) : (e - tp) / Math.abs(e - st)) : null;
   var costR = hgCryptoCostR(e, st, 'maker', 'taker');
   var netR = tp != null ? hgCryptoNetRAtTarget(e, st, tp, dir) : null;
-  var breakeven = grossR != null ? hgCryptoBreakevenWinRate(grossR, costR) : null;
+  var holdHours = num(ctx.holdHours);
+  var fundingRate8h = num(ctx.fundingRate8h) != null ? num(ctx.fundingRate8h) : HG_FUNDING_8H_DEFAULT;
+  var fundingCostR = (holdHours != null && holdHours > 0)
+    ? hgCryptoFundingCostR(size.notionalUSD, size.riskAmountUSD, holdHours, fundingRate8h) : 0;
+  var netRAfterFunding = netR != null ? netR - fundingCostR : null;
+  var taxDragR = hgCryptoIndiaTaxDragR(grossR, costR, size.notionalUSD, size.riskAmountUSD, {
+    indiaTax: !!ctx.indiaTax, indiaTaxRate: ctx.indiaTaxRate, indiaCess: ctx.indiaCess, indiaTds: ctx.indiaTds
+  });
+  var netRAfterTax = netRAfterFunding != null ? netRAfterFunding - taxDragR : null;
+  var breakeven = grossR != null ? hgCryptoBreakevenWinRate(grossR, costR + fundingCostR + taxDragR) : null;
   var measured = num(ctx.measuredWinRate);
   if (measured === null && plan.sym) measured = hgCryptoMeasuredWinRate(plan.sym, dir);
 
@@ -164,17 +199,21 @@ function hgCryptoPositionRisk(plan, ctx){
   var netFloor = num(ctx.netRFloor) != null ? num(ctx.netRFloor) : HG_NET_R_FLOOR;
   var style = String(plan.style || plan.scanner || 'swing').toLowerCase();
   var netPass = netR === null || style.indexOf('scalp') < 0 ? true : (netR >= netFloor);
+  var fundingHoldPass = !(holdHours != null && holdHours > 0 && netRAfterFunding != null && netRAfterFunding < netFloor);
+  var indiaTaxPass = !(ctx.indiaTax && netRAfterTax != null && netRAfterTax < netFloor);
 
   var reasons = [];
   if (!liqPass) reasons.push('Liq clearance ' + (clearance != null ? clearance.toFixed(2) : '?') + '× < ' + HG_CRYPTO_LIQ_CLEARANCE_MIN + '×');
   if (!netPass && netR !== null) reasons.push('Net R @ T1 ' + netR.toFixed(2) + ' < ' + netFloor);
+  if (!fundingHoldPass) reasons.push('Funding hold ' + holdHours + 'h → net ' + (netRAfterFunding != null ? netRAfterFunding.toFixed(2) : '?') + 'R');
+  if (!indiaTaxPass) reasons.push('India tax/TDS → net ' + (netRAfterTax != null ? netRAfterTax.toFixed(2) : '?') + 'R');
   if (ceilingLev != null && impliedLev > ceilingLev + 0.01){
     reasons.push('Implied ' + impliedLev.toFixed(1) + 'x > ceiling ' + ceilingLev + 'x');
   }
 
   return {
     ok: true,
-    pass: liqPass && netPass && !(ceilingLev != null && impliedLev > ceilingLev + 0.01),
+    pass: liqPass && netPass && fundingHoldPass && indiaTaxPass && !(ceilingLev != null && impliedLev > ceilingLev + 0.01),
     dir: dir,
     sym: plan.sym || null,
     balance: bal,
@@ -189,6 +228,13 @@ function hgCryptoPositionRisk(plan, ctx){
     grossR: grossR != null ? Math.round(grossR * 1000) / 1000 : null,
     costR: Math.round(costR * 10000) / 10000,
     netR: netR != null ? Math.round(netR * 1000) / 1000 : null,
+    holdHours: holdHours,
+    fundingRate8h: fundingRate8h,
+    fundingCostR: Math.round(fundingCostR * 10000) / 10000,
+    netRAfterFunding: netRAfterFunding != null ? Math.round(netRAfterFunding * 1000) / 1000 : null,
+    indiaTax: !!ctx.indiaTax,
+    taxDragR: Math.round(taxDragR * 10000) / 10000,
+    netRAfterTax: netRAfterTax != null ? Math.round(netRAfterTax * 1000) / 1000 : null,
     breakevenWinRate: breakeven != null ? Math.round(breakeven * 1000) / 1000 : null,
     measuredWinRate: measured,
     reasons: reasons,

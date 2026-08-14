@@ -12,6 +12,7 @@ function fmt(n, d){
 }
 
 function readForm(root){
+  var indiaEl = $(root, '#rk-india');
   return {
     balance: num($(root, '#rk-balance') && $(root, '#rk-balance').value),
     riskPct: num($(root, '#rk-risk') && $(root, '#rk-risk').value),
@@ -21,7 +22,10 @@ function readForm(root){
     entry: num($(root, '#rk-entry') && $(root, '#rk-entry').value),
     stop: num($(root, '#rk-stop') && $(root, '#rk-stop').value),
     t1: num($(root, '#rk-t1') && $(root, '#rk-t1').value),
-    style: ($(root, '#rk-style') && $(root, '#rk-style').value) || 'swing'
+    style: ($(root, '#rk-style') && $(root, '#rk-style').value) || 'swing',
+    holdHours: num($(root, '#rk-hold') && $(root, '#rk-hold').value),
+    fundingRate8h: num($(root, '#rk-funding') && $(root, '#rk-funding').value) / 100,
+    indiaTax: !!(indiaEl && indiaEl.checked)
   };
 }
 
@@ -56,6 +60,12 @@ function paintWorksheet(root, risk){
     '<span class="k">Gross R @ T1</span><span>' + (risk.grossR != null ? fmt(risk.grossR, 2) + 'R' : '—') + '</span>',
     '<span class="k">Fee drag</span><span>' + fmt(risk.costR, 3) + 'R round trip</span>',
     '<span class="k">Net R @ T1</span><span><b>' + (risk.netR != null ? fmt(risk.netR, 2) + 'R' : '—') + '</b></span>',
+    '<span class="k">Funding hold</span><span>' + (risk.holdHours != null && risk.holdHours > 0
+      ? (risk.holdHours + 'h · ' + fmt(risk.fundingCostR, 3) + 'R drag · net ' + (risk.netRAfterFunding != null ? fmt(risk.netRAfterFunding, 2) + 'R' : '—'))
+      : '—') + '</span>',
+    '<span class="k">India tax/TDS</span><span>' + (risk.indiaTax
+      ? (fmt(risk.taxDragR, 3) + 'R drag · net ' + (risk.netRAfterTax != null ? fmt(risk.netRAfterTax, 2) + 'R' : '—'))
+      : 'off') + '</span>',
     '<span class="k">Breakeven win</span><span>' + (risk.breakevenWinRate != null ? fmt(risk.breakevenWinRate * 100, 1) + '%' : '—') + '</span>',
     '<span class="k">Your ledger</span><span>' + (risk.measuredWinRate != null ? fmt(risk.measuredWinRate * 100, 1) + '% on symbol' : 'thin / n/a') + '</span>',
     '</div>',
@@ -75,7 +85,10 @@ function recalc(root){
   }
   var risk = G.hgCryptoPositionRisk({
     sym: f.sym, dir: f.dir, entry: f.entry, stop: f.stop, t1: f.t1, style: f.style
-  }, { balance: f.balance, riskPct: f.riskPct, mmr: f.mmr });
+  }, {
+    balance: f.balance, riskPct: f.riskPct, mmr: f.mmr,
+    holdHours: f.holdHours, fundingRate8h: f.fundingRate8h, indiaTax: f.indiaTax
+  });
   paintWorksheet(root, risk);
 }
 
@@ -106,7 +119,7 @@ function mount(el){
   el.innerHTML = [
     '<section class="hg-tab hg-risk-tab">',
     '  <div class="hg-title">Risk Worksheet</div>',
-    '  <div class="note">Pack 18 — risk-first sizing for crypto perps. Qty = risk$ ÷ stop distance. Implied leverage falls out; ceiling is max survivable only.</div>',
+    '  <div class="note">Pack 18 v2 — risk-first sizing + funding hold + India VDA tax/TDS (optional).</div>',
     '  <div class="grid2" style="margin-top:12px">',
     '    <div class="card"><h3>Inputs</h3>',
     '      <div class="formrow"><label>Symbol</label><input id="rk-sym" placeholder="BTCUSD" /></div>',
@@ -118,6 +131,9 @@ function mount(el){
     '      <div class="formrow"><label>Entry</label><input id="rk-entry" type="number" step="any" /></div>',
     '      <div class="formrow"><label>Stop</label><input id="rk-stop" type="number" step="any" /></div>',
     '      <div class="formrow"><label>T1</label><input id="rk-t1" type="number" step="any" /></div>',
+    '      <div class="formrow"><label>Hold (hours)</label><input id="rk-hold" type="number" value="0" step="1" title="Funding settlements every 8h on notional" /></div>',
+    '      <div class="formrow"><label>Funding / 8h %</label><input id="rk-funding" type="number" value="0.01" step="0.001" title="Default 0.01% per 8h period" /></div>',
+    '      <div class="formrow"><label><input type="checkbox" id="rk-india" checked /> India VDA tax + 1% TDS</label></div>',
     '      <div class="actions" style="margin-top:10px">',
     '        <button type="button" class="btn primary" id="rk-calc">Calculate</button>',
     '        <button type="button" class="btn ghost" id="rk-from-trade">Pull from Trade Plan</button>',
@@ -133,10 +149,12 @@ function mount(el){
   if (calcBtn) calcBtn.addEventListener('click', function(){ recalc(root); });
   var pullBtn = $(root, '#rk-from-trade');
   if (pullBtn) pullBtn.addEventListener('click', function(){ pullFromTradePlan(root); });
-  ['#rk-balance', '#rk-risk', '#rk-mmr', '#rk-entry', '#rk-stop', '#rk-t1'].forEach(function(sel){
+  ['#rk-balance', '#rk-risk', '#rk-mmr', '#rk-entry', '#rk-stop', '#rk-t1', '#rk-hold', '#rk-funding'].forEach(function(sel){
     var inp = $(root, sel);
     if (inp) inp.addEventListener('change', function(){ recalc(root); });
   });
+  var indiaEl = $(root, '#rk-india');
+  if (indiaEl) indiaEl.addEventListener('change', function(){ recalc(root); });
   pullFromTradePlan(root);
 }
 

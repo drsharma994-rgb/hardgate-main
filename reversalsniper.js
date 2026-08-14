@@ -397,7 +397,44 @@ function cardHTML(r){
     + '</div>';
 }
 
-var __rs = { busy: false, ranOnce: false, run: null };
+var __rs = { busy: false, ranOnce: false, run: null, snap: null };
+
+function publishRsDeskSnap(results){
+  try{
+    var cands = (results || []).map(function(r, i){
+      var s = r.setup || {};
+      var sym = r.sym || (r.item && r.item.sym) || '—';
+      return {
+        id: 'rs|' + sym + '|' + i,
+        sym: sym,
+        dir: 'long',
+        entry: s.entry,
+        stop: s.stop,
+        t1: s.t1,
+        t2: s.t2,
+        rr: s.rr1,
+        rr2: s.rr2,
+        conviction: s.conviction,
+        lev: s.lev,
+        riskPct: s.riskPct,
+        triggers: s.triggers,
+        rows: r.rows || null,
+        venueTag: r.item && r.item.venue ? r.item.venue : null,
+        tier: 'clean',
+        scanner: 'reversalsniper',
+        best: !!r.best
+      };
+    });
+    __rs.snap = {
+      at: Date.now(),
+      cands: cands,
+      stat: cands.length
+        ? (cands.length + ' sniper-grade reversals · conviction ranked')
+        : '0 sniper setups — post-drop long bounces only'
+    };
+    W.reversalSniperScan = function(){ return __rs.snap; };
+  }catch(e){}
+}
 
 function mount(el){
   if (!el) return;
@@ -476,6 +513,8 @@ function mount(el){
       results.sort(function(a, b){ return b.setup.conviction - a.setup.conviction; });
       if (results.length) results[0].best = true;
 
+      publishRsDeskSnap(results);
+
       if (results.length){
         cardsEl.innerHTML = '<div class="note ok" style="margin-bottom:8px">★ '
           + esc(results[0].sym) + ' — highest conviction (' + results[0].setup.conviction + ')</div>'
@@ -517,6 +556,8 @@ W.rsMaxSafeLev = rsMaxSafeLev;
 W.rsAssess = rsAssess;
 W.rsBacktest = rsBacktest;
 W.rsConviction = rsConviction;
+W.publishRsDeskSnap = publishRsDeskSnap;
+W.reversalSniperScan = function(){ return __rs.snap; };
 W.rsLoadUniverse = rsLoadUniverse;
 W.rsIsDeskVenue = rsIsDeskVenue;
 W.HG_tabs = W.HG_tabs || [];

@@ -113,7 +113,7 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const blIdx = html.indexOf('best-levels.js');
 const ssIdx = html.indexOf('supersetup.js');
 ok(blIdx >= 0 && ssIdx > blIdx, 'supersetup.js loads after best-levels.js');
-ok(/supersetup\.js\?v=280/.test(html), 'supersetup.js cache-busted in index.html');
+ok(/supersetup\.js\?v=284/.test(html), 'supersetup.js cache-busted in index.html');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 ok(swCacheOk(sw), 'sw.js cache matches build-stamp (' + HG_VER + ')');
