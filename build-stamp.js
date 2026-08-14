@@ -21,7 +21,7 @@ var HG_BUILD = {
   version: 'hg-v291',
   pack: 'super best populate fix',
   built: '2026-08-14T21:00:00Z',
-  note: 'SUPER BEST direct repaint · inline BEST warm · quiet runBest · sync merge guard'
+  note: 'SUPER BEST direct repaint · inline BEST warm · quiet runBest · includes v288–v290 stack'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

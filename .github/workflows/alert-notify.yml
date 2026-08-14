@@ -51,6 +51,7 @@ jobs:
           # first channel for ticket/engine pushes (ntfy is the fallback).
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_DISABLED: "1"
           # free ntfy.sh push fallback — repo secret NTFY_TOPIC; unset =
           # changes are logged, push honestly skipped
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}

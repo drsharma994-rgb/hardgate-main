@@ -14,6 +14,7 @@ ctx.window = ctx;
 ctx.globalThis = ctx;
 
 vm.runInContext(fs.readFileSync(path.join(root, 'goldind.js'), 'utf8'), ctx, { filename: 'goldind.js' });
+vm.runInContext(fs.readFileSync(path.join(root, 'supersetup.js'), 'utf8'), ctx, { filename: 'supersetup.js' });
 vm.runInContext(fs.readFileSync(path.join(root, 'super-gold.js'), 'utf8'), ctx, { filename: 'super-gold.js' });
 const W = ctx.window;
 
@@ -42,6 +43,10 @@ var passPill = W.superGoldDeskPill({ minimalLossPass: true });
 ok(passPill.label === 'GRADE A PASS' && passPill.cls === 'minloss', 'GRADE A PASS pill');
 var watchPill = W.superGoldDeskPill({ tier: 'near', nearWatch: true });
 ok(watchPill.label === 'WATCH ONLY', 'WATCH ONLY pill');
+var auditHoldPill = W.superGoldDeskPill({ tier: 'clean', goldAudit: { pass: false, reasons: ['Macro HEADWIND vs long'] } });
+ok(auditHoldPill.label === 'AUDIT HOLD', 'AUDIT HOLD pill');
+var sizeHoldPill = W.superGoldDeskPill({ tier: 'clean', goldAudit: { pass: true }, sizingPass: false, calc: { reason: 'Risk buffer too high' } });
+ok(sizeHoldPill.label === 'Risk buffer too high', 'pill shows calc reason not RISK BLOCK');
 
 W.hgInGoldWeekend = function(){ return true; };
 var wkAudit = W.runGoldDeskAudit(W, {}, { dir: 'long', tier: 'clean', rr: 2 });
@@ -82,6 +87,11 @@ ok(snap.cands.length === 2, 'merges scalp A + swing B');
 ok(snap.audit.clean === 1 && snap.audit.near === 1, 'audit counts clean/near');
 ok(snap.armed.length === 1, 'armed strip preserved');
 ok(snap.cands.some(function(r){ return r.minimalLossPass === true; }), 'grade A row is trade-ready');
+
+const xauSnap = W.buildSnapFromGoldScans(W, { balance: 1000, riskPct: 1 });
+const xauRow = xauSnap.cands.find(function(r){ return r.sym === 'XAUTUSD' && r.dir === 'long'; });
+ok(xauRow && xauRow.minimalLossPass === true, 'GRADE A passes with supersetup calcTrade loaded');
+ok(xauRow && W.superGoldDeskPill(xauRow).label === 'GRADE A PASS', 'no false RISK BLOCK with supersetup calcTrade');
 ok(snap.cands.every(function(r){ return r.positionSize && !r.positionSize.error; }), 'goldAttachPositionSize on rows');
 
 const stale = W.buildSnapFromGoldScans(W, { balance: 1000, riskPct: 1 });
@@ -99,9 +109,15 @@ ok(hydrated.cands.length === 2 && hydrated.hydrated === true, 'syncDesk hydrates
 
 const src = fs.readFileSync(path.join(root, 'super-gold.js'), 'utf8');
 ok(/gsWarm/.test(src) && /gwWarm/.test(src), 'scan cycle warms gold desks');
+ok(/goldCalcTrade/.test(src), 'gold-specific calcTrade path');
 ok(/goldAttachPositionSize/.test(src), 'spot sizing wired');
 ok(/hgApplyGoldBestLevels/.test(src), 'best-levels refine wired');
 ok(/sg-send-trade/.test(src), 'Send to Trade Plan button');
+
+ok(/sg-open-scalp/.test(src) && /sg-open-swing/.test(src), 'gold scalp/swing nav buttons');
+ok(/hgSuperDeskInjectStyles/.test(src), 'uses shared super desk styles');
+ok(!/if \(W\.__hgSuperSetupStyles\) return/.test(src), 'no super-setup style skip bug');
+ok(/hg-super-desk hg-super-gold/.test(src), 'super gold uses shared desk shell');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 ok(/super-gold\.js\?v=291/.test(html), 'super-gold.js cache-busted in index.html');

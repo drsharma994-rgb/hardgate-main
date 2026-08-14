@@ -2,6 +2,7 @@ import fs from 'fs';
 import { pathToFileURL } from 'url';
 import { telegramPlanBlock, hasPlanLevels } from '../lib/telegram-plan.mjs';
 import { apiAuthHeaders } from '../lib/api-auth.mjs';
+import { telegramAlertsDisabled, sendTelegramMessage } from '../lib/telegram-guard.mjs';
 
 const SITE_URL = process.env.HARDGATE_URL || 'https://hardgate-main.onrender.com/';
 const STATE_FILE = 'alert-state.json';
@@ -102,21 +103,13 @@ async function sendNtfy(topic, title, body) {
 /* Telegram straight from Node — requires TELEGRAM_TOKEN + TELEGRAM_CHAT_ID in
    the environment (Render / GitHub Actions secrets). No baked-in fallbacks. */
 async function sendTelegramCi(text) {
-  const t = process.env.TELEGRAM_TOKEN;
-  const c = process.env.TELEGRAM_CHAT_ID;
-  if (!t || !c) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
-  try {
-    const res = await fetch('https://api.telegram.org/bot' + t + '/sendMessage', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: c, text: String(text || ''), disable_web_page_preview: true })
-    });
-    return (res && (res.ok === true || (res.status >= 200 && res.status < 300))) ? 'sent'
-      : 'failed: HTTP ' + (res && (res.status !== undefined ? res.status : '?'))
-        + (res && res.status === 401 ? ' — token invalid/revoked; update TELEGRAM_TOKEN via @BotFather on Render + GitHub secrets' : '');
-  } catch (e) {
-    return 'failed: ' + ((e && e.message) ? e.message : String(e));
-  }
+  if (telegramAlertsDisabled()) return 'skipped: TELEGRAM_DISABLED';
+  const r = await sendTelegramMessage(text);
+  if (r.skipped) return 'skipped: no TELEGRAM_TOKEN/TELEGRAM_CHAT_ID secrets configured';
+  if (r.ok) return 'sent';
+  const reason = r.reason || 'unknown';
+  return 'failed: ' + reason
+    + (reason.indexOf('401') >= 0 ? ' — token invalid/revoked; update TELEGRAM_TOKEN via @BotFather on Render + GitHub secrets' : '');
 }
 /* CI alert cascade: Telegram first, ntfy as the second free channel. The
    result string always names both channels honestly. */

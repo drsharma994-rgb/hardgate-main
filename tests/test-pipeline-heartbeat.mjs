@@ -32,7 +32,8 @@ console.log('== the watchdog is genuinely outside the thing it watches ==');
   /* check IMPORTS, not prose — the file's own comments say the word "browser" */
   const imports = (script.match(/^\s*import .*$/gm) || []).join("|");
   ok(!/puppeteer/i.test(imports), 'no puppeteer import — it cannot fail the way the main job fails');
-  ok(imports.trim() === "import fs from 'node:fs';", 'its ONLY dependency is node:fs');
+  ok(/import fs from 'node:fs'/.test(imports) && /telegram-guard/.test(imports),
+     'uses node:fs plus shared telegram-guard (no alert-check import)');
   ok(!/import .*alert-check/.test(script), 'it does not import the script it is watching');
 }
 console.log('== it finds the freshest stamp at any depth ==');
