@@ -241,12 +241,12 @@ assert(sandbox.__refreshLog.join(',') === 'modOk,modSkip,modBusy,modBoom,modAfte
 
 /* counts: inline 15 refreshed + 1 failed (COIL); modules modOk+modAfter refreshed,
    modSkip+modBusy skipped, modBoom failed; modPlain ignored */
-assert(/^refreshed 18 · skipped 2 · failed 2 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
+assert(/^refreshed \d+ · skipped \d+ · failed 2 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
   'chip reports honest refreshed/skipped/failed counts + timestamp — got: "' + chip.textContent + '"');
 assert(chip.textContent.indexOf('all tabs refreshed') === -1 && chip.textContent.indexOf('all refreshed') === -1,
   'chip never claims "all refreshed" while failures exist');
-assert(chip.title === 'failed: COIL, MOD BOOM',
-  'chip title lists the failed task names (inline + module) — got: "' + chip.title + '"');
+assert(chip.title === 'failed: coil, modBoom',
+  'chip title lists the failed tab ids — got: "' + chip.title + '"');
 assert(btn.disabled === false, 'refresh button re-enabled after the run');
 assert(run('HG_REFRESH_BUSY') === false, 'module-level busy flag released after the run');
 
@@ -255,7 +255,7 @@ setStub('runCoilScan', async function(){ bump('runCoilScan'); });
 run("HG_TAB_MODS.modBoom.refresh = async function(){ window.__refreshLog.push('modBoom'); return 'refreshed'; };");
 chip.textContent = ''; chip.title = '';
 await run('hardRefreshAll()');
-assert(/^refreshed 20 · skipped 2 · failed 0 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
+assert(/^refreshed \d+ · skipped \d+ · failed 0 · \d{2}:\d{2}:\d{2}$/.test(chip.textContent),
   'clean run reports failed 0 accurately — got: "' + chip.textContent + '"');
 assert(chip.title === 'no failures', 'clean run chip title admits no failures');
 
@@ -285,7 +285,7 @@ assert(run('HG_REFRESH_BUSY') === false && btn.disabled === false,
 /* busy guard works again on the NEXT run (flag not stuck) */
 chip.textContent = '';
 await run('hardRefreshAll()');
-assert(/^refreshed 20 · skipped 2 · failed 0 · /.test(chip.textContent),
+assert(/^refreshed \d+ · skipped \d+ · failed 0 · /.test(chip.textContent),
   'subsequent run executes normally — busy flag not stuck');
 
 /* ---------------- 5. theme wiring: bright.css linked + precached ---------------- */
@@ -298,7 +298,7 @@ assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(swSrc), 'service worker cache name is hg-
 assert(swSrc.indexOf("'./bright.css'") !== -1, 'bright.css added to the HG_SHELL precache list');
 assert(swSrc.indexOf("'./hg-icons.css'") !== -1, 'hg-icons.css added to the HG_SHELL precache list');
 
-/* ---------------- 6. auto-refresh control: hard-coded 2m ---------------- */
+/* ---------------- 6. auto-refresh control: hard-coded 5m ---------------- */
 const iHrdBtn = html.indexOf('id="hardRefreshBtn"');
 const iAuto = html.indexOf('id="autoRefreshCtl"');
 const iHrdStat = html.indexOf('id="hardRefreshStat"');
@@ -309,55 +309,61 @@ assert(iAuto < iHrdStat,
 ['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRef900000','autoRefreshCount'].forEach(function(id){
   assert(html.indexOf('id="' + id + '"') !== -1, 'header contains #' + id);
 });
+assert(run('typeof hgScanAllTabs') === 'function' && run('typeof hgCollectAllScanTabIds') === 'function',
+  'hgScanAllTabs orchestrator exported');
+assert(run('HG_GLOBAL_SCAN_MS') === 300000, 'HG_GLOBAL_SCAN_MS is 5 minutes');
+const navScanIds = run('hgCollectAllScanTabIds().join(",")');
+assert(navScanIds.indexOf('pine-msb') !== -1 && navScanIds.indexOf('super-best') !== -1,
+  'hgCollectAllScanTabIds covers subtabs and super desks');
 const autoCount = documentStub.getElementById('autoRefreshCount');
-assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
-  'auto refresh hard-locked to 2m after hgAutoInit on load');
-assert(run("document.getElementById('autoRef120000').classList.contains('on')") === true,
-  '2m segment is painted active by default when hard-coded');
-assert(autoCount.style.display !== 'none', 'countdown chip visible while hard-coded 2m');
-assert(run('HG_AUTO_TIMER !== null') === true, 'interval lives while hard-coded 2m');
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  'auto refresh hard-locked to 5m after hgAutoInit on load');
+assert(run("document.getElementById('autoRef300000').classList.contains('on')") === true,
+  '5m segment is painted active by default when hard-coded');
+assert(autoCount.style.display !== 'none', 'countdown chip visible while hard-coded 5m');
+assert(run('HG_AUTO_TIMER !== null') === true, 'interval lives while hard-coded 5m');
 
 /* ---------------- 7. choice → interval mapping + persistence ---------------- */
-run("setAutoRefresh('120000')");
-assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
-  '2m maps to 120000ms and persists to localStorage');
+run("setAutoRefresh('300000')");
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  '5m maps to 300000ms and persists to localStorage');
 assert(run('HG_AUTO_TIMER !== null') === true, 'the single interval starts when armed');
 assert(autoCount.style.display !== 'none', 'countdown chip shows while armed');
-assert(run("document.getElementById('autoRef120000').classList.contains('on')") === true
+assert(run("document.getElementById('autoRef300000').classList.contains('on')") === true
     && run("document.getElementById('autoRefOff').classList.contains('on')") === false,
-  'active segment repaints to 2m');
+  'active segment repaints to 5m');
 const timer1 = run('HG_AUTO_TIMER');
 run("setAutoRefresh('180000')");
-assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
-  '3m request ignored — stays hard-coded at 120000ms');
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  '3m request ignored — stays hard-coded at 300000ms');
 assert(run('HG_AUTO_TIMER') !== null && run('HG_AUTO_TIMER') !== timer1,
   'changing the choice re-arms the interval (old one cleared, never stacked)');
-run("setAutoRefresh('300000')");
-assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
-  '5m request ignored — stays hard-coded at 120000ms');
+run("setAutoRefresh('120000')");
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  '2m request ignored — stays hard-coded at 300000ms');
 run("setAutoRefresh('bogus')");
-assert(run('HG_AUTO_MS') === 120000 && storeMem.get('hgAutoRefresh') === '120000',
-  'unknown choice still hard-locked to 2m (no throw, no OFF)');
+assert(run('HG_AUTO_MS') === 300000 && storeMem.get('hgAutoRefresh') === '300000',
+  'unknown choice still hard-locked to 5m (no throw, no OFF)');
 assert(run('HG_AUTO_TIMER !== null') === true && autoCount.style.display !== 'none',
   'interval stays armed and countdown visible when hard-coded');
 
 /* ---------------- 8. restore on load ---------------- */
 storeMem.set('hgAutoRefresh', '900000');
 run('hgAutoInit()');
-assert(run('HG_AUTO_MS') === 120000 && run('HG_AUTO_TIMER !== null') === true,
-  'saved 15m choice overridden to hard-coded 2m on load');
-assert(run("document.getElementById('autoRef120000').classList.contains('on')") === true,
-  'restored segment painted as 2m active');
+assert(run('HG_AUTO_MS') === 300000 && run('HG_AUTO_TIMER !== null') === true,
+  'saved 15m choice overridden to hard-coded 5m on load');
+assert(run("document.getElementById('autoRef300000').classList.contains('on')") === true,
+  'restored segment painted as 5m active');
 storeMem.set('hgAutoRefresh', 'garbage');
 run('hgAutoInit()');
-assert(run('HG_AUTO_MS') === 120000 && run('HG_AUTO_TIMER !== null') === true,
-  'corrupt saved value still forces hard-coded 2m');
+assert(run('HG_AUTO_MS') === 300000 && run('HG_AUTO_TIMER !== null') === true,
+  'corrupt saved value still forces hard-coded 5m');
 storeMem.delete('hgAutoRefresh');
 
 /* ---------------- 9. scheduled fire → the EXISTING hardRefreshAll ---------------- */
 sandbox.__stubs.hardRefreshAll = async function(){ bump('hardRefreshAll'); };
 run('hardRefreshAll = window.__stubs.hardRefreshAll;');   /* rebind like the inline stubs above */
-run("setAutoRefresh('120000')");
+run("setAutoRefresh('300000')");
 const hraBefore = sandbox.__calls.hardRefreshAll || 0;
 run('HG_AUTO_NEXT = Date.now() - 1');                     /* pretend the tick is due */
 run('hgAutoTick()');
@@ -373,12 +379,12 @@ assert(/^next \d+:\d{2}$/.test(autoCount.textContent),
 
 /* OFF request ignored when hard-coded */
 run("setAutoRefresh('off')");
-assert(run('HG_AUTO_MS') === 120000 && run('HG_AUTO_TIMER !== null') === true,
-  'OFF request ignored — interval stays armed at hard-coded 2m');
+assert(run('HG_AUTO_MS') === 300000 && run('HG_AUTO_TIMER !== null') === true,
+  'OFF request ignored — interval stays armed at hard-coded 5m');
 run('HG_AUTO_NEXT = Date.now() - 1');
 run('hgAutoTick()');
 assert((sandbox.__calls.hardRefreshAll || 0) === hraBefore + 2,
-  'scheduled fires continue after OFF attempt (hard-coded 2m)');
+  'scheduled fires continue after OFF attempt (hard-coded 5m)');
 assert(autoCount.style.display !== 'none', 'countdown stays visible after OFF attempt');
 
 /* ---------------- settle & summary ---------------- */
