@@ -183,12 +183,12 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 
 /* ---------------- 1b. nav wiring: group membership ---------------- */
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
-assert(groupTabs('overview') === 'brain,book,startrader,execute,bias,regime,trendmx,rotation,news',
-  'OVERVIEW group gains book after brain');
-assert(groupTabs('crypto') === 'swing,scalp,squeeze,smart,oiflow,liqs,chartvision,onchain,coil,apex,trap,smc,ob,div',
-  'CRYPTO group includes chartvision after liqs');
-assert(groupTabs('gold') === 'gold,goldpro,goldcoint,goldspot,goldscalp,goldswing,super-gold,goldpine,signallog',
-  'GOLD group includes super-gold after goldswing');
+assert(groupTabs('overview') === 'brain,book,trade,log,news,bias,regime,trendmx,rotation,execute,startrader',
+  'COMMAND group: workflow then context');
+assert(groupTabs('crypto') === 'best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis',
+  'CRYPTO group: ranked scans → structure → flow → funding');
+assert(groupTabs('gold') === 'super-gold,goldswing,goldscalp,gold,goldpro,goldspot,goldcoint,goldpine,signallog',
+  'GOLD group: super desk first, then scanners');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',
   'HG_TAB_GROUP maps rotation→overview, onchain→crypto, goldspot→gold');

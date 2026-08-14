@@ -259,21 +259,21 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
 
 /* ---------------- group model ---------------- */
 const EXPECTED_GROUPS = {
-  overview:   ['brain', 'book', 'startrader', 'execute', 'bias', 'regime', 'trendmx', 'rotation', 'news'],
-  crypto:     ['swing', 'scalp', 'squeeze', 'smart', 'oiflow', 'liqs', 'chartvision', 'onchain', 'coil', 'apex', 'trap', 'smc', 'ob', 'div'],
-  gold:       ['gold', 'goldpro', 'goldcoint', 'goldspot', 'goldscalp', 'goldswing', 'super-gold', 'goldpine', 'signallog'],
-  strategies: ['strats', 'meanrev', 'super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'reversalsniper', 'edge', 'best', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'carry', 'venueprem', 'termbasis', 'scorecard', 'reliability', 'formationlab'],
-  tools:      ['risk', 'basis', 'search', 'tradeos', 'hey', 'aiagent', 'log', 'trade', 'finder']
+  overview:   ['brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
+  crypto:     ['best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis'],
+  gold:       ['super-gold', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog'],
+  strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
+  tools:      ['risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent']
 };
 assert(run('Array.isArray(HG_NAV_GROUPS)') === true && run('HG_NAV_GROUPS.length') === 5,
   'HG_NAV_GROUPS defines exactly 5 groups');
 assert(run("HG_NAV_GROUPS.map(function(g){ return g.id; }).join(',')") === 'overview,crypto,gold,strategies,tools',
-  'fixed group order: OVERVIEW → CRYPTO SCANS → GOLD → STRATEGIES → TOOLS');
+  'fixed group order: COMMAND → CRYPTO → GOLD → MODELS → TOOLS');
 assert(Object.keys(EXPECTED_GROUPS).every(gid =>
   run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')") === EXPECTED_GROUPS[gid].join(',')),
   'group membership matches the spec (incl. not-yet-registered brain/strats/meanrev — groups render with missing ids)');
 const ID2GROUP = { squeeze:'crypto', trendmx:'overview', oiflow:'crypto', liqs:'crypto', chartvision:'crypto', regime:'overview',
-                   carry:'strategies', venueprem:'strategies', termbasis:'strategies', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'strategies', edge:'strategies', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
+                   carry:'crypto', venueprem:'crypto', termbasis:'crypto', goldpro:'gold', goldcoint:'gold', strats:'strategies', meanrev:'strategies', 'super-setup':'strategies', 'super-best':'strategies', 'super-sniper':'strategies', 'super-book':'strategies', 'super-calibrate':'strategies', reversalsniper:'crypto', edge:'crypto', pine:'strategies', 'pine-msb':'strategies', 'pine-sqz':'strategies', 'pine-smf':'strategies', 'pine-ht':'strategies', 'pine-smc':'strategies', 'pine-cipher':'strategies', 'pine-rf':'strategies', 'pine-nw':'strategies', 'pine-avwap':'strategies',
                    scorecard:'strategies', reliability:'strategies', formationlab:'strategies',
                    brain:'overview', startrader:'overview', execute:'overview', news:'overview', rotation:'overview', onchain:'crypto', goldspot:'gold' };
 assert(Object.keys(ID2GROUP).every(id => run('HG_TAB_GROUP[' + JSON.stringify(id) + ']') === ID2GROUP[id]),
@@ -332,10 +332,10 @@ assert(REQUIRED_TABS.every(([id]) => {
   return b && b.getAttribute('data-g') === ID2GROUP[id];
 }), 'dynamic nav buttons registered INTO their group via data-g (not appended flat)');
 assert(navEl.children.filter(c => c.id === 'tabB_coil')[0].getAttribute('data-g') === 'crypto'
-    && navEl.children.filter(c => c.id === 'tabB_best')[0].getAttribute('data-g') === 'strategies',
-  'static buttons tagged with their groups too (coil→crypto, best→strategies)');
-const EXPECTED_ORDER = ['tabB_regime', 'tabB_trendmx', 'tabB_squeeze', 'tabB_oiflow', 'tabB_coil',
-                        'tabB_goldpro', 'tabB_best', 'tabB_carry', 'tabB_venueprem', 'tabB_termbasis', 'tabB_dash'];
+    && navEl.children.filter(c => c.id === 'tabB_best')[0].getAttribute('data-g') === 'crypto',
+  'static buttons tagged with their groups too (coil→crypto, best→crypto)');
+const EXPECTED_ORDER = ['tabB_regime', 'tabB_trendmx', 'tabB_best', 'tabB_squeeze', 'tabB_coil', 'tabB_oiflow',
+                        'tabB_carry', 'tabB_venueprem', 'tabB_termbasis', 'tabB_goldpro', 'tabB_dash'];
 assert(navIds.join(',') === EXPECTED_ORDER.join(','),
   'row-2 buttons ordered by group sequence, then group tab order (unassigned last): ' + navIds.join(', '));
 
@@ -415,19 +415,18 @@ assert(!staticErr, 'showTab("best") (static tab) works and mounts nothing dynami
    existing call sites (toTrade, card handoffs) keep working unchanged */
 run("setHgGroup('overview', false)");
 run("showTab('best')");
-assert(run('HG_GROUP') === 'strategies', 'showTab("best") auto-switches OVERVIEW → STRATEGIES');
-assert(storeMem.get('hg_active_group') === 'strategies', 'showTab-driven group switch persists too');
+assert(run('HG_GROUP') === 'crypto', 'showTab("best") auto-switches COMMAND → CRYPTO');
+assert(storeMem.get('hg_active_group') === 'crypto', 'showTab-driven group switch persists too');
 
-/* a group chip click shows its tabs AND auto-opens the first AVAILABLE one —
-   strats/meanrev/scorecard are not registered yet, so STRATEGIES opens BEST */
+/* a group chip click shows its tabs AND auto-opens the first AVAILABLE one */
 run("window.__shown = []; showTab = function(t){ window.__shown.push(t); };");
-const stratChip = chipsRow.children.filter(c => c.getAttribute('data-g') === 'strategies')[0];
-assert(stratChip && Array.isArray(stratChip._ev.click) && stratChip._ev.click.length === 1,
+const cryptoChip = chipsRow.children.filter(c => c.getAttribute('data-g') === 'crypto')[0];
+assert(cryptoChip && Array.isArray(cryptoChip._ev.click) && cryptoChip._ev.click.length === 1,
   'group chip carries a click handler');
-stratChip._ev.click.forEach(fn => fn());
+cryptoChip._ev.click.forEach(fn => fn());
 assert(sandbox.__shown.length === 1 && sandbox.__shown[0] === 'best',
-  'chip click auto-opens first available tab (strats/meanrev skipped gracefully → BEST)');
-assert(run('HG_GROUP') === 'strategies' && chipsRow.children[3].classList.contains('on'),
+  'chip click auto-opens first available tab in CRYPTO (→ BEST)');
+assert(run('HG_GROUP') === 'crypto' && chipsRow.children[1].classList.contains('on'),
   'chip click activates its group + highlight');
 
 /* ---------------- settle & summary ---------------- */

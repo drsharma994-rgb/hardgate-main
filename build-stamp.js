@@ -19,9 +19,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
   version: 'hg-v293',
-  pack: 'super tabs populate audit',
-  built: '2026-08-14T21:45:00Z',
-  note: 'SUPER SNIPER afterScan + merge snap · shared hgSuperDeskMergeSnap · repaint hydrate'
+  pack: 'nav + super tabs populate',
+  built: '2026-08-14T22:00:00Z',
+  note: 'COMMAND/CRYPTO/GOLD/MODELS/TOOLS nav · SUPER SNIPER afterScan · hgSuperDeskMergeSnap'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
