@@ -655,29 +655,25 @@ async function superGoldWarm(opts){
   return 'fresh';
 }
 
+var HG_SUPER_GOLD_STYLE_EXTRA = [
+  '.hg-super-gold.hg-super-desk .hg-desk-card.sel{border-color:#a67c12;box-shadow:0 0 0 1px #a67c12}',
+  '.hg-super-gold.hg-super-desk .hg-btn.primary{background:linear-gradient(180deg,#b8860b,#8b6914);color:#fff;box-shadow:0 2px 8px rgba(139,105,20,.22)}',
+  '.hg-super-gold.hg-super-desk .hg-super-badge{background:#fffbeb;border-color:rgba(166,124,18,.35);color:#8b6914}',
+  '.hg-super-gold .hg-armed{font:600 11px/1.45 var(--mono,monospace);color:var(--gold,#a67c12);margin-top:10px;padding:8px 10px;border-radius:var(--radius-sm,6px);background:#fffbeb;border:1px solid rgba(166,124,18,.25)}',
+  '.hg-super-gold .hg-weekend{font:600 11px/1.45 var(--mono,monospace);color:var(--short,#dc2626);padding:8px 10px;border-radius:var(--radius-sm,6px);background:#fef2f2;border:1px solid rgba(220,38,38,.2)}'
+].join('\n');
+
 function injectStyles(){
+  if (typeof W.hgSuperDeskInjectStyles === 'function'){
+    W.hgSuperDeskInjectStyles('hg-super-gold-styles', HG_SUPER_GOLD_STYLE_EXTRA);
+    return;
+  }
   if (W.__hgSuperGoldStyles) return;
   W.__hgSuperGoldStyles = true;
-  if (W.__hgSuperSetupStyles) return;
   if (typeof document === 'undefined') return;
   var st = document.createElement('style');
   st.id = 'hg-super-gold-styles';
-  st.textContent = [
-    '.hg-super-gold{padding:16px;display:grid;gap:12px}',
-    '.hg-super-gold .hg-card{grid-column:span 12;background:var(--panel,#fff);border:1px solid var(--line,#d7dee8);border-radius:var(--radius,8px);padding:14px}',
-    '.hg-super-gold .hg-title{font:800 18px/1.2 var(--disp,system-ui);color:var(--txt,#172033)}',
-    '.hg-super-gold .hg-note{font:500 12px/1.45 var(--mono,monospace);color:var(--mut,#536175)}',
-    '.hg-super-gold .hg-desk{display:grid;gap:10px;max-height:420px;overflow:auto}',
-    '.hg-super-gold .hg-desk-card{border:1px solid var(--line,#d7dee8);border-radius:var(--radius-sm,6px);padding:12px;cursor:pointer}',
-    '.hg-super-gold .hg-desk-card.sel{border-color:#a67c12;box-shadow:0 0 0 1px #a67c12}',
-    '.hg-super-gold .hg-pill{font:700 10px/1 var(--mono,monospace);padding:4px 8px;border-radius:999px;border:1px solid var(--line,#d7dee8)}',
-    '.hg-super-gold .hg-pill.clean{color:var(--long,#15803d)}',
-    '.hg-super-gold .hg-pill.watch{color:var(--gold,#a67c12);background:#fffbeb}',
-    '.hg-super-gold .hg-pill.block{color:var(--short,#dc2626)}',
-    '.hg-super-gold .hg-pill.minloss{color:var(--long,#15803d);background:var(--long-bg,#ecfdf5)}',
-    '.hg-super-gold .hg-btn{border:0;border-radius:6px;padding:10px 14px;font:700 12px/1.2 var(--mono,monospace);cursor:pointer}',
-    '.hg-super-gold .hg-btn.primary{background:linear-gradient(180deg,#b8860b,#8b6914);color:#fff}'
-  ].join('\n');
+  st.textContent = HG_SUPER_GOLD_STYLE_EXTRA;
   try{ (document.head || document.documentElement).appendChild(st); }catch(e){}
 }
 
@@ -714,30 +710,47 @@ function hitToEvaluation(hit){
 function mount(el){
   if (!el) return;
   injectStyles();
+  var scoreLink = (typeof W.hgSuperDeskScorecardLink === 'function')
+    ? W.hgSuperDeskScorecardLink(TAB_ID) : '';
   el.innerHTML = [
-    '<section class="hg-tab hg-super-gold">',
-    '  <div class="hg-title">Super Gold</div>',
-    '  <div class="hg-note">Conviction desk — merges GOLD SCALP + GOLD SWING. GRADE A + audit + spot sizing = trade-ready.</div>',
-    '  <div class="hg-note" id="sg-weekend" style="margin-top:8px"></div>',
-    '  <div class="hg-card"><h3>Gold Universe Desk</h3>',
-    '    <div class="hg-note" id="sg-scan-stat">Next scan on tab open · 15 min cycle</div>',
-    '    <button type="button" class="hg-btn primary" id="sg-run-scan" style="margin-top:8px">Scan gold desks now</button>',
-    '    <div class="hg-desk" id="sg-desk" style="margin-top:12px"></div>',
-    '    <div class="hg-note" id="sg-armed" style="margin-top:10px"></div>',
-    '  </div>',
-    '  <div class="hg-card"><h3>Trade Context</h3>',
-    '    <div class="hg-form" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">',
-    '      <label>Symbol<input id="sg-symbol" readonly value="—" style="width:100%"/></label>',
-    '      <label>Direction<input id="sg-side" readonly value="—" style="width:100%"/></label>',
-    '      <label>Balance USD<input id="sg-balance" type="number" value="1000" style="width:100%"/></label>',
-    '      <label>Risk %<input id="sg-risk" type="number" value="1" style="width:100%"/></label>',
-    '      <label>Entry<input id="sg-entry" readonly style="width:100%"/></label>',
-    '      <label>Stop<input id="sg-stop" readonly style="width:100%"/></label>',
-    '      <label>T1<input id="sg-t1" readonly style="width:100%"/></label>',
-    '      <label>Size (oz)<input id="sg-size" readonly style="width:100%"/></label>',
+    '<section class="hg-tab hg-super-desk hg-super-gold">',
+    '  <div class="hg-super-head">',
+    '    <div>',
+    '      <div class="hg-title">Super Gold</div>',
+    '      <div class="hg-note">Conviction desk — merges GOLD SCALP + GOLD SWING. GRADE A + audit + spot sizing = trade-ready.</div>',
     '    </div>',
-    '    <div class="hg-note" id="sg-guidance" style="margin-top:10px"></div>',
-    '    <button type="button" class="hg-btn primary" id="sg-send-trade" disabled style="margin-top:10px">Send to Trade Plan</button>',
+    '    <div class="hg-super-badge">Super Gold · GRADE desk</div>',
+    '  </div>',
+    '  <div id="sg-validation"></div>',
+    '  <div class="hg-weekend" id="sg-weekend" style="display:none"></div>',
+    '  <div class="hg-super-grid">',
+    '    <div class="hg-card"><h3>Gold Universe Desk</h3>',
+    '      <div class="hg-scan-stat" id="sg-scan-stat">Next scan on tab open · 15 min cycle</div>',
+    '      <div class="hg-actions">',
+    '        <button type="button" class="hg-btn primary" id="sg-run-scan">Scan gold desks now</button>',
+    '        <button type="button" class="hg-btn secondary" id="sg-open-scalp">Gold Scalp →</button>',
+    '        <button type="button" class="hg-btn secondary" id="sg-open-swing">Gold Swing →</button>',
+    '      </div>',
+    '      <div class="hg-desk" id="sg-desk"></div>',
+    '      <div class="hg-armed" id="sg-armed" style="display:none"></div>',
+    '    </div>',
+    '    <div class="hg-card"><h3>Trade Context</h3>',
+    '      <div class="hg-form">',
+    '        <div class="hg-field"><label for="sg-symbol">Symbol</label><input id="sg-symbol" readonly value="—" /></div>',
+    '        <div class="hg-field"><label for="sg-side">Direction</label><input id="sg-side" readonly value="—" /></div>',
+    '        <div class="hg-field"><label for="sg-balance">Balance USD</label><input id="sg-balance" type="number" value="1000" step="0.01" /></div>',
+    '        <div class="hg-field"><label for="sg-risk">Risk %</label><input id="sg-risk" type="number" value="1" step="0.01" /></div>',
+    '        <div class="hg-field"><label for="sg-entry">Entry</label><input id="sg-entry" readonly /></div>',
+    '        <div class="hg-field"><label for="sg-stop">Stop</label><input id="sg-stop" readonly /></div>',
+    '        <div class="hg-field"><label for="sg-t1">T1</label><input id="sg-t1" readonly /></div>',
+    '        <div class="hg-field"><label for="sg-size">Size (oz)</label><input id="sg-size" readonly /></div>',
+    '      </div>',
+    '      <div class="hg-note" id="sg-guidance" style="margin-top:10px"></div>',
+    '      <div class="hg-actions" style="margin-top:10px">',
+    '        <button type="button" class="hg-btn primary" id="sg-send-trade" disabled>Send to Trade Plan</button>',
+    '      </div>',
+    '      <div style="margin-top:10px">' + scoreLink + '</div>',
+    '    </div>',
     '  </div>',
     '</section>'
   ].join('\n');
@@ -800,6 +813,13 @@ function mount(el){
     }
   }
 
+  function paintValidation(){
+    var vEl = $('#sg-validation');
+    if (vEl && typeof W.hgSuperDeskValidationHtml === 'function'){
+      vEl.innerHTML = W.hgSuperDeskValidationHtml(W);
+    }
+  }
+
   function paintWeekendBanner(){
     var el = $('#sg-weekend');
     if (!el) return;
@@ -817,6 +837,7 @@ function mount(el){
   }
 
   function paintDesk(snap){
+    paintValidation();
     paintWeekendBanner();
     snap = snap || superGoldScan();
     var desk = $('#sg-desk');
@@ -828,11 +849,13 @@ function mount(el){
     var armedEl = $('#sg-armed');
     if (armedEl){
       var armed = (snap && Array.isArray(snap.armed)) ? snap.armed : [];
-      armedEl.textContent = armed.length
+      var armedTxt = armed.length
         ? ('FORMING: ' + armed.slice(0, 4).map(function(a){
           return (a.strategy || a.stratKey || 'watch') + ' @ ' + fmt(a.level, 2);
         }).join(' · ') + (armed.length > 4 ? ' …' : ''))
         : '';
+      armedEl.textContent = armedTxt;
+      armedEl.style.display = armedTxt ? 'block' : 'none';
     }
     if (!desk) return;
     var rows = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
@@ -848,19 +871,24 @@ function mount(el){
       var tierLbl = r.tier === 'clean' ? ('GRADE ' + String(r.grade || 'A').toUpperCase()) : 'WATCH';
       var pill = superGoldDeskPill(r);
       var sel = (__sg.selectedId === r.id) ? ' sel' : '';
+      var tierPillCls = r.tier === 'clean' ? 'clean' : 'watch';
       return '<div class="hg-desk-card' + sel + '" data-id="' + String(r.id).replace(/"/g, '') + '">'
-        + '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'
-        + '<strong>' + String(r.sym || 'XAU') + ' · ' + String(r.dir || '').toUpperCase() + '</strong>'
-        + '<span><span class="hg-pill clean">' + tierLbl + '</span> '
-        + '<span class="hg-pill">' + String(r.scanner || '') + '</span> '
-        + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span></span></div>'
-        + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:8px;font:600 11px var(--mono,monospace)">'
-        + '<div>ENTRY<br/>' + fmt(r.entry, 2) + '</div>'
-        + '<div>STOP<br/>' + fmt(r.stop, 2) + '</div>'
-        + '<div>T1<br/>' + fmt(r.tp, 2) + '</div>'
-        + '<div>RR<br/>' + fmt(r.rr, 2) + '</div>'
-        + '<div>SIZE<br/>' + (r.positionSize ? fmt(r.positionSize.positionSizeUnits, 3) + ' oz' : '—') + '</div>'
-        + '</div><div class="hg-note" style="margin-top:6px">' + String(r.strategy || '') + '</div></div>';
+        + '<div class="hg-desk-top">'
+        + '<div class="hg-desk-sym">' + String(r.sym || 'XAU') + ' · ' + String(r.dir || '').toUpperCase() + '</div>'
+        + '<div class="hg-desk-pills">'
+        + '<span class="hg-pill ' + tierPillCls + '">' + tierLbl + '</span>'
+        + '<span class="hg-pill">' + String(r.scanner || '') + '</span>'
+        + '<span class="hg-pill ' + pill.cls + '">' + pill.label + '</span>'
+        + '</div></div>'
+        + '<div class="hg-desk-levels">'
+        + '<div><div class="k">ENTRY</div><div class="v">' + fmt(r.entry, 2) + '</div></div>'
+        + '<div><div class="k">STOP</div><div class="v">' + fmt(r.stop, 2) + '</div></div>'
+        + '<div><div class="k">T1</div><div class="v">' + fmt(r.tp, 2) + '</div></div>'
+        + '<div><div class="k">RR</div><div class="v">' + fmt(r.rr, 2) + '</div></div>'
+        + '<div><div class="k">SIZE</div><div class="v">'
+        + (r.positionSize ? fmt(r.positionSize.positionSizeUnits, 3) + ' oz' : '—') + '</div></div>'
+        + '</div>'
+        + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '') + '</div></div>';
     }).join('');
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
       card.addEventListener('click', function(){
@@ -909,6 +937,15 @@ function mount(el){
       setScanStatus(String(msg));
     });
   });
+  var scalpBtn = $('#sg-open-scalp');
+  if (scalpBtn) scalpBtn.addEventListener('click', function(){
+    if (typeof W.showTab === 'function') W.showTab('goldscalp');
+  });
+  var swingBtn = $('#sg-open-swing');
+  if (swingBtn) swingBtn.addEventListener('click', function(){
+    if (typeof W.showTab === 'function') W.showTab('goldswing');
+  });
+  if (typeof W.hgSuperDeskBindScorecard === 'function') W.hgSuperDeskBindScorecard(root);
 
   __sg.mounted = true;
   __sg.paintDesk = paintDesk;
