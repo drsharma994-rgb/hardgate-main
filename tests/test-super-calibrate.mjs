@@ -39,7 +39,7 @@ const panel = W.superCalibrateBuildPanel(
 );
 ok(typeof panel === 'string' && panel.length > 20, 'buildPanel returns html');
 
-ok(/super-calibrate\.js\?v=292/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
+ok(/super-calibrate\.js\?v=293/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')), 'index wired');
 ok(swCacheOk(fs.readFileSync(path.join(root, 'sw.js'), 'utf8')), 'sw ' + HG_VER);
 
 console.log('\n' + pass + ' passed' + (fail ? ', ' + fail + ' FAILED' : ''));
