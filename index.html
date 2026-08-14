@@ -746,14 +746,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=285"></script>
+<script src="supersetup.js?v=286"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=285"></script>
-<script src="super-gold.js?v=285"></script>
-<script src="super-best.js?v=285"></script>
-<script src="super-sniper.js?v=285"></script>
-<script src="super-book.js?v=285"></script>
-<script src="super-calibrate.js?v=285"></script>
+<script src="super-desk-common.js?v=286"></script>
+<script src="super-gold.js?v=286"></script>
+<script src="super-best.js?v=286"></script>
+<script src="super-sniper.js?v=286"></script>
+<script src="super-book.js?v=286"></script>
+<script src="super-calibrate.js?v=286"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2852,6 +2852,9 @@ function showTab(t){
   if (t === 'super-calibrate'){
     try{
       if (typeof window.superCalibrateRepaint === 'function') window.superCalibrateRepaint();
+      if (typeof window.superCalibrateRun === 'function' && !window.HG_superCalibrateScan){
+        window.superCalibrateRun({ force: true });
+      }
     }catch(eSc){}
   }
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
@@ -4533,6 +4536,7 @@ async function runTabAlertScans(){
   await Promise.all([
     (typeof brainAlertWarm === 'function' ? brainAlertWarm() : Promise.resolve()).catch(function(e){ console.warn('tab alert brain', e); }),
     bestScanWarm().catch(function(e){ console.warn('tab alert best', e); }),
+    (typeof superBestRunScan === 'function' ? superBestRunScan({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert super-best', e); }),
     runSmartScan({ quiet: true }).catch(function(e){ console.warn('tab alert smart', e); }),
     (typeof trendmxWarm === 'function' ? trendmxWarm({ quiet: true }) : Promise.resolve()).catch(function(e){ console.warn('tab alert trendmx', e); })
   ]);

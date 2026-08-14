@@ -54,7 +54,7 @@ const snap2 = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1, maxLeverag
 ok(snap2.cands.length === 1, 'lite enrich fallback when superSetupEnrichRow returns null');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-ok(/super-best\.js\?v=285/.test(html), 'super-best in index');
+ok(/super-best\.js\?v=286/.test(html), 'super-best in index');
 ok(/'super-best'/.test(html), 'super-best in nav');
 
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');

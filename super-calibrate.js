@@ -124,6 +124,7 @@ async function superCalibrateRunInner(opts){
     snap.scanned = result.scanned;
     publishSuperCalibrateSnap(snap);
     __sc.lastAt = Date.now();
+    if (__sc.mounted && typeof __sc.paintSnap === 'function') __sc.paintSnap(snap);
     return snap.stat || 'done';
   }catch(e){
     return 'error: ' + ((e && e.message) ? e.message : String(e));
@@ -216,6 +217,7 @@ function superCalibrateRepaint(){
 }
 
 async function superCalibrateRefresh(){
+  if (!__sc.lastAt) await superCalibrateRun({ force: true });
   superCalibrateRepaint();
   return 'refreshed';
 }

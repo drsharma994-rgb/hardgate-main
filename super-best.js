@@ -270,11 +270,14 @@ async function superBestRunScanInner(opts){
   if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
   try{
     var warm = W.bestScanWarm;
-    var runBest = W.runBest;
+    var runBestFn = W.runBest;
     if (typeof warm === 'function'){
       await warm();
-    } else if (typeof runBest === 'function'){
-      await runBest({ quiet: true });
+    }
+    var bestSnap = (typeof W.bestScan === 'function') ? W.bestScan() : null;
+    if ((!bestSnap || !Array.isArray(bestSnap.clean) || !bestSnap.clean.length)
+        && typeof runBestFn === 'function'){
+      try{ await runBestFn({ quiet: true }); }catch(eRb){}
     }
     __sb.lastScanAt = Date.now();
     var snap = buildSnapFromBestScan(W, opts.riskOpts || defaultRiskOpts(), { allowStale: true });
@@ -286,6 +289,9 @@ async function superBestRunScanInner(opts){
         style: 'super-best', cleanOnly: true, limit: 6,
         repaint: __sb.mounted && typeof __sb.paintVision === 'function' ? __sb.paintVision : null
       });
+    }
+    if (__sb.mounted && typeof __sb.syncFromExistingDesks === 'function'){
+      __sb.syncFromExistingDesks();
     }
     __sb.lastScanMsg = snap.stat || 'done';
     return __sb.lastScanMsg;
@@ -477,6 +483,7 @@ function mount(el){
 
   __sb.setScanStatus = setScanStatus;
   __sb.paintDesk = paintDesk;
+  __sb.syncFromExistingDesks = syncFromExistingDesks;
   __sb.mounted = true;
 
   if (typeof W.hgSuperDeskBindScorecard === 'function') W.hgSuperDeskBindScorecard(root);
@@ -494,15 +501,14 @@ function mount(el){
   });
 
   syncFromExistingDesks();
-  superBestRunScan({ riskOpts: readRiskOpts() }).then(setScanStatus);
+  superBestRunScan({ riskOpts: readRiskOpts() });
 
   __sb.syncTimer = setInterval(function(){
     try{
       var snap = buildSnapFromBestScan(W, readRiskOpts(), { allowStale: true });
-      if (snap.cands.length){
-        publishSuperBestSnap(Object.assign({}, superBestScan() || {}, snap));
-        paintDesk(superBestScan());
-      }
+      snap.scanAt = (__sb.lastScanAt || (superBestScan() && superBestScan().scanAt) || snap.at);
+      publishSuperBestSnap(Object.assign({}, superBestScan() || {}, snap));
+      if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(superBestScan());
     }catch(e){}
   }, SYNC_MS);
 
