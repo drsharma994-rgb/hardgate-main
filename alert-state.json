@@ -4,10 +4,7 @@
   "gold": null,
   "lastRunAt": "2026-08-14T06:01:50.730Z",
   "ticket": {
-    "long": {
-      "sym": "SNDKBUSD",
-      "entry": 1438.192767895893
-    },
+    "long": null,
     "short": null
   },
   "sniper": {
@@ -188,11 +185,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-14T14:41:48.095Z"
+    "at": "2026-08-14T15:34:35.972Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-14T14:41:48.095Z"
+    "at": "2026-08-14T15:34:35.972Z"
   },
   "degraded": {
     "count": 0,
@@ -214,7 +211,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-14T14:41:48.770Z"
+    "at": "2026-08-14T15:34:36.412Z"
   },
   "bookFill": {
     "key": "u0|p0",
