@@ -40,6 +40,8 @@ services:
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: TELEGRAM_DISABLED
+        value: "1"
   - type: worker
     name: hardgate-daemon
     runtime: node

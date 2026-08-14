@@ -245,6 +245,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <label class="header-field" title="Telegram alerts via server /api/notify — set TELEGRAM_TOKEN + TELEGRAM_CHAT_ID on Render. Optional chat override stored locally.">
         <span class="header-field-label">telegram</span>
         <input id="tgChat" placeholder="chat id override (optional)" title="optional chat id override; server TELEGRAM_CHAT_ID used when empty">
+        <button class="btn ghost header-field-btn" type="button" id="tgStopBtn" onclick="stopTelegramAlerts()">STOP ALERTS</button>
+        <button class="btn ghost header-field-btn" type="button" id="tgResumeBtn" onclick="resumeTelegramAlerts()">RESUME</button>
         <button class="btn ghost header-field-btn" type="button" onclick="saveTelegram()">SAVE</button>
         <button class="btn ghost header-field-btn" type="button" onclick="resetTelegramDefaults()">RESET</button>
         <button class="btn ghost header-field-btn" type="button" onclick="testTelegram()">TEST</button>
@@ -6660,6 +6662,48 @@ function saveStandDownCfg(){
 
 /* Telegram alerts — server-side /api/notify (token on Render, not in browser).
    Optional chat id override in localStorage. Never throws. */
+const HG_LS_TG_OFF = 'hgTelegramOff';
+const HG_LS_TG_MIGRATE = 'hgTelegramMigratedOff289';
+function hgTelegramAlertsOff(){
+  try{
+    if (localStorage.getItem(HG_LS_TG_OFF) === '1') return true;
+    if (localStorage.getItem(HG_LS_TG_OFF) === '0') return false;
+  }catch(e){}
+  return !!window.__hgTelegramServerDisabled;
+}
+function stopTelegramAlerts(){
+  try{ localStorage.setItem(HG_LS_TG_OFF, '1'); }catch(e){}
+  updateTelegramOffUi();
+}
+function resumeTelegramAlerts(){
+  try{ localStorage.setItem(HG_LS_TG_OFF, '0'); }catch(e){}
+  updateTelegramOffUi();
+}
+function hgTelegramMigrateStopOnce(){
+  try{
+    if (localStorage.getItem(HG_LS_TG_MIGRATE) === '1') return;
+    localStorage.setItem(HG_LS_TG_OFF, '1');
+    localStorage.setItem(HG_LS_TG_MIGRATE, '1');
+  }catch(e){}
+}
+function updateTelegramOffUi(){
+  const off = hgTelegramAlertsOff();
+  const stopBtn = $('tgStopBtn');
+  const resumeBtn = $('tgResumeBtn');
+  if (stopBtn) stopBtn.disabled = !!off;
+  if (resumeBtn) resumeBtn.disabled = !off;
+  const stat = $('tgStat');
+  if (!stat) return;
+  if (off){
+    stat.textContent = window.__hgTelegramServerDisabled
+      ? 'telegram OFF (server TELEGRAM_DISABLED) — RESUME re-enables browser only'
+      : 'telegram alerts OFF — click RESUME to re-enable';
+    stat.style.color = 'var(--short,#dc2626)';
+  } else {
+    stat.style.color = '';
+    if (!stat.dataset.userMsg) stat.textContent = 'telegram alerts ON';
+  }
+}
 function tgCreds(){
   let chat = null;
   try{ chat = localStorage.getItem('hg_tg_chat'); }catch(e){}
@@ -6680,6 +6724,7 @@ function hgTelegramFormat(opts){
 }
 async function sendTelegram(textOrTitle, bodyOptional){
   try{
+    if (hgTelegramAlertsOff()) return 'disabled';
     let text = String(textOrTitle || '');
     if (arguments.length >= 2 && bodyOptional != null && bodyOptional !== ''){
       text = (typeof hgTelegramFormat === 'function')
@@ -6723,11 +6768,20 @@ function saveTelegram(){
   const c = ($('tgChat').value||'').trim();
   try{
     if (c) localStorage.setItem('hg_tg_chat', c); else localStorage.removeItem('hg_tg_chat');
-    $('tgStat').textContent = c ? 'chat override saved' : 'using server TELEGRAM_CHAT_ID';
-  }catch(e){ $('tgStat').textContent = 'save failed'; }
+    const stat = $('tgStat');
+    if (stat){
+      stat.dataset.userMsg = '1';
+      stat.textContent = c ? 'chat override saved' : 'using server TELEGRAM_CHAT_ID';
+      stat.style.color = '';
+    }
+  }catch(e){ if ($('tgStat')) $('tgStat').textContent = 'save failed'; }
 }
 async function testTelegram(){
   const stat = $('tgStat');
+  if (hgTelegramAlertsOff()){
+    if (stat){ stat.dataset.userMsg = '1'; stat.textContent = 'telegram alerts are OFF — click RESUME first'; stat.style.color = 'var(--short,#dc2626)'; }
+    return;
+  }
   if (stat) stat.textContent = 'checking…';
   try{
     const cap = await fetch('/api/notify/capabilities').then(function(r){ return r.json(); }).catch(function(){ return null; });
@@ -7173,6 +7227,13 @@ function initAlerts(){
     const tc = localStorage.getItem('hg_tg_chat') || '';
     if ($('tgChat')) $('tgChat').value = tc;
   }catch(e){}
+  try{ hgTelegramMigrateStopOnce(); updateTelegramOffUi(); }catch(e){}
+  try{
+    fetch('/api/notify/capabilities').then(function(r){ return r.json(); }).then(function(cap){
+      window.__hgTelegramServerDisabled = !!(cap && cap.telegramDisabled);
+      updateTelegramOffUi();
+    }).catch(function(){ updateTelegramOffUi(); });
+  }catch(e){ try{ updateTelegramOffUi(); }catch(e2){} }
   try{ if (typeof initHgApiKey === 'function') initHgApiKey(); }catch(e){}
   try{ if (typeof loadStandDownCfg === 'function') loadStandDownCfg(); }catch(e){}
   try{ const sv = localStorage.getItem('hgSmartVenue'); if (sv && $('smartVenue')) $('smartVenue').value = (sv === 'cdcx') ? 'cdcx' : 'binance'; }catch(e){}

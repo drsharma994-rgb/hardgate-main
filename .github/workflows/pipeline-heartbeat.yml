@@ -32,4 +32,5 @@ jobs:
           RENDER_DISPATCH_PRIMARY: ${{ vars.RENDER_DISPATCH_PRIMARY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_DISABLED: "1"
         run: node scripts/pipeline-heartbeat.mjs

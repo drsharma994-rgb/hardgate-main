@@ -24,6 +24,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import { telegramPlanBlock } from '../lib/telegram-plan.mjs';
+import { telegramAlertsDisabled, telegramConfigured, sendTelegramMessage } from '../lib/telegram-guard.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const STATE_FILE = path.join(ROOT, 'scripts', '.squeeze-watch-state.json');
@@ -187,17 +188,11 @@ async function scanFires(){
 
 /* ---------------- telegram ---------------- */
 async function sendTelegram(text){
-  const token = process.env.TELEGRAM_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chat) return 'not-configured';
-  try{
-    const r = await fetch('https://api.telegram.org/bot' + encodeURIComponent(token) + '/sendMessage', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chat, text: String(text || ''), disable_web_page_preview: true })
-    });
-    if (!r.ok) return 'HTTP ' + r.status;
-    const j = await r.json().catch(() => null);
-    return (j && j.ok) ? true : 'api-error';
-  }catch(e){ return String((e && e.message) || e).slice(0, 120); }
+  if (telegramAlertsDisabled()) return 'TELEGRAM_DISABLED';
+  const r = await sendTelegramMessage(String(text || ''));
+  if (r.skipped) return 'not-configured';
+  if (r.ok) return true;
+  return String(r.reason || 'send failed').slice(0, 120);
 }
 
 /* ---------------- state ---------------- */
@@ -241,7 +236,8 @@ async function cycle(){
    Never exposes env values, keys, or symbol-level state. */
 function squeezeWatchStatus(){
   return { armed: __armed, intervalMin: INTERVAL_MS / 60000,
-           telegramConfigured: !!(process.env.TELEGRAM_TOKEN && process.env.TELEGRAM_CHAT_ID),
+           telegramConfigured: telegramConfigured(),
+           telegramDisabled: telegramAlertsDisabled(),
            lastCycle: __lastCycle };
 }
 
@@ -249,7 +245,11 @@ function squeezeWatchStatus(){
    set; honest no-op otherwise. Returns a status string for the boot log. */
 function startSqueezeWatch(){
   if (__timer) return 'already running';
-  if (!process.env.TELEGRAM_TOKEN || !process.env.TELEGRAM_CHAT_ID){
+  if (telegramAlertsDisabled()){
+    console.log('[squeeze-watch] disabled — TELEGRAM_DISABLED');
+    return 'disabled: TELEGRAM_DISABLED';
+  }
+  if (!telegramConfigured()){
     console.log('[squeeze-watch] disabled — TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set in the environment');
     return 'disabled: no telegram env';
   }
