@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v311',
-  pack: 'omnigold horizon-aware gates + deeper history',
-  built: '2026-08-15T19:35:00Z',
-  note: 'one instrument cannot pool across symbols so history goes 5x deeper · vol floor and session now scale with the horizon · yield guard reads tnxTrend'
+  version: 'hg-v312',
+  pack: 'omnigold cost drag — gross vs tradeable',
+  built: '2026-08-15T19:55:00Z',
+  note: 'walk-forward is GROSS; a 3-point gold scalp stop gives ~19% of 1R to spread — new cost-drag gate prices every setup against its own stop'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

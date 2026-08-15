@@ -120,7 +120,8 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
     htf:{e21:10,e50:9}, killzone:{zone:'LONDON',label:'LONDON OPEN'},
     macro:{realRateHint:'TAILWIND', dxy:{trend20:'DOWN'}}, yield:{valid:true},
     adr:{usedPct:45}, news:{risk:'low',note:''}, minRr:1.5,
-    stats:{samples:120,hit:0.45,expR:0.12}
+    stats:{samples:120,hit:0.45,expR:0.12},
+    planRisk: 12   /* a wide-enough stop that cost drag is immaterial */
   });
   const gFull = win.hgOmniGrade(full);
   ok(gFull.ticket === true, 'a fully supported gold setup grades to a ticket');
@@ -190,6 +191,29 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   ok(yg('FLAT', 'long').pass === true,     'a flat yield trend blocks nothing');
   ok(win.hgOgGates(flat, hit, {}).filter(g => g.key === 'yield-guard')[0].pass === null,
      'with no macro at all the yield gate stays UNCHECKED');
+}
+
+/* ---- cost drag: a structurally correct stop can still be untradeable ----
+   The walk-forward measures GROSS outcomes. On the first live scalp card a
+   3.16-point stop meant a $0.30 gold spread was ~19% of 1R round-trip,
+   turning a measured +0.38R into roughly +0.19R net. Six scalp mechanics
+   reading "has paid" gross is exactly where that difference matters. */
+{
+  const flat = [];
+  let px = 4384;
+  for (let i = 0; i < 200; i++){ const o = px, c = px + 0.15; flat.push({ t:i*3600, o, h:Math.max(o,c)+0.6, l:Math.min(o,c)-0.6, c, v:100 }); px = c; }
+  const hit = { kind:'MMOVE', dir:'long', level:1, why:'t' };
+  const cost = r => win.hgOgGates(flat, hit, { planRisk: r }).filter(g => g.key === 'cost-drag')[0];
+
+  ok(cost(1.5).pass === false, 'a $1.50 stop is vetoed — the spread would eat most of 1R');
+  ok(cost(3.16).pass === true, 'the live 3.16-point stop passes but is flagged');
+  ok(/material drag/.test(cost(3.16).why), 'and says the drag is material rather than staying silent');
+  ok(!/material drag/.test(cost(40).why), 'a wide swing stop carries no drag warning');
+  ok(/% of 1R/.test(cost(8).why), 'the card always states the cost as a share of 1R');
+  ok(cost(NaN).pass === null, 'with no plan risk the gate stays UNCHECKED rather than guessing');
+
+  ok(win.hgOgGates(flat, hit, {}).map(g => g.key).indexOf('cost-drag') >= 0,
+     'cost-drag is part of the gold ledger');
 }
 
 console.log('');

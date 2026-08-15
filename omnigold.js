@@ -84,6 +84,16 @@ terse status, and never launches a first-time scan on a global refresh.
              minAtrPct: 0.12, sessionHard: false }
   };
 
+  /* Assumed round-trip transaction cost in DOLLARS per ounce, used only to
+     express what a stop distance costs to trade. Gold retail spreads run
+     roughly $0.20-0.50 and widen off-hours; $0.30 is a middling, not a
+     generous, assumption. This is the difference between a measured edge and
+     a tradeable one: the walk-forward is GROSS, and on a 3-point scalp stop
+     a $0.30 spread is ~19% of 1R. */
+  var ASSUMED_SPREAD_USD = 0.30;
+  var COST_WARN_R = 0.15;   // cost above this share of 1R is worth flagging
+  var COST_VETO_R = 0.30;   // above this the edge is mostly paying the spread
+
   var MIN_SAMPLES = 20;
   var EDGE_VETO_Z = -2;
   var EDGE_VETO_SAMPLES = 30;
@@ -470,7 +480,25 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'news-window', hard:false, pass: nw, why: nwWhy });
 
-    /* 11 — measured edge: this mechanic's own walk-forward on THIS horizon,
+    /* 11 — cost drag. A stop can be structurally correct and still be
+       untradeable: the walk-forward measures GROSS outcomes, so a tight
+       intraday stop can show a healthy R multiple that the spread then eats.
+       On the first live scalp card a 3.16-point stop meant a $0.30 spread
+       was 19% of 1R, turning a measured +0.38R into roughly +0.19R net. */
+    var cost = null, costWhy = 'no plan risk to cost';
+    var planRisk = fin(x.planRisk);
+    if (isFinite(planRisk) && planRisk > 0){
+      var rt = ASSUMED_SPREAD_USD * 2;
+      var costR = rt / planRisk;
+      cost = costR <= COST_VETO_R;
+      costWhy = 'round-trip ~$' + rt.toFixed(2) + ' on a $' + planRisk.toFixed(2) + ' stop = '
+              + (costR * 100).toFixed(0) + '% of 1R'
+              + (costR > COST_VETO_R ? ' — the spread would eat most of the edge'
+                 : (costR > COST_WARN_R ? ' — material drag, size accordingly' : ''));
+    }
+    gates.push({ key:'cost-drag', hard:false, pass: cost, why: costWhy });
+
+    /* 12 — measured edge: this mechanic's own walk-forward on THIS horizon,
        judged by significance against the breakeven rate for this R floor. */
     var minRr = isFinite(fin(x.minRr)) ? fin(x.minRr) : 2;
     var sExp = x.stats ? fin(x.stats.expR) : NaN;
@@ -511,13 +539,16 @@ terse status, and never launches a first-time scan on a global refresh.
       ex.minRr = cfg.minRr;
       ex.minAtrPct = cfg.minAtrPct;
       ex.sessionHard = cfg.sessionHard;
-      var gates = hgOgGates(rows, hit, ex);
-      var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
+      /* Plan BEFORE gates: the cost-drag gate needs the actual stop distance,
+         so the levels must exist before the ledger runs. */
       var plan = null;
       if (planFn){
         try { plan = planFn(hit.dir, rows, undefined, { minRr: cfg.minRr }); } catch (e) { plan = null; }
       }
       if (plan && deriveFn) plan = deriveFn(plan);
+      ex.planRisk = (plan && isFinite(num(plan.risk))) ? num(plan.risk) : NaN;
+      var gates = hgOgGates(rows, hit, ex);
+      var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
       out.push({
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
@@ -720,7 +751,10 @@ terse status, and never launches a first-time scan on a global refresh.
         ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + HORIZONS.scalp.minRr + 'R)', HORIZONS.scalp.minRr)
                           + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + HORIZONS.swing.minRr + 'R)', HORIZONS.swing.minRr)
                           + '<div class="note">Walk-forward on the same bars just read, per horizon and never merged — a mechanic that pays on 4h need not pay on 1h. '
-                          + 'A bar spanning both stop and target counts as a STOP. In-sample on a short window; under ' + MIN_SAMPLES + ' samples is noise.</div>';
+                          + 'A bar spanning both stop and target counts as a STOP. In-sample on a short window; under ' + MIN_SAMPLES + ' samples is noise. '
+                          + '<b>Every figure above is GROSS of spread and commission.</b> That matters most intraday: at an assumed $'
+                          + ASSUMED_SPREAD_USD.toFixed(2) + ' gold spread, a $3 scalp stop gives up ~20% of 1R round-trip, so a +0.38R gross read is nearer +0.19R net. '
+                          + 'The per-card <b>cost-drag</b> gate prices this against each setup’s own stop.</div>';
 
         if (!ranked.length){
           ui.cards.innerHTML = (!res.scalp.rows.length && !res.swing.rows.length)
