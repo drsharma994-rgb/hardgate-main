@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v313',
-  pack: 'walk-forward counts non-overlapping trades',
-  built: '2026-08-15T20:20:00Z',
-  note: '94% of firings overlapped the previous forward window — sigma was inflated 3-4x; both omniroute and omnigold now count only sequentially-takeable trades'
+  version: 'hg-v314',
+  pack: 'pooled verdict made symmetric',
+  built: '2026-08-15T20:45:00Z',
+  note: 'has-paid required only expR>0 while failure required -2sigma — now +2sigma both ways, with the sample count each unproven row would need'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

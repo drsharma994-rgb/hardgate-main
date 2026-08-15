@@ -423,6 +423,45 @@ for (const [name, mk, gateKey] of fields){
      'with the detail flag it reports where the trade resolved');
 }
 
+/* ---- 18. the pooled verdict must be symmetric ----
+   The table read "has paid" on any positive expectancy while only calling
+   failure at -2 sigma. On live gold that presented +0.27 sigma — noise — as
+   proven, across four mechanics at once. A verdict must be as hard to earn
+   as it is to lose. */
+{
+  const r = (n, hit, rr) => win.hgOmniPoolRead({ samples:n, hit, expR:0 }, rr || 1.5, 20);
+
+  ok(r(45, 0.42).read === 'within noise', '+0.27 sigma is noise, not "has paid" (45 samples, 42% vs 40% breakeven)');
+  ok(r(44, 0.48).read === 'within noise', '+1.08 sigma is still noise');
+  ok(r(400, 0.52).read === 'has paid',    '+4.90 sigma earns "has paid" — the label is still reachable');
+  ok(r(400, 0.28).read === 'has not paid','-4.90 sigma earns "has not paid"');
+  ok(r(11, 0.45).read === 'too few to judge', 'below the sample floor nothing is judged');
+  ok(r(0, 0).read === 'never fired', 'a mechanic that never fired says so');
+  ok(win.hgOmniPoolRead(null, 1.5, 20).read === 'never fired', 'the helper is null-safe');
+
+  /* the thresholds must mirror each other exactly */
+  const se = Math.sqrt(0.4 * 0.6 / 100);
+  ok(r(100, 0.40 + 2*se).read === 'has paid',     'exactly +2 sigma passes');
+  ok(r(100, 0.40 - 2*se).read === 'has not paid', 'exactly -2 sigma fails — same bar in both directions');
+
+  /* "needs ~N" answers what a noise row would take to settle */
+  const orb = r(27, 0.48);
+  ok(orb.need && orb.need > 27, 'a positive-but-unproven row reports the sample count it would need (' + orb.need + ')');
+  const tiny = r(45, 0.42);
+  ok(tiny.need > orb.need, 'a smaller observed edge needs far more samples — which is itself the answer');
+  ok(r(400, 0.52).need === null, 'an already-proven row needs nothing further');
+  ok(r(43, 0.30).need === null, 'a negative row is not given a target to chase');
+
+  /* the R multiple moves the breakeven (1/(1+R)), so the SAME hit rate sits
+     on opposite sides of it — 36% is below the 40% needed at 1.5R but above
+     the 33.3% needed at 2R. Both land in the noise band here, so the honest
+     assertion is about sigma, not the label. */
+  const at15 = r(200, 0.36, 1.5), at20 = r(200, 0.36, 2);
+  ok(at15.z < 0 && at20.z > 0,
+     '36% is below breakeven at 1.5R but above it at 2R (sigma ' + at15.z.toFixed(2) + ' vs ' + at20.z.toFixed(2) + ')');
+  ok(at20.z > at15.z, 'a lower breakeven makes the same hit rate score better');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

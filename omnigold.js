@@ -626,21 +626,25 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!pool) return '';
     var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE','ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET'];
     var h = '<h4>' + esc(label) + ' — measured on this horizon</h4>';
-    h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>READ</th></tr></thead><tbody>';
+    h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>σ</th><th>READ</th></tr></thead><tbody>';
     var pBreak = 1 / (1 + minRr);
     for (var i = 0; i < keys.length; i++){
       var k = keys[i], p = pool[k];
       if (!p || !p.samples){
-        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired here</td></tr>';
+        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired here</td></tr>';
         continue;
       }
-      var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, p.samples));
-      var z = se > 0 ? ((p.hit - pBreak) / se) : 0;
-      var thin = p.samples < MIN_SAMPLES;
-      var read = thin ? 'too few to judge' : (z <= EDGE_VETO_Z ? 'has not paid' : (z > 0 ? 'has paid' : 'within noise'));
-      var cls = thin ? '' : (z <= EDGE_VETO_Z ? 'bad' : (z > 0 ? 'ok' : ''));
-      h += '<tr><td><b>' + k + '</b></td><td>' + p.samples + '</td><td>' + (p.hit * 100).toFixed(0) + '%</td>'
-        +  '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td><td>' + pill(read, cls) + '</td></tr>';
+      /* Same shared verdict helper omniroute's table uses, so the two
+         cannot drift apart in wording or in threshold. */
+      var rd = (W() && typeof W().hgOmniPoolRead === 'function')
+             ? W().hgOmniPoolRead(p, minRr, MIN_SAMPLES)
+             : { z: NaN, read: 'engine unavailable', need: null, cls: '' };
+      var z = rd.z, read = rd.read, cls = rd.cls;
+      var needTxt = rd.need ? (' <span class="dim">(needs ~' + rd.need + ')</span>') : '';
+      h += '<tr><td><b>' + k + '</b></td><td>' + p.samples + needTxt + '</td><td>' + (p.hit * 100).toFixed(0) + '%</td>'
+        +  '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td>'
+        +  '<td>' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ</td>'
+        +  '<td>' + pill(read, cls) + '</td></tr>';
     }
     return h + '</tbody></table>';
   }

@@ -1340,6 +1340,37 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return h;
   }
 
+  /* Pooled verdict for one mechanic — PURE, exported, and shared by both
+     tabs' tables so the wording cannot drift between them.
+     Judged by SIGNIFICANCE and SYMMETRICALLY: the table used to read "has
+     paid" on any positive expectancy while only calling failure at -2 sigma,
+     so a +0.27 sigma result — noise — was presented as proven. A verdict
+     must be as hard to earn as it is to lose.
+     `need` answers the question a "within noise" row invites: how many
+     NON-OVERLAPPING trades would settle this at 2 sigma, given the effect
+     size observed so far. A tiny edge returns a huge number, which is itself
+     the useful answer. */
+  function hgOmniPoolRead(p, minRr, minSamples){
+    if (!p || !p.samples) return { z: NaN, read: 'never fired', need: null, cls: '' };
+    var rr = isFinite(+minRr) ? +minRr : MIN_RR;
+    var thin = p.samples < (isFinite(+minSamples) ? +minSamples : MIN_SAMPLES);
+    var pBreak = 1 / (1 + rr);
+    var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, p.samples));
+    var z = se > 0 ? ((p.hit - pBreak) / se) : 0;
+    var read = thin ? 'too few to judge'
+             : (z >= 2 ? 'has paid' : (z <= EDGE_VETO_Z ? 'has not paid' : 'within noise'));
+    var cls = thin ? '' : (z >= 2 ? 'ok' : (z <= EDGE_VETO_Z ? 'bad' : ''));
+    var need = null;
+    if (!thin && z > 0 && z < 2){
+      var edge = p.hit - pBreak;
+      if (edge > 0){
+        var n = Math.ceil(4 * pBreak * (1 - pBreak) / (edge * edge));
+        if (isFinite(n) && n > p.samples) need = n;
+      }
+    }
+    return { z: z, read: read, need: need, cls: cls };
+  }
+
   /* Pooled walk-forward result per detector. This is the tab's honest
      self-assessment: which of the six mechanics actually resolved to T1
      before stop on the history just scanned. Thin pools are labelled rather
@@ -1347,20 +1378,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function renderPooled(pool){
     if (!pool) return '';
     var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE'], h, i, k, p;
-    h = '<table class="tbl"><thead><tr><th>DETECTOR</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>READ</th></tr></thead><tbody>';
+    h = '<table class="tbl"><thead><tr><th>DETECTOR</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>σ</th><th>READ</th></tr></thead><tbody>';
     for (i = 0; i < keys.length; i++){
       k = keys[i]; p = pool[k];
       if (!p || !p.samples){
-        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td></tr>';
+        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td></tr>';
         continue;
       }
-      var thinPool = p.samples < MIN_SAMPLES;
-      var read = thinPool ? 'too few to judge' : (p.expR > 0 ? 'has paid' : 'has not paid');
-      var cls = thinPool ? '' : (p.expR > 0 ? 'ok' : 'bad');
+      var v = hgOmniPoolRead(p, MIN_RR, MIN_SAMPLES);
+      var z = v.z, read = v.read, cls = v.cls;
+      var needTxt = v.need ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
       h += '<tr><td><b>' + k + '</b></td>'
-        + '<td>' + p.samples + '</td>'
+        + '<td>' + p.samples + needTxt + '</td>'
         + '<td>' + (p.hit * 100).toFixed(0) + '%</td>'
         + '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td>'
+        + '<td>' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ</td>'
         + '<td>' + pill(read, cls) + '</td></tr>';
     }
     h += '</tbody></table>';
@@ -1890,6 +1922,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniBacktestOne = hgOmniBacktestOne;
     window.hgOmniBacktestAll = hgOmniBacktestAll;
     window.hgOmniPoolStats = hgOmniPoolStats;
+    window.hgOmniPoolRead = hgOmniPoolRead;
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
     window.hgOmniEvaluate = hgOmniEvaluate;
