@@ -359,6 +359,30 @@ for (const [name, mk, gateKey] of fields){
   ok(!/proxy/.test(real.why), 'a genuine regime.js read carries no proxy caveat');
 }
 
+/* ---- 16. an unloaded news module must not read as "low risk" ----
+   hgNewsRisk() returns {risk:'low', note:'news not loaded'} when it has never
+   fetched. That is a DEFAULT, not a measurement, and reading it as PASS let a
+   card claim "news risk low" while nothing had been checked — the exact
+   silent pass this ledger exists to prevent. */
+{
+  const hit = { kind:'MMOVE', dir:'long', level:1, why:'t' };
+  const nw = news => win.hgOmniGates(rows, hit, null, news ? { news } : {})
+                        .filter(g => g.key === 'news-window')[0];
+
+  ok(nw({ risk:'low', blackout:false, note:'news not loaded' }).pass === null,
+     'an unloaded news module reads UNCHECKED, not a low-risk PASS');
+  ok(nw({ risk:'low', blackout:false, note:'news error: boom' }).pass === null,
+     'an errored news module also reads UNCHECKED');
+  ok(/news not loaded/.test(nw({ risk:'low', blackout:false, note:'news not loaded' }).why),
+     'and the card repeats the module note rather than inventing a reason');
+
+  ok(nw({ risk:'low', blackout:false, note:'' }).pass === true,
+     'a genuine low-risk read still passes');
+  ok(nw({ risk:'high', blackout:true, note:'' }).pass === false,
+     'a blackout window still vetoes');
+  ok(nw(null).pass === null, 'no news object at all stays UNCHECKED');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

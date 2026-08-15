@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v308',
-  pack: 'omniroute btc regime proxy',
-  built: '2026-08-15T18:20:00Z',
-  note: 'regime.js 8-gauge warm fails in-browser, so fall back to BTC daily off binance klines and label the source'
+  version: 'hg-v309',
+  pack: 'omniroute news gate no longer passes on a default',
+  built: '2026-08-15T18:40:00Z',
+  note: 'unloaded news module returned risk:low and read as PASS — now UNCHECKED · news warmed and read for every contract'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

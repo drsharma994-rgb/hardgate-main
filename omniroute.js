@@ -800,10 +800,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     gates.push({ key:'regime', hard:false, pass: rg, why: rgWhy });
 
     /* 11 — event blackout: never open into a scheduled high-impact print */
+    /* hgNewsRisk() returns {risk:'low', note:'news not loaded'} when the news
+       module has never fetched — a DEFAULT, not a measurement. Reading that
+       as PASS meant a card could claim "news risk low" while nothing had
+       been checked, which is precisely the silent pass this ledger exists to
+       prevent. An unloaded or errored module reads UNCHECKED. */
     var nw = null, nwWhy = 'news module has not run';
-    if (x.news && x.news.risk){
+    var nwNote = (x.news && typeof x.news.note === 'string') ? x.news.note : '';
+    var nwUnloaded = /not loaded|news error/i.test(nwNote);
+    if (x.news && x.news.risk && !nwUnloaded){
       nw = !(x.news.blackout === true || String(x.news.risk) === 'high');
       nwWhy = 'news risk ' + x.news.risk + (nw ? '' : ' — blackout window');
+    } else if (nwUnloaded){
+      nwWhy = 'news not checked — module reports: ' + nwNote;
     }
     gates.push({ key:'news-window', hard:false, pass: nw, why: nwWhy });
 
@@ -1424,6 +1433,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        warmup on HG_warmups for exactly this; it returns 'fresh' when already
        computed, so this is cheap on repeat scans. Best-effort: a failure
        leaves the gate UNCHECKED, which is its honest previous state. */
+    /* News is warmed the same way and for the same reason: its gate is
+       otherwise stuck reporting a default. Best-effort and never fatal. */
+    function warmNews(){
+      return Promise.resolve().then(function(){
+        var hooks = W.HG_warmups;
+        if (!hooks || !hooks.length) return null;
+        var nw = null, i;
+        for (i = 0; i < hooks.length; i++) if (hooks[i] && hooks[i].id === 'news') nw = hooks[i];
+        if (!nw || typeof nw.run !== 'function') return null;
+        omniSafeStat(ui, 'warming news calendar…');
+        return nw.run();
+      }).catch(function(){ return null; });
+    }
+
     function warmRegime(){
       return Promise.resolve().then(function(){
         if (typeof W.regimeState === 'function' && W.regimeState()) return 'fresh';
@@ -1459,7 +1482,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        came back" is a data-source problem, not a quiet market. Also guards
        a synchronous throw, which .then() alone would not catch. */
     var uniErr = null;
-    return warmRegime().then(function(){ return W.xuUniverse(); })
+    return warmRegime().then(warmNews).then(function(){ return W.xuUniverse(); })
       .catch(function(err){ uniErr = omniErrMsg(err); return null; })
       .then(function(uni){
       uni = uni || [];
@@ -1608,6 +1631,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               try { ex.regime = W.regimeState(); } catch (er) { ex.regime = null; }
             }
             if (!ex.regime && __omni.regimeProxy) ex.regime = __omni.regimeProxy;
+            /* hgNewsRisk is a pure read of the news cache — it never fetches —
+               so like the daily HTF it does not belong behind the network
+               enrichment ceiling. */
+            if (!ex.news && typeof W.hgNewsRisk === 'function'){
+              try { ex.news = W.hgNewsRisk(fitem.sym); } catch (er) { ex.news = null; }
+            }
             if (!ex.regime) ex.regimeWarm = __omni.regimeWarm || null;
             var pos = null;
             if (typeof W.xuPositioning === 'function'){
