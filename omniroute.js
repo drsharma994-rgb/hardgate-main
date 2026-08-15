@@ -24,6 +24,37 @@ THE LEDGER. Six setup families, each a pure detector over OHLCV:
   MMOVE      Measured move — clean impulse leg, shallow pullback, the leg
              projected forward supplies a structural target.
 
+COVERAGE. Both venues, EVERY futures contract — no top-N cap. That is
+affordable because the scan is two-pass: pass 1 runs the detectors over
+every contract (candles only, one linear sweep, no per-name network); pass 2
+does the expensive work — walk-forward measurement, Binance confluence, book
+depth — ONLY on contracts that actually fired, so cost tracks hits rather
+than universe size. Pass 2 carries a stated ceiling; when it bites, the UI
+says how many fired contracts were dropped rather than implying full cover.
+
+SELF-MEASUREMENT (the point of this tab). Each detector is replayed across
+the same bars the scan just read: every past firing is taken at the bar
+close, stopped at the 10-bar structural extreme (ATR fallback), targeted at
+MIN_RR, and given 20 bars to resolve. Results pool across all scanned
+symbols, and the `measured-edge` gate VETOES setups from a detector whose
+pooled expectancy is negative — the scanner refuses its own signal when its
+own history says that signal has not paid. Under MIN_SAMPLES it reports
+'too few to judge' instead of dressing up noise.
+  Honesty constraints, because a backtest that flatters itself is worse than
+  none: when a single bar spans BOTH stop and target it counts as a STOP
+  (candles cannot say which printed first); results are IN-SAMPLE on a short
+  window; and none of it is walk-forward-validated out of sample. Verified
+  against a synthetic random walk, the harness returns ~26% T1-first against
+  the 33% breakeven for 2R — pessimistic, as intended.
+
+FREE CONFLUENCE. Binance's public key-less endpoints supply OI trend
+(openInterestHist), retail crowding (globalLongShortAccountRatio), taker
+aggression (takerlongshortRatio) and book depth (depth, for a real slippage
+check); the daily timeframe is RESAMPLED from the same 4h bars rather than
+refetched; regime and news blackout come from the app's own modules. All of
+it is CONDITIONAL — a contract that is not on Binance simply reads UNCHECKED
+and is never punished for its venue's API.
+
 GATES, NOT SCORES. Every candidate runs the same ledger. Three HARD gates
 (trend alignment, ATR vol-alive, participation) are computable from candles
 on BOTH venues and must pass explicitly. Funding is CONDITIONAL: it vetoes
@@ -73,16 +104,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var LLM_TIMEOUT_MS = 90000;
   var PING_TIMEOUT_MS = 8000;
 
-  /* Scan shape. TOP_N bounds the sweep so a scan stays inside a sane time
-     budget; it is stated in the UI because a silent cap reads as "scanned
-     everything" when it did not. */
-  var TOP_N = 40;
+  /* Scan shape. TOP_N = 0 means EVERY futures contract on both venues; the
+     scan is two-pass precisely so that is affordable. Pass 1 (detect) is one
+     cheap linear sweep per contract. Pass 2 (enrich: walk-forward
+     measurement + Binance confluence + book depth) runs ONLY on contracts
+     that actually fired, so cost scales with hits, not with universe size. */
+  var TOP_N = 0;
   var TF = '4h';
   var BARS = 180;
-  var CHUNK = 5;
+  var CHUNK = 6;          // venue-leg concurrency for pass 1
+  var ENRICH_CHUNK = 3;   // gentler: pass 2 hits Binance endpoints
+  var ENRICH_MAX = 60;    // hard ceiling on pass 2, reported when it bites
   var MIN_RR = 2;
   var RANGE_LOOKBACK = 40;
   var ORB_BARS = 3;
+  var MIN_SAMPLES = 20;   // below this a measured rate is not evidence
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '' };
 
@@ -358,6 +394,147 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return out;
   }
 
+  /* ============ pure: higher timeframe by resampling ============ */
+
+  /* 4h -> 1d without a second network call: 180 4h bars is 30 daily bars,
+     and the venue legs are the expensive part of a scan. Buckets by UTC day
+     from the bar-open seconds xuCandles guarantees. Pure. */
+  function hgOmniResample(rows, secPerBucket){
+    if (!rows || !rows.length) return [];
+    var per = secPerBucket || 86400, out = [], cur = null, i, r, t, key;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i]; t = num(r.t);
+      if (!isFinite(t)) continue;
+      key = Math.floor(t / per) * per;
+      if (!cur || cur.t !== key){
+        if (cur) out.push(cur);
+        cur = { t: key, o: num(r.o), h: num(r.h), l: num(r.l), c: num(r.c), v: num(r.v) || 0 };
+      } else {
+        if (num(r.h) > cur.h) cur.h = num(r.h);
+        if (num(r.l) < cur.l) cur.l = num(r.l);
+        cur.c = num(r.c);
+        cur.v += (num(r.v) || 0);
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
+
+  /* ============ pure: self-measurement (walk-forward) ============ */
+
+  /* Simple structural stop for the backtest: the extreme of the last
+     `look` bars on the wrong side of entry, else an ATR fallback. Kept
+     independent of hgPlanLevels so the measurement is reproducible in a
+     bare test runner and cannot drift with UI plan policy. Pure. */
+  function hgOmniBtStop(dir, rows, idx, look){
+    var lo = Infinity, hi = -Infinity, i, h, l;
+    for (i = Math.max(0, idx - (look || 10)); i <= idx; i++){
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+    }
+    var entry = num(rows[idx].c);
+    if (!isFinite(entry)) return NaN;
+    var stop = (dir === 'long') ? lo : hi;
+    if (!isFinite(stop) || (dir === 'long' ? stop >= entry : stop <= entry)){
+      var atr = atrOf(rows.slice(0, idx + 1), 14);
+      if (!isFinite(atr) || atr <= 0) return NaN;
+      stop = (dir === 'long') ? entry - atr * 1.5 : entry + atr * 1.5;
+    }
+    return stop;
+  }
+
+  /* Walk one historical signal forward and report which side paid first.
+     INTRABAR AMBIGUITY: when a single bar's range spans BOTH the stop and
+     the target we count it a STOP. Candle data cannot say which printed
+     first, and the optimistic reading is exactly how backtests come out
+     flattering. This makes the measured rate a floor, not a best case.
+     Returns 't1' | 'stop' | 'open' (never resolved inside horizon). Pure. */
+  function hgOmniWalkForward(rows, idx, dir, rMult, horizon){
+    var entry = num(rows[idx].c);
+    var stop = hgOmniBtStop(dir, rows, idx, 10);
+    if (!isFinite(entry) || !isFinite(stop)) return null;
+    var risk = Math.abs(entry - stop);
+    if (!(risk > 0)) return null;
+    var tgt = (dir === 'long') ? entry + rMult * risk : entry - rMult * risk;
+    var end = Math.min(rows.length - 1, idx + (horizon || 20)), i, h, l;
+    for (i = idx + 1; i <= end; i++){
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (!isFinite(h) || !isFinite(l)) continue;
+      var hitStop = (dir === 'long') ? (l <= stop) : (h >= stop);
+      var hitT1   = (dir === 'long') ? (h >= tgt)  : (l <= tgt);
+      if (hitStop && hitT1) return 'stop';       // conservative, see above
+      if (hitStop) return 'stop';
+      if (hitT1) return 't1';
+    }
+    return 'open';
+  }
+
+  /* Replay ONE detector across the fetched history and measure it.
+     detectFn(prefixRows) -> hit|null, exactly the live detectors' shape, so
+     what is measured is what is traded. Pure given rows. */
+  function hgOmniBacktestOne(rows, detectFn, opts){
+    opts = opts || {};
+    var rMult = opts.rMult || MIN_RR, horizon = opts.horizon || 20;
+    var warm = opts.warm || 45;
+    var wins = 0, losses = 0, open = 0, i, hit, res;
+    if (!rows || rows.length < warm + horizon + 2) return null;
+    for (i = warm; i < rows.length - horizon; i++){
+      try { hit = detectFn(rows.slice(0, i + 1)); } catch (e) { hit = null; }
+      if (!hit) continue;
+      res = hgOmniWalkForward(rows, i, hit.dir, rMult, horizon);
+      if (res === 't1') wins++;
+      else if (res === 'stop') losses++;
+      else if (res === 'open') open++;
+    }
+    var settled = wins + losses;
+    if (!settled) return { samples: 0, wins: 0, losses: 0, open: open, hit: NaN, expR: NaN };
+    var hitRate = wins / settled;
+    /* expectancy per unit risk at this R multiple */
+    var expR = hitRate * rMult - (1 - hitRate) * 1;
+    return { samples: settled, wins: wins, losses: losses, open: open, hit: hitRate, expR: expR };
+  }
+
+  /* Measure every detector family on this symbol's own history. Pure. */
+  function hgOmniBacktestAll(rows, opts){
+    var out = {};
+    var fns = {
+      SPRING: function(r){ var g = hgOmniRange(r, RANGE_LOOKBACK); return g ? hgOmniSpring(r, g) : null; },
+      PO3:    function(r){ return hgOmniPo3(r, 6); },
+      ORB:    function(r){ return hgOmniOrb(r, ORB_BARS); },
+      ABSORB: function(r){ var g = hgOmniRange(r, RANGE_LOOKBACK); return g ? hgOmniAbsorb(r, g) : null; },
+      VALUE:  function(r){ var p = hgOmniProfile(r, 24); return p ? hgOmniValueReject(r, p) : null; },
+      MMOVE:  function(r){ return hgOmniMeasuredMove(r, 10); }
+    };
+    var k;
+    for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
+      out[k] = hgOmniBacktestOne(rows, fns[k], opts);
+    }
+    return out;
+  }
+
+  /* Pool per-detector stats across every symbol scanned. A single symbol
+     yields far too few samples to trust; the pooled number is the one worth
+     reading, and both are shown so a thin pool is visible. Pure. */
+  function hgOmniPoolStats(perSymbol){
+    var pool = {}, i, k, s;
+    for (i = 0; i < (perSymbol || []).length; i++){
+      for (k in perSymbol[i]) if (Object.prototype.hasOwnProperty.call(perSymbol[i], k)){
+        s = perSymbol[i][k];
+        if (!s) continue;
+        if (!pool[k]) pool[k] = { samples:0, wins:0, losses:0, open:0 };
+        pool[k].samples += s.samples; pool[k].wins += s.wins;
+        pool[k].losses += s.losses; pool[k].open += s.open;
+      }
+    }
+    for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)){
+      var p = pool[k];
+      p.hit = p.samples ? (p.wins / p.samples) : NaN;
+      p.expR = p.samples ? (p.hit * MIN_RR - (1 - p.hit)) : NaN;
+    }
+    return pool;
+  }
+
   /* ==================== pure: the gate ledger ==================== */
 
   /* Each gate returns {key, hard, pass, why}. pass:null means UNKNOWN — the
@@ -371,7 +548,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                    blocking funding gate would mean CoinDCX could never
                    produce a ticket at all. The card still shows the check
                    did not run, so nobody mistakes silence for a pass. */
-  function hgOmniGates(rows, hit, positioning){
+  function hgOmniGates(rows, hit, positioning, extra){
     var gates = [];
     var closes = closesOf(rows);
     var e21 = emaOf(closes.slice(-60), 21), e50 = emaOf(closes.slice(-120), 50);
@@ -409,6 +586,97 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'funding', hard:false, pass: fundOk, why: fundWhy });
 
+    /* ---- CONDITIONAL confluence from free public data ----
+       Everything below is optional context: present for names that trade on
+       Binance (free, key-less endpoints) or when the app's own market-wide
+       modules have run. Absent inputs read UNCHECKED and never block, so a
+       CoinDCX-only listing is not punished for being absent from Binance. */
+    var x = extra || {};
+
+    /* 5 — daily-timeframe agreement, resampled from the same 4h bars */
+    var d1 = null, d1Why = 'daily bars unavailable';
+    if (x.htf && isFinite(x.htf.e21) && isFinite(x.htf.e50)){
+      var upD = x.htf.e21 >= x.htf.e50;
+      d1 = (hit.dir === 'long') ? upD : !upD;
+      d1Why = 'daily EMA21 ' + (upD ? '≥' : '<') + ' EMA50' + (d1 ? ' — agrees' : ' — disagrees with the setup');
+    }
+    gates.push({ key:'htf-daily', hard:false, pass: d1, why: d1Why });
+
+    /* 6 — open interest should BUILD into the move, not bleed out of it */
+    var oi = null, oiWhy = 'OI not published for this contract';
+    if (x.oi && isFinite(x.oi.changePct)){
+      oi = x.oi.changePct > -3;    // collapsing OI = the move is being unwound
+      oiWhy = 'OI ' + (x.oi.changePct >= 0 ? '+' : '') + x.oi.changePct.toFixed(1) + '% over the window'
+            + (oi ? '' : ' — unwinding, not building');
+    }
+    gates.push({ key:'oi-build', hard:false, pass: oi, why: oiWhy });
+
+    /* 7 — retail crowding as a CONTRARIAN read: when the retail account
+       majority already sits on our side at an extreme, the fuel is spent. */
+    var rc = null, rcWhy = 'retail long/short not published';
+    if (x.retail && isFinite(x.retail.longPct)){
+      var lp = x.retail.longPct;
+      var crowdedWithUs = (hit.dir === 'long' && lp >= 75) || (hit.dir === 'short' && lp <= 25);
+      rc = !crowdedWithUs;
+      rcWhy = 'retail ' + lp.toFixed(0) + '% long' + (crowdedWithUs ? ' — crowded on our side' : '');
+    }
+    gates.push({ key:'retail-contrarian', hard:false, pass: rc, why: rcWhy });
+
+    /* 8 — taker aggression should not lean against the setup */
+    var tk = null, tkWhy = 'taker flow not published';
+    if (x.taker && isFinite(x.taker.buySellRatio)){
+      var br = x.taker.buySellRatio;
+      tk = (hit.dir === 'long') ? (br >= 0.9) : (br <= 1.1);
+      tkWhy = 'taker buy/sell ' + br.toFixed(2) + (tk ? '' : ' — aggression leans against us');
+    }
+    gates.push({ key:'taker-flow', hard:false, pass: tk, why: tkWhy });
+
+    /* 9 — book depth vs the stop distance. A stop that sits inside the
+       slippage envelope is not a stop, it is a donation. */
+    var lq = null, lqWhy = 'order book not available for this contract';
+    if (x.depth && isFinite(x.depth.bidUsd) && isFinite(x.depth.askUsd)){
+      var side = (hit.dir === 'long') ? x.depth.bidUsd : x.depth.askUsd;
+      lq = side >= 25000;                       // top-20 levels, USD notional
+      lqWhy = 'top-of-book ' + Math.round(side).toLocaleString() + ' USD'
+            + (lq ? '' : ' — too thin, slippage would eat the stop');
+    }
+    gates.push({ key:'book-depth', hard:false, pass: lq, why: lqWhy });
+
+    /* 10 — market regime: do not buy dips in a risk-off tape */
+    var rg = null, rgWhy = 'regime module has not run';
+    if (x.regime && x.regime.label){
+      var lbl = String(x.regime.label).toUpperCase();
+      if (lbl.indexOf('RISK-ON') >= 0) { rg = (hit.dir === 'long'); }
+      else if (lbl.indexOf('RISK-OFF') >= 0) { rg = (hit.dir === 'short'); }
+      else rg = true;                            // neutral tape blocks nothing
+      rgWhy = 'regime ' + x.regime.label + (rg ? '' : ' — against the setup side');
+    }
+    gates.push({ key:'regime', hard:false, pass: rg, why: rgWhy });
+
+    /* 11 — event blackout: never open into a scheduled high-impact print */
+    var nw = null, nwWhy = 'news module has not run';
+    if (x.news && x.news.risk){
+      nw = !(x.news.blackout === true || String(x.news.risk) === 'high');
+      nwWhy = 'news risk ' + x.news.risk + (nw ? '' : ' — blackout window');
+    }
+    gates.push({ key:'news-window', hard:false, pass: nw, why: nwWhy });
+
+    /* 12 — measured edge: this detector's own pooled walk-forward result.
+       Not a veto on thin evidence — under MIN_SAMPLES it stays UNCHECKED
+       rather than pretending 3 trades mean anything. */
+    var ed = null, edWhy = 'not yet measured';
+    if (x.stats && isFinite(x.stats.expR)){
+      if (x.stats.samples < 20){
+        edWhy = 'only ' + x.stats.samples + ' past samples — too few to judge';
+      } else {
+        ed = x.stats.expR > 0;
+        edWhy = x.stats.samples + ' samples · ' + (x.stats.hit * 100).toFixed(0) + '% T1-first · '
+              + (x.stats.expR >= 0 ? '+' : '') + x.stats.expR.toFixed(2) + 'R expectancy'
+              + (ed ? '' : ' — negative, this detector has not paid');
+      }
+    }
+    gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
+
     return gates;
   }
 
@@ -440,14 +708,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* Whole per-symbol evaluation: detectors -> gates -> plan. Pure given
      rows; hgPlanLevels is looked up defensively and NaN-safe. */
-  function hgOmniEvaluate(item, rows, positioning){
+  function hgOmniEvaluate(item, rows, positioning, extra){
     var hits = hgOmniDetect(rows), out = [], i;
     if (!hits.length) return out;
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
     for (i = 0; i < hits.length; i++){
       var hit = hits[i];
-      var gates = hgOmniGates(rows, hit, positioning);
+      var ex = extra || {};
+      // per-detector measured stats select by this hit's family
+      var exForHit = {};
+      for (var kk in ex) if (Object.prototype.hasOwnProperty.call(ex, kk)) exForHit[kk] = ex[kk];
+      exForHit.stats = (ex.stats && ex.stats[hit.kind]) ? ex.stats[hit.kind] : null;
+      var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       var plan = null;
       if (planFn){
@@ -798,6 +1071,39 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return h;
   }
 
+  /* Pooled walk-forward result per detector. This is the tab's honest
+     self-assessment: which of the six mechanics actually resolved to T1
+     before stop on the history just scanned. Thin pools are labelled rather
+     than rounded into a confident-looking percentage. */
+  function renderPooled(pool){
+    if (!pool) return '';
+    var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE'], h, i, k, p;
+    h = '<table class="tbl"><thead><tr><th>DETECTOR</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>READ</th></tr></thead><tbody>';
+    for (i = 0; i < keys.length; i++){
+      k = keys[i]; p = pool[k];
+      if (!p || !p.samples){
+        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td></tr>';
+        continue;
+      }
+      var thinPool = p.samples < MIN_SAMPLES;
+      var read = thinPool ? 'too few to judge' : (p.expR > 0 ? 'has paid' : 'has not paid');
+      var cls = thinPool ? '' : (p.expR > 0 ? 'ok' : 'bad');
+      h += '<tr><td><b>' + k + '</b></td>'
+        + '<td>' + p.samples + '</td>'
+        + '<td>' + (p.hit * 100).toFixed(0) + '%</td>'
+        + '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td>'
+        + '<td>' + pill(read, cls) + '</td></tr>';
+    }
+    h += '</tbody></table>';
+    h += '<div class="note">Walk-forward on the same bars the scan just read: each past firing is taken at the bar close, '
+      +  'stopped at the ' + 10 + '-bar structural extreme (ATR fallback), targeted at ' + MIN_RR + 'R, and given 20 bars to resolve. '
+      +  '<b>When one bar spans both stop and target it is counted a STOP</b> — candles cannot say which printed first, and the '
+      +  'optimistic reading is how backtests flatter themselves. So these are floors. '
+      +  'They are also in-sample on a short window: treat under ' + MIN_SAMPLES + ' samples as noise, and do not size on any of it '
+      +  'until you have run it forward yourself.</div>';
+    return h;
+  }
+
   function renderMatrix(){
     var m = hgOmniCoverageMatrix(), h = '<table class="tbl"><thead><tr><th>SCHOOL</th><th>TEACHES</th><th>OURS</th><th>STILL MISSING</th></tr></thead><tbody>', i, r;
     for (i = 0; i < m.length; i++){
@@ -861,40 +1167,114 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (note){ ui.warn.textContent = note; ui.warn.style.display = 'block'; }
       else { ui.warn.style.display = 'none'; }
 
-      var list = uni.slice(0, TOP_N);
-      var cands = [], done = 0;
+      var list = (TOP_N > 0) ? uni.slice(0, TOP_N) : uni.slice();
+      var fired = [], done = 0, thin = 0;
 
+      /* ---- PASS 1: detect over EVERY contract. Candles only, no extra
+         network per name, so this stays linear in the universe size. ---- */
       function step(i){
         if (i >= list.length) return Promise.resolve();
         var slice = list.slice(i, i + CHUNK);
         return Promise.all(slice.map(function(item){
           return W.xuCandles(item, TF, BARS).then(function(rows){
             done++;
-            ui.stat.textContent = 'scanning ' + done + '/' + list.length + ' — ' + cands.length + ' setup(s) so far';
-            if (!rows || rows.length < 30) return;
-            var pos = null;
-            if (typeof W.xuPositioning === 'function'){
-              try { pos = W.xuPositioning(item.base || item.sym); } catch (e) { pos = null; }
+            if (done % 5 === 0 || done === list.length){
+              ui.stat.textContent = 'pass 1/2 · scanning ' + done + '/' + list.length
+                + ' contracts — ' + fired.length + ' fired';
             }
-            var found = hgOmniEvaluate(item, rows, pos);
-            for (var k = 0; k < found.length; k++) cands.push(found[k]);
+            if (!rows || rows.length < 60){ thin++; return; }
+            var hits = hgOmniDetect(rows);
+            if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
           }).catch(function(){ done++; });
         })).then(function(){ return step(i + CHUNK); });
       }
 
-      return step(0).then(function(){ return { cands: cands, scanned: list.length, uni: uni.length }; });
+      return step(0).then(function(){
+        /* ---- PASS 2: enrich ONLY what fired. Walk-forward measurement is
+           O(bars x detectors) per symbol, and the Binance/depth calls are
+           per-symbol network — confining both to hits is what makes a
+           full-universe scan viable at all. ---- */
+        var subset = fired.slice(0, ENRICH_MAX);
+        var perSymbolStats = [], enriched = [], e = 0;
+
+        function enrich(i){
+          if (i >= subset.length) return Promise.resolve();
+          var slice = subset.slice(i, i + ENRICH_CHUNK);
+          return Promise.all(slice.map(function(f){
+            var base = f.item.base || '';
+            var binSym = base ? (base + 'USDT') : null;
+            var jobs = [
+              (typeof W.binanceOIHistory === 'function' && binSym) ? W.binanceOIHistory(binSym, '4h', 12).catch(function(){ return null; }) : Promise.resolve(null),
+              (typeof W.binanceLongShort === 'function' && binSym) ? W.binanceLongShort(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
+              (typeof W.binanceTakerRatio === 'function' && binSym) ? W.binanceTakerRatio(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
+              (typeof W.binanceDepth === 'function' && binSym) ? W.binanceDepth(binSym, 20).catch(function(){ return null; }) : Promise.resolve(null)
+            ];
+            return Promise.all(jobs).then(function(r){
+              e++;
+              ui.stat.textContent = 'pass 2/2 · measuring ' + e + '/' + subset.length + ' fired contracts…';
+              var oiH = r[0], ls = r[1], tk = r[2], dep = r[3];
+              var oiChange = null;
+              if (oiH && oiH.series && oiH.series.length >= 2){
+                var a = oiH.series[0].oi, b = oiH.series[oiH.series.length - 1].oi;
+                if (isFinite(a) && a > 0 && isFinite(b)) oiChange = (b - a) / a * 100;
+              }
+              /* daily agreement, resampled from the SAME bars (no extra fetch) */
+              var d1rows = hgOmniResample(f.rows, 86400), htf = null;
+              if (d1rows.length >= 25){
+                var dc = closesOf(d1rows);
+                htf = { e21: emaOf(dc.slice(-40), 21), e50: emaOf(dc, 50) };
+              }
+              var stats = hgOmniBacktestAll(f.rows, { rMult: MIN_RR, horizon: 20, warm: 45 });
+              perSymbolStats.push(stats);
+              enriched.push({ f: f, extra: {
+                htf: htf,
+                oi: (oiChange === null) ? null : { changePct: oiChange },
+                retail: (ls && ls.latest) ? ls.latest : null,
+                taker: (tk && tk.latest) ? tk.latest : null,
+                depth: dep,
+                regime: (typeof W.regimeState === 'function') ? (function(){ try { return W.regimeState(); } catch (er) { return null; } })() : null,
+                news: (typeof W.hgNewsRisk === 'function') ? (function(){ try { return W.hgNewsRisk(f.item.sym); } catch (er) { return null; } })() : null,
+                stats: stats
+              }});
+            }).catch(function(){ e++; });
+          })).then(function(){ return enrich(i + ENRICH_CHUNK); });
+        }
+
+        return enrich(0).then(function(){
+          /* Pool the per-symbol measurements; the pooled number is the one
+             the measured-edge gate reads, since one symbol is never enough. */
+          var pooled = hgOmniPoolStats(perSymbolStats);
+          var cands = [], j, k;
+          for (j = 0; j < enriched.length; j++){
+            var ex = enriched[j].extra;
+            ex.stats = pooled;                      // pooled, not per-symbol
+            var pos = null;
+            if (typeof W.xuPositioning === 'function'){
+              try { pos = W.xuPositioning(enriched[j].f.item.base || enriched[j].f.item.sym); } catch (er) { pos = null; }
+            }
+            var found = hgOmniEvaluate(enriched[j].f.item, enriched[j].f.rows, pos, ex);
+            for (k = 0; k < found.length; k++) cands.push(found[k]);
+          }
+          return { cands: cands, scanned: list.length, uni: uni.length,
+                   fired: fired.length, enriched: subset.length, thin: thin, pooled: pooled };
+        });
+      });
     }).then(function(res){
       if (!res) return;
       var ranked = hgOmniRank(res.cands);
-      __omni.snap = { at: Date.now(), scanned: res.scanned, uni: res.uni, rows: ranked };
+      __omni.snap = { at: Date.now(), scanned: res.scanned, uni: res.uni, rows: ranked, pooled: res.pooled };
       __omni.ran = true;
       var tickets = 0, i;
       for (i = 0; i < ranked.length; i++) if (ranked[i].grade.ticket) tickets++;
-      __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · scanned ' + res.scanned + '/' + res.uni;
-      ui.stat.textContent = __omni.lastStat +
-        (res.uni > res.scanned ? '  (capped at top ' + TOP_N + ' by turnover — the rest were NOT scanned)' : '');
+      __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
+      /* Say out loud what was NOT covered — a silent cap reads as full cover. */
+      var caveat = '';
+      if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' fired contracts beyond the ' + ENRICH_MAX + '-name measurement ceiling were dropped';
+      if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
+      ui.stat.textContent = __omni.lastStat + caveat;
+      ui.pool.innerHTML = renderPooled(res.pooled);
       if (!ranked.length){
-        ui.cards.innerHTML = '<div class="empty">no setup fired on the scanned names. That is a normal result — the detectors are meant to be quiet.</div>';
+        ui.cards.innerHTML = '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
         return;
       }
       var h = '';
@@ -961,14 +1341,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniRoute — desk setups <span>delta + coindcx · spring · po3 · orb · absorption · value area · measured move</span></h2>'
-      + '<div class="note" style="margin-bottom:10px">Scans the Delta India + CoinDCX universe with the six mechanics the popular desks trade '
-      + 'but our other tabs could not express. Every candidate runs a hard-gate ledger (trend · vol-alive · participation · funding); '
-      + '<b>a single veto stands it aside</b> — vetoed cards still render so you can see WHY. Levels come from the house plan engine with a '
-      + MIN_RR + 'R floor, and cards are ordered by R:R. '
-      + 'Ordering by R:R is a fact about geometry, <b>not</b> a profitability forecast — none of these gates has been walk-forward tested here.</div>'
-      + '<div class="row"><button class="btn" id="omniRun">RUN SETUP SCAN</button></div>'
-      + '<div class="note" id="omniStat">idle — press RUN.</div>'
+      + '<div class="note" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX with the six mechanics the '
+      + 'popular desks trade. Two passes: detect over the whole universe, then measure and enrich only what fired. '
+      + 'Each candidate runs a ledger of 3 hard gates (trend · vol-alive · participation) plus conditional confluence from free public data — '
+      + 'daily agreement, OI build, retail crowding, taker aggression, book depth, regime, news blackout, and the detector’s own measured edge. '
+      + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
+      + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor and cards order by R:R — geometry, <b>not</b> a profit forecast. '
+      + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
+      + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button></div>'
+      + '<div class="note" id="omniStat">idle — press RUN. Full coverage is ~200+ Delta contracts plus CoinDCX, so expect a few minutes; progress shows per pass.</div>'
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
+      + '<div id="omniPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="omniCards" style="margin-top:12px"></div>'
 
       + '<hr class="sep">'
@@ -997,6 +1380,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ui = {
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
       warn: el.querySelector('#omniWarn'), cards: el.querySelector('#omniCards'),
+      pool: el.querySelector('#omniPool'),
       matrix: el.querySelector('#omniMatrix'),
       ep: el.querySelector('#omniEp'), tok: el.querySelector('#omniTok'),
       model: el.querySelector('#omniModel'), ping: el.querySelector('#omniPing'),
@@ -1062,6 +1446,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniValueReject = hgOmniValueReject;
     window.hgOmniMeasuredMove = hgOmniMeasuredMove;
     window.hgOmniDetect = hgOmniDetect;
+    window.hgOmniResample = hgOmniResample;
+    window.hgOmniBtStop = hgOmniBtStop;
+    window.hgOmniWalkForward = hgOmniWalkForward;
+    window.hgOmniBacktestOne = hgOmniBacktestOne;
+    window.hgOmniBacktestAll = hgOmniBacktestAll;
+    window.hgOmniPoolStats = hgOmniPoolStats;
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
     window.hgOmniEvaluate = hgOmniEvaluate;

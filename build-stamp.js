@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v298',
-  pack: 'omniroute setup scanner + version badge',
-  built: '2026-08-15T14:10:00Z',
-  note: 'OMNIROUTE scans delta+coindcx for spring/po3/orb/absorb/value/mmove · masthead version badge'
+  version: 'hg-v299',
+  pack: 'omniroute full-universe scan + self-measurement',
+  built: '2026-08-15T14:40:00Z',
+  note: 'all delta+coindcx contracts · walk-forward measured-edge veto · free binance OI/retail/taker/depth confluence'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
