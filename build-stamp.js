@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v297',
-  pack: 'omniroute strategy ingestion tab',
-  built: '2026-08-15T13:00:00Z',
-  note: 'OMNIROUTE tab · static coverage matrix vs gate inventory · optional gateway ingest'
+  version: 'hg-v298',
+  pack: 'omniroute setup scanner + version badge',
+  built: '2026-08-15T14:10:00Z',
+  note: 'OMNIROUTE scans delta+coindcx for spring/po3/orb/absorb/value/mmove · masthead version badge'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

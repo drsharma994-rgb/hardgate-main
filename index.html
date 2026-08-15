@@ -48,6 +48,7 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 .market-picture-bar .note{font-size:11px;display:block;margin-top:2px}
 .brand{font-family:var(--disp);font-weight:700;font-size:17px;letter-spacing:.06em;color:var(--gold)}
 .brand small{display:block;font-family:var(--mono);font-weight:600;font-size:9px;letter-spacing:.18em;color:var(--mut)}
+.verbadge{display:inline-block;margin-left:8px;padding:1px 7px;border:1px solid var(--gold);border-radius:10px;font-family:var(--mono);font-weight:700;font-size:10px;letter-spacing:.08em;vertical-align:middle;opacity:.85}
 .xtoggle{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
 .xtoggle button{background:transparent;border:0;color:var(--mut);padding:6px 12px;font-size:11px;letter-spacing:.08em;font-weight:600}
 .xtoggle button.on{background:linear-gradient(180deg,#2563eb,#0f5cc0);color:#fff;font-weight:600}
@@ -190,7 +191,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <body>
 <header class="hg-header">
   <div class="header-primary">
-    <div class="brand">HARDGATE<small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
+    <div class="brand">HARDGATE<span id="hgVerBadge" class="verbadge" title="build version — bumped on every deploy">v?</span><small>DELTA · COINDCX · STARTRADER · BINANCE · GOLD (PAXG) · GATES, NOT SCORES · 23+ TOOLS</small></div>
     <div class="xtoggle">
       <button id="xDelta" class="on" onclick="setExchange('delta')">DELTA INDIA</button>
       <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
@@ -8490,6 +8491,24 @@ try{
     };
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('load', __hgRegister);
     else __hgRegister();
+  })();
+}catch(e){}
+/* Version badge in the masthead. Single source of truth is build-stamp.js
+   (G.HG_BUILD.version) — the SAME string sw.js caches under, so the badge
+   cannot drift from what is actually deployed. Lives INSIDE this existing
+   inline block on purpose: tests/test-tabs.mjs pins index.html at exactly
+   three inline <script> blocks (the harness extracts and runs them), so new
+   inline code joins a block rather than opening a fourth. Never throws; a
+   missing stamp hides the badge rather than showing a wrong build. */
+try{
+  (function(){
+    var el = document.getElementById('hgVerBadge');
+    if (!el) return;
+    var v = (window.HG_BUILD && window.HG_BUILD.version) ? String(window.HG_BUILD.version) : '';
+    if (!v){ el.style.display = 'none'; return; }
+    el.textContent = v.replace(/^hg-/, '');          // 'hg-v298' -> 'v298'
+    var b = window.HG_BUILD;
+    if (b && b.pack) el.title = v + ' — ' + b.pack + (b.built ? (' · built ' + b.built) : '');
   })();
 }catch(e){}
 </script>
