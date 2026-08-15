@@ -66,12 +66,22 @@ terse status, and never launches a first-time scan on a global refresh.
 
   var LS_KEY = 'hg_omnigold_v1';
 
-  /* Horizon shapes. Gold's intraday character is session-bound, so the scalp
-     horizon reads 1h bars over ~2 weeks; the swing horizon mirrors
-     OmniRoute's 4h/180. */
+  /* Horizon shapes. Bar counts are deliberately much larger than OmniRoute's. That scan
+     pools its walk-forward across ~500 contracts; gold is ONE instrument, so
+     the only way to reach a sample count worth reading is depth of history.
+     At 180x4h the first live run returned 5-12 samples per mechanic on the
+     swing horizon — every row read "too few to judge", which is an honest
+     report of a useless measurement. Deeper history also makes the daily
+     resample possible on the scalp horizon (1000x1h ~ 41 days, where 320x1h
+     was 13 days and could not fill a 21-period daily EMA).
+     minAtrPct is per-horizon because ATR% scales with the square root of bar
+     length: holding 1h bars to a 4h threshold vetoed live setups as "too
+     dead" that were merely intraday. */
   var HORIZONS = {
-    scalp: { tf: '1h', bars: 320, minRr: 1.5, horizonBars: 24, warm: 60, label: 'SCALP' },
-    swing: { tf: '4h', bars: 180, minRr: 2.0, horizonBars: 20, warm: 45, label: 'SWING' }
+    scalp: { tf: '1h', bars: 1000, minRr: 1.5, horizonBars: 24, warm: 60, label: 'SCALP',
+             minAtrPct: 0.05, sessionHard: true },
+    swing: { tf: '4h', bars: 500,  minRr: 2.0, horizonBars: 20, warm: 45, label: 'SWING',
+             minAtrPct: 0.12, sessionHard: false }
   };
 
   var MIN_SAMPLES = 20;
@@ -338,9 +348,12 @@ terse status, and never launches a first-time scan on a global refresh.
 
     /* 2 — volatility alive */
     var atr = atrOf(rows, 14), atrPct = (isFinite(atr) && isFinite(last) && last > 0) ? (atr / last * 100) : NaN;
-    var volOk = isFinite(atrPct) ? (atrPct >= 0.12) : null;   // gold is far less volatile than alts
+    /* Per-horizon: ATR% scales with sqrt(bar length), so a 1h bar cannot be
+       held to a 4h floor. Gold is also far less volatile than alts. */
+    var minAtr = isFinite(fin(x.minAtrPct)) ? fin(x.minAtrPct) : 0.12;
+    var volOk = isFinite(atrPct) ? (atrPct >= minAtr) : null;
     gates.push({ key:'vol-alive', hard:true, pass: volOk,
-      why: isFinite(atrPct) ? ('ATR ' + atrPct.toFixed(2) + '% of price' + (volOk ? '' : ' — too dead')) : 'ATR unavailable' });
+      why: isFinite(atrPct) ? ('ATR ' + atrPct.toFixed(2) + '% of price (floor ' + minAtr + '%)' + (volOk ? '' : ' — too dead')) : 'ATR unavailable' });
 
     /* 3 — participation. CONDITIONAL on gold, unlike crypto: several gold
        feeds (spot proxies especially) publish no volume at all, and a hard
@@ -373,8 +386,19 @@ terse status, and never launches a first-time scan on a global refresh.
     var sess = null, sessWhy = 'killzone module unavailable';
     if (x.killzone && x.killzone.zone){
       var z = String(x.killzone.zone);
-      sess = (z !== 'OFF');
-      sessWhy = 'session ' + (x.killzone.label || z) + (sess ? '' : ' — outside the London/NY killzones');
+      var inKz = (z !== 'OFF');
+      /* Session is decisive INTRADAY and merely contextual on the swing
+         horizon — a 4h structure is legitimately born at any hour, and
+         vetoing it for the clock (as the first live build did) grades it
+         against a scalper's model. The comment said this; the code did not. */
+      if (x.sessionHard === false){
+        sess = true;
+        sessWhy = 'session ' + (x.killzone.label || z)
+                + (inKz ? '' : ' — off-hours, context only at swing horizon');
+      } else {
+        sess = inKz;
+        sessWhy = 'session ' + (x.killzone.label || z) + (inKz ? '' : ' — outside the London/NY killzones');
+      }
     }
     gates.push({ key:'session', hard:false, pass: sess, why: sessWhy });
 
@@ -402,8 +426,18 @@ terse status, and never launches a first-time scan on a global refresh.
     gates.push({ key:'dxy-inverse', hard:false, pass: dxy, why: dxyWhy });
 
     /* 8 — yield guard, from goldind's own validator */
-    var yld = null, yldWhy = 'US10Y series unavailable';
-    if (x.yield && typeof x.yield.valid === 'boolean'){
+    /* getGoldMacro() exposes tnxTrend (US10Y direction), NOT a US10Y candle
+       series — the first build asked for rows that never existed, so this
+       gate read UNCHECKED on every card. Rising nominal yields are a
+       headwind for gold longs; falling yields for shorts. */
+    var yld = null, yldWhy = 'US10Y trend unavailable';
+    if (x.macro && typeof x.macro.tnxTrend === 'string' && x.macro.tnxTrend){
+      var yt = String(x.macro.tnxTrend).toUpperCase();
+      if (yt.indexOf('RIS') >= 0) yld = (hit.dir === 'short');
+      else if (yt.indexOf('FALL') >= 0) yld = (hit.dir === 'long');
+      else yld = true;                                   // FLAT blocks nothing
+      yldWhy = 'US10Y ' + yt + (yld ? ' — supports this direction' : ' — headwind for this direction');
+    } else if (x.yield && typeof x.yield.valid === 'boolean'){
       yld = x.yield.valid;
       yldWhy = 'yield guard ' + (yld ? 'clear' : 'flags this direction')
              + (x.yield.reason ? (' — ' + x.yield.reason) : '');
@@ -475,6 +509,8 @@ terse status, and never launches a first-time scan on a global refresh.
       var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
       ex.stats = (extra && extra.stats && extra.stats[statKey]) ? extra.stats[statKey] : null;
       ex.minRr = cfg.minRr;
+      ex.minAtrPct = cfg.minAtrPct;
+      ex.sessionHard = cfg.sessionHard;
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
       var plan = null;

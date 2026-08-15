@@ -159,6 +159,39 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   ok(win.hgOgDetect(null).length === 0, 'detection on null input is empty, not a throw');
 }
 
+/* ---- horizon-aware gates, all three from the first live gold scan ---- */
+{
+  const flat = [];
+  let px = 4384;
+  for (let i = 0; i < 200; i++){ const o = px, c = px + 0.15; flat.push({ t:i*3600, o, h:Math.max(o,c)+0.6, l:Math.min(o,c)-0.6, c, v:100 }); px = c; }
+  const hit = { kind:'MMOVE', dir:'long', level:1, why:'t' };
+
+  /* vol floor scales with bar length: ATR% goes as sqrt(bar length), so
+     holding 1h bars to a 4h floor vetoed live setups as "too dead". */
+  const volWhy = f => win.hgOgGates(flat, hit, { minAtrPct: f }).filter(g => g.key === 'vol-alive')[0].why;
+  ok(/floor 0.05%/.test(volWhy(0.05)), 'the scalp horizon states its own ATR floor');
+  ok(/floor 0.12%/.test(volWhy(0.12)), 'the swing horizon states a different floor');
+
+  /* session is decisive intraday, contextual on swing — the first build
+     vetoed 4h structures for the clock. */
+  const sess = hard => win.hgOgGates(flat, hit, { killzone:{ zone:'OFF', label:'OFF-HOURS' }, sessionHard: hard })
+                          .filter(g => g.key === 'session')[0];
+  ok(sess(true).pass === false, 'off-hours VETOES on the scalp horizon');
+  ok(sess(false).pass === true, 'off-hours does NOT veto on the swing horizon');
+  ok(/context only at swing horizon/.test(sess(false).why), 'and the swing card says it is context only');
+
+  /* yield guard reads tnxTrend — getGoldMacro exposes no US10Y candle rows,
+     which is why the first build reported this gate UNCHECKED on every card. */
+  const yg = (trend, dir) => win.hgOgGates(flat, { kind:'MMOVE', dir, level:1, why:'t' }, { macro:{ tnxTrend: trend } })
+                                .filter(g => g.key === 'yield-guard')[0];
+  ok(yg('RISING', 'long').pass === false,  'rising US10Y is a headwind for a gold long');
+  ok(yg('RISING', 'short').pass === true,  'rising US10Y supports a gold short');
+  ok(yg('FALLING', 'long').pass === true,  'falling US10Y supports a gold long');
+  ok(yg('FLAT', 'long').pass === true,     'a flat yield trend blocks nothing');
+  ok(win.hgOgGates(flat, hit, {}).filter(g => g.key === 'yield-guard')[0].pass === null,
+     'with no macro at all the yield gate stays UNCHECKED');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v310',
-  pack: 'omnigold — gold desk setups, scalp + swing',
-  built: '2026-08-15T19:10:00Z',
-  note: 'OMNIGOLD tab on the omniroute engine · asia break / killzone judas / adr fade / round magnet · gold gate ledger replaces the perp gates'
+  version: 'hg-v311',
+  pack: 'omnigold horizon-aware gates + deeper history',
+  built: '2026-08-15T19:35:00Z',
+  note: 'one instrument cannot pool across symbols so history goes 5x deeper · vol floor and session now scale with the horizon · yield guard reads tnxTrend'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
