@@ -120,12 +120,32 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var RANGE_LOOKBACK = 40;
   var ORB_BARS = 3;
   var MIN_SAMPLES = 20;   // below this a measured rate is not evidence
+  /* A measured detector is only VETOED when it is clearly losing, not merely
+     negative: the walk-forward is in-sample over a short window, so noise
+     alone drifts a 2R system below breakeven. */
+  var EDGE_VETO_R = -0.25;
+  var EDGE_VETO_SAMPLES = 30;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '' };
 
   /* ==================== pure: small numerics ==================== */
 
   function num(v){ var n = +v; return isFinite(n) ? n : NaN; }
+
+  /* Strict numeric coercion for EXTERNAL payload fields.
+     `isFinite(null)` is TRUE in JavaScript (null coerces to 0), so the
+     natural-looking guard `isFinite(x) ? x.toFixed(2) : fallback` sails
+     straight through for null and then throws on .toFixed. The venues do
+     return nulls by design — xuPositioning reports fundingPct:null for every
+     CoinDCX contract, which is ~494 of the ~500 scanned — so this crashed
+     the scan on the first CoinDCX setup every time.
+     fin() maps null/undefined/'' to NaN, and callers must convert FIRST and
+     then use the converted number for both the test and the formatting. */
+  function fin(v){
+    if (v === null || v === undefined || v === '') return NaN;
+    var n = +v;
+    return isFinite(n) ? n : NaN;
+  }
 
   function emaOf(vals, n){
     if (!vals || vals.length < n || n <= 0) return NaN;
@@ -578,7 +598,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 4 — funding sanity: never add to the crowded side of an extreme.
        CoinDCX reports no funding, so this legitimately stays unknown. */
-    var f = (positioning && isFinite(positioning.fundingPct)) ? positioning.fundingPct : NaN;
+    var f = positioning ? fin(positioning.fundingPct) : NaN;
     var fundOk = null, fundWhy = 'funding not reported by venue';
     if (isFinite(f)){
       var crowded = (hit.dir === 'long' && f > 0.05) || (hit.dir === 'short' && f < -0.05);
@@ -596,8 +616,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 5 — daily-timeframe agreement, resampled from the same 4h bars */
     var d1 = null, d1Why = 'daily bars unavailable';
-    if (x.htf && isFinite(x.htf.e21) && isFinite(x.htf.e50)){
-      var upD = x.htf.e21 >= x.htf.e50;
+    var he21 = x.htf ? fin(x.htf.e21) : NaN, he50 = x.htf ? fin(x.htf.e50) : NaN;
+    if (isFinite(he21) && isFinite(he50)){
+      var upD = he21 >= he50;
       d1 = (hit.dir === 'long') ? upD : !upD;
       d1Why = 'daily EMA21 ' + (upD ? '≥' : '<') + ' EMA50' + (d1 ? ' — agrees' : ' — disagrees with the setup');
     }
@@ -605,9 +626,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 6 — open interest should BUILD into the move, not bleed out of it */
     var oi = null, oiWhy = 'OI not published for this contract';
-    if (x.oi && isFinite(x.oi.changePct)){
-      oi = x.oi.changePct > -3;    // collapsing OI = the move is being unwound
-      oiWhy = 'OI ' + (x.oi.changePct >= 0 ? '+' : '') + x.oi.changePct.toFixed(1) + '% over the window'
+    var oiCh = x.oi ? fin(x.oi.changePct) : NaN;
+    if (isFinite(oiCh)){
+      oi = oiCh > -3;              // collapsing OI = the move is being unwound
+      oiWhy = 'OI ' + (oiCh >= 0 ? '+' : '') + oiCh.toFixed(1) + '% over the window'
             + (oi ? '' : ' — unwinding, not building');
     }
     gates.push({ key:'oi-build', hard:false, pass: oi, why: oiWhy });
@@ -615,8 +637,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* 7 — retail crowding as a CONTRARIAN read: when the retail account
        majority already sits on our side at an extreme, the fuel is spent. */
     var rc = null, rcWhy = 'retail long/short not published';
-    if (x.retail && isFinite(x.retail.longPct)){
-      var lp = x.retail.longPct;
+    var lp = x.retail ? fin(x.retail.longPct) : NaN;
+    if (isFinite(lp)){
       var crowdedWithUs = (hit.dir === 'long' && lp >= 75) || (hit.dir === 'short' && lp <= 25);
       rc = !crowdedWithUs;
       rcWhy = 'retail ' + lp.toFixed(0) + '% long' + (crowdedWithUs ? ' — crowded on our side' : '');
@@ -625,8 +647,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 8 — taker aggression should not lean against the setup */
     var tk = null, tkWhy = 'taker flow not published';
-    if (x.taker && isFinite(x.taker.buySellRatio)){
-      var br = x.taker.buySellRatio;
+    var br = x.taker ? fin(x.taker.buySellRatio) : NaN;
+    if (isFinite(br)){
       tk = (hit.dir === 'long') ? (br >= 0.9) : (br <= 1.1);
       tkWhy = 'taker buy/sell ' + br.toFixed(2) + (tk ? '' : ' — aggression leans against us');
     }
@@ -635,8 +657,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* 9 — book depth vs the stop distance. A stop that sits inside the
        slippage envelope is not a stop, it is a donation. */
     var lq = null, lqWhy = 'order book not available for this contract';
-    if (x.depth && isFinite(x.depth.bidUsd) && isFinite(x.depth.askUsd)){
-      var side = (hit.dir === 'long') ? x.depth.bidUsd : x.depth.askUsd;
+    var dBid = x.depth ? fin(x.depth.bidUsd) : NaN, dAsk = x.depth ? fin(x.depth.askUsd) : NaN;
+    if (isFinite(dBid) && isFinite(dAsk)){
+      var side = (hit.dir === 'long') ? dBid : dAsk;
       lq = side >= 25000;                       // top-20 levels, USD notional
       lqWhy = 'top-of-book ' + Math.round(side).toLocaleString() + ' USD'
             + (lq ? '' : ' — too thin, slippage would eat the stop');
@@ -666,14 +689,34 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        Not a veto on thin evidence — under MIN_SAMPLES it stays UNCHECKED
        rather than pretending 3 trades mean anything. */
     var ed = null, edWhy = 'not yet measured';
-    if (x.stats && isFinite(x.stats.expR)){
-      if (x.stats.samples < 20){
-        edWhy = 'only ' + x.stats.samples + ' past samples — too few to judge';
+    var sExp = x.stats ? fin(x.stats.expR) : NaN;
+    var sHit = x.stats ? fin(x.stats.hit) : NaN;
+    var sN = x.stats ? fin(x.stats.samples) : NaN;
+    if (isFinite(sExp) && isFinite(sHit) && isFinite(sN)){
+      var stat = sN + ' samples · ' + (sHit * 100).toFixed(0) + '% T1-first · '
+               + (sExp >= 0 ? '+' : '') + sExp.toFixed(2) + 'R';
+      if (sN < MIN_SAMPLES){
+        edWhy = 'only ' + sN + ' past samples — too few to judge';
+      } else if (sExp <= EDGE_VETO_R && sN >= EDGE_VETO_SAMPLES){
+        /* Only a CLEARLY losing detector is vetoed. Earlier this vetoed on
+           any expR <= 0, which silenced the whole tab: the measurement is
+           in-sample over ~30 days, and a 2R system sitting near its 33%
+           breakeven lands slightly negative on noise alone. Treating that
+           as a veto is over-fitting a month of noise, and it produced a
+           scanner that found setups and then refused every one of them.
+           Marginal reads now PASS and say so — the number is still on the
+           card, so a thin edge is visible rather than silently fatal. */
+        ed = false;
+        edWhy = stat + ' — clearly negative, this detector has not paid';
+      } else if (sExp <= EDGE_VETO_R){
+        /* Clearly negative, but on too thin a pool to veto on. Say exactly
+           that — calling this "marginal noise" would misdescribe the number
+           sitting right next to it. */
+        ed = true;
+        edWhy = stat + ' — negative, but only ' + sN + ' samples: too few to veto on';
       } else {
-        ed = x.stats.expR > 0;
-        edWhy = x.stats.samples + ' samples · ' + (x.stats.hit * 100).toFixed(0) + '% T1-first · '
-              + (x.stats.expR >= 0 ? '+' : '') + x.stats.expR.toFixed(2) + 'R expectancy'
-              + (ed ? '' : ' — negative, this detector has not paid');
+        ed = true;
+        edWhy = stat + (sExp > 0 ? '' : ' — marginal, within noise of breakeven');
       }
     }
     gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });

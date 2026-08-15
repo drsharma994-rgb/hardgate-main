@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v301',
-  pack: 'omniroute dead-data honesty',
+  version: 'hg-v302',
+  pack: 'omniroute null-crash fix + scan populates',
   built: '2026-08-15T16:15:00Z',
-  note: 'candle-fetch failures counted separately from thin history · dead-data scan no longer reads as a quiet market · universe rejection names its reason'
+  note: 'isFinite(null) trap killed every coindcx setup · measured-edge no longer vetoes on in-sample noise'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
