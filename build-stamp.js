@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v303',
-  pack: 'omniroute closed-candles + real R:R',
+  version: 'hg-v304',
+  pack: 'omniroute honest R:R + right model per family',
   built: '2026-08-15T16:15:00Z',
-  note: 'forming bar dropped · rr1/riskPct derived (wrapper strips them) · sub-cent price precision · daily EMA sized to history'
+  note: 'R:R was overstated 5-7x · reversion setups no longer vetoed for being counter-trend · measured-edge by significance · every fired contract now carded'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

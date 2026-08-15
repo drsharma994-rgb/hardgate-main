@@ -174,6 +174,60 @@ for (const [name, mk, gateKey] of fields){
      'ranking puts tickets first, then R:R desc (got ' + ranked.map(r => r.base).join('') + ')');
 }
 
+/* ---- 8. R:R must agree with the levels the card prints ----
+   Live cards showed R:R 14.72 / 11.35 / 9.57 whose true value was 2.00 in
+   every case, because plan.risk is stale with respect to the entry the
+   wrapper reports. Risk is now derived from |entry-stop|. */
+{
+  const stale = { dir:'long', entry:0.13417, stop:0.13131, t1:0.13989, t2:0.14417, risk:0.00038909 };
+  const d = win.hgOmniDerivePlan(stale);
+  ok(Math.abs(d.rr1 - 2.00) < 0.01, 'R:R derived from printed geometry, not stale plan.risk (got ' + d.rr1.toFixed(2) + ')');
+  ok(Math.abs(d.riskPct - 2.13) < 0.02, 'riskPct matches |entry-stop| (got ' + d.riskPct.toFixed(2) + '%)');
+  ok(Math.abs(d.risk - Math.abs(stale.entry - stale.stop)) < 1e-12, 'risk overwritten with the self-consistent value');
+}
+
+/* ---- 9. trend gates must grade each family against the right model ----
+   SPRING is a failed breakdown, so it occurs in a downtrend BY CONSTRUCTION.
+   Vetoing it for being counter-trend graded reversion setups against a
+   continuation model and silenced the tab. */
+{
+  const dn = [];
+  let px = 200;
+  for (let i = 0; i < 90; i++){                    // sustained downtrend
+    const o = px, c = px - 0.6;
+    dn.push({ t: 1700000000 + i * 14400, o, h: Math.max(o,c) + 0.2, l: Math.min(o,c) - 0.2, c, v: 1000 });
+    px = c;
+  }
+  const trendOf = kind => win.hgOmniGates(dn, { kind, dir:'long', level:1, why:'t' }, null, {})
+                              .filter(g => g.key === 'trend')[0];
+
+  const spring = trendOf('SPRING');
+  ok(spring.pass !== false, 'SPRING long in a downtrend is NOT vetoed on trend');
+  ok(spring.hard === false, 'trend is conditional for a reversion family');
+  ok(/reversion setup/.test(spring.why), 'the card explains why counter-trend is expected');
+
+  const po3 = trendOf('PO3');
+  ok(po3.pass === false, 'PO3 long in a downtrend IS vetoed — continuation must agree with trend');
+  ok(po3.hard === true, 'trend stays a hard gate for a continuation family');
+}
+
+/* ---- 10. measured-edge uses significance, not a flat R cutoff ----
+   A fixed threshold ignores sample size. On live data SPRING at 26% over 473
+   samples is 3.4 SE below the 33.3% breakeven for 2R (a real shortfall) yet
+   sat inside a -0.25R cutoff; MMOVE at 33% over 2016 samples is genuinely
+   breakeven and must survive. */
+{
+  const edge = st => win.hgOmniGates(rows, { kind:'PO3', dir:'long', level:99, why:'t' }, null, { stats: st })
+                        .filter(g => g.key === 'measured-edge')[0];
+  ok(edge({ samples:473,  hit:0.26, expR:-0.23 }).pass === false, 'SPRING-like -3.4sigma is vetoed despite -0.23R');
+  ok(edge({ samples:624,  hit:0.29, expR:-0.12 }).pass === false, 'PO3-like -2.3sigma is vetoed');
+  ok(edge({ samples:458,  hit:0.30, expR:-0.10 }).pass === true,  'ORB-like -1.5sigma survives as noise');
+  ok(edge({ samples:2016, hit:0.33, expR:0 }).pass === true,      'MMOVE-like breakeven over 2016 samples survives');
+  ok(edge({ samples:4,    hit:0.25, expR:-0.25 }).pass === null,  'ABSORB-like 4 samples stays UNCHECKED');
+  ok(/sigma vs breakeven|σ vs breakeven/.test(edge({ samples:473, hit:0.26, expR:-0.23 }).why),
+     'the card shows the sigma distance it judged on');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

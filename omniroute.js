@@ -123,11 +123,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* A measured detector is only VETOED when it is clearly losing, not merely
      negative: the walk-forward is in-sample over a short window, so noise
      alone drifts a 2R system below breakeven. */
-  var EDGE_VETO_R = -0.25;
+  /* Veto when the measured T1-first rate is this many standard errors below
+     the breakeven rate for MIN_RR. -2 is the conventional two-sigma bar:
+     tight enough to catch a real shortfall, loose enough that ordinary
+     sampling noise does not silence a detector. */
+  var EDGE_VETO_Z = -2;
   var EDGE_VETO_SAMPLES = 30;
   /* Daily EMA periods sized to the daily bars BARS x TF actually yields
      (180 x 4h ~= 31 days). Asking for a 50-period daily EMA silently
      disabled the gate on every card. */
+  /* Which detector families trade AGAINST the prevailing trend. Used so the
+     trend gates grade each setup against the right model. */
+  var REVERSION_KINDS = { SPRING:true, UTAD:true, VALUE:true, ABSORB:true };
+
   var DAILY_FAST = 10;
   var DAILY_SLOW = 21;
 
@@ -600,14 +608,33 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var e21 = emaOf(closes.slice(-60), 21), e50 = emaOf(closes.slice(-120), 50);
     var last = closes.length ? closes[closes.length - 1] : NaN;
 
-    /* 1 — trend alignment: the setup must not fight the 21/50 stack */
+    /* 1 — trend alignment, applied ACCORDING TO THE SETUP'S NATURE.
+       Vetoing a counter-trend setup for being counter-trend is a category
+       error, and it silenced the tab: SPRING is a failed breakdown, which by
+       construction occurs in a downtrend, so 'EMA21 < EMA50 — against the
+       setup' vetoed essentially every reversion card while claiming they had
+       failed a quality check. They had not; they were being graded against
+       the wrong model.
+         CONTINUATION families (PO3, ORB, MMOVE) trade with the trend, so
+       disagreement is a genuine hard veto.
+         REVERSION families (SPRING, UTAD, VALUE, ABSORB) trade against it.
+       For those the stack is reported as context and never vetoes. */
+    var reversion = REVERSION_KINDS[hit.kind] === true;
     var trendOk = null, trendWhy = 'EMA unavailable';
     if (isFinite(e21) && isFinite(e50) && isFinite(last)){
-      var up = e21 >= e50, dn = e21 <= e50;
-      trendOk = (hit.dir === 'long') ? up : dn;
-      trendWhy = 'EMA21 ' + (up ? '≥' : '<') + ' EMA50' + (trendOk ? ' — with the setup' : ' — against the setup');
+      var up = e21 >= e50;
+      var agrees = (hit.dir === 'long') ? up : !up;
+      if (reversion){
+        trendOk = true;   // context only
+        trendWhy = 'EMA21 ' + (up ? '≥' : '<') + ' EMA50 — '
+                 + (agrees ? 'trend agrees' : 'counter-trend, which is what this setup IS')
+                 + ' (context only for a reversion setup)';
+      } else {
+        trendOk = agrees;
+        trendWhy = 'EMA21 ' + (up ? '≥' : '<') + ' EMA50' + (agrees ? ' — with the setup' : ' — against the setup');
+      }
     }
-    gates.push({ key:'trend', hard:true, pass: trendOk, why: trendWhy });
+    gates.push({ key:'trend', hard: !reversion, pass: trendOk, why: trendWhy });
 
     /* 2 — volatility alive: a dead tape cannot pay a 2R target */
     var atr = atrOf(rows, 14), atrPct = (isFinite(atr) && isFinite(last) && last > 0) ? (atr / last * 100) : NaN;
@@ -644,8 +671,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var he21 = x.htf ? fin(x.htf.e21) : NaN, he50 = x.htf ? fin(x.htf.e50) : NaN;
     if (isFinite(he21) && isFinite(he50)){
       var upD = he21 >= he50;
-      d1 = (hit.dir === 'long') ? upD : !upD;
-      d1Why = 'daily EMA21 ' + (upD ? '≥' : '<') + ' EMA50' + (d1 ? ' — agrees' : ' — disagrees with the setup');
+      var dAgrees = (hit.dir === 'long') ? upD : !upD;
+      /* Same reasoning as the 4h trend gate: a reversion setup is expected
+         to disagree with the prevailing daily stack. */
+      d1 = reversion ? true : dAgrees;
+      d1Why = 'daily EMA21 ' + (upD ? '≥' : '<') + ' EMA50'
+            + (reversion ? (dAgrees ? ' — agrees' : ' — counter-trend (expected for a reversion setup)')
+                         : (dAgrees ? ' — agrees' : ' — disagrees with the setup'));
     }
     gates.push({ key:'htf-daily', hard:false, pass: d1, why: d1Why });
 
@@ -720,9 +752,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     if (isFinite(sExp) && isFinite(sHit) && isFinite(sN)){
       var stat = sN + ' samples · ' + (sHit * 100).toFixed(0) + '% T1-first · '
                + (sExp >= 0 ? '+' : '') + sExp.toFixed(2) + 'R';
+      /* Significance, not a flat R threshold. A fixed cutoff ignores sample
+         size, and got this exactly wrong on live data: SPRING at 26% over
+         473 samples is 3.4 standard errors below the 33.3% breakeven for 2R
+         — a real shortfall — yet -0.23R sat inside a -0.25R cutoff and was
+         reported as "within noise". Meanwhile MMOVE at 33% over 2016 samples
+         IS genuinely breakeven and must not be vetoed. Compare the observed
+         T1-first rate against the breakeven rate for this R multiple,
+         1/(1+R), in units of its own binomial standard error. */
+      var pBreak = 1 / (1 + MIN_RR);
+      var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, sN));
+      var z = se > 0 ? ((sHit - pBreak) / se) : 0;
+      var zTxt = ' [' + (z >= 0 ? '+' : '') + z.toFixed(1) + 'σ vs breakeven]';
       if (sN < MIN_SAMPLES){
         edWhy = 'only ' + sN + ' past samples — too few to judge';
-      } else if (sExp <= EDGE_VETO_R && sN >= EDGE_VETO_SAMPLES){
+      } else if (z <= EDGE_VETO_Z && sN >= EDGE_VETO_SAMPLES){
         /* Only a CLEARLY losing detector is vetoed. Earlier this vetoed on
            any expR <= 0, which silenced the whole tab: the measurement is
            in-sample over ~30 days, and a 2R system sitting near its 33%
@@ -732,16 +776,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            Marginal reads now PASS and say so — the number is still on the
            card, so a thin edge is visible rather than silently fatal. */
         ed = false;
-        edWhy = stat + ' — clearly negative, this detector has not paid';
-      } else if (sExp <= EDGE_VETO_R){
-        /* Clearly negative, but on too thin a pool to veto on. Say exactly
-           that — calling this "marginal noise" would misdescribe the number
-           sitting right next to it. */
+        edWhy = stat + zTxt + ' — significantly below breakeven, this detector has not paid';
+      } else if (z <= EDGE_VETO_Z){
+        /* Significantly negative, but on too thin a pool to act on. */
         ed = true;
-        edWhy = stat + ' — negative, but only ' + sN + ' samples: too few to veto on';
+        edWhy = stat + zTxt + ' — below breakeven, but only ' + sN + ' samples: too few to veto on';
       } else {
         ed = true;
-        edWhy = stat + (sExp > 0 ? '' : ' — marginal, within noise of breakeven');
+        edWhy = stat + zTxt + (z < 0 ? ' — below breakeven but within noise' : '');
       }
     }
     gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
@@ -822,11 +864,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var out = {}, k;
     for (k in plan) if (Object.prototype.hasOwnProperty.call(plan, k)) out[k] = plan[k];
     var entry = num(out.entry), stop = num(out.stop), t1 = num(out.t1), t2 = num(out.t2);
-    var risk = isFinite(num(out.risk)) ? num(out.risk) : Math.abs(entry - stop);
+    /* Risk is derived from the levels the card actually PRINTS, never from
+       plan.risk. Live cards showed R:R 14.72 / 11.35 / 9.57 whose true value
+       was 2.00 in every case — a 5-7x overstatement that also drove the
+       ranking. The wrapper's `risk` field is stale with respect to the entry
+       it reports (hgPlanLevelsCore's exact-entry pass moves entry/t1/t2 and
+       leaves risk behind), so entry/stop are the only self-consistent
+       source. If the numbers on the card disagree with each other, the card
+       is lying; deriving from what is shown makes that impossible. */
+    var risk = Math.abs(entry - stop);
     if (isFinite(risk) && risk > 0){
-      if (!isFinite(num(out.rr1)) && isFinite(t1)) out.rr1 = Math.abs(t1 - entry) / risk;
-      if (!isFinite(num(out.rr2)) && isFinite(t2)) out.rr2 = Math.abs(t2 - entry) / risk;
-      if (!isFinite(num(out.riskPct)) && isFinite(entry) && entry > 0) out.riskPct = risk / entry * 100;
+      /* Recomputed unconditionally — a stale rr1/riskPct from the wrapper
+         must not win over the geometry actually displayed. */
+      if (isFinite(t1)) out.rr1 = Math.abs(t1 - entry) / risk;
+      if (isFinite(t2)) out.rr2 = Math.abs(t2 - entry) / risk;
+      if (isFinite(entry) && entry > 0) out.riskPct = risk / entry * 100;
       out.risk = risk;
     }
     return out;
@@ -1401,15 +1453,31 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           try{ console.warn('omniroute pass 2 error — continuing with partial', e2); }catch(eL2){}
         }).then(function(){
           var pooled = hgOmniPoolStats(perSymbolStats);
-          var cands = [], j, k;
+
+          /* Evaluate EVERY contract that fired, not just the enriched
+             subset. Previously a live scan reported "230 fired contracts
+             beyond the measurement ceiling were dropped" — and those 230
+             produced no card at all, so most of what the scan found was
+             invisible. The ceiling exists to bound expensive per-symbol
+             NETWORK enrichment, which is not a reason to hide the setup:
+             detection and the plan need no network. Unenriched contracts
+             still get the pooled measurement (it is global) and simply read
+             UNCHECKED on the per-symbol confluence gates. */
+          var exBySym = {}, j, k;
           for (j = 0; j < enriched.length; j++){
-            var ex = enriched[j].extra;
-            ex.stats = pooled;
+            var esym = enriched[j].f.item.sym;
+            enriched[j].extra.stats = pooled;
+            exBySym[esym] = enriched[j].extra;
+          }
+          var cands = [];
+          for (j = 0; j < fired.length; j++){
+            var fitem = fired[j].item;
+            var ex = exBySym[fitem.sym] || { stats: pooled };
             var pos = null;
             if (typeof W.xuPositioning === 'function'){
-              try { pos = W.xuPositioning(enriched[j].f.item.base || enriched[j].f.item.sym); } catch (er) { pos = null; }
+              try { pos = W.xuPositioning(fitem.base || fitem.sym); } catch (er) { pos = null; }
             }
-            var found = hgOmniEvaluate(enriched[j].f.item, enriched[j].f.rows, pos, ex);
+            var found = hgOmniEvaluate(fitem, fired[j].rows, pos, ex);
             for (k = 0; k < found.length; k++) cands.push(found[k]);
           }
           return { cands: cands, scanned: list.length, uni: uni.length,
@@ -1428,7 +1496,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
         var caveat = '';
         if (res.pass1Err) caveat += '  · pass 1 interrupted (' + res.pass1Err + ') — partial cover at ' + res.pass1Done + '/' + res.scanned;
-        if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' fired contracts beyond the ' + ENRICH_MAX + '-name measurement ceiling were dropped';
+        if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' of them show hard gates + plan only (per-symbol confluence capped at ' + ENRICH_MAX + ' names)';
         if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
         /* Distinct from `thin`: these contracts were asked and did not answer
            (rate limit, venue down). Folding them into "scanned" would let a
