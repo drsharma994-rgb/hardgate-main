@@ -700,7 +700,6 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="oiflow.js"></script>
 <script src="regime.js"></script>
 <script src="carry.js"></script>
-<script src="omniroute.js"></script>
 <script src="termbasis.js"></script>
 <script src="goldpro.js"></script>
 <script src="goldcoint.js"></script>
@@ -709,6 +708,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
+<script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=47"></script>
@@ -750,14 +750,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=296"></script>
+<script src="supersetup.js?v=300"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=296"></script>
-<script src="super-gold.js?v=296"></script>
-<script src="super-best.js?v=296"></script>
-<script src="super-sniper.js?v=296"></script>
-<script src="super-book.js?v=296"></script>
-<script src="super-calibrate.js?v=296"></script>
+<script src="super-desk-common.js?v=300"></script>
+<script src="super-gold.js?v=300"></script>
+<script src="super-best.js?v=300"></script>
+<script src="super-sniper.js?v=300"></script>
+<script src="super-book.js?v=300"></script>
+<script src="super-calibrate.js?v=300"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3072,6 +3072,11 @@ const HG_TAB_AUTO_SCAN = {
     const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.tradeos : null;
     if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
   },
+  omniroute: async function(){
+    const pane = document.getElementById('tab_omniroute');
+    const runBtn = pane && pane.querySelector('#omniRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
   book: async function(){
     if (typeof superBookRefresh === 'function') await superBookRefresh();
     else if (typeof bookRefresh === 'function') await bookRefresh();
@@ -3094,7 +3099,8 @@ const HG_SCAN_RUN_BTN = {
   'pine-cipher': '#pineCipherRun',
   'pine-rf': '#pineRfRun',
   'pine-nw': '#pineNwRun',
-  'pine-avwap': '#pineAvwapRun'
+  'pine-avwap': '#pineAvwapRun',
+  omniroute: '#omniRun'
 };
 function hgCollectAllScanTabIds(){
   const seen = {};

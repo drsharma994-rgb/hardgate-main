@@ -112,8 +112,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var TOP_N = 0;
   var TF = '4h';
   var BARS = 180;
-  var CHUNK = 6;          // venue-leg concurrency for pass 1
-  var ENRICH_CHUNK = 3;   // gentler: pass 2 hits Binance endpoints
+  var CHUNK = 4;          // venue-leg concurrency for pass 1 (gentle on /api/proxy)
+  var CHUNK_DELAY_MS = 80; // pause between pass-1 batches — avoids 429 mid-scan
+  var ENRICH_CHUNK = 2;   // gentler: pass 2 hits Binance endpoints
   var ENRICH_MAX = 60;    // hard ceiling on pass 2, reported when it bites
   var MIN_RR = 2;
   var RANGE_LOOKBACK = 40;
@@ -719,7 +720,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       // per-detector measured stats select by this hit's family
       var exForHit = {};
       for (var kk in ex) if (Object.prototype.hasOwnProperty.call(ex, kk)) exForHit[kk] = ex[kk];
-      exForHit.stats = (ex.stats && ex.stats[hit.kind]) ? ex.stats[hit.kind] : null;
+      /* UTAD is measured under SPRING — same detector family in the backtest pool */
+      var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
+      exForHit.stats = (ex.stats && ex.stats[statKey]) ? ex.stats[statKey] : null;
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       var plan = null;
@@ -1145,30 +1148,47 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== the scan ==================== */
 
+  function omniSleep(ms){
+    return new Promise(function(ok){ setTimeout(ok, ms); });
+  }
+
+  function omniErrMsg(e){
+    return (e && e.message) ? e.message : String(e);
+  }
+
+  function omniSafeStat(ui, msg){
+    try{ if (ui && ui.stat) ui.stat.textContent = msg; }catch(e){}
+  }
+
   function runScan(ui){
     if (__omni.busy) return Promise.resolve();
     var W = (typeof window !== 'undefined') ? window : null;
     if (!W || typeof W.xuUniverse !== 'function' || typeof W.xuCandles !== 'function'){
-      ui.stat.textContent = 'xuniverse.js unavailable — no venue universe, scan disabled.';
+      omniSafeStat(ui, 'xuniverse.js unavailable — no venue universe, scan disabled.');
       return Promise.resolve();
     }
     __omni.busy = true;
     ui.btn.disabled = true;
     ui.cards.innerHTML = '';
-    ui.stat.textContent = 'loading Delta + CoinDCX universe…';
+    omniSafeStat(ui, 'loading Delta + CoinDCX universe…');
 
     return W.xuUniverse().then(function(uni){
       uni = uni || [];
       if (!uni.length){
-        ui.stat.textContent = 'universe empty — both venue legs failed.';
+        omniSafeStat(ui, 'universe empty — both venue legs failed.');
         return null;
       }
       var note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
-      if (note){ ui.warn.textContent = note; ui.warn.style.display = 'block'; }
-      else { ui.warn.style.display = 'none'; }
+      try{
+        if (note){ ui.warn.textContent = note; ui.warn.style.display = 'block'; }
+        else { ui.warn.style.display = 'none'; }
+      }catch(eW){}
 
-      var list = (TOP_N > 0) ? uni.slice(0, TOP_N) : uni.slice();
-      var fired = [], done = 0, thin = 0;
+      /* Delta + CoinDCX desks only — skip extension legs the tab does not trade */
+      var list = (TOP_N > 0) ? uni.slice(0, TOP_N) : uni.filter(function(item){
+        return item && (item.exchange === 'delta' || item.exchange === 'coindcx');
+      });
+      var fired = [], done = 0, thin = 0, pass1Err = null;
 
       /* ---- PASS 1: detect over EVERY contract. Candles only, no extra
          network per name, so this stays linear in the universe size. ---- */
@@ -1176,20 +1196,28 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         if (i >= list.length) return Promise.resolve();
         var slice = list.slice(i, i + CHUNK);
         return Promise.all(slice.map(function(item){
-          return W.xuCandles(item, TF, BARS).then(function(rows){
+          return Promise.resolve().then(function(){
+            return W.xuCandles(item, TF, BARS);
+          }).then(function(rows){
             done++;
             if (done % 5 === 0 || done === list.length){
-              ui.stat.textContent = 'pass 1/2 · scanning ' + done + '/' + list.length
-                + ' contracts — ' + fired.length + ' fired';
+              omniSafeStat(ui, 'pass 1/2 · scanning ' + done + '/' + list.length
+                + ' contracts — ' + fired.length + ' fired');
             }
             if (!rows || rows.length < 60){ thin++; return; }
             var hits = hgOmniDetect(rows);
             if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
           }).catch(function(){ done++; });
-        })).then(function(){ return step(i + CHUNK); });
+        })).then(function(){
+          if (i + CHUNK >= list.length) return;
+          return omniSleep(CHUNK_DELAY_MS).then(function(){ return step(i + CHUNK); });
+        });
       }
 
-      return step(0).then(function(){
+      return step(0).catch(function(e1){
+        pass1Err = omniErrMsg(e1);
+        try{ console.warn('omniroute pass 1 error — continuing with partial', e1); }catch(eL){}
+      }).then(function(){
         /* ---- PASS 2: enrich ONLY what fired. Walk-forward measurement is
            O(bars x detectors) per symbol, and the Binance/depth calls are
            per-symbol network — confining both to hits is what makes a
@@ -1197,57 +1225,61 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         var subset = fired.slice(0, ENRICH_MAX);
         var perSymbolStats = [], enriched = [], e = 0;
 
+        function enrichOne(f){
+          var base = f.item.base || '';
+          var binSym = base ? (base + 'USDT') : null;
+          var jobs = [
+            (typeof W.binanceOIHistory === 'function' && binSym) ? W.binanceOIHistory(binSym, '4h', 12).catch(function(){ return null; }) : Promise.resolve(null),
+            (typeof W.binanceLongShort === 'function' && binSym) ? W.binanceLongShort(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
+            (typeof W.binanceTakerRatio === 'function' && binSym) ? W.binanceTakerRatio(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
+            (typeof W.binanceDepth === 'function' && binSym) ? W.binanceDepth(binSym, 20).catch(function(){ return null; }) : Promise.resolve(null)
+          ];
+          return Promise.all(jobs).then(function(r){
+            e++;
+            omniSafeStat(ui, 'pass 2/2 · measuring ' + e + '/' + subset.length + ' fired contracts…');
+            var oiH = r[0], ls = r[1], tk = r[2], dep = r[3];
+            var oiChange = null;
+            if (oiH && oiH.series && oiH.series.length >= 2){
+              var a = oiH.series[0].oi, b = oiH.series[oiH.series.length - 1].oi;
+              if (isFinite(a) && a > 0 && isFinite(b)) oiChange = (b - a) / a * 100;
+            }
+            var d1rows = hgOmniResample(f.rows, 86400), htf = null;
+            if (d1rows.length >= 25){
+              var dc = closesOf(d1rows);
+              htf = { e21: emaOf(dc.slice(-40), 21), e50: emaOf(dc, 50) };
+            }
+            var stats = hgOmniBacktestAll(f.rows, { rMult: MIN_RR, horizon: 20, warm: 45 });
+            perSymbolStats.push(stats);
+            enriched.push({ f: f, extra: {
+              htf: htf,
+              oi: (oiChange === null) ? null : { changePct: oiChange },
+              retail: (ls && ls.latest) ? ls.latest : null,
+              taker: (tk && tk.latest) ? tk.latest : null,
+              depth: dep,
+              regime: (typeof W.regimeState === 'function') ? (function(){ try { return W.regimeState(); } catch (er) { return null; } })() : null,
+              news: (typeof W.hgNewsRisk === 'function') ? (function(){ try { return W.hgNewsRisk(f.item.sym); } catch (er) { return null; } })() : null,
+              stats: stats
+            }});
+          }).catch(function(){ e++; });
+        }
+
         function enrich(i){
           if (i >= subset.length) return Promise.resolve();
           var slice = subset.slice(i, i + ENRICH_CHUNK);
-          return Promise.all(slice.map(function(f){
-            var base = f.item.base || '';
-            var binSym = base ? (base + 'USDT') : null;
-            var jobs = [
-              (typeof W.binanceOIHistory === 'function' && binSym) ? W.binanceOIHistory(binSym, '4h', 12).catch(function(){ return null; }) : Promise.resolve(null),
-              (typeof W.binanceLongShort === 'function' && binSym) ? W.binanceLongShort(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
-              (typeof W.binanceTakerRatio === 'function' && binSym) ? W.binanceTakerRatio(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
-              (typeof W.binanceDepth === 'function' && binSym) ? W.binanceDepth(binSym, 20).catch(function(){ return null; }) : Promise.resolve(null)
-            ];
-            return Promise.all(jobs).then(function(r){
-              e++;
-              ui.stat.textContent = 'pass 2/2 · measuring ' + e + '/' + subset.length + ' fired contracts…';
-              var oiH = r[0], ls = r[1], tk = r[2], dep = r[3];
-              var oiChange = null;
-              if (oiH && oiH.series && oiH.series.length >= 2){
-                var a = oiH.series[0].oi, b = oiH.series[oiH.series.length - 1].oi;
-                if (isFinite(a) && a > 0 && isFinite(b)) oiChange = (b - a) / a * 100;
-              }
-              /* daily agreement, resampled from the SAME bars (no extra fetch) */
-              var d1rows = hgOmniResample(f.rows, 86400), htf = null;
-              if (d1rows.length >= 25){
-                var dc = closesOf(d1rows);
-                htf = { e21: emaOf(dc.slice(-40), 21), e50: emaOf(dc, 50) };
-              }
-              var stats = hgOmniBacktestAll(f.rows, { rMult: MIN_RR, horizon: 20, warm: 45 });
-              perSymbolStats.push(stats);
-              enriched.push({ f: f, extra: {
-                htf: htf,
-                oi: (oiChange === null) ? null : { changePct: oiChange },
-                retail: (ls && ls.latest) ? ls.latest : null,
-                taker: (tk && tk.latest) ? tk.latest : null,
-                depth: dep,
-                regime: (typeof W.regimeState === 'function') ? (function(){ try { return W.regimeState(); } catch (er) { return null; } })() : null,
-                news: (typeof W.hgNewsRisk === 'function') ? (function(){ try { return W.hgNewsRisk(f.item.sym); } catch (er) { return null; } })() : null,
-                stats: stats
-              }});
-            }).catch(function(){ e++; });
-          })).then(function(){ return enrich(i + ENRICH_CHUNK); });
+          return Promise.all(slice.map(enrichOne)).then(function(){
+            if (i + ENRICH_CHUNK >= subset.length) return;
+            return omniSleep(CHUNK_DELAY_MS).then(function(){ return enrich(i + ENRICH_CHUNK); });
+          });
         }
 
-        return enrich(0).then(function(){
-          /* Pool the per-symbol measurements; the pooled number is the one
-             the measured-edge gate reads, since one symbol is never enough. */
+        return enrich(0).catch(function(e2){
+          try{ console.warn('omniroute pass 2 error — continuing with partial', e2); }catch(eL2){}
+        }).then(function(){
           var pooled = hgOmniPoolStats(perSymbolStats);
           var cands = [], j, k;
           for (j = 0; j < enriched.length; j++){
             var ex = enriched[j].extra;
-            ex.stats = pooled;                      // pooled, not per-symbol
+            ex.stats = pooled;
             var pos = null;
             if (typeof W.xuPositioning === 'function'){
               try { pos = W.xuPositioning(enriched[j].f.item.base || enriched[j].f.item.sym); } catch (er) { pos = null; }
@@ -1256,32 +1288,46 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             for (k = 0; k < found.length; k++) cands.push(found[k]);
           }
           return { cands: cands, scanned: list.length, uni: uni.length,
-                   fired: fired.length, enriched: subset.length, thin: thin, pooled: pooled };
+                   fired: fired.length, enriched: subset.length, thin: thin,
+                   pooled: pooled, pass1Err: pass1Err, pass1Done: done };
         });
       });
     }).then(function(res){
       if (!res) return;
-      var ranked = hgOmniRank(res.cands);
-      __omni.snap = { at: Date.now(), scanned: res.scanned, uni: res.uni, rows: ranked, pooled: res.pooled };
-      __omni.ran = true;
-      var tickets = 0, i;
-      for (i = 0; i < ranked.length; i++) if (ranked[i].grade.ticket) tickets++;
-      __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
-      /* Say out loud what was NOT covered — a silent cap reads as full cover. */
-      var caveat = '';
-      if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' fired contracts beyond the ' + ENRICH_MAX + '-name measurement ceiling were dropped';
-      if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
-      ui.stat.textContent = __omni.lastStat + caveat;
-      ui.pool.innerHTML = renderPooled(res.pooled);
-      if (!ranked.length){
-        ui.cards.innerHTML = '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
-        return;
+      try{
+        var ranked = hgOmniRank(res.cands || []);
+        __omni.snap = { at: Date.now(), scanned: res.scanned, uni: res.uni, rows: ranked, pooled: res.pooled };
+        __omni.ran = true;
+        var tickets = 0, i;
+        for (i = 0; i < ranked.length; i++) if (ranked[i].grade && ranked[i].grade.ticket) tickets++;
+        __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
+        var caveat = '';
+        if (res.pass1Err) caveat += '  · pass 1 interrupted (' + res.pass1Err + ') — partial cover at ' + res.pass1Done + '/' + res.scanned;
+        if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' fired contracts beyond the ' + ENRICH_MAX + '-name measurement ceiling were dropped';
+        if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
+        omniSafeStat(ui, __omni.lastStat + caveat);
+        try{ ui.pool.innerHTML = renderPooled(res.pooled); }catch(eP){
+          try{ ui.pool.innerHTML = '<div class="note warn">measurement table failed to render.</div>'; }catch(eP2){}
+        }
+        if (!ranked.length){
+          ui.cards.innerHTML = '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
+          return;
+        }
+        var h = '';
+        for (i = 0; i < ranked.length; i++){
+          try { h += setupCard(ranked[i]); }
+          catch (eC){
+            try{ console.warn('omniroute card render skipped', ranked[i] && ranked[i].sym, eC); }catch(eC2){}
+          }
+        }
+        ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
+      }catch(eRender){
+        omniSafeStat(ui, 'scan finished but render failed: ' + omniErrMsg(eRender));
+        try{ console.warn('omniroute render failed', eRender); }catch(eR2){}
       }
-      var h = '';
-      for (i = 0; i < ranked.length; i++) h += setupCard(ranked[i]);
-      ui.cards.innerHTML = h;
-    }).catch(function(){
-      ui.stat.textContent = 'scan failed.';
+    }).catch(function(e){
+      omniSafeStat(ui, 'scan failed: ' + omniErrMsg(e));
+      try{ console.warn('omniroute scan failed', e); }catch(eF){}
     }).then(function(){
       __omni.busy = false;
       ui.btn.disabled = false;
