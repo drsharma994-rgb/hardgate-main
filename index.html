@@ -699,6 +699,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="oiflow.js"></script>
 <script src="regime.js"></script>
 <script src="carry.js"></script>
+<script src="omniroute.js"></script>
 <script src="termbasis.js"></script>
 <script src="goldpro.js"></script>
 <script src="goldcoint.js"></script>
@@ -2699,7 +2700,7 @@ const HG_NAV_GROUPS = [
   { id:'crypto',     label:'CRYPTO',   tabs:['best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
-  { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
+  { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent','omniroute'] },
 ];
 const HG_TAB_GROUP = {};
 HG_NAV_GROUPS.forEach(function(g){ g.tabs.forEach(function(t){ HG_TAB_GROUP[t] = g.id; }); });

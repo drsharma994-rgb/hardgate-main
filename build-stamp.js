@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v296',
-  pack: 'super best populate fix',
-  built: '2026-08-15T09:15:00Z',
-  note: 'superBestHydrateFromBest · afterScan paints merged snap · empty warm rescan'
+  version: 'hg-v297',
+  pack: 'omniroute strategy ingestion tab',
+  built: '2026-08-15T13:00:00Z',
+  note: 'OMNIROUTE tab · static coverage matrix vs gate inventory · optional gateway ingest'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
