@@ -601,6 +601,33 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return { e21: e21, e50: e50, bars: d1.length };
   }
 
+  /* Crypto regime from BTC's own daily trend. PURE given rows.
+     Why this exists: regime.js runs an 8-gauge scan (CoinGecko, DeFiLlama,
+     alternative.me, macro) and in the field its headless warm returned
+     "unavailable: every gauge source failed" on every scan, leaving the gate
+     permanently UNCHECKED. Rather than depend on eight third-party sources
+     that demonstrably do not all resolve in this browser, derive the read
+     that actually matters for alt perps — what BTC is doing — from Binance
+     klines, an endpoint this very scan already proves reachable (OI, taker
+     and depth all resolve against it).
+     Deliberately narrower than regime.js: this is BTC trend only, so it is
+     used as a FALLBACK and labelled as such, never presented as the full
+     8-gauge verdict. */
+  function hgOmniBtcRegime(dailyRows){
+    if (!dailyRows || dailyRows.length < DAILY_SLOW + 2) return null;
+    var c = closesOf(dailyRows);
+    var fast = emaOf(c.slice(-(DAILY_FAST * 2)), DAILY_FAST), slow = emaOf(c, DAILY_SLOW);
+    var last = c.length ? c[c.length - 1] : NaN;
+    if (!isFinite(fast) || !isFinite(slow) || !isFinite(last)) return null;
+    var up = fast >= slow && last >= slow;
+    var down = fast < slow && last < slow;
+    return {
+      label: up ? 'RISK-ON' : (down ? 'RISK-OFF' : 'MIXED'),
+      source: 'btc-daily-proxy',
+      detail: 'BTC daily EMA' + DAILY_FAST + (fast >= slow ? ' ≥ ' : ' < ') + 'EMA' + DAILY_SLOW
+    };
+  }
+
   /* ==================== pure: the gate ledger ==================== */
 
   /* Each gate returns {key, hard, pass, why}. pass:null means UNKNOWN — the
@@ -760,12 +787,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var rg = null;
     var rgWhy = x.regimeWarm ? ('regime unavailable — warm reported: ' + x.regimeWarm)
                              : 'regime module has not run';
+    var rgProxy = (x.regime && x.regime.source === 'btc-daily-proxy');
     if (x.regime && x.regime.label){
       var lbl = String(x.regime.label).toUpperCase();
       if (lbl.indexOf('RISK-ON') >= 0) { rg = (hit.dir === 'long'); }
       else if (lbl.indexOf('RISK-OFF') >= 0) { rg = (hit.dir === 'short'); }
       else rg = true;                            // neutral tape blocks nothing
-      rgWhy = 'regime ' + x.regime.label + (rg ? '' : ' — against the setup side');
+      rgWhy = 'regime ' + x.regime.label
+            + (rgProxy ? (' (BTC daily proxy — regime.js gauges unavailable' + (x.regime.detail ? '; ' + x.regime.detail : '') + ')') : '')
+            + (rg ? '' : ' — against the setup side');
     }
     gates.push({ key:'regime', hard:false, pass: rg, why: rgWhy });
 
@@ -1410,6 +1440,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }).catch(function(e){
         __omni.regimeWarm = 'threw: ' + ((e && e.message) || e);
         return null;
+      }).then(function(){
+        /* If the 8-gauge module produced nothing, fall back to a BTC daily
+           read off Binance klines — one request, an endpoint this scan
+           already relies on. Failure here simply leaves the gate UNCHECKED. */
+        __omni.regimeProxy = null;
+        if (typeof W.regimeState === 'function' && W.regimeState()) return null;
+        if (typeof W.binanceKlines !== 'function') return null;
+        return Promise.resolve().then(function(){ return W.binanceKlines('BTCUSDT', '1d', 120); })
+          .then(function(rows){ __omni.regimeProxy = hgOmniBtcRegime(rows); })
+          .catch(function(){ __omni.regimeProxy = null; });
       });
     }
 
@@ -1567,6 +1607,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             if (!ex.regime && typeof W.regimeState === 'function'){
               try { ex.regime = W.regimeState(); } catch (er) { ex.regime = null; }
             }
+            if (!ex.regime && __omni.regimeProxy) ex.regime = __omni.regimeProxy;
             if (!ex.regime) ex.regimeWarm = __omni.regimeWarm || null;
             var pos = null;
             if (typeof W.xuPositioning === 'function'){
@@ -1598,7 +1639,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            dead data source read as a completed sweep. */
         if (res.failed) caveat += '  · ' + res.failed + ' candle fetches FAILED (rate limit or venue down)';
         if (__omni.regimeWarm && __omni.regimeWarm !== 'fresh' && __omni.regimeWarm !== 'warmed'){
-          caveat += '  · regime gate unavailable (' + __omni.regimeWarm + ')';
+          caveat += __omni.regimeProxy
+            ? ('  · regime.js gauges unavailable (' + __omni.regimeWarm + ') — using BTC daily proxy')
+            : ('  · regime gate unavailable (' + __omni.regimeWarm + ')');
         }
         omniSafeStat(ui, __omni.lastStat + caveat);
         try{ ui.pool.innerHTML = renderPooled(res.pooled); }catch(eP){
@@ -1799,6 +1842,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniResample = hgOmniResample;
     window.hgOmniDropForming = hgOmniDropForming;
     window.hgOmniDailyHtf = hgOmniDailyHtf;
+    window.hgOmniBtcRegime = hgOmniBtcRegime;
     window.hgOmniDerivePlan = hgOmniDerivePlan;
     window.hgOmniBtStop = hgOmniBtStop;
     window.hgOmniWalkForward = hgOmniWalkForward;

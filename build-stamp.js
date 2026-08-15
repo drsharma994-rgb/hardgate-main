@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v307',
-  pack: 'omniroute regime diagnosis',
-  built: '2026-08-15T18:00:00Z',
-  note: 'a dead regime gate now names the reason the warm failed instead of always saying it never ran'
+  version: 'hg-v308',
+  pack: 'omniroute btc regime proxy',
+  built: '2026-08-15T18:20:00Z',
+  note: 'regime.js 8-gauge warm fails in-browser, so fall back to BTC daily off binance klines and label the source'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

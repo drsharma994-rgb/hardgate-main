@@ -323,6 +323,42 @@ for (const [name, mk, gateKey] of fields){
   ok(live.pass === true && /RISK-ON/.test(live.why), 'a live regime read evaluates normally');
 }
 
+/* ---- 15. BTC daily regime proxy ----
+   regime.js's headless warm returned "unavailable: every gauge source
+   failed" on every live scan, leaving the gate permanently UNCHECKED. Its 8
+   gauges span CoinGecko / DeFiLlama / alternative.me / macro; rather than
+   depend on all of them resolving, fall back to BTC's own daily trend off
+   Binance klines — an endpoint the same scan already proves reachable. It is
+   deliberately NARROWER than the 8-gauge verdict, so it must say so. */
+{
+  const daily = (dir, n) => {
+    let px = 100; const r = [];
+    for (let i = 0; i < n; i++){
+      const o = px, c = px + (dir === 'up' ? 0.8 : -0.8);
+      r.push({ t: 1700000000 + i * 86400, o, h: Math.max(o,c)+0.3, l: Math.min(o,c)-0.3, c, v: 1000 });
+      px = c;
+    }
+    return r;
+  };
+  const up = win.hgOmniBtcRegime(daily('up', 60));
+  const dn = win.hgOmniBtcRegime(daily('dn', 60));
+  ok(up && up.label === 'RISK-ON',  'a BTC daily uptrend reads RISK-ON');
+  ok(dn && dn.label === 'RISK-OFF', 'a BTC daily downtrend reads RISK-OFF');
+  ok(up.source === 'btc-daily-proxy', 'the proxy identifies its own source');
+  ok(win.hgOmniBtcRegime(daily('up', 10)) === null, 'too little daily history returns null rather than a guess');
+  ok(win.hgOmniBtcRegime(null) === null, 'proxy is null-safe');
+
+  const g = win.hgOmniGates(rows, { kind:'MMOVE', dir:'long', level:1, why:'t' }, null, { regime: up })
+               .filter(x => x.key === 'regime')[0];
+  ok(g.pass === true, 'the proxy read drives the gate');
+  ok(/BTC daily proxy/.test(g.why), 'the card discloses that this is the proxy, not the 8-gauge verdict');
+  ok(/gauges unavailable/.test(g.why), 'and says why the fuller source was not used');
+
+  const real = win.hgOmniGates(rows, { kind:'MMOVE', dir:'long', level:1, why:'t' }, null,
+                               { regime:{ label:'RISK-ON' } }).filter(x => x.key === 'regime')[0];
+  ok(!/proxy/.test(real.why), 'a genuine regime.js read carries no proxy caveat');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }
