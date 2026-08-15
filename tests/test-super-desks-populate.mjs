@@ -29,7 +29,7 @@ var kept = W.hgSuperDeskMergeSnap(
 ok(kept.cands.length === 1 && kept.stat === '2 setups', 'merge snap keeps populated cands');
 
 const deskFiles = [
-  ['super-best.js', ['superBestAfterScan', 'mergePublishSuperBestSnap', 'warmBestSnapInline']],
+  ['super-best.js', ['superBestAfterScan', 'mergePublishSuperBestSnap', 'superBestHydrateFromBest', 'warmBestSnapInline']],
   ['super-sniper.js', ['superSniperAfterScan', 'mergePublishSuperSniperSnap']],
   ['super-gold.js', ['mergePublishSuperGoldSnap', 'superGoldAfterScan', 'publishSuperGoldSnap']],
   ['super-book.js', ['buildSnapFromBook', 'refreshBook']],
