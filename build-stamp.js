@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v295',
-  pack: 'global 5min scan all tabs',
-  built: '2026-08-14T23:30:00Z',
-  note: 'hgScanAllTabs every 5m · nav+subtab+pine · super desk 5m cycle'
+  version: 'hg-v296',
+  pack: 'super best populate fix',
+  built: '2026-08-15T09:15:00Z',
+  note: 'superBestHydrateFromBest · afterScan paints merged snap · empty warm rescan'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

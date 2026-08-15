@@ -181,6 +181,29 @@ function buildSnapFromBestScan(win, riskOpts, opts){
     var raw = bestCandFromClean(c, scanned);
     if (!raw || !(raw.entry > 0 && raw.stop > 0)) return;
     var row = enrichSuperBestRow(raw, 'clean', riskOpts, { source: 'best', scanner: 'best', at: scanned });
+    if (!row){
+      row = {
+        id: raw.id,
+        sym: raw.sym,
+        dir: raw.dir,
+        entry: raw.entry,
+        stop: raw.stop,
+        t1: raw.t1,
+        t2: raw.t2,
+        rr: raw.rr,
+        tp: raw.t1,
+        tier: 'clean',
+        scanner: 'best',
+        famScore: c.famScore,
+        robScore: c.robScore,
+        stack: raw.stack || null,
+        rows: raw.rows || null,
+        venueTag: raw.venueTag || null,
+        sizingPass: false,
+        minimalLossPass: false,
+        riskReason: 'BEST desk — sizing not evaluated'
+      };
+    }
     if (row){
       row.famScore = c.famScore;
       row.robScore = c.robScore;
@@ -260,12 +283,17 @@ async function warmBestSnapInline(win){
 
 function superBestScan(){ return __hgSuperBestSnap; }
 
-function syncDeskFromExisting(win, riskOpts){
+function superBestHydrateFromBest(win, riskOpts){
+  win = win || W;
+  riskOpts = riskOpts || defaultRiskOpts(win);
   var snap = buildSnapFromBestScan(win, riskOpts, { allowStale: true });
   snap.scanAt = __sb.lastScanAt || snap.at || Date.now();
   snap.hydrated = true;
-  publishSuperBestSnap(snap);
-  return snap;
+  return mergePublishSuperBestSnap(snap);
+}
+
+function syncDeskFromExisting(win, riskOpts){
+  return superBestHydrateFromBest(win, riskOpts);
 }
 
 function hitToEvaluation(hit){
@@ -313,11 +341,12 @@ function superBestAfterScan(snap){
   snap = snap || superBestScan();
   if (!snap) return;
   mergePublishSuperBestSnap(snap);
-  __sb.lastScanMsg = snap.stat || 'done';
+  snap = superBestScan();
+  __sb.lastScanMsg = (snap && snap.stat) ? snap.stat : 'done';
   if (__sb.mounted && typeof __sb.setScanStatus === 'function') __sb.setScanStatus(__sb.lastScanMsg);
   if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(snap);
   if (__sb.mounted && typeof __sb.applyFirstSetup === 'function') __sb.applyFirstSetup(false);
-  if (typeof W.hgSuperDeskEnrichChartVision === 'function' && snap.cands && snap.cands.length){
+  if (typeof W.hgSuperDeskEnrichChartVision === 'function' && snap && snap.cands && snap.cands.length){
     W.hgSuperDeskEnrichChartVision(snap.cands, {
       style: 'super-best', cleanOnly: true, limit: 6,
       repaint: __sb.mounted && typeof __sb.paintVision === 'function' ? __sb.paintVision : null
@@ -371,8 +400,17 @@ async function superBestRunScan(opts){
 
 async function superBestWarm(opts){
   opts = opts || {};
+  var snap = superBestScan();
+  var empty = !snap || !snap.cands || !snap.cands.length;
+  if (empty){
+    snap = superBestHydrateFromBest(W, defaultRiskOpts());
+    if (snap && snap.cands && snap.cands.length){
+      if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(snap);
+      return 'hydrated';
+    }
+  }
   var stale = !__sb.lastScanAt || (Date.now() - __sb.lastScanAt) >= SCAN_INTERVAL_MS;
-  if (stale || opts.force) return superBestRunScan({ force: !!opts.force });
+  if (stale || opts.force || empty) return superBestRunScan({ force: !!(opts.force || empty) });
   return 'fresh';
 }
 
@@ -389,7 +427,7 @@ function mount(el){
     '  <div class="hg-note">Conviction desk — BEST tab CLEAN pool only (7/7 gates + family/robustness stack).</div>',
     '  <div id="sb-validation"></div>',
     '  <div class="hg-card"><h3>BEST Universe Desk</h3>',
-    '    <div class="hg-note" id="sb-scan-stat">Next scan on tab open · 15 min cycle</div>',
+    '    <div class="hg-note" id="sb-scan-stat">Next scan on tab open · 5 min cycle</div>',
     '    <button type="button" class="hg-btn primary" id="sb-run-scan" style="margin-top:8px">Run BEST scan now</button>',
     '    <div class="hg-desk" id="sb-desk" style="margin-top:12px"></div>',
     '    <div id="sb-vision" style="margin-top:10px"></div>',
@@ -540,10 +578,9 @@ function mount(el){
   }
 
   function syncFromExistingDesks(){
-    var snap = syncDeskFromExisting(W, readRiskOpts());
-    mergePublishSuperBestSnap(snap);
+    var snap = superBestHydrateFromBest(W, readRiskOpts());
     applyFirstSetup(true);
-    return superBestScan();
+    return snap;
   }
 
   __sb.setScanStatus = setScanStatus;
@@ -584,26 +621,23 @@ function mount(el){
 }
 
 function superBestRepaint(){
-  if (!__sb.mounted) return;
   var snap = superBestScan();
   if (!snap || !snap.cands || !snap.cands.length){
-    snap = syncDeskFromExisting(W, defaultRiskOpts());
-    mergePublishSuperBestSnap(snap);
-    snap = superBestScan();
+    snap = superBestHydrateFromBest(W, defaultRiskOpts());
   }
+  if (!__sb.mounted) return;
   if (typeof __sb.paintDesk === 'function') __sb.paintDesk(snap);
   if (typeof __sb.applyFirstSetup === 'function') __sb.applyFirstSetup(false);
 }
 
 async function superBestRefresh(){
   try{
-    if (__sb.mounted && typeof __sb.paintDesk === 'function'){
-      syncDeskFromExisting(W, defaultRiskOpts());
-      __sb.paintDesk(superBestScan());
-    }
+    var snap = superBestHydrateFromBest(W, defaultRiskOpts());
+    if (__sb.mounted && typeof __sb.paintDesk === 'function') __sb.paintDesk(snap);
     var stale = !__sb.lastScanAt || (Date.now() - __sb.lastScanAt) >= SCAN_INTERVAL_MS;
-    if (stale) await superBestRunScan({ force: true });
-    return stale ? 'scanned+refreshed' : 'refreshed';
+    var empty = !snap || !snap.cands || !snap.cands.length;
+    if (stale || empty) await superBestRunScan({ force: true });
+    return (stale || empty) ? 'scanned+refreshed' : 'refreshed';
   }catch(e){ return 'error'; }
 }
 
@@ -611,6 +645,7 @@ W.superBestDeskPill = superBestDeskPill;
 W.enrichSuperBestRow = enrichSuperBestRow;
 W.enrichSuperBestRowLite = enrichSuperBestRowLite;
 W.buildSnapFromBestScan = buildSnapFromBestScan;
+W.superBestHydrateFromBest = superBestHydrateFromBest;
 W.superBestSyncDesk = syncDeskFromExisting;
 W.warmBestSnapInline = warmBestSnapInline;
 W.mergePublishSuperBestSnap = mergePublishSuperBestSnap;

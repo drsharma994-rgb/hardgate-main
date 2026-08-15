@@ -748,14 +748,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=295"></script>
+<script src="supersetup.js?v=296"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=295"></script>
-<script src="super-gold.js?v=295"></script>
-<script src="super-best.js?v=295"></script>
-<script src="super-sniper.js?v=295"></script>
-<script src="super-book.js?v=295"></script>
-<script src="super-calibrate.js?v=295"></script>
+<script src="super-desk-common.js?v=296"></script>
+<script src="super-gold.js?v=296"></script>
+<script src="super-best.js?v=296"></script>
+<script src="super-sniper.js?v=296"></script>
+<script src="super-book.js?v=296"></script>
+<script src="super-calibrate.js?v=296"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2832,6 +2832,7 @@ function showTab(t){
   }
   if (t === 'super-best'){
     try{
+      if (typeof window.superBestHydrateFromBest === 'function') window.superBestHydrateFromBest();
       if (typeof window.superBestRepaint === 'function') window.superBestRepaint();
     }catch(eSb){}
   }

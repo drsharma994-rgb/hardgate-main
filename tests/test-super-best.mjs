@@ -23,7 +23,7 @@ function ok(c, m){ if (c){ pass++; console.log('ok    - ' + m); } else { fail++;
 ok(typeof W.buildSnapFromBestScan === 'function', 'buildSnapFromBestScan exported');
 ok(typeof W.superBestRunScan === 'function', 'superBestRunScan exported');
 ok(typeof W.mergePublishSuperBestSnap === 'function', 'mergePublishSuperBestSnap exported');
-ok(typeof W.warmBestSnapInline === 'function', 'warmBestSnapInline exported');
+ok(typeof W.superBestHydrateFromBest === 'function', 'superBestHydrateFromBest exported');
 
 const now = Date.now();
 W.calcTrade = function(opts){
@@ -62,6 +62,19 @@ W.mergePublishSuperBestSnap({
 W.mergePublishSuperBestSnap({ at: now, cands: [], stat: '0 BEST CLEAN — stale tick' });
 const kept = W.superBestScan();
 ok(kept.cands.length === 1 && kept.stat.indexOf('1 BEST CLEAN') === 0, 'mergePublish keeps prior cands when rebuild empty');
+
+W.calcTrade = function(){ throw new Error('calc down'); };
+const snapNoCalc = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1 });
+ok(snapNoCalc.cands.length === 1 && snapNoCalc.cands[0].sym === 'ETHUSD', 'fallback row when calcTrade throws');
+
+W.mergePublishSuperBestSnap({ at: now, cands: [{ id: 'x', sym: 'X', dir: 'long', entry: 1, stop: 2 }], stat: '1 BEST CLEAN' });
+W.mergePublishSuperBestSnap({ at: now, cands: [], stat: '0 BEST CLEAN — tick' });
+const mergedSnap = W.superBestScan();
+ok(mergedSnap.cands.length === 1, 'hydrate merge keeps desk rows');
+
+W.bestScan = function(){ return { at: now, clean: [{ sym: 'SOLUSD', dir: 'long', entry: 10, stop: 9, t1: 12, rr: 2, famScore: 5, robScore: 1 }] }; };
+const hydrated = W.superBestHydrateFromBest(W, { balance: 1000, riskPct: 1 });
+ok(hydrated.cands.length === 1 && hydrated.cands[0].sym === 'SOLUSD', 'hydrateFromBest maps BEST snap');
 
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 ok(new RegExp('super-best\\.js\\?v=' + HG_VER.replace('hg-v', '')).test(html), 'super-best in index');
