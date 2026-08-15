@@ -5,8 +5,8 @@
   "lastRunAt": "2026-08-14T06:01:50.730Z",
   "ticket": {
     "long": {
-      "sym": "B-GWEI_USDT",
-      "entry": 0.02559994990200941
+      "sym": "B-HEI_USDT",
+      "entry": 0.1404591773372846
     },
     "short": null
   },
@@ -26,91 +26,46 @@
     "at": "2026-08-15T03:20:45.324Z"
   },
   "squeeze": {
-    "key": "B-AIO_USDT:long;B-AVAX_USDT:long;B-GWEI_USDT:long;B-LINK_USDT:long;B-PIEVERSE_USDT:long;B-PRL_USDT:long;B-ROBO_USDT:long;B-ZAMA_USDT:short",
+    "key": "B-AIO_USDT:long;B-HEI_USDT:long;B-RONIN_USDT:short",
     "rows": [
+      {
+        "sym": "B-HEI_USDT",
+        "dir": "long",
+        "kind": "fired",
+        "entry": 0.15055,
+        "stop": 0.11561173402043087,
+        "t1": 0.22042653195913822,
+        "t2": 0.2728339309284919
+      },
       {
         "sym": "B-AIO_USDT",
         "dir": "long",
         "kind": "fired",
-        "entry": 0.04948,
-        "stop": 0.04322553896795762,
-        "t1": 0.061988922064084774,
-        "t2": 0.07137061361214836
+        "entry": 0.05168,
+        "stop": 0.04581014322279776,
+        "t1": 0.06341971355440448,
+        "t2": 0.07222449872020784
       },
       {
-        "sym": "B-GWEI_USDT",
-        "dir": "long",
-        "kind": "fired",
-        "entry": 0.0256,
-        "stop": 0.022160101818458885,
-        "t1": 0.032479796363082236,
-        "t2": 0.037639643635393905
-      },
-      {
-        "sym": "B-ZAMA_USDT",
+        "sym": "B-RONIN_USDT",
         "dir": "short",
         "kind": "fired",
-        "entry": 0.04444,
-        "stop": 0.04639875596467959,
-        "t1": 0.040522488070640815,
-        "t2": 0.037584354123621426
-      },
-      {
-        "sym": "B-LINK_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 9.703,
-        "stop": 9.441234612358064,
-        "t1": 10.22653077528387,
-        "t2": 10.619178856746771
-      },
-      {
-        "sym": "B-AVAX_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 6.788,
-        "stop": 6.601277317042281,
-        "t1": 7.161445365915439,
-        "t2": 7.441529390352018
-      },
-      {
-        "sym": "B-ROBO_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 0.01855,
-        "stop": 0.017023334622861968,
-        "t1": 0.021603330754276066,
-        "t2": 0.023893328819983115
-      },
-      {
-        "sym": "B-PRL_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 0.3797,
-        "stop": 0.3577471748494242,
-        "t1": 0.42360565030115155,
-        "t2": 0.45653488802701525
-      },
-      {
-        "sym": "B-PIEVERSE_USDT",
-        "dir": "long",
-        "kind": "break",
-        "entry": 0.8305,
-        "stop": 0.7824001607452254,
-        "t1": 0.9266996785095492,
-        "t2": 0.998849437391711
+        "entry": 0.04679,
+        "stop": 0.0492089784265275,
+        "t1": 0.04195204314694499,
+        "t2": 0.038323575507153734
       }
     ],
-    "at": "2026-08-15T03:20:45.325Z"
+    "at": "2026-08-15T04:05:08.992Z"
   },
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-15T03:20:45.325Z"
+    "at": "2026-08-15T04:05:08.993Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-15T03:20:45.326Z"
+    "at": "2026-08-15T04:05:08.993Z"
   },
   "degraded": {
     "count": 0,
@@ -132,7 +87,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-15T03:20:45.693Z"
+    "at": "2026-08-15T04:05:09.426Z"
   },
   "bookFill": {
     "key": "u0|p0",
