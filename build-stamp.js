@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v314',
-  pack: 'pooled verdict made symmetric',
-  built: '2026-08-15T20:45:00Z',
-  note: 'has-paid required only expR>0 while failure required -2sigma — now +2sigma both ways, with the sample count each unproven row would need'
+  version: 'hg-v315',
+  pack: 'omnigold takes all available history',
+  built: '2026-08-15T21:00:00Z',
+  note: '1500 bars per horizon — the data layer ceiling; swing gains 3x and finally clears the judge threshold'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

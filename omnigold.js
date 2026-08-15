@@ -77,10 +77,16 @@ terse status, and never launches a first-time scan on a global refresh.
      minAtrPct is per-horizon because ATR% scales with the square root of bar
      length: holding 1h bars to a 4h threshold vetoed live setups as "too
      dead" that were merely intraday. */
+  /* 1500 is the ceiling the data layer can actually deliver: getGoldCandles
+     accepts up to 5000 but delegates to binanceKlines, which caps a single
+     request at 1500 and offers no pagination. Taking all of it is free and
+     it is the only lever left on sample count — 1500x1h is ~62 days,
+     1500x4h ~250 days. The swing horizon gains most (3x), which is where
+     nearly every row read "too few to judge". */
   var HORIZONS = {
-    scalp: { tf: '1h', bars: 1000, minRr: 1.5, horizonBars: 24, warm: 60, label: 'SCALP',
+    scalp: { tf: '1h', bars: 1500, minRr: 1.5, horizonBars: 24, warm: 60, label: 'SCALP',
              minAtrPct: 0.05, sessionHard: true },
-    swing: { tf: '4h', bars: 500,  minRr: 2.0, horizonBars: 20, warm: 45, label: 'SWING',
+    swing: { tf: '4h', bars: 1500, minRr: 2.0, horizonBars: 20, warm: 45, label: 'SWING',
              minAtrPct: 0.12, sessionHard: false }
   };
 
