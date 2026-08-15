@@ -815,7 +815,7 @@ console.log('== 13) wiring edits (index.html HG_NAV_GROUPS + sw.js) ==');
 {
   const html = fs.readFileSync(root + 'index.html', 'utf8');
   const gLine = (html.match(/\{ id:'gold'[^\n]*\n?/) || [''])[0];
-  assert(/tabs:\['super-gold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'\]/.test(gLine),
+  assert(/tabs:\['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'\]/.test(gLine),
          'GOLD group: super desk first, then swing/scalp scanners — got: ' + gLine.trim());
   const sw = fs.readFileSync(root + 'sw.js', 'utf8');
   assert(/HG_CACHE\s*=\s*'hg-v\d+'/.test(sw), 'service worker cache is hg-vN (alerts workstream)');

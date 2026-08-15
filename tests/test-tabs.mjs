@@ -261,7 +261,7 @@ assert(REQUIRED_TABS.every(([id]) => run('HG_TAB_MODS[' + JSON.stringify(id) + '
 const EXPECTED_GROUPS = {
   overview:   ['brain', 'book', 'trade', 'log', 'news', 'bias', 'regime', 'trendmx', 'rotation', 'execute', 'startrader'],
   crypto:     ['best', 'swing', 'scalp', 'edge', 'smart', 'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex', 'oiflow', 'liqs', 'onchain', 'chartvision', 'carry', 'venueprem', 'termbasis'],
-  gold:       ['super-gold', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog'],
+  gold:       ['super-gold', 'omnigold', 'goldswing', 'goldscalp', 'gold', 'goldpro', 'goldspot', 'goldcoint', 'goldpine', 'signallog'],
   strategies: ['super-setup', 'super-best', 'super-sniper', 'super-book', 'super-calibrate', 'pine', 'pine-msb', 'pine-sqz', 'pine-smf', 'pine-ht', 'pine-smc', 'pine-cipher', 'pine-rf', 'pine-nw', 'pine-avwap', 'strats', 'meanrev', 'formationlab', 'scorecard', 'reliability'],
   tools:      ['risk', 'basis', 'search', 'finder', 'tradeos', 'hey', 'aiagent', 'omniroute']
 };

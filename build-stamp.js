@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v309',
-  pack: 'omniroute news gate no longer passes on a default',
-  built: '2026-08-15T18:40:00Z',
-  note: 'unloaded news module returned risk:low and read as PASS — now UNCHECKED · news warmed and read for every contract'
+  version: 'hg-v310',
+  pack: 'omnigold — gold desk setups, scalp + swing',
+  built: '2026-08-15T19:10:00Z',
+  note: 'OMNIGOLD tab on the omniroute engine · asia break / killzone judas / adr fade / round magnet · gold gate ledger replaces the perp gates'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

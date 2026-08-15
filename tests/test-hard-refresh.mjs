@@ -187,7 +187,7 @@ assert(groupTabs('overview') === 'brain,book,trade,log,news,bias,regime,trendmx,
   'COMMAND group: workflow then context');
 assert(groupTabs('crypto') === 'best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis',
   'CRYPTO group: ranked scans → structure → flow → funding');
-assert(groupTabs('gold') === 'super-gold,goldswing,goldscalp,gold,goldpro,goldspot,goldcoint,goldpine,signallog',
+assert(groupTabs('gold') === 'super-gold,omnigold,goldswing,goldscalp,gold,goldpro,goldspot,goldcoint,goldpine,signallog',
   'GOLD group: super desk first, then scanners');
 assert(run("HG_TAB_GROUP.rotation") === 'overview' && run("HG_TAB_GROUP.onchain") === 'crypto'
     && run("HG_TAB_GROUP.goldspot") === 'gold',

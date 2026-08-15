@@ -726,6 +726,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldscalp.js"></script>
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
+<!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
+<script src="omnigold.js"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -2699,7 +2701,7 @@ async function runObScanLeg(opts){
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
   { id:'crypto',     label:'CRYPTO',   tabs:['best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
-  { id:'gold',       label:'GOLD',     tabs:['super-gold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
+  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent','omniroute'] },
 ];
