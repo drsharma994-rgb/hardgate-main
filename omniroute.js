@@ -725,15 +725,32 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 9 — book depth vs the stop distance. A stop that sits inside the
        slippage envelope is not a stop, it is a donation. */
-    var lq = null, lqWhy = 'order book not available for this contract';
+    /* Depth comes from BINANCE (binanceDepth on base+USDT), which is not the
+       venue this contract trades on. That distinction matters more here than
+       for the other Binance reads: OI, retail and taker are market-wide
+       STATE, but book depth is about YOUR FILL, and CoinDCX/Delta books are
+       typically far thinner than Binance's. The inference is only valid in
+       one direction — if the deepest venue is thin the trade venue is
+       certainly thin (a veto is sound), but a PASS says nothing about
+       whether YOUR book can absorb the stop. The label now says so instead
+       of implying the trade venue was measured. */
+    var lq = null, lqWhy = 'reference order book not available for this contract';
     var dBid = x.depth ? fin(x.depth.bidUsd) : NaN, dAsk = x.depth ? fin(x.depth.askUsd) : NaN;
+    var venue = String((x.exchange || '')).toLowerCase();
+    var isBinanceVenue = venue === 'binance';
     if (isFinite(dBid) && isFinite(dAsk)){
       var side = (hit.dir === 'long') ? dBid : dAsk;
       lq = side >= 25000;                       // top-20 levels, USD notional
-      lqWhy = 'top-of-book ' + Math.round(side).toLocaleString() + ' USD'
-            + (lq ? '' : ' — too thin, slippage would eat the stop');
+      lqWhy = (isBinanceVenue ? 'top-of-book ' : 'BINANCE reference top-of-book ')
+            + Math.round(side).toLocaleString() + ' USD'
+            + (lq ? (isBinanceVenue ? '' : ' — your ' + (venue || 'venue') + ' book was NOT measured and is likely thinner')
+                  : ' — too thin even on Binance, slippage would eat the stop');
     }
-    gates.push({ key:'book-depth', hard:false, pass: lq, why: lqWhy });
+    /* Key stays STABLE — it is an identifier that veto lists and any
+       downstream consumer match on, so it must not vary with the payload.
+       The venue caveat rides in `why` and in an explicit `source` field. */
+    gates.push({ key:'book-depth', hard:false, pass: lq, why: lqWhy,
+                 source: isBinanceVenue ? 'venue' : 'binance-reference' });
 
     /* 10 — market regime: do not buy dips in a risk-off tape */
     var rg = null, rgWhy = 'regime module has not run';
@@ -854,6 +871,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       /* UTAD is measured under SPRING — same detector family in the backtest pool */
       var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
       exForHit.stats = (ex.stats && ex.stats[statKey]) ? ex.stats[statKey] : null;
+      exForHit.exchange = item && item.exchange;
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       var plan = null;
@@ -1362,13 +1380,33 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     ui.cards.innerHTML = '';
     omniSafeStat(ui, 'loading Delta + CoinDCX universe…');
 
+    /* Warm the regime read once per scan. regimeState() stays null until the
+       REGIME tab has run, which is why every live card reported "regime
+       module has not run" — the gate was structurally unreachable for anyone
+       who had not opened that tab first. regime.js registers a headless
+       warmup on HG_warmups for exactly this; it returns 'fresh' when already
+       computed, so this is cheap on repeat scans. Best-effort: a failure
+       leaves the gate UNCHECKED, which is its honest previous state. */
+    function warmRegime(){
+      return Promise.resolve().then(function(){
+        if (typeof W.regimeState === 'function' && W.regimeState()) return 'fresh';
+        var hooks = W.HG_warmups;
+        if (!hooks || !hooks.length) return 'no warmup registered';
+        var rg = null, i;
+        for (i = 0; i < hooks.length; i++) if (hooks[i] && hooks[i].id === 'regime') rg = hooks[i];
+        if (!rg || typeof rg.run !== 'function') return 'no regime warmup';
+        omniSafeStat(ui, 'warming market regime…');
+        return rg.run();
+      }).catch(function(){ return 'regime warm failed'; });
+    }
+
     /* A REJECTED xuUniverse() is the same situation as a returned [] — no
        universe — so route it to the same honest message instead of the
        generic catch. The distinction matters to the reader: "no contracts
        came back" is a data-source problem, not a quiet market. Also guards
        a synchronous throw, which .then() alone would not catch. */
     var uniErr = null;
-    return Promise.resolve().then(function(){ return W.xuUniverse(); })
+    return warmRegime().then(function(){ return W.xuUniverse(); })
       .catch(function(err){ uniErr = omniErrMsg(err); return null; })
       .then(function(uni){
       uni = uni || [];

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v305',
-  pack: 'omniroute evidence coverage + free daily HTF',
+  version: 'hg-v306',
+  pack: 'omniroute regime warm + honest depth source',
   built: '2026-08-15T16:15:00Z',
-  note: 'daily HTF needs no network so every card gets it · tickets show n/12 checks and rank by evidence · enrich ceiling 60->120'
+  note: 'regime warmed headlessly so the gate can run · book depth labelled as a BINANCE reference, not your venue book'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -273,6 +273,32 @@ for (const [name, mk, gateKey] of fields){
   ok(ranked[0].base === 'FULL', 'at equal R:R the better-evidenced ticket ranks first');
 }
 
+/* ---- 13. book depth must not pass off Binance's book as the trade venue's ----
+   Depth comes from binanceDepth(base+USDT). For a CoinDCX or Delta contract
+   that is NOT the book the order would hit, and unlike OI/retail/taker
+   (market-wide state) this gate is about the fill. The inference is valid in
+   one direction only: thin on the deepest venue implies thin everywhere, but
+   deep on Binance says nothing about CoinDCX. */
+{
+  const hit = { kind:'MMOVE', dir:'short', level:99, why:'t' };
+  const depthGate = (exchange, usd) =>
+    win.hgOmniGates(rows, hit, null, { depth:{ bidUsd:usd, askUsd:usd }, exchange })
+       .filter(g => g.key === 'book-depth')[0];
+
+  const cdcx = depthGate('coindcx', 58466);
+  ok(cdcx.key === 'book-depth', 'the gate key is stable regardless of venue (identifiers must not vary with data)');
+  ok(cdcx.source === 'binance-reference', 'a non-Binance venue marks the reading as a reference');
+  ok(/BINANCE reference/.test(cdcx.why), 'the source venue is named on the card');
+  ok(/NOT measured/.test(cdcx.why), 'a pass states plainly that the trade venue book was not measured');
+
+  const binance = depthGate('binance', 58466);
+  ok(binance.source === 'venue', 'on Binance itself the reading IS the trade venue book');
+  ok(!/reference/.test(binance.why), 'and carries no reference caveat');
+
+  ok(depthGate('coindcx', 4000).pass === false,
+     'thin on Binance still vetoes — that inference direction IS valid');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }
