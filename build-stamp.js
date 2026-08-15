@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v304',
-  pack: 'omniroute honest R:R + right model per family',
+  version: 'hg-v305',
+  pack: 'omniroute evidence coverage + free daily HTF',
   built: '2026-08-15T16:15:00Z',
-  note: 'R:R was overstated 5-7x · reversion setups no longer vetoed for being counter-trend · measured-edge by significance · every fired contract now carded'
+  note: 'daily HTF needs no network so every card gets it · tickets show n/12 checks and rank by evidence · enrich ceiling 60->120'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

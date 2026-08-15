@@ -114,8 +114,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var BARS = 180;
   var CHUNK = 4;          // venue-leg concurrency for pass 1 (gentle on /api/proxy)
   var CHUNK_DELAY_MS = 80; // pause between pass-1 batches — avoids 429 mid-scan
-  var ENRICH_CHUNK = 2;   // gentler: pass 2 hits Binance endpoints
-  var ENRICH_MAX = 60;    // hard ceiling on pass 2, reported when it bites
+  var ENRICH_CHUNK = 4;   // pass 2 hits Binance (CORS-open, 60s cached)
+  var ENRICH_MAX = 120;   // ceiling on NETWORKED enrichment, reported when it bites
   var MIN_RR = 2;
   var RANGE_LOOKBACK = 40;
   var ORB_BARS = 3;
@@ -589,6 +589,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return pool;
   }
 
+  /* Daily EMA pair resampled from the intraday series. No network: 180 x 4h
+     is ~31 daily bars, so periods must be ones that history supports (a
+     50-period daily EMA silently returned NaN and disabled the gate). Pure. */
+  function hgOmniDailyHtf(rows){
+    var d1 = hgOmniResample(rows, 86400);
+    if (!d1 || d1.length < DAILY_SLOW + 2) return null;
+    var dc = closesOf(d1);
+    var e21 = emaOf(dc.slice(-(DAILY_FAST * 2)), DAILY_FAST), e50 = emaOf(dc, DAILY_SLOW);
+    if (!isFinite(e21) || !isFinite(e50)) return null;
+    return { e21: e21, e50: e50, bars: d1.length };
+  }
+
   /* ==================== pure: the gate ledger ==================== */
 
   /* Each gate returns {key, hard, pass, why}. pass:null means UNKNOWN — the
@@ -763,7 +775,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var pBreak = 1 / (1 + MIN_RR);
       var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, sN));
       var z = se > 0 ? ((sHit - pBreak) / se) : 0;
-      var zTxt = ' [' + (z >= 0 ? '+' : '') + z.toFixed(1) + 'σ vs breakeven]';
+      /* two decimals: a z of -1.96 rendered as "-2.0sigma ... within noise"
+         read as a contradiction against a -2 cutoff. */
+      var zTxt = ' [' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ vs breakeven]';
       if (sN < MIN_SAMPLES){
         edWhy = 'only ' + sN + ' past samples — too few to judge';
       } else if (z <= EDGE_VETO_Z && sN >= EDGE_VETO_SAMPLES){
@@ -806,8 +820,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
     }
     var ticket = vetoes.length === 0 && hardUnknown.length === 0;
+    /* How much of the ledger actually RAN. A ticket resting on 4 evaluated
+       gates is far weaker evidence than one resting on 12, and the badge
+       alone cannot show that difference — so count it and surface it. */
+    var evaluated = 0;
+    for (i = 0; i < gates.length; i++) if (gates[i].pass !== null) evaluated++;
     return {
       ticket: ticket,
+      evaluated: evaluated,
+      total: gates.length,
       vetoes: vetoes,
       unknown: hardUnknown,
       degraded: degraded,
@@ -890,6 +911,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var arr = (cands || []).slice();
     arr.sort(function(a, b){
       if (a.grade.ticket !== b.grade.ticket) return a.grade.ticket ? -1 : 1;
+      /* EVIDENCE first, R:R second. The plan engine returns its 2R floor on
+         essentially every setup, so R:R is pinned at 2.00 and discriminates
+         nothing — sorting on it was sorting on a constant. How many gates
+         actually ran is the real difference between two tickets. */
+      var ae = (a.grade && a.grade.evaluated) || 0, be = (b.grade && b.grade.evaluated) || 0;
+      if (be !== ae) return be - ae;
       var ar = isFinite(a.rr) ? a.rr : -1, br = isFinite(b.rr) ? b.rr : -1;
       if (br !== ar) return br - ar;
       return String(a.base) < String(b.base) ? -1 : 1;
@@ -1208,9 +1235,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   function setupCard(c){
     var head = esc(c.base || c.sym) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase());
+    var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
+    if (tot){
+      /* Evidence coverage sits next to the verdict, not buried in the list:
+         a 4/12 ticket and a 12/12 ticket are not the same claim. */
+      badge += ' ' + pill(ev + '/' + tot + ' checks', ev * 2 >= tot ? '' : 'bad');
+    }
     if (c.grade.ticket && c.grade.degraded && c.grade.degraded.length){
-      badge += ' ' + pill('· ' + c.grade.degraded.join(',') + ' unchecked', '');
+      badge += ' <span class="dim">· ' + esc(c.grade.degraded.join(', ')) + ' unchecked</span>';
     }
     var h = '<div class="card">';
     h += '<div class="ttl">' + head + ' ' + badge + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
@@ -1420,11 +1453,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                returned NaN every time — that is exactly why every live card
                read "htf-daily UNCHECKED — daily bars unavailable". Use periods
                the available history can actually support. */
-            var d1rows = hgOmniResample(f.rows, 86400), htf = null;
-            if (d1rows.length >= DAILY_SLOW + 2){
-              var dc = closesOf(d1rows);
-              htf = { e21: emaOf(dc.slice(-(DAILY_FAST * 2)), DAILY_FAST), e50: emaOf(dc, DAILY_SLOW) };
-            }
+            var htf = hgOmniDailyHtf(f.rows);
             var stats = hgOmniBacktestAll(f.rows, { rMult: MIN_RR, horizon: 20, warm: 45 });
             perSymbolStats.push(stats);
             enriched.push({ f: f, extra: {
@@ -1473,6 +1502,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           for (j = 0; j < fired.length; j++){
             var fitem = fired[j].item;
             var ex = exBySym[fitem.sym] || { stats: pooled };
+            /* The daily timeframe is RESAMPLED from bars already in hand — it
+               costs no network — but it used to be computed only inside the
+               enrichment step, so every contract past the enrich ceiling
+               reported "htf-daily UNCHECKED — daily bars unavailable" even
+               though the data was sitting right there. Compute it for every
+               carded contract; only genuinely networked signals belong
+               behind the ceiling. */
+            if (!ex.htf) ex.htf = hgOmniDailyHtf(fired[j].rows);
             var pos = null;
             if (typeof W.xuPositioning === 'function'){
               try { pos = W.xuPositioning(fitem.base || fitem.sym); } catch (er) { pos = null; }
@@ -1700,6 +1737,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniDetect = hgOmniDetect;
     window.hgOmniResample = hgOmniResample;
     window.hgOmniDropForming = hgOmniDropForming;
+    window.hgOmniDailyHtf = hgOmniDailyHtf;
     window.hgOmniDerivePlan = hgOmniDerivePlan;
     window.hgOmniBtStop = hgOmniBtStop;
     window.hgOmniWalkForward = hgOmniWalkForward;

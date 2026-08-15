@@ -228,6 +228,51 @@ for (const [name, mk, gateKey] of fields){
      'the card shows the sigma distance it judged on');
 }
 
+/* ---- 11. daily HTF is free and must be available to EVERY card ----
+   It was computed only inside the network-enrichment step, so every contract
+   past the enrich ceiling reported "daily bars unavailable" while the bars
+   sat in memory. */
+{
+  let seed = 9;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  let px = 100; const series = [];
+  for (let i = 0; i < 200; i++){
+    const o = px, c = px + (rnd() - 0.46) * 1.5;
+    series.push({ t: 1700000000 + i * 14400, o, h: Math.max(o,c) + rnd()*0.5, l: Math.min(o,c) - rnd()*0.5, c, v: 1000 });
+    px = c;
+  }
+  const htf = win.hgOmniDailyHtf(series);
+  ok(htf && htf.bars >= 23, '200x4h resamples to enough daily bars to run the gate (got ' + (htf ? htf.bars : 0) + ')');
+  ok(htf && isFinite(htf.e21) && isFinite(htf.e50), 'daily EMAs are finite at periods the history supports');
+  ok(win.hgOmniDailyHtf(series.slice(0, 40)) === null, 'a too-short series refuses rather than returning noise');
+  ok(win.hgOmniDailyHtf(null) === null, 'daily HTF is null-safe');
+
+  const g = win.hgOmniGates(series, { kind:'MMOVE', dir:'long', level:1, why:'t' }, null, { htf })
+                .filter(x => x.key === 'htf-daily')[0];
+  ok(g.pass !== null, 'htf-daily actually evaluates when given resampled bars');
+}
+
+/* ---- 12. evidence coverage separates a thin ticket from a solid one ----
+   The plan engine returns its 2R floor on essentially every setup, so R:R is
+   pinned at 2.00 and cannot rank anything. How many gates RAN is the real
+   difference between two tickets. */
+{
+  const hit = { kind:'VALUE', dir:'long', level:99, why:'t' };
+  const bare = win.hgOmniGrade(win.hgOmniGates(rows, hit, null, {}));
+  const full = win.hgOmniGrade(win.hgOmniGates(rows, hit, { fundingPct:0.01 }, {
+    htf:{e21:9,e50:10}, oi:{changePct:5}, retail:{longPct:50}, taker:{buySellRatio:1.1},
+    depth:{bidUsd:5e5,askUsd:5e5}, regime:{label:'RISK-ON'}, news:{risk:'low'},
+    stats:{samples:500,hit:0.34,expR:0.02}
+  }));
+  ok(bare.evaluated < full.evaluated, 'a bare CoinDCX ticket reports fewer evaluated gates than a fully evidenced one');
+  ok(full.evaluated === full.total, 'a fully evidenced ticket reports every gate evaluated');
+  const ranked = win.hgOmniRank([
+    { base:'BARE', grade:bare, rr:2.0 },
+    { base:'FULL', grade:full, rr:2.0 }
+  ]);
+  ok(ranked[0].base === 'FULL', 'at equal R:R the better-evidenced ticket ranks first');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }
