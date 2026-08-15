@@ -753,7 +753,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                  source: isBinanceVenue ? 'venue' : 'binance-reference' });
 
     /* 10 — market regime: do not buy dips in a risk-off tape */
-    var rg = null, rgWhy = 'regime module has not run';
+    /* When the regime read is absent, say WHY. The scan warms regime.js's
+       headless hook before sweeping, so "has not run" is no longer a
+       sufficient explanation — if the warm ran and still produced nothing,
+       that outcome is the useful information, not the absence. */
+    var rg = null;
+    var rgWhy = x.regimeWarm ? ('regime unavailable — warm reported: ' + x.regimeWarm)
+                             : 'regime module has not run';
     if (x.regime && x.regime.label){
       var lbl = String(x.regime.label).toUpperCase();
       if (lbl.indexOf('RISK-ON') >= 0) { rg = (hit.dir === 'long'); }
@@ -872,6 +878,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
       exForHit.stats = (ex.stats && ex.stats[statKey]) ? ex.stats[statKey] : null;
       exForHit.exchange = item && item.exchange;
+      exForHit.regimeWarm = ex.regimeWarm;
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       var plan = null;
@@ -1397,7 +1404,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         if (!rg || typeof rg.run !== 'function') return 'no regime warmup';
         omniSafeStat(ui, 'warming market regime…');
         return rg.run();
-      }).catch(function(){ return 'regime warm failed'; });
+      }).then(function(r){
+        __omni.regimeWarm = (r == null) ? 'no result' : String(r);
+        return r;
+      }).catch(function(e){
+        __omni.regimeWarm = 'threw: ' + ((e && e.message) || e);
+        return null;
+      });
     }
 
     /* A REJECTED xuUniverse() is the same situation as a returned [] — no
@@ -1548,6 +1561,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                carded contract; only genuinely networked signals belong
                behind the ceiling. */
             if (!ex.htf) ex.htf = hgOmniDailyHtf(fired[j].rows);
+            /* Re-read regime per contract: the warm may have completed after
+               enrichment began, and it is a single shared market-wide value
+               rather than anything per-symbol. */
+            if (!ex.regime && typeof W.regimeState === 'function'){
+              try { ex.regime = W.regimeState(); } catch (er) { ex.regime = null; }
+            }
+            if (!ex.regime) ex.regimeWarm = __omni.regimeWarm || null;
             var pos = null;
             if (typeof W.xuPositioning === 'function'){
               try { pos = W.xuPositioning(fitem.base || fitem.sym); } catch (er) { pos = null; }
@@ -1577,6 +1597,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            (rate limit, venue down). Folding them into "scanned" would let a
            dead data source read as a completed sweep. */
         if (res.failed) caveat += '  · ' + res.failed + ' candle fetches FAILED (rate limit or venue down)';
+        if (__omni.regimeWarm && __omni.regimeWarm !== 'fresh' && __omni.regimeWarm !== 'warmed'){
+          caveat += '  · regime gate unavailable (' + __omni.regimeWarm + ')';
+        }
         omniSafeStat(ui, __omni.lastStat + caveat);
         try{ ui.pool.innerHTML = renderPooled(res.pooled); }catch(eP){
           try{ ui.pool.innerHTML = '<div class="note warn">measurement table failed to render.</div>'; }catch(eP2){}

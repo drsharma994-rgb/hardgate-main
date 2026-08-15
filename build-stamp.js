@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v306',
-  pack: 'omniroute regime warm + honest depth source',
-  built: '2026-08-15T16:15:00Z',
-  note: 'regime warmed headlessly so the gate can run · book depth labelled as a BINANCE reference, not your venue book'
+  version: 'hg-v307',
+  pack: 'omniroute regime diagnosis',
+  built: '2026-08-15T18:00:00Z',
+  note: 'a dead regime gate now names the reason the warm failed instead of always saying it never ran'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

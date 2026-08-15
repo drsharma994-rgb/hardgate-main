@@ -299,6 +299,30 @@ for (const [name, mk, gateKey] of fields){
      'thin on Binance still vetoes — that inference direction IS valid');
 }
 
+/* ---- 14. a dead regime gate must explain itself ----
+   The scan warms regime.js's headless HG_warmups hook before sweeping, so
+   "regime module has not run" stopped being a sufficient explanation: if the
+   warm ran and still produced nothing, THAT outcome is the useful
+   information. Same principle as surfacing the scan-failure reason. */
+{
+  const hit = { kind:'MMOVE', dir:'long', level:99, why:'t' };
+  const rg = extra => win.hgOmniGates(rows, hit, null, extra).filter(g => g.key === 'regime')[0];
+
+  ok(/every gauge source failed/.test(rg({ regimeWarm:'unavailable: every gauge source failed' }).why),
+     'a failed warm reports the gauge failure verbatim');
+  ok(/threw: gauge fetch died/.test(rg({ regimeWarm:'threw: gauge fetch died' }).why),
+     'a thrown warm reports the exception');
+  ok(/no warmup registered/.test(rg({ regimeWarm:'no warmup registered' }).why),
+     'a missing warmup hook says so rather than blaming the module');
+  ok(rg({}).why === 'regime module has not run',
+     'with no warm attempted at all the original wording stands');
+
+  ok(rg({ regimeWarm:'unavailable: x' }).pass === null,
+     'an unavailable regime stays UNCHECKED — it never becomes a silent pass');
+  const live = rg({ regime:{ label:'RISK-ON' } });
+  ok(live.pass === true && /RISK-ON/.test(live.why), 'a live regime read evaluates normally');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }
