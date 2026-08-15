@@ -125,6 +125,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      alone drifts a 2R system below breakeven. */
   var EDGE_VETO_R = -0.25;
   var EDGE_VETO_SAMPLES = 30;
+  /* Daily EMA periods sized to the daily bars BARS x TF actually yields
+     (180 x 4h ~= 31 days). Asking for a 50-period daily EMA silently
+     disabled the gate on every card. */
+  var DAILY_FAST = 10;
+  var DAILY_SLOW = 21;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '' };
 
@@ -180,6 +185,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       v = num(rows[i].v); if (isFinite(v)) { s += v; c++; }
     }
     return c ? s / c : NaN;
+  }
+
+  /* Bar-open seconds per timeframe, for forming-bar detection. */
+  var TF_SEC = { '1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '1d':86400 };
+
+  /* Drop the still-forming last bar. The house rule (engine.js
+     dropFormingXu, edge.js, startradertab.js): "gates only ever see CLOSED
+     candles — a still-forming bar repaints." omniroute was NOT doing this,
+     and it corrupted live output in a way that looked like a gate bug:
+     the partial bar carries partial VOLUME, so the participation gate saw
+     0.08x the 20-bar mean and vetoed; and ORB reported "closed below the
+     opening range" on a bar that had not closed. Pure given `now`. */
+  function hgOmniDropForming(rows, tf, nowSec){
+    if (!rows || !rows.length) return rows || [];
+    var sec = TF_SEC[tf] || 0;
+    if (!sec) return rows;
+    var lastT = num(rows[rows.length - 1].t);
+    if (!isFinite(lastT)) return rows;
+    var now = isFinite(nowSec) ? nowSec : (Date.now() / 1000);
+    return ((now - lastT) < sec) ? rows.slice(0, -1) : rows;
   }
 
   /* ==================== pure: range + structure ==================== */
@@ -773,12 +798,36 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         try { plan = planFn(hit.dir, rows, undefined, { minRr: MIN_RR, type: 'OMNI' }); }
         catch (e) { plan = null; }
       }
+      /* The global hgPlanLevels wrapper (index.html) forwards only
+         {dir,entry,stop,t1,t2,risk,note,...} — it DROPS rr1/rr2/riskPct from
+         hgPlanLevelsCore. Reading plan.rr1 therefore gave undefined, which
+         rendered as "R:R —" and, worse, made hgOmniRank sort every card by
+         NaN: the tab claimed to order by R:R while ordering by nothing.
+         Derive both from fields the wrapper does provide. */
+      if (plan) plan = hgOmniDerivePlan(plan);
       out.push({
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
         rr: (plan && isFinite(plan.rr1)) ? plan.rr1 : NaN
       });
+    }
+    return out;
+  }
+
+  /* Fill in the reward/risk fields the plan wrapper strips. Never mutates
+     the input; returns NaN rather than a guess when geometry is unusable. */
+  function hgOmniDerivePlan(plan){
+    if (!plan) return plan;
+    var out = {}, k;
+    for (k in plan) if (Object.prototype.hasOwnProperty.call(plan, k)) out[k] = plan[k];
+    var entry = num(out.entry), stop = num(out.stop), t1 = num(out.t1), t2 = num(out.t2);
+    var risk = isFinite(num(out.risk)) ? num(out.risk) : Math.abs(entry - stop);
+    if (isFinite(risk) && risk > 0){
+      if (!isFinite(num(out.rr1)) && isFinite(t1)) out.rr1 = Math.abs(t1 - entry) / risk;
+      if (!isFinite(num(out.rr2)) && isFinite(t2)) out.rr2 = Math.abs(t2 - entry) / risk;
+      if (!isFinite(num(out.riskPct)) && isFinite(entry) && entry > 0) out.riskPct = risk / entry * 100;
+      out.risk = risk;
     }
     return out;
   }
@@ -1081,6 +1130,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function fmt(n, d){ return isFinite(n) ? (+n).toFixed(d == null ? 4 : d) : '—'; }
+
+  /* Price formatting scaled to magnitude. A flat 4 decimals rendered
+     1000BONK as ENTRY 0.0023 / STOP 0.0024 — one apparent tick apart, with
+     the real distance rounded away. Sub-cent perps are most of the CoinDCX
+     universe, so fixed precision is not a cosmetic problem: it made the
+     plan unreadable exactly where the stop matters most. */
+  function fmtPx(n){
+    var v = +n;
+    if (!isFinite(v)) return '—';
+    var a = Math.abs(v);
+    var d = a >= 1000 ? 2 : a >= 1 ? 4 : a >= 0.01 ? 5 : a >= 0.0001 ? 7 : 9;
+    return v.toFixed(d);
+  }
   function pill(txt, cls){ return '<span class="gpip ' + (cls || '') + '">' + esc(txt) + '</span>'; }
 
   function gateLine(g){
@@ -1102,8 +1164,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     h += '<div class="ttl">' + head + ' ' + badge + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
     if (c.plan){
-      h += '<div class="plan">ENTRY ' + fmt(c.plan.entry) + ' · STOP ' + fmt(c.plan.stop)
-        +  ' · T1 ' + fmt(c.plan.t1) + ' · T2 ' + fmt(c.plan.t2)
+      h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
+        +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b>'
         +  ' · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
@@ -1257,6 +1319,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               omniSafeStat(ui, 'pass 1/2 · scanning ' + done + '/' + list.length
                 + ' contracts — ' + fired.length + ' fired');
             }
+            /* Closed candles only — see hgOmniDropForming. Applied HERE, at
+               the single ingestion point, so every downstream consumer
+               (detectors, gates, walk-forward measurement) sees the same
+               closed set and none of them can disagree about the last bar. */
+            rows = hgOmniDropForming(rows, TF);
             if (!rows || rows.length < 60){ thin++; return; }
             var hits = hgOmniDetect(rows);
             if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
@@ -1296,10 +1363,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               var a = oiH.series[0].oi, b = oiH.series[oiH.series.length - 1].oi;
               if (isFinite(a) && a > 0 && isFinite(b)) oiChange = (b - a) / a * 100;
             }
+            /* 180 x 4h is ~30 calendar days, so ~31 daily bars. The old code
+               asked emaOf() for a 50-period daily EMA, which needs 50 bars and
+               returned NaN every time — that is exactly why every live card
+               read "htf-daily UNCHECKED — daily bars unavailable". Use periods
+               the available history can actually support. */
             var d1rows = hgOmniResample(f.rows, 86400), htf = null;
-            if (d1rows.length >= 25){
+            if (d1rows.length >= DAILY_SLOW + 2){
               var dc = closesOf(d1rows);
-              htf = { e21: emaOf(dc.slice(-40), 21), e50: emaOf(dc, 50) };
+              htf = { e21: emaOf(dc.slice(-(DAILY_FAST * 2)), DAILY_FAST), e50: emaOf(dc, DAILY_SLOW) };
             }
             var stats = hgOmniBacktestAll(f.rows, { rMult: MIN_RR, horizon: 20, warm: 45 });
             perSymbolStats.push(stats);
@@ -1559,6 +1631,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniMeasuredMove = hgOmniMeasuredMove;
     window.hgOmniDetect = hgOmniDetect;
     window.hgOmniResample = hgOmniResample;
+    window.hgOmniDropForming = hgOmniDropForming;
+    window.hgOmniDerivePlan = hgOmniDerivePlan;
     window.hgOmniBtStop = hgOmniBtStop;
     window.hgOmniWalkForward = hgOmniWalkForward;
     window.hgOmniBacktestOne = hgOmniBacktestOne;

@@ -128,6 +128,52 @@ for (const [name, mk, gateKey] of fields){
      'negative-but-thin says so, rather than calling -0.60R "marginal noise"');
 }
 
+/* ---- 6. still-forming bar must never reach the gates ----
+   engine.js/edge.js/startradertab.js all drop it: "gates only ever see
+   CLOSED candles — a still-forming bar repaints". omniroute did not, and
+   the partial bar's partial VOLUME made the participation gate veto live
+   setups at 0.08x the 20-bar mean, while ORB claimed a close on a bar that
+   had not closed. */
+{
+  const now = 1700000000 + 100 * 14400;
+  const base = [];
+  for (let i = 0; i < 10; i++) base.push({ t: 1700000000 + i * 14400, o: 1, h: 2, l: 0.5, c: 1, v: 10 });
+
+  const forming = base.concat([{ t: now - 3600, o: 1, h: 2, l: 0.5, c: 1, v: 1 }]);
+  ok(win.hgOmniDropForming(forming, '4h', now).length === base.length,
+     'a bar opened 1h ago on 4h is still forming and is dropped');
+
+  const closed = base.concat([{ t: now - 18000, o: 1, h: 2, l: 0.5, c: 1, v: 1 }]);
+  ok(win.hgOmniDropForming(closed, '4h', now).length === closed.length,
+     'a bar opened 5h ago on 4h has closed and is kept');
+
+  ok(Array.isArray(win.hgOmniDropForming(null, '4h', now)), 'dropForming is null-safe');
+  ok(win.hgOmniDropForming(base, 'nonsense', now).length === base.length,
+     'unknown timeframe leaves the series untouched rather than guessing');
+}
+
+/* ---- 7. rr1/riskPct must be derived, since the plan wrapper strips them ----
+   index.html's hgPlanLevels forwards only {dir,entry,stop,t1,t2,risk,note},
+   dropping rr1/rr2/riskPct from hgPlanLevelsCore. Reading plan.rr1 gave
+   undefined, so cards showed "R:R —" AND hgOmniRank sorted every row by NaN
+   — the tab claimed to order by R:R while ordering by nothing. */
+{
+  const stripped = { dir:'short', entry:0.0023456, stop:0.0024111, t1:0.0021, t2:0.0020, risk:0.0000655, note:'x' };
+  const d = win.hgOmniDerivePlan(stripped);
+  ok(Math.abs(d.rr1 - 3.75) < 0.01, 'rr1 derived from entry/t1/risk (got ' + d.rr1.toFixed(3) + ')');
+  ok(isFinite(d.rr2), 'rr2 derived');
+  ok(Math.abs(d.riskPct - 2.792) < 0.01, 'riskPct derived (got ' + d.riskPct.toFixed(3) + '%)');
+  ok(stripped.rr1 === undefined, 'the input plan object is not mutated');
+
+  const ranked = win.hgOmniRank([
+    { base:'A', grade:{ ticket:true,  vetoes:[] }, rr:1.9 },
+    { base:'B', grade:{ ticket:true,  vetoes:[] }, rr:4.2 },
+    { base:'D', grade:{ ticket:false, vetoes:[] }, rr:9.9 }
+  ]);
+  ok(ranked.map(r => r.base).join('') === 'BAD',
+     'ranking puts tickets first, then R:R desc (got ' + ranked.map(r => r.base).join('') + ')');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

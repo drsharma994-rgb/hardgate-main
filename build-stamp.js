@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v302',
-  pack: 'omniroute null-crash fix + scan populates',
+  version: 'hg-v303',
+  pack: 'omniroute closed-candles + real R:R',
   built: '2026-08-15T16:15:00Z',
-  note: 'isFinite(null) trap killed every coindcx setup · measured-edge no longer vetoes on in-sample noise'
+  note: 'forming bar dropped · rr1/riskPct derived (wrapper strips them) · sub-cent price precision · daily EMA sized to history'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
