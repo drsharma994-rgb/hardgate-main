@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v312',
-  pack: 'omnigold cost drag — gross vs tradeable',
-  built: '2026-08-15T19:55:00Z',
-  note: 'walk-forward is GROSS; a 3-point gold scalp stop gives ~19% of 1R to spread — new cost-drag gate prices every setup against its own stop'
+  version: 'hg-v313',
+  pack: 'walk-forward counts non-overlapping trades',
+  built: '2026-08-15T20:20:00Z',
+  note: '94% of firings overlapped the previous forward window — sigma was inflated 3-4x; both omniroute and omnigold now count only sequentially-takeable trades'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

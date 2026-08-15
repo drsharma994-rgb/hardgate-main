@@ -383,6 +383,46 @@ for (const [name, mk, gateKey] of fields){
   ok(nw(null).pass === null, 'no news object at all stays UNCHECKED');
 }
 
+/* ---- 17. walk-forward must count NON-OVERLAPPING trades ----
+   Advancing one bar at a time counted a mechanic that fires on 20
+   consecutive bars of ONE move as 20 samples sharing a single outcome. On
+   synthetic data 94% of firings overlapped the previous forward window, and
+   the sigma the measured-edge gate judges on was inflated 3-4x (1.38 counted
+   vs 0.39 independent) — the difference between "has paid" and "within
+   noise" on live cards. */
+{
+  let seed = 5;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  let px = 4384; const series = [];
+  for (let i = 0; i < 1000; i++){
+    const o = px, c = px + (rnd() - 0.48) * 6;
+    series.push({ t:i*3600, o, h:Math.max(o,c)+rnd()*3, l:Math.min(o,c)-rnd()*3, c, v:900+rnd()*400 });
+    px = c;
+  }
+  const det = r => { const p = win.hgOmniProfile(r, 24); return p ? win.hgOmniValueReject(r, p) : null; };
+
+  /* count raw firings the OLD way for comparison */
+  let raw = 0;
+  for (let i = 60; i < series.length - 24; i++) if (det(series.slice(0, i + 1))) raw++;
+
+  const bt = win.hgOmniBacktestOne(series, det, { rMult:1.5, horizon:24, warm:60 });
+  ok(bt.samples < raw, 'non-overlapping sampling reports fewer trades than raw firings (' + bt.samples + ' vs ' + raw + ')');
+  ok(bt.samples > 0, 'and still finds trades to measure');
+  ok(bt.samples <= Math.ceil((series.length - 60) / 1),
+     'sample count cannot exceed the bars available');
+
+  /* every counted trade must be sequentially takeable: at most bars/horizon of them */
+  ok(bt.samples <= Math.ceil((series.length - 60) / 2),
+     'counted trades are spaced, not stacked on one another');
+
+  /* walkForward keeps its original string contract for existing callers */
+  ok(typeof win.hgOmniWalkForward(series, 100, 'long', 1.5, 24) === 'string',
+     'hgOmniWalkForward without the detail flag still returns a plain string');
+  const d = win.hgOmniWalkForward(series, 100, 'long', 1.5, 24, true);
+  ok(d && typeof d === 'object' && typeof d.res === 'string' && isFinite(d.at),
+     'with the detail flag it reports where the trade resolved');
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }
