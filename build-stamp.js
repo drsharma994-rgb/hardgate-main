@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v300',
-  pack: 'omniroute scan resilience',
+  version: 'hg-v301',
+  pack: 'omniroute dead-data honesty',
   built: '2026-08-15T16:15:00Z',
-  note: 'omniroute: gentler full-universe scan, partial pass-1 recovery, error detail in UI'
+  note: 'candle-fetch failures counted separately from thin history · dead-data scan no longer reads as a quiet market · universe rejection names its reason'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

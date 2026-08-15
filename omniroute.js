@@ -1172,10 +1172,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     ui.cards.innerHTML = '';
     omniSafeStat(ui, 'loading Delta + CoinDCX universe…');
 
-    return W.xuUniverse().then(function(uni){
+    /* A REJECTED xuUniverse() is the same situation as a returned [] — no
+       universe — so route it to the same honest message instead of the
+       generic catch. The distinction matters to the reader: "no contracts
+       came back" is a data-source problem, not a quiet market. Also guards
+       a synchronous throw, which .then() alone would not catch. */
+    var uniErr = null;
+    return Promise.resolve().then(function(){ return W.xuUniverse(); })
+      .catch(function(err){ uniErr = omniErrMsg(err); return null; })
+      .then(function(uni){
       uni = uni || [];
       if (!uni.length){
-        omniSafeStat(ui, 'universe empty — both venue legs failed.');
+        omniSafeStat(ui, 'universe empty — both venue legs failed'
+          + (uniErr ? (' (' + uniErr + ')') : '')
+          + '. Nothing to scan — this is a data-source problem, not a setup drought.');
         return null;
       }
       var note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
@@ -1188,7 +1198,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var list = (TOP_N > 0) ? uni.slice(0, TOP_N) : uni.filter(function(item){
         return item && (item.exchange === 'delta' || item.exchange === 'coindcx');
       });
-      var fired = [], done = 0, thin = 0, pass1Err = null;
+      var fired = [], done = 0, thin = 0, failed = 0, pass1Err = null;
 
       /* ---- PASS 1: detect over EVERY contract. Candles only, no extra
          network per name, so this stays linear in the universe size. ---- */
@@ -1207,7 +1217,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             if (!rows || rows.length < 60){ thin++; return; }
             var hits = hgOmniDetect(rows);
             if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
-          }).catch(function(){ done++; });
+          }).catch(function(){ done++; failed++; });
         })).then(function(){
           if (i + CHUNK >= list.length) return;
           return omniSleep(CHUNK_DELAY_MS).then(function(){ return step(i + CHUNK); });
@@ -1289,7 +1299,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           }
           return { cands: cands, scanned: list.length, uni: uni.length,
                    fired: fired.length, enriched: subset.length, thin: thin,
-                   pooled: pooled, pass1Err: pass1Err, pass1Done: done };
+                   failed: failed, pooled: pooled, pass1Err: pass1Err, pass1Done: done };
         });
       });
     }).then(function(res){
@@ -1305,12 +1315,25 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         if (res.pass1Err) caveat += '  · pass 1 interrupted (' + res.pass1Err + ') — partial cover at ' + res.pass1Done + '/' + res.scanned;
         if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' fired contracts beyond the ' + ENRICH_MAX + '-name measurement ceiling were dropped';
         if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
+        /* Distinct from `thin`: these contracts were asked and did not answer
+           (rate limit, venue down). Folding them into "scanned" would let a
+           dead data source read as a completed sweep. */
+        if (res.failed) caveat += '  · ' + res.failed + ' candle fetches FAILED (rate limit or venue down)';
         omniSafeStat(ui, __omni.lastStat + caveat);
         try{ ui.pool.innerHTML = renderPooled(res.pooled); }catch(eP){
           try{ ui.pool.innerHTML = '<div class="note warn">measurement table failed to render.</div>'; }catch(eP2){}
         }
         if (!ranked.length){
-          ui.cards.innerHTML = '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
+          /* A scan where the candles never arrived is NOT a quiet market.
+             Without this the two are indistinguishable on screen, and the
+             honest reading (I could not look) is the one that gets lost. */
+          var dead = (res.failed || 0) + (res.thin || 0);
+          var deadPct = res.scanned ? (dead / res.scanned) : 0;
+          ui.cards.innerHTML = (deadPct >= 0.5)
+            ? ('<div class="note warn">No setups — but ' + dead + ' of ' + res.scanned
+               + ' contracts returned no usable candles, so this is a DATA problem, not a quiet market. '
+               + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
+            : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
           return;
         }
         var h = '';
