@@ -2587,8 +2587,10 @@ function flowTrapAssess(takerSeries, bookDepth, dir, spotSeries){
     out.flowOk = out.cvdAligned || out.obiAligned || out.spotPerpAligned;
     return out;
   }catch(e){
-    return { veto: false, reason: '', cvdAligned: false, obiAligned: false,
-             spotPerpAligned: false, flowOk: false };
+    /* flowOk:false already reads as unproven rather than passed; `unchecked`
+       distinguishes "the flow legs disagreed" from "the flow legs never ran". */
+    return { veto: false, unchecked: true, reason: '', cvdAligned: false,
+             obiAligned: false, spotPerpAligned: false, flowOk: false };
   }
 }
 function applyCvd(rows){

@@ -89,7 +89,7 @@ function spotPerpFlowAssess(perpSeries, spotSeries, dir){
     }
     return base;
   }catch(e){
-    return { veto: false, reason: '', spotPerpAligned: false, diverged: false };
+    return { veto: false, unchecked: true, reason: '', spotPerpAligned: false, diverged: false };
   }
 }
 

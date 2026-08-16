@@ -172,8 +172,12 @@ function hgShieldGuardVeto(rows, dir, inp){
     if (reasons.length >= 2){
       return { veto: true, reason: 'ShieldGuard: ' + reasons.join(' · '), reasons: reasons };
     }
-    return { veto: false, reasons: reasons };
-  }catch(e){ return { veto: false }; }
+    return { veto: false, reasons: reasons, checked: true };
+  }catch(e){
+    /* A veto that could not be evaluated is not the same as no veto found. */
+    return { veto: false, unchecked: true,
+             reason: 'ShieldGuard threw: ' + ((e && e.message) || String(e)) };
+  }
 }
 
 G.hgSwingLook = hgSwingLook;

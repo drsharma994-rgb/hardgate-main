@@ -52,7 +52,10 @@ function brainRowPlanConfirmed(row){
       try{ return !!G.hgConfirmedCascade(row.rows, row.dec.dir); }catch(e3){}
     }
     return p.entryType !== 'MARKET' || p.confirmed !== false;
-  }catch(e){ return true; }
+  }catch(e){
+    try{ if (typeof G.hgFwdWarn === 'function') G.hgFwdWarn('BRAIN', 'plan-confirmed check threw, row treated as confirmed: ' + ((e && e.message) || e)); }catch(e2){}
+    return true;
+  }
 }
 
 function brainRowHasTripleStack(sym, dir){

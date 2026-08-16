@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v335',
-  pack: 'swept for the shape instead of reading for the bug',
-  built: '2026-08-17T05:50:00Z',
-  note: 'hgEnrichGenericExact replaced T2 while refreshing only rr1, so rr2 kept pointing at the target it had just discarded'
+  version: 'hg-v336',
+  pack: 'a thrown formation is not a formed ticket',
+  built: '2026-08-17T08:05:00Z',
+  note: 'hgFormTicket answered every exception with ok:true and the raw unformed hit, so a fault produced an ungated ticket reported as formed'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

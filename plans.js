@@ -76,7 +76,9 @@ function hgRegimeAllowsSetup(rows, style){
       return { allow: true, reason: dr.label + ' — compression friendly for ' + style };
     }
     return { allow: true, reason: dr.label || null };
-  }catch(e){ return { allow: true, reason: null }; }
+  }catch(e){
+    return { allow: true, unchecked: true, reason: 'regime check threw: ' + hgErrText(e) };
+  }
 }
 
 /* --- 4H tape regime label (STRONG TREND / WEAK TREND / …) for card UI --- */
@@ -521,7 +523,9 @@ function hgMacroAllowsCrypto(sym, dir){
       return { allow: false, reason: 'DXY rising — USD strength headwind for alt longs' };
     }
     return { allow: true, reason: null };
-  }catch(e){ return { allow: true, reason: null }; }
+  }catch(e){
+    return { allow: true, unchecked: true, reason: 'macro check threw: ' + hgErrText(e) };
+  }
 }
 
 function hgTripleStackMatch(sym, dir){
@@ -1368,7 +1372,14 @@ function hgTicketFinalGates(plan, ctx){
     }
 
     return { ok: true, chips: chips };
-  }catch(e){ return { ok: true, chips: [] }; }
+  }catch(e){
+    /* Not a veto — a fault here is no evidence against the trade. But the
+       ticket cannot claim it cleared the final gates, so it carries a chip
+       saying they never ran. */
+    return { ok: true, unchecked: true,
+             uncheckedReason: 'final gates threw: ' + hgErrText(e),
+             chips: ['FINAL GATES UNCHECKED'] };
+  }
 }
 
 G.hgTicketFinalGates = hgTicketFinalGates;

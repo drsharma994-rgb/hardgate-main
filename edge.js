@@ -153,7 +153,14 @@ function isCorrectivePullback(A, index, dir, lookback){
     }
     if (pullbackVol > impulseVol * PULLBACK_VOL_RATIO) return false;
     return true;
-  }catch(e){ return true; }
+  }catch(e){
+    /* A throw here admits the setup without the volume check (edge.js:472
+       rejects on false). The verdict is left permissive on purpose — failing
+       closed on a transient fault would suppress real setups — but it is no
+       longer silent about it. */
+    try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('EDGE', 'corrective-pullback check threw, setup admitted unchecked: ' + ((e && e.message) || e)); }catch(e2){}
+    return true;
+  }
 }
 
 /* SWING SCAN G1 — 4H EMA cascade + spread gate */

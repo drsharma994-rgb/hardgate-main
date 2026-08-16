@@ -725,7 +725,15 @@ function hgFormTicket(hit, ctx){
     }
 
     return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note, metaLabel: plan.metaLabel || null };
-  }catch(e){ return { ok: true, hit: hit, formationScore: 0 }; }
+  }catch(e){
+    /* `hit` here is the RAW input. Reporting ok:true with it claimed a formed
+       ticket for a hit that had had no POI entry, no sweep or structure stop,
+       no structure targets, no fill gate and no hgTicketFinalGates run against
+       it. Formation did not happen, so it must not be reported as having
+       happened; every caller already has a !ok path that falls through to an
+       alternative plan or declines the candidate. */
+    return { ok: false, reason: 'formation threw: ' + ((e && e.message) || String(e)), tag: 'formation' };
+  }
 }
 
 G.hgFormationParams = hgFormationParams;
