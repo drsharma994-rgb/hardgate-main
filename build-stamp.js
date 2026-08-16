@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v340',
-  pack: 'grepped by four tests, run by none',
-  built: '2026-08-17T17:30:00Z',
-  note: 'STAR TRADER is 966 lines that no test executed; probing found no live defect and one latent forming-bar hazard'
+  version: 'hg-v341',
+  pack: 'forty settled samples, reported as none',
+  built: '2026-08-17T19:55:00Z',
+  note: 'a gate family that agreed on every settled trade had no lift to compute, and the ledger said it had no samples'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

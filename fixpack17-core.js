@@ -350,8 +350,34 @@ function hgFamilyLift(records, meta, order, labels){
 
 function hgFamilyLiftLine(row){
   if (!row) return '';
-  if (row.liftR === null || row.nWith === 0){
-    return 'measured: no settled samples yet';
+  /* Two different states used to print the same sentence, and for one of them
+     the sentence was false.
+
+     liftR is null whenever EITHER side of the comparison is empty. A family
+     that agreed on all 40 settled trades and never once disagreed has
+     nWith 40, nWithout 0, liftR null — and the ledger said "no settled
+     samples yet" about forty settled samples. That is the common early state,
+     not an edge case: a gate family that keeps passing has nothing to be
+     measured against until the first disagreeing trade settles.
+
+     The evidence is genuinely absent in the first case and genuinely
+     incomparable in the second, and the reader has to be able to tell which. */
+  var nW = (typeof row.nWith === 'number' && isFinite(row.nWith)) ? row.nWith : 0;
+  var nO = (typeof row.nWithout === 'number' && isFinite(row.nWithout)) ? row.nWithout : 0;
+  if (nW === 0 && nO === 0) return 'measured: no settled samples yet';
+  if (row.liftR === null || row.liftR === undefined){
+    if (nO === 0){
+      return 'measured: ' + nW + ' settled with this family agreeing, none disagreeing'
+        + ' — no lift can be computed until one settles the other way';
+    }
+    if (nW === 0){
+      return 'measured: ' + nO + ' settled with this family disagreeing, none agreeing'
+        + ' — no lift can be computed until one settles the other way';
+    }
+    return 'measured: ' + nW + ' agree / ' + nO + ' disagree, but the lift is not computable';
+  }
+  if (typeof row.liftR !== 'number' || !isFinite(row.liftR)){
+    return 'measured: ' + nW + ' agree / ' + nO + ' disagree — lift unavailable';
   }
   var lift = (row.liftR >= 0 ? '+' : '') + row.liftR.toFixed(2) + 'R';
   var eff = (row.effectiveN !== null && row.effectiveN !== undefined) ? ' · eff n ' + row.effectiveN : '';
