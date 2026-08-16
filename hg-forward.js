@@ -464,13 +464,21 @@ localStorage. Never throws.
           mechs.sort();
           for (var j = 0; j < mechs.length; j++){
             var p = pool[mechs[j]];
-            totS += p.samples; totW += p.wins; totO += p.open; rowsOut++;
+            /* SUPER: tabs are SELECTION layers — they re-present setups their
+               source tab already recorded, after a conviction filter. Their own
+               numbers are meaningful (does the filter beat the pool?), but they
+               are not distinct trades, so they are shown and excluded from the
+               totals rather than double-counted. */
+            var isSel = names[i].indexOf('SUPER:') === 0;
+            if (!isSel){ totS += p.samples; totW += p.wins; totO += p.open; }
+            rowsOut++;
             var v = readFn ? readFn(p, minRr, 20) : null;
             var read = !p.samples ? (p.open ? (p.open + ' awaiting settlement') : 'never fired')
                                   : (v ? v.read : 'unjudged');
             var cls = !p.samples ? '' : (v ? v.cls : '');
             var need = (v && v.need) ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
-            h += '<tr><td class="dim">' + esc(names[i]) + '</td><td><b>' + esc(mechs[j]) + '</b></td>'
+            h += '<tr><td class="dim">' + esc(names[i]) + (isSel ? ' <span class="dim">(selection)</span>' : '')
+               + '</td><td><b>' + esc(mechs[j]) + '</b></td>'
                + '<td>' + p.samples + need + '</td>'
                + '<td>' + (p.samples ? (p.hit * 100).toFixed(0) + '%' : '—') + '</td>'
                + '<td>' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—') + '</td>'
@@ -480,7 +488,9 @@ localStorage. Never throws.
         }
         h += '</tbody></table>';
         h += '<div class="note">' + rowsOut + ' mechanic(s) across ' + names.length + ' tab(s) · '
-           + totS + ' settled, ' + totO + ' open'
+           + totS + ' settled, ' + totO + ' open <span class="dim">(selection desks excluded from these '
+           + 'totals — they re-present setups their source tab already recorded, so counting them again '
+           + 'would inflate the trade count; their own rows above still stand)</span>'
            + (totS ? (' · ' + (totW / totS * 100).toFixed(0) + '% T1-first overall') : '')
            + '. Recorded once per firing, settled by bars that did not exist at the time; a bar spanning '
            + 'both stop and target counts as a STOP, and expiry is excluded rather than counted as a win. '

@@ -199,6 +199,38 @@ function bars(spec){
   console.warn = quiet;
 }
 
+/* ---- selection desks are shown but not double-counted ----
+   SUPER BEST / SNIPER / GOLD are conviction desks OVER pools their source tab
+   already records. Their own numbers answer the most direct question in the
+   app — does the filter beat the pool it filtered? — but they are not distinct
+   trades, so counting them in the totals would inflate the trade count. */
+{
+  const mk = (tab, mech, st, i) => ({
+    ...win.hgFwdNormalize({ tab, mechanic: mech, sym: 'S' + i, tf: '4h', dir: 'long',
+                            entry: 100, stop: 98, t1: 104, barT: i, horizonBars: 20 }),
+    state: st, r: st === 't1' ? 2 : -1
+  });
+  const list = [];
+  for (let i = 0; i < 20; i++) list.push(mk('BEST:swing', 'SWING-CLEAN', i % 2 ? 't1' : 'stop', i));
+  for (let i = 20; i < 30; i++) list.push(mk('SUPER:BEST', 'CONVICTION-PICK', i % 4 ? 't1' : 'stop', i));
+  __store['hg_forward_v1'] = JSON.stringify(list);
+
+  const html = win.hgFwdAllHTML({ minRr: 2 });
+  ok(/SUPER:BEST/.test(html), 'the selection desk still gets its own row');
+  ok(/\(selection\)/.test(html), 'and is labelled as a selection layer');
+  ok(/20 settled/.test(html), 'totals count only the source tab, not the desk that re-presents it');
+  ok(!/30 settled/.test(html), 'the same trades are not counted twice');
+  ok(/would inflate the trade count/.test(html), 'and the footer explains why');
+
+  /* both rows must remain independently readable — that comparison IS the point */
+  const src = win.hgFwdStatsOf(list, 'BEST:swing', 'SWING-CLEAN');
+  const sel = win.hgFwdStatsOf(list, 'SUPER:BEST', 'CONVICTION-PICK');
+  ok(src.samples === 20 && sel.samples === 10, 'each tab keeps its own settled count');
+  ok(sel.hit > src.hit, 'and the filter can be compared against its pool (70% vs 50% here)');
+
+  __store['hg_forward_v1'] = JSON.stringify([]);
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

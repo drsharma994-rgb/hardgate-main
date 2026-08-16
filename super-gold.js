@@ -569,6 +569,26 @@ function buildSnapFromGoldScans(win, riskOpts, opts){
 
 function publishSuperGoldSnap(snap){
   __hgSuperGoldSnap = snap || null;
+  /* FORWARD LOG. This desk SELECTS from a pool another tab already records,
+     so these are not new trades — they are the same setups after a conviction
+     filter. Recording them measures the FILTER: does the desk's pick resolve
+     better than the pool it picked from? That is the most direct test of
+     whether the conviction layer earns its place.
+     The SUPER: prefix marks it as a selection layer so the cross-tab ledger
+     can keep it out of distinct-trade totals rather than double-counting. */
+  try {
+    if (snap && Array.isArray(snap.cands) && snap.cands.length
+        && typeof W.hgFwdRecordScan === 'function'){
+      W.hgFwdRecordScan('SUPER:GOLD', '4h', snap.cands.filter(function(c){
+        return c && c.sym && c.dir
+            && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1)
+            && +c.entry !== +c.stop;
+      }).map(function(c){
+        return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                 mechanic: 'CONVICTION-PICK', ticket: true };
+      }), { horizonBars: 20 });
+    }
+  } catch (eFwd) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('super-gold', eFwd); } catch (eW) {} }
   try{ W.HG_superGoldScan = snap; }catch(e){}
   return snap;
 }

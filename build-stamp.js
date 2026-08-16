@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v326',
-  pack: 'the forward log reports its own failures',
-  built: '2026-08-16T12:30:00Z',
-  note: 'a broken recorder looked exactly like a quiet market — 19 silent catches in my own instrumentation now report'
+  version: 'hg-v327',
+  pack: 'the conviction desks measure their own filter',
+  built: '2026-08-16T13:20:00Z',
+  note: 'SUPER desks compare against the pool they filter; shown but excluded from totals so the same trade is not counted twice'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
