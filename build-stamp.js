@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v334',
-  pack: 'the min-R:R gate was testing a label, not the trade',
-  built: '2026-08-17T03:40:00Z',
-  note: 'a widened structure stop left rr1/rr2 behind and the R:R floor read the stale rr1 in preference to deriving one'
+  version: 'hg-v335',
+  pack: 'swept for the shape instead of reading for the bug',
+  built: '2026-08-17T05:50:00Z',
+  note: 'hgEnrichGenericExact replaced T2 while refreshing only rr1, so rr2 kept pointing at the target it had just discarded'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

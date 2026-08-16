@@ -629,6 +629,34 @@ function hgStructureStop(dir, entry, rows, opts){
 }
 
 /* --- R-multiple plan from entry/stop --- */
+
+/* Every plan enricher below replaces entry and/or stop and then updates the
+   targets and ratios only inside a guard. When that guard fails — or updates
+   some legs and not others — the plan ships new levels with ratios measured
+   against the levels they replaced. This is the same defect fixed in
+   formation.js, gold-best-levels.js, conviction-lock.js and omniroute.js;
+   plans.js carries the rr1/rr2/riskPct field shape rather than rr/rr2/rr3,
+   which is why it gets its own function instead of sharing hgSyncPlanRr.
+
+   Rule: derive from the levels the plan actually carries, and clear what
+   cannot be derived. Never inherit. */
+function hgPlanNum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
+
+function hgSyncPlanRatios(p){
+  if (!p) return p;
+  try{
+    var entry = hgPlanNum(p.entry), stop = hgPlanNum(p.stop);
+    var risk = (isFinite(entry) && isFinite(stop)) ? Math.abs(entry - stop) : NaN;
+    var usable = isFinite(risk) && risk > 0;
+    var t1 = hgPlanNum(p.t1), t2 = hgPlanNum(p.t2);
+    p.rr1 = (usable && isFinite(t1)) ? Math.abs(t1 - entry) / risk : null;
+    p.rr2 = (usable && isFinite(t2)) ? Math.abs(t2 - entry) / risk : null;
+    if (p.rr !== undefined) p.rr = p.rr1;
+    p.riskPct = (usable && isFinite(entry) && entry > 0) ? (risk / entry * 100) : null;
+  }catch(e){}
+  return p;
+}
+
 function hgPlanFromRisk(dir, entry, stop, opts){
   opts = opts || {};
   try{
@@ -772,6 +800,11 @@ function hgEnrichGenericExact(plan, rows, opts){
       var tg = hgPlanSwingTargets(dir, entry, stop, a4, {});
       if (tg){ out.t1 = tg.t1; out.t2 = tg.t2; out.rr1 = tg.rr1; out.targetPolicy = tg.targetPolicy; }
     }
+    /* `out` is spread from `plan`, so it arrives with the caller's t1/t2/rr1/
+       rr2 measured against the OLD entry and stop. Both blocks above are
+       conditional, and the swing-targets one replaces t2 while refreshing only
+       rr1 — leaving rr2 pointing at the target it just discarded. */
+    hgSyncPlanRatios(out);
     return out;
   }catch(e){ return plan; }
 }
@@ -1264,6 +1297,12 @@ function hgEnrichSmartPlan(plan, rows4h){
         plan.t1 = pr.t1; plan.t2 = pr.t2; plan.rr1 = pr.rr1; plan.rr2 = pr.rr2; plan.riskPct = pr.riskPct;
       }
     }
+    /* plan.entry was moved to the EMA21 unconditionally several lines above,
+       but the stop and every target sit behind `if (st)`. With no structure
+       stop the plan went on carrying its original stop, targets and ratios
+       against a new entry — and this function mutates the caller's object
+       rather than a copy, so the inconsistency travelled with it. */
+    hgSyncPlanRatios(plan);
     return plan;
   }catch(e){ return plan; }
 }
@@ -1360,6 +1399,7 @@ G.hgApplyGoldWeekendDemotes = hgApplyGoldWeekendDemotes;
 G.HG_GOLD_WEEKEND_EXCEED_MAX = HG_GOLD_WEEKEND_EXCEED_MAX;
 G.hgStaleMomentumVeto = hgStaleMomentumVeto;
 G.hgUncheckedGate = hgUncheckedGate;
+G.hgSyncPlanRatios = hgSyncPlanRatios;
 G.hgMarkGateUnchecked = hgMarkGateUnchecked;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;
