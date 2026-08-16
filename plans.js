@@ -119,9 +119,23 @@ function hgBtcCandleSymbol(ticker){
 }
 
 /* Stale cascade with no displacement — same rule as BEST time-decay veto. */
+/* A gate that could not run must never read as a gate that passed. Every exit
+   that skips the actual check reports `unchecked` so the caller can say
+   UNCHECKED on the card rather than presenting a clean ledger for a test that
+   never happened. `veto:false` alone is not evidence of anything. */
+function hgUncheckedGate(reason){
+  return { veto: false, unchecked: true, uncheckedReason: reason || 'check unavailable' };
+}
+function hgErrText(e){
+  try{ return (e && e.message) ? String(e.message) : String(e || 'error'); }catch(e2){ return 'error'; }
+}
+
 function hgStaleMomentumVeto(rows, dir, entry){
   try{
-    if (!rows || rows.length < 60 || !dir || !isFinite(+entry)) return { veto: false };
+    if (!dir || !isFinite(+entry)) return hgUncheckedGate('stale-momentum: no direction/entry to test');
+    if (!rows || rows.length < 60){
+      return hgUncheckedGate('stale-momentum: ' + ((rows && rows.length) || 0) + ' bars, needs 60');
+    }
     var c = rows.map(function(r){ return r.c; });
     var p = +c[c.length - 1];
     var a4 = (typeof last === 'function' && typeof atr === 'function') ? last(atr(rows, 14)) : NaN;
@@ -132,13 +146,14 @@ function hgStaleMomentumVeto(rows, dir, entry){
       if (dir === 'short' && (e9a[b] >= e21a[b] || e21a[b] >= e50a[b])) break;
       cascadeAgeBars++;
     }
-    if (cascadeAgeBars > 6 && isFinite(a4) && a4 > 0){
+    if (!isFinite(a4) || !(a4 > 0)) return hgUncheckedGate('stale-momentum: ATR unavailable');
+    if (cascadeAgeBars > 6){
       if (Math.abs(p - entry) < a4 * 1.0){
         return { veto: true, reason: 'STALE MOMENTUM: cascade ' + cascadeAgeBars + ' bars old, displacement < 1×ATR' };
       }
     }
-    return { veto: false };
-  }catch(e){ return { veto: false }; }
+    return { veto: false, checked: true };
+  }catch(e){ return hgUncheckedGate('stale-momentum check threw: ' + hgErrText(e)); }
 }
 
 /* Map venue symbol → Binance USD-M leg for flow/funding twins (free public REST). */
@@ -213,12 +228,15 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
     if (!hit || !hit.dir) return { ok: true };
     var dir = hit.dir;
     var sym = ticker && ticker.symbol;
+    var unchecked = [];
     var stale = hgStaleMomentumVeto(rows, dir, hit.entry);
     if (stale.veto) return { ok: false, reason: stale.reason, tag: 'stale' };
+    if (stale.unchecked) unchecked.push(stale.uncheckedReason);
     var tf = (style === 'scalp' || style === 'gold-scalp') ? '1h' : '4h';
     var fr = (ticker && ticker.fundingPct != null && isFinite(+ticker.fundingPct)) ? +ticker.fundingPct : null;
     var flow = await hgAssessFlowTrap(sym, dir, fr, tf);
     if (flow.veto) return { ok: false, reason: flow.reason || 'flow trap', tag: 'flow', flowDetail: flow.flowDetail };
+    if (flow.flowNA) unchecked.push('flow trap: ' + (flow.flowDetail || 'no flow legs'));
     var rsEdge = null;
     if (!hgIsBtcSymbol(sym) && style.indexOf('gold') < 0 && typeof hgRelStrength === 'function' && typeof getCandles === 'function'){
       var look = (typeof G.HG_RS_LOOK === 'number') ? G.HG_RS_LOOK : 30;
@@ -226,12 +244,17 @@ async function hgPostGateSetupVeto(ticker, hit, rows, style, getCandles){
       var rsr = hgRelStrength(rows, btcRows, dir, look);
       if (rsr.available && !rsr.ok) return { ok: false, reason: rsr.note || 'lagging BTC', tag: 'rs' };
       if (rsr.available && isFinite(rsr.edge)) rsEdge = rsr.edge;
+      if (!rsr.available) unchecked.push('BTC relative strength: ' + (rsr.note || 'no BTC series'));
     }
     return {
       ok: true, flowOk: flow.flowOk, flowNA: flow.flowNA, flowDetail: flow.flowDetail,
-      crossOk: flow.crossOk, rsEdge: rsEdge
+      crossOk: flow.crossOk, rsEdge: rsEdge,
+      unchecked: unchecked.length > 0, uncheckedReasons: unchecked
     };
-  }catch(e){ return { ok: true }; }
+  }catch(e){
+    /* The gate threw. It did not pass — nothing was tested. Say so. */
+    return { ok: true, unchecked: true, uncheckedReasons: ['post-gate threw: ' + hgErrText(e)] };
+  }
 }
 
 /* Gold tabs — stale + XAUUSDT flow (no BTC RS). */
@@ -241,23 +264,45 @@ async function hgPostGateGoldVeto(cand, hit, rows15m, rows4h, style){
     if (!hit || !hit.dir) return { ok: true };
     var dir = hit.dir;
     var rows = (style === 'gold-scalp' && rows15m && rows15m.length >= 60) ? rows15m : rows4h;
-    if (rows && rows.length >= 60){
-      var stale = hgStaleMomentumVeto(rows, dir, hit.entry);
-      if (stale.veto) return { ok: false, reason: stale.reason, tag: 'stale' };
-    }
+    var unchecked = [];
+    var stale = hgStaleMomentumVeto(rows, dir, hit.entry);
+    if (stale.veto) return { ok: false, reason: stale.reason, tag: 'stale' };
+    if (stale.unchecked) unchecked.push(stale.uncheckedReason);
     var sym = (cand && cand.sym) ? cand.sym : 'XAUUSDT';
     var flow = await hgAssessFlowTrap(sym, dir, null, style === 'gold-scalp' ? '1h' : '4h');
     if (flow.veto) return { ok: false, reason: flow.reason || 'flow trap', tag: 'flow', flowDetail: flow.flowDetail };
-    return { ok: true, flowOk: flow.flowOk, flowNA: flow.flowNA, flowDetail: flow.flowDetail };
-  }catch(e){ return { ok: true }; }
+    if (flow.flowNA) unchecked.push('flow trap: ' + (flow.flowDetail || 'no flow legs'));
+    return {
+      ok: true, flowOk: flow.flowOk, flowNA: flow.flowNA, flowDetail: flow.flowDetail,
+      unchecked: unchecked.length > 0, uncheckedReasons: unchecked
+    };
+  }catch(e){
+    return { ok: true, unchecked: true, uncheckedReasons: ['post-gate threw: ' + hgErrText(e)] };
+  }
+}
+
+/* Mark a candidate as carrying a gate that could not be evaluated. It is NOT
+   demoted — an unrunnable check is not evidence against the trade — but the
+   stamp travels to the card so the reader can see the ledger is incomplete. */
+function hgMarkGateUnchecked(c, reasons){
+  if (!c) return;
+  var list = (Array.isArray(reasons) && reasons.length) ? reasons : ['post-gate could not be evaluated'];
+  c.postGateUnchecked = true;
+  c.postGateUncheckedReasons = (c.postGateUncheckedReasons || []).concat(list);
+  var stamp = 'POST-GATE UNCHECKED';
+  if (!Array.isArray(c.stamps)) c.stamps = [];
+  if (c.stamps.indexOf(stamp) < 0) c.stamps = c.stamps.concat([stamp]);
 }
 
 async function hgFilterGoldPostGate(ranked, venueRows, defaultRows4h, style){
-  try{
-    if (!Array.isArray(ranked)) return ranked;
-    for (var i = 0; i < ranked.length; i++){
-      var c = ranked[i];
-      if (!c || c.demoted || c.vetoed) continue;
+  if (!Array.isArray(ranked)) return ranked;
+  /* Per-candidate isolation. This loop used to sit inside ONE try: a single
+     throw aborted it and every candidate after that point was returned with
+     no gate run and no mark — silently reading as clean. */
+  for (var i = 0; i < ranked.length; i++){
+    var c = ranked[i];
+    if (!c || c.demoted || c.vetoed) continue;
+    try{
       var vr = venueRows ? venueRows[c.venue] : null;
       var r15 = vr && vr.rows15m;
       var r4 = (vr && vr.rows4h && vr.rows4h.length) ? vr.rows4h : defaultRows4h;
@@ -269,12 +314,16 @@ async function hgFilterGoldPostGate(ranked, venueRows, defaultRows4h, style){
         var stamp = 'POST-GATE ' + String(qv.tag || 'quality').toUpperCase();
         c.stamps = Array.isArray(c.stamps) ? c.stamps.concat([stamp]) : [stamp];
         c.demoteReason = qv.reason || stamp;
-      } else if (qv.flowDetail){
-        c.flowDetail = qv.flowDetail;
+      } else {
+        if (qv.flowDetail) c.flowDetail = qv.flowDetail;
+        if (qv.unchecked) hgMarkGateUnchecked(c, qv.uncheckedReasons);
+        else c.postGateChecked = true;
       }
+    }catch(e){
+      hgMarkGateUnchecked(c, ['post-gate threw: ' + hgErrText(e)]);
     }
-    return ranked;
-  }catch(e){ return ranked; }
+  }
+  return ranked;
 }
 
 var HG_GOLD_WEEKEND_EXCEED_MAX = 0.35;
@@ -1310,6 +1359,8 @@ G.hgGoldWeekendConvictionDemote = hgGoldWeekendConvictionDemote;
 G.hgApplyGoldWeekendDemotes = hgApplyGoldWeekendDemotes;
 G.HG_GOLD_WEEKEND_EXCEED_MAX = HG_GOLD_WEEKEND_EXCEED_MAX;
 G.hgStaleMomentumVeto = hgStaleMomentumVeto;
+G.hgUncheckedGate = hgUncheckedGate;
+G.hgMarkGateUnchecked = hgMarkGateUnchecked;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;
 G.hgSwingG5OK = hgSwingG5OK;

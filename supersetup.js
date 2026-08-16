@@ -359,13 +359,17 @@ function runFullMinimalLossAudit(win, c, hit, opts){
   var prec = runPrecisionSourceAudit(win, c, hit, opts);
   var reasons = (house.reasons || []).concat(ext.reasons || []).concat(prec.reasons || []);
   var passed = (house.passed || []).concat(ext.passed || []).concat(prec.passed || []);
+  var unchecked = (house.unchecked || []).concat(ext.unchecked || []).concat(prec.unchecked || []);
   return {
     pass: house.pass && ext.pass && prec.pass,
     reasons: reasons,
     passed: passed,
+    unchecked: unchecked,
     externalSources: (ext.sources || []).concat(prec.sources || []),
     precision: prec,
-    layerSummary: passed.length + ' ok' + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+    layerSummary: passed.length + ' ok'
+      + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+      + (unchecked.length ? (' · ' + unchecked.length + ' unchecked') : '')
   };
 }
 
@@ -416,6 +420,9 @@ function runPrecisionSourceAudit(win, c, hit, opts){
   var reasons = [];
   var passed = [];
   var sources = [];
+  /* Layers that could not be evaluated. Kept apart from `passed` and from
+     `reasons`: an unrunnable check neither clears a setup nor blocks it. */
+  var unchecked = [];
   var style = opts.style || (String(hit.scanner || 'swing').indexOf('scalp') >= 0 ? 'scalp' : 'swing');
 
   if (typeof win.deribitVolState === 'function'){
@@ -472,6 +479,12 @@ function runPrecisionSourceAudit(win, c, hit, opts){
   } else if (hit.postGate && hit.postGate.ok === false){
     sources.push('post-gate');
     reasons.push(hit.postGate.reason || 'post-gate veto');
+  } else if (hit.postGate && hit.postGate.ok && hit.postGate.unchecked){
+    /* ok:true from a gate that could not run is not a pass. It does not block
+       the setup, but it must not be counted as a precision layer cleared. */
+    sources.push('post-gate');
+    unchecked.push('Post-gate UNCHECKED — '
+      + ((hit.postGate.uncheckedReasons || ['reason not recorded']).join(' · ')));
   } else if (hit.postGate && hit.postGate.ok){
     passed.push('post-gate');
   }
@@ -481,7 +494,10 @@ function runPrecisionSourceAudit(win, c, hit, opts){
     reasons: reasons,
     passed: passed,
     sources: sources,
-    layerSummary: passed.length + ' precision ok' + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+    unchecked: unchecked,
+    layerSummary: passed.length + ' precision ok'
+      + (reasons.length ? (' · ' + reasons.length + ' block') : '')
+      + (unchecked.length ? (' · ' + unchecked.length + ' unchecked') : '')
   };
 }
 

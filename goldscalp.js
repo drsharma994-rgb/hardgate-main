@@ -843,6 +843,13 @@ function cardHTML(c, isBest, season){
     ? '<div class="gsx-gateline"><b>⚠ ' + esc(c.stamps.join(' · ')) + '</b> — '
       + esc((Array.isArray(c.gateNotes) ? c.gateNotes : []).join(' · '))
       + ' — demoted by quality gate: can never be MOST PROBABLE.</div>' : '';
+  /* A gate that could not be evaluated is shown as UNCHECKED. It is not a
+     veto and not a pass — the reader is told the ledger is incomplete. */
+  var uncheckedLine = (c.postGateUnchecked && !c.demoted)
+    ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important"><b>&#9888; POST-GATE UNCHECKED</b> &mdash; '
+      + esc((c.postGateUncheckedReasons || ['reason not recorded']).join(' &middot; '))
+      + '. This setup was <b>not</b> cleared by the quality gate; it was never tested.</div>'
+    : '';
   var xautBasisLine = (c.sym === 'XAUTUSD' && isFinite(c.spotRef) && isFinite(c.xautBasisPct)
     && Math.abs(c.xautBasisPct) > XAUT_SPOT_BASIS_WARN_PCT)
     ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important">XAUT instrument ~$' + pxF(c.entry)
@@ -905,6 +912,7 @@ function cardHTML(c, isBest, season){
     + visionLine
     + (c.invalidates ? '<div class="gsx-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
     + gateLine
+    + uncheckedLine
     + xautBasisLine
     + lockLine
     + newsBanner + notes + seasonLine
@@ -1389,7 +1397,16 @@ async function runScan(ui, scanSt){
     if (filterFn){
       try{
         ranked = await filterFn(ranked, venueRows, gold.rows4h, 'gold-scalp');
-      }catch(ePg){}
+      }catch(ePg){
+        /* The whole post-gate never ran. Every candidate is unchecked, not
+           clean — mark them so the card cannot imply a gate that passed. */
+        var mkFn = gfn('hgMarkGateUnchecked');
+        var pgWhy = 'post-gate filter threw: ' + ((ePg && ePg.message) ? ePg.message : String(ePg));
+        for (var pgI = 0; pgI < ranked.length; pgI++){
+          if (mkFn) mkFn(ranked[pgI], [pgWhy]);
+        }
+        try{ if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('GOLDSCALP', pgWhy); }catch(ePg2){}
+      }
     }
     var atrW = NaN;
     if (gold.rows4h && gold.rows4h.length){
