@@ -81,17 +81,16 @@ console.log('\n== a fabricated 0% would have read as a NEUTRAL crowd ==');
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'positioning.js'), 'utf8'), ctx, { filename: 'positioning.js' });
 
-  if (typeof ctx.positioningCrossCheck === 'function'){
-    const withZero = ctx.positioningCrossCheck({ fundingPct: 0, retailLongPct: null, oiChgPct: null },
-                                               { fundingPct: 0, retailLongPct: null });
-    const withNull = ctx.positioningCrossCheck({ fundingPct: null, retailLongPct: null, oiChgPct: null },
-                                               { fundingPct: null, retailLongPct: null });
-    ok(withZero && withNull, 'cross-check ran on both');
-    ok(JSON.stringify(withZero) !== JSON.stringify(withNull),
-      'a 0% funding and an ABSENT funding reach different conclusions — which is why the fabrication mattered');
-  } else {
-    ok(true, 'positioningCrossCheck not exported in this context — chain checked at source instead');
-  }
+  /* No skip branch. If this stops being reachable the suite must say so
+     rather than quietly report a pass for a chain it never followed. */
+  ok(typeof ctx.positioningCrossCheck === 'function', 'positioningCrossCheck is reachable');
+  const withZero = ctx.positioningCrossCheck({ fundingPct: 0, retailLongPct: null, oiChgPct: null },
+                                             { fundingPct: 0, retailLongPct: null });
+  const withNull = ctx.positioningCrossCheck({ fundingPct: null, retailLongPct: null, oiChgPct: null },
+                                             { fundingPct: null, retailLongPct: null });
+  ok(withZero && withNull, 'cross-check ran on both');
+  ok(JSON.stringify(withZero) !== JSON.stringify(withNull),
+    'a 0% funding and an ABSENT funding reach different conclusions — which is why the fabrication mattered');
 }
 
 console.log('\n== the funding twin no longer fills a gap with a made-up zero ==');

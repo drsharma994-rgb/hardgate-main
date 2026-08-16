@@ -36,25 +36,72 @@ const m = globalThis.swingGateMatrix(rows, ticker);
 ok(m && m.dir === 'long' && m.passed >= 1, 'swingGateMatrix returns aligned long with gate tally');
 ok(typeof globalThis.swingTryClean === 'function', 'swingTryClean exported');
 ok(typeof globalThis.scalpTryNear === 'function', 'scalpTryNear exported');
-{
-  const hit = globalThis.swingTryClean(rows, ticker);
-  if (hit){
-    ok(hit.dir === 'long' || hit.dir === 'short', 'swingTryClean direction');
-    ok(typeof hit.entryType === 'string' && hit.entryType.length > 0, 'swingTryClean enriched entryType');
-    ok(hit.targetPolicy && hit.targetPolicy.indexOf('unified') >= 0, 'swingTryClean unified targetPolicy');
-    ok(isFinite(hit.mark), 'swingTryClean carries mark price');
-  } else {
-    ok(true, 'fixture may not pass all gates — enrich path still wired when hit');
+/* A gate fixture must actually reach the gates.
+
+   These three blocks used to end in `else ok(true, 'fixture may not ...')`,
+   which reports a PASS for a path the fixture never entered. Instrumenting the
+   shipped test showed swingTryClean and swingTryNear both returned null, so
+   the enrich assertions and the near-clean assertions had never run once —
+   two of the file's 17 "passes" were testing nothing at all.
+
+   The linear ramp above cannot clear the gates: a pure trend pins RSI (G3),
+   never expands volume or closes near a high (G5), and leaves the structure
+   stop too far for R:R (G6). Real setups are not ramps. These fixtures are
+   trend -> shallow pullback -> reclaim bar closing near its high on expanded
+   volume, which is the shape the gates were written to find, and they were
+   located by searching the parameter space rather than hand-tuned until
+   something passed. */
+function gatedRows(cfg){
+  const out = [];
+  let c = 50000;
+  for (let i = 0; i < 260; i++){
+    const k = 259 - i;                      /* bars from the end */
+    let vol = 1000;
+    if (k >= cfg.pullBars + cfg.recBars) c = c * (1 + cfg.drift);
+    else if (k >= cfg.recBars)           c = c * (1 - cfg.pullPct);
+    else                               { c = c * (1 + cfg.recPct); vol = 1000 * cfg.volPop; }
+    const rng = c * 0.006;
+    const nearHigh = k < cfg.recBars;       /* reclaim bars close at their high */
+    out.push({
+      t: 1700000000 + i * 14400,
+      o: c - rng * (nearHigh ? 0.7 : 0.3),
+      h: c + rng * (nearHigh ? 0.08 : 0.5),
+      l: c - rng * (nearHigh ? 0.9 : 0.5),
+      c: c, v: vol
+    });
   }
+  return out;
+}
+
+/* Clears all seven gates. */
+const CLEAN_CFG = { drift: 0.005, pullPct: 0.003, pullBars: 12, recBars: 2, recPct: 0.004, volPop: 2 };
+/* Clears six — G6 R:R is the one it misses. */
+const NEAR_CFG  = { drift: 0.003, pullPct: 0.003, pullBars: 8,  recBars: 2, recPct: 0.002, volPop: 1 };
+
+{
+  const cleanRows = gatedRows(CLEAN_CFG);
+  const cleanTk = { symbol: 'BTCUSDT', fundingPct: 0.01, mark: cleanRows[cleanRows.length - 1].c };
+  const gm = globalThis.swingGateMatrix(cleanRows, cleanTk);
+  ok(gm && gm.dir === 'long' && gm.passed === 7,
+     'CLEAN fixture clears all seven gates (' + (gm && gm.passed) + '/7) — the fixture reaches the code');
+
+  const hit = globalThis.swingTryClean(cleanRows, cleanTk);
+  /* No else-branch pass. If the fixture stops reaching the enrich path the
+     suite must say so rather than quietly stop testing it. */
+  ok(hit, 'swingTryClean returns a hit on the CLEAN fixture (was: null, and the block below never ran)');
+  ok(hit.dir === 'long' || hit.dir === 'short', 'swingTryClean direction');
+  ok(typeof hit.entryType === 'string' && hit.entryType.length > 0, 'swingTryClean enriched entryType');
+  ok(hit.targetPolicy && hit.targetPolicy.indexOf('unified') >= 0, 'swingTryClean unified targetPolicy');
+  ok(isFinite(hit.mark), 'swingTryClean carries mark price');
 }
 {
-  const near = globalThis.swingTryNear(rows, ticker);
-  if (near){
-    ok(near.nearClean === true && near.passed >= 6, 'swingTryNear marks 6/7+ watch rows');
-    ok(Array.isArray(near.missing) && near.missing.length >= 1, 'swingTryNear lists missing gates');
-  } else {
-    ok(true, 'fixture may not land 6/7 near-clean — swingTryNear path still wired');
-  }
+  const nearRows = gatedRows(NEAR_CFG);
+  const nearTk = { symbol: 'BTCUSDT', fundingPct: 0.01, mark: nearRows[nearRows.length - 1].c };
+  const near = globalThis.swingTryNear(nearRows, nearTk);
+  ok(near, 'swingTryNear returns a watch row on the NEAR fixture (was: null, and the block below never ran)');
+  ok(near.nearClean === true && near.passed >= 6, 'swingTryNear marks 6/7+ watch rows');
+  ok(Array.isArray(near.missing) && near.missing.length >= 1, 'swingTryNear lists missing gates');
+  ok(near.missing.some(g => /G6/.test(g)), 'and names G6 as the gate this fixture misses');
 }
 {
   /* G6 must not cap wide structure stops — veto honestly when R:R fails. */
@@ -62,14 +109,12 @@ ok(typeof globalThis.scalpTryNear === 'function', 'scalpTryNear exported');
   const k = wide.length - 11;
   wide[k] = Object.assign({}, wide[k], { l: wide[k].l * 0.80 });
   const tm = globalThis.swingGateMatrix(wide, ticker);
-  if (tm && tm.dir && isFinite(tm.a4) && tm.a4 > 0){
-    ok(Math.abs(tm.dynamicRR - 1.75) > 1e-6 || tm.dynamicRR >= 2.0,
-       'wide stop: dynamicRR is not pinned at dead 1.75 cap artifact');
-    ok(Math.abs(tm.entry - tm.stop) / tm.a4 > 1.75 - 1e-9 || !tm.gates.find(function(g){ return g[0].indexOf('G6')===0 && g[1]; }),
-       'wide stop: structure distance reported without 2.0xATR cap');
-  } else {
-    ok(true, 'wide-stop fixture did not align — G6 veto test skipped');
-  }
+  ok(tm && tm.dir && isFinite(tm.a4) && tm.a4 > 0,
+     'wide-stop fixture aligns, so the G6 assertions below actually run');
+  ok(Math.abs(tm.dynamicRR - 1.75) > 1e-6 || tm.dynamicRR >= 2.0,
+     'wide stop: dynamicRR is not pinned at dead 1.75 cap artifact');
+  ok(Math.abs(tm.entry - tm.stop) / tm.a4 > 1.75 - 1e-9 || !tm.gates.find(function(g){ return g[0].indexOf('G6')===0 && g[1]; }),
+     'wide stop: structure distance reported without 2.0xATR cap');
 }
 
 {

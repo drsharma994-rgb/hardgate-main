@@ -130,6 +130,14 @@ console.log('macro panel captured: dxy =', macroPanelArgs.macro && macroPanelArg
 console.log('logSetup calls:', JSON.stringify(logged));
 if (gGates !== 37) throw new Error('expected 37 swing gates, got ' + gGates);
 if (cGates !== 40) throw new Error('expected 40 scalp gates (20 x2), got ' + cGates);
+/* The docblock above promises the verdict, the levels plan and the context
+   panel are checked. They were printed, not checked — a run that rendered a
+   gate ledger with no verdict and no plan would have passed silently. */
+if (!/verdict/.test(out)) throw new Error('RUN1: gate ledger rendered without a verdict');
+if (!/PLAN:/.test(out)) throw new Error('RUN1: no levels plan in the rendered output');
+if (!/Weekly structure/.test(out)) throw new Error('RUN1: context panel missing from the output');
+if (!macroPanelArgs || !macroPanelArgs.macro) throw new Error('RUN1: macro panel never received a macro object');
+if (!Array.isArray(logged)) throw new Error('RUN1: logSetup capture broke');
 
 // ---- RUN 2: macro feed dead (Yahoo/Frankfurter fail) — gates must degrade, not break ----
 globalThis.getGoldMacro = async () => null;
@@ -166,6 +174,7 @@ if (!g12 || g12[1] !== 'na' || !g13 || g13[1] !== 'na') throw new Error('RUN2: m
   console.log('goldLvl chip:', elements.goldLvl.innerHTML);
   console.log('swing GS gates:', gsGates, '| scalp GC gates:', gcGates);
   console.log('swing verdict present:', /verdict/.test(sw), '| macro panel refreshed:', !!macroPanelArgs);
+  if (!/verdict/.test(sw)) throw new Error('RUN3: quick swing ledger rendered without a verdict');
   if (gsGates !== 7) throw new Error('expected 7 GS gates, got ' + gsGates);
   if (gcGates !== 12) throw new Error('expected 12 GC gates (6 x2), got ' + gcGates);
   if (!/^evaluated/.test(elements.goldStat.textContent)) throw new Error('runGold did not complete cleanly');

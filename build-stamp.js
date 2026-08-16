@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v337',
-  pack: 'a rate nobody reported is not a rate of zero',
-  built: '2026-08-17T10:20:00Z',
-  note: 'Bybit reports absent fields as an empty string and the funding twin filled thin CoinDCX contracts with a fabricated 0.0000%'
+  version: 'hg-v338',
+  pack: 'nine assertions that had never once run',
+  built: '2026-08-17T12:40:00Z',
+  note: 'the cryptogates fixture never cleared the gates, so the enrich and near-clean blocks passed on an else branch instead of running'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

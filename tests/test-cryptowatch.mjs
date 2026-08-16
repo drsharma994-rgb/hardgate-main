@@ -33,9 +33,11 @@ ok(w && (w.state === 'armed' || w.state === 'idle'), 'trending fixture yields a 
 ok(w.gatesPassed >= 3, 'partial gate tally reported — got ' + w.gatesPassed);
 
 const clean = globalThis.swingWatchEval(rows, { symbol: 'BTCUSD', fundingPct: 0.01 });
-/* may be null if all gates pass on strong trend fixture — if not null, ok */
-if (clean === null) ok(true, 'all gates pass → null (already CLEAN, not forming)');
-else ok(clean.gatesPassed < 7, 'not fully clean when watch row exists');
+/* Both outcomes are legitimate — null means every gate passed so there is
+   nothing forming — but the contract holds either way, so it is asserted in
+   one expression that always runs rather than a branch that passes itself. */
+ok(clean === null || clean.gatesPassed < 7,
+   'a watch row exists only while the setup is NOT already fully clean');
 
 console.log('== coilWatchItems ==');
 const coils = globalThis.coilWatchItems({ list: [{ symbol: 'ETHUSD', coilLow: 3000, coilHigh: 3100, dir: 'long' }] });
