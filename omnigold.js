@@ -557,13 +557,13 @@ terse status, and never launches a first-time scan on a global refresh.
         try { plan = planFn(hit.dir, rows, undefined, { minRr: cfg.minRr }); } catch (e) { plan = null; }
       }
       if (plan && deriveFn) plan = deriveFn(plan);
-      ex.planRisk = (plan && isFinite(num(plan.risk))) ? num(plan.risk) : NaN;
+      ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
       out.push({
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
-        rr: (plan && isFinite(num(plan.rr1))) ? num(plan.rr1) : NaN
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
     }
     return out;
@@ -603,8 +603,12 @@ terse status, and never launches a first-time scan on a global refresh.
   }
   function pill(t, c){ return '<span class="gpip ' + (c || '') + '">' + esc(t) + '</span>'; }
   /* Gold prints in dollars — 2dp is right for XAUUSD and PAXG alike. */
-  function fmtPx(n){ var v = +n; return isFinite(v) ? v.toFixed(2) : '—'; }
-  function fmt(n, d){ return isFinite(n) ? (+n).toFixed(d == null ? 2 : d) : '—'; }
+  /* isFinite(null) is TRUE and +null is 0, so formatting a null through the
+     natural guard prints a confident "0.00" for a value that is absent. Every
+     cleared R:R and every venue field that legitimately arrives as null went
+     through here. fin() maps null/undefined/'' to NaN first. */
+  function fmtPx(n){ var v = fin(n); return isFinite(v) ? v.toFixed(2) : '—'; }
+  function fmt(n, d){ var v = fin(n); return isFinite(v) ? v.toFixed(d == null ? 2 : d) : '—'; }
 
   function gateLine(g){
     var cls = g.pass === true ? 'ok' : (g.pass === false ? 'bad' : '');

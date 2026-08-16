@@ -952,7 +952,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
-        rr: (plan && isFinite(plan.rr1)) ? plan.rr1 : NaN
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
     }
     return out;
@@ -964,7 +964,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     if (!plan) return plan;
     var out = {}, k;
     for (k in plan) if (Object.prototype.hasOwnProperty.call(plan, k)) out[k] = plan[k];
-    var entry = num(out.entry), stop = num(out.stop), t1 = num(out.t1), t2 = num(out.t2);
+    /* fin(), not num(). num(null) is 0 because +null is 0, so a missing entry
+       would be read as price zero and produce a risk of |0 - stop| — a large,
+       entirely invented number, and an R:R to match. fin() is the strict
+       version already used for venue payloads in this file. */
+    var entry = fin(out.entry), stop = fin(out.stop), t1 = fin(out.t1), t2 = fin(out.t2);
     /* Risk is derived from the levels the card actually PRINTS, never from
        plan.risk. Live cards showed R:R 14.72 / 11.35 / 9.57 whose true value
        was 2.00 in every case — a 5-7x overstatement that also drove the
@@ -974,14 +978,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        source. If the numbers on the card disagree with each other, the card
        is lying; deriving from what is shown makes that impossible. */
     var risk = Math.abs(entry - stop);
-    if (isFinite(risk) && risk > 0){
-      /* Recomputed unconditionally — a stale rr1/riskPct from the wrapper
-         must not win over the geometry actually displayed. */
-      if (isFinite(t1)) out.rr1 = Math.abs(t1 - entry) / risk;
-      if (isFinite(t2)) out.rr2 = Math.abs(t2 - entry) / risk;
-      if (isFinite(entry) && entry > 0) out.riskPct = risk / entry * 100;
-      out.risk = risk;
-    }
+    var usable = isFinite(risk) && risk > 0;
+    /* Every derived field is ASSIGNED on every path, never merely
+       overwritten on the good one. The copy loop above brought the wrapper's
+       stale rr1/rr2/risk/riskPct across with the rest of the plan, so leaving
+       any of them untouched here let exactly the number this function exists
+       to eliminate survive whenever the geometry was degenerate: entry equal
+       to stop, or a target the plan did not supply. The comment used to claim
+       these were "recomputed unconditionally" while they sat inside the
+       risk > 0 guard. They are unconditional now, and a value that cannot be
+       derived is null rather than inherited. */
+    out.rr1 = (usable && isFinite(t1)) ? Math.abs(t1 - entry) / risk : null;
+    out.rr2 = (usable && isFinite(t2)) ? Math.abs(t2 - entry) / risk : null;
+    out.riskPct = (usable && isFinite(entry) && entry > 0) ? (risk / entry * 100) : null;
+    out.risk = usable ? risk : null;
     return out;
   }
 
@@ -997,7 +1007,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          actually ran is the real difference between two tickets. */
       var ae = (a.grade && a.grade.evaluated) || 0, be = (b.grade && b.grade.evaluated) || 0;
       if (be !== ae) return be - ae;
-      var ar = isFinite(a.rr) ? a.rr : -1, br = isFinite(b.rr) ? b.rr : -1;
+      /* fin(), not isFinite: a cleared R:R is null, and isFinite(null) is true,
+         so the raw test would rank an unknown R:R as a real 0 rather than
+         sinking it below every setup that has one. */
+      var ar = isFinite(fin(a.rr)) ? fin(a.rr) : -1, br = isFinite(fin(b.rr)) ? fin(b.rr) : -1;
       if (br !== ar) return br - ar;
       return String(a.base) < String(b.base) ? -1 : 1;
     });
@@ -1288,7 +1301,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return String(s == null ? '' : s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-  function fmt(n, d){ return isFinite(n) ? (+n).toFixed(d == null ? 4 : d) : '—'; }
+  /* isFinite(null) is TRUE and +null is 0, so formatting a null through the
+     natural guard prints a confident "0.00" for a value that is absent. Every
+     cleared R:R and every venue field that legitimately arrives as null went
+     through here. fin() maps null/undefined/'' to NaN first. */
+  function fmt(n, d){ var v = fin(n); return isFinite(v) ? v.toFixed(d == null ? 4 : d) : '—'; }
 
   /* Price formatting scaled to magnitude. A flat 4 decimals rendered
      1000BONK as ENTRY 0.0023 / STOP 0.0024 — one apparent tick apart, with

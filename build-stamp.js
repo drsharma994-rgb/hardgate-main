@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v331',
-  pack: 'a restored conviction carries its own numbers, not the scan it replaced',
-  built: '2026-08-16T21:20:00Z',
-  note: 'the merged-conviction branch restored entry/stop/t1/t2 from the lock and left t3 and rr3 behind from the fresh scan'
+  version: 'hg-v332',
+  pack: 'the overstated R:R had one door left open',
+  built: '2026-08-16T23:15:00Z',
+  note: 'hgOmniDerivePlan recomputed R:R inside a risk>0 guard, so degenerate geometry let the wrapper stale R:R through unchanged'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
