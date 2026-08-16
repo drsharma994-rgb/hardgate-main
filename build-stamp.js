@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v339',
-  pack: 'nine tabs no test had ever loaded',
-  built: '2026-08-17T15:05:00Z',
-  note: 'pineHalfTrend names a direction with a null entry, and three sub-tabs read detector levels straight through to the card'
+  version: 'hg-v340',
+  pack: 'grepped by four tests, run by none',
+  built: '2026-08-17T17:30:00Z',
+  note: 'STAR TRADER is 966 lines that no test executed; probing found no live defect and one latent forming-bar hazard'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

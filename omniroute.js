@@ -210,7 +210,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var sec = TF_SEC[tf] || 0;
     if (!sec) return rows;
     var lastT = num(rows[rows.length - 1].t);
-    if (!isFinite(lastT)) return rows;
+    if (!isFinite(lastT) || lastT <= 0) return rows;
+    /* Same millisecond normalisation engine.js already does — a ms stamp
+       would make this drop the newest CLOSED bar on every scan. */
+    if (lastT > 1e12) lastT = Math.floor(lastT / 1000);
     var now = isFinite(nowSec) ? nowSec : (Date.now() / 1000);
     return ((now - lastT) < sec) ? rows.slice(0, -1) : rows;
   }

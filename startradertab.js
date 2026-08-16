@@ -162,12 +162,23 @@ function stEdgeReadyMsg(){
 
 function stTierRank(t){ return TIER_RANK[t] || 0; }
 
-function stDropForming(rows, tf){
+function stDropForming(rows, tf, nowSec){
   try{
     var sec = { '15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400 }[tf];
     if (!rows || !rows.length || !sec) return rows || [];
-    var now = Math.floor(Date.now() / 1000);
-    return (now - rows[rows.length - 1].t < sec) ? rows.slice(0, -1) : rows;
+    /* Bar timestamps arrive in seconds from every feed this tab uses today
+       (binanceKlines divides by 1000, Yahoo reports seconds). engine.js
+       normalises milliseconds anyway because both forms exist in this
+       codebase, and without it a millisecond stamp makes now - t hugely
+       negative, which is always < sec — so the newest CLOSED bar would be
+       discarded on every scan, silently leaving the tab a bar stale. Not a
+       live fault, and not the dangerous direction; closed here so it stays
+       that way. */
+    var lastT = +rows[rows.length - 1].t;
+    if (!isFinite(lastT) || lastT <= 0) return rows;
+    if (lastT > 1e12) lastT = Math.floor(lastT / 1000);
+    var now = isFinite(nowSec) ? nowSec : Math.floor(Date.now() / 1000);
+    return (now - lastT < sec) ? rows.slice(0, -1) : rows;
   }catch(e){ return rows || []; }
 }
 
