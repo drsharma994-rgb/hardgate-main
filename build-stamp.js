@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v324',
-  pack: 'the PINE family on the forward log',
-  built: '2026-08-16T10:50:00Z',
-  note: 'one hook in pine-sub covers nine scripts; fresh signals only, so an ageing signal is not counted twice'
+  version: 'hg-v325',
+  pack: 'one place to read every tab evidence',
+  built: '2026-08-16T11:40:00Z',
+  note: 'fifteen tabs were recording with nowhere to read it — cross-tab ledger now sits in SCORECARD beside its own'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

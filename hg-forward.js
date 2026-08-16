@@ -369,6 +369,73 @@ localStorage. Never throws.
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    /* Every tab's evidence in one table. Most tabs record but have no panel
+       of their own, so without this the instrumentation is write-only —
+       fifteen tabs banking evidence nobody can read.
+       This lives beside SCORECARD's ledger rather than replacing it. That
+       ledger dedups by symbol+direction within 24h, which is correct for
+       "did this SETUP pay" but collapses distinct mechanics: if two tabs
+       both fire long BTC today it keeps one. Measuring which MECHANIC pays
+       needs the tab+mechanic+bar key used here, so the two answer different
+       questions and both are worth having. */
+    W.hgFwdAllHTML = function(opts){
+      try {
+        var o = opts || {};
+        var list = load();
+        if (!list.length){
+          return '<div class="note"><b>FORWARD LEDGER — every tab, out-of-sample</b><br>'
+               + 'Nothing recorded yet. Each tab logs a setup once when it fires and settles it later '
+               + 'against bars that had not printed at the time. Run the scanners and this fills; '
+               + 'unlike every other measurement in the app it is never re-read from the current window.</div>';
+        }
+        var tabs = {}, i, r;
+        for (i = 0; i < list.length; i++){
+          r = list[i];
+          if (!tabs[r.tab]) tabs[r.tab] = true;
+        }
+        var names = [];
+        for (var t in tabs) if (Object.prototype.hasOwnProperty.call(tabs, t)) names.push(t);
+        names.sort();
+        var readFn = (typeof W.hgOmniPoolRead === 'function') ? W.hgOmniPoolRead : null;
+        var minRr = isFinite(+o.minRr) ? +o.minRr : 2;
+        var h = '<h3>FORWARD LEDGER — every tab, out-of-sample</h3>';
+        h += '<table class="tbl"><thead><tr><th>TAB</th><th>MECHANIC</th><th>SETTLED</th>'
+           + '<th>T1-FIRST</th><th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
+        var totS = 0, totW = 0, totO = 0, rowsOut = 0;
+        for (i = 0; i < names.length; i++){
+          var pool = hgFwdPool(list, names[i]);
+          var mechs = [];
+          for (var m in pool) if (Object.prototype.hasOwnProperty.call(pool, m)) mechs.push(m);
+          mechs.sort();
+          for (var j = 0; j < mechs.length; j++){
+            var p = pool[mechs[j]];
+            totS += p.samples; totW += p.wins; totO += p.open; rowsOut++;
+            var v = readFn ? readFn(p, minRr, 20) : null;
+            var read = !p.samples ? (p.open ? (p.open + ' awaiting settlement') : 'never fired')
+                                  : (v ? v.read : 'unjudged');
+            var cls = !p.samples ? '' : (v ? v.cls : '');
+            var need = (v && v.need) ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
+            h += '<tr><td class="dim">' + esc(names[i]) + '</td><td><b>' + esc(mechs[j]) + '</b></td>'
+               + '<td>' + p.samples + need + '</td>'
+               + '<td>' + (p.samples ? (p.hit * 100).toFixed(0) + '%' : '—') + '</td>'
+               + '<td>' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—') + '</td>'
+               + '<td class="dim">' + p.open + '</td>'
+               + '<td><span class="gpip ' + cls + '">' + esc(read) + '</span></td></tr>';
+          }
+        }
+        h += '</tbody></table>';
+        h += '<div class="note">' + rowsOut + ' mechanic(s) across ' + names.length + ' tab(s) · '
+           + totS + ' settled, ' + totO + ' open'
+           + (totS ? (' · ' + (totW / totS * 100).toFixed(0) + '% T1-first overall') : '')
+           + '. Recorded once per firing, settled by bars that did not exist at the time; a bar spanning '
+           + 'both stop and target counts as a STOP, and expiry is excluded rather than counted as a win. '
+           + 'This sits alongside the SCORECARD ledger below, which dedups by symbol and direction over 24h '
+           + '— right for "did this setup pay", but it merges mechanics, so per-mechanic evidence is keyed '
+           + 'separately here.</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
     W.hgFwdState = function(){
       try {
         var l = load(), open = 0, settled = 0, i;

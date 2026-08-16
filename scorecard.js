@@ -1501,11 +1501,29 @@ function mountScorecard(el){
       + '<button class="btn" id="scoreExport" title="download the full ledger + stats as JSON">EXPORT JSON</button></div>'
       + '<div class="grid3" style="margin-top:12px" id="scoreBoard"></div>'
       + '<hr class="sep">'
+      + '<div id="scoreFwdAll"></div>'
+      + '<hr class="sep">'
       + '<div id="scoreBreaks"></div>'
       + '<hr class="sep">'
       + '<div id="scoreOpenWrap"></div>'
       + '<div id="scoreSettledWrap"></div>'
       + '</div>';
+    /* The per-mechanic forward ledger, shown in the tab whose whole purpose is
+       measurement. It sits ABOVE this tab's own ledger rather than replacing
+       it: hgScoreRecord dedups by symbol+direction over 24h, which is right
+       for "did this setup pay" but merges distinct mechanics — if two tabs
+       both fire long BTC today it keeps one. Answering "which MECHANIC pays"
+       needs a tab+mechanic+bar key, so the two ledgers answer different
+       questions and both belong here.
+       Without this, fifteen instrumented tabs were recording evidence with
+       nowhere to read it. */
+    try {
+      var fwdAllEl = el.querySelector('#scoreFwdAll');
+      if (fwdAllEl && typeof G.hgFwdAllHTML === 'function'){
+        fwdAllEl.innerHTML = G.hgFwdAllHTML({ minRr: 2 });
+      }
+    } catch (eFwd) {}
+
     var ui = {
       el: el,
       stat: el.querySelector('#scoreStat'),
