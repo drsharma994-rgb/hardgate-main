@@ -1313,6 +1313,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      universe, so fixed precision is not a cosmetic problem: it made the
      plan unreadable exactly where the stop matters most. */
   function fmtPx(n){
+    if (n === null || n === undefined || n === '') return '—';
     var v = +n;
     if (!isFinite(v)) return '—';
     var a = Math.abs(v);

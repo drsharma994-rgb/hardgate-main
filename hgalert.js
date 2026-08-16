@@ -92,7 +92,11 @@ function gfn(name){
   try{ if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') return globalThis[name]; }catch(e){}
   return null;
 }
+/* Number(null) and +null are both 0, so coercing before the finite test
+   prints a confident zero for a value that is absent. Reject the empty
+   values first. */
 function alertFmtPx(n){
+  if (n === null || n === undefined || n === '') return '—';
   var x = +n;
   if (!(typeof x === 'number' && isFinite(x))) return '—';
   var a = Math.abs(x);

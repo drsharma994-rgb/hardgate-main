@@ -11,7 +11,11 @@ var DEFAULT_SYMBOLS = 24;
 var __hgSuperCalSnap = null;
 var __sc = { mounted: false, root: null, busy: false, lastAt: 0 };
 
+/* Number(null) and +null are both 0, so coercing before the finite test
+   prints a confident zero for a value that is absent. Reject the empty
+   values first. */
 function fmt(n, d){
+  if (n === null || n === undefined || n === '') return '—';
   d = (d === undefined) ? 2 : d;
   var x = Number(n);
   return Number.isFinite(x) ? x.toFixed(d) : '—';

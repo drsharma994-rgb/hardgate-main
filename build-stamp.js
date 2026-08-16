@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v332',
-  pack: 'the overstated R:R had one door left open',
-  built: '2026-08-16T23:15:00Z',
-  note: 'hgOmniDerivePlan recomputed R:R inside a risk>0 guard, so degenerate geometry let the wrapper stale R:R through unchanged'
+  version: 'hg-v333',
+  pack: 'finding it a sixth time by hand is not a plan',
+  built: '2026-08-17T01:30:00Z',
+  note: 'thirteen formatters printed a confident number for an absent value; a test now executes every formatter in the app with null'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

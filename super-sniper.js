@@ -19,7 +19,14 @@ var __sn = {
 };
 
 function N(v){ return Number(v); }
-function fmt(n, d){ return (typeof W.hgSuperDeskFmt === 'function') ? W.hgSuperDeskFmt(n, d) : String(n); }
+/* The String(n) fallback rendered a missing value as the text "null".
+   Absent reads as absent whether or not the shared desk formatter loaded. */
+function fmt(n, d){
+  if (n === null || n === undefined || n === '') return '—';
+  if (typeof W.hgSuperDeskFmt === 'function') return W.hgSuperDeskFmt(n, d);
+  var x = Number(n);
+  return Number.isFinite(x) ? x.toFixed(d === undefined ? 2 : d) : '—';
+}
 
 function isFreshAt(at, maxMs){
   maxMs = maxMs || SNAP_MAX_MS;

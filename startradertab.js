@@ -26,7 +26,11 @@ function esc(s){
     return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
   });
 }
+/* Number(null) and +null are both 0, so coercing before the finite test
+   prints a confident zero for a value that is absent. Reject the empty
+   values first. */
 function pxF(n){
+  if (n === null || n === undefined || n === '') return '—';
   if (typeof W.px === 'function') return W.px(n);
   if (!isFinite(n)) return '—';
   var a = Math.abs(n);
@@ -34,6 +38,7 @@ function pxF(n){
   return Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
 }
 function fmtF(n, d){
+  if (n === null || n === undefined || n === '') return '—';
   if (typeof W.fmt === 'function') return W.fmt(n, d);
   if (!isFinite(n)) return '—';
   return Number(n).toLocaleString('en-US', { maximumFractionDigits: (d === undefined ? 2 : d) });
