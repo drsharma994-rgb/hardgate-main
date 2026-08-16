@@ -659,7 +659,7 @@ async function runGoldPro(ui){
           ticket: gpAligned
         }], { horizonBars: 20 });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldpro", eFwd); } catch (eW) {} }
 
     ui.out.innerHTML = renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,

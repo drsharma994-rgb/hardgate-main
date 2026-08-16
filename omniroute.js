@@ -1599,7 +1599,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                levels counts as a stop" rule biases pessimistic. That is the
                safe direction, so it is allowed rather than skipped. */
             if (typeof W.hgFwdResolve === 'function'){
-              try { W.hgFwdResolve(item.sym, null, rows); } catch (e) {}
+              try { W.hgFwdResolve(item.sym, null, rows); }
+              catch (e) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('omniroute:resolve', e); } catch (eW) {} }
             }
             var hits = hgOmniDetect(rows);
             if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
@@ -1734,7 +1735,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                mechanic: found[k].kind,
                                ticket: !!(found[k].grade && found[k].grade.ticket) });
               }
-              if (fwdRows.length){ try { W.hgFwdRecordScan('OMNIROUTE', TF, fwdRows, { horizonBars: 20 }); } catch (e) {} }
+              if (fwdRows.length){
+                try { W.hgFwdRecordScan('OMNIROUTE', TF, fwdRows, { horizonBars: 20 }); }
+                catch (e) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('omniroute:record', e); } catch (eW) {} }
+              }
             }
           }
           return { cands: cands, scanned: list.length, uni: uni.length,

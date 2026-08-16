@@ -545,7 +545,7 @@ function publishOiflowState(results){
         }
         if (fwd.length) W.hgFwdRecordScan('OIFLOW', '4h', fwd, { horizonBars: 20 });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("oiflow", eFwd); } catch (eW) {} }
     /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
        mirrors window.oiflowState() for the BRAIN. */
     G.HG_oiflowResults = { results: rows, syms: syms, at: at };
@@ -723,7 +723,7 @@ function mount(el){
       if (oiFwdEl && typeof W.hgFwdPanelHTML === 'function'){
         oiFwdEl.innerHTML = W.hgFwdPanelHTML('OIFLOW', { minRr: 2, title: 'FORWARD — do OI regimes resolve differently?' });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("oiflow", eFwd); } catch (eW) {} }
     try{
       if (typeof hgSetupPaintDesk === 'function'){
         hgSetupPaintDesk('oiflowDesk', { kind: 'oiflow', tab: 'OI FLOW',

@@ -394,7 +394,7 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
                    ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
         }), { horizonBars: 24 });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eFwd); } catch (eW) {} }
     var hist = [];
     for (var j = 0; j < (history || []).length; j++){
       var h = history[j];
@@ -1292,7 +1292,7 @@ async function runScan(ui, scanSt){
       if (typeof W.hgFwdResolve === 'function' && gold && gold.rows4h && gold.rows4h.length){
         W.hgFwdResolve('XAUUSD', null, gold.rows4h);
       }
-    } catch (eRes) {}
+    } catch (eRes) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("goldscalp", eRes); } catch (eW) {} }
     try{
       if (typeof W.hgVolFromCloses === 'function' && gold.rows4h && gold.rows4h.length >= 30){
         W.__hgGoldVolPack = W.hgVolFromCloses(gold.rows4h.map(function(r){ return r.c; }));

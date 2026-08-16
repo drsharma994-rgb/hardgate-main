@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v325',
-  pack: 'one place to read every tab evidence',
-  built: '2026-08-16T11:40:00Z',
-  note: 'fifteen tabs were recording with nowhere to read it — cross-tab ledger now sits in SCORECARD beside its own'
+  version: 'hg-v326',
+  pack: 'the forward log reports its own failures',
+  built: '2026-08-16T12:30:00Z',
+  note: 'a broken recorder looked exactly like a quiet market — 19 silent catches in my own instrumentation now report'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

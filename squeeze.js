@@ -853,7 +853,7 @@ function publishSqueezeState(results){
         }
         if (fwd.length) W.hgFwdRecordScan('SQUEEZE', '4h', fwd, { horizonBars: 20 });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("squeeze", eFwd); } catch (eW) {} }
     /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
        mirrors window.squeezeState() for the BRAIN. */
     W.HG_squeezeResults = { results: rows, syms: syms, at: at };
@@ -1063,7 +1063,7 @@ function mount(el){
     if (sqFwdEl && typeof W.hgFwdPanelHTML === 'function'){
       sqFwdEl.innerHTML = W.hgFwdPanelHTML('SQUEEZE', { minRr: 2, title: 'FORWARD — has FIRED or BREAK paid?' });
     }
-  } catch (eFwd) {}
+  } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("squeeze", eFwd); } catch (eW) {} }
   var refs = {
     summary: summaryEl,
     firedDesk: el.querySelector('#sqFiredDesk'),

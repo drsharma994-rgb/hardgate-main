@@ -741,7 +741,7 @@ function trendmxLimitBoardHTML(rows){
                  ticket: !!(c.row && c.row.gate && c.row.gate.clean7) };
       }), { horizonBars: 20 });
     }
-  } catch (eFwd) {}
+  } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("trendtable", eFwd); } catch (eW) {} }
   cands = cands.slice(0, 8);
   if (!cands.length) return '';
   return '<div class="panel" style="margin:12px 0">'

@@ -51,6 +51,14 @@ localStorage. Never throws.
   var LS_KEY = 'hg_forward_v1';
   var MAX_RECORDS = 4000;     /* ~1 year of a busy tab; pruned oldest-first */
 
+  /* Module scope on purpose: this file is 'use strict', so a function declared
+     inside the `if (typeof window …)` block does NOT escape it — the health
+     renderer sits outside that block and could not see it there. */
+  function esc(x){
+    return String(x == null ? '' : x)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function num(v){ var n = +v; return isFinite(n) ? n : NaN; }
   /* null/undefined/'' -> NaN. isFinite(null) is TRUE in JS. */
   function fin(v){
@@ -208,6 +216,57 @@ localStorage. Never throws.
     return out;
   }
 
+  /* ==================== health ====================
+     Every call site into this module is wrapped in try/catch, because a
+     logging failure must never break a scan. But a SILENT logging failure is
+     worse than the crash it prevents: evidence stops accumulating, the panel
+     keeps saying "nothing recorded yet", and there is no way to tell a quiet
+     market from a broken pipeline. That ambiguity is the exact thing this
+     workstream exists to remove, so the module reports its own failures.
+     Kept in memory plus a small persisted summary, so a fault that happens
+     during a scan still shows after a reload. */
+
+  var HEALTH_KEY = 'hg_forward_health_v1';
+  var MAX_ERRS = 20;
+  var __errs = [];
+
+  function hgFwdWarn(scope, err){
+    try {
+      var msg = (err && err.message) ? err.message : String(err || 'unknown');
+      __errs.push({ scope: String(scope || '?'), msg: msg, at: Date.now() });
+      if (__errs.length > MAX_ERRS) __errs = __errs.slice(-MAX_ERRS);
+      try {
+        if (typeof localStorage !== 'undefined'){
+          var prev = null;
+          try { prev = JSON.parse(localStorage.getItem(HEALTH_KEY) || 'null'); } catch (e2) { prev = null; }
+          var n = (prev && isFinite(+prev.count)) ? (+prev.count + 1) : 1;
+          localStorage.setItem(HEALTH_KEY, JSON.stringify({ count: n, scope: String(scope || '?'), msg: msg, at: Date.now() }));
+        }
+      } catch (e3) { /* storage full or blocked — the in-memory list still holds it */ }
+      try { if (typeof console !== 'undefined' && console.warn) console.warn('[hg-forward] ' + scope, err); } catch (e4) {}
+    } catch (e) { /* the warner itself must never throw */ }
+  }
+
+  function hgFwdHealth(){
+    var persisted = null;
+    try {
+      if (typeof localStorage !== 'undefined') persisted = JSON.parse(localStorage.getItem(HEALTH_KEY) || 'null');
+    } catch (e) { persisted = null; }
+    return { errors: __errs.slice(), recent: __errs.length, persisted: persisted };
+  }
+
+  function hgFwdHealthHTML(){
+    var h = hgFwdHealth();
+    var n = (h.persisted && isFinite(+h.persisted.count)) ? +h.persisted.count : h.recent;
+    if (!n) return '';
+    var last = h.errors.length ? h.errors[h.errors.length - 1] : h.persisted;
+    return '<div class="note warn"><b>Forward log reported ' + n + ' failure(s).</b> '
+         + 'Evidence may be incomplete — a scan that cannot record looks exactly like a quiet market, '
+         + 'which is why this says so instead of staying silent.'
+         + (last ? ('<br>Last: <b>' + esc(last.scope) + '</b> — ' + esc(last.msg)) : '')
+         + '</div>';
+  }
+
   /* ==================== storage (the only impure part) ==================== */
 
   function load(){
@@ -325,15 +384,16 @@ localStorage. Never throws.
         for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
         keys.sort();
         var title = o.title || 'FORWARD — out-of-sample, accumulated across scans';
+        var healthHtml = hgFwdHealthHTML();
         if (!keys.length){
-          return '<div class="note"><b>' + esc(title) + '</b><br>'
+          return healthHtml + '<div class="note"><b>' + esc(title) + '</b><br>'
                + 'Nothing recorded yet. This fills as scans run: each setup is logged once when it '
                + 'fires and settled later by bars that had not printed at the time. Unlike every '
                + 'other measurement in the app, it is never re-read from the current window.</div>';
         }
         var readFn = (typeof W.hgOmniPoolRead === 'function') ? W.hgOmniPoolRead : null;
         var minRr = isFinite(+o.minRr) ? +o.minRr : 2;
-        var h = '<h4>' + esc(title) + '</h4>';
+        var h = healthHtml + '<h4>' + esc(title) + '</h4>';
         h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SETTLED</th><th>T1-FIRST</th>'
            + '<th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
         var i, p, v;
@@ -364,11 +424,6 @@ localStorage. Never throws.
       } catch (e) { return ''; }
     };
 
-    function esc(x){
-      return String(x == null ? '' : x)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-
     /* Every tab's evidence in one table. Most tabs record but have no panel
        of their own, so without this the instrumentation is write-only —
        fifteen tabs banking evidence nobody can read.
@@ -383,7 +438,7 @@ localStorage. Never throws.
         var o = opts || {};
         var list = load();
         if (!list.length){
-          return '<div class="note"><b>FORWARD LEDGER — every tab, out-of-sample</b><br>'
+          return hgFwdHealthHTML() + '<div class="note"><b>FORWARD LEDGER — every tab, out-of-sample</b><br>'
                + 'Nothing recorded yet. Each tab logs a setup once when it fires and settles it later '
                + 'against bars that had not printed at the time. Run the scanners and this fills; '
                + 'unlike every other measurement in the app it is never re-read from the current window.</div>';
@@ -398,7 +453,7 @@ localStorage. Never throws.
         names.sort();
         var readFn = (typeof W.hgOmniPoolRead === 'function') ? W.hgOmniPoolRead : null;
         var minRr = isFinite(+o.minRr) ? +o.minRr : 2;
-        var h = '<h3>FORWARD LEDGER — every tab, out-of-sample</h3>';
+        var h = hgFwdHealthHTML() + '<h3>FORWARD LEDGER — every tab, out-of-sample</h3>';
         h += '<table class="tbl"><thead><tr><th>TAB</th><th>MECHANIC</th><th>SETTLED</th>'
            + '<th>T1-FIRST</th><th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
         var totS = 0, totW = 0, totO = 0, rowsOut = 0;
@@ -435,6 +490,10 @@ localStorage. Never throws.
         return h;
       } catch (e) { return ''; }
     };
+
+    W.hgFwdWarn = hgFwdWarn;
+    W.hgFwdHealth = hgFwdHealth;
+    W.hgFwdHealthHTML = hgFwdHealthHTML;
 
     W.hgFwdState = function(){
       try {

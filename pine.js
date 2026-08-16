@@ -777,7 +777,7 @@ function mount(el){
           });
           if (pFwd.length) W.hgFwdRecordScan('PINE', TF, pFwd, { horizonBars: 20 });
         }
-      } catch (eFwd) {}
+      } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("pine", eFwd); } catch (eW) {} }
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
       if (out) out.innerHTML = renderPineOut(signals, gate);

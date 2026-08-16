@@ -1304,7 +1304,7 @@ async function edgeScanList(list, fetchCandles, hooks){
         };
       }), { horizonBars: 20 });
     }
-  } catch (eFwd) {}
+  } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("edge", eFwd); } catch (eW) {} }
   return {
     found: found, list: list, forming: forming,
     stats: { skipped: skipped, noBias: noBias, noTrig: noTrig, tallyFail: tallyFail, t0: t0, pass: found.length }
@@ -1414,7 +1414,7 @@ function mount(el){
         if (fwdEl && typeof W.hgFwdPanelHTML === 'function'){
           fwdEl.innerHTML = W.hgFwdPanelHTML('EDGE', { minRr: 2, title: 'FORWARD — which EDGE trigger has paid' });
         }
-      } catch (eFwd) {}
+      } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("edge", eFwd); } catch (eW) {} }
       if (formingEl) formingEl.innerHTML = edgeFormingHTML(forming);
       if (!found.length){
         emptyEl.style.display = 'block';

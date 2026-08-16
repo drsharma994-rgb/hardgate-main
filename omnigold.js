@@ -727,7 +727,10 @@ terse status, and never launches a first-time scan on a global refresh.
          still see their records resolve. Settling a 4h record with 1h bars is
          FINER, not coarser; the reverse is conservative under the "one bar
          spanning both counts as a stop" rule. Both directions are safe. */
-      if (fwdResolve){ try { fwdResolve('XAUUSD', null, rows); } catch (e) {} }
+      if (fwdResolve){
+        try { fwdResolve('XAUUSD', null, rows); }
+        catch (e) { var wf = gfn('hgFwdWarn'); if (wf) { try { wf('omnigold:resolve', e); } catch (eW) {} } }
+      }
 
       var hits = hgOgDetect(rows, {});
       var extra = {
@@ -753,7 +756,7 @@ terse status, and never launches a first-time scan on a global refresh.
               dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
               barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket)
             });
-          } catch (e) {}
+          } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
         }
       }
       return { cfg: cfg, rows: rows, source: got.source, cands: cands, pooled: pooled };

@@ -21,6 +21,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+/* localStorage shim. The module reaches for the global, and without one its
+   persistence path is silently skipped — which would leave the persisted-health
+   assertion below testing nothing. The pure core is exercised without storage
+   throughout; this exists only so the storage-backed paths are real. */
+const __store = {};
+globalThis.localStorage = {
+  getItem: k => (k in __store ? __store[k] : null),
+  setItem: (k, v) => { __store[k] = String(v); },
+  removeItem: k => { delete __store[k]; }
+};
+
 const win = {};
 new Function('window', readFileSync(path.join(ROOT, 'hg-forward.js'), 'utf8'))(win);
 
@@ -147,6 +159,44 @@ function bars(spec){
   ok(list.length === win.HG_FWD_MAX, 'the log is capped at HG_FWD_MAX (' + win.HG_FWD_MAX + ')');
   const oldest = Math.min(...list.map(r => r.barT));
   ok(oldest > 1000, 'the oldest records were pruned, not the newest');
+}
+
+/* ---- the log must report its OWN failures ----
+   Every call site into this module is wrapped in try/catch so a logging fault
+   can never break a scan. But a SILENT logging fault is worse than the crash
+   it prevents: evidence stops accumulating while the panel keeps saying
+   "nothing recorded yet", and a broken pipeline becomes indistinguishable
+   from a quiet market — the exact ambiguity this whole workstream removes. */
+{
+  const quiet = console.warn; console.warn = () => {};
+
+  ok(win.hgFwdHealthHTML() === '', 'a healthy log renders no warning at all');
+
+  win.hgFwdWarn('squeeze:record', new TypeError('Cannot read properties of undefined'));
+  const h1 = win.hgFwdHealth();
+  ok(h1.recent === 1, 'a failure is recorded');
+  ok(h1.persisted && h1.persisted.count === 1, 'and persisted, so it survives a reload');
+
+  win.hgFwdWarn('pine:resolve', new Error('candles unavailable'));
+  const html = win.hgFwdHealthHTML();
+  ok(/2 failure/.test(html), 'the count is shown');
+  ok(/pine:resolve/.test(html), 'the most recent scope is named');
+  ok(/candles unavailable/.test(html), 'and its reason, verbatim');
+  ok(/quiet market/.test(html), 'and it states why silence would have been misleading');
+
+  ok(win.hgFwdPanelHTML('ANY').indexOf('failure') >= 0,
+     'the warning leads the per-tab panel, not buried under it');
+  ok(win.hgFwdAllHTML().indexOf('failure') >= 0, 'and the cross-tab ledger too');
+
+  /* the warner is the last line of defence — it must never throw */
+  let threw = null;
+  try {
+    win.hgFwdWarn(null, null);
+    win.hgFwdWarn(undefined, { get message(){ throw new Error('nasty getter'); } });
+  } catch (e) { threw = e.message; }
+  ok(threw === null, 'the warner itself never throws, whatever it is handed');
+
+  console.warn = quiet;
 }
 
 console.log('');

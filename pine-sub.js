@@ -243,7 +243,7 @@ function pineSubRunScan(cfg, opts){
         });
         if (fwd.length) W.hgFwdRecordScan('PINE', TF, fwd, { horizonBars: 20 });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("pine-sub", eFwd); } catch (eW) {} }
 
     /* Settle open PINE records with bars this scan already fetched. Kept to
        the last chunk's rows rather than refetching — resolution is
@@ -255,7 +255,7 @@ function pineSubRunScan(cfg, opts){
           if (sr && sr.sym && sr.rows && sr.rows.length) W.hgFwdResolve(sr.sym, null, sr.rows);
         }
       }
-    } catch (eRes) {}
+    } catch (eRes) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("pine-sub", eRes); } catch (eW) {} }
 
     try{ await pineSubAlertBatch(signals, opts); }catch(eAl){ console.warn('pine sub alert', eAl); }
 

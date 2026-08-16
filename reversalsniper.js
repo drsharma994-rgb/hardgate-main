@@ -448,7 +448,7 @@ function publishRsDeskSnap(results){
         });
         if (fwd.length) W.hgFwdRecordScan('REVERSALSNIPER', '4h', fwd, { horizonBars: 20 });
       }
-    } catch (eFwd) {}
+    } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("reversalsniper", eFwd); } catch (eW) {} }
   }catch(e){}
 }
 
@@ -535,7 +535,7 @@ function mount(el){
     if (rsFwdEl && typeof W.hgFwdPanelHTML === 'function'){
       rsFwdEl.innerHTML = W.hgFwdPanelHTML('REVERSALSNIPER', { minRr: 2, title: 'FORWARD — has the sniper bounce paid?' });
     }
-  } catch (eFwd) {}
+  } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("reversalsniper", eFwd); } catch (eW) {} }
   if (!btn || !statEl) return;
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
