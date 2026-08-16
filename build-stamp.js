@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v327',
-  pack: 'the conviction desks measure their own filter',
-  built: '2026-08-16T13:20:00Z',
-  note: 'SUPER desks compare against the pool they filter; shown but excluded from totals so the same trade is not counted twice'
+  version: 'hg-v328',
+  pack: 'pruning costs detail, never evidence',
+  built: '2026-08-16T14:10:00Z',
+  note: 'the cap would have pruned away early evidence before any mechanic reached significance — settled outcomes now fold into an uncapped aggregate'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -231,6 +231,59 @@ function bars(spec){
   __store['hg_forward_v1'] = JSON.stringify([]);
 }
 
+/* ---- pruning must cost detail, never evidence ----
+   The record list is capped and prunes oldest-first. On its own that destroys
+   the whole point: at a conservative 150 records/day across ~20 instrumented
+   tabs the cap fills in under a month, and a mechanic needing ~157 settled
+   trades over ~2.7 months would lose its earliest evidence before ever
+   reaching significance — the same structural failure as the in-sample
+   window, only slower and harder to notice. */
+{
+  __store['hg_forward_v1'] = JSON.stringify([]);
+  __store['hg_forward_agg_v1'] = JSON.stringify({});
+
+  const CAP = win.HG_FWD_MAX;
+  const EXTRA = 500;
+  let list = [];
+  let agg = {};
+  for (let i = 0; i < CAP + EXTRA; i++){
+    const r = win.hgFwdAdd(list, { tab:'PINE', mechanic:'MSB', sym:'S'+i, tf:'4h', dir:'long',
+                                   entry:100, stop:98, t1:104, barT:i, horizonBars:20 });
+    list = r.list;
+    const last = list[list.length - 1];
+    last.state = (i % 2) ? 't1' : 'stop';
+    last.r = (i % 2) ? 2 : -1;
+    if (r.folded && r.folded.length) agg = win.hgFwdFold(agg, r.folded);
+  }
+
+  ok(list.length === CAP, 'the live list stays at the cap (' + list.length + ')');
+  const folded = agg['PINE|MSB'] ? (agg['PINE|MSB'].wins + agg['PINE|MSB'].losses) : 0;
+  ok(folded === EXTRA, 'every pruned settled trade was folded into the aggregate (' + folded + ')');
+
+  const st = win.hgFwdStatsOf(list, 'PINE', 'MSB', false, agg);
+  ok(st.samples === CAP + EXTRA, 'ALL ' + (CAP + EXTRA) + ' trades still count (got ' + st.samples + ')');
+  ok(Math.abs(st.hit - 0.5) < 1e-9, 'and the hit rate is unchanged by pruning');
+
+  /* a mechanic whose live records are entirely gone must not vanish */
+  /* hgFwdPoolOf is the pure form; hgFwdPool is the storage-backed wrapper and
+     takes only a tab. Using the wrong one here made this assertion fail
+     against correct code. */
+  const onlyAgg = win.hgFwdPoolOf([], 'PINE', agg);
+  ok(onlyAgg.MSB && onlyAgg.MSB.samples === EXTRA,
+     'a mechanic surviving only in the aggregate still appears in the pool');
+
+  /* open and expired carry no outcome — folding them would invent evidence */
+  const noOutcome = win.hgFwdFold({}, [
+    { tab:'T', mechanic:'M', state:'open', rr:2 },
+    { tab:'T', mechanic:'M', state:'expired', rr:2 }
+  ]);
+  ok(!noOutcome['T|M'] || noOutcome['T|M'].wins === 0, 'open records contribute no wins');
+  ok(noOutcome['T|M'] && noOutcome['T|M'].expired === 1, 'expired is tracked but is not a win');
+
+  __store['hg_forward_v1'] = JSON.stringify([]);
+  __store['hg_forward_agg_v1'] = JSON.stringify({});
+}
+
 console.log('');
 console.log(pass + ' passed, ' + fail + ' failed');
 if (fail){ console.log('TESTS FAILED'); process.exit(1); }

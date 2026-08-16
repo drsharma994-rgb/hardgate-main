@@ -121,12 +121,16 @@ localStorage. Never throws.
       if (hgFwdKey(recs[i]) === key) return { list: recs, added: false, reason: 'already recorded' };
     }
     var out = recs.concat([norm]);
-    /* prune oldest-first, by the bar the setup fired on */
+    /* Prune oldest-first — but FOLD the dropped records' outcomes into the
+       aggregate first, so pruning costs detail and never evidence. */
+    var folded = null;
     if (out.length > MAX_RECORDS){
       out.sort(function(a, b){ return num(a.barT) - num(b.barT); });
+      var dropped = out.slice(0, out.length - MAX_RECORDS);
       out = out.slice(out.length - MAX_RECORDS);
+      folded = dropped;
     }
-    return { list: out, added: true, reason: 'recorded' };
+    return { list: out, added: true, reason: 'recorded', folded: folded };
   }
 
   /* Settle one open record against candles. Only bars STRICTLY AFTER the
@@ -179,9 +183,19 @@ localStorage. Never throws.
      in-sample shape exactly (samples/wins/losses/open/hit/expR) so the same
      verdict helper reads both. 'expired' is excluded from the hit rate — it
      is not a win. Pure. */
-  function hgFwdStats(list, tab, mechanic, ticketOnly){
+  function hgFwdStats(list, tab, mechanic, ticketOnly, agg){
     var recs = Array.isArray(list) ? list : [];
     var wins = 0, losses = 0, open = 0, expired = 0, rrSum = 0, i, r;
+    /* Start from any evidence already folded out of the record list. Without
+       this, everything pruned would silently vanish from the numbers.
+       ticketOnly cannot be answered from the aggregate — it does not keep that
+       split — so a ticket-only query deliberately uses live records only and
+       is therefore a view of the recent window, not of all time. */
+    if (agg && !ticketOnly){
+      var ak = String(tab || '') + '|' + String(mechanic || '');
+      var a = agg[ak];
+      if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0); }
+    }
     for (i = 0; i < recs.length; i++){
       r = recs[i];
       if (tab && r.tab !== tab) continue;
@@ -203,15 +217,72 @@ localStorage. Never throws.
   }
 
   /* Every mechanic seen for a tab. Pure. */
-  function hgFwdPool(list, tab){
+  function hgFwdPool(list, tab, agg){
     var recs = Array.isArray(list) ? list : [];
-    var seen = {}, out = {}, i;
+    var seen = {}, out = {}, i, k;
     for (i = 0; i < recs.length; i++){
       if (tab && recs[i].tab !== tab) continue;
       seen[recs[i].mechanic] = true;
     }
+    /* Mechanics that exist ONLY in the aggregate — every live record pruned —
+       must still appear, or a long-running mechanic would drop off the table
+       precisely because it had accumulated the most evidence. */
+    for (k in (agg || {})) if (Object.prototype.hasOwnProperty.call(agg, k)){
+      var parts = k.split('|');
+      if (!tab || parts[0] === tab) seen[parts.slice(1).join('|')] = true;
+    }
     for (var m in seen) if (Object.prototype.hasOwnProperty.call(seen, m)){
-      out[m] = hgFwdStats(recs, tab, m);
+      out[m] = hgFwdStats(recs, tab, m, false, agg);
+    }
+    return out;
+  }
+
+  /* ==================== the aggregate ====================
+     The record list is capped, and pruning is oldest-first. On its own that
+     quietly destroys the thing this module exists to build: at a conservative
+     150 records/day across ~20 instrumented tabs the cap fills in under a
+     month, and a mechanic needing ~157 settled trades over ~2.7 months would
+     have its earliest evidence pruned before it ever reached significance —
+     the same structural failure as the in-sample window, only slower and
+     harder to notice.
+     So a record is never simply dropped. Before pruning, any SETTLED outcome
+     is folded into a per-(tab, mechanic) running aggregate that has no cap.
+     Detail is lost; evidence is not. Open and expired records carry no
+     outcome, so dropping those costs nothing. */
+
+  var AGG_KEY = 'hg_forward_agg_v1';
+
+  function aggKey(rec){ return String(rec.tab) + '|' + String(rec.mechanic); }
+
+  function loadAgg(){
+    try {
+      if (typeof localStorage === 'undefined') return {};
+      var j = JSON.parse(localStorage.getItem(AGG_KEY) || '{}');
+      return (j && typeof j === 'object') ? j : {};
+    } catch (e) { return {}; }
+  }
+
+  function saveAgg(a){
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      localStorage.setItem(AGG_KEY, JSON.stringify(a || {}));
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* Fold settled records into the aggregate. PURE given the aggregate. */
+  function hgFwdFold(agg, recs){
+    var out = {}, k;
+    for (k in (agg || {})) if (Object.prototype.hasOwnProperty.call(agg, k)) out[k] = agg[k];
+    for (var i = 0; i < (recs || []).length; i++){
+      var r = recs[i];
+      if (!r) continue;
+      if (r.state !== 't1' && r.state !== 'stop' && r.state !== 'expired') continue;
+      var key = aggKey(r);
+      if (!out[key]) out[key] = { wins: 0, losses: 0, expired: 0, rrSum: 0 };
+      if (r.state === 't1'){ out[key].wins++; out[key].rrSum += (num(r.rr) || 0); }
+      else if (r.state === 'stop') out[key].losses++;
+      else out[key].expired++;
     }
     return out;
   }
@@ -299,6 +370,8 @@ localStorage. Never throws.
     W.hgFwdSettleOne = hgFwdSettleOne;
     W.hgFwdSettle = hgFwdSettle;
     W.hgFwdStatsOf = hgFwdStats;
+    W.hgFwdFold = hgFwdFold;
+    W.hgFwdAgg = loadAgg;
     W.hgFwdPoolOf = hgFwdPool;
     W.HG_FWD_MAX = MAX_RECORDS;
 
@@ -307,9 +380,14 @@ localStorage. Never throws.
     W.hgFwdRecord = function(rec){
       try {
         var r = hgFwdAdd(load(), rec);
-        if (r.added) save(r.list);
+        if (r.added){
+          /* Fold BEFORE saving the trimmed list, so a crash between the two
+             cannot lose the dropped records' outcomes. */
+          if (r.folded && r.folded.length) saveAgg(hgFwdFold(loadAgg(), r.folded));
+          save(r.list);
+        }
         return r.reason;
-      } catch (e) { return 'error'; }
+      } catch (e) { hgFwdWarn('record', e); return 'error'; }
     };
 
     /* Hand back fresh candles for a symbol; any open record whose outcome is
@@ -326,11 +404,12 @@ localStorage. Never throws.
     /* Out-of-sample stats, same shape the in-sample pool uses, so
        hgOmniPoolRead() reads either without translation. */
     W.hgFwdStats = function(tab, mechanic, ticketOnly){
-      try { return hgFwdStats(load(), tab, mechanic, ticketOnly); }
-      catch (e) { return { samples:0, wins:0, losses:0, open:0, expired:0, hit:NaN, avgRr:NaN, expR:NaN }; }
+      try { return hgFwdStats(load(), tab, mechanic, ticketOnly, loadAgg()); }
+      catch (e) { hgFwdWarn('stats', e); return { samples:0, wins:0, losses:0, open:0, expired:0, hit:NaN, avgRr:NaN, expR:NaN }; }
     };
     W.hgFwdPool = function(tab){
-      try { return hgFwdPool(load(), tab); } catch (e) { return {}; }
+      try { return hgFwdPool(load(), tab, loadAgg()); }
+      catch (e) { hgFwdWarn('pool', e); return {}; }
     };
     /* Bar-open seconds per timeframe, so a scan can derive the bar it fired on
        without the caller threading candle timestamps through. */
@@ -379,7 +458,7 @@ localStorage. Never throws.
     W.hgFwdPanelHTML = function(tab, opts){
       try {
         var o = opts || {};
-        var pool = W.hgFwdPool(tab) || {};
+        var pool = W.hgFwdPool(tab) || {};   /* already merges the aggregate */
         var keys = [], k;
         for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
         keys.sort();
@@ -437,17 +516,21 @@ localStorage. Never throws.
       try {
         var o = opts || {};
         var list = load();
-        if (!list.length){
+        if (!list.length && !Object.keys(loadAgg()).length){
           return hgFwdHealthHTML() + '<div class="note"><b>FORWARD LEDGER — every tab, out-of-sample</b><br>'
                + 'Nothing recorded yet. Each tab logs a setup once when it fires and settles it later '
                + 'against bars that had not printed at the time. Run the scanners and this fills; '
                + 'unlike every other measurement in the app it is never re-read from the current window.</div>';
         }
-        var tabs = {}, i, r;
+        var agg = loadAgg();
+        var tabs = {}, i, r, ak;
         for (i = 0; i < list.length; i++){
           r = list[i];
           if (!tabs[r.tab]) tabs[r.tab] = true;
         }
+        /* Tabs whose live records have all been pruned still have evidence in
+           the aggregate — they must not disappear from the ledger. */
+        for (ak in agg) if (Object.prototype.hasOwnProperty.call(agg, ak)) tabs[ak.split('|')[0]] = true;
         var names = [];
         for (var t in tabs) if (Object.prototype.hasOwnProperty.call(tabs, t)) names.push(t);
         names.sort();
@@ -458,7 +541,7 @@ localStorage. Never throws.
            + '<th>T1-FIRST</th><th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
         var totS = 0, totW = 0, totO = 0, rowsOut = 0;
         for (i = 0; i < names.length; i++){
-          var pool = hgFwdPool(list, names[i]);
+          var pool = hgFwdPool(list, names[i], agg);
           var mechs = [];
           for (var m in pool) if (Object.prototype.hasOwnProperty.call(pool, m)) mechs.push(m);
           mechs.sort();
@@ -516,7 +599,10 @@ localStorage. Never throws.
       } catch (e) { return null; }
     };
     W.hgFwdClear = function(){
-      try { localStorage.removeItem(LS_KEY); return true; } catch (e) { return false; }
+      /* Clears the aggregate too — otherwise a "cleared" log would keep
+         reporting evidence from records the user believes they deleted. */
+      try { localStorage.removeItem(LS_KEY); localStorage.removeItem(AGG_KEY); return true; }
+      catch (e) { return false; }
     };
   }
 
