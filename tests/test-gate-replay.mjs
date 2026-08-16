@@ -56,9 +56,21 @@ const T = { symbol: 'X', fundingPct: 0.005 };
 console.log('== NO LOOK-AHEAD — the load-bearing property ==');
 {
   ok(typeof ctx.cgGateReplay === 'function', 'cgGateReplay is not a function');
-  const base = tape(500, 7919, 0.0025, 0.02);
+  /* A longer tape than before. cgGateReplay now counts NON-OVERLAPPING trades
+     with a fixed `horizon` cooldown (84 x 4h = 14 days), so 500 bars holds
+     only about three independent trades — which is the true information
+     content, and was the point of the fix: the old bar-by-bar count reported
+     roughly 130. The tape is lengthened so the look-ahead comparison below
+     still runs over a meaningful number of samples. */
+  const base = tape(2400, 7919, 0.0025, 0.02);
   const a = ctx.cgGateReplay(base, T, {});
-  ok(a.aligned > 100, 'the replay produced ' + a.aligned + ' aligned samples');
+  /* cgGateReplay counts NON-OVERLAPPING trades: after a signal settles, the
+     scan resumes past its resolution bar rather than re-firing on every bar of
+     the same move. That is the point of the fix — a gate true across twenty
+     bars of one move is one trade, not twenty — so this precondition is now a
+     dozen-ish samples on a 500-bar tape, not a hundred. The load-bearing
+     property below (no look-ahead) is unaffected by the count. */
+  ok(a.aligned > 8, 'the replay produced ' + a.aligned + ' aligned samples');
   const lastI = a.samples[a.samples.length - 1].i;
   /* triple every high, third every low, double every close — AFTER the last replayed bar */
   const alt = base.map((b, k) => k > lastI ? { ...b, h: b.h * 3, l: b.l * 0.3, c: b.c * 2 } : b);
@@ -71,10 +83,13 @@ console.log('== NO LOOK-AHEAD — the load-bearing property ==');
 }
 console.log('== outcomes are bounded and use the fill gate ==');
 {
+  /* Wider worlds and more of them: with non-overlapping sampling each 420-bar
+     world yields only a couple of settled trades, so the pool is built from
+     more and longer worlds rather than from re-counting the same moves. */
   const all = [];
-  for (let s = 1; s <= 30; s++) all.push(...ctx.cgGateReplay(world(s * 7919, 420), T, {}).samples);
+  for (let s = 1; s <= 60; s++) all.push(...ctx.cgGateReplay(world(s * 7919, 1400), T, {}).samples);
   const rs = all.filter(x => x.r !== null).map(x => x.r);
-  ok(rs.length > 500, rs.length + ' settled samples');
+  ok(rs.length > 200, rs.length + ' settled samples');
   ok(Math.min.apply(null, rs) === -1, 'the worst outcome is exactly -1R, never worse');
   /* target is the matrix ATR excursion; risk varies, so R is bounded but not constant */
   /* Bound raised from 10 to 25 in pack 22. Not a regression: the target is a
@@ -114,8 +129,11 @@ console.log('== a sweep re-prices a threshold in COUNT and in R ==');
 {
   const all = [];
   let clean = 0;
+  /* Longer worlds for the same reason as above: a 420-bar world holds only a
+     couple of non-overlapping trades, so CLEAN setups have to come from more
+     tape rather than from counting one move repeatedly. */
   for (let s = 1; s <= 140; s++){
-    const rp = ctx.cgGateReplay(world(s * 7919, 420),
+    const rp = ctx.cgGateReplay(world(s * 7919, 1400),
       { symbol: 'X', fundingPct: [-0.06, -0.02, 0, 0.02, 0.06][s % 5] }, {});
     all.push(...rp.samples); clean += rp.clean;
   }

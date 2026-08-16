@@ -732,6 +732,24 @@
         if (r.r !== null) out.settled++;
         out.samples.push({ i: i, dir: m.dir, pass: pass, vals: vals,
                            entry: m.entry, stop: m.stop, r: r.r, state: r.state });
+        /* NON-OVERLAPPING samples. Advancing one bar at a time counted a gate
+           that stays true across twenty bars of ONE move as twenty independent
+           samples sharing a single outcome. Anything reading samples.length as
+           a sample count — super-calibrate tunes thresholds on it — inherits a
+           number several times larger than the evidence behind it. Measured on
+           the identical flaw in omniroute: 94% of firings fell inside the
+           previous signal's forward window, and correcting it moved a mechanic
+           from "has paid" to "within noise".
+           The skip is a FIXED cooldown, not "resume where the trade resolved".
+           Resolution depends on future bars, so skipping to it would make the
+           sample SET future-dependent — tests/test-gate-replay.mjs caught
+           exactly that: gate verdicts stopped being invariant when the future
+           was mutated. The verdicts themselves never looked ahead, but which
+           bars got sampled did, and purged-cv/OOS downstream rely on that
+           invariant. A fixed `horizon` cooldown is deterministic, guarantees
+           no two counted trades share a forward window, and costs only some
+           samples where a trade resolved early. */
+        i += horizon;
       }
       out.note = out.aligned + ' aligned bars of ' + out.n + ' replayed · ' + out.clean
         + ' CLEAN · ' + out.settled + ' settled';
@@ -741,7 +759,7 @@
   /* forward settle from bar i+1; LIMIT fill required first */
   function cgReplaySettle(rows, i, dir, entry, stop, t1, horizon, fillBars, m){
     try{
-      if (!isFinite(entry) || !isFinite(stop) || Math.abs(entry - stop) <= 0) return { r: null, state: 'no-plan' };
+      if (!isFinite(entry) || !isFinite(stop) || Math.abs(entry - stop) <= 0) return { r: null, state: 'no-plan', at: i };
       var risk = Math.abs(entry - stop);
       /* isFinite(null) === true in JS — null coerces to 0, which would make the
          target 0 and turn every long into an instant 7R "win". Same trap as the
@@ -752,7 +770,7 @@
       if (t1 !== null && t1 !== undefined && isFinite(t1) && t1 !== 0) tgt = t1;
       else if (m && isFinite(m.expectedMove) && m.expectedMove > 0) tgt = (dir === 'long') ? entry + m.expectedMove : entry - m.expectedMove;
       else tgt = (dir === 'long') ? entry + 2 * risk : entry - 2 * risk;
-      if (!isFinite(tgt) || (dir === 'long' ? tgt <= entry : tgt >= entry)) return { r: null, state: 'bad-target' };
+      if (!isFinite(tgt) || (dir === 'long' ? tgt <= entry : tgt >= entry)) return { r: null, state: 'bad-target', at: i };
       var filled = false, wait = 0;
       for (var k = i + 1; k <= i + horizon && k < rows.length; k++){
         var b = rows[k];
@@ -760,15 +778,15 @@
         if (!filled){
           var touched = (dir === 'long') ? b.l <= entry : b.h >= entry;
           if (touched) filled = true;
-          else { wait++; if (wait >= fillBars) return { r: null, state: 'unfilled' }; continue; }
+          else { wait++; if (wait >= fillBars) return { r: null, state: 'unfilled', at: k }; continue; }
         }
         var sl = (dir === 'long') ? b.l <= stop : b.h >= stop;
         var tp = (dir === 'long') ? b.h >= tgt : b.l <= tgt;
-        if (sl) return { r: -1, state: 'SL' };                 /* same-bar -> SL, as the ledger does */
-        if (tp) return { r: Math.abs(tgt - entry) / risk, state: 'TP' };
+        if (sl) return { r: -1, state: 'SL', at: k };          /* same-bar -> SL, as the ledger does */
+        if (tp) return { r: Math.abs(tgt - entry) / risk, state: 'TP', at: k };
       }
-      return { r: null, state: filled ? 'open' : 'unfilled' };
-    }catch(e){ return { r: null, state: 'err' }; }
+      return { r: null, state: filled ? 'open' : 'unfilled', at: Math.min(i + horizon, rows.length - 1) };
+    }catch(e){ return { r: null, state: 'err', at: i }; }
   }
   /* What WOULD a different threshold on one gate have produced?
      dir: 'min' = value must be >= t (G1, G5, G6, G3)

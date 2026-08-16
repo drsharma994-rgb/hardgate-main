@@ -6,8 +6,13 @@ import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
 import assert from 'assert';
+import { fileURLToPath } from 'url';
 
-const ROOT = path.resolve(new URL('.', import.meta.url).pathname, '..');
+/* fileURLToPath, not URL.pathname: on Windows the latter yields
+   "/C:/Users/..." with a leading slash, and path.resolve turns that into
+   "C:\C:\Users\..." — this test could never have run on Windows. Every
+   other test in the suite already uses fileURLToPath. */
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let pass = 0;
 function ok(cond, msg){
   assert.ok(cond, msg);

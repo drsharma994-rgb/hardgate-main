@@ -551,7 +551,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (r.res === 't1') wins++;
       else if (r.res === 'stop') losses++;
       else open++;
-      i = Math.max(i, isFinite(r.at) ? r.at : (i + horizon));   // skip past the trade
+      /* FIXED cooldown, not "skip to where it resolved". Resolution depends on
+         future bars, so resuming at r.at would make the sample SET
+         future-dependent — the signal would still be clean, but which bars got
+         sampled would not be. Deterministic beats squeezing out extra samples. */
+      i += horizon;
     }
     var settled = wins + losses;
     if (!settled) return { samples: 0, wins: 0, losses: 0, open: open, hit: NaN, expR: NaN };

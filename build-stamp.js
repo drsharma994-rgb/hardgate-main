@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v316',
-  pack: 'omnigold atr precision',
-  built: '2026-08-16T01:15:00Z',
-  note: 'vol-alive printed 0.05% for both a passing 0.0501% and a vetoed 0.0499% — now 3dp so the number cannot contradict the verdict'
+  version: 'hg-v317',
+  pack: 'audit fixes — overlap bias, stale pins, windows path',
+  built: '2026-08-16T04:30:00Z',
+  note: 'cgGateReplay counts non-overlapping trades · 7 stale cache-bust pins · fix-pack-17 could never run on windows · suite verified green end to end'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
