@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v342',
-  pack: 'FULL REPORT — one contract, every engine, one exact plan',
-  built: '2026-08-17T23:20:00Z',
-  note: 'SEARCH now runs the whole desk against the contract you typed and states an exact entry, stop and three targets; OMNIROUTE moved to CRYPTO'
+  version: 'hg-v343',
+  pack: 'what the engines see, and what the app has measured',
+  built: '2026-08-18T02:40:00Z',
+  note: 'the FULL REPORT now shows the out-of-sample record, the scorecard edge, the meta-label, FQS, the flow trap and the post-gate'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

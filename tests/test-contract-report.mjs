@@ -91,9 +91,9 @@ console.log('\n== it runs the whole desk, not a token few ==');
 
   ok(rep && rep.summary, 'a report came back');
   ok(rep.summary.engines >= 25, 'at least 25 engines were run (' + rep.summary.engines + ')');
-  ok(rep.sections.length === 5, 'five sections: gates, pine, structure, vetoes, formation');
+  ok(rep.sections.length === 6, 'six sections: gates, pine, structure, vetoes, formation, measured');
   const ids = rep.sections.map(s => s.id).join(',');
-  ok(ids === 'gates,pine,structure,gatesveto,formation', 'section order is stable (' + ids + ')');
+  ok(ids === 'gates,pine,structure,gatesveto,formation,measured', 'section order is stable (' + ids + ')');
   const pine = rep.sections.filter(s => s.id === 'pine')[0];
   ok(pine.rows.length === 10, 'all ten pine detectors are reported (' + pine.rows.length + ')');
   ok(rep.indicators.length >= 10, 'the indicator block is populated (' + rep.indicators.length + ' reads)');
@@ -209,6 +209,92 @@ console.log('\n== the R:R on every engine row is derived, never carried ==');
   }
   ok(checked > 0, 'engine rows with an R:R were actually checked (' + checked + ')');
 }
+
+console.log('\n== MEASURED TRACK RECORD: what the app has actually measured ==');
+{
+  /* The report shows what the engines SEE. This section shows what has been
+     MEASURED — the out-of-sample forward log, the scorecard's edge lookup,
+     the meta-label and the formation-quality score. It will mostly read "no
+     settled samples yet", and that is the correct answer rather than a
+     failure of the panel: the forward log only counts firings recorded on a
+     bar and settled later against bars that had not printed. A confident hit
+     rate with four samples behind it would be worse than an empty one. */
+  const ctx = boot(ENGINES.concat(['fixpack15-core.js', 'meta-label.js', 'hg-forward.js',
+                                   'scorecard.js', 'supersetup.js']));
+  const r4 = gen(260, 50000, 'pullback');
+  const rep = ctx.hgContractReportRun({ sym: 'BTCUSD', rows4h: r4, rows1h: gen(260, 50000, 'pullback'),
+    rows15m: gen(260, 50000, 'pullback'),
+    ticker: { symbol: 'BTCUSD', fundingPct: 0.01, mark: r4[r4.length - 1].c } });
+
+  const m = rep.sections.filter(s => s.id === 'measured')[0];
+  ok(!!m, 'the measured section exists');
+  ok(m.rows.length >= 3, 'it carries several measurements (' + m.rows.length + ')');
+  ok(/MEASURED TRACK RECORD/.test(m.label), 'and is labelled as measurement, not opinion');
+
+  const names = m.rows.map(r => r.name).join(' | ');
+  ok(/Meta-label/.test(names), 'the meta-label take/skip is included');
+  ok(/Measured edge|scorecard/.test(names), 'the scorecard edge lookup is included');
+  ok(/Forward log|forward log/i.test(names), 'the out-of-sample forward log is included');
+
+  /* An empty ledger must read as empty, never as a result. */
+  for (const r of m.rows){
+    ok(r.state !== 'signal' || !/no settled|no records/.test(r.detail),
+      r.name + ': does not report a signal while saying it has no samples');
+    ok(!/NaN|undefined/.test(r.detail), r.name + ': no NaN in the detail (' + r.detail.slice(0, 50) + ')');
+  }
+  const fwd = m.rows.filter(r => /Forward log/i.test(r.name));
+  for (const f of fwd){
+    if (f.state === 'signal'){
+      ok(/settled/.test(f.detail), f.name + ': a reported record states its sample count');
+    } else {
+      ok(/no settled|not loaded|no desk fired/.test(f.detail),
+        f.name + ': an empty ledger says so plainly (' + f.detail.slice(0, 60) + ')');
+    }
+  }
+
+  /* A small sample must be labelled as one rather than read as a verdict. */
+  const small = m.rows.filter(r => r.why && /not enough|a count, not a verdict/.test(r.why));
+  ok(small.length === 0 || small.every(r => r.state === 'signal'),
+    'a small-sample caveat only appears where a number was actually reported');
+
+  const html = ctx.hgContractReportHTML(rep);
+  ok(/MEASURED TRACK RECORD/.test(html), 'the section renders');
+  ok(!/NaN|undefined/.test(html), 'and the page still has no NaN in it');
+}
+
+console.log('\n== FLOW & POST-GATE: network engines, appended without blocking ==');
+{
+  const ctx = boot(ENGINES);
+  const r4 = gen(260, 50000, 'pullback');
+  const rep = ctx.hgContractReportRun({ sym: 'BTCUSD', rows4h: r4, rows1h: gen(260, 50000, 'pullback'),
+    rows15m: gen(260, 50000, 'pullback'),
+    ticker: { symbol: 'BTCUSD', fundingPct: 0.01, mark: r4[r4.length - 1].c } });
+
+  ok(typeof ctx.hgContractReportEnrich === 'function', 'hgContractReportEnrich is exported');
+  const extra = await ctx.hgContractReportEnrich(rep, { ticker: { symbol: 'BTCUSD', fundingPct: 0.01 }, rows4h: r4 });
+  ok(Array.isArray(extra) && extra.length === 2, 'it returns the flow and post-gate rows (' + extra.length + ')');
+  for (const r of extra){
+    ok(['signal', 'idle', 'unchecked', 'error'].indexOf(r.state) >= 0, r.name + ': carries a real state');
+    ok(typeof r.detail === 'string', r.name + ': carries a detail');
+    ok(!/NaN|undefined/.test(r.detail), r.name + ': no NaN in the detail');
+  }
+  const flow = extra.filter(r => /Flow trap/.test(r.name))[0];
+  ok(!!flow, 'the flow trap is reported');
+  ok(flow.state !== 'signal' || !/N\/A/.test(flow.detail),
+    'flow N/A is never reported as a passed flow leg');
+
+  /* With no plan there is nothing to gate — it must say so, not pass. */
+  const bare = ctx.hgContractReportRun({ sym: 'X', rows4h: [], rows1h: [], rows15m: [], ticker: { symbol: 'X' } });
+  const none = await ctx.hgContractReportEnrich(bare, { ticker: { symbol: 'X' }, rows4h: [] });
+  ok(none.length === 2, 'both rows still appear with no plan');
+  ok(none.every(r => r.state === 'unchecked'), 'and both read UNCHECKED rather than passing');
+
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  ok(/hgContractReportEnrich\(rep/.test(html), 'SEARCH calls the async enrichment');
+  ok(/FLOW & POST-GATE \(network\)/.test(html), 'and appends it as its own section');
+  ok(/the synchronous report stands on its own/.test(html), 'a failed enrichment leaves the report intact');
+}
+
 
 console.log('\n== the SEARCH tab is wired to it ==');
 {

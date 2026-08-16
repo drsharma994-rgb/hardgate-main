@@ -427,6 +427,163 @@ function formationRow(rows4h, ticker, best){
   });
 }
 
+/* ==================== measured track record ====================
+
+   Everything above is what the engines SEE. This is what the app has
+   actually MEASURED — the out-of-sample forward log, the scorecard's edge
+   lookup, the meta-label and the formation-quality score.
+
+   It will mostly read "no settled samples yet", and that is the honest
+   answer rather than a failure of this panel: the forward log only counts
+   firings that were recorded on a bar and later settled against bars that
+   had not printed at the time. A number here is earned slowly. Showing an
+   empty ledger truthfully is the whole point — a confident-looking hit rate
+   with four samples behind it would be worse than nothing. */
+
+function measuredRows(rows4h, ticker, plan, sections){
+  var out = [];
+
+  /* --- out-of-sample forward log, per desk whose engine fired --- */
+  var TABS = [
+    ['SWING gate matrix', 'CRYPTOGATES'], ['EDGE', 'EDGE'], ['SQUEEZE', 'SQUEEZE'],
+    ['TREND MATRIX', 'TRENDTABLE'], ['REVERSAL SNIPER', 'REVERSALSNIPER'],
+    ['PINE ·', 'PINE'], ['MEAN REVERSION', 'MEANREV']
+  ];
+  var fired = {};
+  sections.forEach(function(s){
+    s.rows.forEach(function(r){
+      if (r.state !== 'signal') return;
+      TABS.forEach(function(t){ if (r.name.indexOf(t[0]) === 0) fired[t[1]] = true; });
+    });
+  });
+  var tabs = Object.keys(fired);
+
+  if (!has('hgFwdStats')){
+    out.push(unchecked('Out-of-sample forward log', 'hg-forward.js not loaded'));
+  } else if (!tabs.length){
+    out.push(row('Out-of-sample forward log', { state: 'idle',
+      detail: 'no desk fired on this contract, so there is no mechanic to look up' }));
+  } else {
+    tabs.forEach(function(tab){
+      out.push(attempt('Forward log · ' + tab, ['hgFwdStats'], function(){
+        var st = W.hgFwdStats(tab, null, false) || {};
+        var n = fin(st.samples);
+        if (!isFinite(n) || n <= 0){
+          return row('Forward log · ' + tab, { state: 'idle',
+            detail: 'no settled out-of-sample trades recorded for this desk yet'
+              + (fin(st.open) > 0 ? ' — ' + fin(st.open) + ' still open' : '') });
+        }
+        var hit = fin(st.hit), expR = fin(st.expR);
+        return row('Forward log · ' + tab, { state: 'signal',
+          detail: n + ' settled · hit ' + (isFinite(hit) ? nf(hit * 100, 1) + '%' : '—')
+            + ' · expectancy ' + (isFinite(expR) ? nf(expR, 3) + 'R' : '—')
+            + (fin(st.open) > 0 ? ' · ' + fin(st.open) + ' open' : ''),
+          why: n < 30 ? (n + ' settled trades is not enough to conclude anything — treat this as a count, not a verdict') : null });
+      }));
+    });
+  }
+
+  /* --- the scorecard's measured edge for this symbol and direction --- */
+  out.push(attempt('Measured edge (scorecard ledger)', ['hgEdgeFor', 'hgScoreRecords'], function(){
+    if (!plan || !plan.ok) return unchecked('Measured edge (scorecard ledger)', 'no plan to look up');
+    var recs = W.hgScoreRecords() || [];
+    if (!recs.length) return row('Measured edge (scorecard ledger)', { state: 'idle',
+      detail: 'the scorecard has no records yet' });
+    var e = W.hgEdgeFor({ symbol: (ticker && ticker.symbol) || '', side: plan.dir,
+      rr: plan.rr1, ts: null }, recs);
+    if (!e) return row('Measured edge (scorecard ledger)', { state: 'idle', detail: 'no matching archetype' });
+    var n = fin(e.n);
+    if (!isFinite(n) || n <= 0) return row('Measured edge (scorecard ledger)', { state: 'idle',
+      detail: 'no settled records match this archetype' });
+    return row('Measured edge (scorecard ledger)', { state: 'signal',
+      detail: n + ' matching records' + (isFinite(fin(e.winRate)) ? ' · win ' + nf(fin(e.winRate) * 100, 1) + '%' : '')
+        + (isFinite(fin(e.expR)) ? ' · ' + nf(fin(e.expR), 3) + 'R' : ''),
+      why: n < 30 ? 'fewer than 30 records — a count, not a verdict' : null });
+  }));
+
+  /* --- the app's own take-or-skip on this exact plan --- */
+  out.push(attempt('Meta-label (take / skip)', ['hgMetaLabel'], function(){
+    if (!plan || !plan.ok) return unchecked('Meta-label (take / skip)', 'no plan to label');
+    var recs = has('hgScoreRecords') ? (W.hgScoreRecords() || []) : [];
+    var ml = W.hgMetaLabel({
+      dir: plan.dir, entry: plan.entry, stop: plan.stop, t1: plan.t1, t2: plan.t2,
+      rr: plan.rr1, rr1: plan.rr1
+    }, {}, recs);
+    if (!ml) return row('Meta-label (take / skip)', { state: 'idle', detail: 'no label returned' });
+    var p = fin(ml.prob);
+    return row('Meta-label (take / skip)', { state: ml.take ? 'signal' : 'idle', dir: plan.dir,
+      detail: (ml.take ? 'TAKE' : 'SKIP') + (isFinite(p) ? ' · ' + nf(p * 100, 0) + '%' : '')
+        + (ml.verdict ? ' · ' + ml.verdict : ''),
+      why: recs.length ? null : 'no ledger records behind this probability yet — it is a prior, not a measurement' });
+  }));
+
+  /* --- formation quality --- */
+  out.push(attempt('Formation quality score', ['superSetupFqsGate'], function(){
+    if (!plan || !plan.ok) return unchecked('Formation quality score', 'no plan to score');
+    var f = W.superSetupFqsGate({ dir: plan.dir, entry: plan.entry, stop: plan.stop,
+      t1: plan.t1, rr: plan.rr1, sym: (ticker && ticker.symbol) || '' }, {});
+    if (!f) return row('Formation quality score', { state: 'idle', detail: 'no score returned' });
+    return row('Formation quality score', { state: f.ok ? 'signal' : 'idle',
+      detail: (isFinite(fin(f.fqs)) ? 'FQS ' + nf(f.fqs, 0) : 'FQS —')
+        + (f.grade ? ' · grade ' + f.grade : '')
+        + (f.ok ? ' · clears the floor' : ' · below the floor' + (f.reason ? ' — ' + f.reason : '')) });
+  }));
+
+  return out;
+}
+
+/* Async engines — flow legs and the post-gate need the network, so they run
+   after the synchronous report is already on screen rather than holding it. */
+function hgContractReportEnrich(rep, inp){
+  inp = inp || {};
+  var ticker = inp.ticker || {};
+  var rows4h = Array.isArray(inp.rows4h) ? inp.rows4h : [];
+  var dir = (rep && rep.plan && rep.plan.ok) ? rep.plan.dir : null;
+  var jobs = [];
+  var rows = [];
+
+  if (!dir){
+    rows.push(unchecked('Flow trap (CVD / order-book imbalance)', 'no direction to assess flow against'));
+    rows.push(unchecked('Post-gate quality veto', 'no plan to put through it'));
+    return Promise.resolve(rows);
+  }
+
+  jobs.push(
+    (has('hgAssessFlowTrap')
+      ? Promise.resolve().then(function(){ return W.hgAssessFlowTrap(ticker.symbol || '', dir, ticker.fundingPct, '4h'); })
+      : Promise.resolve(null))
+    .then(function(f){
+      if (!f) return unchecked('Flow trap (CVD / order-book imbalance)', 'plans.js not loaded');
+      if (f.flowNA) return unchecked('Flow trap (CVD / order-book imbalance)',
+        f.flowDetail || 'no flow legs available for this symbol');
+      return row('Flow trap (CVD / order-book imbalance)', {
+        state: f.veto ? 'idle' : 'signal', dir: dir,
+        detail: (f.veto ? 'VETO — ' + (f.reason || 'flow against') : 'no trap') + ' · ' + (f.flowDetail || '') });
+    })
+    .catch(function(e){ return row('Flow trap (CVD / order-book imbalance)', { state: 'error', detail: 'threw: ' + errText(e) }); })
+  );
+
+  jobs.push(
+    (has('hgPostGateSetupVeto')
+      ? Promise.resolve().then(function(){
+          return W.hgPostGateSetupVeto(ticker, { dir: dir, entry: rep.plan.entry, stop: rep.plan.stop, t1: rep.plan.t1 },
+            rows4h, 'swing', W.getCandles || null);
+        })
+      : Promise.resolve(null))
+    .then(function(q){
+      if (!q) return unchecked('Post-gate quality veto', 'plans.js not loaded');
+      if (q.ok === false) return row('Post-gate quality veto', { state: 'idle',
+        detail: 'VETO — ' + (q.reason || q.tag || 'quality') });
+      if (q.unchecked) return unchecked('Post-gate quality veto',
+        (q.uncheckedReasons || ['could not be evaluated']).join(' · '));
+      return row('Post-gate quality veto', { state: 'signal', dir: dir, detail: 'passed' });
+    })
+    .catch(function(e){ return row('Post-gate quality veto', { state: 'error', detail: 'threw: ' + errText(e) }); })
+  );
+
+  return Promise.all(jobs);
+}
+
 /* ==================== the executable plan ====================
 
    The reads above are evidence. This turns them into ONE plan with exact
@@ -631,6 +788,11 @@ function hgContractReportRun(inp){
   /* the one thing the reader actually acts on */
   report.plan = planFrom(rows4h, ticker, report.sections, lean);
 
+  /* what the app has MEASURED, as opposed to what it sees — needs the plan,
+     so it is built after it */
+  report.sections.push({ id: 'measured', label: 'MEASURED TRACK RECORD (out-of-sample)',
+    rows: measuredRows(rows4h, ticker, report.plan, report.sections) });
+
   report.indicators = indicatorReads(rows4h, rows1h, rows15m);
 
   var all = [];
@@ -771,6 +933,7 @@ function hgContractReportHTML(rep){
 }
 
 W.hgContractReportRun = hgContractReportRun;
+W.hgContractReportEnrich = hgContractReportEnrich;
 W.hgContractReportHTML = hgContractReportHTML;
 W.hgContractReportCSS = hgContractReportCSS;
 
