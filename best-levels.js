@@ -23,10 +23,19 @@ function blMinRr(style){
 }
 
 function blValidPlan(plan, style){
-  if (!plan || !fin(+plan.entry) || plan.entry <= 0 || !fin(+plan.stop) || !fin(+plan.t1)) return false;
-  if (Math.abs(plan.entry - plan.stop) <= 0) return false;
-  var rr = fin(+plan.rr1) ? +plan.rr1
-    : Math.abs(plan.t1 - plan.entry) / Math.abs(plan.entry - plan.stop);
+  if (!plan) return false;
+  /* fin() here is the file's own strict helper, but +plan.entry would coerce
+     a null to 0 before it ever reached the test. */
+  var entry = (plan.entry === null || plan.entry === undefined || plan.entry === '') ? NaN : +plan.entry;
+  var stop = (plan.stop === null || plan.stop === undefined || plan.stop === '') ? NaN : +plan.stop;
+  var t1 = (plan.t1 === null || plan.t1 === undefined || plan.t1 === '') ? NaN : +plan.t1;
+  if (!fin(entry) || entry <= 0 || !fin(stop) || !fin(t1)) return false;
+  var risk = Math.abs(entry - stop);
+  if (!(risk > 0)) return false;
+  /* Derived, never read from plan.rr1. Preferring the plan's own rr1 let the
+     minimum-R:R floor be cleared by a ratio measured against levels the plan
+     no longer had — the gate testing a stored number instead of the trade. */
+  var rr = Math.abs(t1 - entry) / risk;
   return fin(rr) && rr >= blMinRr(style) - 1e-9;
 }
 
@@ -278,6 +287,7 @@ function hgBestLevels(inp){
   }
 }
 
+G.blValidPlan = blValidPlan;   /* pure predicate — exported so the min-R:R floor is testable, not asserted by regex */
 G.hgBestLevels = hgBestLevels;
 G.hgBestLevelsEdgeGate = hgBestLevelsEdgeGate;
 G.hgBestLevelsVisionVeto = hgBestLevelsVisionVeto;

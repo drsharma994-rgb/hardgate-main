@@ -36,9 +36,17 @@ function gbMinRr(style, regime){
 }
 
 function gbValidPlan(plan, minRr){
-  if (!plan || !fin(+plan.entry) || plan.entry <= 0 || !fin(+plan.stop) || !fin(+plan.t1)) return false;
-  if (Math.abs(plan.entry - plan.stop) <= 0) return false;
-  var rr = fin(+plan.rr1) ? +plan.rr1 : Math.abs(plan.t1 - plan.entry) / Math.abs(plan.entry - plan.stop);
+  if (!plan) return false;
+  var entry = gbNum(plan.entry), stop = gbNum(plan.stop), t1 = gbNum(plan.t1);
+  if (!fin(entry) || entry <= 0 || !fin(stop) || !fin(t1)) return false;
+  var risk = Math.abs(entry - stop);
+  if (!(risk > 0)) return false;
+  /* Derived here, never read from plan.rr1. This gate used to PREFER the
+     plan's own rr1, which meant a minimum-R:R floor could be cleared by a
+     ratio measured against levels the plan no longer had — the gate testing
+     a number instead of the trade. The levels are the only self-consistent
+     source, exactly as in hgSyncPlanRr. */
+  var rr = Math.abs(t1 - entry) / risk;
   return fin(rr) && rr >= minRr - 1e-9;
 }
 
@@ -562,6 +570,7 @@ function hgApplyGoldBestLevels(gc, inp){
   }catch(e){ return gc; }
 }
 
+G.gbValidPlan = gbValidPlan;   /* pure predicate — exported so the min-R:R floor is testable, not asserted by regex */
 G.hgBestLevelsGold = hgBestLevelsGold;
 G.hgApplyGoldBestLevels = hgApplyGoldBestLevels;
 G.hgGoldMtfGate = hgGoldMtfGate;

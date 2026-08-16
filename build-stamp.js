@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v333',
-  pack: 'finding it a sixth time by hand is not a plan',
-  built: '2026-08-17T01:30:00Z',
-  note: 'thirteen formatters printed a confident number for an absent value; a test now executes every formatter in the app with null'
+  version: 'hg-v334',
+  pack: 'the min-R:R gate was testing a label, not the trade',
+  built: '2026-08-17T03:40:00Z',
+  note: 'a widened structure stop left rr1/rr2 behind and the R:R floor read the stale rr1 in preference to deriving one'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -544,7 +544,25 @@ function hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   plan.fillProb = fill.pct;
   plan.fillNote = fill.note;
 
-  var gRr = isFinite(plan.t1) ? Math.abs(plan.t1 - plan.entry) / risk : NaN;
+  /* Every ratio derived from the FINAL levels, on every path.
+
+     plan starts as a copy of hit, so it arrives carrying the hit's rr, rr1
+     and rr2. Three paths above then move the levels without replacing all
+     three: the entryMoved branch leaves every ratio and both targets behind
+     when hgStructureTargets returns nothing; the else branch recomputes rr
+     but not rr1 or rr2, even though hgStructureStop routinely widens the stop
+     there; and the goldScalpLevels branch sets rr and rr2 from lv0 just
+     before the stop can be changed again beneath them.
+
+     A stale rr1 does not merely display wrong. gbValidPlan in
+     gold-best-levels.js PREFERS plan.rr1 over deriving one, so the minimum
+     R:R gate could be cleared by a ratio measured against levels the setup no
+     longer has. */
+  plan.rr = isFinite(plan.t1) ? Math.abs(plan.t1 - plan.entry) / risk : null;
+  plan.rr1 = plan.rr;
+  plan.rr2 = isFinite(plan.t2) ? Math.abs(plan.t2 - plan.entry) / risk : null;
+
+  var gRr = isFinite(plan.rr) ? plan.rr : NaN;
   if (!isFinite(gRr) || gRr < minRr - 1e-9){
     return { ok: false, reason: 'min R:R ' + minRr + ' not met (' + (isFinite(gRr) ? gRr.toFixed(2) : 'n/a') + 'R)', tag: 'formation' };
   }
@@ -646,6 +664,23 @@ function hgFormTicket(hit, ctx){
       var vs = G.hgScalpPostEnrichValid(plan, { m15: ctx.m15 || rows, a: a4, minRr: minRr });
       if (!vs) return { ok: false, reason: 'scalp post-enrich failed', tag: 'formation' };
       plan = vs;
+    }
+
+    /* Same rule as the gold path, on the bigger surface. This branch moves
+       the entry to the ranked POI and then moves the stop again (sweep stop,
+       structure stop, ledger stopScale) — but t1/t2/rr/rr1/rr2 are only
+       replaced inside `if (tg)`. When hgStructureTargets returns nothing, the
+       plan goes on carrying the ORIGINAL hit's targets and ratios against a
+       new entry and a new stop. Derived from the final levels, on every
+       path, after post-enrich has had its say. */
+    var fRisk = (isFinite(+plan.entry) && isFinite(+plan.stop))
+      ? Math.abs(+plan.entry - +plan.stop) : NaN;
+    if (isFinite(fRisk) && fRisk > 0){
+      plan.rr = isFinite(+plan.t1) ? Math.abs(+plan.t1 - +plan.entry) / fRisk : null;
+      plan.rr1 = plan.rr;
+      plan.rr2 = isFinite(+plan.t2) ? Math.abs(+plan.t2 - +plan.entry) / fRisk : null;
+    } else {
+      plan.rr = null; plan.rr1 = null; plan.rr2 = null;
     }
 
     var fillBars = baseStyle === 'scalp' ? params.fillBarsScalp : params.fillBarsSwing;
