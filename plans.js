@@ -101,8 +101,13 @@ async function hgEnrichTickerFundingTwin(ticker){
     var bSym = mapFn(ticker.symbol);
     if (!bSym) return ticker;
     var bf = await fundFn(bSym);
-    if (!bf || !isFinite(+bf.fundingPct)) return ticker;
-    return Object.assign({}, ticker, { fundingPct: +bf.fundingPct, fundingTwin: bSym });
+    /* +null is 0, so a twin with no rate used to pass this guard and be
+       written onto the ticker as a confident 0.0000% — this function exists
+       to keep G4 honest for thin CoinDCX contracts, and it was filling the
+       gap with a fabricated number instead of leaving it empty. */
+    var twinPct = hgPlanNum(bf && bf.fundingPct);
+    if (!isFinite(twinPct)) return ticker;
+    return Object.assign({}, ticker, { fundingPct: twinPct, fundingTwin: bSym });
   }catch(e){ return ticker; }
 }
 

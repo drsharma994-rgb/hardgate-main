@@ -931,8 +931,12 @@ async function gatherSymbol(sym, tick, source){
     rows1h: rows1h.length ? rows1h : null,
     chg24:        (tick && isFinite(tick.chg24))       ? tick.chg24       : null,
     turnoverUsd:  (tick && isFinite(tick.turnoverUsd)) ? tick.turnoverUsd : null,
-    fundingPct:   (fnd && isFinite(fnd.fundingPct)) ? fnd.fundingPct
-                : ((tick && isFinite(tick.fundingPct)) ? tick.fundingPct : null),
+    /* isFinite(null) is true, so a null on the PRIMARY source satisfied this
+       test and short-circuited the fallback — the ticker's real rate was never
+       consulted. The neighbouring single-source fields are unaffected: a null
+       passing their guard still assigns the same null. */
+    fundingPct:   (fnd && fnd.fundingPct != null && isFinite(+fnd.fundingPct)) ? +fnd.fundingPct
+                : ((tick && tick.fundingPct != null && isFinite(+tick.fundingPct)) ? +tick.fundingPct : null),
     oiChgPct:     oiChgPct,
     retailLongPct:(ls  && ls.latest  && isFinite(ls.latest.longPct))        ? ls.latest.longPct        : null,
     topLongPct:   (top && top.latest && isFinite(top.latest.longPct))       ? top.latest.longPct       : null,

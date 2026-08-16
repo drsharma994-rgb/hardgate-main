@@ -363,8 +363,13 @@ function renderMacroPanel(macro, funding, ls, cot){
   } else rows.push(lrow('M4', 'Gold/Silver ratio', 'unavailable', 'na', 'N/A'));
 
   // M5 — XAU perp funding (extremes read contrarian; percent units per 8h)
-  if (funding && isFinite(funding.fundingPct)){
-    var f = funding.fundingPct;
+  /* isFinite(null) is true, so a missing rate used to take the TRUE branch
+     with f = null. Every comparison against null is false, so the row printed
+     "— normal range · NEUT" — absent data presented as a measured reading,
+     while the else branch that already says "unavailable · N/A" sat unused. */
+  var fRaw = funding ? funding.fundingPct : null;
+  if (fRaw !== null && fRaw !== undefined && fRaw !== '' && isFinite(+fRaw)){
+    var f = +fRaw;
     rows.push(lrow('M5', 'XAU perp funding (8h)',
       signed(f, 4) + '% / 8h' + (f >= 0.05 ? ' — longs crowded: contrarian bearish lean'
                               : (f <= -0.05 ? ' — shorts crowded: contrarian bullish lean' : ' — normal range')),

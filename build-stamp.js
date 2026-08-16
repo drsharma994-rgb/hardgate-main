@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v336',
-  pack: 'a thrown formation is not a formed ticket',
-  built: '2026-08-17T08:05:00Z',
-  note: 'hgFormTicket answered every exception with ok:true and the raw unformed hit, so a fault produced an ungated ticket reported as formed'
+  version: 'hg-v337',
+  pack: 'a rate nobody reported is not a rate of zero',
+  built: '2026-08-17T10:20:00Z',
+  note: 'Bybit reports absent fields as an empty string and the funding twin filled thin CoinDCX contracts with a fabricated 0.0000%'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

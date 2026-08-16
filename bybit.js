@@ -28,6 +28,8 @@ async function __byFetchJson(url, timeoutMs){
   finally{ clearTimeout(timer); }
 }
 
+function __byNum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
+
 function __byCacheGet(key){
   var h = __BY_CACHE.get(key);
   return (h && (Date.now() - h.at) < BY_CACHE_MS) ? h.val : undefined;
@@ -46,9 +48,13 @@ async function bybitFunding(symbol){
     var r = await __byFetchJson(BYBIT_API + '/v5/market/tickers?category=linear&symbol=' + encodeURIComponent(symbol));
     var row = (r && Array.isArray(r.list)) ? r.list[0] : null;
     if (!row) return null;
+    /* Bybit reports absent fields as an EMPTY STRING, and +'' is 0 — as is
+       +null. isFinite() then passes and the snapshot carries a confident
+       "funding is exactly 0.0000%" and a mark price of $0 for values the
+       venue never sent. __byNum rejects the empty values before coercing. */
     return __byCachePut(key, {
-      fundingPct: isFinite(+row.fundingRate) ? (+row.fundingRate) * 100 : null,
-      markPrice: isFinite(+row.lastPrice) ? +row.lastPrice : null
+      fundingPct: isFinite(__byNum(row.fundingRate)) ? __byNum(row.fundingRate) * 100 : null,
+      markPrice: isFinite(__byNum(row.lastPrice)) ? __byNum(row.lastPrice) : null
     });
   }catch(e){ return null; }
 }
