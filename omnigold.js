@@ -369,7 +369,12 @@ terse status, and never launches a first-time scan on a global refresh.
     var minAtr = isFinite(fin(x.minAtrPct)) ? fin(x.minAtrPct) : 0.12;
     var volOk = isFinite(atrPct) ? (atrPct >= minAtr) : null;
     gates.push({ key:'vol-alive', hard:true, pass: volOk,
-      why: isFinite(atrPct) ? ('ATR ' + atrPct.toFixed(2) + '% of price (floor ' + minAtr + '%)' + (volOk ? '' : ' — too dead')) : 'ATR unavailable' });
+      /* 3dp, not 2. Gold ATR% sits right on the scalp floor, so at 2dp a
+         vetoed 0.0499% and a passing 0.0501% both printed "0.05%" — the card
+         showed a number that appeared to satisfy the very floor it had just
+         failed. A gate must not display a value that contradicts its own
+         verdict. */
+      why: isFinite(atrPct) ? ('ATR ' + atrPct.toFixed(3) + '% of price (floor ' + minAtr + '%)' + (volOk ? '' : ' — too dead')) : 'ATR unavailable' });
 
     /* 3 — participation. CONDITIONAL on gold, unlike crypto: several gold
        feeds (spot proxies especially) publish no volume at all, and a hard

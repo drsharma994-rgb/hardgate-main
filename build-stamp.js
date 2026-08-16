@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v315',
-  pack: 'omnigold takes all available history',
-  built: '2026-08-15T21:00:00Z',
-  note: '1500 bars per horizon — the data layer ceiling; swing gains 3x and finally clears the judge threshold'
+  version: 'hg-v316',
+  pack: 'omnigold atr precision',
+  built: '2026-08-16T01:15:00Z',
+  note: 'vol-alive printed 0.05% for both a passing 0.0501% and a vetoed 0.0499% — now 3dp so the number cannot contradict the verdict'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
