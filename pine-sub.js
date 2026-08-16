@@ -65,6 +65,30 @@ function pineSubEnrichSignal(sig, item, res){
   var rrEntry = pineNum(sig.entry), rrStop = pineNum(sig.stop), rrT1 = pineNum(sig.t1);
   var rk = (fin(rrEntry) && fin(rrStop)) ? Math.abs(rrEntry - rrStop) : NaN;
   sig.rr = (fin(rk) && rk > 0 && fin(rrT1)) ? Math.abs(rrT1 - rrEntry) / rk : null;
+  /* A signal without usable levels is not a signal.
+
+     Six of the nine sub-tabs build their plan through pineSubBuildPlan, which
+     always returns finite levels. Three — ht, msb, smc — read the detector's
+     own res.entry / res.stop straight through, and a detector can name a
+     direction while its levels are not numbers: with the includeContext option
+     the app actually passes, pineHalfTrend returns dir 'long' with NaN targets
+     on a flat series, and dir 'short' with entry === null when closes are null.
+
+     Nothing downstream would have printed a wrong number — the formatters show
+     an em-dash and the forward log drops rows whose entry is not finite — but
+     the tab would still have rendered a HALF TREND card with no entry and no
+     stop, offering the reader a trade that cannot be taken. It is dropped
+     here, once, for every module rather than in the three that read directly. */
+  if (!fin(rrEntry) || !fin(rrStop) || rrEntry === rrStop){
+    try{
+      if (typeof W.hgFwdWarn === 'function'){
+        W.hgFwdWarn('PINE', 'signal dropped — ' + String(sig.scriptId || 'script')
+          + ' named ' + String(sig.dir) + ' on ' + String(sig.sym)
+          + ' with unusable levels (entry ' + String(sig.entry) + ', stop ' + String(sig.stop) + ')');
+      }
+    }catch(eW){}
+    return null;
+  }
   return sig;
 }
 

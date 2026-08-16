@@ -135,13 +135,21 @@ console.log('\n== pine: one guard for nine scripts, no Infinity R:R ==');
     { sym: 'X', dir: 'long', entry: entry, stop: stop, t1: t1, isNew: true },
     { gates: [] }, { newLong: true }
   );
+  /* This contract TIGHTENED after v331. It used to be enough that
+     entry === stop lost its R:R; the signal itself still came back. It is now
+     dropped outright, because a trade with no risk distance is not a trade and
+     a card with no levels is not worth showing. The suite caught the change
+     here rather than in the browser. */
   const degenerate = mk(100, 100, 110);
-  ok(degenerate.rr === null, 'entry === stop yields null, not Infinity');
-  ok(degenerate.rr !== Infinity, 'no Infinity can reach a sort or an R:R floor');
+  ok(degenerate === null, 'entry === stop is dropped outright — no Infinity can reach a sort or an R:R floor');
+  const nullStop = mk(100, null, 110);
+  ok(nullStop === null, 'a null stop is dropped rather than priced at zero');
   const normal = mk(100, 98, 104);
+  ok(normal !== null, 'a signal with real levels survives');
   ok(near(normal.rr, 2), 'a real signal still gets its real 2R');
   const noTarget = mk(100, 98, null);
-  ok(noTarget.rr === null, 'a null target yields null rather than treating it as price 0');
+  ok(noTarget !== null, 'a missing TARGET does not drop the signal — entry and stop are still tradeable');
+  ok(noTarget.rr === null, 'but its R:R is null rather than treating the target as price 0');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
