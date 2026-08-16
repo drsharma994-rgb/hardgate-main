@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v343',
-  pack: 'what the engines see, and what the app has measured',
-  built: '2026-08-18T02:40:00Z',
-  note: 'the FULL REPORT now shows the out-of-sample record, the scorecard edge, the meta-label, FQS, the flow trap and the post-gate'
+  version: 'hg-v344',
+  pack: 'the panel that displayed no evidence recorded none either',
+  built: '2026-08-18T05:10:00Z',
+  note: 'the FULL REPORT now records its own plan, under its own tab id, because a contract you chose to look up is not a systematic sample'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

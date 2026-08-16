@@ -483,6 +483,27 @@ function measuredRows(rows4h, ticker, plan, sections){
     });
   }
 
+  /* --- this panel's OWN record, kept apart from the desks --- */
+  out.push(attempt('Plans from this panel (selection-biased)', ['hgFwdStats'], function(){
+    var st = W.hgFwdStats(REPORT_TAB, null, false) || {};
+    var n = fin(st.samples);
+    var bias = 'these are plans YOU chose to look up, not plans a desk generated — '
+      + 'useful for judging your own picks, never poolable with the desk numbers above';
+    if (!isFinite(n) || n <= 0){
+      return row('Plans from this panel (selection-biased)', { state: 'idle',
+        detail: 'nothing settled yet'
+          + (fin(st.open) > 0 ? ' — ' + fin(st.open) + ' plan' + (fin(st.open) === 1 ? '' : 's') + ' open' : '')
+          + '. Each FULL REPORT records its plan once per 4h bar and settles it later against bars that have not printed yet.',
+        why: bias });
+    }
+    var hit = fin(st.hit), expR = fin(st.expR);
+    return row('Plans from this panel (selection-biased)', { state: 'signal',
+      detail: n + ' settled · hit ' + (isFinite(hit) ? nf(hit * 100, 1) + '%' : '—')
+        + ' · expectancy ' + (isFinite(expR) ? nf(expR, 3) + 'R' : '—')
+        + (fin(st.open) > 0 ? ' · ' + fin(st.open) + ' open' : ''),
+      why: bias + (n < 30 ? ' · ' + n + ' settled is a count, not a verdict' : '') });
+  }));
+
   /* --- the scorecard's measured edge for this symbol and direction --- */
   out.push(attempt('Measured edge (scorecard ledger)', ['hgEdgeFor', 'hgScoreRecords'], function(){
     if (!plan || !plan.ok) return unchecked('Measured edge (scorecard ledger)', 'no plan to look up');
@@ -530,6 +551,47 @@ function measuredRows(rows4h, ticker, plan, sections){
   }));
 
   return out;
+}
+
+/* Record this report's plan so it can eventually be measured.
+
+   Every desk records its firings into the forward log; this one produced a
+   concrete, levelled, timestamped plan and recorded nothing, so the report
+   could display "no settled samples yet" forever while generating setups it
+   never counted.
+
+   It records under its OWN tab id, and that separation is the whole point.
+   A desk scan is systematic: it fires on whatever the universe throws up. A
+   FULL REPORT fires on a contract the reader chose to type in. Pooling the
+   two would let a habit of only checking symbols that already look good
+   flatter the desks' numbers — the log would be measuring the choosing, not
+   the strategy. Kept apart, it answers a different and still useful
+   question: how do the plans I actually look at work out?
+
+   hgFwdRecordScan dedups by bar, so pressing FULL REPORT repeatedly inside
+   one 4h bar records once. */
+var REPORT_TAB = 'SEARCH-REPORT';
+
+function hgContractReportRecord(rep){
+  try{
+    if (!rep || !rep.plan || !rep.plan.ok) return 0;
+    if (!has('hgFwdRecordScan')) return 0;
+    var p = rep.plan;
+    if (!isFinite(fin(p.entry)) || !isFinite(fin(p.stop)) || !isFinite(fin(p.t1))) return 0;
+    if (fin(p.entry) === fin(p.stop)) return 0;
+    /* The mechanic is the SOURCE of the levels, not the symbol — so the log
+       can later say which kind of plan works, rather than which coin did. */
+    var mech = /formed ticket/.test(p.source || '') ? 'FORMED-TICKET'
+             : (/^derived/.test(p.source || '') ? 'DERIVED-STRUCTURE'
+             : String(p.source || 'ENGINE').toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 24));
+    return W.hgFwdRecordScan(REPORT_TAB, '4h', [{
+      sym: rep.sym, dir: p.dir, entry: p.entry, stop: p.stop, t1: p.t1,
+      mechanic: mech, ticket: false
+    }], { horizonBars: 20 });
+  }catch(e){
+    try{ if (has('hgFwdWarn')) W.hgFwdWarn('contract-report', e); }catch(e2){}
+    return 0;
+  }
 }
 
 /* Async engines — flow legs and the post-gate need the network, so they run
@@ -934,6 +996,7 @@ function hgContractReportHTML(rep){
 
 W.hgContractReportRun = hgContractReportRun;
 W.hgContractReportEnrich = hgContractReportEnrich;
+W.hgContractReportRecord = hgContractReportRecord;
 W.hgContractReportHTML = hgContractReportHTML;
 W.hgContractReportCSS = hgContractReportCSS;
 

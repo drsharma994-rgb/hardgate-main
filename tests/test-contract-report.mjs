@@ -296,6 +296,102 @@ console.log('\n== FLOW & POST-GATE: network engines, appended without blocking =
 }
 
 
+console.log('\n== the report records its own plan, kept apart from the desks ==');
+{
+  /* Every desk records its firings so evidence accumulates. This panel
+     produced a concrete levelled plan and recorded nothing, so it could show
+     "no settled samples yet" forever while generating setups it never
+     counted.
+
+     It records under its OWN tab id, and that separation is the point. A desk
+     scan is systematic — it fires on whatever the universe throws up. A FULL
+     REPORT fires on a contract the reader chose to type in. Pooling the two
+     would let a habit of only checking symbols that already look good flatter
+     the desk numbers: the log would be measuring the choosing, not the
+     strategy. */
+  const store = {};
+  const ctx = { console, Math, Date, isFinite, parseFloat, parseInt, JSON, Array, Object,
+                Number, String, Promise, RegExp, setTimeout, clearTimeout };
+  ctx.window = ctx; ctx.globalThis = ctx; ctx.HG_tabs = [];
+  ctx.localStorage = { getItem: k => (k in store ? store[k] : null),
+                       setItem: (k, v) => { store[k] = String(v); },
+                       removeItem: k => { delete store[k]; } };
+  ctx.document = { createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){} }),
+                   getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+                   head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
+  vm.createContext(ctx);
+  for (const f of ENGINES.concat(['hg-forward.js'])){
+    const p = path.join(ROOT, f);
+    if (fs.existsSync(p)){ try { vm.runInContext(fs.readFileSync(p, 'utf8'), ctx, { filename: f }); } catch (e) {} }
+  }
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'contract-report.js'), 'utf8'), ctx, { filename: 'contract-report.js' });
+
+  ok(typeof ctx.hgContractReportRecord === 'function', 'hgContractReportRecord is exported');
+  ok(typeof ctx.hgFwdStats === 'function', 'the forward log is available to record into');
+
+  const r4 = gen(260, 50000, 'pullback');
+  const mk = () => ctx.hgContractReportRun({ sym: 'BTCUSD', rows4h: r4, rows1h: gen(260, 50000, 'pullback'),
+    rows15m: gen(260, 50000, 'pullback'),
+    ticker: { symbol: 'BTCUSD', fundingPct: 0.01, mark: r4[r4.length - 1].c } });
+
+  const rep = mk();
+  ok(rep.plan.ok, 'the fixture produced a plan to record — the block is not vacuous');
+
+  const first = ctx.hgContractReportRecord(rep);
+  ok(first === 1, 'the plan is recorded once (' + first + ')');
+  const second = ctx.hgContractReportRecord(rep);
+  ok(second === 0, 'pressing FULL REPORT again in the same bar records nothing (' + second + ')');
+
+  const own = ctx.hgFwdStats('SEARCH-REPORT', null, false);
+  ok(own.open === 1, 'the plan sits open in the panel own pool (' + own.open + ')');
+  ok(own.samples === 0, 'and counts as nothing settled until it resolves');
+
+  /* The whole point: the desks must be untouched. */
+  for (const desk of ['CRYPTOGATES', 'EDGE', 'PINE', 'SQUEEZE', 'TRENDTABLE']){
+    const d = ctx.hgFwdStats(desk, null, false);
+    ok(d.samples === 0 && d.open === 0, desk + ' pool is untouched by a user-chosen lookup');
+  }
+
+  const pool = ctx.hgFwdPool('SEARCH-REPORT');
+  const mechs = Object.keys(pool);
+  ok(mechs.length === 1, 'exactly one mechanic was recorded (' + mechs.join(',') + ')');
+  ok(/FORMED-TICKET|DERIVED-STRUCTURE|[A-Z]/.test(mechs[0]),
+    'the mechanic is the SOURCE of the levels, not the symbol (' + mechs[0] + ')');
+  ok(!/BTCUSD/.test(mechs[0]), 'the coin is not the mechanic — the log must say which KIND of plan works');
+
+  /* A plan that cannot be recorded honestly must not be. */
+  const noPlan = { plan: { ok: false } };
+  ok(ctx.hgContractReportRecord(noPlan) === 0, 'a report with no plan records nothing');
+  ok(ctx.hgContractReportRecord({ plan: { ok: true, entry: 100, stop: 100, t1: 110, dir: 'long' } }) === 0,
+    'a plan with no risk distance records nothing');
+  ok(ctx.hgContractReportRecord(null) === 0, 'a null report records nothing and does not throw');
+
+  /* And the panel reports its own record with the bias stated. */
+  const rep2 = mk();
+  const m = rep2.sections.filter(s => s.id === 'measured')[0];
+  const ownRow = m.rows.filter(r => /selection-biased/.test(r.name))[0];
+  ok(!!ownRow, 'the panel reports its own pool as a distinct row');
+  ok(/selection-biased/.test(ownRow.name), 'and names the bias in the row title');
+  ok(/never poolable|not plans a desk generated/.test(ownRow.why || ''),
+    'and explains why it cannot be pooled with the desks');
+  ok(/1 plan open/.test(ownRow.detail), 'and reflects the plan just recorded (' + ownRow.detail.slice(0, 40) + ')');
+
+  const html = ctx.hgContractReportHTML(rep2);
+  ok(/selection-biased/.test(html), 'the bias is visible to the reader, not only in the data');
+  ok(!/NaN|undefined/.test(html), 'and the page still has no NaN');
+}
+
+console.log('\n== SEARCH records the plan after rendering it ==');
+{
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  ok(/hgContractReportRecord\(rep\)/.test(html), 'the SEARCH handler records the plan');
+  const renderAt = html.indexOf('out.innerHTML = hgContractReportHTML(rep);');
+  const recordAt = html.indexOf('hgContractReportRecord(rep)');
+  ok(renderAt > 0 && recordAt > renderAt, 'it records AFTER the page is on screen, so recording never delays the report');
+  ok(/must never be pooled with the desk/.test(html), 'the separation is documented where it is wired');
+}
+
+
 console.log('\n== the SEARCH tab is wired to it ==');
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
