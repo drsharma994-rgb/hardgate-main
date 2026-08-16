@@ -951,6 +951,10 @@ function cardHTML(c, isBest, season){
     ? '<div class="gsw-whyline"><b>VISION:</b> ' + esc(visionText) + '</div>' : '';
   /* A gate that could not be evaluated is shown as UNCHECKED. It is not a
      veto and not a pass — the reader is told the ledger is incomplete. */
+  /* When an R:R leg was cleared rather than computed, say why — a blank or an
+     em-dash on the card should not leave the reader guessing. */
+  var rrNoteLine = c.rrNote
+    ? '<div class="note" style="margin-top:6px">R:R &mdash; ' + esc(c.rrNote) + '</div>' : '';
   var uncheckedLine = (c.postGateUnchecked && !c.demoted)
     ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important"><b>&#9888; POST-GATE UNCHECKED</b> &mdash; '
       + esc((c.postGateUncheckedReasons || ['reason not recorded']).join(' &middot; '))
@@ -989,6 +993,7 @@ function cardHTML(c, isBest, season){
     + (c.why ? '<div class="gsw-whyline"' + gswSt(GSW_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')
+    + rrNoteLine
     + uncheckedLine
     + xautBasisLine
     + lockLine
@@ -2300,12 +2305,11 @@ async function runScan(ui, scanSt){
               if (isFinite(gfm2.hit.t1)) gc2.t1 = gfm2.hit.t1;
               if (isFinite(gfm2.hit.t2)) gc2.t2 = gfm2.hit.t2;
             }
-            var rskFs2 = Math.abs(gc2.entry - gc2.stop);
-            if (rskFs2 > 0){
-              if (isFinite(gc2.t1)) gc2.rr = Math.abs(gc2.t1 - gc2.entry) / rskFs2;
-              if (isFinite(gc2.t2)) gc2.rr2 = Math.abs(gc2.t2 - gc2.entry) / rskFs2;
-              if (isFinite(gc2.t3)) gc2.rr3 = Math.abs(gc2.t3 - gc2.entry) / rskFs2;
-            }
+            /* Same rule as the best-levels path: R:R is recomputed from the
+               levels now on the card, and cleared where it cannot be — never
+               left over from the plan these levels replaced. */
+            var syncRrFn = gfn('hgSyncPlanRr');
+            if (syncRrFn) syncRrFn(gc2);
           }
         }catch(eGf2){}
       }

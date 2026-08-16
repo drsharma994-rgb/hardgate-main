@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v329',
-  pack: 'a gate that could not run is not a gate that passed',
-  built: '2026-08-16T17:40:00Z',
-  note: 'post-gates answered every failure with ok:true; one throwing candidate silently skipped the gate for all the rest'
+  version: 'hg-v330',
+  pack: 'a shown R:R is the ratio between the shown levels',
+  built: '2026-08-16T19:05:00Z',
+  note: 'replacing entry/stop/targets left the previous plan R:R attached when any guard failed; every leg is now recomputed or cleared'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

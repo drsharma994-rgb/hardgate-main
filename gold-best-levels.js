@@ -382,12 +382,52 @@ function hgBestLevelsGold(inp){
   }
 }
 
+/* A derived number must never outlive the inputs it was derived from.
+
+   hgApplyGoldBestLevels replaces entry/stop/targets in place, then recomputed
+   R:R only where every guard happened to hold. Where one did not — risk of
+   zero, a target the new plan did not supply, a non-finite level — the OLD
+   rr/rr2/rr3 stayed attached to the NEW levels. A card then showed an entry, a
+   stop, a target, and an R:R that was not the ratio between them. This is the
+   second time a stale R:R has reached a card, so it is now impossible by
+   construction: every leg is recomputed from the levels actually on the
+   candidate, and any leg that cannot be computed is CLEARED, never carried. */
+function gbNum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
+
+function hgSyncPlanRr(c){
+  if (!c) return c;
+  try{
+    var entry = gbNum(c.entry), stop = gbNum(c.stop);
+    var risk = (fin(entry) && fin(stop)) ? Math.abs(entry - stop) : NaN;
+    var usable = fin(risk) && risk > 0;
+    var legs = [['t1', 'rr'], ['t2', 'rr2'], ['t3', 'rr3']];
+    var cleared = [], i, tgt, key;
+    for (i = 0; i < legs.length; i++){
+      tgt = gbNum(c[legs[i][0]]); key = legs[i][1];
+      if (usable && fin(tgt)){
+        c[key] = Math.abs(tgt - entry) / risk;
+      } else {
+        if (c[key] !== null && c[key] !== undefined) cleared.push(key.toUpperCase());
+        c[key] = null;
+      }
+    }
+    if (!usable){
+      c.rrNote = 'R:R unavailable — entry and stop do not define a risk distance';
+    } else if (cleared.length){
+      c.rrNote = cleared.join(' / ') + ' cleared — no target at these levels';
+    } else {
+      c.rrNote = null;
+    }
+  }catch(e){}
+  return c;
+}
+
 /** Apply unified gold levels onto a scan candidate (mutates gc). */
 /** Recompute structural R:R tally leg after hgApplyGoldBestLevels mutates rr. */
 function hgGoldRefreshTallyRr(c){
   if (!c || !Array.isArray(c.tallyParts)) return c;
   try{
-    var rrVal = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
+    var rrVal = fin(gbNum(c.rr)) ? gbNum(c.rr) : gbNum(c.rr1);
     var rrPts = (fin(rrVal) && rrVal >= 2) ? (rrVal >= 2.5 ? 2 : 1) : 0;
     var found = false, i, p, oldPts;
     for (i = 0; i < c.tallyParts.length; i++){
@@ -464,6 +504,9 @@ function hgGoldAnnotateCandidateMeta(c, inp){
 
 function hgGoldPostApplyRefresh(c, metaInp){
   if (!c) return c;
+  /* Before anything reads c.rr — the tally leg does — make sure it matches the
+     levels currently on the candidate rather than the ones it was built from. */
+  hgSyncPlanRr(c);
   hgGoldRefreshTallyRr(c);
   hgGoldSyncCandidateGrade(c);
   hgGoldAnnotateCandidateMeta(c, metaInp);
@@ -514,12 +557,7 @@ function hgApplyGoldBestLevels(gc, inp){
       if (fin(plan.t3)) gc.t3 = plan.t3;
     }
 
-    var rsk = Math.abs(gc.entry - gc.stop);
-    if (rsk > 0){
-      if (fin(gc.t1)) gc.rr = Math.abs(gc.t1 - gc.entry) / rsk;
-      if (fin(gc.t2)) gc.rr2 = Math.abs(gc.t2 - gc.entry) / rsk;
-      if (fin(gc.t3)) gc.rr3 = Math.abs(gc.t3 - gc.entry) / rsk;
-    }
+    hgSyncPlanRr(gc);
     return gc;
   }catch(e){ return gc; }
 }
@@ -537,6 +575,7 @@ G.HG_GOLD_SWING_MIN_RR = HG_GOLD_SWING_MIN_RR;
 G.hgGoldGradeFromScore = hgGoldGradeFromScore;
 G.hgGoldSyncCandidateGrade = hgGoldSyncCandidateGrade;
 G.hgGoldRefreshTallyRr = hgGoldRefreshTallyRr;
+G.hgSyncPlanRr = hgSyncPlanRr;
 G.hgGoldAnnotateCandidateMeta = hgGoldAnnotateCandidateMeta;
 G.hgGoldPostApplyRefresh = hgGoldPostApplyRefresh;
 

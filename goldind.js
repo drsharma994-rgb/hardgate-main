@@ -2289,6 +2289,16 @@ function hgGoldInlineBridge(inp){
    (stable). -> {ranked:[cand + {tally, tallyParts:[{label,pts}]}], best} —
    {ranked:[], best:null} on any failure.
 ========================================================================= */
+/* isFinite(null) is true and +null is 0, so a CLEARED R:R (set to null by
+   hgSyncPlanRr when the levels cannot produce one) would read here as a
+   confident 0.0R and be printed into the tally as if it had been measured.
+   This reader rejects null/undefined/'' before the numeric test. */
+function gdRr(v){
+  if (v === null || v === undefined || v === '') return NaN;
+  var n = +v;
+  return (typeof n === 'number' && isFinite(n)) ? n : NaN;
+}
+
 function goldRankSetups(cands, ctx){
   var out = { ranked: [], best: null, rejected: [] };
   try{
@@ -2439,7 +2449,7 @@ function goldRankSetups(cands, ctx){
                        + ' printing the same structure (' + (cvMap[c.id].names || []).join(' · ') + ')', pts: 2 });
         tally += 2;
       }
-      var rrVal = isFinite(c.rr) ? +c.rr : (isFinite(c.rr1) ? +c.rr1 : NaN);
+      var rrVal = isFinite(gdRr(c.rr)) ? gdRr(c.rr) : gdRr(c.rr1);
       if (isFinite(rrVal) && rrVal >= 2){
         var rrPts = rrVal >= 2.5 ? 2 : 1;
         parts.push({ label: 'structural R:R ' + rrVal.toFixed(1) + 'R — reward/risk geometry', pts: rrPts });
@@ -2517,8 +2527,8 @@ function goldRankSetups(cands, ctx){
       var ax = isFinite(x.agree) ? x.agree : 0;
       var ay = isFinite(y.agree) ? y.agree : 0;
       if (ay !== ax) return ay - ax;
-      var rrx = isFinite(x.rr) ? x.rr : (isFinite(x.rr1) ? x.rr1 : 0);
-      var rry = isFinite(y.rr) ? y.rr : (isFinite(y.rr1) ? y.rr1 : 0);
+      var rrx = isFinite(gdRr(x.rr)) ? gdRr(x.rr) : (isFinite(gdRr(x.rr1)) ? gdRr(x.rr1) : 0);
+      var rry = isFinite(gdRr(y.rr)) ? gdRr(y.rr) : (isFinite(gdRr(y.rr1)) ? gdRr(y.rr1) : 0);
       return rry - rrx;
     });
     out.ranked = ranked;
