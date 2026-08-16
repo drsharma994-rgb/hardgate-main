@@ -833,6 +833,27 @@ function publishSqueezeState(results){
     }
     var at = Date.now();
     __sqSnap = { results: rows, at: at };
+    /* FORWARD LOG. SQUEEZE's two actionable kinds are recorded as separate
+       mechanics: a TTM squeeze FIRE and a Donchian BREAK are different claims
+       and there has never been anything in the app able to say which of them
+       pays. 'build' rows are excluded — a forming squeeze carries no levels,
+       so there is nothing to settle it against. Rows without a plan are
+       skipped for the same reason. */
+    try {
+      if (typeof W.hgFwdRecordScan === 'function'){
+        var fwd = [], fi;
+        for (fi = 0; fi < rows.length; fi++){
+          var fr = rows[fi];
+          if (!fr || !fr.dir) continue;
+          if (fr.kind !== 'fired' && fr.kind !== 'break') continue;
+          if (!isFinite(+fr.entry) || !isFinite(+fr.stop) || !isFinite(+fr.t1)) continue;
+          fwd.push({ sym: fr.sym, dir: fr.dir, entry: +fr.entry, stop: +fr.stop, t1: +fr.t1,
+                     mechanic: (fr.kind === 'fired') ? 'SQZ-FIRED' : 'SQZ-BREAK',
+                     ticket: fr.kind === 'fired' });
+        }
+        if (fwd.length) W.hgFwdRecordScan('SQUEEZE', '4h', fwd, { horizonBars: 20 });
+      }
+    } catch (eFwd) {}
     /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
        mirrors window.squeezeState() for the BRAIN. */
     W.HG_squeezeResults = { results: rows, syms: syms, at: at };
@@ -1023,6 +1044,7 @@ function mount(el){
     + '</div>'
     + '<div id="sqFiredDesk"></div>'
     + '<div class="cards" id="sqCards"></div>'
+    + '<div id="sqFwd"></div>'
     + '<div id="sqNear"></div>'
     + '<div id="sqForming"></div>'
     + '<div id="sqLimit"></div>'
@@ -1033,6 +1055,15 @@ function mount(el){
       statEl = el.querySelector('#sqStat'), summaryEl = el.querySelector('#sqSummary'),
       progEl = el.querySelector('#sqProg'), cardsEl = el.querySelector('#sqCards'),
       emptyEl = el.querySelector('#sqEmpty'), funnelEl = el.querySelector('#sqFunnel');
+  /* Paint the shared forward panel on mount, so the tab shows its accumulated
+     out-of-sample record before any scan runs — the only number on this tab
+     that is not re-read from the current window. */
+  try {
+    var sqFwdEl = el.querySelector('#sqFwd');
+    if (sqFwdEl && typeof W.hgFwdPanelHTML === 'function'){
+      sqFwdEl.innerHTML = W.hgFwdPanelHTML('SQUEEZE', { minRr: 2, title: 'FORWARD — has FIRED or BREAK paid?' });
+    }
+  } catch (eFwd) {}
   var refs = {
     summary: summaryEl,
     firedDesk: el.querySelector('#sqFiredDesk'),

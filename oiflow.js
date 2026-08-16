@@ -523,6 +523,29 @@ function publishOiflowState(results){
     }
     var at = Date.now();
     __oiSnap = { results: rows, at: at };
+    /* FORWARD LOG. The published snapshot deliberately carries no levels —
+       it is a positioning read, and the plan is derived at render time — so
+       the levels are recomputed here via oiflowSetup(), the same function the
+       cards use. The mechanic is the classifier's own regime label (squeeze,
+       trend fuel, capitulation...), which is the useful split: OI FLOW's
+       whole claim is that those regimes mean different things, and nothing
+       until now could check whether they resolve differently. */
+    try {
+      if (typeof W.hgFwdRecordScan === 'function' && typeof oiflowSetup === 'function'){
+        var fwd = [], fi, fr, fs;
+        for (fi = 0; fi < results.length; fi++){
+          fr = results[fi];
+          if (!fr || !fr.cls || !fr.cls.dir) continue;
+          try { fs = oiflowSetup(fr.cls, fr.rows4h, fr.rows1h); } catch (eS) { fs = null; }
+          if (!fs || !isFinite(+fs.entry) || !isFinite(+fs.stop) || !isFinite(+fs.t1)) continue;
+          var reg = (typeof fr.cls.regime === 'string' && fr.cls.regime) ? fr.cls.regime : 'UNCLASSIFIED';
+          fwd.push({ sym: fr.sym, dir: fr.cls.dir, entry: +fs.entry, stop: +fs.stop, t1: +fs.t1,
+                     mechanic: 'OI-' + String(reg).toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 24),
+                     ticket: !!fs.confirmed });
+        }
+        if (fwd.length) W.hgFwdRecordScan('OIFLOW', '4h', fwd, { horizonBars: 20 });
+      }
+    } catch (eFwd) {}
     /* engine.js Stage-0 contract reads {syms, at} from this key; `results`
        mirrors window.oiflowState() for the BRAIN. */
     G.HG_oiflowResults = { results: rows, syms: syms, at: at };
@@ -676,6 +699,7 @@ function mount(el){
       + '<div class="prog" id="oiflowProg"><i></i></div>'
       + '</div>'
       + '<div id="oiflowDesk"></div>'
+      + '<div id="oiflowFwd"></div>'
       + '<div class="cards" id="oiflowCards"></div>'
       + '<div class="empty" id="oiflowEmpty" style="display:none">No positioning edges right now — books are balanced.</div>';
     __mountedEl = el;
@@ -691,6 +715,15 @@ function mount(el){
     }
     var btn = el.querySelector('#oiflowRun');
     if (btn) btn.addEventListener('click', function(){ runScan(el); });
+    /* Shared forward panel — OI FLOW's regimes recorded, and read back here.
+       The tab's whole claim is that squeeze / trend-fuel / capitulation mean
+       different things; this is the first thing able to check that. */
+    try {
+      var oiFwdEl = el.querySelector('#oiflowFwd');
+      if (oiFwdEl && typeof W.hgFwdPanelHTML === 'function'){
+        oiFwdEl.innerHTML = W.hgFwdPanelHTML('OIFLOW', { minRr: 2, title: 'FORWARD — do OI regimes resolve differently?' });
+      }
+    } catch (eFwd) {}
     try{
       if (typeof hgSetupPaintDesk === 'function'){
         hgSetupPaintDesk('oiflowDesk', { kind: 'oiflow', tab: 'OI FLOW',

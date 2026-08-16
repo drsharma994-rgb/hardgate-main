@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v320',
-  pack: 'EDGE on the forward log + shared panel',
-  built: '2026-08-16T07:30:00Z',
-  note: 'EDGE records per TRIGGER so its ~10 entries can be compared; one shared panel now serves every instrumented tab'
+  version: 'hg-v321',
+  pack: 'SQUEEZE, REVERSALSNIPER, OIFLOW on the forward log',
+  built: '2026-08-16T08:20:00Z',
+  note: 'squeeze FIRED vs BREAK, sniper bounce, and OI regimes each recorded as their own mechanic'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

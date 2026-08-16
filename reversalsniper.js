@@ -433,6 +433,22 @@ function publishRsDeskSnap(results){
         : '0 sniper setups — post-drop long bounces only'
     };
     W.reversalSniperScan = function(){ return __rs.snap; };
+    /* FORWARD LOG. Every sniper candidate is a post-drop long bounce, so the
+       mechanic is one thing rather than a family — what accumulates here is
+       whether that single claim resolves. Conviction rides in as the ticket
+       flag so a high-conviction sniper can later be compared against the rest;
+       if they resolve alike, conviction is a label rather than a filter. */
+    try {
+      if (typeof W.hgFwdRecordScan === 'function' && cands.length){
+        var fwd = cands.filter(function(c){
+          return c && c.dir && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1);
+        }).map(function(c){
+          return { sym: c.sym, dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                   mechanic: 'SNIPER-BOUNCE', ticket: !!c.conviction };
+        });
+        if (fwd.length) W.hgFwdRecordScan('REVERSALSNIPER', '4h', fwd, { horizonBars: 20 });
+      }
+    } catch (eFwd) {}
   }catch(e){}
 }
 
@@ -499,6 +515,7 @@ function mount(el){
     + ' · lev ≥ ' + MIN_LEV + '×</span></div>'
     + '<div class="prog" id="rsProg"><i></i></div>'
     + '<div class="cards" id="rsCards"></div>'
+    + '<div id="rsFwd"></div>'
     + '<div class="empty" id="rsEmpty" style="display:none">No sniper-grade long reversals right now — '
     + 'need a post-drop setup with a stop tight enough for ≥' + MIN_LEV + '×.</div>'
     + '<div class="note" id="rsIdle">Auto-scan starts when you open this tab — or press SCAN REVERSALS.</div>'
@@ -510,6 +527,15 @@ function mount(el){
   var cardsEl = el.querySelector('#rsCards');
   var emptyEl = el.querySelector('#rsEmpty');
   var idleEl = el.querySelector('#rsIdle');
+  /* Paint the shared forward panel on mount — the tab's accumulated
+     out-of-sample record, and the only number here not re-read from the
+     current window. */
+  try {
+    var rsFwdEl = el.querySelector('#rsFwd');
+    if (rsFwdEl && typeof W.hgFwdPanelHTML === 'function'){
+      rsFwdEl.innerHTML = W.hgFwdPanelHTML('REVERSALSNIPER', { minRr: 2, title: 'FORWARD — has the sniper bounce paid?' });
+    }
+  } catch (eFwd) {}
   if (!btn || !statEl) return;
 
   function setStat(t, warn){ statEl.textContent = t; statEl.className = warn ? 'note warn' : 'note'; }
