@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v330',
-  pack: 'a shown R:R is the ratio between the shown levels',
-  built: '2026-08-16T19:05:00Z',
-  note: 'replacing entry/stop/targets left the previous plan R:R attached when any guard failed; every leg is now recomputed or cleared'
+  version: 'hg-v331',
+  pack: 'a restored conviction carries its own numbers, not the scan it replaced',
+  built: '2026-08-16T21:20:00Z',
+  note: 'the merged-conviction branch restored entry/stop/t1/t2 from the lock and left t3 and rr3 behind from the fresh scan'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

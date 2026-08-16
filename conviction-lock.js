@@ -16,6 +16,34 @@ var W = (typeof window !== 'undefined') ? window
 var SCALP_EXPIRY_MS = 6 * 60 * 60 * 1000;
 var SWING_EXPIRY_MS = 5 * 24 * 60 * 60 * 1000;
 
+
+/* Restoring a locked conviction replaces the candidate's levels wholesale.
+   Every ratio derived from the OLD levels must be re-derived or cleared in the
+   same breath — a card must never pair a locked entry/stop with an R:R that
+   belongs to the plan it replaced. hgSyncPlanRr (gold-best-levels.js) is the
+   single definition of that rule; it is resolved at call time, which is scan
+   time, long after every script has loaded. If it is somehow absent the
+   ratios are CLEARED rather than left standing, because a missing number is
+   honest and a stale one is not. */
+function clSyncRr(c){
+  if (!c) return c;
+  try{
+    var fn = W.hgSyncPlanRr;
+    if (typeof fn === 'function') return fn(c);
+    c.rr = null; c.rr2 = null; c.rr3 = null;
+    c.rrNote = 'R:R not re-derived — level sync unavailable';
+  }catch(e){}
+  return c;
+}
+
+/* isFinite(null) is true, so a null level would pass an isFinite guard and
+   then arithmetic on it would read as price 0 — the trap that has already
+   produced fabricated numbers twice in this codebase. Nothing writes a null
+   t3 today; this closes the door before something does. */
+function clFin(v){
+  return v !== null && v !== undefined && v !== '' && typeof +v === 'number' && isFinite(+v);
+}
+
 function __barMs(bar){
   try{
     if (!bar) return NaN;
@@ -384,13 +412,8 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
       }
       if (rec){
         c.entry = rec.entry; c.stop = rec.stop; c.t1 = rec.t1; c.t2 = rec.t2;
-        if (isFinite(rec.t3)) c.t3 = rec.t3;
-        var risk = Math.abs(rec.entry - rec.stop);
-        if (risk > 0){
-          c.rr = Math.abs(rec.t1 - rec.entry) / risk;
-          c.rr2 = Math.abs(rec.t2 - rec.entry) / risk;
-          if (isFinite(rec.t3)) c.rr3 = Math.abs(rec.t3 - rec.entry) / risk;
-        }
+        c.t3 = clFin(rec.t3) ? rec.t3 : null;
+        clSyncRr(c);
         c.venue = rec.venue; c.sym = rec.sym;
         c.locked = true; c.issuedAt = rec.issuedAt;
         if (rec.grade) c.grade = rec.grade;
@@ -413,11 +436,12 @@ function applyHardgateConvictionLock(store, ranked, venueRows, nowMs, opts){
             }
           }
           c.entry = mergedRec.entry; c.stop = mergedRec.stop; c.t1 = mergedRec.t1; c.t2 = mergedRec.t2;
-          var mrisk = Math.abs(mergedRec.entry - mergedRec.stop);
-          if (mrisk > 0){
-            c.rr = Math.abs(mergedRec.t1 - mergedRec.entry) / mrisk;
-            c.rr2 = Math.abs(mergedRec.t2 - mergedRec.entry) / mrisk;
-          }
+          /* t3 was previously left behind here: entry/stop/t1/t2 came from the
+             merged record while t3 and rr3 stayed from the fresh scan, so every
+             merged conviction carrying a T3 showed a runner from a different
+             plan. It is restored with the rest, then all ratios re-derived. */
+          c.t3 = clFin(mergedRec.t3) ? mergedRec.t3 : null;
+          clSyncRr(c);
           c.venue = mergedRec.venue; c.sym = mergedRec.sym;
           c.locked = true; c.issuedAt = mergedRec.issuedAt;
           c.merged = true; c.mergedInto = mergedRec.id; c.mergedAt = nowMs;
@@ -480,9 +504,9 @@ function convictionCardFromLiveRec(rec, defaults){
       : { long: (rec.dir === 'long') ? (isFinite(rec.agree) ? rec.agree : 2) : 0,
           short: (rec.dir === 'short') ? (isFinite(rec.agree) ? rec.agree : 2) : 0 },
     atr: isFinite(rec.atr) ? rec.atr : NaN,
-    rr: risk > 0 ? Math.abs(rec.t1 - rec.entry) / risk : NaN,
-    rr2: risk > 0 && isFinite(rec.t2) ? Math.abs(rec.t2 - rec.entry) / risk : NaN,
-    rr3: (risk > 0 && isFinite(rec.t3)) ? Math.abs(rec.t3 - rec.entry) / risk : NaN
+    rr: (risk > 0 && clFin(rec.t1)) ? Math.abs(rec.t1 - rec.entry) / risk : null,
+    rr2: (risk > 0 && clFin(rec.t2)) ? Math.abs(rec.t2 - rec.entry) / risk : null,
+    rr3: (risk > 0 && clFin(rec.t3)) ? Math.abs(rec.t3 - rec.entry) / risk : null
   };
   try{
     card.asOf = isFinite(card.issuedAt)

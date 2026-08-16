@@ -584,7 +584,8 @@ function __cardFromLiveRec(rec){
     atr: isFinite(rec.atr) ? rec.atr : NaN,
     rr: risk > 0 ? Math.abs(rec.t1 - rec.entry) / risk : NaN,
     rr2: risk > 0 && isFinite(rec.t2) ? Math.abs(rec.t2 - rec.entry) / risk : NaN,
-    rr3: (risk > 0 && isFinite(rec.t3)) ? Math.abs(rec.t3 - rec.entry) / risk : NaN
+    rr3: (risk > 0 && rec.t3 !== null && rec.t3 !== undefined && isFinite(rec.t3))
+      ? Math.abs(rec.t3 - rec.entry) / risk : null
   };
   try{
     card.asOf = isFinite(card.issuedAt)

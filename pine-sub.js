@@ -10,6 +10,10 @@ var PINE_EDGE_UNIVERSE_NOTE = 'Same <b>EDGE+</b> universe as crypto PINE: ticket
   + 'falls back to <b>SWING CLEAN</b>. Shows <b>NEW</b>, <b>RECENT</b> (5 bars), and <b>ALIGNED</b> context. Run <b>EDGE</b> first.';
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
+/* +null is 0, so coercing before the finite test turns a missing level into
+   price zero — the trap that has produced fabricated numbers repeatedly here.
+   Reject the empty values first, then coerce. */
+function pineNum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
 
 function pineSubEsc(s){
   return String(s || '').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; });
@@ -50,6 +54,17 @@ function pineSubEnrichSignal(sig, item, res){
   sig.gateHits = item.gateHits;
   if (!sig.gates) sig.gates = item.gates;
   if (!isFresh && !isRecent && !isContext) return null;
+  /* Every one of the nine pine scripts sets
+       sig.rr = Math.abs(t1 - entry) / Math.abs(entry - stop)
+     with no guard on the denominator. entry === stop yields Infinity, which
+     would clear any R:R floor and sort ahead of every real setup the moment
+     anything reads it. Nothing reads it today — the forward log recomputes R
+     from the levels and already drops entry === stop — so this is a landmine
+     rather than a live fault, and it is defused here, once, for all nine
+     rather than in nine copies that can drift apart. */
+  var rrEntry = pineNum(sig.entry), rrStop = pineNum(sig.stop), rrT1 = pineNum(sig.t1);
+  var rk = (fin(rrEntry) && fin(rrStop)) ? Math.abs(rrEntry - rrStop) : NaN;
+  sig.rr = (fin(rk) && rk > 0 && fin(rrT1)) ? Math.abs(rrT1 - rrEntry) / rk : null;
   return sig;
 }
 
