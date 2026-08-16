@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v323',
-  pack: 'the gold desks on the forward log',
-  built: '2026-08-16T10:00:00Z',
-  note: 'GOLD SWING/SCALP split by strategy, GOLD PRO by composite-vs-fallback; any gold tab now settles every gold record'
+  version: 'hg-v324',
+  pack: 'the PINE family on the forward log',
+  built: '2026-08-16T10:50:00Z',
+  note: 'one hook in pine-sub covers nine scripts; fresh signals only, so an ageing signal is not counted twice'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -221,6 +221,42 @@ function pineSubRunScan(cfg, opts){
 
     if (typeof sortFn === 'function') signals.sort(sortFn);
 
+    /* FORWARD LOG — one hook for all nine PINE sub-tabs. They share this
+       harness and nothing else, so instrumenting here covers MSB, SQZ, SMF,
+       HT, SMC, CIPHER, RF, NW and AVWAP at once.
+       Only FRESH signals are recorded. isRecent and isContext are the same
+       setup seen again some bars later, and recording those would count one
+       signal several times as it aged through the window — the precise
+       inflation this log exists to avoid. The script id is the mechanic, so
+       each PINE script is measured on its own rather than pooled into one
+       undifferentiated "PINE" number. */
+    try {
+      if (typeof W.hgFwdRecordScan === 'function'){
+        var fwd = signals.filter(function(sg){
+          return sg && sg.isNew && sg.sym && sg.dir
+              && fin(+sg.entry) && fin(+sg.stop) && fin(+sg.t1)
+              && +sg.entry !== +sg.stop;
+        }).map(function(sg){
+          return { sym: sg.sym, dir: sg.dir, entry: +sg.entry, stop: +sg.stop, t1: +sg.t1,
+                   mechanic: String(sg.scriptId || statLabel || 'PINE').toUpperCase().slice(0, 24),
+                   ticket: !!sg.edgeTicket };
+        });
+        if (fwd.length) W.hgFwdRecordScan('PINE', TF, fwd, { horizonBars: 20 });
+      }
+    } catch (eFwd) {}
+
+    /* Settle open PINE records with bars this scan already fetched. Kept to
+       the last chunk's rows rather than refetching — resolution is
+       best-effort, and OMNIROUTE's full sweep settles anything missed. */
+    try {
+      if (typeof W.hgFwdResolve === 'function'){
+        for (var ri = 0; ri < signals.length; ri++){
+          var sr = signals[ri];
+          if (sr && sr.sym && sr.rows && sr.rows.length) W.hgFwdResolve(sr.sym, null, sr.rows);
+        }
+      }
+    } catch (eRes) {}
+
     try{ await pineSubAlertBatch(signals, opts); }catch(eAl){ console.warn('pine sub alert', eAl); }
 
     if (cfg.snap) cfg.snap.current = { at: Date.now(), signals: signals, gate: gate, stat: '' };

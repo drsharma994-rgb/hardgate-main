@@ -760,6 +760,24 @@ function mount(el){
         try{ await pineFireAlerts(alertable, opts); }catch(eAl){ console.warn('pine alert', eAl); }
       }
 
+      /* FORWARD LOG. Same rules as the sub-tab harness: FRESH signals only,
+         because isRecent/isContext are the same setup seen again some bars
+         later and recording those would count one signal repeatedly as it
+         aged through the window. Script id is the mechanic, so each PINE
+         script is measured on its own. */
+      try {
+        if (typeof W.hgFwdRecordScan === 'function'){
+          var pFwd = signals.filter(function(sg){
+            return sg && sg.isNew && sg.sym && sg.dir
+                && fin(+sg.entry) && fin(+sg.stop) && fin(+sg.t1) && +sg.entry !== +sg.stop;
+          }).map(function(sg){
+            return { sym: sg.sym, dir: sg.dir, entry: +sg.entry, stop: +sg.stop, t1: +sg.t1,
+                     mechanic: String(sg.scriptId || 'PINE').toUpperCase().slice(0, 24),
+                     ticket: !!sg.edgeTicket };
+          });
+          if (pFwd.length) W.hgFwdRecordScan('PINE', TF, pFwd, { horizonBars: 20 });
+        }
+      } catch (eFwd) {}
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
       if (out) out.innerHTML = renderPineOut(signals, gate);
