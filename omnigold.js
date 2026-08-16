@@ -633,16 +633,24 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
-  function renderPooled(pool, label, minRr){
+  function renderPooled(pool, label, minRr, fwdTab){
     if (!pool) return '';
     var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE','ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET'];
+    /* Forward (out-of-sample) counts for the same mechanics. These accumulate
+       one record per firing across scans and are the only numbers here that
+       are not re-read from the same window every time. */
+    var fwdPool = null;
+    var fwdFn = gfn('hgFwdPool');
+    if (fwdFn && fwdTab){ try { fwdPool = fwdFn(fwdTab); } catch (e) { fwdPool = null; } }
     var h = '<h4>' + esc(label) + ' — measured on this horizon</h4>';
-    h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>σ</th><th>READ</th></tr></thead><tbody>';
+    h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>σ</th><th>READ</th><th>FORWARD</th></tr></thead><tbody>';
     var pBreak = 1 / (1 + minRr);
     for (var i = 0; i < keys.length; i++){
       var k = keys[i], p = pool[k];
+      var fwd = fwdPool ? fwdPool[k] : null;
+      var fwdTxt = fwdCell(fwd);
       if (!p || !p.samples){
-        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired here</td></tr>';
+        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired here</td><td>' + fwdTxt + '</td></tr>';
         continue;
       }
       /* Same shared verdict helper omniroute's table uses, so the two
@@ -655,9 +663,21 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<tr><td><b>' + k + '</b></td><td>' + p.samples + needTxt + '</td><td>' + (p.hit * 100).toFixed(0) + '%</td>'
         +  '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td>'
         +  '<td>' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ</td>'
-        +  '<td>' + pill(read, cls) + '</td></tr>';
+        +  '<td>' + pill(read, cls) + '</td>'
+        +  '<td>' + fwdTxt + '</td></tr>';
     }
     return h + '</tbody></table>';
+  }
+
+  /* Forward column. Deliberately terse: settled count, hit rate, and how many
+     are still open. Until a mechanic has settled trades this reads "—", which
+     is the honest state on day one — the log has to be fed by scans over time
+     before it can say anything. */
+  function fwdCell(f){
+    if (!f || (!f.samples && !f.open)) return '<span class="dim">—</span>';
+    if (!f.samples) return '<span class="dim">' + f.open + ' open</span>';
+    return '<b>' + f.samples + '</b> · ' + (f.hit * 100).toFixed(0) + '%'
+         + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '');
   }
 
   /* ==================== the scan ==================== */
@@ -697,6 +717,12 @@ terse status, and never launches a first-time scan on a global refresh.
         pooled = poolFn ? poolFn([stats]) : stats;
       }
 
+      /* Settle any forward records this symbol has open, using the bars just
+         fetched. Done BEFORE recording the current firing, so a setup can
+         never be settled by the bar it was written on. */
+      var fwdResolve = gfn('hgFwdResolve');
+      if (fwdResolve){ try { fwdResolve('XAUUSD', cfg.tf, rows); } catch (e) {} }
+
       var hits = hgOgDetect(rows, {});
       var extra = {
         htf: dailyFn ? dailyFn(rows) : null,
@@ -704,6 +730,26 @@ terse status, and never launches a first-time scan on a global refresh.
         adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled
       };
       var cands = hgOgEvaluate(rows, hits, extra, cfg);
+
+      /* Record every firing that carries a plan — not only tickets. The
+         in-sample pool measures the raw mechanic, so the forward pool must
+         measure the same thing or the two cannot be compared. The ticket flag
+         rides along so the gates can be judged separately later. */
+      var fwdRecord = gfn('hgFwdRecord');
+      if (fwdRecord && rows.length){
+        var barT = num(rows[rows.length - 1].t);
+        for (var ci = 0; ci < cands.length; ci++){
+          var c = cands[ci];
+          if (!c.plan) continue;
+          try {
+            fwdRecord({
+              tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
+              dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
+              barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket)
+            });
+          } catch (e) {}
+        }
+      }
       return { cfg: cfg, rows: rows, source: got.source, cands: cands, pooled: pooled };
     }).catch(function(){
       return { cfg: cfg, rows: [], source: null, cands: [], pooled: null };
@@ -763,8 +809,8 @@ terse status, and never launches a first-time scan on a global refresh.
         }
         ui.stat.textContent = __og.lastStat + warn;
 
-        ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + HORIZONS.scalp.minRr + 'R)', HORIZONS.scalp.minRr)
-                          + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + HORIZONS.swing.minRr + 'R)', HORIZONS.swing.minRr)
+        ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + HORIZONS.scalp.minRr + 'R)', HORIZONS.scalp.minRr, 'OMNIGOLD:SCALP')
+                          + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + HORIZONS.swing.minRr + 'R)', HORIZONS.swing.minRr, 'OMNIGOLD:SWING')
                           + '<div class="note">Walk-forward on the same bars just read, per horizon and never merged — a mechanic that pays on 4h need not pay on 1h. '
                           + 'A bar spanning both stop and target counts as a STOP. In-sample on a short window; under ' + MIN_SAMPLES + ' samples is noise. '
                           + '<b>Every figure above is GROSS of spread and commission.</b> That matters most intraday: at an assumed $'

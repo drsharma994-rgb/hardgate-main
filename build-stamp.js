@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v317',
-  pack: 'audit fixes — overlap bias, stale pins, windows path',
-  built: '2026-08-16T04:30:00Z',
-  note: 'cgGateReplay counts non-overlapping trades · 7 stale cache-bust pins · fix-pack-17 could never run on windows · suite verified green end to end'
+  version: 'hg-v318',
+  pack: 'forward log — out-of-sample evidence',
+  built: '2026-08-16T06:00:00Z',
+  note: 'every measurement was in-sample and could never converge; setups are now recorded once per firing and settled by later bars'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

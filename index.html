@@ -708,6 +708,10 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="liqs.js"></script>
 <!-- xuniverse.js: no-tab IIFE library (combined Delta India + CoinDCX contract universe) consumed by engine.js/brain.js; registers no HG_tabs entry -->
 <script src="xuniverse.js"></script>
+<!-- hg-forward.js: the out-of-sample accumulator. Loads BEFORE any tab that
+     records into it; every consumer feature-checks it, so load order is
+     defensive rather than load-bearing. -->
+<script src="hg-forward.js"></script>
 <script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
@@ -752,14 +756,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=317"></script>
+<script src="supersetup.js?v=318"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=317"></script>
-<script src="super-gold.js?v=317"></script>
-<script src="super-best.js?v=317"></script>
-<script src="super-sniper.js?v=317"></script>
-<script src="super-book.js?v=317"></script>
-<script src="super-calibrate.js?v=317"></script>
+<script src="super-desk-common.js?v=318"></script>
+<script src="super-gold.js?v=318"></script>
+<script src="super-best.js?v=318"></script>
+<script src="super-sniper.js?v=318"></script>
+<script src="super-book.js?v=318"></script>
+<script src="super-calibrate.js?v=318"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
