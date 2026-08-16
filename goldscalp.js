@@ -376,6 +376,25 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null
       });
     }
+    /* FORWARD LOG, split by STRATEGY. This desk runs several distinct setups
+       — trend pullback, range breakout, order-block retest, macro-aligned
+       continuation — and until now nothing could say which of them pays. The
+       conviction lock means a candidate keeps its original levels across
+       re-scans, and the log keys on the bar, so a locked setup is recorded
+       once rather than re-counted every time the desk repaints.
+       XAUUSD is the symbol regardless of venue: the venue affects execution,
+       not whether the setup resolved. */
+    try {
+      if (typeof W.hgFwdRecordScan === 'function' && cands.length){
+        W.hgFwdRecordScan('GOLDSCALP', '1h', cands.filter(function(c){
+          return c && c.dir && isFinite(+c.entry) && isFinite(+c.stop) && isFinite(+c.t1);
+        }).map(function(c){
+          return { sym: 'XAUUSD', dir: c.dir, entry: +c.entry, stop: +c.stop, t1: +c.t1,
+                   mechanic: String(c.stratKey || c.strategy || 'UNKNOWN').toUpperCase().slice(0, 28),
+                   ticket: (c.grade === 'A' || c.grade === 'clean' || !!c.locked) };
+        }), { horizonBars: 24 });
+      }
+    } catch (eFwd) {}
     var hist = [];
     for (var j = 0; j < (history || []).length; j++){
       var h = history[j];
@@ -1263,6 +1282,17 @@ async function runScan(ui, scanSt){
     var stRoute = !!(scanSt && scanSt.useStartraderRouting);
     /* leg 1: primary gold feed */
     var gold = stRoute ? await fetchStartraderGoldKlines() : await fetchGoldKlines();
+    /* Settle open gold records with the bars just fetched, BEFORE this scan
+       records anything — so a setup can never be settled by the bar it was
+       written on. Placed here rather than in publishScan because that
+       function never receives the candles; the earlier attempt referenced an
+       out-of-scope rows4h and would have failed silently inside its own
+       try/catch, which is the exact pattern this work is meant to remove. */
+    try {
+      if (typeof W.hgFwdResolve === 'function' && gold && gold.rows4h && gold.rows4h.length){
+        W.hgFwdResolve('XAUUSD', null, gold.rows4h);
+      }
+    } catch (eRes) {}
     try{
       if (typeof W.hgVolFromCloses === 'function' && gold.rows4h && gold.rows4h.length >= 30){
         W.__hgGoldVolPack = W.hgVolFromCloses(gold.rows4h.map(function(r){ return r.c; }));

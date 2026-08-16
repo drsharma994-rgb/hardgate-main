@@ -721,7 +721,13 @@ terse status, and never launches a first-time scan on a global refresh.
          fetched. Done BEFORE recording the current firing, so a setup can
          never be settled by the bar it was written on. */
       var fwdResolve = gfn('hgFwdResolve');
-      if (fwdResolve){ try { fwdResolve('XAUUSD', cfg.tf, rows); } catch (e) {} }
+      /* tf is passed as null on purpose: settle EVERY open XAUUSD record, not
+         only ones from this horizon. GOLD SWING, GOLD SCALP and GOLD PRO all
+         record against XAUUSD, and a user who runs only one gold tab should
+         still see their records resolve. Settling a 4h record with 1h bars is
+         FINER, not coarser; the reverse is conservative under the "one bar
+         spanning both counts as a stop" rule. Both directions are safe. */
+      if (fwdResolve){ try { fwdResolve('XAUUSD', null, rows); } catch (e) {} }
 
       var hits = hgOgDetect(rows, {});
       var extra = {

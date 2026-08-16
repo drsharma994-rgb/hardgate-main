@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v322',
-  pack: 'every inline tab + TREND MATRIX on the forward log',
-  built: '2026-08-16T09:10:00Z',
-  note: 'one hook in cardHTML covers SMC/OB/TRAP/DIV/COIL/APEX; CARRY left out because its edge is funding, not price'
+  version: 'hg-v323',
+  pack: 'the gold desks on the forward log',
+  built: '2026-08-16T10:00:00Z',
+  note: 'GOLD SWING/SCALP split by strategy, GOLD PRO by composite-vs-fallback; any gold tab now settles every gold record'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

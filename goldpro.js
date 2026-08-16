@@ -644,6 +644,23 @@ async function runGoldPro(ui){
       }
     }
 
+    /* FORWARD LOG. GOLD PRO issues one live 4H setup at a time rather than a
+       list, so the mechanic is whether its levels came from the composite
+       GOLD SETUP decision or the raw ATR fallback — those are different
+       claims and should not be pooled. Recorded once per 4h bar; a repaint
+       inside the same bar is the same setup. */
+    try {
+      if (lvPlan && typeof W.hgFwdRecordScan === 'function'
+          && isFinite(+lvPlan.entry) && isFinite(+lvPlan.stop) && isFinite(+lvPlan.t1)){
+        var gpAligned = !!(lvNote && lvNote.indexOf('aligned with the GOLD SETUP') >= 0);
+        W.hgFwdRecordScan('GOLDPRO', '4h', [{
+          sym: 'XAUUSD', dir: lvPlan.dir, entry: +lvPlan.entry, stop: +lvPlan.stop, t1: +lvPlan.t1,
+          mechanic: gpAligned ? 'GP-COMPOSITE' : 'GP-ATR-FALLBACK',
+          ticket: gpAligned
+        }], { horizonBars: 20 });
+      }
+    } catch (eFwd) {}
+
     ui.out.innerHTML = renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,
                                            src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows })
