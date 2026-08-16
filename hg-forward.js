@@ -273,6 +273,43 @@ localStorage. Never throws.
     W.hgFwdPool = function(tab){
       try { return hgFwdPool(load(), tab); } catch (e) { return {}; }
     };
+    /* Bar-open seconds per timeframe, so a scan can derive the bar it fired on
+       without the caller threading candle timestamps through. */
+    var TF_SEC = { '1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '1d':86400 };
+
+    /* Record a whole scan's output in one call — the shape every tab needs.
+       barT is derived by flooring NOW to the timeframe, so re-running a scan
+       inside the same bar records each setup once, which is exactly the dedup
+       rule the log is built on. Callers pass their own setups; nothing here
+       inspects tab internals, so instrumenting a new tab is one line.
+       Returns how many NEW trades were recorded. */
+    W.hgFwdRecordScan = function(tab, tf, cands, opts){
+      try {
+        if (!tab || !Array.isArray(cands) || !cands.length) return 0;
+        var sec = TF_SEC[tf] || 14400;
+        var barT = Math.floor((Date.now() / 1000) / sec) * sec;
+        var o = opts || {};
+        var added = 0, i, c;
+        for (i = 0; i < cands.length; i++){
+          c = cands[i];
+          if (!c) continue;
+          var r = W.hgFwdRecord({
+            tab: tab,
+            mechanic: c.mechanic || c.strategy || o.mechanic || tf,
+            sym: c.sym || c.symbol,
+            tf: tf,
+            dir: c.dir,
+            entry: c.entry, stop: c.stop, t1: c.t1,
+            barT: barT,
+            horizonBars: o.horizonBars || 20,
+            ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true)
+          });
+          if (r === 'recorded') added++;
+        }
+        return added;
+      } catch (e) { return 0; }
+    };
+
     W.hgFwdState = function(){
       try {
         var l = load(), open = 0, settled = 0, i;

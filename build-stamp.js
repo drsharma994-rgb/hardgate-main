@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v318',
-  pack: 'forward log — out-of-sample evidence',
-  built: '2026-08-16T06:00:00Z',
-  note: 'every measurement was in-sample and could never converge; setups are now recorded once per firing and settled by later bars'
+  version: 'hg-v319',
+  pack: 'BEST/SWING/SCALP + OMNIROUTE on the forward log',
+  built: '2026-08-16T06:40:00Z',
+  note: 'the tab that emails you picks now measures whether its 7/7 CLEAN actually pays — CLEAN vs NEAR tracked apart'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -1375,6 +1375,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return { z: z, read: read, need: need, cls: cls };
   }
 
+  /* Forward column: settled count, hit rate, and how many are still open.
+     Reads "—" until trades settle, which is the honest day-one state. */
+  function fwdCell(f){
+    if (!f || (!f.samples && !f.open)) return '<span class="dim">—</span>';
+    if (!f.samples) return '<span class="dim">' + f.open + ' open</span>';
+    return '<b>' + f.samples + '</b> · ' + (f.hit * 100).toFixed(0) + '%'
+         + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '');
+  }
+
   /* Pooled walk-forward result per detector. This is the tab's honest
      self-assessment: which of the six mechanics actually resolved to T1
      before stop on the history just scanned. Thin pools are labelled rather
@@ -1382,11 +1391,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function renderPooled(pool){
     if (!pool) return '';
     var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE'], h, i, k, p;
-    h = '<table class="tbl"><thead><tr><th>DETECTOR</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>σ</th><th>READ</th></tr></thead><tbody>';
+    /* Out-of-sample counts for the same detectors. Unlike every other column
+       here, these are not re-read from the current window — they accumulate
+       one record per firing across scans. */
+    var fwdPool = null;
+    if (typeof window !== 'undefined' && typeof window.hgFwdPool === 'function'){
+      try { fwdPool = window.hgFwdPool('OMNIROUTE'); } catch (e) { fwdPool = null; }
+    }
+    h = '<table class="tbl"><thead><tr><th>DETECTOR</th><th>SAMPLES</th><th>T1-FIRST</th><th>EXPECTANCY</th><th>σ</th><th>READ</th><th>FORWARD</th></tr></thead><tbody>';
     for (i = 0; i < keys.length; i++){
       k = keys[i]; p = pool[k];
+      var fwdTxt = fwdCell(fwdPool ? fwdPool[k] : null);
       if (!p || !p.samples){
-        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td></tr>';
+        h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td><td>' + fwdTxt + '</td></tr>';
         continue;
       }
       var v = hgOmniPoolRead(p, MIN_RR, MIN_SAMPLES);
@@ -1397,7 +1414,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         + '<td>' + (p.hit * 100).toFixed(0) + '%</td>'
         + '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td>'
         + '<td>' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ</td>'
-        + '<td>' + pill(read, cls) + '</td></tr>';
+        + '<td>' + pill(read, cls) + '</td>'
+        + '<td>' + fwdTxt + '</td></tr>';
     }
     h += '</tbody></table>';
     h += '<div class="note">Walk-forward on the same bars the scan just read: each past firing is taken at the bar close, '
@@ -1572,6 +1590,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                closed set and none of them can disagree about the last bar. */
             rows = hgOmniDropForming(rows, TF);
             if (!rows || rows.length < 60){ thin++; return; }
+            /* FORWARD LOG resolution. This sweep already holds fresh bars for
+               every contract, so it is the cheapest place in the app to settle
+               open forward records — BEST/SWING/SCALP record them, this pass
+               resolves them, and neither tab needs to know about the other.
+               Bars here are 4h; a 1h scalp record settled by a 4h bar is
+               resolved more COARSELY, which under the "one bar spanning both
+               levels counts as a stop" rule biases pessimistic. That is the
+               safe direction, so it is allowed rather than skipped. */
+            if (typeof W.hgFwdResolve === 'function'){
+              try { W.hgFwdResolve(item.sym, null, rows); } catch (e) {}
+            }
             var hits = hgOmniDetect(rows);
             if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
           }).catch(function(){ done++; failed++; });
@@ -1692,6 +1721,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             }
             var found = hgOmniEvaluate(fitem, fired[j].rows, pos, ex);
             for (k = 0; k < found.length; k++) cands.push(found[k]);
+            /* Record this contract's firings so OMNIROUTE accumulates the same
+               out-of-sample evidence OMNIGOLD does. Every setup with a plan,
+               not only tickets, so the forward pool measures the same thing
+               the in-sample pool measures. */
+            if (typeof W.hgFwdRecordScan === 'function'){
+              var fwdRows = [];
+              for (k = 0; k < found.length; k++){
+                if (!found[k].plan) continue;
+                fwdRows.push({ sym: fitem.sym, dir: found[k].dir,
+                               entry: found[k].plan.entry, stop: found[k].plan.stop, t1: found[k].plan.t1,
+                               mechanic: found[k].kind,
+                               ticket: !!(found[k].grade && found[k].grade.ticket) });
+              }
+              if (fwdRows.length){ try { W.hgFwdRecordScan('OMNIROUTE', TF, fwdRows, { horizonBars: 20 }); } catch (e) {} }
+            }
           }
           return { cands: cands, scanned: list.length, uni: uni.length,
                    fired: fired.length, enriched: subset.length, thin: thin,
