@@ -732,6 +732,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
 <script src="omnigold.js"></script>
+<!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
+<script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -756,14 +758,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=341"></script>
+<script src="supersetup.js?v=342"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=341"></script>
-<script src="super-gold.js?v=341"></script>
-<script src="super-best.js?v=341"></script>
-<script src="super-sniper.js?v=341"></script>
-<script src="super-book.js?v=341"></script>
-<script src="super-calibrate.js?v=341"></script>
+<script src="super-desk-common.js?v=342"></script>
+<script src="super-gold.js?v=342"></script>
+<script src="super-best.js?v=342"></script>
+<script src="super-sniper.js?v=342"></script>
+<script src="super-book.js?v=342"></script>
+<script src="super-calibrate.js?v=342"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2704,10 +2706,10 @@ async function runObScanLeg(opts){
    gold lane → conviction desks / pine / lab → utilities. */
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
-  { id:'crypto',     label:'CRYPTO',   tabs:['best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
-  { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent','omniroute'] },
+  { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
 ];
 const HG_TAB_GROUP = {};
 HG_NAV_GROUPS.forEach(function(g){ g.tabs.forEach(function(t){ HG_TAB_GROUP[t] = g.id; }); });
@@ -7408,13 +7410,77 @@ btn.textContent = 'BACKTEST'; setTimeout(()=>{ btn.disabled = false; }, 5000);
 }
 }
 
-function searchRow(ex, sym, price, chg, funding, turnover){
+function searchRow(ex, sym, price, chg, funding, turnover, meta){
   const bits=[];
   bits.push(isFinite(price)&&price!=null ? px(price) : 'n/a');
   if (chg!=null && isFinite(chg)) bits.push('24h '+pct(chg,2));
   if (funding!=null && isFinite(funding)) bits.push('funding '+pct(funding,4));
   if (turnover!=null && isFinite(turnover) && turnover>0) bits.push('turnover $'+fmt(turnover,0));
-  return '<div class="lrow"><span class="gid">'+(ex==='delta'?'DELTA':'CDCX')+'</span><span class="gname">'+sym+'</span><span class="gdetail">'+bits.join(' \u00b7 ')+'</span><span class="stamp na">'+(ex==='delta'?'Delta India':'CoinDCX')+'</span></div>';
+  const rid = 'cr_' + ex + '_' + String(sym).replace(/[^A-Za-z0-9]/g,'_');
+  const btn = '<button id="'+rid+'_b" onclick="runContractReport(\'' + ex + '\',\'' + sym + '\',\'' + rid + '\')" '
+    + 'style="padding:4px 10px;font-size:11px;background:transparent;border:1px solid var(--line);color:var(--gold);border-radius:4px">FULL REPORT</button>';
+  return '<div class="lrow"><span class="gid">'+(ex==='delta'?'DELTA':'CDCX')+'</span><span class="gname">'+sym+'</span><span class="gdetail">'+bits.join(' \u00b7 ')+'</span>'
+    + btn + '<span class="stamp na">'+(ex==='delta'?'Delta India':'CoinDCX')+'</span></div>'
+    + '<div class="prog" id="'+rid+'_p"><i></i></div><div id="'+rid+'_o"></div>';
+}
+
+/* FULL REPORT \u2014 pull this contract's candles and run every engine the app has
+   against them, then state one plan with exact entry, stop and targets.
+   Feature-checked throughout: a module that is not loaded, or candles too thin
+   to work with, are reported as UNCHECKED on their own row rather than quietly
+   leaving the report shorter than it looks. */
+async function runContractReport(ex, sym, rid){
+  const btn = $(rid+'_b'), out = $(rid+'_o');
+  if (!out) return;
+  if (typeof hgContractReportRun !== 'function'){
+    out.innerHTML = '<div class="note warn">contract-report.js is not loaded &mdash; reload HARDGATE.</div>';
+    return;
+  }
+  if (btn) btn.disabled = true;
+  setProg(rid+'_p', 0.1);
+  out.innerHTML = '<div class="note">pulling 4h / 1h / 15m candles for '+sym+'\u2026</div>';
+  try{
+    const get = (ex === 'delta') ? candlesDelta : candlesCdcx;
+    const legs = await Promise.all([
+      get(sym,'4h',300).catch(function(){ return []; }),
+      get(sym,'1h',300).catch(function(){ return []; }),
+      get(sym,'15m',300).catch(function(){ return []; })
+    ]);
+    setProg(rid+'_p', 0.6);
+    const r4 = legs[0]||[], r1 = legs[1]||[], r15 = legs[2]||[];
+    if (!r4.length){
+      out.innerHTML = '<div class="note warn">no 4h candles came back for '+sym+' &mdash; nothing can be evaluated, '
+        + 'so nothing is claimed. The venue feed may be down, or this contract may have no history.</div>';
+      return;
+    }
+    let tk = { symbol: sym, mark: r4[r4.length-1].c, fundingPct: null };
+    try{
+      if (ex === 'delta' && S_SEARCH_CACHE && S_SEARCH_CACHE.delta){
+        const hit = S_SEARCH_CACHE.delta.filter(function(x){ return x.symbol === sym; })[0];
+        if (hit) tk = { symbol: sym, mark: hit.mark, fundingPct: hit.fundingPct, turnoverUsd: hit.turnoverUsd };
+      }
+    }catch(e){}
+    if (typeof hgEnrichTickerFundingTwin === 'function'){
+      try{ tk = await hgEnrichTickerFundingTwin(tk); }catch(e){}
+    }
+    setProg(rid+'_p', 0.85);
+    const rep = hgContractReportRun({ sym: sym, venue: ex, rows4h: r4, rows1h: r1, rows15m: r15, ticker: tk });
+    try{
+      if (typeof hgContractReportCSS === 'function' && !document.getElementById('crCss')){
+        const st = document.createElement('style');
+        st.id = 'crCss';
+        st.textContent = hgContractReportCSS();
+        (document.head||document.documentElement).appendChild(st);
+      }
+    }catch(e){}
+    out.innerHTML = hgContractReportHTML(rep);
+  }catch(e){
+    out.innerHTML = '<div class="note warn">report failed: '+((e&&e.message)||e)+'</div>';
+  } finally {
+    if (btn) btn.disabled = false;
+    setProg(rid+'_p', 1);
+    setTimeout(function(){ setProg(rid+'_p', null); }, 400);
+  }
 }
 async function runSearch(){
   const btn=$('searchRun'); btn.disabled=true; setProg('searchProg',0.08);

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v341',
-  pack: 'forty settled samples, reported as none',
-  built: '2026-08-17T19:55:00Z',
-  note: 'a gate family that agreed on every settled trade had no lift to compute, and the ledger said it had no samples'
+  version: 'hg-v342',
+  pack: 'FULL REPORT — one contract, every engine, one exact plan',
+  built: '2026-08-17T23:20:00Z',
+  note: 'SEARCH now runs the whole desk against the contract you typed and states an exact entry, stop and three targets; OMNIROUTE moved to CRYPTO'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
