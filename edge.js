@@ -1282,6 +1282,29 @@ async function edgeScanList(list, fetchCandles, hooks){
   found.sort(function(a, b){
     return (b.tally - a.tally) || (b.bt.expR - a.bt.expR) || (b.sig.rr - a.sig.rr);
   });
+  /* FORWARD LOG, keyed by TRIGGER rather than by symbol. EDGE already
+     backtests non-overlapping (edgeBacktest resumes at exitJ + 1, which is
+     more than most of this app does), but that measurement is in-sample and
+     per-symbol: it cannot say whether EMA21 PULLBACK pays better than
+     SWEEP + RECLAIM. Recording under sig.edge is what makes the ~10 triggers
+     comparable to each other over time.
+     Everything that passed the tally is recorded, and `forming` is not —
+     a forming setup has no committed levels to settle against. */
+  try {
+    if (typeof W.hgFwdRecordScan === 'function' && found.length){
+      W.hgFwdRecordScan('EDGE', '4h', found.map(function(f){
+        return {
+          sym: f.sym,
+          dir: f.sig && f.sig.dir,
+          entry: f.sig && f.sig.entry,
+          stop: f.sig && f.sig.stop,
+          t1: f.sig && f.sig.t1,
+          mechanic: (f.sig && f.sig.edge) || 'UNKNOWN',
+          ticket: true            /* it cleared EDGE's tally to be in `found` */
+        };
+      }), { horizonBars: 20 });
+    }
+  } catch (eFwd) {}
   return {
     found: found, list: list, forming: forming,
     stats: { skipped: skipped, noBias: noBias, noTrig: noTrig, tallyFail: tallyFail, t0: t0, pass: found.length }
@@ -1307,6 +1330,7 @@ function mount(el){
     + '<div class="prog" id="edgeProg"><i></i></div>'
     + '<div id="edgeDesk"></div>'
     + '<div id="edgeFunnel"></div>'
+    + '<div id="edgeFwd"></div>'
     + '<div id="edgeForming"></div>'
     + '<div class="cards" id="edgeCards"></div>'
     + '<div class="empty" id="edgeEmpty" style="display:none">No SWING-aligned edge entries right now — trend + value have not lined up.</div>'
@@ -1381,6 +1405,16 @@ function mount(el){
       var forming = res.forming || [];
       publishEdgeScan(found, { stats: st, forming: forming });
       if (funnelEl) funnelEl.innerHTML = edgeFunnelHTML(st, list.length);
+      /* Which of EDGE's ~10 triggers has actually paid. edgeBacktest already
+         measures non-overlapping, but in-sample and per-symbol — it cannot
+         compare EMA21 PULLBACK against SWEEP + RECLAIM. This can, and unlike
+         everything else on the tab it is not re-read from the current window. */
+      try {
+        var fwdEl = document.getElementById('edgeFwd');
+        if (fwdEl && typeof W.hgFwdPanelHTML === 'function'){
+          fwdEl.innerHTML = W.hgFwdPanelHTML('EDGE', { minRr: 2, title: 'FORWARD — which EDGE trigger has paid' });
+        }
+      } catch (eFwd) {}
       if (formingEl) formingEl.innerHTML = edgeFormingHTML(forming);
       if (!found.length){
         emptyEl.style.display = 'block';

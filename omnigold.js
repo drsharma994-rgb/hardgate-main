@@ -811,6 +811,15 @@ terse status, and never launches a first-time scan on a global refresh.
 
         ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + HORIZONS.scalp.minRr + 'R)', HORIZONS.scalp.minRr, 'OMNIGOLD:SCALP')
                           + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + HORIZONS.swing.minRr + 'R)', HORIZONS.swing.minRr, 'OMNIGOLD:SWING')
+                          + (function(){
+                              /* The two horizons record under separate tabs, so the shared
+                                 panel is rendered twice — a mechanic that pays on 1h need not
+                                 pay on 4h, and merging them would hide exactly that. */
+                              var pf = gfn('hgFwdPanelHTML');
+                              if (!pf) return '';
+                              return pf('OMNIGOLD:SCALP', { minRr: HORIZONS.scalp.minRr, title: 'FORWARD — SCALP, out-of-sample' })
+                                   + pf('OMNIGOLD:SWING', { minRr: HORIZONS.swing.minRr, title: 'FORWARD — SWING, out-of-sample' });
+                            })()
                           + '<div class="note">Walk-forward on the same bars just read, per horizon and never merged — a mechanic that pays on 4h need not pay on 1h. '
                           + 'A bar spanning both stop and target counts as a STOP. In-sample on a short window; under ' + MIN_SAMPLES + ' samples is noise. '
                           + '<b>Every figure above is GROSS of spread and commission.</b> That matters most intraday: at an assumed $'

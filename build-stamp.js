@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v319',
-  pack: 'BEST/SWING/SCALP + OMNIROUTE on the forward log',
-  built: '2026-08-16T06:40:00Z',
-  note: 'the tab that emails you picks now measures whether its 7/7 CLEAN actually pays — CLEAN vs NEAR tracked apart'
+  version: 'hg-v320',
+  pack: 'EDGE on the forward log + shared panel',
+  built: '2026-08-16T07:30:00Z',
+  note: 'EDGE records per TRIGGER so its ~10 entries can be compared; one shared panel now serves every instrumented tab'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

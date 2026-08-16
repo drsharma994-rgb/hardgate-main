@@ -310,6 +310,65 @@ localStorage. Never throws.
       } catch (e) { return 0; }
     };
 
+    /* A drop-in panel any tab can render with one line. Kept here rather than
+       in each tab so the wording, the thresholds and the honest empty state
+       stay identical everywhere — the alternative is forty tabs each
+       describing out-of-sample evidence slightly differently.
+       Verdicts come from hgOmniPoolRead when it is loaded, so the forward
+       column is judged by exactly the same +/-2 sigma bar as the in-sample
+       one; without it the panel still lists counts and simply omits verdicts. */
+    W.hgFwdPanelHTML = function(tab, opts){
+      try {
+        var o = opts || {};
+        var pool = W.hgFwdPool(tab) || {};
+        var keys = [], k;
+        for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
+        keys.sort();
+        var title = o.title || 'FORWARD — out-of-sample, accumulated across scans';
+        if (!keys.length){
+          return '<div class="note"><b>' + esc(title) + '</b><br>'
+               + 'Nothing recorded yet. This fills as scans run: each setup is logged once when it '
+               + 'fires and settled later by bars that had not printed at the time. Unlike every '
+               + 'other measurement in the app, it is never re-read from the current window.</div>';
+        }
+        var readFn = (typeof W.hgOmniPoolRead === 'function') ? W.hgOmniPoolRead : null;
+        var minRr = isFinite(+o.minRr) ? +o.minRr : 2;
+        var h = '<h4>' + esc(title) + '</h4>';
+        h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SETTLED</th><th>T1-FIRST</th>'
+           + '<th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
+        var i, p, v;
+        for (i = 0; i < keys.length; i++){
+          p = pool[keys[i]];
+          v = readFn ? readFn(p, minRr, 20) : null;
+          /* A mechanic with open trades and none settled has NOT "never
+             fired" — it has fired and is waiting. The shared verdict helper
+             only speaks about settled samples, so that distinction has to be
+             made here or the panel misreports its own pending evidence. */
+          var read;
+          if (!p.samples) read = p.open ? (p.open + ' awaiting settlement') : 'never fired';
+          else read = v ? v.read : 'unjudged';
+          var cls = (!p.samples) ? '' : (v ? v.cls : '');
+          var need = (v && v.need) ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
+          h += '<tr><td><b>' + esc(keys[i]) + '</b></td>'
+             + '<td>' + p.samples + need + '</td>'
+             + '<td>' + (p.samples ? (p.hit * 100).toFixed(0) + '%' : '—') + '</td>'
+             + '<td>' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—') + '</td>'
+             + '<td class="dim">' + p.open + (p.expired ? (' <span class="dim">/' + p.expired + ' exp</span>') : '') + '</td>'
+             + '<td><span class="gpip ' + cls + '">' + esc(read) + '</span></td></tr>';
+        }
+        h += '</tbody></table>';
+        h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
+           + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
+           + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
+        return h;
+      } catch (e) { return ''; }
+    };
+
+    function esc(x){
+      return String(x == null ? '' : x)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     W.hgFwdState = function(){
       try {
         var l = load(), open = 0, settled = 0, i;

@@ -756,14 +756,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=319"></script>
+<script src="supersetup.js?v=320"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=319"></script>
-<script src="super-gold.js?v=319"></script>
-<script src="super-best.js?v=319"></script>
-<script src="super-sniper.js?v=319"></script>
-<script src="super-book.js?v=319"></script>
-<script src="super-calibrate.js?v=319"></script>
+<script src="super-desk-common.js?v=320"></script>
+<script src="super-gold.js?v=320"></script>
+<script src="super-best.js?v=320"></script>
+<script src="super-sniper.js?v=320"></script>
+<script src="super-book.js?v=320"></script>
+<script src="super-calibrate.js?v=320"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -4090,6 +4090,23 @@ function hgPaintCryptoDeskFromSnap(kind){
   if (!cands.length && !near.length){
     if (emptyEl){ emptyEl.style.display = 'block'; emptyEl.textContent = (snap && snap.stat) ? snap.stat : 'No 7/7 CLEAN setups in the latest background scan.'; }
     if (statEl && snap && snap.stat) statEl.textContent = snap.stat;
+  /* FORWARD panel for this desk. BEST/SWING/SCALP have been emitting setups
+     for their whole life with no record of whether they resolved; this is
+     where that finally shows. CLEAN and NEAR appear as separate mechanics on
+     purpose — if NEAR resolves as well as CLEAN, the top tier is not earning
+     its name. */
+  try {
+    if (typeof hgFwdPanelHTML === 'function'){
+      const fwdId = (kind === 'swing') ? 'swingFwd' : 'scalpFwd';
+      let fwdEl = document.getElementById(fwdId);
+      if (!fwdEl && statEl && statEl.parentNode){
+        fwdEl = document.createElement('div');
+        fwdEl.id = fwdId;
+        statEl.parentNode.insertBefore(fwdEl, statEl.nextSibling);
+      }
+      if (fwdEl) fwdEl.innerHTML = hgFwdPanelHTML('BEST:' + kind, { minRr: 2, title: 'FORWARD — has CLEAN actually paid?' });
+    }
+  } catch (eFwd) {}
     return;
   }
   const bestId = snap.bestId;
