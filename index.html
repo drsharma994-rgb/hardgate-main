@@ -756,14 +756,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=321"></script>
+<script src="supersetup.js?v=322"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=321"></script>
-<script src="super-gold.js?v=321"></script>
-<script src="super-best.js?v=321"></script>
-<script src="super-sniper.js?v=321"></script>
-<script src="super-book.js?v=321"></script>
-<script src="super-calibrate.js?v=321"></script>
+<script src="super-desk-common.js?v=322"></script>
+<script src="super-gold.js?v=322"></script>
+<script src="super-best.js?v=322"></script>
+<script src="super-sniper.js?v=322"></script>
+<script src="super-book.js?v=322"></script>
+<script src="super-calibrate.js?v=322"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3621,6 +3621,24 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const stratId = bookMeta.strategy || scanId;
   const tradeable = tier === 'clean' && isFinite(entry) && isFinite(stop) && isFinite(t1);
   const tradeMeta = { t2: bookMeta.t2, stack: bookMeta.stack, scanner: scanId, strategy: stratId, venue: bookMeta.venue };
+  /* FORWARD LOG — the single choke point for every inline tab. SMC, ORDER
+     BLOCKS, TRAP, DIV, COIL and APEX all render through cardHTML, and it
+     already holds everything a record needs: symbol, direction, levels, and
+     the scanner that produced them. Instrumenting here covers all of them at
+     once rather than patching six scan functions that share no other code.
+     Only TRADEABLE cards are recorded — `tradeable` already means CLEAN tier
+     with finite entry/stop/t1, so NEAR and forming cards (which carry no
+     committed levels) are excluded by the same test the trade button uses.
+     Re-renders are harmless: the log keys on the bar, so a card repainted ten
+     times in one bar is still one trade. */
+  try {
+    if (tradeable && typeof hgFwdRecordScan === 'function'){
+      hgFwdRecordScan('CARD:' + scanId, '4h',
+        [{ sym: sym, dir: dir, entry: entry, stop: stop, t1: t1,
+           mechanic: String(stratId || scanId).toUpperCase(), ticket: true }],
+        { horizonBars: 20 });
+    }
+  } catch (eFwd) {}
   const onclickJs = tradeable
     ? (typeof hgToTradePlanOnclickJs === 'function'
       ? hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, tradeMeta)

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v321',
-  pack: 'SQUEEZE, REVERSALSNIPER, OIFLOW on the forward log',
-  built: '2026-08-16T08:20:00Z',
-  note: 'squeeze FIRED vs BREAK, sniper bounce, and OI regimes each recorded as their own mechanic'
+  version: 'hg-v322',
+  pack: 'every inline tab + TREND MATRIX on the forward log',
+  built: '2026-08-16T09:10:00Z',
+  note: 'one hook in cardHTML covers SMC/OB/TRAP/DIV/COIL/APEX; CARRY left out because its edge is funding, not price'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

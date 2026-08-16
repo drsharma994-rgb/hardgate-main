@@ -727,6 +727,21 @@ function trendmxLimitBoardHTML(rows){
     });
   }
   cands.sort(function(a, b){ return b.rank - a.rank; });
+  /* FORWARD LOG — recorded BEFORE the top-8 slice, so the measurement covers
+     every setup the tab judged tradeable rather than only the eight it had
+     room to show. The mechanic splits on clean7, which is the tab's own claim
+     about quality: if the 7/7 rows resolve like the merely-convicted ones,
+     that distinction is not doing work. */
+  try {
+    if (typeof W.hgFwdRecordScan === 'function' && cands.length){
+      W.hgFwdRecordScan('TRENDMX', '4h', cands.map(function(c){
+        return { sym: c.row && c.row.sym, dir: c.dir,
+                 entry: c.plan && c.plan.entry, stop: c.plan && c.plan.stop, t1: c.plan && c.plan.t1,
+                 mechanic: (c.row && c.row.gate && c.row.gate.clean7) ? 'TM-CLEAN7' : 'TM-CONVICTION',
+                 ticket: !!(c.row && c.row.gate && c.row.gate.clean7) };
+      }), { horizonBars: 20 });
+    }
+  } catch (eFwd) {}
   cands = cands.slice(0, 8);
   if (!cands.length) return '';
   return '<div class="panel" style="margin:12px 0">'
