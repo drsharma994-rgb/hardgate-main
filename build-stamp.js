@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v352',
-  pack: 'measured-edge quoted the number the forward log exists to distrust',
-  built: '2026-08-19T04:30:00Z',
-  note: 'the gate passed a ticket on +1.47 sigma in-sample while the same mechanic was 0 of 5 out-of-sample; the forward log now outranks it'
+  version: 'hg-v353',
+  pack: 'clear one desk without destroying the rest of the evidence',
+  built: '2026-08-19T07:10:00Z',
+  note: 'hgFwdClear takes a desk prefix, so the invalidated gold records can go while the crypto out-of-sample record survives'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

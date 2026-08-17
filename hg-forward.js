@@ -598,11 +598,53 @@ localStorage. Never throws.
         return { total: l.length, open: open, settled: settled, cap: MAX_RECORDS };
       } catch (e) { return null; }
     };
-    W.hgFwdClear = function(){
-      /* Clears the aggregate too — otherwise a "cleared" log would keep
-         reporting evidence from records the user believes they deleted. */
-      try { localStorage.removeItem(LS_KEY); localStorage.removeItem(AGG_KEY); return true; }
-      catch (e) { return false; }
+    /* Clear the forward log, optionally for ONE desk only.
+
+       All-or-nothing was the only option, and that is the wrong tool after a
+       model change: the gold stop fix invalidated the OMNIGOLD records, while
+       the OMNIROUTE, PINE and EDGE pools were recorded under a stop model
+       that did not change and are still good evidence. Wiping those to fix
+       gold would destroy months of accumulated out-of-sample record for no
+       reason.
+
+       Pass a tab prefix to clear just that desk — 'OMNIGOLD' catches both
+       'OMNIGOLD:SCALP' and 'OMNIGOLD:SWING'. Pass nothing to clear
+       everything, which is what this always did.
+
+       The AGGREGATE is cleared for the same tabs in the same call. It is a
+       separate store that survives record pruning by design, so clearing
+       records alone would leave the log still reporting trades the user
+       believes they deleted — the exact failure this had to avoid.
+
+       Returns what was actually removed rather than a bare true, because
+       "I deleted your evidence" deserves a count. */
+    W.hgFwdClear = function(tabPrefix){
+      try {
+        var pref = (tabPrefix === undefined || tabPrefix === null) ? null : String(tabPrefix);
+        if (pref === null || pref === ''){
+          var allRecs = load().length;
+          var allAgg = Object.keys(loadAgg()).length;
+          localStorage.removeItem(LS_KEY);
+          localStorage.removeItem(AGG_KEY);
+          return { cleared: 'ALL', records: allRecs, aggregates: allAgg };
+        }
+        var recs = load();
+        var keptRecs = [], droppedRecs = 0, i;
+        for (i = 0; i < recs.length; i++){
+          if (recs[i] && String(recs[i].tab).indexOf(pref) === 0) droppedRecs++;
+          else keptRecs.push(recs[i]);
+        }
+        save(keptRecs);
+        var agg = loadAgg(), keptAgg = {}, droppedAgg = 0, k;
+        for (k in agg){
+          if (!Object.prototype.hasOwnProperty.call(agg, k)) continue;
+          if (String(k).indexOf(pref + '|') === 0) droppedAgg++;
+          else keptAgg[k] = agg[k];
+        }
+        saveAgg(keptAgg);
+        return { cleared: pref, records: droppedRecs, aggregates: droppedAgg,
+                 recordsKept: keptRecs.length, aggregatesKept: Object.keys(keptAgg).length };
+      } catch (e) { hgFwdWarn('clear', e); return { cleared: null, records: 0, aggregates: 0, error: true }; }
     };
   }
 
