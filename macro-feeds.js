@@ -22,11 +22,22 @@ if (!G) return;
 var FEED_MS = 5 * 60 * 1000;
 var __feedTimer = null;
 
+/* isFinite(null) is true and +null is 0, so this guard let nulls through and
+   then compared them as zero: a real current reading against a null prior
+   returned 'spiking', and a null current against a real prior returned
+   'dropping' — an active macro call manufactured from one data point.
+
+   Both upstream parsers (__parseYahooChart, __parseTreasury10Y) already drop
+   non-finite closes, so nothing reaches this with a null today. Hardening a
+   guard that was clearly meant to catch exactly this, not a live fault. */
+function __yieldNum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
+
 function __yieldTrendBrain(cur, prior, threshold){
   threshold = (isFinite(threshold) && threshold > 0) ? threshold : 0.05;
-  if (!isFinite(cur) || !isFinite(prior)) return 'flat';
-  if (cur > prior + threshold) return 'spiking';
-  if (cur < prior - threshold) return 'dropping';
+  var c = __yieldNum(cur), p = __yieldNum(prior);
+  if (!isFinite(c) || !isFinite(p)) return 'flat';
+  if (c > p + threshold) return 'spiking';
+  if (c < p - threshold) return 'dropping';
   return 'flat';
 }
 
@@ -42,16 +53,83 @@ function __mapSmtForBrain(smtResult){
   };
 }
 
+/* How long a reading stays usable after the feed stops confirming it.
+
+   These are set by the timeframe the data is BUILT from, not by taste. The
+   US10Y trend comes off daily candles, so it is still a fair read hours
+   later; the SMT divergence is computed from 15m XAU/XAG bars, so it goes out
+   of date within a couple of hours. Neither is valid forever. */
+var YIELD_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+var SMT_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+/* A failed refresh used to publish nothing, which left the LAST GOOD state
+   standing — same object, same timestamp — for as long as the feed stayed
+   down. brain.js reads it and acts on it:
+
+     trend 'spiking'  -> pushes a SHORT bias on gold, caution
+     trend 'dropping' -> pushes a LONG bias on gold, strong
+     divergence set   -> pushes a VETO
+
+   So a dead US10Y feed went on biasing the gold lane short indefinitely, and
+   a dead silver feed went on vetoing, with nothing on screen to say the
+   reading had stopped being refreshed. brain.js already has the honest branch
+   for this — `if (!inp.yield) hush('yield', 'no US10Y macro data — yield
+   correlation unread')` — it simply could never be reached.
+
+   Now a failed refresh keeps the value but marks it stale, and once it is
+   older than the timeframe it was built from the state is published as null
+   so that hush path is the one that fires. The diagnostic side-channel keeps
+   the last known value and its age so the staleness is inspectable rather
+   than merely absent. */
+function __expireMacroFeedState(nowMs){
+  try{
+    nowMs = isFinite(nowMs) ? nowMs : Date.now();
+    var y = G.__hgGoldYieldState;
+    if (y && isFinite(+y.at)){
+      var yAge = nowMs - (+y.at);
+      if (yAge > YIELD_MAX_AGE_MS){
+        G.__hgGoldYieldStale = { lastOkAt: +y.at, ageMs: yAge, last: y,
+          reason: 'US10Y feed has not confirmed this reading for ' + Math.round(yAge / 3600000) + 'h' };
+        G.__hgGoldYieldState = null;
+        G.__hgYieldState = null;
+      } else if (y.stale){
+        G.__hgGoldYieldState = { trend: y.trend, current: y.current, at: y.at,
+          source: y.source, stale: true, ageMs: yAge };
+      }
+    }
+    var s = G.__hgGoldSmtState;
+    if (s && isFinite(+s.at)){
+      var sAge = nowMs - (+s.at);
+      if (sAge > SMT_MAX_AGE_MS){
+        G.__hgGoldSmtStale = { lastOkAt: +s.at, ageMs: sAge, last: s,
+          reason: 'silver feed has not confirmed this divergence for ' + Math.round(sAge / 60000) + 'm' };
+        G.__hgGoldSmtState = null;
+        G.__hgSmtState = null;
+      } else if (s.stale){
+        G.__hgGoldSmtState = { divergence: s.divergence, smtActive: s.smtActive, type: s.type,
+          at: s.at, source: s.source, stale: true, ageMs: sAge };
+      }
+    }
+  }catch(e){ /* never throw */ }
+}
+
 function __publishMacroFeedState(smt, yld){
   try{
+    var now = Date.now();
     if (yld && typeof yld.trend === 'string'){
       G.__hgYieldState = yld;
       G.__hgGoldYieldState = {
         trend: yld.trend,
         current: yld.current,
-        at: yld.at || Date.now(),
-        source: yld.source || 'macro-feeds'
+        at: yld.at || now,
+        source: yld.source || 'macro-feeds',
+        stale: false
       };
+      G.__hgGoldYieldStale = null;
+    } else if (G.__hgGoldYieldState){
+      /* The refresh ran and produced nothing. Say so on the state itself
+         rather than leaving a silent survivor. */
+      G.__hgGoldYieldState.stale = true;
     }
     if (smt && typeof smt === 'object'){
       G.__hgSmtState = smt;
@@ -59,10 +137,15 @@ function __publishMacroFeedState(smt, yld){
         divergence: smt.divergence || null,
         smtActive: !!smt.smtActive,
         type: smt.type || null,
-        at: smt.at || Date.now(),
-        source: smt.source || 'macro-feeds'
+        at: smt.at || now,
+        source: smt.source || 'macro-feeds',
+        stale: false
       };
+      G.__hgGoldSmtStale = null;
+    } else if (G.__hgGoldSmtState){
+      G.__hgGoldSmtState.stale = true;
     }
+    __expireMacroFeedState(now);
   }catch(e){ /* never throw */ }
 }
 
@@ -171,6 +254,7 @@ function stopMacroFeeds(){
 
 G.fetchSilverData = fetchSilverData;
 G.fetchUS10YYield = fetchUS10YYield;
+G.hgExpireMacroFeedState = __expireMacroFeedState;
 G.updateMacroFeeds = updateMacroFeeds;
 G.startMacroFeeds = startMacroFeeds;
 G.stopMacroFeeds = stopMacroFeeds;

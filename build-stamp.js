@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v347',
-  pack: 'a z-score over readings that were not there',
-  built: '2026-08-18T12:30:00Z',
-  note: 'stored nulls added 0 to the sum and 1 to the count, dragging the venue-premium mean down and inflating the sd, so a stretched premium read as normal'
+  version: 'hg-v348',
+  pack: 'a dead macro feed went on biasing gold',
+  built: '2026-08-18T15:20:00Z',
+  note: 'a failed refresh published nothing, so the last US10Y and SMT reads stood forever and brain kept acting on them'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
