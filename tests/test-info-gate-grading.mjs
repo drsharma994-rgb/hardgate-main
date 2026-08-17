@@ -119,13 +119,26 @@ console.log('\n== the four gold context gates carry the flag ==');
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(src),
        k + ' is declared hard:false, info:true');
   }
-  /* And nothing else in the app has quietly become non-vetoing. */
+  for (const k of ['adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift']){
+    ok(new RegExp("key:'" + k + "', hard:false, info:true").test(src),
+       k + ' is declared hard:false, info:true');
+  }
+
+  /* And nothing else in the app has quietly become non-vetoing. The info flag
+     is for INDICATOR CONTEXT reads only — a gate that encodes a risk rule
+     (news blackout, cost drag, session) must still be able to stand a trade
+     aside, and silently flipping one to info would remove a real veto while
+     every test kept passing. */
+  const CONTEXT_ONLY = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime',
+                        'adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
-    (s.match(/gates\.push\(\{ key:'[a-z0-9-]+'[^}]*info:true/g) || []).forEach(m => all.push(m));
+    (s.match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
+      .forEach(m => all.push(/key:'([a-z0-9-]+)'/.exec(m)[1]));
   }
-  ok(all.length === 4, 'exactly four gates in the app are info gates (' + all.length + ')');
+  ok(all.length === CONTEXT_ONLY.length, 'the app has ' + CONTEXT_ONLY.length + ' info gates (' + all.length + ')');
+  all.forEach(k => ok(CONTEXT_ONLY.indexOf(k) >= 0, '"' + k + '" is an indicator context read, not a risk rule'));
 }
 
 console.log('\n== the card must not print VETO on a gate that did not veto ==');

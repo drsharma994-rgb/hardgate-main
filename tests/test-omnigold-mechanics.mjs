@@ -80,10 +80,14 @@ console.log('== all seven are registered in ALL THREE places ==');
     ok(re.test(SRC), k + ' has a backtest entry, so it accumulates an in-sample record');
   }
 
-  /* (3) the pooled key list — what the card actually shows. */
-  const poolLine = SRC.split('\n').filter(l => /'PDH-SWEEP','PDL-SWEEP'/.test(l))[0] || '';
-  ok(!!poolLine, 'the pooled key list was found');
-  for (const k of NEW) ok(poolLine.indexOf("'" + k + "'") >= 0, k + ' is in the pooled key list');
+  /* (3) OG_MECHANICS — the single list the pooled table renders from AND the
+     measured-edge multiple-comparisons bar is computed from. A mechanic
+     missing here would both hide from the card and understate the
+     correction, so it is one list rather than two. */
+  const listSrc = SRC.slice(SRC.indexOf('var OG_MECHANICS'), SRC.indexOf('var __og'));
+  ok(listSrc.length > 0, 'OG_MECHANICS was found');
+  for (const k of NEW) ok(listSrc.indexOf("'" + k + "'") >= 0, k + ' is in OG_MECHANICS');
+  ok(/var keys = OG_MECHANICS\.slice\(\);/.test(SRC), 'the pooled table renders from that list');
 
   /* (1) the detect pass is proven behaviourally below — a regex would pass on
      a call that is dead code. */
@@ -401,7 +405,13 @@ console.log('\n== the new gates do not quietly become a wall of vetoes ==');
      have a record of their own. */
   const hardKeys = (SRC.match(/gates\.push\(\{ key:'[a-z-]+', hard:true/g) || []).length;
   const total = (SRC.match(/gates\.push/g) || []).length;
-  ok(total === 16, 'the ledger has 16 gates (' + total + ')');
+  /* Not a hardcoded number: the ledger grows, and a count assertion that has
+     to be edited every time teaches you to edit it without thinking. What
+     matters is that the source and the runtime agree. */
+  const live = W.hgOgGates(flat(300), { kind: 'ORB', dir: 'long', level: 3350, why: 't' },
+                           { stats: { samples: 41, hit: 0.51, expR: 0.54 }, minRr: 1.5 });
+  ok(total === live.length, 'every gates.push in the source reaches the ledger (' + total + ')');
+  ok(live.length >= 16, 'and the ledger has not shrunk (' + live.length + ')');
   for (const k of ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime']){
     const re = new RegExp("key:'" + k + "', hard:false");
     ok(re.test(SRC), k + ' is declared hard:false in the source');

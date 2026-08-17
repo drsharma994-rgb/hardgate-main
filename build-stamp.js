@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v354',
-  pack: 'seven more gold mechanics, four indicator reads, and a context gate that is actually context',
-  built: '2026-08-19T09:40:00Z',
-  note: 'OMNIGOLD gains PDH/PDL-SWEEP, LONDON-FIX, VWAP-REVERT, NR7-BREAK, SMT-DIVERGE and TREND-RECLAIM, each wired into the walk-forward and the forward log so it can be judged from its first firing; ichimoku, donchian, stoch RSI and Hurst report as info gates that argue without vetoing'
+  version: 'hg-v355',
+  pack: 'ten more gold mechanics, five more indicator reads, and a significance bar that accounts for the search',
+  built: '2026-08-19T11:20:00Z',
+  note: 'OMNIGOLD scans 27 mechanics; measured-edge now judges each against the Sidak bar for 27 tries, so a +1.47 sigma in-sample read reads UNCHECKED instead of PASS'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

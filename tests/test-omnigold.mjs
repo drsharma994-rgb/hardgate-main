@@ -151,17 +151,29 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
 
      What belongs HERE is that the rest of the ledger is fully evaluated, and
      that the gates which cannot run say so rather than passing quietly. */
-  const INDICATOR_GATES = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime'];
+  const INDICATOR_GATES = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime',
+                           'adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
+                           /* measured-edge reads UNCHECKED here on purpose: 45% over 120
+                              samples is +1.1σ, and against 27 scanned mechanics the bar
+                              is +2.89σ. Not demonstrated is not the same as passing. */
+                           'measured-edge'];
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);
   ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
      'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
   ok(gFull.evaluated === gFull.total - unchecked.length, 'and the evaluated count matches');
   INDICATOR_GATES.forEach(k => {
     const g = full.filter(x => x.key === k)[0];
-    ok(!!g, 'indicator gate "' + k + '" is on the gold ledger');
-    ok(g.info === true, k + ' is INFO: it reports an adverse read, it does not veto');
-    ok(g.pass !== true, k + ' never passes on an indicator it could not read (' + g.why + ')');
+    ok(!!g, 'gate "' + k + '" is on the gold ledger');
+    ok(g.pass !== true, k + ' does not pass on evidence it has not got (' + g.why + ')');
   });
+  /* measured-edge is NOT an info gate: a mechanic proven to lose must still be
+     able to veto. Only the indicator context reads are non-vetoing. */
+  INDICATOR_GATES.filter(k => k !== 'measured-edge').forEach(k => {
+    ok(full.filter(x => x.key === k)[0].info === true,
+       k + ' is INFO: it reports an adverse read, it does not veto');
+  });
+  ok(full.filter(x => x.key === 'measured-edge')[0].info !== true,
+     'measured-edge is NOT info — a mechanic that has demonstrably not paid still vetoes');
 
   /* hostile context vetoes on the gold-specific gates */
   const hostile = win.hgOgGates(flat, hit, {

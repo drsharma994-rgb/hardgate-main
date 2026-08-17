@@ -107,6 +107,18 @@ terse status, and never launches a first-time scan on a global refresh.
   var DAILY_FAST = 10, DAILY_SLOW = 21;
   var REVERSION_KINDS = { SPRING:true, UTAD:true, VALUE:true, ABSORB:true, 'ADR-FADE':true, 'ROUND-MAGNET':true, 'KZ-JUDAS':true };
 
+  /* Every mechanic this desk scans. ONE list: renderPooled shows these, and
+     the measured-edge gate divides its significance threshold by this many,
+     so the multiple-comparisons correction can never drift out of step with
+     the number of mechanics actually being tried. Adding a detector without
+     adding it here would understate the correction. */
+  var OG_MECHANICS = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE',
+                      'ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET',
+                      'PDH-SWEEP','PDL-SWEEP','LONDON-FIX','VWAP-REVERT','NR7-BREAK',
+                      'SMT-DIVERGE','TREND-RECLAIM',
+                      'PWH-SWEEP','PWL-SWEEP','FVG-FILL','BOS-RETEST','EQH-SWEEP','EQL-SWEEP',
+                      'SQUEEZE-FIRE','RSI-DIVERGE','GSR-EXTREME','AVWAP-RECLAIM'];
+
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null };
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
@@ -311,6 +323,17 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgNr7Break(rows);      if (d) out.push(d);
     d = hgOgSmtDiverge(rows);    if (d) out.push(d);
     d = hgOgTrendReclaim(rows);  if (d) out.push(d);
+
+    /* second round */
+    var pw = hgOgPrevWeek(rows, opts.nowSec);
+    if (pw){ d = hgOgPwSweep(rows, pw); if (d) out.push(d); }
+    d = hgOgFvgFill(rows);       if (d) out.push(d);
+    d = hgOgBosRetest(rows);     if (d) out.push(d);
+    d = hgOgPoolSweep(rows);     if (d) out.push(d);
+    d = hgOgSqueezeFire(rows);   if (d) out.push(d);
+    d = hgOgRsiDiverge(rows);    if (d) out.push(d);
+    d = hgOgGsrExtreme(rows);    if (d) out.push(d);
+    d = hgOgAvwapReclaim(rows);  if (d) out.push(d);
     return out;
   }
 
@@ -514,7 +537,329 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+
+  /* ============ second round of gold mechanics ============
+
+     Same rule as the first round: every kind is registered in the live detect
+     pass, the walk-forward backtest map and the pooled key list, so it earns
+     an in-sample record and a forward record from its first firing and can be
+     judged. None is assumed to work.
+
+     These lean on the shared indicator library rather than re-deriving what
+     it already computes. Every return shape below was checked against the
+     real function output, not inferred from the name — the previous round
+     wired two gates to shapes that did not exist (ichimokuState has no
+     .state; donchian returns arrays, not scalars) and both read "unavailable"
+     forever without ever throwing. */
+
+  /* Fair value gap: a three-bar imbalance where the middle bar runs so hard
+     that bar 1 and bar 3 do not overlap. Price returning into that gap is the
+     rebalance. Pure — no library dependency. */
+  function hgOgFvgFill(rows){
+    if (!rows || rows.length < 12) return null;
+    var n = rows.length - 1;
+    var c = num(rows[n].c);
+    if (!isFinite(c)) return null;
+    /* Look back over recent bars for the freshest unfilled gap. */
+    var i, aH, aL, bH, bL, gapLo, gapHi;
+    /* From n-1, not n-2: the freshest tradeable gap is the one completed on
+       the previous bar and re-entered by this one, and starting a bar later
+       skipped exactly that case. */
+    for (i = n - 1; i >= Math.max(2, n - 30); i--){
+      aH = num(rows[i - 2].h); aL = num(rows[i - 2].l);
+      bH = num(rows[i].h);     bL = num(rows[i].l);
+      if (!isFinite(aH) || !isFinite(aL) || !isFinite(bH) || !isFinite(bL)) continue;
+      if (bL > aH){                                  /* bullish gap: aH .. bL */
+        gapLo = aH; gapHi = bL;
+        if (c >= gapLo && c <= gapHi){
+          return { kind:'FVG-FILL', dir:'long', level: gapLo,
+                   why:'price back inside an unfilled bullish imbalance ' + gapLo.toFixed(2) + '–' + gapHi.toFixed(2) };
+        }
+        if (c < gapLo) return null;                  /* gap already run through */
+      } else if (bH < aL){                           /* bearish gap: bH .. aL */
+        gapLo = bH; gapHi = aL;
+        if (c >= gapLo && c <= gapHi){
+          return { kind:'FVG-FILL', dir:'short', level: gapHi,
+                   why:'price back inside an unfilled bearish imbalance ' + gapLo.toFixed(2) + '–' + gapHi.toFixed(2) };
+        }
+        if (c > gapHi) return null;
+      }
+    }
+    return null;
+  }
+
+  /* Break of structure, then a retest of the level that broke. hgStructure
+     returns { swings, lastBOS:{dir,level,i}, lastCHoCH, trend }. */
+  function hgOgBosRetest(rows){
+    if (!rows || rows.length < 60) return null;
+    var f = gfn('hgStructure');
+    if (!f) return null;
+    var st;
+    try { st = f(rows, {}); } catch (e) { return null; }
+    var bos = st && st.lastBOS;
+    if (!bos) return null;
+    var lvl = num(bos.level), bi = num(bos.i);
+    if (!isFinite(lvl) || !isFinite(bi)) return null;
+    var n = rows.length - 1;
+    var age = n - bi;
+    if (!(age >= 1 && age <= 20)) return null;       /* a stale break is not a retest */
+    var c = num(rows[n].c), l = num(rows[n].l), h = num(rows[n].h);
+    var a = atrOf(rows, 14);
+    if (!isFinite(c) || !isFinite(l) || !isFinite(h) || !isFinite(a) || !(a > 0)) return null;
+    var near = a * 0.5;
+    if (bos.dir === 'up' && l <= lvl + near && c > lvl){
+      return { kind:'BOS-RETEST', dir:'long', level: lvl,
+               why:'retest of the broken structure high ' + lvl.toFixed(2) + ' holding as support' };
+    }
+    if (bos.dir === 'down' && h >= lvl - near && c < lvl){
+      return { kind:'BOS-RETEST', dir:'short', level: lvl,
+               why:'retest of the broken structure low ' + lvl.toFixed(2) + ' capping as resistance' };
+    }
+    return null;
+  }
+
+  /* Equal highs and lows are resting liquidity. findLiquidityPools returns
+     { buySide:{level,count}|null, sellSide:{level,count}|null }. Fire on the
+     sweep-and-reject of a pool, which is where the stops actually sat. */
+  function hgOgPoolSweep(rows){
+    if (!rows || rows.length < 30) return null;
+    var f = gfn('findLiquidityPools');
+    if (!f) return null;
+    var pools;
+    try { pools = f(rows); } catch (e) { return null; }
+    if (!pools) return null;
+    var n = rows.length - 1;
+    var h = num(rows[n].h), l = num(rows[n].l), c = num(rows[n].c);
+    if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    var rng = h - l;
+    if (!(rng > 0)) return null;
+    var bs = pools.buySide, ss = pools.sellSide;
+    var bl = bs ? num(bs.level) : NaN, sl = ss ? num(ss.level) : NaN;
+    if (isFinite(bl) && h > bl && c < bl && (h - bl) >= rng * 0.2){
+      return { kind:'EQH-SWEEP', dir:'short', level: bl,
+               why:'swept ' + (num(bs.count) || 0) + ' equal highs at ' + bl.toFixed(2) + ' and closed back below' };
+    }
+    if (isFinite(sl) && l < sl && c > sl && (sl - l) >= rng * 0.2){
+      return { kind:'EQL-SWEEP', dir:'long', level: sl,
+               why:'swept ' + (num(ss.count) || 0) + ' equal lows at ' + sl.toFixed(2) + ' and reclaimed' };
+    }
+    return null;
+  }
+
+  /* TTM squeeze release. ttmSqueeze returns { on:[], fired:[], momentum:[] }
+     as parallel arrays; direction comes from the momentum sign at the fire. */
+  function hgOgSqueezeFire(rows){
+    if (!rows || rows.length < 60) return null;
+    var f = gfn('ttmSqueeze');
+    if (!f) return null;
+    var s;
+    try { s = f(rows); } catch (e) { return null; }
+    if (!s || !s.fired || !s.fired.length || !s.momentum) return null;
+    var n = s.fired.length - 1;
+    if (s.fired[n] !== true) return null;
+    var mom = num(s.momentum[n]);
+    if (!isFinite(mom) || mom === 0) return null;
+    var c = num(rows[rows.length - 1].c);
+    if (!isFinite(c)) return null;
+    return { kind:'SQUEEZE-FIRE', dir: mom > 0 ? 'long' : 'short', level: c,
+             why:'volatility squeeze released with momentum ' + (mom > 0 ? 'up' : 'down') };
+  }
+
+  /* Regular RSI divergence at a confirmed pivot: price makes the extreme, the
+     oscillator does not. findPivots returns [{i,type:'high'|'low',v}]. */
+  function hgOgRsiDiverge(rows){
+    if (!rows || rows.length < 80) return null;
+    var rsiFn = gfn('rsi'), pivFn = gfn('findPivots');
+    if (!rsiFn || !pivFn) return null;
+    var closes = closesOf(rows);
+    if (closes.length < 80) return null;
+    var r, piv;
+    try { r = rsiFn(closes, 14); piv = pivFn(closes, 5); } catch (e) { return null; }
+    if (!r || !r.length || !piv || piv.length < 2) return null;
+    var n = closes.length - 1;
+    function lastTwo(type){
+      var out = [], i;
+      for (i = piv.length - 1; i >= 0 && out.length < 2; i--) if (piv[i].type === type) out.push(piv[i]);
+      return out;
+    }
+    var hi = lastTwo('high'), lo = lastTwo('low');
+    /* the newer pivot has to be recent enough to still be tradeable */
+    function fresh(p){ return p && isFinite(num(p.i)) && (n - num(p.i)) <= 8; }
+    if (hi.length === 2 && fresh(hi[0])){
+      var pNew = num(hi[0].v), pOld = num(hi[1].v);
+      var rNew = num(r[num(hi[0].i)]), rOld = num(r[num(hi[1].i)]);
+      if (isFinite(pNew) && isFinite(pOld) && isFinite(rNew) && isFinite(rOld)
+          && pNew > pOld && rNew < rOld){
+        return { kind:'RSI-DIVERGE', dir:'short', level: pNew,
+                 why:'higher price high into a lower RSI high (' + rOld.toFixed(0) + ' -> ' + rNew.toFixed(0) + ')' };
+      }
+    }
+    if (lo.length === 2 && fresh(lo[0])){
+      var qNew = num(lo[0].v), qOld = num(lo[1].v);
+      var sNew = num(r[num(lo[0].i)]), sOld = num(r[num(lo[1].i)]);
+      if (isFinite(qNew) && isFinite(qOld) && isFinite(sNew) && isFinite(sOld)
+          && qNew < qOld && sNew > sOld){
+        return { kind:'RSI-DIVERGE', dir:'long', level: qNew,
+                 why:'lower price low into a higher RSI low (' + sOld.toFixed(0) + ' -> ' + sNew.toFixed(0) + ')' };
+      }
+    }
+    return null;
+  }
+
+  /* The prior WEEK high and low. A different pool from the prior day: weekly
+     levels are where swing stops sit, and gold reaches for them on the
+     Monday/Tuesday expansion. */
+  function hgOgPrevWeek(rows, nowSec){
+    if (!rows || rows.length < 48) return null;
+    var last = num(rows[rows.length - 1].t);
+    if (!isFinite(last)) return null;
+    var refN = fin(nowSec);
+    var ref = isFinite(refN) ? refN : last;
+    /* Unix epoch was a Thursday; shift so weeks start Monday 00:00 UTC. */
+    var wkStart = Math.floor((ref - 345600) / 604800) * 604800 + 345600;
+    var prevStart = wkStart - 604800;
+    var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t < prevStart || t >= wkStart) continue;
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+      n++;
+    }
+    if (n < 24 || !isFinite(hi) || !isFinite(lo) || !(hi > lo)) return null;
+    return { pwh: hi, pwl: lo, bars: n };
+  }
+
+  function hgOgPwSweep(rows, pw){
+    if (!rows || !pw || rows.length < 4) return null;
+    var last = rows[rows.length - 1];
+    var h = num(last.h), l = num(last.l), c = num(last.c);
+    if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    var rng = h - l;
+    if (!(rng > 0)) return null;
+    if (h > pw.pwh && c < pw.pwh && (h - pw.pwh) >= rng * 0.2){
+      return { kind:'PWH-SWEEP', dir:'short', level: pw.pwh,
+               why:'swept the prior week high ' + pw.pwh.toFixed(2) + ' and closed back below it' };
+    }
+    if (l < pw.pwl && c > pw.pwl && (pw.pwl - l) >= rng * 0.2){
+      return { kind:'PWL-SWEEP', dir:'long', level: pw.pwl,
+               why:'swept the prior week low ' + pw.pwl.toFixed(2) + ' and reclaimed it' };
+    }
+    return null;
+  }
+
+  /* Gold/silver ratio at an extreme. Distinct from SMT-DIVERGE, which reads
+     the two legs disagreeing in DIRECTION; this reads the ratio itself
+     stretched against its own recent distribution. */
+  function hgOgGsrExtreme(rows){
+    if (!rows || rows.length < 60) return null;
+    var w = W();
+    var xag = w && w.__hgXagCandles;
+    if (!xag || xag.length < 60) return null;
+    var zf = gfn('zscoreLast');
+    if (!zf) return null;
+    var m = Math.min(rows.length, xag.length);
+    var ratio = [], i, g, s;
+    for (i = 0; i < m; i++){
+      g = num(rows[rows.length - m + i].c);
+      s = num(xag[xag.length - m + i].c);
+      if (!isFinite(g) || !isFinite(s) || !(s > 0)) continue;
+      ratio.push(g / s);
+    }
+    if (ratio.length < 50) return null;
+    var z;
+    try { z = num(zf(ratio, 50)); } catch (e) { return null; }
+    if (!isFinite(z)) return null;
+    var c = num(rows[rows.length - 1].c);
+    if (!isFinite(c)) return null;
+    var gsr = ratio[ratio.length - 1];
+    /* A stretched ratio mean-reverts through the gold leg as often as the
+       silver leg, so this is a fade of the stretch, stated as such. */
+    if (z >= 2){
+      return { kind:'GSR-EXTREME', dir:'short', level: c,
+               why:'gold/silver ratio ' + gsr.toFixed(1) + ' at +' + z.toFixed(1) + 'σ — gold stretched rich to silver' };
+    }
+    if (z <= -2){
+      return { kind:'GSR-EXTREME', dir:'long', level: c,
+               why:'gold/silver ratio ' + gsr.toFixed(1) + ' at ' + z.toFixed(1) + 'σ — gold stretched cheap to silver' };
+    }
+    return null;
+  }
+
+  /* Anchored VWAP from the last significant swing, reclaimed. hgAVWAP returns
+     { value, upper, lower, stdev } measured from the anchor index forward. */
+  function hgOgAvwapReclaim(rows){
+    if (!rows || rows.length < 80) return null;
+    var af = gfn('hgAVWAP'), pf = gfn('findPivots');
+    if (!af || !pf) return null;
+    var closes = closesOf(rows);
+    if (closes.length < 80) return null;
+    var piv;
+    try { piv = pf(closes, 5); } catch (e) { return null; }
+    if (!piv || !piv.length) return null;
+    var n = rows.length - 1;
+    var anchor = null, i;
+    for (i = piv.length - 1; i >= 0; i--){
+      var pi = num(piv[i].i);
+      if (isFinite(pi) && (n - pi) >= 15 && (n - pi) <= 120){ anchor = piv[i]; break; }
+    }
+    if (!anchor) return null;
+    var av;
+    try { av = af(rows, num(anchor.i)); } catch (e) { return null; }
+    if (!av) return null;
+    var v = num(av.value);
+    if (!isFinite(v) || !(v > 0)) return null;
+    var c = num(rows[n].c), pc = num(rows[n - 1].c);
+    if (!isFinite(c) || !isFinite(pc)) return null;
+    /* A reclaim is a cross, not a state: it has to have happened on this bar. */
+    if (pc <= v && c > v && anchor.type === 'low'){
+      return { kind:'AVWAP-RECLAIM', dir:'long', level: v,
+               why:'reclaimed the VWAP anchored to the swing low at ' + v.toFixed(2) };
+    }
+    if (pc >= v && c < v && anchor.type === 'high'){
+      return { kind:'AVWAP-RECLAIM', dir:'short', level: v,
+               why:'lost the VWAP anchored to the swing high at ' + v.toFixed(2) };
+    }
+    return null;
+  }
+
   /* ==================== gold gate ledger ==================== */
+
+  /* Standard normal CDF (Abramowitz & Stegun 26.2.17). Inlined rather than
+     borrowed from the indicator library so that a piece of pure arithmetic
+     can never read "unavailable" because a script did not load. */
+  function hgOgNormCdf(z){
+    if (!isFinite(z)) return NaN;
+    var sgn = z < 0 ? -1 : 1, x = Math.abs(z) / Math.SQRT2;
+    var t = 1 / (1 + 0.3275911 * x);
+    var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+              - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+    return 0.5 * (1 + sgn * y);
+  }
+
+  /* THE MULTIPLE-COMPARISONS BAR.
+
+     This desk scans OG_MECHANICS.length mechanics and reports the ones that
+     look good. Judging each against a lone 5% threshold answers the wrong
+     question: with 27 mechanics tried, the BEST of them clears +1.6σ by pure
+     chance most of the time, so "+1.47σ vs breakeven" on a card is not
+     evidence of anything — it is what searching twenty-seven ways looks like.
+
+     Sidak: the per-mechanic threshold that holds the FAMILY-wise false
+     positive rate at 5% across k independent tries. Inverted by bisection
+     because the closed form is not worth carrying. */
+  function hgOgFamilyZ(k){
+    var n = Math.floor(fin(k));
+    if (!isFinite(n) || n < 1) n = 1;
+    var target = Math.pow(0.95, 1 / n);        /* per-test confidence needed */
+    var lo = 0, hi = 8, mid, i;
+    for (i = 0; i < 64; i++){
+      mid = (lo + hi) / 2;
+      if (hgOgNormCdf(mid) < target) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
 
   function emaOf(vals, n){
     if (!vals || vals.length < n || n <= 0) return NaN;
@@ -734,10 +1079,26 @@ terse status, and never launches a first-time scan on a global refresh.
       var z = se > 0 ? ((sHit - pBreak) / se) : 0;
       var stat = sN + ' samples · ' + (sHit * 100).toFixed(0) + '% T1-first · '
                + (sExp >= 0 ? '+' : '') + sExp.toFixed(2) + 'R [' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ vs breakeven]';
+      /* The bar a single mechanic must clear once you account for how many
+         were tried. A positive read that does not clear it is not a weaker
+         edge — it is no evidence at all, and PASS would say otherwise. */
+      var famZ = hgOgFamilyZ(OG_MECHANICS.length);
+      var famTxt = ' · ' + OG_MECHANICS.length + ' mechanics scanned, so +'
+                 + famZ.toFixed(2) + 'σ is the bar before one this good means anything';
+
       if (sN < MIN_SAMPLES) edWhy = 'only ' + sN + ' past samples — too few to judge';
       else if (z <= EDGE_VETO_Z && sN >= EDGE_VETO_SAMPLES){ ed = false; edWhy = stat + ' — significantly below breakeven, this mechanic has not paid'; }
       else if (z <= EDGE_VETO_Z){ ed = true; edWhy = stat + ' — below breakeven, but only ' + sN + ' samples: too few to veto on'; }
-      else { ed = true; edWhy = stat + (z < 0 ? ' — below breakeven but within noise' : ''); }
+      else if (z >= famZ){ ed = true; edWhy = stat + ' — clears the ' + OG_MECHANICS.length + '-mechanic significance bar (+' + famZ.toFixed(2) + 'σ)'; }
+      else {
+        /* UNCHECKED, not PASS: searching 27 ways and reporting the best one
+           does not demonstrate an edge, and the ledger's own rule is that
+           what has not been established does not read as established. The
+           gate is soft, so this does not veto — the ticket stands and the
+           card stops claiming a measurement it has not got. */
+        ed = null;
+        edWhy = stat + (z < 0 ? ' — below breakeven but within noise' : '') + famTxt;
+      }
       edWhy = 'in-sample ' + edWhy;
     }
 
@@ -915,6 +1276,149 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'hurst-regime', hard:false, info:true, pass: hu, why: huWhy });
 
+    /* --- second round of indicator reads --------------------------------
+
+       Same standing as the first four: info gates. They report, they can
+       argue against a setup on the card, and they never veto. Nothing here
+       has a measured record on gold, so nothing here has earned the right to
+       stand a trade aside.
+
+       Every return shape below was read off the real function, not guessed.
+       adx/keltner/ttmSqueeze all return PARALLEL ARRAYS; hgAtrPercentile
+       returns a bare number; hgStructureGate returns an object with a note.
+       Getting that wrong is silent — the gate simply reads unavailable for
+       ever — which is how the previous round shipped two dead gates. */
+
+    /* 17 — ADX: is there a trend here at all, and does it point our way? */
+    var adxOk = null, adxWhy = 'ADX unavailable';
+    var adxFn = gfn('adx');
+    if (adxFn){
+      try {
+        var ax = adxFn(rows, 14);
+        var aArr = ax && ax.adx, pArr = ax && ax.plusDI, mArr = ax && ax.minusDI;
+        var aV = (aArr && aArr.length) ? fin(aArr[aArr.length - 1]) : NaN;
+        var pV = (pArr && pArr.length) ? fin(pArr[pArr.length - 1]) : NaN;
+        var mV = (mArr && mArr.length) ? fin(mArr[mArr.length - 1]) : NaN;
+        if (isFinite(aV) && isFinite(pV) && isFinite(mV)){
+          var trending = aV >= 25;
+          var diUp = pV > mV;
+          adxWhy = 'ADX ' + aV.toFixed(0) + (trending ? ' — trending' : ' — no trend')
+                 + ', DI ' + (diUp ? 'up' : 'down');
+          if (!trending){
+            /* No trend is not an argument against a reversion mechanic; it is
+               the condition it wants. */
+            adxOk = reversion ? true : false;
+            adxWhy += reversion ? ' — which is the tape a reversion mechanic wants'
+                                : ' — a continuation mechanic with no trend behind it';
+          } else {
+            var diAgrees = (hit.dir === 'long') ? diUp : !diUp;
+            adxOk = reversion ? true : diAgrees;
+            adxWhy += diAgrees ? ' — agrees' : (reversion ? ' — counter-trend by design' : ' — DI points the other way');
+          }
+        }
+      } catch (eAdx){ adxOk = null; adxWhy = 'ADX threw: ' + ((eAdx && eAdx.message) || eAdx); }
+    }
+    gates.push({ key:'adx-trend', hard:false, info:true, pass: adxOk, why: adxWhy });
+
+    /* 18 — TTM squeeze state: compression, release, or neither. */
+    var sq = null, sqWhy = 'squeeze unavailable';
+    var sqFn = gfn('ttmSqueeze');
+    if (sqFn){
+      try {
+        var sqR = sqFn(rows);
+        var onA = sqR && sqR.on, fdA = sqR && sqR.fired, moA = sqR && sqR.momentum;
+        if (onA && onA.length && moA && moA.length){
+          var li = onA.length - 1;
+          var isOn = onA[li] === true, didFire = !!(fdA && fdA[li] === true);
+          var mo = fin(moA[li]);
+          sqWhy = isOn ? 'in a volatility squeeze (compression, no expansion yet)'
+                : didFire ? 'squeeze just released' : 'no squeeze';
+          if (isFinite(mo)){
+            var moUp = mo > 0;
+            sqWhy += ', momentum ' + (moUp ? 'up' : 'down');
+            var moAgrees = (hit.dir === 'long') ? moUp : !moUp;
+            /* Entering INTO a live squeeze is entering before the market has
+               chosen — worth saying, not worth vetoing. */
+            if (isOn){ sq = false; sqWhy += ' — entering before the expansion has picked a side'; }
+            else if (reversion){
+              /* A fade is counter-momentum BY DESIGN. Marking it "against"
+                 would be the same category error the trend gate refuses. */
+              sq = true;
+              sqWhy += moAgrees ? ' — agrees' : ' — counter-momentum by design';
+            }
+            else { sq = moAgrees; sqWhy += moAgrees ? ' — agrees' : ' — momentum points the other way'; }
+          } else { sq = isOn ? false : null; }
+        }
+      } catch (eSq){ sq = null; sqWhy = 'squeeze threw: ' + ((eSq && eSq.message) || eSq); }
+    }
+    gates.push({ key:'squeeze-state', hard:false, info:true, pass: sq, why: sqWhy });
+
+    /* 19 — Keltner position: riding the band, or stretched outside it. */
+    var kel = null, kelWhy = 'keltner unavailable';
+    var kelFn = gfn('keltner');
+    if (kelFn){
+      try {
+        var kc = kelFn(rows, 20, 1.5);
+        var kU = (kc && kc.up && kc.up.length) ? fin(kc.up[kc.up.length - 1]) : NaN;
+        var kL = (kc && kc.lo && kc.lo.length) ? fin(kc.lo[kc.lo.length - 1]) : NaN;
+        var kM = (kc && kc.mid && kc.mid.length) ? fin(kc.mid[kc.mid.length - 1]) : NaN;
+        var kC = fin(rows[rows.length - 1].c);
+        if (isFinite(kU) && isFinite(kL) && isFinite(kM) && isFinite(kC) && kU > kL){
+          var outHigh = kC > kU, outLow = kC < kL;
+          kelWhy = outHigh ? 'above the upper Keltner band'
+                 : outLow ? 'below the lower Keltner band'
+                 : 'inside the Keltner bands';
+          if (reversion){
+            /* Outside the band is exactly where a fade belongs. */
+            kel = true;
+            if (outHigh || outLow) kelWhy += ' — the stretch a reversion mechanic is fading';
+          } else if ((hit.dir === 'long' && outHigh) || (hit.dir === 'short' && outLow)){
+            kel = false;
+            kelWhy += ' — chasing a move already extended past the band';
+          } else {
+            kel = true;
+          }
+        }
+      } catch (eKel){ kel = null; kelWhy = 'keltner threw: ' + ((eKel && eKel.message) || eKel); }
+    }
+    gates.push({ key:'keltner-pos', hard:false, info:true, pass: kel, why: kelWhy });
+
+    /* 20 — ATR percentile: gold's own volatility, ranked against its history.
+       Both tails matter. A dead tape will not reach a 1.5R target before the
+       horizon expires; a top-decile tape moves the stop into the noise. */
+    var vp = null, vpWhy = 'ATR percentile unavailable';
+    var vpFn = gfn('hgAtrPercentile');
+    if (vpFn){
+      try {
+        var pct = fin(vpFn(rows, 14, 100));
+        if (isFinite(pct)){
+          vpWhy = 'ATR in the ' + pct.toFixed(0) + 'th percentile of the last 100 bars';
+          if (pct < 15){ vp = false; vpWhy += ' — too quiet to reach the target inside the horizon'; }
+          else if (pct > 90){ vp = false; vpWhy += ' — top-decile volatility, the stop sits inside the noise'; }
+          else vp = true;
+        }
+      } catch (eVp){ vp = null; vpWhy = 'ATR percentile threw: ' + ((eVp && eVp.message) || eVp); }
+    }
+    gates.push({ key:'atr-percentile', hard:false, info:true, pass: vp, why: vpWhy });
+
+    /* 21 — Market structure: is there a fresh opposing change of character?
+       hgStructureGate returns { veto, bos, choch, note } and already words
+       its own note, so the card quotes it rather than paraphrasing. */
+    var stG = null, stGWhy = 'structure unavailable';
+    var stGFn = gfn('hgStructureGate');
+    if (stGFn){
+      try {
+        var sg = stGFn(rows, hit.dir, {});
+        if (sg && typeof sg.note === 'string' && sg.note){
+          stGWhy = sg.note;
+          stG = (sg.veto === true) ? false : true;
+          if (sg.veto === true) stGWhy += ' — structure turned against this direction';
+        }
+      } catch (eSt2){ stG = null; stGWhy = 'structure threw: ' + ((eSt2 && eSt2.message) || eSt2); }
+    }
+    gates.push({ key:'structure-shift', hard:false, info:true, pass: stG, why: stGWhy });
+
+
     return gates;
   }
 
@@ -1060,9 +1564,7 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function renderPooled(pool, label, minRr, fwdTab){
     if (!pool) return '';
-    var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE',
-                'ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET',
-                'PDH-SWEEP','PDL-SWEEP','LONDON-FIX','VWAP-REVERT','NR7-BREAK','SMT-DIVERGE','TREND-RECLAIM'];
+    var keys = OG_MECHANICS.slice();
     /* Forward (out-of-sample) counts for the same mechanics. These accumulate
        one record per firing across scans and are the only numbers here that
        are not re-read from the same window every time. */
@@ -1142,7 +1644,17 @@ terse status, and never launches a first-time scan on a global refresh.
           'VWAP-REVERT':  function(r){ return hgOgVwapRevert(r); },
           'NR7-BREAK':    function(r){ return hgOgNr7Break(r); },
           'SMT-DIVERGE':  function(r){ return hgOgSmtDiverge(r); },
-          'TREND-RECLAIM':function(r){ return hgOgTrendReclaim(r); }
+          'TREND-RECLAIM':function(r){ return hgOgTrendReclaim(r); },
+          'PWH-SWEEP':    function(r){ var q = hgOgPrevWeek(r); var h = q ? hgOgPwSweep(r, q) : null; return (h && h.kind === 'PWH-SWEEP') ? h : null; },
+          'PWL-SWEEP':    function(r){ var q = hgOgPrevWeek(r); var h = q ? hgOgPwSweep(r, q) : null; return (h && h.kind === 'PWL-SWEEP') ? h : null; },
+          'FVG-FILL':     function(r){ return hgOgFvgFill(r); },
+          'BOS-RETEST':   function(r){ return hgOgBosRetest(r); },
+          'EQH-SWEEP':    function(r){ var h = hgOgPoolSweep(r); return (h && h.kind === 'EQH-SWEEP') ? h : null; },
+          'EQL-SWEEP':    function(r){ var h = hgOgPoolSweep(r); return (h && h.kind === 'EQL-SWEEP') ? h : null; },
+          'SQUEEZE-FIRE': function(r){ return hgOgSqueezeFire(r); },
+          'RSI-DIVERGE':  function(r){ return hgOgRsiDiverge(r); },
+          'GSR-EXTREME':  function(r){ return hgOgGsrExtreme(r); },
+          'AVWAP-RECLAIM':function(r){ return hgOgAvwapReclaim(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
