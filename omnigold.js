@@ -131,7 +131,8 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!rows || rows.length < 6) return null;
     var last = num(rows[rows.length - 1].t);
     if (!isFinite(last)) return null;
-    var ref = isFinite(nowSec) ? nowSec : last;
+    var refN = fin(nowSec);                       /* NOT isFinite(nowSec): null passes it */
+    var ref = isFinite(refN) ? refN : last;
     var dayStart = Math.floor(ref / 86400) * 86400;
     var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l, hr;
     for (i = 0; i < rows.length; i++){
@@ -300,7 +301,217 @@ terse status, and never launches a first-time scan on a global refresh.
     var adr = hgOgAdr(rows, 14);
     if (adr){ d = hgOgAdrFade(rows, adr); if (d) out.push(d); }
     d = hgOgRoundMagnet(rows); if (d) out.push(d);
+    /* --- added mechanics: each also registered in the backtest map and the
+       pooled key list, so none of them can produce setups without a
+       measurable record --- */
+    var pd = hgOgPrevDay(rows, opts.nowSec);
+    if (pd){ d = hgOgPdSweep(rows, pd); if (d) out.push(d); }
+    d = hgOgLondonFix(rows);     if (d) out.push(d);
+    d = hgOgVwapRevert(rows);    if (d) out.push(d);
+    d = hgOgNr7Break(rows);      if (d) out.push(d);
+    d = hgOgSmtDiverge(rows);    if (d) out.push(d);
+    d = hgOgTrendReclaim(rows);  if (d) out.push(d);
     return out;
+  }
+
+
+  /* ==================== additional gold mechanics ====================
+
+     Each of these is a mechanic a gold desk actually trades, and each is
+     registered in THREE places: the live detect pass, the walk-forward
+     backtest map, and the pooled-results key list. That wiring is the point.
+     A detector added only to the scan would produce setups with no in-sample
+     history and no out-of-sample record — a strategy that can never be judged
+     is worse than no strategy, because it still costs money.
+
+     Every one starts at zero samples. Their measured-edge gate reads "not yet
+     measured" until their own record says otherwise, and the forward log
+     scores each separately from the first firing. None is assumed to work. */
+
+  /* The prior day high/low — the liquidity gold reaches for most reliably.
+     Distinct from ASIA-BREAK, which uses the Asian session box rather than
+     the whole previous day. */
+  function hgOgPrevDay(rows, nowSec){
+    if (!rows || rows.length < 24) return null;
+    var last = num(rows[rows.length - 1].t);
+    if (!isFinite(last)) return null;
+    var refN = fin(nowSec);                       /* NOT isFinite(nowSec): null passes it */
+    var ref = isFinite(refN) ? refN : last;
+    var dayStart = Math.floor(ref / 86400) * 86400;
+    var prevStart = dayStart - 86400;
+    var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t < prevStart || t >= dayStart) continue;
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+      n++;
+    }
+    if (n < 6 || !isFinite(hi) || !isFinite(lo) || !(hi > lo)) return null;
+    return { pdh: hi, pdl: lo, bars: n };
+  }
+
+  function hgOgPdSweep(rows, pd){
+    if (!rows || !pd || rows.length < 4) return null;
+    var last = rows[rows.length - 1];
+    var h = num(last.h), l = num(last.l), c = num(last.c);
+    if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    var rng = h - l;
+    if (!(rng > 0)) return null;
+    /* swept the level then closed back inside it — a failed continuation */
+    if (h > pd.pdh && c < pd.pdh && (h - pd.pdh) >= rng * 0.2){
+      return { kind:'PDH-SWEEP', dir:'short', level: pd.pdh,
+               why:'swept the prior day high ' + pd.pdh.toFixed(2) + ' and closed back below it' };
+    }
+    if (l < pd.pdl && c > pd.pdl && (pd.pdl - l) >= rng * 0.2){
+      return { kind:'PDL-SWEEP', dir:'long', level: pd.pdl,
+               why:'swept the prior day low ' + pd.pdl.toFixed(2) + ' and reclaimed it' };
+    }
+    return null;
+  }
+
+  /* The London PM fix at 15:00 is a scheduled, documented gold flow. Taken as
+     a decisive drive through the fix hour rather than a fade of it. */
+  function hgOgLondonFix(rows){
+    if (!rows || rows.length < 6) return null;
+    var last = rows[rows.length - 1];
+    var t = num(last.t);
+    if (!isFinite(t)) return null;
+    var hr = Math.floor((t % 86400) / 3600);
+    if (hr !== 15 && hr !== 16) return null;
+    var c = num(last.c), o = num(last.o), h = num(last.h), l = num(last.l);
+    if (!isFinite(c) || !isFinite(o) || !isFinite(h) || !isFinite(l)) return null;
+    var rng = h - l;
+    if (!(rng > 0)) return null;
+    if (Math.abs(c - o) < rng * 0.5) return null;      /* needs a decisive body */
+    var pc = num(rows[rows.length - 2] && rows[rows.length - 2].c);
+    if (!isFinite(pc)) return null;
+    if (c > o && c > pc){
+      return { kind:'LONDON-FIX', dir:'long', level: c,
+               why:'decisive up bar through the ' + hr + ':00 London fix window' };
+    }
+    if (c < o && c < pc){
+      return { kind:'LONDON-FIX', dir:'short', level: c,
+               why:'decisive down bar through the ' + hr + ':00 London fix window' };
+    }
+    return null;
+  }
+
+  /* Session VWAP stretch and reversion. Uses the shared vwapAt when present
+     so this cannot drift from the rest of the app.s VWAP. */
+  function hgOgVwapRevert(rows){
+    if (!rows || rows.length < 30) return null;
+    var n = rows.length - 1;
+    var c = num(rows[n].c);
+    if (!isFinite(c)) return null;
+    var vw = NaN;
+    var vwFn = gfn('vwapAt');
+    if (vwFn){ try { vw = num(vwFn(rows, n)); } catch (e) { vw = NaN; } }
+    if (!isFinite(vw)){
+      var pv = 0, vol = 0, i;
+      for (i = Math.max(0, rows.length - 24); i <= n; i++){
+        var tp = (num(rows[i].h) + num(rows[i].l) + num(rows[i].c)) / 3;
+        var v = num(rows[i].v);
+        if (!isFinite(tp)) continue;
+        if (!isFinite(v) || v <= 0) v = 1;
+        pv += tp * v; vol += v;
+      }
+      if (!(vol > 0)) return null;
+      vw = pv / vol;
+    }
+    if (!isFinite(vw) || !(vw > 0)) return null;
+    var sum = 0, cnt = 0, j;
+    for (j = Math.max(0, rows.length - 24); j <= n; j++){
+      var cc = num(rows[j].c);
+      if (!isFinite(cc)) continue;
+      sum += (cc - vw) * (cc - vw); cnt++;
+    }
+    if (cnt < 10) return null;
+    var sd = Math.sqrt(sum / cnt);
+    if (!(sd > 0)) return null;
+    var z = (c - vw) / sd;
+    if (z >= 2){
+      return { kind:'VWAP-REVERT', dir:'short', level: vw,
+               why:'price ' + z.toFixed(1) + ' SD above session VWAP ' + vw.toFixed(2) };
+    }
+    if (z <= -2){
+      return { kind:'VWAP-REVERT', dir:'long', level: vw,
+               why:'price ' + Math.abs(z).toFixed(1) + ' SD below session VWAP ' + vw.toFixed(2) };
+    }
+    return null;
+  }
+
+  /* NR7 — the narrowest range of seven bars, then expansion out of it.
+     Compression precedes expansion; direction is taken from the break. */
+  function hgOgNr7Break(rows){
+    if (!rows || rows.length < 9) return null;
+    var n = rows.length - 1, i, rngs = [];
+    for (i = n - 7; i <= n - 1; i++){
+      if (i < 0) return null;
+      var h = num(rows[i].h), l = num(rows[i].l);
+      if (!isFinite(h) || !isFinite(l)) return null;
+      rngs.push({ i: i, r: h - l });
+    }
+    var narrow = rngs[rngs.length - 1];
+    for (i = 0; i < rngs.length; i++) if (rngs[i].r < narrow.r) return null;
+    var nh = num(rows[narrow.i].h), nl = num(rows[narrow.i].l);
+    var c = num(rows[n].c), lh = num(rows[n].h), ll = num(rows[n].l);
+    if (!isFinite(c) || !isFinite(nh) || !isFinite(nl) || !isFinite(lh) || !isFinite(ll)) return null;
+    if (!((lh - ll) > narrow.r * 1.5)) return null;    /* needs real expansion */
+    if (c > nh) return { kind:'NR7-BREAK', dir:'long', level: nh,
+                         why:'expansion above the narrowest bar in seven (' + nh.toFixed(2) + ')' };
+    if (c < nl) return { kind:'NR7-BREAK', dir:'short', level: nl,
+                         why:'expansion below the narrowest bar in seven (' + nl.toFixed(2) + ')' };
+    return null;
+  }
+
+  /* Gold against silver. Real desks watch the pair; macro-feeds.js already
+     fetches the silver series. With no silver this returns null rather than
+     guessing — a mechanic that cannot see its second leg has no signal. */
+  function hgOgSmtDiverge(rows){
+    if (!rows || rows.length < 20) return null;
+    var w = W();
+    var xag = w && w.__hgXagCandles;
+    if (!xag || xag.length < 20) return null;
+    function legs(src){
+      var n = src.length - 1;
+      return { last: num(src[n].c), prior: num(src[n - 10] && src[n - 10].c) };
+    }
+    var g = legs(rows), s = legs(xag);
+    if (!isFinite(g.last) || !isFinite(g.prior) || !isFinite(s.last) || !isFinite(s.prior)) return null;
+    var gUp = g.last > g.prior, sUp = s.last > s.prior;
+    if (gUp === sUp) return null;                      /* aligned — no divergence */
+    var gMove = Math.abs(g.last - g.prior) / Math.max(1e-9, Math.abs(g.prior));
+    var sMove = Math.abs(s.last - s.prior) / Math.max(1e-9, Math.abs(s.prior));
+    if (gMove < 0.002 || sMove < 0.002) return null;   /* both legs must have moved */
+    return { kind:'SMT-DIVERGE', dir: gUp ? 'short' : 'long', level: g.last,
+             why:'gold ' + (gUp ? 'up' : 'down') + ' while silver ' + (sUp ? 'up' : 'down')
+                 + ' over 10 bars — the metals disagree' };
+  }
+
+  /* Trend reclaim: an established stack, a pullback through the fast EMA, and
+     a close back the right side of it. The continuation counterpart to the
+     reversion mechanics above. */
+  function hgOgTrendReclaim(rows){
+    if (!rows || rows.length < 60) return null;
+    var c = [], i;
+    for (i = 0; i < rows.length; i++){ var v = num(rows[i].c); if (isFinite(v)) c.push(v); }
+    if (c.length < 60) return null;
+    var e21 = emaOf(c, 21), e50 = emaOf(c, 50);
+    var pe21 = emaOf(c.slice(0, c.length - 1), 21);
+    if (!isFinite(e21) || !isFinite(e50) || !isFinite(pe21)) return null;
+    var last = c[c.length - 1], prev = c[c.length - 2];
+    if (!isFinite(last) || !isFinite(prev)) return null;
+    if (e21 > e50 && prev < pe21 && last > e21){
+      return { kind:'TREND-RECLAIM', dir:'long', level: e21,
+               why:'pullback through the 21-EMA reclaimed inside an up stack' };
+    }
+    if (e21 < e50 && prev > pe21 && last < e21){
+      return { kind:'TREND-RECLAIM', dir:'short', level: e21,
+               why:'pullback through the 21-EMA rejected inside a down stack' };
+    }
+    return null;
   }
 
   /* ==================== gold gate ledger ==================== */
@@ -578,6 +789,132 @@ terse status, and never launches a first-time scan on a global refresh.
 
     gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
 
+    /* --- added indicator reads ------------------------------------------
+
+       These are CONTEXT, deliberately conditional rather than hard. Adding
+       four more hard gates to a twelve-gate ledger would cut tickets to
+       almost nothing and the cut would be arbitrary: none of these has a
+       measured record on this desk. They report, they show on the card, and
+       they can veto only where the read is unambiguous and directional.
+
+       An indicator that cannot be computed reads UNCHECKED, never PASS. */
+
+    /* 13 — Ichimoku cloud position. A well-known gold trend filter. */
+    var ich = null, ichWhy = 'ichimoku unavailable';
+    var ichFn = gfn('ichimokuState');
+    if (ichFn){
+      try {
+        /* indicators2.js returns { priceVsCloud:'ABOVE'|'BELOW'|'INSIDE',
+           tkCross:'BULL'|'BEAR', cloudBull:bool }. Reading a .state or .label
+           off it finds undefined and the gate reads UNCHECKED forever, which
+           is exactly what the suite caught. */
+        var ichR = ichFn(rows);
+        var iState = ichR ? String(ichR.priceVsCloud || '') : '';
+        if (iState === 'ABOVE' || iState === 'BELOW'){
+          var bullCloud = (iState === 'ABOVE');
+          var tk = ichR.tkCross === 'BULL';
+          var ichAgrees = (hit.dir === 'long') ? bullCloud : !bullCloud;
+          ichWhy = 'price ' + iState.toLowerCase() + ' the cloud, tenkan/kijun '
+                 + (tk ? 'bull' : 'bear') + ', cloud ' + (ichR.cloudBull ? 'bull' : 'bear');
+          /* A reversion mechanic is counter-cloud BY DESIGN — the same
+             category error the trend gate already refuses to make. */
+          if (reversion){
+            ich = true;
+            ichWhy += ' — counter-cloud is expected for a reversion mechanic';
+          } else {
+            /* A SOFT FAIL, not UNCHECKED. The cloud was read and it disagrees;
+               reporting that as "unknown" would hide a known negative behind
+               the label the ledger reserves for things it could not check. */
+            ich = ichAgrees;
+            ichWhy += ichAgrees ? ' — agrees' : ' — against this direction (context, not a veto)';
+          }
+        } else if (iState === 'INSIDE'){
+          ichWhy = 'inside the cloud — no directional read';
+        }
+      } catch (eIch){ ich = null; ichWhy = 'ichimoku threw: ' + ((eIch && eIch.message) || eIch); }
+    }
+    gates.push({ key:'ichimoku', hard:false, info:true, pass: ich, why: ichWhy });
+
+    /* 14 — Donchian position: where price sits in its own 20-bar range. */
+    var don = null, donWhy = 'donchian unavailable';
+    var donFn = gfn('donchian');
+    if (donFn){
+      try {
+        /* indicators2.js returns { up, lo, mid } as ARRAYS, one entry per bar
+           — not scalars, and not .upper/.lower. Both halves of that mistake
+           read NaN and left the gate permanently UNCHECKED. */
+        var dc = donFn(rows, 20);
+        var dUa = dc && dc.up, dLa = dc && dc.lo;
+        var dU = (dUa && dUa.length) ? fin(dUa[dUa.length - 1]) : NaN;
+        var dL = (dLa && dLa.length) ? fin(dLa[dLa.length - 1]) : NaN;
+        var dC = fin(rows[rows.length - 1].c);
+        if (isFinite(dU) && isFinite(dL) && isFinite(dC) && dU > dL){
+          /* The channel is built from the bars BEFORE this one, so the close
+             can sit outside it. That is a range break and worth saying, not a
+             negative percentage on the card. */
+          var pos = (dC - dL) / (dU - dL);
+          var shown = Math.max(0, Math.min(1, pos));
+          donWhy = (pos > 1 ? 'broken ABOVE the 20-bar range ('
+                  : pos < 0 ? 'broken BELOW the 20-bar range ('
+                  : 'at ' + (shown * 100).toFixed(0) + '% of the 20-bar range (')
+                 + dL.toFixed(2) + '–' + dU.toFixed(2) + ')';
+          /* Buying the very top or selling the very bottom of the range is
+             the one case worth flagging as a fail. */
+          if (hit.dir === 'long' && pos > 0.95){ don = false; donWhy += ' — buying the extreme high of the range'; }
+          else if (hit.dir === 'short' && pos < 0.05){ don = false; donWhy += ' — selling the extreme low of the range'; }
+          else { don = true; }
+        }
+      } catch (eDon){ don = null; donWhy = 'donchian threw: ' + ((eDon && eDon.message) || eDon); }
+    }
+    gates.push({ key:'donchian-pos', hard:false, info:true, pass: don, why: donWhy });
+
+    /* 15 — Stochastic RSI extreme, as a momentum-exhaustion read. */
+    var st = null, stWhy = 'stoch RSI unavailable';
+    var stFn = gfn('stochRsi');
+    if (stFn){
+      try {
+        var closes = [], ci;
+        for (ci = 0; ci < rows.length; ci++){ var cv = fin(rows[ci].c); if (isFinite(cv)) closes.push(cv); }
+        var sArr = stFn(closes, 14);
+        var sv = (sArr && sArr.length) ? fin(sArr[sArr.length - 1]) : NaN;
+        /* "unavailable" would claim the indicator is missing. It ran; on a
+           tape with no RSI range in the window there is simply no value to
+           read, and the card should say which of the two it is. */
+        if (!isFinite(sv)) stWhy = 'stoch RSI has no value on this tape (no RSI range in the window)';
+        if (isFinite(sv)){
+          var v = sv > 1 ? sv / 100 : sv;           /* some builds return 0–100 */
+          stWhy = 'stoch RSI ' + (v * 100).toFixed(0);
+          if (hit.dir === 'long' && v >= 0.95){ st = false; stWhy += ' — buying into an exhausted high'; }
+          else if (hit.dir === 'short' && v <= 0.05){ st = false; stWhy += ' — selling into an exhausted low'; }
+          else { st = true; }
+        }
+      } catch (eSt){ st = null; stWhy = 'stoch RSI threw: ' + ((eSt && eSt.message) || eSt); }
+    }
+    gates.push({ key:'stoch-rsi', hard:false, info:true, pass: st, why: stWhy });
+
+    /* 16 — Hurst exponent: is this series trending or mean-reverting right
+       now? Reported for every mechanic, and used to flag the mismatch that
+       matters — a reversion mechanic in a strongly trending tape. */
+    var hu = null, huWhy = 'hurst unavailable';
+    var huFn = gfn('hgHurstRS');
+    if (huFn){
+      try {
+        var hcl = [], hi2;
+        for (hi2 = 0; hi2 < rows.length; hi2++){ var hv = fin(rows[hi2].c); if (isFinite(hv)) hcl.push(hv); }
+        var hr = huFn(hcl);
+        var H = fin(hr && (hr.hurst !== undefined ? hr.hurst : hr));
+        if (isFinite(H)){
+          var trending = H > 0.55, reverting = H < 0.45;
+          huWhy = 'Hurst ' + H.toFixed(2) + ' — '
+                + (trending ? 'trending' : (reverting ? 'mean-reverting' : 'neither, random walk'));
+          var isReversion = /REVERT|FADE|MAGNET|SWEEP|JUDAS|SPRING/.test(String(hit.kind || ''));
+          if (isReversion && trending){ hu = false; huWhy += ': a reversion mechanic against a trending tape'; }
+          else { hu = true; }
+        }
+      } catch (eHu){ hu = null; huWhy = 'hurst threw: ' + ((eHu && eHu.message) || eHu); }
+    }
+    gates.push({ key:'hurst-regime', hard:false, info:true, pass: hu, why: huWhy });
+
     return gates;
   }
 
@@ -687,8 +1024,16 @@ terse status, and never launches a first-time scan on a global refresh.
   function fmt(n, d){ var v = fin(n); return isFinite(v) ? v.toFixed(d == null ? 2 : d) : '—'; }
 
   function gateLine(g){
-    var cls = g.pass === true ? 'ok' : (g.pass === false ? 'bad' : '');
-    var mark = g.pass === true ? 'PASS' : (g.pass === false ? 'VETO' : (g.hard ? 'NO DATA' : 'UNCHECKED'));
+    /* An info gate does not veto, so it must not print VETO next to a TICKET
+       badge — the row would contradict the card. It reads AGAINST: the app
+       disagrees, and is saying so without standing the trade aside. */
+    var vetoed = (g.pass === false) && !g.info;
+    var against = (g.pass === false) && g.info;
+    var cls = g.pass === true ? 'ok' : (vetoed ? 'bad' : '');
+    var mark = g.pass === true ? 'PASS'
+             : vetoed ? 'VETO'
+             : against ? 'AGAINST'
+             : (g.hard ? 'NO DATA' : 'UNCHECKED');
     return '<li>' + pill(mark, cls) + ' <b>' + esc(g.key) + '</b> <span class="dim">' + esc(g.why) + '</span></li>';
   }
 
@@ -715,7 +1060,9 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function renderPooled(pool, label, minRr, fwdTab){
     if (!pool) return '';
-    var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE','ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET'];
+    var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE',
+                'ASIA-BREAK','KZ-JUDAS','ADR-FADE','ROUND-MAGNET',
+                'PDH-SWEEP','PDL-SWEEP','LONDON-FIX','VWAP-REVERT','NR7-BREAK','SMT-DIVERGE','TREND-RECLAIM'];
     /* Forward (out-of-sample) counts for the same mechanics. These accumulate
        one record per firing across scans and are the only numbers here that
        are not re-read from the same window every time. */
@@ -788,7 +1135,14 @@ terse status, and never launches a first-time scan on a global refresh.
           'ASIA-BREAK':   function(r){ var a = hgOgAsiaRange(r); return a ? hgOgAsiaBreak(r, a) : null; },
           'KZ-JUDAS':     function(r){ var a = hgOgAsiaRange(r); return a ? hgOgKzJudas(r, a, gfn('goldKillzone')) : null; },
           'ADR-FADE':     function(r){ var a = hgOgAdr(r, 14); return a ? hgOgAdrFade(r, a) : null; },
-          'ROUND-MAGNET': function(r){ return hgOgRoundMagnet(r); }
+          'ROUND-MAGNET': function(r){ return hgOgRoundMagnet(r); },
+          'PDH-SWEEP':    function(r){ var p = hgOgPrevDay(r); var h = p ? hgOgPdSweep(r, p) : null; return (h && h.kind === 'PDH-SWEEP') ? h : null; },
+          'PDL-SWEEP':    function(r){ var p = hgOgPrevDay(r); var h = p ? hgOgPdSweep(r, p) : null; return (h && h.kind === 'PDL-SWEEP') ? h : null; },
+          'LONDON-FIX':   function(r){ return hgOgLondonFix(r); },
+          'VWAP-REVERT':  function(r){ return hgOgVwapRevert(r); },
+          'NR7-BREAK':    function(r){ return hgOgNr7Break(r); },
+          'SMT-DIVERGE':  function(r){ return hgOgSmtDiverge(r); },
+          'TREND-RECLAIM':function(r){ return hgOgTrendReclaim(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){

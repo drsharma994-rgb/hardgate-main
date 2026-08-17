@@ -970,10 +970,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   }
 
   function hgOmniGrade(gates){
-    var vetoes = [], hardUnknown = [], degraded = [], i, g;
+    var vetoes = [], hardUnknown = [], degraded = [], notes = [], i, g;
     for (i = 0; i < gates.length; i++){
       g = gates[i];
-      if (g.pass === false) vetoes.push(g.key);
+      /* An info gate REPORTS an adverse read without standing the trade
+         aside. Until it has a record of its own, a gate that has never been
+         measured on this desk has not earned a veto — and stacking unmeasured
+         vetoes onto a twelve-gate ledger cuts tickets for arbitrary reasons.
+         Gates without the flag behave exactly as before: pass===false vetoes. */
+      if (g.pass === false){
+        if (g.info) notes.push(g.key); else vetoes.push(g.key);
+      }
       else if (g.pass === null){
         if (g.hard) hardUnknown.push(g.key); else degraded.push(g.key);
       }
@@ -991,9 +998,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       vetoes: vetoes,
       unknown: hardUnknown,
       degraded: degraded,
+      notes: notes,
       verdict: vetoes.length ? ('VETO — ' + vetoes.join(', '))
              : (hardUnknown.length ? ('WATCH — no data: ' + hardUnknown.join(', '))
-             : (degraded.length ? ('CLEAN · unchecked: ' + degraded.join(', ')) : 'CLEAN'))
+             : ((degraded.length ? ('CLEAN · unchecked: ' + degraded.join(', ')) : 'CLEAN')
+                /* An adverse context read never hides: the ticket stands, and
+                   the card says what argued against it. */
+                + (notes.length ? ' · against: ' + notes.join(', ') : '')))
     };
   }
 

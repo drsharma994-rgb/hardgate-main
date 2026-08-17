@@ -115,8 +115,22 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   const partNoVol = win.hgOgGates(noVol, hit, {}).filter(g => g.key === 'participation')[0];
   ok(partNoVol.pass === null, 'a volumeless gold feed reads UNCHECKED, never a silent pass');
 
-  /* full context grades to a clean ticket */
-  const full = win.hgOgGates(flat, hit, {
+  /* Full context grades to a clean ticket.
+     The series needs real two-way movement, not the straight line above: a
+     strictly monotonic tape has RSI pinned at 100, so the stochastic RSI has
+     no range to normalise against and genuinely has no value. That is the
+     indicator being honest, not a gate failing, but it makes the
+     every-gate-evaluated assertion below untestable on a straight line. */
+  const wavy = [];
+  {
+    let p = 2000;
+    for (let i = 0; i < 200; i++){
+      const o = p;
+      p = p * (1 + Math.sin(i / 9) * 0.0018 + 0.0004);
+      wavy.push({ t: i * 3600, o, h: Math.max(o, p) + 2, l: Math.min(o, p) - 2, c: p, v: 100 });
+    }
+  }
+  const full = win.hgOgGates(wavy, hit, {
     htf:{e21:10,e50:9}, killzone:{zone:'LONDON',label:'LONDON OPEN'},
     macro:{realRateHint:'TAILWIND', dxy:{trend20:'DOWN'}}, yield:{valid:true},
     adr:{usedPct:45}, news:{risk:'low',note:''}, minRr:1.5,
@@ -125,7 +139,29 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   });
   const gFull = win.hgOmniGrade(full);
   ok(gFull.ticket === true, 'a fully supported gold setup grades to a ticket');
-  ok(gFull.evaluated === gFull.total, 'and reports every gate evaluated');
+
+  /* This harness loads each module with new Function('window', src), which
+     gives every file its own scope — so indicators.js, indicators2.js and
+     fixpack14-core.js are not loaded here at all, and the four gates that
+     read them (ichimoku, donchian, stoch RSI, Hurst) correctly report that
+     they could not be computed. In the browser those are classic scripts and
+     their declarations are on window, so the reads do happen; that they
+     produce real values on a real series is proved against a shared context
+     in test-omnigold-mechanics.mjs.
+
+     What belongs HERE is that the rest of the ledger is fully evaluated, and
+     that the gates which cannot run say so rather than passing quietly. */
+  const INDICATOR_GATES = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime'];
+  const unchecked = full.filter(g => g.pass === null).map(g => g.key);
+  ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
+     'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
+  ok(gFull.evaluated === gFull.total - unchecked.length, 'and the evaluated count matches');
+  INDICATOR_GATES.forEach(k => {
+    const g = full.filter(x => x.key === k)[0];
+    ok(!!g, 'indicator gate "' + k + '" is on the gold ledger');
+    ok(g.info === true, k + ' is INFO: it reports an adverse read, it does not veto');
+    ok(g.pass !== true, k + ' never passes on an indicator it could not read (' + g.why + ')');
+  });
 
   /* hostile context vetoes on the gold-specific gates */
   const hostile = win.hgOgGates(flat, hit, {
