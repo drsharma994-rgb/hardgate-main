@@ -100,6 +100,7 @@ terse status, and never launches a first-time scan on a global refresh.
   var COST_WARN_R = 0.15;   // cost above this share of 1R is worth flagging
   var COST_VETO_R = 0.30;   // above this the edge is mostly paying the spread
 
+  var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
   var EDGE_VETO_Z = -2;
   var EDGE_VETO_SAMPLES = 30;
@@ -526,10 +527,70 @@ terse status, and never launches a first-time scan on a global refresh.
       else if (z <= EDGE_VETO_Z && sN >= EDGE_VETO_SAMPLES){ ed = false; edWhy = stat + ' — significantly below breakeven, this mechanic has not paid'; }
       else if (z <= EDGE_VETO_Z){ ed = true; edWhy = stat + ' — below breakeven, but only ' + sN + ' samples: too few to veto on'; }
       else { ed = true; edWhy = stat + (z < 0 ? ' — below breakeven but within noise' : ''); }
+      edWhy = 'in-sample ' + edWhy;
     }
+
+    /* ---- OUT-OF-SAMPLE OVERRIDE ----------------------------------------
+
+       Everything above is the walk-forward pool, re-read from the same window
+       on every scan. It is what this gate has always used, and on the live
+       gold desk it passed a ticket reading
+
+         'PASS measured-edge 41 samples · 51% T1-first · +0.54R [+1.47σ]'
+
+       for ROUND-MAGNET, while the forward log for that same mechanic on that
+       same horizon stood at 0 wins in 5 settled trades. A gate calling itself
+       measured-edge cannot quote the number the forward log exists to
+       distrust and then ignore the forward log.
+
+       Precedence: enough settled forward trades and the forward record IS the
+       verdict; too few but CONTRADICTING a positive in-sample read and the
+       gate reads UNCHECKED rather than passing on the agreeable half; nothing
+       forward and the in-sample number stands, labelled as in-sample. */
+    var fwd = x.fwd || null;
+    var fN = fwd ? fin(fwd.samples) : NaN;
+    if (isFinite(fN) && fN > 0){
+      var fHit = fin(fwd.hit);
+      var fBreak = 1 / (1 + minRr);
+      var fTxt = fN + ' settled out-of-sample · ' + (isFinite(fHit) ? (fHit * 100).toFixed(0) + '%' : '—') + ' T1-first';
+      if (fN >= FWD_MIN_JUDGE && isFinite(fHit)){
+        var fse = Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / fN));
+        var fz = (fHit - fBreak) / fse;
+        var fzTxt = ' [' + (fz >= 0 ? '+' : '') + fz.toFixed(2) + 'σ vs breakeven]';
+        if (fz <= EDGE_VETO_Z){
+          ed = false;
+          edWhy = fTxt + fzTxt + ' — the OUT-OF-SAMPLE record is significantly below breakeven and outranks the in-sample pool';
+        } else {
+          ed = true;
+          edWhy = fTxt + fzTxt + ' — measured out-of-sample';
+        }
+      } else if (isFinite(fHit) && isFinite(z) && z > 0 && fHit < fBreak){
+        ed = null;
+        edWhy = fTxt + ' vs ' + edWhy
+              + ' — CONTRADICTORY: the walk-forward pool is positive while every settled out-of-sample '
+              + 'trade has lost. Too few to judge either way, so this reads UNCHECKED rather than PASS.';
+      } else {
+        edWhy = fTxt + ' (too few to judge) · ' + edWhy;
+      }
+    } else if (fwd && fin(fwd.open) > 0){
+      edWhy = fin(fwd.open) + ' out-of-sample trade' + (fin(fwd.open) === 1 ? '' : 's') + ' still open · ' + edWhy;
+    }
+
     gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
 
     return gates;
+  }
+
+  /* This mechanic's OUT-OF-SAMPLE record, or null when the log is absent.
+     Never throws: no forward log must leave the gate on the in-sample number
+     saying so, not break the scan. */
+  function hgOgFwdFor(tab, mechanic){
+    try{
+      var w = W();
+      if (!w || typeof w.hgFwdStats !== 'function' || !tab || !mechanic) return null;
+      var f = w.hgFwdStats(tab, mechanic, false);
+      return (f && isFinite(fin(f.samples))) ? f : null;
+    }catch(e){ return null; }
   }
 
   /* Grade + plan for one horizon. Reuses omniroute's grade/derive so the
@@ -547,6 +608,11 @@ terse status, and never launches a first-time scan on a global refresh.
       /* UTAD is measured under SPRING — same family in the pool */
       var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
       ex.stats = (extra && extra.stats && extra.stats[statKey]) ? extra.stats[statKey] : null;
+      /* Tell the shared gate which forward pool is this desk's, so
+         measured-edge can weigh the out-of-sample record for this mechanic
+         against the in-sample one instead of only seeing the latter. */
+      ex.fwdTab = 'OMNIGOLD:' + cfg.label;
+      ex.fwd = hgOgFwdFor(ex.fwdTab, statKey);
       ex.minRr = cfg.minRr;
       ex.minAtrPct = cfg.minAtrPct;
       ex.sessionHard = cfg.sessionHard;

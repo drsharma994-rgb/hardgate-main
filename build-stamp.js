@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v351',
-  pack: 'the gold setups were 0.8R trades priced as 1.2R',
-  built: '2026-08-19T01:15:00Z',
-  note: 'the 2xATR stop cap truncated gold stops short of invalidation, which made sub-floor trades clear the R:R gate'
+  version: 'hg-v352',
+  pack: 'measured-edge quoted the number the forward log exists to distrust',
+  built: '2026-08-19T04:30:00Z',
+  note: 'the gate passed a ticket on +1.47 sigma in-sample while the same mechanic was 0 of 5 out-of-sample; the forward log now outranks it'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

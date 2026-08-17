@@ -129,6 +129,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      sampling noise does not silence a detector. */
   var EDGE_VETO_Z = -2;
   var EDGE_VETO_SAMPLES = 30;
+  /* Settled out-of-sample trades needed before the forward record can be a
+     verdict on its own. Below it the record can still contradict, but not
+     conclude. */
+  var FWD_MIN_JUDGE = 20;
   /* Daily EMA periods sized to the daily bars BARS x TF actually yields
      (180 x 4h ~= 31 days). Asking for a 50-period daily EMA silently
      disabled the gate on every card. */
@@ -880,7 +884,69 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         ed = true;
         edWhy = stat + zTxt + (z < 0 ? ' — below breakeven but within noise' : '');
       }
+      edWhy = 'in-sample ' + edWhy;
     }
+
+    /* ---- OUT-OF-SAMPLE OVERRIDE ----------------------------------------
+
+       Everything above is the walk-forward pool, re-read from the same window
+       on every scan. It is the number this gate has always used, and on live
+       data it passed a ticket reading
+
+         'PASS measured-edge 41 samples · 51% T1-first · +0.54R [+1.47σ]'
+
+       for ROUND-MAGNET, while the forward log for that same mechanic stood at
+       0 wins in 5 settled trades. A gate that calls itself measured-edge
+       cannot cite the number the forward log exists to distrust and ignore
+       the forward log itself.
+
+       Precedence, in order:
+         - enough settled forward trades to judge -> the forward record IS the
+           verdict, and a significant shortfall vetoes
+         - some forward trades, too few to judge, but they CONTRADICT a
+           positive in-sample read -> UNCHECKED, never PASS. The evidence is
+           in conflict and the card must say so rather than quote the
+           agreeable half
+         - some forward trades that agree, or none at all -> in-sample stands,
+           labelled as in-sample so it is never mistaken for realised results
+    */
+    var fwd = x.fwd || null;
+    var fN = fwd ? fin(fwd.samples) : NaN;
+    if (isFinite(fN) && fN > 0){
+      var fHit = fin(fwd.hit);
+      /* omniroute's in-sample z uses the module MIN_RR; a desk that supplies
+         its own R floor (OMNIGOLD's 1.5R scalp) must be judged against ITS
+         breakeven, not the module default. */
+      var edMinRr = isFinite(fin(x.minRr)) && fin(x.minRr) > 0 ? fin(x.minRr) : MIN_RR;
+      var fBreak = 1 / (1 + edMinRr);
+      var fTxt = fN + ' settled out-of-sample · ' + (isFinite(fHit) ? (fHit * 100).toFixed(0) + '%' : '—') + ' T1-first';
+      if (fN >= FWD_MIN_JUDGE && isFinite(fHit)){
+        var fz = (fHit - fBreak) / Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / fN));
+        var fzTxt = ' [' + (fz >= 0 ? '+' : '') + fz.toFixed(2) + 'σ vs breakeven]';
+        if (fz <= EDGE_VETO_Z){
+          ed = false;
+          edWhy = fTxt + fzTxt + ' — the OUT-OF-SAMPLE record is significantly below breakeven; '
+                + 'in-sample said ' + (isFinite(z) ? ((z >= 0 ? '+' : '') + z.toFixed(2) + 'σ') : 'nothing') + ' and is outranked';
+        } else {
+          ed = true;
+          edWhy = fTxt + fzTxt + ' — measured out-of-sample';
+        }
+      } else if (isFinite(fHit) && isFinite(z) && z > 0 && fHit < fBreak){
+        /* The two disagree and neither is conclusive. Unknown reads
+           UNCHECKED, never PASS — the same rule the rest of the ledger is
+           held to. A conditional gate at null degrades the card without
+           standing the trade aside. */
+        ed = null;
+        edWhy = fTxt + ' vs in-sample ' + stat + zTxt
+              + ' — CONTRADICTORY: the walk-forward pool is positive while every settled '
+              + 'out-of-sample trade has lost. Too few to judge either way, so this reads UNCHECKED.';
+      } else {
+        edWhy = fTxt + ' (too few to judge) · ' + edWhy;
+      }
+    } else if (fwd && fin(fwd.open) > 0){
+      edWhy = fin(fwd.open) + ' out-of-sample trades still open · ' + edWhy;
+    }
+
     gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
 
     return gates;
@@ -891,6 +957,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      `degraded`) but does not stand it aside — see the note on hgOmniGates.
      An unevaluable HARD gate still blocks, because those are computable on
      both venues and a missing one means the data itself was bad. Pure. */
+  /* Out-of-sample stats for one mechanic, or null when the log is absent.
+     Never throws: a missing forward log must leave the gate reading the
+     in-sample number and saying so, not break the scan. */
+  function hgOmniFwdFor(tab, mechanic){
+    try{
+      var w = W();
+      if (!w || typeof w.hgFwdStats !== 'function' || !tab || !mechanic) return null;
+      var f = w.hgFwdStats(tab, mechanic, false);
+      return (f && isFinite(fin(f.samples))) ? f : null;
+    }catch(e){ return null; }
+  }
+
   function hgOmniGrade(gates){
     var vetoes = [], hardUnknown = [], degraded = [], i, g;
     for (i = 0; i < gates.length; i++){
@@ -935,6 +1013,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       /* UTAD is measured under SPRING — same detector family in the backtest pool */
       var statKey = (hit.kind === 'UTAD') ? 'SPRING' : hit.kind;
       exForHit.stats = (ex.stats && ex.stats[statKey]) ? ex.stats[statKey] : null;
+      /* The OUT-OF-SAMPLE record for the same mechanic. The measured-edge gate
+         used to see only the in-sample pool above, which is re-read from the
+         same window on every scan — so it could pass a ticket on +1.47σ while
+         the forward log said 0 of 5 on that exact mechanic. Both go to the
+         gate now and the gate decides which one is evidence. */
+      exForHit.fwd = hgOmniFwdFor(ex.fwdTab || 'OMNIROUTE', statKey);
       exForHit.exchange = item && item.exchange;
       exForHit.regimeWarm = ex.regimeWarm;
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
