@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v348',
-  pack: 'a dead macro feed went on biasing gold',
-  built: '2026-08-18T15:20:00Z',
-  note: 'a failed refresh published nothing, so the last US10Y and SMT reads stood forever and brain kept acting on them'
+  version: 'hg-v349',
+  pack: 'a cointegration result computed on invented data',
+  built: '2026-08-18T18:00:00Z',
+  note: 'GOLD COINT expanded one spot price per metal into 150 fake bars by a fixed ramp, then reported the pair as cointegrated'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

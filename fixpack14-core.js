@@ -349,11 +349,39 @@ function hgFamilyRouter(input){
 
 /* --- gold coint --- */
 function hgCoint(seriesA, seriesB){
-  var a = (seriesA || []).filter(function(x){ return isFinite(x); });
-  var b = (seriesB || []).filter(function(x){ return isFinite(x); });
-  var n = Math.min(a.length, b.length);
+  /* Cointegration is a statement about CONTEMPORANEOUS observations, and
+     these are bare number arrays with no timestamps, so the only alignment
+     available is position.
+
+     Each series used to be filtered for finite values INDEPENDENTLY and then
+     truncated to a common length. If one feed had three gaps and the other
+     had none, that silently paired every observation three bars apart for the
+     whole series — and the beta, the spread, the half-life and the z-score
+     were all computed on mismatched dates. A drifting offset is exactly the
+     kind of error that manufactures a relationship.
+
+     Dropping a bar from one series is only safe if the same bar is dropped
+     from the other, so gaps are removed PAIRWISE. Where a caller hands in two
+     series of different lengths, position cannot be trusted at all and the
+     result is declined rather than guessed. */
+  var rawA = seriesA || [], rawB = seriesB || [];
+  if (rawA.length !== rawB.length){
+    return { cointegrated: false, n: 0, note: 'series lengths differ ('
+      + rawA.length + ' vs ' + rawB.length + ') — cannot align without timestamps' };
+  }
+  /* +null and +'' are both 0, so coercing before the finite test would let a
+     missing price through AS ZERO — which in a regression is far worse than
+     dropping the bar. My first version of this loop did exactly that, and the
+     test below caught it. */
+  function cnum(v){ return (v === null || v === undefined || v === '') ? NaN : +v; }
+  var a = [], b = [];
+  for (var k = 0; k < rawA.length; k++){
+    var av = cnum(rawA[k]), bv = cnum(rawB[k]);
+    if (!isFinite(av) || !isFinite(bv)) continue;   /* drop the PAIR, never one side */
+    a.push(av); b.push(bv);
+  }
+  var n = a.length;
   if (n < 120) return null;
-  a = a.slice(-n); b = b.slice(-n);
   var mx = 0, my = 0, i;
   for (i = 0; i < n; i++){ mx += b[i]; my += a[i]; }
   mx /= n; my /= n;

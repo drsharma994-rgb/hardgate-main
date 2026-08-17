@@ -35,21 +35,34 @@ async function runGoldCoint(ui){
   if (ui && ui.stat) ui.stat.textContent = 'loading…';
   try{
     var gold = [], silver = [], paxg = [], xaut = [], xau = [], dxy = [];
-    if (typeof getGoldMacro === 'function'){
-      var macro = await getGoldMacro().catch(function(){ return null; });
-      if (macro && isFinite(macro.gold)) gold.push(macro.gold);
-    }
-    if (typeof fetch === 'function'){
+
+    /* The XAU and XAG series used to be MANUFACTURED. One spot price was
+       fetched for each, then expanded into 150 "historical" points by a fixed
+       linear ramp:
+
+         for (i = 0; i < 150; i++) gold.unshift(price * (1 + (i - 75) * 0.0001));
+
+       Two straight lines are trivially cointegrated, so hgCoint returned
+       cointegrated:true with an ADF of -10.31 and a half-life of 0.38 bars —
+       a confident result measuring the two constants above it, not the metals.
+       The tab printed it as the XAU / XAG row beside rows built from real
+       Binance klines, indistinguishable from them.
+
+       Real daily history or nothing. getGoldCandles and getSilverCandles are
+       the same routed sources macro-feeds.js uses; when they cannot supply
+       120 bars the arrays stay empty and row() reports "insufficient data",
+       which is what the reader needs to know. */
+    if (typeof getGoldCandles === 'function'){
       try{
-        var gj = await fetch('https://api.gold-api.com/price/XAU').then(function(r){ return r.json(); });
-        var sj = await fetch('https://api.gold-api.com/price/XAG').then(function(r){ return r.json(); });
-        if (gj && isFinite(+gj.price)){
-          for (var i = 0; i < 150; i++) gold.unshift(+gj.price * (1 + (i - 75) * 0.0001));
-        }
-        if (sj && isFinite(+sj.price)){
-          for (var j = 0; j < 150; j++) silver.unshift(+sj.price * (1 + (j - 75) * 0.00015));
-        }
-      }catch(eApi){}
+        var gc = await getGoldCandles('1d', 150);
+        if (gc && gc.rows && gc.rows.length) gold = gc.rows.map(function(r){ return +r.c; });
+      }catch(eG){}
+    }
+    if (typeof getSilverCandles === 'function'){
+      try{
+        var sc = await getSilverCandles('1d', 150);
+        if (sc && sc.rows && sc.rows.length) silver = sc.rows.map(function(r){ return +r.c; });
+      }catch(eS){}
     }
     if (typeof binanceKlines === 'function'){
       try{
