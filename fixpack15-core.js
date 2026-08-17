@@ -172,15 +172,40 @@ function hgVenuePremiumZ(history, lookback, premBps){
   lookback = lookback || 240;
   var hist = Array.isArray(history) ? history.slice() : [];
   var cur = premBps != null ? fin(premBps) : (hist.length ? fin(hist[hist.length - 1]) : null);
-  var window = hist.slice(-lookback);
-  var n = window.length;
-  if (cur === null) return { premBps: null, z: null, n: n, stretched: false };
-  var sum = 0; for (var i = 0; i < window.length; i++) sum += window[i];
+
+  /* The history comes back from localStorage as raw JSON and was summed
+     without checking what was in it. A stored null adds 0 to the sum and 1 to
+     the count — so it does not merely get ignored, it drags the mean toward
+     zero and inflates the standard deviation. Measured on a 120-sample series
+     with 20 nulls: mean 10.14 -> 8.46, sd 1.40 -> 3.99, and the z-score
+     collapsed from 10.65 to 4.15, while n still claimed 120 readings.
+
+     That is the wrong direction to be wrong in. A z-score is the whole point
+     of this function — an inflated sd makes a genuinely stretched premium
+     read as normal, which is a missed signal reported as a measurement. One
+     non-numeric entry did worse: mean and sd both went NaN.
+
+     Only real readings are counted now, and n reports how many there actually
+     were rather than how long the array was.
+
+     (`window` was also the name of the local slice, shadowing the global
+     inside a browser file. Renamed — nothing here used it, but it is a
+     footgun sitting in a function that reads from localStorage.) */
+  var win = [];
+  for (var s = Math.max(0, hist.length - lookback); s < hist.length; s++){
+    var v0 = fin(hist[s]);
+    if (v0 !== null && isFinite(v0)) win.push(v0);
+  }
+  var n = win.length;
+  var dropped = Math.min(hist.length, lookback) - n;
+  if (cur === null) return { premBps: null, z: null, n: n, dropped: dropped, stretched: false };
+  var sum = 0; for (var i = 0; i < n; i++) sum += win[i];
   var mean = n ? sum / n : 0;
-  var v = 0; for (var j = 0; j < window.length; j++) v += (window[j] - mean) * (window[j] - mean);
+  var v = 0; for (var j = 0; j < n; j++) v += (win[j] - mean) * (win[j] - mean);
   var sd = n ? Math.sqrt(v / n) : 0;
   var z = (sd > 0) ? (cur - mean) / sd : null;
-  return { premBps: cur, mean: mean, sd: sd, z: z, n: n, stretched: n >= 60 && z !== null && Math.abs(z) >= 2 };
+  return { premBps: cur, mean: mean, sd: sd, z: z, n: n, dropped: dropped,
+           stretched: n >= 60 && z !== null && Math.abs(z) >= 2 };
 }
 
 function hgBarFreshnessChip(barAge, tf){

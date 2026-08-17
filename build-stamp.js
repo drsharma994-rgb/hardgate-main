@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v346',
-  pack: 'the worksheet approved trades that cannot win',
-  built: '2026-08-18T10:05:00Z',
-  note: 'RISK PASS on a long whose target sat below entry, and on a stop and target transposed — the geometry is now checked before the money is'
+  version: 'hg-v347',
+  pack: 'a z-score over readings that were not there',
+  built: '2026-08-18T12:30:00Z',
+  note: 'stored nulls added 0 to the sum and 1 to the count, dragging the venue-premium mean down and inflating the sd, so a stretched premium read as normal'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
