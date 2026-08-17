@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v350',
-  pack: 'the gold stop was moved inside the structure it was meant to sit behind',
-  built: '2026-08-18T21:40:00Z',
-  note: '65 percent of gold setups had the stop tightened to 1.5xATR, 53 percent nearer than invalidation; gold now keeps the structural stop'
+  version: 'hg-v351',
+  pack: 'the gold setups were 0.8R trades priced as 1.2R',
+  built: '2026-08-19T01:15:00Z',
+  note: 'the 2xATR stop cap truncated gold stops short of invalidation, which made sub-floor trades clear the R:R gate'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

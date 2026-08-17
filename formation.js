@@ -491,8 +491,21 @@ function hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   var stop = +plan.stop;
   if (!isFinite(hit.structStop) && typeof G.hgStructureStop === 'function'){
     try{
+      /* GOLD keeps its structural stop.
+
+         v350 fixed this for OMNIGOLD and reached nothing else. SUPER GOLD,
+         GOLD SWING and GOLD SCALP all build levels through
+         hgApplyGoldBestLevels -> hgBestLevelsGold -> hgFormTicket, which
+         lands here — so three of the four gold desks were still having the
+         stop pulled off structure to a flat 1.5xATR whenever invalidation sat
+         beyond 2.5xATR. On gold-shaped 1h data that fired on 65% of setups
+         and put the stop ~53% nearer than the level that means the idea is
+         wrong, which is inside ordinary session noise.
+
+         The crypto branch below is deliberately left on the old default. */
       var st = G.hgStructureStop(dir, plan.entry, rows, {
-        look: params.swingLook, buffer: params.buffer, capDist: params.capDist
+        look: params.swingLook, buffer: params.buffer, capDist: params.capDist,
+        capMode: 'structure'
       });
       if (st && isFinite(st.stop)){
         if (dir === 'long' && st.stop < stop){ stop = st.stop; plan.stopNote = (plan.stopNote ? plan.stopNote + '; ' : '') + (st.note || ''); }

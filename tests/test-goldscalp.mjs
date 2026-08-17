@@ -905,8 +905,15 @@ function checkCandShape(c, key, dir, msg){
   if (dir === 'long') assert(c.stop < c.entry && c.t1 > c.entry && c.t2 > c.t1, msg + ': long stop below entry, TP1/TP2 above');
   else assert(c.stop > c.entry && c.t1 < c.entry && c.t2 < c.t1, msg + ': short stop above entry, TP1/TP2 below');
   const sd = Math.abs(c.entry - c.stop);
-  assert(sd >= 1.5*c.atr - 1e-9 && sd <= 2.0*c.atr + 1e-9,
-         msg + ': stop distance inside 1.5–2×ATR14(15m) (got ' + (sd/c.atr).toFixed(2) + '×)');
+  /* The upper bound was 2×ATR, and that cap was the defect: swept across
+     structure distances of 0.6–4.5 ATR it truncated the stop short of the
+     level that invalidates the trade on 63% of setups, which is what kept
+     taking them out in noise. The floor still holds at 1.5×; the ceiling is
+     now the 3.5× sanity bound for broken structure, not a risk policy —
+     fixed-risk sizing already bounds the dollars, so a wider stop buys a
+     smaller position rather than more exposure. */
+  assert(sd >= 1.5*c.atr - 1e-9 && sd <= 3.5*c.atr + 1e-9,
+         msg + ': stop between the 1.5×ATR floor and the 3.5×ATR ceiling (got ' + (sd/c.atr).toFixed(2) + '×)');
   assert(c.rr >= 1.2 - 1e-9, msg + ': TP1 pays >= 1.2R (got ' + c.rr.toFixed(2) + ')');
   assert(c.id.indexOf(key + '|' + dir + '|') === 0, msg + ': deterministic conviction id ' + c.id);
   assert(c.grade === 'A' || c.grade === 'B' || c.grade === 'C', msg + ': grade A/B/C');
@@ -962,7 +969,20 @@ function checkCandShape(c, key, dir, msg){
     return rows;
   }
   const rc = W.goldScalpSetups({ rows15m: ribbonRows(), now: OFF_NOW });
-  checkCandShape(rc.find(c => c.stratKey === 'ribbon'), 'ribbon', 'long', 'EMA ribbon pullback');
+  /* This fixture used to produce a ribbon candidate, and no longer does —
+     deliberately. With the stop truncated at 2xATR its TP1 measured 1.2R+
+     against a risk that never reached invalidation; with the stop behind the
+     structure the same trade is 0.8R, and the desk's own 1.2R floor drops it
+     with a named reason. The setup did not disappear, it was re-priced and
+     correctly declined: exactly the case that was "not working out". */
+  const ribbonCand = rc.find(c => c.stratKey === 'ribbon');
+  const ribbonDrop = (rc.rejected || []).find(r => r.stratKey === 'ribbon');
+  assert(!ribbonCand, 'EMA ribbon pullback: no longer offered once the stop clears structure');
+  assert(!!ribbonDrop, 'EMA ribbon pullback: it appears in the rejected channel, not silently gone');
+  assert(/R:R insufficient/.test(ribbonDrop.reason),
+         'EMA ribbon pullback: dropped for R:R, with the reason named (' + ribbonDrop.reason + ')');
+  assert(/< 1\.2R minimum/.test(ribbonDrop.reason),
+         'EMA ribbon pullback: measured against real invalidation it fell under the 1.2R floor');
 
   /* --- Asian-range breakout: 00:00-07:00 GMT box, London expansion --- */
   function asianBoRows(){

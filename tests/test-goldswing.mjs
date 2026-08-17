@@ -345,7 +345,7 @@ console.log('== 3) weekly-range breakout fires + stays silent without a trigger 
   assert(wk && wk.agree === 3, 'ledger: sweep-reclaim trigger + 4h sweep read + weekly-VWAP read = 3 (got ' + (wk && wk.agree) + ')');
   assert(wk && wk.tally === 3 && wk.grade === 'C', 'bare ctx: tally 3, grade C (unified A≥8/B≥5 thresholds)');
   assert(wk && wk.stop < 2380, 'stop anchored BEYOND the swept weekly low (got ' + (wk && wk.stop) + ')');
-  assert(/stop beyond structure 2380/.test(env.M.stubs['#gwCards'].innerHTML), 'stop note names the structure anchor (card HTML)');
+  assert(/stop BEHIND structure 2380/.test(env.M.stubs['#gwCards'].innerHTML), 'stop note names the structure anchor (card HTML)');
   assert(wk && /swept and reclaimed/.test(wk.why) && /weekly range/.test(wk.why), 'evidence named in plain language');
   assert(wk && /4h close back below 2380/.test(wk.invalidates), 'invalidation names the level');
 
@@ -587,16 +587,23 @@ console.log('== 8) stop / target math ==');
          'long targets at exactly 1.5R / 2.5R / 4R from real values');
   assert(Math.abs(wk.rr - 1.5) < 1e-6 && Math.abs(wk.rr2 - 2.5) < 1e-6 && Math.abs(wk.rr3 - 4.0) < 1e-6,
          'R multiples reported honestly (1.5 / 2.5 / 4.0) — got ' + wk.rr + ' / ' + wk.rr2 + ' / ' + wk.rr3);
-  assert(wk.stop < 2380 && wk.stop > wk.entry - 2*wk.atr - 1e-9,
-         'stop beyond the swept level yet never wider than 2×ATR');
+  /* The 2×ATR ceiling here was the defect — see tests/test-gold-stop-model.mjs.
+     What matters is that the stop clears the swept level; the width bound is
+     now the 4× sanity ceiling for broken structure. */
+  assert(wk.stop < 2380 && wk.stop > wk.entry - 4*wk.atr - 1e-9,
+         'stop beyond the swept level, within the 4×ATR sanity ceiling');
 
-  /* far structure -> the 2×ATR cap binds, note says so */
+  /* far structure -> the stop now CLEARS it rather than truncating at 2×ATR */
   const envF = makeScanEnv(wkReclaim4h(2395), weekly1d());
   await envF.M.stubs['#gwRun']._handler();
   const wkF = envF.C.goldswingScan().cands.find(c => c.stratKey === 'wkbreak');
-  assert(Math.abs(Math.abs(wkF.entry - wkF.stop) - 2*wkF.atr) < 1e-9,
-         'structure beyond 1.75×ATR -> the 2×ATR cap binds exactly');
-  assert(/capped 2×/.test(envF.M.stubs['#gwCards'].innerHTML), 'cap named in the stop note (card HTML)');
+  assert(Math.abs(wkF.entry - wkF.stop) > 2*wkF.atr - 1e-9,
+         'structure beyond 1.75×ATR -> the stop goes BEHIND it, no longer truncated at 2×ATR ('
+         + (Math.abs(wkF.entry - wkF.stop)/wkF.atr).toFixed(2) + '×)');
+  /* The note used to say 'capped 2×' while placing the stop short of the
+     structure. It now says BEHIND, and only mentions a ceiling when the
+     4× sanity bound actually binds. */
+  assert(/stop BEHIND structure/.test(envF.M.stubs['#gwCards'].innerHTML), 'stop note says it went behind the structure (card HTML)');
 
   /* short symmetry: mirrored pullback -> stop above, targets descending */
   const envM = makeScanEnv(mirrorRows(pullback4h(), 2400), mirrorRows(dailyBull(), 2400));
@@ -606,9 +613,9 @@ console.log('== 8) stop / target math ==');
   assert(pbM && pbM.stop > pbM.entry && pbM.t1 < pbM.entry && pbM.t2 < pbM.t1 && pbM.t3 < pbM.t2,
          'short: stop above entry, TP1/TP2/TP3 descending');
   const riskM = Math.abs(pbM.entry - pbM.stop);
-  assert(riskM >= 1.5*pbM.atr - 1e-9 && riskM <= 2.0*pbM.atr + 1e-9
+  assert(riskM >= 1.5*pbM.atr - 1e-9 && riskM <= 4.0*pbM.atr + 1e-9
       && Math.abs(pbM.t3 - (pbM.entry - 4.0*riskM)) < 1e-9,
-         'short risk model symmetric (1.5–2×ATR stop, 4R final target)');
+         'short risk model symmetric (1.5–4×ATR stop, 4R final target)');
   Date.now = realDateNow;
   cleanup();
 }

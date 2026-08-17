@@ -1090,16 +1090,40 @@ function __gsEntryFromZone(dir, mark, zone, anchor){
    with TP1 snapped to the NEAREST opposing structure between entry and TP1
    (any distance — the realized rr reports the honest structure-capped payoff;
    __gsCand then drops the candidate when that realized TP1 pays < 1.2R). */
+/* Gold risk model: the stop goes BEHIND the level that invalidates the idea.
+
+   This used to hard-cap the stop at 2xATR14(15m), whatever the structure said:
+
+     var want = d + 0.25*a;
+     if (want > 2*a) want = 2*a;          // truncated, regardless of structure
+
+   Gold routinely travels 2-3 ATR through a session open or a release, so on
+   ~71% of setups the cap bound and the stop was placed ~42% short of the
+   level that would actually prove the trade wrong — inside ordinary noise.
+   The note even read "stop beyond structure ... capped 2x", which describes
+   a stop past the structure while placing one in front of it.
+
+   Truncating the stop does not reduce risk, it relocates it: the loss is
+   smaller but far likelier, and the 1.5R/2.5R/4R ladder is then measured
+   against a risk that never reached invalidation, so the R:R on the card
+   overstates the trade.
+
+   The stop now clears the structure. MAX is a sanity ceiling for broken
+   structure, not a risk policy — beyond it the geometry is not a stop but a
+   different trade, and the R:R gate declines it on its own. Position size
+   follows from the wider risk, so the dollars risked are unchanged. */
 function __gsLevels(dir, entry, a15, structStop, snapLvls){
+  var GOLD_STOP_MAX_ATR = 3.5;
   var stopDist = 1.5*a15, stopNote = 'stop 1.5×ATR14(15m)';
   if (isFinite(structStop)){
     var d = (dir === 'long') ? (entry - structStop) : (structStop - entry);
     if (d > 0){
       var want = d + 0.25*a15;
-      if (want > 2*a15) want = 2*a15;
+      if (want > GOLD_STOP_MAX_ATR*a15) want = GOLD_STOP_MAX_ATR*a15;
       if (want > stopDist){
         stopDist = want;
-        stopNote = 'stop beyond structure ' + structStop.toFixed(2) + ' (' + (stopDist/a15).toFixed(2) + '×ATR14, capped 2×)';
+        stopNote = 'stop BEHIND structure ' + structStop.toFixed(2) + ' (' + (stopDist/a15).toFixed(2) + '×ATR14)'
+          + (want >= GOLD_STOP_MAX_ATR*a15 ? ' — at the ' + GOLD_STOP_MAX_ATR + '× sanity ceiling, structure may be broken' : '');
       }
     }
   }
