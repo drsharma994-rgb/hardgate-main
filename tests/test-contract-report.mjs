@@ -392,6 +392,83 @@ console.log('\n== SEARCH records the plan after rendering it ==');
 }
 
 
+console.log('\n== the loop closes: what is recorded also gets settled ==');
+{
+  /* v344 recorded and never resolved — a ledger that can only ever grow
+     "open". hgFwdResolve is keyed by SYMBOL rather than tab, so a desk scan
+     on the same coin would eventually settle these, but only for coins the
+     desks happen to scan and only if those scans are run. A contract you
+     looked up and the desks never touch would stay open forever.
+
+     The report is the right place: it has just pulled fresh 4h bars for
+     exactly this symbol, so re-checking a contract days later settles the
+     plan you took on it last time. */
+  const store = {};
+  const ctx = { console, Math, Date, isFinite, parseFloat, parseInt, JSON, Array, Object,
+                Number, String, Promise, RegExp, setTimeout, clearTimeout };
+  ctx.window = ctx; ctx.globalThis = ctx; ctx.HG_tabs = [];
+  ctx.localStorage = { getItem: k => (k in store ? store[k] : null),
+                       setItem: (k, v) => { store[k] = String(v); },
+                       removeItem: k => { delete store[k]; } };
+  ctx.document = { createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){} }),
+                   getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+                   head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
+  vm.createContext(ctx);
+  for (const f of ENGINES.concat(['hg-forward.js'])){
+    const p = path.join(ROOT, f);
+    if (fs.existsSync(p)){ try { vm.runInContext(fs.readFileSync(p, 'utf8'), ctx, { filename: f }); } catch (e) {} }
+  }
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'contract-report.js'), 'utf8'), ctx, { filename: 'contract-report.js' });
+
+  ok(typeof ctx.hgContractReportResolve === 'function', 'hgContractReportResolve is exported');
+
+  const bar = Math.floor((Date.now() / 1000) / 14400) * 14400;
+  const rec = ctx.hgFwdRecordScan('SEARCH-REPORT', '4h',
+    [{ sym: 'ZZZUSD', dir: 'long', entry: 100, stop: 98, t1: 104, mechanic: 'FORMED-TICKET' }],
+    { horizonBars: 20 });
+  ok(rec === 1, 'a plan was recorded to settle (' + rec + ')');
+  let st = ctx.hgFwdStats('SEARCH-REPORT', null, false);
+  ok(st.open === 1 && st.samples === 0, 'it starts open and unsettled');
+
+  /* Bars strictly after the recording bar, the last tagging T1. */
+  const later = [];
+  for (let i = 1; i <= 5; i++) later.push({ t: bar + i * 14400, o: 100, h: i === 5 ? 105 : 101, l: 99, c: 100, v: 1 });
+  const changed = ctx.hgContractReportResolve('ZZZUSD', later);
+  ok(changed === 1, 'resolving with later bars settles it (' + changed + ')');
+
+  st = ctx.hgFwdStats('SEARCH-REPORT', null, false);
+  ok(st.open === 0, 'nothing is left open');
+  ok(st.samples === 1, 'and it counts as one settled trade');
+  ok(st.wins === 1, 'a bar that tagged T1 is a win');
+  ok(Math.abs(st.expR - 2) < 1e-9, 'the R credited is the real 2R from |104-100|/|100-98| (' + st.expR + ')');
+
+  /* THE GUARD: a bar at or before the recording bar must never settle it. */
+  ctx.hgFwdRecordScan('SEARCH-REPORT', '4h',
+    [{ sym: 'YYYUSD', dir: 'long', entry: 100, stop: 98, t1: 104, mechanic: 'X' }], { horizonBars: 20 });
+  const sameBar = [{ t: bar, o: 100, h: 110, l: 99, c: 100, v: 1 }];
+  const cheat = ctx.hgContractReportResolve('YYYUSD', sameBar);
+  ok(cheat === 0, 'a bar from the SAME bar the plan fired on settles nothing — no look-ahead');
+  const after = ctx.hgFwdStats('SEARCH-REPORT', null, false);
+  ok(after.samples === 1, 'the settled count is unchanged by the look-ahead attempt (' + after.samples + ')');
+  ok(after.open === 1, 'and that plan is still correctly open');
+
+  /* Degenerate inputs cost nothing. */
+  ok(ctx.hgContractReportResolve(null, later) === 0, 'no symbol resolves nothing');
+  ok(ctx.hgContractReportResolve('ZZZUSD', []) === 0, 'no bars resolves nothing');
+  ok(ctx.hgContractReportResolve('ZZZUSD', null) === 0, 'null bars resolves nothing and does not throw');
+}
+
+console.log('\n== SEARCH settles before it records ==');
+{
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  ok(/hgContractReportResolve\(sym, r4\)/.test(html), 'the SEARCH handler resolves this symbol');
+  const resolveAt = html.indexOf('hgContractReportResolve(sym, r4)');
+  const recordAt = html.indexOf('hgContractReportRecord(rep)');
+  ok(resolveAt > 0 && recordAt > resolveAt,
+    'resolve runs BEFORE record, so the plan being written is never a candidate to settle against its own bar');
+}
+
+
 console.log('\n== the SEARCH tab is wired to it ==');
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

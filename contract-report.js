@@ -572,6 +572,33 @@ function measuredRows(rows4h, ticker, plan, sections){
    one 4h bar records once. */
 var REPORT_TAB = 'SEARCH-REPORT';
 
+/* Settle whatever this contract already has open, using the bars that have
+   printed since.
+
+   v344 recorded and never resolved, which is a ledger that can only ever grow
+   "open". hgFwdResolve is keyed by SYMBOL, not by tab, so a desk scan on the
+   same coin would eventually settle these — but only for coins the desks
+   happen to scan, and only if those scans are run. A contract you looked up
+   and the desks never touch would stay open forever.
+
+   The report is the right place to do it: it has just pulled fresh 4h bars
+   for exactly this symbol. Re-checking a contract days later settles the plan
+   you took on it last time. Resolve runs BEFORE record, so the plan being
+   written now is never a candidate for settlement against its own bar —
+   hgFwdSettle already refuses bars at or before barT, and doing it in this
+   order means that guard is never the only thing standing between a record
+   and a look-ahead settlement. */
+function hgContractReportResolve(sym, rows4h){
+  try{
+    if (!has('hgFwdResolve')) return 0;
+    if (!sym || !Array.isArray(rows4h) || !rows4h.length) return 0;
+    return W.hgFwdResolve(sym, '4h', rows4h) || 0;
+  }catch(e){
+    try{ if (has('hgFwdWarn')) W.hgFwdWarn('contract-report', e); }catch(e2){}
+    return 0;
+  }
+}
+
 function hgContractReportRecord(rep){
   try{
     if (!rep || !rep.plan || !rep.plan.ok) return 0;
@@ -997,6 +1024,7 @@ function hgContractReportHTML(rep){
 W.hgContractReportRun = hgContractReportRun;
 W.hgContractReportEnrich = hgContractReportEnrich;
 W.hgContractReportRecord = hgContractReportRecord;
+W.hgContractReportResolve = hgContractReportResolve;
 W.hgContractReportHTML = hgContractReportHTML;
 W.hgContractReportCSS = hgContractReportCSS;
 

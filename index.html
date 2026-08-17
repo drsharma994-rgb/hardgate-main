@@ -758,14 +758,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=344"></script>
+<script src="supersetup.js?v=345"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=344"></script>
-<script src="super-gold.js?v=344"></script>
-<script src="super-best.js?v=344"></script>
-<script src="super-sniper.js?v=344"></script>
-<script src="super-book.js?v=344"></script>
-<script src="super-calibrate.js?v=344"></script>
+<script src="super-desk-common.js?v=345"></script>
+<script src="super-gold.js?v=345"></script>
+<script src="super-best.js?v=345"></script>
+<script src="super-sniper.js?v=345"></script>
+<script src="super-book.js?v=345"></script>
+<script src="super-calibrate.js?v=345"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -7474,6 +7474,10 @@ async function runContractReport(ex, sym, rid){
       }
     }catch(e){}
     out.innerHTML = hgContractReportHTML(rep);
+    /* Settle anything this contract already had open, using the bars that
+       have printed since it was recorded. Runs BEFORE the new record, so the
+       plan being written now can never be settled against its own bar. */
+    try{ if (typeof hgContractReportResolve === 'function') hgContractReportResolve(sym, r4); }catch(e){}
     /* Record this plan so the panel can eventually be measured like every
        other desk. It records under its own tab id — plans you chose to look
        up are not a systematic sample and must never be pooled with the desk

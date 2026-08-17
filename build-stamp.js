@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v344',
-  pack: 'the panel that displayed no evidence recorded none either',
-  built: '2026-08-18T05:10:00Z',
-  note: 'the FULL REPORT now records its own plan, under its own tab id, because a contract you chose to look up is not a systematic sample'
+  version: 'hg-v345',
+  pack: 'a ledger that only ever grew open',
+  built: '2026-08-18T07:35:00Z',
+  note: 'the report recorded plans and never settled them; re-checking a contract now settles the plan you took on it last time'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
