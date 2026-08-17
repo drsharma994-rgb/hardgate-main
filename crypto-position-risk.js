@@ -169,6 +169,30 @@ function hgCryptoPositionRisk(plan, ctx){
   if (e === null || st === null || !(e > 0) || e === st){
     return { ok: false, reason: 'invalid entry/stop' };
   }
+  /* A stop on the winning side is not a stop, and a target on the losing side
+     is not a target. This is a HAND-TYPED worksheet — entry, stop and T1 are
+     all keyed in — so transposing the stop and the target is the likeliest
+     input error there is, and it used to come back RISK PASS with an empty
+     reasons list and a gross R of -0.33. A long whose T1 sat below entry
+     reported -2.5R and passed. Sizing arithmetic works on any three numbers;
+     it cannot tell you the numbers describe a trade, so the geometry is
+     checked before the money is. T1 stays optional — sizing without a target
+     is legitimate — but a target that IS supplied must be on the side that
+     wins. */
+  if (dir === 'long' && st > e){
+    return { ok: false, reason: 'long stop ' + st + ' is ABOVE entry ' + e + ' — stop and target may be transposed' };
+  }
+  if (dir === 'short' && st < e){
+    return { ok: false, reason: 'short stop ' + st + ' is BELOW entry ' + e + ' — stop and target may be transposed' };
+  }
+  if (tp !== null){
+    if (dir === 'long' && tp <= e){
+      return { ok: false, reason: 'long target ' + tp + ' is not above entry ' + e + ' — this cannot win' };
+    }
+    if (dir === 'short' && tp >= e){
+      return { ok: false, reason: 'short target ' + tp + ' is not below entry ' + e + ' — this cannot win' };
+    }
+  }
 
   var size = hgCryptoFixedRiskSize(bal, rp, e, st, ctx.precision);
   if (size.error) return { ok: false, reason: size.error };

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v345',
-  pack: 'a ledger that only ever grew open',
-  built: '2026-08-18T07:35:00Z',
-  note: 'the report recorded plans and never settled them; re-checking a contract now settles the plan you took on it last time'
+  version: 'hg-v346',
+  pack: 'the worksheet approved trades that cannot win',
+  built: '2026-08-18T10:05:00Z',
+  note: 'RISK PASS on a long whose target sat below entry, and on a stop and target transposed — the geometry is now checked before the money is'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
