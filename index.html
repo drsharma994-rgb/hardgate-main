@@ -758,14 +758,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=349"></script>
+<script src="supersetup.js?v=350"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=349"></script>
-<script src="super-gold.js?v=349"></script>
-<script src="super-best.js?v=349"></script>
-<script src="super-sniper.js?v=349"></script>
-<script src="super-book.js?v=349"></script>
-<script src="super-calibrate.js?v=349"></script>
+<script src="super-desk-common.js?v=350"></script>
+<script src="super-gold.js?v=350"></script>
+<script src="super-best.js?v=350"></script>
+<script src="super-sniper.js?v=350"></script>
+<script src="super-book.js?v=350"></script>
+<script src="super-calibrate.js?v=350"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3562,10 +3562,15 @@ function hgSessionChip(now){
    T2 = 3.5R. Pure decision function: no DOM, never throws, returns null when
    levels can't be computed (caller shows 'levels unavailable — size down').
    Stop always lands on the correct side of entry for dir. */
-function hgPlanLevels(dir, rows, entryOverride){
+function hgPlanLevels(dir, rows, entryOverride, opts){
   try{
     if (typeof hgPlanLevelsCore === 'function'){
-      var pl = hgPlanLevelsCore(dir, rows, entryOverride, { minRr: 2 });
+      /* The options argument used to be missing here, so every caller that
+         passed one — OMNIGOLD passes { minRr: cfg.minRr } — had it silently
+         dropped and got a hardcoded 2R policy plus crypto stop defaults it
+         could not tune. Forwarded now, with 2R as the default it always had. */
+      var plOpts = Object.assign({ minRr: 2 }, opts || {});
+      var pl = hgPlanLevelsCore(dir, rows, entryOverride, plOpts);
       if (pl) return { dir: pl.dir, entry: pl.entry, stop: pl.stop, t1: pl.t1, t2: pl.t2, risk: pl.risk, note: pl.note,
                        targetPolicy: pl.targetPolicy, planSrc: pl.planSrc };
     }

@@ -8,6 +8,8 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 var HG_STOP_BUFFER_ATR = 0.25;
 var HG_STOP_CAP_DIST_ATR = 2.5;
 var HG_STOP_FALLBACK_ATR = 1.5;
+/* Beyond this the structure is not a stop, it is a different trade. */
+var HG_STOP_MAX_DIST_ATR = 6.0;
 var HG_SWEEP_STOP_ATR = 0.5;
 var HG_SWEEP_RECLAIM_MAX = 3;
 var HG_SWEEP_RECLAIM_BODY_ATR = 0.8;
@@ -615,16 +617,63 @@ function hgStructureStop(dir, entry, rows, opts){
     var aArr = atr(rows, atrLen);
     var a = _last(aArr);
     if (!isFinite(a) || a <= 0) return null;
+    /* When the structural stop sits further than capDist×ATR, this used to
+       MOVE THE STOP IN to a flat fallback×ATR and take the trade anyway.
+
+       Measured on gold-shaped 1h data, that fired on 65% of setups. The stop
+       landed 53% closer than the level that would actually invalidate the
+       idea — inside normal noise — and, because R:R is computed against the
+       risk distance, the card then advertised 2.00R for a trade worth 0.96R
+       against real invalidation. A 2.08x overstatement, and a stop placed
+       where it will be hit.
+
+       That is the one wrong answer available here. If a setup needs more room
+       than policy allows, the honest responses are to take it at the
+       structural stop and let the R:R gate judge it on true risk, or to
+       decline it. Keeping the trade while falsifying the risk is neither.
+
+       The stop now stays on structure and the R:R gate does its job: a wide
+       stop with a far target still passes, a wide stop without one is
+       correctly rejected for reward that no longer justifies the risk.
+       Beyond maxDist×ATR the geometry is treated as unusable and declined
+       outright, rather than dressed up.
+
+       Callers that genuinely want the old tightening can ask for it with
+       capMode:'tighten', which now says so on the plan instead of hiding it. */
+    var maxDist = (opts.maxDist !== undefined) ? opts.maxDist : HG_STOP_MAX_DIST_ATR;
+    /* DEFAULT UNCHANGED. Making 'structure' the global default re-priced every
+       desk at once and broke five existing test files — the crypto desks are
+       tuned around a 2.5×ATR cap and a 1.5×ATR fallback, and changing that
+       under them is a different piece of work from fixing gold. Desks opt in
+       per call; the gold desks now do. */
+    var capMode = opts.capMode || 'tighten';
     var sw = (typeof lastSwing === 'function') ? lastSwing(rows, dir, look) : NaN;
-    var stop = NaN, note = '';
+    var stop = NaN, note = '', wide = false;
     if (isFinite(sw)){
       stop = (dir === 'long') ? sw - buffer * a : sw + buffer * a;
       var risk = Math.abs(entry - stop);
       if (risk > 0 && risk <= capDist * a){
         note = 'stop: lastSwing(' + look + ') buffered ' + buffer + '×ATR' + atrLen;
       } else if (risk > capDist * a){
-        stop = (dir === 'long') ? entry - fallback * a : entry + fallback * a;
-        note = 'stop capped: structure beyond ' + capDist + '×ATR — ' + fallback + '×ATR' + atrLen;
+        /* The hard decline applies only where a desk has opted into structure
+           stops. On the default path it was rejecting plans that had always
+           been produced — a smooth trend has a tiny ATR and a distant swing,
+           so risk/ATR is large without the setup being unusable. That was my
+           addition breaking real cases, not an existing fault. */
+        if (capMode !== 'tighten' && risk > maxDist * a){
+          return null;
+        }
+        if (capMode === 'tighten'){
+          stop = (dir === 'long') ? entry - fallback * a : entry + fallback * a;
+          note = 'stop capped: structure beyond ' + capDist + '×ATR — ' + fallback + '×ATR' + atrLen
+               + ' (TIGHTENED off structure: the R:R below is measured against this reduced risk, '
+               + 'so the stop sits nearer than the level that would invalidate the idea)';
+        } else {
+          wide = true;
+          note = 'stop: lastSwing(' + look + ') buffered ' + buffer + '×ATR' + atrLen
+               + ' — WIDE (' + (risk / a).toFixed(1) + '×ATR, beyond the ' + capDist
+               + '×ATR guide); R:R is measured against this real invalidation';
+        }
       }
     }
     if (!isFinite(stop) || (dir === 'long' ? stop >= entry : stop <= entry)){
@@ -633,7 +682,7 @@ function hgStructureStop(dir, entry, rows, opts){
     }
     var riskF = Math.abs(entry - stop);
     if (!(riskF > 0)) return null;
-    return { stop: stop, risk: riskF, atr: a, note: note };
+    return { stop: stop, risk: riskF, atr: a, note: note, wide: wide };
   }catch(e){ return null; }
 }
 

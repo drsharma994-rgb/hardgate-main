@@ -554,7 +554,17 @@ terse status, and never launches a first-time scan on a global refresh.
          so the levels must exist before the ledger runs. */
       var plan = null;
       if (planFn){
-        try { plan = planFn(hit.dir, rows, undefined, { minRr: cfg.minRr }); } catch (e) { plan = null; }
+        /* Gold opts into structure stops.
+           With the crypto default, 65% of gold setups had their stop moved
+           off structure to a flat 1.5xATR — 53% nearer than the level that
+           actually invalidates the idea, which on gold sits inside ordinary
+           session noise. Targets are R-multiples OF the risk, so keeping the
+           stop on structure widens the target with it: the same 2R trade, now
+           measured against real invalidation, with fixed-risk sizing taking a
+           smaller position for the same dollars at risk. */
+        try {
+          plan = planFn(hit.dir, rows, undefined, { minRr: cfg.minRr, capMode: 'structure' });
+        } catch (e) { plan = null; }
       }
       if (plan && deriveFn) plan = deriveFn(plan);
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
