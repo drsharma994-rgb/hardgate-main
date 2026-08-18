@@ -2049,10 +2049,15 @@ terse status, and never launches a first-time scan on a global refresh.
      is the honest state on day one — the log has to be fed by scans over time
      before it can say anything. */
   function fwdCell(f){
-    if (!f || (!f.samples && !f.open)) return '<span class="dim">—</span>';
-    if (!f.samples) return '<span class="dim">' + f.open + ' open</span>';
+    if (!f || (!f.samples && !f.open && !f.stale)) return '<span class="dim">—</span>';
+    /* STALE is shown apart from OPEN. A record whose bars were never going to
+       arrive — the contract was delisted, renamed, or simply stopped being
+       scanned — is not a trade still running, and counting the two together
+       overstates how much evidence is still in flight. */
+    var st = (f.stale > 0) ? (' <span class="dim">· ' + f.stale + ' stale</span>') : '';
+    if (!f.samples) return '<span class="dim">' + (f.open || 0) + ' open</span>' + st;
     return '<b>' + f.samples + '</b> · ' + (f.hit * 100).toFixed(0) + '%'
-         + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '');
+         + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '') + st;
   }
 
   /* ==================== the scan ==================== */
@@ -2398,13 +2403,14 @@ terse status, and never launches a first-time scan on a global refresh.
         catch (e) { out.push(tab + ': unreadable (' + ((e && e.message) || e) + ')'); return; }
         out.push('=== ' + tab + ' ===');
         out.push('  settled ' + st.samples + '  wins ' + st.wins + '  losses ' + st.losses
-               + '  open ' + st.open + '  expired ' + st.expired);
+               + '  open ' + st.open + '  expired ' + st.expired
+               + (st.stale ? '  STALE ' + st.stale : ''));
         out.push('  hit ' + (isFinite(st.hit) ? (st.hit * 100).toFixed(0) + '%' : '—')
                + '   expectancy ' + (isFinite(st.expR) ? ((st.expR >= 0 ? '+' : '') + st.expR.toFixed(2) + 'R') : '—'));
         var rows = [], k;
         for (k in pool){
           if (!Object.prototype.hasOwnProperty.call(pool, k)) continue;
-          if (pool[k] && (pool[k].samples || pool[k].open)) rows.push([k, pool[k]]);
+          if (pool[k] && (pool[k].samples || pool[k].open || pool[k].stale)) rows.push([k, pool[k]]);
         }
         rows.sort(function(a, b){ return (b[1].samples || 0) - (a[1].samples || 0); });
         if (!rows.length){ out.push('  no mechanic has recorded anything yet on this horizon'); return; }
@@ -2414,12 +2420,15 @@ terse status, and never launches a first-time scan on a global refresh.
                  + ' settled ' + String('  ' + p.samples).slice(-3)
                  + '  W' + String('  ' + p.wins).slice(-3) + ' L' + String('  ' + p.losses).slice(-3)
                  + '  open ' + String('  ' + p.open).slice(-3)
+                 + (p.stale ? '  stale ' + p.stale : '')
                  + '  hit ' + (isFinite(p.hit) ? String('   ' + (p.hit * 100).toFixed(0) + '%').slice(-4) : '   —')
                  + '  exp ' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—'));
         });
       });
       out.push('');
       out.push('Out-of-sample only. Every figure is GROSS of spread and commission.');
+      out.push('STALE = recorded, then the bars to settle it never arrived (delisted, renamed,');
+      out.push('or the contract stopped being scanned). Not a win, not a loss, not still running.');
       var txt = out.join('\n');
       if (typeof console !== 'undefined' && console.log) console.log(txt);
       return txt;

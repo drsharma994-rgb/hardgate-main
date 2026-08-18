@@ -50,6 +50,17 @@ localStorage. Never throws.
 
   var LS_KEY = 'hg_forward_v1';
   var MAX_RECORDS = 4000;     /* ~1 year of a busy tab; pruned oldest-first */
+  /* Bar-open seconds per timeframe. Module scope, because both the recorder
+     (deriving the bar a scan fired on) and the staleness check (deriving when
+     a record's horizon has demonstrably passed) need it. */
+  var TF_SEC = { '1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '1d':86400 };
+  /* How far past its own horizon an OPEN record must be before we stop
+     calling it live. Settlement needs BARS for that symbol to arrive; if a
+     contract is delisted, renamed, or simply drops out of the universe, the
+     bars never come and the record stays open for ever. Three horizons is
+     well beyond any normal settle: a 4h/20-bar record is stale after ten
+     days, a 1h/24-bar one after three. */
+  var STALE_HORIZONS = 3;
 
   /* Module scope on purpose: this file is 'use strict', so a function declared
      inside the `if (typeof window …)` block does NOT escape it — the health
@@ -142,6 +153,24 @@ localStorage. Never throws.
     return { list: out, added: true, reason: 'recorded', folded: folded };
   }
 
+  /* An open record whose bars were never going to arrive.
+
+     NOT a settlement: we do not know the outcome and must never guess one.
+     It is reported apart from 'open' because the two mean different things to
+     a reader — "still running" and "recorded, then the contract went quiet"
+     are not the same evidence, and lumping them together overstates how much
+     is still in flight. A live desk showed ~1,200 open records with no way to
+     tell which were which. Pure. */
+  function hgFwdIsStale(rec, nowSec){
+    if (!rec || rec.state !== 'open') return false;
+    var bar = num(rec.barT);
+    var hz = num(rec.horizonBars);
+    if (!isFinite(bar) || !isFinite(hz) || hz <= 0) return false;
+    var sec = TF_SEC[rec.tf] || 14400;
+    var now = isFinite(num(nowSec)) ? num(nowSec) : Math.floor(Date.now() / 1000);
+    return (now - bar) > (hz * sec * STALE_HORIZONS);
+  }
+
   /* Settle one open record against candles. Only bars STRICTLY AFTER the
      firing bar are considered, so a record can never be resolved by data
      that already existed when it was written. Pure. */
@@ -192,9 +221,9 @@ localStorage. Never throws.
      in-sample shape exactly (samples/wins/losses/open/hit/expR) so the same
      verdict helper reads both. 'expired' is excluded from the hit rate — it
      is not a win. Pure. */
-  function hgFwdStats(list, tab, mechanic, ticketOnly, agg){
+  function hgFwdStats(list, tab, mechanic, ticketOnly, agg, nowSec){
     var recs = Array.isArray(list) ? list : [];
-    var wins = 0, losses = 0, open = 0, expired = 0, rrSum = 0, i, r;
+    var wins = 0, losses = 0, open = 0, expired = 0, rrSum = 0, stale = 0, i, r;
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -210,6 +239,10 @@ localStorage. Never throws.
       if (tab && r.tab !== tab) continue;
       if (mechanic && r.mechanic !== mechanic) continue;
       if (ticketOnly === true && r.ticket !== true) continue;
+      /* Split 'open' before counting it: a record whose bars were never
+         going to arrive is not a trade still running. Neither is counted as
+         a sample — we do not know the outcome of either. */
+      if (r.state === 'open' && hgFwdIsStale(r, nowSec)){ stale++; continue; }
       if (r.state === 't1'){ wins++; rrSum += num(r.rr) || 0; }
       else if (r.state === 'stop') losses++;
       else if (r.state === 'expired') expired++;
@@ -233,7 +266,7 @@ localStorage. Never throws.
     else if (isFinite(avgRr)) expR = hit * avgRr - (1 - hit);
     else expR = NaN;
     return { samples: settled, wins: wins, losses: losses, open: open,
-             expired: expired, hit: hit, avgRr: avgRr, expR: expR };
+             stale: stale, expired: expired, hit: hit, avgRr: avgRr, expR: expR };
   }
 
   /* Every mechanic seen for a tab. Pure. */
@@ -431,9 +464,6 @@ localStorage. Never throws.
       try { return hgFwdPool(load(), tab, loadAgg()); }
       catch (e) { hgFwdWarn('pool', e); return {}; }
     };
-    /* Bar-open seconds per timeframe, so a scan can derive the bar it fired on
-       without the caller threading candle timestamps through. */
-    var TF_SEC = { '1m':60, '5m':300, '15m':900, '30m':1800, '1h':3600, '2h':7200, '4h':14400, '1d':86400 };
 
     /* Record a whole scan's output in one call — the shape every tab needs.
        barT is derived by flooring NOW to the timeframe, so re-running a scan
@@ -504,7 +534,8 @@ localStorage. Never throws.
              only speaks about settled samples, so that distinction has to be
              made here or the panel misreports its own pending evidence. */
           var read;
-          if (!p.samples) read = p.open ? (p.open + ' awaiting settlement') : 'never fired';
+          if (!p.samples) read = p.open ? (p.open + ' awaiting settlement')
+                                        : (p.stale ? 'nothing settled — ' + p.stale + ' stale' : 'never fired');
           else read = v ? v.read : 'unjudged';
           var cls = (!p.samples) ? '' : (v ? v.cls : '');
           var need = hgFwdNeedText(v && v.need);
@@ -512,7 +543,9 @@ localStorage. Never throws.
              + '<td>' + p.samples + need + '</td>'
              + '<td>' + (p.samples ? (p.hit * 100).toFixed(0) + '%' : '—') + '</td>'
              + '<td>' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—') + '</td>'
-             + '<td class="dim">' + p.open + (p.expired ? (' <span class="dim">/' + p.expired + ' exp</span>') : '') + '</td>'
+             + '<td class="dim">' + p.open
+             + (p.stale ? (' <span class="dim">/' + p.stale + ' stale</span>') : '')
+             + (p.expired ? (' <span class="dim">/' + p.expired + ' exp</span>') : '') + '</td>'
              + '<td><span class="gpip ' + cls + '">' + esc(read) + '</span></td></tr>';
         }
         h += '</tbody></table>';
@@ -576,7 +609,8 @@ localStorage. Never throws.
             if (!isSel){ totS += p.samples; totW += p.wins; totO += p.open; }
             rowsOut++;
             var v = readFn ? readFn(p, minRr, 20) : null;
-            var read = !p.samples ? (p.open ? (p.open + ' awaiting settlement') : 'never fired')
+            var read = !p.samples ? (p.open ? (p.open + ' awaiting settlement')
+                                             : (p.stale ? 'nothing settled — ' + p.stale + ' stale' : 'never fired'))
                                   : (v ? v.read : 'unjudged');
             var cls = !p.samples ? '' : (v ? v.cls : '');
             var need = hgFwdNeedText(v && v.need);

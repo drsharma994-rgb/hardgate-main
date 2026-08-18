@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v369',
-  pack: 'one bad minute upstream no longer routes the whole session through our own server',
-  built: '2026-08-21T04:15:00Z',
-  note: 'the geo-block fallback pinned to the proxy on ANY direct failure, so a single transient 503 detoured every later call for the rest of the session; it pins only on 451, 403 or a CORS throw now'
+  version: 'hg-v370',
+  pack: 'open was not the same as still running',
+  built: '2026-08-21T09:30:00Z',
+  note: 'settlement needs bars for that symbol to arrive, so a delisted contract left records open for ever with no wall-clock expiry; stale is now reported apart from open and counts as neither win, loss nor expiry'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

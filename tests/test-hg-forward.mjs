@@ -125,7 +125,13 @@ function bars(spec){
 
 /* ---- pooling matches the in-sample stat shape ---- */
 {
-  const mk = (state, barT, rr) => ({ ...win.hgFwdNormalize({ ...base, barT }), state, r: state === 't1' ? rr : (state === 'stop' ? -1 : null) });
+  /* barT must be WALL-CLOCK, not an ordering marker. Since the log learned to
+     tell a live open record from a stale one — bars that were never going to
+     arrive — a barT of 5 means epoch second 5, and an open record from 1970
+     is correctly no longer counted as still running. Recent stamps here, one
+     bar apart, which is what these values always meant. */
+  const NOW = Math.floor(Date.now() / 1000);
+  const mk = (state, n, rr) => ({ ...win.hgFwdNormalize({ ...base, barT: NOW - n * 14400 }), state, r: state === 't1' ? rr : (state === 'stop' ? -1 : null) });
   const list = [ mk('t1',1), mk('t1',2), mk('stop',3), mk('stop',4), mk('open',5), mk('expired',6) ];
   const st = win.hgFwdStatsOf(list, 'OMNIGOLD', 'MMOVE');
   ok(st.samples === 4, 'settled samples exclude open and expired (got ' + st.samples + ')');

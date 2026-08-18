@@ -2294,10 +2294,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* Forward column: settled count, hit rate, and how many are still open.
      Reads "—" until trades settle, which is the honest day-one state. */
   function fwdCell(f){
-    if (!f || (!f.samples && !f.open)) return '<span class="dim">—</span>';
-    if (!f.samples) return '<span class="dim">' + f.open + ' open</span>';
+    if (!f || (!f.samples && !f.open && !f.stale)) return '<span class="dim">—</span>';
+    /* STALE is shown apart from OPEN. A record whose bars were never going to
+       arrive — the contract was delisted, renamed, or simply stopped being
+       scanned — is not a trade still running, and counting the two together
+       overstates how much evidence is still in flight. */
+    var st = (f.stale > 0) ? (' <span class="dim">· ' + f.stale + ' stale</span>') : '';
+    if (!f.samples) return '<span class="dim">' + (f.open || 0) + ' open</span>' + st;
     return '<b>' + f.samples + '</b> · ' + (f.hit * 100).toFixed(0) + '%'
-         + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '');
+         + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '') + st;
   }
 
   /* Pooled walk-forward result per detector. This is the tab's honest
