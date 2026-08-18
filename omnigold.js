@@ -117,7 +117,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       'PDH-SWEEP','PDL-SWEEP','LONDON-FIX','VWAP-REVERT','NR7-BREAK',
                       'SMT-DIVERGE','TREND-RECLAIM',
                       'PWH-SWEEP','PWL-SWEEP','FVG-FILL','BOS-RETEST','EQH-SWEEP','EQL-SWEEP',
-                      'SQUEEZE-FIRE','RSI-DIVERGE','GSR-EXTREME','AVWAP-RECLAIM'];
+                      'SQUEEZE-FIRE','RSI-DIVERGE','GSR-EXTREME','AVWAP-RECLAIM',
+                      'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
+                      'POC-REVERT','COINT-SPREAD','THREE-BAR'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null };
 
@@ -334,6 +336,15 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgRsiDiverge(rows);    if (d) out.push(d);
     d = hgOgGsrExtreme(rows);    if (d) out.push(d);
     d = hgOgAvwapReclaim(rows);  if (d) out.push(d);
+
+    /* round four */
+    d = hgOgCusumShift(rows);    if (d) out.push(d);
+    d = hgOgVolExpansion(rows);  if (d) out.push(d);
+    d = hgOgPinReject(rows);     if (d) out.push(d);
+    d = hgOgEngulfLevel(rows);   if (d) out.push(d);
+    d = hgOgPocRevert(rows);     if (d) out.push(d);
+    d = hgOgCointSpread(rows);   if (d) out.push(d);
+    d = hgOgThreeBar(rows);      if (d) out.push(d);
     return out;
   }
 
@@ -825,6 +836,234 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
 
+
+  /* ============ round four: robustness ============
+
+     Twenty-seven mechanics already scan here. A fourth round of detectors
+     alone would buy less than it costs: every added mechanic raises the
+     multiple-comparisons bar for all of them and makes a two-sided tape more
+     likely. So this round is weighted toward reads that make an existing
+     setup more trustworthy — higher-timeframe agreement, regime fit and a
+     volatility forecast — with the new mechanics chosen for being genuinely
+     different in kind rather than for the count.
+
+     Shapes below were probed against the real functions first, as always. */
+
+  /* Resample to a coarser timeframe. The desk already holds 1500 bars, so the
+     higher timeframe is built from what is in hand rather than fetched: no
+     extra request, no second source to disagree with the first, and the two
+     views are guaranteed to describe the same bars. */
+  function hgOgResample(rows, factor){
+    if (!rows || !rows.length || !(factor > 1)) return null;
+    var out = [], i, j, o, h, l, c, v, t, bar;
+    var start = rows.length % factor;      /* drop the ragged oldest partial */
+    for (i = start; i + factor <= rows.length; i += factor){
+      o = num(rows[i].o); t = num(rows[i].t);
+      h = -Infinity; l = Infinity; v = 0; c = NaN;
+      for (j = i; j < i + factor; j++){
+        bar = rows[j];
+        var bh = num(bar.h), bl = num(bar.l), bc = num(bar.c), bv = num(bar.v);
+        if (isFinite(bh) && bh > h) h = bh;
+        if (isFinite(bl) && bl < l) l = bl;
+        if (isFinite(bc)) c = bc;
+        if (isFinite(bv)) v += bv;
+      }
+      if (!isFinite(o) || !isFinite(c) || !isFinite(h) || !isFinite(l) || !isFinite(t)) continue;
+      out.push({ t: t, o: o, h: h, l: l, c: c, v: v });
+    }
+    return out.length ? out : null;
+  }
+
+  /* A CUSUM shift is a structural change in the mean, not a pattern: the
+     series has genuinely moved to a new level. cusumLast returns
+     { dir, barsAgo }. */
+  function hgOgCusumShift(rows){
+    if (!rows || rows.length < 60) return null;
+    var f = gfn('cusumLast');
+    if (!f) return null;
+    var closes = closesOf(rows);
+    if (closes.length < 60) return null;
+    /* k is the CUSUM decision interval in units of ONE BAR's return sigma.
+       At the library default k=1 the threshold is crossed almost every bar:
+       swept over 300 tapes it reported a fresh shift on 299 of them, which is
+       not a signal, it is a description of noise — and as a TREND-family
+       mechanic it would have swamped the consensus vote on every scan.
+       k=12 puts it at 11%, which is what a structural mean shift should be. */
+    var s;
+    try { s = f(closes, 12); } catch (e) { return null; }
+    if (!s || (s.dir !== 'long' && s.dir !== 'short')) return null;
+    var age = num(s.barsAgo);
+    if (!isFinite(age) || age > 3) return null;        /* only a fresh shift is tradeable */
+    var c = num(closes[closes.length - 1]);
+    if (!isFinite(c)) return null;
+    return { kind:'CUSUM-SHIFT', dir: s.dir, level: c,
+             why:'CUSUM marks a structural ' + (s.dir === 'long' ? 'upward' : 'downward')
+                 + ' mean shift ' + age + ' bar' + (age === 1 ? '' : 's') + ' ago' };
+  }
+
+  /* Volatility breaking out of its own long-run level. hgVolFromCloses
+     returns { sigmaNow, sigmaForecast, sigmaLongRun, ... }. Direction comes
+     from the bar doing the expanding, not from the volatility itself. */
+  function hgOgVolExpansion(rows){
+    if (!rows || rows.length < 120) return null;
+    var f = gfn('hgVolFromCloses');
+    if (!f) return null;
+    var closes = closesOf(rows);
+    if (closes.length < 120) return null;
+    var vp;
+    try { vp = f(closes, {}); } catch (e) { return null; }
+    if (!vp) return null;
+    var now = num(vp.sigmaNow), lr = num(vp.sigmaLongRun);
+    if (!isFinite(now) || !isFinite(lr) || !(lr > 0)) return null;
+    var ratio = now / lr;
+    if (!(ratio >= 1.6)) return null;
+    var n = rows.length - 1;
+    var c = num(rows[n].c), o = num(rows[n].o), h = num(rows[n].h), l = num(rows[n].l);
+    if (!isFinite(c) || !isFinite(o) || !isFinite(h) || !isFinite(l)) return null;
+    var rng = h - l;
+    if (!(rng > 0) || Math.abs(c - o) < rng * 0.5) return null;   /* needs a decisive bar */
+    return { kind:'VOL-EXPANSION', dir: c > o ? 'long' : 'short', level: c,
+             why:'volatility ' + ratio.toFixed(1) + 'x its long-run level, expanding on a decisive bar' };
+  }
+
+  /* A pin bar: most of the range is wick on one side, and the close is back
+     in the body. The oldest reversal read there is, and pure. */
+  function hgOgPinReject(rows){
+    if (!rows || rows.length < 20) return null;
+    var n = rows.length - 1;
+    var o = num(rows[n].o), h = num(rows[n].h), l = num(rows[n].l), c = num(rows[n].c);
+    if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    var rng = h - l;
+    if (!(rng > 0)) return null;
+    var a = atrOf(rows, 14);
+    if (!isFinite(a) || !(a > 0) || rng < a * 0.8) return null;    /* a meaningful bar, not noise */
+    var body = Math.abs(c - o);
+    var upper = h - Math.max(o, c), lower = Math.min(o, c) - l;
+    if (body > rng * 0.34) return null;                            /* a pin is mostly wick */
+    if (lower >= rng * 0.6 && upper <= rng * 0.2){
+      return { kind:'PIN-REJECT', dir:'long', level: l,
+               why:'pin bar rejecting ' + l.toFixed(2) + ' — ' + ((lower / rng) * 100).toFixed(0) + '% lower wick' };
+    }
+    if (upper >= rng * 0.6 && lower <= rng * 0.2){
+      return { kind:'PIN-REJECT', dir:'short', level: h,
+               why:'pin bar rejecting ' + h.toFixed(2) + ' — ' + ((upper / rng) * 100).toFixed(0) + '% upper wick' };
+    }
+    return null;
+  }
+
+  /* An engulfing bar that also takes out the prior extreme: the reversal has
+     to actually trade through the level, not merely close past it on a
+     bigger body. */
+  function hgOgEngulfLevel(rows){
+    if (!rows || rows.length < 20) return null;
+    var n = rows.length - 1;
+    var o = num(rows[n].o), c = num(rows[n].c), h = num(rows[n].h), l = num(rows[n].l);
+    var po = num(rows[n-1].o), pc = num(rows[n-1].c), ph = num(rows[n-1].h), pl = num(rows[n-1].l);
+    if (!isFinite(o) || !isFinite(c) || !isFinite(po) || !isFinite(pc)) return null;
+    if (!isFinite(h) || !isFinite(l) || !isFinite(ph) || !isFinite(pl)) return null;
+    var a = atrOf(rows, 14);
+    if (!isFinite(a) || !(a > 0)) return null;
+    var body = Math.abs(c - o), pBody = Math.abs(pc - po);
+    if (!(body > pBody) || body < a * 0.6) return null;
+    if (c > o && pc < po && c > Math.max(po, pc) && l <= pl){
+      return { kind:'ENGULF-LEVEL', dir:'long', level: pl,
+               why:'bullish engulfing that took the prior low ' + pl.toFixed(2) + ' first' };
+    }
+    if (c < o && pc > po && c < Math.min(po, pc) && h >= ph){
+      return { kind:'ENGULF-LEVEL', dir:'short', level: ph,
+               why:'bearish engulfing that took the prior high ' + ph.toFixed(2) + ' first' };
+    }
+    return null;
+  }
+
+  /* Price stretched away from the volume-profile point of control, which is
+     where the most business was actually done. volumeProfile returns
+     { poc, vah, val, bins }. */
+  function hgOgPocRevert(rows){
+    if (!rows || rows.length < 120) return null;
+    var f = gfn('volumeProfile');
+    if (!f) return null;
+    var prof;
+    try { prof = f(rows, Math.max(0, rows.length - 200), rows.length - 1); } catch (e) { return null; }
+    if (!prof) return null;
+    var poc = num(prof.poc), vah = num(prof.vah), val = num(prof.val);
+    var c = num(rows[rows.length - 1].c);
+    var a = atrOf(rows, 14);
+    if (!isFinite(poc) || !isFinite(vah) || !isFinite(val) || !isFinite(c)) return null;
+    if (!isFinite(a) || !(a > 0) || !(vah > val)) return null;
+    var away = (c - poc) / a;
+    if (Math.abs(away) < 2.5) return null;             /* must be genuinely stretched */
+    if (c > vah && away >= 2.5){
+      return { kind:'POC-REVERT', dir:'short', level: poc,
+               why:'price ' + away.toFixed(1) + ' ATR above the point of control ' + poc.toFixed(2) + ' and outside value' };
+    }
+    if (c < val && away <= -2.5){
+      return { kind:'POC-REVERT', dir:'long', level: poc,
+               why:'price ' + Math.abs(away).toFixed(1) + ' ATR below the point of control ' + poc.toFixed(2) + ' and outside value' };
+    }
+    return null;
+  }
+
+  /* The cointegrated gold/silver residual at an extreme. Distinct from
+     GSR-EXTREME, which reads the raw ratio: this reads the spread AFTER
+     fitting the hedge ratio, and only when the pair is actually cointegrated
+     — an uncointegrated spread has no mean to revert to, and trading it as
+     though it did is the classic way to lose money on a pairs trade. */
+  function hgOgCointSpread(rows){
+    if (!rows || rows.length < 120) return null;
+    var w = W();
+    var xag = w && w.__hgXagCandles;
+    if (!xag || xag.length < 120) return null;
+    var f = gfn('hgCoint');
+    if (!f) return null;
+    var m = Math.min(rows.length, xag.length, 300);
+    var a = [], b = [], i, ga, sa;
+    for (i = 0; i < m; i++){
+      ga = num(rows[rows.length - m + i].c);
+      sa = num(xag[xag.length - m + i].c);
+      if (!isFinite(ga) || !isFinite(sa)) continue;
+      a.push(ga); b.push(sa);
+    }
+    if (a.length < 100 || a.length !== b.length) return null;
+    var co;
+    try { co = f(a, b); } catch (e) { return null; }
+    if (!co || co.cointegrated !== true) return null;
+    var z = num(co.spreadZ), hl = num(co.halfLifeBars);
+    if (!isFinite(z) || Math.abs(z) < 2) return null;
+    /* A half-life longer than the horizon means the reversion cannot land in
+       time even if it is real. */
+    if (isFinite(hl) && hl > 40) return null;
+    var c = num(rows[rows.length - 1].c);
+    if (!isFinite(c)) return null;
+    return { kind:'COINT-SPREAD', dir: z > 0 ? 'short' : 'long', level: c,
+             why:'gold/silver spread ' + (z >= 0 ? '+' : '') + z.toFixed(1)
+                 + ' SD from its fitted mean, half-life ' + (isFinite(hl) ? hl.toFixed(0) + ' bars' : 'unknown') };
+  }
+
+  /* Three-bar reversal: a low (or high) with a higher (lower) bar either
+     side, confirmed by the close. Structure, not indicator. */
+  function hgOgThreeBar(rows){
+    if (!rows || rows.length < 20) return null;
+    var n = rows.length - 1;
+    var l0 = num(rows[n-2].l), l1 = num(rows[n-1].l), l2 = num(rows[n].l);
+    var h0 = num(rows[n-2].h), h1 = num(rows[n-1].h), h2 = num(rows[n].h);
+    var c2 = num(rows[n].c), c0 = num(rows[n-2].c);
+    if (!isFinite(l0) || !isFinite(l1) || !isFinite(l2)) return null;
+    if (!isFinite(h0) || !isFinite(h1) || !isFinite(h2)) return null;
+    if (!isFinite(c2) || !isFinite(c0)) return null;
+    var a = atrOf(rows, 14);
+    if (!isFinite(a) || !(a > 0)) return null;
+    if (l1 < l0 && l1 < l2 && c2 > c0 && (c2 - l1) >= a * 0.8){
+      return { kind:'THREE-BAR', dir:'long', level: l1,
+               why:'three-bar reversal off ' + l1.toFixed(2) + ', confirmed by the close' };
+    }
+    if (h1 > h0 && h1 > h2 && c2 < c0 && (h1 - c2) >= a * 0.8){
+      return { kind:'THREE-BAR', dir:'short', level: h1,
+               why:'three-bar reversal off ' + h1.toFixed(2) + ', confirmed by the close' };
+    }
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -859,6 +1098,10 @@ terse status, and never launches a first-time scan on a global refresh.
     'ABSORB':'REVERSION', 'RSI-DIVERGE':'REVERSION', 'AVWAP-RECLAIM':'REVERSION',
     /* an unfilled inefficiency */
     'FVG-FILL':'IMBALANCE',
+    /* round four */
+    'PIN-REJECT':'SWEEP', 'ENGULF-LEVEL':'SWEEP', 'THREE-BAR':'SWEEP',
+    'POC-REVERT':'REVERSION', 'COINT-SPREAD':'INTERMARKET',
+    'CUSUM-SHIFT':'TREND', 'VOL-EXPANSION':'TREND',
     /* the other metal disagrees with this one */
     'SMT-DIVERGE':'INTERMARKET', 'GSR-EXTREME':'INTERMARKET'
   };
@@ -937,7 +1180,15 @@ terse status, and never launches a first-time scan on a global refresh.
   }
   function closesOf(rows){
     var out = [], i, c;
-    for (i = 0; i < rows.length; i++){ c = num(rows[i].c); if (isFinite(c)) out.push(c); }
+    if (!rows || !rows.length) return out;
+    /* A null ENTRY, not just a null array: a feed that drops a bar leaves a
+       hole in the middle, and reaching through it threw from inside whatever
+       gate happened to call this first. Skip the hole, keep the series. */
+    for (i = 0; i < rows.length; i++){
+      if (!rows[i]) continue;
+      c = num(rows[i].c);
+      if (isFinite(c)) out.push(c);
+    }
     return out;
   }
   function atrOf(rows, n){
@@ -964,7 +1215,14 @@ terse status, and never launches a first-time scan on a global refresh.
      spot gold and are deliberately absent rather than faked. */
   function hgOgGates(rows, hit, extra){
     var gates = [], x = extra || {};
-    var closes = closesOf(rows);
+    /* One guarded read of the trigger bar. rows[rows.length-1] on an empty
+       array is undefined, and reaching through it threw before any gate had
+       been pushed — so the whole ledger vanished rather than degrading to
+       UNCHECKED. Not reachable from the live scan (detect needs 40 bars
+       first) but a ledger that can throw is a ledger that can take the card
+       with it. */
+    var lastBar = (rows && rows.length) ? rows[rows.length - 1] : null;
+    var closes = closesOf(rows || []);
     var e21 = emaOf(closes.slice(-60), 21), e50 = emaOf(closes.slice(-120), 50);
     var last = closes.length ? closes[closes.length - 1] : NaN;
     var reversion = REVERSION_KINDS[hit.kind] === true;
@@ -1004,7 +1262,8 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 3 — participation. CONDITIONAL on gold, unlike crypto: several gold
        feeds (spot proxies especially) publish no volume at all, and a hard
        volume gate would silently disqualify every setup sourced from them. */
-    var mv = meanVol(rows.slice(0, rows.length - 1), 20), lv = num(rows[rows.length - 1].v);
+    var mv = lastBar ? meanVol(rows.slice(0, rows.length - 1), 20) : NaN;
+    var lv = lastBar ? num(lastBar.v) : NaN;
     var partOk = null, partWhy = 'this gold feed publishes no volume';
     if (isFinite(mv) && isFinite(lv) && mv > 0){
       partOk = lv >= mv * 0.7;
@@ -1276,7 +1535,7 @@ terse status, and never launches a first-time scan on a global refresh.
         var dUa = dc && dc.up, dLa = dc && dc.lo;
         var dU = (dUa && dUa.length) ? fin(dUa[dUa.length - 1]) : NaN;
         var dL = (dLa && dLa.length) ? fin(dLa[dLa.length - 1]) : NaN;
-        var dC = fin(rows[rows.length - 1].c);
+        var dC = lastBar ? fin(lastBar.c) : NaN;
         if (isFinite(dU) && isFinite(dL) && isFinite(dC) && dU > dL){
           /* The channel is built from the bars BEFORE this one, so the close
              can sit outside it. That is a range break and worth saying, not a
@@ -1505,7 +1764,19 @@ terse status, and never launches a first-time scan on a global refresh.
                + (cons.agree.length ? ' (' + cons.agree.join(', ') + ')' : '');
       var splitTxt = cons.nSplit ? '; ' + cons.split.join(', ')
                    + (cons.nSplit === 1 ? ' is' : ' are') + ' split and counted for neither' : '';
-      if (cons.nAgainst === 0){
+      if (cons.nAgree === 0 && cons.nAgainst === 0){
+        /* Every family that fired is internally divided, so not one of them
+           has an opinion. The nAgainst===0 branch below would read that as
+           "nothing firing against it" and PASS — which it did, printing
+           "0 families agree, nothing firing against it" and letting a long
+           and a short ticket simultaneously. Nothing agreeing is not the same
+           as nothing disagreeing, and this is the most two-sided tape there
+           is. A latent hole since the split rule landed; round four made
+           splits common enough to hit it. */
+        con = false;
+        conWhy = 'every mechanic family that fired is split (' + cons.split.join(', ')
+               + ') — the desk has no directional opinion at all';
+      } else if (cons.nAgainst === 0){
         con = true;
         conWhy = aTxt + ', nothing firing against it' + splitTxt;
       } else if (cons.nAgree > cons.nAgainst){
@@ -1651,6 +1922,115 @@ terse status, and never launches a first-time scan on a global refresh.
       } catch (eVpf){ vpf = null; vpfWhy = 'volume profile threw: ' + ((eVpf && eVpf.message) || eVpf); }
     }
     gates.push({ key:'value-area', hard:false, info:true, pass: vpf, why: vpfWhy });
+
+    /* 28 — HIGHER TIMEFRAME CONFIRMATION.
+
+       The one read on this ledger that adds robustness rather than opinion.
+       Everything else judges the setup against the timeframe it fired on;
+       this asks whether the timeframe above agrees, which is the question a
+       desk asks before sizing up. A 1h long inside a 4h downtrend is a
+       different trade from the same 1h long inside a 4h uptrend, and until
+       now the card could not tell them apart.
+
+       The higher timeframe is RESAMPLED from bars already in hand — no second
+       fetch, no second source that can disagree with the first, and both
+       views provably describe the same bars.
+
+       Info, not hard. A counter-HTF trade is a real thing a desk takes on
+       purpose, and this has no measured record on gold. It argues; it does
+       not veto. */
+    var htf = null, htfWhy = 'higher timeframe unavailable';
+    try {
+      var hRows = hgOgResample(rows, 4);
+      if (hRows && hRows.length >= 60){
+        var hCl = closesOf(hRows);
+        var h21 = emaOf(hCl.slice(-60), 21), h50 = emaOf(hCl.slice(-120), 50);
+        var hLast = hCl.length ? hCl[hCl.length - 1] : NaN;
+        if (isFinite(h21) && isFinite(h50) && isFinite(hLast)){
+          var hUp = h21 >= h50;
+          var hAgrees = (hit.dir === 'long') ? hUp : !hUp;
+          htfWhy = '4x timeframe is ' + (hUp ? 'up' : 'down')
+                 + ' (EMA21 ' + h21.toFixed(2) + ' vs EMA50 ' + h50.toFixed(2) + ')';
+          if (reversion){
+            /* A fade is counter-trend by design on every timeframe. */
+            htf = true;
+            htfWhy += hAgrees ? ' — and agrees' : ' — counter-trend by design for a reversion mechanic';
+          } else {
+            htf = hAgrees;
+            htfWhy += hAgrees ? ' — agrees, the trade is with the timeframe above'
+                              : ' — this is a counter-trend trade against the timeframe above';
+          }
+        }
+      } else if (hRows){
+        htfWhy = 'only ' + hRows.length + ' higher-timeframe bars — too few to read a trend';
+      }
+    } catch (eHtf){ htf = null; htfWhy = 'higher timeframe threw: ' + ((eHtf && eHtf.message) || eHtf); }
+    gates.push({ key:'htf-confirm', hard:false, info:true, pass: htf, why: htfWhy });
+
+    /* 29 — REGIME FIT. detectRegime returns { regime, label }.
+
+       Trend mechanics need a trending tape and reversion mechanics need a
+       ranging one. That is not a preference, it is the definition of the
+       mechanic — and running a breakout in a dead range is the single most
+       reliable way to pay the spread repeatedly for nothing. */
+    var reg = null, regWhy = 'regime unavailable';
+    var regFn = gfn('detectRegime');
+    if (regFn){
+      try {
+        var rg = regFn(rows);
+        var rName = rg ? String(rg.regime || '') : '';
+        var rLabel = rg ? String(rg.label || rName) : '';
+        if (rName){
+          var trendy = /trend/i.test(rName);
+          var rangey = /range|chop|mean/i.test(rName);
+          regWhy = 'regime reads ' + (rLabel || rName);
+          if (!trendy && !rangey){
+            reg = true;
+            regWhy += ' — no clear regime either way';
+          } else if (reversion){
+            reg = rangey;
+            regWhy += rangey ? ' — a ranging tape is what a reversion mechanic wants'
+                             : ' — fading a trending tape';
+          } else {
+            reg = trendy;
+            regWhy += trendy ? ' — a trending tape is what a continuation mechanic wants'
+                             : ' — a continuation mechanic in a tape that is not trending';
+          }
+        }
+      } catch (eReg){ reg = null; regWhy = 'regime threw: ' + ((eReg && eReg.message) || eReg); }
+    }
+    gates.push({ key:'regime-fit', hard:false, info:true, pass: reg, why: regWhy });
+
+    /* 30 — VOLATILITY FORECAST. hgVolFromCloses returns
+       { sigmaNow, sigmaForecast, sigmaLongRun, source, ... }.
+
+       Every target on this desk is an R multiple of the stop, so whether the
+       target is reachable inside the horizon depends on volatility going
+       FORWARD, not on what it has just done. A target set in an expanding
+       tape and a target set into a collapse are not the same bet, and the
+       ladder alone cannot show the difference. */
+    var vf = null, vfWhy = 'volatility forecast unavailable';
+    var vfFn = gfn('hgVolFromCloses');
+    if (vfFn){
+      try {
+        var vpk = vfFn(closesOf(rows), {});
+        var sNow = vpk ? fin(vpk.sigmaNow) : NaN;
+        var sFwd = vpk ? fin(vpk.sigmaForecast) : NaN;
+        if (isFinite(sNow) && isFinite(sFwd) && sNow > 0){
+          var chg = (sFwd - sNow) / sNow;
+          vfWhy = 'volatility forecast ' + (chg >= 0 ? '+' : '') + (chg * 100).toFixed(0)
+                + '% vs now (' + (vpk.source || 'model') + ')';
+          if (chg <= -0.35){
+            vf = false;
+            vfWhy += ' — contracting hard, the target may not be reachable inside the horizon';
+          } else {
+            vf = true;
+          }
+        }
+      } catch (eVf){ vf = null; vfWhy = 'volatility forecast threw: ' + ((eVf && eVf.message) || eVf); }
+    }
+    gates.push({ key:'vol-forecast', hard:false, info:true, pass: vf, why: vfWhy });
+
 
 
 
@@ -2025,7 +2405,14 @@ terse status, and never launches a first-time scan on a global refresh.
           'SQUEEZE-FIRE': function(r){ return hgOgSqueezeFire(r); },
           'RSI-DIVERGE':  function(r){ return hgOgRsiDiverge(r); },
           'GSR-EXTREME':  function(r){ return hgOgGsrExtreme(r); },
-          'AVWAP-RECLAIM':function(r){ return hgOgAvwapReclaim(r); }
+          'AVWAP-RECLAIM':function(r){ return hgOgAvwapReclaim(r); },
+          'CUSUM-SHIFT':  function(r){ return hgOgCusumShift(r); },
+          'VOL-EXPANSION':function(r){ return hgOgVolExpansion(r); },
+          'PIN-REJECT':   function(r){ return hgOgPinReject(r); },
+          'ENGULF-LEVEL': function(r){ return hgOgEngulfLevel(r); },
+          'POC-REVERT':   function(r){ return hgOgPocRevert(r); },
+          'COINT-SPREAD': function(r){ return hgOgCointSpread(r); },
+          'THREE-BAR':    function(r){ return hgOgThreeBar(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
@@ -2256,6 +2643,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgAdr = hgOgAdr;
     window.hgOgAdrFade = hgOgAdrFade;
     window.hgOgRoundMagnet = hgOgRoundMagnet;
+    window.hgOgResample = hgOgResample;   /* exported so the higher-timeframe build is testable directly */
     window.hgOgDetect = hgOgDetect;
     window.hgOgGates = hgOgGates;
     window.hgOgEvaluate = hgOgEvaluate;

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v359',
-  pack: 'hgOgReport() prints the gold desk record from the console',
-  built: '2026-08-19T19:40:00Z',
-  note: 'the forward log only exists in the browser that produced it, so reading your own record is now one word instead of a pasted snippet'
+  version: 'hg-v360',
+  pack: 'higher-timeframe confirmation, regime fit and a volatility forecast, plus seven mechanics',
+  built: '2026-08-19T21:50:00Z',
+  note: 'OMNIGOLD scans 34 mechanics behind 30 gates; CUSUM was firing on 299 of 300 tapes at the library default k, and the consensus gate passed BOTH directions when every family was split'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

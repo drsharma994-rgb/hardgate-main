@@ -120,7 +120,8 @@ console.log('\n== the four gold context gates carry the flag ==');
        k + ' is declared hard:false, info:true');
   }
   for (const k of ['adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
-                   'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area']){
+                   'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area',
+                   'htf-confirm', 'regime-fit', 'vol-forecast']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(src),
        k + ' is declared hard:false, info:true');
   }
@@ -132,7 +133,8 @@ console.log('\n== the four gold context gates carry the flag ==');
      every test kept passing. */
   const CONTEXT_ONLY = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime',
                         'adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
-                        'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area'];
+                        'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area',
+                        'htf-confirm', 'regime-fit', 'vol-forecast'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
