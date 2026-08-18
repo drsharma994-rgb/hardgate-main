@@ -4,10 +4,7 @@
   "gold": null,
   "lastRunAt": "2026-08-17T07:33:45.557Z",
   "ticket": {
-    "long": {
-      "sym": "B-AAVE_USDT",
-      "entry": 87.56
-    },
+    "long": null,
     "short": null
   },
   "sniper": {
@@ -223,11 +220,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T05:30:55.000Z"
+    "at": "2026-08-18T05:58:50.658Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T05:30:55.000Z"
+    "at": "2026-08-18T05:58:50.658Z"
   },
   "degraded": {
     "count": 0,
@@ -249,7 +246,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T05:30:55.300Z"
+    "at": "2026-08-18T05:58:50.982Z"
   },
   "bookFill": {
     "key": "u0|p0",
