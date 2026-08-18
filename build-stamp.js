@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v366',
-  pack: 'a dropped candle no longer costs the whole contract',
-  built: '2026-08-20T15:30:00Z',
-  note: 'fuzzing found 24 of 199 exported functions threw on a rows array with a hole in it; fixed at the two ingestion points, and the first version of that fix used num() which admits a null close as price zero'
+  version: 'hg-v367',
+  pack: 'the ledger can finally see the stop it is judging',
+  built: '2026-08-20T19:10:00Z',
+  note: 'omniroute derived the plan AFTER the gates ran, so no gate could say anything about a 13.33% stop; plan now comes first and both desks read stop width'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

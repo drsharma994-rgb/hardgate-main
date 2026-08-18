@@ -121,14 +121,14 @@ console.log('\n== the four gold context gates carry the flag ==');
   }
   for (const k of ['adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
                    'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area',
-                   'htf-confirm', 'regime-fit', 'vol-forecast']){
+                   'htf-confirm', 'regime-fit', 'vol-forecast', 'stop-width']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(src),
        k + ' is declared hard:false, info:true (omnigold)');
   }
   /* The universe reads live on OMNIROUTE — they need the whole sweep, which
      a single-instrument desk does not have. */
   const routeSrc = fs.readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8');
-  for (const k of ['adx-trend', 'atr-percentile', 'vol-forecast', 'xs-rank', 'breadth']){
+  for (const k of ['adx-trend', 'atr-percentile', 'vol-forecast', 'xs-rank', 'breadth', 'stop-width']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(routeSrc),
        k + ' is declared hard:false, info:true (omniroute)');
   }
@@ -147,14 +147,24 @@ console.log('\n== the four gold context gates carry the flag ==');
                         'adx-trend', 'atr-percentile', 'vol-forecast',
                         /* the universe reads — the only gates that look
                            outside the contract being judged */
-                        'xs-rank', 'breadth'];
+                        'xs-rank', 'breadth',
+                        /* what the stop asks of the trade — a wide stop is
+                           often correct, so it reports and never vetoes */
+                        'stop-width'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
     (s.match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
       .forEach(m => all.push(/key:'([a-z0-9-]+)'/.exec(m)[1]));
   }
-  ok(all.length === CONTEXT_ONLY.length, 'the app has ' + CONTEXT_ONLY.length + ' info gates (' + all.length + ')');
+  /* MEMBERSHIP, not a count. Several of these exist on BOTH desks, so the
+     number of info-gate declarations is larger than the list of names that
+     are allowed to be one — comparing the two could never hold, and a count
+     assertion here only ever taught you to bump the number. What matters is
+     that nothing OUTSIDE this list has quietly become non-vetoing. */
+  const allowed = new Set(CONTEXT_ONLY);
+  ok(all.length > 0, 'the app declares info gates (' + all.length + ' declarations, '
+    + new Set(all).size + ' distinct)');
   all.forEach(k => ok(CONTEXT_ONLY.indexOf(k) >= 0, '"' + k + '" is an indicator context read, not a risk rule'));
 }
 

@@ -1547,6 +1547,47 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'breadth', hard:false, info:true, pass: brOk, why: brWhy });
 
+    /* STOP-WIDTH — what this stop actually asks of the trade.
+
+       The card has always PRINTED the risk percentage and never said anything
+       about it: a live scan showed "risk 13.33%" and "risk 0.86%" rendered
+       identically. They are not the same trade. A 13.3% stop on a 2R target
+       needs the market to travel 26.7% before T1 pays, and at a fixed 1%
+       account risk it buys a position 15x smaller than the 0.86% one — so the
+       same "2R" means very different things.
+
+       Info, not a veto: a wide stop on a volatile alt is often correct, and
+       the previous gold work established that TRUNCATING a stop to make the
+       number look better just relocates the risk. This states the
+       consequence; it does not overrule the structure. */
+    var sw = null, swWhy = 'no plan yet — stop width cannot be judged';
+    var swPlan = x.plan;
+    if (swPlan){
+      var swE = fin(swPlan.entry), swS = fin(swPlan.stop), swT = fin(swPlan.t1);
+      if (isFinite(swE) && isFinite(swS) && swE > 0){
+        var swPct = Math.abs(swE - swS) / swE * 100;
+        if (isFinite(swPct) && swPct > 0){
+          /* The move T1 actually requires, from the plan's own numbers rather
+             than an assumed multiple. */
+          var needPct = isFinite(swT) ? (Math.abs(swT - swE) / swE * 100) : (swPct * fin(x.minRr || 2));
+          swWhy = 'stop is ' + swPct.toFixed(2) + '% from entry; T1 needs a '
+                + needPct.toFixed(1) + '% move';
+          if (swPct >= 8){
+            sw = false;
+            swWhy += ' — a very wide stop: at fixed account risk this sizes to a small position, '
+                   + 'and the target needs a large move to pay';
+          } else if (swPct <= 0.25){
+            sw = false;
+            swWhy += ' — a very tight stop: ordinary noise and spread will take it out before the idea fails';
+          } else {
+            sw = true;
+          }
+        }
+      }
+    }
+    gates.push({ key:'stop-width', hard:false, info:true, pass: sw, why: swWhy });
+
+
 
 
     return gates;
@@ -1634,20 +1675,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       exForHit.regimeWarm = ex.regimeWarm;
       exForHit.allHits = hits;      /* so the consensus gate can see the rest of the scan */
       exForHit.sym = item && item.sym;   /* so the cross-sectional gates can find this contract's rank */
-      var gates = hgOmniGates(rows, hit, positioning, exForHit);
-      var grade = hgOmniGrade(gates);
+      /* PLAN BEFORE GATES. The ledger could not see the stop it was judging:
+         plan was derived after the gates ran, so no gate could say anything
+         about how wide it is. A live card read "risk 13.33%" in exactly the
+         same weight as one reading "risk 0.86%", and those are not the same
+         trade. Gold has run in this order since the cost-drag gate landed for
+         the same reason. */
       var plan = null;
       if (planFn){
         try { plan = planFn(hit.dir, rows, undefined, { minRr: MIN_RR, type: 'OMNI' }); }
         catch (e) { plan = null; }
       }
+      if (plan) plan = hgOmniDerivePlan(plan);
+      exForHit.plan = plan;
+      var gates = hgOmniGates(rows, hit, positioning, exForHit);
+      var grade = hgOmniGrade(gates);
       /* The global hgPlanLevels wrapper (index.html) forwards only
          {dir,entry,stop,t1,t2,risk,note,...} — it DROPS rr1/rr2/riskPct from
          hgPlanLevelsCore. Reading plan.rr1 therefore gave undefined, which
          rendered as "R:R —" and, worse, made hgOmniRank sort every card by
          NaN: the tab claimed to order by R:R while ordering by nothing.
          Derive both from fields the wrapper does provide. */
-      if (plan) plan = hgOmniDerivePlan(plan);
       out.push({
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,

@@ -299,7 +299,11 @@ for (const [name, mk, gateKey] of fields){
   const ALLOWED_UNCHECKED = ['measured-edge', 'consensus', 'adx-trend', 'atr-percentile', 'vol-forecast',
                             /* the universe reads need the whole sweep, which a
                                single-symbol harness has no way to supply */
-                            'xs-rank', 'breadth'];
+                            'xs-rank', 'breadth',
+                            /* no plan is supplied in this harness, so the
+                               stop cannot be judged — which is the correct
+                               UNCHECKED, not a missing gate */
+                            'stop-width'];
   ok(fullUnchecked.every(k => ALLOWED_UNCHECKED.indexOf(k) >= 0),
      'only the family-wise edge read, consensus and the unloadable indicator reads are unchecked ('
      + (fullUnchecked.join(', ') || 'none') + ')');

@@ -1447,6 +1447,36 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'consensus', hard: conHard, pass: con, why: conWhy });
 
+    /* STOP-WIDTH — what this stop actually asks of the trade. See omniroute:
+       the card printed the risk percentage and never said anything about it,
+       so a 13% stop and a 0.9% stop rendered identically. Info, not a veto: a
+       wide stop is often correct, and the v351 work established that
+       truncating one to make the number look better only relocates the risk. */
+    var sw = null, swWhy = 'no plan yet — stop width cannot be judged';
+    var swPlan = x.plan;
+    if (swPlan){
+      var swE = fin(swPlan.entry), swS = fin(swPlan.stop), swT = fin(swPlan.t1);
+      if (isFinite(swE) && isFinite(swS) && swE > 0){
+        var swPct = Math.abs(swE - swS) / swE * 100;
+        if (isFinite(swPct) && swPct > 0){
+          var needPct = isFinite(swT) ? (Math.abs(swT - swE) / swE * 100) : (swPct * (fin(x.minRr) || 1.5));
+          swWhy = 'stop is ' + swPct.toFixed(2) + '% from entry; T1 needs a ' + needPct.toFixed(1) + '% move';
+          /* Gold is far less volatile than an alt, so the wide threshold is
+             tighter here: 3% on XAUUSD is a very large stop. */
+          if (swPct >= 3){
+            sw = false;
+            swWhy += ' — a very wide stop for gold: at fixed account risk this sizes to a small position';
+          } else if (swPct <= 0.08){
+            sw = false;
+            swWhy += ' — a very tight stop: ordinary noise and spread will take it out before the idea fails';
+          } else {
+            sw = true;
+          }
+        }
+      }
+    }
+    gates.push({ key:'stop-width', hard:false, info:true, pass: sw, why: swWhy });
+
     /* 23 — MACD histogram: momentum turning, not merely present. macdHist
        returns a bare ARRAY of histogram values. */
     var mac = null, macWhy = 'MACD unavailable';
@@ -1743,6 +1773,7 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       if (plan && deriveFn) plan = deriveFn(plan);
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
+      ex.plan = plan;      /* so stop-width can state what the stop asks of the trade */
       ex.allHits = hits;          /* so the consensus gate can see the rest of the scan */
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
