@@ -21,6 +21,24 @@ const ALLOWED_HOSTS = new Set([
   'api.frankfurter.app',
   // gold COT — CFTC Public Reporting (weekly managed-money positioning)
   'publicreporting.cftc.gov',
+  /* Binance. NOT here until now, which is why every Binance-dependent read
+     failed for a user in a geo-blocked country: the browser gets HTTP 451,
+     binance.js returns null without saying why, and the cards then reported
+     "OI not published for this contract" — blaming the venue for a block.
+
+     The whole point of a same-origin proxy is that the SERVER is not in the
+     blocked country: this service runs in Singapore, where these hosts
+     resolve normally. Read-only public market data, same as every other host
+     on this list. */
+  'api.binance.com',
+  'fapi.binance.com',
+  /* regime.js gauges — same story: fetched directly, blocked or CORS-refused
+     for some clients, and the whole eight-gauge composite then reported
+     "every gauge source failed" while the app fell back to a BTC daily proxy
+     on every card in every tab. */
+  'api.coingecko.com',
+  'api.alternative.me',
+  'stablecoins.llama.fi',
 ]);
 
 const UPSTREAM_TIMEOUT_MS = 15000;
@@ -29,6 +47,10 @@ const UPSTREAM_TIMEOUT_MS = 15000;
 const RATE_WINDOW_MS = 60000;
 const RATE_MAX_DEFAULT = 300;
 const RATE_MAX_COINDCX = 800;
+/* An enriched sweep asks for OI, long/short, taker flow and depth on up to
+   ENRICH_MAX contracts — four calls a name. The default 300/min would rate-
+   limit the tab against itself long before Binance did. */
+const RATE_MAX_BINANCE = 900;
 const __rateBuckets = new Map();
 const __responseCache = new Map();
 
@@ -100,7 +122,9 @@ function clientKey(req){
 function rateLimited(key, hostname){
   const now = Date.now();
   const bucketKey = key + '|' + (hostname || '*');
-  const max = (hostname && hostname.indexOf('coindcx.com') !== -1) ? RATE_MAX_COINDCX : RATE_MAX_DEFAULT;
+  const max = (hostname && hostname.indexOf('coindcx.com') !== -1) ? RATE_MAX_COINDCX
+            : (hostname && hostname.indexOf('binance.com') !== -1) ? RATE_MAX_BINANCE
+            : RATE_MAX_DEFAULT;
   let bucket = __rateBuckets.get(bucketKey);
   if (!bucket){ bucket = []; __rateBuckets.set(bucketKey, bucket); }
   while (bucket.length && now - bucket[0] > RATE_WINDOW_MS) bucket.shift();

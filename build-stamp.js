@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v367',
-  pack: 'the ledger can finally see the stop it is judging',
-  built: '2026-08-20T19:10:00Z',
-  note: 'omniroute derived the plan AFTER the gates ran, so no gate could say anything about a 13.33% stop; plan now comes first and both desks read stop width'
+  version: 'hg-v368',
+  pack: 'the regime gauges were never broken - Binance was unreachable',
+  built: '2026-08-21T00:40:00Z',
+  note: 'binance.js fetched direct, got HTTP 451 in a blocked country and returned null silently; the same-origin proxy runs in Singapore and had no Binance host on its allowlist'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

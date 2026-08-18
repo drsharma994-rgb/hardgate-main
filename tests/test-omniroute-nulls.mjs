@@ -303,7 +303,10 @@ for (const [name, mk, gateKey] of fields){
                             /* no plan is supplied in this harness, so the
                                stop cannot be judged — which is the correct
                                UNCHECKED, not a missing gate */
-                            'stop-width'];
+                            'stop-width',
+                            /* no plan and no crypto-position-risk.js in this
+                               harness, so these correctly cannot be read */
+                            'net-r', 'liq-room'];
   ok(fullUnchecked.every(k => ALLOWED_UNCHECKED.indexOf(k) >= 0),
      'only the family-wise edge read, consensus and the unloadable indicator reads are unchecked ('
      + (fullUnchecked.join(', ') || 'none') + ')');

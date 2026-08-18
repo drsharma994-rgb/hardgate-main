@@ -40,22 +40,73 @@ const __binBucket = makeTokenBucket(6, 6); // gentle smoothing; fapi allows far 
 const __BIN_CACHE = new Map();
 const BIN_CACHE_MS = 60*1000;
 
+/* GEO-BLOCK FALLBACK.
+
+   Binance answers HTTP 451 to browsers in several countries. This file used
+   to fetch directly, get a 451, return null, and say nothing — so every
+   Binance-dependent read went quietly dark: the regime gauges reported "every
+   gauge source failed", and the perp gates printed "OI not published for this
+   contract", which blames the venue for a block that has nothing to do with
+   the contract.
+
+   The app already ships a same-origin proxy, and the server it runs on is in
+   Singapore where these hosts resolve normally. It simply was not in the
+   proxy's allowlist and this file never tried it.
+
+   Sticky, because the answer does not change within a session: once a direct
+   call is refused, every later call goes straight to the proxy rather than
+   paying for a doomed request first. __hgBinanceVia records which path is in
+   use so the UI can say "geo-blocked, routed via proxy" instead of inventing
+   a reason. */
+const __BIN_VIA = { mode: 'unknown' };      /* unknown | direct | proxy | blocked */
+function __binVia(){ return __BIN_VIA.mode; }
+function __binProxied(url){ return '/api/proxy?url=' + encodeURIComponent(url); }
+
+async function __binOneFetch(url, ctrl){
+  const res = await fetch(url, { signal: ctrl.signal });
+  if (res.status === 418 || res.status === 429){
+    try{
+      var root = (typeof globalThis !== 'undefined') ? globalThis : window;
+      if (root && root.S) root.S.binanceBackoffUntil = Date.now() + 90000;
+    }catch(e){}
+    return { rateLimited: true };
+  }
+  if (!res.ok) return { status: res.status };
+  return { json: await res.json() };
+}
+
 async function __binFetchJson(url, timeoutMs){
   const ctrl = new AbortController();
   const timer = setTimeout(function(){ ctrl.abort(); }, timeoutMs || 10000);
   try{
     const w = __binBucket.take();
     if (w > 0) await new Promise(function(r){ setTimeout(r, Math.min(w, 2000)); });
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (res.status === 418 || res.status === 429){
-      try{
-        var root = (typeof globalThis !== 'undefined') ? globalThis : window;
-        if (root && root.S) root.S.binanceBackoffUntil = Date.now() + 90000;
-      }catch(e){}
-      return null;
+
+    /* Already known blocked: do not pay for the direct call again. */
+    if (__BIN_VIA.mode !== 'proxy'){
+      let direct = null;
+      try { direct = await __binOneFetch(url, ctrl); }
+      catch (e) { direct = { threw: true }; }
+      if (direct && direct.rateLimited) return null;
+      if (direct && direct.json !== undefined){
+        if (__BIN_VIA.mode === 'unknown') __BIN_VIA.mode = 'direct';
+        return direct.json;
+      }
+      /* 451 geo-block, 403, or a CORS/network throw — all mean "not from this
+         browser", and all are worth one proxy attempt. */
     }
-    if (!res.ok) return null;
-    return await res.json();
+
+    let viaProxy = null;
+    try { viaProxy = await __binOneFetch(__binProxied(url), ctrl); }
+    catch (e) { viaProxy = { threw: true }; }
+    if (viaProxy && viaProxy.json !== undefined){
+      __BIN_VIA.mode = 'proxy';
+      return viaProxy.json;
+    }
+    /* Neither path worked. Say so once rather than letting each caller invent
+       an explanation. */
+    if (__BIN_VIA.mode !== 'direct') __BIN_VIA.mode = 'blocked';
+    return null;
   }catch(e){ return null; }
   finally{ clearTimeout(timer); }
 }
@@ -400,3 +451,14 @@ async function binanceDepth(symbol, limit){
     return __binCachePut(key, out);
   }catch(e){ return null; }
 }
+
+/* Which path Binance data is coming in on, for the UI to state plainly rather
+   than each gate inventing its own explanation for a null.
+     'direct'  — the browser can reach Binance
+     'proxy'   — the browser cannot (geo-block), the same-origin proxy can
+     'blocked' — neither worked; the data genuinely is not available
+     'unknown' — nothing has been fetched yet this session */
+(function(){
+  var root = (typeof globalThis !== 'undefined') ? globalThis : window;
+  root.hgBinanceVia = __binVia;
+})();

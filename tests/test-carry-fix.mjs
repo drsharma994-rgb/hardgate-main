@@ -142,8 +142,15 @@ console.log('--- binanceFundingInfo: failure tolerance ---');
   assert(await thrown.ctx.binanceFundingInfo() === null, 'fetch throw -> resolves null (never rejects)');
   const wrongShape = makeBinCtx([{ match: 'fundingInfo', body: { not: 'an array' } }]);
   assert(await wrongShape.ctx.binanceFundingInfo() === null, 'non-array body -> null');
+  /* A retry must re-fetch rather than serve a cached failure. NOT a hardcoded
+     count: since the geo-block fallback landed, one logical attempt makes up
+     to TWO fetches — direct, then the same-origin proxy — so counting raw
+     fetches measures the transport, not the caching. What matters is that the
+     second attempt went to the network at all. */
+  const beforeRetry = httpFail.calls.n;
   const miss = await httpFail.ctx.binanceFundingInfo();
-  assert(miss === null && httpFail.calls.n === 2, 'failures are NOT cached (retry re-fetches)');
+  assert(miss === null, 'a repeated failure still resolves null');
+  assert(httpFail.calls.n > beforeRetry, 'failures are NOT cached (retry re-fetches)');
 }
 
 /* ================================================================

@@ -128,7 +128,8 @@ console.log('\n== the four gold context gates carry the flag ==');
   /* The universe reads live on OMNIROUTE — they need the whole sweep, which
      a single-instrument desk does not have. */
   const routeSrc = fs.readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8');
-  for (const k of ['adx-trend', 'atr-percentile', 'vol-forecast', 'xs-rank', 'breadth', 'stop-width']){
+  for (const k of ['adx-trend', 'atr-percentile', 'vol-forecast', 'xs-rank', 'breadth', 'stop-width',
+                   'net-r', 'liq-room']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(routeSrc),
        k + ' is declared hard:false, info:true (omniroute)');
   }
@@ -150,7 +151,11 @@ console.log('\n== the four gold context gates carry the flag ==');
                         'xs-rank', 'breadth',
                         /* what the stop asks of the trade — a wide stop is
                            often correct, so it reports and never vetoes */
-                        'stop-width'];
+                        'stop-width',
+                        /* the position-risk reads: what the R is worth after
+                           fees, and where liquidation sits relative to the
+                           stop. Both inform sizing; neither vetoes. */
+                        'net-r', 'liq-room'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');

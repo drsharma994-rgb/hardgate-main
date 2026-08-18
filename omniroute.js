@@ -1043,6 +1043,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        there blames the venue for a decision this tab made. */
     var NOT_MEASURED = 'not measured — this contract was past the per-symbol confluence ceiling, so it was never requested';
     var wasEnriched = !(extra && extra.enriched === false);
+    /* THREE reasons a perp read can be missing, and they are different facts:
+         - never asked (past the confluence ceiling)
+         - asked, but Binance is unreachable from this browser AND the proxy
+         - asked and answered, and the venue genuinely publishes nothing
+       Reporting the second as the third blames a venue for a geo-block. */
+    var binVia = null;
+    try {
+      var bw = (typeof window !== 'undefined') ? window : null;
+      if (bw && typeof bw.hgBinanceVia === 'function') binVia = bw.hgBinanceVia();
+    } catch (eBv) { binVia = null; }
+    var BIN_BLOCKED = (binVia === 'blocked');
+    function perpWhy(genuine){
+      if (!wasEnriched) return NOT_MEASURED;
+      if (BIN_BLOCKED) return 'Binance is unreachable from this browser and via the proxy — not a statement about this contract';
+      return genuine;
+    }
     var gates = [];
     var closes = closesOf(rows);
     var e21 = emaOf(closes.slice(-60), 21), e50 = emaOf(closes.slice(-120), 50);
@@ -1091,7 +1107,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* 4 — funding sanity: never add to the crowded side of an extreme.
        CoinDCX reports no funding, so this legitimately stays unknown. */
     var f = positioning ? fin(positioning.fundingPct) : NaN;
-    var fundOk = null, fundWhy = wasEnriched ? 'funding not reported by venue' : NOT_MEASURED;
+    var fundOk = null, fundWhy = perpWhy('funding not reported by venue');
     if (isFinite(f)){
       var crowded = (hit.dir === 'long' && f > 0.05) || (hit.dir === 'short' && f < -0.05);
       fundOk = !crowded;
@@ -1122,7 +1138,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     gates.push({ key:'htf-daily', hard:false, pass: d1, why: d1Why });
 
     /* 6 — open interest should BUILD into the move, not bleed out of it */
-    var oi = null, oiWhy = wasEnriched ? 'OI not published for this contract' : NOT_MEASURED;
+    var oi = null, oiWhy = perpWhy('OI not published for this contract');
     var oiCh = x.oi ? fin(x.oi.changePct) : NaN;
     if (isFinite(oiCh)){
       oi = oiCh > -3;              // collapsing OI = the move is being unwound
@@ -1133,7 +1149,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 7 — retail crowding as a CONTRARIAN read: when the retail account
        majority already sits on our side at an extreme, the fuel is spent. */
-    var rc = null, rcWhy = wasEnriched ? 'retail long/short not published' : NOT_MEASURED;
+    var rc = null, rcWhy = perpWhy('retail long/short not published');
     var lp = x.retail ? fin(x.retail.longPct) : NaN;
     if (isFinite(lp)){
       var crowdedWithUs = (hit.dir === 'long' && lp >= 75) || (hit.dir === 'short' && lp <= 25);
@@ -1143,7 +1159,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     gates.push({ key:'retail-contrarian', hard:false, pass: rc, why: rcWhy });
 
     /* 8 — taker aggression should not lean against the setup */
-    var tk = null, tkWhy = wasEnriched ? 'taker flow not published' : NOT_MEASURED;
+    var tk = null, tkWhy = perpWhy('taker flow not published');
     var br = x.taker ? fin(x.taker.buySellRatio) : NaN;
     if (isFinite(br)){
       tk = (hit.dir === 'long') ? (br >= 0.9) : (br <= 1.1);
@@ -1162,7 +1178,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        certainly thin (a veto is sound), but a PASS says nothing about
        whether YOUR book can absorb the stop. The label now says so instead
        of implying the trade venue was measured. */
-    var lq = null, lqWhy = wasEnriched ? 'reference order book not available for this contract' : NOT_MEASURED;
+    var lq = null, lqWhy = perpWhy('reference order book not available for this contract');
     var dBid = x.depth ? fin(x.depth.bidUsd) : NaN, dAsk = x.depth ? fin(x.depth.askUsd) : NaN;
     var venue = String((x.exchange || '')).toLowerCase();
     var isBinanceVenue = venue === 'binance';
@@ -1586,6 +1602,94 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
     }
     gates.push({ key:'stop-width', hard:false, info:true, pass: sw, why: swWhy });
+
+    /* NET-R — the R:R on the card is GROSS.
+
+       Every card prints "R:R 2.00" and means 2R before fees. crypto-position-
+       risk.js has computed the cost-adjusted figure since it was written and
+       no ledger has ever read it. On a wide stop the difference is noise; on
+       a 0.86% stop the round trip can take a fifth of the R, and the win rate
+       the setup actually needs moves with it.
+
+       Info: the cost is a fact about the venue and the stop, not a fault in
+       the setup. It is stated so 2R stops meaning two different things. */
+    var nr = null, nrWhy = 'net R unavailable (crypto-position-risk.js not loaded)';
+    var nrFn = idxFn('hgCryptoNetRAtTarget');
+    var beFn = idxFn('hgCryptoBreakevenWinRate');
+    var costFn = idxFn('hgCryptoCostR');
+    var nrPlan = x.plan;
+    if (nrFn && nrPlan){
+      try {
+        var nrE = fin(nrPlan.entry), nrS = fin(nrPlan.stop), nrT = fin(nrPlan.t1);
+        if (isFinite(nrE) && isFinite(nrS) && isFinite(nrT) && nrE > 0 && nrE !== nrS){
+          /* DIRECTIONAL, like the library's own net figure. Computing gross
+             as |t1-entry| while the library computes it signed made a short
+             read "2.00R gross, -2.05R net" — two different questions answered
+             in one sentence. Signed also means a target on the WRONG side of
+             entry shows as negative rather than being hidden by Math.abs. */
+            var nrRisk = Math.abs(nrE - nrS);
+            var grossR = (hit.dir === 'long') ? (nrT - nrE) / nrRisk : (nrE - nrT) / nrRisk;
+            var netR = fin(nrFn(nrE, nrS, nrT, hit.dir));
+            if (isFinite(netR)){
+              /* Same sides the library assumes, or the cost printed on the
+                 card will not reconcile with the net figure beside it. */
+              var costR = costFn ? fin(costFn(nrE, nrS, 'maker', 'maker')) : NaN;
+              var beWin = beFn ? fin(beFn(grossR, isFinite(costR) ? costR : 0)) : NaN;
+              nrWhy = 'T1 is ' + grossR.toFixed(2) + 'R gross, ' + netR.toFixed(2) + 'R net of fees'
+                    + (isFinite(costR) ? ' (cost ' + costR.toFixed(2) + 'R)' : '')
+                    + (isFinite(beWin) ? ' — needs ' + (beWin * 100).toFixed(0) + '% wins to break even' : '');
+              if (!(grossR > 0)){
+                /* The target is on the wrong side of entry for this direction.
+                   That is a broken plan, not an expensive one. */
+                nr = false;
+                nrWhy = 'T1 is on the wrong side of entry for a ' + hit.dir + ' — the plan does not hold together';
+              } else if ((grossR - netR) / grossR >= 0.25){
+                nr = false;
+                nrWhy += ' — fees take over a quarter of the reward';
+              } else {
+                nr = true;
+              }
+            }
+        } else if (nrE === nrS){
+          nrWhy = 'entry and stop are the same price — no R to cost';
+        }
+      } catch (eNr){ nr = null; nrWhy = 'net R threw: ' + ((eNr && eNr.message) || eNr); }
+    } else if (!nrPlan && nrFn){
+      nrWhy = 'no plan yet — net R cannot be costed';
+    }
+    gates.push({ key:'net-r', hard:false, info:true, pass: nr, why: nrWhy });
+
+    /* LIQ-ROOM — the leverage at which liquidation reaches the stop.
+
+       Above it the position is closed by the exchange before the idea is
+       proved wrong, which is a different loss from the one the plan
+       describes. A statement about sizing, so it argues and never vetoes:
+       leverage is the user's decision and this desk does not place orders. */
+    var lr2 = null, lr2Why = 'max leverage unavailable (crypto-position-risk.js not loaded)';
+    var levFn = idxFn('hgCryptoMaxSurvivableLev');
+    if (levFn && nrPlan){
+      try {
+        var lvE = fin(nrPlan.entry), lvS = fin(nrPlan.stop);
+        if (isFinite(lvE) && isFinite(lvS) && lvE > 0 && lvE !== lvS){
+          var maxLev = fin(levFn(lvE, lvS, null, null));
+          if (isFinite(maxLev) && maxLev >= 1){
+            lr2Why = 'liquidation clears the stop up to ' + maxLev.toFixed(0) + 'x leverage';
+            /* Under 2x means the stop is so wide that almost any leverage puts
+               liquidation inside it. */
+            if (maxLev < 2){
+              lr2 = false;
+              lr2Why += ' — barely any room: this stop is wide enough that leverage liquidates before it';
+            } else {
+              lr2 = true;
+            }
+          }
+        }
+      } catch (eLr){ lr2 = null; lr2Why = 'max leverage threw: ' + ((eLr && eLr.message) || eLr); }
+    } else if (!nrPlan && levFn){
+      lr2Why = 'no plan yet — leverage room cannot be judged';
+    }
+    gates.push({ key:'liq-room', hard:false, info:true, pass: lr2, why: lr2Why });
+
 
 
 

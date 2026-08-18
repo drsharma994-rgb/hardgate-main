@@ -112,9 +112,23 @@ async function rgFetchJson(url, timeoutMs){
         var w = __rgBucket.take();
         if (w > 0) await rgSleep(Math.min(w, 2000));
       }
-      var res = await fetch(url, { signal: ctrl.signal });
-      if (!res || !res.ok) return null;
-      return await res.json();
+      /* Same geo-block fallback as binance.js. These gauges fetch Binance,
+         CoinGecko and alternative.me directly; a browser in a blocked country
+         gets 451/CORS on all three and regimeWarm then reported "every gauge
+         source failed" — which is true but says nothing about WHY, and left
+         every card in the app running on a BTC daily proxy instead.
+
+         The same-origin proxy runs server-side, outside the block. Try direct
+         first, fall back once. */
+      var res = null;
+      try { res = await fetch(url, { signal: ctrl.signal }); } catch (eDirect) { res = null; }
+      if (res && res.ok) return await res.json();
+      var viaProxy = null;
+      try {
+        viaProxy = await fetch('/api/proxy?url=' + encodeURIComponent(url), { signal: ctrl.signal });
+      } catch (eProxy) { viaProxy = null; }
+      if (viaProxy && viaProxy.ok) return await viaProxy.json();
+      return null;
     } finally { clearTimeout(timer); }
   }catch(e){ return null; }
 }
