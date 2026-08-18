@@ -5,7 +5,10 @@
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
     "long": null,
-    "short": null
+    "short": {
+      "sym": "XAU",
+      "entry": 4440.032744510565
+    }
   },
   "sniper": {
     "key": "B-OPN_USDT@0.05662;B-VVV_USDT@13.801715955524324",
@@ -274,11 +277,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T21:59:16.386Z"
+    "at": "2026-08-18T22:33:08.391Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T21:59:16.386Z"
+    "at": "2026-08-18T22:33:08.392Z"
   },
   "degraded": {
     "count": 0,
@@ -299,7 +302,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T21:59:17.116Z"
+    "at": "2026-08-18T22:33:09.247Z"
   },
   "bookFill": {
     "key": "u0|p0",
