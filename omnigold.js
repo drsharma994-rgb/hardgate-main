@@ -2036,6 +2036,21 @@ terse status, and never launches a first-time scan on a global refresh.
     if (ui) ui.stat.textContent = 'fetching gold ' + cfg.tf + ' bars…';
     return hgOgFetchRows(cfg.tf, cfg.bars).then(function(got){
       var rows = got.rows || [];
+      /* Sanitise before anything reads a bar. dropFn (omniroute's) now does
+         this too, but it is feature-checked — without it gold would ingest a
+         hole-punched array straight into the detectors, and a venue dropping
+         one candle would take the whole horizon down. A hole in the data is a
+         data problem, not something each detector should have to guard. */
+      var okRows = [], ri, rr;
+      for (ri = 0; ri < rows.length; ri++){
+        rr = rows[ri];
+        if (!rr || typeof rr !== 'object') continue;
+        /* fin(), NOT num(): num(null) is 0 because +null is 0, which would
+           admit a null close as the price zero. */
+        if (!isFinite(fin(rr.c))) continue;
+        okRows.push(rr);
+      }
+      rows = okRows;
       if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
       if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null };
 

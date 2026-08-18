@@ -11,6 +11,7 @@ const GOLDAPI = 'https://api.gold-api.com';
 let binanceSkipped = 0;
 let binanceAttempted = 0;
 let networkSkipped = 0;
+let checks = 0;          /* legs that returned data and were inspected */
 
 function networkSkipLabel(label, err){
   const cause = err && err.cause;
@@ -53,7 +54,7 @@ async function j(url, label, opts){
     throw e;
   } finally { clearTimeout(t); }
 }
-const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
+const show = (name, v) => { checks++; console.log('\n== ' + name + ' ==\n' + v); };
 
 // 1) Binance klines BTCUSDT 1h -> normalized row shape
 {
@@ -169,13 +170,19 @@ const show = (name, v) => console.log('\n== ' + name + ' ==\n' + v);
   }
 }
 
-if (binanceAttempted > 0 && binanceSkipped === binanceAttempted){
-  console.log('\nALL SMOKE TESTS PASSED — Binance legs skipped (' + binanceSkipped + '/' + binanceAttempted + ' HTTP 451 geo-block; non-Binance feeds OK)');
-} else if (binanceSkipped > 0){
-  console.log('\nALL SMOKE TESTS PASSED (Binance partial skip: ' + binanceSkipped + '/' + binanceAttempted + ' geo-blocked; remaining legs OK)');
-} else if (networkSkipped > 0){
-  console.log('\nALL SMOKE TESTS PASSED (network skip: ' + networkSkipped + ' leg(s) unavailable; remaining OK)');
-} else {
-  console.log('\nALL SMOKE TESTS PASSED');
+/* A live-network smoke test, and the only file in the suite with no
+   assertions of its own — it prints what the endpoints returned. That is a
+   fair thing to be, but it used to print ALL SMOKE TESTS PASSED and exit 0
+   even when EVERY leg had been skipped, so a machine with no network scored
+   a pass for verifying nothing and counted toward the suite total on it.
+
+   A skipped leg is not a passed leg. */
+if (checks === 0){
+  console.log('\nVERIFIED NOTHING — every leg was skipped (' + networkSkipped
+    + ' network, ' + binanceSkipped + ' geo-blocked). This is not a pass.');
+  process.exit(1);
 }
+const tail = (binanceSkipped > 0 ? ' (Binance skip ' + binanceSkipped + '/' + binanceAttempted + ')' : '')
+           + (networkSkipped > 0 ? ' (network skip ' + networkSkipped + ')' : '');
+console.log('\n' + checks + ' leg(s) verified' + tail + (tail ? '' : ' — ALL SMOKE TESTS PASSED'));
 process.exit(0);

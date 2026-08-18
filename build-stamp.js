@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v365',
-  pack: 'which contracts get the full ledger is now a ranking, not a race',
-  built: '2026-08-20T11:45:00Z',
-  note: 'the 120 enriched contracts were whichever answered first; they are now chosen by how many mechanic families agree, and a contract past the cap says it was never asked instead of blaming the venue'
+  version: 'hg-v366',
+  pack: 'a dropped candle no longer costs the whole contract',
+  built: '2026-08-20T15:30:00Z',
+  note: 'fuzzing found 24 of 199 exported functions threw on a rows array with a hole in it; fixed at the two ingestion points, and the first version of that fix used num() which admits a null close as price zero'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

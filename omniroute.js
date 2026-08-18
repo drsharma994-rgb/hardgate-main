@@ -211,6 +211,33 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      opening range" on a bar that had not closed. Pure given `now`. */
   function hgOmniDropForming(rows, tf, nowSec){
     if (!rows || !rows.length) return rows || [];
+
+    /* SANITISE FIRST — this is the single ingestion point for the whole
+       crypto scan, and every downstream reader assumes each entry is a bar.
+
+       A venue that drops one candle returns an array with a null in it, and
+       reaching through it threw from inside whichever detector happened to
+       run first. Pass 1 catches that per contract, so the scan survived — but
+       the contract was silently counted as FAILED and produced no card at
+       all. Measured by fuzzing with feed-shaped input: a single null entry
+       made 24 of 199 exported functions throw, hgOmniDetect among them.
+
+       One guard here beats twenty-four defensive checks downstream, and it is
+       the honest place for it: a hole in the data is a data problem, not
+       something each detector should have an opinion about. */
+    var clean = [], ci, r;
+    for (ci = 0; ci < rows.length; ci++){
+      r = rows[ci];
+      if (!r || typeof r !== 'object') continue;
+      /* fin(), NOT num(): +null is 0 and isFinite(0) is true, so num() lets a
+         null close through as the price ZERO. That is the exact trap this
+         audit was sweeping for, written into the sweep's own fix. */
+      if (!isFinite(fin(r.c))) continue;      /* a bar with no close is not a bar */
+      clean.push(r);
+    }
+    rows = clean;
+    if (!rows.length) return rows;
+
     var sec = TF_SEC[tf] || 0;
     if (!sec) return rows;
     var lastT = num(rows[rows.length - 1].t);
