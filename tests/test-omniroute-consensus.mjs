@@ -221,18 +221,23 @@ console.log('\n== THE SIGNIFICANCE BAR: six mechanics, not one ==');
 console.log('\n== the bar is keyed to the real mechanic count ==');
 {
   ok(/var OMNI_MECHANICS = /.test(SRC), 'there is one mechanic list');
-  ok(/var keys = OMNI_MECHANICS\.slice\(\)/.test(SRC), 'the pooled table renders from it');
-  ok(/hgOmniFamilyZ\(OMNI_MECHANICS\.length\)/.test(SRC), 'and the bar is computed from it');
+  /* The pooled table shows backtestable AND forward-only mechanics — the
+     latter with an explicit "no history to replay" read rather than a zero. */
+  ok(/var keys = OMNI_ALL_MECHANICS\.slice\(\)/.test(SRC), 'the pooled table renders from the combined list');
+  ok(/var OMNI_ALL_MECHANICS = OMNI_MECHANICS\.concat\(OMNI_FWD_ONLY\)/.test(SRC),
+     'which is backtestable plus forward-only');
+  ok(/hgOmniFamilyZ\(OMNI_ALL_MECHANICS\.length\)/.test(SRC), 'and the bar counts every search, replayable or not');
   const listSrc = SRC.slice(SRC.indexOf('var OMNI_MECHANICS'), SRC.indexOf('var OMNI_FAMILY'));
   const count = (listSrc.match(/'[A-Z0-9-]+'/g) || []).length;
-  ok(count === 6, 'six measured mechanics — UTAD is measured under SPRING, so it is not a separate test (' + count + ')');
+  ok(count >= 22, 'the backtestable list grew with the shared mechanics (' + count + ')');
+  ok(listSrc.indexOf("'UTAD'") < 0, 'UTAD is still absent — it is measured under SPRING, not as a separate test');
 
   const g = W.hgOmniGates(ROWS, hit('ORB', 'long'), null,
     { stats: { samples: 41, hit: 0.46, expR: 0.1 }, minRr: 2 }).filter(x => x.key === 'measured-edge')[0];
   const m = /\+(\d\.\d\d)σ is the bar/.exec(g.why);
   ok(!!m, 'the bar is stated numerically');
   ok(parseFloat(m[1]) > 1.64, 'and is stricter than a single test (' + m[1] + 'σ)');
-  ok(parseFloat(m[1]) < 2.97, 'while below the 34-mechanic gold bar — fewer tries, lower bar (' + m[1] + 'σ)');
+  ok(parseFloat(m[1]) > 2.39, 'and ROSE with the new mechanics (' + m[1] + 'σ, was 2.39σ at 6)');
 }
 
 console.log('\n== every mechanic the desk detects has a family ==');

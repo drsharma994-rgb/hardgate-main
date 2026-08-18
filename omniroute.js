@@ -438,9 +438,122 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* Run every detector; return all hits (a symbol can present more than one
      family, which is genuine confluence rather than a duplicate). Pure. */
-  function hgOmniDetect(rows){
+
+  /* ============ crypto-native mechanics ============
+
+     These three cannot exist on spot gold: there is no funding rate, no open
+     interest and no perpetual basis on a metal. They are the reason this desk
+     is not just the gold desk pointed at BTC, and they read positioning
+     rather than price — which is the only genuinely new information a
+     seventeenth price pattern would not give.
+
+     Each takes the SAME positioning object the perp gates already receive, so
+     there is no new fetch: pass 2 already has funding, OI, taker flow and
+     depth in hand for every fired contract. */
+
+  /* Funding paid by one side for long enough, at a high enough rate, is a
+     crowd paying rent to stay wrong. The squeeze is against the payer. */
+  function hgOmniFundingSqueeze(rows, positioning){
+    if (!rows || rows.length < 20 || !positioning) return null;
+    var rate = fin(positioning.fundingPct);
+    if (!isFinite(rate)) rate = fin(positioning.funding && positioning.funding.rate);
+    if (!isFinite(rate) || rate === 0) return null;
+    /* 0.05% per 8h is roughly 55% a year — a real cost, not a rounding. */
+    var EXTREME = 0.05;
+    if (Math.abs(rate) < EXTREME) return null;
+    var n = rows.length - 1;
+    var c = num(rows[n].c), pc = num(rows[n - 1].c);
+    if (!isFinite(c) || !isFinite(pc)) return null;
+    /* Only when price has STOPPED going the payer's way: funding alone is a
+       cost, funding plus a stall is a squeeze setup. */
+    if (rate > 0 && c < pc){
+      return { kind:'FUND-SQUEEZE', dir:'short', level: c,
+               why:'longs paying ' + rate.toFixed(3) + '% funding while price rolls over' };
+    }
+    if (rate < 0 && c > pc){
+      return { kind:'FUND-SQUEEZE', dir:'long', level: c,
+               why:'shorts paying ' + Math.abs(rate).toFixed(3) + '% funding while price turns up' };
+    }
+    return null;
+  }
+
+  /* Price up on FALLING open interest is short covering, not new buying: the
+     move is fuelled by exits and has no one left to carry it. Price up on
+     rising OI is real. The divergence is the signal. */
+  function hgOmniOiDiverge(rows, positioning){
+    if (!rows || rows.length < 20 || !positioning) return null;
+    var oiPct = fin(positioning.oi && positioning.oi.changePct);
+    if (!isFinite(oiPct)) oiPct = fin(positioning.oiChangePct);
+    if (!isFinite(oiPct)) return null;
+    if (Math.abs(oiPct) < 5) return null;              /* a real change in the book */
+    var n = rows.length - 1;
+    var look = Math.min(6, n);
+    var c = num(rows[n].c), was = num(rows[n - look].c);
+    if (!isFinite(c) || !isFinite(was) || !(was > 0)) return null;
+    var movePct = (c - was) / was * 100;
+    if (Math.abs(movePct) < 1) return null;            /* price has to have moved */
+    if (movePct > 0 && oiPct < 0){
+      return { kind:'OI-DIVERGE', dir:'short', level: c,
+               why:'price +' + movePct.toFixed(1) + '% on ' + oiPct.toFixed(1)
+                   + '% open interest — short covering, not new buying' };
+    }
+    if (movePct < 0 && oiPct < 0){
+      return { kind:'OI-DIVERGE', dir:'long', level: c,
+               why:'price ' + movePct.toFixed(1) + '% on ' + oiPct.toFixed(1)
+                   + '% open interest — long liquidation exhausting, not new selling' };
+    }
+    return null;
+  }
+
+  /* Taker flow against the price move. Aggressive sellers hitting bids while
+     price holds up means someone large is absorbing them, and vice versa. */
+  function hgOmniFlowAbsorb(rows, positioning){
+    if (!rows || rows.length < 20 || !positioning) return null;
+    var ratio = fin(positioning.taker && positioning.taker.buySellRatio);
+    if (!isFinite(ratio)) ratio = fin(positioning.takerRatio);
+    if (!isFinite(ratio) || !(ratio > 0)) return null;
+    var n = rows.length - 1;
+    var look = Math.min(6, n);
+    var c = num(rows[n].c), was = num(rows[n - look].c);
+    if (!isFinite(c) || !isFinite(was) || !(was > 0)) return null;
+    var movePct = (c - was) / was * 100;
+    /* Sellers dominant but price refuses to fall = absorption under it. */
+    if (ratio <= 0.8 && movePct >= -0.5 && movePct <= 1.5){
+      return { kind:'FLOW-ABSORB', dir:'long', level: c,
+               why:'takers ' + ratio.toFixed(2) + ' buy/sell (sellers dominant) yet price is holding — absorbed' };
+    }
+    if (ratio >= 1.25 && movePct <= 0.5 && movePct >= -1.5){
+      return { kind:'FLOW-ABSORB', dir:'short', level: c,
+               why:'takers ' + ratio.toFixed(2) + ' buy/sell (buyers dominant) yet price is capped — distributed into' };
+    }
+    return null;
+  }
+
+  function hgOmniDetect(rows, positioning){
     var out = [];
     if (!rows || rows.length < 30) return out;
+    /* The shared, instrument-agnostic mechanics. Feature-checked: without
+       hg-mechanics.js these simply do not fire, which shows in the pooled
+       table, rather than throwing the scan. */
+    var runAll = (typeof window !== 'undefined' && typeof window.hgMechRunAll === 'function')
+      ? window.hgMechRunAll : null;
+    if (runAll){
+      try {
+        var shared = runAll(rows) || [];
+        for (var si = 0; si < shared.length; si++) out.push(shared[si]);
+      } catch (eS) { /* one bad detector must not cost the scan */ }
+    }
+    /* Positioning mechanics, only where positioning exists. See the note on
+       OMNI_FWD_ONLY: these can never be back-tested, because the walk-forward
+       replays candles and there is no historical funding or open interest to
+       replay with them. They earn a forward record and nothing else, and the
+       pooled table says so rather than showing them as never having fired. */
+    if (positioning){
+      var pd;
+      pd = hgOmniFundingSqueeze(rows, positioning); if (pd) out.push(pd);
+      pd = hgOmniOiDiverge(rows, positioning);      if (pd) out.push(pd);
+      pd = hgOmniFlowAbsorb(rows, positioning);     if (pd) out.push(pd);
+    }
     var rng = hgOmniRange(rows, RANGE_LOOKBACK);
     var prof = hgOmniProfile(rows, 24);
     var d;
@@ -583,6 +696,31 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       VALUE:  function(r){ var p = hgOmniProfile(r, 24); return p ? hgOmniValueReject(r, p) : null; },
       MMOVE:  function(r){ return hgOmniMeasuredMove(r, 10); }
     };
+    /* The shared mechanics are pure functions of rows, so they backtest
+       exactly like the six above. Registered by the SAME kind string the
+       detect pass emits, or the in-sample pool and the live scan would be
+       measuring different things under one name. */
+    var mw = (typeof window !== 'undefined') ? window : null;
+    function shared(fnName, kind){
+      var f = mw && typeof mw[fnName] === 'function' ? mw[fnName] : null;
+      if (!f) return null;
+      return function(r){ var h = null; try { h = f(r); } catch (e) { h = null; }
+                          return (h && (!kind || h.kind === kind)) ? h : null; };
+    }
+    var SHARED = [
+      ['hgMechVwapRevert','VWAP-REVERT'], ['hgMechNr7Break','NR7-BREAK'],
+      ['hgMechTrendReclaim','TREND-RECLAIM'], ['hgMechFvgFill','FVG-FILL'],
+      ['hgMechBosRetest','BOS-RETEST'], ['hgMechPoolSweep','EQH-SWEEP'],
+      ['hgMechPoolSweep','EQL-SWEEP'], ['hgMechSqueezeFire','SQUEEZE-FIRE'],
+      ['hgMechRsiDiverge','RSI-DIVERGE'], ['hgMechAvwapReclaim','AVWAP-RECLAIM'],
+      ['hgMechCusumShift','CUSUM-SHIFT'], ['hgMechVolExpansion','VOL-EXPANSION'],
+      ['hgMechPinReject','PIN-REJECT'], ['hgMechEngulfLevel','ENGULF-LEVEL'],
+      ['hgMechPocRevert','POC-REVERT'], ['hgMechThreeBar','THREE-BAR']
+    ];
+    for (var sh = 0; sh < SHARED.length; sh++){
+      var fn = shared(SHARED[sh][0], SHARED[sh][1]);
+      if (fn) fns[SHARED[sh][1]] = fn;
+    }
     var k;
     for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
       out[k] = hgOmniBacktestOne(rows, fns[k], opts);
@@ -669,7 +807,30 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      the multiple-comparisons correction cannot drift out of step with the
      number of mechanics actually being tried. UTAD is deliberately absent —
      it is measured under SPRING, so it is not a separate test. */
-  var OMNI_MECHANICS = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE'];
+  /* Backtestable mechanics: pure functions of rows, so the walk-forward can
+     replay them and the pooled table can show an in-sample record. */
+  var OMNI_MECHANICS = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE',
+                        'VWAP-REVERT','NR7-BREAK','TREND-RECLAIM','FVG-FILL','BOS-RETEST',
+                        'EQH-SWEEP','EQL-SWEEP','SQUEEZE-FIRE','RSI-DIVERGE','AVWAP-RECLAIM',
+                        'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
+                        'POC-REVERT','THREE-BAR'];
+
+  /* FORWARD-ONLY mechanics. These read positioning, and the walk-forward
+     replays candles — there is no historical funding rate or open interest
+     stored anywhere in the app to replay alongside them. They therefore
+     CANNOT earn an in-sample record, ever.
+
+     That is stated rather than hidden: the pooled table shows them as
+     forward-only instead of "never fired here", which would read as a broken
+     detector rather than an un-backtestable one. They still accumulate an
+     out-of-sample record from their first firing, which is the number that
+     matters anyway.
+
+     They DO count toward the significance bar below. A search is a search
+     whether or not it can be replayed, and leaving them out would understate
+     how many ways this desk is looking. */
+  var OMNI_FWD_ONLY = ['FUND-SQUEEZE','OI-DIVERGE','FLOW-ABSORB'];
+  var OMNI_ALL_MECHANICS = OMNI_MECHANICS.concat(OMNI_FWD_ONLY);
 
   /* Mechanic families, for the consensus gate. Mechanics that read the same
      thing about the tape count once between them: SPRING and UTAD are one
@@ -678,8 +839,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var OMNI_FAMILY = {
     'SPRING':'SWEEP', 'UTAD':'SWEEP',
     'ORB':'TREND', 'MMOVE':'TREND', 'PO3':'TREND',
-    'VALUE':'REVERSION', 'ABSORB':'REVERSION'
+    'VALUE':'REVERSION', 'ABSORB':'REVERSION',
+    /* Positioning is its own family. Funding, open interest and taker flow
+       all read the same thing — what the crowd is carrying — so they agree
+       with each other by construction and must count once between them. */
+    'FUND-SQUEEZE':'POSITIONING', 'OI-DIVERGE':'POSITIONING', 'FLOW-ABSORB':'POSITIONING'
   };
+  /* The shared mechanics bring their own family map. Merged rather than
+     retyped, so a kind cannot be classified one way here and another there. */
+  (function(){
+    var m = (typeof window !== 'undefined') ? window.HG_MECH_FAMILY : null;
+    if (!m) return;
+    for (var k in m) if (Object.prototype.hasOwnProperty.call(m, k) && !OMNI_FAMILY[k]) OMNI_FAMILY[k] = m[k];
+  })();
   function hgOmniFamilyOf(kind){ return OMNI_FAMILY[String(kind || '')] || 'OTHER'; }
 
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17), inlined so a piece of
@@ -958,10 +1130,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         /* Significantly negative, but on too thin a pool to act on. */
         ed = true;
         edWhy = stat + zTxt + ' — below breakeven, but only ' + sN + ' samples: too few to veto on';
-      } else if (z >= hgOmniFamilyZ(OMNI_MECHANICS.length)){
+      } else if (z >= hgOmniFamilyZ(OMNI_ALL_MECHANICS.length)){
         ed = true;
-        edWhy = stat + zTxt + ' — clears the ' + OMNI_MECHANICS.length
-              + '-mechanic significance bar (+' + hgOmniFamilyZ(OMNI_MECHANICS.length).toFixed(2) + 'σ)';
+        edWhy = stat + zTxt + ' — clears the ' + OMNI_ALL_MECHANICS.length
+              + '-mechanic significance bar (+' + hgOmniFamilyZ(OMNI_ALL_MECHANICS.length).toFixed(2) + 'σ)';
       } else {
         /* UNCHECKED, not PASS. This desk reports whichever of its mechanics
            looks best, so a read that clears a lone 5% threshold but not the
@@ -970,8 +1142,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            stops is the card claiming a measurement it has not got. */
         ed = null;
         edWhy = stat + zTxt + (z < 0 ? ' — below breakeven but within noise' : '')
-              + ' · ' + OMNI_MECHANICS.length + ' mechanics scanned, so +'
-              + hgOmniFamilyZ(OMNI_MECHANICS.length).toFixed(2)
+              + ' · ' + OMNI_ALL_MECHANICS.length + ' mechanics scanned, so +'
+              + hgOmniFamilyZ(OMNI_ALL_MECHANICS.length).toFixed(2)
               + 'σ is the bar before one this good means anything';
       }
       edWhy = 'in-sample ' + edWhy;
@@ -1125,6 +1297,92 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'consensus', hard: conHard, pass: con, why: conWhy });
 
+    /* --- added indicator reads ------------------------------------------
+
+       INFO gates: they report, they can argue against a setup on the card,
+       and they never veto. Nothing here has a measured record on this desk,
+       and a twelve-gate ledger does not need three more arbitrary vetoes.
+
+       Every return shape was probed against the real function first. adx
+       returns PARALLEL ARRAYS, hgAtrPercentile a bare number,
+       hgVolFromCloses an object — getting that wrong is silent, the gate
+       simply reads "unavailable" for ever, and that is how two dead gates
+       shipped on the gold desk. */
+    var idxW = (typeof window !== 'undefined') ? window : null;
+    function idxFn(n){ return (idxW && typeof idxW[n] === 'function') ? idxW[n] : null; }
+    var isRev = (hit.kind === 'SPRING' || hit.kind === 'UTAD' || hit.kind === 'VALUE'
+              || hit.kind === 'ABSORB' || hit.kind === 'VWAP-REVERT' || hit.kind === 'RSI-DIVERGE'
+              || hit.kind === 'POC-REVERT' || hit.kind === 'AVWAP-RECLAIM');
+
+    /* ADX — is there a trend here at all, and does it point our way? */
+    var adxOk = null, adxWhy = 'ADX unavailable';
+    var adxFn = idxFn('adx');
+    if (adxFn){
+      try {
+        var ax = adxFn(rows, 14);
+        var aA = ax && ax.adx, pA = ax && ax.plusDI, mA = ax && ax.minusDI;
+        var aV = (aA && aA.length) ? fin(aA[aA.length - 1]) : NaN;
+        var pV = (pA && pA.length) ? fin(pA[pA.length - 1]) : NaN;
+        var mV = (mA && mA.length) ? fin(mA[mA.length - 1]) : NaN;
+        if (isFinite(aV) && isFinite(pV) && isFinite(mV)){
+          var trending = aV >= 25, diUp = pV > mV;
+          adxWhy = 'ADX ' + aV.toFixed(0) + (trending ? ' — trending' : ' — no trend')
+                 + ', DI ' + (diUp ? 'up' : 'down');
+          if (!trending){
+            adxOk = isRev ? true : false;
+            adxWhy += isRev ? ' — which is the tape a reversion mechanic wants'
+                            : ' — a continuation mechanic with no trend behind it';
+          } else {
+            var diAgrees = (hit.dir === 'long') ? diUp : !diUp;
+            adxOk = isRev ? true : diAgrees;
+            adxWhy += diAgrees ? ' — agrees' : (isRev ? ' — counter-trend by design' : ' — DI points the other way');
+          }
+        }
+      } catch (eA){ adxOk = null; adxWhy = 'ADX threw: ' + ((eA && eA.message) || eA); }
+    }
+    gates.push({ key:'adx-trend', hard:false, info:true, pass: adxOk, why: adxWhy });
+
+    /* ATR percentile — both tails matter. A dead tape will not reach a 2R
+       target inside the horizon; a top-decile tape puts the stop in noise. */
+    var apOk = null, apWhy = 'ATR percentile unavailable';
+    var apFn = idxFn('hgAtrPercentile');
+    if (apFn){
+      try {
+        var pct = fin(apFn(rows, 14, 100));
+        if (isFinite(pct)){
+          apWhy = 'ATR in the ' + pct.toFixed(0) + 'th percentile of the last 100 bars';
+          if (pct < 15){ apOk = false; apWhy += ' — too quiet to reach the target inside the horizon'; }
+          else if (pct > 90){ apOk = false; apWhy += ' — top-decile volatility, the stop sits inside the noise'; }
+          else apOk = true;
+        }
+      } catch (eP){ apOk = null; apWhy = 'ATR percentile threw: ' + ((eP && eP.message) || eP); }
+    }
+    gates.push({ key:'atr-percentile', hard:false, info:true, pass: apOk, why: apWhy });
+
+    /* Volatility FORECAST. Every target here is an R multiple of the stop, so
+       whether it is reachable depends on volatility going forward, not on
+       what it has just done. */
+    var vfOk = null, vfWhy = 'volatility forecast unavailable';
+    var vfFn = idxFn('hgVolFromCloses');
+    if (vfFn){
+      try {
+        var vCl = [], vi;
+        for (vi = 0; vi < rows.length; vi++){ var vc = fin(rows[vi].c); if (isFinite(vc)) vCl.push(vc); }
+        var vpk = vfFn(vCl, {});
+        var sNow = vpk ? fin(vpk.sigmaNow) : NaN;
+        var sFwd = vpk ? fin(vpk.sigmaForecast) : NaN;
+        if (isFinite(sNow) && isFinite(sFwd) && sNow > 0){
+          var chg = (sFwd - sNow) / sNow;
+          vfWhy = 'volatility forecast ' + (chg >= 0 ? '+' : '') + (chg * 100).toFixed(0)
+                + '% vs now (' + (vpk.source || 'model') + ')';
+          if (chg <= -0.35){ vfOk = false; vfWhy += ' — contracting hard, the target may not be reachable inside the horizon'; }
+          else vfOk = true;
+        }
+      } catch (eV){ vfOk = null; vfWhy = 'volatility forecast threw: ' + ((eV && eV.message) || eV); }
+    }
+    gates.push({ key:'vol-forecast', hard:false, info:true, pass: vfOk, why: vfWhy });
+
+
     return gates;
   }
 
@@ -1187,7 +1445,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* Whole per-symbol evaluation: detectors -> gates -> plan. Pure given
      rows; hgPlanLevels is looked up defensively and NaN-safe. */
   function hgOmniEvaluate(item, rows, positioning, extra){
-    var hits = hgOmniDetect(rows), out = [], i;
+    var hits = hgOmniDetect(rows, positioning), out = [], i;
     if (!hits.length) return out;
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
@@ -1695,7 +1953,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      than rounded into a confident-looking percentage. */
   function renderPooled(pool){
     if (!pool) return '';
-    var keys = OMNI_MECHANICS.slice(), h, i, k, p;
+    var keys = OMNI_ALL_MECHANICS.slice(), h, i, k, p;
     /* Out-of-sample counts for the same detectors. Unlike every other column
        here, these are not re-read from the current window — they accumulate
        one record per firing across scans. */
@@ -1707,6 +1965,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     for (i = 0; i < keys.length; i++){
       k = keys[i]; p = pool[k];
       var fwdTxt = fwdCell(fwdPool ? fwdPool[k] : null);
+      /* A forward-only mechanic has no in-sample row to show and never will.
+         Saying "never fired here" would read as a broken detector. */
+      if (OMNI_FWD_ONLY.indexOf(k) >= 0){
+        h += '<tr><td><b>' + k + '</b></td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td>'
+           + '<td class="dim">—</td><td class="dim">forward-only — no historical funding/OI to replay</td>'
+           + '<td>' + fwdTxt + '</td></tr>';
+        continue;
+      }
       if (!p || !p.samples){
         h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td><td>' + fwdTxt + '</td></tr>';
         continue;

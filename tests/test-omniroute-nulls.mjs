@@ -291,8 +291,14 @@ for (const [name, mk, gateKey] of fields){
     stats:{samples:500,hit:0.34,expR:0.02}
   });
   const fullUnchecked = fullGates.filter(g => g.pass === null).map(g => g.key);
-  ok(fullUnchecked.every(k => k === 'measured-edge' || k === 'consensus'),
-     'only measured-edge and consensus are unchecked on a fully evidenced ticket ('
+  /* This harness loads omniroute via new Function('window', src), so
+     indicators.js and fixpack14-core.js are never loaded and the three
+     indicator reads correctly report that they could not be computed. That
+     they produce real values on a real series is proved against a shared
+     context in tests/test-shared-mechanics.mjs. */
+  const ALLOWED_UNCHECKED = ['measured-edge', 'consensus', 'adx-trend', 'atr-percentile', 'vol-forecast'];
+  ok(fullUnchecked.every(k => ALLOWED_UNCHECKED.indexOf(k) >= 0),
+     'only the family-wise edge read, consensus and the unloadable indicator reads are unchecked ('
      + (fullUnchecked.join(', ') || 'none') + ')');
   ok(full.evaluated === full.total - fullUnchecked.length, 'and every other gate reports');
   const ranked = win.hgOmniRank([

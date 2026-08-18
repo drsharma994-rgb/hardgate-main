@@ -72,8 +72,16 @@ console.log('== the gate is reachable and still reports in-sample when alone =='
 {
   ok(typeof G === 'function', 'hgOmniGates is exported');
   const g = edge({ samples: 41, hit: 0.51, expR: 0.54 }, null);
-  ok(g.pass === true, 'a positive in-sample pool with no forward record still passes');
-  ok(/^in-sample /.test(g.why), 'and the text now says IN-SAMPLE up front (' + g.why.slice(0, 40) + ')');
+  /* Since the family-wise bar landed, +1.44 sigma across 25 scanned mechanics
+     reads UNCHECKED rather than PASS — that IS the point of the correction.
+     What this section protects is that in-sample is still reported, still
+     labelled as in-sample, and still does not veto. */
+  ok(g.pass !== false, 'a positive in-sample pool with no forward record is not vetoed');
+  ok(g.pass === null, 'it reads UNCHECKED — one good-looking read out of 25 searches is not evidence');
+  ok(/^in-sample /.test(g.why), 'and the text still says IN-SAMPLE up front (' + g.why.slice(0, 40) + ')');
+  ok(/mechanics scanned/.test(g.why), 'with the bar it failed to clear stated on the card');
+  const strong = edge({ samples: 600, hit: 0.56, expR: 0.7 }, null);
+  ok(strong.pass === true, 'while a pool with real weight behind it still PASSES');
 }
 
 console.log('\n== THE LIVE CASE: in-sample +σ, out-of-sample 0 of 5 ==');
@@ -108,7 +116,10 @@ console.log('\n== a conclusive out-of-sample record outranks in-sample ==');
 console.log('\n== a thin but agreeing record does not block ==');
 {
   const g = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 5, hit: 0.6, open: 0, expR: 0.5 });
-  ok(g.pass === true, 'a small forward sample that agrees still passes');
+  /* Too few forward trades to judge, so the in-sample read stands — and that
+     read is now UNCHECKED under the family-wise bar. Not blocking is what
+     this section is about; the gate is soft either way. */
+  ok(g.pass !== false, 'a small forward sample that agrees does not block');
   ok(/too few to judge/.test(g.why), 'and is honest that it is too few to judge');
   ok(/in-sample/.test(g.why), 'with the in-sample figure still shown');
 }
@@ -116,7 +127,7 @@ console.log('\n== a thin but agreeing record does not block ==');
 console.log('\n== open trades are surfaced rather than silent ==');
 {
   const g = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 0, hit: NaN, open: 6, expR: NaN });
-  ok(g.pass === true, 'nothing settled yet does not block');
+  ok(g.pass !== false, 'nothing settled yet does not block');
   ok(/6 out-of-sample trades still open/.test(g.why), 'but the open count is on the card (' + g.why.slice(0, 45) + ')');
 }
 

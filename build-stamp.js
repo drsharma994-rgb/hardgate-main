@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v361',
-  pack: 'omniroute stops contradicting itself, and a tie rule that was wrong on both desks',
-  built: '2026-08-19T23:55:00Z',
-  note: 'OMNIROUTE graded a long and a short ticket at once on 12% of contracts; it now has the consensus gate and the family-wise significance bar, and a TREND-vs-REVERSION tie is broken by the regime instead of vetoing both'
+  version: 'hg-v362',
+  pack: 'nineteen more mechanics on omniroute, and the shared library that made it one implementation instead of two',
+  built: '2026-08-20T02:30:00Z',
+  note: 'sixteen instrument-agnostic detectors moved to hg-mechanics.js and are now shared by both desks; omniroute adds three crypto-native positioning mechanics that can never be back-tested and say so'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

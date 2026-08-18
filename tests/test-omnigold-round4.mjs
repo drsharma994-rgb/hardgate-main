@@ -36,6 +36,12 @@ let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
 const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+/* The instrument-agnostic detectors moved to hg-mechanics.js so OMNIROUTE
+   could use them without a second copy. omnigold keeps thin delegations under
+   the same names, so behaviour is unchanged — but assertions about the
+   detector SOURCE have to read the file it now lives in. */
+const MECH = fs.readFileSync(path.join(ROOT, 'hg-mechanics.js'), 'utf8');
+const BOTH = SRC + '\n' + MECH;
 
 function boot(){
   const ctx = { console, Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
@@ -47,7 +53,7 @@ function boot(){
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
-  for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-forward.js',
+  for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js', 'hg-forward.js',
                    'omniroute.js', 'omnigold.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
@@ -89,8 +95,8 @@ console.log('== all seven are registered in all four places ==');
 
 console.log('\n== THE DEFECT: a mechanic that fires on 99.7% of tapes is not a signal ==');
 {
-  ok(/f\(closes, 12\)/.test(SRC), 'CUSUM runs at k=12, not the library default of 1');
-  ok(/reported a fresh shift on 299 of them/.test(SRC), 'and the source records why');
+  ok(/f\(closes, 12\)/.test(BOTH), 'CUSUM runs at k=12, not the library default of 1');
+  ok(/reported a fresh shift on 299 of them/.test(BOTH), 'and the source records why');
 
   /* Behavioural, not just the constant: sweep it. */
   let fires = 0, tapes = 0;
@@ -202,7 +208,7 @@ console.log('\n== htf-confirm: the read that actually adds robustness ==');
   ok(/EMA21 .* vs EMA50/.test(g.why), 'with the numbers behind it');
 
   /* Resampling must be built from the bars in hand, not a second fetch. */
-  ok(/function hgOgResample\(rows, factor\)/.test(SRC), 'the higher timeframe is resampled');
+  ok(/function hgOgResample\(rows, factor\)/.test(BOTH), 'the higher timeframe is resampled');
   ok(/hgOgResample\(rows, 4\)/.test(SRC), 'at 4x the scan timeframe');
 
   /* A reversion mechanic is counter-trend on every timeframe by design. */

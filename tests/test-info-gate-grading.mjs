@@ -134,7 +134,10 @@ console.log('\n== the four gold context gates carry the flag ==');
   const CONTEXT_ONLY = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime',
                         'adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
                         'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area',
-                        'htf-confirm', 'regime-fit', 'vol-forecast'];
+                        'htf-confirm', 'regime-fit', 'vol-forecast',
+                        /* omniroute's own indicator reads — same standing:
+                           they argue, they never veto. */
+                        'adx-trend', 'atr-percentile', 'vol-forecast'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
