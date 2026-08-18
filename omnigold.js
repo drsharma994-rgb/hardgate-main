@@ -867,16 +867,29 @@ terse status, and never launches a first-time scan on a global refresh.
   /* Families voting each way on the bar this hit fired on. */
   function hgOgConsensus(allHits, hit){
     if (!allHits || !allHits.length || !hit) return null;
-    var mine = {}, theirs = {}, i, h, fam;
+    /* A family is only a vote if it speaks with ONE voice. SPRING long and
+       ROUND-MAGNET short are both SWEEP; counting SWEEP as agreeing AND
+       opposing put the same family on both sides of the ledger, inflated
+       both counts, and manufactured ties out of a family that simply had no
+       opinion. A split family is neutral, and is reported as neutral rather
+       than quietly dropped — "the sweep reads are split" is worth knowing. */
+    var seen = {}, i, h, fam, k;
     for (i = 0; i < allHits.length; i++){
       h = allHits[i];
       if (!h || !h.kind || (h.dir !== 'long' && h.dir !== 'short')) continue;
       fam = hgOgFamilyOf(h.kind);
-      if (h.dir === hit.dir) mine[fam] = true; else theirs[fam] = true;
+      if (!seen[fam]) seen[fam] = { mine: false, theirs: false };
+      if (h.dir === hit.dir) seen[fam].mine = true; else seen[fam].theirs = true;
     }
-    var agree = Object.keys(mine), against = Object.keys(theirs);
-    return { agree: agree.sort(), against: against.sort(),
-             nAgree: agree.length, nAgainst: against.length };
+    var agree = [], against = [], split = [];
+    for (k in seen){
+      if (!Object.prototype.hasOwnProperty.call(seen, k)) continue;
+      if (seen[k].mine && seen[k].theirs) split.push(k);
+      else if (seen[k].mine) agree.push(k);
+      else against.push(k);
+    }
+    return { agree: agree.sort(), against: against.sort(), split: split.sort(),
+             nAgree: agree.length, nAgainst: against.length, nSplit: split.length };
   }
 
   /* ==================== gold gate ledger ==================== */
@@ -1490,20 +1503,22 @@ terse status, and never launches a first-time scan on a global refresh.
       conHard = true;
       var aTxt = cons.nAgree + ' famil' + (cons.nAgree === 1 ? 'y agrees' : 'ies agree')
                + (cons.agree.length ? ' (' + cons.agree.join(', ') + ')' : '');
+      var splitTxt = cons.nSplit ? '; ' + cons.split.join(', ')
+                   + (cons.nSplit === 1 ? ' is' : ' are') + ' split and counted for neither' : '';
       if (cons.nAgainst === 0){
         con = true;
-        conWhy = aTxt + ', nothing firing against it';
+        conWhy = aTxt + ', nothing firing against it' + splitTxt;
       } else if (cons.nAgree > cons.nAgainst){
         con = true;
-        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')';
+        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt;
       } else if (cons.nAgree === cons.nAgainst){
         con = false;
         conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ')
-               + ') — the tape is two-sided and the desk cannot pick a side';
+               + ')' + splitTxt + ' — the tape is two-sided and the desk cannot pick a side';
       } else {
         con = false;
         conWhy = 'only ' + aTxt + ' vs ' + cons.nAgainst + ' against ('
-               + cons.against.join(', ') + ') — this is the minority read';
+               + cons.against.join(', ') + ')' + splitTxt + ' — this is the minority read';
       }
     }
     gates.push({ key:'consensus', hard: conHard, pass: con, why: conWhy });
@@ -1766,13 +1781,144 @@ terse status, and never launches a first-time scan on a global refresh.
     return '<li>' + pill(mark, cls) + ' <b>' + esc(g.key) + '</b> <span class="dim">' + esc(g.why) + '</span></li>';
   }
 
+
+  /* ==================== the pick ====================
+
+     One setup per horizon, marked out from the rest.
+
+     It is called the STRONGEST CASE and not "highest probability to win",
+     because the desk cannot honestly say the second thing. A probability
+     needs a settled record; most of these 27 mechanics have never settled a
+     trade here, and the ones that have are 0 for 13. Printing a win
+     percentage next to a setup that has no measured record would be inventing
+     the one number the user would most reasonably act on.
+
+     So the pick is ranked on the evidence that DOES exist, in this order:
+
+       1. it must be a TICKET — a vetoed setup is never promoted
+       2. how many independent mechanic families agree with it
+       3. its own settled out-of-sample record, where it has one
+       4. how much of the ledger could actually be evaluated
+       5. R:R
+
+     and the card states which of those it is standing on, so "strongest" is
+     auditable rather than a colour. Where a measured record exists it is
+     quoted with its sample count; where none exists the card says so in those
+     words instead of leaving a confident-looking gap. */
+
+  /* The pick's own colour, injected once and scoped to this tab's cards.
+
+     Deliberately VIOLET, not green: green already means PASS on every gate
+     row in the app, and reusing it here would read as "this one passed" —
+     which says nothing, since every pick is a ticket by construction. A
+     colour that means nothing elsewhere can mean exactly one thing here.
+
+     Colours are set explicitly rather than inherited so the card reads the
+     same on the light and dark stylesheets, and the accent is carried by a
+     left rule and a tint, never by text colour alone — a card that says what
+     it means only in colour says nothing to a reader who cannot see it, which
+     is why the badge and the reasons are spelled out in words too. */
+  function hgOgInjectPickStyles(){
+    var d = (typeof document !== 'undefined') ? document : null;
+    if (!d || !d.head) return;
+    if (d.getElementById('og-pick-css')) return;
+    var st = d.createElement('style');
+    st.id = 'og-pick-css';
+    st.textContent =
+      '#ogCards .card.og-pick{'
+    +   'border-left:4px solid #7c3aed;'
+    +   'background:linear-gradient(90deg,rgba(124,58,237,.075),transparent 42%);'
+    +   'box-shadow:0 0 0 1px rgba(124,58,237,.30),0 6px 20px -8px rgba(124,58,237,.40);'
+    + '}'
+    + '#ogCards .card.og-pick .ttl{color:#6d28d9}'
+    + '#ogCards .gpip.pick{'
+    +   'background:#7c3aed;border:1px solid #6d28d9;color:#fff;'
+    +   'font-weight:700;letter-spacing:.04em;'
+    + '}'
+    + '#ogCards .og-pick-why{'
+    +   'margin:8px 0;padding:8px 10px;'
+    +   'border:1px solid rgba(124,58,237,.32);border-left:3px solid #7c3aed;'
+    +   'background:rgba(124,58,237,.06);border-radius:4px;font-size:12px;line-height:1.5;'
+    + '}'
+    + '#ogCards .og-pick-why b{color:#6d28d9}'
+    + '#ogCards .og-pick-why ul{margin:5px 0 5px 16px;padding:0}'
+    + '#ogCards .og-pick-why li{margin:2px 0}'
+    + '#ogCards .og-pick-none{'
+    +   'border-left:3px solid rgba(124,58,237,.42);'
+    +   'background:rgba(124,58,237,.04);margin-bottom:8px;'
+    + '}'
+    /* Dark stylesheets: same hue, lifted so it holds on a dark ground. */
+    + '@media (prefers-color-scheme:dark){'
+    +   '#ogCards .card.og-pick{border-left-color:#a78bfa;'
+    +     'background:linear-gradient(90deg,rgba(167,139,250,.13),transparent 42%);'
+    +     'box-shadow:0 0 0 1px rgba(167,139,250,.34),0 6px 20px -8px rgba(167,139,250,.34)}'
+    +   '#ogCards .card.og-pick .ttl{color:#c4b5fd}'
+    +   '#ogCards .gpip.pick{background:#7c3aed;border-color:#a78bfa;color:#fff}'
+    +   '#ogCards .og-pick-why{border-color:rgba(167,139,250,.36);border-left-color:#a78bfa;'
+    +     'background:rgba(167,139,250,.10)}'
+    +   '#ogCards .og-pick-why b{color:#c4b5fd}'
+    +   '#ogCards .og-pick-none{border-left-color:rgba(167,139,250,.45);background:rgba(167,139,250,.07)}'
+    + '}';
+    d.head.appendChild(st);
+  }
+
+  function hgOgPickBasis(c){
+    var bits = [], fwd = null, cons = c && c.consensus;
+    if (cons && cons.nAgree > 0){
+      bits.push(cons.nAgree + ' mechanic famil' + (cons.nAgree === 1 ? 'y agrees' : 'ies agree')
+              + (cons.agree && cons.agree.length ? ' (' + cons.agree.join(', ') + ')' : '')
+              + (cons.nAgainst ? ', ' + cons.nAgainst + ' against' : ', none against'));
+    }
+    /* The only number here that is out-of-sample. */
+    var g, i;
+    for (i = 0; c && c.gates && i < c.gates.length; i++){
+      g = c.gates[i];
+      if (g && g.key === 'measured-edge'){ fwd = g; break; }
+    }
+    if (fwd){
+      if (/settled out-of-sample/.test(String(fwd.why))) bits.push('own settled record: ' + fwd.why);
+      else bits.push('no settled out-of-sample record yet — nothing here is a measured win rate');
+    }
+    var ev = (c && c.grade && c.grade.evaluated) || 0;
+    var tot = (c && c.grade && c.grade.total) || 0;
+    if (tot) bits.push(ev + ' of ' + tot + ' checks could be evaluated');
+    return bits;
+  }
+
+  /* Highest-ranked TICKET on one horizon, or null. Deliberately null rather
+     than "the best of a bad lot": promoting a vetoed setup because it was the
+     least-vetoed would defeat the entire ledger. */
+  function hgOgPickFor(ranked, horizon){
+    if (!ranked || !ranked.length) return null;
+    var i, c;
+    for (i = 0; i < ranked.length; i++){
+      c = ranked[i];
+      if (!c || c.horizon !== horizon) continue;
+      if (!(c.grade && c.grade.ticket)) continue;
+      if (!c.plan) continue;              /* no levels means nothing to act on */
+      return c;
+    }
+    return null;
+  }
+
   function setupCard(c){
     var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
     if (tot) badge += ' ' + pill(ev + '/' + tot + ' checks', ev * 2 >= tot ? '' : 'bad');
-    var h = '<div class="card">';
+    if (c.topPick) badge = pill('STRONGEST ' + c.horizon, 'pick') + ' ' + badge;
+    var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
+    if (c.topPick){
+      /* What the pick is standing on, in words, so the colour is never the
+         whole argument. */
+      var basis = hgOgPickBasis(c), bi;
+      h += '<div class="og-pick-why"><b>Strongest case on ' + esc(c.horizon)
+        +  '</b> — ranked on the evidence the desk actually has:<ul>';
+      for (bi = 0; bi < basis.length; bi++) h += '<li>' + esc(basis[bi]) + '</li>';
+      h += '</ul><span class="dim">Strongest of what fired now. NOT a win probability: '
+        +  'a probability needs a settled record, and this desk does not have one yet.</span></div>';
+    }
     if (c.plan){
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
         +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
@@ -2012,8 +2158,31 @@ terse status, and never launches a first-time scan on a global refresh.
             : '<div class="empty">no gold setup fired on either horizon. That is a normal result — the detectors are meant to be quiet.</div>';
           return;
         }
+        /* ONE pick per horizon, marked and floated to the top so the answer
+           to "what do I trade" is the first thing on the page rather than
+           something to be reconstructed from a list. A horizon with no ticket
+           says so outright — an empty result is an answer, and dressing up
+           the least-vetoed setup as a pick would defeat the ledger. */
+        var pickScalp = hgOgPickFor(ranked, HORIZONS.scalp.label);
+        var pickSwing = hgOgPickFor(ranked, HORIZONS.swing.label);
+        if (pickScalp) pickScalp.topPick = true;
+        if (pickSwing) pickSwing.topPick = true;
+
+        var ordered = [];
+        if (pickScalp) ordered.push(pickScalp);
+        if (pickSwing) ordered.push(pickSwing);
+        for (i = 0; i < ranked.length; i++){
+          if (ranked[i] !== pickScalp && ranked[i] !== pickSwing) ordered.push(ranked[i]);
+        }
+
         var h = '';
-        for (i = 0; i < ranked.length; i++) h += setupCard(ranked[i]);
+        [[HORIZONS.scalp.label, pickScalp], [HORIZONS.swing.label, pickSwing]].forEach(function(pair){
+          if (pair[1]) return;
+          h += '<div class="note og-pick-none">No ' + esc(pair[0]) + ' pick: nothing on that horizon '
+            +  'cleared the ledger this scan. That is a result, not a gap — the alternative would be '
+            +  'promoting a setup the desk already vetoed.</div>';
+        });
+        for (i = 0; i < ordered.length; i++) h += setupCard(ordered[i]);
         ui.cards.innerHTML = h;
       })
       .catch(function(err){
@@ -2052,6 +2221,7 @@ terse status, and never launches a first-time scan on a global refresh.
     };
     if (!ui.btn || !ui.stat || !ui.cards || !ui.pool) return;
     __og.ui = ui;
+    hgOgInjectPickStyles();
 
     var w = W(), missing = [];
     if (typeof fetch !== 'function') missing.push('fetch');

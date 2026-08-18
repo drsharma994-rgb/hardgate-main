@@ -177,6 +177,64 @@ console.log('\n== degenerate scans never throw ==');
   }
 }
 
+console.log('\n== a family that fires BOTH ways votes for neither side ==');
+{
+  /* My own first cut counted a split family on BOTH sides, which inflated
+     each count by one and manufactured ties out of a family that simply had
+     no opinion. SPRING long and ROUND-MAGNET short are both SWEEP. */
+  const split = [hit('SPRING', 'long'), hit('ROUND-MAGNET', 'short'),
+                 hit('VWAP-REVERT', 'long'), hit('ORB', 'short')];
+  const g = con(split[0], split);
+  ok(!/agree \(.*SWEEP.*\).*against \(.*SWEEP/.test(g.why),
+     'SWEEP does not appear on both sides of the same sentence (' + g.why + ')');
+  ok(/SWEEP is split and counted for neither/.test(g.why),
+     'the split is REPORTED, not silently dropped — a divided family is worth knowing');
+  ok(/1 family agrees \(REVERSION\)/.test(g.why), 'only the unambiguous families are counted');
+  ok(/1 against \(TREND\)/.test(g.why), 'on both sides of the vote');
+  ok(g.pass === false, 'and a genuine one-to-one tie still vetoes');
+
+  /* With the split family removed from both counts, a real majority emerges. */
+  const decided = [hit('SPRING', 'long'), hit('ROUND-MAGNET', 'short'),
+                   hit('VWAP-REVERT', 'long'), hit('SMT-DIVERGE', 'long')];
+  const g2 = con(decided[0], decided);
+  ok(g2.pass === true, 'two unambiguous families to nothing carries the vote');
+  ok(/SWEEP is split/.test(g2.why), 'while still disclosing that the sweep reads disagreed');
+}
+
+console.log('\n== the pick: one per horizon, and only ever a ticket ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/function hgOgPickFor\(ranked, horizon\)/.test(src), 'there is a per-horizon pick');
+  ok(/if \(!\(c\.grade && c\.grade\.ticket\)\) continue;/.test(src),
+     'it skips anything that is not a ticket — a vetoed setup is never promoted');
+  ok(/if \(!c\.plan\) continue;/.test(src), 'and anything with no levels to act on');
+  ok(/No ' \+ esc\(pair\[0\]\) \+ ' pick/.test(src),
+     'a horizon with no ticket says so outright rather than showing a gap');
+
+  /* The words on the card matter as much as the colour: this must not claim
+     a win probability the desk cannot support. */
+  ok(/STRONGEST ' \+ c\.horizon/.test(src), 'the badge says STRONGEST, not "most likely to win"');
+  ok(/NOT a win probability/.test(src), 'and the card states plainly that it is not a probability');
+  ok(/no settled out-of-sample record yet/.test(src),
+     'quoting the measured record where one exists and saying so where none does');
+  /* Comments stripped first: the file EXPLAINS why it refuses to say
+     "highest probability to win", and that explanation must not itself trip
+     the check. What matters is what can reach the card. */
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '');
+  ok(!/probability to win|win rate of|% chance|most likely to win/i.test(code),
+     'no win-probability language can reach the card');
+}
+
+console.log('\n== the pick colour is its own, and never the only signal ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/og-pick-css/.test(src), 'the pick styles are injected once, scoped to this tab');
+  ok(/#7c3aed/.test(src), 'in violet — a hue that means nothing else in the app');
+  ok(/prefers-color-scheme:dark/.test(src), 'with a dark-theme variant so it holds on either ground');
+  ok(/STRONGEST/.test(src) && /og-pick-why/.test(src),
+     'and the card carries a badge and written reasons, so the meaning survives without colour');
+}
+
 console.log('\n== the ranker puts the setup the desk agrees with first ==');
 {
   const rank = W.hgOmniRank;

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v356',
-  pack: 'the desk stops contradicting itself, and five more indicator reads',
-  built: '2026-08-19T14:05:00Z',
-  note: 'OMNIGOLD graded a long and a short ticket at once on 42% of tapes; a consensus gate now votes by mechanic family, vetoes the minority side and vetoes both on a tie'
+  version: 'hg-v357',
+  pack: 'one marked pick per horizon, and a split family that stops voting twice',
+  built: '2026-08-19T16:30:00Z',
+  note: 'OMNIGOLD marks the strongest SCALP and SWING ticket in violet with its evidence spelled out; a mechanic family firing both ways now counts for neither side instead of both'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
