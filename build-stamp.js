@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v364',
-  pack: 'cross-sectional: the one read 530 contracts can make that one contract cannot',
-  built: '2026-08-20T08:20:00Z',
-  note: 'every mechanic judged a contract alone and none of the 22 clears breakeven; the sweep now ranks the whole universe and trades the extremes of it'
+  version: 'hg-v365',
+  pack: 'which contracts get the full ledger is now a ranking, not a race',
+  built: '2026-08-20T11:45:00Z',
+  note: 'the 120 enriched contracts were whichever answered first; they are now chosen by how many mechanic families agree, and a contract past the cap says it was never asked instead of blaming the venue'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

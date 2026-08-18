@@ -233,7 +233,12 @@ console.log('\n== the sweep collects the universe without extra network ==');
   ok(SRC.indexOf('var xsSum = hgOmniXsSummary') < SRC.indexOf('xsRanks = hgOmniXsRanks'),
      'and the ranks are computed AFTER the sweep, never during it');
   /* No fetch was added: the summary is built from rows pass 1 already had. */
-  const passOne = SRC.slice(SRC.indexOf('PASS 1: detect over EVERY contract'), SRC.indexOf('var subset = fired.slice'));
+  /* Boundary by a marker that exists: the enrichment slice was renamed when
+     the cap became merit-ordered, and indexOf returning -1 quietly turned
+     this into a scan of almost the whole file. */
+  const endMark = 'WHICH 120 GET THE FULL LEDGER';
+  ok(SRC.indexOf(endMark) > 0, 'the end-of-pass-1 marker exists');
+  const passOne = SRC.slice(SRC.indexOf('PASS 1: detect over EVERY contract'), SRC.indexOf(endMark));
   ok(!/xuCandles\(|binance\w+\(/.test(passOne.replace(/W\.xuCandles\(item, TF, BARS\)/, '')),
      'pass 1 gained no new network call');
 }

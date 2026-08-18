@@ -1007,6 +1007,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   }
 
   function hgOmniGates(rows, hit, positioning, extra){
+    /* One reason string for every gate that depends on pass-2 enrichment,
+       declared FIRST because the funding gate runs before `x` is assigned and
+       a hoisted var read there is undefined — which is exactly what it did.
+
+       A contract past the measurement ceiling has NOT been shown to lack the
+       data; it was never asked. Saying "not published for this contract"
+       there blames the venue for a decision this tab made. */
+    var NOT_MEASURED = 'not measured — this contract was past the per-symbol confluence ceiling, so it was never requested';
+    var wasEnriched = !(extra && extra.enriched === false);
     var gates = [];
     var closes = closesOf(rows);
     var e21 = emaOf(closes.slice(-60), 21), e50 = emaOf(closes.slice(-120), 50);
@@ -1055,7 +1064,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* 4 — funding sanity: never add to the crowded side of an extreme.
        CoinDCX reports no funding, so this legitimately stays unknown. */
     var f = positioning ? fin(positioning.fundingPct) : NaN;
-    var fundOk = null, fundWhy = 'funding not reported by venue';
+    var fundOk = null, fundWhy = wasEnriched ? 'funding not reported by venue' : NOT_MEASURED;
     if (isFinite(f)){
       var crowded = (hit.dir === 'long' && f > 0.05) || (hit.dir === 'short' && f < -0.05);
       fundOk = !crowded;
@@ -1086,7 +1095,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     gates.push({ key:'htf-daily', hard:false, pass: d1, why: d1Why });
 
     /* 6 — open interest should BUILD into the move, not bleed out of it */
-    var oi = null, oiWhy = 'OI not published for this contract';
+    var oi = null, oiWhy = wasEnriched ? 'OI not published for this contract' : NOT_MEASURED;
     var oiCh = x.oi ? fin(x.oi.changePct) : NaN;
     if (isFinite(oiCh)){
       oi = oiCh > -3;              // collapsing OI = the move is being unwound
@@ -1097,7 +1106,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     /* 7 — retail crowding as a CONTRARIAN read: when the retail account
        majority already sits on our side at an extreme, the fuel is spent. */
-    var rc = null, rcWhy = 'retail long/short not published';
+    var rc = null, rcWhy = wasEnriched ? 'retail long/short not published' : NOT_MEASURED;
     var lp = x.retail ? fin(x.retail.longPct) : NaN;
     if (isFinite(lp)){
       var crowdedWithUs = (hit.dir === 'long' && lp >= 75) || (hit.dir === 'short' && lp <= 25);
@@ -1107,7 +1116,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     gates.push({ key:'retail-contrarian', hard:false, pass: rc, why: rcWhy });
 
     /* 8 — taker aggression should not lean against the setup */
-    var tk = null, tkWhy = 'taker flow not published';
+    var tk = null, tkWhy = wasEnriched ? 'taker flow not published' : NOT_MEASURED;
     var br = x.taker ? fin(x.taker.buySellRatio) : NaN;
     if (isFinite(br)){
       tk = (hit.dir === 'long') ? (br >= 0.9) : (br <= 1.1);
@@ -1126,7 +1135,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        certainly thin (a veto is sound), but a PASS says nothing about
        whether YOUR book can absorb the stop. The label now says so instead
        of implying the trade venue was measured. */
-    var lq = null, lqWhy = 'reference order book not available for this contract';
+    var lq = null, lqWhy = wasEnriched ? 'reference order book not available for this contract' : NOT_MEASURED;
     var dBid = x.depth ? fin(x.depth.bidUsd) : NaN, dAsk = x.depth ? fin(x.depth.askUsd) : NaN;
     var venue = String((x.exchange || '')).toLowerCase();
     var isBinanceVenue = venue === 'binance';
@@ -2369,7 +2378,54 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            30 names, because a percentile of a handful is not a percentile. */
         xsRanks = hgOmniXsRanks(xsAll);
 
-        var subset = fired.slice(0, ENRICH_MAX);
+        /* WHICH 120 GET THE FULL LEDGER.
+
+           This was fired.slice(0, ENRICH_MAX) — the first 120 contracts to
+           come back from the network, which is a race order, not a merit
+           order. A live scan fired ~490 names: 120 got funding, open
+           interest, retail, taker flow and book depth, and 370 got hard gates
+           and a plan only. Which 370 was decided by whichever venue leg
+           happened to answer slowest. That is the real reason most cards
+           could not use most of the indicators.
+
+           Ranked now, on evidence already in hand and costing nothing:
+
+             1. how many independent mechanic FAMILIES agree on a direction —
+                the same measure the consensus gate uses, and the one thing
+                that most predicts whether a name will become a ticket
+             2. how many mechanics fired at all
+             3. how much cross-sectional conviction there is: a contract at
+                either extreme of the universe is more worth measuring than
+                one in the middle
+
+           Names beyond the cap still get hard gates and a plan; they are just
+           no longer chosen by network luck. */
+        var xsRankOf = function(sym){
+          if (!xsRanks || !xsRanks.rank) return 0.5;
+          var r = fin(xsRanks.rank[String(sym)]);
+          return isFinite(r) ? r : 0.5;
+        };
+        var enrichMerit = function(f){
+          var fams = {}, i, h, best = 0, dir;
+          for (i = 0; i < f.hits.length; i++){
+            h = f.hits[i];
+            if (!h || (h.dir !== 'long' && h.dir !== 'short')) continue;
+            dir = h.dir;
+            if (!fams[dir]) fams[dir] = {};
+            fams[dir][hgOmniFamilyOf(h.kind)] = true;
+          }
+          for (dir in fams){
+            if (!Object.prototype.hasOwnProperty.call(fams, dir)) continue;
+            var n = 0, k;
+            for (k in fams[dir]) if (Object.prototype.hasOwnProperty.call(fams[dir], k)) n++;
+            if (n > best) best = n;
+          }
+          /* distance from the middle of the universe, 0 .. 0.5 */
+          var edge = Math.abs(xsRankOf(f.item && f.item.sym) - 0.5);
+          return best * 1000 + f.hits.length * 10 + edge * 10;
+        };
+        var meritOrder = fired.slice().sort(function(a, b){ return enrichMerit(b) - enrichMerit(a); });
+        var subset = meritOrder.slice(0, ENRICH_MAX);
         var perSymbolStats = [], enriched = [], e = 0;
 
         function enrichOne(f){
@@ -2447,6 +2503,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           for (j = 0; j < fired.length; j++){
             var fitem = fired[j].item;
             var ex = exBySym[fitem.sym] || { stats: pooled };
+            /* WHY a per-symbol gate is unchecked matters. "OI not published
+               for this contract" and "this contract was past the measurement
+               ceiling" are different facts, and the card was printing the
+               first for both — so a name that simply lost a race looked like
+               a venue that publishes nothing. */
+            ex.enriched = Object.prototype.hasOwnProperty.call(exBySym, fitem.sym);
+            ex.xs = xsRanks;
+            ex.sym = fitem.sym;
             /* The daily timeframe is RESAMPLED from bars already in hand — it
                costs no network — but it used to be computed only inside the
                enrichment step, so every contract past the enrich ceiling
@@ -2510,7 +2574,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
         var caveat = '';
         if (res.pass1Err) caveat += '  · pass 1 interrupted (' + res.pass1Err + ') — partial cover at ' + res.pass1Done + '/' + res.scanned;
-        if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' of them show hard gates + plan only (per-symbol confluence capped at ' + ENRICH_MAX + ' names)';
+        if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' of them show hard gates + plan only (per-symbol confluence capped at ' + ENRICH_MAX + ' names, and the ' + ENRICH_MAX + ' were chosen by how many mechanic families agree, not by which answered first)';
         if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
         /* Distinct from `thin`: these contracts were asked and did not answer
            (rate limit, venue down). Folding them into "scanned" would let a
@@ -2759,6 +2823,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* Cross-sectional pieces are exported so the universe read is testable
        on its own — it is the only part of this desk that cannot be checked
        from a single symbol's bars. */
+    window.hgOmniFamilyOf  = hgOmniFamilyOf;   /* the consensus family map, so the vote is testable */
     window.hgOmniXsSummary = hgOmniXsSummary;
     window.hgOmniXsRanks   = hgOmniXsRanks;
     window.hgOmniXsLeader  = hgOmniXsLeader;
