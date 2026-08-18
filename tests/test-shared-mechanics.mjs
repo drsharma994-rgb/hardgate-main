@@ -201,8 +201,11 @@ console.log('\n== forward-only is stated, not hidden ==');
   for (const k of ['FUND-SQUEEZE', 'OI-DIVERGE', 'FLOW-ABSORB']){
     ok(!(k in bt), k + ' is correctly absent from the walk-forward');
   }
-  ok(/var OMNI_FWD_ONLY = \['FUND-SQUEEZE','OI-DIVERGE','FLOW-ABSORB'\]/.test(ROUTE),
+  ok(/var OMNI_FWD_ONLY = \['FUND-SQUEEZE','OI-DIVERGE','FLOW-ABSORB'/.test(ROUTE),
      'they are declared forward-only');
+  /* The cross-sectional pair joined the same list for the same reason: a past
+     bar's universe cannot be replayed from one symbol's candles either. */
+  ok(/'XS-LEADER','XS-LAGGARD'\]/.test(ROUTE), 'and so are the cross-sectional mechanics');
   ok(/forward-only — no historical funding\/OI to replay/.test(ROUTE),
      'and the pooled table says exactly that instead of "never fired here"');
   ok(/OMNI_FWD_ONLY\.indexOf\(k\) >= 0/.test(ROUTE), 'with a dedicated row, not the empty-pool row');
@@ -218,7 +221,13 @@ console.log('\n== the significance bar counts EVERY search, replayable or not ==
   const m = /\+(\d\.\d\d)σ is the bar/.exec(g.why);
   ok(!!m, 'the bar is stated on the card');
   ok(parseFloat(m[1]) > 2.39, 'and ROSE with the extra mechanics (' + m[1] + 'σ, was 2.39σ at 6)');
-  ok(new RegExp('\\b25 mechanics scanned').test(g.why), 'quoting all 25, not just the 22 replayable ones');
+  /* Derived, not hardcoded: the count grows every round, and a literal here
+     just teaches you to bump it without reading it. What must hold is that
+     the card quotes backtestable PLUS forward-only. */
+  const nAll = (ROUTE.slice(ROUTE.indexOf('var OMNI_MECHANICS'), ROUTE.indexOf('var OMNI_ALL_MECHANICS'))
+                     .match(/'[A-Z0-9-]+'/g) || []).length;
+  ok(g.why.indexOf(nAll + ' mechanics scanned') >= 0,
+     'quoting all ' + nAll + ' searches, replayable or not');
 }
 
 console.log('\n== adding nineteen mechanics did not reintroduce contradictions ==');

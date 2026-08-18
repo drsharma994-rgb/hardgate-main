@@ -296,7 +296,10 @@ for (const [name, mk, gateKey] of fields){
      indicator reads correctly report that they could not be computed. That
      they produce real values on a real series is proved against a shared
      context in tests/test-shared-mechanics.mjs. */
-  const ALLOWED_UNCHECKED = ['measured-edge', 'consensus', 'adx-trend', 'atr-percentile', 'vol-forecast'];
+  const ALLOWED_UNCHECKED = ['measured-edge', 'consensus', 'adx-trend', 'atr-percentile', 'vol-forecast',
+                            /* the universe reads need the whole sweep, which a
+                               single-symbol harness has no way to supply */
+                            'xs-rank', 'breadth'];
   ok(fullUnchecked.every(k => ALLOWED_UNCHECKED.indexOf(k) >= 0),
      'only the family-wise edge read, consensus and the unloadable indicator reads are unchecked ('
      + (fullUnchecked.join(', ') || 'none') + ')');

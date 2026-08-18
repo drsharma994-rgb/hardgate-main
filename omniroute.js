@@ -439,6 +439,87 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* Run every detector; return all hits (a symbol can present more than one
      family, which is genuine confluence rather than a duplicate). Pure. */
 
+
+  /* ============ cross-sectional: the one thing 530 contracts can say ============
+
+     Every mechanic on this desk judges a contract ALONE. That is the same
+     question a single-symbol tab asks, and the live pool says how it has gone:
+     twenty-two price mechanics, roughly four thousand in-sample firings, and
+     not one of them clears breakeven. A twenty-third candle formation is
+     measurably not the missing piece.
+
+     What a 530-contract sweep can say, and a single-symbol tab structurally
+     cannot, is where THIS contract sits against every other one. Cross-
+     sectional momentum is one of the few effects in crypto with support
+     outside a backtest, and the tab already holds the bars needed to measure
+     it — pass 1 fetches every contract and throws away everything that did
+     not fire. Keeping four numbers per symbol costs no network at all.
+
+     These are FORWARD-ONLY, for the same reason the positioning mechanics
+     are: the walk-forward replays one symbol's candles, and the cross-section
+     at a past bar cannot be reconstructed from them. They earn an
+     out-of-sample record and say so. */
+
+  /* Four numbers per contract, taken from bars already in hand. */
+  function hgOmniXsSummary(sym, rows){
+    if (!sym || !rows || rows.length < 61) return null;
+    var n = rows.length - 1;
+    var c = num(rows[n].c), c20 = num(rows[n - 20].c), c60 = num(rows[n - 60].c);
+    if (!isFinite(c) || !isFinite(c20) || !isFinite(c60) || !(c20 > 0) || !(c60 > 0)) return null;
+    return { sym: String(sym), ret20: (c - c20) / c20, ret60: (c - c60) / c60, last: c };
+  }
+
+  /* Percentile rank of every contract against the universe, plus the breadth
+     of the sweep. Pure: summaries in, ranks out. */
+  function hgOmniXsRanks(summaries){
+    if (!summaries || !summaries.length) return null;
+    var clean = [], i;
+    for (i = 0; i < summaries.length; i++){
+      if (summaries[i] && isFinite(summaries[i].ret20)) clean.push(summaries[i]);
+    }
+    /* Under about thirty names a percentile is not a percentile, it is a
+       rounding of a handful of numbers. Refuse rather than mislead. */
+    if (clean.length < 30) return null;
+    var sorted = clean.slice().sort(function(a, b){ return a.ret20 - b.ret20; });
+    var rank = {}, up = 0;
+    for (i = 0; i < sorted.length; i++){
+      rank[sorted[i].sym] = sorted.length > 1 ? (i / (sorted.length - 1)) : 0.5;
+      if (sorted[i].ret20 > 0) up++;
+    }
+    var mid = sorted[Math.floor(sorted.length / 2)];
+    return { rank: rank, n: sorted.length, breadthUp: up / sorted.length,
+             medianRet20: mid ? mid.ret20 : NaN };
+  }
+
+  /* Cross-sectional momentum. Top of the universe and still going is the
+     documented effect; the EMA check is there so this is not simply buying
+     whatever has already run furthest. */
+  function hgOmniXsLeader(rows, xs, sym){
+    if (!rows || rows.length < 60 || !xs || !xs.rank) return null;
+    var r = xs.rank[String(sym)];
+    if (!isFinite(r)) return null;
+    var closes = [], i;
+    for (i = 0; i < rows.length; i++){ var cv = num(rows[i].c); if (isFinite(cv)) closes.push(cv); }
+    if (closes.length < 60) return null;
+    var e21 = emaOf(closes.slice(-60), 21);
+    var last = closes[closes.length - 1];
+    if (!isFinite(e21) || !isFinite(last)) return null;
+    /* State the percentile, not "top N%": at the very top that arithmetic
+       renders "top 0%", which reads as none of them. */
+    var pct = ordinal(r * 100);
+    if (r >= 0.9 && last > e21){
+      return { kind:'XS-LEADER', dir:'long', level: last,
+               why:'ranks ' + pct + ' percentile of ' + xs.n
+                   + ' contracts by 20-bar return, and still above its 21-EMA' };
+    }
+    if (r <= 0.1 && last < e21){
+      return { kind:'XS-LAGGARD', dir:'short', level: last,
+               why:'ranks ' + pct + ' percentile of ' + xs.n
+                   + ' contracts by 20-bar return, and still below its 21-EMA' };
+    }
+    return null;
+  }
+
   /* ============ crypto-native mechanics ============
 
      These three cannot exist on spot gold: there is no funding rate, no open
@@ -529,7 +610,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return null;
   }
 
-  function hgOmniDetect(rows, positioning){
+  function hgOmniDetect(rows, positioning, xs, sym){
     var out = [];
     if (!rows || rows.length < 30) return out;
     /* The shared, instrument-agnostic mechanics. Feature-checked: without
@@ -553,6 +634,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       pd = hgOmniFundingSqueeze(rows, positioning); if (pd) out.push(pd);
       pd = hgOmniOiDiverge(rows, positioning);      if (pd) out.push(pd);
       pd = hgOmniFlowAbsorb(rows, positioning);     if (pd) out.push(pd);
+    }
+    /* Cross-sectional: needs the whole sweep, so it only runs where the
+       universe ranks were computed. Forward-only, like the positioning
+       mechanics — a past bar's cross-section cannot be replayed from one
+       symbol's candles. */
+    if (xs){
+      var xd = hgOmniXsLeader(rows, xs, sym);
+      if (xd) out.push(xd);
     }
     var rng = hgOmniRange(rows, RANGE_LOOKBACK);
     var prof = hgOmniProfile(rows, 24);
@@ -829,7 +918,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      They DO count toward the significance bar below. A search is a search
      whether or not it can be replayed, and leaving them out would understate
      how many ways this desk is looking. */
-  var OMNI_FWD_ONLY = ['FUND-SQUEEZE','OI-DIVERGE','FLOW-ABSORB'];
+  var OMNI_FWD_ONLY = ['FUND-SQUEEZE','OI-DIVERGE','FLOW-ABSORB','XS-LEADER','XS-LAGGARD'];
   var OMNI_ALL_MECHANICS = OMNI_MECHANICS.concat(OMNI_FWD_ONLY);
 
   /* Mechanic families, for the consensus gate. Mechanics that read the same
@@ -843,7 +932,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* Positioning is its own family. Funding, open interest and taker flow
        all read the same thing — what the crowd is carrying — so they agree
        with each other by construction and must count once between them. */
-    'FUND-SQUEEZE':'POSITIONING', 'OI-DIVERGE':'POSITIONING', 'FLOW-ABSORB':'POSITIONING'
+    'FUND-SQUEEZE':'POSITIONING', 'OI-DIVERGE':'POSITIONING', 'FLOW-ABSORB':'POSITIONING',
+    /* Cross-sectional is its own family: it reads the contract against the
+       universe, which no price mechanic on this ledger looks at. */
+    'XS-LEADER':'CROSS-SECTIONAL', 'XS-LAGGARD':'CROSS-SECTIONAL'
   };
   /* The shared mechanics bring their own family map. Merged rather than
      retyped, so a kind cannot be classified one way here and another there. */
@@ -1382,6 +1474,44 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'vol-forecast', hard:false, info:true, pass: vfOk, why: vfWhy });
 
+    /* XS-RANK — where this contract sits against the whole sweep.
+
+       No other gate on this ledger looks outside the symbol. A long in the
+       bottom decile of a 500-contract universe is not the same trade as the
+       identical setup in the top decile, and until now the card could not
+       tell them apart. Info: cross-sectional momentum has support in the
+       literature but none on THIS desk yet, so it argues and does not veto. */
+    var xsOk = null, xsWhy = 'universe rank unavailable (sweep too small to rank)';
+    var xsPack = x.xs;
+    if (xsPack && xsPack.rank && x.sym){
+      var xr = fin(xsPack.rank[String(x.sym)]);
+      if (isFinite(xr)){
+        var pctl = Math.round(xr * 100);
+        xsWhy = 'ranks ' + ordinal(pctl) + ' percentile of ' + xsPack.n + ' contracts by 20-bar return';
+        /* Buying the weakest of five hundred, or selling the strongest, is
+           the case worth flagging. */
+        if (hit.dir === 'long' && xr <= 0.1){ xsOk = false; xsWhy += ' — buying the weakest of the universe'; }
+        else if (hit.dir === 'short' && xr >= 0.9){ xsOk = false; xsWhy += ' — selling the strongest of the universe'; }
+        else xsOk = true;
+      }
+    }
+    gates.push({ key:'xs-rank', hard:false, info:true, pass: xsOk, why: xsWhy });
+
+    /* BREADTH — how much of the universe is going the same way.
+
+       A short taken while 85% of contracts are up is fighting the whole tape,
+       and no per-symbol read can see that. */
+    var brOk = null, brWhy = 'breadth unavailable (sweep too small to measure)';
+    if (xsPack && isFinite(fin(xsPack.breadthUp))){
+      var up = fin(xsPack.breadthUp);
+      brWhy = Math.round(up * 100) + '% of ' + xsPack.n + ' contracts are up over 20 bars';
+      if (hit.dir === 'long' && up <= 0.15){ brOk = false; brWhy += ' — a long against a universe-wide selloff'; }
+      else if (hit.dir === 'short' && up >= 0.85){ brOk = false; brWhy += ' — a short against a universe-wide rally'; }
+      else brOk = true;
+    }
+    gates.push({ key:'breadth', hard:false, info:true, pass: brOk, why: brWhy });
+
+
 
     return gates;
   }
@@ -1445,7 +1575,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* Whole per-symbol evaluation: detectors -> gates -> plan. Pure given
      rows; hgPlanLevels is looked up defensively and NaN-safe. */
   function hgOmniEvaluate(item, rows, positioning, extra){
-    var hits = hgOmniDetect(rows, positioning), out = [], i;
+    var hits = hgOmniDetect(rows, positioning, (extra && extra.xs) || null, item && item.sym), out = [], i;
     if (!hits.length) return out;
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
@@ -1467,6 +1597,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       exForHit.exchange = item && item.exchange;
       exForHit.regimeWarm = ex.regimeWarm;
       exForHit.allHits = hits;      /* so the consensus gate can see the rest of the scan */
+      exForHit.sym = item && item.sym;   /* so the cross-sectional gates can find this contract's rank */
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       var plan = null;
@@ -2174,6 +2305,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         return item && (item.exchange === 'delta' || item.exchange === 'coindcx');
       });
       var fired = [], done = 0, thin = 0, failed = 0, pass1Err = null;
+      var xsAll = [], xsRanks = null;
 
       /* ---- PASS 1: detect over EVERY contract. Candles only, no extra
          network per name, so this stays linear in the universe size. ---- */
@@ -2207,6 +2339,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               try { W.hgFwdResolve(item.sym, null, rows); }
               catch (e) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('omniroute:resolve', e); } catch (eW) {} }
             }
+            /* CROSS-SECTIONAL SUMMARY for every contract, fired or not.
+               Four numbers, no network: pass 1 already holds these bars and
+               was throwing away everything that did not fire, which is
+               exactly the data a universe-relative read needs. */
+            var xsSum = hgOmniXsSummary(item.sym, rows);
+            if (xsSum) xsAll.push(xsSum);
+            /* Detect WITHOUT the cross-section here: the ranks are not known
+               until every contract has been seen. Pass 2 re-detects the fired
+               names with the universe in hand. */
             var hits = hgOmniDetect(rows);
             if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
           }).catch(function(){ done++; failed++; });
@@ -2224,6 +2365,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            O(bars x detectors) per symbol, and the Binance/depth calls are
            per-symbol network — confining both to hits is what makes a
            full-universe scan viable at all. ---- */
+        /* Universe ranks, once pass 1 has seen every contract. Refuses under
+           30 names, because a percentile of a handful is not a percentile. */
+        xsRanks = hgOmniXsRanks(xsAll);
+
         var subset = fired.slice(0, ENRICH_MAX);
         var perSymbolStats = [], enriched = [], e = 0;
 
@@ -2261,6 +2406,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               depth: dep,
               regime: (typeof W.regimeState === 'function') ? (function(){ try { return W.regimeState(); } catch (er) { return null; } })() : null,
               news: (typeof W.hgNewsRisk === 'function') ? (function(){ try { return W.hgNewsRisk(f.item.sym); } catch (er) { return null; } })() : null,
+              /* The whole-universe read. Present only once pass 1 has ranked
+                 every contract, and null on a sweep too small to rank. */
+              xs: xsRanks,
               stats: stats
             }});
           }).catch(function(){ e++; });
@@ -2608,6 +2756,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniProfile = hgOmniProfile;
     window.hgOmniValueReject = hgOmniValueReject;
     window.hgOmniMeasuredMove = hgOmniMeasuredMove;
+    /* Cross-sectional pieces are exported so the universe read is testable
+       on its own — it is the only part of this desk that cannot be checked
+       from a single symbol's bars. */
+    window.hgOmniXsSummary = hgOmniXsSummary;
+    window.hgOmniXsRanks   = hgOmniXsRanks;
+    window.hgOmniXsLeader  = hgOmniXsLeader;
     window.hgOmniDetect = hgOmniDetect;
     window.hgOmniResample = hgOmniResample;
     window.hgOmniDropForming = hgOmniDropForming;

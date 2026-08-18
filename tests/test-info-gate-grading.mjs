@@ -123,7 +123,14 @@ console.log('\n== the four gold context gates carry the flag ==');
                    'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area',
                    'htf-confirm', 'regime-fit', 'vol-forecast']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(src),
-       k + ' is declared hard:false, info:true');
+       k + ' is declared hard:false, info:true (omnigold)');
+  }
+  /* The universe reads live on OMNIROUTE — they need the whole sweep, which
+     a single-instrument desk does not have. */
+  const routeSrc = fs.readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8');
+  for (const k of ['adx-trend', 'atr-percentile', 'vol-forecast', 'xs-rank', 'breadth']){
+    ok(new RegExp("key:'" + k + "', hard:false, info:true").test(routeSrc),
+       k + ' is declared hard:false, info:true (omniroute)');
   }
 
   /* And nothing else in the app has quietly become non-vetoing. The info flag
@@ -137,7 +144,10 @@ console.log('\n== the four gold context gates carry the flag ==');
                         'htf-confirm', 'regime-fit', 'vol-forecast',
                         /* omniroute's own indicator reads — same standing:
                            they argue, they never veto. */
-                        'adx-trend', 'atr-percentile', 'vol-forecast'];
+                        'adx-trend', 'atr-percentile', 'vol-forecast',
+                        /* the universe reads — the only gates that look
+                           outside the contract being judged */
+                        'xs-rank', 'breadth'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');

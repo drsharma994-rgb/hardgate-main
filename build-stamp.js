@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v363',
-  pack: 'four defects read straight off a live scan',
-  built: '2026-08-20T05:10:00Z',
-  note: 'cards headed TICKET were printing VETO rows for info gates, and five mechanics on one set of levels were counted as five tickets instead of one trade'
+  version: 'hg-v364',
+  pack: 'cross-sectional: the one read 530 contracts can make that one contract cannot',
+  built: '2026-08-20T08:20:00Z',
+  note: 'every mechanic judged a contract alone and none of the 22 clears breakeven; the sweep now ranks the whole universe and trades the extremes of it'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
