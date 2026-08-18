@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v360',
-  pack: 'higher-timeframe confirmation, regime fit and a volatility forecast, plus seven mechanics',
-  built: '2026-08-19T21:50:00Z',
-  note: 'OMNIGOLD scans 34 mechanics behind 30 gates; CUSUM was firing on 299 of 300 tapes at the library default k, and the consensus gate passed BOTH directions when every family was split'
+  version: 'hg-v361',
+  pack: 'omniroute stops contradicting itself, and a tie rule that was wrong on both desks',
+  built: '2026-08-19T23:55:00Z',
+  note: 'OMNIROUTE graded a long and a short ticket at once on 12% of contracts; it now has the consensus gate and the family-wise significance bar, and a TREND-vs-REVERSION tie is broken by the regime instead of vetoing both'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

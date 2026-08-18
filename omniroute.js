@@ -664,6 +664,84 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                    blocking funding gate would mean CoinDCX could never
                    produce a ticket at all. The card still shows the check
                    did not run, so nobody mistakes silence for a pass. */
+  /* Every mechanic this desk measures. ONE list: renderPooled shows these and
+     the measured-edge bar divides its significance threshold by this many, so
+     the multiple-comparisons correction cannot drift out of step with the
+     number of mechanics actually being tried. UTAD is deliberately absent —
+     it is measured under SPRING, so it is not a separate test. */
+  var OMNI_MECHANICS = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE'];
+
+  /* Mechanic families, for the consensus gate. Mechanics that read the same
+     thing about the tape count once between them: SPRING and UTAD are one
+     idea seen from either side of a range, and treating them as two
+     independent confirmations would manufacture agreement out of redundancy. */
+  var OMNI_FAMILY = {
+    'SPRING':'SWEEP', 'UTAD':'SWEEP',
+    'ORB':'TREND', 'MMOVE':'TREND', 'PO3':'TREND',
+    'VALUE':'REVERSION', 'ABSORB':'REVERSION'
+  };
+  function hgOmniFamilyOf(kind){ return OMNI_FAMILY[String(kind || '')] || 'OTHER'; }
+
+  /* Standard normal CDF (Abramowitz & Stegun 26.2.17), inlined so a piece of
+     pure arithmetic can never read "unavailable" because a script did not
+     load. */
+  function hgOmniNormCdf(z){
+    if (!isFinite(z)) return NaN;
+    var sgn = z < 0 ? -1 : 1, x = Math.abs(z) / Math.SQRT2;
+    var t = 1 / (1 + 0.3275911 * x);
+    var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+              - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+    return 0.5 * (1 + sgn * y);
+  }
+
+  /* THE MULTIPLE-COMPARISONS BAR.
+
+     This desk reports whichever of its mechanics looks best. Judging each
+     against a lone 5% threshold answers the wrong question: with six
+     mechanics tried, the best of them clears +1.6σ by chance most of the
+     time. Sidak gives the per-mechanic threshold that holds the FAMILY-wise
+     false positive rate at 5% across k tries.
+
+     At six mechanics the bar is +2.44σ, not +1.64σ. On a 2R floor at 41
+     samples that is the difference between needing a 45.4% hit rate and a
+     51.3% one — and the gate was passing the first. */
+  function hgOmniFamilyZ(k){
+    var n = Math.floor(fin(k));
+    if (!isFinite(n) || n < 1) n = 1;
+    var target = Math.pow(0.95, 1 / n);
+    var lo = 0, hi = 8, mid, i;
+    for (i = 0; i < 64; i++){
+      mid = (lo + hi) / 2;
+      if (hgOmniNormCdf(mid) < target) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  /* Families voting each way on this bar. A family that fires BOTH ways is
+     internally divided and counts for NEITHER side — putting it on both
+     inflates each count and manufactures ties out of a family that simply has
+     no opinion. */
+  function hgOmniConsensus(allHits, hit){
+    if (!allHits || !allHits.length || !hit) return null;
+    var seen = {}, i, h, fam, k;
+    for (i = 0; i < allHits.length; i++){
+      h = allHits[i];
+      if (!h || !h.kind || (h.dir !== 'long' && h.dir !== 'short')) continue;
+      fam = hgOmniFamilyOf(h.kind);
+      if (!seen[fam]) seen[fam] = { mine: false, theirs: false };
+      if (h.dir === hit.dir) seen[fam].mine = true; else seen[fam].theirs = true;
+    }
+    var agree = [], against = [], split = [];
+    for (k in seen){
+      if (!Object.prototype.hasOwnProperty.call(seen, k)) continue;
+      if (seen[k].mine && seen[k].theirs) split.push(k);
+      else if (seen[k].mine) agree.push(k);
+      else against.push(k);
+    }
+    return { agree: agree.sort(), against: against.sort(), split: split.sort(),
+             nAgree: agree.length, nAgainst: against.length, nSplit: split.length };
+  }
+
   function hgOmniGates(rows, hit, positioning, extra){
     var gates = [];
     var closes = closesOf(rows);
@@ -880,9 +958,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         /* Significantly negative, but on too thin a pool to act on. */
         ed = true;
         edWhy = stat + zTxt + ' — below breakeven, but only ' + sN + ' samples: too few to veto on';
-      } else {
+      } else if (z >= hgOmniFamilyZ(OMNI_MECHANICS.length)){
         ed = true;
-        edWhy = stat + zTxt + (z < 0 ? ' — below breakeven but within noise' : '');
+        edWhy = stat + zTxt + ' — clears the ' + OMNI_MECHANICS.length
+              + '-mechanic significance bar (+' + hgOmniFamilyZ(OMNI_MECHANICS.length).toFixed(2) + 'σ)';
+      } else {
+        /* UNCHECKED, not PASS. This desk reports whichever of its mechanics
+           looks best, so a read that clears a lone 5% threshold but not the
+           family-wise one is not a weak edge — it is what searching six ways
+           looks like. The gate is soft, so the ticket still stands; what
+           stops is the card claiming a measurement it has not got. */
+        ed = null;
+        edWhy = stat + zTxt + (z < 0 ? ' — below breakeven but within noise' : '')
+              + ' · ' + OMNI_MECHANICS.length + ' mechanics scanned, so +'
+              + hgOmniFamilyZ(OMNI_MECHANICS.length).toFixed(2)
+              + 'σ is the bar before one this good means anything';
       }
       edWhy = 'in-sample ' + edWhy;
     }
@@ -948,6 +1038,92 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
 
     gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
+
+    /* CONSENSUS. The one gate that reads the rest of the scan on this
+       contract.
+
+       Measured over 300 tapes before this existed: 29% fired both directions
+       on the same contract and 12% graded a LONG and a SHORT ticket at the
+       same moment, each with a clean ledger, with nothing on the card saying
+       which one the tab believed. Seven detectors each asked "is my own setup
+       sound?" and not one asked whether anything else disagreed.
+
+       Hard, and deliberately not soft: unlike the indicator reads this makes
+       no claim about whether a mechanic works. It states a fact about this
+       bar — the desk is pointing both ways and this setup is on the thinner
+       side. A tie vetoes BOTH, because on a genuinely two-sided tape the
+       honest output is no trade rather than a coin flip presented as a setup.
+
+       With no scan supplied it goes SOFT and reads UNCHECKED, so a caller
+       that cannot provide the other hits does not have every setup silently
+       blocked by a gate that could not run. */
+    var con = null, conWhy = 'no other mechanics to compare against';
+    var conHard = false;
+    var cons = x.allHits ? hgOmniConsensus(x.allHits, hit) : null;
+    if (cons){
+      conHard = true;
+      var aTxt = cons.nAgree + ' famil' + (cons.nAgree === 1 ? 'y agrees' : 'ies agree')
+               + (cons.agree.length ? ' (' + cons.agree.join(', ') + ')' : '');
+      var splitTxt = cons.nSplit ? '; ' + cons.split.join(', ')
+                   + (cons.nSplit === 1 ? ' is' : ' are') + ' split and counted for neither' : '';
+      if (cons.nAgree === 0 && cons.nAgainst === 0){
+        /* Every family that fired is internally divided, so not one of them
+           has an opinion. Nothing agreeing is not the same as nothing
+           disagreeing, and reading it as the latter passed BOTH directions. */
+        con = false;
+        conWhy = 'every mechanic family that fired is split (' + cons.split.join(', ')
+               + ') — the desk has no directional opinion at all';
+      } else if (cons.nAgainst === 0){
+        con = true;
+        conWhy = aTxt + ', nothing firing against it' + splitTxt;
+      } else if (cons.nAgree > cons.nAgainst){
+        con = true;
+        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt;
+      } else if (cons.nAgree === cons.nAgainst){
+        /* A TIE between TREND and REVERSION is not a contradiction — it is
+           what those two families ARE. In any trending tape the continuation
+           mechanics fire with the move and the fades fire against it, every
+           time. Vetoing both made the tab go quiet exactly when there was a
+           trend to trade: measured over 300 tapes, the veto rate ROSE from
+           36% on a random walk to 56% on a trending one, and 87% of those
+           were ties. That is the gate misreading its own design.
+
+           The regime already says which family belongs. Let it break the tie:
+           a trending tape favours the continuation side, a ranging tape the
+           fade. Exactly one side can win, so this cannot reintroduce a
+           contradictory pair. With no clear regime it is a genuine coin flip
+           and both still stand aside. */
+        /* The STRUCTURAL regime (trend vs range), not x.regime — that one is
+           the RISK-ON/RISK-OFF macro read and answers a different question.
+           Looked up defensively, like every other optional module here. */
+        var tieReg = null;
+        var tieW = (typeof window !== 'undefined') ? window : null;
+        var tieFn = (tieW && typeof tieW.detectRegime === 'function') ? tieW.detectRegime : null;
+        if (tieFn){ try { var tr = tieFn(rows); tieReg = tr ? String(tr.regime || '') : null; } catch (eT){ tieReg = null; } }
+        var wantFam = /trend/i.test(tieReg || '') ? 'TREND'
+                    : /range|chop|mean/i.test(tieReg || '') ? 'REVERSION' : null;
+        var mineHas = wantFam && cons.agree.indexOf(wantFam) >= 0;
+        var theirsHas = wantFam && cons.against.indexOf(wantFam) >= 0;
+        if (wantFam && mineHas && !theirsHas){
+          con = true;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt
+                 + ' — tied, broken by the ' + tieReg + ' regime, which favours ' + wantFam;
+        } else if (wantFam && theirsHas && !mineHas){
+          con = false;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt
+                 + ' — tied, and the ' + tieReg + ' regime favours the other side (' + wantFam + ')';
+        } else {
+          con = false;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ')
+                 + ')' + splitTxt + ' — tied, and no regime read to break it: the desk cannot pick a side';
+        }
+      } else {
+        con = false;
+        conWhy = 'only ' + aTxt + ' vs ' + cons.nAgainst + ' against ('
+               + cons.against.join(', ') + ')' + splitTxt + ' — this is the minority read';
+      }
+    }
+    gates.push({ key:'consensus', hard: conHard, pass: con, why: conWhy });
 
     return gates;
   }
@@ -1032,6 +1208,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       exForHit.fwd = hgOmniFwdFor(ex.fwdTab || 'OMNIROUTE', statKey);
       exForHit.exchange = item && item.exchange;
       exForHit.regimeWarm = ex.regimeWarm;
+      exForHit.allHits = hits;      /* so the consensus gate can see the rest of the scan */
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       var plan = null;
@@ -1050,6 +1227,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
+        /* Carried so hgOmniRank can put the setup the rest of the scan agrees
+           with above the one nothing supports. */
+        consensus: hgOmniConsensus(hits, hit),
+        family: hgOmniFamilyOf(hit.kind),
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
     }
@@ -1514,7 +1695,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      than rounded into a confident-looking percentage. */
   function renderPooled(pool){
     if (!pool) return '';
-    var keys = ['SPRING','PO3','ORB','ABSORB','VALUE','MMOVE'], h, i, k, p;
+    var keys = OMNI_MECHANICS.slice(), h, i, k, p;
     /* Out-of-sample counts for the same detectors. Unlike every other column
        here, these are not re-read from the current window — they accumulate
        one record per firing across scans. */

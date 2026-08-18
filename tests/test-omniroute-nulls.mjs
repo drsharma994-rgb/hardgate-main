@@ -120,8 +120,20 @@ for (const [name, mk, gateKey] of fields){
 {
   const edge = st => win.hgOmniGates(rows, hit, null, { stats: st }).filter(x => x.key === 'measured-edge')[0];
   ok(edge({ samples: 40, hit: 0.13, expR: -0.60 }).pass === false, 'clearly losing detector (40 smp, -0.60R) is vetoed');
-  ok(edge({ samples: 40, hit: 0.30, expR: -0.10 }).pass === true,  'marginally negative (40 smp, -0.10R) is NOT vetoed on noise');
-  ok(edge({ samples: 40, hit: 0.45, expR: 0.35 }).pass === true,   'profitable detector passes');
+  /* These two now read UNCHECKED rather than PASS, and that is the point of
+     the family-wise bar: 45% over 40 samples on a 2R floor is +1.57 sigma,
+     and across six scanned mechanics the best of six clears that by chance
+     most of the time. The gate is SOFT, so an unchecked read does not veto
+     and the ticket still forms — which is exactly what this section exists to
+     protect. What changed is that the card stops calling an unproven number
+     evidence, not that the tab went quiet. */
+  ok(edge({ samples: 40, hit: 0.30, expR: -0.10 }).pass !== false, 'marginally negative (40 smp, -0.10R) is NOT vetoed on noise');
+  ok(edge({ samples: 40, hit: 0.45, expR: 0.35 }).pass !== false,  'a profitable-looking detector is not vetoed');
+  ok(edge({ samples: 40, hit: 0.45, expR: 0.35 }).pass === null,   'but reads UNCHECKED — +1.57 sigma does not clear the six-mechanic bar');
+  ok(edge({ samples: 400, hit: 0.46, expR: 0.35 }).pass === true,  'a detector with a real sample behind it still PASSES');
+  /* And an unchecked measured-edge must not cost the ticket. */
+  ok(win.hgOmniGrade([{ key: 'measured-edge', hard: false, pass: null, why: 'x' }]).ticket === true,
+     'an UNCHECKED measured-edge leaves the ticket standing');
   ok(edge({ samples: 8,  hit: 0.63, expR: 0.90 }).pass === null,   'too few samples reads UNCHECKED, however good the number looks');
   const thin = edge({ samples: 22, hit: 0.13, expR: -0.60 });
   ok(thin.pass === true && /too few to veto on/.test(thin.why),
@@ -221,8 +233,13 @@ for (const [name, mk, gateKey] of fields){
                         .filter(g => g.key === 'measured-edge')[0];
   ok(edge({ samples:473,  hit:0.26, expR:-0.23 }).pass === false, 'SPRING-like -3.4sigma is vetoed despite -0.23R');
   ok(edge({ samples:624,  hit:0.29, expR:-0.12 }).pass === false, 'PO3-like -2.3sigma is vetoed');
-  ok(edge({ samples:458,  hit:0.30, expR:-0.10 }).pass === true,  'ORB-like -1.5sigma survives as noise');
-  ok(edge({ samples:2016, hit:0.33, expR:0 }).pass === true,      'MMOVE-like breakeven over 2016 samples survives');
+  /* "Survives" means NOT VETOED, which is what this section is about. Since
+     the family-wise bar landed there is a third state: a read sitting near
+     breakeven is UNCHECKED rather than PASS. It still survives — the gate is
+     soft and the ticket stands — it just no longer claims to be evidence. */
+  ok(edge({ samples:458,  hit:0.30, expR:-0.10 }).pass !== false, 'ORB-like -1.5sigma survives as noise');
+  ok(edge({ samples:2016, hit:0.33, expR:0 }).pass !== false,     'MMOVE-like breakeven over 2016 samples survives');
+  ok(edge({ samples:2016, hit:0.33, expR:0 }).pass === null,      'and sitting exactly on breakeven reads UNCHECKED, not PASS');
   ok(edge({ samples:4,    hit:0.25, expR:-0.25 }).pass === null,  'ABSORB-like 4 samples stays UNCHECKED');
   ok(/sigma vs breakeven|σ vs breakeven/.test(edge({ samples:473, hit:0.26, expR:-0.23 }).why),
      'the card shows the sigma distance it judged on');
@@ -265,7 +282,19 @@ for (const [name, mk, gateKey] of fields){
     stats:{samples:500,hit:0.34,expR:0.02}
   }));
   ok(bare.evaluated < full.evaluated, 'a bare CoinDCX ticket reports fewer evaluated gates than a fully evidenced one');
-  ok(full.evaluated === full.total, 'a fully evidenced ticket reports every gate evaluated');
+  /* measured-edge reads UNCHECKED here on purpose: 34% over 500 samples is
+     +0.32 sigma, and against six scanned mechanics the bar is +2.39. Every
+     OTHER gate must still be evaluated. */
+  const fullGates = win.hgOmniGates(rows, hit, { fundingPct:0.01 }, {
+    htf:{e21:9,e50:10}, oi:{changePct:5}, retail:{longPct:50}, taker:{buySellRatio:1.1},
+    depth:{bidUsd:5e5,askUsd:5e5}, regime:{label:'RISK-ON'}, news:{risk:'low'},
+    stats:{samples:500,hit:0.34,expR:0.02}
+  });
+  const fullUnchecked = fullGates.filter(g => g.pass === null).map(g => g.key);
+  ok(fullUnchecked.every(k => k === 'measured-edge' || k === 'consensus'),
+     'only measured-edge and consensus are unchecked on a fully evidenced ticket ('
+     + (fullUnchecked.join(', ') || 'none') + ')');
+  ok(full.evaluated === full.total - fullUnchecked.length, 'and every other gate reports');
   const ranked = win.hgOmniRank([
     { base:'BARE', grade:bare, rr:2.0 },
     { base:'FULL', grade:full, rr:2.0 }

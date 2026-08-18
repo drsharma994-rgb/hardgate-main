@@ -1783,9 +1783,38 @@ terse status, and never launches a first-time scan on a global refresh.
         con = true;
         conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt;
       } else if (cons.nAgree === cons.nAgainst){
-        con = false;
-        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ')
-               + ')' + splitTxt + ' — the tape is two-sided and the desk cannot pick a side';
+        /* A TIE between TREND and REVERSION is not a contradiction — it is
+           what those two families ARE. In a trending tape the continuation
+           mechanics fire with the move and the fades fire against it, every
+           time, so vetoing both throws the trade away for being exactly what
+           it should be. Found on OMNIROUTE, where the veto rate ROSE from 36%
+           on a random walk to 56% on a trending one with 87% of those being
+           ties; here ties were ~60% of every consensus veto.
+
+           The structural regime already says which family belongs, so let it
+           break the tie. Only one side can win, so this cannot reintroduce a
+           contradictory pair, and with no clear regime both still stand
+           aside. */
+        var tieReg = null;
+        var tieFn = gfn('detectRegime');
+        if (tieFn){ try { var tr = tieFn(rows); tieReg = tr ? String(tr.regime || '') : null; } catch (eT){ tieReg = null; } }
+        var wantFam = /trend/i.test(tieReg || '') ? 'TREND'
+                    : /range|chop|mean/i.test(tieReg || '') ? 'REVERSION' : null;
+        var mineHas = wantFam && cons.agree.indexOf(wantFam) >= 0;
+        var theirsHas = wantFam && cons.against.indexOf(wantFam) >= 0;
+        if (wantFam && mineHas && !theirsHas){
+          con = true;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt
+                 + ' — tied, broken by the ' + tieReg + ' regime, which favours ' + wantFam;
+        } else if (wantFam && theirsHas && !mineHas){
+          con = false;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt
+                 + ' — tied, and the ' + tieReg + ' regime favours the other side (' + wantFam + ')';
+        } else {
+          con = false;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ')
+                 + ')' + splitTxt + ' — tied, and no regime read to break it: the desk cannot pick a side';
+        }
       } else {
         con = false;
         conWhy = 'only ' + aTxt + ' vs ' + cons.nAgainst + ' against ('

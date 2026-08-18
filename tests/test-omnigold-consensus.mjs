@@ -80,13 +80,19 @@ console.log('== the gate exists and is a real veto ==');
 
 console.log('\n== THE DEFECT: a two-sided tape can no longer ticket both ways ==');
 {
-  /* One family each way. Nobody wins, so nobody trades. */
+  /* One family each way. This is a TIE, and since v361 a tie is broken by
+     the structural regime rather than vetoing both — a TREND mechanic firing
+     against a REVERSION mechanic is what those families ARE in a trending
+     tape, and standing both aside made the desk quiet exactly when there was
+     a trend to trade. What must still hold, and is the whole point of this
+     gate, is that the two can never BOTH ticket. */
   const all = [hit('ORB', 'long'), hit('ROUND-MAGNET', 'short')];
-  ok(con(all[0], all).pass === false, 'the long side is vetoed');
-  ok(con(all[1], all).pass === false, 'and so is the short side');
-  ok(/two-sided/.test(con(all[0], all).why), 'the card says the tape is two-sided (' + con(all[0], all).why + ')');
-  ok(tickets(all[0], all) === false && tickets(all[1], all) === false,
-     'neither direction grades to a ticket — a tie is no trade, not a coin flip');
+  const L = con(all[0], all), S = con(all[1], all);
+  ok(!(L.pass === true && S.pass === true), 'the two directions are never both passed');
+  ok(!(tickets(all[0], all) && tickets(all[1], all)),
+     'and never both graded to a ticket — that is the guarantee, tie-break or no');
+  ok(/tied/.test(L.why), 'the card says it was a tie (' + L.why + ')');
+  ok(/regime/.test(L.why), 'and names the regime as what settled it, or that there was none');
 }
 
 console.log('\n== the majority side survives, the minority does not ==');
