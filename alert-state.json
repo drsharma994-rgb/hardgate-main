@@ -4,10 +4,7 @@
   "gold": null,
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
-    "long": {
-      "sym": "B-1000RATS_USDT",
-      "entry": 0.04444071184073256
-    },
+    "long": null,
     "short": {
       "sym": "XAU",
       "entry": 4444.03633422185
@@ -280,11 +277,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T19:00:07.362Z"
+    "at": "2026-08-18T19:34:47.202Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T19:00:07.362Z"
+    "at": "2026-08-18T19:34:47.202Z"
   },
   "degraded": {
     "count": 0,
@@ -305,7 +302,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T19:00:07.680Z"
+    "at": "2026-08-18T19:34:47.551Z"
   },
   "bookFill": {
     "key": "u0|p0",
