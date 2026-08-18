@@ -2395,6 +2395,176 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return h + '<div class="note">Research note. No rule becomes a gate until it is coded and backtested against our own data.</div></div>';
   }
 
+
+  /* ==================== the parameter grid ====================
+
+     THE QUESTION THIS ANSWERS: "why doesn't any of it work?"
+
+     The pooled table measures every mechanic at ONE setting — a 2R target
+     with a 20-bar horizon — because that is what MIN_RR and the scan config
+     say. Twenty-two mechanics all sitting at breakeven there is not
+     twenty-two broken mechanics; twenty-two independent things do not fail in
+     one tidy gradient. It is one frame applied to all of them.
+
+     Swept on synthetic tapes, the SAME six original detectors ran from
+     -18.7 sigma at 3R/10 bars to +2.5 sigma at 1.5R/40 bars. Nothing about
+     the detectors changed between those numbers. Target and horizon were
+     doing all the work.
+
+     This runs that sweep on the REAL bars the scan just fetched, so the
+     question is answered with this desk's own data instead of a simulation.
+
+     It is IN-SAMPLE and GROSS of costs, exactly like the pooled table, and it
+     is a diagnostic rather than a recommendation: the best cell of nine is
+     the best of nine searches, and the multiple-comparisons bar applies to
+     picking a parameter set just as much as to picking a mechanic. It is
+     labelled as such on the panel. */
+
+  /* 25, not 60. Twelve settings x six detectors over sixty contracts is ~45
+     seconds of arithmetic; the grid answers whether the PARAMETERS move the
+     result, and twenty-five contracts of real bars answer that with several
+     hundred settled trades per cell. */
+  var GRID_SAMPLE = 25;
+  var GRID_R = [1, 1.5, 2, 3];
+  var GRID_H = [10, 20, 40];
+
+  /* The SIX ORIGINAL detectors only, not all twenty-two.
+
+     Two reasons, and neither is a shortcut. The shared mechanics carry
+     genuinely expensive reads — volume profile, cointegration, a GARCH fit —
+     and running all of them twelve times took 197 SECONDS on twenty-five
+     contracts, which is a frozen tab, not a button. And the question here is
+     whether the PARAMETERS move the result, which the six core detectors
+     answer at least as well: they have by far the deepest pools, and holding
+     the mechanic set fixed is what makes the rows comparable at all. */
+  var GRID_MECHS = ['SPRING', 'PO3', 'ORB', 'ABSORB', 'VALUE', 'MMOVE'];
+
+  function hgOmniGridFns(){
+    return {
+      SPRING: function(r){ var g = hgOmniRange(r, RANGE_LOOKBACK); return g ? hgOmniSpring(r, g) : null; },
+      PO3:    function(r){ return hgOmniPo3(r, 6); },
+      ORB:    function(r){ return hgOmniOrb(r, ORB_BARS); },
+      ABSORB: function(r){ var g = hgOmniRange(r, RANGE_LOOKBACK); return g ? hgOmniAbsorb(r, g) : null; },
+      VALUE:  function(r){ var g = hgOmniProfile(r, 24); return g ? hgOmniValueReject(r, g) : null; },
+      MMOVE:  function(r){ return hgOmniMeasuredMove(r, 10); }
+    };
+  }
+
+  function hgOmniGridRun(rowsList, rMult, horizon){
+    var wins = 0, losses = 0, i, j, p;
+    var fns = hgOmniGridFns();
+    for (i = 0; i < rowsList.length; i++){
+      for (j = 0; j < GRID_MECHS.length; j++){
+        try { p = hgOmniBacktestOne(rowsList[i], fns[GRID_MECHS[j]], { rMult: rMult, horizon: horizon, warm: 45 }); }
+        catch (e) { continue; }
+        if (!p || !p.samples) continue;
+        wins += (p.wins || 0); losses += (p.losses || 0);
+      }
+    }
+    var settled = wins + losses;
+    if (!settled) return null;
+    var hit = wins / settled;
+    var be = 1 / (1 + rMult);
+    var se = Math.sqrt(be * (1 - be) / settled);
+    return { settled: settled, hit: hit, be: be,
+             expR: hit * rMult - (1 - hit),
+             z: se > 0 ? (hit - be) / se : 0 };
+  }
+
+  /* PROGRESSIVE, not blocking. Twelve settings over sixty contracts is tens
+     of seconds of pure arithmetic, and doing it in one synchronous pass
+     freezes the tab for the duration — the scan itself chunks for exactly
+     this reason. One cell per turn, rows appended as they land, so the table
+     fills in front of the user and the page stays alive. */
+  function hgOmniGridCells(){
+    var out = [], ri, hi;
+    for (ri = 0; ri < GRID_R.length; ri++)
+      for (hi = 0; hi < GRID_H.length; hi++)
+        out.push({ r: GRID_R[ri], h: GRID_H[hi] });
+    return out;
+  }
+
+  function hgOmniGridRowHTML(cell, c){
+    var live = (cell.r === MIN_RR && cell.h === 20);
+    if (!c){
+      return '<tr><td>' + cell.r + 'R</td><td>' + cell.h + '</td>'
+           + '<td class="dim" colspan="5">no settled samples at this setting</td></tr>';
+    }
+    var cls = c.z >= 2 ? 'ok' : (c.z <= -2 ? 'bad' : '');
+    return '<tr' + (live ? ' style="font-weight:600"' : '') + '>'
+         + '<td>' + cell.r + 'R' + (live ? ' <span class="dim">&larr; live</span>' : '') + '</td>'
+         + '<td>' + cell.h + '</td>'
+         + '<td>' + c.settled + '</td>'
+         + '<td>' + (c.hit * 100).toFixed(1) + '%</td>'
+         + '<td class="dim">' + (c.be * 100).toFixed(1) + '%</td>'
+         + '<td>' + (c.expR >= 0 ? '+' : '') + c.expR.toFixed(3) + 'R</td>'
+         + '<td class="' + cls + '">' + (c.z >= 0 ? '+' : '') + c.z.toFixed(2) + 'σ</td></tr>';
+  }
+
+  function hgOmniGridNote(best){
+    var n = GRID_R.length * GRID_H.length;
+    var h = '<div class="note">Same detectors, same bars, same stop model &mdash; only the TARGET and '
+      + 'the HORIZON change between rows. A gradient across them is the parameters doing the work, not '
+      + 'the mechanics failing. The row marked <b>live</b> is what this tab actually trades and measures.'
+      + '<br><br><b>This is a diagnostic, not a recommendation.</b> Every figure is IN-SAMPLE on the '
+      + 'window just scanned and GROSS of spread and commission, exactly like the pooled table. The best '
+      + 'of ' + n + ' cells is the best of ' + n + ' searches: the multiple-comparisons bar that applies '
+      + 'to picking a mechanic applies to picking a parameter set, so a cell clearing +2σ here is not '
+      + 'evidence on its own. Change the live setting only after the forward log has measured it.</div>';
+    if (best){
+      h += '<div class="note">Strongest cell on this window: <b>' + best.r + 'R / ' + best.h
+         + ' bars</b> at ' + (best.z >= 0 ? '+' : '') + best.z.toFixed(2) + 'σ ('
+         + (best.expR >= 0 ? '+' : '') + best.expR.toFixed(3) + 'R). Live is ' + MIN_RR + 'R / 20 bars.</div>';
+    }
+    return h;
+  }
+
+  /* Synchronous whole-grid build. Kept because it is what a test can call
+     directly; the tab uses the progressive runner below. */
+  function hgOmniGridHTML(rowsList){
+    if (!rowsList || !rowsList.length){
+      return '<div class="note warn">No bars retained &mdash; run a scan first, then the grid.</div>';
+    }
+    var cells = hgOmniGridCells(), best = null, body = '', i, c;
+    for (i = 0; i < cells.length; i++){
+      c = hgOmniGridRun(rowsList, cells[i].r, cells[i].h);
+      if (c && (!best || c.z > best.z)) best = { r: cells[i].r, h: cells[i].h, z: c.z, expR: c.expR };
+      body += hgOmniGridRowHTML(cells[i], c);
+    }
+    return hgOmniGridHead() + body + '</tbody></table>' + hgOmniGridNote(best);
+  }
+
+  function hgOmniGridHead(){
+    return '<h4>PARAMETER GRID &mdash; the same mechanics at other targets and horizons</h4>'
+         + '<table class="tbl"><thead><tr><th>TARGET</th><th>HORIZON</th><th>SETTLED</th>'
+         + '<th>T1-FIRST</th><th>BREAKEVEN</th><th>EXPECTANCY</th><th>σ</th></tr></thead><tbody>';
+  }
+
+  /* One cell per turn. onProgress(html, done, total) after each. */
+  function hgOmniGridProgressive(rowsList, onProgress, onDone){
+    if (!rowsList || !rowsList.length){
+      onDone('<div class="note warn">No bars retained &mdash; run a scan first, then the grid.</div>');
+      return;
+    }
+    var cells = hgOmniGridCells(), i = 0, best = null, body = '';
+    function step(){
+      if (i >= cells.length){
+        onDone(hgOmniGridHead() + body + '</tbody></table>' + hgOmniGridNote(best));
+        return;
+      }
+      var cell = cells[i];
+      var c = null;
+      try { c = hgOmniGridRun(rowsList, cell.r, cell.h); } catch (e) { c = null; }
+      if (c && (!best || c.z > best.z)) best = { r: cell.r, h: cell.h, z: c.z, expR: c.expR };
+      body += hgOmniGridRowHTML(cell, c);
+      i++;
+      onProgress(hgOmniGridHead() + body + '</tbody></table>'
+        + '<div class="note">measuring &hellip; ' + i + ' of ' + cells.length + ' settings</div>', i, cells.length);
+      setTimeout(step, 0);
+    }
+    setTimeout(step, 0);
+  }
+
   /* ==================== the scan ==================== */
 
   function omniSleep(ms){
@@ -2609,6 +2779,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           return best * 1000 + f.hits.length * 10 + edge * 10;
         };
         var meritOrder = fired.slice().sort(function(a, b){ return enrichMerit(b) - enrichMerit(a); });
+        /* Keep the bars for the strongest names so the parameter grid can run
+           on REAL data without a second fetch. Capped: the grid answers a
+           question about the mechanics, not about every contract. */
+        __omni.gridRows = meritOrder.slice(0, GRID_SAMPLE).map(function(f){ return f.rows; });
+
         var subset = meritOrder.slice(0, ENRICH_MAX);
         var perSymbolStats = [], enriched = [], e = 0;
 
@@ -2907,9 +3082,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
       + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor and cards order by R:R — geometry, <b>not</b> a profit forecast. '
       + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
-      + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button></div>'
+      + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button>'
+      +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
       + '<div class="note" id="omniStat">idle — press RUN. Full coverage is ~200+ Delta contracts plus CoinDCX, so expect a few minutes; progress shows per pass.</div>'
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
+      + '<div id="omniGridOut" style="margin-top:10px"></div>'
       + '<div id="omniPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="omniCards" style="margin-top:12px"></div>'
 
@@ -2945,10 +3122,35 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       model: el.querySelector('#omniModel'), ping: el.querySelector('#omniPing'),
       pingStat: el.querySelector('#omniPingStat'), kind: el.querySelector('#omniKind'),
       src: el.querySelector('#omniSrc'), irun: el.querySelector('#omniIngest'),
-      istat: el.querySelector('#omniIStat'), iout: el.querySelector('#omniIOut')
+      istat: el.querySelector('#omniIStat'), iout: el.querySelector('#omniIOut'),
+      grid: el.querySelector('#omniGrid'), gridOut: el.querySelector('#omniGridOut')
     };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __omni.ui = ui;
+
+    /* The parameter grid runs on bars the scan already fetched, so it costs
+       no network — but it does re-run the walk-forward nine times, so it is a
+       button rather than part of every scan. */
+    if (ui.grid){
+      ui.grid.addEventListener('click', function(){
+        if (!__omni.gridRows || !__omni.gridRows.length){
+          ui.gridOut.innerHTML = '<div class="note warn">Run a scan first — the grid measures the bars '
+                               + 'that scan fetched, and there are none yet.</div>';
+          return;
+        }
+        ui.grid.disabled = true;
+        ui.gridOut.innerHTML = '<div class="note">measuring ' + __omni.gridRows.length
+                             + ' contracts at ' + (GRID_R.length * GRID_H.length) + ' settings…</div>';
+        try {
+          hgOmniGridProgressive(__omni.gridRows,
+            function(html){ ui.gridOut.innerHTML = html; },
+            function(html){ ui.gridOut.innerHTML = html; ui.grid.disabled = false; });
+        } catch (e){
+          ui.gridOut.innerHTML = '<div class="note warn">grid failed: ' + omniErrMsg(e) + '</div>';
+          ui.grid.disabled = false;
+        }
+      });
+    }
 
     var W = (typeof window !== 'undefined') ? window : null;
     var missing = [];
@@ -3007,6 +3209,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* Cross-sectional pieces are exported so the universe read is testable
        on its own — it is the only part of this desk that cannot be checked
        from a single symbol's bars. */
+    /* The grid is exported so the sweep can be measured directly — it is the
+       one piece here that answers a question about the STRATEGY rather than
+       about a setup, and it deserves its own test. */
+    window.hgOmniGridRun   = hgOmniGridRun;
+    window.hgOmniGridHTML  = hgOmniGridHTML;
+    window.hgOmniGridProgressive = hgOmniGridProgressive;
     window.hgOmniFamilyOf  = hgOmniFamilyOf;   /* the consensus family map, so the vote is testable */
     window.hgOmniXsSummary = hgOmniXsSummary;
     window.hgOmniXsRanks   = hgOmniXsRanks;

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v370',
-  pack: 'open was not the same as still running',
-  built: '2026-08-21T09:30:00Z',
-  note: 'settlement needs bars for that symbol to arrive, so a delisted contract left records open for ever with no wall-clock expiry; stale is now reported apart from open and counts as neither win, loss nor expiry'
+  version: 'hg-v371',
+  pack: 'the parameter grid - why nothing works, answered with your own bars',
+  built: '2026-08-21T14:20:00Z',
+  note: 'the pool measures every mechanic at one target and one horizon; the same six detectors run from -9.8 to +1.7 sigma across the grid, and the live 2R/20 setting sits near the worst corner'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
@@ -84,7 +84,11 @@ function hgBuildChipState(res, b){
 /** Async: is this tab running what the server serves?
     fetchImpl injectable for tests. Never throws, never rejects. */
 function hgBuildFreshness(fetchImpl){
-  var f = fetchImpl || (typeof G.fetch === 'function' ? G.fetch.bind(G) : null);
+  /* typeof, not truthiness: any non-null value passed here used to be
+     accepted as a fetch and then called, throwing "f is not a function"
+     instead of returning the honest 'unknown' this function exists to give. */
+  var f = (typeof fetchImpl === 'function') ? fetchImpl
+        : (typeof G.fetch === 'function' ? G.fetch.bind(G) : null);
   var loaded = HG_BUILD.version;
   if (!f) return Promise.resolve({ state: 'unknown', loaded: loaded, live: null, reason: 'no fetch available' });
   var url = './build-stamp.js?fresh=' + Date.now();
