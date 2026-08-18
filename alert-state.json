@@ -6,7 +6,7 @@
   "ticket": {
     "long": {
       "sym": "B-1000RATS_USDT",
-      "entry": 0.04427537432824098
+      "entry": 0.04444071184073256
     },
     "short": {
       "sym": "XAU",
@@ -14,46 +14,28 @@
     }
   },
   "sniper": {
-    "key": "B-BTW_USDT@0.39115118933588205;B-OPN_USDT@0.05662;B-RED_USDT@0.091635769031265;B-VVV_USDT@13.87",
+    "key": "B-OPN_USDT@0.05662;B-VVV_USDT@13.801715955524324",
     "hits": [
       {
         "sym": "B-OPN_USDT",
         "dir": "long",
         "entry": 0.05662,
-        "stop": 0.05523251957527556,
+        "stop": 0.05529619315561057,
         "t1": 0.06115,
-        "lev": 23,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-BTW_USDT",
-        "dir": "long",
-        "entry": 0.39115118933588205,
-        "stop": 0.3809357734461501,
-        "t1": 0.408,
-        "lev": 22,
+        "lev": 24,
         "state": "APPROACHING"
       },
       {
         "sym": "B-VVV_USDT",
         "dir": "long",
-        "entry": 13.87,
-        "stop": 13.493449726234669,
-        "t1": 14.434825410647996,
-        "lev": 21,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-RED_USDT",
-        "dir": "long",
-        "entry": 0.091635769031265,
-        "stop": 0.08892633593453358,
-        "t1": 0.0958,
-        "lev": 20,
+        "entry": 13.801715955524324,
+        "stop": 13.452094253187564,
+        "t1": 14.326148509029466,
+        "lev": 23,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-18T18:14:08.002Z"
+    "at": "2026-08-18T19:00:07.361Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -298,11 +280,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T18:14:08.002Z"
+    "at": "2026-08-18T19:00:07.362Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T18:14:08.003Z"
+    "at": "2026-08-18T19:00:07.362Z"
   },
   "degraded": {
     "count": 0,
@@ -323,7 +305,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T18:14:09.001Z"
+    "at": "2026-08-18T19:00:07.680Z"
   },
   "bookFill": {
     "key": "u0|p0",
