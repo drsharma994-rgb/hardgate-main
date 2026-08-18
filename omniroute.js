@@ -1103,6 +1103,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          essentially every setup, so R:R is pinned at 2.00 and discriminates
          nothing — sorting on it was sorting on a constant. How many gates
          actually ran is the real difference between two tickets. */
+      /* CONSENSUS first where a desk supplies it. Between two tickets, how
+         many independent mechanic families point the same way is stronger
+         evidence than how many gates happened to be computable — and on a
+         desk scanning 27 mechanics it is the difference between a setup the
+         book agrees on and one that is simply alone. Desks that do not set
+         it compare 0 to 0 and are ordered exactly as before. */
+      var ac = (a.consensus && a.consensus.nAgree) || 0, bc = (b.consensus && b.consensus.nAgree) || 0;
+      if (bc !== ac) return bc - ac;
       var ae = (a.grade && a.grade.evaluated) || 0, be = (b.grade && b.grade.evaluated) || 0;
       if (be !== ae) return be - ae;
       /* fin(), not isFinite: a cleared R:R is null, and isFinite(null) is true,

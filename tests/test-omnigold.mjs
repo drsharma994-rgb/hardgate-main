@@ -151,12 +151,15 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
 
      What belongs HERE is that the rest of the ledger is fully evaluated, and
      that the gates which cannot run say so rather than passing quietly. */
-  const INDICATOR_GATES = ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime',
-                           'adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
-                           /* measured-edge reads UNCHECKED here on purpose: 45% over 120
-                              samples is +1.1σ, and against 27 scanned mechanics the bar
-                              is +2.89σ. Not demonstrated is not the same as passing. */
-                           'measured-edge'];
+  /* Every gate that reads the indicator library, derived from the source so
+     this does not need editing each time one is added. Plus measured-edge,
+     which reads UNCHECKED here on purpose (45% over 120 samples is +1.1σ, and
+     against 27 scanned mechanics the bar is +2.89σ), and consensus, which is
+     soft-UNCHECKED when no scan is supplied. */
+  const ogSrc = readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  const INFO_GATES = (ogSrc.match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
+    .map(m => /key:'([a-z0-9-]+)'/.exec(m)[1]);
+  const INDICATOR_GATES = INFO_GATES.concat(['measured-edge', 'consensus']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);
   ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
      'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
@@ -168,12 +171,18 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   });
   /* measured-edge is NOT an info gate: a mechanic proven to lose must still be
      able to veto. Only the indicator context reads are non-vetoing. */
-  INDICATOR_GATES.filter(k => k !== 'measured-edge').forEach(k => {
+  /* consensus is a HARD veto and measured-edge can veto: both are excluded
+     from the info check on purpose. A structural contradiction between the
+     desk's own mechanics, and a mechanic proven to lose, must both be able to
+     stand a trade aside. */
+  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus').forEach(k => {
     ok(full.filter(x => x.key === k)[0].info === true,
        k + ' is INFO: it reports an adverse read, it does not veto');
   });
   ok(full.filter(x => x.key === 'measured-edge')[0].info !== true,
      'measured-edge is NOT info — a mechanic that has demonstrably not paid still vetoes');
+  ok(full.filter(x => x.key === 'consensus')[0].info !== true,
+     'consensus is NOT info — a two-sided tape must be able to stand the trade aside');
 
   /* hostile context vetoes on the gold-specific gates */
   const hostile = win.hgOgGates(flat, hit, {

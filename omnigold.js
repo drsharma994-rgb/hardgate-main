@@ -824,6 +824,61 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+
+  /* ==================== consensus across mechanics ====================
+
+     THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
+     ticket and a SHORT ticket at the same moment, on the same instrument and
+     the same horizon, each with a clean ledger. The user is handed two
+     contradictory trades and nothing on the card says which one the app
+     believes. That is not a confidence problem, it is a correctness problem —
+     and every mechanic added makes it more likely, not less.
+
+     Nothing in the twelve-gate ledger ever asked the one question a desk asks
+     first: is anything else firing, and does it agree?
+
+     Counting raw agreeing mechanics would be the multiple-comparisons error
+     in a different suit. PDH-SWEEP, PWH-SWEEP and EQH-SWEEP are three names
+     for "liquidity taken from above and rejected" — they agree with each
+     other by construction, not by evidence, and treating them as three
+     independent confirmations manufactures confidence out of redundancy. So
+     the vote is by FAMILY: mechanics that read the same thing about the tape
+     count once between them. */
+
+  var OG_FAMILY = {
+    /* liquidity taken and rejected */
+    'SPRING':'SWEEP', 'UTAD':'SWEEP', 'KZ-JUDAS':'SWEEP', 'ROUND-MAGNET':'SWEEP',
+    'PDH-SWEEP':'SWEEP', 'PDL-SWEEP':'SWEEP', 'PWH-SWEEP':'SWEEP', 'PWL-SWEEP':'SWEEP',
+    'EQH-SWEEP':'SWEEP', 'EQL-SWEEP':'SWEEP',
+    /* the tape is going somewhere and this joins it */
+    'ORB':'TREND', 'MMOVE':'TREND', 'PO3':'TREND', 'ASIA-BREAK':'TREND',
+    'NR7-BREAK':'TREND', 'SQUEEZE-FIRE':'TREND', 'TREND-RECLAIM':'TREND',
+    'BOS-RETEST':'TREND', 'LONDON-FIX':'TREND',
+    /* price is stretched and this fades it */
+    'VWAP-REVERT':'REVERSION', 'ADR-FADE':'REVERSION', 'VALUE':'REVERSION',
+    'ABSORB':'REVERSION', 'RSI-DIVERGE':'REVERSION', 'AVWAP-RECLAIM':'REVERSION',
+    /* an unfilled inefficiency */
+    'FVG-FILL':'IMBALANCE',
+    /* the other metal disagrees with this one */
+    'SMT-DIVERGE':'INTERMARKET', 'GSR-EXTREME':'INTERMARKET'
+  };
+  function hgOgFamilyOf(kind){ return OG_FAMILY[String(kind || '')] || 'OTHER'; }
+
+  /* Families voting each way on the bar this hit fired on. */
+  function hgOgConsensus(allHits, hit){
+    if (!allHits || !allHits.length || !hit) return null;
+    var mine = {}, theirs = {}, i, h, fam;
+    for (i = 0; i < allHits.length; i++){
+      h = allHits[i];
+      if (!h || !h.kind || (h.dir !== 'long' && h.dir !== 'short')) continue;
+      fam = hgOgFamilyOf(h.kind);
+      if (h.dir === hit.dir) mine[fam] = true; else theirs[fam] = true;
+    }
+    var agree = Object.keys(mine), against = Object.keys(theirs);
+    return { agree: agree.sort(), against: against.sort(),
+             nAgree: agree.length, nAgainst: against.length };
+  }
+
   /* ==================== gold gate ledger ==================== */
 
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17). Inlined rather than
@@ -1418,6 +1473,171 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'structure-shift', hard:false, info:true, pass: stG, why: stGWhy });
 
+    /* 22 — CONSENSUS. The one gate that reads the rest of the scan.
+
+       A hard veto, and deliberately so: unlike the indicator reads above,
+       this makes no claim about whether a mechanic works. It states a fact
+       about this bar — that the desk's own mechanics are pointing both ways
+       and this setup is on the side with fewer of them. Presenting that as a
+       ticket is the app disagreeing with itself in front of the user.
+
+       Ties veto BOTH directions. When the tape is genuinely two-sided the
+       honest output is no trade, not a coin flip dressed as a setup. */
+    var con = null, conWhy = 'no other mechanics to compare against';
+    var conHard = false;
+    var cons = x.allHits ? hgOgConsensus(x.allHits, hit) : null;
+    if (cons){
+      conHard = true;
+      var aTxt = cons.nAgree + ' famil' + (cons.nAgree === 1 ? 'y agrees' : 'ies agree')
+               + (cons.agree.length ? ' (' + cons.agree.join(', ') + ')' : '');
+      if (cons.nAgainst === 0){
+        con = true;
+        conWhy = aTxt + ', nothing firing against it';
+      } else if (cons.nAgree > cons.nAgainst){
+        con = true;
+        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')';
+      } else if (cons.nAgree === cons.nAgainst){
+        con = false;
+        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ')
+               + ') — the tape is two-sided and the desk cannot pick a side';
+      } else {
+        con = false;
+        conWhy = 'only ' + aTxt + ' vs ' + cons.nAgainst + ' against ('
+               + cons.against.join(', ') + ') — this is the minority read';
+      }
+    }
+    gates.push({ key:'consensus', hard: conHard, pass: con, why: conWhy });
+
+    /* 23 — MACD histogram: momentum turning, not merely present. macdHist
+       returns a bare ARRAY of histogram values. */
+    var mac = null, macWhy = 'MACD unavailable';
+    var macFn = gfn('macdHist');
+    if (macFn){
+      try {
+        var mh = macFn(closesOf(rows));
+        var m0 = (mh && mh.length) ? fin(mh[mh.length - 1]) : NaN;
+        var m1 = (mh && mh.length > 1) ? fin(mh[mh.length - 2]) : NaN;
+        if (isFinite(m0) && isFinite(m1)){
+          var rising = m0 > m1;
+          macWhy = 'MACD histogram ' + (m0 >= 0 ? '+' : '') + m0.toFixed(2)
+                 + ' and ' + (rising ? 'rising' : 'falling');
+          var macAgrees = (hit.dir === 'long') ? rising : !rising;
+          if (reversion){
+            /* A fade wants momentum rolling over, which is the opposite of
+               agreement — so agreement is not the test for it. */
+            mac = true;
+            macWhy += macAgrees ? ' — turning with the fade' : ' — still against the fade, early';
+          } else {
+            mac = macAgrees;
+            macWhy += macAgrees ? ' — agrees' : ' — momentum is turning the other way';
+          }
+        }
+      } catch (eMac){ mac = null; macWhy = 'MACD threw: ' + ((eMac && eMac.message) || eMac); }
+    }
+    gates.push({ key:'macd-momentum', hard:false, info:true, pass: mac, why: macWhy });
+
+    /* 24 — Bollinger %B: where price sits across its own volatility envelope.
+       bollingerPercentB returns a bare NUMBER (0 = lower band, 1 = upper). */
+    var bb = null, bbWhy = 'bollinger %B unavailable';
+    var bbFn = gfn('bollingerPercentB');
+    if (bbFn){
+      try {
+        var pb = fin(bbFn(rows, 20, 2));
+        if (isFinite(pb)){
+          bbWhy = '%B ' + pb.toFixed(2) + ' ('
+                + (pb > 1 ? 'above the upper band' : pb < 0 ? 'below the lower band'
+                   : pb > 0.5 ? 'upper half' : 'lower half') + ')';
+          if (reversion){
+            bb = true;
+            if (pb > 1 || pb < 0) bbWhy += ' — the stretch being faded';
+          } else if (hit.dir === 'long' && pb > 1){ bb = false; bbWhy += ' — buying outside the envelope'; }
+          else if (hit.dir === 'short' && pb < 0){ bb = false; bbWhy += ' — selling outside the envelope'; }
+          else bb = true;
+        }
+      } catch (eBb){ bb = null; bbWhy = 'bollinger %B threw: ' + ((eBb && eBb.message) || eBb); }
+    }
+    gates.push({ key:'bollinger-pctb', hard:false, info:true, pass: bb, why: bbWhy });
+
+    /* 25 — Volume z-score: is anyone actually here for this move? volZ
+       returns a bare NUMBER. Gold feeds without volume return NaN, which
+       reads UNCHECKED rather than pretending participation was confirmed. */
+    var vz = null, vzWhy = 'volume z unavailable (this feed may publish no volume)';
+    var vzFn = gfn('volZ');
+    if (vzFn){
+      try {
+        var z20 = fin(vzFn(rows, 20));
+        if (isFinite(z20)){
+          vzWhy = 'volume ' + (z20 >= 0 ? '+' : '') + z20.toFixed(1) + 'σ vs its 20-bar mean';
+          if (z20 <= -1){ vz = false; vzWhy += ' — nobody is here for this move'; }
+          else vz = true;
+        }
+      } catch (eVz){ vz = null; vzWhy = 'volume z threw: ' + ((eVz && eVz.message) || eVz); }
+    }
+    gates.push({ key:'volume-z', hard:false, info:true, pass: vz, why: vzWhy });
+
+    /* 26 — Linear regression slope: the trend's actual gradient, in dollars
+       per bar, rather than a crossover's opinion of it. Returns an ARRAY. */
+    var lr = null, lrWhy = 'regression slope unavailable';
+    var lrFn = gfn('linregSlope');
+    if (lrFn){
+      try {
+        var slArr = lrFn(closesOf(rows), 20);
+        var sl = (slArr && slArr.length) ? fin(slArr[slArr.length - 1]) : NaN;
+        var aRef = atrOf(rows, 14);
+        if (isFinite(sl) && isFinite(aRef) && aRef > 0){
+          var perAtr = sl / aRef;
+          lrWhy = '20-bar regression slope ' + (sl >= 0 ? '+' : '') + sl.toFixed(2)
+                + '/bar (' + (perAtr >= 0 ? '+' : '') + perAtr.toFixed(2) + ' ATR)';
+          var flat = Math.abs(perAtr) < 0.02;
+          if (flat){
+            lr = reversion ? true : false;
+            lrWhy += flat && reversion ? ' — flat, which is what a fade wants'
+                                       : ' — flat, no gradient behind a continuation';
+          } else {
+            var slUp = sl > 0;
+            var slAgrees = (hit.dir === 'long') ? slUp : !slUp;
+            lr = reversion ? true : slAgrees;
+            lrWhy += reversion ? ' — counter-slope by design'
+                   : (slAgrees ? ' — agrees' : ' — the gradient points the other way');
+          }
+        }
+      } catch (eLr){ lr = null; lrWhy = 'regression slope threw: ' + ((eLr && eLr.message) || eLr); }
+    }
+    gates.push({ key:'regression-slope', hard:false, info:true, pass: lr, why: lrWhy });
+
+    /* 27 — Volume profile: is the entry near value, or out in thin air where
+       there is no traded history to lean on? volumeProfile returns
+       { poc, vah, val, bins }. */
+    var vpf = null, vpfWhy = 'volume profile unavailable';
+    var vpfFn = gfn('volumeProfile');
+    if (vpfFn){
+      try {
+        var prof = vpfFn(rows, Math.max(0, rows.length - 200), rows.length - 1);
+        var poc = prof ? fin(prof.poc) : NaN;
+        var vah = prof ? fin(prof.vah) : NaN;
+        var val = prof ? fin(prof.val) : NaN;
+        var pxNow = fin(rows[rows.length - 1].c);
+        if (isFinite(poc) && isFinite(vah) && isFinite(val) && isFinite(pxNow) && vah > val){
+          var inValue = pxNow >= val && pxNow <= vah;
+          vpfWhy = 'price ' + (inValue ? 'inside' : 'outside') + ' value ('
+                 + val.toFixed(2) + '–' + vah.toFixed(2) + ', POC ' + poc.toFixed(2) + ')';
+          if (reversion){
+            /* Fades work back toward the POC; being outside value is the setup. */
+            vpf = true;
+            if (!inValue) vpfWhy += ' — outside value, with the POC as the magnet';
+          } else {
+            /* A continuation entered deep inside value is fighting the whole
+               traded distribution to get anywhere. */
+            vpf = !inValue;
+            vpfWhy += inValue ? ' — a continuation starting inside the value area'
+                              : ' — outside value, with room to travel';
+          }
+        }
+      } catch (eVpf){ vpf = null; vpfWhy = 'volume profile threw: ' + ((eVpf && eVpf.message) || eVpf); }
+    }
+    gates.push({ key:'value-area', hard:false, info:true, pass: vpf, why: vpfWhy });
+
+
 
     return gates;
   }
@@ -1475,11 +1695,16 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       if (plan && deriveFn) plan = deriveFn(plan);
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
+      ex.allHits = hits;          /* so the consensus gate can see the rest of the scan */
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
       out.push({
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
+        /* Carried on the candidate so the ranker can put the setup the rest
+           of the desk agrees with above the one nothing supports. */
+        consensus: hgOgConsensus(hits, hit),
+        family: hgOgFamilyOf(hit.kind),
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
     }

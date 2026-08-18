@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v355',
-  pack: 'ten more gold mechanics, five more indicator reads, and a significance bar that accounts for the search',
-  built: '2026-08-19T11:20:00Z',
-  note: 'OMNIGOLD scans 27 mechanics; measured-edge now judges each against the Sidak bar for 27 tries, so a +1.47 sigma in-sample read reads UNCHECKED instead of PASS'
+  version: 'hg-v356',
+  pack: 'the desk stops contradicting itself, and five more indicator reads',
+  built: '2026-08-19T14:05:00Z',
+  note: 'OMNIGOLD graded a long and a short ticket at once on 42% of tapes; a consensus gate now votes by mechanic family, vetoes the minority side and vetoes both on a tie'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
