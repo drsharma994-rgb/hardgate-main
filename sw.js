@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v371';
+const HG_CACHE = 'hg-v372';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -56,10 +56,34 @@ function hgIsShellRequest(url){
   }catch(e){ return false; }
 }
 
+/* PER-FILE, not addAll.
+
+   cache.addAll() is ATOMIC by specification: if any one request fails, the
+   returned promise rejects and NOTHING is written to the cache. The shell
+   above is 125 files and the comment on it promises that "a single missing
+   file must never fail install" — which is exactly what addAll does not
+   provide. One renamed or mistyped entry and the whole offline shell was
+   silently empty, because the .catch() below swallowed the rejection and
+   install completed looking healthy.
+
+   Each file is now added on its own, so one 404 costs one file. The count is
+   reported to any client that asks, so a shell that is quietly half-cached
+   can be seen rather than guessed at. */
+function hgSwPrecache(cache, urls){
+  var okCount = 0, failed = [];
+  return Promise.all((urls || []).map(function(u){
+    return cache.add(u).then(function(){ okCount++; },
+                             function(){ failed.push(u); });
+  })).then(function(){
+    self.__hgPrecache = { cached: okCount, failed: failed, total: (urls || []).length };
+    return self.__hgPrecache;
+  });
+}
+
 self.addEventListener('install', function(ev){
   ev.waitUntil(
     caches.open(HG_CACHE)
-      .then(function(c){ return c.addAll(HG_SHELL); })
+      .then(function(c){ return hgSwPrecache(c, HG_SHELL); })
       .catch(function(){ /* precache is best-effort — never fail install */ })
       .then(function(){ try{ return self.skipWaiting(); }catch(e){} })
   );

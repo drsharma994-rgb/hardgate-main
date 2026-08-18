@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v371',
-  pack: 'the parameter grid - why nothing works, answered with your own bars',
-  built: '2026-08-21T14:20:00Z',
-  note: 'the pool measures every mechanic at one target and one horizon; the same six detectors run from -9.8 to +1.7 sigma across the grid, and the live 2R/20 setting sits near the worst corner'
+  version: 'hg-v372',
+  pack: 'one missing file emptied the whole offline cache, and 52 tabs had no test',
+  built: '2026-08-21T20:15:00Z',
+  note: 'cache.addAll is atomic, so a single 404 among 125 shell files left the offline cache completely empty and install still reported success'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
