@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v362',
-  pack: 'nineteen more mechanics on omniroute, and the shared library that made it one implementation instead of two',
-  built: '2026-08-20T02:30:00Z',
-  note: 'sixteen instrument-agnostic detectors moved to hg-mechanics.js and are now shared by both desks; omniroute adds three crypto-native positioning mechanics that can never be back-tested and say so'
+  version: 'hg-v363',
+  pack: 'four defects read straight off a live scan',
+  built: '2026-08-20T05:10:00Z',
+  note: 'cards headed TICKET were printing VETO rows for info gates, and five mechanics on one set of levels were counted as five tickets instead of one trade'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

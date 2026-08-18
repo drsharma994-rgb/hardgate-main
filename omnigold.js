@@ -1343,7 +1343,7 @@ terse status, and never launches a first-time scan on a global refresh.
       try {
         var pct = fin(vpFn(rows, 14, 100));
         if (isFinite(pct)){
-          vpWhy = 'ATR in the ' + pct.toFixed(0) + 'th percentile of the last 100 bars';
+          vpWhy = 'ATR in the ' + hgOgOrdinal(pct) + ' percentile of the last 100 bars';
           if (pct < 15){ vp = false; vpWhy += ' — too quiet to reach the target inside the horizon'; }
           else if (pct > 90){ vp = false; vpWhy += ' — top-decile volatility, the stop sits inside the noise'; }
           else vp = true;
@@ -1800,6 +1800,13 @@ terse status, and never launches a first-time scan on a global refresh.
   function fmtPx(n){ var v = fin(n); return isFinite(v) ? v.toFixed(2) : '—'; }
   function fmt(n, d){ var v = fin(n); return isFinite(v) ? v.toFixed(d == null ? 2 : d) : '—'; }
 
+  /* 62th, 23th, 2th. Ordinals are not "th" for everything. */
+  function hgOgOrdinal(n){
+    var v = Math.round(n), t = v % 100, u = v % 10;
+    var suf = (t >= 11 && t <= 13) ? 'th' : (u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th');
+    return v + suf;
+  }
+
   function gateLine(g){
     /* An info gate does not veto, so it must not print VETO next to a TICKET
        badge — the row would contradict the card. It reads AGAINST: the app
@@ -1942,6 +1949,10 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
+    if (c.alsoKinds && c.alsoKinds.length){
+      h += '<div class="dim">also fired here on identical levels: ' + esc(c.alsoKinds.join(', '))
+        +  ' — ' + (c.alsoKinds.length + 1) + ' mechanics, one trade</div>';
+    }
     if (c.topPick){
       /* What the pick is standing on, in words, so the colour is never the
          whole argument. */
@@ -2222,7 +2233,33 @@ terse status, and never launches a first-time scan on a global refresh.
             +  'cleared the ledger this scan. That is a result, not a gap — the alternative would be '
             +  'promoting a setup the desk already vetoed.</div>';
         });
-        for (i = 0; i < ordered.length; i++) h += setupCard(ordered[i]);
+        /* Collapse duplicate trades — see omniroute. Several mechanics firing
+           on the same bar produce the same symbol, direction, entry and stop:
+           that is one trade with several names, and showing it several times
+           reads as several opportunities. Horizon is part of the key, because
+           the same levels on SCALP and SWING are genuinely two tickets with
+           different targets and different time stops. */
+        var ogTradeKey = function(c){
+          var pl = c.plan || {};
+          var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
+          var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
+          return String(c.horizon) + '|' + String(c.dir) + '|' + e + '|' + st;
+        };
+        var ogSeen = {}, ogCollapsed = [];
+        for (i = 0; i < ordered.length; i++){
+          var ok2 = ogTradeKey(ordered[i]);
+          if (ogSeen[ok2] !== undefined){
+            var own = ogCollapsed[ogSeen[ok2]];
+            if (!own.alsoKinds) own.alsoKinds = [];
+            if (own.alsoKinds.indexOf(ordered[i].kind) < 0 && ordered[i].kind !== own.kind){
+              own.alsoKinds.push(ordered[i].kind);
+            }
+            continue;
+          }
+          ogSeen[ok2] = ogCollapsed.length;
+          ogCollapsed.push(ordered[i]);
+        }
+        for (i = 0; i < ogCollapsed.length; i++) h += setupCard(ogCollapsed[i]);
         ui.cards.innerHTML = h;
       })
       .catch(function(err){

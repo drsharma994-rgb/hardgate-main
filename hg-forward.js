@@ -54,6 +54,15 @@ localStorage. Never throws.
   /* Module scope on purpose: this file is 'use strict', so a function declared
      inside the `if (typeof window …)` block does NOT escape it — the health
      renderer sits outside that block and could not see it there. */
+  /* See omniroute: a required sample size in the tens of thousands is not a
+     target, it is the statement that the edge is indistinguishable from
+     zero. */
+  function hgFwdNeedText(need){
+    if (!need || !isFinite(need)) return '';
+    if (need > 5000) return ' <span class="dim">(edge too small to confirm at any realistic sample size)</span>';
+    return ' <span class="dim">(needs ~' + need + ')</span>';
+  }
+
   function esc(x){
     return String(x == null ? '' : x)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -498,7 +507,7 @@ localStorage. Never throws.
           if (!p.samples) read = p.open ? (p.open + ' awaiting settlement') : 'never fired';
           else read = v ? v.read : 'unjudged';
           var cls = (!p.samples) ? '' : (v ? v.cls : '');
-          var need = (v && v.need) ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
+          var need = hgFwdNeedText(v && v.need);
           h += '<tr><td><b>' + esc(keys[i]) + '</b></td>'
              + '<td>' + p.samples + need + '</td>'
              + '<td>' + (p.samples ? (p.hit * 100).toFixed(0) + '%' : '—') + '</td>'
@@ -570,7 +579,7 @@ localStorage. Never throws.
             var read = !p.samples ? (p.open ? (p.open + ' awaiting settlement') : 'never fired')
                                   : (v ? v.read : 'unjudged');
             var cls = !p.samples ? '' : (v ? v.cls : '');
-            var need = (v && v.need) ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
+            var need = hgFwdNeedText(v && v.need);
             h += '<tr><td class="dim">' + esc(names[i]) + (isSel ? ' <span class="dim">(selection)</span>' : '')
                + '</td><td><b>' + esc(mechs[j]) + '</b></td>'
                + '<td>' + p.samples + need + '</td>'

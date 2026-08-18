@@ -1350,7 +1350,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       try {
         var pct = fin(apFn(rows, 14, 100));
         if (isFinite(pct)){
-          apWhy = 'ATR in the ' + pct.toFixed(0) + 'th percentile of the last 100 bars';
+          apWhy = 'ATR in the ' + ordinal(pct) + ' percentile of the last 100 bars';
           if (pct < 15){ apOk = false; apWhy += ' — too quiet to reach the target inside the horizon'; }
           else if (pct > 90){ apOk = false; apWhy += ' — top-decile volatility, the stop sits inside the noise'; }
           else apOk = true;
@@ -1867,12 +1867,30 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   }
   function pill(txt, cls){ return '<span class="gpip ' + (cls || '') + '">' + esc(txt) + '</span>'; }
 
+  /* 62th, 23th, 2th. Ordinals are not "th" for everything. */
+  function ordinal(n){
+    var v = Math.round(n), t = v % 100, u = v % 10;
+    var suf = (t >= 11 && t <= 13) ? 'th' : (u === 1 ? 'st' : u === 2 ? 'nd' : u === 3 ? 'rd' : 'th');
+    return v + suf;
+  }
+
   function gateLine(g){
-    var cls = g.pass === true ? 'ok' : (g.pass === false ? 'bad' : '');
-    /* an unevaluable CONDITIONAL gate reads UNCHECKED, not UNKNOWN — the
+    /* An INFO gate does not veto, so it must not print VETO on a card whose
+       badge says TICKET — the row would flatly contradict the header, and the
+       reader resolves that however they like. Live output showed exactly
+       that: "MET · TREND-RECLAIM LONG TICKET" with "VETO adx-trend" and
+       "VETO atr-percentile" underneath it. Fixed on the gold desk in v356 and
+       not carried across; this is the carry-across.
+
+       An unevaluable CONDITIONAL gate reads UNCHECKED, not UNKNOWN — the
        distinction matters: it did not fail, it never ran. */
+    var vetoed  = (g.pass === false) && !g.info;
+    var against = (g.pass === false) && g.info;
+    var cls = g.pass === true ? 'ok' : (vetoed ? 'bad' : '');
     var mark = g.pass === true ? 'PASS'
-             : (g.pass === false ? 'VETO' : (g.hard ? 'NO DATA' : 'UNCHECKED'));
+             : vetoed ? 'VETO'
+             : against ? 'AGAINST'
+             : (g.hard ? 'NO DATA' : 'UNCHECKED');
     return '<li>' + pill(mark, cls) + ' <b>' + esc(g.key) + '</b> <span class="dim">' + esc(g.why) + '</span></li>';
   }
 
@@ -1890,6 +1908,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     var h = '<div class="card">';
     h += '<div class="ttl">' + head + ' ' + badge + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+    if (c.alsoKinds && c.alsoKinds.length){
+      /* Same entry, same stop, same targets — so this is ONE trade that
+         several mechanics found, not several trades. */
+      h += '<div class="dim">also fired here on identical levels: ' + esc(c.alsoKinds.join(', '))
+        +  ' — ' + (c.alsoKinds.length + 1) + ' mechanics, one trade</div>';
+    }
     h += '<div class="dim">' + esc(c.why) + '</div>';
     if (c.plan){
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
@@ -1917,6 +1941,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      NON-OVERLAPPING trades would settle this at 2 sigma, given the effect
      size observed so far. A tiny edge returns a huge number, which is itself
      the useful answer. */
+  /* "(needs ~35379)" is arithmetically correct and tells the reader nothing.
+     A required sample size that large is not a target, it is the statement
+     that the observed edge is indistinguishable from zero — so say that
+     instead of printing a number nobody can act on. */
+  function needText(need){
+    if (!need || !isFinite(need)) return '';
+    if (need > 5000) return ' <span class="dim">(edge too small to confirm at any realistic sample size)</span>';
+    return ' <span class="dim">(needs ~' + need + ')</span>';
+  }
+
   function hgOmniPoolRead(p, minRr, minSamples){
     if (!p || !p.samples) return { z: NaN, read: 'never fired', need: null, cls: '' };
     var rr = isFinite(+minRr) ? +minRr : MIN_RR;
@@ -1979,7 +2013,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
       var v = hgOmniPoolRead(p, MIN_RR, MIN_SAMPLES);
       var z = v.z, read = v.read, cls = v.cls;
-      var needTxt = v.need ? (' <span class="dim">(needs ~' + v.need + ')</span>') : '';
+      var needTxt = needText(v.need);
       h += '<tr><td><b>' + k + '</b></td>'
         + '<td>' + p.samples + needTxt + '</td>'
         + '<td>' + (p.hit * 100).toFixed(0) + '%</td>'
@@ -2356,11 +2390,51 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
           return;
         }
-        var h = '';
+        /* COLLAPSE DUPLICATE TRADES.
+
+           Five mechanics firing on the same bar produce five candidates with
+           the SAME symbol, direction, entry, stop and targets. That is one
+           trade wearing five names, and rendering it five times told the user
+           there were five opportunities: a live scan reported 147 tickets of
+           which whole blocks were identical rows.
+
+           Grouped by what actually distinguishes a TRADE — symbol, direction
+           and the levels you would send to the exchange. The best-ranked
+           member keeps the card; the rest are named on it, which is more
+           useful than five copies anyway: several independent mechanics
+           agreeing on one entry is the thing worth knowing. */
+        var tradeKey = function(c){
+          var pl = c.plan || {};
+          var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
+          var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
+          return String(c.sym) + '|' + String(c.dir) + '|' + e + '|' + st;
+        };
+        var seenTrade = {}, collapsed = [];
         for (i = 0; i < ranked.length; i++){
-          try { h += setupCard(ranked[i]); }
+          var tk = tradeKey(ranked[i]);
+          if (seenTrade[tk] !== undefined){
+            var owner = collapsed[seenTrade[tk]];
+            if (!owner.alsoKinds) owner.alsoKinds = [];
+            if (owner.alsoKinds.indexOf(ranked[i].kind) < 0 && ranked[i].kind !== owner.kind){
+              owner.alsoKinds.push(ranked[i].kind);
+            }
+            continue;
+          }
+          seenTrade[tk] = collapsed.length;
+          collapsed.push(ranked[i]);
+        }
+        var dupHidden = ranked.length - collapsed.length;
+        if (dupHidden > 0){
+          __omni.lastStat += ' · ' + collapsed.length + ' distinct trade(s) after collapsing '
+                          + dupHidden + ' duplicate card(s) on identical levels';
+          omniSafeStat(ui, __omni.lastStat);
+        }
+
+        var h = '';
+        for (i = 0; i < collapsed.length; i++){
+          try { h += setupCard(collapsed[i]); }
           catch (eC){
-            try{ console.warn('omniroute card render skipped', ranked[i] && ranked[i].sym, eC); }catch(eC2){}
+            try{ console.warn('omniroute card render skipped', collapsed[i] && collapsed[i].sym, eC); }catch(eC2){}
           }
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
