@@ -5,8 +5,8 @@
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
     "long": {
-      "sym": "B-OPN_USDT",
-      "entry": 0.05662
+      "sym": "B-EDEN_USDT",
+      "entry": 0.050647991703344254
     },
     "short": {
       "sym": "XAU",
@@ -14,28 +14,37 @@
     }
   },
   "sniper": {
-    "key": "B-BTW_USDT@0.37612972327124894;B-VVV_USDT@13.87",
+    "key": "B-BTW_USDT@0.3889829645489037;B-OPN_USDT@0.05662;B-VVV_USDT@13.87",
     "hits": [
       {
         "sym": "B-BTW_USDT",
         "dir": "long",
-        "entry": 0.37612972327124894,
-        "stop": 0.3656382574581767,
-        "t1": 0.39606,
-        "lev": 21,
+        "entry": 0.3889829645489037,
+        "stop": 0.3788016149474695,
+        "t1": 0.408,
+        "lev": 22,
+        "state": "IN ZONE"
+      },
+      {
+        "sym": "B-OPN_USDT",
+        "dir": "long",
+        "entry": 0.05662,
+        "stop": 0.055235980966708446,
+        "t1": 0.06115,
+        "lev": 24,
         "state": "APPROACHING"
       },
       {
         "sym": "B-VVV_USDT",
         "dir": "long",
         "entry": 13.87,
-        "stop": 13.49575329766324,
-        "t1": 14.431370053505137,
+        "stop": 13.493449726234669,
+        "t1": 14.434825410647996,
         "lev": 21,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-18T16:32:57.508Z"
+    "at": "2026-08-18T17:05:43.423Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -280,11 +289,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T16:32:57.508Z"
+    "at": "2026-08-18T17:05:43.423Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T16:32:57.508Z"
+    "at": "2026-08-18T17:05:43.423Z"
   },
   "degraded": {
     "count": 0,
@@ -305,7 +314,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T16:32:57.899Z"
+    "at": "2026-08-18T17:05:43.804Z"
   },
   "bookFill": {
     "key": "u0|p0",
