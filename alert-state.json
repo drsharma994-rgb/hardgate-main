@@ -7,7 +7,7 @@
     "long": null,
     "short": {
       "sym": "XAU",
-      "entry": 4444.03633422185
+      "entry": 4440.032744510565
     }
   },
   "sniper": {
@@ -277,18 +277,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T19:58:55.800Z"
+    "at": "2026-08-18T21:01:12.577Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T19:58:55.801Z"
+    "at": "2026-08-18T21:01:12.577Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-18T19:58:55.801Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -303,7 +302,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T19:58:56.076Z"
+    "at": "2026-08-18T21:01:12.894Z"
   },
   "bookFill": {
     "key": "u0|p0",
