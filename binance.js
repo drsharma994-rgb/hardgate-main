@@ -83,8 +83,8 @@ async function __binFetchJson(url, timeoutMs){
     if (w > 0) await new Promise(function(r){ setTimeout(r, Math.min(w, 2000)); });
 
     /* Already known blocked: do not pay for the direct call again. */
+    let direct = null;
     if (__BIN_VIA.mode !== 'proxy'){
-      let direct = null;
       try { direct = await __binOneFetch(url, ctrl); }
       catch (e) { direct = { threw: true }; }
       if (direct && direct.rateLimited) return null;
@@ -92,15 +92,33 @@ async function __binFetchJson(url, timeoutMs){
         if (__BIN_VIA.mode === 'unknown') __BIN_VIA.mode = 'direct';
         return direct.json;
       }
-      /* 451 geo-block, 403, or a CORS/network throw — all mean "not from this
-         browser", and all are worth one proxy attempt. */
+      /* Any direct failure is worth ONE proxy attempt. Whether it PINS the
+         session is a separate question — see below. */
     }
 
     let viaProxy = null;
     try { viaProxy = await __binOneFetch(__binProxied(url), ctrl); }
     catch (e) { viaProxy = { threw: true }; }
     if (viaProxy && viaProxy.json !== undefined){
-      __BIN_VIA.mode = 'proxy';
+      /* PIN ONLY ON A PERMANENT BLOCK.
+
+         The first cut pinned on ANY direct failure, so a single transient 503
+         routed every later call through the proxy for the rest of the
+         session — hundreds of requests per scan taking a needless detour
+         through our own server and burning its rate limit, while Binance was
+         reachable the whole time. Measured: one blip, then four straight
+         proxy calls with direct never retried.
+
+         451 and 403 are the geo-block, and they are stable — worth pinning.
+         A THROW with no readable status is the CORS shape of the same block,
+         but only if the proxy then worked: if the network itself were down
+         the proxy would have failed too, and we would not be here.
+
+         A readable 5xx is the upstream having a bad minute. Use the proxy for
+         THIS call and try direct again on the next one. */
+      var st = direct ? direct.status : undefined;
+      var permanent = (st === 451 || st === 403) || (direct && direct.threw === true);
+      if (permanent) __BIN_VIA.mode = 'proxy';
       return viaProxy.json;
     }
     /* Neither path worked. Say so once rather than letting each caller invent

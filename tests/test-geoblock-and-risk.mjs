@@ -120,6 +120,60 @@ console.log('\n== when neither path works it says BLOCKED, not nothing ==');
   ok(ctx.hgBinanceVia() === 'blocked', 'but the state says blocked, so a gate can say why');
 }
 
+console.log('\n== a transient blip must NOT pin the session to the proxy ==');
+{
+  /* The first cut of the fallback pinned on ANY direct failure, so one 503
+     routed every later call through our own server for the rest of the
+     session — hundreds of requests per scan taking a needless detour and
+     burning the proxy's rate limit, while Binance was reachable throughout.
+
+     451, 403 and a CORS-shaped throw are the geo-block and are stable, so
+     they pin. A readable 5xx is the upstream having a bad minute. */
+  const trial = async (directFn, proxyOk) => {
+    const ctx = { console: { log(){}, warn(){} }, Math, Date, isFinite, JSON, Array, Object,
+                  Number, String, Promise, setTimeout, clearTimeout, AbortController,
+                  encodeURIComponent, TypeError };
+    ctx.window = ctx; ctx.globalThis = ctx;
+    const seen = [];
+    ctx.fetch = async (url) => {
+      const isProxy = String(url).indexOf('/api/proxy') === 0;
+      seen.push(isProxy ? 'PROXY' : 'DIRECT');
+      if (isProxy) return proxyOk ? { ok: true, status: 200, json: async () => [1] }
+                                  : { ok: false, status: 502, json: async () => null };
+      return directFn();
+    };
+    vm.createContext(ctx);
+    vm.runInContext(BIN, ctx, { filename: 'binance.js' });
+    await ctx.__binFetchJson('https://api.binance.com/x');
+    const via = ctx.hgBinanceVia();
+    seen.length = 0;
+    await ctx.__binFetchJson('https://api.binance.com/x');
+    return { via, next: seen.join('+') };
+  };
+
+  const geo = await trial(() => ({ ok: false, status: 451, json: async () => null }), true);
+  ok(geo.via === 'proxy', 'a 451 geo-block pins to the proxy');
+  ok(geo.next === 'PROXY', 'and later calls skip the doomed direct attempt');
+
+  const forbidden = await trial(() => ({ ok: false, status: 403, json: async () => null }), true);
+  ok(forbidden.via === 'proxy', 'so does a 403');
+
+  const cors = await trial(() => { throw new TypeError('Failed to fetch'); }, true);
+  ok(cors.via === 'proxy', 'and a CORS-shaped throw, BUT only because the proxy then worked');
+
+  for (const status of [500, 502, 503, 504]){
+    const blip = await trial(() => ({ ok: false, status, json: async () => null }), true);
+    ok(blip.via !== 'proxy', 'a transient ' + status + ' does NOT pin the session (via=' + blip.via + ')');
+    ok(blip.next.indexOf('DIRECT') === 0, 'and the next call tries direct again (' + blip.next + ')');
+  }
+
+  /* If the network itself is down, direct throws AND the proxy fails — that
+     is not a geo-block and must not be recorded as one. */
+  const down = await trial(() => { throw new TypeError('Failed to fetch'); }, false);
+  ok(down.via === 'blocked', 'a total outage reads blocked, not proxy (' + down.via + ')');
+  ok(down.next.indexOf('DIRECT') === 0, 'and direct is retried when the network may have returned');
+}
+
 console.log('\n== regime.js gets the same fallback ==');
 {
   ok(/\/api\/proxy\?url=/.test(REGIME), 'regime.js tries the proxy');

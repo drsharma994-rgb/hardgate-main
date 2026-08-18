@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v368',
-  pack: 'the regime gauges were never broken - Binance was unreachable',
-  built: '2026-08-21T00:40:00Z',
-  note: 'binance.js fetched direct, got HTTP 451 in a blocked country and returned null silently; the same-origin proxy runs in Singapore and had no Binance host on its allowlist'
+  version: 'hg-v369',
+  pack: 'one bad minute upstream no longer routes the whole session through our own server',
+  built: '2026-08-21T04:15:00Z',
+  note: 'the geo-block fallback pinned to the proxy on ANY direct failure, so a single transient 503 detoured every later call for the rest of the session; it pins only on 451, 403 or a CORS throw now'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
