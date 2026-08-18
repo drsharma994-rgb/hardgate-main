@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v358',
-  pack: 'a desk that has never won can no longer print an em dash for its expectancy',
-  built: '2026-08-19T18:15:00Z',
-  note: 'forward expectancy fell to NaN whenever there were zero winners, so a 0-for-13 record rendered as an em dash; with no winners the expectancy is exactly -1R and is now stated'
+  version: 'hg-v359',
+  pack: 'hgOgReport() prints the gold desk record from the console',
+  built: '2026-08-19T19:40:00Z',
+  note: 'the forward log only exists in the browser that produced it, so reading your own record is now one word instead of a pasted snippet'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

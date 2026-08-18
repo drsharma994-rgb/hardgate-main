@@ -2259,6 +2259,48 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgDetect = hgOgDetect;
     window.hgOgGates = hgOgGates;
     window.hgOgEvaluate = hgOgEvaluate;
+    /* hgOgReport() — the desk record, on demand, from the console.
+
+       The forward log lives in localStorage, so it can only be read in the
+       browser that produced it. Asking someone to paste a twenty-line
+       snippet to see their own results is a way of not showing them. */
+    window.hgOgReport = function hgOgReport(){
+      var sf = gfn('hgFwdStats'), pf = gfn('hgFwdPool');
+      if (!sf || !pf) return 'hg-forward.js is not loaded — no record to read.';
+      var out = [];
+      ['OMNIGOLD:SCALP', 'OMNIGOLD:SWING'].forEach(function(tab){
+        var st, pool;
+        try { st = sf(tab, null, false); pool = pf(tab) || {}; }
+        catch (e) { out.push(tab + ': unreadable (' + ((e && e.message) || e) + ')'); return; }
+        out.push('=== ' + tab + ' ===');
+        out.push('  settled ' + st.samples + '  wins ' + st.wins + '  losses ' + st.losses
+               + '  open ' + st.open + '  expired ' + st.expired);
+        out.push('  hit ' + (isFinite(st.hit) ? (st.hit * 100).toFixed(0) + '%' : '—')
+               + '   expectancy ' + (isFinite(st.expR) ? ((st.expR >= 0 ? '+' : '') + st.expR.toFixed(2) + 'R') : '—'));
+        var rows = [], k;
+        for (k in pool){
+          if (!Object.prototype.hasOwnProperty.call(pool, k)) continue;
+          if (pool[k] && (pool[k].samples || pool[k].open)) rows.push([k, pool[k]]);
+        }
+        rows.sort(function(a, b){ return (b[1].samples || 0) - (a[1].samples || 0); });
+        if (!rows.length){ out.push('  no mechanic has recorded anything yet on this horizon'); return; }
+        rows.forEach(function(r){
+          var p = r[1];
+          out.push('    ' + String(r[0] + '               ').slice(0, 15)
+                 + ' settled ' + String('  ' + p.samples).slice(-3)
+                 + '  W' + String('  ' + p.wins).slice(-3) + ' L' + String('  ' + p.losses).slice(-3)
+                 + '  open ' + String('  ' + p.open).slice(-3)
+                 + '  hit ' + (isFinite(p.hit) ? String('   ' + (p.hit * 100).toFixed(0) + '%').slice(-4) : '   —')
+                 + '  exp ' + (isFinite(p.expR) ? ((p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R') : '—'));
+        });
+      });
+      out.push('');
+      out.push('Out-of-sample only. Every figure is GROSS of spread and commission.');
+      var txt = out.join('\n');
+      if (typeof console !== 'undefined' && console.log) console.log(txt);
+      return txt;
+    };
+
     window.hgOgState = function hgOgState(){
       try { return __og.snap ? JSON.parse(JSON.stringify(__og.snap)) : null; } catch (e) { return null; }
     };

@@ -148,5 +148,17 @@ console.log('\n== the table renders the number it is now given ==');
   ok(/else if \(!wins\) expR = -1;/.test(src), 'and the zero-winner case is explicit in the source');
 }
 
-console.log('\n' + passed + ' passed, 0 failed');
+console.log('\n== hgOgReport(): the record, readable, without a paste-blob ==');
+
+{
+  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/window\.hgOgReport = function hgOgReport\(\)/.test(src), 'omnigold exposes hgOgReport()');
+  ok(/OMNIGOLD:SCALP', 'OMNIGOLD:SWING'/.test(src), 'covering both horizons');
+  ok(/hg-forward\.js is not loaded/.test(src), 'and says so plainly if the log module is absent');
+  ok(/no mechanic has recorded anything yet/.test(src), 'an empty horizon reads as empty, not as zero performance');
+  ok(/GROSS of spread and commission/.test(src), 'and the gross-of-costs caveat travels with the numbers');
+  ok(/catch \(e\) \{ out\.push\(tab \+ ': unreadable/.test(src), 'a corrupt store is reported, not thrown');
+}
+
+console.log('\n' + (passed) + ' passed, 0 failed');
 console.log('ALL FORWARD EXPECTANCY TESTS PASSED');
