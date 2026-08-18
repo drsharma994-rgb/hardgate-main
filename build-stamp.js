@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v357',
-  pack: 'one marked pick per horizon, and a split family that stops voting twice',
-  built: '2026-08-19T16:30:00Z',
-  note: 'OMNIGOLD marks the strongest SCALP and SWING ticket in violet with its evidence spelled out; a mechanic family firing both ways now counts for neither side instead of both'
+  version: 'hg-v358',
+  pack: 'a desk that has never won can no longer print an em dash for its expectancy',
+  built: '2026-08-19T18:15:00Z',
+  note: 'forward expectancy fell to NaN whenever there were zero winners, so a 0-for-13 record rendered as an em dash; with no winners the expectancy is exactly -1R and is now stated'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -211,7 +211,18 @@ localStorage. Never throws.
     /* average reward multiple actually carried by the winners, so expectancy
        reflects the plans recorded rather than an assumed R */
     var avgRr = wins ? (rrSum / wins) : NaN;
-    var expR = (settled && isFinite(avgRr)) ? (hit * avgRr - (1 - hit)) : NaN;
+    /* With NO winners avgRr is legitimately unknown — there is no winner to
+       average — but the EXPECTANCY is not: every settled trade lost 1R, so it
+       is exactly -1R and the hit*avgRr term vanishes. Gating expR on
+       isFinite(avgRr) printed a dash for the one record that needs no
+       inference at all, and a dash reads as "no data" rather than as the
+       worst result on the scale. A desk that has never won must not be able
+       to hide behind an em dash. */
+    var expR;
+    if (!settled) expR = NaN;
+    else if (!wins) expR = -1;
+    else if (isFinite(avgRr)) expR = hit * avgRr - (1 - hit);
+    else expR = NaN;
     return { samples: settled, wins: wins, losses: losses, open: open,
              expired: expired, hit: hit, avgRr: avgRr, expR: expR };
   }
