@@ -4,35 +4,44 @@
   "gold": null,
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
-    "long": null,
-    "short": {
-      "sym": "XAU",
-      "entry": 4440.032744510565
-    }
+    "long": {
+      "sym": "B-1000RATS_USDT",
+      "entry": 0.042529321188488574
+    },
+    "short": null
   },
   "sniper": {
-    "key": "B-OPN_USDT@0.05662;B-VVV_USDT@13.801715955524324",
+    "key": "B-SOL_USDT@76.69;B-VVV_USDT@13.819605259726583;SOXSUSDT@44.03",
     "hits": [
-      {
-        "sym": "B-OPN_USDT",
-        "dir": "long",
-        "entry": 0.05662,
-        "stop": 0.05529619315561057,
-        "t1": 0.06115,
-        "lev": 24,
-        "state": "APPROACHING"
-      },
       {
         "sym": "B-VVV_USDT",
         "dir": "long",
-        "entry": 13.801715955524324,
-        "stop": 13.452094253187564,
-        "t1": 14.326148509029466,
+        "entry": 13.819605259726583,
+        "stop": 13.481021984563212,
+        "t1": 14.815,
         "lev": 23,
         "state": "APPROACHING"
+      },
+      {
+        "sym": "B-SOL_USDT",
+        "dir": "long",
+        "entry": 76.69,
+        "stop": 76.40232502973294,
+        "t1": 77.21,
+        "lev": 94,
+        "state": "IN ZONE"
+      },
+      {
+        "sym": "SOXSUSDT",
+        "dir": "long",
+        "entry": 44.03,
+        "stop": 43.372578049418934,
+        "t1": 45.65,
+        "lev": 36,
+        "state": "IN ZONE"
       }
     ],
-    "at": "2026-08-18T19:00:07.361Z"
+    "at": "2026-08-19T01:46:20.900Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -277,11 +286,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-18T23:59:07.374Z"
+    "at": "2026-08-19T01:46:20.900Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-18T23:59:07.375Z"
+    "at": "2026-08-19T01:46:20.900Z"
   },
   "degraded": {
     "count": 0,
@@ -302,7 +311,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-18T23:59:07.682Z"
+    "at": "2026-08-19T01:46:21.219Z"
   },
   "bookFill": {
     "key": "u0|p0",
