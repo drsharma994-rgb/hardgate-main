@@ -164,5 +164,23 @@ console.log('\n== both desks capture the live price at ingestion ==');
   ok(/fin\(x\.livePx\)/.test(GOLD), 'read with fin — a null price is missing, not price zero');
 }
 
+console.log('\n== a dead card is not RENDERED as a trade ==');
+{
+  /* The gate vetoed, but the tab still drew the card full size — ENTRY, STOP
+     and T1 in large type a hundred points from the chart. The veto badge was
+     there; the numbers were what registered, and "a short trade with not even
+     close levels" was reported three times before this landed. */
+  ok(/levels dead on arrival: /.test(GOLD), 'a DOA card collapses to one dim line');
+  ok(/card not rendered/.test(GOLD), 'saying explicitly that the card was withheld');
+  ok(/DEAD LEVELS — priced off a closed bar the market has left behind/.test(GOLD),
+     'under a heading naming the cause');
+  ok(/lfG\.pass === false && lfG\.info !== true/.test(GOLD),
+     'only a REAL veto collapses — AGAINST resting-order plans still render in full');
+  ok(GOLD.indexOf('levels dead on arrival') > GOLD.indexOf('var ogSeen'),
+     'applied after the duplicate collapse, so the surviving card is the one judged');
+  ok(/'level-fresh': 'the market has moved past the levels/.test(GOLD),
+     'and the desk read can name it when it dominates');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL LEVEL-FRESH TESTS PASSED');

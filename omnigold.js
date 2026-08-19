@@ -2538,6 +2538,7 @@ terse status, and never launches a first-time scan on a global refresh.
         'trend': 'the setups that fired point against the prevailing EMA stack',
         'htf-daily': 'the setups that fired disagree with the daily stack',
         'news-window': 'a news blackout is standing the whole desk aside',
+        'level-fresh': 'the market has moved past the levels the mechanics fired at — the plans are priced off bars the tape has left behind',
         'measured-edge': 'the mechanics that fired have measurably not paid here'
       };
       var parts = [], used = 0;
@@ -2878,7 +2879,37 @@ terse status, and never launches a first-time scan on a global refresh.
             own.alsoKinds.push(cur.kind);
           }
         }
-        for (i = 0; i < ogCollapsed.length; i++) h += setupCard(ogCollapsed[i]);
+        /* A CARD WHOSE LEVELS ARE DEAD IS NOT A CARD.
+
+           level-fresh already vetoes a plan the market has crossed, so it
+           could not ticket — but the tab still drew it full size, ENTRY,
+           STOP and T1 in large type, a hundred points from the chart. The
+           veto badge was there; the numbers were what registered, and the
+           reader kept seeing "a short trade with not even close levels".
+           Reported three times before this landed.
+
+           A dead card collapses to one dim line naming the gap and the
+           cause. AGAINST (a genuine resting-order plan at real structure)
+           still renders in full — those levels are meant to be far. */
+        var deadLines = '';
+        for (i = 0; i < ogCollapsed.length; i++){
+          var cCard = ogCollapsed[i];
+          var lfG = null, gj;
+          for (gj = 0; gj < (cCard.gates || []).length; gj++){
+            if (cCard.gates[gj] && cCard.gates[gj].key === 'level-fresh'){ lfG = cCard.gates[gj]; break; }
+          }
+          if (lfG && lfG.pass === false && lfG.info !== true){
+            deadLines += '<div class="dim">' + esc(cCard.kind + ' ' + String(cCard.dir).toUpperCase())
+                      +  ' — levels dead on arrival: ' + esc(String(lfG.why).replace(/^DEAD ON ARRIVAL — /, ''))
+                      +  ' · card not rendered</div>';
+            continue;
+          }
+          h += setupCard(cCard);
+        }
+        if (deadLines){
+          h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
+            +  deadLines + '</div>';
+        }
         ui.cards.innerHTML = h;
       })
       .catch(function(err){
