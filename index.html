@@ -185,8 +185,15 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <link rel="stylesheet" href="hg-icons.css">
 <link rel="stylesheet" href="mobile.css">
 <link rel="stylesheet" href="annunciator.css">
-<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<!-- VENDORED. These were the only two scripts the app fetched from a third party at
+     runtime, and index.html carried no integrity= anywhere: a hijacked CDN path would
+     have injected arbitrary JS into the page that renders trade decisions and holds
+     the forward log. @emailjs/browser was pinned to a FLOATING major (@4), so the code
+     the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
+     byte-identical. Served same-origin now, so they are precached with the rest of the
+     shell and the charts work offline. -->
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=378"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=378"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -713,7 +720,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=377"></script>
+<script src="hg-mechanics.js?v=378"></script>
 <script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
@@ -760,14 +767,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=377"></script>
+<script src="supersetup.js?v=378"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=377"></script>
-<script src="super-gold.js?v=377"></script>
-<script src="super-best.js?v=377"></script>
-<script src="super-sniper.js?v=377"></script>
-<script src="super-book.js?v=377"></script>
-<script src="super-calibrate.js?v=377"></script>
+<script src="super-desk-common.js?v=378"></script>
+<script src="super-gold.js?v=378"></script>
+<script src="super-best.js?v=378"></script>
+<script src="super-sniper.js?v=378"></script>
+<script src="super-book.js?v=378"></script>
+<script src="super-calibrate.js?v=378"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>

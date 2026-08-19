@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v377';
+const HG_CACHE = 'hg-v378';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -23,6 +23,9 @@ const HG_SHELL = [
   './setup-ui.js', './plans.js', './setup-stack.js', './gate-replay-oos.js', './cryptogates.js',
   './squeeze.js', './trendtable.js', './oiflow.js', './regime.js', './carry.js', './hg-forward.js', './hg-mechanics.js', './omniroute.js', './omnigold.js', './contract-report.js', './termbasis.js',
   './goldpro.js', './strats.js', './meanrev.js', './supersetup.js', './super-desk-common.js', './super-gold.js', './super-best.js', './super-sniper.js', './super-book.js', './super-calibrate.js', './reversalsniper.js', './edge.js', './startradertab.js', './book-routing.js', './api-client.js', './tradeos.js', './hey-lens.js', './book.js', './execute.js', './liqs.js', './xuniverse.js', './desk-scan-universe.js',
+  /* Vendored third-party libraries. Previously loaded from unpkg/jsdelivr, so
+     the offline shell covered 126 local files and then broke on charts. */
+  './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
   './conviction-lock.js', './macro-feeds.js', './venuepremium.js',

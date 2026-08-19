@@ -4,7 +4,7 @@
   "private": true,
   "description": "HARDGATE crypto + gold trading terminal — static app + same-origin API (proxy, book, TradeOS MCP)",
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <25"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -12,7 +12,7 @@
   },
   "optionalDependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "puppeteer": "^24.0.0"
+    "puppeteer": "^25.8.0"
   },
   "scripts": {
     "start": "node scripts/server.mjs",

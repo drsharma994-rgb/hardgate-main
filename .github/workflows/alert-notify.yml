@@ -40,7 +40,7 @@ jobs:
           node-version: '20'
 
       - name: Install Puppeteer
-        run: npm install puppeteer@23
+        run: npm install puppeteer@25
 
       - name: Run alert check against the live site
         run: node scripts/alert-check.mjs

@@ -1350,7 +1350,23 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          IS genuinely breakeven and must not be vetoed. Compare the observed
          T1-first rate against the breakeven rate for this R multiple,
          1/(1+R), in units of its own binomial standard error. */
-      var pBreak = 1 / (1 + MIN_RR);
+      /* THE DESK'S OWN R FLOOR, NOT THE MODULE DEFAULT.
+
+         The out-of-sample branch below already does this, and its comment
+         says why: "a desk that supplies its own R floor (OMNIGOLD's 1.5R
+         scalp) must be judged against ITS breakeven". The in-sample half
+         above it was never given the same treatment, so the two halves of one
+         gate could measure the same mechanic against two different breakevens
+         and disagree on the same card.
+
+         Dormant today — omniroute never sets ex.minRr, and the gold desk
+         carries its own copy of this gate — which is exactly why it would
+         have gone unnoticed. Anyone adding a second R floor to crypto (a 1.5R
+         scalp horizon, say) would get a silently wrong significance bar: at
+         1.5R breakeven is 40%, not 33.3%, so a losing detector would be
+         measured against a bar it clears. */
+      var edInRr = isFinite(fin(x.minRr)) && fin(x.minRr) > 0 ? fin(x.minRr) : MIN_RR;
+      var pBreak = 1 / (1 + edInRr);
       var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, sN));
       var z = se > 0 ? ((sHit - pBreak) / se) : 0;
       /* two decimals: a z of -1.96 rendered as "-2.0sigma ... within noise"

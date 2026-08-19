@@ -22,6 +22,11 @@ services:
     autoDeploy: true
     healthCheckPath: /
     envVars:
+      # Pin the runtime. package.json said only ">=18", so Render was free to
+      # pick any future major and change the runtime under a deployed trading
+      # desk without a commit. Raise this deliberately, not by drift.
+      - key: NODE_VERSION
+        value: "22.11.0"
       - key: GEMINI_API_KEY
         sync: false
       - key: XM_MT5_URL
@@ -52,6 +57,10 @@ services:
     startCommand: node app.js
     autoDeploy: true
     envVars:
+      # Same pin as the web service. The daemon also builds Chrome for
+      # puppeteer, which is the most runtime-sensitive step in the stack.
+      - key: NODE_VERSION
+        value: "22.11.0"
       - key: HARDGATE_URL
         value: https://hardgate-main.onrender.com/
       - key: HARDGATE_DAEMON_DRY_RUN

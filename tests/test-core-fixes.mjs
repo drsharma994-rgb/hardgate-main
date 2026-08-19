@@ -268,10 +268,37 @@ assert(html.includes("name:'ticker', symbols: symbols") && html.includes("name:'
 }
 
 /* ================= 9. mini-charts engine (lightweight-charts v4) ================= */
-assert(html.includes('https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js'),
-  'lightweight-charts 4.2.0 CDN script tag present');
-assert(html.indexOf('@emailjs/browser@4') < html.indexOf('lightweight-charts@4.2.0'),
+/* Both libraries are VENDORED now. index.html carried no integrity= anywhere, and
+   @emailjs/browser was pinned to a floating major (@4), so the code this terminal
+   executed could change without a deploy. They are served same-origin, which also
+   means the offline shell finally covers the charts. */
+assert(html.includes('./vendor/lightweight-charts-4.2.0.js'),
+  'lightweight-charts 4.2.0 is served same-origin from ./vendor');
+assert(html.includes('./vendor/emailjs-browser-4.4.1.js'),
+  'EmailJS is pinned to an exact version and served same-origin');
+assert(!/unpkg\.com|cdn\.jsdelivr\.net/.test(html),
+  'no third-party script host remains in index.html');
+assert(html.indexOf('emailjs-browser-4.4.1') < html.indexOf('lightweight-charts-4.2.0'),
   'lightweight-charts tag loads AFTER EmailJS in <head>');
+{
+  const fsx = await import('node:fs');
+  const SWSRC = fsx.readFileSync('sw.js', 'utf8');
+  for (const v of ['vendor/lightweight-charts-4.2.0.js', 'vendor/emailjs-browser-4.4.1.js']){
+    assert(fsx.existsSync(v), v + ' exists on disk');
+    assert(fsx.statSync(v).size > 3000, v + ' is a real build, not a stub');
+    assert(SWSRC.includes('./' + v), v + ' is precached, so charts work offline');
+  }
+  /* The CSP must no longer permit a third-party script host, and must permit the
+     endpoint EmailJS actually posts to — connect-src omitted api.emailjs.com, so
+     every email alert was blocked by this application's own header. */
+  const srv = fsx.readFileSync('scripts/server.mjs', 'utf8');
+  const vjs = fsx.readFileSync('vercel.json', 'utf8');
+  for (const [n, src] of [['server.mjs', srv], ['vercel.json', vjs]]){
+    assert(!/script-src[^;"]*(unpkg|jsdelivr)/.test(src), n + ' script-src allows no CDN host');
+    assert(/connect-src[^;"]*https:\/\/api\.emailjs\.com/.test(src),
+      n + ' connect-src permits api.emailjs.com, which EmailJS posts to');
+  }
+}
 assert(/\.hgchart\{[^}]*height\s*:\s*190px/.test(html), '.hgchart CSS: 190px chart slot');
 assert(html.includes('function hgMiniChart(el, rows, plan, opts){') && html.includes('function hgChartAvailable(){'),
   'hgMiniChart + hgChartAvailable defined inline');

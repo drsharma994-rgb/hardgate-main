@@ -75,11 +75,15 @@ function baseHeaders(res){
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+    /* No third-party script host. lightweight-charts and @emailjs/browser were the
+       only two, and they are vendored under ./vendor now — so a CDN can no longer
+       execute code in this page, and a future edit that re-adds a CDN tag fails
+       loudly here instead of silently working. */
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data:",
-    "connect-src 'self' https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.frankfurter.dev https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov https://api.hyperliquid.xyz https://api.worldmonitor.app https://generativelanguage.googleapis.com wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
+    "connect-src 'self' https://api.emailjs.com https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.frankfurter.dev https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov https://api.hyperliquid.xyz https://api.worldmonitor.app https://generativelanguage.googleapis.com wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "object-src 'none'",
