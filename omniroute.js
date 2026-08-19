@@ -1222,16 +1222,57 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        as PASS meant a card could claim "news risk low" while nothing had
        been checked, which is precisely the silent pass this ledger exists to
        prevent. An unloaded or errored module reads UNCHECKED. */
-    var nw = null, nwWhy = 'news module has not run';
+    var nw = null, nwWhy = 'news module has not run', nwInfo = false;
     var nwNote = (x.news && typeof x.news.note === 'string') ? x.news.note : '';
     var nwUnloaded = /not loaded|news error/i.test(nwNote);
     if (x.news && x.news.risk && !nwUnloaded){
-      nw = !(x.news.blackout === true || String(x.news.risk) === 'high');
-      nwWhy = 'news risk ' + x.news.risk + (nw ? '' : ' — blackout window');
+      /* A BLACKOUT IS NOT A FORECAST, AND THIS GATE WAS TREATING THEM AS ONE.
+
+         news.js defines two different things on the same object:
+
+           blackout : now is inside [event - 60m, event + 60m] of a
+                      high-impact print. Trading is genuinely suspended.
+           risk     : 'high' if a blackout is active OR a high-impact USD
+                      event lands within the next TWENTY-FOUR HOURS.
+
+         Vetoing on risk === 'high' therefore stands the desk aside for a
+         whole day around every CPI, NFP, FOMC, PPI, PCE, GDP and the WEEKLY
+         jobless claims print. On the US calendar those overlap: there is a
+         high-impact release within 24h on most weekdays, so the gate is not
+         occasionally on, it is effectively permanently on. That is what the
+         live scans showed — 11 of 11 gold setups and every one of 1240 crypto
+         setups vetoed, across days, by this single gate.
+
+         brain.js found and fixed exactly this on 2026-07-30 and says so in a
+         comment: "an event hours away is context — a caution chip, never a
+         kill". engine.js and book.js also veto on blackout alone. These two
+         desks were the only consumers still killing on the forecast, which is
+         why the rest of the app kept working while both tabs sat empty.
+
+         So: a true blackout vetoes. A red event on the horizon is reported
+         AGAINST — visible on the card, costing the reader nothing — because
+         standing aside for a print that is nineteen hours away is not
+         discipline, it is not trading. */
+      var nwBlack = (x.news.blackout === true);
+      var nwHigh = (String(x.news.risk) === 'high');
+      nw = !nwBlack;
+      if (nwBlack){
+        nwWhy = 'NEWS BLACKOUT — TRADING BLOCKED'
+              + (nwNote ? ' · ' + nwNote : ' (no event named — check the news tab)');
+      } else if (nwHigh){
+        /* Not a veto. info:true keeps it off the ticket's critical path while
+           still printing on the card, which is what a caution is. */
+        nw = false; nwInfo = true;
+        nwWhy = 'red event on the horizon, OUTSIDE the blackout window — caution, not a veto'
+              + (nwNote ? ' · ' + nwNote : '');
+      } else {
+        nwWhy = 'news risk ' + x.news.risk + ' — no blackout active'
+              + (nwNote ? ' · ' + nwNote : '');
+      }
     } else if (nwUnloaded){
       nwWhy = 'news not checked — module reports: ' + nwNote;
     }
-    gates.push({ key:'news-window', hard:false, pass: nw, why: nwWhy });
+    gates.push({ key:'news-window', hard:false, info: nwInfo, pass: nw, why: nwWhy });
 
     /* 12 — measured edge: this detector's own pooled walk-forward result.
        Not a veto on thin evidence — under MIN_SAMPLES it stays UNCHECKED
@@ -1457,8 +1498,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                  + ' — tied, and the ' + tieReg + ' regime favours the other side (' + wantFam + ')';
         } else {
           con = false;
+          /* Say WHICH of the three tie-break failures happened. "No regime
+             read" was printed for all of them, including on cards where
+             regime-fit had just reported WEAK TREND three lines below — which
+             sends the reader looking for a missing regime that is not
+             missing. */
+          var tieWhy = !wantFam
+            ? 'no regime read to break it'
+            : (cons.split.indexOf(wantFam) >= 0
+                ? 'the ' + tieReg + ' regime favours ' + wantFam + ', and ' + wantFam
+                  + ' is itself split — it cannot break its own tie'
+                : (mineHas && theirsHas
+                    ? wantFam + ' fired on BOTH sides, so the regime cannot separate them'
+                    : wantFam + ' did not fire at all, so the ' + tieReg
+                      + ' regime has nothing here to favour'));
           conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ')
-                 + ')' + splitTxt + ' — tied, and no regime read to break it: the desk cannot pick a side';
+                 + ')' + splitTxt + ' — tied, and ' + tieWhy + ': the desk cannot pick a side';
         }
       } else {
         con = false;
@@ -3056,6 +3111,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         var tickets = 0, i;
         for (i = 0; i < ranked.length; i++) if (ranked[i].grade && ranked[i].grade.ticket) tickets++;
         __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
+        /* Same as gold: when nothing clears, name the gate responsible rather
+           than leaving the reader to find it across fifty cards. */
+        if (!tickets && ranked.length){
+          var blockTally = {}, bi, bj, bg;
+          for (bi = 0; bi < ranked.length; bi++){
+            for (bj = 0; bj < (ranked[bi].gates || []).length; bj++){
+              bg = ranked[bi].gates[bj];
+              if (bg && bg.pass === false && bg.info !== true){
+                blockTally[bg.key] = (blockTally[bg.key] || 0) + 1;
+              }
+            }
+          }
+          var bKeys = Object.keys(blockTally).sort(function(a, b){ return blockTally[b] - blockTally[a]; });
+          if (bKeys.length){
+            __omni.lastStat += '  ·  NO TICKETS: ' + bKeys[0] + ' vetoed '
+                            + blockTally[bKeys[0]] + ' of ' + ranked.length + ' setups'
+                            + (bKeys.length > 1 ? ' (then ' + bKeys.slice(1, 3).join(', ') + ')' : '')
+                            + ' — run hgOmniWhyNoTickets() for the full tally';
+          }
+        }
         var caveat = '';
         if (res.pass1Err) caveat += '  · pass 1 interrupted (' + res.pass1Err + ') — partial cover at ' + res.pass1Done + '/' + res.scanned;
         if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' of them show hard gates + plan only (per-symbol confluence capped at ' + ENRICH_MAX + ' names, and the ' + ENRICH_MAX + ' were chosen by how many mechanic families agree, not by which answered first)';
