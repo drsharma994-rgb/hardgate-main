@@ -1073,6 +1073,24 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'level-fresh', hard:false, info: lfInfo, pass: lfOk, why: lfWhy });
 
+    /* MOMENTUM-STOP — reported AGAINST whenever the plan rests on a
+       volatility stop rather than structure. Info, not a veto: the plan
+       engine only grants one to continuation mechanics that opted in, and
+       killing it here would just restore the no-levels stalemate. The card
+       must show the compromise. */
+    var msOk = null, msWhy = 'stop is on structure, or no plan to judge';
+    if (plHas && plObj){
+      if (plObj.momentumStop === true){
+        msOk = false;
+        msWhy = 'stop is a VOLATILITY stop, not structure — noise can stop this trade '
+              + 'without the idea being wrong; size accordingly';
+      } else {
+        msOk = true;
+        msWhy = 'stop rests on structure';
+      }
+    }
+    gates.push({ key:'momentum-stop', hard:false, info:true, pass: msOk, why: msWhy });
+
     var reversion = hgOgIsReversion(hit.kind);
 
     /* 1 — trend, graded by family (see omniroute: vetoing a reversion setup
@@ -2169,7 +2187,15 @@ terse status, and never launches a first-time scan on a global refresh.
            measured against real invalidation, with fixed-risk sizing taking a
            smaller position for the same dollars at risk. */
         try {
-          plan = planFn(hit.dir, rows, undefined, { minRr: cfg.minRr, capMode: 'structure' });
+          /* Continuation mechanics may fall back to a LABELLED momentum stop
+             when no structure sits within reach — that is the breakout trade
+             the walk-forward pool already measures. Fades never get one: a
+             fade's premise IS the level, and a fade without structure has no
+             premise. */
+          plan = planFn(hit.dir, rows, undefined, {
+            minRr: cfg.minRr, capMode: 'structure',
+            momentumOk: !hgOgIsReversion(hit.kind)
+          });
         } catch (e) { plan = null; }
       }
       if (plan && deriveFn) plan = deriveFn(plan);

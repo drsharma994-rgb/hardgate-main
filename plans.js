@@ -661,6 +661,36 @@ function hgStructureStop(dir, entry, rows, opts){
            so risk/ATR is large without the setup being unusable. That was my
            addition breaking real cases, not an existing fault. */
         if (capMode !== 'tighten' && risk > maxDist * a){
+          /* THE MOMENTUM STOP — the trade v381 removed, put back with its name on.
+
+             v381 killed the silent ATR fallback because it was presented AS
+             structure: the card said lastSwing, claimed 2R against risk 53%
+             smaller than real invalidation, and the stop sat where it would
+             be hit. The lie was the defect. But declining outright created
+             its own inconsistency: the walk-forward pool's OWN stop model
+             (hgOmniBtStop) falls back to 1.5xATR when structure is unusable
+             — disclosed in every pool footer — so the in-sample numbers
+             measure trades the live desk refuses to take, and in a runaway
+             trend the desk takes nothing at all. Four sessions of "why does
+             the scalp setup have no levels" were that gap.
+
+             A volatility stop with its name on is a different instrument
+             from a fake structural one. The caller must OPT IN
+             (momentumOk: true — the desks grant it to continuation
+             mechanics only, never fades), the note says what it is and what
+             it is not, and plan.momentumStop lets the ledger flag it AGAINST
+             so the compromise is on the card, not buried. */
+          if (opts.momentumOk === true){
+            stop = (dir === 'long') ? entry - fallback * a : entry + fallback * a;
+            var mRisk = Math.abs(entry - stop);
+            if (!(mRisk > 0)) return null;
+            return { stop: stop, risk: mRisk, atr: a, momentumStop: true,
+                     note: 'MOMENTUM STOP: ' + fallback + '×ATR' + atrLen
+                         + ' — no structure within ' + maxDist + '×ATR (nearest swing '
+                         + (risk / a).toFixed(1) + '×ATR away). This is a volatility stop, '
+                         + 'NOT invalidation: noise can stop this trade without the idea being wrong',
+                     wide: false };
+          }
           return null;
         }
         if (capMode === 'tighten'){
@@ -790,7 +820,7 @@ function hgRestateStopNote(note, atrVal, finalRisk, capDist){
        fallback note describes something else and is left alone. */
     var WIDE_RE = / — WIDE \([\d.]+×ATR, beyond the [\d.]+×ATR guide\); R:R is measured against this real invalidation/;
     var base = note.replace(WIDE_RE, '');
-    if (/stop capped|lastSwing unavailable/.test(base)) return note;
+    if (/stop capped|lastSwing unavailable|MOMENTUM STOP/.test(base)) return note;
     var mult = r / a;
     if (mult > cap){
       return base + ' — WIDE (' + mult.toFixed(1) + '×ATR, beyond the ' + cap
@@ -814,6 +844,7 @@ function hgPlanLevelsCore(dir, rows, entryOverride, opts){
     });
     if (!plan) return null;
     plan.note = st.note;
+    if (st.momentumStop === true) plan.momentumStop = true;
     plan.planSrc = 'hgPlanLevels';
     plan.type = opts.type || 'SWING';
     plan.dir = dir;
@@ -825,6 +856,16 @@ function hgPlanLevelsCore(dir, rows, entryOverride, opts){
         preferEdge: opts.preferEdge
       });
       if (exactPl){
+        /* hgApplyExactEntry builds a FRESH plan object, which silently dropped
+           the momentumStop flag — a volatility stop then rendered as
+           [structure], the ledger's AGAINST never fired, and the exact
+           disguise v381 removed was back through a side door. The flag and
+           its note are re-attached BEFORE the restatement, whose guard skips
+           MOMENTUM notes so it cannot rewrite one as WIDE-structural. */
+        if (st.momentumStop === true){
+          exactPl.momentumStop = true;
+          if (!/MOMENTUM STOP/.test(String(exactPl.note || ''))) exactPl.note = st.note;
+        }
         /* The entry has moved; the note must describe where the stop now is. */
         exactPl.note = hgRestateStopNote(exactPl.note, st.atr,
           Math.abs(+exactPl.entry - +exactPl.stop),

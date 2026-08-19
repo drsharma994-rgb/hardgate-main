@@ -146,6 +146,14 @@ console.log('\n== the four gold context gates carry the flag ==');
                         /* omniroute's own indicator reads — same standing:
                            they argue, they never veto. */
                         'adx-trend', 'atr-percentile', 'vol-forecast',
+                        /* momentum-stop marks a plan resting on a volatility
+                           stop rather than structure. It is info BY DESIGN:
+                           the plan engine only grants such a stop to
+                           continuation mechanics that opted in, and a veto
+                           here would restore the no-levels stalemate it was
+                           built to end. The compromise argues on the card; it
+                           does not kill it. */
+                        'momentum-stop',
                         /* the universe reads — the only gates that look
                            outside the contract being judged */
                         'xs-rank', 'breadth',

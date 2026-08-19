@@ -55,7 +55,14 @@
         var plOpts = Object.assign({ minRr: 2 }, opts || {});
         var pl = hgPlanLevelsCore(dir, rows, entryOverride, plOpts);
         if (pl) return { dir: pl.dir, entry: pl.entry, stop: pl.stop, t1: pl.t1, t2: pl.t2, risk: pl.risk, note: pl.note,
-                         targetPolicy: pl.targetPolicy, planSrc: pl.planSrc };
+                         targetPolicy: pl.targetPolicy, planSrc: pl.planSrc,
+                         /* This fixed field list silently dropped the flag that
+                            marks a volatility stop, so a momentum plan rendered
+                            as structural and the ledger's AGAINST never fired —
+                            the disguise v381 removed, back through a third door.
+                            The list already dropped rr1/rr2 the same way once;
+                            that is what it does to any field added below it. */
+                         momentumStop: pl.momentumStop === true };
       }
       if (dir!=='long' && dir!=='short') return null;
       if (!rows || !rows.length) return null;
