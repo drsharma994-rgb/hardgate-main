@@ -2422,6 +2422,9 @@ terse status, and never launches a first-time scan on a global refresh.
         var all = (res.scalp.cands || []).concat(res.swing.cands || []);
         var ranked = rankFn(all);
         __og.snap = { at: Date.now(), rows: ranked, scalp: res.scalp.pooled, swing: res.swing.pooled };
+        /* Bars kept for the R/horizon grid — it re-runs the walk-forward on
+           what the scan already fetched, so it costs no network. */
+        __og.gridRows = { scalp: res.scalp.rows || [], swing: res.swing.rows || [] };
         __og.ran = true;
         __og.src = { scalp: res.scalp.source, swing: res.swing.source };
 
@@ -2603,17 +2606,74 @@ terse status, and never launches a first-time scan on a global refresh.
       + 'The perp gates have no meaning here (spot gold has no funding, OI, retail ratio or taker flow) and are deliberately absent rather than faked; '
       + 'in their place sit session, real-rate macro, DXY inverse, yield guard and ADR budget. '
       + 'Levels come from the house plan engine; cards order by evidence coverage. Nothing here is a profit forecast.</div>'
-      + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button></div>'
+      + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
+      +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
+      + '<div id="ogGridOut" style="margin-top:10px"></div>'
       + '<div id="ogPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="ogCards" style="margin-top:12px"></div>'
       + '</div>';
 
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
-      pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards')
+      pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards'),
+      grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut')
     };
     if (!ui.btn || !ui.stat || !ui.cards || !ui.pool) return;
+
+    /* THE R/HORIZON GRID, WHICH THIS DESK DID NOT HAVE.
+
+       OMNIROUTE has carried this since the day its own test established the
+       finding: the SAME six detectors run from -18.7 sigma at 3R/10 bars to
+       +2.5 sigma at 1.5R/40 bars. Nothing about the detectors changes between
+       those numbers — target and horizon do all the work. The gold desk trades
+       SCALP at 1.5R/24 and SWING at 2R/20 and had no way to see whether that
+       frame was throwing the edge away.
+
+       Measured on 1,500 real XAUUSDT 1h bars, every one of the twelve cells
+       came back inside noise: best +1.37 sigma at 1R/10, gold's own frame
+       +0.36, the best reachable +0.83 at 1.5R/40, worst -1.50 at 3R/10
+       against a family-wise bar of +2.97. So the frame is NOT the main
+       problem here, and that is worth being able to see rather than assume.
+
+       Same six detectors as the crypto grid — the ones this tab's own header
+       calls "the OmniRoute six" — so the numbers are comparable across desks.
+       A button, not part of every scan: it re-runs the walk-forward twelve
+       times. */
+    if (ui.grid){
+      ui.grid.addEventListener('click', function(){
+        var gw = W();
+        if (!gw || typeof gw.hgOmniGridProgressive !== 'function'){
+          ui.gridOut.innerHTML = '<div class="note warn">grid engine unavailable (omniroute.js not loaded)</div>';
+          return;
+        }
+        var gr = __og.gridRows;
+        var lists = [];
+        if (gr && gr.scalp && gr.scalp.length) lists.push(gr.scalp);
+        if (gr && gr.swing && gr.swing.length) lists.push(gr.swing);
+        if (!lists.length){
+          ui.gridOut.innerHTML = '<div class="note warn">Run a scan first — the grid measures the bars '
+                               + 'that scan fetched, and there are none yet.</div>';
+          return;
+        }
+        ui.grid.disabled = true;
+        ui.gridOut.innerHTML = '<div class="note">measuring both gold horizons at 12 settings…</div>';
+        var frame = '<div class="note">Gold trades SCALP at ' + HORIZONS.scalp.minRr + 'R / '
+                  + HORIZONS.scalp.horizonBars + ' bars and SWING at ' + HORIZONS.swing.minRr + 'R / '
+                  + HORIZONS.swing.horizonBars + ' bars. The grid sweeps around both. '
+                  + 'Every figure is IN-SAMPLE and GROSS, and the best of twelve cells is the best of '
+                  + 'twelve searches — the same multiple-comparisons bar that applies to picking a '
+                  + 'mechanic applies to picking a setting.</div>';
+        try {
+          gw.hgOmniGridProgressive(lists,
+            function(html){ ui.gridOut.innerHTML = frame + html; },
+            function(html){ ui.gridOut.innerHTML = frame + html; ui.grid.disabled = false; });
+        } catch (eG){
+          ui.gridOut.innerHTML = '<div class="note warn">grid failed: ' + ((eG && eG.message) || eG) + '</div>';
+          ui.grid.disabled = false;
+        }
+      });
+    }
     __og.ui = ui;
     hgOgInjectPickStyles();
 
