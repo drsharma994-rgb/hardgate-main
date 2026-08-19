@@ -182,5 +182,30 @@ console.log('\n== a dead card is not RENDERED as a trade ==');
      'and the desk read can name it when it dominates');
 }
 
+console.log('\n== OMNIROUTE has the same rendering rule and its own desk read ==');
+{
+  /* Requested as "update in the omnipotent tab" — the crypto desk had the
+     level-fresh GATE from v395 but still rendered DOA cards full size, and
+     had no plain-language read. Parity with the gold desk, asserted. */
+  ok(/levels dead on arrival: /.test(ROUTE), 'a DOA crypto card collapses to one dim line');
+  ok(/card not rendered/.test(ROUTE), 'saying the card was withheld');
+  ok(/DEAD LEVELS — priced off a closed bar the market has left behind/.test(ROUTE),
+     'under the same heading as gold');
+  ok(/lfG\.pass === false && lfG\.info !== true/.test(ROUTE),
+     'and only a REAL veto collapses — resting-order plans still render');
+  /* The desk read, exercised directly. */
+  ok(typeof W.hgOmniDeskRead === 'function', 'hgOmniDeskRead is exported');
+  const t = W.hgOmniDeskRead({ 'level-fresh': 8, 'consensus': 3 }, 12);
+  ok(/^DESK READ: /.test(t), 'it leads with its name');
+  ok(/market has moved past the levels/.test(t), 'translating level-fresh into the condition');
+  ok(t.indexOf('moved past') < t.indexOf('two-sided'), 'dominant veto first');
+  ok(/Standing aside IS the read on 12 setups/.test(t), 'and closes with the count');
+  ok(W.hgOmniDeskRead({}, 5) === '', 'an empty tally says nothing');
+  ok(W.hgOmniDeskRead({ 'future-gate': 4 }, 4) === '', 'an unmapped gate stays silent rather than mumbling');
+  ok(W.hgOmniDeskRead(null, 0) === '', 'and null never throws');
+  ok(/var omniRead = hgOmniDeskRead\(blockTally, ranked\.length\);/.test(ROUTE),
+     'wired into the NO TICKETS branch of the status line');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL LEVEL-FRESH TESTS PASSED');

@@ -2868,6 +2868,35 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      Deliberately blunt about the difference between "vetoed" and "could not
      be evaluated". A gate that never ran is not the reason a ticket failed,
      and conflating the two sends you chasing the wrong thing. */
+  /* THE DESK READ, crypto edition — same purpose as the gold desk's: the
+     status line named the top blocking GATE, which is a category, and the
+     reader needed the market condition it implies. Derived from the graded
+     cards, costing nothing. */
+  function hgOmniDeskRead(tally, total){
+    try {
+      var PLAIN = {
+        'level-fresh': 'the market has moved past the levels the mechanics fired at — plans priced off bars the tape has left behind',
+        'measured-edge': 'the mechanics that fired have measurably not paid on this desk',
+        'book-depth': 'the books are too thin to absorb the stop without slippage',
+        'participation': 'the trigger bars are thin for their time of day',
+        'consensus': "the desk's own mechanics point both ways, and a two-sided tape earns no ticket",
+        'trend': 'the setups that fired point against the prevailing stack',
+        'htf-daily': 'the setups that fired disagree with the daily stack',
+        'news-window': 'a news blackout is standing the whole desk aside',
+        'funding': 'funding says the crowd is already positioned this way',
+        'plan-levels': 'no stop could be placed on structure for the setups that fired'
+      };
+      var keys = Object.keys(tally || {}).sort(function(a, b){ return tally[b] - tally[a]; });
+      var parts = [], i;
+      for (i = 0; i < keys.length && parts.length < 2; i++){
+        if (PLAIN[keys[i]]) parts.push(PLAIN[keys[i]]);
+      }
+      if (!parts.length) return '';
+      return 'DESK READ: ' + parts.join('; ')
+           + '. Standing aside IS the read on ' + total + ' setups.';
+    } catch (e){ return ''; }
+  }
+
   function hgWhyNoTicketsFrom(rows, label){
     if (!rows || !rows.length){
       return label + ': no scan in memory — run a scan first, then ask again.';
@@ -3374,6 +3403,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                             + blockTally[bKeys[0]] + ' of ' + ranked.length + ' setups'
                             + (bKeys.length > 1 ? ' (then ' + bKeys.slice(1, 3).join(', ') + ')' : '')
                             + ' — run hgOmniWhyNoTickets() for the full tally';
+            var omniRead = hgOmniDeskRead(blockTally, ranked.length);
+            if (omniRead) __omni.lastStat += '  ·  ' + omniRead;
           }
         }
         var caveat = '';
@@ -3451,11 +3482,34 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
 
         var h = '';
+        /* A CARD WHOSE LEVELS ARE DEAD IS NOT A CARD — same rule as the gold
+           desk, for the same reason. level-fresh already vetoes a plan the
+           market has crossed, but a full-size card with ENTRY/STOP/T1 far
+           from the chart is what the reader sees regardless of the badge.
+           Only a REAL DOA veto collapses; an AGAINST resting-order plan at
+           genuine structure still renders in full. */
+        var deadLines = '';
         for (i = 0; i < collapsed.length; i++){
+          var lfG = null, gj2;
+          for (gj2 = 0; gj2 < (collapsed[i].gates || []).length; gj2++){
+            var gg2 = collapsed[i].gates[gj2];
+            if (gg2 && gg2.key === 'level-fresh'){ lfG = gg2; break; }
+          }
+          if (lfG && lfG.pass === false && lfG.info !== true){
+            deadLines += '<div class="dim">' + esc(String(collapsed[i].sym || '') + ' ' + collapsed[i].kind
+                      +  ' ' + String(collapsed[i].dir).toUpperCase())
+                      +  ' — levels dead on arrival: ' + esc(String(lfG.why).replace(/^DEAD ON ARRIVAL — /, ''))
+                      +  ' · card not rendered</div>';
+            continue;
+          }
           try { h += setupCard(collapsed[i]); }
           catch (eC){
             try{ console.warn('omniroute card render skipped', collapsed[i] && collapsed[i].sym, eC); }catch(eC2){}
           }
+        }
+        if (deadLines){
+          h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
+            +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
       }catch(eRender){
@@ -3687,6 +3741,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        Exported so it can be checked against an independent Sidak
        computation rather than only against itself. */
     window.hgOmniFamilyZ = hgOmniFamilyZ;
+    /* Exported so the plain-language read is testable apart from a live scan. */
+    window.hgOmniDeskRead = hgOmniDeskRead;
     window.hgOmniPoolRead = hgOmniPoolRead;
     /* Gold's table already calls hgOmniPoolRead; it printed the raw sample
        figure and so lacked the "too small to confirm" guard this has. */
