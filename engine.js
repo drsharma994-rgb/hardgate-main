@@ -1129,6 +1129,43 @@ function setSnapshot(survivors, rejected){
                 gatesPassed: (typeof res.gatesPassed === 'number' && isFinite(res.gatesPassed)) ? res.gatesPassed : 0 });
     }
     __snap = { survivors: sv, rejected: rj, at: Date.now() };
+
+    /* RECORD WHAT THIS TAB CLAIMED, SO IT CAN BE HELD TO IT.
+
+       This tab exists to answer "should I go long or short, and exactly where
+       do I enter, stop, and take profit". It produces its own levels through
+       its own six-gate funnel and, until now, never found out whether any of
+       them worked: the forward log is the only measurement in this app that
+       accumulates, and EXECUTE was not in it. Every other conclusion the desk
+       draws about its own mechanics comes from that log.
+
+       Survivors only, and only those carrying a full plan. A rejected
+       candidate has no levels to settle against, and recording one would
+       measure a trade this tab explicitly refused to take — the same circular
+       error omniroute's measured-edge gate documents.
+
+       Guarded and swallowed: instrumentation must never break a scan. */
+    try {
+      if (typeof G.hgFwdRecordScan === 'function'){
+        var fwd = [];
+        for (i = 0; i < sv.length; i++){
+          var s0 = sv[i];
+          if (!s0 || !s0.plan || !s0.sym) continue;
+          if (s0.dir !== 'long' && s0.dir !== 'short') continue;
+          var e0 = +s0.plan.entry, st0 = +s0.plan.stop, t10 = +s0.plan.t1;
+          if (!isFinite(e0) || !isFinite(st0) || !isFinite(t10) || e0 === st0) continue;
+          fwd.push({ sym: s0.sym, dir: s0.dir, entry: e0, stop: st0, t1: t10,
+                     /* Conviction is this tab's own claim about the setup, so
+                        STRONG and MODERATE are measured apart rather than
+                        pooled into one undifferentiated EXECUTE number. */
+                     mechanic: 'GATES-' + String(s0.conviction || 'NA').toUpperCase().slice(0, 12),
+                     ticket: true });
+        }
+        if (fwd.length) G.hgFwdRecordScan('EXECUTE', '4h', fwd, { horizonBars: 20 });
+      }
+    } catch (eFwd){
+      try { if (typeof G.hgFwdWarn === 'function') G.hgFwdWarn('engine:forward', eFwd); } catch (eW) {}
+    }
   }catch(e){ /* snapshotting must never break the scan */ }
 }
 
