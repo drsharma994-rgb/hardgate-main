@@ -161,7 +161,11 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   const ogSrc = readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
   const INFO_GATES = (ogSrc.match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
     .map(m => /key:'([a-z0-9-]+)'/.exec(m)[1]);
-  const INDICATOR_GATES = INFO_GATES.concat(['measured-edge', 'consensus']);
+  /* plan-levels reads UNCHECKED here for the same reason stop-width does:
+     this harness supplies no plan, and the gate deliberately distinguishes
+     an absent plan KEY (nothing to judge) from an explicitly null plan
+     (the engine ran and produced no levels, which IS a veto). */
+  const INDICATOR_GATES = INFO_GATES.concat(['measured-edge', 'consensus', 'plan-levels']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);
   ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
      'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
@@ -177,7 +181,12 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      from the info check on purpose. A structural contradiction between the
      desk's own mechanics, and a mechanic proven to lose, must both be able to
      stand a trade aside. */
-  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus').forEach(k => {
+  /* plan-levels joins them. It is UNCHECKED in this harness only because no
+     plan key is supplied; when the engine actually returns null it must
+     VETO, because a ticket with no entry, stop or target is a trade that
+     cannot be placed. Making it info would restore the exact defect it
+     was added to close. */
+  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus' && k !== 'plan-levels').forEach(k => {
     ok(full.filter(x => x.key === k)[0].info === true,
        k + ' is INFO: it reports an adverse read, it does not veto');
   });

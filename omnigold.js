@@ -926,6 +926,56 @@ terse status, and never launches a first-time scan on a global refresh.
     var closes = closesOf(rows || []);
     var e21 = emaOf(closes.slice(-60), 21), e50 = emaOf(closes.slice(-120), 50);
     var last = closes.length ? closes[closes.length - 1] : NaN;
+    /* PLAN-LEVELS — a TICKET with nothing to place is not a ticket.
+
+       The desk's single ticket read:
+
+         GOLD · SCALP · AVWAP-RECLAIM LONG   TICKET 29/32 checks
+         no plan — structure could not clear the R floor, so no levels are shown.
+         UNCHECKED cost-drag    no plan risk to cost
+         UNCHECKED stop-width   no plan yet — stop width cannot be judged
+
+       The plan engine had returned null, the card said so plainly, and the
+       ledger graded it TICKET anyway. Nothing in thirty-two gates asked
+       whether there was a trade to take. cost-drag and stop-width both
+       noticed and both are soft, so their UNCHECKED could not block it.
+
+       A ticket is the desk saying "this cleared, act on it". With no entry,
+       no stop and no target there is nothing to act on, and calling it a
+       ticket is the worst thing this ledger can do: every other veto tells
+       you why to stand aside, and this one invited you in with no levels.
+
+       THREE STATES, deliberately:
+         plan present and complete -> PASS
+         plan explicitly null      -> VETO. The engine ran and produced
+                                      nothing; that is a decision, not a gap.
+         no plan key at all        -> UNCHECKED and soft. The caller never
+                                      offered one, so this gate has nothing to
+                                      judge and must not invent a veto. */
+    var plHas = !!(x && Object.prototype.hasOwnProperty.call(x, 'plan'));
+    var plObj = plHas ? x.plan : undefined;
+    var plOk = null, plWhy = 'no plan supplied to the ledger — not judged here';
+    if (plHas){
+      if (!plObj){
+        plOk = false;
+        plWhy = 'NO LEVELS — the plan engine produced no entry, stop or target, '
+              + 'so there is nothing to place';
+      } else {
+        var pE = fin(plObj.entry), pS = fin(plObj.stop), pT = fin(plObj.t1);
+        if (isFinite(pE) && isFinite(pS) && isFinite(pT) && pE !== pS){
+          plOk = true;
+          plWhy = 'entry, stop and target all present';
+        } else {
+          plOk = false;
+          plWhy = 'INCOMPLETE LEVELS — '
+                + (!isFinite(pE) ? 'no entry' : !isFinite(pS) ? 'no stop'
+                   : !isFinite(pT) ? 'no target' : 'entry equals stop')
+                + ', so there is nothing to place';
+        }
+      }
+    }
+    gates.push({ key:'plan-levels', hard:false, pass: plOk, why: plWhy });
+
     var reversion = hgOgIsReversion(hit.kind);
 
     /* 1 — trend, graded by family (see omniroute: vetoing a reversion setup

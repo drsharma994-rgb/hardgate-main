@@ -311,6 +311,10 @@ for (const [name, mk, gateKey] of fields){
      they produce real values on a real series is proved against a shared
      context in tests/test-shared-mechanics.mjs. */
   const ALLOWED_UNCHECKED = ['measured-edge', 'consensus', 'adx-trend', 'atr-percentile', 'vol-forecast',
+                            /* no plan key is supplied here, and plan-levels
+                               separates that from an explicitly null plan,
+                               which is a veto */
+                            'plan-levels',
                             /* the universe reads need the whole sweep, which a
                                single-symbol harness has no way to supply */
                             'xs-rank', 'breadth',
