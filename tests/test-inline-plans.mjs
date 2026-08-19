@@ -149,6 +149,9 @@ assert(blocks.length === 3, 'index.html yields exactly 3 non-empty inline <scrip
 
 loadErr = null;
 try{
+  /* hgPlanLevels + applyExactEntry live in hg-plan.js now, not in these
+     blocks — the browser loads that module before the inline scripts run. */
+  vm.runInContext(readFileSync(path.join(root, 'hg-plan.js'), 'utf8'), ctx, { filename: 'hg-plan.js' });
   blocks.forEach((body, i) => vm.runInContext(body, ctx, { filename: 'index.html:inline-' + (i + 1) }));
 }catch(e){ loadErr = e; }
 assert(!loadErr, 'all 3 inline blocks execute without throwing'

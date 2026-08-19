@@ -192,8 +192,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=381"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=381"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=382"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=382"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -689,6 +689,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
+<script src="./hg-plan.js?v=382"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -720,8 +721,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=381"></script>
-<script src="./hg-gates.js?v=381"></script>
+<script src="hg-mechanics.js?v=382"></script>
+<script src="./hg-gates.js?v=382"></script>
 <script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
@@ -768,14 +769,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=381"></script>
+<script src="supersetup.js?v=382"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=381"></script>
-<script src="super-gold.js?v=381"></script>
-<script src="super-best.js?v=381"></script>
-<script src="super-sniper.js?v=381"></script>
-<script src="super-book.js?v=381"></script>
-<script src="super-calibrate.js?v=381"></script>
+<script src="super-desk-common.js?v=382"></script>
+<script src="super-gold.js?v=382"></script>
+<script src="super-best.js?v=382"></script>
+<script src="super-sniper.js?v=382"></script>
+<script src="super-book.js?v=382"></script>
+<script src="super-calibrate.js?v=382"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3494,10 +3495,10 @@ window.hgChartAvailable = hgChartAvailable;
 window.hgMiniChart = hgMiniChart;
 
 /* Apply EDGE-parity exact structure entry to any plan object. */
-function applyExactEntry(plan, rows4h, opts){
-  if (!plan || typeof hgApplyExactEntry !== 'function') return plan;
-  try{ return hgApplyExactEntry(plan, rows4h, opts || {}) || plan; }catch(e){ return plan; }
-}
+/* applyExactEntry and hgPlanLevels moved to hg-plan.js. Ten modules call the
+   plan engine, and while it lived here no test harness could reach it: every
+   desk test built its cards with plan === null, so cost-drag and stop-width
+   reported UNCHECKED on 100% of cards in every test that has ever run. */
 function planBlockExact(pl, note){
   if (!pl) return 'levels unavailable — size down';
   var meta = (typeof hgPlanMeta === 'function') ? hgPlanMeta(pl) : {};
@@ -3572,71 +3573,7 @@ function hgSessionChip(now){
    T2 = 3.5R. Pure decision function: no DOM, never throws, returns null when
    levels can't be computed (caller shows 'levels unavailable — size down').
    Stop always lands on the correct side of entry for dir. */
-function hgPlanLevels(dir, rows, entryOverride, opts){
-  try{
-    if (typeof hgPlanLevelsCore === 'function'){
-      /* The options argument used to be missing here, so every caller that
-         passed one — OMNIGOLD passes { minRr: cfg.minRr } — had it silently
-         dropped and got a hardcoded 2R policy plus crypto stop defaults it
-         could not tune. Forwarded now, with 2R as the default it always had. */
-      var plOpts = Object.assign({ minRr: 2 }, opts || {});
-      var pl = hgPlanLevelsCore(dir, rows, entryOverride, plOpts);
-      if (pl) return { dir: pl.dir, entry: pl.entry, stop: pl.stop, t1: pl.t1, t2: pl.t2, risk: pl.risk, note: pl.note,
-                       targetPolicy: pl.targetPolicy, planSrc: pl.planSrc };
-    }
-    if (dir!=='long' && dir!=='short') return null;
-    if (!rows || !rows.length) return null;
-    const entry = (isFinite(entryOverride) && entryOverride>0) ? +entryOverride : +rows[rows.length-1].c;
-    if (!isFinite(entry) || entry<=0 || typeof atr!=='function') return null;
-    const a = last(atr(rows,14));
-    if (!isFinite(a) || a<=0) return null;
-    let stop = (typeof lastSwing==='function') ? lastSwing(rows, dir, 30) : NaN;
-    let note = '';
-    if (!isFinite(stop) || (dir==='long' ? stop>=entry : stop<=entry)){
-      stop = dir==='long' ? entry-1.5*a : entry+1.5*a;
-      note = 'ATR stop (no clean swing)';
-    }
-    let risk = Math.abs(entry-stop);
-    if (!(risk>0)) return null;
-    if (risk < 0.5*a){
-      stop = dir==='long' ? entry-1.5*a : entry+1.5*a;   // structure too tight to be meaningful
-      risk = 1.5*a;
-      note = 'ATR stop (swing too tight)';
-    }
-    /* DO NOT TIGHTEN A FAR STOP. This used to move the stop in to a flat
-       1.5xATR and take the trade anyway. plans.js removed exactly that from
-       hgStructureStop and named it: measured on gold-shaped 1h data it fired
-       on 65% of setups, landed the stop 53% closer than the level that would
-       actually invalidate the idea, and - because R:R is computed against the
-       risk distance - advertised 2.00R for a trade worth 0.96R. "That is the
-       one wrong answer available here."
 
-       It was fixed there and left here, in the fallback every caller lands on
-       when plans.js has not loaded. The honest responses are the same two:
-       keep the structural stop and let the R:R gate judge it on true risk, or
-       decline. 6xATR mirrors HG_STOP_MAX_DIST_ATR, hardcoded because this
-       path exists precisely for when plans.js is absent. */
-    if (risk > 6*a){
-      return null;
-    }
-    if (risk > 2.5*a){
-      note = 'stop: lastSwing(30) - WIDE (' + (risk/a).toFixed(1) + '×ATR, beyond the 2.5×ATR guide);'
-           + ' R:R is measured against this real invalidation';
-    }
-    /* HONOUR THE CALLER'S R FLOOR. The wrapper above forwards opts to
-       hgPlanLevelsCore precisely because "every caller that passed one -
-       OMNIGOLD passes { minRr: cfg.minRr } - had it silently dropped and got
-       a hardcoded 2R policy". This fallback four lines below it went on
-       hardcoding 2R, so a gold SCALP setup on a 1.5R floor was handed 2R
-       targets while measured-edge judged it against the 1.5R breakeven of
-       40% rather than 2R's 33.3%. T2 keeps its original 1.75x ratio to T1. */
-    const rMul = (opts && isFinite(+opts.minRr) && +opts.minRr > 0) ? +opts.minRr : 2;
-    const t1 = dir==='long' ? entry+rMul*risk : entry-rMul*risk;
-    const t2 = dir==='long' ? entry+rMul*1.75*risk : entry-rMul*1.75*risk;
-    var plFallback = { dir:dir, entry:entry, stop:stop, t1:t1, t2:t2, risk:risk, note:note, type:'SWING' };
-    return applyExactEntry(plFallback, rows, { poiLevel: entryOverride, style: 'swing', preferEdge: true });
-  }catch(e){ return null; }
-}
 /* plan line from rows via the universal fallback, or the honest degrade note */
 function hgPlanBlock(dir, rows, entryOverride, extraNote){
   const pl = hgPlanLevels(dir, rows, entryOverride);
@@ -3644,7 +3581,7 @@ function hgPlanBlock(dir, rows, entryOverride, extraNote){
   const note = (pl.note && extraNote) ? pl.note+' · '+extraNote : (pl.note || extraNote || '');
   return planBlockExact(pl, note);
 }
-window.hgPlanLevels = hgPlanLevels;
+/* hgPlanLevels is exported by hg-plan.js now, which owns the definition. */
 window.hgPlanBlock = hgPlanBlock;
 function inlineScanStack(dir, sym, rows, opts){
   if (typeof hgSetupStackForInlineScan !== 'function') return null;

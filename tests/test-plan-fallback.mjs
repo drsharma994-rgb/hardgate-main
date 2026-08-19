@@ -44,6 +44,8 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
 const ok = (cond, label) => { if (!cond) throw new Error('FAIL: ' + label); passed++; console.log('  ok —', label); };
 
+/* The engine lives in hg-plan.js now; index.html only loads it. */
+const SRC = readFileSync(path.join(ROOT, 'hg-plan.js'), 'utf8');
 const HTML = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 
 /* Pull hgPlanLevels out of index.html and run it with hgPlanLevelsCore
@@ -59,11 +61,11 @@ function bootFallback(){
   /* indicators.js already supplies last(); redeclaring it throws. */
   /* applyExactEntry also lives in index.html; the fallback's last act is to
      call it. Identity here keeps this test about the geometry. */
-  vm.runInContext('function applyExactEntry(pl){ return pl; }', ctx);
-  const i = HTML.indexOf('function hgPlanLevels(dir, rows, entryOverride, opts){');
-  let d = 0, j = i;
-  while (j < HTML.length){ if (HTML[j] === '{') d++; else if (HTML[j] === '}'){ d--; if (!d) break; } j++; }
-  vm.runInContext(HTML.slice(i, j + 1), ctx, { filename: 'index.html:hgPlanLevels' });
+  /* hg-plan.js brings its own applyExactEntry; without plans.js it finds no
+     hgApplyExactEntry and returns the plan unchanged, which is the shim's job. */
+  /* hg-plan.js, loaded WITHOUT plans.js, so hgPlanLevelsCore is absent and the
+     fallback is what runs. That is the only way to reach this path. */
+  vm.runInContext(readFileSync(path.join(ROOT, 'hg-plan.js'), 'utf8'), ctx, { filename: 'hg-plan.js' });
   return ctx;
 }
 const W = bootFallback();
@@ -206,10 +208,11 @@ console.log('\n== degenerate input never throws and never invents a plan ==');
 
 console.log('\n== the source records why, so it is not tidied back ==');
 {
-  ok(/one wrong answer available here/.test(HTML), 'index.html carries the diagnosis plans.js wrote');
-  ok(/HONOUR THE CALLER'S R FLOOR/.test(HTML), 'and the R-floor fix names itself');
-  ok(!/stop capped at 1\.5×ATR \(structure too far\)/.test(HTML), 'the tightening note is gone');
-  ok(/risk > 6\*a/.test(HTML), 'the 6xATR decline mirrors HG_STOP_MAX_DIST_ATR');
+  ok(/one wrong answer available here/.test(SRC), 'hg-plan.js carries the diagnosis plans.js wrote');
+  ok(!/function hgPlanLevels\(/.test(HTML), 'and index.html no longer defines the engine at all');
+  ok(/HONOUR THE CALLER'S R FLOOR/.test(SRC), 'and the R-floor fix names itself');
+  ok(!/stop capped at 1\.5×ATR \(structure too far\)/.test(SRC), 'the tightening note is gone');
+  ok(/risk > 6\*a/.test(SRC), 'the 6xATR decline mirrors HG_STOP_MAX_DIST_ATR');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

@@ -52,7 +52,7 @@ function boot(){
                    documentElement:{appendChild(){}}, addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js','indicators2.js','fixpack14-core.js','hg-mechanics.js',
-                   'hg-forward.js','hg-gates.js','omniroute.js','omnigold.js']){
+                   'hg-forward.js','plans.js', 'hg-gates.js', 'hg-plan.js','omniroute.js','omnigold.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
   return ctx;

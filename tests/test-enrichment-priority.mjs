@@ -53,7 +53,7 @@ function boot(){
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js',
-                   'hg-forward.js', 'hg-gates.js', 'omniroute.js']){
+                   'hg-forward.js', 'plans.js', 'hg-gates.js', 'hg-plan.js', 'omniroute.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
   return ctx;

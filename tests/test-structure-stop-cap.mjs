@@ -193,10 +193,15 @@ console.log('\n== unusable geometry is declined outright ==');
 
 console.log('\n== the options argument reaches the core again ==');
 {
-  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-  ok(/function hgPlanLevels\(dir, rows, entryOverride, opts\)/.test(html),
+  /* hgPlanLevels moved out of index.html into hg-plan.js: ten modules call it
+     and while it lived in an 8,700-line HTML file no harness could reach it,
+     so every desk test built its cards with plan === null. */
+  const planSrc = fs.readFileSync(path.join(ROOT, 'hg-plan.js'), 'utf8');
+  ok(/function hgPlanLevels\(dir, rows, entryOverride, opts\)/.test(planSrc),
     'hgPlanLevels accepts the options its callers were already passing');
-  ok(/Object\.assign\(\{ minRr: 2 \}, opts \|\| \{\}\)/.test(html),
+  ok(!/function hgPlanLevels\(/.test(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')),
+    'and index.html no longer defines it');
+  ok(/Object\.assign\(\{ minRr: 2 \}, opts \|\| \{\}\)/.test(planSrc),
     'and forwards them, keeping 2R as the default it always had');
 
   const og = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
