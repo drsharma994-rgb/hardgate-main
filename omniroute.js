@@ -1733,6 +1733,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'vol-forecast', hard:false, info:true, pass: vfOk, why: vfWhy });
 
+    /* The 14 indicator context reads gold has carried since round four —
+       ichimoku, donchian, stoch-RSI, Hurst, squeeze, Keltner, structure
+       shift, MACD, %B, volume-z, regression slope, value area, htf-confirm
+       and regime-fit — shared from hg-gates.js. Info only: they argue,
+       never veto, so the mechanic count and its significance bar are
+       untouched. A crypto card now carries the same evidence as a gold
+       one. */
+    (function(){
+      var shW = (typeof window !== 'undefined') ? window : null;
+      var shFn = (shW && typeof shW.hgIndicatorGates === 'function') ? shW.hgIndicatorGates : null;
+      var sh = shFn ? shFn(rows, hit, x, reversion) : null;
+      if (sh && sh.length){ for (var si = 0; si < sh.length; si++) gates.push(sh[si]); }
+      else gates.push({ key:'context-gates', hard:false, info:true, pass:null,
+                        why:'shared context gates unavailable (hg-gates.js not loaded)' });
+    })();
+
     /* XS-RANK — where this contract sits against the whole sweep.
 
        No other gate on this ledger looks outside the symbol. A long in the

@@ -315,6 +315,14 @@ for (const [name, mk, gateKey] of fields){
                                separates that from an explicitly null plan,
                                which is a veto */
                             'plan-levels', 'level-fresh',
+                            /* the 14 shared context reads (hg-gates.js
+                               hgIndicatorGates) — indicator context that
+                               may be uncomputable on a thin harness tape,
+                               and correctly says so */
+                            'ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime',
+                            'squeeze-state', 'keltner-pos', 'structure-shift',
+                            'macd-momentum', 'bollinger-pctb', 'volume-z',
+                            'regression-slope', 'value-area', 'htf-confirm', 'regime-fit',
                             /* the universe reads need the whole sweep, which a
                                single-symbol harness has no way to supply */
                             'xs-rank', 'breadth',

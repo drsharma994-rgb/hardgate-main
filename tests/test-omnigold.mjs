@@ -158,9 +158,15 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      which reads UNCHECKED here on purpose (45% over 120 samples is +1.1σ, and
      against 27 scanned mechanics the bar is +2.89σ), and consensus, which is
      soft-UNCHECKED when no scan is supplied. */
-  const ogSrc = readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  /* The context gates live in hg-gates.js now; deriving from gold alone
+     misses them and every runtime UNCHECKED then fails membership. */
+  const ogSrc = readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8')
+              + readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
   const INFO_GATES = (ogSrc.match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
-    .map(m => /key:'([a-z0-9-]+)'/.exec(m)[1]);
+    .map(m => /key:'([a-z0-9-]+)'/.exec(m)[1])
+    /* context-gates is the fallback both sides declare and neither pushes on
+       a healthy ledger — it exists only when hg-gates.js is broken/absent. */
+    .filter(k => k !== 'context-gates');
   /* plan-levels reads UNCHECKED here for the same reason stop-width does:
      this harness supplies no plan, and the gate deliberately distinguishes
      an absent plan KEY (nothing to judge) from an explicitly null plan

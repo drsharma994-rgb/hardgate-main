@@ -404,7 +404,19 @@ console.log('\n== the new gates do not quietly become a wall of vetoes ==');
      nothing, and the cut would be arbitrary. They must stay soft until they
      have a record of their own. */
   const hardKeys = (SRC.match(/gates\.push\(\{ key:'[a-z-]+', hard:true/g) || []).length;
-  const total = (SRC.match(/gates\.push/g) || []).length;
+  /* The 14 indicator context gates moved to hg-gates.js (hgIndicatorGates)
+     so OMNIROUTE carries them too; derivations that read the gold source
+     alone undercount the ledger. */
+  const SHSRC = fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
+  const shBody = SHSRC.slice(SHSRC.indexOf('function hgIndicatorGates'), SHSRC.indexOf('G.hgBarSpacingSec'));
+  /* -2: the shared catch-all push fires only on a throw, and gold's
+     module-absent fallback push fires only without hg-gates — exactly
+     neither appears on a healthy ledger. */
+  /* Count gate DECLARATIONS (gates.push({ key:), not the shared-forwarding
+     loop's bare gates.push(sh[si]). -2: gold's module-absent fallback and the
+     shared catch-all are declarations that never fire on a healthy ledger. */
+  const total = (SRC.match(/gates\.push\(\{ key:/g) || []).length
+              + (shBody.match(/gates\.push\(\{ key:/g) || []).length - 2;
   /* Not a hardcoded number: the ledger grows, and a count assertion that has
      to be edited every time teaches you to edit it without thinking. What
      matters is that the source and the runtime agree. */
@@ -414,7 +426,8 @@ console.log('\n== the new gates do not quietly become a wall of vetoes ==');
   ok(live.length >= 16, 'and the ledger has not shrunk (' + live.length + ')');
   for (const k of ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime']){
     const re = new RegExp("key:'" + k + "', hard:false");
-    ok(re.test(SRC), k + ' is declared hard:false in the source');
+    /* these four moved to hg-gates.js with the rest of the context block */
+    ok(re.test(SRC) || re.test(shBody), k + ' is declared hard:false in the source');
   }
 }
 

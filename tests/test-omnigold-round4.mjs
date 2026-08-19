@@ -209,7 +209,11 @@ console.log('\n== htf-confirm: the read that actually adds robustness ==');
 
   /* Resampling must be built from the bars in hand, not a second fetch. */
   ok(/function hgOgResample\(rows, factor\)/.test(BOTH), 'the higher timeframe is resampled');
-  ok(/hgOgResample\(rows, 4\)/.test(SRC), 'at 4x the scan timeframe');
+  /* htf-confirm moved to hg-gates.js; it resamples via the shared
+     hgMechResample there, so the source check spans both files. */
+  ok(/hgOgResample\(rows, 4\)/.test(SRC)
+     || /hgMechResample'?\)?[\s\S]{0,200}?\(rows, 4\)/.test(fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8')),
+     'at 4x the scan timeframe');
 
   /* A reversion mechanic is counter-trend on every timeframe by design. */
   const rev = W.hgOgGates(rows, { kind: 'ROUND-MAGNET', dir: 'long', level: px, why: 't' },

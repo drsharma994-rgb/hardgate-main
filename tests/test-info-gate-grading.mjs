@@ -114,7 +114,9 @@ console.log('\n== info does not become a way to pass an unknown ==');
 
 console.log('\n== the four gold context gates carry the flag ==');
 {
-  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  /* spans gold + the shared context block in hg-gates.js */
+  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8')
+            + fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
   for (const k of ['ichimoku', 'donchian-pos', 'stoch-rsi', 'hurst-regime']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(src),
        k + ' is declared hard:false, info:true');
@@ -154,6 +156,11 @@ console.log('\n== the four gold context gates carry the flag ==');
                            built to end. The compromise argues on the card; it
                            does not kill it. */
                         'momentum-stop',
+                        /* the fallback both desks declare and neither
+                           pushes on a healthy ledger — it appears only
+                           when hg-gates.js is broken or absent, and a
+                           broken shared module must degrade, not veto */
+                        'context-gates',
                         /* the universe reads — the only gates that look
                            outside the contract being judged */
                         'xs-rank', 'breadth',
@@ -186,7 +193,9 @@ console.log('\n== the card must not print VETO on a gate that did not veto ==');
   /* A row reading VETO beside a TICKET badge contradicts the card, and the
      user resolves that contradiction however they like — which is the whole
      failure this flag was meant to prevent. */
-  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  /* spans gold + the shared context block in hg-gates.js */
+  const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8')
+            + fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
   ok(/var vetoed = \(g\.pass === false\) && !g\.info;/.test(src),
      'the gate row only calls it a VETO when it actually vetoed');
   ok(/'AGAINST'/.test(src), 'an adverse info read renders as AGAINST');

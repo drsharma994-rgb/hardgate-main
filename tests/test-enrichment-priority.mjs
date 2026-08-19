@@ -73,7 +73,13 @@ console.log('== every setup already runs every gate ==');
 {
   /* The premise of the question deserves checking: are gates being skipped? */
   const gs = W.hgOmniGates(rows, HIT, null, { stats: { samples: 400, hit: 0.46, expR: 0.3 }, minRr: 2 });
-  const pushes = (SRC.match(/gates\.push/g) || []).length;
+  /* The 14 shared context gates live in hg-gates.js; declarations only
+     (gates.push({ key:), and -2 for the two fallbacks that never fire on
+     a healthy ledger. The forwarding loop's bare push is not a gate. */
+  const SH4 = fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
+  const shBody4 = SH4.slice(SH4.indexOf('function hgIndicatorGates'), SH4.indexOf('G.hgBarSpacingSec'));
+  const pushes = (SRC.match(/gates\.push\(\{ key:/g) || []).length
+               + (shBody4.match(/gates\.push\(\{ key:/g) || []).length - 2;
   ok(gs.length === pushes, 'every gates.push in the source reaches the ledger (' + gs.length + ')');
   ok(gs.every(g => typeof g.why === 'string' && g.why.length > 0),
      'and every one states a reason, evaluated or not — none is silently skipped');

@@ -264,8 +264,14 @@ console.log('\n== nothing new became a veto ==');
   /* Derived, not hardcoded: the ledger grows most rounds, and a literal here
      just teaches you to bump it without reading it. What must hold is that
      the runtime info gates are exactly the ones declared info in the source. */
-  const declared = (SRC.match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
-    .map(m => /key:'([a-z0-9-]+)'/.exec(m)[1]);
+  /* The 14 indicator context gates moved to hg-gates.js (hgIndicatorGates)
+     so OMNIROUTE carries them too; derivations that read the gold source
+     alone undercount the ledger. */
+  const SHSRC2 = fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
+  const shBody2 = SHSRC2.slice(SHSRC2.indexOf('function hgIndicatorGates'), SHSRC2.indexOf('G.hgBarSpacingSec'));
+  const declared = ((SRC + shBody2).match(/gates\.push\(\{ key:'([a-z0-9-]+)'[^}]*info:true/g) || [])
+    .map(m => /key:'([a-z0-9-]+)'/.exec(m)[1])
+    .filter(k => k !== 'context-gates');   /* fallback, never on a healthy ledger */
   ok(infoKeys.length === declared.length,
      'every info gate declared in the source reaches the ledger (' + infoKeys.length + ')');
   ok(infoKeys.every(k => declared.indexOf(k) >= 0), 'and none appeared from anywhere else');
@@ -276,7 +282,12 @@ console.log('\n== nothing new became a veto ==');
 
   /* 21 gates is a lot to put in front of someone. They must not all be hard. */
   const hard = gs.filter(g => g.hard === true).length;
-  const pushes = (SRC.match(/gates\.push/g) || []).length;
+  /* Declarations across gold + the shared context block; -2 for the two
+     fallbacks that never fire on a healthy ledger; the shared-forwarding
+     loop's bare gates.push(sh[si]) is not a declaration and is not counted. */
+  const shBody2b = SHSRC2.slice(SHSRC2.indexOf('function hgIndicatorGates'), SHSRC2.indexOf('G.hgBarSpacingSec'));
+  const pushes = (SRC.match(/gates\.push\(\{ key:/g) || []).length
+               + (shBody2b.match(/gates\.push\(\{ key:/g) || []).length - 2;
   ok(gs.length === pushes, 'every gates.push in the source reaches the ledger (' + gs.length + ')');
   ok(hard <= 13, 'only a minority are hard vetoes (' + hard + ' of ' + gs.length + ') — the rest report');
 }
