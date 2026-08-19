@@ -1013,6 +1013,59 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'plan-levels', hard:false, pass: plOk, why: plWhy });
 
+    /* LEVEL-FRESH — the levels must survive contact with the CURRENT price.
+
+       The desk drops the forming candle before anything reads a bar, which is
+       right for every indicator. But the plan then prices its entry at the
+       last CLOSED bar — up to four hours stale on the swing horizon — and no
+       gate ever compared it against where the market actually is.
+
+       Demonstrated live: every swing card quoted entry 4391.83 while the
+       market traded 4499.23, 107 points off the reader's chart. The two
+       SHORT cards carried stops at 4449 with the market at 4499 — fifty
+       points beyond the stop before the trade was ever placed — and earlier
+       the desk TICKETED one of those. A ticket whose stop the market has
+       already crossed is dead on arrival: filled at market, it is an instant
+       stop-out presented as a 2R setup.
+
+       Three states:
+         market beyond the stop            -> VETO, dead on arrival
+         entry more than 1.5xATR from      -> AGAINST (info). The levels are a
+         the market                           resting-order plan around stale
+                                              structure, not a market entry,
+                                              and the card must say which
+         otherwise                         -> PASS, quoting the gap
+
+       UNCHECKED when no live price is supplied — harnesses and callers that
+       predate this gate keep working, and unknown reads UNCHECKED, never
+       PASS. */
+    var lfOk = null, lfWhy = 'no live price supplied — freshness not judged', lfInfo = false;
+    var lfPx = x ? fin(x.livePx) : NaN;   /* x may be absent in old harnesses */
+    if (isFinite(lfPx) && lfPx > 0 && plHas && plObj){
+      var lfE = fin(plObj.entry), lfS = fin(plObj.stop);
+      if (isFinite(lfE) && isFinite(lfS)){
+        var lfAtr = atrOf(rows, 14);
+        var lfGap = lfPx - lfE;
+        var crossed = (hit.dir === 'short') ? (lfPx >= lfS) : (lfPx <= lfS);
+        if (crossed){
+          lfOk = false;
+          lfWhy = 'DEAD ON ARRIVAL — the market (' + lfPx.toFixed(2) + ') is already '
+                + Math.abs(lfPx - lfS).toFixed(0) + ' points beyond the stop ('
+                + lfS.toFixed(2) + '): these levels were priced off a closed bar the market has left behind';
+        } else if (isFinite(lfAtr) && lfAtr > 0 && Math.abs(lfGap) > 1.5 * lfAtr){
+          lfOk = false; lfInfo = true;
+          lfWhy = 'entry ' + lfE.toFixed(2) + ' sits ' + Math.abs(lfGap).toFixed(0) + ' points ('
+                + (Math.abs(lfGap) / lfAtr).toFixed(1) + '×ATR) from the market (' + lfPx.toFixed(2)
+                + ') — a resting-order plan around stale structure, not a market entry';
+        } else {
+          lfOk = true;
+          lfWhy = 'levels within reach of the market (' + lfPx.toFixed(2) + ', '
+                + Math.abs(lfGap).toFixed(0) + ' points from entry)';
+        }
+      }
+    }
+    gates.push({ key:'level-fresh', hard:false, info: lfInfo, pass: lfOk, why: lfWhy });
+
     var reversion = hgOgIsReversion(hit.kind);
 
     /* 1 — trend, graded by family (see omniroute: vetoing a reversion setup
@@ -2114,7 +2167,9 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       if (plan && deriveFn) plan = deriveFn(plan);
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
-      ex.plan = plan;      /* so stop-width can state what the stop asks of the trade */
+      /* Only when the engine exists — see omniroute: an absent plan engine is
+         UNCHECKED, an engine that declined is a veto, and they must not blur. */
+      if (planFn) ex.plan = plan;      /* so stop-width can state what the stop asks of the trade */
       ex.allHits = hits;          /* so the consensus gate can see the rest of the scan */
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
@@ -2522,6 +2577,9 @@ terse status, and never launches a first-time scan on a global refresh.
         okRows.push(rr);
       }
       rows = okRows;
+      /* The forming candle is dropped for the indicators, but its close IS the
+         current price — keep it so the ledger can judge level freshness. */
+      var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
       if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
       if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null };
 
@@ -2590,7 +2648,8 @@ terse status, and never launches a first-time scan on a global refresh.
       var extra = {
         htf: dailyFn ? dailyFn(rows) : null,
         killzone: shared.killzone, macro: shared.macro, yield: shared.yieldGuard,
-        adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled
+        adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled,
+        livePx: livePx
       };
       var cands = hgOgEvaluate(rows, hits, extra, cfg);
 

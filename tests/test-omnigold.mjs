@@ -165,7 +165,10 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      this harness supplies no plan, and the gate deliberately distinguishes
      an absent plan KEY (nothing to judge) from an explicitly null plan
      (the engine ran and produced no levels, which IS a veto). */
-  const INDICATOR_GATES = INFO_GATES.concat(['measured-edge', 'consensus', 'plan-levels']);
+  /* level-fresh joins for the same reason: no live price is supplied here,
+     and unknown reads UNCHECKED. When a price IS supplied and the market has
+     crossed the stop, it vetoes — asserted in test-level-fresh.mjs. */
+  const INDICATOR_GATES = INFO_GATES.concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);
   ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
      'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
@@ -186,7 +189,7 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      VETO, because a ticket with no entry, stop or target is a trade that
      cannot be placed. Making it info would restore the exact defect it
      was added to close. */
-  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus' && k !== 'plan-levels').forEach(k => {
+  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus' && k !== 'plan-levels' && k !== 'level-fresh').forEach(k => {
     ok(full.filter(x => x.key === k)[0].info === true,
        k + ' is INFO: it reports an adverse read, it does not veto');
   });

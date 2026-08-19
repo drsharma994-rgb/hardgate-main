@@ -314,7 +314,7 @@ for (const [name, mk, gateKey] of fields){
                             /* no plan key is supplied here, and plan-levels
                                separates that from an explicitly null plan,
                                which is a veto */
-                            'plan-levels',
+                            'plan-levels', 'level-fresh',
                             /* the universe reads need the whole sweep, which a
                                single-symbol harness has no way to supply */
                             'xs-rank', 'breadth',

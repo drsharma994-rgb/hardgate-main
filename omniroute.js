@@ -1086,6 +1086,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        disagreement is a genuine hard veto.
          REVERSION families (SPRING, UTAD, VALUE, ABSORB) trade against it.
        For those the stack is reported as context and never vetoes. */
+    /* x is assigned further down in this function; these gates run first, and
+       before this line they saw the hoisted-but-unassigned var — so plan-levels
+       could never veto here. Assigning early is idempotent with the later line. */
+    var x = extra || {};
+
     /* PLAN-LEVELS — a TICKET with nothing to place is not a ticket.
 
        The desk's single ticket read:
@@ -1135,6 +1140,59 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
     }
     gates.push({ key:'plan-levels', hard:false, pass: plOk, why: plWhy });
+
+    /* LEVEL-FRESH — the levels must survive contact with the CURRENT price.
+
+       The desk drops the forming candle before anything reads a bar, which is
+       right for every indicator. But the plan then prices its entry at the
+       last CLOSED bar — up to four hours stale on the swing horizon — and no
+       gate ever compared it against where the market actually is.
+
+       Demonstrated live: every swing card quoted entry 4391.83 while the
+       market traded 4499.23, 107 points off the reader's chart. The two
+       SHORT cards carried stops at 4449 with the market at 4499 — fifty
+       points beyond the stop before the trade was ever placed — and earlier
+       the desk TICKETED one of those. A ticket whose stop the market has
+       already crossed is dead on arrival: filled at market, it is an instant
+       stop-out presented as a 2R setup.
+
+       Three states:
+         market beyond the stop            -> VETO, dead on arrival
+         entry more than 1.5xATR from      -> AGAINST (info). The levels are a
+         the market                           resting-order plan around stale
+                                              structure, not a market entry,
+                                              and the card must say which
+         otherwise                         -> PASS, quoting the gap
+
+       UNCHECKED when no live price is supplied — harnesses and callers that
+       predate this gate keep working, and unknown reads UNCHECKED, never
+       PASS. */
+    var lfOk = null, lfWhy = 'no live price supplied — freshness not judged', lfInfo = false;
+    var lfPx = x ? fin(x.livePx) : NaN;   /* x may be absent in old harnesses */
+    if (isFinite(lfPx) && lfPx > 0 && plHas && plObj){
+      var lfE = fin(plObj.entry), lfS = fin(plObj.stop);
+      if (isFinite(lfE) && isFinite(lfS)){
+        var lfAtr = atrOf(rows, 14);
+        var lfGap = lfPx - lfE;
+        var crossed = (hit.dir === 'short') ? (lfPx >= lfS) : (lfPx <= lfS);
+        if (crossed){
+          lfOk = false;
+          lfWhy = 'DEAD ON ARRIVAL — the market (' + lfPx.toFixed(2) + ') is already '
+                + Math.abs(lfPx - lfS).toFixed(0) + ' points beyond the stop ('
+                + lfS.toFixed(2) + '): these levels were priced off a closed bar the market has left behind';
+        } else if (isFinite(lfAtr) && lfAtr > 0 && Math.abs(lfGap) > 1.5 * lfAtr){
+          lfOk = false; lfInfo = true;
+          lfWhy = 'entry ' + lfE.toFixed(2) + ' sits ' + Math.abs(lfGap).toFixed(0) + ' points ('
+                + (Math.abs(lfGap) / lfAtr).toFixed(1) + '×ATR) from the market (' + lfPx.toFixed(2)
+                + ') — a resting-order plan around stale structure, not a market entry';
+        } else {
+          lfOk = true;
+          lfWhy = 'levels within reach of the market (' + lfPx.toFixed(2) + ', '
+                + Math.abs(lfGap).toFixed(0) + ' points from entry)';
+        }
+      }
+    }
+    gates.push({ key:'level-fresh', hard:false, info: lfInfo, pass: lfOk, why: lfWhy });
 
     var reversion = REVERSION_KINDS[hit.kind] === true;
     var trendOk = null, trendWhy = 'EMA unavailable';
@@ -1188,7 +1246,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        Binance (free, key-less endpoints) or when the app's own market-wide
        modules have run. Absent inputs read UNCHECKED and never block, so a
        CoinDCX-only listing is not punished for being absent from Binance. */
-    var x = extra || {};
+    x = extra || {};   /* already declared above, before the plan gates */
 
     /* 5 — daily-timeframe agreement, resampled from the same 4h bars */
     var d1 = null, d1Why = 'daily bars unavailable';
@@ -1990,7 +2048,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         catch (e) { plan = null; }
       }
       if (plan) plan = hgOmniDerivePlan(plan);
-      exForHit.plan = plan;
+      /* Attach the plan key ONLY when a plan engine exists. plan-levels
+         distinguishes 'the engine ran and produced nothing' (an explicit
+         null — a veto) from 'no engine was ever loaded' (no key — UNCHECKED),
+         and setting null here unconditionally collapsed the two: every
+         harness without plans.js loaded had its whole desk vetoed. */
+      if (planFn) exForHit.plan = plan;
       var gates = hgOmniGates(rows, hit, positioning, exForHit);
       var grade = hgOmniGrade(gates);
       /* The global hgPlanLevels wrapper (index.html) forwards only
@@ -2995,6 +3058,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                the single ingestion point, so every downstream consumer
                (detectors, gates, walk-forward measurement) sees the same
                closed set and none of them can disagree about the last bar. */
+            /* The forming candle's close is the current price — retained for the
+               level-fresh gate before the sanitiser drops it. */
+            var livePx = (rows && rows.length) ? fin(rows[rows.length - 1].c) : NaN;
             rows = hgOmniDropForming(rows, TF);
             if (!rows || rows.length < 60){ thin++; return; }
             /* FORWARD LOG resolution. This sweep already holds fresh bars for
@@ -3019,7 +3085,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                until every contract has been seen. Pass 2 re-detects the fired
                names with the universe in hand. */
             var hits = hgOmniDetect(rows);
-            if (hits.length) fired.push({ item: item, rows: rows, hits: hits });
+            if (hits.length) fired.push({ item: item, rows: rows, hits: hits, livePx: livePx });
             else unfired.push({ item: item, rows: rows });
           }).catch(function(){ done++; failed++; });
         })).then(function(){
@@ -3246,6 +3312,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             if (typeof W.xuPositioning === 'function'){
               try { pos = W.xuPositioning(fitem.base || fitem.sym); } catch (er) { pos = null; }
             }
+            /* The live price captured at ingestion, so level-fresh can judge
+               the plan against where the market actually is. */
+            ex.livePx = fired[j].livePx;
             var found = hgOmniEvaluate(fitem, fired[j].rows, pos, ex);
             for (k = 0; k < found.length; k++) cands.push(found[k]);
             /* Record this contract's firings so OMNIROUTE accumulates the same

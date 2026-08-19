@@ -217,5 +217,18 @@ console.log('\n== degenerate input never throws ==');
   ok(!threw, 'a null extras object does not throw');
 }
 
+console.log('\n== the desks attach the plan key only when an engine exists ==');
+{
+  /* Found the hard way: the desks set ex.plan = plan unconditionally, so a
+     harness with no plan engine loaded had plan:null on every card and the
+     whole desk vetoed — 0 tickets across 99 tapes in test-shared-mechanics.
+     An absent engine is not a declined plan. */
+  ok(/if \(planFn\) exForHit\.plan = plan;/.test(ROUTE),
+     'omniroute attaches the key only when hgPlanLevels exists');
+  ok(/if \(planFn\) ex\.plan = plan;/.test(GOLD), 'and omnigold likewise');
+  ok(/harness without plans\.js loaded had its whole desk vetoed/.test(ROUTE),
+     'with the failure that taught it recorded inline');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL PLAN-LEVELS GATE TESTS PASSED');
