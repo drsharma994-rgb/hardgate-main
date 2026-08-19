@@ -261,6 +261,11 @@ async function goldLiveSpotRef(klineHint){
   }catch(e){ return NaN; }
 }
 
+/* Exported so OMNIGOLD can say how far its feed sits from real spot. It was
+   a private helper here while the gold desk two tabs over was quoting levels
+   from a Binance perp and calling them gold. One definition, both users. */
+if (typeof window !== 'undefined') window.hgGoldLiveSpot = goldLiveSpotRef;
+
 function goldPurgeStaleConvictions(store, liveSpot){
   if (!store || !store.live || !isFinite(liveSpot) || !(liveSpot > 0)) return 0;
   var n = 0;

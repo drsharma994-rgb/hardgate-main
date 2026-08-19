@@ -1952,6 +1952,40 @@ terse status, and never launches a first-time scan on a global refresh.
   /* The app's gold chain, in order, all feature-checked. Whichever answers
      is NAMED — a PAXG-derived setup is not XAUUSD spot and the user should
      see which instrument produced their levels. */
+  /* WHOSE GOLD IS THIS?
+
+     The status line said "source: scalp binance-xau". That is an internal
+     key, and it was the only thing on screen telling a reader which
+     instrument produced their entry, stop and target. Asked directly whether
+     the prices matched their broker, the honest answer needed three lookups
+     through two files.
+
+     binance-xau is Binance's USD-M XAUUSDT PERPETUAL. Measured live it sat
+     $4374.58 against $4369.70 spot — 0.11% above, which on a 21.94-point
+     scalp stop is 22% of 1R. The trade's SHAPE survives, because entry, stop
+     and target all come from the same feed, but the printed levels are not
+     the ones a broker on spot XAUUSD is showing. It also trades 24/7 while
+     spot gold brokers close from Friday night to Sunday night, so a weekend
+     scan is built on bars the broker never printed.
+
+     None of that is fixable from here — pointing the desk at a broker's own
+     feed needs the XM bridge configured, which is infrastructure, not code.
+     What IS fixable is the desk claiming less than it knows. It now names the
+     instrument in plain words and states its distance from spot. */
+  var OG_SRC_LABEL = {
+    'xm-xauusd':   'XM XAUUSD (your broker feed)',
+    'gold-spot':   'spot XAU',
+    'binance-xau': 'BINANCE XAUUSDT perp',
+    'binance-paxg':'BINANCE PAXGUSDT (tokenised gold)',
+    'binance-xaut':'BINANCE XAUTUSDT (tokenised gold)'
+  };
+  function hgOgSrcLabel(src){
+    var k = String(src || '');
+    return OG_SRC_LABEL[k] || (k || 'none');
+  }
+  /* True only for a feed that IS the instrument a spot-gold broker quotes. */
+  function hgOgSrcIsBroker(src){ return String(src || '') === 'xm-xauusd'; }
+
   function hgOgFetchRows(tf, n){
     var xm = gfn('getXmGoldCandles'), gg = gfn('getGoldCandles'), bk = gfn('binanceKlines');
     return Promise.resolve()
@@ -2395,7 +2429,8 @@ terse status, and never launches a first-time scan on a global refresh.
         /* Over DISTINCT TRADES, not raw candidates — see ogDistinctCounts. */
         var dcounts = ogDistinctCounts(ranked);
         var tickets = dcounts.tickets;
-        var srcNote = 'source: scalp ' + (res.scalp.source || 'none') + ' · swing ' + (res.swing.source || 'none');
+        var srcNote = 'source: scalp ' + hgOgSrcLabel(res.scalp.source)
+                    + ' · swing ' + hgOgSrcLabel(res.swing.source);
         __og.lastStat = ranked.length + ' setup(s)'
                       + (dcounts.trades < ranked.length
                           ? ' · ' + dcounts.trades + ' distinct trade(s) after collapsing '
@@ -2431,6 +2466,34 @@ terse status, and never launches a first-time scan on a global refresh.
           warn = '  · NO gold bars from any source (XM bridge, spot proxy, PAXG) — this is a data problem, not a quiet market';
         }
         ui.stat.textContent = __og.lastStat + warn;
+
+        /* THE BASIS, stated rather than left to be discovered. Fired after the
+           status line is already up, so a slow or dead spot feed delays
+           nothing and simply leaves the line as it was. */
+        (function(){
+          try {
+            var spotFn = gfn('hgGoldLiveSpot');
+            var srcKey = res.scalp.source || res.swing.source;
+            if (!spotFn || !srcKey) return;
+            if (hgOgSrcIsBroker(srcKey)) return;   /* already the broker's own feed */
+            var lastRow = (res.scalp.rows && res.scalp.rows.length)
+                        ? res.scalp.rows[res.scalp.rows.length - 1]
+                        : ((res.swing.rows && res.swing.rows.length)
+                            ? res.swing.rows[res.swing.rows.length - 1] : null);
+            var feedPx = lastRow ? fin(lastRow.c) : NaN;
+            if (!isFinite(feedPx) || feedPx <= 0) return;
+            Promise.resolve(spotFn(feedPx)).then(function(spot){
+              if (!isFinite(spot) || spot <= 0) return;
+              var driftPct = (feedPx / spot - 1) * 100;
+              var msg = '  ·  NOT a broker feed: ' + hgOgSrcLabel(srcKey)
+                      + ' is ' + (driftPct >= 0 ? '+' : '') + driftPct.toFixed(2)
+                      + '% vs spot ($' + feedPx.toFixed(2) + ' vs $' + spot.toFixed(2) + ')'
+                      + ' — these levels are this instrument\'s, not your broker\'s XAUUSD';
+              __og.lastStat += msg;
+              ui.stat.textContent = __og.lastStat + warn;
+            }).catch(function(){});
+          } catch (eB){}
+        })();
 
         ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + HORIZONS.scalp.minRr + 'R)', HORIZONS.scalp.minRr, 'OMNIGOLD:SCALP')
                           + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + HORIZONS.swing.minRr + 'R)', HORIZONS.swing.minRr, 'OMNIGOLD:SWING')
