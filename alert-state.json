@@ -5,8 +5,8 @@
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
     "long": {
-      "sym": "B-PUMP_USDT",
-      "entry": 0.002861802564400886
+      "sym": "B-EDEN_USDT",
+      "entry": 0.04915172002956279
     },
     "short": null
   },
@@ -268,18 +268,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-19T05:47:57.792Z"
+    "at": "2026-08-19T06:44:14.970Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-19T05:47:57.792Z"
+    "at": "2026-08-19T06:44:14.970Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-19T05:47:57.792Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -294,7 +293,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-19T05:47:58.405Z"
+    "at": "2026-08-19T06:44:15.658Z"
   },
   "bookFill": {
     "key": "u0|p0",
