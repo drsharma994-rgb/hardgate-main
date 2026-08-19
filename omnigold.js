@@ -1820,6 +1820,103 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'regime-fit', hard:false, info:true, pass: reg, why: regWhy });
 
+    /* FADE-STRENGTH — the gate that was missing, and that v376 made necessary.
+
+       Reported as "the setups are absolutely wrong — shorts in a rally", and
+       the ledger could not stop one. For a reversion mechanic:
+
+         trend             passes by design  (trendOk = true)
+         htf-daily         passes by design  (d1 = reversion ? true : ...)
+         hurst-regime      info:true
+         regime-fit        info:true
+         adx-trend         info:true
+         structure-shift   info:true
+         htf-confirm       info:true
+         regression-slope  info:true
+
+       Eight trend-aware gates and not one of them can veto a fade. A live
+       ticket carried "AGAINST hurst-regime — a reversion mechanic against a
+       trending tape" and "AGAINST regime-fit — fading a trending tape" side
+       by side, and cleared anyway.
+
+       v376 widened that hole. Before it, VWAP-REVERT, POC-REVERT, RSI-DIVERGE
+       and AVWAP-RECLAIM were classed as continuation and WERE vetoed by trend
+       and htf-daily. Reclassifying them as reversion was right — the trend
+       gate's own comment says vetoing a fade for being counter-trend is a
+       category error, and it is — but it handed those four a free pass on
+       every trend check at the same time.
+
+       The distinction the ledger never drew: fading a STRETCHED market is the
+       trade; fading a STRONG TREND is the classic way to lose. Direction is
+       not the question for a fade. STRENGTH is.
+
+       Three independent reads of strength against this fade, and TWO must
+       agree before it vetoes — one noisy indicator must not kill a setup:
+
+         1. the daily stack, which is what "a rally" usually means
+         2. ADX >= 25 with DI pointing against the fade
+         3. the structural regime reading trend, with the local EMA stack
+            confirming the direction
+
+       Soft, so it reports rather than silently disappearing the card. */
+    var fadeOk = true, fadeWhy = 'continuation setup — this gate only judges fades';
+    if (reversion){
+      var adverse = [], neutralN = 0;
+      /* A short fade fights an UPtrend; a long fade fights a DOWNtrend. */
+      var fadeShort = (hit.dir === 'short');
+
+      /* 1 — the higher timeframe. */
+      var fhe21 = x.htf ? fin(x.htf.e21) : NaN, fhe50 = x.htf ? fin(x.htf.e50) : NaN;
+      if (isFinite(fhe21) && isFinite(fhe50)){
+        var dailyUp = fhe21 >= fhe50;
+        if (dailyUp === fadeShort) adverse.push('the daily stack is ' + (dailyUp ? 'up' : 'down'));
+      } else neutralN++;
+
+      /* 2 — ADX with direction. */
+      var fAdxFn = gfn('adx');
+      if (fAdxFn){
+        try {
+          var fx = fAdxFn(rows, 14);
+          var fa = (fx && fx.adx && fx.adx.length) ? fin(fx.adx[fx.adx.length - 1]) : NaN;
+          var fp = (fx && fx.plusDI && fx.plusDI.length) ? fin(fx.plusDI[fx.plusDI.length - 1]) : NaN;
+          var fm = (fx && fx.minusDI && fx.minusDI.length) ? fin(fx.minusDI[fx.minusDI.length - 1]) : NaN;
+          if (isFinite(fa) && isFinite(fp) && isFinite(fm)){
+            if (fa >= 25 && ((fp > fm) === fadeShort))
+              adverse.push('ADX ' + fa.toFixed(0) + ' with DI ' + (fp > fm ? 'up' : 'down'));
+          } else neutralN++;
+        } catch (eFa){ neutralN++; }
+      } else neutralN++;
+
+      /* 3 — the structural regime, with the local stack agreeing on which way. */
+      var fRegFn = gfn('detectRegime');
+      if (fRegFn && isFinite(e21) && isFinite(e50)){
+        try {
+          var fr = fRegFn(rows);
+          var frName = fr ? String(fr.regime || '') : '';
+          if (/trend/i.test(frName)){
+            var localUp = e21 >= e50;
+            if (localUp === fadeShort)
+              adverse.push('regime ' + ((fr && fr.label) || frName) + ' running ' + (localUp ? 'up' : 'down'));
+          }
+        } catch (eFr){ neutralN++; }
+      } else neutralN++;
+
+      if (adverse.length >= 2){
+        fadeOk = false;
+        fadeWhy = 'fading a STRONG trend — ' + adverse.join('; ')
+                + '. A fade wants a stretched tape, not a running one';
+      } else if (adverse.length === 1){
+        fadeWhy = 'fade is counter-trend on one read (' + adverse[0]
+                + '), which is what a fade IS — one read is not enough to stand it aside';
+      } else if (neutralN >= 3){
+        fadeOk = null;
+        fadeWhy = 'no usable trend-strength read — cannot judge this fade';
+      } else {
+        fadeWhy = 'nothing strong running against this fade';
+      }
+    }
+    gates.push({ key:'fade-strength', hard:false, pass: fadeOk, why: fadeWhy });
+
     /* 30 — VOLATILITY FORECAST. hgVolFromCloses returns
        { sigmaNow, sigmaForecast, sigmaLongRun, source, ... }.
 
