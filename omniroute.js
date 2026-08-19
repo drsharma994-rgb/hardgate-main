@@ -190,6 +190,57 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return cnt ? sum / cnt : NaN;
   }
 
+  /* PARTICIPATION MUST COMPARE LIKE WITH LIKE.
+
+     "trigger vol 0.39x 20-bar mean" was the top veto on the live gold desk —
+     4 of 7 setups — on a card whose own session gate read ASIAN RANGE three
+     lines below it.
+
+     On 1h gold a 20-bar mean spans TWENTY HOURS, so it averages Asia, London
+     and New York together. Asian volume is a fraction of London's by
+     construction, so an ordinary Asian bar scores ~0.4x and is vetoed for
+     being thin when all it is, is three in the morning. The gate was
+     measuring TIME OF DAY and calling it participation — and because the
+     whole desk scans one instrument at one moment, it vetoed every card at
+     once.
+
+     Against the same slot on previous days it measures what it claims: is
+     this bar busy FOR THIS TIME OF DAY. The bar spacing is derived from the
+     tape rather than assumed, so it works on 1h and 4h alike. With too little
+     per-slot history it falls back to the flat mean and SAYS which baseline
+     it used, because a gate quietly changing what it compares against is how
+     this went unnoticed in the first place. */
+  function hgBarSpacingSec(rows){
+    if (!rows || rows.length < 6) return NaN;
+    var d = [], i, a, b;
+    for (i = Math.max(1, rows.length - 50); i < rows.length; i++){
+      a = fin(rows[i] && rows[i].t); b = fin(rows[i - 1] && rows[i - 1].t);
+      if (isFinite(a) && isFinite(b) && a > b) d.push(a - b);
+    }
+    if (!d.length) return NaN;
+    d.sort(function(x, y){ return x - y; });
+    return d[Math.floor(d.length / 2)];
+  }
+  function hgSlotMeanVol(rows, want){
+    var out = { mean: NaN, n: 0 };
+    if (!rows || rows.length < 2) return out;
+    var dt = hgBarSpacingSec(rows);
+    /* Daily bars and coarser have no intraday slot to correct for. */
+    if (!isFinite(dt) || dt <= 0 || dt >= 86400) return out;
+    var lt = fin(rows[rows.length - 1] && rows[rows.length - 1].t);
+    if (!isFinite(lt)) return out;
+    var slot = Math.floor((lt % 86400) / dt);
+    var sum = 0, n = 0, i, t, v;
+    for (i = rows.length - 2; i >= 0 && n < (want || 20); i--){
+      t = fin(rows[i] && rows[i].t); v = fin(rows[i] && rows[i].v);
+      if (!isFinite(t) || !isFinite(v)) continue;
+      if (Math.floor((t % 86400) / dt) !== slot) continue;
+      sum += v; n++;
+    }
+    /* Fewer than five same-slot bars is not a baseline, it is a rumour. */
+    if (n >= 5 && sum > 0){ out.mean = sum / n; out.n = n; }
+    return out;
+  }
   function meanVol(rows, n){
     if (!rows || !rows.length) return NaN;
     var s = 0, c = 0, i, v;
@@ -1099,7 +1150,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       why: isFinite(atrPct) ? ('ATR ' + atrPct.toFixed(2) + '% of price' + (volOk ? '' : ' — too dead')) : 'ATR unavailable' });
 
     /* 3 — participation: the trigger bar should not be a volume vacuum */
-    var mv = meanVol(rows.slice(0, rows.length - 1), 20), lv = num(rows[rows.length - 1].v);
+    /* Same time-of-day correction as the gold desk, and for the same reason:
+       a 20-bar mean on 4h bars spans three days and mixes the Asian and US
+       sessions, so a quiet-hours bar is vetoed for being quiet-hours. fin,
+       not num: +null is 0, which would score 0.00x and veto. */
+    var lv = fin(rows[rows.length - 1].v);
+    var slotV = hgSlotMeanVol(rows, 20);
+    var usedSlot = isFinite(slotV.mean);
+    var mv = usedSlot ? slotV.mean : meanVol(rows.slice(0, rows.length - 1), 20);
     var partOk = (isFinite(mv) && isFinite(lv) && mv > 0) ? (lv >= mv * 0.7) : null;
     gates.push({ key:'participation', hard:true, pass: partOk,
       why: (isFinite(mv) && isFinite(lv) && mv > 0) ? ('trigger vol ' + (lv/mv).toFixed(2) + '× 20-bar mean') : 'volume unavailable' });
