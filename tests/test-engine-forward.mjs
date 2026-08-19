@@ -167,7 +167,12 @@ console.log('\n== the correction: the other four were already measured ==');
   const BRAIN = read('brain.js');
   ok(/hgPlanLevels/.test(BRAIN), 'brain builds its own plans through hgPlanLevels');
   ok(/never invented/.test(BRAIN), 'and says its plans are never invented');
-  ok(!/hgFwdRecord/.test(BRAIN), 'and is still unmeasured — the remaining gap, deliberately left');
+  /* The gap this named is closed: brain records its OWN plans under BRAIN,
+     skipping src === 'gate engine' because those trades are already in the
+     EXECUTE pool. The overlap that made it a two-step job is resolved by
+     provenance — see test-brain-forward.mjs. */
+  ok(/hgFwdRecordScan\('BRAIN'/.test(BRAIN), 'and is now measured, with the EXECUTE overlap excluded');
+  ok(/fp\.src === 'gate engine'\) continue;/.test(BRAIN), 'by skipping plans EXECUTE already recorded');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

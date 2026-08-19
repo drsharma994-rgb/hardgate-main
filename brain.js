@@ -5349,6 +5349,51 @@ async function runBrain(el){
       setups = primes.concat(highs);
     }
 
+    /* RECORD WHAT BRAIN CALLED, SO IT CAN BE HELD TO IT.
+
+       Brain was the last plan-producing tab outside the forward log — the
+       only measurement in this app that accumulates. Named as outstanding in
+       test-engine-forward.mjs rather than quietly done, because brain is not
+       a simple case: it PREFERS the gate engine's survivors when they exist,
+       and those plans are already recorded under the EXECUTE tab. Recording
+       them again here would count the same trade twice.
+
+       The overlap is resolved by provenance, which normalizePlan already
+       stamps on every plan: src === 'gate engine' is EXECUTE's trade and is
+       skipped; everything brain built itself — smartSetup, hgPlanLevels,
+       swingTryClean, gold setup — is brain's own call and is recorded under
+       BRAIN, keyed by that source so each plan engine accumulates its own
+       record instead of pooling into one undifferentiated number.
+
+       PRIME and HIGH only: those are the tiers brain presents as actionable,
+       and the desks record what was presented, not what was considered.
+       hgFwdRecordScan dedups per symbol+mechanic+bar, so a quick rescan
+       cannot double-count. Guarded and swallowed — instrumentation must
+       never break a scan. */
+    try {
+      if (typeof G.hgFwdRecordScan === 'function' && Array.isArray(setups) && setups.length){
+        var fwdOwn = [];
+        for (var fw = 0; fw < setups.length; fw++){
+          var fr = setups[fw];
+          if (!fr || !fr.plan || !fr.sym || !fr.dec) continue;
+          var fp = fr.plan;
+          if (fp.src === 'gate engine') continue;   /* EXECUTE already holds it */
+          if (fr.dec.dir !== 'long' && fr.dec.dir !== 'short') continue;
+          var fe = +fp.entry, fs = +fp.stop, ft = +fp.t1;
+          if (!isFinite(fe) || !isFinite(fs) || !isFinite(ft) || fe === fs) continue;
+          fwdOwn.push({
+            sym: fr.sym, dir: fr.dec.dir, entry: fe, stop: fs, t1: ft,
+            mechanic: ('BRAIN-' + String(fp.src || 'own').toUpperCase()
+                        .replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')).slice(0, 24),
+            ticket: fr.dec.tier === 'PRIME'
+          });
+        }
+        if (fwdOwn.length) G.hgFwdRecordScan('BRAIN', '4h', fwdOwn, { horizonBars: 20 });
+      }
+    } catch (eFwdB){
+      try { if (typeof G.hgFwdWarn === 'function') G.hgFwdWarn('brain:forward', eFwdB); } catch (eW3) {}
+    }
+
     /* render */
     var readTxt = marketRead(snap);
     if (read && readWrap){
