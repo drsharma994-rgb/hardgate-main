@@ -5,52 +5,52 @@
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
     "long": {
-      "sym": "B-PUMP_USDT",
-      "entry": 0.0030019454076159412
+      "sym": "B-EDEN_USDT",
+      "entry": 0.05063228684673623
     },
     "short": null
   },
   "sniper": {
-    "key": "B-LA_USDT@0.05326;B-PUMP_USDT@0.0030019454076159412;B-VVV_USDT@13.685;SOXSUSDT@44.6503967876964",
+    "key": "B-LA_USDT@0.05442;B-PRL_USDT@0.4339;B-PUMP_USDT@0.003007;B-SOL_USDT@76.71224679380198",
     "hits": [
       {
         "sym": "B-PUMP_USDT",
         "dir": "long",
-        "entry": 0.0030019454076159412,
-        "stop": 0.0029599280815319497,
+        "entry": 0.003007,
+        "stop": 0.0029551537244532095,
         "t1": 0.003128,
-        "lev": 38,
+        "lev": 32,
         "state": "IN ZONE"
+      },
+      {
+        "sym": "B-PRL_USDT",
+        "dir": "long",
+        "entry": 0.4339,
+        "stop": 0.4240560607764258,
+        "t1": 0.4571,
+        "lev": 25,
+        "state": "APPROACHING"
       },
       {
         "sym": "B-LA_USDT",
         "dir": "long",
-        "entry": 0.05326,
-        "stop": 0.05190993222581551,
+        "entry": 0.05442,
+        "stop": 0.053100656548949195,
         "t1": 0.0596,
-        "lev": 23,
+        "lev": 24,
         "state": "APPROACHING"
       },
       {
-        "sym": "B-VVV_USDT",
+        "sym": "B-SOL_USDT",
         "dir": "long",
-        "entry": 13.685,
-        "stop": 13.474052399228666,
-        "t1": 14.143,
-        "lev": 35,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "SOXSUSDT",
-        "dir": "long",
-        "entry": 44.6503967876964,
-        "stop": 44.04659609269316,
-        "t1": 45.65,
-        "lev": 39,
+        "entry": 76.71224679380198,
+        "stop": 76.44786861428817,
+        "t1": 77.21,
+        "lev": 98,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-19T04:22:46.796Z"
+    "at": "2026-08-19T05:03:35.031Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -295,11 +295,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-19T04:22:46.797Z"
+    "at": "2026-08-19T05:03:35.031Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-19T04:22:46.797Z"
+    "at": "2026-08-19T05:03:35.031Z"
   },
   "degraded": {
     "count": 0,
@@ -320,7 +320,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-19T04:22:47.112Z"
+    "at": "2026-08-19T05:03:35.345Z"
   },
   "bookFill": {
     "key": "u0|p0",
