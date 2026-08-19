@@ -972,8 +972,31 @@ terse status, and never launches a first-time scan on a global refresh.
     if (plHas){
       if (!plObj){
         plOk = false;
+        /* SAY WHY THERE ARE NO LEVELS. "no plan" and the card's own subtitle
+           "structure could not clear the R floor" both point at R:R, and on
+           live gold the real cause was stop DISTANCE: price had run 2.74% in
+           a day, the nearest swing low sat 165 points below at 7.76xATR, and
+           the plan engine refuses anything past 6xATR rather than inventing a
+           tighter stop. Six of nine scalp cards were dropped for that, and
+           the card blamed the wrong thing. Diagnosed here from the same swing
+           and ATR the engine used, so the reader learns the actual geometry
+           instead of a category. */
         plWhy = 'NO LEVELS — the plan engine produced no entry, stop or target, '
               + 'so there is nothing to place';
+        try {
+          var pSwFn = gfn('lastSwing');
+          var pAtr = atrOf(rows, 14);
+          var pSw = pSwFn ? fin(pSwFn(rows, hit.dir, 20)) : NaN;
+          var pLast = (rows && rows.length) ? fin(rows[rows.length - 1].c) : NaN;
+          if (isFinite(pSw) && isFinite(pAtr) && pAtr > 0 && isFinite(pLast)){
+            var pMult = Math.abs(pLast - pSw) / pAtr;
+            plWhy += ' — the nearest swing ' + (hit.dir === 'long' ? 'low' : 'high')
+                   + ' is ' + Math.abs(pLast - pSw).toFixed(0) + ' points away ('
+                   + pMult.toFixed(1) + '×ATR)'
+                   + (pMult > 6 ? ', past the 6×ATR limit, so no stop can be placed on structure'
+                                : ', which the engine could not turn into a usable plan');
+          }
+        } catch (ePl){}
       } else {
         var pE = fin(plObj.entry), pS = fin(plObj.stop), pT = fin(plObj.t1);
         if (isFinite(pE) && isFinite(pS) && isFinite(pT) && pE !== pS){

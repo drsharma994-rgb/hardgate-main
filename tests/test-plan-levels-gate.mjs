@@ -93,6 +93,42 @@ console.log('== THE DEFECT: a planless card could be a TICKET ==');
   ok(/VETO — plan-levels/.test(graded.verdict), 'and leads the verdict: ' + graded.verdict.slice(0, 40));
 }
 
+console.log('\n== and it names the GEOMETRY, not a category ==');
+{
+  /* On live gold the card said "structure could not clear the R floor", which
+     points at R:R. The real cause was stop DISTANCE: price had run 2.74% in a
+     day, the nearest swing low sat 165 points below at 7.76xATR, and the
+     engine refuses anything past 6xATR. Six of nine scalp cards were dropped
+     for that and the card blamed the wrong thing. */
+  const up = [];
+  { let p = 4300, s = 5;
+    const rnd = () => { s = (s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+    for (let i = 0; i < 400; i++){
+      p = p*(1+(rnd()-0.30)*0.004);
+      const r = p*0.0010*(0.5+rnd());
+      up.push({ t: 1700000000+i*3600, o:p-r*0.25, h:p+r, l:p-r, c:p, v:1000 });
+    } }
+  const pl = (rows, dir) => W.hgOgGates(rows, { dir: dir, kind:'ORB', mech:'ORB' }, { plan: null })
+                             .filter(x => x && x.key === 'plan-levels')[0];
+  const g = pl(up, 'long');
+  ok(/nearest swing low is \d+ points away/.test(g.why),
+     'it states the distance in points: ' + g.why.slice(60, 145));
+  ok(/[\d.]+×ATR/.test(g.why), 'and in ATR multiples, which is what the engine judges on');
+  ok(/past the 6×ATR limit|could not turn into a usable plan/.test(g.why),
+     'and says which side of the limit it fell');
+  const gs = pl(up, 'short');
+  ok(/nearest swing high/.test(gs.why), 'a short is measured to the swing HIGH');
+  /* The diagnostic must never break the gate. */
+  for (const rows of [[], [{}], up.slice(0, 3)]){
+    let threw = null, d = null;
+    try { d = pl(rows, 'long'); } catch (e){ threw = e; }
+    ok(!threw, 'the diagnostic does not throw on ' + rows.length + ' bars');
+    ok(d && d.pass === false, '   and the veto still stands');
+    ok(d && !/NaN|undefined/.test(String(d.why)), '   with no NaN in the reason');
+  }
+}
+
+
 console.log('\n== a complete plan passes and blocks nothing ==');
 {
   const g = gate({ plan: GOODPLAN });
