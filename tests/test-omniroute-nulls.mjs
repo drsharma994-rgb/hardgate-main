@@ -28,6 +28,8 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 /* omniroute.js is a classic script: evaluate it with a window shim. */
 const win = {};
+/* hg-gates.js holds the gate logic that was identical in both desks. */
+new Function('window', readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8'))(win);
 const src = readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8');
 new Function('window', src)(win);
 

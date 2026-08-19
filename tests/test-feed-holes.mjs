@@ -43,7 +43,7 @@ function boot(){
                    documentElement: el(), addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js',
-                   'hg-forward.js', 'omniroute.js', 'omnigold.js']){
+                   'hg-forward.js', 'hg-gates.js', 'omniroute.js', 'omnigold.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
   return ctx;

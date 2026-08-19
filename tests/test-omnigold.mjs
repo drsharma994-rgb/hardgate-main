@@ -16,6 +16,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const win = {};
+/* hg-gates.js holds the gate logic that was identical in both desks. */
+new Function('window', readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8'))(win);
 new Function('window', readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8'))(win);
 new Function('window', readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8'))(win);
 

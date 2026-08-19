@@ -190,57 +190,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return cnt ? sum / cnt : NaN;
   }
 
-  /* PARTICIPATION MUST COMPARE LIKE WITH LIKE.
-
-     "trigger vol 0.39x 20-bar mean" was the top veto on the live gold desk —
-     4 of 7 setups — on a card whose own session gate read ASIAN RANGE three
-     lines below it.
-
-     On 1h gold a 20-bar mean spans TWENTY HOURS, so it averages Asia, London
-     and New York together. Asian volume is a fraction of London's by
-     construction, so an ordinary Asian bar scores ~0.4x and is vetoed for
-     being thin when all it is, is three in the morning. The gate was
-     measuring TIME OF DAY and calling it participation — and because the
-     whole desk scans one instrument at one moment, it vetoed every card at
-     once.
-
-     Against the same slot on previous days it measures what it claims: is
-     this bar busy FOR THIS TIME OF DAY. The bar spacing is derived from the
-     tape rather than assumed, so it works on 1h and 4h alike. With too little
-     per-slot history it falls back to the flat mean and SAYS which baseline
-     it used, because a gate quietly changing what it compares against is how
-     this went unnoticed in the first place. */
-  function hgBarSpacingSec(rows){
-    if (!rows || rows.length < 6) return NaN;
-    var d = [], i, a, b;
-    for (i = Math.max(1, rows.length - 50); i < rows.length; i++){
-      a = fin(rows[i] && rows[i].t); b = fin(rows[i - 1] && rows[i - 1].t);
-      if (isFinite(a) && isFinite(b) && a > b) d.push(a - b);
-    }
-    if (!d.length) return NaN;
-    d.sort(function(x, y){ return x - y; });
-    return d[Math.floor(d.length / 2)];
-  }
+  /* Moved to hg-gates.js. These two helpers were byte-identical in both desks
+     (1,330 chars, verbatim) because the fix was written once and pasted; the
+     shim keeps this file working if hg-gates.js somehow fails to load, rather
+     than throwing a ReferenceError mid-scan. */
   function hgSlotMeanVol(rows, want){
-    var out = { mean: NaN, n: 0 };
-    if (!rows || rows.length < 2) return out;
-    var dt = hgBarSpacingSec(rows);
-    /* Daily bars and coarser have no intraday slot to correct for. */
-    if (!isFinite(dt) || dt <= 0 || dt >= 86400) return out;
-    var lt = fin(rows[rows.length - 1] && rows[rows.length - 1].t);
-    if (!isFinite(lt)) return out;
-    var slot = Math.floor((lt % 86400) / dt);
-    var sum = 0, n = 0, i, t, v;
-    for (i = rows.length - 2; i >= 0 && n < (want || 20); i--){
-      t = fin(rows[i] && rows[i].t); v = fin(rows[i] && rows[i].v);
-      if (!isFinite(t) || !isFinite(v)) continue;
-      if (Math.floor((t % 86400) / dt) !== slot) continue;
-      sum += v; n++;
-    }
-    /* Fewer than five same-slot bars is not a baseline, it is a rumour. */
-    if (n >= 5 && sum > 0){ out.mean = sum / n; out.n = n; }
-    return out;
+    var w = ((typeof window !== 'undefined') ? window : null);
+    return (w && typeof w.hgSlotMeanVol === 'function')
+      ? w.hgSlotMeanVol(rows, want)
+      : { mean: NaN, n: 0 };
   }
+
   function meanVol(rows, n){
     if (!rows || !rows.length) return NaN;
     var s = 0, c = 0, i, v;
@@ -1280,56 +1240,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        as PASS meant a card could claim "news risk low" while nothing had
        been checked, which is precisely the silent pass this ledger exists to
        prevent. An unloaded or errored module reads UNCHECKED. */
-    var nw = null, nwWhy = 'news module has not run', nwInfo = false;
-    var nwNote = (x.news && typeof x.news.note === 'string') ? x.news.note : '';
-    var nwUnloaded = /not loaded|news error/i.test(nwNote);
-    if (x.news && x.news.risk && !nwUnloaded){
-      /* A BLACKOUT IS NOT A FORECAST, AND THIS GATE WAS TREATING THEM AS ONE.
-
-         news.js defines two different things on the same object:
-
-           blackout : now is inside [event - 60m, event + 60m] of a
-                      high-impact print. Trading is genuinely suspended.
-           risk     : 'high' if a blackout is active OR a high-impact USD
-                      event lands within the next TWENTY-FOUR HOURS.
-
-         Vetoing on risk === 'high' therefore stands the desk aside for a
-         whole day around every CPI, NFP, FOMC, PPI, PCE, GDP and the WEEKLY
-         jobless claims print. On the US calendar those overlap: there is a
-         high-impact release within 24h on most weekdays, so the gate is not
-         occasionally on, it is effectively permanently on. That is what the
-         live scans showed — 11 of 11 gold setups and every one of 1240 crypto
-         setups vetoed, across days, by this single gate.
-
-         brain.js found and fixed exactly this on 2026-07-30 and says so in a
-         comment: "an event hours away is context — a caution chip, never a
-         kill". engine.js and book.js also veto on blackout alone. These two
-         desks were the only consumers still killing on the forecast, which is
-         why the rest of the app kept working while both tabs sat empty.
-
-         So: a true blackout vetoes. A red event on the horizon is reported
-         AGAINST — visible on the card, costing the reader nothing — because
-         standing aside for a print that is nineteen hours away is not
-         discipline, it is not trading. */
-      var nwBlack = (x.news.blackout === true);
-      var nwHigh = (String(x.news.risk) === 'high');
-      nw = !nwBlack;
-      if (nwBlack){
-        nwWhy = 'NEWS BLACKOUT — TRADING BLOCKED'
-              + (nwNote ? ' · ' + nwNote : ' (no event named — check the news tab)');
-      } else if (nwHigh){
-        /* Not a veto. info:true keeps it off the ticket's critical path while
-           still printing on the card, which is what a caution is. */
-        nw = false; nwInfo = true;
-        nwWhy = 'red event on the horizon, OUTSIDE the blackout window — caution, not a veto'
-              + (nwNote ? ' · ' + nwNote : '');
-      } else {
-        nwWhy = 'news risk ' + x.news.risk + ' — no blackout active'
-              + (nwNote ? ' · ' + nwNote : '');
-      }
-    } else if (nwUnloaded){
-      nwWhy = 'news not checked — module reports: ' + nwNote;
+    /* Moved to hg-gates.js — the decision was byte-identical in both desks
+       (2,730 chars, verbatim). It emptied BOTH tabs for days and the fix had
+       to be written twice; that is what this module exists to stop. */
+    var __nwG = ((typeof window !== 'undefined') ? window : null), __nw;
+    if (__nwG && typeof __nwG.hgNewsGate === 'function'){
+      __nw = __nwG.hgNewsGate(x.news);
+    } else {
+      /* hg-gates.js absent: UNCHECKED, never a quiet pass. */
+      __nw = { pass: null, info: false, why: 'news gate module (hg-gates.js) not loaded' };
     }
+    var nw = __nw.pass, nwWhy = __nw.why, nwInfo = __nw.info;
     gates.push({ key:'news-window', hard:false, info: nwInfo, pass: nw, why: nwWhy });
 
     /* 12 — measured edge: this detector's own pooled walk-forward result.

@@ -51,7 +51,7 @@ function boot(){
                    documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js',
-                   'hg-forward.js', 'omniroute.js', 'omnigold.js']){
+                   'hg-forward.js', 'hg-gates.js', 'omniroute.js', 'omnigold.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
   return ctx;
@@ -150,13 +150,20 @@ console.log('\n== a calm feed passes, and does not shout ==');
 
 console.log('\n== both desks were fixed, not just the one that was reported ==');
 {
+  /* The decision moved to hg-gates.js. It was byte-identical in both desks
+     (2,730 chars, verbatim) precisely because this fix had to be written
+     twice — so keeping ONE copy is the durable form of "both desks were
+     fixed". Each desk is still asserted to call it. */
+  const SHARED = fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
+  ok(/var nwBlack = \(news\.blackout === true\);/.test(SHARED), 'the shared gate reads blackout on its own');
+  ok(/\n      nw = !nwBlack;/.test(SHARED), 'and vetoes on the blackout alone');
+  ok(!/nw = !\(news\.blackout === true \|\| String\(news\.risk\) === 'high'\)/.test(SHARED),
+     'it no longer vetoes on the 24h forecast');
+  ok(/caution, not a veto/.test(SHARED), 'it reports the horizon event as a caution');
+  ok(/jobless\s+claims/i.test(SHARED), 'and records WHY 24h is permanently on, so it is not tidied away again');
   for (const [n, src] of [['omnigold', GOLD], ['omniroute', ROUTE]]){
-    ok(/var nwBlack = \(x\.news\.blackout === true\);/.test(src), n + ' reads blackout on its own');
-    ok(/\n      nw = !nwBlack;/.test(src), n + ' vetoes on the blackout alone');
-    ok(!/nw = !\(x\.news\.blackout === true \|\| String\(x\.news\.risk\) === 'high'\)/.test(src),
-       n + ' no longer vetoes on the 24h forecast');
-    ok(/caution, not a veto/.test(src), n + ' reports the horizon event as a caution');
-    ok(/jobless claims/i.test(src), n + ' records WHY 24h is permanently on, so it is not tidied away again');
+    ok(/hgNewsGate\(x\.news\)/.test(src), n + ' calls the shared gate');
+    ok(!/var nwBlack =/.test(src), n + ' keeps no second copy of the decision');
   }
   /* The rest of the app already had this right; it must stay that way. */
   const BRAIN = fs.readFileSync(path.join(ROOT, 'brain.js'), 'utf8');

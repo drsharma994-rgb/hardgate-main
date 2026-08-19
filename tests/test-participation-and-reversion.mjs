@@ -58,7 +58,7 @@ function boot(){
                    documentElement:{appendChild(){}}, addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js','indicators2.js','fixpack14-core.js','hg-mechanics.js',
-                   'hg-forward.js','omniroute.js','omnigold.js']){
+                   'hg-forward.js', 'hg-gates.js','omniroute.js','omnigold.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
   return ctx;
@@ -166,11 +166,17 @@ console.log('\n== a null volume reads UNCHECKED, not 0.00x — the isFinite(null
 
 console.log('\n== both desks got the correction, not just the one that was reported ==');
 {
+  /* The baseline moved to hg-gates.js — it was byte-identical in both desks
+     (1,330 chars, verbatim), which is the whole reason it now lives once. */
+  const SHARED = fs.readFileSync(path.join(ROOT, 'hg-gates.js'), 'utf8');
+  ok(/function hgSlotMeanVol\(rows, want\)/.test(SHARED), 'the shared module has the per-slot baseline');
+  ok(/function hgBarSpacingSec\(rows\)/.test(SHARED), 'and derives bar spacing from the tape, not an assumption');
+  ok(/n >= 5 && sum > 0/.test(SHARED), 'refusing a baseline built from under five bars');
+  ok(/dt >= 86400/.test(SHARED), 'and skipping the correction on daily bars, which have no intraday slot');
   for (const [n, src] of [['omnigold', GOLD], ['omniroute', ROUTE]]){
-    ok(/function hgSlotMeanVol\(rows, want\)/.test(src), n + ' has the per-slot baseline');
-    ok(/function hgBarSpacingSec\(rows\)/.test(src), n + ' derives bar spacing from the tape, not an assumption');
-    ok(/n >= 5 && sum > 0/.test(src), n + ' refuses a baseline built from under five bars');
-    ok(/dt >= 86400/.test(src), n + ' skips the correction on daily bars, which have no intraday slot');
+    ok(/w\.hgSlotMeanVol\(rows, want\)/.test(src), n + ' delegates to it');
+    ok(!/function hgBarSpacingSec\(rows\)\{?\s*\n\s*if \(!rows/.test(src),
+       n + ' keeps no second copy');
   }
 }
 

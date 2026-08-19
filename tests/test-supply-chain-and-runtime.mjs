@@ -172,7 +172,7 @@ console.log('\n== 4. the dormant R-floor trap in measured-edge ==');
     documentElement:{appendChild(){}}, addEventListener(){} };
   vm.createContext(ctx);
   for (const f of ['indicators.js','indicators2.js','fixpack14-core.js','hg-mechanics.js',
-                   'hg-forward.js','omniroute.js']){
+                   'hg-forward.js', 'hg-gates.js','omniroute.js']){
     vm.runInContext(read(f), ctx, { filename: f });
   }
   const T0 = 1700000000 - (1700000000 % 86400);

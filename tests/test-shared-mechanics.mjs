@@ -135,7 +135,7 @@ console.log('\n== omnigold delegates rather than keeping a second copy ==');
   /* The delegations are feature-checked, so a missing module costs those
      mechanics and not the tab. */
   ok(/var f = gfn\('hgMech\w+'\); return f \? f\(/.test(GOLD), 'and each one feature-checks first');
-  const G = boot(['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-forward.js',
+  const G = boot(['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-forward.js', 'hg-gates.js',
                   'omniroute.js', 'omnigold.js']);   /* NOTE: hg-mechanics.js deliberately absent */
   let threw = null, hits = null;
   try { hits = G.hgOgDetect(tape(400, 5, 3350), {}); } catch (e) { threw = e; }

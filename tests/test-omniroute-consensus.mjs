@@ -59,7 +59,7 @@ function boot(){
                    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
                    head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
   vm.createContext(ctx);
-  for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-forward.js', 'omniroute.js']){
+  for (const f of ['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-forward.js', 'hg-gates.js', 'omniroute.js']){
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
   return ctx;
