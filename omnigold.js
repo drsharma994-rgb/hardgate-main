@@ -1039,8 +1039,15 @@ terse status, and never launches a first-time scan on a global refresh.
        UNCHECKED when no live price is supplied — harnesses and callers that
        predate this gate keep working, and unknown reads UNCHECKED, never
        PASS. */
+    /* THE UNCHECKED REASON MUST BE TRUE. This printed "no live price supplied"
+       on a card whose own DEAD LEVELS block quoted the live price — the plan
+       was what was missing, and a diagnostic that misreports its own inputs
+       sends the reader chasing the wrong absence. Three distinct reasons. */
     var lfOk = null, lfWhy = 'no live price supplied — freshness not judged', lfInfo = false;
     var lfPx = x ? fin(x.livePx) : NaN;   /* x may be absent in old harnesses */
+    if (isFinite(lfPx) && lfPx > 0 && !(plHas && plObj)){
+      lfWhy = 'live price in hand (' + lfPx.toFixed(2) + ') but no plan to judge — see plan-levels';
+    }
     if (isFinite(lfPx) && lfPx > 0 && plHas && plObj){
       var lfE = fin(plObj.entry), lfS = fin(plObj.stop);
       if (isFinite(lfE) && isFinite(lfS)){

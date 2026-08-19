@@ -207,5 +207,20 @@ console.log('\n== OMNIROUTE has the same rendering rule and its own desk read ==
      'wired into the NO TICKETS branch of the status line');
 }
 
+console.log('\n== the UNCHECKED reason is true to its inputs ==');
+{
+  /* The live card printed "no live price supplied" while its own DEAD LEVELS
+     block quoted the live price — the plan was the missing input. */
+  const g = gate('long', { plan: null, livePx: 4509.51 });
+  ok(g.pass === null, 'a live price with no plan is still UNCHECKED');
+  ok(/live price in hand \(4509\.51\) but no plan to judge/.test(g.why),
+     'and the reason names the input it actually has: ' + g.why);
+  ok(/see plan-levels/.test(g.why), 'pointing at the gate that explains the absence');
+  ok(!/no live price supplied/.test(g.why), 'and never claims the price was missing');
+  /* The genuinely-missing-price reason is unchanged. */
+  ok(/no live price supplied/.test(gate('long', { plan: { entry:4400, stop:4380, t1:4440 } }).why),
+     'while a truly absent price still says so');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');
 console.log('ALL LEVEL-FRESH TESTS PASSED');
