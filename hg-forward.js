@@ -502,9 +502,21 @@ localStorage. Never throws.
        in each tab so the wording, the thresholds and the honest empty state
        stay identical everywhere — the alternative is forty tabs each
        describing out-of-sample evidence slightly differently.
-       Verdicts come from hgOmniPoolRead when it is loaded, so the forward
-       column is judged by exactly the same +/-2 sigma bar as the in-sample
-       one; without it the panel still lists counts and simply omits verdicts. */
+       Verdicts come from hgOmniPoolRead when it is loaded; without it the panel
+       still lists counts and simply omits verdicts.
+
+       WHICH BAR. This used to say "exactly the same +/-2 sigma bar as the
+       in-sample one", and that stopped being true when the in-sample table
+       moved its POSITIVE bar to the family-wise threshold. Worse, the call
+       passed no bar at all, so after that change every forward panel in the
+       app silently inherited omniroute's 27-MECHANIC default — a gold panel
+       judged by the crypto count.
+
+       The bar is derived from the rows this panel is actually rendering. That
+       is the honest number: a reader looking at a table of N mechanics and
+       noticing the best one has searched N ways, whether the numbers are
+       in-sample or out. The negative side keeps -2 sigma, because noticing
+       that one named mechanic is losing is not a search. */
     W.hgFwdPanelHTML = function(tab, opts){
       try {
         var o = opts || {};
@@ -522,13 +534,18 @@ localStorage. Never throws.
         }
         var readFn = (typeof W.hgOmniPoolRead === 'function') ? W.hgOmniPoolRead : null;
         var minRr = isFinite(+o.minRr) ? +o.minRr : 2;
+        /* Correct over the rows THIS panel shows, not over another desk's
+           mechanic count. o.barZ lets a caller state its own if it has reason
+           to. */
+        var barZ = isFinite(+o.barZ) && +o.barZ > 0 ? +o.barZ
+                 : ((typeof W.hgOmniFamilyZ === 'function') ? W.hgOmniFamilyZ(Math.max(1, keys.length)) : 2);
         var h = healthHtml + '<h4>' + esc(title) + '</h4>';
         h += '<table class="tbl"><thead><tr><th>MECHANIC</th><th>SETTLED</th><th>T1-FIRST</th>'
            + '<th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
         var i, p, v;
         for (i = 0; i < keys.length; i++){
           p = pool[keys[i]];
-          v = readFn ? readFn(p, minRr, 20) : null;
+          v = readFn ? readFn(p, minRr, 20, barZ) : null;
           /* A mechanic with open trades and none settled has NOT "never
              fired" — it has fired and is waiting. The shared verdict helper
              only speaks about settled samples, so that distinction has to be
@@ -589,6 +606,14 @@ localStorage. Never throws.
         names.sort();
         var readFn = (typeof W.hgOmniPoolRead === 'function') ? W.hgOmniPoolRead : null;
         var minRr = isFinite(+o.minRr) ? +o.minRr : 2;
+        /* Count the rows before rendering them: this table spans every tab, so
+           the search a reader performs over it is wider than any one desk's. */
+        var ledgerRows = 0;
+        for (var ci = 0; ci < names.length; ci++){
+          var cp = hgFwdPool(list, names[ci], agg);
+          for (var cm in cp) if (Object.prototype.hasOwnProperty.call(cp, cm)) ledgerRows++;
+        }
+        var barZ = (typeof W.hgOmniFamilyZ === 'function') ? W.hgOmniFamilyZ(Math.max(1, ledgerRows)) : 2;
         var h = hgFwdHealthHTML() + '<h3>FORWARD LEDGER — every tab, out-of-sample</h3>';
         h += '<table class="tbl"><thead><tr><th>TAB</th><th>MECHANIC</th><th>SETTLED</th>'
            + '<th>T1-FIRST</th><th>EXPECTANCY</th><th>OPEN</th><th>READ</th></tr></thead><tbody>';
@@ -608,7 +633,7 @@ localStorage. Never throws.
             var isSel = names[i].indexOf('SUPER:') === 0;
             if (!isSel){ totS += p.samples; totW += p.wins; totO += p.open; }
             rowsOut++;
-            var v = readFn ? readFn(p, minRr, 20) : null;
+            var v = readFn ? readFn(p, minRr, 20, barZ) : null;
             var read = !p.samples ? (p.open ? (p.open + ' awaiting settlement')
                                              : (p.stale ? 'nothing settled — ' + p.stale + ' stale' : 'never fired'))
                                   : (v ? v.read : 'unjudged');
