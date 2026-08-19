@@ -2462,6 +2462,17 @@ terse status, and never launches a first-time scan on a global refresh.
         +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
+      /* The same levels in the reader's instrument. Only when the factor is
+         real and the basis is worth mentioning — a broker-bridge feed, a
+         failed spot fetch, or a sub-0.05% basis all render nothing. */
+      var sf = fin(__og.spotFactor);
+      if (isFinite(sf) && sf > 0 && Math.abs(sf - 1) > 0.0005){
+        h += '<div class="dim">&#8776; SPOT-EQUIVALENT (basis ' + ((sf - 1) >= 0 ? '+' : '')
+          +  ((sf - 1) * 100).toFixed(2) + '% applied, R:R unchanged): '
+          +  'ENTRY ' + fmtPx(c.plan.entry * sf) + ' · STOP ' + fmtPx(c.plan.stop * sf)
+          +  ' · T1 ' + fmtPx(c.plan.t1 * sf)
+          +  (isFinite(fin(c.plan.t2)) ? ' · T2 ' + fmtPx(c.plan.t2 * sf) : '') + '</div>';
+      }
     } else {
       h += '<div class="dim">no plan — structure could not clear the R floor, so no levels are shown.</div>';
     }
@@ -2747,7 +2758,27 @@ terse status, and never launches a first-time scan on a global refresh.
           return { scalp: scalp, swing: swing };
         });
       })
-      .then(function(res){
+      .then(async function(res){
+        /* SPOT-EQUIVALENT LEVELS. The feed is a Binance perp and the reader's
+           broker quotes spot XAUUSD; the basis line already SAYS the levels
+           are the perp's, but saying it does not make them placeable. A
+           perp->spot conversion is one ratio (spot / perp-live) applied to
+           entry, stop and targets alike, which preserves R:R exactly. Fetched
+           BEFORE rendering, bounded to 2.5s, and NaN on any failure — cards
+           then simply omit the extra line rather than waiting or lying. */
+        __og.spotFactor = NaN;
+        try {
+          var sfFn = gfn('hgGoldLiveSpot');
+          var sfFeed = (res.scalp.rows && res.scalp.rows.length)
+                     ? fin(res.scalp.rows[res.scalp.rows.length - 1].c) : NaN;
+          if (sfFn && isFinite(sfFeed) && sfFeed > 0 && !hgOgSrcIsBroker(res.scalp.source)){
+            var sfSpot = await Promise.race([
+              Promise.resolve(sfFn(sfFeed)),
+              new Promise(function(r2){ setTimeout(function(){ r2(NaN); }, 2500); })
+            ]);
+            if (isFinite(sfSpot) && sfSpot > 0) __og.spotFactor = sfSpot / sfFeed;
+          }
+        } catch (eSf){}
         var rankFn = (w && typeof w.hgOmniRank === 'function') ? w.hgOmniRank : function(a){ return a; };
         var all = (res.scalp.cands || []).concat(res.swing.cands || []);
         var ranked = rankFn(all);
