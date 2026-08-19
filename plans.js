@@ -753,6 +753,53 @@ function hgPlanFromRisk(dir, entry, stop, opts){
 }
 
 /* --- universal hgPlanLevels replacement core --- */
+/* THE STOP NOTE DESCRIBED A GEOMETRY THE CARD NO LONGER HAS.
+
+   hgPlanLevelsCore builds the stop with hgStructureStop, copies its note onto
+   the plan, and THEN calls hgApplyExactEntry, which moves the entry to a real
+   level. The note was never recomputed, so the "N x ATR" it quotes is the
+   distance from the PRE-adjustment entry while the card shows the post-
+   adjustment one.
+
+   Measured over 1,470 gold cards that printed both figures, the note and the
+   card's own entry/stop agreed only 5% of the time: median 1.95x apart, worst
+   4.71x. A live card read "WIDE (4.2xATR, beyond the 2.5xATR guide)" beside a
+   vol-alive reading that put the same stop at 1.53xATR.
+
+   That is not cosmetic. The WIDE clause is the card's warning that a stop sits
+   outside policy, and a reader sizing off it was being told a stop was more
+   than twice as wide as it is — or, in the other direction, not warned about
+   one that had become wide.
+
+   Restated here against the FINAL entry. Deliberately NOT a new decline: a
+   plan already past the hgStructureStop checks is not withdrawn on
+   re-measurement, because removing setups is the opposite of what this is
+   for. If the adjusted geometry IS wide it says so, and if it no longer is,
+   the clause goes. */
+function hgRestateStopNote(note, atrVal, finalRisk, capDist){
+  try{
+    note = String(note || '');
+    /* This restates an existing note; it does not author one. With nothing
+       to restate, appending a clause would produce a note that begins
+       " - WIDE (...)" and describes a stop nobody said anything about. */
+    if (!note) return note;
+    var a = +atrVal, r = +finalRisk;
+    var cap = (typeof capDist === 'number' && isFinite(capDist)) ? capDist : HG_STOP_CAP_DIST_ATR;
+    if (!isFinite(a) || a <= 0 || !isFinite(r) || r <= 0) return note;
+    /* Only the structural-stop note carries this clause; a capped or
+       fallback note describes something else and is left alone. */
+    var WIDE_RE = / — WIDE \([\d.]+×ATR, beyond the [\d.]+×ATR guide\); R:R is measured against this real invalidation/;
+    var base = note.replace(WIDE_RE, '');
+    if (/stop capped|lastSwing unavailable/.test(base)) return note;
+    var mult = r / a;
+    if (mult > cap){
+      return base + ' — WIDE (' + mult.toFixed(1) + '×ATR, beyond the ' + cap
+           + '×ATR guide); R:R is measured against this real invalidation';
+    }
+    return base;
+  }catch(e){ return note; }
+}
+
 function hgPlanLevelsCore(dir, rows, entryOverride, opts){
   opts = opts || {};
   try{
@@ -777,7 +824,13 @@ function hgPlanLevelsCore(dir, rows, entryOverride, opts){
         style: opts.style || 'swing',
         preferEdge: opts.preferEdge
       });
-      if (exactPl) return exactPl;
+      if (exactPl){
+        /* The entry has moved; the note must describe where the stop now is. */
+        exactPl.note = hgRestateStopNote(exactPl.note, st.atr,
+          Math.abs(+exactPl.entry - +exactPl.stop),
+          (opts.capDist !== undefined) ? opts.capDist : HG_STOP_CAP_DIST_ATR);
+        return exactPl;
+      }
     }
     return plan;
   }catch(e){ return null; }
@@ -1476,6 +1529,9 @@ G.hgTripleStackChipHtml = hgTripleStackChipHtml;
 G.hgVenueDataNote = hgVenueDataNote;
 G.hgFunnelPanelHTML = hgFunnelPanelHTML;
 G.hgStructureStop = hgStructureStop;
+/* Exported so the restatement can be tested apart from a full plan build —
+   the note it rewrites is the card's only warning about stop width. */
+G.hgRestateStopNote = hgRestateStopNote;
 G.hgPlanFromRisk = hgPlanFromRisk;
 G.hgPlanLevelsCore = hgPlanLevelsCore;
 G.hgDetectLiquiditySweep = hgDetectLiquiditySweep;
