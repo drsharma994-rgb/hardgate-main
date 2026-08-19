@@ -169,9 +169,9 @@ console.log('\n== THE CORRECTION: 27 mechanics change what a sigma is worth ==')
   ok(/clears the \d+-mechanic significance bar/.test(strong.why), 'and says it cleared the bar (' + strong.why.slice(-52) + ')');
 
   /* Precedence is untouched: real out-of-sample evidence still outranks. */
-  const good = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.64, open: 0, expR: 0.6 });
+  const good = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.64, open: 0, expR: 0.6, ticketOnly: { samples: 25, hit: 0.64, open: 0, expR: 0.6 } });
   ok(good.pass === true, 'a good settled forward record still passes on its own merit');
-  const bad = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0, open: 0, expR: -1 });
+  const bad = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0, open: 0, expR: -1, ticketOnly: { samples: 25, hit: 0, open: 0, expR: -1 } });
   ok(bad.pass === false, 'and a bad one still vetoes');
 
   /* A mechanic that has genuinely not paid is still vetoed, not merely

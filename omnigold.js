@@ -1076,17 +1076,39 @@ terse status, and never launches a first-time scan on a global refresh.
       var fHit = fin(fwd.hit);
       var fBreak = 1 / (1 + minRr);
       var fTxt = fN + ' settled out-of-sample · ' + (isFinite(fHit) ? (fHit * 100).toFixed(0) + '%' : '—') + ' T1-first';
-      if (fN >= FWD_MIN_JUDGE && isFinite(fHit)){
-        var fse = Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / fN));
-        var fz = (fHit - fBreak) / fse;
+      /* THE VETO USES THE TICKET-ONLY RECORD. See omniroute: the all-firings
+         figure is what the card reports, because it is the only one
+         comparable with the in-sample pool — but vetoing on it is circular.
+         Most firings are rejected by this very ledger, the rejects are
+         recorded, they lose, and the mechanic is then condemned by trades the
+         desk refused to take. That is what emptied both tabs. */
+      var tix = fwd.ticketOnly;
+      var tN = tix ? fin(tix.samples) : NaN;
+      var tHit = tix ? fin(tix.hit) : NaN;
+      var judgeN = (isFinite(tN) && tN >= FWD_MIN_JUDGE) ? tN : NaN;
+      var judgeHit = isFinite(judgeN) ? tHit : NaN;
+
+      if (isFinite(judgeN) && isFinite(judgeHit)){
+        var fse = Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / judgeN));
+        var fz = (judgeHit - fBreak) / fse;
         var fzTxt = ' [' + (fz >= 0 ? '+' : '') + fz.toFixed(2) + 'σ vs breakeven]';
+        var tixTxt = judgeN + ' settled TICKETS · ' + (judgeHit * 100).toFixed(0) + '% T1-first';
         if (fz <= EDGE_VETO_Z){
           ed = false;
-          edWhy = fTxt + fzTxt + ' — the OUT-OF-SAMPLE record is significantly below breakeven and outranks the in-sample pool';
+          edWhy = tixTxt + fzTxt + ' — the trades this ledger actually cleared have not paid'
+                + (fN > judgeN ? ' (of ' + fN + ' settled firings overall)' : '');
         } else {
           ed = true;
-          edWhy = fTxt + fzTxt + ' — measured out-of-sample';
+          edWhy = tixTxt + fzTxt + ' — measured out-of-sample on cleared setups';
         }
+      } else if (fN >= FWD_MIN_JUDGE && isFinite(fHit)){
+        /* Enough settled FIRINGS to describe, not enough cleared TICKETS to
+           condemn. Report, do not veto. */
+        var az = (fHit - fBreak) / Math.sqrt(Math.max(1e-9, fBreak * (1 - fBreak) / fN));
+        ed = null;
+        edWhy = fTxt + ' [' + (az >= 0 ? '+' : '') + az.toFixed(2) + 'σ vs breakeven]'
+              + ' — but only ' + (isFinite(tN) ? tN : 0) + ' of those were setups this ledger cleared, '
+              + 'too few to judge the mechanic on. Reported, not vetoed.';
       } else if (isFinite(fHit) && isFinite(z) && z > 0 && fHit < fBreak){
         ed = null;
         edWhy = fTxt + ' vs ' + edWhy
@@ -1727,8 +1749,29 @@ terse status, and never launches a first-time scan on a global refresh.
     try{
       var w = W();
       if (!w || typeof w.hgFwdStats !== 'function' || !tab || !mechanic) return null;
-      var f = w.hgFwdStats(tab, mechanic, false);
-      return (f && isFinite(fin(f.samples))) ? f : null;
+      /* TWO records, and they answer different questions.
+
+         'all' is every firing that carried a plan. It is what the in-sample
+         pool measures, so it is the only one comparable with it, and it is
+         what the card reports.
+
+         'ticket' is the subset the ledger actually cleared. That is the only
+         honest basis for a VETO: a mechanic fires, the ledger rejects most of
+         them for reasons of its own — no trend, no participation, wrong
+         regime — those rejects are recorded and they lose, and the mechanic
+         is then condemned by trades this desk refused to take. Judging it
+         that way is circular, and it is what emptied both tabs: every
+         mechanic crossed twenty settled all-firings at zero wins and was
+         vetoed, including on the setups the ledger had cleared.
+
+         ticketOnly cannot be answered from the pruned aggregate, so it is a
+         view of the recent window rather than of all time. That is a reason
+         to require enough of it before acting, not a reason to ignore it. */
+      var all = w.hgFwdStats(tab, mechanic, false);
+      var tix = w.hgFwdStats(tab, mechanic, true);
+      if (!all || !isFinite(fin(all.samples))) return null;
+      all.ticketOnly = (tix && isFinite(fin(tix.samples))) ? tix : null;
+      return all;
     }catch(e){ return null; }
   }
 

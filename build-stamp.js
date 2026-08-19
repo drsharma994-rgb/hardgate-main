@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v372',
-  pack: 'one missing file emptied the whole offline cache, and 52 tabs had no test',
-  built: '2026-08-21T20:15:00Z',
-  note: 'cache.addAll is atomic, so a single 404 among 125 shell files left the offline cache completely empty and install still reported success'
+  version: 'hg-v373',
+  pack: 'both tabs went silent because every mechanic was condemned by trades the ledger refused to take',
+  built: '2026-08-22T02:40:00Z',
+  note: 'measured-edge vetoed on the ALL-FIRINGS forward record; most firings are rejected by the ledger, the rejects lose, and the mechanic is then blocked even on the setups that cleared'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -98,18 +98,29 @@ console.log('\n== THE LIVE CASE: in-sample +σ, out-of-sample 0 of 5 ==');
 
 console.log('\n== a conclusive out-of-sample record outranks in-sample ==');
 {
-  const bad = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0, open: 0, expR: -1 });
-  ok(bad.pass === false, 'a significant out-of-sample shortfall VETOES');
-  ok(/outranked|outranks/.test(bad.why), 'and says the in-sample pool was outranked');
-  ok(/25 settled out-of-sample/.test(bad.why), 'quoting the settled count');
+  /* The veto now reads the TICKET-ONLY record. Judging a mechanic on every
+     firing is circular: most firings are rejected by this ledger, the rejects
+     are recorded, they lose, and the mechanic is condemned by trades the desk
+     refused to take. That is what emptied both tabs. A conclusive record on
+     CLEARED setups still outranks in-sample, which is what this section is
+     about. */
+  const bad = edge({ samples: 41, hit: 0.51, expR: 0.54 },
+    { samples: 25, hit: 0, open: 0, expR: -1, ticketOnly: { samples: 25, hit: 0, open: 0, expR: -1 } });
+  ok(bad.pass === false, 'a significant shortfall on CLEARED tickets VETOES');
+  /* The wording changed with the rule: it now names WHICH record condemned
+     the mechanic, which is more use than saying in-sample was outranked. */
+  ok(/have not paid/.test(bad.why), 'and says the cleared trades have not paid');
+  ok(/25 settled TICKETS/.test(bad.why), 'quoting the count of trades this ledger actually cleared');
 
-  const good = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.64, open: 0, expR: 0.6 });
+  const good = edge({ samples: 41, hit: 0.51, expR: 0.54 },
+    { samples: 25, hit: 0.64, open: 0, expR: 0.6, ticketOnly: { samples: 25, hit: 0.64, open: 0, expR: 0.6 } });
   ok(good.pass === true, 'a good out-of-sample record passes');
   ok(/measured out-of-sample/.test(good.why), 'and is labelled as measured out-of-sample');
   ok(!/in-sample 41/.test(good.why), 'the in-sample number is no longer the headline once real evidence exists');
 
   /* A conclusive forward record beats a NEGATIVE in-sample read too. */
-  const rescue = edge({ samples: 41, hit: 0.20, expR: -0.5 }, { samples: 25, hit: 0.64, open: 0, expR: 0.6 });
+  const rescue = edge({ samples: 41, hit: 0.20, expR: -0.5 },
+    { samples: 25, hit: 0.64, open: 0, expR: 0.6, ticketOnly: { samples: 25, hit: 0.64, open: 0, expR: 0.6 } });
   ok(rescue.pass === true, 'and it works in the other direction: good forward beats bad in-sample');
 }
 
@@ -135,9 +146,13 @@ console.log('\n== the breakeven basis follows the desk, not a module default =='
 {
   /* OMNIGOLD scalp runs a 1.5R floor: breakeven 40%, not the 33% of a 2R
      desk. Judging a 1.5R mechanic against 33% overstates its significance. */
-  const at40 = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.40, open: 0, expR: 0 }, 1.5);
+  /* ticketOnly supplied, because the veto judges cleared trades now. */
+  const tix40 = { samples: 25, hit: 0.40, open: 0, expR: 0 };
+  const at40 = edge({ samples: 41, hit: 0.51, expR: 0.54 },
+    { samples: 25, hit: 0.40, open: 0, expR: 0, ticketOnly: tix40 }, 1.5);
   ok(at40.pass === true, 'a 1.5R mechanic sitting exactly on its 40% breakeven is not vetoed');
-  const at40on2R = edge({ samples: 41, hit: 0.51, expR: 0.54 }, { samples: 25, hit: 0.40, open: 0, expR: 0 }, 2);
+  const at40on2R = edge({ samples: 41, hit: 0.51, expR: 0.54 },
+    { samples: 25, hit: 0.40, open: 0, expR: 0, ticketOnly: tix40 }, 2);
   ok(at40on2R.pass === true, 'and on a 2R desk 40% is comfortably above its 33% breakeven');
   const src = fs.readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8');
   ok(/var edMinRr = isFinite\(fin\(x\.minRr\)\)/.test(src), 'the gate reads the desk R floor when supplied');

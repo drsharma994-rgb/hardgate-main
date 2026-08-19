@@ -210,9 +210,9 @@ console.log('\n== THE SIGNIFICANCE BAR: six mechanics, not one ==');
   ok(/clears the \d+-mechanic significance bar/.test(strong.why), 'and says it cleared it');
 
   /* Out-of-sample precedence is untouched. */
-  const good = edge({ samples: 41, hit: 0.46, expR: 0.1 }, { samples: 25, hit: 0.60, open: 0, expR: 0.6 });
+  const good = edge({ samples: 41, hit: 0.46, expR: 0.1 }, { samples: 25, hit: 0.60, open: 0, expR: 0.6, ticketOnly: { samples: 25, hit: 0.60, open: 0, expR: 0.6 } });
   ok(good.pass === true, 'a settled forward record still passes on its own merit');
-  const bad = edge({ samples: 41, hit: 0.46, expR: 0.1 }, { samples: 25, hit: 0, open: 0, expR: -1 });
+  const bad = edge({ samples: 41, hit: 0.46, expR: 0.1 }, { samples: 25, hit: 0, open: 0, expR: -1, ticketOnly: { samples: 25, hit: 0, open: 0, expR: -1 } });
   ok(bad.pass === false, 'and a bad one still vetoes');
   const dead = edge({ samples: 400, hit: 0.20, expR: -0.5 }, null);
   ok(dead.pass === false, 'a significantly-below-breakeven pool still VETOES rather than going unchecked');
