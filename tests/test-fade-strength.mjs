@@ -18,7 +18,7 @@
    cleared anyway.
 
    V376 WIDENED THAT HOLE, AND IT WAS MY CHANGE. Before it, VWAP-REVERT,
-   POC-REVERT, RSI-DIVERGE and AVWAP-RECLAIM were classed as continuation and
+   POC-REVERT and RSI-DIVERGE were classed as continuation and
    WERE vetoed by trend and htf-daily. Reclassifying them as reversion was
    correct — the trend gate's own comment says vetoing a fade for being
    counter-trend is a category error, and it is — but it handed those four a
@@ -98,7 +98,12 @@ const gate = (rows, dir, kind, htf) =>
   W.hgOgGates(rows, { dir: dir, kind: kind, mech: kind }, htf ? { htf: htf } : {})
    .filter(g => g && g.key === 'fade-strength')[0];
 
-const REVERSION = ['POC-REVERT','VWAP-REVERT','ADR-FADE','SPRING','RSI-DIVERGE','AVWAP-RECLAIM'];
+/* AVWAP-RECLAIM is NOT here. It reclaims a swing-low VWAP long and loses a
+   swing-high VWAP short — it trades WITH the cross both ways, which is
+   continuation. Classing it reversion exempted it from every trend gate and
+   produced a live TICKET whose own gates described a long as fading the move
+   it was buying. See test-avwap-reclaim-family.mjs. */
+const REVERSION = ['POC-REVERT','VWAP-REVERT','ADR-FADE','SPRING','RSI-DIVERGE'];
 const CONTINUATION = ['ORB','MMOVE','PO3','BOS-RETEST','NR7-BREAK'];
 
 console.log('== the tapes are what they claim to be ==');

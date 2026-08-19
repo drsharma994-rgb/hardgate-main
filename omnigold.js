@@ -745,7 +745,21 @@ terse status, and never launches a first-time scan on a global refresh.
     'BOS-RETEST':'TREND', 'LONDON-FIX':'TREND',
     /* price is stretched and this fades it */
     'VWAP-REVERT':'REVERSION', 'ADR-FADE':'REVERSION', 'VALUE':'REVERSION',
-    'ABSORB':'REVERSION', 'RSI-DIVERGE':'REVERSION', 'AVWAP-RECLAIM':'REVERSION',
+    'ABSORB':'REVERSION', 'RSI-DIVERGE':'REVERSION',
+    /* AVWAP-RECLAIM IS NOT A FADE, AND CALLING IT ONE BROKE A LIVE CARD.
+         The detector fires LONG when price crosses UP through the VWAP anchored
+         to a swing LOW, and SHORT when it crosses DOWN through one anchored to a
+         swing HIGH. Both trade WITH the cross: an up-move resuming after a
+         pullback, or a down-move resuming. That is continuation.
+         Classed REVERSION, it was exempted from every trend gate, and a live
+         gold TICKET came out reading "above the upper Keltner band - the stretch
+         a reversion mechanic is fading" on a LONG that was buying that stretch,
+         with stoch RSI 100 and the 20-bar range broken above. Six gates
+         describing a long as a fade of the move it was joining.
+         Every other REVERSION member genuinely fades: VWAP-REVERT, POC-REVERT,
+         ADR-FADE, VALUE, ABSORB and RSI-DIVERGE all trade against a stretch.
+         This one was alone in being wrong. */
+    'AVWAP-RECLAIM':'TREND',
     /* an unfilled inefficiency */
     'FVG-FILL':'IMBALANCE',
     /* round four */

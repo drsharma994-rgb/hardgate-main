@@ -27,7 +27,7 @@
    omnigold.js and they disagreed: REVERSION_KINDS (a seven-name literal
    written before rounds two, three and four added their detectors), a private
    regex inside hurst-regime, and OG_FAMILY. So VWAP-REVERT, POC-REVERT,
-   RSI-DIVERGE and AVWAP-RECLAIM — mechanics whose whole job is fading a move
+   and RSI-DIVERGE — mechanics whose whole job is fading a move
    — were judged as continuation trades and vetoed by htf-daily and trend for
    disagreeing with the higher timeframe, which is the condition a fade
    REQUIRES.
@@ -190,7 +190,12 @@ console.log('\n== ONE definition of reversion, and the three gates now agree =='
 
   /* The four mechanics that were misjudged. */
   const rows = goldTape(600, 10, 1.2, 29);
-  for (const kind of ['POC-REVERT', 'VWAP-REVERT', 'RSI-DIVERGE', 'AVWAP-RECLAIM']){
+  /* AVWAP-RECLAIM was in this list and should never have been: it reclaims a
+     swing-low VWAP long and loses a swing-high VWAP short, trading WITH the
+     cross both ways. Exempting it from the trend gates produced a live TICKET
+     whose own gates called a long a fade of the move it was buying. It is
+     classed TREND now — see test-avwap-reclaim-family.mjs. */
+  for (const kind of ['POC-REVERT', 'VWAP-REVERT', 'RSI-DIVERGE']){
     /* Daily stack UP, setup SHORT: the higher timeframe disagrees, which is
        exactly the condition a fade requires. */
     const g = W.hgOgGates(rows, { dir: 'short', kind: kind, mech: kind },
