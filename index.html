@@ -192,8 +192,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=380"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=380"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=381"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=381"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -720,8 +720,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=380"></script>
-<script src="./hg-gates.js?v=380"></script>
+<script src="hg-mechanics.js?v=381"></script>
+<script src="./hg-gates.js?v=381"></script>
 <script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
@@ -768,14 +768,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=380"></script>
+<script src="supersetup.js?v=381"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=380"></script>
-<script src="super-gold.js?v=380"></script>
-<script src="super-best.js?v=380"></script>
-<script src="super-sniper.js?v=380"></script>
-<script src="super-book.js?v=380"></script>
-<script src="super-calibrate.js?v=380"></script>
+<script src="super-desk-common.js?v=381"></script>
+<script src="super-gold.js?v=381"></script>
+<script src="super-best.js?v=381"></script>
+<script src="super-sniper.js?v=381"></script>
+<script src="super-book.js?v=381"></script>
+<script src="super-calibrate.js?v=381"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3603,13 +3603,36 @@ function hgPlanLevels(dir, rows, entryOverride, opts){
       risk = 1.5*a;
       note = 'ATR stop (swing too tight)';
     }
-    if (risk > 2.5*a){
-      stop = dir==='long' ? entry-1.5*a : entry+1.5*a;
-      risk = 1.5*a;
-      note = 'stop capped at 1.5×ATR (structure too far)';
+    /* DO NOT TIGHTEN A FAR STOP. This used to move the stop in to a flat
+       1.5xATR and take the trade anyway. plans.js removed exactly that from
+       hgStructureStop and named it: measured on gold-shaped 1h data it fired
+       on 65% of setups, landed the stop 53% closer than the level that would
+       actually invalidate the idea, and - because R:R is computed against the
+       risk distance - advertised 2.00R for a trade worth 0.96R. "That is the
+       one wrong answer available here."
+
+       It was fixed there and left here, in the fallback every caller lands on
+       when plans.js has not loaded. The honest responses are the same two:
+       keep the structural stop and let the R:R gate judge it on true risk, or
+       decline. 6xATR mirrors HG_STOP_MAX_DIST_ATR, hardcoded because this
+       path exists precisely for when plans.js is absent. */
+    if (risk > 6*a){
+      return null;
     }
-    const t1 = dir==='long' ? entry+2*risk : entry-2*risk;
-    const t2 = dir==='long' ? entry+3.5*risk : entry-3.5*risk;
+    if (risk > 2.5*a){
+      note = 'stop: lastSwing(30) - WIDE (' + (risk/a).toFixed(1) + '×ATR, beyond the 2.5×ATR guide);'
+           + ' R:R is measured against this real invalidation';
+    }
+    /* HONOUR THE CALLER'S R FLOOR. The wrapper above forwards opts to
+       hgPlanLevelsCore precisely because "every caller that passed one -
+       OMNIGOLD passes { minRr: cfg.minRr } - had it silently dropped and got
+       a hardcoded 2R policy". This fallback four lines below it went on
+       hardcoding 2R, so a gold SCALP setup on a 1.5R floor was handed 2R
+       targets while measured-edge judged it against the 1.5R breakeven of
+       40% rather than 2R's 33.3%. T2 keeps its original 1.75x ratio to T1. */
+    const rMul = (opts && isFinite(+opts.minRr) && +opts.minRr > 0) ? +opts.minRr : 2;
+    const t1 = dir==='long' ? entry+rMul*risk : entry-rMul*risk;
+    const t2 = dir==='long' ? entry+rMul*1.75*risk : entry-rMul*1.75*risk;
     var plFallback = { dir:dir, entry:entry, stop:stop, t1:t1, t2:t2, risk:risk, note:note, type:'SWING' };
     return applyExactEntry(plFallback, rows, { poiLevel: entryOverride, style: 'swing', preferEdge: true });
   }catch(e){ return null; }

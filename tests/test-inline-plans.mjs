@@ -2,7 +2,8 @@
    Two layers, same vm harness as test-tabs.mjs (stub DOM + dead fetch):
      A. pure decision/markup functions from index.html —
         hgPlanLevels (universal fallback plan: entry = last close or the card's
-        own trigger, stop = lastSwing(30) or 1.5×ATR against dir, T1 = 2R,
+        own trigger, stop = lastSwing(30) or 1.5×ATR against dir, T1 = the
+        CALLER'S R floor and not a hardcoded 2R — see test-plan-fallback.mjs,
         T2 = 3.5R) and planBlock (oiflow/smartCardHTML-style plan line with
         honest 'levels unavailable — size down' degrade);
      B. render paths — the 7 inline scans (scalp, coil, apex, trap, smc, ob,
