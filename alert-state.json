@@ -5,52 +5,25 @@
   "lastRunAt": "2026-08-18T07:40:49.604Z",
   "ticket": {
     "long": {
-      "sym": "B-EDEN_USDT",
-      "entry": 0.05063228684673623
+      "sym": "B-PUMP_USDT",
+      "entry": 0.002861802564400886
     },
     "short": null
   },
   "sniper": {
-    "key": "B-LA_USDT@0.05442;B-PRL_USDT@0.4339;B-PUMP_USDT@0.003007;B-SOL_USDT@76.71224679380198",
+    "key": "B-VVV_USDT@13.626",
     "hits": [
       {
-        "sym": "B-PUMP_USDT",
+        "sym": "B-VVV_USDT",
         "dir": "long",
-        "entry": 0.003007,
-        "stop": 0.0029551537244532095,
-        "t1": 0.003128,
-        "lev": 32,
+        "entry": 13.626,
+        "stop": 13.408532266259076,
+        "t1": 14.143,
+        "lev": 34,
         "state": "IN ZONE"
-      },
-      {
-        "sym": "B-PRL_USDT",
-        "dir": "long",
-        "entry": 0.4339,
-        "stop": 0.4240560607764258,
-        "t1": 0.4571,
-        "lev": 25,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-LA_USDT",
-        "dir": "long",
-        "entry": 0.05442,
-        "stop": 0.053100656548949195,
-        "t1": 0.0596,
-        "lev": 24,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-SOL_USDT",
-        "dir": "long",
-        "entry": 76.71224679380198,
-        "stop": 76.44786861428817,
-        "t1": 77.21,
-        "lev": 98,
-        "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-19T05:03:35.031Z"
+    "at": "2026-08-19T05:47:57.791Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -295,17 +268,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-19T05:03:35.031Z"
+    "at": "2026-08-19T05:47:57.792Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-19T05:03:35.031Z"
+    "at": "2026-08-19T05:47:57.792Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
+  "engineAlertAt": "2026-08-19T05:47:57.792Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -320,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-19T05:03:35.345Z"
+    "at": "2026-08-19T05:47:58.405Z"
   },
   "bookFill": {
     "key": "u0|p0",
