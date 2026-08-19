@@ -2436,6 +2436,16 @@ terse status, and never launches a first-time scan on a global refresh.
        The forward log lives in localStorage, so it can only be read in the
        browser that produced it. Asking someone to paste a twenty-line
        snippet to see their own results is a way of not showing them. */
+    /* Same diagnosis for the gold desk. The helper lives in omniroute, which
+       loads first and which this tab already borrows its grader from. */
+    window.hgOgWhyNoTickets = function(){
+      var w = W();
+      if (!w || typeof w.hgWhyNoTicketsFrom !== 'function'){
+        return 'omniroute.js is not loaded — the shared diagnostic is unavailable.';
+      }
+      return w.hgWhyNoTicketsFrom(__og.snap && __og.snap.rows, 'OMNIGOLD');
+    };
+
     window.hgOgReport = function hgOgReport(){
       var sf = gfn('hgFwdStats'), pf = gfn('hgFwdPool');
       if (!sf || !pf) return 'hg-forward.js is not loaded — no record to read.';

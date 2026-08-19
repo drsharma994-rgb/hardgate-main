@@ -2613,6 +2613,83 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     setTimeout(step, 0);
   }
 
+
+  /* WHY ARE THERE NO TICKETS?
+
+     A scan can report "230 setups, 0 tickets" and give no way to find out
+     which gate is responsible. Every card carries its own ledger, but reading
+     fifty cards to spot the common veto is not a diagnosis, it is a chore —
+     and it is exactly the question that matters when the tab goes quiet.
+
+     This reads the LAST SCAN already held in memory and tallies it: which
+     gates vetoed, how often, and the reason each one gave most frequently.
+     No refetch, no recompute — it is reporting on work already done.
+
+     Deliberately blunt about the difference between "vetoed" and "could not
+     be evaluated". A gate that never ran is not the reason a ticket failed,
+     and conflating the two sends you chasing the wrong thing. */
+  function hgWhyNoTicketsFrom(rows, label){
+    if (!rows || !rows.length){
+      return label + ': no scan in memory — run a scan first, then ask again.';
+    }
+    var vetoes = {}, whys = {}, unchecked = {}, tickets = 0, i, j, g, c;
+    for (i = 0; i < rows.length; i++){
+      c = rows[i];
+      if (c && c.grade && c.grade.ticket) tickets++;
+      if (!c || !c.gates) continue;
+      for (j = 0; j < c.gates.length; j++){
+        g = c.gates[j];
+        if (!g) continue;
+        if (g.pass === false && g.info !== true){
+          vetoes[g.key] = (vetoes[g.key] || 0) + 1;
+          if (!whys[g.key]) whys[g.key] = {};
+          var w = String(g.why || '').slice(0, 90);
+          whys[g.key][w] = (whys[g.key][w] || 0) + 1;
+        } else if (g.pass === null && g.hard === true){
+          /* hard + UNCHECKED also blocks a ticket, and is a DATA problem
+             rather than a judgement — worth separating. */
+          unchecked[g.key] = (unchecked[g.key] || 0) + 1;
+        }
+      }
+    }
+    var out = [];
+    out.push('=== ' + label + ' ===');
+    out.push('  candidates : ' + rows.length);
+    out.push('  TICKETS    : ' + tickets);
+    if (tickets === rows.length){
+      out.push('  everything cleared — nothing to explain.');
+      return out.join('\n');
+    }
+    var order = Object.keys(vetoes).sort(function(a, b){ return vetoes[b] - vetoes[a]; });
+    if (!order.length){
+      out.push('  no gate vetoed anything.');
+    } else {
+      out.push('');
+      out.push('  VETOED BY (a single veto is enough to stop a ticket):');
+      for (i = 0; i < order.length; i++){
+        var k = order[i], n = vetoes[k];
+        out.push('    ' + (k + '                    ').slice(0, 20)
+               + String(n).padStart(4) + '  (' + (n / rows.length * 100).toFixed(0) + '% of candidates)');
+        /* The reason it gave most often — that is the actual diagnosis. */
+        var ws = Object.keys(whys[k]).sort(function(a, b){ return whys[k][b] - whys[k][a]; });
+        if (ws.length) out.push('        most often: ' + ws[0]);
+      }
+    }
+    var uOrder = Object.keys(unchecked).sort(function(a, b){ return unchecked[b] - unchecked[a]; });
+    if (uOrder.length){
+      out.push('');
+      out.push('  HARD GATES THAT COULD NOT BE EVALUATED (a data problem, not a judgement):');
+      for (i = 0; i < uOrder.length; i++){
+        out.push('    ' + (uOrder[i] + '                    ').slice(0, 20)
+               + String(unchecked[uOrder[i]]).padStart(4));
+      }
+    }
+    out.push('');
+    out.push('  A candidate needs EVERY veto-capable gate to pass. Fix the gate at the');
+    out.push('  top of that list first: it is blocking the most setups.');
+    return out.join('\n');
+  }
+
   /* ==================== the scan ==================== */
 
   function omniSleep(ms){
@@ -3260,6 +3337,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* The grid is exported so the sweep can be measured directly — it is the
        one piece here that answers a question about the STRATEGY rather than
        about a setup, and it deserves its own test. */
+    window.hgWhyNoTicketsFrom = hgWhyNoTicketsFrom;   /* omnigold borrows it */
+    window.hgOmniWhyNoTickets = function(){
+      return hgWhyNoTicketsFrom(__omni.snap && __omni.snap.rows, 'OMNIROUTE');
+    };
     window.hgOmniGridRun   = hgOmniGridRun;
     window.hgOmniGridHTML  = hgOmniGridHTML;
     window.hgOmniGridProgressive = hgOmniGridProgressive;
