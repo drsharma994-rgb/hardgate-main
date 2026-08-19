@@ -22,7 +22,8 @@ feature-checked, every network call is async with an AbortController timeout,
 and every panel degrades independently of the others.
 
 Exports (and ONLY these): window.goldProVerdict (pure classifier, unit-tested),
-window.goldProPlan (pure execution-levels builder, unit-tested), plus the
+window.goldProPlan (pure execution-levels builder, unit-tested),
+window.goldProClosed (closed-bars sanitiser, unit-tested), plus the
 window.HG_tabs registration below.
 
 Hard refresh (index.html hardRefreshAll): the registration carries refresh()
@@ -255,6 +256,30 @@ function lastCrossIdx(boolArr){
   for (var i = boolArr.length - 1; i > 0; i--){ if (boolArr[i]) return i; }
   return -1;
 }
+/* CLOSED CANDLES ONLY — the convention every measuring desk in this app holds,
+   and this tab did not. Its 4H EMA20/50/100 cascade, ATR and swing — the
+   things that DECIDE whether a setup exists and where its stop goes — were
+   computed on rows that still contained the forming candle. A cascade read at
+   14:05 can flip by the 16:00 close: the setup repaints, and "the tab shows a
+   setup that later was not there" is exactly the complaint that produces. The
+   daily structure reads (EMA50/200 side, crosses) had the same flaw at daily
+   scale.
+
+   The forming close is kept apart as the LIVE price: it is the right number
+   for the entry and for the dead-on-arrival check, and the wrong number for
+   every indicator. Same split the OMNI desks use. */
+function goldProClosed(rows, tf){
+  try{
+    if (typeof window !== 'undefined' && typeof window.hgOmniDropForming === 'function'){
+      return window.hgOmniDropForming(rows, tf);
+    }
+    var sec = { '4h': 14400, '1d': 86400 }[tf];
+    if (!rows || !rows.length || !sec) return rows || [];
+    var now = Math.floor(Date.now() / 1000);
+    return (now - rows[rows.length - 1].t < sec) ? rows.slice(0, -1) : rows;
+  }catch(e){ return rows || []; }
+}
+
 function structureState(rows1d, rows4h){
   var st = { ok: false, above200: null, distPct: null, crossState: null, crossAgo: null,
              cascade: 'N/A', lastClose: NaN, e50: NaN, e200: NaN };
@@ -541,7 +566,9 @@ async function runGoldPro(ui){
     setP(ui, 0.85);
     setNote(ui, 'rendering…');
 
-    var st = structureState(g1d.rows, g4h.rows);
+    /* Structure is judged on CLOSED bars only — a forming daily candle can
+       put price on the other side of the 50/200 for hours of the day. */
+    var st = structureState(goldProClosed(g1d.rows, '1d'), goldProClosed(g4h.rows, '4h'));
     try{ window.__hgGoldCot = cot; }catch(eCot){}
     var verdict = goldProVerdict({
       goldAbove200: st.above200,
@@ -586,6 +613,9 @@ async function runGoldPro(ui){
       if (!lvRows || !lvRows.length){
         lvReason = 'levels unavailable — no 4H gold candles from any source (getCandles XAUUSDT/PAXGUSDT, gold chain).';
       } else {
+        /* Live price first, then close the series for every indicator. */
+        var lvLive = +lvRows[lvRows.length - 1].c;
+        lvRows = goldProClosed(lvRows, '4h');
         lvRowsN = lvRows.length;
         var lc = lvRows.map(function(r){ return r.c; });
         var lm = lc.length - 1;
@@ -603,7 +633,24 @@ async function runGoldPro(ui){
           lvReason = 'levels unavailable — ATR(14) is not computable on the 4H gold series.';
         } else {
           var lswing = (typeof lastSwing === 'function') ? lastSwing(lvRows, lvCascade, 30) : NaN;
-          lvPlan = goldProPlan({ dir: lvCascade, entry: lclose, atr: la4, swing: lswing });
+          /* Entry at the LIVE price — the closed-bar close can sit hours and
+             many points behind a moving market, and a card priced there is
+             the dead-levels defect this app has already paid for twice. The
+             stop stays on closed-bar structure: invalidation is structure,
+             not the old close. */
+          var lvEntry = (isFinite(lvLive) && lvLive > 0) ? lvLive : lclose;
+          lvPlan = goldProPlan({ dir: lvCascade, entry: lvEntry, atr: la4, swing: lswing });
+          /* DEAD ON ARRIVAL: if the market has already crossed the structural
+             stop, there is no trade — say so instead of drawing one. */
+          if (lvPlan && isFinite(lvLive)){
+            var lvDead = (lvCascade === 'long') ? (lvLive <= +lvPlan.stop) : (lvLive >= +lvPlan.stop);
+            if (lvDead){
+              lvReason = 'levels dead on arrival — the market (' + lvLive.toFixed(2)
+                       + ') is already beyond the structural stop (' + (+lvPlan.stop).toFixed(2)
+                       + '); no ' + lvCascade.toUpperCase() + ' setup exists at current price.';
+              lvPlan = null;
+            }
+          }
           if (!lvPlan){
             lvReason = 'levels unavailable — degenerate 4H inputs.';
           } else if (typeof goldSetupDecision === 'function' && typeof rsi === 'function'){
@@ -754,6 +801,9 @@ function mount(el){
 
 if (typeof window !== 'undefined'){
   window.goldProVerdict = goldProVerdict;
+  /* Exported so the closed-bars split is testable — the vacuity guard caught
+     the first version of its test silently skipping when this was local. */
+  window.goldProClosed = goldProClosed;
   window.goldProPlan = goldProPlan;
   window.goldProState = function(){
     try{ return window.__hgGoldProVerdict || null; }catch(e){ return null; }
