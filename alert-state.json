@@ -6,42 +6,51 @@
   "ticket": {
     "long": {
       "sym": "B-1000RATS_USDT",
-      "entry": 0.042487503006670396
+      "entry": 0.04258386664303403
     },
     "short": null
   },
   "sniper": {
-    "key": "B-PUMP_USDT@0.0030006719740790157;B-SOL_USDT@76.69;B-VVV_USDT@13.626",
+    "key": "B-KAITO_USDT@0.3417394232035422;B-PUMP_USDT@0.0030016110258974994;B-SOL_USDT@76.69;SOXSUSDT@44.602734098784595",
     "hits": [
       {
         "sym": "B-PUMP_USDT",
         "dir": "long",
-        "entry": 0.0030006719740790157,
-        "stop": 0.002956014800337227,
+        "entry": 0.0030016110258974994,
+        "stop": 0.002958644491840505,
         "t1": 0.003128,
-        "lev": 36,
+        "lev": 37,
         "state": "IN ZONE"
-      },
-      {
-        "sym": "B-VVV_USDT",
-        "dir": "long",
-        "entry": 13.626,
-        "stop": 13.407924858418957,
-        "t1": 14.143,
-        "lev": 34,
-        "state": "APPROACHING"
       },
       {
         "sym": "B-SOL_USDT",
         "dir": "long",
         "entry": 76.69,
-        "stop": 76.41055261907273,
+        "stop": 76.40854873267082,
         "t1": 77.21,
         "lev": 95,
+        "state": "APPROACHING"
+      },
+      {
+        "sym": "SOXSUSDT",
+        "dir": "long",
+        "entry": 44.602734098784595,
+        "stop": 43.97111616771649,
+        "t1": 45.65,
+        "lev": 38,
         "state": "IN ZONE"
+      },
+      {
+        "sym": "B-KAITO_USDT",
+        "dir": "long",
+        "entry": 0.3417394232035422,
+        "stop": 0.336215345095421,
+        "t1": 0.3503,
+        "lev": 34,
+        "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-19T02:45:37.570Z"
+    "at": "2026-08-19T03:33:15.835Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -286,17 +295,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-19T02:45:37.571Z"
+    "at": "2026-08-19T03:33:15.836Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-19T02:45:37.571Z"
+    "at": "2026-08-19T03:33:15.836Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
+  "engineAlertAt": "2026-08-19T03:33:15.836Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -311,7 +321,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-19T02:45:37.865Z"
+    "at": "2026-08-19T03:33:16.550Z"
   },
   "bookFill": {
     "key": "u0|p0",
