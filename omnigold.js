@@ -2188,10 +2188,17 @@ terse status, and never launches a first-time scan on a global refresh.
       /* Same shared verdict helper omniroute's table uses, so the two
          cannot drift apart in wording or in threshold. */
       var rd = (W() && typeof W().hgOmniPoolRead === 'function')
-             ? W().hgOmniPoolRead(p, minRr, MIN_SAMPLES)
+             /* Gold scans 34 mechanics, so its bar is its own — passing none
+                would judge a gold row against the crypto count. */
+             ? W().hgOmniPoolRead(p, minRr, MIN_SAMPLES, hgOgFamilyZ(OG_MECHANICS.length))
              : { z: NaN, read: 'engine unavailable', need: null, cls: '' };
       var z = rd.z, read = rd.read, cls = rd.cls;
-      var needTxt = rd.need ? (' <span class="dim">(needs ~' + rd.need + ')</span>') : '';
+      /* Shared with omniroute, which already refuses to print a sample size
+         nobody can act on. Raising the bar to the family-wise threshold made
+         those numbers 2.2x larger, so the guard matters more, not less. */
+      var needTxt = (W() && typeof W().hgOmniNeedText === 'function')
+                  ? W().hgOmniNeedText(rd.need)
+                  : (rd.need ? (' <span class="dim">(needs ~' + rd.need + ')</span>') : '');
       h += '<tr><td><b>' + k + '</b></td><td>' + p.samples + needTxt + '</td><td>' + (p.hit * 100).toFixed(0) + '%</td>'
         +  '<td>' + (p.expR >= 0 ? '+' : '') + p.expR.toFixed(2) + 'R</td>'
         +  '<td>' + (z >= 0 ? '+' : '') + z.toFixed(2) + 'σ</td>'
@@ -2438,6 +2445,9 @@ terse status, and never launches a first-time scan on a global refresh.
                             })()
                           + '<div class="note">Walk-forward on the same bars just read, per horizon and never merged — a mechanic that pays on 4h need not pay on 1h. '
                           + 'A bar spanning both stop and target counts as a STOP. In-sample on a short window; under ' + MIN_SAMPLES + ' samples is noise. '
+                          + '"needs ~N" is the sample this mechanic would take to clear the '
+                          + OG_MECHANICS.length + '-mechanic significance bar (+' + hgOgFamilyZ(OG_MECHANICS.length).toFixed(2) + '&sigma;), '
+                          + 'which is the same bar the measured-edge gate uses — not a lone 5% threshold. '
                           + '<b>Every figure above is GROSS of spread and commission.</b> That matters most intraday: at an assumed $'
                           + ASSUMED_SPREAD_USD.toFixed(2) + ' gold spread, a $3 scalp stop gives up ~20% of 1R round-trip, so a +0.38R gross read is nearer +0.19R net. '
                           + 'The per-card <b>cost-drag</b> gate prices this against each setup’s own stop.</div>';

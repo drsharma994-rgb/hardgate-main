@@ -498,10 +498,28 @@ for (const [name, mk, gateKey] of fields){
   ok(r(0, 0).read === 'never fired', 'a mechanic that never fired says so');
   ok(win.hgOmniPoolRead(null, 1.5, 20).read === 'never fired', 'the helper is null-safe');
 
-  /* the thresholds must mirror each other exactly */
+  /* THE TWO SIDES ARE NOT SYMMETRIC, AND MUST NOT BE.
+
+     This used to assert "exactly +2 sigma passes" against a hard-coded +2.00,
+     and that PASS was the defect: the measured-edge gate credits a mechanic
+     only at the FAMILY-WISE bar (+2.89 sigma across 27 crypto mechanics), so
+     a row between +2.00 and +2.89 was printed green as "has paid" in the
+     summary while the ledger refused to credit it on the card.
+
+     The negative side keeps its -2 sigma bar, and that asymmetry is correct
+     rather than an oversight. Reporting whichever of 27 mechanics looks BEST
+     is a search, so a positive claim must clear the multiple-comparisons
+     correction. Noticing that one specific mechanic is losing is not a
+     search, so it does not. */
   const se = Math.sqrt(0.4 * 0.6 / 100);
-  ok(r(100, 0.40 + 2*se).read === 'has paid',     'exactly +2 sigma passes');
-  ok(r(100, 0.40 - 2*se).read === 'has not paid', 'exactly -2 sigma fails — same bar in both directions');
+  const BAR = win.hgOmniFamilyZ(27);
+  ok(BAR > 2.8 && BAR < 3.0, 'the family-wise bar is +' + BAR.toFixed(2) + ' sigma, not +2.00');
+  ok(r(100, 0.40 + 2*se).read === 'within noise',
+     'exactly +2 sigma is NOT "has paid" — it does not clear the 27-mechanic bar');
+  ok(r(100, 0.40 + (BAR + 0.05)*se).read === 'has paid',
+     'clearing the family-wise bar does earn it');
+  ok(r(100, 0.40 - 2*se).read === 'has not paid',
+     'exactly -2 sigma still fails — a loss is not a search, so it needs no correction');
 
   /* "needs ~N" answers what a noise row would take to settle */
   const orb = r(27, 0.48);

@@ -2419,25 +2419,49 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return ' <span class="dim">(needs ~' + need + ')</span>';
   }
 
-  function hgOmniPoolRead(p, minRr, minSamples){
-    if (!p || !p.samples) return { z: NaN, read: 'never fired', need: null, cls: '' };
+  /* THE TABLE AND THE GATE JUDGED THE SAME NUMBER AGAINST DIFFERENT BARS.
+
+     This table said "has paid" at +2.00 sigma. The measured-edge gate credits
+     a mechanic only at the FAMILY-WISE bar — +2.89 sigma across 27 crypto
+     mechanics, +2.97 across 34 gold ones — and says so on the card: "34
+     mechanics scanned, so +2.97 sigma is the bar before one this good means
+     anything". So a mechanic between those two thresholds was printed in
+     green as PAID in the summary the reader looks at first, while the ledger
+     refused to credit it. That is the same contradiction fixed in v377 for
+     the negative direction (the table read "has not paid" while the gate
+     printed PASS); this is its mirror image, left behind.
+
+     Worse, the "needs ~N" column solved for z = 2. The formula is
+     n = z^2 * p(1-p) / edge^2, so aiming at 2.00 instead of 2.97 understates
+     the sample by 2.2x. A live gold row read "AVWAP-RECLAIM 29 samples (needs
+     ~42)" when the ledger will not credit it before ~94 — the column was
+     coaching the reader toward a bar this desk does not accept.
+
+     Both now take the same bar the gate uses. A desk that does not supply one
+     gets the family-wise bar rather than the lone 5% threshold, because
+     reporting whichever of N mechanics looks best and then judging it at
+     +2 sigma is precisely the multiple-comparisons error this whole design
+     exists to prevent. */
+  function hgOmniPoolRead(p, minRr, minSamples, barZ){
+    if (!p || !p.samples) return { z: NaN, read: 'never fired', need: null, cls: '', bar: NaN };
     var rr = isFinite(+minRr) ? +minRr : MIN_RR;
     var thin = p.samples < (isFinite(+minSamples) ? +minSamples : MIN_SAMPLES);
+    var bar = (isFinite(+barZ) && +barZ > 0) ? +barZ : hgOmniFamilyZ(OMNI_ALL_MECHANICS.length);
     var pBreak = 1 / (1 + rr);
     var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, p.samples));
     var z = se > 0 ? ((p.hit - pBreak) / se) : 0;
     var read = thin ? 'too few to judge'
-             : (z >= 2 ? 'has paid' : (z <= EDGE_VETO_Z ? 'has not paid' : 'within noise'));
-    var cls = thin ? '' : (z >= 2 ? 'ok' : (z <= EDGE_VETO_Z ? 'bad' : ''));
+             : (z >= bar ? 'has paid' : (z <= EDGE_VETO_Z ? 'has not paid' : 'within noise'));
+    var cls = thin ? '' : (z >= bar ? 'ok' : (z <= EDGE_VETO_Z ? 'bad' : ''));
     var need = null;
-    if (!thin && z > 0 && z < 2){
+    if (!thin && z > 0 && z < bar){
       var edge = p.hit - pBreak;
       if (edge > 0){
-        var n = Math.ceil(4 * pBreak * (1 - pBreak) / (edge * edge));
+        var n = Math.ceil(bar * bar * pBreak * (1 - pBreak) / (edge * edge));
         if (isFinite(n) && n > p.samples) need = n;
       }
     }
-    return { z: z, read: read, need: need, cls: cls };
+    return { z: z, read: read, need: need, cls: cls, bar: bar };
   }
 
   /* Forward column: settled count, hit rate, and how many are still open.
@@ -2484,7 +2508,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         h += '<tr><td><b>' + k + '</b></td><td class="dim">0</td><td class="dim">—</td><td class="dim">—</td><td class="dim">—</td><td class="dim">never fired in this history</td><td>' + fwdTxt + '</td></tr>';
         continue;
       }
-      var v = hgOmniPoolRead(p, MIN_RR, MIN_SAMPLES);
+      /* The same bar measured-edge uses, so the table and the card cannot
+         disagree about one number. */
+      var v = hgOmniPoolRead(p, MIN_RR, MIN_SAMPLES, hgOmniFamilyZ(OMNI_ALL_MECHANICS.length));
       var z = v.z, read = v.read, cls = v.cls;
       var needTxt = needText(v.need);
       h += '<tr><td><b>' + k + '</b></td>'
@@ -3486,7 +3512,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniBacktestOne = hgOmniBacktestOne;
     window.hgOmniBacktestAll = hgOmniBacktestAll;
     window.hgOmniPoolStats = hgOmniPoolStats;
+    /* The family-wise bar every significance claim in the app turns on.
+       Exported so it can be checked against an independent Sidak
+       computation rather than only against itself. */
+    window.hgOmniFamilyZ = hgOmniFamilyZ;
     window.hgOmniPoolRead = hgOmniPoolRead;
+    /* Gold's table already calls hgOmniPoolRead; it printed the raw sample
+       figure and so lacked the "too small to confirm" guard this has. */
+    window.hgOmniNeedText = needText;
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
     window.hgOmniEvaluate = hgOmniEvaluate;
