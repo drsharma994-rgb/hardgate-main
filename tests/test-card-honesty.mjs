@@ -74,12 +74,19 @@ console.log('\n== 2. one trade is one card, however many mechanics found it ==')
     ok(/mechanics, one trade/.test(src), name + ' says plainly that it is one trade');
   }
   /* The key must be what an exchange would see: symbol, side, entry, stop. */
-  ok(/String\(c\.sym\) \+ '\|' \+ String\(c\.dir\) \+ '\|' \+ e \+ '\|' \+ st/.test(ROUTE),
+  /* The key moved to a named function so the ticket COUNT could use the same
+     one the render does — the header said "2 ticket(s)" over the pre-collapse
+     list while one card rendered. Same key, one definition now. */
+  ok(/String\(c && c\.sym\) \+ '\|' \+ String\(c && c\.dir\) \+ '\|' \+ e \+ '\|' \+ st/.test(ROUTE),
      'omniroute keys on symbol, direction, entry and stop');
+  ok(/function omniTradeKey\(c\)/.test(ROUTE) && /omniTradeKey\(cur2\)/.test(ROUTE),
+     'and the render uses that one definition rather than a private copy');
   /* Gold must ALSO key on horizon: the same levels on SCALP and SWING are two
      genuinely different tickets, with different targets and time stops. */
-  ok(/String\(c\.horizon\) \+ '\|' \+ String\(c\.dir\)/.test(GOLD),
+  ok(/String\(c && c\.horizon\) \+ '\|' \+ String\(c && c\.dir\)/.test(GOLD),
      'omnigold keys on horizon too — SCALP and SWING at the same levels are two trades, not one');
+  ok(/function ogTradeKey\(c\)/.test(GOLD) && /ogTradeKey\(cur\)/.test(GOLD),
+     'and gold likewise uses one definition for both the count and the render');
 
   /* Exercise the collapse itself. */
   const fin = v => (v === null || v === undefined || v === '') ? NaN : (isFinite(+v) ? +v : NaN);

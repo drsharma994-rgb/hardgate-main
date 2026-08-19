@@ -755,6 +755,46 @@ terse status, and never launches a first-time scan on a global refresh.
     /* the other metal disagrees with this one */
     'SMT-DIVERGE':'INTERMARKET', 'GSR-EXTREME':'INTERMARKET'
   };
+  /* COLLAPSE FIRST, THEN COUNT — AND LET THE CLEARED ONE KEEP THE CARD.
+
+     The gold header read "12 setup(s) · 2 ticket(s)" and the desk rendered
+     ONE ticket. Both numbers were counted over the pre-collapse list while
+     the cards were rendered after it. Several mechanics firing the same bar
+     produce the same entry, stop, direction and horizon — one trade with
+     several names — and when two members of a group both graded TICKET the
+     header counted two and the collapse showed one. A ticket count you cannot
+     act on twice is a count of positions the reader might size twice.
+
+     The owner rule was the worse half. The FIRST member kept the card, so a
+     group holding one cleared setup and one vetoed setup showed whichever
+     happened to sort first — and a ticket could be hidden behind a VETO card
+     entirely, invisible on the desk while still being counted in the header.
+     That is not hypothetical: mechanics on identical levels genuinely grade
+     differently, because measured-edge is per mechanic and consensus is per
+     family. A cleared member now takes the card. */
+  function ogTradeKey(c){
+    var pl = (c && c.plan) || {};
+    var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
+    var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
+    /* Horizon is part of the key: the same levels on SCALP and SWING are
+       genuinely two tickets, with different targets and different time stops. */
+    return String(c && c.horizon) + '|' + String(c && c.dir) + '|' + e + '|' + st;
+  }
+  /* PURE. Counts only — choosing which member keeps the card is the render's
+     job, and a counter that mutated the candidates would make the two passes
+     depend on each other. */
+  function ogDistinctCounts(list){
+    var seen = {}, trades = 0, tickets = 0, i, k, c, t;
+    for (i = 0; i < (list || []).length; i++){
+      c = list[i]; if (!c) continue;
+      k = ogTradeKey(c);
+      t = !!(c.grade && c.grade.ticket);
+      if (seen[k] === undefined){ seen[k] = t; trades++; if (t) tickets++; }
+      else if (t && !seen[k]){ seen[k] = true; tickets++; }
+    }
+    return { trades: trades, tickets: tickets };
+  }
+
   function hgOgFamilyOf(kind){ return OG_FAMILY[String(kind || '')] || 'OTHER'; }
 
   /* Families voting each way on the bar this hit fired on. */
@@ -1149,7 +1189,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var sExp = x.stats ? fin(x.stats.expR) : NaN;
     var sHit = x.stats ? fin(x.stats.hit) : NaN;
     var sN = x.stats ? fin(x.stats.samples) : NaN;
-    var ed = null, edWhy = 'not yet measured';
+    var ed = null, edWhy = 'not yet measured', edInfo = false;
     if (isFinite(sExp) && isFinite(sHit) && isFinite(sN)){
       var pBreak = 1 / (1 + minRr);
       var se = Math.sqrt(pBreak * (1 - pBreak) / Math.max(1, sN));
@@ -1165,7 +1205,20 @@ terse status, and never launches a first-time scan on a global refresh.
 
       if (sN < MIN_SAMPLES) edWhy = 'only ' + sN + ' past samples — too few to judge';
       else if (z <= EDGE_VETO_Z && sN >= EDGE_VETO_SAMPLES){ ed = false; edWhy = stat + ' — significantly below breakeven, this mechanic has not paid'; }
-      else if (z <= EDGE_VETO_Z){ ed = true; edWhy = stat + ' — below breakeven, but only ' + sN + ' samples: too few to veto on'; }
+      else if (z <= EDGE_VETO_Z){
+        /* SIGNIFICANTLY NEGATIVE IS NOT A PASS. This printed a green PASS
+           beside "-2.09σ vs breakeven" on the only ticket the desk was
+           recommending, while the pool table above it read "has not paid" for
+           the same mechanic on the same number — the table judges past
+           MIN_SAMPLES (20), the gate refuses to act under EDGE_VETO_SAMPLES
+           (30), and the 20–29 window printed PASS. Too thin to VETO on is not
+           evidence of an edge, and this ledger's rule is that unknown reads
+           UNCHECKED, never PASS. info:true keeps it off the ticket's critical
+           path while reporting AGAINST, which is what it is. */
+        ed = false; edInfo = true;
+        edWhy = stat + ' — below breakeven; ' + sN + ' samples is under the ' + EDGE_VETO_SAMPLES
+              + ' this gate needs to veto on, so it counts AGAINST rather than standing the trade aside';
+      }
       else if (z >= famZ){ ed = true; edWhy = stat + ' — clears the ' + OG_MECHANICS.length + '-mechanic significance bar (+' + famZ.toFixed(2) + 'σ)'; }
       else {
         /* UNCHECKED, not PASS: searching 27 ways and reporting the best one
@@ -1247,7 +1300,7 @@ terse status, and never launches a first-time scan on a global refresh.
       edWhy = fin(fwd.open) + ' out-of-sample trade' + (fin(fwd.open) === 1 ? '' : 's') + ' still open · ' + edWhy;
     }
 
-    gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
+    gates.push({ key:'measured-edge', hard:false, info: edInfo, pass: ed, why: edWhy });
 
     /* --- added indicator reads ------------------------------------------
 
@@ -2410,10 +2463,17 @@ terse status, and never launches a first-time scan on a global refresh.
         __og.ran = true;
         __og.src = { scalp: res.scalp.source, swing: res.swing.source };
 
-        var tickets = 0, i;
-        for (i = 0; i < ranked.length; i++) if (ranked[i].grade.ticket) tickets++;
+        var i;
+        /* Over DISTINCT TRADES, not raw candidates — see ogDistinctCounts. */
+        var dcounts = ogDistinctCounts(ranked);
+        var tickets = dcounts.tickets;
         var srcNote = 'source: scalp ' + (res.scalp.source || 'none') + ' · swing ' + (res.swing.source || 'none');
-        __og.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + srcNote;
+        __og.lastStat = ranked.length + ' setup(s)'
+                      + (dcounts.trades < ranked.length
+                          ? ' · ' + dcounts.trades + ' distinct trade(s) after collapsing '
+                            + (ranked.length - dcounts.trades) + ' duplicate card(s) on identical levels'
+                          : '')
+                      + ' · ' + tickets + ' ticket(s) · ' + srcNote;
         /* When the desk produces NO tickets, name the gate responsible in the
            status line. A scan that reports "11 setups, 0 tickets" and nothing
            else sends the reader through every card looking for the common
@@ -2497,25 +2557,30 @@ terse status, and never launches a first-time scan on a global refresh.
            reads as several opportunities. Horizon is part of the key, because
            the same levels on SCALP and SWING are genuinely two tickets with
            different targets and different time stops. */
-        var ogTradeKey = function(c){
-          var pl = c.plan || {};
-          var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
-          var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
-          return String(c.horizon) + '|' + String(c.dir) + '|' + e + '|' + st;
-        };
         var ogSeen = {}, ogCollapsed = [];
         for (i = 0; i < ordered.length; i++){
-          var ok2 = ogTradeKey(ordered[i]);
-          if (ogSeen[ok2] !== undefined){
-            var own = ogCollapsed[ogSeen[ok2]];
-            if (!own.alsoKinds) own.alsoKinds = [];
-            if (own.alsoKinds.indexOf(ordered[i].kind) < 0 && ordered[i].kind !== own.kind){
-              own.alsoKinds.push(ordered[i].kind);
-            }
+          var cur = ordered[i], ok2 = ogTradeKey(cur);
+          if (ogSeen[ok2] === undefined){
+            ogSeen[ok2] = ogCollapsed.length;
+            ogCollapsed.push(cur);
             continue;
           }
-          ogSeen[ok2] = ogCollapsed.length;
-          ogCollapsed.push(ordered[i]);
+          var own = ogCollapsed[ogSeen[ok2]];
+          if ((cur.grade && cur.grade.ticket) && !(own.grade && own.grade.ticket)){
+            /* The cleared setup takes the card from the vetoed one, carrying
+               the names already collected and adding the displaced owner. */
+            var also = (own.alsoKinds || []).slice();
+            if (also.indexOf(own.kind) < 0) also.push(own.kind);
+            var drop = also.indexOf(cur.kind);
+            if (drop >= 0) also.splice(drop, 1);
+            cur.alsoKinds = also;
+            ogCollapsed[ogSeen[ok2]] = cur;
+            continue;
+          }
+          if (!own.alsoKinds) own.alsoKinds = [];
+          if (own.alsoKinds.indexOf(cur.kind) < 0 && cur.kind !== own.kind){
+            own.alsoKinds.push(cur.kind);
+          }
         }
         for (i = 0; i < ogCollapsed.length; i++) h += setupCard(ogCollapsed[i]);
         ui.cards.innerHTML = h;
@@ -2594,6 +2659,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgResample = hgOgResample;   /* exported so the higher-timeframe build is testable directly */
     window.hgOgDetect = hgOgDetect;
     window.hgOgGates = hgOgGates;
+    /* Exported so the ticket count can be tested apart from a live scan —
+       the header and the rendered cards disagreed for want of exactly this. */
+    window.ogDistinctCounts = ogDistinctCounts;
+    window.ogTradeKey = ogTradeKey;
     window.hgOgEvaluate = hgOgEvaluate;
     /* hgOgReport() — the desk record, on demand, from the console.
 

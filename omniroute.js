@@ -1335,7 +1335,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* 12 — measured edge: this detector's own pooled walk-forward result.
        Not a veto on thin evidence — under MIN_SAMPLES it stays UNCHECKED
        rather than pretending 3 trades mean anything. */
-    var ed = null, edWhy = 'not yet measured';
+    var ed = null, edWhy = 'not yet measured', edInfo = false;
     var sExp = x.stats ? fin(x.stats.expR) : NaN;
     var sHit = x.stats ? fin(x.stats.hit) : NaN;
     var sN = x.stats ? fin(x.stats.samples) : NaN;
@@ -1370,9 +1370,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         ed = false;
         edWhy = stat + zTxt + ' — significantly below breakeven, this detector has not paid';
       } else if (z <= EDGE_VETO_Z){
-        /* Significantly negative, but on too thin a pool to act on. */
-        ed = true;
-        edWhy = stat + zTxt + ' — below breakeven, but only ' + sN + ' samples: too few to veto on';
+        /* SIGNIFICANTLY NEGATIVE IS NOT A PASS.
+
+           This branch showed a green PASS beside "-2.09 sigma vs breakeven"
+           on the only ticket the gold desk was recommending, while the pool
+           table three inches above read "has not paid" for the SAME mechanic
+           on the SAME number. Two verdicts on one measurement: the table
+           judges anything past MIN_SAMPLES (20), the gate refused to act
+           under EDGE_VETO_SAMPLES (30), and the 20-29 window printed PASS.
+
+           Being too thin to VETO on is not evidence of an edge, and the rest
+           of this ledger is held to "unknown reads UNCHECKED, never PASS".
+           So it stands the trade aside for nothing — info:true keeps it off
+           the ticket's critical path — and reports AGAINST, which is what an
+           adverse read the desk cannot act on actually is. */
+        ed = false; edInfo = true;
+        edWhy = stat + zTxt + ' — below breakeven; ' + sN + ' samples is under the '
+              + EDGE_VETO_SAMPLES + ' this gate needs to veto on, so it counts AGAINST '
+              + 'rather than standing the trade aside';
       } else if (z >= hgOmniFamilyZ(OMNI_ALL_MECHANICS.length)){
         ed = true;
         edWhy = stat + zTxt + ' — clears the ' + OMNI_ALL_MECHANICS.length
@@ -1479,7 +1494,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       edWhy = fin(fwd.open) + ' out-of-sample trades still open · ' + edWhy;
     }
 
-    gates.push({ key:'measured-edge', hard:false, pass: ed, why: edWhy });
+    gates.push({ key:'measured-edge', hard:false, info: edInfo, pass: ed, why: edWhy });
 
     /* CONSENSUS. The one gate that reads the rest of the scan on this
        contract.
@@ -1873,6 +1888,42 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       all.ticketOnly = (tix && isFinite(fin(tix.samples))) ? tix : null;
       return all;
     }catch(e){ return null; }
+  }
+
+  /* COLLAPSE FIRST, THEN COUNT — AND LET THE CLEARED ONE KEEP THE CARD.
+
+     The gold header read "12 setup(s) · 2 ticket(s)" and the desk rendered
+     ONE ticket. Both numbers were counted over the pre-collapse list while
+     the cards were rendered after it. Several mechanics firing the same bar
+     produce the same entry, stop, direction and horizon — one trade with
+     several names — and when two members of a group both graded TICKET the
+     header counted two and the collapse showed one. A ticket count you cannot
+     act on twice is a count of positions the reader might size twice.
+
+     The owner rule was the worse half. The FIRST member kept the card, so a
+     group holding one cleared setup and one vetoed setup showed whichever
+     happened to sort first — and a ticket could be hidden behind a VETO card
+     entirely, invisible on the desk while still being counted in the header.
+     That is not hypothetical: mechanics on identical levels genuinely grade
+     differently, because measured-edge is per mechanic and consensus is per
+     family. A cleared member now takes the card. */
+  function omniTradeKey(c){
+    var pl = (c && c.plan) || {};
+    var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
+    var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
+    return String(c && c.sym) + '|' + String(c && c.dir) + '|' + e + '|' + st;
+  }
+  /* PURE — see the gold desk's copy. */
+  function omniDistinctCounts(list){
+    var seen = {}, trades = 0, tickets = 0, i, k, c, t;
+    for (i = 0; i < (list || []).length; i++){
+      c = list[i]; if (!c) continue;
+      k = omniTradeKey(c);
+      t = !!(c.grade && c.grade.ticket);
+      if (seen[k] === undefined){ seen[k] = t; trades++; if (t) tickets++; }
+      else if (t && !seen[k]){ seen[k] = true; tickets++; }
+    }
+    return { trades: trades, tickets: tickets };
   }
 
   function hgOmniGrade(gates){
@@ -3167,7 +3218,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         __omni.snap = { at: Date.now(), scanned: res.scanned, uni: res.uni, rows: ranked, pooled: res.pooled };
         __omni.ran = true;
         var tickets = 0, i;
-        for (i = 0; i < ranked.length; i++) if (ranked[i].grade && ranked[i].grade.ticket) tickets++;
+        /* Over DISTINCT TRADES — see omniDistinctCounts. */
+        var dcounts = omniDistinctCounts(ranked);
+        tickets = dcounts.tickets;
         __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned';
         /* Same as gold: when nothing clears, name the gate responsible rather
            than leaving the reader to find it across fifty cards. */
@@ -3232,25 +3285,29 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            member keeps the card; the rest are named on it, which is more
            useful than five copies anyway: several independent mechanics
            agreeing on one entry is the thing worth knowing. */
-        var tradeKey = function(c){
-          var pl = c.plan || {};
-          var e = isFinite(fin(pl.entry)) ? fin(pl.entry).toPrecision(8) : 'na';
-          var st = isFinite(fin(pl.stop)) ? fin(pl.stop).toPrecision(8) : 'na';
-          return String(c.sym) + '|' + String(c.dir) + '|' + e + '|' + st;
-        };
         var seenTrade = {}, collapsed = [];
         for (i = 0; i < ranked.length; i++){
-          var tk = tradeKey(ranked[i]);
-          if (seenTrade[tk] !== undefined){
-            var owner = collapsed[seenTrade[tk]];
-            if (!owner.alsoKinds) owner.alsoKinds = [];
-            if (owner.alsoKinds.indexOf(ranked[i].kind) < 0 && ranked[i].kind !== owner.kind){
-              owner.alsoKinds.push(ranked[i].kind);
-            }
+          var cur2 = ranked[i], tk = omniTradeKey(cur2);
+          if (seenTrade[tk] === undefined){
+            seenTrade[tk] = collapsed.length;
+            collapsed.push(cur2);
             continue;
           }
-          seenTrade[tk] = collapsed.length;
-          collapsed.push(ranked[i]);
+          var owner = collapsed[seenTrade[tk]];
+          if ((cur2.grade && cur2.grade.ticket) && !(owner.grade && owner.grade.ticket)){
+            /* A cleared setup takes the card from a vetoed one. */
+            var also2 = (owner.alsoKinds || []).slice();
+            if (also2.indexOf(owner.kind) < 0) also2.push(owner.kind);
+            var drop2 = also2.indexOf(cur2.kind);
+            if (drop2 >= 0) also2.splice(drop2, 1);
+            cur2.alsoKinds = also2;
+            collapsed[seenTrade[tk]] = cur2;
+            continue;
+          }
+          if (!owner.alsoKinds) owner.alsoKinds = [];
+          if (owner.alsoKinds.indexOf(cur2.kind) < 0 && cur2.kind !== owner.kind){
+            owner.alsoKinds.push(cur2.kind);
+          }
         }
         var dupHidden = ranked.length - collapsed.length;
         if (dupHidden > 0){

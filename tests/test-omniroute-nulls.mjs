@@ -135,9 +135,21 @@ for (const [name, mk, gateKey] of fields){
   ok(win.hgOmniGrade([{ key: 'measured-edge', hard: false, pass: null, why: 'x' }]).ticket === true,
      'an UNCHECKED measured-edge leaves the ticket standing');
   ok(edge({ samples: 8,  hit: 0.63, expR: 0.90 }).pass === null,   'too few samples reads UNCHECKED, however good the number looks');
+  /* This used to assert pass === true, and the PASS was the defect. A live
+     gold card showed a green PASS beside "-2.09 sigma vs breakeven" on the
+     only ticket the desk was recommending, while the pool table above it read
+     "has not paid" for the same mechanic on the same number: the table judges
+     past MIN_SAMPLES (20), the gate refused to act under EDGE_VETO_SAMPLES
+     (30), and the 20-29 window printed PASS. Too thin to VETO on is not
+     evidence of an edge. It now reports AGAINST via info:true — visible on
+     the card, and still unable to stand the trade aside. */
   const thin = edge({ samples: 22, hit: 0.13, expR: -0.60 });
-  ok(thin.pass === true && /too few to veto on/.test(thin.why),
-     'negative-but-thin says so, rather than calling -0.60R "marginal noise"');
+  ok(thin.pass === false && thin.info === true,
+     'negative-but-thin is AGAINST, not a PASS — it must not read as evidence of an edge');
+  ok(/counts AGAINST/.test(thin.why),
+     'and says what it is doing, rather than calling -0.60R "marginal noise"');
+  ok(win.hgOmniGrade([{ key: 'trend', hard: true, pass: true, why: 'x' }, thin]).ticket === true,
+     'while still leaving the ticket standing, which is the whole point of info');
 }
 
 /* ---- 6. still-forming bar must never reach the gates ----
