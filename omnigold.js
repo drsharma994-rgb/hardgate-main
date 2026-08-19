@@ -2442,6 +2442,59 @@ terse status, and never launches a first-time scan on a global refresh.
          + (f.open ? (' <span class="dim">(+' + f.open + ' open)</span>') : '') + st;
   }
 
+  /* THE DESK READ — one plain sentence on why the desk is quiet.
+
+     "Why does it show the wrong setups?" was asked four times, and each time
+     the answer was recoverable only by reading every gate on every card and
+     tallying by hand. The status line named the top blocking GATE, but a gate
+     name is a category; the reader needed the market condition it implies.
+
+     Live example this was built from: gold +2.7% in 24h, STRONG TREND up.
+     With-trend entries had no placeable stop — the nearest structure sat
+     6.8xATR away because the rally never paused long enough to print a
+     pivot — while every setup WITH placeable structure was a counter-trend
+     fade, vetoed by policy. Eleven coherent cards, zero tickets, and no
+     sentence anywhere saying that. This derives one from the cards already
+     graded: no refetch, no recompute. */
+  function hgOgDeskRead(ranked, rows){
+    try {
+      if (!ranked || !ranked.length) return '';
+      var tally = {}, i, j, g;
+      for (i = 0; i < ranked.length; i++){
+        var vs = (ranked[i].grade && ranked[i].grade.vetoes) || [];
+        for (j = 0; j < vs.length; j++) tally[vs[j]] = (tally[vs[j]] || 0) + 1;
+      }
+      var keys = Object.keys(tally).sort(function(a, b){ return tally[b] - tally[a]; });
+      if (!keys.length) return '';
+      var move = NaN;
+      if (rows && rows.length > 25){
+        var c0 = fin(rows[rows.length - 25].c), c1 = fin(rows[rows.length - 1].c);
+        if (isFinite(c0) && isFinite(c1) && c0 > 0) move = (c1 / c0 - 1) * 100;
+      }
+      var moveTxt = isFinite(move)
+        ? ('gold has moved ' + (move >= 0 ? '+' : '') + move.toFixed(1) + '% in 24 bars')
+        : 'the tape';
+      var PLAIN = {
+        'plan-levels': 'price has run without pausing, so there is no nearby structure to stop against — with-trend entries cannot place a stop',
+        'fade-strength': 'the only placeable setups fade a strong trend, and the desk stands fades aside against a running tape',
+        'adr-budget': 'the day has already spent its range, so chasing continuation late is blocked',
+        'consensus': "the desk's own mechanics point both ways, and a two-sided tape earns no ticket",
+        'participation': 'the trigger bars are thin for this time of day',
+        'trend': 'the setups that fired point against the prevailing EMA stack',
+        'htf-daily': 'the setups that fired disagree with the daily stack',
+        'news-window': 'a news blackout is standing the whole desk aside',
+        'measured-edge': 'the mechanics that fired have measurably not paid here'
+      };
+      var parts = [], used = 0;
+      for (i = 0; i < keys.length && used < 2; i++){
+        if (PLAIN[keys[i]]){ parts.push(PLAIN[keys[i]]); used++; }
+      }
+      if (!parts.length) return '';
+      return 'DESK READ: ' + moveTxt + ' — ' + parts.join('; ')
+           + '. Standing aside IS the read; a consolidation that prints new structure changes it.';
+    } catch (e){ return ''; }
+  }
+
   /* ==================== the scan ==================== */
 
   function scanHorizon(cfg, shared, ui){
@@ -2646,6 +2699,9 @@ terse status, and never launches a first-time scan on a global refresh.
                           + blockTally[top] + ' of ' + ranked.length + ' setups'
                           + (bKeys.length > 1 ? ' (then ' + bKeys.slice(1, 3).join(', ') + ')' : '')
                           + ' — run hgOgWhyNoTickets() for the full tally';
+            /* And the condition behind the category, in words. */
+            var deskRead = hgOgDeskRead(ranked, res.scalp.rows && res.scalp.rows.length ? res.scalp.rows : res.swing.rows);
+            if (deskRead) __og.lastStat += '  ·  ' + deskRead;
           }
         }
         var warn = '';
@@ -2909,6 +2965,8 @@ terse status, and never launches a first-time scan on a global refresh.
        snippet to see their own results is a way of not showing them. */
     /* Same diagnosis for the gold desk. The helper lives in omniroute, which
        loads first and which this tab already borrows its grader from. */
+    /* Exported so the plain-language read is testable apart from a live scan. */
+    window.hgOgDeskRead = hgOgDeskRead;
     window.hgOgWhyNoTickets = function(){
       var w = W();
       if (!w || typeof w.hgWhyNoTicketsFrom !== 'function'){
