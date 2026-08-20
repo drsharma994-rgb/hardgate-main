@@ -178,8 +178,34 @@ function setupAt(A, i){
 }
 
 /* Live signal on the last bar. Never throws. */
+/* Closed bars only. This signal read the last bar of whatever the caller
+   fetched — a candle still forming, whose RSI(2) and %B un-print as it
+   moves. The file's own backtest header admits the last-bar occurrence
+   "cannot be resolved"; the live signal was resolving it anyway, on every
+   scan. Self-sufficient (spacing inferred from the tape), a no-op on
+   historical tapes, and shared with every caller of mrSignal — brain,
+   edge and star trader read this signal too. */
+function mrClosed(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 6) return rows;
+    var d = [], i, a, b;
+    for (i = Math.max(1, rows.length - 30); i < rows.length; i++){
+      a = +(rows[i] && rows[i].t); b = +(rows[i - 1] && rows[i - 1].t);
+      if (isFinite(a) && isFinite(b) && a > b) d.push(a - b);
+    }
+    if (!d.length) return rows;
+    d.sort(function(x, y){ return x - y; });
+    var sp = d[Math.floor(d.length / 2)];
+    var lastT = +rows[rows.length - 1].t;
+    if (isFinite(lastT) && lastT > 1e12) lastT = Math.floor(lastT / 1000);
+    return (isFinite(sp) && sp > 0 && isFinite(lastT) && (Date.now() / 1000 - lastT) < sp)
+      ? rows.slice(0, -1) : rows;
+  }catch(e){ return rows; }
+}
+
 function mrSignal(rows){
   try{
+    rows = mrClosed(rows);
     if (!Array.isArray(rows) || rows.length < 2) return null;
     var A = computeArrays(rows);
     if (!A) return null;
@@ -451,6 +477,9 @@ function mount(el){
             if (typeof hgDeskFetchKlines === 'function') rows = await hgDeskFetchKlines(item, '4h', KL_LIMIT);
             else if (typeof binanceKlines === 'function') rows = await binanceKlines(sym, '4h', KL_LIMIT);
             if (!rows || !rows.length){ failed++; return; }
+            /* one convention for the whole scan: the backtest and the stats
+               table must read the same closed tape the signal reads */
+            rows = mrClosed(rows);
             var sig = mrSignal(rows);
             if (!sig) return;
             var bt = mrBacktest(rows);
@@ -530,6 +559,7 @@ async function mrRefresh(){
 var W = (typeof window !== 'undefined') ? window
       : (typeof globalThis !== 'undefined') ? globalThis : {};
 W.mrSignal = mrSignal;
+W.mrClosed = mrClosed;   /* exported so the closed-bars contract is testable, not asserted by regex */
 W.mrBacktest = mrBacktest;
 W.meanrevPlan = meanrevPlan;
 W.meanrevPlanHtml = meanrevPlanHtml;

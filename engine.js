@@ -916,7 +916,12 @@ async function gatherSymbol(sym, tick, source){
     (typeof binanceTopTraders === 'function') ? leg(function(){ return binanceTopTraders(sym, '1h', 2); }, null) : Promise.resolve(null),
     (typeof binanceTakerRatio === 'function') ? leg(function(){ return binanceTakerRatio(sym, '1h', 2); }, null) : Promise.resolve(null)
   ]);
-  var rows4h = legs[0] || [], rows1h = legs[1] || [], fnd = legs[2], oih = legs[3], ls = legs[4], top = legs[5], tk = legs[6];
+  /* The xu path drops the forming candle (dropFormingXu at its leg); this
+     legacy path fed the same gate ledger a repainting bar, so the same
+     ledger read closed bars on one universe source and a live partial on
+     the other. One convention, both sources. */
+  var rows4h = dropFormingXu(legs[0] || [], '4h'), rows1h = dropFormingXu(legs[1] || [], '1h'),
+      fnd = legs[2], oih = legs[3], ls = legs[4], top = legs[5], tk = legs[6];
   var oiChgPct = null;
   if (oih && oih.series && oih.series.length >= 2){
     var first = null, lastOi = null;

@@ -695,7 +695,12 @@ async function runGoldPro(ui){
                 tnxTrend: macro ? macro.tnxTrend : null,
                 fundingPct: (funding && isFinite(funding.fundingPct)) ? funding.fundingPct : null,
                 retailLongPct: (ls && ls.latest && isFinite(ls.latest.longPct)) ? ls.latest.longPct : null,
-                price: lclose, a4: la4, e20: le20,
+                /* lvEntry, not lclose: two blocks above, this panel priced
+                   its entry at the LIVE price precisely because the closed
+                   4H bar sits hours behind a moving market. Feeding the
+                   composite the stale close re-priced the final setup at
+                   the number the panel had just rejected. */
+                price: lvEntry, a4: la4, e20: le20,
                 swingStop: lswing, weekRange: weekRange
               });
               if (gsd && gsd.aside === false && isFinite(gsd.entry) && isFinite(gsd.stop) &&

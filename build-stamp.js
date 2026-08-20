@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v407',
+  version: 'hg-v408',
   pack: 'ask the tab why it has no tickets instead of guessing',
   built: '2026-08-22T06:30:00Z',
   note: 'hgOmniWhyNoTickets() and hgOgWhyNoTickets() tally the last scan: which gates vetoed, how often, and the reason each gave most'
