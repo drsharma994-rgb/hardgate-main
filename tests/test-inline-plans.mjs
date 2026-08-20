@@ -113,9 +113,22 @@ WebSocketStub.prototype.close = function(){ this.readyState = 3; };
 WebSocketStub.prototype.addEventListener = function(){};
 const fetchStub = async () => ({ ok: false, status: 503, statusText: 'stubbed',
   json: async () => ({}), text: async () => '' });
+/* Timers the sandboxed inline scripts create are TRACKED so the summary can
+   clear every one of them before exiting. Handing the raw setInterval to
+   app-boot code left live libuv handles at process.exit(0), and on Windows
+   the forced teardown races their close — the async.c
+   `!(handle->flags & UV_HANDLE_CLOSING)` abort that made this file the
+   suite's one permanent "doesn't count" failure while passing standalone.
+   A suite with a standing excuse is rot; leave teardown nothing to race. */
+const __timers = [], __intervals = [];
+/* full argument pass-through — setTimeout(fn, ms, arg) is real usage, and a
+   wrapper that drops the extras silently stalls whatever awaited them */
+const trackedSetTimeout = (fn, ms, ...args) => { const h = setTimeout(fn, ms, ...args); __timers.push(h); return h; };
+const trackedSetInterval = (fn, ms, ...args) => { const h = setInterval(fn, ms, ...args); __intervals.push(h); return h; };
 const sandbox = {
   console,
-  setTimeout, clearTimeout, setInterval, clearInterval,
+  setTimeout: trackedSetTimeout, clearTimeout,
+  setInterval: trackedSetInterval, clearInterval,
   AbortController, queueMicrotask,
   document: documentStub,
   localStorage: localStorageStub,
@@ -387,6 +400,15 @@ async function drive(name, runCode, cardsId, tickers, data, extraChecks){
   process.on('unhandledRejection', () => {});
   await new Promise(r => setTimeout(r, 300));
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  /* Clear every timer the sandbox created BEFORE the hard exit. The exit
+     stays process.exit — the app's inline boot code holds other loop refs
+     and a natural drain never comes — but with all timer handles already
+     closed, the Windows teardown has nothing to race, which was the
+     async.c abort that made this file the suite's one standing excuse.
+     (Timers cleared: intervals + timeouts the sandbox tracked above.) */
+  for (const h of __intervals){ try{ clearInterval(h); }catch(e){} }
+  for (const h of __timers){ try{ clearTimeout(h); }catch(e){} }
+  await new Promise(r => setTimeout(r, 50));   /* let closing handles finish closing */
   if (fail > 0){ console.error('TESTS FAILED'); process.exit(1); }
   console.log('ALL INLINE-PLAN TESTS PASSED');
   process.exit(0);
