@@ -14,6 +14,14 @@ console.log('== light theme (base-themes data-dense) ==');
   const tokens = fs.readFileSync(path.join(root, 'vendor/base-themes/tokens-data-dense-light.css'), 'utf8');
   ok(bright.indexOf('#f4f6f9') >= 0, 'light background token');
   ok(!/backdrop-filter\s*:\s*blur/.test(bright), 'bright.css avoids heavy backdrop blur');
+  ok(/hgColorWash/.test(bright), 'page keeps a named color wash (not a gray slab)');
+  ok(/hgAccentBar/.test(bright), 'header carries a named multi-hue accent bar');
+  ok(/card\.long/.test(bright) && /rgba\(21,128,61/.test(bright),
+     'LONG cards keep a green tint, not color-only borders');
+  ok(/card\.short/.test(bright) && /rgba\(220,38,38/.test(bright),
+     'SHORT cards keep a red tint');
+  ok(/#fffbeb|#fef3c7|#fff7ed/.test(bright), 'GOLD setup cards sit on a warm cream wash');
+  ok(/prefers-reduced-motion/.test(bright), 'color motion still yields to reduced-motion');
   ok(tokens.indexOf("data-style='data-dense'") >= 0, 'vendor tokens scoped to data-dense light');
   ok(fs.existsSync(path.join(root, 'hg-icons.css')), 'hg-icons.css present');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');

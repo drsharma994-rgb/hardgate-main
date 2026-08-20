@@ -35,10 +35,14 @@
   --radius-sm:6px;
 }
 
-/* ---------- 2. page background — soft neutral (no mesh / no fixed gradients) ---------- */
+/* ---------- 2. page background — hgColorWash (blue / teal / amber, still light) ---------- */
 html,body{background:var(--ink);color:var(--txt);font-weight:500}
 body{
-  background:linear-gradient(180deg,#ffffff 0%,var(--ink) 120px,var(--ink) 100%);
+  background:
+    radial-gradient(1100px 420px at 0% -10%, rgba(37,99,235,.12), transparent 58%),
+    radial-gradient(900px 380px at 100% 0%, rgba(13,148,136,.10), transparent 52%),
+    radial-gradient(700px 280px at 88% 100%, rgba(217,119,6,.08), transparent 48%),
+    linear-gradient(180deg,#e8f1ff 0%,var(--ink) 140px,var(--ink) 100%);
   background-attachment:scroll;
 }
 a{color:var(--gold-dim)}
@@ -71,9 +75,21 @@ a{color:var(--gold-dim)}
 
 /* ---------- 4. header — crisp topbar, no backdrop-filter ---------- */
 header,.hg-header{
-  background:var(--panel);
+  background:linear-gradient(180deg,#ffffff 0%,#f4f8ff 100%);
   border-bottom:1px solid var(--line);
   box-shadow:var(--shadow-sm);
+  position:sticky;
+  top:0;
+  z-index:50;
+}
+/* hgAccentBar — live tape of desk hues under the chrome */
+header::after,.hg-header::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:0;
+  height:3px;
+  background:linear-gradient(90deg,#2563eb 0%,#0d9488 38%,#f59e0b 72%,#dc2626 100%);
+  pointer-events:none;
 }
 .brand{
   color:var(--gold);
@@ -81,11 +97,11 @@ header,.hg-header{
   font-family:var(--disp,'Space Grotesk',system-ui,sans-serif);
 }
 .brand small{color:var(--mut);font-weight:600}
-.header-chips .statuschip:nth-child(1){border-color:rgba(15,92,192,.28);background:rgba(15,92,192,.06)}
-.header-chips .statuschip:nth-child(2){border-color:rgba(124,58,237,.24);background:rgba(124,58,237,.05)}
-.header-chips .statuschip:nth-child(3){border-color:rgba(194,65,12,.24);background:rgba(194,65,12,.05)}
-.header-chips .statuschip:nth-child(4){border-color:rgba(15,118,110,.24);background:rgba(15,118,110,.05)}
-.header-chips .statuschip:nth-child(5){border-color:rgba(21,128,61,.24);background:rgba(21,128,61,.05)}
+.header-chips .statuschip:nth-child(1){border-color:rgba(15,92,192,.40);background:rgba(15,92,192,.12)}
+.header-chips .statuschip:nth-child(2){border-color:rgba(13,148,136,.40);background:rgba(13,148,136,.12)}
+.header-chips .statuschip:nth-child(3){border-color:rgba(217,119,6,.42);background:rgba(245,158,11,.14)}
+.header-chips .statuschip:nth-child(4){border-color:rgba(15,118,110,.40);background:rgba(15,118,110,.12)}
+.header-chips .statuschip:nth-child(5){border-color:rgba(21,128,61,.40);background:rgba(21,128,61,.12)}
 .header-drawer-inner{border-top-color:var(--line)}
 .header-field{border-color:var(--line);background:var(--panel)}
 .header-menu-btn{
@@ -97,8 +113,8 @@ header,.hg-header{
 .header-menu-btn:active{transform:scale(.98)}
 
 .market-picture-bar{
-  background:linear-gradient(90deg,rgba(15,92,192,.06),rgba(37,99,235,.04),rgba(15,118,110,.05));
-  border-bottom-color:var(--line);
+  background:linear-gradient(90deg,rgba(37,99,235,.12),rgba(13,148,136,.10),rgba(245,158,11,.10));
+  border-bottom-color:rgba(37,99,235,.18);
   color:var(--mut);
 }
 .market-picture-bar b{color:var(--gold);text-shadow:none}
@@ -131,7 +147,7 @@ header,.hg-header{
 
 /* ---------- 5. nav groups ---------- */
 .navgroups{
-  background:var(--panel2);
+  background:linear-gradient(90deg,rgba(37,99,235,.08),rgba(13,148,136,.07),rgba(245,158,11,.08),var(--panel2));
   border-bottom:1px solid var(--line);
 }
 .navgroups button{
@@ -172,7 +188,7 @@ nav{background:var(--panel);border-bottom:1px solid var(--line)}
 nav button{color:var(--mut);transition:color .15s}
 nav button:hover{color:var(--txt)}
 nav button.on{color:var(--gold);text-shadow:none;font-weight:700}
-nav button::after{background:linear-gradient(90deg,#0f5cc0,#2563eb)}
+nav button::after{background:linear-gradient(90deg,#2563eb,#0d9488,#d97706)}
 nav button.on::after{box-shadow:none}
 
 /* ---------- 7. panels & cards — bordered cards, fast paint ---------- */
@@ -202,8 +218,14 @@ nav button.on::after{box-shadow:none}
   box-shadow:var(--shadow-md);
   transform:none;
 }
-.card.long{border-left:3px solid var(--long)}
-.card.short{border-left:3px solid var(--short)}
+.card.long{
+  border-left:4px solid var(--long);
+  background:linear-gradient(90deg,rgba(21,128,61,.10),var(--panel) 56px);
+}
+.card.short{
+  border-left:4px solid var(--short);
+  background:linear-gradient(90deg,rgba(220,38,38,.09),var(--panel) 56px);
+}
 .card .sym{color:var(--txt)}
 .card.long .dir{color:var(--long);text-shadow:none}
 .card.short .dir{color:var(--short);text-shadow:none}
@@ -339,9 +361,9 @@ table tr:hover td{background:rgba(15,92,192,.05)}
 
 /* ---------- 15. gold setup cards — light panels (tab + StarTrader embed) ---------- */
 .card.gsx-card,.card.gsw-card{
-  background:var(--panel)!important;
+  background:linear-gradient(180deg,#fffbeb 0%,#ffffff 42%)!important;
   color:var(--txt)!important;
-  border-color:var(--line)!important;
+  border-color:#f59e0b!important;
 }
 .card.gsx-card .sym,.card.gsw-card .sym{color:var(--txt)!important}
 .card.gsx-card .mini .k,.card.gsw-card .mini .k{color:var(--dim)!important}
