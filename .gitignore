@@ -5,5 +5,13 @@ data/paperbook.json
 data/shadow-book.json
 snapshots/
 node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
 __pycache__/
 *.pyc

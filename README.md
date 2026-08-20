@@ -104,6 +104,20 @@ Server-backed paper trading on Render (`/api/book`). No real orders unless you e
 
 Scanners expose **ADD · {FUND}** when a plan has entry/stop/T1; `scanner:` meta pins fund routing (`book-routing.js`).
 
+## Android app
+
+The phone app is a **launcher** over the live desk, not a native rewrite. Scanners,
+gates, and `/api/proxy` stay on Render.
+
+1. **Install from Chrome** on the phone: open https://hardgate-main.onrender.com →
+   browser menu → **Install app** / Add to Home screen (needs the 192 + 512 PNG
+   icons on the live origin).
+2. **Sideload an APK**: GitHub → Actions → **Android APK** → download
+   `hardgate-android-debug` (`app-debug.apk`). Package id `app.hardgate.desk.debug`.
+   Details in `android/README.md`.
+
+Do not commit a signing keystore. Release / Play Store listing is a separate step.
+
 ## Run it
 
 Open `index.html` in a browser, or serve the folder (e.g. GitHub Pages). Everything loads from the folder

@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v426';
+const HG_CACHE = 'hg-v427';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -16,7 +16,7 @@ const HG_SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon.svg', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './mobile.css', './annunciator.css',
+  './icon.svg', './icon-192.png', './icon-512.png', './bright.css', './hg-icons.css', './vendor/base-themes/tokens-data-dense-light.css', './mobile.css', './annunciator.css',
   './build-stamp.js',
   './hghost.js',
   './indicators.js', './indicators2.js', './store.js', './binance.js', './spot-perp.js', './startrader.js', './xm-trader.js', './bybit.js', './deribit-vol.js', './positioning.js', './cryptowatch.js', './macro.js', './openbb-desk.js', './ccxt-desk.js', './trading-stack.js', './worldmonitor-desk.js', './chart-vision-desk.js', './chartvision-tab.js', './hey-desk.js', './atomic-agent-desk.js', './ai-agent.js', './agent-alerts.js',

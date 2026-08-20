@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v426',
-  pack: 'MIN `: collapse header chrome so setups fill the window',
-  built: '2026-08-20T17:30:00Z',
-  note: 'Press ` (or MIN `) to hide the tools drawer, MARKET PICTURE, chips, group row, and tab lead copy. Tab nav stays. Choice persists in this browser. Typing in an input does not steal the key. OMNIROUTE v425 keep-last-scan stays.'
+  version: 'hg-v427',
+  pack: 'Android app: live desk in a full-screen WebView',
+  built: '2026-08-20T17:50:00Z',
+  note: 'APK is a launcher over https://hardgate-main.onrender.com (JS on, HTTPS only, no JS bridge). Chrome can Install app via 192/512 PNG icons. Desk deploys do not need a new APK. v426 chrome-min and v425 OMNIROUTE keep-last-scan stay.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

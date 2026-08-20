@@ -214,6 +214,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### Android app — hg-v427
+- The desk is **not rewritten in Kotlin**. `android/` is a full-screen WebView launcher over **https://hardgate-main.onrender.com** (JS on, HTTPS only, no `JavascriptInterface`, no file://). A Render deploy is the next app launch.
+- Sideload APK from GitHub Actions **Android APK** (`assembleDebug` → `app-debug.apk`, id `app.hardgate.desk.debug`). Do not commit a keystore.
+- Chrome **Install app** uses `icon-192.png` + `icon-512.png` in `manifest.webmanifest`.
+- Tests: `node tests/test-android-app.mjs`. See `android/README.md`.
+
 ### Header chrome key — hg-v426
 - Press **backtick** or the header **MIN `** button to collapse the tools drawer, MARKET PICTURE, status chips, group chips, brand tagline, and `.hg-lead` tab intros so setup cards fill the window. Tab nav and venue toggles stay. Press again to restore.
 - Persists in `localStorage` `hg_chrome_min`. Ignored while focus is in an input / textarea / select.
