@@ -192,8 +192,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=408"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=408"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=409"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=409"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -689,7 +689,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=408"></script>
+<script src="./hg-plan.js?v=409"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -721,8 +721,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=408"></script>
-<script src="./hg-gates.js?v=408"></script>
+<script src="hg-mechanics.js?v=409"></script>
+<script src="./hg-gates.js?v=409"></script>
 <script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
@@ -743,6 +743,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
 <script src="omnigold.js"></script>
+<!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
+<script src="omnipresent.js"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -769,14 +771,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=408"></script>
+<script src="supersetup.js?v=409"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=408"></script>
-<script src="super-gold.js?v=408"></script>
-<script src="super-best.js?v=408"></script>
-<script src="super-sniper.js?v=408"></script>
-<script src="super-book.js?v=408"></script>
-<script src="super-calibrate.js?v=408"></script>
+<script src="super-desk-common.js?v=409"></script>
+<script src="super-gold.js?v=409"></script>
+<script src="super-best.js?v=409"></script>
+<script src="super-sniper.js?v=409"></script>
+<script src="super-book.js?v=409"></script>
+<script src="super-calibrate.js?v=409"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2717,7 +2719,7 @@ async function runObScanLeg(opts){
    gold lane → conviction desks / pine / lab → utilities. */
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
-  { id:'crypto',     label:'CRYPTO',   tabs:['omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['omnipresent','omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
