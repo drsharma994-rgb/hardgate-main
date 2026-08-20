@@ -12,6 +12,8 @@
      - a throw on candidate 0 does not disarm the gate for candidates 1..N
      - an unchecked candidate is marked, NOT demoted (an unrunnable check is
        not evidence against a trade, only absence of evidence for it)
+     - unmarked ≠ trade-ready: CLEAN / PRIME / Telegram / ADD TO BOOK require
+       the post-gate to have actually run (`hgSetupTradeReady`)
 
    Run: node tests/test-gate-unchecked.mjs */
 import fs from 'node:fs';
@@ -46,9 +48,18 @@ console.log('== new contract is exported ==');
 {
   ok(typeof W.hgUncheckedGate === 'function', 'hgUncheckedGate exported');
   ok(typeof W.hgMarkGateUnchecked === 'function', 'hgMarkGateUnchecked exported');
+  ok(typeof W.hgSetupTradeReady === 'function', 'hgSetupTradeReady exported');
   const u = W.hgUncheckedGate('because');
   ok(u.veto === false && u.unchecked === true, 'unchecked gate does not veto but flags itself');
   ok(u.uncheckedReason === 'because', 'unchecked gate carries its reason');
+  const ready = { dir: 'long', entry: 1, stop: 0.9, t1: 1.2, clean: true };
+  ok(W.hgSetupTradeReady(ready) === true, 'a complete ledger is trade-ready');
+  ok(W.hgSetupTradeReady(null) === false, 'missing hit is not trade-ready');
+  ok(W.hgSetupTradeReady({ demoted: true }) === false, 'demoted is not trade-ready');
+  ok(W.hgSetupTradeReady({ postGateUnchecked: true, clean: true }) === false,
+     'UNCHECKED stamp is not trade-ready even if still labeled clean');
+  ok(W.hgSetupTradeReady({ postGate: { ok: true, unchecked: true } }) === false,
+     'postGate.unchecked is not trade-ready');
 }
 
 console.log('\n== stale-momentum: thin data is UNCHECKED, not a pass ==');
@@ -124,6 +135,8 @@ console.log('\n== THE REGRESSION: one bad candidate must not disarm the gate for
   ok(seen.join(',') === 'B,C', 'candidates after the throw were still evaluated (was: loop aborted, none reached)');
   ok(out[0].postGateUnchecked === true, 'the failing candidate is marked UNCHECKED');
   ok(out[0].demoted !== true, 'a technical fault does not demote the trade');
+  ok(out[0].tradeReady === false, 'UNCHECKED is not trade-ready (no CLEAN/PRIME/alerts/book)');
+  ok(W.hgSetupTradeReady(out[0]) === false, 'hgSetupTradeReady rejects the unmarked ledger');
   ok((out[0].stamps || []).indexOf('POST-GATE UNCHECKED') >= 0, 'the UNCHECKED stamp reaches the card');
   ok((out[0].postGateUncheckedReasons || []).some(r => /venue rows exploded/.test(r)), 'the fault reason is kept, not swallowed');
   ok(out[1].postGateUnchecked === true && out[2].postGateUnchecked === true,
@@ -145,6 +158,8 @@ console.log('\n== a gate that genuinely runs is recorded as CHECKED ==');
 
   ok(out[0].postGateChecked === true, 'a real pass is recorded as checked');
   ok(out[0].postGateUnchecked !== true, 'a real pass is not flagged unchecked');
+  ok(out[0].tradeReady !== false, 'a real pass stays trade-ready');
+  ok(W.hgSetupTradeReady(out[0]) === true, 'hgSetupTradeReady accepts a checked ledger');
   ok((out[0].stamps || []).indexOf('POST-GATE UNCHECKED') < 0, 'no UNCHECKED stamp on a genuine pass');
   ok(typeof out[0].flowDetail === 'string' && /CVD/.test(out[0].flowDetail), 'flow detail still propagates');
 
@@ -186,6 +201,39 @@ console.log('\n== supersetup keeps unchecked out of the passed tally ==');
   const passIdx = src.indexOf("passed.push('post-gate')");
   const unchIdx = src.indexOf('hit.postGate.unchecked');
   ok(unchIdx > 0 && unchIdx < passIdx, 'the unchecked test runs BEFORE the pass test, or it would never be reached');
+}
+
+console.log('\n== UNCHECKED cannot be CLEAN / MOST PROBABLE / book ==');
+{
+  const marked = { dir: 'long', entry: 3300, stop: 3280, t1: 3340, grade: 'A', clean: true, tier: 'clean' };
+  W.hgMarkGateUnchecked(marked, ['flow trap: FLOW N/A']);
+  ok(marked.tradeReady === false, 'mark sets tradeReady false');
+  ok(marked.clean !== true, 'mark clears the CLEAN flag');
+  ok(marked.grade !== 'A', 'mark cannot keep GRADE A (MOST PROBABLE / lock path)');
+  ok(W.hgSetupTradeReady(marked) === false, 'marked hit is not trade-ready');
+
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  ok(/POST-GATE UNCHECKED/.test(html), 'SWING/SCALP UNCHECKED card is not labeled 6/7 NEAR');
+  ok(/qv\.unchecked/.test(html), 'SWING/SCALP scan branches on post-gate UNCHECKED');
+  ok(/qualitySkip\.unchecked/.test(html), 'UNCHECKED CLEAN is counted in the quality funnel, not found++');
+
+  const scalpSrc = fs.readFileSync(path.join(ROOT, 'goldscalp.js'), 'utf8');
+  const swingSrc = fs.readFileSync(path.join(ROOT, 'goldswing.js'), 'utf8');
+  ok(/postGateUnchecked/.test(scalpSrc) && /postGateUnchecked/.test(swingSrc),
+     'gold scan snapshots carry postGateUnchecked for alerts');
+  ok(/hgSetupTradeReady|postGateUnchecked|tradeReady/.test(
+       scalpSrc.slice(scalpSrc.indexOf('function goldPickSpotAlignedBest'), scalpSrc.indexOf('function goldPickSpotAlignedBest') + 900)
+     ), 'gold MOST PROBABLE pick skips UNCHECKED');
+  ok(/goldTradeReady/.test(scalpSrc) && /goldTradeReady/.test(swingSrc),
+     'gold cards hide SEND/BOOK when UNCHECKED');
+
+  const alerts = fs.readFileSync(path.join(ROOT, 'tabalerts.js'), 'utf8');
+  ok(/postGateUnchecked|tradeReady|hgSetupTradeReady/.test(alerts),
+     'Telegram collect refuses UNCHECKED as CLEAN/conviction');
+
+  const book = fs.readFileSync(path.join(ROOT, 'book.js'), 'utf8');
+  ok(/postGateUnchecked|hgSetupTradeReady/.test(book),
+     'ADD TO BOOK vetoes UNCHECKED tickets');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

@@ -204,6 +204,8 @@ function goldPickSpotAlignedBest(ranked, spotRef){
   for (var i = 0; i < ranked.length; i++){
     var bc = ranked[i];
     if (!bc || bc.demoted || bc.vetoed) continue;
+    if (bc.postGateUnchecked || bc.tradeReady === false) continue;
+    if (typeof W !== 'undefined' && W && typeof W.hgSetupTradeReady === 'function' && !W.hgSetupTradeReady(bc)) continue;
     var isXaut = bc.sym === 'XAUTUSD' || (bc.venue && /XAUT/i.test(bc.venue));
     if (!isXaut) return bc;
     if (isFinite(spotRef) && isFinite(bc.entry)){
@@ -431,6 +433,10 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         session: c.session || null, atr: isFinite(c.atr) ? c.atr : null,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null,
+        demoted: !!c.demoted, vetoed: !!c.vetoed,
+        postGateUnchecked: !!c.postGateUnchecked,
+        tradeReady: c.tradeReady !== false && !c.postGateUnchecked,
+        stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         anchor: isFinite(c.anchor) ? c.anchor : null,
         zone: (c.zone && isFinite(c.zone.lo) && isFinite(c.zone.hi)) ? { lo: c.zone.lo, hi: c.zone.hi } : null
       });
@@ -923,7 +929,8 @@ function cardHTML(c, isBest, season){
   var lockLine = c.locked
     ? '<div class="gsw-lockline">⬤ CONVICTION LOCK — levels as of ' + esc(c.asOf || '') + ' (restored verbatim)</div>'
     : '<div class="gsw-lockline" style="color:#1E293B">○ new conviction issued ' + esc(c.asOf || '') + '</div>';
-  var tradeOnclick = (c.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+  var goldTradeReady = !c.postGateUnchecked && c.tradeReady !== false;
+  var tradeOnclick = (goldTradeReady && c.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(c.sym, c.dir, c.entry, c.stop, c.t1, { t2: c.t2, stack: c.stack, scanner: 'goldswing', strategy: 'goldswing' })
       : ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
@@ -931,8 +938,8 @@ function cardHTML(c, isBest, season){
     : '';
   var tradeBtn = tradeOnclick
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
-    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
+  var bookBtn = (goldTradeReady && typeof bookBtnHTML === 'function' && c.sym)
+    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldswing', strategy: 'goldswing', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack, postGateUnchecked: !!c.postGateUnchecked, tradeReady: c.tradeReady }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
   if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok"' + gswPipAttr(true) + '>formation ' + c.formationScore + '</span>';

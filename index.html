@@ -192,8 +192,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=418"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=418"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=419"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=419"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -689,7 +689,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=418"></script>
+<script src="./hg-plan.js?v=419"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -721,8 +721,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=418"></script>
-<script src="./hg-gates.js?v=418"></script>
+<script src="hg-mechanics.js?v=419"></script>
+<script src="./hg-gates.js?v=419"></script>
 <script src="omniroute.js"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
@@ -771,14 +771,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=418"></script>
+<script src="supersetup.js?v=419"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=418"></script>
-<script src="super-gold.js?v=418"></script>
-<script src="super-best.js?v=418"></script>
-<script src="super-sniper.js?v=418"></script>
-<script src="super-book.js?v=418"></script>
-<script src="super-calibrate.js?v=418"></script>
+<script src="super-desk-common.js?v=419"></script>
+<script src="super-gold.js?v=419"></script>
+<script src="super-best.js?v=419"></script>
+<script src="super-sniper.js?v=419"></script>
+<script src="super-book.js?v=419"></script>
+<script src="super-calibrate.js?v=419"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3942,6 +3942,34 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
 
 function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
   if (!hit || !hit.dir) return;
+  if (hit.postGateUnchecked){
+    const chartId = 'hgc-unchk-' + kind + '-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
+    const cardSym = hgCardVenueSym(t.symbol, venueTag);
+    const reasons = (hit.postGateUncheckedReasons || ['flow/RS could not run']).join(' · ');
+    const unchkPlan = '<span class="note warn"><b>POST-GATE UNCHECKED</b> — 7/7 gates passed but flow/RS did not run (' + reasons + '). Watch only — not CLEAN, not a ticket.</span>';
+    if (typeof hgSetupCardHTML === 'function'){
+      cardsEl.insertAdjacentHTML('beforeend', hgSetupCardHTML({
+        tier: 'near', sym: cardSym, dir: hit.dir,
+        mini: [
+          ['mark', px(t.mark || hit.level || '—')],
+          ['gates', (hit.passed || 7) + '/' + (hit.gatesTotal || 7)],
+          ['ledger', 'UNCHECKED']
+        ],
+        gates: ['POST-GATE UNCHECKED — not trade-ready'],
+        plan: unchkPlan, chartId: chartId,
+        bookMeta: { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near', postGateUnchecked: true, tradeReady: false, stack: hit.stack }
+      }));
+    } else {
+      cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, hit.dir, [
+        ['mark', px(t.mark || hit.level || '—')],
+        ['gates', (hit.passed || 7) + '/' + (hit.gatesTotal || 7)],
+        ['ledger', 'UNCHECKED']
+      ], ['POST-GATE UNCHECKED — not trade-ready'], unchkPlan,
+        null, null, null, chartId, { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near', postGateUnchecked: true, tradeReady: false }));
+    }
+    if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
+    return;
+  }
   const chartId = 'hgc-near-' + kind + '-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const miss = (hit.missing || []).join(', ');
   const cardSym = hgCardVenueSym(t.symbol, venueTag);
@@ -4001,6 +4029,8 @@ function hgCryptoCandRow(t, hit, venueTag, vetoMeta){
     row.formationScore = vetoMeta.formationScore;
     row.poi = vetoMeta.poi;
     row.poiLabel = vetoMeta.poiLabel;
+    row.postGateUnchecked = !!vetoMeta.postGateUnchecked;
+    row.tradeReady = vetoMeta.tradeReady;
   }
   if (typeof hgCryptoRankBoost === 'function'){
     row.rankBoost = hgCryptoRankBoost(t.symbol, hit.dir, hit.rr, vetoMeta || {});
@@ -4026,7 +4056,14 @@ function hgRankCryptoCands(cands){
     if (tb !== ta) return tb - ta;
     return String(a.sym || '').localeCompare(String(b.sym || ''));
   });
-  const bestId = sorted.length ? hgCryptoSetupId(sorted[0]) : null;
+  let bestRow = null;
+  for (let i = 0; i < sorted.length; i++){
+    if (typeof hgSetupTradeReady === 'function' ? hgSetupTradeReady(sorted[i]) : (sorted[i] && !sorted[i].postGateUnchecked && sorted[i].tradeReady !== false)){
+      bestRow = sorted[i];
+      break;
+    }
+  }
+  const bestId = bestRow ? hgCryptoSetupId(bestRow) : null;
   return { cands: sorted, bestId: bestId };
 }
 function hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit){
@@ -4495,6 +4532,24 @@ async function runScanLeg(kind, opts){
                 }
                 hit.flowDetail = qv.flowDetail; hit.flowNA = qv.flowNA; hit.flowOk = qv.flowOk;
                 hit.crossOk = qv.crossOk; hit.rsEdge = qv.rsEdge;
+                if (qv.unchecked){
+                  if (typeof hgMarkGateUnchecked === 'function') hgMarkGateUnchecked(hit, qv.uncheckedReasons);
+                  audit.qualitySkip.unchecked = (audit.qualitySkip.unchecked || 0) + 1;
+                  nearCands.push(Object.assign({
+                    sym: t.symbol, venueTag: venueTag, nearClean: true,
+                    postGateUnchecked: true, tradeReady: false
+                  }, hit));
+                  nearFound++;
+                  if (!quiet){
+                    if (nearFound === 1){
+                      const nearHdr = (typeof hgSetupNearHeaderHTML === 'function')
+                        ? hgSetupNearHeaderHTML(1, 'swing') : '<div class="note warn" style="margin:10px 0 6px"><b>NEAR CLEAN (6/7)</b> — watch only. These are not tickets until all seven gates pass.</div>';
+                      cardsEl.insertAdjacentHTML('beforeend', nearHdr);
+                    }
+                    if (typeof renderNearCleanCard === 'function') renderNearCleanCard(t, hit, cardsEl, 'swing', venueTag);
+                  }
+                  return;
+                }
               }
               if (typeof hgFormTicket === 'function'){
                 const fm = hgFormTicket(hit, { rows: rows, style: 'swing', ticker: tScan, a4: hit.a4 });
@@ -4574,6 +4629,19 @@ async function runScanLeg(kind, opts){
                 }
                 hit.flowDetail = qv.flowDetail; hit.flowNA = qv.flowNA; hit.flowOk = qv.flowOk;
                 hit.crossOk = qv.crossOk; hit.rsEdge = qv.rsEdge;
+                if (qv.unchecked){
+                  if (typeof hgMarkGateUnchecked === 'function') hgMarkGateUnchecked(hit, qv.uncheckedReasons);
+                  audit.qualitySkip.unchecked = (audit.qualitySkip.unchecked || 0) + 1;
+                  nearCands.push(Object.assign({
+                    sym: t.symbol, venueTag: venueTag, nearClean: true,
+                    postGateUnchecked: true, tradeReady: false
+                  }, hit));
+                  nearFound++;
+                  if (!quiet && typeof renderNearCleanCard === 'function'){
+                    renderNearCleanCard(t, hit, cardsEl, 'scalp', venueTag);
+                  }
+                  return;
+                }
               }
               if (typeof hgFormTicket === 'function'){
                 const fm = hgFormTicket(hit, { rows: h1, m15: m15, style: 'scalp', ticker: tScan, a: hit.a });

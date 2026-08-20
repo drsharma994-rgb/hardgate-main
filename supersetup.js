@@ -555,6 +555,13 @@ async function applySuperSetupPostGate(snap, win){
       hit.postGate = pg;
       if (pg && !pg.ok){
         superSetupApplyVetoReason(hit, pg.reason || 'Flow/RS post-gate veto');
+      } else if (pg && pg.unchecked){
+        if (typeof win.hgMarkGateUnchecked === 'function') win.hgMarkGateUnchecked(hit, pg.uncheckedReasons);
+        hit.tradeReady = false;
+        hit.nearWatch = true;
+        hit.nearClean = true;
+        hit.minimalLossPass = false;
+        if (hit.tier === 'clean' || hit.tier === 'prime' || hit.tier === 'watch') hit.tier = 'near';
       } else if (hit.minLossAudit){
         var prec = runPrecisionSourceAudit(win, {}, hit, { style: style });
         hit.minLossAudit.pass = hit.minLossAudit.pass && prec.pass;
@@ -667,6 +674,7 @@ function refineSuperSetupLevels(win, c, hit, refineOpts){
 /** Desk pill label — NEAR 6/7 is watch-only by tier; CLEAN needs full audit for MIN LOSS PASS. */
 function superSetupDeskPill(row){
   if (!row) return { cls: 'block', label: 'RISK BLOCK' };
+  if (row.postGateUnchecked || row.tradeReady === false) return { cls: 'watch', label: 'WATCH ONLY' };
   if (row.minimalLossPass) return { cls: 'minloss', label: 'MIN LOSS PASS' };
   var isNear = row.tier === 'near' || row.nearClean;
   if (isNear || row.nearWatch){
@@ -855,12 +863,18 @@ function autoSelectFirstSetup(snap){
   }
   if (!hit){
     for (i = 0; i < snap.cands.length; i++){
-      if (snap.cands[i] && snap.cands[i].minimalLossPass){ hit = snap.cands[i]; break; }
+      if (snap.cands[i] && snap.cands[i].minimalLossPass
+          && snap.cands[i].tradeReady !== false && !snap.cands[i].postGateUnchecked){
+        hit = snap.cands[i]; break;
+      }
     }
   }
   if (!hit){
     for (i = 0; i < snap.cands.length; i++){
-      if (snap.cands[i] && snap.cands[i].tier === 'clean'){ hit = snap.cands[i]; break; }
+      if (snap.cands[i] && snap.cands[i].tier === 'clean'
+          && snap.cands[i].tradeReady !== false && !snap.cands[i].postGateUnchecked){
+        hit = snap.cands[i]; break;
+      }
     }
   }
   if (!hit) hit = snap.cands[0];
@@ -1298,6 +1312,8 @@ function evaluateStructureTrigger(win, side, rows, chart){
 
 function isCleanScannerHit(hit){
   if (!hit) return false;
+  if (hit.postGateUnchecked === true || hit.tradeReady === false) return false;
+  if (typeof W.hgSetupTradeReady === 'function' && !W.hgSetupTradeReady(hit)) return false;
   if (hit.clean === false && !hit.nearClean) return false;
   var side = normalizeSide(hit.dir);
   if (!side) return false;
@@ -2161,6 +2177,7 @@ W.runFullMinimalLossAudit = runFullMinimalLossAudit;
 W.superSetupFqsGate = superSetupFqsGate;
 W.runPrecisionSourceAudit = runPrecisionSourceAudit;
 W.applySuperSetupPostGate = applySuperSetupPostGate;
+W.isCleanScannerHit = isCleanScannerHit;
 W.superSetupSortCands = superSetupSortCands;
 W.superSetupSymBase = superSetupSymBase;
 W.calcSafeMaxLeverage = calcSafeMaxLeverage;

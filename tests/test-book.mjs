@@ -142,6 +142,16 @@ console.log('== addToBook vetoes ==');
 }
 
 {
+  const W = loadBookStack();
+  const unchk = await W.addToBook({
+    sym: 'BTCUSDT', dir: 'long', entry: 100, stop: 95, t1: 110,
+    postGateUnchecked: true, tradeReady: false, silent: true
+  });
+  ok(unchk.ok === false && unchk.veto === true, 'UNCHECKED ticket is not bookable');
+  ok((unchk.reasons || []).join(' ').indexOf('UNCHECKED') >= 0, 'UNCHECKED book veto names the ledger gap');
+}
+
+{
   const W = loadBookStack({
     brainLiveModeOn: () => true,
     brainLiveEligible: () => ({ ok: false, reasons: ['TRIPLE STACK missing'] }),

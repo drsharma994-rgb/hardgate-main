@@ -29,7 +29,7 @@ function loadTabAlerts(){
 const lib = loadTabAlerts();
 const { hgTabAlertsFresh, hgTabAlertsFormat, setupKey, GAP_MS, GOLD_MIN_TALLY,
   tabAlertsShouldRun, tabAlertsMarkRun, LS_LAST_RUN, LS_CLEAN_ONLY, LS_GOLD_LAST_RUN,
-  setupIsClean7, tabAlertsFilterClean7, tabAlertsFilterCryptoConvicted, tabAlertsCleanOnlyEnabled,
+  setupIsClean7, setupIsNearClean6, tabAlertsFilterClean7, tabAlertsFilterCryptoConvicted, tabAlertsCleanOnlyEnabled,
   tabAlertsGoldSeparateEnabled, tabAlertsGoldConvictedOnlyEnabled,
   tabAlertsCryptoConvictedOnlyEnabled, goldIsMostConvinced } = lib;
 
@@ -74,6 +74,14 @@ assert(setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9,
 assert(!setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2, nearClean: true, gatesPassed: 6 }), 'SWING near rows are not clean7');
 assert(setupIsClean7({ src: 'EDGE', clean7: true, gatesPassed: 7, gatesTotal: 7 }), 'explicit clean7 passes');
 assert(!setupIsClean7({ src: 'GOLD SCALP', tally: 11, entry: 1, stop: 0.9, t1: 1.2 }), 'gold tally-only is not clean7');
+assert(!setupIsClean7({ src: 'SWING', sym: 'X', dir: 'long', entry: 1, stop: 0.9, t1: 1.2, clean7: true, postGateUnchecked: true }),
+       'UNCHECKED is not CLEAN7 even with the clean7 flag');
+assert(!setupIsClean7({ src: 'SWING', clean7: true, tradeReady: false, entry: 1, stop: 0.9, t1: 1.2 }),
+       'tradeReady=false is not CLEAN7');
+assert(!setupIsNearClean6({ src: 'SWING', nearClean: true, gatesPassed: 6, postGateUnchecked: true, entry: 1, stop: 0.9, t1: 1.2 }),
+       'UNCHECKED is not 6/7 NEAR Telegram');
+assert(!goldIsMostConvinced({ id: 'a', grade: 'A', locked: true, postGateUnchecked: true }, { bestId: 'a' }),
+       'UNCHECKED gold is not MOST CONVINCED');
 assert(tabAlertsFilterClean7([
   { src: 'SWING', sym: 'A', dir: 'long', entry: 1, stop: 0.9, t1: 1.1, clean7: true },
   { src: 'EDGE', sym: 'B', dir: 'short', entry: 2, stop: 2.1, t1: 1.8, tally: 6 }
@@ -223,6 +231,19 @@ assert(goldRun.pushed === 2 && WGold._tg.indexOf('GOLD CONVICTION') >= 0
        && WGold._tg.indexOf('COIN:') >= 0 && WGold._tg.indexOf('STOP LOSS:') >= 0
        && WGold._tg.indexOf('GOLD SCALP') >= 0,
        'gold conviction telegram batch with explicit COIN / ENTRY / SL / TP');
+
+const WGoldUnchk = loadWithWindow({
+  goldscalpScan: () => ({
+    bestId: 'gs1',
+    cands: [{ id: 'gs1', sym: 'XAUUSD', dir: 'long', entry: 2400, stop: 2390, t1: 2420, tally: 11, grade: 'A', locked: true, postGateUnchecked: true, tradeReady: false }]
+  }),
+  goldswingScan: () => ({ cands: [] }),
+  sendTelegram: async (t) => { WGoldUnchk._tg = t; return true; }
+});
+WGoldUnchk.localStorage = { _m: {}, getItem(k){ return k in this._m ? this._m[k] : null; }, setItem(k,v){ this._m[k]=String(v); } };
+assert(WGoldUnchk.hgTabAlertsCollectGold().length === 0, 'UNCHECKED gold MOST PROBABLE is not a conviction alert');
+const goldUnchkRun = await WGoldUnchk.hgTabAlertsRunGold({ force: true });
+assert(goldUnchkRun.pushed === 0, 'UNCHECKED gold does not send Telegram');
 
 const WBrainNoClean = loadWithWindow({
   __hgBrainLast: () => ({

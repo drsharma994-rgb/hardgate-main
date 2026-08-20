@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v418',
-  pack: 'phone viewing: stacked header, 44px taps, no page sideways scroll',
-  built: '2026-08-20T10:30:00Z',
-  note: 'mobile.css ≤860px stacks brand+menu then exchange; gold PLACED/CROSS-CHECKED from v417 stays; cache busts off production hg-v417'
+  version: 'hg-v419',
+  pack: 'UNCHECKED is not trade-ready: no CLEAN/PRIME/alerts/book until flow/RS actually runs',
+  built: '2026-08-20T11:00:00Z',
+  note: 'post-gate UNCHECKED stays visible but cannot be MOST PROBABLE, Telegram, or ADD TO BOOK; G1–G7 unchanged'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
