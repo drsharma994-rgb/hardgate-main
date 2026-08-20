@@ -2028,6 +2028,21 @@ terse status, and never launches a first-time scan on a global refresh.
     try { cands = opFn(rows, livePx, hgOgZoneLevels(rows, livePx)); }
     catch (e) { return ''; }
     if (!cands || !cands.length) return '';
+    /* A gold zone flipping to TRIGGERED reaches the reader even off-tab —
+       chime + Telegram through the alert bell's ZONES class, keyed per
+       tab+zone (seeded silently on the first scan, never fires twice). */
+    var azFn = gfn('hgAlertZones');
+    if (azFn){
+      try{
+        azFn(cands.filter(function(zc){ return zc.status === 'TRIGGERED'; })
+          .map(function(zc){
+            return { sym: 'XAUUSD', dir: zc.dir, tab: 'OMNIGOLD',
+                     zoneLo: zc.zone.lo, zoneHi: zc.zone.hi,
+                     entry: zc.entry, stop: zc.stop, t1: zc.t1, t2: zc.t2, rr2: zc.rr2,
+                     verdict: 'anticipation zone — the gated OMNIGOLD cards decide tickets' };
+          }), 'OMNIGOLD');
+      }catch(eAz){}
+    }
     var h = '<div class="panel"><h2>NEXT GOLD LEVELS <span>anticipation — the nearest high-confluence zone each way · tickets are decided by the gated cards below</span></h2>';
     if (tmFn){
       try { h += '<div class="dim">triggers evaluate at 1h closes: ' + esc(tmFn(Date.now(), 3).join(' · ')) + '</div>'; } catch (e2) {}

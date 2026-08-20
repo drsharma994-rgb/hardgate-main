@@ -519,6 +519,26 @@
                                           ticket: !!(c.grade && c.grade.ticket) }; });
             if (fwd.length){ try{ W.hgFwdRecordScan('OMNIPRESENT', TF, fwd, { horizonBars: 24 }); }catch(e){} }
           }
+          /* THE WHOLE POINT, DELIVERED: the flip to TRIGGERED reaches the
+             reader even when this tab is not on screen — chime + Telegram
+             via the alert bell (hgalert.js ZONES class, seeded silently on
+             the first scan, keyed per zone so nothing fires twice). The
+             verdict rides along honestly: a triggered zone the gates
+             vetoed says so in the same push. */
+          if (gfn('hgAlertZones')){
+            try{
+              W.hgAlertZones(found.filter(function (c){ return c.status === 'TRIGGERED'; })
+                .map(function (c){
+                  return { sym: c.sym, dir: c.dir, tab: 'OMNIPRESENT',
+                           zoneLo: c.zone.lo, zoneHi: c.zone.hi,
+                           entry: c.entry, stop: c.stop, t1: c.t1, t2: c.t2, rr2: c.rr2,
+                           verdict: (c.grade && c.grade.ticket) ? 'TICKET — all gates clear'
+                                  : ((c.grade && c.grade.vetoes && c.grade.vetoes.length)
+                                      ? 'VETOED by ' + c.grade.vetoes.join(', ')
+                                      : 'WATCH — no veto, not a ticket') };
+                }), 'OMNIPRESENT');
+            }catch(eAz){}
+          }
           return { found: found, top: top, scanned: list.length, failed: failed };
         });
       })

@@ -897,6 +897,69 @@ console.log('== 14) squeeze alerts ==');
          'garbage -> ignored, never throws');
 }
 
+/* =========================================================================
+   15) ZONES — the anticipation desks' trigger alerts (seed -> new zone
+       chimes + cascade with honest verdict; per-TAB keying so OMNIPRESENT
+       and OMNIGOLD pushing alternately never re-alert each other's zones)
+========================================================================= */
+console.log('== 15) zone alerts ==');
+{
+  const ls = memLocalStorage();
+  ls.setItem('hgAlertEnabled', '1');
+  const env = loadHgalert({ doc: stubDocument(), ls, audio: true });
+  clickBtn(env);
+  const tgCalls = [];
+  env.W.sendTelegram = (t) => { tgCalls.push(t); return Promise.resolve(true); };
+
+  assert(typeof env.W.hgAlertZones === 'function', 'window.hgAlertZones seam exposed');
+  const zn = (sym, dir, lo, verdict) => ({ sym, dir, tab: 'OMNIPRESENT',
+    zoneLo: lo, zoneHi: lo + 0.5, entry: lo, stop: lo + 0.8, t1: lo - 1.6, t2: lo - 4, rr2: 5,
+    verdict: verdict || 'TICKET — all gates clear' });
+
+  /* first sighting seeds silently — a trigger that predates the watcher is noise */
+  assert(env.W.hgAlertZones([zn('BTCUSD', 'short', 70000)], 'OMNIPRESENT') === 'seeded' && tgCalls.length === 0,
+         'first zone set seeds silently');
+  assert(env.W.hgAlertZones([zn('BTCUSD', 'short', 70000)], 'OMNIPRESENT') === 'unchanged',
+         'identical set -> unchanged');
+
+  /* the OTHER desk pushing its own (different) set must SEED, not alert —
+     one shared key here would flip on every alternating scan */
+  assert(env.W.hgAlertZones([zn('XAUUSD', 'short', 4508)], 'OMNIGOLD') === 'seeded' && tgCalls.length === 0,
+         'per-TAB keys: the gold desk seeds independently instead of re-alerting');
+  assert(env.W.hgAlertZones([zn('BTCUSD', 'short', 70000)], 'OMNIPRESENT') === 'unchanged',
+         'and the first desk is still unchanged after the other pushed');
+
+  /* a NEW triggered zone chimes + pushes, with levels and the honest verdict */
+  const r = env.W.hgAlertZones([zn('BTCUSD', 'short', 70000),
+                                zn('SOLUSD', 'short', 85, 'VETOED by trend-guard')], 'OMNIPRESENT');
+  await new Promise(r2 => setTimeout(r2, 30));
+  assert(r === 'alerted' && tgCalls.length === 1, 'new triggered zone -> alerted, one telegram push');
+  assert(tgCalls[0].indexOf('ZONE TRIGGERED') >= 0 && tgCalls[0].indexOf('swept & REJECTED') >= 0
+      && tgCalls[0].indexOf('STOP LOSS:') >= 0 && tgCalls[0].indexOf('TAKE PROFIT 2:') >= 0
+      && tgCalls[0].indexOf('VETOED by trend-guard') >= 0
+      && tgCalls[0].indexOf('hardgate-main.onrender.com') >= 0,
+         'push carries the zone, both targets, the HONEST verdict, and the site link');
+
+  /* moved zone inside the 5-min throttle -> held, not silent */
+  assert(env.W.hgAlertZones([zn('BTCUSD', 'short', 70200)], 'OMNIPRESENT') === 'throttled'
+      && tgCalls.length === 1, 'changed set inside the 5-min throttle -> held');
+
+  /* cleared + garbage */
+  assert(env.W.hgAlertZones([], 'OMNIGOLD') === 'cleared', 'empty set -> cleared, silent');
+  assert(env.W.hgAlertZones(null) === 'ignored' && env.W.hgAlertZones('x') === 'ignored',
+         'garbage -> ignored, never throws');
+
+  /* the desks actually push: source contract on both wirings */
+  const OP = fs.readFileSync(path.join(root, 'omnipresent.js'), 'utf8');
+  const OG = fs.readFileSync(path.join(root, 'omnigold.js'), 'utf8');
+  assert(/hgAlertZones\(found\.filter/.test(OP) && /'OMNIPRESENT'\);/.test(OP),
+         'omnipresent pushes its triggered set after every scan');
+  assert(/azFn\(cands\.filter/.test(OG) && /'OMNIGOLD'\);/.test(OG),
+         'the gold levels panel pushes its triggered set too');
+  assert(/verdict: \(c\.grade && c\.grade\.ticket\)/.test(OP),
+         'and the verdict rides along honestly — a vetoed trigger says so in the push');
+}
+
 globalThis.setInterval = REAL_SET_INTERVAL;
 Date.now = REAL_DATE_NOW;
 console.log('\n' + pass + ' assertions passed' + (fail ? ', ' + fail + ' FAILED' : ''));

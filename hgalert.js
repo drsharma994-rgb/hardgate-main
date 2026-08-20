@@ -227,6 +227,10 @@ var __sniperLive = false;                /* a sniper push has arrived this sessi
 var __lastSniperLine = '';               /* last sniper alert/seed line */
 var __squeezeKey = null;                 /* last-seen squeeze hit-set key */
 var __lastSqueezeLine = '';              /* last squeeze alert/seed line (push-only class) */
+var __zonesKey = {};                     /* per-TAB last-seen TRIGGERED-zone set key — two desks
+                                            push here (OMNIPRESENT, OMNIGOLD); one shared key would
+                                            flip on every alternating scan and re-alert old zones */
+var __lastZonesLine = '';                /* last zone alert/seed line (push-only class) */
 
 /* last evaluation reads, for the panel's honest lines */
 var __evaluated = false;
@@ -649,6 +653,91 @@ function onSqueeze(hits){
   }catch(e){ return 'error'; }
 }
 
+/* ---------------- ZONES — the anticipation desks' whole point, delivered.
+
+   OMNIPRESENT and the OMNIGOLD levels panel hold a reversal zone BEFORE
+   price arrives; the moment worth interrupting someone's day for is the
+   flip to TRIGGERED — the zone was swept and the bar closed back through
+   it, and the entry is at market NOW. The desks push their triggered sets
+   here after every scan (window.hgAlertZones); keying is per sym+dir+zone,
+   so the same trigger never fires twice and a NEW trigger always does.
+   First sighting after load seeds silently — an alert for something that
+   happened before you were watching is noise. Telegram first, ntfy at
+   priority 5 second — the SNIPER cascade, because this is the same class
+   of message: come enter. The push carries the verdict honestly: a
+   triggered zone the gates vetoed says so in the same breath. */
+function zonesKeyOf(list){
+  var ks = [];
+  for (var i = 0; i < list.length; i++){
+    var z = list[i];
+    if (!z || !z.sym) continue;
+    ks.push(String(z.sym) + '@' + String(z.dir) + '@' + (+z.zoneLo).toFixed(2));
+  }
+  ks.sort();
+  return ks.join('|');
+}
+function zonesBlocks(list){
+  var blocks = [];
+  for (var i = 0; i < list.length && blocks.length < 4; i++){
+    var z = list[i];
+    if (!z || !z.sym) continue;
+    blocks.push(String(z.sym) + ' ' + String(z.dir || '').toUpperCase()
+      + ' — zone ' + (+z.zoneLo).toFixed(2) + '-' + (+z.zoneHi).toFixed(2) + ' swept & REJECTED'
+      + '\nENTRY (market): ' + (+z.entry).toFixed(2)
+      + '\nSTOP LOSS: ' + (+z.stop).toFixed(2)
+      + '\nTAKE PROFIT 1: ' + (+z.t1).toFixed(2) + ' (2R)'
+      + '\nTAKE PROFIT 2: ' + (+z.t2).toFixed(2) + (isFinite(+z.rr2) ? ' (' + (+z.rr2).toFixed(1) + 'R)' : '')
+      + '\nVERDICT: ' + String(z.verdict || 'see the tab')
+      + '\nTab: ' + String(z.tab || 'OMNIPRESENT'));
+  }
+  if (list.length > 4) blocks.push('+' + (list.length - 4) + ' more');
+  return blocks.length ? blocks.join('\n\n') : '—';
+}
+function onZones(list, tab){
+  try{
+    if (!Array.isArray(list)) return 'ignored';
+    tab = String(tab || (list[0] && list[0].tab) || 'OMNIPRESENT');
+    var key = zonesKeyOf(list);
+    if (!Object.prototype.hasOwnProperty.call(__zonesKey, tab)){
+      __zonesKey[tab] = key; __lastZonesLine = hhmm() + ' zones seeded (' + tab + ')'; return 'seeded';
+    }
+    if (key === __zonesKey[tab]) return 'unchanged';
+    __zonesKey[tab] = key;
+    if (!list.length){ __lastZonesLine = hhmm() + ' zone board cleared'; return 'cleared'; }
+    var line = hhmm() + ' ZONE TRIGGERED: ' + list.map(function(z){
+      return String(z.sym) + ' ' + String(z.dir || '').toUpperCase(); }).slice(0, 3).join(', ');
+    if (!__enabled || !__unlocked || !audioOk()){
+      __lastZonesLine = line + (__enabled ? ' (armed — plays after your next click)' : ' (alerts off)');
+      return 'unarmed';
+    }
+    var now = 0;
+    try{ now = Date.now(); }catch(e){ now = 0; }
+    if (now - (__lastChime.zones || 0) < CHIME_GAP_MS){
+      __lastZonesLine = line + ' (alert held by 5-min throttle)';
+      return 'throttled';
+    }
+    __lastChime.zones = now;
+    var suffix;
+    if (__muted){ suffix = ' (muted)'; }
+    else if (playChime()){ suffix = ''; }
+    else { suffix = ' (sound failed)'; }
+    var txt = '🎯 HARDGATE ZONE TRIGGERED\n'
+      + 'A pre-armed reversal zone was swept and rejected — entry is at market NOW.\n\n'
+      + zonesBlocks(list)
+      + offHoursTag()
+      + '\nhttps://hardgate-main.onrender.com/';
+    try{
+      var tg = gfn('sendTelegram');
+      if (tg){ suffix += ' · telegram'; Promise.resolve(tg(txt)).then(function(r){
+        if (r !== true){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE ZONE TRIGGERED', txt, { priority: 5 }); }
+      }).catch(function(){ var nt = gfn('sendAlertPush'); if (nt) nt('HARDGATE ZONE TRIGGERED', txt, { priority: 5 }); }); }
+      else { var nt2 = gfn('sendAlertPush'); if (nt2){ nt2('HARDGATE ZONE TRIGGERED', txt, { priority: 5 }); suffix += ' · ntfy p5'; } }
+    }catch(e){}
+    __lastZonesLine = line + suffix;
+    return 'alerted';
+  }catch(e){ return 'error'; }
+}
+
 /* ---------------- (e) DAILY FAMILY DIGEST — the Setup Log's per-family
    track record, pushed once per day at 21:05-21:35 IST while the app is
    open. The log lives in THIS browser (localStorage), so this is the only
@@ -1014,6 +1103,10 @@ W.hgAlertSniper = function(hits){
 };
 W.hgAlertSqueeze = function(hits){
   try{ return onSqueeze(hits); }
+  catch(e){ return 'error'; }
+};
+W.hgAlertZones = function(list, tab){
+  try{ return onZones(list, tab); }
   catch(e){ return 'error'; }
 };
 /* family-digest seams (vm suites): the text builder + the daily tick */
