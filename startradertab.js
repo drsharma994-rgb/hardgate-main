@@ -501,6 +501,30 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       if (!dir) return null;
     }
 
+    /* The shared indicator context, cast as one more vote — the same 14
+       gates the ledger desks grade with. One vote worth 1 point, only when
+       the evaluated majority is decisive (margin of 3+), and it can vote
+       AGAINST the working direction: a synthesis that counts only agreeing
+       desks needs at least one voice that reads the tape itself. rows4h are
+       closed here (stDropForming at the fetch site) and hgContextRead
+       re-enforces that on its own. */
+    if (typeof W.hgContextRead === 'function'){
+      var cxS = W.hgContextRead(rows4h, dir, 'startrader', false);
+      if (cxS){
+        /* objections, not majorities: half of these gates are
+       permissive location reads ("do not chase the extreme") that rarely
+       object, so a with/against majority never fires even on a short into
+       a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
+       pass=false is an objection; five objections is a third of the panel
+       shouting. */
+        if (cxS.againstN <= 1) votes.push({ src: 'CONTEXT GATES', dir: dir, pts: 1, detail: cxS.read });
+        else if (cxS.againstN >= 5) votes.push({ src: 'CONTEXT GATES',
+          dir: dir === 'long' ? 'short' : 'long', pts: 1, detail: cxS.read });
+        dir = stMajorityDir(votes);
+        if (!dir) return null;
+      }
+    }
+
     for (var v = 0; v < votes.length; v++) points += votes[v].pts;
 
     var agree = votes.filter(function(x){ return x.dir === dir; });

@@ -426,7 +426,10 @@ function trendmxPlanHTML(s){
     + ' · T2 <b>' + pxFmt(s.t2) + '</b> (' + fmtN(rr2, 1) + 'R)'
     + (isFinite(s.riskPct) ? ' · risk ' + fmtN(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
-    + (s.note ? ' — ' + escH(s.note) : '');
+    + (s.note ? ' — ' + escH(s.note) : '')
+    /* the shared 14-gate indicator read attached by hgBestLevels */
+    + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '');
 }
 
 /* expandable-row block for one matrix row; uses the scan-cached 4h rows —

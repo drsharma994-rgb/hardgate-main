@@ -268,6 +268,38 @@ function hgBestLevels(inp){
     plan = hgBestLevelsEdgeGate(plan, inp);
     if (!plan) return Object.assign(out, { reason: 'freqtrade edge gate', gate: gate });
 
+    /* Phase 3b — the shared indicator context. SQUEEZE, TRENDTABLE and
+       OI FLOW all route their plans through here and none of them reads a
+       single one of the 14 shared context gates (OI FLOW reads essentially
+       no price indicator at all — its whole quality grade was one EMA20/50
+       test). One call here gives all of them the same read the two ledger
+       desks get. Info first: the ledger and counts ride on the plan for any
+       card to show. Policy second, and mild: an outright ADVERSE MAJORITY
+       (more evaluated gates against the direction than with it) shaves the
+       formation score by the same 8 points a failing walk-forward edge
+       already costs — a demotion in rank, never a veto. hgContextRead
+       enforces closed bars itself, so the forming-candle feeds these desks
+       pass in cannot repaint the verdicts. */
+    if (typeof G.hgContextRead === 'function'){
+      var cxKind = (gate && gate.hit && (gate.hit.kind || gate.hit.stratKey)) || baseStyle;
+      var cx = G.hgContextRead(rows, dir, cxKind, inp.allowFade === true);
+      if (cx){
+        plan.contextGates = cx.gates;
+        plan.contextRead = cx.read;
+        /* objections, not majorities: half of these gates are
+       permissive location reads ("do not chase the extreme") that rarely
+       object, so a with/against majority never fires even on a short into
+       a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
+       pass=false is an objection; five objections is a third of the panel
+       shouting. */
+        if (cx.againstN >= 5){
+          plan.contextWarn = true;
+          plan.formationScore = (fin(plan.formationScore) ? plan.formationScore
+                                : (fin(formationScore) ? formationScore : 0)) - 8;
+        }
+      }
+    }
+
     /* Phase 4 */
     plan = hgBestLevelsVisionVeto(plan, inp);
 

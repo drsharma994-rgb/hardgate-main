@@ -638,6 +638,63 @@
     return gates;
   }
 
+  /* ================= the one-call context read ==================
+
+     Every desk that grades by hand-summed tally rather than a ledger —
+     GOLD SCALP, GOLD SWING, GOLD PRO, EDGE, SQUEEZE, TRENDTABLE, OI FLOW,
+     STAR TRADER, both best-levels refiners — asked the same question the
+     two ledger desks already answer: what do the indicators actually say
+     about this setup? This is hgIndicatorGates packaged for them.
+
+     Three guarantees the callers cannot each be trusted to re-implement:
+
+       CLOSED BARS. Most of those desks feed a forming candle into their
+       indicator math (measured in the 2026-08 audit: five of six crypto
+       desks, all of goldind). The last bar is dropped HERE whenever it is
+       younger than the tape's own bar spacing — self-sufficient, no tf
+       label needed, and a no-op on historical tapes.
+
+       INFO ONLY. Nothing returned here vetoes. The counts summarise 14
+       verdicts; what a desk does with "9 against" is that desk's policy.
+
+       HONEST COUNTS. withN/againstN count only gates that evaluated;
+       gates that could not run are n/a, never silently counted as agreeing. */
+  function hgContextRead(rows, dir, kind, reversion){
+    try{
+      if (dir !== 'long' && dir !== 'short') return null;
+      if (!rows || rows.length < 60) return null;
+      var clean = [], i, r;
+      for (i = 0; i < rows.length; i++){
+        r = rows[i];
+        if (r && isFinite(fin(r.c))) clean.push(r);
+      }
+      if (clean.length < 60) return null;
+      var sp = hgBarSpacingSec(clean);
+      var lastT = fin(clean[clean.length - 1].t);
+      if (isFinite(lastT) && lastT > 1e12) lastT = Math.floor(lastT / 1000);
+      if (isFinite(sp) && sp > 0 && isFinite(lastT)
+          && (Date.now() / 1000 - lastT) < sp){
+        clean = clean.slice(0, -1);
+      }
+      if (clean.length < 60) return null;
+      var gates = hgIndicatorGates(clean, { dir: dir, kind: String(kind || '') }, {},
+                                   reversion === true);
+      if (!gates || !gates.length) return null;
+      var withN = 0, againstN = 0, na = 0, g;
+      for (i = 0; i < gates.length; i++){
+        g = gates[i];
+        if (!g) continue;
+        if (g.pass === true) withN++;
+        else if (g.pass === false) againstN++;
+        else na++;
+      }
+      return { gates: gates, withN: withN, againstN: againstN, na: na,
+               read: 'indicator context ' + withN + ' with / ' + againstN + ' against'
+                   + (na ? ' / ' + na + ' n-a' : '') + ' of ' + gates.length };
+    }catch(e){ return null; }
+  }
+
+  G.hgContextRead   = hgContextRead;
   G.hgBarSpacingSec = hgBarSpacingSec;
   G.hgSlotMeanVol   = hgSlotMeanVol;
   G.hgNewsGate      = hgNewsGate;

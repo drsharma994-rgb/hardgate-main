@@ -424,6 +424,11 @@ function cardHTML(r){
       + ' · risk ' + FMT(s.riskPct, 2) + '%'
       + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
       + (s.note ? ' — ' + s.note : '')
+      /* the shared 14-gate indicator read attached by hgBestLevels — this
+         desk consults almost no price indicator of its own, so this line is
+         most of its price-context evidence */
+      + (s.contextRead ? '<div class="dim">' + String(s.contextRead).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+          + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
     : oiflowPlan(r);
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')

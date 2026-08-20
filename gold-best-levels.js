@@ -371,6 +371,35 @@ function hgBestLevelsGold(inp){
       plan = G.hgBestLevelsVisionVeto(plan, inp);
     }
 
+    /* Phase 5 — the shared indicator context. Both gold tabs route every
+       candidate through here, and neither reads a single one of the 14
+       shared context gates — goldind re-implements half of them privately
+       and consults none in the grade. Same contract as the crypto refiner:
+       the ledger and counts ride on the plan for the card to show, and an
+       ADVERSE MAJORITY (more evaluated gates against than with) costs the
+       same 8 formation points a failing walk-forward edge already costs — a
+       demotion in rank, never a veto. hgContextRead enforces closed bars
+       itself, which matters here more than anywhere: goldind computes every
+       indicator on a tape whose last candle is still forming. */
+    if (typeof G.hgContextRead === 'function'){
+      var skRev = (sk === 'vwap' || sk === 'ob' || sk === 'fvg' || sk === 'vwapband');
+      var cx = G.hgContextRead(formRows, dir, hit.stratKey || style, skRev);
+      if (cx){
+        plan.contextGates = cx.gates;
+        plan.contextRead = cx.read;
+        /* objections, not majorities: half of these gates are
+       permissive location reads ("do not chase the extreme") that rarely
+       object, so a with/against majority never fires even on a short into
+       a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
+       pass=false is an objection; five objections is a third of the panel
+       shouting. */
+        if (cx.againstN >= 5){
+          plan.contextWarn = true;
+          plan.formationScore = Math.round((fin(+plan.formationScore) ? +plan.formationScore : 0) - 8);
+        }
+      }
+    }
+
     plan.planSrc = (plan.planSrc || 'gold formation') + ' · ' + GB_REF;
     plan.goldRegime = regime.label;
     plan.goldMinRr = minRr;
@@ -551,6 +580,15 @@ function hgApplyGoldBestLevels(gc, inp){
     gc.goldRegime = plan.goldRegime;
     gc.goldMinRr = plan.goldMinRr;
     gc.mtfNote = plan.mtfNote;
+    /* The context read must reach the CANDIDATE — that is the object the
+       gold tabs render. A demotion whose reason never reaches the card is
+       indistinguishable from a bug. */
+    gc.contextGates = plan.contextGates;
+    gc.contextRead = plan.contextRead;
+    if (plan.contextWarn && !gc.demoted){
+      gc.demoted = true;
+      gc.demoteReason = plan.contextRead || 'indicator context against';
+    }
     if (plan.visionVetoed){
       gc.demoted = true;
       gc.demoteReason = plan.demoteReason || 'vision veto';

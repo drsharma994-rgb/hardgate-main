@@ -784,6 +784,26 @@ function edgeEnrich(sig, rows, item, candleSrc){
     }
     /* --- STANDARD ENRICHMENTS --- */
     out.parts.push({ label: 'SWING 4H cascade + HTF agree — ' + dir.toUpperCase(), pts: 2 });
+    /* The shared indicator context — the same 14 gates the ledger desks
+       grade with, summarised into this tally's own currency. Weighted like
+       any other single evidence line (capped at ±2), because fourteen reads
+       of the same tape are one opinion, not fourteen votes. rows here are
+       already closed bars (dropped at scan ingestion), and hgContextRead
+       re-enforces that on its own, so this cannot repaint. */
+    if (typeof W.hgContextRead === 'function'){
+      var cxE = W.hgContextRead(rows, dir, sig.edge || 'edge', false);
+      if (cxE){
+        /* objections, not majorities: half of these gates are
+       permissive location reads ("do not chase the extreme") that rarely
+       object, so a with/against majority never fires even on a short into
+       a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
+       pass=false is an objection; five objections is a third of the panel
+       shouting. */
+        var cxPts = (cxE.againstN >= 5) ? -2 : (cxE.againstN <= 1 ? 1 : 0);
+        out.parts.push({ label: cxE.read, pts: cxPts });
+        out.contextGates = cxE.gates;
+      }
+    }
     out.tally += 2;
     out.parts.push({ label: sig.edge + (sig.swept ? ' · liquidity sweep' : ' · value entry'), pts: 2 });
     out.tally += 2;

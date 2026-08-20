@@ -442,7 +442,11 @@ function squeezePlanHTML(s){
     + ' · T2 <b>' + pxF(s.t2) + '</b> (' + fmtF(rr2, 1) + 'R)'
     + (isFinite(s.riskPct) ? ' · risk ' + fmtF(s.riskPct, 2) + '%' : '')
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
-    + (s.note ? ' — ' + esc(s.note) : '');
+    + (s.note ? ' — ' + esc(s.note) : '')
+    /* the shared 14-gate indicator read attached by hgBestLevels — shown,
+       because a demotion whose reason never reaches the card is a bug */
+    + (s.contextRead ? '<div class="dim">' + esc(s.contextRead)
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '');
 }
 
 /* full block: <div class="plan"> line (+ optional extra note) plus the

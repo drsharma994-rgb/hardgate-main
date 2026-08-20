@@ -432,9 +432,19 @@ function goldProCardStack(o){
   try{
     var p = o && o.plan;
     if (!p || typeof hgSetupStackForInlineScan !== 'function') return null;
+    /* gatesPassed used to be the literal 7/7 — a gate count with no gates
+       behind it. The card now states what the 14 shared context gates
+       actually read for this direction, and states nothing when they could
+       not run: an invented number is worse than no number. */
+    var cx = o.context;
     return hgSetupStackForInlineScan({
       dir: p.dir, sym: 'XAUUSDT', rows4h: o.rows4h || null, style: 'goldpro', asset: 'gold',
-      clean: true, gatesPassed: 7, gatesTotal: 7
+      clean: !!(cx && cx.withN > cx.againstN),
+      /* undefined, not null: isFinite(null) is TRUE in JS, and a null here
+         would render as a fake 0/0-clean badge — the exact invented-number
+         defect this change removes. */
+      gatesPassed: cx ? cx.withN : undefined,
+      gatesTotal: cx ? (cx.withN + cx.againstN) : undefined
     });
   }catch(e){ return null; }
 }
@@ -443,6 +453,11 @@ function renderLevelsPanel(o){
   var h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span></h2>';
   if (!o || !o.plan) return h + '<div class="note warn">' + esc((o && o.reason) || 'levels unavailable.') + '</div></div>';
   var p = o.plan;
+  if (o.context && o.context.read){
+    h += '<div class="note">' + esc(o.context.read)
+      + (o.context.againstN > o.context.withN ? ' — the indicator context leans AGAINST this setup' : '')
+      + '</div>';
+  }
   if (p && p.dir && typeof hgBookStampChip === 'function'){
     h = '<div class="panel"><h2>EXECUTION LEVELS <span>live 4H gold setup · stop = wider of 1.5×ATR14(4H) / 30-bar swing structure · T1 2R · T2 3.5R</span>'
       + hgBookStampChip('XAUUSD', p.dir, { scanner: 'goldpro', strategy: 'goldpro', fund: 'gold', klass: 'metals' })
@@ -604,7 +619,7 @@ async function runGoldPro(ui){
     if (typeof ema !== 'function' || typeof atr !== 'function'){
       lvReason = 'levels unavailable — the indicator layer (ema/atr) is missing.';
     } else {
-      var lvRows = null;
+      var lvRows = null, lvContext = null;
       if (typeof getCandles === 'function'){
         try{ var xa = await getCandles('XAUUSDT', '4h', 200); if (xa && xa.length){ lvRows = xa; lvSrc = 'XAUUSDT perp'; } }catch(e){}
         if (!lvRows){ try{ var xp = await getCandles('PAXGUSDT', '4h', 200); if (xp && xp.length){ lvRows = xp; lvSrc = 'PAXGUSDT perp'; } }catch(e){} }
@@ -633,6 +648,12 @@ async function runGoldPro(ui){
           lvReason = 'levels unavailable — ATR(14) is not computable on the 4H gold series.';
         } else {
           var lswing = (typeof lastSwing === 'function') ? lastSwing(lvRows, lvCascade, 30) : NaN;
+          /* The real indicator read for this setup — lvRows are already
+             closed bars and lvCascade is the direction, so the shared
+             context gates cost one call. This replaces the number the card
+             stack used to invent (see goldProCardStack). */
+          lvContext = (typeof window !== 'undefined' && typeof window.hgContextRead === 'function')
+            ? window.hgContextRead(lvRows, lvCascade, 'gp-cascade', false) : null;
           /* Entry at the LIVE price — the closed-bar close can sit hours and
              many points behind a moving market, and a card priced there is
              the dead-levels defect this app has already paid for twice. The
@@ -715,7 +736,8 @@ async function runGoldPro(ui){
 
     ui.out.innerHTML = renderStructurePanel(st, g1d.rows, g4h.rows, src)
                      + renderLevelsPanel({ plan: lvPlan, reason: lvReason, note: lvNote,
-                                           src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows })
+                                           src: lvSrc, rowsN: lvRowsN, cascade: lvCascade, rows4h: lvRows,
+                                           context: lvContext })
                      + renderMacroPanel(macro, funding, ls, cot)
                      + renderCorrPanel(cr, corrErr)
                      + renderVerdictPanel(verdict);
