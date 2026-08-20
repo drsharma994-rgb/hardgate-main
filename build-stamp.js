@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v416',
-  pack: 'ask the tab why it has no tickets instead of guessing',
-  built: '2026-08-22T06:30:00Z',
-  note: 'hgOmniWhyNoTickets() and hgOgWhyNoTickets() tally the last scan: which gates vetoed, how often, and the reason each gave most'
+  version: 'hg-v417',
+  pack: 'a bit of color on the light desk — wash, accent bar, long/short tints',
+  built: '2026-08-20T09:05:00Z',
+  note: 'bright.css color wash + header accent bar; text contrast unchanged'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
