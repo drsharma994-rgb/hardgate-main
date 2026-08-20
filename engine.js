@@ -699,6 +699,22 @@ function gateCandidate(inp){
   res.pass = true;
   res.gatesPassed = countTrue();
   res.conviction = res.gatesPassed >= GATES.length ? 'STRONG' : 'MODERATE';
+  /* The shared indicator context reads every survivor. It cannot veto —
+     G0-G5 already decided this trade exists — but an ADVERSE read (a third
+     of the twenty-gate panel objecting) knocks STRONG to MODERATE, which
+     halves suggested risk through the existing policy. Sizing is the
+     honest lever for soft evidence. */
+  if (typeof window !== 'undefined' && typeof window.hgContextRead === 'function'){
+    var cxE = window.hgContextRead(rows4h, dir, 'engine', false);
+    if (cxE){
+      res.contextRead = cxE.read;
+      res.contextAdverse = cxE.adverse === true;
+      if (cxE.adverse && res.conviction === 'STRONG'){
+        res.conviction = 'MODERATE';
+        res.contextNote = 'conviction knocked STRONG→MODERATE: ' + cxE.read;
+      }
+    }
+  }
   res.plan = buildPlan(dir, cls, rows4h, inp.rows1h, {
     sym: sym,
     fundingPct: numOrNull(inp.fundingPct),
@@ -1004,7 +1020,10 @@ function cardHTML(r){
     + '<div class="vwhy"><b>' + res.conviction + ' CONVICTION</b> — ' + res.gatesPassed + ' of 6 gates passed'
     + ' · suggested risk <b>' + FMT(res.riskPct, 2) + '%</b> of equity'
     + (res.turnoverUnverified ? ' · turnover unverified — size down' : '')
-    + (s ? ' · ' + s.type + (s.confirmed ? ' CONFIRMED' : ' UNCONFIRMED') : ' · levels unavailable — size down') + '</div></div>';
+    + (s ? ' · ' + s.type + (s.confirmed ? ' CONFIRMED' : ' UNCONFIRMED') : ' · levels unavailable — size down')
+    /* a knocked conviction must say what knocked it, on the card */
+    + (res.contextNote ? '<br>' + esc(res.contextNote)
+       : (res.contextRead ? '<br>' + esc(res.contextRead) : '')) + '</div></div>';
   var mini = '<div class="mini">'
     + '<span class="k">mark</span><span>' + PX(r.mark) + '</span>'
     + '<span class="k">24h change</span><span>' + (r.chg24 !== null ? PCT(r.chg24, 2) : '—') + '</span>'

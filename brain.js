@@ -1992,6 +1992,21 @@ function applyTrend4h(rows){
         }
         continue;
       }
+      /* The shared 20-gate indicator context, cast as one vote layer — the
+         same bank every scanning desk reads (v405/v413). CLEAN (≤1
+         objection) votes with the working direction; ADVERSE (a third of
+         the panel objecting) votes against it; the middle stays silent —
+         fourteen-plus reads of one tape are one opinion, not twenty votes.
+         hgContextRead enforces closed bars itself. */
+      if (typeof window !== 'undefined' && typeof window.hgContextRead === 'function' && row.dec && row.dec.dir){
+        var cxB = window.hgContextRead(row.rows4h, row.dec.dir, 'brain', false);
+        if (cxB && (cxB.clean || cxB.adverse)){
+          var cxVote = cxB.clean ? row.dec.dir : (row.dec.dir === 'long' ? 'short' : 'long');
+          row.col.votes.push({ layer: 'ctxgates', vote: cxVote, kind: 'context', text: cxB.read });
+          colNote(row.col, 'ctxgates', String(cxVote).toUpperCase(), cxB.read);
+          row.dec = brainDecide(row.col.votes, { unavailable: row.col.unavailable });
+        }
+      }
       var t = trend4hAssess(row.rows4h);
       if (t && t.dir === row.dec.dir){
         row.col.votes.push({ layer: 'trend4h', vote: t.dir, kind: 'structural', text: t.text });

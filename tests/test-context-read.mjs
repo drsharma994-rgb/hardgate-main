@@ -162,4 +162,30 @@ console.log('\n== source contracts on the five seams behavior cannot cheaply dri
   }
 }
 
+console.log('\n== round three: the last three scanning desks join the bank ==');
+{
+  const MR = read('meanrev.js');
+  ok(/hgContextRead\(rows, sig\.dir, 'meanrev', true\)/.test(MR),
+     'mean rev — the audit’s thinnest desk — reads the bank, graded AS reversion');
+  ok(/contextRead/.test(MR) && /context AGAINST this fade/.test(MR),
+     'and the read renders on its card with the adverse warning');
+
+  const EN = read('engine.js');
+  ok(/hgContextRead\(rows4h, dir, 'engine', false\)/.test(EN),
+     'engine reads the bank on every survivor');
+  ok(/cxE\.adverse && res\.conviction === 'STRONG'/.test(EN)
+     && /res\.conviction = 'MODERATE'/.test(EN),
+     'adverse context knocks STRONG to MODERATE — sizing, the honest lever, not a veto');
+  ok(/res\.contextNote \? '<br>' \+ esc\(res\.contextNote\)/.test(EN),
+     'and a knocked conviction says what knocked it, on the card');
+
+  const BR = read('brain.js');
+  ok(/hgContextRead\(row\.rows4h, row\.dec\.dir, 'brain', false\)/.test(BR),
+     'brain reads the bank as a vote layer');
+  ok(/cxB && \(cxB\.clean \|\| cxB\.adverse\)/.test(BR),
+     'the middle stays silent — only clean or adverse casts the vote');
+  ok(/layer: 'ctxgates'/.test(BR) && /row\.dec\.dir === 'long' \? 'short' : 'long'/.test(BR),
+     'and the context can vote AGAINST the working direction');
+}
+
 console.log('\npassed: ' + passed);

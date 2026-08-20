@@ -356,6 +356,11 @@ function cardHTML(r){
       + (sig.dir === 'long' ? 'low − ' : 'high + ') + PLAN_STOP_ATR + '×ATR' + ATR_LEN
       + ' · T1 = sma' + MEAN_LEN + ' mean · T2 = opposite band(' + BB_LEN + ',' + BB_MULT + ')</div>'
     : '<div class="plan">levels unavailable — ATR/band data missing for ' + esc(r.sym) + '</div>';
+  /* the shared 20-gate read — a demotion whose reason never reaches the card is a bug */
+  if (r.contextRead){
+    planBlock += '<div class="dim">' + esc(r.contextRead)
+      + (r.contextAdverse ? ' — context AGAINST this fade' : '') + '</div>';
+  }
 
   var tradeOnclick = (lv && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
@@ -482,6 +487,13 @@ function mount(el){
             rows = mrClosed(rows);
             var sig = mrSignal(rows);
             if (!sig) return;
+            /* The shared indicator context — this desk read five arrays of
+               its own and nothing else (the 2026-08 audit's thinnest desk).
+               A mean-reversion entry is graded AS reversion: it is never
+               punished for being counter-trend, but five-plus objections
+               from twenty reads is named on the card and costs rank. */
+            var cx = (typeof window !== 'undefined' && typeof window.hgContextRead === 'function')
+              ? window.hgContextRead(rows, sig.dir, 'meanrev', true) : null;
             var bt = mrBacktest(rows);
             var closes = rows.map(function(r){ return r.c; });
             var k = rows.length - 1;
@@ -493,6 +505,7 @@ function mount(el){
             var tick = { symbol: sym, turnoverUsd: item.turnoverUsd, mark: rows[k].c, chg24: null };
             results.push({
               sym: sym, sig: sig, bt: bt, tick: tick, rows: rows, venue: item.exchange || null,
+              contextRead: cx ? cx.read : null, contextAdverse: !!(cx && cx.adverse),
               stats: {
                 last: rows[k].c,
                 rsi2: rsi(closes, RSI_LEN)[k],
