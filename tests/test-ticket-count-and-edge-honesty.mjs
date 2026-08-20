@@ -171,10 +171,9 @@ console.log('\n== SECOND DEFECT: a losing read no longer shows as PASS ==');
   };
   /* The live number: 22 samples at 18% against a 1.5R breakeven of 40%. */
   const thin = edge(22, 0.18);
-  ok(thin.pass !== true, 'a -2σ read on 22 samples is NOT a PASS any more');
-  ok(thin.info === true, 'it is reported as info, so it cannot veto the ticket either');
-  ok(/counts AGAINST/.test(thin.why), 'and says what it is doing: ' + thin.why);
-  ok(/under the 30/.test(thin.why), 'naming the sample floor it fell short of');
+  ok(thin.pass === false, 'a -2σ read on 22 samples is a VETO (min-loss: no 20–29 free pass)');
+  ok(thin.info !== true, 'it is NOT info — info cannot stop a ticket');
+  ok(/has not paid/.test(thin.why), 'and says the mechanic has not paid: ' + thin.why);
 
   /* Past the floor it must still be a hard veto. */
   const fat = edge(60, 0.18);
@@ -191,28 +190,25 @@ console.log('\n== SECOND DEFECT: a losing read no longer shows as PASS ==');
   ok(good.info !== true, 'as a real pass, not a caution');
 }
 
-console.log('\n== the AGAINST read does not silence the desk ==');
+console.log('\n== the losing read now stops the ticket on gold ==');
 {
-  /* The whole point of info:true — the ticket survives. */
   const clean = [{ key: 'trend', hard: true, pass: true, why: 'ok' },
                  { key: 'vol-alive', hard: true, pass: true, why: 'ok' }];
   const against = { key: 'measured-edge', hard: false, info: true, pass: false, why: 'counts AGAINST' };
   const veto = { key: 'measured-edge', hard: false, pass: false, why: 'has not paid' };
   ok(W.hgOmniGrade(clean.concat([against])).ticket === true,
-     'a thin negative read leaves the ticket standing');
+     'an INFO negative read (omniroute 20–29 window) still leaves the ticket standing');
   ok(W.hgOmniGrade(clean.concat([veto])).ticket === false,
-     'a measured one still stops it');
-  ok(W.hgOmniGrade(clean.concat([against])).notes.indexOf('measured-edge') >= 0,
-     'and the card still says it argued against');
+     'a measured-edge VETO stops it');
 }
 
-console.log('\n== both desks got both fixes ==');
+console.log('\n== gold vetoes the thin losing read; omniroute still reports AGAINST ==');
 {
-  for (const [n, src] of [['omnigold', GOLD], ['omniroute', ROUTE]]){
-    ok(/ed = false; edInfo = true;/.test(src), n + ' reports the thin negative read as AGAINST');
-    ok(/info: edInfo, pass: ed/.test(src), n + ' passes the flag through to the gate');
-    ok(/SIGNIFICANTLY NEGATIVE IS NOT A PASS/.test(src), n + ' records why, so it is not tidied back');
-  }
+  ok(!/ed = false; edInfo = true;/.test(GOLD) || /Min-loss: the pool table/.test(GOLD),
+     'gold no longer uses the 20–29 info free-pass');
+  ok(/ed = false; edInfo = true;/.test(ROUTE), 'omniroute still reports the thin negative as AGAINST (crypto desk unchanged)');
+  ok(/info: edInfo, pass: ed/.test(GOLD) && /info: edInfo, pass: ed/.test(ROUTE),
+     'both pass the flag through to the gate');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

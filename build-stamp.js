@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v418',
-  pack: 'phone viewing: stacked header, 44px taps, no page sideways scroll',
-  built: '2026-08-20T10:30:00Z',
-  note: 'mobile.css ≤860px stacks brand+menu then exchange; gold PLACED/CROSS-CHECKED from v417 stays; cache busts off production hg-v417'
+  version: 'hg-v420',
+  pack: 'OMNIGOLD min-loss: losing mechanics, daily-fade, vol-stop, weekend, yield-dir',
+  built: '2026-08-20T11:20:00Z',
+  note: 'OMNIGOLD tickets no longer issue on a mechanic that has not paid, a fade into the daily rally, a volatility stop, or a gold weekend/Friday-close gap; yield is judged per direction; phone layout from v418 stays'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

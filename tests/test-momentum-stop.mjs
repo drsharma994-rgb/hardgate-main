@@ -144,20 +144,18 @@ console.log('\n== the ledger shows the compromise ==');
   const g = (plan) => W.hgOgGates(STR, { dir:'long', kind:'ORB', mech:'ORB' }, { plan: plan })
                        .filter(x => x && x.key === 'momentum-stop')[0];
   const m = g({ entry: 4300, stop: 4270, t1: 4345, momentumStop: true });
-  ok(m.pass === false && m.info === true, 'a momentum plan reads AGAINST — visible, not fatal');
+  ok(m.pass === false && m.info !== true, 'a momentum plan is a real VETO — visible and fatal for tickets');
   ok(/VOLATILITY stop, not structure/.test(m.why), 'saying what it is: ' + m.why.slice(0, 60));
-  ok(/size accordingly/.test(m.why), 'and what to do about it');
   const st = g({ entry: 4300, stop: 4270, t1: 4345 });
   ok(st.pass === true, 'a structural plan passes');
   ok(/rests on structure/.test(st.why), 'and says so');
   const noPlan = g(null);
   ok(noPlan && noPlan.pass === null, 'no plan reads UNCHECKED — this gate judges stops, not absence');
   ok(/no plan to judge/.test(noPlan.why), 'and says so');
-  /* AGAINST must not stop a ticket by itself. */
+  /* Min-loss: a volatility stop cannot TICKET. */
   const graded = W.hgOmniGrade([{ key:'trend', hard:true, pass:true, why:'ok' },
-    { key:'momentum-stop', hard:false, info:true, pass:false, why:'volatility stop' }]);
-  ok(graded.ticket === true, 'and it cannot veto — killing it would restore the stalemate');
-  ok(graded.notes.indexOf('momentum-stop') >= 0, 'while still appearing among the against-notes');
+    { key:'momentum-stop', hard:false, info:false, pass:false, why:'volatility stop' }]);
+  ok(graded.ticket === false, 'a momentum-stop veto stops the ticket');
 }
 
 console.log('\n== the flag survived its two assassins, pinned at the source ==');

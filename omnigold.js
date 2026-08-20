@@ -98,7 +98,8 @@ terse status, and never launches a first-time scan on a global refresh.
      a $0.30 spread is ~19% of 1R. */
   var ASSUMED_SPREAD_USD = 0.30;
   var COST_WARN_R = 0.15;   // cost above this share of 1R is worth flagging
-  var COST_VETO_R = 0.30;   // above this the edge is mostly paying the spread
+  var COST_VETO_R = 0.30;   // swing / unspecified — a wide stop can carry more drag
+  var COST_VETO_R_SCALP = 0.15; // scalp: the live 3.16-pt stop was 19% of 1R paying the spread
 
   var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
@@ -160,6 +161,30 @@ terse status, and never launches a first-time scan on a global refresh.
     if (v === null || v === undefined || v === '') return NaN;
     var n = +v;
     return isFinite(n) ? n : NaN;
+  }
+
+  /* Directional yield read. The scan used to freeze validateYieldCorrelation
+     against 'long' and reuse that verdict on every setup — so a short into
+     falling yields was cleared by a long-side check. Prefer goldind's
+     validator when loaded; otherwise the same last-vs-5-bars test. */
+  function hgOgYieldValid(rows, dir){
+    var fn = gfn('validateYieldCorrelation');
+    if (fn){
+      try {
+        var r = fn(rows, dir);
+        if (r && typeof r.valid === 'boolean') return r;
+      } catch (e) {}
+    }
+    if (!rows || rows.length < 5) return null;
+    var cur = fin(rows[rows.length - 1] && rows[rows.length - 1].c);
+    var prior = fin(rows[rows.length - 5] && rows[rows.length - 5].c);
+    if (!isFinite(cur) || !isFinite(prior)) return null;
+    var d = String(dir || '').toLowerCase();
+    if (d === 'long' && cur > prior)
+      return { valid: false, reason: 'US10Y yields are rising — headwind for a gold long' };
+    if (d === 'short' && cur < prior)
+      return { valid: false, reason: 'US10Y yields are falling — headwind for a gold short' };
+    return { valid: true, reason: 'yield move does not fight this direction' };
   }
 
   /* ==================== gold-specific pure detectors ==================== */
@@ -1073,11 +1098,11 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'level-fresh', hard:false, info: lfInfo, pass: lfOk, why: lfWhy });
 
-    /* MOMENTUM-STOP — reported AGAINST whenever the plan rests on a
-       volatility stop rather than structure. Info, not a veto: the plan
-       engine only grants one to continuation mechanics that opted in, and
-       killing it here would just restore the no-levels stalemate. The card
-       must show the compromise. */
+    /* MOMENTUM-STOP — a volatility stop, not structure. Continuation
+       mechanics may still RECEIVE one from the plan engine (otherwise a
+       runaway tape has no levels at all), but it cannot TICKET: gold
+       scalps die inside session noise on these stops. The card still
+       shows the compromise; the pick skips it. */
     var msOk = null, msWhy = 'stop is on structure, or no plan to judge';
     if (plHas && plObj){
       if (plObj.momentumStop === true){
@@ -1089,7 +1114,10 @@ terse status, and never launches a first-time scan on a global refresh.
         msWhy = 'stop rests on structure';
       }
     }
-    gates.push({ key:'momentum-stop', hard:false, info:true, pass: msOk, why: msWhy });
+    /* Min-loss: a volatility stop is how gold scalps die inside session
+       noise. Info:true used to leave the TICKET standing; the compromise
+       is still on the card, it just cannot be the trade. */
+    gates.push({ key:'momentum-stop', hard:false, info: false, pass: msOk, why: msWhy });
 
     var reversion = hgOgIsReversion(hit.kind);
 
@@ -1216,6 +1244,12 @@ terse status, and never launches a first-time scan on a global refresh.
       else if (yt.indexOf('FALL') >= 0) yld = (hit.dir === 'long');
       else yld = true;                                   // FLAT blocks nothing
       yldWhy = 'US10Y ' + yt + (yld ? ' — supports this direction' : ' — headwind for this direction');
+    } else if (x.yieldRows){
+      var yv = hgOgYieldValid(x.yieldRows, hit.dir);
+      if (yv && typeof yv.valid === 'boolean'){
+        yld = yv.valid;
+        yldWhy = yv.reason || (yld ? 'yield guard clear' : 'yield guard flags this direction');
+      }
     } else if (x.yield && typeof x.yield.valid === 'boolean'){
       yld = x.yield.valid;
       yldWhy = 'yield guard ' + (yld ? 'clear' : 'flags this direction')
@@ -1261,10 +1295,11 @@ terse status, and never launches a first-time scan on a global refresh.
     if (isFinite(planRisk) && planRisk > 0){
       var rt = ASSUMED_SPREAD_USD * 2;
       var costR = rt / planRisk;
-      cost = costR <= COST_VETO_R;
+      var costCeil = (x.sessionHard === true) ? COST_VETO_R_SCALP : COST_VETO_R;
+      cost = costR <= costCeil;
       costWhy = 'round-trip ~$' + rt.toFixed(2) + ' on a $' + planRisk.toFixed(2) + ' stop = '
               + (costR * 100).toFixed(0) + '% of 1R'
-              + (costR > COST_VETO_R ? ' — the spread would eat most of the edge'
+              + (costR > costCeil ? ' — the spread would eat most of the edge'
                  : (costR > COST_WARN_R ? ' — material drag, size accordingly' : ''));
     }
     gates.push({ key:'cost-drag', hard:false, pass: cost, why: costWhy });
@@ -1290,20 +1325,14 @@ terse status, and never launches a first-time scan on a global refresh.
                  + famZ.toFixed(2) + 'σ is the bar before one this good means anything';
 
       if (sN < MIN_SAMPLES) edWhy = 'only ' + sN + ' past samples — too few to judge';
-      else if (z <= EDGE_VETO_Z && sN >= EDGE_VETO_SAMPLES){ ed = false; edWhy = stat + ' — significantly below breakeven, this mechanic has not paid'; }
       else if (z <= EDGE_VETO_Z){
-        /* SIGNIFICANTLY NEGATIVE IS NOT A PASS. This printed a green PASS
-           beside "-2.09σ vs breakeven" on the only ticket the desk was
-           recommending, while the pool table above it read "has not paid" for
-           the same mechanic on the same number — the table judges past
-           MIN_SAMPLES (20), the gate refuses to act under EDGE_VETO_SAMPLES
-           (30), and the 20–29 window printed PASS. Too thin to VETO on is not
-           evidence of an edge, and this ledger's rule is that unknown reads
-           UNCHECKED, never PASS. info:true keeps it off the ticket's critical
-           path while reporting AGAINST, which is what it is. */
-        ed = false; edInfo = true;
-        edWhy = stat + ' — below breakeven; ' + sN + ' samples is under the ' + EDGE_VETO_SAMPLES
-              + ' this gate needs to veto on, so it counts AGAINST rather than standing the trade aside';
+        /* Min-loss: the pool table already says "has not paid" at MIN_SAMPLES
+           (20). The 20–29 window used to report AGAINST as info so the TICKET
+           still issued — a mechanic at −2σ with 22 samples was the live
+           recommendation. Too thin to be a *large* sample is not a reason to
+           take a losing trade. Under 20 stays UNCHECKED (too few to judge). */
+        ed = false; edInfo = false;
+        edWhy = stat + ' — significantly below breakeven, this mechanic has not paid';
       }
       else if (z >= famZ){ ed = true; edWhy = stat + ' — clears the ' + OG_MECHANICS.length + '-mechanic significance bar (+' + famZ.toFixed(2) + 'σ)'; }
       else {
@@ -1710,8 +1739,10 @@ terse status, and never launches a first-time scan on a global refresh.
        trade; fading a STRONG TREND is the classic way to lose. Direction is
        not the question for a fade. STRENGTH is.
 
-       Three independent reads of strength against this fade, and TWO must
-       agree before it vetoes — one noisy indicator must not kill a setup:
+       Three independent reads of strength against this fade. The daily
+       stack alone is enough to veto — that is the "shorts in a rally"
+       complaint. ADX and regime still need TWO to agree when the daily
+       is missing, so one noisy oscillator cannot kill a setup:
 
          1. the daily stack, which is what "a rally" usually means
          2. ADX >= 25 with DI pointing against the fade
@@ -1721,15 +1752,20 @@ terse status, and never launches a first-time scan on a global refresh.
        Soft, so it reports rather than silently disappearing the card. */
     var fadeOk = true, fadeWhy = 'continuation setup — this gate only judges fades';
     if (reversion){
-      var adverse = [], neutralN = 0;
+      var adverse = [], dailyAgainst = false, neutralN = 0;
       /* A short fade fights an UPtrend; a long fade fights a DOWNtrend. */
       var fadeShort = (hit.dir === 'short');
 
-      /* 1 — the higher timeframe. */
+      /* 1 — the higher timeframe. The live complaint was "shorts in a rally";
+         the daily stack IS that rally. One noisy oscillator must not kill a
+         fade, but fading the daily trend is the classic gold loss. */
       var fhe21 = x.htf ? fin(x.htf.e21) : NaN, fhe50 = x.htf ? fin(x.htf.e50) : NaN;
       if (isFinite(fhe21) && isFinite(fhe50)){
         var dailyUp = fhe21 >= fhe50;
-        if (dailyUp === fadeShort) adverse.push('the daily stack is ' + (dailyUp ? 'up' : 'down'));
+        if (dailyUp === fadeShort){
+          dailyAgainst = true;
+          adverse.push('the daily stack is ' + (dailyUp ? 'up' : 'down'));
+        }
       } else neutralN++;
 
       /* 2 — ADX with direction. */
@@ -1761,13 +1797,13 @@ terse status, and never launches a first-time scan on a global refresh.
         } catch (eFr){ neutralN++; }
       } else neutralN++;
 
-      if (adverse.length >= 2){
+      if (dailyAgainst || adverse.length >= 2){
         fadeOk = false;
         fadeWhy = 'fading a STRONG trend — ' + adverse.join('; ')
                 + '. A fade wants a stretched tape, not a running one';
       } else if (adverse.length === 1){
         fadeWhy = 'fade is counter-trend on one read (' + adverse[0]
-                + '), which is what a fade IS — one read is not enough to stand it aside';
+                + '), which is what a fade IS — one oscillator is not enough to stand it aside';
       } else if (neutralN >= 3){
         fadeOk = null;
         fadeWhy = 'no usable trend-strength read — cannot judge this fade';
@@ -1807,8 +1843,56 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'vol-forecast', hard:false, info:true, pass: vf, why: vfWhy });
 
+    /* WEEKEND EXPOSURE — spot/CME closes Fri 22:00 UTC. A ticket issued
+       inside that window is a gap bet on a closed book, not a gold trade.
+       SWING also vetoes inside one 4h bar of the close: that hold will
+       still be open when the book gaps. SCALP may still trade the last
+       live hours. */
+    var wkOk = null, wkWhy = 'no scan clock supplied — weekend exposure not judged';
+    var wkNow = fin(x.nowSec);
+    var wkFn = gfn('hgInGoldWeekend');
+    if (isFinite(wkNow) && wkNow > 0 && wkFn){
+      try {
+        if (wkFn(wkNow)){
+          wkOk = false;
+          wkWhy = x.sessionHard
+            ? 'inside gold weekend — spot/CME is closed; a scalp ticket is not a live XAU book'
+            : 'inside gold weekend — a swing hold is a gap across a closed spot/CME book';
+        } else {
+          var secsFn = gfn('hgSecsToGoldWeekend');
+          var secsLeft = secsFn ? fin(secsFn(wkNow)) : NaN;
+          if (x.sessionHard !== true && isFinite(secsLeft) && secsLeft >= 0 && secsLeft < 4 * 3600){
+            wkOk = false;
+            wkWhy = 'Friday close in ' + (secsLeft / 3600).toFixed(1)
+                  + 'h — a swing hold would gap a closed spot/CME book';
+          } else {
+            wkOk = true;
+            wkWhy = 'outside the gold weekend closure';
+          }
+        }
+      } catch (eWk){ wkWhy = 'weekend check threw'; }
+    } else if (isFinite(wkNow) && wkNow > 0 && !wkFn){
+      wkWhy = 'weekend helper unavailable — not judged';
+    }
+    gates.push({ key:'weekend-exposure', hard:false, pass: wkOk, why: wkWhy });
 
-
+    /* ShieldGuard — gold tabs already refuse these tapes. Feature-checked:
+       UNCHECKED when the module is not loaded, never a silent pass. */
+    var shOk = null, shWhy = 'ShieldGuard not loaded — not judged';
+    var shFn = gfn('hgShieldGuardVeto');
+    if (shFn && rows && hit && hit.dir){
+      try {
+        var sh = shFn(rows, hit.dir, {});
+        if (sh && sh.veto){
+          shOk = false;
+          shWhy = 'ShieldGuard: ' + (sh.reason || 'veto');
+        } else {
+          shOk = true;
+          shWhy = 'ShieldGuard clear';
+        }
+      } catch (eSh){ shWhy = 'ShieldGuard threw: ' + ((eSh && eSh.message) || eSh); }
+    }
+    gates.push({ key:'shield-guard', hard:false, pass: shOk, why: shWhy });
 
     return gates;
   }
@@ -2261,6 +2345,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!c || c.horizon !== horizon) continue;
       if (!(c.grade && c.grade.ticket)) continue;
       if (!c.plan) continue;              /* no levels means nothing to act on */
+      if (c.plan.momentumStop === true) continue; /* vol stop is not a ticket */
       return c;
     }
     return null;
@@ -2526,7 +2611,7 @@ terse status, and never launches a first-time scan on a global refresh.
         catch (e) { var wf = gfn('hgFwdWarn'); if (wf) { try { wf('omnigold:resolve', e); } catch (eW) {} } }
       }
 
-      var hits = hgOgDetect(rows, {});
+      var hits = hgOgDetect(rows, { nowSec: shared.nowSec });
       /* the anticipation zones, computed once per horizon and handed to the
          ledger so zone-anchor can place every mechanic against real
          structure (best-effort: an absent engine reads UNCHECKED) */
@@ -2537,7 +2622,9 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       var extra = {
         htf: dailyFn ? dailyFn(rows) : null,
-        killzone: shared.killzone, macro: shared.macro, yield: shared.yieldGuard,
+        killzone: shared.killzone, macro: shared.macro,
+        yieldRows: shared.yieldRows || null,
+        nowSec: shared.nowSec,
         adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled,
         livePx: livePx, zoneCtx: zoneCtx
       };
@@ -2583,7 +2670,7 @@ terse status, and never launches a first-time scan on a global refresh.
     /* market-wide context, fetched once for both horizons */
     ui.stat.textContent = 'reading macro + session context…';
     var macroFn = gfn('getGoldMacro') || gfn('getGoldMacroCached');
-    var shared = { killzone: null, macro: null, yieldGuard: null, news: null };
+    var shared = { killzone: null, macro: null, yieldRows: null, nowSec: Date.now() / 1000, news: null };
     try { var kz = gfn('goldKillzone'); if (kz) shared.killzone = kz(Date.now()); } catch (e) {}
     try { var nr = gfn('hgNewsRisk'); if (nr) shared.news = nr('XAUUSD'); } catch (e) {}
 
@@ -2592,10 +2679,8 @@ terse status, and never launches a first-time scan on a global refresh.
       .catch(function(){ return null; })
       .then(function(m){
         shared.macro = m || null;
-        var yg = gfn('validateYieldCorrelation');
-        if (yg && m && m.us10yRows){
-          try { shared.yieldGuard = yg(m.us10yRows, 'long'); } catch (e) { shared.yieldGuard = null; }
-        }
+        shared.yieldRows = (m && m.us10yRows) ? m.us10yRows : null;
+        shared.nowSec = Date.now() / 1000;
         return scanHorizon(HORIZONS.scalp, shared, ui);
       })
       .then(function(scalp){
@@ -2996,6 +3081,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.ogDistinctCounts = ogDistinctCounts;
     window.ogTradeKey = ogTradeKey;
     window.hgOgEvaluate = hgOgEvaluate;
+    window.hgOgPickFor = hgOgPickFor;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
     window.hgOgZonesPanel = hgOgZonesPanel;
     /* hgOgReport() — the desk record, on demand, from the console.

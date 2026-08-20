@@ -30,9 +30,9 @@
 
    fade-strength takes three independent reads of strength against the fade —
    the daily stack, ADX with DI, and the structural regime with the local EMA
-   stack confirming — and requires TWO to agree before vetoing, so one noisy
-   indicator cannot kill a setup. It is soft, so it reports rather than
-   disappearing the card.
+   stack confirming. The daily stack alone is enough to veto (that is the
+   "shorts in a rally" failure). ADX and regime still need two when daily
+   is missing, so one noisy oscillator cannot kill a setup.
 
    Run: node tests/test-fade-strength.mjs */
 import fs from 'node:fs';
@@ -119,7 +119,7 @@ console.log('\n== THE DEFECT: a fade against a strong trend is now vetoed ==');
     const g = gate(RALLY, 'short', k, { e21: 4400, e50: 4300 });
     ok(g.pass === false, k + ' SHORT into a rally is VETOED');
     ok(/fading a STRONG trend/.test(g.why), '   and says why: ' + g.why.slice(0, 78));
-    ok(/;/.test(g.why), '   naming more than one adverse read, as the two-of-three rule requires');
+    ok(/daily stack/.test(g.why) || /;/.test(g.why), '   naming the daily rally or two independent reads');
   }
   /* Mirror image: a long fade into a selloff. */
   const g2 = gate(SELLOFF, 'long', 'POC-REVERT', { e21: 4300, e50: 4400 });
@@ -150,14 +150,12 @@ console.log('\n== a fade in a RANGING tape is untouched, which is where fades be
      'and it says so rather than staying silent: ' + g.why.slice(0, 70));
 }
 
-console.log('\n== ONE adverse read is not enough ==');
+console.log('\n== the daily stack alone vetoes a fade — that is the rally ==');
 {
-  /* The whole point of two-of-three: a fade IS counter-trend, so a single
-     disagreeing indicator must not stand it aside. Range tape, daily against. */
+  /* Range tape so ADX/regime are not a strong trend; daily UP vs SHORT. */
   const g = gate(RANGE, 'short', 'POC-REVERT', { e21: 4400, e50: 4300 });
-  ok(g.pass !== false, 'a fade with only the daily against it is not vetoed');
-  ok(/one read is not enough/.test(g.why) || /nothing strong/.test(g.why),
-     'and the reason explains the threshold: ' + g.why.slice(0, 80));
+  ok(g.pass === false, 'a fade with the daily against it is vetoed — shorts in a rally');
+  ok(/daily stack/.test(g.why), 'naming the daily: ' + g.why.slice(0, 80));
 }
 
 console.log('\n== continuation mechanics are not judged by this gate at all ==');

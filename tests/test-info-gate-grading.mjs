@@ -156,14 +156,9 @@ console.log('\n== the four gold context gates carry the flag ==');
                         /* omniroute's own indicator reads — same standing:
                            they argue, they never veto. */
                         'adx-trend', 'atr-percentile', 'vol-forecast',
-                        /* momentum-stop marks a plan resting on a volatility
-                           stop rather than structure. It is info BY DESIGN:
-                           the plan engine only grants such a stop to
-                           continuation mechanics that opted in, and a veto
-                           here would restore the no-levels stalemate it was
-                           built to end. The compromise argues on the card; it
-                           does not kill it. */
-                        'momentum-stop',
+                        /* zone-anchor remains info. momentum-stop is a real
+                           veto on OMNIGOLD (min-loss: a volatility stop
+                           cannot TICKET) so it is NOT in this list. */
                         /* the fallback both desks declare and neither
                            pushes on a healthy ledger — it appears only
                            when hg-gates.js is broken or absent, and a

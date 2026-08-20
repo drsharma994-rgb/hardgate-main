@@ -214,6 +214,14 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIGOLD min-loss — hg-v420
+- **Do not** run OMNIGOLD through `hgApplyGoldBestLevels`. The desk prices **live market entry** (`skipExact` + `entryOverride`); snapping to formation levels recreates DEAD ON ARRIVAL / stale-entry tickets.
+- Yield is judged **per setup direction** (`hgOgYieldValid(rows, dir)`). Never freeze `validateYieldCorrelation(..., 'long')` for the whole scan.
+- A mechanic at **20+ samples and ≤ −2σ vs breakeven VETOES** (no 20–29 info free-pass). OmniRoute crypto keeps the 20–29 AGAINST window.
+- Fading the **daily stack** is enough to veto (`fade-strength`). A volatility / momentum stop cannot TICKET (`momentum-stop` + `hgOgPickFor` skip).
+- **Weekend:** inside Fri 22:00 UTC–Sun 22:00 UTC is a veto; SWING also vetoes inside one 4h bar of the Friday close. Scalp cost-drag ceiling is **0.15R** (`sessionHard`).
+- Tests: `node tests/test-omnigold-min-loss.mjs`, `node tests/test-omnigold.mjs`, `node tests/test-fade-strength.mjs`, `node tests/test-momentum-stop.mjs`
+
 ### Auto hard refresh — hg-v267
 - **`HG_AUTO_REFRESH_HARDCODED_MS = 120000`** in `index.html` — every **2 minutes** the app runs `hardRefreshAll()` on all inline scanners + every `HG_TAB_MODS.refresh()` (including GOLD SCALP/SWING). OFF / 3m / 5m / 15m header buttons are ignored; localStorage `hgAutoRefresh` always stores `120000`.
 - **`goldscalpRefresh` / `goldswingRefresh`:** run a headless scan when the tab was never opened (stub UI, same path as `gsWarm`/`gwWarm`) so the 2m cycle never skips gold tabs cold.
