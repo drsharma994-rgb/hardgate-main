@@ -799,7 +799,7 @@ function edgeEnrich(sig, rows, item, candleSrc){
        a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
        pass=false is an objection; five objections is a third of the panel
        shouting. */
-        var cxPts = (cxE.againstN >= 5) ? -2 : (cxE.againstN <= 1 ? 1 : 0);
+        var cxPts = cxE.adverse ? -2 : (cxE.clean ? 1 : 0);
         out.parts.push({ label: cxE.read, pts: cxPts });
         out.contextGates = cxE.gates;
       }

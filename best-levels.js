@@ -292,7 +292,7 @@ function hgBestLevels(inp){
        a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
        pass=false is an objection; five objections is a third of the panel
        shouting. */
-        if (cx.againstN >= 5){
+        if (cx.adverse){
           plan.contextWarn = true;
           plan.formationScore = (fin(plan.formationScore) ? plan.formationScore
                                 : (fin(formationScore) ? formationScore : 0)) - 8;

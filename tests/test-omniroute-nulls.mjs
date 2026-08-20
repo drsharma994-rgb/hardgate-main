@@ -323,6 +323,8 @@ for (const [name, mk, gateKey] of fields){
                             'squeeze-state', 'keltner-pos', 'structure-shift',
                             'macd-momentum', 'bollinger-pctb', 'volume-z',
                             'regression-slope', 'value-area', 'htf-confirm', 'regime-fit',
+                            'adx-regime', 'obv-flow', 'mfi-pressure', 'cci-stretch',
+                            'ema-ribbon', 'heikin-trend',
                             /* the universe reads need the whole sweep, which a
                                single-symbol harness has no way to supply */
                             'xs-rank', 'breadth',

@@ -517,8 +517,8 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
        a rally — measured: 5 against / 9 with. pass=true means NO OBJECTION,
        pass=false is an objection; five objections is a third of the panel
        shouting. */
-        if (cxS.againstN <= 1) votes.push({ src: 'CONTEXT GATES', dir: dir, pts: 1, detail: cxS.read });
-        else if (cxS.againstN >= 5) votes.push({ src: 'CONTEXT GATES',
+        if (cxS.clean) votes.push({ src: 'CONTEXT GATES', dir: dir, pts: 1, detail: cxS.read });
+        else if (cxS.adverse) votes.push({ src: 'CONTEXT GATES',
           dir: dir === 'long' ? 'short' : 'long', pts: 1, detail: cxS.read });
         dir = stMajorityDir(votes);
         if (!dir) return null;

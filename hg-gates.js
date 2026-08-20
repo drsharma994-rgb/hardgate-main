@@ -631,6 +631,174 @@
       } catch (eReg){ reg = null; regWhy = 'regime threw: ' + ((eReg && eReg.message) || eReg); }
     }
     gates.push({ key:'regime-fit', hard:false, info:true, pass: reg, why: regWhy });
+
+    /* ============ BANK TWO — six more reads, every desk at once ============
+
+       Added 2026-08 when the ask became "feed the tabs more indicators and
+       strategies". Because every desk consumes this one function (the two
+       ledger desks directly, the eight tally desks through hgContextRead),
+       six additions here upgrade the whole app. Same contract as the first
+       fourteen: info-only, honest UNCHECKED, and a reversion mechanic is
+       never punished for being counter-trend — that is what it IS; whether
+       the fade should exist at all is fade-strength's call, not context. */
+
+    /* 30 — ADX/DI: is there directional energy, and whose side is it on? */
+    var axG = null, axWhy = 'ADX unavailable';
+    var axFn = gfn('adx');
+    if (axFn){
+      try {
+        var axr = axFn(rows, 14), axn = rows.length - 1;
+        var axNow = fin(axr.adx[axn]), pdi = fin(axr.plusDI[axn]), mdi = fin(axr.minusDI[axn]);
+        if (isFinite(axNow) && isFinite(pdi) && isFinite(mdi)){
+          var diUp = pdi > mdi;
+          var diAgrees = (hit.dir === 'long') ? diUp : !diUp;
+          axWhy = 'ADX ' + axNow.toFixed(0) + ' with DI ' + (diUp ? 'up' : 'down');
+          if (reversion){
+            axG = true;
+            axWhy += ' — counter-trend by design; whether the fade should exist is fade-strength’s call';
+          } else if (axNow < 20){
+            axG = false;
+            axWhy += ' — no directional energy behind a continuation';
+          } else {
+            axG = diAgrees;
+            axWhy += diAgrees ? ' — the energy is on this side' : ' — the energy is on the other side';
+          }
+        }
+      } catch (eAx){ axG = null; axWhy = 'ADX threw: ' + ((eAx && eAx.message) || eAx); }
+    }
+    gates.push({ key:'adx-regime', hard:false, info:true, pass: axG, why: axWhy });
+
+    /* 31 — OBV flow: is volume accumulating with the trade or against it? */
+    var obvG = null, obvWhy = 'volume series unavailable';
+    try {
+      var obv = 0, obvBack = NaN, oi3, oc, op, ov, obvSpan = Math.min(rows.length - 1, 60);
+      var haveVol = false;
+      for (oi3 = rows.length - obvSpan; oi3 < rows.length; oi3++){
+        oc = fin(rows[oi3].c); op = fin(rows[oi3 - 1].c); ov = fin(rows[oi3].v);
+        if (!isFinite(oc) || !isFinite(op) || !isFinite(ov)) continue;
+        haveVol = haveVol || ov > 0;
+        obv += (oc > op ? ov : (oc < op ? -ov : 0));
+        if (oi3 === rows.length - 21) obvBack = obv;
+      }
+      if (haveVol && isFinite(obvBack)){
+        var obvRising = (obv - obvBack) > 0;
+        var obvAgrees = (hit.dir === 'long') ? obvRising : !obvRising;
+        obvWhy = 'on-balance volume ' + (obvRising ? 'rising' : 'falling') + ' over 20 bars';
+        if (reversion){
+          obvG = true;
+          obvWhy += ' — the flow a fade fades, by design';
+        } else {
+          obvG = obvAgrees;
+          obvWhy += obvAgrees ? ' — volume backs this side' : ' — volume is walking the other way';
+        }
+      }
+    } catch (eObv){ obvG = null; obvWhy = 'OBV threw: ' + ((eObv && eObv.message) || eObv); }
+    gates.push({ key:'obv-flow', hard:false, info:true, pass: obvG, why: obvWhy });
+
+    /* 32 — MFI pressure: money-flow exhaustion at the extremes. Unlike the
+       trend reads, this one CAN argue against a fade's counterpart — buying
+       a tape already stuffed above 80 is late whoever you are. */
+    var mfiG = null, mfiWhy = 'MFI inputs unavailable';
+    try {
+      var mp = 14, posF = 0, negF = 0, mi, tpN, tpP, mv;
+      if (rows.length > mp + 1){
+        for (mi = rows.length - mp; mi < rows.length; mi++){
+          tpN = (fin(rows[mi].h) + fin(rows[mi].l) + fin(rows[mi].c)) / 3;
+          tpP = (fin(rows[mi - 1].h) + fin(rows[mi - 1].l) + fin(rows[mi - 1].c)) / 3;
+          mv = fin(rows[mi].v);
+          if (!isFinite(tpN) || !isFinite(tpP) || !isFinite(mv)) continue;
+          if (tpN > tpP) posF += tpN * mv; else if (tpN < tpP) negF += tpN * mv;
+        }
+        if (posF + negF > 0){
+          var mfi = 100 * posF / (posF + negF);
+          mfiWhy = 'MFI(14) ' + mfi.toFixed(0);
+          if (hit.dir === 'long' && mfi >= 80){ mfiG = false; mfiWhy += ' — buying a tape already stuffed with money flow'; }
+          else if (hit.dir === 'short' && mfi <= 20){ mfiG = false; mfiWhy += ' — selling a tape already drained'; }
+          else { mfiG = true; mfiWhy += ' — no money-flow exhaustion against this entry'; }
+        }
+      }
+    } catch (eMfi){ mfiG = null; mfiWhy = 'MFI threw: ' + ((eMfi && eMfi.message) || eMfi); }
+    gates.push({ key:'mfi-pressure', hard:false, info:true, pass: mfiG, why: mfiWhy });
+
+    /* 33 — CCI stretch: entering WITH a ±200 blowoff is chasing it. A
+       reversion mechanic entering AGAINST the stretch is the design. */
+    var cciG = null, cciWhy = 'CCI inputs unavailable';
+    try {
+      var cp = 20;
+      if (rows.length > cp + 1){
+        var tps = [], ci2;
+        for (ci2 = rows.length - cp; ci2 < rows.length; ci2++){
+          tps.push((fin(rows[ci2].h) + fin(rows[ci2].l) + fin(rows[ci2].c)) / 3);
+        }
+        var tpSum = 0; for (ci2 = 0; ci2 < tps.length; ci2++) tpSum += tps[ci2];
+        var tpMean = tpSum / tps.length, dev = 0;
+        for (ci2 = 0; ci2 < tps.length; ci2++) dev += Math.abs(tps[ci2] - tpMean);
+        dev /= tps.length;
+        if (dev > 0){
+          var cci = (tps[tps.length - 1] - tpMean) / (0.015 * dev);
+          cciWhy = 'CCI(20) ' + cci.toFixed(0);
+          if (!reversion && hit.dir === 'long' && cci >= 200){ cciG = false; cciWhy += ' — chasing a +200 blowoff'; }
+          else if (!reversion && hit.dir === 'short' && cci <= -200){ cciG = false; cciWhy += ' — chasing a −200 washout'; }
+          else if (reversion && ((hit.dir === 'short' && cci >= 200) || (hit.dir === 'long' && cci <= -200))){
+            cciG = true; cciWhy += ' — a stretched tape is the fade’s premise';
+          } else { cciG = true; cciWhy += ' — no blowoff to chase'; }
+        }
+      }
+    } catch (eCci){ cciG = null; cciWhy = 'CCI threw: ' + ((eCci && eCci.message) || eCci); }
+    gates.push({ key:'cci-stretch', hard:false, info:true, pass: cciG, why: cciWhy });
+
+    /* 34 — EMA ribbon: 8/21/50 stack alignment. */
+    var rbG = null, rbWhy = 'EMA ribbon inputs unavailable';
+    try {
+      if (closes.length >= 50){
+        var e8 = emaOf(closes, 8), e21b = emaOf(closes, 21), e50b = emaOf(closes, 50);
+        if (isFinite(e8) && isFinite(e21b) && isFinite(e50b)){
+          var stackUp = e8 > e21b && e21b > e50b;
+          var stackDn = e8 < e21b && e21b < e50b;
+          rbWhy = 'EMA 8/21/50 ' + (stackUp ? 'stacked up' : (stackDn ? 'stacked down' : 'tangled'));
+          if (reversion){
+            rbG = true;
+            rbWhy += stackUp || stackDn ? ' — counter-ribbon by design' : ' — a tangled ribbon suits a fade';
+          } else if (!stackUp && !stackDn){
+            rbG = false;
+            rbWhy += ' — no alignment behind a continuation';
+          } else {
+            rbG = (hit.dir === 'long') ? stackUp : stackDn;
+            rbWhy += rbG ? ' — aligned with this side' : ' — stacked against it';
+          }
+        }
+      }
+    } catch (eRb){ rbG = null; rbWhy = 'ribbon threw: ' + ((eRb && eRb.message) || eRb); }
+    gates.push({ key:'ema-ribbon', hard:false, info:true, pass: rbG, why: rbWhy });
+
+    /* 35 — Heikin-Ashi run: three smoothed candles one way is short-term
+       momentum whoever measures it. */
+    var haG = null, haWhy = 'not enough bars for a Heikin-Ashi read';
+    try {
+      if (rows.length >= 5){
+        var hb = rows.slice(-4), haO = (fin(hb[0].o) + fin(hb[0].c)) / 2, haC, haCol = [], hi2;
+        for (hi2 = 0; hi2 < hb.length; hi2++){
+          haC = (fin(hb[hi2].o) + fin(hb[hi2].h) + fin(hb[hi2].l) + fin(hb[hi2].c)) / 4;
+          if (hi2 > 0) haO = (haO + haCol[hi2 - 1].c) / 2;
+          haCol.push({ o: haO, c: haC });
+        }
+        var ups = 0, dns = 0;
+        for (hi2 = 1; hi2 < haCol.length; hi2++){
+          if (haCol[hi2].c > haCol[hi2].o) ups++; else if (haCol[hi2].c < haCol[hi2].o) dns++;
+        }
+        var haRun = (ups === 3) ? 'up' : (dns === 3 ? 'down' : null);
+        haWhy = haRun ? 'three Heikin-Ashi candles ' + haRun : 'no three-candle Heikin-Ashi run either way';
+        if (!haRun){ haG = true; }
+        else if (reversion){
+          haG = true;
+          haWhy += ' — the run a fade steps in front of, by design';
+        } else {
+          haG = (hit.dir === 'long') ? haRun === 'up' : haRun === 'down';
+          haWhy += haG ? ' — momentum with this side' : ' — momentum the other way';
+        }
+      }
+    } catch (eHa){ haG = null; haWhy = 'Heikin-Ashi threw: ' + ((eHa && eHa.message) || eHa); }
+    gates.push({ key:'heikin-trend', hard:false, info:true, pass: haG, why: haWhy });
     } catch (eCtx){
       gates.push({ key:'context-gates', hard:false, info:true, pass:null,
                    why:'context block threw: ' + ((eCtx && eCtx.message) || eCtx) });
@@ -688,7 +856,16 @@
         else if (g.pass === false) againstN++;
         else na++;
       }
+      /* The policy thresholds SCALE with the panel. When the bank grew from
+         14 to 20 gates, every consumer that had hardcoded "5 objections"
+         would silently loosen — so the bar lives here, once: adverse is a
+         third of the panel objecting (5 of 14 then, 7 of 20 now), clean is
+         at most one objection. Consumers read cx.adverse / cx.clean and
+         never count for themselves. */
+      var advBar = Math.max(4, Math.ceil(gates.length * 0.35));
       return { gates: gates, withN: withN, againstN: againstN, na: na,
+               adverse: againstN >= advBar,
+               clean: againstN <= 1,
                read: 'indicator context ' + withN + ' with / ' + againstN + ' against'
                    + (na ? ' / ' + na + ' n-a' : '') + ' of ' + gates.length };
     }catch(e){ return null; }

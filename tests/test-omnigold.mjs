@@ -174,7 +174,15 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   /* level-fresh joins for the same reason: no live price is supplied here,
      and unknown reads UNCHECKED. When a price IS supplied and the market has
      crossed the stop, it vetoes — asserted in test-level-fresh.mjs. */
-  const INDICATOR_GATES = INFO_GATES.concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh']);
+  /* Bank two (2026-08) added reads that need NO library — OBV, MFI, CCI and
+     the Heikin run are arithmetic on the bars themselves, and the ribbon
+     uses the block's own local emaOf. Depriving this harness of the library
+     deprives them of nothing, so the honest expectation flips: they must
+     EVALUATE here, and the not-pass check applies only to gates whose
+     evidence the harness actually withheld. */
+  const SELF_SUFFICIENT = ['obv-flow', 'mfi-pressure', 'cci-stretch', 'ema-ribbon', 'heikin-trend'];
+  const INDICATOR_GATES = INFO_GATES.filter(k => SELF_SUFFICIENT.indexOf(k) < 0)
+    .concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);
   ok(unchecked.every(k => INDICATOR_GATES.indexOf(k) >= 0),
      'every gate that can run in this harness is evaluated (unchecked: ' + (unchecked.join(', ') || 'none') + ')');
@@ -183,6 +191,10 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
     const g = full.filter(x => x.key === k)[0];
     ok(!!g, 'gate "' + k + '" is on the gold ledger');
     ok(g.pass !== true, k + ' does not pass on evidence it has not got (' + g.why + ')');
+  });
+  SELF_SUFFICIENT.forEach(k => {
+    const g = full.filter(x => x.key === k)[0];
+    ok(!!g && g.pass !== null, k + ' needs no library and therefore EVALUATES here (' + (g && g.why) + ')');
   });
   /* measured-edge is NOT an info gate: a mechanic proven to lose must still be
      able to veto. Only the indicator context reads are non-vetoing. */

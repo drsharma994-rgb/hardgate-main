@@ -86,8 +86,11 @@ console.log('== the helper: honest, closed-bars, info-only ==');
      MAJORITY against — what it does read is a pile of OBJECTIONS from
      every trend gate at once. The policy thresholds below count those. */
   const cxAdv = W.hgContextRead(up, 'short', 'test', false);
-  ok(!!cxAdv && cxAdv.againstN >= 5, 'a short into a strong uptrend piles up 5+ objections (' + cxAdv.againstN + ' against / ' + cxAdv.withN + ' with)');
-  ok(cx.againstN < 5, 'while the aligned long stays under the objection bar (' + cx.againstN + ')');
+  ok(!!cxAdv && cxAdv.adverse === true, 'a short into a strong uptrend reads ADVERSE — a third of the panel objecting (' + cxAdv.againstN + ' of ' + cxAdv.gates.length + ')');
+  ok(cx.adverse !== true, 'while the aligned long stays under the scaled objection bar (' + cx.againstN + ' of ' + cx.gates.length + ')');
+  ok(cxAdv.gates.length >= 20, 'the shared bank now carries 20+ reads — bank two included');
+  for (const k2 of ['adx-regime','obv-flow','mfi-pressure','cci-stretch','ema-ribbon','heikin-trend'])
+    ok(cxAdv.gates.some(g => g && g.key === k2), 'bank two gate present: ' + k2);
 
   ok(W.hgContextRead(up.slice(0, 40), 'long', 't', false) === null, 'too little history -> null, never a guess');
   ok(W.hgContextRead(up, 'sideways', 't', false) === null, 'no direction -> null');
@@ -139,8 +142,8 @@ console.log('\n== source contracts on the five seams behavior cannot cheaply dri
 
   const EDGE = read('edge.js');
   ok(/hgContextRead\(rows, dir, sig\.edge \|\| 'edge', false\)/.test(EDGE), 'edge: wired into the tally');
-  ok(/cxE\.againstN >= 5\) \? -2 : \(cxE\.againstN <= 1 \? 1 : 0\)/.test(EDGE),
-     'edge: scored by objection count, capped at ±2 — one opinion, not fourteen votes');
+  ok(/cxE\.adverse \? -2 : \(cxE\.clean \? 1 : 0\)/.test(EDGE),
+     'edge: scored by the SCALED objection bar, capped at ±2 — one opinion, however many reads');
 
   const STAR = read('startradertab.js');
   ok(/hgContextRead\(rows4h, dir, 'startrader', false\)/.test(STAR), 'star trader: wired as a vote');

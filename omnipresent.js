@@ -44,8 +44,9 @@
    and no divergence is vetoed (a fade wants a stretched tape, not a
    running one); fewer than three level sources is not a zone; fewer than
    two evidences is a level, not a setup; a stop the market already
-   crossed is dead on arrival; the 14 shared context gates read every
-   candidate and 5+ objections stand it aside. Verdicts come from the same
+   crossed is dead on arrival; the shared context bank (20 reads as of
+   bank two) grades every candidate, and an adverse third of the panel
+   stands it aside. Verdicts come from the same
    hgOmniGrade every ledger desk uses, and every TRIGGERED plan is
    forward-logged under OMNIPRESENT — the pool that will say, in R, whether
    this desk earns anything. Anticipation, not prophecy.
@@ -423,7 +424,7 @@
     if (cxFn){
       var cx = cxFn(rows, dir, 'omnipresent', true);
       if (cx){
-        gates.push({ key: 'context-gates', hard: false, info: true, pass: (cx.againstN >= 5) ? false : true, why: cx.read });
+        gates.push({ key: 'context-gates', hard: false, info: true, pass: cx.adverse ? false : true, why: cx.read });
         cand.contextGates = cx.gates;
       } else gates.push({ key: 'context-gates', hard: false, pass: null, why: 'context read unavailable on this tape' });
     } else gates.push({ key: 'context-gates', hard: false, pass: null, why: 'hg-gates.js not loaded — UNCHECKED' });

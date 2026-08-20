@@ -145,6 +145,10 @@ console.log('\n== the four gold context gates carry the flag ==');
                         'adx-trend', 'squeeze-state', 'keltner-pos', 'atr-percentile', 'structure-shift',
                         'macd-momentum', 'bollinger-pctb', 'volume-z', 'regression-slope', 'value-area',
                         'htf-confirm', 'regime-fit', 'vol-forecast',
+                        /* bank two (2026-08): six more shared context reads,
+                           same standing — they argue, they never veto */
+                        'adx-regime', 'obv-flow', 'mfi-pressure', 'cci-stretch',
+                        'ema-ribbon', 'heikin-trend',
                         /* omniroute's own indicator reads — same standing:
                            they argue, they never veto. */
                         'adx-trend', 'atr-percentile', 'vol-forecast',
