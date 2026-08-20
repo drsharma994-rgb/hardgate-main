@@ -269,7 +269,11 @@
 
   /* rows are CLOSED bars; livePx is the forming close captured before the
      drop. Returns candidates (0-2: one per side), each ARMED or TRIGGERED. */
-  function opAssess(rows, livePx){
+  /* extraLevels ({above:[{px,src}], below:[{px,src}]}) lets a desk add the
+     levels only IT knows about — the gold tab feeds ADR bands, the Asia
+     range and the prior week here. They join the cluster on equal terms:
+     an extra source is one more voice at a zone, never a zone by itself. */
+  function opAssess(rows, livePx, extraLevels){
     var out = [];
     if (!rows || rows.length < 120 || !(livePx > 0)) return out;
     var atrFn = gfn('atr');
@@ -279,6 +283,17 @@
     if (!(a > 0)) return out;
 
     var src = opLevelSources(rows, livePx);
+    if (extraLevels){
+      var xs2 = ['above', 'below'], xi, xj, XL;
+      for (xi = 0; xi < 2; xi++){
+        if (!Array.isArray(extraLevels[xs2[xi]])) continue;
+        for (xj = 0; xj < extraLevels[xs2[xi]].length; xj++){
+          XL = extraLevels[xs2[xi]][xj];
+          if (XL && isFinite(fin(XL.px)) && fin(XL.px) > 0)
+            src[xs2[xi]].push({ px: fin(XL.px), src: String(XL.src || 'desk level') });
+        }
+      }
+    }
     var sides = [
       { dir: 'short', zones: opZones(src.above, a, livePx, 'above') || [] },
       { dir: 'long',  zones: opZones(src.below, a, livePx, 'below') || [] }

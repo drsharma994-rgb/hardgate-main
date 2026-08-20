@@ -1971,6 +1971,86 @@ terse status, and never launches a first-time scan on a global refresh.
       });
   }
 
+  /* ==================== anticipation: the next gold levels ==================== */
+
+  /* The desk's own levels, fed into the shared zone engine on equal terms:
+     ADR bands (the day's statistical ceiling and floor), the Asia range
+     (the liquidity London and New York hunt), and the prior ISO week's
+     extremes. Everything else — swing points, prior day, Donchian, value
+     area, round hundreds, AVWAP bands — the engine already reads. */
+  function hgOgZoneLevels(rows, livePx){
+    var above = [], below = [];
+    function put(px, src){
+      var v = fin(px);
+      if (!isFinite(v) || v <= 0) return;
+      if (v > livePx) above.push({ px: v, src: src });
+      else if (v < livePx) below.push({ px: v, src: src });
+    }
+    var adr = hgOgAdr(rows, 14);
+    if (adr && isFinite(fin(adr.adr))){
+      if (isFinite(fin(adr.todayLo))) put(adr.todayLo + adr.adr, 'ADR ceiling');
+      if (isFinite(fin(adr.todayHi))) put(adr.todayHi - adr.adr, 'ADR floor');
+    }
+    var asia = hgOgAsiaRange(rows);
+    if (asia){
+      put(asia.hi, 'Asia high');
+      put(asia.lo, 'Asia low');
+    }
+    /* prior complete ISO week's extremes */
+    var byWk = {}, i, t, wk;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t)) continue;
+      wk = Math.floor((t - 345600) / 604800);   /* ISO-ish: weeks anchored Monday */
+      if (!byWk[wk]) byWk[wk] = { hi: num(rows[i].h), lo: num(rows[i].l) };
+      else {
+        if (num(rows[i].h) > byWk[wk].hi) byWk[wk].hi = num(rows[i].h);
+        if (num(rows[i].l) < byWk[wk].lo) byWk[wk].lo = num(rows[i].l);
+      }
+    }
+    var wks = Object.keys(byWk).sort();
+    if (wks.length >= 2){
+      var pw = byWk[wks[wks.length - 2]];
+      put(pw.hi, 'prior-week high');
+      put(pw.lo, 'prior-week low');
+    }
+    return { above: above, below: below };
+  }
+
+  /* The NEXT GOLD LEVELS panel — anticipation, not a ticket. The 35-gate
+     mechanic cards below stay the only path to a TICKET; this panel exists
+     so the reader holds the next high and the next bottom BEFORE the
+     market reaches them, with the trigger rule and the times it can fire. */
+  function hgOgZonesPanel(rows, livePx){
+    var opFn = gfn('opAssess'), tmFn = gfn('opNextCloses');
+    if (!opFn || !rows || rows.length < 120 || !isFinite(fin(livePx))) return '';
+    var cands;
+    try { cands = opFn(rows, livePx, hgOgZoneLevels(rows, livePx)); }
+    catch (e) { return ''; }
+    if (!cands || !cands.length) return '';
+    var h = '<div class="panel"><h2>NEXT GOLD LEVELS <span>anticipation — the nearest high-confluence zone each way · tickets are decided by the gated cards below</span></h2>';
+    if (tmFn){
+      try { h += '<div class="dim">triggers evaluate at 1h closes: ' + esc(tmFn(Date.now(), 3).join(' · ')) + '</div>'; } catch (e2) {}
+    }
+    for (var i = 0; i < cands.length; i++){
+      var c = cands[i];
+      h += '<div style="margin-top:6px">'
+        + '<b>' + (c.dir === 'short' ? 'SHORT from' : 'LONG from') + ' ' + fmtPx(c.zone.lo) + '–' + fmtPx(c.zone.hi) + '</b>'
+        + ' <span class="gpip' + (c.status === 'TRIGGERED' ? ' ok' : '') + '">' + c.status + '</span>'
+        + ' <span class="dim">' + c.zone.confluence + ' sources: ' + esc(c.zone.srcs.join(', '))
+        + ' · ' + c.zone.distAtr.toFixed(1) + '×ATR from ' + fmtPx(livePx) + '</span>'
+        + '<div class="dim">if it rejects: entry ' + fmtPx(c.entry) + ' · SL ' + fmtPx(c.stop)
+        + ' (squeezed) · TP1 ' + fmtPx(c.t1) + ' (2R) · TP2 ' + fmtPx(c.t2) + ' (' + c.rr2.toFixed(1) + 'R)'
+        + ' · trigger: ' + esc(c.trigger) + '</div>'
+        + (c.evidence && c.evidence.length
+            ? '<div class="dim">evidence: ' + esc(c.evidence.join(' · ')) + '</div>'
+            : '<div class="dim">no exhaustion evidence yet — a level, not a setup, until the tape argues for it</div>')
+        + '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
   /* ==================== render ==================== */
 
   function esc(s){
@@ -2318,7 +2398,7 @@ terse status, and never launches a first-time scan on a global refresh.
          current price — keep it so the ledger can judge level freshness. */
       var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
       if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
-      if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null };
+      if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null, livePx: NaN };
 
       /* walk-forward every mechanic on THIS horizon */
       var stats = {}, pooled = null;
@@ -2409,7 +2489,7 @@ terse status, and never launches a first-time scan on a global refresh.
           } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
         }
       }
-      return { cfg: cfg, rows: rows, source: got.source, cands: cands, pooled: pooled };
+      return { cfg: cfg, rows: rows, source: got.source, cands: cands, pooled: pooled, livePx: livePx };
     }).catch(function(){
       return { cfg: cfg, rows: [], source: null, cands: [], pooled: null };
     });
@@ -2598,6 +2678,13 @@ terse status, and never launches a first-time scan on a global refresh.
         }
 
         var h = '';
+        /* The next levels FIRST: the reader asked to hold the high and the
+           bottom before the market arrives — that answer leads the page. */
+        try {
+          if (res.scalp && res.scalp.rows && res.scalp.rows.length){
+            h += hgOgZonesPanel(res.scalp.rows, res.scalp.livePx);
+          }
+        } catch (eZp) {}
         [[HORIZONS.scalp.label, pickScalp], [HORIZONS.swing.label, pickSwing]].forEach(function(pair){
           if (pair[1]) return;
           h += '<div class="note og-pick-none">No ' + esc(pair[0]) + ' pick: nothing on that horizon '
@@ -2804,6 +2891,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.ogDistinctCounts = ogDistinctCounts;
     window.ogTradeKey = ogTradeKey;
     window.hgOgEvaluate = hgOgEvaluate;
+    window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
+    window.hgOgZonesPanel = hgOgZonesPanel;
     /* hgOgReport() — the desk record, on demand, from the console.
 
        The forward log lives in localStorage, so it can only be read in the
