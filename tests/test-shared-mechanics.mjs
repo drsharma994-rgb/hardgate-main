@@ -285,7 +285,7 @@ console.log('\n== load order and cache are wired ==');
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const iMech = html.indexOf('hg-mechanics.js');
-  const iRoute = html.indexOf('src="omniroute.js"');
+  const iRoute = html.indexOf('src="omniroute.js');
   const iGold = html.indexOf('src="omnigold.js');
   ok(iMech > 0, 'hg-mechanics.js is in index.html');
   ok(iMech < iRoute && iMech < iGold, 'and loads BEFORE both desks that call it');

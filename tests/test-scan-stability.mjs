@@ -111,8 +111,13 @@ await W.hgOmniRunScan(ui);
   const tickets = (html.match(/>TICKET</g) || []).length;
   ok(cards > 0, 'cards rendered (' + cards + ')');
   ok(cards <= 40 + tickets, 'full-ledger cards on screen are capped (' + cards + ' cards, ' + tickets + ' tickets, cap 40 + every ticket)');
-  ok(/-card screen cap/.test(html), 'the overflow block names the cap instead of silently truncating');
-  ok(/hgOmniWhyNoTickets\(\)/.test(html), 'and points at where the full ledgers still live');
+  /* Setup-level tickets (hg-v424) can mark far named levels DEAD ON ARRIVAL
+     instead of painting a full card. Those extras must still be NAMED —
+     either the screen-cap overflow or the dead-levels note — never dropped. */
+  ok(/-card screen cap/.test(html) || /DEAD LEVELS/.test(html),
+     'extras are named (screen cap or dead-on-arrival), not silently truncated');
+  ok(/hgOmniWhyNoTickets\(\)/.test(html) || /card not rendered/.test(html),
+     'and points at where the full ledgers still live (or names the dead ones)');
   ok(statHistory.some(s2 => /grading \d+\/\d+/.test(s2)), 'grading progressed in visible chunks — the main thread was yielded');
 }
 
