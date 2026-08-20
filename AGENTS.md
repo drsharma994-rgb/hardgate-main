@@ -214,6 +214,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIROUTE keep last scan — hg-v425
+- A finished OMNIROUTE scan **stays on screen** until a newer scan successfully replaces it. Rescans no longer blank `#omniCards` first.
+- Tab-open / `hardRefreshAll` go through `refreshOmniroute` (skip when **busy** or **fresh &lt; 3 min**). `#omniRun` click is only the first-run fallback.
+- A failed rescan **keeps the last cards** and names the error on the warn line (`rescan failed — keeping last scan`).
+- Tests: `node tests/test-omniroute-keep-results.mjs`, `node tests/test-scan-stability.mjs`
+
 ### OMNIROUTE setup levels — hg-v424
 - Tickets **are the setup**. `hgOmniPlanForHit` prices **ENTRY at `hit.level`** (ORB / FVG / VALUE), not last close. Sweeps and reversions stop beyond that level (crypto cap **6×ATR**, not gold 2.5%). Continuation uses structure **from that entry** (`skipExact`); fades never get a momentum stop.
 - Cards print **SETUP {kind} @ {level}**. `hgOmniConsensusVoters` drops TREND hits the daily stack already disqualifies (no-op when HTF is absent, so existing consensus harnesses stay two-sided).

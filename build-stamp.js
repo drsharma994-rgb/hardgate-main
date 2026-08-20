@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v424',
-  pack: 'OMNIROUTE: ticket levels are the setup, not last close',
-  built: '2026-08-20T15:30:00Z',
-  note: 'OMNIROUTE tickets hit.level (ORB / FVG / VALUE), not last close. Sweep/reversion stop beyond the named level (6xATR crypto cap); continuation skipExact from that entry. Consensus ignores daily-disqualified TREND hits. OMNIGOLD v423 setup levels stay. OMNIPRESENT TRIGGERED stays live after rejection. G1-G7 untouched.'
+  version: 'hg-v425',
+  pack: 'OMNIROUTE: keep last scan on screen when a rescan errors',
+  built: '2026-08-20T17:20:00Z',
+  note: 'OMNIROUTE no longer blanks cards to start a rescan. Tab-switch auto-scan and hardRefreshAll go through refresh() (skip when busy or <3min fresh). A failed rescan keeps the last cards and names the error. v424 setup-level tickets stay.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

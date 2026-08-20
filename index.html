@@ -192,8 +192,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=424"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=424"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=425"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=425"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -689,7 +689,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=424"></script>
+<script src="./hg-plan.js?v=425"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -721,9 +721,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=424"></script>
-<script src="./hg-gates.js?v=424"></script>
-<script src="omniroute.js?v=424"></script>
+<script src="hg-mechanics.js?v=425"></script>
+<script src="./hg-gates.js?v=425"></script>
+<script src="omniroute.js?v=425"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=47"></script>
@@ -742,7 +742,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=424"></script>
+<script src="omnigold.js?v=425"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
 <script src="omnipresent.js"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
@@ -771,14 +771,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=424"></script>
+<script src="supersetup.js?v=425"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=424"></script>
-<script src="super-gold.js?v=424"></script>
-<script src="super-best.js?v=424"></script>
-<script src="super-sniper.js?v=424"></script>
-<script src="super-book.js?v=424"></script>
-<script src="super-calibrate.js?v=424"></script>
+<script src="super-desk-common.js?v=425"></script>
+<script src="super-gold.js?v=425"></script>
+<script src="super-best.js?v=425"></script>
+<script src="super-sniper.js?v=425"></script>
+<script src="super-book.js?v=425"></script>
+<script src="super-calibrate.js?v=425"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -3096,6 +3096,18 @@ const HG_TAB_AUTO_SCAN = {
   omniroute: async function(){
     const pane = document.getElementById('tab_omniroute');
     const runBtn = pane && pane.querySelector('#omniRun');
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.omniroute : null;
+    if (mod && typeof mod.refresh === 'function'){
+      const st = await mod.refresh();
+      const sl = String(st || '').toLowerCase();
+      /* First open: refresh skips the expensive sweep. Click RUN once.
+         A later auto-scan that is busy or still-fresh must not wipe the desk. */
+      if (sl.indexOf('skipped: not run yet') === 0){
+        if (runBtn && !runBtn.disabled) runBtn.click();
+        return 'refreshed';
+      }
+      return st || 'refreshed';
+    }
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
   omnipresent: async function(){

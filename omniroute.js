@@ -156,7 +156,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var DAILY_FAST = 10;
   var DAILY_SLOW = 21;
 
-  var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0 };
+  var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
+                 lastCardsHtml: '', lastPoolHtml: '' };
+  /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
+     hardRefreshAll used to click RUN, which blanked the cards and then
+     often died on a venue blip — "the setup disappears after 1 minute,
+     there is a error". Skip a repeat sweep inside this window; the candles
+     have not moved. */
+  var OMNI_FRESH_MS = 180000;
 
   /* ==================== pure: small numerics ==================== */
 
@@ -3156,6 +3163,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try{ if (ui && ui.stat) ui.stat.textContent = msg; }catch(e){}
   }
 
+  function omniRememberPaint(ui){
+    try { if (ui && ui.cards) __omni.lastCardsHtml = ui.cards.innerHTML; } catch (eC) {}
+    try { if (ui && ui.pool) __omni.lastPoolHtml = ui.pool.innerHTML; } catch (eP) {}
+  }
+
+  function omniKeepLast(ui, why){
+    try {
+      if (ui && ui.cards && __omni.lastCardsHtml) ui.cards.innerHTML = __omni.lastCardsHtml;
+    } catch (eC) {}
+    try {
+      if (ui && ui.pool && __omni.lastPoolHtml != null) ui.pool.innerHTML = __omni.lastPoolHtml;
+    } catch (eP) {}
+    if (__omni.lastStat) omniSafeStat(ui, __omni.lastStat);
+    try {
+      if (ui && ui.warn){
+        ui.warn.textContent = 'rescan failed — keeping last scan. ' + String(why || '');
+        ui.warn.style.display = 'block';
+      }
+    } catch (eW) {}
+  }
+
   function runScan(ui){
     if (__omni.busy) return Promise.resolve();
     var W = (typeof window !== 'undefined') ? window : null;
@@ -3165,8 +3193,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     __omni.busy = true;
     ui.btn.disabled = true;
-    ui.cards.innerHTML = '';
-    omniSafeStat(ui, 'loading Delta + CoinDCX universe…');
+    /* Never blank a finished desk to start a rescan. A failed venue read
+       used to leave that blank standing — the last snapshot was still in
+       memory and the reader saw only the error. */
+    if (!__omni.lastCardsHtml){
+      try { ui.cards.innerHTML = ''; } catch (eClr) {}
+      omniSafeStat(ui, 'loading Delta + CoinDCX universe…');
+    } else {
+      omniSafeStat(ui, 'rescanning… previous results still showing');
+    }
 
     /* Warm the regime read once per scan. regimeState() stays null until the
        REGIME tab has run, which is why every live card reported "regime
@@ -3229,9 +3264,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       .then(function(uni){
       uni = uni || [];
       if (!uni.length){
-        omniSafeStat(ui, 'universe empty — both venue legs failed'
+        var uniMsg = 'universe empty — both venue legs failed'
           + (uniErr ? (' (' + uniErr + ')') : '')
-          + '. Nothing to scan — this is a data-source problem, not a setup drought.');
+          + '. Nothing to scan — this is a data-source problem, not a setup drought.';
+        if (__omni.lastCardsHtml){
+          omniKeepLast(ui, uniMsg);
+          return { keep: true };
+        }
+        omniSafeStat(ui, uniMsg);
         return null;
       }
       var note = (typeof W.xuUniverseNote === 'function') ? W.xuUniverseNote() : null;
@@ -3573,7 +3613,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         });
       });
     }).then(function(res){
-      if (!res) return;
+      if (!res || res.keep) return;
       try{
         var ranked = hgOmniRank(res.cands || []);
         __omni.snap = { at: Date.now(), scanned: res.scanned, uni: res.uni, rows: ranked, pooled: res.pooled };
@@ -3637,6 +3677,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                + ' contracts returned no usable candles, so this is a DATA problem, not a quiet market. '
                + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
             : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
+          omniRememberPaint(ui);
           return;
         }
         /* COLLAPSE DUPLICATE TRADES.
@@ -3741,12 +3782,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
+        omniRememberPaint(ui);
       }catch(eRender){
-        omniSafeStat(ui, 'scan finished but render failed: ' + omniErrMsg(eRender));
+        if (__omni.lastCardsHtml) omniKeepLast(ui, 'scan finished but render failed: ' + omniErrMsg(eRender));
+        else omniSafeStat(ui, 'scan finished but render failed: ' + omniErrMsg(eRender));
         try{ console.warn('omniroute render failed', eRender); }catch(eR2){}
       }
     }).catch(function(e){
-      omniSafeStat(ui, 'scan failed: ' + omniErrMsg(e));
+      if (__omni.lastCardsHtml) omniKeepLast(ui, 'scan failed: ' + omniErrMsg(e));
+      else omniSafeStat(ui, 'scan failed: ' + omniErrMsg(e));
       try{ console.warn('omniroute scan failed', e); }catch(eF){}
     }).then(function(){
       __omni.busy = false;
@@ -3859,6 +3903,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __omni.ui = ui;
+    /* Remount must not look like a first visit. The last completed scan is
+       still the desk until a newer one successfully replaces it. */
+    if (__omni.lastCardsHtml){
+      try { ui.cards.innerHTML = __omni.lastCardsHtml; } catch (eM) {}
+      if (__omni.lastStat) omniSafeStat(ui, __omni.lastStat);
+      if (ui.pool && __omni.lastPoolHtml != null){
+        try { ui.pool.innerHTML = __omni.lastPoolHtml; } catch (eP) {}
+      }
+    }
 
     /* The parameter grid runs on bars the scan already fetched, so it costs
        no network — but it does re-run the walk-forward nine times, so it is a
@@ -3921,6 +3974,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return Promise.resolve().then(function(){
       if (__omni.busy) return 'busy';
       if (!__omni.ran) return 'skipped: not run yet';
+      if (__omni.snap && isFinite(__omni.snap.at) && (Date.now() - __omni.snap.at) < OMNI_FRESH_MS)
+        return 'skipped: fresh';
       var ui = __omni.ui;
       if (ui) return runScan(ui).then(function(){ return __omni.lastStat || 'rescanned'; });
       return __omni.lastStat || 'no ui mounted';
