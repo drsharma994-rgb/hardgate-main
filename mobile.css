@@ -1,15 +1,25 @@
 /* ==========================================================================
    HARDGATE — MOBILE LAYER (mobile.css)
-   Phone-first layout: collapsible header tools, scrollable chips, stacked
-   verdicts, full-width cards. Loaded after bright.css.
+   Phone viewing: no page-wide sideways scroll, 44px taps, stacked header,
+   full-width cards, safe-area insets. Loaded after bright.css.
    Breakpoints: ≤860px (phones/tablets), ≤480px (small phones).
    ========================================================================== */
 
 /* ---------- phones + small tablets (≤860px) ----------------------------- */
 @media (max-width: 860px){
 
-  html,body{font-size:14px}
-  body{padding-bottom:env(safe-area-inset-bottom,0)}
+  html,body{
+    font-size:16px;
+    max-width:100%;
+    -webkit-text-size-adjust:100%;
+    text-size-adjust:100%;
+    overscroll-behavior-y:contain;
+  }
+  body{
+    padding-bottom:env(safe-area-inset-bottom,0);
+    padding-left:env(safe-area-inset-left,0);
+    padding-right:env(safe-area-inset-right,0);
+  }
 
   /* compact header — sticky top row only */
   header,.hg-header{
@@ -17,36 +27,60 @@
     top:0;
     padding:8px 10px 6px;
     padding-top:max(8px,env(safe-area-inset-top,0));
+    padding-left:max(10px,env(safe-area-inset-left,0));
+    padding-right:max(10px,env(safe-area-inset-right,0));
     gap:0;
+    z-index:50;
   }
+  /* header-phone-grid — brand + menu on row 1, exchange full-width on row 2 */
   .header-primary{
+    display:grid;
+    grid-template-columns:1fr auto;
+    grid-template-areas:"brand menu" "xchg xchg";
     gap:8px;
-    flex-wrap:nowrap;
     align-items:center;
+    flex-wrap:unset;
   }
   .brand{
+    grid-area:brand;
     flex:1 1 auto;
     min-width:0;
-    font-size:15px;
+    font-size:16px;
     line-height:1.2;
   }
   .brand small{
     display:block;
-    font-size:8px;
-    letter-spacing:.06em;
+    font-size:11px;
+    letter-spacing:.04em;
     margin-top:2px;
     white-space:normal;
     line-height:1.35;
     opacity:.9;
   }
-  .xtoggle{flex:none}
-  .xtoggle button{padding:6px 10px;font-size:10px;min-height:36px}
-
-  /* hamburger — tools drawer on mobile */
   .header-menu-btn{
-    display:block;
+    grid-area:menu;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex:none;
+    min-height:44px;
+    min-width:44px;
+    padding:10px;
+  }
+  .header-menu-btn .hg-ico{margin-right:0;width:22px;height:22px}
+  .xtoggle{
+    grid-area:xchg;
+    width:100%;
     flex:none;
   }
+  .xtoggle button{
+    flex:1 1 0;
+    padding:10px 8px;
+    font-size:12px;
+    min-height:44px;
+  }
+
+  /* hamburger — tools drawer on mobile */
   .header-drawer{
     max-height:0;
     overflow:hidden;
@@ -55,7 +89,9 @@
     transition:max-height .32s cubic-bezier(.22,1,.36,1),opacity .24s ease,transform .28s cubic-bezier(.22,1,.36,1);
   }
   .header-drawer.open{
-    max-height:560px;
+    max-height:80vh;
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
     opacity:1;
     transform:translateY(0);
   }
@@ -66,10 +102,11 @@
     padding:10px 0 4px;
     margin-top:8px;
   }
-  .header-field{width:100%}
-  .header-field input{width:100%!important;max-width:none!important;flex:1 1 100%}
+  .header-field{width:100%;flex-wrap:wrap}
+  .header-field input{width:100%!important;max-width:100%!important;flex:1 1 100%}
   .header-action,.hgauto{width:100%;justify-content:center}
   .hgauto{flex-wrap:wrap}
+  .hgauto button{min-height:44px;padding:10px 12px;font-size:13px}
 
   /* market chips — horizontal scroll strip */
   .header-chips{
@@ -77,7 +114,7 @@
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
     scrollbar-width:none;
-    gap:6px;
+    gap:8px;
     padding:8px 0 4px;
     margin:0 -2px;
     scroll-snap-type:x proximity;
@@ -85,59 +122,86 @@
   .header-chips::-webkit-scrollbar{display:none}
   .header-chips .statuschip{
     flex:none;
-    font-size:10px;
-    padding:5px 10px;
+    font-size:12px;
+    padding:10px 12px;
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
     scroll-snap-align:start;
   }
 
   .market-picture-bar{
-    font-size:12px!important;
-    padding:8px 10px!important;
+    font-size:13px!important;
+    padding:10px 12px!important;
     line-height:1.45;
   }
 
   /* nav — momentum scroll */
   .navgroups{
     padding:6px 10px 0;
-    gap:6px;
+    padding-left:max(10px,env(safe-area-inset-left,0));
+    padding-right:max(10px,env(safe-area-inset-right,0));
+    gap:8px;
     scroll-snap-type:x proximity;
   }
   .navgroups button{
-    min-height:38px;
-    padding:8px 12px;
-    font-size:10px;
-    letter-spacing:.08em;
+    min-height:44px;
+    padding:10px 14px;
+    font-size:12px;
+    letter-spacing:.06em;
     scroll-snap-align:start;
   }
   nav{
     padding:0 6px;
+    padding-left:max(6px,env(safe-area-inset-left,0));
+    padding-right:max(6px,env(safe-area-inset-right,0));
     scroll-snap-type:x proximity;
   }
   nav button{
     min-height:44px;
     padding:12px 14px;
-    font-size:11px;
-    letter-spacing:.1em;
+    font-size:13px;
+    letter-spacing:.08em;
     scroll-snap-align:start;
   }
 
   /* content */
-  main{padding:10px 8px calc(56px + env(safe-area-inset-bottom,0))}
-  .panel{padding:12px 10px;margin-bottom:12px;border-radius:12px}
-  .panel h2{font-size:12px;letter-spacing:.1em}
-  .panel h2 span{display:block;margin:4px 0 0;font-size:10px}
+  main{
+    padding:10px 8px calc(56px + env(safe-area-inset-bottom,0));
+    padding-left:max(8px,env(safe-area-inset-left,0));
+    padding-right:max(8px,env(safe-area-inset-right,0));
+    max-width:100%;
+    overflow-x:clip;
+  }
+  .panel{
+    padding:12px 10px;
+    margin-bottom:12px;
+    border-radius:12px;
+    max-width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .panel h2{font-size:13px;letter-spacing:.08em}
+  .panel h2 span{display:block;margin:4px 0 0;font-size:12px}
 
   .cards{grid-template-columns:1fr;gap:10px}
+  .card,.ticket,.plan{min-width:0;max-width:100%}
   .grid2,.grid3{grid-template-columns:1fr;gap:12px}
+  .row{flex-direction:column;align-items:stretch}
+  .row .btn,.row > button{width:100%;min-width:0}
+  label.f,label.f input{width:100%!important;max-width:100%!important}
 
-  .btn,.btn.ghost,.toTrade,.card .toTrade{
+  .btn,.btn.ghost,.toTrade,.card .toTrade,.toBook,.card .toBook{
     min-height:44px;
     padding:10px 16px;
-    font-size:13px;
+    font-size:15px;
     width:100%;
   }
-  .row .btn{width:auto;min-width:120px}
-  select,input[type="text"],input[type="number"]{min-height:40px;font-size:16px}
+  select,input[type="text"],input[type="number"],input[type="password"],input:not([type]){
+    min-height:44px;
+    font-size:16px;
+    max-width:100%!important;
+  }
 
   /* verdict stacks vertically */
   .verdict{flex-direction:column;align-items:flex-start;gap:8px}
@@ -162,19 +226,22 @@
   #brainTicketWrap,#brainBoardWrap{overflow-x:hidden}
 
   .ledger,.kv{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .hgchart{height:160px}
-  .note{font-size:12px;line-height:1.65;font-weight:500}
+  .hgchart{height:160px;max-width:100%}
+  .note{font-size:13px;line-height:1.55;font-weight:500}
 
-  /* tables scroll horizontally */
-  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
-  td,th{padding:6px 10px}
+  /* tables stay tables; the panel scrolls if the grid is wide */
+  table{width:100%;max-width:none}
+  td,th{padding:8px 10px}
+
+  .ticket,.plan,.empty{overflow-wrap:anywhere;word-break:break-word}
+  .bookActs{white-space:normal;display:flex;flex-wrap:wrap;gap:8px}
 
   /* floating alert */
   #hgAlertRoot{
     right:max(10px,env(safe-area-inset-right,0))!important;
     bottom:max(10px,env(safe-area-inset-bottom,0))!important;
   }
-  #hgAlertRoot .hgab-btn{padding:8px 12px!important;font-size:11px!important;min-height:44px}
+  #hgAlertRoot .hgab-btn{padding:8px 12px!important;font-size:13px!important;min-height:44px}
   #hgAlertRoot .hgab-panel{width:min(92vw,320px)!important;max-height:70vh;overflow:auto}
 }
 
@@ -187,13 +254,14 @@
 
 /* ---------- small phones (≤480px) ---------------------------------------- */
 @media (max-width: 480px){
-  .brand{font-size:14px}
-  .brand small{font-size:7px;letter-spacing:.05em}
-  .xtoggle button{padding:6px 8px;font-size:9px}
-  .navgroups button{padding:7px 10px;font-size:9px}
-  nav button{padding:11px 12px;font-size:10px}
+  .brand{font-size:15px}
+  .brand small{font-size:11px;letter-spacing:.04em}
+  .xtoggle button{padding:10px 6px;font-size:11px}
+  .navgroups button{padding:10px 12px;font-size:12px}
+  nav button{padding:12px 12px;font-size:12px}
   .verdict .vword{font-size:18px}
-  .card .sym{font-size:14px}
+  .card .sym{font-size:15px}
+  .card .mini{grid-template-columns:1fr}
   .card .chead{flex-wrap:wrap;gap:4px}
   .card .chead span,.gpip{max-width:100%}
   .auditRows > div{flex-wrap:wrap}
@@ -207,7 +275,7 @@
   button,.btn,.toTrade,select,.statuschip,.navgroups button,nav button{
     touch-action:manipulation;
   }
-  a,button,select,input{-webkit-tap-highlight-color:rgba(201,146,26,.18)}
+  a,button,select,input{-webkit-tap-highlight-color:rgba(15,92,192,.18)}
   .card:hover{transform:none}
   .statuschip[onclick]:hover,.header-action:hover{transform:none}
 }
