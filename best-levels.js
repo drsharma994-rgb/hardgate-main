@@ -39,6 +39,32 @@ function blValidPlan(plan, style){
   return fin(rr) && rr >= blMinRr(style) - 1e-9;
 }
 
+/* Closed bars only, self-sufficiently. Every caller of this refiner —
+   squeeze, trendtable, oiflow — fetches raw klines and hands them over with
+   the last candle still printing, so stops, structure and formation scores
+   repainted as that bar moved (the 2026-08 audit's last unfixed finding).
+   The drop keys off the tape's own bar spacing: no tf label needed, a no-op
+   on historical tapes, and the FORMING close is captured first as the live
+   mark — the market price is real information, it just is not a bar. Same
+   convention as mrClosed / hgContextRead / the gold desks. */
+function blClosed(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 6) return rows;
+    var d = [], i, a, b;
+    for (i = Math.max(1, rows.length - 30); i < rows.length; i++){
+      a = +(rows[i] && rows[i].t); b = +(rows[i - 1] && rows[i - 1].t);
+      if (isFinite(a) && isFinite(b) && a > b) d.push(a - b);
+    }
+    if (!d.length) return rows;
+    d.sort(function(x, y){ return x - y; });
+    var sp = d[Math.floor(d.length / 2)];
+    var lastT = +rows[rows.length - 1].t;
+    if (isFinite(lastT) && lastT > 1e12) lastT = Math.floor(lastT / 1000);
+    return (isFinite(sp) && sp > 0 && isFinite(lastT) && (Date.now() / 1000 - lastT) < sp)
+      ? rows.slice(0, -1) : rows;
+  }catch(e){ return rows; }
+}
+
 function blTicker(inp, rows){
   inp = inp || {};
   var mark = fin(+inp.mark) ? +inp.mark
@@ -176,7 +202,15 @@ function hgBestLevels(inp){
 
     var style = String(inp.style || inp.tab || 'swing').toLowerCase();
     var baseStyle = style.indexOf('scalp') >= 0 ? 'scalp' : 'swing';
+    /* The ticker's mark is taken from the tape BEFORE the forming candle is
+       dropped: the live price is where MARKET-vs-LIMIT is decided, and that
+       decision wants the market, not the last close. Everything structural
+       below reads the closed tape. */
     var ticker = inp.ticker || blTicker(inp, rows);
+    rows = blClosed(rows);
+    if (!rows.length) return Object.assign(out, { reason: 'no closed rows' });
+    var rows1hClosed = blClosed(inp.rows1h);
+    var rows15mClosed = blClosed(inp.rows15m || inp.m15);
     var gate = inp.gate || null;
     var plan = null;
     var formationScore = null;
@@ -195,8 +229,8 @@ function hgBestLevels(inp){
         rows: rows,
         style: baseStyle,
         a4: gate.hit.a4,
-        rows1h: inp.rows1h,
-        m15: inp.rows15m || inp.m15,
+        rows1h: rows1hClosed,
+        m15: rows15mClosed,
         ticker: ticker,
       };
       var formed = blTryFormTicket(gate.hit, ctx);
@@ -212,18 +246,18 @@ function hgBestLevels(inp){
         var clean = G.swingTryClean(rows, ticker);
         if (clean && clean.dir === dir){
           gate = gate || { hit: clean, clean7: true, gatesPassed: clean.passed || 7, label: '7/7 CLEAN' };
-          var f1 = blTryFormTicket(clean, { rows: rows, style: 'swing', a4: clean.a4, rows1h: inp.rows1h, ticker: ticker });
+          var f1 = blTryFormTicket(clean, { rows: rows, style: 'swing', a4: clean.a4, rows1h: rows1hClosed, ticker: ticker });
           if (f1){ plan = f1.plan; formationScore = f1.formationScore; }
         }
       }catch(e){}
     }
 
-    if (!plan && baseStyle === 'scalp' && typeof G.scalpTryClean === 'function' && inp.rows15m){
+    if (!plan && baseStyle === 'scalp' && typeof G.scalpTryClean === 'function' && rows15mClosed && rows15mClosed.length){
       try{
-        var sclean = G.scalpTryClean(inp.rows1h || rows, inp.rows15m, ticker);
+        var sclean = G.scalpTryClean(rows1hClosed || rows, rows15mClosed, ticker);
         if (sclean && sclean.dir === dir){
           gate = gate || { hit: sclean, clean7: true, gatesPassed: sclean.passed || 7 };
-          var f2 = blTryFormTicket(sclean, { rows: inp.rows15m, style: 'scalp', a4: sclean.a4, m15: inp.rows15m, ticker: ticker });
+          var f2 = blTryFormTicket(sclean, { rows: rows15mClosed, style: 'scalp', a4: sclean.a4, m15: rows15mClosed, ticker: ticker });
           if (f2){ plan = f2.plan; formationScore = f2.formationScore; }
         }
       }catch(e){}
@@ -242,7 +276,7 @@ function hgBestLevels(inp){
 
     /* FADE-only smartSetup branch */
     if (!plan){
-      plan = blTrySmartFade(inp, dir, rows, inp.rows1h);
+      plan = blTrySmartFade(inp, dir, rows, rows1hClosed);
     }
 
     if (!plan || !blValidPlan(plan, baseStyle)){
@@ -255,8 +289,8 @@ function hgBestLevels(inp){
     if (typeof G.hgApplyExactEntry === 'function' && inp.skipExact !== true){
       try{
         var ex = G.hgApplyExactEntry(plan, rows, {
-          rows1h: inp.rows1h,
-          rows15m: inp.rows15m,
+          rows1h: rows1hClosed,
+          rows15m: rows15mClosed,
           style: baseStyle,
           preferEdge: inp.preferEdge !== false,
         });

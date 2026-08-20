@@ -14,6 +14,32 @@ var HG_GOLD_HIGH_VOL_MIN_RR = 1.5;
 
 function fin(v){ return typeof v === 'number' && isFinite(v); }
 
+/* Closed bars only, self-sufficiently — goldscalp and goldswing hand this
+   refiner tapes whose last candle is still printing (goldind computes on
+   forming bars throughout; the 2026-08 audit's finding), so the regime read,
+   the MTF EMAs, the POI quality and every hgFormTicket level repainted as
+   that bar moved. The drop keys off the tape's own bar spacing (no tf label
+   needed, a no-op on historical tapes); the forming CLOSE is captured first
+   as the live mark, because the market price is real information — it just
+   is not a bar. Same convention as blClosed / mrClosed / hgContextRead. */
+function gbClosed(rows){
+  try{
+    if (!Array.isArray(rows) || rows.length < 6) return rows;
+    var d = [], i, a, b;
+    for (i = Math.max(1, rows.length - 30); i < rows.length; i++){
+      a = +(rows[i] && rows[i].t); b = +(rows[i - 1] && rows[i - 1].t);
+      if (isFinite(a) && isFinite(b) && a > b) d.push(a - b);
+    }
+    if (!d.length) return rows;
+    d.sort(function(x, y){ return x - y; });
+    var sp = d[Math.floor(d.length / 2)];
+    var lastT = +rows[rows.length - 1].t;
+    if (isFinite(lastT) && lastT > 1e12) lastT = Math.floor(lastT / 1000);
+    return (isFinite(sp) && sp > 0 && isFinite(lastT) && (Date.now() / 1000 - lastT) < sp)
+      ? rows.slice(0, -1) : rows;
+  }catch(e){ return rows; }
+}
+
 function gbDir(d){
   d = String(d || '').toLowerCase();
   return (d === 'long' || d === 'short') ? d : null;
@@ -280,6 +306,11 @@ function hgBestLevelsGold(inp){
     if (style === 'gold-scalp' && inp.rows15m && inp.rows15m.length) formRows = inp.rows15m;
     if (style === 'gold-swing' && inp.rows4h && inp.rows4h.length) formRows = inp.rows4h;
 
+    /* live close first, closed bars for everything structural — see gbClosed */
+    var liveClose = formRows.length ? +formRows[formRows.length - 1].c : NaN;
+    formRows = gbClosed(formRows);
+    if (!formRows.length) return Object.assign(out, { reason: 'no closed rows' });
+
     var regime = hgGoldRegime(formRows, style);
     var minRr = gbMinRr(style, regime);
 
@@ -288,9 +319,9 @@ function hgBestLevelsGold(inp){
       style: style,
       stratKey: hit.stratKey,
       exemptMtf: hit.stratKey === 'sweep' || hit.stratKey === 'asian',
-      rows4h: inp.rows4h,
-      rows1h: inp.rows1h,
-      rows1d: inp.rows1d,
+      rows4h: gbClosed(inp.rows4h),
+      rows1h: gbClosed(inp.rows1h),
+      rows1d: gbClosed(inp.rows1d),
     });
     if (mtf.demote && mtf.ok === false){
       return Object.assign(out, { reason: mtf.reason, mtf: mtf, demote: true });
@@ -316,8 +347,12 @@ function hgBestLevelsGold(inp){
       return Object.assign(out, { reason: 'hgFormTicket missing' });
     }
 
+    /* the mark prefers the LIVE reads — inp.mark, then the desk's pxNow,
+       then the forming close captured above; the closed tape is the last
+       resort, not the default */
     var mark = fin(+inp.mark) ? +inp.mark
-      : (fin(+hit.pxNow) ? +hit.pxNow : (formRows.length ? +formRows[formRows.length - 1].c : +hit.entry));
+      : (fin(+hit.pxNow) ? +hit.pxNow
+      : (fin(liveClose) ? liveClose : (formRows.length ? +formRows[formRows.length - 1].c : +hit.entry)));
     var atrW = fin(+inp.atrW) ? +inp.atrW : NaN;
 
     var ctx = hgGoldCalibrateCtx({
