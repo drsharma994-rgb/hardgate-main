@@ -1,0 +1,22 @@
+---
+description: Route non-trivial work through addyosmani/agent-skills workflows
+alwaysApply: true
+---
+
+# Agent skills (addyosmani/agent-skills)
+
+Before non-trivial technical work:
+
+1. Route via `.cursor/skills/using-agent-skills/SKILL.md` (or `.agents/skills/using-agent-skills/SKILL.md`).
+2. Read and follow the matching skill under `.cursor/skills/<name>/SKILL.md`.
+3. Open `reference.md` or linked checklists in that folder when the skill points to them.
+4. Prefer project skills over guessing; the user does not need to say "read skill" each time.
+
+## HARDGATE-specific defaults
+
+- **Tests:** `npm test` is the offline gate; run affected `tests/test-*.mjs` for focused changes.
+- **Deploy:** bump `build-stamp.js` + `sw.js` `HG_CACHE` together; verify with `npm run check:prod`.
+- **UI work:** combine `frontend-ui-engineering` with existing HARDGATE tab conventions in `AGENTS.md`.
+- **Ship:** use `shipping-and-launch` + `git-workflow-and-versioning`; PR via project tooling, not ad-hoc deploys.
+
+Shared checklists (when a skill links to repo-level references): `agent-skills-references/`.
