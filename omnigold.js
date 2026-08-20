@@ -1502,8 +1502,29 @@ terse status, and never launches a first-time scan on a global refresh.
         con = true;
         conWhy = aTxt + ', nothing firing against it' + splitTxt;
       } else if (cons.nAgree > cons.nAgainst){
-        con = true;
-        conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt;
+        /* Outnumbering is not immunity. The minority branch below can now
+           be rescued by the regime; if this side could still pass on raw
+           count, the two directions would ticket TOGETHER — the exact
+           contradiction this gate exists to prevent. Both branches read
+           the same signal, so exactly one side can win: a majority whose
+           regime-favoured family fired ONLY on the other side is the
+           chorus that fires against every such regime, and it stands
+           aside. */
+        var mjReg = null;
+        var mjFn = gfn('detectRegime');
+        if (mjFn){ try { var mjR = mjFn(rows); mjReg = mjR ? String(mjR.regime || '') : null; } catch (eMj){ mjReg = null; } }
+        var mjFam = /trend/i.test(mjReg || '') ? 'TREND'
+                  : /range|chop|mean/i.test(mjReg || '') ? 'REVERSION' : null;
+        if (mjFam && cons.against.indexOf(mjFam) >= 0 && cons.agree.indexOf(mjFam) < 0){
+          con = false;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt
+                 + ' — outnumbers it, but the ' + mjReg + ' regime favours ' + mjFam
+                 + ', which fired only on the other side: this majority is the chorus that fires against every '
+                 + String(mjReg).toLowerCase();
+        } else {
+          con = true;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt;
+        }
       } else if (cons.nAgree === cons.nAgainst){
         /* A TIE between TREND and REVERSION is not a contradiction — it is
            what those two families ARE. In a trending tape the continuation
@@ -1552,9 +1573,34 @@ terse status, and never launches a first-time scan on a global refresh.
                  + ')' + splitTxt + ' — tied, and ' + tieWhy + ': the desk cannot pick a side';
         }
       } else {
-        con = false;
-        conWhy = 'only ' + aTxt + ' vs ' + cons.nAgainst + ' against ('
-               + cons.against.join(', ') + ')' + splitTxt + ' — this is the minority read';
+        /* MINORITY READ — but the tie-break's own measurement applies here
+           too: in a trending tape the fades fire against the move EVERY
+           time, so the continuation family is structurally outnumbered by
+           mechanics that add no information. Observed live: the only
+           with-trend setup on the tape (MMOVE long, ADX 40 up) vetoed
+           1-v-2 by the same fades fade-strength had just rejected as
+           invalid in that exact regime — REJECTED SETUPS WERE VOTING.
+           Same break as the tie above, same conditions, nothing new to
+           game: a clear regime read, the regime's own family on THIS side,
+           and not on the other. A minority the regime disowns still
+           vetoes, and TREND firing on both sides still cannot be
+           separated. */
+        var mnReg = null;
+        var mnFn = gfn('detectRegime');
+        if (mnFn){ try { var mnR = mnFn(rows); mnReg = mnR ? String(mnR.regime || '') : null; } catch (eMn){ mnReg = null; } }
+        var mnFam = /trend/i.test(mnReg || '') ? 'TREND'
+                  : /range|chop|mean/i.test(mnReg || '') ? 'REVERSION' : null;
+        if (mnFam && cons.agree.indexOf(mnFam) >= 0 && cons.against.indexOf(mnFam) < 0){
+          con = true;
+          conWhy = aTxt + ' vs ' + cons.nAgainst + ' against (' + cons.against.join(', ') + ')' + splitTxt
+                 + ' — outnumbered, but the ' + mnReg + ' regime favours ' + mnFam
+                 + ' and it fired on this side only: a headcount of mechanics that fire against every '
+                 + String(mnReg).toLowerCase() + ' is noise, not disagreement';
+        } else {
+          con = false;
+          conWhy = 'only ' + aTxt + ' vs ' + cons.nAgainst + ' against ('
+                 + cons.against.join(', ') + ')' + splitTxt + ' — this is the minority read';
+        }
       }
     }
     gates.push({ key:'consensus', hard: conHard, pass: con, why: conWhy });

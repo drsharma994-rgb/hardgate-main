@@ -128,14 +128,35 @@ console.log('\n== redundant mechanics do not manufacture agreement ==');
   ok(/^1 family agrees/.test(g.why), 'four sweep mechanics count as ONE family (' + g.why + ')');
   ok(g.pass === false, 'so four redundant reads do not outvote one genuine disagreement');
 
-  /* Whereas four genuinely different reads DO carry the vote. */
-  const varied = [hit('PDH-SWEEP', 'short'), hit('VWAP-REVERT', 'short'),
-                  hit('SMT-DIVERGE', 'short'), hit('ORB', 'long')];
+  /* Genuinely different reads DO carry the vote — when the regime does not
+     disown them. This tape reads as a TREND regime, so the majority must
+     hold the TREND family itself to win on count. */
+  const varied = [hit('ORB', 'long'), hit('VWAP-REVERT', 'long'),
+                  hit('SMT-DIVERGE', 'long'), hit('PDH-SWEEP', 'short')];
   const g2 = con(varied[0], varied);
   ok(g2.nAgree === undefined, 'the gate reports through why, not a score');
-  ok(g2.pass === true, 'three DIFFERENT families outvote one');
-  ok(/SWEEP/.test(g2.why) && /REVERSION/.test(g2.why) && /INTERMARKET/.test(g2.why),
+  ok(g2.pass === true, 'three DIFFERENT families outvote one when the regime family is among them');
+  ok(/TREND/.test(g2.why) && /REVERSION/.test(g2.why) && /INTERMARKET/.test(g2.why),
      'and each distinct family is named (' + g2.why + ')');
+}
+
+console.log('\n== REJECTED SETUPS DO NOT VOTE: the regime disowns a fade chorus ==');
+{
+  /* Observed live (2026-08-20): gold in a strong uptrend, ADX 40 DI up. The
+     only with-trend setup on the tape was vetoed 1-v-2 by the same fades
+     fade-strength had just rejected as invalid in that exact regime. In a
+     trending tape the fades fire against the move EVERY time — outnumbering
+     the one continuation family without adding one bit of information. The
+     tie-break already knew this; the minority branch now does too, and the
+     majority branch mirrors it so the two directions can never both pass. */
+  const chorus = [hit('POC-REVERT', 'short'), hit('PDH-SWEEP', 'short'), hit('ORB', 'long')];
+  const long = con(chorus[2], chorus), short = con(chorus[0], chorus);
+  ok(long.pass === true, 'the regime-favoured minority passes (this tape reads TREND)');
+  ok(/noise, not disagreement/.test(long.why), 'and says why: ' + long.why.slice(0, 110));
+  ok(short.pass === false, 'while the fade majority is stood aside');
+  ok(/chorus that fires against every/.test(short.why), 'named as the chorus, not a majority: ' + short.why.slice(0, 110));
+  ok(!(long.pass === true && short.pass === true), 'the two directions can never both pass');
+  ok(tickets(chorus[0], chorus) === false, 'and the fade never reaches the user as a ticket');
 }
 
 console.log('\n== every mechanic the desk scans has a family ==');
