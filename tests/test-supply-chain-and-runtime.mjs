@@ -134,9 +134,17 @@ console.log('\n== 3. one puppeteer version, and a pinned runtime ==');
   const pup = (PKG.optionalDependencies || {}).puppeteer || (PKG.dependencies || {}).puppeteer;
   ok(/\^?2[5-9]|\^?[3-9]\d/.test(pup), 'package.json is on puppeteer 25 or newer (' + pup + ')');
   const wf = read('.github/workflows/alert-notify.yml');
-  const m = /npm install puppeteer@(\d+)/.exec(wf);
-  ok(!!m, 'the workflow installs puppeteer');
-  ok(Number(m[1]) >= 25, 'at the same major as package.json (@' + m[1] + ') — it was @23');
+  const runs = wf.split('\n').filter(l => /^\s+run:/.test(l)).join('\n');
+  /* Bare `npm install puppeteer@25` reported "added 106 packages" on GHA then
+     `import('puppeteer')` threw ERR_MODULE_NOT_FOUND. puppeteer is an
+     optionalDependency — install from the lockfile with optional deps on,
+     then install Chrome the same way the Render daemon does. */
+  ok(/\bnpm ci\b/.test(runs), 'the workflow installs from the lockfile (npm ci)');
+  ok(/include=optional/.test(runs), 'and includes optional deps so puppeteer is actually on disk');
+  ok(/puppeteer browsers install chrome/.test(runs), 'then installs Chrome for the headless sweep');
+  ok(!/npm install puppeteer@23/.test(runs), 'does not pin the old puppeteer@23');
+  ok(!/npm install puppeteer@25/.test(runs),
+     'does not use the bare `npm install puppeteer@25` that left the package unresolvable');
   ok(!/">=18"/.test(JSON.stringify(PKG.engines)), 'engines no longer accepts any future major');
   ok(/<\s*\d/.test(PKG.engines.node), 'it has an upper bound (' + PKG.engines.node + ')');
   const pins = [...RENDER.matchAll(/key: NODE_VERSION\s*\r?\n\s*value: "([^"]+)"/g)].map(x => x[1]);

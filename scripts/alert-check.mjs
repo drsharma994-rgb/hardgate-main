@@ -460,8 +460,17 @@ function digestBody(info) {
 
 async function main() {
   // dynamic import: keeps this module loadable without puppeteer installed
-  // (tests import the pure helpers above); CI installs puppeteer before running.
-  const { default: puppeteer } = await import('puppeteer');
+  // (tests import the pure helpers above); CI must `npm ci --include=optional`
+  // before this step — a bare `npm install puppeteer@25` left the package
+  // unresolvable on ubuntu-latest (ERR_MODULE_NOT_FOUND after "added 106 packages").
+  let puppeteer;
+  try {
+    ({ default: puppeteer } = await import('puppeteer'));
+  } catch (e) {
+    console.error('FATAL: puppeteer is not resolvable from scripts/alert-check.mjs.');
+    console.error('The alert-notify workflow must run `npm ci --include=optional` first.');
+    throw e;
+  }
 
   const prevState = loadState();
   console.log('Previous alert state:', JSON.stringify(prevState));
