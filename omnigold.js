@@ -100,6 +100,14 @@ terse status, and never launches a first-time scan on a global refresh.
   var COST_WARN_R = 0.15;   // cost above this share of 1R is worth flagging
   var COST_VETO_R = 0.30;   // swing / unspecified — a wide stop can carry more drag
   var COST_VETO_R_SCALP = 0.15; // scalp: the live 3.16-pt stop was 19% of 1R paying the spread
+  /* A lastSwing from a three-month rally is not a gold invalidation. 2.5% of
+     XAUUSD is already a very wide swing stop; anything larger is a different
+     instrument than the setup on the card. */
+  var GOLD_STOP_MAX_PCT = 0.025;
+  /* STRONGEST prefers a ticket whose named level is actually in reach.
+     A 4H FVG 6×ATR behind the market is a real limit, not the trade to
+     float first when a sweep 1.5×ATR away already has a ticket. */
+  var GOLD_NEAR_ATR = 2;
 
   var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
@@ -864,6 +872,115 @@ terse status, and never launches a first-time scan on a global refresh.
              nAgree: agree.length, nAgainst: against.length, nSplit: split.length };
   }
 
+  /* Hits that the ledger has already disqualified must not vote. Live scalp
+     tapes were empty because ORB/MMOVE/BOS shorts (which fail `trend` on an
+     up stack) and POC shorts (which fail fade-strength into a rally) still
+     counted in consensus, so the with-trend ROUND-MAGNET / PO3 long was the
+     "minority read". A vetoed setup is not disagreement. */
+  function hgOgConsensusVoters(allHits, rows, extra){
+    if (!allHits || !allHits.length) return allHits || [];
+    extra = extra || {};
+    var he21 = extra.htf ? fin(extra.htf.e21) : NaN, he50 = extra.htf ? fin(extra.htf.e50) : NaN;
+    var dailyUp = (isFinite(he21) && isFinite(he50)) ? (he21 >= he50) : null;
+    var out = [], i, h, rev, agrees;
+    for (i = 0; i < allHits.length; i++){
+      h = allHits[i];
+      if (!h || (h.dir !== 'long' && h.dir !== 'short')) continue;
+      rev = hgOgIsReversion(h.kind);
+      if (dailyUp === null){ out.push(h); continue; }
+      if (!rev){
+        agrees = (h.dir === 'long') ? dailyUp : !dailyUp;
+        if (!agrees) continue;
+      } else if (dailyUp === (h.dir === 'short')) continue;
+      out.push(h);
+    }
+    return out;
+  }
+
+  function hgOgClipStop(dir, entry, stop){
+    var e = fin(entry), s = fin(stop);
+    if (!isFinite(e) || e <= 0 || !isFinite(s)) return NaN;
+    var risk = (dir === 'long') ? (e - s) : (s - e);
+    if (!(risk > 0)) return NaN;
+    var cap = e * GOLD_STOP_MAX_PCT;
+    if (risk <= cap) return s;
+    return (dir === 'long') ? (e - cap) : (e + cap);
+  }
+
+  /* The printed trade IS the mechanic. Pricing entry at live gold while the
+     detector named Asia high / a round / an FVG produced the live defect:
+     FVG-FILL LONG at 4429 printed ENTRY 4535 / STOP 3415. Sweeps get a stop
+     beyond the named level (that is the invalidation). Continuation still
+     uses structure from that entry, skipExact so enrichers cannot move it. */
+  function hgOgPlanForHit(hit, rows, extra, cfg){
+    cfg = cfg || {};
+    extra = extra || {};
+    if (!hit || (hit.dir !== 'long' && hit.dir !== 'short')) return null;
+    var live = fin(extra.livePx);
+    var lvl = fin(hit.level);
+    var entry = (isFinite(lvl) && lvl > 0) ? lvl
+              : ((isFinite(live) && live > 0) ? live : undefined);
+    var minRr = isFinite(fin(cfg.minRr)) ? fin(cfg.minRr) : 1.5;
+    var reversion = hgOgIsReversion(hit.kind);
+    var fromRisk = gfn('hgPlanFromRisk');
+    var planFn = gfn('hgPlanLevels');
+    var a = atrOf(rows, 14);
+    if (!(isFinite(a) && a > 0) && isFinite(entry)) a = entry * 0.003;
+
+    if (reversion && isFinite(entry) && fromRisk){
+      var last = (rows && rows.length) ? rows[rows.length - 1] : null;
+      var stop, wick;
+      if (hit.dir === 'long'){
+        wick = last ? fin(last.l) : NaN;
+        stop = ((isFinite(wick) && wick < entry) ? wick : entry) - 0.35 * a;
+      } else {
+        wick = last ? fin(last.h) : NaN;
+        stop = ((isFinite(wick) && wick > entry) ? wick : entry) + 0.35 * a;
+      }
+      stop = hgOgClipStop(hit.dir, entry, stop);
+      if (!isFinite(stop)) return null;
+      var sweepPl = fromRisk(hit.dir, entry, stop, {
+        t1R: 2, t2R: 3.5, minRr: minRr,
+        targetPolicy: 'R-multiples of setup-level risk'
+      });
+      if (sweepPl){
+        sweepPl.note = 'SETUP ' + String(hit.kind) + ' @ ' + entry.toFixed(2)
+                     + ' — stop beyond the level that is the trade';
+        sweepPl.planSrc = 'hgOgPlanForHit';
+        sweepPl.dir = hit.dir;
+      }
+      return sweepPl;
+    }
+
+    if (!planFn || !isFinite(entry)) return null;
+    var plan = null;
+    try {
+      plan = planFn(hit.dir, rows, entry, {
+        minRr: minRr, capMode: 'structure', skipExact: true,
+        momentumOk: !reversion
+      });
+    } catch (eP) { plan = null; }
+    if (plan && fromRisk && isFinite(fin(plan.entry)) && isFinite(fin(plan.stop))){
+      var clipped = hgOgClipStop(hit.dir, plan.entry, plan.stop);
+      if (isFinite(clipped) && Math.abs(clipped - plan.stop) > 1e-9){
+        var repl = fromRisk(hit.dir, plan.entry, clipped, {
+          t1R: 2, t2R: 3.5, minRr: minRr,
+          targetPolicy: plan.targetPolicy || 'R-multiples'
+        });
+        if (repl){
+          repl.note = (plan.note ? (String(plan.note) + ' — ') : '')
+                    + 'stop capped at ' + (GOLD_STOP_MAX_PCT * 100).toFixed(1)
+                    + '% of gold: a lastSwing that far is not this setup\'s invalidation';
+          if (plan.momentumStop === true) repl.momentumStop = true;
+          repl.planSrc = plan.planSrc;
+          repl.dir = hit.dir;
+          plan = repl;
+        }
+      }
+    }
+    return plan;
+  }
+
   /* ==================== gold gate ledger ==================== */
 
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17). Inlined rather than
@@ -1546,7 +1663,7 @@ terse status, and never launches a first-time scan on a global refresh.
        honest output is no trade, not a coin flip dressed as a setup. */
     var con = null, conWhy = 'no other mechanics to compare against';
     var conHard = false;
-    var cons = x.allHits ? hgOgConsensus(x.allHits, hit) : null;
+    var cons = x.allHits ? hgOgConsensus(hgOgConsensusVoters(x.allHits, rows, x), hit) : null;
     if (cons){
       conHard = true;
       var aTxt = cons.nAgree + ' famil' + (cons.nAgree === 1 ? 'y agrees' : 'ies agree')
@@ -1954,80 +2071,39 @@ terse status, and never launches a first-time scan on a global refresh.
       ex.minAtrPct = cfg.minAtrPct;
       ex.sessionHard = cfg.sessionHard;
       /* Plan BEFORE gates: the cost-drag gate needs the actual stop distance,
-         so the levels must exist before the ledger runs. */
+         so the levels must exist before the ledger runs.
+
+         The printed trade IS the mechanic. Live gold as the entry produced
+         FVG-FILL @ 4429 with ENTRY 4535 / STOP 3415, and ROUND-MAGNET @ 4530
+         with no plan. hgOgPlanForHit prices entry at hit.level, puts a
+         sweep stop beyond that level, and keeps skipExact so enrichers
+         cannot hijack continuation structure. livePx is for freshness. */
       var plan = null;
-      if (planFn){
-        /* Gold opts into structure stops.
-           With the crypto default, 65% of gold setups had their stop moved
-           off structure to a flat 1.5xATR — 53% nearer than the level that
-           actually invalidates the idea, which on gold sits inside ordinary
-           session noise. Targets are R-multiples OF the risk, so keeping the
-           stop on structure widens the target with it: the same 2R trade, now
-           measured against real invalidation, with fixed-risk sizing taking a
-           smaller position for the same dollars at risk. */
-        try {
-          /* Continuation mechanics may fall back to a LABELLED momentum stop
-             when no structure sits within reach — that is the breakout trade
-             the walk-forward pool already measures. Fades never get one: a
-             fade's premise IS the level, and a fade without structure has no
-             premise. */
-          /* PRICE THE ENTRY AT THE CURRENT MARKET, NOT AT A LEVEL THE
-             ENGINE LIKES BETTER.
-
-             Two things kept gold entries away from the live price. First,
-             the plan engine defaults entry to rows[last].c — the closed
-             bar, up to an hour stale on SCALP and four on SWING. Second,
-             and larger: hgApplyExactEntry then MOVED the entry to its own
-             structure — the edgeSignal path replaces entry, stop and
-             targets wholesale with a resting order at an edge, and the
-             scalp enricher re-anchors to EMA21 or a sweep level. Measured
-             live: entry 4454.92 against a 4519.51 market, 65 points away,
-             with the override this desk passed simply ignored. Every
-             symptom the reader kept pasting — levels not matching live
-             gold, level-fresh AGAINST, DEAD ON ARRIVAL — was downstream
-             of that.
-
-             GOLD PRO drew the correct line in v398: indicators and
-             structure read CLOSED bars only (they must not repaint); the
-             ENTRY is the live price, because that is where a trade
-             actually starts. Same split here. entryOverride carries the
-             forming candle's live close, and skipExact keeps the
-             enrichers from moving it. The stop still comes from
-             closed-bar structure — invalidation is structure — so risk
-             runs from where you would really enter to where the idea
-             really dies, and targets are R-multiples of that real risk.
-
-             This desk therefore offers MARKET plans, not resting limits;
-             the resting-order style lives on unchanged on OMNIROUTE.
-             Without a live price (harness tapes), the last closed close
-             is the market proxy — same convention, never the old
-             behavior back by accident. The forward log records what was
-             offered at scan time, which is the point: it measures what
-             the desk told the reader to do. */
-          var ogLive = fin(ex.livePx);
-          plan = planFn(hit.dir, rows,
-            (isFinite(ogLive) && ogLive > 0) ? ogLive : undefined, {
-            minRr: cfg.minRr, capMode: 'structure', skipExact: true,
-            momentumOk: !hgOgIsReversion(hit.kind)
-          });
-        } catch (e) { plan = null; }
-      }
+      try { plan = hgOgPlanForHit(hit, rows, ex, cfg); }
+      catch (e) { plan = null; }
       if (plan && deriveFn) plan = deriveFn(plan);
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
-      /* Only when the engine exists — see omniroute: an absent plan engine is
-         UNCHECKED, an engine that declined is a veto, and they must not blur. */
-      if (planFn) ex.plan = plan;      /* so stop-width can state what the stop asks of the trade */
+      /* Always stamp the key: null is a real decline (plan-levels vetoes),
+         missing would be UNCHECKED and let a ticket print with no levels. */
+      ex.plan = plan;
       ex.allHits = hits;          /* so the consensus gate can see the rest of the scan */
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
+      var livePx = fin(ex.livePx);
+      var setupPx = fin(hit.level);
+      if (!isFinite(setupPx) && plan) setupPx = fin(plan.entry);
+      var atrN = atrOf(rows, 14);
+      var distAtr = (isFinite(livePx) && isFinite(setupPx) && isFinite(atrN) && atrN > 0)
+                  ? Math.abs(livePx - setupPx) / atrN : NaN;
       out.push({
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
         /* Carried on the candidate so the ranker can put the setup the rest
            of the desk agrees with above the one nothing supports. */
-        consensus: hgOgConsensus(hits, hit),
+        consensus: hgOgConsensus(hgOgConsensusVoters(hits, rows, ex), hit),
         family: hgOgFamilyOf(hit.kind),
-        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
+        distAtr: distAtr
       });
     }
     return out;
@@ -2344,22 +2420,34 @@ terse status, and never launches a first-time scan on a global refresh.
      Structural tickets win. If the only remaining ticket is a labelled
      volatility stop (runaway tape, no nearby pivot), take that rather than
      leave STRONGEST empty — empty is how the desk showed "no setup with
-     ticket" while a with-trend continuation was the correct trade. */
+     ticket" while a with-trend continuation was the correct trade.
+
+     Among those, prefer a level inside GOLD_NEAR_ATR of live gold. A 100-point
+     FVG is still a ticket on the list; it is not the first card when a sweep
+     two ATR away already has matching entry/stop. Far tickets remain if
+     nothing nearer survived. */
   function hgOgPickFor(ranked, horizon){
     if (!ranked || !ranked.length) return null;
-    var i, c, fallback = null;
+    var i, c, structural = [], vol = [];
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
       if (!c || c.horizon !== horizon) continue;
       if (!(c.grade && c.grade.ticket)) continue;
       if (!c.plan) continue;              /* no levels means nothing to act on */
-      if (c.plan.momentumStop === true){
-        if (!fallback) fallback = c;
-        continue;
-      }
-      return c; /* structural ticket wins */
+      if (c.plan.momentumStop === true) vol.push(c);
+      else structural.push(c);
     }
-    return fallback;
+    var pool = structural.length ? structural : vol;
+    if (!pool.length) return null;
+    var near = [], anyDist = false;
+    for (i = 0; i < pool.length; i++){
+      if (isFinite(fin(pool[i].distAtr))){
+        anyDist = true;
+        if (pool[i].distAtr <= GOLD_NEAR_ATR) near.push(pool[i]);
+      }
+    }
+    if (anyDist && near.length) pool = near;
+    return pool[0];
   }
 
   function setupCard(c){
@@ -2389,6 +2477,12 @@ terse status, and never launches a first-time scan on a global refresh.
       for (bi = 0; bi < basis.length; bi++) h += '<li>' + esc(basis[bi]) + '</li>';
       h += '</ul><span class="dim">Strongest of what fired now. NOT a win probability: '
         +  'a probability needs a settled record, and this desk does not have one yet.</span></div>';
+    }
+    if (isFinite(fin(c.level))){
+      h += '<div class="dim">SETUP ' + esc(c.kind) + ' @ ' + fmtPx(c.level)
+        +  ((c.plan && isFinite(fin(c.plan.entry)) && Math.abs(c.plan.entry - c.level) > 0.05)
+              ? (' · plan entry ' + fmtPx(c.plan.entry)) : '')
+        +  '</div>';
     }
     if (c.plan){
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
@@ -3092,6 +3186,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.ogDistinctCounts = ogDistinctCounts;
     window.ogTradeKey = ogTradeKey;
     window.hgOgEvaluate = hgOgEvaluate;
+    window.hgOgPlanForHit = hgOgPlanForHit;
+    window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
     window.hgOgZonesPanel = hgOgZonesPanel;

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v422',
-  pack: 'OMNIGOLD tickets: labelled vol-stop continuation can TICKET; STRONGEST prefers structure',
-  built: '2026-08-20T13:20:00Z',
-  note: 'OMNIGOLD restores continuation tickets: momentum-stop is AGAINST not a veto; STRONGEST prefers structural then falls back to labelled vol-stop. Fade daily-stack, weekend, yield-per-dir, and 20-sample losing-mechanic vetoes stay. OMNIPRESENT max-quality from v421 stays'
+  version: 'hg-v423',
+  pack: 'OMNIGOLD: ticket levels are the setup, not live gold',
+  built: '2026-08-20T14:00:00Z',
+  note: 'OMNIGOLD tickets hit.level (ROUND-MAGNET / FVG), not the live print. Sweep stop beyond the named level; continuation skipExact from that entry; 2.5% gold stop cap. Consensus ignores daily-disqualified hits. STRONGEST prefers structural then near (2xATR) then vol-stop. v420 min-loss vetoes stay. Do not run through hgApplyGoldBestLevels.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -214,6 +214,13 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIGOLD setup levels — hg-v423
+- Tickets **are the setup**. `hgOgPlanForHit` prices **ENTRY at `hit.level`** (ROUND-MAGNET @ 4530, FVG @ 4429), not live gold. Sweeps stop beyond that level; continuation still uses structure / labelled vol-stop **from that entry** (`skipExact`). Stops clip at **2.5% of gold** — a 1000-pt lastSwing is not a gold invalidation.
+- Cards print **SETUP {kind} @ {level}**. `hgOgConsensusVoters` drops continuation/fade hits the daily stack already disqualifies, so rejected TREND shorts cannot empty a with-trend scalp.
+- `hgOgPickFor` still prefers structure then vol-stop; among those, prefers tickets **≤ 2×ATR** from live gold so a far FVG does not float as STRONGEST over a nearby sweep.
+- **Do not** run OMNIGOLD through `hgApplyGoldBestLevels`. G1–G7 and v420 min-loss vetoes stay. `momentum-stop` stays AGAINST (v422).
+- Tests: `node tests/test-omnigold-setup-levels.mjs`, `node tests/test-gold-live-entry.mjs`, `node tests/test-omnigold-consensus.mjs`
+
 ### OMNIGOLD tickets — hg-v422
 - Continuation with a labelled **volatility / momentum stop** can **TICKET** (`momentum-stop` is AGAINST, not a veto). Killing it as a real veto emptied the desk on a runaway gold trend (no nearby structure for with-trend; fades already stood aside).
 - `hgOgPickFor` prefers a **structural** ticket; if the only ticket is a vol-stop continuation, it still picks that rather than leaving STRONGEST empty.
@@ -221,7 +228,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Tests: `node tests/test-omnigold-min-loss.mjs`, `node tests/test-momentum-stop.mjs`
 
 ### OMNIGOLD min-loss — hg-v420
-- **Do not** run OMNIGOLD through `hgApplyGoldBestLevels`. The desk prices **live market entry** (`skipExact` + `entryOverride`); snapping to formation levels recreates DEAD ON ARRIVAL / stale-entry tickets.
+- **Do not** run OMNIGOLD through `hgApplyGoldBestLevels`. The desk tickets **the named setup level** (`hgOgPlanForHit`); snapping to formation levels recreates DEAD ON ARRIVAL / stale-entry tickets.
 - Yield is judged **per setup direction** (`hgOgYieldValid(rows, dir)`). Never freeze `validateYieldCorrelation(..., 'long')` for the whole scan.
 - A mechanic at **20+ samples and ≤ −2σ vs breakeven VETOES** (no 20–29 info free-pass). OmniRoute crypto keeps the 20–29 AGAINST window.
 - Fading the **daily stack** is enough to veto (`fade-strength`). A volatility / momentum stop is **AGAINST** (`info`) — the continuation ticket stands, otherwise a runaway tape has no nearby structure. `hgOgPickFor` prefers a structural ticket, then falls back to the labelled vol-stop rather than leaving STRONGEST empty.

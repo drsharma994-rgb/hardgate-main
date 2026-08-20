@@ -1,28 +1,22 @@
-/* HARDGATE — the gold desk prices its entry at the CURRENT market.
+/* HARDGATE — OMNIGOLD tickets the named setup level, not the live print.
 
-   "Why don't omnigold tab use current gold levels and make a scalp setup
-   out of it?" Because two engines moved the entry away from the market.
-   The plan core defaulted entry to the last CLOSED bar — an hour stale on
-   SCALP, four on SWING. Then hgApplyExactEntry moved it further: the
-   edgeSignal path replaces entry, stop and targets wholesale with a
-   resting order at a structure edge, and the scalp enricher re-anchors to
-   EMA21 or a sweep level. Measured live before the fix: entry 4454.92
-   against a 4519.51 market — 65 points away — and the override the desk
-   passed was simply ignored.
+   The plan core still accepts a live override when a detector did not name
+   a level (skipExact, so enrichers cannot drag entry to EMA21 / an edge).
+   OMNIGOLD itself must not use that override to chase the market: a 4H FVG
+   at 4429 on a 4535 tape is a 4429 limit, not ENTRY 4535 / STOP 3415.
 
-   The contract, GOLD PRO's v398 split, now on the gold desk proper:
+   Contract:
 
      indicators and structure  ->  CLOSED bars only (no repainting)
-     the ENTRY                 ->  the LIVE price (where a trade starts)
-     the stop                  ->  closed-bar structure, from the real entry
+     the ENTRY                 ->  hit.level when the detector named one,
+                                   else the live print (or last closed close)
+     the stop                  ->  beyond that setup (sweep) or structure
+                                   from that entry (continuation), capped
      targets                   ->  R-multiples of that real risk
-     no live price supplied    ->  last closed close as the market proxy,
-                                   entry NEVER moved to an enricher's level
+     skipExact                 ->  enrichers cannot hijack continuation
 
-   Guarded here in source (the call passes the live override and
-   skipExact) and in behaviour (every planned card enters exactly at the
-   live price, level-fresh PASSES by construction, and the labelled
-   momentum stop survives the skipExact path).
+   Guarded here in source (hgOgPlanForHit + skipExact) and in behaviour
+   (every planned card with a named level enters THERE).
 
    Run: node tests/test-gold-live-entry.mjs */
 import fs from 'node:fs';
@@ -71,17 +65,14 @@ const HITS = [ { kind:'ORB', dir:'long',  level: CLOSED, why:'t' },
                { kind:'ORB', dir:'short', level: CLOSED, why:'t' } ];
 const CFG = { minRr: 1.5, label: 'SCALP' };
 
-console.log('== source: the call passes the live price and pins skipExact ==');
+console.log('== source: the plan is the setup, skipExact blocks enrichers ==');
 {
-  const i = GOLD.indexOf('plan = planFn(hit.dir, rows,');
-  ok(i >= 0, 'the plan call is where the contract says');
-  const call = GOLD.slice(i, GOLD.indexOf(');', i));
-  ok(/fin\(ex\.livePx\)/.test(GOLD.slice(Math.max(0, i - 300), i)), 'the override is the live price the scan captured');
-  ok(/skipExact:\s*true/.test(call), 'and skipExact keeps the enrichers from moving it');
-  ok(/momentumOk:\s*!hgOgIsReversion\(hit\.kind\)/.test(call), 'the momentum grant is untouched');
+  ok(/function hgOgPlanForHit\(/.test(GOLD), 'setup-native planner exists');
+  ok(/skipExact:\s*true/.test(GOLD), 'skipExact keeps the enrichers from moving continuation entries');
+  ok(/momentumOk:\s*!reversion/.test(GOLD), 'the momentum grant is still continuation-only');
 }
 
-console.log('\n== with a live price, every planned card enters exactly there ==');
+console.log('\n== with a named setup level, every planned card enters THERE ==');
 {
   const LIVE = CLOSED + 3.7;              /* the market has drifted since the close */
   const cards = W.hgOgEvaluate(ROWS, HITS, { livePx: LIVE }, CFG);
@@ -89,13 +80,13 @@ console.log('\n== with a live price, every planned card enters exactly there =='
   const planned = cards.filter(c => c.plan);
   ok(planned.length >= 1, 'at least one direction found a plan on this tape (' + planned.length + ' did)');
   for (const c of planned){
-    ok(Math.abs(c.plan.entry - LIVE) < 1e-9, c.dir + ' entry IS the live price, not the closed bar (' + c.plan.entry.toFixed(2) + ')');
+    ok(Math.abs(c.plan.entry - CLOSED) < 1e-9, c.dir + ' entry IS the setup level, not live gold (' + c.plan.entry.toFixed(2) + ')');
     ok(c.dir === 'long' ? c.plan.stop < c.plan.entry : c.plan.stop > c.plan.entry,
-       c.dir + ' stop on the invalidation side of the real entry');
+       c.dir + ' stop on the invalidation side of the setup entry');
     ok(c.dir === 'long' ? c.plan.t1 > c.plan.entry : c.plan.t1 < c.plan.entry,
-       c.dir + ' target beyond the real entry');
+       c.dir + ' target beyond the setup entry');
     const lf = c.gates.filter(g => g && g.key === 'level-fresh')[0];
-    ok(lf && lf.pass === true, c.dir + ' level-fresh PASSES by construction — entry is at market');
+    ok(lf && lf.pass !== false, c.dir + ' level-fresh does not veto a 3.7pt drift on this tape');
   }
 }
 
