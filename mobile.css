@@ -32,11 +32,11 @@
     gap:0;
     z-index:50;
   }
-  /* header-phone-grid — brand + menu on row 1, exchange full-width on row 2 */
+  /* header-phone-grid — brand + chrome + menu on row 1, exchange full-width on row 2 */
   .header-primary{
     display:grid;
-    grid-template-columns:1fr auto;
-    grid-template-areas:"brand menu" "xchg xchg";
+    grid-template-columns:1fr auto auto;
+    grid-template-areas:"brand chrome menu" "xchg xchg xchg";
     gap:8px;
     align-items:center;
     flex-wrap:unset;
@@ -57,6 +57,13 @@
     line-height:1.35;
     opacity:.9;
   }
+  .chrome-min-btn{
+    grid-area:chrome;
+    margin-left:0;
+    min-height:44px;
+    min-width:44px;
+    padding:8px 10px;
+  }
   .header-menu-btn{
     grid-area:menu;
     display:flex;
@@ -67,6 +74,7 @@
     min-width:44px;
     padding:10px;
   }
+  html.hg-chrome-min .header-menu-btn{display:none!important}
   .header-menu-btn .hg-ico{margin-right:0;width:22px;height:22px}
   .xtoggle{
     grid-area:xchg;
@@ -248,8 +256,8 @@
 /* ---------- desktop: drawer always open, no hamburger --------------- */
 @media (min-width: 861px){
   .header-menu-btn{display:none!important}
-  .header-drawer{max-height:none!important;opacity:1!important;overflow:visible;transform:none!important}
-  .header-drawer-inner{border-top:0;margin-top:0;padding-top:4px}
+  html:not(.hg-chrome-min) .header-drawer{max-height:none!important;opacity:1!important;overflow:visible;transform:none!important}
+  html:not(.hg-chrome-min) .header-drawer-inner{border-top:0;margin-top:0;padding-top:4px}
 }
 
 /* ---------- small phones (≤480px) ---------------------------------------- */

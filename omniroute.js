@@ -3851,7 +3851,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniRoute — desk setups <span>delta + coindcx · spring · po3 · orb · absorption · value area · measured move</span></h2>'
-      + '<div class="note" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX with the six mechanics the '
+      + '<div class="note hg-lead" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX with the six mechanics the '
       + 'popular desks trade. Two passes: detect over the whole universe, then measure and enrich only what fired. '
       + 'Each candidate runs a ledger of 3 hard gates (trend · vol-alive · participation) plus conditional confluence from free public data — '
       + 'daily agreement, OI build, retail crowding, taker aggression, book depth, regime, news blackout, and the detector’s own measured edge. '

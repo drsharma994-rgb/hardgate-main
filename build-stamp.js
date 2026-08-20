@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v425',
-  pack: 'OMNIROUTE: keep last scan on screen when a rescan errors',
-  built: '2026-08-20T17:20:00Z',
-  note: 'OMNIROUTE no longer blanks cards to start a rescan. Tab-switch auto-scan and hardRefreshAll go through refresh() (skip when busy or <3min fresh). A failed rescan keeps the last cards and names the error. v424 setup-level tickets stay.'
+  version: 'hg-v426',
+  pack: 'MIN `: collapse header chrome so setups fill the window',
+  built: '2026-08-20T17:30:00Z',
+  note: 'Press ` (or MIN `) to hide the tools drawer, MARKET PICTURE, chips, group row, and tab lead copy. Tab nav stays. Choice persists in this browser. Typing in an input does not steal the key. OMNIROUTE v425 keep-last-scan stays.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

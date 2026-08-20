@@ -39,6 +39,16 @@ header{display:flex;flex-direction:column;gap:0;padding:10px 16px;border-bottom:
 .header-drawer-inner{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 0 2px;border-top:1px solid var(--line);margin-top:6px}
 .header-menu-btn{display:none;margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--gold);border-radius:6px;padding:6px 12px;font-size:16px;line-height:1;min-height:36px}
 .header-menu-btn[aria-expanded="true"]{background:rgba(201,146,26,.12);border-color:var(--gold)}
+.chrome-min-btn{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--gold);border-radius:6px;padding:6px 10px;font-size:11px;letter-spacing:.08em;font-weight:700;min-height:36px;cursor:pointer}
+.chrome-min-btn[aria-pressed="true"]{background:rgba(15,92,192,.12);border-color:var(--gold)}
+html.hg-chrome-min .header-drawer,
+html.hg-chrome-min .header-chips,
+html.hg-chrome-min .market-picture-bar,
+html.hg-chrome-min .navgroups,
+html.hg-chrome-min .brand small,
+html.hg-chrome-min .hg-lead{display:none!important}
+html.hg-chrome-min header,html.hg-chrome-min .hg-header{padding:6px 16px}
+html.hg-chrome-min main{padding-top:10px}
 .header-field{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
 .header-field-label{font-size:9px;letter-spacing:.12em;color:var(--mut);text-transform:uppercase;flex:0 0 100%}
 .header-field input{flex:1 1 120px;min-width:0;padding:4px 8px;font-size:11px}
@@ -192,8 +202,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=425"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=425"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=426"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=426"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -204,6 +214,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
       <button id="xCdcx" onclick="setExchange('coindcx')">COINDCX</button>
       <button id="xStar" onclick="setExchange('startrader')">STARTRADER</button>
     </div>
+    <button type="button" class="chrome-min-btn" id="chromeMinBtn" onclick="toggleChromeMin()" title="Minimize header (key `)" aria-pressed="false" aria-label="Minimize header">MIN `</button>
     <button type="button" class="header-menu-btn" id="headerMenuBtn" aria-label="Tools and alerts" aria-expanded="false" aria-controls="headerDrawer" onclick="toggleHeaderDrawer()" title="Tools &amp; alerts"><svg class="hg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
   </div>
   <div class="header-chips" id="headerChips">
@@ -689,7 +700,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=425"></script>
+<script src="./hg-plan.js?v=426"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -721,9 +732,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=425"></script>
-<script src="./hg-gates.js?v=425"></script>
-<script src="omniroute.js?v=425"></script>
+<script src="hg-mechanics.js?v=426"></script>
+<script src="./hg-gates.js?v=426"></script>
+<script src="omniroute.js?v=426"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=47"></script>
@@ -742,7 +753,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=425"></script>
+<script src="omnigold.js?v=426"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
 <script src="omnipresent.js"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
@@ -771,14 +782,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=425"></script>
+<script src="supersetup.js?v=426"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=425"></script>
-<script src="super-gold.js?v=425"></script>
-<script src="super-best.js?v=425"></script>
-<script src="super-sniper.js?v=425"></script>
-<script src="super-book.js?v=425"></script>
-<script src="super-calibrate.js?v=425"></script>
+<script src="super-desk-common.js?v=426"></script>
+<script src="super-gold.js?v=426"></script>
+<script src="super-best.js?v=426"></script>
+<script src="super-sniper.js?v=426"></script>
+<script src="super-book.js?v=426"></script>
+<script src="super-calibrate.js?v=426"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -8534,6 +8545,64 @@ function hgAutoInit(){
     setAutoRefresh(typeof saved === 'string' ? saved : 'off');  /* garbage values degrade to OFF */
   }catch(e){}
 }
+var HG_CHROME_KEY = 'hg_chrome_min';
+function hgChromeTyping(el){
+  try{
+    if (!el) return false;
+    var tag = String(el.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }catch(e){ return false; }
+}
+function hgSetChromeMin(on){
+  try{
+    on = !!on;
+    if (document.documentElement && document.documentElement.classList)
+      document.documentElement.classList.toggle('hg-chrome-min', on);
+    try{
+      if (typeof localStorage !== 'undefined' && localStorage)
+        localStorage.setItem(HG_CHROME_KEY, on ? '1' : '0');
+    }catch(e){}
+    var b = document.getElementById('chromeMinBtn');
+    if (b){
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.setAttribute('title', on ? 'Show header (key `)' : 'Minimize header (key `)');
+      if ('textContent' in b) b.textContent = on ? 'SHOW `' : 'MIN `';
+    }
+  }catch(e){}
+}
+function toggleChromeMin(){
+  try{
+    var on = !(document.documentElement && document.documentElement.classList
+      && document.documentElement.classList.contains('hg-chrome-min'));
+    hgSetChromeMin(on);
+  }catch(e){}
+}
+function hgChromeKey(ev){
+  try{
+    if (!ev || ev.defaultPrevented) return false;
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return false;
+    var isTick = ev.key === '`' || ev.code === 'Backquote';
+    if (!isTick) return false;
+    if (hgChromeTyping(ev.target)) return false;
+    if (typeof ev.preventDefault === 'function') ev.preventDefault();
+    toggleChromeMin();
+    return true;
+  }catch(e){ return false; }
+}
+function hgChromeInit(){
+  try{
+    var saved = '0';
+    try{
+      if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.getItem === 'function')
+        saved = localStorage.getItem(HG_CHROME_KEY);
+    }catch(e){}
+    hgSetChromeMin(saved === '1');
+    if (document && typeof document.addEventListener === 'function')
+      document.addEventListener('keydown', hgChromeKey);
+  }catch(e){}
+}
 function toggleHeaderDrawer(){
   try{
     const d = $('headerDrawer'), b = $('headerMenuBtn');
@@ -8543,6 +8612,7 @@ function toggleHeaderDrawer(){
   }catch(e){}
 }
 hgAutoInit();
+hgChromeInit();
 
 /* ================= DYNAMIC FEATURE TABS =================
    Modules loaded after macro.js register on window.HG_tabs. Build a nav

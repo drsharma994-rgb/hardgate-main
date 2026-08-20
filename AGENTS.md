@@ -214,6 +214,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### Header chrome key — hg-v426
+- Press **backtick** or the header **MIN `** button to collapse the tools drawer, MARKET PICTURE, status chips, group chips, brand tagline, and `.hg-lead` tab intros so setup cards fill the window. Tab nav and venue toggles stay. Press again to restore.
+- Persists in `localStorage` `hg_chrome_min`. Ignored while focus is in an input / textarea / select.
+- Desktop always-open drawer yields (`html:not(.hg-chrome-min)`). Tests: `node tests/test-chrome-min.mjs`.
+
 ### OMNIROUTE keep last scan — hg-v425
 - A finished OMNIROUTE scan **stays on screen** until a newer scan successfully replaces it. Rescans no longer blank `#omniCards` first.
 - Tab-open / `hardRefreshAll` go through `refreshOmniroute` (skip when **busy** or **fresh &lt; 3 min**). `#omniRun` click is only the first-run fallback.
