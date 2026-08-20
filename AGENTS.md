@@ -8,6 +8,26 @@ Guidance for AI agents and cloud development environments working on HARDGATE.
 
 HARDGATE is a zero-dependency static SPA (`index.html` + classic JS modules) served by a small Node HTTP server (`scripts/server.mjs`). There is no build step, no Docker, and no database.
 
+### Agent skills (Claude / Cursor)
+
+This repo ships [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) for workflow routing (spec → plan → build → test → review → ship).
+
+| Location | Purpose |
+|----------|---------|
+| `.agents/skills/<name>/SKILL.md` | Primary install (via `npx skills add addyosmani/agent-skills`) |
+| `.cursor/skills/<name>/SKILL.md` | Cursor Agent discovery |
+| `.claude/skills/<name>/SKILL.md` | Claude Code / Copilot skills directory |
+| `.cursor/rules/agent-skills.mdc` | Always-on routing rule — start with `using-agent-skills` |
+| `.claude/commands/` | Slash commands (`/spec`, `/plan`, `/build`, `/test`, `/review`, `/ship`, …) |
+| `agent-skills-references/` | Shared checklists linked from skills |
+| `skills-lock.json` | Installed skill versions + hashes |
+
+**Claude Code plugin (local):** `claude --plugin-dir /path/to/hardgate-main` (uses `.claude-plugin/plugin.json`).
+
+**Refresh from upstream:** `npx skills add addyosmani/agent-skills -y` then re-copy to `.cursor/skills/` and `.claude/skills/` if needed.
+
+**HARDGATE defaults when using skills:** run `npm test` before merge; bump `build-stamp.js` + `sw.js` together for deploy; follow tab conventions in this file for UI work.
+
 ### Services
 
 | Service | Command | Port | Required? |

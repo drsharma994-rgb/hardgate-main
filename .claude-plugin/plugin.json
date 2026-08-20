@@ -1,0 +1,10 @@
+{
+  "name": "hardgate-agent-skills",
+  "version": "0.6.7",
+  "description": "Production-grade engineering skills (addyosmani/agent-skills) wired for HARDGATE.",
+  "homepage": "https://github.com/addyosmani/agent-skills",
+  "repository": "https://github.com/addyosmani/agent-skills",
+  "license": "MIT",
+  "commands": "./.claude/commands",
+  "skills": "./.claude/skills"
+}
