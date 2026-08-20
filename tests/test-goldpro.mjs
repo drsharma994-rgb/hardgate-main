@@ -195,6 +195,13 @@ const SAVED_FETCH = globalThis.fetch; globalThis.fetch = undefined;
 /* --- stubs for the remaining flows --- */
 const DAY = 86400;
 const today0 = Math.floor(Date.now() / (DAY * 1000)) * DAY; // unix sec, UTC midnight
+/* The 4H tape must end on a bar that is CLOSED at any wall-clock hour.
+   Anchored at today0, the last bar is younger than 14400s between 00:00 and
+   04:00 UTC, goldProClosed drops it, the 30-bar swing shifts one bar, and
+   every exact SL/TP assertion below fails — a suite that was green all day
+   and red only if run before breakfast. The previous completed 4H boundary
+   minus one full period is closed at every hour of every day. */
+const h4last = Math.floor(Date.now() / (14400 * 1000)) * 14400 - 14400;
 function synth1d(n){
   const rows = [];
   for (let i = 0; i < n; i++){
@@ -207,7 +214,7 @@ function synth4h(n){
   const rows = [];
   for (let i = 0; i < n; i++){
     const c = 2300 + i * 2;
-    rows.push({ t: today0 - (n - 1 - i) * 14400, o: c - 1, h: c + 2, l: c - 2, c, v: 50 });
+    rows.push({ t: h4last - (n - 1 - i) * 14400, o: c - 1, h: c + 2, l: c - 2, c, v: 50 });
   }
   return rows;
 }
@@ -341,7 +348,10 @@ globalThis.fetch = async (url) => {
 globalThis.getGoldCandles = async (res) => {
   const mk = (n, step, dt) => {
     const rows = [];
-    for (let i = 0; i < n; i++){ const c = 2600 - i * step; rows.push({ t: today0 - (n - 1 - i) * dt, o: c + 1, h: c + 2, l: c - 2, c, v: 100 }); }
+    for (let i = 0; i < n; i++){ const c = 2600 - i * step;
+      /* same closed-at-any-hour anchor as synth4h — see h4last above */
+      const t0 = (dt === 14400) ? h4last : today0;
+      rows.push({ t: t0 - (n - 1 - i) * dt, o: c + 1, h: c + 2, l: c - 2, c, v: 100 }); }
     return rows;
   };
   return { rows: res === '1d' ? mk(400, 1.2, DAY) : mk(200, 1.5, 14400), source: 'binance-paxg' };
