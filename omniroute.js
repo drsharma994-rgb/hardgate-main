@@ -116,6 +116,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var CHUNK_DELAY_MS = 80; // pause between pass-1 batches — avoids 429 mid-scan
   var ENRICH_CHUNK = 4;   // pass 2 hits Binance (CORS-open, 60s cached)
   var ENRICH_MAX = 120;   // ceiling on NETWORKED enrichment, reported when it bites
+  /* THE SCAN USED TO CRASH THE TAB IT RAN IN. Two causes, both here.
+     Rendering was unbounded: a 1,240-setup scan built a full 35-gate card
+     for every distinct trade into one innerHTML — tens of thousands of DOM
+     nodes, which is precisely the profile mobile Chrome answers with a
+     silent out-of-memory page reload ("the app refreshed and my results
+     are gone"). And grading was one synchronous loop over every fired
+     contract — 35 gates x indicators x 180 bars x ~500 names with no yield,
+     which is the profile the browser answers with an "unresponsive page"
+     kill. Cap what reaches the DOM (every TICKET always renders; the rest
+     go to one-line rows — the data all stays in __omni.snap for
+     hgOmniWhyNoTickets), and grade in chunks that yield the main thread. */
+  var CARD_RENDER_MAX = 40;  // full-ledger cards on screen; every ticket renders regardless
+  var GRADE_CHUNK = 20;      // contracts graded per main-thread slice
   var MIN_RR = 2;
   var RANGE_LOOKBACK = 40;
   var ORB_BARS = 3;
@@ -3327,7 +3340,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             exBySym[esym] = enriched[j].extra;
           }
           var cands = [];
-          for (j = 0; j < fired.length; j++){
+          function gradeOne(j){
             var fitem = fired[j].item;
             var ex = exBySym[fitem.sym] || { stats: pooled };
             /* WHY a per-symbol gate is unchecked matters. "OI not published
@@ -3387,10 +3400,29 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                 catch (e) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('omniroute:record', e); } catch (eW) {} }
               }
             }
+            /* Graded means these bars are finished with — release them so the
+               tab is not holding a universe of candles while it renders. The
+               parameter grid keeps its own references in __omni.gridRows. */
+            fired[j].rows = null;
           }
-          return { cands: cands, scanned: list.length, uni: uni.length,
+          function gradeStep(j){
+            if (j >= fired.length) return Promise.resolve();
+            var stop = Math.min(j + GRADE_CHUNK, fired.length);
+            for (var gj = j; gj < stop; gj++){
+              /* One bad contract must not take down the other 499. */
+              try { gradeOne(gj); }
+              catch (eG){ try { console.warn('omniroute grade skipped',
+                fired[gj] && fired[gj].item && fired[gj].item.sym, eG); } catch (eG2) {} }
+            }
+            if (stop >= fired.length) return Promise.resolve();
+            omniSafeStat(ui, 'grading ' + stop + '/' + fired.length + ' fired contracts…');
+            return omniSleep(0).then(function(){ return gradeStep(stop); });
+          }
+          return gradeStep(0).then(function(){
+            return { cands: cands, scanned: list.length, uni: uni.length,
                    fired: fired.length, enriched: subset.length, thin: thin,
                    failed: failed, pooled: pooled, pass1Err: pass1Err, pass1Done: done };
+          });
         });
       });
     }).then(function(res){
@@ -3512,6 +3544,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            Only a REAL DOA veto collapses; an AGAINST resting-order plan at
            genuine structure still renders in full. */
         var deadLines = '';
+        var shown = 0, overflowN = 0, overflowLines = '';
         for (i = 0; i < collapsed.length; i++){
           var lfG = null, gj2;
           for (gj2 = 0; gj2 < (collapsed[i].gates || []).length; gj2++){
@@ -3525,10 +3558,36 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                       +  ' · card not rendered</div>';
             continue;
           }
-          try { h += setupCard(collapsed[i]); }
-          catch (eC){
-            try{ console.warn('omniroute card render skipped', collapsed[i] && collapsed[i].sym, eC); }catch(eC2){}
+          var isTk = !!(collapsed[i].grade && collapsed[i].grade.ticket);
+          if (isTk || shown < CARD_RENDER_MAX){
+            try { h += setupCard(collapsed[i]); shown++; }
+            catch (eC){
+              try{ console.warn('omniroute card render skipped', collapsed[i] && collapsed[i].sym, eC); }catch(eC2){}
+            }
+          } else {
+            overflowN++;
+            /* One line, not one card: the sym, the mechanic, the direction
+               and what killed it — enough to decide whether to care. */
+            if (overflowN <= 200){
+              var ovV = (collapsed[i].grade && collapsed[i].grade.vetoes && collapsed[i].grade.vetoes.length)
+                ? collapsed[i].grade.vetoes[0]
+                  + (collapsed[i].grade.vetoes.length > 1 ? ' +' + (collapsed[i].grade.vetoes.length - 1) : '')
+                : 'no veto — below rank cap';
+              overflowLines += '<div class="dim">' + esc(String(collapsed[i].sym || '') + ' '
+                + collapsed[i].kind + ' ' + String(collapsed[i].dir).toUpperCase()
+                + ' — ' + ovV) + '</div>';
+            }
           }
+        }
+        if (overflowN){
+          h += '<div class="note" style="margin-top:10px"><b>' + overflowN
+            + ' more setup(s) past the ' + CARD_RENDER_MAX + '-card screen cap'
+            + ' — every ticket above rendered in full; a page with a thousand'
+            + ' full ledgers is what was crashing this tab. Ledgers all kept:'
+            + ' hgOmniWhyNoTickets().</b>'
+            + overflowLines
+            + (overflowN > 200 ? '<div class="dim">…and ' + (overflowN - 200) + ' more, summarised in the pool table above</div>' : '')
+            + '</div>';
         }
         if (deadLines){
           h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
@@ -3773,6 +3832,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
     window.hgOmniEvaluate = hgOmniEvaluate;
+    /* The scan loop itself, so the stability test can run a full universe
+       through the real pipeline instead of trusting source inspection. */
+    window.hgOmniRunScan = runScan;
     window.hgOmniRank = hgOmniRank;
     /* research half */
     window.hgOmniGateInventory = hgOmniGateInventory;
