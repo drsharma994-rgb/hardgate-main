@@ -70,7 +70,7 @@ console.log('== the ordering defect ==');
 {
   /* The plan must exist before the ledger runs, or no gate can judge it. */
   const evalSrc = ROUTE.slice(ROUTE.indexOf('function hgOmniEvaluate'), ROUTE.indexOf('function hgOmniDerivePlan'));
-  const planAt = evalSrc.indexOf('plan = planFn(');
+  const planAt = evalSrc.indexOf('plan = hgOmniPlanForHit(');
   const gatesAt = evalSrc.indexOf('var gates = hgOmniGates(');
   ok(planAt > 0 && gatesAt > 0, 'both the plan and the gate call were found');
   ok(planAt < gatesAt, 'the plan is derived BEFORE the gates run');

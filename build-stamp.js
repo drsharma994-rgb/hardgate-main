@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v423',
-  pack: 'OMNIGOLD: ticket levels are the setup, not live gold',
-  built: '2026-08-20T14:00:00Z',
-  note: 'OMNIGOLD tickets hit.level (ROUND-MAGNET / FVG), not the live print. Sweep stop beyond the named level; continuation skipExact from that entry; 2.5% gold stop cap. Consensus ignores daily-disqualified hits. STRONGEST prefers structural then near (2xATR) then vol-stop. v420 min-loss vetoes stay. Do not run through hgApplyGoldBestLevels.'
+  version: 'hg-v424',
+  pack: 'OMNIROUTE: ticket levels are the setup, not last close',
+  built: '2026-08-20T15:30:00Z',
+  note: 'OMNIROUTE tickets hit.level (ORB / FVG / VALUE), not last close. Sweep/reversion stop beyond the named level (6xATR crypto cap); continuation skipExact from that entry. Consensus ignores daily-disqualified TREND hits. OMNIGOLD v423 setup levels stay. OMNIPRESENT TRIGGERED stays live after rejection. G1-G7 untouched.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

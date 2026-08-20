@@ -214,6 +214,13 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIROUTE setup levels — hg-v424
+- Tickets **are the setup**. `hgOmniPlanForHit` prices **ENTRY at `hit.level`** (ORB / FVG / VALUE), not last close. Sweeps and reversions stop beyond that level (crypto cap **6×ATR**, not gold 2.5%). Continuation uses structure **from that entry** (`skipExact`); fades never get a momentum stop.
+- Cards print **SETUP {kind} @ {level}**. `hgOmniConsensusVoters` drops TREND hits the daily stack already disqualifies (no-op when HTF is absent, so existing consensus harnesses stay two-sided).
+- **OMNIPRESENT is unchanged:** TRIGGERED still enters at the **live** print after rejection; ARMED stays WATCH at the zone edge. Do not copy `hgOmniPlanForHit` onto that desk.
+- G1–G7, gold min-loss, and OMNIGOLD v423 setup-level tickets stay.
+- Tests: `node tests/test-omniroute-setup-levels.mjs`, `node tests/test-omniroute.mjs`, `node tests/test-omniroute-consensus.mjs`
+
 ### OMNIGOLD setup levels — hg-v423
 - Tickets **are the setup**. `hgOgPlanForHit` prices **ENTRY at `hit.level`** (ROUND-MAGNET @ 4530, FVG @ 4429), not live gold. Sweeps stop beyond that level; continuation still uses structure / labelled vol-stop **from that entry** (`skipExact`). Stops clip at **2.5% of gold** — a 1000-pt lastSwing is not a gold invalidation.
 - Cards print **SETUP {kind} @ {level}**. `hgOgConsensusVoters` drops continuation/fade hits the daily stack already disqualifies, so rejected TREND shorts cannot empty a with-trend scalp.

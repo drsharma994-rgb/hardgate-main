@@ -997,6 +997,96 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   })();
   function hgOmniFamilyOf(kind){ return OMNI_FAMILY[String(kind || '')] || 'OTHER'; }
 
+  function hgOmniIsReversion(kind){
+    var f = hgOmniFamilyOf(kind);
+    return f === 'REVERSION' || f === 'SWEEP';
+  }
+
+  /* Hits the ledger has already disqualified must not vote. TREND shorts
+     that fail `trend` / `htf-daily` on a rising stack used to empty every
+     with-trend ticket via consensus. A vetoed setup is not disagreement.
+     With no HTF the filter is a no-op so existing consensus harnesses stay
+     two-sided. */
+  function hgOmniConsensusVoters(allHits, rows, extra){
+    if (!allHits || !allHits.length) return allHits || [];
+    extra = extra || {};
+    var he21 = extra.htf ? fin(extra.htf.e21) : NaN, he50 = extra.htf ? fin(extra.htf.e50) : NaN;
+    var dailyUp = (isFinite(he21) && isFinite(he50)) ? (he21 >= he50) : null;
+    var out = [], i, h, rev, agrees;
+    for (i = 0; i < allHits.length; i++){
+      h = allHits[i];
+      if (!h || (h.dir !== 'long' && h.dir !== 'short')) continue;
+      rev = hgOmniIsReversion(h.kind);
+      if (dailyUp === null){ out.push(h); continue; }
+      if (!rev){
+        agrees = (h.dir === 'long') ? dailyUp : !dailyUp;
+        if (!agrees) continue;
+      } else if (dailyUp === (h.dir === 'short')) continue;
+      out.push(h);
+    }
+    return out;
+  }
+
+  /* The printed trade IS the mechanic. Pricing entry at last close while the
+     detector named an FVG / ORB / VALUE produced the live gold-desk defect
+     on crypto: SETUP at one price, ENTRY at another. Sweeps stop beyond the
+     named level. Continuation still uses structure from that entry,
+     skipExact so enrichers cannot hijack it. Fades never get a momentum
+     stop: a fade's premise IS the level. */
+  function hgOmniPlanForHit(hit, rows, extra){
+    extra = extra || {};
+    if (!hit || (hit.dir !== 'long' && hit.dir !== 'short')) return null;
+    var live = fin(extra.livePx);
+    var lvl = fin(hit.level);
+    var entry = (isFinite(lvl) && lvl > 0) ? lvl
+              : ((isFinite(live) && live > 0) ? live : undefined);
+    var minRr = isFinite(fin(extra.minRr)) && fin(extra.minRr) > 0 ? fin(extra.minRr) : MIN_RR;
+    var reversion = hgOmniIsReversion(hit.kind);
+    var w = (typeof window !== 'undefined') ? window : null;
+    var fromRisk = (w && typeof w.hgPlanFromRisk === 'function') ? w.hgPlanFromRisk : null;
+    var planFn = (w && typeof w.hgPlanLevels === 'function') ? w.hgPlanLevels : null;
+    var a = atrOf(rows, 14);
+    if (!(isFinite(a) && a > 0) && isFinite(entry)) a = entry * 0.01;
+
+    if (reversion && isFinite(entry) && fromRisk){
+      var lastBar = (rows && rows.length) ? rows[rows.length - 1] : null;
+      var stop, wick;
+      if (hit.dir === 'long'){
+        wick = lastBar ? fin(lastBar.l) : NaN;
+        stop = ((isFinite(wick) && wick < entry) ? wick : entry) - 0.35 * a;
+      } else {
+        wick = lastBar ? fin(lastBar.h) : NaN;
+        stop = ((isFinite(wick) && wick > entry) ? wick : entry) + 0.35 * a;
+      }
+      if (!isFinite(stop)) return null;
+      var risk = Math.abs(entry - stop);
+      if (isFinite(a) && a > 0 && risk > 6 * a){
+        stop = (hit.dir === 'long') ? (entry - 6 * a) : (entry + 6 * a);
+      }
+      var sweepPl = fromRisk(hit.dir, entry, stop, {
+        t1R: 2, t2R: 3.5, minRr: minRr,
+        targetPolicy: 'R-multiples of setup-level risk'
+      });
+      if (sweepPl){
+        sweepPl.note = 'SETUP ' + String(hit.kind) + ' @ ' + entry
+                     + ' — stop beyond the level that is the trade';
+        sweepPl.planSrc = 'hgOmniPlanForHit';
+        sweepPl.dir = hit.dir;
+      }
+      return sweepPl;
+    }
+
+    if (!planFn || !isFinite(entry)) return null;
+    var plan = null;
+    try {
+      plan = planFn(hit.dir, rows, entry, {
+        minRr: minRr, capMode: 'structure', skipExact: true,
+        momentumOk: !hgOmniIsReversion(hit.kind)
+      });
+    } catch (eP) { plan = null; }
+    return plan;
+  }
+
   /* Standard normal CDF (Abramowitz & Stegun 26.2.17), inlined so a piece of
      pure arithmetic can never read "unavailable" because a script did not
      load. */
@@ -1581,7 +1671,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        blocked by a gate that could not run. */
     var con = null, conWhy = 'no other mechanics to compare against';
     var conHard = false;
-    var cons = x.allHits ? hgOmniConsensus(x.allHits, hit) : null;
+    var cons = x.allHits ? hgOmniConsensus(hgOmniConsensusVoters(x.allHits, rows, x), hit) : null;
     if (cons){
       conHard = true;
       var aTxt = cons.nAgree + ' famil' + (cons.nAgree === 1 ? 'y agrees' : 'ies agree')
@@ -2118,15 +2208,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       exForHit.regimeWarm = ex.regimeWarm;
       exForHit.allHits = hits;      /* so the consensus gate can see the rest of the scan */
       exForHit.sym = item && item.sym;   /* so the cross-sectional gates can find this contract's rank */
+      exForHit.minRr = MIN_RR;
       /* PLAN BEFORE GATES. The ledger could not see the stop it was judging:
          plan was derived after the gates ran, so no gate could say anything
          about how wide it is. A live card read "risk 13.33%" in exactly the
          same weight as one reading "risk 0.86%", and those are not the same
          trade. Gold has run in this order since the cost-drag gate landed for
-         the same reason. */
+         the same reason.
+
+         The printed trade IS the mechanic. Passing undefined as the entry
+         priced last close + enrichers, so an ORB/FVG/VALUE at a named level
+         printed a different ENTRY. hgOmniPlanForHit tickets hit.level. */
       var plan = null;
       if (planFn){
-        try { plan = planFn(hit.dir, rows, undefined, { minRr: MIN_RR, type: 'OMNI' }); }
+        try { plan = hgOmniPlanForHit(hit, rows, exForHit); }
         catch (e) { plan = null; }
       }
       if (plan) plan = hgOmniDerivePlan(plan);
@@ -2150,7 +2245,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         gates: gates, grade: grade, plan: plan,
         /* Carried so hgOmniRank can put the setup the rest of the scan agrees
            with above the one nothing supports. */
-        consensus: hgOmniConsensus(hits, hit),
+        consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
         family: hgOmniFamilyOf(hit.kind),
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
@@ -2578,6 +2673,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         +  ' — ' + (c.alsoKinds.length + 1) + ' mechanics, one trade</div>';
     }
     h += '<div class="dim">' + esc(c.why) + '</div>';
+    if (isFinite(fin(c.level))){
+      h += '<div class="dim">SETUP ' + esc(c.kind) + ' @ ' + fmtPx(c.level)
+        +  ((c.plan && isFinite(fin(c.plan.entry)) && Math.abs(c.plan.entry - c.level) > 1e-6)
+              ? (' · plan entry ' + fmtPx(c.plan.entry)) : '')
+        +  '</div>';
+    }
     if (c.plan){
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
         +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
@@ -3878,6 +3979,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
     window.hgOmniEvaluate = hgOmniEvaluate;
+    window.hgOmniPlanForHit = hgOmniPlanForHit;
+    window.hgOmniConsensusVoters = hgOmniConsensusVoters;
+    window.hgOmniIsReversion = hgOmniIsReversion;
     /* The scan loop itself, so the stability test can run a full universe
        through the real pipeline instead of trusting source inspection. */
     window.hgOmniRunScan = runScan;
