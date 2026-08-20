@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v417',
+  version: 'hg-v418',
   pack: 'phone viewing: stacked header, 44px taps, no page sideways scroll',
-  built: '2026-08-20T09:30:00Z',
-  note: 'mobile.css ≤860px stacks brand+menu then exchange, clips main overflow-x, keeps tables as tables, and uses viewport-fit=cover for notch insets'
+  built: '2026-08-20T10:30:00Z',
+  note: 'mobile.css ≤860px stacks brand+menu then exchange; gold PLACED/CROSS-CHECKED from v417 stays; cache busts off production hg-v417'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

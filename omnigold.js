@@ -1391,6 +1391,44 @@ terse status, and never launches a first-time scan on a global refresh.
     /* The 14 indicator context reads moved to hg-gates.js so OMNIROUTE gets
        them too — a gold card carried 34 checks to crypto\'s 21, and the gap
        was exactly these. Verbatim move; verified by gate-output equivalence. */
+    /* ZONE ANCHOR — is this setup AT a level, or in no-man's land?
+
+       The NEXT GOLD LEVELS panel already computes where the multi-source
+       zones sit (swings, prior day/week, ADR, Asia, value area, rounds,
+       AVWAP), but the mechanic cards never knew: a POC-REVERT firing at a
+       four-source overhead zone and one firing in the middle of nowhere
+       graded identically. They are not the same trade — a level everyone
+       can see is where liquidity rests and where a rejection has odds; a
+       setup far from any structure is leaning on nothing. Info-only: being
+       unanchored costs standing, never existence. */
+    (function(){
+      var za = null, zaWhy = 'zone context unavailable';
+      var zc = x.zoneCtx;
+      if (Array.isArray(zc) && zc.length){
+        var ref = fin(hit.level);
+        if (!isFinite(ref)) ref = fin(x.livePx);
+        var aRef2 = atrOf(rows, 14);
+        if (isFinite(ref) && isFinite(aRef2) && aRef2 > 0){
+          var best = null, zi2, zz, dEdge;
+          for (zi2 = 0; zi2 < zc.length; zi2++){
+            zz = zc[zi2] && zc[zi2].zone;
+            if (!zz || !isFinite(fin(zz.lo)) || !isFinite(fin(zz.hi))) continue;
+            dEdge = (ref < zz.lo) ? (zz.lo - ref) : (ref > zz.hi ? ref - zz.hi : 0);
+            if (!best || dEdge < best.d) best = { d: dEdge, z: zz };
+          }
+          if (best){
+            var dAtr = best.d / aRef2;
+            zaWhy = 'nearest structural zone (' + (best.z.confluence || '?') + ' sources: '
+                  + best.z.srcs.join(', ') + ') sits ' + dAtr.toFixed(1) + 'xATR from the setup level';
+            if (dAtr <= 0.5){ za = true; zaWhy += ' — anchored AT the level'; }
+            else if (dAtr > 1.5){ za = false; zaWhy += ' — no structure within reach: a setup in no-man’s-land'; }
+            else { za = true; zaWhy += ' — within working distance'; }
+          } else zaWhy = 'no multi-source zone computed on this tape';
+        }
+      }
+      gates.push({ key:'zone-anchor', hard:false, info:true, pass: za, why: zaWhy });
+    })();
+
     (function(){
       var shFn = gfn('hgIndicatorGates');
       var sh = shFn ? shFn(rows, hit, x, reversion) : null;
@@ -2236,6 +2274,12 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
+    /* the cross-horizon read — agreement is standing, disagreement is a
+       warning the reader deserves before entering */
+    if (c.horizonNote){
+      h += '<div class="dim">' + pill(c.horizonAgree ? 'HORIZONS ALIGNED' : 'HORIZON CONFLICT', c.horizonAgree ? 'ok' : 'bad')
+        +  ' ' + esc(c.horizonNote) + '</div>';
+    }
     if (c.alsoKinds && c.alsoKinds.length){
       h += '<div class="dim">also fired here on identical levels: ' + esc(c.alsoKinds.join(', '))
         +  ' — ' + (c.alsoKinds.length + 1) + ' mechanics, one trade</div>';
@@ -2483,11 +2527,19 @@ terse status, and never launches a first-time scan on a global refresh.
       }
 
       var hits = hgOgDetect(rows, {});
+      /* the anticipation zones, computed once per horizon and handed to the
+         ledger so zone-anchor can place every mechanic against real
+         structure (best-effort: an absent engine reads UNCHECKED) */
+      var zoneCtx = null;
+      var opFn2 = gfn('opAssess');
+      if (opFn2){
+        try { zoneCtx = opFn2(rows, livePx, hgOgZoneLevels(rows, livePx)); } catch (eZc){ zoneCtx = null; }
+      }
       var extra = {
         htf: dailyFn ? dailyFn(rows) : null,
         killzone: shared.killzone, macro: shared.macro, yield: shared.yieldGuard,
         adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled,
-        livePx: livePx
+        livePx: livePx, zoneCtx: zoneCtx
       };
       var cands = hgOgEvaluate(rows, hits, extra, cfg);
 
@@ -2574,6 +2626,38 @@ terse status, and never launches a first-time scan on a global refresh.
         } catch (eSf){}
         var rankFn = (w && typeof w.hgOmniRank === 'function') ? w.hgOmniRank : function(a){ return a; };
         var all = (res.scalp.cands || []).concat(res.swing.cands || []);
+        /* HORIZON AGREEMENT — a scalp aligned with the swing horizon's read
+           is a different trade from one fighting it, and until now the two
+           scans never looked at each other. A chip, not a gate: each
+           horizon's ledger was graded before the other existed, and an
+           honest ledger is not edited after the fact. */
+        (function(){
+          var dirsOf = function(cands){
+            var d = { long: [], short: [] }, i2, c2;
+            for (i2 = 0; i2 < (cands || []).length; i2++){
+              c2 = cands[i2];
+              if (c2 && (c2.dir === 'long' || c2.dir === 'short') && d[c2.dir].indexOf(c2.kind) < 0) d[c2.dir].push(c2.kind);
+            }
+            return d;
+          };
+          var scalpD = dirsOf(res.scalp.cands), swingD = dirsOf(res.swing.cands);
+          var mark2 = function(cands, other, otherLabel){
+            for (var i3 = 0; i3 < (cands || []).length; i3++){
+              var c3 = cands[i3];
+              if (!c3 || (c3.dir !== 'long' && c3.dir !== 'short')) continue;
+              var withMe = other[c3.dir], against = other[c3.dir === 'long' ? 'short' : 'long'];
+              if (withMe.length){
+                c3.horizonNote = otherLabel + ' horizon agrees (' + withMe.slice(0, 3).join(', ') + ')';
+                c3.horizonAgree = true;
+              } else if (against.length){
+                c3.horizonNote = otherLabel + ' horizon reads the OTHER way (' + against.slice(0, 3).join(', ') + ')';
+                c3.horizonAgree = false;
+              }
+            }
+          };
+          mark2(res.scalp.cands, swingD, 'SWING');
+          mark2(res.swing.cands, scalpD, 'SCALP');
+        })();
         var ranked = rankFn(all);
         __og.snap = { at: Date.now(), rows: ranked, scalp: res.scalp.pooled, swing: res.swing.pooled };
         /* Bars kept for the R/horizon grid — it re-runs the walk-forward on
