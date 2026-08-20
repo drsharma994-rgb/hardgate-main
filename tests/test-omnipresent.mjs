@@ -135,7 +135,7 @@ console.log('\n== the ledger: no evidence, no setup; dead stops veto; thin zones
   const thin = Object.assign({}, c, { zone: Object.assign({}, c.zone, { confluence: 2, srcs: ['a', 'b'] }) });
   const g3 = W.opGates(rows, thin, live, 'TESTUSD');
   const cf = g3.filter(g => g.key === 'confluence')[0];
-  ok(cf && cf.pass === false && cf.info === true, 'a two-source zone reads AGAINST (info), not vetoed');
+  ok(cf && cf.pass === false && cf.info !== true, 'a two-source zone is a HARD veto — 3+ sources is a zone');
 
   const g4 = W.opGates(rows, c, live, 'TESTUSD');
   ok(g4.some(g => g.key === 'context-gates'), 'the 14 shared context gates read every candidate');

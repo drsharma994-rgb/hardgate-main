@@ -16,7 +16,7 @@ const bookFiles = [
   'carry.js', 'termbasis.js', 'goldpro.js', 'edge.js', 'brain.js', 'engine.js',
   'squeeze.js', 'meanrev.js', 'oiflow.js', 'liqs.js', 'goldscalp.js', 'goldswing.js',
   'goldpine.js', 'startradertab.js', 'trendtable.js', 'pine.js', 'setup-ui.js',
-  'index.html', 'scripts/best-v9-inline.js'
+  'index.html', 'scripts/best-v9-inline.js', 'omnipresent.js'
 ];
 
 console.log('== book + trade handoff coverage ==');

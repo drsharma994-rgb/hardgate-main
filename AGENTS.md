@@ -222,6 +222,14 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Weekend:** inside Fri 22:00 UTC–Sun 22:00 UTC is a veto; SWING also vetoes inside one 4h bar of the Friday close. Scalp cost-drag ceiling is **0.15R** (`sessionHard`).
 - Tests: `node tests/test-omnigold-min-loss.mjs`, `node tests/test-omnigold.mjs`, `node tests/test-fade-strength.mjs`, `node tests/test-momentum-stop.mjs`
 
+### OMNIPRESENT max-quality — hg-v421
+- **TICKET** only on **TRIGGERED** (1h close rejected the zone). ARMED is WATCH — hard UNCHECKED `rejection` gate, not a veto badge.
+- Confluence **< 3** and exhaustion **< 2** are hard vetoes (the tab already claimed this; AGAINST notes used to still ticket).
+- Daily EMA stack against the fade vetoes (`htf-daily`). Running ADX without **RSI divergence** vetoes (`trend-guard`) — stretch is the trend.
+- Adverse context panel (`cx.adverse`) is a real veto. Settled `OP-HIGH-REJECT` / `OP-LOW-REJECT` at 20+ samples with negative expectancy vetoes.
+- TICKET cards carry ADD TO BOOK + SEND TO TRADE PLAN. Tab open auto-scans (`HG_TAB_AUTO_SCAN.omnipresent`).
+- Tests: `node tests/test-omnipresent-max.mjs`, `node tests/test-omnipresent.mjs`
+
 ### Auto hard refresh — hg-v267
 - **`HG_AUTO_REFRESH_HARDCODED_MS = 120000`** in `index.html` — every **2 minutes** the app runs `hardRefreshAll()` on all inline scanners + every `HG_TAB_MODS.refresh()` (including GOLD SCALP/SWING). OFF / 3m / 5m / 15m header buttons are ignored; localStorage `hgAutoRefresh` always stores `120000`.
 - **`goldscalpRefresh` / `goldswingRefresh`:** run a headless scan when the tab was never opened (stub UI, same path as `gsWarm`/`gwWarm`) so the 2m cycle never skips gold tabs cold.

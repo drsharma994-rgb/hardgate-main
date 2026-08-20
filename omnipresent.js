@@ -27,10 +27,14 @@
                 level band, the tight structural stop beyond it, the wide
                 targets, the trigger rule, and WHEN the trigger can fire
                 (bar closes, listed in UTC and IST). The reader holds the
-                level before the market gets there.
+                level before the market gets there. ARMED is WATCH, never
+                a TICKET — there is no trade until the 1h close rejects.
      TRIGGERED  the zone was swept and the last closed bar closed back
                 through it — the classical rejection. Entry is the LIVE
-                price, now, and the plan is forward-logged.
+                price, now, and the plan is forward-logged. TICKET only
+                after 3+ sources, 2+ exhaustion reads, a daily stack that
+                does not fight the fade, and (if ADX is running) RSI
+                divergence.
 
    STOP: beyond the zone extreme plus 0.3xATR — squeezed, because the zone
    IS the invalidation: if price accepts beyond it, the idea is dead and no
@@ -389,6 +393,35 @@
     return out;
   }
 
+  /* Daily closes from a 1h tape — the "shorts in a rally" read. Need ~12
+     sessions so EMA8 vs EMA13 is defined; fewer → UNCHECKED, never a pass. */
+  function opHtfDaily(rows){
+    rows = opClean(rows);
+    if (rows.length < 80) return null;
+    var lastByDay = {}, i, t, day, closes, emaFn, eFast, eSlow, a, b;
+    for (i = 0; i < rows.length; i++){
+      t = fin(rows[i].t);
+      if (!isFinite(t)) continue;
+      if (t > 1e12) t = Math.floor(t / 1000);
+      day = Math.floor(t / 86400);
+      lastByDay[day] = fin(rows[i].c);
+    }
+    closes = Object.keys(lastByDay).sort(function (x, y){ return +x - +y; })
+      .map(function (d){ return lastByDay[d]; })
+      .filter(function (c){ return isFinite(c); });
+    if (closes.length < 12) return null;
+    emaFn = gfn('ema');
+    if (!emaFn) return null;
+    try{
+      eFast = emaFn(closes, 8);
+      eSlow = emaFn(closes, 13);
+      a = fin(eFast[eFast.length - 1]);
+      b = fin(eSlow[eSlow.length - 1]);
+    }catch(e){ return null; }
+    if (!isFinite(a) || !isFinite(b)) return null;
+    return { up: a >= b, e8: a, e13: b, n: closes.length };
+  }
+
   /* ==================== pure: the ledger ==================== */
 
   function opGates(rows, cand, livePx, sym){
@@ -399,36 +432,44 @@
     var z = cand.zone || { lo: NaN, hi: NaN, confluence: 0, srcs: [] };
     var dir = cand.dir;
 
-    /* A fade against a RUNNING trend needs the tape to be exhausted, not
-       merely high — same read fade-strength uses on the gold desk. */
+    /* A fade against a RUNNING trend needs DIVERGENCE, not mere stretch.
+       Stretch + climax fire inside the trend itself — that is how gold and
+       crypto fades die. RSI divergence is the exhaustion that can actually
+       turn a running tape. */
     var adxFn = gfn('adx');
+    var hasDiv = cand.evidence.some(function (s){ return /divergence/i.test(String(s)); });
     if (adxFn && rows && rows.length > 40){
       try{
         var ax = adxFn(rows, 14), n2 = rows.length - 1;
         var adxNow = fin(ax.adx[n2]), diP = fin(ax.plusDI ? ax.plusDI[n2] : ax.pdi && ax.pdi[n2]), diM = fin(ax.minusDI ? ax.minusDI[n2] : ax.mdi && ax.mdi[n2]);
-        var runningAgainst = isFinite(adxNow) && adxNow >= 30
+        var runningAgainst = isFinite(adxNow) && adxNow >= 25
           && ((dir === 'short' && diP > diM) || (dir === 'long' && diM > diP));
-        var exhausted = cand.evidence.length >= 2;
-        if (runningAgainst && !exhausted){
+        if (runningAgainst && !hasDiv){
           gates.push({ key: 'trend-guard', hard: true, pass: false,
-            why: 'fading a RUNNING trend (ADX ' + adxNow.toFixed(0) + ' with DI against) with under two exhaustion reads — a fade wants a stretched tape, not a running one' });
+            why: 'fading a RUNNING trend (ADX ' + adxNow.toFixed(0) + ' with DI against) without RSI divergence — stretch is the trend, not exhaustion' });
         } else {
           gates.push({ key: 'trend-guard', hard: true, pass: true,
-            why: runningAgainst ? 'trend runs against this fade, but ' + cand.evidence.length + ' exhaustion reads argue the tape is done'
+            why: runningAgainst ? 'trend runs against this fade, but RSI divergence argues the tape is done'
                                 : 'no running trend stands against this direction' });
         }
       }catch(e){ gates.push({ key: 'trend-guard', hard: true, pass: null, why: 'ADX threw: ' + (e && e.message) }); }
     } else gates.push({ key: 'trend-guard', hard: true, pass: null, why: 'ADX unavailable — trend read UNCHECKED' });
 
+    /* 3+ sources is a ZONE — the header already said so. Two voices is a
+       coincidence, and coincidences used to TICKET as AGAINST. */
     gates.push(z.confluence >= 3
       ? { key: 'confluence', hard: true, pass: true, why: z.confluence + ' independent level sources agree here: ' + z.srcs.join(', ') }
-      : { key: 'confluence', hard: false, info: true, pass: false, why: 'only ' + z.confluence + ' level sources (' + z.srcs.join(', ') + ') — a thinner zone, weighted AGAINST' });
+      : { key: 'confluence', hard: true, pass: false, why: 'only ' + z.confluence + ' level sources (' + z.srcs.join(', ') + ') — not a zone (need 3+)' });
 
+    /* Two exhaustion reads is a setup. One is a level with a hint. Zero is
+       just a line on the chart. All three used to be able to TICKET except
+       zero; the one-read AGAINST note was the live leak. */
     gates.push(cand.evidence.length >= 2
       ? { key: 'exhaustion', hard: true, pass: true, why: cand.evidence.length + ' independent exhaustion reads' }
-      : (cand.evidence.length === 1
-        ? { key: 'exhaustion', hard: false, info: true, pass: false, why: 'one exhaustion read only — a level with thin evidence, AGAINST' }
-        : { key: 'exhaustion', hard: true, pass: false, why: 'no exhaustion evidence at all — this is a level, not a setup' }));
+      : { key: 'exhaustion', hard: true, pass: false,
+          why: cand.evidence.length === 1
+            ? 'one exhaustion read only — a level, not a setup'
+            : 'no exhaustion evidence at all — this is a level, not a setup' });
 
     /* dead-on-arrival: the market already beyond the stop */
     var dead = (dir === 'short') ? (livePx >= cand.stop) : (livePx <= cand.stop);
@@ -458,12 +499,81 @@
     if (cxFn){
       var cx = cxFn(rows, dir, 'omnipresent', true);
       if (cx){
-        gates.push({ key: 'context-gates', hard: false, info: true, pass: cx.adverse ? false : true, why: cx.read });
+        /* The header promised an adverse third of the panel stands the
+           trade aside. info:true made that a note that still TICKETED. */
+        if (cx.adverse){
+          gates.push({ key: 'context-gates', hard: false, pass: false,
+            why: cx.read + ' — a third of the panel objects; this fade stands aside' });
+        } else {
+          gates.push({ key: 'context-gates', hard: false, info: true, pass: true, why: cx.read });
+        }
         cand.contextGates = cx.gates;
       } else gates.push({ key: 'context-gates', hard: false, pass: null, why: 'context read unavailable on this tape' });
     } else gates.push({ key: 'context-gates', hard: false, pass: null, why: 'hg-gates.js not loaded — UNCHECKED' });
 
+    /* REJECTION — ARMED is anticipation. TICKET means enter now. A hard
+       UNCHECKED on ARMED grades WATCH (blocks the ticket, is not a veto). */
+    gates.push(cand.status === 'TRIGGERED'
+      ? { key: 'rejection', hard: true, pass: true, why: '1h close rejected the zone — entry is live' }
+      : { key: 'rejection', hard: true, pass: null,
+          why: 'ARMED — the zone is not yet swept; there is no trade to take until the 1h close rejects' });
+
+    /* Daily stack: fading a higher-timeframe rally is how these shorts die. */
+    var htf = opHtfDaily(rows);
+    if (!htf){
+      gates.push({ key: 'htf-daily', hard: false, pass: null, why: 'not enough daily closes to judge the higher timeframe' });
+    } else {
+      var htfAgainst = (dir === 'short' && htf.up) || (dir === 'long' && !htf.up);
+      gates.push({ key: 'htf-daily', hard: false, pass: htfAgainst ? false : true,
+        why: htfAgainst
+          ? ('daily EMA stack is ' + (htf.up ? 'UP' : 'DOWN') + ' — fading a higher-timeframe '
+            + (htf.up ? 'rally' : 'selloff'))
+          : ('daily EMA stack ' + (htf.up ? 'UP' : 'DOWN') + ' does not fight this fade') });
+    }
+
+    /* This desk's own settled record. Same bar as OMNIGOLD: 20+ samples
+       with negative expectancy (or −2σ vs breakeven) VETOES. */
+    var mech = 'OP-' + (dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT');
+    var ed = null, edWhy = 'no settled OMNIPRESENT record yet — not judged';
+    var fwdFn = gfn('hgFwdStats');
+    if (fwdFn){
+      try{
+        var st = fwdFn('OMNIPRESENT', mech, true);
+        var sN = st ? fin(st.samples) : NaN;
+        var sHit = st ? fin(st.hit) : NaN;
+        var sExp = st ? fin(st.expR) : NaN;
+        if (isFinite(sN) && sN >= 20 && isFinite(sHit) && isFinite(sExp)){
+          var pBreak = 1 / (1 + MIN_RR);
+          var se = Math.sqrt(pBreak * (1 - pBreak) / sN);
+          var zsc = se > 0 ? ((sHit - pBreak) / se) : 0;
+          var stat = sN + ' samples · ' + (sHit * 100).toFixed(0) + '% · '
+                   + (sExp >= 0 ? '+' : '') + sExp.toFixed(2) + 'R ['
+                   + (zsc >= 0 ? '+' : '') + zsc.toFixed(2) + 'σ vs breakeven]';
+          if (sExp < 0 || zsc <= -2){
+            ed = false;
+            edWhy = stat + ' — significantly below breakeven, this mechanic has not paid';
+          } else {
+            ed = true;
+            edWhy = stat;
+          }
+        } else if (isFinite(sN) && sN > 0 && sN < 20){
+          edWhy = 'only ' + sN + ' settled samples — too few to judge';
+        }
+      }catch(eEd){ edWhy = 'forward stats threw'; }
+    }
+    gates.push({ key: 'measured-edge', hard: false, pass: ed, why: edWhy });
+
     return gates;
+  }
+
+  /* Shown head: tickets first (already sorted), then ARMED watches that
+     the ledger did not veto. Vetoed junk does not occupy the "most
+     probable" slots unless nothing cleaner exists. */
+  function opShowable(c){
+    if (!c || !c.grade) return false;
+    if (c.grade.ticket) return true;
+    if (c.grade.vetoes && c.grade.vetoes.length) return false;
+    return c.status === 'ARMED';
   }
 
   /* Next K hourly bar closes — WHEN a trigger can actually fire. Entries on
@@ -544,7 +654,9 @@
             if (at !== bt) return bt - at;
             return b.score - a.score;
           });
-          var top = found.slice(0, SHOW);
+          var showable = found.filter(opShowable);
+          var top = showable.slice(0, SHOW);
+          if (!top.length) top = found.slice(0, Math.min(3, found.length));
 
           /* forward-log every TRIGGERED plan in the head — the desk's record */
           if (gfn('hgFwdRecordScan')){
@@ -604,6 +716,21 @@
 
   /* ==================== render ==================== */
 
+  function opCta(c){
+    if (!(c && c.grade && c.grade.ticket)) return '';
+    var meta = {
+      scanner: 'omnipresent',
+      strategy: 'OP-' + (c.dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT'),
+      t2: c.t2
+    };
+    var h = '';
+    if (gfn('hgBookStampChip')) h += W.hgBookStampChip(c.sym, c.dir, meta);
+    if (gfn('bookBtnHTML')) h += W.bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, meta);
+    if (gfn('hgToTradePlanOnclickAttr'))
+      h += '<button class="toTrade" onclick="' + W.hgToTradePlanOnclickAttr(c.sym, c.dir, c.entry, c.stop, c.t1, meta) + '">SEND TO TRADE PLAN →</button>';
+    return h ? '<div>' + h + '</div>' : '';
+  }
+
   function opCard(c){
     var badge = (c.grade && c.grade.ticket)
       ? '<span class="gpip ok">TICKET</span>'
@@ -613,13 +740,16 @@
       : '<span class="gpip">ARMED — level not yet swept, be there first</span>';
     var h = '<div class="card">';
     h += '<div class="ttl">' + esc(c.base || c.sym) + ' · ' + (c.dir === 'short' ? 'SHORT from the high' : 'LONG from the bottom')
-       + ' ' + badge + ' ' + st + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+       + ' ' + badge + ' ' + st + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span>'
+       + (gfn('hgBookStampChip') ? W.hgBookStampChip(c.sym, c.dir, { scanner: 'omnipresent', strategy: 'OP-' + (c.dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT') }) : '')
+       + '</div>';
     h += '<div>ZONE <b>' + pxF(c.zone.lo) + '–' + pxF(c.zone.hi) + '</b> (' + c.zone.confluence + ' sources: '
        + esc(c.zone.srcs.join(', ')) + ') · ' + c.zone.distAtr.toFixed(1) + 'xATR from market ' + pxF(c.livePx) + '</div>';
     h += '<div>ENTRY <b>' + pxF(c.entry) + '</b>' + (c.status === 'TRIGGERED' ? ' (live)' : ' (at the zone)')
        + ' · SL <b>' + pxF(c.stop) + '</b> (squeezed: zone + ' + STOP_PAD_ATR + 'xATR)'
        + ' · TP1 <b>' + pxF(c.t1) + '</b> (2R) · TP2 <b>' + pxF(c.t2) + '</b> (' + c.rr2.toFixed(1) + 'R)</div>';
     h += '<div class="dim">trigger: ' + esc(c.trigger) + '</div>';
+    h += opCta(c);
     if (c.evidence.length) h += '<div>evidence: ' + esc(c.evidence.join(' · ')) + '</div>';
     else h += '<div class="dim">no exhaustion evidence yet — the zone is drawn, the tape has not argued for it</div>';
     var g;
@@ -640,10 +770,10 @@
       + '<h2>OMNIPRESENT — the anticipation desk <span>nearest high-confluence reversal zone per contract · tight structural stop · wide targets · triggers at 1h closes</span></h2>'
       + '<div class="note" style="margin-bottom:10px">METHOD — for every contract: cluster the independent levels the whole market can see '
       + '(swing highs/lows, prior-day extremes, Donchian edges, value area, volume POC, round numbers, AVWAP bands); 3+ sources within a third of an ATR is a ZONE. '
-      + 'Read exhaustion on the approach (RSI divergence, volume climax, ATR stretch, squeeze release). ARMED = you hold the level before price arrives; '
+      + 'Read exhaustion on the approach (RSI divergence, volume climax, ATR stretch, squeeze release). ARMED = you hold the level before price arrives (WATCH — not a ticket); '
       + 'TRIGGERED = swept and rejected, enter at market. Stop sits just beyond the zone — the zone IS the invalidation, which is why it can stay squeezed. '
-      + 'Every card runs the ledger: fades against running trends are vetoed, thin zones and thin evidence are named, news blackouts stand trades down, '
-      + 'and the 14 shared context gates read every candidate. Every triggered plan is forward-logged under OMNIPRESENT. '
+      + 'TICKET requires 3+ level sources, 2+ exhaustion reads including a real rejection, a daily stack that does not fight the fade, and a running trend only with RSI divergence. '
+      + 'Thin zones, one-read “setups”, and an adverse third of the context panel are vetoes. Every triggered plan is forward-logged under OMNIPRESENT. '
       + '<b>Anticipation, not prophecy</b> — these are the levels where reversals have the best structural odds; the forward pool is the judge.</div>'
       + '<div class="note" id="opStat">idle — press RUN.</div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="opRun">RUN OMNIPRESENT SCAN</button></div>'
@@ -679,6 +809,7 @@
     window.opEvidence = opEvidence;
     window.opAssess = opAssess;
     window.opGates = opGates;
+    window.opShowable = opShowable;
     window.opNextCloses = opNextCloses;
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
