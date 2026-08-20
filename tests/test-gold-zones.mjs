@@ -126,4 +126,43 @@ console.log('\n== source: the panel leads the render, and only the gated cards t
   ok(!/TICKET/.test(panelFn.replace(/tickets are decided/g, '')), 'the panel never prints a TICKET badge of its own');
 }
 
+
+
+console.log('\n== v417: the mechanic cards finally know where the zones are ==');
+{
+  const GOLD2 = read('omnigold.js');
+  ok(/key:'zone-anchor', hard:false, info:true/.test(GOLD2),
+     'zone-anchor is on the gold ledger, info-only — standing, never existence');
+  ok(/zoneCtx: zoneCtx/.test(GOLD2) && /opFn2\(rows, livePx, hgOgZoneLevels\(rows, livePx\)\)/.test(GOLD2),
+     'the scan computes the zones once per horizon and hands them to the ledger');
+
+  const W3 = boot(BASE.concat(['omnipresent.js']));
+  const rows = goldTape(500);
+  const live = rows[rows.length - 1].c;
+  const zc = W3.opAssess(rows, live, W3.hgOgZoneLevels(rows, live));
+  if (zc.length){
+    const zEdge = zc[0].zone.lo;
+    const at = W3.hgOgGates(rows, { dir: 'short', kind: 'POC-REVERT', mech: 'POC-REVERT', level: zEdge },
+      { livePx: live, zoneCtx: zc }).filter(g => g && g.key === 'zone-anchor')[0];
+    ok(at && at.pass === true && /anchored AT the level|within working distance/.test(at.why),
+       'a mechanic firing at the zone reads anchored: ' + at.why.slice(0, 80));
+    const far = W3.hgOgGates(rows, { dir: 'short', kind: 'POC-REVERT', mech: 'POC-REVERT', level: live * 1.2 },
+      { livePx: live, zoneCtx: zc }).filter(g => g && g.key === 'zone-anchor')[0];
+    ok(far && far.pass === false && far.info === true && /no structure within reach/.test(far.why),
+       'a mechanic in no-man’s-land reads AGAINST (info), never vetoed');
+  } else {
+    /* this tape is BUILT to produce zones — none at all means the level
+       machinery broke, and that must fail loudly, not skip politely */
+    throw new Error('FAIL: goldTape produced no zones for the anchored/no-man’s-land cases');
+  }
+  const un = W3.hgOgGates(rows, { dir: 'short', kind: 'POC-REVERT', mech: 'POC-REVERT', level: live },
+    { livePx: live }).filter(g => g && g.key === 'zone-anchor')[0];
+  ok(un && un.pass === null && /unavailable/.test(un.why),
+     'no zone context -> UNCHECKED, never a guess');
+
+  ok(/HORIZONS ALIGNED/.test(GOLD2) && /HORIZON CONFLICT/.test(GOLD2)
+     && /horizon reads the OTHER way/.test(GOLD2),
+     'and the two horizons finally look at each other — agreement or conflict named on the card');
+}
+
 console.log('\npassed: ' + passed);

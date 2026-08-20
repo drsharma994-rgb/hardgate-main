@@ -149,6 +149,10 @@ console.log('\n== the four gold context gates carry the flag ==');
                            same standing — they argue, they never veto */
                         'adx-regime', 'obv-flow', 'mfi-pressure', 'cci-stretch',
                         'ema-ribbon', 'heikin-trend',
+                        /* gold's structural-placement read (v417): a setup at
+                           a multi-source zone vs one in no-man's-land — it
+                           argues standing, never existence */
+                        'zone-anchor',
                         /* omniroute's own indicator reads — same standing:
                            they argue, they never veto. */
                         'adx-trend', 'atr-percentile', 'vol-forecast',
