@@ -100,7 +100,8 @@ console.log('\n== ARMED before the market arrives, TRIGGERED after the rejection
   ok(short.stop > short.zone.hi, 'the squeezed stop sits just beyond the zone extreme');
   ok((short.stop - short.zone.hi) / short.atr < 0.5, 'and it IS squeezed — under half an ATR of pad');
   ok(short.t1 < short.entry && short.t2 < short.t1, 'targets stack away from the entry');
-  ok(short.rr2 >= 3.5, 'TP2 is wide: at least 3.5R (' + short.rr2.toFixed(1) + 'R)');
+  ok(short.rr2 >= 5, 'TP2 is BIG: at least 5R, stretching to the opposite zone up to 10R (' + short.rr2.toFixed(1) + 'R)');
+  ok(short.rr2 <= 10, 'and capped at 10R — wide is a policy, unbounded is a fantasy');
   ok(/CLOSES back below/.test(short.trigger), 'the trigger rule is written on the card: ' + short.trigger.slice(0, 60));
 
   /* Sweep and reject: a bar tags the zone and the next closes back under it. */

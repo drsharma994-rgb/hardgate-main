@@ -34,9 +34,11 @@
 
    STOP: beyond the zone extreme plus 0.3xATR — squeezed, because the zone
    IS the invalidation: if price accepts beyond it, the idea is dead and no
-   wider stop changes that. TARGETS: T1 = 2R; T2 = the opposite zone or
-   3.5R, whichever is further (capped 6R) — wide, because a rejection at a
-   universe-visible level travels.
+   wider stop changes that. TARGETS: T1 = 2R (the banker — and the leg the
+   forward log measures, so the record stays comparable); T2 = the opposite
+   zone or 5R, whichever is further, capped 10R — deliberately BIG, because
+   a rejection at a universe-visible level travels, and the tight stop is
+   what makes a 5-10R runner arithmetically honest rather than greedy.
 
    EVERY claim is gated: a fade against a running ADX trend with no climax
    and no divergence is vetoed (a fade wants a stretched tape, not a
@@ -77,6 +79,8 @@
   var ARM_MAX_ATR = 3.0;    // a zone further than this is not "near future"
   var STOP_PAD_ATR = 0.30;  // squeezed structural stop beyond the zone extreme
   var MIN_RR = 1.8;
+  var T2_FLOOR_R = 5;       // the runner starts at 5R — the squeezed stop is what buys this
+  var T2_CAP_R = 10;        // and stretches to the opposite zone, up to 10R
 
   var __op = { busy: false, ran: false, ui: null, lastStat: null, snap: null };
 
@@ -330,12 +334,15 @@
       var risk = Math.abs(entry - stop);
       if (!(risk > 0)) continue;
       var t1 = (dir === 'short') ? entry - 2 * risk : entry + 2 * risk;
-      var opp = sides[s === 0 ? 1 : 0].zone;
-      var t2r = 3.5;
-      if (opp){
-        var oppEdge = (dir === 'short') ? opp.hi : opp.lo;
+      /* the opposite side's zones were selected for the OTHER direction's
+         entry; for the runner target we want the FAR one in reach */
+      var oppList = sides[s === 0 ? 1 : 0].zones || [];
+      var t2r = T2_FLOOR_R, oi2;
+      for (oi2 = 0; oi2 < oppList.length; oi2++){
+        if (oppList[oi2].distAtr > ARM_MAX_ATR) break;
+        var oppEdge = (dir === 'short') ? oppList[oi2].hi : oppList[oi2].lo;
         var rr = Math.abs(oppEdge - entry) / risk;
-        if (rr > t2r) t2r = Math.min(6, rr);
+        if (rr > t2r) t2r = Math.min(T2_CAP_R, rr);
       }
       var t2 = (dir === 'short') ? entry - t2r * risk : entry + t2r * risk;
 
