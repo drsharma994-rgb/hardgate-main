@@ -1803,8 +1803,43 @@ terse status, and never launches a first-time scan on a global refresh.
              the walk-forward pool already measures. Fades never get one: a
              fade's premise IS the level, and a fade without structure has no
              premise. */
-          plan = planFn(hit.dir, rows, undefined, {
-            minRr: cfg.minRr, capMode: 'structure',
+          /* PRICE THE ENTRY AT THE CURRENT MARKET, NOT AT A LEVEL THE
+             ENGINE LIKES BETTER.
+
+             Two things kept gold entries away from the live price. First,
+             the plan engine defaults entry to rows[last].c — the closed
+             bar, up to an hour stale on SCALP and four on SWING. Second,
+             and larger: hgApplyExactEntry then MOVED the entry to its own
+             structure — the edgeSignal path replaces entry, stop and
+             targets wholesale with a resting order at an edge, and the
+             scalp enricher re-anchors to EMA21 or a sweep level. Measured
+             live: entry 4454.92 against a 4519.51 market, 65 points away,
+             with the override this desk passed simply ignored. Every
+             symptom the reader kept pasting — levels not matching live
+             gold, level-fresh AGAINST, DEAD ON ARRIVAL — was downstream
+             of that.
+
+             GOLD PRO drew the correct line in v398: indicators and
+             structure read CLOSED bars only (they must not repaint); the
+             ENTRY is the live price, because that is where a trade
+             actually starts. Same split here. entryOverride carries the
+             forming candle's live close, and skipExact keeps the
+             enrichers from moving it. The stop still comes from
+             closed-bar structure — invalidation is structure — so risk
+             runs from where you would really enter to where the idea
+             really dies, and targets are R-multiples of that real risk.
+
+             This desk therefore offers MARKET plans, not resting limits;
+             the resting-order style lives on unchanged on OMNIROUTE.
+             Without a live price (harness tapes), the last closed close
+             is the market proxy — same convention, never the old
+             behavior back by accident. The forward log records what was
+             offered at scan time, which is the point: it measures what
+             the desk told the reader to do. */
+          var ogLive = fin(ex.livePx);
+          plan = planFn(hit.dir, rows,
+            (isFinite(ogLive) && ogLive > 0) ? ogLive : undefined, {
+            minRr: cfg.minRr, capMode: 'structure', skipExact: true,
             momentumOk: !hgOgIsReversion(hit.kind)
           });
         } catch (e) { plan = null; }
