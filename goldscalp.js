@@ -1373,7 +1373,13 @@ async function runScan(ui, scanSt){
     var spotRef = (isFinite(liveSpot) && liveSpot > 0) ? liveSpot : klineSpot;
     if (isFinite(liveSpot) && isFinite(klineSpot) && Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
       legs.push('spot anchor ~$' + pxF(liveSpot) + ' (klines ~$' + pxF(klineSpot) + ') — levels scaled to live spot');
-      goldAlignLevelsToSpot(cands, klineSpot, liveSpot);
+      /* MOVED: alignment now runs AFTER the best-levels batch below.
+         Aligning here was silently undone — hgApplyGoldBestLevels and the
+         hgFormTicket fallback both re-derive entry/stop/targets from the
+         raw FEED rows, overwriting the spot-scaled levels with feed-priced
+         ones for every non-locked candidate. The reader then saw levels
+         that matched neither the feed nor the broker. One alignment, last,
+         after every engine that rewrites levels has run. */
     } else if (isFinite(liveSpot)){
       legs.push('spot anchor ~$' + pxF(liveSpot) + ' (gold-api.com)');
     }
@@ -1488,6 +1494,15 @@ async function runScan(ui, scanSt){
         }catch(eGf2){}
       }
     }
+    }
+
+    /* SPOT ALIGNMENT — LAST. Every engine above re-derives levels from the
+       feed rows; running the scale before them meant it was overwritten and
+       the card showed feed-basis levels against a broker-basis market. The
+       conviction lock below restores its stored spot-basis levels verbatim
+       afterward, so locked cards are never double-scaled. */
+    if (isFinite(liveSpot) && isFinite(klineSpot) && Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
+      goldAlignLevelsToSpot(ranked, klineSpot, liveSpot);
     }
 
     /* (5) NEWS-WINDOW VETO — inside a high-impact ±30-min window NO new
