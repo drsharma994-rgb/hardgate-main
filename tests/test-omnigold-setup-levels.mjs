@@ -115,11 +115,9 @@ console.log('\n== 4. skipExact still blocks enricher hijack when there is no set
   ok(/skipExact:\s*true/.test(GOLD), 'skipExact stays on the continuation path');
   const hit = { kind: 'ORB', dir: 'long', why: 'closed above ORB' }; /* no level */
   const pl = W.hgOgPlanForHit(hit, ROWS, { livePx: LIVE }, CFG);
-  if (pl){
-    ok(Math.abs(pl.entry - LIVE) < 1e-6, 'no setup level → live market is the honest proxy');
-  } else {
-    ok(true, 'no plan is acceptable when structure cannot clear — just not a hijacked EMA21');
-  }
+  ok(pl == null || Math.abs(pl.entry - LIVE) < 1e-6,
+     pl ? ('no setup level → live market is the honest proxy (got ' + pl.entry + ')')
+        : 'no plan when structure cannot clear — not a hijacked EMA21');
 }
 
 console.log('\n== 5. counter-trend TREND hits do not vote against a with-trend setup ==');
@@ -183,6 +181,19 @@ console.log('\n== 7. STRONGEST prefers a nearby ticket over a 6×ATR FVG ==');
   const onlyFar = W.hgOgPickFor([far], 'SWING');
   ok(onlyFar && onlyFar.kind === 'FVG-FILL',
      'a far FVG still wins STRONGEST when nothing nearer ticketed');
+  const nearer = {
+    horizon: 'SWING', kind: 'KZ-JUDAS', dir: 'long', distAtr: 0.12,
+    grade: { ticket: true, vetoes: [] },
+    plan: { entry: 4534.80, stop: 4518.07, t1: 4560, momentumStop: false }
+  };
+  const alsoNear = {
+    horizon: 'SWING', kind: 'THREE-BAR', dir: 'long', distAtr: 1.67,
+    grade: { ticket: true, vetoes: [] },
+    plan: { entry: 4506, stop: 4499.97, t1: 4518, momentumStop: false }
+  };
+  const closest = W.hgOgPickFor([alsoNear, nearer], 'SWING');
+  ok(closest && closest.kind === 'KZ-JUDAS',
+     'among two near tickets, the closer print is STRONGEST (got ' + (closest && closest.kind) + ')');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');

@@ -69,7 +69,7 @@ console.log('== source: the plan is the setup, skipExact blocks enrichers ==');
 {
   ok(/function hgOgPlanForHit\(/.test(GOLD), 'setup-native planner exists');
   ok(/skipExact:\s*true/.test(GOLD), 'skipExact keeps the enrichers from moving continuation entries');
-  ok(/momentumOk:\s*!reversion/.test(GOLD), 'the momentum grant is still continuation-only');
+  ok(/momentumOk:\s*!hgOgIsReversion\(hit\.kind\)/.test(GOLD), 'the momentum grant is still continuation-only');
 }
 
 console.log('\n== with a named setup level, every planned card enters THERE ==');

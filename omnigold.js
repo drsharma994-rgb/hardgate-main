@@ -911,7 +911,8 @@ terse status, and never launches a first-time scan on a global refresh.
      detector named Asia high / a round / an FVG produced the live defect:
      FVG-FILL LONG at 4429 printed ENTRY 4535 / STOP 3415. Sweeps get a stop
      beyond the named level (that is the invalidation). Continuation still
-     uses structure from that entry, skipExact so enrichers cannot move it. */
+     uses structure from that entry, skipExact so enrichers cannot move it.
+     Fades never get a momentum stop: a fade's premise IS the level. */
   function hgOgPlanForHit(hit, rows, extra, cfg){
     cfg = cfg || {};
     extra = extra || {};
@@ -956,8 +957,8 @@ terse status, and never launches a first-time scan on a global refresh.
     var plan = null;
     try {
       plan = planFn(hit.dir, rows, entry, {
-        minRr: minRr, capMode: 'structure', skipExact: true,
-        momentumOk: !reversion
+        minRr: cfg.minRr, capMode: 'structure', skipExact: true,
+        momentumOk: !hgOgIsReversion(hit.kind)
       });
     } catch (eP) { plan = null; }
     if (plan && fromRisk && isFinite(fin(plan.entry)) && isFinite(fin(plan.stop))){
@@ -968,7 +969,12 @@ terse status, and never launches a first-time scan on a global refresh.
           targetPolicy: plan.targetPolicy || 'R-multiples'
         });
         if (repl){
-          repl.note = (plan.note ? (String(plan.note) + ' — ') : '')
+          /* A clipped stop is no longer the WIDE lastSwing the plan engine
+             named. Drop that clause or the card's note disagrees with its
+             own ENTRY/STOP (test-stop-note-restate). */
+          var prevNote = String(plan.note || '');
+          if (/\bWIDE\b/.test(prevNote)) prevNote = '';
+          repl.note = (prevNote ? (prevNote + ' — ') : '')
                     + 'stop capped at ' + (GOLD_STOP_MAX_PCT * 100).toFixed(1)
                     + '% of gold: a lastSwing that far is not this setup\'s invalidation';
           if (plan.momentumStop === true) repl.momentumStop = true;
@@ -2083,9 +2089,12 @@ terse status, and never launches a first-time scan on a global refresh.
       catch (e) { plan = null; }
       if (plan && deriveFn) plan = deriveFn(plan);
       ex.planRisk = (plan && isFinite(fin(plan.risk))) ? fin(plan.risk) : NaN;
-      /* Always stamp the key: null is a real decline (plan-levels vetoes),
-         missing would be UNCHECKED and let a ticket print with no levels. */
-      ex.plan = plan;
+      /* Attach only when the engine exists. An absent engine is not a
+         declined plan — stamping plan:null vetoed the whole desk in
+         harnesses without plans.js. When the engine IS here, null is a
+         real decline (plan-levels vetoes) so a ticket cannot print with
+         no levels. */
+      if (planFn) ex.plan = plan;
       ex.allHits = hits;          /* so the consensus gate can see the rest of the scan */
       var gates = hgOgGates(rows, hit, ex);
       var grade = gradeFn ? gradeFn(gates) : { ticket:false, vetoes:[], unknown:[], degraded:[], evaluated:0, total:gates.length, verdict:'engine unavailable' };
@@ -2422,9 +2431,10 @@ terse status, and never launches a first-time scan on a global refresh.
      leave STRONGEST empty — empty is how the desk showed "no setup with
      ticket" while a with-trend continuation was the correct trade.
 
-     Among those, prefer a level inside GOLD_NEAR_ATR of live gold. A 100-point
-     FVG is still a ticket on the list; it is not the first card when a sweep
-     two ATR away already has matching entry/stop. Far tickets remain if
+     Among those, prefer a level inside GOLD_NEAR_ATR of live gold, and
+     among those the closest print. A 100-point FVG is still a ticket on
+     the list; it is not the first card when a sweep two points off the
+     market already has matching entry/stop. Far tickets remain if
      nothing nearer survived. */
   function hgOgPickFor(ranked, horizon){
     if (!ranked || !ranked.length) return null;
@@ -2447,6 +2457,13 @@ terse status, and never launches a first-time scan on a global refresh.
       }
     }
     if (anyDist && near.length) pool = near;
+    if (anyDist){
+      pool = pool.slice().sort(function(a, b){
+        var da = isFinite(fin(a.distAtr)) ? a.distAtr : 99;
+        var db = isFinite(fin(b.distAtr)) ? b.distAtr : 99;
+        return da - db;
+      });
+    }
     return pool[0];
   }
 
