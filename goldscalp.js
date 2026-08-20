@@ -235,6 +235,8 @@ function goldPickSpotAlignedBest(ranked, spotRef){
   for (var i = 0; i < ranked.length; i++){
     var bc = ranked[i];
     if (!bc || bc.demoted || bc.vetoed) continue;
+    if (bc.postGateUnchecked || bc.tradeReady === false) continue;
+    if (typeof W !== 'undefined' && W && typeof W.hgSetupTradeReady === 'function' && !W.hgSetupTradeReady(bc)) continue;
     var isXaut = bc.sym === 'XAUTUSD' || (bc.venue && /XAUT/i.test(bc.venue));
     if (!isXaut) return bc;
     if (isFinite(spotRef) && isFinite(bc.entry)){
@@ -377,6 +379,8 @@ function publishScan(ranked, best, history, at, rejected, armed, whySilent){
         demoted: !!c.demoted,
         stamps: Array.isArray(c.stamps) ? c.stamps.slice() : [],
         vetoed: !!c.vetoed, merged: !!c.merged,
+        postGateUnchecked: !!c.postGateUnchecked,
+        tradeReady: c.tradeReady !== false && !c.postGateUnchecked,
         locked: !!c.locked, issuedAt: isFinite(c.issuedAt) ? c.issuedAt : null,
         asOf: c.asOf || null, why: c.why || null, invalidates: c.invalidates || null
       });
@@ -864,7 +868,8 @@ function cardHTML(c, isBest, season){
     ? '<div class="note warn" style="margin-top:6px;color:#FBBF24!important">XAUT instrument ~$' + pxF(c.entry)
       + ' vs spot XAU ~$' + pxF(c.spotRef) + ' (' + (c.xautBasisPct >= 0 ? '+' : '') + fmtF(c.xautBasisPct, 2)
       + '%). Levels valid on <b>Delta XAUTUSD</b> only — not spot/StarTrader XAUUSD.</div>' : '';
-  var tradeOnclick = (c.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
+  var goldTradeReady = !c.postGateUnchecked && c.tradeReady !== false;
+  var tradeOnclick = (goldTradeReady && c.sym && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')
       ? hgToTradePlanOnclickAttr(c.sym, c.dir, c.entry, c.stop, c.t1, { t2: c.t2, stack: c.stack, scanner: 'goldscalp', strategy: 'goldscalp' })
       : ('toTrade(' + JSON.stringify(c.sym) + ',' + JSON.stringify(c.dir) + ',' + c.entry + ',' + c.stop + ',' + c.t1 + ')')
@@ -872,8 +877,8 @@ function cardHTML(c, isBest, season){
     : '';
   var tradeBtn = tradeOnclick
     ? '<button class="toTrade" onclick="' + tradeOnclick + '">SEND TO TRADE PLAN →</button>' : '';
-  var bookBtn = (typeof bookBtnHTML === 'function' && c.sym)
-    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack }) : '';
+  var bookBtn = (goldTradeReady && typeof bookBtnHTML === 'function' && c.sym)
+    ? bookBtnHTML(c.sym, c.dir, c.entry, c.stop, c.t1, { scanner: 'goldscalp', strategy: 'goldscalp', klass: 'metals', fund: 'gold', t2: c.t2, stack: c.stack, postGateUnchecked: !!c.postGateUnchecked, tradeReady: c.tradeReady }) : '';
   var stackHtml = (c.stack && typeof hgSetupStackMiniHtml === 'function') ? hgSetupStackMiniHtml(c.stack) : '';
   var metaChips = '';
   if (isFinite(c.formationScore)) metaChips += '<span class="gpip ok"' + gsxPipAttr(true) + '>formation ' + c.formationScore + '</span>';

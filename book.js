@@ -404,6 +404,11 @@ async function addToBook(opts){
         return { ok: false, veto: true, reasons: ['LIVE MODE: ' + (liveGate.reasons || []).join(' · ')] };
       }
     }
+    if (opts.postGateUnchecked === true || opts.tradeReady === false
+        || (opts.postGate && opts.postGate.unchecked === true)
+        || (typeof W.hgSetupTradeReady === 'function' && (opts.postGateUnchecked || opts.tradeReady === false || (opts.postGate && opts.postGate.unchecked)) && !W.hgSetupTradeReady(opts))){
+      return { ok: false, veto: true, reasons: ['POST-GATE UNCHECKED — not trade-ready until flow/RS actually runs'] };
+    }
     if (body.t1 == null || !isFinite(body.t1)){
       var risk = Math.abs(body.entry - body.stop);
       body.t1 = body.dir === 'short' ? body.entry - risk : body.entry + risk;
@@ -622,7 +627,7 @@ async function bookFetchOpenKeys(){
 function bookBtnHTML(sym, dir, entry, stop, t1, meta){
   meta = meta || {};
   var fund = bookResolveFund(meta);
-  var payload = JSON.stringify({
+    var payload = JSON.stringify({
     sym: sym, dir: dir, entry: entry, stop: stop,
     t1: (t1 !== undefined && isFinite(t1)) ? t1 : null,
     t2: (meta.t2 !== undefined && isFinite(meta.t2)) ? meta.t2 : null,
@@ -633,7 +638,9 @@ function bookBtnHTML(sym, dir, entry, stop, t1, meta){
     venue: meta.venue || 'paper',
     fund: fund,
     layers: bookMetaLayers(meta),
-    gateStates: (meta.gateStates && typeof meta.gateStates === 'object') ? meta.gateStates : null
+    gateStates: (meta.gateStates && typeof meta.gateStates === 'object') ? meta.gateStates : null,
+    postGateUnchecked: meta.postGateUnchecked === true,
+    tradeReady: meta.tradeReady === false ? false : undefined
   });
   return '<button class="toBook" title="Add to ' + fund + ' fund" onclick=\'addToBook(' + payload + ')\'>ADD · ' + esc(fund.toUpperCase()) + '</button>';
 }

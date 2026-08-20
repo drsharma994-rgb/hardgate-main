@@ -102,6 +102,35 @@ ok(/Super Setup v2\.3\.0/.test(src), 'badge shows v2.3.0');
 ok(/runExternalSourceAudit/.test(src) && /runPrecisionSourceAudit/.test(src), 'external + precision audits wired');
 ok(/superSetupFqsGate/.test(src) && /hgMetaLabel/.test(src), 'FQS + meta-label gates wired');
 ok(/applySuperSetupPostGate/.test(src) && /hgPostGateSetupVeto/.test(src), 'post-gate flow/BTC RS wired');
+ok(/nearWatch = true/.test(src) && /pg\.unchecked/.test(src), 'UNCHECKED post-gate parks the row as watch, not CLEAN');
+
+{
+  W.hgPostGateSetupVeto = async function(){
+    return { ok: true, unchecked: true, uncheckedReasons: ['flow trap: FLOW N/A'] };
+  };
+  W.hgMarkGateUnchecked = function(hit, reasons){
+    hit.postGateUnchecked = true;
+    hit.tradeReady = false;
+    hit.clean = false;
+    if (hit.tier === 'clean' || hit.tier === 'prime') hit.tier = 'watch';
+  };
+  const snap = {
+    cands: [{
+      tier: 'clean', sym: 'BTCUSDT', dir: 'long', entry: 100, stop: 95, t1: 110,
+      rows: [{ c: 100 }, { c: 101 }], sizingPass: true, minLossAudit: { pass: true },
+      stack: { tierHint: 'clean' }, scanner: 'swing'
+    }]
+  };
+  await W.applySuperSetupPostGate(snap, W);
+  ok(snap.cands[0].tradeReady === false, 'SUPER SETUP UNCHECKED is not trade-ready');
+  ok(snap.cands[0].tier !== 'clean', 'SUPER SETUP UNCHECKED is not CLEAN');
+  ok(snap.cands[0].nearWatch === true, 'SUPER SETUP UNCHECKED is watch-only');
+  ok(W.isCleanScannerHit(snap.cands[0]) === false, 'isCleanScannerHit rejects UNCHECKED');
+  const pill = W.superSetupDeskPill(snap.cands[0]);
+  ok(pill && pill.label === 'WATCH ONLY', 'desk pill says WATCH ONLY, not RISK PASS');
+  delete W.hgPostGateSetupVeto;
+  delete W.hgMarkGateUnchecked;
+}
 ok(/deribitVolWarm/.test(src), 'DVOL warm in scan cycle');
 ok(/refineSuperSetupLevels/.test(src) && /hgBestLevels/.test(src), 'exact entry pipeline wired');
 ok(/minimalLossPass/.test(src) && /calcSafeMaxLeverage/.test(src), 'minimal-loss gate + safe lev');

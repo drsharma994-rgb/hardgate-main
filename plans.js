@@ -290,14 +290,36 @@ async function hgPostGateGoldVeto(cand, hit, rows15m, rows4h, style){
   }
 }
 
+/* A setup is trade-ready only when every quality check that was supposed
+   to run actually ran. UNCHECKED is absence of evidence — it must not
+   mint CLEAN / PRIME / Telegram / ADD TO BOOK. It is also not a veto:
+   demote stays false so the card can still show the ledger with a stamp. */
+function hgSetupTradeReady(hit){
+  try{
+    if (!hit) return false;
+    if (hit.demoted === true || hit.vetoed === true) return false;
+    if (hit.tradeReady === false) return false;
+    if (hit.postGateUnchecked === true) return false;
+    if (hit.postGate && hit.postGate.unchecked === true) return false;
+    return true;
+  }catch(e){ return false; }
+}
+
 /* Mark a candidate as carrying a gate that could not be evaluated. It is NOT
    demoted — an unrunnable check is not evidence against the trade — but the
-   stamp travels to the card so the reader can see the ledger is incomplete. */
+   stamp travels to the card so the reader can see the ledger is incomplete,
+   and tradeReady is cleared so CLEAN/PRIME/alerts/book cannot treat it as a pass. */
 function hgMarkGateUnchecked(c, reasons){
   if (!c) return;
   var list = (Array.isArray(reasons) && reasons.length) ? reasons : ['post-gate could not be evaluated'];
   c.postGateUnchecked = true;
   c.postGateUncheckedReasons = (c.postGateUncheckedReasons || []).concat(list);
+  c.tradeReady = false;
+  if (c.clean === true) c.clean = false;
+  if (c.clean7 === true) c.clean7 = false;
+  if (String(c.grade || '').toUpperCase() === 'A') c.grade = 'B';
+  var t = String(c.tier || '').toLowerCase();
+  if (t === 'clean' || t === 'prime') c.tier = 'watch';
   var stamp = 'POST-GATE UNCHECKED';
   if (!Array.isArray(c.stamps)) c.stamps = [];
   if (c.stamps.indexOf(stamp) < 0) c.stamps = c.stamps.concat([stamp]);
@@ -1560,6 +1582,7 @@ G.hgStaleMomentumVeto = hgStaleMomentumVeto;
 G.hgUncheckedGate = hgUncheckedGate;
 G.hgSyncPlanRatios = hgSyncPlanRatios;
 G.hgMarkGateUnchecked = hgMarkGateUnchecked;
+G.hgSetupTradeReady = hgSetupTradeReady;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;
 G.hgSwingG5OK = hgSwingG5OK;

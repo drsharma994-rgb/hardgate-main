@@ -159,6 +159,9 @@ function tabAlertsCryptoConvictedOnlyEnabled(root){
 
 function goldIsMostConvinced(c, scanVal){
   if (!c || c.vetoed || c.demoted) return false;
+  if (c.postGateUnchecked || c.tradeReady === false) return false;
+  var readyFn = gfn('hgSetupTradeReady');
+  if (readyFn && !readyFn(c)) return false;
   if (scanVal && scanVal.bestId && c.id && c.id === scanVal.bestId) return true;
   if (c.locked === true && String(c.grade || '').toUpperCase() === 'A') return true;
   return false;
@@ -193,6 +196,7 @@ function tabAlertsCleanOnlyEnabled(root){
 
 function setupIsClean7(s){
   if (!s || s.watch || s.nearClean === true) return false;
+  if (s.postGateUnchecked === true || s.tradeReady === false) return false;
   if (s.goldConvicted === true) return true;
   if (s.clean7 === true || s.clean === true) return true;
   if (fin(+s.gatesPassed) && fin(+s.gatesTotal) && +s.gatesPassed >= 7 && +s.gatesTotal >= 7) return true;
@@ -202,6 +206,7 @@ function setupIsClean7(s){
 
 function setupIsNearClean6(s){
   if (!s || s.watch || setupIsClean7(s)) return false;
+  if (s.postGateUnchecked === true || s.tradeReady === false) return false;
   if (s.nearClean !== true) return false;
   var gp = fin(+s.gatesPassed) ? +s.gatesPassed : (fin(+s.passed) ? +s.passed : 0);
   return gp >= 6;
@@ -239,6 +244,7 @@ function collectCrypto(out, kind, src){
   var minRr = kind === 'swing' ? 2.0 : 2.25;
   for (var i = 0; i < cands.length; i++){
     var c = cands[i];
+    if (c.postGateUnchecked === true || c.tradeReady === false) continue;
     var rr = fin(+c.rr) ? +c.rr : (fin(+c.rr1) ? +c.rr1 : NaN);
     if (fin(rr) && rr < minRr) continue;
     var mp = cryptoIsMostProbable(c, val);
@@ -252,6 +258,7 @@ function collectCrypto(out, kind, src){
   var nearCands = (val && Array.isArray(val.nearCands)) ? val.nearCands : [];
   for (var j = 0; j < nearCands.length; j++){
     var n = nearCands[j];
+    if (n.postGateUnchecked === true || n.tradeReady === false) continue;
     var nrr = fin(+n.rr) ? +n.rr : NaN;
     if (fin(nrr) && nrr < minRr * 0.9) continue;
     var gp = fin(+n.gatesPassed) ? +n.gatesPassed : (fin(+n.passed) ? +n.passed : 6);
