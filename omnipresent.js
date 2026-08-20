@@ -89,12 +89,29 @@
 
   /* ==================== pure: pivots and level sources ==================== */
 
+  /* Sanitise first — every exported read must survive feed-shaped garbage
+     STANDALONE. A venue that drops one candle returns an array with an
+     undefined in it, and the first sweep of this module (2026-08 fuzz)
+     found five functions that walked straight into that hole. One guard
+     per entry point beats five defensive checks per loop — the same
+     lesson hgOmniDropForming's sanitiser recorded for the crypto scan. */
+  function opClean(rows){
+    if (!Array.isArray(rows)) return [];
+    var out = [], i, r;
+    for (i = 0; i < rows.length; i++){
+      r = rows[i];
+      if (r && typeof r === 'object' && isFinite(fin(r.c))) out.push(r);
+    }
+    return out;
+  }
+
   /* Fractal pivots, k bars each side. The last k bars cannot confirm a
      pivot yet — that is not a defect, it is what "confirmed" means. */
   function opPivots(rows, k){
     k = k || 3;
+    rows = opClean(rows);
     var hi = [], lo = [], i, j, isH, isL;
-    if (!rows || rows.length < k * 2 + 1) return { hi: hi, lo: lo };
+    if (rows.length < k * 2 + 1) return { hi: hi, lo: lo };
     for (i = k; i < rows.length - k; i++){
       isH = true; isL = true;
       for (j = 1; j <= k; j++){
@@ -120,7 +137,9 @@
      Returns { above:[{px,src}], below:[{px,src}] } relative to livePx. */
   function opLevelSources(rows, livePx){
     var out = { above: [], below: [] };
-    if (!rows || rows.length < 60 || !(livePx > 0)) return out;
+    rows = opClean(rows);
+    livePx = fin(livePx);
+    if (rows.length < 60 || !(livePx > 0)) return out;
     var i, px;
     function put(p, src){
       p = fin(p);
@@ -188,7 +207,10 @@
      ZONE_TOL_ATR. Returns the NEAREST zone to the market on that side, or
      null — anticipating means the next level, not every level. */
   function opZones(levels, atr, livePx, side){
-    if (!levels || !levels.length || !(atr > 0)) return null;
+    if (!Array.isArray(levels) || !(atr > 0)) return null;
+    /* a null level entry is not a level */
+    levels = levels.filter(function (L){ return L && isFinite(fin(L.px)); });
+    if (!levels.length) return null;
     var sorted = levels.slice().sort(function (a, b){ return a.px - b.px; });
     var zones = [], cur = null, i, L;
     for (i = 0; i < sorted.length; i++){
@@ -221,7 +243,8 @@
      item is independent and named; the count is the score's honest core. */
   function opEvidence(rows, dir, livePx){
     var ev = [];
-    if (!rows || rows.length < 60) return ev;
+    rows = opClean(rows);
+    if (rows.length < 60) return ev;
     var n = rows.length - 1;
     var closes = rows.map(function (r){ return fin(r.c); });
     var atrFn = gfn('atr'), emaFn = gfn('ema'), rsiFn = gfn('rsi'), vzFn = gfn('volZ'), sqFn = gfn('ttmSqueeze');
@@ -280,7 +303,9 @@
      an extra source is one more voice at a zone, never a zone by itself. */
   function opAssess(rows, livePx, extraLevels){
     var out = [];
-    if (!rows || rows.length < 120 || !(livePx > 0)) return out;
+    rows = opClean(rows);
+    livePx = fin(livePx);
+    if (rows.length < 120 || !(livePx > 0)) return out;
     var atrFn = gfn('atr');
     if (!atrFn) return out;
     var n = rows.length - 1, a = NaN;
@@ -368,7 +393,11 @@
 
   function opGates(rows, cand, livePx, sym){
     var gates = [];
-    var z = cand.zone, dir = cand.dir;
+    cand = cand || {};
+    /* a candidate with no evidence ARRAY is a candidate with no evidence */
+    if (!Array.isArray(cand.evidence)) cand.evidence = [];
+    var z = cand.zone || { lo: NaN, hi: NaN, confluence: 0, srcs: [] };
+    var dir = cand.dir;
 
     /* A fade against a RUNNING trend needs the tape to be exhausted, not
        merely high — same read fade-strength uses on the gold desk. */
@@ -407,9 +436,14 @@
       ? { key: 'level-fresh', hard: true, pass: false, why: 'DEAD ON ARRIVAL — market (' + pxF(livePx) + ') is already beyond the stop (' + pxF(cand.stop) + ')' }
       : { key: 'level-fresh', hard: true, pass: true, why: 'market ' + pxF(livePx) + ', ' + (Math.abs(livePx - cand.entry) / cand.atr).toFixed(1) + 'xATR from the entry' });
 
-    gates.push(cand.rr1 >= MIN_RR
-      ? { key: 'min-rr', hard: true, pass: true, why: 'T1 pays ' + cand.rr1.toFixed(1) + 'R off the squeezed stop' }
-      : { key: 'min-rr', hard: true, pass: false, why: 'T1 pays only ' + cand.rr1.toFixed(1) + 'R — under the ' + MIN_RR + 'R floor' });
+    /* fin() first: an absent rr1 must read UNCHECKED, not throw building
+       its own why-string (undefined.toFixed — caught by the fuzz pin) */
+    var rr1n = fin(cand.rr1);
+    gates.push(!isFinite(rr1n)
+      ? { key: 'min-rr', hard: true, pass: null, why: 'no R:R supplied — UNCHECKED' }
+      : (rr1n >= MIN_RR
+        ? { key: 'min-rr', hard: true, pass: true, why: 'T1 pays ' + rr1n.toFixed(1) + 'R off the squeezed stop' }
+        : { key: 'min-rr', hard: true, pass: false, why: 'T1 pays only ' + rr1n.toFixed(1) + 'R — under the ' + MIN_RR + 'R floor' }));
 
     var newsFn = gfn('hgNewsRisk');
     if (newsFn){

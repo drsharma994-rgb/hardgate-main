@@ -1980,6 +1980,12 @@ terse status, and never launches a first-time scan on a global refresh.
      area, round hundreds, AVWAP bands — the engine already reads. */
   function hgOgZoneLevels(rows, livePx){
     var above = [], below = [];
+    /* survive feed-shaped garbage standalone: a hole-punched array (venue
+       dropped a candle) must not throw — same rule as every other export */
+    if (!Array.isArray(rows)) rows = [];
+    rows = rows.filter(function(r){ return r && typeof r === 'object' && isFinite(fin(r.c)); });
+    livePx = fin(livePx);
+    if (!rows.length || !(livePx > 0)) return { above: above, below: below };
     function put(px, src){
       var v = fin(px);
       if (!isFinite(v) || v <= 0) return;
