@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v421',
-  pack: 'OMNIPRESENT max-quality: 3-source zones, 2-evidence, ARMED≠ticket, HTF fade veto',
-  built: '2026-08-20T12:15:00Z',
-  note: 'OMNIPRESENT tickets require a real 1h rejection, 3+ level sources, 2+ exhaustion reads, and a daily stack that does not fight the fade; ARMED is WATCH; OMNIGOLD min-loss from v420 stays'
+  version: 'hg-v422',
+  pack: 'OMNIGOLD tickets: labelled vol-stop continuation can TICKET; STRONGEST prefers structure',
+  built: '2026-08-20T13:20:00Z',
+  note: 'OMNIGOLD restores continuation tickets: momentum-stop is AGAINST not a veto; STRONGEST prefers structural then falls back to labelled vol-stop. Fade daily-stack, weekend, yield-per-dir, and 20-sample losing-mechanic vetoes stay. OMNIPRESENT max-quality from v421 stays'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

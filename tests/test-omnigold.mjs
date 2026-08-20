@@ -207,7 +207,7 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      VETO, because a ticket with no entry, stop or target is a trade that
      cannot be placed. Making it info would restore the exact defect it
      was added to close. */
-  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus' && k !== 'plan-levels' && k !== 'level-fresh' && k !== 'weekend-exposure' && k !== 'shield-guard' && k !== 'momentum-stop').forEach(k => {
+  INDICATOR_GATES.filter(k => k !== 'measured-edge' && k !== 'consensus' && k !== 'plan-levels' && k !== 'level-fresh' && k !== 'weekend-exposure' && k !== 'shield-guard').forEach(k => {
     ok(full.filter(x => x.key === k)[0].info === true,
        k + ' is INFO: it reports an adverse read, it does not veto');
   });

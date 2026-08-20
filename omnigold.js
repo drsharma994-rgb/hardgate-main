@@ -1100,9 +1100,12 @@ terse status, and never launches a first-time scan on a global refresh.
 
     /* MOMENTUM-STOP — a volatility stop, not structure. Continuation
        mechanics may still RECEIVE one from the plan engine (otherwise a
-       runaway tape has no levels at all), but it cannot TICKET: gold
-       scalps die inside session noise on these stops. The card still
-       shows the compromise; the pick skips it. */
+       runaway tape has no levels at all). The ledger flags it AGAINST
+       (info) so the compromise is on the card; it does NOT veto the
+       ticket. v420 made this a real veto and emptied the desk: fades
+       already fail fade-strength, continuation had only a vol stop, and
+       the user saw "no setup with ticket". Fades never get a momentum
+       stop (momentumOk is off for reversions). */
     var msOk = null, msWhy = 'stop is on structure, or no plan to judge';
     if (plHas && plObj){
       if (plObj.momentumStop === true){
@@ -1114,10 +1117,7 @@ terse status, and never launches a first-time scan on a global refresh.
         msWhy = 'stop rests on structure';
       }
     }
-    /* Min-loss: a volatility stop is how gold scalps die inside session
-       noise. Info:true used to leave the TICKET standing; the compromise
-       is still on the card, it just cannot be the trade. */
-    gates.push({ key:'momentum-stop', hard:false, info: false, pass: msOk, why: msWhy });
+    gates.push({ key:'momentum-stop', hard:false, info:true, pass: msOk, why: msWhy });
 
     var reversion = hgOgIsReversion(hit.kind);
 
@@ -2331,24 +2331,35 @@ terse status, and never launches a first-time scan on a global refresh.
     var ev = (c && c.grade && c.grade.evaluated) || 0;
     var tot = (c && c.grade && c.grade.total) || 0;
     if (tot) bits.push(ev + ' of ' + tot + ' checks could be evaluated');
+    if (c && c.plan && c.plan.momentumStop === true){
+      bits.push('stop is a labelled VOLATILITY / MOMENTUM stop — structure was too far; this is the compromise, not invalidation');
+    }
     return bits;
   }
 
   /* Highest-ranked TICKET on one horizon, or null. Deliberately null rather
      than "the best of a bad lot": promoting a vetoed setup because it was the
-     least-vetoed would defeat the entire ledger. */
+     least-vetoed would defeat the entire ledger.
+
+     Structural tickets win. If the only remaining ticket is a labelled
+     volatility stop (runaway tape, no nearby pivot), take that rather than
+     leave STRONGEST empty — empty is how the desk showed "no setup with
+     ticket" while a with-trend continuation was the correct trade. */
   function hgOgPickFor(ranked, horizon){
     if (!ranked || !ranked.length) return null;
-    var i, c;
+    var i, c, fallback = null;
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
       if (!c || c.horizon !== horizon) continue;
       if (!(c.grade && c.grade.ticket)) continue;
       if (!c.plan) continue;              /* no levels means nothing to act on */
-      if (c.plan.momentumStop === true) continue; /* vol stop is not a ticket */
-      return c;
+      if (c.plan.momentumStop === true){
+        if (!fallback) fallback = c;
+        continue;
+      }
+      return c; /* structural ticket wins */
     }
-    return null;
+    return fallback;
   }
 
   function setupCard(c){

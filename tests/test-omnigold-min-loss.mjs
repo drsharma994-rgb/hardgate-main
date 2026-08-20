@@ -10,9 +10,12 @@
      1. yield is judged per setup DIRECTION
      2. a below-breakeven mechanic at 20+ samples VETOES (no 20–29 free pass)
      3. fading the daily stack is enough to stand the trade aside
-     4. a MOMENTUM / volatility stop cannot TICKET
+     4. a MOMENTUM / volatility stop is AGAINST (info) — the ticket stands,
+        otherwise a runaway tape has no placeable structure and the desk
+        shows no TICKET. STRONGEST prefers a structural ticket, then falls
+        back to the labelled vol-stop rather than leaving the desk empty.
      5. gold weekend is a veto when the scan says it is in the closure
-     6. STRONGEST pick never promotes a momentum-stop plan
+     6. scalp cost-drag ceiling stays 0.15R (sessionHard)
 
    Run: node tests/test-omnigold-min-loss.mjs */
 import fs from 'node:fs';
@@ -108,17 +111,19 @@ console.log('\n== 3. fading the daily stack is enough to stand aside ==');
   ok(withDaily.pass !== false, 'the same daily UP does not veto a LONG fade — it is not fighting the rally');
 }
 
-console.log('\n== 4. a volatility stop cannot TICKET ==');
+console.log('\n== 4. a volatility stop is AGAINST — the continuation ticket still stands ==');
 {
   const m = gate('momentum-stop', { dir: 'long', kind: 'ORB' },
                  { plan: { entry: 4300, stop: 4270, t1: 4345, momentumStop: true } });
-  ok(m.pass === false && m.info !== true, 'momentum-stop is a real veto, not an AGAINST note');
+  ok(m.pass === false && m.info === true, 'momentum-stop is an AGAINST note, not a ticket-killer');
   const graded = W.hgOmniGrade([
     { key: 'trend', hard: true, pass: true, why: 'ok' },
     { key: 'vol-alive', hard: true, pass: true, why: 'ok' },
     { key: 'momentum-stop', hard: false, info: m.info, pass: false, why: m.why }
   ]);
-  ok(graded.ticket === false, 'a volatility-stop plan cannot grade TICKET');
+  ok(graded.ticket === true, 'a labelled volatility-stop plan can still grade TICKET');
+  ok(graded.notes && graded.notes.indexOf('momentum-stop') >= 0,
+     'the compromise is named on the ticket (got notes=' + JSON.stringify(graded.notes) + ')');
 
   const ranked = [
     { horizon: 'SCALP', kind: 'ORB', dir: 'long', grade: { ticket: true, vetoes: [] },
@@ -127,7 +132,24 @@ console.log('\n== 4. a volatility stop cannot TICKET ==');
       plan: { entry: 4300, stop: 4240, t1: 4420 } }
   ];
   const pick = W.hgOgPickFor(ranked, 'SCALP');
-  ok(pick && pick.kind === 'MMOVE', 'STRONGEST pick skips the momentum-stop plan and takes the structural one');
+  ok(pick && pick.kind === 'MMOVE', 'STRONGEST pick prefers the structural ticket over a vol-stop');
+
+  /* v420 left the desk empty on a runaway gold trend: fades vetoed by
+     daily-stack, continuation vetoed (and then skipped) because the only
+     placeable stop was a labelled vol stop. The user then saw "no setup
+     with ticket". When the only remaining ticket IS that continuation,
+     pick it — empty is the defect. */
+  const onlyVol = [
+    { horizon: 'SWING', kind: 'ORB', dir: 'long', grade: { ticket: true, vetoes: [] },
+      plan: { entry: 4300, stop: 4270, t1: 4345, momentumStop: true } },
+    { horizon: 'SWING', kind: 'POC-REVERT', dir: 'short', grade: { ticket: false, vetoes: ['fade-strength'] },
+      plan: { entry: 4300, stop: 4320, t1: 4240 } }
+  ];
+  const swingPick = W.hgOgPickFor(onlyVol, 'SWING');
+  ok(swingPick && swingPick.kind === 'ORB' && swingPick.plan.momentumStop === true,
+     'when the only ticket is a labelled vol-stop continuation, STRONGEST still picks it');
+  ok(/labelled VOLATILITY \/ MOMENTUM stop/.test(GOLD),
+     'STRONGEST card names the vol-stop compromise so the reader is not sold a structural stop');
 }
 
 console.log('\n== 5. gold weekend is a veto when the scan is inside the closure ==');

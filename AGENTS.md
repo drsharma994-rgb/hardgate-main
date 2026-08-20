@@ -214,11 +214,17 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIGOLD tickets — hg-v422
+- Continuation with a labelled **volatility / momentum stop** can **TICKET** (`momentum-stop` is AGAINST, not a veto). Killing it as a real veto emptied the desk on a runaway gold trend (no nearby structure for with-trend; fades already stood aside).
+- `hgOgPickFor` prefers a **structural** ticket; if the only ticket is a vol-stop continuation, it still picks that rather than leaving STRONGEST empty.
+- Min-loss vetoes from hg-v420 **stay**: fade daily-stack, weekend closure, yield-per-direction, 20-sample losing mechanic, ShieldGuard, scalp cost-drag 0.15R.
+- Tests: `node tests/test-omnigold-min-loss.mjs`, `node tests/test-momentum-stop.mjs`
+
 ### OMNIGOLD min-loss — hg-v420
 - **Do not** run OMNIGOLD through `hgApplyGoldBestLevels`. The desk prices **live market entry** (`skipExact` + `entryOverride`); snapping to formation levels recreates DEAD ON ARRIVAL / stale-entry tickets.
 - Yield is judged **per setup direction** (`hgOgYieldValid(rows, dir)`). Never freeze `validateYieldCorrelation(..., 'long')` for the whole scan.
 - A mechanic at **20+ samples and ≤ −2σ vs breakeven VETOES** (no 20–29 info free-pass). OmniRoute crypto keeps the 20–29 AGAINST window.
-- Fading the **daily stack** is enough to veto (`fade-strength`). A volatility / momentum stop cannot TICKET (`momentum-stop` + `hgOgPickFor` skip).
+- Fading the **daily stack** is enough to veto (`fade-strength`). A volatility / momentum stop is **AGAINST** (`info`) — the continuation ticket stands, otherwise a runaway tape has no nearby structure. `hgOgPickFor` prefers a structural ticket, then falls back to the labelled vol-stop rather than leaving STRONGEST empty.
 - **Weekend:** inside Fri 22:00 UTC–Sun 22:00 UTC is a veto; SWING also vetoes inside one 4h bar of the Friday close. Scalp cost-drag ceiling is **0.15R** (`sessionHard`).
 - Tests: `node tests/test-omnigold-min-loss.mjs`, `node tests/test-omnigold.mjs`, `node tests/test-fade-strength.mjs`, `node tests/test-momentum-stop.mjs`
 

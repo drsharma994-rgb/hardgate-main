@@ -153,12 +153,14 @@ console.log('\n== the four gold context gates carry the flag ==');
                            a multi-source zone vs one in no-man's-land — it
                            argues standing, never existence */
                         'zone-anchor',
+                        /* labelled volatility stop on a runaway tape: the
+                           compromise is on the card as AGAINST, the ticket
+                           stands — otherwise with-trend gold has no levels */
+                        'momentum-stop',
                         /* omniroute's own indicator reads — same standing:
                            they argue, they never veto. */
                         'adx-trend', 'atr-percentile', 'vol-forecast',
-                        /* zone-anchor remains info. momentum-stop is a real
-                           veto on OMNIGOLD (min-loss: a volatility stop
-                           cannot TICKET) so it is NOT in this list. */
+                        /* zone-anchor + momentum-stop remain info. */
                         /* the fallback both desks declare and neither
                            pushes on a healthy ledger — it appears only
                            when hg-gates.js is broken or absent, and a

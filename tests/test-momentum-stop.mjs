@@ -23,6 +23,9 @@
      3. the note names it: "MOMENTUM STOP ... This is a volatility stop, NOT
         invalidation"
      4. the ledger flags it AGAINST (info) so the compromise is on the card
+      — it does NOT veto the ticket. Killing it as a real veto (v420)
+      restored the no-levels stalemate: with-trend entries have no nearby
+      structure, fades are stood aside, the desk shows zero tickets.
 
    THE FLAG DIED TWICE ON THE WAY IN, and both killings are pinned. First
    hgApplyExactEntry builds a fresh plan object and dropped momentumStop;
@@ -144,7 +147,7 @@ console.log('\n== the ledger shows the compromise ==');
   const g = (plan) => W.hgOgGates(STR, { dir:'long', kind:'ORB', mech:'ORB' }, { plan: plan })
                        .filter(x => x && x.key === 'momentum-stop')[0];
   const m = g({ entry: 4300, stop: 4270, t1: 4345, momentumStop: true });
-  ok(m.pass === false && m.info !== true, 'a momentum plan is a real VETO — visible and fatal for tickets');
+  ok(m.pass === false && m.info === true, 'a momentum plan is AGAINST — visible, not fatal');
   ok(/VOLATILITY stop, not structure/.test(m.why), 'saying what it is: ' + m.why.slice(0, 60));
   const st = g({ entry: 4300, stop: 4270, t1: 4345 });
   ok(st.pass === true, 'a structural plan passes');
@@ -152,10 +155,10 @@ console.log('\n== the ledger shows the compromise ==');
   const noPlan = g(null);
   ok(noPlan && noPlan.pass === null, 'no plan reads UNCHECKED — this gate judges stops, not absence');
   ok(/no plan to judge/.test(noPlan.why), 'and says so');
-  /* Min-loss: a volatility stop cannot TICKET. */
+  /* Killing this as a real veto emptied the desk on a runaway tape. */
   const graded = W.hgOmniGrade([{ key:'trend', hard:true, pass:true, why:'ok' },
-    { key:'momentum-stop', hard:false, info:false, pass:false, why:'volatility stop' }]);
-  ok(graded.ticket === false, 'a momentum-stop veto stops the ticket');
+    { key:'momentum-stop', hard:false, info:true, pass:false, why:'volatility stop' }]);
+  ok(graded.ticket === true, 'a momentum-stop AGAINST still tickets — otherwise the runaway tape has no trade');
 }
 
 console.log('\n== the flag survived its two assassins, pinned at the source ==');
