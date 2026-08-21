@@ -196,7 +196,13 @@ console.log('--- binanceBasis ---');
 {
   const { ctx, calls } = makeBinCtx([{ match: '/futures/data/basis', body: BASIS }]);
   const r = await ctx.binanceBasis(); // all defaults
-  const u = calls.urls[0];
+  /* Not urls[0] any more: a non-PERPETUAL request first asks exchangeInfo
+     whether the pair even has that dated contract (Binance lists quarterlies
+     for two pairs, and asking anywhere else earns a 400 -4104). This mock
+     routes only /futures/data/basis, so exchangeInfo 404s, the listing reads
+     as UNKNOWN and the call is attempted — which is the degradation this
+     assertion should see. Find the basis URL rather than assume its slot. */
+  const u = calls.urls.filter(function(x){ return x.indexOf('/futures/data/basis') >= 0; })[0] || '';
   assert(u.indexOf('pair=BTCUSDT') >= 0 && u.indexOf('contractType=CURRENT_QUARTER') >= 0 &&
          u.indexOf('period=1h') >= 0 && u.indexOf('limit=1') >= 0,
     "default args -> pair=BTCUSDT&contractType=CURRENT_QUARTER&period=1h&limit=1");

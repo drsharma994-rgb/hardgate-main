@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v431',
-  pack: 'request coalescing + CSP allowlist repair',
-  built: '2026-08-21T12:40:00Z',
-  note: 'One in-flight request per contract instead of two or three, which is what got the desk IP-banned by Binance. ON-CHAIN, LIQS and Deribit DVOL reach their hosts again. CoinDCX rows no longer ask Binance for B-XRP_USDT. Carries the v430 setup-honesty pack.'
+  version: 'hg-v432',
+  pack: 'dated-futures gate',
+  built: '2026-08-21T13:35:00Z',
+  note: 'Binance lists quarterlies for BTCUSDT and ETHUSDT only. TERM BASIS no longer asks the other ten pairs for contracts that do not exist — 20 dead 400s per scan gone, and pairs without dated futures read as skipped, not incomplete. Carries v431 request coalescing and the v430 setup-honesty pack.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

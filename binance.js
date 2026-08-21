@@ -368,6 +368,38 @@ async function binanceTopLSAccounts(symbol, period, limit){
   }catch(e){ return null; }
 }
 
+/* GET /fapi/v1/exchangeInfo -> { PAIR: true } for the pairs that actually have
+   a delivery contract of this type.
+
+   THE DEFECT THIS EXISTS FOR. Binance lists quarterly futures for exactly two
+   pairs — BTCUSDT and ETHUSDT. Everything else is perpetual-only. binanceBasis
+   asked for CURRENT_QUARTER / NEXT_QUARTER on whatever pair it was handed, so
+   the TERM BASIS tab's twelve-pair scan sent twenty requests that Binance can
+   only answer with 400 -4104 "Invalid contract type", then reported the ten
+   dead pairs as "incomplete" — which reads as the venue being flaky rather
+   than as us asking for contracts that do not exist.
+
+   Same exchangeInfo payload binancePerpUniverse() reads, so this costs no
+   extra request: __binFetchJson coalesces the in-flight call and the 60s
+   cache holds the parsed map. null means the universe is UNAVAILABLE (callers
+   should attempt anyway rather than invent a "not listed"); an empty object
+   means it answered and nothing qualifies. */
+async function binanceDeliveryPairs(contractType){
+  try{
+    contractType = String(contractType || 'CURRENT_QUARTER').toUpperCase();
+    const key = 'delivery|' + contractType;
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const j = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/exchangeInfo');
+    if (!j || !Array.isArray(j.symbols)) return null;
+    const out = {};
+    for (let i = 0; i < j.symbols.length; i++){
+      const sy = j.symbols[i];
+      if (sy && sy.contractType === contractType && sy.pair) out[String(sy.pair).toUpperCase()] = true;
+    }
+    return __binCachePut(key, out);
+  }catch(e){ return null; }
+}
+
 /* GET /futures/data/basis?pair=..&contractType=.. -> {latest, series} of
    {annualizedBasisPct, basisRatePct, basis, futuresPrice, indexPrice, t}.
    Data layer for a future term-structure tab. Wire basisRate/annualizedBasisRate
@@ -376,11 +408,18 @@ async function binanceTopLSAccounts(symbol, period, limit){
    contractType: CURRENT_QUARTER | NEXT_QUARTER | PERPETUAL. */
 async function binanceBasis(pair, contractType, period, limit){
   try{
-    pair = pair || 'BTCUSDT';
-    contractType = contractType || 'CURRENT_QUARTER';
+    pair = String(pair || 'BTCUSDT').toUpperCase();
+    contractType = String(contractType || 'CURRENT_QUARTER').toUpperCase();
     period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 1));
     const key = 'basis|' + pair + '|' + contractType + '|' + period + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    /* PERPETUAL exists for every listed perp; the quarterlies exist for two
+       pairs. Ask only where the contract does. A null map means exchangeInfo
+       was unreachable — attempt the call rather than claim "not listed". */
+    if (contractType !== 'PERPETUAL'){
+      const listed = await binanceDeliveryPairs(contractType);
+      if (listed && !listed[pair]) return null;
+    }
     const url = BINANCE_FAPI + '/futures/data/basis?pair=' + encodeURIComponent(pair) +
                 '&contractType=' + encodeURIComponent(contractType) +
                 '&period=' + encodeURIComponent(period) + '&limit=' + limit;

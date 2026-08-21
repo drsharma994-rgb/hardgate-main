@@ -195,23 +195,56 @@ the user runs a scan once.
     };
   }
 
+  /* A TERM STRUCTURE NEEDS DATED CONTRACTS, AND BINANCE LISTS TWO.
+
+     This used to rank the top twelve perps by turnover and ask each for
+     PERPETUAL + CURRENT_QUARTER + NEXT_QUARTER basis. Only BTCUSDT and
+     ETHUSDT have quarterlies, so ten of the twelve pairs cost two requests
+     that Binance can only answer 400 -4104 "Invalid contract type", produced
+     no curve, and were then counted on the stat line as "10 incomplete" —
+     which reads as the venue being flaky rather than as the tab asking for
+     contracts that were never listed. SOLUSDT sat in SEED_PAIRS the whole
+     time and could never have produced a row.
+
+     Ask exchangeInfo which pairs actually carry BOTH quarterlies (scanPair
+     needs all three legs) and scan those. When exchangeInfo is unreachable
+     the filter is skipped rather than guessed at, so an outage degrades to
+     the old behaviour instead of silently emptying the tab.
+
+     Returns { pairs, filtered } so the stat line can say what was skipped
+     and why, instead of reporting it as failure. */
   async function universePairs(){
     var out = [];
     var seen = {};
     SEED_PAIRS.forEach(function(p){ if (!seen[p]){ seen[p] = true; out.push(p); } });
     try{
-      if (typeof binanceTickers24h !== 'function') return out;
-      var map = await binanceTickers24h();
-      if (!map) return out;
-      var rows = Object.keys(map).map(function(sym){ return map[sym]; })
-        .filter(function(t){ return t && (t.turnoverUsd || 0) >= MIN_TURNOVER; })
-        .sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
-      for (var i = 0; i < rows.length && out.length < TOP_N; i++){
-        var sym = rows[i].symbol;
-        if (!seen[sym]){ seen[sym] = true; out.push(sym); }
+      if (typeof binanceTickers24h === 'function'){
+        var map = await binanceTickers24h();
+        if (map){
+          var rows = Object.keys(map).map(function(sym){ return map[sym]; })
+            .filter(function(t){ return t && (t.turnoverUsd || 0) >= MIN_TURNOVER; })
+            .sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
+          for (var i = 0; i < rows.length && out.length < TOP_N; i++){
+            var sym = rows[i].symbol;
+            if (!seen[sym]){ seen[sym] = true; out.push(sym); }
+          }
+        }
       }
     }catch(e){}
-    return out.slice(0, TOP_N);
+    out = out.slice(0, TOP_N);
+
+    var dated = null;
+    try{
+      if (typeof binanceDeliveryPairs === 'function'){
+        var cur = await binanceDeliveryPairs('CURRENT_QUARTER');
+        var nxt = await binanceDeliveryPairs('NEXT_QUARTER');
+        if (cur && nxt) dated = { cur: cur, nxt: nxt };
+      }
+    }catch(e){}
+    if (!dated) return { pairs: out, filtered: 0, known: false };
+
+    var keep = out.filter(function(p){ return dated.cur[p] && dated.nxt[p]; });
+    return { pairs: keep, filtered: out.length - keep.length, known: true };
   }
 
   async function runTermBasisScan(el){
@@ -235,9 +268,20 @@ the user runs a scan once.
         return 'error: binanceBasis missing';
       }
       var tickMap = (typeof binanceTickers24h === 'function') ? await binanceTickers24h() : null;
-      var pairs = await universePairs();
+      var uni = await universePairs();
+      var pairs = uni.pairs;
+      var skipped = uni.filtered;
       stat.className = 'note';
-      stat.textContent = 'loading term structure for ' + pairs.length + ' pairs…';
+      stat.textContent = 'loading term structure for ' + pairs.length + ' pair' + (pairs.length === 1 ? '' : 's') + '…';
+      if (!pairs.length){
+        stat.textContent = 'no pair in the turnover universe carries dated futures';
+        empty.textContent = uni.known
+          ? 'Binance lists quarterly contracts for a small set of pairs, and none of them cleared the $'
+            + fmtN(MIN_TURNOVER / 1e6, 0) + 'M turnover floor. A term structure needs dated contracts — there is nothing to curve.'
+          : 'Binance exchangeInfo is unreachable, so the dated-contract list is unknown. Retry when the feed is back.';
+        empty.style.display = 'block';
+        return 'no dated-futures pairs';
+      }
       for (var ci = 0; ci < pairs.length; ci += CHUNK){
         var chunk = pairs.slice(ci, ci + CHUNK);
         await Promise.all(chunk.map(async function(pair, idx){
@@ -254,14 +298,21 @@ the user runs a scan once.
       }
       results.sort(function(a, b){ return (b.score - a.score) || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0)); });
       cards.innerHTML = results.map(cardHTML).join('');
+      /* 'skipped' is not failure: those pairs have no dated contracts to
+         curve, which is a fact about Binance's listings, not a fetch that
+         went wrong. Naming it separately keeps 'incomplete' meaning what it
+         says — a leg that should have answered and did not. */
       stat.textContent = 'done · ' + results.length + ' curves'
         + (failed ? ' · ' + failed + ' incomplete' : '')
+        + (skipped ? ' · ' + skipped + ' skipped (no dated futures on Binance)' : '')
         + ' · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's';
       if (!results.length){
         var hostMsg = (typeof hgHostingMode === 'function' && hgHostingMode() === 'static')
           ? ' Static host — term basis needs Binance /api routes on Render.'
           : '';
-        empty.textContent = 'No term-structure data returned — Binance basis endpoint may be geo-blocked or pairs lack dated futures.' + hostMsg;
+        empty.textContent = 'No term-structure data returned for ' + pairs.length
+          + ' dated-futures pair' + (pairs.length === 1 ? '' : 's')
+          + ' — the Binance basis endpoint may be geo-blocked.' + hostMsg;
         empty.style.display = 'block';
       }
       __tbSnap = {
@@ -342,6 +393,9 @@ the user runs a scan once.
   G.termBasisPlan = termBasisPlan;
   G.termBasisBookBtn = termBasisBookBtn;
   G.termBasisTradeBtn = termBasisTradeBtn;
+  /* Exported so the dated-futures filter is testable on its own — it decides
+     what the tab even asks for, and it had no coverage when it was wrong. */
+  G.termBasisUniversePairs = universePairs;
   G.termBasisState = function termBasisState(){
     try{ return __tbSnap ? JSON.parse(JSON.stringify(__tbSnap)) : null; }catch(e){ return null; }
   };
