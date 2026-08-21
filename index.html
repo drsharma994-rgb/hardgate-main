@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=434"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=434"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=435"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=435"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -339,7 +339,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <div class="row">
       <label class="f">SCAN TOP (BY TURNOVER)<input id="swingN" type="number" value="30" min="5" max="500" style="width:80px"></label>
       <label class="f">MIN 24H TURNOVER $<input id="swingTurn" type="number" value="200000" style="width:110px"></label>
-      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="swingAll" type="checkbox" style="width:auto" checked> SCAN WHOLE EXCHANGE</label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="swingAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="swingRun" onclick="runScan('swing')">SCAN</button>
       <button class="btn" id="swingDiag" onclick="runGateDiagnostics()">CALIBRATE</button>
       <span class="note" id="swingStat"></span>
@@ -360,7 +360,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <h2>Scalp Scanner <span>15m trigger inside 1H context · ATR targets · funding-window aware</span></h2>
     <div class="row">
       <label class="f">SCAN TOP (BY TURNOVER)<input id="scalpN" type="number" value="20" min="5" max="500" style="width:80px"></label>
-      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="scalpAll" type="checkbox" style="width:auto" checked> SCAN WHOLE EXCHANGE</label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="scalpAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="scalpRun" onclick="runScan('scalp')">SCAN</button>
       <span class="note" id="scalpStat"></span>
     </div>
@@ -596,7 +596,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
     <h2>Best Setup <span>hard gates are the ticket in · ranking = tally of independent aligned confirmations · WAIT is a first-class answer</span></h2>
     <div class="row" style="margin-bottom:10px">
       <label class="f">SCAN TOP (BY TURNOVER)<input id="bestN" type="number" value="30" min="5" max="500" style="width:80px"></label>
-      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto" checked> SCAN WHOLE EXCHANGE</label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
       <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
       <span class="note" id="bestStat"></span>
       <span class="note">Telegram: crypto 7/7 CLEAN + 6/7 NEAR (default) — convicted-only mode (hgAlertCryptoConvictedOnly=1, default) sends gate-clean MOST PROBABLE only, no NEAR. Gold uses separate 15-min batch. Set hgAlertCleanOnly=0 or hgAlertCryptoConvictedOnly=0 to widen.</span>
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=434"></script>
+<script src="./hg-plan.js?v=435"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=434"></script>
-<script src="./hg-gates.js?v=434"></script>
-<script src="omniroute.js?v=434"></script>
+<script src="hg-mechanics.js?v=435"></script>
+<script src="./hg-gates.js?v=435"></script>
+<script src="omniroute.js?v=435"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=47"></script>
+<script src="edge.js?v=435"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=434"></script>
+<script src="omnigold.js?v=435"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=434"></script>
+<script src="omnipresent.js?v=435"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=434"></script>
+<script src="supersetup.js?v=435"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=434"></script>
-<script src="super-gold.js?v=434"></script>
-<script src="super-best.js?v=434"></script>
-<script src="super-sniper.js?v=434"></script>
-<script src="super-book.js?v=434"></script>
-<script src="super-calibrate.js?v=434"></script>
+<script src="super-desk-common.js?v=435"></script>
+<script src="super-gold.js?v=435"></script>
+<script src="super-best.js?v=435"></script>
+<script src="super-sniper.js?v=435"></script>
+<script src="super-book.js?v=435"></script>
+<script src="super-calibrate.js?v=435"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1011,8 +1011,25 @@ function hgVenueFullUni(excludeSym){
   if (excludeSym) uni = uni.filter(function(t){ return t.symbol !== excludeSym; });
   return uni.sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
 }
+/* Dual venue means Delta AND CoinDCX at this depth. It does not mean
+   "ignore SCAN TOP and fetch every name". Whole-exchange is the checkbox
+   or forceScanAll (alert warm). */
+function hgBoundScanUniverse(tickers, opts){
+  opts = opts || {};
+  var uni = Array.isArray(tickers) ? tickers.slice() : [];
+  var scanAll = !!opts.scanAll;
+  var n = Math.max(5, Math.min(500, +opts.n || 30));
+  var minTurn = isFinite(+opts.minTurn) ? +opts.minTurn : 0;
+  var ex = String(opts.exchange || '');
+  uni.sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
+  if (scanAll) return uni;
+  if (ex === 'delta' || ex === 'startrader'){
+    uni = uni.filter(function(t){ return (t.turnoverUsd || 0) >= minTurn; });
+  }
+  return uni.slice(0, n);
+}
 function hgScanWholeExchange(opts, checkboxEl){
-  return !!(opts && opts.forceScanAll) || !!(checkboxEl && checkboxEl.checked) || hgDualScanEnabled();
+  return !!(opts && opts.forceScanAll) || !!(checkboxEl && checkboxEl.checked);
 }
 
 const DELTA = 'https://api.india.delta.exchange';
@@ -1318,11 +1335,24 @@ async function candlesDelta(sym, res, count){
 }
 
 async function loadTickersCdcx(){
-  // Active USDT-margined futures instruments; ticker detail endpoints vary — we
-  // rank by what candles give us and mark funding as unavailable rather than faking it.
+  // Active USDT-margined futures instruments. Marks (mp + 24h USDT turnover v)
+  // are a companion: merge when the desk answers, keep honest zeros when it
+  // does not — never invent turnover, never empty the list on a marks miss.
   const j = await cdcxGet(`${CDCX_API}/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT`);
   const list = Array.isArray(j) ? j : (j.instruments||[]);
-  return list.map(s=>({ symbol: typeof s==='string'? s : s.symbol, mark: NaN, fundingPct: null, oiUsd: 0, turnoverUsd: 0, chg24: null }));
+  const rows = list.map(s=>({ symbol: typeof s==='string'? s : s.symbol, mark: NaN, fundingPct: null, oiUsd: 0, turnoverUsd: 0, chg24: null })).filter(function(t){ return !!t.symbol; });
+  try{
+    const mk = await cdcxGet(`${CDCX_PUB}/market_data/v3/current_prices/futures/rt`);
+    if (typeof xuMergeCdcxMarks === 'function'){
+      const adapted = rows.map(function(r){ return Object.assign({}, r, { sym: r.symbol }); });
+      const mm = xuMergeCdcxMarks(adapted, mk);
+      return (mm.rows || adapted).map(function(r){
+        r.symbol = r.symbol || r.sym;
+        return r;
+      });
+    }
+  }catch(e){}
+  return rows;
 }
 const CDCX_RES = {'15m':'15','1h':'60','2h':'120','4h':'240','1d':'1D'};
 async function candlesCdcx(sym, res, count){
@@ -4517,10 +4547,9 @@ async function runScanLeg(kind, opts){
   let uni = [];
   try{
     if (!S.tickers.length) S.tickers = await getTickers();
-    uni = S.tickers.slice();
-    if (S.exchange === 'delta' || S.exchange === 'startrader') uni = uni.filter(function(t){ return scanAll ? true : t.turnoverUsd >= minTurn; }).sort(function(a, b){ return b.turnoverUsd - a.turnoverUsd; });
-    const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd || 0) > 0; });
-    if (!scanAll && turnoverKnown) uni = uni.slice(0, N);
+    uni = hgBoundScanUniverse(S.tickers, {
+      scanAll: scanAll, n: N, minTurn: minTurn, exchange: S.exchange
+    });
     const universeLabel = scanAll ? ('whole ' + hgExLabel() + ' universe') : ('top ' + N + ' by turnover');
     const minsToFunding = tickClock();
     let found = 0, nearFound = 0;
@@ -6773,11 +6802,9 @@ async function runBest(opts){
           const bestN = $('bestN');
           const N = Math.max(5, Math.min(500, +(bestN && bestN.value ? bestN.value : 30)));
           if (!S.tickers.length) S.tickers=await getTickers();
-          let uni = S.exchange==='delta'
-            ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
-            : S.tickers.slice();
-          const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; });
-          if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
+          let uni = hgBoundScanUniverse(S.tickers, {
+            scanAll: scanAll, n: N, minTurn: 200000, exchange: S.exchange
+          });
           totalUni += uni.length;
           const leg = await runCascadeCore(uni);
           if (leg.funnel){
@@ -6851,10 +6878,9 @@ async function runBest(opts){
   try{
     const scanAll = hgScanWholeExchange(opts, $('bestAll'));
     const N = Math.max(5, Math.min(500, +$('bestN').value||30)); if (!S.tickers.length) S.tickers=await getTickers();
-    let uni = S.exchange==='delta'
-      ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
-      : S.tickers.slice();
-    const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; }); if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
+    let uni = hgBoundScanUniverse(S.tickers, {
+      scanAll: scanAll, n: N, minTurn: 200000, exchange: S.exchange
+    });
     const exLabel = S.exchange==='delta'?'Delta India':'CoinDCX';
     const universeLabel = scanAll ? `whole ${exLabel} futures universe` : `top ${N} by turnover`;
     const {clean, breadth, funnel: bestFunnel} = await runCascadeCore(uni);
@@ -6908,12 +6934,10 @@ async function silentBestScan(exchangeArg){
   try{
     return await withExchange(exchangeArg, async function(){
       const scanAll = true;
-      const N = 999999;
       if (!S.tickers.length) S.tickers=await getTickers();
-      let uni = S.exchange==='delta'
-        ? S.tickers.filter(t=> scanAll ? true : t.turnoverUsd>=200000).sort((a,b)=>b.turnoverUsd-a.turnoverUsd)
-        : S.tickers.slice();
-      const turnoverKnown = uni.some(function(t){ return (t.turnoverUsd||0) > 0; }); if (!scanAll && turnoverKnown) uni = uni.slice(0,N);
+      let uni = hgBoundScanUniverse(S.tickers, {
+        scanAll: scanAll, n: 30, minTurn: 200000, exchange: S.exchange
+      });
       const {clean} = await runCascadeCore(uni);
       return clean;
     });

@@ -219,6 +219,10 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### Bounded crypto scans — hg-v435
+- Dual venue still means **Delta + CoinDCX**. It does **not** mean SCAN WHOLE EXCHANGE. SWING/SCALP/BEST default to top N by turnover; CoinDCX tickers merge marks so that N is liquid. EDGE `MAX_UNIVERSE` is 80. G1–G7 unchanged. Alert warm still `forceScanAll`.
+- Tests: `tests/test-scan-universe-bound.mjs`.
+
 ### OMNIGOLD XM bot backtest — hg-v434
 - **BACKTEST BOT** on the OMNIGOLD XM panel replays the **send path**, not the mechanic R/HORIZON GRID (that enters at bar close). Universe is `ogXmTicketOk` TICKET rows; fill is pending at setup entry (`xmOrderType`); same-bar SL+T1 is STOP; unfilled is not a loss; GROSS and NET of the $0.30×2 gold spread.
 - In-sample on bars the scan already fetched. Session/killzone read each prefix bar; macro/news use the last scan snapshot. Not a live XM statement. Does not POST to XM. Crypto execute stays disabled.

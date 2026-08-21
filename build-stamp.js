@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v434',
-  pack: 'OMNIGOLD XM bot backtest',
-  built: '2026-08-21T10:30:00Z',
-  note: 'BACKTEST BOT on OMNIGOLD replays the XM send path: TICKET rows only, pending fill at setup entry, stop-first, GROSS vs NET of the gold spread. Unfilled is not a loss. In-sample on fetched bars — not a live XM statement. Crypto execute stays disabled.'
+  version: 'hg-v435',
+  pack: 'bounded crypto scans',
+  built: '2026-08-21T15:50:00Z',
+  note: 'SWING / SCALP / BEST / EDGE finish a liquid top-N (dual venue still both books). Dual scan is not whole-exchange. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -28,7 +28,7 @@ Pure exports (never throw):
 var W = (typeof window !== 'undefined') ? window : this;
 
 var MIN_TURNOVER  = 5e6;
-var MAX_UNIVERSE  = 0;
+var MAX_UNIVERSE  = 80;
 var KL_LIMIT      = 300;
 var DON_LEN       = 55;
 var BB_LEN        = 20;
