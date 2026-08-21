@@ -11,7 +11,9 @@
    SWING, SCALP, EDGE and BEST even when the tape had 5/7 watch rows.
 
    G1–G7 are not loosened here. A finished top-N scan may still print 0 CLEAN.
-   What it must not do is refuse to finish.
+   What it must not do is refuse to finish. Alert / pine / SUPER SETUP warm
+   uses HG_SCAN_WARM_N (80) — never forceScanAll — and quiet scans must not
+   overwrite the desk status line.
 
    Run: node tests/test-scan-universe-bound.mjs */
 import fs from 'node:fs';
@@ -51,7 +53,8 @@ function bootBound(){
   vm.runInContext(
     extractFn(HTML, 'hgDualScanEnabled') + '\n'
     + extractFn(HTML, 'hgBoundScanUniverse') + '\n'
-    + extractFn(HTML, 'hgScanWholeExchange') + '\n',
+    + extractFn(HTML, 'hgScanWholeExchange') + '\n'
+    + extractFn(HTML, 'hgScanUniverseN') + '\n',
     ctx
   );
   return ctx;
@@ -64,7 +67,7 @@ console.log('== dual venue is not whole-exchange ==');
   ok(!/hgDualScanEnabled\(\)/.test(fn),
      'hgScanWholeExchange does not treat dual-scan as scan-all');
   ok(/forceScanAll/.test(fn) && /checkboxEl/.test(fn),
-     'whole-exchange is still opt-in via checkbox or forceScanAll');
+     'whole-exchange is still opt-in via checkbox or opts.forceScanAll');
   ok(/function hgDualScanEnabled\(/.test(HTML), 'dual-scan helper still exists');
   ok(/HG_DUAL_CRYPTO_EX = \['delta', 'coindcx'\]/.test(HTML),
      'default dual venue is still Delta + CoinDCX');
@@ -75,7 +78,6 @@ console.log('== SCAN WHOLE EXCHANGE is off until the reader asks ==');
   ok(!/<input id="swingAll"[^>]*checked/.test(HTML), 'SWING whole-exchange default off');
   ok(!/<input id="scalpAll"[^>]*checked/.test(HTML), 'SCALP whole-exchange default off');
   ok(!/<input id="bestAll"[^>]*checked/.test(HTML), 'BEST whole-exchange default off');
-  ok(/forceScanAll: true/.test(HTML), 'alert warm still covers the full book');
 }
 
 console.log('== bound universe: top N even when CoinDCX turnover is unknown ==');
@@ -87,7 +89,7 @@ console.log('== bound universe: top N even when CoinDCX turnover is unknown ==')
   ok(W.hgScanWholeExchange({}, { checked: true }) === true,
      'checked box still scans the whole book');
   ok(W.hgScanWholeExchange({ forceScanAll: true }, { checked: false }) === true,
-     'forceScanAll still wins (alert warm)');
+     'forceScanAll still wins when the caller asks');
 
   const cdcx = [];
   for (let i = 0; i < 120; i++){
@@ -110,15 +112,48 @@ console.log('== bound universe: top N even when CoinDCX turnover is unknown ==')
   const all = W.hgBoundScanUniverse(delta, { scanAll: true, n: 2, minTurn: 200000, exchange: 'delta' });
   ok(all.length === 4 && all[0].symbol === 'BTCUSD',
      'scanAll keeps the full Delta book, still sorted');
+
+  ok(W.hgScanUniverseN({ n: 80 }, { value: '30' }) === 80, 'opts.n wins over the SCAN TOP input');
+  ok(W.hgScanUniverseN({}, { value: '20' }) === 20, 'falls back to the SCAN TOP input');
+  ok(W.hgScanUniverseN({}, { value: '' }) === 30, 'empty input defaults to 30');
+  ok(W.hgScanUniverseN({ n: 1 }, {}) === 5, 'N floor is 5');
+  ok(W.hgScanUniverseN({ n: 9999 }, {}) === 500, 'N cap is 500');
 }
 
 console.log('== SWING/SCALP/BEST actually call the bound helper ==');
 {
   ok(/hgBoundScanUniverse\(S\.tickers/.test(HTML), 'scan legs bound S.tickers through the helper');
+  ok(/hgScanUniverseN\(opts/.test(HTML), 'SWING/SCALP/BEST read N from opts then the input');
   ok(/loadTickersCdcx[\s\S]{0,800}xuMergeCdcxMarks/.test(HTML)
      || /xuMergeCdcxMarks[\s\S]{0,400}loadTickersCdcx/.test(HTML)
      || /function loadTickersCdcx\(\)\{[\s\S]*xuMergeCdcxMarks/.test(HTML),
      'CoinDCX ticker load merges marks so top-N is by turnover');
+}
+
+console.log('== alert warm is a liquid cap, not the whole book ==');
+{
+  ok(/HG_SCAN_WARM_N\s*=\s*80/.test(HTML), 'HG_SCAN_WARM_N is 80');
+  const warm = extractFn(HTML, 'cryptoScanWarm');
+  ok(!/forceScanAll/.test(warm), 'cryptoScanWarm does not forceScanAll');
+  ok(/n:\s*HG_SCAN_WARM_N/.test(warm), 'cryptoScanWarm passes n: HG_SCAN_WARM_N');
+  const silent = extractFn(HTML, 'silentBestScan');
+  ok(!/scanAll\s*=\s*true/.test(silent), 'silent BEST warm is not scanAll=true');
+  ok(/scanAll:\s*false/.test(silent) && /HG_SCAN_WARM_N/.test(silent),
+     'silent BEST uses HG_SCAN_WARM_N at both venues');
+  const ss = read('supersetup.js');
+  ok(!/forceScanAll:\s*true/.test(ss), 'SUPER SETUP fallback does not forceScanAll');
+}
+
+console.log('== quiet scans do not hijack the desk status line ==');
+{
+  const leg = extractFn(HTML, 'runScanLeg');
+  ok(/hgScanUniverseN\(opts/.test(leg), 'runScanLeg honors opts.n via hgScanUniverseN');
+  const scanMsg = leg.indexOf("'scanning '");
+  ok(scanMsg > 0, 'live scans still print scanning N/M');
+  ok(/if\s*\(\s*!quiet\s*\)/.test(leg.slice(Math.max(0, scanMsg - 320), scanMsg)),
+     'quiet scans do not overwrite swingStat/scalpStat with scanning N/M');
+  ok(/if\s*\(\s*!quiet\s*\)[\s\S]{0,160}setProg\(isSwing \? 'swingProg'/.test(leg),
+     'quiet scans do not drive the SWING/SCALP progress bar');
 }
 
 console.log('== EDGE is capped so a $5M floor cannot dump 250+ names ==');

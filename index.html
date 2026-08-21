@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=435"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=435"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=436"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=436"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=435"></script>
+<script src="./hg-plan.js?v=436"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=435"></script>
-<script src="./hg-gates.js?v=435"></script>
-<script src="omniroute.js?v=435"></script>
+<script src="hg-mechanics.js?v=436"></script>
+<script src="./hg-gates.js?v=436"></script>
+<script src="omniroute.js?v=436"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=435"></script>
+<script src="edge.js?v=436"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=435"></script>
+<script src="omnigold.js?v=436"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=435"></script>
+<script src="omnipresent.js?v=436"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=435"></script>
+<script src="supersetup.js?v=436"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=435"></script>
-<script src="super-gold.js?v=435"></script>
-<script src="super-best.js?v=435"></script>
-<script src="super-sniper.js?v=435"></script>
-<script src="super-book.js?v=435"></script>
-<script src="super-calibrate.js?v=435"></script>
+<script src="super-desk-common.js?v=436"></script>
+<script src="super-gold.js?v=436"></script>
+<script src="super-best.js?v=436"></script>
+<script src="super-sniper.js?v=436"></script>
+<script src="super-book.js?v=436"></script>
+<script src="super-calibrate.js?v=436"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1013,12 +1013,20 @@ function hgVenueFullUni(excludeSym){
 }
 /* Dual venue means Delta AND CoinDCX at this depth. It does not mean
    "ignore SCAN TOP and fetch every name". Whole-exchange is the checkbox
-   or forceScanAll (alert warm). */
+   or opts.forceScanAll. Alert / pine / SUPER SETUP warm uses HG_SCAN_WARM_N. */
+var HG_SCAN_WARM_N = 80;
+window.HG_SCAN_WARM_N = HG_SCAN_WARM_N;
+function hgScanUniverseN(opts, inputEl){
+  opts = opts || {};
+  var n = +opts.n;
+  if (!(isFinite(n) && n > 0)) n = inputEl && inputEl.value != null ? +inputEl.value : NaN;
+  return Math.max(5, Math.min(500, n || 30));
+}
 function hgBoundScanUniverse(tickers, opts){
   opts = opts || {};
   var uni = Array.isArray(tickers) ? tickers.slice() : [];
   var scanAll = !!opts.scanAll;
-  var n = Math.max(5, Math.min(500, +opts.n || 30));
+  var n = hgScanUniverseN(opts, null);
   var minTurn = isFinite(+opts.minTurn) ? +opts.minTurn : 0;
   var ex = String(opts.exchange || '');
   uni.sort(function(a, b){ return (b.turnoverUsd || 0) - (a.turnoverUsd || 0); });
@@ -4515,7 +4523,7 @@ async function runScanLeg(kind, opts){
   const st0 = $(isSwing ? 'swingStat' : 'scalpStat');
   if (!quiet && !skipUiClear && !(await waitAlertIdle(st0))) return null;
   const scanAll = hgScanWholeExchange(opts, $(isSwing ? 'swingAll' : 'scalpAll'));
-  const N = Math.max(5, Math.min(500, +$(isSwing ? 'swingN' : 'scalpN').value || 30));
+  const N = hgScanUniverseN(opts, $(isSwing ? 'swingN' : 'scalpN'));
   const minTurn = isSwing ? (+$('swingTurn').value || 0) : 0;
   const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards'), emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty'), statEl = $(isSwing ? 'swingStat' : 'scalpStat');
   const btn = $(isSwing ? 'swingRun' : 'scalpRun');
@@ -4561,22 +4569,26 @@ async function runScanLeg(kind, opts){
     const t0scan = Date.now();
     const CHUNK_SIZE = quiet ? 8 : 5;
     if (!hgScanRateOk()){
-      statEl.textContent = (venueTag ? venueTag + ' · ' : '') + hgScanRateLimitNote();
-      if (!quiet){ emptyEl.style.display = 'block'; emptyEl.textContent = hgScanRateLimitNote(); }
-      setProg(isSwing ? 'swingProg' : 'scalpProg', null);
-      btn.disabled = false;
+      if (!quiet){
+        statEl.textContent = (venueTag ? venueTag + ' · ' : '') + hgScanRateLimitNote();
+        emptyEl.style.display = 'block'; emptyEl.textContent = hgScanRateLimitNote();
+        setProg(isSwing ? 'swingProg' : 'scalpProg', null);
+        btn.disabled = false;
+      }
       return;
     }
     for (let ci = 0; ci < uni.length; ci += CHUNK_SIZE){
       if (!hgScanRateOk()){
-        statEl.textContent = (venueTag ? venueTag + ' · ' : '') + hgScanRateLimitNote();
+        if (!quiet) statEl.textContent = (venueTag ? venueTag + ' · ' : '') + hgScanRateLimitNote();
         break;
       }
       const chunk = uni.slice(ci, ci + CHUNK_SIZE);
       await Promise.all(chunk.map(async function(t, idxInChunk){
         const i = ci + idxInChunk;
-        setProg(isSwing ? 'swingProg' : 'scalpProg', (i + 1) / uni.length);
-        statEl.textContent = (venueTag ? venueTag + ' · ' : '') + 'scanning ' + (i + 1) + '/' + uni.length + ' - ' + t.symbol + ' · ' + Math.floor((Date.now() - t0scan) / 1000) + 's';
+        if (!quiet){
+          setProg(isSwing ? 'swingProg' : 'scalpProg', (i + 1) / uni.length);
+          statEl.textContent = (venueTag ? venueTag + ' · ' : '') + 'scanning ' + (i + 1) + '/' + uni.length + ' - ' + t.symbol + ' · ' + Math.floor((Date.now() - t0scan) / 1000) + 's';
+        }
         try{
           if (isSwing){
             if (typeof swingTryClean !== 'function') return;
@@ -4850,7 +4862,7 @@ async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
 
 async function cryptoScanWarm(kind){
   try{
-    await runScan(kind, { quiet: true, forceScanAll: true });
+    await runScan(kind, { quiet: true, n: HG_SCAN_WARM_N });
     hgPaintCryptoDeskFromSnap(kind);
     return 'warmed';
   }
@@ -6799,8 +6811,7 @@ async function runBest(opts){
         const ex = HG_DUAL_CRYPTO_EX[ei];
         await withExchange(ex, async function(){
           const scanAll = hgScanWholeExchange(opts, $('bestAll'));
-          const bestN = $('bestN');
-          const N = Math.max(5, Math.min(500, +(bestN && bestN.value ? bestN.value : 30)));
+          const N = hgScanUniverseN(opts, $('bestN'));
           if (!S.tickers.length) S.tickers=await getTickers();
           let uni = hgBoundScanUniverse(S.tickers, {
             scanAll: scanAll, n: N, minTurn: 200000, exchange: S.exchange
@@ -6877,7 +6888,7 @@ async function runBest(opts){
   const out=$('bestOut'); out.innerHTML=''; $('bestStat').textContent='';
   try{
     const scanAll = hgScanWholeExchange(opts, $('bestAll'));
-    const N = Math.max(5, Math.min(500, +$('bestN').value||30)); if (!S.tickers.length) S.tickers=await getTickers();
+    const N = hgScanUniverseN(opts, $('bestN')); if (!S.tickers.length) S.tickers=await getTickers();
     let uni = hgBoundScanUniverse(S.tickers, {
       scanAll: scanAll, n: N, minTurn: 200000, exchange: S.exchange
     });
@@ -6933,10 +6944,9 @@ window.publishBestSnap = publishBestSnap;
 async function silentBestScan(exchangeArg){
   try{
     return await withExchange(exchangeArg, async function(){
-      const scanAll = true;
       if (!S.tickers.length) S.tickers=await getTickers();
       let uni = hgBoundScanUniverse(S.tickers, {
-        scanAll: scanAll, n: 30, minTurn: 200000, exchange: S.exchange
+        scanAll: false, n: HG_SCAN_WARM_N, minTurn: 200000, exchange: S.exchange
       });
       const {clean} = await runCascadeCore(uni);
       return clean;

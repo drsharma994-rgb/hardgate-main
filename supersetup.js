@@ -914,17 +914,18 @@ async function superSetupRunScanInner(opts){
     var warm = W.cryptoScanWarm;
     var runScan = W.runScan;
     if (typeof warm === 'function'){
-      __ss.lastScanMsg = 'Swing scan — all Delta + CoinDCX contracts…';
+      __ss.lastScanMsg = 'Swing scan — liquid top-N Delta + CoinDCX…';
       if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
       await warm('swing');
       if (opts.includeScalp !== false){
-        __ss.lastScanMsg = 'Scalp scan — all Delta + CoinDCX contracts…';
+        __ss.lastScanMsg = 'Scalp scan — liquid top-N Delta + CoinDCX…';
         if (__ss.mounted && typeof __ss.setScanStatus === 'function') __ss.setScanStatus(__ss.lastScanMsg);
         await warm('scalp');
       }
     } else if (typeof runScan === 'function'){
-      await runScan('swing', { quiet: true, forceScanAll: true });
-      if (opts.includeScalp !== false) await runScan('scalp', { quiet: true, forceScanAll: true });
+      var warmN = (typeof W.HG_SCAN_WARM_N === 'number') ? W.HG_SCAN_WARM_N : 80;
+      await runScan('swing', { quiet: true, n: warmN });
+      if (opts.includeScalp !== false) await runScan('scalp', { quiet: true, n: warmN });
     }
     var bestWarm = W.bestScanWarm;
     if (typeof bestWarm === 'function'){

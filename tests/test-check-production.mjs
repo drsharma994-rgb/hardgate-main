@@ -59,7 +59,9 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS/.test(html), 'HG_ALERTS_AUTO_REFRESH_MS uses global scan interval');
   ok(/HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS/.test(html), 'HG_AUTO_REFRESH_HARDCODED_MS uses global scan interval');
   ok(/GAP_MS = 5 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 5 minutes');
-  ok(/forceScanAll: true/.test(html), 'alert warm scans whole exchange');
+  ok(/HG_SCAN_WARM_N\s*=\s*80/.test(html), 'alert warm uses a liquid cap, not the whole book');
+  ok(!/function cryptoScanWarm\([\s\S]*?forceScanAll:\s*true/.test(html),
+     'cryptoScanWarm does not forceScanAll');
   ok(/nearCands/.test(html), 'quiet scan stores near-clean candidates');
   ok(/6\/7 NEAR/.test(tabalerts), 'tabalerts labels near-clean rows honestly');
   ok(/GOLD_MIN_TALLY = 10/.test(tabalerts), 'tabalerts gold min tally is 10');
