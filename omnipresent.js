@@ -740,7 +740,10 @@
       if (!sideFn || !htmlFn) return null;
       var pic = null, fng = null;
       try{ pic = W.__hgMarketPicture || null; }catch(e){}
-      try{ fng = (W.S && W.S.fng) || null; }catch(e2){}
+      try{
+        if (typeof S !== 'undefined' && S && S.fng) fng = S.fng;
+        else if (W.S && W.S.fng) fng = W.S.fng;
+      }catch(e2){}
       var read = sideFn(pic, fng);
       try{ if (ui && ui.side) ui.side.innerHTML = htmlFn(read); }catch(e3){}
       return read;

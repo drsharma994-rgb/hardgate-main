@@ -113,6 +113,8 @@ console.log('== HTML names the call ==');
 console.log('== picture is cached for the desks ==');
 {
   ok(/__hgMarketPicture/.test(HTML), 'runMarketPictureUI stores the picture for the omni desks');
+  ok(/typeof S !== 'undefined' && S && S\.fng/.test(ROUTE),
+     'omniFng reads the lexical S.fng the chip uses, not only window.S');
   ok(!/html\.hg-chrome-min[^{;]*\.omni-side/.test(HTML.replace(/\s+/g, ' ')),
      'chrome-min does not hide the desk side call');
   const pin = HG_VER.replace('hg-v', '');

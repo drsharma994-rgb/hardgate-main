@@ -2715,8 +2715,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   }
   function omniFng(){
     try{
-      if (typeof window !== 'undefined' && window.S && window.S.fng) return window.S.fng;
+      if (typeof S !== 'undefined' && S && S.fng) return S.fng;
     }catch(e){}
+    try{
+      if (typeof window !== 'undefined' && window.S && window.S.fng) return window.S.fng;
+    }catch(e2){}
     return null;
   }
   function omniPaintSide(ui, read){
