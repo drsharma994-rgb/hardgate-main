@@ -172,6 +172,12 @@ assert(!loadErr, 'all 3 inline blocks execute without throwing'
 
 const run = code => vm.runInContext(code, ctx);
 
+/* Boot arms the 5-min alert cycle (HG_ALERTS_FORCED_ON). Quiet AUTO_SCAN now
+   finishes swing/scalp/best instead of parking 240s on waitAlertIdle, so the
+   cycle reaches apex/coil mid-fixture and blanks those cards. This file is
+   a render-path unit test — disarm the cycle so each drive() owns the desk. */
+run('(function(){ try{ if (S.alertTimer) clearInterval(S.alertTimer); }catch(e0){} S.alertTimer=null; S.alertBusy=false; S.alertsOn=false; __hgTabScanSeq=(__hgTabScanSeq||0)+1000; if (typeof hgScanAllTabs==="function") hgScanAllTabs=async function(){ return { refreshed:0, skipped:0, failed:0, failedNames:[] }; }; })()');
+
 /* ================= A. pure plan functions ================= */
 assert(run('typeof hgPlanLevels') === 'function' && run('typeof window.hgPlanLevels') === 'function',
   'hgPlanLevels defined and exported on window');
