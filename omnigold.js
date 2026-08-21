@@ -3394,7 +3394,7 @@ terse status, and never launches a first-time scan on a global refresh.
       +   '<div class="row" style="margin-top:8px">'
       +     '<button type="button" class="btn" id="ogXmSend">SEND STRONGEST TICKETS TO XM</button>'
       +     '<button type="button" class="btn ghost" id="ogXmRefresh">REFRESH XM STATUS</button>'
-      +     '<button type="button" class="btn ghost" id="ogXmBt">BACKTEST BOT</button>'
+      +     '<button type="button" class="btn ghost" id="ogXmBt" title="Replay the XM send path on the bars this scan fetched. Takes a minute on a full gold history. Does not POST to XM.">BACKTEST BOT</button>'
       +   '</div>'
       +   '<label class="note" style="display:flex;gap:8px;align-items:center;margin-top:8px">'
       +     '<input type="checkbox" id="ogXmAuto">'
