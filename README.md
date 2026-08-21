@@ -75,7 +75,7 @@ HARDGATE ports concepts from leading open-source trading repos without running t
 | **CCXT** | [ccxt/ccxt](https://github.com/ccxt/ccxt) | `/api/ccxt/desk` (public funding, no keys) + in-process `/api/execute` |
 | **Freqtrade** | [freqtrade/freqtrade](https://github.com/freqtrade/freqtrade) | Expectancy edge + cooldown/stoploss guard on formation (`HARDGATE_FT_*`) |
 | **OpenBB** | [OpenBB-finance/OpenBB](https://github.com/OpenBB-finance/OpenBB) | `/api/openbb/desk` (Yahoo macro fallback; optional `OPENBB_API_URL` backend) |
-| **XM / MT5** | Broker bridge | `/api/xm/candles` for broker-aligned XAUUSD + OMNIGOLD ticket orders (`POST /api/xm/order`, dry-run until `XM_OMNIGOLD_LIVE=1`) |
+| **XM / MT5** | Broker bridge | `/api/xm/candles` for broker-aligned XAUUSD + OMNIGOLD ticket orders (`POST /api/xm/order`, dry-run until `XM_OMNIGOLD_LIVE=1`). OMNIGOLD **BACKTEST BOT** replays that send path on fetched gold bars (pending fill, stop-first, GROSS vs NET) — not a live XM statement. |
 
 Unified status: **`GET /api/trading-stack/status`**. The SCORECARD formation panel shows CCXT/OpenBB/XM/EXEC
 lamps via `trading-stack.js`. Enable daemon gates on the Render worker after scorecard settles: `HARDGATE_FQS_GATE=1`,

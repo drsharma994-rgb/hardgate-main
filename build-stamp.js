@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v433',
-  pack: 'OMNIGOLD XM bot',
-  built: '2026-08-21T09:30:00Z',
-  note: 'OMNIGOLD tickets can be sent to an XM MT5 bridge as gold lots. Default DRY RUN. Live requires XM_OMNIGOLD_LIVE=1 + HARDGATE_API_SECRET. WATCH/VETO never send. Crypto execute and daemon CCXT stay disabled.'
+  version: 'hg-v434',
+  pack: 'OMNIGOLD XM bot backtest',
+  built: '2026-08-21T10:30:00Z',
+  note: 'BACKTEST BOT on OMNIGOLD replays the XM send path: TICKET rows only, pending fill at setup entry, stop-first, GROSS vs NET of the gold spread. Unfilled is not a loss. In-sample on fetched bars — not a live XM statement. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

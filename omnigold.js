@@ -156,7 +156,7 @@ terse status, and never launches a first-time scan on a global refresh.
                       'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
                       'POC-REVERT','COINT-SPREAD','THREE-BAR'];
 
-  var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null };
+  var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false };
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
   function gfn(name){
@@ -2801,6 +2801,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var shared = { killzone: null, macro: null, yieldRows: null, nowSec: Date.now() / 1000, news: null };
     try { var kz = gfn('goldKillzone'); if (kz) shared.killzone = kz(Date.now()); } catch (e) {}
     try { var nr = gfn('hgNewsRisk'); if (nr) shared.news = nr('XAUUSD'); } catch (e) {}
+    __og.shared = shared;
 
     return Promise.resolve()
       .then(function(){ return macroFn ? macroFn() : null; })
@@ -3095,10 +3096,12 @@ terse status, and never launches a first-time scan on a global refresh.
     return isFinite(px) && px > 0 ? px : undefined;
   }
 
-  function hgOgXmSlim(c){
+  function hgOgXmSlim(c, liveOverride){
     if (!c || !(c.grade && c.grade.ticket) || !c.plan) return null;
     if (c.grade.vetoes && c.grade.vetoes.length) return null;
     if (c.dir !== 'long' && c.dir !== 'short') return null;
+    var live = fin(liveOverride);
+    if (!(live > 0)) live = isFinite(fin(c.livePx)) ? fin(c.livePx) : hgOgXmLivePx();
     return {
       source: 'OMNIGOLD',
       horizon: c.horizon,
@@ -3107,7 +3110,7 @@ terse status, and never launches a first-time scan on a global refresh.
       ticket: true,
       grade: { ticket: true, vetoes: [] },
       plan: { entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1, t2: c.plan.t2 },
-      livePx: isFinite(fin(c.livePx)) ? fin(c.livePx) : hgOgXmLivePx(),
+      livePx: live,
       symbol: 'XAUUSD'
     };
   }
@@ -3216,6 +3219,153 @@ terse status, and never launches a first-time scan on a global refresh.
     return hgOgXmSendTickets(ui, hgOgXmStrongest(), 'strongest');
   }
 
+  /* Bot backtest: replay SEND STRONGEST on the bars this scan fetched.
+     Not the mechanic R/HORIZON GRID (that enters at bar close). Macro and
+     news are the last scan's snapshot; session/killzone read the prefix bar. */
+  function hgOgXmBtExtra(prefix, cfg){
+    var last = prefix && prefix.length ? prefix[prefix.length - 1] : null;
+    var livePx = last ? fin(last.c) : NaN;
+    var nowSec = last ? num(last.t) : NaN;
+    var w = W();
+    var dailyFn = (w && typeof w.hgOmniDailyHtf === 'function') ? w.hgOmniDailyHtf : null;
+    var shared = __og.shared || {};
+    var pooled = (__og.snap && cfg && (cfg.label === HORIZONS.scalp.label ? __og.snap.scalp : __og.snap.swing)) || null;
+    var kzFn = gfn('goldKillzone');
+    var killzone = null;
+    try { if (kzFn && isFinite(nowSec)) killzone = kzFn(nowSec * 1000); } catch (eK) {}
+    var zoneCtx = null;
+    var opFn = gfn('opAssess');
+    if (opFn && isFinite(livePx) && livePx > 0){
+      try { zoneCtx = opFn(prefix, livePx, hgOgZoneLevels(prefix, livePx)); } catch (eZ) { zoneCtx = null; }
+    }
+    return {
+      htf: dailyFn ? dailyFn(prefix) : null,
+      killzone: killzone,
+      macro: shared.macro,
+      yieldRows: shared.yieldRows,
+      nowSec: nowSec,
+      adr: hgOgAdr(prefix, 14),
+      news: shared.news,
+      stats: pooled,
+      livePx: livePx,
+      zoneCtx: zoneCtx
+    };
+  }
+
+  function hgOgXmBtTicketAt(prefix, cfg){
+    if (!prefix || prefix.length < 40) return null;
+    var last = prefix[prefix.length - 1];
+    var hits = hgOgDetect(prefix, { nowSec: last ? num(last.t) : undefined });
+    if (!hits || !hits.length) return null;
+    var cands = hgOgEvaluate(prefix, hits, hgOgXmBtExtra(prefix, cfg), cfg);
+    var pick = hgOgPickFor(cands, cfg.label);
+    var live = last ? fin(last.c) : NaN;
+    return hgOgXmSlim(pick, live);
+  }
+
+  function hgOgXmBtWalkHorizon(mod, rows, cfg, onProgress){
+    return new Promise(function(resolve){
+      if (!mod || !rows || rows.length < (cfg.warm + cfg.horizonBars + 2)){
+        resolve(mod ? mod.ogXmBotSummarize([], { lots: 0.01, spreadUsd: ASSUMED_SPREAD_USD }) : null);
+        return;
+      }
+      var i = cfg.warm;
+      var takenUntil = -1;
+      var trades = [];
+      var cap = rows.length - cfg.horizonBars;
+      function step(){
+        var n = 0;
+        while (n < 6 && i < cap){
+          n++;
+          if (i <= takenUntil){ i++; continue; }
+          var slim = null;
+          try { slim = hgOgXmBtTicketAt(rows.slice(0, i + 1), cfg); } catch (eT) { slim = null; }
+          if (slim){
+            var t = mod.ogXmBotWalkTrade(rows, i, slim, {
+              horizon: cfg.horizonBars, fillBars: cfg.horizonBars,
+              spreadUsd: ASSUMED_SPREAD_USD, lots: 0.01
+            });
+            if (t && t.state !== 'skip'){
+              trades.push(t);
+              takenUntil = i + cfg.horizonBars;
+            }
+          }
+          i++;
+        }
+        if (typeof onProgress === 'function') onProgress(cfg.label, i, cap, trades.length);
+        if (i >= cap){
+          resolve(mod.ogXmBotSummarize(trades, { lots: 0.01, spreadUsd: ASSUMED_SPREAD_USD }));
+          return;
+        }
+        setTimeout(step, 0);
+      }
+      setTimeout(step, 0);
+    });
+  }
+
+  function hgOgXmBtPaint(ui, html){
+    if (ui && ui.xmBtOut) ui.xmBtOut.innerHTML = html;
+  }
+
+  function hgOgXmRunBacktest(ui){
+    ui = ui || __og.ui;
+    if (!ui) return Promise.resolve(null);
+    if (__og.btBusy || __og.busy){
+      hgOgXmBtPaint(ui, '<div class="note">scan or backtest already running</div>');
+      return Promise.resolve(null);
+    }
+    var gr = __og.gridRows;
+    var scalpRows = gr && gr.scalp ? gr.scalp : [];
+    var swingRows = gr && gr.swing ? gr.swing : [];
+    if (!scalpRows.length && !swingRows.length){
+      hgOgXmBtPaint(ui, '<div class="note warn">Run a gold scan first — the bot backtest uses the bars that scan fetched, and there are none yet.</div>');
+      return Promise.resolve(null);
+    }
+    __og.btBusy = true;
+    if (ui.xmBt) ui.xmBt.disabled = true;
+    hgOgXmBtPaint(ui, '<div class="note">loading bot backtest…</div>');
+    var ver = '434';
+    try {
+      var w = W();
+      if (w && w.HG_BUILD && w.HG_BUILD.version) ver = String(w.HG_BUILD.version).replace(/^hg-v/, '');
+    } catch (eV) {}
+    return import('./lib/omnigold-xm-bot-backtest.mjs?v=' + ver).then(function(mod){
+      var parts = [];
+      function prog(label, i, cap, n){
+        hgOgXmBtPaint(ui, '<div class="note">replaying ' + label + ' · bar ' + i + '/' + cap
+          + ' · ' + n + ' send(s) so far — TICKET fill at setup entry, not bar close</div>'
+          + parts.join(''));
+      }
+      var chain = Promise.resolve();
+      if (scalpRows.length){
+        chain = chain.then(function(){
+          return hgOgXmBtWalkHorizon(mod, scalpRows, HORIZONS.scalp, prog).then(function(sum){
+            parts.push(mod.ogXmBotBacktestHtml(sum, 'SCALP · XM bot'));
+          });
+        });
+      }
+      if (swingRows.length){
+        chain = chain.then(function(){
+          return hgOgXmBtWalkHorizon(mod, swingRows, HORIZONS.swing, prog).then(function(sum){
+            parts.push(mod.ogXmBotBacktestHtml(sum, 'SWING · XM bot'));
+          });
+        });
+      }
+      return chain.then(function(){
+        hgOgXmBtPaint(ui, parts.join('') || '<div class="note">no horizon had enough bars</div>');
+        return parts;
+      });
+    }).catch(function(err){
+      hgOgXmBtPaint(ui, '<div class="note warn">bot backtest failed: '
+        + esc((err && err.message) || err) + '</div>');
+      return null;
+    }).then(function(out){
+      __og.btBusy = false;
+      if (ui.xmBt) ui.xmBt.disabled = false;
+      return out;
+    });
+  }
+
   /* ==================== mount / refresh ==================== */
 
   function mountOmnigold(el){
@@ -3237,16 +3387,20 @@ terse status, and never launches a first-time scan on a global refresh.
       +   '<h3>XM trader bot</h3>'
       +   '<p class="note">Sends this tab’s <b>TICKET</b> rows to your XM MT5 account through the same bridge as gold candles (<code>XM_MT5_URL</code>). '
       +   'WATCH and VETO are never sent. Crypto EXECUTE stays disabled. Default is <b>DRY RUN</b> — live lots require <code>XM_OMNIGOLD_LIVE=1</code> on Render plus the header API key matching <code>HARDGATE_API_SECRET</code>. '
-      +   '<code>HARDGATE_KILL_SWITCH</code> / <code>HARDGATE_TRADING_HALT</code> block live sends.</p>'
+      +   '<code>HARDGATE_KILL_SWITCH</code> / <code>HARDGATE_TRADING_HALT</code> block live sends. '
+      +   '<b>BACKTEST BOT</b> replays that send path on the gold bars this scan fetched: pending fill at the setup entry, stop-first, GROSS vs NET of the $'
+      +   (ASSUMED_SPREAD_USD * 2).toFixed(2) + ' round-trip spread. Unfilled is not a loss. In-sample — not a live XM statement.</p>'
       +   '<div class="note" id="ogXmStat" role="status">checking XM bot…</div>'
       +   '<div class="row" style="margin-top:8px">'
       +     '<button type="button" class="btn" id="ogXmSend">SEND STRONGEST TICKETS TO XM</button>'
       +     '<button type="button" class="btn ghost" id="ogXmRefresh">REFRESH XM STATUS</button>'
+      +     '<button type="button" class="btn ghost" id="ogXmBt">BACKTEST BOT</button>'
       +   '</div>'
       +   '<label class="note" style="display:flex;gap:8px;align-items:center;margin-top:8px">'
       +     '<input type="checkbox" id="ogXmAuto">'
       +     ' Auto-send strongest tickets after each scan (still dry-run unless the server is live)'
       +   '</label>'
+      +   '<div id="ogXmBtOut" style="margin-top:10px"></div>'
       + '</div>'
       + '<div id="ogGridOut" style="margin-top:10px"></div>'
       + '<div id="ogPool" style="margin-top:10px"></div>'
@@ -3258,7 +3412,8 @@ terse status, and never launches a first-time scan on a global refresh.
       pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards'),
       grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut'),
       xmStat: el.querySelector('#ogXmStat'), xmSend: el.querySelector('#ogXmSend'),
-      xmRefresh: el.querySelector('#ogXmRefresh'), xmAuto: el.querySelector('#ogXmAuto')
+      xmRefresh: el.querySelector('#ogXmRefresh'), xmAuto: el.querySelector('#ogXmAuto'),
+      xmBt: el.querySelector('#ogXmBt'), xmBtOut: el.querySelector('#ogXmBtOut')
     };
     if (!ui.btn || !ui.stat || !ui.cards || !ui.pool) return;
 
@@ -3328,6 +3483,7 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       if (ui.xmSend) ui.xmSend.addEventListener('click', function(){ hgOgXmSendStrongest(ui); });
       if (ui.xmRefresh) ui.xmRefresh.addEventListener('click', function(){ hgOgXmRefreshStatus(ui); });
+      if (ui.xmBt) ui.xmBt.addEventListener('click', function(){ hgOgXmRunBacktest(ui); });
       if (ui.cards){
         ui.cards.addEventListener('click', function(ev){
           var t = ev.target;
@@ -3385,6 +3541,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgPlanForHit = hgOgPlanForHit;
     window.hgOgXmSlim = hgOgXmSlim;
     window.hgOgXmStrongest = hgOgXmStrongest;
+    window.hgOgXmRunBacktest = hgOgXmRunBacktest;
     window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */

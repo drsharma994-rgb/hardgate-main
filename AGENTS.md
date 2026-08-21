@@ -91,6 +91,7 @@ Not required for local dev or core UI:
 | `XM_OMNIGOLD_LIVE=1` | Send OMNIGOLD **TICKET** rows as gold lots to the XM bridge (default dry-run). Requires `HARDGATE_API_SECRET`. Crypto execute stays disabled. |
 | `XM_OMNIGOLD_LOTS`, `XM_OMNIGOLD_MAX_LOTS` | Default / cap XM lot size (default `0.01` / `0.10`) |
 | `XM_OMNIGOLD_BOT=0` | Disable the OMNIGOLD XM order API even for dry-run |
+| OMNIGOLD **BACKTEST BOT** | In-browser replay of the XM send path on bars the scan fetched (TICKET + pending fill + stop-first, GROSS vs NET). Does not POST to XM. |
 
 ### Render daemon worker
 
@@ -217,6 +218,15 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Pass `candleSource` from `gold.src['15m']` (scalp) or `gold.src['4h']` (swing) into setup bundles for volume-trust / mixed-feed A+ behavior.
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
+
+### OMNIGOLD XM bot backtest — hg-v434
+- **BACKTEST BOT** on the OMNIGOLD XM panel replays the **send path**, not the mechanic R/HORIZON GRID (that enters at bar close). Universe is `ogXmTicketOk` TICKET rows; fill is pending at setup entry (`xmOrderType`); same-bar SL+T1 is STOP; unfilled is not a loss; GROSS and NET of the $0.30×2 gold spread.
+- In-sample on bars the scan already fetched. Session/killzone read each prefix bar; macro/news use the last scan snapshot. Not a live XM statement. Does not POST to XM. Crypto execute stays disabled.
+- Tests: `node tests/test-omnigold-xm-bot-backtest.mjs`.
+
+### OMNIGOLD XM bot — hg-v433
+- Dedicated gold-lot path: OMNIGOLD **TICKET** rows → `POST /api/xm/order`. Default DRY RUN. Live requires `XM_OMNIGOLD_LIVE=1` + `HARDGATE_API_SECRET`. WATCH/VETO never send. Crypto execute / daemon CCXT stay disabled.
+- Tests: `node tests/test-omnigold-xm-bot.mjs`.
 
 ### Setup honesty pack — hg-v430
 - **MOST PROBABLE** prefers tape-aligned, post-gate-**checked** 7/7 over a hotter UNCHECKED or against-tape row (`hgRankCryptoSetups`). Crypto CLEAN scans stamp `POST-GATE UNCHECKED` when flow/RS could not run (gold already did).
