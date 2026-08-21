@@ -952,8 +952,8 @@ console.log('== 15) zone alerts ==');
   /* the desks actually push: source contract on both wirings */
   const OP = fs.readFileSync(path.join(root, 'omnipresent.js'), 'utf8');
   const OG = fs.readFileSync(path.join(root, 'omnigold.js'), 'utf8');
-  assert(/hgAlertZones\(found\.filter/.test(OP) && /'OMNIPRESENT'\);/.test(OP),
-         'omnipresent pushes its triggered set after every scan');
+  assert(/hgAlertZones\(top\.filter/.test(OP) && /'OMNIPRESENT'\);/.test(OP),
+         'omnipresent pushes the shown-head triggered set after every scan');
   assert(/azFn\(cands\.filter/.test(OG) && /'OMNIGOLD'\);/.test(OG),
          'the gold levels panel pushes its triggered set too');
   assert(/verdict: \(c\.grade && c\.grade\.ticket\)/.test(OP),
