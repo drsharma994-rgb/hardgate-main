@@ -134,5 +134,9 @@ console.log('== the daemon cannot route an order either ==');
      'render.yaml declares no EXECUTE_CCXT_* key for an operator to fill in');
   ok(/LIVE EXECUTION IS DISABLED IN SOURCE/.test(yaml),
      'render.yaml states the constraint instead of documenting how to arm it');
+  ok(/XM_OMNIGOLD_LIVE/.test(yaml),
+     'OMNIGOLD XM live flag is declared separately from CCXT execute');
+  ok(/value:\s*"0"/.test(yaml.slice(yaml.indexOf('XM_OMNIGOLD_LIVE'))),
+     'XM_OMNIGOLD_LIVE defaults to 0 (dry-run) in render.yaml');
 }
 console.log('\n' + passed + ' passed, 0 failed');

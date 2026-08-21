@@ -58,7 +58,8 @@ function hgTradingStackPanelHtml(){
       + '</div>';
   }
   if (st.xm){
-    h += '<div class="note">Gold broker · XM ' + (st.xm.configured ? ('configured · ' + (st.xm.symbol || 'XAUUSD')) : 'not configured — set XM_MT5_URL on Render') + '</div>';
+    h += '<div class="note">Gold broker · XM ' + (st.xm.configured ? ('configured · ' + (st.xm.symbol || 'XAUUSD')) : 'not configured — set XM_MT5_URL on Render')
+      + ((st.xm.bot && st.xm.bot.live) ? ' · OMNIGOLD LIVE' : ' · OMNIGOLD dry-run') + '</div>';
   }
   if (st.execute){
     h += '<div class="note">Execute · mode ' + (st.execute.mode || 'none')

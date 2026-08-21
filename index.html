@@ -266,7 +266,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
         <button class="btn ghost header-field-btn" type="button" onclick="saveStandDownCfg()">SAVE</button>
         <span class="note" id="sdStat"></span>
       </label>
-      <label class="header-field" title="Server API key for /api/book and /api/execute mutations. Set HARDGATE_API_SECRET on Render to match. Stored in this browser only.">
+      <label class="header-field" title="Server API key for /api/book, /api/execute and /api/xm/order mutations. Set HARDGATE_API_SECRET on Render to match. Stored in this browser only.">
         <span class="header-field-label">api key</span>
         <input id="hgApiKey" type="password" placeholder="HARDGATE_API_SECRET" autocomplete="off">
         <button class="btn ghost header-field-btn" type="button" onclick="saveHgApiKey()">SAVE</button>
@@ -764,7 +764,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=432"></script>
+<script src="omnigold.js?v=433"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
 <script src="omnipresent.js?v=432"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->

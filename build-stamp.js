@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v432',
-  pack: 'dated-futures gate',
-  built: '2026-08-21T13:35:00Z',
-  note: 'Binance lists quarterlies for BTCUSDT and ETHUSDT only. TERM BASIS no longer asks the other ten pairs for contracts that do not exist — 20 dead 400s per scan gone, and pairs without dated futures read as skipped, not incomplete. Carries v431 request coalescing and the v430 setup-honesty pack.'
+  version: 'hg-v433',
+  pack: 'OMNIGOLD XM bot',
+  built: '2026-08-21T09:30:00Z',
+  note: 'OMNIGOLD tickets can be sent to an XM MT5 bridge as gold lots. Default DRY RUN. Live requires XM_OMNIGOLD_LIVE=1 + HARDGATE_API_SECRET. WATCH/VETO never send. Crypto execute and daemon CCXT stay disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

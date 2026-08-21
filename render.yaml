@@ -7,9 +7,13 @@
 # HG_DAEMON_EXECUTION_ENABLED = false, so the CCXT executor is never even
 # constructed and no broker call is possible regardless of environment.
 # Do NOT set EXECUTE_CCXT_* here — nothing would read it, and it would only
-# create the false impression that this deployment can trade. Orders are placed
-# BY HAND on Delta; this stack is signal + paper-measurement only.
+# create the false impression that this deployment can trade. Crypto orders
+# are placed BY HAND on Delta; that stack is signal + paper-measurement only.
 # Guarded by tests/test-no-live-trading.mjs (browser path AND daemon path).
+#
+# OMNIGOLD → XM gold lots is a SEPARATE path (not CCXT). Default DRY RUN.
+# Live gold orders require XM_OMNIGOLD_LIVE=1 + HARDGATE_API_SECRET + the
+# header API key. HARDGATE_KILL_SWITCH / HARDGATE_TRADING_HALT still halt.
 services:
   - type: web
     name: hardgate-main
@@ -35,6 +39,14 @@ services:
         sync: false
       - key: XM_GOLD_SYMBOL
         value: XAUUSD
+      - key: XM_OMNIGOLD_LIVE
+        value: "0"
+      - key: XM_OMNIGOLD_LOTS
+        value: "0.01"
+      - key: XM_OMNIGOLD_MAX_LOTS
+        value: "0.10"
+      - key: HARDGATE_API_SECRET
+        sync: false
       - key: CCXT_MARKET_EXCHANGE
         value: binanceusdm
       - key: CCXT_MARKET_SYMBOLS

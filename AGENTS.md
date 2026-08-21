@@ -67,7 +67,7 @@ Not required for local dev or core UI:
 | `HARDGATE_SCAN_MS` | Daemon scan interval (default 15 min) |
 | `HARDGATE_DAEMON_DRY_RUN=1` | Run daemon loop without CCXT orders |
 | `HARDGATE_STATE_FILE` | JSON conviction persistence path (default `hardgate-daemon-state.json`) |
-| `HARDGATE_KILL_SWITCH` | Manual trading halt (`1` / `true` blocks CCXT execute + daemon orders) |
+| `HARDGATE_KILL_SWITCH` | Manual trading halt (`1` / `true` blocks CCXT execute + daemon orders + OMNIGOLD XM live sends) |
 | `HARDGATE_KILL_SWITCH_PCT` | Auto halt when session PnL % falls below threshold (e.g. `-2` for −2%) |
 | `HARDGATE_TRADING_HALT` | Alias for manual halt (same as `HARDGATE_KILL_SWITCH`) |
 | `EXECUTE_TWAP_SLICES` | Split CCXT orders into N TWAP slices (default `1` = single order) |
@@ -87,6 +87,10 @@ Not required for local dev or core UI:
 | `ATOMIC_SCAN_TOP` | Top N contracts per venue for **Atomic Agents** Delta+CoinDCX pipeline (default 18) |
 | `HARDGATE_FQS_GATE`, `HARDGATE_EDGE_GATE`, `HARDGATE_FT_EDGE_GATE` | Daemon formation quality gates (see Render worker section) |
 | `/api/trading-stack/status` | Unified CCXT + OpenBB + Freqtrade + XM + execute status (see README Trading stack) |
+| `XM_MT5_URL`, `XM_MT5_TOKEN`, `XM_GOLD_SYMBOL` | XM / MT5 gold candle bridge (`/api/xm/candles`) — same URL used for OMNIGOLD orders |
+| `XM_OMNIGOLD_LIVE=1` | Send OMNIGOLD **TICKET** rows as gold lots to the XM bridge (default dry-run). Requires `HARDGATE_API_SECRET`. Crypto execute stays disabled. |
+| `XM_OMNIGOLD_LOTS`, `XM_OMNIGOLD_MAX_LOTS` | Default / cap XM lot size (default `0.01` / `0.10`) |
+| `XM_OMNIGOLD_BOT=0` | Disable the OMNIGOLD XM order API even for dry-run |
 
 ### Render daemon worker
 

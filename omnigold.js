@@ -2522,7 +2522,13 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     h += '<ul class="lst">';
     for (var i = 0; i < c.gates.length; i++) h += gateLine(c.gates[i]);
-    h += '</ul></div>';
+    h += '</ul>';
+    if (c.grade && c.grade.ticket && c.plan){
+      h += '<div class="row" style="margin-top:8px">'
+        +  '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
+        +  '</div>';
+    }
+    h += '</div>';
     return h;
   }
 
@@ -3066,6 +3072,7 @@ terse status, and never launches a first-time scan on a global refresh.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h;
+        if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){
         ui.stat.textContent = 'scan failed: ' + ((err && err.message) || err);
@@ -3075,6 +3082,138 @@ terse status, and never launches a first-time scan on a global refresh.
         __og.busy = false;
         ui.btn.disabled = false;
       });
+  }
+
+  /* ==================== XM order bot ==================== */
+
+  function hgOgXmLivePx(){
+    var gr = __og.gridRows;
+    var rows = (gr && gr.scalp && gr.scalp.length) ? gr.scalp
+             : (gr && gr.swing && gr.swing.length ? gr.swing : null);
+    if (!rows || !rows.length) return undefined;
+    var px = fin(rows[rows.length - 1] && rows[rows.length - 1].c);
+    return isFinite(px) && px > 0 ? px : undefined;
+  }
+
+  function hgOgXmSlim(c){
+    if (!c || !(c.grade && c.grade.ticket) || !c.plan) return null;
+    if (c.grade.vetoes && c.grade.vetoes.length) return null;
+    if (c.dir !== 'long' && c.dir !== 'short') return null;
+    return {
+      source: 'OMNIGOLD',
+      horizon: c.horizon,
+      kind: c.kind,
+      dir: c.dir,
+      ticket: true,
+      grade: { ticket: true, vetoes: [] },
+      plan: { entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1, t2: c.plan.t2 },
+      livePx: isFinite(fin(c.livePx)) ? fin(c.livePx) : hgOgXmLivePx(),
+      symbol: 'XAUUSD'
+    };
+  }
+
+  function hgOgXmStrongest(){
+    var rows = __og.snap && __og.snap.rows;
+    if (!rows || !rows.length) return [];
+    var out = [], seen = {};
+    var scalp = hgOgPickFor(rows, HORIZONS.scalp.label);
+    var swing = hgOgPickFor(rows, HORIZONS.swing.label);
+    [scalp, swing].forEach(function(c){
+      var slim = hgOgXmSlim(c);
+      if (!slim) return;
+      var k = ogTradeKey(c);
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(slim);
+    });
+    return out;
+  }
+
+  function hgOgXmFindByKey(key){
+    var rows = __og.snap && __og.snap.rows;
+    var i, c;
+    for (i = 0; i < (rows || []).length; i++){
+      c = rows[i];
+      if (c && ogTradeKey(c) === key) return hgOgXmSlim(c);
+    }
+    return null;
+  }
+
+  function hgOgXmSetStat(ui, text){
+    if (ui && ui.xmStat) ui.xmStat.textContent = text;
+  }
+
+  function hgOgXmPaintStatus(ui, st){
+    if (!ui || !ui.xmStat) return;
+    if (!st){ ui.xmStat.textContent = 'XM bot status unavailable'; return; }
+    var bits = [];
+    bits.push(st.configured ? ('bridge on · ' + (st.symbol || 'XAUUSD')) : 'bridge off — set XM_MT5_URL on Render');
+    bits.push(st.live ? 'LIVE lots' : 'DRY RUN');
+    bits.push((st.lots || 0.01) + ' lots (max ' + (st.maxLots || 0.10) + ')');
+    if (st.halted) bits.push('HALTED');
+    if (!st.authConfigured) bits.push('set HARDGATE_API_SECRET to send');
+    else bits.push('API key required in header');
+    if (st.last && st.last.reason) bits.push('last: ' + st.last.reason);
+    ui.xmStat.textContent = bits.join(' · ');
+  }
+
+  function hgOgXmRefreshStatus(ui){
+    if (typeof fetch !== 'function'){
+      hgOgXmSetStat(ui, 'fetch unavailable');
+      return Promise.resolve(null);
+    }
+    return fetch('/api/xm/bot', { cache: 'no-store' }).then(function(r){
+      return r.json();
+    }).then(function(st){
+      hgOgXmPaintStatus(ui, st);
+      return st;
+    }).catch(function(){
+      hgOgXmSetStat(ui, 'XM bot status failed');
+      return null;
+    });
+  }
+
+  function hgOgXmSendTickets(ui, tickets, label){
+    tickets = tickets || [];
+    if (!tickets.length){
+      hgOgXmSetStat(ui, (label || 'XM') + ': no OMNIGOLD ticket to send (WATCH / VETO are never sent)');
+      return Promise.resolve(null);
+    }
+    if (typeof fetch !== 'function'){
+      hgOgXmSetStat(ui, 'fetch unavailable');
+      return Promise.resolve(null);
+    }
+    var headers = gfn('hgApiHeaders')
+                ? gfn('hgApiHeaders')()
+                : { 'Content-Type': 'application/json' };
+    hgOgXmSetStat(ui, 'sending ' + tickets.length + ' ticket(s) to XM…');
+    return fetch('/api/xm/order', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ tickets: tickets })
+    }).then(function(r){
+      return r.json().then(function(j){ return { status: r.status, json: j }; });
+    }).then(function(out){
+      var j = out.json || {};
+      var first = (j.results && j.results[0]) || j;
+      var mode = first.dryRun ? 'DRY RUN' : 'LIVE';
+      var msg;
+      if (j.ok){
+        msg = mode + ' ok — ' + tickets.length + ' ticket(s) '
+            + (first.dryRun ? 'previewed, not sent' : 'posted to XM');
+      } else {
+        msg = mode + ' refused: ' + (j.reason || (first && first.reason) || ('HTTP ' + out.status));
+      }
+      hgOgXmSetStat(ui, msg);
+      return j;
+    }).catch(function(err){
+      hgOgXmSetStat(ui, 'XM send failed: ' + ((err && err.message) || err));
+      return null;
+    });
+  }
+
+  function hgOgXmSendStrongest(ui){
+    return hgOgXmSendTickets(ui, hgOgXmStrongest(), 'strongest');
   }
 
   /* ==================== mount / refresh ==================== */
@@ -3094,6 +3233,21 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
+      + '<div class="panel" id="ogXmBot" style="margin-top:12px">'
+      +   '<h3>XM trader bot</h3>'
+      +   '<p class="note">Sends this tab’s <b>TICKET</b> rows to your XM MT5 account through the same bridge as gold candles (<code>XM_MT5_URL</code>). '
+      +   'WATCH and VETO are never sent. Crypto EXECUTE stays disabled. Default is <b>DRY RUN</b> — live lots require <code>XM_OMNIGOLD_LIVE=1</code> on Render plus the header API key matching <code>HARDGATE_API_SECRET</code>. '
+      +   '<code>HARDGATE_KILL_SWITCH</code> / <code>HARDGATE_TRADING_HALT</code> block live sends.</p>'
+      +   '<div class="note" id="ogXmStat" role="status">checking XM bot…</div>'
+      +   '<div class="row" style="margin-top:8px">'
+      +     '<button type="button" class="btn" id="ogXmSend">SEND STRONGEST TICKETS TO XM</button>'
+      +     '<button type="button" class="btn ghost" id="ogXmRefresh">REFRESH XM STATUS</button>'
+      +   '</div>'
+      +   '<label class="note" style="display:flex;gap:8px;align-items:center;margin-top:8px">'
+      +     '<input type="checkbox" id="ogXmAuto">'
+      +     ' Auto-send strongest tickets after each scan (still dry-run unless the server is live)'
+      +   '</label>'
+      + '</div>'
       + '<div id="ogGridOut" style="margin-top:10px"></div>'
       + '<div id="ogPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="ogCards" style="margin-top:12px"></div>'
@@ -3102,7 +3256,9 @@ terse status, and never launches a first-time scan on a global refresh.
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
       pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards'),
-      grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut')
+      grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut'),
+      xmStat: el.querySelector('#ogXmStat'), xmSend: el.querySelector('#ogXmSend'),
+      xmRefresh: el.querySelector('#ogXmRefresh'), xmAuto: el.querySelector('#ogXmAuto')
     };
     if (!ui.btn || !ui.stat || !ui.cards || !ui.pool) return;
 
@@ -3161,6 +3317,29 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     __og.ui = ui;
     hgOgInjectPickStyles();
+    try {
+      var autoOn = false;
+      try { autoOn = localStorage.getItem('hg_og_xm_auto') === '1'; } catch (eA) {}
+      if (ui.xmAuto){
+        ui.xmAuto.checked = autoOn;
+        ui.xmAuto.addEventListener('change', function(){
+          try { localStorage.setItem('hg_og_xm_auto', ui.xmAuto.checked ? '1' : '0'); } catch (eS) {}
+        });
+      }
+      if (ui.xmSend) ui.xmSend.addEventListener('click', function(){ hgOgXmSendStrongest(ui); });
+      if (ui.xmRefresh) ui.xmRefresh.addEventListener('click', function(){ hgOgXmRefreshStatus(ui); });
+      if (ui.cards){
+        ui.cards.addEventListener('click', function(ev){
+          var t = ev.target;
+          if (!t || !t.getAttribute) return;
+          if (!/\bog-xm-send\b/.test(t.className || '')) return;
+          var key = t.getAttribute('data-og-key');
+          var slim = hgOgXmFindByKey(key);
+          hgOgXmSendTickets(ui, slim ? [slim] : [], 'ticket');
+        });
+      }
+      hgOgXmRefreshStatus(ui);
+    } catch (eXm) {}
 
     var w = W(), missing = [];
     if (typeof fetch !== 'function') missing.push('fetch');
@@ -3204,6 +3383,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.ogTradeKey = ogTradeKey;
     window.hgOgEvaluate = hgOgEvaluate;
     window.hgOgPlanForHit = hgOgPlanForHit;
+    window.hgOgXmSlim = hgOgXmSlim;
+    window.hgOgXmStrongest = hgOgXmStrongest;
     window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
