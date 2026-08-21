@@ -98,6 +98,7 @@ const el = {
       '#omniRun': { disabled: false, addEventListener: function(){} },
       '#omniStat': { textContent: '' },
       '#omniWarn': { textContent: '', style: { display: 'none' } },
+      '#omniSide': { innerHTML: '' },
       '#omniCards': { innerHTML: '' },
       '#omniPool': { innerHTML: '' },
       '#omniMatrix': { innerHTML: '' },

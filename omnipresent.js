@@ -690,7 +690,7 @@
         });
       })
       .then(function (res){
-        if (!res) return;
+        if (!res) return opRefreshSide(ui);
         __op.ran = true;
         __op.snap = { at: Date.now(), rows: res.found };
         var trig = res.top.filter(function (c){ return c.status === 'TRIGGERED'; }).length;
@@ -699,11 +699,13 @@
                       + ' · ' + trig + ' triggered · ' + tick + ' ticket(s)'
                       + (res.failed ? ' · ' + res.failed + ' feeds failed' : '');
         opStat(ui, __op.lastStat);
-        var h = '', closes = opNextCloses(Date.now(), 3);
-        h += '<div class="note">Triggers evaluate at 1h bar closes: <b>' + closes.join(' · ') + '</b>'
-          + ' — highest-frequency reversal windows: London 07–10 UTC, New York 13–16 UTC.</div>';
-        for (var i = 0; i < res.top.length; i++) h += opCard(res.top[i]);
-        ui.cards.innerHTML = h || '<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>';
+        return opRefreshSide(ui).then(function (sideRead){
+          var h = '', closes = opNextCloses(Date.now(), 3);
+          h += '<div class="note">Triggers evaluate at 1h bar closes: <b>' + closes.join(' · ') + '</b>'
+            + ' — highest-frequency reversal windows: London 07–10 UTC, New York 13–16 UTC.</div>';
+          for (var i = 0; i < res.top.length; i++) h += opCard(res.top[i], sideRead);
+          ui.cards.innerHTML = h || '<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>';
+        });
       })
       .catch(function (e){
         opStat(ui, 'scan failed: ' + ((e && e.message) || e));
@@ -731,10 +733,38 @@
     return h ? '<div>' + h + '</div>' : '';
   }
 
-  function opCard(c){
+  function opRefreshSide(ui){
+    var sideFn = gfn('hgOmniMarketSide');
+    var htmlFn = gfn('hgOmniMarketSideHtml');
+    var paint = function (){
+      if (!sideFn || !htmlFn) return null;
+      var pic = null, fng = null;
+      try{ pic = W.__hgMarketPicture || null; }catch(e){}
+      try{ fng = (W.S && W.S.fng) || null; }catch(e2){}
+      var read = sideFn(pic, fng);
+      try{ if (ui && ui.side) ui.side.innerHTML = htmlFn(read); }catch(e3){}
+      return read;
+    };
+    try{
+      if (W && W.__hgMarketPicture) return Promise.resolve(paint());
+      if (W && typeof W.marketPictureCheck === 'function'){
+        return Promise.resolve(W.marketPictureCheck()).then(function (r){
+          try{ W.__hgMarketPicture = r; }catch(e){}
+          return paint();
+        }).catch(function (){ return paint(); });
+      }
+    }catch(e4){}
+    return Promise.resolve(paint());
+  }
+
+  function opCard(c, sideRead){
     var badge = (c.grade && c.grade.ticket)
       ? '<span class="gpip ok">TICKET</span>'
       : ((c.grade && c.grade.vetoes && c.grade.vetoes.length) ? '<span class="gpip bad">VETO</span>' : '<span class="gpip">WATCH</span>');
+    if (sideRead && (sideRead.side === 'long' || sideRead.side === 'short') && c.dir){
+      if (String(c.dir).toLowerCase() === sideRead.side) badge += ' <span class="gpip ok">WITH TAPE</span>';
+      else badge += ' <span class="gpip bad">AGAINST TAPE</span>';
+    }
     var st = (c.status === 'TRIGGERED')
       ? '<span class="gpip ok">TRIGGERED — rejection closed, entry at market</span>'
       : '<span class="gpip">ARMED — level not yet swept, be there first</span>';
@@ -777,9 +807,10 @@
       + '<b>Anticipation, not prophecy</b> — these are the levels where reversals have the best structural odds; the forward pool is the judge.</div>'
       + '<div class="note" id="opStat">idle — press RUN.</div>'
       + '<div class="row" style="margin-top:8px"><button class="btn" id="opRun">RUN OMNIPRESENT SCAN</button></div>'
+      + '<div id="opSide"></div>'
       + '<div class="cards" id="opCards" style="margin-top:12px"></div>'
       + '</div>';
-    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), cards: el.querySelector('#opCards') };
+    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), side: el.querySelector('#opSide'), cards: el.querySelector('#opCards') };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __op.ui = ui;
     var missing = [];
@@ -788,6 +819,7 @@
     if (!gfn('hgOmniGrade')) missing.push('hgOmniGrade');
     if (missing.length) opStat(ui, 'missing globals: ' + missing.join(', ') + ' — the scan degrades honestly where it can.');
     ui.btn.addEventListener('click', function (){ return runScan(ui); });
+    opRefreshSide(ui);
   }
 
   function refreshOmnipresent(){

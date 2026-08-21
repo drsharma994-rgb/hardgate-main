@@ -2632,6 +2632,116 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   }
   function pill(txt, cls){ return '<span class="gpip ' + (cls || '') + '">' + esc(txt) + '</span>'; }
 
+  /* Desk side — TAKE LONGS / TAKE SHORTS / STAND ASIDE.
+     Two gates, no composite score. Tape is the MARKET PICTURE majority
+     (4H EMA cascade on BTC/ETH/SOL/GOLD). Sentiment is BIAS S2 Fear & Greed
+     (block fresh longs ≥80, fresh shorts ≤20). A missing F&G is UNCHECKED,
+     not a silent pass, and does not veto a clear tape. Extreme sentiment
+     stands you aside — it does not flip you to the other side. */
+  var OMNI_FNG_LONG_VETO = 80;
+  var OMNI_FNG_SHORT_VETO = 20;
+  function hgOmniMarketSide(picture, fng){
+    picture = picture || {};
+    var longs = +picture.longs || 0;
+    var shorts = +picture.shorts || 0;
+    var mixed = +picture.mixed || 0;
+    var total = longs + shorts + mixed;
+    var tape = 'mixed';
+    var tapePass = null;
+    var tapeWhy = 'market picture not read yet — no side until the 4H cascade is in';
+    if (total > 0){
+      if (longs > shorts && longs >= Math.ceil(total / 2) + 1) tape = 'long';
+      else if (shorts > longs && shorts >= Math.ceil(total / 2) + 1) tape = 'short';
+      tapePass = tape !== 'mixed';
+      tapeWhy = (tape === 'long' ? 'LONG-LEANING' : tape === 'short' ? 'SHORT-LEANING' : 'MIXED — no clear lean')
+              + ' (' + longs + ' long · ' + shorts + ' short · ' + mixed + ' mixed of ' + total
+              + ' — 4H EMA cascade on BTC/ETH/SOL/GOLD, same majority as MARKET PICTURE)';
+    } else if (picture.verdict){
+      var v = String(picture.verdict).toUpperCase();
+      if (v.indexOf('LONG-LEANING') >= 0) tape = 'long';
+      else if (v.indexOf('SHORT-LEANING') >= 0) tape = 'short';
+      tapePass = tape !== 'mixed';
+      tapeWhy = String(picture.verdict);
+    }
+    var fv = (fng && isFinite(+fng.v)) ? +fng.v : null;
+    var sentPass = null;
+    var sentWhy = 'F&G unavailable — sentiment not read, not a pass';
+    if (fv !== null){
+      var lab = fng.c ? (' ' + fng.c) : '';
+      if (tape === 'long' && fv >= OMNI_FNG_LONG_VETO){
+        sentPass = false;
+        sentWhy = fv + lab + ' — BIAS S2 blocks fresh longs at ≥' + OMNI_FNG_LONG_VETO;
+      } else if (tape === 'short' && fv <= OMNI_FNG_SHORT_VETO){
+        sentPass = false;
+        sentWhy = fv + lab + ' — BIAS S2 blocks fresh shorts at ≤' + OMNI_FNG_SHORT_VETO;
+      } else {
+        sentPass = true;
+        sentWhy = fv + lab + ' — not extreme against this side (longs veto ≥'
+                + OMNI_FNG_LONG_VETO + ', shorts veto ≤' + OMNI_FNG_SHORT_VETO + ')';
+      }
+    }
+    var side = 'aside';
+    var headline = 'STAND ASIDE';
+    if (tapePass === true && sentPass !== false){
+      side = tape;
+      headline = tape === 'long' ? 'TAKE LONGS' : 'TAKE SHORTS';
+    }
+    return {
+      side: side, headline: headline, tape: tape,
+      longs: longs, shorts: shorts, mixed: mixed, total: total, fng: fv,
+      gates: [
+        { key: 'tape', pass: tapePass, hard: true, why: tapeWhy },
+        { key: 'sentiment', pass: sentPass, hard: true, why: sentWhy }
+      ]
+    };
+  }
+  function hgOmniMarketSideHtml(read){
+    if (!read) return '';
+    var cls = read.side === 'long' ? 'long' : read.side === 'short' ? 'short' : 'aside';
+    var h = '<div class="omni-side ' + cls + '" role="status">';
+    h += '<div class="omni-side-call">' + esc(read.headline) + '</div>';
+    h += '<ul class="lst">';
+    var gs = read.gates || [];
+    for (var i = 0; i < gs.length; i++) h += gateLine(gs[i]);
+    h += '</ul>';
+    h += '<div class="note">';
+    if (read.side === 'aside'){
+      h += 'No side to take until tape and sentiment agree. Cards still render. This is not a ticket.';
+    } else {
+      h += 'Take <b>' + esc(read.side.toUpperCase()) + '</b> setups. The other side still renders, stamped AGAINST TAPE — not hidden. This is not itself a ticket.';
+    }
+    h += '</div></div>';
+    return h;
+  }
+  function omniFng(){
+    try{
+      if (typeof window !== 'undefined' && window.S && window.S.fng) return window.S.fng;
+    }catch(e){}
+    return null;
+  }
+  function omniPaintSide(ui, read){
+    try{ if (ui && ui.side) ui.side.innerHTML = hgOmniMarketSideHtml(read); }catch(e){}
+    return read;
+  }
+  function omniRefreshSide(ui){
+    var paint = function(){
+      var pic = null;
+      try{ pic = (typeof window !== 'undefined' && window.__hgMarketPicture) || null; }catch(e){}
+      return omniPaintSide(ui, hgOmniMarketSide(pic, omniFng()));
+    };
+    try{
+      if (typeof window !== 'undefined' && window.__hgMarketPicture)
+        return Promise.resolve(paint());
+      if (typeof window !== 'undefined' && typeof window.marketPictureCheck === 'function'){
+        return Promise.resolve(window.marketPictureCheck()).then(function(r){
+          try{ window.__hgMarketPicture = r; }catch(e){}
+          return paint();
+        }).catch(function(){ return paint(); });
+      }
+    }catch(e2){}
+    return Promise.resolve(paint());
+  }
+
   /* 62th, 23th, 2th. Ordinals are not "th" for everything. */
   function ordinal(n){
     var v = Math.round(n), t = v % 100, u = v % 10;
@@ -2659,7 +2769,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return '<li>' + pill(mark, cls) + ' <b>' + esc(g.key) + '</b> <span class="dim">' + esc(g.why) + '</span></li>';
   }
 
-  function setupCard(c){
+  function setupCard(c, sideRead){
     var head = esc(c.base || c.sym) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase());
     var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
@@ -2667,6 +2777,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       /* Evidence coverage sits next to the verdict, not buried in the list:
          a 4/12 ticket and a 12/12 ticket are not the same claim. */
       badge += ' ' + pill(ev + '/' + tot + ' checks', ev * 2 >= tot ? '' : 'bad');
+    }
+    if (sideRead && (sideRead.side === 'long' || sideRead.side === 'short') && c.dir){
+      if (String(c.dir).toLowerCase() === sideRead.side) badge += ' ' + pill('WITH TAPE', 'ok');
+      else badge += ' ' + pill('AGAINST TAPE', 'bad');
     }
     if (c.grade.ticket && c.grade.degraded && c.grade.degraded.length){
       badge += ' <span class="dim">· ' + esc(c.grade.degraded.join(', ')) + ' unchecked</span>';
@@ -3678,7 +3792,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
             : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
           omniRememberPaint(ui);
-          return;
+          return omniRefreshSide(ui);
         }
         /* COLLAPSE DUPLICATE TRADES.
 
@@ -3724,6 +3838,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           omniSafeStat(ui, __omni.lastStat);
         }
 
+        /* Side banner first so WITH TAPE / AGAINST TAPE stamps wait for the
+           picture when the cache is cold. Empty desks still get the call. */
+        return omniRefreshSide(ui).then(function(sideRead){
         var h = '';
         /* A CARD WHOSE LEVELS ARE DEAD IS NOT A CARD — same rule as the gold
            desk, for the same reason. level-fresh already vetoes a plan the
@@ -3748,7 +3865,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           }
           var isTk = !!(collapsed[i].grade && collapsed[i].grade.ticket);
           if (isTk || shown < CARD_RENDER_MAX){
-            try { h += setupCard(collapsed[i]); shown++; }
+            try { h += setupCard(collapsed[i], sideRead); shown++; }
             catch (eC){
               try{ console.warn('omniroute card render skipped', collapsed[i] && collapsed[i].sym, eC); }catch(eC2){}
             }
@@ -3783,6 +3900,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
         omniRememberPaint(ui);
+        });
       }catch(eRender){
         if (__omni.lastCardsHtml) omniKeepLast(ui, 'scan finished but render failed: ' + omniErrMsg(eRender));
         else omniSafeStat(ui, 'scan finished but render failed: ' + omniErrMsg(eRender));
@@ -3862,6 +3980,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
       + '<div class="note" id="omniStat">idle — press RUN. Full coverage is ~200+ Delta contracts plus CoinDCX, so expect a few minutes; progress shows per pass.</div>'
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
+      + '<div id="omniSide"></div>'
       + '<div id="omniGridOut" style="margin-top:10px"></div>'
       + '<div id="omniPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="omniCards" style="margin-top:12px"></div>'
@@ -3891,7 +4010,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     var ui = {
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
-      warn: el.querySelector('#omniWarn'), cards: el.querySelector('#omniCards'),
+      warn: el.querySelector('#omniWarn'), side: el.querySelector('#omniSide'), cards: el.querySelector('#omniCards'),
       pool: el.querySelector('#omniPool'),
       matrix: el.querySelector('#omniMatrix'),
       ep: el.querySelector('#omniEp'), tok: el.querySelector('#omniTok'),
@@ -3912,6 +4031,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         try { ui.pool.innerHTML = __omni.lastPoolHtml; } catch (eP) {}
       }
     }
+    omniRefreshSide(ui);
 
     /* The parameter grid runs on bars the scan already fetched, so it costs
        no network — but it does re-run the walk-forward nine times, so it is a
@@ -4033,6 +4153,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniNeedText = needText;
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
+    window.hgOmniMarketSide = hgOmniMarketSide;
+    window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;
     window.hgOmniPlanForHit = hgOmniPlanForHit;
     window.hgOmniConsensusVoters = hgOmniConsensusVoters;

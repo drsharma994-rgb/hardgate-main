@@ -214,6 +214,12 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIROUTE / OMNIPRESENT market side — hg-v428
+- Both desks print **TAKE LONGS** / **TAKE SHORTS** / **STAND ASIDE** from two gates (not a score): **tape** = MARKET PICTURE majority (4H EMA cascade on BTC/ETH/SOL/GOLD); **sentiment** = BIAS S2 Fear & Greed (block fresh longs at ≥80, fresh shorts at ≤20). Extreme sentiment stands aside — it does not flip you to the other side. Missing F&G is UNCHECKED and does not veto a clear tape.
+- Cards against the side still render, stamped **AGAINST TAPE**. The banner is not a ticket. Header MARKET PICTURE stays informational; the desks make the call. Chrome-min does not hide the banner.
+- Shared engine: `hgOmniMarketSide` / `hgOmniMarketSideHtml` in `omniroute.js`. Picture cached as `window.__hgMarketPicture`.
+- Tests: `node tests/test-omni-market-side.mjs`.
+
 ### Android app — hg-v427
 - The desk is **not rewritten in Kotlin**. `android/` is a full-screen WebView launcher over **https://hardgate-main.onrender.com** (JS on, HTTPS only, no `JavascriptInterface`, no file://). A Render deploy is the next app launch.
 - Sideload APK from GitHub Actions **Android APK** (`assembleDebug` → `app-debug.apk`, id `app.hardgate.desk.debug`). Do not commit a keystore.

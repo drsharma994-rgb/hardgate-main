@@ -131,6 +131,17 @@ hr.sep{border:0;border-top:1px solid var(--line);margin:10px 0}
 .card .gates{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
 .gpip{font-size:10px;letter-spacing:.06em;padding:2px 6px;border-radius:3px;border:1px solid var(--line);color:var(--txt);background:rgba(15,23,42,.03);font-weight:600}
 .gpip.ok{color:var(--pass);border-color:rgba(53,192,142,.5);background:rgba(53,192,142,.08)}
+.gpip.bad{color:var(--veto);border-color:rgba(194,65,12,.5);background:rgba(194,65,12,.08)}
+.omni-side{margin:10px 0 12px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius,8px);background:var(--panel2)}
+.omni-side-call{font-family:var(--disp);font-size:22px;font-weight:800;letter-spacing:.1em;margin-bottom:8px}
+.omni-side.long{border-color:var(--long);border-left:4px solid var(--long)}
+.omni-side.long .omni-side-call{color:var(--long)}
+.omni-side.short{border-color:var(--short);border-left:4px solid var(--short)}
+.omni-side.short .omni-side-call{color:var(--short)}
+.omni-side.aside{border-color:var(--line-strong)}
+.omni-side.aside .omni-side-call{color:var(--mut)}
+.omni-side ul.lst{margin:6px 0 8px;padding:0;list-style:none}
+.omni-side ul.lst li{padding:2px 0}
 .card .plan{font-size:11px;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:7px 9px;margin-top:8px;line-height:1.6;font-weight:500}
 .card .plan b{color:var(--gold);font-weight:700}
 .card .toTrade{margin-top:8px;width:100%;background:transparent;border:1px solid var(--gold-dim);color:var(--gold);border-radius:4px;padding:6px;font-size:11px;letter-spacing:.08em}
@@ -734,7 +745,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
 <script src="hg-mechanics.js?v=427"></script>
 <script src="./hg-gates.js?v=427"></script>
-<script src="omniroute.js?v=427"></script>
+<script src="omniroute.js?v=428"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=47"></script>
@@ -755,7 +766,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
 <script src="omnigold.js?v=427"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js"></script>
+<script src="omnipresent.js?v=428"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -8394,6 +8405,7 @@ async function runMarketPictureUI(){
   if (el) el.textContent = 'checking\u2026';
   try{
     const r = await marketPictureCheck();
+    try{ window.__hgMarketPicture = r; }catch(ePic){}
     if (el) el.textContent = r.verdict;
     if (detailEl) detailEl.textContent = '(' + r.detail.join(' \u00b7 ') + ' \u2014 4H EMA cascade breadth across BTC/ETH/SOL/GOLD, informational only, not a trade signal)';
   }catch(e){

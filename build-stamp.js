@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v427',
-  pack: 'Android app: live desk in a full-screen WebView',
-  built: '2026-08-20T17:50:00Z',
-  note: 'APK is a launcher over https://hardgate-main.onrender.com (JS on, HTTPS only, no JS bridge). Chrome can Install app via 192/512 PNG icons. Desk deploys do not need a new APK. v426 chrome-min and v425 OMNIROUTE keep-last-scan stay.'
+  version: 'hg-v428',
+  pack: 'OMNIROUTE / OMNIPRESENT market side',
+  built: '2026-08-21T04:20:00Z',
+  note: 'Desks print TAKE LONGS / TAKE SHORTS / STAND ASIDE from MARKET PICTURE majority + BIAS S2 F&G. Opposite-side cards still render, stamped AGAINST TAPE. v427 Android WebView launcher stays.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
