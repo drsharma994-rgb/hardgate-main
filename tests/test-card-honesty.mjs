@@ -51,7 +51,7 @@ console.log('== 1. a card that says TICKET cannot show VETO rows ==');
   }
   /* Behavioural: an info gate that failed must not be marked like a veto. */
   const gl = new Function('g', 'pill', 'esc', ROUTE.slice(ROUTE.indexOf('function gateLine(g){'),
-    ROUTE.indexOf('function setupCard(c){')).replace(/^function gateLine\(g\)\{/, '') .replace(/\}\s*$/, ''));
+    ROUTE.indexOf('function setupCard(c')).replace(/^function gateLine\(g\)\{/, '') .replace(/\}\s*$/, ''));
   const pill = (t) => '[' + t + ']';
   const esc = s => String(s);
   ok(gl({ pass: false, info: true, key: 'adx-trend', why: 'x' }, pill, esc).indexOf('[AGAINST]') >= 0,
