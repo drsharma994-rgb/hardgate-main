@@ -492,10 +492,15 @@ async function binanceFundingHist(symbol, limit){
 async function binanceSpotTakerFlow(symbol, interval, limit){
   try{
     if (!symbol) return null;
+    symbol = String(symbol).toUpperCase();
     interval = interval || '1h';
     limit = Math.max(8, Math.min(500, limit || 25));
     const key = 'spotTaker|' + symbol + '|' + interval + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    /* Spot flow needs a spot pair. A verified non-member costs no request;
+       an unreachable list is not a verdict, so we still try. */
+    const spot = await binanceSpotSymbols();
+    if (spot && !spot[symbol]) return null;
     const url = BINANCE_SPOT + '/api/v3/klines?symbol=' + encodeURIComponent(symbol)
       + '&interval=' + encodeURIComponent(interval) + '&limit=' + limit;
     const raw = await __binFetchJson(url);
@@ -509,6 +514,43 @@ async function binanceSpotTakerFlow(symbol, interval, limit){
       .sort(function(a,b){ return a.t - b.t; });
     if (series.length < 8) return null;
     return __binCachePut(key, { latest: series[series.length - 1], series: series });
+  }catch(e){ return null; }
+}
+
+/* SPOT MEMBERSHIP -> { SYMBOL: true }. A perp is not automatically a spot pair.
+
+   THE DEFECT THIS EXISTS FOR. binanceSpotTakerFlow asked api.binance.com for
+   klines on whatever symbol BRAIN handed it, and BRAIN hands it perp symbols.
+   Plenty of perps have no spot listing at all, so the request could only come
+   back
+
+     400 {"code":-1121,"msg":"Invalid symbol."}
+
+   — verified live on MONUSDT, which trades as a perp and does not appear in
+   the spot symbol list. Same shape as the dated-futures gate above and as
+   hgDeskBinanceSym in desk-scan-universe.js: asking a venue about an
+   instrument it does not list.
+
+   Read from /api/v3/ticker/price, NOT /api/v3/exchangeInfo. The spot
+   exchangeInfo payload measured 17.5 MB, which has no business in a browser;
+   ticker/price answers the same membership question in 156 KB, is one
+   request, and __binFetchJson coalesces it while the 60s cache holds the
+   parsed map.
+
+   null means the list was UNREACHABLE — callers attempt anyway rather than
+   invent a "not listed". An outage is not a verdict. */
+async function binanceSpotSymbols(){
+  try{
+    const key = 'spotSymbols';
+    const hit = __binCacheGet(key); if (hit !== undefined) return hit;
+    const raw = await __binFetchJson(BINANCE_SPOT + '/api/v3/ticker/price');
+    if (!Array.isArray(raw) || !raw.length) return null;
+    const out = {};
+    for (let i = 0; i < raw.length; i++){
+      const r = raw[i];
+      if (r && r.symbol) out[String(r.symbol).toUpperCase()] = true;
+    }
+    return __binCachePut(key, out);
   }catch(e){ return null; }
 }
 

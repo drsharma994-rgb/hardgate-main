@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v434',
-  pack: 'OMNIGOLD XM bot backtest',
-  built: '2026-08-21T10:30:00Z',
-  note: 'BACKTEST BOT on OMNIGOLD replays the XM send path: TICKET rows only, pending fill at setup entry, stop-first, GROSS vs NET of the gold spread. Unfilled is not a loss. In-sample on fetched bars — not a live XM statement. Crypto execute stays disabled.'
+  version: 'hg-v435',
+  pack: 'spot-membership gate',
+  built: '2026-08-21T14:20:00Z',
+  note: 'A perp is not a spot pair. BRAIN spot-flow no longer asks Binance spot for perp-only symbols like MONUSDT. Membership from ticker/price (156KB), not spot exchangeInfo (17.5MB). Carries the v434 OMNIGOLD XM bot backtest, the v432 dated-futures gate and v431 request coalescing.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
