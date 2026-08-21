@@ -172,6 +172,34 @@ async function hgDeskLoadUniverse(opts){
   };
 }
 
+/* item.sym is the VENUE's contract code, and only Binance's own codes mean
+   anything to Binance. The Binance leg here used item.sym first and fell back
+   to base+USDT only when sym was missing — so any CoinDCX row that reached it
+   asked fapi for symbol=B-XRP_USDT, which Binance can never resolve. Observed
+   live: B-XRP_USDT and B-SOL_USDT 4h klines, both dead on arrival.
+
+   The venue leg is preferred and unchanged. This is the fallback taken when
+   xuCandles has not loaded yet (script order) or when the row carries no
+   exchange tag at all — and on that path the only symbol Binance understands
+   is the one built from the base asset, exactly as xuniverse.js's
+   binanceCandleFallback() already does. item.sym is used ONLY when the row is
+   already a Binance row. */
+function hgDeskBinanceSym(item){
+  if (!item) return null;
+  if (item.exchange === 'binance' && item.sym) return String(item.sym).toUpperCase();
+  var base = item.base ? String(item.base).toUpperCase() : null;
+  if (base) return base + 'USDT';
+  /* No base tag: derive it from the venue code the same way xuniverse does
+     (B-XRP_USDT -> XRP, XRPUSD -> XRP) rather than shipping the code as-is. */
+  var sym = item.sym ? String(item.sym).toUpperCase() : '';
+  if (!sym) return null;
+  var m = sym.match(/^B-([A-Z0-9]+)_USDT$/);        /* CoinDCX futures */
+  if (m) return m[1] + 'USDT';
+  m = sym.match(/^([A-Z0-9]+)USDT?$/);              /* Delta / Binance shapes */
+  if (m) return m[1] + 'USDT';
+  return null;
+}
+
 async function hgDeskFetchKlines(item, tf, n){
   try{
     if (item && item.exchange && item.exchange !== 'binance' && typeof G.xuCandles === 'function'){
@@ -179,8 +207,7 @@ async function hgDeskFetchKlines(item, tf, n){
       return Array.isArray(rows) ? rows : [];
     }
     if (typeof G.binanceKlines === 'function'){
-      var sym = (item && item.sym) ? item.sym : null;
-      if (!sym && item && item.base) sym = item.base + 'USDT';
+      var sym = hgDeskBinanceSym(item);
       if (sym){
         rows = await G.binanceKlines(sym, tf, n);
         return Array.isArray(rows) ? rows : [];
@@ -200,6 +227,7 @@ try{
   G.hgDeskLoadDeltaCoinDCX = hgDeskLoadDeltaCoinDCX;
   G.hgDeskFilterVenues = hgDeskFilterVenues;
   G.hgDeskFetchKlines = hgDeskFetchKlines;
+  G.hgDeskBinanceSym = hgDeskBinanceSym;
 }catch(e){}
 
 })();

@@ -146,7 +146,15 @@ console.log('== heuristic vision does not buy MOST PROBABLE ==');
 
 console.log('== cache stamp ==');
 {
-  ok(HG_VER === 'hg-v430', 'build stamp is hg-v430 (got ' + HG_VER + ')');
+  /* Not pinned to a literal. helpers/build-version.mjs exists precisely
+     because 30 files once hardcoded the cache string and every release
+     needed 30 edits — this file was the 31st, and it broke the suite one
+     release later. What this pack actually needs is that the stamp was
+     bumped for it and never walks backwards; sw.js matching is the real
+     drift guard and is asserted below. */
+  const verNum = Number(String(HG_VER).replace(/^hg-v/, ''));
+  ok(Number.isFinite(verNum) && verNum >= 430,
+     'build stamp is hg-v430 or later (got ' + HG_VER + ')');
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches');
 }
 

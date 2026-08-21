@@ -43,6 +43,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { connectSrcByFile } from './helpers/csp.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url)) + '/..';
 let passed = 0;
@@ -112,13 +113,17 @@ console.log('\n== the vendored files are real builds that register the right glo
 
 console.log('\n== 2. the CSP permits what the app does, and nothing more ==');
 {
+  const CSP_BY_FILE = new Map(connectSrcByFile());
   for (const [n, src] of [['scripts/server.mjs', SRV], ['vercel.json', VJS]]){
     const csp = /script-src[^;"]*/.exec(src);
     ok(!!csp, n + ' declares a script-src');
     ok(!/unpkg|jsdelivr/.test(csp[0]), n + ' script-src allows no CDN host: ' + csp[0].trim());
     ok(/'self'/.test(csp[0]), 'and still allows same-origin scripts');
-    /* THE DEFECT: EmailJS posts to api.emailjs.com and connect-src omitted it. */
-    ok(/connect-src[^;"]*https:\/\/api\.emailjs\.com/.test(src),
+    /* THE DEFECT: EmailJS posts to api.emailjs.com and connect-src omitted it.
+       server.mjs now builds the directive from a CONNECT_SRC array so the two
+       files can be diffed token for token, so the effective set is read
+       through the helper rather than grepped out of the raw source. */
+    ok(CSP_BY_FILE.get(n).has('https://api.emailjs.com'),
        n + ' connect-src permits api.emailjs.com, which every email alert needs');
     ok(/object-src 'none'/.test(src) && /frame-ancestors 'none'/.test(src),
        n + ' keeps the rest of the policy intact');

@@ -69,6 +69,43 @@ const MIME = {
   '.map':  'application/json; charset=utf-8',
 };
 
+/* THE ONE connect-src ALLOWLIST.
+
+   Every host the browser is allowed to reach. It lived as one long inline
+   string here and a second hand-maintained copy in vercel.json, and the two
+   drifted: server.mjs gained api.hyperliquid.xyz, api.worldmonitor.app and
+   generativelanguage.googleapis.com, vercel.json never did — so the same
+   commit worked on Render and lost three feeds on Vercel, silently, because
+   a CSP block is a console message and not a failed test.
+
+   It is a list now, one host per line with the module that needs it, and
+   tests/test-csp-allowlist.mjs asserts vercel.json carries exactly the same
+   set. Adding a host to one file and not the other fails the suite. */
+const CONNECT_SRC = [
+  "'self'",
+  'https://api.emailjs.com',                  /* alerts.js — email pushes */
+  'https://api.india.delta.exchange',         /* xuniverse.js, positioning.js */
+  'https://api.delta.exchange',
+  'https://fapi.binance.com',                 /* binance.js */
+  'https://api.binance.com',
+  'https://www.deribit.com',                  /* deribit-vol.js — DVOL implied-vol regime */
+  'https://mempool.space',                    /* onchain.js — five BTC on-chain legs */
+  'https://api.gold-api.com',                 /* macro.js gold spot */
+  'https://api.frankfurter.app',              /* macro.js FX */
+  'https://api.frankfurter.dev',
+  'https://api.alternative.me',               /* regime.js Fear & Greed */
+  'https://api.coingecko.com',                /* regime.js global cap */
+  'https://stablecoins.llama.fi',             /* regime.js stablecoin supply */
+  'https://home.treasury.gov',                /* macro.js yield curve */
+  'https://api.hyperliquid.xyz',              /* worldmonitor-desk.js */
+  'https://api.worldmonitor.app',
+  'https://generativelanguage.googleapis.com',/* chart-vision-desk.js — Gemini */
+  'wss://public-socket.india.delta.exchange', /* delta live ticks */
+  'wss://socket.india.delta.exchange',
+  'wss://fstream.binance.com',                /* liqs.js — !forceOrder liquidation tape */
+  'https://ntfy.sh',                          /* tabalerts.js push */
+].join(' ');
+
 /* vercel.json parity — security headers on every response */
 function baseHeaders(res){
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -83,7 +120,7 @@ function baseHeaders(res){
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data:",
-    "connect-src 'self' https://api.emailjs.com https://api.india.delta.exchange https://api.delta.exchange https://fapi.binance.com https://api.binance.com https://api.gold-api.com https://api.frankfurter.app https://api.frankfurter.dev https://api.alternative.me https://api.coingecko.com https://stablecoins.llama.fi https://home.treasury.gov https://api.hyperliquid.xyz https://api.worldmonitor.app https://generativelanguage.googleapis.com wss://public-socket.india.delta.exchange wss://socket.india.delta.exchange https://ntfy.sh",
+    "connect-src " + CONNECT_SRC,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "object-src 'none'",

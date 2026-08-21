@@ -171,15 +171,47 @@ async function __yahooViaProxy(url){
   try{ return await __macroFetchJson(url); }catch(e){ return null; }
 }
 
+/* "FRED IS NOT CONFIGURED" IS AN ANSWER, AND IT DOES NOT CHANGE.
+
+   /api/fred replies 503 {error:'fred not configured'} when the server has no
+   FRED_API_KEY. __macroCachePut only stores truthy values, so that answer was
+   never remembered: five call sites × repeated warms re-asked on every pass
+   and a single page load fired ~25 requests at an endpoint that had already
+   said no. Every one of them logged a console error, which buried the real
+   failures underneath.
+
+   FRED_API_KEY is read from the process environment at boot, so within one
+   browser session the answer genuinely cannot change — the latch is sticky
+   for the session, the same discipline binance.js uses for its geo-block.
+   A 503 latches; any other failure does not, because those are transient and
+   the next warm should try again. Nothing is fabricated either way: an
+   unconfigured FRED still returns null and the macro cards still say so. */
+const __FRED = { unconfigured: false };
+
+async function __fredFetch(url, timeoutMs){
+  const ctrl = new AbortController();
+  const timer = setTimeout(function(){ ctrl.abort(); }, timeoutMs || 10000);
+  try{
+    const w = __macroBucket.take();
+    if (w > 0) await new Promise(function(r){ setTimeout(r, Math.min(w, 2000)); });
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (res.status === 503){ __FRED.unconfigured = true; return null; }
+    if (!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+  finally{ clearTimeout(timer); }
+}
+
 /* FRED observations via same-origin /api/fred (server holds FRED_API_KEY).
    Returns ascending [{date, value}] or null when unconfigured/unavailable. */
 async function __fredSeries(series, limit){
   try{
+    if (__FRED.unconfigured) return null;
     series = String(series || 'DGS10').toUpperCase();
     limit = Math.max(5, Math.min(100, limit || 30));
     const key = 'fred|' + series + '|' + limit;
     const hit = __macroCacheGet(key, DXY_CACHE_MS); if (hit !== undefined) return hit;
-    const j = await __macroFetchJson('/api/fred?series=' + encodeURIComponent(series) + '&limit=' + limit);
+    const j = await __fredFetch('/api/fred?series=' + encodeURIComponent(series) + '&limit=' + limit);
     if (!j || !Array.isArray(j.observations) || !j.observations.length) return null;
     const rows = j.observations.slice().reverse();
     return __macroCachePut(key, rows);

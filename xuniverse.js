@@ -558,7 +558,43 @@ async function binanceCandleFallback(item, tf, count, venueRows){
 }
 
 /* ---------------- candle router ---------------- */
-async function xuCandles(item, tf, n){
+
+/* IN-FLIGHT COALESCING — see the same note in binance.js.
+
+   xuCandles had no cache and no coalescing at all: every caller that wanted
+   4h BTC candles opened its own request. A BRAIN synthesis fans dozens of
+   candidates out at once and several layers ask for the same contract in the
+   same instant, so the network log showed the identical Delta and CoinDCX
+   candle URL two and three times per millisecond — which is what pushed the
+   Delta proxy into 429 and Binance into an outright IP ban.
+
+   Deliberately in-flight ONLY, not a TTL cache: candles must stay live, and
+   callers already re-poll on their own schedule. The entry is dropped the
+   moment the request settles, so the ONLY thing collapsed is the burst of
+   duplicates that a single fan-out creates.
+
+   Each caller gets its own array (rows.slice()) because that is what the
+   uncoalesced version handed out — strats.js pops the unclosed tail bar off
+   the rows it receives, and sharing one array between layers would let one
+   caller's trim silently shorten another's series. The row objects inside are
+   read-only everywhere and stay shared. */
+var __XU_CANDLES_INFLIGHT = new Map();
+
+function xuCandles(item, tf, n){
+  var count = (isFinite(+n) && +n > 0) ? Math.floor(+n) : 200;
+  var key = (item && item.exchange ? item.exchange : '?') + '|' +
+            (item && item.sym ? item.sym : '?') + '|' + tf + '|' + count;
+  var live = __XU_CANDLES_INFLIGHT.get(key);
+  if (!live){
+    live = xuCandlesOnce(item, tf, n).finally(function(){
+      __XU_CANDLES_INFLIGHT.delete(key);
+    });
+    __XU_CANDLES_INFLIGHT.set(key, live);
+  }
+  return live.then(function(rows){ return Array.isArray(rows) ? rows.slice() : []; });
+}
+
+async function xuCandlesOnce(item, tf, n){
   try{
     xuCandles.lastSource = null; // debug-only tag, see the fallback note above
     if (!item || !item.sym) return [];

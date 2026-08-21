@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=430"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=430"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=431"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=431"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=430"></script>
+<script src="./hg-plan.js?v=431"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,9 +743,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=430"></script>
-<script src="./hg-gates.js?v=430"></script>
-<script src="omniroute.js?v=430"></script>
+<script src="hg-mechanics.js?v=431"></script>
+<script src="./hg-gates.js?v=431"></script>
+<script src="omniroute.js?v=431"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=47"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=430"></script>
+<script src="omnigold.js?v=431"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=430"></script>
+<script src="omnipresent.js?v=431"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=430"></script>
+<script src="supersetup.js?v=431"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=430"></script>
-<script src="super-gold.js?v=430"></script>
-<script src="super-best.js?v=430"></script>
-<script src="super-sniper.js?v=430"></script>
-<script src="super-book.js?v=430"></script>
-<script src="super-calibrate.js?v=430"></script>
+<script src="super-desk-common.js?v=431"></script>
+<script src="super-gold.js?v=431"></script>
+<script src="super-best.js?v=431"></script>
+<script src="super-sniper.js?v=431"></script>
+<script src="super-book.js?v=431"></script>
+<script src="super-calibrate.js?v=431"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1087,7 +1087,34 @@ function trackCall(bucket){
   }catch(e){}
 }
 
-async function cdcxGet(url){
+/* IN-FLIGHT COALESCING — the third and last candle path.
+
+   binance.js and xuniverse.js each got this guard; these two inline readers
+   are what the rest of the page actually calls, and they had no cache and no
+   coalescing at all. A rescan fans out and several layers ask for the SAME
+   contract in the same instant: measured after the other two were fixed, 782
+   candle requests for 491 distinct URLs — 264 URLs fetched more than once,
+   triples 6ms apart, every one of them from candlesCdcx -> cdcxGet. That
+   surplus is what earned the desk a Binance -1003 IP ban and a wall of Delta
+   429s, and the retry ladder below then multiplied each 429 again.
+
+   A caller asking for a URL that is already in the air waits for that answer
+   instead of opening a second request. In-flight ONLY — the entry is dropped
+   the moment it settles, so a later poll always goes back to the network and
+   no candle is ever served stale. The retry ladders keep working unchanged;
+   they now run once per URL rather than once per duplicate caller. */
+const __HG_INFLIGHT = new Map();
+function hgCoalesce(key, run){
+  const live = __HG_INFLIGHT.get(key);
+  if (live) return live;
+  const p = run().finally(function(){ __HG_INFLIGHT.delete(key); });
+  __HG_INFLIGHT.set(key, p);
+  return p;
+}
+
+function cdcxGet(url){ return hgCoalesce('cdcx|' + url, function(){ return cdcxGetOnce(url); }); }
+
+async function cdcxGetOnce(url){
   trackCall('cdcx');
   async function unwrap(j, via){
     S.cdcxViaProxy = via;
@@ -1132,7 +1159,9 @@ async function cdcxGet(url){
 
 /* Delta fetch: same-origin /api/proxy first (browser CORS blocks direct on
    hardgate-main.onrender.com and many static hosts), then direct for Node/tests. */
-async function deltaGet(url){
+function deltaGet(url){ return hgCoalesce('delta|' + url, function(){ return deltaGetOnce(url); }); }
+
+async function deltaGetOnce(url){
   trackCall('delta');
   async function readJson(r, via){
     if (!r.ok) throw new Error((via || 'fetch') + ' HTTP ' + r.status);

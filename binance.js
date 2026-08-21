@@ -75,7 +75,7 @@ async function __binOneFetch(url, ctrl){
   return { json: await res.json() };
 }
 
-async function __binFetchJson(url, timeoutMs){
+async function __binFetchJsonOnce(url, timeoutMs){
   const ctrl = new AbortController();
   const timer = setTimeout(function(){ ctrl.abort(); }, timeoutMs || 10000);
   try{
@@ -127,6 +127,35 @@ async function __binFetchJson(url, timeoutMs){
     return null;
   }catch(e){ return null; }
   finally{ clearTimeout(timer); }
+}
+
+/* IN-FLIGHT COALESCING.
+
+   The 60s cache above is checked BEFORE the await and written AFTER it, so it
+   only ever deduplicates requests that are already sequential. A scan fans out
+   dozens of candidates at once, every one of them misses the still-empty
+   cache, and the same URL goes out two or three times in the same millisecond.
+   Measured on the live desk: SAHARAUSD, SOPHUSD, ALTUSD and SKLUSD each
+   requested three times, back to back — and the reply was Binance -1003,
+   "Way too many requests; IP banned", plus 429s from the Delta proxy.
+
+   A second caller for a URL that is already in the air waits on the first
+   answer instead of asking again. In-flight ONLY — the entry is dropped the
+   moment it settles, so this never serves a stale candle; it only collapses
+   the duplicates of one instant. Same shape as binancePerpMap() in
+   xuniverse.js and the calendar handler in api/news-calendar.js, which
+   already do this; the hot path simply never got it. */
+const __BIN_INFLIGHT = new Map();
+
+function __binFetchJson(url, timeoutMs){
+  const k = String(url);
+  const live = __BIN_INFLIGHT.get(k);
+  if (live) return live;
+  const p = __binFetchJsonOnce(url, timeoutMs).finally(function(){
+    __BIN_INFLIGHT.delete(k);
+  });
+  __BIN_INFLIGHT.set(k, p);
+  return p;
 }
 
 function __binCacheGet(key){

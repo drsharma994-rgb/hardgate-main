@@ -293,9 +293,15 @@ assert(html.indexOf('emailjs-browser-4.4.1') < html.indexOf('lightweight-charts-
      every email alert was blocked by this application's own header. */
   const srv = fsx.readFileSync('scripts/server.mjs', 'utf8');
   const vjs = fsx.readFileSync('vercel.json', 'utf8');
+  /* connect-src is no longer one grep-able line in server.mjs — it is built
+     from a CONNECT_SRC array so the two files can be compared token for
+     token. Read the effective set through the helper. */
+  const { connectSrcByFile } = await import('./helpers/csp.mjs');
   for (const [n, src] of [['server.mjs', srv], ['vercel.json', vjs]]){
     assert(!/script-src[^;"]*(unpkg|jsdelivr)/.test(src), n + ' script-src allows no CDN host');
-    assert(/connect-src[^;"]*https:\/\/api\.emailjs\.com/.test(src),
+  }
+  for (const [n, hosts] of connectSrcByFile()){
+    assert(hosts.has('https://api.emailjs.com'),
       n + ' connect-src permits api.emailjs.com, which EmailJS posts to');
   }
 }

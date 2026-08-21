@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v430',
-  pack: 'setup honesty — better tickets',
-  built: '2026-08-21T06:40:00Z',
-  note: 'MOST PROBABLE prefers tape-aligned, post-gate-checked 7/7. NEAR is watch-only. OMNIPRESENT measured-edge no longer PASSes a thin positive. Heuristic vision cannot buy the star. G1–G7 and gold min-loss unchanged.'
+  version: 'hg-v431',
+  pack: 'request coalescing + CSP allowlist repair',
+  built: '2026-08-21T12:40:00Z',
+  note: 'One in-flight request per contract instead of two or three, which is what got the desk IP-banned by Binance. ON-CHAIN, LIQS and Deribit DVOL reach their hosts again. CoinDCX rows no longer ask Binance for B-XRP_USDT. Carries the v430 setup-honesty pack.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
