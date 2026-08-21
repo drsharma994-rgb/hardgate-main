@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=438"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=438"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=439"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=439"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=438"></script>
+<script src="./hg-plan.js?v=439"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=438"></script>
-<script src="./hg-gates.js?v=438"></script>
-<script src="omniroute.js?v=438"></script>
+<script src="hg-mechanics.js?v=439"></script>
+<script src="./hg-gates.js?v=439"></script>
+<script src="omniroute.js?v=439"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=438"></script>
+<script src="edge.js?v=439"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=438"></script>
+<script src="omnigold.js?v=439"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=438"></script>
+<script src="omnipresent.js?v=439"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=438"></script>
+<script src="supersetup.js?v=439"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=438"></script>
-<script src="super-gold.js?v=438"></script>
-<script src="super-best.js?v=438"></script>
-<script src="super-sniper.js?v=438"></script>
-<script src="super-book.js?v=438"></script>
-<script src="super-calibrate.js?v=438"></script>
+<script src="super-desk-common.js?v=439"></script>
+<script src="super-gold.js?v=439"></script>
+<script src="super-best.js?v=439"></script>
+<script src="super-sniper.js?v=439"></script>
+<script src="super-book.js?v=439"></script>
+<script src="super-calibrate.js?v=439"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -2970,6 +2970,14 @@ function showTab(t){
       }
     }catch(eSc){}
   }
+  if (tabSwitch && (t === 'swing' || t === 'scalp' || t === 'best' || t === 'edge')){
+    try{
+      const stId = (t === 'swing') ? 'swingStat' : (t === 'scalp') ? 'scalpStat' : (t === 'best') ? 'bestStat' : 'edgeStat';
+      const st = document.getElementById(stId);
+      const cur = st ? String(st.textContent || '') : '';
+      if (st && !/scanning|starting scan|done —|done ·/i.test(cur)) st.textContent = 'starting scan…';
+    }catch(eStart){}
+  }
   if (tabSwitch && typeof scheduleTabAutoScan === 'function') scheduleTabAutoScan(t);
   if (tabSwitch && t !== 'book' && typeof hgBookStampRefreshThrottled === 'function'){
     hgBookStampRefreshThrottled();
@@ -2989,9 +2997,21 @@ function showTab(t){
 let __hgTabScanSeq = 0;
 let __hgTabScanBusy = false;
 const HG_TAB_AUTO_SCAN = {
-  swing: function(){ return runScan('swing'); },
-  scalp: function(){ return runScan('scalp'); },
-  best: function(){ return runBest(); },
+  swing: function(opts){
+    opts = opts || {};
+    if (opts.quiet && typeof cryptoScanWarm === 'function') return cryptoScanWarm('swing');
+    return runScan('swing', opts);
+  },
+  scalp: function(opts){
+    opts = opts || {};
+    if (opts.quiet && typeof cryptoScanWarm === 'function') return cryptoScanWarm('scalp');
+    return runScan('scalp', opts);
+  },
+  best: function(opts){
+    opts = opts || {};
+    if (opts.quiet && typeof bestScanWarm === 'function') return bestScanWarm();
+    return runBest(opts);
+  },
   pine: async function(){
     const pane = document.getElementById('tab_pine');
     const runBtn = pane && pane.querySelector('#pineRun');
@@ -3052,9 +3072,16 @@ const HG_TAB_AUTO_SCAN = {
     const runBtn = pane && pane.querySelector('#brainRun');
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
-  edge: async function(){
+  edge: async function(opts){
+    opts = opts || {};
     const pane = document.getElementById('tab_edge');
     const runBtn = pane && pane.querySelector('#edgeRun');
+    const mounted = !!(runBtn);
+    if (opts.quiet || !mounted){
+      if (typeof edgeWarm === 'function'){
+        return edgeWarm(opts.quiet ? opts : Object.assign({}, opts, { force: true }));
+      }
+    }
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
   coil: function(){ return runCoilScan(); },
@@ -3259,7 +3286,7 @@ async function hgScanOneTab(id, opts){
   opts = opts || {};
   try{
     if (typeof HG_TAB_AUTO_SCAN !== 'undefined' && typeof HG_TAB_AUTO_SCAN[id] === 'function'){
-      await HG_TAB_AUTO_SCAN[id]();
+      await HG_TAB_AUTO_SCAN[id](opts);
       return 'refreshed';
     }
     const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS[id] : null;
@@ -3340,32 +3367,48 @@ window.hgScanOneTab = hgScanOneTab;
 window.hgScanAllTabs = hgScanAllTabs;
 function scheduleTabAutoScan(t){
   const seq = ++__hgTabScanSeq;
-  setTimeout(async function(){
+  const t0 = Date.now();
+  const mustScan = (t === 'swing' || t === 'scalp' || t === 'best' || t === 'edge');
+  function blocked(){
+    return __hgTabScanBusy
+      || (typeof isManualScanBusy === 'function' && isManualScanBusy())
+      || (typeof HG_REFRESH_BUSY !== 'undefined' && HG_REFRESH_BUSY)
+      || !!(typeof S !== 'undefined' && S && (S.scanQuietDepth || 0) > 0);
+  }
+  function go(){
     if (seq !== __hgTabScanSeq) return;
-    if (__hgTabScanBusy || (typeof isManualScanBusy === 'function' && isManualScanBusy())) return;
-    if (typeof HG_REFRESH_BUSY !== 'undefined' && HG_REFRESH_BUSY) return;
-    __hgTabScanBusy = true;
-    try{
-      if (HG_TAB_AUTO_SCAN[t]){
-        await HG_TAB_AUTO_SCAN[t]();
+    if (blocked()){
+      if (mustScan && (Date.now() - t0) < 120000){
+        setTimeout(go, 400);
         return;
       }
-      const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS[t] : null;
-      if (!mod) return;
-      if (typeof mod.refresh === 'function'){
-        const st = await mod.refresh();
-        if (st && String(st).indexOf('skip') === 0){
-          const autoRunBtn = HG_SCAN_RUN_BTN[t];
-          if (autoRunBtn){
-            const pane = document.getElementById('tab_' + t);
-            const runBtn = pane && pane.querySelector(autoRunBtn);
-            if (runBtn) runBtn.click();
+      if (!mustScan) return;
+    }
+    __hgTabScanBusy = true;
+    (async function(){
+      try{
+        if (HG_TAB_AUTO_SCAN[t]){
+          await HG_TAB_AUTO_SCAN[t]({ force: true });
+          return;
+        }
+        const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS[t] : null;
+        if (!mod) return;
+        if (typeof mod.refresh === 'function'){
+          const st = await mod.refresh();
+          if (st && String(st).indexOf('skip') === 0){
+            const autoRunBtn = HG_SCAN_RUN_BTN[t];
+            if (autoRunBtn){
+              const pane = document.getElementById('tab_' + t);
+              const runBtn = pane && pane.querySelector(autoRunBtn);
+              if (runBtn) runBtn.click();
+            }
           }
         }
-      }
-    }catch(e){ console.warn('HARDGATE tab auto-scan', t, e); }
-    finally{ __hgTabScanBusy = false; }
-  }, 120);
+      }catch(e){ console.warn('HARDGATE tab auto-scan', t, e); }
+      finally{ __hgTabScanBusy = false; }
+    })();
+  }
+  setTimeout(go, 120);
 }
 </script>
 

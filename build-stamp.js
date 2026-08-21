@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v438',
-  pack: 'quiet liquid scan warm',
-  built: '2026-08-21T17:15:00Z',
-  note: 'SWING/SCALP/BEST/EDGE finish a liquid top-N; quiet warm does not hijack the desk. Also carries the spot-membership gate (a perp is not a spot pair). G1–G7 unchanged. Crypto execute stays disabled.'
+  version: 'hg-v439',
+  pack: 'crypto desks scan themselves',
+  built: '2026-08-21T21:00:00Z',
+  note: 'Opening SWING/SCALP/EDGE/BEST starts their scan even if another tab holds the lock. Background cycles stay quiet. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

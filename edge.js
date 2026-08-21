@@ -1489,8 +1489,9 @@ function mount(el){
 
   __edge.run = runScan;
   setTimeout(function(){
-    if (!__edge.ranOnce && typeof runScan === 'function') runScan();
-  }, 500);
+    if (__edge.busy) return;
+    if (typeof runScan === 'function') runScan();
+  }, 400);
 }
 
 function edgeRefresh(){
