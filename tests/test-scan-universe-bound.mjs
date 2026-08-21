@@ -154,6 +154,14 @@ console.log('== quiet scans do not hijack the desk status line ==');
      'quiet scans do not overwrite swingStat/scalpStat with scanning N/M');
   ok(/if\s*\(\s*!quiet\s*\)[\s\S]{0,160}setProg\(isSwing \? 'swingProg'/.test(leg),
      'quiet scans do not drive the SWING/SCALP progress bar');
+  const core = extractFn(HTML, 'runCascadeCore');
+  ok(/opts\s*=\s*opts\s*\|\|\s*\{\}/.test(core) && /quiet/.test(core),
+     'runCascadeCore accepts a quiet flag');
+  ok(/if\s*\(\s*!quiet\s*\)[\s\S]{0,220}bestStat/.test(core),
+     'quiet BEST core does not write gates N/M onto bestStat');
+  const silent = extractFn(HTML, 'silentBestScan');
+  ok(/runCascadeCore\(uni,\s*\{\s*quiet:\s*true/.test(silent),
+     'silent BEST warm calls runCascadeCore quietly');
 }
 
 console.log('== EDGE is capped so a $5M floor cannot dump 250+ names ==');

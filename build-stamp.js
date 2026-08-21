@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v436',
+  version: 'hg-v437',
   pack: 'quiet liquid scan warm',
-  built: '2026-08-21T16:20:00Z',
-  note: 'Alert/pine/SUPER SETUP warm uses HG_SCAN_WARM_N=80, not whole-exchange. Quiet scans do not overwrite SWING/SCALP status. G1–G7 unchanged. Crypto execute stays disabled.'
+  built: '2026-08-21T16:50:00Z',
+  note: 'Quiet SWING/SCALP/BEST warm does not overwrite the desk. Alert warm is HG_SCAN_WARM_N=80, not whole-exchange. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

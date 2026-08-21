@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=436"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=436"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=437"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=437"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=436"></script>
+<script src="./hg-plan.js?v=437"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=436"></script>
-<script src="./hg-gates.js?v=436"></script>
-<script src="omniroute.js?v=436"></script>
+<script src="hg-mechanics.js?v=437"></script>
+<script src="./hg-gates.js?v=437"></script>
+<script src="omniroute.js?v=437"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=436"></script>
+<script src="edge.js?v=437"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=436"></script>
+<script src="omnigold.js?v=437"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=436"></script>
+<script src="omnipresent.js?v=437"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=436"></script>
+<script src="supersetup.js?v=437"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=436"></script>
-<script src="super-gold.js?v=436"></script>
-<script src="super-best.js?v=436"></script>
-<script src="super-sniper.js?v=436"></script>
-<script src="super-book.js?v=436"></script>
-<script src="super-calibrate.js?v=436"></script>
+<script src="super-desk-common.js?v=437"></script>
+<script src="super-gold.js?v=437"></script>
+<script src="super-best.js?v=437"></script>
+<script src="super-sniper.js?v=437"></script>
+<script src="super-book.js?v=437"></script>
+<script src="super-calibrate.js?v=437"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -6454,7 +6454,9 @@ function bestSessionActive(){
   }catch(e){ return false; }
 }
 
-async function runCascadeCore(uni){
+async function runCascadeCore(uni, opts){
+  opts = opts || {};
+  const quiet = !!opts.quiet;
   let clean=[];
   let breadthBull=0, breadthTotal=0;
   const funnel = { regimeSkip: 0, thin: 0, cleanRaw: 0, vetoStale: 0, vetoTrap: 0 };
@@ -6462,8 +6464,11 @@ async function runCascadeCore(uni){
   for (let ci=0; ci<uni.length; ci+=CHUNK1_SIZE){
     const chunk = uni.slice(ci, ci+CHUNK1_SIZE);
     await Promise.all(chunk.map(async function(t, idxInChunk){
-      const i = ci+idxInChunk; setProg('bestProg',(i+1)/uni.length*0.65);
-      $('bestStat').textContent=`gates ${i+1}/${uni.length} · ${t.symbol}`;
+      const i = ci+idxInChunk;
+      if (!quiet){
+        setProg('bestProg',(i+1)/uni.length*0.65);
+        if ($('bestStat')) $('bestStat').textContent=`gates ${i+1}/${uni.length} · ${t.symbol}`;
+      }
       try{
         const rows=await getCandles(t.symbol,'4h',260);
         if (rows.length<210){ funnel.thin++; return; }
@@ -6525,8 +6530,11 @@ async function runCascadeCore(uni){
 
   /* Evidence FAMILIES & VETOES for survivors */
   for (let i=0;i<clean.length;i++){
-    const s=clean[i]; setProg('bestProg',0.65+((i+1)/clean.length)*0.3);
-    $('bestStat').textContent=`evidence ${i+1}/${clean.length} · ${s.t.symbol}`;
+    const s=clean[i];
+    if (!quiet){
+      setProg('bestProg',0.65+((i+1)/clean.length)*0.3);
+      if ($('bestStat')) $('bestStat').textContent=`evidence ${i+1}/${clean.length} · ${s.t.symbol}`;
+    }
     const want=s.dir==='long'?1:-1;
     const c=s.rows.map(r=>r.c);
     const a4=last(atr(s.rows,14));
@@ -6817,7 +6825,7 @@ async function runBest(opts){
             scanAll: scanAll, n: N, minTurn: 200000, exchange: S.exchange
           });
           totalUni += uni.length;
-          const leg = await runCascadeCore(uni);
+          const leg = await runCascadeCore(uni, { quiet: quiet });
           if (leg.funnel){
             bestFunnel.regimeSkip += leg.funnel.regimeSkip || 0;
             bestFunnel.thin += leg.funnel.thin || 0;
@@ -6894,7 +6902,7 @@ async function runBest(opts){
     });
     const exLabel = S.exchange==='delta'?'Delta India':'CoinDCX';
     const universeLabel = scanAll ? `whole ${exLabel} futures universe` : `top ${N} by turnover`;
-    const {clean, breadth, funnel: bestFunnel} = await runCascadeCore(uni);
+    const {clean, breadth, funnel: bestFunnel} = await runCascadeCore(uni, { quiet: !!opts.quiet });
     publishBestSnap(clean, { uniLen: uni.length, dual: false, funnel: bestFunnel });
     if (!clean.length){
       out.innerHTML=bestFunnelHtml(bestFunnel, 0, uni.length)
@@ -6948,7 +6956,7 @@ async function silentBestScan(exchangeArg){
       let uni = hgBoundScanUniverse(S.tickers, {
         scanAll: false, n: HG_SCAN_WARM_N, minTurn: 200000, exchange: S.exchange
       });
-      const {clean} = await runCascadeCore(uni);
+      const {clean} = await runCascadeCore(uni, { quiet: true });
       return clean;
     });
   }catch(e){ return []; }
