@@ -214,6 +214,11 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### OMNIPRESENT one side per contract — hg-v429
+- One card per **base + venue**. When the desk call is **TAKE LONGS** / **TAKE SHORTS**, that direction wins even if the other side is TRIGGERED or nearer. The shown head does not mix LONG and SHORT on the same name (the BZ CoinDCX pair).
+- If the tape has a side and there is no with-tape zone, the head is empty — we do not substitute the against-tape card. Alerts / forward-log follow the shown head.
+- Tests: `node tests/test-omnipresent-one-side.mjs`.
+
 ### OMNIROUTE / OMNIPRESENT market side — hg-v428
 - Both desks print **TAKE LONGS** / **TAKE SHORTS** / **STAND ASIDE** from two gates (not a score): **tape** = MARKET PICTURE majority (4H EMA cascade on BTC/ETH/SOL/GOLD); **sentiment** = BIAS S2 Fear & Greed (block fresh longs at ≥80, fresh shorts at ≤20). Extreme sentiment stands aside — it does not flip you to the other side. Missing F&G is UNCHECKED and does not veto a clear tape.
 - Cards against the side still render, stamped **AGAINST TAPE**. The banner is not a ticket. Header MARKET PICTURE stays informational; the desks make the call. Chrome-min does not hide the banner.

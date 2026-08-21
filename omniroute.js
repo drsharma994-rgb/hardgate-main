@@ -2695,8 +2695,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       ]
     };
   }
-  function hgOmniMarketSideHtml(read){
+  function hgOmniMarketSideHtml(read, opts){
     if (!read) return '';
+    opts = opts || {};
     var cls = read.side === 'long' ? 'long' : read.side === 'short' ? 'short' : 'aside';
     var h = '<div class="omni-side ' + cls + '" role="status">';
     h += '<div class="omni-side-call">' + esc(read.headline) + '</div>';
@@ -2707,6 +2708,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     h += '<div class="note">';
     if (read.side === 'aside'){
       h += 'No side to take until tape and sentiment agree. Cards still render. This is not a ticket.';
+    } else if (opts.oneSide){
+      h += 'Take <b>' + esc(read.side.toUpperCase()) + '</b> setups. One direction per contract — the other side is not shown. This is not itself a ticket.';
     } else {
       h += 'Take <b>' + esc(read.side.toUpperCase()) + '</b> setups. The other side still renders, stamped AGAINST TAPE — not hidden. This is not itself a ticket.';
     }

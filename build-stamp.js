@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v428',
-  pack: 'OMNIROUTE / OMNIPRESENT market side',
-  built: '2026-08-21T04:20:00Z',
-  note: 'Desks print TAKE LONGS / TAKE SHORTS / STAND ASIDE from MARKET PICTURE majority + BIAS S2 F&G. Opposite-side cards still render, stamped AGAINST TAPE. v427 Android WebView launcher stays.'
+  version: 'hg-v429',
+  pack: 'OMNIPRESENT one side per contract',
+  built: '2026-08-21T04:55:00Z',
+  note: 'OMNIPRESENT no longer prints LONG and SHORT on the same name. Tape-aligned wins. v428 TAKE LONGS / TAKE SHORTS call stays.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

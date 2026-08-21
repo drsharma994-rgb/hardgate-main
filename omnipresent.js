@@ -576,6 +576,69 @@
     return c.status === 'ARMED';
   }
 
+  /* One name, one direction. The desk prints TAKE LONGS / TAKE SHORTS;
+     a LONG-from-the-bottom and a SHORT-from-the-high on the same contract
+     is two answers to a one-answer question. Tape-aligned wins even when
+     the other side is TRIGGERED or nearer. */
+  function opContractKey(c){
+    return String(c && (c.base || c.sym) || '') + '|' + String((c && c.exchange) || '');
+  }
+  function opBetterCand(a, b, side){
+    if (!b) return true;
+    if (!a) return false;
+    var aDir = String(a.dir || '').toLowerCase();
+    var bDir = String(b.dir || '').toLowerCase();
+    if (side === 'long' || side === 'short'){
+      var aW = aDir === side ? 1 : 0, bW = bDir === side ? 1 : 0;
+      if (aW !== bW) return aW > bW;
+    }
+    var aT = (a.grade && a.grade.ticket) ? 1 : 0, bT = (b.grade && b.grade.ticket) ? 1 : 0;
+    if (aT !== bT) return aT > bT;
+    var aC = (a.grade && a.grade.vetoes && a.grade.vetoes.length) ? 0 : 1;
+    var bC = (b.grade && b.grade.vetoes && b.grade.vetoes.length) ? 0 : 1;
+    if (aC !== bC) return aC > bC;
+    var aTr = a.status === 'TRIGGERED' ? 1 : 0, bTr = b.status === 'TRIGGERED' ? 1 : 0;
+    if (aTr !== bTr) return aTr > bTr;
+    var aS = isFinite(a.score) ? a.score : 0, bS = isFinite(b.score) ? b.score : 0;
+    if (aS !== bS) return aS > bS;
+    var aD = (a.zone && isFinite(+a.zone.distAtr)) ? +a.zone.distAtr : 99;
+    var bD = (b.zone && isFinite(+b.zone.distAtr)) ? +b.zone.distAtr : 99;
+    return aD < bD;
+  }
+  function opOnePerContract(cands, side){
+    if (side && side.side) side = side.side;
+    if (side !== 'long' && side !== 'short') side = null;
+    var best = {}, order = [], i, c, k;
+    for (i = 0; i < (cands || []).length; i++){
+      c = cands[i];
+      if (!c) continue;
+      k = opContractKey(c);
+      if (best[k] == null){ best[k] = c; order.push(k); continue; }
+      if (opBetterCand(c, best[k], side)) best[k] = c;
+    }
+    return order.map(function (key){ return best[key]; });
+  }
+  function opRankHead(cands, sideRead){
+    var side = sideRead && (sideRead.side === 'long' || sideRead.side === 'short') ? sideRead.side : null;
+    var one = opOnePerContract(cands, side);
+    one.sort(function (a, b){
+      var at = a && a.grade && a.grade.ticket ? 1 : 0, bt = b && b.grade && b.grade.ticket ? 1 : 0;
+      if (at !== bt) return bt - at;
+      return ((b && b.score) || 0) - ((a && a.score) || 0);
+    });
+    var showable = one.filter(opShowable);
+    if (side)
+      showable = showable.filter(function (c){ return String(c.dir).toLowerCase() === side; });
+    var top = showable.slice(0, SHOW);
+    if (!top.length){
+      var fb = side
+        ? one.filter(function (c){ return String(c.dir).toLowerCase() === side; })
+        : one;
+      top = fb.slice(0, Math.min(3, fb.length));
+    }
+    return { one: one, top: top, side: side };
+  }
+
   /* Next K hourly bar closes — WHEN a trigger can actually fire. Entries on
      this desk happen at bar closes (that is what "closed back through" means),
      so these times are the honest answer to "the exact time of entry". */
@@ -649,16 +712,27 @@
         }
 
         return step(0).then(function (){
-          found.sort(function (a, b){
-            var at = a.grade && a.grade.ticket ? 1 : 0, bt = b.grade && b.grade.ticket ? 1 : 0;
-            if (at !== bt) return bt - at;
-            return b.score - a.score;
-          });
-          var showable = found.filter(opShowable);
-          var top = showable.slice(0, SHOW);
-          if (!top.length) top = found.slice(0, Math.min(3, found.length));
+          return { found: found, scanned: list.length, failed: failed };
+        });
+      })
+      .then(function (res){
+        if (!res) return opRefreshSide(ui);
+        return opRefreshSide(ui).then(function (sideRead){
+          var ranked = opRankHead(res.found, sideRead);
+          var top = ranked.top;
+          __op.ran = true;
+          __op.snap = { at: Date.now(), rows: res.found };
+          var trig = top.filter(function (c){ return c.status === 'TRIGGERED'; }).length;
+          var tick = top.filter(function (c){ return c.grade && c.grade.ticket; }).length;
+          __op.lastStat = res.found.length + ' zone(s) across ' + res.scanned + ' contracts · showing '
+                        + top.length + ' · one side per contract'
+                        + (ranked.side ? (' · tape ' + ranked.side) : '')
+                        + ' · ' + trig + ' triggered · ' + tick + ' ticket(s)'
+                        + (res.failed ? ' · ' + res.failed + ' feeds failed' : '');
+          opStat(ui, __op.lastStat);
 
-          /* forward-log every TRIGGERED plan in the head — the desk's record */
+          /* forward-log / Telegram only the shown head — alerting the
+             against-tape side of the same name is the bug this collapses. */
           if (gfn('hgFwdRecordScan')){
             var fwd = top.filter(function (c){ return c.status === 'TRIGGERED'; })
               .map(function (c){ return { sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1,
@@ -666,15 +740,9 @@
                                           ticket: !!(c.grade && c.grade.ticket) }; });
             if (fwd.length){ try{ W.hgFwdRecordScan('OMNIPRESENT', TF, fwd, { horizonBars: 24 }); }catch(e){} }
           }
-          /* THE WHOLE POINT, DELIVERED: the flip to TRIGGERED reaches the
-             reader even when this tab is not on screen — chime + Telegram
-             via the alert bell (hgalert.js ZONES class, seeded silently on
-             the first scan, keyed per zone so nothing fires twice). The
-             verdict rides along honestly: a triggered zone the gates
-             vetoed says so in the same push. */
           if (gfn('hgAlertZones')){
             try{
-              W.hgAlertZones(found.filter(function (c){ return c.status === 'TRIGGERED'; })
+              W.hgAlertZones(top.filter(function (c){ return c.status === 'TRIGGERED'; })
                 .map(function (c){
                   return { sym: c.sym, dir: c.dir, tab: 'OMNIPRESENT',
                            zoneLo: c.zone.lo, zoneHi: c.zone.hi,
@@ -686,25 +754,17 @@
                 }), 'OMNIPRESENT');
             }catch(eAz){}
           }
-          return { found: found, top: top, scanned: list.length, failed: failed };
-        });
-      })
-      .then(function (res){
-        if (!res) return opRefreshSide(ui);
-        __op.ran = true;
-        __op.snap = { at: Date.now(), rows: res.found };
-        var trig = res.top.filter(function (c){ return c.status === 'TRIGGERED'; }).length;
-        var tick = res.top.filter(function (c){ return c.grade && c.grade.ticket; }).length;
-        __op.lastStat = res.found.length + ' zone(s) across ' + res.scanned + ' contracts · showing top ' + res.top.length
-                      + ' · ' + trig + ' triggered · ' + tick + ' ticket(s)'
-                      + (res.failed ? ' · ' + res.failed + ' feeds failed' : '');
-        opStat(ui, __op.lastStat);
-        return opRefreshSide(ui).then(function (sideRead){
+
           var h = '', closes = opNextCloses(Date.now(), 3);
           h += '<div class="note">Triggers evaluate at 1h bar closes: <b>' + closes.join(' · ') + '</b>'
             + ' — highest-frequency reversal windows: London 07–10 UTC, New York 13–16 UTC.</div>';
-          for (var i = 0; i < res.top.length; i++) h += opCard(res.top[i], sideRead);
-          ui.cards.innerHTML = h || '<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>';
+          for (var i = 0; i < top.length; i++) h += opCard(top[i], sideRead);
+          var empty = (ranked.side)
+            ? ('<div class="empty">no ' + ranked.side.toUpperCase()
+               + ' zone in range — TAKE ' + (ranked.side === 'long' ? 'LONGS' : 'SHORTS')
+               + ' stands; the other side is not shown.</div>')
+            : ('<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>');
+          ui.cards.innerHTML = h || empty;
         });
       })
       .catch(function (e){
@@ -745,7 +805,7 @@
         else if (W.S && W.S.fng) fng = W.S.fng;
       }catch(e2){}
       var read = sideFn(pic, fng);
-      try{ if (ui && ui.side) ui.side.innerHTML = htmlFn(read); }catch(e3){}
+      try{ if (ui && ui.side) ui.side.innerHTML = htmlFn(read, { oneSide: true }); }catch(e3){}
       return read;
     };
     try{
@@ -845,6 +905,8 @@
     window.opAssess = opAssess;
     window.opGates = opGates;
     window.opShowable = opShowable;
+    window.opOnePerContract = opOnePerContract;
+    window.opRankHead = opRankHead;
     window.opNextCloses = opNextCloses;
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
