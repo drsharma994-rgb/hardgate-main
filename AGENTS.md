@@ -219,6 +219,10 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### Quiet liquid scan warm — hg-v438
+- Ship stamp for bounded SWING/SCALP/EDGE/BEST scans + quiet warm (`HG_SCAN_WARM_N = 80`) merged onto `main` with the spot-membership gate (a perp is not a spot pair). G1–G7 unchanged.
+- Tests: `tests/test-scan-universe-bound.mjs`, `tests/test-dated-futures-gate.mjs`.
+
 ### Quiet liquid scan warm — hg-v437
 - Alert / pine / SUPER SETUP / silent BEST warm uses **`HG_SCAN_WARM_N = 80`**, not `forceScanAll`. Quiet SWING/SCALP loops do not write `#swingStat` / `#scalpStat` or the progress bar. Quiet `runCascadeCore` does not write `#bestStat` (so a background BEST warm cannot look like `gates 80/80`). `opts.n` wins over the SCAN TOP input.
 - Dual venue is still both books at the configured depth. SCAN WHOLE EXCHANGE stays an explicit checkbox. G1–G7 unchanged.

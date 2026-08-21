@@ -18,8 +18,20 @@
    asking for contracts that were never listed. SOLUSDT was hardcoded in
    SEED_PAIRS and could never have produced a row.
 
-   Neither binanceBasis nor universePairs had a single test, which is how it
-   survived. Both are covered here.
+   universePairs had no test at all, and binanceBasis was covered only for
+   argument defaults and unit parsing, never for contract existence. Both are
+   covered here.
+
+   SECTION 4 GUARDS THE SAME MISTAKE ON THE SPOT SIDE. binanceSpotTakerFlow
+   asked api.binance.com for klines on whatever symbol BRAIN handed it, and
+   BRAIN hands it PERP symbols. A perp is not automatically a spot pair:
+   MONUSDT trades as a perp, is absent from the spot symbol list, and answered
+
+       400 {"code":-1121,"msg":"Invalid symbol."}
+
+   — verified live. Membership now comes from /api/v3/ticker/price (156 KB),
+   deliberately not /api/v3/exchangeInfo, which measured 17.5 MB and has no
+   business in a browser.
    Run: node tests/test-dated-futures-gate.mjs */
 
 import fs from 'node:fs';
@@ -206,6 +218,79 @@ function recorder(opts){
   assert(uni.known === false, 'universe: an exchangeInfo outage is reported as unknown, never guessed');
   assert(uni.pairs.indexOf('SOLUSDT') >= 0 && uni.filtered === 0,
     'universe: with the listing unknown nothing is filtered — degrade, do not empty the tab');
+}
+
+/* ======================================================================
+   4) spot flow needs a SPOT pair — a perp symbol is not one
+   ====================================================================== */
+
+/* /api/v3/ticker/price, trimmed. MONUSDT is deliberately absent: it trades as
+   a perp and has no spot listing, and it is the symbol that produced the live
+   400 -1121 "Invalid symbol". */
+const SPOT_PRICES = [
+  { symbol: 'BTCUSDT', price: '77851.28' },
+  { symbol: 'ETHUSDT', price: '2418.10' },
+  { symbol: 'SOLUSDT', price: '141.55' }
+];
+const SPOT_KLINES = Array.from({ length: 10 }, function(_, i){
+  return [1787299200000 + i * 3600000, '1', '2', '0.5', '1.5', '100', 0, 0, 0, '60', '0', '0'];
+});
+const INVALID_SYMBOL = { code: -1121, msg: 'Invalid symbol.' };
+
+function spotRecorder(opts){
+  opts = opts || {};
+  const urls = [];
+  const fn = function(url){
+    const u = String(url);
+    urls.push(u);
+    if (u.indexOf('/api/v3/ticker/price') >= 0){
+      if (opts.listDown) return Promise.resolve({ ok: false, status: 500, json: async () => null });
+      return Promise.resolve({ ok: true, status: 200, json: async () => SPOT_PRICES });
+    }
+    if (u.indexOf('/api/v3/klines') >= 0){
+      const sym = (u.match(/symbol=([A-Z0-9]+)/) || [])[1];
+      if (!SPOT_PRICES.some(function(r){ return r.symbol === sym; })){
+        return Promise.resolve({ ok: false, status: 400, json: async () => INVALID_SYMBOL });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => SPOT_KLINES });
+    }
+    return Promise.resolve({ ok: false, status: 404, json: async () => null });
+  };
+  fn.urls = urls;
+  fn.klineCalls = function(){ return urls.filter(function(u){ return u.indexOf('/api/v3/klines') >= 0; }); };
+  return fn;
+}
+
+{
+  const f = spotRecorder();
+  const ctx = loadBinance(f);
+
+  const mon = await ctx.binanceSpotTakerFlow('MONUSDT', '1h', 25);
+  assert(mon === null, 'spot flow: a perp with no spot listing yields null');
+  assert(f.klineCalls().length === 0,
+    'spot flow: and costs ZERO requests — the 400 -1121 is never provoked, got ' + f.klineCalls().length);
+
+  const btc = await ctx.binanceSpotTakerFlow('BTCUSDT', '1h', 25);
+  assert(!!btc && !!btc.latest && btc.series.length >= 8,
+    'spot flow: a real spot pair still returns its series');
+  assert(f.klineCalls().length === 1, 'spot flow: exactly one request for the listed pair');
+
+  const lower = await ctx.binanceSpotTakerFlow('monusdt', '1h', 25);
+  assert(lower === null, 'spot flow: a lower-case perp symbol is gated too');
+
+  const map = await ctx.binanceSpotSymbols();
+  assert(!!map && map.BTCUSDT === true, 'spot symbols: the membership map is populated');
+  const listCalls = f.urls.filter(function(u){ return u.indexOf('ticker/price') >= 0; }).length;
+  assert(listCalls === 1, 'spot symbols: the 156KB list is fetched ONCE and cached, got ' + listCalls);
+}
+
+/* the list being unreachable must not turn into a fabricated "not listed" */
+{
+  const f = spotRecorder({ listDown: true });
+  const ctx = loadBinance(f);
+  await ctx.binanceSpotTakerFlow('MONUSDT', '1h', 25);
+  assert(f.klineCalls().length === 1,
+    'spot flow: with the symbol list down the call is attempted — an outage is not a verdict');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
