@@ -131,6 +131,7 @@ console.log('== scan wiring: enrich → clean → post-gate veto ==');
   ok(/hgEnrichTickerFundingTwin\(t\)/.test(html), 'scan enriches ticker before gates');
   ok(/hgPostGateSetupVeto\(tScan, hit, rows, 'swing'/.test(html), 'swing CLEAN passes post-gate veto');
   ok(/hgPostGateSetupVeto\(tScan, hit, h1, 'scalp'/.test(html), 'scalp CLEAN passes post-gate veto');
+  ok(/hgApplyCryptoPostGate\(hit, qv\)/.test(html), 'post-gate result is stamped (UNCHECKED vs checked)');
   ok(/audit\.qualitySkip\[qv\.tag/.test(html), 'quality skips tracked by tag');
 }
 

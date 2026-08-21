@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v429',
-  pack: 'OMNIPRESENT one side per contract',
-  built: '2026-08-21T04:55:00Z',
-  note: 'OMNIPRESENT no longer prints LONG and SHORT on the same name. Tape-aligned wins. v428 TAKE LONGS / TAKE SHORTS call stays.'
+  version: 'hg-v430',
+  pack: 'setup honesty — better tickets',
+  built: '2026-08-21T06:40:00Z',
+  note: 'MOST PROBABLE prefers tape-aligned, post-gate-checked 7/7. NEAR is watch-only. OMNIPRESENT measured-edge no longer PASSes a thin positive. Heuristic vision cannot buy the star. G1–G7 and gold min-loss unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

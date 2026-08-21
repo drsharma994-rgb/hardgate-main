@@ -214,6 +214,13 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### Setup honesty pack — hg-v430
+- **MOST PROBABLE** prefers tape-aligned, post-gate-**checked** 7/7 over a hotter UNCHECKED or against-tape row (`hgRankCryptoSetups`). Crypto CLEAN scans stamp `POST-GATE UNCHECKED` when flow/RS could not run (gold already did).
+- SUPER SETUP: NEAR is **watch only**, never a "ticket". CLEAN without min-loss is **audit hold**. Hydrate kicks async post-gate. SUPER BEST lite enrich is **SIZE OK**, not MIN LOSS PASS (full audit still required).
+- OMNIPRESENT measured-edge: a mild positive at 20+ samples is **UNCHECKED** until it clears the 2-mechanic bar; a losing 20+ sample mechanic still VETOES.
+- Heuristic chart-vision formation boost no longer promotes (Gemini still can). G1–G7, gold min-loss, OMNIPRESENT one-side, TRIGGERED=live / ARMED=WATCH unchanged.
+- Tests: `node tests/test-setup-honesty-v430.mjs`.
+
 ### OMNIPRESENT one side per contract — hg-v429
 - One card per **base + venue**. When the desk call is **TAKE LONGS** / **TAKE SHORTS**, that direction wins even if the other side is TRIGGERED or nearer. The shown head does not mix LONG and SHORT on the same name (the BZ CoinDCX pair).
 - If the tape has a side and there is no with-tape zone, the head is empty — we do not substitute the against-tape card. Alerts / forward-log follow the shown head.

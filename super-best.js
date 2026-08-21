@@ -121,8 +121,8 @@ function enrichSuperBestRowLite(c, tier, riskOpts, meta){
     impliedLev: calc && calc.impliedLeverage,
     safeMaxLev: safeLev,
     qty: calc && calc.qty,
-    minimalLossPass: tier === 'clean' && !!(calc && calc.ok),
-    riskReason: tier === 'clean' && calc && calc.ok ? 'PASS (lite)' : 'BEST desk lite enrich'
+    minimalLossPass: false,
+    riskReason: tier === 'clean' && calc && calc.ok ? 'SIZE OK (BEST lite — not min-loss)' : 'BEST desk lite enrich'
   };
   if (typeof W.hgCryptoAttachPositionSize === 'function'){
     try{
@@ -137,8 +137,17 @@ function enrichSuperBestRowLite(c, tier, riskOpts, meta){
 }
 
 function enrichSuperBestRow(c, tier, riskOpts, meta){
-  /* BEST tab already ran 7/7 + evidence — desk uses lite enrich only (no re-veto). */
-  return enrichSuperBestRowLite(c, tier, riskOpts, meta);
+  var hit = enrichSuperBestRowLite(c, tier, riskOpts, meta);
+  if (!hit) return hit;
+  if (tier === 'clean' && typeof W.runFullMinimalLossAudit === 'function'){
+    try{
+      var audit = W.runFullMinimalLossAudit(W, {}, hit, {});
+      hit.minLossAudit = audit;
+      hit.minimalLossPass = !!(audit && audit.pass && hit.sizingPass);
+      if (hit.minimalLossPass) hit.riskReason = 'PASS';
+    }catch(e0){}
+  }
+  return hit;
 }
 
 function superBestSortCands(cands){
@@ -338,7 +347,7 @@ function hitToEvaluation(hit){
     minimalLossPass: hit.minimalLossPass,
     minLossAudit: hit.minLossAudit,
     setupType: 'BEST CLEAN · ' + (hit.famScore != null ? hit.famScore + '/9 fam' : '7/7'),
-    note: (hit.minimalLossPass ? 'MIN LOSS PASS · ' : 'BEST · ')
+    note: (hit.minimalLossPass ? 'MIN LOSS PASS · ' : (hit.sizingPass ? 'SIZE OK · ' : 'BEST · '))
       + (hit.sym || '') + ' · fam ' + (hit.famScore != null ? hit.famScore : '—')
       + ' · rob ' + (hit.robScore != null ? hit.robScore : '—'),
     hit: hit

@@ -840,6 +840,13 @@ function syncDeskFromExisting(win, riskOpts, opts){
   snap.scanAt = __ss.lastScanAt || snap.at || Date.now();
   snap.hydrated = true;
   publishSuperSetupSnap(snap);
+  if (opts.skipPostGate !== true && typeof Promise === 'function'){
+    Promise.resolve(applySuperSetupPostGate(snap, win)).then(function (next){
+      if (!next) return;
+      publishSuperSetupSnap(next);
+      if (__ss.mounted && typeof __ss.paintDesk === 'function') __ss.paintDesk(next);
+    }).catch(function (){});
+  }
   return snap;
 }
 
@@ -1310,6 +1317,24 @@ function isNearScannerHit(hit){
   return isCleanScannerHit(hit) && (hit.nearClean === true || hit.tier === 'near');
 }
 
+function scannerReadyNote(hit){
+  var isNear = isNearScannerHit(hit);
+  var tierLabel = isNear ? 'NEAR' : 'CLEAN';
+  var hold = '';
+  if (isNear) hold = ' · watch only';
+  else if (hit && hit.minimalLossPass) hold = ' · minimal-loss PASS';
+  else if (hit && hit.minLossAudit && hit.minLossAudit.reasons && hit.minLossAudit.reasons.length)
+    hold = ' · audit hold: ' + hit.minLossAudit.reasons[0];
+  else if (hit && hit.riskPass === false) hold = ' · risk ' + (hit.riskReason || 'BLOCK');
+  else hold = ' · audit hold';
+  return {
+    isNear: isNear,
+    watchOnly: isNear,
+    tierLabel: tierLabel,
+    note: tierLabel + hold + ' · ' + ((hit && hit.sym) || '') + ' · ' + ((hit && hit.venueTag) || 'Delta/CoinDCX')
+  };
+}
+
 /** Main gate: idle until CLEAN scanner or confirmed structure. Pure for tests. */
 function evaluateSetup(win, opts){
   win = win || W;
@@ -1337,7 +1362,7 @@ function evaluateSetup(win, opts){
 
   if (isCleanScannerHit(hit)){
     var scanSide = normalizeSide(hit.dir);
-    var tierLabel = (hit.tier === 'near' || hit.nearClean) ? 'NEAR' : 'CLEAN';
+    var labels = scannerReadyNote(hit);
     var scanRr = pickRR(hit);
     if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
       var sdist = Math.abs(hit.entry - hit.stop);
@@ -1363,13 +1388,10 @@ function evaluateSetup(win, opts){
       minimalLossPass: hit.minimalLossPass,
       minLossAudit: hit.minLossAudit,
       refined: hit.refined,
-      setupType: tierLabel + ' · ' + (hit.scanner || hit.source || 'scanner')
+      watchOnly: labels.watchOnly,
+      setupType: labels.tierLabel + ' · ' + (hit.scanner || hit.source || 'scanner')
         + (hit.refined ? ' · exact entry' : ''),
-      note: tierLabel + ' ticket · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
-        + (hit.minimalLossPass ? ' · minimal-loss PASS'
-          : (hit.minLossAudit && hit.minLossAudit.reasons && hit.minLossAudit.reasons.length
-            ? (' · audit hold: ' + hit.minLossAudit.reasons[0])
-            : (hit.riskPass === false ? (' · risk ' + (hit.riskReason || 'BLOCK')) : ''))),
+      note: labels.note,
       hit: hit
     };
   }
@@ -1732,7 +1754,9 @@ function mount(el){
     if (idleBanner){
       idleBanner.textContent = ev.minimalLossPass
         ? ('MINIMAL LOSS PASS — ' + (ev.note || 'tradeable setup'))
-        : ('ACTIVE — ' + (ev.note || 'tradeable setup detected'));
+        : (ev.watchOnly
+          ? ('WATCH ONLY — ' + (ev.note || 'NEAR · not a ticket'))
+          : ('ACTIVE — ' + (ev.note || 'CLEAN · audit hold')));
     }
     setTriggerChip(ev);
     __ss.lastKey = setupSignalKey(ev);
@@ -1805,12 +1829,12 @@ function mount(el){
 
   function hitToEvaluation(hit){
     if (!hit || !isCleanScannerHit(hit)) return { ready: false, idle: true, reason: 'No qualifying setup' };
-    var tierLabel = (hit.tier === 'near' || hit.nearClean) ? 'NEAR' : 'CLEAN';
     var rr = pickRR(hit);
     if (N(hit.t1) > 0 && N(hit.entry) > 0 && N(hit.stop) > 0){
       var rd = Math.abs(hit.entry - hit.stop);
       if (rd > 0) rr = Math.abs(hit.t1 - hit.entry) / rd;
     }
+    var labels = scannerReadyNote(hit);
     return {
       ready: true,
       idle: false,
@@ -1831,13 +1855,10 @@ function mount(el){
       minimalLossPass: hit.minimalLossPass,
       minLossAudit: hit.minLossAudit,
       refined: hit.refined,
-      setupType: tierLabel + ' · ' + (hit.scanner || 'swing')
+      watchOnly: labels.watchOnly,
+      setupType: labels.tierLabel + ' · ' + (hit.scanner || 'swing')
         + (hit.refined ? ' · exact entry' : ''),
-      note: tierLabel + ' · ' + (hit.sym || '') + ' · ' + (hit.venueTag || 'Delta/CoinDCX')
-        + (hit.minimalLossPass ? ' · minimal-loss PASS'
-          : (hit.minLossAudit && hit.minLossAudit.reasons && hit.minLossAudit.reasons.length
-            ? (' · audit hold: ' + hit.minLossAudit.reasons[0])
-            : (hit.tier === 'near' ? ' · watch only' : ' · risk check'))),
+      note: labels.note,
       hit: hit
     };
   }
@@ -2174,6 +2195,7 @@ W.superSetupPickRR = pickRR;
 W.superSetupCollectScanHits = collectScanHits;
 W.superSetupEvaluateStructure = evaluateStructureTrigger;
 W.superSetupEvaluate = evaluateSetup;
+W.superSetupScannerNote = scannerReadyNote;
 W.superSetupEnrichRow = enrichSuperSetupRow;
 W.mergePublishSuperSetupSnap = mergePublishSuperSetupSnap;
 W.superSetupBuildSnap = buildSnapFromCryptoScans;

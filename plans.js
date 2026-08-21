@@ -303,6 +303,61 @@ function hgMarkGateUnchecked(c, reasons){
   if (c.stamps.indexOf(stamp) < 0) c.stamps = c.stamps.concat([stamp]);
 }
 
+function hgPostGateBannerHtml(c){
+  if (!c || !c.postGateUnchecked || c.demoted) return '';
+  var reasons = (c.postGateUncheckedReasons && c.postGateUncheckedReasons.length)
+    ? c.postGateUncheckedReasons.join(' · ')
+    : 'reason not recorded';
+  var esc = function (s){
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  return '<div class="note warn" style="margin-top:6px;color:#FBBF24!important"><b>&#9888; POST-GATE UNCHECKED</b> &mdash; '
+    + esc(reasons)
+    + '. Quality legs were <b>not</b> cleared; they were never tested. A checked 7/7 beats this for MOST PROBABLE.</div>';
+}
+
+/* MOST PROBABLE order: tape-aligned first, then a post-gate that actually
+   ran, then formation / rankBoost. An UNCHECKED or against-tape row can
+   still print — it cannot steal the star while a better 7/7 exists. */
+function hgCmpSetupQuality(a, b, side){
+  a = a || {};
+  b = b || {};
+  if (side === 'long' || side === 'short'){
+    var aW = String(a.dir || '').toLowerCase() === side ? 1 : 0;
+    var bW = String(b.dir || '').toLowerCase() === side ? 1 : 0;
+    if (aW !== bW) return bW - aW;
+  }
+  var aC = a.postGateUnchecked ? 0 : (a.postGateChecked ? 2 : 1);
+  var bC = b.postGateUnchecked ? 0 : (b.postGateChecked ? 2 : 1);
+  if (aC !== bC) return bC - aC;
+  var fs = (b.formationScore || 0) - (a.formationScore || 0);
+  if (fs) return fs;
+  var rb = (b.rankBoost || 0) - (a.rankBoost || 0);
+  if (rb) return rb;
+  var rra = Number.isFinite(+a.rr) ? +a.rr : (Number.isFinite(+a.rr1) ? +a.rr1 : 0);
+  var rrb = Number.isFinite(+b.rr) ? +b.rr : (Number.isFinite(+b.rr1) ? +b.rr1 : 0);
+  if (rrb !== rra) return rrb - rra;
+  var re = (b.rsEdge || 0) - (a.rsEdge || 0);
+  if (re) return re;
+  var fb = (b.flowOk ? 1 : 0) - (a.flowOk ? 1 : 0);
+  if (fb) return fb;
+  var ta = Number.isFinite(+a.turnoverUsd) ? +a.turnoverUsd : 0;
+  var tb = Number.isFinite(+b.turnoverUsd) ? +b.turnoverUsd : 0;
+  if (tb !== ta) return tb - ta;
+  return String(a.sym || '').localeCompare(String(b.sym || ''));
+}
+
+function hgRankCryptoSetups(cands, side){
+  var sorted = (cands || []).slice().sort(function (a, b){ return hgCmpSetupQuality(a, b, side); });
+  var best = null, i, c;
+  for (i = 0; i < sorted.length; i++){
+    c = sorted[i];
+    if (c && !c.postGateUnchecked){ best = c; break; }
+  }
+  if (!best && sorted.length) best = sorted[0];
+  return { cands: sorted, best: best };
+}
+
 async function hgFilterGoldPostGate(ranked, venueRows, defaultRows4h, style){
   if (!Array.isArray(ranked)) return ranked;
   /* Per-candidate isolation. This loop used to sit inside ONE try: a single
@@ -1560,6 +1615,9 @@ G.hgStaleMomentumVeto = hgStaleMomentumVeto;
 G.hgUncheckedGate = hgUncheckedGate;
 G.hgSyncPlanRatios = hgSyncPlanRatios;
 G.hgMarkGateUnchecked = hgMarkGateUnchecked;
+G.hgPostGateBannerHtml = hgPostGateBannerHtml;
+G.hgCmpSetupQuality = hgCmpSetupQuality;
+G.hgRankCryptoSetups = hgRankCryptoSetups;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;
 G.hgSwingG5OK = hgSwingG5OK;

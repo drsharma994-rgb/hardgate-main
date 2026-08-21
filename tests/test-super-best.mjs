@@ -41,7 +41,8 @@ W.bestScan = function(){
 };
 
 const snap = W.buildSnapFromBestScan(W, { balance: 1000, riskPct: 1 });
-ok(snap.cands.length === 1 && snap.cands[0].minimalLossPass, 'enriches BEST clean row');
+ok(snap.cands.length === 1 && snap.cands[0].sizingPass, 'enriches BEST clean row with SIZE OK');
+ok(snap.cands[0].minimalLossPass !== true, 'lite enrich does not stamp MIN LOSS PASS');
 
 W.bestScan = function(){
   return {

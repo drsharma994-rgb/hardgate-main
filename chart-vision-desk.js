@@ -31,7 +31,12 @@ function hgChartVisionFormationBoost(dir, analysis){
   var bias = analysis.bias ? String(analysis.bias).toLowerCase() : null;
   var c = fin(+analysis.confidence) ? +analysis.confidence : 0;
   if (!bias || c < 0.55) return 0;
+  var src = String(analysis.source || analysis.visionMode || '').toLowerCase();
+  var heuristic = (src === 'heuristic');
   if (bias === side){
+    /* Heuristic SVG reads must not promote a setup to MOST PROBABLE.
+       Gemini multimodal still boosts. Penalties against the setup stay. */
+    if (heuristic) return 0;
     if (c >= 0.82) return 12;
     if (c >= 0.68) return 8;
     if (c >= 0.55) return 4;

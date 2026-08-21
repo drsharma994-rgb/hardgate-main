@@ -546,15 +546,23 @@
           var pBreak = 1 / (1 + MIN_RR);
           var se = Math.sqrt(pBreak * (1 - pBreak) / sN);
           var zsc = se > 0 ? ((sHit - pBreak) / se) : 0;
+          var famZ = 1.96;
+          try{
+            if (gfn('hgOmniFamilyZ')) famZ = W.hgOmniFamilyZ(2);
+          }catch(eZ){}
           var stat = sN + ' samples · ' + (sHit * 100).toFixed(0) + '% · '
                    + (sExp >= 0 ? '+' : '') + sExp.toFixed(2) + 'R ['
                    + (zsc >= 0 ? '+' : '') + zsc.toFixed(2) + 'σ vs breakeven]';
           if (sExp < 0 || zsc <= -2){
             ed = false;
             edWhy = stat + ' — significantly below breakeven, this mechanic has not paid';
-          } else {
+          } else if (zsc >= famZ){
             ed = true;
-            edWhy = stat;
+            edWhy = stat + ' — clears the 2-mechanic significance bar (+' + famZ.toFixed(2) + 'σ)';
+          } else {
+            ed = null;
+            edWhy = stat + ' — does not clear the 2-mechanic bar (+' + famZ.toFixed(2)
+                  + 'σ); too thin to call an edge, so this stays UNCHECKED rather than PASS';
           }
         } else if (isFinite(sN) && sN > 0 && sN < 20){
           edWhy = 'only ' + sN + ' settled samples — too few to judge';
