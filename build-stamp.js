@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v445',
-  pack: 'one fill window, with evidence',
-  built: '2026-08-22T15:05:00Z',
-  note: 'The first settled ledger came back 24 UNFILLED of 25. FILL_BARS lived as two hard-coded 12s in scorecard.js and the inline LOG with only a comment promising they matched; it is one exported window now. Every UNFILLED verdict records nearR, how close the market came in R, so the 12-bar patience can be chosen from data. The window itself is UNCHANGED: those 24 came from one scan in a 0.6-hour spread, all long, which is one market event, not 24 observations. Carries the v444 strategy-confirm pack and v443 headless ledger settle.'
+  version: 'hg-v446',
+  pack: 'strategy + indicators on every scan card',
+  built: '2026-08-22T15:50:00Z',
+  note: 'Scan cards now name the native strategy that formed the ticket and list which of the 20 shared indicator gates agreed or objected. SWING / SCALP / BEST already stamped this and hid it; EDGE, STAR TRADER, and LIQS now run hgStrategyRefine on the plan they already built; gold copies hgContextRead confirm counts onto GOLD SCALP / SWING. Adverse still demotes rank by 8 — never deletes a ticket, never invents levels, never widens a stop. G1–G7 and crypto live-trading stay unchanged. Carries the v445 one-fill-window pack, v444 strategy-confirm, and v443 headless ledger settle.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
