@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v442',
-  pack: 'most probable on every scan tab',
-  built: '2026-08-22T08:30:00Z',
-  note: 'Every market-scan tab pins one MOST PROBABLE banner with ENTRY / STOP / T1 / T2. CLEAN or confirmed leads. Else NEAR (watch only). Else one closest draft. No levels → no banner. G1–G7 unchanged. Crypto execute stays disabled.'
+  version: 'hg-v443',
+  pack: 'the ledger settles unattended',
+  built: '2026-08-22T14:05:00Z',
+  note: 'SCORECARD had 98 setups logged, 59 old enough to resolve and 0 settled: refresh() refused to settle until settlement had already run once, which only a human opening the tab could do. It now settles headlessly on the 10-minute tick, bounded by a 20-minute per-record cooldown and a 25-fetch budget so a background tick can never become a request storm.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

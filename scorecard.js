@@ -1033,15 +1033,51 @@ function defaultFetchCandles(rec){
     return Promise.reject(e);
   }
 }
-async function hgScoreSettle(fetchCandles){
-  var out = { settled: 0, open: 0, failed: 0, notes: [] };
+/* PER-RUN BUDGET.
+
+   Settlement walks one candle fetch per OPEN record, sequentially. That was
+   fine when the only caller was a human opening the tab; the periodic refresh
+   calls it every 10 minutes, and 200 open records (the store cap) would mean
+   200 fetches a tick, forever. This desk has already been rate-limited into a
+   Binance IP ban once by exactly that shape of unbounded fan-out.
+
+   Two bounds, both honest and both reported in out.notes:
+     SETTLE_COOLDOWN_MS — a record checked recently is skipped. A 1h-candle
+       walk cannot change meaningfully inside a few minutes, so re-walking it
+       every tick buys nothing and costs a request.
+     SETTLE_MAX_PER_RUN — a hard ceiling on fetches per call. Oldest-checked
+       records go first, so nothing starves: what is skipped this run is at the
+       front of the queue next run.
+   opts.full (the tab's own REFRESH button) lifts both — a human asking for it
+   is not a background tick. */
+var SETTLE_COOLDOWN_MS  = 20 * 60 * 1000;
+var SETTLE_MAX_PER_RUN  = 25;
+
+async function hgScoreSettle(fetchCandles, opts){
+  var out = { settled: 0, open: 0, failed: 0, skipped: 0, notes: [] };
   try{
+    var full = !!(opts && opts.full);
+    var budget = full ? Infinity : SETTLE_MAX_PER_RUN;
+    var cooldown = full ? 0 : SETTLE_COOLDOWN_MS;
+    var now = Date.now();
     var fn = (typeof fetchCandles === 'function') ? fetchCandles
            : (hasCandleRoute() ? defaultFetchCandles : null);
     if (!fn) out.notes.push('no candle route available — xuniverse/getCandles absent');
-    for (var i = 0; i < store.length; i++){
-      var rec = store[i];
+    /* oldest-checked first, so a capped run never starves the same records */
+    var queue = [];
+    for (var qi = 0; qi < store.length; qi++){
+      var qr = store[qi];
+      if (qr && qr.status === 'open') queue.push(qr);
+    }
+    queue.sort(function(a, b){ return (a.lastCheck || 0) - (b.lastCheck || 0); });
+    for (var i = 0; i < queue.length; i++){
+      var rec = queue[i];
       if (!rec || rec.status !== 'open') continue;
+      if (cooldown && rec.lastCheck && (now - rec.lastCheck) < cooldown){
+        out.open++; out.skipped++; continue;
+      }
+      if (budget <= 0){ out.open++; out.skipped++; continue; }
+      budget--;
       try{
         if (!fn){ rec.note = 'no candle route — settlement unavailable'; out.failed++; continue; }
         var rows = await fn(rec);
@@ -1098,6 +1134,10 @@ async function hgScoreSettle(fetchCandles){
         try{ rec.note = 'settlement failed for ' + rec.sym + ': ' + errMsg(e); }catch(e2){}
         out.failed++;
       }
+    }
+    if (out.skipped){
+      out.notes.push(out.skipped + ' left for the next run (recently checked, or over the '
+        + SETTLE_MAX_PER_RUN + '-per-run budget)');
     }
     saveStore();
     return out;
@@ -1278,7 +1318,7 @@ function render(ui){
 }
 
 /* ================= settle run + refresh contract ================= */
-async function runSettle(ui){
+async function runSettle(ui, opts){
   if (__sc.busy){
     try{ if (ui && ui.stat) ui.stat.textContent = 'settlement already running…'; }catch(e){}
     return 'busy';
@@ -1302,7 +1342,7 @@ async function runSettle(ui){
         ? 'settling ' + openN + ' open record' + (openN === 1 ? '' : 's') + ' against 1h candles…'
         : 'no open records — rendering the stored ledger…';
     }
-    var res = await hgScoreSettle(defaultFetchCandles);
+    var res = await hgScoreSettle(defaultFetchCandles, opts);
     render(ui);
     var msg = 'settled ' + res.settled + ' · still open ' + res.open + ' · failed ' + res.failed + ' · ' + timeStr();
     if (res.notes && res.notes.length) msg += ' (' + res.notes.join('; ') + ')';
@@ -1320,11 +1360,28 @@ async function runSettle(ui){
    settlement runs; 'skipped: not run yet' before the first user settle (a
    global refresh never fires an expensive first-time candle sweep); after
    the first run it re-settles the same way RE-SETTLE NOW does. */
+/* THE LEDGER MUST SETTLE WITHOUT BEING WATCHED.
+
+   This used to read `if (!__sc.ranOnce || !__sc.ui) return 'skipped: not run
+   yet'` — and __sc.ranOnce is only ever set INSIDE runSettle. That is a
+   deadlock: the periodic refresh would not settle until settlement had
+   already run once, and the only thing that ran it once was a human opening
+   this tab and clicking. Measured on the deployed desk: 98 records logged,
+   59 of them old enough to have resolved, 0 settled — so the R-multiple
+   ledger, the only evidence for whether any layer on this desk makes money,
+   had never produced a single outcome.
+
+   The 'not run yet' guard is right for a heavy user-triggered scan (strats.js
+   uses it correctly). It is wrong here, because settlement is not a scan of
+   the market — it is bookkeeping on trades ALREADY taken, and its whole value
+   is that it accrues unattended. The ledger lives in localStorage and does
+   not need the DOM, so it settles headlessly; render(ui) already no-ops on a
+   null ui. The per-run budget in hgScoreSettle is what keeps this cheap. */
 async function refreshScorecard(){
   try{
     if (__sc.busy) return 'busy';
-    if (!__sc.ranOnce || !__sc.ui) return 'skipped: not run yet';
-    await runSettle(__sc.ui);
+    if (!hasCandleRoute()) return 'skipped: no candle route';
+    await runSettle(__sc.ui);   /* ui may be null — settles headlessly */
     return 'refreshed';
   }catch(e){
     return 'error: ' + errMsg(e);
@@ -1545,7 +1602,7 @@ function mountScorecard(el){
       ui.warn.textContent = warns.join(' · ');
       ui.warn.style.display = 'block';
     }
-    if (ui.btn) ui.btn.addEventListener('click', function(){ return runSettle(ui); });
+    if (ui.btn) ui.btn.addEventListener('click', function(){ return runSettle(ui, { full: true }); });
     if (ui.copyBtn) ui.copyBtn.addEventListener('click', function(){ onCopyStats(ui); });
     if (ui.exportBtn) ui.exportBtn.addEventListener('click', function(){ onExportJson(ui); });
     render(ui);
