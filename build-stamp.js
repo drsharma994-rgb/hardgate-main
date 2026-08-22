@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v440',
-  pack: 'most probable entry sl tp',
-  built: '2026-08-22T02:00:00Z',
-  note: 'SWING/SCALP/EDGE/BEST pin one MOST PROBABLE plan with ENTRY / STOP / T1 / T2. CLEAN wins; else 6/7 NEAR watch; else one closest ≥5/7 draft. G1–G7 unchanged. Crypto execute stays disabled.'
+  version: 'hg-v441',
+  pack: 'scan every 10 minutes',
+  built: '2026-08-22T07:30:00Z',
+  note: 'Every scan in every tab runs every 10 minutes, always. AUTO 10m is locked; OFF / 2m / 3m / 5m / 15m ignored. Alert cycle shares the same clock. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

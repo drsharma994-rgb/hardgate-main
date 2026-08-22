@@ -182,7 +182,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Fix Pack 19 (hg-v189):** **Gate replay / threshold sweep** — `cgGateReplay`, `cgReplaySettle`, `cgReplaySweep`, `cgGateReplayPanelHTML`. Walk-forward replay on SWING scan (500×4h bars); **GATE REPLAY** panel under WHY EMPTY with G6 / top ONLY-blocker / ANCHOR tables. Console: `cgGateReplay` + `cgReplaySweep`. **`tests/test-gate-replay.mjs`** (28 assertions).
 - **Fix Pack 18 (hg-v186 / UI hg-v188):** **Gold weekend exposure** — `hgInGoldWeekend`, `hgSecsToGoldWeekend`, `hgGoldWeekendMoves`, `hgGoldWeekendRisk`, `hgGoldWeekendReadout`. **WEEKEND EXPOSURE** panel on GOLD SCALP / SWING (and StarTrader gold sub-tabs) after RUN SCAN; not stamped on tickets until your instrument numbers justify it. **`tests/test-gold-weekend.mjs`**.
 - **Contract sizing on ticket (hg-v171):** TRADE PLAN ticket prints **CONTRACTS** (lots) from Delta `/v2/products` via `hgQtyToContracts` — rounds DOWN; sub-lot positions called out.
-- **Cache reuse (hg-v171):** `HG_CANDLE_TTL_QUIET = 420` (> 5-min alert cycle) so quiet scans reuse candles across cycles.
+- **Cache reuse (hg-v171 / hg-v441):** `HG_CANDLE_TTL_QUIET = 720` (> 10-min scan cycle) so quiet scans reuse candles across cycles.
 - **Directional funding G4 (hg-v170):** `cryptogates.js` / `engine.js` veto funding only when it runs **against** the trade; `CG_FUND_SANITY` / `FUND_SANITY` = 0.30 is a broken-feed check, not a crowd cap. Favorable funding (long at negative fr) no longer blocked.
 - **Non-live upgrades:** EDGE cards show **FLOW OK / PARTIAL / N/A** when Binance CVD/OBI legs missing; tabalerts cover SMART $, OI FLOW, LIQS, SQUEEZE, CARRY, TERM BASIS watch on the **15-min** cycle; `hardRefreshAll` warms macro + layer tabs; static GitHub Pages shows proxy banner via `hghost.js` (`tests/test-hghost.mjs`); gate funnel tab labeled **GATES** (id `execute`); scanner cards show **IN BOOK** via `hgBookStampChip` (slotted; repaints on tab switch / after ADD TO BOOK). Layer tabs (CARRY, TERM BASIS, GOLD PRO) wire **SEND TO TRADE PLAN →** handoffs.
 - **Crypto setup accuracy (hg-v127+):** SWING G6 floor **R:R ≥ 2.0** (`CG_SWING_RR_MIN`); structure stop is never ATR-capped in the matrix. **Fix Pack 2 (hg-v168):** G1 spread **0.25×ATR**, G5 volZ **>0.5** with **RSI-slope quiet-tape stand-in** (`hgSwingG5OK` parity with `engine.js`), EMA21 anchor **≤1.5×ATR** — enforced by `tests/test-gate-parity.mjs`. **`swingTryClean` / `scalpTryClean` return 7/7 CLEAN trend only**; counter-trend funding fades use **`swingTryFundingFade` / `scalpTryFundingFade`** (honest gate tally, not CLEAN 7/7).
@@ -224,7 +224,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Tests: `tests/test-most-probable-panel.mjs`.
 
 ### Crypto desks scan themselves — hg-v439
-- Opening **SWING / SCALP / EDGE / BEST** starts that desk's scan. A busy BRAIN or 5-min cycle **retries** the tab-open scan instead of dropping it. Background `hgScanAllTabs` passes `quiet` so those four use `cryptoScanWarm` / `bestScanWarm` / `edgeWarm` and do not steal the RUN button. EDGE still auto-runs on the visible pane after a headless warm. G1–G7 unchanged.
+- Opening **SWING / SCALP / EDGE / BEST** starts that desk's scan. A busy BRAIN or 10-min cycle **retries** the tab-open scan instead of dropping it. Background `hgScanAllTabs` passes `quiet` so those four use `cryptoScanWarm` / `bestScanWarm` / `edgeWarm` and do not steal the RUN button. EDGE still auto-runs on the visible pane after a headless warm. G1–G7 unchanged.
 - Tests: `tests/test-crypto-tab-auto-scan.mjs`.
 
 ### Quiet liquid scan warm — hg-v438
@@ -320,9 +320,14 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - TICKET cards carry ADD TO BOOK + SEND TO TRADE PLAN. Tab open auto-scans (`HG_TAB_AUTO_SCAN.omnipresent`).
 - Tests: `node tests/test-omnipresent-max.mjs`, `node tests/test-omnipresent.mjs`
 
+### Auto hard refresh — hg-v441
+- **`HG_GLOBAL_SCAN_MS = 10 * 60 * 1000`** — every **10 minutes**, always. `hardRefreshAll()` → `hgScanAllTabs()` runs every scan in every nav tab / subtab / `HG_TAB_MODS.refresh()` (including GOLD SCALP/SWING and SUPER desks). The 10-min alert cycle uses the same sweep so it cannot sneak a 5-min side door.
+- **`HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS`**. Header shows **AUTO 10m**. OFF / 2m / 3m / 5m / 15m clicks are ignored; localStorage `hgAutoRefresh` always stores `600000`.
+- Quiet candle TTL is **720s** so cache spans the 10-min boundary. G1–G7 unchanged.
+- Tests: `tests/test-scan-every-10m.mjs`, `tests/test-hard-refresh.mjs`.
+
 ### Auto hard refresh — hg-v267
-- **`HG_AUTO_REFRESH_HARDCODED_MS = 120000`** in `index.html` — every **2 minutes** the app runs `hardRefreshAll()` on all inline scanners + every `HG_TAB_MODS.refresh()` (including GOLD SCALP/SWING). OFF / 3m / 5m / 15m header buttons are ignored; localStorage `hgAutoRefresh` always stores `120000`.
-- **`goldscalpRefresh` / `goldswingRefresh`:** run a headless scan when the tab was never opened (stub UI, same path as `gsWarm`/`gwWarm`) so the 2m cycle never skips gold tabs cold.
+- **`goldscalpRefresh` / `goldswingRefresh`:** run a headless scan when the tab was never opened (stub UI, same path as `gsWarm`/`gwWarm`) so a background cycle never skips gold tabs cold.
 
 ### Light UI theme — hg-v267
 - Theme source: [markbang/base-themes](https://github.com/markbang/base-themes) **`data-dense` / `light`** tokens in `vendor/base-themes/tokens-data-dense-light.css`.

@@ -53,9 +53,9 @@ console.log('== check-production script ==');
 
 console.log('== alert cycle constants (README alignment) ==');
 {
-  ok(/HG_TAB_ALERT_MS = 5 \* 60 \* 1000/.test(html), 'HG_TAB_ALERT_MS is 5 minutes');
+  ok(/HG_TAB_ALERT_MS = 10 \* 60 \* 1000/.test(html), 'HG_TAB_ALERT_MS is 10 minutes');
   ok(/HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS/.test(html), 'HG_ALERT_CYCLE_MS aliases tab alert ms');
-  ok(/HG_GLOBAL_SCAN_MS = 5 \* 60 \* 1000/.test(html), 'HG_GLOBAL_SCAN_MS is 5 minutes');
+  ok(/HG_GLOBAL_SCAN_MS = 10 \* 60 \* 1000/.test(html), 'HG_GLOBAL_SCAN_MS is 10 minutes');
   ok(/HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS/.test(html), 'HG_ALERTS_AUTO_REFRESH_MS uses global scan interval');
   ok(/HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS/.test(html), 'HG_AUTO_REFRESH_HARDCODED_MS uses global scan interval');
   ok(/GAP_MS = 5 \* 60 \* 1000/.test(tabalerts), 'tabalerts GAP_MS is 5 minutes');
@@ -69,7 +69,7 @@ console.log('== alert cycle constants (README alignment) ==');
   ok(/LS_CLEAN_ONLY = 'hgAlertCleanOnly'/.test(tabalerts), 'tabalerts clean-only localStorage key');
   ok(/LS_GOLD_SEPARATE = 'hgAlertGoldSeparate'/.test(tabalerts), 'tabalerts gold separate batch key');
   ok(/hgTabAlertsRunGold/.test(tabalerts), 'tabalerts exposes hgTabAlertsRunGold');
-  ok(/hgTabAlertsRunGold\(\)/.test(html), 'index calls hgTabAlertsRunGold on 5-min cycle');
+  ok(/hgTabAlertsRunGold\(\)/.test(html), 'index calls hgTabAlertsRunGold on 10-min cycle');
   ok(/HG_TRENDMX_ALERT_MS = 15 \* 60 \* 1000/.test(html), 'HG_TRENDMX_ALERT_MS is 15 minutes');
   ok(/runTrendmxCrossAlerts/.test(html), 'index runs trend matrix cross alerts on 15-min cycle');
   ok(/TRENDMX_ALERT_CYCLE_MS = 15 \* 60 \* 1000/.test(tabalerts), 'tabalerts trendmx cycle is 15 minutes');
@@ -96,7 +96,7 @@ console.log('== HG_SHELL vs index.html scripts ==');
 
 console.log('== README doc guards ==');
 {
-  ok(readme.indexOf('5-minute') >= 0 || readme.indexOf('5 min') >= 0, 'README documents 5-min alert cycle');
+  ok(readme.indexOf('10-minute') >= 0 || readme.indexOf('10 min') >= 0, 'README documents 10-min scan cycle');
   ok(!/EDGE uses tally ≥ 3/.test(readme) && !/EDGE uses tally >= 3/.test(readme),
     'README does not stale-document EDGE tally >= 3');
   ok(/tally.*6|≥ 6|>= 6/.test(readme), 'README documents EDGE tally >= 6');

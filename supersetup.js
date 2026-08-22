@@ -14,8 +14,8 @@ var W = (typeof window !== 'undefined') ? window
 
 var TAB_ID = 'super-setup';
 var SYNC_MS = 2500;
-var SCAN_INTERVAL_MS = 5 * 60 * 1000;
-var SNAP_MAX_MS = SCAN_INTERVAL_MS + 5 * 60 * 1000;
+var SCAN_INTERVAL_MS = 10 * 60 * 1000;
+var SNAP_MAX_MS = SCAN_INTERVAL_MS + 10 * 60 * 1000;
 var STRUCT_MAX_BARS = 20;
 var __hgSuperSetupSnap = null;
 var __ss = {

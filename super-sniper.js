@@ -8,8 +8,8 @@ var W = (typeof window !== 'undefined') ? window
 
 var TAB_ID = 'super-sniper';
 var SYNC_MS = 2500;
-var SCAN_INTERVAL_MS = 5 * 60 * 1000;
-var SNAP_MAX_MS = SCAN_INTERVAL_MS + 5 * 60 * 1000;
+var SCAN_INTERVAL_MS = 10 * 60 * 1000;
+var SNAP_MAX_MS = SCAN_INTERVAL_MS + 10 * 60 * 1000;
 var MIN_CONVICTION = 4;
 var __hgSuperSniperSnap = null;
 var __sn = {

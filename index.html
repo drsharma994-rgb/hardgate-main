@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=440"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=440"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=441"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=441"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -239,7 +239,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
   <div class="header-drawer" id="headerDrawer">
     <div class="header-drawer-inner">
       <button id="hardRefreshBtn" class="statuschip header-action" type="button" onclick="hardRefreshAll()"><svg class="hg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>HARD REFRESH</button>
-      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh locked at 2 minutes — re-runs ⟳ HARD REFRESH on every tab (including GOLD SCALP/SWING); a tick landing mid-refresh is skipped honestly and the countdown continues"><span class="hgalabel">AUTO 2m</span><button id="autoRefOff" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" class="on" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button><button id="autoRef900000" type="button" onclick="setAutoRefresh('900000')">15m</button></span>
+      <span class="hgauto" id="autoRefreshCtl" title="auto hard refresh locked at 10 minutes — re-runs every scan in every tab; OFF / 2m / 3m / 5m / 15m ignored; a tick landing mid-refresh is skipped honestly and the countdown continues"><span class="hgalabel">AUTO 10m</span><button id="autoRefOff" type="button" onclick="setAutoRefresh('off')">OFF</button><button id="autoRef120000" type="button" onclick="setAutoRefresh('120000')">2m</button><button id="autoRef180000" type="button" onclick="setAutoRefresh('180000')">3m</button><button id="autoRef300000" type="button" onclick="setAutoRefresh('300000')">5m</button><button id="autoRef600000" class="on" type="button" onclick="setAutoRefresh('600000')">10m</button><button id="autoRef900000" type="button" onclick="setAutoRefresh('900000')">15m</button></span>
       <span class="statuschip" id="autoRefreshCount" style="display:none"></span>
       <span class="statuschip" id="hardRefreshStat"></span>
       <span class="statuschip header-action" id="chipAlert" onclick="toggleAlerts()" style="cursor:pointer"><svg class="hg-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>ALERTS <b id="alertState">OFF</b></span>
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=440"></script>
+<script src="./hg-plan.js?v=441"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=440"></script>
-<script src="./hg-gates.js?v=440"></script>
-<script src="omniroute.js?v=440"></script>
+<script src="hg-mechanics.js?v=441"></script>
+<script src="./hg-gates.js?v=441"></script>
+<script src="omniroute.js?v=441"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=440"></script>
+<script src="edge.js?v=441"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=440"></script>
+<script src="omnigold.js?v=441"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=440"></script>
+<script src="omnipresent.js?v=441"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=440"></script>
+<script src="supersetup.js?v=441"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=440"></script>
-<script src="super-gold.js?v=440"></script>
-<script src="super-best.js?v=440"></script>
-<script src="super-sniper.js?v=440"></script>
-<script src="super-book.js?v=440"></script>
-<script src="super-calibrate.js?v=440"></script>
+<script src="super-desk-common.js?v=441"></script>
+<script src="super-gold.js?v=441"></script>
+<script src="super-best.js?v=441"></script>
+<script src="super-sniper.js?v=441"></script>
+<script src="super-book.js?v=441"></script>
+<script src="super-calibrate.js?v=441"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -881,32 +881,30 @@ function publishBestSnap(clean, meta){
 window.bestScan = function(){ return __hgBestSnap; };
 
 /* Owner policy: alerts always armed in this browser.
-   BEST (Strategies tab): Telegram on new #1 setup every 5 min (server CI matches).
+   BEST (Strategies tab): Telegram on new #1 setup every 10 min (server CI matches).
    All tab setups (SWING/SCALP/EDGE/PINE/BRAIN/GOLD/…): one unified Telegram
-   batch every 5 min via tabalerts.js (per-setup dedup in hg_tabalert_keys). */
+   batch every 10 min via tabalerts.js (per-setup dedup in hg_tabalert_keys). */
 const HG_ALERTS_FORCED_ON = true;
-const HG_BEST_ALERT_MS = 5 * 60 * 1000;
-const HG_TAB_ALERT_MS = 5 * 60 * 1000;
+const HG_BEST_ALERT_MS = 10 * 60 * 1000;
+const HG_TAB_ALERT_MS = 10 * 60 * 1000;
 const HG_ALERT_CYCLE_MS = HG_TAB_ALERT_MS;
 const HG_TRENDMX_ALERT_MS = 15 * 60 * 1000;
-const HG_GLOBAL_SCAN_MS = 5 * 60 * 1000;
+const HG_GLOBAL_SCAN_MS = 10 * 60 * 1000;
 const HG_ALERTS_AUTO_REFRESH_MS = HG_GLOBAL_SCAN_MS;
-/* Hard-coded app-wide auto scan — every nav tab/subtab + HG_tabs module every 5 min
+/* Hard-coded app-wide auto scan — every nav tab/subtab + HG_tabs module every 10 min
    via hardRefreshAll → hgScanAllTabs. Not user-disableable; localStorage OFF ignored. */
 const HG_AUTO_REFRESH_HARDCODED_MS = HG_GLOBAL_SCAN_MS;
-/* Was 300 — identical to HG_TAB_ALERT_MS, so a cached candle expired at the
-   exact moment the next cycle asked for it and nothing was ever reused. 420
-   spans the cycle boundary, so the second consumer of a symbol inside a cycle
-   and the next cycle's first look both hit cache. Gates still only ever see
-   CLOSED candles, so no signal is lost — a 4H bar does not change in 2 min. */
-const HG_CANDLE_TTL_QUIET = 420;
+/* Quiet TTL must outlive the scan cycle so a cached candle is reused inside
+   one 10-min sweep and still valid at the next cycle's first look. 720 > 600.
+   Gates still only ever see CLOSED candles. */
+const HG_CANDLE_TTL_QUIET = 720;
 /* symbols replayed by CALIBRATE — 40 x 500 bars is ~90s and enough to see a shape */
 const HG_DIAG_SYMBOLS = 40;
 /* the lookback sweep re-runs the whole replay once per value, so it uses a
    smaller symbol set — 12 x 6 lookbacks is already 72 full replays */
 const HG_DIAG_LOOK_SYMBOLS = 12;
 const HG_DIAG_LOOKS = [5, 8, 10, 15, 20, 30];
-const HG_POS_SNAP_TTL = 420;   /* reuse positioning snapshots across 5-min alert cycles */
+const HG_POS_SNAP_TTL = 720;   /* reuse positioning snapshots across 10-min scan cycles */
 function hgScanRateOk(){
   try{ return !(S.binanceBackoffUntil && Date.now() < S.binanceBackoffUntil); }catch(e){ return true; }
 }
@@ -4893,7 +4891,7 @@ async function runScanLeg(kind, opts){
 }
 
 
-/* Quiet background scans for the 5-min Telegram alert cycle — no UI churn. */
+/* Quiet background scans for the 10-min Telegram alert cycle — no UI churn. */
 async function refreshCryptoWatch(kind, uni, cleanSyms, opts){
   const quiet = !!(opts && opts.quiet);
   const elId = kind === 'swing' ? 'swingWatch' : 'scalpWatch';
@@ -4994,7 +4992,7 @@ async function runTabAlertScans(){
   }catch(e){ console.warn('tab alert full scan', e); }
 }
 
-/* Unified 5-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
+/* Unified 10-min setup Telegram — warm scanners (whole exchange) then push all tabs once. */
 async function runTabSetupAlerts(){
   const now = Date.now();
   if (S.lastTabAlertCheck && now - S.lastTabAlertCheck < HG_TAB_ALERT_MS) return;
@@ -5024,7 +5022,7 @@ async function runTrendmxCrossAlerts(){
   }catch(e){ console.error('HARDGATE trend matrix cross alerts failed', e); }
 }
 
-/* Legacy hook — EDGE now rides the unified 5-min tabalerts batch. */
+/* Legacy hook — EDGE now rides the unified 10-min tabalerts batch. */
 async function runEdgeAlertCycle(){
   return runTabSetupAlerts();
 }
@@ -7497,7 +7495,7 @@ async function runAlertCycle(){
         }
       }
     }catch(e){ console.error('HARDGATE gold alert leg failed', e); }
-    /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 5 min */
+    /* all tab setups — SWING/SCALP/EDGE/PINE/BRAIN/GOLD/SMART/… every 10 min */
     try{ await runTabSetupAlerts(); }catch(e){ console.error('HARDGATE tab setup alerts failed', e); }
     /* TREND MATRIX fresh ⚡GOLDEN crosses — own 15-min scan + Telegram (one msg per coin) */
     try{ await runTrendmxCrossAlerts(); }catch(e){ console.error('HARDGATE trend matrix cross alerts failed', e); }
@@ -8694,18 +8692,13 @@ async function hardRefreshAll(){
   }
 }
 
-/* ⏱ AUTO REFRESH — segmented OFF / 2m / 3m / 5m control sitting next to
-   ⟳ HARD REFRESH in the header. The choice persists in localStorage under
-   'hgAutoRefresh' ('off'|'120000'|'180000'|'300000') and is restored on load —
-   a saved ON choice resumes automatically. ONE 1s setInterval drives both the
-   countdown chip ('next 1:47') and the schedule; it is cleared on every change
-   and on OFF, never stacked. Each due tick calls the EXISTING hardRefreshAll()
-   — there is no second refresh pipeline. If a refresh is already in flight,
-   hardRefreshAll() self-skips (honest) and the countdown simply continues to
-   the next tick. Every step is feature-checked and try-wrapped: this must
-   never throw at load or during ticks. */
+/* ⏱ AUTO REFRESH — segmented OFF / 2m / 3m / 5m / 10m / 15m control sitting
+   next to ⟳ HARD REFRESH. Hard-locked to 10 minutes (HG_AUTO_REFRESH_HARDCODED_MS).
+   OFF / 2m / 3m / 5m / 15m clicks are ignored; localStorage always stores 600000.
+   ONE 1s setInterval drives both the countdown chip and the schedule. Each due
+   tick calls the EXISTING hardRefreshAll() — no second refresh pipeline. */
 const HG_AUTO_KEY = 'hgAutoRefresh';
-const HG_AUTO_CHOICES = { 'off':0, '120000':120000, '180000':180000, '300000':300000, '900000':900000 };
+const HG_AUTO_CHOICES = { 'off':0, '120000':120000, '180000':180000, '300000':300000, '600000':600000, '900000':900000 };
 let HG_AUTO_MS = 0;        /* 0 = OFF */
 let HG_AUTO_NEXT = 0;      /* epoch ms of the next scheduled tick */
 let HG_AUTO_TIMER = null;  /* the ONE interval handle; null while OFF */
@@ -8720,7 +8713,7 @@ function hgAutoEls(){
 function hgAutoPaint(){
   try{
     const activeId = HG_AUTO_MS > 0 ? ('autoRef' + HG_AUTO_MS) : 'autoRefOff';
-    ['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRef900000'].forEach(function(id){
+    ['autoRefOff','autoRef120000','autoRef180000','autoRef300000','autoRef600000','autoRef900000'].forEach(function(id){
       let b = null;
       try{
         if (typeof document !== 'undefined' && document && typeof document.getElementById === 'function')
