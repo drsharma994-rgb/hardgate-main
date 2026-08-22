@@ -371,17 +371,26 @@ function hgMpNum(v){
 }
 
 /* Flatten the shapes scan tabs actually emit — {entry,stop,t1}, BEST
-   {t.symbol}, SMART {setup}, OMNI {plan}, sniper {setup}, sl/tp aliases.
-   Drops zero-risk and missing T1. Never invents levels. */
+   {t.symbol}, SMART {setup}, OMNI {plan}, sniper {setup}, MEANREV {sig},
+   sl/tp/target aliases. Drops zero-risk and missing T1. Never invents levels. */
+function hgMpFirstNum(){
+  var i, n;
+  for (i = 0; i < arguments.length; i++){
+    n = hgMpNum(arguments[i]);
+    if (isFinite(n)) return n;
+  }
+  return NaN;
+}
+
 function hgNormalizeSetupRow(raw){
   if (!raw || typeof raw !== 'object') return null;
-  var plan = (raw.plan && typeof raw.plan === 'object') ? raw.plan : null;
+  var plan = (raw.plan && typeof raw.plan === 'object' && !Array.isArray(raw.plan)) ? raw.plan : null;
   var setup = (raw.setup && typeof raw.setup === 'object') ? raw.setup : null;
-  var nest = setup || plan || {};
-  var src = setup || plan || raw;
+  var sig = raw.sig && typeof raw.sig === 'object' ? raw.sig : null;
+  var nest = setup || plan || sig || {};
+  var src = setup || plan || sig || raw;
   var t = raw.t && typeof raw.t === 'object' ? raw.t : null;
   var cls = raw.cls && typeof raw.cls === 'object' ? raw.cls : null;
-  var sig = raw.sig && typeof raw.sig === 'object' ? raw.sig : null;
   var sym = raw.venueSym || raw.sym || raw.symbol || raw.ticker
     || (t && (t.symbol || t.sym)) || nest.sym || nest.symbol || '';
   var dir = raw.dir || raw.side || raw.direction
@@ -389,10 +398,10 @@ function hgNormalizeSetupRow(raw){
   dir = String(dir || '').toLowerCase();
   if (dir === 'buy' || dir === 'l') dir = 'long';
   if (dir === 'sell' || dir === 's') dir = 'short';
-  var entry = hgMpNum(src.entry != null ? src.entry : raw.entry);
-  var stop = hgMpNum(src.stop != null ? src.stop : (raw.stop != null ? raw.stop : (raw.sl != null ? raw.sl : nest.sl)));
-  var t1 = hgMpNum(src.t1 != null ? src.t1 : (raw.t1 != null ? raw.t1 : (raw.tp != null ? raw.tp : (raw.tp1 != null ? raw.tp1 : (nest.tp != null ? nest.tp : nest.tp1)))));
-  var t2 = hgMpNum(src.t2 != null ? src.t2 : (raw.t2 != null ? raw.t2 : (raw.tp2 != null ? raw.tp2 : nest.tp2)));
+  var entry = hgMpFirstNum(src.entry, raw.entry, nest.entry);
+  var stop = hgMpFirstNum(src.stop, raw.stop, raw.sl, nest.stop, nest.sl);
+  var t1 = hgMpFirstNum(src.t1, raw.t1, raw.tp, raw.tp1, raw.target, nest.t1, nest.tp, nest.tp1, nest.target);
+  var t2 = hgMpFirstNum(src.t2, raw.t2, raw.tp2, nest.t2, nest.tp2);
   var row = {
     sym: String(sym || ''),
     dir: dir,

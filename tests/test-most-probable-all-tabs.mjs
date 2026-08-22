@@ -143,6 +143,20 @@ console.log('== normalize: common setup shapes become one row ==');
   });
   ok(sniper && sniper.t1 === 103.6 && sniper.dir === 'long', 'reversal-sniper {setup} normalizes');
 
+  const meanrev = W.hgNormalizeSetupRow({
+    sym: 'SOLUSD', sig: { dir: 'long', entry: 150, stop: 147, target: 156 }
+  });
+  ok(meanrev && meanrev.dir === 'long' && meanrev.entry === 150 && meanrev.t1 === 156,
+     'MEANREV {sig.entry/stop/target} normalizes');
+
+  const squeezePlan = W.hgNormalizeSetupRow({
+    sym: 'ETHUSD', dir: 'short', plan: { entry: 4000, stop: 4080, t1: 3840, t2: 3760 }
+  });
+  ok(squeezePlan && squeezePlan.entry === 4000 && squeezePlan.t1 === 3840,
+     'SQUEEZE plan object (not the HTML string) normalizes');
+  ok(W.hgNormalizeSetupRow({ sym: 'ETHUSD', dir: 'short', plan: 'ENTRY 4000' }) === null,
+     'SQUEEZE HTML plan string is not treated as levels');
+
   ok(W.hgNormalizeSetupRow({ sym: 'X', dir: 'long', entry: 1, stop: 1, t1: 2 }) === null, 'zero-risk row is dropped');
   ok(W.hgNormalizeSetupRow(null) === null, 'null input is dropped');
 }

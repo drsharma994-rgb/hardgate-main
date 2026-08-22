@@ -673,7 +673,25 @@ function sqPaintDeskSections(refs, results, filterFn){
         + shown.map(function(r){ return sqSetupCardHTML(r, 'clean'); }).join('');
       sqPaintMiniCharts(refs.cards, shown);
     }
-    try { if (typeof W.hgMpPin === 'function') W.hgMpPin('squeeze', { cands: clean, nearCands: near, closest: forming[0] }, null, refs.cards); } catch (eMp) {}
+    try {
+      if (typeof W.hgMpPin === 'function'){
+        function sqWithPlan(row){
+          if (!row) return row;
+          var p = squeezePlan({
+            sym: row.sym, dir: row.dir, cls: row.cls, rows4h: row.rows4h,
+            rows1h: row.rows1h, kind: row.kind, gate: row.gate, tick: row.tick
+          });
+          return p ? Object.assign({}, row, {
+            entry: p.entry, stop: p.stop, t1: p.t1, t2: p.t2, plan: p
+          }) : row;
+        }
+        W.hgMpPin('squeeze', {
+          cands: clean.map(sqWithPlan),
+          nearCands: near.map(sqWithPlan),
+          closest: forming[0] ? sqWithPlan(forming[0]) : null
+        }, null, refs.cards);
+      }
+    } catch (eMp) {}
   }
   if (refs.near){
     var nearShown = near.filter(filterFn || function(){ return true; });

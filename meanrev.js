@@ -531,7 +531,22 @@ function mount(el){
 
       if (!results.length) emptyEl.style.display = 'block';
       else cardsEl.innerHTML = results.map(cardHTML).join('');
-      try { if (typeof window.hgMpPin === 'function') window.hgMpPin('meanrev', results, null, cardsEl); } catch (eMp) {}
+      try {
+        if (typeof window.hgMpPin === 'function'){
+          window.hgMpPin('meanrev', results.map(function(r){
+            var sig = r && r.sig;
+            var st = r && r.stats;
+            var lv = (sig && st && typeof meanrevPlan === 'function')
+              ? meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: st.extreme, atr: st.atr, mean: sig.target, oppBand: st.oppBand })
+              : null;
+            if (lv) return Object.assign({}, r, lv, { dir: sig.dir });
+            if (sig) return Object.assign({}, r, {
+              dir: sig.dir, entry: sig.entry, stop: sig.stop, t1: sig.target, rr: sig.rr
+            });
+            return r;
+          }), null, cardsEl);
+        }
+      } catch (eMp) {}
 
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
       setStat('universe ' + uni.length + ' · signals ' + results.length + ' · failed ' + failed
