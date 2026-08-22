@@ -1917,6 +1917,7 @@ function mount(el){
         + '<div><div class="k">SAFE MAX</div><div class="v">' + (Number.isFinite(r.safeMaxLev) ? fmt(r.safeMaxLev, 0) + 'x' : '—') + '</div></div>'
         + '</div></div>';
     }).join('');
+    try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-setup', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
       card.addEventListener('click', function(){
         var id = card.getAttribute('data-id');

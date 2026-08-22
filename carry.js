@@ -465,6 +465,14 @@ is in flight it reports 'busy' (overlaps never double-fetch).
         + carryBookBtn(c, carryStack)
         + '</div>';
     }).join('');
+    try {
+      if (typeof window.hgMpPin === 'function'){
+        window.hgMpPin('carry', cards.map(function(c){
+          var lv = (c && c.levels) || {};
+          return { sym: c.base, dir: 'long', entry: lv.entry, stop: lv.stopLong || lv.stopShort, t1: lv.t1Px, t2: lv.t2Px };
+        }), null, ui.cards);
+      }
+    } catch (eMp) {}
   }
 
   function __renderTable(ui, list){

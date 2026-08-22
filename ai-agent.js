@@ -853,6 +853,7 @@ function renderDesk(ui, desk){
     + '<a href="https://github.com/Eigenwise/atomic-agents" target="_blank" rel="noopener">atomic-agents</a> scans the full Delta India + CoinDCX universe for gate-clean setups. '
     + 'Telegram alerts fire on the 5-min cycle when a great setup forms (ENTRY · SL · TP). Server watch runs 24/7 when TELEGRAM_* is set on Render.</div>';
   ui.out.innerHTML = h;
+  try { if (typeof W.hgMpPin === 'function') W.hgMpPin('aiagent', collectSetupsForDisplay(desk), null, ui.out); } catch (eMp) {}
 }
 
 async function refreshAgentTab(ui, force){

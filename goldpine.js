@@ -512,6 +512,7 @@ function mount(el){
           { total: result.scalp.length });
 
       if (out) out.innerHTML = html;
+      try { if (typeof W.hgMpPin === 'function') W.hgMpPin('goldpine', swingTop.concat(scalpTop), null, out); } catch (eMp) {}
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
       if (stat) stat.textContent = 'done · top ' + swingTop.length + '/' + result.swing.length + ' swing · top '
         + scalpTop.length + '/' + result.scalp.length + ' scalp · ' + dt + 's';

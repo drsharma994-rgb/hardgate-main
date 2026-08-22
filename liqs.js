@@ -831,6 +831,7 @@ function renderSetups(snap){
   if (!setup){ box.innerHTML = '<div class="empty">no flush-reversal setup right now</div>'; return; }
   maybeFetchSetupRows(setup.sym); /* no-op without getCandles / while fresh / in-flight */
   box.innerHTML = setupCardHTML(setup);
+  try { if (typeof G.hgMpPin === 'function') G.hgMpPin('liqs', [setup], null, box); } catch (eMp) {}
 }
 
 function render(){

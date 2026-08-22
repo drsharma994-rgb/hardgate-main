@@ -171,6 +171,7 @@ function mount(el){
         out.innerHTML = (typeof W.pineSubRenderOut === 'function')
           ? W.pineSubRenderOut(signals, gate, cardHTML, 'no MSB/OB NEW, RECENT, or ALIGNED match on this scan.')
           : '';
+        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('pine-msb', signals, null, out); } catch (eMp) {}
       }
 
       var dt = ((Date.now() - t0) / 1000).toFixed(1);

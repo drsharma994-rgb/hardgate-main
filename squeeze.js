@@ -673,6 +673,7 @@ function sqPaintDeskSections(refs, results, filterFn){
         + shown.map(function(r){ return sqSetupCardHTML(r, 'clean'); }).join('');
       sqPaintMiniCharts(refs.cards, shown);
     }
+    try { if (typeof W.hgMpPin === 'function') W.hgMpPin('squeeze', { cands: clean, nearCands: near, closest: forming[0] }, null, refs.cards); } catch (eMp) {}
   }
   if (refs.near){
     var nearShown = near.filter(filterFn || function(){ return true; });

@@ -646,6 +646,7 @@ async function runScan(el){
       return (ta - tb) || (b.cls.score - a.cls.score) || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0));
     });
     cards.innerHTML = results.map(cardHTML).join('');
+    try { if (typeof G.hgMpPin === 'function') G.hgMpPin('oiflow', results, null, cards); } catch (eMp) {}
     paintCharts(cards, results);
     if (typeof globalThis !== 'undefined' && typeof globalThis.hgChartVisionEnrichDeskRows === 'function'){
       var oiWraps = results.filter(function(r){ return r.setup && r.setup.confirmed && r.rows4h; }).map(function(r){

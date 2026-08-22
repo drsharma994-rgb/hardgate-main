@@ -846,6 +846,18 @@ function trendmxPaintDeskSections(refs, state){
       refs.cards.innerHTML = ch;
       trendmxPaintMiniCharts(refs.cards, clean);
     }
+    try {
+      if (typeof W.hgMpPin === 'function'){
+        function tmWithPlan(row){
+          var d = tmDirOf(row);
+          var p = d ? trendmxPlan(Object.assign({}, row, { dir: d })) : null;
+          return p ? Object.assign({}, row, p, { dir: d }) : row;
+        }
+        for (var ti = 0; ti < clean.length; ti++) tmLead.push(Object.assign({ tier: 'clean' }, tmWithPlan(clean[ti])));
+        for (var tn = 0; tn < near.length; tn++) tmLead.push(Object.assign({ tier: 'near' }, tmWithPlan(near[tn])));
+        W.hgMpPin('trendmx', { cands: clean.map(tmWithPlan), nearCands: near.map(tmWithPlan), closest: forming[0] ? tmWithPlan(forming[0]) : null }, null, refs.cards);
+      }
+    } catch (eMp) {}
   }
   if (refs.near){
     refs.near.innerHTML = near.length

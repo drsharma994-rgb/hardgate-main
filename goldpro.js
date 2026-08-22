@@ -746,6 +746,7 @@ async function runGoldPro(ui){
                      + renderMacroPanel(macro, funding, ls, cot)
                      + renderCorrPanel(cr, corrErr)
                      + renderVerdictPanel(verdict);
+    try { if (typeof window.hgMpPin === 'function') window.hgMpPin('goldpro', lvPlan ? [lvPlan] : [], null, ui.out); } catch (eMp) {}
 
     var degraded = [];
     if (!g1d.rows.length) degraded.push('gold candles');

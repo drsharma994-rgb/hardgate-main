@@ -364,6 +364,125 @@ function hgSetupHasLevels(row){
   return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
 }
 
+function hgMpNum(v){
+  if (v === null || v === undefined || v === '') return NaN;
+  var n = +v;
+  return isFinite(n) ? n : NaN;
+}
+
+/* Flatten the shapes scan tabs actually emit — {entry,stop,t1}, BEST
+   {t.symbol}, SMART {setup}, OMNI {plan}, sniper {setup}, sl/tp aliases.
+   Drops zero-risk and missing T1. Never invents levels. */
+function hgNormalizeSetupRow(raw){
+  if (!raw || typeof raw !== 'object') return null;
+  var plan = (raw.plan && typeof raw.plan === 'object') ? raw.plan : null;
+  var setup = (raw.setup && typeof raw.setup === 'object') ? raw.setup : null;
+  var nest = setup || plan || {};
+  var src = setup || plan || raw;
+  var t = raw.t && typeof raw.t === 'object' ? raw.t : null;
+  var cls = raw.cls && typeof raw.cls === 'object' ? raw.cls : null;
+  var sig = raw.sig && typeof raw.sig === 'object' ? raw.sig : null;
+  var sym = raw.venueSym || raw.sym || raw.symbol || raw.ticker
+    || (t && (t.symbol || t.sym)) || nest.sym || nest.symbol || '';
+  var dir = raw.dir || raw.side || raw.direction
+    || (cls && cls.dir) || (sig && sig.dir) || nest.dir || nest.side || '';
+  dir = String(dir || '').toLowerCase();
+  if (dir === 'buy' || dir === 'l') dir = 'long';
+  if (dir === 'sell' || dir === 's') dir = 'short';
+  var entry = hgMpNum(src.entry != null ? src.entry : raw.entry);
+  var stop = hgMpNum(src.stop != null ? src.stop : (raw.stop != null ? raw.stop : (raw.sl != null ? raw.sl : nest.sl)));
+  var t1 = hgMpNum(src.t1 != null ? src.t1 : (raw.t1 != null ? raw.t1 : (raw.tp != null ? raw.tp : (raw.tp1 != null ? raw.tp1 : (nest.tp != null ? nest.tp : nest.tp1)))));
+  var t2 = hgMpNum(src.t2 != null ? src.t2 : (raw.t2 != null ? raw.t2 : (raw.tp2 != null ? raw.tp2 : nest.tp2)));
+  var row = {
+    sym: String(sym || ''),
+    dir: dir,
+    entry: entry,
+    stop: stop,
+    t1: t1,
+    venue: raw.venue || raw.venueTag || nest.venue,
+    rr: hgMpNum(raw.rr != null ? raw.rr : (src.rr != null ? src.rr : nest.rr)),
+    passed: raw.gatesPassed != null ? raw.gatesPassed : (raw.passed != null ? raw.passed : nest.passed),
+    gatesPassed: raw.gatesPassed != null ? raw.gatesPassed : raw.passed,
+    gatesTotal: raw.gatesTotal || nest.gatesTotal || 7,
+    missing: raw.missing || nest.missing,
+    nearClean: !!(raw.nearClean || nest.nearClean),
+    postGateUnchecked: !!raw.postGateUnchecked
+  };
+  if (isFinite(t2) && t2 > 0) row.t2 = t2;
+  if (!hgSetupHasLevels(row)) return null;
+  var tier = String(raw.tier || nest.tier || '').toLowerCase();
+  var confirmed = !!(raw.confirmed || (setup && setup.confirmed) || (raw.grade && raw.grade.ticket) || raw.ticket);
+  var forming = !!(raw.forming || raw.closest || tier === 'forming' || raw.isRecent || raw.edgeForming);
+  var near = !!(raw.near || raw.nearClean || tier === 'near' || raw.isContext);
+  var clean = !!(raw.clean || confirmed || tier === 'clean' || tier === 'best' || raw.edgeTicket || raw.isNew);
+  if (isFinite(+row.passed)){
+    if (+row.passed >= 7){ clean = true; near = false; forming = false; }
+    else if (+row.passed === 6){ near = true; clean = false; }
+    else if (+row.passed >= 5){ forming = true; clean = false; }
+  }
+  if (clean && !near) row.clean = true;
+  else if (near){ row.near = true; row.nearClean = true; }
+  if (forming && !row.clean) row.forming = true;
+  if (!row.clean && !row.near && !row.forming) row.clean = true;
+  return row;
+}
+
+function hgCollectSetupRows(payload){
+  if (!payload) return [];
+  if (Array.isArray(payload)){
+    var out = [], i, n;
+    for (i = 0; i < payload.length; i++){
+      n = hgNormalizeSetupRow(payload[i]);
+      if (n) out.push(n);
+    }
+    return out;
+  }
+  if (typeof payload !== 'object') return [];
+  var keys = ['cands', 'nearCands', 'found', 'rows', 'setups', 'results', 'clean', 'near', 'signals', 'top', 'shown'];
+  var bag = [], k, arr, j;
+  if (payload.closest) bag.push(payload.closest);
+  for (k = 0; k < keys.length; k++){
+    arr = payload[keys[k]];
+    if (Array.isArray(arr)){
+      for (j = 0; j < arr.length; j++) bag.push(arr[j]);
+    }
+  }
+  if (!bag.length){
+    n = hgNormalizeSetupRow(payload);
+    return n ? [n] : [];
+  }
+  return hgCollectSetupRows(bag);
+}
+
+function hgPickMostProbableAny(payload, side){
+  if (!payload) return null;
+  var cands = [], near = [], closest = null, rows, r, extra, i;
+  if (!Array.isArray(payload) && typeof payload === 'object'
+      && (payload.cands || payload.nearCands || payload.closest || payload.near)){
+    cands = hgCollectSetupRows(payload.cands || []);
+    near = hgCollectSetupRows(payload.nearCands || payload.near || []);
+    closest = payload.closest ? hgNormalizeSetupRow(payload.closest) : null;
+    extra = hgCollectSetupRows({
+      found: payload.found, rows: payload.rows, setups: payload.setups,
+      results: payload.results, signals: payload.signals, top: payload.top, shown: payload.shown
+    });
+    for (i = 0; i < extra.length; i++){
+      if (extra[i].clean) cands.push(extra[i]);
+      else if (extra[i].near) near.push(extra[i]);
+      else if (!closest) closest = extra[i];
+    }
+    return hgPickMostProbable(cands, near, side, closest);
+  }
+  rows = hgCollectSetupRows(payload);
+  for (r = 0; r < rows.length; r++){
+    if (rows[r].clean) cands.push(rows[r]);
+    else if (rows[r].near) near.push(rows[r]);
+    else if (rows[r].forming){ if (!closest) closest = rows[r]; }
+    else cands.push(rows[r]);
+  }
+  return hgPickMostProbable(cands, near, side, closest);
+}
+
 /* One leader for the desk banner. CLEAN with levels wins. Else the best
    6/7 NEAR. Else a single closest ≥5/7 draft (watch-only). Never invents
    a 7/7 ticket. */
@@ -1647,6 +1766,9 @@ G.hgCmpSetupQuality = hgCmpSetupQuality;
 G.hgRankCryptoSetups = hgRankCryptoSetups;
 G.hgSetupHasLevels = hgSetupHasLevels;
 G.hgPickMostProbable = hgPickMostProbable;
+G.hgNormalizeSetupRow = hgNormalizeSetupRow;
+G.hgCollectSetupRows = hgCollectSetupRows;
+G.hgPickMostProbableAny = hgPickMostProbableAny;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;
 G.hgSwingG5OK = hgSwingG5OK;

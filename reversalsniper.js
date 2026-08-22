@@ -570,6 +570,7 @@ function mount(el){
         cardsEl.innerHTML = '<div class="note ok" style="margin-bottom:8px">★ '
           + esc(results[0].sym) + ' — highest conviction (' + results[0].setup.conviction + ')</div>'
           + results.map(cardHTML).join('');
+        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('reversalsniper', results, null, cardsEl); } catch (eMp) {}
       } else {
         emptyEl.style.display = 'block';
         emptyEl.textContent = 'No sniper-grade long reversals right now — need post-drop (≥2%) + sweep/mean-rev/RSI(2) confluence, stop tight enough for ≥'

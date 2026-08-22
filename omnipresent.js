@@ -773,6 +773,7 @@
                + ' stands; the other side is not shown.</div>')
             : ('<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>');
           ui.cards.innerHTML = h || empty;
+          try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnipresent', top, null, ui.cards); } catch (eMp) {}
         });
       })
       .catch(function (e){

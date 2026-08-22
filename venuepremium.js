@@ -103,6 +103,7 @@ function mountVenuePremium(panel){
       var sym = panel.querySelector('#hgVenueSym').value || 'BTCUSDT';
       var snap = await scanVenuePremium(sym);
       cards.innerHTML = renderCard(snap);
+      try { if (typeof globalThis.hgMpPin === 'function') globalThis.hgMpPin('venueprem', snap, null, cards); } catch (eMp) {}
       stat.textContent = 'updated ' + new Date(snap.at).toLocaleTimeString();
     }catch(e){ stat.textContent = 'error: ' + e.message; }
     finally{ __busy = false; }

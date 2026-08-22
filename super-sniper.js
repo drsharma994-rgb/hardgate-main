@@ -377,6 +377,7 @@ function mount(el){
         + 'E ' + fmt(r.entry, 6) + ' · S ' + fmt(r.stop, 6) + ' · T1 ' + fmt(r.t1, 6)
         + ' · lev ' + fmt(r.lev || r.safeMaxLev, 0) + '×</div></div>';
     }).join('');
+    try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-sniper', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
       card.addEventListener('click', function(){
         __sn.selectedId = card.getAttribute('data-id');

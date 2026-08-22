@@ -3905,6 +3905,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
+        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omniroute', ranked, null, ui.cards); } catch (eMp) {}
         omniRememberPaint(ui);
         });
       }catch(eRender){

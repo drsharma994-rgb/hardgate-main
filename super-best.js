@@ -584,6 +584,7 @@ function mount(el){
         + '<div>LEV<br/>' + fmt(r.impliedLev, 1) + 'x</div>'
         + '</div></div>';
     }).join('');
+    try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-best', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
       card.addEventListener('click', function(){
         var id = card.getAttribute('data-id');

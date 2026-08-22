@@ -408,6 +408,7 @@ async function cvRunScan(opts){
       stat.textContent = 'done — 0 setups at 6/7+ / ' + items.length + ' screened · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's';
     } else {
       cards.innerHTML = shown.map(cvCardHTML).join('');
+      try { if (typeof W.hgMpPin === 'function') W.hgMpPin('chartvision', shown, null, cards); } catch (eMp) {}
       cvPaintCharts(cards, shown);
       stat.textContent = 'done — ' + results.length + ' at 6/7+ (' + clean7n + ' CLEAN · ' + nearN + ' NEAR) · showing '
         + shown.length + ' · ' + ((Date.now() - t0) / 1000).toFixed(0) + 's';
@@ -445,6 +446,7 @@ async function cvRunScan(opts){
         },
         repaint: function(){
           cards.innerHTML = shown.map(cvCardHTML).join('');
+          try { if (typeof W.hgMpPin === 'function') W.hgMpPin('chartvision', shown, null, cards); } catch (eMp) {}
           cvPaintCharts(cards, shown);
           if (funnel){
             var visN = shown.filter(function(r){ return r.visionSvg || r.visionNextBar || r.visionChip; }).length;

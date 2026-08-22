@@ -950,6 +950,7 @@ function mount(el){
         + '</div>'
         + '<div class="hg-note" style="margin-top:8px">' + String(r.strategy || '') + '</div></div>';
     }).join('');
+    try { if (typeof W.hgMpPin === 'function') W.hgMpPin('super-gold', rows, null, desk); } catch (eMp) {}
     desk.querySelectorAll('.hg-desk-card').forEach(function(card){
       card.addEventListener('click', function(){
         var id = card.getAttribute('data-id');

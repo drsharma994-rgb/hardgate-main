@@ -1292,6 +1292,7 @@ function paintResults(el, survivors, rejected, isXu){
       asideCount = el.querySelector('#engineAsideCount');
   if (cards){
     cards.innerHTML = survivors.map(cardHTML).join('');
+    try { if (typeof G.hgMpPin === 'function') G.hgMpPin('execute', survivors, null, cards); } catch (eMp) {}
     paintCharts(cards, survivors);
     if (typeof G.hgChartVisionEnrichEngineSurvivors === 'function'){
       G.hgChartVisionEnrichEngineSurvivors(survivors, cards, cardHTML, paintCharts);

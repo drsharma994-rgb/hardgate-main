@@ -132,8 +132,12 @@ function hgMostProbablePanelHTML(kind, pick){
     var total = row.gatesTotal || 7;
     var missing = Array.isArray(row.missing) ? row.missing.join(', ') : '';
     var grade, note;
+    var cryptoDesk = kind === 'swing' || kind === 'scalp' || kind === 'edge' || kind === 'best';
     if (tier === 'clean'){
-      grade = '7/7 CLEAN';
+      if (isFinite(passed))
+        grade = passed + '/' + total + ' CLEAN';
+      else
+        grade = cryptoDesk ? '7/7 CLEAN' : 'LEADER';
       note = 'This is the ranked leader on ' + tab + '. Levels are the live ticket.';
     } else if (tier === 'near'){
       grade = (isFinite(passed) ? (passed + '/' + total + ' NEAR') : '6/7 NEAR') + ' — watch only · not a ticket';
@@ -171,6 +175,120 @@ function hgPinMostProbablePanel(host, kind, pick){
     if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', html);
     else host.innerHTML = html + (host.innerHTML || '');
     return pick;
+  }catch(e){ return null; }
+}
+
+var HG_MP_HOST = {
+  swing: 'swingCards', scalp: 'scalpCards', edge: 'edgeCards', best: 'bestOut',
+  coil: 'coilCards', apex: 'apexCards', trap: 'trapCards', 'liq-trap': 'trapCards',
+  smc: 'smcCards', ob: 'obCards', div: 'divCards', divergence: 'divCards',
+  smart: 'smartCards', basis: 'basisCards', search: 'searchOut', finder: 'finderOut',
+  gold: 'goldSetupOut', 'gold-setup': 'goldSetupOut',
+  squeeze: 'sqCards', reversalsniper: 'rsCards',
+  omnipresent: 'opCards', omniroute: 'omniCards', omnigold: 'ogCards',
+  oiflow: 'oiflowCards', carry: 'carryCards', termbasis: 'tbCards',
+  venueprem: 'hgVenueCards', brain: 'brainCards', startrader: 'stCards',
+  meanrev: 'mrCards', chartvision: 'cvCards', pine: 'pineOut',
+  'pine-msb': 'pineMsbOut', 'pine-sqz': 'pineSqzOut', 'pine-smf': 'pineSmfOut',
+  'pine-ht': 'pineHtOut', 'pine-smc': 'pineSmcOut', 'pine-cipher': 'pineCipherOut',
+  'pine-rf': 'pineRfOut', 'pine-nw': 'pineNwOut', 'pine-avwap': 'pineAvwapOut',
+  engine: 'engineCards', execute: 'engineCards',
+  'super-best': 'sb-desk', 'super-sniper': 'sn-desk', 'super-gold': 'sg-desk',
+  'super-setup': 'ss-desk', goldpine: 'goldPineOut', liqs: 'liqsSetups',
+  aiagent: 'agentOut', strats: 'sgOut',
+  trendmx: '#tab_trendmx [data-r="cards"]',
+  goldpro: '#tab_goldpro [data-gp="out"]',
+  goldspot: '#tab_goldspot [data-gs="out"]',
+  rotation: '#tab_rotation [data-rot="out"]',
+  goldcoint: 'gcointBody'
+};
+
+function hgMpHost(kind){
+  try{
+    if (typeof document === 'undefined') return null;
+    var spec = HG_MP_HOST[kind];
+    var el = null;
+    if (typeof spec === 'function') el = spec();
+    else if (typeof spec === 'string'){
+      if (spec.indexOf(' ') >= 0 || spec.charAt(0) === '#' || spec.charAt(0) === '[')
+        el = document.querySelector(spec);
+      else el = document.getElementById(spec);
+    }
+    if (el) return el;
+    el = document.getElementById(kind + 'Cards')
+      || document.getElementById(kind + 'Out')
+      || document.getElementById(kind + '-desk');
+    if (el) return el;
+    var pane = document.getElementById('tab_' + kind);
+    if (pane){
+      return pane.querySelector('.cards, .hg-desk, [id$="Cards"], [id$="Out"], [data-r="cards"], [data-gp="out"]');
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+function hgMpPin(kind, payload, side, host){
+  try{
+    var pick = (typeof W.hgPickMostProbableAny === 'function')
+      ? W.hgPickMostProbableAny(payload, side) : null;
+    host = host || hgMpHost(kind);
+    if (!host) return pick;
+    if (!pick){
+      var old = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      return null;
+    }
+    hgPinMostProbablePanel(host, kind, pick);
+    return pick;
+  }catch(e){ return null; }
+}
+
+var __hgMpNotes = {};
+var __hgMpFlushT = {};
+var HG_MP_SKIP_AUTO = {
+  swing: 1, scalp: 1, edge: 1, best: 1,
+  goldscalp: 1, goldswing: 1, 'gold-scalp': 1, 'gold-swing': 1
+};
+
+function hgMpCanonKind(scanner){
+  var k = String(scanner || '').replace(/-near$/, '');
+  if (k === 'liq-trap') return 'trap';
+  if (k === 'divergence') return 'div';
+  if (k === 'coil-expansion') return 'coil';
+  if (k.indexOf('gold-') === 0) return 'gold';
+  if (k.indexOf('finder') === 0) return 'finder';
+  return k;
+}
+
+function hgMpNoteCard(sym, dir, entry, stop, t1, bookMeta){
+  try{
+    bookMeta = bookMeta || {};
+    var raw = bookMeta.scanner;
+    if (!raw) return;
+    var kind = hgMpCanonKind(raw);
+    if (HG_MP_SKIP_AUTO[kind] || HG_MP_SKIP_AUTO[raw]) return;
+    var row = {
+      sym: sym, dir: dir, entry: entry, stop: stop, t1: t1, t2: bookMeta.t2,
+      venue: bookMeta.venue, tier: bookMeta.tier,
+      passed: bookMeta.passed, gatesPassed: bookMeta.gatesPassed,
+      confirmed: bookMeta.confirmed, clean: bookMeta.clean, near: bookMeta.near
+    };
+    if (typeof W.hgSetupHasLevels === 'function' && !W.hgSetupHasLevels(row)) return;
+    if (!__hgMpNotes[kind]) __hgMpNotes[kind] = [];
+    __hgMpNotes[kind].push(row);
+    if (typeof setTimeout === 'function'){
+      if (__hgMpFlushT[kind]) clearTimeout(__hgMpFlushT[kind]);
+      __hgMpFlushT[kind] = setTimeout(function(){ hgMpFlush(kind); }, 0);
+    }
+  }catch(e){}
+}
+
+function hgMpFlush(kind){
+  try{
+    var rows = __hgMpNotes[kind] || [];
+    __hgMpNotes[kind] = [];
+    __hgMpFlushT[kind] = null;
+    return hgMpPin(kind, rows);
   }catch(e){ return null; }
 }
 
@@ -562,6 +680,12 @@ W.hgSetupDeskBannerHTML = hgSetupDeskBannerHTML;
 W.hgSetupNearHeaderHTML = hgSetupNearHeaderHTML;
 W.hgMostProbablePanelHTML = hgMostProbablePanelHTML;
 W.hgPinMostProbablePanel = hgPinMostProbablePanel;
+W.HG_MP_HOST = HG_MP_HOST;
+W.hgMpHost = hgMpHost;
+W.hgMpPin = hgMpPin;
+W.hgMpNoteCard = hgMpNoteCard;
+W.hgMpFlush = hgMpFlush;
+W.hgMpCanonKind = hgMpCanonKind;
 W.hgMpPx = hgMpPx;
 W.hgFormingWatchHTML = hgFormingWatchHTML;
 W.hgSetupEmptyHTML = hgSetupEmptyHTML;

@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=441"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=441"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=442"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=442"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=441"></script>
+<script src="./hg-plan.js?v=442"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=441"></script>
-<script src="./hg-gates.js?v=441"></script>
-<script src="omniroute.js?v=441"></script>
+<script src="hg-mechanics.js?v=442"></script>
+<script src="./hg-gates.js?v=442"></script>
+<script src="omniroute.js?v=442"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=441"></script>
+<script src="edge.js?v=442"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=441"></script>
+<script src="omnigold.js?v=442"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=441"></script>
+<script src="omnipresent.js?v=442"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=441"></script>
+<script src="supersetup.js?v=442"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=441"></script>
-<script src="super-gold.js?v=441"></script>
-<script src="super-best.js?v=441"></script>
-<script src="super-sniper.js?v=441"></script>
-<script src="super-book.js?v=441"></script>
-<script src="super-calibrate.js?v=441"></script>
+<script src="super-desk-common.js?v=442"></script>
+<script src="super-gold.js?v=442"></script>
+<script src="super-best.js?v=442"></script>
+<script src="super-sniper.js?v=442"></script>
+<script src="super-book.js?v=442"></script>
+<script src="super-calibrate.js?v=442"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1976,7 +1976,7 @@ async function runBasisScan(){
         __cardsHtml.push(cardHTML(b, dir,
           [["Delta mark",px(dT.mark)],["CoinDCX px",px(cPrice)],["basis",fmt(basisPct,3)+"%"],["delta funding", dT.fundingPct!==null?fmt(dT.fundingPct,4)+"%/int":"n/a"],["BINANCE 8h %", binFundTxt]],
           ["G1 base asset on both venues","G2 |basis|>=0.15%"],
-          planTxt, dT.mark, nomStop, nomT1));
+          planTxt, dT.mark, nomStop, nomT1, null, { scanner: 'basis', strategy: 'basis', tier: 'near' }));
       }catch(e){}
       await sleep(150);
     }
@@ -2273,6 +2273,13 @@ function smartCardHTML(r){
   const venueChip = r.venue === 'cdcx'
     ? ' <span class="gpip" title="positioning via ' + r.sym + ' on Binance (same asset — positioning is a property of the asset, not the venue) · trade it on CoinDCX">COINDCX</span>'
     : '';
+  try {
+    if (s && typeof hgMpNoteCard === 'function'){
+      hgMpNoteCard(r.venueSym || r.sym, s.dir, s.entry, s.stop, s.t1, {
+        scanner: 'smart', t2: s.t2, tier: s.confirmed ? 'clean' : 'near', confirmed: !!s.confirmed
+      });
+    }
+  } catch (eMp) {}
   return '<div class="card ' + r.cls.dir + tierCls + '">'
     + '<div class="chead"><span class="sym">' + (r.venueSym || r.sym) + venueChip + '</span><span class="dir">' + r.cls.dir.toUpperCase() + ' · ' + ev.length + ' EVIDENCE · ' + tierLabel + badge + visionChip
       + (s && typeof hgBookStampChip === 'function' ? hgBookStampChip(r.venueSym || r.sym, s.dir, { scanner: 'smart', strategy: 'smart' }) : '')
@@ -3773,6 +3780,14 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
         { horizonBars: 20 });
     }
   } catch (eFwd) { try { if (typeof window.hgFwdWarn === "function") window.hgFwdWarn("index", eFwd); } catch (eW) {} }
+  try {
+    if (typeof hgMpNoteCard === 'function'){
+      hgMpNoteCard(sym, dir, entry, stop, t1, {
+        scanner: scanId, t2: bookMeta.t2, venue: bookMeta.venue, tier: tier,
+        passed: bookMeta.passed, gatesPassed: bookMeta.gatesPassed
+      });
+    }
+  } catch (eMp) {}
   const onclickJs = tradeable
     ? (typeof hgToTradePlanOnclickJs === 'function'
       ? hgToTradePlanOnclickJs(sym, dir, entry, stop, t1, tradeMeta)
@@ -5480,6 +5495,13 @@ async function runGold(){
         }
       }catch(eBr){}
     }
+    try {
+      if (typeof hgMpPin === 'function'){
+        var goldLead = [];
+        if (gsPlan) goldLead.push(Object.assign({ sym: GOLD_SYM }, gsPlan));
+        hgMpPin('gold', goldLead, null, $('goldSetupOut') || $('goldSwingOut'));
+      }
+    } catch (eMp) {}
     $('goldStat').textContent = `evaluated · closed bars only · ${new Date().toTimeString().slice(0,5)}${tabBridge}`;
   }catch(e){
     $('goldStat').textContent = 'gold eval failed: '+e.message;
@@ -6258,6 +6280,7 @@ async function runGoldSetup(){
         stack: gsSetupStack })
       + '</div>';
     if (typeof hgMiniChart === 'function') hgMiniChart($('goldSetupChart'), h4, { dir: dir, entry: decision.entry, stop: decision.stop, t1: decision.t1, t2: decision.t2 });
+    try { if (typeof hgMpPin === 'function') hgMpPin('gold', [Object.assign({ sym: GOLD_SYM }, decision)], null, out); } catch (eMp) {}
     if (stat) stat.textContent = decision.confidence.toLowerCase() + ' ' + dir + ' · closed bars only · ' + new Date().toTimeString().slice(0,5);
   }catch(e){
     if (stat) stat.textContent = 'gold setup failed: ' + e.message;
@@ -8460,6 +8483,7 @@ async function runFinder(){
         + renderStrategy('JUDAS SWEEP \u2014 SHORT', js, { sym: GOLD_SYM, assetType: 'gold' })
         + `<div class="row"><button class="btn" id="finderBtRun" onclick="runFinderGoldBacktest()">RUN BACKTEST CONTEXT</button> <button class="btn" id="finderBtX" onclick="btCancel('finder')" style="display:none">CANCEL</button></div><div class="prog" id="finderBtProg"><i></i></div><div id="finderBacktestOut"></div>`;
       stat.textContent = 'evaluated \u00b7 ' + new Date().toTimeString().slice(0,8);
+      try { if (typeof hgMpPin === 'function') hgMpPin('finder', [swing, jl, js], null, out); } catch (eMp) {}
     } else {
       const base = document.getElementById('finderSym').value.trim().toUpperCase();
       if (!base){ stat.textContent='enter a symbol'; return; }
@@ -8480,6 +8504,7 @@ async function runFinder(){
         + renderStrategy('JUDAS SWEEP \u2014 SHORT', js, { sym: t.sym, assetType: 'crypto' })
         + `<div class="row"><button class="btn" id="finderBtRun" onclick="runFinderCryptoBacktest('${base}')">RUN BACKTEST CONTEXT</button> <button class="btn" id="finderBtX" onclick="btCancel('finder')" style="display:none">CANCEL</button></div><div class="prog" id="finderBtProg"><i></i></div><div id="finderBacktestOut"></div>`;
       stat.textContent = 'evaluated \u00b7 closed bars only \u00b7 ' + new Date().toTimeString().slice(0,8);
+      try { if (typeof hgMpPin === 'function') hgMpPin('finder', [swing, scalp, jl, js], null, out); } catch (eMp) {}
     }
   }catch(e){
     stat.textContent = 'evaluation failed: ' + e.message;

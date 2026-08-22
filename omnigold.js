@@ -3073,6 +3073,7 @@ terse status, and never launches a first-time scan on a global refresh.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h;
+        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnigold', ogCollapsed, null, ui.cards); } catch (eMp) {}
         if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){

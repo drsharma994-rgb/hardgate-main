@@ -301,6 +301,15 @@ function pineSubRunScan(cfg, opts){
     if (cfg.snap) cfg.snap.current = { at: Date.now(), signals: signals, gate: gate, stat: '' };
     if (ui.out && cardFn){
       ui.out.innerHTML = pineSubRenderOut(signals, gate, cardFn, emptyDetail);
+      try {
+        if (typeof W.hgMpPin === 'function'){
+          var pineKind = (ui.out.id === 'pineOut') ? 'pine'
+            : (ui.out.id && /^pine/.test(ui.out.id) && /Out$/.test(ui.out.id))
+              ? ('pine-' + ui.out.id.replace(/^pine/, '').replace(/Out$/, '').toLowerCase())
+              : (cfg.tabId || 'pine');
+          W.hgMpPin(pineKind, signals, null, ui.out);
+        }
+      } catch (eMp) {}
     }
 
     var dt = ((Date.now() - t0) / 1000).toFixed(1);

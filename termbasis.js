@@ -298,6 +298,7 @@ the user runs a scan once.
       }
       results.sort(function(a, b){ return (b.score - a.score) || ((b.turnoverUsd || 0) - (a.turnoverUsd || 0)); });
       cards.innerHTML = results.map(cardHTML).join('');
+      try { if (typeof G.hgMpPin === 'function') G.hgMpPin('termbasis', results, null, cards); } catch (eMp) {}
       /* 'skipped' is not failure: those pairs have no dated contracts to
          curve, which is a fact about Binance's listings, not a fetch that
          went wrong. Naming it separately keeps 'incomplete' meaning what it

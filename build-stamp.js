@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v441',
-  pack: 'scan every 10 minutes',
-  built: '2026-08-22T07:30:00Z',
-  note: 'Every scan in every tab runs every 10 minutes, always. AUTO 10m is locked; OFF / 2m / 3m / 5m / 15m ignored. Alert cycle shares the same clock. G1–G7 unchanged. Crypto execute stays disabled.'
+  version: 'hg-v442',
+  pack: 'most probable on every scan tab',
+  built: '2026-08-22T08:30:00Z',
+  note: 'Every market-scan tab pins one MOST PROBABLE banner with ENTRY / STOP / T1 / T2. CLEAN or confirmed leads. Else NEAR (watch only). Else one closest draft. No levels → no banner. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

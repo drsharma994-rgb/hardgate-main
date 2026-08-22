@@ -531,6 +531,7 @@ function mount(el){
 
       if (!results.length) emptyEl.style.display = 'block';
       else cardsEl.innerHTML = results.map(cardHTML).join('');
+      try { if (typeof window.hgMpPin === 'function') window.hgMpPin('meanrev', results, null, cardsEl); } catch (eMp) {}
 
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
       setStat('universe ' + uni.length + ' · signals ' + results.length + ' · failed ' + failed

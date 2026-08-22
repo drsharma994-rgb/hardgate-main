@@ -5427,6 +5427,7 @@ async function runBrain(el){
     /* safe* wrappers: one bad row becomes an honest RENDER FAILED row,
        never blanks the whole 500-row render */
     cards.innerHTML = setups.map(safeCardHTML).join('');
+    try { if (typeof G.hgMpPin === 'function') G.hgMpPin('brain', setups.concat(watches || []), null, cards); } catch (eMp) {}
     paintCharts(cards, setups);
     /* ENTRY TICKET — best long + best short with computed plans, over the
        FULL row set so planned WATCH radar rows qualify too */
@@ -5711,6 +5712,7 @@ async function runQuick(el){
       readWrap.style.display = 'block';
     }
     cards.innerHTML = setups.map(safeCardHTML).join('');
+    try { if (typeof G.hgMpPin === 'function') G.hgMpPin('brain', setups.concat(watches || []), null, cards); } catch (eMp) {}
     paintCharts(cards, setups);
     /* ENTRY TICKET — same contract as the full scan; the rechecked row set
        carries every freshly planned WATCH-or-better row */

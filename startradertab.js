@@ -873,6 +873,7 @@ function mount(el){
         return;
       }
       cards.innerHTML = show.map(cardHTML).join('');
+      try { if (typeof W.hgMpPin === 'function') W.hgMpPin('startrader', show, null, cards); } catch (eMp) {}
       if (typeof W.hgChartVisionEnrichDeskRows === 'function'){
         var stWraps = show.filter(function(r){
           return !r.planDraft && r.rows4h && (r.tier === 'PRIME' || r.tier === 'HIGH');
@@ -887,7 +888,10 @@ function mount(el){
         });
         W.hgChartVisionEnrichDeskRows(stWraps, function(w){ return w.rows4h; }, {
           limit: 12,
-          repaint: function(){ cards.innerHTML = show.map(cardHTML).join(''); }
+          repaint: function(){
+            cards.innerHTML = show.map(cardHTML).join('');
+            try { if (typeof W.hgMpPin === 'function') W.hgMpPin('startrader', show, null, cards); } catch (eMp) {}
+          }
         });
       }
       var primes = show.filter(function(x){ return x.tier === 'PRIME'; }).length;

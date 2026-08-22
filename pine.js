@@ -781,6 +781,7 @@ function mount(el){
       __pineSnap = { at: Date.now(), signals: signals, gate: gate, stat: '' };
 
       if (out) out.innerHTML = renderPineOut(signals, gate);
+      try { if (typeof W.hgMpPin === 'function') W.hgMpPin('pine', signals, null, out); } catch (eMp) {}
 
       var visibleN = signals.filter(pineSignalVisible).length;
       var dt = ((Date.now() - t0) / 1000).toFixed(1);
