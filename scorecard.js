@@ -109,6 +109,14 @@ var SETTLE_SEC = 3600;
    through the entry to reach the stop, so it fills. Only the winners were
    phantom. FILL_BARS matches the LOG's fill window in index.html. */
 var FILL_BARS = 12;
+/* ONE fill window, not two copies that a comment PROMISES are equal.
+   index.html's LOG had its own `const FILL_BARS = 12` and this file's note
+   said "FILL_BARS matches the LOG's fill window in index.html" — a promise
+   with nothing enforcing it. Change one and the LOG and the SCORECARD would
+   silently disagree about whether the same setup was ever a trade. Exported
+   here, read there, and tests/test-fill-window.mjs asserts the LOG does not
+   hard-code a second literal. Same drift class as the connect-src allowlist. */
+try{ G.HG_FILL_BARS = FILL_BARS; }catch(e){}
 var MAX_BARS   = 500;                    /* candle fetch cap (> 14d of 1h bars) */
 
 /* ---------------- module state ---------------- */
@@ -438,6 +446,13 @@ function hgScoreWalk(record, rows){
     var deadline = at + EXPIRE_MS;
     var touchedT1 = false, walked = 0, lastClose = null, lastT = null, expired = false;
     var filled = false, fillWait = 0, sawBars = 0, filledAt = null, fillIdx = -1;
+    /* Closest the market came to the limit while we waited, in R. An UNFILLED
+       verdict is a real decision — it removes the setup from expectancy
+       entirely — so it should carry its evidence rather than just a bar
+       count. nearR 0.05 means the limit missed by a twentieth of the risk;
+       nearR 3 means the plan was never in the neighbourhood. Cheap to track
+       and it is what makes FILL_BARS answerable from data later. */
+    var nearR = null;
     var maeR = 0, mfeR = 0;
     var exSign = (dir === 'long') ? 1 : -1;
     function noteExcursion(b){
@@ -466,9 +481,14 @@ function hgScoreWalk(record, rows){
           && (dir === 'long' ? bar.l <= entry : bar.h >= entry);
         if (touched){ filled = true; filledAt = bar.t; fillIdx = k; }
         else {
+          if (bar.l !== null && bar.h !== null && risk > 0){
+            var gap = (dir === 'long') ? (bar.l - entry) / risk : (entry - bar.h) / risk;
+            if (gap >= 0 && (nearR === null || gap < nearR)) nearR = gap;
+          }
           fillWait++;
           if (fillWait >= FILL_BARS){
-            return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: bar.t };
+            return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: bar.t,
+                     nearR: (nearR === null ? null : round4(nearR)) };
           }
           continue;
         }
@@ -507,8 +527,10 @@ function hgScoreWalk(record, rows){
          verdict we cannot support. Only claim PENDING_FILL / UNFILLED when
          bars were actually examined and none of them reached the limit. */
       if (sawBars > 0){
-        if (expired) return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: lastT };
-        return { state: 'PENDING_FILL', r: null, bars: fillWait, closedAt: null, filledAt: filledAt };
+        if (expired) return { state: 'UNFILLED', r: null, bars: fillWait, closedAt: lastT,
+                              nearR: (nearR === null ? null : round4(nearR)) };
+        return { state: 'PENDING_FILL', r: null, bars: fillWait, closedAt: null, filledAt: filledAt,
+                 nearR: (nearR === null ? null : round4(nearR)) };
       }
     }
     if (expired) return Object.assign({ state: 'EXPIRED', r: (lastClose !== null ? rOf(lastClose) : null), bars: walked, closedAt: lastT, filledAt: filledAt }, ex());
@@ -1097,7 +1119,9 @@ async function hgScoreSettle(fetchCandles, opts){
         rec.bars = w.bars;
         if (w.state === 'PENDING_FILL'){
           rec.mtm = null;
-          rec.note = 'limit not reached yet (' + w.bars + ' bars) — not a trade until it fills';
+          rec.nearR = (w.nearR === undefined) ? null : w.nearR;
+          rec.note = 'limit not reached yet (' + w.bars + ' bars'
+            + (w.nearR != null ? ', closest ' + w.nearR + 'R away' : '') + ') — not a trade until it fills';
           out.open++;
         }else if (w.state === 'OPEN'){
           rec.mtm = round4(w.r);
@@ -1110,7 +1134,10 @@ async function hgScoreSettle(fetchCandles, opts){
           rec.closedAt = w.closedAt;
           rec.settledAt = Date.now();
           rec.mtm = null;
-          rec.note = 'limit never traded — excluded from expectancy';
+          rec.nearR = (w.nearR === undefined) ? null : w.nearR;
+          rec.note = 'limit never traded'
+            + (w.nearR != null ? ' — closest approach ' + w.nearR + 'R from entry' : '')
+            + ' — excluded from expectancy';
           out.unfilled = (out.unfilled || 0) + 1;
           out.settled++;
         }else{

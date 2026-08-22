@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v444',
-  pack: 'strategy confirm on every scan tab',
-  built: '2026-08-22T14:10:00Z',
-  note: 'Every scan tab stamps the shared 20-gate indicator bank as CLEAN / MIXED / ADVERSE. Adverse demotes rank, never deletes the ticket. Stops never widen. G1–G7 unchanged. Crypto execute stays disabled. SCORECARD still settles headlessly on the 10-minute tick (v443).'
+  version: 'hg-v445',
+  pack: 'one fill window, with evidence',
+  built: '2026-08-22T15:05:00Z',
+  note: 'The first settled ledger came back 24 UNFILLED of 25. FILL_BARS lived as two hard-coded 12s in scorecard.js and the inline LOG with only a comment promising they matched; it is one exported window now. Every UNFILLED verdict records nearR, how close the market came in R, so the 12-bar patience can be chosen from data. The window itself is UNCHANGED: those 24 came from one scan in a 0.6-hour spread, all long, which is one market event, not 24 observations. Carries the v444 strategy-confirm pack and v443 headless ledger settle.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
