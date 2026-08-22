@@ -51,6 +51,33 @@ const RATE_MAX_COINDCX = 800;
    ENRICH_MAX contracts — four calls a name. The default 300/min would rate-
    limit the tab against itself long before Binance did. */
 const RATE_MAX_BINANCE = 900;
+/* DELTA IS A PRIMARY VENUE AND WAS THE ONLY ONE WITHOUT ITS OWN BUCKET.
+
+   CoinDCX and Binance each got a named ceiling above; Delta India — the venue
+   in this app's own title — fell through to RATE_MAX_DEFAULT, and that is the
+   ONLY host the desk rate-limits itself against. Measured on the deployed
+   desk, one QUICK RESCAN: 1,957 fetches, 219 rejected, and all 219 were
+   429 api.india.delta.exchange from THIS proxy, not from Delta. Observed
+   demand was ~430 Delta requests/min against a 300/min ceiling.
+
+   The new ceiling is arithmetic, not a guess. Delta documents a quota of
+   10,000 units per fixed 5-minute window, throttled by IP for unauthenticated
+   requests — 2,000 units/min. /v2/history/candles and /v2/tickers, which is
+   substantially all of what a scan asks for, cost 3 units each. So Delta
+   itself starts refusing at roughly
+
+       2,000 units/min ÷ 3 units  =  ~666 requests/min
+
+   500 sits above the ~430/min the desk actually wants and at ~75% of Delta's
+   own ceiling (1,500 of 2,000 units), so the desk stops rejecting its own
+   traffic while the venue's real limit still has headroom. Raising this
+   further would only move the refusal from our 429 to Delta's, which is the
+   worse failure: theirs is IP-scoped and ours is not.
+
+   Source: Delta Exchange API docs, rate-limit section (10,000 units / 5 min;
+   "any endpoint not mentioned here has a cost of 1 unit"; OHLC candles and
+   tickers listed at 3). */
+const RATE_MAX_DELTA = 500;
 const __rateBuckets = new Map();
 const __responseCache = new Map();
 
@@ -124,6 +151,7 @@ function rateLimited(key, hostname){
   const bucketKey = key + '|' + (hostname || '*');
   const max = (hostname && hostname.indexOf('coindcx.com') !== -1) ? RATE_MAX_COINDCX
             : (hostname && hostname.indexOf('binance.com') !== -1) ? RATE_MAX_BINANCE
+            : (hostname && hostname.indexOf('delta.exchange') !== -1) ? RATE_MAX_DELTA
             : RATE_MAX_DEFAULT;
   let bucket = __rateBuckets.get(bucketKey);
   if (!bucket){ bucket = []; __rateBuckets.set(bucketKey, bucket); }

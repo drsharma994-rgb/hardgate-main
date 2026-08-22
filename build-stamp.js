@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v446',
-  pack: 'strategy + indicators on every scan card',
-  built: '2026-08-22T15:50:00Z',
-  note: 'Scan cards now name the native strategy that formed the ticket and list which of the 20 shared indicator gates agreed or objected. SWING / SCALP / BEST already stamped this and hid it; EDGE, STAR TRADER, and LIQS now run hgStrategyRefine on the plan they already built; gold copies hgContextRead confirm counts onto GOLD SCALP / SWING. Adverse still demotes rank by 8 — never deletes a ticket, never invents levels, never widens a stop. G1–G7 and crypto live-trading stay unchanged. Carries the v445 one-fill-window pack, v444 strategy-confirm, and v443 headless ledger settle.'
+  version: 'hg-v447',
+  pack: 'Delta gets its own proxy budget',
+  built: '2026-08-22T16:30:00Z',
+  note: 'Delta India was the only primary venue without a named rate ceiling in /api/proxy, so the desk rejected its own Delta traffic: one rescan measured 219 self-inflicted 429s, all of them Delta, none from Delta itself. Sized from Delta published limits — 10,000 units per 5 min at 3 units a candle call is about 666 req/min — so the budget is 500: above the ~430/min a rescan wants, at 75 percent of the venue ceiling. Carries the v446 strategy+indicators cards, v445 one-fill-window, v444 strategy-confirm and v443 headless ledger settle.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
