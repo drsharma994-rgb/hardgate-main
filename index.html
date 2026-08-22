@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=442"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=442"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=443"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=443"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=442"></script>
+<script src="./hg-plan.js?v=443"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=442"></script>
-<script src="./hg-gates.js?v=442"></script>
-<script src="omniroute.js?v=442"></script>
+<script src="hg-mechanics.js?v=443"></script>
+<script src="./hg-gates.js?v=443"></script>
+<script src="omniroute.js?v=443"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=442"></script>
+<script src="edge.js?v=443"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=442"></script>
+<script src="omnigold.js?v=443"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=442"></script>
+<script src="omnipresent.js?v=443"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=442"></script>
+<script src="supersetup.js?v=443"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=442"></script>
-<script src="super-gold.js?v=442"></script>
-<script src="super-best.js?v=442"></script>
-<script src="super-sniper.js?v=442"></script>
-<script src="super-book.js?v=442"></script>
-<script src="super-calibrate.js?v=442"></script>
+<script src="super-desk-common.js?v=443"></script>
+<script src="super-gold.js?v=443"></script>
+<script src="super-best.js?v=443"></script>
+<script src="super-sniper.js?v=443"></script>
+<script src="super-book.js?v=443"></script>
+<script src="super-calibrate.js?v=443"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1769,7 +1769,8 @@ async function runCoilScanLeg(opts){
           (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
           pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
-          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack }));
+          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack,
+            strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst }));
       }catch(e){}
       await sleep(120);
     }
@@ -1918,7 +1919,7 @@ async function runDivScanLeg(opts){
     if (!(rr>=2)) continue;
     var plObj = applyExactEntry({ dir: dir, type: 'SWING', entry: entry, stop: stop, t1: t1, t2: t2,
       note: capped ? 'stop capped at 2×ATR — the divergence pivot sits beyond; invalidation still belongs to the pivot' : '' },
-      rows, { style: 'swing', preferEdge: true });
+      rows, { style: 'swing', preferEdge: true, refineLevels: true });
     entry = plObj.entry; stop = plObj.stop; t1 = plObj.t1; t2 = plObj.t2;
     found++;
     const reg = detectRegime(rows);
@@ -1928,7 +1929,8 @@ async function runDivScanLeg(opts){
        ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
       ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
       planBlockExact(plObj, plObj.note), entry, stop, t1, null,
-      { scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack }));
+      { scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack,
+        strategyConfirm: plObj.strategyConfirm, strategyWith: plObj.strategyWith, strategyAgainst: plObj.strategyAgainst }));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);
@@ -2250,7 +2252,9 @@ function smartCardHTML(r){
   const tierCls = tier === 'near' ? ' tier-near' : (tier === 'forming' ? ' tier-forming' : '');
   const tierLabel = (typeof hgSetupTierLabel === 'function') ? hgSetupTierLabel(tier) : (tier === 'near' ? 'NEAR' : (tier === 'forming' ? 'FORMING' : 'CLEAN'));
   const badge = s ? ' <span class="gpip ok">' + s.type + '</span> <span class="gpip' + (s.confirmed ? ' ok' : '') + '">'
-      + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>' : '';
+      + (s.confirmed ? 'CONFIRMED' : 'UNCONFIRMED') + '</span>'
+      + ((typeof hgStrategyConfirmChipHtml === 'function')
+        ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '') : '';
   const visionChip = (r.visionChip && s && s.confirmed) ? ' <span class="gpip ok">' + String(r.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
   const regime = r.cls.regime.length ? r.cls.regime.join(' · ') + '. ' : '';
   const planTxt = s
@@ -2532,7 +2536,8 @@ async function runApexScanLeg(opts){
         (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
-        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack }));
+        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack,
+          strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst }));
     });
     statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done — ${results.length} Apex assets found`;
     if (!results.length && opts.dualLast !== false) emptyEl.style.display='block';
@@ -2625,7 +2630,8 @@ found++;
 const t2 = dir==='long' ? uOuter : lOuter;   // stretch target: opposite extreme band, beyond the mean
 var trapPl = applyExactEntry({ dir: dir, type: 'SCALP', entry: p, stop: stop, t1: t1, t2: t2,
   note: 'mean reversion — stop tight behind the wick; target the mean first' },
-  rows, { style: 'scalp', m15: rows, poiLevel: dir==='long' ? lInner : uInner, poiLabel: 'inner band' });
+  rows, { style: 'scalp', m15: rows, poiLevel: dir==='long' ? lInner : uInner, poiLabel: 'inner band',
+    refineLevels: true, reversion: true });
 const trapStack = inlineScanStack(dir, t.symbol, rows, { style: 'scalp', ticker: t, clean: true });
 __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 [['mark',px(p)],['RSI now',fmt(rNow,1)],['RSI at sweep',fmt(rsiAtSweep,1)],['vol (ATR%)',fmt(atrPct,2)+'%'],
@@ -2635,7 +2641,8 @@ __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
 planBlockExact(trapPl, trapPl.note)
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack }));
+trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack,
+  strategyConfirm: trapPl.strategyConfirm, strategyWith: trapPl.strategyWith, strategyAgainst: trapPl.strategyAgainst }));
 }catch(e){}
 await sleep(100);
 }
@@ -2712,7 +2719,7 @@ async function runSmcScanLeg(opts){
         if (dir === 'long' ? t2 < t1 : t2 > t1) t2 = t1;   // T2 never behind T1
         var smcPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the FVG; T1 = nearest liquidity' }, rows,
-          { poiLevel: (fvg.top + fvg.bottom) / 2, poiLabel: 'FVG mid', preferEdge: true });
+          { poiLevel: (fvg.top + fvg.bottom) / 2, poiLabel: 'FVG mid', preferEdge: true, refineLevels: true });
         const smcStack = inlineScanStack(dir, t.symbol, rows, { style: 'swing', ticker: t, clean: true, nearClean: true });
         __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir, [
           ['mark', px(p)], ['Gap Age', `${fvg.age} bars (4H)`],
@@ -2721,7 +2728,8 @@ async function runSmcScanLeg(opts){
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlockExact(smcPl, smcPl.note)
         + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', smcPl.entry, smcPl.stop, smcPl.t1, null,
-        { scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack }));
+        { scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack,
+          strategyConfirm: smcPl.strategyConfirm, strategyWith: smcPl.strategyWith, strategyAgainst: smcPl.strategyAgainst }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2785,7 +2793,7 @@ async function runObScanLeg(opts){
         var obEntry = dir === 'long' ? ob.bottom + (ob.top - ob.bottom) * 0.382 : ob.top - (ob.top - ob.bottom) * 0.382;
         var obPl = applyExactEntry({ dir: dir, type: 'SWING', entry: p, stop: stop, t1: t1, t2: t2,
           note: 'structural stop behind the OB; T1 = nearest liquidity' }, rows,
-          { poiLevel: obEntry, poiLabel: 'OB edge', preferEdge: true });
+          { poiLevel: obEntry, poiLabel: 'OB edge', preferEdge: true, refineLevels: true });
         const obStack = inlineScanStack(dir, t.symbol, rows, { style: 'swing', ticker: t, clean: true, nearClean: true });
         __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir, [
           ['mark', px(p)], ['OB Age', `${ob.age} bars (4H)`],
@@ -2794,7 +2802,8 @@ async function runObScanLeg(opts){
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlockExact(obPl, obPl.note)
         + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', obPl.entry, obPl.stop, obPl.t1, null,
-        { scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack }));
+        { scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack,
+          strategyConfirm: obPl.strategyConfirm, strategyWith: obPl.strategyWith, strategyAgainst: obPl.strategyAgainst }));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -3813,8 +3822,11 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
     : '';
   const visionChipHtml = bookMeta.visionChip
     ? ' <span class="gpip ok">' + String(bookMeta.visionChip).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' : '';
+  const confirmChip = (typeof hgStrategyConfirmChipHtml === 'function')
+    ? hgStrategyConfirmChipHtml(bookMeta.strategyConfirm, bookMeta.strategyWith, bookMeta.strategyAgainst)
+    : '';
   return `<div class="card ${dir}${tierCls}">
-    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}</div>
+    <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
     ${stackHtml}
     ${postGateBanner}
@@ -8404,7 +8416,7 @@ async function evalGoldSwing(){
     sg.push(['GS7','Structural R:R \u2265 2', rrOk?'pass':'veto', risk>0?`${fmt(room/risk,2)}R room`:'no structure']);
     if(rrOk){ t1=casc==='long'?entry+2*risk:entry-2*risk; t2=casc==='long'?entry+3*risk:entry-3*risk;
       var swingPl = applyExactEntry({ dir: casc, type: 'SWING', entry: entry, stop: stop, t1: t1, t2: t2 }, h4,
-        { style: 'swing', preferEdge: true });
+        { style: 'swing', preferEdge: true, asset: 'gold', skipRefine: true });
       entry = swingPl.entry; stop = swingPl.stop; t1 = swingPl.t1; t2 = swingPl.t2;
     }
   } else {

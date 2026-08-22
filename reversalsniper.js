@@ -268,6 +268,10 @@ function rsAssess(rows, opts){
       }
     }
 
+    if (typeof W.hgStrategyRefine === 'function'){
+      try{ W.hgStrategyRefine(setup, rows, { style: 'reversal-sniper', reversion: true }); }catch(eRf){}
+    }
+
     setup.conviction = rsConviction(setup);
     if (setup.conviction < MIN_CONVICTION) return null;
     return setup;
@@ -384,7 +388,10 @@ function cardHTML(r){
     + '</div>'
     + '<div class="gates">' + triggerChips(s.triggers)
     + '<span class="gpip ok">CONVICTION ' + s.conviction + '</span>'
-    + '<span class="gpip ok">≥' + MIN_LEV + '× SAFE</span></div>'
+    + '<span class="gpip ok">≥' + MIN_LEV + '× SAFE</span>'
+    + ((typeof W.hgStrategyConfirmChipHtml === 'function')
+      ? W.hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
+    + '</div>'
     + '<div class="plan">BUY · ENTRY <b>' + pxF(s.entry) + '</b> · STOP <b>' + pxF(s.stop) + '</b>'
     + ' · TP1 <b>' + pxF(s.t1) + '</b> (' + fmtF(s.rr1, 1) + 'R) · TP2 <b>' + pxF(s.t2) + '</b> (' + fmtF(s.rr2, 1) + 'R)'
     + safeChip + '</div>'

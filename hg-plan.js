@@ -62,7 +62,14 @@
                             the disguise v381 removed, back through a third door.
                             The list already dropped rr1/rr2 the same way once;
                             that is what it does to any field added below it. */
-                         momentumStop: pl.momentumStop === true };
+                         momentumStop: pl.momentumStop === true,
+                         strategyConfirm: pl.strategyConfirm,
+                         strategyWith: pl.strategyWith,
+                         strategyAgainst: pl.strategyAgainst,
+                         strategyDemoted: pl.strategyDemoted === true,
+                         contextRead: pl.contextRead,
+                         contextWarn: pl.contextWarn === true,
+                         formationScore: pl.formationScore };
       }
       if (dir!=='long' && dir!=='short') return null;
       if (!rows || !rows.length) return null;

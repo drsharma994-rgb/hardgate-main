@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v442',
-  pack: 'most probable on every scan tab',
-  built: '2026-08-22T08:30:00Z',
-  note: 'Every market-scan tab pins one MOST PROBABLE banner with ENTRY / STOP / T1 / T2. CLEAN or confirmed leads. Else NEAR (watch only). Else one closest draft. No levels → no banner. G1–G7 unchanged. Crypto execute stays disabled.'
+  version: 'hg-v443',
+  pack: 'strategy confirm on every scan tab',
+  built: '2026-08-22T13:20:00Z',
+  note: 'Every scan tab stamps the shared 20-gate indicator bank as CLEAN / MIXED / ADVERSE. Adverse demotes rank, never deletes the ticket. Stops never widen. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

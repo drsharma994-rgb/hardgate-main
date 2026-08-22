@@ -445,6 +445,8 @@ function squeezePlanHTML(s){
     + (s.note ? ' — ' + esc(s.note) : '')
     /* the shared 14-gate indicator read attached by hgBestLevels — shown,
        because a demotion whose reason never reaches the card is a bug */
+    + ((typeof hgStrategyConfirmChipHtml === 'function')
+      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
     + (s.contextRead ? '<div class="dim">' + esc(s.contextRead)
         + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '');
 }

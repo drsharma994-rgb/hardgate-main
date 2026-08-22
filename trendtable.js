@@ -428,6 +428,8 @@ function trendmxPlanHTML(s){
     + (typeof hgSafeLevChip === 'function' ? hgSafeLevChip(s.entry, s.stop) : '')
     + (s.note ? ' — ' + escH(s.note) : '')
     /* the shared 14-gate indicator read attached by hgBestLevels */
+    + ((typeof hgStrategyConfirmChipHtml === 'function')
+      ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
     + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
         + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '');
 }

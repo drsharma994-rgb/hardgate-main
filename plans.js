@@ -1083,6 +1083,9 @@ function hgPlanLevelsCore(dir, rows, entryOverride, opts){
         return exactPl;
       }
     }
+    if (typeof hgStrategyRefine === 'function'){
+      try{ return hgStrategyRefine(plan, rows, opts) || plan; }catch(eRef){}
+    }
     return plan;
   }catch(e){ return null; }
 }
@@ -1215,8 +1218,133 @@ function hgEnrichScalpExact(hit, m15, opts){
   }catch(e){ return hit; }
 }
 
+/* --- strategy confirm (shared 20-gate context on every scan tab) --- */
+/* Tabs were printing tickets from local pattern gates and skipping the
+   shared indicator bank. This is the one chokepoint: stamp CLEAN / MIXED /
+   ADVERSE, demote rank when the tape objects, never invent or flip a plan.
+   Level changes stay OFF unless the caller sets refineLevels: true — and
+   even then the stop may only move closer, and only when R:R still clears
+   the style floor. Gold desks already run hgBestLevelsGold; skip them. */
+function hgStrategyIsGold(plan, opts){
+  opts = opts || {};
+  if (opts.skipRefine === true) return true;
+  var blob = [opts.sym, opts.symbol, opts.asset, opts.assetType, opts.style,
+              plan && plan.sym, plan && plan.symbol, plan && plan.style]
+    .map(function(x){ return String(x || '').toLowerCase(); }).join(' ');
+  return /xau|paxg|xaut|gold/.test(blob);
+}
+
+function hgStrategyIsReversion(plan, opts){
+  opts = opts || {};
+  if (opts.reversion === true || opts.allowFade === true) return true;
+  var blob = [opts.style, opts.kind, opts.scanner,
+              plan && plan.type, plan && plan.style, plan && plan.strategy]
+    .map(function(x){ return String(x || '').toLowerCase(); }).join(' ');
+  return /fade|trap|liq-trap|meanrev|mean-rev|reversal|judas/.test(blob);
+}
+
+function hgStrategyStyleFloor(plan, opts){
+  opts = opts || {};
+  if (isFinite(+opts.minRr) && +opts.minRr > 0) return +opts.minRr;
+  var style = String(opts.style || (plan && plan.type) || 'swing').toLowerCase();
+  if (style === 'scalp') return 2.25;
+  if (style === 'fade' || style === 'meanrev' || style === 'trap' || style === 'liq-trap'
+      || style === 'reversal-sniper' || style === 'reversal') return 1.5;
+  return 2.0;
+}
+
+function hgStrategyConfirmChipHtml(confirm, withN, againstN){
+  try{
+    confirm = String(confirm || '').toUpperCase();
+    if (confirm !== 'CLEAN' && confirm !== 'MIXED' && confirm !== 'ADVERSE') return '';
+    var cls = confirm === 'CLEAN' ? 'ok' : (confirm === 'ADVERSE' ? 'veto' : 'caution');
+    var extra = (isFinite(+withN) || isFinite(+againstN))
+      ? ' ' + (+withN || 0) + 'w/' + (+againstN || 0) + 'a'
+      : '';
+    return ' <span class="gpip ' + cls + '">INDICATORS ' + confirm + extra + '</span>';
+  }catch(e){ return ''; }
+}
+
+function hgStrategyRefine(plan, rows, opts){
+  if (!plan || typeof plan !== 'object') return plan;
+  opts = opts || {};
+  try{
+    var dir = String(plan.dir || '').toLowerCase();
+    if (dir !== 'long' && dir !== 'short') return plan;
+    if (hgStrategyIsGold(plan, opts)) return plan;
+
+    var wantLevels = opts.refineLevels === true && plan.strategyLevelsRefined !== true;
+    var already = !!plan.strategyConfirm;
+
+    if (!already && typeof hgContextRead === 'function' && rows && rows.length){
+      var rev = hgStrategyIsReversion(plan, opts);
+      var kind = opts.kind || opts.scanner || opts.style || plan.type || 'setup';
+      var cx = hgContextRead(rows, dir, kind, rev);
+      if (cx){
+        plan.contextGates = cx.gates;
+        plan.contextRead = cx.read;
+        plan.strategyWith = cx.withN;
+        plan.strategyAgainst = cx.againstN;
+        plan.strategyConfirm = cx.clean ? 'CLEAN' : (cx.adverse ? 'ADVERSE' : 'MIXED');
+        plan.contextWarn = !!cx.adverse;
+        if (cx.adverse && plan.strategyDemoted !== true){
+          var fs = +plan.formationScore;
+          plan.formationScore = (isFinite(fs) ? fs : 0) - 8;
+          plan.strategyDemoted = true;
+        }
+      } else {
+        plan.strategyConfirm = 'MIXED';
+        plan.strategyWith = 0;
+        plan.strategyAgainst = 0;
+      }
+    }
+
+    if (wantLevels && rows && rows.length && typeof hgStructureStop === 'function'){
+      var entry = +plan.entry, stop = +plan.stop, t1 = +plan.t1;
+      if (isFinite(entry) && entry > 0 && isFinite(stop) && isFinite(t1)){
+        var st = hgStructureStop(dir, entry, rows, opts);
+        if (st && isFinite(st.stop)){
+          var curRisk = Math.abs(entry - stop);
+          var newRisk = Math.abs(entry - st.stop);
+          var sideOk = dir === 'long' ? st.stop < entry : st.stop > entry;
+          var closer = sideOk && newRisk > 0 && newRisk < curRisk - 1e-12;
+          if (closer){
+            var rr = Math.abs(t1 - entry) / newRisk;
+            if (rr >= hgStrategyStyleFloor(plan, opts)){
+              plan.stop = st.stop;
+              if (st.note){
+                plan.note = (plan.note ? String(plan.note) + ' · ' : '')
+                  + 'strategy tighten: ' + st.note;
+              }
+              plan.strategyLevelsRefined = true;
+              if (typeof hgSyncPlanRatios === 'function') hgSyncPlanRatios(plan);
+              else {
+                plan.risk = newRisk;
+                plan.rr1 = rr;
+              }
+            }
+          }
+        }
+      }
+    }
+    return plan;
+  }catch(e){ return plan; }
+}
+
 /* --- unified exact entry: EDGE signal first, then style enrichers --- */
 function hgApplyExactEntry(plan, rows4h, opts){
+  opts = opts || {};
+  var out = plan;
+  try{
+    out = _hgApplyExactEntry(plan, rows4h, opts);
+  }catch(e){ out = plan; }
+  if (out && opts.skipRefine !== true){
+    try{ out = hgStrategyRefine(out, rows4h, opts) || out; }catch(eR){}
+  }
+  return out;
+}
+
+function _hgApplyExactEntry(plan, rows4h, opts){
   opts = opts || {};
   try{
     if (!plan || !plan.dir || !rows4h || !rows4h.length) return plan;
@@ -1746,6 +1874,8 @@ G.hgEnrichSwingClean = hgEnrichSwingClean;
 G.hgEnrichSmartPlan = hgEnrichSmartPlan;
 G.hgEnrichGenericExact = hgEnrichGenericExact;
 G.hgEnrichScalpExact = hgEnrichScalpExact;
+G.hgStrategyRefine = hgStrategyRefine;
+G.hgStrategyConfirmChipHtml = hgStrategyConfirmChipHtml;
 G.hgApplyExactEntry = hgApplyExactEntry;
 G.hgPlanMeta = hgPlanMeta;
 G.hgFormatEntryType = hgFormatEntryType;

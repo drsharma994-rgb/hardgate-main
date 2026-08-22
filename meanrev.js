@@ -342,6 +342,9 @@ function cardHTML(r){
      fallback when the band/ATR ingredients are missing. */
   var lv = meanrevPlan({ dir: sig.dir, entry: sig.entry, extreme: st.extreme,
                          atr: st.atr, mean: sig.target, oppBand: st.oppBand });
+  if (lv && typeof hgStrategyRefine === 'function' && r.rows){
+    try{ lv = hgStrategyRefine(lv, r.rows, { style: 'meanrev', reversion: true }) || lv; }catch(eRf){}
+  }
   var mrStack = null;
   if (lv && typeof hgSetupStackForInlineScan === 'function'){
     try{
@@ -390,6 +393,8 @@ function cardHTML(r){
     + '<span class="gpip ok">REGIME ' + regimeChip + '</span>'
     + '<span class="gpip ok">' + trigChip + '</span>'
     + '<span class="gpip ok">R:R ' + fmtF(sig.rr, 2) + ' ≥ ' + MIN_RR + ' (replay gate)</span>'
+    + ((typeof hgStrategyConfirmChipHtml === 'function')
+      ? hgStrategyConfirmChipHtml(lv && lv.strategyConfirm, lv && lv.strategyWith, lv && lv.strategyAgainst) : '')
     + '</div>'
     + planBlock
     + stackHtml

@@ -427,6 +427,8 @@ function cardHTML(r){
       /* the shared 14-gate indicator read attached by hgBestLevels — this
          desk consults almost no price indicator of its own, so this line is
          most of its price-context evidence */
+      + ((typeof hgStrategyConfirmChipHtml === 'function')
+        ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
       + (s.contextRead ? '<div class="dim">' + String(s.contextRead).replace(/&/g,'&amp;').replace(/</g,'&lt;')
           + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
     : oiflowPlan(r);

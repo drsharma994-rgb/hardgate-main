@@ -345,9 +345,13 @@ function hgSetupCardHead(sym, dir, tier, extraBadges, venue, bookMeta){
   var badges = (extraBadges || []).join('');
   var bookStamp = (bookMeta && typeof W.hgBookStampChip === 'function')
     ? W.hgBookStampChip(sym, dir, bookMeta) : '';
+  var confirmChip = (typeof W.hgStrategyConfirmChipHtml === 'function')
+    ? W.hgStrategyConfirmChipHtml(bookMeta && bookMeta.strategyConfirm, bookMeta && bookMeta.strategyWith,
+        bookMeta && bookMeta.strategyAgainst)
+    : '';
   return venueHtml + '<span class="sym">' + symHtml + '</span>'
     + '<span class="dir">' + suEsc(String(dir || '').toUpperCase()) + ' · ' + tierLabel + '</span>'
-    + bookStamp + badges;
+    + bookStamp + badges + confirmChip;
 }
 
 /** Conviction mesh chip — agree / oppose / dark / silent layer counts. */
@@ -382,6 +386,15 @@ function hgSetupCardHTML(setup){
   var chartId = setup.chartId || '';
   var bookMeta = setup.bookMeta || {};
   bookMeta.tier = tier;
+  if (!bookMeta.strategyConfirm && setup.strategyConfirm){
+    bookMeta.strategyConfirm = setup.strategyConfirm;
+    bookMeta.strategyWith = setup.strategyWith;
+    bookMeta.strategyAgainst = setup.strategyAgainst;
+  } else if (!bookMeta.strategyConfirm && setup.plan && setup.plan.strategyConfirm){
+    bookMeta.strategyConfirm = setup.plan.strategyConfirm;
+    bookMeta.strategyWith = setup.plan.strategyWith;
+    bookMeta.strategyAgainst = setup.plan.strategyAgainst;
+  }
 
   if (typeof W.cardHTML === 'function' && tier === 'clean'){
     return W.cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMeta);
