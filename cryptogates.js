@@ -513,16 +513,11 @@
     return out;
   }
 
-  function swingTryNear(rows, ticker){
-    var m = swingGateMatrix(rows, ticker);
-    if (!m || !m.dir || m.clean) return null;
-    if (m.passed < 6) return null;
-    var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
-    var anchorOK = isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR;
-    /* 6/7 must be anchor-close; 7/7 with only anchor miss still gets levels + Telegram NEAR row */
-    if (!anchorOK && m.passed < 7) return null;
-    var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
-    if (!anchorOK && m.passed >= 7) missing.push('EMA21 anchor (>1.25×ATR away)');
+  /* Draft ENTRY/STOP/T1/T2 from a swing matrix. Does not decide CLEAN vs
+     NEAR — callers keep those thresholds. Stop still comes from the matrix
+     (structure); T1/T2 stay on the 3.5× / 4.9× ATR ladder. */
+  function cgDraftSwingLevels(m){
+    if (!m || !m.dir) return null;
     var dir = m.dir, p = m.p, e9 = m.e9, a4 = m.a4;
     var entry = p;
     var distToFast = isFinite(a4) && a4 > 0 ? Math.abs(p - e9) / a4 : NaN;
@@ -535,16 +530,30 @@
     }
     var risk = Math.abs(entry - stop);
     if (!(risk > 0)) return null;
-    var expectedMove = a4 * 3.5;
-    var maxExcursion = a4 * 4.9;
+    var expectedMove = (isFinite(a4) && a4 > 0) ? a4 * 3.5 : risk * 2;
+    var maxExcursion = (isFinite(a4) && a4 > 0) ? a4 * 4.9 : risk * 3;
     var t1 = dir === 'long' ? entry + expectedMove : entry - expectedMove;
     var t2 = dir === 'long' ? entry + maxExcursion : entry - maxExcursion;
-    var dynamicRR = expectedMove / risk;
+    return { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2, rr: expectedMove / risk, mark: p };
+  }
+
+  function swingTryNear(rows, ticker){
+    var m = swingGateMatrix(rows, ticker);
+    if (!m || !m.dir || m.clean) return null;
+    if (m.passed < 6) return null;
+    var distToAnchor = isFinite(m.a4) ? Math.abs(m.p - m.e21) / m.a4 : NaN;
+    var anchorOK = isFinite(distToAnchor) && distToAnchor <= CG_SWING_ANCHOR_ATR;
+    /* 6/7 must be anchor-close; 7/7 with only anchor miss still gets levels + Telegram NEAR row */
+    if (!anchorOK && m.passed < 7) return null;
+    var missing = m.gates.filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    if (!anchorOK && m.passed >= 7) missing.push('EMA21 anchor (>1.25×ATR away)');
+    var lv = cgDraftSwingLevels(m);
+    if (!lv) return null;
     var near = {
-      sym: ticker && ticker.symbol, dir: dir, passed: m.passed, gatesPassed: m.passed,
-      gatesTotal: m.gatesTotal, missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: p,
-      level: m.level, dynamicRR: dynamicRR, nearClean: true,
-      entry: entry, stop: stop, t1: t1, t2: t2, rr: dynamicRR
+      sym: ticker && ticker.symbol, dir: lv.dir, passed: m.passed, gatesPassed: m.passed,
+      gatesTotal: m.gatesTotal, missing: missing, rows: m.rows, r14: m.r14, vz: m.vz, mark: lv.mark,
+      level: m.level, dynamicRR: lv.rr, nearClean: true,
+      entry: lv.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr
     };
     if (typeof hgSetupStackAttach === 'function'){
       hgSetupStackAttach(near, { style: 'swing', rows4h: rows, ticker: ticker, nearClean: true, gatesPassed: m.passed, gatesTotal: m.gatesTotal });
@@ -581,6 +590,36 @@
       hgSetupStackAttach(near, { style: 'scalp', rows4h: h1, rows: m15, ticker: ticker, nearClean: true, gatesPassed: m.passed, gatesTotal: m.gatesTotal });
     }
     return near;
+  }
+
+  /* One closest ≥5/7 draft for the MOST PROBABLE banner when CLEAN and
+     NEAR are empty. Not a ticket. Does not change swingTryNear (still 6/7). */
+  function swingTryClosest(rows, ticker){
+    var m = swingGateMatrix(rows, ticker);
+    if (!m || !m.dir || m.clean) return null;
+    if (m.passed < 5) return null;
+    var lv = cgDraftSwingLevels(m);
+    if (!lv) return null;
+    var missing = (m.gates || []).filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    if (!m.anchorOK) missing.push('EMA21 anchor');
+    return {
+      sym: ticker && ticker.symbol, dir: lv.dir, passed: m.passed, gatesPassed: m.passed,
+      gatesTotal: m.gatesTotal, missing: missing, forming: true, nearClean: false,
+      entry: lv.entry, stop: lv.stop, t1: lv.t1, t2: lv.t2, rr: lv.rr, mark: lv.mark
+    };
+  }
+
+  function scalpTryClosest(h1, m15, ticker, minsToFunding){
+    var m = scalpGateMatrix(h1, m15, ticker, minsToFunding);
+    if (!m || !m.dir || m.clean) return null;
+    if (m.passed < 5) return null;
+    if (!(isFinite(m.entry) && isFinite(m.stop) && isFinite(m.t1) && m.entry !== m.stop)) return null;
+    var missing = (m.gates || []).filter(function(g){ return !g[1]; }).map(function(g){ return g[0]; });
+    return {
+      sym: ticker && ticker.symbol, dir: m.dir, passed: m.passed, gatesPassed: m.passed,
+      gatesTotal: m.gatesTotal, missing: missing, forming: true, nearClean: false,
+      entry: m.entry, stop: m.stop, t1: m.t1, t2: m.t2, rr: m.dynamicRR, mark: m.mark
+    };
   }
 
   /* Pure formatter — plain text so it works in a card, a Telegram alert or a
@@ -901,7 +940,10 @@
   G.scalpGateMatrix = scalpGateMatrix;
   G.swingTryClean = swingTryClean;
   G.swingTryNear = swingTryNear;
+  G.swingTryClosest = swingTryClosest;
   G.scalpTryNear = scalpTryNear;
+  G.scalpTryClosest = scalpTryClosest;
+  G.cgDraftSwingLevels = cgDraftSwingLevels;
   G.scalpTryClean = scalpTryClean;
   G.swingSevenGateCheck = swingSevenGateCheck;
   /* Counter-trend funding fade — NOT a clean swing/scalp ticket. Exposed so a

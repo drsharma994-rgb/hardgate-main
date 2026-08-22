@@ -213,8 +213,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=439"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=439"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=440"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=440"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +711,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=439"></script>
+<script src="./hg-plan.js?v=440"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +743,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=439"></script>
-<script src="./hg-gates.js?v=439"></script>
-<script src="omniroute.js?v=439"></script>
+<script src="hg-mechanics.js?v=440"></script>
+<script src="./hg-gates.js?v=440"></script>
+<script src="omniroute.js?v=440"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=439"></script>
+<script src="edge.js?v=440"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,9 +764,9 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=439"></script>
+<script src="omnigold.js?v=440"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=439"></script>
+<script src="omnipresent.js?v=440"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <script src="hggateflip.js"></script>
@@ -793,14 +793,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=439"></script>
+<script src="supersetup.js?v=440"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=439"></script>
-<script src="super-gold.js?v=439"></script>
-<script src="super-best.js?v=439"></script>
-<script src="super-sniper.js?v=439"></script>
-<script src="super-book.js?v=439"></script>
-<script src="super-calibrate.js?v=439"></script>
+<script src="super-desk-common.js?v=440"></script>
+<script src="super-gold.js?v=440"></script>
+<script src="super-best.js?v=440"></script>
+<script src="super-sniper.js?v=440"></script>
+<script src="super-book.js?v=440"></script>
+<script src="super-calibrate.js?v=440"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -4213,16 +4213,16 @@ function hgRankCryptoCands(cands){
   const bestId = sorted.length ? hgCryptoSetupId(sorted[0]) : null;
   return { cands: sorted, bestId: bestId };
 }
-function hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit){
+function hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit, closest){
   const ranked = hgRankCryptoCands(cands);
-  return { at: Date.now(), cands: ranked.cands, nearCands: nearCands || [], bestId: ranked.bestId,
-    stat: statText, audit: audit };
+  return { at: Date.now(), cands: ranked.cands, nearCands: nearCands || [], closest: closest || null,
+    bestId: ranked.bestId, stat: statText, audit: audit };
 }
 function hgAssignCryptoScanSnap(kind, snap){
   if (kind === 'swing') __hgSwingScan = snap; else __hgScalpScan = snap;
 }
-function hgPublishCryptoScanSnap(kind, cands, nearCands, statText, audit){
-  const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit);
+function hgPublishCryptoScanSnap(kind, cands, nearCands, statText, audit, closest){
+  const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, audit, closest);
   hgAssignCryptoScanSnap(kind, snap);
   /* FORWARD LOG. Every crypto scan publishes through here, and BEST reads
      these snapshots — so this single call instruments SWING, SCALP and BEST
@@ -4268,7 +4268,11 @@ function hgPaintCryptoDeskFromSnap(kind){
   if (kind === 'swing' && snap.audit && typeof hgPaintGateReplayPanel === 'function') hgPaintGateReplayPanel(snap.audit);
   const cands = (snap && Array.isArray(snap.cands)) ? snap.cands : [];
   const near = (snap && Array.isArray(snap.nearCands)) ? snap.nearCands : [];
-  if (!cands.length && !near.length){
+  const side = typeof hgTapeSideFromPicture === 'function' ? hgTapeSideFromPicture() : null;
+  const pick = (typeof hgPickMostProbable === 'function')
+    ? hgPickMostProbable(cands, near, side, snap.closest) : null;
+  const banner = (typeof hgMostProbablePanelHTML === 'function') ? hgMostProbablePanelHTML(kind, pick) : '';
+  if (!cands.length && !near.length && !pick){
     if (emptyEl){ emptyEl.style.display = 'block'; emptyEl.textContent = (snap && snap.stat) ? snap.stat : 'No 7/7 CLEAN setups in the latest background scan.'; }
     if (statEl && snap && snap.stat) statEl.textContent = snap.stat;
   /* FORWARD panel for this desk. BEST/SWING/SCALP have been emitting setups
@@ -4291,7 +4295,7 @@ function hgPaintCryptoDeskFromSnap(kind){
     return;
   }
   const bestId = snap.bestId;
-  let html = '';
+  let html = banner || '';
   if (cands.length){
     html += '<div class="note" style="margin:0 0 10px"><b>7/7 CONVICTION TICKETS</b> — synced from the latest alert scan (Delta + CoinDCX). RUN SCAN refreshes charts and full gate readout.</div>';
     cands.forEach(function(c){
@@ -4324,11 +4328,24 @@ function hgPaintCryptoDeskFromSnap(kind){
   if (emptyEl) emptyEl.style.display = 'none';
   if (statEl && snap.stat) statEl.textContent = snap.stat + ' · desk synced (' + cands.length + ' CLEAN' + (near.length ? (' · ' + near.length + ' near') : '') + ')';
 }
+function hgPinMostProbableFromSnap(kind){
+  const isSwing = kind === 'swing';
+  const snap = isSwing ? __hgSwingScan : __hgScalpScan;
+  const cardsEl = $(isSwing ? 'swingCards' : 'scalpCards');
+  const emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty');
+  if (!snap || !cardsEl || typeof hgPickMostProbable !== 'function') return null;
+  const side = typeof hgTapeSideFromPicture === 'function' ? hgTapeSideFromPicture() : null;
+  const pick = hgPickMostProbable(snap.cands, snap.nearCands, side, snap.closest);
+  if (typeof hgPinMostProbablePanel === 'function') hgPinMostProbablePanel(cardsEl, kind, pick);
+  if (pick && emptyEl) emptyEl.style.display = 'none';
+  return pick;
+}
 function hgMaybeSyncCryptoDeskFromSnap(kind){
   if (hgCryptoDeskHasCards(kind)) return;
   hgPaintCryptoDeskFromSnap(kind);
 }
 window.hgPaintCryptoDeskFromSnap = hgPaintCryptoDeskFromSnap;
+window.hgPinMostProbableFromSnap = hgPinMostProbableFromSnap;
 window.hgMaybeSyncCryptoDeskFromSnap = hgMaybeSyncCryptoDeskFromSnap;
 window.hgCryptoSetupId = hgCryptoSetupId;
 window.hgApplyCryptoPostGate = hgApplyCryptoPostGate;
@@ -4508,7 +4525,7 @@ async function runScan(kind, opts){
     }, opts);
     let found = 0, nearFound = 0, scanned = 0;
     const parts = [];
-    let mergedCands = [], mergedNear = [];
+    let mergedCands = [], mergedNear = [], mergedClosest = null;
     const mergedAudit = { cascade: 0, pass6: 0, pass7noAnchor: 0, fail: {}, histShort: 0, errors: 0 };
     (legs || []).forEach(function(L){
       if (!L) return;
@@ -4518,6 +4535,9 @@ async function runScan(kind, opts){
       if (L.statPart) parts.push(L.statPart);
       if (Array.isArray(L.cands)) mergedCands = mergedCands.concat(L.cands);
       if (Array.isArray(L.nearCands)) mergedNear = mergedNear.concat(L.nearCands);
+      if (L.closest && (!mergedClosest || (L.closest.gatesPassed || 0) > (mergedClosest.gatesPassed || 0))){
+        mergedClosest = L.closest;
+      }
       if (L.audit){
         mergedAudit.cascade += L.audit.cascade || 0;
         mergedAudit.pass6 += L.audit.pass6 || 0;
@@ -4538,7 +4558,8 @@ async function runScan(kind, opts){
     const statText = 'done — ' + found + ' CLEAN' + (nearFound ? (' · ' + nearFound + ' near') : '')
       + ' / ' + scanned + ' scanned · BOTH venues (Delta + CoinDCX)'
       + (parts.length ? (' · ' + parts.join(' · ')) : '');
-    hgPublishCryptoScanSnap(kind, mergedCands, mergedNear, statText, mergedAudit);
+    hgPublishCryptoScanSnap(kind, mergedCands, mergedNear, statText, mergedAudit, mergedClosest);
+    hgPinMostProbableFromSnap(kind);
     if (!quiet && legs && legs.length){
       const statEl = $(isSwing ? 'swingStat' : 'scalpStat');
       const emptyEl = $(isSwing ? 'swingEmpty' : 'scalpEmpty');
@@ -4594,6 +4615,7 @@ async function runScanLeg(kind, opts){
   }
   let cands = [];
   let nearCands = [];
+  let closest = null;
   let cleanHits = [];
   let uni = [];
   try{
@@ -4609,6 +4631,15 @@ async function runScanLeg(kind, opts){
       replaySamples: [], replayClean: 0, replaySettled: 0 };
     const flipRecords = [];
     const flipVenue = venueTag || S.exchange || '';
+    function considerClosest(row){
+      if (!row) return;
+      if (typeof hgSetupHasLevels === 'function' && !hgSetupHasLevels(row)) return;
+      const gp = row.gatesPassed || row.passed || 0;
+      const cg = closest ? (closest.gatesPassed || closest.passed || 0) : -1;
+      const rr = Number.isFinite(+row.rr) ? +row.rr : 0;
+      const crr = closest && Number.isFinite(+closest.rr) ? +closest.rr : 0;
+      if (!closest || gp > cg || (gp === cg && rr > crr)) closest = row;
+    }
     const t0scan = Date.now();
     const CHUNK_SIZE = quiet ? 8 : 5;
     if (!hgScanRateOk()){
@@ -4716,6 +4747,9 @@ async function runScanLeg(kind, opts){
                   }
                   renderNearCleanCard(t, near, cardsEl, 'swing', venueTag);
                 }
+              } else if (typeof swingTryClosest === 'function'){
+                const cl = swingTryClosest(rows, tScan);
+                if (cl) considerClosest(Object.assign({ sym: t.symbol, venueTag: venueTag }, cl));
               }
             }
             if (typeof swingTryFundingFade === 'function'){
@@ -4792,6 +4826,9 @@ async function runScanLeg(kind, opts){
                   }
                   renderNearCleanCard(t, nearS, cardsEl, 'scalp', venueTag);
                 }
+              } else if (typeof scalpTryClosest === 'function'){
+                const clS = scalpTryClosest(h1, m15, tScan, minsToFunding);
+                if (clS) considerClosest(Object.assign({ sym: t.symbol, venueTag: venueTag }, clS));
               }
             }
             if (typeof scalpTryFundingFade === 'function'){
@@ -4817,8 +4854,11 @@ async function runScanLeg(kind, opts){
       + (audit.errors ? (' · ' + audit.errors + ' fetch errors') : '');
     if (!quiet && dualLast) statEl.textContent = statText;
     if (!quiet && dualLast) try{ localStorage.setItem('hg_scanlast_' + kind, JSON.stringify({ at: Date.now(), stat: statEl.textContent })); }catch(e){}
-    const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }));
-    if (!opts._singleLeg) hgAssignCryptoScanSnap(kind, snap);
+    const snap = hgBuildCryptoScanSnap(kind, cands, nearCands, statText, Object.assign({}, audit, { found: found, nearFound: nearFound, uniLen: uni.length }), closest);
+    if (!opts._singleLeg){
+      hgAssignCryptoScanSnap(kind, snap);
+      if (dualLast) hgPinMostProbableFromSnap(kind);
+    }
     if (!quiet && dualLast) hgPaintScanFunnel(kind, snap.audit);
     if (!quiet && dualLast && isSwing) hgPaintGateReplayPanel(snap.audit);
     if (!quiet && dualLast && !found){
@@ -4841,7 +4881,7 @@ async function runScanLeg(kind, opts){
     if (!quiet && dualLast && cleanHits.length && typeof hgChartVisionEnrichCryptoScan === 'function'){
       hgChartVisionEnrichCryptoScan({ kind: kind, cleanHits: cleanHits, limit: 12 });
     }
-    return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands, nearCands: nearCands, audit: audit, statText: statText };
+    return { found: found, nearFound: nearFound, uniLen: uni.length, statPart: statPart, cands: cands, nearCands: nearCands, closest: closest, audit: audit, statText: statText };
   }catch(e){
     if (!quiet && dualLast) statEl.textContent = 'scan failed: ' + e.message;
     return null;
@@ -6501,6 +6541,8 @@ async function runCascadeCore(uni, opts){
   opts = opts || {};
   const quiet = !!opts.quiet;
   let clean=[];
+  let near=[];
+  let closest=null;
   let breadthBull=0, breadthTotal=0;
   const funnel = { regimeSkip: 0, thin: 0, cleanRaw: 0, vetoStale: 0, vetoTrap: 0 };
   const CHUNK1_SIZE=5;
@@ -6524,7 +6566,26 @@ async function runCascadeCore(uni, opts){
         }
         if (typeof swingTryClean !== 'function') return;
         let tc = swingTryClean(rows, t);
-        if (!tc || !tc.dir) return;
+        if (!tc || !tc.dir){
+          if (typeof swingTryNear === 'function'){
+            const n = swingTryNear(rows, t);
+            if (n && n.dir && isFinite(n.entry) && isFinite(n.stop) && isFinite(n.t1)){
+              near.push({ t: t, dir: n.dir, entry: n.entry, stop: n.stop, t1: n.t1, t2: n.t2, rr: n.rr,
+                nearClean: true, gatesPassed: n.passed || n.gatesPassed, missing: n.missing, rows: rows });
+            } else if (typeof swingTryClosest === 'function'){
+              const cl = swingTryClosest(rows, t);
+              if (cl && cl.dir && isFinite(cl.entry) && isFinite(cl.stop) && isFinite(cl.t1)){
+                const gp = cl.passed || cl.gatesPassed || 0;
+                const cg = closest ? (closest.gatesPassed || 0) : -1;
+                if (!closest || gp > cg){
+                  closest = { t: t, dir: cl.dir, entry: cl.entry, stop: cl.stop, t1: cl.t1, t2: cl.t2, rr: cl.rr,
+                    forming: true, gatesPassed: gp, missing: cl.missing, rows: rows };
+                }
+              }
+            }
+          }
+          return;
+        }
         if (typeof hgFormTicket === 'function'){
           const fm = hgFormTicket(tc, { rows: rows, style: 'swing', ticker: t, a4: last(atr(rows, 14)) });
           if (!fm.ok){ funnel.formationSkip = (funnel.formationSkip || 0) + 1; return; }
@@ -6794,7 +6855,7 @@ async function runCascadeCore(uni, opts){
 
   clean.sort((a,b)=> (b.profitBoost||0)-(a.profitBoost||0) || b.famScore-a.famScore || b.robScore-a.robScore
     || ((b.rsEdge||0)-(a.rsEdge||0)) || b.rr-a.rr);
-  return {clean, breadth:{bull:breadthBull, total:breadthTotal}, funnel:funnel};
+  return {clean, near, closest, breadth:{bull:breadthBull, total:breadthTotal}, funnel:funnel};
 }
 
 function bestFunnelRows(funnel, cleanLen, uniLen){
@@ -6856,7 +6917,7 @@ async function runBest(opts){
     if (!quiet && btn) btn.disabled=true;
     if (!quiet){ setProg('bestProg',0.05); if (out) out.innerHTML=''; if ($('bestStat')) $('bestStat').textContent='Scanning Delta + CoinDCX…'; }
     try{
-      let allClean = [], breadth = { bull: 0, total: 0 }, totalUni = 0;
+      let allClean = [], allNear = [], allClosest = null, breadth = { bull: 0, total: 0 }, totalUni = 0;
       let bestFunnel = { regimeSkip: 0, thin: 0, cleanRaw: 0, vetoStale: 0, vetoTrap: 0 };
       for (let ei = 0; ei < HG_DUAL_CRYPTO_EX.length; ei++){
         const ex = HG_DUAL_CRYPTO_EX[ei];
@@ -6877,17 +6938,35 @@ async function runBest(opts){
             bestFunnel.vetoTrap += leg.funnel.vetoTrap || 0;
           }
           (leg.clean || []).forEach(function(c){ c._venueLabel = hgExLabel(ex); });
+          (leg.near || []).forEach(function(c){ c._venueLabel = hgExLabel(ex); });
+          if (leg.closest) leg.closest._venueLabel = hgExLabel(ex);
           allClean = allClean.concat(leg.clean || []);
+          allNear = allNear.concat(leg.near || []);
+          if (leg.closest && (!allClosest || (leg.closest.gatesPassed || 0) > (allClosest.gatesPassed || 0))){
+            allClosest = leg.closest;
+          }
           breadth.bull += (leg.breadth && leg.breadth.bull) || 0;
           breadth.total += (leg.breadth && leg.breadth.total) || 0;
         });
       }
       const clean = allClean;
       const universeLabel = 'both Delta India + CoinDCX futures';
-      publishBestSnap(clean, { uniLen: totalUni, dual: true, funnel: bestFunnel });
+      publishBestSnap(clean, { uniLen: totalUni, dual: true, funnel: bestFunnel, near: allNear, closest: allClosest });
       if (quiet) return;
+      if (typeof hgSetupInjectStyles === 'function') hgSetupInjectStyles();
       if (!clean.length){
-        if (out) out.innerHTML=bestFunnelHtml(bestFunnel, 0, totalUni)
+        const nearRows = allNear.map(function(w){
+          return { sym: w.t && w.t.symbol, dir: w.dir, entry: w.entry, stop: w.stop, t1: w.t1, t2: w.t2,
+            rr: w.rr, venue: w._venueLabel, nearClean: true, gatesPassed: w.gatesPassed, missing: w.missing };
+        });
+        const closestRow = allClosest ? { sym: allClosest.t && allClosest.t.symbol, dir: allClosest.dir,
+          entry: allClosest.entry, stop: allClosest.stop, t1: allClosest.t1, t2: allClosest.t2, rr: allClosest.rr,
+          venue: allClosest._venueLabel, forming: true, gatesPassed: allClosest.gatesPassed, missing: allClosest.missing } : null;
+        const pick = (typeof hgPickMostProbable === 'function')
+          ? hgPickMostProbable([], nearRows, typeof hgTapeSideFromPicture === 'function' ? hgTapeSideFromPicture() : null, closestRow)
+          : null;
+        const mp = (typeof hgMostProbablePanelHTML === 'function') ? hgMostProbablePanelHTML('best', pick) : '';
+        if (out) out.innerHTML=bestFunnelHtml(bestFunnel, 0, totalUni) + mp
           + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
         if ($('bestStat')) $('bestStat').textContent='done · 0 CLEAN · dual venue scan · ' + (bestFunnel.cleanRaw || 0) + ' passed gates · ' + ((bestFunnel.vetoStale||0)+(bestFunnel.vetoTrap||0)) + ' vetoed';
         return;
@@ -6908,6 +6987,7 @@ async function runBest(opts){
       const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
       out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, totalUni) + `
       <div class="panel">
+        <div class="hg-mp-eye">MOST PROBABLE SETUP</div>
         <h2>${symLabel} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}${bestVisionChipHtml(w)}</h2>
         ${bestRegimeMiniHtml(w)}
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}
@@ -6945,10 +7025,21 @@ async function runBest(opts){
     });
     const exLabel = S.exchange==='delta'?'Delta India':'CoinDCX';
     const universeLabel = scanAll ? `whole ${exLabel} futures universe` : `top ${N} by turnover`;
-    const {clean, breadth, funnel: bestFunnel} = await runCascadeCore(uni, { quiet: !!opts.quiet });
-    publishBestSnap(clean, { uniLen: uni.length, dual: false, funnel: bestFunnel });
+    const {clean, near: bestNear, closest: bestClosest, breadth, funnel: bestFunnel} = await runCascadeCore(uni, { quiet: !!opts.quiet });
+    publishBestSnap(clean, { uniLen: uni.length, dual: false, funnel: bestFunnel, near: bestNear, closest: bestClosest });
     if (!clean.length){
-      out.innerHTML=bestFunnelHtml(bestFunnel, 0, uni.length)
+      const nearRows = (bestNear || []).map(function(w){
+        return { sym: w.t && w.t.symbol, dir: w.dir, entry: w.entry, stop: w.stop, t1: w.t1, t2: w.t2,
+          rr: w.rr, venue: exLabel, nearClean: true, gatesPassed: w.gatesPassed, missing: w.missing };
+      });
+      const closestRow = bestClosest ? { sym: bestClosest.t && bestClosest.t.symbol, dir: bestClosest.dir,
+        entry: bestClosest.entry, stop: bestClosest.stop, t1: bestClosest.t1, t2: bestClosest.t2, rr: bestClosest.rr,
+        venue: exLabel, forming: true, gatesPassed: bestClosest.gatesPassed, missing: bestClosest.missing } : null;
+      const pick = (typeof hgPickMostProbable === 'function')
+        ? hgPickMostProbable([], nearRows, typeof hgTapeSideFromPicture === 'function' ? hgTapeSideFromPicture() : null, closestRow)
+        : null;
+      const mp = (typeof hgMostProbablePanelHTML === 'function') ? hgMostProbablePanelHTML('best', pick) : '';
+      out.innerHTML=bestFunnelHtml(bestFunnel, 0, uni.length) + mp
         + `<div class="empty"><b>WAIT.</b> Nothing passed all seven hard gates across the ${universeLabel}. The best available trade right now is no trade — that verdict is the product working, not failing.</div>`;
       $('bestStat').textContent='done · 0 CLEAN · ' + (bestFunnel && bestFunnel.cleanRaw ? bestFunnel.cleanRaw + ' passed gates · ' : '') + ((bestFunnel && (bestFunnel.vetoStale+bestFunnel.vetoTrap)) || 0) + ' vetoed';
       return;
@@ -6968,6 +7059,7 @@ async function runBest(opts){
     const famGateNote = pool.length < clean.length ? ' · ≥5/9 families required for #1' : '';
     out.innerHTML = bestFunnelHtml(bestFunnel, clean.length, uni.length) + `
       <div class="panel">
+        <div class="hg-mp-eye">MOST PROBABLE SETUP</div>
         <h2>${w.t.symbol} <span>${w.dir.toUpperCase()} · ${w.entryType} · mark ${px(w.t.mark||w.entry)} · all 7 hard gates PASSED (ticket in — not part of the ranking)</span>${typeof hgTripleStackChipHtml==='function'?hgTripleStackChipHtml(w.t.symbol,w.dir):''}${typeof hgBookStampChip==='function'?hgBookStampChip(w.t.symbol,w.dir,{scanner:'best',strategy:'best'}):''}${bestVisionChipHtml(w)}</h2>
         ${bestRegimeMiniHtml(w)}
         ${(w.rows && typeof hgRegimeRouteHintHtml==='function' && hgRegimeRouteHintHtml(w.rows)) ? '<div class="note" style="margin-top:6px;font-size:11px">'+hgRegimeRouteHintHtml(w.rows)+'</div>' : ''}

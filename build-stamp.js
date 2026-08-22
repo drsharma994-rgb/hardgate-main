@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v439',
-  pack: 'crypto desks scan themselves',
-  built: '2026-08-21T21:00:00Z',
-  note: 'Opening SWING/SCALP/EDGE/BEST starts their scan even if another tab holds the lock. Background cycles stay quiet. G1–G7 unchanged. Crypto execute stays disabled.'
+  version: 'hg-v440',
+  pack: 'most probable entry sl tp',
+  built: '2026-08-22T02:00:00Z',
+  note: 'SWING/SCALP/EDGE/BEST pin one MOST PROBABLE plan with ENTRY / STOP / T1 / T2. CLEAN wins; else 6/7 NEAR watch; else one closest ≥5/7 draft. G1–G7 unchanged. Crypto execute stays disabled.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

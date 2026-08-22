@@ -358,6 +358,33 @@ function hgRankCryptoSetups(cands, side){
   return { cands: sorted, best: best };
 }
 
+function hgSetupHasLevels(row){
+  if (!row) return false;
+  var e = +row.entry, s = +row.stop, t1 = +row.t1;
+  return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+}
+
+/* One leader for the desk banner. CLEAN with levels wins. Else the best
+   6/7 NEAR. Else a single closest ≥5/7 draft (watch-only). Never invents
+   a 7/7 ticket. */
+function hgPickMostProbable(cands, nearCands, side, closest){
+  var ranked = hgRankCryptoSetups(cands || [], side);
+  if (ranked.best && hgSetupHasLevels(ranked.best) && !ranked.best.nearClean){
+    return { row: ranked.best, tier: 'clean', source: 'clean' };
+  }
+  var nr = hgRankCryptoSetups(nearCands || [], side);
+  if (nr.best && hgSetupHasLevels(nr.best)){
+    return { row: nr.best, tier: 'near', source: 'near' };
+  }
+  if (ranked.best && hgSetupHasLevels(ranked.best)){
+    return { row: ranked.best, tier: ranked.best.nearClean ? 'near' : 'clean', source: 'clean' };
+  }
+  if (closest && hgSetupHasLevels(closest)){
+    return { row: closest, tier: 'forming', source: 'closest' };
+  }
+  return null;
+}
+
 async function hgFilterGoldPostGate(ranked, venueRows, defaultRows4h, style){
   if (!Array.isArray(ranked)) return ranked;
   /* Per-candidate isolation. This loop used to sit inside ONE try: a single
@@ -1618,6 +1645,8 @@ G.hgMarkGateUnchecked = hgMarkGateUnchecked;
 G.hgPostGateBannerHtml = hgPostGateBannerHtml;
 G.hgCmpSetupQuality = hgCmpSetupQuality;
 G.hgRankCryptoSetups = hgRankCryptoSetups;
+G.hgSetupHasLevels = hgSetupHasLevels;
+G.hgPickMostProbable = hgPickMostProbable;
 G.hgIsBtcSymbol = hgIsBtcSymbol;
 G.hgBtcCandleSymbol = hgBtcCandleSymbol;
 G.hgSwingG5OK = hgSwingG5OK;

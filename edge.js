@@ -1450,9 +1450,22 @@ function mount(el){
           + Math.floor((Date.now() - st.t0) / 1000) + 's');
         return;
       }
+      var edgePick = null;
+      if (found[0] && found[0].plan && typeof W.hgMostProbablePanelHTML === 'function'){
+        var top = found[0], tp = top.plan, ts = top.sig || {};
+        edgePick = {
+          tier: 'clean',
+          row: {
+            sym: top.sym, dir: ts.dir || tp.dir, entry: tp.entry, stop: tp.stop,
+            t1: tp.t1, t2: tp.t2, rr: ts.rr || tp.rr1, venue: venueLabel(top.item),
+            gatesPassed: 7, gatesTotal: 7
+          }
+        };
+      }
       var longs = found.filter(function(x){ return x.sig.dir === 'long'; }).length;
       var shorts = found.length - longs;
-      cardsEl.innerHTML = found.map(cardHTML).join('');
+      cardsEl.innerHTML = (edgePick && typeof W.hgMostProbablePanelHTML === 'function'
+        ? W.hgMostProbablePanelHTML('edge', edgePick) : '') + found.map(cardHTML).join('');
       if (typeof W.hgChartVisionEnrichDeskRows === 'function'){
         var edgeWraps = found.map(function(r){
           var p = r.plan || {};

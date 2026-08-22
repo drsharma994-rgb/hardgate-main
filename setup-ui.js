@@ -36,7 +36,21 @@ var SU_CSS = ''
 + '.hgw-row.armed .hgw-st,.hg-setup-watch-row.armed .hg-setup-st{color:#047857;border-color:rgba(5,150,105,.45);background:rgba(5,150,105,.10)}'
 + '.hgw-row.idle .hgw-st,.hg-setup-watch-row.idle .hg-setup-st{color:#475569;border-color:#E2E8F0;background:#FFFFFF}'
 + '.hg-setup-near-h{font-size:10px;letter-spacing:.14em;font-weight:800;color:#b45309;margin:12px 0 8px;padding:8px 10px;border:1px solid rgba(180,83,9,.35);border-radius:8px;background:rgba(251,191,36,.08)}'
-+ '.hg-setup-empty{padding:14px 12px;border:1px dashed #CBD5E1;border-radius:10px;color:#64748B;font-size:12px;line-height:1.55;background:#FAFAFA}';
++ '.hg-setup-empty{padding:14px 12px;border:1px dashed #CBD5E1;border-radius:10px;color:#64748B;font-size:12px;line-height:1.55;background:#FAFAFA}'
++ '.hg-mp{margin:0 0 12px;padding:12px 14px;border:1px solid #CBD5E1;border-radius:10px;background:#FFFFFF}'
++ '.hg-mp[data-tier="clean"]{border-color:rgba(5,150,105,.45);box-shadow:inset 0 0 0 1px rgba(5,150,105,.10)}'
++ '.hg-mp[data-tier="near"]{border-color:rgba(180,83,9,.45);background:rgba(251,191,36,.06)}'
++ '.hg-mp[data-tier="forming"]{border-style:dashed;border-color:#94A3B8}'
++ '.hg-mp-eye{font-size:10px;letter-spacing:.16em;font-weight:800;color:#475569;margin:0 0 6px}'
++ '.hg-mp-head{font-size:16px;font-weight:800;color:#020617;letter-spacing:.02em}'
++ '.hg-mp-head span{font-size:11px;font-weight:600;color:#64748B;margin-left:8px;letter-spacing:0}'
++ '.hg-mp-note{font-size:11px;color:#64748B;margin:6px 0 10px;line-height:1.5}'
++ '.hg-mp-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}'
++ '.hg-mp-grid div{border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;background:#F8FAFC}'
++ '.hg-mp-grid i{display:block;font-style:normal;font-size:9px;letter-spacing:.12em;font-weight:800;color:#64748B;margin-bottom:4px}'
++ '.hg-mp-grid b{display:block;font-size:14px;font-weight:800;color:#020617}'
++ '.hg-mp-grid u{display:block;margin-top:2px;font-size:10px;color:#64748B;text-decoration:none}'
++ '@media (max-width:720px){.hg-mp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}';
 
 function suEsc(s){
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -84,6 +98,80 @@ function hgSetupDeskBannerHTML(opts){
     + '</div>'
     + '<div class="hg-setup-desk-note"><b>' + suEsc(tab) + '</b> · ' + suEsc(note) + '</div>'
     + '</div>';
+}
+
+function hgMpPx(n){
+  if (typeof W.px === 'function'){
+    try{ return W.px(n); }catch(e){}
+  }
+  n = +n;
+  if (!isFinite(n)) return '—';
+  var a = Math.abs(n);
+  if (a >= 1000) return n.toFixed(2);
+  if (a >= 1) return n.toFixed(4);
+  return n.toFixed(6);
+}
+
+function hgMostProbablePanelHTML(kind, pick){
+  try{
+    if (!pick || !pick.row) return '';
+    var row = pick.row;
+    if (typeof W.hgSetupHasLevels === 'function' && !W.hgSetupHasLevels(row)) return '';
+    var e = +row.entry, s = +row.stop, t1 = +row.t1, t2 = +row.t2;
+    if (!(isFinite(e) && isFinite(s) && e !== s && isFinite(t1))) return '';
+    var tier = String(pick.tier || 'clean').toLowerCase();
+    if (tier !== 'near' && tier !== 'forming') tier = 'clean';
+    var tab = kind ? String(kind).toUpperCase() : 'SCAN';
+    var dir = String(row.dir || '').toLowerCase();
+    var dirLbl = dir ? dir.toUpperCase() : '—';
+    var risk = Math.abs(e - s);
+    var rr = isFinite(+row.rr) ? +row.rr : (risk > 0 ? Math.abs(t1 - e) / risk : NaN);
+    var rr2 = isFinite(t2) && risk > 0 ? Math.abs(t2 - e) / risk : NaN;
+    var venue = row.venue || row.venueTag || '';
+    var passed = row.gatesPassed != null ? row.gatesPassed : row.passed;
+    var total = row.gatesTotal || 7;
+    var missing = Array.isArray(row.missing) ? row.missing.join(', ') : '';
+    var grade, note;
+    if (tier === 'clean'){
+      grade = '7/7 CLEAN';
+      note = 'This is the ranked leader on ' + tab + '. Levels are the live ticket.';
+    } else if (tier === 'near'){
+      grade = (isFinite(passed) ? (passed + '/' + total + ' NEAR') : '6/7 NEAR') + ' — watch only · not a ticket';
+      note = 'No 7/7 CLEAN on this scan. Closest gated row still prints ENTRY / STOP / T1 / T2 so you can see the plan. Do not trade it until all seven hard gates pass.';
+    } else {
+      grade = (isFinite(passed) ? (passed + '/' + total + ' CLOSEST') : 'CLOSEST') + ' — not a ticket';
+      note = 'No CLEAN or 6/7 NEAR. This is the nearest cascade with draft levels. Standing aside is the position.';
+    }
+    if (missing) note += ' Waiting: ' + missing + '.';
+    var t2Cell = isFinite(t2)
+      ? ('<div><i>T2</i><b>' + suEsc(hgMpPx(t2)) + '</b><u>' + (isFinite(rr2) ? suFmt(rr2, 1) + 'R runner' : 'runner') + '</u></div>')
+      : '<div><i>T2</i><b>—</b><u>not set</u></div>';
+    return '<section class="hg-mp" data-hg-mp="' + suEsc(kind || tab) + '" data-tier="' + tier + '" aria-label="Most probable setup">'
+      + '<div class="hg-mp-eye">MOST PROBABLE' + (tier === 'clean' ? ' SETUP' : (tier === 'near' ? ' WATCH' : ' DRAFT')) + '</div>'
+      + '<div class="hg-mp-head">' + suEsc(row.sym || '?') + ' ' + suEsc(dirLbl)
+      + '<span>' + suEsc(tab) + (venue ? ' · ' + suEsc(venue) : '') + ' · ' + suEsc(grade) + '</span></div>'
+      + '<div class="hg-mp-note">' + suEsc(note) + '</div>'
+      + '<div class="hg-mp-grid">'
+      + '<div><i>ENTRY</i><b>' + suEsc(hgMpPx(e)) + '</b><u>' + suEsc(dir === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>'
+      + '<div><i>STOP</i><b>' + suEsc(hgMpPx(s)) + '</b><u>invalidation</u></div>'
+      + '<div><i>T1</i><b>' + suEsc(hgMpPx(t1)) + '</b><u>' + (isFinite(rr) ? suFmt(rr, 1) + 'R take profit' : 'take profit') + '</u></div>'
+      + t2Cell
+      + '</div></section>';
+  }catch(e){ return ''; }
+}
+
+function hgPinMostProbablePanel(host, kind, pick){
+  try{
+    if (!host) return null;
+    hgSetupInjectStyles();
+    var old = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var html = hgMostProbablePanelHTML(kind, pick);
+    if (!html) return null;
+    if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', html);
+    else host.innerHTML = html + (host.innerHTML || '');
+    return pick;
+  }catch(e){ return null; }
 }
 
 function hgSetupNearHeaderHTML(count, kind){
@@ -472,6 +560,9 @@ W.hgSetupTierLabel = hgSetupTierLabel;
 W.hgSetupTierBadge = hgSetupTierBadge;
 W.hgSetupDeskBannerHTML = hgSetupDeskBannerHTML;
 W.hgSetupNearHeaderHTML = hgSetupNearHeaderHTML;
+W.hgMostProbablePanelHTML = hgMostProbablePanelHTML;
+W.hgPinMostProbablePanel = hgPinMostProbablePanel;
+W.hgMpPx = hgMpPx;
 W.hgFormingWatchHTML = hgFormingWatchHTML;
 W.hgSetupEmptyHTML = hgSetupEmptyHTML;
 W.hgSetupCardHead = hgSetupCardHead;

@@ -219,6 +219,10 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
 - Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
 
+### MOST PROBABLE levels — hg-v440
+- **SWING / SCALP / EDGE / BEST** pin one **MOST PROBABLE** panel with **ENTRY · STOP · T1 · T2**. CLEAN 7/7 wins. Else the best 6/7 NEAR (watch only). Else one closest ≥5/7 draft (not a ticket). Dual-venue merge re-pins the ranked leader. G1–G7 unchanged.
+- Tests: `tests/test-most-probable-panel.mjs`.
+
 ### Crypto desks scan themselves — hg-v439
 - Opening **SWING / SCALP / EDGE / BEST** starts that desk's scan. A busy BRAIN or 5-min cycle **retries** the tab-open scan instead of dropping it. Background `hgScanAllTabs` passes `quiet` so those four use `cryptoScanWarm` / `bestScanWarm` / `edgeWarm` and do not steal the RUN button. EDGE still auto-runs on the visible pane after a headless warm. G1–G7 unchanged.
 - Tests: `tests/test-crypto-tab-auto-scan.mjs`.
