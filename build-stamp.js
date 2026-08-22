@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v443',
+  version: 'hg-v444',
   pack: 'strategy confirm on every scan tab',
-  built: '2026-08-22T13:20:00Z',
-  note: 'Every scan tab stamps the shared 20-gate indicator bank as CLEAN / MIXED / ADVERSE. Adverse demotes rank, never deletes the ticket. Stops never widen. G1–G7 unchanged. Crypto execute stays disabled.'
+  built: '2026-08-22T14:10:00Z',
+  note: 'Every scan tab stamps the shared 20-gate indicator bank as CLEAN / MIXED / ADVERSE. Adverse demotes rank, never deletes the ticket. Stops never widen. G1–G7 unchanged. Crypto execute stays disabled. SCORECARD still settles headlessly on the 10-minute tick (v443).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

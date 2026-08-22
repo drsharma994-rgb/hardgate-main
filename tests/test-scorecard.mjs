@@ -430,6 +430,69 @@ function rec(over){ return Object.assign({}, LONG, over || {}); }
 }
 
 /* ================================================================
+   F0) THE LEDGER ACCRUES UNATTENDED — and stays cheap doing it
+
+   The whole point of the scorecard is that it answers "which layers
+   actually make money" from settled outcomes. It can only do that if
+   settlement happens without a human watching. These assert the two
+   halves that have to be true together: it runs unattended, AND a
+   background tick can never become a request storm.
+================================================================ */
+{
+  const store = makeStorage();
+  const fetched = [];
+  const ctx = makeCtx({ localStorage: store });
+  /* the route lives on window, like every other consumer sees it */
+  ctx.window.getCandles = async function(sym){ fetched.push(sym); return neutralBars(10, 102); };
+  const tab = ctx.window.HG_tabs[0];
+
+  /* three open records, NOBODY has opened the tab and NOBODY has clicked */
+  for (const sym of ['AAAUSDT', 'BBBUSDT', 'CCCUSDT']){
+    ctx.window.hgScoreRecord({ source: 'brain', sym: sym, dir: 'long', tier: 'PRIME',
+      entry: 100, stop: 90, t1: 120, t2: 135, layers: ['OI FLOW'], at: T0 * 1000 });
+  }
+  const r = await tab.refresh();
+  assert(r === 'refreshed',
+    'F0a refresh settles with no prior mount and no prior click — the deadlock is gone');
+  assert(fetched.length === 3,
+    'F0b every open record was walked unattended, got ' + fetched.length);
+
+  /* immediately again: the cooldown must defer them, not re-walk */
+  const before = fetched.length;
+  await tab.refresh();
+  assert(fetched.length === before,
+    'F0c a second tick moments later re-walks nothing — the cooldown holds');
+}
+
+/* the per-run budget caps a large book, and nothing starves */
+{
+  const store = makeStorage();
+  const fetched = [];
+  const ctx = makeCtx({ localStorage: store });
+  /* the route lives on window, like every other consumer sees it */
+  ctx.window.getCandles = async function(sym){ fetched.push(sym); return neutralBars(10, 102); };
+  const tab = ctx.window.HG_tabs[0];
+
+  for (let i = 0; i < 60; i++){
+    ctx.window.hgScoreRecord({ source: 'brain', sym: 'S' + i + 'USDT', dir: 'long', tier: 'PRIME',
+      entry: 100, stop: 90, t1: 120, t2: 135, layers: ['OI FLOW'], at: T0 * 1000 });
+  }
+  await tab.refresh();
+  assert(fetched.length === 25,
+    'F0d 60 open records, one background tick spends exactly the 25-fetch budget, got ' + fetched.length);
+
+  /* oldest-checked-first means the 35 left over are at the FRONT of the next
+     run's queue — a capped run must never starve the same records forever */
+  const firstRound = fetched.slice();
+  const raw = JSON.parse(store.getItem('hg_score_v1'));
+  const walked = raw.filter(function(x){ return x.lastCheck; }).length;
+  assert(walked === 25, 'F0e exactly the walked records carry a lastCheck stamp, got ' + walked);
+  const unwalked = raw.filter(function(x){ return !x.lastCheck; }).length;
+  assert(unwalked === 35, 'F0f the other 35 are untouched and queue first next run, got ' + unwalked);
+  assert(new Set(firstRound).size === 25, 'F0g the budget was spent on 25 DISTINCT records');
+}
+
+/* ================================================================
    F) tab mount + refresh contract
 ================================================================ */
 {
@@ -445,9 +508,21 @@ function rec(over){ return Object.assign({}, LONG, over || {}); }
     'F3 empty ledger renders an honest empty state (no fabricated track record)');
   assert(el._kids['#scoreBoard'].innerHTML.indexOf('no settled trades yet') !== -1,
     'F4 scoreboard admits there is no record below the minimum sample');
+  /* F5 USED TO ASSERT A DEADLOCK. It required refresh() to answer
+     "skipped: not run yet" until a human had opened this tab and clicked —
+     but __sc.ranOnce is only set INSIDE runSettle, so the periodic refresh
+     could never be the thing that ran it first. Measured on the deployed
+     desk: 98 records logged, 59 old enough to have resolved, 0 settled. The
+     R-multiple ledger — the only evidence for whether any layer here makes
+     money — had never produced a single outcome.
+
+     The intent behind the old guard was real: a background tick must not
+     touch off an unbounded candle sweep. That is now enforced by the per-run
+     budget in hgScoreSettle (cooldown + cap), not by refusing to run. What
+     refresh() still will not do is invent a route it does not have. */
   const skipped = await tab.refresh();
-  assert(skipped === 'skipped: not run yet',
-    'F5 refresh before the first user settle -> "skipped: not run yet" (a global refresh never fires a first-time candle sweep)');
+  assert(skipped === 'skipped: no candle route',
+    'F5 refresh with no candle route names the real reason, and settles nothing');
 
   /* click RE-SETTLE with a stubbed xuniverse candle route */
   const calls = {};
@@ -479,8 +554,14 @@ function rec(over){ return Object.assign({}, LONG, over || {}); }
 
   const refreshed = await tab.refresh();
   assert(refreshed === 'refreshed', 'F10 refresh after the first run -> "refreshed"');
-  assert(calls.SOLUSD === 2 && calls.BTCUSD === 1,
-    'F11 refresh re-settles only OPEN records (SOL refetched, settled BTC not)');
+  /* The invariant this has always protected still holds exactly: a SETTLED
+     record is never refetched. What changed is that an OPEN record checked
+     moments ago is now deferred by the settle cooldown, so a 10-minute tick
+     does not re-walk the whole book every time. */
+  assert(calls.BTCUSD === 1,
+    'F11 a settled record is never refetched, however often refresh runs');
+  assert(calls.SOLUSD === 1,
+    'F11b an open record checked moments ago is deferred by the cooldown, not re-walked');
 
   /* busy guard */
   const ctx2 = makeCtx({ localStorage: makeStorage() });
