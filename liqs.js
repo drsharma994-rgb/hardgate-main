@@ -772,6 +772,9 @@ function setupCardHTML(setup){
       + (setup.note ? ' — ' + esc(setup.note) : '')
     : 'no tradeable levels — ' + esc(setup.note);
   var setupRows = (S.setupRows && S.setupRows.sym === setup.sym) ? S.setupRows.rows : null;
+  if (hasPlan && setupRows && typeof hgStrategyRefine === 'function'){
+    try{ hgStrategyRefine(setup, setupRows, { style: 'liqs', kind: 'liqs', reversion: true }); }catch(eRf){}
+  }
   var liqStack = null;
   if (hasPlan && typeof hgSetupStackForInlineScan === 'function'){
     try{
@@ -810,6 +813,7 @@ function setupCardHTML(setup){
     + '<span class="gpip">fade → ' + dirUp + '</span>'
     + '</div>'
     + '<div class="plan">' + planTxt + '</div>'
+    + ((typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(setup) : '')
     + stackHtml
     + tradeBtn
     + bookBtn

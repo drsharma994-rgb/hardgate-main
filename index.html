@@ -1769,8 +1769,9 @@ async function runCoilScanLeg(opts){
           (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
             + '<br>Wait for price to sweep below '+px(coilLow)+', then manually bid the reclaim. Do not buy inside the chop.',
           pl?pl.entry:coilLow, pl?pl.stop:coilLow*0.95, pl?pl.t1:coilHigh, null,
-          { scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack,
-            strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst }));
+          Object.assign({ scanner: 'coil', strategy: 'coil', t2: pl ? pl.t2 : null, tier: 'forming', stack: coilStack,
+            strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst },
+            (typeof hgStrategyBookFields === 'function' && pl) ? hgStrategyBookFields(pl) : {})));
       }catch(e){}
       await sleep(120);
     }
@@ -1929,8 +1930,9 @@ async function runDivScanLeg(opts){
        ["funding", t.fundingPct!==null?fmt(t.fundingPct,4)+"%":"n/a"],["regime",reg.label]],
       ["G1 pivot structure","G2 span>=10 bars","G3 funding","G4 no opposing CUSUM","G5 R:R>=2"],
       planBlockExact(plObj, plObj.note), entry, stop, t1, null,
-      { scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack,
-        strategyConfirm: plObj.strategyConfirm, strategyWith: plObj.strategyWith, strategyAgainst: plObj.strategyAgainst }));
+      Object.assign({ scanner: 'divergence', strategy: 'divergence', t2: t2, stack: divStack,
+        strategyConfirm: plObj.strategyConfirm, strategyWith: plObj.strategyWith, strategyAgainst: plObj.strategyAgainst },
+        (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(plObj) : {})));
         logSetup(t.symbol, dir, "div", entry, stop, t1);
       }catch(e){}
       await sleep(120);
@@ -2303,6 +2305,7 @@ function smartCardHTML(r){
       + contra.map(function(g){ return '<span class="gpip">' + g + '</span>'; }).join('') + '</div>'
     + (s && s.stack && typeof hgSetupStackMiniHtml === 'function' ? hgSetupStackMiniHtml(s.stack) : '')
     + '<div class="plan">' + planTxt + '</div>'
+    + ((s && typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '')
     + (s && s.confirmed && typeof hgChartVisionCardBlock === 'function' ? hgChartVisionCardBlock(r) : '')
     + (s ? '<div class="hgchart" id="hgchart-smart-' + String(r.sym).replace(/[^A-Za-z0-9]/g, '') + '"></div>' : '')
     + tradeBtn
@@ -2536,8 +2539,9 @@ async function runApexScanLeg(opts){
         (pl ? planBlockExact(pl, pl.note) : 'levels unavailable — size down')
           + '<br>MANUAL TRIGGER: do not buy yet. Pull up a 15m chart of BTC. The exact minute BTC prints a bullish reclaim or sweeps a local low, buy this asset.',
         pl?pl.entry:r.mark, pl?pl.stop:r.e50, pl?pl.t1:r.mark*1.05, null,
-        { scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack,
-          strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst }));
+        Object.assign({ scanner: 'apex', strategy: 'apex', t2: pl ? pl.t2 : null, tier: 'forming', stack: apexStack,
+          strategyConfirm: pl && pl.strategyConfirm, strategyWith: pl && pl.strategyWith, strategyAgainst: pl && pl.strategyAgainst },
+          (typeof hgStrategyBookFields === 'function' && pl) ? hgStrategyBookFields(pl) : {})));
     });
     statEl.textContent = (venueTag ? venueTag + ' · ' : '') + `done — ${results.length} Apex assets found`;
     if (!results.length && opts.dualLast !== false) emptyEl.style.display='block';
@@ -2641,8 +2645,9 @@ __cardsHtml.push(cardHTML(hgCardVenueSym(t.symbol, venueTag), dir,
 ['G1 '+fmt(outerSD,1)+' SD extreme','G2 reclaimed '+fmt(innerSD,1)+' SD','G3 momentum exhausted at sweep'],
 planBlockExact(trapPl, trapPl.note)
 + `<br>Dynamic mean reversion: bands auto-scaled to ${fmt(outerSD,1)} SD based on this asset's volatility. Momentum exhaustion (RSI ${fmt(rsiAtSweep,1)}) is read at the moment of the extreme wick, not after price already reclaimed.`,
-trapPl.entry, trapPl.stop, trapPl.t1, null, { scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack,
-  strategyConfirm: trapPl.strategyConfirm, strategyWith: trapPl.strategyWith, strategyAgainst: trapPl.strategyAgainst }));
+trapPl.entry, trapPl.stop, trapPl.t1, null, Object.assign({ scanner: 'liq-trap', strategy: 'liq-trap', t2: trapPl.t2, stack: trapStack,
+  strategyConfirm: trapPl.strategyConfirm, strategyWith: trapPl.strategyWith, strategyAgainst: trapPl.strategyAgainst },
+  (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(trapPl) : {})));
 }catch(e){}
 await sleep(100);
 }
@@ -2728,8 +2733,9 @@ async function runSmcScanLeg(opts){
         ], ['G1 Displacement (FVG)', 'G2 Unmitigated', 'G3 Price inside POI', 'G4 HTF Trend Aligned'],
         planBlockExact(smcPl, smcPl.note)
         + '<br>SMC TAP: price has pulled back into a 4H institutional imbalance. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', smcPl.entry, smcPl.stop, smcPl.t1, null,
-        { scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack,
-          strategyConfirm: smcPl.strategyConfirm, strategyWith: smcPl.strategyWith, strategyAgainst: smcPl.strategyAgainst }));
+        Object.assign({ scanner: 'smc', strategy: 'smc', t2: smcPl.t2, tier: 'near', stack: smcStack,
+          strategyConfirm: smcPl.strategyConfirm, strategyWith: smcPl.strategyWith, strategyAgainst: smcPl.strategyAgainst },
+          (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(smcPl) : {})));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -2802,8 +2808,9 @@ async function runObScanLeg(opts){
         ], ['G1 Valid Order Block', 'G2 Unmitigated', 'G3 Price inside OB', 'G4 HTF Trend Aligned'],
         planBlockExact(obPl, obPl.note)
         + '<br>ORDER BLOCK TAP: price has pulled back into an unmitigated 4H order block. Drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.', obPl.entry, obPl.stop, obPl.t1, null,
-        { scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack,
-          strategyConfirm: obPl.strategyConfirm, strategyWith: obPl.strategyWith, strategyAgainst: obPl.strategyAgainst }));
+        Object.assign({ scanner: 'ob', strategy: 'ob', t2: obPl.t2, tier: 'near', stack: obStack,
+          strategyConfirm: obPl.strategyConfirm, strategyWith: obPl.strategyWith, strategyAgainst: obPl.strategyAgainst },
+          (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(obPl) : {})));
       } catch(e) { /* skip this symbol */ }
       await sleep(100);
     }
@@ -3825,6 +3832,9 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
   const confirmChip = (typeof hgStrategyConfirmChipHtml === 'function')
     ? hgStrategyConfirmChipHtml(bookMeta.strategyConfirm, bookMeta.strategyWith, bookMeta.strategyAgainst)
     : '';
+  const strategyDetail = (typeof hgStrategyTradeDetailHtml === 'function')
+    ? hgStrategyTradeDetailHtml(bookMeta, { skipChip: true })
+    : '';
   return `<div class="card ${dir}${tierCls}">
     <div class="chead">${venueHtml}<span class="sym">${symHtml}</span><span class="dir">${dir.toUpperCase()} · ${tierLabel}</span>${bookStamp}${tripleChip}${visionChipHtml}${confirmChip}</div>
     <div class="mini">${mini.map(([k,v])=>`<span class="k">${k}</span><span>${v}</span>`).join('')}</div>
@@ -3832,6 +3842,7 @@ function cardHTML(sym, dir, mini, gates, plan, entry, stop, t1, chartId, bookMet
     ${postGateBanner}
     <div class="gates">${gates.map(g=>`<span class="gpip ok">${g}</span>`).join('')}</div>
     <div class="plan">${plan}</div>
+    ${strategyDetail}
     ${visionHtml}
     ${cid?`<div class="hgchart" id="${cid}"></div>`:''}
     ${tradeable ? `<button class="toTrade" onclick="${onclickAttr}">SEND TO TRADE PLAN →</button>` : ''}
@@ -4008,6 +4019,18 @@ function hgSetupCardExtras(hit, t, kind){
     if (hit && hit.visionNextBar) extras.push(['next bar', hit.visionNextBar]);
     else if (hit && hit.visionNextMove) extras.push(['chart vision', hit.visionNextMove]);
     if (hit && hit.sessionNote) extras.push(['session', hit.sessionNote]);
+    if (hit && hit.strategyApplied) extras.push(['strategy', hit.strategyApplied]);
+    if (hit && hit.strategyConfirm){
+      extras.push(['indicators', String(hit.strategyConfirm)
+        + (isFinite(hit.strategyWith) || isFinite(hit.strategyAgainst)
+          ? (' ' + (hit.strategyWith || 0) + 'w/' + (hit.strategyAgainst || 0) + 'a') : '')]);
+    }
+    if (hit && hit.strategyWithKeys && hit.strategyWithKeys.length){
+      extras.push(['with', hit.strategyWithKeys.slice(0, 8).join(', ')]);
+    }
+    if (hit && hit.strategyAgainstKeys && hit.strategyAgainstKeys.length){
+      extras.push(['against', hit.strategyAgainstKeys.join(', ')]);
+    }
     if (typeof brainConvictionMesh === 'function' && typeof hgSetupConvictionMeshHtml === 'function'){
       const last = (typeof __hgBrainLast !== 'undefined' && __hgBrainLast) ? __hgBrainLast : null;
       if (last && last.col){
@@ -4048,9 +4071,10 @@ function renderSwingCleanCard(t, hit, cardsEl, quiet, venueTag){
   ].concat(hgSetupCardExtras(hit, t, 'swing'));
   if (!quiet) cardsEl.insertAdjacentHTML('beforeend', cardHTML(cardSym, dir, cardMini, gates, planBlock(dir, entry, stop, t1, t2, hit.planSrc ? 'swingTryClean' : '', {
     entryType: entryType, entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy, sym: t.symbol, style: 'swing'
-  }), entry, stop, t1, chartId, { scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack,
+  }), entry, stop, t1, chartId, Object.assign({ scanner: 'swing', strategy: 'swing', t2: t2, venue: venueTag, stack: hit.stack,
     visionChip: hit.visionChip, visionNextBar: hit.visionNextBar, visionNextMove: hit.visionNextMove, visionPrediction: hit.visionPrediction,
-    postGateUnchecked: hit.postGateUnchecked, postGateUncheckedReasons: hit.postGateUncheckedReasons }));
+    postGateUnchecked: hit.postGateUnchecked, postGateUncheckedReasons: hit.postGateUncheckedReasons },
+    (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(hit) : {})));
   hit.__visionChartId = chartId;
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), rows, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'swing', entry, stop, t1);
@@ -4086,9 +4110,9 @@ function renderFadeSetupCard(t, hit, cardsEl, quiet, venueTag, kind){
     ['counter-trend fade', 'positioning ≥2', 'honest tally'],
     planBlock(hit.dir, hit.entry, hit.stop, hit.t1, hit.t2, hit.planSrc || 'funding fade', {
       entryType: hit.entryType, targetPolicy: hit.targetPolicy
-    }), hit.entry, hit.stop, hit.t1, chartId, {
+    }), hit.entry, hit.stop, hit.t1, chartId, Object.assign({
       scanner: kind, strategy: 'funding-fade', t2: hit.t2, venue: venueTag, stack: hit.stack, fund: 'main'
-    }));
+    }, (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(hit) : {})));
   if (typeof hgMiniChart === 'function'){
     hgMiniChart($(chartId), rows, { dir: hit.dir, entry: hit.entry, stop: hit.stop, t1: hit.t1, t2: hit.t2 });
   }
@@ -4117,9 +4141,10 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
     planBlock(dir, entry, stop, t1, t2, 'time-stop: exit within 24h', {
       entryType: hit.entryType || 'LIMIT @ EMA21', entryGuidance: hit.entryGuidance, targetPolicy: hit.targetPolicy,
       sym: t.symbol, style: 'scalp'
-    }), entry, stop, t1, chartId, { scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack,
+    }), entry, stop, t1, chartId, Object.assign({ scanner: 'scalp', strategy: 'scalp', t2: t2, venue: venueTag, stack: hit.stack,
     visionChip: hit.visionChip, visionNextBar: hit.visionNextBar, visionNextMove: hit.visionNextMove, visionPrediction: hit.visionPrediction,
-    postGateUnchecked: hit.postGateUnchecked, postGateUncheckedReasons: hit.postGateUncheckedReasons }));
+    postGateUnchecked: hit.postGateUnchecked, postGateUncheckedReasons: hit.postGateUncheckedReasons },
+    (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(hit) : {})));
   hit.__visionChartId = chartId;
   if (!quiet && typeof hgMiniChart === 'function') hgMiniChart($(chartId), m15, { dir: dir, entry: entry, stop: stop, t1: t1, t2: t2 });
   if (!quiet) logSetup(t.symbol, dir, 'scalp', entry, stop, t1);
@@ -4127,6 +4152,11 @@ function renderScalpCleanCard(t, hit, minsToFunding, cardsEl, quiet, venueTag){
 
 function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
   if (!hit || !hit.dir) return;
+  try{
+    if (!hit.strategyConfirm && hit.rows && typeof hgStrategyRefine === 'function'){
+      hgStrategyRefine(hit, hit.rows, { style: kind, kind: kind + '-near' });
+    }
+  }catch(eNearRf){}
   const chartId = 'hgc-near-' + kind + '-' + String((venueTag || '') + t.symbol).replace(/[^A-Za-z0-9]/g, '');
   const miss = (hit.missing || []).join(', ');
   const cardSym = hgCardVenueSym(t.symbol, venueTag);
@@ -4145,7 +4175,8 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
       ],
       gates: ['NEAR CLEAN — 6/7 · not a ticket'],
       plan: nearPlan, chartId: chartId,
-      bookMeta: { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near', stack: hit.stack }
+      bookMeta: Object.assign({ scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near', stack: hit.stack },
+        (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(hit) : {})
     }));
     if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
     return;
@@ -4161,7 +4192,8 @@ function renderNearCleanCard(t, hit, cardsEl, kind, venueTag){
     ['dyn R:R', hit.dynamicRR != null ? fmt(hit.dynamicRR, 2) + 'R' : '—']
   ], ['NEAR CLEAN — 6/7 · not a ticket'],
     '<span class="note warn">NEAR CLEAN ' + hit.passed + '/7 — waiting: ' + miss + '. Do not trade until all 7 hard gates pass.</span>',
-    null, null, null, chartId, { scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near' }));
+    null, null, null, chartId, Object.assign({ scanner: kind + '-near', strategy: kind + '-near', venue: venueTag, tier: 'near' },
+      (typeof hgStrategyBookFields === 'function') ? hgStrategyBookFields(hit) : {})));
   if (typeof hgMiniChart === 'function' && hit.rows) hgMiniChart($(chartId), hit.rows, { dir: hit.dir });
 }
 
@@ -7035,7 +7067,7 @@ async function runBest(opts){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/${w.famMax||9} FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total across Delta + CoinDCX) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div id="bestVisionBlock"></div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${typeof hgStrategyTradeDetailHtml==='function'?hgStrategyTradeDetailHtml(w):''}${bestStackHtml(w)}<div id="bestVisionBlock"></div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
         ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">
@@ -7107,7 +7139,7 @@ async function runBest(opts){
           <div class="vword">${w.dir.toUpperCase()} · ${w.famScore}/${w.famMax||9} FAMILIES · ${w.robScore}/2 ROBUST${w.profitBoost?` · +${fmt(w.profitBoost,1)} PROFIT RANK`:''}</div>
           <div class="vwhy">Execution: ${w.entryType}. Ranked #1 of ${pool.length} top setups (${clean.length} CLEAN total) by scorecard expectancy when proven, then independent evidence families (CVD + Book spoof checks included), then robustness, then structural R:R${famGateNote}. 9/9 families + 2/2 robustness is the strongest evidence this framework can honestly claim. Logged to LOG automatically.</div>
         </div>
-        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${bestStackHtml(w)}<div id="bestVisionBlock"></div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
+        <div class="plan">${planBlock(w.dir,w.entry,w.stop,t1,t2,w.planSrc||'', { entryType: w.entryType, entryGuidance: w.entryGuidance, targetPolicy: w.targetPolicy })}</div>${typeof hgStrategyTradeDetailHtml==='function'?hgStrategyTradeDetailHtml(w):''}${bestStackHtml(w)}<div id="bestVisionBlock"></div><div class="hgchart" id="bestChart"></div><div class="note" style="margin-top:8px">Nearest OB: <b>${typeof nearestOBText==='function'?nearestOBText(w.rows,w.dir):'n/a'}</b> · Liquidity Target: <b>${typeof liquidityTargetText==='function'?liquidityTargetText(w.rows,w.dir):'n/a'}</b></div>
         <button class="toTrade" onclick="${typeof hgToTradePlanOnclickAttr==='function'?hgToTradePlanOnclickAttr(w.t.symbol,w.dir,w.entry,w.stop,t1,{t2:t2,stack:w.stack,scanner:'best',strategy:'best'}):('toTrade(\''+w.t.symbol+'\',\''+w.dir+'\','+w.entry+','+w.stop+','+t1+')')}">SEND TO TRADE PLAN →</button>
         ${typeof hgBookBtn==='function'?hgBookBtn(w.t.symbol, w.dir, w.entry, w.stop, t1, { scanner: 'best', strategy: 'best', t2: t2, stack: w.stack }):''}
         <hr class="sep">

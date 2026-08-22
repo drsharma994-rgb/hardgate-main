@@ -448,7 +448,9 @@ function squeezePlanHTML(s){
     + ((typeof hgStrategyConfirmChipHtml === 'function')
       ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
     + (s.contextRead ? '<div class="dim">' + esc(s.contextRead)
-        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '');
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
+    + ((typeof hgStrategyTradeDetailHtml === 'function')
+      ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
 }
 
 /* full block: <div class="plan"> line (+ optional extra note) plus the

@@ -224,4 +224,77 @@ console.log('== inline scanners pass confirm onto the card ==');
   ok(/function hgStrategyConfirmChipHtml/.test(PLANS), 'chip helper lives in plans.js (no new script)');
 }
 
+console.log('== named indicator keys ride on the plan ==');
+{
+  const rows = tape(400, +0.16, 7);
+  const entry = rows[rows.length - 1].c;
+  const plan = { dir: 'long', type: 'SWING', entry: entry, stop: entry * 0.97, t1: entry * 1.06, t2: entry * 1.09 };
+  W.hgStrategyRefine(plan, rows, { style: 'swing' });
+  ok(typeof plan.strategyApplied === 'string' && /swing/i.test(plan.strategyApplied),
+     'strategyApplied names the native strategy');
+  ok(Array.isArray(plan.strategyWithKeys) && plan.strategyWithKeys.length >= 4,
+     'strategyWithKeys lists the agreeing indicator names');
+  ok(Array.isArray(plan.strategyAgainstKeys), 'strategyAgainstKeys is an array (may be empty)');
+  ok(!plan.strategyWithKeys.includes('context-gates'), 'meta context-gates key is not listed');
+}
+
+console.log('== trade-detail HTML names the applied bank ==');
+{
+  ok(typeof W.hgStrategyTradeDetailHtml === 'function', 'hgStrategyTradeDetailHtml is exported');
+  ok(W.hgStrategyTradeDetailHtml(null) === '', 'null source is empty');
+  ok(W.hgStrategyTradeDetailHtml({}) === '', 'empty object is empty');
+  const rows = tape(400, +0.16, 7);
+  const entry = rows[rows.length - 1].c;
+  const plan = { dir: 'long', type: 'SWING', entry: entry, stop: entry * 0.97, t1: entry * 1.06 };
+  const stop0 = plan.stop, t10 = plan.t1;
+  W.hgStrategyRefine(plan, rows, { style: 'swing' });
+  const html = W.hgStrategyTradeDetailHtml(plan);
+  ok(plan.entry === entry && plan.stop === stop0 && plan.t1 === t10,
+     'detail helper does not move levels');
+  ok(/STRATEGY APPLIED/.test(html), 'detail names the strategy');
+  ok(/INDICATORS/.test(html) || /indicator context/.test(html), 'detail shows the indicator bank');
+  ok(/gpip/.test(html), 'detail renders gate chips');
+  ok(typeof W.hgStrategyBookFields === 'function', 'hgStrategyBookFields is exported');
+  const bf = W.hgStrategyBookFields(plan);
+  ok(bf.strategyConfirm === plan.strategyConfirm && Array.isArray(bf.strategyWithKeys),
+     'book fields copy confirm + named keys');
+}
+
+console.log('== primary scan cards forward and render the detail ==');
+{
+  ok(/hgStrategyBookFields\(hit\)/.test(HTML), 'SWING/SCALP bookMeta pulls strategy fields from the hit');
+  ok(/hgStrategyBookFields\(hit\)/.test(HTML) && /renderFadeSetupCard/.test(HTML),
+     'FADE renderer is in the same file as the book-field helper');
+  ok(/hgStrategyTradeDetailHtml\(bookMeta/.test(HTML), 'shared cardHTML renders the trade-detail block');
+  ok(/hgStrategyTradeDetailHtml\(w\)/.test(HTML), 'BEST MOST PROBABLE panel renders the trade-detail block');
+  ok(/function hgStrategyTradeDetailHtml/.test(PLANS), 'detail helper lives in plans.js (no new script)');
+  ok(/strategyApplied: pl\.strategyApplied/.test(PLANJS) || /strategyWithKeys: pl\.strategyWithKeys/.test(PLANJS),
+     'hg-plan.js forwards the named strategy fields (not another dropped-field bug)');
+}
+
+console.log('== module scan tabs apply and show the same bank ==');
+{
+  const EDGE = read('edge.js');
+  const ENGJS = read('engine.js');
+  const ST = read('startradertab.js');
+  const OR = read('omniroute.js');
+  const LIQ = read('liqs.js');
+  const SUI = read('setup-ui.js');
+  const GS = read('goldscalp.js');
+  const GW = read('goldswing.js');
+  const GBL = read('gold-best-levels.js');
+  ok(/hgStrategyRefine/.test(EDGE), 'EDGE runs hgStrategyRefine on the plan');
+  ok(/hgStrategyTradeDetailHtml/.test(EDGE), 'EDGE card shows the trade-detail block');
+  ok(/hgStrategyTradeDetailHtml/.test(ENGJS), 'EXECUTE/GATES card shows the trade-detail block');
+  ok(/hgStrategyRefine/.test(ST), 'STAR TRADER refines the confluence plan');
+  ok(/hgStrategyTradeDetailHtml/.test(ST), 'STAR TRADER card shows the trade-detail block');
+  ok(/hgStrategyTradeDetailHtml/.test(OR), 'OMNIROUTE card shows the trade-detail block');
+  ok(/hgStrategyRefine/.test(LIQ), 'LIQS applies the indicator bank to the fade plan');
+  ok(/hgStrategyTradeDetailHtml/.test(LIQ), 'LIQS card shows the trade-detail block');
+  ok(/hgStrategyTradeDetailHtml/.test(SUI), 'pine/setup panel shows the trade-detail block');
+  ok(/strategyConfirm/.test(GBL), 'gold best-levels stamps confirm counts from hgContextRead');
+  ok(/hgStrategyTradeDetailHtml/.test(GS), 'GOLD SCALP card shows the indicator bank');
+  ok(/hgStrategyTradeDetailHtml/.test(GW), 'GOLD SWING card shows the indicator bank');
+}
+
 console.log('\n' + passed + ' passed, 0 failed');

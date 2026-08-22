@@ -67,6 +67,10 @@
                          strategyWith: pl.strategyWith,
                          strategyAgainst: pl.strategyAgainst,
                          strategyDemoted: pl.strategyDemoted === true,
+                         strategyApplied: pl.strategyApplied,
+                         strategyWithKeys: pl.strategyWithKeys,
+                         strategyAgainstKeys: pl.strategyAgainstKeys,
+                         contextGates: pl.contextGates,
                          contextRead: pl.contextRead,
                          contextWarn: pl.contextWarn === true,
                          formationScore: pl.formationScore };

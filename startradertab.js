@@ -556,6 +556,12 @@ function stSynthesize(contract, rows4h, rows1h, rows15m, ticker, ctx){
       var near = stNearPlan(contract, dir, rows4h, rows1h, rows15m, ticker);
       if (near){ plan = near; planDraft = true; }
     }
+    if (plan && rows4h && typeof W.hgStrategyRefine === 'function'){
+      var kls = String(contract.klass || '').toLowerCase();
+      if (kls.indexOf('metal') < 0 && kls !== 'gold'){
+        try{ W.hgStrategyRefine(plan, rows4h, { style: 'startrader', kind: 'startrader' }); }catch(eRf){}
+      }
+    }
 
     return {
       sym: contract.sym,
@@ -661,7 +667,9 @@ function cardHTML(r){
     + '<span class="k">confluence</span><span>' + r.points + ' pts · ' + r.votes.length + ' reads agree</span>'
     + '<span class="k">strategies</span><span>' + esc(voteTxt) + '</span>'
     + '<span class="k">mark</span><span>' + pxF(r.mark) + '</span>'
-  + '</div>' + planBlk + visionHtml + stackHtml + tradeBtn + bookBtn + '</div>';
+  + '</div>' + planBlk
+    + ((p && typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(p) : '')
+    + visionHtml + stackHtml + tradeBtn + bookBtn + '</div>';
 }
 
 var __st = { busy: false, ranOnce: false, run: null };

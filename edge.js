@@ -942,6 +942,9 @@ function edgeAssess(rows, item, candleSrc){
     if (en.tally < MIN_TALLY) return null;
     var plan = edgePlan(sig);
     if (!plan) return null;
+    if (typeof W.hgStrategyRefine === 'function'){
+      try{ W.hgStrategyRefine(plan, rows, { style: 'edge', kind: 'edge' }); }catch(eRf){}
+    }
     if (typeof W.hgMacroAllowsCrypto === 'function'){
       var mac = W.hgMacroAllowsCrypto(item && item.sym, sig.dir);
       if (mac && mac.allow === false) return null;
@@ -1068,7 +1071,9 @@ function cardHTML(r){
     ? '<div class="plan">' + edgePlanHtml(p, sig)
       + ' — SWING-aligned <b>' + esc(venueLabel(r.item)) + '</b>'
       + (r.candleSrc ? ' · ' + esc(r.candleSrc) : '')
-      + '</div>' : '<div class="plan">levels unavailable</div>';
+      + '</div>'
+      + ((typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(p) : '')
+    : '<div class="plan">levels unavailable</div>';
   var sym = r.item ? r.item.sym : r.sym;
   var tradeOnclick = (p && (typeof W.hgToTradePlanOnclickAttr === 'function' || typeof W.toTrade === 'function'))
     ? ((typeof W.hgToTradePlanOnclickAttr === 'function')

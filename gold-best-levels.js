@@ -422,6 +422,18 @@ function hgBestLevelsGold(inp){
       if (cx){
         plan.contextGates = cx.gates;
         plan.contextRead = cx.read;
+        plan.strategyWith = cx.withN;
+        plan.strategyAgainst = cx.againstN;
+        plan.strategyConfirm = cx.clean ? 'CLEAN' : (cx.adverse ? 'ADVERSE' : 'MIXED');
+        plan.strategyApplied = (typeof G.hgStrategyAppliedName === 'function')
+          ? G.hgStrategyAppliedName(plan, { style: style, kind: hit.stratKey || style })
+          : String((hit && hit.stratKey) || style || 'gold');
+        if (typeof G.hgStrategyStampKeys === 'function') G.hgStrategyStampKeys(plan);
+        else if (typeof G.hgStrategyCollectKeys === 'function'){
+          var gk = G.hgStrategyCollectKeys(cx.gates);
+          plan.strategyWithKeys = gk.withK;
+          plan.strategyAgainstKeys = gk.againstK;
+        }
         /* objections, not majorities: half of these gates are
        permissive location reads ("do not chase the extreme") that rarely
        object, so a with/against majority never fires even on a short into
@@ -620,6 +632,12 @@ function hgApplyGoldBestLevels(gc, inp){
        indistinguishable from a bug. */
     gc.contextGates = plan.contextGates;
     gc.contextRead = plan.contextRead;
+    gc.strategyConfirm = plan.strategyConfirm;
+    gc.strategyWith = plan.strategyWith;
+    gc.strategyAgainst = plan.strategyAgainst;
+    gc.strategyApplied = plan.strategyApplied;
+    gc.strategyWithKeys = plan.strategyWithKeys;
+    gc.strategyAgainstKeys = plan.strategyAgainstKeys;
     if (plan.contextWarn && !gc.demoted){
       gc.demoted = true;
       gc.demoteReason = plan.contextRead || 'indicator context against';

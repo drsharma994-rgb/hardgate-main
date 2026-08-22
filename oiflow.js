@@ -431,6 +431,8 @@ function cardHTML(r){
         ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
       + (s.contextRead ? '<div class="dim">' + String(s.contextRead).replace(/&/g,'&amp;').replace(/</g,'&lt;')
           + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
+      + ((typeof hgStrategyTradeDetailHtml === 'function')
+        ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '')
     : oiflowPlan(r);
   var tradeOnclick = (s && (typeof hgToTradePlanOnclickAttr === 'function' || typeof toTrade === 'function'))
     ? ((typeof hgToTradePlanOnclickAttr === 'function')

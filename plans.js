@@ -1240,7 +1240,7 @@ function hgStrategyIsReversion(plan, opts){
   var blob = [opts.style, opts.kind, opts.scanner,
               plan && plan.type, plan && plan.style, plan && plan.strategy]
     .map(function(x){ return String(x || '').toLowerCase(); }).join(' ');
-  return /fade|trap|liq-trap|meanrev|mean-rev|reversal|judas/.test(blob);
+  return /fade|trap|liq-trap|liqs|meanrev|mean-rev|reversal|judas/.test(blob);
 }
 
 function hgStrategyStyleFloor(plan, opts){
@@ -1262,6 +1262,167 @@ function hgStrategyConfirmChipHtml(confirm, withN, againstN){
       ? ' ' + (+withN || 0) + 'w/' + (+againstN || 0) + 'a'
       : '';
     return ' <span class="gpip ' + cls + '">INDICATORS ' + confirm + extra + '</span>';
+  }catch(e){ return ''; }
+}
+
+var HG_STRATEGY_KEY_LABELS = {
+  'ichimoku': 'Ichimoku',
+  'donchian-pos': 'Donchian',
+  'stoch-rsi': 'Stoch RSI',
+  'hurst-regime': 'Hurst',
+  'squeeze-state': 'Squeeze',
+  'keltner-pos': 'Keltner',
+  'structure-shift': 'BOS/CHoCH',
+  'macd-momentum': 'MACD',
+  'bollinger-pctb': 'Bollinger',
+  'volume-z': 'Volume Z',
+  'regression-slope': 'Linreg',
+  'value-area': 'Value area',
+  'htf-confirm': 'HTF EMA',
+  'regime-fit': 'Regime',
+  'adx-regime': 'ADX',
+  'obv-flow': 'OBV',
+  'mfi-pressure': 'MFI',
+  'cci-stretch': 'CCI',
+  'ema-ribbon': 'EMA ribbon',
+  'heikin-trend': 'Heikin Ashi'
+};
+
+function hgStrategyKeyLabel(key){
+  var k = String(key || '');
+  return HG_STRATEGY_KEY_LABELS[k] || k;
+}
+
+function hgStrategyEscHtml(s){
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function hgStrategyCollectKeys(gates){
+  var withK = [], againstK = [], naK = [], i, g, key;
+  for (i = 0; i < (gates || []).length; i++){
+    g = gates[i];
+    if (!g) continue;
+    key = String(g.key || '');
+    if (!key || key === 'context-gates') continue;
+    if (g.pass === true) withK.push(key);
+    else if (g.pass === false) againstK.push(key);
+    else naK.push(key);
+  }
+  return { withK: withK, againstK: againstK, naK: naK };
+}
+
+function hgStrategyStampKeys(plan){
+  if (!plan || typeof plan !== 'object') return plan;
+  try{
+    if ((!plan.strategyWithKeys || !plan.strategyAgainstKeys) && plan.contextGates){
+      var ck = hgStrategyCollectKeys(plan.contextGates);
+      if (!plan.strategyWithKeys) plan.strategyWithKeys = ck.withK;
+      if (!plan.strategyAgainstKeys) plan.strategyAgainstKeys = ck.againstK;
+    }
+  }catch(e){}
+  return plan;
+}
+
+function hgStrategyAppliedName(plan, opts){
+  opts = opts || {};
+  if (plan && plan.strategyApplied) return String(plan.strategyApplied);
+  var raw = opts.kind || opts.scanner || opts.style
+    || (plan && (plan.strategy || plan.type || plan.planSrc)) || 'setup';
+  var s = String(raw).toLowerCase();
+  if (/goldscalp/.test(s)) return 'GOLD SCALP';
+  if (/goldswing/.test(s)) return 'GOLD SWING';
+  if (/swing/.test(s) && !/fade/.test(s)) return 'SWING 7/7 CLEAN';
+  if (/scalp/.test(s) && !/fade/.test(s)) return 'SCALP 7/7 CLEAN';
+  if (/fade/.test(s)) return 'FUNDING FADE';
+  if (/liqs/.test(s)) return 'LIQ FLUSH FADE';
+  if (/trap/.test(s)) return 'LIQUIDITY TRAP';
+  if (/smc|fvg/.test(s)) return 'SMC / FVG';
+  if (/order.?block|\bob\b/.test(s)) return 'ORDER BLOCK';
+  if (/div/.test(s)) return 'DIVERGENCE';
+  if (/edge/.test(s)) return 'EDGE';
+  if (/squeeze/.test(s)) return 'SQUEEZE';
+  if (/meanrev|mean-rev/.test(s)) return 'MEAN REVERSION';
+  if (/reversal/.test(s)) return 'REVERSAL SNIPER';
+  if (/oiflow|oi-flow/.test(s)) return 'OI FLOW';
+  if (/smart/.test(s)) return 'SMART $';
+  if (/pine/.test(s)) return 'PINE';
+  if (/startrader/.test(s)) return 'STAR TRADER confluence';
+  if (/omniroute/.test(s)) return 'OMNIROUTE';
+  if (/best/.test(s)) return 'BEST 7/7 CLEAN';
+  return String(raw);
+}
+
+function hgStrategyBookFields(src){
+  if (!src || typeof src !== 'object') return {};
+  return {
+    strategyConfirm: src.strategyConfirm,
+    strategyWith: src.strategyWith,
+    strategyAgainst: src.strategyAgainst,
+    strategyDemoted: src.strategyDemoted,
+    strategyApplied: src.strategyApplied,
+    strategyWithKeys: src.strategyWithKeys,
+    strategyAgainstKeys: src.strategyAgainstKeys,
+    contextRead: src.contextRead,
+    contextWarn: src.contextWarn,
+    contextGates: src.contextGates
+  };
+}
+
+/* Shared scan-card block: which strategy ran, which of the 20 indicator
+   gates agreed / objected. Display only — never invents levels. */
+function hgStrategyTradeDetailHtml(src, opts){
+  opts = opts || {};
+  try{
+    if (!src || typeof src !== 'object') return '';
+    var confirm = String(src.strategyConfirm || '').toUpperCase();
+    var withK = src.strategyWithKeys;
+    var againstK = src.strategyAgainstKeys;
+    if ((!withK || !againstK) && src.contextGates){
+      var ck = hgStrategyCollectKeys(src.contextGates);
+      withK = withK || ck.withK;
+      againstK = againstK || ck.againstK;
+    }
+    var applied = src.strategyApplied || '';
+    if (!applied && (src.strategy || src.type || src.planSrc || src.kind)){
+      applied = hgStrategyAppliedName(src, opts);
+    }
+    var read = src.contextRead;
+    var hasConfirm = confirm === 'CLEAN' || confirm === 'MIXED' || confirm === 'ADVERSE';
+    var hasKeys = (withK && withK.length) || (againstK && againstK.length);
+    if (!hasConfirm && !hasKeys && !read && !applied) return '';
+
+    var html = '<div class="hg-strategy-detail note" style="margin-top:6px;font-size:11px">';
+    if (applied){
+      html += '<div><b>STRATEGY APPLIED</b> · ' + hgStrategyEscHtml(applied)
+        + ' · 20-gate indicator bank</div>';
+    }
+    if (opts.skipChip !== true){
+      var chip = hgStrategyConfirmChipHtml(src.strategyConfirm, src.strategyWith, src.strategyAgainst);
+      if (chip){
+        html += '<div>' + chip
+          + (src.contextWarn ? ' · context against this side' : '') + '</div>';
+      }
+    } else if (src.contextWarn){
+      html += '<div class="dim">context against this side</div>';
+    }
+    var i;
+    if (withK && withK.length){
+      html += '<div class="gates" style="margin-top:4px">';
+      for (i = 0; i < withK.length; i++){
+        html += '<span class="gpip ok">' + hgStrategyEscHtml(hgStrategyKeyLabel(withK[i])) + '</span>';
+      }
+      html += '</div>';
+    }
+    if (againstK && againstK.length){
+      html += '<div class="gates" style="margin-top:2px">';
+      for (i = 0; i < againstK.length; i++){
+        html += '<span class="gpip veto">' + hgStrategyEscHtml(hgStrategyKeyLabel(againstK[i])) + '</span>';
+      }
+      html += '</div>';
+    }
+    if (read) html += '<div class="dim">' + hgStrategyEscHtml(String(read)) + '</div>';
+    html += '</div>';
+    return html;
   }catch(e){ return ''; }
 }
 
@@ -1298,6 +1459,8 @@ function hgStrategyRefine(plan, rows, opts){
         plan.strategyAgainst = 0;
       }
     }
+    if (!plan.strategyApplied) plan.strategyApplied = hgStrategyAppliedName(plan, opts);
+    hgStrategyStampKeys(plan);
 
     if (wantLevels && rows && rows.length && typeof hgStructureStop === 'function'){
       var entry = +plan.entry, stop = +plan.stop, t1 = +plan.t1;
@@ -1876,6 +2039,11 @@ G.hgEnrichGenericExact = hgEnrichGenericExact;
 G.hgEnrichScalpExact = hgEnrichScalpExact;
 G.hgStrategyRefine = hgStrategyRefine;
 G.hgStrategyConfirmChipHtml = hgStrategyConfirmChipHtml;
+G.hgStrategyTradeDetailHtml = hgStrategyTradeDetailHtml;
+G.hgStrategyBookFields = hgStrategyBookFields;
+G.hgStrategyStampKeys = hgStrategyStampKeys;
+G.hgStrategyAppliedName = hgStrategyAppliedName;
+G.hgStrategyCollectKeys = hgStrategyCollectKeys;
 G.hgApplyExactEntry = hgApplyExactEntry;
 G.hgPlanMeta = hgPlanMeta;
 G.hgFormatEntryType = hgFormatEntryType;

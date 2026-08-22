@@ -392,6 +392,8 @@ function cardHTML(r){
     + ((typeof W.hgStrategyConfirmChipHtml === 'function')
       ? W.hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
     + '</div>'
+    + ((typeof W.hgStrategyTradeDetailHtml === 'function')
+      ? W.hgStrategyTradeDetailHtml(s, { skipChip: true }) : '')
     + '<div class="plan">BUY · ENTRY <b>' + pxF(s.entry) + '</b> · STOP <b>' + pxF(s.stop) + '</b>'
     + ' · TP1 <b>' + pxF(s.t1) + '</b> (' + fmtF(s.rr1, 1) + 'R) · TP2 <b>' + pxF(s.t2) + '</b> (' + fmtF(s.rr2, 1) + 'R)'
     + safeChip + '</div>'

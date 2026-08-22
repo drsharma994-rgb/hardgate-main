@@ -916,6 +916,7 @@ function cardHTML(c, isBest, season){
     + ' · TP1 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t1) + '</b> (' + fmtF(c.rr, 1) + 'R)'
     + ' · TP2 <b' + gsxSt(GSX_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + '</div>'
+    + ((typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(c) : '')
     + mgmtBlock + guideBlock
     + (c.why ? '<div class="gsx-whyline"' + gsxSt(GSX_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine

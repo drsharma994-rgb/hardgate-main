@@ -991,6 +991,7 @@ function cardHTML(c, isBest, season){
     + ' · TP2 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t2) + '</b> (' + fmtF(c.rr2, 1) + 'R)'
     + ' · TP3 <b' + gswSt(GSW_PLAN_B) + '>$' + pxF(c.t3) + '</b> (' + fmtF(c.rr3, 1) + 'R)'
     + '</div>'
+    + ((typeof hgStrategyTradeDetailHtml === 'function') ? hgStrategyTradeDetailHtml(c) : '')
     + (c.why ? '<div class="gsw-whyline"' + gswSt(GSW_WHY) + '>' + esc(c.why) + '</div>' : '')
     + visionLine
     + (c.invalidates ? '<div class="gsw-invline"><b>INVALIDATES:</b> ' + esc(c.invalidates) + '</div>' : '')

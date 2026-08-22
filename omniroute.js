@@ -2812,6 +2812,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b>'
         +  ' · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
+      if (typeof window !== 'undefined' && typeof window.hgStrategyTradeDetailHtml === 'function'){
+        h += window.hgStrategyTradeDetailHtml(c.plan);
+      }
     } else {
       h += '<div class="dim">no plan — structure could not clear the ' + MIN_RR + 'R floor, so no levels are shown.</div>';
     }

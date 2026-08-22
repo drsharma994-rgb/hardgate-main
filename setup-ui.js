@@ -441,6 +441,7 @@ function hgSetupCardHTML(setup){
     + stackHtml
     + meshHtml
     + (plan ? '<div class="plan">' + plan + '</div>' : '')
+    + ((typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(bookMeta, { skipChip: true }) : '')
     + visionHtml
     + note
     + (cid ? '<div class="hgchart" id="' + cid + '"></div>' : '')
@@ -502,6 +503,7 @@ function hgSetupPanelHTML(sig, opts){
     + '</div>'
     + stackHtml
     + '<div class="plan">' + planHtml + '</div>'
+    + ((typeof W.hgStrategyTradeDetailHtml === 'function') ? W.hgStrategyTradeDetailHtml(sig) : '')
     + tradeBtn + bookBtn
     + '</div>';
 }

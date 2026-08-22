@@ -396,6 +396,8 @@ function cardHTML(r){
     + ((typeof hgStrategyConfirmChipHtml === 'function')
       ? hgStrategyConfirmChipHtml(lv && lv.strategyConfirm, lv && lv.strategyWith, lv && lv.strategyAgainst) : '')
     + '</div>'
+    + ((typeof hgStrategyTradeDetailHtml === 'function' && lv)
+      ? hgStrategyTradeDetailHtml(lv, { skipChip: true }) : '')
     + planBlock
     + stackHtml
     + '<div class="plan">' + record + '</div>'

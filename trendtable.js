@@ -431,7 +431,9 @@ function trendmxPlanHTML(s){
     + ((typeof hgStrategyConfirmChipHtml === 'function')
       ? hgStrategyConfirmChipHtml(s.strategyConfirm, s.strategyWith, s.strategyAgainst) : '')
     + (s.contextRead ? '<div class="dim">' + escH(s.contextRead)
-        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '');
+        + (s.contextWarn ? ' — context AGAINST this direction' : '') + '</div>' : '')
+    + ((typeof hgStrategyTradeDetailHtml === 'function')
+      ? hgStrategyTradeDetailHtml(s, { skipChip: true }) : '');
 }
 
 /* expandable-row block for one matrix row; uses the scan-cached 4h rows —

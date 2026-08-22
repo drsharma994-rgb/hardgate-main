@@ -1056,7 +1056,9 @@ function cardHTML(r){
     + (r.exchange ? ' <span class="gpip">' + esc(String(r.exchange).toUpperCase()) + '</span>' : '') + badge
     + (typeof G.hgBookStampChip === 'function' ? G.hgBookStampChip(r.sym, dir, { scanner: 'execute', strategy: 'execute', venue: r.exchange || 'delta' }) : '')
     + (typeof hgSessionChip === 'function' ? hgSessionChip() : '') + '</span></div>'
-    + verdict + mini + trailHtml + planHtml + stackHtml + visionLine + chartBox + tradeBtn + bookBtn
+    + verdict + mini + trailHtml + planHtml
+    + ((s && typeof G.hgStrategyTradeDetailHtml === 'function') ? G.hgStrategyTradeDetailHtml(s) : '')
+    + stackHtml + visionLine + chartBox + tradeBtn + bookBtn
     + '</div>';
 }
 
