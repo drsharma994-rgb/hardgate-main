@@ -159,6 +159,31 @@ var lastNote = null;
 var inflight = null; // busy-guard: concurrent xuUniverse calls share one fetch
 
 function nowSec(){ return Math.floor(Date.now()/1000); }
+
+/* A CANDLE WINDOW THAT MOVES EVERY SECOND CAN NEVER BE CACHED.
+
+   Candle URLs carried end=nowSec(), so every request was a unique URL. That
+   silently defeated THREE layers at once: the proxy's response cache (keyed
+   by URL), the in-flight coalescing added in v431 (keyed by URL), and the
+   browser's own HTTP cache. CoinDCX candles even had a 45s TTL configured at
+   the proxy that could essentially never hit.
+
+   Measured on a cold load: ~2,900 Delta requests for ~393 distinct
+   (symbol, timeframe) reads — a 7x amplification, because SWING, SCALP, BEST,
+   BRAIN and EDGE each scan the same universe and not one of their identical
+   reads could collapse into another's.
+
+   Quantising the window to a minute makes identical logical reads produce an
+   identical URL, so all three layers work as intended. It is a floor, never a
+   round-up: the window never claims data that does not exist yet. Sub-minute
+   freshness is not lost anywhere that matters — live price comes from the
+   ticker and mark feeds, not from candles, and the forming bar is still
+   returned, just addressed by a stable name. */
+var CANDLE_WINDOW_GRAIN_SEC = 60;
+function hgCandleWindowEnd(){
+  var n = nowSec();
+  return Math.floor(n / CANDLE_WINDOW_GRAIN_SEC) * CANDLE_WINDOW_GRAIN_SEC;
+}
 function numOrNull(x){
   var n = parseFloat(x);
   return isFinite(n) ? n : null;
@@ -606,7 +631,7 @@ async function xuCandlesOnce(item, tf, n){
     if (item.exchange === 'coindcx'){
       src = 'coindcx';
       try{
-        var to = nowSec(), from = to - secPer * (count + 3);
+        var to = hgCandleWindowEnd(), from = to - secPer * (count + 3);
         var url = CDCX_PUB + '/market_data/candlesticks?pair=' + encodeURIComponent(item.sym) +
                   '&from=' + from + '&to=' + to + '&resolution=' + CDCX_RES[tf] + '&pcode=f';
         var j = await cdcxFetchUrl(url);
@@ -623,7 +648,7 @@ async function xuCandlesOnce(item, tf, n){
     else if (item.exchange === 'delta'){
       src = 'delta';
       try{
-        var end = nowSec(), start = end - secPer * (count + 3);
+        var end = hgCandleWindowEnd(), start = end - secPer * (count + 3);
         var r2 = await deltaFetch(DELTA + '/v2/history/candles?resolution=' + DELTA_RES[tf] +
                                   '&symbol=' + encodeURIComponent(item.sym) + '&start=' + start + '&end=' + end);
         if (r2 && r2.ok){
@@ -724,6 +749,7 @@ function xuPositioning(baseOrSym){
 try{
   G.xuUniverse = xuUniverse;
   G.xuCandles = xuCandles;
+  G.hgCandleWindowEnd = hgCandleWindowEnd;
   G.xuMerge = xuMerge;
   G.xuMergeLegs = xuMergeLegs;
   G.xuNormDelta = xuNormDelta;

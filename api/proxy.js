@@ -89,9 +89,24 @@ function coindcxCacheTtl(urlStr){
   return 0;
 }
 
+/* Delta candles are cacheable for the same reason CoinDCX candles are: a
+   closed bar is immutable, and the forming bar changes slowly enough that
+   45s of staleness is immaterial on a 15m/1h/4h series. Delta was absent from
+   this list entirely, so every candle read spent rate-limit budget even when
+   an identical read had just been served. Paired with the quantised window in
+   xuniverse.js — without a stable URL a cache TTL is decoration. */
+function deltaCacheTtl(urlStr){
+  if (!urlStr || urlStr.indexOf('delta.exchange') === -1) return 0;
+  if (urlStr.indexOf('/v2/history/candles') !== -1) return 45 * 1000;
+  if (urlStr.indexOf('/v2/tickers') !== -1) return 30 * 1000;
+  return 0;
+}
+
 function proxyCacheTtl(urlStr){
   var coindcx = coindcxCacheTtl(urlStr);
   if (coindcx) return coindcx;
+  var delta = deltaCacheTtl(urlStr);
+  if (delta) return delta;
   if (!urlStr) return 0;
   if (urlStr.indexOf('faireconomy.media') !== -1 && urlStr.indexOf('ff_calendar') !== -1) return 30 * 60 * 1000;
   if (urlStr.indexOf('cointelegraph.com') !== -1 || urlStr.indexOf('coindesk.com') !== -1) return 10 * 60 * 1000;

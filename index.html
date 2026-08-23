@@ -291,8 +291,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=455"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=455"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=456"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=456"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -789,7 +789,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=455"></script>
+<script src="./hg-plan.js?v=456"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -821,12 +821,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=455"></script>
-<script src="./hg-gates.js?v=455"></script>
-<script src="omniroute.js?v=455"></script>
+<script src="hg-mechanics.js?v=456"></script>
+<script src="./hg-gates.js?v=456"></script>
+<script src="omniroute.js?v=456"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=455"></script>
+<script src="edge.js?v=456"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -842,13 +842,13 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=455"></script>
+<script src="omnigold.js?v=456"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=455"></script>
+<script src="omnipresent.js?v=456"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=455"></script>
+<script src="omnibtc.js?v=456"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -873,14 +873,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=455"></script>
+<script src="supersetup.js?v=456"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=455"></script>
-<script src="super-gold.js?v=455"></script>
-<script src="super-best.js?v=455"></script>
-<script src="super-sniper.js?v=455"></script>
-<script src="super-book.js?v=455"></script>
-<script src="super-calibrate.js?v=455"></script>
+<script src="super-desk-common.js?v=456"></script>
+<script src="super-gold.js?v=456"></script>
+<script src="super-best.js?v=456"></script>
+<script src="super-sniper.js?v=456"></script>
+<script src="super-book.js?v=456"></script>
+<script src="super-calibrate.js?v=456"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1430,7 +1430,10 @@ async function loadTickersDelta(){
 const DELTA_RES = {'15m':'15m','1h':'1h','2h':'2h','4h':'4h','1d':'1d'};
 async function candlesDelta(sym, res, count){
   const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
-  const end = nowSec(), start = end - secPer*(count+3);
+  /* quantised so identical logical reads share a URL — see hgCandleWindowEnd
+     in xuniverse.js for why a per-second window defeated three cache layers */
+  const end = (typeof hgCandleWindowEnd === 'function') ? hgCandleWindowEnd() : nowSec();
+  const start = end - secPer*(count+3);
   const j = await deltaGet(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${encodeURIComponent(sym)}&start=${start}&end=${end}`);
   const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}));
   rows.sort((a,b)=>a.t-b.t);
@@ -1460,7 +1463,8 @@ async function loadTickersCdcx(){
 const CDCX_RES = {'15m':'15','1h':'60','2h':'120','4h':'240','1d':'1D'};
 async function candlesCdcx(sym, res, count){
   const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
-  const to = nowSec(), from = to - secPer*(count+3);
+  const to = (typeof hgCandleWindowEnd === 'function') ? hgCandleWindowEnd() : nowSec();
+  const from = to - secPer*(count+3);
   const j = await cdcxGet(`${CDCX_PUB}/market_data/candlesticks?pair=${encodeURIComponent(sym)}&from=${from}&to=${to}&resolution=${CDCX_RES[res]}&pcode=f`);
   const rows = (j.data||[]).map(c=>({t:Math.floor((c.time??c.t)/1000), o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+(c.volume??0)}));
   rows.sort((a,b)=>a.t-b.t);
@@ -1573,7 +1577,8 @@ async function deltaXautCandles(res, count){
   try{
     const secPer = {'15m':900,'1h':3600,'2h':7200,'4h':14400,'1d':86400}[res];
     if (!secPer || !DELTA_RES[res]) return [];
-    const end = nowSec(), start = end - secPer*(count+3);
+    const end = (typeof hgCandleWindowEnd === 'function') ? hgCandleWindowEnd() : nowSec();
+    const start = end - secPer*(count+3);
     const j = await deltaGet(`${DELTA}/v2/history/candles?resolution=${DELTA_RES[res]}&symbol=${GOLD_SYM}&start=${start}&end=${end}`);
     const rows = (j.result||[]).map(c=>({t:c.time, o:+c.open, h:+c.high, l:+c.low, c:+c.close, v:+c.volume}))
       .filter(c=>isFinite(c.t) && isFinite(c.c) && c.c>0);

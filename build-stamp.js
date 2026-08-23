@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v455',
-  pack: 'Binance 1000x contracts',
-  built: '2026-08-23T02:10:00Z',
-  note: 'The last fapi klines 400s on a cold load were all SHIBUSDT — a contract that does not exist. Binance denominates fifteen cheap tokens in 1000x form and SHIB is 1000SHIBUSDT. The resolver rewrites only when the bare symbol is absent and the 1000 form is present, and never refuses an unknown symbol: XAUUSDT is TRADIFI_PERPETUAL and absent from the perp universe, so a membership check that rejected on absence would have silently killed gold.'
+  version: 'hg-v456',
+  pack: 'a cacheable candle window',
+  built: '2026-08-23T03:30:00Z',
+  note: 'Candle URLs carried end=nowSec(), so every request was a unique URL and three cache layers were defeated at once — the proxy cache, the v431 in-flight coalescing, and the browser. Measured 2,900 Delta requests for 393 distinct symbol+timeframe reads, a 7x amplification. The window is floored to the minute so identical reads share a URL, and Delta candles finally have a proxy TTL. No symbol dropped, no timeframe dropped: every removed request was a duplicate.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
