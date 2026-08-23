@@ -37,25 +37,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # puppeteer 25 engines are >=22.12. Node 20 + optionalDependencies
+          # silently omitted the package (run 32661351621: 106 pkgs, no
+          # node_modules/puppeteer, then a named install no-op'd).
+          node-version: '22'
 
       - name: Install Puppeteer
         env:
-          # ubuntu-latest / npm 10 still omits optionalDependencies during
-          # `npm ci` even with --include=optional. Run 32658206319 added
-          # 106 packages (the required tree only), then `npx puppeteer`
-          # fetched 24.x from the registry just to install Chrome, and
-          # `import('puppeteer')` still failed. An empty omit list plus an
-          # explicit install from the lockfile range is what actually
-          # puts 25.x on disk. --no-install stops npx inventing a major.
-          NPM_CONFIG_OMIT: ""
-          NPM_CONFIG_OPTIONAL: "true"
+          PUPPETEER_SKIP_DOWNLOAD: '1'
         run: |
-          npm ci --include=optional
-          if [ ! -d node_modules/puppeteer ]; then
-            echo "npm ci skipped optional puppeteer — installing lockfile range"
-            npm install --no-save --include=optional puppeteer@25
-          fi
+          npm ci
           test -d node_modules/puppeteer
           npx --no-install puppeteer browsers install chrome
           node -e "import('puppeteer').then(() => console.log('puppeteer ok')).catch((e) => { console.error(e); process.exit(1); })"

@@ -8,11 +8,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "ccxt": "^4.5.71"
+    "ccxt": "^4.5.71",
+    "puppeteer": "^25.8.0"
   },
   "optionalDependencies": {
-    "@resvg/resvg-js": "^2.6.2",
-    "puppeteer": "^25.8.0"
+    "@resvg/resvg-js": "^2.6.2"
   },
   "scripts": {
     "start": "node scripts/server.mjs",

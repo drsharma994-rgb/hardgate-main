@@ -139,7 +139,7 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 - **Dual venue scan (default):** Opening a crypto scan tab auto-runs **Delta India + CoinDCX** (`hg_dual_scan` localStorage `0` disables). Header exchange toggle still sets desk context for TRADE PLAN / bias chips.
 - **Binance geo-blocking (HTTP 451):** Cloud VMs may not reach `fapi.binance.com`. `npm test` passes offline. `tests/test-data-layer.mjs` skips Binance legs on 451 and exits 0.
 - **Use the Node server, not `file://`:** Direct file open skips `/api/proxy`.
-- **`npm install`:** Installs `ccxt`, `@modelcontextprotocol/sdk`, and optional `@resvg/resvg-js` / `puppeteer`. Re-run after pull if imports fail.
+- **`npm install`:** Installs `ccxt`, `@modelcontextprotocol/sdk`, `puppeteer`, and optional `@resvg/resvg-js`. Re-run after pull if imports fail.
 - **Stale dev server on `:10000`:** If `/api/chart-vision/capabilities` returns `not found`, kill the old `node scripts/server.mjs` process and restart (`npm start` in tmux) — an older instance may still be bound to the port.
 - **Node 18+ required**
 - **EDGE tab:** Cards show **FRESH / ACTIVE / STALE** from `barAge` (closed 4H bars since trigger). **FORMING NOW** lists bias-aligned symbols with **×ATR distance to EMA21**; Telegram via unified **15-min** `tabalerts.js` batch (EDGE + EDGE FORMING watch rows). `scripts/edge-diagnose.mjs` uses `HARDGATE_SITE` for `/api/proxy` when run from Node.

@@ -59,6 +59,10 @@ services:
         sync: false
       - key: TELEGRAM_DISABLED
         value: "1"
+      # Web does not launch Chrome. Skip puppeteer's postinstall download
+      # now that puppeteer is a required dependency.
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "1"
   - type: worker
     name: hardgate-daemon
     runtime: node
@@ -85,6 +89,9 @@ services:
         value: /var/data/hardgate-daemon-state.json
       - key: NODE_ENV
         value: production
+      # npm ci skips Chrome; buildCommand installs it explicitly.
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "1"
     disk:
       name: hardgate-daemon-state
       mountPath: /var/data

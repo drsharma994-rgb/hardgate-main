@@ -31,9 +31,10 @@
       extract-zip symlink path traversal (GHSA-jmr9-qjv8-65gv) reached through
       puppeteer -> @puppeteer/browsers. The workflow installed puppeteer@23,
       package.json declared ^24.0.0, and the fix was in 25. It is an
-      optionalDependency, but npm ci installs those and the daemon's build
-      explicitly runs `npx puppeteer browsers install chrome`, so it was on
-      the live service. npm audit now reports 0.
+      required dependency (optionalDependencies were silently omitted on
+      GitHub Actions Node 20 because puppeteer 25 engines are >=22.12). The
+      daemon's build explicitly runs `npx puppeteer browsers install chrome`.
+      npm audit now reports 0.
 
       engines said only ">=18", so Render was free to pick any future major
       and change the runtime under a deployed desk without a commit.
@@ -136,17 +137,35 @@ console.log('\n== 2. the CSP permits what the app does, and nothing more ==');
 
 console.log('\n== 3. one puppeteer version, and a pinned runtime ==');
 {
-  const pup = (PKG.optionalDependencies || {}).puppeteer || (PKG.dependencies || {}).puppeteer;
+  const pup = (PKG.dependencies || {}).puppeteer;
+  ok(!!pup, 'puppeteer is a required dependency — optional install was silently skipped on GHA');
+  ok(!(PKG.optionalDependencies || {}).puppeteer,
+     'and is not listed as optional (GHA Node 20 omitted it even with --include=optional)');
+  ok((PKG.optionalDependencies || {})['@resvg/resvg-js'],
+     '@resvg/resvg-js stays optional');
   ok(/\^?2[5-9]|\^?[3-9]\d/.test(pup), 'package.json is on puppeteer 25 or newer (' + pup + ')');
+  const lock = JSON.parse(read('package-lock.json'));
+  ok(!!(lock.packages[''] && lock.packages[''].dependencies || {}).puppeteer,
+     'lockfile root lists puppeteer under dependencies');
+  ok(!(lock.packages[''].optionalDependencies || {}).puppeteer,
+     'lockfile root does not list puppeteer as optional');
+  ok(!lock.packages['node_modules/puppeteer']?.optional,
+     'node_modules/puppeteer is not marked optional:true');
   const wf = read('.github/workflows/alert-notify.yml');
-  ok(/npm ci --include=optional/.test(wf),
-     'Alert Notify starts from npm ci --include=optional');
-  ok(/NPM_CONFIG_OMIT:\s*""/.test(wf),
-     'and clears NPM_CONFIG_OMIT — GHA npm 10 still skipped optional puppeteer');
+  ok(/node-version:\s*'22'/.test(wf),
+     'Alert Notify runs Node 22 — puppeteer 25 engines are >=22.12');
+  ok(!/node-version:\s*'20'/.test(wf),
+     'not Node 20, which silently omitted optional puppeteer 25');
+  ok(/npm ci/.test(wf) && !/npm ci --include=optional/.test(wf),
+     'Alert Notify uses npm ci without the optional-include dance');
+  ok(!/NPM_CONFIG_OMIT/.test(wf) && !/NPM_CONFIG_OPTIONAL/.test(wf),
+     'and does not fight npm omit flags');
+  ok(!/npm install --no-save/.test(wf),
+     'no fallback named install (that no-opped while the package was optional)');
+  ok(/PUPPETEER_SKIP_DOWNLOAD/.test(wf),
+     'npm ci skips Chrome download — Chrome is installed separately');
   ok(/test -d node_modules\/puppeteer/.test(wf),
      'and refuses to continue if the package is still missing');
-  ok(/npm install --no-save --include=optional puppeteer@25/.test(wf),
-     'a lockfile-range fallback install runs only when ci skipped it');
   ok(/npx --no-install puppeteer browsers install chrome/.test(wf),
      'Chrome is installed with --no-install so npx cannot fetch puppeteer 24');
   ok(!/npx puppeteer /.test(wf),
