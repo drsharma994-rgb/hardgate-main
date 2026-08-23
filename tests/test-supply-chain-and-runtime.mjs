@@ -140,13 +140,19 @@ console.log('\n== 3. one puppeteer version, and a pinned runtime ==');
   ok(/\^?2[5-9]|\^?[3-9]\d/.test(pup), 'package.json is on puppeteer 25 or newer (' + pup + ')');
   const wf = read('.github/workflows/alert-notify.yml');
   ok(/npm ci --include=optional/.test(wf),
-     'Alert Notify uses npm ci --include=optional so optional puppeteer lands');
-  ok(/npx puppeteer browsers install chrome/.test(wf),
-     'and installs Chrome after the package, same as Render');
+     'Alert Notify starts from npm ci --include=optional');
+  ok(/NPM_CONFIG_OMIT:\s*""/.test(wf),
+     'and clears NPM_CONFIG_OMIT — GHA npm 10 still skipped optional puppeteer');
+  ok(/test -d node_modules\/puppeteer/.test(wf),
+     'and refuses to continue if the package is still missing');
+  ok(/npm install --no-save --include=optional puppeteer@25/.test(wf),
+     'a lockfile-range fallback install runs only when ci skipped it');
+  ok(/npx --no-install puppeteer browsers install chrome/.test(wf),
+     'Chrome is installed with --no-install so npx cannot fetch puppeteer 24');
+  ok(!/npx puppeteer /.test(wf),
+     'npx never runs puppeteer without --no-install (that fetched 24.x on GHA)');
   ok(/import\('puppeteer'\)/.test(wf),
      'and verifies the import before launching the site check');
-  ok(!/npm install puppeteer@\d+/.test(wf),
-     'bare `npm install puppeteer@N` is gone — GHA omit=optional left the package missing');
   ok(!/">=18"/.test(JSON.stringify(PKG.engines)), 'engines no longer accepts any future major');
   ok(/<\s*\d/.test(PKG.engines.node), 'it has an upper bound (' + PKG.engines.node + ')');
   const pins = [...RENDER.matchAll(/key: NODE_VERSION\s*\r?\n\s*value: "([^"]+)"/g)].map(x => x[1]);
