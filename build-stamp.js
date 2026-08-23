@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v450',
-  pack: 'cold-load diagnostic',
-  built: '2026-08-22T18:40:00Z',
-  note: 'A warm desk is clean but a cold load still shows a run of 429s and 400s that nothing could attribute after the fact. ?diag=1 installs a fetch recorder as the FIRST script in the document, off by default and untouched when off, so those failures can finally be named. Carries the v449 OMNIBTC desk.'
+  version: 'hg-v451',
+  pack: 'venue codes stop reaching Binance',
+  built: '2026-08-22T20:10:00Z',
+  note: 'The v450 diagnostic named the cold-load failures on its first run: 94 of 105 were fapi klines 400s from CoinDCX codes like B-ETH_USDT being sent to Binance. Fixed in brain fetch4h/fetch1h and, via a sweep that found them, reversalsniper, squeeze and trendtable. All four now reuse the mapping desk-scan-universe already exported.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

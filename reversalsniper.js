@@ -318,8 +318,14 @@ async function rsFetchKlines(item, tf, n){
     if (typeof W.xuCandles === 'function'){
       return await W.xuCandles(item, tf, n);
     }
-    if (typeof binanceKlines === 'function' && item && item.sym){
-      return await binanceKlines(item.sym, tf, n);
+/* Map before asking Binance — a venue code means nothing to fapi. This is the
+   same defect fixed in desk-scan-universe.js (v431) and brain.js (v450);
+   reuse the mapping those export rather than a fifth private copy. When it is
+   unavailable the Binance leg is skipped: no usable symbol means no Binance
+   data, and inventing one is how this family started. */
+    var bSym = (typeof W.hgDeskBinanceSym === 'function') ? W.hgDeskBinanceSym(item) : null;
+    if (bSym && typeof binanceKlines === 'function'){
+      return await binanceKlines(bSym, tf, n);
     }
   }catch(e){}
   return [];

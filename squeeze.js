@@ -910,8 +910,18 @@ function publishSqueezeState(results){
 
 async function squeezeScanCore(hooks){
   hooks = hooks || {};
+/* Map before asking Binance — a venue code means nothing to fapi. This is the
+   same defect fixed in desk-scan-universe.js (v431) and brain.js (v450);
+   reuse the mapping those export rather than a fifth private copy. When it is
+   unavailable the Binance leg is skipped: no usable symbol means no Binance
+   data, and inventing one is how this family started. */
   var fetchK = (typeof W.hgDeskFetchKlines === 'function') ? W.hgDeskFetchKlines.bind(W)
-    : function(it, tf, n){ return binanceKlines(it.sym || it, tf, n); };
+    : function(it, tf, n){
+        var bSym = (typeof W.hgDeskBinanceSym === 'function')
+          ? W.hgDeskBinanceSym(typeof it === 'string' ? { sym: it } : it)
+          : (typeof it === 'string' ? it : null);
+        return bSym ? binanceKlines(bSym, tf, n) : Promise.resolve([]);
+      };
   if (typeof W.hgDeskLoadUniverse !== 'function'
       && (typeof binancePerpUniverse !== 'function' || typeof binanceKlines !== 'function')){
     throw new Error('no universe source (hgDeskLoadUniverse or binancePerpUniverse)');

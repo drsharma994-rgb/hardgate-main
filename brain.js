@@ -1726,6 +1726,32 @@ async function buildUniverse(){
   return legacyUniverse();
 }
 
+/* A CANDIDATE'S sym IS ITS VENUE'S CODE, AND ONLY BINANCE SPEAKS BINANCE.
+
+   fetch4h/fetch1h fall through to binanceKlines when a candidate carries no
+   xu row, and they were handing it cand.sym raw. For a CoinDCX candidate that
+   is B-ETH_USDT, which fapi can only answer
+
+       400 {"code":-1121,"msg":"Invalid symbol."}
+
+   Measured on the deployed desk with ?diag=1 on a cold load: 94 of 105 total
+   failures were exactly this — 23 distinct B-*_USDT codes across the 4h and
+   1h legs, which are these two functions.
+
+   desk-scan-universe.js already solved this in v431 and exports the mapping,
+   so reuse it rather than write a second one that can drift. When the helper
+   is absent the Binance leg is SKIPPED rather than guessed at: a candidate
+   with no usable Binance symbol has no Binance data, and inventing one is how
+   this bug started. */
+function brainBinanceSym(cand){
+  try{
+    if (!cand || !cand.sym) return null;
+    if (typeof G.hgDeskBinanceSym === 'function') return G.hgDeskBinanceSym(cand);
+    var sym = String(cand.sym).toUpperCase();
+    return /^[A-Z0-9]+USDT$/.test(sym) ? sym : null;   /* conservative: only obvious Binance shapes */
+  }catch(e){ return null; }
+}
+
 /* 4h rows for one candidate — xuCandles for xu items, else the inline
    getCandles router, else binanceKlines. Never throws; null on failure.
    xuCandles itself reroutes short venue legs to Binance (its fallback
@@ -1743,8 +1769,9 @@ async function fetch4h(cand){
       var rg = await withTimeout(G.getCandles(cand.sym, '4h', KLINES_4H));
       if (rg && rg.length) return rg;
     }
-    if (typeof G.binanceKlines === 'function'){
-      var rb = await withTimeout(G.binanceKlines(cand.sym, '4h', KLINES_4H));
+    var bs4 = brainBinanceSym(cand);
+    if (bs4 && typeof G.binanceKlines === 'function'){
+      var rb = await withTimeout(G.binanceKlines(bs4, '4h', KLINES_4H));
       if (rb && rb.length) return rb;
     }
   }catch(e){}
@@ -1766,8 +1793,9 @@ async function fetch1h(cand){
       var rg = await withTimeout(G.getCandles(cand.sym, '1h', KLINES_1H));
       if (rg && rg.length) return rg;
     }
-    if (typeof G.binanceKlines === 'function'){
-      var rb = await withTimeout(G.binanceKlines(cand.sym, '1h', KLINES_1H));
+    var bs1 = brainBinanceSym(cand);
+    if (bs1 && typeof G.binanceKlines === 'function'){
+      var rb = await withTimeout(G.binanceKlines(bs1, '1h', KLINES_1H));
       if (rb && rb.length) return rb;
     }
   }catch(e){}
