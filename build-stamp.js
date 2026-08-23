@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v459',
-  pack: 'the 1000x fix reaches every reader',
-  built: '2026-08-23T07:30:00Z',
-  note: 'v455 taught binanceKlines that SHIBUSDT does not exist and 1000SHIBUSDT does — and taught only binanceKlines. premiumIndex was still asking for the bare symbol and getting 400 -1121 on every cold load. All ten per-symbol fapi readers now resolve the 1000x form and refuse foreign venue codes; the spot reader keeps its own membership list, because the perp universe is the wrong list for spot.'
+  version: 'hg-v460',
+  pack: 'serve stale rather than refuse',
+  built: '2026-08-23T09:00:00Z',
+  note: 'With attribution finally in place the Delta 429s were named: 108 of 119 failures were THIS proxy refusing its own traffic on a cold cache, not Delta refusing us. The cache empties on every deploy, so the load right after a release is when the bucket saturates. The proxy already served stale when the upstream failed; it now does the same when the rejection is its own. A candle slightly past its TTL beats a 429.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

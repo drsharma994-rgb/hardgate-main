@@ -27,6 +27,7 @@
    Run: node tests/test-proxy-delta-budget.mjs */
 
 import fs from 'node:fs';
+import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -105,6 +106,67 @@ const DELTA_REQ_CEILING    = Math.floor(DELTA_UNITS_PER_MIN / CANDLE_UNIT_COST);
   const limitAt = PROXY.indexOf('if (rateLimited(');
   assert(cacheAt > 0 && limitAt > 0 && cacheAt < limitAt,
     'the response cache is consulted BEFORE the rate limiter, so hits cost no budget');
+}
+
+/* ---------- 5) a capacity decision is not a data failure ----------
+
+   MEASURED, once the v458 attribution header could finally say WHO rejects
+   what. On a cold-cache load right after a deploy:
+
+       3,661 requests, 119 failures
+       rejectedBy: { proxy: 108, upstream: 10 }
+
+   108 of 119 were THIS proxy refusing its own traffic. The run before it read
+   proxy: 0 — because that one measured a WARM cache. The in-memory cache
+   empties on every deploy, so the load right after a release is precisely when
+   the bucket saturates, and precisely when a stale copy is most valuable.
+
+   The proxy already served stale when the UPSTREAM failed. It did not when the
+   rejection was its own, which is the case that actually happens. A candle a
+   little past its TTL is worth incomparably more to a scan than a 429. */
+{
+  const limitAt = PROXY.indexOf('if (rateLimited(');
+  /* slice to the END of the branch, not a guessed character count — the first
+     cut used 1600 and fell short of the 429 return because the explanatory
+     comments sit between, so the ordering assertion could not see it */
+  const branch = PROXY.slice(limitAt, PROXY.indexOf('const cached', limitAt) > limitAt
+    ? PROXY.indexOf('const cached', limitAt) : limitAt + 4000);
+
+  assert(branch.indexOf('cacheGet(target.toString(), true)') > 0,
+    'the rate-limit branch looks for a stale copy before refusing');
+
+  const staleAt = branch.indexOf('staleOnLimit');
+  const rejectAt = branch.indexOf('sendJson(res, 429');
+  assert(staleAt > 0 && rejectAt > 0 && staleAt < rejectAt,
+    'and does so BEFORE returning 429, or the fallback would be unreachable');
+
+  assert(branch.indexOf("'stale-rate-limited'") > 0,
+    'the response is labelled distinctly, so a stale serve is never mistaken for a fresh one');
+
+  /* A fallback with a zero stale window never fires, so check Delta has one.
+     Sliced by name rather than matched with a regex: a pattern containing an
+     escaped newline does not survive a shell heredoc, which broke this file
+     twice while it was being written. */
+  const grab = function(name){
+    const at = PROXY.indexOf('function ' + name + '(urlStr){');
+    if (at < 0) return '';
+    const close = PROXY.indexOf(String.fromCharCode(10) + '}', at);
+    return PROXY.slice(at, close + 2);
+  };
+  const srcTtl = grab('coindcxCacheTtl') + grab('deltaCacheTtl')
+               + grab('proxyCacheTtl') + grab('proxyCacheStaleMax');
+  assert(srcTtl.indexOf('proxyCacheStaleMax') > 0, 'the TTL functions are extractable by name');
+
+  const ctx = vm.createContext({ console });
+  vm.runInContext(srcTtl, ctx, { filename: 'ttl.js' });
+
+  const deltaCandle = 'https://api.india.delta.exchange/v2/history/candles?symbol=BTCUSD';
+  assert(ctx.proxyCacheTtl(deltaCandle) === 45000, 'Delta candle TTL is 45s');
+  assert(ctx.proxyCacheStaleMax(deltaCandle) === 180000,
+    'and may be served up to 4x that (180s) when the alternative is a 429, got '
+      + ctx.proxyCacheStaleMax(deltaCandle));
+  assert(ctx.proxyCacheStaleMax('https://api.india.delta.exchange/v2/orderbook?symbol=BTCUSD') === 0,
+    'an uncacheable Delta endpoint has no stale window — nothing is fabricated');
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -232,6 +232,25 @@ module.exports = async (req, res) => {
   }
 
   if (rateLimited(clientKey(req), target.hostname)){
+    /* A CAPACITY DECISION IS NOT A DATA FAILURE.
+
+       This proxy already serves a stale copy when the UPSTREAM fails — see the
+       429/5xx branch below. It did not do so when the rejection was its OWN,
+       which is the case that actually happens: measured on a cold-cache load,
+       119 failures of which 108 were this branch, every one of them a Delta
+       candle we very likely had a slightly older copy of.
+
+       The in-memory cache empties on every deploy, so the load right after a
+       release is exactly when the bucket saturates and exactly when serving
+       stale is most valuable. A candle a little past its TTL is worth
+       incomparably more to a scan than a 429. */
+    var staleOnLimit = cacheGet(target.toString(), true);
+    if (staleOnLimit){
+      return send(res, staleOnLimit.status, staleOnLimit.text, {
+        'Content-Type': staleOnLimit.contentType || 'application/json; charset=utf-8',
+        'X-HG-Cache': 'stale-rate-limited',
+      }, req);
+    }
     /* SAY HOW LONG, SO THE CLIENT STOPS GUESSING.
        This bucket is a 60-second window. The browser was retrying a rejected
        request 400ms later — measured on a cold load: 387 of 406 rejected URLs
