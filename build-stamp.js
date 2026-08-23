@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v453',
-  pack: 'the venue-code bug closed at the boundary',
-  built: '2026-08-22T23:30:00Z',
-  note: 'The v451 fix was partial — 88 fapi klines 400s per cold load survived it, hiding one call frame up in klineRows(row.sym). Chasing callers has now failed twice, so binanceKlines itself refuses a B- prefixed venue code. Narrow on purpose: Binance dated contracts like BTCUSDT_260925 are real and still pass.'
+  version: 'hg-v454',
+  pack: 'stop retrying into a full limiter',
+  built: '2026-08-23T00:40:00Z',
+  note: 'Half the Delta 429s on a cold load were the desk retrying its own rejected request 400ms later, into a bucket with a 60-second window — 387 of 406 rejected URLs asked exactly twice. The proxy now sends Retry-After computed from the real remaining window and the client stops spending a request it knows will fail. The ceiling was NOT raised: demand is already at Delta published 2000 units a minute.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

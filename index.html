@@ -291,8 +291,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=453"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=453"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=454"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=454"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -789,7 +789,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=453"></script>
+<script src="./hg-plan.js?v=454"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -821,12 +821,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=453"></script>
-<script src="./hg-gates.js?v=453"></script>
-<script src="omniroute.js?v=453"></script>
+<script src="hg-mechanics.js?v=454"></script>
+<script src="./hg-gates.js?v=454"></script>
+<script src="omniroute.js?v=454"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=453"></script>
+<script src="edge.js?v=454"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -842,13 +842,13 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=453"></script>
+<script src="omnigold.js?v=454"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=453"></script>
+<script src="omnipresent.js?v=454"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=453"></script>
+<script src="omnibtc.js?v=454"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -873,14 +873,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=453"></script>
+<script src="supersetup.js?v=454"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=453"></script>
-<script src="super-gold.js?v=453"></script>
-<script src="super-best.js?v=453"></script>
-<script src="super-sniper.js?v=453"></script>
-<script src="super-book.js?v=453"></script>
-<script src="super-calibrate.js?v=453"></script>
+<script src="super-desk-common.js?v=454"></script>
+<script src="super-gold.js?v=454"></script>
+<script src="super-best.js?v=454"></script>
+<script src="super-sniper.js?v=454"></script>
+<script src="super-book.js?v=454"></script>
+<script src="super-calibrate.js?v=454"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1272,10 +1272,27 @@ async function deltaGetOnce(url){
     S.deltaViaProxy = via;
     return j;
   }
+  /* DO NOT RETRY INTO A LIMITER THAT CANNOT HAVE CLEARED.
+
+     This used to sleep 400ms on a 429 and ask again. Our own proxy's bucket
+     is a SIXTY second window, so a 400ms retry is guaranteed to be rejected
+     too — it just doubles the pressure that caused the rejection. Measured on
+     a cold load: 793 Delta 429s over 406 distinct URLs, 387 of them asked
+     exactly twice a median 408ms apart. Half that traffic was doomed on
+     arrival.
+
+     The proxy now answers with Retry-After. When the wait is longer than we
+     are willing to hold the leg (anything over a second), fail fast and let
+     the caller degrade honestly — the scan has other symbols to get to, and
+     a rejected candle is a missing candle either way. A short wait, or an
+     upstream 429 with no header at all, keeps the single retry it always
+     had. */
   async function tryOrigin(){
     let r = await fetch(CDCX_PROXY(url));
     if (r.status === 429){
-      await sleep(400);
+      const ra = +(r.headers && r.headers.get ? (r.headers.get('Retry-After') || 0) : 0);
+      if (ra > 1) return readJson(r, 'api');      /* cannot clear in time — do not spend a second request */
+      await sleep(ra > 0 ? ra * 1000 : 400);
       r = await fetch(CDCX_PROXY(url));
     }
     return readJson(r, 'api');
