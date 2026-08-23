@@ -39,22 +39,48 @@
     if (typeof fetch !== 'function') return;
     var CAP = 4000;
     var rows = [], dropped = 0, t0 = Date.now();
-    function note(url, status){
+    function note(url, status, res){
       if (rows.length >= CAP){ dropped++; return; }
       var u = String(url);
       try{ u = decodeURIComponent(u); }catch(e){}
-      rows.push({ ms: Date.now() - t0, status: status, url: u });
+      var row = { ms: Date.now() - t0, status: status, url: u };
+      /* WHO rejected this. Our proxy stamps X-HG-Limiter on its own 429s and
+         passes an upstream 429 through untouched, so the header's presence
+         attributes the rejection without reading (and consuming) the body. */
+      try{
+        if (res && res.headers && res.headers.get){
+          row.by = res.headers.get('X-HG-Limiter') ? 'proxy' : 'upstream';
+          var ra = res.headers.get('Retry-After');
+          if (ra) row.retryAfter = +ra;
+        }
+      }catch(e){}
+      rows.push(row);
+    }
+    /* TOTALS, not just failures. Every earlier reading of this counted only
+       what went wrong, so the denominator was never known and a "429 count"
+       could not be turned into a rate or a success ratio. Counting is a
+       string key and an integer — no retention, no growth with traffic. */
+    var totals = {};
+    function tally(url, ok){
+      try{
+        var h = (String(url).match(/https?:\/\/([^\/]+)/) || [null, 'same-origin'])[1];
+        var t = totals[h] || (totals[h] = { n: 0, ok: 0, bad: 0 });
+        t.n++; if (ok) t.ok++; else t.bad++;
+      }catch(e){}
     }
     var orig = fetch;
     window.fetch = function(input){
       var url = (input && input.url) ? input.url : input;
       var p;
       try{ p = orig.apply(this, arguments); }
-      catch(e){ note(url, 'THREW:' + (e && e.message)); throw e; }
+      catch(e){ tally(url, false); note(url, 'THREW:' + (e && e.message)); throw e; }
       return p.then(function(res){
-        if (res && res.status >= 400) note(url, res.status);
+        var bad = !!(res && res.status >= 400);
+        tally(url, !bad);
+        if (bad) note(url, res.status, res);
         return res;
       }, function(err){
+        tally(url, false);
         note(url, 'THREW:' + (err && err.message));
         throw err;                      /* never swallow: same failure, same caller */
       });
@@ -68,8 +94,15 @@
         var k = r.status + '  ' + host + path;
         by[k] = (by[k] || 0) + 1;
       }
+      var attributed = { proxy: 0, upstream: 0, unknown: 0 };
+      for (var j = 0; j < rows.length; j++){
+        var k = rows[j].by;
+        attributed[k === 'proxy' ? 'proxy' : (k === 'upstream' ? 'upstream' : 'unknown')]++;
+      }
       return {
         elapsedSec: Math.round((Date.now() - t0) / 1000),
+        totalsByHost: totals,
+        rejectedBy: attributed,
         failures: rows.length,
         droppedOverCap: dropped,
         firstFailureMs: rows.length ? rows[0].ms : null,
@@ -291,8 +324,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=457"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=457"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=458"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=458"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -789,7 +822,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=457"></script>
+<script src="./hg-plan.js?v=458"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -821,12 +854,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=457"></script>
-<script src="./hg-gates.js?v=457"></script>
-<script src="omniroute.js?v=457"></script>
+<script src="hg-mechanics.js?v=458"></script>
+<script src="./hg-gates.js?v=458"></script>
+<script src="omniroute.js?v=458"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=457"></script>
+<script src="edge.js?v=458"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -842,13 +875,13 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=457"></script>
+<script src="omnigold.js?v=458"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=457"></script>
+<script src="omnipresent.js?v=458"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=457"></script>
+<script src="omnibtc.js?v=458"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -873,14 +906,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=457"></script>
+<script src="supersetup.js?v=458"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=457"></script>
-<script src="super-gold.js?v=457"></script>
-<script src="super-best.js?v=457"></script>
-<script src="super-sniper.js?v=457"></script>
-<script src="super-book.js?v=457"></script>
-<script src="super-calibrate.js?v=457"></script>
+<script src="super-desk-common.js?v=458"></script>
+<script src="super-gold.js?v=458"></script>
+<script src="super-best.js?v=458"></script>
+<script src="super-sniper.js?v=458"></script>
+<script src="super-book.js?v=458"></script>
+<script src="super-calibrate.js?v=458"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>

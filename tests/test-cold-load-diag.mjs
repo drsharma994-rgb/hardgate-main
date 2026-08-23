@@ -159,6 +159,58 @@ function run(search, fetchImpl){
       + rep.droppedOverCap + ')');
 }
 
+/* ---------- 7) totals and attribution ----------
+
+   Every earlier reading of the Delta 429s counted only what went WRONG. With
+   no denominator a 429 count cannot become a rate or a success ratio, and
+   with no attribution it cannot be blamed on a limiter by name. I guessed at
+   the culprit three times across three releases — proxy retries, cache keys,
+   cache bypass — each a real defect, none of them the cause. This is the
+   instrument that makes the next answer a measurement instead of a guess. */
+{
+  const { ctx } = run('?diag=1', function(u){
+    const s2 = String(u);
+    if (s2.indexOf('/ours') >= 0){
+      return Promise.resolve({ status: 429, headers: { get: function(h){
+        return h === 'X-HG-Limiter' ? 'proxy' : (h === 'Retry-After' ? '42' : null);
+      } } });
+    }
+    if (s2.indexOf('/theirs') >= 0){
+      return Promise.resolve({ status: 429, headers: { get: function(){ return null; } } });
+    }
+    return Promise.resolve({ status: 200, headers: { get: function(){ return null; } } });
+  });
+
+  await ctx.fetch('https://x.test/ok');
+  await ctx.fetch('https://x.test/ok');
+  await ctx.fetch('https://x.test/ours');
+  await ctx.fetch('https://y.test/theirs');
+
+  const rep = ctx.hgDiagReport();
+
+  /* the denominator, which never existed before */
+  assert(!!rep.totalsByHost, 'the report carries per-host totals, not only failures');
+  assert(rep.totalsByHost['x.test'].n === 3, 'successes are counted too (3 on x.test)');
+  assert(rep.totalsByHost['x.test'].ok === 2 && rep.totalsByHost['x.test'].bad === 1,
+    'and split into ok/bad so a success RATIO is derivable');
+  assert(rep.totalsByHost['y.test'].n === 1, 'each host is tallied separately');
+
+  /* attribution: our limiter stamps itself, an upstream 429 does not */
+  assert(rep.rejectedBy.proxy === 1,
+    'a 429 carrying X-HG-Limiter is attributed to OUR proxy (got ' + rep.rejectedBy.proxy + ')');
+  assert(rep.rejectedBy.upstream === 1,
+    'a 429 without it is attributed to the venue (got ' + rep.rejectedBy.upstream + ')');
+
+  const ours = rep.rows.filter(function(r){ return r.by === 'proxy'; })[0];
+  assert(ours && ours.retryAfter === 42,
+    'and the real wait is recorded off Retry-After (got ' + (ours && ours.retryAfter) + ')');
+
+  /* attribution must not consume the body — a diagnostic that ate the
+     response would break the caller it is observing */
+  assert(!/\.text\(\)|\.json\(\)/.test(SRC),
+    'the probe never reads a response body, so it cannot consume it');
+}
+
 console.log(String.fromCharCode(10) + pass + ' passed, ' + fail + ' failed');
 if (fail > 0) process.exit(1);
 console.log('ALL COLD-LOAD DIAG TESTS PASSED');

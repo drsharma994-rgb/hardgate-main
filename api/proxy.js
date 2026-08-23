@@ -245,6 +245,12 @@ module.exports = async (req, res) => {
       if (b && b.length) wait = Math.max(1, Math.ceil((RATE_WINDOW_MS - (Date.now() - b[0])) / 1000));
     }catch(e){}
     res.setHeader('Retry-After', String(wait));
+    /* Attribution, so a 429 is never ambiguous again. Delta sends its own 429s
+       and this proxy passes them through verbatim; for three releases I could
+       not tell one from the other and guessed wrong twice. This header is set
+       ONLY when the rejection is ours, so a client can attribute every 429 to
+       a limiter by name without reading the body. */
+    res.setHeader('X-HG-Limiter', 'proxy');
     return sendJson(res, 429, { error: 'rate limit exceeded — try again shortly', retryAfterSec: wait }, req);
   }
 

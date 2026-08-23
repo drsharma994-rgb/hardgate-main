@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v457',
-  pack: 'nine callers walked past the candle cache',
-  built: '2026-08-23T05:00:00Z',
-  note: 'getCandles always had a cache keyed by exchange+symbol+resolution+count, but it keyed on ambient S.exchange, so the single-symbol evaluators that take an explicit venue could not use it — nine call sites fetched directly instead. The cache takes the venue as a parameter now and every caller goes through it. Correction on the record: the earlier 7x amplification figure was measured while my own probes were hammering the API; clean re-measurement is 1.8x, so most Delta demand is genuine.'
+  version: 'hg-v458',
+  pack: 'name the limiter, count the denominator',
+  built: '2026-08-23T06:20:00Z',
+  note: 'Three releases guessed at the Delta 429s and three fixes missed. The proxy now stamps X-HG-Limiter on its OWN rejections and passes upstream 429s through untouched, so every rejection is attributable by name. The ?diag=1 probe records per-host totals rather than only failures, so a 429 count can finally become a rate and a success ratio. Instrument first, then fix.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
