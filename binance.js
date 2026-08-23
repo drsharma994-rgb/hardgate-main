@@ -286,6 +286,8 @@ async function binanceTickers24h(){
 async function binanceFunding(symbol){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     const key = 'funding|' + symbol;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
     const j = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/premiumIndex?symbol=' + encodeURIComponent(symbol));
@@ -302,6 +304,8 @@ async function binanceFunding(symbol){
 async function binanceOI(symbol){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     const key = 'oi|' + symbol;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
     const j = await __binFetchJson(BINANCE_FAPI + '/fapi/v1/openInterest?symbol=' + encodeURIComponent(symbol));
@@ -335,6 +339,8 @@ function __binParseLS(raw, tsKey){
 async function binanceLongShort(symbol, period, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
     const key = 'ls|' + symbol + '|' + period + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
@@ -348,6 +354,8 @@ async function binanceLongShort(symbol, period, limit){
 async function binanceTopTraders(symbol, period, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
     const key = 'top|' + symbol + '|' + period + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
@@ -361,6 +369,8 @@ async function binanceTopTraders(symbol, period, limit){
 async function binanceTakerRatio(symbol, period, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
     const key = 'taker|' + symbol + '|' + period + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
@@ -416,6 +426,8 @@ async function binanceFundingInfo(){
 async function binanceTopLSAccounts(symbol, period, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
     const key = 'topacct|' + symbol + '|' + period + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
@@ -502,6 +514,8 @@ async function binanceBasis(pair, contractType, period, limit){
 async function binanceOIHistory(symbol, period, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     period = period || '1h'; limit = Math.max(1, Math.min(500, limit || 30));
     const key = 'oih|' + symbol + '|' + period + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
@@ -528,6 +542,8 @@ async function binanceOIHistory(symbol, period, limit){
 async function binanceFundingHist(symbol, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     limit = Math.max(10, Math.min(1000, limit || 100));
     const key = 'fundhist|' + symbol + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;
@@ -617,6 +633,8 @@ async function binanceSpotSymbols(){
 async function binanceDepth(symbol, limit){
   try{
     if (!symbol) return null;
+    if (__binForeignSymbol(symbol)) return null;
+    symbol = await __binResolveSymbol(symbol);
     limit = Math.max(5, Math.min(100, limit || 20));
     const key = 'depth|' + symbol + '|' + limit;
     const hit = __binCacheGet(key); if (hit !== undefined) return hit;

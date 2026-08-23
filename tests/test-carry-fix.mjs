@@ -170,9 +170,12 @@ console.log('--- binanceTopLSAccounts ---');
   assert(r.latest.t === 1700003600, 'timestamp ms -> seconds');
   assert(r.series.length === 2 && r.series[0].t < r.series[1].t && r.series[0].longPct === 62.38,
     'series sorted ascending by t (wire order was reversed)');
-  assert(calls.urls[0].indexOf('/futures/data/topLongShortAccountRatio') >= 0 &&
-         calls.urls[0].indexOf('symbol=BTCUSDT') >= 0 &&
-         calls.urls[0].indexOf('period=1h') >= 0 && calls.urls[0].indexOf('limit=30') >= 0,
+  /* Not urls[0] any more: every per-symbol fapi reader first asks exchangeInfo
+     so it can resolve Binance's 1000x contracts (SHIBUSDT -> 1000SHIBUSDT).
+     Find the endpoint rather than assuming its slot. */
+  const tlsUrl = calls.urls.filter(function(u){ return u.indexOf('/futures/data/topLongShortAccountRatio') >= 0; })[0] || '';
+  assert(tlsUrl.indexOf('symbol=BTCUSDT') >= 0 &&
+         tlsUrl.indexOf('period=1h') >= 0 && tlsUrl.indexOf('limit=30') >= 0,
     'default args: period=1h, limit=30');
 
   const g = await ctx.binanceLongShort('BTCUSDT');

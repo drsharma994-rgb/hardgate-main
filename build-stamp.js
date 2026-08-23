@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v458',
-  pack: 'name the limiter, count the denominator',
-  built: '2026-08-23T06:20:00Z',
-  note: 'Three releases guessed at the Delta 429s and three fixes missed. The proxy now stamps X-HG-Limiter on its OWN rejections and passes upstream 429s through untouched, so every rejection is attributable by name. The ?diag=1 probe records per-host totals rather than only failures, so a 429 count can finally become a rate and a success ratio. Instrument first, then fix.'
+  version: 'hg-v459',
+  pack: 'the 1000x fix reaches every reader',
+  built: '2026-08-23T07:30:00Z',
+  note: 'v455 taught binanceKlines that SHIBUSDT does not exist and 1000SHIBUSDT does — and taught only binanceKlines. premiumIndex was still asking for the bare symbol and getting 400 -1121 on every cold load. All ten per-symbol fapi readers now resolve the 1000x form and refuse foreign venue codes; the spot reader keeps its own membership list, because the perp universe is the wrong list for spot.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

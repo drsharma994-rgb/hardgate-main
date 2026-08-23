@@ -242,6 +242,89 @@ function assert(cond, msg){
     'an already-1000 symbol is left alone, never double-prefixed');
 }
 
+/* ---------- 7) the resolver must cover EVERY per-symbol reader ----------
+
+   v455 taught binanceKlines that SHIBUSDT does not exist and 1000SHIBUSDT
+   does. It taught only binanceKlines. Measured on production three releases
+   later, with the diagnostic finally attributing failures:
+
+       400  fapi/v1/premiumIndex?symbol=SHIBUSDT
+
+   Same bug, different reader, and it had been there the whole time — a fix
+   applied to one function while ten siblings shared the defect.
+
+   So this asserts the RULE across the module: every per-symbol fapi reader
+   both refuses a foreign venue code and resolves the 1000x form.
+   binanceSpotTakerFlow is exempt and must stay exempt — it reads SPOT, where
+   the perp universe is the wrong membership list, and it has carried its own
+   guard since v435. */
+{
+  const src = fs.readFileSync(root + 'binance.js', 'utf8');
+  const fapiReaders = [
+    'binanceKlines', 'binanceFunding', 'binanceOI', 'binanceLongShort',
+    'binanceTopTraders', 'binanceTakerRatio', 'binanceTopLSAccounts',
+    'binanceOIHistory', 'binanceFundingHist', 'binanceDepth'
+  ];
+  const missingResolve = [], missingGuard = [];
+  fapiReaders.forEach(function(fn){
+    /* plain slicing, not a RegExp built from a string: escapes in such a
+       pattern are fragile enough that the first cut silently became [sS] and
+       reported all ten readers missing while the behaviour tests passed */
+    const at = src.indexOf('async function ' + fn + '(');
+    const body = at < 0 ? '' : src.slice(at, at + 700);
+    if (body.indexOf('__binResolveSymbol(symbol)') < 0) missingResolve.push(fn);
+    if (body.indexOf('__binForeignSymbol(symbol)') < 0) missingGuard.push(fn);
+  });
+  assert(missingResolve.length === 0,
+    'every per-symbol fapi reader resolves the 1000x form' +
+      (missingResolve.length ? ' — MISSING: ' + missingResolve.join(', ') : ''));
+  assert(missingGuard.length === 0,
+    'and every one refuses a foreign venue code' +
+      (missingGuard.length ? ' — MISSING: ' + missingGuard.join(', ') : ''));
+
+  /* the spot reader must NOT use the perp universe */
+  const spotAt = src.indexOf('async function binanceSpotTakerFlow(');
+  const spot = spotAt < 0 ? '' : src.slice(spotAt, spotAt + 700);
+  assert(spot.indexOf('__binResolveSymbol') < 0,
+    'binanceSpotTakerFlow does NOT use the perp resolver — spot has its own membership list');
+  assert(spot.indexOf('binanceSpotSymbols') >= 0,
+    'it uses the spot symbol list instead, as it has since v435');
+}
+
+/* the fix, exercised rather than grepped: premiumIndex is the reader that
+   exposed the gap */
+{
+  const asked = [];
+  const ctx = vm.createContext(Object.assign(Object.create(null), {
+    console, setTimeout, clearTimeout, AbortController, Promise, Date, Math, JSON,
+    window: {},
+    fetch: function(u){
+      const t = String(u);
+      asked.push(t);
+      if (t.indexOf('exchangeInfo') >= 0){
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ symbols: [
+          { symbol: '1000SHIBUSDT', quoteAsset: 'USDT', contractType: 'PERPETUAL', status: 'TRADING' },
+          { symbol: 'BTCUSDT',      quoteAsset: 'USDT', contractType: 'PERPETUAL', status: 'TRADING' }
+        ]}) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ lastFundingRate: '0.0001', markPrice: '1' }) });
+    }
+  }));
+  vm.runInContext(fs.readFileSync(root + 'binance.js', 'utf8'), ctx, { filename: 'binance.js' });
+
+  await ctx.binanceFunding('SHIBUSDT');
+  const pi = asked.filter(function(u){ return /premiumIndex/.test(u); });
+  assert(pi.some(function(u){ return /symbol=1000SHIBUSDT/.test(u); }),
+    'binanceFunding asks premiumIndex for 1000SHIBUSDT');
+  assert(!pi.some(function(u){ return /symbol=SHIBUSDT/.test(u); }),
+    'and never for the bare SHIBUSDT that produced the live 400');
+
+  const before = asked.length;
+  const r = await ctx.binanceFunding('B-SHIB_USDT');
+  assert(r === null && asked.length === before,
+    'a foreign venue code costs premiumIndex zero requests');
+}
+
 console.log(String.fromCharCode(10) + pass + ' passed, ' + fail + ' failed');
 if (fail > 0) process.exit(1);
 console.log('ALL VENUE SYMBOL MAPPING TESTS PASSED');
