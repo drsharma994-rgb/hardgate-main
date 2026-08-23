@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v449',
-  pack: 'OMNIBTC — Bitcoin-only desk',
-  built: '2026-08-23T06:00:00Z',
-  note: 'New CRYPTO tab OMNIBTC. BTC is the whole universe: every existing house engine and the indicator bank read Delta BTCUSD and CoinDCX B-BTC_USDT, then the desk keeps one MOST PROBABLE setup. CLEAN with real ENTRY/STOP/T1 wins; else NEAR watch; else WAIT. No invented levels, no alts, no gold. G1–G7 unchanged.'
+  version: 'hg-v450',
+  pack: 'cold-load diagnostic',
+  built: '2026-08-22T18:40:00Z',
+  note: 'A warm desk is clean but a cold load still shows a run of 429s and 400s that nothing could attribute after the fact. ?diag=1 installs a fetch recorder as the FIRST script in the document, off by default and untouched when off, so those failures can finally be named. Carries the v449 OMNIBTC desk.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

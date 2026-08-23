@@ -5,6 +5,84 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
 <link rel="manifest" href="manifest.webmanifest">
+<script>
+/* ?diag=1 — ATTRIBUTE THE FAILURES THAT ONLY HAPPEN ON A COLD LOAD.
+
+   A warm desk is clean: a full hardRefreshAll produced three errors, all of
+   them /api/xm/candles 503 from an unconfigured broker. A COLD load is not —
+   it shows a run of 429s and 400s in its first seconds, and until now those
+   could not be attributed at all. Nothing available after the fact can see
+   them: a fetch wrapper installed from the console arrives long after the
+   app has already made the calls, performance.getEntriesByType('resource')
+   caps at 250 entries and then silently stops recording (it dropped 1,707 of
+   1,957 requests when this was first investigated, which is how a truncated
+   sample nearly got reported as a clean one), and the devtools capture window
+   had already scrolled past them.
+
+   The only thing that can see a cold load is something that runs before the
+   first script that fetches. That is this block, and it is the first script
+   in the document for exactly that reason.
+
+   OFF BY DEFAULT AND FREE WHEN OFF. Without ?diag=1 the flag is read, the
+   branch is not taken, and window.fetch is never touched — no wrapper, no
+   allocation, no cost on the path that matters. Enabling it changes nothing
+   about what the desk requests; it only records what came back.
+
+   Usage:  https://…/?diag=1   then in the console:  hgDiagReport()
+   The buffer is capped so a long session cannot grow without bound, and the
+   wrapper re-throws exactly what it caught — a diagnostic that changes
+   behaviour is worse than no diagnostic. */
+(function(){
+  'use strict';
+  try{
+    if (!/[?&]diag=1(&|$)/.test(location.search)) return;
+    if (typeof fetch !== 'function') return;
+    var CAP = 4000;
+    var rows = [], dropped = 0, t0 = Date.now();
+    function note(url, status){
+      if (rows.length >= CAP){ dropped++; return; }
+      var u = String(url);
+      try{ u = decodeURIComponent(u); }catch(e){}
+      rows.push({ ms: Date.now() - t0, status: status, url: u });
+    }
+    var orig = fetch;
+    window.fetch = function(input){
+      var url = (input && input.url) ? input.url : input;
+      var p;
+      try{ p = orig.apply(this, arguments); }
+      catch(e){ note(url, 'THREW:' + (e && e.message)); throw e; }
+      return p.then(function(res){
+        if (res && res.status >= 400) note(url, res.status);
+        return res;
+      }, function(err){
+        note(url, 'THREW:' + (err && err.message));
+        throw err;                      /* never swallow: same failure, same caller */
+      });
+    };
+    window.hgDiagReport = function(){
+      var by = {};
+      for (var i = 0; i < rows.length; i++){
+        var r = rows[i];
+        var host = (r.url.match(/https?:\/\/([^\/]+)/) || [null, 'same-origin'])[1];
+        var path = (r.url.match(/https?:\/\/[^\/]+(\/[A-Za-z0-9\/_.-]*)/) || [null, ''])[1];
+        var k = r.status + '  ' + host + path;
+        by[k] = (by[k] || 0) + 1;
+      }
+      return {
+        elapsedSec: Math.round((Date.now() - t0) / 1000),
+        failures: rows.length,
+        droppedOverCap: dropped,
+        firstFailureMs: rows.length ? rows[0].ms : null,
+        byEndpoint: Object.keys(by).sort(function(a, b){ return by[b] - by[a]; })
+          .map(function(k){ return by[k] + ' x ' + k; }),
+        rows: rows
+      };
+    };
+    window.hgDiagRows = function(){ return rows.slice(); };
+  }catch(e){ /* a diagnostic must never be the reason the desk fails to boot */ }
+})();
+</script>
+
 <meta name="theme-color" content="#f4f6f9">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -213,8 +291,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=449"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=449"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=450"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=450"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -711,7 +789,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=449"></script>
+<script src="./hg-plan.js?v=450"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -743,12 +821,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=449"></script>
-<script src="./hg-gates.js?v=449"></script>
-<script src="omniroute.js?v=449"></script>
+<script src="hg-mechanics.js?v=450"></script>
+<script src="./hg-gates.js?v=450"></script>
+<script src="omniroute.js?v=450"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=449"></script>
+<script src="edge.js?v=450"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -764,13 +842,13 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=449"></script>
+<script src="omnigold.js?v=450"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=449"></script>
+<script src="omnipresent.js?v=450"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=449"></script>
+<script src="omnibtc.js?v=450"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -795,14 +873,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=449"></script>
+<script src="supersetup.js?v=450"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=449"></script>
-<script src="super-gold.js?v=449"></script>
-<script src="super-best.js?v=449"></script>
-<script src="super-sniper.js?v=449"></script>
-<script src="super-book.js?v=449"></script>
-<script src="super-calibrate.js?v=449"></script>
+<script src="super-desk-common.js?v=450"></script>
+<script src="super-gold.js?v=450"></script>
+<script src="super-best.js?v=450"></script>
+<script src="super-sniper.js?v=450"></script>
+<script src="super-book.js?v=450"></script>
+<script src="super-calibrate.js?v=450"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>

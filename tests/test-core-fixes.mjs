@@ -41,7 +41,13 @@ const re = /<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script>/gi;
 const blocks = [];
 let m;
 while ((m = re.exec(html)) !== null){ if (m[1].trim()) blocks.push(m[1]); }
-assert(blocks.length === 3, 'index.html still yields exactly 3 inline <script> blocks (got ' + blocks.length + ')');
+/* FOUR blocks, not three. The FIRST is the ?diag=1 cold-load probe: it has to
+   run before every <script src> to observe a cold load at all, and the three
+   app blocks all sit far below the first src tag, so it cannot live inside
+   one of them. App code still belongs in the other three — that is the thing
+   this count protects, and it still does. */
+assert(blocks.length === 4, 'index.html still yields exactly 4 inline <script> blocks (got ' + blocks.length + ')');
+assert(/\?diag=1/.test(blocks[0]), 'and the first of them is the ?diag=1 probe, ahead of every app script');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hg-core-'));
 let syntaxFail = 0;
