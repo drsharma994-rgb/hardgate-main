@@ -368,6 +368,7 @@ console.log('\n== wiring: nav, host, shell, pin path ==');
   ok(/tabs:\['omnibtc'/.test(html.replace(/\s+/g, '')) || /'omnibtc','omnipresent'/.test(html),
     'OMNIBTC is first in the CRYPTO nav group');
   ok(/omnibtc\.js/.test(html), 'index.html loads omnibtc.js');
+  ok(/omnibtc-engines\.js/.test(html), 'index.html loads the extra-engine module before the tab');
   ok(/omnibtc:\s*'obtcCards'/.test(setup), 'HG_MP_HOST maps omnibtc → obtcCards');
   ok(/\.\/omnibtc\.js/.test(sw), 'sw.js HG_SHELL precaches omnibtc.js');
   ok(/hgMpPin\(|hgMostProbablePanelHTML\(/.test(src), 'the tab pins MOST PROBABLE through the house helper');

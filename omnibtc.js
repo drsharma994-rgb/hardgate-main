@@ -20,11 +20,22 @@ invoked (squeeze, PINE and structure were listed and never wired):
   OMNIROUTE ................ hgOmniEvaluate
   CONTRACT REPORT .......... hgContractReportRun (every gate + indicator)
   20-gate indicator bank ... hgStrategyRefine
+  SMART $ / OI FLOW ........ classify + setup (omnibtc-engines.js)
+  FUNDING FADE ............. swingTryFundingFade / scalpTryFundingFade
+  COIL / DIV / TRAP ........ same gates as those CRYPTO tabs
+  SMC ...................... pineSmcCore last-bar ChoCh
+  STAR TRADER .............. stSynthesize (votes the engines above)
+  ONCHAIN / TERM / CARRY ... evidence only — confirm / demote / refuse
   PINE ..................... READ ONLY. pineScan() is a snapshot the PINE tab
                              computes; this reads a BTC row when one is
                              already there and contributes nothing when it is
                              not. It never runs pine and never mints a signal
                              pine did not produce.
+
+Extra engines never claim 7/7 CLEAN. That badge stays on swingTryClean /
+scalpTryClean. APEX is alts-versus-BTC, so it is not called. BEST is the
+same 7/7 swing path already run. SUPER and BRAIN need a warmed multi-asset
+snap — they are not invented here from an empty board.
 
 Structure (FVG / order blocks) is deliberately NOT listed as an engine: those
 are detectors that feed the planners above, not producers of a ticket.
@@ -192,6 +203,13 @@ a global hard refresh.
           if (app && app.ok === false) continue;
           if (app && app.plan) n = app.plan;
         }catch(eLive){}
+      }
+      if (gfn('hgObtcApplyEvidence')){
+        try{
+          var evApp = W.hgObtcApplyEvidence(n, raw._extra || n._extra || null);
+          if (evApp && evApp.ok === false) continue;
+          if (evApp && evApp.row) n = evApp.row;
+        }catch(eEv){}
       }
       btc.push(n);
     }
@@ -383,6 +401,9 @@ a global hard refresh.
     html += '<div class="dim">' + esc(r.engine || r.strategy || 'engine');
     if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
     html += clean ? ' · ticket' : ' · watch only</div></div>';
+    if (r.evidenceChips && r.evidenceChips.length){
+      html += '<div class="dim" style="width:100%">' + esc(r.evidenceChips.join(' · ')) + '</div>';
+    }
     if (gfn('hgBookStampChip')){
       try{ html += W.hgBookStampChip(r.sym, r.dir, { scanner: 'omnibtc', strategy: r.engine }); }catch(e){}
     }
@@ -465,7 +486,19 @@ a global hard refresh.
     }
     if (ui.detail) ui.detail.innerHTML = pick ? detailHtml(pick) : waitHtml();
     if (ui.ind) ui.ind.innerHTML = indicatorsHtml(snap && snap.indicators);
-    if (ui.ledger) ui.ledger.innerHTML = ledgerHtml(snap && snap.report);
+    if (ui.ledger){
+      var extraHtml = '';
+      if (snap && snap.extraLedger && snap.extraLedger.length){
+        extraHtml = '<h4 style="margin:12px 0 6px;letter-spacing:.06em">EXTRA BTC ENGINES</h4>';
+        snap.extraLedger.forEach(function(r){
+          extraHtml += '<div class="kv"><span class="k">' + esc(r.name) + '</span><span class="v">'
+            + esc(r.state || '—') + (r.dir ? ' · ' + esc(r.dir) : '')
+            + (r.detail ? ' · ' + esc(r.detail) : '')
+            + '</span></div>';
+        });
+      }
+      ui.ledger.innerHTML = extraHtml + ledgerHtml(snap && snap.report);
+    }
   }
 
   function setStat(ui, msg){
@@ -494,8 +527,10 @@ a global hard refresh.
       var all = [];
       var reports = [];
       var indicators = [];
+      var extraLedger = [];
+      var extra = {};
       var winnerRows = null;
-      var i, item, tk, r4, r1, r15, r1d, cands, rep;
+      var i, item, tk, r4, r1, r15, r1d, cands, rep, extraRun;
       for (i = 0; i < legs.length; i++){
         item = legs[i];
         if (!hgObtcIsBtc(item.sym || item.symbol)) continue;
@@ -509,6 +544,10 @@ a global hard refresh.
         r1d = await loadBars(item, '1d', 260);
         if (gfn('hgLiveFormationGather')){
           try{ await W.hgLiveFormationGather(tk.symbol, { ticker: tk, fetch: true }); }catch(eG){}
+        }
+        extra = extra || {};
+        if (gfn('hgObtcGatherExtra')){
+          try{ extra = await W.hgObtcGatherExtra(tk.symbol, tk) || extra; }catch(eX){}
         }
         if (gfn('hgContractReportRun')){
           try{
@@ -528,10 +567,53 @@ a global hard refresh.
           cands = [];
         }
         cands = cands.concat(hgObtcRunLocalEngines(r4, r1, r15, tk, r1d));
-        cands.forEach(function(c){ c._rows = r4; c._ticker = tk; });
+        if (gfn('hgObtcRunExtraEngines')){
+          try{
+            extraRun = W.hgObtcRunExtraEngines(r4, r1, r15, tk, extra);
+            if (extraRun && Array.isArray(extraRun.candidates))
+              cands = cands.concat(extraRun.candidates);
+            if (extraRun && Array.isArray(extraRun.ledger) && extraRun.ledger.length)
+              extraLedger = extraLedger.concat(extraRun.ledger);
+          }catch(eEx){}
+        }
+        cands.forEach(function(c){ c._rows = r4; c._ticker = tk; c._extra = extra; });
         all = all.concat(cands);
       }
       var pick = hgObtcPick(all);
+      if (pick && pick.row && gfn('hgPostGateSetupVeto')){
+        try{
+          var vetoTk = (all.filter(function(c){
+            return c.sym === pick.row.sym && c.dir === pick.row.dir
+              && c.entry === pick.row.entry;
+          })[0] || {})._ticker || { symbol: pick.row.sym };
+          var vetoRows = (all.filter(function(c){
+            return c.sym === pick.row.sym && c.entry === pick.row.entry;
+          })[0] || {})._rows;
+          var veto = await W.hgPostGateSetupVeto(vetoTk, pick.row, vetoRows, 'swing', gfn('getCandles') || gfn('xuCandles'));
+          if (veto && veto.ok === false){
+            all = all.filter(function(c){
+              return !(c.sym === pick.row.sym && c.dir === pick.row.dir
+                && c.entry === pick.row.entry && c.stop === pick.row.stop);
+            });
+            pick = hgObtcPick(all);
+          }
+        }catch(eVt){}
+      }
+      if (pick && pick.row && gfn('hgChartVisionAnalyze') && gfn('hgChartVisionFormationBoost')){
+        try{
+          var vRows = (all.filter(function(c){
+            return c.sym === pick.row.sym && c.entry === pick.row.entry;
+          })[0] || {})._rows;
+          var analysis = await W.hgChartVisionAnalyze(Object.assign({}, pick.row, { rows: vRows, rows4h: vRows }));
+          var boost = W.hgChartVisionFormationBoost(pick.row.dir, analysis);
+          if (typeof boost === 'number' && boost <= -10){
+            pick.row.clean = false;
+            pick.row.near = true;
+            pick.row.nearClean = true;
+            pick.tier = 'near';
+          }
+        }catch(eVi){}
+      }
       if (pick && pick.row){
         var match = all.filter(function(c){
           return c.sym === pick.row.sym && c.dir === pick.row.dir
@@ -566,7 +648,8 @@ a global hard refresh.
         }),
         stat: stat,
         indicators: indicators,
-        report: winRep
+        report: winRep,
+        extraLedger: extraLedger
       };
       __obtc.snap = snap;
       __obtc.ran = true;
@@ -590,9 +673,10 @@ a global hard refresh.
       '<div class="panel">'
       + '<h2>OMNIBTC — Bitcoin only <span>every house strategy + indicator bank · one MOST PROBABLE setup</span></h2>'
       + '<div class="note" style="margin-bottom:10px">BTC is the whole universe. SWING, SCALP, EDGE, PINE, squeeze, '
-      + 'mean-reversion, sniper, liquidity and the 20-gate indicator bank all read the same coin on Delta and CoinDCX. '
-      + 'The desk then keeps <b>one</b> setup: CLEAN with real ENTRY / STOP / T1 wins; otherwise the nearest 6/7 watch; '
-      + 'otherwise WAIT. Levels come from existing engines — this tab will never invent a ticket. G1–G7 stay as they are.</div>'
+      + 'mean-reversion, sniper, liquidity, SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC and STAR TRADER '
+      + 'all read the same coin on Delta and CoinDCX. ONCHAIN / TERM / CARRY confirm, demote or refuse — they never mint levels. '
+      + 'The desk then keeps <b>one</b> setup: 7/7 CLEAN with real ENTRY / STOP / T1 wins; otherwise the nearest watch; '
+      + 'otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are.</div>'
       + '<div class="note" id="obtcStat" aria-live="polite">idle — press SCAN BTC.</div>'
       + '<div class="row" style="margin-top:8px"><button type="button" class="btn" id="obtcRun">SCAN BTC</button></div>'
       + '<div class="cards" id="obtcCards" style="margin-top:12px"></div>'

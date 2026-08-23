@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v463',
-  pack: 'formation reads the live internet',
-  built: '2026-08-23T17:00:00Z',
-  note: 'Setup formation now consumes live OI, predicted funding, liquidation clusters, CVD/OBI, book impact, venue basis, DVOL, spot-perp, stables and the news calendar. Those feeds confirm, demote or refuse. They never invent ENTRY / STOP / T1. liqFlushSetup recovers a real tape when candles were passed as the snap. G1–G7 and gold min-loss stay as they are.'
+  version: 'hg-v464',
+  pack: 'OMNIBTC runs the rest of the BTC house',
+  built: '2026-08-23T18:00:00Z',
+  note: 'OMNIBTC now calls SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC and STAR TRADER on BTC only. ONCHAIN, TERM BASIS and CARRY confirm, demote or refuse. Extra engines never claim 7/7 CLEAN. Levels still come from existing engines. APEX / BEST / SUPER / BRAIN full-universe scans are not invented here. G1–G7 and gold min-loss stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
