@@ -321,9 +321,26 @@ function liqFlushCandle(rows, spikeT){
   }
   return rows[rows.length - 1];
 }
+function liqRecoverSnap(){
+  try{
+    if (G.__hgLiqRecoverSnap && G.__hgLiqRecoverSnap.imbalance) return G.__hgLiqRecoverSnap;
+    if (S && S.agg && typeof S.agg.snapshot === 'function'){
+      var rec = S.agg.snapshot();
+      if (rec && rec.imbalance) return rec;
+    }
+  }catch(e){}
+  return null;
+}
 function liqFlushSetup(snap, rowsOpt, opts){
   try{
     opts = opts || {};
+    /* OMNIBTC / contract-report used to pass candle rows as the first
+       argument. A candle array is not a liquidation tape — recover the
+       real snap, or stand aside. Never invent a flush from OHLC. */
+    if (Array.isArray(snap)){
+      rowsOpt = snap;
+      snap = liqRecoverSnap();
+    }
     if (!snap || typeof snap !== 'object' || !snap.imbalance) return null;
     var cls = snap.imbalance.cls;
     if (cls !== 'long-flush' && cls !== 'short-flush') return null;
@@ -923,6 +940,7 @@ async function refreshLiqs(){
 
 G.liqParse = liqParse;
 G.liqAgg = liqAgg;
+G.liqRecoverSnap = liqRecoverSnap;
 G.liqFlushSetup = liqFlushSetup;
 G.liqsState = function liqsState(){
   try{

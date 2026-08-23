@@ -62,6 +62,10 @@ function hgSetupStackSnap(){
     try{ if (typeof G.getAgentDeskCached === 'function') o.agents = G.getAgentDeskCached(); }catch(e9b){}
     try{ if (typeof G.getAtomicDeskCached === 'function') o.atomic = G.getAtomicDeskCached(); }catch(e9c){}
     try{ if (typeof G.trendmxState === 'function') o.trendmx = G.trendmxState(); }catch(e9d){}
+    try{ if (typeof G.oiflowState === 'function') o.oiflow = G.oiflowState(); }catch(e9e){}
+    try{ if (typeof G.deribitVolState === 'function') o.dvol = G.deribitVolState(); }catch(e9f){}
+    try{ if (typeof G.venuePremiumState === 'function') o.venueprem = G.venuePremiumState(); }catch(e9g){}
+    try{ if (typeof G.liqsState === 'function') o.liqs = G.liqsState(); }catch(e9h){}
     if (o.desk && !o.macro) o.macro = o.desk;
     else if (o.desk && o.macro) o.macro = Object.assign({}, o.macro, o.desk);
     return o;
@@ -380,6 +384,21 @@ function hgSetupStack(inp){
     }
   }
 
+  if (hasDir && typeof G.hgLiveFormationFts === 'function'){
+    try{
+      var liveSnap = inp.live;
+      if (!liveSnap && typeof G.hgLiveFormationSnap === 'function') liveSnap = G.hgLiveFormationSnap(sym, dir);
+      var liveItems = G.hgLiveFormationFts({ live: liveSnap }, dir) || [];
+      for (var li = 0; li < liveItems.length; li++){
+        var lit = liveItems[li];
+        if (!lit) continue;
+        var livePillar = lit.pillar === 'technical' ? technical
+          : (lit.pillar === 'fundamental' ? fundamental : sentiment);
+        _bump(livePillar, _item(lit.label, lit.detail, lit.align), vetoes, cautions);
+      }
+    }catch(eLive){}
+  }
+
   var totalVeto = fundamental.veto || technical.veto || sentiment.veto;
   var net = fundamental.score + technical.score + sentiment.score;
   var tierHint = 'forming';
@@ -433,7 +452,8 @@ function hgSetupStackFromHit(hit, opts){
     macro: opts.macro,
     goldPositioning: opts.goldPositioning,
     positioning: opts.positioning,
-    vision: hit.vision || opts.vision
+    vision: hit.vision || opts.vision,
+    live: opts.live || hit.live || (typeof G.hgLiveFormationSnap === 'function' ? G.hgLiveFormationSnap(hit.sym || opts.sym, hit.dir) : null)
   }, opts.layers || {}));
 }
 

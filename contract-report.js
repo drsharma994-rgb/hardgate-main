@@ -292,7 +292,9 @@ function cryptoGateRows(rows4h, rows1h, rows15m, ticker){
   }));
 
   out.push(attempt('LIQUIDITY FLUSH', ['liqFlushSetup'], function(){
-    var l = W.liqFlushSetup(rows4h, ticker);
+    var flush = has('hgLiveLiqFlushSetup') ? W.hgLiveLiqFlushSetup : W.liqFlushSetup;
+    var snap = has('liqRecoverSnap') ? W.liqRecoverSnap() : null;
+    var l = snap ? flush(snap, rows4h) : flush(rows4h, ticker);
     if (!l || !l.dir) return row('LIQUIDITY FLUSH', { state: 'idle', detail: 'no flush' });
     return row('LIQUIDITY FLUSH', { state: 'signal', dir: l.dir, entry: l.entry, stop: l.stop,
       t1: l.t1, detail: l.note || 'liquidity flush' });

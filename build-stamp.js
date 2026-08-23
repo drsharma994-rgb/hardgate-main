@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v462',
-  pack: 'the off-hours message names its own reason',
-  built: '2026-08-23T15:10:00Z',
-  note: 'Every row reading ASIDE on a Sunday is CORRECT — the conviction haircut drops WATCH to ASIDE on dead tape, by design. But the message collapsed two independent triggers, Sunday and 01:00-06:30 IST, into one label that reads as a clock window: at 20:03 IST on a Sunday it looked like the desk had the wrong time. The rule is unchanged; the sentence now names which trigger actually fired.'
+  version: 'hg-v463',
+  pack: 'formation reads the live internet',
+  built: '2026-08-23T17:00:00Z',
+  note: 'Setup formation now consumes live OI, predicted funding, liquidation clusters, CVD/OBI, book impact, venue basis, DVOL, spot-perp, stables and the news calendar. Those feeds confirm, demote or refuse. They never invent ENTRY / STOP / T1. liqFlushSetup recovers a real tape when candles were passed as the snap. G1–G7 and gold min-loss stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

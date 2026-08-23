@@ -359,6 +359,7 @@ function hgFormationScore(plan, ctx){
     else if (plan.poi === 'avwap') s += 14;
     else if (plan.poi === 'ema21') s += 8;
     if (plan.flowOk) s += 10;
+    if (isFinite(+plan.liveScoreDelta)) s += Math.min(18, Math.max(-18, +plan.liveScoreDelta));
     if (plan.crossOk) s += 5;
     if (plan.rsEdge != null && isFinite(plan.rsEdge)) s += Math.min(12, Math.max(0, plan.rsEdge * 80));
     if (plan.fillProb != null && plan.fillProb >= 50) s += 8;
@@ -585,6 +586,20 @@ function hgFormGoldEnrich(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
   plan.formationScore = hgGoldFormationScore(plan, hit, ctx);
   plan.formationParams = params.source;
   plan.planSrc = 'gold ' + baseStyle + ' · ' + (hit.stratKey || 'strategy');
+  if (typeof G.hgLiveFormationApply === 'function'){
+    try{
+      var gLive = ctx.live;
+      if (!gLive && typeof G.hgLiveFormationSnap === 'function')
+        gLive = G.hgLiveFormationSnap(plan.sym || hit.sym, dir);
+      var gApp = G.hgLiveFormationApply(plan, gLive, { a4: a4, preserveLevels: true, gold: true });
+      if (!gApp || gApp.ok === false){
+        return { ok: false, reason: (gApp && gApp.reason) || 'live context refused', tag: (gApp && gApp.tag) || 'live' };
+      }
+      plan = gApp.plan || plan;
+      if (isFinite(+plan.liveScoreDelta))
+        plan.formationScore = Math.round((isFinite(+plan.formationScore) ? +plan.formationScore : 0) + +plan.liveScoreDelta);
+    }catch(eGLive){}
+  }
   return { ok: true, hit: plan, formationScore: plan.formationScore, fillNote: fill.note };
 }
 
@@ -712,6 +727,40 @@ function hgFormTicket(hit, ctx){
       plan.sessionNote = 'off-session — limit only (no market chase)';
     }
 
+    /* Live internet context. Confirm / demote / refuse. Never invents
+       ENTRY / STOP / T1. A silent feed is UNCHECKED. */
+    var live = (ctx && ctx.live) || null;
+    if (!live && typeof G.hgLiveFormationSnap === 'function'){
+      try{ live = G.hgLiveFormationSnap(plan.sym || hit.sym, dir); }catch(eLv){ live = null; }
+    }
+    if (typeof G.hgLiveFormationApply === 'function'){
+      try{
+        var applied = G.hgLiveFormationApply(plan, live, { a4: a4, minRr: minRr, style: baseStyle });
+        if (!applied || applied.ok === false){
+          return { ok: false, reason: (applied && applied.reason) || 'live context refused', tag: (applied && applied.tag) || 'live' };
+        }
+        plan = applied.plan || plan;
+      }catch(eAp){}
+    }
+    if (plan.liveStopWidened){
+      var liveRisk = (isFinite(+plan.entry) && isFinite(+plan.stop))
+        ? Math.abs(+plan.entry - +plan.stop) : NaN;
+      if (isFinite(liveRisk) && liveRisk > 0){
+        plan.rr = isFinite(+plan.t1) ? Math.abs(+plan.t1 - +plan.entry) / liveRisk : null;
+        plan.rr1 = plan.rr;
+        plan.rr2 = isFinite(+plan.t2) ? Math.abs(+plan.t2 - +plan.entry) / liveRisk : null;
+      }
+      if (baseStyle === 'swing' && typeof G.hgSwingPostEnrichValid === 'function'){
+        var liveG6 = G.hgSwingPostEnrichValid(plan, { rows: rows, a4: a4, minRr: minRr });
+        if (!liveG6) return { ok: false, reason: 'live liq stop failed G6 / min R:R', tag: 'live' };
+        plan = liveG6;
+      } else if (baseStyle === 'scalp' && typeof G.hgScalpPostEnrichValid === 'function'){
+        var liveSc = G.hgScalpPostEnrichValid(plan, { m15: ctx.m15 || rows, a: a4, minRr: minRr });
+        if (!liveSc) return { ok: false, reason: 'live liq stop failed scalp post-enrich', tag: 'live' };
+        plan = liveSc;
+      }
+    }
+
     plan.expiresBars = baseStyle === 'scalp' ? 96 : null;
     plan.formationScore = hgFormationScore(plan, ctx);
     plan.formationParams = params.source;
@@ -728,10 +777,10 @@ function hgFormTicket(hit, ctx){
         minRr: minRr,
         atrPct: (a4 && isFinite(mark) && mark > 0) ? a4 / mark * 100 : null,
         counterTrend: !!(hit.fundingFade || plan.fundingFade),
-        notionalUsd: ctx.notionalUsd,
+        notionalUsd: ctx.notionalUsd || (live && live.notionalUsd),
         venue: ctx.venue,
-        depthUsd: ctx.depthUsd,
-        spreadBps: ctx.spreadBps,
+        depthUsd: ctx.depthUsd || (live && live.depthUsd),
+        spreadBps: ctx.spreadBps || (live && live.spreadBps),
       });
       if (!tg.ok) return { ok: false, reason: tg.reason, tag: tg.tag || 'gate' };
       if (tg.chips && tg.chips.length) plan.evidenceChips = tg.chips;

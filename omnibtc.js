@@ -185,6 +185,14 @@ a global hard refresh.
       n.passed = n.passed != null ? n.passed : raw.passed;
       n.gatesPassed = n.gatesPassed != null ? n.gatesPassed : raw.gatesPassed;
       n.gatesTotal = n.gatesTotal || raw.gatesTotal || 7;
+      if (gfn('hgLiveFormationApply')){
+        try{
+          var live = gfn('hgLiveFormationSnap') ? W.hgLiveFormationSnap(n.sym, n.dir) : null;
+          var app = W.hgLiveFormationApply(n, live, { preserveLevels: true });
+          if (app && app.ok === false) continue;
+          if (app && app.plan) n = app.plan;
+        }catch(eLive){}
+      }
       btc.push(n);
     }
     if (!btc.length) return null;
@@ -278,7 +286,11 @@ a global hard refresh.
     if (gfn('rsAssess'))
       pushEngine(out, 'REVERSAL SNIPER', function(){ return W.rsAssess(rows4h, rows1h || rows4h, ticker); }, ticker);
     if (gfn('liqFlushSetup'))
-      pushEngine(out, 'LIQUIDITY FLUSH', function(){ return W.liqFlushSetup(rows4h, ticker); }, ticker);
+      pushEngine(out, 'LIQUIDITY FLUSH', function(){
+        var flush = gfn('hgLiveLiqFlushSetup') || W.liqFlushSetup;
+        var snap = gfn('liqRecoverSnap') ? W.liqRecoverSnap() : null;
+        return snap ? flush(snap, rows4h) : flush(rows4h, ticker);
+      }, ticker);
     /* SQUEEZE. The tab header has always claimed squeeze and never called it.
        Wired the way squeeze.js wires itself: the pure classifier gives the
        direction, the gate evaluates it, and squeezePlan mints the levels — a
@@ -495,6 +507,9 @@ a global hard refresh.
            higher-timeframe agreement they gate on; without it both degrade to
            an honest zero rather than a guess */
         r1d = await loadBars(item, '1d', 260);
+        if (gfn('hgLiveFormationGather')){
+          try{ await W.hgLiveFormationGather(tk.symbol, { ticker: tk, fetch: true }); }catch(eG){}
+        }
         if (gfn('hgContractReportRun')){
           try{
             rep = W.hgContractReportRun({

@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v462';
+const HG_CACHE = 'hg-v463';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
@@ -28,7 +28,7 @@ const HG_SHELL = [
   './vendor/lightweight-charts-4.2.0.js', './vendor/emailjs-browser-4.4.1.js',
   './engine.js', './news.js', './onchain.js', './rotation.js', './goldspot.js',
   './goldind.js', './goldscalp.js', './goldswing.js', './pinegoldmath.js', './goldpine.js', './signallog.js',
-  './conviction-lock.js', './macro-feeds.js', './venuepremium.js',
+  './conviction-lock.js', './macro-feeds.js', './venuepremium.js', './formation-live.js',
   './hgalert.js', './tabalerts.js', './hggateflip.js', './brainrobust.js', './braininvalidation.js', './gstack-brain.js', './brain.js', './scorecard.js', './fixpack13-core.js', './fixpack14-core.js', './fixpack15-core.js', './fixpack16-core.js', './fixpack17-core.js', './crypto-position-risk.js', './risk-tab.js', './reliability.js', './goldcoint.js', './structure-levels.js', './formation.js', './freqtrade-formation.js', './best-levels.js', './gold-best-levels.js', './walkforward-ui.js', './formation-instr-ui.js', './meta-label.js', './tear-sheet.js', './purged-cv.js', './agent-debate.js', './formation-lab.js',
   './pinemath.js', './pinegate.js', './pine.js', './pine-sub.js', './pinemsb.js', './pinesqz.js', './pinesmf.js', './pineht.js', './pinesmc.js', './pinecipher.js', './pinerf.js', './pinenw.js', './pineavwap.js'
 ];
