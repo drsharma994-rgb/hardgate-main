@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v447',
-  pack: 'Delta gets its own proxy budget',
-  built: '2026-08-22T16:30:00Z',
-  note: 'Delta India was the only primary venue without a named rate ceiling in /api/proxy, so the desk rejected its own Delta traffic: one rescan measured 219 self-inflicted 429s, all of them Delta, none from Delta itself. Sized from Delta published limits — 10,000 units per 5 min at 3 units a candle call is about 666 req/min — so the budget is 500: above the ~430/min a rescan wants, at 75 percent of the venue ceiling. Carries the v446 strategy+indicators cards, v445 one-fill-window, v444 strategy-confirm and v443 headless ledger settle.'
+  version: 'hg-v448',
+  pack: 'BYBIT was dialling a blocked host',
+  built: '2026-08-22T17:40:00Z',
+  note: 'bybit.js dialled api.bybit.com, which connect-src never permitted, so every BYBIT read failed before leaving the page: measured 726 throwing requests per synthesis, 23 percent of everything the desk asked for. macro.js Twelve Data gold fallback was blocked the same way. Both permitted now. The CSP test no longer trusts a hand-written list of hosts — it sweeps every module and fails on any host that is neither permitted nor proxied.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

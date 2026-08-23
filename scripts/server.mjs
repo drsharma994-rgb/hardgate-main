@@ -90,6 +90,8 @@ const CONNECT_SRC = [
   'https://api.binance.com',
   'https://www.deribit.com',                  /* deribit-vol.js — DVOL implied-vol regime */
   'https://mempool.space',                    /* onchain.js — five BTC on-chain legs */
+  'https://api.bybit.com',                    /* bybit.js — v5 linear perp OI + tickers */
+  'https://api.twelvedata.com',               /* macro.js — XAU/XAG gold fallback */
   'https://api.gold-api.com',                 /* macro.js gold spot */
   'https://api.frankfurter.app',              /* macro.js FX */
   'https://api.frankfurter.dev',
