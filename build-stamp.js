@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v448',
-  pack: 'BYBIT was dialling a blocked host',
-  built: '2026-08-22T17:40:00Z',
-  note: 'bybit.js dialled api.bybit.com, which connect-src never permitted, so every BYBIT read failed before leaving the page: measured 726 throwing requests per synthesis, 23 percent of everything the desk asked for. macro.js Twelve Data gold fallback was blocked the same way. Both permitted now. The CSP test no longer trusts a hand-written list of hosts — it sweeps every module and fails on any host that is neither permitted nor proxied.'
+  version: 'hg-v449',
+  pack: 'OMNIBTC — Bitcoin-only desk',
+  built: '2026-08-23T06:00:00Z',
+  note: 'New CRYPTO tab OMNIBTC. BTC is the whole universe: every existing house engine and the indicator bank read Delta BTCUSD and CoinDCX B-BTC_USDT, then the desk keeps one MOST PROBABLE setup. CLEAN with real ENTRY/STOP/T1 wins; else NEAR watch; else WAIT. No invented levels, no alts, no gold. G1–G7 unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
