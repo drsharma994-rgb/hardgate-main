@@ -1407,7 +1407,8 @@ function radarGates(row, snap){
        hard demote (liquidity/overextension) always wins. */
     if (row.sessionDead === true){
       out.haircut = true;
-      out.haircutReason = 'off-hours tape (Sun / 01:00-06:30 IST) — conviction haircut: thin books, worse fills';
+      out.haircutReason = 'off-hours tape (' + (row.sessionDeadWhy || 'Sunday or 01:00-06:30 IST')
+        + ') — conviction haircut: thin books, worse fills';
     }
   }catch(e){}
   return out;
@@ -1425,7 +1426,8 @@ function sessionHaircut(row){
     if (!(TIER_RANK[row.dec.tier] >= TIER_RANK.WATCH)) return;
     row.dec.gatedFrom = row.dec.tier;
     row.dec.tier = row.dec.tier === 'PRIME' ? 'HIGH' : (row.dec.tier === 'HIGH' ? 'WATCH' : 'ASIDE');
-    row.dec.reasons.unshift('off-hours tape (Sun / 01:00-06:30 IST) — conviction haircut: thin books, worse fills');
+    row.dec.reasons.unshift('off-hours tape (' + (row.sessionDeadWhy || 'Sunday or 01:00-06:30 IST')
+      + ') — conviction haircut: thin books, worse fills');
     row.gated = 'session';
   }catch(e){}
 }
@@ -2067,7 +2069,7 @@ current ATR14's percentile rank over the fetched window. 30-80th pct =
 'healthy trend vol' context vote; <20th = dead-tape CAUTION; >90th =
 climax-vol CAUTION; transition bands stay silent.
 SESSION LAYER ('session', context) — clock-only, negative-only by design:
-off-hours tape (Sunday or 01:00-05:30 IST) earns a CAUTION guard (thin
+off-hours tape (Sunday or 01:00-06:30 IST) earns a CAUTION guard (thin
 liquidity, worse fills). It NEVER votes direction — a uniform free vote
 would distort every tier at once. The current window also rides board
 cards as a chip (kill-zone aware, same windows as the gold lane).
@@ -2800,22 +2802,45 @@ function sessionWindow(now){
     var mins = ist.getHours() * 60 + ist.getMinutes(), day = ist.getDay();
     var london = mins >= 750 && mins <= 930;    /* 12:30-15:30 IST */
     var ny = mins >= 1050 && mins <= 1230;      /* 17:30-20:30 IST */
-    var dead = (day === 0) || (mins >= 60 && mins <= 390);  /* Sunday or 01:00-06:30 IST */
-    return { dead: dead, london: london, ny: ny,
+    var sunday = (day === 0);
+    var lateNight = (mins >= 60 && mins <= 390);           /* 01:00-06:30 IST */
+    var dead = sunday || lateNight;
+    return { dead: dead, sunday: sunday, lateNight: lateNight, london: london, ny: ny,
              label: dead ? 'off-hours (Sun/late-night IST)'
                   : london ? 'London kill zone'
                   : ny ? 'NY kill zone' : 'mid-session' };
   }catch(e){ return { dead: false, london: false, ny: false, label: '—' }; }
 }
+/* SAY WHICH CONDITION FIRED, NOT BOTH OF THEM.
+
+   dead is (Sunday) OR (01:00-06:30 IST) — two independent triggers. Every
+   message rendered them as one label, "off-hours tape (Sun / 01:00-06:30
+   IST)", which reads as a single clock window. At 20:03 IST on a Sunday that
+   looks like the desk has the wrong time: the tape genuinely is thin, but the
+   stated reason is not the reason. On a desk whose whole discipline is naming
+   the actual cause, an explanation that sends the operator looking for a
+   nonexistent clock bug is a defect in its own right — it cost me a detour
+   through sessionWindow() before I read the boolean.
+
+   The rule is UNCHANGED. Only the sentence changes, to name what actually
+   fired. */
+function sessionDeadReason(sw){
+  if (!sw || !sw.dead) return null;
+  if (sw.sunday && sw.lateNight) return 'Sunday, and 01:00-06:30 IST';
+  if (sw.sunday) return 'Sunday — weekend books';
+  return '01:00-06:30 IST — late-night tape';
+}
+
 function applySession(row){
   try{
     var sw = sessionWindow();
     row.session = sw.label;
     row.sessionDead = sw.dead === true;
     if (sw.dead){
-      var ctxt = 'off-hours tape (Sun / 01:00-06:30 IST) — thin liquidity, worse fills';
+      var ctxt = 'off-hours tape (' + sessionDeadReason(sw) + ') — thin liquidity, worse fills';
       row.col.votes.push({ layer: 'session', vote: 'neutral', kind: 'context', caution: true, text: ctxt });
       colNote(row.col, 'session', 'CAUTION', ctxt);
+      row.sessionDeadWhy = sessionDeadReason(sw);
       row.cautions = (row.cautions || []).concat([ctxt]);
     }else{
       colNote(row.col, 'session', 'NEUTRAL', sw.label + (sw.london || sw.ny ? ' — prime liquidity window' : ''));
@@ -6225,6 +6250,9 @@ G.__hgBrainSniperHits = sniperHitsFrom;
 G.__hgBrainMtf = { resampleDaily: resampleDaily, dailySide: dailySide };
 G.__hgBrainAtrPct = atrPercentile;
 G.__hgBrainSession = sessionWindow;
+/* exported so the OPERATOR-FACING sentence is testable, not just the boolean:
+   the rule was always right, the explanation was not */
+G.__hgBrainSessionDeadReason = sessionDeadReason;
 /* test seam: set/clear the synthesis clock — __hgBrainSetClock(ms|null).
    Production never calls this; scans keep using the real wall clock. */
 G.__hgBrainSetClock = function(ms){ __sessionNowOverride = (ms === null || ms === undefined) ? null : ms; };

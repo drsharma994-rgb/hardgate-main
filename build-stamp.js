@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v461',
-  pack: 'no mixed bundles after a deploy',
-  built: '2026-08-23T10:20:00Z',
-  note: 'index.html and sw.js were no-cache but every other asset was public max-age=300, and only seventeen script tags carry a ?v= buster. For five minutes after a release a browser could hold the new index.html and an old binance.js at once — a bundle that exists in no commit. Caught live: the server served hg-v460 while the page reported hg-v459 across two reloads. Assets revalidate now; unchanged files still return 304 with no body.'
+  version: 'hg-v462',
+  pack: 'the off-hours message names its own reason',
+  built: '2026-08-23T15:10:00Z',
+  note: 'Every row reading ASIDE on a Sunday is CORRECT — the conviction haircut drops WATCH to ASIDE on dead tape, by design. But the message collapsed two independent triggers, Sunday and 01:00-06:30 IST, into one label that reads as a clock window: at 20:03 IST on a Sunday it looked like the desk had the wrong time. The rule is unchanged; the sentence now names which trigger actually fired.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

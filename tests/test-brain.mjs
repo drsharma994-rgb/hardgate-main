@@ -3427,6 +3427,38 @@ console.log('== AS) tier-1 layers ==');
      && SW('2026-07-27T04:00:00Z').ny === false,
      'AS: 09:30 IST weekday -> mid-session, no flags');
 
+  /* THE MESSAGE MUST NAME THE CONDITION THAT ACTUALLY FIRED.
+
+     dead is (Sunday) OR (01:00-06:30 IST) — two independent triggers. Every
+     message rendered them as one label, "off-hours tape (Sun / 01:00-06:30
+     IST)", which reads as a single clock window. At 20:03 IST on a Sunday
+     that looks like the desk has the wrong time: the tape genuinely is thin,
+     but the stated reason is not the reason, and it sends the operator
+     looking for a clock bug that does not exist. The rule is unchanged; only
+     the sentence is. */
+  const sun = SW('2026-07-26T08:00:00Z');          /* Sunday 13:30 IST */
+  ok(sun.sunday === true && sun.lateNight === false,
+     'AS: Sunday afternoon IST is dead by the SUNDAY trigger, not the clock one');
+
+  const night = SW('2026-07-28T00:30:00Z');        /* Tuesday 06:00 IST */
+  ok(night.lateNight === true && night.sunday === false,
+     'AS: 06:00 IST on a weekday is dead by the CLOCK trigger, not Sunday');
+
+  const both = SW('2026-07-26T00:30:00Z');         /* Sunday 06:00 IST */
+  ok(both.sunday === true && both.lateNight === true,
+     'AS: Sunday pre-dawn trips both triggers');
+
+  const why = W.__hgBrainSessionDeadReason;
+  if (typeof why === 'function'){
+    ok(/Sunday/.test(why(sun)) && !/01:00/.test(why(sun)),
+       'AS: a Sunday reason says Sunday and does NOT quote a clock window it is not in');
+    ok(/01:00-06:30/.test(why(night)) && !/Sunday/.test(why(night)),
+       'AS: a late-night reason quotes the window and does not blame Sunday');
+    ok(/Sunday/.test(why(both)) && /01:00-06:30/.test(why(both)),
+       'AS: when both fire, both are named');
+    ok(why({ dead: false }) === null, 'AS: a live session has no off-hours reason at all');
+  }
+
   /* off-hours conviction haircut: pure, idempotent, demote-safe */
   const SH = W.__hgBrainSessionHaircut, ASH = W.__hgBrainApplySessionHaircut;
   ok(typeof SH === 'function' && typeof ASH === 'function', 'AS: haircut seams exposed');
