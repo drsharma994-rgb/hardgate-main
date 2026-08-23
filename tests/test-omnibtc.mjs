@@ -51,6 +51,109 @@ function boot(extra){
   return ctx;
 }
 
+console.log('== every named engine is actually wired ==');
+{
+  /* THE HEADER USED TO NAME ENGINES THE CODE NEVER CALLED. It advertised
+     "SWING / SCALP / EDGE / PINE / squeeze / mean-reversion / sniper /
+     structure", and squeeze, PINE and structure were never invoked at all.
+     A tab that claims to read everything and silently reads eight of eleven
+     is worse than one that claims less: the operator prices in confidence
+     that is not there. These assert the wiring, not the prose. */
+  const bars = Array.from({ length: 60 }, function(_, i){
+    return { t: 1700000000 + i * 14400, o: 100, h: 104, l: 96, c: 100 + (i % 5) };
+  });
+  const TICKER = { symbol: 'BTCUSD', exchange: 'delta', mark: 100 };
+  const PLAN = { dir: 'long', entry: 100, stop: 90, t1: 120, t2: 135 };
+
+  /* --- SQUEEZE: fires only when the classifier gives a direction --- */
+  {
+    const seen = [];
+    const W = boot();
+    W.squeezeClassify = function(){ return { state: 'FIRED_LONG', donchianBreak: null }; };
+    W.squeezeGateEval = function(){ return { gatesPassed: 7, clean7: true }; };
+    W.squeezePlan = function(inp){ seen.push(inp); return Object.assign({}, PLAN); };
+    const out = W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    ok(seen.length === 1, 'SQUEEZE: a fired classifier reaches squeezePlan');
+    ok(seen[0].dir === 'long', 'SQUEEZE: FIRED_LONG becomes a long, not a guess');
+    ok(!!seen[0].gate, 'SQUEEZE: the gate is evaluated before the plan is minted');
+    ok(out.some(function(c){ return /SQUEEZE/.test(c.engine || ''); }),
+      'SQUEEZE: the candidate carries its engine name');
+  }
+  {
+    /* BUILDING has no direction — squeeze.js own rule — so no ticket */
+    const seen = [];
+    const W = boot();
+    W.squeezeClassify = function(){ return { state: 'BUILDING', donchianBreak: null }; };
+    W.squeezePlan = function(inp){ seen.push(inp); return Object.assign({}, PLAN); };
+    W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    ok(seen.length === 0,
+      'SQUEEZE: a BUILDING squeeze has no direction and therefore mints nothing');
+  }
+  {
+    /* a donchian break is a direction too */
+    const seen = [];
+    const W = boot();
+    W.squeezeClassify = function(){ return { state: 'NONE', donchianBreak: 'SHORT' }; };
+    W.squeezePlan = function(inp){ seen.push(inp); return Object.assign({}, PLAN, { dir: 'short', t1: 80, stop: 110 }); };
+    W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    ok(seen.length === 1 && seen[0].dir === 'short',
+      'SQUEEZE: a donchian break supplies the direction when no fire did');
+  }
+
+  /* --- TREND MATRIX: only at or beyond the module majority --- */
+  {
+    const seen = [];
+    const W = boot();
+    W.trendScore = function(){ return { score: 3, comps: {} }; };
+    W.trendmxGateEval = function(){ return { gatesPassed: 6 }; };
+    W.trendmxPlan = function(inp){ seen.push(inp); return Object.assign({}, PLAN); };
+    W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    ok(seen.length === 1 && seen[0].score === 3,
+      'TREND MATRIX: a composite past the majority reaches trendmxPlan');
+  }
+  {
+    const seen = [];
+    const W = boot();
+    W.trendScore = function(){ return { score: 1, comps: {} }; };
+    W.trendmxPlan = function(inp){ seen.push(inp); return Object.assign({}, PLAN); };
+    W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    ok(seen.length === 0,
+      'TREND MATRIX: a composite short of the majority mints nothing');
+  }
+
+  /* --- PINE: reads a snapshot, never runs pine, never invents --- */
+  {
+    const W = boot();
+    W.pineScan = function(){
+      return { rows: [
+        { sym: 'BTCUSD', kind: 'AVWAP', plan: Object.assign({}, PLAN) },
+        { sym: 'ETHUSD', kind: 'AVWAP', plan: Object.assign({}, PLAN) }
+      ] };
+    };
+    const out = W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    const pine = out.filter(function(c){ return /PINE/.test(c.engine || ''); });
+    ok(pine.length === 1, 'PINE: the BTC snapshot row is read, the ETH row is not');
+  }
+  {
+    const W = boot();
+    W.pineScan = function(){ return null; };   /* PINE tab never ran */
+    const out = W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars);
+    ok(out.every(function(c){ return !/PINE/.test(c.engine || ''); }),
+      'PINE: an empty snapshot contributes nothing — it never runs pine itself');
+  }
+
+  /* --- the header may not out-run the code again --- */
+  {
+    const src = read('omnibtc.js');
+    const head = src.slice(0, src.indexOf('ENGINES ACTUALLY CALLED') + 4000);
+    ['squeezePlan', 'trendmxPlan', 'pineScan'].forEach(function(fn){
+      ok(src.indexOf(fn) > 0, 'omnibtc.js actually references ' + fn);
+    });
+    ok(/READ ONLY/.test(head),
+      'the header states plainly that PINE is a snapshot read, not an engine run');
+  }
+}
+
 console.log('== BTC-only filter ==');
 {
   const W = boot();

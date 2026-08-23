@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v451',
-  pack: 'venue codes stop reaching Binance',
-  built: '2026-08-22T20:10:00Z',
-  note: 'The v450 diagnostic named the cold-load failures on its first run: 94 of 105 were fapi klines 400s from CoinDCX codes like B-ETH_USDT being sent to Binance. Fixed in brain fetch4h/fetch1h and, via a sweep that found them, reversalsniper, squeeze and trendtable. All four now reuse the mapping desk-scan-universe already exported.'
+  version: 'hg-v452',
+  pack: 'OMNIBTC calls what it claims',
+  built: '2026-08-22T22:10:00Z',
+  note: 'OMNIBTC advertised squeeze, PINE and structure and invoked none of them. SQUEEZE and TREND MATRIX are wired the way their own modules wire them — classifier gives the direction, gate evaluates it, the module mints the levels — so a BUILDING squeeze or a sub-majority trend still mints nothing. PINE is a snapshot READ, never a run. No new detector was invented and no level is minted here.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

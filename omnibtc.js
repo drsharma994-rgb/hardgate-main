@@ -4,10 +4,30 @@ OMNIBTC — Bitcoin only. Every house strategy and indicator bank is pointed
 at BTC, then the desk keeps ONE most-probable setup.
 
 WHY THIS TAB EXISTS. The rest of CRYPTO scans a universe. This tab answers
-a narrower question: given everything HARDGATE already knows how to read
-(SWING / SCALP / EDGE / PINE / squeeze / mean-reversion / sniper / structure
-plus the 20-gate indicator bank), what is the single most probable BTC
-setup right now?
+a narrower question: given everything HARDGATE already knows how to read,
+what is the single most probable BTC setup right now?
+
+ENGINES ACTUALLY CALLED, because this header used to name three it never
+invoked (squeeze, PINE and structure were listed and never wired):
+  SWING clean + near-clean ... swingTryClean / swingTryNear
+  SCALP clean .............. scalpTryClean
+  EDGE ..................... edgeSignal
+  MEAN REVERSION ........... mrSignal
+  REVERSAL SNIPER .......... rsAssess
+  LIQUIDITY FLUSH .......... liqFlushSetup
+  SQUEEZE .................. squeezeClassify -> squeezeGateEval -> squeezePlan
+  TREND MATRIX ............. trendScore -> trendmxGateEval -> trendmxPlan
+  OMNIROUTE ................ hgOmniEvaluate
+  CONTRACT REPORT .......... hgContractReportRun (every gate + indicator)
+  20-gate indicator bank ... hgStrategyRefine
+  PINE ..................... READ ONLY. pineScan() is a snapshot the PINE tab
+                             computes; this reads a BTC row when one is
+                             already there and contributes nothing when it is
+                             not. It never runs pine and never mints a signal
+                             pine did not produce.
+
+Structure (FVG / order blocks) is deliberately NOT listed as an engine: those
+are detectors that feed the planners above, not producers of a ticket.
 
 WHAT IT WILL NOT DO.
   - It will not invent a new BTC strategy.
@@ -232,7 +252,7 @@ a global hard refresh.
     }catch(e){}
   }
 
-  function hgObtcRunLocalEngines(rows4h, rows1h, rows15m, ticker){
+  function hgObtcRunLocalEngines(rows4h, rows1h, rows15m, ticker, rows1d){
     var out = [];
     var mins = 120;
     try{ if (gfn('tickClock')) mins = W.tickClock(); }catch(e){}
@@ -259,6 +279,65 @@ a global hard refresh.
       pushEngine(out, 'REVERSAL SNIPER', function(){ return W.rsAssess(rows4h, rows1h || rows4h, ticker); }, ticker);
     if (gfn('liqFlushSetup'))
       pushEngine(out, 'LIQUIDITY FLUSH', function(){ return W.liqFlushSetup(rows4h, ticker); }, ticker);
+    /* SQUEEZE. The tab header has always claimed squeeze and never called it.
+       Wired the way squeeze.js wires itself: the pure classifier gives the
+       direction, the gate evaluates it, and squeezePlan mints the levels — a
+       BUILDING squeeze has no direction and therefore no ticket, which is the
+       module's own rule, not a new one. */
+    if (gfn('squeezeClassify') && gfn('squeezePlan') && rows4h && rows4h.length){
+      try{
+        var cls = W.squeezeClassify(rows4h, rows1d || null);
+        var sqDir = null, sqKind = null;
+        if (cls && cls.state === 'FIRED_LONG'){ sqDir = 'long';  sqKind = 'fired'; }
+        else if (cls && cls.state === 'FIRED_SHORT'){ sqDir = 'short'; sqKind = 'fired'; }
+        else if (cls && cls.donchianBreak){
+          sqDir = (cls.donchianBreak === 'LONG') ? 'long' : 'short'; sqKind = 'break';
+        }
+        if (sqDir){
+          var sqInp = { sym: ticker.symbol, dir: sqDir, cls: cls, kind: sqKind,
+                        rows4h: rows4h, rows1h: rows1h || null, tick: ticker };
+          if (gfn('squeezeGateEval')) sqInp.gate = W.squeezeGateEval(sqInp, sqDir);
+          pushEngine(out, 'SQUEEZE ' + sqKind, function(){ return W.squeezePlan(sqInp); }, ticker);
+        }
+      }catch(eSq){}
+    }
+
+    /* TREND MATRIX. trendScore is a pure read over 1d + 4h; tmDirOf turns a
+       composite at or beyond the module's own majority threshold into a
+       direction, and anything short of that produces no ticket. */
+    if (gfn('trendScore') && gfn('trendmxPlan') && rows4h && rows4h.length){
+      try{
+        var tsc = W.trendScore(rows1d || null, rows4h);
+        if (tsc && isFinite(tsc.score) && Math.abs(tsc.score) >= 2){
+          var tmInp = { sym: ticker.symbol, score: tsc.score, comps: tsc.comps,
+                        rows4h: rows4h, rows1h: rows1h || null, tick: ticker };
+          var tmDir = tsc.score > 0 ? 'long' : 'short';
+          if (gfn('trendmxGateEval')) tmInp.gate = W.trendmxGateEval(tmInp, tmDir);
+          pushEngine(out, 'TREND MATRIX', function(){ return W.trendmxPlan(tmInp); }, ticker);
+        }
+      }catch(eTm){}
+    }
+
+    /* PINE. pineScan() is a SNAPSHOT reader, not a per-symbol scanner — the
+       PINE tab computes it. So this reads a BTC row if one is already there
+       and contributes nothing when it is not. It never runs pine itself, and
+       it never invents a signal pine did not produce. */
+    if (gfn('pineScan')){
+      try{
+        var snap = W.pineScan();
+        var list = (snap && (snap.rows || snap.signals || snap.results)) || null;
+        if (Array.isArray(list)){
+          list.forEach(function(sig){
+            var sym = sig && (sig.sym || sig.symbol);
+            if (!sym || !hgObtcIsBtc(sym)) return;
+            var plan = sig.plan || sig;
+            pushEngine(out, 'PINE ' + (sig.kind || sig.name || 'signal'),
+                       function(){ return plan; }, ticker);
+          });
+        }
+      }catch(ePn){}
+    }
+
     if (gfn('hgOmniEvaluate')){
       try{
         var omni = W.hgOmniEvaluate({
@@ -404,7 +483,7 @@ a global hard refresh.
       var reports = [];
       var indicators = [];
       var winnerRows = null;
-      var i, item, tk, r4, r1, r15, cands, rep;
+      var i, item, tk, r4, r1, r15, r1d, cands, rep;
       for (i = 0; i < legs.length; i++){
         item = legs[i];
         if (!hgObtcIsBtc(item.sym || item.symbol)) continue;
@@ -412,6 +491,10 @@ a global hard refresh.
         r4 = await loadBars(item, '4h', 220);
         r1 = await loadBars(item, '1h', 180);
         r15 = await loadBars(item, '15m', 180);
+        /* the 1d leg is what squeezeClassify and trendScore read for the
+           higher-timeframe agreement they gate on; without it both degrade to
+           an honest zero rather than a guess */
+        r1d = await loadBars(item, '1d', 260);
         if (gfn('hgContractReportRun')){
           try{
             rep = W.hgContractReportRun({
@@ -429,7 +512,7 @@ a global hard refresh.
           rep = null;
           cands = [];
         }
-        cands = cands.concat(hgObtcRunLocalEngines(r4, r1, r15, tk));
+        cands = cands.concat(hgObtcRunLocalEngines(r4, r1, r15, tk, r1d));
         cands.forEach(function(c){ c._rows = r4; c._ticker = tk; });
         all = all.concat(cands);
       }
@@ -535,6 +618,9 @@ a global hard refresh.
   W.hgObtcPick = hgObtcPick;
   W.hgObtcDefaultLegs = hgObtcDefaultLegs;
   W.hgObtcRunScan = hgObtcRunScan;
+  /* exported so the engine wiring is testable on its own: which engines get
+     called, and — more importantly — which correctly decline */
+  W.hgObtcRunLocalEngines = hgObtcRunLocalEngines;
   W.hgObtcState = function(){
     try{ return __obtc.snap ? JSON.parse(JSON.stringify(__obtc.snap)) : null; }catch(e){ return null; }
   };
