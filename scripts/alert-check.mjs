@@ -460,8 +460,16 @@ function digestBody(info) {
 
 async function main() {
   // dynamic import: keeps this module loadable without puppeteer installed
-  // (tests import the pure helpers above); CI installs puppeteer before running.
-  const { default: puppeteer } = await import('puppeteer');
+  // (tests import the pure helpers above). puppeteer is an optionalDependency —
+  // GitHub Actions omits optional deps unless the workflow uses
+  // `npm ci --include=optional`.
+  let puppeteer;
+  try {
+    ({ default: puppeteer } = await import('puppeteer'));
+  } catch (err) {
+    console.error('FATAL: puppeteer is not installed. Alert Notify must run `npm ci --include=optional` (puppeteer lives in optionalDependencies).', err && err.message ? err.message : err);
+    process.exit(1);
+  }
 
   const prevState = loadState();
   console.log('Previous alert state:', JSON.stringify(prevState));
