@@ -90,7 +90,21 @@ console.log('== book / implied / CVD / basis / traps ==');
 
   ok(W.hgLiveImpliedDailyPct(50) > 2 && W.hgLiveImpliedDailyPct(50) < 3, 'DVOL 50 → ~2.6% implied daily');
   const far = W.hgLiveImpliedMoveOk('long', 100, 110, 40);
-  ok(far.refuse === true && far.dropT1 === true, 'T1 beyond implied daily range refuses — no closer T1 is invented');
+  ok(far.refuse === true && far.dropT1 === true, 'T1 beyond implied daily range is marked refuse — no closer T1 is invented');
+  const swingHold = W.hgLiveFormationApply(
+    { dir: 'long', entry: 100, stop: 90, t1: 110 },
+    { dvol: 40 },
+    { a4: 2, style: 'swing' }
+  );
+  ok(swingHold.ok === true && swingHold.plan.t1 === 110,
+    'swing keeps a multi-day T1 when DVOL is a 1-day number — score demotes, levels stay');
+  const scalpFar = W.hgLiveFormationApply(
+    { dir: 'long', entry: 100, stop: 90, t1: 110 },
+    { dvol: 40 },
+    { a4: 2, style: 'scalp' }
+  );
+  ok(scalpFar.ok === false && scalpFar.tag === 'implied',
+    'scalp refuses a T1 the 1-day implied move cannot cover');
   const near = W.hgLiveImpliedMoveOk('long', 100, 101.5, 50);
   ok(near.refuse === false, 'T1 inside implied daily range is allowed');
   const dvolMiss = W.hgLiveImpliedMoveOk('long', 100, 110, null);

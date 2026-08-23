@@ -369,8 +369,11 @@ Classic script, IIFE. Never throws at load. Every helper is feature-checked.
         if (book.refuse) return { ok: false, plan: next, chips: chips, scoreDelta: 0, reason: book.detail, tag: 'book' };
 
         var implied = hgLiveImpliedMoveOk(dir, next.entry, next.t1, live.dvol);
-        if (implied.refuse){
+        if (implied.refuse && String(ctx.style || '') === 'scalp'){
           return { ok: false, plan: next, chips: chips, scoreDelta: 0, reason: implied.detail, tag: 'implied' };
+        }
+        if (implied.refuse){
+          chips.push('T1 beyond 1-day implied — swing hold');
         }
       }
 
