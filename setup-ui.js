@@ -186,6 +186,7 @@ var HG_MP_HOST = {
   gold: 'goldSetupOut', 'gold-setup': 'goldSetupOut',
   squeeze: 'sqCards', reversalsniper: 'rsCards',
   omnipresent: 'opCards', omniroute: 'omniCards', omnigold: 'ogCards',
+  omnibtc: 'obtcCards',
   oiflow: 'oiflowCards', carry: 'carryCards', termbasis: 'tbCards',
   venueprem: 'hgVenueCards', brain: 'brainCards', startrader: 'stCards',
   meanrev: 'mrCards', chartvision: 'cvCards', pine: 'pineOut',

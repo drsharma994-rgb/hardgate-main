@@ -56,7 +56,7 @@ const APP = read('app.js');
 
 const MARKET_SCAN_TABS = [
   'brain', 'trendmx', 'startrader',
-  'omnipresent', 'omniroute', 'best', 'swing', 'scalp', 'edge', 'smart',
+  'omnibtc', 'omnipresent', 'omniroute', 'best', 'swing', 'scalp', 'edge', 'smart',
   'squeeze', 'reversalsniper', 'smc', 'ob', 'trap', 'div', 'coil', 'apex',
   'oiflow', 'liqs', 'chartvision', 'carry', 'venueprem', 'termbasis',
   'super-gold', 'omnigold', 'goldswing', 'goldscalp', 'gold', 'goldpro',
@@ -71,6 +71,7 @@ const MODULE_FILE = {
   brain: 'brain.js',
   trendmx: 'trendtable.js',
   startrader: 'startradertab.js',
+  omnibtc: 'omnibtc.js',
   omnipresent: 'omnipresent.js',
   omniroute: 'omniroute.js',
   edge: 'edge.js',

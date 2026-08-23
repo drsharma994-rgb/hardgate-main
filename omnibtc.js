@@ -1,0 +1,543 @@
+/* =========================================================================
+HARDGATE — omnibtc.js
+OMNIBTC — Bitcoin only. Every house strategy and indicator bank is pointed
+at BTC, then the desk keeps ONE most-probable setup.
+
+WHY THIS TAB EXISTS. The rest of CRYPTO scans a universe. This tab answers
+a narrower question: given everything HARDGATE already knows how to read
+(SWING / SCALP / EDGE / PINE / squeeze / mean-reversion / sniper / structure
+plus the 20-gate indicator bank), what is the single most probable BTC
+setup right now?
+
+WHAT IT WILL NOT DO.
+  - It will not invent a new BTC strategy.
+  - It will not mint ENTRY / STOP / T1. Levels come from existing engines.
+  - It will not promote alts or gold. Non-BTC rows are dropped before rank.
+  - It will not use contract-report's "derived structure" fallback (that
+    path writes numbers when no engine produced a ticket).
+  - It will not loosen G1–G7.
+
+ONE SETUP. CLEAN with real levels wins. Else the best 6/7 NEAR (watch,
+not a ticket). Else WAIT. Standing aside is the position.
+
+VENUES. Delta BTCUSD and CoinDCX B-BTC_USDT when dual-scan is on (the
+house default). Both legs feed one pick — two venues, still one card.
+
+Classic script, IIFE. Never throws at load. Every engine is feature-checked.
+refresh() is async, never throws, and never launches a first-time scan on
+a global hard refresh.
+========================================================================= */
+'use strict';
+
+(function(){
+
+  var W = (typeof window !== 'undefined') ? window : globalThis;
+  var __obtc = { ui: null, busy: false, ran: false, snap: null, lastStat: '' };
+
+  function gfn(name){
+    return (W && typeof W[name] === 'function') ? W[name] : null;
+  }
+  function fin(v){
+    if (v === null || v === undefined || v === '') return NaN;
+    var n = +v;
+    return isFinite(n) ? n : NaN;
+  }
+  function esc(s){
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function hgObtcIsBtc(sym){
+    try{
+      var raw = String(sym || '');
+      var s = raw.replace(/^B-/, '').replace(/_/g, '');
+      if (gfn('hgIsBtcSymbol') && !W.hgIsBtcSymbol(raw)) return false;
+      return /^(BTCUSD|BTCUSDT)$/i.test(s);
+    }catch(e){ return false; }
+  }
+
+  function hgObtcFilterUniverse(items){
+    var out = [], i, it, sym, base;
+    if (!Array.isArray(items)) return out;
+    for (i = 0; i < items.length; i++){
+      it = items[i];
+      if (!it) continue;
+      sym = it.sym || it.symbol || '';
+      if (!hgObtcIsBtc(sym)) continue;
+      base = it.base != null ? String(it.base).toUpperCase() : '';
+      if (base && base !== 'BTC') continue;
+      out.push(it);
+    }
+    return out;
+  }
+
+  function isDerivedSource(src){
+    var s = String(src || '').toLowerCase();
+    if (s.indexOf('derived') < 0) return false;
+    return s.indexOf('structure') >= 0 || s.indexOf('no engine') >= 0;
+  }
+
+  function hgObtcHasLevels(row){
+    if (gfn('hgSetupHasLevels')) return W.hgSetupHasLevels(row);
+    if (!row) return false;
+    var e = fin(row.entry), s = fin(row.stop), t1 = fin(row.t1);
+    return isFinite(e) && e > 0 && isFinite(s) && s > 0 && e !== s && isFinite(t1) && t1 > 0;
+  }
+
+  function hgObtcCandidateFromSignal(r, ticker, opts){
+    opts = opts || {};
+    if (!r || typeof r !== 'object') return null;
+    var src = String(r.source || r.name || opts.engine || '');
+    if (isDerivedSource(src) || isDerivedSource(r.source)) return null;
+    var sym = String((ticker && (ticker.symbol || ticker.sym)) || r.sym || r.symbol || opts.sym || '');
+    if (!hgObtcIsBtc(sym)) return null;
+    var dir = String(r.dir || r.side || r.direction || '').toLowerCase();
+    if (dir === 'buy' || dir === 'l') dir = 'long';
+    if (dir === 'sell' || dir === 's') dir = 'short';
+    if (dir !== 'long' && dir !== 'short') return null;
+    var entry = fin(r.entry), stop = fin(r.stop), t1 = fin(r.t1);
+    if (!(isFinite(entry) && entry > 0 && isFinite(stop) && stop > 0 && entry !== stop && isFinite(t1) && t1 > 0))
+      return null;
+    var passed = fin(r.passed != null ? r.passed : r.gatesPassed);
+    var total = fin(r.total != null ? r.total : r.gatesTotal);
+    if (!isFinite(total) || total <= 0) total = 7;
+    var detail = String(r.detail || '');
+    var clean = !!(r.clean || (isFinite(passed) && passed >= 7) || /clean/i.test(detail));
+    var near = !clean && !!(r.near || r.nearClean || (isFinite(passed) && passed === 6));
+    var forming = !clean && !near && !!(r.forming || (isFinite(passed) && passed >= 5));
+    var t2 = fin(r.t2);
+    var risk = Math.abs(entry - stop);
+    var rr = fin(r.rr);
+    if (!isFinite(rr) && risk > 0) rr = Math.abs(t1 - entry) / risk;
+    var row = {
+      sym: sym,
+      dir: dir,
+      entry: entry,
+      stop: stop,
+      t1: t1,
+      venue: (ticker && (ticker.exchange || ticker.venue)) || r.venue || opts.venue || '',
+      rr: rr,
+      passed: isFinite(passed) ? passed : undefined,
+      gatesPassed: isFinite(passed) ? passed : undefined,
+      gatesTotal: total,
+      engine: src || 'engine',
+      strategy: src || 'engine',
+      clean: clean,
+      near: near,
+      nearClean: near,
+      forming: forming
+    };
+    if (isFinite(t2) && t2 > 0) row.t2 = t2;
+    if (clean){ row.near = false; row.nearClean = false; row.forming = false; }
+    return row;
+  }
+
+  function hgObtcCandidatesFromReport(report, ticker){
+    var out = [], i, j, sec, r, c;
+    if (!report) return out;
+    if (report.plan && report.plan.ok && !isDerivedSource(report.plan.source)){
+      c = hgObtcCandidateFromSignal(report.plan, ticker, { engine: report.plan.source });
+      if (c) out.push(c);
+    }
+    var sections = report.sections || [];
+    for (i = 0; i < sections.length; i++){
+      sec = sections[i];
+      if (!sec || !Array.isArray(sec.rows)) continue;
+      for (j = 0; j < sec.rows.length; j++){
+        r = sec.rows[j];
+        if (!r || r.state !== 'signal') continue;
+        c = hgObtcCandidateFromSignal(r, ticker, { engine: r.name });
+        if (c) out.push(c);
+      }
+    }
+    return out;
+  }
+
+  function hgObtcPick(cands){
+    var btc = [], i, n, raw;
+    for (i = 0; i < (cands || []).length; i++){
+      raw = cands[i];
+      n = gfn('hgNormalizeSetupRow') ? W.hgNormalizeSetupRow(raw) : (hgObtcHasLevels(raw) ? raw : null);
+      if (!n || !hgObtcIsBtc(n.sym) || !hgObtcHasLevels(n)) continue;
+      n.engine = raw.engine || raw.strategy || n.engine;
+      n.strategy = raw.strategy || raw.engine || n.strategy;
+      n.venue = raw.venue || n.venue;
+      n.passed = n.passed != null ? n.passed : raw.passed;
+      n.gatesPassed = n.gatesPassed != null ? n.gatesPassed : raw.gatesPassed;
+      n.gatesTotal = n.gatesTotal || raw.gatesTotal || 7;
+      btc.push(n);
+    }
+    if (!btc.length) return null;
+    var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
+    if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
+    pick.row.engine = pick.row.engine || btc[0].engine;
+    pick.row.strategy = pick.row.strategy || pick.row.engine;
+    return pick;
+  }
+
+  function hgObtcDefaultLegs(){
+    var dual = true;
+    try{ if (gfn('hgDualScanEnabled')) dual = !!W.hgDualScanEnabled(); }catch(e){}
+    var delta = { exchange: 'delta', sym: 'BTCUSD', base: 'BTC' };
+    var cdcx = { exchange: 'coindcx', sym: 'B-BTC_USDT', base: 'BTC' };
+    if (dual) return [delta, cdcx];
+    var ex = (W.S && W.S.exchange) || 'delta';
+    return ex === 'coindcx' ? [cdcx] : [delta];
+  }
+
+  function tickerOf(item){
+    return {
+      symbol: item.sym || item.symbol || 'BTCUSD',
+      fundingPct: item.fundingPct,
+      mark: item.mark,
+      exchange: item.exchange || item.venue || ''
+    };
+  }
+
+  async function hgObtcResolveLegs(){
+    var out = [];
+    if (gfn('xuUniverse')){
+      try{
+        var uni = await W.xuUniverse();
+        out = hgObtcFilterUniverse(uni);
+      }catch(e){ out = []; }
+    }
+    if (!out.length) out = hgObtcDefaultLegs();
+    return hgObtcFilterUniverse(out);
+  }
+
+  async function loadBars(item, tf, n){
+    if (gfn('xuCandles')){
+      try{
+        var rows = await W.xuCandles(item, tf, n);
+        if (Array.isArray(rows) && rows.length) return rows;
+      }catch(e){}
+    }
+    if (gfn('getCandles')){
+      try{
+        var g = await W.getCandles(item.sym || item.symbol, tf, n);
+        if (Array.isArray(g) && g.length) return g;
+      }catch(e2){}
+    }
+    return [];
+  }
+
+  function pushEngine(out, name, fn, ticker){
+    try{
+      var hit = fn();
+      if (!hit) return;
+      if (hit.dir && hit.entry != null && hit.t1 == null && hit.tp != null) hit.t1 = hit.tp;
+      var c = hgObtcCandidateFromSignal(hit, ticker, { engine: name });
+      if (c) out.push(c);
+    }catch(e){}
+  }
+
+  function hgObtcRunLocalEngines(rows4h, rows1h, rows15m, ticker){
+    var out = [];
+    var mins = 120;
+    try{ if (gfn('tickClock')) mins = W.tickClock(); }catch(e){}
+    if (gfn('swingTryClean'))
+      pushEngine(out, 'SWING clean plan', function(){ return W.swingTryClean(rows4h, ticker); }, ticker);
+    if (gfn('swingTryNear')){
+      try{
+        var near = W.swingTryNear(rows4h, ticker);
+        if (near){
+          near.nearClean = true;
+          if (near.passed == null) near.passed = 6;
+          var nc = hgObtcCandidateFromSignal(near, ticker, { engine: 'SWING near-clean watch' });
+          if (nc){ nc.clean = false; nc.near = true; nc.nearClean = true; out.push(nc); }
+        }
+      }catch(e2){}
+    }
+    if (gfn('scalpTryClean'))
+      pushEngine(out, 'SCALP clean plan', function(){ return W.scalpTryClean(rows1h, rows15m, ticker, mins); }, ticker);
+    if (gfn('edgeSignal'))
+      pushEngine(out, 'EDGE', function(){ return W.edgeSignal(rows4h); }, ticker);
+    if (gfn('mrSignal'))
+      pushEngine(out, 'MEAN REVERSION', function(){ return W.mrSignal(rows4h); }, ticker);
+    if (gfn('rsAssess'))
+      pushEngine(out, 'REVERSAL SNIPER', function(){ return W.rsAssess(rows4h, rows1h || rows4h, ticker); }, ticker);
+    if (gfn('liqFlushSetup'))
+      pushEngine(out, 'LIQUIDITY FLUSH', function(){ return W.liqFlushSetup(rows4h, ticker); }, ticker);
+    if (gfn('hgOmniEvaluate')){
+      try{
+        var omni = W.hgOmniEvaluate({
+          sym: ticker.symbol, base: 'BTC', exchange: ticker.exchange || 'delta'
+        }, rows4h, null, null);
+        if (Array.isArray(omni)){
+          omni.forEach(function(hit){
+            var plan = hit && (hit.plan || hit);
+            var c = hgObtcCandidateFromSignal(plan, ticker, { engine: (hit && hit.kind) || 'OMNIROUTE' });
+            if (c) out.push(c);
+          });
+        }
+      }catch(e3){}
+    }
+    return out;
+  }
+
+  function waitHtml(){
+    return '<div class="note" role="status">WAIT — no house engine produced a BTC ticket with real ENTRY / STOP / T1. '
+      + 'Standing aside is the position. Nothing was invented.</div>';
+  }
+
+  function detailHtml(pick){
+    if (!pick || !pick.row || !hgObtcHasLevels(pick.row)) return waitHtml();
+    var r = pick.row;
+    var tier = String(pick.tier || 'clean').toLowerCase();
+    var clean = tier === 'clean';
+    var html = '<div class="card" data-obtc-winner="1">';
+    html += '<div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap">';
+    html += '<div><b>' + esc(r.sym) + '</b> ' + esc(String(r.dir || '').toUpperCase());
+    html += '<div class="dim">' + esc(r.engine || r.strategy || 'engine');
+    if (r.venue) html += ' · ' + esc(String(r.venue).toUpperCase());
+    html += clean ? ' · ticket' : ' · watch only</div></div>';
+    if (gfn('hgBookStampChip')){
+      try{ html += W.hgBookStampChip(r.sym, r.dir, { scanner: 'omnibtc', strategy: r.engine }); }catch(e){}
+    }
+    html += '</div>';
+    if (gfn('hgStrategyTradeDetailHtml')){
+      try{ html += W.hgStrategyTradeDetailHtml(r, { scanner: 'omnibtc', kind: r.engine }); }catch(e2){}
+    }
+    if (clean){
+      html += '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">';
+      if (gfn('bookBtnHTML')){
+        try{
+          html += W.bookBtnHTML(r.sym, r.dir, r.entry, r.stop, r.t1, {
+            scanner: 'omnibtc', strategy: r.engine || 'omnibtc', venue: r.venue, t2: r.t2
+          });
+        }catch(e3){}
+      }
+      if (gfn('hgToTradePlanOnclickAttr')){
+        try{
+          html += '<button type="button" class="btn" onclick="'
+            + W.hgToTradePlanOnclickAttr(r.sym, r.dir, r.entry, r.stop, r.t1, {
+              scanner: 'omnibtc', strategy: r.engine, venue: r.venue, t2: r.t2
+            })
+            + '">SEND TO TRADE PLAN →</button>';
+        }catch(e4){}
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="note" style="margin-top:8px">Watch only — not trade-ready until a CLEAN engine ticket prints.</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function indicatorsHtml(indicators){
+    if (!indicators || !indicators.length){
+      return '<div class="note">No indicator bank ran — engines were missing or candles were too thin.</div>';
+    }
+    var html = '<div class="cr-ind-wrap">';
+    indicators.forEach(function(ind){
+      html += '<div class="kv"><span class="k">' + esc(ind.label) + '</span><span class="v">'
+        + esc(ind.value) + (ind.note ? ' <span class="dim">' + esc(ind.note) + '</span>' : '')
+        + '</span></div>';
+    });
+    return html + '</div>';
+  }
+
+  function ledgerHtml(report){
+    if (!report || !report.sections){
+      return '<div class="note">Engine ledger empty — contract-report.js did not run.</div>';
+    }
+    if (gfn('hgContractReportHTML')){
+      try{ return W.hgContractReportHTML(report); }catch(e){}
+    }
+    var html = '';
+    report.sections.forEach(function(sec){
+      html += '<h4 style="margin:12px 0 6px;letter-spacing:.06em">' + esc(sec.label || sec.id) + '</h4>';
+      (sec.rows || []).forEach(function(r){
+        html += '<div class="kv"><span class="k">' + esc(r.name) + '</span><span class="v">'
+          + esc(r.state || '—') + (r.dir ? ' · ' + esc(r.dir) : '')
+          + (r.detail ? ' · ' + esc(r.detail) : '')
+          + '</span></div>';
+      });
+    });
+    return html;
+  }
+
+  function paint(ui, snap){
+    if (!ui) return;
+    var pick = snap && snap.pick;
+    if (ui.stat){
+      ui.stat.textContent = snap && snap.stat ? snap.stat : '';
+    }
+    if (ui.cards){
+      ui.cards.innerHTML = '';
+      if (pick && hgObtcHasLevels(pick.row)){
+        if (gfn('hgPinMostProbablePanel')) W.hgPinMostProbablePanel(ui.cards, 'omnibtc', pick);
+        else if (gfn('hgMpPin')) W.hgMpPin('omnibtc', [pick.row], pick.row.dir, ui.cards);
+        else if (gfn('hgMostProbablePanelHTML')) ui.cards.innerHTML = W.hgMostProbablePanelHTML('omnibtc', pick);
+      }
+    }
+    if (ui.detail) ui.detail.innerHTML = pick ? detailHtml(pick) : waitHtml();
+    if (ui.ind) ui.ind.innerHTML = indicatorsHtml(snap && snap.indicators);
+    if (ui.ledger) ui.ledger.innerHTML = ledgerHtml(snap && snap.report);
+  }
+
+  function setStat(ui, msg){
+    __obtc.lastStat = msg;
+    if (ui && ui.stat) ui.stat.textContent = msg;
+  }
+
+  async function hgObtcRunScan(ui){
+    ui = ui || __obtc.ui;
+    if (!ui) return 'no ui';
+    if (__obtc.busy) return 'busy';
+    __obtc.busy = true;
+    if (ui.btn) ui.btn.disabled = true;
+    setStat(ui, 'scanning BTC…');
+    try{
+      var legs = await hgObtcResolveLegs();
+      legs = hgObtcFilterUniverse(legs);
+      if (!legs.length){
+        var snap0 = { pick: null, legs: [], candidates: [], stat: 'no BTC contract on the venue', indicators: [], report: null };
+        __obtc.snap = snap0;
+        __obtc.ran = true;
+        paint(ui, snap0);
+        setStat(ui, snap0.stat);
+        return snap0.stat;
+      }
+      var all = [];
+      var reports = [];
+      var indicators = [];
+      var winnerRows = null;
+      var i, item, tk, r4, r1, r15, cands, rep;
+      for (i = 0; i < legs.length; i++){
+        item = legs[i];
+        if (!hgObtcIsBtc(item.sym || item.symbol)) continue;
+        tk = tickerOf(item);
+        r4 = await loadBars(item, '4h', 220);
+        r1 = await loadBars(item, '1h', 180);
+        r15 = await loadBars(item, '15m', 180);
+        if (gfn('hgContractReportRun')){
+          try{
+            rep = W.hgContractReportRun({
+              sym: tk.symbol, venue: tk.exchange, ticker: tk,
+              rows4h: r4, rows1h: r1, rows15m: r15
+            });
+            reports.push(rep);
+            cands = hgObtcCandidatesFromReport(rep, tk);
+            if (rep.indicators && rep.indicators.length && !indicators.length) indicators = rep.indicators;
+          }catch(eRep){
+            rep = null;
+            cands = [];
+          }
+        } else {
+          rep = null;
+          cands = [];
+        }
+        cands = cands.concat(hgObtcRunLocalEngines(r4, r1, r15, tk));
+        cands.forEach(function(c){ c._rows = r4; c._ticker = tk; });
+        all = all.concat(cands);
+      }
+      var pick = hgObtcPick(all);
+      if (pick && pick.row){
+        var match = all.filter(function(c){
+          return c.sym === pick.row.sym && c.dir === pick.row.dir
+            && c.entry === pick.row.entry && c.stop === pick.row.stop;
+        })[0];
+        winnerRows = match && match._rows;
+        if (gfn('hgStrategyRefine') && winnerRows && winnerRows.length){
+          try{
+            W.hgStrategyRefine(pick.row, winnerRows, {
+              scanner: 'omnibtc', kind: pick.row.engine || 'setup'
+            });
+          }catch(eRef){}
+        }
+      }
+      var winRep = null;
+      if (pick && reports.length){
+        winRep = reports.filter(function(r){ return r && hgObtcIsBtc(r.sym) && r.sym === pick.row.sym; })[0] || reports[0];
+        if (winRep && winRep.indicators) indicators = winRep.indicators;
+      }
+      var nClean = all.filter(function(c){ return c.clean; }).length;
+      var stat = pick
+        ? ('BTC · ' + legs.length + ' venue' + (legs.length === 1 ? '' : 's')
+          + ' · ' + all.length + ' levelled read' + (all.length === 1 ? '' : 's')
+          + ' · ' + nClean + ' CLEAN · one MOST PROBABLE')
+        : ('BTC · ' + legs.length + ' venue' + (legs.length === 1 ? '' : 's')
+          + ' · no engine produced a ticket — WAIT');
+      var snap = {
+        pick: pick,
+        legs: legs,
+        candidates: all.map(function(c){
+          return { sym: c.sym, dir: c.dir, entry: c.entry, stop: c.stop, t1: c.t1, engine: c.engine, clean: !!c.clean, near: !!c.near };
+        }),
+        stat: stat,
+        indicators: indicators,
+        report: winRep
+      };
+      __obtc.snap = snap;
+      __obtc.ran = true;
+      paint(ui, snap);
+      setStat(ui, stat);
+      return stat;
+    }catch(e){
+      var fail = 'scan failed — nothing invented';
+      setStat(ui, fail);
+      if (ui.detail) ui.detail.innerHTML = waitHtml();
+      return fail;
+    }finally{
+      __obtc.busy = false;
+      if (ui.btn) ui.btn.disabled = false;
+    }
+  }
+
+  function mountOmnibtc(el){
+    if (!el) return;
+    el.innerHTML =
+      '<div class="panel">'
+      + '<h2>OMNIBTC — Bitcoin only <span>every house strategy + indicator bank · one MOST PROBABLE setup</span></h2>'
+      + '<div class="note" style="margin-bottom:10px">BTC is the whole universe. SWING, SCALP, EDGE, PINE, squeeze, '
+      + 'mean-reversion, sniper, liquidity and the 20-gate indicator bank all read the same coin on Delta and CoinDCX. '
+      + 'The desk then keeps <b>one</b> setup: CLEAN with real ENTRY / STOP / T1 wins; otherwise the nearest 6/7 watch; '
+      + 'otherwise WAIT. Levels come from existing engines — this tab will never invent a ticket. G1–G7 stay as they are.</div>'
+      + '<div class="note" id="obtcStat" aria-live="polite">idle — press SCAN BTC.</div>'
+      + '<div class="row" style="margin-top:8px"><button type="button" class="btn" id="obtcRun">SCAN BTC</button></div>'
+      + '<div class="cards" id="obtcCards" style="margin-top:12px"></div>'
+      + '<div id="obtcDetail" style="margin-top:12px"></div>'
+      + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">INDICATOR BANK</h3>'
+      + '<div id="obtcInd" class="note">Run a scan to read BTC.</div>'
+      + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">STRATEGY LEDGER</h3>'
+      + '<div id="obtcLedger" class="note">Every engine that ran — including the ones that said nothing.</div>'
+      + '</div>';
+    var ui = {
+      btn: el.querySelector('#obtcRun'),
+      stat: el.querySelector('#obtcStat'),
+      cards: el.querySelector('#obtcCards'),
+      detail: el.querySelector('#obtcDetail'),
+      ind: el.querySelector('#obtcInd'),
+      ledger: el.querySelector('#obtcLedger')
+    };
+    if (!ui.btn || !ui.stat || !ui.cards) return;
+    __obtc.ui = ui;
+    ui.btn.addEventListener('click', function(){ return hgObtcRunScan(ui); });
+    if (__obtc.snap) paint(ui, __obtc.snap);
+  }
+
+  function refreshOmnibtc(){
+    return Promise.resolve().then(function(){
+      if (__obtc.busy) return 'busy';
+      if (!__obtc.ran) return 'skipped: not run yet';
+      var ui = __obtc.ui;
+      if (ui) return hgObtcRunScan(ui).then(function(){ return __obtc.lastStat || 'rescanned'; });
+      return __obtc.lastStat || 'no ui mounted';
+    }).catch(function(){ return 'refresh failed'; });
+  }
+
+  W.hgObtcIsBtc = hgObtcIsBtc;
+  W.hgObtcFilterUniverse = hgObtcFilterUniverse;
+  W.hgObtcCandidateFromSignal = hgObtcCandidateFromSignal;
+  W.hgObtcCandidatesFromReport = hgObtcCandidatesFromReport;
+  W.hgObtcPick = hgObtcPick;
+  W.hgObtcDefaultLegs = hgObtcDefaultLegs;
+  W.hgObtcRunScan = hgObtcRunScan;
+  W.hgObtcState = function(){
+    try{ return __obtc.snap ? JSON.parse(JSON.stringify(__obtc.snap)) : null; }catch(e){ return null; }
+  };
+  W.HG_tabs = W.HG_tabs || [];
+  W.HG_tabs.push({ id: 'omnibtc', label: 'OMNIBTC', mount: mountOmnibtc, refresh: refreshOmnibtc });
+})();

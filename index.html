@@ -769,6 +769,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="omnipresent.js?v=448"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
+<!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
+<script src="omnibtc.js?v=448"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -2829,7 +2831,7 @@ async function runObScanLeg(opts){
    gold lane → conviction desks / pine / lab → utilities. */
 const HG_NAV_GROUPS = [
   { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
-  { id:'crypto',     label:'CRYPTO',   tabs:['omnipresent','omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['omnibtc','omnipresent','omniroute','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
   { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
   { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
   { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
@@ -3252,6 +3254,21 @@ const HG_TAB_AUTO_SCAN = {
     const runBtn = pane && pane.querySelector('#opRun');
     if (runBtn && !runBtn.disabled) runBtn.click();
   },
+  omnibtc: async function(){
+    const pane = document.getElementById('tab_omnibtc');
+    const runBtn = pane && pane.querySelector('#obtcRun');
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.omnibtc : null;
+    if (mod && typeof mod.refresh === 'function'){
+      const st = await mod.refresh();
+      const sl = String(st || '').toLowerCase();
+      if (sl.indexOf('skipped: not run yet') === 0){
+        if (runBtn && !runBtn.disabled) runBtn.click();
+        return 'refreshed';
+      }
+      return st || 'refreshed';
+    }
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
   book: async function(){
     if (typeof superBookRefresh === 'function') await superBookRefresh();
     else if (typeof bookRefresh === 'function') await bookRefresh();
@@ -3276,7 +3293,8 @@ const HG_SCAN_RUN_BTN = {
   'pine-nw': '#pineNwRun',
   'pine-avwap': '#pineAvwapRun',
   omniroute: '#omniRun',
-  omnipresent: '#opRun'
+  omnipresent: '#opRun',
+  omnibtc: '#obtcRun'
 };
 function hgCollectAllScanTabIds(){
   const seen = {};
