@@ -139,9 +139,14 @@ console.log('\n== 3. one puppeteer version, and a pinned runtime ==');
   const pup = (PKG.optionalDependencies || {}).puppeteer || (PKG.dependencies || {}).puppeteer;
   ok(/\^?2[5-9]|\^?[3-9]\d/.test(pup), 'package.json is on puppeteer 25 or newer (' + pup + ')');
   const wf = read('.github/workflows/alert-notify.yml');
-  const m = /npm install puppeteer@(\d+)/.exec(wf);
-  ok(!!m, 'the workflow installs puppeteer');
-  ok(Number(m[1]) >= 25, 'at the same major as package.json (@' + m[1] + ') — it was @23');
+  ok(/npm ci --include=optional/.test(wf),
+     'Alert Notify uses npm ci --include=optional so optional puppeteer lands');
+  ok(/npx puppeteer browsers install chrome/.test(wf),
+     'and installs Chrome after the package, same as Render');
+  ok(/import\('puppeteer'\)/.test(wf),
+     'and verifies the import before launching the site check');
+  ok(!/npm install puppeteer@\d+/.test(wf),
+     'bare `npm install puppeteer@N` is gone — GHA omit=optional left the package missing');
   ok(!/">=18"/.test(JSON.stringify(PKG.engines)), 'engines no longer accepts any future major');
   ok(/<\s*\d/.test(PKG.engines.node), 'it has an upper bound (' + PKG.engines.node + ')');
   const pins = [...RENDER.matchAll(/key: NODE_VERSION\s*\r?\n\s*value: "([^"]+)"/g)].map(x => x[1]);
