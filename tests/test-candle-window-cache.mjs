@@ -158,6 +158,51 @@ function assert(cond, msg){
     'the cache key carries the venue explicitly, so a dual scan cannot collide');
 }
 
+/* ---------- 6) a deploy must not leave a MIXED bundle in the browser ----------
+
+   index.html and sw.js were served no-cache; every other asset was
+   public, max-age=300. Only seventeen script tags carry a ?v= buster, so for
+   five minutes after a release a browser could hold the NEW index.html and an
+   OLD binance.js at once — a combination that exists in no commit and was
+   never tested as a whole. On a desk that prices trades off those modules
+   that is a correctness hazard, not a staleness one.
+
+   Observed while verifying v460: curl got hg-v460 from the server while the
+   page reported hg-v459 across two reloads, having pinned the unversioned
+   files. It cost two wasted measurements before I checked the headers.
+
+   no-cache is not "do not cache": the browser still stores the file and still
+   revalidates, so an unchanged asset returns 304 with no body. The versioned
+   service-worker shell remains the real offline cache, and it swaps
+   atomically rather than file by file. */
+{
+  const srv = fs.readFileSync(path.join(root, 'scripts', 'server.mjs'), 'utf8');
+
+  /* Strip comments first — the comment above the fix QUOTES the old header
+     while explaining it, and the first cut flagged its own prose. Exactly the
+     trap test-venue-symbol-mapping hit, and the connect-src reader before
+     that: prose about a defect is not the defect. */
+  const srvCode = srv.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const maxAge = (srvCode.match(/public,\s*max-age=\d+/g) || []);
+  assert(maxAge.length === 0,
+    'no static asset is pinned with a max-age lifetime' +
+      (maxAge.length ? ' — found: ' + maxAge.join(', ') : ''));
+
+  assert(/res\.setHeader\('Cache-Control', 'no-cache'\)/.test(srv),
+    'static assets are served no-cache so every load revalidates');
+
+  /* the API routes must stay no-STORE — revalidation is not good enough for
+     a response that carries live account or market state */
+  const noStore = (srv.match(/'Cache-Control', 'no-store'/g) || []).length;
+  assert(noStore >= 4,
+    'the API routes keep no-store, which is stronger than no-cache (found ' + noStore + ')');
+
+  /* and the version stamp itself must be reachable fresh, or check:prod and
+     the in-app freshness chip both read a stale number */
+  assert(srv.indexOf("'no-store'") < srv.lastIndexOf("'no-cache'"),
+    'both directives are present — the split between API and assets is intact');
+}
+
 console.log(String.fromCharCode(10) + pass + ' passed, ' + fail + ' failed');
 if (fail > 0) process.exit(1);
 console.log('ALL CANDLE WINDOW CACHE TESTS PASSED');

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v460',
-  pack: 'serve stale rather than refuse',
-  built: '2026-08-23T09:00:00Z',
-  note: 'With attribution finally in place the Delta 429s were named: 108 of 119 failures were THIS proxy refusing its own traffic on a cold cache, not Delta refusing us. The cache empties on every deploy, so the load right after a release is when the bucket saturates. The proxy already served stale when the upstream failed; it now does the same when the rejection is its own. A candle slightly past its TTL beats a 429.'
+  version: 'hg-v461',
+  pack: 'no mixed bundles after a deploy',
+  built: '2026-08-23T10:20:00Z',
+  note: 'index.html and sw.js were no-cache but every other asset was public max-age=300, and only seventeen script tags carry a ?v= buster. For five minutes after a release a browser could hold the new index.html and an old binance.js at once — a bundle that exists in no commit. Caught live: the server served hg-v460 while the page reported hg-v459 across two reloads. Assets revalidate now; unchanged files still return 304 with no body.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -222,8 +222,27 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
     /* the service worker + entry html must always revalidate; everything else
        gets a short cache, mirroring the proxy's s-maxage spirit */
-    res.setHeader('Cache-Control',
-      (ext === '.html' || p.endsWith('/sw.js')) ? 'no-cache' : 'public, max-age=300');
+    /* A MIXED BUNDLE IS WORSE THAN A SLOW ONE.
+
+       index.html and sw.js were no-cache; every other asset was
+       public, max-age=300. Only seventeen script tags carry a ?v= buster, so
+       for five minutes after a release a browser could hold the NEW index.html
+       and an OLD binance.js at the same time — a bundle that never existed in
+       any commit and was never tested as a whole. On a desk that prices trades
+       off those modules, that is a correctness hazard, not a staleness one.
+
+       Observed while verifying v460: the server served hg-v460 to curl while
+       the page reported hg-v459 across two reloads, having pinned the
+       unversioned files.
+
+       no-cache does NOT mean no caching. The browser still stores the file and
+       still revalidates with If-None-Match; an unchanged asset comes back 304
+       with no body, so the cost is one conditional request per asset per load
+       and the bytes are saved exactly as before. The service worker continues
+       to serve the offline shell, which is where real offline caching belongs
+       — and its HG_CACHE is versioned, so it swaps atomically rather than
+       file by file. */
+    res.setHeader('Cache-Control', 'no-cache');
     fs.createReadStream(file).pipe(res);
   }catch(e){
     try{ res.statusCode = 500; res.end('server error'); }catch(e2){}
