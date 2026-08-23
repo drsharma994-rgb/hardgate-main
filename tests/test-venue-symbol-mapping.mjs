@@ -149,24 +149,29 @@ function assert(cond, msg){
   ctx.asked = asked;
   vm.runInContext(fs.readFileSync(root + 'binance.js', 'utf8'), ctx, { filename: 'binance.js' });
 
-  const before = asked.length;
+  /* count KLINE requests, not all requests: binanceKlines also consults
+     exchangeInfo now for the 1000x resolver, and counting that would make
+     these assertions measure the wrong thing. */
+  const klines = function(){ return asked.filter(function(u){ return /\/klines/.test(u); }).length; };
+
+  const before = klines();
   const r = await ctx.binanceKlines('B-ETH_USDT', '4h', 120);
   assert(Array.isArray(r) && r.length === 0,
     'a CoinDCX code yields [] — the same honest empty every other failure returns');
-  assert(asked.length === before,
-    'and costs ZERO requests: the 400 -1121 is never provoked (got ' + (asked.length - before) + ')');
+  assert(klines() === before,
+    'and costs ZERO requests: the 400 -1121 is never provoked (got ' + (klines() - before) + ')');
 
   await ctx.binanceKlines('b-btc_usdt', '4h', 120);
-  assert(asked.length === before, 'the guard is case-insensitive');
+  assert(klines() === before, 'the guard is case-insensitive');
 
   /* it must be NARROW. Binance really does ship dated contracts with an
      underscore — BTCUSDT_260925 and friends were live when this was written —
      so a blanket underscore ban would silently kill real data. */
   await ctx.binanceKlines('BTCUSDT_260925', '4h', 120);
-  assert(asked.length === before + 1,
+  assert(klines() === before + 1,
     "Binance's own dated contract BTCUSDT_260925 is NOT blocked");
   await ctx.binanceKlines('BTCUSDT', '4h', 120);
-  assert(asked.length === before + 2, 'and an ordinary perp symbol is untouched');
+  assert(klines() === before + 2, 'and an ordinary perp symbol is untouched');
 }
 
 /* ---------- 5) the indirection that hid from the sweep is closed ---------- */
@@ -178,6 +183,63 @@ function assert(cond, msg){
     'klineRows takes the row so it can map the symbol itself');
   assert(/klineRows[\s\S]{0,400}brainBinanceSym/.test(src),
     'and it maps through the shared helper before asking Binance');
+}
+
+/* ---------- 6) the 1000x denomination, and the trap in fixing it ----------
+
+   After the venue codes were gone, the remaining fapi klines 400s on a cold
+   load were all one symbol: SHIBUSDT, answered 400 -1121 "Invalid symbol".
+   Binance denominates cheap tokens in 1000x contracts — 1000SHIBUSDT — and
+   fifteen listings are affected. For all fifteen the bare form does not exist,
+   so the rewrite is unambiguous.
+
+   THE TRAP: the obvious implementation checks membership and refuses on
+   absence. binancePerpUniverse() filters to contractType PERPETUAL, and
+   XAUUSDT is TRADIFI_PERPETUAL — real, tradeable, and absent from that list.
+   Refusing on absence would have silently killed gold. These assert the
+   rewrite AND that it never refuses. */
+{
+  const asked = [];
+  const ctx = vm.createContext(Object.assign(Object.create(null), {
+    console, setTimeout, clearTimeout, AbortController, Promise, Date, Math, JSON,
+    window: {},
+    fetch: function(u){
+      const s2 = String(u);
+      asked.push(s2);
+      if (s2.indexOf('exchangeInfo') >= 0){
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ symbols: [
+          { symbol: 'BTCUSDT',      quoteAsset: 'USDT', contractType: 'PERPETUAL', status: 'TRADING' },
+          { symbol: '1000SHIBUSDT', quoteAsset: 'USDT', contractType: 'PERPETUAL', status: 'TRADING' },
+          { symbol: '1000PEPEUSDT', quoteAsset: 'USDT', contractType: 'PERPETUAL', status: 'TRADING' }
+          /* XAUUSDT deliberately absent: it is TRADIFI_PERPETUAL in reality */
+        ]}) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+    }
+  }));
+  vm.runInContext(fs.readFileSync(root + 'binance.js', 'utf8'), ctx, { filename: 'binance.js' });
+
+  const symOf = function(u){ const m = u.match(/symbol=([A-Za-z0-9_]+)/); return m ? m[1] : null; };
+  const klineSyms = function(){ return asked.filter(function(u){ return /\/klines/.test(u); }).map(symOf); };
+
+  await ctx.binanceKlines('SHIBUSDT', '4h', 5);
+  assert(klineSyms().indexOf('1000SHIBUSDT') >= 0,
+    'SHIBUSDT is rewritten to the contract that exists, 1000SHIBUSDT');
+  assert(klineSyms().indexOf('SHIBUSDT') < 0,
+    'and the non-existent bare form is never requested');
+
+  await ctx.binanceKlines('BTCUSDT', '4h', 5);
+  assert(klineSyms().indexOf('BTCUSDT') >= 0, 'a symbol that exists passes through untouched');
+
+  /* THE GOLD TRAP: absent from the PERPETUAL universe, must still be asked */
+  await ctx.binanceKlines('XAUUSDT', '4h', 5);
+  assert(klineSyms().indexOf('XAUUSDT') >= 0,
+    'XAUUSDT is absent from the perp universe and is STILL requested — the resolver never refuses');
+
+  /* already-1000 symbols must not become 10001000... */
+  await ctx.binanceKlines('1000PEPEUSDT', '4h', 5);
+  assert(klineSyms().indexOf('1000PEPEUSDT') >= 0 && klineSyms().every(function(x){ return !/^10001000/.test(x || ''); }),
+    'an already-1000 symbol is left alone, never double-prefixed');
 }
 
 console.log(String.fromCharCode(10) + pass + ' passed, ' + fail + ' failed');

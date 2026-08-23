@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v454',
-  pack: 'stop retrying into a full limiter',
-  built: '2026-08-23T00:40:00Z',
-  note: 'Half the Delta 429s on a cold load were the desk retrying its own rejected request 400ms later, into a bucket with a 60-second window — 387 of 406 rejected URLs asked exactly twice. The proxy now sends Retry-After computed from the real remaining window and the client stops spending a request it knows will fail. The ceiling was NOT raised: demand is already at Delta published 2000 units a minute.'
+  version: 'hg-v455',
+  pack: 'Binance 1000x contracts',
+  built: '2026-08-23T02:10:00Z',
+  note: 'The last fapi klines 400s on a cold load were all SHIBUSDT — a contract that does not exist. Binance denominates fifteen cheap tokens in 1000x form and SHIB is 1000SHIBUSDT. The resolver rewrites only when the bare symbol is absent and the 1000 form is present, and never refuses an unknown symbol: XAUUSDT is TRADIFI_PERPETUAL and absent from the perp universe, so a membership check that rejected on absence would have silently killed gold.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

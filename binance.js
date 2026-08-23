@@ -190,10 +190,45 @@ function __binForeignSymbol(symbol){
   return /^B-/i.test(String(symbol || ''));
 }
 
+/* BINANCE DENOMINATES CHEAP TOKENS IN 1000x CONTRACTS.
+
+   Mapping a base asset to <BASE>USDT is right for almost everything and wrong
+   for fifteen listings: SHIB trades as 1000SHIBUSDT, and so do PEPE, FLOKI,
+   BONK, LUNC, XEC, SATS, RATS, CAT and friends. Measured on a cold load after
+   the venue-code fix landed, the remaining fapi klines 400s were all one
+   symbol — SHIBUSDT — answered 400 -1121 "Invalid symbol", because that
+   contract simply does not exist.
+
+   Verified against live exchangeInfo: for all fifteen the BARE form does not
+   exist at all, so the rewrite is unambiguous rather than a preference
+   between two live contracts.
+
+   PURELY ADDITIVE, AND THAT IS DELIBERATE. It rewrites only when the bare
+   symbol is absent AND the 1000 form is present; in every other case the
+   symbol passes through untouched. It must never refuse an unknown symbol:
+   binancePerpUniverse() filters to contractType PERPETUAL, and XAUUSDT is
+   TRADIFI_PERPETUAL — absent from that list while being perfectly real. A
+   membership check that rejected on absence would have silently killed gold.
+   An unavailable universe likewise changes nothing. */
+async function __binResolveSymbol(symbol){
+  try{
+    var sym = String(symbol || '').toUpperCase();
+    if (!sym || /^1000/.test(sym)) return sym;
+    if (typeof binancePerpUniverse !== 'function') return sym;
+    var list = await binancePerpUniverse();
+    if (!Array.isArray(list) || !list.length) return sym;   /* unknown -> unchanged */
+    var have = {};
+    for (var i = 0; i < list.length; i++) have[String(list[i]).toUpperCase()] = true;
+    if (have[sym]) return sym;
+    return have['1000' + sym] ? ('1000' + sym) : sym;
+  }catch(e){ return String(symbol || '').toUpperCase(); }
+}
+
 async function binanceKlines(symbol, interval, limit){
   try{
     if (!symbol) return [];
     if (__binForeignSymbol(symbol)) return [];   /* venue code, not a Binance symbol */
+    symbol = await __binResolveSymbol(symbol);  /* SHIBUSDT -> 1000SHIBUSDT where that is the real contract */
     interval = interval || '1h';
     limit = Math.max(1, Math.min(1500, limit || 500));
     const key = 'klines|' + symbol + '|' + interval + '|' + limit;
