@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v456',
-  pack: 'a cacheable candle window',
-  built: '2026-08-23T03:30:00Z',
-  note: 'Candle URLs carried end=nowSec(), so every request was a unique URL and three cache layers were defeated at once — the proxy cache, the v431 in-flight coalescing, and the browser. Measured 2,900 Delta requests for 393 distinct symbol+timeframe reads, a 7x amplification. The window is floored to the minute so identical reads share a URL, and Delta candles finally have a proxy TTL. No symbol dropped, no timeframe dropped: every removed request was a duplicate.'
+  version: 'hg-v457',
+  pack: 'nine callers walked past the candle cache',
+  built: '2026-08-23T05:00:00Z',
+  note: 'getCandles always had a cache keyed by exchange+symbol+resolution+count, but it keyed on ambient S.exchange, so the single-symbol evaluators that take an explicit venue could not use it — nine call sites fetched directly instead. The cache takes the venue as a parameter now and every caller goes through it. Correction on the record: the earlier 7x amplification figure was measured while my own probes were hammering the API; clean re-measurement is 1.8x, so most Delta demand is genuine.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

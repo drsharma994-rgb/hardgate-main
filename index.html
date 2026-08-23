@@ -291,8 +291,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=456"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=456"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=457"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=457"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -789,7 +789,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=456"></script>
+<script src="./hg-plan.js?v=457"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -821,12 +821,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=456"></script>
-<script src="./hg-gates.js?v=456"></script>
-<script src="omniroute.js?v=456"></script>
+<script src="hg-mechanics.js?v=457"></script>
+<script src="./hg-gates.js?v=457"></script>
+<script src="omniroute.js?v=457"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=456"></script>
+<script src="edge.js?v=457"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -842,13 +842,13 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=456"></script>
+<script src="omnigold.js?v=457"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=456"></script>
+<script src="omnipresent.js?v=457"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=456"></script>
+<script src="omnibtc.js?v=457"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -873,14 +873,14 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=456"></script>
+<script src="supersetup.js?v=457"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=456"></script>
-<script src="super-gold.js?v=456"></script>
-<script src="super-best.js?v=456"></script>
-<script src="super-sniper.js?v=456"></script>
-<script src="super-book.js?v=456"></script>
-<script src="super-calibrate.js?v=456"></script>
+<script src="super-desk-common.js?v=457"></script>
+<script src="super-gold.js?v=457"></script>
+<script src="super-best.js?v=457"></script>
+<script src="super-sniper.js?v=457"></script>
+<script src="super-book.js?v=457"></script>
+<script src="super-calibrate.js?v=457"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>
@@ -1517,20 +1517,38 @@ function hgBarIsForming(rows, res){
   if (!rows || !rows.length || !sec) return false;
   return (nowSec() - rows[rows.length-1].t < sec);
 }
-async function getCandles(sym, res, count, opts){
+/* THE CACHE WAS ALWAYS HERE. SIX CALLERS WALKED PAST IT.
+
+   getCandles keys on S.exchange, so the single-symbol evaluators — which take
+   an explicit `exch` that may be the OTHER venue during a dual scan — could
+   not use it and called candlesDelta / candlesCdcx directly instead. Every one
+   of those reads re-fetched a series another scan had just fetched.
+
+   Measured on a cold production load, after the URL was made stable in v456:
+   605 Delta candle requests for 336 distinct (symbol, timeframe) pairs — 1.8x,
+   and the bypassing callers ask for exactly the mix the failures showed
+   (4h 260, 1h 120/200, 15m 160/200, 1d 60).
+
+   So the cache becomes venue-aware and getCandles delegates to it. Same TTL,
+   same shape, same stored-both-ways behaviour; the only change is that the
+   venue is a parameter instead of ambient state. */
+async function getCandlesFor(exch, sym, res, count, opts){
   opts = opts || {};
   const ttl = hgCandleCacheTtl(opts);
-  const key = `${S.exchange}|${sym}|${res}|${count}|${opts.forming ? 'F' : 'C'}`;
+  const key = `${exch}|${sym}|${res}|${count}|${opts.forming ? 'F' : 'C'}`;
   const hit = S.candleCache[key];
   if (hit && (nowSec()-hit.at) < ttl) return hit.rows;
-  let raw = S.exchange==='delta' ? await candlesDelta(sym,res,count)
-    : (S.exchange==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
+  let raw = exch==='delta' ? await candlesDelta(sym,res,count)
+    : (exch==='startrader' ? await candlesStartrader(sym,res,count) : await candlesCdcx(sym,res,count));
   const closed = dropForming(raw, res);
   const out = opts.forming ? raw : closed;
   S.candleCache[key] = {rows: out, at: nowSec()};
-  S.candleCache[`${S.exchange}|${sym}|${res}|${count}|C`] = { rows: closed, at: nowSec() };
-  S.candleCache[`${S.exchange}|${sym}|${res}|${count}|F`] = { rows: raw, at: nowSec() };
+  S.candleCache[`${exch}|${sym}|${res}|${count}|C`] = { rows: closed, at: nowSec() };
+  S.candleCache[`${exch}|${sym}|${res}|${count}|F`] = { rows: raw, at: nowSec() };
   return out;
+}
+async function getCandles(sym, res, count, opts){
+  return getCandlesFor(S.exchange, sym, res, count, opts);
 }
 
 /* Busy-bounce killer (v53): the alert cycle can hold S.alertBusy for minutes;
@@ -2066,7 +2084,7 @@ async function runBasisScan(){
       const dT = dMap[b];
       const cSym = cByBase[b][0].symbol;
       try{
-        const rows = await candlesCdcx(cSym,"15m",3);
+        const rows = await getCandlesFor('coindcx', cSym, "15m", 3);
         if (!rows.length) continue;
         const cPrice = rows[rows.length-1].c;
         if (!isFinite(dT.mark) || !isFinite(cPrice) || cPrice<=0) continue;
@@ -7973,7 +7991,7 @@ async function runSearch(){
     const cPrices={};
     for (let i=0;i<cCap.length;i++){
       const sym=cCap[i].symbol;
-      try{ const rows=await candlesCdcx(sym,'15m',3); cPrices[sym]= rows.length? rows[rows.length-1].c : null; }
+      try{ const rows=await getCandlesFor('coindcx', sym,'15m',3); cPrices[sym]= rows.length? rows[rows.length-1].c : null; }
       catch(e){ cPrices[sym]=null; }
       setProg('searchProg', 0.55 + (i+1)/Math.max(1,cCap.length)*0.4);
     }
@@ -8428,7 +8446,7 @@ async function findTickerForBase(base){
 }
 
 async function evalSwingSingle(sym, exch){
-  const rows = dropForming(exch==='delta' ? await candlesDelta(sym,'4h',260) : await candlesCdcx(sym,'4h',260), '4h');
+  const rows = await getCandlesFor(exch, sym, '4h', 260);
   if (rows.length<210) return {error:'not enough 4H history'};
   const c=rows.map(r=>r.c);
   const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50)), e200=last(ema(c,200));
@@ -8474,7 +8492,7 @@ async function evalSwingSingle(sym, exch){
 }
 
 async function evalScalpSingle(sym, exch, tickerFundingPct, minsToFunding){
-  const h1 = dropForming(exch==='delta' ? await candlesDelta(sym,'1h',120) : await candlesCdcx(sym,'1h',120), '1h');
+  const h1 = await getCandlesFor(exch, sym, '1h', 120);
   if (h1.length<60) return {error:'not enough 1H history'};
   const c1=h1.map(r=>r.c);
   const e9h=last(ema(c1,9)), e21h=last(ema(c1,21)), e50h=last(ema(c1,50));
@@ -8482,7 +8500,7 @@ async function evalScalpSingle(sym, exch, tickerFundingPct, minsToFunding){
   const g=[];
   g.push(['G1','1H trend', dir?'pass':'veto', dir?dir.toUpperCase():'no clean 1H trend']);
   if (!dir) return {gates:g, veto:true};
-  const m15 = dropForming(exch==='delta' ? await candlesDelta(sym,'15m',160) : await candlesCdcx(sym,'15m',160), '15m');
+  const m15 = await getCandlesFor(exch, sym, '15m', 160);
   if (m15.length<60) return {gates:g, veto:true, error:'not enough 15m history'};
   const c15=m15.map(r=>r.c); const n=c15.length;
   const e9a=ema(c15,9), e21a=ema(c15,21);
@@ -8660,9 +8678,9 @@ async function runFinder(){
       const mins = tickClock();
       const swing = await evalSwingSingle(t.sym, t.exch);
       const scalp = await evalScalpSingle(t.sym, t.exch, t.fundingPct, mins);
-      const d1 = dropForming(t.exch==='delta'?await candlesDelta(t.sym,'1d',60):await candlesCdcx(t.sym,'1d',60), '1d');
-      const h1 = dropForming(t.exch==='delta'?await candlesDelta(t.sym,'1h',200):await candlesCdcx(t.sym,'1h',200), '1h');
-      const m15 = dropForming(t.exch==='delta'?await candlesDelta(t.sym,'15m',200):await candlesCdcx(t.sym,'15m',200), '15m');
+      const d1 = await getCandlesFor(t.exch, t.sym, '1d', 60);
+      const h1 = await getCandlesFor(t.exch, t.sym, '1h', 200);
+      const m15 = await getCandlesFor(t.exch, t.sym, '15m', 200);
       const jl = judasSweepCheck('long', d1, h1, m15);
       const js = judasSweepCheck('short', d1, h1, m15);
       out.innerHTML = `<div class="note">${t.sym} \u00b7 ${t.exch==='delta'?'Delta India':'CoinDCX'} \u00b7 mark ${px(t.mark)}</div>`
@@ -8808,7 +8826,7 @@ async function marketPictureCheck(){
   let longs=0, shorts=0, mixed=0; const detail=[];
   for (const [label, sym] of assets){
     try{
-      const rows = dropForming(await candlesDelta(sym, '4h', 260), '4h');
+      const rows = await getCandlesFor('delta', sym, '4h', 260);
       const c = rows.map(r=>r.c);
       const e9=last(ema(c,9)), e21=last(ema(c,21)), e50=last(ema(c,50));
       let dir = e9>e21&&e21>e50 ? 'long' : (e9<e21&&e21<e50 ? 'short' : 'mixed');
