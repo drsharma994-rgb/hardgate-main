@@ -101,9 +101,16 @@ function assert(cond, msg){
   /* Any module that calls binanceKlines with a bare `.sym` property is
      suspect: that is the exact shape all four bugs took. Known-good callers
      pass a mapped symbol or a literal. */
+  /* Strip comments first. The first cut did not, and immediately flagged a
+     comment in brain.js that QUOTES the defect while explaining the fix —
+     the same trap the connect-src reader hit when a URL inside a note read as
+     a permitted host. Prose about a bug is not the bug. */
+  const stripComments = function(src){
+    return src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  };
   const offenders = [];
   for (const f of fs.readdirSync(root).filter(function(f){ return f.endsWith('.js'); })){
-    const src = fs.readFileSync(root + f, 'utf8');
+    const src = stripComments(fs.readFileSync(root + f, 'utf8'));
     for (const m of src.matchAll(/binanceKlines\(\s*([A-Za-z_$][\w$]*)\.sym\b/g)){
       offenders.push(f + ': binanceKlines(' + m[1] + '.sym …)');
     }
@@ -116,6 +123,61 @@ function assert(cond, msg){
   assert(offenders.length === 0,
     'no module hands a raw .sym to binanceKlines' +
       (offenders.length ? ' — OFFENDERS: ' + offenders.join('; ') : ''));
+}
+
+/* ---------- 4) THE BOUNDARY GUARD — because chasing callers failed twice ----------
+
+   The source sweep in section 3 catches binanceKlines(x.sym …). It CANNOT
+   catch indirection, and that is exactly how the last one survived:
+
+       cryptoPlan:  klineRows(row.sym)
+       klineRows:   binanceKlines(sym, '4h', KLINES_4H)
+
+   88 fapi 400s per cold load, invisible to a regex. So the rule is enforced
+   where every caller has to pass, and these assert that guard rather than
+   trusting the sweep alone. */
+{
+  const ctx = vm.createContext(Object.assign(Object.create(null), {
+    console, setTimeout, clearTimeout, AbortController, Promise, Date, Math, JSON,
+    window: {},
+    fetch: function(u){
+      asked.push(String(u));
+      return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+    }
+  }));
+  var asked = [];
+  ctx.asked = asked;
+  vm.runInContext(fs.readFileSync(root + 'binance.js', 'utf8'), ctx, { filename: 'binance.js' });
+
+  const before = asked.length;
+  const r = await ctx.binanceKlines('B-ETH_USDT', '4h', 120);
+  assert(Array.isArray(r) && r.length === 0,
+    'a CoinDCX code yields [] — the same honest empty every other failure returns');
+  assert(asked.length === before,
+    'and costs ZERO requests: the 400 -1121 is never provoked (got ' + (asked.length - before) + ')');
+
+  await ctx.binanceKlines('b-btc_usdt', '4h', 120);
+  assert(asked.length === before, 'the guard is case-insensitive');
+
+  /* it must be NARROW. Binance really does ship dated contracts with an
+     underscore — BTCUSDT_260925 and friends were live when this was written —
+     so a blanket underscore ban would silently kill real data. */
+  await ctx.binanceKlines('BTCUSDT_260925', '4h', 120);
+  assert(asked.length === before + 1,
+    "Binance's own dated contract BTCUSDT_260925 is NOT blocked");
+  await ctx.binanceKlines('BTCUSDT', '4h', 120);
+  assert(asked.length === before + 2, 'and an ordinary perp symbol is untouched');
+}
+
+/* ---------- 5) the indirection that hid from the sweep is closed ---------- */
+{
+  const src = fs.readFileSync(root + 'brain.js', 'utf8');
+  assert(!/klineRows\(\s*row\.sym\s*\)/.test(src),
+    'brain.js no longer passes a bare row.sym into klineRows');
+  assert(/async function klineRows\(row\)/.test(src),
+    'klineRows takes the row so it can map the symbol itself');
+  assert(/klineRows[\s\S]{0,400}brainBinanceSym/.test(src),
+    'and it maps through the shared helper before asking Binance');
 }
 
 console.log(String.fromCharCode(10) + pass + ' passed, ' + fail + ' failed');

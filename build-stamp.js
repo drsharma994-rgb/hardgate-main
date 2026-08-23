@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v452',
-  pack: 'OMNIBTC calls what it claims',
-  built: '2026-08-22T22:10:00Z',
-  note: 'OMNIBTC advertised squeeze, PINE and structure and invoked none of them. SQUEEZE and TREND MATRIX are wired the way their own modules wire them — classifier gives the direction, gate evaluates it, the module mints the levels — so a BUILDING squeeze or a sub-majority trend still mints nothing. PINE is a snapshot READ, never a run. No new detector was invented and no level is minted here.'
+  version: 'hg-v453',
+  pack: 'the venue-code bug closed at the boundary',
+  built: '2026-08-22T23:30:00Z',
+  note: 'The v451 fix was partial — 88 fapi klines 400s per cold load survived it, hiding one call frame up in klineRows(row.sym). Chasing callers has now failed twice, so binanceKlines itself refuses a B- prefixed venue code. Narrow on purpose: Binance dated contracts like BTCUSDT_260925 are real and still pass.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

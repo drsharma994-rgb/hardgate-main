@@ -3396,9 +3396,15 @@ function enginePlanFor(row, snap){
   return null;
 }
 
-async function klineRows(sym){
+/* Takes the ROW, not a bare sym. It used to take a symbol and cryptoPlan
+   handed it row.sym — a CoinDCX code on a CoinDCX row — which is how 88
+   fapi klines 400s per cold load survived the v451 fix: the `.sym` was one
+   frame up, so a source sweep for binanceKlines(x.sym) could not see it. */
+async function klineRows(row){
   var out = { rows4h: null, rows1h: null };
   if (typeof G.binanceKlines !== 'function') return out;
+  var sym = brainBinanceSym(row && row.sym ? row : { sym: row });
+  if (!sym) return out;
   try{ var r4 = await withTimeout(G.binanceKlines(sym, '4h', KLINES_4H), TUN.fetchMs); out.rows4h = (r4 && r4.length) ? r4 : null; }catch(e){}
   try{ var r1 = await withTimeout(G.binanceKlines(sym, '1h', KLINES_1H), TUN.fetchMs); out.rows1h = (r1 && r1.length) ? r1 : null; }catch(e){}
   return out;
@@ -3412,7 +3418,7 @@ async function klineRows(sym){
 async function cryptoPlan(row, snap){
   var ep = enginePlanFor(row, snap);
   if (ep) return { plan: ep, rows: null };
-  var kl = await klineRows(row.sym);
+  var kl = await klineRows(row);
   var rows = kl.rows4h || kl.rows1h;
   if (!rows) return { plan: null, rows: null };
   var fbNote = '';

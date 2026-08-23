@@ -169,9 +169,31 @@ function __binCachePut(key, val){
 }
 
 /* GET /fapi/v1/klines -> [{t(sec),o,h,l,c,v}] ascending */
+/* A COINDCX CODE IS NOT A BINANCE SYMBOL, AND THIS IS THE LAST PLACE TO SAY SO.
+
+   Four separate call sites have handed this function a foreign venue's code
+   (v431 desk-scan-universe, v451 brain fetch4h/fetch1h, reversalsniper,
+   squeeze, trendtable), and the last one hid from a source sweep because the
+   `.sym` was one call frame up: klineRows(row.sym) -> binanceKlines(sym).
+   Chasing callers has now failed to be exhaustive twice, so the rule is
+   enforced where every caller must pass instead.
+
+   The test is deliberately narrow. B- is the CoinDCX futures prefix and NO
+   Binance symbol begins with it — verified against live exchangeInfo. An
+   underscore alone would be wrong: Binance's dated contracts are
+   BTCUSDT_260925 and friends, four of them live today, and they are real.
+
+   Returning [] matches every other failure path here: never throws, the
+   caller degrades honestly, and no request is spent on an answer that can
+   only be 400 -1121. */
+function __binForeignSymbol(symbol){
+  return /^B-/i.test(String(symbol || ''));
+}
+
 async function binanceKlines(symbol, interval, limit){
   try{
     if (!symbol) return [];
+    if (__binForeignSymbol(symbol)) return [];   /* venue code, not a Binance symbol */
     interval = interval || '1h';
     limit = Math.max(1, Math.min(1500, limit || 500));
     const key = 'klines|' + symbol + '|' + interval + '|' + limit;
