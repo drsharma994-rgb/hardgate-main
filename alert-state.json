@@ -4,10 +4,7 @@
   "gold": null,
   "lastRunAt": "2026-08-24T09:24:13.383Z",
   "ticket": {
-    "long": {
-      "sym": "B-AERO_USDT",
-      "entry": 0.5135304459309463
-    },
+    "long": null,
     "short": null
   },
   "sniper": {
@@ -295,18 +292,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-24T18:52:12.360Z"
+    "at": "2026-08-24T19:30:43.241Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-24T18:52:12.360Z"
+    "at": "2026-08-24T19:30:43.241Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-24T18:52:12.360Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -321,7 +317,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-24T18:52:13.015Z"
+    "at": "2026-08-24T19:30:43.575Z"
   },
   "bookFill": {
     "key": "u0|p0",
