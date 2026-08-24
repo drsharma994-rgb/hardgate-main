@@ -6,7 +6,7 @@
   "ticket": {
     "long": {
       "sym": "XAU",
-      "entry": 4605.231874433023
+      "entry": 4609.783066853618
     },
     "short": null
   },
@@ -295,11 +295,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-24T19:58:49.662Z"
+    "at": "2026-08-24T20:40:22.282Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-24T19:58:49.662Z"
+    "at": "2026-08-24T20:40:22.282Z"
   },
   "degraded": {
     "count": 0,
@@ -321,7 +321,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-24T19:58:49.958Z"
+    "at": "2026-08-24T20:40:22.558Z"
   },
   "bookFill": {
     "key": "u0|p0",
