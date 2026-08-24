@@ -1,7 +1,8 @@
 /* =========================================================================
 HARDGATE — deribit-vol.js
-Deribit public DVOL (volatility index) — no API key.
-BTC/ETH implied-vol regime for BRAIN context votes. Never throws; caches 5m.
+Deribit public DVOL (volatility index) + option put/call flow — no API key.
+BTC/ETH implied-vol regime and call-vs-put volume for setup evidence.
+Never throws; caches 5m. Never prints ENTRY / STOP / T1.
 ========================================================================= */
 'use strict';
 
@@ -101,10 +102,99 @@ async function deribitVolWarm(){
   }catch(e){ return 'dvol error'; }
 }
 
+/* ---- option flow (public put/call volume + OI) ---------------------
+   Deribit book summary, no API key. Classifies call-heavy vs put-heavy.
+   Never prints ENTRY / STOP / T1. Silent book → null. */
+
+var __ofSnap = null;
+
+function deribitOptionNameSide(name){
+  var s = String(name || '');
+  if (/-C$/i.test(s) || /-CALL$/i.test(s)) return 'C';
+  if (/-P$/i.test(s) || /-PUT$/i.test(s)) return 'P';
+  return '';
+}
+
+function deribitOptionFlowClassify(input){
+  try{
+    if (!input || typeof input !== 'object') return null;
+    var cv = +input.callVol, pv = +input.putVol;
+    var co = +input.callOi, po = +input.putOi;
+    if (!isFinite(cv) || cv < 0) cv = 0;
+    if (!isFinite(pv) || pv < 0) pv = 0;
+    if (cv + pv <= 0) return null;
+    var pc = pv / Math.max(cv, 1e-12);
+    var bias = 'neutral';
+    if (pc >= 1.4) bias = 'bearish';
+    else if (pc <= 0.7) bias = 'bullish';
+    var out = { bias: bias, putCallVol: pc, callVol: cv, putVol: pv };
+    if (isFinite(co) && co >= 0) out.callOi = co;
+    if (isFinite(po) && po >= 0) out.putOi = po;
+    return out;
+  }catch(e){ return null; }
+}
+
+async function deribitOptionFlowSnapshot(currency){
+  try{
+    currency = (currency || 'BTC').toUpperCase();
+    if (currency !== 'BTC' && currency !== 'ETH') currency = 'BTC';
+    var key = 'optflow|' + currency;
+    var hit = __dvCacheGet(key);
+    if (hit !== undefined) return hit;
+
+    var r = await __dvFetchJson('/get_book_summary_by_currency?currency='
+      + encodeURIComponent(currency) + '&kind=option');
+    if (!Array.isArray(r) || !r.length) return null;
+
+    var callVol = 0, putVol = 0, callOi = 0, putOi = 0, n = 0, i, row, side, vol, oi;
+    for (i = 0; i < r.length; i++){
+      row = r[i];
+      if (!row) continue;
+      side = deribitOptionNameSide(row.instrument_name);
+      if (!side) continue;
+      vol = +row.volume; if (!isFinite(vol) || vol < 0) vol = 0;
+      oi = +row.open_interest; if (!isFinite(oi) || oi < 0) oi = 0;
+      if (side === 'C'){ callVol += vol; callOi += oi; }
+      else { putVol += vol; putOi += oi; }
+      n++;
+    }
+    if (!n) return null;
+    var cls = deribitOptionFlowClassify({
+      callVol: callVol, putVol: putVol, callOi: callOi, putOi: putOi
+    });
+    if (!cls) return null;
+    cls.currency = currency;
+    cls.at = Date.now();
+    cls.n = n;
+    __ofSnap = cls;
+    return __dvCachePut(key, cls);
+  }catch(e){ return null; }
+}
+
+function deribitOptionFlowState(){
+  try{
+    if (!__ofSnap) return null;
+    return Object.freeze({
+      currency: __ofSnap.currency,
+      bias: __ofSnap.bias,
+      putCallVol: __ofSnap.putCallVol,
+      callVol: __ofSnap.callVol,
+      putVol: __ofSnap.putVol,
+      callOi: __ofSnap.callOi,
+      putOi: __ofSnap.putOi,
+      n: __ofSnap.n,
+      at: __ofSnap.at
+    });
+  }catch(e){ return null; }
+}
+
 var W = (typeof window !== 'undefined') ? window : globalThis;
 W.deribitVolSnapshot = deribitVolSnapshot;
 W.deribitVolState = deribitVolState;
 W.deribitVolClassify = deribitVolClassify;
 W.deribitVolWarm = deribitVolWarm;
+W.deribitOptionFlowClassify = deribitOptionFlowClassify;
+W.deribitOptionFlowSnapshot = deribitOptionFlowSnapshot;
+W.deribitOptionFlowState = deribitOptionFlowState;
 W.HG_warmups = W.HG_warmups || [];
 W.HG_warmups.push({ id: 'dvol', label: 'DVOL', run: deribitVolWarm });

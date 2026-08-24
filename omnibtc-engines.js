@@ -15,8 +15,10 @@ The CRYPTO tabs that were still missing from that list live here:
   STAR TRADER .... stSynthesize — votes the engines above; uses their plan
 
 EVIDENCE, not tickets:
-  ONCHAIN, TERM BASIS, CARRY, flow-trap / post-gate veto, chart-vision boost.
-  Silent = UNCHECKED. They confirm, demote or refuse. They never mint levels.
+  ONCHAIN, TERM BASIS, CARRY, ORDER FLOW (CVD/OBI via hgAssessFlowTrap),
+  OPTION FLOW (Deribit public put/call + DVOL), flow-trap / post-gate veto,
+  chart-vision boost. Silent = UNCHECKED. They confirm, demote or refuse.
+  They never mint levels.
 
 WHAT THIS FILE WILL NOT DO.
   - Claim 7/7 CLEAN. That badge stays on swingTryClean / scalpTryClean.
@@ -374,7 +376,33 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     take('STAR TRADER', hgObtcTryStarTrader(rows4h, rows1h, rows15m, ticker),
       'no majority, or synthesis vetoed');
 
+    ledger.push(orderFlowLedger(extra));
+    ledger.push(optionFlowLedger(extra));
+
     return { candidates: out, ledger: ledger };
+  }
+
+  function orderFlowLedger(extra){
+    var fl = extra && extra.flowLong, fs = extra && extra.flowShort;
+    if (!fl && !fs) return ledgerRow('ORDER FLOW', 'idle', null, 'CVD/OBI unread');
+    if ((fl && fl.veto) || (fs && fs.veto)){
+      var v = (fl && fl.veto) ? fl : fs;
+      return ledgerRow('ORDER FLOW', 'idle', null, (v && v.reason) || 'flow trap');
+    }
+    if (fl && fl.flowOk) return ledgerRow('ORDER FLOW', 'idle', 'long', fl.flowDetail || 'CVD with long');
+    if (fs && fs.flowOk) return ledgerRow('ORDER FLOW', 'idle', 'short', fs.flowDetail || 'CVD with short');
+    if ((fl && fl.flowNA) && (!fs || fs.flowNA))
+      return ledgerRow('ORDER FLOW', 'idle', null, (fl && fl.flowDetail) || 'FLOW N/A');
+    return ledgerRow('ORDER FLOW', 'idle', null, 'no aligned CVD/OBI');
+  }
+
+  function optionFlowLedger(extra){
+    var of = extra && extra.optionFlow;
+    if (!of || !of.bias) return ledgerRow('OPTION FLOW', 'idle', null, 'Deribit put/call unread');
+    var dir = of.bias === 'bullish' ? 'long' : (of.bias === 'bearish' ? 'short' : null);
+    var det = of.bias;
+    if (isFinite(fin(of.putCallVol))) det += ' · P/C ' + Number(of.putCallVol).toFixed(2);
+    return ledgerRow('OPTION FLOW', 'idle', dir, det);
   }
 
   /* Evidence. Silent feeds stay UNCHECKED. Never mint levels. */
@@ -408,9 +436,39 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
       if (carry && isFinite(fin(carry.spreadAPR)))
         out.chips.push('CARRY ' + Number(carry.spreadAPR).toFixed(1) + '% APR');
 
-      if (ctx.flow && ctx.flow.veto){
-        out.ok = false; out.refuse = true; out.reason = ctx.flow.reason || 'flow trap';
+      var flow = ctx.flow;
+      if (!flow){
+        if (dir === 'long' && ctx.flowLong) flow = ctx.flowLong;
+        else if (dir === 'short' && ctx.flowShort) flow = ctx.flowShort;
       }
+      if (flow && flow.veto){
+        out.ok = false; out.refuse = true; out.reason = flow.reason || 'flow trap';
+      } else if (flow && flow.flowOk){
+        out.chips.push('ORDER FLOW with');
+      } else if (flow && flow.flowNA){
+        out.unchecked.push('order-flow');
+      } else if (flow){
+        out.demote = true;
+        out.chips.push('ORDER FLOW against');
+      } else {
+        out.unchecked.push('order-flow');
+      }
+
+      var of = ctx.optionFlow;
+      if (!of || !of.bias){
+        out.unchecked.push('option-flow');
+      } else {
+        out.chips.push('OPTION FLOW ' + of.bias);
+        if ((of.bias === 'bearish' && dir === 'long') || (of.bias === 'bullish' && dir === 'short'))
+          out.demote = true;
+      }
+
+      var dv = ctx.dvol;
+      if (dv && dv.regime === 'extreme'){
+        out.chips.push('DVOL extreme');
+        out.demote = true;
+      }
+
       if (ctx.postGate && ctx.postGate.ok === false){
         out.ok = false; out.refuse = true; out.reason = ctx.postGate.reason || 'post-gate veto';
       }
@@ -434,7 +492,9 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
 
   function evidenceFromExtra(extra){
     extra = extra || {};
-    var ctx = { onchain: extra.onchain || null, term: extra.term || null, carry: extra.carry || null };
+    var ctx = { onchain: extra.onchain || null, term: extra.term || null, carry: extra.carry || null,
+      flowLong: extra.flowLong || null, flowShort: extra.flowShort || null,
+      optionFlow: extra.optionFlow || null, dvol: extra.dvol || null, flow: extra.flow || null };
     if (!ctx.term && gfn('termBasisState')){
       try{
         var tb = W.termBasisState();
@@ -452,7 +512,8 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
   }
 
   async function hgObtcGatherExtra(sym, ticker){
-    var extra = { smart: null, onchain: null, term: null, carry: null, live: null };
+    var extra = { smart: null, onchain: null, term: null, carry: null, live: null,
+      flowLong: null, flowShort: null, optionFlow: null, dvol: null };
     try{
       if (gfn('hgLiveFormationSnap')) extra.live = W.hgLiveFormationSnap(sym, ticker && ticker.dir);
     }catch(e0){}
@@ -466,6 +527,25 @@ Classic script, IIFE. Every call is feature-checked. Never throws at load.
     }catch(e2){}
     extra.term = evidenceFromExtra(extra).term;
     extra.carry = evidenceFromExtra(extra).carry;
+    try{
+      if (gfn('deribitVolSnapshot')) extra.dvol = await W.deribitVolSnapshot('BTC');
+    }catch(e3){}
+    try{
+      if (gfn('deribitOptionFlowSnapshot')) extra.optionFlow = await W.deribitOptionFlowSnapshot('BTC');
+    }catch(e4){}
+    try{
+      if (gfn('hgAssessFlowTrap')){
+        var fr = ticker && isFinite(+ticker.fundingPct) ? +ticker.fundingPct : null;
+        extra.flowLong = await W.hgAssessFlowTrap(sym, 'long', fr, '4h');
+        extra.flowShort = await W.hgAssessFlowTrap(sym, 'short', fr, '4h');
+      }
+    }catch(e5){}
+    if (!extra.dvol && gfn('deribitVolState')){
+      try{ extra.dvol = W.deribitVolState(); }catch(e6){}
+    }
+    if (!extra.optionFlow && gfn('deribitOptionFlowState')){
+      try{ extra.optionFlow = W.deribitOptionFlowState(); }catch(e7){}
+    }
     return extra;
   }
 
