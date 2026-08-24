@@ -6,12 +6,9 @@
   "ticket": {
     "long": {
       "sym": "B-AERO_USDT",
-      "entry": 0.5127807337004833
+      "entry": 0.5135304459309463
     },
-    "short": {
-      "sym": "XAU",
-      "entry": 4663.43
-    }
+    "short": null
   },
   "sniper": {
     "key": "B-AAVE_USDT@133.53;B-ATH_USDT@0.005304000969906976;B-INJ_USDT@5.645;B-POL_USDT@0.11430129442564581",
@@ -298,18 +295,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-24T17:58:48.109Z"
+    "at": "2026-08-24T18:52:12.360Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-24T17:58:48.109Z"
+    "at": "2026-08-24T18:52:12.360Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-24T16:41:20.068Z",
+  "engineAlertAt": "2026-08-24T18:52:12.360Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -324,7 +321,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-24T17:58:48.858Z"
+    "at": "2026-08-24T18:52:13.015Z"
   },
   "bookFill": {
     "key": "u0|p0",
