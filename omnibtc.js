@@ -216,8 +216,18 @@ a global hard refresh.
     if (!btc.length) return null;
     var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
-    pick.row.engine = pick.row.engine || btc[0].engine;
+    var kept = null;
+    for (i = 0; i < btc.length; i++){
+      if (btc[i].sym === pick.row.sym && btc[i].dir === pick.row.dir
+        && btc[i].entry === pick.row.entry && btc[i].stop === pick.row.stop){
+        kept = btc[i];
+        break;
+      }
+    }
+    pick.row.engine = pick.row.engine || (kept && kept.engine) || btc[0].engine;
     pick.row.strategy = pick.row.strategy || pick.row.engine;
+    if ((!pick.row.evidenceChips || !pick.row.evidenceChips.length) && kept && kept.evidenceChips)
+      pick.row.evidenceChips = kept.evidenceChips;
     return pick;
   }
 

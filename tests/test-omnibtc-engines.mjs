@@ -218,6 +218,24 @@ console.log('\n== pick drops a refused extra row ==');
   ok(pick && pick.row.engine === 'SWING clean plan', 'refused TRAP does not beat a real CLEAN');
 }
 
+console.log('\n== pick keeps ORDER FLOW / OPTION FLOW chips after rank ==');
+{
+  const W = boot();
+  const raw = {
+    sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, t2: 135,
+    clean: false, near: true, passed: 6, engine: 'PINE',
+    _extra: { optionFlow: { bias: 'neutral', putCallVol: 0.93 }, flowLong: { flowNA: true } }
+  };
+  const pick = W.hgObtcPick([raw]);
+  ok(pick && pick.row && pick.row.entry === 100, 'watch with levels still ranks');
+  ok(pick.row.engine === 'PINE', 'rank does not steal the winner engine from another row');
+  ok(Array.isArray(pick.row.evidenceChips) && pick.row.evidenceChips.some(function(c){
+    return /OPTION FLOW/i.test(c);
+  }), 'OPTION FLOW chip survives hgPickMostProbableAny re-normalize');
+  ok(pick.row.entry === 100 && pick.row.stop === 90 && pick.row.t1 === 120,
+    'evidence chips do not rewrite ENTRY / STOP / T1');
+}
+
 console.log('\n== wiring: script, shell, header honesty ==');
 {
   const html = read('index.html');
