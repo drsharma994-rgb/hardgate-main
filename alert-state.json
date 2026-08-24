@@ -5,8 +5,8 @@
   "lastRunAt": "2026-08-24T09:24:13.383Z",
   "ticket": {
     "long": {
-      "sym": "B-MORPHO_USDT",
-      "entry": 2.708379317972673
+      "sym": "XAU",
+      "entry": 4643.740034653514
     },
     "short": null
   },
@@ -277,11 +277,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-24T11:58:21.985Z"
+    "at": "2026-08-24T13:03:06.220Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-24T11:58:21.985Z"
+    "at": "2026-08-24T13:03:06.220Z"
   },
   "degraded": {
     "count": 0,
@@ -303,7 +303,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-24T11:58:22.738Z"
+    "at": "2026-08-24T13:03:06.527Z"
   },
   "bookFill": {
     "key": "u0|p0",
