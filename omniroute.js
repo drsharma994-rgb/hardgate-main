@@ -62,10 +62,13 @@ when the venue reports a crowded rate, and reports 'unchecked' when the venue
 reports nothing at all — CoinDCX publishes no funding, and a blocking funding
 gate would have meant CoinDCX could never produce a ticket. A single veto
 stands the trade aside; the card still renders with the veto visible, marked
-VETO or WATCH, never a ticket. No composite score anywhere; cards are ORDERED
-by R:R (a fact about the plan's geometry), which is explicitly not a
-prediction. Levels come from the house hgPlanLevels so entry/stop/T1/T2 obey
-the same policy as every other tab.
+VETO or WATCH, never a ticket. Ranking for the card list and for MOST
+PROBABLE SETUPS balances mechanic-family consensus against indicator
+info-reads (coverage, extra kinds on the same trade, proximity). That score
+is not a win probability. Levels come from the house hgPlanLevels so
+entry/stop/T1/T2 obey the same policy as every other tab. Extra house
+engines (EDGE, MR, squeeze, sniper, SWING path, coil, trap) vote on fired
+contracts and never claim 7/7 CLEAN.
 
 ON "MAXIMUM PROFITABILITY". This ranks by reward-to-risk, requires a minimum
 R:R, and refuses setups whose geometry does not clear it. That is the honest
@@ -157,7 +160,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var DAILY_SLOW = 21;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
-                 lastCardsHtml: '', lastPoolHtml: '' };
+                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '' };
   /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
      hardRefreshAll used to click RUN, which blanked the cards and then
      often died on a venue blip — "the setup disappears after 1 minute,
@@ -993,7 +996,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     'FUND-SQUEEZE':'POSITIONING', 'OI-DIVERGE':'POSITIONING', 'FLOW-ABSORB':'POSITIONING',
     /* Cross-sectional is its own family: it reads the contract against the
        universe, which no price mechanic on this ledger looks at. */
-    'XS-LEADER':'CROSS-SECTIONAL', 'XS-LAGGARD':'CROSS-SECTIONAL'
+    'XS-LEADER':'CROSS-SECTIONAL', 'XS-LAGGARD':'CROSS-SECTIONAL',
+    /* House extra engines vote once per family. They never claim 7/7 CLEAN. */
+    'EDGE':'TREND', 'SWING':'TREND', 'SCALP':'TREND', 'HOUSE-SQUEEZE':'TREND', 'COIL':'TREND',
+    'MR':'REVERSION', 'SNIPER':'REVERSION',
+    'TRAP':'SWEEP', 'SMC':'SWEEP',
+    'FUND-FADE':'POSITIONING'
   };
   /* The shared mechanics bring their own family map. Merged rather than
      retyped, so a kind cannot be classified one way here and another there. */
@@ -2193,6 +2201,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      rows; hgPlanLevels is looked up defensively and NaN-safe. */
   function hgOmniEvaluate(item, rows, positioning, extra){
     var hits = hgOmniDetect(rows, positioning, (extra && extra.xs) || null, item && item.sym), out = [], i;
+    var house = [];
+    try { house = hgOmniHouseHits(rows, item, extra) || []; } catch (eH) { house = []; }
+    if (house.length){
+      var seenHit = {}, hi;
+      for (hi = 0; hi < hits.length; hi++){
+        if (hits[hi] && hits[hi].kind) seenHit[hits[hi].kind + ':' + hits[hi].dir] = true;
+      }
+      for (hi = 0; hi < house.length; hi++){
+        var hk = house[hi] && (house[hi].kind + ':' + house[hi].dir);
+        if (!hk || seenHit[hk]) continue;
+        seenHit[hk] = true;
+        hits.push(house[hi]);
+      }
+    }
     if (!hits.length) return out;
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
@@ -2246,10 +2268,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
          rendered as "R:R —" and, worse, made hgOmniRank sort every card by
          NaN: the tab claimed to order by R:R while ordering by nothing.
          Derive both from fields the wrapper does provide. */
+      var livePx = fin(exForHit.livePx);
+      var atrNow = atrOf(rows, 14);
+      var distAtr = 99;
+      if (plan && isFinite(fin(plan.entry)) && isFinite(livePx) && isFinite(atrNow) && atrNow > 0){
+        distAtr = Math.abs(livePx - fin(plan.entry)) / atrNow;
+      }
       out.push({
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
-        gates: gates, grade: grade, plan: plan,
+        extra: hit.extra === true,
+        gates: gates, grade: grade, plan: plan, distAtr: distAtr,
         /* Carried so hgOmniRank can put the setup the rest of the scan agrees
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
@@ -2325,6 +2354,339 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       return String(a.base) < String(b.base) ? -1 : 1;
     });
     return arr;
+  }
+
+  var OMNI_NEAR_ATR = 2;
+  var OMNI_MP_MAX = 3;
+
+  function omniGfn(name){
+    var w = (typeof window !== 'undefined') ? window : null;
+    return (w && typeof w[name] === 'function') ? w[name] : null;
+  }
+
+  function hgOmniHouseHit(kind, raw, why){
+    if (!raw || typeof raw !== 'object') return null;
+    var dir = String(raw.dir || '').toLowerCase();
+    if (dir === 'buy' || dir === 'l') dir = 'long';
+    if (dir === 'sell' || dir === 's') dir = 'short';
+    if (dir !== 'long' && dir !== 'short') return null;
+    var lvl = fin(raw.entry);
+    if (!isFinite(lvl) || !(lvl > 0)) lvl = fin(raw.level);
+    if (!isFinite(lvl) || !(lvl > 0)) lvl = fin(raw.mark);
+    if (!isFinite(lvl) || !(lvl > 0)) return null;
+    return { kind: kind, dir: dir, level: lvl, why: why || ('house ' + kind), extra: true };
+  }
+
+  /* Extra house strategies, pointed at a contract that already fired a
+     mechanic. Feature-checked, never 7/7 CLEAN, never invent levels — they
+     name a direction and a level, then the same ledger prices the ticket. */
+  function hgOmniHouseHits(rows, item, extra){
+    extra = extra || {};
+    var out = [], last, fn, raw, daily, ticker, px;
+    if (!rows || rows.length < 40) return out;
+    last = rows[rows.length - 1];
+    px = fin(last && last.c);
+    ticker = extra.ticker || item || null;
+    function push(h){
+      if (h && h.kind && (h.dir === 'long' || h.dir === 'short') && isFinite(fin(h.level)) && fin(h.level) > 0){
+        h.extra = true;
+        out.push(h);
+      }
+    }
+    fn = omniGfn('edgeSignal');
+    if (fn){ try { push(hgOmniHouseHit('EDGE', fn(rows), 'EDGE pullback — extra vote, not 7/7 CLEAN')); } catch (e1) {} }
+    fn = omniGfn('mrSignal');
+    if (fn){
+      try {
+        raw = fn(rows);
+        if (raw && raw.target && raw.t1 == null) raw.t1 = raw.target;
+        push(hgOmniHouseHit('MR', raw, 'mean reversion — extra vote, not 7/7 CLEAN'));
+      } catch (e2) {}
+    }
+    fn = omniGfn('squeezeClassify');
+    if (fn && isFinite(px)){
+      try {
+        daily = extra.htfRows || extra.daily || hgOmniResample(rows, 86400);
+        raw = fn(rows, daily);
+        if (raw && raw.state === 'FIRED_LONG')
+          push({ kind:'HOUSE-SQUEEZE', dir:'long', level: px, why:'TTM squeeze fire long — extra vote, not 7/7 CLEAN', extra:true });
+        else if (raw && raw.state === 'FIRED_SHORT')
+          push({ kind:'HOUSE-SQUEEZE', dir:'short', level: px, why:'TTM squeeze fire short — extra vote, not 7/7 CLEAN', extra:true });
+      } catch (e3) {}
+    }
+    fn = omniGfn('rsAssess');
+    if (fn){ try { push(hgOmniHouseHit('SNIPER', fn(rows, {}), 'reversal sniper — extra vote, not 7/7 CLEAN')); } catch (e4) {} }
+    fn = omniGfn('swingTryClean');
+    if (fn){
+      try {
+        raw = fn(rows, ticker);
+        if (raw) raw = { dir: raw.dir, entry: raw.entry, stop: raw.stop, t1: raw.t1, mark: raw.mark };
+        push(hgOmniHouseHit('SWING', raw, 'house SWING path — extra vote, never 7/7 on this desk'));
+      } catch (e5) {}
+    }
+    fn = omniGfn('scalpTryClean');
+    if (fn && extra.rows1h && extra.rows15m){
+      try {
+        raw = fn(extra.rows1h, extra.rows15m, ticker, extra.minsToFunding);
+        if (raw) raw = { dir: raw.dir, entry: raw.entry, stop: raw.stop, t1: raw.t1 };
+        push(hgOmniHouseHit('SCALP', raw, 'house SCALP path — extra vote, never 7/7 on this desk'));
+      } catch (e6) {}
+    }
+    fn = omniGfn('swingTryFundingFade');
+    if (fn){ try { push(hgOmniHouseHit('FUND-FADE', fn(rows, ticker), 'funding fade — extra vote, not 7/7 CLEAN')); } catch (e7) {} }
+    fn = omniGfn('scalpTryFundingFade');
+    if (fn && extra.rows1h && extra.rows15m){
+      try { push(hgOmniHouseHit('FUND-FADE', fn(extra.rows1h, extra.rows15m, ticker, extra.minsToFunding), 'scalp funding fade — extra vote, not 7/7 CLEAN')); } catch (e8) {}
+    }
+    try {
+      var bbFn = omniGfn('bollinger'), vzFn = omniGfn('volZ'), emaFn = omniGfn('ema');
+      if (bbFn && vzFn && emaFn && rows.length >= 80){
+        var closes = closesOf(rows);
+        var bb = bbFn(closes, 20, 2);
+        var width = bb && bb.widthPct ? fin(bb.widthPct[closes.length - 1]) : NaN;
+        var past = bb && bb.widthPct ? bb.widthPct.slice(-51, -1).filter(isFinite) : [];
+        var avgW = past.length ? past.reduce(function(a, b){ return a + b; }, 0) / past.length : NaN;
+        var vz = vzFn(rows, 20);
+        var em = emaFn(closes, 200);
+        var e200 = (em && em.length) ? fin(em[em.length - 1]) : fin(em);
+        if (isFinite(width) && isFinite(avgW) && width < avgW * 0.75 && isFinite(vz) && vz < -0.5
+            && isFinite(px) && isFinite(e200)){
+          var ci, cl, ch;
+          if (px > e200){
+            var coilLow = Infinity;
+            for (ci = Math.max(0, rows.length - 20); ci < rows.length; ci++){
+              cl = fin(rows[ci].l); if (isFinite(cl) && cl < coilLow) coilLow = cl;
+            }
+            if (isFinite(coilLow) && coilLow !== Infinity)
+              push({ kind:'COIL', dir:'long', level: coilLow, why:'BB squeeze · volume drought · above 200 EMA — extra vote, not 7/7 CLEAN', extra:true });
+          } else if (px < e200){
+            var coilHigh = -Infinity;
+            for (ci = Math.max(0, rows.length - 20); ci < rows.length; ci++){
+              ch = fin(rows[ci].h); if (isFinite(ch) && ch > coilHigh) coilHigh = ch;
+            }
+            if (isFinite(coilHigh) && coilHigh !== -Infinity)
+              push({ kind:'COIL', dir:'short', level: coilHigh, why:'BB squeeze · volume drought · below 200 EMA — extra vote, not 7/7 CLEAN', extra:true });
+          }
+        }
+      }
+    } catch (eC) {}
+    try {
+      var bbFn2 = omniGfn('bollinger'), atrFn = omniGfn('atr');
+      if (bbFn2 && atrFn && rows.length >= 50 && isFinite(px) && px > 0){
+        var c2 = closesOf(rows);
+        var at = atrFn(rows, 14);
+        var a14 = (at && at.length) ? fin(at[at.length - 1]) : fin(at);
+        if (isFinite(a14) && a14 > 0){
+          var bbO = bbFn2(c2, 20, 3);
+          var bbI = bbFn2(c2, 20, 2);
+          var lO = bbO && bbO.lower ? fin(bbO.lower[c2.length - 1]) : NaN;
+          var lI = bbI && bbI.lower ? fin(bbI.lower[c2.length - 1]) : NaN;
+          var uO = bbO && bbO.upper ? fin(bbO.upper[c2.length - 1]) : NaN;
+          var uI = bbI && bbI.upper ? fin(bbI.upper[c2.length - 1]) : NaN;
+          var sweptLo = false, sweptHi = false, k2;
+          for (k2 = Math.max(0, rows.length - 4); k2 < rows.length; k2++){
+            if (isFinite(lO) && fin(rows[k2].l) < lO) sweptLo = true;
+            if (isFinite(uO) && fin(rows[k2].h) > uO) sweptHi = true;
+          }
+          if (sweptLo && isFinite(lI) && px > lI)
+            push({ kind:'TRAP', dir:'long', level: px, why:'outer-band sweep reclaim — extra vote, not 7/7 CLEAN', extra:true });
+          else if (sweptHi && isFinite(uI) && px < uI)
+            push({ kind:'TRAP', dir:'short', level: px, why:'outer-band sweep reject — extra vote, not 7/7 CLEAN', extra:true });
+        }
+      }
+    } catch (eT) {}
+    fn = omniGfn('pineSmcCore');
+    if (fn){ try { push(hgOmniHouseHit('SMC', fn(rows), 'SMC ChoCh — extra vote, not 7/7 CLEAN')); } catch (eS) {} }
+    return out;
+  }
+
+  function hgOmniInfoNet(gates){
+    var pass = 0, fail = 0, n = 0, i, g;
+    for (i = 0; i < (gates || []).length; i++){
+      g = gates[i];
+      if (!g || g.info !== true) continue;
+      n++;
+      if (g.pass === true) pass++;
+      else if (g.pass === false) fail++;
+    }
+    return { pass: pass, fail: fail, net: pass - fail, n: n };
+  }
+
+  /* Composite rank, not a probability. Strategy families and indicator
+     reads share the scale so 40 mechanics cannot drown ~20 oscillators. */
+  function hgOmniBalanceParts(c, tape){
+    var cons = (c && c.consensus) || {};
+    var nAgree = cons.nAgree || 0;
+    var nAgainst = cons.nAgainst || 0;
+    var nSplit = cons.nSplit || 0;
+    var famDen = nAgree + nAgainst + nSplit;
+    var family = famDen ? (nAgree - nAgainst) / famDen : 0;
+    var info = hgOmniInfoNet(c && c.gates);
+    var infoRatio = info.n ? (info.net / info.n) : 0;
+    var tot = (c && c.grade && c.grade.total) || 0;
+    var ev = (c && c.grade && c.grade.evaluated) || 0;
+    var coverage = tot ? (ev / tot) : 0;
+    var also = (c && c.alsoKinds && c.alsoKinds.length) ? c.alsoKinds.length : 0;
+    var alsoNorm = Math.min(also, 4) / 4;
+    var dist = (c && isFinite(fin(c.distAtr))) ? fin(c.distAtr) : 99;
+    var near = 1;
+    if (isFinite(dist) && dist > OMNI_NEAR_ATR){
+      near = Math.max(0, 1 - (dist - OMNI_NEAR_ATR) / 4);
+    }
+    var dir = String((c && c.dir) || '').toLowerCase();
+    var tapeDir = String(tape || '').toLowerCase();
+    var tapeScore = 0;
+    if (tapeDir === 'long' || tapeDir === 'short'){
+      tapeScore = (dir === tapeDir) ? 1 : -1;
+    }
+    var ticketN = (c && c.grade && c.grade.ticket) ? 1 : 0;
+    var score = 100 * tapeScore
+              + 120 * ticketN
+              + 30 * family
+              + 30 * infoRatio
+              + 12 * coverage
+              + 10 * alsoNorm
+              + 10 * near;
+    return {
+      score: score, family: family, infoRatio: infoRatio, coverage: coverage,
+      alsoNorm: alsoNorm, near: near, tapeScore: tapeScore,
+      ticket: ticketN, info: info, dist: dist,
+      nAgree: nAgree, nAgainst: nAgainst
+    };
+  }
+  function hgOmniBalanceScore(c, tape){
+    return hgOmniBalanceParts(c, tape).score;
+  }
+
+  function hgOmniDeskOrder(list, tape){
+    var tapeDir = String(tape || '').toLowerCase();
+    return (list || []).slice().sort(function(a, b){
+      if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
+      var sa = hgOmniBalanceScore(a, tapeDir);
+      var sb = hgOmniBalanceScore(b, tapeDir);
+      if (sb !== sa) return sb - sa;
+      var da = isFinite(fin(a.distAtr)) ? a.distAtr : 99;
+      var db = isFinite(fin(b.distAtr)) ? b.distAtr : 99;
+      if (da !== db) return da - db;
+      return String(a.sym || a.kind || '') < String(b.sym || b.kind || '') ? -1 : 1;
+    });
+  }
+
+  function hgOmniPickFew(list, tape, limit){
+    tape = String(tape || '').toLowerCase();
+    limit = Math.max(1, Math.min(5, Math.floor(fin(limit) || OMNI_MP_MAX)));
+    if (tape !== 'long' && tape !== 'short') return [];
+    var pool = [], i, c, seen = {};
+    var ranked = hgOmniDeskOrder(list || [], tape);
+    for (i = 0; i < ranked.length; i++){
+      c = ranked[i];
+      if (!c || !c.plan || !(c.grade && c.grade.ticket)) continue;
+      if (String(c.dir || '').toLowerCase() !== tape) continue;
+      var sym = String(c.sym || c.base || '');
+      if (!sym || seen[sym]) continue;
+      seen[sym] = true;
+      pool.push(c);
+      if (pool.length >= limit) break;
+    }
+    return pool;
+  }
+
+  function hgOmniSideTape(sideRead){
+    if (!sideRead) return '';
+    if (sideRead.side === 'long' || sideRead.side === 'short') return sideRead.side;
+    return '';
+  }
+
+  function hgOmniMpNoneWhy(tape){
+    if (tape === 'short')
+      return 'crypto tape is short — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
+    if (tape === 'long')
+      return 'crypto tape is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
+    return 'no side to take until tape and sentiment agree. Standing aside is the position.';
+  }
+
+  function hgOmniMpOneHtml(c){
+    var h = '<div class="og-mp-hz">';
+    if (c && c.plan){
+      var p = c.plan;
+      var ev = (c.grade && c.grade.evaluated) || 0;
+      var tot = (c.grade && c.grade.total) || 0;
+      var grade = tot ? (ev + '/' + tot + ' TICKET') : 'TICKET';
+      var info = hgOmniInfoNet(c.gates);
+      var cons = c.consensus || {};
+      var nAg = cons.nAgree || 0;
+      var fam = nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree');
+      var ind = info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread';
+      h += '<div class="hg-mp-head">' + esc(String(c.sym || c.base || '')) + ' ' + esc(String(c.dir || '').toUpperCase())
+        +  ' <span>' + esc(c.kind) + ' · ' + esc(grade) + '</span></div>';
+      h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
+        +  ' · WITH TAPE · not a win probability.</div>';
+      h += '<div class="hg-mp-grid">';
+      h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(c.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
+      h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
+      h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>take profit</u></div>';
+      h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>runner</u></div>';
+      h += '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function hgOmniMostProbablePanelHtml(few, tape){
+    few = few || [];
+    tape = String(tape || '').toLowerCase();
+    var any = false, i;
+    for (i = 0; i < few.length; i++) if (few[i] && few[i].plan) any = true;
+    var tier = any ? 'clean' : 'forming';
+    var note = any
+      ? 'Balanced across mechanic families and indicator reads on the crypto tape. Tickets only. Not a win probability.'
+      : hgOmniMpNoneWhy(tape);
+    var h = '<section class="hg-mp" data-hg-mp="omniroute" data-omni-mp="1" data-tier="' + tier + '" aria-label="Most probable crypto setups">';
+    h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
+    h += '<div class="hg-mp-head">OMNIROUTE';
+    if (tape === 'long' || tape === 'short') h += ' ' + tape.toUpperCase();
+    h += ' <span>';
+    if (!any && (tape === 'long' || tape === 'short')) h += tape + ' tape · stand aside · ';
+    h += 'strategies + indicators, balanced · not a win probability</span></div>';
+    h += '<div class="hg-mp-note">' + esc(note) + '</div>';
+    if (any){
+      for (i = 0; i < few.length; i++) h += hgOmniMpOneHtml(few[i]);
+    } else {
+      h += '<div class="og-mp-hz"><div class="hg-mp-head">STAND ASIDE <span>no tape-aligned ticket</span></div>';
+      h += '<div class="hg-mp-note">' + esc(hgOmniMpNoneWhy(tape)) + '</div></div>';
+    }
+    h += '</section>';
+    return h;
+  }
+
+  function hgOmniMpRow(c){
+    if (!c || !c.plan) return null;
+    if (!(c.grade && c.grade.ticket)) return null;
+    return {
+      sym: c.sym, dir: c.dir,
+      entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1, t2: c.plan.t2,
+      rr: c.plan.rr1, clean: false, confirmed: true,
+      gatesPassed: (c.grade && c.grade.evaluated) || 0,
+      gatesTotal: (c.grade && c.grade.total) || 0,
+      venue: c.exchange, kind: c.kind, plan: c.plan, grade: c.grade, consensus: c.consensus
+    };
+  }
+
+  function hgOmniPaintMostProbable(ui, few, tape, mpBag){
+    var host = (ui && ui.mp) || (ui && ui.cards);
+    if (!host) return;
+    try {
+      var wPin = (typeof window !== 'undefined') ? window : null;
+      if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omniroute', mpBag || [], tape || null, host);
+    } catch (eMp) {}
+    try {
+      var dual = hgOmniMostProbablePanelHtml(few, tape);
+      var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
+      if (!dual) return;
+      if (oldMp) oldMp.outerHTML = dual;
+      else if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', dual);
+      else host.innerHTML = dual + (host.innerHTML || '');
+    } catch (eDual) {}
   }
 
   /* ==================== coverage matrix (research half) ==================== */
@@ -2779,6 +3141,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var head = esc(c.base || c.sym) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase());
     var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
+    if (c.topPick) badge = pill('STRONGEST', 'pick') + ' ' + badge;
     if (tot){
       /* Evidence coverage sits next to the verdict, not buried in the list:
          a 4/12 ticket and a 12/12 ticket are not the same claim. */
@@ -3289,6 +3652,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function omniRememberPaint(ui){
     try { if (ui && ui.cards) __omni.lastCardsHtml = ui.cards.innerHTML; } catch (eC) {}
     try { if (ui && ui.pool) __omni.lastPoolHtml = ui.pool.innerHTML; } catch (eP) {}
+    try { if (ui && ui.mp) __omni.lastMpHtml = ui.mp.innerHTML; } catch (eM) {}
   }
 
   function omniKeepLast(ui, why){
@@ -3298,6 +3662,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try {
       if (ui && ui.pool && __omni.lastPoolHtml != null) ui.pool.innerHTML = __omni.lastPoolHtml;
     } catch (eP) {}
+    try {
+      if (ui && ui.mp && __omni.lastMpHtml != null) ui.mp.innerHTML = __omni.lastMpHtml;
+    } catch (eM) {}
     if (__omni.lastStat) omniSafeStat(ui, __omni.lastStat);
     try {
       if (ui && ui.warn){
@@ -3795,13 +4162,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
              honest reading (I could not look) is the one that gets lost. */
           var dead = (res.failed || 0) + (res.thin || 0);
           var deadPct = res.scanned ? (dead / res.scanned) : 0;
-          ui.cards.innerHTML = (deadPct >= 0.5)
-            ? ('<div class="note warn">No setups — but ' + dead + ' of ' + res.scanned
-               + ' contracts returned no usable candles, so this is a DATA problem, not a quiet market. '
-               + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
-            : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
-          omniRememberPaint(ui);
-          return omniRefreshSide(ui);
+          return omniRefreshSide(ui).then(function(sideRead){
+            var tape0 = hgOmniSideTape(sideRead);
+            ui.cards.innerHTML = (deadPct >= 0.5)
+              ? ('<div class="note warn">No setups — but ' + dead + ' of ' + res.scanned
+                 + ' contracts returned no usable candles, so this is a DATA problem, not a quiet market. '
+                 + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
+              : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
+            hgOmniPaintMostProbable(ui, [], tape0, []);
+            omniRememberPaint(ui);
+          });
         }
         /* COLLAPSE DUPLICATE TRADES.
 
@@ -3850,6 +4220,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         /* Side banner first so WITH TAPE / AGAINST TAPE stamps wait for the
            picture when the cache is cold. Empty desks still get the call. */
         return omniRefreshSide(ui).then(function(sideRead){
+        var tape = hgOmniSideTape(sideRead);
+        collapsed = hgOmniDeskOrder(collapsed, tape);
+        var few = hgOmniPickFew(collapsed, tape, OMNI_MP_MAX);
+        var fi;
+        for (fi = 0; fi < few.length; fi++) few[fi].topPick = true;
         var h = '';
         /* A CARD WHOSE LEVELS ARE DEAD IS NOT A CARD — same rule as the gold
            desk, for the same reason. level-fresh already vetoes a plan the
@@ -3908,7 +4283,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
-        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omniroute', ranked, null, ui.cards); } catch (eMp) {}
+        var mpBag = [], mi;
+        for (mi = 0; mi < few.length; mi++){
+          var row = hgOmniMpRow(few[mi]);
+          if (row) mpBag.push(row);
+        }
+        hgOmniPaintMostProbable(ui, few, tape, mpBag);
         omniRememberPaint(ui);
         });
       }catch(eRender){
@@ -3984,13 +4364,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + 'Each candidate runs a ledger of 3 hard gates (trend · vol-alive · participation) plus conditional confluence from free public data — '
       + 'daily agreement, OI build, retail crowding, taker aggression, book depth, regime, news blackout, and the detector’s own measured edge. '
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
-      + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor and cards order by R:R — geometry, <b>not</b> a profit forecast. '
+      + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor. <b>MOST PROBABLE SETUPS</b> lead the tab: up to three tape-aligned tickets, ranked on a balance of mechanic families and indicator reads — not a win probability. Extra house engines vote and never claim 7/7 CLEAN. '
       + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
       + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button>'
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
       + '<div class="note" id="omniStat">idle — press RUN. Full coverage is ~200+ Delta contracts plus CoinDCX, so expect a few minutes; progress shows per pass.</div>'
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
       + '<div id="omniSide"></div>'
+      + '<div id="omniMp" style="margin-top:12px"></div>'
       + '<div id="omniGridOut" style="margin-top:10px"></div>'
       + '<div id="omniPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="omniCards" style="margin-top:12px"></div>'
@@ -4021,6 +4402,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ui = {
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
       warn: el.querySelector('#omniWarn'), side: el.querySelector('#omniSide'), cards: el.querySelector('#omniCards'),
+      mp: el.querySelector('#omniMp'),
       pool: el.querySelector('#omniPool'),
       matrix: el.querySelector('#omniMatrix'),
       ep: el.querySelector('#omniEp'), tok: el.querySelector('#omniTok'),
@@ -4039,6 +4421,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (__omni.lastStat) omniSafeStat(ui, __omni.lastStat);
       if (ui.pool && __omni.lastPoolHtml != null){
         try { ui.pool.innerHTML = __omni.lastPoolHtml; } catch (eP) {}
+      }
+      if (ui.mp && __omni.lastMpHtml != null){
+        try { ui.mp.innerHTML = __omni.lastMpHtml; } catch (eMp) {}
       }
     }
     omniRefreshSide(ui);
@@ -4173,6 +4558,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        through the real pipeline instead of trusting source inspection. */
     window.hgOmniRunScan = runScan;
     window.hgOmniRank = hgOmniRank;
+    window.hgOmniInfoNet = hgOmniInfoNet;
+    window.hgOmniBalanceScore = hgOmniBalanceScore;
+    window.hgOmniDeskOrder = hgOmniDeskOrder;
+    window.hgOmniPickFew = hgOmniPickFew;
+    window.hgOmniHouseHits = hgOmniHouseHits;
+    window.hgOmniMostProbablePanelHtml = hgOmniMostProbablePanelHtml;
     /* research half */
     window.hgOmniGateInventory = hgOmniGateInventory;
     window.hgOmniRoster = hgOmniRoster;

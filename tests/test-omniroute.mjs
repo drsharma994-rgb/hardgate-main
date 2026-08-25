@@ -100,6 +100,7 @@ const el = {
       '#omniWarn': { textContent: '', style: { display: 'none' } },
       '#omniSide': { innerHTML: '' },
       '#omniCards': { innerHTML: '' },
+      '#omniMp': { innerHTML: '' },
       '#omniPool': { innerHTML: '' },
       '#omniMatrix': { innerHTML: '' },
       '#omniEp': { value: '' },

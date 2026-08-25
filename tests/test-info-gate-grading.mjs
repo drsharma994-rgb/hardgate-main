@@ -180,7 +180,10 @@ console.log('\n== the four gold context gates carry the flag ==');
                            whether a ticket is standing on stack / RSI /
                            session VWAP. They never invent one and never
                            stand a cleared ticket aside. */
-                        'ema-stack', 'rsi-zone', 'session-vwap'];
+                        'ema-stack', 'rsi-zone', 'session-vwap',
+                        /* bank three (2026-08): unused tape reads fed into
+                           every desk that already consumes hgIndicatorGates */
+                        'rsi-classic', 'roc-thrust', 'vwap-stretch'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');

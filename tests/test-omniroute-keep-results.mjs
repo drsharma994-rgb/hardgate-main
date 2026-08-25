@@ -74,6 +74,7 @@ console.log('== source: rescan must not blank a live desk ==');
      'runScan no longer blindly blanks the cards, or it restores the last paint');
   ok(/lastCardsHtml|keepLast|previous results still showing/.test(SRC),
      'a last-paint snapshot is kept so a failed rescan can put the cards back');
+  ok(/lastMpHtml/.test(SRC), 'MOST PROBABLE panel is kept across remount / failed rescan');
 }
 
 console.log('\n== source: auto-scan goes through refresh(), not a raw RUN click ==');

@@ -243,7 +243,7 @@ console.log('== G1–G7, gold min-loss, version ==');
   ok(/GOLD_STOP_MAX_PCT\s*=\s*0\.025/.test(GOLD), 'gold min-loss stop cap unchanged');
   ok(/LIVE_TRADING_DISABLED|live trading/i.test(EXEC) || /hgLiveTradingEnabled/.test(EXEC),
      'crypto execute module still present');
-  ok(HG_VER === 'hg-v468', 'build stamp is hg-v468 (got ' + HG_VER + ')');
+  ok(HG_VER === 'hg-v469', 'build stamp is hg-v469 (got ' + HG_VER + ')');
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches build-stamp ' + HG_VER);
 }
 

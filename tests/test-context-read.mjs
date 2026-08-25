@@ -91,6 +91,8 @@ console.log('== the helper: honest, closed-bars, info-only ==');
   ok(cxAdv.gates.length >= 20, 'the shared bank now carries 20+ reads — bank two included');
   for (const k2 of ['adx-regime','obv-flow','mfi-pressure','cci-stretch','ema-ribbon','heikin-trend'])
     ok(cxAdv.gates.some(g => g && g.key === k2), 'bank two gate present: ' + k2);
+  for (const k3 of ['rsi-classic','roc-thrust','vwap-stretch'])
+    ok(cxAdv.gates.some(g => g && g.key === k3), 'bank three gate present: ' + k3);
 
   ok(W.hgContextRead(up.slice(0, 40), 'long', 't', false) === null, 'too little history -> null, never a guess');
   ok(W.hgContextRead(up, 'sideways', 't', false) === null, 'no direction -> null');

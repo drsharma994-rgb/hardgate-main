@@ -799,6 +799,71 @@
       }
     } catch (eHa){ haG = null; haWhy = 'Heikin-Ashi threw: ' + ((eHa && eHa.message) || eHa); }
     gates.push({ key:'heikin-trend', hard:false, info:true, pass: haG, why: haWhy });
+
+    /* ============ BANK THREE — unused tape reads, every desk at once ============
+       Classic RSI (not stoch), 10-bar ROC, VWAP stretch. Same contract as
+       the first twenty: info-only, honest UNCHECKED, reversion is not
+       punished for being counter-trend. */
+    var rsiG = null, rsiWhy = 'RSI unavailable';
+    var rsiFn3 = gfn('rsi');
+    if (rsiFn3){
+      try {
+        var rArr = rsiFn3(closes, 14);
+        var rNow = (rArr && rArr.length) ? fin(rArr[rArr.length - 1]) : fin(rArr);
+        if (isFinite(rNow)){
+          rsiWhy = 'RSI ' + rNow.toFixed(0);
+          if (reversion){
+            if (hit.dir === 'long' && rNow > 70){ rsiG = false; rsiWhy += ' — buying an already-stuffed high'; }
+            else if (hit.dir === 'short' && rNow < 30){ rsiG = false; rsiWhy += ' — selling an already-washed low'; }
+            else { rsiG = true; rsiWhy += ' — stretch a fade can use'; }
+          } else {
+            if (hit.dir === 'long' && rNow > 75){ rsiG = false; rsiWhy += ' — continuation into exhaustion'; }
+            else if (hit.dir === 'short' && rNow < 25){ rsiG = false; rsiWhy += ' — continuation into a washed low'; }
+            else { rsiG = true; rsiWhy += ' — not exhausted against this side'; }
+          }
+        }
+      } catch (eRsi){ rsiG = null; rsiWhy = 'RSI threw: ' + ((eRsi && eRsi.message) || eRsi); }
+    }
+    gates.push({ key:'rsi-classic', hard:false, info:true, pass: rsiG, why: rsiWhy });
+
+    var rocG = null, rocWhy = 'ROC unavailable';
+    var rocFn = gfn('roc');
+    if (rocFn){
+      try {
+        var r10 = fin(rocFn(closes, 10));
+        if (isFinite(r10)){
+          rocWhy = '10-bar ROC ' + (r10 >= 0 ? '+' : '') + r10.toFixed(1) + '%';
+          var rocUp = r10 >= 0;
+          var rocAgrees = (hit.dir === 'long') ? rocUp : !rocUp;
+          if (reversion){ rocG = true; rocWhy += ' — the thrust a fade fades, by design'; }
+          else { rocG = rocAgrees; rocWhy += rocAgrees ? ' — with this side' : ' — against this side'; }
+        }
+      } catch (eRoc){ rocG = null; rocWhy = 'ROC threw: ' + ((eRoc && eRoc.message) || eRoc); }
+    }
+    gates.push({ key:'roc-thrust', hard:false, info:true, pass: rocG, why: rocWhy });
+
+    var vwG = null, vwWhy = 'VWAP deviation unavailable';
+    var vwFn3 = gfn('vwapDev');
+    if (vwFn3){
+      try {
+        var vd = fin(vwFn3(rows, 20));
+        if (isFinite(vd)){
+          vwWhy = 'VWAP deviation ' + (vd >= 0 ? '+' : '') + vd.toFixed(2) + '%';
+          if (reversion){
+            vwG = true;
+            vwWhy += ' — location a fade can use';
+          } else if (Math.abs(vd) > 1.2){
+            var stretchWith = (hit.dir === 'long' && vd > 0) || (hit.dir === 'short' && vd < 0);
+            vwG = !(stretchWith && Math.abs(vd) > 2);
+            vwWhy += stretchWith ? ' — extended with this side' : ' — not stretched against this side';
+          } else {
+            vwG = true;
+            vwWhy += ' — near value';
+          }
+        }
+      } catch (eVw){ vwG = null; vwWhy = 'VWAP threw: ' + ((eVw && eVw.message) || eVw); }
+    }
+    gates.push({ key:'vwap-stretch', hard:false, info:true, pass: vwG, why: vwWhy });
     } catch (eCtx){
       gates.push({ key:'context-gates', hard:false, info:true, pass:null,
                    why:'context block threw: ' + ((eCtx && eCtx.message) || eCtx) });

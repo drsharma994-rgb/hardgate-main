@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v468',
-  pack: 'OMNIGOLD most-probable balance — families + indicators, dual-horizon setups on top',
-  built: '2026-08-25T10:00:00Z',
-  note: 'OMNIGOLD ranks tape-aligned tickets on a balanced score of mechanic families and indicator info-reads, then pins MOST PROBABLE SETUPS (SCALP + SWING) at the top of the tab. A LONG is still not the pick while gold is going down. Not a win probability. Gold min-loss and G1–G7 stay as they are. Extra engines never claim 7/7 CLEAN.'
+  version: 'hg-v469',
+  pack: 'OMNIROUTE most-probable balance — all fed-in engines, few setups on top',
+  built: '2026-08-25T10:40:00Z',
+  note: 'OMNIROUTE ranks tape-aligned tickets on a balanced score of mechanic families and indicator info-reads, then pins MOST PROBABLE SETUPS (up to three distinct symbols) at the top of the tab. House extra engines vote and never claim 7/7 CLEAN. A LONG is not the pick while the crypto tape is short. Gold min-loss and G1–G7 stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
