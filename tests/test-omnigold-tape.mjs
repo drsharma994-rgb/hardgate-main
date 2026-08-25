@@ -11,6 +11,8 @@
      - when that tape is short, STRONGEST is a short or nothing
      - a long ticket is not substituted; a short is not invented
      - unknown tape does not empty the desk
+     - mixed horizons: scalp DOWN + swing UP → desk SHORT. A 4H lean
+       does not sell a LONG while 1h gold is falling
      - gold min-loss and crypto G1–G7 stay as they are
 
    Run: node tests/test-omnigold-tape.mjs */
@@ -123,10 +125,39 @@ console.log('== STRONGEST does not pick LONG when gold is going down ==');
      'symmetric: up tape does not promote a short as STRONGEST');
 }
 
+console.log('== desk tape: either horizon down means no LONG pick ==');
+{
+  const W = boot();
+  ok(typeof W.hgOgDeskTape === 'function', 'hgOgDeskTape exported');
+  ok(W.hgOgDeskTape('short', 'long') === 'short',
+     'scalp DOWN + swing UP → desk SHORT (do not sell the swing long)');
+  ok(W.hgOgDeskTape('long', 'short') === 'short',
+     'swing DOWN + scalp UP → desk SHORT');
+  ok(W.hgOgDeskTape('short', 'short') === 'short', 'both down → short');
+  ok(W.hgOgDeskTape('long', 'long') === 'long', 'both up → long');
+  ok(W.hgOgDeskTape('', '') === '', 'both unread → empty, not a guessed side');
+  ok(W.hgOgDeskTape('', 'long') === 'long', 'one unread, one up → long');
+  ok(W.hgOgDeskTape('short', '') === 'short', 'one down, one unread → short');
+  ok(W.hgOgPickFor([swingLong], 'SWING', W.hgOgDeskTape('short', 'long')) === null,
+     'swing LONG ticket is not STRONGEST when scalp gold is going down');
+  ok(W.hgOgPickFor([longTix], 'SCALP', W.hgOgDeskTape('short', 'long')) === null,
+     'scalp LONG is also refused on mixed down tape');
+  const banner = W.hgOgTapeBannerHtml('short', 'long');
+  ok(/will not pick a LONG/.test(banner),
+     'the banner says this tab will not pick a LONG when either horizon is down');
+}
+
 console.log('== scan wires gold tape into the pick and the banner ==');
 {
-  ok(/hgOgTapeDir\(/.test(GOLD) && /hgOgPickFor\(ranked, HORIZONS\.scalp\.label/.test(GOLD),
-     'the scan computes gold tape and passes it to hgOgPickFor');
+  ok(/hgOgTapeDir\(/.test(GOLD) && /hgOgDeskTape\(scalpTape, swingTape\)/.test(GOLD),
+     'the scan computes per-horizon tape then a desk tape');
+  ok(/hgOgPickFor\(ranked, HORIZONS\.scalp\.label, deskTape\)/.test(GOLD)
+      && /hgOgPickFor\(ranked, HORIZONS\.swing\.label, deskTape\)/.test(GOLD),
+     'both STRONGEST picks follow the desk tape, not the other horizon\'s lean');
+  ok(/hgOgZonesPanel\(res\.scalp\.rows, res\.scalp\.livePx, deskTape\)/.test(GOLD),
+     'NEXT GOLD LEVELS hides the against-tape zone');
+  ok(/__og\.tape && __og\.tape\.desk/.test(GOLD),
+     'XM strongest and card stamps read the desk tape');
   ok(/AGAINST GOLD TAPE/.test(GOLD), 'against-tape cards are stamped, not sold as STRONGEST');
   ok(/going down/.test(GOLD) || /GOLD TAPE/.test(GOLD),
      'the desk names gold tape so a long-on-a-drop is explained');

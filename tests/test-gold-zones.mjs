@@ -101,6 +101,16 @@ console.log('\n== the panel: anticipation that leads the page, honestly labeled 
     ok(/triggers evaluate at 1h closes/.test(html), 'with the exact times a trigger can fire');
     ok(/ARMED|TRIGGERED/.test(html), 'and each zone declares its lifecycle state');
     ok(/SL /.test(html) && /TP1 /.test(html) && /trigger:/.test(html), 'levels and the trigger rule on the card');
+    const down = W.hgOgZonesPanel(rows, live, 'short');
+    const up = W.hgOgZonesPanel(rows, live, 'long');
+    if (/LONG from/.test(html)){
+      ok(!down || !/LONG from/.test(down),
+         'desk SHORT hides the LONG zone that the unfiltered panel showed');
+    }
+    if (/SHORT from/.test(html)){
+      ok(!up || !/SHORT from/.test(up),
+         'desk LONG hides the SHORT zone that the unfiltered panel showed');
+    }
     passed += 0;
   } else {
     /* A quiet tape with no zone in reach is a legitimate empty — but the
@@ -120,8 +130,8 @@ console.log('\n== without the engine, the panel degrades to nothing — silently
 console.log('\n== source: the panel leads the render, and only the gated cards ticket ==');
 {
   const GOLD = read('omnigold.js');
-  ok(/h \+= hgOgZonesPanel\(res\.scalp\.rows, res\.scalp\.livePx\);/.test(GOLD),
-     'the panel is prepended before the mechanic cards');
+  ok(/h \+= hgOgZonesPanel\(res\.scalp\.rows, res\.scalp\.livePx, deskTape\);/.test(GOLD),
+     'the panel is prepended before the mechanic cards, filtered to gold tape');
   const panelFn = GOLD.slice(GOLD.indexOf('function hgOgZonesPanel'), GOLD.indexOf('/* ==================== render ===================='));
   ok(!/TICKET/.test(panelFn.replace(/tickets are decided/g, '')), 'the panel never prints a TICKET badge of its own');
 }

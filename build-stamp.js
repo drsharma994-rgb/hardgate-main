@@ -21,7 +21,7 @@ var HG_BUILD = {
   version: 'hg-v465',
   pack: 'OMNIGOLD follows gold tape — no LONG while gold is going down',
   built: '2026-08-25T03:10:00Z',
-  note: 'OMNIGOLD STRONGEST / MOST PROBABLE / XM strongest follow gold\'s own bars (last vs EMA21, stack, recent closes), not the crypto MARKET PICTURE cascade. When gold tape is down, a LONG is not the setup. A missing short is not invented. Unread tape does not empty the desk. Gold min-loss and G1–G7 stay as they are.'
+  note: 'OMNIGOLD STRONGEST / MOST PROBABLE / NEXT GOLD LEVELS / XM strongest follow gold\'s own bars, not the crypto cascade. Either horizon down → desk SHORT: no LONG pick, no LONG zone. A missing short is not invented. Unread tape does not empty the desk. Gold min-loss and G1–G7 stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
