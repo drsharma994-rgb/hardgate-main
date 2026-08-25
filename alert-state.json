@@ -5,52 +5,25 @@
   "lastRunAt": "2026-08-24T09:24:13.383Z",
   "ticket": {
     "long": {
-      "sym": "XAU",
-      "entry": 4609.783066853618
+      "sym": "B-SUPER_USDT",
+      "entry": 0.1173638597529314
     },
     "short": null
   },
   "sniper": {
-    "key": "B-AAVE_USDT@133.53;B-ATH_USDT@0.005304000969906976;B-INJ_USDT@5.645;B-POL_USDT@0.11430129442564581",
+    "key": "B-SUPER_USDT@0.1173638597529314",
     "hits": [
       {
-        "sym": "B-ATH_USDT",
+        "sym": "B-SUPER_USDT",
         "dir": "long",
-        "entry": 0.005304000969906976,
-        "stop": 0.005194476884895176,
-        "t1": 0.005468287097424675,
-        "lev": 27,
-        "state": "IN ZONE"
-      },
-      {
-        "sym": "B-AAVE_USDT",
-        "dir": "long",
-        "entry": 133.53,
-        "stop": 130.80590807315812,
-        "t1": 141.87,
-        "lev": 28,
-        "state": "IN ZONE"
-      },
-      {
-        "sym": "B-INJ_USDT",
-        "dir": "long",
-        "entry": 5.645,
-        "stop": 5.532315934486084,
-        "t1": 5.814026098270873,
-        "lev": 28,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-POL_USDT",
-        "dir": "long",
-        "entry": 0.11430129442564581,
-        "stop": 0.11204833220789072,
-        "t1": 0.118,
-        "lev": 28,
+        "entry": 0.1173638597529314,
+        "stop": 0.11415729125401171,
+        "t1": 0.13699,
+        "lev": 21,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-24T17:58:48.109Z"
+    "at": "2026-08-25T01:45:45.676Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -295,18 +268,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-24T23:59:28.197Z"
+    "at": "2026-08-25T01:45:45.676Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-24T23:59:28.198Z"
+    "at": "2026-08-25T01:45:45.677Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-24T23:59:28.198Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -321,7 +293,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-24T23:59:28.502Z"
+    "at": "2026-08-25T01:45:45.979Z"
   },
   "bookFill": {
     "key": "u0|p0",
