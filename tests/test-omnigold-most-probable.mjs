@@ -223,7 +223,9 @@ console.log('== LONG against short tape is not MOST PROBABLE ==');
 
 console.log('== scan wires the panel to the top of the tab ==');
 {
-  ok(/hgOgMostProbablePanelHtml\(/.test(GOLD), 'scan renders the dual-horizon panel');
+  ok(/id="ogMp"/.test(GOLD) && GOLD.indexOf('id="ogMp"') < GOLD.indexOf('id="ogXmBot"'),
+     'MOST PROBABLE host sits above the XM bot so it leads the tab');
+  ok(/hgOgPaintMostProbable\(/.test(GOLD), 'scan paints the dual panel onto that host');
   ok(/hgOgDeskOrder\(/.test(GOLD) || /hgOgBalanceScore\(/.test(GOLD),
      'scan uses the gold-specific balance, not a crypto-wide ranker rewrite');
   ok(/hgMpPin\(\s*'omnigold'/.test(GOLD), 'house MOST PROBABLE pin remains');

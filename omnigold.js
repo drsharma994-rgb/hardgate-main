@@ -2936,7 +2936,7 @@ terse status, and never launches a first-time scan on a global refresh.
       var fam = nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree');
       var ind = info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread';
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(pick.dir || '').toUpperCase())
-        +  '<span>' + esc(label) + ' · ' + esc(pick.kind) + ' · ' + esc(grade) + '</span></div>';
+        +  ' <span>' + esc(label) + ' · ' + esc(pick.kind) + ' · ' + esc(grade) + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  ' · WITH GOLD TAPE · not a win probability.</div>';
       h += '<div class="hg-mp-grid">';
@@ -2946,7 +2946,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>runner</u></div>';
       h += '</div>';
     } else {
-      h += '<div class="hg-mp-head">' + esc(label) + ' · STAND ASIDE<span>no tape-aligned ticket</span></div>';
+      h += '<div class="hg-mp-head">' + esc(label) + ' · STAND ASIDE <span>no tape-aligned ticket</span></div>';
       h += '<div class="hg-mp-note">' + esc(hgOgMpNoneWhy(tape)) + '</div>';
     }
     h += '</div>';
@@ -2963,13 +2963,32 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = '<section class="hg-mp" data-hg-mp="omnigold" data-og-mp="1" data-tier="' + tier + '" aria-label="Most probable gold setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
     h += '<div class="hg-mp-head">XAUUSD';
-    if (tape === 'long' || tape === 'short') h += ' ' + tape.toUpperCase();
-    h += '<span>OMNIGOLD · strategies + indicators, balanced · not a win probability</span></div>';
+    if (any && (tape === 'long' || tape === 'short')) h += ' ' + tape.toUpperCase();
+    h += ' <span>OMNIGOLD · ';
+    if (!any && (tape === 'long' || tape === 'short')) h += 'gold tape ' + tape.toUpperCase() + ' · stand aside · ';
+    h += 'strategies + indicators, balanced · not a win probability</span></div>';
     h += '<div class="hg-mp-note">' + esc(note) + '</div>';
     h += hgOgMpHorizonHtml('SCALP', pickScalp, tape);
     h += hgOgMpHorizonHtml('SWING', pickSwing, tape);
     h += '</section>';
     return h;
+  }
+
+  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag){
+    var host = (ui && ui.mp) || (ui && ui.cards);
+    if (!host) return;
+    try {
+      var wPin = W();
+      if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omnigold', mpBag || [], tape || null, host);
+    } catch (eMp) {}
+    try {
+      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape);
+      var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
+      if (!dual) return;
+      if (oldMp) oldMp.outerHTML = dual;
+      else if (host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', dual);
+      else host.innerHTML = dual + (host.innerHTML || '');
+    } catch (eDual) {}
   }
 
   function hgOgMpRow(c){
@@ -3399,6 +3418,7 @@ terse status, and never launches a first-time scan on a global refresh.
     ui.btn.disabled = true;
     ui.cards.innerHTML = '';
     ui.pool.innerHTML = '';
+    if (ui.mp) ui.mp.innerHTML = '';
 
     /* market-wide context, fetched once for both horizons */
     ui.stat.textContent = 'reading macro + session context…';
@@ -3582,6 +3602,9 @@ terse status, and never launches a first-time scan on a global refresh.
           ui.cards.innerHTML = (!res.scalp.rows.length && !res.swing.rows.length)
             ? '<div class="note warn">No gold candles were returned by any source, so nothing could be scanned. Check the XM bridge / spot proxy before reading anything into this.</div>'
             : '<div class="empty">no gold setup fired on either horizon. That is a normal result — the detectors are meant to be quiet.</div>';
+          hgOgPaintMostProbable(ui, null, null,
+            hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows)),
+            []);
           return;
         }
         /* ONE pick per horizon, marked and floated to the top so the answer
@@ -3607,6 +3630,8 @@ terse status, and never launches a first-time scan on a global refresh.
           }
           var own = ogCollapsed[ogSeen[ok2]];
           if ((cur.grade && cur.grade.ticket) && !(own.grade && own.grade.ticket)){
+            /* The cleared setup takes the card from the vetoed one, carrying
+               the names already collected and adding the displaced owner. */
             var also = (own.alsoKinds || []).slice();
             if (also.indexOf(own.kind) < 0) also.push(own.kind);
             var drop = also.indexOf(cur.kind);
@@ -3683,19 +3708,7 @@ terse status, and never launches a first-time scan on a global refresh.
           var mpRow = hgOgMpRow(ogCollapsed[i]);
           if (mpRow) mpBag.push(mpRow);
         }
-        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnigold', mpBag, goldSide || null, ui.cards); } catch (eMp) {}
-        /* House pin is one setup. This desk has two horizons — dual
-           MOST PROBABLE SETUPS replaces it at the top of the tab. */
-        try {
-          var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, deskTape);
-          var host = ui.cards;
-          var oldMp = host && host.querySelector ? host.querySelector('[data-hg-mp]') : null;
-          if (dual){
-            if (oldMp) oldMp.outerHTML = dual;
-            else if (host && host.insertAdjacentHTML) host.insertAdjacentHTML('afterbegin', dual);
-            else if (host) host.innerHTML = dual + (host.innerHTML || '');
-          }
-        } catch (eDual) {}
+        hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag);
         if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){
@@ -4007,6 +4020,7 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
+      + '<div id="ogMp" style="margin-top:12px"></div>'
       + '<div class="panel" id="ogXmBot" style="margin-top:12px">'
       +   '<h3>XM trader bot</h3>'
       +   '<p class="note">Sends this tab’s <b>TICKET</b> rows to your XM MT5 account through the same bridge as gold candles (<code>XM_MT5_URL</code>). '
@@ -4033,6 +4047,7 @@ terse status, and never launches a first-time scan on a global refresh.
 
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
+      mp: el.querySelector('#ogMp'),
       pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards'),
       grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut'),
       xmStat: el.querySelector('#ogXmStat'), xmSend: el.querySelector('#ogXmSend'),
