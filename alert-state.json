@@ -5,12 +5,12 @@
   "lastRunAt": "2026-08-25T10:02:18.606Z",
   "ticket": {
     "long": {
-      "sym": "B-POL_USDT",
-      "entry": 0.1096654792168968
+      "sym": "B-BTW_USDT",
+      "entry": 0.442676389446591
     },
     "short": {
-      "sym": "XAU",
-      "entry": 4619.6534368936345
+      "sym": "B-1000PEPE_USDT",
+      "entry": 0.003950208413190898
     }
   },
   "sniper": {
@@ -289,11 +289,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-25T11:28:44.387Z"
+    "at": "2026-08-25T11:57:31.969Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-25T11:28:44.387Z"
+    "at": "2026-08-25T11:57:31.969Z"
   },
   "degraded": {
     "count": 0,
@@ -315,7 +315,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-25T11:28:45.009Z"
+    "at": "2026-08-25T11:57:32.278Z"
   },
   "bookFill": {
     "key": "u0|p0",
