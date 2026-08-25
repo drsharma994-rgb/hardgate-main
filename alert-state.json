@@ -6,12 +6,9 @@
   "ticket": {
     "long": {
       "sym": "B-SUPER_USDT",
-      "entry": 0.11571
+      "entry": 0.11645
     },
-    "short": {
-      "sym": "XAU",
-      "entry": 4618.288569028468
-    }
+    "short": null
   },
   "sniper": {
     "key": "B-CYS_USDT@0.6336458262867268;B-TAO_USDT@238.41;WIFUSD@0.22003396169512354",
@@ -289,18 +286,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-25T04:40:16.160Z"
+    "at": "2026-08-25T05:18:02.235Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-25T04:40:16.160Z"
+    "at": "2026-08-25T05:18:02.235Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-25T02:46:50.897Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -315,7 +311,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-25T04:40:17.019Z"
+    "at": "2026-08-25T05:18:02.523Z"
   },
   "bookFill": {
     "key": "u0|p0",
