@@ -5,10 +5,13 @@
   "lastRunAt": "2026-08-24T09:24:13.383Z",
   "ticket": {
     "long": {
-      "sym": "B-SUPER_USDT",
-      "entry": 0.11645
+      "sym": "B-STORJ_USDT",
+      "entry": 0.045069817031086395
     },
-    "short": null
+    "short": {
+      "sym": "XAU",
+      "entry": 4618.288569028468
+    }
   },
   "sniper": {
     "key": "B-CYS_USDT@0.6355044988212313;B-JASMY_USDT@0.004834918329670709;B-PIEVERSE_USDT@1.0220156937574134;BTCUSD@80234.56414274852;RAYSOLUSDT@0.8227867882414929",
@@ -304,11 +307,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-25T05:58:51.631Z"
+    "at": "2026-08-25T07:00:27.379Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-25T05:58:51.631Z"
+    "at": "2026-08-25T07:00:27.379Z"
   },
   "degraded": {
     "count": 0,
@@ -330,7 +333,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-25T05:58:51.902Z"
+    "at": "2026-08-25T07:00:27.801Z"
   },
   "bookFill": {
     "key": "u0|p0",
