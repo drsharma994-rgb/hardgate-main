@@ -20,6 +20,24 @@ console.log('== deribit vol classify ==');
   ok(W.deribitVolClassify(90) === 'extreme', 'DVOL 90 → extreme');
 }
 
+console.log('== deribit option flow classify ==');
+{
+  const src = fs.readFileSync(path.join(ROOT, 'deribit-vol.js'), 'utf8');
+  const ctx = vm.createContext({ window: {}, console, Math, Date, fetch: null });
+  vm.runInContext(src, ctx, { filename: 'deribit-vol.js' });
+  const W = ctx.window;
+  ok(typeof W.deribitOptionFlowClassify === 'function', 'deribitOptionFlowClassify exported');
+  const calls = W.deribitOptionFlowClassify({ callVol: 100, putVol: 40, callOi: 10, putOi: 5 });
+  ok(calls && calls.bias === 'bullish', 'more call volume → bullish option flow');
+  const puts = W.deribitOptionFlowClassify({ callVol: 40, putVol: 100, callOi: 5, putOi: 10 });
+  ok(puts && puts.bias === 'bearish', 'more put volume → bearish option flow');
+  const mid = W.deribitOptionFlowClassify({ callVol: 50, putVol: 50, callOi: 8, putOi: 8 });
+  ok(mid && mid.bias === 'neutral', 'balanced put/call → neutral');
+  ok(W.deribitOptionFlowClassify({}) == null, 'empty book → null, not a fake bias');
+  ok(W.deribitOptionFlowClassify(null) == null, 'null input → null');
+  ok(!('entry' in (calls || {})), 'option flow never carries an entry');
+}
+
 console.log('== spot-perp divergence pure ==');
 {
   const src = fs.readFileSync(path.join(ROOT, 'spot-perp.js'), 'utf8');

@@ -160,6 +160,21 @@ console.log('== normalize: common setup shapes become one row ==');
 
   ok(W.hgNormalizeSetupRow({ sym: 'X', dir: 'long', entry: 1, stop: 1, t1: 2 }) === null, 'zero-risk row is dropped');
   ok(W.hgNormalizeSetupRow(null) === null, 'null input is dropped');
+
+  const chips = W.hgNormalizeSetupRow({
+    sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120,
+    engine: 'PINE', evidenceChips: ['OPTION FLOW neutral', 'ORDER FLOW against']
+  });
+  ok(chips && chips.engine === 'PINE', 'normalize keeps the engine name');
+  ok(chips.evidenceChips && chips.evidenceChips[0] === 'OPTION FLOW neutral',
+    'normalize keeps evidence chips — rank must not strip ORDER FLOW / OPTION FLOW');
+
+  const ranked = W.hgPickMostProbableAny([{
+    sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, near: true, passed: 6,
+    evidenceChips: ['OPTION FLOW neutral']
+  }]);
+  ok(ranked && ranked.row.evidenceChips && ranked.row.evidenceChips[0] === 'OPTION FLOW neutral',
+    'pick-any still has OPTION FLOW on the winner after re-normalize');
 }
 
 console.log('== pick-any: CLEAN / NEAR / closest, never invents a ticket ==');

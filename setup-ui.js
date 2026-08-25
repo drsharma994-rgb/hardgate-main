@@ -45,6 +45,7 @@ var SU_CSS = ''
 + '.hg-mp-head{font-size:16px;font-weight:800;color:#020617;letter-spacing:.02em}'
 + '.hg-mp-head span{font-size:11px;font-weight:600;color:#64748B;margin-left:8px;letter-spacing:0}'
 + '.hg-mp-note{font-size:11px;color:#64748B;margin:6px 0 10px;line-height:1.5}'
++ '.hg-mp-chips{font-size:10px;letter-spacing:.04em;font-weight:700;color:#0F766E;margin:-4px 0 10px;line-height:1.45}'
 + '.hg-mp-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}'
 + '.hg-mp-grid div{border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;background:#F8FAFC}'
 + '.hg-mp-grid i{display:block;font-style:normal;font-size:9px;letter-spacing:.12em;font-weight:800;color:#64748B;margin-bottom:4px}'
@@ -147,6 +148,9 @@ function hgMostProbablePanelHTML(kind, pick){
       note = 'No CLEAN or 6/7 NEAR. This is the nearest cascade with draft levels. Standing aside is the position.';
     }
     if (missing) note += ' Waiting: ' + missing + '.';
+    var chipLine = '';
+    if (Array.isArray(row.evidenceChips) && row.evidenceChips.length)
+      chipLine = '<div class="hg-mp-chips">' + suEsc(row.evidenceChips.join(' · ')) + '</div>';
     var t2Cell = isFinite(t2)
       ? ('<div><i>T2</i><b>' + suEsc(hgMpPx(t2)) + '</b><u>' + (isFinite(rr2) ? suFmt(rr2, 1) + 'R runner' : 'runner') + '</u></div>')
       : '<div><i>T2</i><b>—</b><u>not set</u></div>';
@@ -155,6 +159,7 @@ function hgMostProbablePanelHTML(kind, pick){
       + '<div class="hg-mp-head">' + suEsc(row.sym || '?') + ' ' + suEsc(dirLbl)
       + '<span>' + suEsc(tab) + (venue ? ' · ' + suEsc(venue) : '') + ' · ' + suEsc(grade) + '</span></div>'
       + '<div class="hg-mp-note">' + suEsc(note) + '</div>'
+      + chipLine
       + '<div class="hg-mp-grid">'
       + '<div><i>ENTRY</i><b>' + suEsc(hgMpPx(e)) + '</b><u>' + suEsc(dir === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>'
       + '<div><i>STOP</i><b>' + suEsc(hgMpPx(s)) + '</b><u>invalidation</u></div>'

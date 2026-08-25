@@ -106,6 +106,16 @@ console.log('== panel: ENTRY / STOP / T1 / T2 on the banner ==');
   });
   ok(/CLOSEST/.test(draftHtml) && /not a ticket/.test(draftHtml) && /2245/.test(draftHtml),
      'closest banner prints draft levels and refuses the ticket label');
+
+  const chipHtml = W.hgMostProbablePanelHTML('omnibtc', {
+    tier: 'near',
+    row: {
+      sym: 'B-BTC_USDT', dir: 'long', entry: 77728.40, stop: 76857.10, t1: 79471,
+      gatesPassed: 6, evidenceChips: ['OPTION FLOW neutral']
+    }
+  });
+  ok(/OPTION FLOW neutral/.test(chipHtml) && /hg-mp-chips/.test(chipHtml),
+     'MOST PROBABLE banner prints OPTION FLOW / ORDER FLOW chips on the setup');
 }
 
 console.log('== SWING / SCALP / EDGE / BEST pin the banner ==');

@@ -91,6 +91,12 @@ console.log('\n== missing engines stay idle — they do not invent ==');
     'DIV is logged idle when no pivot divergence prints');
   ok(run.ledger.some(function(r){ return r.name === 'TRAP' && r.state === 'idle'; }),
     'TRAP is logged idle when no sweep-and-reclaim prints');
+  ok(run.ledger.some(function(r){ return r.name === 'ORDER FLOW'; }),
+    'ORDER FLOW is on the extra ledger even when CVD is unread');
+  ok(run.ledger.some(function(r){ return r.name === 'OPTION FLOW'; }),
+    'OPTION FLOW is on the extra ledger even when Deribit is unread');
+  ok(!run.candidates.some(function(c){ return /ORDER FLOW|OPTION FLOW/i.test(c.engine || ''); }),
+    'ORDER FLOW / OPTION FLOW never mint a candidate of their own');
 }
 
 console.log('\n== COIL / DIV / TRAP use the tab gates ==');
@@ -141,6 +147,56 @@ console.log('\n== evidence confirms / demotes / refuses — never mints ==');
     postGate: { ok: false, reason: 'stale momentum' }
   });
   ok(dropped.ok === false && dropped.row === null, 'a post-gate veto drops the candidate');
+
+  ok(quiet.unchecked.indexOf('order-flow') >= 0, 'missing CVD/OBI is UNCHECKED order-flow');
+  ok(quiet.unchecked.indexOf('option-flow') >= 0, 'missing Deribit put/call is UNCHECKED option-flow');
+
+  const flowWith = W.hgObtcEvidenceDecide(long, {
+    flowLong: { veto: false, flowOk: true, flowNA: false, flowDetail: 'CVD ✓' }
+  });
+  ok(flowWith.ok === true && flowWith.refuse === false && flowWith.demote === false,
+    'aligned ORDER FLOW confirms — it does not mint a second ticket');
+  ok(flowWith.chips.some(function(c){ return /ORDER FLOW/i.test(c); }),
+    'aligned ORDER FLOW is a chip on the setup');
+
+  const flowAgainst = W.hgObtcEvidenceDecide(long, {
+    flowLong: { veto: false, flowOk: false, flowNA: false, flowDetail: 'CVD ✗' }
+  });
+  ok(flowAgainst.demote === true && flowAgainst.refuse === false,
+    'ORDER FLOW against a long demotes — it does not invent a short');
+
+  const optAgainst = W.hgObtcEvidenceDecide(long, {
+    optionFlow: { bias: 'bearish', putCallVol: 2 }
+  });
+  ok(optAgainst.demote === true && optAgainst.refuse === false,
+    'bearish OPTION FLOW against a long demotes — no new levels');
+  ok(optAgainst.chips.some(function(c){ return /OPTION FLOW/i.test(c); }),
+    'OPTION FLOW is a chip on the setup');
+
+  const optWith = W.hgObtcEvidenceDecide(long, {
+    optionFlow: { bias: 'bullish', putCallVol: 0.5 }
+  });
+  ok(optWith.demote === false && optWith.refuse === false,
+    'bullish OPTION FLOW agrees with a long — confirm, do not invent');
+
+  const dvolX = W.hgObtcEvidenceDecide(long, { dvol: { regime: 'extreme', dvol: 92 } });
+  ok(dvolX.demote === true, 'extreme DVOL demotes a trend setup — it does not print a fade ticket');
+}
+
+console.log('\n== gather extra pulls ORDER FLOW + OPTION FLOW ==');
+{
+  const W = boot();
+  W.deribitOptionFlowSnapshot = async function(){ return { bias: 'bullish', putCallVol: 0.4, callVol: 80, putVol: 30 }; };
+  W.deribitVolSnapshot = async function(){ return { dvol: 38, regime: 'low' }; };
+  W.hgAssessFlowTrap = async function(sym, dir){
+    return { veto: false, flowOk: dir === 'long', flowNA: false, flowDetail: 'CVD ' + dir };
+  };
+  const extra = await W.hgObtcGatherExtra('BTCUSD', TICKER);
+  ok(extra && extra.optionFlow && extra.optionFlow.bias === 'bullish',
+    'gather extra reads Deribit option flow');
+  ok(extra.dvol && extra.dvol.regime === 'low', 'gather extra reads DVOL');
+  ok(extra.flowLong && extra.flowLong.flowOk === true, 'gather extra assesses long ORDER FLOW');
+  ok(extra.flowShort && extra.flowShort.flowOk === false, 'and the short side separately — no invented dir');
 }
 
 console.log('\n== pick drops a refused extra row ==');
@@ -162,6 +218,24 @@ console.log('\n== pick drops a refused extra row ==');
   ok(pick && pick.row.engine === 'SWING clean plan', 'refused TRAP does not beat a real CLEAN');
 }
 
+console.log('\n== pick keeps ORDER FLOW / OPTION FLOW chips after rank ==');
+{
+  const W = boot();
+  const raw = {
+    sym: 'BTCUSD', dir: 'long', entry: 100, stop: 90, t1: 120, t2: 135,
+    clean: false, near: true, passed: 6, engine: 'PINE',
+    _extra: { optionFlow: { bias: 'neutral', putCallVol: 0.93 }, flowLong: { flowNA: true } }
+  };
+  const pick = W.hgObtcPick([raw]);
+  ok(pick && pick.row && pick.row.entry === 100, 'watch with levels still ranks');
+  ok(pick.row.engine === 'PINE', 'rank does not steal the winner engine from another row');
+  ok(Array.isArray(pick.row.evidenceChips) && pick.row.evidenceChips.some(function(c){
+    return /OPTION FLOW/i.test(c);
+  }), 'OPTION FLOW chip survives hgPickMostProbableAny re-normalize');
+  ok(pick.row.entry === 100 && pick.row.stop === 90 && pick.row.t1 === 120,
+    'evidence chips do not rewrite ENTRY / STOP / T1');
+}
+
 console.log('\n== wiring: script, shell, header honesty ==');
 {
   const html = read('index.html');
@@ -179,6 +253,10 @@ console.log('\n== wiring: script, shell, header honesty ==');
     'the header states extra engines never claim 7/7 CLEAN');
   ok(/APEX/.test(eng) && /alts versus BTC/.test(eng),
     'APEX is named as skipped because it is alts versus BTC');
+  ok(/ORDER FLOW/.test(eng) && /OPTION FLOW/.test(eng),
+    'ORDER FLOW and OPTION FLOW are wired as extra evidence');
+  ok(/hgAssessFlowTrap/.test(eng), 'ORDER FLOW reuses hgAssessFlowTrap — not a new CVD engine');
+  ok(/deribitOptionFlowSnapshot/.test(eng), 'OPTION FLOW reuses the Deribit public book summary');
 }
 
 console.log('\npassed: ' + passed);

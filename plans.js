@@ -417,6 +417,13 @@ function hgNormalizeSetupRow(raw){
     nearClean: !!(raw.nearClean || nest.nearClean),
     postGateUnchecked: !!raw.postGateUnchecked
   };
+  if (raw.engine || raw.strategy || nest.engine)
+    row.engine = raw.engine || raw.strategy || nest.engine;
+  if (raw.strategy || raw.engine || nest.strategy)
+    row.strategy = raw.strategy || raw.engine || nest.strategy;
+  var chips = Array.isArray(raw.evidenceChips) ? raw.evidenceChips
+    : (Array.isArray(nest.evidenceChips) ? nest.evidenceChips : null);
+  if (chips && chips.length) row.evidenceChips = chips.slice();
   if (isFinite(t2) && t2 > 0) row.t2 = t2;
   if (!hgSetupHasLevels(row)) return null;
   var tier = String(raw.tier || nest.tier || '').toLowerCase();

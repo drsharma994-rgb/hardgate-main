@@ -25,7 +25,7 @@ invoked (squeeze, PINE and structure were listed and never wired):
   COIL / DIV / TRAP ........ same gates as those CRYPTO tabs
   SMC ...................... pineSmcCore last-bar ChoCh
   STAR TRADER .............. stSynthesize (votes the engines above)
-  ONCHAIN / TERM / CARRY ... evidence only — confirm / demote / refuse
+  ONCHAIN / TERM / CARRY / ORDER FLOW / OPTION FLOW ... evidence only — confirm / demote / refuse
   PINE ..................... READ ONLY. pineScan() is a snapshot the PINE tab
                              computes; this reads a BTC row when one is
                              already there and contributes nothing when it is
@@ -216,8 +216,18 @@ a global hard refresh.
     if (!btc.length) return null;
     var pick = gfn('hgPickMostProbableAny') ? W.hgPickMostProbableAny(btc) : { row: btc[0], tier: 'clean', source: 'clean' };
     if (!pick || !pick.row || !hgObtcIsBtc(pick.row.sym) || !hgObtcHasLevels(pick.row)) return null;
-    pick.row.engine = pick.row.engine || btc[0].engine;
+    var kept = null;
+    for (i = 0; i < btc.length; i++){
+      if (btc[i].sym === pick.row.sym && btc[i].dir === pick.row.dir
+        && btc[i].entry === pick.row.entry && btc[i].stop === pick.row.stop){
+        kept = btc[i];
+        break;
+      }
+    }
+    pick.row.engine = pick.row.engine || (kept && kept.engine) || btc[0].engine;
     pick.row.strategy = pick.row.strategy || pick.row.engine;
+    if ((!pick.row.evidenceChips || !pick.row.evidenceChips.length) && kept && kept.evidenceChips)
+      pick.row.evidenceChips = kept.evidenceChips;
     return pick;
   }
 
@@ -674,7 +684,7 @@ a global hard refresh.
       + '<h2>OMNIBTC — Bitcoin only <span>every house strategy + indicator bank · one MOST PROBABLE setup</span></h2>'
       + '<div class="note" style="margin-bottom:10px">BTC is the whole universe. SWING, SCALP, EDGE, PINE, squeeze, '
       + 'mean-reversion, sniper, liquidity, SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC and STAR TRADER '
-      + 'all read the same coin on Delta and CoinDCX. ONCHAIN / TERM / CARRY confirm, demote or refuse — they never mint levels. '
+      + 'all read the same coin on Delta and CoinDCX. ONCHAIN / TERM / CARRY / ORDER FLOW / OPTION FLOW confirm, demote or refuse — they never mint levels. '
       + 'The desk then keeps <b>one</b> setup: 7/7 CLEAN with real ENTRY / STOP / T1 wins; otherwise the nearest watch; '
       + 'otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are.</div>'
       + '<div class="note" id="obtcStat" aria-live="polite">idle — press SCAN BTC.</div>'
