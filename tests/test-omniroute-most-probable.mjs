@@ -288,6 +288,25 @@ console.log('== shared indicator bank grew with unused tape reads ==');
      'rsi-classic is info, not a veto');
 }
 
+console.log('== two-sided house votes must not throw on an undefined gfn ==');
+{
+  ok(!/\bgfn\(/.test(ROUTE), 'omniroute consensus looks up detectRegime on window, not an undefined gfn');
+  const W = boot();
+  const rows = [];
+  let p = 60000;
+  for (let i = 0; i < 120; i++){
+    p = p * (1 + Math.sin(i / 9) * 0.002);
+    rows.push({ t: 1700000000 + i * 14400, o: p, h: p * 1.002, l: p * 0.998, c: p, v: 900 });
+  }
+  W.mrSignal = function(){ return { dir: 'short', entry: p * 0.999, stop: p * 1.01, target: p * 0.97 }; };
+  W.edgeSignal = function(){ return { dir: 'long', entry: p, stop: p * 0.98, t1: p * 1.04 }; };
+  let threw = false, found = [];
+  try { found = W.hgOmniEvaluate({ sym: 'BTCUSD', base: 'BTC' }, rows, null, {}); }
+  catch (e){ threw = true; }
+  ok(!threw, 'evaluate does not throw when extra engines vote both ways');
+  ok(Array.isArray(found), 'still returns an array');
+}
+
 console.log('== hard constraints stay closed ==');
 {
   ok(/CG_SWING_RR_MIN\s*=\s*2/.test(GATES) || /CG_SWING_RR_MIN = 2/.test(GATES),

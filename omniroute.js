@@ -1713,7 +1713,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            chorus that fires against every such regime, and it stands
            aside. */
         var mjReg = null;
-        var mjFn = gfn('detectRegime');
+        var mjW = (typeof window !== 'undefined') ? window : null;
+        var mjFn = (mjW && typeof mjW.detectRegime === 'function') ? mjW.detectRegime : null;
         if (mjFn){ try { var mjR = mjFn(rows); mjReg = mjR ? String(mjR.regime || '') : null; } catch (eMj){ mjReg = null; } }
         var mjFam = /trend/i.test(mjReg || '') ? 'TREND'
                   : /range|chop|mean/i.test(mjReg || '') ? 'REVERSION' : null;
@@ -1793,7 +1794,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            vetoes, and TREND firing on both sides still cannot be
            separated. */
         var mnReg = null;
-        var mnFn = gfn('detectRegime');
+        var mnW = (typeof window !== 'undefined') ? window : null;
+        var mnFn = (mnW && typeof mnW.detectRegime === 'function') ? mnW.detectRegime : null;
         if (mnFn){ try { var mnR = mnFn(rows); mnReg = mnR ? String(mnR.regime || '') : null; } catch (eMn){ mnReg = null; } }
         var mnFam = /trend/i.test(mnReg || '') ? 'TREND'
                   : /range|chop|mean/i.test(mnReg || '') ? 'REVERSION' : null;
@@ -2219,6 +2221,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
     for (i = 0; i < hits.length; i++){
+      try {
       var hit = hits[i];
       var ex = extra || {};
       // per-detector measured stats select by this hit's family
@@ -2285,6 +2288,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         family: hgOmniFamilyOf(hit.kind),
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
+      } catch (eHit) {
+        try { console.warn('omniroute evaluate skipped', item && item.sym, hits[i] && hits[i].kind, eHit); } catch (eHit2) {}
+      }
     }
     return out;
   }
