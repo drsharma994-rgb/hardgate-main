@@ -11,37 +11,55 @@
     "short": null
   },
   "sniper": {
-    "key": "B-CYS_USDT@0.6336458262867268;B-TAO_USDT@238.41;WIFUSD@0.22003396169512354",
+    "key": "B-CYS_USDT@0.6355044988212313;B-JASMY_USDT@0.004834918329670709;B-PIEVERSE_USDT@1.0220156937574134;BTCUSD@80234.56414274852;RAYSOLUSDT@0.8227867882414929",
     "hits": [
       {
-        "sym": "WIFUSD",
+        "sym": "BTCUSD",
         "dir": "long",
-        "entry": 0.22003396169512354,
-        "stop": 0.21555101527615794,
-        "t1": 0.2299,
-        "lev": 28,
+        "entry": 80234.56414274852,
+        "stop": 79716.0547161612,
+        "t1": 81270.5,
+        "lev": 68,
+        "state": "APPROACHING"
+      },
+      {
+        "sym": "RAYSOLUSDT",
+        "dir": "long",
+        "entry": 0.8227867882414929,
+        "stop": 0.8085530690738277,
+        "t1": 0.8539,
+        "lev": 32,
+        "state": "APPROACHING"
+      },
+      {
+        "sym": "B-PIEVERSE_USDT",
+        "dir": "long",
+        "entry": 1.0220156937574134,
+        "stop": 1.004312122256917,
+        "t1": 1.0508,
+        "lev": 32,
         "state": "IN ZONE"
       },
       {
         "sym": "B-CYS_USDT",
         "dir": "long",
-        "entry": 0.6336458262867268,
-        "stop": 0.6193545773987245,
+        "entry": 0.6355044988212313,
+        "stop": 0.6217358975883133,
         "t1": 0.6685,
-        "lev": 25,
+        "lev": 26,
         "state": "IN ZONE"
       },
       {
-        "sym": "B-TAO_USDT",
+        "sym": "B-JASMY_USDT",
         "dir": "long",
-        "entry": 238.41,
-        "stop": 234.8186891062277,
-        "t1": 243.95,
-        "lev": 36,
+        "entry": 0.004834918329670709,
+        "stop": 0.004751341119548723,
+        "t1": 0.004960284144853687,
+        "lev": 32,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-25T04:40:16.159Z"
+    "at": "2026-08-25T05:58:51.630Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -286,17 +304,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-25T05:18:02.235Z"
+    "at": "2026-08-25T05:58:51.631Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-25T05:18:02.235Z"
+    "at": "2026-08-25T05:58:51.631Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
+  "engineAlertAt": "2026-08-25T05:58:51.631Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -311,7 +330,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-25T05:18:02.523Z"
+    "at": "2026-08-25T05:58:51.902Z"
   },
   "bookFill": {
     "key": "u0|p0",
