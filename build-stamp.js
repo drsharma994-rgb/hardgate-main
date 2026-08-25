@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v471',
+  version: 'hg-v472',
   pack: 'OMNIROUTE full ledger — every engine and indicator on every name',
   built: '2026-08-25T13:30:00Z',
   note: 'OMNIROUTE pass 2 runs every engine (shared mechanics, native six, positioning, XS, house extras including SCALP on 1H+15m) and every indicator on every scanned Delta+CoinDCX name. Quiet names do not get invented tickets. Extra votes never claim 7/7 CLEAN. Gold min-loss and G1–G7 stay as they are.'

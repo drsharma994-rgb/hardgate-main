@@ -157,6 +157,10 @@ console.log('\n== the four gold context gates carry the flag ==');
                            trends in the premium quartile and a desk that
                            vetoed there would stand aside for the move. */
                         'premium-discount',
+                        /* seasonality is goldind's own "context only, not a
+                           vote"; spot-basis is PAXG against the desk's feed
+                           and is live-only, so neither can ever be a veto */
+                        'gold-season', 'spot-basis',
                         /* gold's structural-placement read (v417): a setup at
                            a multi-source zone vs one in no-man's-land — it
                            argues standing, never existence */
