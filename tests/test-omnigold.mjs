@@ -180,7 +180,11 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
      deprives them of nothing, so the honest expectation flips: they must
      EVALUATE here, and the not-pass check applies only to gates whose
      evidence the harness actually withheld. */
-  const SELF_SUFFICIENT = ['obv-flow', 'mfi-pressure', 'cci-stretch', 'ema-ribbon', 'heikin-trend'];
+  /* ema-stack and session-vwap are arithmetic on the bars this harness
+     already supplies (local emaOf / session VWAP). rsi-zone still needs
+     indicators.js rsi() and stays UNCHECKED here. */
+  const SELF_SUFFICIENT = ['obv-flow', 'mfi-pressure', 'cci-stretch', 'ema-ribbon', 'heikin-trend',
+                           'ema-stack', 'session-vwap'];
   const INDICATOR_GATES = INFO_GATES.filter(k => SELF_SUFFICIENT.indexOf(k) < 0)
     .concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh', 'weekend-exposure', 'shield-guard', 'momentum-stop']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);

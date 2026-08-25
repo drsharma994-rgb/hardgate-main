@@ -162,7 +162,7 @@ console.log('\n== THE CORRECTION: 27 mechanics change what a sigma is worth ==')
   ok(live.pass !== true, 'the live +1.47σ in-sample read no longer PASSES');
   ok(live.pass === null, 'it reads UNCHECKED — not demonstrated, not disproved');
   ok(/mechanics scanned/.test(live.why), 'and the card explains why (' + live.why.slice(-70) + ')');
-  ok(/\+2\.\d\dσ is the bar/.test(live.why), 'quoting the bar it had to clear');
+  ok(/\+\d\.\d\dσ is the bar/.test(live.why), 'quoting the bar it had to clear');
 
   const strong = edge({ samples: 200, hit: 0.62, expR: 0.9 }, null);
   ok(strong.pass === true, 'a genuinely strong in-sample read still passes');

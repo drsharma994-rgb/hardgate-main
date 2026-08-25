@@ -175,7 +175,12 @@ console.log('\n== the four gold context gates carry the flag ==');
                         /* the position-risk reads: what the R is worth after
                            fees, and where liquidation sits relative to the
                            stop. Both inform sizing; neither vetoes. */
-                        'net-r', 'liq-room'];
+                        'net-r', 'liq-room',
+                        /* round five gold structure reads — they argue
+                           whether a ticket is standing on stack / RSI /
+                           session VWAP. They never invent one and never
+                           stand a cleared ticket aside. */
+                        'ema-stack', 'rsi-zone', 'session-vwap'];
   const all = [];
   for (const f of ['omnigold.js', 'omniroute.js']){
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
