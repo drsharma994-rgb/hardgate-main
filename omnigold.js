@@ -4025,7 +4025,9 @@ terse status, and never launches a first-time scan on a global refresh.
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
           stats[k] = btFn(rows, fns[k], { rMult: cfg.minRr, horizon: cfg.horizonBars, warm: cfg.warm });
         }
-        pooled = poolFn ? poolFn([stats]) : stats;
+        /* cfg.minRr, NOT the pooler's default: SCALP measures at 1.5R and
+           SWING at 2.0R, and the pool used to re-price both at 2.0. */
+        pooled = poolFn ? poolFn([stats], cfg.minRr) : stats;
       }
 
       /* Settle any forward records this symbol has open, using the bars just

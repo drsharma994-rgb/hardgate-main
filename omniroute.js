@@ -883,7 +883,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   /* Pool per-detector stats across every symbol scanned. A single symbol
      yields far too few samples to trust; the pooled number is the one worth
      reading, and both are shown so a thin pool is visible. Pure. */
-  function hgOmniPoolStats(perSymbol){
+  /* rMult: the R multiple the samples were MEASURED at. Defaults to MIN_RR,
+     which is what this desk backtests at, so omniroute's own call is
+     unchanged.
+
+     THE BUG THIS PARAMETER EXISTS FOR. The pool recomputed expectancy from
+     the pooled hit rate using MIN_RR unconditionally — this module's
+     constant, 2.0 — while the CALLER may have measured at something else.
+     hgOmniBacktestOne already takes opts.rMult and OMNIGOLD passes its
+     horizon's floor: 1.5R on SCALP, 2.0R on SWING. So every scalp mechanic
+     was measured at 1.5R and then had its expectancy re-priced at 2.0R.
+
+     Measured on live gold: STOCHRSI-TURN, 12 wins of 29 settled, hit 41.4%.
+     At the 1.5R it was actually measured at that is +0.034R — a coin flip
+     either side of breakeven, which for 1.5R is 40%. Re-priced at 2.0R the
+     pool printed +0.241R, seven times larger, and that is the number the
+     card showed and measured-edge reasoned about. SWING was correct only
+     because its floor happens to equal MIN_RR.
+
+     Nothing about the samples changes — the hit rate was always right. What
+     was wrong was the R multiple the winners were paid at. */
+  function hgOmniPoolStats(perSymbol, rMult){
     var pool = {}, i, k, s;
     for (i = 0; i < (perSymbol || []).length; i++){
       for (k in perSymbol[i]) if (Object.prototype.hasOwnProperty.call(perSymbol[i], k)){
@@ -897,7 +917,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)){
       var p = pool[k];
       p.hit = p.samples ? (p.wins / p.samples) : NaN;
-      p.expR = p.samples ? (p.hit * MIN_RR - (1 - p.hit)) : NaN;
+      /* fin-style guard: a caller passing null/'' must fall back, not
+         silently price every mechanic at 0R. */
+      var rr = +rMult;
+      if (!isFinite(rr) || rr <= 0) rr = MIN_RR;
+      p.rMult = rr;
+      p.expR = p.samples ? (p.hit * rr - (1 - p.hit)) : NaN;
     }
     return pool;
   }
