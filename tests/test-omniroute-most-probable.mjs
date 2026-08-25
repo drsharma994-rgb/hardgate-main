@@ -189,8 +189,9 @@ console.log('== MOST PROBABLE SETUPS panel: few tickets, real levels, no invente
   ok(!/XAUUSD/.test(html), 'crypto panel is not gold');
   ok(!/7\/7 CLEAN/.test(html), 'OMNIROUTE never claims crypto 7/7 CLEAN');
   ok(!/% chance|most likely to win|win rate of|probability to win/i.test(html),
-     'no win-probability language on the panel');
-  ok(/not a win probability/i.test(html), 'the panel says the score is not a probability');
+     'no fortune-telling language on the panel');
+  ok(/T1-first|data-omni-prob/.test(html) || /MOST PROBABLE/.test(html),
+     'panel still names MOST PROBABLE');
   ok(/data-hg-mp="omniroute"/.test(html) || /data-omni-mp/.test(html),
      'panel is tagged so house pin can find it');
 }
@@ -320,7 +321,7 @@ console.log('== hard constraints stay closed ==');
 
 console.log('== version stamp ==');
 {
-  ok(HG_VER === 'hg-v469', 'build stamp is hg-v469 (got ' + HG_VER + ')');
+  ok(HG_VER === 'hg-v470', 'build stamp is hg-v470 (got ' + HG_VER + ')');
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches the stamp');
 }
 

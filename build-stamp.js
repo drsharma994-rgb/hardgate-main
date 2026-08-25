@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v469',
-  pack: 'OMNIROUTE most-probable balance — all fed-in engines, few setups on top',
-  built: '2026-08-25T10:40:00Z',
-  note: 'OMNIROUTE ranks tape-aligned tickets on a balanced score of mechanic families and indicator info-reads, then pins MOST PROBABLE SETUPS (up to three distinct symbols) at the top of the tab. House extra engines vote and never claim 7/7 CLEAN. A LONG is not the pick while the crypto tape is short. Gold min-loss and G1–G7 stay as they are.'
+  version: 'hg-v470',
+  pack: 'OMNIROUTE T1-first probability — every formation, max % on top',
+  built: '2026-08-25T12:00:00Z',
+  note: 'OMNIROUTE prints an exact T1-first probability on every setup: shrunk walk-forward hit rate updated by live tape, strategy-family consensus and indicator reads. The maximum leads MOST PROBABLE SETUPS. Extra engines never claim 7/7 CLEAN. Gold min-loss and G1–G7 stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
