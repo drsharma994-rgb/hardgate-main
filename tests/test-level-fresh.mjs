@@ -155,9 +155,9 @@ console.log('\n== both desks capture the live price at ingestion ==');
   ok(/livePx: livePx/.test(GOLD), 'and passes it into the ledger extras');
   ok(/var livePx = \(rows && rows\.length\) \? fin\(rows\[rows\.length - 1\]\.c\) : NaN;/.test(ROUTE),
      'omniroute does the same at its single ingestion point');
-  ok(/fired\.push\(\{ item: item, rows: rows, hits: hits, livePx: livePx \}\);/.test(ROUTE),
-     'carried per contract from pass 1');
-  ok(/ex\.livePx = fired\[j\]\.livePx;/.test(ROUTE), 'and handed to the pass-2 ledger');
+  ok(/held\.push\(\{ item: item, rows: rows, hits: hits, livePx: livePx \}\);/.test(ROUTE),
+     'carried per contract from pass 1 — every name, not only fires');
+  ok(/ex\.livePx = held\[j\]\.livePx;/.test(ROUTE), 'and handed to the pass-2 ledger');
   ok((GOLD.match(/key:'level-fresh'/g) || []).length === 1
      && (ROUTE.match(/key:'level-fresh'/g) || []).length === 1,
      'one level-fresh gate per desk');

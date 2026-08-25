@@ -64,7 +64,7 @@ console.log('== source: the three mechanisms exist where the contract says ==');
   ok(/isTk \|\| shown < CARD_RENDER_MAX/.test(SRC), 'every ticket renders regardless of the cap');
   ok(/function gradeStep\(j\)/.test(SRC) && /omniSleep\(0\)\.then\(function\(\)\{ return gradeStep\(stop\); \}\)/.test(SRC),
      'grading is chunked and yields the main thread between chunks');
-  ok(/fired\[j\]\.rows = null;/.test(SRC), 'each contract\'s bars are released once graded');
+  ok(/held\[j\]\.rows = null;/.test(SRC), 'each contract\'s bars are released once graded');
   ok(/try \{ gradeOne\(gj\); \}/.test(SRC), 'one bad contract cannot take down the rest of the grade');
   ok(/-card screen cap/.test(SRC), 'the overflow names itself instead of silently truncating');
 }
