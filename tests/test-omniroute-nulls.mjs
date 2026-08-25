@@ -335,7 +335,14 @@ for (const [name, mk, gateKey] of fields){
                             'stop-width',
                             /* no plan and no crypto-position-risk.js in this
                                harness, so these correctly cannot be read */
-                            'net-r', 'liq-room'];
+                            'net-r', 'liq-room',
+                            /* the liquidation map projects clusters from
+                               recent block extremes and judges them against
+                               a plan. This harness supplies neither enough
+                               bars nor a plan, so UNCHECKED is the honest
+                               read. Vol targeting and CVD compute from the
+                               candles themselves and do report here. */
+                            'liq-map'];
   ok(fullUnchecked.every(k => ALLOWED_UNCHECKED.indexOf(k) >= 0),
      'only the family-wise edge read, consensus and the unloadable indicator reads are unchecked ('
      + (fullUnchecked.join(', ') || 'none') + ')');
