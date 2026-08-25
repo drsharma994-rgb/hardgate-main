@@ -324,8 +324,8 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      the terminal executed could change without a deploy; 4.4.1 is what @4 resolved to,
      byte-identical. Served same-origin now, so they are precached with the rest of the
      shell and the charts work offline. -->
-<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=473"></script>
-<script src="./vendor/lightweight-charts-4.2.0.js?v=473"></script>
+<script type="text/javascript" src="./vendor/emailjs-browser-4.4.1.js?v=474"></script>
+<script src="./vendor/lightweight-charts-4.2.0.js?v=474"></script>
 </head>
 <body>
 <header class="hg-header">
@@ -822,7 +822,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="gate-replay-oos.js"></script>
 <script src="cryptogates.js"></script>
 <script src="plans.js"></script>
-<script src="./hg-plan.js?v=473"></script>
+<script src="./hg-plan.js?v=474"></script>
 <script src="structure-levels.js"></script>
 <script src="setup-stack.js"></script>
 <script src="setup-ui.js"></script>
@@ -854,12 +854,12 @@ table tr:hover td{background:rgba(201,146,26,.06)}
      defensive rather than load-bearing. -->
 <script src="hg-forward.js"></script>
 <!-- hg-mechanics.js: the instrument-agnostic detectors, shared by OMNIROUTE and OMNIGOLD. Loads BEFORE both; each caller feature-checks, so a missing file costs those mechanics rather than the tab. -->
-<script src="hg-mechanics.js?v=473"></script>
-<script src="./hg-gates.js?v=473"></script>
-<script src="omniroute.js?v=473"></script>
+<script src="hg-mechanics.js?v=474"></script>
+<script src="./hg-gates.js?v=474"></script>
+<script src="omniroute.js?v=474"></script>
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
-<script src="edge.js?v=473"></script>
+<script src="edge.js?v=474"></script>
 <script src="startradertab.js?v=40"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
@@ -875,15 +875,15 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <!-- goldswing.js: GOLD SWING tab (4h/1d swing setups; consumes goldind.js detectors read-only) -->
 <script src="goldswing.js"></script>
 <!-- omnigold.js: OMNIGOLD tab. Loads AFTER omniroute.js (whose engine it reuses) and AFTER goldind.js (killzone/ADR detectors) — both are feature-checked, but this order means they are actually there. -->
-<script src="omnigold.js?v=473"></script>
+<script src="omnigold.js?v=474"></script>
 <!-- omnipresent.js: OMNIPRESENT tab, the anticipation desk. Loads AFTER omniroute.js (hgOmniDropForming, hgOmniGrade) and hg-gates.js (hgContextRead) - all feature-checked, this order makes them actually there. -->
-<script src="omnipresent.js?v=473"></script>
+<script src="omnipresent.js?v=474"></script>
 <!-- contract-report.js: the FULL REPORT in SEARCH — one contract put through every strategy, gate and indicator the app ships, ending in one plan with exact entry, stop and targets. Loads after the engines it calls; every one is feature-checked, so a module that is not there reads UNCHECKED instead of silently shortening the report. -->
 <script src="contract-report.js"></script>
 <!-- omnibtc-engines.js: SMART $ / OI FLOW / fade / COIL / DIV / TRAP / SMC / STAR TRADER + on-chain evidence. Loads BEFORE omnibtc.js so the tab can feature-check it. -->
-<script src="omnibtc-engines.js?v=473"></script>
+<script src="omnibtc-engines.js?v=474"></script>
 <!-- omnibtc.js: OMNIBTC tab. BTC only — every house engine + indicator bank, then one MOST PROBABLE. Loads AFTER contract-report.js (hgContractReportRun) and the engines it calls; every one is feature-checked. -->
-<script src="omnibtc.js?v=473"></script>
+<script src="omnibtc.js?v=474"></script>
 <script src="hggateflip.js"></script>
 <script src="brainrobust.js"></script>
 <script src="braininvalidation.js"></script>
@@ -906,18 +906,18 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="venuepremium.js"></script>
 <script src="reliability.js"></script>
 <!-- formation-live.js: internet context for formation. Confirm / demote / refuse. Never invents levels. Loads BEFORE formation.js so hgFormTicket can feature-check it. -->
-<script src="formation-live.js?v=473"></script>
+<script src="formation-live.js?v=474"></script>
 <script src="formation.js"></script>
 <script src="freqtrade-formation.js"></script>
 <script src="best-levels.js"></script>
-<script src="supersetup.js?v=473"></script>
+<script src="supersetup.js?v=474"></script>
 <script src="gold-best-levels.js"></script>
-<script src="super-desk-common.js?v=473"></script>
-<script src="super-gold.js?v=473"></script>
-<script src="super-best.js?v=473"></script>
-<script src="super-sniper.js?v=473"></script>
-<script src="super-book.js?v=473"></script>
-<script src="super-calibrate.js?v=473"></script>
+<script src="super-desk-common.js?v=474"></script>
+<script src="super-gold.js?v=474"></script>
+<script src="super-best.js?v=474"></script>
+<script src="super-sniper.js?v=474"></script>
+<script src="super-book.js?v=474"></script>
+<script src="super-calibrate.js?v=474"></script>
 <script src="walkforward-ui.js"></script>
 <script src="formation-instr-ui.js"></script>
 <script src="meta-label.js"></script>

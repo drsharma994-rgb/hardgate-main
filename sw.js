@@ -1,5 +1,5 @@
 /* =========================================================================
-   HARDGATE service worker — cache hg-v9
+   HARDGATE service worker — cache id is HG_CACHE below, bumped every deploy
    Fresh data is sacred in trading: NETWORK-FIRST for EVERYTHING. The cache
    exists ONLY as an offline fallback for the static app shell.
    NEVER cached: /api/ and /api/proxy responses, non-GET requests, cross-origin
@@ -8,7 +8,7 @@
    ========================================================================= */
 'use strict';
 
-const HG_CACHE = 'hg-v473';
+const HG_CACHE = 'hg-v474';
 
 /* Static app shell, precached best-effort for the offline fallback. A single
    missing file must never fail install — runtime network-first backfills. */
