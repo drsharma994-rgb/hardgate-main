@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v464',
-  pack: 'OMNIBTC runs the rest of the BTC house',
-  built: '2026-08-23T18:00:00Z',
-  note: 'OMNIBTC now calls SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC and STAR TRADER on BTC only. ONCHAIN, TERM BASIS and CARRY confirm, demote or refuse. Extra engines never claim 7/7 CLEAN. Levels still come from existing engines. APEX / BEST / SUPER / BRAIN full-universe scans are not invented here. G1–G7 and gold min-loss stay as they are.'
+  version: 'hg-v465',
+  pack: 'OMNIGOLD follows gold tape — no LONG while gold is going down',
+  built: '2026-08-25T03:10:00Z',
+  note: 'OMNIGOLD STRONGEST / MOST PROBABLE / XM strongest follow gold\'s own bars (last vs EMA21, stack, recent closes), not the crypto MARKET PICTURE cascade. When gold tape is down, a LONG is not the setup. A missing short is not invented. Unread tape does not empty the desk. Gold min-loss and G1–G7 stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

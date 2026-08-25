@@ -15,6 +15,14 @@ trap, the stale-risk R:R, the forming-bar rule, the significance test —
 lands here automatically. Duplicating that engine would have meant
 duplicating its bugs.
 
+GOLD TAPE IS GOLD, NOT THE CRYPTO CASCADE.
+  STRONGEST / MOST PROBABLE / XM strongest follow gold's own bars
+  (last vs EMA21, EMA21 vs EMA50, recent closes). When that tape is
+  down, a LONG is not the setup — even a fade that cleared the trend
+  gate as "counter-trend, which is what this setup IS". No short is
+  invented. Unread tape does not empty the desk. Crypto MARKET PICTURE
+  is BTC/ETH/SOL/GOLD and is the wrong instrument for this call.
+
 TWO HORIZONS, MEASURED SEPARATELY.
   SCALP  1h bars. Session-driven: Asia range, London/NY killzones, ADR
          budget. Tighter R floor.
@@ -1029,6 +1037,45 @@ terse status, and never launches a first-time scan on a global refresh.
     var k = 2 / (n + 1), e = vals[0], i;
     for (i = 1; i < vals.length; i++) e = vals[i] * k + e * (1 - k);
     return e;
+  }
+
+  /* Gold's own direction. Not crypto MARKET PICTURE (that majority is
+     BTC/ETH/SOL/GOLD and can stay LONG-LEANING while XAU is dropping).
+     Short when price is below EMA21 and the stack or the last few closes
+     are also down. Empty string = unread, not a guessed side. */
+  function hgOgTapeDir(rows){
+    try{
+      if (!rows || rows.length < 55) return '';
+      var closes = closesOf(rows);
+      if (closes.length < 55) return '';
+      var last = closes[closes.length - 1];
+      var ago = closes[closes.length - 6];
+      var e21 = emaOf(closes, 21);
+      var e50 = emaOf(closes, 50);
+      if (!isFinite(last) || !isFinite(e21) || !isFinite(e50)) return '';
+      var below = last < e21, above = last > e21;
+      var downStack = e21 < e50, upStack = e21 > e50;
+      var falling = isFinite(ago) && last < ago;
+      var rising = isFinite(ago) && last > ago;
+      if (below && (downStack || falling)) return 'short';
+      if (above && (upStack || rising)) return 'long';
+      return '';
+    }catch(e){ return ''; }
+  }
+  function hgOgTapeLabel(dir){
+    if (dir === 'short') return 'DOWN';
+    if (dir === 'long') return 'UP';
+    return 'UNREAD';
+  }
+  function hgOgTapeBannerHtml(scalpDir, swingDir){
+    var h = '<div class="note og-tape" role="status"><b>GOLD TAPE</b> — gold\'s own bars, not the crypto cascade. ';
+    h += 'Scalp ' + hgOgTapeLabel(scalpDir) + ' · Swing ' + hgOgTapeLabel(swingDir) + '.';
+    if (swingDir === 'short' || scalpDir === 'short')
+      h += ' Gold is going down on at least one horizon — a LONG is not the setup there.';
+    else if (swingDir === 'long' && scalpDir === 'long')
+      h += ' Gold is going up — a SHORT is not the setup.';
+    h += '</div>';
+    return h;
   }
   function closesOf(rows){
     var out = [], i, c;
@@ -2436,7 +2483,7 @@ terse status, and never launches a first-time scan on a global refresh.
      the list; it is not the first card when a sweep two points off the
      market already has matching entry/stop. Far tickets remain if
      nothing nearer survived. */
-  function hgOgPickFor(ranked, horizon){
+  function hgOgPickFor(ranked, horizon, tapeDir){
     if (!ranked || !ranked.length) return null;
     var i, c, structural = [], vol = [];
     for (i = 0; i < ranked.length; i++){
@@ -2449,6 +2496,16 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var pool = structural.length ? structural : vol;
     if (!pool.length) return null;
+    tapeDir = String(tapeDir || '').toLowerCase();
+    if (tapeDir === 'long' || tapeDir === 'short'){
+      var aligned = [];
+      for (i = 0; i < pool.length; i++){
+        if (String(pool[i].dir || '').toLowerCase() === tapeDir) aligned.push(pool[i]);
+      }
+      /* Against-tape is not the setup. Do not invent the other side. */
+      if (!aligned.length) return null;
+      pool = aligned;
+    }
     var near = [], anyDist = false;
     for (i = 0; i < pool.length; i++){
       if (isFinite(fin(pool[i].distAtr))){
@@ -2472,6 +2529,15 @@ terse status, and never launches a first-time scan on a global refresh.
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
     if (tot) badge += ' ' + pill(ev + '/' + tot + ' checks', ev * 2 >= tot ? '' : 'bad');
     if (c.topPick) badge = pill('STRONGEST ' + c.horizon, 'pick') + ' ' + badge;
+    var tapeNow = '';
+    if (__og.tape){
+      tapeNow = (c.horizon === HORIZONS.scalp.label) ? __og.tape.scalp : __og.tape.swing;
+    }
+    if (tapeNow === 'long' || tapeNow === 'short'){
+      badge += ' ' + (String(c.dir).toLowerCase() === tapeNow
+        ? pill('WITH GOLD TAPE', 'ok')
+        : pill('AGAINST GOLD TAPE', 'bad'));
+    }
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
@@ -2984,8 +3050,11 @@ terse status, and never launches a first-time scan on a global refresh.
            something to be reconstructed from a list. A horizon with no ticket
            says so outright — an empty result is an answer, and dressing up
            the least-vetoed setup as a pick would defeat the ledger. */
-        var pickScalp = hgOgPickFor(ranked, HORIZONS.scalp.label);
-        var pickSwing = hgOgPickFor(ranked, HORIZONS.swing.label);
+        var scalpTape = hgOgTapeDir(res.scalp && res.scalp.rows);
+        var swingTape = hgOgTapeDir(res.swing && res.swing.rows);
+        __og.tape = { scalp: scalpTape, swing: swingTape };
+        var pickScalp = hgOgPickFor(ranked, HORIZONS.scalp.label, scalpTape);
+        var pickSwing = hgOgPickFor(ranked, HORIZONS.swing.label, swingTape);
         if (pickScalp) pickScalp.topPick = true;
         if (pickSwing) pickSwing.topPick = true;
 
@@ -2996,7 +3065,7 @@ terse status, and never launches a first-time scan on a global refresh.
           if (ranked[i] !== pickScalp && ranked[i] !== pickSwing) ordered.push(ranked[i]);
         }
 
-        var h = '';
+        var h = hgOgTapeBannerHtml(scalpTape, swingTape);
         /* The next levels FIRST: the reader asked to hold the high and the
            bottom before the market arrives — that answer leads the page. */
         try {
@@ -3004,11 +3073,14 @@ terse status, and never launches a first-time scan on a global refresh.
             h += hgOgZonesPanel(res.scalp.rows, res.scalp.livePx);
           }
         } catch (eZp) {}
-        [[HORIZONS.scalp.label, pickScalp], [HORIZONS.swing.label, pickSwing]].forEach(function(pair){
+        [[HORIZONS.scalp.label, pickScalp, scalpTape], [HORIZONS.swing.label, pickSwing, swingTape]].forEach(function(pair){
           if (pair[1]) return;
-          h += '<div class="note og-pick-none">No ' + esc(pair[0]) + ' pick: nothing on that horizon '
-            +  'cleared the ledger this scan. That is a result, not a gap — the alternative would be '
-            +  'promoting a setup the desk already vetoed.</div>';
+          var noneWhy = 'nothing on that horizon cleared the ledger this scan. That is a result, not a gap — the alternative would be promoting a setup the desk already vetoed.';
+          if (pair[2] === 'short')
+            noneWhy = 'gold is going down on this horizon — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
+          else if (pair[2] === 'long')
+            noneWhy = 'gold is going up on this horizon — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
+          h += '<div class="note og-pick-none">No ' + esc(pair[0]) + ' pick: ' + noneWhy + '</div>';
         });
         /* Collapse duplicate trades — see omniroute. Several mechanics firing
            on the same bar produce the same symbol, direction, entry and stop:
@@ -3073,7 +3145,16 @@ terse status, and never launches a first-time scan on a global refresh.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h;
-        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnigold', ogCollapsed, null, ui.cards); } catch (eMp) {}
+        var goldSide = (swingTape === 'long' || swingTape === 'short') ? swingTape
+                     : ((scalpTape === 'long' || scalpTape === 'short') ? scalpTape : '');
+        var mpBag = ogCollapsed;
+        if (goldSide){
+          mpBag = [];
+          for (i = 0; i < ogCollapsed.length; i++){
+            if (String(ogCollapsed[i].dir || '').toLowerCase() === goldSide) mpBag.push(ogCollapsed[i]);
+          }
+        }
+        try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnigold', mpBag, goldSide || null, ui.cards); } catch (eMp) {}
         if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){
@@ -3120,8 +3201,8 @@ terse status, and never launches a first-time scan on a global refresh.
     var rows = __og.snap && __og.snap.rows;
     if (!rows || !rows.length) return [];
     var out = [], seen = {};
-    var scalp = hgOgPickFor(rows, HORIZONS.scalp.label);
-    var swing = hgOgPickFor(rows, HORIZONS.swing.label);
+    var scalp = hgOgPickFor(rows, HORIZONS.scalp.label, __og.tape && __og.tape.scalp);
+    var swing = hgOgPickFor(rows, HORIZONS.swing.label, __og.tape && __og.tape.swing);
     [scalp, swing].forEach(function(c){
       var slim = hgOgXmSlim(c);
       if (!slim) return;
@@ -3259,7 +3340,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var hits = hgOgDetect(prefix, { nowSec: last ? num(last.t) : undefined });
     if (!hits || !hits.length) return null;
     var cands = hgOgEvaluate(prefix, hits, hgOgXmBtExtra(prefix, cfg), cfg);
-    var pick = hgOgPickFor(cands, cfg.label);
+    var pick = hgOgPickFor(cands, cfg.label, hgOgTapeDir(prefix));
     var live = last ? fin(last.c) : NaN;
     return hgOgXmSlim(pick, live);
   }
@@ -3545,6 +3626,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgXmRunBacktest = hgOgXmRunBacktest;
     window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
+    window.hgOgTapeDir = hgOgTapeDir;
+    window.hgOgTapeBannerHtml = hgOgTapeBannerHtml;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
     window.hgOgZonesPanel = hgOgZonesPanel;
     /* hgOgReport() — the desk record, on demand, from the console.

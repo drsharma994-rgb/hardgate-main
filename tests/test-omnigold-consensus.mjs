@@ -231,7 +231,7 @@ console.log('\n== a family that fires BOTH ways votes for neither side ==');
 console.log('\n== the pick: one per horizon, and only ever a ticket ==');
 {
   const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
-  ok(/function hgOgPickFor\(ranked, horizon\)/.test(src), 'there is a per-horizon pick');
+  ok(/function hgOgPickFor\(ranked, horizon/.test(src), 'there is a per-horizon pick');
   ok(/if \(!\(c\.grade && c\.grade\.ticket\)\) continue;/.test(src),
      'it skips anything that is not a ticket — a vetoed setup is never promoted');
   ok(/if \(!c\.plan\) continue;/.test(src), 'and anything with no levels to act on');
