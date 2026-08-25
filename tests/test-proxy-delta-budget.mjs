@@ -93,7 +93,7 @@ const DELTA_REQ_CEILING    = Math.floor(DELTA_UNITS_PER_MIN / CANDLE_UNIT_COST);
 /* ---------- 3) the other venues are untouched ---------- */
 {
   assert(constOf('RATE_MAX_COINDCX') === 800, 'CoinDCX ceiling unchanged at 800/min');
-  assert(constOf('RATE_MAX_BINANCE') === 900, 'Binance ceiling unchanged at 900/min');
+  assert(constOf('RATE_MAX_BINANCE') === 1600, 'Binance ceiling is 1600/min so OMNIROUTE can enrich every name');
   assert(constOf('RATE_MAX_DEFAULT') === 300, 'the shared default is unchanged at 300/min');
   assert(constOf('RATE_WINDOW_MS') === 60000, 'the window is still one minute — the ceilings are per-minute');
 }

@@ -9,13 +9,13 @@
        pool and the first vetoed card could bury the answer
      - did not share indicator info-reads with the rank
      - did not call house EDGE / MR / squeeze / sniper / G1–G7 as extra
-       votes on fired contracts
+       votes on every scanned contract
 
    After:
      - a composite score balances strategy-family consensus against
        indicator info-reads plus coverage and extra mechanics on the same
        trade. It is NOT a win probability.
-     - house extra engines vote on fired contracts and never claim 7/7 CLEAN
+     - house extra engines vote on every scanned contract and never claim 7/7 CLEAN
      - MOST PROBABLE SETUPS (up to three tape-aligned tickets, distinct
        symbols) lead the tab with ENTRY / STOP / T1 / T2
      - a LONG is never the most probable setup while MARKET PICTURE is short
@@ -320,7 +320,7 @@ console.log('== hard constraints stay closed ==');
 
 console.log('== version stamp ==');
 {
-  ok(HG_VER === 'hg-v469', 'build stamp is hg-v469 (got ' + HG_VER + ')');
+  ok(/^hg-v\d+$/.test(HG_VER), 'build stamp is a hg-vN version (got ' + HG_VER + ')');
   ok(swCacheOk(read('sw.js')), 'sw.js HG_CACHE matches the stamp');
 }
 

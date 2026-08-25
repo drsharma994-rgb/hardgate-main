@@ -92,8 +92,10 @@ console.log('\n== THE DEFECT: the cap was a race, not a ranking ==');
 {
   ok(!/var subset = fired\.slice\(0, ENRICH_MAX\);/.test(SRC),
      'the first-N-to-answer slice is gone');
-  ok(/var meritOrder = fired\.slice\(\)\.sort\(/.test(SRC), 'the fired list is ordered before slicing');
-  ok(/var subset = meritOrder\.slice\(0, ENRICH_MAX\);/.test(SRC), 'and the cap applies to the ORDERED list');
+  ok(!/var subset = meritOrder\.slice\(0, ENRICH_MAX\);/.test(SRC),
+     'the 120-name ordered cap is gone too');
+  ok(/var subset = held;/.test(SRC), 'every held name is enriched');
+  ok(/var meritOrder = held\.slice\(\)\.sort\(/.test(SRC), 'merit order still exists for the parameter grid');
   ok(/function\(a, b\)\{ return enrichMerit\(b\) - enrichMerit\(a\); \}/.test(SRC), 'highest merit first');
 
   /* Exercise the scoring rule itself. */
@@ -181,9 +183,8 @@ console.log('\n== the flag is actually set by the scan ==');
 
 console.log('\n== the status line stops implying the cap was arbitrary ==');
 {
-  ok(/chosen by how many mechanic families agree, not by which answered first/.test(SRC),
-     'the caveat says how the cap was applied');
-  ok(/per-symbol confluence capped at/.test(SRC), 'while still reporting that a cap exists at all');
+  ok(/full ledger on every name/.test(SRC), 'the scan names a full ledger on every name');
+  ok(!/per-symbol confluence capped at/.test(SRC), 'the 120-name cap is no longer reported as policy');
 }
 
 console.log('\n== the cross-section reaches unenriched contracts too ==');

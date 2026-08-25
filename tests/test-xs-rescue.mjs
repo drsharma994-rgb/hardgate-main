@@ -157,16 +157,16 @@ console.log('\n== the rescued hit carries what a card needs ==');
 
 console.log('\n== the scan wires it correctly ==');
 {
-  ok(/var unfired = \[\];/.test(ROUTE), 'pass 1 holds the contracts that fired nothing');
-  ok(/else unfired\.push\(\{ item: item, rows: rows \}\);/.test(ROUTE), 'with their bars, so no refetch is needed');
-  ok(/CROSS-SECTIONAL RESCUE/.test(ROUTE), 'the rescue is named and explained');
+  ok(/held\.push\(\{ item: item, rows: rows, hits: hits, livePx: livePx \}\);/.test(ROUTE),
+     'pass 1 holds every scannable name, fired or not');
+  ok(/CROSS-SECTIONAL STAMP/.test(ROUTE), 'the XS stamp is named and explained');
   ok(/rx = hgOmniXsLeader\(uc\.rows, xsRanks, uc\.item\.sym\);/.test(ROUTE),
      'it runs the cross-sectional detector once the ranks exist');
-  ok(/fired\.push\(\{ item: uc\.item, rows: uc\.rows, hits: \[rx\] \}\);/.test(ROUTE),
-     'and promotes the contract into pass 2');
-  ok(/unfired\.length = 0;/.test(ROUTE), 'the retained bars are released immediately afterwards');
-  /* Ordering: the rescue can only run AFTER the ranks are known. */
-  ok(ROUTE.indexOf('xsRanks = hgOmniXsRanks(xsAll);') < ROUTE.indexOf('CROSS-SECTIONAL RESCUE'),
+  ok(/uc\.hits = \[rx\];/.test(ROUTE),
+     'and stamps the XS hit onto a quiet name already on the workset');
+  ok(!/unfired\.length = 0;/.test(ROUTE), 'quiet bars are not dumped before pass 2');
+  /* Ordering: the stamp can only run AFTER the ranks are known. */
+  ok(ROUTE.indexOf('xsRanks = hgOmniXsRanks(xsAll);') < ROUTE.indexOf('CROSS-SECTIONAL STAMP'),
      'and it runs after the ranks are computed, never before');
 }
 

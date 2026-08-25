@@ -47,10 +47,11 @@ const UPSTREAM_TIMEOUT_MS = 15000;
 const RATE_WINDOW_MS = 60000;
 const RATE_MAX_DEFAULT = 300;
 const RATE_MAX_COINDCX = 800;
-/* An enriched sweep asks for OI, long/short, taker flow and depth on up to
-   ENRICH_MAX contracts — four calls a name. The default 300/min would rate-
-   limit the tab against itself long before Binance did. */
-const RATE_MAX_BINANCE = 900;
+/* OMNIROUTE pass 2 asks for OI, long/short, taker flow and depth on EVERY
+   scannable contract — four Binance calls a name, paced at 2 names / 450ms
+   (~960/min). 1600 leaves headroom for candle fallbacks without the proxy
+   429-ing the tab against itself. */
+const RATE_MAX_BINANCE = 1600;
 /* DELTA IS A PRIMARY VENUE AND WAS THE ONLY ONE WITHOUT ITS OWN BUCKET.
 
    CoinDCX and Binance each got a named ceiling above; Delta India — the venue

@@ -24,13 +24,14 @@ THE LEDGER. Six setup families, each a pure detector over OHLCV:
   MMOVE      Measured move — clean impulse leg, shallow pullback, the leg
              projected forward supplies a structural target.
 
-COVERAGE. Both venues, EVERY futures contract — no top-N cap. That is
-affordable because the scan is two-pass: pass 1 runs the detectors over
-every contract (candles only, one linear sweep, no per-name network); pass 2
-does the expensive work — walk-forward measurement, Binance confluence, book
-depth — ONLY on contracts that actually fired, so cost tracks hits rather
-than universe size. Pass 2 carries a stated ceiling; when it bites, the UI
-says how many fired contracts were dropped rather than implying full cover.
+COVERAGE. Both venues, EVERY futures contract — no top-N cap. Pass 1
+fetches 4H bars and ranks the universe. Pass 2 runs the full ledger on
+every scannable name: every engine (shared mechanics, native six,
+positioning, XS, house extras including SCALP on 1H+15m) and every
+indicator (hgOmniGates + hgIndicatorGates + Binance confluence). A name
+that still fires nothing does not get an invented ticket; the indicator
+ledger still ran. The scan is slower on purpose — cost is linear in the
+book, not in hits.
 
 SELF-MEASUREMENT (the point of this tab). Each detector is replayed across
 the same bars the scan just read: every past firing is taken at the bar
@@ -67,8 +68,8 @@ PROBABLE SETUPS balances mechanic-family consensus against indicator
 info-reads (coverage, extra kinds on the same trade, proximity). That score
 is not a win probability. Levels come from the house hgPlanLevels so
 entry/stop/T1/T2 obey the same policy as every other tab. Extra house
-engines (EDGE, MR, squeeze, sniper, SWING path, coil, trap) vote on fired
-contracts and never claim 7/7 CLEAN.
+engines (EDGE, MR, squeeze, sniper, SWING path, SCALP, coil, trap) vote on
+every scanned contract and never claim 7/7 CLEAN.
 
 ON "MAXIMUM PROFITABILITY". This ranks by reward-to-risk, requires a minimum
 R:R, and refuses setups whose geometry does not clear it. That is the honest
@@ -107,18 +108,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var LLM_TIMEOUT_MS = 90000;
   var PING_TIMEOUT_MS = 8000;
 
-  /* Scan shape. TOP_N = 0 means EVERY futures contract on both venues; the
-     scan is two-pass precisely so that is affordable. Pass 1 (detect) is one
-     cheap linear sweep per contract. Pass 2 (enrich: walk-forward
-     measurement + Binance confluence + book depth) runs ONLY on contracts
-     that actually fired, so cost scales with hits, not with universe size. */
+  /* Scan shape. TOP_N = 0 means EVERY futures contract on both venues.
+     Pass 1 fetches 4H bars and ranks the universe. Pass 2 runs the FULL
+     ledger on every scannable name — every engine and every indicator —
+     so cost is linear in the book. Pacing (ENRICH_CHUNK / ENRICH_DELAY_MS)
+     keeps the same-origin proxy under its Binance and Delta buckets. */
   var TOP_N = 0;
   var TF = '4h';
   var BARS = 180;
   var CHUNK = 4;          // venue-leg concurrency for pass 1 (gentle on /api/proxy)
   var CHUNK_DELAY_MS = 80; // pause between pass-1 batches — avoids 429 mid-scan
-  var ENRICH_CHUNK = 4;   // pass 2 hits Binance (CORS-open, 60s cached)
-  var ENRICH_MAX = 120;   // ceiling on NETWORKED enrichment, reported when it bites
+  var ENRICH_CHUNK = 2;   // 2 names × (4 Binance + 2 extra TFs) per beat
+  var ENRICH_DELAY_MS = 450; // pass-2 pause so the proxy does not 429 itself
   /* THE SCAN USED TO CRASH THE TAB IT RAN IN. Two causes, both here.
      Rendering was unbounded: a 1,240-setup scan built a full 35-gate card
      for every distinct trade into one innerHTML — tens of thousands of DOM
@@ -513,8 +514,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      cannot, is where THIS contract sits against every other one. Cross-
      sectional momentum is one of the few effects in crypto with support
      outside a backtest, and the tab already holds the bars needed to measure
-     it — pass 1 fetches every contract and throws away everything that did
-     not fire. Keeping four numbers per symbol costs no network at all.
+     it — pass 1 fetches every contract and keeps the bars so pass 2 can
+     run every engine on quiet names too. Four numbers per symbol costs
+     no network at all.
 
      These are FORWARD-ONLY, for the same reason the positioning mechanics
      are: the walk-forward replays one symbol's candles, and the cross-section
@@ -591,7 +593,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
      Each takes the SAME positioning object the perp gates already receive, so
      there is no new fetch: pass 2 already has funding, OI, taker flow and
-     depth in hand for every fired contract. */
+     depth in hand for every scannable contract. */
 
   /* Funding paid by one side for long enough, at a high enough rate, is a
      crowd paying rent to stay wrong. The squeeze is against the payer. */
@@ -2217,7 +2219,29 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         hits.push(house[hi]);
       }
     }
-    if (!hits.length) return out;
+    if (!hits.length){
+      /* No engine named a trade. Do not invent a ticket — but still run
+         the indicator ledger on this name so quiet contracts are not a
+         skipped half of the book. */
+      extra = extra || {};
+      try {
+        var qLast = rows[rows.length - 1];
+        var qPx = fin(qLast && qLast.c);
+        var qDir = 'long';
+        try {
+          var qCl = closesOf(rows);
+          var qE = emaOf(qCl.slice(-60), 21);
+          if (isFinite(qPx) && isFinite(qE) && qPx < qE) qDir = 'short';
+        } catch (eDir) {}
+        extra.quietGates = hgOmniGates(rows, {
+          kind: 'QUIET', dir: qDir,
+          level: (isFinite(qPx) && qPx > 0) ? qPx : 1,
+          why: 'no engine fired — indicator ledger only, not a ticket',
+          extra: true
+        }, positioning, extra);
+      } catch (eQ) { extra.quietGates = extra.quietGates || []; }
+      return out;
+    }
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
     for (i = 0; i < hits.length; i++){
@@ -2383,9 +2407,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return { kind: kind, dir: dir, level: lvl, why: why || ('house ' + kind), extra: true };
   }
 
-  /* Extra house strategies, pointed at a contract that already fired a
-     mechanic. Feature-checked, never 7/7 CLEAN, never invent levels — they
-     name a direction and a level, then the same ledger prices the ticket. */
+  /* Extra house strategies, pointed at every scanned contract, not only
+     ones that already fired a candle mechanic. Feature-checked, never
+     7/7 CLEAN, never invent levels — they name a direction and a level,
+     then the same ledger prices the ticket. */
   function hgOmniHouseHits(rows, item, extra){
     extra = extra || {};
     var out = [], last, fn, raw, daily, ticker, px;
@@ -3780,16 +3805,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var list = (TOP_N > 0) ? uni.slice(0, TOP_N) : uni.filter(function(item){
         return item && (item.exchange === 'delta' || item.exchange === 'coindcx');
       });
-      var fired = [], done = 0, thin = 0, failed = 0, pass1Err = null;
+      var held = [], done = 0, thin = 0, failed = 0, pass1Err = null, nPass1Fired = 0;
       __omni.xsRescued = 0;   /* per scan, never carried over from the last one */
-      /* Contracts that fired NOTHING in pass 1, held so the cross-sectional
-         mechanics can still reach them once the universe ranks exist. See the
-         rescue below. */
-      var unfired = [];
       var xsAll = [], xsRanks = null;
 
-      /* ---- PASS 1: detect over EVERY contract. Candles only, no extra
-         network per name, so this stays linear in the universe size. ---- */
+      /* ---- PASS 1: ingest EVERY contract. 4H candles + a cheap detect so
+         the status line can say how many already fired. Every scannable
+         name is held for pass 2 — quiet ones still get house extras,
+         SCALP 1H/15m, indicators, and confluence. ---- */
       function step(i){
         if (i >= list.length) return Promise.resolve();
         var slice = list.slice(i, i + CHUNK);
@@ -3800,7 +3823,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             done++;
             if (done % 5 === 0 || done === list.length){
               omniSafeStat(ui, 'pass 1/2 · scanning ' + done + '/' + list.length
-                + ' contracts — ' + fired.length + ' fired');
+                + ' contracts — ' + nPass1Fired + ' fired · holding all for full ledger');
             }
             /* Closed candles only — see hgOmniDropForming. Applied HERE, at
                the single ingestion point, so every downstream consumer
@@ -3824,17 +3847,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               catch (e) { try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('omniroute:resolve', e); } catch (eW) {} }
             }
             /* CROSS-SECTIONAL SUMMARY for every contract, fired or not.
-               Four numbers, no network: pass 1 already holds these bars and
-               was throwing away everything that did not fire, which is
-               exactly the data a universe-relative read needs. */
+               Four numbers, no network: pass 1 already holds these bars. */
             var xsSum = hgOmniXsSummary(item.sym, rows);
             if (xsSum) xsAll.push(xsSum);
             /* Detect WITHOUT the cross-section here: the ranks are not known
-               until every contract has been seen. Pass 2 re-detects the fired
-               names with the universe in hand. */
+               until every contract has been seen. Pass 2 re-detects every
+               held name with the universe in hand. */
             var hits = hgOmniDetect(rows);
-            if (hits.length) fired.push({ item: item, rows: rows, hits: hits, livePx: livePx });
-            else unfired.push({ item: item, rows: rows });
+            if (hits.length) nPass1Fired++;
+            held.push({ item: item, rows: rows, hits: hits, livePx: livePx });
           }).catch(function(){ done++; failed++; });
         })).then(function(){
           if (i + CHUNK >= list.length) return;
@@ -3846,45 +3867,32 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         pass1Err = omniErrMsg(e1);
         try{ console.warn('omniroute pass 1 error — continuing with partial', e1); }catch(eL){}
       }).then(function(){
-        /* ---- PASS 2: enrich ONLY what fired. Walk-forward measurement is
-           O(bars x detectors) per symbol, and the Binance/depth calls are
-           per-symbol network — confining both to hits is what makes a
-           full-universe scan viable at all. ---- */
+        /* ---- PASS 2: full ledger on every held name. Walk-forward
+           measurement is O(bars × detectors) per symbol and the Binance
+           / 1H / 15m calls are per-symbol network. Pacing below is what
+           makes that viable without 429-ing the proxy. ---- */
         /* Universe ranks, once pass 1 has seen every contract. Refuses under
            30 names, because a percentile of a handful is not a percentile. */
         xsRanks = hgOmniXsRanks(xsAll);
 
-        /* CROSS-SECTIONAL RESCUE.
+        /* CROSS-SECTIONAL STAMP.
 
-           XS-LEADER and XS-LAGGARD are the only mechanics on this desk that
-           cannot be evaluated in pass 1: a contract's rank is not known until
-           every contract has been seen, which is the whole reason for two
-           passes. But pass 1 decided who reached pass 2 on `hits.length`, and
-           those hits were detected WITHOUT the cross-section. So a contract
-           that is the strongest or weakest name in the universe, but happened
-           to have no price mechanic firing on its own candles, was dropped
-           before the cross-section was ever computed. It could never produce
-           a card, however extreme it was.
-
-           Measured on a 300-contract synthetic universe: XS fires on 20% of
-           names, and 5% of those fires had no price mechanic alongside them —
-           1% of the universe, silently gone. On a 524-contract live scan that
-           is roughly five contracts, and they are by construction the tails.
-
-           The rescue costs nothing to speak of. 93% of contracts already fire
-           something and their bars were being retained anyway, so holding the
-           remaining 7% adds a fraction to a list the scan already carries, and
-           no network call: the cross-sectional read needs only bars pass 1 has
-           already fetched. */
+           XS-LEADER and XS-LAGGARD still cannot be evaluated in pass 1: a
+           contract's rank is not known until every contract has been seen.
+           Quiet names used to be dropped here. They are already on `held`;
+           this only stamps an XS hit onto an empty hits list so the
+           parameter grid can see the tails. Evaluate re-detects with xs
+           regardless. */
         try {
           var resc = 0, ru, rx;
           if (xsRanks){
-            for (ru = 0; ru < unfired.length; ru++){
-              var uc = unfired[ru];
+            for (ru = 0; ru < held.length; ru++){
+              var uc = held[ru];
               if (!uc || !uc.item || !uc.rows) continue;
+              if (uc.hits && uc.hits.length) continue;
               rx = hgOmniXsLeader(uc.rows, xsRanks, uc.item.sym);
               if (!rx) continue;
-              fired.push({ item: uc.item, rows: uc.rows, hits: [rx] });
+              uc.hits = [rx];
               resc++;
             }
           }
@@ -3892,32 +3900,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         } catch (eXs){
           try { if (typeof W.hgFwdWarn === 'function') W.hgFwdWarn('omniroute:xs-rescue', eXs); } catch (eW2) {}
         }
-        /* Bars are only needed for the rescue; release them before pass 2
-           holds a full universe of candles alongside its own working set. */
-        unfired.length = 0;
 
-        /* WHICH 120 GET THE FULL LEDGER.
+        /* FULL LEDGER ON EVERY NAME.
 
-           This was fired.slice(0, ENRICH_MAX) — the first 120 contracts to
-           come back from the network, which is a race order, not a merit
-           order. A live scan fired ~490 names: 120 got funding, open
-           interest, retail, taker flow and book depth, and 370 got hard gates
-           and a plan only. Which 370 was decided by whichever venue leg
-           happened to answer slowest. That is the real reason most cards
-           could not use most of the indicators.
-
-           Ranked now, on evidence already in hand and costing nothing:
-
-             1. how many independent mechanic FAMILIES agree on a direction —
-                the same measure the consensus gate uses, and the one thing
-                that most predicts whether a name will become a ticket
-             2. how many mechanics fired at all
-             3. how much cross-sectional conviction there is: a contract at
-                either extreme of the universe is more worth measuring than
-                one in the middle
-
-           Names beyond the cap still get hard gates and a plan; they are just
-           no longer chosen by network luck. */
+           Merit order still exists so the parameter grid samples the
+           strongest tapes. It is not a permission slip to skip anyone. */
         var xsRankOf = function(sym){
           if (!xsRanks || !xsRanks.rank) return 0.5;
           var r = fin(xsRanks.rank[String(sym)]);
@@ -3925,8 +3912,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         };
         var enrichMerit = function(f){
           var fams = {}, i, h, best = 0, dir;
-          for (i = 0; i < f.hits.length; i++){
-            h = f.hits[i];
+          var hitList = (f && f.hits) || [];
+          for (i = 0; i < hitList.length; i++){
+            h = hitList[i];
             if (!h || (h.dir !== 'long' && h.dir !== 'short')) continue;
             dir = h.dir;
             if (!fams[dir]) fams[dir] = {};
@@ -3940,15 +3928,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           }
           /* distance from the middle of the universe, 0 .. 0.5 */
           var edge = Math.abs(xsRankOf(f.item && f.item.sym) - 0.5);
-          return best * 1000 + f.hits.length * 10 + edge * 10;
+          return best * 1000 + hitList.length * 10 + edge * 10;
         };
-        var meritOrder = fired.slice().sort(function(a, b){ return enrichMerit(b) - enrichMerit(a); });
+        var meritOrder = held.slice().sort(function(a, b){ return enrichMerit(b) - enrichMerit(a); });
         /* Keep the bars for the strongest names so the parameter grid can run
            on REAL data without a second fetch. Capped: the grid answers a
            question about the mechanics, not about every contract. */
         __omni.gridRows = meritOrder.slice(0, GRID_SAMPLE).map(function(f){ return f.rows; });
 
-        var subset = meritOrder.slice(0, ENRICH_MAX);
+        var subset = held;
         var perSymbolStats = [], enriched = [], e = 0;
 
         function enrichOne(f){
@@ -3958,12 +3946,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             (typeof W.binanceOIHistory === 'function' && binSym) ? W.binanceOIHistory(binSym, '4h', 12).catch(function(){ return null; }) : Promise.resolve(null),
             (typeof W.binanceLongShort === 'function' && binSym) ? W.binanceLongShort(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
             (typeof W.binanceTakerRatio === 'function' && binSym) ? W.binanceTakerRatio(binSym, '4h', 6).catch(function(){ return null; }) : Promise.resolve(null),
-            (typeof W.binanceDepth === 'function' && binSym) ? W.binanceDepth(binSym, 20).catch(function(){ return null; }) : Promise.resolve(null)
+            (typeof W.binanceDepth === 'function' && binSym) ? W.binanceDepth(binSym, 20).catch(function(){ return null; }) : Promise.resolve(null),
+            (typeof W.xuCandles === 'function')
+              ? Promise.resolve().then(function(){ return W.xuCandles(f.item, '1h', BARS); }).catch(function(){ return []; })
+              : Promise.resolve([]),
+            (typeof W.xuCandles === 'function')
+              ? Promise.resolve().then(function(){ return W.xuCandles(f.item, '15m', BARS); }).catch(function(){ return []; })
+              : Promise.resolve([])
           ];
           return Promise.all(jobs).then(function(r){
             e++;
-            omniSafeStat(ui, 'pass 2/2 · measuring ' + e + '/' + subset.length + ' fired contracts…');
+            omniSafeStat(ui, 'pass 2/2 · full ledger on every name · ' + e + '/' + subset.length);
             var oiH = r[0], ls = r[1], tk = r[2], dep = r[3];
+            var raw1h = Array.isArray(r[4]) ? r[4] : [];
+            var raw15 = Array.isArray(r[5]) ? r[5] : [];
+            var rows1h = hgOmniDropForming(raw1h, '1h');
+            var rows15m = hgOmniDropForming(raw15, '15m');
             var oiChange = null;
             if (oiH && oiH.series && oiH.series.length >= 2){
               var a = oiH.series[0].oi, b = oiH.series[oiH.series.length - 1].oi;
@@ -3988,7 +3986,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               /* The whole-universe read. Present only once pass 1 has ranked
                  every contract, and null on a sweep too small to rank. */
               xs: xsRanks,
-              stats: stats
+              stats: stats,
+              rows1h: rows1h,
+              rows15m: rows15m,
+              ticker: f.item
             }});
           }).catch(function(){ e++; });
         }
@@ -3998,7 +3999,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           var slice = subset.slice(i, i + ENRICH_CHUNK);
           return Promise.all(slice.map(enrichOne)).then(function(){
             if (i + ENRICH_CHUNK >= subset.length) return;
-            return omniSleep(CHUNK_DELAY_MS).then(function(){ return enrich(i + ENRICH_CHUNK); });
+            return omniSleep(ENRICH_DELAY_MS).then(function(){ return enrich(i + ENRICH_CHUNK); });
           });
         }
 
@@ -4007,15 +4008,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }).then(function(){
           var pooled = hgOmniPoolStats(perSymbolStats);
 
-          /* Evaluate EVERY contract that fired, not just the enriched
-             subset. Previously a live scan reported "230 fired contracts
-             beyond the measurement ceiling were dropped" — and those 230
-             produced no card at all, so most of what the scan found was
-             invisible. The ceiling exists to bound expensive per-symbol
-             NETWORK enrichment, which is not a reason to hide the setup:
-             detection and the plan need no network. Unenriched contracts
-             still get the pooled measurement (it is global) and simply read
-             UNCHECKED on the per-symbol confluence gates. */
+          /* Evaluate EVERY held name. House extras, SCALP 1H/15m, the
+             indicator ledger and (when enrichment answered) Binance
+             confluence all run here. A name that still fires nothing
+             does not get an invented ticket. */
           var exBySym = {}, j, k;
           for (j = 0; j < enriched.length; j++){
             var esym = enriched[j].f.item.sym;
@@ -4024,7 +4020,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           }
           var cands = [];
           function gradeOne(j){
-            var fitem = fired[j].item;
+            var fitem = held[j].item;
             var ex = exBySym[fitem.sym] || { stats: pooled };
             /* WHY a per-symbol gate is unchecked matters. "OI not published
                for this contract" and "this contract was past the measurement
@@ -4040,8 +4036,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                reported "htf-daily UNCHECKED — daily bars unavailable" even
                though the data was sitting right there. Compute it for every
                carded contract; only genuinely networked signals belong
-               behind the ceiling. */
-            if (!ex.htf) ex.htf = hgOmniDailyHtf(fired[j].rows);
+               behind a failed enrich. */
+            if (!ex.htf) ex.htf = hgOmniDailyHtf(held[j].rows);
             /* Re-read regime per contract: the warm may have completed after
                enrichment began, and it is a single shared market-wide value
                rather than anything per-symbol. */
@@ -4062,8 +4058,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             }
             /* The live price captured at ingestion, so level-fresh can judge
                the plan against where the market actually is. */
-            ex.livePx = fired[j].livePx;
-            var found = hgOmniEvaluate(fitem, fired[j].rows, pos, ex);
+            ex.livePx = held[j].livePx;
+            if (!ex.ticker) ex.ticker = fitem;
+            var found = hgOmniEvaluate(fitem, held[j].rows, pos, ex);
             for (k = 0; k < found.length; k++) cands.push(found[k]);
             /* Record this contract's firings so OMNIROUTE accumulates the same
                out-of-sample evidence OMNIGOLD does. Every setup with a plan,
@@ -4086,24 +4083,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             /* Graded means these bars are finished with — release them so the
                tab is not holding a universe of candles while it renders. The
                parameter grid keeps its own references in __omni.gridRows. */
-            fired[j].rows = null;
+            held[j].rows = null;
           }
           function gradeStep(j){
-            if (j >= fired.length) return Promise.resolve();
-            var stop = Math.min(j + GRADE_CHUNK, fired.length);
+            if (j >= held.length) return Promise.resolve();
+            var stop = Math.min(j + GRADE_CHUNK, held.length);
             for (var gj = j; gj < stop; gj++){
               /* One bad contract must not take down the other 499. */
               try { gradeOne(gj); }
               catch (eG){ try { console.warn('omniroute grade skipped',
-                fired[gj] && fired[gj].item && fired[gj].item.sym, eG); } catch (eG2) {} }
+                held[gj] && held[gj].item && held[gj].item.sym, eG); } catch (eG2) {} }
             }
-            if (stop >= fired.length) return Promise.resolve();
-            omniSafeStat(ui, 'grading ' + stop + '/' + fired.length + ' fired contracts…');
+            if (stop >= held.length) return Promise.resolve();
+            omniSafeStat(ui, 'grading ' + stop + '/' + held.length + ' names — all engines + indicator ledger…');
             return omniSleep(0).then(function(){ return gradeStep(stop); });
           }
           return gradeStep(0).then(function(){
             return { cands: cands, scanned: list.length, uni: uni.length,
-                   fired: fired.length, enriched: subset.length, thin: thin,
+                   fired: nPass1Fired, held: held.length, enriched: subset.length, thin: thin,
                    failed: failed, pooled: pooled, pass1Err: pass1Err, pass1Done: done };
           });
         });
@@ -4119,6 +4116,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         var dcounts = omniDistinctCounts(ranked);
         tickets = dcounts.tickets;
         __omni.lastStat = ranked.length + ' setup(s) · ' + tickets + ' ticket(s) · ' + res.scanned + ' contracts scanned'
+                        + (res.held ? ('  ·  full ledger on all ' + res.held + ' names (every engine + every indicator)') : '')
                         /* A rescued contract is one the old scan dropped outright, so
                            say how many rather than letting them appear from nowhere. */
                         + (__omni.xsRescued ? '  ·  ' + __omni.xsRescued
@@ -4147,7 +4145,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
         var caveat = '';
         if (res.pass1Err) caveat += '  · pass 1 interrupted (' + res.pass1Err + ') — partial cover at ' + res.pass1Done + '/' + res.scanned;
-        if (res.fired > res.enriched) caveat += '  · ' + (res.fired - res.enriched) + ' of them show hard gates + plan only (per-symbol confluence capped at ' + ENRICH_MAX + ' names, and the ' + ENRICH_MAX + ' were chosen by how many mechanic families agree, not by which answered first)';
+        if (res.held && res.enriched && res.held > res.enriched)
+          caveat += '  · ' + (res.held - res.enriched) + ' names missed networked confluence (enrichment error, not a cap)';
         if (res.thin) caveat += '  · ' + res.thin + ' contracts had too little history to scan';
         /* Distinct from `thin`: these contracts were asked and did not answer
            (rate limit, venue down). Folding them into "scanned" would let a
@@ -4365,16 +4364,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniRoute — desk setups <span>delta + coindcx · spring · po3 · orb · absorption · value area · measured move</span></h2>'
-      + '<div class="note hg-lead" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX with the six mechanics the '
-      + 'popular desks trade. Two passes: detect over the whole universe, then measure and enrich only what fired. '
-      + 'Each candidate runs a ledger of 3 hard gates (trend · vol-alive · participation) plus conditional confluence from free public data — '
-      + 'daily agreement, OI build, retail crowding, taker aggression, book depth, regime, news blackout, and the detector’s own measured edge. '
+      + '<div class="note hg-lead" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX. Pass 1 fetches 4H bars; pass 2 runs the <b>full ledger on every name</b> — every engine (shared mechanics, native six, positioning, XS, house extras including SCALP on 1H + 15m) and every indicator (hard gates, shared oscillators, Binance OI / crowding / taker / depth). '
+      + 'A name that still fires nothing does <b>not</b> get an invented ticket; the indicator ledger still ran. '
+      + 'Each candidate then faces 3 hard gates (trend · vol-alive · participation) plus conditional confluence. '
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
       + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor. <b>MOST PROBABLE SETUPS</b> lead the tab: up to three tape-aligned tickets, ranked on a balance of mechanic families and indicator reads — not a win probability. Extra house engines vote and never claim 7/7 CLEAN. '
       + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
       + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button>'
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
-      + '<div class="note" id="omniStat">idle — press RUN. Full coverage is ~200+ Delta contracts plus CoinDCX, so expect a few minutes; progress shows per pass.</div>'
+      + '<div class="note" id="omniStat">idle — press RUN. Full ledger on every Delta + CoinDCX name (4H + 1H + 15m + confluence), so expect several minutes; progress shows per pass.</div>'
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
       + '<div id="omniSide"></div>'
       + '<div id="omniMp" style="margin-top:12px"></div>'
