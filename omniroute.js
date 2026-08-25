@@ -63,9 +63,10 @@ reports nothing at all — CoinDCX publishes no funding, and a blocking funding
 gate would have meant CoinDCX could never produce a ticket. A single veto
 stands the trade aside; the card still renders with the veto visible, marked
 VETO or WATCH, never a ticket. Ranking for the card list and for MOST
-PROBABLE SETUPS balances mechanic-family consensus against indicator
-info-reads (coverage, extra kinds on the same trade, proximity). That score
-is not a win probability. Levels come from the house hgPlanLevels so
+PROBABLE SETUPS prints P(T1 before stop) for every formation: the mechanic's
+own walk-forward record, shrunk, then updated by live tape + strategy-family
+consensus + indicator info-reads. Same inputs, same integer. That is not a
+PnL forecast. Levels come from the house hgPlanLevels so
 entry/stop/T1/T2 obey the same policy as every other tab. Extra house
 engines (EDGE, MR, squeeze, sniper, SWING path, coil, trap) vote on fired
 contracts and never claim 7/7 CLEAN.
@@ -149,6 +150,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      verdict on its own. Below it the record can still contradict, but not
      conclude. */
   var FWD_MIN_JUDGE = 20;
+  /* Empirical-Bayes pseudo-counts toward the 2R breakeven (1/3). Two winning
+     samples must not print 100% — that is the exactness of this percentage. */
+  var OMNI_PROB_K = 8;
+  /* Live tape / family / indicator log-odds cannot overwhelm the record. */
+  var OMNI_PROB_LL_CAP = 1.15;
   /* Daily EMA periods sized to the daily bars BARS x TF actually yields
      (180 x 4h ~= 31 days). Asking for a 50-period daily EMA silently
      disabled the gate on every card. */
@@ -2286,7 +2292,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
         family: hgOmniFamilyOf(hit.kind),
-        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
+        stats: exForHit.stats,
+        fwd: exForHit.fwd
       });
       } catch (eHit) {
         try { console.warn('omniroute evaluate skipped', item && item.sym, hits[i] && hits[i].kind, eHit); } catch (eHit2) {}
@@ -2564,10 +2572,112 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return hgOmniBalanceParts(c, tape).score;
   }
 
+  function hgOmniLogit(p){
+    var x = fin(p);
+    if (!isFinite(x)) x = 0.5;
+    if (x < 0.001) x = 0.001;
+    if (x > 0.999) x = 0.999;
+    return Math.log(x / (1 - x));
+  }
+  function hgOmniSigmoid(z){
+    var t = fin(z);
+    if (!isFinite(t)) return 0.5;
+    if (t > 20) return 0.999;
+    if (t < -20) return 0.001;
+    return 1 / (1 + Math.exp(-t));
+  }
+
+  /* P(T1 prints before stop). Base = this mechanic's own record, shrunk
+     toward the desk's 2R breakeven so a thin book cannot print 100%.
+     Live tape, strategy-family consensus and indicator info-reads then
+     shift log-odds inside OMNI_PROB_LL_CAP. Exact: same inputs, same integer. */
+  function hgOmniEmpHit(c){
+    c = c || {};
+    var fwd = c.fwd;
+    var tix = fwd && fwd.ticketOnly;
+    var src = null, kind = 'prior';
+    if (tix && isFinite(fin(tix.samples)) && fin(tix.samples) > 0){
+      src = tix;
+      kind = fin(tix.samples) >= MIN_SAMPLES ? 'measured' : 'thin';
+    } else if (fwd && isFinite(fin(fwd.samples)) && fin(fwd.samples) > 0){
+      src = fwd;
+      kind = fin(fwd.samples) >= MIN_SAMPLES ? 'measured' : 'thin';
+    } else if (c.stats && isFinite(fin(c.stats.samples)) && fin(c.stats.samples) > 0){
+      src = c.stats;
+      kind = fin(c.stats.samples) >= MIN_SAMPLES ? 'measured' : 'thin';
+    }
+    var rr = (c.plan && isFinite(fin(c.plan.rr1)) && fin(c.plan.rr1) > 0) ? fin(c.plan.rr1) : MIN_RR;
+    var p0 = 1 / (1 + rr);
+    if (!src) return { p: p0, n: 0, wins: 0, hit: NaN, kind: 'prior', rr: rr };
+    var n = fin(src.samples) || 0;
+    var wins = isFinite(fin(src.wins)) ? fin(src.wins)
+             : (isFinite(fin(src.hit)) ? fin(src.hit) * n : 0);
+    if (wins < 0) wins = 0;
+    if (wins > n) wins = n;
+    var pEmp = (wins + OMNI_PROB_K * p0) / (n + OMNI_PROB_K);
+    return { p: pEmp, n: n, wins: wins, hit: n ? (wins / n) : NaN, kind: kind, rr: rr };
+  }
+
+  function hgOmniProbParts(c, tape){
+    c = c || {};
+    var emp = hgOmniEmpHit(c);
+    var b = hgOmniBalanceParts(c, tape);
+    var vetoN = (c.grade && c.grade.vetoes && c.grade.vetoes.length) ? c.grade.vetoes.length : 0;
+    var bodyLL = 0.40 * b.family
+               + 0.40 * b.infoRatio
+               + 0.18 * b.ticket
+               + 0.12 * b.coverage
+               + 0.10 * b.alsoNorm
+               + 0.10 * (2 * b.near - 1)
+               - 0.30 * Math.min(vetoN, 4);
+    if (bodyLL > OMNI_PROB_LL_CAP) bodyLL = OMNI_PROB_LL_CAP;
+    if (bodyLL < -OMNI_PROB_LL_CAP) bodyLL = -OMNI_PROB_LL_CAP;
+    /* Tape always moves the integer — it is not swallowed by the cap. */
+    var liveLL = bodyLL + 0.50 * b.tapeScore;
+    var p = hgOmniSigmoid(hgOmniLogit(emp.p) + liveLL);
+    var pct = Math.round(100 * p);
+    if (pct < 1) pct = 1;
+    if (pct > 99) pct = 99;
+    return {
+      p: p, pct: pct, kind: emp.kind, n: emp.n, wins: emp.wins, hit: emp.hit,
+      emp: emp.p, liveLL: liveLL, rr: emp.rr,
+      family: b.family, infoRatio: b.infoRatio, tapeScore: b.tapeScore
+    };
+  }
+  function hgOmniProbPct(c, tape){
+    try { return hgOmniProbParts(c, tape).pct; }
+    catch (e) { return 1; }
+  }
+  function hgOmniProbLabel(pr){
+    if (!pr || !isFinite(fin(pr.pct))) return '';
+    var pct = fin(pr.pct) + '% T1-first';
+    if (pr.kind === 'measured') return pct + ' · ' + pr.n + ' settled · shrunk';
+    if (pr.kind === 'thin') return pct + ' · ' + pr.n + ' settled (thin, shrunk)';
+    return pct + ' · prior (no settled record)';
+  }
+  function hgOmniStampProb(list, tape){
+    var out = Array.isArray(list) ? list : [];
+    var i, c, pr;
+    for (i = 0; i < out.length; i++){
+      c = out[i];
+      if (!c) continue;
+      pr = hgOmniProbParts(c, tape);
+      c.probPct = pr.pct;
+      c.probKind = pr.kind;
+      c.probN = pr.n;
+      c.probHit = pr.hit;
+      c.probEmp = pr.emp;
+    }
+    return out;
+  }
+
   function hgOmniDeskOrder(list, tape){
     var tapeDir = String(tape || '').toLowerCase();
     return (list || []).slice().sort(function(a, b){
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
+      var pa = isFinite(fin(a.probPct)) ? fin(a.probPct) : hgOmniProbPct(a, tapeDir);
+      var pb = isFinite(fin(b.probPct)) ? fin(b.probPct) : hgOmniProbPct(b, tapeDir);
+      if (pb !== pa) return pb - pa;
       var sa = hgOmniBalanceScore(a, tapeDir);
       var sb = hgOmniBalanceScore(b, tapeDir);
       if (sb !== sa) return sb - sa;
@@ -2583,6 +2693,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     limit = Math.max(1, Math.min(5, Math.floor(fin(limit) || OMNI_MP_MAX)));
     if (tape !== 'long' && tape !== 'short') return [];
     var pool = [], i, c, seen = {};
+    hgOmniStampProb(list || [], tape);
     var ranked = hgOmniDeskOrder(list || [], tape);
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
@@ -2611,7 +2722,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return 'no side to take until tape and sentiment agree. Standing aside is the position.';
   }
 
-  function hgOmniMpOneHtml(c){
+  function hgOmniMpOneHtml(c, tape){
     var h = '<div class="og-mp-hz">';
     if (c && c.plan){
       var p = c.plan;
@@ -2623,10 +2734,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var nAg = cons.nAgree || 0;
       var fam = nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree');
       var ind = info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread';
-      h += '<div class="hg-mp-head">' + esc(String(c.sym || c.base || '')) + ' ' + esc(String(c.dir || '').toUpperCase())
+      var pr = isFinite(fin(c.probPct)) ? { pct: fin(c.probPct), kind: c.probKind, n: c.probN } : hgOmniProbParts(c, tape);
+      h += '<div class="hg-mp-head"><span class="omni-prob" data-omni-prob="' + pr.pct + '">' + pr.pct + '%</span> '
+        +  esc(String(c.sym || c.base || '')) + ' ' + esc(String(c.dir || '').toUpperCase())
         +  ' <span>' + esc(c.kind) + ' · ' + esc(grade) + '</span></div>';
-      h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
-        +  ' · WITH TAPE · not a win probability.</div>';
+      h += '<div class="hg-mp-note">' + esc(hgOmniProbLabel(pr)) + ' · ' + esc(fam) + ' · ' + esc(ind)
+        +  ' · WITH TAPE.</div>';
       h += '<div class="hg-mp-grid">';
       h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(c.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
       h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
@@ -2645,18 +2758,28 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     for (i = 0; i < few.length; i++) if (few[i] && few[i].plan) any = true;
     var tier = any ? 'clean' : 'forming';
     var note = any
-      ? 'Balanced across mechanic families and indicator reads on the crypto tape. Tickets only. Not a win probability.'
+      ? 'Every formation is P(T1 before stop) from this desk\'s walk-forward record plus live strategy-family and indicator reads. Same inputs, same integer. Not a PnL forecast.'
       : hgOmniMpNoneWhy(tape);
     var h = '<section class="hg-mp" data-hg-mp="omniroute" data-omni-mp="1" data-tier="' + tier + '" aria-label="Most probable crypto setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
-    h += '<div class="hg-mp-head">OMNIROUTE';
-    if (tape === 'long' || tape === 'short') h += ' ' + tape.toUpperCase();
-    h += ' <span>';
-    if (!any && (tape === 'long' || tape === 'short')) h += tape + ' tape · stand aside · ';
-    h += 'strategies + indicators, balanced · not a win probability</span></div>';
+    if (any){
+      var top = few[0];
+      var maxPr = isFinite(fin(top.probPct)) ? { pct: fin(top.probPct), kind: top.probKind, n: top.probN } : hgOmniProbParts(top, tape);
+      h += '<div class="omni-prob-max" data-omni-prob-max="' + maxPr.pct + '">' + maxPr.pct + '%</div>';
+      h += '<div class="hg-mp-head">MAX · ' + esc(String(top.sym || top.base || '')) + ' '
+        +  esc(String(top.dir || '').toUpperCase());
+      if (tape === 'long' || tape === 'short') h += ' · OMNIROUTE ' + tape.toUpperCase();
+      h += ' <span>' + esc(hgOmniProbLabel(maxPr)) + '</span></div>';
+    } else {
+      h += '<div class="hg-mp-head">OMNIROUTE';
+      if (tape === 'long' || tape === 'short') h += ' ' + tape.toUpperCase();
+      h += ' <span>';
+      if (tape === 'long' || tape === 'short') h += tape + ' tape · stand aside · ';
+      h += 'no T1-first probability until a tape-aligned ticket clears</span></div>';
+    }
     h += '<div class="hg-mp-note">' + esc(note) + '</div>';
     if (any){
-      for (i = 0; i < few.length; i++) h += hgOmniMpOneHtml(few[i]);
+      for (i = 0; i < few.length; i++) h += hgOmniMpOneHtml(few[i], tape);
     } else {
       h += '<div class="og-mp-hz"><div class="hg-mp-head">STAND ASIDE <span>no tape-aligned ticket</span></div>';
       h += '<div class="hg-mp-note">' + esc(hgOmniMpNoneWhy(tape)) + '</div></div>';
@@ -2674,7 +2797,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       rr: c.plan.rr1, clean: false, confirmed: true,
       gatesPassed: (c.grade && c.grade.evaluated) || 0,
       gatesTotal: (c.grade && c.grade.total) || 0,
-      venue: c.exchange, kind: c.kind, plan: c.plan, grade: c.grade, consensus: c.consensus
+      venue: c.exchange, kind: c.kind, plan: c.plan, grade: c.grade, consensus: c.consensus,
+      probPct: c.probPct, probKind: c.probKind, probN: c.probN
     };
   }
 
@@ -3144,10 +3268,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   }
 
   function setupCard(c, sideRead){
+    var tape = (sideRead && (sideRead.side === 'long' || sideRead.side === 'short')) ? sideRead.side : '';
+    var pr = isFinite(fin(c.probPct)) ? { pct: fin(c.probPct), kind: c.probKind, n: c.probN } : hgOmniProbParts(c, tape);
     var head = esc(c.base || c.sym) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase());
     var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
     if (c.topPick) badge = pill('STRONGEST', 'pick') + ' ' + badge;
+    badge = pill(pr.pct + '%', 'ok') + ' ' + badge;
     if (tot){
       /* Evidence coverage sits next to the verdict, not buried in the list:
          a 4/12 ticket and a 12/12 ticket are not the same claim. */
@@ -3161,7 +3288,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       badge += ' <span class="dim">· ' + esc(c.grade.degraded.join(', ')) + ' unchecked</span>';
     }
     var h = '<div class="card">';
-    h += '<div class="ttl">' + head + ' ' + badge + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+    h += '<div class="ttl"><span class="omni-prob" data-omni-prob="' + pr.pct + '">' + pr.pct + '%</span> ' + head + ' ' + badge + ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+    h += '<div class="dim">' + esc(hgOmniProbLabel(pr)) + '</div>';
     if (c.alsoKinds && c.alsoKinds.length){
       /* Same entry, same stop, same targets — so this is ONE trade that
          several mechanics found, not several trades. */
@@ -4227,6 +4355,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            picture when the cache is cold. Empty desks still get the call. */
         return omniRefreshSide(ui).then(function(sideRead){
         var tape = hgOmniSideTape(sideRead);
+        hgOmniStampProb(collapsed, tape);
         collapsed = hgOmniDeskOrder(collapsed, tape);
         var few = hgOmniPickFew(collapsed, tape, OMNI_MP_MAX);
         var fi;
@@ -4358,8 +4487,22 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== mount / refresh ==================== */
 
+  function hgOmniProbCss(){
+    try {
+      if (typeof document === 'undefined' || !document.head || !document.createElement) return;
+      if (document.getElementById && document.getElementById('omni-prob-css')) return;
+      var st = document.createElement('style');
+      st.id = 'omni-prob-css';
+      st.textContent = '#tab_omniroute .omni-prob{font-variant-numeric:tabular-nums;font-weight:800;color:#047857}'
+        + '#tab_omniroute .omni-prob-max{font-size:32px;line-height:1;font-weight:800;color:#047857;font-variant-numeric:tabular-nums;letter-spacing:-0.03em;margin:4px 0 8px}'
+        + '#tab_omniroute .card .ttl .omni-prob{font-size:18px;margin-right:8px}';
+      if (document.head.appendChild) document.head.appendChild(st);
+    } catch (eCss) {}
+  }
+
   function mountOmniroute(el){
     if (!el) return;
+    hgOmniProbCss();
     var cfg = hgOmniLoadCfg();
 
     el.innerHTML =
@@ -4370,7 +4513,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + 'Each candidate runs a ledger of 3 hard gates (trend · vol-alive · participation) plus conditional confluence from free public data — '
       + 'daily agreement, OI build, retail crowding, taker aggression, book depth, regime, news blackout, and the detector’s own measured edge. '
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
-      + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor. <b>MOST PROBABLE SETUPS</b> lead the tab: up to three tape-aligned tickets, ranked on a balance of mechanic families and indicator reads — not a win probability. Extra house engines vote and never claim 7/7 CLEAN. '
+      + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor. <b>MOST PROBABLE SETUPS</b> lead the tab: the maximum T1-first probability on top, then up to three tape-aligned tickets. Every formation prints that exact integer from the mechanic\'s walk-forward record plus live strategy-family and indicator reads. Extra house engines vote and never claim 7/7 CLEAN. '
       + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
       + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button>'
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
@@ -4566,6 +4709,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniRank = hgOmniRank;
     window.hgOmniInfoNet = hgOmniInfoNet;
     window.hgOmniBalanceScore = hgOmniBalanceScore;
+    window.hgOmniProbParts = hgOmniProbParts;
+    window.hgOmniProbPct = hgOmniProbPct;
+    window.hgOmniProbLabel = hgOmniProbLabel;
+    window.hgOmniStampProb = hgOmniStampProb;
     window.hgOmniDeskOrder = hgOmniDeskOrder;
     window.hgOmniPickFew = hgOmniPickFew;
     window.hgOmniHouseHits = hgOmniHouseHits;
