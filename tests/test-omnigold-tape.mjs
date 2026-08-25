@@ -151,8 +151,8 @@ console.log('== scan wires gold tape into the pick and the banner ==');
 {
   ok(/hgOgTapeDir\(/.test(GOLD) && /hgOgDeskTape\(scalpTape, swingTape\)/.test(GOLD),
      'the scan computes per-horizon tape then a desk tape');
-  ok(/hgOgPickFor\(ranked, HORIZONS\.scalp\.label, deskTape\)/.test(GOLD)
-      && /hgOgPickFor\(ranked, HORIZONS\.swing\.label, deskTape\)/.test(GOLD),
+  ok(/hgOgPickFor\((ranked|ogCollapsed), HORIZONS\.scalp\.label, deskTape\)/.test(GOLD)
+      && /hgOgPickFor\((ranked|ogCollapsed), HORIZONS\.swing\.label, deskTape\)/.test(GOLD),
      'both STRONGEST picks follow the desk tape, not the other horizon\'s lean');
   ok(/hgOgZonesPanel\(res\.scalp\.rows, res\.scalp\.livePx, deskTape\)/.test(GOLD),
      'NEXT GOLD LEVELS hides the against-tape zone');

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v467',
-  pack: 'OMNIGOLD gold session/structure pack — NY drive, weekly open, pivots, EMA50, fib 618',
-  built: '2026-08-25T09:00:00Z',
-  note: 'OMNIGOLD adds NY-OPEN-DRIVE, WEEKLY-OPEN, PIVOT-REJECT, INSIDE-BREAK, EMA50-HOLD, FIB-618 plus ema-stack / rsi-zone / session-vwap info reads. They go through the existing ledger and gold tape: a LONG is still not the pick while gold is going down. Gold min-loss and G1–G7 stay as they are. Extra engines never claim 7/7 CLEAN.'
+  version: 'hg-v468',
+  pack: 'OMNIGOLD most-probable balance — families + indicators, dual-horizon setups on top',
+  built: '2026-08-25T10:00:00Z',
+  note: 'OMNIGOLD ranks tape-aligned tickets on a balanced score of mechanic families and indicator info-reads, then pins MOST PROBABLE SETUPS (SCALP + SWING) at the top of the tab. A LONG is still not the pick while gold is going down. Not a win probability. Gold min-loss and G1–G7 stay as they are. Extra engines never claim 7/7 CLEAN.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
