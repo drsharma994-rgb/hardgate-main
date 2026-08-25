@@ -4,7 +4,10 @@
   "gold": null,
   "lastRunAt": "2026-08-25T10:02:18.606Z",
   "ticket": {
-    "long": null,
+    "long": {
+      "sym": "XAU",
+      "entry": 4629.104391115902
+    },
     "short": null
   },
   "sniper": {
@@ -265,11 +268,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-25T22:01:13.968Z"
+    "at": "2026-08-25T22:46:10.169Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-25T22:01:13.968Z"
+    "at": "2026-08-25T22:46:10.170Z"
   },
   "degraded": {
     "count": 0,
@@ -291,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-25T22:01:14.788Z"
+    "at": "2026-08-25T22:46:10.460Z"
   },
   "bookFill": {
     "key": "u0|p0",
