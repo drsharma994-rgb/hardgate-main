@@ -41,6 +41,15 @@ GOLD-SPECIFIC MECHANICS (added to OmniRoute's six):
                the extreme — fade the exhaustion.
   ROUND-MAGNET Gold respects round dollars far more than alts do; a rejection
                wick at a $10/$25/$50/$100 level with a close back inside.
+  NY-OPEN-DRIVE London session box, then a NY-hour close through it.
+  WEEKLY-OPEN  Wick through the weekly open, close back — gold's weekly magnet.
+  PIVOT-REJECT Classic floor-trader S1/R1 rejection.
+  INSIDE-BREAK Compression (inside bar) then a close beyond the parent.
+  EMA50-HOLD   With-trend bounce that holds the 50 EMA.
+  FIB-618      Bounce at 61.8 of the last swing.
+
+  INDICATOR READS (info only — they do not veto, they do not invent a ticket):
+  ema-stack · rsi-zone · session-vwap.
 
 GOLD GATE LEDGER (deliberately NOT the crypto one — perp gates do not
 exist here; there is no funding, OI, retail ratio or taker flow on spot
@@ -163,7 +172,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       'PWH-SWEEP','PWL-SWEEP','FVG-FILL','BOS-RETEST','EQH-SWEEP','EQL-SWEEP',
                       'SQUEEZE-FIRE','RSI-DIVERGE','GSR-EXTREME','AVWAP-RECLAIM',
                       'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
-                      'POC-REVERT','COINT-SPREAD','THREE-BAR'];
+                      'POC-REVERT','COINT-SPREAD','THREE-BAR',
+                      'NY-OPEN-DRIVE','WEEKLY-OPEN','PIVOT-REJECT',
+                      'INSIDE-BREAK','EMA50-HOLD','FIB-618'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false };
 
@@ -413,6 +424,13 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgPocRevert(rows);     if (d) out.push(d);
     d = hgOgCointSpread(rows);   if (d) out.push(d);
     d = hgOgThreeBar(rows);      if (d) out.push(d);
+    /* round five — gold session / structure, still measured */
+    d = hgOgNyOpenDrive(rows);   if (d) out.push(d);
+    d = hgOgWeeklyOpen(rows);    if (d) out.push(d);
+    d = hgOgPivotReject(rows);   if (d) out.push(d);
+    d = hgOgInsideBreak(rows);   if (d) out.push(d);
+    d = hgOgEma50Hold(rows);     if (d) out.push(d);
+    d = hgOgFib618(rows);        if (d) out.push(d);
     return out;
   }
 
@@ -756,6 +774,231 @@ terse status, and never launches a first-time scan on a global refresh.
      side, confirmed by the close. Structure, not indicator. */
   function hgOgThreeBar(rows){ var f = gfn('hgMechThreeBar'); return f ? f(rows) : null; }
 
+  /* ==================== round five: gold session / structure ====================
+
+     Gold desks actually trade these. Each one is in detect, the walk-forward
+     map, OG_MECHANICS and OG_FAMILY. None of them invents a ticket — the
+     ledger still grades, and desk tape still refuses a LONG pick while gold
+     is going down. */
+
+  function hgOgBarHour(bar){
+    var t = num(bar && bar.t);
+    if (!isFinite(t)) return NaN;
+    var sec = t % 86400;
+    if (sec < 0) sec += 86400;
+    return sec / 3600;
+  }
+
+  function hgOgLondonRange(rows){
+    if (!rows || rows.length < 8) return null;
+    var lastT = num(rows[rows.length - 1].t);
+    if (!isFinite(lastT)) return null;
+    var dayStart = Math.floor(lastT / 86400) * 86400;
+    var hi = -Infinity, lo = Infinity, n = 0, i, t, h, l, hr;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t < dayStart || t >= dayStart + 86400) continue;
+      hr = hgOgBarHour(rows[i]);
+      if (!(hr >= 7 && hr < 13)) continue;
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+      n++;
+    }
+    if (n < 3 || !isFinite(hi) || !isFinite(lo) || !(hi > lo)) return null;
+    return { hi: hi, lo: lo, bars: n };
+  }
+
+  function hgOgNyOpenDrive(rows){
+    try{
+      if (!rows || rows.length < 16) return null;
+      var london = hgOgLondonRange(rows);
+      if (!london) return null;
+      var last = rows[rows.length - 1];
+      var hr = hgOgBarHour(last);
+      if (!(hr >= 13 && hr < 16)) return null;
+      var o = num(last.o), h = num(last.h), l = num(last.l), c = num(last.c);
+      if (!isFinite(o) || !isFinite(c)) return null;
+      if (c > london.hi && o <= london.hi)
+        return { kind:'NY-OPEN-DRIVE', dir:'long', level: london.hi,
+                 why:'NY hour closed above the London high ' + london.hi.toFixed(2) };
+      if (c < london.lo && o >= london.lo)
+        return { kind:'NY-OPEN-DRIVE', dir:'short', level: london.lo,
+                 why:'NY hour closed below the London low ' + london.lo.toFixed(2) };
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function hgOgWeekOpenPx(rows){
+    if (!rows || !rows.length) return NaN;
+    var lastT = num(rows[rows.length - 1].t);
+    if (!isFinite(lastT)) return NaN;
+    var dayStart = Math.floor(lastT / 86400) * 86400;
+    var dow = new Date(dayStart * 1000).getUTCDay();
+    var fromMon = (dow + 6) % 7;
+    var weekStart = dayStart - fromMon * 86400;
+    var i, t, first = null;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t < weekStart) continue;
+      first = rows[i];
+      break;
+    }
+    return first ? num(first.o) : NaN;
+  }
+
+  function hgOgWeeklyOpen(rows){
+    try{
+      if (!rows || rows.length < 24) return null;
+      var wo = hgOgWeekOpenPx(rows);
+      if (!isFinite(wo)) return null;
+      var last = rows[rows.length - 1];
+      var h = num(last.h), l = num(last.l), c = num(last.c);
+      if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+      var rng = h - l;
+      if (!(rng > 0)) return null;
+      var atrN = atrOf(rows, 14);
+      var need = isFinite(atrN) && atrN > 0 ? atrN * 0.12 : rng * 0.2;
+      if (l < wo && c > wo && (wo - l) >= need)
+        return { kind:'WEEKLY-OPEN', dir:'long', level: wo,
+                 why:'swept the weekly open ' + wo.toFixed(2) + ' and closed back above it' };
+      if (h > wo && c < wo && (h - wo) >= need)
+        return { kind:'WEEKLY-OPEN', dir:'short', level: wo,
+                 why:'swept the weekly open ' + wo.toFixed(2) + ' and closed back below it' };
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function hgOgPrevDayHlc(rows){
+    if (!rows || rows.length < 24) return null;
+    var lastT = num(rows[rows.length - 1].t);
+    if (!isFinite(lastT)) return null;
+    var dayStart = Math.floor(lastT / 86400) * 86400;
+    var prevStart = dayStart - 86400;
+    var hi = -Infinity, lo = Infinity, close = NaN, n = 0, i, t, h, l, c;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t < prevStart || t >= dayStart) continue;
+      h = num(rows[i].h); l = num(rows[i].l); c = num(rows[i].c);
+      if (isFinite(h) && h > hi) hi = h;
+      if (isFinite(l) && l < lo) lo = l;
+      if (isFinite(c)) close = c;
+      n++;
+    }
+    if (n < 6 || !isFinite(hi) || !isFinite(lo) || !isFinite(close) || !(hi > lo)) return null;
+    return { h: hi, l: lo, c: close, bars: n };
+  }
+
+  function hgOgPivotReject(rows){
+    try{
+      var pd = hgOgPrevDayHlc(rows);
+      if (!pd || !rows || !rows.length) return null;
+      var P = (pd.h + pd.l + pd.c) / 3;
+      var R1 = 2 * P - pd.l, S1 = 2 * P - pd.h;
+      var last = rows[rows.length - 1];
+      var h = num(last.h), l = num(last.l), c = num(last.c);
+      if (!isFinite(h) || !isFinite(l) || !isFinite(c) || !isFinite(R1) || !isFinite(S1)) return null;
+      var rng = h - l;
+      if (!(rng > 0)) return null;
+      if (h > R1 && c < R1 && (h - R1) >= rng * 0.12)
+        return { kind:'PIVOT-REJECT', dir:'short', level: R1,
+                 why:'swept classic R1 ' + R1.toFixed(2) + ' and closed back below it' };
+      if (l < S1 && c > S1 && (S1 - l) >= rng * 0.12)
+        return { kind:'PIVOT-REJECT', dir:'long', level: S1,
+                 why:'swept classic S1 ' + S1.toFixed(2) + ' and closed back above it' };
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function hgOgInsideBreak(rows){
+    try{
+      if (!rows || rows.length < 3) return null;
+      var a = rows[rows.length - 3], b = rows[rows.length - 2], z = rows[rows.length - 1];
+      var ah = num(a.h), al = num(a.l), bh = num(b.h), bl = num(b.l);
+      var zo = num(z.o), zc = num(z.c);
+      if (!isFinite(ah) || !isFinite(al) || !isFinite(bh) || !isFinite(bl) || !isFinite(zo) || !isFinite(zc)) return null;
+      if (!(bh < ah && bl > al && ah > al)) return null;
+      if (zc > ah && zo <= ah)
+        return { kind:'INSIDE-BREAK', dir:'long', level: ah,
+                 why:'inside bar then closed above the parent high ' + ah.toFixed(2) };
+      if (zc < al && zo >= al)
+        return { kind:'INSIDE-BREAK', dir:'short', level: al,
+                 why:'inside bar then closed below the parent low ' + al.toFixed(2) };
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function hgOgEma50Hold(rows){
+    try{
+      if (!rows || rows.length < 60) return null;
+      var closes = closesOf(rows);
+      if (closes.length < 55) return null;
+      var e50 = emaOf(closes, 50), e21 = emaOf(closes, 21);
+      var last = rows[rows.length - 1];
+      var h = num(last.h), l = num(last.l), c = num(last.c);
+      if (!isFinite(e50) || !isFinite(e21) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+      var atrN = atrOf(rows, 14);
+      if (!(atrN > 0)) atrN = Math.max(h - l, Math.abs(c) * 0.001);
+      var tagged = (l <= e50 && h >= e50) || Math.abs(l - e50) <= atrN * 0.5 || Math.abs(h - e50) <= atrN * 0.5;
+      if (!tagged) return null;
+      if (e21 > e50 && c > e50 && l <= e50 + atrN * 0.2)
+        return { kind:'EMA50-HOLD', dir:'long', level: e50,
+                 why:'up-stack held EMA50 at ' + e50.toFixed(2) + ' and closed back above it' };
+      if (e21 < e50 && c < e50 && h >= e50 - atrN * 0.2)
+        return { kind:'EMA50-HOLD', dir:'short', level: e50,
+                 why:'down-stack held EMA50 at ' + e50.toFixed(2) + ' and closed back below it' };
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function hgOgFib618(rows){
+    try{
+      if (!rows || rows.length < 22) return null;
+      var win = rows.slice(0, -1);
+      if (win.length < 20) return null;
+      win = win.slice(-20);
+      var hi = -Infinity, lo = Infinity, hiI = -1, loI = -1, i, h, l;
+      for (i = 0; i < win.length; i++){
+        h = num(win[i].h); l = num(win[i].l);
+        if (isFinite(h) && h >= hi){ hi = h; hiI = i; }
+        if (isFinite(l) && l <= lo){ lo = l; loI = i; }
+      }
+      if (!(hi > lo) || hiI < 0 || loI < 0) return null;
+      var last = rows[rows.length - 1];
+      var lh = num(last.h), ll = num(last.l), lc = num(last.c), loP = num(last.o);
+      if (!isFinite(lh) || !isFinite(ll) || !isFinite(lc)) return null;
+      var rng = hi - lo;
+      var longLvl = hi - 0.618 * rng, shortLvl = lo + 0.618 * rng;
+      var atrN = atrOf(rows, 14);
+      var slop = (isFinite(atrN) && atrN > 0) ? atrN * 0.45 : rng * 0.08;
+      if (loI <= hiI && ll <= longLvl + slop && lc > longLvl && (isFinite(loP) ? lc >= loP : true))
+        return { kind:'FIB-618', dir:'long', level: longLvl,
+                 why:'held 61.8 of the last swing at ' + longLvl.toFixed(2) };
+      if (hiI <= loI && lh >= shortLvl - slop && lc < shortLvl && (isFinite(loP) ? lc <= loP : true))
+        return { kind:'FIB-618', dir:'short', level: shortLvl,
+                 why:'held 61.8 of the last swing at ' + shortLvl.toFixed(2) };
+      return null;
+    }catch(e){ return null; }
+  }
+
+  function hgOgSessionVwap(rows){
+    if (!rows || !rows.length) return NaN;
+    var lastT = num(rows[rows.length - 1].t);
+    if (!isFinite(lastT)) return NaN;
+    var dayStart = Math.floor(lastT / 86400) * 86400;
+    var pv = 0, vv = 0, i, t, h, l, c, v, tp;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i].t);
+      if (!isFinite(t) || t < dayStart) continue;
+      h = num(rows[i].h); l = num(rows[i].l); c = num(rows[i].c); v = num(rows[i].v);
+      if (!isFinite(c)) continue;
+      tp = (isFinite(h) && isFinite(l)) ? (h + l + c) / 3 : c;
+      if (!isFinite(v) || v <= 0) v = 1;
+      pv += tp * v; vv += v;
+    }
+    return vv > 0 ? pv / vv : NaN;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -808,6 +1051,9 @@ terse status, and never launches a first-time scan on a global refresh.
     'PIN-REJECT':'SWEEP', 'ENGULF-LEVEL':'SWEEP', 'THREE-BAR':'SWEEP',
     'POC-REVERT':'REVERSION', 'COINT-SPREAD':'INTERMARKET',
     'CUSUM-SHIFT':'TREND', 'VOL-EXPANSION':'TREND',
+    /* round five — gold session / structure */
+    'NY-OPEN-DRIVE':'TREND', 'INSIDE-BREAK':'TREND', 'EMA50-HOLD':'TREND', 'FIB-618':'TREND',
+    'WEEKLY-OPEN':'SWEEP', 'PIVOT-REJECT':'SWEEP',
     /* the other metal disagrees with this one */
     'SMT-DIVERGE':'INTERMARKET', 'GSR-EXTREME':'INTERMARKET'
   };
@@ -2075,6 +2321,79 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'shield-guard', hard:false, pass: shOk, why: shWhy });
 
+    /* Round five indicator reads. INFO only — they argue whether the
+       existing setup is standing on gold structure, they never veto a
+       ticket and they never invent one. */
+    var stackOk = null, stackWhy = 'EMA stack unread';
+    try{
+      var e8 = emaOf(closes, 8);
+      if (isFinite(e8) && isFinite(e21) && isFinite(e50) && isFinite(last)){
+        var bull = e8 > e21 && e21 > e50;
+        var bear = e8 < e21 && e21 < e50;
+        if (reversion){
+          stackOk = true;
+          stackWhy = bull ? '8>21>50 — a fade is counter-stack by design'
+                   : bear ? '8<21<50 — a fade is counter-stack by design'
+                   : 'EMA 8/21/50 mixed — no stack for the fade to fight';
+        } else if (hit.dir === 'long'){
+          stackOk = bull ? true : (bear ? false : null);
+          stackWhy = bull ? '8>21>50 — stack agrees with the long'
+                   : bear ? '8<21<50 — stack is against this long'
+                   : 'EMA 8/21/50 mixed — no clean stack';
+        } else if (hit.dir === 'short'){
+          stackOk = bear ? true : (bull ? false : null);
+          stackWhy = bear ? '8<21<50 — stack agrees with the short'
+                   : bull ? '8>21>50 — stack is against this short'
+                   : 'EMA 8/21/50 mixed — no clean stack';
+        }
+      }
+    }catch(eSt){ stackWhy = 'EMA stack unread'; }
+    gates.push({ key:'ema-stack', hard:false, info:true, pass: stackOk, why: stackWhy });
+
+    var rsiOk = null, rsiWhy = 'RSI unread';
+    try{
+      var rsiFn = gfn('rsi');
+      var rsiArr = rsiFn ? rsiFn(closes, 14) : null;
+      var rsiLast = (rsiArr && rsiArr.length) ? fin(rsiArr[rsiArr.length - 1]) : NaN;
+      if (isFinite(rsiLast)){
+        if (reversion){
+          if (hit.dir === 'long'){
+            rsiOk = rsiLast <= 40 ? true : (rsiLast >= 70 ? false : null);
+            rsiWhy = 'RSI ' + rsiLast.toFixed(0) + (rsiLast <= 40 ? ' — stretched for a long fade' : rsiLast >= 70 ? ' — chasing a high RSI fade' : ' — mid band, not a stretch');
+          } else {
+            rsiOk = rsiLast >= 60 ? true : (rsiLast <= 30 ? false : null);
+            rsiWhy = 'RSI ' + rsiLast.toFixed(0) + (rsiLast >= 60 ? ' — stretched for a short fade' : rsiLast <= 30 ? ' — chasing a low RSI fade' : ' — mid band, not a stretch');
+          }
+        } else if (hit.dir === 'long'){
+          rsiOk = rsiLast >= 78 ? false : true;
+          rsiWhy = 'RSI ' + rsiLast.toFixed(0) + (rsiLast >= 78 ? ' — continuation is chasing the stretch' : ' — not an extreme chase');
+        } else {
+          rsiOk = rsiLast <= 22 ? false : true;
+          rsiWhy = 'RSI ' + rsiLast.toFixed(0) + (rsiLast <= 22 ? ' — continuation is chasing the stretch' : ' — not an extreme chase');
+        }
+      }
+    }catch(eRsi){ rsiWhy = 'RSI unread'; }
+    gates.push({ key:'rsi-zone', hard:false, info:true, pass: rsiOk, why: rsiWhy });
+
+    var vwapOk = null, vwapWhy = 'session VWAP unread';
+    try{
+      var vwap = hgOgSessionVwap(rows);
+      if (isFinite(vwap) && isFinite(last) && vwap > 0){
+        var above = last > vwap;
+        if (reversion){
+          vwapOk = true;
+          vwapWhy = 'session VWAP ' + vwap.toFixed(2) + (above ? ' — price above (fade is counter-VWAP by design)' : ' — price below (fade is counter-VWAP by design)');
+        } else if (hit.dir === 'long'){
+          vwapOk = above ? true : false;
+          vwapWhy = 'session VWAP ' + vwap.toFixed(2) + (above ? ' — price holds above, agrees with the long' : ' — price is below, against this long');
+        } else {
+          vwapOk = above ? false : true;
+          vwapWhy = 'session VWAP ' + vwap.toFixed(2) + (above ? ' — price is above, against this short' : ' — price holds below, agrees with the short');
+        }
+      }
+    }catch(eVw){ vwapWhy = 'session VWAP unread'; }
+    gates.push({ key:'session-vwap', hard:false, info:true, pass: vwapOk, why: vwapWhy });
+
     return gates;
   }
 
@@ -2804,7 +3123,13 @@ terse status, and never launches a first-time scan on a global refresh.
           'ENGULF-LEVEL': function(r){ return hgOgEngulfLevel(r); },
           'POC-REVERT':   function(r){ return hgOgPocRevert(r); },
           'COINT-SPREAD': function(r){ return hgOgCointSpread(r); },
-          'THREE-BAR':    function(r){ return hgOgThreeBar(r); }
+          'THREE-BAR':    function(r){ return hgOgThreeBar(r); },
+          'NY-OPEN-DRIVE':function(r){ return hgOgNyOpenDrive(r); },
+          'WEEKLY-OPEN':  function(r){ return hgOgWeeklyOpen(r); },
+          'PIVOT-REJECT': function(r){ return hgOgPivotReject(r); },
+          'INSIDE-BREAK': function(r){ return hgOgInsideBreak(r); },
+          'EMA50-HOLD':   function(r){ return hgOgEma50Hold(r); },
+          'FIB-618':      function(r){ return hgOgFib618(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
@@ -3479,7 +3804,7 @@ terse status, and never launches a first-time scan on a global refresh.
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniGold — gold desk setups <span>XAUUSD · scalp ' + HORIZONS.scalp.tf + ' + swing ' + HORIZONS.swing.tf
-      +   ' · asia break · killzone judas · adr fade · round magnet · + the OmniRoute six</span></h2>'
+      +   ' · asia break · ny drive · weekly open · pivot · ema50 · fib 618 · + the OmniRoute six</span></h2>'
       + '<div class="note" style="margin-bottom:10px">OmniRoute’s method pointed at gold: mechanical detectors, a hard-gate ledger, '
       + 'walk-forward self-measurement and evidence coverage — plus the mechanics gold desks actually trade. '
       + '<b>Two horizons are measured separately</b>, because a mechanic that pays on 4h need not pay intraday. '
@@ -3638,6 +3963,12 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgRoundMagnet = hgOgRoundMagnet;
     window.hgOgResample = hgOgResample;   /* exported so the higher-timeframe build is testable directly */
     window.hgOgDetect = hgOgDetect;
+    window.hgOgNyOpenDrive = hgOgNyOpenDrive;
+    window.hgOgWeeklyOpen = hgOgWeeklyOpen;
+    window.hgOgPivotReject = hgOgPivotReject;
+    window.hgOgInsideBreak = hgOgInsideBreak;
+    window.hgOgEma50Hold = hgOgEma50Hold;
+    window.hgOgFib618 = hgOgFib618;
     window.hgOgGates = hgOgGates;
     /* Exported so the ticket count can be tested apart from a live scan —
        the header and the rendered cards disagreed for want of exactly this. */
