@@ -2535,6 +2535,11 @@ function goldRankSetups(cands, ctx){
           else if ((news.caution || c.newsCaution) && rc.grade === 'B') rc.grade = 'C';
         }
       }catch(eGr){}
+      try{
+        if (typeof window !== 'undefined' && typeof window.hgSetupSolidityApply === 'function'){
+          window.hgSetupSolidityApply(rc, { asset: 'gold', tally: tally, grade: rc.grade });
+        }
+      }catch(eSol){}
       ranked.push(rc);
     }
     var gOrd = { A: 0, B: 1, C: 2 };
@@ -2545,6 +2550,9 @@ function goldRankSetups(cands, ctx){
       var gx = (gOrd[x.grade] === undefined) ? 9 : gOrd[x.grade];
       var gy = (gOrd[y.grade] === undefined) ? 9 : gOrd[y.grade];
       if (gx !== gy) return gx - gy;
+      var sx = isFinite(x.solidityScore) ? x.solidityScore : 0;
+      var sy = isFinite(y.solidityScore) ? y.solidityScore : 0;
+      if (sy !== sx) return sy - sx;
       var kx = isFinite(x.killzoneWeight) ? x.killzoneWeight : 0;
       var ky = isFinite(y.killzoneWeight) ? y.killzoneWeight : 0;
       if (ky !== kx) return ky - kx;
@@ -2557,8 +2565,13 @@ function goldRankSetups(cands, ctx){
     });
     out.ranked = ranked;
     out.best = null;
-    for (i = 0; i < ranked.length; i++){   /* MOST PROBABLE = best non-demoted */
-      if (!ranked[i].demoted){ out.best = ranked[i]; break; }
+    for (i = 0; i < ranked.length; i++){   /* MOST PROBABLE = best non-demoted, solid first */
+      if (!ranked[i].demoted && ranked[i].solidityBookOk !== false){ out.best = ranked[i]; break; }
+    }
+    if (!out.best){
+      for (i = 0; i < ranked.length; i++){
+        if (!ranked[i].demoted){ out.best = ranked[i]; break; }
+      }
     }
     return out;
   }catch(e){ return { ranked: [], best: null }; }

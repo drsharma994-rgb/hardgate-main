@@ -153,6 +153,7 @@ function hgMostProbablePanelHTML(kind, pick){
     return '<section class="hg-mp" data-hg-mp="' + suEsc(kind || tab) + '" data-tier="' + tier + '" aria-label="Most probable setup">'
       + '<div class="hg-mp-eye">MOST PROBABLE' + (tier === 'clean' ? ' SETUP' : (tier === 'near' ? ' WATCH' : ' DRAFT')) + '</div>'
       + '<div class="hg-mp-head">' + suEsc(row.sym || '?') + ' ' + suEsc(dirLbl)
+      + (typeof W.hgSetupSolidityChipHtml === 'function' ? W.hgSetupSolidityChipHtml(row) : '')
       + '<span>' + suEsc(tab) + (venue ? ' · ' + suEsc(venue) : '') + ' · ' + suEsc(grade) + '</span></div>'
       + '<div class="hg-mp-note">' + suEsc(note) + '</div>'
       + '<div class="hg-mp-grid">'

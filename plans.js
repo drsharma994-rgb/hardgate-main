@@ -330,6 +330,10 @@ function hgCmpSetupQuality(a, b, side){
   var aC = a.postGateUnchecked ? 0 : (a.postGateChecked ? 2 : 1);
   var bC = b.postGateUnchecked ? 0 : (b.postGateChecked ? 2 : 1);
   if (aC !== bC) return bC - aC;
+  if (typeof G.hgSetupSolidityCmp === 'function'){
+    var sc = G.hgSetupSolidityCmp(a, b);
+    if (sc) return sc;
+  }
   var fs = (b.formationScore || 0) - (a.formationScore || 0);
   if (fs) return fs;
   var rb = (b.rankBoost || 0) - (a.rankBoost || 0);
@@ -352,7 +356,7 @@ function hgRankCryptoSetups(cands, side){
   var best = null, i, c;
   for (i = 0; i < sorted.length; i++){
     c = sorted[i];
-    if (c && !c.postGateUnchecked){ best = c; break; }
+    if (c && !c.postGateUnchecked && c.solidityBookOk !== false){ best = c; break; }
   }
   if (!best && sorted.length) best = sorted[0];
   return { cands: sorted, best: best };
@@ -433,6 +437,7 @@ function hgNormalizeSetupRow(raw){
   else if (near){ row.near = true; row.nearClean = true; }
   if (forming && !row.clean) row.forming = true;
   if (!row.clean && !row.near && !row.forming) row.clean = true;
+  if (typeof G.hgSetupSolidityApply === 'function') G.hgSetupSolidityApply(row, { asset: 'crypto' });
   return row;
 }
 
@@ -497,8 +502,18 @@ function hgPickMostProbableAny(payload, side){
    a 7/7 ticket. */
 function hgPickMostProbable(cands, nearCands, side, closest){
   var ranked = hgRankCryptoSetups(cands || [], side);
-  if (ranked.best && hgSetupHasLevels(ranked.best) && !ranked.best.nearClean){
-    return { row: ranked.best, tier: 'clean', source: 'clean' };
+  var best = ranked.best;
+  if (ranked.cands && ranked.cands.length){
+    for (var i = 0; i < ranked.cands.length; i++){
+      var c = ranked.cands[i];
+      if (c && hgSetupHasLevels(c) && !c.nearClean && c.solidityBookOk !== false && !c.postGateUnchecked){
+        best = c;
+        break;
+      }
+    }
+  }
+  if (best && hgSetupHasLevels(best) && !best.nearClean){
+    return { row: best, tier: 'clean', source: 'clean' };
   }
   var nr = hgRankCryptoSetups(nearCands || [], side);
   if (nr.best && hgSetupHasLevels(nr.best)){
