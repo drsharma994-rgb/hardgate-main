@@ -406,6 +406,93 @@ function gateVetoRows(rows4h, ticker){
   return out;
 }
 
+/* OMNIROUTE INFO reads — vol targeting, CVD, liquidation map.
+
+   The SEARCH full report runs every desk engine; these three were added on
+   OMNIROUTE pass 2 and belong on a single-contract audit too. They report
+   only — nothing here vetoes the plan below. */
+function omniInfoRows(rows4h, ticker, plan, takerSeries){
+  var out = [];
+  var dir = (plan && plan.ok) ? plan.dir : null;
+
+  out.push(attempt('Vol targeting (OMNIROUTE)', ['hgOmniVolTarget'], function(){
+    if (!rows4h || rows4h.length < 40){
+      return unchecked('Vol targeting (OMNIROUTE)',
+        'needs 40+ 4h bars to measure realized vol, have ' + ((rows4h && rows4h.length) || 0));
+    }
+    var vt = W.hgOmniVolTarget(rows4h, {});
+    if (!vt) return row('Vol targeting (OMNIROUTE)', { state: 'idle', detail: 'too few returns to measure volatility' });
+    var over = !!(vt.overBudget || vt.mult < 0.75);
+    return row('Vol targeting (OMNIROUTE)', {
+      state: over ? 'idle' : 'signal',
+      detail: vt.note + (over ? ' — over budget at full size' : '')
+    });
+  }));
+
+  out.push(attempt('CVD (OMNIROUTE)', ['hgOmniCvd'], function(){
+    if (!rows4h || rows4h.length < 30){
+      return unchecked('CVD (OMNIROUTE)', 'needs 30+ 4h bars, have ' + ((rows4h && rows4h.length) || 0));
+    }
+    var taker = (takerSeries && takerSeries.length) ? { series: takerSeries } : null;
+    var cv = W.hgOmniCvd(rows4h, 30, taker);
+    if (!cv) return row('CVD (OMNIROUTE)', { state: 'idle', detail: 'CVD could not be computed on this history' });
+    var detail = cv.note;
+    if (cv.divergence){
+      detail += ' · ' + (cv.divergence === 'bear' ? 'price rising into selling flow' : 'price falling into buying flow');
+    }
+    if (dir){
+      var withPlan = (dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
+      detail += ' — flow ' + (withPlan ? 'with' : 'against') + ' the ' + dir + ' plan';
+      return row('CVD (OMNIROUTE)', { state: withPlan ? 'signal' : 'idle', dir: cv.dir, detail: detail });
+    }
+    return row('CVD (OMNIROUTE)', { state: 'signal', dir: cv.dir, detail: detail });
+  }));
+
+  out.push(attempt('Liquidation map (OMNIROUTE)', ['hgOmniLiqMap'], function(){
+    if (!rows4h || rows4h.length < 40){
+      return unchecked('Liquidation map (OMNIROUTE)',
+        'needs 40+ 4h bars to project clusters, have ' + ((rows4h && rows4h.length) || 0));
+    }
+    var lm = W.hgOmniLiqMap(rows4h, {});
+    if (!lm || !lm.clusters || !lm.clusters.length){
+      return row('Liquidation map (OMNIROUTE)', { state: 'idle', detail: 'no liquidation clusters projected from recent extremes' });
+    }
+    var detail = lm.clusters.length + ' cluster(s) projected from recent block extremes';
+    var state = 'signal';
+    if (plan && plan.ok){
+      var lmE = fin(plan.entry), lmS = fin(plan.stop), lmT = fin(plan.t1);
+      if (isFinite(lmS)){
+        var onStop = null, ci;
+        for (ci = 0; ci < lm.clusters.length; ci++){
+          if (Math.abs(lm.clusters[ci].price - lmS) <= lm.tol){ onStop = lm.clusters[ci]; break; }
+        }
+        if (onStop){
+          state = 'idle';
+          detail = 'stop sits inside a liquidation cluster at ' + onStop.price.toFixed(6)
+            + ' (' + onStop.weight + ' projected) — stop-hunt risk';
+        }
+      }
+      if (state === 'signal' && isFinite(lmE) && isFinite(lmT)){
+        var lo = Math.min(lmE, lmT), hi = Math.max(lmE, lmT), fuel = null, cj;
+        for (cj = 0; cj < lm.clusters.length; cj++){
+          if (lm.clusters[cj].price > lo && lm.clusters[cj].price < hi){
+            if (!fuel || lm.clusters[cj].weight > fuel.weight) fuel = lm.clusters[cj];
+          }
+        }
+        if (fuel){
+          detail = 'cluster at ' + fuel.price.toFixed(6) + ' (' + fuel.weight
+            + ' projected) lies between entry and T1 — fuel toward the target';
+        } else {
+          detail += ' — none between entry and T1, stop clear of clusters';
+        }
+      }
+    }
+    return row('Liquidation map (OMNIROUTE)', { state: state, dir: dir, detail: detail });
+  }));
+
+  return out;
+}
+
 function formationRow(rows4h, ticker, best){
   return attempt('Ticket formation (POI → stop → targets)', ['hgFormTicket'], function(){
     if (!best || !best.dir || !isFinite(fin(best.entry)) || !isFinite(fin(best.stop))){
@@ -878,6 +965,9 @@ function hgContractReportRun(inp){
 
   /* the one thing the reader actually acts on */
   report.plan = planFrom(rows4h, ticker, report.sections, lean);
+
+  report.sections.push({ id: 'omniinfo', label: 'OMNIROUTE INFO READS (vol target · CVD · liquidation map)',
+    rows: omniInfoRows(rows4h, ticker, report.plan, inp.takerSeries) });
 
   /* what the app has MEASURED, as opposed to what it sees — needs the plan,
      so it is built after it */

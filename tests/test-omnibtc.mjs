@@ -380,4 +380,36 @@ console.log('\n== wiring: nav, host, shell, pin path ==');
     'the module states it will not invent levels');
 }
 
+console.log('\n== OMNIROUTE full-ledger discipline on BTC ==');
+{
+  const bars = Array.from({ length: 80 }, function(_, i){
+    return { t: 1700000000 + i * 14400, o: 100, h: 104, l: 96, c: 100 + (i % 5), v: 1000 };
+  });
+  const TICKER = { symbol: 'BTCUSD', exchange: 'delta', mark: 100 };
+  const ledger = [];
+  let extraSeen = null;
+  const W = boot();
+  W.hgOmniEvaluate = function(item, rows, pos, extra){
+    extraSeen = extra;
+    return [];
+  };
+  W.hgObtcRunLocalEngines(bars, bars, bars, TICKER, bars, ledger);
+  ok(extraSeen && extraSeen.rows1h === bars && extraSeen.rows15m === bars,
+    'hgOmniEvaluate receives 1H + 15m legs for SCALP / house extras');
+  ok(ledger.length === 1 && /no mechanic fired/i.test(ledger[0].detail),
+    'a quiet OMNIROUTE pass is logged — indicator ledger ran, no invented ticket');
+}
+
+console.log('\n== coverage matrix + contract-report omniinfo wiring ==');
+{
+  const src = read('omnibtc.js');
+  ok(/hgObtcCoverageMatrixHtml/.test(src), 'coverage matrix helper is exported');
+  ok(/OMNIROUTE COVERAGE/.test(src), 'mount shows the OMNIROUTE coverage panel');
+  ok(/takerSeries/.test(src), 'contract report receives takerSeries when gathered');
+  ok(/omniinfo/.test(src), 'scan extracts omniinfo rows onto the snap');
+  const W = boot();
+  W.hgOmniRenderCoverageMatrix = function(){ return '<table class="tbl"><tr><td>COVERED</td></tr></table>'; };
+  ok(/tbl/.test(W.hgObtcCoverageMatrixHtml()), 'coverage matrix renders when omniroute is loaded');
+}
+
 console.log('\npassed: ' + passed);

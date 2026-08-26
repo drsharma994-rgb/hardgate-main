@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v476',
-  pack: 'OMNIROUTE full ledger + coverage — vol targeting · CVD · liquidation map',
-  built: '2026-08-26T05:45:00Z',
-  note: 'OMNIROUTE pass 2 runs every engine and indicator on every scanned Delta+CoinDCX name (quiet names stay honest; extras never claim 7/7 CLEAN). Coverage complete: vol_targeting (hgOmniVolTarget), cvd (hgOmniCvd — Binance taker series, labelled candle approximation as fallback) and liquidation_map (hgOmniLiqMap — leverage clusters from recent extremes). All three are INFO gates only. G1–G7, gold min-loss and crypto live-trading-off stay as they are.'
+  version: 'hg-v477',
+  pack: 'SEARCH full report + OMNIBTC — OMNIROUTE INFO parity',
+  built: '2026-08-26T08:20:00Z',
+  note: 'Contract report (SEARCH → FULL REPORT) now runs vol targeting, CVD and liquidation map INFO reads beside every other engine. OMNIBTC passes 1H + 15m into hgOmniEvaluate, logs quiet OMNIROUTE passes honestly, shows the coverage matrix, and surfaces the three INFO reads on the winner card. G1–G7 and live-trading-off unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

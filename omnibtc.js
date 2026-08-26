@@ -278,7 +278,24 @@ a global hard refresh.
     }catch(e){}
   }
 
-  function hgObtcRunLocalEngines(rows4h, rows1h, rows15m, ticker, rows1d){
+  function hgObtcCoverageMatrixHtml(){
+    if (!gfn('hgOmniRenderCoverageMatrix')) return '';
+    try{ return W.hgOmniRenderCoverageMatrix(); }catch(e){ return ''; }
+  }
+
+  function hgObtcOmniInfoHtml(rows){
+    if (!rows || !rows.length) return '';
+    var html = '<div class="note" style="margin-top:10px"><b>OMNIROUTE INFO</b> — vol target · CVD · liquidation map (report only)</div>';
+    html += '<div class="cr-ind-wrap">';
+    rows.forEach(function(r){
+      html += '<div class="kv"><span class="k">' + esc(r.name) + '</span><span class="v">'
+        + esc(r.state || '—') + (r.detail ? ' · ' + esc(r.detail) : '')
+        + '</span></div>';
+    });
+    return html + '</div>';
+  }
+
+  function hgObtcRunLocalEngines(rows4h, rows1h, rows15m, ticker, rows1d, ledger){
     var out = [];
     var mins = 120;
     try{ if (gfn('tickClock')) mins = W.tickClock(); }catch(e){}
@@ -370,17 +387,39 @@ a global hard refresh.
 
     if (gfn('hgOmniEvaluate')){
       try{
+        var omniExtra = { rows1h: rows1h, rows15m: rows15m };
+        try{ if (gfn('tickClock')) omniExtra.minsToFunding = W.tickClock(); }catch(eM){}
         var omni = W.hgOmniEvaluate({
           sym: ticker.symbol, base: 'BTC', exchange: ticker.exchange || 'delta'
-        }, rows4h, null, null);
+        }, rows4h, null, omniExtra);
         if (Array.isArray(omni)){
-          omni.forEach(function(hit){
-            var plan = hit && (hit.plan || hit);
-            var c = hgObtcCandidateFromSignal(plan, ticker, { engine: (hit && hit.kind) || 'OMNIROUTE' });
-            if (c) out.push(c);
-          });
+          if (!omni.length){
+            if (ledger){
+              ledger.push({ name: 'OMNIROUTE evaluate', state: 'idle', dir: null,
+                detail: 'no mechanic fired on BTC — indicator ledger still ran, no invented ticket' });
+            }
+          } else {
+            omni.forEach(function(hit){
+              var plan = hit && (hit.plan || hit);
+              var c = hgObtcCandidateFromSignal(plan, ticker, { engine: (hit && hit.kind) || 'OMNIROUTE' });
+              if (c) out.push(c);
+              if (ledger){
+                ledger.push({ name: 'OMNIROUTE · ' + (hit && hit.kind ? hit.kind : 'hit'),
+                  state: c ? 'signal' : 'idle', dir: c && c.dir,
+                  detail: c ? 'levelled ticket' : 'mechanic fired but no honest levels on BTC' });
+              }
+            });
+          }
         }
-      }catch(e3){}
+      }catch(e3){
+        if (ledger){
+          ledger.push({ name: 'OMNIROUTE evaluate', state: 'error', dir: null,
+            detail: 'threw during BTC evaluate' });
+        }
+      }
+    } else if (ledger){
+      ledger.push({ name: 'OMNIROUTE evaluate', state: 'unchecked', dir: null,
+        detail: 'module not loaded: hgOmniEvaluate' });
     }
     return out;
   }
@@ -390,7 +429,7 @@ a global hard refresh.
       + 'Standing aside is the position. Nothing was invented.</div>';
   }
 
-  function detailHtml(pick){
+  function detailHtml(pick, omniInfo){
     if (!pick || !pick.row || !hgObtcHasLevels(pick.row)) return waitHtml();
     var r = pick.row;
     var tier = String(pick.tier || 'clean').toLowerCase();
@@ -411,6 +450,7 @@ a global hard refresh.
     if (gfn('hgStrategyTradeDetailHtml')){
       try{ html += W.hgStrategyTradeDetailHtml(r, { scanner: 'omnibtc', kind: r.engine }); }catch(e2){}
     }
+    html += hgObtcOmniInfoHtml(omniInfo);
     if (clean){
       html += '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">';
       if (gfn('bookBtnHTML')){
@@ -484,7 +524,7 @@ a global hard refresh.
         else if (gfn('hgMostProbablePanelHTML')) ui.cards.innerHTML = W.hgMostProbablePanelHTML('omnibtc', pick);
       }
     }
-    if (ui.detail) ui.detail.innerHTML = pick ? detailHtml(pick) : waitHtml();
+    if (ui.detail) ui.detail.innerHTML = pick ? detailHtml(pick, snap && snap.omniInfo) : waitHtml();
     if (ui.ind) ui.ind.innerHTML = indicatorsHtml(snap && snap.indicators);
     if (ui.ledger){
       var extraHtml = '';
@@ -553,7 +593,8 @@ a global hard refresh.
           try{
             rep = W.hgContractReportRun({
               sym: tk.symbol, venue: tk.exchange, ticker: tk,
-              rows4h: r4, rows1h: r1, rows15m: r15
+              rows4h: r4, rows1h: r1, rows15m: r15,
+              takerSeries: extra && extra.takerSeries
             });
             reports.push(rep);
             cands = hgObtcCandidatesFromReport(rep, tk);
@@ -566,7 +607,7 @@ a global hard refresh.
           rep = null;
           cands = [];
         }
-        cands = cands.concat(hgObtcRunLocalEngines(r4, r1, r15, tk, r1d));
+        cands = cands.concat(hgObtcRunLocalEngines(r4, r1, r15, tk, r1d, extraLedger));
         if (gfn('hgObtcRunExtraEngines')){
           try{
             extraRun = W.hgObtcRunExtraEngines(r4, r1, r15, tk, extra);
@@ -629,9 +670,14 @@ a global hard refresh.
         }
       }
       var winRep = null;
+      var omniInfo = [];
       if (pick && reports.length){
         winRep = reports.filter(function(r){ return r && hgObtcIsBtc(r.sym) && r.sym === pick.row.sym; })[0] || reports[0];
         if (winRep && winRep.indicators) indicators = winRep.indicators;
+        if (winRep && winRep.sections){
+          var osec = winRep.sections.filter(function(s){ return s.id === 'omniinfo'; })[0];
+          if (osec && osec.rows) omniInfo = osec.rows;
+        }
       }
       var nClean = all.filter(function(c){ return c.clean; }).length;
       var stat = pick
@@ -649,6 +695,7 @@ a global hard refresh.
         stat: stat,
         indicators: indicators,
         report: winRep,
+        omniInfo: omniInfo,
         extraLedger: extraLedger
       };
       __obtc.snap = snap;
@@ -673,8 +720,10 @@ a global hard refresh.
       '<div class="panel">'
       + '<h2>OMNIBTC — Bitcoin only <span>every house strategy + indicator bank · one MOST PROBABLE setup</span></h2>'
       + '<div class="note" style="margin-bottom:10px">BTC is the whole universe. SWING, SCALP, EDGE, PINE, squeeze, '
-      + 'mean-reversion, sniper, liquidity, SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC and STAR TRADER '
-      + 'all read the same coin on Delta and CoinDCX. ONCHAIN / TERM / CARRY confirm, demote or refuse — they never mint levels. '
+      + 'mean-reversion, sniper, liquidity, SMART $, OI FLOW, funding-fade, COIL, DIV, TRAP, SMC, STAR TRADER, '
+      + '<b>OMNIROUTE (full ledger on 4H + 1H + 15m)</b> and the SEARCH full report all read the same coin on Delta and CoinDCX. '
+      + 'ONCHAIN / TERM / CARRY confirm, demote or refuse — they never mint levels. '
+      + 'Vol targeting · CVD · liquidation map INFO reads ride on the contract report and the winner card. '
       + 'The desk then keeps <b>one</b> setup: 7/7 CLEAN with real ENTRY / STOP / T1 wins; otherwise the nearest watch; '
       + 'otherwise WAIT. Extra engines never claim 7/7. G1–G7 stay as they are.</div>'
       + '<div class="note" id="obtcStat" aria-live="polite">idle — press SCAN BTC.</div>'
@@ -685,6 +734,8 @@ a global hard refresh.
       + '<div id="obtcInd" class="note">Run a scan to read BTC.</div>'
       + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">STRATEGY LEDGER</h3>'
       + '<div id="obtcLedger" class="note">Every engine that ran — including the ones that said nothing.</div>'
+      + '<h3 style="margin:18px 0 6px;letter-spacing:.08em;font-size:12px">OMNIROUTE COVERAGE</h3>'
+      + '<div id="obtcMatrix">' + hgObtcCoverageMatrixHtml() + '</div>'
       + '</div>';
     var ui = {
       btn: el.querySelector('#obtcRun'),
@@ -720,6 +771,8 @@ a global hard refresh.
   /* exported so the engine wiring is testable on its own: which engines get
      called, and — more importantly — which correctly decline */
   W.hgObtcRunLocalEngines = hgObtcRunLocalEngines;
+  W.hgObtcCoverageMatrixHtml = hgObtcCoverageMatrixHtml;
+  W.hgObtcOmniInfoHtml = hgObtcOmniInfoHtml;
   W.hgObtcState = function(){
     try{ return __obtc.snap ? JSON.parse(JSON.stringify(__obtc.snap)) : null; }catch(e){ return null; }
   };

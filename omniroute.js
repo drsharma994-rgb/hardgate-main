@@ -3703,6 +3703,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return h + '</tbody></table>';
   }
 
+  function hgOmniRenderCoverageMatrix(){ return renderMatrix(); }
+
   function renderProposal(mapped, modelName){
     if (!mapped) return '<div class="empty">could not parse a strategy out of that source.</div>';
     var h = '<div class="panel-in"><h3>' + esc(mapped.name) + '</h3>';
@@ -4923,6 +4925,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniRoster = hgOmniRoster;
     window.hgOmniCoverage = hgOmniCoverage;
     window.hgOmniCoverageMatrix = hgOmniCoverageMatrix;
+    window.hgOmniRenderCoverageMatrix = hgOmniRenderCoverageMatrix;
     window.hgOmniGaps = hgOmniGaps;
     window.hgOmniVocabulary = hgOmniVocabulary;
     window.hgOmniBuildPrompt = hgOmniBuildPrompt;
