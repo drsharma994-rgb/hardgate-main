@@ -107,6 +107,37 @@ an accident: a first attempt at a combined "indicator stack" tally was cut
 because five of its six members were already gates in their own right, and
 counting one reading twice inflates a ticket's check count without adding
 any evidence behind it.
+WHAT A GATE AUDIT FOUND, AND WHY ALMOST NOTHING WAS CHANGED. Every gate on
+this ledger was split by its own verdict and resolved at the 2R where T1
+sits, on 1,000 PAXG bars per horizon. On SCALP, ELEVEN gates read
+"backwards" — the firings they rejected outperformed the ones they kept:
+adx-trend -7.4, value-area -7.3, vol-alive -7.2, weekend-exposure -6.6,
+adx-regime -6.3, obv-flow -6.1, squeeze-state -5.9, participation -5.4,
+cci-stretch -4.3, premium-discount -4.0, trend -3.5 sigma.
+
+That is not eleven broken gates. Look at what they have in common: every one
+PASSES when the tape is active and FAILS when it is quiet. It is one effect
+seen eleven ways — on 1h gold, a setup fired into confirmed activity does
+worse, because by the time the indicators agree the move is largely spent.
+Counting it eleven times would be counting one thing eleven times.
+
+And most of it does not survive the second horizon. value-area is -7.3 on
+SCALP and +4.9 on SWING. structure-shift is +8.1 on SCALP and -4.4 on SWING.
+stoch-rsi is -2.8 and +4.2. A gate that reverses sign between horizons is
+reading noise, not structure.
+
+So the standard for touching a gate on evidence is: it must replicate on
+BOTH horizons, past the family-wise bar, in the same direction. Exactly one
+gate met it — participation, -5.4 on SCALP and -2.2 on SWING — and that is
+the only one changed. The rest stand, including the ones that look worst on
+a single horizon.
+
+Three that EARN their keep on both horizons, for the record, since a ledger
+is easier to distrust than to credit: regime-fit (+3.0 / +4.5),
+htf-confirm (+3.3 / +5.5) and hurst-regime (+6.4 / +2.8). They are info
+reads and were left as such — promoting them to vetoes on in-sample
+evidence would be the same overfit in the opposite direction.
+
 Participation is an INFO read here, unlike OmniRoute, for two reasons.
 Several gold feeds publish no volume at all, and a hard volume gate would
 silently disqualify every setup sourced from them. And on the feeds that DO

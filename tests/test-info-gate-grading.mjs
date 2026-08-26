@@ -19,6 +19,21 @@
    completely unchanged, which is the assertion this file exists for — every
    other desk in the app grades through this same function.
 
+   THE BAR FOR ADDING TO THIS LIST. Moving a gate to info stops it vetoing,
+   so the list is a one-way door and needs a standard. A full audit of the
+   gold ledger — every gate split by its own verdict, resolved at the 2R
+   where T1 sits, 1,000 bars per horizon — found ELEVEN gates reading
+   backwards on SCALP. Almost none survived the second horizon: value-area
+   was -7.3 sigma on SCALP and +4.9 on SWING, structure-shift +8.1 and -4.4,
+   stoch-rsi -2.8 and +4.2. A gate that reverses sign between horizons is
+   reading noise.
+
+   So: a gate joins this list only if it reads backwards on BOTH horizons,
+   past the family-wise bar, in the same direction — and only if it is an
+   indicator read rather than a risk rule. participation is the one gate that
+   has met that (-5.4 SCALP, -2.2 SWING). "It looks wrong on one horizon" is
+   not evidence; it is the shape noise takes when you test fifty things.
+
    Run: node tests/test-info-gate-grading.mjs */
 import fs from 'node:fs';
 import path from 'node:path';
