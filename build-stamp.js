@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v471',
-  pack: 'OMNIROUTE coverage complete — vol targeting · CVD · liquidation map',
-  built: '2026-08-25T15:05:00Z',
-  note: 'OMNIROUTE closes its last three coverage holes: vol_targeting (hgOmniVolTarget), cvd (hgOmniCvd — Binance taker series, labelled candle approximation as fallback) and liquidation_map (hgOmniLiqMap — leverage clusters from recent extremes). All three are INFO gates: they argue on the card and never veto. Every school on the coverage table now reads COVERED. G1–G7, gold min-loss and crypto live-trading-off stay as they are.'
+  version: 'hg-v472',
+  pack: 'OMNIROUTE full ledger + coverage — vol targeting · CVD · liquidation map',
+  built: '2026-08-26T05:30:00Z',
+  note: 'OMNIROUTE pass 2 runs every engine and indicator on every scanned Delta+CoinDCX name (quiet names stay honest; extras never claim 7/7 CLEAN). Coverage complete: vol_targeting (hgOmniVolTarget), cvd (hgOmniCvd — Binance taker series, labelled candle approximation as fallback) and liquidation_map (hgOmniLiqMap — leverage clusters from recent extremes). All three are INFO gates only. G1–G7, gold min-loss and crypto live-trading-off stay as they are.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

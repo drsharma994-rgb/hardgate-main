@@ -162,7 +162,33 @@ console.log('\n== THE CORRECTION: 27 mechanics change what a sigma is worth ==')
   ok(live.pass !== true, 'the live +1.47σ in-sample read no longer PASSES');
   ok(live.pass === null, 'it reads UNCHECKED — not demonstrated, not disproved');
   ok(/mechanics scanned/.test(live.why), 'and the card explains why (' + live.why.slice(-70) + ')');
-  ok(/\+\d\.\d\dσ is the bar/.test(live.why), 'quoting the bar it had to clear');
+  /* The bar itself is NOT hard-coded. It is a Sidak family-wise correction
+     over OG_MECHANICS.length, so it moves every time a mechanic is added —
+     pinning a leading digit made this test assert the mechanic COUNT by
+     accident, and it broke twice as the desk grew 34 -> 40 -> 54.
+     What matters is that the card quotes the bar at all, and that the number
+     it quotes is the one the ledger actually applied. */
+  const quoted = /\+(\d\.\d\d)σ is the bar/.exec(live.why);
+  ok(!!quoted, 'quoting the bar it had to clear (' + live.why.slice(-60) + ')');
+  const nMech = Number((/(\d+) mechanics scanned/.exec(live.why) || [])[1] || 0);
+  ok(nMech > 0, 'and naming how many mechanics that bar is corrected for (' + nMech + ')');
+  {
+    /* Recomputed here rather than imported, so a change to the correction has
+       to be made deliberately in two places instead of drifting in one. */
+    const normCdf = z => {
+      const t = 1 / (1 + 0.2316419 * Math.abs(z));
+      const d = 0.3989422804014327 * Math.exp(-z * z / 2);
+      const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+      return z > 0 ? 1 - p : p;
+    };
+    const target = Math.pow(0.95, 1 / nMech);
+    let lo = 0, hi = 8;
+    for (let i = 0; i < 64; i++){ const mid = (lo + hi) / 2; if (normCdf(mid) < target) lo = mid; else hi = mid; }
+    const expect = (lo + hi) / 2;
+    ok(Math.abs(Number(quoted[1]) - expect) < 0.02,
+       'the quoted bar (+' + quoted[1] + 'σ) is the Sidak bar for ' + nMech +
+       ' mechanics (+' + expect.toFixed(2) + 'σ)');
+  }
 
   const strong = edge({ samples: 200, hit: 0.62, expR: 0.9 }, null);
   ok(strong.pass === true, 'a genuinely strong in-sample read still passes');

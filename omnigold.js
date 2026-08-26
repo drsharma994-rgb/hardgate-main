@@ -39,6 +39,25 @@ A mechanic that pays on the swing horizon need not pay intraday, so the two
 pools are measured and reported apart — never merged into one flattering
 number.
 
+HOW MANY MECHANICS, AND WHERE THEY COME FROM. OG_MECHANICS is the single
+source of truth and currently holds 48. Six are OmniRoute's, consumed from
+its exports. Four are the classic gold desk setups described just below.
+Twenty-four more were added in later rounds from the shared hg-mechanics
+library and gold-specific structure work. The last fourteen come from
+goldind.js and pinegoldmath.js — about ninety gold functions that were being
+loaded on every scan while this desk called two of them. See the block above
+hgOgIchiKumo for which of those ninety became mechanics, which stayed as
+gates, and why: the dividing line is whether a read is a pure function of
+bars, because the walk-forward replays over candle prefixes and anything
+needing live depth or funding can never earn a record at all.
+
+EVERY MECHANIC IS REGISTERED IN THREE PLACES — the live detect pass, the
+walk-forward backtest map, and OG_MECHANICS. tests/test-omnigold-full-cover.mjs
+fails the build if those three ever disagree, because each way of getting it
+wrong fails silently: miss the backtest map and the measured-edge gate has
+nothing to read; miss OG_MECHANICS and the record exists but never reaches
+the card.
+
 GOLD-SPECIFIC MECHANICS (added to OmniRoute's six):
   ASIA-BREAK   Asia-session range, then a London break holding beyond it —
                the most widely taught gold intraday setup there is.
@@ -65,6 +84,16 @@ gold, and pretending otherwise would fabricate confluence):
   CONDITIONAL   htf-daily · session/killzone · macro real-rate · DXY
                 alignment · yield guard · ADR budget · news window ·
                 participation · measured-edge
+  SHARED        hgIndicatorGates (hg-gates.js) adds about eighteen more —
+                ichimoku, stoch-rsi, cci-stretch, ema-ribbon, heikin-trend,
+                donchian, keltner, macd, bollinger, volume-z and the rest —
+                each asked whether it agrees with THIS direction
+  GOLD-ONLY     premium-discount, the one gold read the shared set lacks
+Nothing on this ledger reads the same indicator twice. That is a rule, not
+an accident: a first attempt at a combined "indicator stack" tally was cut
+because five of its six members were already gates in their own right, and
+counting one reading twice inflates a ticket's check count without adding
+any evidence behind it.
 Participation is CONDITIONAL here, unlike OmniRoute: several gold feeds
 publish no volume at all, and a hard volume gate would silently disqualify
 every setup sourced from them.
@@ -181,7 +210,15 @@ terse status, and never launches a first-time scan on a global refresh.
                       'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
                       'POC-REVERT','COINT-SPREAD','THREE-BAR',
                       'NY-OPEN-DRIVE','WEEKLY-OPEN','PIVOT-REJECT',
-                      'INSIDE-BREAK','EMA50-HOLD','FIB-618'];
+                      'INSIDE-BREAK','EMA50-HOLD','FIB-618',
+                      /* round six — the goldind.js / pinegoldmath.js library,
+                         which this desk had loaded on every scan and was using
+                         two functions out of. See the block above hgOgIchiKumo
+                         for why these and not the other eighty. */
+                      'ICHI-KUMO','STOCHRSI-TURN','CCI-EXTREME','RIBBON-PULLBACK',
+                      'HA-FLIP','VWAP-BAND','PD-EQUILIBRIUM','ER-IGNITION',
+                      'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
+                      'MFI-SQUAT','DI-CROSS'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false };
 
@@ -438,6 +475,21 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgInsideBreak(rows);   if (d) out.push(d);
     d = hgOgEma50Hold(rows);     if (d) out.push(d);
     d = hgOgFib618(rows);        if (d) out.push(d);
+    /* round six: the gold indicator library */
+    d = hgOgIchiKumo(rows);        if (d) out.push(d);
+    d = hgOgStochTurn(rows);       if (d) out.push(d);
+    d = hgOgCciExtreme(rows);      if (d) out.push(d);
+    d = hgOgRibbonPullback(rows);  if (d) out.push(d);
+    d = hgOgHaFlip(rows);          if (d) out.push(d);
+    d = hgOgVwapBand(rows);        if (d) out.push(d);
+    d = hgOgPdEquilibrium(rows);   if (d) out.push(d);
+    d = hgOgErIgnition(rows);      if (d) out.push(d);
+    d = hgOgStructBos(rows);       if (d) out.push(d);
+    d = hgOgSweepV2(rows);         if (d) out.push(d);
+    d = hgOgObRetest(rows);        if (d) out.push(d);
+    d = hgOgOuRevert(rows);        if (d) out.push(d);
+    d = hgOgMfiSquat(rows);        if (d) out.push(d);
+    d = hgOgDiCross(rows);         if (d) out.push(d);
     return out;
   }
 
@@ -1006,6 +1058,410 @@ terse status, and never launches a first-time scan on a global refresh.
     return vv > 0 ? pv / vv : NaN;
   }
 
+  /* ============ round six: the gold indicator library, finally asked ======
+
+     goldind.js is 4,496 lines and exports about ninety gold functions. This
+     desk was using TWO of them: goldKillzone for the session read and
+     validateYieldCorrelation for the yield gate. Ichimoku, StochRSI, CCI, the
+     EMA ribbon, Heikin-Ashi, VWAP bands, premium/discount, the v2 structure
+     and sweep reads, order-block retest and Kaufman efficiency were all
+     loaded in the page on every scan and never asked a question.
+     pineGoldOuZscore in pinegoldmath.js likewise.
+
+     EVERY ONE BELOW IS A PURE FUNCTION OF BARS, and that is not a style
+     preference. The walk-forward replays each detector over candle prefixes
+     (hgOmniBacktestOne), so a mechanic reaching for the order book, funding
+     or a live macro print cannot be measured at all — and the rule this file
+     has enforced since its first added mechanic is that an unmeasurable
+     strategy is worse than none, because it still costs money and nothing can
+     ever judge it. goldind's depth, CVD and funding reads are therefore NOT
+     promoted to mechanics; they inform the gate ledger instead, where they
+     carry no implied track record.
+
+     STATE, AND WHY IT IS PASSED IN. goldOrderBlockRetest falls back to a
+     module-level _lastActiveZones cache when no zones are handed to it. That
+     cache is written by whichever gold tab ran last, so a walk-forward replay
+     could score bar 300 against zones derived from bar 1500 — lookahead, and
+     the flattering kind. Zones and structure are therefore both computed from
+     the prefix here and passed explicitly.
+
+     THE PRICE, STATED PLAINLY. The measured-edge gate is a family-wise
+     significance test over OG_MECHANICS.length. Going from 40 mechanics to 54
+     raises the per-mechanic bar from about +3.02 sigma to about +3.11. Every
+     mechanic already here now clears a slightly higher hurdle. That is the
+     correct direction — widening the search while holding the threshold still
+     is how a desk manufactures false positives — but it is a real cost paid
+     by the existing mechanics, and the pooled table prints the count so the
+     reader can see what the bar is being set against.
+
+     All feature-checked: without goldind.js these return null and the pooled
+     table shows them as never having fired, which is the truth. */
+
+  /* BOUNDED HISTORY, AND WHY EVERY CALL BELOW USES IT.
+
+     The walk-forward calls each detector once per bar over a GROWING prefix —
+     about 1,440 times on a 1,500-bar horizon. The goldind reads rebuild their
+     whole indicator array on every call, so an O(n) indicator becomes O(n^2)
+     across the replay. Measured on a 1500-bar horizon before this helper:
+     OB-RETEST took 360 SECONDS for one horizon, and the other thirteen came
+     to about ten seconds between them, against a 5-20ms baseline for the
+     mechanics already here. OB-RETEST was the worst by three orders of
+     magnitude because goldActiveOrderBlocks walks every bar looking for a
+     displacement and then walks forward again from each one it finds.
+
+     Each call is therefore handed only the tail it needs. The window is sized
+     from the indicator's own memory, not guessed: Wilder-smoothed reads (RSI,
+     ADX, ATR) converge in roughly five periods and get 300 bars, an EMA200
+     gets 600, and reads with a fixed lookback get a small multiple of it.
+     These are not approximations of the full-history answer — they are the
+     same answer, because the bars dropped could not have influenced it.
+
+     The one deliberate semantic choice is VWAP-BAND, whose anchor becomes a
+     rolling 300 bars rather than the start of the prefix. That is the better
+     definition anyway: an anchor at bar zero drifts further into the past on
+     every bar of the replay, so the mechanic being measured at bar 1400 was
+     not the mechanic being measured at bar 100. */
+  function ogTail(rows, n){
+    if (!rows) return rows;
+    return (rows.length > n) ? rows.slice(rows.length - n) : rows;
+  }
+
+  /* ICHI-KUMO. Price closes clear of the Ichimoku cloud AND the Tenkan/Kijun
+     cross agrees. Cloud state alone is a condition, not an event — it reads
+     ABOVE for every bar of a trend that left the cloud weeks ago — so the
+     prior bar must still have been inside or on the far side. */
+  function hgOgIchiKumo(rows){
+    var f = gfn('goldIchimoku');
+    if (!f || !rows || rows.length < 60) return null;
+    var k = null;
+    try { k = f(ogTail(rows, 200)); } catch (e) { return null; }
+    if (!k) return null;
+    var top = fin(k.cloudTop), bot = fin(k.cloudBot);
+    if (!isFinite(top) || !isFinite(bot)) return null;
+    var n = rows.length;
+    var c = fin(rows[n - 1] && rows[n - 1].c), p = fin(rows[n - 2] && rows[n - 2].c);
+    if (!isFinite(c) || !isFinite(p)) return null;
+    if (k.state === 'ABOVE' && k.tkCross === 'BULL' && p <= top && c > top)
+      return { kind:'ICHI-KUMO', dir:'long', level: top,
+               why:'closed out above the Ichimoku cloud at ' + top.toFixed(2) + ' with Tenkan over Kijun' };
+    if (k.state === 'BELOW' && k.tkCross === 'BEAR' && p >= bot && c < bot)
+      return { kind:'ICHI-KUMO', dir:'short', level: bot,
+               why:'closed out below the Ichimoku cloud at ' + bot.toFixed(2) + ' with Tenkan under Kijun' };
+    return null;
+  }
+
+  /* STOCHRSI-TURN. StochRSI leaving an extreme. goldStochRSI already reports
+     that as a discrete cross rather than a level, so this is an event by
+     construction and needs no prior-bar recomputation. */
+  function hgOgStochTurn(rows){
+    var f = gfn('goldStochRSI');
+    if (!f || !rows || rows.length < 40) return null;
+    var s = null;
+    try { s = f(ogTail(rows, 300)); } catch (e) { return null; }
+    if (!s) return null;
+    var lv = fin(rows[rows.length - 1] && rows[rows.length - 1].c);
+    if (!isFinite(lv)) return null;
+    if (s.crossUp)   return { kind:'STOCHRSI-TURN', dir:'long',  level: lv,
+                              why:'StochRSI crossed up out of oversold' };
+    if (s.crossDown) return { kind:'STOCHRSI-TURN', dir:'short', level: lv,
+                              why:'StochRSI crossed down out of overbought' };
+    return null;
+  }
+
+  /* CCI-EXTREME. The fade: CCI was past +/-100 on the prior bar and has come
+     back inside. Costs a second goldCCI pass on the prefix, which is the
+     reason this is a fade rather than a breakout read — a breakout read would
+     need no prior bar at all, but it would be firing INTO the move rather
+     than after it has turned. */
+  function hgOgCciExtreme(rows){
+    var f = gfn('goldCCI');
+    if (!f || !rows || rows.length < 40) return null;
+    var cur = null, prv = null;
+    var win = ogTail(rows, 200);
+    try { cur = f(win); prv = f(win.slice(0, win.length - 1)); } catch (e) { return null; }
+    if (!cur || !prv) return null;
+    var lv = fin(rows[rows.length - 1] && rows[rows.length - 1].c);
+    if (!isFinite(lv)) return null;
+    if (prv.zone === 'EXTREME_HIGH' && cur.zone !== 'EXTREME_HIGH')
+      return { kind:'CCI-EXTREME', dir:'short', level: lv,
+               why:'CCI fell back inside +100 after an extreme high' };
+    if (prv.zone === 'EXTREME_LOW' && cur.zone !== 'EXTREME_LOW')
+      return { kind:'CCI-EXTREME', dir:'long', level: lv,
+               why:'CCI rose back inside -100 after an extreme low' };
+    return null;
+  }
+
+  /* RIBBON-PULLBACK. Continuation, not reversal: the 20/50/200 stack is
+     aligned and price has pulled back within half an ATR of the EMA20. The
+     ribbon's own sellOnly flag (price under the 200) vetoes the long side, so
+     a counter-trend bounce cannot be dressed up as a continuation. */
+  function hgOgRibbonPullback(rows){
+    var f = gfn('goldRibbon');
+    if (!f || !rows || rows.length < 60) return null;
+    var rb = null;
+    try { rb = f(ogTail(rows, 600)); } catch (e) { return null; }
+    if (!rb || !rb.pullback20) return null;
+    var e20 = fin(rb.e20);
+    if (!isFinite(e20)) return null;
+    if (rb.mode === 'BULL' && rb.above20 === true && !rb.sellOnly)
+      return { kind:'RIBBON-PULLBACK', dir:'long', level: e20,
+               why:'20/50/200 stacked bullish and price pulled back to the EMA20 at ' + e20.toFixed(2) };
+    if (rb.mode === 'BEAR' && rb.above20 === false)
+      return { kind:'RIBBON-PULLBACK', dir:'short', level: e20,
+               why:'20/50/200 stacked bearish and price pulled back to the EMA20 at ' + e20.toFixed(2) };
+    return null;
+  }
+
+  /* HA-FLIP. The FIRST Heikin-Ashi bar of a new direction — consecutive === 1
+     — with a body worth the name. Any higher count is the middle of a run
+     this already fired on. */
+  function hgOgHaFlip(rows){
+    var f = gfn('goldHeikinAshi');
+    if (!f || !rows || rows.length < 40) return null;
+    var ha = null;
+    try { ha = f(ogTail(rows, 300)); } catch (e) { return null; }
+    if (!ha || ha.consecutive !== 1) return null;
+    var sz = fin(ha.lastSize);
+    if (!(sz > 0.5)) return null;
+    var lv = fin(rows[rows.length - 1] && rows[rows.length - 1].c);
+    if (!isFinite(lv)) return null;
+    if (ha.dir === 'bull') return { kind:'HA-FLIP', dir:'long', level: lv,
+                                    why:'first Heikin-Ashi bull bar after a bear run, body ' + (sz * 100).toFixed(0) + '% of range' };
+    if (ha.dir === 'bear') return { kind:'HA-FLIP', dir:'short', level: lv,
+                                    why:'first Heikin-Ashi bear bar after a bull run, body ' + (sz * 100).toFixed(0) + '% of range' };
+    return null;
+  }
+
+  /* VWAP-BAND. Traded outside the second VWAP deviation band and closed back
+     inside it. Anchored at the start of the prefix rather than at a session
+     open — deliberate, since the session anchor is already AVWAP-RECLAIM's
+     job and two mechanics on one anchor would double-count a single edge. */
+  function hgOgVwapBand(rows){
+    var f = gfn('goldVWAPBands');
+    if (!f || !rows || rows.length < 60) return null;
+    var vb = null;
+    try { vb = f(ogTail(rows, 300), 0); } catch (e) { return null; }
+    if (!vb) return null;
+    var up = fin(vb.upper2), dn = fin(vb.lower2);
+    if (!isFinite(up) || !isFinite(dn)) return null;
+    var b = rows[rows.length - 1];
+    var h = fin(b && b.h), l = fin(b && b.l), c = fin(b && b.c);
+    if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+    if (h > up && c < up) return { kind:'VWAP-BAND', dir:'short', level: up,
+                                   why:'rejected the upper 2-sigma VWAP band at ' + up.toFixed(2) };
+    if (l < dn && c > dn) return { kind:'VWAP-BAND', dir:'long', level: dn,
+                                   why:'rejected the lower 2-sigma VWAP band at ' + dn.toFixed(2) };
+    return null;
+  }
+
+  /* PD-EQUILIBRIUM. ICT premium/discount: fade the extreme quartile of the
+     recent range back toward equilibrium — but ONLY where goldPremiumDiscount
+     reads the tape as CHOP. In a trend the premium quartile is where price
+     lives, and fading it there is the most reliable way to lose money on this
+     read, which is why the adxContext check is not optional. */
+  function hgOgPdEquilibrium(rows){
+    var f = gfn('goldPremiumDiscount');
+    if (!f || !rows || rows.length < 40) return null;
+    var pd = null;
+    try { pd = f(ogTail(rows, 300)); } catch (e) { return null; }
+    if (!pd || pd.adxContext !== 'CHOP') return null;
+    var hi = fin(pd.rangeHi), lo = fin(pd.rangeLo);
+    if (!isFinite(hi) || !isFinite(lo)) return null;
+    var eq = (hi + lo) / 2;
+    if (pd.zone === 'PREMIUM')  return { kind:'PD-EQUILIBRIUM', dir:'short', level: hi,
+                                         why:'in the premium quartile of a ranging tape, equilibrium ' + eq.toFixed(2) };
+    if (pd.zone === 'DISCOUNT') return { kind:'PD-EQUILIBRIUM', dir:'long', level: lo,
+                                         why:'in the discount quartile of a ranging tape, equilibrium ' + eq.toFixed(2) };
+    return null;
+  }
+
+  /* ER-IGNITION. Kaufman efficiency crossing out of chop: the prior bar was
+     noise (ER < 0.25) and this one is directional. Direction comes from the
+     close over the window, not from ER, which is unsigned. */
+  function hgOgErIgnition(rows){
+    var f = gfn('calculateKaufmanER');
+    if (!f || !rows || rows.length < 40) return null;
+    var cur = null, prv = null;
+    var win = ogTail(rows, 100);
+    try { cur = f(win, 20); prv = f(win.slice(0, win.length - 1), 20); } catch (e) { return null; }
+    if (!cur || !prv) return null;
+    if (!(prv.isChop === true && cur.isChop === false)) return null;
+    var n = rows.length;
+    var c = fin(rows[n - 1] && rows[n - 1].c), back = fin(rows[n - 21] && rows[n - 21].c);
+    if (!isFinite(c) || !isFinite(back) || c === back) return null;
+    return { kind:'ER-IGNITION', dir: (c > back) ? 'long' : 'short', level: back,
+             why:'Kaufman efficiency broke out of chop to ' + fin(cur.er).toFixed(2) + ' over the last 20 bars' };
+  }
+
+  /* STRUCT-BOS. goldMarketStructure's break of structure or change of
+     character, taken only when it reports the breaking LEVEL — a BOS with no
+     level is a label, and this desk cannot place a trade against a label.
+
+     THE TRANSITION CHECK IS NOT OPTIONAL. goldMarketStructure sets bos from
+     `cur > lastHigh.price`, which is a STANDING CONDITION: it stays true for
+     every bar price holds above that swing high, which in a trend is most of
+     them. Measured over 4,200 synthetic windows this fired on 50% of bars
+     before the check below — a mechanic firing every other bar would have
+     dominated the consensus vote and flooded the pooled table with samples
+     that are one move counted many times. Requiring the PRIOR bar not to have
+     been in the same broken state turns the condition back into the event it
+     is described as. Costs a second structure read on the prefix. */
+  function hgOgStructBos(rows){
+    var f = gfn('goldMarketStructure');
+    if (!f || !rows || rows.length < 40) return null;
+    var ms = null, prv = null;
+    var win = ogTail(rows, 300);
+    try { ms = f(win); prv = f(win.slice(0, win.length - 1)); } catch (e) { return null; }
+    if (!ms || (!ms.bos && !ms.choch)) return null;
+    if (prv && prv.trend === ms.trend && (prv.bos || prv.choch)) return null;
+    var lv = fin(ms.level);
+    if (!isFinite(lv)) return null;
+    var what = ms.choch ? 'change of character' : 'break of structure';
+    if (ms.trend === 'bullish') return { kind:'STRUCT-BOS', dir:'long', level: lv,
+                                         why: what + ' up through ' + lv.toFixed(2) };
+    if (ms.trend === 'bearish') return { kind:'STRUCT-BOS', dir:'short', level: lv,
+                                         why: what + ' down through ' + lv.toFixed(2) };
+    return null;
+  }
+
+  /* SWEEP-V2. goldind's liquidity sweep: the bar takes out a prior extreme,
+     closes back inside it, and does so on a volume spike. Distinct from
+     POOL-SWEEP, the shared candle-only version with no volume condition — on
+     feeds that publish no volume this one simply never fires and POOL-SWEEP
+     still covers the geometry. */
+  function hgOgSweepV2(rows){
+    var f = gfn('goldSweepV2');
+    if (!f || !rows || rows.length < 40) return null;
+    var s = null;
+    try { s = f(ogTail(rows, 100)); } catch (e) { return null; }
+    if (!s || !s.trigger) return null;
+    var lv = fin(s.level);
+    if (!isFinite(lv) || (s.dir !== 'long' && s.dir !== 'short')) return null;
+    return { kind:'SWEEP-V2', dir: s.dir, level: lv,
+             why:'swept ' + lv.toFixed(2) + ' on a volume spike and closed back inside' };
+  }
+
+  /* OB-RETEST. Price returns into an unmitigated order block with structure
+     agreeing. Zones and structure are both computed from THIS prefix and
+     passed in explicitly — see the note above on _lastActiveZones. */
+  function hgOgObRetest(rows){
+    var f = gfn('goldOrderBlockRetest'), zf = gfn('goldActiveOrderBlocks'), sf = gfn('goldMarketStructure');
+    if (!f || !zf || !sf || !rows || rows.length < 40) return null;
+    var r = null;
+    /* 90 bars — the tightest window on this desk, and the only one chosen from
+       a measurement rather than from an indicator's memory.
+
+       goldActiveOrderBlocks walks every bar hunting displacement and then
+       walks FORWARD from each candidate to test mitigation, so it is
+       quadratic in its input and the walk-forward calls it once per bar. On a
+       full 1,500-bar prefix this single mechanic measured 360 SECONDS for one
+       horizon. Windowed, on the same tape and the same replay:
+
+           300 bars   36.0 s        150 bars    9.9 s
+           200 bars   18.3 s        120 bars    5.5 s
+                                     90 bars    2.1 s
+
+       For scale, the 24 measurable mechanics that predate round five come to
+       5.5 s per horizon between them, and the other thirteen added here come
+       to 2.5 s. At 300 bars this one mechanic would have cost five times the
+       entire backtest phase; at 90 it costs about what the other thirteen do
+       together, which is the most it can justify.
+
+       The trading argument agrees with the cost one. 90 bars is roughly four
+       days on the scalp horizon and fifteen on the swing, and an order block
+       older than that is not what anyone means by unmitigated supply. The
+       zones and the structure read must come from the SAME window, or the
+       retest is checked against a trend the blocks never saw. */
+    var win = ogTail(rows, 90);
+    try {
+      var st = sf(win);
+      if (!st || !st.trend || st.trend === 'neutral') return null;
+      var zones = zf(win, undefined, win.length - 1) || [];
+      if (!zones.length) return null;
+      r = f(win, win.length - 1, st, zones);
+    } catch (e) { return null; }
+    if (!r || !r.trigger) return null;
+    var lv = fin(r.anchor);
+    if (!isFinite(lv) || (r.direction !== 'long' && r.direction !== 'short')) return null;
+    return { kind:'OB-RETEST', dir: r.direction, level: lv,
+             why:'retested an unmitigated order block at ' + lv.toFixed(2) + ' with structure agreeing' };
+  }
+
+  /* OU-REVERT. The Ornstein-Uhlenbeck exhaustion read from pinegoldmath: a
+     FITTED mean-reverting process rather than a raw z-score, so the mean it
+     reverts to is estimated rather than assumed. Distinct from POC-REVERT
+     (volume mean) and VWAP-BAND (volume-weighted price mean). */
+  function hgOgOuRevert(rows){
+    var f = gfn('pineGoldOuZscore');
+    if (!f || !rows || rows.length < 80) return null;
+    var ou = null;
+    try { ou = f(ogTail(rows, 300)); } catch (e) { return null; }
+    if (!ou) return null;
+    var m = fin(ou.mean), z = fin(ou.z);
+    if (!isFinite(m) || !isFinite(z)) return null;
+    if (ou.shortExhaust) return { kind:'OU-REVERT', dir:'short', level: m,
+                                  why:'OU z-score at ' + z.toFixed(2) + ', stretched above the fitted mean ' + m.toFixed(2) };
+    if (ou.longExhaust)  return { kind:'OU-REVERT', dir:'long',  level: m,
+                                  why:'OU z-score at ' + z.toFixed(2) + ', stretched below the fitted mean ' + m.toFixed(2) };
+    return null;
+  }
+
+  /* MFI-SQUAT. Williams' market facilitation index: a SQUAT bar is heavy
+     volume that bought no range — the classic pre-break compression — and the
+     trade is the bar after it, with range restored on rising volume. Needs
+     volume, so on feeds that publish none goldMFI returns NONE and this never
+     fires, which is the honest outcome rather than a fabricated one. */
+  function hgOgMfiSquat(rows){
+    var f = gfn('goldMFI');
+    if (!f || !rows || rows.length < 40) return null;
+    var m = null;
+    try { m = f(ogTail(rows, 100)); } catch (e) { return null; }
+    if (!m || m.last !== 'GREEN') return null;
+    var ser = m.series || [];
+    if (ser.length < 2 || ser[ser.length - 2] !== 'SQUAT') return null;
+    var n = rows.length;
+    var c = fin(rows[n - 1] && rows[n - 1].c), o = fin(rows[n - 1] && rows[n - 1].o);
+    if (!isFinite(c) || !isFinite(o) || c === o) return null;
+    return { kind:'MFI-SQUAT', dir: (c > o) ? 'long' : 'short', level: o,
+             why:'range expanded on rising volume straight out of a squat bar' };
+  }
+
+  /* DI-CROSS. The directional-movement cross, confirmed by ADX TURNING UP.
+
+     The obvious gate — require goldADX to report a trending state at the cross
+     — is wrong, and measurably so. ADX is definitionally at its trough on a DI
+     cross, because ADX measures the SPREAD between +DI and -DI and that spread
+     is zero at the crossover by construction. On a tape built to contain a
+     textbook reversal the cross landed with ADX at 7.5, labelled CHOP, three
+     bars before the same tape read ADX 30 and TRENDING. Gating on the state
+     label meant the mechanic vetoed itself: it fired 22 times in 4,200 sampled
+     windows, and every one of those was an accident of a cross drifting into a
+     still-elevated reading rather than the setup being described.
+
+     Rising ADX is the honest confirmation. It says the spread is opening after
+     the cross, which is the thing a DI cross is supposed to signal, and it is
+     available on the cross bar itself rather than three bars late. Whether it
+     pays is not decided here — that is the measured-edge gate's job, and it
+     now has a mechanic that fires often enough to have an opinion about. */
+  function hgOgDiCross(rows){
+    var f = gfn('goldADX');
+    if (!f || !rows || rows.length < 40) return null;
+    var cur = null, prv = null;
+    var win = ogTail(rows, 300);
+    try { cur = f(win); prv = f(win.slice(0, win.length - 1)); } catch (e) { return null; }
+    if (!cur || !prv) return null;
+    if (!(fin(cur.adx) > fin(prv.adx))) return null;
+    var cp = fin(cur.plusDI), cm = fin(cur.minusDI), pp = fin(prv.plusDI), pm = fin(prv.minusDI);
+    if (!isFinite(cp) || !isFinite(cm) || !isFinite(pp) || !isFinite(pm)) return null;
+    var lv = fin(rows[rows.length - 1] && rows[rows.length - 1].c);
+    if (!isFinite(lv)) return null;
+    if (pp <= pm && cp > cm) return { kind:'DI-CROSS', dir:'long', level: lv,
+                                      why:'+DI crossed above -DI with ADX turning up from ' + fin(prv.adx).toFixed(0) };
+    if (pp >= pm && cp < cm) return { kind:'DI-CROSS', dir:'short', level: lv,
+                                      why:'-DI crossed above +DI with ADX turning up from ' + fin(prv.adx).toFixed(0) };
+    return null;
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -1062,7 +1518,30 @@ terse status, and never launches a first-time scan on a global refresh.
     'NY-OPEN-DRIVE':'TREND', 'INSIDE-BREAK':'TREND', 'EMA50-HOLD':'TREND', 'FIB-618':'TREND',
     'WEEKLY-OPEN':'SWEEP', 'PIVOT-REJECT':'SWEEP',
     /* the other metal disagrees with this one */
-    'SMT-DIVERGE':'INTERMARKET', 'GSR-EXTREME':'INTERMARKET'
+    'SMT-DIVERGE':'INTERMARKET', 'GSR-EXTREME':'INTERMARKET',
+    /* ROUND FIVE — the gold indicator library.
+
+       Mapping these is not bookkeeping. hgOgFamilyOf returns 'OTHER' for
+       anything unlisted, so fourteen unmapped mechanics would have formed one
+       enormous pseudo-family, and consensus counts votes PER FAMILY precisely
+       so that correlated mechanics cannot each be counted as independent
+       agreement. Seven trend-following reads landing in one bucket called
+       OTHER would have voted as a bloc while claiming to be a consensus.
+
+       Seven of them are continuation reads and that is not a mistake in the
+       classification — an EMA-ribbon pullback, a cloud break, a structure
+       break and a DI cross really are the same idea measured four ways, and
+       the family is what stops the desk from mistaking that for four
+       independent confirmations. */
+    'ICHI-KUMO':'TREND', 'RIBBON-PULLBACK':'TREND', 'HA-FLIP':'TREND',
+    'ER-IGNITION':'TREND', 'STRUCT-BOS':'TREND', 'MFI-SQUAT':'TREND',
+    'DI-CROSS':'TREND',
+    'STOCHRSI-TURN':'REVERSION', 'CCI-EXTREME':'REVERSION',
+    'VWAP-BAND':'REVERSION', 'PD-EQUILIBRIUM':'REVERSION', 'OU-REVERT':'REVERSION',
+    'SWEEP-V2':'SWEEP',
+    /* An unmitigated order block is an unfilled inefficiency being revisited,
+       which is FVG-FILL's idea with a different name for the zone. */
+    'OB-RETEST':'IMBALANCE'
   };
   /* COLLAPSE FIRST, THEN COUNT — AND LET THE CLEARED ONE KEEP THE CARD.
 
@@ -2401,6 +2880,51 @@ terse status, and never launches a first-time scan on a global refresh.
     }catch(eVw){ vwapWhy = 'session VWAP unread'; }
     gates.push({ key:'session-vwap', hard:false, info:true, pass: vwapOk, why: vwapWhy });
 
+    /* PREMIUM / DISCOUNT — the one gold read the ledger did not already have.
+
+       A first pass at this was an "indicator stack" gate: a tally of six gold
+       indicators asked whether they agreed with the direction. It was cut,
+       and the reason is worth recording so it does not get rebuilt.
+
+       hg-gates.js already contributes about eighteen indicator gates to THIS
+       ledger through hgIndicatorGates, and five of them — ichimoku, stoch-rsi,
+       cci-stretch, ema-ribbon, heikin-trend — already ask their indicator
+       whether it agrees with the direction. The stack duplicated five of its
+       six members. Every duplicate would have counted one reading twice: once
+       as its own gate and again inside the tally, inflating the ticket's check
+       count and quietly double-weighting five indicators over the rest. A desk
+       that counts the same evidence twice is how a marginal setup becomes a
+       confident one on paper and nothing at all in the market.
+
+       What survived is the single read nothing else asks: ICT premium/discount,
+       which is where price sits in its own recent range. Buy the discount, sell
+       the premium. Reported the same way the shared indicator gates are —
+       soft, informational, and abstaining in the middle of the range rather
+       than voting, because a mid-range read has no view and counting silence
+       as agreement is the same double-count in a different coat. */
+    var pdG = null, pdWhy = 'premium/discount unavailable (goldind.js not loaded)';
+    var pdFn = gfn('goldPremiumDiscount');
+    if (pdFn){
+      try {
+        var pdR = pdFn(ogTail(rows || [], 300));
+        if (!pdR){
+          pdWhy = 'premium/discount could not be read from these bars';
+        } else if (pdR.zone === 'NEUTRAL'){
+          pdWhy = 'mid-range at ' + (fin(pdR.pct) * 100).toFixed(0)
+                + '% of the ' + fin(pdR.range).toFixed(0) + '-point range — no premium/discount view';
+        } else {
+          var pdLong = (hit && hit.dir === 'long');
+          var pdDisc = (pdR.zone === 'DISCOUNT');
+          pdG = pdLong ? pdDisc : !pdDisc;
+          pdWhy = 'price in the ' + String(pdR.zone).toLowerCase() + ' quartile ('
+                + (fin(pdR.pct) * 100).toFixed(0) + '% of range)'
+                + (pdG ? ' — agrees with this ' + (pdLong ? 'long' : 'short')
+                       : ' — against this ' + (pdLong ? 'long' : 'short') + ' (context, not a veto)');
+        }
+      } catch (ePd){ pdG = null; pdWhy = 'premium/discount threw: ' + ((ePd && ePd.message) || ePd); }
+    }
+    gates.push({ key:'premium-discount', hard:false, info:true, pass: pdG, why: pdWhy });
+
     return gates;
   }
 
@@ -3173,7 +3697,11 @@ terse status, and never launches a first-time scan on a global refresh.
       /* Same shared verdict helper omniroute's table uses, so the two
          cannot drift apart in wording or in threshold. */
       var rd = (W() && typeof W().hgOmniPoolRead === 'function')
-             /* Gold scans 34 mechanics, so its bar is its own — passing none
+             /* Gold scans OG_MECHANICS.length mechanics — 48 since the gold
+                indicator library was wired in — so its bar is its own, and it
+                is read from the array rather than written down here, because a
+                hard-coded count silently understates the correction the moment
+                a mechanic is added. Passing none
                 would judge a gold row against the crypto count. */
              ? W().hgOmniPoolRead(p, minRr, MIN_SAMPLES, hgOgFamilyZ(OG_MECHANICS.length))
              : { z: NaN, read: 'engine unavailable', need: null, cls: '' };
@@ -3339,7 +3867,23 @@ terse status, and never launches a first-time scan on a global refresh.
           'PIVOT-REJECT': function(r){ return hgOgPivotReject(r); },
           'INSIDE-BREAK': function(r){ return hgOgInsideBreak(r); },
           'EMA50-HOLD':   function(r){ return hgOgEma50Hold(r); },
-          'FIB-618':      function(r){ return hgOgFib618(r); }
+          'FIB-618':      function(r){ return hgOgFib618(r); },
+          /* round six. Each is the same pure function the live pass calls,
+             so the in-sample record and the live firing cannot diverge. */
+          'ICHI-KUMO':       function(r){ return hgOgIchiKumo(r); },
+          'STOCHRSI-TURN':   function(r){ return hgOgStochTurn(r); },
+          'CCI-EXTREME':     function(r){ return hgOgCciExtreme(r); },
+          'RIBBON-PULLBACK': function(r){ return hgOgRibbonPullback(r); },
+          'HA-FLIP':         function(r){ return hgOgHaFlip(r); },
+          'VWAP-BAND':       function(r){ return hgOgVwapBand(r); },
+          'PD-EQUILIBRIUM':  function(r){ return hgOgPdEquilibrium(r); },
+          'ER-IGNITION':     function(r){ return hgOgErIgnition(r); },
+          'STRUCT-BOS':      function(r){ return hgOgStructBos(r); },
+          'SWEEP-V2':        function(r){ return hgOgSweepV2(r); },
+          'OB-RETEST':       function(r){ return hgOgObRetest(r); },
+          'OU-REVERT':       function(r){ return hgOgOuRevert(r); },
+          'MFI-SQUAT':       function(r){ return hgOgMfiSquat(r); },
+          'DI-CROSS':        function(r){ return hgOgDiCross(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
@@ -4177,6 +4721,25 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgInsideBreak = hgOgInsideBreak;
     window.hgOgEma50Hold = hgOgEma50Hold;
     window.hgOgFib618 = hgOgFib618;
+    /* Round six, exported for the same reason hgOgAdrFade and hgOgRoundMagnet
+       are: a detector reachable only through hgOgDetect can be tested for
+       "something fired" but not for "THIS fired, and nothing else did". The
+       firing test needs to drive each one alone, and the cost measurement
+       needs to time each one alone. */
+    window.hgOgIchiKumo = hgOgIchiKumo;
+    window.hgOgStochTurn = hgOgStochTurn;
+    window.hgOgCciExtreme = hgOgCciExtreme;
+    window.hgOgRibbonPullback = hgOgRibbonPullback;
+    window.hgOgHaFlip = hgOgHaFlip;
+    window.hgOgVwapBand = hgOgVwapBand;
+    window.hgOgPdEquilibrium = hgOgPdEquilibrium;
+    window.hgOgErIgnition = hgOgErIgnition;
+    window.hgOgStructBos = hgOgStructBos;
+    window.hgOgSweepV2 = hgOgSweepV2;
+    window.hgOgObRetest = hgOgObRetest;
+    window.hgOgOuRevert = hgOgOuRevert;
+    window.hgOgMfiSquat = hgOgMfiSquat;
+    window.hgOgDiCross = hgOgDiCross;
     window.hgOgGates = hgOgGates;
     /* Exported so the ticket count can be tested apart from a live scan —
        the header and the rendered cards disagreed for want of exactly this. */
