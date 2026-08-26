@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v488',
-  pack: 'OMNIGOLD CI parity restore',
-  built: '2026-08-26T17:00:00Z',
-  note: 'Restore level-fresh kline livePx + spotFactor reset order; basis broker guard; legacy fetch test scope.'
+  version: 'hg-v489',
+  pack: 'OMNIGOLD live spot level align',
+  built: '2026-08-26T17:15:00Z',
+  note: 'Scale plans from 0.15%/8pt drift; level-fresh uses marketPx; MARKET row on MP panel.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -146,6 +146,13 @@ console.log('\n== no live price reads UNCHECKED — never PASS, and old callers 
   ok(gate('long', { livePx: 4400 }).pass === null, 'a live price with no plan is UNCHECKED');
 }
 
+console.log('\n== marketPx beats stale closed-bar livePx ==');
+{
+  const g = gate('short', { plan: { entry: 4600, stop: 4708, t1: 4380 }, livePx: 4600, marketPx: 4589 });
+  ok(g.pass === true, 'live spot 4589 vs entry 4600 passes level-fresh');
+  ok(/4589/.test(g.why), 'quotes live market, not the 4h close (' + g.why + ')');
+}
+
 console.log('\n== both desks capture the live price at ingestion ==');
 {
   ok(/var livePx = rows\.length \? fin\(rows\[rows\.length - 1\]\.c\) : NaN;/.test(GOLD),
@@ -153,6 +160,7 @@ console.log('\n== both desks capture the live price at ingestion ==');
   ok(GOLD.indexOf('var livePx = rows.length') < GOLD.indexOf('if (dropFn) rows = dropFn(rows, cfg.tf)'),
      'BEFORE the sanitiser runs, or it would be gone');
   ok(/livePx: livePx/.test(GOLD), 'and passes it into the ledger extras');
+  ok(/marketPx: mktPx/.test(GOLD), 'and passes gold-api live spot when available');
   ok(/var livePx = \(rows && rows\.length\) \? fin\(rows\[rows\.length - 1\]\.c\) : NaN;/.test(ROUTE),
      'omniroute does the same at its single ingestion point');
   ok(/held\.push\(\{ item: item, rows: rows, hits: hits, livePx: livePx \}\);/.test(ROUTE),

@@ -97,6 +97,30 @@ console.log('\n== far VETO watch is not MOST PROBABLE ==');
   ok(p && p.plan.entry === 4598, 'near watch still shown (' + (p && p.plan.entry) + ')');
 }
 
+console.log('\n== sub-0.15% drift still skips align ==');
+{
+  const W = boot();
+  const card = { plan: { entry: 4600, stop: 4660, t1: 4480 } };
+  W.hgOgAlignPlansToSpot([card], 4600, 4604, 0.15);
+  ok(!card.spotAligned, '0.09% drift does not scale at 0.15% floor');
+  ok(card.plan.entry === 4600, 'entry unchanged');
+}
+
+console.log('\n== 11pt live gap scales (4600 feed vs 4589 spot) ==');
+{
+  const W = boot();
+  const card = {
+    dir: 'short', level: 4600,
+    plan: { entry: 4600.02, stop: 4708.83, t1: 4382.39, t2: 4219.17, rr1: 2 }
+  };
+  W.hgOgAlignPlansToSpot([card], 4600.02, 4589, 0.15);
+  ok(card.spotAligned === true, '0.24% / 11pt drift scales');
+  ok(Math.abs(card.plan.entry - 4589) < 1.5, 'entry lands on live spot (~' + card.plan.entry + ')');
+  var risk = card.plan.stop - card.plan.entry;
+  var rew = card.plan.entry - card.plan.t1;
+  ok(Math.abs(rew / risk - 2) < 0.03, 'R:R preserved (' + (rew / risk).toFixed(3) + 'R)');
+}
+
 console.log('\n== entry note names market vs limit retest ==');
 {
   const W = boot();
