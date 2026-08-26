@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v490',
-  pack: 'OMNIGOLD settled execute 95% bar',
-  built: '2026-08-26T19:30:00Z',
-  note: 'SETTLED EXECUTE panel — TICKET + forward Wilson 95% lower bound (min 15 settled).'
+  version: 'hg-v492',
+  pack: 'OMNIGOLD settled execute + scan coverage',
+  built: '2026-08-26T20:30:00Z',
+  note: 'SETTLED EXECUTE 95% bar + SCAN COVERAGE + GOLD SCALP/SWING engine bridge.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
