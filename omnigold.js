@@ -3919,6 +3919,215 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
+  /* ==================== scan coverage + gold-tab engines ====================
+     Asked whether every strategy and indicator is actually applied: the 55
+     OMNIGOLD mechanics always run on each horizon, but most scans fire only a
+     handful and the ledger vetoes most cards — which reads as "unused". This
+     panel names what fired vs stayed silent, and the bridge below runs the
+     same GOLD SCALP / GOLD SWING multi-strategy engines those tabs use. */
+
+  function hgOgBuildScanCoverage(horizonRes){
+    var cands = (horizonRes && horizonRes.cands) || [];
+    var fired = {}, i, c, k;
+    var tickets = 0, vetoes = 0;
+    for (i = 0; i < cands.length; i++){
+      c = cands[i];
+      if (!c || !c.kind) continue;
+      if (!fired[c.kind]) fired[c.kind] = { long: 0, short: 0, ticket: 0, veto: 0 };
+      if (c.dir === 'long') fired[c.kind].long++;
+      else if (c.dir === 'short') fired[c.kind].short++;
+      if (c.grade && c.grade.ticket) { fired[c.kind].ticket++; tickets++; }
+      else if (c.grade && c.grade.vetoes && c.grade.vetoes.length) { fired[c.kind].veto++; vetoes++; }
+    }
+    var firedKeys = Object.keys(fired).sort();
+    var silent = [];
+    for (i = 0; i < OG_MECHANICS.length; i++){
+      k = OG_MECHANICS[i];
+      if (!fired[k]) silent.push(k);
+    }
+    return {
+      label: (horizonRes && horizonRes.cfg && horizonRes.cfg.label) || 'HORIZON',
+      tf: (horizonRes && horizonRes.cfg && horizonRes.cfg.tf) || '',
+      mechanicsTotal: OG_MECHANICS.length,
+      fired: fired,
+      firedKeys: firedKeys,
+      firedCount: firedKeys.length,
+      silent: silent,
+      silentCount: silent.length,
+      candidates: cands.length,
+      tickets: tickets,
+      vetoes: vetoes
+    };
+  }
+
+  function hgOgScanCoveragePanelHtml(scalpCov, swingCov){
+    scalpCov = scalpCov || {};
+    swingCov = swingCov || {};
+    var h = '<section class="hg-mp og-scan-coverage" data-og-coverage="1" aria-label="Scan coverage">';
+    h += '<div class="hg-mp-eye">SCAN COVERAGE · ALL MECHANICS</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>every scan runs all ' + OG_MECHANICS.length
+      + ' mechanics + ~34 indicator ledger checks per firing — quiet ≠ unwired</span></div>';
+    h += '<div class="hg-mp-note">OMNIGOLD mechanics are detectors; the gold ledger grades each hit. '
+      + 'Most bars fire few mechanics and veto most cards — that is the desk being strict, not strategies missing. '
+      + 'GOLD SCALP/SWING tab engines run separately below on the same bars.</div>';
+    [scalpCov, swingCov].forEach(function(cov){
+      if (!cov || !cov.label) return;
+      h += '<div class="hg-mp-note" style="margin-top:8px"><b>' + esc(cov.label) + ' (' + esc(cov.tf) + ')</b> · '
+        + 'evaluated <b>' + cov.mechanicsTotal + '</b> mechanics · fired <b>' + cov.firedCount + '</b>'
+        + ' · ' + cov.candidates + ' candidate(s) · <b>' + cov.tickets + '</b> TICKET'
+        + ' · ' + cov.vetoes + ' VETO</div>';
+      if (cov.firedKeys && cov.firedKeys.length){
+        var parts = [], fi, fd;
+        for (fi = 0; fi < cov.firedKeys.length; fi++){
+          fd = cov.fired[ cov.firedKeys[fi] ];
+          parts.push(cov.firedKeys[fi] + (fd.ticket ? ' ✓' : '') + ' ('
+            + (fd.long ? fd.long + 'L' : '') + (fd.long && fd.short ? '/' : '') + (fd.short ? fd.short + 'S' : '') + ')');
+        }
+        h += '<div class="dim" style="margin:4px 0 0 12px">fired: ' + esc(parts.join(' · ')) + '</div>';
+      } else {
+        h += '<div class="dim" style="margin:4px 0 0 12px">fired: none this bar — detectors are meant to be quiet</div>';
+      }
+      if (cov.silentCount > 0 && cov.silentCount <= 12){
+        h += '<div class="dim" style="margin:2px 0 0 12px">silent: ' + esc(cov.silent.join(', ')) + '</div>';
+      } else if (cov.silentCount > 12){
+        h += '<div class="dim" style="margin:2px 0 0 12px">silent: ' + cov.silentCount + ' mechanics (no trigger on this bar)</div>';
+      }
+    });
+    h += '<div class="hg-mp-note dim">Indicator reads (ichimoku, stoch-rsi, ADX, Hurst, premium/discount, …) apply on every card via hgIndicatorGates — INFO gates argue; HARD gates veto.</div>';
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgPaintScanCoverage(ui, scalpCov, swingCov){
+    var host = ui && ui.coverage;
+    if (!host) return;
+    try { host.innerHTML = hgOgScanCoveragePanelHtml(scalpCov, swingCov); }
+    catch (eCov){ host.innerHTML = ''; }
+  }
+
+  function hgOgGoldEngineRowHtml(c, tier){
+    if (!c || !c.dir) return '';
+    var h = '<div class="og-gold-engine-row' + (tier === 'best' ? ' og-gold-engine-best' : '') + '">';
+    h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir).toUpperCase())
+      + ' <span>' + esc(c.strategy || c.stratKey || 'SETUP') + '</span></div>';
+    h += '<div class="hg-mp-note">' + (c.grade ? ('grade ' + esc(String(c.grade))) : '')
+      + (isFinite(fin(c.tally)) ? (' · tally +' + fin(c.tally)) : '')
+      + (c.demoted ? ' · demoted' : '')
+      + (tier === 'best' ? ' · <b>tab best</b>' : '') + '</div>';
+    if (isFinite(fin(c.entry)) && isFinite(fin(c.stop))){
+      h += '<div class="hg-mp-grid">';
+      h += '<div><i>ENTRY</i><b>' + fmtPx(c.entry) + '</b></div>';
+      h += '<div><i>STOP</i><b>' + fmtPx(c.stop) + '</b></div>';
+      h += '<div><i>T1</i><b>' + fmtPx(c.t1) + '</b></div>';
+      if (isFinite(fin(c.rr))) h += '<div><i>R:R</i><b>' + fin(c.rr).toFixed(2) + '</b></div>';
+      h += '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function hgOgGoldEnginesPanelHtml(bridge){
+    bridge = bridge || {};
+    var h = '<section class="hg-mp og-gold-engines" data-og-gold-engines="1" aria-label="Gold tab engines">';
+    h += '<div class="hg-mp-eye">GOLD SCALP / SWING ENGINES</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>same multi-strategy catalog as GOLD SCALP + GOLD SWING tabs</span></div>';
+    if (!bridge.ok){
+      h += '<div class="hg-mp-note warn">' + esc(bridge.why || 'goldind.js / goldswing.js not loaded') + '</div></section>';
+      return h;
+    }
+    h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups. '
+      + 'Open <b>GOLD SCALP</b> / <b>GOLD SWING</b> for full cards and book handoff.</div>';
+    var sc = bridge.scalp || {}, sw = bridge.swing || {};
+    var scRanked = sc.ranked || [], swRanked = sw.ranked || [];
+    h += '<div class="hg-mp-note" style="margin-top:8px"><b>GOLD SCALP engine</b> · ' + scRanked.length + ' setup(s)'
+      + ((sc.rejected && sc.rejected.length) ? (' · ' + sc.rejected.length + ' rejected by quality gates') : '') + '</div>';
+    if (sc.best) h += hgOgGoldEngineRowHtml(sc.best, 'best');
+    var si;
+    for (si = 0; si < Math.min(3, scRanked.length); si++){
+      if (scRanked[si] === sc.best) continue;
+      h += hgOgGoldEngineRowHtml(scRanked[si], 'alt');
+    }
+    if (!scRanked.length) h += '<div class="dim" style="margin-left:12px">no scalp strategy triggered on this bar</div>';
+    h += '<div class="hg-mp-note" style="margin-top:8px"><b>GOLD SWING engine</b> · ' + swRanked.length + ' setup(s)'
+      + ((sw.rejected && sw.rejected.length) ? (' · ' + sw.rejected.length + ' rejected') : '') + '</div>';
+    if (sw.best) h += hgOgGoldEngineRowHtml(sw.best, 'best');
+    var wi;
+    for (wi = 0; wi < Math.min(3, swRanked.length); wi++){
+      if (swRanked[wi] === sw.best) continue;
+      h += hgOgGoldEngineRowHtml(swRanked[wi], 'alt');
+    }
+    if (!swRanked.length) h += '<div class="dim" style="margin-left:12px">no swing strategy triggered on this bar</div>';
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgRunGoldTabEngines(shared, scalpRows, swingRows){
+    var setupsFn = gfn('goldScalpSetups');
+    var swingFn = gfn('goldSwingSetups');
+    if (!setupsFn && !swingFn){
+      return Promise.resolve({ ok: false, why: 'goldScalpSetups / goldSwingSetups unavailable — load goldind.js + goldswing.js' });
+    }
+    return Promise.all([
+      hgOgFetchRows('15m', 500),
+      hgOgFetchRows('1d', 400)
+    ]).then(function(extra){
+      var m15 = (extra[0] && extra[0].rows) || [];
+      var d1 = (extra[1] && extra[1].rows) || [];
+      var inp = {
+        rows15m: m15,
+        rows1h: scalpRows || [],
+        rows4h: swingRows || [],
+        rows1d: d1,
+        now: Date.now(),
+        macro: shared && shared.macro,
+        news: shared && shared.news
+      };
+      var gpsFn = gfn('goldProState');
+      if (gpsFn){ try { inp.goldPro = gpsFn(); } catch (eGp){} }
+      var scalpOut = { ranked: [], best: null, rejected: [] };
+      if (setupsFn){
+        var got = setupsFn(inp);
+        var cands = Array.isArray(got) ? got : [];
+        var rankFn = gfn('goldRankSetups');
+        var ctx = { now: inp.now, macro: inp.macro, goldPro: inp.goldPro,
+                    crossVenue: gfn('goldCrossVenueMap') ? gfn('goldCrossVenueMap')(cands) : null };
+        scalpOut = rankFn ? rankFn(cands, ctx) : { ranked: cands, best: cands[0] || null, rejected: [] };
+        if (got && got.rejected) scalpOut.rejected = (scalpOut.rejected || []).concat(got.rejected);
+      }
+      var swingOut = swingFn ? swingFn(inp) : { ranked: [], best: null, rejected: [] };
+      /* Align engine levels to live spot when the omnigold scan already did. */
+      var anchor = fin(__og.spotAnchor);
+      if (anchor > 0){
+        var swingRanked = swingOut.ranked || [];
+        var alignList = (scalpOut.ranked || []).concat(swingRanked);
+        var kline = (scalpRows && scalpRows.length) ? fin(scalpRows[scalpRows.length - 1].c) : NaN;
+        if (isFinite(kline) && kline > 0){
+          var ratio = anchor / kline;
+          if (Math.abs(ratio - 1) * 100 >= 0.15){
+            var ai, ac, keys = ['entry', 'stop', 't1', 't2'];
+            for (ai = 0; ai < alignList.length; ai++){
+              ac = alignList[ai];
+              if (!ac) continue;
+              for (var kj = 0; kj < keys.length; kj++){
+                if (isFinite(fin(ac[keys[kj]]))) ac[keys[kj]] = fin(ac[keys[kj]]) * ratio;
+              }
+            }
+          }
+        }
+      }
+      return { ok: true, scalp: scalpOut, swing: swingOut };
+    }).catch(function(err){
+      return { ok: false, why: (err && err.message) || String(err) };
+    });
+  }
+
+  function hgOgPaintGoldEngines(ui, bridge){
+    var host = ui && ui.goldEngines;
+    if (!host) return;
+    try { host.innerHTML = hgOgGoldEnginesPanelHtml(bridge); }
+    catch (eGe){ host.innerHTML = ''; }
+  }
+
   function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing){
     tape = String(tape || '').toLowerCase();
     var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
@@ -4495,6 +4704,8 @@ terse status, and never launches a first-time scan on a global refresh.
     ui.cards.innerHTML = '';
     ui.pool.innerHTML = '';
     if (ui.mp) ui.mp.innerHTML = '';
+    if (ui.coverage) ui.coverage.innerHTML = '';
+    if (ui.goldEngines) ui.goldEngines.innerHTML = '';
 
     /* market-wide context, fetched once for both horizons */
     ui.stat.textContent = 'reading macro + session context…';
@@ -4739,7 +4950,10 @@ terse status, and never launches a first-time scan on a global refresh.
           hgOgPaintMostProbable(ui, null, null,
             hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows)),
             []);
-          return;
+          hgOgPaintScanCoverage(ui, hgOgBuildScanCoverage(res.scalp), hgOgBuildScanCoverage(res.swing));
+          return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
+            hgOgPaintGoldEngines(ui, bridge);
+          });
         }
         /* ONE pick per horizon, marked and floated to the top so the answer
            to "what do I trade" is the first thing on the page rather than
@@ -4889,7 +5103,11 @@ terse status, and never launches a first-time scan on a global refresh.
         } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
         __og.held = ogHeld;
         hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing);
-        if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
+        hgOgPaintScanCoverage(ui, hgOgBuildScanCoverage(res.scalp), hgOgBuildScanCoverage(res.swing));
+        return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
+          hgOgPaintGoldEngines(ui, bridge);
+          if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
+        });
       })
       .catch(function(err){
         ui.stat.textContent = 'scan failed: ' + ((err && err.message) || err);
@@ -5201,6 +5419,8 @@ terse status, and never launches a first-time scan on a global refresh.
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
       + '<div id="ogMp" style="margin-top:12px"></div>'
+      + '<div id="ogCoverage" style="margin-top:12px"></div>'
+      + '<div id="ogGoldEngines" style="margin-top:12px"></div>'
       + '<div class="panel" id="ogXmBot" style="margin-top:12px">'
       +   '<h3>XM trader bot</h3>'
       +   '<p class="note">Sends this tab’s <b>TICKET</b> rows to your XM MT5 account through the same bridge as gold candles (<code>XM_MT5_URL</code>). '
@@ -5228,6 +5448,8 @@ terse status, and never launches a first-time scan on a global refresh.
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
       mp: el.querySelector('#ogMp'),
+      coverage: el.querySelector('#ogCoverage'),
+      goldEngines: el.querySelector('#ogGoldEngines'),
       pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards'),
       grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut'),
       xmStat: el.querySelector('#ogXmStat'), xmSend: el.querySelector('#ogXmSend'),
@@ -5407,6 +5629,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
+    window.hgOgBuildScanCoverage = hgOgBuildScanCoverage;
+    window.hgOgScanCoveragePanelHtml = hgOgScanCoveragePanelHtml;
+    window.hgOgRunGoldTabEngines = hgOgRunGoldTabEngines;
+    window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgTargetReadout = hgOgTargetReadout;
     window.hgOgHorizonCfg = hgOgHorizonCfg;
     window.hgOgAlignPlansToSpot = hgOgAlignPlansToSpot;
