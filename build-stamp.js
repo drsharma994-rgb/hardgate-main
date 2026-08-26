@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v485',
-  pack: 'OMNIGOLD T1 readout — 2R · pts · horizon window',
-  built: '2026-08-26T14:15:00Z',
-  note: 'OMNIGOLD cards + MOST PROBABLE show T1 context: 2.0R, point distance, % move, and 24×1h / 20×4h reach window. Clarifies scalp target math vs MMOVE projection.'
+  version: 'hg-v486',
+  pack: 'OMNIGOLD spot-aligned levels',
+  built: '2026-08-26T16:15:00Z',
+  note: 'OMNIGOLD uses getXAUCandles (same as GOLD tabs) and scales proxy-feed plans to live spot before render — fixes wrong ENTRY/STOP/T1 on twelvedata/perp feeds.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
