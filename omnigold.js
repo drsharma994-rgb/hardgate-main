@@ -3665,6 +3665,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var tapeDir = String(tape || '').toLowerCase();
     return (list || []).slice().sort(function(a, b){
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
+      if (!!a.topHeld !== !!b.topHeld) return a.topHeld ? -1 : 1;
       var sa = hgOgBalanceScore(a, tapeDir);
       var sb = hgOgBalanceScore(b, tapeDir);
       if (sb !== sa) return sb - sa;
@@ -3733,58 +3734,70 @@ terse status, and never launches a first-time scan on a global refresh.
     return s;
   }
 
-  function hgOgMpHorizonHtml(label, pick, tape){
+  function hgOgMpHorizonHtml(label, pick, tape, heldPick, heldMeta){
     var h = '<div class="og-mp-hz">';
-    if (pick && pick.plan){
-      var p = pick.plan;
-      var ev = (pick.grade && pick.grade.evaluated) || 0;
-      var tot = (pick.grade && pick.grade.total) || 0;
+    var row = (pick && pick.plan) ? pick : ((heldPick && heldPick.plan) ? heldPick : null);
+    var isHeld = !(pick && pick.plan) && heldPick && heldPick.plan;
+    if (row && row.plan){
+      var p = row.plan;
+      var ev = (row.grade && row.grade.evaluated) || 0;
+      var tot = (row.grade && row.grade.total) || 0;
       var grade = tot ? (ev + '/' + tot + ' TICKET') : 'TICKET';
-      var info = hgOgInfoNet(pick.gates);
-      var cons = pick.consensus || {};
+      var info = hgOgInfoNet(row.gates);
+      var cons = row.consensus || {};
       var nAg = cons.nAgree || 0;
       var fam = nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree');
       var ind = info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread';
-      h += '<div class="hg-mp-head">XAUUSD ' + esc(String(pick.dir || '').toUpperCase())
-        +  ' <span>' + esc(label) + ' · ' + esc(pick.kind) + ' · ' + esc(grade) + '</span></div>';
+      h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
+        +  ' <span>' + esc(label) + ' · ' + esc(row.kind) + ' · ' + esc(grade)
+        +  (isHeld ? ' · HELD' : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
-        +  ' · WITH GOLD TAPE · not a win probability.</div>';
+        +  (isHeld
+            ? ' · AGAINST GOLD TAPE · HELD until tape flips · not trade-ready'
+            : ' · WITH GOLD TAPE · not a win probability.') + '</div>';
       h += '<div class="hg-mp-grid">';
-      h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(pick.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
+      h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(row.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
       h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
       h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>take profit</u></div>';
       h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>runner</u></div>';
       h += '</div>';
     } else {
       h += '<div class="hg-mp-head">' + esc(label) + ' · STAND ASIDE <span>no tape-aligned ticket</span></div>';
-      h += '<div class="hg-mp-note">' + esc(hgOgMpNoneWhy(tape)) + '</div>';
+      h += '<div class="hg-mp-note">' + esc(hgOgMpNoneWhy(tape, heldMeta)) + '</div>';
     }
     h += '</div>';
     return h;
   }
 
-  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held){
+  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, heldScalp, heldSwing){
     tape = String(tape || '').toLowerCase();
-    var any = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
-    var tier = any ? 'clean' : 'forming';
-    var note = any
+    var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
+    var anyHeld = (heldScalp && heldScalp.plan) || (heldSwing && heldSwing.plan);
+    var any = anyTrade || anyHeld;
+    var tier = anyTrade ? 'clean' : (anyHeld ? 'forming' : 'forming');
+    var note = anyTrade
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
-      : hgOgMpNoneWhy(tape, held);
+      : (anyHeld
+          ? hgOgMpNoneWhy(tape, held) + ' Levels below are HELD tickets — cleared the ledger but against the tape; not trade-ready until the release level prints.'
+          : hgOgMpNoneWhy(tape, held));
     var h = '<section class="hg-mp" data-hg-mp="omnigold" data-og-mp="1" data-tier="' + tier + '" aria-label="Most probable gold setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
     h += '<div class="hg-mp-head">XAUUSD';
-    if (any && (tape === 'long' || tape === 'short')) h += ' ' + tape.toUpperCase();
+    if (anyTrade && (tape === 'long' || tape === 'short')) h += ' ' + tape.toUpperCase();
     h += ' <span>OMNIGOLD · ';
-    if (!any && (tape === 'long' || tape === 'short')) h += 'gold tape ' + tape.toUpperCase() + ' · stand aside · ';
+    if (!anyTrade && (tape === 'long' || tape === 'short')){
+      h += 'gold tape ' + tape.toUpperCase() + ' · ';
+      h += anyHeld ? 'held ticket(s) · ' : 'stand aside · ';
+    }
     h += 'strategies + indicators, balanced · not a win probability</span></div>';
     h += '<div class="hg-mp-note">' + esc(note) + '</div>';
-    h += hgOgMpHorizonHtml('SCALP', pickScalp, tape);
-    h += hgOgMpHorizonHtml('SWING', pickSwing, tape);
+    h += hgOgMpHorizonHtml('SCALP', pickScalp, tape, heldScalp, held);
+    h += hgOgMpHorizonHtml('SWING', pickSwing, tape, heldSwing, held);
     h += '</section>';
     return h;
   }
 
-  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held){
+  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held, heldScalp, heldSwing){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
     try {
@@ -3792,7 +3805,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omnigold', mpBag || [], tape || null, host);
     } catch (eMp) {}
     try {
-      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held);
+      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, heldScalp, heldSwing);
       var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
       if (!dual) return;
       if (oldMp) oldMp.outerHTML = dual;
@@ -3884,11 +3897,55 @@ terse status, and never launches a first-time scan on a global refresh.
     return picked;
   }
 
+  /* Best cleared TICKET that points AGAINST the desk tape — shown as HELD with
+     full levels in MOST PROBABLE, never promoted to trade-ready. The tape rule
+     is unchanged; this only stops the desk from hiding tickets it already minted. */
+  function hgOgPickHeldFor(ranked, horizon, tapeDir){
+    if (!ranked || !ranked.length) return null;
+    tapeDir = String(tapeDir || '').toLowerCase();
+    if (tapeDir !== 'long' && tapeDir !== 'short') return null;
+    var i, c, structural = [], vol = [];
+    for (i = 0; i < ranked.length; i++){
+      c = ranked[i];
+      if (!c || c.horizon !== horizon) continue;
+      if (!(c.grade && c.grade.ticket)) continue;
+      if (!c.plan) continue;
+      if (String(c.dir || '').toLowerCase() === tapeDir) continue;
+      if (c.plan.momentumStop === true) vol.push(c);
+      else structural.push(c);
+    }
+    var pool = structural.length ? structural : vol;
+    if (!pool.length) return null;
+    var near = [], anyDist = false;
+    for (i = 0; i < pool.length; i++){
+      if (isFinite(fin(pool[i].distAtr))){
+        anyDist = true;
+        if (pool[i].distAtr <= GOLD_NEAR_ATR) near.push(pool[i]);
+      }
+    }
+    if (anyDist && near.length) pool = near;
+    pool = pool.slice().sort(function(a, b){
+      var sa = hgOgBalanceScore(a, tapeDir);
+      var sb = hgOgBalanceScore(b, tapeDir);
+      if (sb !== sa) return sb - sa;
+      var da = isFinite(fin(a.distAtr)) ? a.distAtr : 99;
+      var db = isFinite(fin(b.distAtr)) ? b.distAtr : 99;
+      return da - db;
+    });
+    var picked = pool[0] || null;
+    if (picked){
+      picked.balance = hgOgBalanceParts(picked, tapeDir);
+      picked.heldAgainstTape = true;
+    }
+    return picked;
+  }
+
   function setupCard(c){
     var ev = (c.grade.evaluated || 0), tot = (c.grade.total || 0);
     var badge = c.grade.ticket ? pill('TICKET','ok') : pill(c.grade.vetoes.length ? 'VETO' : 'WATCH', c.grade.vetoes.length ? 'bad' : '');
     if (tot) badge += ' ' + pill(ev + '/' + tot + ' checks', ev * 2 >= tot ? '' : 'bad');
     if (c.topPick) badge = pill('STRONGEST ' + c.horizon, 'pick') + ' ' + badge;
+    else if (c.topHeld) badge = pill('HELD ' + c.horizon, 'warn') + ' ' + badge;
     var tapeNow = '';
     if (__og.tape){
       tapeNow = (__og.tape.desk === 'long' || __og.tape.desk === 'short')
@@ -3900,7 +3957,7 @@ terse status, and never launches a first-time scan on a global refresh.
         ? pill('WITH GOLD TAPE', 'ok')
         : pill('AGAINST GOLD TAPE', 'bad'));
     }
-    var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + '">';
+    var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + (c.topHeld ? ' og-held' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
     /* the cross-horizon read — agreement is standing, disagreement is a
@@ -4505,8 +4562,12 @@ terse status, and never launches a first-time scan on a global refresh.
 
         var pickScalp = hgOgPickFor(ogCollapsed, HORIZONS.scalp.label, deskTape);
         var pickSwing = hgOgPickFor(ogCollapsed, HORIZONS.swing.label, deskTape);
+        var heldScalp = pickScalp ? null : hgOgPickHeldFor(ogCollapsed, HORIZONS.scalp.label, deskTape);
+        var heldSwing = pickSwing ? null : hgOgPickHeldFor(ogCollapsed, HORIZONS.swing.label, deskTape);
         if (pickScalp) pickScalp.topPick = true;
         if (pickSwing) pickSwing.topPick = true;
+        if (heldScalp) heldScalp.topHeld = true;
+        if (heldSwing) heldSwing.topHeld = true;
         ogCollapsed = hgOgDeskOrder(ogCollapsed, deskTape);
 
         var h = hgOgTapeBannerHtml(scalpTape, swingTape);
@@ -4517,8 +4578,8 @@ terse status, and never launches a first-time scan on a global refresh.
             h += hgOgZonesPanel(res.scalp.rows, res.scalp.livePx, deskTape);
           }
         } catch (eZp) {}
-        [[HORIZONS.scalp.label, pickScalp], [HORIZONS.swing.label, pickSwing]].forEach(function(pair){
-          if (pair[1]) return;
+        [[HORIZONS.scalp.label, pickScalp, heldScalp], [HORIZONS.swing.label, pickSwing, heldSwing]].forEach(function(pair){
+          if (pair[1] || pair[2]) return;
           var noneWhy = 'nothing on that horizon cleared the ledger this scan. That is a result, not a gap — the alternative would be promoting a setup the desk already vetoed.';
           if (deskTape === 'short')
             noneWhy = 'gold is going down — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
@@ -4565,6 +4626,14 @@ terse status, and never launches a first-time scan on a global refresh.
           var mpRow = hgOgMpRow(ogCollapsed[i]);
           if (mpRow) mpBag.push(mpRow);
         }
+        if (heldScalp){
+          var mpHs = hgOgMpRow(heldScalp);
+          if (mpHs){ mpHs.held = true; mpHs.near = true; mpBag.push(mpHs); }
+        }
+        if (heldSwing){
+          var mpHw = hgOgMpRow(heldSwing);
+          if (mpHw){ mpHw.held = true; mpHw.near = true; mpBag.push(mpHw); }
+        }
         /* Tickets the tape is holding: cleared the whole ledger, carry a plan,
            and point the other way. Counted from the COLLAPSED list so several
            mechanics on one set of levels count as the one trade they are. */
@@ -4585,12 +4654,14 @@ terse status, and never launches a first-time scan on a global refresh.
             var wantDir = (deskTape === 'short') ? 'long' : 'short';
             if (blockRows && blockRows.length){
               ogHeld.level = hgOgTapeFlipLevel(blockRows, wantDir);
-              ogHeld.from = fin(blockRows[blockRows.length - 1].c);
+              var liveFrom = (scalpTape === deskTape) ? fin(res.scalp && res.scalp.livePx)
+                            : fin(res.swing && res.swing.livePx);
+              ogHeld.from = (liveFrom > 0) ? liveFrom : fin(blockRows[blockRows.length - 1].c);
             }
           }
         } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
         __og.held = ogHeld;
-        hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld);
+        hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, heldScalp, heldSwing);
         if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){
@@ -5102,6 +5173,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgXmRunBacktest = hgOgXmRunBacktest;
     window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
+    window.hgOgPickHeldFor = hgOgPickHeldFor;
     window.hgOgInfoNet = hgOgInfoNet;
     window.hgOgBalanceScore = hgOgBalanceScore;
     window.hgOgBalanceParts = hgOgBalanceParts;
