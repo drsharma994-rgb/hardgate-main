@@ -131,7 +131,7 @@ console.log('\n== the four gold context gates carry the flag ==');
      a single-instrument desk does not have. */
   const routeSrc = fs.readFileSync(path.join(ROOT, 'omniroute.js'), 'utf8');
   for (const k of ['adx-trend', 'atr-percentile', 'vol-forecast', 'xs-rank', 'breadth', 'stop-width',
-                   'net-r', 'liq-room']){
+                   'net-r', 'liq-room', 'vol-target', 'cvd', 'liq-map']){
     ok(new RegExp("key:'" + k + "', hard:false, info:true").test(routeSrc),
        k + ' is declared hard:false, info:true (omniroute)');
   }
@@ -188,6 +188,14 @@ console.log('\n== the four gold context gates carry the flag ==');
                            fees, and where liquidation sits relative to the
                            stop. Both inform sizing; neither vetoes. */
                         'net-r', 'liq-room',
+                        /* the three techniques the OMNIROUTE coverage table
+                           used to list with no implementation: vol targeting,
+                           CVD and the liquidation-cluster map. Same standing
+                           as the rest of the bank — none has a measured
+                           record on this desk, so they argue and never veto.
+                           A ticket that cleared before they existed must
+                           still clear. */
+                        'vol-target', 'cvd', 'liq-map',
                         /* round five gold structure reads — they argue
                            whether a ticket is standing on stack / RSI /
                            session VWAP. They never invent one and never

@@ -33,6 +33,13 @@ that still fires nothing does not get an invented ticket; the indicator
 ledger still ran. The scan is slower on purpose — cost is linear in the
 book, not in hits.
 
+COVERAGE IS NOW COMPLETE, and it was not before: the table at the bottom
+of this tab printed its own holes — TSMOM without vol_targeting, order
+flow without cvd and liquidation_map. hgOmniVolTarget, hgOmniCvd and
+hgOmniLiqMap implement those three. All three are INFO reads: they argue
+on the card and never veto, because none of them has a measured record on
+this desk yet and three new vetoes would re-cut the ledger by assertion.
+
 SELF-MEASUREMENT (the point of this tab). Each detector is replayed across
 the same bars the scan just read: every past firing is taken at the bar
 close, stopped at the 10-bar structural extreme (ATR fallback), targeted at
@@ -744,6 +751,220 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     if (cur) out.push(cur);
     return out;
+  }
+
+  /* ============ pure: vol targeting · CVD · liquidation map ============
+
+     The coverage table below named these three as the tab's own holes, and
+     the tab printed them: TSMOM PARTIAL without vol_targeting, order flow
+     PARTIAL without cvd and liquidation_map. A desk that claims every
+     engine and every indicator cannot carry three techniques it only lists.
+
+     All three are pure over OHLCV so they run on EVERY contract, including
+     CoinDCX names with no Binance twin, and all three reach the ledger as
+     INFO reads — they argue on the card and never veto. Nothing here has a
+     measured record on this desk yet, and three new vetoes would re-cut the
+     ledger by assertion rather than by evidence. */
+
+  /* Volatility budget, expressed per bar of the scan timeframe (4h). Crypto
+     perps routinely run hotter than this; that is the point — the multiplier
+     says how much smaller the position has to be for the risk to match. */
+  var OMNI_VOL_TARGET_PCT = 2.5;
+  var OMNI_VOL_MULT_MIN = 0.25;
+  var OMNI_VOL_MULT_MAX = 3;
+
+  /* Realized volatility against a budget, and the size that budget implies.
+     TSMOM sizes by volatility rather than by conviction, and without this a
+     1%-a-bar tape and an 8%-a-bar tape were ranked as the same trade. Pure;
+     null rather than a guess when there is too little history. */
+  function hgOmniVolTarget(rows, cfg){
+    if (!rows || rows.length < 40) return null;
+    cfg = cfg || {};
+    var want = fin(cfg.lookback);
+    var look = Math.min(isFinite(want) && want > 0 ? want : 60, rows.length - 1);
+    if (look < 20) return null;
+    var rets = [], i, a, b;
+    for (i = rows.length - look; i < rows.length; i++){
+      if (i < 1) continue;
+      a = fin(rows[i - 1].c); b = fin(rows[i].c);
+      if (!isFinite(a) || !isFinite(b) || a <= 0 || b <= 0) continue;
+      rets.push(Math.log(b / a));
+    }
+    if (rets.length < 20) return null;
+    var mean = 0;
+    for (i = 0; i < rets.length; i++) mean += rets[i];
+    mean /= rets.length;
+    var sq = 0;
+    for (i = 0; i < rets.length; i++) sq += (rets[i] - mean) * (rets[i] - mean);
+    var sd = Math.sqrt(sq / (rets.length - 1));
+    if (!isFinite(sd) || sd <= 0) return null;
+    var sigmaNow = sd * 100;
+    var target = fin(cfg.targetPct);
+    if (!isFinite(target) || target <= 0) target = OMNI_VOL_TARGET_PCT;
+    var raw = target / sigmaNow;
+    var mult = Math.max(OMNI_VOL_MULT_MIN, Math.min(raw, OMNI_VOL_MULT_MAX));
+    return {
+      sigmaNow: sigmaNow,
+      sigmaTarget: target,
+      mult: mult,
+      /* Clipped at both ends deliberately: an unbounded multiplier on a dead
+         tape is an invitation to size into an illiquid contract. */
+      clipped: raw !== mult,
+      overBudget: sigmaNow > target,
+      note: 'realized vol ' + sigmaNow.toFixed(2) + '%/bar vs a ' + target.toFixed(2)
+          + '% budget — size ' + mult.toFixed(2) + 'x'
+    };
+  }
+
+  /* Cumulative volume delta.
+
+     Binance's free taker buy/sell series is REAL aggressor data and is used
+     whenever the contract has a twin. Everything else gets the standard
+     close-location approximation over candle volume, LABELLED as an
+     approximation the same way the volume profile labels its own — a candle
+     is not a trade tape, and pretending otherwise on a CoinDCX-only name
+     would be worse than the honest estimate. Pure. */
+  function hgOmniCvd(rows, look, taker){
+    if (!rows || rows.length < 30) return null;
+    var want = fin(look);
+    var n = Math.max(10, Math.min(isFinite(want) && want > 0 ? want : 30, rows.length));
+    var i, delta = 0, source = 'candles', used = 0;
+    var series = (taker && taker.series && taker.series.length) ? taker.series : null;
+    if (series){
+      for (i = Math.max(0, series.length - n); i < series.length; i++){
+        var r = fin(series[i] && series[i].buySellRatio);
+        if (!isFinite(r) || r <= 0) continue;
+        /* (r-1)/(r+1) maps a buy/sell RATIO onto a signed imbalance in
+           [-1,1]. Subtracting 1 instead would make a 0.5 ratio (-0.5) look
+           half as one-sided as a 2.0 ratio (+1.0) for the mirror-image
+           tape. */
+        delta += (r - 1) / (r + 1);
+        used++;
+      }
+      if (used >= 4) source = 'taker';
+      else { delta = 0; used = 0; }
+    }
+    if (source === 'candles'){
+      for (i = Math.max(0, rows.length - n); i < rows.length; i++){
+        var h = fin(rows[i].h), l = fin(rows[i].l), c = fin(rows[i].c), v = fin(rows[i].v);
+        if (!isFinite(h) || !isFinite(l) || !isFinite(c)) continue;
+        if (!isFinite(v) || v < 0) v = 0;
+        var rng = h - l;
+        /* A zero-range bar carries no location information — it must not
+           divide by zero and it must not be read as neutral pressure that
+           did not happen. */
+        if (!(rng > 0)) { used++; continue; }
+        var clv = ((c - l) - (h - c)) / rng;
+        delta += clv * v;
+        used++;
+      }
+      if (!used) return null;
+    }
+    if (!isFinite(delta)) return null;
+    var first = fin(rows[Math.max(0, rows.length - n)].c);
+    var last = fin(rows[rows.length - 1].c);
+    var priceUp = (isFinite(first) && isFinite(last)) ? (last > first) : null;
+    var flowUp = delta > 0;
+    var divergence = null;
+    if (priceUp === true && !flowUp) divergence = 'bear';
+    else if (priceUp === false && flowUp) divergence = 'bull';
+    return {
+      delta: delta,
+      source: source,
+      dir: flowUp ? 'long' : 'short',
+      bars: used,
+      divergence: divergence,
+      note: source === 'taker'
+        ? ('CVD ' + (delta >= 0 ? '+' : '') + delta.toFixed(2) + ' from Binance taker buy/sell over '
+           + used + ' windows')
+        : ('CVD ' + (delta >= 0 ? '+' : '') + delta.toFixed(0)
+           + ' candle-approximated close-location delta over ' + used + ' bars (no trade tape)')
+    };
+  }
+
+  /* Liquidation map.
+
+     No exchange publishes a free liquidation heatmap, so this projects one
+     from what candles do say: positions are opened at the extremes the tape
+     just made, and a position opened there dies at a price set by its
+     leverage. Cluster those deaths and you have the levels the market has a
+     mechanical reason to reach.
+
+     Deliberately NOT the same question as liq-room, which asks how much
+     leverage OUR stop survives. This asks where OTHER people's stops are.
+     Pure. */
+  function hgOmniLiqMap(rows, cfg){
+    if (!rows || rows.length < 40) return null;
+    cfg = cfg || {};
+    var px = fin(rows[rows.length - 1].c);
+    if (!isFinite(px) || px <= 0) return null;
+    var want = fin(cfg.lookback);
+    var look = Math.min(isFinite(want) && want > 0 ? want : 60, rows.length);
+    var blk = Math.max(5, Math.round(fin(cfg.block) || 10));
+    var levs = (cfg.levs && cfg.levs.length) ? cfg.levs : [10, 25, 50, 100];
+    var mmr = fin(cfg.mmr);
+    if (!isFinite(mmr) || mmr < 0) mmr = 0.005;
+    var start = Math.max(0, rows.length - look);
+    var refs = [], i, j;
+    /* Block extremes rather than pivot patterns: a pivot definition that
+       finds nothing on a quiet tape would report "no clusters" for a
+       contract that plainly has a recent range. */
+    for (i = start; i < rows.length; i += blk){
+      var hi = -Infinity, lo = Infinity;
+      for (j = i; j < Math.min(i + blk, rows.length); j++){
+        var h = fin(rows[j].h), l = fin(rows[j].l);
+        if (isFinite(h) && h > hi) hi = h;
+        if (isFinite(l) && l < lo) lo = l;
+      }
+      if (hi !== -Infinity) refs.push({ price: hi, side: 'long' });
+      if (lo !== Infinity) refs.push({ price: lo, side: 'short' });
+    }
+    if (!refs.length) return null;
+    var raw = [];
+    for (i = 0; i < refs.length; i++){
+      for (j = 0; j < levs.length; j++){
+        var lev = fin(levs[j]);
+        if (!isFinite(lev) || lev <= 1) continue;
+        /* A long opened at a swing high is liquidated below it; a short
+           opened at a swing low is liquidated above it. */
+        var p = (refs[i].side === 'long')
+          ? refs[i].price * (1 - 1 / lev + mmr)
+          : refs[i].price * (1 + 1 / lev - mmr);
+        if (!isFinite(p) || p <= 0) continue;
+        raw.push({ price: p, side: refs[i].side, lev: lev });
+      }
+    }
+    if (!raw.length) return null;
+    var atr = atrOf(rows, 14);
+    var tol = Math.max(isFinite(atr) && atr > 0 ? atr * 0.35 : 0, px * 0.002);
+    raw.sort(function(a, b){ return a.price - b.price; });
+    var clusters = [], cur = null;
+    for (i = 0; i < raw.length; i++){
+      if (cur && Math.abs(raw[i].price - cur.price) <= tol){
+        cur.sum += raw[i].price;
+        cur.weight++;
+        cur.price = cur.sum / cur.weight;
+        if (raw[i].lev < cur.minLev) cur.minLev = raw[i].lev;
+        if (raw[i].side !== cur.side) cur.mixed = true;
+      } else {
+        if (cur) clusters.push(cur);
+        cur = { price: raw[i].price, sum: raw[i].price, weight: 1,
+                side: raw[i].side, minLev: raw[i].lev, mixed: false };
+      }
+    }
+    if (cur) clusters.push(cur);
+    var out = [];
+    for (i = 0; i < clusters.length; i++){
+      out.push({ price: clusters[i].price, weight: clusters[i].weight,
+                 side: clusters[i].side, minLev: clusters[i].minLev,
+                 mixed: clusters[i].mixed === true });
+    }
+    var below = null, above = null;
+    for (i = 0; i < out.length; i++){
+      if (out[i].price < px && (!below || out[i].price > below.price)) below = out[i];
+      if (out[i].price > px && (!above || out[i].price < above.price)) above = out[i];
+    }
+    return { clusters: out, nearestBelow: below, nearestAbove: above, tol: tol, price: px };
   }
 
   /* ============ pure: self-measurement (walk-forward) ============ */
@@ -2106,6 +2327,92 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'liq-room', hard:false, info:true, pass: lr2, why: lr2Why });
 
+    /* VOL-TARGET — the size this tape's volatility actually allows.
+
+       Time-series momentum sizes by volatility, and this ledger had no read
+       of it: an 8%-a-bar contract and a 1%-a-bar contract graded identically
+       on every other gate. Reporting, not sizing — this desk places no
+       orders, so it says what the budget implies and leaves the decision. */
+    var vtOk = null, vtWhy = 'volatility budget unavailable (too few bars to measure)';
+    try {
+      var vt = hgOmniVolTarget(rows, {});
+      if (vt){
+        vtWhy = vt.note;
+        if (vt.mult < 0.75){
+          vtOk = false;
+          vtWhy += ' — over budget, full size here is a bigger bet than the rest of the book';
+        } else {
+          vtOk = true;
+        }
+      }
+    } catch (eVt){ vtOk = null; vtWhy = 'volatility budget threw: ' + ((eVt && eVt.message) || eVt); }
+    gates.push({ key:'vol-target', hard:false, info:true, pass: vtOk, why: vtWhy });
+
+    /* CVD — is the aggressor flow on the side of this trade?
+
+       Real Binance taker data where the contract has a twin, a labelled
+       candle approximation everywhere else, so a CoinDCX-only name gets a
+       flow read rather than a blank. */
+    var cvOk = null, cvWhy = 'CVD unavailable (too few bars)';
+    try {
+      var cv = hgOmniCvd(rows, 30, x.takerSeries || null);
+      if (cv){
+        var cvWith = (hit.dir === 'long') ? (cv.delta > 0) : (cv.delta < 0);
+        cvWhy = cv.note + ' — flow ' + (cvWith ? 'with' : 'against') + ' the ' + hit.dir;
+        if (cv.divergence){
+          cvWhy += ' · ' + (cv.divergence === 'bear' ? 'price rising into selling flow'
+                                                     : 'price falling into buying flow');
+        }
+        cvOk = cvWith;
+      }
+    } catch (eCv){ cvOk = null; cvWhy = 'CVD threw: ' + ((eCv && eCv.message) || eCv); }
+    gates.push({ key:'cvd', hard:false, info:true, pass: cvOk, why: cvWhy });
+
+    /* LIQ-MAP — where other people's leverage dies.
+
+       liq-room asks what OUR stop survives. This asks where the market has a
+       mechanical reason to travel: a cluster between entry and target is
+       fuel, and a stop parked inside one is a stop-hunt waiting to happen. */
+    var lmOk = null, lmWhy = 'liquidation map unavailable (too few bars to project clusters)';
+    try {
+      var lm = hgOmniLiqMap(rows, {});
+      if (lm && lm.clusters.length){
+        var lmPlan = plHas ? plObj : null;
+        var lmE = lmPlan ? fin(lmPlan.entry) : NaN;
+        var lmS = lmPlan ? fin(lmPlan.stop) : NaN;
+        var lmT = lmPlan ? fin(lmPlan.t1) : NaN;
+        lmWhy = lm.clusters.length + ' liquidation cluster(s) projected from recent extremes';
+        if (isFinite(lmS)){
+          var onStop = null, ci2;
+          for (ci2 = 0; ci2 < lm.clusters.length; ci2++){
+            if (Math.abs(lm.clusters[ci2].price - lmS) <= lm.tol){ onStop = lm.clusters[ci2]; break; }
+          }
+          if (onStop){
+            lmOk = false;
+            lmWhy = 'the stop sits inside a liquidation cluster at ' + onStop.price.toFixed(6)
+                  + ' (' + onStop.weight + ' projected liquidations) — stop-hunt risk';
+          }
+        }
+        if (lmOk === null && isFinite(lmE) && isFinite(lmT)){
+          var lo2 = Math.min(lmE, lmT), hi2 = Math.max(lmE, lmT), fuel = null, cj;
+          for (cj = 0; cj < lm.clusters.length; cj++){
+            if (lm.clusters[cj].price > lo2 && lm.clusters[cj].price < hi2){
+              if (!fuel || lm.clusters[cj].weight > fuel.weight) fuel = lm.clusters[cj];
+            }
+          }
+          if (fuel){
+            lmOk = true;
+            lmWhy = 'a liquidation cluster at ' + fuel.price.toFixed(6) + ' (' + fuel.weight
+                  + ' projected) lies between entry and T1 — fuel toward the target';
+          } else {
+            lmOk = true;
+            lmWhy += ' — none between entry and T1, and the stop is clear of them';
+          }
+        }
+      }
+    } catch (eLm){ lmOk = null; lmWhy = 'liquidation map threw: ' + ((eLm && eLm.message) || eLm); }
+    gates.push({ key:'liq-map', hard:false, info:true, pass: lmOk, why: lmWhy });
+
 
 
 
@@ -2777,7 +3084,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       { key:'effort_vs_result', label:'effort vs result (absorption)',    tabs:['OMNIROUTE'] },
       { key:'volume_profile',   label:'volume profile POC (candle approx)', tabs:['OMNIROUTE'] },
       { key:'value_area',       label:'value area VAH/VAL rejection',     tabs:['OMNIROUTE'] },
-      { key:'measured_move',    label:'measured move projection',         tabs:['OMNIROUTE'] }
+      { key:'measured_move',    label:'measured move projection',         tabs:['OMNIROUTE'] },
+      /* The last three holes this table used to print as STILL MISSING. */
+      { key:'vol_targeting',    label:'volatility targeting (size by realized vol)', tabs:['OMNIROUTE'] },
+      { key:'cvd',              label:'cumulative volume delta (taker series, candle approx fallback)', tabs:['OMNIROUTE'] },
+      { key:'liquidation_map',  label:'liquidation cluster map (leverage projection)', tabs:['OMNIROUTE'] }
     ];
   }
 
@@ -2861,6 +3172,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   function hgOmniVocabulary(){
     var inv = hgOmniGateInventory(), out = [], i;
     for (i = 0; i < inv.length; i++) out.push(inv[i].key);
+    /* These three used to live here ONLY — nameable by the extractor, with
+       no gate behind them. They are implemented now and registered in the
+       inventory above, so the list is a safety net against a roster key
+       losing its gate, not a stand-in for one. */
     var extra = ['vol_targeting','cvd','liquidation_map'];
     for (i = 0; i < extra.length; i++) if (out.indexOf(extra[i]) === -1) out.push(extra[i]);
     return out;
@@ -4005,6 +4320,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               oi: (oiChange === null) ? null : { changePct: oiChange },
               retail: (ls && ls.latest) ? ls.latest : null,
               taker: (tk && tk.latest) ? tk.latest : null,
+              /* The WHOLE taker series, not only its last value: CVD is an
+                 integral, and the latest ratio alone cannot be integrated. */
+              takerSeries: (tk && tk.series && tk.series.length) ? tk : null,
               depth: dep,
               regime: (typeof W.regimeState === 'function') ? (function(){ try { return W.regimeState(); } catch (er) { return null; } })() : null,
               news: (typeof W.hgNewsRisk === 'function') ? (function(){ try { return W.hgNewsRisk(f.item.sym); } catch (er) { return null; } })() : null,
@@ -4389,7 +4707,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniRoute — desk setups <span>delta + coindcx · spring · po3 · orb · absorption · value area · measured move</span></h2>'
-      + '<div class="note hg-lead" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX. Pass 1 fetches 4H bars; pass 2 runs the <b>full ledger on every name</b> — every engine (shared mechanics, native six, positioning, XS, house extras including SCALP on 1H + 15m) and every indicator (hard gates, shared oscillators, Binance OI / crowding / taker / depth). '
+      + '<div class="note hg-lead" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX. Pass 1 fetches 4H bars; pass 2 runs the <b>full ledger on every name</b> — every engine (shared mechanics, native six, positioning, XS, house extras including SCALP on 1H + 15m) and every indicator (hard gates, shared oscillators, Binance OI / crowding / taker / depth, <b>vol targeting · CVD · liquidation map</b>). '
+      + 'The coverage table below now reads COVERED on every school. CVD uses Binance taker data where the contract has a twin and a labelled candle approximation elsewhere — a candle is not a trade tape. '
       + 'A name that still fires nothing does <b>not</b> get an invented ticket; the indicator ledger still ran. '
       + 'Each candidate then faces 3 hard gates (trend · vol-alive · participation) plus conditional confluence. '
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
@@ -4575,6 +4894,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* Gold's table already calls hgOmniPoolRead; it printed the raw sample
        figure and so lacked the "too small to confirm" guard this has. */
     window.hgOmniNeedText = needText;
+    /* The three techniques the coverage table used to list without an
+       implementation. Exported so each can be checked on its own numbers
+       rather than only through a scan. */
+    window.hgOmniVolTarget = hgOmniVolTarget;
+    window.hgOmniCvd = hgOmniCvd;
+    window.hgOmniLiqMap = hgOmniLiqMap;
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
     window.hgOmniMarketSide = hgOmniMarketSide;
