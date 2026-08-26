@@ -150,11 +150,12 @@ already spent; on crypto it confirms a breakout. OmniRoute keeps it hard,
 which is where that rule belongs. It is NOT inverted here — that would fit
 the sign of one instrument's sample.
 
-DATA. The app's existing gold chain, in order and all feature-checked:
-getXmGoldCandles (XM MT5 bridge) → getGoldCandles (spot proxy) →
-binanceKlines('PAXGUSDT') as the last resort. Whichever answers is named on
-screen, because a PAXG-derived setup is not the same instrument as XAUUSD
-spot and the difference belongs in front of the user, not buried.
+DATA. Same choke point as GOLD SCALP/SWING: getXAUCandles (index.html) —
+XM XAUUSD → macro.js spot proxies → Delta XAUTUSD — with hgOgFetchRowsLegacy
+only when that export is absent. Whichever answers is named on screen,
+because a PAXG-derived setup is not the same instrument as XAUUSD spot and
+the difference belongs in front of the user, not buried. Proxy feeds are
+scaled to live spot (gold-api.com) before render, matching the gold tabs.
 
 ON EDGE. Same discipline as OMNIROUTE: cards are ordered by evidence
 coverage, the measured-edge gate vetoes a mechanic whose own history is
@@ -3289,10 +3290,13 @@ terse status, and never launches a first-time scan on a global refresh.
      instrument in plain words and states its distance from spot. */
   var OG_SRC_LABEL = {
     'xm-xauusd':   'XM XAUUSD (your broker feed)',
+    'delta-xaut':  'DELTA XAUTUSD',
     'gold-spot':   'spot XAU',
     'binance-xau': 'BINANCE XAUUSDT perp',
     'binance-paxg':'BINANCE PAXGUSDT (tokenised gold)',
-    'binance-xaut':'BINANCE XAUTUSDT (tokenised gold)'
+    'binance-xaut':'BINANCE XAUTUSDT (tokenised gold)',
+    'twelvedata':  'TWELVE DATA XAU/USD',
+    'yahoo':       'YAHOO GC=F'
   };
   function hgOgSrcLabel(src){
     var k = String(src || '');
@@ -3300,8 +3304,22 @@ terse status, and never launches a first-time scan on a global refresh.
   }
   /* True only for a feed that IS the instrument a spot-gold broker quotes. */
   function hgOgSrcIsBroker(src){ return String(src || '') === 'xm-xauusd'; }
+  /* Execution-native feeds — levels are already the tradable instrument. */
+  function hgOgSrcIsVenueNative(src){
+    var k = String(src || '');
+    return k === 'xm-xauusd' || k === 'delta-xaut';
+  }
 
-  function hgOgFetchRows(tf, n){
+  function hgOgFeedSourceFor(tf){
+    var w = W();
+    if (w && w.S){
+      if (w.S.goldSrcByTf && w.S.goldSrcByTf[tf]) return w.S.goldSrcByTf[tf];
+      if (w.S.goldDataSource) return w.S.goldDataSource;
+    }
+    return null;
+  }
+
+  function hgOgFetchRowsLegacy(tf, n){
     var xm = gfn('getXmGoldCandles'), gg = gfn('getGoldCandles'), bk = gfn('binanceKlines');
     return Promise.resolve()
       .then(function(){ return xm ? xm(tf, n) : null; })
@@ -3320,6 +3338,47 @@ terse status, and never launches a first-time scan on a global refresh.
               });
           });
       });
+  }
+
+  /* Prefer getXAUCandles — the same spot-first chain GOLD SCALP/SWING use. */
+  function hgOgFetchRows(tf, n){
+    var xauFn = gfn('getXAUCandles');
+    if (xauFn){
+      return Promise.resolve()
+        .then(function(){ return xauFn(tf, n); })
+        .then(function(rows){
+          if (rows && rows.length){
+            return { rows: rows, source: hgOgFeedSourceFor(tf) || 'binance-xau' };
+          }
+          return hgOgFetchRowsLegacy(tf, n);
+        })
+        .catch(function(){ return hgOgFetchRowsLegacy(tf, n); });
+    }
+    return hgOgFetchRowsLegacy(tf, n);
+  }
+
+  /* Scale printed plans to live spot — mirrors goldscalp goldAlignLevelsToSpot. */
+  function hgOgAlignPlansToSpot(list, klineRef, liveRef){
+    if (!list || !list.length) return;
+    klineRef = fin(klineRef); liveRef = fin(liveRef);
+    if (!(klineRef > 0) || !(liveRef > 0)) return;
+    var ratio = liveRef / klineRef;
+    if (Math.abs(ratio - 1) * 100 < 0.35) return;
+    var i, c, p, keys;
+    for (i = 0; i < list.length; i++){
+      c = list[i];
+      if (!c) continue;
+      if (isFinite(fin(c.level))) c.level = fin(c.level) * ratio;
+      p = c.plan;
+      if (p){
+        keys = ['entry', 'stop', 't1', 't2', 'risk'];
+        for (var ki = 0; ki < keys.length; ki++){
+          if (isFinite(fin(p[keys[ki]]))) p[keys[ki]] = fin(p[keys[ki]]) * ratio;
+        }
+      }
+      c.spotAligned = true;
+      c.spotAlignRatio = ratio;
+    }
   }
 
   /* ==================== anticipation: the next gold levels ==================== */
@@ -4051,7 +4110,7 @@ terse status, and never launches a first-time scan on a global refresh.
          real and the basis is worth mentioning — a broker-bridge feed, a
          failed spot fetch, or a sub-0.05% basis all render nothing. */
       var sf = fin(__og.spotFactor);
-      if (isFinite(sf) && sf > 0 && Math.abs(sf - 1) > 0.0005){
+      if (isFinite(sf) && sf > 0 && Math.abs(sf - 1) > 0.0005 && !c.spotAligned){
         h += '<div class="dim">&#8776; SPOT-EQUIVALENT (basis ' + ((sf - 1) >= 0 ? '+' : '')
           +  ((sf - 1) * 100).toFixed(2) + '% applied, R:R unchanged): '
           +  'ENTRY ' + fmtPx(c.plan.entry * sf) + ' · STOP ' + fmtPx(c.plan.stop * sf)
@@ -4411,26 +4470,6 @@ terse status, and never launches a first-time scan on a global refresh.
         });
       })
       .then(async function(res){
-        /* SPOT-EQUIVALENT LEVELS. The feed is a Binance perp and the reader's
-           broker quotes spot XAUUSD; the basis line already SAYS the levels
-           are the perp's, but saying it does not make them placeable. A
-           perp->spot conversion is one ratio (spot / perp-live) applied to
-           entry, stop and targets alike, which preserves R:R exactly. Fetched
-           BEFORE rendering, bounded to 2.5s, and NaN on any failure — cards
-           then simply omit the extra line rather than waiting or lying. */
-        __og.spotFactor = NaN;
-        try {
-          var sfFn = gfn('hgGoldLiveSpot');
-          var sfFeed = (res.scalp.rows && res.scalp.rows.length)
-                     ? fin(res.scalp.rows[res.scalp.rows.length - 1].c) : NaN;
-          if (sfFn && isFinite(sfFeed) && sfFeed > 0 && !hgOgSrcIsBroker(res.scalp.source)){
-            var sfSpot = await Promise.race([
-              Promise.resolve(sfFn(sfFeed)),
-              new Promise(function(r2){ setTimeout(function(){ r2(NaN); }, 2500); })
-            ]);
-            if (isFinite(sfSpot) && sfSpot > 0) __og.spotFactor = sfSpot / sfFeed;
-          }
-        } catch (eSf){}
         var rankFn = (w && typeof w.hgOmniRank === 'function') ? w.hgOmniRank : function(a){ return a; };
         var all = (res.scalp.cands || []).concat(res.swing.cands || []);
         /* HORIZON AGREEMENT — a scalp aligned with the swing horizon's read
@@ -4466,6 +4505,41 @@ terse status, and never launches a first-time scan on a global refresh.
           mark2(res.swing.cands, scalpD, 'SCALP');
         })();
         var ranked = rankFn(all);
+
+        /* SPOT ALIGN — same discipline as GOLD SCALP/SWING. Proxy feeds
+           (twelvedata, perp, PAXG) can sit off live spot; scale every printed
+           plan to the gold-api anchor before render. R:R unchanged. XM and
+           Delta XAUT are execution-native and are not scaled. */
+        __og.spotFactor = NaN;
+        __og.spotAnchor = NaN;
+        var spotAlignNote = '';
+        try {
+          var sfFn = gfn('hgGoldLiveSpot');
+          var klineSpot = fin(res.scalp.livePx);
+          if (!(klineSpot > 0)) klineSpot = fin(res.swing.livePx);
+          if (!(klineSpot > 0) && res.scalp.rows && res.scalp.rows.length){
+            klineSpot = fin(res.scalp.rows[res.scalp.rows.length - 1].c);
+          }
+          var srcKey = res.scalp.source || res.swing.source;
+          if (sfFn && isFinite(klineSpot) && klineSpot > 0 && !hgOgSrcIsVenueNative(srcKey)){
+            var liveSpot = await Promise.race([
+              Promise.resolve(sfFn(klineSpot)),
+              new Promise(function(r2){ setTimeout(function(){ r2(NaN); }, 2500); })
+            ]);
+            if (isFinite(liveSpot) && liveSpot > 0){
+              __og.spotAnchor = liveSpot;
+              __og.spotFactor = liveSpot / klineSpot;
+              if (Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
+                hgOgAlignPlansToSpot(ranked, klineSpot, liveSpot);
+                res.scalp.livePx = liveSpot;
+                res.swing.livePx = liveSpot;
+                spotAlignNote = ' · levels scaled to live spot ~$' + liveSpot.toFixed(2)
+                              + ' (feed ~$' + klineSpot.toFixed(2) + ')';
+              }
+            }
+          }
+        } catch (eSf){}
+
         __og.snap = { at: Date.now(), rows: ranked, scalp: res.scalp.pooled, swing: res.swing.pooled };
         /* Bars kept for the R/horizon grid — it re-runs the walk-forward on
            what the scan already fetched, so it costs no network. */
@@ -4484,7 +4558,7 @@ terse status, and never launches a first-time scan on a global refresh.
                           ? ' · ' + dcounts.trades + ' distinct trade(s) after collapsing '
                             + (ranked.length - dcounts.trades) + ' duplicate card(s) on identical levels'
                           : '')
-                      + ' · ' + tickets + ' ticket(s) · ' + srcNote;
+                      + ' · ' + tickets + ' ticket(s) · ' + srcNote + spotAlignNote;
         /* When the desk produces NO tickets, name the gate responsible in the
            status line. A scan that reports "11 setups, 0 tickets" and nothing
            else sends the reader through every card looking for the common
@@ -4526,7 +4600,8 @@ terse status, and never launches a first-time scan on a global refresh.
             var spotFn = gfn('hgGoldLiveSpot');
             var srcKey = res.scalp.source || res.swing.source;
             if (!spotFn || !srcKey) return;
-            if (hgOgSrcIsBroker(srcKey)) return;   /* already the broker's own feed */
+            if (hgOgSrcIsVenueNative(srcKey)) return;
+            if (spotAlignNote) return;   /* primary levels already scaled */
             var lastRow = (res.scalp.rows && res.scalp.rows.length)
                         ? res.scalp.rows[res.scalp.rows.length - 1]
                         : ((res.swing.rows && res.swing.rows.length)
@@ -4712,6 +4787,11 @@ terse status, and never launches a first-time scan on a global refresh.
             var wantDir = (deskTape === 'short') ? 'long' : 'short';
             if (blockRows && blockRows.length){
               ogHeld.level = hgOgTapeFlipLevel(blockRows, wantDir);
+              var sfHeld = fin(__og.spotFactor);
+              if (isFinite(ogHeld.level) && isFinite(sfHeld) && sfHeld > 0
+                  && Math.abs(sfHeld - 1) > 0.005){
+                ogHeld.level = ogHeld.level * sfHeld;
+              }
               var liveFrom = (scalpTape === deskTape) ? fin(res.scalp && res.scalp.livePx)
                             : fin(res.swing && res.swing.livePx);
               ogHeld.from = (liveFrom > 0) ? liveFrom : fin(blockRows[blockRows.length - 1].c);
@@ -5240,6 +5320,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
     window.hgOgTargetReadout = hgOgTargetReadout;
     window.hgOgHorizonCfg = hgOgHorizonCfg;
+    window.hgOgAlignPlansToSpot = hgOgAlignPlansToSpot;
+    window.hgOgFetchRows = hgOgFetchRows;
     window.hgOgMpNoneWhy = hgOgMpNoneWhy;           /* the stand-aside copy, testable */
     window.hgOgTapeDir = hgOgTapeDir;
     window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;
