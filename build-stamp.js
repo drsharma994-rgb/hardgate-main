@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v482',
-  pack: 'Setup solidity — SOLID/GOOD/WATCH rank + book gate',
-  built: '2026-08-26T08:35:00Z',
-  note: 'Unified hgSetupSolidityScore for crypto + gold: gates, post-gate, R:R, flow, gold grade/tally, OMNI INFO. Ranks MOST PROBABLE and gold leads by solidity; BOOK vetoes WEAK rows unless forceBook. Chips on MP panel + OMNIBTC. G1–G7 unchanged.'
+  version: 'hg-v483',
+  pack: 'OMNIGOLD HELD tickets show levels in MOST PROBABLE',
+  built: '2026-08-26T11:05:00Z',
+  note: 'When cleared gold tickets are HELD against tape, MOST PROBABLE now renders ENTRY/STOP/T1 labeled HELD · not trade-ready (tape rule unchanged). Release level uses live price. hgOgPickHeldFor exported.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
