@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v489',
-  pack: 'OMNIGOLD live spot level align',
-  built: '2026-08-26T17:15:00Z',
-  note: 'Scale plans from 0.15%/8pt drift; level-fresh uses marketPx; MARKET row on MP panel.'
+  version: 'hg-v490',
+  pack: 'OMNIGOLD settled execute 95% bar',
+  built: '2026-08-26T19:30:00Z',
+  note: 'SETTLED EXECUTE panel — TICKET + forward Wilson 95% lower bound (min 15 settled).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

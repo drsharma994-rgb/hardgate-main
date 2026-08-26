@@ -245,6 +245,13 @@ terse status, and never launches a first-time scan on a global refresh.
      A 4H FVG 6×ATR behind the market is a real limit, not the trade to
      float first when a sweep 1.5×ATR away already has a ticket. */
   var GOLD_NEAR_ATR = 2;
+  /* SETTLED EXECUTE — only promote setups whose cleared TICKETS have a
+     measured forward win rate with Wilson 95% CI lower bound >= 95%.
+     Requires enough settled out-of-sample tickets; most mechanics never
+     reach this bar — the panel says so rather than inventing a number. */
+  var OG_EXEC_MIN_N = 15;
+  var OG_EXEC_WILSON_LO = 0.95;
+  var OG_EXEC_WILSON_Z = 1.96;
 
   var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
@@ -3919,6 +3926,158 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
+  function hgOgWilsonHit(wins, n, z){
+    var wf = gfn('hgWilson');
+    wins = fin(wins); n = fin(n);
+    if (!wf || !(n > 0) || wins < 0 || wins > n) return null;
+    try { return wf(wins, n, isFinite(fin(z)) ? fin(z) : OG_EXEC_WILSON_Z); }
+    catch (eW){ return null; }
+  }
+
+  function hgOgScorecardGoldEvidence(dir){
+    var statsFn = gfn('hgScoreStats');
+    if (!statsFn) return null;
+    var raw = null;
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage){
+        raw = localStorage.getItem('hg_score_v1');
+      }
+    } catch (eLs){ return null; }
+    if (!raw) return null;
+    var list;
+    try { list = JSON.parse(raw); } catch (eJ){ return null; }
+    if (!Array.isArray(list) || !list.length) return null;
+    var wins = 0, n = 0, i, rec;
+    for (i = 0; i < list.length; i++){
+      rec = list[i];
+      if (!rec || rec.status !== 'settled') continue;
+      if (typeof rec.r !== 'number' || !isFinite(rec.r)) continue;
+      var sym = String(rec.sym || '').toUpperCase();
+      if (sym.indexOf('XAU') < 0 && sym.indexOf('GOLD') < 0 && sym.indexOf('PAXG') < 0) continue;
+      if (dir && rec.dir !== dir) continue;
+      n++;
+      if (rec.r > 0) wins++;
+    }
+    if (!(n > 0)) return null;
+    var w = hgOgWilsonHit(wins, n);
+    return { source: 'scorecard-gold', wins: wins, samples: n, hit: wins / n, wilson: w };
+  }
+
+  function hgOgSettledEvidence(row){
+    if (!row) return null;
+    var tab = 'OMNIGOLD:' + String(row.horizon || 'SWING');
+    var fwd = hgOgFwdFor(tab, row.kind);
+    var out = null;
+    if (fwd && fwd.ticketOnly && fin(fwd.ticketOnly.samples) > 0){
+      var t = fwd.ticketOnly;
+      out = {
+        source: 'forward-ticket',
+        wins: fin(t.wins) || 0,
+        samples: fin(t.samples),
+        hit: fin(t.hit),
+        expR: fin(t.expR),
+        wilson: hgOgWilsonHit(t.wins, t.samples)
+      };
+    }
+    var sc = hgOgScorecardGoldEvidence(row.dir);
+    if (sc && sc.wilson){
+      if (!out || sc.wilson.lo > (out.wilson ? out.wilson.lo : -1)){
+        out = sc;
+      }
+    }
+    return out;
+  }
+
+  function hgOgSettledExecuteOk(ev, minLo, minN){
+    if (!ev || !ev.wilson) return false;
+    minLo = isFinite(fin(minLo)) ? fin(minLo) : OG_EXEC_WILSON_LO;
+    minN = isFinite(fin(minN)) ? fin(minN) : OG_EXEC_MIN_N;
+    return fin(ev.samples) >= minN && ev.wilson.lo >= minLo;
+  }
+
+  function hgOgPickSettledExecutes(ranked, tapeDir, opts){
+    opts = opts || {};
+    var minLo = opts.minWilsonLo != null ? opts.minWilsonLo : OG_EXEC_WILSON_LO;
+    var minN = opts.minN != null ? opts.minN : OG_EXEC_MIN_N;
+    tapeDir = String(tapeDir || '').toLowerCase();
+    var execute = [], pool = [], i, c, ev;
+    for (i = 0; i < (ranked || []).length; i++){
+      c = ranked[i];
+      if (!c || !(c.grade && c.grade.ticket) || !c.plan) continue;
+      if (tapeDir === 'long' || tapeDir === 'short'){
+        if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
+      }
+      ev = hgOgSettledEvidence(c);
+      c.settledEv = ev;
+      if (hgOgSettledExecuteOk(ev, minLo, minN)) execute.push(c);
+      else if (ev && ev.wilson) pool.push(c);
+    }
+    pool.sort(function(a, b){
+      return (b.settledEv.wilson.lo - a.settledEv.wilson.lo)
+          || (b.settledEv.samples - a.settledEv.samples);
+    });
+    return { execute: execute, best: pool.slice(0, 2), minLo: minLo, minN: minN };
+  }
+
+  function hgOgSettledExecuteRowHtml(c, tier){
+    var p = c.plan, ev = c.settledEv;
+    var w = ev && ev.wilson;
+    var pct = w ? (w.p * 100).toFixed(0) : '—';
+    var lo = w ? (w.lo * 100).toFixed(0) : '—';
+    var hi = w ? (w.hi * 100).toFixed(0) : '—';
+    var h = '<div class="og-settled-row' + (tier === 'execute' ? ' og-settled-exec' : '') + '">';
+    h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir || '').toUpperCase())
+      + ' <span>' + esc(c.horizon) + ' · ' + esc(c.kind) + ' · TICKET</span></div>';
+    h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
+      + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
+      + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
+      + (tier === 'execute' ? ' · <b>meets execute bar</b>' : ' · below ' + (OG_EXEC_WILSON_LO * 100) + '% lower bound') + '</div>';
+    h += '<div class="hg-mp-grid">';
+    var mkt = fin(__og.spotAnchor);
+    if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
+    h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>limit</u></div>';
+    h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
+    h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: c.dir }, p), c.horizon) || 'target') + '</u></div>';
+    h += '</div>';
+    h += '<div class="row" style="margin-top:8px">'
+      + '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
+      + '</div></div>';
+    return h;
+  }
+
+  function hgOgSettledExecutePanelHtml(bag){
+    bag = bag || { execute: [], best: [], minLo: OG_EXEC_WILSON_LO, minN: OG_EXEC_MIN_N };
+    var h = '<section class="hg-mp og-settled-exec-panel" data-og-settled="1" aria-label="Settled execute setups">';
+    h += '<div class="hg-mp-eye">SETTLED EXECUTE · 95% BAR</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>TICKET + forward settled evidence · Wilson lower ≥ '
+      + (bag.minLo * 100).toFixed(0) + '% · min ' + bag.minN + ' trades</span></div>';
+    if (bag.execute && bag.execute.length){
+      h += '<div class="hg-mp-note">These cleared the full ledger <b>and</b> their mechanic\'s settled TICKET record meets the bar. Not a forecast — measured on trades this desk already cleared.</div>';
+      var ei;
+      for (ei = 0; ei < bag.execute.length; ei++) h += hgOgSettledExecuteRowHtml(bag.execute[ei], 'execute');
+    } else {
+      h += '<div class="hg-mp-note warn">No setup meets TICKET + ' + bag.minN + ' settled forward tickets + Wilson 95% lower bound ≥ '
+        + (bag.minLo * 100).toFixed(0) + '%. Even 15/15 wins only yields ~80% Wilson lower — you need roughly <b>80+ cleared wins</b> at near-perfect rate. '
+        + 'Gold in-sample grids peak near ~54% hit, so this bar is intentionally rare. '
+        + 'Use <b>GOLD SCALP / GOLD SWING</b> for 7/7 grade-A setups, or keep scanning to build the forward log below.</div>';
+      if (bag.best && bag.best.length){
+        h += '<div class="hg-mp-note">Best <b>available</b> settled edge on current TICKETs (still below the execute bar):</div>';
+        var bi;
+        for (bi = 0; bi < bag.best.length; bi++) h += hgOgSettledExecuteRowHtml(bag.best[bi], 'best');
+      }
+    }
+    h += '<div class="hg-mp-note dim">Also check SCORECARD → BY LANE → gold for your booked LOG history. OMNIGOLD forward log grows each scan — run regularly to settle mechanics.</div>';
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgPaintSettledExecute(ui, bag){
+    var host = ui && ui.settledExec;
+    if (!host) return;
+    try { host.innerHTML = hgOgSettledExecutePanelHtml(bag); }
+    catch (eSe){ host.innerHTML = ''; }
+  }
+
   function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing){
     tape = String(tape || '').toLowerCase();
     var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
@@ -4739,6 +4898,7 @@ terse status, and never launches a first-time scan on a global refresh.
           hgOgPaintMostProbable(ui, null, null,
             hgOgDeskTape(hgOgTapeDir(res.scalp && res.scalp.rows), hgOgTapeDir(res.swing && res.swing.rows)),
             []);
+          hgOgPaintSettledExecute(ui, { execute: [], best: [], minLo: OG_EXEC_WILSON_LO, minN: OG_EXEC_MIN_N });
           return;
         }
         /* ONE pick per horizon, marked and floated to the top so the answer
@@ -4889,6 +5049,7 @@ terse status, and never launches a first-time scan on a global refresh.
         } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
         __og.held = ogHeld;
         hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing);
+        hgOgPaintSettledExecute(ui, hgOgPickSettledExecutes(ogCollapsed, deskTape));
         if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){
@@ -5201,6 +5362,7 @@ terse status, and never launches a first-time scan on a global refresh.
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
       + '<div id="ogMp" style="margin-top:12px"></div>'
+      + '<div id="ogSettledExec" style="margin-top:12px"></div>'
       + '<div class="panel" id="ogXmBot" style="margin-top:12px">'
       +   '<h3>XM trader bot</h3>'
       +   '<p class="note">Sends this tab’s <b>TICKET</b> rows to your XM MT5 account through the same bridge as gold candles (<code>XM_MT5_URL</code>). '
@@ -5228,6 +5390,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
       mp: el.querySelector('#ogMp'),
+      settledExec: el.querySelector('#ogSettledExec'),
       pool: el.querySelector('#ogPool'), cards: el.querySelector('#ogCards'),
       grid: el.querySelector('#ogGrid'), gridOut: el.querySelector('#ogGridOut'),
       xmStat: el.querySelector('#ogXmStat'), xmSend: el.querySelector('#ogXmSend'),
@@ -5401,6 +5564,11 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgConsensusVoters = hgOgConsensusVoters;
     window.hgOgPickFor = hgOgPickFor;
     window.hgOgPickWatchFor = hgOgPickWatchFor;
+    window.hgOgWilsonHit = hgOgWilsonHit;
+    window.hgOgSettledEvidence = hgOgSettledEvidence;
+    window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
+    window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;
+    window.hgOgSettledExecutePanelHtml = hgOgSettledExecutePanelHtml;
     window.hgOgHeldQueueHtml = hgOgHeldQueueHtml;
     window.hgOgInfoNet = hgOgInfoNet;
     window.hgOgBalanceScore = hgOgBalanceScore;
