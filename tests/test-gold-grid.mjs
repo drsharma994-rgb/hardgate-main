@@ -151,8 +151,16 @@ console.log('\n== it refuses to read as a recommendation ==');
 
 console.log('\n== it names gold\'s own frame so the reader can locate themselves ==');
 {
-  ok(/HORIZONS\.scalp\.minRr \+ 'R \/ '/.test(GOLD), 'the panel quotes the live SCALP setting');
-  ok(/HORIZONS\.swing\.minRr \+ 'R \/ '/.test(GOLD), 'and the live SWING setting');
+  /* The panel used to read "Gold trades SCALP at 1.5R" — but 1.5R is the
+     plan-ACCEPTANCE floor, while T1 is placed at OG_T1_R on both horizons.
+     Quoting the floor as though it were the target is the same conflation
+     test-omnigold-t1-r.mjs exists for, so the panel now names both and says
+     which is which. */
+  ok(/OG_T1_R \+ 'R on both horizons/.test(GOLD), 'the panel quotes where T1 is actually placed');
+  ok(/HORIZONS\.scalp\.minRr/.test(GOLD) && /HORIZONS\.swing\.minRr/.test(GOLD),
+     'and still quotes both live per-horizon floors');
+  ok(/acceptance floors, not targets/.test(GOLD),
+     'naming them as floors so the reader cannot mistake one for the other');
   ok(/HORIZONS\.scalp\.horizonBars/.test(GOLD) && /HORIZONS\.swing\.horizonBars/.test(GOLD),
      'including both horizons, read from the config rather than hardcoded');
 }

@@ -150,6 +150,36 @@ terse status, and never launches a first-time scan on a global refresh.
      it is the only lever left on sample count — 1500x1h is ~62 days,
      1500x4h ~250 days. The swing horizon gains most (3x), which is where
      nearly every row read "too few to judge". */
+  /* WHERE T1 ACTUALLY SITS, and why it is not cfg.minRr.
+
+     Two different numbers were being used as though they were one:
+
+       cfg.minRr   an ACCEPTANCE FLOOR. The plan engine rejects any structure
+                   whose reachable R:R falls below it. 1.5 on SCALP, 2.0 on
+                   SWING.
+       t1R         where T1 is PLACED. Hard-coded 2.0 on both horizons, on
+                   both plan paths.
+
+     The walk-forward, the pooled expectancy, the measured-edge breakeven and
+     the forward panel were all keyed to cfg.minRr — so on SCALP the desk
+     measured "did price reach 1.5R before the stop" and printed that number
+     beside a ticket whose T1 is at 2.0R. Reaching 2R is strictly harder, so
+     the card overstated its own plan.
+
+     Measured on 1,000 hours of live PAXG bars: 39.9% at 1.5R against 30.9%
+     at 2.0R — the headline hit rate was 9.0 points too generous. A survey of
+     1,957 scalp plans and 1,838 swing plans found T1 at exactly 2.00R on
+     100% of them, zero variance, so this is a constant and not an average.
+
+     SWING never showed it because its floor happens to equal 2.0 — the same
+     shape as the pooled-expectancy bug before it: wrong on one horizon,
+     invisible on the other, and the wrong one trades more often.
+
+     One constant now feeds BOTH the plan and every measurement of it, so
+     they cannot drift apart again. cfg.minRr keeps its real job: the floor. */
+  var OG_T1_R = 2;
+  var OG_T2_R = 3.5;
+
   var HORIZONS = {
     scalp: { tf: '1h', bars: 1500, minRr: 1.5, horizonBars: 24, warm: 60, label: 'SCALP',
              minAtrPct: 0.05, sessionHard: true },
@@ -1733,7 +1763,7 @@ terse status, and never launches a first-time scan on a global refresh.
       stop = hgOgClipStop(hit.dir, entry, stop);
       if (!isFinite(stop)) return null;
       var sweepPl = fromRisk(hit.dir, entry, stop, {
-        t1R: 2, t2R: 3.5, minRr: minRr,
+        t1R: OG_T1_R, t2R: OG_T2_R, minRr: minRr,
         targetPolicy: 'R-multiples of setup-level risk'
       });
       if (sweepPl){
@@ -1757,7 +1787,7 @@ terse status, and never launches a first-time scan on a global refresh.
       var clipped = hgOgClipStop(hit.dir, plan.entry, plan.stop);
       if (isFinite(clipped) && Math.abs(clipped - plan.stop) > 1e-9){
         var repl = fromRisk(hit.dir, plan.entry, clipped, {
-          t1R: 2, t2R: 3.5, minRr: minRr,
+          t1R: OG_T1_R, t2R: OG_T2_R, minRr: minRr,
           targetPolicy: plan.targetPolicy || 'R-multiples'
         });
         if (repl){
@@ -3116,7 +3146,9 @@ terse status, and never launches a first-time scan on a global refresh.
          against the in-sample one instead of only seeing the latter. */
       ex.fwdTab = 'OMNIGOLD:' + cfg.label;
       ex.fwd = hgOgFwdFor(ex.fwdTab, statKey);
-      ex.minRr = cfg.minRr;
+      /* the gate computes breakeven as 1/(1+minRr); it must be the R the
+         hit rate was measured at, which is where T1 sits */
+      ex.minRr = OG_T1_R;
       ex.minAtrPct = cfg.minAtrPct;
       ex.sessionHard = cfg.sessionHard;
       /* Plan BEFORE gates: the cost-drag gate needs the actual stop distance,
@@ -4023,11 +4055,12 @@ terse status, and never launches a first-time scan on a global refresh.
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
-          stats[k] = btFn(rows, fns[k], { rMult: cfg.minRr, horizon: cfg.horizonBars, warm: cfg.warm });
+          stats[k] = btFn(rows, fns[k], { rMult: OG_T1_R, horizon: cfg.horizonBars, warm: cfg.warm });
         }
-        /* cfg.minRr, NOT the pooler's default: SCALP measures at 1.5R and
-           SWING at 2.0R, and the pool used to re-price both at 2.0. */
-        pooled = poolFn ? poolFn([stats], cfg.minRr) : stats;
+        /* OG_T1_R, the multiple T1 is actually placed at — the same one the
+           walk-forward above measured with. Passing cfg.minRr here priced
+           SCALP expectancy at a 1.5R the plan never targets. */
+        pooled = poolFn ? poolFn([stats], OG_T1_R) : stats;
       }
 
       /* Settle any forward records this symbol has open, using the bars just
@@ -4281,16 +4314,18 @@ terse status, and never launches a first-time scan on a global refresh.
           } catch (eB){}
         })();
 
-        ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + HORIZONS.scalp.minRr + 'R)', HORIZONS.scalp.minRr, 'OMNIGOLD:SCALP')
-                          + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + HORIZONS.swing.minRr + 'R)', HORIZONS.swing.minRr, 'OMNIGOLD:SWING')
+        /* Labelled and judged at OG_T1_R, not the acceptance floor: the table
+           reports whether price reached T1, so the R it names must be T1's. */
+        ui.pool.innerHTML = renderPooled(res.scalp.pooled, 'SCALP (' + HORIZONS.scalp.tf + ', ' + OG_T1_R + 'R)', OG_T1_R, 'OMNIGOLD:SCALP')
+                          + renderPooled(res.swing.pooled, 'SWING (' + HORIZONS.swing.tf + ', ' + OG_T1_R + 'R)', OG_T1_R, 'OMNIGOLD:SWING')
                           + (function(){
                               /* The two horizons record under separate tabs, so the shared
                                  panel is rendered twice — a mechanic that pays on 1h need not
                                  pay on 4h, and merging them would hide exactly that. */
                               var pf = gfn('hgFwdPanelHTML');
                               if (!pf) return '';
-                              return pf('OMNIGOLD:SCALP', { minRr: HORIZONS.scalp.minRr, title: 'FORWARD — SCALP, out-of-sample' })
-                                   + pf('OMNIGOLD:SWING', { minRr: HORIZONS.swing.minRr, title: 'FORWARD — SWING, out-of-sample' });
+                              return pf('OMNIGOLD:SCALP', { minRr: OG_T1_R, title: 'FORWARD — SCALP, out-of-sample' })
+                                   + pf('OMNIGOLD:SWING', { minRr: OG_T1_R, title: 'FORWARD — SWING, out-of-sample' });
                             })()
                           + '<div class="note">Walk-forward on the same bars just read, per horizon and never merged — a mechanic that pays on 4h need not pay on 1h. '
                           + 'A bar spanning both stop and target counts as a STOP. In-sample on a short window; under ' + MIN_SAMPLES + ' samples is noise. '
@@ -4796,9 +4831,14 @@ terse status, and never launches a first-time scan on a global refresh.
         }
         ui.grid.disabled = true;
         ui.gridOut.innerHTML = '<div class="note">measuring both gold horizons at 12 settings…</div>';
-        var frame = '<div class="note">Gold trades SCALP at ' + HORIZONS.scalp.minRr + 'R / '
-                  + HORIZONS.scalp.horizonBars + ' bars and SWING at ' + HORIZONS.swing.minRr + 'R / '
-                  + HORIZONS.swing.horizonBars + ' bars. The grid sweeps around both. '
+        /* T1 sits at OG_T1_R on BOTH horizons; the per-horizon minRr is the
+           acceptance floor, not the target. Saying "trades SCALP at 1.5R"
+           described the floor and read as the target. */
+        var frame = '<div class="note">Gold places T1 at ' + OG_T1_R + 'R on both horizons — SCALP over '
+                  + HORIZONS.scalp.horizonBars + ' bars, SWING over '
+                  + HORIZONS.swing.horizonBars + ' bars (the ' + HORIZONS.scalp.minRr + 'R / '
+                  + HORIZONS.swing.minRr + 'R per-horizon figures are plan-acceptance floors, not targets). '
+                  + 'The grid sweeps around both. '
                   + 'Every figure is IN-SAMPLE and GROSS, and the best of twelve cells is the best of '
                   + 'twelve searches — the same multiple-comparisons bar that applies to picking a '
                   + 'mechanic applies to picking a setting.</div>';

@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v478',
+  version: 'hg-v479',
   pack: 'Setup solidity — SOLID/GOOD/WATCH rank + book gate',
   built: '2026-08-26T08:35:00Z',
   note: 'Unified hgSetupSolidityScore for crypto + gold: gates, post-gate, R:R, flow, gold grade/tally, OMNI INFO. Ranks MOST PROBABLE and gold leads by solidity; BOOK vetoes WEAK rows unless forceBook. Chips on MP panel + OMNIBTC. G1–G7 unchanged.'

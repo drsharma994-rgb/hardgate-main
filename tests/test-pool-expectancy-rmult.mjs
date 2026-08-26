@@ -100,12 +100,28 @@ console.log('\n== zero samples stay NaN, not a fabricated zero ==');
   ok(!isFinite(p.expR), 'and no expectancy — an unmeasured mechanic reads unknown, not breakeven');
 }
 
-console.log('\n== the gold desk passes its horizon floor ==');
+console.log('\n== the gold desk passes the R its samples were MEASURED at ==');
 {
+  /* This assertion originally pinned cfg.minRr. It was right about the
+     principle and wrong about the value: cfg.minRr is a plan-ACCEPTANCE
+     floor, while the samples are measured wherever T1 is placed — OG_T1_R.
+     Passing the floor priced SCALP expectancy at a 1.5R the plan never
+     targets, which is the defect test-omnigold-t1-r.mjs was added for.
+
+     Pinning the literal is what let this test bless the intermediate state,
+     so it now asserts the invariant instead: whatever multiple the desk
+     chooses, the pool and the walk-forward must use the SAME one. If they
+     diverge, the hit rate and the expectancy on the card describe two
+     different trades. */
   const og = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
-  ok(/poolFn\(\[stats\],\s*cfg\.minRr\)/.test(og),
-     'omnigold pools at cfg.minRr, so SCALP is priced at 1.5R and SWING at 2.0R');
-  ok(!/poolFn\(\[stats\]\)/.test(og), 'and never calls the pooler without a multiple');
+  ok(!/poolFn\(\[stats\]\)/.test(og), 'omnigold never calls the pooler without a multiple');
+  const poolArg = /poolFn\(\[stats\],\s*([A-Za-z_$][\w.$]*)\)/.exec(og);
+  ok(!!poolArg, 'omnigold passes an explicit multiple to the pooler');
+  const btArg = /rMult:\s*([A-Za-z_$][\w.$]*)/.exec(og);
+  ok(!!btArg, 'omnigold passes an explicit multiple to the walk-forward');
+  ok(poolArg[1] === btArg[1],
+     'the pool prices at the SAME multiple the walk-forward measured at (both ' +
+     poolArg[1] + ')');
 }
 
 console.log('\npool expectancy rMult: ' + passed + ' checks passed');
