@@ -161,6 +161,24 @@ console.log('\n== the four gold context gates carry the flag ==');
                            vote"; spot-basis is PAXG against the desk's feed
                            and is live-only, so neither can ever be a veto */
                         'gold-season', 'spot-basis',
+                        /* PARTICIPATION, and this one needs its reasoning on
+                           the record because this list exists to stop exactly
+                           this kind of loosening.
+
+                           It is an INDICATOR read — trigger-bar volume against
+                           its own time-of-day mean — not a risk rule. It sits
+                           beside obv-flow and mfi-pressure, which are already
+                           here, and nothing about it protects the account the
+                           way news-window, cost-drag or session do.
+
+                           It is info on GOLD only. OmniRoute keeps it hard:true
+                           because crypto breakouts genuinely need turnover. On
+                           gold it was measured filtering backwards — passed
+                           27.7% vs vetoed 35.2% on SCALP (z -5.38, n=4593) and
+                           27.7% vs 30.7% on SWING (z -2.19, n=4369) — while
+                           discarding 38% of scalp firings. A high-volume bar on
+                           a metal is often the move already spent. */
+                        'participation',
                         /* gold's structural-placement read (v417): a setup at
                            a multi-source zone vs one in no-man's-land — it
                            argues standing, never existence */

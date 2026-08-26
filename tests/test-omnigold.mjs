@@ -183,8 +183,14 @@ ok(typeof win.HG_tabs.filter(t => t.id === 'omnigold')[0].refresh === 'function'
   /* ema-stack and session-vwap are arithmetic on the bars this harness
      already supplies (local emaOf / session VWAP). rsi-zone still needs
      indicators.js rsi() and stays UNCHECKED here. */
+  /* participation joins them: it is arithmetic on the bars' OWN volume against
+     their own time-of-day mean, so this harness deprives it of nothing and it
+     must EVALUATE here rather than read UNCHECKED. It appears in this list
+     only now because it became an info gate — it was a veto until it was
+     measured filtering backwards on gold (passed 27.7% vs vetoed 35.2% on
+     SCALP, z -5.38). See the block above its push in omnigold.js. */
   const SELF_SUFFICIENT = ['obv-flow', 'mfi-pressure', 'cci-stretch', 'ema-ribbon', 'heikin-trend',
-                           'ema-stack', 'session-vwap'];
+                           'ema-stack', 'session-vwap', 'participation'];
   const INDICATOR_GATES = INFO_GATES.filter(k => SELF_SUFFICIENT.indexOf(k) < 0)
     .concat(['measured-edge', 'consensus', 'plan-levels', 'level-fresh', 'weekend-exposure', 'shield-guard', 'momentum-stop']);
   const unchecked = full.filter(g => g.pass === null).map(g => g.key);

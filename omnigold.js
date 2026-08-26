@@ -107,9 +107,17 @@ an accident: a first attempt at a combined "indicator stack" tally was cut
 because five of its six members were already gates in their own right, and
 counting one reading twice inflates a ticket's check count without adding
 any evidence behind it.
-Participation is CONDITIONAL here, unlike OmniRoute: several gold feeds
-publish no volume at all, and a hard volume gate would silently disqualify
-every setup sourced from them.
+Participation is an INFO read here, unlike OmniRoute, for two reasons.
+Several gold feeds publish no volume at all, and a hard volume gate would
+silently disqualify every setup sourced from them. And on the feeds that DO
+publish it, the gate was measured pointing the wrong way: splitting every
+gold firing by its own verdict and resolving at 2R gave passed 27.7% against
+vetoed 35.2% on SCALP (z -5.38) and 27.7% against 30.7% on SWING (z -2.19).
+The bars it discarded outperformed the ones it kept, and it was discarding
+38% of scalp firings to do it. A high-volume bar on a metal is often the move
+already spent; on crypto it confirms a breakout. OmniRoute keeps it hard,
+which is where that rule belongs. It is NOT inverted here — that would fit
+the sign of one instrument's sample.
 
 DATA. The app's existing gold chain, in order and all feature-checked:
 getXmGoldCandles (XM MT5 bridge) → getGoldCandles (spot proxy) →
@@ -2165,7 +2173,37 @@ terse status, and never launches a first-time scan on a global refresh.
               + (usedSlot ? '× the mean for THIS TIME OF DAY over the last ' + slotV.n + ' sessions'
                           : '× 20-bar mean — too little history to correct for the session');
     }
-    gates.push({ key:'participation', hard:false, pass: partOk, why: partWhy });
+    /* INFO, NOT A VETO — and that is a correction, not a loosening.
+
+       The comment above says participation is "CONDITIONAL on gold", and the
+       header says a hard volume gate "would silently disqualify" gold setups.
+       The code did not implement that intent: hard:false WITHOUT info:true
+       still vetoes in hgOmniGrade — test-info-gate-grading.mjs asserts exactly
+       that ("a hard:false gate with no info flag STILL vetoes"). So on any
+       feed that does publish volume, PAXG included, this was a full veto.
+
+       It was also pointing the wrong way. Split every gold firing by this
+       gate's own verdict and resolve at the 2R where T1 sits:
+
+         SCALP   passed 27.7% (n=2856)   vetoed 35.2% (n=1737)   z = -5.38
+         SWING   passed 27.7% (n=2330)   vetoed 30.7% (n=2039)   z = -2.19
+
+       Both horizons, thousands of samples, well outside noise: the bars this
+       gate threw away did BETTER than the ones it kept, and it was discarding
+       38% of scalp firings and 47% of swing firings to do it.
+
+       That is economically unsurprising for gold. A high-volume bar on a
+       metal is frequently the move already spent — a fix print, a data
+       release, an exhaustion candle — whereas crypto breakouts genuinely need
+       turnover behind them. The rule came from the crypto desk, where it
+       belongs, and does not transfer.
+
+       NOT INVERTED. Vetoing high volume instead would fit the sign of this
+       sample on one instrument, which is how a backtest edge gets
+       manufactured. The reading stays on the card, under "against:", and
+       stops standing trades aside. Whether low participation actually PAYS on
+       gold is a question for the forward log, not for this gate. */
+    gates.push({ key:'participation', hard:false, info:true, pass: partOk, why: partWhy });
 
     /* 4 — daily agreement */
     var he21 = x.htf ? fin(x.htf.e21) : NaN, he50 = x.htf ? fin(x.htf.e50) : NaN;
