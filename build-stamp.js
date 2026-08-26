@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v489',
-  pack: 'OMNIGOLD live spot level align',
-  built: '2026-08-26T17:15:00Z',
-  note: 'Scale plans from 0.15%/8pt drift; level-fresh uses marketPx; MARKET row on MP panel.'
+  version: 'hg-v491',
+  pack: 'OMNIGOLD scan coverage + gold engines',
+  built: '2026-08-26T20:15:00Z',
+  note: 'SCAN COVERAGE panel (55 mechanics fired/silent) + GOLD SCALP/SWING engine bridge each scan.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
