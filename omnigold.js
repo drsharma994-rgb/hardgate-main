@@ -3446,6 +3446,37 @@ terse status, and never launches a first-time scan on a global refresh.
      cleared R:R and every venue field that legitimately arrives as null went
      through here. fin() maps null/undefined/'' to NaN first. */
   function fmtPx(n){ var v = fin(n); return isFinite(v) ? v.toFixed(2) : '—'; }
+
+  function hgOgHorizonCfg(label){
+    var L = String(label || '').toUpperCase();
+    return (L === 'SWING') ? HORIZONS.swing : HORIZONS.scalp;
+  }
+
+  /* Plain readout under T1: where the target sits in R, points, %, and the
+     horizon window the desk uses to judge whether it is reachable. */
+  function hgOgTargetReadout(plan, horizonLabel){
+    if (!plan) return '';
+    try {
+      var e = fin(plan.entry), s = fin(plan.stop), t1 = fin(plan.t1);
+      var dir = String(plan.dir || '').toLowerCase();
+      if (!(e > 0) || !(t1 > 0) || (dir !== 'long' && dir !== 'short')) return '';
+      var risk = fin(plan.risk);
+      if (!(risk > 0) && isFinite(s)){
+        risk = (dir === 'long') ? (e - s) : (s - e);
+      }
+      if (!(risk > 0)) return '';
+      var rew = (dir === 'long') ? (t1 - e) : (e - t1);
+      if (!(rew > 0)) return '';
+      var t1R = fin(plan.t1R);
+      if (!(t1R > 0)) t1R = rew / risk;
+      var hz = hgOgHorizonCfg(horizonLabel);
+      var bars = hz.horizonBars || 24;
+      var tf = hz.tf || '1h';
+      var pct = (rew / e) * 100;
+      return 'T1 · ' + fmt(t1R, 1) + 'R · ' + rew.toFixed(0) + ' pts · '
+           + pct.toFixed(2) + '% · ' + bars + '×' + tf + ' window';
+    } catch (e){ return ''; }
+  }
   function fmt(n, d){ var v = fin(n); return isFinite(v) ? v.toFixed(d == null ? 2 : d) : '—'; }
 
   /* 62th, 23th, 2th. Ordinals are not "th" for everything. */
@@ -3758,7 +3789,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div class="hg-mp-grid">';
       h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(row.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
       h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
-      h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>take profit</u></div>';
+      h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: row.dir }, p), label) || 'take profit') + '</u></div>';
       h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>runner</u></div>';
       h += '</div>';
     } else {
@@ -4013,6 +4044,8 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
         +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
+      var t1Note = hgOgTargetReadout(Object.assign({ dir: c.dir }, c.plan), c.horizon);
+      if (t1Note) h += '<div class="dim og-t1-readout">' + esc(t1Note) + '</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
       /* The same levels in the reader's instrument. Only when the factor is
          real and the basis is worth mentioning — a broker-bridge feed, a
@@ -5205,9 +5238,11 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
-    window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;   /* the release level, testable */
+    window.hgOgTargetReadout = hgOgTargetReadout;
+    window.hgOgHorizonCfg = hgOgHorizonCfg;
     window.hgOgMpNoneWhy = hgOgMpNoneWhy;           /* the stand-aside copy, testable */
     window.hgOgTapeDir = hgOgTapeDir;
+    window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;
     window.hgOgDeskTape = hgOgDeskTape;
     window.hgOgTapeBannerHtml = hgOgTapeBannerHtml;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
