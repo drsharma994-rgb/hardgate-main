@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v486',
-  pack: 'OMNIGOLD spot-aligned levels',
-  built: '2026-08-26T16:15:00Z',
-  note: 'OMNIGOLD uses getXAUCandles (same as GOLD tabs) and scales proxy-feed plans to live spot before render — fixes wrong ENTRY/STOP/T1 on twelvedata/perp feeds.'
+  version: 'hg-v487',
+  pack: 'OMNIGOLD market vs entry honesty',
+  built: '2026-08-26T16:30:00Z',
+  note: 'Live spot anchor for level-fresh/dist; MOST PROBABLE hides far limit retests; MARKET vs entry note on cards.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
