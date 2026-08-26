@@ -136,8 +136,11 @@ console.log('\n== the bridge, which is the real fix, is still preferred ==');
   /* This change does not paper over the cause: the moment the XM bridge is
      configured the chain takes it first and the disclosure goes quiet. */
   ok(/getXmGoldCandles/.test(GOLD), 'the fetch chain still asks the XM bridge first');
-  const i = GOLD.indexOf('getXmGoldCandles');
-  const j = GOLD.indexOf('getGoldCandles');
+  const legacyStart = GOLD.indexOf('function hgOgFetchRowsLegacy');
+  const legacyEnd = GOLD.indexOf('function hgOgFetchRows', legacyStart + 1);
+  const legacy = legacyStart >= 0 ? GOLD.slice(legacyStart, legacyEnd) : GOLD;
+  const i = legacy.indexOf('getXmGoldCandles');
+  const j = legacy.indexOf('getGoldCandles');
   ok(i > 0 && j > 0 && i < j, 'before the spot proxy');
   ok(/xm_not_configured/.test(read('lib/xm-trader-fetch.mjs')),
      'and the bridge reports honestly when it has no configuration');

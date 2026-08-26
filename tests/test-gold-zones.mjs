@@ -143,8 +143,10 @@ console.log('\n== v417: the mechanic cards finally know where the zones are ==')
   const GOLD2 = read('omnigold.js');
   ok(/key:'zone-anchor', hard:false, info:true/.test(GOLD2),
      'zone-anchor is on the gold ledger, info-only — standing, never existence');
-  ok(/zoneCtx: zoneCtx/.test(GOLD2) && /opFn2\(rows, livePx, hgOgZoneLevels\(rows, livePx\)\)/.test(GOLD2),
+  ok(/zoneCtx: zoneCtx/.test(GOLD2) && /opFn2\(rows, zonePx, hgOgZoneLevels\(rows, zonePx\)\)/.test(GOLD2),
      'the scan computes the zones once per horizon and hands them to the ledger');
+  ok(/var zonePx = \(mktPx > 0\) \? mktPx : livePx/.test(GOLD2),
+     'zone engine prefers gold-api live spot over stale bar close');
 
   const W3 = boot(BASE.concat(['omnipresent.js']));
   const rows = goldTape(500);

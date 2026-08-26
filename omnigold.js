@@ -2103,7 +2103,13 @@ terse status, and never launches a first-time scan on a global refresh.
        was what was missing, and a diagnostic that misreports its own inputs
        sends the reader chasing the wrong absence. Three distinct reasons. */
     var lfOk = null, lfWhy = 'no live price supplied — freshness not judged', lfInfo = false;
-    var lfPx = x ? fin(x.livePx) : NaN;   /* x may be absent in old harnesses */
+    /* Prefer gold-api live spot when supplied — closed-bar livePx alone
+       leaves swing entries priced off a 4h print the market has left. */
+    var lfPx = NaN;
+    if (x){
+      if (isFinite(fin(x.marketPx)) && fin(x.marketPx) > 0) lfPx = fin(x.marketPx);
+      else lfPx = fin(x.livePx);
+    }
     if (isFinite(lfPx) && lfPx > 0 && !(plHas && plObj)){
       lfWhy = 'live price in hand (' + lfPx.toFixed(2) + ') but no plan to judge — see plan-levels';
     }
@@ -3358,12 +3364,13 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   /* Scale printed plans to live spot — mirrors goldscalp goldAlignLevelsToSpot. */
-  function hgOgAlignPlansToSpot(list, klineRef, liveRef){
+  function hgOgAlignPlansToSpot(list, klineRef, liveRef, minPct){
     if (!list || !list.length) return;
     klineRef = fin(klineRef); liveRef = fin(liveRef);
     if (!(klineRef > 0) || !(liveRef > 0)) return;
     var ratio = liveRef / klineRef;
-    if (Math.abs(ratio - 1) * 100 < 0.35) return;
+    var floorPct = (isFinite(fin(minPct)) && fin(minPct) > 0) ? fin(minPct) : 0.35;
+    if (Math.abs(ratio - 1) * 100 < floorPct) return;
     var i, c, p, keys;
     for (i = 0; i < list.length; i++){
       c = list[i];
@@ -3893,6 +3900,10 @@ terse status, and never launches a first-time scan on a global refresh.
             ? ' · WITH GOLD TAPE · gate blocked · not trade-ready'
             : ' · WITH GOLD TAPE · not a win probability.') + '</div>';
       h += '<div class="hg-mp-grid">';
+      var mktShow = fin(__og.spotAnchor);
+      if (mktShow > 0){
+        h += '<div><i>MARKET</i><b>' + fmtPx(mktShow) + '</b><u>live spot now</u></div>';
+      }
       h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>' + (String(row.dir).toLowerCase() === 'short' ? 'SELL ZONE' : 'BUY ZONE') + '</u></div>';
       h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
       h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: row.dir }, p), label) || 'take profit') + '</u></div>';
@@ -4330,10 +4341,7 @@ terse status, and never launches a first-time scan on a global refresh.
         okRows.push(rr);
       }
       rows = okRows;
-      /* Live market for freshness + distance: prefer gold-api anchor over the
-         last kline close (ORB can fire on a bar print while spot moved). */
-      var klinePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
-      var livePx = (shared.liveSpotPx > 0) ? fin(shared.liveSpotPx) : klinePx;
+      var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
       if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
       if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null, livePx: NaN };
 
@@ -4430,8 +4438,10 @@ terse status, and never launches a first-time scan on a global refresh.
          structure (best-effort: an absent engine reads UNCHECKED) */
       var zoneCtx = null;
       var opFn2 = gfn('opAssess');
+      var mktPx = (shared.liveSpotPx > 0) ? fin(shared.liveSpotPx) : NaN;
+      var zonePx = (mktPx > 0) ? mktPx : livePx;
       if (opFn2){
-        try { zoneCtx = opFn2(rows, livePx, hgOgZoneLevels(rows, livePx)); } catch (eZc){ zoneCtx = null; }
+        try { zoneCtx = opFn2(rows, zonePx, hgOgZoneLevels(rows, zonePx)); } catch (eZc){ zoneCtx = null; }
       }
       var extra = {
         htf: dailyFn ? dailyFn(rows) : null,
@@ -4439,7 +4449,7 @@ terse status, and never launches a first-time scan on a global refresh.
         yieldRows: shared.yieldRows || null,
         nowSec: shared.nowSec,
         adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled,
-        livePx: livePx, zoneCtx: zoneCtx,
+        livePx: livePx, marketPx: mktPx, zoneCtx: zoneCtx,
         /* for the spot-basis gate: the tokenised print, and which feed the
            desk itself is on (so it does not price PAXG against PAXG) */
         paxg: shared.paxg, srcId: got.source
@@ -4479,6 +4489,8 @@ terse status, and never launches a first-time scan on a global refresh.
       return Promise.resolve();
     }
     __og.busy = true;
+    __og.spotFactor = NaN;
+    __og.spotAnchor = NaN;
     ui.btn.disabled = true;
     ui.cards.innerHTML = '';
     ui.pool.innerHTML = '';
@@ -4572,26 +4584,40 @@ terse status, and never launches a first-time scan on a global refresh.
         var spotAlignNote = '';
         try {
           var sfFn = gfn('hgGoldLiveSpot');
-          var klineSpot = fin(res.scalp.livePx);
-          if (!(klineSpot > 0)) klineSpot = fin(res.swing.livePx);
+          /* Feed anchor: swing 4h close first (where SWING mechanics fire),
+             then scalp 1h — not the pre-drop forming tick. */
+          var klineSpot = NaN;
+          if (res.swing.rows && res.swing.rows.length){
+            klineSpot = fin(res.swing.rows[res.swing.rows.length - 1].c);
+          }
           if (!(klineSpot > 0) && res.scalp.rows && res.scalp.rows.length){
             klineSpot = fin(res.scalp.rows[res.scalp.rows.length - 1].c);
           }
+          if (!(klineSpot > 0)) klineSpot = fin(res.swing.livePx) || fin(res.scalp.livePx);
           var srcKey = res.scalp.source || res.swing.source;
-          if (sfFn && isFinite(klineSpot) && klineSpot > 0 && !hgOgSrcIsVenueNative(srcKey)){
-            var liveSpot = await Promise.race([
-              Promise.resolve(sfFn(klineSpot)),
-              new Promise(function(r2){ setTimeout(function(){ r2(NaN); }, 2500); })
-            ]);
-            if (isFinite(liveSpot) && liveSpot > 0){
-              __og.spotAnchor = liveSpot;
-              __og.spotFactor = liveSpot / klineSpot;
-              if (Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
-                hgOgAlignPlansToSpot(ranked, klineSpot, liveSpot);
-                res.scalp.livePx = liveSpot;
-                res.swing.livePx = liveSpot;
-                spotAlignNote = ' · levels scaled to live spot ~$' + liveSpot.toFixed(2)
-                              + ' (feed ~$' + klineSpot.toFixed(2) + ')';
+          if (sfFn && isFinite(klineSpot) && klineSpot > 0 && !hgOgSrcIsBroker(res.scalp.source)
+              && !hgOgSrcIsVenueNative(srcKey)){
+            var sfSpot = fin(shared.liveSpotPx);
+            if (!(sfSpot > 0)){
+              sfSpot = await Promise.race([
+                Promise.resolve(sfFn(klineSpot)),
+                new Promise(function(r2){ setTimeout(function(){ r2(NaN); }, 2500); })
+              ]);
+            }
+            var sfFeed = klineSpot;
+            if (isFinite(sfSpot) && sfSpot > 0){
+              __og.spotAnchor = sfSpot;
+              __og.spotFactor = sfSpot / sfFeed;
+              var driftPct = Math.abs(sfFeed / sfSpot - 1) * 100;
+              var driftPts = Math.abs(sfFeed - sfSpot);
+              /* 11 pts @ ~4590 is only 0.24% — still too far to place on a
+                 live chart; align from 0.15% or 8 pts (whichever comes first). */
+              if (driftPct >= 0.15 || driftPts >= 8){
+                hgOgAlignPlansToSpot(ranked, sfFeed, sfSpot, 0.15);
+                res.scalp.livePx = sfSpot;
+                res.swing.livePx = sfSpot;
+                spotAlignNote = ' · levels scaled to live spot ~$' + sfSpot.toFixed(2)
+                              + ' (feed ~$' + sfFeed.toFixed(2) + ')';
               }
             }
           }
@@ -4663,7 +4689,7 @@ terse status, and never launches a first-time scan on a global refresh.
             var spotFn = gfn('hgGoldLiveSpot');
             var srcKey = res.scalp.source || res.swing.source;
             if (!spotFn || !srcKey) return;
-            if (hgOgSrcIsVenueNative(srcKey)) return;
+            if (hgOgSrcIsBroker(srcKey)) return;
             if (spotAlignNote) return;   /* primary levels already scaled */
             var lastRow = (res.scalp.rows && res.scalp.rows.length)
                         ? res.scalp.rows[res.scalp.rows.length - 1]
