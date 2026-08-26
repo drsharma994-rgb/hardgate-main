@@ -5,13 +5,10 @@
   "lastRunAt": "2026-08-25T10:02:18.606Z",
   "ticket": {
     "long": {
-      "sym": "B-FARTCOIN_USDT",
-      "entry": 0.1869220319382865
+      "sym": "B-ENA_USDT",
+      "entry": 0.141
     },
-    "short": {
-      "sym": "XAU",
-      "entry": 4633.062879231965
-    }
+    "short": null
   },
   "sniper": {
     "key": "B-SUI_USDT@0.7669",
@@ -271,11 +268,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-26T08:09:16.768Z"
+    "at": "2026-08-26T09:03:16.709Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-26T08:09:16.769Z"
+    "at": "2026-08-26T09:03:16.710Z"
   },
   "degraded": {
     "count": 0,
@@ -297,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-26T08:09:17.054Z"
+    "at": "2026-08-26T09:03:17.046Z"
   },
   "bookFill": {
     "key": "u0|p0",
