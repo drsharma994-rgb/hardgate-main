@@ -5,28 +5,34 @@
   "lastRunAt": "2026-08-26T10:41:00.242Z",
   "ticket": {
     "long": {
-      "sym": "B-EDEN_USDT",
-      "entry": 0.0512660682106191
+      "sym": "B-SOL_USDT",
+      "entry": 96.18609794743685
     },
-    "short": {
-      "sym": "XAU",
-      "entry": 4633.062879231965
-    }
+    "short": null
   },
   "sniper": {
-    "key": "B-BTC_USDT@78100.1",
+    "key": "B-SAND_USDT@0.04037;B-STX_USDT@0.25667107989651056",
     "hits": [
       {
-        "sym": "B-BTC_USDT",
+        "sym": "B-STX_USDT",
         "dir": "long",
-        "entry": 78100.1,
-        "stop": 77710.17518944878,
-        "t1": 78748.8,
-        "lev": 80,
+        "entry": 0.25667107989651056,
+        "stop": 0.2501964395809286,
+        "t1": 0.2698,
+        "lev": 23,
+        "state": "APPROACHING"
+      },
+      {
+        "sym": "B-SAND_USDT",
+        "dir": "long",
+        "entry": 0.04037,
+        "stop": 0.03991128590558656,
+        "t1": 0.04165,
+        "lev": 45,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-26T11:13:01.391Z"
+    "at": "2026-08-26T12:53:40.764Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -271,11 +277,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-26T11:47:51.307Z"
+    "at": "2026-08-26T12:53:40.764Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-26T11:47:51.307Z"
+    "at": "2026-08-26T12:53:40.765Z"
   },
   "degraded": {
     "count": 0,
@@ -296,7 +302,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-26T11:47:51.666Z"
+    "at": "2026-08-26T12:53:41.052Z"
   },
   "bookFill": {
     "key": "u0|p0",
