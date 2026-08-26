@@ -252,6 +252,12 @@ terse status, and never launches a first-time scan on a global refresh.
   var OG_EXEC_MIN_N = 15;
   var OG_EXEC_WILSON_LO = 0.95;
   var OG_EXEC_WILSON_Z = 1.96;
+  /* SCALP VERDICT — pooled settled TICKET record across gold desks.
+     Wilson 95% lower ≥ 90% with enough settled trades. Lower bar than the
+     95% execute tier; still requires real forward history, not in-sample. */
+  var OG_SCALP_FWD_TABS = ['OMNIGOLD:SCALP', 'GOLDSCALP', 'SUPER:GOLD'];
+  var OG_VERDICT_SCALP_LO = 0.90;
+  var OG_VERDICT_MIN_N = 10;
 
   var FWD_MIN_JUDGE = 20;   // settled out-of-sample trades before it can conclude
   var MIN_SAMPLES = 20;
@@ -3963,26 +3969,74 @@ terse status, and never launches a first-time scan on a global refresh.
     return { source: 'scorecard-gold', wins: wins, samples: n, hit: wins / n, wilson: w };
   }
 
+  function hgOgFwdTicketStats(tab, mechanic){
+    try {
+      var w = W();
+      if (!w || typeof w.hgFwdStats !== 'function' || !tab) return null;
+      var st = w.hgFwdStats(tab, mechanic || null, true);
+      if (!st || !(fin(st.samples) > 0)) return null;
+      return st;
+    } catch (e){ return null; }
+  }
+
+  function hgOgMergeSettledEvidence(tabs, mechanic, dir){
+    tabs = tabs || [];
+    var wins = 0, losses = 0, sources = [], i, st;
+    for (i = 0; i < tabs.length; i++){
+      st = hgOgFwdTicketStats(tabs[i], mechanic);
+      if (!st) continue;
+      wins += fin(st.wins) || 0;
+      losses += fin(st.losses) || 0;
+      sources.push(tabs[i] + (mechanic ? ':' + mechanic : ' · all TICKETs'));
+    }
+    var settled = wins + losses;
+    if (!(settled > 0)) return null;
+    return {
+      source: sources.join(' + '),
+      sources: sources,
+      wins: wins,
+      losses: losses,
+      samples: settled,
+      hit: wins / settled,
+      wilson: hgOgWilsonHit(wins, settled),
+      pooled: true
+    };
+  }
+
   function hgOgSettledEvidence(row){
     if (!row) return null;
-    var tab = 'OMNIGOLD:' + String(row.horizon || 'SWING');
-    var fwd = hgOgFwdFor(tab, row.kind);
-    var out = null;
-    if (fwd && fwd.ticketOnly && fin(fwd.ticketOnly.samples) > 0){
-      var t = fwd.ticketOnly;
-      out = {
-        source: 'forward-ticket',
-        wins: fin(t.wins) || 0,
-        samples: fin(t.samples),
-        hit: fin(t.hit),
-        expR: fin(t.expR),
-        wilson: hgOgWilsonHit(t.wins, t.samples)
-      };
+    var horizon = String(row.horizon || 'SWING').toUpperCase();
+    var mechanic = row.kind || row.stratKey || row.strategy;
+    var tabs = (horizon === 'SCALP') ? OG_SCALP_FWD_TABS.slice()
+              : ['OMNIGOLD:SWING', 'GOLDSWING', 'SUPER:GOLD'];
+    var out = hgOgMergeSettledEvidence(tabs, mechanic, row.dir);
+    if (!out){
+      var tab = 'OMNIGOLD:' + (horizon === 'SCALP' ? 'SCALP' : 'SWING');
+      var fwd = hgOgFwdFor(tab, mechanic);
+      if (fwd && fwd.ticketOnly && fin(fwd.ticketOnly.samples) > 0){
+        var t = fwd.ticketOnly;
+        out = {
+          source: tab + ':' + mechanic,
+          wins: fin(t.wins) || 0,
+          samples: fin(t.samples),
+          hit: fin(t.hit),
+          expR: fin(t.expR),
+          wilson: hgOgWilsonHit(t.wins, t.samples)
+        };
+      }
     }
     var sc = hgOgScorecardGoldEvidence(row.dir);
     if (sc && sc.wilson){
       if (!out || sc.wilson.lo > (out.wilson ? out.wilson.lo : -1)){
         out = sc;
+      }
+    }
+    /* Desk-wide scalp pool when mechanic-specific history is thin. */
+    if (horizon === 'SCALP' && (!out || fin(out.samples) < OG_VERDICT_MIN_N)){
+      var desk = hgOgMergeSettledEvidence(OG_SCALP_FWD_TABS, null, row.dir);
+      if (desk && desk.wilson && (!out || desk.wilson.lo > (out.wilson ? out.wilson.lo : -1))){
+        desk.source = 'desk-pool · ' + desk.source;
+        out = desk;
       }
     }
     return out;
@@ -4076,6 +4130,154 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!host) return;
     try { host.innerHTML = hgOgSettledExecutePanelHtml(bag); }
     catch (eSe){ host.innerHTML = ''; }
+  }
+
+  function hgOgBridgeToVerdictCand(setup, label){
+    if (!setup || !setup.dir) return null;
+    if (!(isFinite(fin(setup.entry)) && isFinite(fin(setup.stop)) && isFinite(fin(setup.t1)))) return null;
+    var gradeA = (setup.grade === 'A' || setup.grade === 'clean' || setup.locked);
+    return {
+      horizon: 'SCALP',
+      kind: String(setup.stratKey || setup.strategy || 'GOLD-ENGINE').toUpperCase(),
+      dir: setup.dir,
+      plan: { entry: fin(setup.entry), stop: fin(setup.stop), t1: fin(setup.t1),
+              t2: isFinite(fin(setup.t2)) ? fin(setup.t2) : undefined },
+      grade: { ticket: gradeA },
+      engineSrc: label || 'gold-engine'
+    };
+  }
+
+  function hgOgCollectScalpVerdictCandidates(ranked, bridge){
+    var out = [], seen = {}, i, c, key;
+    for (i = 0; i < (ranked || []).length; i++){
+      c = ranked[i];
+      if (!c || String(c.horizon || '').toUpperCase() !== 'SCALP') continue;
+      if (!(c.grade && c.grade.ticket) || !c.plan) continue;
+      key = ogTradeKey(c);
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push(c);
+    }
+    if (bridge && bridge.ok && bridge.scalp){
+      var picks = [];
+      if (bridge.scalp.best) picks.push(bridge.scalp.best);
+      var rankedSc = bridge.scalp.ranked || [];
+      for (i = 0; i < Math.min(4, rankedSc.length); i++){
+        if (rankedSc[i] && rankedSc[i] !== bridge.scalp.best) picks.push(rankedSc[i]);
+      }
+      for (i = 0; i < picks.length; i++){
+        c = hgOgBridgeToVerdictCand(picks[i], 'GOLDSCALP engine');
+        if (!c || !(c.grade && c.grade.ticket)) continue;
+        key = ogTradeKey(c);
+        if (seen[key]) continue;
+        seen[key] = true;
+        out.push(c);
+      }
+    }
+    return out;
+  }
+
+  function hgOgPickScalpVerdict(ranked, bridge, tapeDir){
+    tapeDir = String(tapeDir || '').toLowerCase();
+    var pool = [], verdict = [], i, c, ev;
+    var cands = hgOgCollectScalpVerdictCandidates(ranked, bridge);
+    for (i = 0; i < cands.length; i++){
+      c = cands[i];
+      if (tapeDir === 'long' || tapeDir === 'short'){
+        if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
+      }
+      ev = hgOgSettledEvidence(c);
+      c.verdictEv = ev;
+      if (hgOgSettledExecuteOk(ev, OG_VERDICT_SCALP_LO, OG_VERDICT_MIN_N)) verdict.push(c);
+      else if (ev && ev.wilson) pool.push(c);
+    }
+    verdict.sort(function(a, b){
+      return (b.verdictEv.wilson.lo - a.verdictEv.wilson.lo)
+          || (b.verdictEv.samples - a.verdictEv.samples);
+    });
+    pool.sort(function(a, b){
+      return (b.verdictEv.wilson.lo - a.verdictEv.wilson.lo)
+          || (b.verdictEv.samples - a.verdictEv.samples);
+    });
+    return {
+      go: verdict[0] || null,
+      alternates: verdict.slice(1, 3),
+      bestBelow: pool.slice(0, 2),
+      minLo: OG_VERDICT_SCALP_LO,
+      minN: OG_VERDICT_MIN_N,
+      tabs: OG_SCALP_FWD_TABS.slice()
+    };
+  }
+
+  function hgOgScalpVerdictRowHtml(c, tier){
+    var p = c.plan, ev = c.verdictEv || c.settledEv;
+    var w = ev && ev.wilson;
+    var pct = w ? (w.p * 100).toFixed(0) : '—';
+    var lo = w ? (w.lo * 100).toFixed(0) : '—';
+    var hi = w ? (w.hi * 100).toFixed(0) : '—';
+    var src = c.engineSrc ? (' · ' + c.engineSrc) : '';
+    var h = '<div class="og-verdict-row' + (tier === 'go' ? ' og-verdict-go' : '') + '">';
+    h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir || '').toUpperCase())
+      + ' <span>SCALP · ' + esc(c.kind) + src + '</span></div>';
+    h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
+      + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
+      + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
+      + (tier === 'go' ? ' · <b>meets 90% verdict bar</b>' : ' · below 90% lower bound') + '</div>';
+    h += '<div class="hg-mp-grid">';
+    var mkt = fin(__og.spotAnchor);
+    if (mkt > 0) h += '<div><i>MARKET</i><b>' + fmtPx(mkt) + '</b><u>live spot</u></div>';
+    h += '<div><i>ENTRY</i><b>' + fmtPx(p.entry) + '</b><u>limit</u></div>';
+    h += '<div><i>STOP</i><b>' + fmtPx(p.stop) + '</b><u>invalidation</u></div>';
+    h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: c.dir }, p), 'SCALP') || 'target') + '</u></div>';
+    h += '</div>';
+    if (tier === 'go' && !c.engineSrc){
+      h += '<div class="row" style="margin-top:8px">'
+        + '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
+        + '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function hgOgScalpVerdictPanelHtml(bag){
+    bag = bag || { go: null, alternates: [], bestBelow: [], minLo: OG_VERDICT_SCALP_LO, minN: OG_VERDICT_MIN_N };
+    var h = '<section class="hg-mp og-scalp-verdict" data-og-verdict="1" aria-label="Scalp verdict">';
+    h += '<div class="hg-mp-eye">SCALP VERDICT · 90% SETTLED</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>pooled TICKET history · '
+      + (bag.tabs ? bag.tabs.join(' + ') : OG_SCALP_FWD_TABS.join(' + '))
+      + ' + scorecard gold · Wilson lower ≥ ' + (bag.minLo * 100).toFixed(0)
+      + '% · min ' + bag.minN + ' settled</span></div>';
+    if (bag.go){
+      h += '<div class="hg-mp-note" style="border-left:3px solid var(--long,#16a34a);padding-left:10px">'
+        + '<b>VERDICT: GO</b> — this scalp setup\'s settled TICKET record across gold desks clears the 90% bar. '
+        + 'Measured on trades already cleared, not a win-probability forecast.</div>';
+      h += hgOgScalpVerdictRowHtml(bag.go, 'go');
+      if (bag.alternates && bag.alternates.length){
+        h += '<div class="hg-mp-note">Also cleared the bar:</div>';
+        var ai;
+        for (ai = 0; ai < bag.alternates.length; ai++) h += hgOgScalpVerdictRowHtml(bag.alternates[ai], 'go');
+      }
+    } else {
+      h += '<div class="hg-mp-note warn"><b>VERDICT: NO GO</b> — no current scalp setup (OMNIGOLD TICKET or GOLD SCALP engine grade-A) '
+        + 'has ' + bag.minN + '+ settled TICKETs with Wilson 95% lower bound ≥ '
+        + (bag.minLo * 100).toFixed(0) + '% across pooled gold forward logs. '
+        + 'Run GOLD SCALP / SUPER GOLD regularly to build history; scorecard gold LOG also counts.</div>';
+      if (bag.bestBelow && bag.bestBelow.length){
+        h += '<div class="hg-mp-note">Best available settled edge on current scalp candidates (still below 90% lower bound):</div>';
+        var bi;
+        for (bi = 0; bi < bag.bestBelow.length; bi++) h += hgOgScalpVerdictRowHtml(bag.bestBelow[bi], 'below');
+      }
+    }
+    h += '<div class="hg-mp-note dim">The 95% SETTLED EXECUTE panel below is a stricter tier. This verdict pools mechanic + desk-wide gold TICKET history so thin single-tab records still count when the combined log is strong.</div>';
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgPaintScalpVerdict(ui, bag){
+    var host = ui && ui.verdict;
+    if (!host) return;
+    try { host.innerHTML = hgOgScalpVerdictPanelHtml(bag); }
+    catch (eV){ host.innerHTML = ''; }
   }
 
   /* ==================== scan coverage + gold-tab engines ==================== */
@@ -4286,6 +4488,7 @@ terse status, and never launches a first-time scan on a global refresh.
     hgOgPaintSettledExecute(ui, hgOgPickSettledExecutes(ogCollapsed || [], deskTape));
     return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
       hgOgPaintGoldEngines(ui, bridge);
+      hgOgPaintScalpVerdict(ui, hgOgPickScalpVerdict(ogCollapsed || [], bridge, deskTape));
     });
   }
 
@@ -4866,6 +5069,7 @@ terse status, and never launches a first-time scan on a global refresh.
     ui.pool.innerHTML = '';
     if (ui.mp) ui.mp.innerHTML = '';
     if (ui.settledExec) ui.settledExec.innerHTML = '';
+    if (ui.verdict) ui.verdict.innerHTML = '';
     if (ui.coverage) ui.coverage.innerHTML = '';
     if (ui.goldEngines) ui.goldEngines.innerHTML = '';
 
@@ -5577,6 +5781,7 @@ terse status, and never launches a first-time scan on a global refresh.
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
       + '<div id="ogMp" style="margin-top:12px"></div>'
+      + '<div id="ogVerdict" style="margin-top:12px"></div>'
       + '<div id="ogSettledExec" style="margin-top:12px"></div>'
       + '<div id="ogCoverage" style="margin-top:12px"></div>'
       + '<div id="ogGoldEngines" style="margin-top:12px"></div>'
@@ -5607,6 +5812,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var ui = {
       btn: el.querySelector('#ogRun'), stat: el.querySelector('#ogStat'),
       mp: el.querySelector('#ogMp'),
+      verdict: el.querySelector('#ogVerdict'),
       settledExec: el.querySelector('#ogSettledExec'),
       coverage: el.querySelector('#ogCoverage'),
       goldEngines: el.querySelector('#ogGoldEngines'),
@@ -5788,6 +5994,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgSettledExecuteOk = hgOgSettledExecuteOk;
     window.hgOgPickSettledExecutes = hgOgPickSettledExecutes;
     window.hgOgSettledExecutePanelHtml = hgOgSettledExecutePanelHtml;
+    window.hgOgMergeSettledEvidence = hgOgMergeSettledEvidence;
+    window.hgOgPickScalpVerdict = hgOgPickScalpVerdict;
+    window.hgOgScalpVerdictPanelHtml = hgOgScalpVerdictPanelHtml;
+    window.hgOgPaintScalpVerdict = hgOgPaintScalpVerdict;
     window.hgOgBuildScanCoverage = hgOgBuildScanCoverage;
     window.hgOgScanCoveragePanelHtml = hgOgScanCoveragePanelHtml;
     window.hgOgRunGoldTabEngines = hgOgRunGoldTabEngines;
