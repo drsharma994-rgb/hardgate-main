@@ -91,9 +91,9 @@ console.log('\n== it runs the whole desk, not a token few ==');
 
   ok(rep && rep.summary, 'a report came back');
   ok(rep.summary.engines >= 25, 'at least 25 engines were run (' + rep.summary.engines + ')');
-  ok(rep.sections.length === 6, 'six sections: gates, pine, structure, vetoes, formation, measured');
+  ok(rep.sections.length === 7, 'seven sections: gates, pine, structure, vetoes, formation, omniinfo, measured');
   const ids = rep.sections.map(s => s.id).join(',');
-  ok(ids === 'gates,pine,structure,gatesveto,formation,measured', 'section order is stable (' + ids + ')');
+  ok(ids === 'gates,pine,structure,gatesveto,formation,omniinfo,measured', 'section order is stable (' + ids + ')');
   const pine = rep.sections.filter(s => s.id === 'pine')[0];
   ok(pine.rows.length === 10, 'all ten pine detectors are reported (' + pine.rows.length + ')');
   ok(rep.indicators.length >= 10, 'the indicator block is populated (' + rep.indicators.length + ' reads)');
@@ -479,6 +479,37 @@ console.log('\n== the SEARCH tab is wired to it ==');
   ok(/no 4h candles came back/.test(html), 'and says so plainly when the feed gives nothing');
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   ok(/\.\/contract-report\.js/.test(sw), 'the service worker caches the new module');
+}
+
+console.log('\n== OMNIROUTE INFO reads (vol target · CVD · liquidation map) ==');
+{
+  const ctx = boot(ENGINES);
+  ctx.hgOmniVolTarget = function(rows){
+    return { sigmaNow: 1.2, sigmaTarget: 2.5, mult: 2.0, overBudget: false,
+      note: 'realized vol 1.20%/bar vs a 2.50% budget — size 2.00x' };
+  };
+  ctx.hgOmniCvd = function(){ return { delta: 1200, source: 'candles', dir: 'long', bars: 30,
+    note: 'CVD +1200 candle-approximated close-location delta over 30 bars (no trade tape)' }; };
+  ctx.hgOmniLiqMap = function(){
+    return { clusters: [{ price: 50100, weight: 4 }], tol: 50 };
+  };
+  const r4 = gen(260, 50000, 'pullback');
+  const rep = ctx.hgContractReportRun({ sym: 'BTCUSD', rows4h: r4,
+    rows1h: gen(260, 50000, 'pullback'), rows15m: gen(260, 50000, 'pullback'),
+    ticker: { symbol: 'BTCUSD', fundingPct: 0.01, mark: r4[r4.length - 1].c } });
+  const sec = rep.sections.filter(s => s.id === 'omniinfo')[0];
+  ok(!!sec && sec.rows.length === 3, 'omniinfo section carries three INFO rows');
+  const names = sec.rows.map(r => r.name).join(' ');
+  ok(/Vol targeting/.test(names), 'vol targeting row is present');
+  ok(/CVD/.test(names), 'CVD row is present');
+  ok(/Liquidation map/.test(names), 'liquidation map row is present');
+  ok(sec.rows.every(r => r.state !== 'unchecked'), 'all three ran when omniroute helpers are loaded');
+  const bare = boot([]);
+  const thin = bare.hgContractReportRun({ sym: 'X', rows4h: gen(20, 100, 'up'), rows1h: [], rows15m: [],
+    ticker: { symbol: 'X' } });
+  const om = thin.sections.filter(s => s.id === 'omniinfo')[0];
+  ok(om && om.rows.length === 3, 'omniinfo rows still appear when helpers are missing');
+  ok(om.rows.every(r => r.state === 'unchecked'), 'missing omniroute.js reads UNCHECKED, not absent');
 }
 
 console.log('\n' + passed + ' passed, 0 failed');
