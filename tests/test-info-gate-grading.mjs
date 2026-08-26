@@ -194,6 +194,13 @@ console.log('\n== the four gold context gates carry the flag ==');
                            discarding 38% of scalp firings. A high-volume bar on
                            a metal is often the move already spent. */
                         'participation',
+                        /* fill-risk reads the ORDER, not the account: how far
+                           the plan's limit sits from market and the measured
+                           never-fill rate at that distance (about 1 in 5 past
+                           0.25R on both horizons, 1 in 3 past 1R). A far
+                           limit is a worse ORDER, not a forbidden trade, so
+                           it argues and never vetoes. */
+                        'fill-risk',
                         /* gold's structural-placement read (v417): a setup at
                            a multi-source zone vs one in no-man's-land — it
                            argues standing, never existence */

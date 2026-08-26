@@ -2387,6 +2387,60 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'cost-drag', hard:false, pass: cost, why: costWhy });
 
+    /* FILL RISK — a limit away from market is not a position until it fills.
+
+       Nothing on the card said so, and it is not a small effect. Replaying
+       every gold setup the desk forms (near setups only, the ones the picker
+       shows) and asking whether price ever traded the plan's entry inside the
+       horizon, on 1,000 PAXG bars per horizon:
+
+         |entry-market|   SCALP never fills   SWING never fills
+           0-0.1R              5.3%                0.5%
+           0.1-0.25R          14.0%                7.0%
+           0.25-0.5R          21.3%               18.7%
+           0.5-1R             15.8%               20.3%
+           1R+                25.9%               33.6%
+
+       Roughly one in ten shown setups overall never trades, and past a
+       quarter-R from market it is one in five. The same replay also showed
+       why this must be DISCLOSED and not assumed away: counting away-limits
+       as if they always filled flipped a -0.285R population to +0.401R on
+       paper, because the limits that never fill are disproportionately the
+       trades where price ran off favourably without you.
+
+       INFO, not a veto. Fill risk is a property of the ORDER, not of the
+       setup's quality — the setup may be excellent and simply require the
+       patience to miss it one time in five. The read abstains at or through
+       market (the order fills now; there is nothing to argue about) and
+       argues AGAINST only past 0.25R, where the measured never-fill rate
+       crosses one in five on both horizons. */
+    var frOk = null, frWhy = 'no plan supplied — fill risk not judged';
+    if (plHas && plObj && isFinite(fin(plObj.entry)) && isFinite(fin(plObj.stop))){
+      var frE = fin(plObj.entry), frS = fin(plObj.stop), frPx = fin(x.livePx);
+      var frRisk = Math.abs(frE - frS);
+      if (!isFinite(frPx) || !(frRisk > 0)){
+        frWhy = 'no live price this scan — fill risk not judged';
+      } else {
+        var frAway = (hit.dir === 'long') ? (frE < frPx - 1e-9) : (frE > frPx + 1e-9);
+        var frGapR = Math.abs(frE - frPx) / frRisk;
+        if (!frAway){
+          frWhy = 'entry at or through market — the order fills immediately';
+        } else if (frGapR <= 0.25){
+          frOk = true;
+          frWhy = 'limit ' + Math.abs(frE - frPx).toFixed(2) + ' pts (' + frGapR.toFixed(2)
+                + 'R) from market — near; measured, about 1 in 10 such limits never fills inside the horizon';
+        } else {
+          frOk = false;
+          frWhy = 'limit ' + Math.abs(frE - frPx).toFixed(2) + ' pts (' + frGapR.toFixed(2)
+                + 'R) from market — measured on gold, at this distance about 1 in '
+                + (frGapR >= 1 ? '3' : '5') + ' never fills inside the horizon; the trade may simply not happen';
+        }
+      }
+    } else if (plHas && !plObj){
+      frWhy = 'plan declined — nothing to fill';
+    }
+    gates.push({ key:'fill-risk', hard:false, info:true, pass: frOk, why: frWhy });
+
     /* 12 — measured edge: this mechanic's own walk-forward on THIS horizon,
        judged by significance against the breakeven rate for this R floor. */
     var minRr = isFinite(fin(x.minRr)) ? fin(x.minRr) : 2;
