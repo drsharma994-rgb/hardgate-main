@@ -125,10 +125,11 @@ console.log('\n== the tape rule itself is untouched ==');
      'hgOgDeskTape still lets short win outright');
   ok(/if \(!aligned\.length\) return null;/.test(SRC),
      'hgOgPickFor still refuses to invent the other side');
-  ok(typeof W.hgOgPickHeldFor === 'function', 'hgOgPickHeldFor is exported');
+  ok(typeof W.hgOgPickWatchFor === 'function', 'hgOgPickWatchFor is exported');
+  ok(typeof W.hgOgHeldQueueHtml === 'function', 'hgOgHeldQueueHtml is exported');
 }
 
-console.log('\n== held tickets render levels in MOST PROBABLE ==');
+console.log('\n== against-tape LONG never appears as MOST PROBABLE setup ==');
 {
   const heldRow = {
     dir: 'long', kind: 'SPRING', horizon: 'SCALP',
@@ -136,26 +137,44 @@ console.log('\n== held tickets render levels in MOST PROBABLE ==');
     plan: { entry: 6010, stop: 5980, t1: 6070, t2: 6120, rr1: 2 },
     gates: [], consensus: { nAgree: 2 }
   };
-  const html = W.hgOgMostProbablePanelHtml(null, null, 'short', { n: 1, level: 6025, from: 6018, tf: '1h' }, heldRow, null);
-  ok(/HELD/.test(html), 'panel mentions HELD');
-  ok(/6010\.00/.test(html) && /5980\.00/.test(html) && /6070\.00/.test(html),
-     'ENTRY/STOP/T1 grid shows held ticket levels');
-  ok(/not trade-ready/.test(html), 'held copy says not trade-ready');
-  ok(!/WITH GOLD TAPE/.test(html.split('STAND ASIDE')[0] || html) || /AGAINST GOLD TAPE/.test(html),
-     'held row is labeled against tape, not with tape');
+  const html = W.hgOgMostProbablePanelHtml(null, null, 'short', { n: 1, level: 6025, from: 6018, tf: '1h' }, null, null);
+  ok(!/6010\.00/.test(html), 'against-tape LONG entry is not in MOST PROBABLE');
+  ok(/HELD queue|Against-tape tickets/.test(html) || /going down/.test(html),
+     'copy explains tape conflict without selling the long');
+
+  const watchShort = {
+    dir: 'short', kind: 'ROUND-MAGNET', horizon: 'SWING',
+    grade: { ticket: false, evaluated: 43, total: 63, vetoes: ['consensus'] },
+    plan: { entry: 6010, stop: 6050, t1: 5930, t2: 5850, rr1: 2 },
+    gates: [], consensus: { nAgree: 1 }
+  };
+  const html2 = W.hgOgMostProbablePanelHtml(null, null, 'short', null, null, watchShort);
+  ok(/6010\.00/.test(html2), 'WITH-tape SHORT veto shows levels when tape is down');
+  ok(/VETO|gate blocked/.test(html2), 'and is labeled gate-blocked');
+  ok(/SHORT/.test(html2), 'direction matches down tape');
 }
 
-console.log('\n== hgOgPickHeldFor returns against-tape ticket only ==');
+console.log('\n== hgOgPickWatchFor returns with-tape veto only ==');
 {
   const rows = [
-    { dir: 'short', horizon: 'SCALP', grade: { ticket: true }, plan: { entry: 1, stop: 2, t1: 3 }, distAtr: 0.5, kind: 'A' },
-    { dir: 'long', horizon: 'SCALP', grade: { ticket: true }, plan: { entry: 10, stop: 9, t1: 12 }, distAtr: 0.3, kind: 'B' }
+    { dir: 'long', horizon: 'SCALP', grade: { ticket: true }, plan: { entry: 10, stop: 9, t1: 12 }, distAtr: 0.3, kind: 'B' },
+    { dir: 'short', horizon: 'SCALP', grade: { ticket: false, vetoes: ['x'] }, plan: { entry: 1, stop: 2, t1: 3 }, distAtr: 0.5, kind: 'A' }
   ];
-  const aligned = W.hgOgPickFor(rows, 'SCALP', 'short');
-  ok(aligned && aligned.dir === 'short', 'pick for short tape is short');
-  const held = W.hgOgPickHeldFor(rows, 'SCALP', 'short');
-  ok(held && held.dir === 'long', 'held pick is the long against short tape');
-  ok(held.heldAgainstTape === true, 'held flag is set');
+  ok(W.hgOgPickFor(rows, 'SCALP', 'short') === null, 'no short ticket');
+  const watch = W.hgOgPickWatchFor(rows, 'SCALP', 'short');
+  ok(watch && watch.dir === 'short', 'watch pick is SHORT with down tape');
+  ok(watch.tapeWatch === true, 'tapeWatch flag set');
+  ok(W.hgOgPickWatchFor(rows, 'SCALP', 'short') !== W.hgOgPickFor(rows, 'SCALP', 'long'), 'watch respects tape side');
+}
+
+console.log('\n== held queue lists against-tape tickets without full cards ==');
+{
+  const q = W.hgOgHeldQueueHtml([
+    { horizon: 'SCALP', kind: 'THREE-BAR', dir: 'long', plan: { entry: 6010, stop: 5980, t1: 6070 } }
+  ], 'short');
+  ok(/HELD AGAINST TAPE/.test(q), 'queue header');
+  ok(/THREE-BAR LONG/.test(q), 'names the held mechanic');
+  ok(/6010\.00/.test(q), 'dim level line only');
 }
 
 console.log('\nomnigold held tickets: ' + passed + ' checks passed');
