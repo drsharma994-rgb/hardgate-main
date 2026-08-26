@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v487',
-  pack: 'OMNIGOLD market vs entry honesty',
-  built: '2026-08-26T16:30:00Z',
-  note: 'Live spot anchor for level-fresh/dist; MOST PROBABLE hides far limit retests; MARKET vs entry note on cards.'
+  version: 'hg-v488',
+  pack: 'OMNIGOLD CI parity restore',
+  built: '2026-08-26T17:00:00Z',
+  note: 'Restore level-fresh kline livePx + spotFactor reset order; basis broker guard; legacy fetch test scope.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

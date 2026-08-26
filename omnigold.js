@@ -4330,10 +4330,7 @@ terse status, and never launches a first-time scan on a global refresh.
         okRows.push(rr);
       }
       rows = okRows;
-      /* Live market for freshness + distance: prefer gold-api anchor over the
-         last kline close (ORB can fire on a bar print while spot moved). */
-      var klinePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
-      var livePx = (shared.liveSpotPx > 0) ? fin(shared.liveSpotPx) : klinePx;
+      var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
       if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
       if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null, livePx: NaN };
 
@@ -4479,6 +4476,8 @@ terse status, and never launches a first-time scan on a global refresh.
       return Promise.resolve();
     }
     __og.busy = true;
+    __og.spotFactor = NaN;
+    __og.spotAnchor = NaN;
     ui.btn.disabled = true;
     ui.cards.innerHTML = '';
     ui.pool.innerHTML = '';
@@ -4578,20 +4577,22 @@ terse status, and never launches a first-time scan on a global refresh.
             klineSpot = fin(res.scalp.rows[res.scalp.rows.length - 1].c);
           }
           var srcKey = res.scalp.source || res.swing.source;
-          if (sfFn && isFinite(klineSpot) && klineSpot > 0 && !hgOgSrcIsVenueNative(srcKey)){
-            var liveSpot = await Promise.race([
+          if (sfFn && isFinite(klineSpot) && klineSpot > 0 && !hgOgSrcIsBroker(res.scalp.source)
+              && !hgOgSrcIsVenueNative(srcKey)){
+            var sfSpot = await Promise.race([
               Promise.resolve(sfFn(klineSpot)),
               new Promise(function(r2){ setTimeout(function(){ r2(NaN); }, 2500); })
             ]);
-            if (isFinite(liveSpot) && liveSpot > 0){
-              __og.spotAnchor = liveSpot;
-              __og.spotFactor = liveSpot / klineSpot;
-              if (Math.abs(klineSpot / liveSpot - 1) * 100 > 0.5){
-                hgOgAlignPlansToSpot(ranked, klineSpot, liveSpot);
-                res.scalp.livePx = liveSpot;
-                res.swing.livePx = liveSpot;
-                spotAlignNote = ' · levels scaled to live spot ~$' + liveSpot.toFixed(2)
-                              + ' (feed ~$' + klineSpot.toFixed(2) + ')';
+            var sfFeed = klineSpot;
+            if (isFinite(sfSpot) && sfSpot > 0){
+              __og.spotAnchor = sfSpot;
+              __og.spotFactor = sfSpot / sfFeed;
+              if (Math.abs(sfFeed / sfSpot - 1) * 100 > 0.5){
+                hgOgAlignPlansToSpot(ranked, sfFeed, sfSpot);
+                res.scalp.livePx = sfSpot;
+                res.swing.livePx = sfSpot;
+                spotAlignNote = ' · levels scaled to live spot ~$' + sfSpot.toFixed(2)
+                              + ' (feed ~$' + sfFeed.toFixed(2) + ')';
               }
             }
           }
@@ -4663,7 +4664,7 @@ terse status, and never launches a first-time scan on a global refresh.
             var spotFn = gfn('hgGoldLiveSpot');
             var srcKey = res.scalp.source || res.swing.source;
             if (!spotFn || !srcKey) return;
-            if (hgOgSrcIsVenueNative(srcKey)) return;
+            if (hgOgSrcIsBroker(srcKey)) return;
             if (spotAlignNote) return;   /* primary levels already scaled */
             var lastRow = (res.scalp.rows && res.scalp.rows.length)
                         ? res.scalp.rows[res.scalp.rows.length - 1]
