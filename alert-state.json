@@ -5,28 +5,25 @@
   "lastRunAt": "2026-08-25T10:02:18.606Z",
   "ticket": {
     "long": {
-      "sym": "B-STX_USDT",
-      "entry": 0.2636444957086751
+      "sym": "B-ZRO_USDT",
+      "entry": 1.1457079243814279
     },
-    "short": {
-      "sym": "B-PEOPLE_USDT",
-      "entry": 0.008412667285033601
-    }
+    "short": null
   },
   "sniper": {
-    "key": "B-PEOPLE_USDT@0.008412667285033601",
+    "key": "B-TAO_USDT@230.25031920262572",
     "hits": [
       {
-        "sym": "B-PEOPLE_USDT",
-        "dir": "short",
-        "entry": 0.008412667285033601,
-        "stop": 0.008582215741799702,
-        "t1": 0.008,
-        "lev": 28,
-        "state": "IN ZONE"
+        "sym": "B-TAO_USDT",
+        "dir": "long",
+        "entry": 230.25031920262572,
+        "stop": 224.21521411338162,
+        "t1": 244.96,
+        "lev": 22,
+        "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-26T04:56:58.635Z"
+    "at": "2026-08-26T05:37:24.229Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -271,11 +268,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-26T04:56:58.635Z"
+    "at": "2026-08-26T05:37:24.229Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-26T04:56:58.636Z"
+    "at": "2026-08-26T05:37:24.229Z"
   },
   "degraded": {
     "count": 0,
@@ -297,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-26T04:56:58.916Z"
+    "at": "2026-08-26T05:37:24.592Z"
   },
   "bookFill": {
     "key": "u0|p0",
