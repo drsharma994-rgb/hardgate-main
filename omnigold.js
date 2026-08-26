@@ -3381,6 +3381,53 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   }
 
+  /* Live spot anchor (gold-api.com) — bounded, never stalls a scan. */
+  function hgOgResolveLiveSpot(klineHint){
+    var sfFn = gfn('hgGoldLiveSpot');
+    if (!sfFn) return Promise.resolve(NaN);
+    return Promise.race([
+      Promise.resolve().then(function(){ return sfFn(klineHint); }).catch(function(){ return NaN; }),
+      new Promise(function(r){ setTimeout(function(){ r(NaN); }, 2500); })
+    ]).then(function(sp){ return (isFinite(fin(sp)) && fin(sp) > 0) ? fin(sp) : NaN; });
+  }
+
+  function hgOgRefreshDistAtr(list, livePx, rows){
+    if (!list || !list.length || !(fin(livePx) > 0)) return;
+    var atrN = atrOf(rows, 14);
+    if (!(isFinite(atrN) && atrN > 0)) return;
+    var i, c, setupPx;
+    for (i = 0; i < list.length; i++){
+      c = list[i];
+      if (!c) continue;
+      c.livePx = fin(livePx);
+      setupPx = fin(c.level);
+      if (!isFinite(setupPx) && c.plan) setupPx = fin(c.plan.entry);
+      if (isFinite(setupPx)) c.distAtr = Math.abs(fin(livePx) - setupPx) / atrN;
+    }
+  }
+
+  /* How far the setup entry sits from the live market — limit retest vs at-market. */
+  function hgOgEntryMarketNote(row, plan){
+    var mkt = fin(__og.spotAnchor) || fin(row && row.livePx);
+    var e = plan && fin(plan.entry);
+    if (!(mkt > 0) || !(e > 0)) return '';
+    var gap = mkt - e;
+    var pts = Math.abs(gap);
+    if (pts < 0.5) return 'MARKET ' + fmtPx(mkt) + ' · at entry';
+    var dir = String(row.dir || '').toLowerCase();
+    if (dir === 'short'){
+      return 'MARKET ' + fmtPx(mkt) + (gap < 0
+        ? ' · +' + pts.toFixed(0) + ' pts below entry · limit retest · not a market short'
+        : ' · +' + pts.toFixed(0) + ' pts above entry');
+    }
+    if (dir === 'long'){
+      return 'MARKET ' + fmtPx(mkt) + (gap > 0
+        ? ' · +' + pts.toFixed(0) + ' pts above entry · limit retest · not a market long'
+        : ' · +' + pts.toFixed(0) + ' pts below entry');
+    }
+    return 'MARKET ' + fmtPx(mkt) + ' · ' + pts.toFixed(0) + ' pts from entry';
+  }
+
   /* ==================== anticipation: the next gold levels ==================== */
 
   /* The desk's own levels, fed into the shared zone engine on equal terms:
@@ -3851,6 +3898,8 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div><i>T1</i><b>' + fmtPx(p.t1) + '</b><u>' + esc(hgOgTargetReadout(Object.assign({ dir: row.dir }, p), label) || 'take profit') + '</u></div>';
       h += '<div><i>T2</i><b>' + (isFinite(fin(p.t2)) ? fmtPx(p.t2) : '—') + '</b><u>runner</u></div>';
       h += '</div>';
+      var mktNote = hgOgEntryMarketNote(row, p);
+      if (mktNote) h += '<div class="hg-mp-note dim">' + esc(mktNote) + '</div>';
     } else {
       h += '<div class="hg-mp-head">' + esc(label) + ' · STAND ASIDE <span>no tape-aligned ticket</span></div>';
       h += '<div class="hg-mp-note">' + esc(hgOgMpNoneWhy(tape, heldMeta)) + '</div>';
@@ -4017,6 +4066,9 @@ terse status, and never launches a first-time scan on a global refresh.
         if (pool[i].distAtr <= GOLD_NEAR_ATR) near.push(pool[i]);
       }
     }
+    /* A far limit level is not the desk's "most probable" read — stand aside
+       instead of showing ORB @ 4633 when gold prints 4597. */
+    if (anyDist && !near.length) return null;
     if (anyDist && near.length) pool = near;
     pool = pool.slice().sort(function(a, b){
       var sa = hgOgBalanceScore(a, tapeDir);
@@ -4105,6 +4157,8 @@ terse status, and never launches a first-time scan on a global refresh.
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       var t1Note = hgOgTargetReadout(Object.assign({ dir: c.dir }, c.plan), c.horizon);
       if (t1Note) h += '<div class="dim og-t1-readout">' + esc(t1Note) + '</div>';
+      var mktNote = hgOgEntryMarketNote(c, c.plan);
+      if (mktNote) h += '<div class="dim og-market-note">' + esc(mktNote) + '</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
       /* The same levels in the reader's instrument. Only when the factor is
          real and the basis is worth mentioning — a broker-bridge feed, a
@@ -4276,9 +4330,10 @@ terse status, and never launches a first-time scan on a global refresh.
         okRows.push(rr);
       }
       rows = okRows;
-      /* The forming candle is dropped for the indicators, but its close IS the
-         current price — keep it so the ledger can judge level freshness. */
-      var livePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
+      /* Live market for freshness + distance: prefer gold-api anchor over the
+         last kline close (ORB can fire on a bar print while spot moved). */
+      var klinePx = rows.length ? fin(rows[rows.length - 1].c) : NaN;
+      var livePx = (shared.liveSpotPx > 0) ? fin(shared.liveSpotPx) : klinePx;
       if (dropFn) rows = dropFn(rows, cfg.tf);        // closed candles only
       if (!rows.length) return { cfg: cfg, rows: [], source: got.source, cands: [], pooled: null, livePx: NaN };
 
@@ -4433,6 +4488,7 @@ terse status, and never launches a first-time scan on a global refresh.
     ui.stat.textContent = 'reading macro + session context…';
     var macroFn = gfn('getGoldMacro') || gfn('getGoldMacroCached');
     var shared = { killzone: null, macro: null, yieldRows: null, nowSec: Date.now() / 1000, news: null,
+                   liveSpotPx: NaN,
                    /* ONE extra request per scan, shared by both horizons, for the
                       spot-basis gate. NaN on any failure or timeout — the gate
                       then reads "no PAXG print this scan" rather than waiting or
@@ -4449,9 +4505,9 @@ terse status, and never launches a first-time scan on a global refresh.
         shared.macro = m || null;
         shared.yieldRows = (m && m.us10yRows) ? m.us10yRows : null;
         shared.nowSec = Date.now() / 1000;
-        /* Bounded to 2.5s and swallowed, for the same reason the spot-factor
-           fetch below is: a context read must never be able to stall a scan. */
-        return Promise.race([
+        return hgOgResolveLiveSpot(NaN).then(function(sp){
+          if (isFinite(sp) && sp > 0) shared.liveSpotPx = sp;
+          return Promise.race([
           Promise.resolve().then(function(){
             var bkFn = gfn('binanceKlines');
             return bkFn ? bkFn('PAXGUSDT', '1h', 2) : null;
@@ -4462,6 +4518,7 @@ terse status, and never launches a first-time scan on a global refresh.
             if (pk && pk.length) shared.paxg = fin(pk[pk.length - 1].c);
           } catch (ePk){ shared.paxg = NaN; }
           return scanHorizon(HORIZONS.scalp, shared, ui);
+        });
         });
       })
       .then(function(scalp){
@@ -4539,6 +4596,12 @@ terse status, and never launches a first-time scan on a global refresh.
             }
           }
         } catch (eSf){}
+        if (!(fin(__og.spotAnchor) > 0) && fin(shared.liveSpotPx) > 0) __og.spotAnchor = fin(shared.liveSpotPx);
+        var mktPx = fin(__og.spotAnchor) || fin(shared.liveSpotPx);
+        if (mktPx > 0){
+          hgOgRefreshDistAtr(ranked, mktPx, (res.scalp.rows && res.scalp.rows.length)
+            ? res.scalp.rows : (res.swing.rows || []));
+        }
 
         __og.snap = { at: Date.now(), rows: ranked, scalp: res.scalp.pooled, swing: res.swing.pooled };
         /* Bars kept for the R/horizon grid — it re-runs the walk-forward on
@@ -5322,6 +5385,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgHorizonCfg = hgOgHorizonCfg;
     window.hgOgAlignPlansToSpot = hgOgAlignPlansToSpot;
     window.hgOgFetchRows = hgOgFetchRows;
+    window.hgOgResolveLiveSpot = hgOgResolveLiveSpot;
+    window.hgOgRefreshDistAtr = hgOgRefreshDistAtr;
+    window.hgOgEntryMarketNote = hgOgEntryMarketNote;
     window.hgOgMpNoneWhy = hgOgMpNoneWhy;           /* the stand-aside copy, testable */
     window.hgOgTapeDir = hgOgTapeDir;
     window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;

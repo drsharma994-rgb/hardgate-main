@@ -83,4 +83,27 @@ console.log('\n== tiny drift is a no-op ==');
   ok(card.plan.entry === 4600, 'entry unchanged');
 }
 
+console.log('\n== far VETO watch is not MOST PROBABLE ==');
+{
+  const W = boot();
+  const far = { horizon: 'SCALP', kind: 'ORB', dir: 'short',
+    grade: { ticket: false, vetoes: ['x'] },
+    plan: { entry: 4633.59, stop: 4699.3, t1: 4502.17 }, distAtr: 2.4 };
+  const near = { horizon: 'SCALP', kind: 'MMOVE', dir: 'short',
+    grade: { ticket: false, vetoes: ['y'] },
+    plan: { entry: 4598, stop: 4660, t1: 4470 }, distAtr: 0.5 };
+  ok(W.hgOgPickWatchFor([far], 'SCALP', 'short') === null, 'ORB 2.4×ATR off market stays out of MP');
+  const p = W.hgOgPickWatchFor([near, far], 'SCALP', 'short');
+  ok(p && p.plan.entry === 4598, 'near watch still shown (' + (p && p.plan.entry) + ')');
+}
+
+console.log('\n== entry note names market vs limit retest ==');
+{
+  const W = boot();
+  const note = W.hgOgEntryMarketNote({ dir: 'short', livePx: 4597 }, { entry: 4633.59 });
+  ok(/4597/.test(note), 'names market (' + note + ')');
+  ok(/limit retest/.test(note), 'calls out limit retest');
+  ok(/37/.test(note), 'names point gap');
+}
+
 console.log('\nomnigold feed align: ' + passed + ' checks passed');
