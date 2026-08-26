@@ -6,7 +6,7 @@
   "ticket": {
     "long": {
       "sym": "B-EDEN_USDT",
-      "entry": 0.051297886392437285
+      "entry": 0.0512660682106191
     },
     "short": {
       "sym": "XAU",
@@ -271,18 +271,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-26T11:13:01.392Z"
+    "at": "2026-08-26T11:47:51.307Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-26T11:13:01.392Z"
+    "at": "2026-08-26T11:47:51.307Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-26T09:58:06.626Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -297,7 +296,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-26T11:13:01.691Z"
+    "at": "2026-08-26T11:47:51.666Z"
   },
   "bookFill": {
     "key": "u0|p0",
