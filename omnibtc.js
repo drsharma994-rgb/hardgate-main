@@ -451,6 +451,9 @@ a global hard refresh.
       try{ html += W.hgStrategyTradeDetailHtml(r, { scanner: 'omnibtc', kind: r.engine }); }catch(e2){}
     }
     html += hgObtcOmniInfoHtml(omniInfo);
+    if (gfn('hgSetupSolidityChipHtml')){
+      try{ html += '<div style="margin-top:6px">' + W.hgSetupSolidityChipHtml(r) + '</div>'; }catch(eS){}
+    }
     if (clean){
       html += '<div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">';
       if (gfn('bookBtnHTML')){
@@ -655,28 +658,39 @@ a global hard refresh.
           }
         }catch(eVi){}
       }
+      var winRep = null;
+      var omniInfo = [];
+      if (pick && pick.row && reports.length){
+        winRep = reports.filter(function(r){ return r && hgObtcIsBtc(r.sym) && r.sym === pick.row.sym; })[0] || reports[0];
+        if (winRep && winRep.indicators) indicators = winRep.indicators;
+        if (winRep && winRep.sections){
+          var osec = winRep.sections.filter(function(s){ return s.id === 'omniinfo'; })[0];
+          if (osec && osec.rows) omniInfo = osec.rows;
+        }
+      }
       if (pick && pick.row){
         var match = all.filter(function(c){
           return c.sym === pick.row.sym && c.dir === pick.row.dir
             && c.entry === pick.row.entry && c.stop === pick.row.stop;
         })[0];
         winnerRows = match && match._rows;
+        if (omniInfo.length){
+          omniInfo.forEach(function(r){
+            var det = String(r.detail || '');
+            if (/Vol targeting/.test(r.name || '')) pick.row.omniVolOverBudget = /over budget/i.test(det);
+            if (/CVD/.test(r.name || '')) pick.row.omniCvdWith = (r.state === 'signal');
+            else if (/CVD/.test(r.name || '') && r.state === 'idle' && /against/.test(det)) pick.row.omniCvdWith = false;
+            if (/Liquidation map/.test(r.name || '')) pick.row.omniLiqStopCluster = /stop sits inside/i.test(det);
+            else if (/Liquidation map/.test(r.name || '') && /fuel toward/i.test(det)) pick.row.omniLiqFuel = true;
+          });
+        }
+        if (gfn('hgSetupSolidityApply')) W.hgSetupSolidityApply(pick.row, { asset: 'crypto' });
         if (gfn('hgStrategyRefine') && winnerRows && winnerRows.length){
           try{
             W.hgStrategyRefine(pick.row, winnerRows, {
               scanner: 'omnibtc', kind: pick.row.engine || 'setup'
             });
           }catch(eRef){}
-        }
-      }
-      var winRep = null;
-      var omniInfo = [];
-      if (pick && reports.length){
-        winRep = reports.filter(function(r){ return r && hgObtcIsBtc(r.sym) && r.sym === pick.row.sym; })[0] || reports[0];
-        if (winRep && winRep.indicators) indicators = winRep.indicators;
-        if (winRep && winRep.sections){
-          var osec = winRep.sections.filter(function(s){ return s.id === 'omniinfo'; })[0];
-          if (osec && osec.rows) omniInfo = osec.rows;
         }
       }
       var nClean = all.filter(function(c){ return c.clean; }).length;

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v477',
-  pack: 'SEARCH full report + OMNIBTC — OMNIROUTE INFO parity',
-  built: '2026-08-26T08:20:00Z',
-  note: 'Contract report (SEARCH → FULL REPORT) now runs vol targeting, CVD and liquidation map INFO reads beside every other engine. OMNIBTC passes 1H + 15m into hgOmniEvaluate, logs quiet OMNIROUTE passes honestly, shows the coverage matrix, and surfaces the three INFO reads on the winner card. G1–G7 and live-trading-off unchanged.'
+  version: 'hg-v478',
+  pack: 'Setup solidity — SOLID/GOOD/WATCH rank + book gate',
+  built: '2026-08-26T08:35:00Z',
+  note: 'Unified hgSetupSolidityScore for crypto + gold: gates, post-gate, R:R, flow, gold grade/tally, OMNI INFO. Ranks MOST PROBABLE and gold leads by solidity; BOOK vetoes WEAK rows unless forceBook. Chips on MP panel + OMNIBTC. G1–G7 unchanged.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

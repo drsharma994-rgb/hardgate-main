@@ -404,6 +404,22 @@ async function addToBook(opts){
         return { ok: false, veto: true, reasons: ['LIVE MODE: ' + (liveGate.reasons || []).join(' · ')] };
       }
     }
+    if (!opts.forceBook && typeof W.hgSetupSolidityBookOk === 'function'){
+      var solidRow = {
+        sym: opts.sym, dir: opts.dir, entry: opts.entry, stop: opts.stop, t1: opts.t1,
+        clean: opts.clean || opts.tier === 'clean', gatesPassed: opts.gatesPassed,
+        postGateUnchecked: opts.postGateUnchecked, postGateChecked: opts.postGateChecked,
+        near: opts.near, nearClean: opts.nearClean, grade: opts.grade, tally: opts.tally,
+        rr: opts.rr, formationScore: opts.formationScore, flowOk: opts.flowOk,
+        solidityScore: opts.solidityScore, solidityBookOk: opts.solidityBookOk
+      };
+      if (!W.hgSetupSolidityBookOk(solidRow)){
+        var ss = typeof W.hgSetupSolidityScore === 'function' ? W.hgSetupSolidityScore(solidRow) : null;
+        return { ok: false, veto: true,
+          reasons: ['SOLIDITY — ' + (ss && ss.summary ? ss.summary : 'setup not solid enough for book')
+            + ' (pass forceBook to override)'] };
+      }
+    }
     if (body.t1 == null || !isFinite(body.t1)){
       var risk = Math.abs(body.entry - body.stop);
       body.t1 = body.dir === 'short' ? body.entry - risk : body.entry + risk;
