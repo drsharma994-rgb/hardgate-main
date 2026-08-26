@@ -6,7 +6,7 @@
   "ticket": {
     "long": {
       "sym": "B-TLM_USDT",
-      "entry": 0.0014718306832042622
+      "entry": 0.0014714670468406257
     },
     "short": null
   },
@@ -268,18 +268,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-26T01:52:41.589Z"
+    "at": "2026-08-26T03:06:27.848Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-26T01:52:41.590Z"
+    "at": "2026-08-26T03:06:27.849Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-26T01:52:41.590Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -294,7 +293,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-26T01:52:41.894Z"
+    "at": "2026-08-26T03:06:28.193Z"
   },
   "bookFill": {
     "key": "u0|p0",
