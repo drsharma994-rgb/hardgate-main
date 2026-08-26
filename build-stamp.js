@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v484',
-  pack: 'OMNIGOLD tape-aligned setups only in MOST PROBABLE',
-  built: '2026-08-26T13:10:00Z',
-  note: 'When gold tape is DOWN, MOST PROBABLE shows SHORT (with-tape) reads only — never LONG held tickets as setups. VETO SHORT levels shown as gate-blocked watch. Against-tape tickets moved to HELD queue list.'
+  version: 'hg-v485',
+  pack: 'OMNIGOLD T1 readout — 2R · pts · horizon window',
+  built: '2026-08-26T14:15:00Z',
+  note: 'OMNIGOLD cards + MOST PROBABLE show T1 context: 2.0R, point distance, % move, and 24×1h / 20×4h reach window. Clarifies scalp target math vs MMOVE projection.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

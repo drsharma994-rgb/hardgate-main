@@ -165,4 +165,40 @@ console.log('\n== the arithmetic the fix rests on ==');
      'harder hit rate while reporting an easier one');
 }
 
+console.log('\n== T1 readout on cards names R, pts, and horizon window ==');
+{
+  const ctx = bootOg();
+  const plan = { dir: 'short', entry: 4635.05, stop: 4698.85, t1: 4507.44, risk: 63.8, t1R: 2 };
+  const s = ctx.hgOgTargetReadout(plan, 'SCALP');
+  ok(/T1 · 2\.0R/.test(s), 'names 2.0R (' + s + ')');
+  ok(/128 pts/.test(s), 'names point distance (' + s + ')');
+  ok(/24×1h window/.test(s), 'names scalp horizon (' + s + ')');
+  const sw = ctx.hgOgTargetReadout(plan, 'SWING');
+  ok(/20×4h window/.test(sw), 'swing horizon differs (' + sw + ')');
+  const html = ctx.hgOgMostProbablePanelHtml(null, null, 'short', null, {
+    dir: 'short', kind: 'MMOVE', horizon: 'SCALP',
+    grade: { ticket: false, evaluated: 50, total: 53, vetoes: ['x'] },
+    plan: plan, gates: [], consensus: { nAgree: 0 }
+  }, null);
+  ok(/24×1h window/.test(html), 'MOST PROBABLE T1 cell carries the readout');
+}
+
+function bootOg(){
+  const ctx = { console, Math, Date, isFinite, isNaN, parseFloat, parseInt, JSON, Array, Object,
+                Number, String, Promise, RegExp, setTimeout, clearTimeout, Float64Array, Infinity, NaN };
+  ctx.window = ctx; ctx.globalThis = ctx; ctx.HG_tabs = [];
+  ctx.localStorage = { getItem: () => null, setItem(){}, removeItem(){} };
+  ctx.document = { createElement: () => ({ style: {}, innerHTML: '', appendChild(){}, setAttribute(){},
+                    querySelector: () => null, querySelectorAll: () => [] }),
+                   getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+                   head: { appendChild(){} }, documentElement: { appendChild(){} }, addEventListener(){} };
+  vm.createContext(ctx);
+  for (const f of ['indicators.js','indicators2.js','fixpack14-core.js','hg-mechanics.js','hg-forward.js',
+                   'plans.js','hg-gates.js','hg-plan.js','structure-levels.js','best-levels.js',
+                   'gold-best-levels.js','regime.js','goldind.js','pinegoldmath.js','omniroute.js','omnigold.js']){
+    vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  }
+  return ctx;
+}
+
 console.log('\nomnigold T1 R: ' + passed + ' checks passed · plan and measurement share one constant');
