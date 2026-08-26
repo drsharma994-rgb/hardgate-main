@@ -3675,12 +3675,62 @@ terse status, and never launches a first-time scan on a global refresh.
     });
   }
 
-  function hgOgMpNoneWhy(tape){
+  /* The price a CLOSED bar must print for hgOgTapeDir(rows) to read `want`.
+     Mirrors that function exactly rather than approximating it: 'long' needs
+     close above EMA21 AND (EMA21 over EMA50 OR rising versus five bars back),
+     so when the stack is not yet up the bar must clear the older close too.
+     NaN when it cannot be stated. The level moves as the EMA does — it is a
+     reading of now, not a standing order. */
+  function hgOgTapeFlipLevel(rows, want){
+    try{
+      if (!rows || rows.length < 55) return NaN;
+      var closes = closesOf(rows);
+      if (closes.length < 55) return NaN;
+      var e21 = emaOf(closes, 21), e50 = emaOf(closes, 50);
+      var ago = closes[closes.length - 6];
+      if (!isFinite(e21) || !isFinite(e50) || !isFinite(ago)) return NaN;
+      if (want === 'long')  return (e21 > e50) ? e21 : Math.max(e21, ago);
+      if (want === 'short') return (e21 < e50) ? e21 : Math.min(e21, ago);
+      return NaN;
+    }catch(e){ return NaN; }
+  }
+
+  /* WHY THIS SAYS MORE THAN "STANDING ASIDE".
+
+     The desk was telling the reader that gold is going down and a long is not
+     the setup. True, and it left out the two things the reader actually needs:
+     how many tickets are being HELD, and what would release them. From the
+     outside, a desk holding four cleared longs 0.35% below its trigger looks
+     exactly like a desk that found nothing. Reported as "still no trade" when
+     the honest answer was "four trades, waiting on one level".
+
+     Nothing here loosens the tape rule. That rule is the best-evidenced thing
+     on this desk — firings that agree with it hit 37.4% against 24.0% for
+     those that do not, z +9.79 on the scalp horizon — so the setups stay held.
+     They are simply no longer held in silence. */
+  function hgOgMpNoneWhy(tape, held){
+    var base;
     if (tape === 'short')
-      return 'gold is going down — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
-    if (tape === 'long')
-      return 'gold is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
-    return 'nothing on this horizon cleared the ledger this scan. Standing aside is the position.';
+      base = 'gold is going down — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
+    else if (tape === 'long')
+      base = 'gold is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
+    else
+      base = 'nothing on this horizon cleared the ledger this scan. Standing aside is the position.';
+    if (!held || !held.n) return base;
+    var side = (tape === 'short') ? 'LONG' : 'SHORT';
+    var s = base + ' ' + held.n + ' ticket' + (held.n === 1 ? '' : 's')
+          + ' cleared the ledger and ' + (held.n === 1 ? 'is' : 'are') + ' HELD — all '
+          + side + ' while the tape reads ' + String(tape).toUpperCase() + '.';
+    if (isFinite(fin(held.level)) && isFinite(fin(held.from)) && fin(held.from) > 0){
+      var lvl = fin(held.level), from = fin(held.from);
+      var pct = Math.abs(lvl - from) / from * 100;
+      s += ' They release if a closed ' + (held.tf || '1h') + ' bar prints '
+        +  (tape === 'short' ? 'above ' : 'below ') + lvl.toFixed(2)
+        +  ' (' + (lvl >= from ? '+' : '') + (lvl - from).toFixed(2) + ', '
+        +  pct.toFixed(2) + '% from ' + from.toFixed(2) + ')'
+        +  ' — that level moves with the EMA, so it is a reading of now.';
+    }
+    return s;
   }
 
   function hgOgMpHorizonHtml(label, pick, tape){
@@ -3713,13 +3763,13 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
-  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape){
+  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held){
     tape = String(tape || '').toLowerCase();
     var any = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
     var tier = any ? 'clean' : 'forming';
     var note = any
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
-      : hgOgMpNoneWhy(tape);
+      : hgOgMpNoneWhy(tape, held);
     var h = '<section class="hg-mp" data-hg-mp="omnigold" data-og-mp="1" data-tier="' + tier + '" aria-label="Most probable gold setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
     h += '<div class="hg-mp-head">XAUUSD';
@@ -3734,7 +3784,7 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
-  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag){
+  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
     try {
@@ -3742,7 +3792,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omnigold', mpBag || [], tape || null, host);
     } catch (eMp) {}
     try {
-      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape);
+      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held);
       var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
       if (!dual) return;
       if (oldMp) oldMp.outerHTML = dual;
@@ -4515,7 +4565,32 @@ terse status, and never launches a first-time scan on a global refresh.
           var mpRow = hgOgMpRow(ogCollapsed[i]);
           if (mpRow) mpBag.push(mpRow);
         }
-        hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag);
+        /* Tickets the tape is holding: cleared the whole ledger, carry a plan,
+           and point the other way. Counted from the COLLAPSED list so several
+           mechanics on one set of levels count as the one trade they are. */
+        var ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf };
+        try {
+          if (deskTape === 'long' || deskTape === 'short'){
+            for (var hj = 0; hj < ogCollapsed.length; hj++){
+              var hc = ogCollapsed[hj];
+              if (hc && hc.plan && hc.grade && hc.grade.ticket
+                  && String(hc.dir || '').toLowerCase() !== deskTape) ogHeld.n++;
+            }
+            /* Name the level on whichever horizon is actually blocking. Scalp
+               is checked first: it is the faster of the two and the one a
+               reader watching a 1h chart can act on. */
+            var blockRows = (scalpTape === deskTape) ? (res.scalp && res.scalp.rows)
+                                                     : (res.swing && res.swing.rows);
+            ogHeld.tf = (scalpTape === deskTape) ? HORIZONS.scalp.tf : HORIZONS.swing.tf;
+            var wantDir = (deskTape === 'short') ? 'long' : 'short';
+            if (blockRows && blockRows.length){
+              ogHeld.level = hgOgTapeFlipLevel(blockRows, wantDir);
+              ogHeld.from = fin(blockRows[blockRows.length - 1].c);
+            }
+          }
+        } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
+        __og.held = ogHeld;
+        hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld);
         if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
       })
       .catch(function(err){
@@ -5032,6 +5107,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
+    window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;   /* the release level, testable */
+    window.hgOgMpNoneWhy = hgOgMpNoneWhy;           /* the stand-aside copy, testable */
     window.hgOgTapeDir = hgOgTapeDir;
     window.hgOgDeskTape = hgOgDeskTape;
     window.hgOgTapeBannerHtml = hgOgTapeBannerHtml;
