@@ -2,31 +2,31 @@
   "delta": "EDENUSD|short",
   "coindcx": "B-HYPE_USDT|short",
   "gold": null,
-  "lastRunAt": "2026-08-25T10:02:18.606Z",
+  "lastRunAt": "2026-08-26T10:41:00.242Z",
   "ticket": {
     "long": {
-      "sym": "B-TRUMP_USDT",
-      "entry": 2.184
+      "sym": "B-ZRO_USDT",
+      "entry": 1.1402233068609766
     },
     "short": {
       "sym": "XAU",
-      "entry": 4633.062879231965
+      "entry": 4625.890676298326
     }
   },
   "sniper": {
-    "key": "B-SUI_USDT@0.7669",
+    "key": "B-POL_USDT@0.11840981186378817",
     "hits": [
       {
-        "sym": "B-SUI_USDT",
-        "dir": "short",
-        "entry": 0.7669,
-        "stop": 0.7752284365700188,
-        "t1": 0.7523,
-        "lev": 46,
+        "sym": "B-POL_USDT",
+        "dir": "long",
+        "entry": 0.11840981186378817,
+        "stop": 0.1162519725389544,
+        "t1": 0.12165,
+        "lev": 30,
         "state": "IN ZONE"
       }
     ],
-    "at": "2026-08-26T07:26:36.480Z"
+    "at": "2026-08-26T10:41:00.257Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -271,11 +271,11 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-26T09:58:06.625Z"
+    "at": "2026-08-26T10:41:00.258Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-26T09:58:06.625Z"
+    "at": "2026-08-26T10:41:00.258Z"
   },
   "degraded": {
     "count": 0,
@@ -297,7 +297,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-26T09:58:06.851Z"
+    "at": "2026-08-26T10:41:00.492Z"
   },
   "bookFill": {
     "key": "u0|p0",
