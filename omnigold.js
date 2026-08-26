@@ -40,16 +40,29 @@ pools are measured and reported apart — never merged into one flattering
 number.
 
 HOW MANY MECHANICS, AND WHERE THEY COME FROM. OG_MECHANICS is the single
-source of truth and currently holds 48. Six are OmniRoute's, consumed from
+source of truth and currently holds 55. Six are OmniRoute's, consumed from
 its exports. Four are the classic gold desk setups described just below.
-Twenty-four more were added in later rounds from the shared hg-mechanics
-library and gold-specific structure work. The last fourteen come from
+Thirty more were added in later rounds from the shared hg-mechanics library
+and gold-specific session/structure work. The last fifteen come from
 goldind.js and pinegoldmath.js — about ninety gold functions that were being
 loaded on every scan while this desk called two of them. See the block above
 hgOgIchiKumo for which of those ninety became mechanics, which stayed as
 gates, and why: the dividing line is whether a read is a pure function of
 bars, because the walk-forward replays over candle prefixes and anything
 needing live depth or funding can never earn a record at all.
+
+WHAT IS DELIBERATELY NOT WIRED, so nobody re-derives it:
+  goldOpeningRange   its box is ONE hour and it needs two bars inside it.
+                     This desk runs 1h and 4h bars, so the box holds one bar
+                     or none and the function returns null on every scan.
+                     Verified on both horizons; it needs 15m data to work.
+  goldRangeBound     duplicates regime-fit, which already asks the same
+                     family-aware question (a fade wants a ranging tape, a
+                     continuation wants a trending one) off detectRegime.
+  book / CVD /       calculateOrderBookImbalance, validateDomLiquidity,
+  funding reads      validateOBWithCVD, evaluateFundingRate — none can be
+                     replayed over candles, and spot gold has no funding at
+                     all. Nothing on this desk pretends otherwise.
 
 EVERY MECHANIC IS REGISTERED IN THREE PLACES — the live detect pass, the
 walk-forward backtest map, and OG_MECHANICS. tests/test-omnigold-full-cover.mjs
@@ -218,7 +231,7 @@ terse status, and never launches a first-time scan on a global refresh.
                       'ICHI-KUMO','STOCHRSI-TURN','CCI-EXTREME','RIBBON-PULLBACK',
                       'HA-FLIP','VWAP-BAND','PD-EQUILIBRIUM','ER-IGNITION',
                       'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
-                      'MFI-SQUAT','DI-CROSS'];
+                      'MFI-SQUAT','DI-CROSS','FVG-HVN'];
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false };
 
@@ -490,6 +503,7 @@ terse status, and never launches a first-time scan on a global refresh.
     d = hgOgOuRevert(rows);        if (d) out.push(d);
     d = hgOgMfiSquat(rows);        if (d) out.push(d);
     d = hgOgDiCross(rows);         if (d) out.push(d);
+    d = hgOgFvgHvn(rows);          if (d) out.push(d);
     return out;
   }
 
@@ -1462,6 +1476,39 @@ terse status, and never launches a first-time scan on a global refresh.
     return null;
   }
 
+  /* FVG-HVN. goldind's v2 fair-value gap: a three-bar imbalance that ALSO
+     sits on a high-volume node. goldFVGV2 applies that filter itself through
+     goldFVGHasHVNSupport, building the profile with goldVolumeProfile when
+     none is handed in — so this one mechanic is what puts all three of those
+     functions to work.
+
+     DISTINCT FROM FVG-FILL, AND MEASURABLY SO. The obvious objection is that
+     the desk already trades imbalances. It does, and they are not the same
+     trade: across 300 synthetic tapes FVG-FILL fired 40 times, this fired 21,
+     and they landed on the same bar 3 times. FVG-FILL trades price returning
+     INTO an old unfilled gap; this trades a FRESH gap that opened where volume
+     was already transacting, so the level has a reason to hold beyond its own
+     geometry. Two mechanics on one idea would be double-counting, which this
+     file has cut a gate for before — an 87% disjoint firing set is not that. */
+  function hgOgFvgHvn(rows){
+    var f = gfn('goldFVGV2');
+    if (!f || !rows || rows.length < 60) return null;
+    var g = null;
+    /* goldFVGV2 builds a volume profile over its whole input when none is
+       supplied, so it carries the same O(n)-per-bar cost as the rest of the
+       library. Bounded like every other call here — see the note on ogTail. */
+    try { g = f(ogTail(rows, 300)); } catch (e) { return null; }
+    if (!g || !g.trigger) return null;
+    var lv = fin(g.anchor);
+    if (!isFinite(lv) || (g.dir !== 'long' && g.dir !== 'short')) return null;
+    var bot = fin(g.bottom), top = fin(g.top);
+    var span = (isFinite(bot) && isFinite(top))
+             ? (' ' + bot.toFixed(2) + '–' + top.toFixed(2)) : '';
+    return { kind:'FVG-HVN', dir: g.dir, level: lv,
+             why:'fresh ' + (g.dir === 'long' ? 'bullish' : 'bearish') + ' imbalance'
+               + span + ' opened on a high-volume node' };
+  }
+
   /* ==================== consensus across mechanics ====================
 
      THE DEFECT THIS EXISTS FOR: on 42% of tapes the desk graded a LONG
@@ -1541,7 +1588,11 @@ terse status, and never launches a first-time scan on a global refresh.
     'SWEEP-V2':'SWEEP',
     /* An unmitigated order block is an unfilled inefficiency being revisited,
        which is FVG-FILL's idea with a different name for the zone. */
-    'OB-RETEST':'IMBALANCE'
+    'OB-RETEST':'IMBALANCE',
+    /* Same family as FVG-FILL by construction — both trade an unfilled
+       inefficiency, so consensus must not count them as two independent
+       votes even though they fire on different bars. */
+    'FVG-HVN':'IMBALANCE'
   };
   /* COLLAPSE FIRST, THEN COUNT — AND LET THE CLEARED ONE KEEP THE CARD.
 
@@ -2925,6 +2976,90 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     gates.push({ key:'premium-discount', hard:false, info:true, pass: pdG, why: pdWhy });
 
+    /* SEASONALITY — a weak prior, reported as one.
+
+       goldind's own note ends "context only, not a vote", and this gate keeps
+       it that way: info, never a veto, and NEUTRAL months abstain rather than
+       agreeing. The read is keyed to the TRIGGER BAR's timestamp, not to
+       Date.now(), so a replayed setup is judged by the month it fired in
+       rather than the month the replay was run in. */
+    var seaG = null, seaWhy = 'seasonal context unavailable (goldind.js not loaded)';
+    var seaFn = gfn('goldSeason');
+    if (seaFn){
+      try {
+        var seaSec = (lastBar && isFinite(fin(lastBar.t))) ? fin(lastBar.t) : fin(x.nowSec);
+        if (!isFinite(seaSec)){
+          seaWhy = 'no timestamp on the trigger bar — season not read';
+        } else {
+          var sea = seaFn(seaSec * 1000);
+          if (!sea || !isFinite(sea.month)){
+            seaWhy = 'season could not be read from the trigger bar';
+          } else if (sea.bias === 'STRONG'){
+            seaG = (hit.dir === 'long');
+            seaWhy = 'Jan–Feb, historically gold’s strongest stretch'
+                   + (seaG ? ' — agrees with this long' : ' — against this short (context, not a veto)');
+          } else if (sea.bias === 'CONSOLIDATION'){
+            /* Spring consolidation favours fades and argues against
+               continuation. A trend mechanic here is not wrong, just
+               unsupported by the calendar — which is why this is info. */
+            seaG = reversion ? true : false;
+            seaWhy = 'spring/early-summer, historically a consolidation stretch'
+                   + (reversion ? ' — a fade suits a consolidating month'
+                                : ' — against a continuation (context, not a veto)');
+          } else {
+            seaWhy = 'no strong seasonal bias this month — the calendar abstains';
+          }
+        }
+      } catch (eSea){ seaG = null; seaWhy = 'season threw: ' + ((eSea && eSea.message) || eSea); }
+    }
+    gates.push({ key:'gold-season', hard:false, info:true, pass: seaG, why: seaWhy });
+
+    /* SPOT BASIS — tokenised gold against the desk's own feed.
+
+       PAXG trading at a premium to spot XAU means crypto-side demand is
+       paying up for gold; a discount means the opposite. It is a real read and
+       it is LIVE-ONLY: the walk-forward replays one candle series, and there
+       is no retained paired PAXG/spot history to replay against, so this can
+       never earn an in-sample record. That is exactly why it is a gate and not
+       a mechanic — the same rule that keeps goldind's book and funding reads
+       off the mechanic list.
+
+       SKIPPED when the desk is already reading PAXG. The fetch chain falls
+       back to binanceKlines('PAXGUSDT') when XM and the spot proxy both fail,
+       and pricing PAXG against itself would return a flat PARITY that looks
+       like a measurement. Saying so is better than printing a zero. */
+    var basG = null, basWhy = 'gold basis unavailable';
+    var basFn = gfn('calculateGoldSpotBasis');
+    var basSrc = String((x && x.srcId) || '');
+    var basPaxg = fin(x && x.paxg), basFeed = fin(x && x.livePx);
+    if (basSrc.indexOf('paxg') !== -1){
+      basWhy = 'the desk is reading PAXG itself, so there is no second series to price it against';
+    } else if (!basFn){
+      basWhy = 'gold basis unavailable (goldind.js not loaded)';
+    } else if (!isFinite(basPaxg) || !isFinite(basFeed)){
+      basWhy = 'no PAXG print this scan — basis not read';
+    } else {
+      try {
+        var bas = basFn(basPaxg, basFeed);
+        var basPct = fin(bas && bas.basisPercent);
+        var basTal = fin(bas && bas.basisTally);
+        if (!isFinite(basPct)){
+          basWhy = 'basis could not be computed from this scan’s prints';
+        } else if (!isFinite(basTal) || basTal === 0){
+          basWhy = 'PAXG within 0.15% of the feed (' + basPct.toFixed(2)
+                 + '%) — at parity, no basis view';
+        } else {
+          var basLong = (hit.dir === 'long');
+          basG = basTal > 0 ? basLong : !basLong;
+          basWhy = 'PAXG at ' + (basPct >= 0 ? '+' : '') + basPct.toFixed(2)
+                 + '% to the feed — tokenised gold is ' + (basTal > 0 ? 'bid' : 'offered')
+                 + (basG ? ', agrees with this ' + (basLong ? 'long' : 'short')
+                         : ', against this ' + (basLong ? 'long' : 'short') + ' (context, not a veto)');
+        }
+      } catch (eBas){ basG = null; basWhy = 'basis threw: ' + ((eBas && eBas.message) || eBas); }
+    }
+    gates.push({ key:'spot-basis', hard:false, info:true, pass: basG, why: basWhy });
+
     return gates;
   }
 
@@ -3883,13 +4018,16 @@ terse status, and never launches a first-time scan on a global refresh.
           'OB-RETEST':       function(r){ return hgOgObRetest(r); },
           'OU-REVERT':       function(r){ return hgOgOuRevert(r); },
           'MFI-SQUAT':       function(r){ return hgOgMfiSquat(r); },
-          'DI-CROSS':        function(r){ return hgOgDiCross(r); }
+          'DI-CROSS':        function(r){ return hgOgDiCross(r); },
+          'FVG-HVN':         function(r){ return hgOgFvgHvn(r); }
         };
         var k;
         for (k in fns) if (Object.prototype.hasOwnProperty.call(fns, k)){
           stats[k] = btFn(rows, fns[k], { rMult: cfg.minRr, horizon: cfg.horizonBars, warm: cfg.warm });
         }
-        pooled = poolFn ? poolFn([stats]) : stats;
+        /* cfg.minRr, NOT the pooler's default: SCALP measures at 1.5R and
+           SWING at 2.0R, and the pool used to re-price both at 2.0. */
+        pooled = poolFn ? poolFn([stats], cfg.minRr) : stats;
       }
 
       /* Settle any forward records this symbol has open, using the bars just
@@ -3922,7 +4060,10 @@ terse status, and never launches a first-time scan on a global refresh.
         yieldRows: shared.yieldRows || null,
         nowSec: shared.nowSec,
         adr: hgOgAdr(rows, 14), news: shared.news, stats: pooled,
-        livePx: livePx, zoneCtx: zoneCtx
+        livePx: livePx, zoneCtx: zoneCtx,
+        /* for the spot-basis gate: the tokenised print, and which feed the
+           desk itself is on (so it does not price PAXG against PAXG) */
+        paxg: shared.paxg, srcId: got.source
       };
       var cands = hgOgEvaluate(rows, hits, extra, cfg);
 
@@ -3967,7 +4108,12 @@ terse status, and never launches a first-time scan on a global refresh.
     /* market-wide context, fetched once for both horizons */
     ui.stat.textContent = 'reading macro + session context…';
     var macroFn = gfn('getGoldMacro') || gfn('getGoldMacroCached');
-    var shared = { killzone: null, macro: null, yieldRows: null, nowSec: Date.now() / 1000, news: null };
+    var shared = { killzone: null, macro: null, yieldRows: null, nowSec: Date.now() / 1000, news: null,
+                   /* ONE extra request per scan, shared by both horizons, for the
+                      spot-basis gate. NaN on any failure or timeout — the gate
+                      then reads "no PAXG print this scan" rather than waiting or
+                      inventing a parity. */
+                   paxg: NaN };
     try { var kz = gfn('goldKillzone'); if (kz) shared.killzone = kz(Date.now()); } catch (e) {}
     try { var nr = gfn('hgNewsRisk'); if (nr) shared.news = nr('XAUUSD'); } catch (e) {}
     __og.shared = shared;
@@ -3979,7 +4125,20 @@ terse status, and never launches a first-time scan on a global refresh.
         shared.macro = m || null;
         shared.yieldRows = (m && m.us10yRows) ? m.us10yRows : null;
         shared.nowSec = Date.now() / 1000;
-        return scanHorizon(HORIZONS.scalp, shared, ui);
+        /* Bounded to 2.5s and swallowed, for the same reason the spot-factor
+           fetch below is: a context read must never be able to stall a scan. */
+        return Promise.race([
+          Promise.resolve().then(function(){
+            var bkFn = gfn('binanceKlines');
+            return bkFn ? bkFn('PAXGUSDT', '1h', 2) : null;
+          }).catch(function(){ return null; }),
+          new Promise(function(rp){ setTimeout(function(){ rp(null); }, 2500); })
+        ]).then(function(pk){
+          try {
+            if (pk && pk.length) shared.paxg = fin(pk[pk.length - 1].c);
+          } catch (ePk){ shared.paxg = NaN; }
+          return scanHorizon(HORIZONS.scalp, shared, ui);
+        });
       })
       .then(function(scalp){
         return scanHorizon(HORIZONS.swing, shared, ui).then(function(swing){
@@ -4740,6 +4899,13 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgOuRevert = hgOgOuRevert;
     window.hgOgMfiSquat = hgOgMfiSquat;
     window.hgOgDiCross = hgOgDiCross;
+    window.hgOgFvgHvn = hgOgFvgHvn;
+    /* The family map decides how much a mechanic contributes to the
+       combined SCALP/SWING pick, because the balance score reads
+       consensus per FAMILY rather than per mechanic. Exported so a test
+       can assert nothing falls through to OTHER — an unmapped mechanic
+       still fires and still shows a card, so the miss is invisible. */
+    window.hgOgFamilyOf = hgOgFamilyOf;
     window.hgOgGates = hgOgGates;
     /* Exported so the ticket count can be tested apart from a live scan —
        the header and the rendered cards disagreed for want of exactly this. */

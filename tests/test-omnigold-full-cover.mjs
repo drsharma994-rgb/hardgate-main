@@ -64,7 +64,7 @@ const mechEnd = CODE.indexOf('];', mechStart);
 ok(mechEnd > mechStart, 'OG_MECHANICS array terminates');
 const MECHANICS = (CODE.slice(mechStart, mechEnd).match(/'[A-Z0-9][A-Z0-9-]*'/g) || [])
   .map(s => s.slice(1, -1));
-ok(MECHANICS.length >= 54, 'OG_MECHANICS holds at least 54 keys (found ' + MECHANICS.length + ')');
+ok(MECHANICS.length >= 55, 'OG_MECHANICS holds at least 55 keys (found ' + MECHANICS.length + ')');
 ok(new Set(MECHANICS).size === MECHANICS.length, 'no duplicate keys in OG_MECHANICS');
 
 /* ---- 2. the backtest fns map ---- */
@@ -131,7 +131,7 @@ ok(btOnly.length === 0,
 const ROUND5 = ['ICHI-KUMO','STOCHRSI-TURN','CCI-EXTREME','RIBBON-PULLBACK',
                 'HA-FLIP','VWAP-BAND','PD-EQUILIBRIUM','ER-IGNITION',
                 'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
-                'MFI-SQUAT','DI-CROSS'];
+                'MFI-SQUAT','DI-CROSS','FVG-HVN'];
 for (const k of ROUND5){
   ok(MECHANICS.includes(k) && BT_KEYS.has(k), k + ' is registered in both the key list and the backtest map');
 }
@@ -140,7 +140,8 @@ for (const k of ROUND5){
 const LIB = ['goldIchimoku','goldStochRSI','goldCCI','goldRibbon','goldHeikinAshi',
              'goldVWAPBands','goldPremiumDiscount','calculateKaufmanER',
              'goldMarketStructure','goldSweepV2','goldOrderBlockRetest',
-             'goldActiveOrderBlocks','pineGoldOuZscore','goldMFI','goldADX'];
+             'goldActiveOrderBlocks','pineGoldOuZscore','goldMFI','goldADX',
+             'goldFVGV2'];
 for (const fn of LIB){
   ok(CODE.includes("gfn('" + fn + "')"), 'omnigold reaches ' + fn + '() from the gold library');
 }
@@ -180,7 +181,7 @@ ok(SW.includes("'./pinegoldmath.js'"), 'pinegoldmath.js is in the service-worker
 const R5_FNS = ['hgOgIchiKumo','hgOgStochTurn','hgOgCciExtreme','hgOgRibbonPullback',
                 'hgOgHaFlip','hgOgVwapBand','hgOgPdEquilibrium','hgOgErIgnition',
                 'hgOgStructBos','hgOgSweepV2','hgOgObRetest','hgOgOuRevert',
-                'hgOgMfiSquat','hgOgDiCross'];
+                'hgOgMfiSquat','hgOgDiCross','hgOgFvgHvn'];
 ok(/function ogTail\s*\(/.test(CODE), 'the ogTail bounding helper exists');
 for (const name of R5_FNS){
   const at = CODE.indexOf('function ' + name);

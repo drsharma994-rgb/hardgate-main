@@ -5,25 +5,25 @@
   "lastRunAt": "2026-08-25T10:02:18.606Z",
   "ticket": {
     "long": {
-      "sym": "B-STX_USDT",
-      "entry": 0.2548615371289946
+      "sym": "B-ZRO_USDT",
+      "entry": 1.1457079243814279
     },
     "short": null
   },
   "sniper": {
-    "key": "B-STX_USDT@0.2548615371289946",
+    "key": "B-TAO_USDT@230.25031920262572",
     "hits": [
       {
-        "sym": "B-STX_USDT",
+        "sym": "B-TAO_USDT",
         "dir": "long",
-        "entry": 0.2548615371289946,
-        "stop": 0.24768993749835605,
-        "t1": 0.2893,
-        "lev": 21,
+        "entry": 230.25031920262572,
+        "stop": 224.21521411338162,
+        "t1": 244.96,
+        "lev": 22,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-25T14:46:25.219Z"
+    "at": "2026-08-26T05:37:24.229Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -268,18 +268,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-25T14:46:25.219Z"
+    "at": "2026-08-26T05:37:24.229Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-25T14:46:25.219Z"
+    "at": "2026-08-26T05:37:24.229Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-25T12:55:13.918Z",
+  "engineAlertAt": "2026-08-26T04:56:58.636Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -294,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-25T14:46:25.860Z"
+    "at": "2026-08-26T05:37:24.592Z"
   },
   "bookFill": {
     "key": "u0|p0",
@@ -305,12 +305,12 @@
     },
     "at": "2026-08-24T23:36:13.263Z"
   },
-  "digestAt": "2026-08-18T15:49:07.355Z",
+  "digestAt": "2026-08-25T15:43:01.016Z",
   "digestTicket": {
-    "long": {
-      "sym": "B-CLO_USDT",
-      "entry": 0.14150097161106062
-    },
-    "short": null
+    "long": null,
+    "short": {
+      "sym": "B-ADA_USDT",
+      "entry": 0.2187850074031443
+    }
   }
 }

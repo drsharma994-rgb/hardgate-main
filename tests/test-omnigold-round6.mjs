@@ -1,4 +1,4 @@
-/* HARDGATE — the fourteen gold-library mechanics actually FIRE (round six).
+/* HARDGATE — the fifteen gold-library mechanics actually FIRE (round six).
 
    Its sibling, test-omnigold-full-cover.mjs, proves the three registrations
    agree. That is necessary and not sufficient: a detector can be wired into
@@ -7,7 +7,7 @@
    simply has not had its setup yet — the pooled table shows a permanent zero
    either way, which reads as "no samples" rather than "no code path".
 
-   So this file drives each of the fourteen until it fires, and fails if one
+   So this file drives each of the fifteen until it fires, and fails if one
    cannot be made to. Two findings from building it are worth keeping, because
    both were real defects and both were invisible until measured:
 
@@ -111,7 +111,7 @@ function series(mode, n){
    and vague; giving it a tape built for it is honest and fast. */
 const ROUND5 = ['ICHI-KUMO','STOCHRSI-TURN','CCI-EXTREME','RIBBON-PULLBACK','HA-FLIP',
                 'VWAP-BAND','PD-EQUILIBRIUM','ER-IGNITION','STRUCT-BOS','SWEEP-V2',
-                'OU-REVERT','MFI-SQUAT'];
+                'OU-REVERT','MFI-SQUAT','FVG-HVN'];
 const fired = {}; ROUND5.forEach(k => fired[k] = 0);
 let windows = 0;
 for (const mode of ['trend','range','chop2trend','spike','rand']){
@@ -237,4 +237,4 @@ ok(rawLongest > longestRun,
    'the underlying goldMarketStructure read does latch (' + rawLongest +
    ' consecutive), so the guard is doing real work');
 
-console.log('\nomnigold round-five: ' + passed + ' checks passed · all 14 library mechanics fire');
+console.log('\nomnigold round-six: ' + passed + ' checks passed · all 15 library mechanics fire');
