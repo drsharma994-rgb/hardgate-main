@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v483',
-  pack: 'OMNIGOLD HELD tickets show levels in MOST PROBABLE',
-  built: '2026-08-26T11:05:00Z',
-  note: 'When cleared gold tickets are HELD against tape, MOST PROBABLE now renders ENTRY/STOP/T1 labeled HELD · not trade-ready (tape rule unchanged). Release level uses live price. hgOgPickHeldFor exported.'
+  version: 'hg-v484',
+  pack: 'OMNIGOLD tape-aligned setups only in MOST PROBABLE',
+  built: '2026-08-26T13:10:00Z',
+  note: 'When gold tape is DOWN, MOST PROBABLE shows SHORT (with-tape) reads only — never LONG held tickets as setups. VETO SHORT levels shown as gate-blocked watch. Against-tape tickets moved to HELD queue list.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
