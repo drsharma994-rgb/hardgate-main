@@ -4418,7 +4418,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                 fwdRows.push({ sym: fitem.sym, dir: found[k].dir,
                                entry: found[k].plan.entry, stop: found[k].plan.stop, t1: found[k].plan.t1,
                                mechanic: found[k].kind,
-                               ticket: !!(found[k].grade && found[k].grade.ticket) });
+                               ticket: !!(found[k].grade && found[k].grade.ticket),
+                               /* The crypto replicated-gate stack. Audited on
+                                  10 Binance majors x 1,000 bars, both 4h and
+                                  1h, Sidak-corrected: regime (+8.5/+7.2) and
+                                  htf-confirm (+5.9/+9.0) replicated cleanly,
+                                  stoch-rsi (+3.5/+3.3) sat on the bar. Note
+                                  gold's other two (regime-fit, hurst-regime)
+                                  did NOT survive here — each desk earns its
+                                  own stack. Recorded, not acted on: this
+                                  field exists so the forward panel can judge
+                                  the claim on trades logged before their
+                                  outcomes existed. */
+                               stack3: (function(gs){
+                                 var keep = { 'regime':1, 'htf-confirm':1, 'stoch-rsi':1 };
+                                 var nS = 0, gj;
+                                 for (gj = 0; gj < (gs || []).length; gj++){
+                                   if (gs[gj] && keep[gs[gj].key] && gs[gj].pass === true) nS++;
+                                 }
+                                 return nS;
+                               })(found[k].gates) });
               }
               if (fwdRows.length){
                 try { W.hgFwdRecordScan('OMNIROUTE', TF, fwdRows, { horizonBars: 20 }); }
@@ -4503,7 +4522,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             : ('  · regime gate unavailable (' + __omni.regimeWarm + ')');
         }
         omniSafeStat(ui, __omni.lastStat + caveat);
-        try{ ui.pool.innerHTML = renderPooled(res.pooled); }catch(eP){
+        try{
+          /* The forward panel under the pooled table, exactly as OMNIGOLD
+             renders it: without this the stack3/shadow evidence this tab
+             records would be write-only. Its blocks self-hide until data
+             exists, so a fresh install shows nothing extra. */
+          var fwdPanel = '';
+          if (W && typeof W.hgFwdPanelHTML === 'function'){
+            try { fwdPanel = W.hgFwdPanelHTML('OMNIROUTE', { minRr: MIN_RR, title: 'FORWARD — out-of-sample' }) || ''; }
+            catch (eFp) { fwdPanel = ''; }
+          }
+          ui.pool.innerHTML = renderPooled(res.pooled) + fwdPanel;
+        }catch(eP){
           try{ ui.pool.innerHTML = '<div class="note warn">measurement table failed to render.</div>'; }catch(eP2){}
         }
         if (!ranked.length){

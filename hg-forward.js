@@ -724,12 +724,23 @@ localStorage. Never throws.
                 : 'If A does not beat C here, the chips are counting confluence rather than measuring edge.')
             + '</div>';
         })();
-        /* THE STACK LINE. regime-fit + htf-confirm + hurst-regime are the only
-           gates that replicated on BOTH horizons. In-sample on 1,000 PAXG bars
-           the swing horizon went 31.9% (tape alone) -> 45.0% when all three
-           agreed, +0.350R, z +5.80. This is where that claim gets checked
-           against trades recorded before their outcomes existed. */
+        /* THE STACK LINE. Each desk earned its own stack, so the wording is
+           per-tab. GOLD: regime-fit + htf-confirm + hurst-regime were the
+           only gates that replicated on both horizons — in-sample (close-by-
+           close re-measure) the swing horizon went 31.6% on tape alone to
+           44.2% with all three, z +5.68. CRYPTO (OMNIROUTE): regime and
+           htf-confirm replicated on both 4h and 1h across 10 Binance majors,
+           stoch-rsi marginally; gold's other two gates did NOT survive
+           there. This is where each claim gets checked against trades
+           recorded before their outcomes existed. */
         (function(){
+          var isGoldTab = String(tab).indexOf('OMNIGOLD') === 0 || String(tab).indexOf('GOLD') === 0;
+          var stackNames = isGoldTab
+            ? 'regime-fit, htf-confirm and hurst-regime'
+            : 'regime, htf-confirm and stoch-rsi';
+          var stackCtx = isGoldTab
+            ? 'In-sample the swing horizon ran 31.6% on tape alone against 44.2% with all three; this is the out-of-sample check on that.'
+            : 'In-sample (10 Binance majors) BTC-regime-aligned firings ran 32.2% at 2R against 35.0% with htf-confirm stacked on; this is the out-of-sample check on that.';
           var st = { 0:{n:0,w:0}, 1:{n:0,w:0}, 2:{n:0,w:0}, 3:{n:0,w:0} }, tot = 0, k, si;
           for (si = 0; si < keys.length; si++){
             var sp = pool[keys[si]];
@@ -740,11 +751,8 @@ localStorage. Never throws.
           var bits = [];
           for (k in st) if (st[k].n) bits.push(k + '/3 ' + (100 * st[k].w / st[k].n).toFixed(0) + '% (n=' + st[k].n + ')');
           h += '<div class="note"><b>REPLICATED-GATE STACK</b> — T1-first by how many of '
-            + 'regime-fit, htf-confirm and hurst-regime agreed: ' + esc(bits.join(' · ')) + '. '
-            + (tot < 40
-                ? 'Too few to judge yet — accumulating.'
-                : 'In-sample the swing horizon ran 31.9% on tape alone against 45.0% with all three; '
-                  + 'this is the out-of-sample check on that.')
+            + stackNames + ' agreed: ' + esc(bits.join(' · ')) + '. '
+            + (tot < 40 ? 'Too few to judge yet — accumulating.' : stackCtx)
             + '</div>';
         })();
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
