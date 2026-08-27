@@ -3970,6 +3970,52 @@ terse status, and never launches a first-time scan on a global refresh.
     return '';
   }
 
+  /* A CONFLUENCE GRADE FOR THE DESK'S OWN CARDS.
+
+     Until now only ENGINE picks bridged from the GOLD SCALP/SWING tabs wore a
+     letter; OMNIGOLD's own mechanic cards printed "50/54 checks" and nothing
+     else, so a reader comparing an ORB against a STRUCT-BOS had no glanceable
+     quality read at all.
+
+     WHY NOT THE ENGINE'S OWN TALLY. The engine grades on a raw count — A at
+     eight or more agreeing reads. Reconstructing that count over 1,000 PAXG
+     bars per horizon put 97% of setups in grade A and produced a non-monotone
+     hit rate across tally buckets (34.6% at 8, 57.6% at 10, 20.0% at 11,
+     26.6% at 12). A letter that says A for almost everything grades nothing.
+
+     So this grades on the two NORMALISED terms the balance score already
+     computes — net agreeing families over families that voted, and net
+     agreeing indicator reads over reads that answered. Both sit in [-1,1] and
+     neither saturates, so the letters actually separate.
+
+     WHAT THE LETTER IS NOT. It is not a probability, and it is not permission.
+     Confluence has never been shown to predict outcome on gold — eleven gates
+     measured BACKWARDS on the scalp horizon, and every one of them passes when
+     the tape is active, which is when a move is largely spent. A VETO still
+     outranks any letter: an A on a gate-blocked card means "many reads agree",
+     not "take it". Whether A beats C is now recorded per firing and answered
+     out-of-sample by the forward panel's BY GRADE line. */
+  function hgOgConfluenceGrade(c, tape){
+    try {
+      if (!c) return '';
+      var b = (c.balance && isFinite(fin(c.balance.family))) ? c.balance : hgOgBalanceParts(c, tape);
+      if (!b) return '';
+      var fam = fin(b.family), inf = fin(b.infoRatio);
+      if (!isFinite(fam)) fam = 0;
+      if (!isFinite(inf)) inf = 0;
+      /* An unread ledger is not a grade. Without indicator reads the score
+         would be carried entirely by the family term and a lone mechanic
+         would print C on no evidence at all. */
+      var n = (b.info && isFinite(fin(b.info.n))) ? fin(b.info.n) : 0;
+      if (n < 5) return '';
+      var s = (fam + inf) / 2;
+      if (s >= 0.5) return 'A';
+      if (s >= 0.25) return 'B';
+      if (s >= 0) return 'C';
+      return 'D';
+    } catch (e) { return ''; }
+  }
+
   function hgOgGradeChipHtml(grade, opts){
     opts = opts || {};
     var g = hgOgNormalizeGrade(grade);
@@ -4004,7 +4050,15 @@ terse status, and never launches a first-time scan on a global refresh.
         ? ('GOLD ENGINE ' + hgOgGradeChipHtml(row.engineGrade || 'A', { large: true })
           + (row.engineDemoted ? ' · demoted' : '')
           + (row.engineLowGrade ? ' · forming · need tally ≥5 for B' : ''))
-        : (tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks')) : (row.grade.ticket ? 'TICKET' : 'WATCH'));
+        : (function(){
+            /* the desk's own cards carry a letter too — see hgOgConfluenceGrade
+               for why it is the normalised score and not the engine's raw
+               tally, which graded 97% of setups A */
+            var lg = hgOgConfluenceGrade(row, tape);
+            var base = tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks'))
+                           : (row.grade.ticket ? 'TICKET' : 'WATCH');
+            return (lg ? (hgOgGradeChipHtml(lg, { large: true }) + ' ') : '') + base;
+          })();
       var info = row.gates ? hgOgInfoNet(row.gates) : { n: 0, pass: 0 };
       var cons = row.consensus || {};
       var nAg = cons.nAgree || 0;
@@ -5373,7 +5427,7 @@ terse status, and never launches a first-time scan on a global refresh.
                  the grade counts CONFLUENCE, and confluence has never been
                  shown to predict outcome on gold. c.grade is the gate ledger's
                  object, so the letter comes off the engine bridge instead. */
-              grade: c.engineGrade || (c.grade && c.grade.letter) || ''
+              grade: c.engineGrade || (c.grade && c.grade.letter) || hgOgConfluenceGrade(c) || ''
             });
           } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
         }
@@ -6364,6 +6418,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgMpNoneWhy = hgOgMpNoneWhy;           /* the stand-aside copy, testable */
     window.hgOgTapeDir = hgOgTapeDir;
     window.hgOgTapeFlipLevel = hgOgTapeFlipLevel;
+    window.hgOgConfluenceGrade = hgOgConfluenceGrade;  /* the card letter, testable */
     window.hgOgDeskTape = hgOgDeskTape;
     window.hgOgTapeBannerHtml = hgOgTapeBannerHtml;
     window.hgOgZoneLevels = hgOgZoneLevels;   /* the desk's own anticipation levels, testable */
