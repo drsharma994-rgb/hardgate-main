@@ -158,4 +158,42 @@ console.log('\n== the panel prints the evidence ==');
   ok(/Too few pairs to act on/.test(SRC), 'and refuses to recommend on a thin sample');
 }
 
+console.log('\n== the grade is recorded so the A/B/C chips can be judged ==');
+{
+  /* The chips grade by CONFLUENCE COUNT — A means eight or more reads agree.
+     Whether that predicts anything on gold is open, and doubtful: eleven gates
+     measured backwards on the scalp horizon, and every one of them passes when
+     the tape is ACTIVE, which is when a gold move is already largely spent. An
+     A chip that is really a C is worse than no chip at all. The grade cannot
+     be reconstructed once the outcome is known, so it is written at firing
+     time and judged here. */
+  const withGrade = (g) => ctx.hgFwdNormalize({ tab:'T', mechanic:'M', sym:'X', tf:'1h', dir:'long',
+    entry:100, stop:90, t1:120, barT:T0, horizonBars:6, grade:g });
+  ok(withGrade('A').grade === 'A', 'an A grade is kept');
+  ok(withGrade('clean').grade === 'A', 'CLEAN normalises to A, matching the chip renderer');
+  ok(withGrade('c').grade === 'C', 'lowercase normalises');
+  ok(withGrade('').grade === '' && withGrade(undefined).grade === '',
+     'an absent grade stays empty — an ungraded setup must not default into A and flatter itself');
+  ok(withGrade('X').grade === '', 'a nonsense grade is dropped rather than passed through');
+
+  const g = (grade, rows) => ctx.hgFwdSettleOne(withGrade(grade), rows);
+  const recs = [
+    g('A', [bar(0, 121, 101)]),
+    g('A', [bar(0, 105, 89)]),
+    g('C', [bar(0, 121, 101)]),
+    g('C', [bar(0,105,99),bar(1,105,99),bar(2,105,99),bar(3,105,99),bar(4,105,99),bar(5,105,99)])
+  ];
+  const st = ctx.hgFwdStatsOf(recs, 'T', 'M', false);
+  ok(st.byGrade.A.n === 2 && st.byGrade.A.w === 1, 'A: 2 settled, 1 win');
+  ok(st.byGrade.C.n === 1 && st.byGrade.C.w === 1,
+     'C: only the settled one counts — the expired C is excluded, as everywhere else');
+  ok(st.byGrade.B.n === 0, 'a grade with no records reads zero rather than going missing');
+
+  const SRC = fs.readFileSync(path.join(ROOT, 'hg-forward.js'), 'utf8');
+  ok(/BY GRADE/.test(SRC), 'the forward panel carries the by-grade line');
+  ok(/Too few to judge the chips yet/.test(SRC), 'and refuses to judge the chips on a thin sample');
+  const OG = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/grade: c\.engineGrade/.test(OG), 'omnigold passes the grade when it records a setup');
+}
+
 console.log('\nforward bank shadow: ' + passed + ' checks passed');

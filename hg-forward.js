@@ -125,6 +125,20 @@ localStorage. Never throws.
          not, the ledger is decoration. It cannot be reconstructed after the
          fact, so it has to be written at record time. */
       ticket: rec.ticket === true,
+      /* THE SETUP'S OWN GRADE AT FIRING TIME (A/B/C/D), so the chips can be
+         judged out-of-sample. The grade is a CONFLUENCE tally — A is "eight or
+         more reads agree" — and confluence has never been shown to predict
+         outcome on gold. It plausibly does the opposite: eleven gates measured
+         BACKWARDS on the scalp horizon, and every one of them passes when the
+         tape is active, which is when a gold move is already spent. An A chip
+         that is really a C is worse than no chip.
+         It cannot be reconstructed later, so it is written at record time and
+         costs one string. */
+      grade: (function(g){
+        var t = String(g || '').toUpperCase().trim();
+        if (t === 'CLEAN') return 'A';
+        return (t === 'A' || t === 'B' || t === 'C' || t === 'D') ? t : '';
+      })(rec.grade),
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -274,6 +288,9 @@ localStorage. Never throws.
        shadow R — comparing the shadow against a different population than the
        actual would be the fill-modelling mistake all over again. */
     var bankN = 0, bankSum = 0, bankActualSum = 0;
+    /* Settled outcomes split by the grade the setup carried WHEN IT FIRED, so
+       the A/B/C chips can be judged rather than trusted. */
+    var byGrade = { A:{n:0,w:0}, B:{n:0,w:0}, C:{n:0,w:0}, D:{n:0,w:0} };
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -302,6 +319,10 @@ localStorage. Never throws.
         bankN++; bankSum += num(r.bankR);
         bankActualSum += (r.state === 't1') ? (num(r.rr) || 0) : -1;
       }
+      if ((r.state === 't1' || r.state === 'stop') && byGrade[r.grade]){
+        byGrade[r.grade].n++;
+        if (r.state === 't1') byGrade[r.grade].w++;
+      }
     }
     var settled = wins + losses;
     var hit = settled ? wins / settled : NaN;
@@ -325,7 +346,8 @@ localStorage. Never throws.
              /* the shadow comparison, matched pairs only */
              bankN: bankN,
              bankExpR: bankN ? (bankSum / bankN) : NaN,
-             bankActualExpR: bankN ? (bankActualSum / bankN) : NaN };
+             bankActualExpR: bankN ? (bankActualSum / bankN) : NaN,
+             byGrade: byGrade };
   }
 
   /* Every mechanic seen for a tab. Pure. */
@@ -556,7 +578,9 @@ localStorage. Never throws.
             entry: c.entry, stop: c.stop, t1: c.t1,
             barT: barT,
             horizonBars: o.horizonBars || 20,
-            ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true)
+            ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true),
+            /* accept the grade wherever the calling desk keeps it */
+            grade: c.grade || c.engineGrade || (c.gradeObj && c.gradeObj.letter) || o.grade || ''
           });
           if (r === 'recorded') added++;
         }
@@ -652,6 +676,29 @@ localStorage. Never throws.
                          : 'A persistent gap here is out-of-sample evidence; in-sample, 48% of stopped gold scalps had first reached +1R.')
               + '</div>';
           }
+        })();
+        /* THE GRADE LINE. The A/B/C chips grade by CONFLUENCE COUNT — A means
+           eight or more reads agree. Whether that predicts anything on gold is
+           an open question and a doubtful one: eleven gates measured backwards
+           on the scalp horizon, and they all pass when the tape is active,
+           which is when a gold move is already spent. This is where the chips
+           get judged on trades recorded before their outcomes existed. */
+        (function(){
+          var g, tot = 0, gs = { A:{n:0,w:0}, B:{n:0,w:0}, C:{n:0,w:0}, D:{n:0,w:0} };
+          for (var gi = 0; gi < keys.length; gi++){
+            var gp = pool[keys[gi]];
+            if (!gp || !gp.byGrade) continue;
+            for (g in gs) if (gp.byGrade[g]){ gs[g].n += gp.byGrade[g].n; gs[g].w += gp.byGrade[g].w; tot += gp.byGrade[g].n; }
+          }
+          if (!tot) return;
+          var parts = [];
+          for (g in gs) if (gs[g].n) parts.push(g + ' ' + (100 * gs[g].w / gs[g].n).toFixed(0) + '% (n=' + gs[g].n + ')');
+          h += '<div class="note"><b>BY GRADE</b> — T1-first on settled records, split by the grade the '
+            + 'setup carried when it fired: ' + esc(parts.join(' · ')) + '. '
+            + (tot < 40
+                ? 'Too few to judge the chips yet — accumulating.'
+                : 'If A does not beat C here, the chips are counting confluence rather than measuring edge.')
+            + '</div>';
         })();
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '

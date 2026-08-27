@@ -5367,7 +5367,13 @@ terse status, and never launches a first-time scan on a global refresh.
             fwdRecord({
               tab: 'OMNIGOLD:' + cfg.label, mechanic: c.kind, sym: 'XAUUSD', tf: cfg.tf,
               dir: c.dir, entry: c.plan.entry, stop: c.plan.stop, t1: c.plan.t1,
-              barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket)
+              barT: barT, horizonBars: cfg.horizonBars, ticket: !!(c.grade && c.grade.ticket),
+              /* The A/B/C chip this setup wore when it fired. Written now so
+                 the forward panel can judge the chips rather than trust them:
+                 the grade counts CONFLUENCE, and confluence has never been
+                 shown to predict outcome on gold. c.grade is the gate ledger's
+                 object, so the letter comes off the engine bridge instead. */
+              grade: c.engineGrade || (c.grade && c.grade.letter) || ''
             });
           } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
         }
