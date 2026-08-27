@@ -18,7 +18,7 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v503',
+  version: 'hg-v504',
   pack: 'OMNIGOLD colorful grade chips',
   built: '2026-08-27T05:35:00Z',
   note: 'Grade A/B/C/D chips enlarged, bold, and color-coded on OMNIGOLD engine rows + MOST PROBABLE.'

@@ -4127,7 +4127,22 @@ terse status, and never launches a first-time scan on a global refresh.
         : (info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread');
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
         +  ' <span>' + esc(label) + ' · ' + esc(isEngine ? String(row.kind).slice(0, 48) : row.kind) + ' · ' + grade
-        +  (isWatch ? ' · VETO' : '') + (isEngine ? (row.engineLowGrade ? ' · FORMING' : ' · ACTIONABLE') : '') + '</span></div>';
+        +  (isWatch ? ' · VETO' : '')
+        +  (isEngine
+             /* AGAINST THE TAPE IS NOT ACTIONABLE, whoever found it.
+                hgOgPickGoldEngineFor falls back to an against-tape engine pick
+                when no aligned one exists, and this badge called it
+                ACTIONABLE — while the same panel was holding OMNIGOLD's own
+                against-tape tickets in a queue and saying they are "not shown
+                as setups". One rule, two answers, on the same screen.
+                The tape rule is the best-evidenced thing on this desk:
+                with-tape firings hit 37.4% for +0.121R, against-tape 24.0%
+                for -0.280R, z +9.79 on scalp. A counter-trend read is worth
+                seeing and is not worth taking, so it keeps its card and loses
+                the word that invites the click. */
+             ? (row.engineAgainstTape ? ' · AGAINST TAPE — NOT ACTIONABLE'
+                                      : (row.engineLowGrade ? ' · FORMING' : ' · ACTIONABLE'))
+             : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  (isEngine
             ? (row.engineAgainstTape

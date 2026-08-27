@@ -177,4 +177,30 @@ console.log('\n== held queue lists against-tape tickets without full cards ==');
   ok(/6010\.00/.test(q), 'dim level line only');
 }
 
+
+console.log('\n== an against-tape ENGINE pick is never badged ACTIONABLE ==');
+{
+  /* THE CONTRADICTION THIS GUARDS. hgOgPickGoldEngineFor falls back to an
+     against-tape engine pick when no aligned one exists. The badge called it
+     ACTIONABLE — on the same panel that was holding OMNIGOLD's own
+     against-tape tickets in a queue and saying they are "not shown as
+     setups". One rule, two answers, one screen.
+
+     Live: gold tape SHORT, and the headline read
+       "XAUUSD LONG SCALP · HVN / VOLUME NODE RETEST · GOLD ENGINE A · ACTIONABLE"
+     with "AGAINST GOLD TAPE" in the small print underneath.
+
+     The tape rule is the best-evidenced component on this desk — with-tape
+     firings hit 37.4% for +0.121R, against-tape 24.0% for -0.280R, z +9.79.
+     The card is worth showing; the word ACTIONABLE is not. */
+  const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/row\.engineAgainstTape \? ' · AGAINST TAPE — NOT ACTIONABLE'/.test(SRC),
+     'an against-tape engine pick is badged NOT ACTIONABLE');
+  const badge = SRC.slice(SRC.indexOf('isEngine'), SRC.indexOf('</span></div>', SRC.indexOf('isEngine')));
+  ok(badge.indexOf('engineAgainstTape') < badge.indexOf("' · ACTIONABLE'"),
+     'and the against-tape branch is tested BEFORE the ACTIONABLE one, so it cannot fall through');
+  ok(/engineLowGrade \? ' · FORMING'/.test(SRC),
+     'a tape-aligned low-grade engine pick still reads FORMING, unchanged');
+}
+
 console.log('\nomnigold held tickets: ' + passed + ' checks passed');
