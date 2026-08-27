@@ -3958,7 +3958,8 @@ terse status, and never launches a first-time scan on a global refresh.
       var tot = (row.grade && row.grade.total) || 0;
       var grade = isEngine
         ? ('GOLD ENGINE · grade ' + esc(String(row.engineGrade || 'A'))
-          + (row.engineDemoted ? ' · demoted' : ''))
+          + (row.engineDemoted ? ' · demoted' : '')
+          + (row.engineLowGrade ? ' · forming · need tally ≥5 for B' : ''))
         : (tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks')) : (row.grade.ticket ? 'TICKET' : 'WATCH'));
       var info = row.gates ? hgOgInfoNet(row.gates) : { n: 0, pass: 0 };
       var cons = row.consensus || {};
@@ -3971,7 +3972,7 @@ terse status, and never launches a first-time scan on a global refresh.
         : (info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread');
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
         +  ' <span>' + esc(label) + ' · ' + esc(isEngine ? String(row.kind).slice(0, 48) : row.kind) + ' · ' + grade
-        +  (isWatch ? ' · VETO' : '') + (isEngine ? ' · ACTIONABLE' : '') + '</span></div>';
+        +  (isWatch ? ' · VETO' : '') + (isEngine ? (row.engineLowGrade ? ' · FORMING' : ' · ACTIONABLE') : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  (isEngine
             ? (row.engineAgainstTape
@@ -4436,7 +4437,24 @@ terse status, and never launches a first-time scan on a global refresh.
     var g = String(c.grade || '').toUpperCase();
     if (c.locked || g === 'A' || g === 'CLEAN') return true;
     if (opts.allowB && g === 'B' && fin(c.tally) >= 5) return true;
+    if (opts.allowC && g === 'C') return true;
     return false;
+  }
+
+  function hgOgEngineListHasAb(list){
+    var i;
+    for (i = 0; i < (list || []).length; i++){
+      if (hgOgGoldEngineGradeOk(list[i], { allowB: true })) return true;
+    }
+    return false;
+  }
+
+  function hgOgEngineGradeBannerHtml(ranked){
+    if (!ranked || !ranked.length || hgOgEngineListHasAb(ranked)) return '';
+    var bestT = 0, i;
+    for (i = 0; i < ranked.length; i++) bestT = Math.max(bestT, fin(ranked[i].tally) || 0);
+    return '<div class="hg-mp-note warn" style="margin:4px 0 0 12px">No grade-A/B this bar — best tally +'
+      + bestT + '. Grading: <b>A ≥ 8</b> · <b>B ≥ 5</b> · else C. More agreeing reads (macro, session, structure, GOLD PRO) push tally up.</div>';
   }
 
   function hgOgApplyBridgeBestLevels(inp, scalpOut, swingOut){
@@ -4547,11 +4565,12 @@ terse status, and never launches a first-time scan on a global refresh.
     var ranked = (bucket.ranked || []).slice();
     if (bucket.best && ranked.indexOf(bucket.best) < 0) ranked.unshift(bucket.best);
 
-    function poolFor(alignedOnly){
+    function poolFor(alignedOnly, gradeOpts){
+      gradeOpts = gradeOpts || { allowB: true };
       var i, c, pool = [];
       for (i = 0; i < ranked.length; i++){
         c = ranked[i];
-        if (!hgOgGoldEngineGradeOk(c, { allowB: true })) continue;
+        if (!hgOgGoldEngineGradeOk(c, gradeOpts)) continue;
         if (alignedOnly && (tapeDir === 'long' || tapeDir === 'short')){
           if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
         }
@@ -4562,6 +4581,8 @@ terse status, and never launches a first-time scan on a global refresh.
         var ga = String(a.grade || '').toUpperCase(), gb = String(b.grade || '').toUpperCase();
         if (ga === 'A' && gb !== 'A') return -1;
         if (gb === 'A' && ga !== 'A') return 1;
+        if (ga === 'B' && gb === 'C') return -1;
+        if (gb === 'B' && ga === 'C') return 1;
         if (a.demoted && !b.demoted) return 1;
         if (b.demoted && !a.demoted) return -1;
         return (fin(b.tally) || 0) - (fin(a.tally) || 0);
@@ -4569,11 +4590,13 @@ terse status, and never launches a first-time scan on a global refresh.
       return pool;
     }
 
-    var aligned = poolFor(true);
+    var gradeOpts = { allowB: true };
+    if (opts.allowC) gradeOpts.allowC = true;
+    var aligned = poolFor(true, gradeOpts);
     var pick = aligned[0] || null;
     var againstTape = false;
     if (!pick && opts.allowAgainstTape !== false){
-      var any = poolFor(false);
+      var any = poolFor(false, gradeOpts);
       pick = any[0] || null;
       if (pick && (tapeDir === 'long' || tapeDir === 'short')
           && String(pick.dir || '').toLowerCase() !== tapeDir) againstTape = true;
@@ -4583,8 +4606,15 @@ terse status, and never launches a first-time scan on a global refresh.
     if (out){
       out.engineDemoted = !!pick.demoted;
       out.engineAgainstTape = againstTape;
+      out.engineLowGrade = !!(opts.allowC && String(pick.grade || '').toUpperCase() === 'C');
     }
     return out;
+  }
+
+  function hgOgPickGoldEngineForMp(bridge, horizon, tapeDir){
+    var ab = hgOgPickGoldEngineFor(bridge, horizon, tapeDir, { allowC: false });
+    if (ab) return ab;
+    return hgOgPickGoldEngineFor(bridge, horizon, tapeDir, { allowC: true });
   }
 
   function hgOgGoldEngineRowHtml(c, tier){
@@ -4620,7 +4650,7 @@ terse status, and never launches a first-time scan on a global refresh.
       return h;
     }
     h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups + hgApplyGoldBestLevels when loaded. '
-      + 'Grade-A/B setups surface in <b>MOST PROBABLE</b> when the OMNIGOLD mechanic ledger has no TICKET. '
+      + 'Grade <b>A ≥ 8</b> · <b>B ≥ 5</b> tally · else C. A/B surface in <b>MOST PROBABLE</b> first; grade-C shows as <b>FORMING</b> when nothing stronger cleared. '
       + 'Open <b>GOLD SCALP</b> / <b>GOLD SWING</b> for full cards and book handoff.</div>';
     var sc = bridge.scalp || {}, sw = bridge.swing || {};
     var scRanked = sc.ranked || [], swRanked = sw.ranked || [];
@@ -4633,6 +4663,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += hgOgGoldEngineRowHtml(scRanked[si], 'alt');
     }
     if (!scRanked.length) h += '<div class="dim" style="margin-left:12px">no scalp strategy triggered on this bar</div>';
+    else h += hgOgEngineGradeBannerHtml(scRanked);
     h += '<div class="hg-mp-note" style="margin-top:8px"><b>GOLD SWING engine</b> · ' + swRanked.length + ' setup(s)'
       + ((sw.rejected && sw.rejected.length) ? (' · ' + sw.rejected.length + ' rejected') : '') + '</div>';
     if (sw.best) h += hgOgGoldEngineRowHtml(sw.best, 'best');
@@ -4642,6 +4673,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += hgOgGoldEngineRowHtml(swRanked[wi], 'alt');
     }
     if (!swRanked.length) h += '<div class="dim" style="margin-left:12px">no swing strategy triggered on this bar</div>';
+    else h += hgOgEngineGradeBannerHtml(swRanked);
     h += '</section>';
     return h;
   }
@@ -4730,12 +4762,17 @@ terse status, and never launches a first-time scan on a global refresh.
     var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
     var anyWatch = (watchScalp && watchScalp.plan) || (watchSwing && watchSwing.plan);
     var anyEngine = (engineScalp && engineScalp.plan) || (engineSwing && engineSwing.plan);
-    var tier = anyTrade ? 'clean' : (anyEngine ? 'engine' : 'forming');
+    var tier = anyTrade ? 'clean'
+      : (anyEngine
+          ? (((engineScalp && engineScalp.engineLowGrade) || (engineSwing && engineSwing.engineLowGrade))
+              ? 'forming' : 'engine')
+          : 'forming');
     var note = anyTrade
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
       : (anyEngine
-          ? ('No OMNIGOLD TICKET cleared on this horizon — showing the best grade-A/B setup from <b>GOLD SCALP / GOLD SWING</b> engines. '
-             + 'Demoted or against-tape engines are labeled honestly. Not a win probability.')
+          ? ((engineScalp && engineScalp.engineLowGrade) || (engineSwing && engineSwing.engineLowGrade)
+              ? 'No grade-A/B engine this bar — showing best <b>grade-C FORMING</b> setup from GOLD SCALP/SWING (tally below 5). Not a win probability.'
+              : 'No OMNIGOLD TICKET cleared on this horizon — showing the best grade-A/B setup from <b>GOLD SCALP / GOLD SWING</b> engines. Demoted or against-tape engines are labeled honestly. Not a win probability.')
           : (anyWatch
           ? ('Gold tape reads ' + tape.toUpperCase()
              + ' — no ticket cleared; best WITH-tape level read below is gate-blocked (VETO). '
@@ -5705,8 +5742,8 @@ terse status, and never launches a first-time scan on a global refresh.
         __og.held = ogHeld;
         return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
           __og.bridge = bridge;
-          var engineScalp = !pickScalp ? hgOgPickGoldEngineFor(bridge, HORIZONS.scalp.label, deskTape) : null;
-          var engineSwing = !pickSwing ? hgOgPickGoldEngineFor(bridge, HORIZONS.swing.label, deskTape) : null;
+          var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, deskTape) : null;
+          var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, deskTape) : null;
           hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing);
           return hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape, bridge).then(function(){
             if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
@@ -6247,6 +6284,8 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgApplyBridgeBestLevels = hgOgApplyBridgeBestLevels;
     window.hgOgBridgeSetupToPick = hgOgBridgeSetupToPick;
     window.hgOgPickGoldEngineFor = hgOgPickGoldEngineFor;
+    window.hgOgPickGoldEngineForMp = hgOgPickGoldEngineForMp;
+    window.hgOgEngineGradeBannerHtml = hgOgEngineGradeBannerHtml;
     window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgPaintOgPostScan = hgOgPaintOgPostScan;
     window.hgOgHeldQueueHtml = hgOgHeldQueueHtml;
