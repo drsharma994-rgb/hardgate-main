@@ -4,10 +4,7 @@
   "gold": null,
   "lastRunAt": "2026-08-27T14:29:25.473Z",
   "ticket": {
-    "long": {
-      "sym": "B-BICO_USDT",
-      "entry": 0.022928191523873296
-    },
+    "long": null,
     "short": null
   },
   "sniper": {
@@ -295,17 +292,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-27T14:29:25.488Z"
+    "at": "2026-08-27T23:55:34.449Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-27T14:29:25.488Z"
+    "at": "2026-08-27T23:55:34.450Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
+  "engineAlertAt": "2026-08-27T23:55:34.450Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -320,7 +318,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-27T14:29:26.276Z"
+    "at": "2026-08-27T23:55:34.718Z"
   },
   "bookFill": {
     "key": "u0|p0",
