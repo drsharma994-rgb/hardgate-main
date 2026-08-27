@@ -1,0 +1,97 @@
+{
+  "claim": "GOLD SWING @2R: tape-aligned + regime-fit + htf-confirm + hurst-regime all agree. In-sample 44.2% hit vs 31.6% tape-alone (z +5.68, n=608, close-by-close alignment), frozen before the cutoff.",
+  "cutoff": "2026-08-28T00:00:00Z",
+  "lastCheckedDate": "2026-08-27",
+  "status": "accumulating",
+  "verdict": "Too few to judge yet — 0 of 40 settled stack firings.",
+  "swing2R": {
+    "every": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "tape": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "stack2of3": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "stack3of3": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "zStackVsTape": null,
+    "judgedBars": 0,
+    "firstBar": null,
+    "lastBar": null
+  },
+  "scalpControl2R": {
+    "every": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "tape": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "stack2of3": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "stack3of3": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "zStackVsTape": null,
+    "judgedBars": 0,
+    "firstBar": null,
+    "lastBar": null
+  },
+  "scalpControl1R": {
+    "every": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "tape": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "stack2of3": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "stack3of3": {
+      "n": 0,
+      "wins": 0,
+      "hitPct": null,
+      "expR": null
+    },
+    "zStackVsTape": null,
+    "judgedBars": 0,
+    "firstBar": null,
+    "lastBar": null
+  }
+}

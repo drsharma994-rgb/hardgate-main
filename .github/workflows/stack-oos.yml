@@ -1,0 +1,49 @@
+# HARDGATE stack OOS verdict: once a day, recompute whether the SWING
+# replicated-gate stack (tape + regime-fit + htf-confirm + hurst-regime,
+# 45.0% at 2R in-sample, z +5.80) survives on bars that printed AFTER the
+# claim was frozen (cutoff 2026-08-28T00:00:00Z, a literal in the script).
+#
+# No dependency install: scripts/stack-oos-check.mjs uses only node builtins, repo files
+# and public Binance market data (data-api.binance.vision answers from US
+# runners where api.binance.com replies 451). State accumulates in
+# stack-oos-state.json; the commit guard means quiet days cost nothing.
+name: HARDGATE Stack OOS Verdict
+
+on:
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hardgate-stack-oos
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # The walk replays every post-cutoff bar with growing prefixes, so the
+    # job gets slower as evidence accumulates (~O(bars x prefix)). 30 min
+    # covers well past the point the verdict becomes judgeable (~40 settled
+    # stack firings, a few weeks). Once stack-oos-state.json's status leaves
+    # "accumulating", this workflow has answered its question and can be
+    # retired.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Recompute the out-of-sample verdict
+        run: node scripts/stack-oos-check.mjs
+
+      - name: Commit updated verdict state if it changed
+        run: |
+          git config user.name "hardgate-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add stack-oos-state.json
+          git diff --cached --quiet || { git commit -m "chore: stack OOS verdict [skip ci]"; git pull --rebase origin main; git push; }
