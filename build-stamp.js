@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v496',
-  pack: 'OMNIGOLD actionable gold engines',
-  built: '2026-08-27T02:50:00Z',
-  note: 'MOST PROBABLE promotes GOLD SCALP/SWING grade-A/B when mechanic ledger has no TICKET; bridge applies hgApplyGoldBestLevels.'
+  version: 'hg-v497',
+  pack: 'OMNIGOLD engine MP visibility',
+  built: '2026-08-27T04:25:00Z',
+  note: 'MOST PROBABLE shows demoted/against-tape grade-A/B gold engines when no TICKET.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
