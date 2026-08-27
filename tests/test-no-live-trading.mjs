@@ -106,10 +106,10 @@ console.log('== quiet candle cache outlives the alert cycle ==');
 {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const ttl = +(/const HG_CANDLE_TTL_QUIET = (\d+);/.exec(html) || [])[1];
-  const cycleMs = +(/const HG_TAB_ALERT_MS = (\d+) \* 60 \* 1000;/.exec(html) || [])[1] * 60;
-  ok(isFinite(ttl) && isFinite(cycleMs), 'both constants are readable');
-  ok(ttl > cycleMs,
-     'quiet TTL ' + ttl + 's exceeds the ' + cycleMs + 's cycle — cached candles survive the boundary');
+  const cycleSec = +(/const HG_GLOBAL_SCAN_MS = (\d+) \* 60 \* 1000;/.exec(html) || [])[1] * 60;
+  ok(isFinite(ttl) && isFinite(cycleSec), 'both constants are readable');
+  ok(ttl > cycleSec,
+     'quiet TTL ' + ttl + 's exceeds the ' + cycleSec + 's cycle — cached candles survive the boundary');
 }
 /* The browser was never the only way out. The Render worker (app.js) imports a
    CCXT executor and render.yaml used to document arming it via env vars, which

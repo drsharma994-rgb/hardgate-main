@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v499',
-  pack: 'OMNIGOLD colorful grade chips',
-  built: '2026-08-27T05:35:00Z',
-  note: 'Grade A/B/C/D chips enlarged, bold, and color-coded on OMNIGOLD engine rows + MOST PROBABLE.'
+  version: 'hg-v500',
+  pack: 'global 5-min tab refresh',
+  built: '2026-08-27T06:10:00Z',
+  note: 'Every tab scans every 5 minutes via hardRefreshAll → hgScanAllTabs; AUTO 5m locked.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

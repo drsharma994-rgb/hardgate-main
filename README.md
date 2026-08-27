@@ -152,13 +152,13 @@ since 2026-07-29; `vercel --prod --yes` resumes it if billing is reactivated.
 ## Alerts
 
 Toggle the 🔔 chip in the header. **This deployment forces alerts ON** in the browser
-(`HG_ALERTS_FORCED_ON`) on every page load, with a **10-minute** silent tab-alert cycle
-(`HG_ALERT_CYCLE_MS`, same as `HG_TAB_ALERT_MS`) and **10-minute AUTO hard refresh**
+(`HG_ALERTS_FORCED_ON`) on every page load, with a **5-minute** silent tab-alert cycle
+(`HG_ALERT_CYCLE_MS`, same as `HG_TAB_ALERT_MS`) and **5-minute AUTO hard refresh**
 (`HG_ALERTS_AUTO_REFRESH_MS` / `HG_GLOBAL_SCAN_MS`) so every scan in every tab stays warm.
-The 🔔 toggle cannot turn alerts off while forced-on is set. OFF / 2m / 3m / 5m / 15m AUTO
+The 🔔 toggle cannot turn alerts off while forced-on is set. OFF / 2m / 3m / 10m / 15m AUTO
 buttons are ignored.
 
-While armed, every 10 minutes a silent tab-alert cycle runs (whole-exchange SWING/SCALP warm):
+While armed, every 5 minutes a silent tab-alert cycle runs (whole-exchange SWING/SCALP warm):
 
 1. **Delta** and **CoinDCX**: full best-setup scan — alerts the top CLEAN pick when it changes
    (deduped by symbol+direction).
