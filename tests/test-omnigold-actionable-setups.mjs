@@ -142,8 +142,31 @@ console.log('\n== grade C fallback when no A/B ==');
   ok(/FORMING/.test(html), 'forming tier in MP');
   ok(/need tally/.test(html), 'explains B threshold');
   const panel = W.hgOgGoldEnginesPanelHtml(bridge);
-  ok(/No grade-A\/B this bar/.test(panel), 'engines panel explains missing A/B');
+  ok(/og-grade-chip og-grade-a/.test(panel), 'engines panel explains missing A/B with chips');
 }
+console.log('\n== grade chips ==');
+{
+  const W = boot();
+  const chipA = W.hgOgGradeChipHtml('A', { large: true });
+  ok(/og-grade-chip og-grade-a og-grade-lg/.test(chipA), 'large grade A chip');
+  ok(/og-grade-c/.test(W.hgOgGradeChipHtml('C')), 'grade C chip');
+  ok(/og-grade-d/.test(W.hgOgGradeChipHtml('D')), 'grade D chip');
+  const eng = W.hgOgBridgeSetupToPick({
+    dir: 'short', strategy: 'FVG FILL', entry: 4627, stop: 4638, t1: 4612,
+    grade: 'C', tally: 4
+  }, 'SCALP');
+  eng.engineLowGrade = true;
+  const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, eng, null);
+  ok(/og-grade-chip og-grade-c/.test(html), 'MP panel renders grade chip');
+  const panel = W.hgOgGoldEnginesPanelHtml({
+    ok: true,
+    scalp: { ranked: [{ dir: 'short', strategy: 'FVG FILL', entry: 1, stop: 2, t1: 0.5, grade: 'C', tally: 4 }],
+      best: { dir: 'short', strategy: 'FVG FILL', entry: 1, stop: 2, t1: 0.5, grade: 'C', tally: 4 }, rejected: [] },
+    swing: { ranked: [], best: null, rejected: [] }
+  });
+  ok(/og-grade-lg/.test(panel), 'engines panel large grade chip');
+}
+
 console.log('\n== wiring exports ==');
 {
   const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
