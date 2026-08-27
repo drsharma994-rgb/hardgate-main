@@ -173,24 +173,69 @@ localStorage. Never throws.
 
   /* Settle one open record against candles. Only bars STRICTLY AFTER the
      firing bar are considered, so a record can never be resolved by data
-     that already existed when it was written. Pure. */
+     that already existed when it was written. Pure.
+
+     SHADOW: BANK HALF AT +1R. Alongside the actual outcome, the same walk
+     resolves what "bank half at +1R, stop the rest to breakeven" would have
+     done. Why this is measured and not just proposed: on 1,000 PAXG bars per
+     horizon, 48% of stopped gold scalps had FIRST reached +1R — a partial
+     would have banked them — but that is in-sample, and this repo's standard
+     is that strategy changes need out-of-sample evidence. This shadow is how
+     that evidence accumulates: every record now carries both outcomes, and in
+     a few weeks the forward panel can say which policy actually paid, on
+     trades that had not happened when the policy was written down.
+
+     The shadow can only ever settle EARLIER than the actual (its stop
+     tightens to breakeven after +1R), so freezing it inside the actual's walk
+     is sound: by the time the actual terminates, the shadow already has.
+     Ambiguity is resolved against the shadow at every step — a bar touching
+     both +1R and the stop is a STOP (candles cannot order intra-bar prints,
+     same convention as the actual), and a post-bank bar touching both
+     breakeven and T1 banks only the half (+0.5), never the full ride. The
+     comparison must not be able to flatter the policy it exists to judge.
+
+       oneR   whether +1R traded before the stop (null while unknowable)
+       bankR  the shadow outcome in R; null when the actual expired unsettled
+              or T1 sits inside +1R (no banking opportunity — policies equal) */
   function hgFwdSettleOne(rec, rows){
     if (!rec || rec.state !== 'open') return rec;
     if (!rows || !rows.length) return rec;
     var i, t, h, l, seen = 0;
     var hitStop, hitT1;
+    var long = (rec.dir === 'long');
+    var oneLvl = long ? (rec.entry + rec.risk) : (rec.entry - rec.risk);
+    var banked = false, shadowR = null;         /* null = not yet resolved */
+    var noBank = (rec.rr <= 1);                 /* T1 at/inside +1R: identical policies */
     for (i = 0; i < rows.length; i++){
       t = num(rows[i].t);
       if (!isFinite(t) || t <= rec.barT) continue;      /* strictly after */
       seen++;
       h = num(rows[i].h); l = num(rows[i].l);
       if (!isFinite(h) || !isFinite(l)) continue;
-      hitStop = (rec.dir === 'long') ? (l <= rec.stop) : (h >= rec.stop);
-      hitT1   = (rec.dir === 'long') ? (h >= rec.t1)   : (l <= rec.t1);
+      hitStop = long ? (l <= rec.stop) : (h >= rec.stop);
+      hitT1   = long ? (h >= rec.t1)   : (l <= rec.t1);
+      /* ---- shadow first, so its state is final before any actual return ---- */
+      if (!noBank && shadowR === null){
+        if (!banked){
+          if (hitStop) shadowR = -1;                          /* stop before +1R */
+          else if (long ? (h >= oneLvl) : (l <= oneLvl)){
+            banked = true;                                    /* half off at +1R */
+            if (hitT1) shadowR = 0.5 + 0.5 * rec.rr;          /* same bar ran on */
+            else if (long ? (l <= rec.entry) : (h >= rec.entry)) shadowR = 0.5;  /* conservative: breakeven first */
+          }
+        } else {
+          if (long ? (l <= rec.entry) : (h >= rec.entry)) shadowR = 0.5;         /* breakeven checked first */
+          else if (hitT1) shadowR = 0.5 + 0.5 * rec.rr;
+        }
+      }
+      /* ---- actual, unchanged ---- */
       /* both in one bar -> STOP. Candles cannot say which printed first. */
-      if (hitStop) return copyWith(rec, { state:'stop', r: -1, settledT: t });
-      if (hitT1)   return copyWith(rec, { state:'t1',   r: rec.rr, settledT: t });
-      if (seen >= rec.horizonBars) return copyWith(rec, { state:'expired', r: null, settledT: t });
+      if (hitStop) return copyWith(rec, { state:'stop', r: -1, settledT: t,
+        oneR: banked, bankR: noBank ? -1 : (shadowR !== null ? shadowR : (banked ? 0.5 : -1)) });
+      if (hitT1)   return copyWith(rec, { state:'t1',   r: rec.rr, settledT: t,
+        oneR: true, bankR: noBank ? rec.rr : (shadowR !== null ? shadowR : 0.5 + 0.5 * rec.rr) });
+      if (seen >= rec.horizonBars) return copyWith(rec, { state:'expired', r: null, settledT: t,
+        oneR: banked, bankR: null });
     }
     return rec;
   }
@@ -224,6 +269,11 @@ localStorage. Never throws.
   function hgFwdStats(list, tab, mechanic, ticketOnly, agg, nowSec){
     var recs = Array.isArray(list) ? list : [];
     var wins = 0, losses = 0, open = 0, expired = 0, rrSum = 0, stale = 0, i, r;
+    /* MATCHED PAIRS for the bank-half-at-1R shadow: only records carrying a
+       finite bankR contribute, and each contributes BOTH its actual and its
+       shadow R — comparing the shadow against a different population than the
+       actual would be the fill-modelling mistake all over again. */
+    var bankN = 0, bankSum = 0, bankActualSum = 0;
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -232,7 +282,8 @@ localStorage. Never throws.
     if (agg && !ticketOnly){
       var ak = String(tab || '') + '|' + String(mechanic || '');
       var a = agg[ak];
-      if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0); }
+      if (a){ wins += (a.wins || 0); losses += (a.losses || 0); expired += (a.expired || 0); rrSum += (a.rrSum || 0);
+              bankN += (a.bankN || 0); bankSum += (a.bankSum || 0); bankActualSum += (a.bankActualSum || 0); }
     }
     for (i = 0; i < recs.length; i++){
       r = recs[i];
@@ -247,6 +298,10 @@ localStorage. Never throws.
       else if (r.state === 'stop') losses++;
       else if (r.state === 'expired') expired++;
       else open++;
+      if ((r.state === 't1' || r.state === 'stop') && isFinite(num(r.bankR))){
+        bankN++; bankSum += num(r.bankR);
+        bankActualSum += (r.state === 't1') ? (num(r.rr) || 0) : -1;
+      }
     }
     var settled = wins + losses;
     var hit = settled ? wins / settled : NaN;
@@ -266,7 +321,11 @@ localStorage. Never throws.
     else if (isFinite(avgRr)) expR = hit * avgRr - (1 - hit);
     else expR = NaN;
     return { samples: settled, wins: wins, losses: losses, open: open,
-             stale: stale, expired: expired, hit: hit, avgRr: avgRr, expR: expR };
+             stale: stale, expired: expired, hit: hit, avgRr: avgRr, expR: expR,
+             /* the shadow comparison, matched pairs only */
+             bankN: bankN,
+             bankExpR: bankN ? (bankSum / bankN) : NaN,
+             bankActualExpR: bankN ? (bankActualSum / bankN) : NaN };
   }
 
   /* Every mechanic seen for a tab. Pure. */
@@ -336,6 +395,13 @@ localStorage. Never throws.
       if (r.state === 't1'){ out[key].wins++; out[key].rrSum += (num(r.rr) || 0); }
       else if (r.state === 'stop') out[key].losses++;
       else out[key].expired++;
+      /* the shadow folds too, or pruning would erase exactly the long-run
+         evidence this measurement exists to accumulate */
+      if ((r.state === 't1' || r.state === 'stop') && isFinite(num(r.bankR))){
+        out[key].bankN = (out[key].bankN || 0) + 1;
+        out[key].bankSum = (out[key].bankSum || 0) + num(r.bankR);
+        out[key].bankActualSum = (out[key].bankActualSum || 0) + ((r.state === 't1') ? (num(r.rr) || 0) : -1);
+      }
     }
     return out;
   }
@@ -566,6 +632,27 @@ localStorage. Never throws.
              + '<td><span class="gpip ' + cls + '">' + esc(read) + '</span></td></tr>';
         }
         h += '</tbody></table>';
+        /* THE SHADOW LINE. Sums the matched pairs across every mechanic shown
+           and prints both policies side by side. Nothing is recommended until
+           the gap is worth acting on over a real sample — this line is the
+           evidence accumulating in public, not a verdict. */
+        (function(){
+          var bn = 0, bs = 0, ba = 0, bi2;
+          for (bi2 = 0; bi2 < keys.length; bi2++){
+            var bp = pool[keys[bi2]];
+            if (bp && bp.bankN){ bn += bp.bankN; bs += bp.bankN * bp.bankExpR; ba += bp.bankN * bp.bankActualExpR; }
+          }
+          if (bn > 0){
+            var sh = bs / bn, ac = ba / bn;
+            h += '<div class="note"><b>SHADOW — bank half at +1R, rest to breakeven</b>: '
+              + bn + ' settled pair' + (bn === 1 ? '' : 's') + ' · as traded '
+              + (ac >= 0 ? '+' : '') + ac.toFixed(2) + 'R vs shadow '
+              + (sh >= 0 ? '+' : '') + sh.toFixed(2) + 'R per trade. '
+              + (bn < 30 ? 'Too few pairs to act on — accumulating.'
+                         : 'A persistent gap here is out-of-sample evidence; in-sample, 48% of stopped gold scalps had first reached +1R.')
+              + '</div>';
+          }
+        })();
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '
            + 'not exist at the time. A bar spanning both stop and target counts as a STOP; expiry is '
            + 'excluded rather than counted as a win. This is the only measurement here that accumulates.</div>';
