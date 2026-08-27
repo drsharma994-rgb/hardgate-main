@@ -120,11 +120,35 @@ console.log('\n== engine beats veto watch in MP horizon ==');
   ok(/SWEEP/.test(hz), 'engine strategy in horizon row');
 }
 
+console.log('\n== grade C fallback when no A/B ==');
+{
+  const W = boot();
+  const bridge = {
+    ok: true,
+    scalp: {
+      ranked: [{
+        dir: 'short', strategy: 'FVG FILL', entry: 4627, stop: 4638, t1: 4612,
+        grade: 'C', tally: 4, demoted: true
+      }],
+      best: { dir: 'short', strategy: 'FVG FILL', entry: 4627, stop: 4638, t1: 4612,
+        grade: 'C', tally: 4, demoted: true }
+    },
+    swing: { ranked: [], best: null }
+  };
+  const pick = W.hgOgPickGoldEngineForMp(bridge, 'SCALP', 'long');
+  ok(pick && pick.engineLowGrade, 'grade C fallback');
+  ok(pick.dir === 'short', 'best grade C picked');
+  const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, pick, null);
+  ok(/FORMING/.test(html), 'forming tier in MP');
+  ok(/need tally/.test(html), 'explains B threshold');
+  const panel = W.hgOgGoldEnginesPanelHtml(bridge);
+  ok(/No grade-A\/B this bar/.test(panel), 'engines panel explains missing A/B');
+}
 console.log('\n== wiring exports ==');
 {
   const SRC = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
   ok(/hgOgApplyBridgeBestLevels/.test(SRC), 'best-levels batch in bridge');
-  ok(/hgOgPickGoldEngineFor/.test(SRC), 'engine pick helper');
+  ok(/hgOgPickGoldEngineForMp/.test(SRC), 'MP engine pick helper');
   ok(/hgOgRunGoldTabEngines\(shared, res\.scalp\.rows/.test(SRC), 'bridge runs before MP paint');
 }
 
