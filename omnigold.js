@@ -3957,7 +3957,8 @@ terse status, and never launches a first-time scan on a global refresh.
       var ev = (row.grade && row.grade.evaluated) || 0;
       var tot = (row.grade && row.grade.total) || 0;
       var grade = isEngine
-        ? ('GOLD ENGINE · grade ' + esc(String(row.engineGrade || 'A')))
+        ? ('GOLD ENGINE · grade ' + esc(String(row.engineGrade || 'A'))
+          + (row.engineDemoted ? ' · demoted' : ''))
         : (tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks')) : (row.grade.ticket ? 'TICKET' : 'WATCH'));
       var info = row.gates ? hgOgInfoNet(row.gates) : { n: 0, pass: 0 };
       var cons = row.consensus || {};
@@ -3973,7 +3974,9 @@ terse status, and never launches a first-time scan on a global refresh.
         +  (isWatch ? ' · VETO' : '') + (isEngine ? ' · ACTIONABLE' : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  (isEngine
-            ? ' · WITH GOLD TAPE · not an OMNIGOLD TICKET · use GOLD tab for book handoff'
+            ? (row.engineAgainstTape
+                ? ' · AGAINST GOLD TAPE · counter-trend engine read · not an OMNIGOLD TICKET · use GOLD SCALP/SWING for book'
+                : ' · WITH GOLD TAPE · not an OMNIGOLD TICKET · use GOLD SCALP/SWING for book')
             : (isWatch
             ? ' · WITH GOLD TAPE · gate blocked · not trade-ready'
             : ' · WITH GOLD TAPE · not a win probability.')) + '</div>';
@@ -4535,31 +4538,53 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
-  function hgOgPickGoldEngineFor(bridge, horizon, tapeDir){
+  function hgOgPickGoldEngineFor(bridge, horizon, tapeDir, opts){
+    opts = opts || {};
     if (!bridge || !bridge.ok) return null;
     var bucket = (horizon === HORIZONS.swing.label) ? bridge.swing : bridge.scalp;
     if (!bucket) return null;
     tapeDir = String(tapeDir || '').toLowerCase();
     var ranked = (bucket.ranked || []).slice();
     if (bucket.best && ranked.indexOf(bucket.best) < 0) ranked.unshift(bucket.best);
-    var i, c, pool = [];
-    for (i = 0; i < ranked.length; i++){
-      c = ranked[i];
-      if (!hgOgGoldEngineGradeOk(c, { allowB: true })) continue;
-      if (tapeDir === 'long' || tapeDir === 'short'){
-        if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
+
+    function poolFor(alignedOnly){
+      var i, c, pool = [];
+      for (i = 0; i < ranked.length; i++){
+        c = ranked[i];
+        if (!hgOgGoldEngineGradeOk(c, { allowB: true })) continue;
+        if (alignedOnly && (tapeDir === 'long' || tapeDir === 'short')){
+          if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
+        }
+        pool.push(c);
       }
-      if (c.demoted && String(c.grade || '').toUpperCase() !== 'A' && !c.locked) continue;
-      pool.push(c);
+      if (!pool.length) return pool;
+      pool.sort(function(a, b){
+        var ga = String(a.grade || '').toUpperCase(), gb = String(b.grade || '').toUpperCase();
+        if (ga === 'A' && gb !== 'A') return -1;
+        if (gb === 'A' && ga !== 'A') return 1;
+        if (a.demoted && !b.demoted) return 1;
+        if (b.demoted && !a.demoted) return -1;
+        return (fin(b.tally) || 0) - (fin(a.tally) || 0);
+      });
+      return pool;
     }
-    if (!pool.length) return null;
-    pool.sort(function(a, b){
-      var ga = String(a.grade || '').toUpperCase(), gb = String(b.grade || '').toUpperCase();
-      if (ga === 'A' && gb !== 'A') return -1;
-      if (gb === 'A' && ga !== 'A') return 1;
-      return (fin(b.tally) || 0) - (fin(a.tally) || 0);
-    });
-    return hgOgBridgeSetupToPick(pool[0], horizon);
+
+    var aligned = poolFor(true);
+    var pick = aligned[0] || null;
+    var againstTape = false;
+    if (!pick && opts.allowAgainstTape !== false){
+      var any = poolFor(false);
+      pick = any[0] || null;
+      if (pick && (tapeDir === 'long' || tapeDir === 'short')
+          && String(pick.dir || '').toLowerCase() !== tapeDir) againstTape = true;
+    }
+    if (!pick) return null;
+    var out = hgOgBridgeSetupToPick(pick, horizon);
+    if (out){
+      out.engineDemoted = !!pick.demoted;
+      out.engineAgainstTape = againstTape;
+    }
+    return out;
   }
 
   function hgOgGoldEngineRowHtml(c, tier){
@@ -4709,8 +4734,8 @@ terse status, and never launches a first-time scan on a global refresh.
     var note = anyTrade
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
       : (anyEngine
-          ? ('No OMNIGOLD TICKET cleared — showing grade-A/B setups from the <b>GOLD SCALP / GOLD SWING</b> multi-strategy engines (15m scalp + 4h swing). '
-             + 'These use formation, best-levels, macro and GOLD PRO gates — not the 55-mechanic walk-forward ledger. Not a win probability.')
+          ? ('No OMNIGOLD TICKET cleared on this horizon — showing the best grade-A/B setup from <b>GOLD SCALP / GOLD SWING</b> engines. '
+             + 'Demoted or against-tape engines are labeled honestly. Not a win probability.')
           : (anyWatch
           ? ('Gold tape reads ' + tape.toUpperCase()
              + ' — no ticket cleared; best WITH-tape level read below is gate-blocked (VETO). '

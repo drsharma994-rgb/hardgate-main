@@ -50,7 +50,7 @@ console.log('\n== bridge setup converts to MP pick ==');
   ok(pick.engineGrade === 'A', 'grade carried');
 }
 
-console.log('\n== pick gold engine respects tape ==');
+console.log('\n== pick gold engine respects tape (aligned first) ==');
 {
   const W = boot();
   const bridge = {
@@ -67,7 +67,31 @@ console.log('\n== pick gold engine respects tape ==');
   const shortPick = W.hgOgPickGoldEngineFor(bridge, 'SCALP', 'short');
   ok(shortPick && shortPick.dir === 'short', 'tape-aligned short');
   const longPick = W.hgOgPickGoldEngineFor(bridge, 'SCALP', 'long');
-  ok(longPick && longPick.dir === 'long', 'tape-aligned long');
+  ok(longPick && longPick.dir === 'long', 'tape-aligned long wins over higher-tally opposite');
+}
+
+console.log('\n== demoted grade B + against tape still surfaces ==');
+{
+  const W = boot();
+  const bridge = {
+    ok: true,
+    scalp: {
+      ranked: [{
+        dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', entry: 4628, stop: 4640, t1: 4610,
+        grade: 'B', tally: 6, demoted: true
+      }],
+      best: { dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', entry: 4628, stop: 4640, t1: 4610,
+        grade: 'B', tally: 6, demoted: true }
+    },
+    swing: { ranked: [], best: null }
+  };
+  const pick = W.hgOgPickGoldEngineFor(bridge, 'SCALP', 'long');
+  ok(pick && pick.dir === 'short', 'against-tape short when tape is long');
+  ok(pick.engineAgainstTape, 'flagged against tape');
+  ok(pick.engineDemoted, 'demoted carried');
+  const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, pick, null);
+  ok(/AGAINST GOLD TAPE/.test(html), 'against-tape label in MP');
+  ok(/LIQUIDITY SWEEP/.test(html), 'strategy in MP');
 }
 
 console.log('\n== MOST PROBABLE panel shows engine tier ==');
