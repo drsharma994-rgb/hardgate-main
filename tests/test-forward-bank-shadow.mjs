@@ -196,4 +196,33 @@ console.log('\n== the grade is recorded so the A/B/C chips can be judged ==');
   ok(/grade: c\.engineGrade/.test(OG), 'omnigold passes the grade when it records a setup');
 }
 
+console.log('\n== the replicated-gate stack is recorded, so it can be judged ==');
+{
+  /* regime-fit, htf-confirm and hurst-regime are the only gates that earned
+     their keep on BOTH horizons in the gate audit. Stacked on the tape,
+     in-sample on 1,000 PAXG bars, the swing horizon ran 31.9% (tape alone)
+     against 45.0% when all three agreed — +0.350R, z +5.80. Strongest result
+     of the audit, and in-sample on one instrument, which is precisely what
+     this repo declines to trade on. Recording the count per firing is how it
+     earns a real verdict instead. */
+  const withStack = (v) => ctx.hgFwdNormalize({ tab:'T', mechanic:'M', sym:'X', tf:'1h', dir:'long',
+    entry:100, stop:90, t1:120, barT:T0, horizonBars:6, stack3:v });
+  ok(withStack(3).stack3 === 3, 'all three agreeing is recorded as 3');
+  ok(withStack(0).stack3 === 0, 'none agreeing is recorded as 0 — a real reading, not missing');
+  ok(withStack(undefined).stack3 === -1, 'an unreported count is -1, never silently 0');
+  ok(withStack(9).stack3 === -1 && withStack(-2).stack3 === -1, 'out-of-range counts are rejected');
+
+  const g = (n, rows) => ctx.hgFwdSettleOne(withStack(n), rows);
+  const recs = [ g(3, [bar(0,121,101)]), g(3, [bar(0,105,89)]), g(0, [bar(0,105,89)]) ];
+  const st = ctx.hgFwdStatsOf(recs, 'T', 'M', false);
+  ok(st.byStack[3].n === 2 && st.byStack[3].w === 1, '3/3 bucket: 2 settled, 1 win');
+  ok(st.byStack[0].n === 1 && st.byStack[0].w === 0, '0/3 bucket kept separate');
+
+  const SRC = fs.readFileSync(path.join(ROOT, 'hg-forward.js'), 'utf8');
+  ok(/REPLICATED-GATE STACK/.test(SRC), 'the forward panel carries the stack line');
+  const OG = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/'regime-fit':1, 'htf-confirm':1, 'hurst-regime':1/.test(OG),
+     'omnigold counts exactly the three gates that replicated — not a wider net');
+}
+
 console.log('\nforward bank shadow: ' + passed + ' checks passed');

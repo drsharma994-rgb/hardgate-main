@@ -139,6 +139,24 @@ localStorage. Never throws.
         if (t === 'CLEAN') return 'A';
         return (t === 'A' || t === 'B' || t === 'C' || t === 'D') ? t : '';
       })(rec.grade),
+      /* HOW MANY OF THE THREE REPLICATED GATES AGREED (0-3, -1 = unknown).
+         regime-fit, htf-confirm and hurst-regime are the only gates that
+         earned their keep on BOTH horizons in the gate audit. Stacked on top
+         of the tape, in-sample on 1,000 PAXG bars:
+
+           SWING @2R   tape alone 31.9%  ->  all three agree 45.0% (n=602)
+                       +0.350R, z +5.80 over the tape
+           SCALP @2R   tape alone 36.0%  ->  all three agree 38.2% (n=930)
+                       z +1.14 — not significant
+
+         That is the strongest result of the whole audit and it is IN-SAMPLE
+         on one instrument, which is exactly the evidence this repo refuses to
+         trade on. Recording it per firing is how it earns an out-of-sample
+         answer instead. */
+      stack3: (function(v){
+        var n = +v;
+        return (isFinite(n) && n >= 0 && n <= 3) ? Math.floor(n) : -1;
+      })(rec.stack3),
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
@@ -291,6 +309,8 @@ localStorage. Never throws.
     /* Settled outcomes split by the grade the setup carried WHEN IT FIRED, so
        the A/B/C chips can be judged rather than trusted. */
     var byGrade = { A:{n:0,w:0}, B:{n:0,w:0}, C:{n:0,w:0}, D:{n:0,w:0} };
+    /* settled outcomes split by how many of the three replicated gates agreed */
+    var byStack = { 0:{n:0,w:0}, 1:{n:0,w:0}, 2:{n:0,w:0}, 3:{n:0,w:0} };
     /* Start from any evidence already folded out of the record list. Without
        this, everything pruned would silently vanish from the numbers.
        ticketOnly cannot be answered from the aggregate — it does not keep that
@@ -323,6 +343,10 @@ localStorage. Never throws.
         byGrade[r.grade].n++;
         if (r.state === 't1') byGrade[r.grade].w++;
       }
+      if ((r.state === 't1' || r.state === 'stop') && byStack[r.stack3]){
+        byStack[r.stack3].n++;
+        if (r.state === 't1') byStack[r.stack3].w++;
+      }
     }
     var settled = wins + losses;
     var hit = settled ? wins / settled : NaN;
@@ -347,7 +371,7 @@ localStorage. Never throws.
              bankN: bankN,
              bankExpR: bankN ? (bankSum / bankN) : NaN,
              bankActualExpR: bankN ? (bankActualSum / bankN) : NaN,
-             byGrade: byGrade };
+             byGrade: byGrade, byStack: byStack };
   }
 
   /* Every mechanic seen for a tab. Pure. */
@@ -698,6 +722,29 @@ localStorage. Never throws.
             + (tot < 40
                 ? 'Too few to judge the chips yet — accumulating.'
                 : 'If A does not beat C here, the chips are counting confluence rather than measuring edge.')
+            + '</div>';
+        })();
+        /* THE STACK LINE. regime-fit + htf-confirm + hurst-regime are the only
+           gates that replicated on BOTH horizons. In-sample on 1,000 PAXG bars
+           the swing horizon went 31.9% (tape alone) -> 45.0% when all three
+           agreed, +0.350R, z +5.80. This is where that claim gets checked
+           against trades recorded before their outcomes existed. */
+        (function(){
+          var st = { 0:{n:0,w:0}, 1:{n:0,w:0}, 2:{n:0,w:0}, 3:{n:0,w:0} }, tot = 0, k, si;
+          for (si = 0; si < keys.length; si++){
+            var sp = pool[keys[si]];
+            if (!sp || !sp.byStack) continue;
+            for (k in st) if (sp.byStack[k]){ st[k].n += sp.byStack[k].n; st[k].w += sp.byStack[k].w; tot += sp.byStack[k].n; }
+          }
+          if (!tot) return;
+          var bits = [];
+          for (k in st) if (st[k].n) bits.push(k + '/3 ' + (100 * st[k].w / st[k].n).toFixed(0) + '% (n=' + st[k].n + ')');
+          h += '<div class="note"><b>REPLICATED-GATE STACK</b> — T1-first by how many of '
+            + 'regime-fit, htf-confirm and hurst-regime agreed: ' + esc(bits.join(' · ')) + '. '
+            + (tot < 40
+                ? 'Too few to judge yet — accumulating.'
+                : 'In-sample the swing horizon ran 31.9% on tape alone against 45.0% with all three; '
+                  + 'this is the out-of-sample check on that.')
             + '</div>';
         })();
         h += '<div class="note">Recorded once per firing when it fires, settled later by bars that did '

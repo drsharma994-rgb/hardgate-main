@@ -5499,7 +5499,18 @@ terse status, and never launches a first-time scan on a global refresh.
                  the grade counts CONFLUENCE, and confluence has never been
                  shown to predict outcome on gold. c.grade is the gate ledger's
                  object, so the letter comes off the engine bridge instead. */
-              grade: c.engineGrade || (c.grade && c.grade.letter) || hgOgConfluenceGrade(c) || ''
+              grade: c.engineGrade || (c.grade && c.grade.letter) || hgOgConfluenceGrade(c) || '',
+              /* the three gates that replicated on both horizons — recorded so
+                 the in-sample 45%-at-2R swing result earns an out-of-sample
+                 verdict rather than being traded on faith */
+              stack3: (function(gs){
+                var keep = { 'regime-fit':1, 'htf-confirm':1, 'hurst-regime':1 };
+                var n = 0, j;
+                for (j = 0; j < (gs || []).length; j++){
+                  if (gs[j] && keep[gs[j].key] && gs[j].pass === true) n++;
+                }
+                return n;
+              })(c.gates)
             });
           } catch (e) { var wr = gfn('hgFwdWarn'); if (wr) { try { wr('omnigold:record', e); } catch (eW) {} } }
         }
