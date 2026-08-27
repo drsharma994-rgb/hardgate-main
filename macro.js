@@ -238,6 +238,14 @@ const TREASURY_CSV_BASE = 'https://home.treasury.gov/resource-center/data-chart-
 function __treasuryCsvUrl(year){
   return TREASURY_CSV_BASE + year + '/all?type=daily_treasury_yield_curve&field_tdr_date_value=' + year + '&page&_format=csv';
 }
+/* The REAL (TIPS) yield curve — the keyless stand-in for FRED's DFII10.
+   Same host and same shape as the nominal curve above, which the app has
+   fetched directly under CSP since v431, so this adds no new origin and no
+   new failure mode. Its header says "10 YR" where the nominal one says
+   "10 Yr", hence the case-insensitive match in the parser. */
+function __treasuryRealCsvUrl(year){
+  return TREASURY_CSV_BASE + year + '/all?type=daily_treasury_real_yield_curve&field_tdr_date_value=' + year + '&page&_format=csv';
+}
 /* Minimal RFC-4180-ish CSV line splitter (quoted fields, "" escapes). */
 function __parseCsvLine(line){
   const out = []; let cur = '', inQ = false;
@@ -254,6 +262,37 @@ function __parseCsvLine(line){
   return out;
 }
 /* CSV text -> [{t:<unix sec>, date:'YYYY-MM-DD', y10:<number>}] ascending. */
+/* Ten-year REAL yield rows from the TIPS curve CSV, oldest-first, in the
+   {value,date} shape __trendFromFredRows already consumes — so the trend read
+   is computed by exactly the same code whether the numbers came from FRED or
+   from Treasury, and the two cannot drift apart. */
+function __parseTreasuryReal10Y(csvText){
+  try{
+    if (!csvText || typeof csvText !== 'string') return [];
+    const lines = csvText.split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const header = __parseCsvLine(lines[0]).map(function(h){ return h.trim().toUpperCase(); });
+    let ci = -1;
+    for (let i = 0; i < header.length; i++){ if (header[i] === '10 YR'){ ci = i; break; } }
+    if (ci < 0) return [];
+    const rows = [];
+    for (let k = 1; k < lines.length; k++){
+      if (!lines[k] || !lines[k].trim()) continue;
+      const cells = __parseCsvLine(lines[k]);
+      if (cells.length <= ci) continue;
+      const v = parseFloat(cells[ci]);
+      const d = (cells[0] || '').trim();
+      if (!isFinite(v) || !d) continue;
+      const t = Date.parse(d);
+      if (!isFinite(t)) continue;
+      rows.push({ value: v, date: d, t: t });
+    }
+    /* Treasury serves newest-first; every consumer here expects oldest-first. */
+    rows.sort(function(a, b){ return a.t - b.t; });
+    return rows;
+  }catch(e){ return []; }
+}
+
 function __parseTreasury10Y(csvText){
   try{
     if (!csvText || typeof csvText !== 'string') return [];
@@ -313,10 +352,34 @@ async function getDXYOfficial(){
   try{
     const hit = __macroCacheGet('dxyOfficial', DXY_CACHE_MS); if (hit !== undefined) return hit;
     const rows = await __fredSeries('DTWEXBGS', 30);
-    if (!rows || !rows.length) return null;
-    const t = __trendFromFredRows(rows, 0.3);
-    if (!isFinite(t.value)) return null;
-    return __macroCachePut('dxyOfficial', { value: t.value, date: t.date, trend20: t.trend20, change20Pct: t.change20Pct, source: 'fred' });
+    if (rows && rows.length){
+      const t = __trendFromFredRows(rows, 0.3);
+      if (isFinite(t.value))
+        return __macroCachePut('dxyOfficial', { value: t.value, date: t.date, trend20: t.trend20, change20Pct: t.change20Pct, source: 'fred' });
+    }
+    /* KEYLESS FALLBACK — ICE DXY off Yahoo, through the same allowlisted proxy
+       the other Yahoo legs use. NOT the same index as FRED's DTWEXBGS: that is
+       the Fed's trade-weighted BROAD dollar, this is the six-currency ICE
+       basket. They move together and the gate only reads the DIRECTION, which
+       is why substituting is honest — but the source is NAMED on the card so a
+       reader is never told "Fed broad dollar" when they are looking at ICE. */
+    const yj = await __yahooViaProxy('https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB?interval=1d&range=3mo');
+    const yr2 = __parseYahooChart(yj);
+    if (!yr2 || yr2.length < 21) return null;
+    /* __parseYahooChart yields {t,o,h,l,c}; there is no .date on it, and an
+       empty date reads on the card as "source unknown when". Derive it from
+       the bar's own timestamp. */
+    const rows2 = yr2.map(function(r){
+                       var d = '';
+                       try { d = new Date((+r.t) * 1000).toISOString().slice(0, 10); } catch (eD) { d = ''; }
+                       return { value: r.c, date: d };
+                     })
+                     .filter(function(r){ return isFinite(r.value); });
+    if (rows2.length < 21) return null;
+    const t2 = __trendFromFredRows(rows2, 0.3);
+    if (!isFinite(t2.value)) return null;
+    return __macroCachePut('dxyOfficial', { value: t2.value, date: t2.date, trend20: t2.trend20,
+                                            change20Pct: t2.change20Pct, source: 'ice-dxy' });
   }catch(e){ return null; }
 }
 
@@ -325,10 +388,25 @@ async function getRealYield10Y(){
   try{
     const hit = __macroCacheGet('real10y', DXY_CACHE_MS); if (hit !== undefined) return hit;
     const rows = await __fredSeries('DFII10', 30);
-    if (!rows || !rows.length) return null;
-    const t = __trendFromFredRows(rows, 2);
-    if (!isFinite(t.value)) return null;
-    return __macroCachePut('real10y', { value: t.value, date: t.date, trend20: t.trend20, change20Pct: t.change20Pct, source: 'fred' });
+    if (rows && rows.length){
+      const t = __trendFromFredRows(rows, 2);
+      if (isFinite(t.value))
+        return __macroCachePut('real10y', { value: t.value, date: t.date, trend20: t.trend20, change20Pct: t.change20Pct, source: 'fred' });
+    }
+    /* KEYLESS FALLBACK. Real rates are gold's primary fundamental driver, and
+       without FRED_API_KEY this read returned null — leaving macro-realrate
+       permanently UNCHECKED on a live desk. Treasury publishes the same TIPS
+       curve as a CSV, same host the nominal fallback already uses, no key.
+       Trend is computed by __trendFromFredRows either way, so FRED and
+       Treasury cannot disagree about what RISING means. */
+    const yr = new Date().getUTCFullYear();
+    let tr = __parseTreasuryReal10Y(await __macroFetchText(__treasuryRealCsvUrl(yr)));
+    if (!tr.length) tr = __parseTreasuryReal10Y(await __macroFetchText(__treasuryRealCsvUrl(yr - 1)));
+    if (!tr.length) return null;
+    const tt = __trendFromFredRows(tr, 2);
+    if (!isFinite(tt.value)) return null;
+    return __macroCachePut('real10y', { value: tt.value, date: tt.date, trend20: tt.trend20,
+                                        change20Pct: tt.change20Pct, source: 'treasury-tips' });
   }catch(e){ return null; }
 }
 
