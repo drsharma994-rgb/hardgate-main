@@ -4008,10 +4008,51 @@ terse status, and never launches a first-time scan on a global refresh.
          would print C on no evidence at all. */
       var n = (b.info && isFinite(fin(b.info.n))) ? fin(b.info.n) : 0;
       if (n < 5) return '';
-      var s = (fam + inf) / 2;
-      if (s >= 0.5) return 'A';
-      if (s >= 0.25) return 'B';
-      if (s >= 0) return 'C';
+      /* ONE VOTING FAMILY IS NOT A CONSENSUS.
+
+         hgOgConsensusVoters filters the voter pool by the DAILY trend before
+         anyone votes: when the daily is up, every short — trend and reversion
+         alike — is dropped from the pool. So a day when gold's daily is up but
+         the 1h/4h tape reads short leaves exactly one family voting (a lone
+         long), and the family term is pinned to -1.000 for every short on the
+         board no matter how many fired or how many reads back them.
+
+         Live, that produced the contradiction a reader spotted immediately:
+         the tab announced "gold tape reads SHORT", offered only shorts, and
+         graded all five of them D — while the single opposing long took an A.
+         Five short mechanics had fired against one long.
+
+         A denominator of one carries no information about agreement, so it
+         does not get to carry half the grade. Below two voting families the
+         letter comes from the indicator reads alone, on the same principle as
+         the five-read floor above: silence beats a number that looks like
+         evidence and is not. */
+      var famDen = 0;
+      if (b && isFinite(fin(b.nAgree)) && isFinite(fin(b.nAgainst))){
+        famDen = fin(b.nAgree) + fin(b.nAgainst);
+      }
+      /* THE INDICATOR READ CARRIES THE LETTER; STRATEGIES ADJUST IT.
+
+         Giving the family term half the score was wrong twice over. It is
+         pinned to -1 whenever the pool is degenerate — which is 25% of scalp
+         setups and 41% of swing ones — and a term that extreme swamped 37
+         indicator reads on a denominator of one. Weighting it to zero instead
+         threw away the strategy half of the question and pushed five of six
+         live setups to A.
+
+         So the letter rides on infoRatio, and agreeing families move it by at
+         most 0.15 — about one band — and only when at least two families
+         actually voted. Strategies can promote or demote a card; they cannot
+         define it from a single vote. */
+      var s = inf + ((famDen >= 2) ? (0.15 * fam) : 0);
+      /* Cuts are the QUARTILES of infoRatio measured over 3,769 real gold
+         setups (1,924 scalp / 1,845 swing): p25 0.43, median 0.60, p75 0.69.
+         So A is genuinely top-quartile confluence for this instrument rather
+         than an arbitrary line — the mistake that let a raw tally grade 97%
+         of setups A. Recalibrate these if the indicator set changes size. */
+      if (s >= 0.69) return 'A';
+      if (s >= 0.60) return 'B';
+      if (s >= 0.43) return 'C';
       return 'D';
     } catch (e) { return ''; }
   }
@@ -4028,10 +4069,15 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function hgOgGradeLegendHtml(){
     return '<span class="og-grade-legend">'
-      + hgOgGradeChipHtml('A', { large: true }) + ' ≥8 '
-      + hgOgGradeChipHtml('B', { large: true }) + ' ≥5 '
-      + hgOgGradeChipHtml('C', { large: true }) + ' forming '
-      + hgOgGradeChipHtml('D', { large: true }) + ' weak'
+      /* The engine's raw-tally wording ("≥8", "≥5") described a count that
+         graded 97% of setups A. The desk's own cards grade on measured
+         quartiles of indicator agreement instead, so the legend says what the
+         letters mean rather than quoting a threshold that no longer applies
+         to half the cards on screen. */
+      + hgOgGradeChipHtml('A', { large: true }) + ' top quarter '
+      + hgOgGradeChipHtml('B', { large: true }) + ' above median '
+      + hgOgGradeChipHtml('C', { large: true }) + ' below median '
+      + hgOgGradeChipHtml('D', { large: true }) + ' bottom quarter'
       + '</span>';
   }
 
@@ -4064,7 +4110,18 @@ terse status, and never launches a first-time scan on a global refresh.
       var nAg = cons.nAgree || 0;
       var fam = isEngine
         ? (row.engineSrc || 'GOLD tab engine')
-        : (nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree'));
+        : (function(){
+            /* SHOW THE DENOMINATOR. "0 families agree" reads as "the desk
+               disagrees with this"; the truth is often "only one family was
+               allowed to vote, because hgOgConsensusVoters drops every setup
+               fighting the DAILY trend before the vote". Those are different
+               statements and the reader was drawing the wrong one. */
+            var vAg = cons.nAgree || 0, vAg2 = cons.nAgainst || 0;
+            var den = vAg + vAg2;
+            if (!den) return 'no family voted (all filtered by the daily trend)';
+            return vAg + ' of ' + den + ' famil' + (den === 1 ? 'y agrees' : 'ies agree')
+                 + (den < 2 ? ' — too few to weigh' : '');
+          })();
       var ind = isEngine
         ? (isFinite(fin(row.engineTally)) ? ('tally +' + fin(row.engineTally) + ' · multi-strategy catalog') : 'multi-strategy catalog')
         : (info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread');

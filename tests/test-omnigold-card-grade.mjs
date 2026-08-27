@@ -62,18 +62,43 @@ const mk = (nAgree, nAgainst, infoPass, infoFail) => ({
   )
 });
 
-console.log('\n== the letters separate rather than all reading A ==');
+console.log('\n== the cuts are measured quartiles, so the letters separate ==');
 {
-  ok(W.hgOgConfluenceGrade(mk(4, 0, 30, 2)) === 'A', 'strong agreement both ways is an A');
-  ok(W.hgOgConfluenceGrade(mk(0, 4, 2, 30)) === 'D', 'strong disagreement both ways is a D');
-  const mid = W.hgOgConfluenceGrade(mk(2, 1, 20, 12));
-  ok(mid === 'B' || mid === 'C', 'a mixed card lands in the middle (' + mid + ')');
+  /* p25 0.43, median 0.60, p75 0.69 over 3,769 real gold setups (1,924 scalp,
+     1,845 swing). A is top-quartile confluence FOR THIS INSTRUMENT, not an
+     arbitrary line — which is the mistake that let a raw tally grade 97% of
+     setups A. */
+  ok(W.hgOgConfluenceGrade(mk(0, 0, 34, 3)) === 'A', 'top-quartile indicator agreement is an A');
+  ok(W.hgOgConfluenceGrade(mk(0, 0, 24, 13)) === 'D', 'bottom-quartile is a D');
 
-  /* THE SATURATION TEST — this is the failure the engine tally had. The card
-     the user was looking at: 0 families agreeing, 26 of 37 indicators with. */
-  const live = W.hgOgConfluenceGrade(mk(0, 0, 26, 11));
-  ok(live !== 'A', 'the live card (0 families, 26/37 indicators) is NOT an A — no family agreed with it');
-  ok(live === 'C' || live === 'B', 'it grades in the middle instead (' + live + ')');
+  /* NOT ALL ONE LETTER — the failure mode both earlier attempts had, in
+     opposite directions. */
+  const spread = new Set([mk(0,0,34,3), mk(0,0,31,6), mk(0,0,28,9), mk(0,0,24,13)]
+    .map(c => W.hgOgConfluenceGrade(c)));
+  ok(spread.size >= 3,
+     'four confluence levels produce at least three distinct letters (' + [...spread].sort().join('') + ')');
+}
+
+console.log('\n== a degenerate voter pool cannot define the letter ==');
+{
+  /* hgOgConsensusVoters drops every setup fighting the DAILY trend before the
+     vote. On a day when the daily is up but the tape reads short, exactly one
+     family votes and the family term pins to -1.000 for every short on the
+     board. Live, five shorts fired against one long: all five graded D while
+     the lone long took an A. That inversion is what this guards. */
+  const lone = W.hgOgConfluenceGrade(mk(0, 1, 27, 10));       /* famDen = 1 */
+  const noneVoting = W.hgOgConfluenceGrade(mk(0, 0, 27, 10)); /* famDen = 0 */
+  ok(lone === noneVoting,
+     'one opposing family is treated as no evidence, exactly like none (' + lone + ')');
+  ok(lone !== 'D', 'so it cannot force a D on a card with 27 of 37 reads behind it');
+
+  /* with a real denominator the family term is allowed to matter — bounded */
+  const up = W.hgOgConfluenceGrade(mk(2, 0, 28, 9));
+  const dn = W.hgOgConfluenceGrade(mk(0, 2, 28, 9));
+  ok(up !== dn, 'with two or more voting families, agreement moves the letter (' + up + ' vs ' + dn + ')');
+  const SRC0 = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
+  ok(/0\.15 \* fam/.test(SRC0),
+     'and it is a bounded adjustment — about one band — never half the score');
 }
 
 console.log('\n== an unread ledger gets no letter at all ==');
