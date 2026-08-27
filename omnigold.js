@@ -3945,27 +3945,38 @@ terse status, and never launches a first-time scan on a global refresh.
     return s;
   }
 
-  function hgOgMpHorizonHtml(label, pick, tape, watchPick, heldMeta){
+  function hgOgMpHorizonHtml(label, pick, tape, watchPick, heldMeta, enginePick){
     var h = '<div class="og-mp-hz">';
-    var row = (pick && pick.plan) ? pick : ((watchPick && watchPick.plan) ? watchPick : null);
-    var isWatch = !(pick && pick.plan) && watchPick && watchPick.plan;
+    var row = (pick && pick.plan) ? pick
+      : ((enginePick && enginePick.plan) ? enginePick
+      : ((watchPick && watchPick.plan) ? watchPick : null));
+    var isEngine = !(pick && pick.plan) && enginePick && enginePick.plan;
+    var isWatch = !(pick && pick.plan) && !isEngine && watchPick && watchPick.plan;
     if (row && row.plan){
       var p = row.plan;
       var ev = (row.grade && row.grade.evaluated) || 0;
       var tot = (row.grade && row.grade.total) || 0;
-      var grade = tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks')) : (row.grade.ticket ? 'TICKET' : 'WATCH');
-      var info = hgOgInfoNet(row.gates);
+      var grade = isEngine
+        ? ('GOLD ENGINE · grade ' + esc(String(row.engineGrade || 'A')))
+        : (tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks')) : (row.grade.ticket ? 'TICKET' : 'WATCH'));
+      var info = row.gates ? hgOgInfoNet(row.gates) : { n: 0, pass: 0 };
       var cons = row.consensus || {};
       var nAg = cons.nAgree || 0;
-      var fam = nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree');
-      var ind = info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread';
+      var fam = isEngine
+        ? (row.engineSrc || 'GOLD tab engine')
+        : (nAg + ' famil' + (nAg === 1 ? 'y agrees' : 'ies agree'));
+      var ind = isEngine
+        ? (isFinite(fin(row.engineTally)) ? ('tally +' + fin(row.engineTally) + ' · multi-strategy catalog') : 'multi-strategy catalog')
+        : (info.n ? (info.pass + '/' + info.n + ' indicators with') : 'indicators unread');
       h += '<div class="hg-mp-head">XAUUSD ' + esc(String(row.dir || '').toUpperCase())
-        +  ' <span>' + esc(label) + ' · ' + esc(row.kind) + ' · ' + esc(grade)
-        +  (isWatch ? ' · VETO' : '') + '</span></div>';
+        +  ' <span>' + esc(label) + ' · ' + esc(isEngine ? String(row.kind).slice(0, 48) : row.kind) + ' · ' + grade
+        +  (isWatch ? ' · VETO' : '') + (isEngine ? ' · ACTIONABLE' : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
-        +  (isWatch
+        +  (isEngine
+            ? ' · WITH GOLD TAPE · not an OMNIGOLD TICKET · use GOLD tab for book handoff'
+            : (isWatch
             ? ' · WITH GOLD TAPE · gate blocked · not trade-ready'
-            : ' · WITH GOLD TAPE · not a win probability.') + '</div>';
+            : ' · WITH GOLD TAPE · not a win probability.')) + '</div>';
       h += '<div class="hg-mp-grid">';
       var mktShow = fin(__og.spotAnchor);
       if (mktShow > 0){
@@ -4415,6 +4426,142 @@ terse status, and never launches a first-time scan on a global refresh.
     catch (eCov){ host.innerHTML = ''; }
   }
 
+  function hgOgGoldEngineGradeOk(c, opts){
+    opts = opts || {};
+    if (!c || !c.dir || c.vetoed) return false;
+    if (!(isFinite(fin(c.entry)) && isFinite(fin(c.stop)) && isFinite(fin(c.t1)))) return false;
+    var g = String(c.grade || '').toUpperCase();
+    if (c.locked || g === 'A' || g === 'CLEAN') return true;
+    if (opts.allowB && g === 'B' && fin(c.tally) >= 5) return true;
+    return false;
+  }
+
+  function hgOgApplyBridgeBestLevels(inp, scalpOut, swingOut){
+    var applyBlFn = gfn('hgApplyGoldBestLevels');
+    var postFn = gfn('hgGoldPostApplyRefresh');
+    if (!applyBlFn) return;
+    var m15 = (inp && inp.rows15m) || [];
+    var atrFn = gfn('atr');
+    var atrW = NaN;
+    if (atrFn && m15.length >= 20){
+      try {
+        var aArr = atrFn(m15, 14);
+        atrW = (aArr && aArr.length) ? fin(aArr[aArr.length - 1]) : NaN;
+      } catch (eAtr){}
+    }
+    var nowMs = (inp && inp.now) || Date.now();
+    var batches = [
+      { out: scalpOut, style: 'gold-scalp', rows: m15, rows15m: m15,
+        rows1h: inp.rows1h, rows4h: inp.rows4h },
+      { out: swingOut, style: 'gold-swing', rows: (inp.rows4h || []),
+        rows15m: m15, rows1h: inp.rows1h, rows4h: inp.rows4h }
+    ];
+    var bi, b, ri, gc, ranked;
+    for (bi = 0; bi < batches.length; bi++){
+      b = batches[bi];
+      if (!b.out) continue;
+      ranked = b.out.ranked || [];
+      for (ri = 0; ri < ranked.length; ri++){
+        gc = ranked[ri];
+        if (!gc || gc.vetoed || gc.locked) continue;
+        try {
+          applyBlFn(gc, {
+            style: b.style,
+            rows: b.rows,
+            rows15m: b.rows15m,
+            rows1h: b.rows1h,
+            rows4h: b.rows4h,
+            atrW: atrW,
+            nowMs: nowMs,
+            rankBoost: (gc.agree || 0) + (gc.killzoneWeight || 0),
+            vision: gc.vision
+          });
+          if (postFn){
+            postFn(gc, {
+              style: b.style,
+              rows: b.rows,
+              rows15m: b.rows15m,
+              rows1h: b.rows1h,
+              rows4h: b.rows4h
+            });
+          }
+        } catch (eBl){}
+      }
+      if (b.out.best && ranked.indexOf(b.out.best) < 0 && !b.out.best.vetoed && !b.out.best.locked){
+        try {
+          applyBlFn(b.out.best, {
+            style: b.style, rows: b.rows, rows15m: b.rows15m,
+            rows1h: b.rows1h, rows4h: b.rows4h, atrW: atrW, nowMs: nowMs
+          });
+          if (postFn) postFn(b.out.best, { style: b.style, rows: b.rows, rows15m: b.rows15m,
+            rows1h: b.rows1h, rows4h: b.rows4h });
+        } catch (eBb){}
+      }
+      ranked = ranked.filter(function(x){ return x && !x.vetoed; });
+      b.out.ranked = ranked;
+      if (b.out.best && b.out.best.vetoed){
+        b.out.best = ranked.length ? ranked[0] : null;
+      } else if (!b.out.best && ranked.length){
+        b.out.best = ranked[0];
+      }
+    }
+  }
+
+  function hgOgBridgeSetupToPick(setup, horizon){
+    if (!setup || !setup.dir) return null;
+    if (!(isFinite(fin(setup.entry)) && isFinite(fin(setup.stop)) && isFinite(fin(setup.t1)))) return null;
+    var risk = Math.abs(fin(setup.entry) - fin(setup.stop));
+    var rr1 = isFinite(fin(setup.rr)) ? fin(setup.rr)
+      : (risk > 0 ? Math.abs(fin(setup.t1) - fin(setup.entry)) / risk : NaN);
+    return {
+      horizon: horizon,
+      kind: String(setup.strategy || setup.stratKey || 'GOLD-ENGINE'),
+      dir: setup.dir,
+      plan: {
+        entry: fin(setup.entry),
+        stop: fin(setup.stop),
+        t1: fin(setup.t1),
+        t2: isFinite(fin(setup.t2)) ? fin(setup.t2) : undefined,
+        rr1: rr1
+      },
+      grade: { ticket: false, evaluated: 0, total: 0, engine: true },
+      enginePick: true,
+      engineGrade: setup.grade,
+      engineTally: setup.tally,
+      engineSrc: (horizon === HORIZONS.swing.label) ? 'GOLD SWING tab' : 'GOLD SCALP tab',
+      why: (setup.strategy || setup.stratKey || 'gold engine')
+        + (setup.grade ? (' · grade ' + setup.grade) : '')
+        + (isFinite(fin(setup.tally)) ? (' · tally +' + fin(setup.tally)) : '')
+    };
+  }
+
+  function hgOgPickGoldEngineFor(bridge, horizon, tapeDir){
+    if (!bridge || !bridge.ok) return null;
+    var bucket = (horizon === HORIZONS.swing.label) ? bridge.swing : bridge.scalp;
+    if (!bucket) return null;
+    tapeDir = String(tapeDir || '').toLowerCase();
+    var ranked = (bucket.ranked || []).slice();
+    if (bucket.best && ranked.indexOf(bucket.best) < 0) ranked.unshift(bucket.best);
+    var i, c, pool = [];
+    for (i = 0; i < ranked.length; i++){
+      c = ranked[i];
+      if (!hgOgGoldEngineGradeOk(c, { allowB: horizon === HORIZONS.swing.label })) continue;
+      if (tapeDir === 'long' || tapeDir === 'short'){
+        if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
+      }
+      if (c.demoted && String(c.grade || '').toUpperCase() !== 'A' && !c.locked) continue;
+      pool.push(c);
+    }
+    if (!pool.length) return null;
+    pool.sort(function(a, b){
+      var ga = String(a.grade || '').toUpperCase(), gb = String(b.grade || '').toUpperCase();
+      if (ga === 'A' && gb !== 'A') return -1;
+      if (gb === 'A' && ga !== 'A') return 1;
+      return (fin(b.tally) || 0) - (fin(a.tally) || 0);
+    });
+    return hgOgBridgeSetupToPick(pool[0], horizon);
+  }
+
   function hgOgGoldEngineRowHtml(c, tier){
     if (!c || !c.dir) return '';
     var h = '<div class="og-gold-engine-row' + (tier === 'best' ? ' og-gold-engine-best' : '') + '">';
@@ -4423,6 +4570,8 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note">' + (c.grade ? ('grade ' + esc(String(c.grade))) : '')
       + (isFinite(fin(c.tally)) ? (' · tally +' + fin(c.tally)) : '')
       + (c.demoted ? ' · demoted' : '')
+      + (c.vetoed ? ' · vetoed' : '')
+      + (c.formationScore ? (' · formation ' + fin(c.formationScore)) : '')
       + (tier === 'best' ? ' · <b>tab best</b>' : '') + '</div>';
     if (isFinite(fin(c.entry)) && isFinite(fin(c.stop))){
       h += '<div class="hg-mp-grid">';
@@ -4445,7 +4594,8 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div class="hg-mp-note warn">' + esc(bridge.why || 'goldind.js / goldswing.js not loaded') + '</div></section>';
       return h;
     }
-    h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups. '
+    h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups + hgApplyGoldBestLevels when loaded. '
+      + 'Grade-A/B setups surface in <b>MOST PROBABLE</b> when the OMNIGOLD mechanic ledger has no TICKET. '
       + 'Open <b>GOLD SCALP</b> / <b>GOLD SWING</b> for full cards and book handoff.</div>';
     var sc = bridge.scalp || {}, sw = bridge.swing || {};
     var scRanked = sc.ranked || [], swRanked = sw.ranked || [];
@@ -4505,6 +4655,7 @@ terse status, and never launches a first-time scan on a global refresh.
         if (got && got.rejected) scalpOut.rejected = (scalpOut.rejected || []).concat(got.rejected);
       }
       var swingOut = swingFn ? swingFn(inp) : { ranked: [], best: null, rejected: [] };
+      hgOgApplyBridgeBestLevels(inp, scalpOut, swingOut);
       var anchor = fin(__og.spotAnchor);
       if (anchor > 0){
         var swingRanked = swingOut.ranked || [];
@@ -4537,30 +4688,37 @@ terse status, and never launches a first-time scan on a global refresh.
     catch (eGe){ host.innerHTML = ''; }
   }
 
-  function hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape){
+  function hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape, bridgeIn){
     hgOgPaintScanCoverage(ui, hgOgBuildScanCoverage(res.scalp), hgOgBuildScanCoverage(res.swing));
     hgOgPaintSettledExecute(ui, hgOgPickSettledExecutes(ogCollapsed || [], deskTape));
-    return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
+    var bridgeP = bridgeIn ? Promise.resolve(bridgeIn)
+      : hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows);
+    return bridgeP.then(function(bridge){
+      __og.bridge = bridge;
       hgOgPaintGoldEngines(ui, bridge);
       hgOgPaintScalpVerdict(ui, hgOgPickScalpVerdict(ogCollapsed || [], bridge, deskTape));
     });
   }
 
-  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing){
+  function hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing, engineScalp, engineSwing){
     tape = String(tape || '').toLowerCase();
     var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
     var anyWatch = (watchScalp && watchScalp.plan) || (watchSwing && watchSwing.plan);
-    var tier = anyTrade ? 'clean' : 'forming';
+    var anyEngine = (engineScalp && engineScalp.plan) || (engineSwing && engineSwing.plan);
+    var tier = anyTrade ? 'clean' : (anyEngine ? 'engine' : 'forming');
     var note = anyTrade
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
-      : (anyWatch
+      : (anyEngine
+          ? ('No OMNIGOLD TICKET cleared — showing grade-A/B setups from the <b>GOLD SCALP / GOLD SWING</b> multi-strategy engines (15m scalp + 4h swing). '
+             + 'These use formation, best-levels, macro and GOLD PRO gates — not the 55-mechanic walk-forward ledger. Not a win probability.')
+          : (anyWatch
           ? ('Gold tape reads ' + tape.toUpperCase()
              + ' — no ticket cleared; best WITH-tape level read below is gate-blocked (VETO). '
              + (held && held.n
                 ? ('Against-tape tickets (' + held.n + ') stay in the HELD queue — not shown as setups. ')
                 : '')
              + 'Hard refresh after a tape flip.')
-          : hgOgMpNoneWhy(tape, held));
+          : hgOgMpNoneWhy(tape, held)));
     var h = '<section class="hg-mp" data-hg-mp="omnigold" data-og-mp="1" data-tier="' + tier + '" aria-label="Most probable gold setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
     h += '<div class="hg-mp-head">XAUUSD';
@@ -4572,13 +4730,13 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     h += 'strategies + indicators, balanced · not a win probability</span></div>';
     h += '<div class="hg-mp-note">' + esc(note) + '</div>';
-    h += hgOgMpHorizonHtml('SCALP', pickScalp, tape, watchScalp, held);
-    h += hgOgMpHorizonHtml('SWING', pickSwing, tape, watchSwing, held);
+    h += hgOgMpHorizonHtml('SCALP', pickScalp, tape, watchScalp, held, engineScalp);
+    h += hgOgMpHorizonHtml('SWING', pickSwing, tape, watchSwing, held, engineSwing);
     h += '</section>';
     return h;
   }
 
-  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held, watchScalp, watchSwing){
+  function hgOgPaintMostProbable(ui, pickScalp, pickSwing, tape, mpBag, held, watchScalp, watchSwing, engineScalp, engineSwing){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
     try {
@@ -4586,7 +4744,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omnigold', mpBag || [], tape || null, host);
     } catch (eMp) {}
     try {
-      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing);
+      var dual = hgOgMostProbablePanelHtml(pickScalp, pickSwing, tape, held, watchScalp, watchSwing, engineScalp, engineSwing);
       var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
       if (!dual) return;
       if (oldMp) oldMp.outerHTML = dual;
@@ -5520,9 +5678,14 @@ terse status, and never launches a first-time scan on a global refresh.
           }
         } catch (eHeld){ ogHeld = { n: 0, level: NaN, from: NaN, tf: HORIZONS.scalp.tf }; }
         __og.held = ogHeld;
-        hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing);
-        return hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape).then(function(){
-          if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
+        return hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows).then(function(bridge){
+          __og.bridge = bridge;
+          var engineScalp = !pickScalp ? hgOgPickGoldEngineFor(bridge, HORIZONS.scalp.label, deskTape) : null;
+          var engineSwing = !pickSwing ? hgOgPickGoldEngineFor(bridge, HORIZONS.swing.label, deskTape) : null;
+          hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing);
+          return hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape, bridge).then(function(){
+            if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
+          });
         });
       })
       .catch(function(err){
@@ -5830,7 +5993,7 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<b>Two horizons are measured separately</b>, because a mechanic that pays on 4h need not pay intraday. '
       + 'The perp gates have no meaning here (spot gold has no funding, OI, retail ratio or taker flow) and are deliberately absent rather than faked; '
       + 'in their place sit session, real-rate macro, DXY inverse, yield guard and ADR budget. '
-      + 'Levels come from the house plan engine. <b>MOST PROBABLE SETUPS</b> lead the tab: one SCALP and one SWING ticket, ranked on a balance of mechanic families and indicator reads — not a win probability. Cards still badge STRONGEST. Nothing here is a profit forecast.</div>'
+      + 'Levels come from the house plan engine. <b>MOST PROBABLE SETUPS</b> lead the tab: one SCALP and one SWING ticket when the mechanic ledger clears; otherwise grade-A/B setups from the <b>GOLD SCALP / GOLD SWING</b> engines (15m + 4h). Cards still badge STRONGEST. Nothing here is a profit forecast.</div>'
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
@@ -6055,6 +6218,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBuildScanCoverage = hgOgBuildScanCoverage;
     window.hgOgScanCoveragePanelHtml = hgOgScanCoveragePanelHtml;
     window.hgOgRunGoldTabEngines = hgOgRunGoldTabEngines;
+    window.hgOgGoldEngineGradeOk = hgOgGoldEngineGradeOk;
+    window.hgOgApplyBridgeBestLevels = hgOgApplyBridgeBestLevels;
+    window.hgOgBridgeSetupToPick = hgOgBridgeSetupToPick;
+    window.hgOgPickGoldEngineFor = hgOgPickGoldEngineFor;
     window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgPaintOgPostScan = hgOgPaintOgPostScan;
     window.hgOgHeldQueueHtml = hgOgHeldQueueHtml;
@@ -6063,6 +6230,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
+    window.hgOgMpHorizonHtml = hgOgMpHorizonHtml;
     window.hgOgTargetReadout = hgOgTargetReadout;
     window.hgOgHorizonCfg = hgOgHorizonCfg;
     window.hgOgAlignPlansToSpot = hgOgAlignPlansToSpot;
