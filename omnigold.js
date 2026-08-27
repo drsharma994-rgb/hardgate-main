@@ -4545,7 +4545,7 @@ terse status, and never launches a first-time scan on a global refresh.
     var i, c, pool = [];
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
-      if (!hgOgGoldEngineGradeOk(c, { allowB: horizon === HORIZONS.swing.label })) continue;
+      if (!hgOgGoldEngineGradeOk(c, { allowB: true })) continue;
       if (tapeDir === 'long' || tapeDir === 'short'){
         if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
       }
