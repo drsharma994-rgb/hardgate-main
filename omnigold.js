@@ -3763,6 +3763,24 @@ terse status, and never launches a first-time scan on a global refresh.
     + '#ogCards .og-mp-hz{margin-top:12px}'
     + '#ogCards .og-mp-hz + .og-mp-hz{border-top:1px solid #E2E8F0;padding-top:12px;margin-top:12px}'
     + '#ogCards .og-mp-hz .hg-mp-head{font-size:14px}'
+    + '.og-grade-chip{display:inline-block;font-weight:800;font-size:13px;line-height:1;'
+    +   'padding:4px 10px;border-radius:6px;letter-spacing:.06em;vertical-align:middle;'
+    +   'border:2px solid transparent;box-shadow:0 1px 0 rgba(0,0,0,.06)}'
+    + '.og-grade-chip.og-grade-lg{font-size:20px;padding:6px 14px;border-radius:8px;'
+    +   'min-width:2rem;text-align:center}'
+    + '.og-grade-a{color:#14532d;background:linear-gradient(180deg,#bbf7d0,#4ade80);border-color:#16a34a}'
+    + '.og-grade-b{color:#1e3a8a;background:linear-gradient(180deg,#bfdbfe,#60a5fa);border-color:#2563eb}'
+    + '.og-grade-c{color:#92400e;background:linear-gradient(180deg,#fde68a,#fbbf24);border-color:#d97706}'
+    + '.og-grade-d{color:#7f1d1d;background:linear-gradient(180deg,#fecaca,#f87171);border-color:#dc2626}'
+    + '.og-grade-legend{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:4px}'
+    + '.og-gold-engine-row .og-grade-chip{margin-left:8px}'
+    + '[data-hg-mp] .og-mp-hz .og-grade-chip{margin-left:6px}'
+    + '@media (prefers-color-scheme:dark){'
+    +   '.og-grade-a{color:#ecfdf5;background:linear-gradient(180deg,#166534,#22c55e);border-color:#4ade80}'
+    +   '.og-grade-b{color:#eff6ff;background:linear-gradient(180deg,#1d4ed8,#3b82f6);border-color:#93c5fd}'
+    +   '.og-grade-c{color:#fffbeb;background:linear-gradient(180deg,#b45309,#f59e0b);border-color:#fcd34d}'
+    +   '.og-grade-d{color:#fef2f2;background:linear-gradient(180deg,#991b1b,#ef4444);border-color:#fca5a5}'
+    + '}'
     + '@media (prefers-color-scheme:dark){'
     +   '#ogCards .og-mp-hz + .og-mp-hz{border-top-color:rgba(167,139,250,.28)}'
     + '}';
@@ -3945,6 +3963,32 @@ terse status, and never launches a first-time scan on a global refresh.
     return s;
   }
 
+  function hgOgNormalizeGrade(g){
+    var s = String(g || '').toUpperCase().trim();
+    if (s === 'CLEAN') return 'A';
+    if (s === 'A' || s === 'B' || s === 'C' || s === 'D') return s;
+    return '';
+  }
+
+  function hgOgGradeChipHtml(grade, opts){
+    opts = opts || {};
+    var g = hgOgNormalizeGrade(grade);
+    if (!g) return '';
+    var label = opts.label || g;
+    return '<span class="og-grade-chip og-grade-' + g.toLowerCase()
+      + (opts.large ? ' og-grade-lg' : '')
+      + '" title="Setup grade ' + g + '">' + esc(label) + '</span>';
+  }
+
+  function hgOgGradeLegendHtml(){
+    return '<span class="og-grade-legend">'
+      + hgOgGradeChipHtml('A', { large: true }) + ' ≥8 '
+      + hgOgGradeChipHtml('B', { large: true }) + ' ≥5 '
+      + hgOgGradeChipHtml('C', { large: true }) + ' forming '
+      + hgOgGradeChipHtml('D', { large: true }) + ' weak'
+      + '</span>';
+  }
+
   function hgOgMpHorizonHtml(label, pick, tape, watchPick, heldMeta, enginePick){
     var h = '<div class="og-mp-hz">';
     var row = (pick && pick.plan) ? pick
@@ -3957,7 +4001,7 @@ terse status, and never launches a first-time scan on a global refresh.
       var ev = (row.grade && row.grade.evaluated) || 0;
       var tot = (row.grade && row.grade.total) || 0;
       var grade = isEngine
-        ? ('GOLD ENGINE · grade ' + esc(String(row.engineGrade || 'A'))
+        ? ('GOLD ENGINE ' + hgOgGradeChipHtml(row.engineGrade || 'A', { large: true })
           + (row.engineDemoted ? ' · demoted' : '')
           + (row.engineLowGrade ? ' · forming · need tally ≥5 for B' : ''))
         : (tot ? (ev + '/' + tot + (row.grade.ticket ? ' TICKET' : ' checks')) : (row.grade.ticket ? 'TICKET' : 'WATCH'));
@@ -4453,8 +4497,11 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!ranked || !ranked.length || hgOgEngineListHasAb(ranked)) return '';
     var bestT = 0, i;
     for (i = 0; i < ranked.length; i++) bestT = Math.max(bestT, fin(ranked[i].tally) || 0);
-    return '<div class="hg-mp-note warn" style="margin:4px 0 0 12px">No grade-A/B this bar — best tally +'
-      + bestT + '. Grading: <b>A ≥ 8</b> · <b>B ≥ 5</b> · else C. More agreeing reads (macro, session, structure, GOLD PRO) push tally up.</div>';
+    return '<div class="hg-mp-note warn" style="margin:4px 0 0 12px">No '
+      + hgOgGradeChipHtml('A') + ' / ' + hgOgGradeChipHtml('B')
+      + ' this bar — best tally +' + bestT + '. Grading: '
+      + hgOgGradeLegendHtml()
+      + '. More agreeing reads push tally up.</div>';
   }
 
   function hgOgApplyBridgeBestLevels(inp, scalpOut, swingOut){
@@ -4621,9 +4668,10 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!c || !c.dir) return '';
     var h = '<div class="og-gold-engine-row' + (tier === 'best' ? ' og-gold-engine-best' : '') + '">';
     h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir).toUpperCase())
+      + (c.grade ? (' ' + hgOgGradeChipHtml(c.grade, { large: true })) : '')
       + ' <span>' + esc(c.strategy || c.stratKey || 'SETUP') + '</span></div>';
-    h += '<div class="hg-mp-note">' + (c.grade ? ('grade ' + esc(String(c.grade))) : '')
-      + (isFinite(fin(c.tally)) ? (' · tally +' + fin(c.tally)) : '')
+    h += '<div class="hg-mp-note">'
+      + (isFinite(fin(c.tally)) ? ('tally +' + fin(c.tally)) : '')
       + (c.demoted ? ' · demoted' : '')
       + (c.vetoed ? ' · vetoed' : '')
       + (c.formationScore ? (' · formation ' + fin(c.formationScore)) : '')
@@ -4650,7 +4698,9 @@ terse status, and never launches a first-time scan on a global refresh.
       return h;
     }
     h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups + hgApplyGoldBestLevels when loaded. '
-      + 'Grade <b>A ≥ 8</b> · <b>B ≥ 5</b> tally · else C. A/B surface in <b>MOST PROBABLE</b> first; grade-C shows as <b>FORMING</b> when nothing stronger cleared. '
+      + 'Grades: ' + hgOgGradeLegendHtml()
+      + '. A/B surface in <b>MOST PROBABLE</b> first; '
+      + hgOgGradeChipHtml('C', { large: true }) + ' shows as <b>FORMING</b> when nothing stronger cleared. '
       + 'Open <b>GOLD SCALP</b> / <b>GOLD SWING</b> for full cards and book handoff.</div>';
     var sc = bridge.scalp || {}, sw = bridge.swing || {};
     var scRanked = sc.ranked || [], swRanked = sw.ranked || [];
@@ -6294,6 +6344,9 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBalanceParts = hgOgBalanceParts;
     window.hgOgDeskOrder = hgOgDeskOrder;
     window.hgOgMostProbablePanelHtml = hgOgMostProbablePanelHtml;
+    window.hgOgNormalizeGrade = hgOgNormalizeGrade;
+    window.hgOgGradeChipHtml = hgOgGradeChipHtml;
+    window.hgOgGradeLegendHtml = hgOgGradeLegendHtml;
     window.hgOgMpHorizonHtml = hgOgMpHorizonHtml;
     window.hgOgTargetReadout = hgOgTargetReadout;
     window.hgOgHorizonCfg = hgOgHorizonCfg;
