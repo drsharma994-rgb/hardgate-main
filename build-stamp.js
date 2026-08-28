@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v522',
-  pack: 'confluence scores on all setups — unified quality rating',
-  built: '2026-08-28T08:35:00Z',
-  note: 'Extended confluence scoring to GOLD SCALP/SWING engine setups. All three setup cards (TOP, SCALP engine, SWING engine) now display confluence score + spectrum badge. Full transparency across entire MOST PROBABLE SETUPS section.'
+  version: 'hg-v523',
+  pack: 'engine setup confluence scoring — grade-based fallback',
+  built: '2026-08-28T08:40:00Z',
+  note: 'Fixed confluence scoring for engine setups using grade-based fallback. Grade A=85+, B=70+, C=50+, D=30+. Demoted and low-tally penalties applied. All setups now show spectrum badge consistently.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
