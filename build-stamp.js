@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v520',
-  pack: 'show all confluence ratings - FAIR+ visibility',
-  built: '2026-08-28T08:20:00Z',
-  note: 'Quality gate ≥50: show EXCEPTIONAL/STRONG/FAIR setups. Full transparency, traders choose based on confluence ratings.'
+  version: 'hg-v521',
+  pack: 'confluence spectrum legend + setup quality visibility',
+  built: '2026-08-28T08:25:00Z',
+  note: 'Added visible spectrum legend to MOST PROBABLE SETUPS showing all confluence rating tiers (EXCEPTIONAL/STRONG/FAIR/WEAK) with guidance. Full transparency on what each score means.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
