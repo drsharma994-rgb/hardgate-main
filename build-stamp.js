@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v513',
-  pack: 'add refresh button to TOP SETUP with manual callback',
-  built: '2026-08-28T07:20:00Z',
-  note: 'Added 🔄 Refresh button to TOP SETUP section for manual setup refresh without page reload.'
+  version: 'hg-v514',
+  pack: 'refresh button UX + performance fixes for app hangs',
+  built: '2026-08-28T07:35:00Z',
+  note: 'Fixed: button layout (no overlay), removed auto-repaint from poller (eliminates hangs).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
