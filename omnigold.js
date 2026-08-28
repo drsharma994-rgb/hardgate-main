@@ -5372,8 +5372,10 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 2. MARKET CONDITIONS SCORE — 3D rating under current conditions */
     var topSetup = setups.length > 0 ? setups[0] : null;
 
-    /* QUALITY GATE: Only show setups that meet minimum standards */
-    var qualityGatePass = topSetup && topSetup.checksPass >= 5 && fin(topSetup.compositeScore) >= 70;
+    /* QUALITY GATE: Show setups with 4+ checks passing (uses more indicators/strategies)
+       4/5 checks = strong setup with multiple confirmations
+       5/5 checks = perfect setup (rare in real markets) */
+    var qualityGatePass = topSetup && topSetup.checksPass >= 4 && fin(topSetup.compositeScore) >= 70;
 
     if (topSetup && qualityGatePass){
       h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">🏆 TOP SETUP (Best for Current Conditions)</div>';
@@ -5438,7 +5440,7 @@ terse status, and never launches a first-time scan on a global refresh.
       if (topSetup){
         var reason = '';
         if (fin(topSetup.compositeScore) < 70) reason = 'Market quality score ' + fin(topSetup.compositeScore).toFixed(0) + '/100 (need ≥70)';
-        if (topSetup.checksPass < 5) reason = 'Pre-entry checks ' + topSetup.checksPass + '/5 passing (need 5/5)';
+        if (topSetup.checksPass < 4) reason = 'Pre-entry checks ' + topSetup.checksPass + '/5 passing (need ≥4 for multi-indicator confirmation)';
         h += '<div style="color:var(--fg-muted,#666);font-size:0.9em">' + (reason || 'Quality threshold not met') + '</div>';
       } else {
         h += '<div style="color:var(--fg-muted,#666);font-size:0.9em">No open setups tracked. Run a scan to find opportunities.</div>';
