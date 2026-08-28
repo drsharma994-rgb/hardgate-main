@@ -3621,6 +3621,7 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* Fetch and cache correlation regime data. Updates cache only if it's older than 1 hour. */
   function hgOgFetchCorrelationRegime(goldRows, macro){
+    return Promise.resolve(null); // TEMP: disabled - debugging "Invalid time value"
     var now = Date.now();
     var lastUpdate = __og.lastRegimeUpdate || 0;
     var hourMs = 3600000;
