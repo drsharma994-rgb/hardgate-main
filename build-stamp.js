@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v519',
-  pack: 'multi-factor confluence scoring - elite setup identification',
-  built: '2026-08-28T08:15:00Z',
-  note: '6-dimension confluence score: Trend+Geometry+Market+Checks+Confidence+Freshness. Elite setups identified by true quality.'
+  version: 'hg-v520',
+  pack: 'show all confluence ratings - FAIR+ visibility',
+  built: '2026-08-28T08:20:00Z',
+  note: 'Quality gate ≥50: show EXCEPTIONAL/STRONG/FAIR setups. Full transparency, traders choose based on confluence ratings.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
