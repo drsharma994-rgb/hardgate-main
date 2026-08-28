@@ -5764,6 +5764,14 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = '<div class="og-verdict-row' + (tier === 'go' ? ' og-verdict-go' : '') + '">';
     h += '<div class="hg-mp-head">XAUUSD ' + esc(String(c.dir || '').toUpperCase())
       + ' <span>SCALP · ' + esc(c.kind) + src + '</span></div>';
+    var confResult = hgOgAdvancedConfluenceScore(c);
+    if (confResult !== null && confResult !== undefined){
+      var confObj = typeof confResult === 'number' ? { confluenceScore: confResult } : confResult;
+      if (confObj && isFinite(fin(confObj.confluenceScore || confObj.score))){
+        var displayScore = fin(confObj.confluenceScore || confObj.score);
+        h += hgOgRenderConfluenceBreakdown({ confluenceScore: displayScore });
+      }
+    }
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
       + esc(String(ev.wins)) + '/' + esc(String(ev.samples)) + ' wins · '
       + pct + '% hit · Wilson 95% CI ' + lo + '–' + hi + '%'
