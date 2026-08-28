@@ -4,50 +4,26 @@
   "gold": null,
   "lastRunAt": "2026-08-27T14:29:25.473Z",
   "ticket": {
-    "long": null,
+    "long": {
+      "sym": "B-PROM_USDT",
+      "entry": 4.341658690153063
+    },
     "short": null
   },
   "sniper": {
-    "key": "ARMUSDT@253.93;B-CATI_USDT@0.05238417743352421;B-KITE_USDT@0.12569;B-SOL_USDT@103.93120312960536",
+    "key": "CRMUSDT@245.05677220043083",
     "hits": [
       {
-        "sym": "B-SOL_USDT",
+        "sym": "CRMUSDT",
         "dir": "long",
-        "entry": 103.93120312960536,
-        "stop": 102.78407461349128,
-        "t1": 105.85,
-        "lev": 46,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-CATI_USDT",
-        "dir": "long",
-        "entry": 0.05238417743352421,
-        "stop": 0.05119990559835932,
-        "t1": 0.0554,
-        "lev": 25,
-        "state": "IN ZONE"
-      },
-      {
-        "sym": "ARMUSDT",
-        "dir": "long",
-        "entry": 253.93,
-        "stop": 250.26291756330977,
-        "t1": 261.19,
-        "lev": 37,
-        "state": "APPROACHING"
-      },
-      {
-        "sym": "B-KITE_USDT",
-        "dir": "long",
-        "entry": 0.12569,
-        "stop": 0.12231768781035454,
-        "t1": 0.13074846828446818,
-        "lev": 22,
+        "entry": 245.05677220043083,
+        "stop": 240.62023554352055,
+        "t1": 254.76,
+        "lev": 31,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-27T14:29:25.487Z"
+    "at": "2026-08-28T10:00:27.839Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -292,18 +268,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-27T23:55:34.449Z"
+    "at": "2026-08-28T10:00:27.840Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-27T23:55:34.450Z"
+    "at": "2026-08-28T10:00:27.840Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-27T23:55:34.450Z",
+  "engineAlertAt": "2026-08-28T10:00:27.840Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -318,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-27T23:55:34.718Z"
+    "at": "2026-08-28T10:00:28.079Z"
   },
   "bookFill": {
     "key": "u0|p0",
