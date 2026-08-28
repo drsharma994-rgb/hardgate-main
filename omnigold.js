@@ -5178,7 +5178,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<th style="text-align:right;padding:4px">Ready</th>';
       h += '</tr>';
 
-      toShow.forEach(function(setup){
+      toShow.forEach(function(setup, idx){
         var ageMinutes = Math.floor(setup.age / 60);
         var ageHours = Math.floor(setup.age / 3600);
         var ageDays = Math.floor(setup.age / 86400);
@@ -5195,10 +5195,16 @@ terse status, and never launches a first-time scan on a global refresh.
         var mktScore = fin(setup.compositeScore) || 0;
         var mktColor = mktScore >= 70 ? '#22c55e' : mktScore >= 50 ? '#f59e0b' : '#dc2626';
 
-        h += '<tr style="border-bottom:1px solid var(--hr)">';
-        h += '<td style="padding:4px">' + mechLabel
+        /* HIGHLIGHT THE BEST SETUP (index 0) with golden background and border */
+        var isBest = idx === 0;
+        var rowStyle = isBest
+          ? 'background:linear-gradient(90deg, rgba(34,197,94,0.15) 0%, rgba(34,197,94,0.05) 100%);border:2px solid #22c55e;border-bottom:2px solid #22c55e;box-shadow:0 0 12px rgba(34,197,94,0.2)'
+          : 'border-bottom:1px solid var(--hr)';
+
+        h += '<tr style="' + rowStyle + '">';
+        h += '<td style="padding:4px">' + (isBest ? '🏆 ' : '') + mechLabel
           + (setup.isCorrelated ? ' <b>⚠</b>' : '') + '</td>';
-        h += '<td style="text-align:center;padding:4px;color:' + mktColor + ';font-weight:bold">' + mktScore.toFixed(0) + '/100</td>';
+        h += '<td style="text-align:center;padding:4px;color:' + mktColor + ';font-weight:bold">' + mktScore.toFixed(0) + '/100' + (isBest ? ' ⭐ BEST' : '') + '</td>';
         h += '<td style="text-align:center;padding:4px">' + confBadge + '</td>';
         h += '<td style="text-align:right;padding:4px"' + ageClass + '>'
           + (setup.age > 4 * 3600 ? '⏱ ' : '') + esc(ageStr) + '</td>';
