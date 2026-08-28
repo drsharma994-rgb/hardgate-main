@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v515',
-  pack: 'disable poller entirely - no more app freezes',
-  built: '2026-08-28T07:40:00Z',
-  note: 'Disabled setInterval poller (was root cause of hangs). Manual refresh only via button.'
+  version: 'hg-v516',
+  pack: 'two-pass optimization for large open setups',
+  built: '2026-08-28T07:45:00Z',
+  note: 'Optimized hgOgUpdateOpenSetups: Pass 1 quick filter, Pass 2 heavy scoring on top 20 only.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
