@@ -4676,6 +4676,35 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* Real-time setup status updater — instant response to price changes */
+  function hgOgUpdateSetupStatus(setup, livePrice){
+    if (!setup || !livePrice) return setup;
+
+    var entry = fin(setup.entry);
+    var tp = fin(setup.t1);
+    var sl = fin(setup.stop);
+    var status = 'active';
+    var isClosed = false;
+
+    if (livePrice > 0 && entry > 0){
+      if (entry > tp){  /* SHORT */
+        if (livePrice >= sl) { status = 'stopped'; isClosed = true; }
+        else if (livePrice <= tp) { status = 'profit'; isClosed = true; }
+        else if (livePrice >= entry) { status = 'active'; }
+        else { status = 'pending'; }
+      } else {  /* LONG */
+        if (livePrice <= sl) { status = 'stopped'; isClosed = true; }
+        else if (livePrice >= tp) { status = 'profit'; isClosed = true; }
+        else if (livePrice <= entry) { status = 'active'; }
+        else { status = 'pending'; }
+      }
+    }
+
+    setup.tradeStatus = status;
+    setup.isClosed = isClosed;
+    return setup;
+  }
+
   function hgOgUpdateOpenSetups(){
     try {
       var now = Date.now() / 1000;
@@ -4716,7 +4745,7 @@ terse status, and never launches a first-time scan on a global refresh.
           rec = Object.assign({}, rec, regenerated);  /* Update record with new levels */
         }
 
-        /* Setup status based on current price */
+        /* Setup status based on current price — with real-time detection */
         var entry = fin(rec.entry);
         var tp = fin(rec.t1);
         var sl = fin(rec.stop);
@@ -4728,15 +4757,15 @@ terse status, and never launches a first-time scan on a global refresh.
           if (entry > tp){  /* SHORT setup */
             if (livePrice >= sl) { status = 'stopped'; isClosed = true; }  /* Hit SL */
             else if (livePrice <= tp) { status = 'profit'; isClosed = true; }  /* Hit TP */
-            else if (livePrice < entry) { status = 'pending'; }  /* Not yet entered */
-            else { status = 'active'; }  /* In play */
+            else if (livePrice >= entry) { status = 'active'; }  /* Entered (price above entry for SHORT = in play) */
+            else { status = 'pending'; }  /* Price still below entry */
           }
           /* For LONG setups: SL < entry, TP > entry */
           else {
             if (livePrice <= sl) { status = 'stopped'; isClosed = true; }  /* Hit SL */
             else if (livePrice >= tp) { status = 'profit'; isClosed = true; }  /* Hit TP */
-            else if (livePrice > entry) { status = 'pending'; }  /* Not yet entered */
-            else { status = 'active'; }  /* In play */
+            else if (livePrice <= entry) { status = 'active'; }  /* Entered (price below entry for LONG = in play) */
+            else { status = 'pending'; }  /* Price still above entry */
           }
         }
 
@@ -4820,9 +4849,53 @@ terse status, and never launches a first-time scan on a global refresh.
       __og.dailyPnL = dailyPnL;
 
       __og.openSetups = open;
+
+      /* Start real-time polling for instant status updates */
+      hgOgStartStatusPoller();
     } catch (e){
       __og.openSetups = [];
     }
+  }
+
+  /* Real-time status poller — updates every 2 seconds without full refresh */
+  function hgOgStartStatusPoller(){
+    if (__og.statusPollerActive) return;
+    __og.statusPollerActive = true;
+
+    var pollInterval = setInterval(function(){
+      try {
+        var livePrice = fin(__og.spotAnchor) || 0;
+        if (!livePrice || !__og.openSetups || !__og.openSetups.length){
+          clearInterval(pollInterval);
+          __og.statusPollerActive = false;
+          return;
+        }
+
+        /* Update all setups with current price */
+        var anyChanged = false;
+        __og.openSetups.forEach(function(setup){
+          var oldStatus = setup.tradeStatus;
+          hgOgUpdateSetupStatus(setup, livePrice);
+          if (setup.tradeStatus !== oldStatus) anyChanged = true;
+        });
+
+        /* Repaint if status changed */
+        if (anyChanged && __og.ui && __og.ui.openWatchPanel){
+          try {
+            __og.ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
+          } catch (e){}
+        }
+      } catch (e){
+        clearInterval(pollInterval);
+        __og.statusPollerActive = false;
+      }
+    }, 2000);  /* Update every 2 seconds */
+
+    /* Stop polling after 5 minutes */
+    setTimeout(function(){
+      clearInterval(pollInterval);
+      __og.statusPollerActive = false;
+    }, 5 * 60 * 1000);
   }
 
   /* Market Conditions Score Display — 3D scoring */
