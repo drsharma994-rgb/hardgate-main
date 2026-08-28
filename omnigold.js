@@ -318,7 +318,9 @@ terse status, and never launches a first-time scan on a global refresh.
 
   var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
                lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
-               lastVerdictHtml: null, lastSettledExecHtml: null, lastCoverageHtml: null, lastGoldEnginesHtml: null };
+               lastVerdictHtml: null, lastSettledExecHtml: null, lastCoverageHtml: null, lastGoldEnginesHtml: null,
+               correlationRegime: null, lastRegimeUpdate: 0,
+               rollingStats: null, openSetups: [], lastRollingUpdate: 0 };
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
   function gfn(name){
@@ -355,6 +357,156 @@ terse status, and never launches a first-time scan on a global refresh.
     if (d === 'short' && cur < prior)
       return { valid: false, reason: 'US10Y yields are falling — headwind for a gold short' };
     return { valid: true, reason: 'yield move does not fight this direction' };
+  }
+
+  /* ==================== DXY-gold correlation regime detector ==================== */
+
+  /* Fetch DXY daily closes from Binance USDT data (current day + last 30 days).
+     Returns array of { t: timestamp_sec, c: close } or null on failure. */
+  function hgOgFetchDxyData(){
+    var w = W();
+    var bkFn = gfn('binanceKlines');
+    if (!bkFn) return Promise.resolve(null);
+    return Promise.race([
+      Promise.resolve().then(function(){
+        return bkFn('DXYUSDT', '1d', 31);
+      }).catch(function(){ return null; }),
+      new Promise(function(rp){ setTimeout(function(){ rp(null); }, 5000); })
+    ]).then(function(klines){
+      if (!klines || !Array.isArray(klines)) return null;
+      var out = [];
+      for (var i = 0; i < klines.length; i++){
+        var k = klines[i];
+        if (!k || !isFinite(fin(k.t)) || !isFinite(fin(k.c))) continue;
+        out.push({ t: Math.floor(fin(k.t) / 1000), c: fin(k.c) });
+      }
+      return out.length >= 5 ? out : null;
+    }).catch(function(){ return null; });
+  }
+
+  /* Calculate rolling correlation: gold 4h close vs DXY daily close (lagged 1 day).
+     goldRows: array of { t, c }, dxyRows: array of { t, c }.
+     Returns { correlation, beta, sampleCount } or null. */
+  function hgOgCalculateCorrelation(goldRows, dxyRows){
+    if (!goldRows || !goldRows.length || !dxyRows || !dxyRows.length) return null;
+    var goldCloses = [], dxyCloses = [], i, j, g, d, gIdx;
+    /* Gold 4h: align to daily close times. DXY is daily, so we match gold
+       daily closes (23:00 UTC start of next day) against DXY close (00:00 UTC). */
+    for (i = 0; i < Math.min(goldRows.length, 30); i++){
+      g = goldRows[i];
+      if (!isFinite(fin(g.c))) continue;
+      var gTime = fin(g.t);
+      if (!isFinite(gTime)) continue;
+      var gDayStart = Math.floor(gTime / 86400) * 86400;
+      var dxyFound = null;
+      /* Find DXY from same day (within a day window) */
+      for (j = 0; j < dxyRows.length; j++){
+        d = dxyRows[j];
+        if (!isFinite(fin(d.c))) continue;
+        var dTime = fin(d.t);
+        if (!isFinite(dTime)) continue;
+        var dDayStart = Math.floor(dTime / 86400) * 86400;
+        /* Match same calendar day or previous day (lagged 1 day) */
+        if (dDayStart === gDayStart || dDayStart === gDayStart - 86400){
+          dxyFound = d;
+          break;
+        }
+      }
+      if (dxyFound && isFinite(fin(dxyFound.c))){
+        goldCloses.push(fin(g.c));
+        dxyCloses.push(fin(dxyFound.c));
+      }
+    }
+    if (goldCloses.length < 5) return null;
+    /* Pearson correlation */
+    var n = goldCloses.length, sumG = 0, sumD = 0, sumGD = 0, sumG2 = 0, sumD2 = 0;
+    for (i = 0; i < n; i++){
+      sumG += goldCloses[i];
+      sumD += dxyCloses[i];
+      sumGD += goldCloses[i] * dxyCloses[i];
+      sumG2 += goldCloses[i] * goldCloses[i];
+      sumD2 += dxyCloses[i] * dxyCloses[i];
+    }
+    var num = n * sumGD - sumG * sumD;
+    var den = Math.sqrt((n * sumG2 - sumG * sumG) * (n * sumD2 - sumD * sumD));
+    var corr = den > 0 ? num / den : 0;
+    /* Beta: gold return per 1% DXY move. When DXY up 1%, gold down ~-0.9 is "normal". */
+    var betaNum = n * sumGD - sumG * sumD;
+    var betaDen = n * sumD2 - sumD * sumD;
+    var beta = betaDen > 0 ? betaNum / betaDen : NaN;
+    return { correlation: isFinite(corr) ? corr : 0, beta: isFinite(beta) ? beta : 0, sampleCount: n };
+  }
+
+  /* Compute real rate: 10Y yield - inflation expectation (breakeven rate).
+     yields: array of { t, c }. Returns realRate (as %, e.g., 2.1) or NaN. */
+  function hgOgRealRate(yields, macro){
+    if (!yields || !yields.length) return NaN;
+    var rate10y = fin(yields[yields.length - 1] && yields[yields.length - 1].c);
+    if (!isFinite(rate10y)) return NaN;
+    /* Inflation breakeven: if macro has it, use it; otherwise default to 2.3% */
+    var breakeven = (macro && isFinite(fin(macro.breakeven))) ? fin(macro.breakeven) : 2.3;
+    return rate10y - breakeven;
+  }
+
+  /* Regime state machine: returns { regime, dxyValue, correlation, beta, realRate, reason } */
+  function hgOgDetectRegime(dxyRows, goldRows, yields, macro){
+    var regime = 'NORMAL', reason = '';
+    var dxyValue = NaN, correlation = NaN, beta = NaN, realRate = NaN;
+    /* Get latest DXY */
+    if (dxyRows && dxyRows.length){
+      dxyValue = fin(dxyRows[dxyRows.length - 1].c);
+    }
+    /* Calculate correlation and beta */
+    var corr = hgOgCalculateCorrelation(goldRows, dxyRows);
+    if (corr){
+      correlation = corr.correlation;
+      beta = corr.beta;
+    }
+    /* Calculate real rate */
+    realRate = hgOgRealRate(yields, macro);
+    /* Apply regime rules */
+    if (!isFinite(dxyValue)) dxyValue = 103;   /* fallback */
+    if (!isFinite(correlation)) correlation = -0.92;   /* fallback */
+    if (!isFinite(beta)) beta = -0.95;   /* fallback */
+    if (!isFinite(realRate)) realRate = 2.1;   /* fallback */
+    /* EXTREME regime: beta < -1.5 (unusual inverse) or real rates shift +50bp */
+    if (beta < -1.5){
+      regime = 'EXTREME';
+      reason = 'extreme inverse correlation (' + beta.toFixed(2) + ') — unusual positioning';
+    } else if (realRate > 2.5){   /* assuming baseline ~2.0, this is +50bp */
+      regime = 'EXTREME';
+      reason = 'real rates elevated — rate shock risk';
+    }
+    /* DECOUPLING regime: beta > -0.3 (correlation weakens) or DXY > 105 */
+    else if (beta > -0.3){
+      regime = 'DECOUPLING';
+      reason = 'gold decoupling from DXY (' + beta.toFixed(2) + ') — regime shift';
+    } else if (isFinite(dxyValue) && dxyValue > 105){
+      regime = 'DECOUPLING';
+      reason = 'DXY > 105 extreme — real-rate drivers';
+    }
+    /* NORMAL: correlation -0.8 to -1.2, DXY 100-105, real rates stable */
+    else {
+      regime = 'NORMAL';
+      reason = 'DXY-gold dynamics stable';
+    }
+    return {
+      regime: regime,
+      dxyValue: isFinite(dxyValue) ? dxyValue : NaN,
+      correlation: isFinite(correlation) ? correlation : NaN,
+      beta: isFinite(beta) ? beta : NaN,
+      realRate: isFinite(realRate) ? realRate : NaN,
+      reason: reason,
+      lastUpdate: Date.now()
+    };
+  }
+
+  /* Regime scale multiplier for risk sizing: applied ON TOP of stack3 scaling.
+     Returns 1.0 (NORMAL), 0.7 (DECOUPLING), or 0.6 (EXTREME). */
+  function hgOgRegimeScaleFactor(regime){
+    if (regime === 'DECOUPLING') return 0.7;
+    if (regime === 'EXTREME') return 0.6;
+    return 1.0;   /* NORMAL */
   }
 
   /* ==================== gold-specific pure detectors ==================== */
@@ -3467,6 +3619,33 @@ terse status, and never launches a first-time scan on a global refresh.
     ]).then(function(sp){ return (isFinite(fin(sp)) && fin(sp) > 0) ? fin(sp) : NaN; });
   }
 
+  /* Fetch and cache correlation regime data. Updates cache only if it's older than 1 hour. */
+  function hgOgFetchCorrelationRegime(goldRows, macro){
+    var now = Date.now();
+    var lastUpdate = __og.lastRegimeUpdate || 0;
+    var hourMs = 3600000;
+    /* Check cache freshness: only fetch if >1 hour stale */
+    if (isFinite(lastUpdate) && (now - lastUpdate) < hourMs && __og.correlationRegime){
+      return Promise.resolve(__og.correlationRegime);
+    }
+    /* Fetch DXY data and detect regime */
+    return hgOgFetchDxyData().then(function(dxyRows){
+      if (!dxyRows) {
+        /* Graceful: use cached or default */
+        if (__og.correlationRegime) return __og.correlationRegime;
+        return hgOgDetectRegime(null, goldRows, null, macro);
+      }
+      var regime = hgOgDetectRegime(dxyRows, goldRows, (macro && macro.us10yRows) || null, macro);
+      __og.correlationRegime = regime;
+      __og.lastRegimeUpdate = now;
+      return regime;
+    }).catch(function(){
+      /* On fetch error: return cached or default */
+      if (__og.correlationRegime) return __og.correlationRegime;
+      return hgOgDetectRegime(null, goldRows, null, macro);
+    });
+  }
+
   function hgOgRefreshDistAtr(list, livePx, rows){
     if (!list || !list.length || !(fin(livePx) > 0)) return;
     var atrN = atrOf(rows, 14);
@@ -4244,6 +4423,178 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* ==================== rolling performance tracking ==================== */
+
+  /* Extract timezone from barT (bar timestamp in seconds).
+     Returns 'asia', 'london', or 'ny' based on UTC hour. */
+  function hgOgTimezoneFromBarT(barT){
+    if (!isFinite(barT)) return null;
+    var hr = Math.floor((barT % 86400) / 3600);
+    if (hr >= 0 && hr < 8) return 'asia';
+    if (hr >= 8 && hr < 16) return 'london';
+    if (hr >= 16 && hr < 24) return 'ny';
+    return null;
+  }
+
+  /* Get settled records from forward log in localStorage.
+     Reads from 'hg_forward_v1' key and filters for settled records.
+     Returns array of settled records with state, barT, rr, mechanic, tab, etc. */
+  function hgOgGetSettledRecords(){
+    try {
+      if (typeof localStorage === 'undefined') return [];
+      var raw = localStorage.getItem('hg_forward_v1');
+      if (!raw) return [];
+      var list = JSON.parse(raw);
+      if (!Array.isArray(list)) return [];
+      var settled = [];
+      for (var i = 0; i < list.length; i++){
+        var rec = list[i];
+        if (rec && (rec.state === 't1' || rec.state === 'stop' || rec.state === 'expired')){
+          settled.push(rec);
+        }
+      }
+      return settled;
+    } catch (e){ return []; }
+  }
+
+  /* Update rolling stats from settled records.
+     Tracks last 20/100 settled trades, timezone breakdown, today vs 30-day baseline.
+     Stores in __og.rollingStats: { last20: {n, w}, last100: {n,w}, byTimezone: {...},
+     todayHitRate, baselineHitRate, lastUpdate } */
+  function hgOgUpdateRollingStats(){
+    try {
+      var now = Date.now() / 1000;
+      var todayStart = Math.floor(now / 86400) * 86400;
+      var thirtyDaysAgo = todayStart - (30 * 86400);
+
+      var recs = hgOgGetSettledRecords();
+
+      /* Sort by barT descending (newest first) */
+      recs.sort(function(a, b){ return (b.barT || 0) - (a.barT || 0); });
+
+      /* Calculate last 20 and last 100 hit rates */
+      var last20 = recs.slice(0, 20);
+      var last100 = recs.slice(0, 100);
+      var last20Wins = 0, last20Total = 0;
+      var last100Wins = 0, last100Total = 0;
+
+      last20.forEach(function(r){
+        if (r && (r.state === 't1' || r.state === 'stop' || r.state === 'expired')){
+          last20Total++;
+          if (r.state === 't1') last20Wins++;
+        }
+      });
+      last100.forEach(function(r){
+        if (r && (r.state === 't1' || r.state === 'stop' || r.state === 'expired')){
+          last100Total++;
+          if (r.state === 't1') last100Wins++;
+        }
+      });
+
+      /* Calculate timezone breakdown for last 100 */
+      var byTimezone = { asia: {n: 0, w: 0}, london: {n: 0, w: 0}, ny: {n: 0, w: 0} };
+      last100.forEach(function(r){
+        if (!r || !isFinite(r.barT)) return;
+        var tz = hgOgTimezoneFromBarT(r.barT);
+        if (!tz || !byTimezone[tz]) return;
+        if (r.state === 't1' || r.state === 'stop' || r.state === 'expired'){
+          byTimezone[tz].n++;
+          if (r.state === 't1') byTimezone[tz].w++;
+        }
+      });
+
+      /* Calculate today's hit rate (from todayStart to now) */
+      var todayRecs = recs.filter(function(r){ return r && r.barT >= todayStart; });
+      var todayWins = 0, todayTotal = 0;
+      todayRecs.forEach(function(r){
+        if (r && (r.state === 't1' || r.state === 'stop' || r.state === 'expired')){
+          todayTotal++;
+          if (r.state === 't1') todayWins++;
+        }
+      });
+
+      /* Calculate 30-day baseline (average per day, computed from full history) */
+      var thirtyDayRecs = recs.filter(function(r){ return r && r.barT >= thirtyDaysAgo && r.barT < now; });
+      var thirtyDayWins = 0, thirtyDayTotal = 0;
+      thirtyDayRecs.forEach(function(r){
+        if (r && (r.state === 't1' || r.state === 'stop' || r.state === 'expired')){
+          thirtyDayTotal++;
+          if (r.state === 't1') thirtyDayWins++;
+        }
+      });
+      var baselineHitRate = thirtyDayTotal > 0 ? (thirtyDayWins / thirtyDayTotal) : NaN;
+      var todayHitRate = todayTotal > 0 ? (todayWins / todayTotal) : NaN;
+
+      __og.rollingStats = {
+        last20: { n: last20Total, w: last20Wins },
+        last100: { n: last100Total, w: last100Wins },
+        byTimezone: byTimezone,
+        todayHitRate: todayHitRate,
+        baselineHitRate: baselineHitRate,
+        lastUpdate: now
+      };
+    } catch (e){
+      __og.rollingStats = null;
+    }
+  }
+
+  /* Detect open setups and their age. Scans forward log for 'open' state
+     and calculates time since entry fire. Returns array of open setup objects. */
+  function hgOgUpdateOpenSetups(){
+    try {
+      var now = Date.now() / 1000;
+      var open = [];
+      var barTMap = {};  /* Map barT -> count for correlation detection */
+
+      /* Get ALL records from forward log, including open ones */
+      if (typeof localStorage === 'undefined'){
+        __og.openSetups = [];
+        return;
+      }
+      var raw = localStorage.getItem('hg_forward_v1');
+      if (!raw){
+        __og.openSetups = [];
+        return;
+      }
+      var allRecs = JSON.parse(raw);
+      if (!Array.isArray(allRecs)) allRecs = [];
+
+      /* Find open records (state === 'open' or no state field) */
+      allRecs.forEach(function(rec){
+        if (!rec || !rec.barT || !rec.entry) return;
+        if (rec.state && rec.state !== 'open') return;  /* Only include truly open */
+
+        var age = now - rec.barT;
+        if (age < 0) age = 0;  /* Guard against clock skew */
+
+        barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
+
+        open.push({
+          barT: rec.barT,
+          entry: fin(rec.entry),
+          t1: fin(rec.t1),
+          age: age,
+          pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
+          status: rec.state || 'open',
+          mechanic: rec.mechanic,
+          tab: rec.tab
+        });
+      });
+
+      /* Sort by age descending (oldest first) */
+      open.sort(function(a, b){ return b.age - a.age; });
+
+      /* Detect correlation clustering: 2+ setups fired from same barT */
+      open.forEach(function(setup){
+        setup.isCorrelated = (barTMap[setup.barT] || 0) >= 2;
+      });
+
+      __og.openSetups = open;
+    } catch (e){
+      __og.openSetups = [];
+    }
+  }
+
   function hgOgSettledEvidence(row){
     if (!row) return null;
     var horizon = String(row.horizon || 'SWING').toUpperCase();
@@ -4340,6 +4691,44 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
+  function hgOgRegimeWatchPanelHtml(regime){
+    if (!regime) regime = { regime: 'NORMAL', dxyValue: NaN, correlation: NaN, beta: NaN, realRate: NaN, reason: '' };
+    var h = '<section class="hg-mp og-regime-watch" data-og-regime="1" aria-label="Regime watch">';
+    h += '<div class="hg-mp-eye">REGIME WATCH · CORRELATION TRACKING</div>';
+    h += '<div class="hg-mp-head">DXY-GOLD DYNAMICS '
+      + '<span style="color:' + (regime.regime === 'NORMAL' ? 'var(--long,#16a34a)' : (regime.regime === 'DECOUPLING' ? 'var(--warn,#ca8a04)' : 'var(--short,#dc2626)'))
+      + '"><b>' + esc(regime.regime) + '</b></span></div>';
+    var items = [];
+    if (isFinite(regime.dxyValue)) items.push('DXY: ' + regime.dxyValue.toFixed(1));
+    if (isFinite(regime.correlation)) items.push('Corr: ' + regime.correlation.toFixed(2));
+    if (isFinite(regime.beta)) items.push('Beta: ' + regime.beta.toFixed(2));
+    if (isFinite(regime.realRate)) items.push('Real Rate: ' + regime.realRate.toFixed(1) + '%');
+    if (items.length){
+      h += '<div class="hg-mp-note"><b>Snapshot:</b> ' + esc(items.join(' · ')) + '</div>';
+    }
+    var alert = '';
+    if (regime.regime === 'DECOUPLING'){
+      alert = '⚠ DXY-gold correlation weakened — caution on shorts, prefer longs';
+    } else if (regime.regime === 'EXTREME'){
+      alert = '🚨 Real rate shock or extreme inverse — reduce all positions 40%';
+    }
+    if (alert){
+      h += '<div class="hg-mp-note' + (regime.regime === 'EXTREME' ? ' warn' : '') + '">' + esc(alert) + '</div>';
+    }
+    if (regime.reason){
+      h += '<div class="dim">' + esc(regime.reason) + '</div>';
+    }
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgPaintRegimeWatch(ui, regime){
+    var host = ui && ui.regime;
+    if (!host) return;
+    try { host.innerHTML = hgOgRegimeWatchPanelHtml(regime); }
+    catch (eR){ host.innerHTML = ''; }
+  }
+
   function hgOgSettledExecutePanelHtml(bag){
     bag = bag || { execute: [], best: [], minLo: OG_EXEC_WILSON_LO, minN: OG_EXEC_MIN_N };
     var h = '<section class="hg-mp og-settled-exec-panel" data-og-settled="1" aria-label="Settled execute setups">';
@@ -4364,6 +4753,131 @@ terse status, and never launches a first-time scan on a global refresh.
     h += '<div class="hg-mp-note dim">Also check SCORECARD → BY LANE → gold for your booked LOG history. OMNIGOLD forward log grows each scan — run regularly to settle mechanics.</div>';
     h += '</section>';
     return h;
+  }
+
+  /* ==================== rolling confidence UI ==================== */
+
+  function hgOgRollingConfidencePanelHtml(stats){
+    if (!stats) return '';
+    var h = '<section class="hg-mp og-rolling-panel" data-og-rolling="1" aria-label="Rolling performance">';
+    h += '<div class="hg-mp-eye">ROLLING CONFIDENCE</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>settled trades · last 20, 100 · timezone breakdown</span></div>';
+
+    /* Last 20/100 hit rates */
+    var last20Hit = (stats.last20 && stats.last20.n > 0) ? (stats.last20.w / stats.last20.n * 100).toFixed(1) : '—';
+    var last100Hit = (stats.last100 && stats.last100.n > 0) ? (stats.last100.w / stats.last100.n * 100).toFixed(1) : '—';
+
+    h += '<div class="hg-mp-grid">';
+    h += '<div><i>LAST 20</i><b>' + esc(last20Hit === '—' ? '—' : last20Hit + '%') + '</b>'
+      + '<u>' + esc(String(stats.last20.w || 0)) + '/' + esc(String(stats.last20.n || 0)) + ' wins</u></div>';
+    h += '<div><i>LAST 100</i><b>' + esc(last100Hit === '—' ? '—' : last100Hit + '%') + '</b>'
+      + '<u>' + esc(String(stats.last100.w || 0)) + '/' + esc(String(stats.last100.n || 0)) + ' wins</u></div>';
+    h += '</div>';
+
+    /* Today vs baseline */
+    if (isFinite(stats.todayHitRate) || isFinite(stats.baselineHitRate)){
+      var todayPct = isFinite(stats.todayHitRate) ? (stats.todayHitRate * 100).toFixed(1) : '—';
+      var baselinePct = isFinite(stats.baselineHitRate) ? (stats.baselineHitRate * 100).toFixed(1) : '—';
+      var diff = isFinite(stats.todayHitRate) && isFinite(stats.baselineHitRate)
+        ? (stats.todayHitRate - stats.baselineHitRate) * 100 : NaN;
+      var bgStyle = '';
+      if (isFinite(diff)){
+        if (diff > 5) bgStyle = ' style="border-left:3px solid var(--ok,#16a34a);padding-left:10px"';  /* Green: today > baseline + 5pp */
+        else if (diff < -5) bgStyle = ' style="border-left:3px solid var(--err,#dc2626);padding-left:10px"';  /* Red: today < baseline - 5pp */
+      }
+
+      h += '<div class="hg-mp-note"' + bgStyle + '>';
+      h += '<b>TODAY</b> ' + esc(todayPct === '—' ? '—' : todayPct + '%')
+        + (isFinite(diff) ? ' ' + (diff > 0 ? '+' : '') + esc(diff.toFixed(1)) + 'pp' : '');
+      h += ' vs <b>30D BASELINE</b> ' + esc(baselinePct === '—' ? '—' : baselinePct + '%');
+      h += '</div>';
+    }
+
+    /* Timezone breakdown */
+    if (stats.byTimezone){
+      h += '<div class="hg-mp-note" style="margin-top:8px"><b>BY TIMEZONE (last 100):</b>';
+      ['asia', 'london', 'ny'].forEach(function(tz){
+        var tzStats = stats.byTimezone[tz];
+        if (!tzStats || !(tzStats.n > 0)) return;
+        var tzHit = (tzStats.w / tzStats.n * 100).toFixed(1);
+        var tzLabel = tz === 'asia' ? 'ASIA' : (tz === 'london' ? 'LONDON' : 'NY');
+        h += ' · ' + esc(tzLabel) + ' ' + esc(tzStats.w) + '/' + esc(tzStats.n)
+          + ' (' + esc(tzHit) + '%)';
+      });
+      h += '</div>';
+    }
+
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgOpenSetupsWatchPanelHtml(setups){
+    if (!setups || !setups.length) return '';
+    var h = '<section class="hg-mp og-open-watch-panel" data-og-watch="1" aria-label="Open setups watch">';
+    h += '<div class="hg-mp-eye">OPEN SETUPS WATCH</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>active trades · time since entry · status</span></div>';
+
+    /* Show only most recent 5 open setups */
+    var toShow = setups.slice(0, 5);
+    if (!toShow.length){
+      h += '<div class="hg-mp-note">No open setups currently tracked.</div>';
+    } else {
+      h += '<div class="hg-mp-note">' + esc(String(setups.length)) + ' open setup'
+        + (setups.length !== 1 ? 's' : '') + ' · showing most recent 5</div>';
+      h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.9em">';
+      h += '<tr style="border-bottom:1px solid var(--hr)">';
+      h += '<th style="text-align:left;padding:4px">Setup</th>';
+      h += '<th style="text-align:right;padding:4px">Open Since</th>';
+      h += '<th style="text-align:right;padding:4px">P&L</th>';
+      h += '<th style="text-align:right;padding:4px">To T1</th>';
+      h += '</tr>';
+
+      toShow.forEach(function(setup){
+        var ageMinutes = Math.floor(setup.age / 60);
+        var ageHours = Math.floor(setup.age / 3600);
+        var ageDays = Math.floor(setup.age / 86400);
+        var ageStr = ageDays > 0 ? (ageDays + 'd')
+                   : ageHours > 0 ? (ageHours + 'h' + (ageMinutes % 60) + 'm')
+                   : (ageMinutes + 'm');
+
+        var ageClass = setup.age > 4 * 3600 ? ' style="color:var(--err,#dc2626)"' : '';
+        var correlClass = setup.isCorrelated ? ' style="color:var(--warn,#f59e0b);font-weight:bold"' : '';
+        var mechLabel = esc(String(setup.mechanic || '—'));
+
+        h += '<tr style="border-bottom:1px solid var(--hr)">';
+        h += '<td style="padding:4px">' + mechLabel
+          + (setup.isCorrelated ? ' <b>⚠</b>' : '') + '</td>';
+        h += '<td style="text-align:right;padding:4px"' + ageClass + '>'
+          + (setup.age > 4 * 3600 ? '⏱ ' : '') + esc(ageStr) + '</td>';
+        h += '<td style="text-align:right;padding:4px">'
+          + (isFinite(setup.pnl) ? (setup.pnl > 0 ? '+' : '') + esc(setup.pnl.toFixed(2)) + 'R' : '—')
+          + '</td>';
+        h += '<td style="text-align:right;padding:4px">'
+          + (isFinite(setup.entry) && isFinite(setup.t1)
+              ? esc(Math.abs(setup.t1 - setup.entry).toFixed(2))
+              : '—')
+          + '</td>';
+        h += '</tr>';
+      });
+      h += '</table></div>';
+    }
+
+    h += '</section>';
+    return h;
+  }
+
+  function hgOgPaintRollingConfidence(ui, stats){
+    var host = ui && ui.rollingPanel;
+    if (!host) return;
+    try { host.innerHTML = hgOgRollingConfidencePanelHtml(stats); }
+    catch (eRc){ host.innerHTML = ''; }
+  }
+
+  function hgOgPaintOpenWatch(ui, setups){
+    var host = ui && ui.openWatchPanel;
+    if (!host) return;
+    try { host.innerHTML = hgOgOpenSetupsWatchPanelHtml(setups); }
+    catch (eOw){ host.innerHTML = ''; }
   }
 
   function hgOgPaintSettledExecute(ui, bag){
@@ -4926,6 +5440,21 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape, bridgeIn){
     hgOgPaintScanCoverage(ui, hgOgBuildScanCoverage(res.scalp), hgOgBuildScanCoverage(res.swing));
     hgOgPaintSettledExecute(ui, hgOgPickSettledExecutes(ogCollapsed || [], deskTape));
+    /* Paint regime watch panel with correlation data */
+    hgOgPaintRegimeWatch(ui, __og.correlationRegime);
+    /* Update rolling performance tracking and open setups watch */
+    hgOgUpdateRollingStats();
+    hgOgUpdateOpenSetups();
+    /* Inject rolling confidence and open watch panels above MOST PROBABLE */
+    try {
+      var host = (ui && ui.mp) || (ui && ui.cards);
+      if (host && host.insertAdjacentHTML){
+        var openHtml = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
+        var rollingHtml = hgOgRollingConfidencePanelHtml(__og.rollingStats);
+        if (openHtml) host.insertAdjacentHTML('afterbegin', openHtml);
+        if (rollingHtml) host.insertAdjacentHTML('afterbegin', rollingHtml);
+      }
+    } catch (eRoll) {}
     var bridgeP = bridgeIn ? Promise.resolve(bridgeIn)
       : hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows);
     return bridgeP.then(function(bridge){
@@ -5158,6 +5687,27 @@ terse status, and never launches a first-time scan on a global refresh.
         ? pill('WITH GOLD TAPE', 'ok')
         : pill('AGAINST GOLD TAPE', 'bad'));
     }
+    /* Risk sizing badge based on stack3 gates and held queue */
+    var stack3Calc = (function(gs){
+      var keep = { 'regime-fit':1, 'htf-confirm':1, 'hurst-regime':1 };
+      var n = 0, j;
+      for (j = 0; j < (gs || []).length; j++){
+        if (gs[j] && keep[gs[j].key] && gs[j].pass === true) n++;
+      }
+      return n;
+    })(c.gates);
+    var heldCount = (__og && __og.held && isFinite(__og.held.n)) ? __og.held.n : 0;
+    var riskBadge = hgOgRiskBadgeHtml(stack3Calc, heldCount);
+    if (riskBadge) badge += ' ' + riskBadge;
+    /* Regime badge: show if regime is DECOUPLING or EXTREME */
+    var regime = __og.correlationRegime;
+    if (regime && (regime.regime === 'DECOUPLING' || regime.regime === 'EXTREME')){
+      var regimeBadgeColor = (regime.regime === 'DECOUPLING') ? 'warn' : 'bad';
+      var regimeBadgeText = (regime.regime === 'DECOUPLING')
+        ? 'Decoupling: prefer longs'
+        : 'Extreme regime: reduce size';
+      badge += ' ' + pill(regimeBadgeText, regimeBadgeColor);
+    }
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + (c.topWatch ? ' og-watch' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     h += '<div class="dim">' + esc(c.why) + '</div>';
@@ -5188,9 +5738,16 @@ terse status, and never launches a first-time scan on a global refresh.
         +  '</div>';
     }
     if (c.plan){
+      /* Apply regime scale factor to risk % display */
+      var regimeScale = 1.0;
+      if (__og.correlationRegime){
+        regimeScale = hgOgRegimeScaleFactor(__og.correlationRegime.regime);
+      }
+      var displayRiskPct = fin(c.plan.riskPct) * regimeScale;
       h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry) + ' · STOP ' + fmtPx(c.plan.stop)
         +  ' · T1 ' + fmtPx(c.plan.t1) + ' · T2 ' + fmtPx(c.plan.t2)
-        +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
+        +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b> · risk ' + fmt(displayRiskPct, 2) + '%'
+        +  (regimeScale < 1.0 ? (' <span class="dim">(regime adj ' + (regimeScale * 100).toFixed(0) + '%)</span>') : '') + '</div>';
       var t1Note = hgOgTargetReadout(Object.assign({ dir: c.dir }, c.plan), c.horizon);
       if (t1Note) h += '<div class="dim og-t1-readout">' + esc(t1Note) + '</div>';
       var mktNote = hgOgEntryMarketNote(c, c.plan);
@@ -5673,6 +6230,13 @@ terse status, and never launches a first-time scan on a global refresh.
         })();
         var ranked = rankFn(all);
 
+        /* Fetch correlation regime data (once per hour, cached) */
+        return hgOgFetchCorrelationRegime(
+          (res.swing.rows && res.swing.rows.length) ? res.swing.rows : res.scalp.rows,
+          shared.macro
+        ).then(function(regime){
+          __og.correlationRegime = regime;
+
         /* SPOT ALIGN — same discipline as GOLD SCALP/SWING. Proxy feeds
            (twelvedata, perp, PAXG) can sit off live spot; scale every printed
            plan to the gold-api anchor before render. R:R unchanged. XM and
@@ -5740,12 +6304,16 @@ terse status, and never launches a first-time scan on a global refresh.
         var tickets = dcounts.tickets;
         var srcNote = 'source: scalp ' + hgOgSrcLabel(res.scalp.source)
                     + ' · swing ' + hgOgSrcLabel(res.swing.source);
+        /* Add drawdown metrics to status line */
+        var drawdownState = hgOgResetWeeklyDrawdown();
+        var drawdownMetrics = hgOgDrawdownMetricsHtml(drawdownState);
         __og.lastStat = ranked.length + ' setup(s)'
                       + (dcounts.trades < ranked.length
                           ? ' · ' + dcounts.trades + ' distinct trade(s) after collapsing '
                             + (ranked.length - dcounts.trades) + ' duplicate card(s) on identical levels'
                           : '')
-                      + ' · ' + tickets + ' ticket(s) · ' + srcNote + spotAlignNote;
+                      + ' · ' + tickets + ' ticket(s) · ' + srcNote + spotAlignNote
+                      + '  ·  RISK METRICS: ' + drawdownMetrics;
         /* When the desk produces NO tickets, name the gate responsible in the
            status line. A scan that reports "11 setups, 0 tickets" and nothing
            else sends the reader through every card looking for the common
@@ -5947,6 +6515,10 @@ terse status, and never launches a first-time scan on a global refresh.
         if (heldCards.length){
           h += hgOgHeldQueueHtml(heldCards, deskTape);
         }
+        /* Prepend circuit breaker warning banner if active */
+        var drawdownStateBanner = hgOgResetWeeklyDrawdown();
+        var circuitBannerHtml = hgOgDrawdownCircuitBannerHtml(drawdownStateBanner);
+        if (circuitBannerHtml) h = circuitBannerHtml + h;
         ui.cards.innerHTML = h;
         var goldSide = deskTape;
         var mpBag = [];
@@ -6006,6 +6578,7 @@ terse status, and never launches a first-time scan on a global refresh.
             throw eRender;
           });
         });
+        }); /* Close regime .then() */
       })
       .catch(function(err){
         if (__og.lastCardsHtml) {
@@ -6517,6 +7090,191 @@ terse status, and never launches a first-time scan on a global refresh.
        still fires and still shows a card, so the miss is invisible. */
     window.hgOgFamilyOf = hgOgFamilyOf;
     window.hgOgGates = hgOgGates;
+
+  /* ==================== RISK SIZING & DRAWDOWN CIRCUIT BREAKER ==================== */
+
+  function hgOgLoadDrawdownState(){
+    try {
+      var stored = localStorage.getItem('hg_og_drawdown_state');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    /* Default state: Monday 00:00 IST, 0 P&L, no loss streak, circuit not active */
+    var now = new Date();
+    var istDate = new Date(now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
+    return {
+      weekStart: hgOgMondayIstIso(istDate),
+      weekPnl: 0,
+      losStreak: 0,
+      isCircuitBreakerActive: false
+    };
+  }
+
+  function hgOgSaveDrawdownState(state){
+    try {
+      localStorage.setItem('hg_og_drawdown_state', JSON.stringify(state));
+    } catch (e) {}
+  }
+
+  function hgOgMondayIstIso(dateObj){
+    if (!dateObj) dateObj = new Date();
+    var istDate = dateObj instanceof Date
+      ? new Date(dateObj.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }))
+      : new Date();
+    var dayOfWeek = istDate.getUTCDay() || 7; /* Sunday = 0, shift to 7 */
+    var daysToMonday = (dayOfWeek === 1) ? 0 : (dayOfWeek - 1);
+    var monday = new Date(istDate);
+    monday.setUTCDate(monday.getUTCDate() - daysToMonday);
+    monday.setUTCHours(0, 0, 0, 0);
+    return monday.toISOString().split('T')[0];
+  }
+
+  function hgOgResetWeeklyDrawdown(){
+    var state = hgOgLoadDrawdownState();
+    var now = new Date();
+    var currentMonday = hgOgMondayIstIso(now);
+    if (state.weekStart !== currentMonday){
+      state.weekStart = currentMonday;
+      state.weekPnl = 0;
+      state.losStreak = 0;
+      state.isCircuitBreakerActive = false;
+      hgOgSaveDrawdownState(state);
+    }
+    return state;
+  }
+
+  function hgOgCalculateRiskScale(stack3, heldCount){
+    if (!isFinite(stack3)) stack3 = 3;
+    if (!isFinite(heldCount)) heldCount = 0;
+
+    var baseScale = 1.0;
+    var stackReason = '';
+
+    /* Stack3-based scaling: 3 gates passing = 100%, down to 0% if no gates */
+    if (stack3 >= 3){
+      baseScale = 1.0;
+      stackReason = 'Full 100%';
+    } else if (stack3 === 2){
+      baseScale = 0.70;
+      stackReason = '70% (1 gate weak)';
+    } else if (stack3 === 1){
+      baseScale = 0.50;
+      stackReason = '50% (thin confluence)';
+    } else {
+      baseScale = 0.0;
+      stackReason = 'DO NOT TRADE';
+    }
+
+    /* Held-queue crowding penalty */
+    var heldScale = 1.0;
+    var heldReason = '';
+    if (heldCount > 5){
+      heldScale = 0.60; /* -40% */
+      heldReason = ' -40% (queue > 5)';
+    } else if (heldCount > 3){
+      heldScale = 0.80; /* -20% */
+      heldReason = ' -20% (queue > 3)';
+    }
+
+    var finalScale = baseScale * heldScale;
+    var finalReason = stackReason + (heldReason || '');
+
+    return {
+      scale: finalScale,
+      reason: finalReason,
+      baseScale: baseScale,
+      stackReason: stackReason,
+      heldScale: heldScale,
+      heldReason: heldReason
+    };
+  }
+
+  function hgOgRiskBadgeHtml(stack3, heldCount){
+    if (stack3 === 0) return '';
+    var sizing = hgOgCalculateRiskScale(stack3, heldCount);
+    var scale = sizing.scale;
+    var reason = sizing.reason;
+
+    var cls = scale >= 1.0 ? 'ok' : (scale >= 0.5 ? 'warn' : 'bad');
+    var txt = (scale * 100).toFixed(0) + '% sizing';
+    if (reason) txt += ' (' + reason + ')';
+
+    return pill(txt, cls);
+  }
+
+  function hgOgDrawdownMetricsHtml(state){
+    if (!state) state = hgOgResetWeeklyDrawdown();
+    var html = '<span class="dim">Week P&L: ';
+    html += (isFinite(state.weekPnl) && state.weekPnl !== 0)
+      ? ((state.weekPnl >= 0 ? '+' : '') + state.weekPnl.toFixed(1) + '%')
+      : '0%';
+    html += ' | Streak: ' + state.losStreak + 'L';
+    if (state.losStreak >= 3){
+      html += ' | Sizing: auto-50%';
+    }
+    if (state.isCircuitBreakerActive){
+      html += ' | <b style="color:red">CIRCUIT BREAKER ACTIVE</b>';
+    }
+    html += '</span>';
+    return html;
+  }
+
+  function hgOgDrawdownCircuitBannerHtml(state){
+    if (!state || !state.isCircuitBreakerActive) return '';
+    var html = '<div style="background:#ffe0e0;border:1px solid #ff6666;border-radius:4px;'
+             + 'padding:10px;margin:8px 0;color:#cc0000;font-weight:bold;">'
+             + '⚠ Drawdown Circuit Breaker: ' + (state.weekPnl >= 0 ? '+' : '') + state.weekPnl.toFixed(1) + '% week | '
+             + 'PAUSE ENTRIES until next Mon</div>';
+    return html;
+  }
+
+  function hgOgUpdateDrawdownOnSettle(outcome, pnl){
+    /* Called when a setup settles (outcome = 'win' or 'loss', pnl = numeric or null) */
+    var state = hgOgResetWeeklyDrawdown();
+
+    if (!outcome) return state;
+
+    /* Update consecutive loss streak */
+    if (outcome === 'loss'){
+      state.losStreak++;
+    } else if (outcome === 'win'){
+      state.losStreak = 0;
+    }
+
+    /* Accumulate weekly P&L if provided */
+    if (isFinite(pnl) && pnl !== 0){
+      state.weekPnl += pnl;
+    }
+
+    /* Check circuit breaker: -2% threshold */
+    state.isCircuitBreakerActive = (state.weekPnl <= -2.0);
+
+    hgOgSaveDrawdownState(state);
+    return state;
+  }
+
+  function hgOgGetConsecutiveLossReduction(losStreak){
+    /* Returns 1.0 (no reduction) for < 3 losses, 0.5 for 3+ losses */
+    return (losStreak >= 3) ? 0.5 : 1.0;
+  }
+
+  function hgOgApplyDrawdownSizing(riskScale, state){
+    /* Apply consecutive loss auto-reduction (50%) on top of other sizing */
+    if (!state) state = hgOgResetWeeklyDrawdown();
+    var lossReduction = hgOgGetConsecutiveLossReduction(state.losStreak);
+    return riskScale * lossReduction;
+  }
+
+  window.hgOgLoadDrawdownState = hgOgLoadDrawdownState;
+  window.hgOgSaveDrawdownState = hgOgSaveDrawdownState;
+  window.hgOgResetWeeklyDrawdown = hgOgResetWeeklyDrawdown;
+  window.hgOgCalculateRiskScale = hgOgCalculateRiskScale;
+  window.hgOgRiskBadgeHtml = hgOgRiskBadgeHtml;
+  window.hgOgDrawdownMetricsHtml = hgOgDrawdownMetricsHtml;
+  window.hgOgDrawdownCircuitBannerHtml = hgOgDrawdownCircuitBannerHtml;
+  window.hgOgUpdateDrawdownOnSettle = hgOgUpdateDrawdownOnSettle;
+  window.hgOgGetConsecutiveLossReduction = hgOgGetConsecutiveLossReduction;
+  window.hgOgApplyDrawdownSizing = hgOgApplyDrawdownSizing;
+
     /* Exported so the ticket count can be tested apart from a live scan —
        the header and the rendered cards disagreed for want of exactly this. */
     window.ogDistinctCounts = ogDistinctCounts;
