@@ -604,7 +604,9 @@ localStorage. Never throws.
             horizonBars: o.horizonBars || 20,
             ticket: (c.ticket !== undefined) ? c.ticket : (o.ticket === true),
             /* accept the grade wherever the calling desk keeps it */
-            grade: c.grade || c.engineGrade || (c.gradeObj && c.gradeObj.letter) || o.grade || ''
+            grade: c.grade || c.engineGrade || (c.gradeObj && c.gradeObj.letter) || o.grade || '',
+            /* stack3 from OMNIROUTE and OMNIGOLD, passed through unchanged */
+            stack3: c.stack3
           });
           if (r === 'recorded') added++;
         }
