@@ -1,0 +1,88 @@
+================================================================================
+CRYPTO FILL-RISK MEASUREMENT — QUICK REFERENCE
+================================================================================
+
+WHAT WAS BUILT
+──────────────
+A complete replay system to measure never-fill rates on crypto limit orders
+and replace gold's placeholder rates in omniroute.js fill-risk gate.
+
+START HERE
+──────────
+1. Read: README-CRYPTO-FILL-RISK.md (9.8KB)
+2. Pick your approach:
+   - Option A: node scripts/crypto-fill-risk-cal.mjs  (20-40 min, most accurate)
+   - Option B: node scripts/crypto-fill-risk-direct.mjs  (5-15 min, simpler)
+   - Option C: node scripts/test-crypto-fill-risk.mjs  (<10 sec, test only)
+3. Wait for results → scripts/crypto-fill-risk-results.json
+4. Use CRYPTO-GATE-MESSAGE-TEMPLATE.md to update omniroute.js
+
+FILES
+─────
+3 Scripts (all syntax verified, ready to run):
+  • crypto-fill-risk-cal.mjs       Main replay (OMNIROUTE fires)
+  • crypto-fill-risk-direct.mjs    Quick measurement (simulates orders)
+  • test-crypto-fill-risk.mjs      Test harness (mock data, no network)
+
+4 Documentation files:
+  • README-CRYPTO-FILL-RISK.md         Main guide (start here)
+  • CRYPTO-FILL-RISK-CALIBRATION.md    Technical deep dive
+  • CRYPTO-GATE-MESSAGE-TEMPLATE.md    Exact omniroute.js updates
+  • SAMPLE-CRYPTO-FILL-RISK-RESULTS.md Example output & interpretation
+
+2 Data template files:
+  • crypto-fill-risk-results.json       Main output (populated when run)
+  • crypto-fill-risk-test-results.json  Test output (mock data)
+
+Bonus:
+  • CRYPTO-FILL-RISK-DELIVERABLES.txt   Complete summary
+  • MEASUREMENT-GUIDE.txt                This file
+
+THE MEASUREMENT
+───────────────
+For every OMNIROUTE detection (or simulated order):
+  1. Record entry price, market price, calculated stop
+  2. Calculate gap in R: |entry - market| / risk
+  3. Walk forward N bars: did price ever trade the entry?
+  4. Bucket by gap: [0–0.25R], [0.25–0.5R], [0.5–1R], [1R+]
+  5. Report: % never-filled per bucket for 4h and 1h horizons
+
+SYMBOLS TESTED
+──────────────
+10 Binance USDT perpetuals (80% of crypto futures volume):
+  BTCUSDT, ETHUSDT, SOLUSDT, XRPUSDT, BNBUSDT,
+  DOGEUSDT, ADAUSDT, LINKUSDT, AVAXUSDT, LTCUSDT
+
+EXPECTED RESULTS
+────────────────
+Crypto likely shows similar or better fill rates than gold due to:
+  • Higher Binance volume
+  • 24/7 continuous trading
+  • Tighter order book spreads
+
+Gold's rates for reference:
+  0–0.25R: ~10% never-fill
+  0.25–1R: ~20% never-fill
+  1R+: ~30% never-fill
+
+UPDATING omniroute.js
+─────────────────────
+Location: lines ~1570–1631
+Changes needed:
+  ✗ Remove: [CRYPTO STUB: gold rates]
+  ✓ Add: crypto-measured rates
+  ✓ Update: ratios (1 in X) with actual data
+  ✓ Add: calibration date
+
+See CRYPTO-GATE-MESSAGE-TEMPLATE.md for exact code.
+
+NEXT STEP
+─────────
+→ Read README-CRYPTO-FILL-RISK.md (5 min read)
+→ Choose Option A or B and run the script
+→ Check results in scripts/crypto-fill-risk-results.json
+→ Update omniroute.js using CRYPTO-GATE-MESSAGE-TEMPLATE.md
+→ Test on live scan
+→ Commit changes
+
+================================================================================

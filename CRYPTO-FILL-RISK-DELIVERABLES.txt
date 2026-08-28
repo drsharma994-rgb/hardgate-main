@@ -1,0 +1,167 @@
+================================================================================
+HARDGATE — CRYPTO FILL-RISK CALIBRATION REPLAY
+Complete Deliverables Summary
+================================================================================
+
+OBJECTIVE
+─────────
+Build a replay that measures crypto-specific never-fill rates for OMNIROUTE's
+fill-risk gate, replacing gold's placeholder rates with data from 10 Binance
+majors (1,000 bars each at 4h and 1h horizons).
+
+================================================================================
+DELIVERABLES
+================================================================================
+
+1. MEASUREMENT SCRIPTS (3 files)
+─────────────────────────────────
+
+  ✓ scripts/crypto-fill-risk-cal.mjs (12KB)
+    Main replay script — OMNIROUTE-integrated measurement
+    - Fetches 1,000 bars per horizon from Binance FAPI
+    - Runs hgOmniDetect on each bar prefix
+    - For each firing: records entry, stop, livePx, gap in R
+    - Walks forward: checks if entry fills within horizon
+    - Buckets results: [0–0.25R], [0.25–0.5R], [0.5–1R], [1R+]
+    - Outputs: % never-filled for each bucket, both horizons
+    - Runtime: ~20–40 minutes
+    - Output: scripts/crypto-fill-risk-results.json
+    - Status: ✓ Syntax verified, ready to run
+
+  ✓ scripts/crypto-fill-risk-direct.mjs (8.6KB)
+    Simplified measurement — doesn't require detector firing
+    - Simulates limit orders at gaps: 0.1R, 0.25R, 0.5R, 1.0R, 1.5R
+    - Places order at each distance below market (long only)
+    - Walks forward to measure if order fills within horizon
+    - Faster execution (~5–15 minutes)
+    - Output: scripts/crypto-fill-risk-direct-results.json
+    - Good for quick validation or when detectors are sparse
+    - Status: ✓ Syntax verified, ready to run
+
+  ✓ scripts/test-crypto-fill-risk.mjs (8.1KB)
+    Test harness with mock data (development only)
+    - Generates synthetic OHLCV bars
+    - Runs same logic as main replay without network calls
+    - Validates measurement logic without depending on Binance
+    - Runtime: <10 seconds
+    - Status: ✓ Syntax verified, runs successfully
+
+2. DOCUMENTATION (4 files)
+───────────────────────────
+
+  ✓ scripts/README-CRYPTO-FILL-RISK.md (9.8KB)
+    Main reference guide
+    - Overview and quick start (3 options)
+    - Complete workflow (6 steps)
+    - Symbols tested and expected results
+    - Troubleshooting section
+    - File locations and technical details
+    - Re-calibration schedule
+    - Success criteria
+
+  ✓ scripts/CRYPTO-FILL-RISK-CALIBRATION.md (8.7KB)
+    Comprehensive technical guide
+    - What to measure and why
+    - Gold's baseline rates (for reference)
+    - Two measurement approaches (Option 1 & 2)
+    - Network handling and rate limits
+    - Expected results and gate message structure
+    - How to update omniroute.js
+    - Interpretation and caveats
+    - Re-calibration guidance
+
+  ✓ scripts/CRYPTO-GATE-MESSAGE-TEMPLATE.md (11KB)
+    Exact gate update instructions for omniroute.js
+    - Current code (lines ~1570–1610) shown in full
+    - Replacement template with placeholders
+    - Example substitution with hypothetical results
+    - Key numbers to extract from results JSON
+    - Verification checklist (8 items)
+    - Sample commit message
+
+  ✓ scripts/SAMPLE-CRYPTO-FILL-RISK-RESULTS.md (6.5KB)
+    Sample output and interpretation guide
+    - Console output (what you'll see when script runs)
+    - JSON output format (crypto-fill-risk-results.json)
+    - Interpretation of sample results
+    - Comparison to gold baseline
+    - Sample gate messages (before/after)
+    - Quality checks and metrics
+    - Recommendations for threshold updates
+
+3. DATA FILES (2 files)
+───────────────────────
+
+  ✓ scripts/crypto-fill-risk-results.json (1.1KB)
+    Empty template (populated when main replay runs)
+    - Timestamp and metadata
+    - Symbols tested (10 majors)
+    - Bars per horizon (1,000)
+    - Results per bucket [0–0.25R, 0.25–0.5R, 0.5–1R, 1R+]
+    - Both 4h and 1h horizons
+    - Fields: name, min, max, filled, neverFilled, total
+
+  ✓ scripts/crypto-fill-risk-test-results.json (569B)
+    Output from test harness (populated when test runs)
+    - Same structure as above but with mock data
+    - Timestamp and test metadata
+
+================================================================================
+QUICK START
+================================================================================
+
+Option A: Measure on OMNIROUTE Fires (Recommended)
+  $ cd /path/to/hardgate-main
+  $ node scripts/crypto-fill-risk-cal.mjs
+
+Option B: Direct Fill-Rate Measurement (Faster)
+  $ node scripts/crypto-fill-risk-direct.mjs
+
+Option C: Test Logic (No Network)
+  $ node scripts/test-crypto-fill-risk.mjs
+
+================================================================================
+FILES & LOCATIONS
+================================================================================
+
+Scripts (ready to run):
+  scripts/crypto-fill-risk-cal.mjs
+  scripts/crypto-fill-risk-direct.mjs
+  scripts/test-crypto-fill-risk.mjs
+
+Documentation:
+  scripts/README-CRYPTO-FILL-RISK.md
+  scripts/CRYPTO-FILL-RISK-CALIBRATION.md
+  scripts/CRYPTO-GATE-MESSAGE-TEMPLATE.md
+  scripts/SAMPLE-CRYPTO-FILL-RISK-RESULTS.md
+
+Data output (populated after running scripts):
+  scripts/crypto-fill-risk-results.json
+  scripts/crypto-fill-risk-direct-results.json
+
+Gate to update:
+  omniroute.js (lines ~1570–1631)
+
+================================================================================
+WORKFLOW (6 Steps)
+================================================================================
+
+1. Run measurement script (Option A, B, or C)
+2. Review results in JSON file
+3. Calculate "1 in X" ratios from percentages
+4. Update omniroute.js with crypto rates (see template)
+5. Verify & test on live scan
+6. Commit with proper message
+
+See README-CRYPTO-FILL-RISK.md for complete workflow with details.
+
+================================================================================
+STATUS
+================================================================================
+
+All scripts:          ✓ Syntax verified and ready
+All documentation:    ✓ Complete and cross-referenced
+All templates:        ✓ Ready to use
+Network handling:     ✓ Rate limits handled with retries and delays
+
+Ready to run. See README-CRYPTO-FILL-RISK.md for quick start.
