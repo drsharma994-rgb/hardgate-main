@@ -5143,7 +5143,47 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 2. MARKET CONDITIONS SCORE — 3D rating under current conditions */
     var topSetup = setups.length > 0 ? setups[0] : null;
     if (topSetup){
-      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">TOP SETUP (Best for Current Conditions)</div>';
+      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">🏆 TOP SETUP (Best for Current Conditions)</div>';
+
+      /* PRICE LEVELS — Entry, TP, SL */
+      if (isFinite(fin(topSetup.entry)) && isFinite(fin(topSetup.t1)) && isFinite(fin(topSetup.stop))){
+        var entry = fin(topSetup.entry);
+        var tp = fin(topSetup.t1);
+        var sl = fin(topSetup.stop);
+        var riskPts = Math.abs(sl - entry);
+        var profitPts = Math.abs(tp - entry);
+        var rr = riskPts > 0 ? (profitPts / riskPts).toFixed(2) : 'N/A';
+
+        h += '<div style="margin:12px 0;padding:12px;border:2px solid #22c55e;border-radius:4px;background:rgba(34,197,94,0.1)">';
+        h += '<div style="font-weight:bold;margin-bottom:8px;color:#22c55e">📍 PRICE LEVELS</div>';
+        h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+
+        h += '<div style="padding:8px;background:rgba(34,197,94,0.2);border-radius:3px;border-left:3px solid #22c55e">';
+        h += '<div style="font-size:0.8em;color:var(--fg-muted,#666);margin-bottom:2px">ENTRY</div>';
+        h += '<div style="font-size:1.3em;font-weight:bold;color:#22c55e">' + entry.toFixed(2) + '</div>';
+        h += '</div>';
+
+        h += '<div style="padding:8px;background:rgba(34,197,94,0.2);border-radius:3px;border-left:3px solid #22c55e">';
+        h += '<div style="font-size:0.8em;color:var(--fg-muted,#666);margin-bottom:2px">TAKE PROFIT (T1)</div>';
+        h += '<div style="font-size:1.3em;font-weight:bold;color:#22c55e">' + tp.toFixed(2) + '</div>';
+        h += '</div>';
+
+        h += '<div style="padding:8px;background:rgba(220,38,38,0.15);border-radius:3px;border-left:3px solid #dc2626">';
+        h += '<div style="font-size:0.8em;color:var(--fg-muted,#666);margin-bottom:2px">STOP LOSS</div>';
+        h += '<div style="font-size:1.3em;font-weight:bold;color:#dc2626">' + sl.toFixed(2) + '</div>';
+        h += '</div>';
+
+        h += '</div>';
+
+        h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:0.85em">';
+        h += '<div><span style="color:var(--fg-muted,#666)">Risk:</span> <strong>' + riskPts.toFixed(2) + ' pts</strong></div>';
+        h += '<div><span style="color:var(--fg-muted,#666)">Profit:</span> <strong style="color:#22c55e">' + profitPts.toFixed(2) + ' pts</strong></div>';
+        h += '<div><span style="color:var(--fg-muted,#666)">R:R:</span> <strong style="color:#22c55e">1:' + rr + '</strong></div>';
+        h += '</div>';
+
+        h += '</div>';
+      }
+
       h += hgOgRenderMarketConditionsScore(topSetup);
       h += hgOgRenderChecklist(topSetup);
       h += hgOgRenderConfidence(topSetup.evidence);
