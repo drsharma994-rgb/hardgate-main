@@ -4678,7 +4678,7 @@ terse status, and never launches a first-time scan on a global refresh.
         }
 
         /* Skip closed setups — show only ACTIVE or PENDING */
-        if (isClosed && age > 300) continue;  /* Skip closed setups older than 5 min */
+        if (isClosed && age > 300) return;  /* Skip closed setups older than 5 min */
 
         /* Gate confluence: count passing gates from stack3 field */
         var gateConf = fin(rec.stack3) || 0;
