@@ -98,13 +98,19 @@ eq(seenOpts && seenOpts.cache, 'no-store', 'freshness fetch uses cache:no-store'
 
 /* ---- DRIFT GUARD: sw.js cache version must equal the build stamp ---- */
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const swVer = (sw.match(/HG_CACHE\s*=\s*'([^']+)'/) || [])[1];
 ok(swVer, 'sw.js HG_CACHE is readable');
 eq(swVer, G.HG_BUILD.version,
   'sw.js HG_CACHE (' + swVer + ') must match build-stamp version (' + G.HG_BUILD.version + ') — bump BOTH when you ship');
 
+/* ---- DRIFT GUARD: index.html script ?v= pins must match build stamp ---- */
+const pin = G.HG_BUILD.version.replace(/^hg-v/, '');
+const bustPins = [...new Set([...html.matchAll(/<script[^>]+src="[^"]*\?v=(\d+)"/g)].map(m => m[1]))];
+ok(bustPins.length >= 1 && bustPins.every(p => p === pin),
+  'every index.html script ?v= matches build-stamp (' + pin + ') — got: ' + bustPins.join(', ') + ' — bump ALL index.html ?v= when you ship');
+
 /* ---- wiring: the file must actually be loaded and precached ---- */
-const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 ok(html.indexOf('<script src="build-stamp.js"></script>') >= 0, 'build-stamp.js has a script tag');
 ok(html.indexOf('id="chipBuild"') >= 0, 'header has the build chip element');
 ok(sw.indexOf("'./build-stamp.js'") >= 0, 'build-stamp.js is in the sw precache list');
