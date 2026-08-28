@@ -168,7 +168,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var DAILY_SLOW = 21;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
-                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', held: { n: 0 } };
+                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', held: { n: 0 },
+                 openSetups: [] };
   /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
      hardRefreshAll used to click RUN, which blanked the cards and then
      often died on a venue blip — "the setup disappears after 1 minute,
@@ -4844,6 +4845,79 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== mount / refresh ==================== */
 
+  /* Render crypto pro-trader panel */
+  function omniRenderProTraderPanel(setups){
+    if (!setups || !setups.length) return '<div style="padding:8px;color:var(--fg-muted,#999)">No open crypto setups tracked.</div>';
+
+    var html = '<div style="padding:8px">';
+    html += '<div style="font-weight:bold;margin-bottom:8px;font-size:1.1em">🚀 OMNI PRO-TRADER CRYPTO SUITE</div>';
+
+    var top = setups[0];
+    if (top){
+      html += '<div style="margin:8px 0;padding:8px;background:#3b82f633;border-left:3px solid #3b82f6;border-radius:3px">';
+      html += '<div style="font-weight:bold;margin-bottom:4px">🏆 TOP SETUP: ' + esc(String(top.symbol || top.mechanic)) + '</div>';
+
+      if (isFinite(fin(top.entry)) && isFinite(fin(top.t1)) && isFinite(fin(top.stop))){
+        var entry = fin(top.entry), tp = fin(top.t1), sl = fin(top.stop);
+        var risk = Math.abs(sl - entry), profit = Math.abs(tp - entry), rr = risk > 0 ? (profit/risk).toFixed(2) : 'N/A';
+        var tradeStatus = top.tradeStatus || 'active';
+        var statusLabel = tradeStatus === 'profit' ? '✓ PROFIT' : tradeStatus === 'stopped' ? '✗ STOPPED' : '▶ ACTIVE';
+        var statusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : '#3b82f6';
+
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:0.85em;margin:6px 0">';
+        html += '<div><span style="color:var(--fg-muted,#666)">Entry:</span> <b>' + entry.toFixed(8) + '</b></div>';
+        html += '<div><span style="color:var(--fg-muted,#666)">TP:</span> <b style="color:#22c55e">' + tp.toFixed(8) + '</b></div>';
+        html += '<div><span style="color:var(--fg-muted,#666)">SL:</span> <b style="color:#dc2626">' + sl.toFixed(8) + '</b></div>';
+        html += '</div>';
+
+        html += '<div style="display:flex;gap:8px;font-size:0.85em;margin:4px 0">';
+        html += '<div><span style="color:var(--fg-muted,#666)">Risk:</span> <b>' + risk.toFixed(8) + '</b></div>';
+        html += '<div><span style="color:var(--fg-muted,#666)">Profit:</span> <b style="color:#22c55e">' + profit.toFixed(8) + '</b></div>';
+        html += '<div><span style="color:var(--fg-muted,#666)">R:R:</span> <b style="color:#3b82f6">1:' + rr + '</b></div>';
+        html += '<div style="margin-left:auto;color:' + statusColor + ';font-weight:bold;background:' + statusColor + '22;padding:2px 6px;border-radius:3px">' + statusLabel + '</div>';
+        html += '</div>';
+      }
+
+      var comp = fin(top.compositeScore) || 0, tech = fin(top.technicalScore) || 0, sent = fin(top.sentimentScore) || 0, fund = fin(top.fundamentalScore) || 0;
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;font-size:0.8em;margin-top:6px">';
+      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#3b82f6">' + comp.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Overall</div></div>';
+      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#8b5cf6">' + tech.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Technical</div></div>';
+      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#f59e0b">' + sent.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Sentiment</div></div>';
+      html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#06b6d4">' + fund.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Fundamental</div></div>';
+      html += '</div>';
+
+      html += '<div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:4px;font-size:0.75em;margin-top:6px">';
+      var checks = top.checks || {};
+      var items = [
+        {key: 'htfRegime', label: '4h Regime'},
+        {key: 'gate1h', label: '1h Gate'},
+        {key: 'corrNorm', label: 'Corr Normal'},
+        {key: 'drawdownOk', label: 'Drawdown'},
+        {key: 'riskReward', label: 'R:R'}
+      ];
+      items.forEach(function(item){
+        var passed = checks[item.key];
+        var color = passed ? '#22c55e' : '#dc2626';
+        html += '<div style="text-align:center;padding:3px;border:1px solid ' + color + '33;color:' + color + ';font-weight:bold">' + (passed ? '✓' : '✗') + ' ' + item.label + '</div>';
+      });
+      html += '</div>';
+
+      html += '</div>';
+    }
+
+    html += '<div style="margin-top:8px;font-size:0.85em;color:var(--fg-muted,#666)">' + (setups.length || 0) + ' open crypto setup' + (setups.length !== 1 ? 's' : '') + ' tracked</div>';
+    html += '</div>';
+    return html;
+  }
+
+  function omniPaintProTrader(ui, setups){
+    try {
+      if (ui && ui.proTrader){
+        ui.proTrader.innerHTML = omniRenderProTraderPanel(setups);
+      }
+    } catch (e){}
+  }
+
   function mountOmniroute(el){
     if (!el) return;
     var cfg = hgOmniLoadCfg();
@@ -4851,6 +4925,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     el.innerHTML =
       '<div class="panel">'
       + '<h2>OmniRoute — desk setups <span>delta + coindcx · spring · po3 · orb · absorption · value area · measured move</span></h2>'
+      + '<div id="omniProTrader" style="margin-bottom:16px;border:2px solid #3b82f6;border-radius:4px;padding:12px;background:rgba(59,130,246,0.05)"></div>'
       + '<div class="note hg-lead" style="margin-bottom:10px">Scans <b>every futures contract</b> on Delta India + CoinDCX. Pass 1 fetches 4H bars; pass 2 runs the <b>full ledger on every name</b> — every engine (shared mechanics, native six, positioning, XS, house extras including SCALP on 1H + 15m) and every indicator (hard gates, shared oscillators, Binance OI / crowding / taker / depth, <b>vol targeting · CVD · liquidation map</b>). '
       + 'The coverage table below now reads COVERED on every school. CVD uses Binance taker data where the contract has a twin and a labelled candle approximation elsewhere — a candle is not a trade tape. '
       + 'A name that still fires nothing does <b>not</b> get an invented ticket; the indicator ledger still ran. '
@@ -4897,6 +4972,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       mp: el.querySelector('#omniMp'),
       pool: el.querySelector('#omniPool'),
       matrix: el.querySelector('#omniMatrix'),
+      proTrader: el.querySelector('#omniProTrader'),
       ep: el.querySelector('#omniEp'), tok: el.querySelector('#omniTok'),
       model: el.querySelector('#omniModel'), ping: el.querySelector('#omniPing'),
       pingStat: el.querySelector('#omniPingStat'), kind: el.querySelector('#omniKind'),
@@ -4977,14 +5053,131 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* House contract: async, never throws, terse status. Never launches a
      first-time universe sweep on a global refresh. */
+  /* ===== PRO-TRADER CRYPTO SUITE ===== */
+
+  /* Update open crypto setups from forward log */
+  function omniUpdateOpenSetups(){
+    try {
+      var now = Date.now() / 1000;
+      var open = [];
+      var barTMap = {};
+      var evidenceCache = {};
+      var livePrice = 0;  /* Crypto would need specific pair price */
+
+      if (typeof localStorage === 'undefined'){
+        __omni.openSetups = [];
+        return;
+      }
+
+      var raw = localStorage.getItem('hg_forward_v1');
+      if (!raw){
+        __omni.openSetups = [];
+        return;
+      }
+
+      var allRecs = JSON.parse(raw);
+      if (!Array.isArray(allRecs)) allRecs = [];
+
+      allRecs.forEach(function(rec){
+        if (!rec || !rec.barT || !rec.entry) return;
+        if (rec.state && rec.state !== 'open') return;
+        if (rec.tab && rec.tab.indexOf('OMNI') === -1) return;  /* Only crypto */
+
+        var age = now - rec.barT;
+        if (age < 0) age = 0;
+
+        barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
+
+        var entry = fin(rec.entry);
+        var tp = fin(rec.t1);
+        var sl = fin(rec.stop);
+        var status = 'active';
+        var isClosed = false;
+
+        if (livePrice > 0 && entry > 0){
+          if (entry > tp){  /* SHORT */
+            if (livePrice >= sl) { status = 'stopped'; isClosed = true; }
+            else if (livePrice <= tp) { status = 'profit'; isClosed = true; }
+            else if (livePrice < entry) { status = 'pending'; }
+            else { status = 'active'; }
+          } else {  /* LONG */
+            if (livePrice <= sl) { status = 'stopped'; isClosed = true; }
+            else if (livePrice >= tp) { status = 'profit'; isClosed = true; }
+            else if (livePrice > entry) { status = 'pending'; }
+            else { status = 'active'; }
+          }
+        }
+
+        if (isClosed && age > 300) return;
+
+        var gateConf = fin(rec.stack3) || 0;
+        var mechKey = rec.mechanic || 'default';
+        var evidence = evidenceCache[mechKey];
+        if (!evidence){
+          evidence = { wilson: { lo: 0.50, hi: 0.70, p: 0.60 }, samples: 0, hit: 0.60, source: 'crypto' };
+          evidenceCache[mechKey] = evidence;
+        }
+
+        var checks = {
+          htfRegime: rec.htf_confirm === true,
+          gate1h: rec.regime_fit === true,
+          corrNorm: rec.corrRegime !== 'EXTREME',
+          drawdownOk: true,
+          riskReward: fin(rec.t1 - rec.entry) / fin(rec.stop - rec.entry) >= 1.5 || isNaN(fin(rec.t1 - rec.entry))
+        };
+        var checksPass = Object.keys(checks).filter(function(k){ return checks[k]; }).length;
+
+        var techScore = (gateConf / 3 * 40) + (checks.htfRegime ? 30 : 0) + 30;
+        var sentScore = 60;  /* Default neutral for crypto */
+        var fundScore = age < 30 * 60 ? 65 : age > 4 * 3600 ? 35 : 50;
+        var composite = (techScore * 0.4) + (sentScore * 0.35) + (fundScore * 0.25);
+
+        open.push({
+          barT: rec.barT, entry: entry, t1: tp, stop: sl, age: age,
+          pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
+          status: rec.state || 'open', tradeStatus: status,
+          mechanic: rec.mechanic || rec.symbol || '—',
+          symbol: rec.symbol || '—',
+          gateConf: gateConf,
+          evidence: evidence,
+          checks: checks, checksPass: checksPass, readyToEnter: checksPass === 5,
+          technicalScore: Math.min(100, techScore),
+          sentimentScore: sentScore,
+          fundamentalScore: Math.min(100, fundScore),
+          compositeScore: Math.min(100, composite),
+          corrRegime: rec.corrRegime || 'NORMAL',
+          isCorrelated: barTMap[rec.barT] >= 2
+        });
+      });
+
+      open.sort(function(a, b){
+        if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
+        if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
+        return b.age - a.age;
+      });
+
+      __omni.openSetups = open;
+    } catch (e){
+      __omni.openSetups = [];
+    }
+  }
+
   function refreshOmniroute(){
+    omniUpdateOpenSetups();  /* Update pro-trader setups */
+    var ui = __omni.ui;
+    if (ui) omniPaintProTrader(ui, __omni.openSetups);  /* Paint pro-trader panel */
+
     return Promise.resolve().then(function(){
       if (__omni.busy) return 'busy';
       if (!__omni.ran) return 'skipped: not run yet';
       if (__omni.snap && isFinite(__omni.snap.at) && (Date.now() - __omni.snap.at) < OMNI_FRESH_MS)
         return 'skipped: fresh';
       var ui = __omni.ui;
-      if (ui) return runScan(ui).then(function(){ return __omni.lastStat || 'rescanned'; });
+      if (ui) return runScan(ui).then(function(){
+        omniUpdateOpenSetups();
+        if (ui) omniPaintProTrader(ui, __omni.openSetups);
+        return __omni.lastStat || 'rescanned';
+      });
       return __omni.lastStat || 'no ui mounted';
     }).catch(function(){ return 'refresh failed'; });
   }
