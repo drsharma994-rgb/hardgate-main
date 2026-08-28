@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v521',
-  pack: 'confluence spectrum legend + setup quality visibility',
-  built: '2026-08-28T08:25:00Z',
-  note: 'Added visible spectrum legend to MOST PROBABLE SETUPS showing all confluence rating tiers (EXCEPTIONAL/STRONG/FAIR/WEAK) with guidance. Full transparency on what each score means.'
+  version: 'hg-v522',
+  pack: 'confluence scores on all setups — unified quality rating',
+  built: '2026-08-28T08:35:00Z',
+  note: 'Extended confluence scoring to GOLD SCALP/SWING engine setups. All three setup cards (TOP, SCALP engine, SWING engine) now display confluence score + spectrum badge. Full transparency across entire MOST PROBABLE SETUPS section.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
