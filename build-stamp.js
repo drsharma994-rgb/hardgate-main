@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v509',
-  pack: 'barT keying symmetry + Wilson lower bound promotions + crypto fill-risk calibration system',
-  built: '2026-08-28T00:30:00Z',
-  note: 'OMNIROUTE: barT now keyed to decision bar (matches OMNIGOLD). OOS measurement: verdicts auto-advance at 95%/90% confidence thresholds. Crypto fill-risk calibration tooling ready for measurement run.'
+  version: 'hg-v510',
+  pack: 'Pro-trader suite: rolling performance, risk sizing, drawdown circuit breaker, DXY correlation regime',
+  built: '2026-08-28T01:00:00Z',
+  note: 'OMNIGOLD: rolling hit rate (last 20/100 + timezone breakdown), open setup watch (age+P&L), risk sizing by gate confluence (100%/70%/50%), drawdown circuit breaker at -2% weekly, DXY-gold correlation regime detector (NORMAL/DECOUPLING/EXTREME with risk multipliers).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
