@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v516',
-  pack: 'two-pass optimization for large open setups',
-  built: '2026-08-28T07:45:00Z',
-  note: 'Optimized hgOgUpdateOpenSetups: Pass 1 quick filter, Pass 2 heavy scoring on top 20 only.'
+  version: 'hg-v517',
+  pack: 'quality gate for TOP SETUP - only show trade-ready setups',
+  built: '2026-08-28T08:00:00Z',
+  note: 'Added quality gate: compositeScore ≥70 AND checksPass=5 required. Filters weak setups.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
