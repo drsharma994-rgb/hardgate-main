@@ -4932,6 +4932,30 @@ terse status, and never launches a first-time scan on a global refresh.
     __og.statusPollerActive = false;
   }
 
+  /* Manual refresh callback for button clicks */
+  function hgOgManualRefresh(){
+    try {
+      /* Update setups with current price */
+      hgOgUpdateOpenSetups();
+
+      /* Repaint UI immediately */
+      var ui = __og.ui;
+      if (ui && ui.openWatchPanel && __og.openSetups){
+        ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
+      }
+
+      return true;
+    } catch (e){
+      if (typeof console !== 'undefined') console.error('Refresh failed:', e);
+      return false;
+    }
+  }
+
+  /* Expose to global scope for onclick handlers */
+  if (typeof window !== 'undefined'){
+    window.hgOgManualRefresh = hgOgManualRefresh;
+  }
+
   /* Market Conditions Score Display — 3D scoring */
   function hgOgRenderMarketConditionsScore(setup){
     if (!setup) return '';
