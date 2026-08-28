@@ -3621,7 +3621,6 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* Fetch and cache correlation regime data. Updates cache only if it's older than 1 hour. */
   function hgOgFetchCorrelationRegime(goldRows, macro){
-    return Promise.resolve(null); // TEMP: disabled - debugging "Invalid time value"
     var now = Date.now();
     var lastUpdate = __og.lastRegimeUpdate || 0;
     var hourMs = 3600000;
@@ -5444,9 +5443,8 @@ terse status, and never launches a first-time scan on a global refresh.
     /* Paint regime watch panel with correlation data */
     hgOgPaintRegimeWatch(ui, __og.correlationRegime);
     /* Update rolling performance tracking and open setups watch */
-    // TEMP: Commented out while debugging "Invalid time value" error
-    // hgOgUpdateRollingStats();
-    // hgOgUpdateOpenSetups();
+    hgOgUpdateRollingStats();
+    hgOgUpdateOpenSetups();
     /* Inject rolling confidence and open watch panels above MOST PROBABLE */
     try {
       var host = (ui && ui.mp) || (ui && ui.cards);
