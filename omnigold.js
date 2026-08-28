@@ -4728,26 +4728,22 @@ terse status, and never launches a first-time scan on a global refresh.
       var allRecs = JSON.parse(raw);
       if (!Array.isArray(allRecs)) allRecs = [];
 
-      /* Find open records (state === 'open' or no state field) */
+      /* TWO-PASS approach to avoid hanging on large datasets:
+         Pass 1: Lightweight filter (no expensive scoring)
+         Pass 2: Heavy scoring only on top N results */
+
+      var candidates = [];  /* First pass: lightweight filter */
+
+      /* PASS 1: Quick filter without expensive calculations */
       allRecs.forEach(function(rec){
         if (!rec || !rec.barT || !rec.entry) return;
-        if (rec.state && rec.state !== 'open') return;  /* Only include truly open */
+        if (rec.state && rec.state !== 'open') return;
 
         var age = now - rec.barT;
-        if (age < 0) age = 0;  /* Guard against clock skew */
-
+        if (age < 0) age = 0;
         barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
 
-        /* Check if setup is stale — regenerate if needed */
-        var isStale = hgOgIsSetupStale(rec, livePrice);
-        var regenerated = null;
-
-        if (isStale && livePrice > 0){
-          regenerated = hgOgRegenerateSetup(rec, livePrice);
-          rec = Object.assign({}, rec, regenerated);  /* Update record with new levels */
-        }
-
-        /* Setup status based on current price — with real-time detection */
+        /* Quick status check (no expensive regenerate yet) */
         var entry = fin(rec.entry);
         var tp = fin(rec.t1);
         var sl = fin(rec.stop);
@@ -4755,29 +4751,42 @@ terse status, and never launches a first-time scan on a global refresh.
         var isClosed = false;
 
         if (livePrice > 0 && entry > 0){
-          /* For SHORT setups (entry > tp typically): SL > entry, TP < entry */
-          if (entry > tp){  /* SHORT setup */
-            if (livePrice >= sl) { status = 'stopped'; isClosed = true; }  /* Hit SL */
-            else if (livePrice <= tp) { status = 'profit'; isClosed = true; }  /* Hit TP */
-            else if (livePrice >= entry) { status = 'active'; }  /* Entered (price above entry for SHORT = in play) */
-            else { status = 'pending'; }  /* Price still below entry */
-          }
-          /* For LONG setups: SL < entry, TP > entry */
-          else {
-            if (livePrice <= sl) { status = 'stopped'; isClosed = true; }  /* Hit SL */
-            else if (livePrice >= tp) { status = 'profit'; isClosed = true; }  /* Hit TP */
-            else if (livePrice <= entry) { status = 'active'; }  /* Entered (price below entry for LONG = in play) */
-            else { status = 'pending'; }  /* Price still above entry */
+          if (entry > tp){
+            if (livePrice >= sl) { status = 'stopped'; isClosed = true; }
+            else if (livePrice <= tp) { status = 'profit'; isClosed = true; }
+            else if (livePrice >= entry) { status = 'active'; }
+            else { status = 'pending'; }
+          } else {
+            if (livePrice <= sl) { status = 'stopped'; isClosed = true; }
+            else if (livePrice >= tp) { status = 'profit'; isClosed = true; }
+            else if (livePrice <= entry) { status = 'active'; }
+            else { status = 'pending'; }
           }
         }
 
-        /* Skip closed setups — show only ACTIVE or PENDING */
-        if (isClosed && age > 300) return;  /* Skip closed setups older than 5 min */
+        /* Skip old closed setups */
+        if (isClosed && age > 300) return;
 
-        /* Gate confluence: count passing gates from stack3 field */
-        var gateConf = fin(rec.stack3) || 0;
+        candidates.push({ rec: rec, status: status, age: age, gateConf: fin(rec.stack3) || 0 });
+      });
 
-        /* Win rate confidence for this mechanic */
+      /* Sort by gate confluence (fast sort for quick ranking) */
+      candidates.sort(function(a, b){ return b.gateConf - a.gateConf; });
+
+      /* PASS 2: Heavy scoring only on top 20 candidates */
+      candidates.slice(0, 20).forEach(function(cand){
+        var rec = cand.rec;
+        var status = cand.status;
+
+        /* Now do expensive operations only on top candidates */
+        var isStale = hgOgIsSetupStale(rec, livePrice);
+        var regenerated = null;
+
+        if (isStale && livePrice > 0){
+          regenerated = hgOgRegenerateSetup(rec, livePrice);
+          rec = Object.assign({}, rec, regenerated);
+        }
+
         var mechKey = rec.mechanic || 'default';
         var evidence = evidenceCache[mechKey];
         if (!evidence){
@@ -4785,12 +4794,11 @@ terse status, and never launches a first-time scan on a global refresh.
           evidenceCache[mechKey] = evidence;
         }
 
-        /* Pre-entry checklist conditions */
         var checks = {
           htfRegime: rec.htf_confirm === true || (rec.gates && rec.gates.some(function(g){ return g.key === 'htf-confirm' && g.pass; })),
           gate1h: rec.regime_fit === true || (rec.gates && rec.gates.some(function(g){ return g.key === 'regime-fit' && g.pass; })),
           corrNorm: rec.corrRegime !== 'EXTREME',
-          drawdownOk: true,  /* Would need live drawdown state */
+          drawdownOk: true,
           riskReward: fin(rec.t1 - rec.entry) / fin(rec.stop - rec.entry) >= 1.5 || isNaN(fin(rec.t1 - rec.entry))
         };
         var checksPass = Object.keys(checks).filter(function(k){ return checks[k]; }).length;
@@ -4800,13 +4808,13 @@ terse status, and never launches a first-time scan on a global refresh.
           entry: fin(rec.entry),
           t1: fin(rec.t1),
           stop: fin(rec.stop),
-          age: age,
+          age: cand.age,
           pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
           status: rec.state || 'open',
-          tradeStatus: status,  /* active/pending/profit/stopped */
+          tradeStatus: status,
           mechanic: rec.mechanic,
           tab: rec.tab,
-          gateConf: gateConf,
+          gateConf: cand.gateConf,
           evidence: evidence,
           wilsonLo: (evidence && evidence.wilson) ? evidence.wilson.lo : NaN,
           confidence: (evidence && evidence.wilson) ? evidence.wilson : null,
@@ -4819,7 +4827,6 @@ terse status, and never launches a first-time scan on a global refresh.
           isStale: isStale
         };
 
-        /* Calculate market condition scores */
         setupObj.technicalScore = hgOgTechnicalScore(setupObj);
         setupObj.sentimentScore = hgOgSentimentScore(setupObj.corrRegime);
         setupObj.fundamentalScore = hgOgFundamentalScore(setupObj.age, setupObj.corrRegime);
@@ -4828,7 +4835,7 @@ terse status, and never launches a first-time scan on a global refresh.
         open.push(setupObj);
       });
 
-      /* Sort by composite market quality score (highest first), then by gate confluence */
+      /* Final sort by composite score */
       open.sort(function(a, b){
         if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
         if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
