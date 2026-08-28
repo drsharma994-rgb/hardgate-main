@@ -4332,6 +4332,19 @@ terse status, and never launches a first-time scan on a global refresh.
             : (isWatch
             ? ' · WITH GOLD TAPE · gate blocked · not trade-ready'
             : ' · WITH GOLD TAPE · not a win probability.')) + '</div>';
+
+      /* CONFLUENCE SCORE & SPECTRUM RATING */
+      var confScore = hgOgAdvancedConfluenceScore(row);
+      if (confScore && isFinite(fin(confScore))){
+        var confColor = confScore >= 85 ? '#10b981' : confScore >= 70 ? '#22c55e' : confScore >= 50 ? '#f59e0b' : '#dc2626';
+        var confBadge = confScore >= 85 ? '🏆 EXCEPTIONAL' : confScore >= 70 ? '✓ STRONG' : confScore >= 50 ? '⚠ FAIR' : '✗ WEAK';
+        h += '<div style="margin:12px 0;padding:8px;border:2px solid ' + confColor + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+        h += '<div style="font-size:1.4em;font-weight:bold;color:' + confColor + '">' + confScore.toFixed(0) + '/100</div>';
+        h += '<div style="background:' + confColor + ';color:white;padding:4px 8px;border-radius:6px;font-size:0.8em;font-weight:bold">' + confBadge + '</div>';
+        h += '</div></div>';
+      }
+
       h += '<div class="hg-mp-grid">';
       var mktShow = fin(__og.spotAnchor);
       if (mktShow > 0){
