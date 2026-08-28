@@ -4622,6 +4622,60 @@ terse status, and never launches a first-time scan on a global refresh.
     return Math.min(100, composite);
   }
 
+  /* Smart Setup Refresh: Detect stale and regenerate fresh ones */
+  function hgOgIsSetupStale(setup, livePrice){
+    if (!setup || !livePrice) return false;
+    var entry = fin(setup.entry);
+    if (!isFinite(entry)) return false;
+
+    /* Setup is stale if price moved significantly away from entry */
+    var distance = Math.abs(livePrice - entry);
+    var entryDist = Math.abs(setup.t1 - entry) || 0;
+
+    /* Stale if price moved more than 30% of the target distance OR entry already hit */
+    return distance > (entryDist * 0.3) || Math.abs(livePrice - entry) > Math.abs(setup.stop - entry);
+  }
+
+  /* Regenerate setup based on current price levels */
+  function hgOgRegenerateSetup(oldSetup, livePrice){
+    if (!oldSetup || !livePrice) return oldSetup;
+
+    var oldEntry = fin(oldSetup.entry);
+    var oldStop = fin(oldSetup.stop);
+    var oldT1 = fin(oldSetup.t1);
+
+    if (!isFinite(oldEntry) || !isFinite(oldStop)) return oldSetup;
+
+    /* Calculate old risk/reward ratio */
+    var oldRisk = Math.abs(oldStop - oldEntry);
+    var oldReward = Math.abs(oldT1 - oldEntry);
+    var oldRR = oldRisk > 0 ? oldReward / oldRisk : 2.0;
+
+    /* Detect if old setup was SHORT or LONG */
+    var wasShort = oldEntry > oldT1;
+
+    /* Generate new levels based on current price and old R:R */
+    var newStop = wasShort
+      ? livePrice + oldRisk  /* SHORT: stop above current price */
+      : livePrice - oldRisk; /* LONG: stop below current price */
+
+    var newT1 = wasShort
+      ? livePrice - (oldRisk * oldRR)  /* SHORT: target below */
+      : livePrice + (oldRisk * oldRR); /* LONG: target above */
+
+    return {
+      entry: livePrice,
+      t1: newT1,
+      stop: newStop,
+      mechanic: oldSetup.mechanic,
+      symbol: oldSetup.symbol,
+      gateConf: oldSetup.gateConf,
+      isRegenerated: true,
+      originalEntry: oldEntry,
+      regeneratedAt: Date.now() / 1000
+    };
+  }
+
   function hgOgUpdateOpenSetups(){
     try {
       var now = Date.now() / 1000;
@@ -4652,6 +4706,15 @@ terse status, and never launches a first-time scan on a global refresh.
         if (age < 0) age = 0;  /* Guard against clock skew */
 
         barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
+
+        /* Check if setup is stale — regenerate if needed */
+        var isStale = hgOgIsSetupStale(rec, livePrice);
+        var regenerated = null;
+
+        if (isStale && livePrice > 0){
+          regenerated = hgOgRegenerateSetup(rec, livePrice);
+          rec = Object.assign({}, rec, regenerated);  /* Update record with new levels */
+        }
 
         /* Setup status based on current price */
         var entry = fin(rec.entry);
@@ -4719,7 +4782,10 @@ terse status, and never launches a first-time scan on a global refresh.
           checks: checks,
           checksPass: checksPass,
           readyToEnter: checksPass === 5,
-          corrRegime: rec.corrRegime || 'NORMAL'
+          corrRegime: rec.corrRegime || 'NORMAL',
+          isRegenerated: regenerated ? true : false,
+          originalEntry: regenerated ? regenerated.originalEntry : fin(rec.entry),
+          isStale: isStale
         };
 
         /* Calculate market condition scores */
@@ -5187,10 +5253,14 @@ terse status, and never launches a first-time scan on a global refresh.
         var tradeStatus = topSetup.tradeStatus || 'active';
         var statusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : tradeStatus === 'pending' ? '#f59e0b' : '#3b82f6';
         var statusLabel = tradeStatus === 'profit' ? '✓ TARGET HIT' : tradeStatus === 'stopped' ? '✗ STOPPED OUT' : tradeStatus === 'pending' ? '⏳ PENDING ENTRY' : '▶ ACTIVE';
+        var regeneratedLabel = topSetup.isRegenerated ? '🔄 REGENERATED' : '';
 
         h += '<div style="margin:12px 0;padding:12px;border:2px solid ' + statusColor + ';border-radius:4px;background:rgba(34,197,94,0.1);position:relative">';
-        h += '<div style="position:absolute;top:8px;right:8px;background:' + statusColor + ';color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + statusLabel + '</div>';
-        h += '<div style="font-weight:bold;margin-bottom:8px;color:#22c55e">📍 PRICE LEVELS</div>';
+        h += '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px">';
+        if (regeneratedLabel) h += '<div style="background:#10b981;color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + regeneratedLabel + '</div>';
+        h += '<div style="background:' + statusColor + ';color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + statusLabel + '</div>';
+        h += '</div>';
+        h += '<div style="font-weight:bold;margin-bottom:8px;color:#22c55e">📍 PRICE LEVELS' + (topSetup.isRegenerated ? ' (Updated for Current Price)' : '') + '</div>';
         h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
 
         h += '<div style="padding:8px;background:rgba(34,197,94,0.2);border-radius:3px;border-left:3px solid #22c55e">';
