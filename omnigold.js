@@ -5386,11 +5386,11 @@ terse status, and never launches a first-time scan on a global refresh.
         var statusLabel = tradeStatus === 'profit' ? '✓ TARGET HIT' : tradeStatus === 'stopped' ? '✗ STOPPED OUT' : tradeStatus === 'pending' ? '⏳ PENDING ENTRY' : '▶ ACTIVE';
         var regeneratedLabel = topSetup.isRegenerated ? '🔄 REGENERATED' : '';
 
-        h += '<div style="margin:12px 0;padding:12px;border:2px solid ' + statusColor + ';border-radius:4px;background:rgba(34,197,94,0.1);position:relative">';
-        h += '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;align-items:center">';
-        h += '<button class="btn" style="padding:4px 12px;font-size:0.85em;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer" onclick="window.hgOgManualRefresh && window.hgOgManualRefresh()">🔄 Refresh</button>';
+        h += '<div style="margin:12px 0;padding:12px;border:2px solid ' + statusColor + ';border-radius:4px;background:rgba(34,197,94,0.1)">';
+        h += '<div style="display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap">';
         if (regeneratedLabel) h += '<div style="background:#10b981;color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + regeneratedLabel + '</div>';
         h += '<div style="background:' + statusColor + ';color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + statusLabel + '</div>';
+        h += '<button class="btn" style="padding:4px 12px;font-size:0.75em;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer;margin-left:auto" onclick="window.hgOgManualRefresh && window.hgOgManualRefresh()">🔄 Refresh</button>';
         h += '</div>';
         h += '<div style="font-weight:bold;margin-bottom:8px;color:#22c55e">📍 PRICE LEVELS' + (topSetup.isRegenerated ? ' (Updated for Current Price)' : '') + '</div>';
         h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
