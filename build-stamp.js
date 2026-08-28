@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v523',
-  pack: 'engine setup confluence scoring — grade-based fallback',
-  built: '2026-08-28T08:40:00Z',
-  note: 'Fixed confluence scoring for engine setups using grade-based fallback. Grade A=85+, B=70+, C=50+, D=30+. Demoted and low-tally penalties applied. All setups now show spectrum badge consistently.'
+  version: 'hg-v524',
+  pack: 'confluence ratings on detailed setup cards — complete spectrum',
+  built: '2026-08-28T08:45:00Z',
+  note: 'Added confluence spectrum display to detailed setup breakdown cards in SCAN COVERAGE section. Every setup card now shows confluence score + spectrum badge (EXCEPTIONAL/STRONG/FAIR/WEAK) for full transparency.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

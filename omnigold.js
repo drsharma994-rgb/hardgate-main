@@ -6510,6 +6510,8 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + (c.topWatch ? ' og-watch' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
+    var confScore = hgOgAdvancedConfluenceScore(c);
+    h += hgOgRenderConfluenceBreakdown(confScore);
     h += '<div class="dim">' + esc(c.why) + '</div>';
     /* the cross-horizon read — agreement is standing, disagreement is a
        warning the reader deserves before entering */
