@@ -5054,8 +5054,8 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* Multi-Factor Confluence Display */
   function hgOgRenderConfluenceBreakdown(setup){
-    if (!setup || !setup.confluenceScore) return '';
-    var score = setup.confluenceScore || 0;
+    if (!setup || setup.confluenceScore === null || setup.confluenceScore === undefined) return '';
+    var score = isFinite(fin(setup.confluenceScore)) ? fin(setup.confluenceScore) : 0;
     var color = score >= 85 ? '#10b981' : score >= 70 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#dc2626';
     var badge = score >= 85 ? '🏆 EXCEPTIONAL' : score >= 70 ? '✓ STRONG' : score >= 50 ? '⚠ FAIR' : '✗ WEAK';
 
