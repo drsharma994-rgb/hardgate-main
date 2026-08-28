@@ -12,7 +12,7 @@
 
    WHEN YOU SHIP: bump VERSION here and HG_CACHE in sw.js, then run:
      npm run sync:cache
-   (updates every index.html script ?v= pin). tests/test-build-stamp.mjs fails on drift.
+   (updates every index.html script ?v= pin). tests/test-build-stamp.mjs fails on drift. */
 (function(){
 'use strict';
 var G = (typeof window !== 'undefined') ? window : globalThis;
