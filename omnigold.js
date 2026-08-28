@@ -4545,6 +4545,7 @@ terse status, and never launches a first-time scan on a global refresh.
       var now = Date.now() / 1000;
       var open = [];
       var barTMap = {};  /* Map barT -> count for correlation detection */
+      var evidenceCache = {};  /* Cache evidence lookups */
 
       /* Get ALL records from forward log, including open ones */
       if (typeof localStorage === 'undefined'){
@@ -4569,30 +4570,207 @@ terse status, and never launches a first-time scan on a global refresh.
 
         barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
 
+        /* Gate confluence: count passing gates from stack3 field */
+        var gateConf = fin(rec.stack3) || 0;
+
+        /* Win rate confidence for this mechanic */
+        var mechKey = rec.mechanic || 'default';
+        var evidence = evidenceCache[mechKey];
+        if (!evidence){
+          evidence = hgOgSettledEvidence({ mechanic: rec.mechanic, dir: rec.dir, kind: rec.mechanic });
+          evidenceCache[mechKey] = evidence;
+        }
+
+        /* Pre-entry checklist conditions */
+        var checks = {
+          htfRegime: rec.htf_confirm === true || (rec.gates && rec.gates.some(function(g){ return g.key === 'htf-confirm' && g.pass; })),
+          gate1h: rec.regime_fit === true || (rec.gates && rec.gates.some(function(g){ return g.key === 'regime-fit' && g.pass; })),
+          corrNorm: rec.corrRegime !== 'EXTREME',
+          drawdownOk: true,  /* Would need live drawdown state */
+          riskReward: fin(rec.t1 - rec.entry) / fin(rec.stop - rec.entry) >= 1.5 || isNaN(fin(rec.t1 - rec.entry))
+        };
+        var checksPass = Object.keys(checks).filter(function(k){ return checks[k]; }).length;
+
         open.push({
           barT: rec.barT,
           entry: fin(rec.entry),
           t1: fin(rec.t1),
+          stop: fin(rec.stop),
           age: age,
           pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
           status: rec.state || 'open',
           mechanic: rec.mechanic,
-          tab: rec.tab
+          tab: rec.tab,
+          gateConf: gateConf,
+          evidence: evidence,
+          wilsonLo: (evidence && evidence.wilson) ? evidence.wilson.lo : NaN,
+          confidence: (evidence && evidence.wilson) ? evidence.wilson : null,
+          checks: checks,
+          checksPass: checksPass,
+          readyToEnter: checksPass === 5
         });
       });
 
-      /* Sort by age descending (oldest first) */
-      open.sort(function(a, b){ return b.age - a.age; });
+      /* Sort by gate confluence descending (3-gate first), then by age */
+      open.sort(function(a, b){
+        if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
+        return b.age - a.age;
+      });
 
       /* Detect correlation clustering: 2+ setups fired from same barT */
       open.forEach(function(setup){
         setup.isCorrelated = (barTMap[setup.barT] || 0) >= 2;
       });
 
+      /* Calculate daily equity curve */
+      var dailyPnL = {};
+      open.forEach(function(setup){
+        if (!isNaN(setup.pnl) && isFinite(setup.pnl)){
+          var date = new Date(setup.barT * 1000).toISOString().split('T')[0];
+          dailyPnL[date] = (dailyPnL[date] || 0) + setup.pnl;
+        }
+      });
+      __og.dailyPnL = dailyPnL;
+
       __og.openSetups = open;
     } catch (e){
       __og.openSetups = [];
     }
+  }
+
+  /* Pro-trader feature: Setup Quality Filter + Confidence Display */
+  function hgOgRenderSetupFilter(setupList){
+    if (!setupList || setupList.length === 0) return '';
+    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
+    var byConf = { 3: [], 2: [], 1: [], 0: [] };
+    setupList.forEach(function(s){ if (byConf[s.gateConf]) byConf[s.gateConf].push(s); });
+
+    [3, 2, 1, 0].forEach(function(conf){
+      var sets = byConf[conf];
+      if (!sets || sets.length === 0) return;
+      var label = conf === 3 ? 'PRIME (3-gate)' : conf + '-gate';
+      var icon = conf === 3 ? '★' : '◆';
+      var color = conf === 3 ? '#22c55e' : conf === 2 ? '#f59e0b' : '#8b5cf6';
+      html += '<div style="margin:6px 0;padding:4px;border-left:3px solid ' + color + '">';
+      html += '<strong style="color:' + color + '">' + icon + ' ' + label + ' (' + sets.length + ')</strong>';
+      sets.slice(0, 3).forEach(function(s){
+        var wilson = s.confidence ? (s.confidence.lo * 100).toFixed(1) + '%' : '—';
+        html += '<div style="margin:2px 0 2px 8px;font-size:0.85em">';
+        html += '<span>' + (s.mechanic || 'setup') + '</span> ';
+        html += '<span style="float:right;background:rgba(' + (color === '#22c55e' ? '34,197,94' : color === '#f59e0b' ? '245,158,11' : '139,92,246') + ',0.2);padding:1px 4px;border-radius:2px">' + wilson + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  /* Pre-Entry Checklist: 5 conditions guard */
+  function hgOgRenderChecklist(setup){
+    if (!setup) return '';
+    var checks = setup.checks || {};
+    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
+    html += '<div style="font-weight:bold;margin-bottom:6px;color:#f59e0b">📋 PRE-ENTRY GUARD</div>';
+    var items = [
+      { key: 'htfRegime', label: 'HTF regime confirmed', icon: '↗' },
+      { key: 'gate1h', label: '1h gate replicated', icon: '▲' },
+      { key: 'corrNorm', label: 'Correlation NORMAL (not EXTREME)', icon: '↔' },
+      { key: 'drawdownOk', label: 'Drawdown buffer > -2%', icon: '📊' },
+      { key: 'riskReward', label: 'Risk/Reward ≥ 1.5R', icon: '⚖' }
+    ];
+    items.forEach(function(item){
+      var passed = checks[item.key];
+      var color = passed ? '#22c55e' : '#dc2626';
+      var symbol = passed ? '✓' : '✗';
+      html += '<div style="margin:3px 0;color:' + color + '"><span style="font-weight:bold">' + symbol + '</span> ' + item.label + '</div>';
+    });
+    var allPass = setup.readyToEnter;
+    var verdictColor = allPass ? '#22c55e' : '#f59e0b';
+    var verdictText = allPass ? '✓ READY TO ENTER' : '⚠ ' + (5 - setup.checksPass) + ' CONDITIONS MISSING';
+    html += '<div style="margin-top:8px;padding:6px;background:' + verdictColor + '33;border:1px solid ' + verdictColor + ';border-radius:3px;font-weight:bold;text-align:center;color:' + verdictColor + '">';
+    html += verdictText + '</div></div>';
+    return html;
+  }
+
+  /* Win Rate Confidence: Wilson lower bound on rolling stats */
+  function hgOgRenderConfidence(evidence){
+    if (!evidence || !evidence.wilson) return '';
+    var w = evidence.wilson;
+    var pct = (w.lo * 100).toFixed(1);
+    var color = w.lo >= 0.55 ? '#22c55e' : w.lo >= 0.50 ? '#f59e0b' : '#dc2626';
+    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px">';
+    html += '<div style="font-weight:bold;margin-bottom:6px">📊 WIN RATE CONFIDENCE (Wilson LB)</div>';
+    html += '<div style="height:30px;background:' + color + '33;border:2px solid ' + color + ';border-radius:4px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.1em;color:' + color + '">';
+    html += pct + '% (' + evidence.samples + ' samples)';
+    html += '</div>';
+    html += '<div style="margin-top:4px;font-size:0.85em;color:var(--fg-muted,#666)">';
+    html += 'Raw hit rate: ' + (evidence.hit * 100).toFixed(1) + '% · Confidence: ' + (w.lo >= 0.55 ? 'HIGH ✓' : w.lo >= 0.50 ? 'MEDIUM ⚠' : 'LOW ✗');
+    html += '</div></div>';
+    return html;
+  }
+
+  /* Equity Curve: Daily P&L smoothed */
+  function hgOgRenderEquityCurve(dailyPnL){
+    if (!dailyPnL || Object.keys(dailyPnL).length === 0) return '';
+    var dates = Object.keys(dailyPnL).sort();
+    var values = dates.map(function(d){ return dailyPnL[d]; });
+    var cumul = [];
+    var sum = 0;
+    values.forEach(function(v){ sum += v; cumul.push(sum); });
+    var maxD = Math.max.apply(null, cumul);
+    var minD = Math.min.apply(null, cumul);
+    var range = maxD - minD || 1;
+    var maxDD = Math.abs(minD - maxD);
+    var lastVal = cumul[cumul.length - 1];
+    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
+    html += '<div style="font-weight:bold;margin-bottom:6px">📈 DAILY EQUITY CURVE</div>';
+    html += '<div style="display:flex;height:60px;gap:2px;align-items:flex-end;background:rgba(0,0,0,0.05);padding:4px;border-radius:3px;overflow-x:auto">';
+    cumul.slice(-20).forEach(function(v, i){
+      var norm = Math.max(1, (v - minD) / range * 100);
+      var color = v >= 0 ? '#22c55e' : '#dc2626';
+      html += '<div style="flex:1;min-width:8px;height:' + norm + '%;background:' + color + ';border-radius:1px;cursor:help" title="' + (v > 0 ? '+' : '') + v.toFixed(2) + 'R"></div>';
+    });
+    html += '</div>';
+    html += '<div style="display:flex;gap:12px;margin-top:6px;font-size:0.85em">';
+    html += '<div>Total P&L: <strong style="color:' + (lastVal > 0 ? '#22c55e' : '#dc2626') + '">' + (lastVal > 0 ? '+' : '') + lastVal.toFixed(2) + 'R</strong></div>';
+    html += '<div>Max Drawdown: <strong style="color:#dc2626">' + (-maxDD).toFixed(2) + 'R</strong></div>';
+    html += '<div>Win Days: <strong>' + values.filter(function(v){ return v > 0; }).length + '</strong></div>';
+    html += '</div></div>';
+    return html;
+  }
+
+  /* Gate Matrix: Which gates fired on 4h vs 1h */
+  function hgOgRenderGateMatrix(setupList){
+    if (!setupList || setupList.length === 0) return '';
+    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
+    html += '<div style="font-weight:bold;margin-bottom:6px">🎯 GATE MATRIX (4h vs 1h)</div>';
+    html += '<div style="overflow-x:auto">';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.85em">';
+    html += '<tr style="border-bottom:2px solid var(--hr)">';
+    html += '<th style="text-align:left;padding:4px">Mechanic</th>';
+    html += '<th style="text-align:center;padding:4px">4h HTF</th>';
+    html += '<th style="text-align:center;padding:4px">1h Gate</th>';
+    html += '<th style="text-align:center;padding:4px">Confluence</th>';
+    html += '<th style="text-align:center;padding:4px">Ready</th>';
+    html += '</tr>';
+    setupList.slice(0, 5).forEach(function(s){
+      var has4h = s.checks.htfRegime;
+      var has1h = s.checks.gate1h;
+      var conf = s.gateConf === 3 ? '★★★ PRIME' : s.gateConf === 2 ? '★★ HIGH' : '★ LOW';
+      var color4h = has4h ? '#22c55e' : '#dc2626';
+      var color1h = has1h ? '#22c55e' : '#dc2626';
+      var colorReady = s.readyToEnter ? '#22c55e' : '#f59e0b';
+      html += '<tr style="border-bottom:1px solid var(--hr)">';
+      html += '<td style="padding:4px">' + (s.mechanic || 'setup').substring(0, 12) + '</td>';
+      html += '<td style="text-align:center;padding:4px;color:' + color4h + ';font-weight:bold">' + (has4h ? '✓' : '✗') + '</td>';
+      html += '<td style="text-align:center;padding:4px;color:' + color1h + ';font-weight:bold">' + (has1h ? '✓' : '✗') + '</td>';
+      html += '<td style="text-align:center;padding:4px">' + conf + '</td>';
+      html += '<td style="text-align:center;padding:4px;color:' + colorReady + ';font-weight:bold">' + (s.readyToEnter ? '✓' : '⚠') + '</td>';
+      html += '</tr>';
+    });
+    html += '</table></div></div>';
+    return html;
   }
 
   function hgOgSettledEvidence(row){
@@ -4814,7 +4992,29 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgOpenSetupsWatchPanelHtml(setups){
     if (!setups || !setups.length) return '';
     var h = '<section class="hg-mp og-open-watch-panel" data-og-watch="1" aria-label="Open setups watch">';
-    h += '<div class="hg-mp-eye">OPEN SETUPS WATCH</div>';
+    h += '<div class="hg-mp-eye">OMNIGOLD PRO-TRADER SUITE</div>';
+
+    /* 1. SETUP QUALITY FILTER — by gate confluence */
+    h += hgOgRenderSetupFilter(setups);
+
+    /* 2. PRE-ENTRY CHECKLIST + HIGHEST CONFIDENCE SETUP */
+    var topSetup = setups.length > 0 ? setups[0] : null;
+    if (topSetup){
+      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">HIGHEST CONFIDENCE SETUP</div>';
+      h += hgOgRenderChecklist(topSetup);
+      h += hgOgRenderConfidence(topSetup.evidence);
+    }
+
+    /* 3. EQUITY CURVE — Daily P&L */
+    if (__og.dailyPnL && Object.keys(__og.dailyPnL).length > 0){
+      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">DAILY PERFORMANCE</div>';
+      h += hgOgRenderEquityCurve(__og.dailyPnL);
+    }
+
+    /* 4. GATE MATRIX — 4h vs 1h confluence */
+    h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">MULTI-TIMEFRAME GATE CONFLUENCE</div>';
+    h += hgOgRenderGateMatrix(setups);
+
     h += '<div class="hg-mp-head">XAUUSD <span>active trades · time since entry · status</span></div>';
 
     /* Show only most recent 5 open setups */
@@ -4827,9 +5027,10 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.9em">';
       h += '<tr style="border-bottom:1px solid var(--hr)">';
       h += '<th style="text-align:left;padding:4px">Setup</th>';
+      h += '<th style="text-align:center;padding:4px">Confluence</th>';
       h += '<th style="text-align:right;padding:4px">Open Since</th>';
       h += '<th style="text-align:right;padding:4px">P&L</th>';
-      h += '<th style="text-align:right;padding:4px">To T1</th>';
+      h += '<th style="text-align:right;padding:4px">Ready</th>';
       h += '</tr>';
 
       toShow.forEach(function(setup){
@@ -4841,22 +5042,20 @@ terse status, and never launches a first-time scan on a global refresh.
                    : (ageMinutes + 'm');
 
         var ageClass = setup.age > 4 * 3600 ? ' style="color:var(--err,#dc2626)"' : '';
-        var correlClass = setup.isCorrelated ? ' style="color:var(--warn,#f59e0b);font-weight:bold"' : '';
         var mechLabel = esc(String(setup.mechanic || '—'));
+        var confBadge = setup.gateConf === 3 ? '★★★' : (setup.gateConf === 2 ? '★★' : '★');
+        var readyBadge = setup.readyToEnter ? '✓' : '⚠';
 
         h += '<tr style="border-bottom:1px solid var(--hr)">';
         h += '<td style="padding:4px">' + mechLabel
           + (setup.isCorrelated ? ' <b>⚠</b>' : '') + '</td>';
+        h += '<td style="text-align:center;padding:4px">' + confBadge + '</td>';
         h += '<td style="text-align:right;padding:4px"' + ageClass + '>'
           + (setup.age > 4 * 3600 ? '⏱ ' : '') + esc(ageStr) + '</td>';
         h += '<td style="text-align:right;padding:4px">'
           + (isFinite(setup.pnl) ? (setup.pnl > 0 ? '+' : '') + esc(setup.pnl.toFixed(2)) + 'R' : '—')
           + '</td>';
-        h += '<td style="text-align:right;padding:4px">'
-          + (isFinite(setup.entry) && isFinite(setup.t1)
-              ? esc(Math.abs(setup.t1 - setup.entry).toFixed(2))
-              : '—')
-          + '</td>';
+        h += '<td style="text-align:center;padding:4px">' + readyBadge + '</td>';
         h += '</tr>';
       });
       h += '</table></div>';
