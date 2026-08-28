@@ -4859,8 +4859,8 @@ terse status, and never launches a first-time scan on a global refresh.
         });
       }
 
-      /* Start real-time polling for instant status updates */
-      hgOgStartStatusPoller();
+      /* Polling disabled: was causing app hangs even after removing repaint.
+         Users can manually refresh via the Refresh button instead. */
     } catch (e){
       __og.openSetups = [];
     }
