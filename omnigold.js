@@ -4334,8 +4334,9 @@ terse status, and never launches a first-time scan on a global refresh.
             : ' · WITH GOLD TAPE · not a win probability.')) + '</div>';
 
       /* CONFLUENCE SCORE & SPECTRUM RATING */
-      var confScore = hgOgAdvancedConfluenceScore(row);
-      if (confScore && isFinite(fin(confScore))){
+      var confResult = hgOgAdvancedConfluenceScore(row);
+      var confScore = typeof confResult === 'number' ? confResult : (confResult && fin(confResult.score));
+      if (isFinite(fin(confScore))){
         var confColor = confScore >= 85 ? '#10b981' : confScore >= 70 ? '#22c55e' : confScore >= 50 ? '#f59e0b' : '#dc2626';
         var confBadge = confScore >= 85 ? '🏆 EXCEPTIONAL' : confScore >= 70 ? '✓ STRONG' : confScore >= 50 ? '⚠ FAIR' : '✗ WEAK';
         h += '<div style="margin:12px 0;padding:8px;border:2px solid ' + confColor + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
@@ -4984,6 +4985,19 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!setup) return { score: 0, factors: [] };
     var factors = [];
     var totalScore = 0;
+
+    /* FALLBACK FOR ENGINE SETUPS: Grade-based scoring when confluence data missing */
+    var isEngineSetup = setup.engineGrade && !setup.gateConf;
+    var baseFromGrade = 0;
+    if (isEngineSetup){
+      if (setup.engineGrade === 'A') baseFromGrade = 85;
+      else if (setup.engineGrade === 'B') baseFromGrade = 70;
+      else if (setup.engineGrade === 'C') baseFromGrade = 50;
+      else if (setup.engineGrade === 'D') baseFromGrade = 30;
+      if (setup.engineDemoted) baseFromGrade -= 10;  /* Penalize demoted */
+      if (setup.engineTally && setup.engineTally < 5) baseFromGrade -= 5;  /* Low tally penalty */
+      return baseFromGrade;  /* Return scalar for engine setups */
+    }
 
     /* 1. TREND CONFLUENCE (25 pts max) — Multi-MA alignment */
     var trendScore = 0;
