@@ -6262,6 +6262,16 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     h += 'strategies + indicators, balanced · not a win probability</span></div>';
     h += '<div class="hg-mp-note">' + esc(note) + '</div>';
+
+    /* CONFLUENCE SPECTRUM LEGEND — full transparency */
+    h += '<div style="margin:12px 0;padding:12px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
+    h += '<div style="font-weight:bold;margin-bottom:8px;color:var(--fg-muted,#666)">Confluence Rating Spectrum</div>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:0.85em">';
+    h += '<div style="padding:6px;border-left:3px solid #10b981;background:#10b981' + '11' + '"><span style="color:#10b981;font-weight:bold">🏆 ≥85</span><br>EXCEPTIONAL<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Trade immediately</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #22c55e;background:#22c55e' + '11' + '"><span style="color:#22c55e;font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Trade with conviction</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #f59e0b;background:#f59e0b' + '11' + '"><span style="color:#f59e0b;font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Acceptable but not best</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #dc2626;background:#dc2626' + '11' + '"><span style="color:#dc2626;font-weight:bold">✗ <50</span><br>WEAK<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Skip this setup</span></div>';
+    h += '</div></div>';
     h += hgOgMpHorizonHtml('SCALP', pickScalp, tape, watchScalp, held, engineScalp);
     h += hgOgMpHorizonHtml('SWING', pickSwing, tape, watchSwing, held, engineSwing);
     h += '</section>';
