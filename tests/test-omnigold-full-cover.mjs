@@ -89,7 +89,7 @@ for (const m of BT_BLOCK.matchAll(/(?:^|[{,]\s*)'([A-Z0-9][A-Z0-9-]*)'\s*:/gm)) 
 for (const m of BT_BLOCK.matchAll(/(?:^|[{,]\s*)([A-Z][A-Z0-9]*)\s*:/gm)) BT_KEYS.add(m[1]);
 
 /* ---- 3. the live detect pass ---- */
-const dStart = CODE.indexOf('function hgOgDetect');
+const dStart = CODE.indexOf('function hgOgDetect(rows');
 ok(dStart > 0, 'hgOgDetect is present');
 const DETECT = braceBlock(CODE, dStart);
 ok(DETECT.length > 0, 'hgOgDetect body is brace-balanced');

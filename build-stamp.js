@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v510',
-  pack: 'Pro-trader suite: rolling performance, risk sizing, drawdown circuit breaker, DXY correlation regime',
-  built: '2026-08-28T01:00:00Z',
-  note: 'OMNIGOLD: rolling hit rate (last 20/100 + timezone breakdown), open setup watch (age+P&L), risk sizing by gate confluence (100%/70%/50%), drawdown circuit breaker at -2% weekly, DXY-gold correlation regime detector (NORMAL/DECOUPLING/EXTREME with risk multipliers).'
+  version: 'hg-v511',
+  pack: 'CI fix: omnigold async spot align + test anchors',
+  built: '2026-08-28T05:35:00Z',
+  note: 'Fix await in correlation-regime callback (syntax error broke entire suite); test hgOgDetect(rows) anchor; omniroute fill-risk test alignment.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
