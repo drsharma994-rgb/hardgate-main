@@ -4866,44 +4866,70 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   }
 
-  /* Real-time status poller — updates every 1 second without full refresh */
+  /* Real-time status poller — updates every 2 seconds with proper cleanup */
   function hgOgStartStatusPoller(){
-    if (__og.statusPollerActive) return;
-    __og.statusPollerActive = true;
+    /* Clear existing poller to prevent duplicates */
+    if (__og.statusPollerInterval){
+      clearInterval(__og.statusPollerInterval);
+    }
+    if (__og.statusPollerTimeout){
+      clearTimeout(__og.statusPollerTimeout);
+    }
 
-    var pollInterval = setInterval(function(){
+    __og.statusPollerActive = true;
+    var pollCount = 0;
+
+    __og.statusPollerInterval = setInterval(function(){
       try {
         var livePrice = fin(__og.spotAnchor) || 0;
-        if (!__og.openSetups || !__og.openSetups.length){
-          clearInterval(pollInterval);
-          __og.statusPollerActive = false;
+
+        /* Stop if no setups or no valid price */
+        if (!__og.openSetups || !__og.openSetups.length || livePrice <= 0){
           return;
         }
 
-        /* Only update if we have a valid price */
-        if (livePrice <= 0) return;
+        /* Limit: only update top 5 setups to reduce CPU load */
+        var toUpdate = __og.openSetups.slice(0, 5);
 
-        /* Update all setups with current price */
-        __og.openSetups.forEach(function(setup){
+        /* Update statuses */
+        toUpdate.forEach(function(setup){
           hgOgUpdateSetupStatus(setup, livePrice);
         });
 
-        /* Always repaint to ensure UI reflects latest status */
-        if (__og.ui && __og.ui.openWatchPanel){
+        /* Repaint only every 2 polls (every 4 seconds) to reduce DOM thrashing */
+        pollCount++;
+        if (pollCount % 2 === 0 && __og.ui && __og.ui.openWatchPanel){
           try {
             __og.ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
           } catch (e){}
         }
       } catch (e){
-        /* Silent fail, keep polling */
+        /* Log but don't crash */
+        if (typeof console !== 'undefined') console.error('Status poller error:', e);
       }
-    }, 1000);  /* Update every 1 second for faster response */
+    }, 2000);  /* Update every 2 seconds (reduced from 1 for efficiency) */
 
-    /* Stop polling after 10 minutes */
-    setTimeout(function(){
-      clearInterval(pollInterval);
+    /* Auto-stop poller after 10 minutes to free resources */
+    __og.statusPollerTimeout = setTimeout(function(){
+      if (__og.statusPollerInterval){
+        clearInterval(__og.statusPollerInterval);
+        __og.statusPollerInterval = null;
+      }
       __og.statusPollerActive = false;
     }, 10 * 60 * 1000);
+  }
+
+  /* Stop poller when tab becomes inactive */
+  function hgOgStopStatusPoller(){
+    if (__og.statusPollerInterval){
+      clearInterval(__og.statusPollerInterval);
+      __og.statusPollerInterval = null;
+    }
+    if (__og.statusPollerTimeout){
+      clearTimeout(__og.statusPollerTimeout);
+      __og.statusPollerTimeout = null;
+    }
+    __og.statusPollerActive = false;
   }
 
   /* Market Conditions Score Display — 3D scoring */
@@ -7624,6 +7650,9 @@ terse status, and never launches a first-time scan on a global refresh.
   }
 
   function refreshOmnigold(){
+    /* Stop existing poller before refresh to prevent hangs */
+    hgOgStopStatusPoller();
+
     return Promise.resolve().then(function(){
       if (__og.busy) return 'busy';
       if (!__og.ran) return 'skipped: not run yet';
