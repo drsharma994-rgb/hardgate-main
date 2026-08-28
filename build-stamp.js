@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v518',
-  pack: 'quality gate 4/5+ checks - uses more indicators/strategies',
-  built: '2026-08-28T08:10:00Z',
-  note: 'Quality gate: compositeScore ≥70 AND checksPass ≥4. Shows strongest multi-indicator setups.'
+  version: 'hg-v519',
+  pack: 'multi-factor confluence scoring - elite setup identification',
+  built: '2026-08-28T08:15:00Z',
+  note: '6-dimension confluence score: Trend+Geometry+Market+Checks+Confidence+Freshness. Elite setups identified by true quality.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
