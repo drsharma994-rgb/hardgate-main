@@ -1693,18 +1693,260 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return { score: totalScore, detail: detail, maxScore: 20, rr: rr, stopPct: stopPct };
   }
 
-  /* SOLIDITY SCORE: Combines all 4 P0 pillars (50 pts total) */
-  function hgOmniSolidityScore(setup){
+  /* ==================== P1 SOLIDITY FRAMEWORK (25 pts total) ==================== */
+
+  /* P1.1: REGIME CLASSIFICATION SCORING (10 pts)
+     Scores alignment between setup direction and market regime.
+     Score: 10pts if regime matches setup direction
+     Score: 7pts if regime is RANGE (acceptable for reversals)
+     Score: 5pts if regime is COMPRESSION (caution flag but not veto)
+     Score: 2pts if regime mismatches (directional entry against trend)
+  */
+  function hgOmniRegimeScore(setup){
+    if (!setup || !setup.hit || !setup.hit.dir) return { score: 0, detail: 'no setup direction' };
+
+    var direction = String(setup.hit.dir).toUpperCase();
+    var regime = null;
+    var regimeDetail = '';
+
+    /* Try to extract regime from extra/setup enrichment */
+    if (setup.extra && setup.extra.regime){
+      regime = setup.extra.regime;
+    } else if (setup.regime){
+      regime = setup.regime;
+    }
+
+    if (!regime || !regime.label){
+      return { score: 0, detail: 'regime unavailable', maxScore: 10 };
+    }
+
+    var regimeLabel = String(regime.label).toUpperCase();
+    var score = 0;
+
+    /* Regime matching logic */
+    if (regimeLabel === 'TRENDING' || regimeLabel === 'TREND'){
+      if (direction === 'LONG' || direction === 'UP'){
+        score = 10;
+        regimeDetail = 'trending regime matches long direction';
+      } else if (direction === 'SHORT' || direction === 'DOWN'){
+        score = 10;
+        regimeDetail = 'trending regime matches short direction';
+      } else {
+        score = 2;
+        regimeDetail = 'trending regime but unclear direction';
+      }
+    } else if (regimeLabel === 'RANGE' || regimeLabel === 'RANGING'){
+      score = 7;
+      regimeDetail = 'range regime acceptable for reversion plays';
+    } else if (regimeLabel === 'COMPRESSION' || regimeLabel === 'COILING'){
+      score = 5;
+      regimeDetail = 'compression regime — caution flag but tradeable';
+    } else if (regimeLabel === 'REVERSAL' || regimeLabel === 'FLIP'){
+      /* Reversal regime suggests opposite direction */
+      if ((direction === 'SHORT' || direction === 'DOWN') && regimeLabel === 'REVERSAL TO UP'){
+        score = 2;
+        regimeDetail = 'reversal regime against setup direction';
+      } else if ((direction === 'LONG' || direction === 'UP') && regimeLabel === 'REVERSAL TO DOWN'){
+        score = 2;
+        regimeDetail = 'reversal regime against setup direction';
+      } else {
+        score = 7;
+        regimeDetail = 'reversal regime aligns with reversion setup';
+      }
+    } else {
+      score = 2;
+      regimeDetail = 'regime ' + regimeLabel + ' mismatch or unknown';
+    }
+
+    return { score: score, detail: regimeDetail, maxScore: 10, regime: regimeLabel };
+  }
+
+  /* P1.2: ATR EXPANSION SIGNAL SCORING (8 pts)
+     Detects whether volatility is expanding (recent ATR vs MA) and forecasted.
+     Score: 8pts if ATR expanding (5-bar avg > 20-bar MA), 4pts if stable, 1pt if contracting
+     Bonus: +2pts if vol forecast predicts further expansion
+  */
+  function hgOmniAtrExpansionScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 25) return { score: 0, detail: 'insufficient data for ATR expansion' };
+
+    var rows = setup.rows;
+    var atr14 = atrOf(rows, 14);
+    if (!isFinite(atr14) || atr14 <= 0) return { score: 0, detail: 'ATR unavailable' };
+
+    /* Calculate 5-bar recent ATR average */
+    var recentAtrs = [];
+    var i, idx, atrVal;
+    for (i = Math.max(0, rows.length - 5); i < rows.length; i++){
+      idx = Math.max(0, i);
+      var subRows = rows.slice(Math.max(0, idx - 13), idx + 1);
+      atrVal = atrOf(subRows, 14);
+      if (isFinite(atrVal)) recentAtrs.push(atrVal);
+    }
+    var recentAtrAvg = recentAtrs.length > 0 ? recentAtrs.reduce(function(a,b){return a+b;}) / recentAtrs.length : atr14;
+
+    /* Calculate 20-bar MA of ATR (using historical ATRs) */
+    var historicalAtrs = [];
+    for (i = Math.max(0, rows.length - 24); i < rows.length; i++){
+      idx = Math.max(0, i);
+      var histRows = rows.slice(Math.max(0, idx - 13), idx + 1);
+      atrVal = atrOf(histRows, 14);
+      if (isFinite(atrVal)) historicalAtrs.push(atrVal);
+    }
+    var atrMa20 = historicalAtrs.length >= 20 ?
+                  historicalAtrs.slice(-20).reduce(function(a,b){return a+b;}) / 20 :
+                  (historicalAtrs.length > 0 ? historicalAtrs.reduce(function(a,b){return a+b;}) / historicalAtrs.length : atr14);
+
+    var score = 0, detail = '', atrStatus = '';
+    var expansionRatio = atrMa20 > 0 ? recentAtrAvg / atrMa20 : 1;
+
+    if (expansionRatio > 1.05){
+      score = 8;
+      atrStatus = 'expanding';
+      detail = 'ATR expanding: recent avg ' + recentAtrAvg.toFixed(2) + ' > MA20 ' + atrMa20.toFixed(2) + ' (ratio ' + expansionRatio.toFixed(2) + ')';
+    } else if (expansionRatio >= 0.95){
+      score = 4;
+      atrStatus = 'stable';
+      detail = 'ATR stable: recent avg ' + recentAtrAvg.toFixed(2) + ' ~= MA20 ' + atrMa20.toFixed(2) + ' (ratio ' + expansionRatio.toFixed(2) + ')';
+    } else {
+      score = 1;
+      atrStatus = 'contracting';
+      detail = 'ATR contracting: recent avg ' + recentAtrAvg.toFixed(2) + ' < MA20 ' + atrMa20.toFixed(2) + ' (ratio ' + expansionRatio.toFixed(2) + ')';
+    }
+
+    /* Bonus: check for vol forecast (if available in setup.extra) */
+    var volBonus = 0, volBonusDetail = '';
+    if (setup.extra && setup.extra.volForecast && setup.extra.volForecast.expanding){
+      volBonus = 2;
+      volBonusDetail = ' + 2pt vol forecast bonus (expansion predicted)';
+    }
+
+    var totalScore = Math.min(score + volBonus, 8);
+    return {
+      score: totalScore,
+      detail: detail + (volBonusDetail || ''),
+      maxScore: 8,
+      atrStatus: atrStatus,
+      expansionRatio: expansionRatio,
+      volBonus: volBonus
+    };
+  }
+
+  /* P1.3: SESSION/EXECUTION TIMING SCORING (7 pts)
+     Scores trade timing by session (LONDON, NY, ASIA) and horizon (SCALP vs SWING).
+     SCALP (1H): 7pts LONDON/NY OVERLAP, 5pts LONDON open, 3pts NY open, 1pt ASIA
+     SWING (4H): 7pts LONDON/NY OVERLAP, 4pts other active hours
+     Penalize: -2pts if red-flag news <1h away, 0pts if in quiet hours
+  */
+  function hgOmniSessionTimingScore(setup, horizonLabel){
+    if (!setup) return { score: 0, detail: 'no setup' };
+
+    /* Current time in IST (Indian Standard Time, UTC+5:30) for consistent reference */
+    var now = new Date();
+    var istOffset = 5.5; /* IST is UTC+5:30 */
+    var utcHours = now.getUTCHours();
+    var istHours = (utcHours + istOffset) % 24;
+    var minutes = now.getUTCMinutes();
+    var timeDecimal = istHours + (minutes / 60);
+
+    var horizon = horizonLabel ? String(horizonLabel).toUpperCase() : 'UNKNOWN';
+    var score = 0, sessionLabel = '', detail = '';
+
+    /* Session windows (in IST hours) */
+    var asiaOpen = 0;     /* 00:00 IST = 18:30 prev JST open (approx) */
+    var londonOpen = 5;   /* 05:00 IST = 23:30 prev London open (approx) */
+    var londonNyOverlap = 13; /* 13:00-17:30 IST = 07:30-12:00 London / 13:00-17:30 NY */
+    var nyOpen = 20.5;    /* 20:30 IST = 11:00 NY open (approx) */
+    var quietHoursStart = 0;
+    var quietHoursEnd = 5;
+
+    /* Determine current session and timing bonus */
+    if (timeDecimal >= londonNyOverlap && timeDecimal < 17.5){
+      sessionLabel = 'LONDON/NY OVERLAP';
+      if (horizon === 'SCALP' || horizon === '1H'){
+        score = 7;
+      } else if (horizon === 'SWING' || horizon === '4H'){
+        score = 7;
+      } else {
+        score = 6;
+      }
+    } else if (timeDecimal >= londonOpen && timeDecimal < londonNyOverlap){
+      sessionLabel = 'LONDON OPEN';
+      if (horizon === 'SCALP' || horizon === '1H'){
+        score = 5;
+      } else {
+        score = 4;
+      }
+    } else if (timeDecimal >= nyOpen || timeDecimal < asiaOpen + 1){
+      sessionLabel = 'NY OPEN';
+      if (horizon === 'SCALP' || horizon === '1H'){
+        score = 3;
+      } else {
+        score = 3;
+      }
+    } else if (timeDecimal >= asiaOpen && timeDecimal < londonOpen){
+      sessionLabel = 'ASIA';
+      if (horizon === 'SCALP' || horizon === '1H'){
+        score = 1;
+      } else {
+        score = 1;
+      }
+    } else {
+      sessionLabel = 'UNDEFINED';
+      score = 0;
+    }
+
+    /* Quiet hours penalty (very low liquidity) */
+    if (timeDecimal >= quietHoursStart && timeDecimal < quietHoursEnd){
+      score = 0;
+      sessionLabel = 'QUIET HOURS (penalized)';
+      detail = 'setup during quiet hours (00:00-05:00 IST) — minimal liquidity';
+    } else {
+      detail = horizon + ' setup during ' + sessionLabel + ' (' + istHours.toFixed(1) + ' IST)';
+    }
+
+    /* News penalty: -2pts if red-flag news <1h away */
+    var newsPenalty = 0;
+    if (setup.extra && setup.extra.redFlagNews && setup.extra.redFlagNews.minutesUntil < 60){
+      newsPenalty = 2;
+      score = Math.max(0, score - newsPenalty);
+      detail += ' | -2pt news penalty (' + setup.extra.redFlagNews.minutesUntil + 'min to ' + setup.extra.redFlagNews.event + ')';
+    }
+
+    return {
+      score: score,
+      detail: detail,
+      maxScore: 7,
+      session: sessionLabel,
+      horizon: horizon,
+      istHours: istHours,
+      newsPenalty: newsPenalty
+    };
+  }
+
+  /* ==================== end P1 solidity framework ==================== */
+
+  /* SOLIDITY SCORE: Combines all P0 (55 pts) + P1 (25 pts) pillars (80 pts total) */
+  function hgOmniSolidityScore(setup, horizonLabel){
     if (!setup) return { score: 0, maxScore: 200, breakdown: {}, detail: 'no setup' };
 
+    /* P0 Pillars (55 pts) */
     var ob = hgOmniOrderBlockScore(setup);
     var fvg = hgOmniFvgScore(setup);
     var mtf = hgOmniMultiTfCascadeScore(setup);
     var rr = hgOmniRiskRewardScore(setup);
 
-    var totalScore = ob.score + fvg.score + mtf.score + rr.score;
+    /* P1 Pillars (25 pts) */
+    var regimeScore = hgOmniRegimeScore(setup);
+    var atrExpScore = hgOmniAtrExpansionScore(setup);
+    var sessionScore = hgOmniSessionTimingScore(setup, horizonLabel);
+
+    var totalScore = ob.score + fvg.score + mtf.score + rr.score +
+                     regimeScore.score + atrExpScore.score + sessionScore.score;
+
     var maxStructuralScore = (ob.maxScore || 15) + (fvg.maxScore || 10) +
-                              (mtf.maxScore || 10) + (rr.maxScore || 20);
+                              (mtf.maxScore || 10) + (rr.maxScore || 20) +
+                              (regimeScore.maxScore || 10) + (atrExpScore.maxScore || 8) +
+                              (sessionScore.maxScore || 7);
 
     return {
       score: totalScore,
@@ -1713,12 +1955,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         orderBlock: { score: ob.score, maxScore: ob.maxScore || 15, detail: ob.detail },
         fvg: { score: fvg.score, maxScore: fvg.maxScore || 10, detail: fvg.detail },
         multiTfCascade: { score: mtf.score, maxScore: mtf.maxScore || 10, detail: mtf.detail, agreements: mtf.agreements },
-        riskReward: { score: rr.score, maxScore: rr.maxScore || 20, detail: rr.detail, rr: rr.rr }
+        riskReward: { score: rr.score, maxScore: rr.maxScore || 20, detail: rr.detail, rr: rr.rr },
+        regime: { score: regimeScore.score, maxScore: regimeScore.maxScore || 10, detail: regimeScore.detail, regime: regimeScore.regime },
+        atrExpansion: { score: atrExpScore.score, maxScore: atrExpScore.maxScore || 10, detail: atrExpScore.detail, status: atrExpScore.atrStatus },
+        sessionTiming: { score: sessionScore.score, maxScore: sessionScore.maxScore || 7, detail: sessionScore.detail, session: sessionScore.session }
       },
       detail: 'OB:' + ob.score + '/' + (ob.maxScore || 15) +
               ' FVG:' + fvg.score + '/' + (fvg.maxScore || 10) +
               ' MTF:' + mtf.score + '/' + (mtf.maxScore || 10) +
-              ' RR:' + rr.score + '/' + (rr.maxScore || 20)
+              ' RR:' + rr.score + '/' + (rr.maxScore || 20) +
+              ' REG:' + regimeScore.score + '/' + (regimeScore.maxScore || 10) +
+              ' ATR:' + atrExpScore.score + '/' + (atrExpScore.maxScore || 10) +
+              ' SES:' + sessionScore.score + '/' + (sessionScore.maxScore || 7)
     };
   }
 
@@ -5775,6 +6023,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniFvgScore = hgOmniFvgScore;
     window.hgOmniMultiTfCascadeScore = hgOmniMultiTfCascadeScore;
     window.hgOmniRiskRewardScore = hgOmniRiskRewardScore;
+    /* P1 Solidity Framework Scoring Functions */
+    window.hgOmniRegimeScore = hgOmniRegimeScore;
+    window.hgOmniAtrExpansionScore = hgOmniAtrExpansionScore;
+    window.hgOmniSessionTimingScore = hgOmniSessionTimingScore;
     window.hgOmniSolidityScore = hgOmniSolidityScore;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
