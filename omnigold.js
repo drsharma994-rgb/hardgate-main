@@ -5364,7 +5364,7 @@ terse status, and never launches a first-time scan on a global refresh.
 
         h += '<div style="margin:12px 0;padding:12px;border:2px solid ' + statusColor + ';border-radius:4px;background:rgba(34,197,94,0.1);position:relative">';
         h += '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;align-items:center">';
-        h += '<button class="btn" style="padding:4px 12px;font-size:0.85em;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer" onclick="(function(){hgOgUpdateOpenSetups(); var ui = __og.ui; if(ui && ui.openWatchPanel) ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);})()">🔄 Refresh</button>';
+        h += '<button class="btn" style="padding:4px 12px;font-size:0.85em;background:#3b82f6;color:white;border:none;border-radius:6px;cursor:pointer" onclick="window.hgOgManualRefresh && window.hgOgManualRefresh()">🔄 Refresh</button>';
         if (regeneratedLabel) h += '<div style="background:#10b981;color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + regeneratedLabel + '</div>';
         h += '<div style="background:' + statusColor + ';color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + statusLabel + '</div>';
         h += '</div>';
