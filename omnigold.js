@@ -6511,8 +6511,13 @@ terse status, and never launches a first-time scan on a global refresh.
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + (c.topWatch ? ' og-watch' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     var confResult = hgOgAdvancedConfluenceScore(c);
-    var confObj = typeof confResult === 'number' ? { confluenceScore: confResult } : confResult;
-    h += hgOgRenderConfluenceBreakdown(confObj);
+    if (confResult !== null && confResult !== undefined){
+      var confObj = typeof confResult === 'number' ? { confluenceScore: confResult } : confResult;
+      if (confObj && isFinite(fin(confObj.confluenceScore || confObj.score))){
+        var displayScore = fin(confObj.confluenceScore || confObj.score);
+        h += hgOgRenderConfluenceBreakdown({ confluenceScore: displayScore });
+      }
+    }
     h += '<div class="dim">' + esc(c.why) + '</div>';
     /* the cross-horizon read — agreement is standing, disagreement is a
        warning the reader deserves before entering */
