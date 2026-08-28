@@ -4508,6 +4508,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                entry: found[k].plan.entry, stop: found[k].plan.stop, t1: found[k].plan.t1,
                                mechanic: found[k].kind,
                                ticket: !!(found[k].grade && found[k].grade.ticket),
+                               /* barT keying must match OMNIGOLD: the decision bar's open time,
+                                  not current time. Without this, hgFwdRecordScan defaults to
+                                  Date.now() and invalidates cross-desk out-of-sample comparison. */
+                               barT: num(held[j].rows && held[j].rows.length > 0 ? held[j].rows[held[j].rows.length - 1].t : NaN),
                                /* The crypto replicated-gate stack. Audited on
                                   10 Binance majors x 1,000 bars, both 4h and
                                   1h, Sidak-corrected: regime (+8.5/+7.2) and

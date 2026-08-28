@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v508',
-  pack: 'Keep-last resilience, held-against-tape queue, fill-risk gate on OMNIROUTE',
-  built: '2026-08-28T00:15:00Z',
-  note: 'OMNIGOLD: snapshots all panels post-render, restores on fetch/render failure. OMNIROUTE: holds against-tape tickets with sentiment-flip release, fill-risk gate (0–0.25R PASS, >0.25R FAIL).'
+  version: 'hg-v509',
+  pack: 'barT keying symmetry + Wilson lower bound promotions + crypto fill-risk calibration system',
+  built: '2026-08-28T00:30:00Z',
+  note: 'OMNIROUTE: barT now keyed to decision bar (matches OMNIGOLD). OOS measurement: verdicts auto-advance at 95%/90% confidence thresholds. Crypto fill-risk calibration tooling ready for measurement run.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
