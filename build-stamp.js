@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v512',
-  pack: 'fix forEach continue in open setup watch',
-  built: '2026-08-28T07:05:00Z',
-  note: 'Replace illegal continue inside forEach with return in hgOgRefreshOpenSetups.'
+  version: 'hg-v513',
+  pack: 'add refresh button to TOP SETUP with manual callback',
+  built: '2026-08-28T07:20:00Z',
+  note: 'Added 🔄 Refresh button to TOP SETUP section for manual setup refresh without page reload.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
