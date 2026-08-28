@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v511',
-  pack: 'CI test alignment (detect anchor, fill-risk, stack3 slice)',
-  built: '2026-08-28T05:55:00Z',
-  note: 'Fix test-omnigold-full-cover hgOgDetect(rows) anchor; omniroute fill-risk + stack3 slice tests.'
+  version: 'hg-v512',
+  pack: 'fix forEach continue in open setup watch',
+  built: '2026-08-28T07:05:00Z',
+  note: 'Replace illegal continue inside forEach with return in hgOgRefreshOpenSetups.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
