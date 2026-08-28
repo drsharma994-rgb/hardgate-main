@@ -4540,6 +4540,88 @@ terse status, and never launches a first-time scan on a global refresh.
 
   /* Detect open setups and their age. Scans forward log for 'open' state
      and calculates time since entry fire. Returns array of open setup objects. */
+  /* Market Condition Scoring Engine — 3 dimensions */
+
+  /* Technical Score: Gate quality + regime fit + structure */
+  function hgOgTechnicalScore(setup){
+    if (!setup) return 0;
+    var score = 0;
+
+    /* Gate confluence weight: 3-gate = 100%, 2-gate = 70%, 1-gate = 40% */
+    var gateConf = fin(setup.gateConf) || 0;
+    var gateScore = (gateConf / 3) * 100;
+    score += gateScore * 0.4;
+
+    /* Regime fit quality: If setup passed regime-fit gate, it's aligned */
+    var hasBtfConfirm = setup.checks && setup.checks.htfRegime ? 1 : 0;
+    score += hasBtfConfirm * 30;
+
+    /* Structure quality: Based on risk/reward ratio */
+    if (setup.stop && setup.entry && setup.t1){
+      var risk = Math.abs(setup.stop - setup.entry);
+      var reward = Math.abs(setup.t1 - setup.entry);
+      if (risk > 0){
+        var rr = reward / risk;
+        var rrScore = Math.min(100, (rr / 2.5) * 100);  /* 2.5R = 100% */
+        score += rrScore * 0.3;
+      }
+    }
+
+    return Math.min(100, score);
+  }
+
+  /* Sentiment Score: Correlation regime + risk-on/off bias */
+  function hgOgSentimentScore(corrRegime){
+    if (!corrRegime) corrRegime = 'NORMAL';
+
+    /* NORMAL correlation = gold uncorrelated from risk, highest score */
+    if (corrRegime === 'NORMAL') return 80;
+
+    /* DECOUPLING = uncertain regime, medium score */
+    if (corrRegime === 'DECOUPLING') return 50;
+
+    /* EXTREME = gold correlates with equities (risk-on) or USD (risk-off), risky */
+    if (corrRegime === 'EXTREME') return 20;
+
+    return 50;  /* Default: medium */
+  }
+
+  /* Fundamental Score: News risk + macro event proximity */
+  function hgOgFundamentalScore(age, corrRegime){
+    var score = 50;  /* Base: neutral */
+
+    /* Setups older than 4 hours may have missed news cycles */
+    if (age && age > 4 * 3600){
+      score -= 15;
+    }
+
+    /* EXTREME correlation = elevated news risk, reduce score */
+    if (corrRegime === 'EXTREME'){
+      score -= 20;
+    }
+
+    /* Recent setups (< 30 min) = fresh market read */
+    if (age && age < 30 * 60){
+      score += 15;
+    }
+
+    return Math.max(0, Math.min(100, score));
+  }
+
+  /* Composite Market Quality Score */
+  function hgOgCompositeScore(setup, corrRegime){
+    if (!setup) return 0;
+
+    var technical = hgOgTechnicalScore(setup);
+    var sentiment = hgOgSentimentScore(corrRegime);
+    var fundamental = hgOgFundamentalScore(setup.age, corrRegime);
+
+    /* Weighted composite: 40% technical, 35% sentiment, 25% fundamental */
+    var composite = (technical * 0.4) + (sentiment * 0.35) + (fundamental * 0.25);
+
+    return Math.min(100, composite);
+  }
+
   function hgOgUpdateOpenSetups(){
     try {
       var now = Date.now() / 1000;
@@ -4591,7 +4673,7 @@ terse status, and never launches a first-time scan on a global refresh.
         };
         var checksPass = Object.keys(checks).filter(function(k){ return checks[k]; }).length;
 
-        open.push({
+        var setupObj = {
           barT: rec.barT,
           entry: fin(rec.entry),
           t1: fin(rec.t1),
@@ -4607,12 +4689,22 @@ terse status, and never launches a first-time scan on a global refresh.
           confidence: (evidence && evidence.wilson) ? evidence.wilson : null,
           checks: checks,
           checksPass: checksPass,
-          readyToEnter: checksPass === 5
-        });
+          readyToEnter: checksPass === 5,
+          corrRegime: rec.corrRegime || 'NORMAL'
+        };
+
+        /* Calculate market condition scores */
+        setupObj.technicalScore = hgOgTechnicalScore(setupObj);
+        setupObj.sentimentScore = hgOgSentimentScore(setupObj.corrRegime);
+        setupObj.fundamentalScore = hgOgFundamentalScore(setupObj.age, setupObj.corrRegime);
+        setupObj.compositeScore = hgOgCompositeScore(setupObj, setupObj.corrRegime);
+
+        open.push(setupObj);
       });
 
-      /* Sort by gate confluence descending (3-gate first), then by age */
+      /* Sort by composite market quality score (highest first), then by gate confluence */
       open.sort(function(a, b){
+        if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
         if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
         return b.age - a.age;
       });
@@ -4636,6 +4728,57 @@ terse status, and never launches a first-time scan on a global refresh.
     } catch (e){
       __og.openSetups = [];
     }
+  }
+
+  /* Market Conditions Score Display — 3D scoring */
+  function hgOgRenderMarketConditionsScore(setup){
+    if (!setup) return '';
+    var html = '<div style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
+    html += '<div style="font-weight:bold;margin-bottom:8px">🎯 MARKET QUALITY SCORE (Current Conditions)</div>';
+
+    /* Composite score bar */
+    var compScore = fin(setup.compositeScore) || 0;
+    var compColor = compScore >= 70 ? '#22c55e' : compScore >= 50 ? '#f59e0b' : '#dc2626';
+    html += '<div style="margin-bottom:8px">';
+    html += '<div style="font-weight:bold;color:' + compColor + '">Overall: ' + compScore.toFixed(0) + '/100</div>';
+    html += '<div style="height:20px;background:rgba(0,0,0,0.05);border-radius:3px;overflow:hidden;margin-top:4px">';
+    html += '<div style="height:100%;width:' + compScore + '%;background:' + compColor + ';transition:width 0.3s"></div>';
+    html += '</div></div>';
+
+    /* 3D Dimension breakdown */
+    var techScore = fin(setup.technicalScore) || 0;
+    var sentScore = fin(setup.sentimentScore) || 0;
+    var fundScore = fin(setup.fundamentalScore) || 0;
+
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px">';
+
+    /* Technical */
+    var techColor = techScore >= 70 ? '#22c55e' : techScore >= 50 ? '#f59e0b' : '#dc2626';
+    html += '<div style="border:1px solid ' + techColor + '33;border-radius:3px;padding:6px;background:' + techColor + '11">';
+    html += '<div style="font-size:0.85em;font-weight:bold;color:' + techColor + '">Technical</div>';
+    html += '<div style="font-size:1.2em;font-weight:bold;margin:4px 0">' + techScore.toFixed(0) + '</div>';
+    html += '<div style="font-size:0.75em;color:var(--fg-muted,#666)">Gates + Structure</div>';
+    html += '</div>';
+
+    /* Sentiment */
+    var sentColor = sentScore >= 70 ? '#22c55e' : sentScore >= 50 ? '#f59e0b' : '#dc2626';
+    html += '<div style="border:1px solid ' + sentColor + '33;border-radius:3px;padding:6px;background:' + sentColor + '11">';
+    html += '<div style="font-size:0.85em;font-weight:bold;color:' + sentColor + '">Sentiment</div>';
+    html += '<div style="font-size:1.2em;font-weight:bold;margin:4px 0">' + sentScore.toFixed(0) + '</div>';
+    html += '<div style="font-size:0.75em;color:var(--fg-muted,#666)">' + setup.corrRegime + '</div>';
+    html += '</div>';
+
+    /* Fundamental */
+    var fundColor = fundScore >= 70 ? '#22c55e' : fundScore >= 50 ? '#f59e0b' : '#dc2626';
+    html += '<div style="border:1px solid ' + fundColor + '33;border-radius:3px;padding:6px;background:' + fundColor + '11">';
+    html += '<div style="font-size:0.85em;font-weight:bold;color:' + fundColor + '">Fundamental</div>';
+    html += '<div style="font-size:1.2em;font-weight:bold;margin:4px 0">' + fundScore.toFixed(0) + '</div>';
+    html += '<div style="font-size:0.75em;color:var(--fg-muted,#666)">News Risk</div>';
+    html += '</div>';
+
+    html += '</div>';
+    html += '</div>';
+    return html;
   }
 
   /* Pro-trader feature: Setup Quality Filter + Confidence Display */
@@ -4997,10 +5140,11 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 1. SETUP QUALITY FILTER — by gate confluence */
     h += hgOgRenderSetupFilter(setups);
 
-    /* 2. PRE-ENTRY CHECKLIST + HIGHEST CONFIDENCE SETUP */
+    /* 2. MARKET CONDITIONS SCORE — 3D rating under current conditions */
     var topSetup = setups.length > 0 ? setups[0] : null;
     if (topSetup){
-      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">HIGHEST CONFIDENCE SETUP</div>';
+      h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">TOP SETUP (Best for Current Conditions)</div>';
+      h += hgOgRenderMarketConditionsScore(topSetup);
       h += hgOgRenderChecklist(topSetup);
       h += hgOgRenderConfidence(topSetup.evidence);
     }
@@ -5027,6 +5171,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.9em">';
       h += '<tr style="border-bottom:1px solid var(--hr)">';
       h += '<th style="text-align:left;padding:4px">Setup</th>';
+      h += '<th style="text-align:center;padding:4px">Market Score</th>';
       h += '<th style="text-align:center;padding:4px">Confluence</th>';
       h += '<th style="text-align:right;padding:4px">Open Since</th>';
       h += '<th style="text-align:right;padding:4px">P&L</th>';
@@ -5046,9 +5191,14 @@ terse status, and never launches a first-time scan on a global refresh.
         var confBadge = setup.gateConf === 3 ? '★★★' : (setup.gateConf === 2 ? '★★' : '★');
         var readyBadge = setup.readyToEnter ? '✓' : '⚠';
 
+        /* Market score color */
+        var mktScore = fin(setup.compositeScore) || 0;
+        var mktColor = mktScore >= 70 ? '#22c55e' : mktScore >= 50 ? '#f59e0b' : '#dc2626';
+
         h += '<tr style="border-bottom:1px solid var(--hr)">';
         h += '<td style="padding:4px">' + mechLabel
           + (setup.isCorrelated ? ' <b>⚠</b>' : '') + '</td>';
+        h += '<td style="text-align:center;padding:4px;color:' + mktColor + ';font-weight:bold">' + mktScore.toFixed(0) + '/100</td>';
         h += '<td style="text-align:center;padding:4px">' + confBadge + '</td>';
         h += '<td style="text-align:right;padding:4px"' + ageClass + '>'
           + (setup.age > 4 * 3600 ? '⏱ ' : '') + esc(ageStr) + '</td>';
