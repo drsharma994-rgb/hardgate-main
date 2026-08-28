@@ -1411,6 +1411,319 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
              nAgree: agree.length, nAgainst: against.length, nSplit: split.length };
   }
 
+  /* ================== P0 SOLIDITY FRAMEWORK SCORING (50 pts total) ================== */
+
+  /* 1. ORDER BLOCKS DETECTION & SCORING (15 pts)
+     Detects recent order blocks (swing high/low with +2 bar confirmation).
+     Scores proximity: 15pts if entry within 0.5×ATR, 10pts if within 1.0×ATR,
+     5pts if within 1.5×ATR, 0pts otherwise.
+  */
+  function hgOmniOrderBlockScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 5) return { score: 0, detail: 'insufficient data' };
+    var rows = setup.rows, plan = setup.plan;
+    if (!plan || !isFinite(fin(plan.entry))) return { score: 0, detail: 'no plan' };
+
+    var atr = atrOf(rows, 14);
+    if (!isFinite(atr) || atr <= 0) return { score: 0, detail: 'ATR unavailable' };
+
+    /* Detect recent order block: look for swing high/low with 2-bar confirmation */
+    var entry = fin(plan.entry);
+    var i, score = 0, detail = '';
+
+    /* Check last 10 bars for recent order block (swing extremes) */
+    var obLevel = null;
+    if (rows.length >= 5){
+      /* Swing low: low below previous 2 lows, then 2 bars close above it */
+      for (i = rows.length - 5; i >= Math.max(0, rows.length - 15); i--){
+        var lo = num(rows[i].l), loMinus1 = num(rows[i-1].l), loMinus2 = num(rows[i-2].l);
+        var close1 = num(rows[i+1].c), close2 = num(rows[i+2].c);
+        if (isFinite(lo) && isFinite(loMinus1) && isFinite(loMinus2) &&
+            isFinite(close1) && isFinite(close2) &&
+            lo < loMinus1 && lo < loMinus2 && close1 > lo && close2 > lo){
+          obLevel = lo;
+          break;
+        }
+      }
+      /* Swing high: high above previous 2 highs, then 2 bars close below it */
+      if (!obLevel){
+        for (i = rows.length - 5; i >= Math.max(0, rows.length - 15); i--){
+          var hi = num(rows[i].h), hiMinus1 = num(rows[i-1].h), hiMinus2 = num(rows[i-2].h);
+          var close1 = num(rows[i+1].c), close2 = num(rows[i+2].c);
+          if (isFinite(hi) && isFinite(hiMinus1) && isFinite(hiMinus2) &&
+              isFinite(close1) && isFinite(close2) &&
+              hi > hiMinus1 && hi > hiMinus2 && close1 < hi && close2 < hi){
+            obLevel = hi;
+            break;
+          }
+        }
+      }
+    }
+
+    if (obLevel){
+      var distFromOb = Math.abs(entry - obLevel) / atr;
+      if (distFromOb <= 0.5){
+        score = 15;
+        detail = 'OB at ' + obLevel.toFixed(2) + ', entry within 0.5x ATR (' + distFromOb.toFixed(2) + 'x)';
+      } else if (distFromOb <= 1.0){
+        score = 10;
+        detail = 'OB at ' + obLevel.toFixed(2) + ', entry within 1.0x ATR (' + distFromOb.toFixed(2) + 'x)';
+      } else if (distFromOb <= 1.5){
+        score = 5;
+        detail = 'OB at ' + obLevel.toFixed(2) + ', entry within 1.5x ATR (' + distFromOb.toFixed(2) + 'x)';
+      } else {
+        score = 0;
+        detail = 'OB at ' + obLevel.toFixed(2) + ', entry beyond 1.5x ATR';
+      }
+    } else {
+      detail = 'no recent order block detected';
+    }
+
+    return { score: score, detail: detail, maxScore: 15 };
+  }
+
+  /* 2. FVG (FAIR VALUE GAP) DETECTION & SCORING (10 pts)
+     Detects fresh bearish/bullish FVG (3-bar imbalance unmitigated).
+     Scores: 10pts if FVG exists within 1×ATR, 5pts if within 2×ATR, 0pts otherwise.
+  */
+  function hgOmniFvgScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 4) return { score: 0, detail: 'insufficient data' };
+    var rows = setup.rows, plan = setup.plan;
+    if (!plan || !isFinite(fin(plan.entry))) return { score: 0, detail: 'no plan' };
+
+    var atr = atrOf(rows, 14);
+    if (!isFinite(atr) || atr <= 0) return { score: 0, detail: 'ATR unavailable' };
+
+    var entry = fin(plan.entry);
+    var score = 0, detail = '', fvgLevel = null;
+
+    /* Look for FVG in last 8 bars: 3-bar imbalance (gap between bar 1 high and bar 2 low, or vice versa) */
+    if (rows.length >= 4){
+      for (var i = rows.length - 4; i >= Math.max(0, rows.length - 12); i--){
+        var h1 = num(rows[i].h), l1 = num(rows[i].l);
+        var h2 = num(rows[i+1].h), l2 = num(rows[i+1].l);
+        var h3 = num(rows[i+2].h), l3 = num(rows[i+2].l);
+
+        if (!isFinite(h1) || !isFinite(l1) || !isFinite(h2) || !isFinite(l2) ||
+            !isFinite(h3) || !isFinite(l3)) continue;
+
+        /* Bullish FVG: bar 1 low > bar 2 high */
+        if (l1 > h2 && h2 < l3){
+          fvgLevel = { type: 'bullish', level: h2, top: l1 };
+          break;
+        }
+        /* Bearish FVG: bar 1 high < bar 2 low */
+        if (h1 < l2 && l2 > h3){
+          fvgLevel = { type: 'bearish', level: l2, bottom: h1 };
+          break;
+        }
+      }
+    }
+
+    if (fvgLevel){
+      var fvgMid = fvgLevel.type === 'bullish' ? (fvgLevel.level + fvgLevel.top) / 2 :
+                   (fvgLevel.level + fvgLevel.bottom) / 2;
+      var distFromFvg = Math.abs(entry - fvgMid) / atr;
+
+      if (distFromFvg <= 1.0){
+        score = 10;
+        detail = fvgLevel.type + ' FVG near ' + fvgMid.toFixed(2) + ', entry within 1x ATR (' + distFromFvg.toFixed(2) + 'x)';
+      } else if (distFromFvg <= 2.0){
+        score = 5;
+        detail = fvgLevel.type + ' FVG near ' + fvgMid.toFixed(2) + ', entry within 2x ATR (' + distFromFvg.toFixed(2) + 'x)';
+      } else {
+        score = 0;
+        detail = fvgLevel.type + ' FVG exists but entry beyond 2x ATR';
+      }
+    } else {
+      detail = 'no fresh FVG detected';
+    }
+
+    return { score: score, detail: detail, maxScore: 10 };
+  }
+
+  /* 3. MULTI-TF EMA CASCADE SCORING (10 pts)
+     Validates 1H, 4H, and daily EMA8/21/50 stack alignment.
+     Score: 10pts if 1H/4H/daily all agree, 7pts if 2/3 agree, 3pts if 1/3, 0pts otherwise.
+  */
+  function hgOmniMultiTfCascadeScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 120) return { score: 0, detail: 'insufficient data' };
+    var rows = setup.rows, hit = setup.hit;
+    if (!hit || !hit.dir) return { score: 0, detail: 'no hit' };
+
+    var direction = hit.dir;
+    var agreements = 0;
+
+    /* Current timeframe: extract closes and check EMA8/21/50 alignment */
+    var closes = closesOf(rows);
+    if (closes.length < 50){
+      return { score: 0, detail: 'insufficient closes' };
+    }
+
+    /* Check current TF: 1H assumed if we have ~60 closes for recent period */
+    var e8 = emaOf(closes.slice(-30), 8);
+    var e21 = emaOf(closes.slice(-60), 21);
+    var e50 = emaOf(closes.slice(-120), 50);
+    var currentLast = closes[closes.length - 1];
+
+    var tf1hAlign = false;
+    if (isFinite(e8) && isFinite(e21) && isFinite(e50) && isFinite(currentLast)){
+      /* EMA stack: for longs, should be 8 > 21 > 50 (or close 8) */
+      if (direction === 'long'){
+        tf1hAlign = (e8 >= e21 * 0.998) && (e21 >= e50 * 0.998) && (currentLast >= e8 * 0.995);
+      } else {
+        tf1hAlign = (e8 <= e21 * 1.002) && (e21 <= e50 * 1.002) && (currentLast <= e8 * 1.005);
+      }
+    }
+    if (tf1hAlign) agreements++;
+
+    /* 4H resample */
+    var tf4h = hgOmniResample(rows, 14400);  /* 4 hours in seconds */
+    var tf4hAlign = false;
+    if (tf4h && tf4h.length >= 50){
+      var closes4h = closesOf(tf4h);
+      if (closes4h.length >= 50){
+        var e8_4h = emaOf(closes4h.slice(-30), 8);
+        var e21_4h = emaOf(closes4h.slice(-60), 21);
+        var e50_4h = emaOf(closes4h.slice(-120), 50);
+        var last4h = closes4h[closes4h.length - 1];
+
+        if (isFinite(e8_4h) && isFinite(e21_4h) && isFinite(e50_4h) && isFinite(last4h)){
+          if (direction === 'long'){
+            tf4hAlign = (e8_4h >= e21_4h * 0.998) && (e21_4h >= e50_4h * 0.998) && (last4h >= e8_4h * 0.995);
+          } else {
+            tf4hAlign = (e8_4h <= e21_4h * 1.002) && (e21_4h <= e50_4h * 1.002) && (last4h <= e8_4h * 1.005);
+          }
+        }
+      }
+    }
+    if (tf4hAlign) agreements++;
+
+    /* Daily resample */
+    var tfDaily = hgOmniResample(rows, 86400);  /* 1 day in seconds */
+    var tfDailyAlign = false;
+    if (tfDaily && tfDaily.length >= 50){
+      var closesDaily = closesOf(tfDaily);
+      if (closesDaily.length >= 50){
+        var e8_d = emaOf(closesDaily.slice(-30), 8);
+        var e21_d = emaOf(closesDaily.slice(-60), 21);
+        var e50_d = emaOf(closesDaily.slice(-120), 50);
+        var lastDaily = closesDaily[closesDaily.length - 1];
+
+        if (isFinite(e8_d) && isFinite(e21_d) && isFinite(e50_d) && isFinite(lastDaily)){
+          if (direction === 'long'){
+            tfDailyAlign = (e8_d >= e21_d * 0.998) && (e21_d >= e50_d * 0.998) && (lastDaily >= e8_d * 0.995);
+          } else {
+            tfDailyAlign = (e8_d <= e21_d * 1.002) && (e21_d <= e50_d * 1.002) && (lastDaily <= e8_d * 1.005);
+          }
+        }
+      }
+    }
+    if (tfDailyAlign) agreements++;
+
+    var score = 0, detail = '';
+    if (agreements === 3){
+      score = 10;
+      detail = '1H/4H/daily all agree on ' + direction;
+    } else if (agreements === 2){
+      score = 7;
+      detail = '2 of 3 timeframes agree on ' + direction;
+    } else if (agreements === 1){
+      score = 3;
+      detail = '1 of 3 timeframes agrees on ' + direction;
+    } else {
+      score = 0;
+      detail = 'no timeframe agreement';
+    }
+
+    return { score: score, detail: detail, maxScore: 10, agreements: agreements };
+  }
+
+  /* 4. RISK:REWARD GEOMETRY SCORER (15 pts)
+     Scores R:R ratio: 15pts if ≥2.0, 12pts if ≥1.5, 8pts if ≥1.0, 0pts if <1.0.
+     Bonus: 5pts if stop < 1% from entry, 3pts if < 1.5%.
+  */
+  function hgOmniRiskRewardScore(setup){
+    if (!setup || !setup.plan) return { score: 0, detail: 'no plan' };
+
+    var plan = setup.plan;
+    var entry = fin(plan.entry);
+    var stop = fin(plan.stop);
+    var t1 = fin(plan.t1);
+
+    if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1) || entry === stop){
+      return { score: 0, detail: 'incomplete plan levels' };
+    }
+
+    var risk = Math.abs(entry - stop);
+    var reward = Math.abs(t1 - entry);
+    var rr = risk > 0 ? reward / risk : 0;
+
+    var baseScore = 0;
+    var rrDetail = '';
+
+    if (rr >= 2.0){
+      baseScore = 15;
+      rrDetail = 'R:R ' + rr.toFixed(2) + ' >= 2.0';
+    } else if (rr >= 1.5){
+      baseScore = 12;
+      rrDetail = 'R:R ' + rr.toFixed(2) + ' >= 1.5';
+    } else if (rr >= 1.0){
+      baseScore = 8;
+      rrDetail = 'R:R ' + rr.toFixed(2) + ' >= 1.0';
+    } else {
+      baseScore = 0;
+      rrDetail = 'R:R ' + rr.toFixed(2) + ' < 1.0';
+    }
+
+    /* Stop precision bonus */
+    var stopPct = (risk / entry) * 100;
+    var bonusScore = 0, bonusDetail = '';
+
+    if (stopPct < 1.0){
+      bonusScore = 5;
+      bonusDetail = ' + 5pt tight stop bonus (' + stopPct.toFixed(2) + '%)';
+    } else if (stopPct < 1.5){
+      bonusScore = 3;
+      bonusDetail = ' + 3pt stop precision bonus (' + stopPct.toFixed(2) + '%)';
+    }
+
+    var totalScore = Math.min(baseScore + bonusScore, 20);  /* cap bonus doesn't exceed total */
+    var detail = rrDetail + (bonusDetail || '') + (bonusScore > 0 ? ' total=' + totalScore : '');
+
+    return { score: totalScore, detail: detail, maxScore: 20, rr: rr, stopPct: stopPct };
+  }
+
+  /* SOLIDITY SCORE: Combines all 4 P0 pillars (50 pts total) */
+  function hgOmniSolidityScore(setup){
+    if (!setup) return { score: 0, maxScore: 200, breakdown: {}, detail: 'no setup' };
+
+    var ob = hgOmniOrderBlockScore(setup);
+    var fvg = hgOmniFvgScore(setup);
+    var mtf = hgOmniMultiTfCascadeScore(setup);
+    var rr = hgOmniRiskRewardScore(setup);
+
+    var totalScore = ob.score + fvg.score + mtf.score + rr.score;
+    var maxStructuralScore = (ob.maxScore || 15) + (fvg.maxScore || 10) +
+                              (mtf.maxScore || 10) + (rr.maxScore || 20);
+
+    return {
+      score: totalScore,
+      maxScore: maxStructuralScore,
+      breakdown: {
+        orderBlock: { score: ob.score, maxScore: ob.maxScore || 15, detail: ob.detail },
+        fvg: { score: fvg.score, maxScore: fvg.maxScore || 10, detail: fvg.detail },
+        multiTfCascade: { score: mtf.score, maxScore: mtf.maxScore || 10, detail: mtf.detail, agreements: mtf.agreements },
+        riskReward: { score: rr.score, maxScore: rr.maxScore || 20, detail: rr.detail, rr: rr.rr }
+      },
+      detail: 'OB:' + ob.score + '/' + (ob.maxScore || 15) +
+              ' FVG:' + fvg.score + '/' + (fvg.maxScore || 10) +
+              ' MTF:' + mtf.score + '/' + (mtf.maxScore || 10) +
+              ' RR:' + rr.score + '/' + (rr.maxScore || 20)
+    };
+  }
+
+  /* ==================== end P0 solidity framework ==================== */
+
   function hgOmniGates(rows, hit, positioning, extra){
     /* One reason string for every gate that depends on pass-2 enrichment,
        declared FIRST because the funding gate runs before `x` is assigned and
@@ -5457,6 +5770,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniLiqMap = hgOmniLiqMap;
     window.hgOmniGates = hgOmniGates;
     window.hgOmniGrade = hgOmniGrade;
+    /* P0 Solidity Framework Scoring Functions */
+    window.hgOmniOrderBlockScore = hgOmniOrderBlockScore;
+    window.hgOmniFvgScore = hgOmniFvgScore;
+    window.hgOmniMultiTfCascadeScore = hgOmniMultiTfCascadeScore;
+    window.hgOmniRiskRewardScore = hgOmniRiskRewardScore;
+    window.hgOmniSolidityScore = hgOmniSolidityScore;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;
