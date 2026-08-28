@@ -4628,6 +4628,7 @@ terse status, and never launches a first-time scan on a global refresh.
       var open = [];
       var barTMap = {};  /* Map barT -> count for correlation detection */
       var evidenceCache = {};  /* Cache evidence lookups */
+      var livePrice = fin(__og.spotAnchor) || 0;  /* Current market price */
 
       /* Get ALL records from forward log, including open ones */
       if (typeof localStorage === 'undefined'){
@@ -4651,6 +4652,33 @@ terse status, and never launches a first-time scan on a global refresh.
         if (age < 0) age = 0;  /* Guard against clock skew */
 
         barTMap[rec.barT] = (barTMap[rec.barT] || 0) + 1;
+
+        /* Setup status based on current price */
+        var entry = fin(rec.entry);
+        var tp = fin(rec.t1);
+        var sl = fin(rec.stop);
+        var status = 'active';
+        var isClosed = false;
+
+        if (livePrice > 0 && entry > 0){
+          /* For SHORT setups (entry > tp typically): SL > entry, TP < entry */
+          if (entry > tp){  /* SHORT setup */
+            if (livePrice >= sl) { status = 'stopped'; isClosed = true; }  /* Hit SL */
+            else if (livePrice <= tp) { status = 'profit'; isClosed = true; }  /* Hit TP */
+            else if (livePrice < entry) { status = 'pending'; }  /* Not yet entered */
+            else { status = 'active'; }  /* In play */
+          }
+          /* For LONG setups: SL < entry, TP > entry */
+          else {
+            if (livePrice <= sl) { status = 'stopped'; isClosed = true; }  /* Hit SL */
+            else if (livePrice >= tp) { status = 'profit'; isClosed = true; }  /* Hit TP */
+            else if (livePrice > entry) { status = 'pending'; }  /* Not yet entered */
+            else { status = 'active'; }  /* In play */
+          }
+        }
+
+        /* Skip closed setups — show only ACTIVE or PENDING */
+        if (isClosed && age > 300) continue;  /* Skip closed setups older than 5 min */
 
         /* Gate confluence: count passing gates from stack3 field */
         var gateConf = fin(rec.stack3) || 0;
@@ -4681,6 +4709,7 @@ terse status, and never launches a first-time scan on a global refresh.
           age: age,
           pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
           status: rec.state || 'open',
+          tradeStatus: status,  /* active/pending/profit/stopped */
           mechanic: rec.mechanic,
           tab: rec.tab,
           gateConf: gateConf,
@@ -5154,7 +5183,13 @@ terse status, and never launches a first-time scan on a global refresh.
         var profitPts = Math.abs(tp - entry);
         var rr = riskPts > 0 ? (profitPts / riskPts).toFixed(2) : 'N/A';
 
-        h += '<div style="margin:12px 0;padding:12px;border:2px solid #22c55e;border-radius:4px;background:rgba(34,197,94,0.1)">';
+        /* Setup status badge */
+        var tradeStatus = topSetup.tradeStatus || 'active';
+        var statusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : tradeStatus === 'pending' ? '#f59e0b' : '#3b82f6';
+        var statusLabel = tradeStatus === 'profit' ? '✓ TARGET HIT' : tradeStatus === 'stopped' ? '✗ STOPPED OUT' : tradeStatus === 'pending' ? '⏳ PENDING ENTRY' : '▶ ACTIVE';
+
+        h += '<div style="margin:12px 0;padding:12px;border:2px solid ' + statusColor + ';border-radius:4px;background:rgba(34,197,94,0.1);position:relative">';
+        h += '<div style="position:absolute;top:8px;right:8px;background:' + statusColor + ';color:white;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:bold">' + statusLabel + '</div>';
         h += '<div style="font-weight:bold;margin-bottom:8px;color:#22c55e">📍 PRICE LEVELS</div>';
         h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
 
@@ -5215,7 +5250,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '<th style="text-align:center;padding:4px">Confluence</th>';
       h += '<th style="text-align:right;padding:4px">Open Since</th>';
       h += '<th style="text-align:right;padding:4px">P&L</th>';
-      h += '<th style="text-align:right;padding:4px">Ready</th>';
+      h += '<th style="text-align:center;padding:4px">Trade Status</th>';
       h += '</tr>';
 
       toShow.forEach(function(setup, idx){
@@ -5235,6 +5270,11 @@ terse status, and never launches a first-time scan on a global refresh.
         var mktScore = fin(setup.compositeScore) || 0;
         var mktColor = mktScore >= 70 ? '#22c55e' : mktScore >= 50 ? '#f59e0b' : '#dc2626';
 
+        /* Trade status badge */
+        var tradeStatus = setup.tradeStatus || 'active';
+        var tradeStatusLabel = tradeStatus === 'profit' ? '✓ PROFIT' : tradeStatus === 'stopped' ? '✗ SL' : tradeStatus === 'pending' ? '⏳ PENDING' : '▶ ACTIVE';
+        var tradeStatusColor = tradeStatus === 'profit' ? '#22c55e' : tradeStatus === 'stopped' ? '#dc2626' : tradeStatus === 'pending' ? '#f59e0b' : '#3b82f6';
+
         /* HIGHLIGHT THE BEST SETUP (index 0) with golden background and border */
         var isBest = idx === 0;
         var rowStyle = isBest
@@ -5251,7 +5291,7 @@ terse status, and never launches a first-time scan on a global refresh.
         h += '<td style="text-align:right;padding:4px">'
           + (isFinite(setup.pnl) ? (setup.pnl > 0 ? '+' : '') + esc(setup.pnl.toFixed(2)) + 'R' : '—')
           + '</td>';
-        h += '<td style="text-align:center;padding:4px">' + readyBadge + '</td>';
+        h += '<td style="text-align:center;padding:4px;color:' + tradeStatusColor + ';font-weight:bold">' + tradeStatusLabel + '</td>';
         h += '</tr>';
       });
       h += '</table></div>';
