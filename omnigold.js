@@ -4686,17 +4686,19 @@ terse status, and never launches a first-time scan on a global refresh.
     var status = 'active';
     var isClosed = false;
 
-    if (livePrice > 0 && entry > 0){
-      if (entry > tp){  /* SHORT */
-        if (livePrice >= sl) { status = 'stopped'; isClosed = true; }
-        else if (livePrice <= tp) { status = 'profit'; isClosed = true; }
-        else if (livePrice >= entry) { status = 'active'; }
-        else { status = 'pending'; }
-      } else {  /* LONG */
-        if (livePrice <= sl) { status = 'stopped'; isClosed = true; }
-        else if (livePrice >= tp) { status = 'profit'; isClosed = true; }
-        else if (livePrice <= entry) { status = 'active'; }
-        else { status = 'pending'; }
+    if (livePrice > 0 && isFinite(entry) && isFinite(tp) && isFinite(sl)){
+      if (entry > tp){  /* SHORT: entry > TP, stop > entry */
+        /* SHORT: sell at entry, profit if goes down to TP, stop if goes up to SL */
+        if (livePrice >= sl) { status = 'stopped'; isClosed = true; }  /* Price rose to/past stop */
+        else if (livePrice <= tp) { status = 'profit'; isClosed = true; }  /* Price fell to/past target */
+        else if (livePrice > entry) { status = 'pending'; }  /* Price above entry, waiting to come down */
+        else { status = 'active'; }  /* Price between TP and entry = in SHORT trade */
+      } else {  /* LONG: entry < TP, stop < entry */
+        /* LONG: buy at entry, profit if goes up to TP, stop if goes down to SL */
+        if (livePrice <= sl) { status = 'stopped'; isClosed = true; }  /* Price fell to/past stop */
+        else if (livePrice >= tp) { status = 'profit'; isClosed = true; }  /* Price rose to/past target */
+        else if (livePrice < entry) { status = 'pending'; }  /* Price below entry, waiting to come up */
+        else { status = 'active'; }  /* Price between entry and TP = in LONG trade */
       }
     }
 
