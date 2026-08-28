@@ -35,6 +35,7 @@ function shellEntries(sw){
 
 const html = fs.readFileSync(root + 'index.html', 'utf8');
 const sw = fs.readFileSync(root + 'sw.js', 'utf8');
+const stamp = fs.readFileSync(root + 'build-stamp.js', 'utf8');
 const readme = fs.readFileSync(root + 'README.md', 'utf8');
 const tabalerts = fs.readFileSync(root + 'tabalerts.js', 'utf8');
 
@@ -49,6 +50,17 @@ console.log('== check-production script ==');
   ok(/STALE — merge \+ redeploy needed/.test(src), 'check-production prints STALE status');
   const pkg = JSON.parse(fs.readFileSync(root + 'package.json', 'utf8'));
   ok(pkg.scripts && pkg.scripts['check:prod'], 'package.json exposes check:prod');
+}
+
+console.log('== index.html cache bust matches build stamp ==');
+{
+  const verM = stamp.match(/version\s*:\s*['"]([A-Za-z0-9._-]+)['"]/);
+  const pin = verM[1].replace(/^hg-v/, '');
+  const bustPins = [...new Set([...html.matchAll(/<script[^>]+src="[^"]*\?v=(\d+)"/g)].map(m => m[1]))];
+  ok(bustPins.length >= 1 && bustPins.every(p => p === pin),
+     'every index.html script ?v= matches build-stamp (' + pin + ') — got: ' + bustPins.join(', '));
+  ok(new RegExp("HG_CACHE\\s*=\\s*['\"]" + verM[1] + "['\"]").test(sw),
+     'sw.js HG_CACHE matches build-stamp.js');
 }
 
 console.log('== alert cycle constants (README alignment) ==');
