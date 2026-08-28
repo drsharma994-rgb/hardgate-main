@@ -315,6 +315,9 @@ for (const [name, mk, gateKey] of fields){
                                separates that from an explicitly null plan,
                                which is a veto */
                             'plan-levels', 'level-fresh',
+                            /* fill-risk needs a plan + livePx; this harness
+                               supplies neither, so UNCHECKED is honest */
+                            'fill-risk',
                             /* shared context reads (hg-gates.js
                                hgIndicatorGates) — indicator context that
                                may be uncomputable on a thin harness tape,
