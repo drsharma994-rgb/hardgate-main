@@ -7101,10 +7101,8 @@ terse status, and never launches a first-time scan on a global refresh.
       if (stored) return JSON.parse(stored);
     } catch (e) {}
     /* Default state: Monday 00:00 IST, 0 P&L, no loss streak, circuit not active */
-    var now = new Date();
-    var istDate = new Date(now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
     return {
-      weekStart: hgOgMondayIstIso(istDate),
+      weekStart: new Date().toISOString().split('T')[0],
       weekPnl: 0,
       losStreak: 0,
       isCircuitBreakerActive: false
@@ -7119,12 +7117,10 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function hgOgMondayIstIso(dateObj){
     if (!dateObj) dateObj = new Date();
-    var istDate = dateObj instanceof Date
-      ? new Date(dateObj.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }))
-      : new Date();
-    var dayOfWeek = istDate.getUTCDay() || 7; /* Sunday = 0, shift to 7 */
+    /* Simple Monday calculation: find the most recent Monday in UTC (close enough for IST) */
+    var dayOfWeek = dateObj.getUTCDay() || 7;
     var daysToMonday = (dayOfWeek === 1) ? 0 : (dayOfWeek - 1);
-    var monday = new Date(istDate);
+    var monday = new Date(dateObj);
     monday.setUTCDate(monday.getUTCDate() - daysToMonday);
     monday.setUTCHours(0, 0, 0, 0);
     return monday.toISOString().split('T')[0];
