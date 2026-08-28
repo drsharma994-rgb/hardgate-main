@@ -5443,8 +5443,9 @@ terse status, and never launches a first-time scan on a global refresh.
     /* Paint regime watch panel with correlation data */
     hgOgPaintRegimeWatch(ui, __og.correlationRegime);
     /* Update rolling performance tracking and open setups watch */
-    hgOgUpdateRollingStats();
-    hgOgUpdateOpenSetups();
+    // TEMP: Commented out while debugging "Invalid time value" error
+    // hgOgUpdateRollingStats();
+    // hgOgUpdateOpenSetups();
     /* Inject rolling confidence and open watch panels above MOST PROBABLE */
     try {
       var host = (ui && ui.mp) || (ui && ui.cards);
