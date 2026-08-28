@@ -6234,7 +6234,7 @@ terse status, and never launches a first-time scan on a global refresh.
         return hgOgFetchCorrelationRegime(
           (res.swing.rows && res.swing.rows.length) ? res.swing.rows : res.scalp.rows,
           shared.macro
-        ).then(function(regime){
+        ).then(async function(regime){
           __og.correlationRegime = regime;
 
         /* SPOT ALIGN — same discipline as GOLD SCALP/SWING. Proxy feeds
