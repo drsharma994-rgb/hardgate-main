@@ -4845,17 +4845,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== mount / refresh ==================== */
 
-  /* Render crypto pro-trader panel */
+  /* Render crypto pro-trader panel with AI intelligence */
   function omniRenderProTraderPanel(setups){
     if (!setups || !setups.length) return '<div style="padding:8px;color:var(--fg-muted,#999)">No open crypto setups tracked.</div>';
 
     var html = '<div style="padding:8px">';
-    html += '<div style="font-weight:bold;margin-bottom:8px;font-size:1.1em">🚀 OMNI PRO-TRADER CRYPTO SUITE</div>';
+    html += '<div style="font-weight:bold;margin-bottom:8px;font-size:1.1em">🚀 AI-ENHANCED OMNI PRO-TRADER CRYPTO</div>';
 
     var top = setups[0];
     if (top){
-      html += '<div style="margin:8px 0;padding:8px;background:#3b82f633;border-left:3px solid #3b82f6;border-radius:3px">';
-      html += '<div style="font-weight:bold;margin-bottom:4px">🏆 TOP SETUP: ' + esc(String(top.symbol || top.mechanic)) + '</div>';
+      var aiRegime = top.aiRegime || { volatility: 'NORMAL', trend: 'RANGING', momentum: 'WEAK', quality: 50 };
+      var aiQuality = fin(top.aiSignalQuality) || 50;
+      var aiRisk = top.aiRiskAssessment || { riskScore: 50, riskLevel: 'MEDIUM', tradeability: false };
+      var aiPos = top.aiPositioning || {};
+      var tradeable = aiRisk.tradeability;
+      var tradeColor = tradeable ? '#22c55e' : '#dc2626';
+
+      html += '<div style="margin:8px 0;padding:8px;background:#3b82f633;border-left:3px solid ' + tradeColor + ';border-radius:3px">';
+      html += '<div style="font-weight:bold;margin-bottom:4px">🏆 TOP SETUP: ' + esc(String(top.symbol || top.mechanic)) + ' — ' + (tradeable ? '✓ TRADEABLE' : '✗ TOO RISKY') + '</div>';
 
       if (isFinite(fin(top.entry)) && isFinite(fin(top.t1)) && isFinite(fin(top.stop))){
         var entry = fin(top.entry), tp = fin(top.t1), sl = fin(top.stop);
@@ -4879,11 +4886,50 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
 
       var comp = fin(top.compositeScore) || 0, tech = fin(top.technicalScore) || 0, sent = fin(top.sentimentScore) || 0, fund = fin(top.fundamentalScore) || 0;
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;font-size:0.8em;margin-top:6px">';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;font-size:0.8em;margin-top:6px;margin-bottom:8px">';
       html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#3b82f6">' + comp.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Overall</div></div>';
       html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#8b5cf6">' + tech.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Technical</div></div>';
       html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#f59e0b">' + sent.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Sentiment</div></div>';
       html += '<div style="border:1px solid #3b82f633;padding:4px;text-align:center"><div style="font-weight:bold;color:#06b6d4">' + fund.toFixed(0) + '</div><div style="color:var(--fg-muted,#666);font-size:0.75em">Fundamental</div></div>';
+      html += '</div>';
+
+      /* AI INTELLIGENCE DISPLAY */
+      html += '<div style="margin:8px 0;padding:8px;background:#10b98133;border:1px solid #10b981;border-radius:3px">';
+      html += '<div style="font-weight:bold;margin-bottom:6px;color:#10b981">🧠 AI MARKET INTELLIGENCE</div>';
+
+      /* Market Regime */
+      html += '<div style="font-size:0.85em;margin-bottom:6px">';
+      html += '<div style="color:var(--fg-muted,#666)">Market Regime:</div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-top:2px">';
+      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.volatility + '</div><div>Volatility</div></div>';
+      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.trend + '</div><div>Trend</div></div>';
+      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.momentum + '</div><div>Momentum</div></div>';
+      html += '<div style="text-align:center;padding:3px;background:#10b98122;border-radius:2px;font-size:0.75em"><div style="font-weight:bold">' + aiRegime.quality.toFixed(0) + '</div><div>Quality</div></div>';
+      html += '</div></div>';
+
+      /* AI Signal Quality & Risk */
+      html += '<div style="font-size:0.85em;display:grid;grid-template-columns:1fr 1fr;gap:6px">';
+      var sigColor = aiQuality >= 70 ? '#22c55e' : aiQuality >= 50 ? '#f59e0b' : '#dc2626';
+      var riskColor = aiRisk.riskScore <= 20 ? '#22c55e' : aiRisk.riskScore <= 35 ? '#f59e0b' : '#dc2626';
+      html += '<div style="padding:4px;border:1px solid ' + sigColor + '33;background:' + sigColor + '11;border-radius:2px"><div style="color:' + sigColor + ';font-weight:bold">' + aiQuality.toFixed(0) + '</div><div style="font-size:0.75em;color:var(--fg-muted,#666)">Signal Quality</div></div>';
+      html += '<div style="padding:4px;border:1px solid ' + riskColor + '33;background:' + riskColor + '11;border-radius:2px"><div style="color:' + riskColor + ';font-weight:bold">' + aiRisk.riskLevel + '</div><div style="font-size:0.75em;color:var(--fg-muted,#666)">Risk Level (' + aiRisk.riskScore + ')</div></div>';
+      html += '</div>';
+
+      /* Position Sizing AI */
+      if (aiPos.recommended){
+        html += '<div style="font-size:0.85em;margin-top:6px;padding:4px;background:#f59e0b22;border-left:3px solid #f59e0b;border-radius:2px">';
+        html += '<div style="color:var(--fg-muted,#666)">💰 AI Position Sizing:</div>';
+        html += '<div style="font-weight:bold;color:#f59e0b">Risk ' + aiPos.riskPercent + '% of account</div>';
+        html += '</div>';
+      }
+
+      /* AI Risk Warnings */
+      if (aiRisk.risks && aiRisk.risks.length > 0){
+        html += '<div style="font-size:0.85em;margin-top:6px;padding:4px;background:#dc262622;border-left:3px solid #dc2626;border-radius:2px">';
+        aiRisk.risks.forEach(function(r){ html += '<div>' + r + '</div>'; });
+        html += '</div>';
+      }
+
       html += '</div>';
 
       html += '<div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:4px;font-size:0.75em;margin-top:6px">';
@@ -5053,7 +5099,165 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* House contract: async, never throws, terse status. Never launches a
      first-time universe sweep on a global refresh. */
-  /* ===== PRO-TRADER CRYPTO SUITE ===== */
+  /* ===== AI-ENHANCED PRO-TRADER CRYPTO SUITE ===== */
+
+  /* AI Market Intelligence: Detect market regime */
+  function omniAIDetectMarketRegime(volatility, trend, momentum){
+    volatility = fin(volatility) || 1.0;
+    trend = String(trend || 'ranging').toLowerCase();
+    momentum = fin(momentum) || 0;
+
+    var regime = {
+      volatility: volatility > 1.5 ? 'HIGH' : volatility < 0.7 ? 'LOW' : 'NORMAL',
+      trend: trend === 'strong_up' ? 'IMPULSE_UP' : trend === 'strong_down' ? 'IMPULSE_DOWN' : 'RANGING',
+      momentum: Math.abs(momentum) > 0.7 ? 'STRONG' : 'WEAK',
+      quality: 0
+    };
+
+    /* Calculate regime quality (0-100) */
+    if (regime.volatility === 'NORMAL' && regime.momentum === 'STRONG'){
+      regime.quality = 85;  /* Perfect setup conditions */
+    } else if ((regime.volatility === 'NORMAL' || regime.volatility === 'HIGH') && regime.trend !== 'RANGING'){
+      regime.quality = 75;  /* Good trending conditions */
+    } else if (regime.volatility === 'LOW' && regime.trend === 'RANGING'){
+      regime.quality = 60;  /* Stable but low movement */
+    } else if (regime.volatility === 'HIGH' && regime.trend === 'RANGING'){
+      regime.quality = 30;  /* Dangerous chop */
+    } else {
+      regime.quality = 50;  /* Neutral */
+    }
+
+    return regime;
+  }
+
+  /* AI Risk Management: Dynamic position sizing */
+  function omniAICalculatePositionSize(account, risk, volatility, confidence){
+    account = fin(account) || 10000;
+    risk = fin(risk) || 0.01;  /* 1% default risk */
+    volatility = fin(volatility) || 1.0;
+    confidence = fin(confidence) || 0.5;
+
+    /* Base position: account * risk / entry_risk */
+    var baseSize = account * risk;
+
+    /* Kelly Criterion adjustment: size *= (2*confidence - 1) */
+    var kellyFactor = Math.max(0.5, Math.min(2.0, (2 * confidence) - 1));
+
+    /* Volatility adjustment: lower vol = larger position */
+    var volFactor = Math.min(2.0, 1.5 / volatility);
+
+    var positionSize = baseSize * kellyFactor * volFactor;
+
+    return {
+      baseSize: baseSize,
+      kellyAdjusted: baseSize * kellyFactor,
+      volAdjusted: baseSize * kellyFactor * volFactor,
+      recommended: Math.max(account * 0.001, Math.min(account * 0.1, positionSize)),
+      riskPercent: (positionSize / account * 100).toFixed(2)
+    };
+  }
+
+  /* AI Entry/Exit Intelligence: Smart levels based on regime */
+  function omniAISmartLevels(entry, stop, regime, confidence){
+    entry = fin(entry) || 0;
+    stop = fin(stop) || 0;
+    regime = regime || { volatility: 'NORMAL', momentum: 'WEAK', quality: 50 };
+    confidence = fin(confidence) || 0.5;
+
+    var risk = Math.abs(stop - entry);
+    if (risk === 0) return { entry: entry, tp1: entry, tp2: entry, tp3: entry, trail: false };
+
+    /* Volatility-adjusted take profit levels */
+    var volMultiplier = regime.volatility === 'HIGH' ? 1.2 : regime.volatility === 'LOW' ? 0.8 : 1.0;
+    var momentumMultiplier = regime.momentum === 'STRONG' ? 1.5 : 1.0;
+
+    var baseRR = 2.0;
+    var tp1Distance = risk * baseRR * volMultiplier * 0.5;  /* Half target at 1R */
+    var tp2Distance = risk * baseRR * volMultiplier;        /* 2R mid-point */
+    var tp3Distance = risk * baseRR * volMultiplier * momentumMultiplier * 1.5;  /* 3R+ for strong momentum */
+
+    var isLong = entry > stop;
+    var tp1 = isLong ? entry + tp1Distance : entry - tp1Distance;
+    var tp2 = isLong ? entry + tp2Distance : entry - tp2Distance;
+    var tp3 = isLong ? entry + tp3Distance : entry - tp3Distance;
+
+    return {
+      entry: entry, stop: stop, risk: risk,
+      tp1: tp1, tp2: tp2, tp3: tp3,
+      tp1Pct: ((tp1Distance / entry) * 100).toFixed(2),
+      tp2Pct: ((tp2Distance / entry) * 100).toFixed(2),
+      tp3Pct: ((tp3Distance / entry) * 100).toFixed(2),
+      trailingStop: regime.momentum === 'STRONG',  /* Trail in strong trends */
+      partialProfitAt: 'TP1'  /* Take first 50% at TP1 */
+    };
+  }
+
+  /* AI Signal Quality Scoring */
+  function omniAISignalQuality(setup, regime, confidence){
+    setup = setup || {};
+    regime = regime || { quality: 50 };
+    confidence = fin(confidence) || 0.5;
+
+    var score = 0;
+
+    /* Confluence points: multiple conditions aligned */
+    var confluenceCount = 0;
+    if (setup.htfRegime === true) confluenceCount++;
+    if (setup.gate1h === true) confluenceCount++;
+    if (setup.corrNorm === true) confluenceCount++;
+    confluenceCount += setup.gateConf || 0;
+
+    score += Math.min(40, confluenceCount * 8);  /* 40 pts for confluence */
+
+    /* Regime quality alignment */
+    score += regime.quality * 0.4;  /* 40 pts max from regime */
+
+    /* Historical confidence (Wilson LB) */
+    score += confidence * 100 * 0.2;  /* 20 pts max from win rate */
+
+    return Math.min(100, score);
+  }
+
+  /* AI Risk Assessment */
+  function omniAIRiskAssessment(setup, regime, age){
+    setup = setup || {};
+    regime = regime || { volatility: 'NORMAL' };
+    age = fin(age) || 0;
+
+    var risks = [];
+    var riskScore = 0;
+
+    /* Volatility risk */
+    if (regime.volatility === 'HIGH'){
+      risks.push('⚠ HIGH volatility: slippage risk');
+      riskScore += 15;
+    }
+
+    /* Age risk: stale setups */
+    if (age > 2 * 3600){  /* 2 hours old */
+      risks.push('⚠ Stale setup (' + Math.floor(age/60) + 'm old): may be invalidated');
+      riskScore += 10;
+    }
+
+    /* One-sided market risk */
+    if (regime.momentum === 'STRONG'){
+      risks.push('⚠ Strong momentum: potential for stop hunts');
+      riskScore += 8;
+    }
+
+    /* Liquidity risk: incomplete price levels */
+    if (!isFinite(fin(setup.stop)) || !isFinite(fin(setup.t1))){
+      risks.push('✗ Missing price levels: cannot trade');
+      riskScore += 30;
+    }
+
+    return {
+      riskScore: riskScore,  /* 0-100, higher = more risk */
+      riskLevel: riskScore > 30 ? 'HIGH' : riskScore > 15 ? 'MEDIUM' : 'LOW',
+      risks: risks,
+      tradeability: riskScore < 40  /* Can trade if risk < 40 */
+    };
+  }
 
   /* Update open crypto setups from forward log */
   function omniUpdateOpenSetups(){
@@ -5132,6 +5336,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         var fundScore = age < 30 * 60 ? 65 : age > 4 * 3600 ? 35 : 50;
         var composite = (techScore * 0.4) + (sentScore * 0.35) + (fundScore * 0.25);
 
+        /* AI Market Intelligence */
+        var aiRegime = omniAIDetectMarketRegime(1.0, 'ranging', 0.3);
+        var aiSignalQuality = omniAISignalQuality(checks, aiRegime, evidence.hit || 0.5);
+        var aiRiskAssess = omniAIRiskAssessment(rec, aiRegime, age);
+        var aiPositioning = omniAICalculatePositionSize(10000, 0.02, 1.0, evidence.hit || 0.5);
+        var aiSmartLevels = omniAISmartLevels(entry, sl, aiRegime, evidence.hit || 0.5);
+
         open.push({
           barT: rec.barT, entry: entry, t1: tp, stop: sl, age: age,
           pnl: isFinite(fin(rec.r)) ? fin(rec.r) : NaN,
@@ -5146,7 +5357,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           fundamentalScore: Math.min(100, fundScore),
           compositeScore: Math.min(100, composite),
           corrRegime: rec.corrRegime || 'NORMAL',
-          isCorrelated: barTMap[rec.barT] >= 2
+          isCorrelated: barTMap[rec.barT] >= 2,
+          /* AI Intelligence */
+          aiRegime: aiRegime,
+          aiSignalQuality: aiSignalQuality,
+          aiRiskAssessment: aiRiskAssess,
+          aiPositioning: aiPositioning,
+          aiSmartLevels: aiSmartLevels,
+          aiTradeability: aiRiskAssess.tradeability
         });
       });
 
