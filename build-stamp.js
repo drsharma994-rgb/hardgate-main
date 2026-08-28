@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v514',
-  pack: 'refresh button UX + performance fixes for app hangs',
-  built: '2026-08-28T07:35:00Z',
-  note: 'Fixed: button layout (no overlay), removed auto-repaint from poller (eliminates hangs).'
+  version: 'hg-v515',
+  pack: 'disable poller entirely - no more app freezes',
+  built: '2026-08-28T07:40:00Z',
+  note: 'Disabled setInterval poller (was root cause of hangs). Manual refresh only via button.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
