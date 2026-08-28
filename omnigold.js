@@ -4832,11 +4832,18 @@ terse status, and never launches a first-time scan on a global refresh.
         setupObj.fundamentalScore = hgOgFundamentalScore(setupObj.age, setupObj.corrRegime);
         setupObj.compositeScore = hgOgCompositeScore(setupObj, setupObj.corrRegime);
 
+        /* Multi-factor confluence score (0-100): True setup quality across all dimensions */
+        var confluenceResult = hgOgAdvancedConfluenceScore(setupObj);
+        setupObj.confluenceScore = confluenceResult.score;
+        setupObj.confluenceFactors = confluenceResult.factors;
+        setupObj.confluenceInterpretation = confluenceResult.interpretation;
+
         open.push(setupObj);
       });
 
-      /* Final sort by composite score */
+      /* Final sort: Confluence score first (multi-factor), then composite, then gates */
       open.sort(function(a, b){
+        if (b.confluenceScore !== a.confluenceScore) return b.confluenceScore - a.confluenceScore;
         if (b.compositeScore !== a.compositeScore) return b.compositeScore - a.compositeScore;
         if (b.gateConf !== a.gateConf) return b.gateConf - a.gateConf;
         return b.age - a.age;
@@ -4957,6 +4964,99 @@ terse status, and never launches a first-time scan on a global refresh.
   /* Expose to global scope for onclick handlers */
   if (typeof window !== 'undefined'){
     window.hgOgManualRefresh = hgOgManualRefresh;
+  }
+
+  /* MULTI-FACTOR CONFLUENCE SCORING — Advanced setup quality assessment */
+  function hgOgAdvancedConfluenceScore(setup){
+    if (!setup) return { score: 0, factors: [] };
+    var factors = [];
+    var totalScore = 0;
+
+    /* 1. TREND CONFLUENCE (25 pts max) — Multi-MA alignment */
+    var trendScore = 0;
+    if (setup.gateConf >= 3) trendScore = 25;  /* 3-gate PRIME */
+    else if (setup.gateConf >= 2) trendScore = 15;  /* 2-gate HIGH */
+    else if (setup.gateConf >= 1) trendScore = 8;  /* 1-gate LOW */
+    factors.push({ name: 'Trend Confluence', value: trendScore, max: 25 });
+    totalScore += trendScore;
+
+    /* 2. ENTRY GEOMETRY (20 pts max) — Risk-Reward + Entry precision */
+    var rr = setup.entry && setup.stop ? Math.abs(setup.t1 - setup.entry) / Math.abs(setup.stop - setup.entry) : 0;
+    var geometryScore = 0;
+    if (rr >= 2.0) geometryScore = 20;  /* Excellent R:R */
+    else if (rr >= 1.5) geometryScore = 15;  /* Good R:R */
+    else if (rr >= 1.0) geometryScore = 8;  /* Acceptable */
+    factors.push({ name: 'Entry Geometry', value: geometryScore, max: 20 });
+    totalScore += geometryScore;
+
+    /* 3. MARKET CONDITIONS (20 pts max) — Technical + Sentiment + Fundamental */
+    var marketScore = Math.min(20, (fin(setup.compositeScore) || 0) / 5);
+    factors.push({ name: 'Market Conditions', value: marketScore, max: 20 });
+    totalScore += marketScore;
+
+    /* 4. PRE-ENTRY CONFIRMATION (15 pts max) — Checklist passing */
+    var checkScore = 0;
+    if (setup.checksPass >= 5) checkScore = 15;  /* All checks pass */
+    else if (setup.checksPass >= 4) checkScore = 12;  /* 4/5 pass */
+    else if (setup.checksPass >= 3) checkScore = 6;  /* 3/5 pass */
+    factors.push({ name: 'Pre-Entry Checks', value: checkScore, max: 15 });
+    totalScore += checkScore;
+
+    /* 5. WIN RATE CONFIDENCE (15 pts max) — Wilson Lower Bound */
+    var wilsonScore = 0;
+    if (setup.wilsonLo && isFinite(setup.wilsonLo)){
+      wilsonScore = Math.min(15, setup.wilsonLo * 0.3);  /* Scale 0-50% to 0-15 pts */
+    }
+    factors.push({ name: 'Win Rate Confidence', value: wilsonScore, max: 15 });
+    totalScore += wilsonScore;
+
+    /* 6. SETUP AGE & FRESHNESS (5 pts max) — Recent > Stale */
+    var ageScore = 0;
+    if (setup.age < 3600) ageScore = 5;  /* Fresh (< 1h) */
+    else if (setup.age < 86400) ageScore = 2;  /* Recent (< 24h) */
+    factors.push({ name: 'Setup Freshness', value: ageScore, max: 5 });
+    totalScore += ageScore;
+
+    return {
+      score: Math.round(totalScore),
+      maxScore: 100,
+      factors: factors,
+      interpretation: totalScore >= 85 ? 'EXCEPTIONAL' : totalScore >= 70 ? 'STRONG' : totalScore >= 50 ? 'FAIR' : 'WEAK'
+    };
+  }
+
+  /* Multi-Factor Confluence Display */
+  function hgOgRenderConfluenceBreakdown(setup){
+    if (!setup || !setup.confluenceScore) return '';
+    var score = setup.confluenceScore || 0;
+    var color = score >= 85 ? '#10b981' : score >= 70 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#dc2626';
+    var badge = score >= 85 ? '🏆 EXCEPTIONAL' : score >= 70 ? '✓ STRONG' : score >= 50 ? '⚠ FAIR' : '✗ WEAK';
+
+    var html = '<div style="margin:12px 0;padding:8px;border:2px solid ' + color + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
+    html += '<div style="font-weight:bold;margin-bottom:8px;color:' + color + '">⭐ MULTI-FACTOR CONFLUENCE</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="font-size:2em;font-weight:bold;color:' + color + '">' + score + '/100</div>';
+    html += '<div style="background:' + color + ';color:white;padding:4px 8px;border-radius:6px;font-size:0.85em;font-weight:bold">' + badge + '</div>';
+    html += '</div>';
+
+    /* Factor breakdown */
+    if (setup.confluenceFactors && setup.confluenceFactors.length > 0){
+      html += '<div style="font-size:0.9em;color:var(--fg-muted,#666)">';
+      setup.confluenceFactors.forEach(function(f){
+        var barColor = f.value >= (f.max * 0.8) ? '#22c55e' : f.value >= (f.max * 0.6) ? '#f59e0b' : '#dc2626';
+        html += '<div style="margin-bottom:6px">';
+        html += '<div style="display:flex;justify-content:space-between;margin-bottom:2px">';
+        html += '<span>' + f.name + '</span>';
+        html += '<span style="font-weight:bold;color:' + barColor + '">' + Math.round(f.value) + '/' + f.max + '</span>';
+        html += '</div>';
+        html += '<div style="height:8px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden">';
+        html += '<div style="height:100%;width:' + (f.value/f.max*100) + '%;background:' + barColor + '"></div>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
   }
 
   /* Market Conditions Score Display — 3D scoring */
@@ -5430,6 +5530,10 @@ terse status, and never launches a first-time scan on a global refresh.
         h += '</div>';
       }
 
+      /* Display multi-factor confluence breakdown FIRST (most important) */
+      h += hgOgRenderConfluenceBreakdown(topSetup);
+
+      /* Then market conditions and checklist */
       h += hgOgRenderMarketConditionsScore(topSetup);
       h += hgOgRenderChecklist(topSetup);
       h += hgOgRenderConfidence(topSetup.evidence);
