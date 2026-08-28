@@ -5371,7 +5371,11 @@ terse status, and never launches a first-time scan on a global refresh.
 
     /* 2. MARKET CONDITIONS SCORE — 3D rating under current conditions */
     var topSetup = setups.length > 0 ? setups[0] : null;
-    if (topSetup){
+
+    /* QUALITY GATE: Only show setups that meet minimum standards */
+    var qualityGatePass = topSetup && topSetup.checksPass >= 5 && fin(topSetup.compositeScore) >= 70;
+
+    if (topSetup && qualityGatePass){
       h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">🏆 TOP SETUP (Best for Current Conditions)</div>';
 
       /* PRICE LEVELS — Entry, TP, SL */
@@ -5427,6 +5431,19 @@ terse status, and never launches a first-time scan on a global refresh.
       h += hgOgRenderMarketConditionsScore(topSetup);
       h += hgOgRenderChecklist(topSetup);
       h += hgOgRenderConfidence(topSetup.evidence);
+    } else {
+      /* No trade-ready setups: show why */
+      h += '<div style="margin:12px 0;padding:12px;border:2px solid #f59e0b;border-radius:4px;background:rgba(245,158,11,0.1)">';
+      h += '<div style="color:#f59e0b;font-weight:bold;margin-bottom:8px">⏸️ NO TRADE-READY SETUPS</div>';
+      if (topSetup){
+        var reason = '';
+        if (fin(topSetup.compositeScore) < 70) reason = 'Market quality score ' + fin(topSetup.compositeScore).toFixed(0) + '/100 (need ≥70)';
+        if (topSetup.checksPass < 5) reason = 'Pre-entry checks ' + topSetup.checksPass + '/5 passing (need 5/5)';
+        h += '<div style="color:var(--fg-muted,#666);font-size:0.9em">' + (reason || 'Quality threshold not met') + '</div>';
+      } else {
+        h += '<div style="color:var(--fg-muted,#666);font-size:0.9em">No open setups tracked. Run a scan to find opportunities.</div>';
+      }
+      h += '</div>';
     }
 
     /* 3. EQUITY CURVE — Daily P&L */
