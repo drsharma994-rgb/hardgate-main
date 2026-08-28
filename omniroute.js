@@ -168,7 +168,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var DAILY_SLOW = 21;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
-                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '' };
+                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', held: { n: 0 } };
   /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
      hardRefreshAll used to click RUN, which blanked the cards and then
      often died on a venue blip — "the setup disappears after 1 minute,
@@ -1567,6 +1567,69 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     gates.push({ key:'level-fresh', hard:false, info: lfInfo, pass: lfOk, why: lfWhy });
 
+    /* FILL RISK — a limit away from market is not a position until it fills.
+
+       CRYPTO MEASUREMENT STUB: The never-fill rates below are from OMNIGOLD's
+       backtesting on 1,000 PAXG bars per horizon. These DO NOT apply to crypto
+       yet — different asset class, different liquidity, different patterns.
+       The desk must calibrate crypto-specific rates by replaying every setup
+       this scan forms on crypto candles and asking whether price traded the
+       entry inside the horizon. Record the rates here.
+
+       For now: using gold's rates as a placeholder with a loud flag that
+       they need crypto-specific calibration. This lets the gate wire in
+       and show up on cards without claiming measured truth it does not have.
+
+       Gold's measured rates (1,000 bars per horizon):
+         |entry-market|   SCALP never fills   SWING never fills
+           0-0.1R              5.3%                0.5%
+           0.1-0.25R          14.0%                7.0%
+           0.25-0.5R          21.3%               18.7%
+           0.5-1R             15.8%               20.3%
+           1R+                25.9%               33.6%
+
+       The same replay also showed why this must be DISCLOSED and not assumed
+       away: counting away-limits as if they always filled flipped a -0.285R
+       population to +0.401R on paper, because the limits that never fill are
+       disproportionately the trades where price ran off favourably without you.
+
+       INFO, not a veto. Fill risk is a property of the ORDER, not of the
+       setup's quality — the setup may be excellent and simply require the
+       patience to miss it one time in five. The read abstains at or through
+       market (the order fills now; there is nothing to argue about) and
+       argues AGAINST only past 0.25R, where the measured never-fill rate
+       crosses one in five on both horizons. */
+    var frOk = null, frWhy = 'no plan supplied — fill risk not judged', frGapR = NaN;
+    if (plHas && plObj && isFinite(fin(plObj.entry)) && isFinite(fin(plObj.stop))){
+      var frE = fin(plObj.entry), frS = fin(plObj.stop), frPx = fin(x.livePx);
+      var frRisk = Math.abs(frE - frS);
+      if (!isFinite(frPx) || !(frRisk > 0)){
+        frWhy = 'no live price this scan — fill risk not judged';
+      } else {
+        var frAway = (hit.dir === 'long') ? (frE < frPx - 1e-9) : (frE > frPx + 1e-9);
+        frGapR = Math.abs(frE - frPx) / frRisk;
+        if (!frAway){
+          frWhy = 'entry at or through market — the order fills immediately';
+        } else if (frGapR <= 0.25){
+          frOk = true;
+          frWhy = '[CRYPTO STUB: gold rates] limit ' + Math.abs(frE - frPx).toFixed(2) + ' pts (' + frGapR.toFixed(2)
+                + 'R) from market — near; measured on gold, about 1 in 10 such limits never fills inside the horizon';
+        } else {
+          frOk = false;
+          frWhy = '[CRYPTO STUB: gold rates] limit ' + Math.abs(frE - frPx).toFixed(2) + ' pts (' + frGapR.toFixed(2)
+                + 'R) from market — measured on gold, at this distance about 1 in '
+                + (frGapR >= 1 ? '3' : '5') + ' never fills inside the horizon; the trade may simply not happen';
+        }
+      }
+    } else if (plHas && !plObj){
+      frWhy = 'plan declined — nothing to fill';
+    }
+    gates.push({ key:'fill-risk', hard:false, info:true, pass: frOk, why: frWhy });
+    /* Store frGapR on the gates array so forward records can access it */
+    if (gates.length > 0){
+      gates[gates.length - 1].fillRiskGapR = frGapR;
+    }
+
     var reversion = REVERSION_KINDS[hit.kind] === true;
     var trendOk = null, trendWhy = 'EMA unavailable';
     if (isFinite(e21) && isFinite(e50) && isFinite(last)){
@@ -2939,18 +3002,26 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     tape = String(tape || '').toLowerCase();
     limit = Math.max(1, Math.min(5, Math.floor(fin(limit) || OMNI_MP_MAX)));
     if (tape !== 'long' && tape !== 'short') return [];
-    var pool = [], i, c, seen = {};
+    var pool = [], heldCards = [], i, c, seen = {}, heldSeen = {};
     var ranked = hgOmniDeskOrder(list || [], tape);
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
       if (!c || !c.plan || !(c.grade && c.grade.ticket)) continue;
-      if (String(c.dir || '').toLowerCase() !== tape) continue;
+      if (String(c.dir || '').toLowerCase() !== tape){
+        var hSym = String(c.sym || c.base || '');
+        if (hSym && !heldSeen[hSym]){
+          heldSeen[hSym] = true;
+          heldCards.push(c);
+        }
+        continue;
+      }
       var sym = String(c.sym || c.base || '');
       if (!sym || seen[sym]) continue;
       seen[sym] = true;
       pool.push(c);
       if (pool.length >= limit) break;
     }
+    pool.heldCards = heldCards;
     return pool;
   }
 
@@ -2960,12 +3031,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return '';
   }
 
-  function hgOmniMpNoneWhy(tape){
+  function hgOmniMpNoneWhy(tape, held){
+    var base;
     if (tape === 'short')
-      return 'crypto tape is short — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
-    if (tape === 'long')
-      return 'crypto tape is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
-    return 'no side to take until tape and sentiment agree. Standing aside is the position.';
+      base = 'crypto tape is short — a LONG is not the setup. Standing aside is the position when no short ticket cleared.';
+    else if (tape === 'long')
+      base = 'crypto tape is going up — a SHORT is not the setup. Standing aside is the position when no long ticket cleared.';
+    else
+      base = 'no side to take until tape and sentiment agree. Standing aside is the position.';
+    if (!held || !held.n) return base;
+    var side = (tape === 'short') ? 'LONG' : 'SHORT';
+    var s = base + ' ' + held.n + ' ticket' + (held.n === 1 ? '' : 's')
+          + ' cleared the ledger and ' + (held.n === 1 ? 'is' : 'are') + ' HELD — all '
+          + side + ' while the tape reads ' + String(tape).toUpperCase() + '.';
+    s += ' They release if sentiment flips away from ' + String(tape).toUpperCase() + '.';
+    return s;
   }
 
   function hgOmniMpOneHtml(c){
@@ -2995,7 +3075,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return h;
   }
 
-  function hgOmniMostProbablePanelHtml(few, tape){
+  function hgOmniMostProbablePanelHtml(few, tape, held){
     few = few || [];
     tape = String(tape || '').toLowerCase();
     var any = false, i;
@@ -3003,7 +3083,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var tier = any ? 'clean' : 'forming';
     var note = any
       ? 'Balanced across mechanic families and indicator reads on the crypto tape. Tickets only. Not a win probability.'
-      : hgOmniMpNoneWhy(tape);
+      : hgOmniMpNoneWhy(tape, held);
     var h = '<section class="hg-mp" data-hg-mp="omniroute" data-omni-mp="1" data-tier="' + tier + '" aria-label="Most probable crypto setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
     h += '<div class="hg-mp-head">OMNIROUTE';
@@ -3016,7 +3096,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       for (i = 0; i < few.length; i++) h += hgOmniMpOneHtml(few[i]);
     } else {
       h += '<div class="og-mp-hz"><div class="hg-mp-head">STAND ASIDE <span>no tape-aligned ticket</span></div>';
-      h += '<div class="hg-mp-note">' + esc(hgOmniMpNoneWhy(tape)) + '</div></div>';
+      h += '<div class="hg-mp-note">' + esc(hgOmniMpNoneWhy(tape, held)) + '</div></div>';
     }
     h += '</section>';
     return h;
@@ -3035,7 +3115,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
   }
 
-  function hgOmniPaintMostProbable(ui, few, tape, mpBag){
+  function hgOmniPaintMostProbable(ui, few, tape, mpBag, held){
     var host = (ui && ui.mp) || (ui && ui.cards);
     if (!host) return;
     try {
@@ -3043,7 +3123,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (wPin && typeof wPin.hgMpPin === 'function') wPin.hgMpPin('omniroute', mpBag || [], tape || null, host);
     } catch (eMp) {}
     try {
-      var dual = hgOmniMostProbablePanelHtml(few, tape);
+      var dual = hgOmniMostProbablePanelHtml(few, tape, held);
       var oldMp = host.querySelector ? host.querySelector('[data-hg-mp]') : null;
       if (!dual) return;
       if (oldMp) oldMp.outerHTML = dual;
@@ -4415,6 +4495,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               var fwdRows = [];
               for (k = 0; k < found.length; k++){
                 if (!found[k].plan) continue;
+                /* Extract fillRiskGapR from the fill-risk gate for measurement */
+                var fillRiskGapR = NaN;
+                var gates = found[k].gates || [];
+                for (var gi = 0; gi < gates.length; gi++){
+                  if (gates[gi] && gates[gi].key === 'fill-risk' && isFinite(gates[gi].fillRiskGapR)){
+                    fillRiskGapR = gates[gi].fillRiskGapR;
+                    break;
+                  }
+                }
                 fwdRows.push({ sym: fitem.sym, dir: found[k].dir,
                                entry: found[k].plan.entry, stop: found[k].plan.stop, t1: found[k].plan.t1,
                                mechanic: found[k].kind,
@@ -4437,7 +4526,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                    if (gs[gj] && keep[gs[gj].key] && gs[gj].pass === true) nS++;
                                  }
                                  return nS;
-                               })(found[k].gates) });
+                               })(found[k].gates),
+                               /* FILL-RISK measurement: distance in R from entry to market.
+                                  Recorded for the forward panel to judge fill probability
+                                  as outcomes settle. Calibration uses gold's rates as a
+                                  placeholder — crypto-specific measurement needed. */
+                               fillRiskGapR: fillRiskGapR });
               }
               if (fwdRows.length){
                 try { W.hgFwdRecordScan('OMNIROUTE', TF, fwdRows, { horizonBars: 20 }); }
@@ -4549,7 +4643,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                  + ' contracts returned no usable candles, so this is a DATA problem, not a quiet market. '
                  + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
               : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
-            hgOmniPaintMostProbable(ui, [], tape0, []);
+            hgOmniPaintMostProbable(ui, [], tape0, [], { n: 0 });
             omniRememberPaint(ui);
           });
         }
@@ -4603,6 +4697,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         var tape = hgOmniSideTape(sideRead);
         collapsed = hgOmniDeskOrder(collapsed, tape);
         var few = hgOmniPickFew(collapsed, tape, OMNI_MP_MAX);
+        /* Tickets sentiment/tape is holding: cleared the whole ledger, carry a plan,
+           and point the other way. Counted from the COLLAPSED list so several
+           mechanics on one set of levels count as the one trade they are. */
+        var omniHeld = { n: 0 };
+        try {
+          if (tape === 'long' || tape === 'short'){
+            for (var hj = 0; hj < collapsed.length; hj++){
+              var hc = collapsed[hj];
+              if (hc && hc.plan && hc.grade && hc.grade.ticket
+                  && String(hc.dir || '').toLowerCase() !== tape) omniHeld.n++;
+            }
+          }
+        } catch (eHeld){ omniHeld = { n: 0 }; }
+        __omni.held = omniHeld;
         var fi;
         for (fi = 0; fi < few.length; fi++) few[fi].topPick = true;
         var h = '';
@@ -4668,7 +4776,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           var row = hgOmniMpRow(few[mi]);
           if (row) mpBag.push(row);
         }
-        hgOmniPaintMostProbable(ui, few, tape, mpBag);
+        hgOmniPaintMostProbable(ui, few, tape, mpBag, __omni.held);
         omniRememberPaint(ui);
         });
       }catch(eRender){

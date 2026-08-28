@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v507',
-  pack: 'OMNIGOLD colorful grade chips',
-  built: '2026-08-27T05:35:00Z',
-  note: 'Grade A/B/C/D chips enlarged, bold, and color-coded on OMNIGOLD engine rows + MOST PROBABLE.'
+  version: 'hg-v508',
+  pack: 'Keep-last resilience, held-against-tape queue, fill-risk gate on OMNIROUTE',
+  built: '2026-08-28T00:15:00Z',
+  note: 'OMNIGOLD: snapshots all panels post-render, restores on fetch/render failure. OMNIROUTE: holds against-tape tickets with sentiment-flip release, fill-risk gate (0–0.25R PASS, >0.25R FAIL).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

@@ -316,7 +316,9 @@ terse status, and never launches a first-time scan on a global refresh.
                       'STRUCT-BOS','SWEEP-V2','OB-RETEST','OU-REVERT',
                       'MFI-SQUAT','DI-CROSS','FVG-HVN'];
 
-  var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false };
+  var __og = { ui: null, busy: false, ran: false, snap: null, lastStat: '', src: null, shared: null, btBusy: false,
+               lastCardsHtml: null, lastPoolHtml: null, lastMpHtml: null,
+               lastVerdictHtml: null, lastSettledExecHtml: null, lastCoverageHtml: null, lastGoldEnginesHtml: null };
 
   function W(){ return (typeof window !== 'undefined') ? window : null; }
   function gfn(name){
@@ -5521,6 +5523,51 @@ terse status, and never launches a first-time scan on a global refresh.
     });
   }
 
+  function ogSafeStat(ui, msg){
+    try{ if (ui && ui.stat) ui.stat.textContent = msg; }catch(e){}
+  }
+
+  function ogRememberPaint(ui){
+    try { if (ui && ui.cards) __og.lastCardsHtml = ui.cards.innerHTML; } catch (eC) {}
+    try { if (ui && ui.pool) __og.lastPoolHtml = ui.pool.innerHTML; } catch (eP) {}
+    try { if (ui && ui.mp) __og.lastMpHtml = ui.mp.innerHTML; } catch (eM) {}
+    try { if (ui && ui.verdict) __og.lastVerdictHtml = ui.verdict.innerHTML; } catch (eV) {}
+    try { if (ui && ui.settledExec) __og.lastSettledExecHtml = ui.settledExec.innerHTML; } catch (eSe) {}
+    try { if (ui && ui.coverage) __og.lastCoverageHtml = ui.coverage.innerHTML; } catch (eCo) {}
+    try { if (ui && ui.goldEngines) __og.lastGoldEnginesHtml = ui.goldEngines.innerHTML; } catch (eGe) {}
+  }
+
+  function ogKeepLast(ui, why){
+    try {
+      if (ui && ui.cards && __og.lastCardsHtml) ui.cards.innerHTML = __og.lastCardsHtml;
+    } catch (eC) {}
+    try {
+      if (ui && ui.pool && __og.lastPoolHtml != null) ui.pool.innerHTML = __og.lastPoolHtml;
+    } catch (eP) {}
+    try {
+      if (ui && ui.mp && __og.lastMpHtml != null) ui.mp.innerHTML = __og.lastMpHtml;
+    } catch (eM) {}
+    try {
+      if (ui && ui.verdict && __og.lastVerdictHtml != null) ui.verdict.innerHTML = __og.lastVerdictHtml;
+    } catch (eV) {}
+    try {
+      if (ui && ui.settledExec && __og.lastSettledExecHtml != null) ui.settledExec.innerHTML = __og.lastSettledExecHtml;
+    } catch (eSe) {}
+    try {
+      if (ui && ui.coverage && __og.lastCoverageHtml != null) ui.coverage.innerHTML = __og.lastCoverageHtml;
+    } catch (eCo) {}
+    try {
+      if (ui && ui.goldEngines && __og.lastGoldEnginesHtml != null) ui.goldEngines.innerHTML = __og.lastGoldEnginesHtml;
+    } catch (eGe) {}
+    if (__og.lastStat) ogSafeStat(ui, __og.lastStat);
+    try {
+      if (ui && ui.warn){
+        ui.warn.textContent = 'scan failed — keeping last results. ' + String(why || '');
+        ui.warn.style.display = 'block';
+      }
+    } catch (eW) {}
+  }
+
   function runScan(ui){
     if (__og.busy) return Promise.resolve();
     var w = W();
@@ -5532,16 +5579,23 @@ terse status, and never launches a first-time scan on a global refresh.
     __og.spotFactor = NaN;
     __og.spotAnchor = NaN;
     ui.btn.disabled = true;
-    ui.cards.innerHTML = '';
-    ui.pool.innerHTML = '';
-    if (ui.mp) ui.mp.innerHTML = '';
-    if (ui.settledExec) ui.settledExec.innerHTML = '';
-    if (ui.verdict) ui.verdict.innerHTML = '';
-    if (ui.coverage) ui.coverage.innerHTML = '';
-    if (ui.goldEngines) ui.goldEngines.innerHTML = '';
+    /* Never blank a finished desk to start a rescan. A failed fetch or render
+       used to leave that blank standing — the last snapshot was still in
+       memory and the reader saw only the error. */
+    if (!__og.lastCardsHtml){
+      try { ui.cards.innerHTML = ''; } catch (eClr) {}
+      try { ui.pool.innerHTML = ''; } catch (eClr2) {}
+      try { if (ui.mp) ui.mp.innerHTML = ''; } catch (eClr3) {}
+      try { if (ui.settledExec) ui.settledExec.innerHTML = ''; } catch (eClr4) {}
+      try { if (ui.verdict) ui.verdict.innerHTML = ''; } catch (eClr5) {}
+      try { if (ui.coverage) ui.coverage.innerHTML = ''; } catch (eClr6) {}
+      try { if (ui.goldEngines) ui.goldEngines.innerHTML = ''; } catch (eClr7) {}
+      ogSafeStat(ui, 'reading macro + session context…');
+    } else {
+      ogSafeStat(ui, 'rescanning… previous results still showing');
+    }
 
     /* market-wide context, fetched once for both horizons */
-    ui.stat.textContent = 'reading macro + session context…';
     var macroFn = gfn('getGoldMacro') || gfn('getGoldMacroCached');
     var shared = { killzone: null, macro: null, yieldRows: null, nowSec: Date.now() / 1000, news: null,
                    liveSpotPx: NaN,
@@ -5937,14 +5991,28 @@ terse status, and never launches a first-time scan on a global refresh.
           __og.bridge = bridge;
           var engineScalp = !pickScalp ? hgOgPickGoldEngineForMp(bridge, HORIZONS.scalp.label, deskTape) : null;
           var engineSwing = !pickSwing ? hgOgPickGoldEngineForMp(bridge, HORIZONS.swing.label, deskTape) : null;
-          hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing);
+          try {
+            hgOgPaintMostProbable(ui, pickScalp, pickSwing, deskTape, mpBag, ogHeld, watchScalp, watchSwing, engineScalp, engineSwing);
+          } catch (eRender) {
+            if (__og.lastCardsHtml) ogKeepLast(ui, 'scan finished but mostProbable render failed: ' + ((eRender && eRender.message) || eRender));
+            throw eRender;
+          }
           return hgOgPaintOgPostScan(ui, res, shared, ogCollapsed, deskTape, bridge).then(function(){
+            ogRememberPaint(ui);
+            __og.lastStat = ui.stat.textContent;
             if (ui.xmAuto && ui.xmAuto.checked) hgOgXmSendStrongest(ui);
+          }).catch(function(eRender){
+            if (__og.lastCardsHtml) ogKeepLast(ui, 'scan finished but postScan render failed: ' + ((eRender && eRender.message) || eRender));
+            throw eRender;
           });
         });
       })
       .catch(function(err){
-        ui.stat.textContent = 'scan failed: ' + ((err && err.message) || err);
+        if (__og.lastCardsHtml) {
+          ogKeepLast(ui, 'scan failed: ' + ((err && err.message) || err));
+        } else {
+          ogSafeStat(ui, 'scan failed: ' + ((err && err.message) || err));
+        }
         try { if (typeof console !== 'undefined' && console.error) console.error('[omnigold] scan failed', err); } catch (e) {}
       })
       .then(function(){
