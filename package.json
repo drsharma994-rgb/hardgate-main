@@ -18,6 +18,7 @@
     "start": "node scripts/server.mjs",
     "daemon": "node app.js",
     "check:prod": "node scripts/check-production.mjs",
+    "sync:cache": "node scripts/sync-cache-bust.mjs",
     "test:data-layer": "node tests/test-data-layer.mjs",
     "test": "node scripts/run-tests.mjs"
   }
