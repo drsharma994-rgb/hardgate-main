@@ -4852,6 +4852,13 @@ terse status, and never launches a first-time scan on a global refresh.
 
       __og.openSetups = open;
 
+      /* Immediately update status with current price (don't wait for poller) */
+      if (livePrice > 0){
+        __og.openSetups.forEach(function(setup){
+          hgOgUpdateSetupStatus(setup, livePrice);
+        });
+      }
+
       /* Start real-time polling for instant status updates */
       hgOgStartStatusPoller();
     } catch (e){
@@ -4859,7 +4866,7 @@ terse status, and never launches a first-time scan on a global refresh.
     }
   }
 
-  /* Real-time status poller — updates every 2 seconds without full refresh */
+  /* Real-time status poller — updates every 1 second without full refresh */
   function hgOgStartStatusPoller(){
     if (__og.statusPollerActive) return;
     __og.statusPollerActive = true;
@@ -4867,37 +4874,36 @@ terse status, and never launches a first-time scan on a global refresh.
     var pollInterval = setInterval(function(){
       try {
         var livePrice = fin(__og.spotAnchor) || 0;
-        if (!livePrice || !__og.openSetups || !__og.openSetups.length){
+        if (!__og.openSetups || !__og.openSetups.length){
           clearInterval(pollInterval);
           __og.statusPollerActive = false;
           return;
         }
 
+        /* Only update if we have a valid price */
+        if (livePrice <= 0) return;
+
         /* Update all setups with current price */
-        var anyChanged = false;
         __og.openSetups.forEach(function(setup){
-          var oldStatus = setup.tradeStatus;
           hgOgUpdateSetupStatus(setup, livePrice);
-          if (setup.tradeStatus !== oldStatus) anyChanged = true;
         });
 
-        /* Repaint if status changed */
-        if (anyChanged && __og.ui && __og.ui.openWatchPanel){
+        /* Always repaint to ensure UI reflects latest status */
+        if (__og.ui && __og.ui.openWatchPanel){
           try {
             __og.ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
           } catch (e){}
         }
       } catch (e){
-        clearInterval(pollInterval);
-        __og.statusPollerActive = false;
+        /* Silent fail, keep polling */
       }
-    }, 2000);  /* Update every 2 seconds */
+    }, 1000);  /* Update every 1 second for faster response */
 
-    /* Stop polling after 5 minutes */
+    /* Stop polling after 10 minutes */
     setTimeout(function(){
       clearInterval(pollInterval);
       __og.statusPollerActive = false;
-    }, 5 * 60 * 1000);
+    }, 10 * 60 * 1000);
   }
 
   /* Market Conditions Score Display — 3D scoring */
