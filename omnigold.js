@@ -5472,10 +5472,10 @@ terse status, and never launches a first-time scan on a global refresh.
     /* 2. MARKET CONDITIONS SCORE — 3D rating under current conditions */
     var topSetup = setups.length > 0 ? setups[0] : null;
 
-    /* QUALITY GATE: Show setups with 4+ checks passing (uses more indicators/strategies)
-       4/5 checks = strong setup with multiple confirmations
-       5/5 checks = perfect setup (rare in real markets) */
-    var qualityGatePass = topSetup && topSetup.checksPass >= 4 && fin(topSetup.compositeScore) >= 70;
+    /* QUALITY GATE: Show setups with confluence ≥50 (FAIR+)
+       Allows visibility into all ratings: WEAK/FAIR/STRONG/EXCEPTIONAL
+       Traders see full spectrum and choose based on confluence score */
+    var qualityGatePass = topSetup && fin(topSetup.confluenceScore) >= 50;
 
     if (topSetup && qualityGatePass){
       h += '<div style="margin:16px 0 8px 0;padding-bottom:8px;border-bottom:2px solid var(--hr);font-weight:bold;color:var(--fg-muted,#666)">🏆 TOP SETUP (Best for Current Conditions)</div>';
