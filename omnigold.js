@@ -4891,18 +4891,14 @@ terse status, and never launches a first-time scan on a global refresh.
         /* Limit: only update top 5 setups to reduce CPU load */
         var toUpdate = __og.openSetups.slice(0, 5);
 
-        /* Update statuses */
+        /* Update statuses silently (no repaint) — user can click Refresh button to see updates */
         toUpdate.forEach(function(setup){
           hgOgUpdateSetupStatus(setup, livePrice);
         });
 
-        /* Repaint only every 2 polls (every 4 seconds) to reduce DOM thrashing */
-        pollCount++;
-        if (pollCount % 2 === 0 && __og.ui && __og.ui.openWatchPanel){
-          try {
-            __og.ui.openWatchPanel.innerHTML = hgOgOpenSetupsWatchPanelHtml(__og.openSetups);
-          } catch (e){}
-        }
+        /* Removed automatic repaint: DOM thrashing was causing hangs.
+           Status updates happen silently in memory.
+           User clicks "Refresh" button to see latest display. */
       } catch (e){
         /* Log but don't crash */
         if (typeof console !== 'undefined') console.error('Status poller error:', e);
