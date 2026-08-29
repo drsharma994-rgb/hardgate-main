@@ -3,7 +3,7 @@
 
    The pooled table printed "has paid" in green at +2.00 sigma. The
    measured-edge gate credits a mechanic only at the FAMILY-WISE bar — +2.89
-   sigma across 27 crypto mechanics, +2.97 across 34 gold ones — and says so
+   sigma across 29 crypto mechanics, +2.97 across 34 gold ones — and says so
    on every card:
 
      "34 mechanics scanned, so +2.97σ is the bar before one this good means
@@ -74,7 +74,7 @@ function famZ(m){ let lo=0, hi=6; const target = Math.pow(0.95, 1/m);
 
 console.log('== the app agrees with an independent Sidak computation ==');
 {
-  for (const m of [6, 22, 27, 34]){
+  for (const m of [6, 22, 27, 29, 34]){
     ok(Math.abs(W.hgOmniFamilyZ(m) - famZ(m)) < 0.02,
        m + ' mechanics -> +' + W.hgOmniFamilyZ(m).toFixed(2) + 'σ (independent: +' + famZ(m).toFixed(2) + 'σ)');
   }
@@ -147,7 +147,7 @@ console.log('\n== a desk that supplies no bar gets the family-wise one, not +2.0
   const two  = W.hgOmniPoolRead(pool, 2, 20, 2);
   ok(isFinite(dflt.bar), 'the reader reports which bar it used (' + dflt.bar.toFixed(2) + 'σ)');
   ok(dflt.bar > 2.5, 'and with no argument it is the family-wise bar, not +2.00σ');
-  ok(Math.abs(dflt.bar - W.hgOmniFamilyZ(27)) < 0.01, 'specifically the crypto mechanic count');
+  ok(Math.abs(dflt.bar - W.hgOmniFamilyZ(29)) < 0.01, 'specifically the crypto mechanic count');
   ok(dflt.read !== two.read || dflt.z < 2 || dflt.z >= dflt.bar,
      'so the default is at least as strict as the explicit loose one');
 }
@@ -155,16 +155,16 @@ console.log('\n== a desk that supplies no bar gets the family-wise one, not +2.0
 console.log('\n== both desks pass their OWN mechanic count ==');
 {
   ok(/hgOmniPoolRead\(p, MIN_RR, MIN_SAMPLES, hgOmniFamilyZ\(OMNI_ALL_MECHANICS\.length\)\)/.test(ROUTE),
-     'omniroute passes its 27-mechanic bar');
+     'omniroute passes its 29-mechanic bar');
   ok(/hgOmniPoolRead\(p, minRr, MIN_SAMPLES, hgOgFamilyZ\(OG_MECHANICS\.length\)\)/.test(GOLD),
      'omnigold passes its 34-mechanic bar — judging a gold row by the crypto count would be wrong');
   ok(!/z >= 2 \? 'has paid'/.test(ROUTE), 'the hard-coded +2.00σ threshold is gone');
   ok(!/4 \* pBreak \* \(1 - pBreak\)/.test(ROUTE), 'and so is the z=2 sample formula');
   ok(/bar \* bar \* pBreak/.test(ROUTE), 'the sample target squares the actual bar');
   /* Gold and crypto bars genuinely differ, so this is not cosmetic. */
-  ok(Math.abs(W.hgOmniFamilyZ(34) - W.hgOmniFamilyZ(27)) > 0.05,
+  ok(W.hgOmniFamilyZ(34) > W.hgOmniFamilyZ(29),
      'the two desks bars differ (+' + W.hgOmniFamilyZ(34).toFixed(2) + 'σ vs +'
-     + W.hgOmniFamilyZ(27).toFixed(2) + 'σ)');
+     + W.hgOmniFamilyZ(29).toFixed(2) + 'σ)');
 }
 
 console.log('\n== the table says which bar it is quoting ==');

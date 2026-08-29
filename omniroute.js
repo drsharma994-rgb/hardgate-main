@@ -1089,7 +1089,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       ['hgMechRsiDiverge','RSI-DIVERGE'], ['hgMechAvwapReclaim','AVWAP-RECLAIM'],
       ['hgMechCusumShift','CUSUM-SHIFT'], ['hgMechVolExpansion','VOL-EXPANSION'],
       ['hgMechPinReject','PIN-REJECT'], ['hgMechEngulfLevel','ENGULF-LEVEL'],
-      ['hgMechPocRevert','POC-REVERT'], ['hgMechThreeBar','THREE-BAR']
+      ['hgMechPocRevert','POC-REVERT'], ['hgMechThreeBar','THREE-BAR'],
+      ['hgMechSupertrendFlip','SUPERTREND-FLIP'], ['hgMechParabolicSarFlip','PSAR-FLIP']
     ];
     for (var sh = 0; sh < SHARED.length; sh++){
       var fn = shared(SHARED[sh][0], SHARED[sh][1]);
@@ -1222,7 +1223,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                         'VWAP-REVERT','NR7-BREAK','TREND-RECLAIM','FVG-FILL','BOS-RETEST',
                         'EQH-SWEEP','EQL-SWEEP','SQUEEZE-FIRE','RSI-DIVERGE','AVWAP-RECLAIM',
                         'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
-                        'POC-REVERT','THREE-BAR'];
+                        'POC-REVERT','THREE-BAR','SUPERTREND-FLIP','PSAR-FLIP'];
 
   /* FORWARD-ONLY mechanics. These read positioning, and the walk-forward
      replays candles — there is no historical funding rate or open interest

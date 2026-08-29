@@ -232,8 +232,8 @@ console.log('\n== the pick: one per horizon, and only ever a ticket ==');
 {
   const src = fs.readFileSync(path.join(ROOT, 'omnigold.js'), 'utf8');
   ok(/function hgOgPickFor\(ranked, horizon/.test(src), 'there is a per-horizon pick');
-  ok(/if \(!\(c\.grade && c\.grade\.ticket\)\) continue;/.test(src),
-     'it skips anything that is not a ticket — a vetoed setup is never promoted');
+  ok(/if \(!hgOgIsSuperSolid\(c\)\) continue;/.test(src),
+     'it skips anything that is not SUPER SOLID — a vetoed or weak setup is never promoted');
   ok(/if \(!c\.plan\) continue;/.test(src), 'and anything with no levels to act on');
   ok(/No ' \+ esc\(pair\[0\]\) \+ ' pick/.test(src),
      'a horizon with no ticket says so outright rather than showing a gap');

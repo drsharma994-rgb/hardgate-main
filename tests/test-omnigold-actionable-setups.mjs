@@ -34,8 +34,8 @@ console.log('== grade gate for engine promotion ==');
   ok(W.hgOgGoldEngineGradeOk({ dir: 'long', entry: 1, stop: 0.9, t1: 1.2, grade: 'A' }), 'grade A passes');
   ok(!W.hgOgGoldEngineGradeOk({ dir: 'long', entry: 1, stop: 0.9, t1: 1.2, grade: 'C' }), 'grade C blocked');
   ok(!W.hgOgGoldEngineGradeOk({ dir: 'long', entry: 1, stop: 0.9, t1: 1.2, grade: 'A', vetoed: true }), 'vetoed blocked');
-  ok(W.hgOgGoldEngineGradeOk({ dir: 'long', entry: 1, stop: 0.9, t1: 1.2, grade: 'B', tally: 6 }, { allowB: true }),
-     'grade B with tally on swing');
+  ok(!W.hgOgGoldEngineGradeOk({ dir: 'long', entry: 1, stop: 0.9, t1: 1.2, grade: 'B', tally: 6 }, { allowB: true }),
+     'grade B blocked under SUPER SOLID (A/CLEAN only)');
 }
 
 console.log('\n== bridge setup converts to MP pick ==');
@@ -70,7 +70,7 @@ console.log('\n== pick gold engine respects tape (aligned first) ==');
   ok(longPick && longPick.dir === 'long', 'tape-aligned long wins over higher-tally opposite');
 }
 
-console.log('\n== demoted grade B + against tape still surfaces ==');
+console.log('\n== demoted grade B does not surface under SUPER SOLID ==');
 {
   const W = boot();
   const bridge = {
@@ -86,12 +86,9 @@ console.log('\n== demoted grade B + against tape still surfaces ==');
     swing: { ranked: [], best: null }
   };
   const pick = W.hgOgPickGoldEngineFor(bridge, 'SCALP', 'long');
-  ok(pick && pick.dir === 'short', 'against-tape short when tape is long');
-  ok(pick.engineAgainstTape, 'flagged against tape');
-  ok(pick.engineDemoted, 'demoted carried');
+  ok(!pick, 'grade B against-tape does not fall back into MOST PROBABLE');
   const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, pick, null);
-  ok(/AGAINST GOLD TAPE/.test(html), 'against-tape label in MP');
-  ok(/LIQUIDITY SWEEP/.test(html), 'strategy in MP');
+  ok(/stand aside|no side to take/i.test(html), 'MP stays honest when only B-grade engines fired');
 }
 
 console.log('\n== MOST PROBABLE panel shows engine tier ==');
@@ -120,7 +117,7 @@ console.log('\n== engine beats veto watch in MP horizon ==');
   ok(/SWEEP/.test(hz), 'engine strategy in horizon row');
 }
 
-console.log('\n== grade C fallback when no A/B ==');
+console.log('\n== grade C does not fallback when no A/B ==');
 {
   const W = boot();
   const bridge = {
@@ -136,11 +133,9 @@ console.log('\n== grade C fallback when no A/B ==');
     swing: { ranked: [], best: null }
   };
   const pick = W.hgOgPickGoldEngineForMp(bridge, 'SCALP', 'long');
-  ok(pick && pick.engineLowGrade, 'grade C fallback');
-  ok(pick.dir === 'short', 'best grade C picked');
+  ok(!pick, 'grade C no longer falls back into MOST PROBABLE');
   const html = W.hgOgMostProbablePanelHtml(null, null, 'long', null, null, null, pick, null);
-  ok(/FORMING/.test(html), 'forming tier in MP');
-  ok(/need tally/.test(html), 'explains B threshold');
+  ok(/data-tier="forming"/.test(html), 'forming tier when no engine pick clears SUPER SOLID');
   const panel = W.hgOgGoldEnginesPanelHtml(bridge);
   ok(/og-grade-chip og-grade-a/.test(panel), 'engines panel explains missing A/B with chips');
 }
