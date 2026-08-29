@@ -1,9 +1,11 @@
 /* =========================================================================
 hg-mechanics.js — the instrument-agnostic mechanics, in ONE place.
 
-These sixteen detectors were written and tested inside omnigold.js, but not
-one of them knows anything about gold: every threshold is expressed in ATR or
-in percent, so they read a BTC 4h chart exactly as well as an XAUUSD 1h one.
+These eighteen detectors were written and tested inside omnigold.js (plus two
+classic stop-and-reverse trend systems, Supertrend and Parabolic SAR, added
+later), but not one of them knows anything about gold: every threshold is
+expressed in ATR or in percent, so they read a BTC 4h chart exactly as well
+as an XAUUSD 1h one.
 Adding them to OMNIROUTE by copying would have doubled the maintenance
 surface for no benefit and guaranteed the two copies drift — the app already
 carries ~300 lines of that kind of duplication between the gold desks, and it
@@ -464,6 +466,142 @@ function fin(v){
     return null;
   }
 
+  /* Supertrend flip. ATR(10)-banded stop-and-reverse trend indicator — a
+     different mathematical construction from every existing TREND member
+     (none of BOS-RETEST, TREND-RECLAIM, SQUEEZE-FIRE, CUSUM-SHIFT or
+     VOL-EXPANSION bands the ATR against the midpoint this way), so it adds
+     a genuinely independent trend read rather than a relabelled duplicate.
+     Classic parameters (period 10, multiplier 3) — proven and widely used,
+     not tuned to this app's tape. Fires only on the bar the trend flips,
+     not on every bar the flipped trend continues to hold. */
+  function atrSeries(rows, n){
+    if (!rows || rows.length < n + 1) return null;
+    var trs = [], i, h, l, pc, tr;
+    for (i = 0; i < rows.length; i++){
+      if (i === 0){ trs.push(NaN); continue; }
+      h = num(rows[i].h); l = num(rows[i].l); pc = num(rows[i - 1].c);
+      if (!isFinite(h) || !isFinite(l) || !isFinite(pc)){ trs.push(NaN); continue; }
+      tr = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+      trs.push(tr);
+    }
+    var out = [], sum, cnt, k;
+    for (i = 0; i < rows.length; i++){
+      if (i < n){ out.push(NaN); continue; }
+      sum = 0; cnt = 0;
+      for (k = i - n + 1; k <= i; k++) if (isFinite(trs[k])){ sum += trs[k]; cnt++; }
+      out.push(cnt ? sum / cnt : NaN);
+    }
+    return out;
+  }
+
+  function hgMechSupertrendFlip(rows){
+    if (!rows || rows.length < 60) return null;
+    var PERIOD = 10, MULT = 3;
+    var atrS = atrSeries(rows, PERIOD);
+    if (!atrS) return null;
+    var n = rows.length, i;
+    var fub = new Array(n), flb = new Array(n), st = new Array(n), up = new Array(n);
+    for (i = 0; i < n; i++){
+      var h = num(rows[i].h), l = num(rows[i].l), c = num(rows[i].c), a = atrS[i];
+      if (!isFinite(h) || !isFinite(l) || !isFinite(c) || !isFinite(a)){
+        fub[i] = NaN; flb[i] = NaN; st[i] = NaN; up[i] = null;
+        continue;
+      }
+      var mid = (h + l) / 2;
+      var bub = mid + MULT * a, blb = mid - MULT * a;
+      if (i === 0 || !isFinite(fub[i - 1]) || up[i - 1] === null){
+        fub[i] = bub; flb[i] = blb;
+        up[i] = c >= mid;
+        st[i] = up[i] ? blb : bub;
+        continue;
+      }
+      var pc = num(rows[i - 1].c);
+      fub[i] = (bub < fub[i - 1] || pc > fub[i - 1]) ? bub : fub[i - 1];
+      flb[i] = (blb > flb[i - 1] || pc < flb[i - 1]) ? blb : flb[i - 1];
+      if (up[i - 1] === true){
+        if (c < flb[i]){ up[i] = false; st[i] = fub[i]; }
+        else { up[i] = true; st[i] = flb[i]; }
+      } else {
+        if (c > fub[i]){ up[i] = true; st[i] = flb[i]; }
+        else { up[i] = false; st[i] = fub[i]; }
+      }
+    }
+    var last = n - 1, prev = n - 2;
+    if (prev < 0 || up[last] === null || up[prev] === null) return null;
+    if (up[last] === true && up[prev] === false){
+      return { kind:'SUPERTREND-FLIP', dir:'long', level: st[last],
+               why:'Supertrend(' + PERIOD + ',' + MULT + ') flipped up, stop now ' + st[last].toFixed(2) };
+    }
+    if (up[last] === false && up[prev] === true){
+      return { kind:'SUPERTREND-FLIP', dir:'short', level: st[last],
+               why:'Supertrend(' + PERIOD + ',' + MULT + ') flipped down, stop now ' + st[last].toFixed(2) };
+    }
+    return null;
+  }
+
+  /* Parabolic SAR flip. A classic accelerating stop-and-reverse system —
+     independent again from Supertrend: SAR accelerates against an extreme
+     point with a rising acceleration factor, Supertrend bands a fixed
+     multiple of ATR off the midpoint. The two disagree often enough in
+     practice to be worth counting separately toward the SUPER SOLID
+     agreement bar. Classic parameters: step 0.02, max 0.2. */
+  function hgMechParabolicSarFlip(rows){
+    if (!rows || rows.length < 60) return null;
+    var AF0 = 0.02, STEP = 0.02, MAXAF = 0.2;
+    var n = rows.length, i;
+    var c0 = num(rows[0].c), c1 = num(rows[1] ? rows[1].c : NaN);
+    if (!isFinite(c0) || !isFinite(c1)) return null;
+    var sar = new Array(n), up = new Array(n), ep = new Array(n), af = new Array(n);
+    up[1] = c1 >= c0;
+    sar[1] = up[1] ? num(rows[0].l) : num(rows[0].h);
+    ep[1] = up[1] ? num(rows[1].h) : num(rows[1].l);
+    af[1] = AF0;
+    if (!isFinite(sar[1]) || !isFinite(ep[1])) return null;
+    for (i = 2; i < n; i++){
+      var h = num(rows[i].h), l = num(rows[i].l);
+      var ph = num(rows[i - 1].h), pl = num(rows[i - 1].l);
+      var pph = num(rows[i - 2].h), ppl = num(rows[i - 2].l);
+      if (!isFinite(h) || !isFinite(l) || !isFinite(ph) || !isFinite(pl)
+          || up[i - 1] === null || !isFinite(sar[i - 1]) || !isFinite(ep[i - 1]) || !isFinite(af[i - 1])){
+        up[i] = up[i - 1]; sar[i] = sar[i - 1]; ep[i] = ep[i - 1]; af[i] = af[i - 1];
+        continue;
+      }
+      var prevSar = sar[i - 1], prevEp = ep[i - 1], prevAf = af[i - 1], wasUp = up[i - 1];
+      var newSar = wasUp ? (prevSar + prevAf * (prevEp - prevSar))
+                         : (prevSar - prevAf * (prevSar - prevEp));
+      if (wasUp) newSar = Math.min(newSar, pl, isFinite(ppl) ? ppl : pl);
+      else newSar = Math.max(newSar, ph, isFinite(pph) ? pph : ph);
+      var flip = wasUp ? (l < newSar) : (h > newSar);
+      if (flip){
+        up[i] = !wasUp;
+        sar[i] = prevEp;
+        ep[i] = up[i] ? h : l;
+        af[i] = AF0;
+      } else {
+        up[i] = wasUp;
+        sar[i] = newSar;
+        if (wasUp){
+          ep[i] = h > prevEp ? h : prevEp;
+          af[i] = h > prevEp ? Math.min(prevAf + STEP, MAXAF) : prevAf;
+        } else {
+          ep[i] = l < prevEp ? l : prevEp;
+          af[i] = l < prevEp ? Math.min(prevAf + STEP, MAXAF) : prevAf;
+        }
+      }
+    }
+    var last = n - 1, prev = n - 2;
+    if (prev < 1 || up[last] === null || up[prev] === null || !isFinite(sar[last])) return null;
+    if (up[last] === true && up[prev] === false){
+      return { kind:'PSAR-FLIP', dir:'long', level: sar[last],
+               why:'Parabolic SAR flipped below price to ' + sar[last].toFixed(2) + ', trend turns up' };
+    }
+    if (up[last] === false && up[prev] === true){
+      return { kind:'PSAR-FLIP', dir:'short', level: sar[last],
+               why:'Parabolic SAR flipped above price to ' + sar[last].toFixed(2) + ', trend turns down' };
+    }
+    return null;
+  }
+
   function emaOf(vals, n){
     if (!vals || vals.length < n || n <= 0) return NaN;
     var k = 2 / (n + 1), e = vals[0], i;
@@ -523,6 +661,8 @@ G.hgMechPinReject    = hgMechPinReject;
 G.hgMechEngulfLevel  = hgMechEngulfLevel;
 G.hgMechPocRevert    = hgMechPocRevert;
 G.hgMechThreeBar     = hgMechThreeBar;
+G.hgMechSupertrendFlip    = hgMechSupertrendFlip;
+G.hgMechParabolicSarFlip  = hgMechParabolicSarFlip;
 
 /* Every kind this module can emit, and the consensus family each belongs to.
    Exported so a desk cannot register a mechanic without also giving it a
@@ -531,12 +671,18 @@ G.hgMechThreeBar     = hgMechThreeBar;
 G.HG_MECH_KINDS = ['VWAP-REVERT','NR7-BREAK','TREND-RECLAIM','FVG-FILL','BOS-RETEST',
                    'EQH-SWEEP','EQL-SWEEP','SQUEEZE-FIRE','RSI-DIVERGE','AVWAP-RECLAIM',
                    'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
-                   'POC-REVERT','THREE-BAR'];
+                   'POC-REVERT','THREE-BAR','SUPERTREND-FLIP','PSAR-FLIP'];
 G.HG_MECH_FAMILY = {
   'EQH-SWEEP':'SWEEP', 'EQL-SWEEP':'SWEEP', 'PIN-REJECT':'SWEEP',
   'ENGULF-LEVEL':'SWEEP', 'THREE-BAR':'SWEEP',
   'NR7-BREAK':'TREND', 'TREND-RECLAIM':'TREND', 'BOS-RETEST':'TREND',
   'SQUEEZE-FIRE':'TREND', 'CUSUM-SHIFT':'TREND', 'VOL-EXPANSION':'TREND',
+  /* Two more stop-and-reverse trend systems, added deliberately as TREND
+     members: each is built on a different mathematical construction from
+     every existing TREND detector (see the comments above each function),
+     so they widen the independent-agreement pool the SUPER SOLID bar
+     counts rather than duplicating a family that already has six voices. */
+  'SUPERTREND-FLIP':'TREND', 'PSAR-FLIP':'TREND',
   'VWAP-REVERT':'REVERSION', 'RSI-DIVERGE':'REVERSION',
   /* AVWAP-RECLAIM IS NOT A FADE, AND CALLING IT ONE BROKE A LIVE CARD.
      The detector fires LONG when price crosses UP through the VWAP anchored
@@ -562,7 +708,8 @@ G.hgMechRunAll = function hgMechRunAll(rows){
   var fns = [hgMechVwapRevert, hgMechNr7Break, hgMechTrendReclaim, hgMechFvgFill,
              hgMechBosRetest, hgMechPoolSweep, hgMechSqueezeFire, hgMechRsiDiverge,
              hgMechAvwapReclaim, hgMechCusumShift, hgMechVolExpansion, hgMechPinReject,
-             hgMechEngulfLevel, hgMechPocRevert, hgMechThreeBar];
+             hgMechEngulfLevel, hgMechPocRevert, hgMechThreeBar,
+             hgMechSupertrendFlip, hgMechParabolicSarFlip];
   for (i = 0; i < fns.length; i++){
     try { d = fns[i](rows); } catch (e) { d = null; }
     if (d && d.kind && (d.dir === 'long' || d.dir === 'short') && isFinite(fin(d.level))) out.push(d);

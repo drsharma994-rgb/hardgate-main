@@ -4321,8 +4321,11 @@ terse status, and never launches a first-time scan on a global refresh.
                 for -0.280R, z +9.79 on scalp. A counter-trend read is worth
                 seeing and is not worth taking, so it keeps its card and loses
                 the word that invites the click. */
-             ? (row.engineAgainstTape ? ' · AGAINST TAPE — NOT ACTIONABLE'
-                                      : (row.engineLowGrade ? ' · FORMING' : ' · ACTIONABLE'))
+             /* engineLowGrade is always false now — SUPER SOLID removed the
+                grade-C fallback that used to earn this badge, so a bridged
+                engine pick is either AGAINST TAPE or ACTIONABLE, never a
+                demoted FORMING card. */
+             ? (row.engineAgainstTape ? ' · AGAINST TAPE — NOT ACTIONABLE' : ' · ACTIONABLE')
              : '') + '</span></div>';
       h += '<div class="hg-mp-note">' + esc(fam) + ' · ' + esc(ind)
         +  (isEngine
@@ -6187,21 +6190,26 @@ terse status, and never launches a first-time scan on a global refresh.
     catch (eCov){ host.innerHTML = ''; }
   }
 
+  /* SUPER SOLID — gold keeps only grade A / CLEAN. The old B (tally>=5)
+     and C fallbacks existed to avoid an empty panel on a quiet bar, but
+     that is exactly the trade the user asked to stop making: a demoted
+     B/C card dressed as a pick is not "super solid", it is a quieter tab
+     wearing a card. opts.allowB / opts.allowC are accepted for call-site
+     compatibility but now ignored — A/CLEAN (or an already-locked, i.e.
+     already-held, position) is the only bar. An empty panel is the
+     honest result when nothing clears it. */
   function hgOgGoldEngineGradeOk(c, opts){
-    opts = opts || {};
     if (!c || !c.dir || c.vetoed) return false;
     if (!(isFinite(fin(c.entry)) && isFinite(fin(c.stop)) && isFinite(fin(c.t1)))) return false;
     var g = String(c.grade || '').toUpperCase();
     if (c.locked || g === 'A' || g === 'CLEAN') return true;
-    if (opts.allowB && g === 'B' && fin(c.tally) >= 5) return true;
-    if (opts.allowC && g === 'C') return true;
     return false;
   }
 
   function hgOgEngineListHasAb(list){
     var i;
     for (i = 0; i < (list || []).length; i++){
-      if (hgOgGoldEngineGradeOk(list[i], { allowB: true })) return true;
+      if (hgOgGoldEngineGradeOk(list[i], {})) return true;
     }
     return false;
   }
@@ -6211,8 +6219,8 @@ terse status, and never launches a first-time scan on a global refresh.
     var bestT = 0, i;
     for (i = 0; i < ranked.length; i++) bestT = Math.max(bestT, fin(ranked[i].tally) || 0);
     return '<div class="hg-mp-note warn" style="margin:4px 0 0 12px">No '
-      + hgOgGradeChipHtml('A') + ' / ' + hgOgGradeChipHtml('B')
-      + ' this bar — best tally +' + bestT + '. Grading: '
+      + hgOgGradeChipHtml('A')
+      + ' this bar — best tally +' + bestT + '. SUPER SOLID keeps grade A / CLEAN only, no B or C fallback. Grading: '
       + hgOgGradeLegendHtml()
       + '. More agreeing reads push tally up.</div>';
   }
@@ -6316,6 +6324,11 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
+  /* SUPER SOLID — no C-grade (or B) fallback anywhere in the bridged
+     engine pick path. hgOgGoldEngineGradeOk already hard-stops anything
+     below A/CLEAN, so this pool is A/CLEAN (or an already-locked, i.e.
+     already-held, position) only — opts.allowC is accepted for call-site
+     compatibility but has no effect. */
   function hgOgPickGoldEngineFor(bridge, horizon, tapeDir, opts){
     opts = opts || {};
     if (!bridge || !bridge.ok) return null;
@@ -6325,12 +6338,11 @@ terse status, and never launches a first-time scan on a global refresh.
     var ranked = (bucket.ranked || []).slice();
     if (bucket.best && ranked.indexOf(bucket.best) < 0) ranked.unshift(bucket.best);
 
-    function poolFor(alignedOnly, gradeOpts){
-      gradeOpts = gradeOpts || { allowB: true };
+    function poolFor(alignedOnly){
       var i, c, pool = [];
       for (i = 0; i < ranked.length; i++){
         c = ranked[i];
-        if (!hgOgGoldEngineGradeOk(c, gradeOpts)) continue;
+        if (!hgOgGoldEngineGradeOk(c, {})) continue;
         if (alignedOnly && (tapeDir === 'long' || tapeDir === 'short')){
           if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
         }
@@ -6338,11 +6350,6 @@ terse status, and never launches a first-time scan on a global refresh.
       }
       if (!pool.length) return pool;
       pool.sort(function(a, b){
-        var ga = String(a.grade || '').toUpperCase(), gb = String(b.grade || '').toUpperCase();
-        if (ga === 'A' && gb !== 'A') return -1;
-        if (gb === 'A' && ga !== 'A') return 1;
-        if (ga === 'B' && gb === 'C') return -1;
-        if (gb === 'B' && ga === 'C') return 1;
         if (a.demoted && !b.demoted) return 1;
         if (b.demoted && !a.demoted) return -1;
         return (fin(b.tally) || 0) - (fin(a.tally) || 0);
@@ -6350,13 +6357,11 @@ terse status, and never launches a first-time scan on a global refresh.
       return pool;
     }
 
-    var gradeOpts = { allowB: true };
-    if (opts.allowC) gradeOpts.allowC = true;
-    var aligned = poolFor(true, gradeOpts);
+    var aligned = poolFor(true);
     var pick = aligned[0] || null;
     var againstTape = false;
     if (!pick && opts.allowAgainstTape !== false){
-      var any = poolFor(false, gradeOpts);
+      var any = poolFor(false);
       pick = any[0] || null;
       if (pick && (tapeDir === 'long' || tapeDir === 'short')
           && String(pick.dir || '').toLowerCase() !== tapeDir) againstTape = true;
@@ -6366,15 +6371,13 @@ terse status, and never launches a first-time scan on a global refresh.
     if (out){
       out.engineDemoted = !!pick.demoted;
       out.engineAgainstTape = againstTape;
-      out.engineLowGrade = !!(opts.allowC && String(pick.grade || '').toUpperCase() === 'C');
+      out.engineLowGrade = false;
     }
     return out;
   }
 
   function hgOgPickGoldEngineForMp(bridge, horizon, tapeDir){
-    var ab = hgOgPickGoldEngineFor(bridge, horizon, tapeDir, { allowC: false });
-    if (ab) return ab;
-    return hgOgPickGoldEngineFor(bridge, horizon, tapeDir, { allowC: true });
+    return hgOgPickGoldEngineFor(bridge, horizon, tapeDir, {});
   }
 
   function hgOgGoldEngineRowHtml(c, tier, horizon){
@@ -6419,8 +6422,8 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups + hgApplyGoldBestLevels when loaded. '
       + 'Grades: ' + hgOgGradeLegendHtml()
-      + '. A/B surface in <b>MOST PROBABLE</b> first; '
-      + hgOgGradeChipHtml('C', { large: true }) + ' shows as <b>FORMING</b> when nothing stronger cleared. '
+      + '. <b>SUPER SOLID:</b> only ' + hgOgGradeChipHtml('A', { large: true })
+      + ' / CLEAN surfaces in <b>MOST PROBABLE</b> — grade B and C no longer fall back into a pick; nothing stronger clearing means no pick, not a demoted one. '
       + 'Open <b>GOLD SCALP</b> / <b>GOLD SWING</b> for full cards and book handoff.</div>';
     var sc = bridge.scalp || {}, sw = bridge.swing || {};
     var scRanked = sc.ranked || [], swRanked = sw.ranked || [];
@@ -6547,17 +6550,14 @@ terse status, and never launches a first-time scan on a global refresh.
     var anyTrade = (pickScalp && pickScalp.plan) || (pickSwing && pickSwing.plan);
     var anyWatch = (watchScalp && watchScalp.plan) || (watchSwing && watchSwing.plan);
     var anyEngine = (engineScalp && engineScalp.plan) || (engineSwing && engineSwing.plan);
-    var tier = anyTrade ? 'clean'
-      : (anyEngine
-          ? (((engineScalp && engineScalp.engineLowGrade) || (engineSwing && engineSwing.engineLowGrade))
-              ? 'forming' : 'engine')
-          : 'forming');
+    /* engineLowGrade is always false now — SUPER SOLID removed the grade-C
+       fallback, so a bridged engine pick can only be 'engine' tier (A/CLEAN)
+       or absent entirely, never a demoted 'forming' engine card. */
+    var tier = anyTrade ? 'clean' : (anyEngine ? 'engine' : 'forming');
     var note = anyTrade
       ? 'Balanced across mechanic families and indicator reads on gold\'s own tape. Tickets only. Not a win probability.'
       : (anyEngine
-          ? ((engineScalp && engineScalp.engineLowGrade) || (engineSwing && engineSwing.engineLowGrade)
-              ? 'No grade-A/B engine this bar — showing best <b>grade-C FORMING</b> setup from GOLD SCALP/SWING (tally below 5). Not a win probability.'
-              : 'No OMNIGOLD TICKET cleared on this horizon — showing the best grade-A/B setup from <b>GOLD SCALP / GOLD SWING</b> engines. Demoted or against-tape engines are labeled honestly. Not a win probability.')
+          ? 'No OMNIGOLD TICKET cleared on this horizon — showing the best grade-A/CLEAN setup from <b>GOLD SCALP / GOLD SWING</b> engines. Demoted or against-tape engines are labeled honestly. Not a win probability.'
           : (anyWatch
           ? ('Gold tape reads ' + tape.toUpperCase()
              + ' — no ticket cleared; best WITH-tape level read below is gate-blocked (VETO). '
@@ -6652,13 +6652,35 @@ terse status, and never launches a first-time scan on a global refresh.
      ticket on the list; it is not the first card when a sweep two points
      off the market already has matching entry/stop. Far tickets remain if
      nothing nearer survived. */
+  /* SUPER SOLID (own gold mechanics) — the same raised bar as OMNIROUTE,
+     applied to OMNIGOLD's own detector candidates (hgOgGates / hgOmniGrade,
+     the same shared ledger — not the bridged GOLD SCALP/SWING engine path,
+     which is tightened separately via hgOgGoldEngineGradeOk). A CLEAN
+     ticket alone only proves zero vetoes; "super solid" additionally
+     requires most of the gate ledger to have actually run (not defaulted
+     to unknown) and at least one independent mechanic family agreeing on
+     direction. Thresholds match OMNIROUTE's so "super solid" means the
+     same thing on both desks. */
+  var OG_SUPER_SOLID_MIN_COVERAGE = 0.75;
+  var OG_SUPER_SOLID_MIN_AGREE = 2;
+  function hgOgIsSuperSolid(c){
+    if (!c || !c.plan || !(c.grade && c.grade.ticket)) return false;
+    var g = c.grade;
+    var tot = fin(g.total) || 0;
+    var ev = fin(g.evaluated) || 0;
+    if (tot > 0 && (ev / tot) < OG_SUPER_SOLID_MIN_COVERAGE) return false;
+    var nAgree = (c.consensus && fin(c.consensus.nAgree)) || 0;
+    if (nAgree < OG_SUPER_SOLID_MIN_AGREE) return false;
+    return true;
+  }
+
   function hgOgPickFor(ranked, horizon, tapeDir){
     if (!ranked || !ranked.length) return null;
     var i, c, structural = [], vol = [];
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
       if (!c || c.horizon !== horizon) continue;
-      if (!(c.grade && c.grade.ticket)) continue;
+      if (!hgOgIsSuperSolid(c)) continue;
       if (!c.plan) continue;              /* no levels means nothing to act on */
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
@@ -7594,6 +7616,7 @@ terse status, and never launches a first-time scan on a global refresh.
            still renders in full — those levels are meant to be far. */
         var deadLines = '';
         var heldCards = [];
+        var ogShown = 0, ogOverflowN = 0, ogOverflowLines = '';
         for (i = 0; i < ogCollapsed.length; i++){
           var cCard = ogCollapsed[i];
           if ((deskTape === 'long' || deskTape === 'short')
@@ -7612,7 +7635,37 @@ terse status, and never launches a first-time scan on a global refresh.
                       +  ' · card not rendered</div>';
             continue;
           }
-          h += setupCard(cCard);
+          /* SUPER SOLID — same bar as the MP pick: a CLEAN ticket with thin
+             ledger coverage or no independent family agreement collapses
+             to a one-line summary here too, instead of a full card. */
+          if (hgOgIsSuperSolid(cCard)){
+            h += setupCard(cCard);
+            ogShown++;
+          } else {
+            ogOverflowN++;
+            if (ogOverflowN <= 200){
+              var ogG = cCard.grade;
+              var ogOvV;
+              if (ogG && ogG.vetoes && ogG.vetoes.length){
+                ogOvV = ogG.vetoes[0] + (ogG.vetoes.length > 1 ? ' +' + (ogG.vetoes.length - 1) : '');
+              } else if (ogG && ogG.ticket){
+                ogOvV = 'clean but below the SUPER SOLID bar (thin ledger coverage or no independent agreement)';
+              } else {
+                ogOvV = 'no veto — below rank cap';
+              }
+              ogOverflowLines += '<div class="dim">' + esc(cCard.kind + ' ' + String(cCard.dir).toUpperCase())
+                + ' — ' + ogOvV + '</div>';
+            }
+          }
+        }
+        if (ogOverflowN){
+          h += '<div class="note" style="margin-top:10px"><b>' + ogOverflowN
+            + ' more setup(s) did not clear the SUPER SOLID bar (CLEAN ticket + ≥'
+            + Math.round(OG_SUPER_SOLID_MIN_COVERAGE * 100) + '% ledger coverage + ≥'
+            + OG_SUPER_SOLID_MIN_AGREE + ' agreeing mechanic familie(s)) — only super solid setups render as full cards.</b>'
+            + ogOverflowLines
+            + (ogOverflowN > 200 ? '<div class="dim">…and ' + (ogOverflowN - 200) + ' more</div>' : '')
+            + '</div>';
         }
         if (deadLines){
           h += '<div class="note" style="margin-top:10px"><b>DEAD LEVELS — priced off a closed bar the market has left behind:</b>'
@@ -7995,7 +8048,8 @@ terse status, and never launches a first-time scan on a global refresh.
       + '<b>Two horizons are measured separately</b>, because a mechanic that pays on 4h need not pay intraday. '
       + 'The perp gates have no meaning here (spot gold has no funding, OI, retail ratio or taker flow) and are deliberately absent rather than faked; '
       + 'in their place sit session, real-rate macro, DXY inverse, yield guard and ADR budget. '
-      + 'Levels come from the house plan engine. <b>MOST PROBABLE SETUPS</b> lead the tab: one SCALP and one SWING ticket when the mechanic ledger clears; otherwise grade-A/B setups from the <b>GOLD SCALP / GOLD SWING</b> engines (15m + 4h). Cards still badge STRONGEST. Nothing here is a profit forecast.</div>'
+      + 'Levels come from the house plan engine. <b>MOST PROBABLE SETUPS</b> lead the tab: one SCALP and one SWING ticket when the mechanic ledger clears; otherwise grade-A / CLEAN-only setups from the <b>GOLD SCALP / GOLD SWING</b> engines (15m + 4h) — B and C fallbacks are never shown. Cards still badge STRONGEST. Nothing here is a profit forecast.</div>'
+      + '<div class="note" style="margin-bottom:10px"><b>SUPER SOLID bar:</b> own-mechanic gold cards only render when they clear ≥' + Math.round(OG_SUPER_SOLID_MIN_COVERAGE*100) + '% of gates evaluated and ≥' + OG_SUPER_SOLID_MIN_AGREE + ' mechanics agree; everything else collapses to a one-line overflow count so the tab never pads itself with marginal reads.</div>'
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
