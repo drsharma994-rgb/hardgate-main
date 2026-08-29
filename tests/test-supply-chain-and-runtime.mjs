@@ -175,8 +175,8 @@ console.log('\n== 3. one puppeteer version, and a pinned runtime ==');
   ok(!/">=18"/.test(JSON.stringify(PKG.engines)), 'engines no longer accepts any future major');
   ok(/<\s*\d/.test(PKG.engines.node), 'it has an upper bound (' + PKG.engines.node + ')');
   const pins = [...RENDER.matchAll(/key: NODE_VERSION\s*\r?\n\s*value: "([^"]+)"/g)].map(x => x[1]);
-  ok(pins.length === 2, 'both Render services pin NODE_VERSION (' + pins.length + ')');
-  ok(pins[0] === pins[1], 'to the same version (' + pins.join(', ') + ')');
+  ok(pins.length >= 2, 'every Render service pins NODE_VERSION (' + pins.length + ')');
+  ok(pins.every(p => p === pins[0]), 'all to the same version (' + [...new Set(pins)].join(', ') + ')');
   const major = Number(String(pins[0]).split('.')[0]);
   const range = PKG.engines.node;
   ok(/>=\s*(\d+)/.exec(range) && major >= Number(/>=\s*(\d+)/.exec(range)[1]),
