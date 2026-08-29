@@ -5,28 +5,25 @@
   "lastRunAt": "2026-08-28T21:10:53.926Z",
   "ticket": {
     "long": {
-      "sym": "B-CHIP_USDT",
-      "entry": 0.03833437688798477
+      "sym": "B-COTI_USDT",
+      "entry": 0.012608447817691649
     },
-    "short": {
-      "sym": "XAU",
-      "entry": 4581.273053054277
-    }
+    "short": null
   },
   "sniper": {
-    "key": "CRMUSDT@245.05677220043083",
+    "key": "B-SIREN_USDT@0.03086",
     "hits": [
       {
-        "sym": "CRMUSDT",
+        "sym": "B-SIREN_USDT",
         "dir": "long",
-        "entry": 245.05677220043083,
-        "stop": 240.62023554352055,
-        "t1": 254.76,
-        "lev": 31,
+        "entry": 0.03086,
+        "stop": 0.030105031583091812,
+        "t1": 0.03205,
+        "lev": 23,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-28T10:00:27.839Z"
+    "at": "2026-08-29T10:07:30.369Z"
   },
   "squeeze": {
     "key": "B-1000PEPE_USDT:short;B-1000RATS_USDT:long;B-ALGO_USDT:short;B-ALPINE_USDT:short;B-ARX_USDT:long;B-BEAT_USDT:short;B-BTC_USDT:long;B-BZ_USDT:long;B-CLO_USDT:long;B-HBAR_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-MORPHO_USDT:long;B-ON_USDT:short;B-OPN_USDT:long;B-RIVER_USDT:short;B-SAND_USDT:short;B-SEI_USDT:short;B-SOL_USDT:long;B-TRX_USDT:long;B-USELESS_USDT:long;B-VVV_USDT:long;B-XAG_USDT:short;B-XAU_USDT:short;B-XLM_USDT:short;SLVONUSD:short",
@@ -271,18 +268,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-29T03:12:05.335Z"
+    "at": "2026-08-29T10:07:30.369Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-29T03:12:05.336Z"
+    "at": "2026-08-29T10:07:30.370Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-29T03:12:05.336Z",
+  "engineAlertAt": "2026-08-29T10:07:30.370Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -297,7 +294,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-29T03:12:05.917Z"
+    "at": "2026-08-29T10:07:30.657Z"
   },
   "bookFill": {
     "key": "u0|p0",
