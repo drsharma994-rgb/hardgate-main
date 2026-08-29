@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v528',
-  pack: 'pplx.app CoinDCX proxy — minimal same-origin backend',
+  version: 'hg-v526',
+  pack: 'replay calibration — cost-drag gates, replay evidence, solidity on cards',
   built: '2026-08-29T16:30:00Z',
-  note: 'The pplx.app static host does not run api/proxy.js by itself, so CoinDCX (which does not send CORS headers) 404-ed on every fetch. Started a minimal Node backend (scripts/server-minimal.mjs) mounting /api/proxy, /api/fred, /api/news/calendar, /api/coindcx/*. deploy_website rewrites __PORT_8420__ so the browser hits it same-origin. Mutating routes (book/execute/xm) are deliberately not mounted — a public URL never had any business calling them.'
+  note: 'Backtest-driven additions from 9,766 zero-lookahead replay trades: cost-drag chips (fees-vs-stop geometry, the #1 measured killer) on OMNIROUTE and OMNIGOLD setup cards, per-kind replay evidence lines on OMNIGOLD (honest win rates and net R), engine grade-A/B badges, and the 200-pt solidity score now rendering on OMNIROUTE cards. Refit verdicts were not-predictive OOS, so no fitted probabilities shipped — scores labeled informational.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

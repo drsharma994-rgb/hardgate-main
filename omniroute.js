@@ -1149,26 +1149,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return pool;
   }
 
-  /* Shared EMA-pair trend read over any bar series, at the same fast/slow
-     periods the daily HTF gate already uses. Extracted out of hgOmniDailyHtf
-     unchanged so daily behaviour is byte-for-byte identical to before \u2014
-     this only exists so the SAME trend read can also run on 1H bars
-     (already fetched for the scalp house engines, no new network cost) for
-     multi-timeframe confluence weighting. Pure; null when history is short. */
-  function hgOmniTrendFromRows(rows){
-    if (!rows || rows.length < DAILY_SLOW + 2) return null;
-    var dc = closesOf(rows);
-    var e21 = emaOf(dc.slice(-(DAILY_FAST * 2)), DAILY_FAST), e50 = emaOf(dc, DAILY_SLOW);
-    if (!isFinite(e21) || !isFinite(e50)) return null;
-    return { e21: e21, e50: e50, bars: rows.length };
-  }
-
   /* Daily EMA pair resampled from the intraday series. No network: 180 x 4h
      is ~31 daily bars, so periods must be ones that history supports (a
      50-period daily EMA silently returned NaN and disabled the gate). Pure. */
   function hgOmniDailyHtf(rows){
     var d1 = hgOmniResample(rows, 86400);
-    return hgOmniTrendFromRows(d1);
+    if (!d1 || d1.length < DAILY_SLOW + 2) return null;
+    var dc = closesOf(d1);
+    var e21 = emaOf(dc.slice(-(DAILY_FAST * 2)), DAILY_FAST), e50 = emaOf(dc, DAILY_SLOW);
+    if (!isFinite(e21) || !isFinite(e50)) return null;
+    return { e21: e21, e50: e50, bars: d1.length };
   }
 
   /* Crypto regime from BTC's own daily trend. PURE given rows.
@@ -4847,17 +4837,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
         family: hgOmniFamilyOf(hit.kind),
-        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
-        /* Multi-timeframe reads, carried read-only for confluence weighting
-           (BULLS tab ranking only \u2014 never a gate, never a veto, never
-           changes grade/plan). htf is the SAME daily EMA10/EMA21 read the
-           htf-daily gate above already computed \u2014 reused, not
-           recomputed. htf1h runs the identical pure trend read over the 1H
-           bars already fetched for the scalp house engines, so this adds no
-           new network call. Either is null when its bars are unavailable or
-           too short \u2014 that reads as \"unevaluable\", never as \"against\". */
-        htf: (exForHit && exForHit.htf) || null,
-        htf1h: (exForHit && exForHit.rows1h && exForHit.rows1h.length) ? hgOmniTrendFromRows(exForHit.rows1h) : null
+        rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN
       });
       } catch (eHit) {
         try { console.warn('omniroute evaluate skipped', item && item.sym, hits[i] && hits[i].kind, eHit); } catch (eHit2) {}
@@ -5150,31 +5130,6 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     });
   }
 
-  /* SUPER SOLID — the raised bar. A plain CLEAN ticket only proves zero
-     vetoes fired; it says nothing about how much of the ledger actually ran
-     or whether any other mechanic agrees. "Super solid" adds two measured
-     requirements on top of CLEAN:
-       1) evaluated/total >= SUPER_SOLID_MIN_COVERAGE — most of the gate
-          ledger actually had data and ran, not defaulted to unknown/degraded.
-       2) consensus.nAgree >= SUPER_SOLID_MIN_AGREE — at least one
-          independent mechanic family beyond the firing detector itself
-          points the same way (nAgree counts the hit's own family too, so
-          2 means real outside agreement, not just itself).
-     Both cuts are conservative and documented here (not buried in a magic
-     number at the call site) so they can be retuned in one place. */
-  var SUPER_SOLID_MIN_COVERAGE = 0.75;
-  var SUPER_SOLID_MIN_AGREE = 2;
-  function hgOmniIsSuperSolid(c){
-    if (!c || !c.plan || !(c.grade && c.grade.ticket)) return false;
-    var g = c.grade;
-    var tot = fin(g.total) || 0;
-    var ev = fin(g.evaluated) || 0;
-    if (tot > 0 && (ev / tot) < SUPER_SOLID_MIN_COVERAGE) return false;
-    var nAgree = (c.consensus && fin(c.consensus.nAgree)) || 0;
-    if (nAgree < SUPER_SOLID_MIN_AGREE) return false;
-    return true;
-  }
-
   function hgOmniPickFew(list, tape, limit){
     tape = String(tape || '').toLowerCase();
     limit = Math.max(1, Math.min(5, Math.floor(fin(limit) || OMNI_MP_MAX)));
@@ -5183,7 +5138,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var ranked = hgOmniDeskOrder(list || [], tape);
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
-      if (!hgOmniIsSuperSolid(c)) continue;
+      if (!c || !c.plan || !(c.grade && c.grade.ticket)) continue;
       if (String(c.dir || '').toLowerCase() !== tape){
         var hSym = String(c.sym || c.base || '');
         if (hSym && !heldSeen[hSym]){
@@ -5820,850 +5775,6 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     h += '</div>';
     return h;
   }
-
-  /* ============ 20X — leverage-safe setup filter (crypto only) ============
-     Not a new scan: a filter on the SAME OMNIROUTE ledger (__omni.lastCollapsed)
-     already built by runScan(). A trade is "20x-safe" here when the stop the
-     plan already carries sits far enough from entry that, per
-     hgCryptoMaxSurvivableLev (crypto-position-risk.js — 0.5% maintenance
-     margin, 1.5x clearance buffer baked in), liquidation at 20x leverage
-     would still fall beyond the stop. That means the STOP closes a losing
-     trade, not the exchange's forced liquidation — a materially different
-     (and worse) outcome the plan's R:R never priced in.
-     Kept to the SUPER SOLID bar already used for the main cards, so this
-     tab is a strict subset: only setups that would earn a full card on
-     OMNIROUTE AND clear the 20x leverage-room test. */
-  function hgOmniLeverageSafeCards(minLev){
-    var lev = (typeof minLev === 'number' && minLev >= 1) ? minLev : 20;
-    var src = __omni.lastCollapsed || null;
-    var levFn = (typeof window !== 'undefined' && typeof window.hgCryptoMaxSurvivableLev === 'function')
-              ? window.hgCryptoMaxSurvivableLev : null;
-    var liqFn = (typeof window !== 'undefined' && typeof window.hgCryptoLiqPrice === 'function')
-              ? window.hgCryptoLiqPrice : null;
-    if (!levFn){
-      return { ok:false, why:'crypto-position-risk.js not loaded \u2014 leverage safety cannot be judged', cards:[], hasScan: !!(src && src.length) };
-    }
-    if (!src || !src.length){
-      return { ok:true, why:'', cards:[], hasScan:false, minLev: lev };
-    }
-    var out = [];
-    for (var i = 0; i < src.length; i++){
-      var c = src[i];
-      if (!c || !c.plan || !c.grade) continue;
-      if (!hgOmniIsSuperSolid(c)) continue;
-      var e = fin(c.plan.entry), s = fin(c.plan.stop);
-      if (!isFinite(e) || !isFinite(s) || e === s) continue;
-      var maxLev;
-      try { maxLev = fin(levFn(e, s, null, null)); } catch (eL){ maxLev = NaN; }
-      if (!isFinite(maxLev) || maxLev < lev) continue;
-      var liqPx = null;
-      try { if (liqFn) liqPx = fin(liqFn(e, lev, null, c.dir)); } catch (eP){ liqPx = null; }
-      out.push({ c: c, maxLev: maxLev, liqPx: liqPx });
-    }
-    out.sort(function(a, b){ return b.maxLev - a.maxLev; });
-    return { ok:true, why:'', cards: out, hasScan:true, minLev: lev };
-  }
-  window.hgOmniLeverageSafeCards = hgOmniLeverageSafeCards;
-
-  function lev20CardHtml(entry){
-    var c = entry.c;
-    var base = setupCard(c, null);
-    var liqTxt = isFinite(entry.liqPx) ? fmtPx(entry.liqPx) : 'n/a';
-    var note = '<div class="plan" style="border-top:1px dashed rgba(255,255,255,0.15);margin-top:8px;padding-top:8px">'
-      + '<b>' + esc(entry.maxLev.toFixed(0)) + 'x</b> survivable \u2014 the stop at ' + esc(fmtPx(c.plan.stop))
-      + ' clears liquidation up to this leverage (0.5% maintenance margin + 1.5x clearance buffer built in). '
-      + 'At exactly 20x, liquidation \u2248 ' + esc(liqTxt) + ' \u2014 beyond the stop, so the stop closes this trade, not forced liquidation.'
-      + '</div>';
-    return base.replace(/<\/div>\s*$/, note + '</div>');
-  }
-
-  function mountLev20(el){
-    if (!el) return;
-    el.innerHTML =
-      '<div class="hg-lead" style="margin-bottom:10px">'
-      + '<b>20X \u2014 LEVERAGE-SAFE SETUPS</b> <span class="dim">crypto only \u00b7 filters OMNIROUTE, no separate scan</span>'
-      + '<div class="note" style="margin-top:6px">SUPER SOLID setups from the OMNIROUTE ledger whose stop sits far enough '
-      + 'from entry that, at 20x leverage, the exchange\'s forced liquidation stays beyond the stop (0.5% maintenance margin '
-      + '+ 1.5x safety clearance already built into the math). That means the plan\'s own stop is what closes a losing trade '
-      + '\u2014 not a liquidation at a worse price the plan never accounted for. Run the OMNIROUTE full scan first; this tab '
-      + 'reads that same result and does not fetch anything on its own.</div></div>'
-      + '<div style="margin-bottom:10px"><button type="button" class="btn" id="lev20Refresh">REFILTER</button> '
-      + '<span id="lev20Stat" class="dim">idle</span></div>'
-      + '<div id="lev20Cards"></div>';
-    var btn = el.querySelector('#lev20Refresh');
-    if (btn) btn.addEventListener('click', function(){ refreshLev20(); });
-    refreshLev20();
-  }
-  window.mountLev20 = mountLev20;
-
-  function refreshLev20(opts){
-    opts = opts || {};
-    var el = (typeof document !== 'undefined') ? document.getElementById('tab_lev20') : null;
-    if (!el) return 'skip:no-pane';
-    var statEl = el.querySelector('#lev20Stat');
-    var cardsEl = el.querySelector('#lev20Cards');
-    if (!cardsEl) return 'skip:not-mounted';
-    var res = hgOmniLeverageSafeCards(20);
-    if (!res.ok){
-      if (statEl) statEl.textContent = res.why;
-      cardsEl.innerHTML = '<div class="note">' + esc(res.why) + '</div>';
-      return 'skip:' + res.why;
-    }
-    if (!res.hasScan){
-      if (statEl) statEl.textContent = 'no OMNIROUTE scan run yet \u2014 open OMNIROUTE and press RUN FULL SCAN first';
-      cardsEl.innerHTML = '<div class="note">Run the OMNIROUTE full scan first; this tab filters those results \u2014 it does not scan on its own.</div>';
-      return 'skip:no-scan-yet';
-    }
-    if (statEl) statEl.textContent = res.cards.length + ' setup(s) currently clear 20x with the stop still ahead of liquidation'
-      + ' (filtered from the current SUPER SOLID pool)';
-    if (!res.cards.length){
-      cardsEl.innerHTML = '<div class="note">No current SUPER SOLID setup has a stop tight enough for safe 20x right now \u2014 '
-        + 'wider stops need a lower leverage to keep the stop, not the exchange, in control. Re-run OMNIROUTE and refilter as the ledger changes.</div>';
-      return 'refreshed';
-    }
-    var h = '';
-    for (var i = 0; i < res.cards.length; i++){
-      try { h += lev20CardHtml(res.cards[i]); } catch (eR){}
-    }
-    cardsEl.innerHTML = h;
-    return 'refreshed';
-  }
-  window.refreshLev20 = refreshLev20;
-
-  /* ============ BULLS — BTC/ETH/SOL max-leverage-survivable desk ============
-     Restricted to the three majors, on the SAME OMNIROUTE ledger the 20X tab
-     reads (__omni.lastCollapsed) — no separate scan.
-
-     "Never hit stop loss" cannot mean the plan's own stop is skipped — a
-     stop that is never allowed to be the exit is not a risk control, it is
-     the absence of one. What CAN be engineered is the one thing leverage
-     actually threatens: that the EXCHANGE's forced liquidation fires before
-     the plan's own stop does, closing the trade at a worse, unplanned price.
-     BULLS keeps only setups where liquidation stays behind the stop even at
-     100x or 200x — so if the trade is wrong, the strategy's stop closes it,
-     not a margin call. It does not, and cannot, make the stop itself
-     unreachable to the market.
-
-     Real ceilings from the venues this desk trades (checked live): Delta
-     India lists BTC perpetuals up to 200x and ETH/SOL up to 100x; CoinDCX
-     caps its majors at 100x. Reaching genuine 200x survivability needs a
-     stop within a few tenths of a percent of entry once the exchange's own
-     maintenance margin is priced in — rare even for BTC/ETH/SOL's
-     comparatively low volatility, so an empty 200x tab on a given scan is
-     the math working, not a bug. Toggle to 100X for a wider (still strict)
-     read. */
-  var HG_BULLS_SYMS = { BTC:true, ETH:true, SOL:true };
-  var __bullsTier = 100; /* 100 or 200, chosen via the tab's toggle */
-
-  function hgCryptoRawSurvivableLev(entry, stop, mmr, clearance){
-    /* Same formula as crypto-position-risk.js's hgCryptoMaxSurvivableLev,
-       WITHOUT its min(100, ...) display clamp — BULLS needs to know whether
-       a stop is tight enough to clear 200x, not just "100 or more". Mirrors
-       the shared defaults so the two never quietly disagree. */
-    var e = fin(entry), st = fin(stop);
-    if (!isFinite(e) || !isFinite(st) || !(e > 0) || e === st) return null;
-    var sd = Math.abs(e - st) / e;
-    var G = (typeof window !== 'undefined') ? window : {};
-    var m = (typeof mmr === 'number' && mmr > 0) ? mmr
-          : (typeof G.HG_CRYPTO_MMR_DEFAULT === 'number' ? G.HG_CRYPTO_MMR_DEFAULT : 0.005);
-    var buf = (typeof clearance === 'number' && clearance > 0) ? clearance
-          : (typeof G.HG_CRYPTO_LIQ_CLEARANCE_MIN === 'number' ? G.HG_CRYPTO_LIQ_CLEARANCE_MIN : 1.5);
-    var denom = sd * buf + m;
-    if (!(denom > 0)) return null;
-    return 1 / denom;
-  }
-  window.hgCryptoRawSurvivableLev = hgCryptoRawSurvivableLev;
-
-  function hgOmniIsBullsGrade(c){
-    /* One notch above SUPER SOLID: no adverse context reads at all (not
-       just "the vetoes are zero"), and one more independent mechanic family
-       has to agree. BULLS claims to be the strongest read the whole desk
-       can produce on exactly three names — the bar should show it. */
-    if (!hgOmniIsSuperSolid(c)) return false;
-    if (c.grade && c.grade.notes && c.grade.notes.length) return false;
-    var nAgree = (c.consensus && fin(c.consensus.nAgree)) || 0;
-    if (nAgree < SUPER_SOLID_MIN_AGREE + 1) return false;
-    if (!isFinite(fin(c.rr)) || fin(c.rr) < 2) return false;
-    return true;
-  }
-
-  function hgOmniBullsBlockReason(c){
-    /* Human-readable reason a BTC/ETH/SOL candidate is not BULLS-grade —
-       shown in the near-miss panel so an empty tab explains itself instead
-       of reading as broken. Checks in the same order hgOmniIsBullsGrade
-       checks, so the FIRST reason returned is the actual blocker. */
-    if (!c || !c.plan || !c.grade) return 'incomplete plan/grade data';
-    if (!c.grade.ticket){
-      var v = (c.grade.vetoes && c.grade.vetoes.length) ? c.grade.vetoes.join(', ') : 'unresolved hard-unknown gate(s)';
-      return 'VETO on this desk\u2019s own gates: ' + v;
-    }
-    var tot = fin(c.grade.total) || 0, ev = fin(c.grade.evaluated) || 0;
-    if (tot > 0 && (ev / tot) < SUPER_SOLID_MIN_COVERAGE) return 'too little of the gate ledger ran (' + ev + '/' + tot + ')';
-    var nAgree = (c.consensus && fin(c.consensus.nAgree)) || 0;
-    if (nAgree < SUPER_SOLID_MIN_AGREE) return 'only ' + nAgree + ' independent mechanic family agreeing (needs \u2265' + SUPER_SOLID_MIN_AGREE + ' for SUPER SOLID)';
-    if (c.grade.notes && c.grade.notes.length) return 'adverse context read(s) against the ticket: ' + c.grade.notes.join(', ');
-    if (nAgree < SUPER_SOLID_MIN_AGREE + 1) return 'only ' + nAgree + ' independent mechanic families agree (BULLS needs \u2265' + (SUPER_SOLID_MIN_AGREE + 1) + ')';
-    if (!isFinite(fin(c.rr)) || fin(c.rr) < 2) return 'R:R below 2 (' + (isFinite(fin(c.rr)) ? fin(c.rr).toFixed(2) : '\u2014') + ')';
-    var e = fin(c.plan.entry), s = fin(c.plan.stop);
-    if (!isFinite(e) || !isFinite(s) || e === s) return 'no valid entry/stop';
-    var rawLev = hgCryptoRawSurvivableLev(e, s);
-    if (!isFinite(rawLev)) return 'leverage survivability could not be computed';
-    return 'stop only clears liquidation up to ' + Math.floor(rawLev) + 'x (BULLS tier needs more)';
-  }
-
-  var HG_BULLS_TIER_LABEL = {
-    BULLS: 'BULLS-GRADE',
-    SUPER_SOLID: 'SUPER SOLID',
-    WATCH: 'WATCH-GRADE',
-    VETOED: 'VETOED \u2014 NOT RECOMMENDED',
-    DYNAMIC: 'BELOW REQUESTED LEVERAGE'
-  };
-
-  /* MULTI-TIMEFRAME CONFLUENCE WEIGHTING — BULLS tab only.
-
-     This never touches a gate, a veto, the grade, or the leverage floor.
-     It ONLY refines the order BULLS shows equally-qualified BTC/ETH/SOL
-     tickets in, and adds a transparency line to the card, by checking
-     whether the 1H and DAILY trend (both already computed elsewhere in the
-     scan — no new network calls) point the same way as the candidate's own
-     direction. A candidate whose direction the wider tape actually agrees
-     with is a better bet than one relying on the 4H mechanic alone, so
-     among tickets tied on nAgree this desk now prefers the one with more
-     timeframes behind it — without ever letting a stronger MTF read rescue
-     a candidate that failed the existing hard gates, or push a weaker one
-     above a candidate with more raw mechanic agreement. */
-  function hgOmniMtfConfluence(c){
-    var dir = c && c.dir;
-    if (dir !== 'long' && dir !== 'short') return null;
-    var reads = [];
-    function readTf(tfLabel, htf){
-      var e21 = htf ? fin(htf.e21) : NaN, e50 = htf ? fin(htf.e50) : NaN;
-      if (!isFinite(e21) || !isFinite(e50) || !e50){
-        reads.push({ tf: tfLabel, agree: null, strength: 0, detail: tfLabel + ' trend unavailable' });
-        return;
-      }
-      var up = e21 >= e50;
-      var agree = (dir === 'long') ? up : !up;
-      /* 3% EMA10\u2013EMA21 spread reads as "full strength" confirmation;
-         beyond that it is capped, not amplified further \u2014 this is a
-         confluence check, not a momentum score. */
-      var strength = Math.min(1, Math.abs(e21 - e50) / e50 / 0.03);
-      reads.push({ tf: tfLabel, agree: agree, strength: strength,
-        detail: tfLabel + ' EMA' + DAILY_FAST + (up ? ' \u2265 ' : ' < ') + 'EMA' + DAILY_SLOW
-              + (agree ? ' \u2014 confirms the ' + dir : ' \u2014 against the ' + dir) });
-    }
-    readTf('1H', c.htf1h);
-    readTf('DAILY', c.htf);
-    var score = 0, evaluated = 0, confirmed = 0, against = 0, i;
-    for (i = 0; i < reads.length; i++){
-      if (reads[i].agree === null) continue;
-      evaluated++;
-      if (reads[i].agree){ confirmed++; score += 0.5 + 0.5 * reads[i].strength; }
-      else { against++; score -= 0.5 + 0.5 * reads[i].strength; }
-    }
-    return { score: score, evaluated: evaluated, confirmed: confirmed, against: against, reads: reads };
-  }
-
-  /* ============ BULLS SCORING RUBRIC - Fair / Good / Superb ============
-     Layered ON TOP of the existing tier ladder. The tier ladder (BULLS ->
-     SUPER_SOLID -> WATCH -> VETOED -> DYNAMIC) and all its safety gates run
-     FIRST and are never weakened. This rubric then scores HOW GOOD each
-     qualifying candidate is, assigns a Fair/Good/Superb badge with visible
-     reason chips, and enforces a display cap so only the top setups show.
-     It NEVER touches a gate, a veto, grade.ticket, the plan, the leverage
-     floor, or any tier assignment. Pure read-only scoring + display. */
-
-  /* --- Regime detection from existing BTC daily proxy or regime.js state --- */
-  function hgBullsRegime(regimeObj){
-    if (!regimeObj) return null;
-    var label = String(regimeObj.label || '').toUpperCase();
-    if (label === 'RISK-ON') return 'trend';
-    if (label === 'RISK-OFF') return 'weak';
-    if (label === 'MIXED') return 'range';
-    return null;
-  }
-
-  /* --- Map 0-100 score + regime -> Fair/Good/Superb tier badge --- */
-  function hgBullsTierBadge(score, regime){
-    var superbBar = 85, goodBar = 65, fairBar = 40;
-    if (regime === 'trend'){ superbBar = 80; goodBar = 60; }
-    else if (regime === 'range'){ superbBar = 88; goodBar = 68; }
-    else if (regime === 'weak'){ superbBar = 90; goodBar = 70; fairBar = 50; }
-    if (score >= superbBar) return 'SUPERB';
-    if (score >= goodBar) return 'GOOD';
-    if (score >= fairBar) return 'FAIR';
-    return 'NOT RECOMMENDED';
-  }
-
-  /* --- Pre-score hard veto: candidates that should never be in the main
-     trade list regardless of score. Returns array of reason strings, or
-     null if the candidate passes. These are DISPLAY-ONLY filters - they
-     never change grade.ticket or any gate. The existing gate veto still
-     applies independently and with full authority. --- */
-  function hgBullsHardVeto(entry){
-    var c = entry.c;
-    var reasons = [];
-
-    /* 1. MTF strongly against (score < -0.5 means both TFs disagree) */
-    if (entry.mtf && isFinite(entry.mtf.score) && entry.mtf.score < -0.5){
-      reasons.push('MTF confluence strongly against (' +
-        (entry.mtf.against || 0) + '/' + (entry.mtf.evaluated || 0) + ' timeframes)');
-    }
-
-    /* 2. R:R below 1.5 despite clean structure */
-    var rr = isFinite(fin(c.rr)) ? fin(c.rr) : (c.plan ? fin(c.plan.rr1) : 0);
-    if (isFinite(rr) && rr < 1.5){
-      reasons.push('R:R ' + rr.toFixed(2) + ' below 1.5');
-    }
-
-    /* 3. Entry too far from trigger (late/extended) */
-    var dist = isFinite(fin(c.distAtr)) ? fin(c.distAtr) : 99;
-    if (dist > 8){
-      reasons.push('Entry ' + dist.toFixed(1) + ' ATR from trigger (too extended)');
-    }
-
-    /* 4. Zero agreement + strong disagreement */
-    var cons = c.consensus || {};
-    var nA = cons.nAgree || 0, nAg = cons.nAgainst || 0;
-    if (nA === 0 && nAg >= 2){
-      reasons.push('Zero mechanic agreement, ' + nAg + ' families against');
-    }
-
-    /* 5. Already vetoed by desk gates (display flag only) */
-    if (c.grade && c.grade.ticket === false && c.grade.vetoes && c.grade.vetoes.length){
-      reasons.push('Desk VETO: ' + c.grade.vetoes.join(', '));
-    }
-
-    return reasons.length ? reasons : null;
-  }
-
-  /* --- Score one candidate 0-100 with reason chips. Pure, read-only on c. --- */
-  function hgBullsScoreCandidate(entry){
-    var c = entry.c;
-    var chips = [];
-    var score = 0;
-
-    /* 1. Higher-timeframe trend (25 pts)
-       Daily EMA10 vs EMA21 alignment (15), plus 1H agreement (10). */
-    var htfScore = 0;
-    var dailyAligned = false, htf1hAligned = false;
-    if (c.htf){
-      var dE21 = fin(c.htf.e21), dE50 = fin(c.htf.e50);
-      if (isFinite(dE21) && isFinite(dE50) && dE50 > 0){
-        var dUp = dE21 >= dE50;
-        dailyAligned = (c.dir === 'long') ? dUp : !dUp;
-        htfScore += dailyAligned ? 15 : 0;
-      }
-    }
-    if (entry.mtf && entry.mtf.reads){
-      for (var ri = 0; ri < entry.mtf.reads.length; ri++){
-        var r = entry.mtf.reads[ri];
-        if (r.tf === '1H' && r.agree === true) htf1hAligned = true;
-      }
-      if (htf1hAligned) htfScore += 10;
-    }
-    score += Math.min(25, htfScore);
-    chips.push({ label: 'HTF ' + (dailyAligned ? '\u2713' : '\u2717'), ok: dailyAligned });
-
-    /* 2. Multi-timeframe confluence (20 pts)
-       Map mtf.score [-1..+1] to [0..20]. Unavailable = 5 (neutral). */
-    var mtfPts = 0;
-    if (entry.mtf && isFinite(entry.mtf.score)){
-      mtfPts = Math.max(0, Math.min(20, (entry.mtf.score + 1) * 10));
-      var confirmed = entry.mtf.confirmed || 0;
-      var against = entry.mtf.against || 0;
-      chips.push({ label: 'MTF ' + confirmed + '/' + (confirmed + against) + ' TF',
-                   ok: confirmed > 0 });
-    } else {
-      mtfPts = 5;
-      chips.push({ label: 'MTF n/a', ok: null });
-    }
-    score += mtfPts;
-
-    /* 3. Setup structure quality (15 pts)
-       nAgree-based + alsoKinds bonus. */
-    var nAgree = entry.nAgree || 0;
-    var structPts = 0;
-    if (nAgree >= 3) structPts = 15;
-    else if (nAgree === 2) structPts = 10;
-    else if (nAgree === 1) structPts = 5;
-    var alsoCount = (c.alsoKinds && c.alsoKinds.length) || 0;
-    structPts = Math.min(15, structPts + Math.min(3, alsoCount));
-    score += structPts;
-    chips.push({ label: 'Str ' + nAgree + '/6 fam', ok: nAgree >= 2 });
-
-    /* 4. Relative strength (10 pts)
-       consensus family ratio (nAgree - nAgainst) / total. */
-    var cons2 = c.consensus || {};
-    var nA2 = cons2.nAgree || 0, nAg2 = cons2.nAgainst || 0;
-    var famDen = nA2 + nAg2;
-    var rsPts = 0;
-    if (famDen > 0){
-      var famRatio = (nA2 - nAg2) / famDen;
-      rsPts = Math.max(0, Math.min(10, (famRatio + 1) * 5));
-    }
-    score += rsPts;
-    chips.push({ label: 'RS ' + (famDen > 0 ? ((nA2 - nAg2) >= 0 ? '+' : '') + (nA2 - nAg2) : 'n/a'),
-                 ok: famDen > 0 && nA2 > nAg2 });
-
-    /* 5. Volume & participation (10 pts)
-       Gate info net ratio (5) + alsoKinds count (5). */
-    var info = hgOmniInfoNet(c.gates);
-    var infoRatio = info.n ? (info.net / info.n) : 0;
-    var volPts = Math.max(0, Math.min(5, (infoRatio + 1) * 2.5));
-    var alsoVol = Math.min(5, alsoCount * 1.67);
-    score += volPts + alsoVol;
-    chips.push({ label: 'Vol +' + info.pass + '/-' + info.fail,
-                 ok: info.net >= 0 });
-
-    /* 6. Entry location (10 pts)
-       distAtr-based: 10 at <=2 ATR, scale to 0 at >=6. */
-    var dist2 = isFinite(fin(c.distAtr)) ? fin(c.distAtr) : 99;
-    var locPts = 0;
-    if (dist2 <= 2) locPts = 10;
-    else if (dist2 <= 4) locPts = Math.max(0, 10 - (dist2 - 2) * 2.5);
-    else if (dist2 <= 6) locPts = Math.max(0, 5 - (dist2 - 4) * 2.5);
-    score += locPts;
-    chips.push({ label: 'Entry ' + (dist2 < 99 ? dist2.toFixed(1) : '?') + ' ATR',
-                 ok: dist2 <= 4 });
-
-    /* 7. Risk-to-reward (10 pts) */
-    var rr2 = isFinite(fin(c.rr)) ? fin(c.rr) : (c.plan ? fin(c.plan.rr1) : 0);
-    var rrPts = 0;
-    if (rr2 >= 3) rrPts = 10;
-    else if (rr2 >= 2.5) rrPts = 7;
-    else if (rr2 >= 2) rrPts = 5;
-    else if (rr2 >= 1.5) rrPts = 3;
-    score += rrPts;
-    chips.push({ label: 'R:R ' + (rr2 > 0 ? rr2.toFixed(1) + 'x' : '?'),
-                 ok: rr2 >= 2 });
-
-    return { score: Math.round(score), chips: chips, maxScore: 100 };
-  }
-
-  function hgOmniBullsBuildPool(majors, filterFn, tierName, lev, dynamicLev){
-
-    /* dynamicLev=true is the absolute last resort: instead of requiring the
-       candidate's stop to survive the REQUESTED tier (100x/200x), it accepts
-       the candidate's own true survivable leverage, whatever that is, and
-       the card is rendered at THAT honest number instead of the requested
-       one. This is not a relaxation of the liquidation-behind-stop rule \u2014
-       it is the same rule applied at the leverage the stop can actually
-       support, so liquidation never sits inside the stop at the leverage a
-       card actually displays. It only ever activates once BULLS, SUPER_SOLID,
-       WATCH and VETOED have all failed to find anything that survives the
-       requested tier. */
-    var out = [];
-    for (var j = 0; j < majors.length; j++){
-      var c = majors[j];
-      if (!filterFn(c)) continue;
-      var e = fin(c.plan.entry), s = fin(c.plan.stop);
-      if (!isFinite(e) || !isFinite(s) || e === s) continue;
-      var rawLev = hgCryptoRawSurvivableLev(e, s);
-      if (!isFinite(rawLev) || rawLev < 1) continue;
-      if (!dynamicLev && rawLev < lev) continue;
-      var useLev = dynamicLev ? Math.min(lev, Math.floor(rawLev)) : lev;
-      var liqFn = (typeof window !== 'undefined' && typeof window.hgCryptoLiqPrice === 'function')
-                ? window.hgCryptoLiqPrice : null;
-      var liqPx = null;
-      try { if (liqFn) liqPx = fin(liqFn(e, useLev, null, c.dir)); } catch (eP){ liqPx = null; }
-      var mtf = null;
-      try { mtf = hgOmniMtfConfluence(c); } catch (eM){ mtf = null; }
-      out.push({ c: c, rawLev: rawLev, useLev: useLev, liqPx: liqPx, base: String(c.base || c.sym || '').toUpperCase(),
-                 nAgree: (c.consensus && fin(c.consensus.nAgree)) || 0, qualityTier: tierName, mtf: mtf });
-    }
-    out.sort(function(a, b){
-      if (b.rawLev !== a.rawLev) return b.rawLev - a.rawLev;
-      if (b.nAgree !== a.nAgree) return b.nAgree - a.nAgree;
-      /* Multi-timeframe confluence is a tiebreaker ONLY — it never outranks
-         raw survivable leverage or raw mechanic agreement, it only orders
-         candidates that are already tied on both. */
-      var am = (a.mtf && isFinite(a.mtf.score)) ? a.mtf.score : 0;
-      var bm = (b.mtf && isFinite(b.mtf.score)) ? b.mtf.score : 0;
-      if (bm !== am) return bm - am;
-      return (fin(b.c.rr) || 0) - (fin(a.c.rr) || 0);
-    });
-
-    /* BULLS SCORING RUBRIC - score each candidate, apply hard-veto filter,
-       re-sort by score within the existing tier ordering, and split into
-       display vs overflow. This NEVER overrides the tier ladder above: a
-       candidate that cleared BULLS-GRADE still ranks above one that only
-       cleared SUPER_SOLID, regardless of score. Score only refines order
-       WITHIN the same tier. Hard veto only moves a candidate to the
-       overflow/not-recommended display - it never changes grade.ticket
-       or any gate. */
-    var regime = hgBullsRegime(__omni.regimeProxy ||
-      (typeof window === 'object' && typeof window.regimeState === 'function'
-        ? (function(){ try { return window.regimeState(); } catch(e){ return null; } })()
-        : null));
-    for (var si = 0; si < out.length; si++){
-      var vetoReasons = hgBullsHardVeto(out[si]);
-      if (vetoReasons){
-        out[si].hardVeto = vetoReasons;
-        continue;
-      }
-      try {
-        var scored = hgBullsScoreCandidate(out[si]);
-        out[si].score = scored.score;
-        out[si].chips = scored.chips;
-        out[si].tierBadge = hgBullsTierBadge(scored.score, regime);
-        out[si].regime = regime;
-      } catch (eS){
-        out[si].score = 0;
-        out[si].chips = [];
-        out[si].tierBadge = 'FAIR';
-        out[si].regime = regime;
-      }
-    }
-    /* Re-sort: tier precedence first (already grouped by ladder), then
-       score within tier, then rawLev, then nAgree. */
-    var TIER_ORDER = { BULLS: 0, SUPER_SOLID: 1, WATCH: 2, VETOED: 3, DYNAMIC: 4 };
-    out.sort(function(a, b){
-      var ta = TIER_ORDER[a.qualityTier] || 0, tb = TIER_ORDER[b.qualityTier] || 0;
-      if (ta !== tb) return ta - tb;
-      var sb = b.score || 0, sa = a.score || 0;
-      if (sb !== sa) return sb - sa;
-      if (b.rawLev !== a.rawLev) return b.rawLev - a.rawLev;
-      return (b.nAgree || 0) - (a.nAgree || 0);
-    });
-    return out;
-  }
-
-
-  function hgOmniBullsCards(minLev){
-    var lev = (minLev === 200) ? 200 : 100;
-    var src = __omni.lastCollapsed || null;
-    if (!src || !src.length){
-      return { ok:true, cards:[], hasScan:false, minLev: lev, nearMiss:[], tier:null };
-    }
-    var majors = [];
-    for (var i = 0; i < src.length; i++){
-      var c = src[i];
-      if (!c || !c.plan || !c.grade) continue;
-      var base = String(c.base || c.sym || '').toUpperCase();
-      if (!HG_BULLS_SYMS[base]) continue;
-      majors.push(c);
-    }
-    /* Graduated ladder \u2014 the leverage-survivability check (liquidation
-       stays behind the stop at the chosen tier) is a HARD floor applied at
-       every rung and is never relaxed; only the conviction bar underneath
-       it steps down, one rung at a time, until real BTC/ETH/SOL reads exist
-       to show. This keeps the tab populated far more often while still
-       never presenting a hard-VETOed (grade.ticket === false) read as an
-       actionable card \u2014 those only ever surface in the near-miss panel
-       below, clearly marked as blocked, never as a trade idea. */
-    var out = hgOmniBullsBuildPool(majors, hgOmniIsBullsGrade, 'BULLS', lev);
-    if (!out.length) out = hgOmniBullsBuildPool(majors, hgOmniIsSuperSolid, 'SUPER_SOLID', lev);
-    if (!out.length) out = hgOmniBullsBuildPool(majors, function(c){ return !!(c.grade && c.grade.ticket); }, 'WATCH', lev);
-    /* Last-resort rung, shown ONLY per explicit user instruction so the tab
-       is never silently empty: includes candidates this desk's own gates
-       have hard-VETOed (grade.ticket === false). These are NEVER presented
-       as a recommendation \u2014 bullsCardHtml renders this tier with a
-       distinct red \"VETOED / NOT RECOMMENDED\" treatment and lists the
-       actual gate(s) that failed, sourced from hgOmniBullsBlockReason, so a
-       user can never mistake this for an actionable BULLS/SUPER_SOLID/WATCH
-       read. The leverage-survivability hard floor (rawLev >= lev) still
-       applies unconditionally \u2014 that check is never relaxed at any tier. */
-    if (!out.length) out = hgOmniBullsBuildPool(majors, function(c){ return true; }, 'VETOED', lev);
-    /* Absolute last resort: none of BTC/ETH/SOL survive the REQUESTED tier
-       even ignoring the desk's own veto \u2014 their stops are simply too wide
-       for 100x/200x today. Rather than manufacture a false 100x/200x-safe
-       card (which would let liquidation sit inside the stop \u2014 the one
-       thing that must never happen), show the same candidate at its own
-       real safe leverage, honestly labeled as below the requested tier. */
-    if (!out.length) out = hgOmniBullsBuildPool(majors, function(c){ return true; }, 'DYNAMIC', lev, true);
-    var tierUsed = out.length ? out[0].qualityTier : null;
-    /* Near-miss panel: only populated when nothing qualified at ANY rung
-       above (i.e. every BTC/ETH/SOL read right now is either hard-VETOed
-       by this desk\u2019s own gates, or its stop is too wide to clear the
-       chosen leverage tier), so a genuinely empty tab still explains
-       itself instead of reading as broken. Deduped to the single freshest
-       read per symbol+direction, capped at 6, ties broken by nAgree then rr. */
-    var nearMiss = [];
-    if (!out.length && majors.length){
-      var bySym = {};
-      for (var j = 0; j < majors.length; j++){
-        var mc = majors[j];
-        var key = String(mc.base || mc.sym || '') + '|' + String(mc.dir || '');
-        if (!bySym[key]) bySym[key] = mc;
-      }
-      var dedup = [];
-      for (var k in bySym){ if (Object.prototype.hasOwnProperty.call(bySym, k)) dedup.push(bySym[k]); }
-      dedup.sort(function(a, b){
-        var na = (a.consensus && fin(a.consensus.nAgree)) || 0, nb = (b.consensus && fin(b.consensus.nAgree)) || 0;
-        if (nb !== na) return nb - na;
-        return (fin(b.rr) || 0) - (fin(a.rr) || 0);
-      });
-      for (var m = 0; m < Math.min(6, dedup.length); m++){
-        nearMiss.push({ c: dedup[m], reason: hgOmniBullsBlockReason(dedup[m]) });
-      }
-    }
-    return { ok:true, cards: out, hasScan:true, minLev: lev, nearMiss: nearMiss, tier: tierUsed };
-  }
-  window.hgOmniBullsCards = hgOmniBullsCards;
-
-  function bullsCardHtml(entry, tier){
-    var c = entry.c;
-    var base = setupCard(c, null);
-    var qTier = entry.qualityTier || 'BULLS';
-    var isDynamic = (qTier === 'DYNAMIC');
-    /* DYNAMIC cards render at their OWN real safe leverage (entry.useLev),
-       never at the requested tier \u2014 that is the entire point of this
-       rung: it never claims a leverage the stop cannot actually survive. */
-    var displayLev = isDynamic ? Math.max(1, Math.floor(entry.useLev)) : Math.min(999, Math.floor(entry.rawLev));
-    var tierBadge = isDynamic
-      ? (displayLev + 'X-SAFE (below the requested ' + tier + 'x)')
-      : (entry.rawLev >= 200 ? '200X-SAFE' : '100X-SAFE');
-    var liqLev = isDynamic ? displayLev : tier;
-    var liqTxt = isFinite(entry.liqPx) ? fmtPx(entry.liqPx) : 'n/a';
-    var qLabel = HG_BULLS_TIER_LABEL[qTier] || qTier;
-    /* Conviction line reflects the ACTUAL rung this card cleared — never
-       claims "zero adverse reads" or "BULLS-grade" for a card that only
-       cleared a lower rung of the ladder, so the badge always matches the
-       real gate the card passed. */
-    var convictionTxt;
-    if (qTier === 'BULLS'){
-      convictionTxt = 'nAgree ' + esc(String(entry.nAgree)) + '/6 mechanic families, zero adverse context reads, R:R '
-        + esc(isFinite(fin(c.rr)) ? fin(c.rr).toFixed(2) : '\u2014') + '.';
-    } else if (qTier === 'SUPER_SOLID'){
-      convictionTxt = 'nAgree ' + esc(String(entry.nAgree)) + '/6 mechanic families, ' + esc(SUPER_SOLID_MIN_COVERAGE * 100 + '%')
-        + '+ gate-ledger coverage \u2014 clears SUPER SOLID (same bar as the 20X desk) but not the extra BULLS notch '
-        + '(zero adverse reads / \u22653 families / R:R \u2265 2), so treat conviction as one step below full BULLS-grade.';
-    } else if (qTier === 'WATCH'){
-      convictionTxt = 'nAgree ' + esc(String(entry.nAgree)) + '/6 mechanic families \u2014 this desk has NOT vetoed the ticket, but it '
-        + 'also has not cleared SUPER SOLID coverage yet. This is the best current read on this name, shown so the tab is never '
-        + 'silently empty \u2014 size and conviction should be materially lower than a BULLS- or SUPER-SOLID-grade card.';
-    } else if (qTier === 'VETOED'){
-      /* VETOED tier: this desk's own risk gates rejected this exact ticket.
-         Never phrase this as a trade idea \u2014 state plainly that it failed
-         and list the actual gate(s) that failed it, via hgOmniBullsBlockReason. */
-      convictionTxt = '<b style="color:#ff5c5c">This desk\'s own risk gates VETOED this ticket \u2014 it is NOT a recommendation.</b> '
-        + 'Shown only because no BTC/ETH/SOL read currently clears even the lowest WATCH bar, and you asked to always see the '
-        + 'closest available read rather than a blank tab. Reason blocked: ' + esc(hgOmniBullsBlockReason(c)) + '. '
-        + 'Treat this strictly as \u201cwhat the market is doing\u201d context, not as a setup to size or enter.';
-    } else {
-      /* DYNAMIC tier: no BTC/ETH/SOL stop today is tight enough to survive
-         the requested 100x/200x \u2014 shown honestly at the leverage this
-         exact stop CAN survive instead of pretending the requested tier is
-         safe. Still says plainly whether the desk's own gates ticketed it. */
-      var vetoedToo = !(c.grade && c.grade.ticket);
-      convictionTxt = '<b style="color:#f5a623">No BTC/ETH/SOL stop today is tight enough to survive ' + esc(String(tier))
-        + 'x \u2014 this is the closest read, shown at its own real safe leverage (' + esc(String(displayLev)) + 'x), not '
-        + esc(String(tier)) + 'x.</b> '
-        + (vetoedToo
-            ? ('This ticket is ALSO hard-VETOed by the desk\'s own gates (' + esc(hgOmniBullsBlockReason(c)) + '), so treat it as market context only, not a trade.')
-            : ('This ticket is not vetoed by the desk\'s gates, but nAgree ' + esc(String(entry.nAgree)) + '/6 mechanic families \u2014 size for ' + esc(String(displayLev)) + 'x at most, never ' + esc(String(tier)) + 'x, if acting on it at all.'));
-    }
-    var isVetoed = (qTier === 'VETOED');
-    var wrapStyle = isVetoed
-      ? 'border-top:2px solid #ff5c5c;margin-top:8px;padding-top:8px;background:rgba(255,92,92,0.07)'
-      : isDynamic
-        ? 'border-top:2px solid #f5a623;margin-top:8px;padding-top:8px;background:rgba(245,166,35,0.07)'
-        : 'border-top:1px dashed rgba(255,255,255,0.15);margin-top:8px;padding-top:8px';
-    var qLabelHtml = isVetoed ? ('<span style="color:#ff5c5c">' + esc(qLabel) + '</span>')
-      : isDynamic ? ('<span style="color:#f5a623">' + esc(qLabel) + '</span>')
-      : esc(qLabel);
-    /* Multi-timeframe confluence line \u2014 pure transparency, ranking
-       tiebreaker only. Never claims agreement it did not check: an
-       unevaluable read states so by name rather than being silently
-       omitted, and a mixed/against read is stated as plainly as agreement. */
-    var mtfTxt = '';
-    if (entry.mtf && entry.mtf.reads && entry.mtf.reads.length){
-      var mtfParts = [];
-      for (var mi = 0; mi < entry.mtf.reads.length; mi++) mtfParts.push(esc(entry.mtf.reads[mi].detail));
-      mtfTxt = ' <span class="dim">MTF confluence \u2014 ' + mtfParts.join('; ') + '.</span>';
-    }
-    var note = '<div class="plan" style="' + wrapStyle + '">'
-      + '<b>' + qLabelHtml + '</b> \u00b7 <b>' + esc(tierBadge) + '</b> \u2014 stop clears liquidation up to <b>' + esc(displayLev.toFixed ? displayLev.toFixed(0) : String(displayLev)) + 'x</b> '
-      + '(0.5% maintenance margin + 1.5x clearance buffer built in). At exactly ' + esc(String(liqLev))
-      + 'x, liquidation \u2248 ' + esc(liqTxt) + ' \u2014 beyond the stop at ' + esc(fmtPx(c.plan.stop))
-      + ', so the plan\'s stop remains the exit, not forced liquidation. '
-      + convictionTxt
-      + mtfTxt;
-
-    /* Score badge + reason chips (Fair/Good/Superb rubric).
-       Pure display addition - never changes any gate, veto, or tier
-       assignment. Only renders if scoring ran on this entry. */
-    if (entry.score != null){
-      var scoreTier = entry.tierBadge || 'GOOD';
-      var badgeColor = scoreTier === 'SUPERB' ? '#4caf50'
-        : scoreTier === 'GOOD' ? '#2196f3'
-        : scoreTier === 'FAIR' ? '#ff9800' : '#ff5c5c';
-      var scoreLine = ' <span style="background:' + esc(badgeColor)
-        + ';color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:bold">'
-        + esc(scoreTier) + '</span>'
-        + ' <span class="dim">Score ' + esc(String(entry.score)) + '/100'
-        + (entry.regime ? ' \u00b7 ' + esc(entry.regime) + ' regime' : '') + '</span>';
-      if (entry.chips && entry.chips.length){
-        scoreLine += '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">';
-        for (var ci = 0; ci < entry.chips.length; ci++){
-          var chip = entry.chips[ci];
-          var chipColor = chip.ok === true ? '#4caf50'
-            : chip.ok === false ? '#ff5c5c' : '#888';
-          scoreLine += '<span style="background:rgba(255,255,255,0.06);border:1px solid '
-            + esc(chipColor) + ';color:' + esc(chipColor)
-            + ';padding:1px 6px;border-radius:3px;font-size:10px">'
-            + esc(chip.label) + '</span>';
-        }
-        scoreLine += '</div>';
-      }
-      note += scoreLine;
-    }
-
-    note += '</div>';
-    return base.replace(/<\/div>\s*$/, note + '</div>');
-  }
-
-  function mountBulls(el){
-
-    if (!el) return;
-    el.innerHTML =
-      '<div class="hg-lead" style="margin-bottom:10px">'
-      + '<b>BULLS \u2014 BTC / ETH / SOL, MAX LEVERAGE, LIQUIDATION KEPT BEHIND THE STOP</b> '
-      + '<span class="dim">crypto majors only \u00b7 filters OMNIROUTE, no separate scan</span>'
-      + '<div class="note" style="margin-top:6px">Ranks BTC/ETH/SOL by the strongest read this desk can currently produce. '
-      + 'Ladder: <b>BULLS-GRADE</b> (one notch past SUPER SOLID \u2014 zero adverse context reads, \u22653 independent mechanic '
-      + 'families agreeing, R:R \u2265 2) shown when available; if none clear that, the next rung down is shown instead \u2014 '
-      + '<b>SUPER SOLID</b> (same bar the 20X desk uses) or, failing that, <b>WATCH-GRADE</b> (not hard-vetoed by this desk, but '
-      + 'below full coverage). If NOTHING clears even WATCH, the tab falls back to show the closest '
-      + '<b style="color:#ff5c5c">VETOED</b> ticket in red, explicitly marked NOT a recommendation. And if not even a VETOED '
-      + 'candidate\'s stop is tight enough to survive the requested leverage at all, the final rung, <b style="color:#f5a623">'
-      + 'BELOW REQUESTED LEVERAGE</b> in amber, shows that same candidate honestly re-priced at the leverage its OWN stop can '
-      + 'actually survive, never at the leverage you asked for \u2014 all purely so the tab is never blank. Every card states '
-      + 'exactly which rung it cleared, and only VETOED/DYNAMIC rungs can include a ticket this desk\'s own gates rejected. '
-      + 'At every rung, the ONE requirement that never relaxes: liquidation at the leverage a card actually DISPLAYS must '
-      + 'still sit beyond the stop, so a losing trade exits on the plan\'s own stop, not a margin call. This does not and cannot '
-      + 'make the stop itself unreachable: leverage changes what happens if it is hit, not whether it can be. Delta India lists '
-      + 'BTC up to 200x and ETH/SOL up to 100x; CoinDCX caps majors at 100x \u2014 genuine 200x survivability needs a very tight '
-      + 'stop once the exchange\'s own maintenance margin is priced in, so it will often come up empty even when 100x does not. '
-      + 'Run the OMNIROUTE full scan first; this tab reads that result and does not fetch anything on its own.'
-      + '<div style="margin-top:6px"><b>Scoring:</b> each candidate is scored 0-100 across 7 dimensions '
-      + '(HTF trend, MTF confluence, setup structure, relative strength, volume/participation, entry location, R:R) '
-      + 'and badged <b style="color:#4caf50">SUPERB</b> / <b style="color:#2196f3">GOOD</b> / '
-      + '<b style="color:#ff9800">FAIR</b>. Top 5 shown; rest in a collapsed Not Recommended section. '
-      + 'Scoring refines order within a tier only \u2014 it never overrides safety gates or the tier ladder.</div></div>'
-
-      + '<div style="margin-bottom:10px">'
-      + '<button type="button" class="btn on" id="bullsTier100" data-lev="100">100X</button> '
-      + '<button type="button" class="btn" id="bullsTier200" data-lev="200">200X</button> '
-      + '<button type="button" class="btn" id="bullsRefresh">REFILTER</button> '
-      + '<span id="bullsStat" class="dim">idle</span></div>'
-      + '<div id="bullsCards"></div>';
-    var b100 = el.querySelector('#bullsTier100');
-    var b200 = el.querySelector('#bullsTier200');
-    var refreshBtn = el.querySelector('#bullsRefresh');
-    if (b100) b100.addEventListener('click', function(){
-      __bullsTier = 100; b100.classList.add('on'); if (b200) b200.classList.remove('on'); refreshBulls();
-    });
-    if (b200) b200.addEventListener('click', function(){
-      __bullsTier = 200; b200.classList.add('on'); if (b100) b100.classList.remove('on'); refreshBulls();
-    });
-    if (refreshBtn) refreshBtn.addEventListener('click', function(){ refreshBulls(); });
-    refreshBulls();
-  }
-  window.mountBulls = mountBulls;
-
-  function refreshBulls(opts){
-    opts = opts || {};
-    var el = (typeof document !== 'undefined') ? document.getElementById('tab_bulls') : null;
-    if (!el) return 'skip:no-pane';
-    var statEl = el.querySelector('#bullsStat');
-    var cardsEl = el.querySelector('#bullsCards');
-    if (!cardsEl) return 'skip:not-mounted';
-    var res = hgOmniBullsCards(__bullsTier);
-    if (!res.hasScan){
-      if (statEl) statEl.textContent = 'no OMNIROUTE scan run yet \u2014 open OMNIROUTE and press RUN FULL SCAN first';
-      cardsEl.innerHTML = '<div class="note">Run the OMNIROUTE full scan first; this tab filters those results \u2014 it does not scan on its own.</div>';
-      return 'skip:no-scan-yet';
-    }
-    if (statEl){
-      if (res.cards.length && res.tier === 'DYNAMIC'){
-        statEl.textContent = '\u26a0 No BTC/ETH/SOL stop today is tight enough to survive ' + __bullsTier + 'x at all \u2014 showing '
-          + res.cards.length + ' candidate(s) re-priced honestly at their OWN real safe leverage (see each card), NOT ' + __bullsTier
-          + 'x. These are NOT recommendations at the requested tier \u2014 read each card\'s actual leverage before acting.';
-      } else if (res.cards.length && res.tier === 'VETOED'){
-        statEl.textContent = '\u26a0 No BTC/ETH/SOL read clears even the lowest WATCH bar right now \u2014 showing '
-          + res.cards.length + ' desk-VETOed ticket(s) at ' + __bullsTier + 'x ONLY so the tab is never blank. These are NOT '
-          + 'recommendations \u2014 read the red-flagged reason on each card before treating them as anything but context.';
-      } else if (res.cards.length && res.tier && res.tier !== 'BULLS'){
-        statEl.textContent = res.cards.length + ' BTC/ETH/SOL setup(s) currently clear ' + __bullsTier
-          + 'x liquidation-safety at ' + (HG_BULLS_TIER_LABEL[res.tier] || res.tier) + ' conviction (no full BULLS-grade read available right now \u2014 showing the next rung down, clearly labeled per card)';
-      } else {
-        statEl.textContent = res.cards.length + ' BTC/ETH/SOL setup(s) currently clear ' + __bullsTier
-          + 'x with liquidation still behind the stop (BULLS-grade: zero adverse reads, \u22653 mechanic families, R:R \u2265 2)';
-      }
-    }
-    if (!res.cards.length){
-      var msg = '<div class="note">No current BTC, ETH or SOL setup clears ' + __bullsTier + 'x liquidation-safety at any conviction tier right now'
-        + (__bullsTier === 200 ? ' \u2014 try 100X, which is a materially easier bar.' : ' \u2014 the majors are trading with wider stops than this tier allows today.')
-        + ' Re-run OMNIROUTE and refilter as the ledger changes.</div>';
-      if (res.nearMiss && res.nearMiss.length){
-        /* Transparency, not a downgrade: show the actual BTC/ETH/SOL reads
-           on the ledger right now and the specific gate each one is failing,
-           so "empty" reads as "the market didn\u2019t offer one" rather than
-           "the tab is broken". Mirrors OMNIROUTE\u2019s own veto-visibility rule. */
-        msg += '<div class="note" style="margin-top:10px"><b>Closest current reads on BTC/ETH/SOL (none clear the bar):</b></div>';
-        msg += '<div style="margin-top:6px">';
-        for (var nm = 0; nm < res.nearMiss.length; nm++){
-          var nmC = res.nearMiss[nm].c;
-          var nmBase = esc(String(nmC.base || nmC.sym || '?').toUpperCase());
-          var nmDir = esc(String(nmC.dir || '?').toUpperCase());
-          var nmKind = esc(String(nmC.kind || ''));
-          msg += '<div class="plan" style="border-top:1px dashed rgba(255,255,255,0.12);padding-top:6px;margin-top:6px">'
-            + '<b>' + nmBase + ' ' + nmDir + '</b>' + (nmKind ? ' \u00b7 ' + nmKind : '')
-            + ' \u2014 blocked: ' + esc(res.nearMiss[nm].reason) + '</div>';
-        }
-        msg += '</div>';
-      }
-      cardsEl.innerHTML = msg;
-      return 'refreshed';
-    }
-    /* Split into display cards (scored, not hard-vetoed, top N) and
-       overflow (hard-vetoed or below cap). The display cap keeps the
-       trade list short and focused - rest go to a collapsed section. */
-    var BULLS_MAX_DISPLAY = 5;
-    var displayCards = [];
-    var notRecommended = [];
-    for (var i = 0; i < res.cards.length; i++){
-      var card = res.cards[i];
-      if (card.hardVeto){
-        notRecommended.push(card);
-      } else if (displayCards.length < BULLS_MAX_DISPLAY){
-        displayCards.push(card);
-      } else {
-        notRecommended.push(card);
-      }
-    }
-    var h = '';
-    for (var i = 0; i < displayCards.length; i++){
-      try { h += bullsCardHtml(displayCards[i], __bullsTier); } catch (eR){}
-    }
-    /* Not Recommended accordion - collapsed by default, clearly marked
-       as review-only, never presented as actionable trades. */
-    if (notRecommended.length){
-      h += '<details style="margin-top:12px">'
-        + '<summary style="cursor:pointer;color:#ff5c5c;font-weight:bold;font-size:13px">'
-        + 'Not Recommended (' + notRecommended.length + ')</summary>'
-        + '<div style="margin-top:8px;padding-left:12px">';
-      for (var nr = 0; nr < notRecommended.length; nr++){
-        var nrE = notRecommended[nr];
-        var nrBase = esc(String(nrE.base || nrE.c && nrE.c.sym || '?').toUpperCase());
-        var nrDir = esc(String(nrE.c && nrE.c.dir || '?').toUpperCase());
-        h += '<div class="plan" style="border-top:1px solid rgba(255,92,92,0.2);padding-top:6px;margin-top:6px">'
-          + '<b style="color:#ff5c5c">' + nrBase + ' ' + nrDir + '</b>'
-          + (nrE.score != null ? ' \u00b7 Score ' + esc(String(nrE.score)) + '/100' : '')
-          + (nrE.hardVeto ? ' \u00b7 <span style="color:#ff5c5c">Vetoed: ' + esc(nrE.hardVeto.join('; ')) + '</span>' : '')
-          + '</div>';
-      }
-      h += '</div></details>';
-    }
-    cardsEl.innerHTML = h;
-    return 'refreshed';
-
-  }
-  window.refreshBulls = refreshBulls;
-
-
 
   /* Pooled verdict for one mechanic — PURE, exported, and shared by both
      tabs' tables so the wording cannot drift between them.
@@ -7737,10 +6848,6 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         return omniRefreshSide(ui).then(function(sideRead){
         var tape = hgOmniSideTape(sideRead);
         collapsed = hgOmniDeskOrder(collapsed, tape);
-        /* Kept for the 20X tab, which filters this same ledger rather than
-           running its own scan — a reference is enough since it only reads
-           .plan/.grade/.gates/.dir/.sym off each card, never mutates them. */
-        __omni.lastCollapsed = collapsed;
         var few = hgOmniPickFew(collapsed, tape, OMNI_MP_MAX);
         /* Tickets sentiment/tape is holding: cleared the whole ledger, carry a plan,
            and point the other way. Counted from the COLLAPSED list so several
@@ -7780,8 +6887,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                       +  ' · card not rendered</div>';
             continue;
           }
-          var isTk = hgOmniIsSuperSolid(collapsed[i]);
-          if (isTk){
+          var isTk = !!(collapsed[i].grade && collapsed[i].grade.ticket);
+          if (isTk || shown < CARD_RENDER_MAX){
             try { h += setupCard(collapsed[i], sideRead); shown++; }
             catch (eC){
               try{ console.warn('omniroute card render skipped', collapsed[i] && collapsed[i].sym, eC); }catch(eC2){}
@@ -7789,19 +6896,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           } else {
             overflowN++;
             /* One line, not one card: the sym, the mechanic, the direction
-               and why it did not clear the SUPER SOLID bar — enough to
-               decide whether to care, without giving a half-evidenced
-               setup the same full-size card as a super solid one. */
+               and what killed it — enough to decide whether to care. */
             if (overflowN <= 200){
-              var ciG = collapsed[i].grade;
-              var ovV;
-              if (ciG && ciG.vetoes && ciG.vetoes.length){
-                ovV = ciG.vetoes[0] + (ciG.vetoes.length > 1 ? ' +' + (ciG.vetoes.length - 1) : '');
-              } else if (ciG && ciG.ticket){
-                ovV = 'clean but below the SUPER SOLID bar (thin ledger coverage or no independent agreement)';
-              } else {
-                ovV = 'no veto — below rank cap';
-              }
+              var ovV = (collapsed[i].grade && collapsed[i].grade.vetoes && collapsed[i].grade.vetoes.length)
+                ? collapsed[i].grade.vetoes[0]
+                  + (collapsed[i].grade.vetoes.length > 1 ? ' +' + (collapsed[i].grade.vetoes.length - 1) : '')
+                : 'no veto — below rank cap';
               overflowLines += '<div class="dim">' + esc(String(collapsed[i].sym || '') + ' '
                 + collapsed[i].kind + ' ' + String(collapsed[i].dir).toUpperCase()
                 + ' — ' + ovV) + '</div>';
@@ -7810,10 +6910,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         }
         if (overflowN){
           h += '<div class="note" style="margin-top:10px"><b>' + overflowN
-            + ' more setup(s) did not clear the SUPER SOLID bar (CLEAN ticket + ≥'
-            + Math.round(SUPER_SOLID_MIN_COVERAGE * 100) + '% ledger coverage + ≥'
-            + SUPER_SOLID_MIN_AGREE + ' agreeing mechanic familie(s)) — only super solid'
-            + ' setups render as full cards. Full ledgers all kept:'
+            + ' more setup(s) past the ' + CARD_RENDER_MAX + '-card screen cap'
+            + ' — every ticket above rendered in full; a page with a thousand'
+            + ' full ledgers is what was crashing this tab. Ledgers all kept:'
             + ' hgOmniWhyNoTickets().</b>'
             + overflowLines
             + (overflowN > 200 ? '<div class="dim">…and ' + (overflowN - 200) + ' more, summarised in the pool table above</div>' : '')
@@ -8026,9 +7125,6 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + 'Each candidate then faces 3 hard gates (trend · vol-alive · participation) plus conditional confluence. '
       + '<b>A single veto stands it aside</b>; vetoed cards still render so you can see why. A contract missing a data source reads UNCHECKED, never PASS. '
       + 'Levels come from the house plan engine at a ' + MIN_RR + 'R floor. <b>MOST PROBABLE SETUPS</b> lead the tab: up to three tape-aligned tickets, ranked on a balance of mechanic families and indicator reads — not a win probability. Extra house engines vote and never claim 7/7 CLEAN. '
-      + '<b>SUPER SOLID bar:</b> every card on this tab — not just the top three — must be a CLEAN ticket (zero vetoes, zero hard-unknowns) AND have run at least '
-      + Math.round(SUPER_SOLID_MIN_COVERAGE * 100) + '% of the gate ledger (not defaulted to unknown) AND have ≥' + SUPER_SOLID_MIN_AGREE
-      + ' independent mechanic familie(s) agreeing on direction. Anything clean but thinner than that collapses to a one-line summary below the cards instead of a full ticket — a quiet tab is the intended result when nothing clears this. '
       + 'The measurement below is in-sample on a short window: it tells you which detector has paid <i>on the bars just read</i>, which is a floor, not a promise.</div>'
       + '<div class="row"><button class="btn" id="omniRun">RUN FULL SCAN (ALL CONTRACTS)</button>'
       +   ' <button class="btn" id="omniGrid">PARAMETER GRID</button></div>'
@@ -8483,8 +7579,6 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniResample = hgOmniResample;
     window.hgOmniDropForming = hgOmniDropForming;
     window.hgOmniDailyHtf = hgOmniDailyHtf;
-    window.hgOmniTrendFromRows = hgOmniTrendFromRows;   /* same trend read, any timeframe's rows \u2014 testable */
-    window.hgOmniMtfConfluence = hgOmniMtfConfluence;   /* BULLS-tab MTF confluence score, testable in isolation */
     window.hgOmniBtcRegime = hgOmniBtcRegime;
     window.hgOmniDerivePlan = hgOmniDerivePlan;
     window.hgOmniBtStop = hgOmniBtStop;
@@ -8573,8 +7667,6 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
     window.HG_tabs = window.HG_tabs || [];
     window.HG_tabs.push({ id:'omniroute', label:'OMNIROUTE', mount: mountOmniroute, refresh: refreshOmniroute });
-    window.HG_tabs.push({ id:'lev20', label:'20X', mount: mountLev20, refresh: refreshLev20 });
-    window.HG_tabs.push({ id:'bulls', label:'BULLS', mount: mountBulls, refresh: refreshBulls });
   }
 
 })();
