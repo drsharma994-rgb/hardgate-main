@@ -15,3 +15,4 @@ android/local.properties
 *.jks
 __pycache__/
 *.pyc
+scripts/.bt-cache/
