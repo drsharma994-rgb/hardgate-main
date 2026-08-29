@@ -72,21 +72,24 @@ function risingGold(n){
 
 const longTix = {
   horizon: 'SCALP', kind: 'ADR-FADE', dir: 'long',
-  grade: { ticket: true, vetoes: [] },
+  grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
   plan: { entry: 3400, stop: 3380, t1: 3440 },
-  distAtr: 0.4
+  distAtr: 0.4,
+  consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }
 };
 const shortTix = {
   horizon: 'SCALP', kind: 'MMOVE', dir: 'short',
-  grade: { ticket: true, vetoes: [] },
+  grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
   plan: { entry: 3390, stop: 3410, t1: 3350 },
-  distAtr: 0.6
+  distAtr: 0.6,
+  consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] }
 };
 const swingLong = {
   horizon: 'SWING', kind: 'VWAP-REVERT', dir: 'long',
-  grade: { ticket: true, vetoes: [] },
+  grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
   plan: { entry: 3400, stop: 3360, t1: 3480 },
-  distAtr: 0.3
+  distAtr: 0.3,
+  consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }
 };
 
 console.log('== gold tape is gold bars, not crypto MARKET PICTURE ==');

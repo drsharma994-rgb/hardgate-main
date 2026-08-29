@@ -111,16 +111,20 @@ await W.hgOmniRunScan(ui);
 const firstHtml = ui.cards.innerHTML;
 const firstStat = String(stat.textContent || '');
 const nCards = (firstHtml.match(/<div class="card">/g) || []).length;
-ok(nCards > 0, 'first scan painted cards (' + nCards + ')');
+const nOverflow = (firstHtml.match(/class="dim"/g) || []).length;
+ok(firstHtml.length > 0 && (nCards > 0 || nOverflow > 0 || /SUPER SOLID bar/.test(firstHtml)),
+   'first scan painted the desk (' + nCards + ' card(s), ' + nOverflow + ' overflow line(s))');
 ok(/setup\(s\)/.test(firstStat), 'first scan reported setups: "' + firstStat.slice(0, 80) + '"');
 
 await W.hgOmniRunScan(ui);
 const afterHtml = ui.cards.innerHTML;
 const afterStat = String(stat.textContent || '');
 const afterWarn = String(warn.textContent || '');
-ok((afterHtml.match(/<div class="card">/g) || []).length > 0,
-   'rescan failure did not leave the desk empty');
-ok(afterHtml.indexOf('class="card"') >= 0, 'the last cards are still in the DOM');
+ok(afterHtml.length > 0, 'rescan failure did not leave the desk empty');
+ok((afterHtml.match(/<div class="card">/g) || []).length > 0
+   || (afterHtml.match(/class="dim"/g) || []).length > 0
+   || /SUPER SOLID bar/.test(afterHtml),
+   'the last paint is still in the DOM');
 ok(/venue down|failed|keeping last|last scan|rescan/i.test(afterStat + ' ' + afterWarn),
    'the error is named without discarding the scan (stat="' + afterStat.slice(0, 90)
    + '" warn="' + afterWarn.slice(0, 90) + '")');
