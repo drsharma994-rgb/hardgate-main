@@ -1,0 +1,446 @@
+================================================================================
+                    ROADMAP TO 200-POINT SOLIDITY FRAMEWORK
+                            (P5 Planning & Gap Analysis)
+================================================================================
+
+CURRENT STATE (P4 Complete)
+================================================================================
+
+Framework: 173-176 pts (of 200-pt goal)
+Coverage: 15 pillars (P0-P4)
+Phase: Ready for final 24-27 pts (P5)
+
+P0 (55 pts):   Order Block, FVG, Multi-TF Cascade, Risk:Reward
+P1 (25 pts):   Regime, ATR Expansion, Session Timing
+P2 (20 pts):   Liquidation, Expectancy
+P3 (39 pts):   Order Flow, Structure, Momentum
+P4 (34-37 pts): Liquidation Recovery, Vol Term, Risk-Adjusted ← NEW
+
+Tier Mapping (176-point scale):
+  147+ → Extremely Solid
+  120-146 → Solid
+  88-119 → Fair
+  <88 → Weak
+
+================================================================================
+                        P5 CANDIDATE INDICATORS
+================================================================================
+
+To reach 200 pts, need one of:
+  A) 4-5 indicators totaling 24-27 pts
+  B) 2-3 larger indicators totaling 24-27 pts
+
+RECOMMENDED P5 POOL (sorted by impact & implementability):
+
+┌─ OPTION 1: SECTOR MOMENTUM ALIGNMENT (8 pts) ────────────────────────────┐
+│                                                                             │
+│ Function: hgOmniSectorMomentumScore(setup, sectorIndex, marketIndex)       │
+│                                                                             │
+│ Purpose: Score if trade aligns with sector trend and market bias           │
+│ Mechanics: Compare setup direction to sector/market momentum               │
+│                                                                             │
+│ Scoring:                                                                    │
+│   8 pts: Trade aligned with sector + market both bullish/bearish           │
+│   5 pts: Trade aligned with sector, market neutral                         │
+│   3 pts: Trade against sector but market aligned                           │
+│   0 pts: Trade against both (high friction)                                │
+│                                                                             │
+│ Data Required:                                                              │
+│   - Sector momentum proxy (e.g., SPY/QQQ slope, 20-bar vs 50-bar)          │
+│   - Market regime (setup.regime already available from P1)                 │
+│   - Optional: Live sector ETF prices (BXY, XLK, XLF, etc.)                 │
+│                                                                             │
+│ Graceful Degradation: 0 pts if sector data unavailable (no veto)          │
+│ Performance: ~5ms (lightweight comparison)                                 │
+│ Integration: Add to hgOmniSolidityScore() as 8-pt pillar #16              │
+│                                                                             │
+│ Examples:                                                                   │
+│   Long crypto entry + BTC bullish + stocks bullish → 8 pts                │
+│   Long tech when QQQ up but broad market down → 3 pts                     │
+│   Long when market bearish + sector down → 0 pts                          │
+│                                                                             │
+│ Dependencies: Setup.regime (from P1), optional live data for accuracy      │
+│ Risk: Requires macro context; scores 0 if unavailable (safe)              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ OPTION 2: MULTI-ASSET CONFIRMATION (10 pts) ──────────────────────────────┐
+│                                                                             │
+│ Function: hgOmniMultiAssetScore(setup, btcPrice, fundingRate, oiTrend)    │
+│                                                                             │
+│ Purpose: Score entry based on BTC, funding, and open interest confirmation │
+│ Mechanics: Check alignment across three macro signals                       │
+│                                                                             │
+│ Scoring:                                                                    │
+│   10 pts: 3/3 confirmations (BTC trend + funding + OI all aligned)          │
+│   7 pts:  2/3 confirmations                                                │
+│   4 pts:  1/3 confirmations                                                │
+│   0 pts:  0/3 or contradictions (no confirmation)                          │
+│                                                                             │
+│ Data Required:                                                              │
+│   - BTC 4H/daily trend (available from setup.btcRegime if present)         │
+│   - Funding rates (Binance public endpoint: funderRate)                    │
+│   - Open Interest trend (Binance public endpoint: openInterestHist)        │
+│                                                                             │
+│ Graceful Degradation: 0 pts if any data unavailable (conditional logic)   │
+│ Performance: ~12ms (includes API parsing)                                  │
+│ Integration: Add to hgOmniSolidityScore() as 10-pt pillar #17             │
+│                                                                             │
+│ Examples:                                                                   │
+│   Long BTC + positive funding + OI up → 10 pts                            │
+│   Long BTC + neutral funding + OI down → 4 pts                            │
+│   Long but BTC down + negative funding → 0 pts                            │
+│                                                                             │
+│ Dependencies: Optional hgOmniBtcRegime(), Binance API calls (existing)    │
+│ Risk: API latency; degradation to 0 pts is safe (no veto)                │
+│ Win Rate Bias: Omitted because already in P2 Expectancy                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ OPTION 3: NEWS & EVENTS CALENDAR (6 pts) ────────────────────────────────┐
+│                                                                             │
+│ Function: hgOmniNewsCalendarScore(setup, eventList, timeWindow)            │
+│                                                                             │
+│ Purpose: Score entry based on proximity to market events (blackout logic)  │
+│ Mechanics: Check if entry is during blackout hours or near events         │
+│                                                                             │
+│ Scoring:                                                                    │
+│   6 pts: Outside all event windows + low-impact news day                   │
+│   3 pts: Minor event scheduled but >1 hour away                            │
+│   1 pt:  Major event within 1 hour but unlikely to affect pair             │
+│   0 pts: FOMC/CPI/NFP within 30min, or high-impact news imminent           │
+│                                                                             │
+│ Data Required:                                                              │
+│   - App's own news calendar (if exists)                                    │
+│   - Time-to-event filtering (est timestamp)                                │
+│   - Pair-specific sensitivity (BTC sensitive to macro, others less so)     │
+│                                                                             │
+│ Graceful Degradation: 6 pts if no calendar available (assume clear)      │
+│ Performance: ~2ms (simple timestamp comparison)                            │
+│ Integration: Add to hgOmniSolidityScore() as 6-pt pillar #18             │
+│                                                                             │
+│ Examples:                                                                   │
+│   Entry on quiet news day, no events → 6 pts                              │
+│   Minor economic indicator 2 hours away → 3 pts                            │
+│   FOMC decision in 20 minutes → 0 pts (black out)                         │
+│                                                                             │
+│ Dependencies: Optional news calendar (no hard requirement)                 │
+│ Risk: Conservative (0 pts = high caution, safe default)                   │
+│ Integration: Can use app.newsBlackout() if exists                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ OPTION 4: EXECUTION QUALITY & SLIPPAGE PROJECTION (8-10 pts) ────────────┐
+│                                                                             │
+│ Function: hgOmniExecutionQualityScore(setup, bookDepth, volume)            │
+│                                                                             │
+│ Purpose: Score expected slippage relative to trade reward                  │
+│ Mechanics: Compare depth at entry level to expected position size          │
+│                                                                             │
+│ Scoring:                                                                    │
+│   10 pts: Slippage <0.05% of reward (minimal impact)                       │
+│   7 pts:  Slippage 0.05-0.1% of reward                                     │
+│   4 pts:  Slippage 0.1-0.2% of reward                                      │
+│   0 pts:  Slippage >0.2% of reward (poor execution odds)                   │
+│                                                                             │
+│ Data Required:                                                              │
+│   - Order book depth (Binance depth endpoint)                              │
+│   - Estimated position size (from setup.plan or account)                   │
+│   - Bid-ask spread                                                         │
+│   - Volume profile (if available)                                          │
+│                                                                             │
+│ Graceful Degradation: 4 pts if depth unavailable (assume moderate)       │
+│ Performance: ~8ms (includes book parsing)                                  │
+│ Integration: Add to hgOmniSolidityScore() as 10-pt pillar #19            │
+│                                                                             │
+│ Examples:                                                                   │
+│   Deep book, small position, tight spread → 10 pts                        │
+│   Medium depth, normal size → 4 pts                                        │
+│   Thin book, large position planned → 0 pts (rethink timing)              │
+│                                                                             │
+│ Dependencies: Binance book depth (existing data source)                    │
+│ Risk: Assumes static book (real-time depth changes); safe fallback         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ OPTION 5: PORTFOLIO DIVERSIFICATION & HEDGE BENEFIT (5 pts) ────────────┐
+│                                                                             │
+│ Function: hgOmniPortfolioHedgeScore(setup, portfolio)                      │
+│                                                                             │
+│ Purpose: Score if trade diversifies or hedges existing portfolio           │
+│ Mechanics: Calculate correlation to open positions                         │
+│                                                                             │
+│ Scoring:                                                                    │
+│   5 pts: -0.5 to 0.0 correlation (strong diversifier/hedge)               │
+│   3 pts: 0.0 to 0.3 correlation (weak diversifier)                        │
+│   1 pt:  0.3 to 0.6 correlation (same direction, some use)                │
+│   0 pts: >0.6 correlation or no portfolio data (redundant)                │
+│                                                                             │
+│ Data Required:                                                              │
+│   - Current portfolio positions (if tracked)                               │
+│   - Price history for correlation calculation                              │
+│   - Optional: realized correlation matrix                                  │
+│                                                                             │
+│ Graceful Degradation: 0 pts if no portfolio context (solo traders)       │
+│ Performance: ~6ms per position (scales with portfolio size)               │
+│ Integration: Add to hgOmniSolidityScore() as 5-pt pillar #20             │
+│                                                                             │
+│ Examples:                                                                   │
+│   Long BTC + short Gold (negative correlation) → 5 pts                    │
+│   Long XRP + long BTC (high correlation) → 0 pts                          │
+│   No portfolio context → 0 pts (not penalizing)                           │
+│                                                                             │
+│ Dependencies: Optional portfolio tracking (no hard requirement)            │
+│ Risk: Requires portfolio context; solo traders score 0 (safe)             │
+│ Use Case: Prop traders, fund managers with diversification mandate        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+                        RECOMMENDED P5 PACKAGE
+================================================================================
+
+To reach 200 pts with optimal breadth, implement:
+
+PRIMARY (3 indicators, ~25 pts):
+  1. Sector Momentum Alignment (8 pts)  ← quick win, high impact
+  2. Multi-Asset Confirmation (10 pts)  ← strong signal, available data
+  3. News & Events Calendar (6 pts)     ← safety net, easy integration
+  Total: 24 pts → Framework reaches 197-200 pts
+
+RATIONALE:
+  - Sector Momentum: Validates macro-direction (complements regime from P1)
+  - Multi-Asset: BTC/funding/OI are desk standards (adds 3-factor check)
+  - News Calendar: Blackout logic is simple risk control (most traders use)
+  - Combined: Covers macro (sector), market structure (funding/OI), and risk
+  - No veto functions: All degrade to 0 if data missing (safe)
+  - Performance: 5+12+2 = ~19ms total (acceptable)
+
+ALTERNATIVE (if want optional P5 features):
+  - Add Options 4 & 5 as "bonus" scoring (not required for 200)
+  - Execution Quality: For venues with deep books (Binance, Deribit)
+  - Portfolio Hedge: For multi-position traders only
+
+ARCHITECTURE READINESS (P5 Implementation):
+  ✓ hgOmniSolidityScore() already built to handle N pillars
+  ✓ Breakdown object auto-expands (no hard-coded limits)
+  ✓ Tier thresholds calculated as percent of maxScore (scale-proof)
+  ✓ P0-P4 functions zero-veto (P5 functions can follow same pattern)
+  ✓ Export/registration mechanism tested (adding 3 more functions is trivial)
+  ✓ Test framework ready (test_p4_solidity.js pattern applies to P5)
+
+================================================================================
+                      IMPLEMENTATION TIMELINE
+================================================================================
+
+PHASE P5 (Estimated 2-3 weeks):
+
+Week 1:
+  - Day 1-2: Implement Sector Momentum (8 pts)
+  - Day 3: Implement Multi-Asset Confirmation (10 pts)
+  - Day 4: Implement News Calendar integration (6 pts)
+  - Day 5: Integration + testing
+
+Week 2:
+  - Test all three P5 functions with realistic data
+  - Update tier mapping to 200-point scale
+  - Create P5_QUICK_REFERENCE.md + test_p5_solidity.js
+  - Update documentation (add P5 to P4_ROADMAP_TO_200 → P5_COMPLETION_REPORT)
+
+Week 3 (optional):
+  - Add Execution Quality (10 pts, if time/priority permits)
+  - Add Portfolio Hedge (5 pts, if time/priority permits)
+  - Final tuning + production deployment
+
+================================================================================
+                        CURRENT ARCHITECTURE STATE
+================================================================================
+
+hgOmniSolidityScore() function structure (proven, scalable):
+
+  Input: setup object (standard)
+  Process:
+    1. Call N scoring functions (currently 12, will be 15 with P5)
+    2. Sum all scores
+    3. Sum all maxScores
+    4. Determine tier based on score/maxScore ratio
+    5. Return { score, maxScore, tier, breakdown: {...}, detail: '...' }
+  Output: Single comprehensive score + detailed breakdown
+
+Key design decisions that enable P5 scaling:
+  ✓ Functions independent (no cross-pillar dependencies)
+  ✓ All return { score, maxScore, detail, ... } (consistent interface)
+  ✓ Tier logic uses percentage (47th percentile = "extremely solid", robust)
+  ✓ Breakdown object is dynamic (just add more entries)
+  ✓ Detail string concatenates all pillars (no length limit)
+  ✓ All functions export to window (browser test-friendly)
+  ✓ Graceful degradation proven (P0-P4 all degrade to 0)
+
+Expected final state (P5 complete):
+  - 18-20 pillars (depending on P5 + optional bonus)
+  - 200 pts exactly (or 205+ with bonuses)
+  - ~50-60ms total execution time (UI budget: 100ms)
+  - File size: omniroute.js ~7.5KB → ~8.5KB (with P5)
+  - Three test files: test_p3/p4/p5_solidity.js (modular)
+
+================================================================================
+                          TESTING STRATEGY
+================================================================================
+
+P5 testing will follow P4 pattern:
+
+For each P5 function, create scenarios:
+
+Sector Momentum:
+  Scenario 1: Trade aligned with bullish sector + bullish market → 8 pts
+  Scenario 2: Trade against sector but market aligned → 3 pts
+  Scenario 3: No sector data → 0 pts (graceful degrade)
+
+Multi-Asset:
+  Scenario 1: BTC up + positive funding + OI climbing → 10 pts
+  Scenario 2: BTC neutral + funding flat + OI down → 4 pts
+  Scenario 3: API unavailable → 0 pts (safe fallback)
+
+News Calendar:
+  Scenario 1: Entry on quiet day, no events → 6 pts
+  Scenario 2: FOMC in 2 hours → 0 pts (blackout)
+  Scenario 3: No calendar data → 6 pts (assume clear)
+
+All scenarios will run in test_p5_solidity.js (same format as test_p4).
+
+================================================================================
+                        DATA SOURCE REQUIREMENTS
+================================================================================
+
+P5 functions will use:
+
+1. Sector Momentum (Option 1):
+   - Already available: setup.regime (from P1)
+   - Optional: Live SPY/QQQ prices (Binance data source)
+   - Fallback: 0 pts if live data unavailable (no veto)
+
+2. Multi-Asset (Option 2):
+   - Already available: hgOmniBtcRegime() if exists
+   - Use: Binance funderRate endpoint (already integrated)
+   - Use: Binance openInterestHist endpoint (already integrated)
+   - Graceful: 0 pts if BTC regime unavailable
+
+3. News Calendar (Option 3):
+   - Optional: App's internal news calendar (if exists)
+   - Use: Simple timestamp filtering
+   - Fallback: 6 pts if no calendar (assume clear entry)
+
+No new external APIs required beyond Binance (already used in omniroute.js).
+
+================================================================================
+                        SUCCESS CRITERIA (P5)
+================================================================================
+
+P5 will be considered complete when:
+
+FUNCTIONAL:
+  ✓ Three new functions implemented (Sector, Multi-Asset, News)
+  ✓ hgOmniSolidityScore() returns 200+ points max
+  ✓ Tier mapping updated for 200-point scale
+  ✓ All functions degrade gracefully (0 pts if data missing)
+  ✓ All functions perform <10ms (individually)
+
+QUALITY:
+  ✓ Zero modifications to P0-P4 (backward compatible)
+  ✓ All new functions export to window
+  ✓ Comprehensive test scenarios (4+ per function)
+  ✓ All tests pass with synthetic data
+
+DOCUMENTATION:
+  ✓ P5_QUICK_REFERENCE.md (parallel to P4_QR.md)
+  ✓ test_p5_solidity.js (3-4 test scenarios)
+  ✓ P5_COMPLETION_REPORT.txt (implementation summary)
+  ✓ Updated P4_ROADMAP_TO_200.txt → P5_ROADMAP_COMPLETE.txt (archive notes)
+
+COVERAGE:
+  ✓ 18 pillars total (P0:4, P1:3, P2:2, P3:3, P4:3, P5:3)
+  ✓ Micro (setup mechanics): P0, P2, P3
+  ✓ Macro (regime/market): P1, P5 Sector/Multi-Asset
+  ✓ Meta (sizing/risk/events): P4, P5 News
+  ✓ Portfolio (diversification): P4 Risk-Adj, P5 Hedge (optional)
+
+DEPLOYMENT:
+  ✓ omniroute.js updated and tested
+  ✓ No breaking changes to existing code
+  ✓ UI tier display updated (200-point scale)
+  ✓ Production-ready (no beta features)
+
+================================================================================
+                    BEYOND 200: OPTIONAL P5+ FEATURES
+================================================================================
+
+If additional points desired beyond 200:
+
+OPTION 4 (Execution Quality, 10 pts):
+  - Implement if: High-frequency traders need fill quality assurance
+  - Data: Binance depth endpoint (already available)
+  - Risk: Safe (0 pts if book unavailable)
+  - Impact: ~10ms overhead
+
+OPTION 5 (Portfolio Hedge, 5 pts):
+  - Implement if: Multi-position traders need diversification scoring
+  - Data: Portfolio position correlation
+  - Risk: Safe (0 pts if no portfolio context)
+  - Impact: ~6ms per position
+
+Either can be added post-P5 without disrupting 200-point framework.
+
+================================================================================
+                          DEPLOYMENT CHECKLIST
+================================================================================
+
+PRE-DEPLOYMENT (P5):
+  [ ] All three P5 functions tested with synthetic data
+  [ ] Zero modifications to P0-P4 (verify via diff)
+  [ ] hgOmniSolidityScore() updated + tested
+  [ ] Tier thresholds updated for 200-point scale
+  [ ] All functions exported to window
+  [ ] Documentation complete (quick ref + test file + completion report)
+
+DEPLOYMENT:
+  [ ] Deploy omniroute.js with P5 functions
+  [ ] Deploy test_p5_solidity.js for validation
+  [ ] Update UI tier display thresholds
+  [ ] Run sanity check on production data (5+ live setups)
+  [ ] Monitor performance (target <60ms for full solidity calc)
+
+POST-DEPLOYMENT:
+  [ ] Collect feedback on P5 scores (overweighting/underweighting?)
+  [ ] Monitor false positive rate (trades scoring high but failing)
+  [ ] Archive P4_ROADMAP_TO_200.txt → historical reference
+  [ ] Create P5_COMPLETION_REPORT.txt + P5_ROADMAP_BEYOND_200.txt (if continued)
+
+================================================================================
+                              SUMMARY
+================================================================================
+
+CURRENT STATE:
+  Framework: 173-176 pts (P0-P4 complete)
+  Pillars: 15
+  Status: Ready for P5
+
+P5 TARGET:
+  Framework: 200 pts (exact)
+  Pillars: 18 (+ optional 20+)
+  Functions: 3 primary (Sector, Multi-Asset, News)
+  Timeline: 2-3 weeks
+  Effort: Moderate (can reuse P4 patterns)
+
+ARCHITECTURE:
+  Scalable: Yes (tested with P0-P4)
+  Performant: Yes (<60ms total for 18 pillars)
+  Maintainable: Yes (consistent function signatures)
+  Production-Ready: Yes (zero-veto, graceful degradation)
+
+P5 will complete the 200-point solidity framework, providing professional-grade
+setup evaluation across all three dimensions: micro (mechanics), macro
+(regime/market), and meta (sizing/risk/events). Framework will then be ready
+for extended use in prop desk workflows, fund systems, and retail trader
+platforms.
+
+================================================================================

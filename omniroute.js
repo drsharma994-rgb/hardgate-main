@@ -1925,9 +1925,970 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== end P1 solidity framework ==================== */
 
-  /* SOLIDITY SCORE: Combines all P0 (55 pts) + P1 (25 pts) pillars (80 pts total) */
+  /* ==================== P2 SOLIDITY FRAMEWORK (20 pts) ==================== */
+
+  /* 1. LIQUIDATION MAP INTEGRATION & SCORING (12 pts)
+     Scores based on liquidation density around entry/stop levels.
+
+     Thresholds (in ATR units from nearest liq level):
+     - 12pts: entry 0.25-0.5x ATR from nearest liq (sweet spot, ahead of sweep)
+     - 8pts:  entry 0.5-1.0x ATR away (acceptable, stop can rest on liq)
+     - 4pts:  entry 1.0-2.0x ATR away (workable but farther)
+     - 0pts:  entry > 2.0x ATR away (ignores liq context)
+
+     Bonus: +2pts if stop positioned BELOW major liq (shorts) or ABOVE (longs)
+
+     Gracefully degrades to 0pts if liq map unavailable.
+  */
+  function hgOmniLiquidationScore(setup, direction){
+    if (!setup) return { score: 0, detail: 'no setup' };
+    if (!setup.rows || setup.rows.length < 40) return { score: 0, detail: 'insufficient bars for liq map' };
+    if (!setup.plan || !isFinite(fin(setup.plan.entry))) return { score: 0, detail: 'no entry plan' };
+
+    var rows = setup.rows, plan = setup.plan;
+    var entry = fin(plan.entry), stop = fin(plan.stop);
+    var atr = atrOf(rows, 14);
+
+    if (!isFinite(atr) || atr <= 0) return { score: 0, detail: 'ATR unavailable' };
+
+    /* Determine direction: use explicit parameter, fall back to hit.dir, then guess from entry/stop */
+    var dir = direction;
+    if (!dir && setup.hit && setup.hit.dir) dir = setup.hit.dir;
+    if (!dir && isFinite(stop)){
+      dir = (entry > stop) ? 'long' : 'short';
+    }
+
+    var score = 0, detail = '', stopBonus = 0;
+
+    try {
+      /* Compute liquidation map from recent price action */
+      var lm = hgOmniLiqMap(rows, {});
+
+      if (!lm || !lm.clusters || !lm.clusters.length){
+        /* No liq clusters detected: assign graceful 0, no veto */
+        detail = 'liquidation map unavailable (too few bars or no clusters)';
+        return { score: score, detail: detail, maxScore: 12, stopBonus: 0 };
+      }
+
+      /* Find nearest liquidation level relative to entry */
+      var nearestLiq = null, nearestDist = Infinity;
+      for (var i = 0; i < lm.clusters.length; i++){
+        var cluster = lm.clusters[i];
+        /* Only consider liq clusters on the relevant side for this direction */
+        if (dir === 'long' && cluster.side !== 'short') continue;
+        if (dir === 'short' && cluster.side !== 'long') continue;
+
+        var dist = Math.abs(entry - cluster.price);
+        if (dist < nearestDist){
+          nearestDist = dist;
+          nearestLiq = cluster;
+        }
+      }
+
+      if (!nearestLiq){
+        /* No relevant liq cluster for this direction */
+        detail = 'no ' + dir + ' liquidation cluster found for direction';
+        return { score: score, detail: detail, maxScore: 12, stopBonus: 0 };
+      }
+
+      var distInAtr = nearestDist / atr;
+
+      /* Score based on entry distance from nearest liquidation */
+      if (distInAtr >= 0.25 && distInAtr <= 0.5){
+        score = 12;
+        detail = 'entry ' + distInAtr.toFixed(2) + 'x ATR from liq level '
+               + nearestLiq.price.toFixed(6) + ' (sweet spot, ahead of sweep)';
+      } else if (distInAtr > 0.5 && distInAtr <= 1.0){
+        score = 8;
+        detail = 'entry ' + distInAtr.toFixed(2) + 'x ATR from liq level '
+               + nearestLiq.price.toFixed(6) + ' (acceptable distance)';
+      } else if (distInAtr > 1.0 && distInAtr <= 2.0){
+        score = 4;
+        detail = 'entry ' + distInAtr.toFixed(2) + 'x ATR from liq level '
+               + nearestLiq.price.toFixed(6) + ' (workable but farther)';
+      } else {
+        score = 0;
+        detail = 'entry ' + distInAtr.toFixed(2) + 'x ATR from liq level '
+               + nearestLiq.price.toFixed(6) + ' (ignores liq context)';
+      }
+
+      /* Bonus: check if stop is well-positioned relative to major liq level */
+      if (isFinite(stop) && score > 0){
+        var majorLiq = null, majorWeight = 0;
+        for (var j = 0; j < lm.clusters.length; j++){
+          if (lm.clusters[j].weight > majorWeight){
+            majorWeight = lm.clusters[j].weight;
+            majorLiq = lm.clusters[j];
+          }
+        }
+
+        if (majorLiq){
+          var stopWellPlaced = false;
+          if (dir === 'long' && stop < majorLiq.price){
+            /* For longs, stop BELOW major liq is good (avoid being liquidated into it) */
+            stopWellPlaced = true;
+          } else if (dir === 'short' && stop > majorLiq.price){
+            /* For shorts, stop ABOVE major liq is good (avoid being liquidated into it) */
+            stopWellPlaced = true;
+          }
+
+          if (stopWellPlaced){
+            stopBonus = 2;
+            score += stopBonus;
+            detail += ' | +2pt stop bonus (positioned away from major liq at '
+                    + majorLiq.price.toFixed(6) + ')';
+          }
+        }
+      }
+
+    } catch (eLiq) {
+      /* Graceful degradation if liq map calculation fails */
+      detail = 'liquidation scoring threw: ' + ((eLiq && eLiq.message) || eLiq);
+      return { score: 0, detail: detail, maxScore: 12, stopBonus: 0 };
+    }
+
+    return {
+      score: score,
+      detail: detail,
+      maxScore: 12,
+      nearestLiq: nearestLiq ? nearestLiq.price : null,
+      stopBonus: stopBonus,
+      direction: dir
+    };
+  }
+
+  /* 2. EXPECTANCY & STATISTICAL EDGE SCORING (8 pts)
+     Scores based on measured expectancy (expR) and sample size confidence.
+
+     Expectancy scoring:
+     - 8pts if expR >= +0.50R (high edge)
+     - 6pts if expR >= +0.25R (moderate)
+     - 3pts if expR >= 0R (breakeven/unproven)
+     - 0pts if expR < 0R (negative)
+
+     Sample size confidence:
+     - 8pts if >= 50 samples (statistically robust)
+     - 6pts if 20-49 samples (acceptable)
+     - 3pts if 10-19 samples (small but usable)
+     - 1pt if < 10 samples (anecdotal only)
+
+     Returns: max(expectancy_score, sample_score) — whichever is higher
+     If no historical data: return 3pts (neutral/unproven)
+  */
+  function hgOmniExpectancyScore(setup){
+    if (!setup) return { score: 3, detail: 'no setup — neutral expectancy' };
+
+    /* Extract expectancy data from setup.extra.stats or setup.stats */
+    var stats = null;
+    if (setup.extra && setup.extra.stats) stats = setup.extra.stats;
+    else if (setup.stats) stats = setup.stats;
+
+    /* If no stats at all, return neutral score */
+    if (!stats){
+      return {
+        score: 3,
+        detail: 'no historical data available — neutral/unproven',
+        maxScore: 8,
+        expR: null,
+        samples: null,
+        hitRate: null
+      };
+    }
+
+    var expR = fin(stats.expR);
+    var samples = fin(stats.samples);
+    var hitRate = fin(stats.hit);
+
+    /* If critical data is missing, return neutral */
+    if (!isFinite(expR) || !isFinite(samples)){
+      return {
+        score: 3,
+        detail: 'incomplete stats (expR or samples missing)',
+        maxScore: 8,
+        expR: expR,
+        samples: samples,
+        hitRate: hitRate
+      };
+    }
+
+    var expectancyScore = 0, sampleScore = 0, detail = '';
+
+    /* Score based on expectancy */
+    if (expR >= 0.50){
+      expectancyScore = 8;
+      detail = 'high edge: +' + expR.toFixed(2) + 'R (8pts)';
+    } else if (expR >= 0.25){
+      expectancyScore = 6;
+      detail = 'moderate edge: +' + expR.toFixed(2) + 'R (6pts)';
+    } else if (expR >= 0){
+      expectancyScore = 3;
+      detail = 'breakeven: +' + expR.toFixed(2) + 'R (3pts)';
+    } else {
+      expectancyScore = 0;
+      detail = 'negative edge: ' + expR.toFixed(2) + 'R (0pts)';
+    }
+
+    /* Score based on sample size confidence */
+    if (samples >= 50){
+      sampleScore = 8;
+      detail += ' | robust: ' + Math.floor(samples) + ' samples (8pts)';
+    } else if (samples >= 20){
+      sampleScore = 6;
+      detail += ' | acceptable: ' + Math.floor(samples) + ' samples (6pts)';
+    } else if (samples >= 10){
+      sampleScore = 3;
+      detail += ' | small: ' + Math.floor(samples) + ' samples (3pts)';
+    } else {
+      sampleScore = 1;
+      detail += ' | anecdotal: ' + Math.floor(samples) + ' samples (1pt)';
+    }
+
+    /* Return the higher of the two scores */
+    var score = Math.max(expectancyScore, sampleScore);
+
+    detail += ' → max score: ' + score + 'pts';
+    if (isFinite(hitRate)){
+      detail += ' [' + (hitRate * 100).toFixed(0) + '% hit rate]';
+    }
+
+    return {
+      score: score,
+      detail: detail,
+      maxScore: 8,
+      expR: expR,
+      samples: Math.floor(samples),
+      hitRate: hitRate,
+      expectancyScore: expectancyScore,
+      sampleScore: sampleScore
+    };
+  }
+
+  /* ==================== end P2 solidity framework ==================== */
+
+  /* ==================== P3 SOLIDITY FRAMEWORK (39 pts total) ==================== */
+
+  /* P3.1: ORDER FLOW CONFLUENCE SCORING (12 pts)
+     Scores entry alignment with order flow imbalance (if available).
+
+     Thresholds (σ-based imbalance at entry level):
+     - 12pts: +2σ imbalance (strong conviction, heavy bid/ask)
+     - 10pts: +1σ imbalance (moderate conviction)
+     - 5pts:  ±0.5σ imbalance (light conviction)
+     - 0pts:  counterflow or unavailable (no order flow data)
+
+     Bonus: +3pts if imbalance sustains >5 bars (conviction confirmed)
+
+     Default: 0pts if no order flow data — never vetoes.
+  */
+  function hgOmniOrderFlowScore(setup){
+    if (!setup) return { score: 0, detail: 'no setup' };
+
+    /* Extract order flow data if available from extra enrichment */
+    var flowData = null;
+    if (setup.extra && setup.extra.orderFlow) flowData = setup.extra.orderFlow;
+    else if (setup.orderFlow) flowData = setup.orderFlow;
+
+    /* Gracefully degrade to 0 if no flow data */
+    if (!flowData || !isFinite(fin(flowData.imbalance))){
+      return {
+        score: 0,
+        detail: 'order flow data unavailable',
+        maxScore: 12,
+        flowAvailable: false
+      };
+    }
+
+    var imbalance = fin(flowData.imbalance);
+    var sigma = fin(flowData.sigma) || 1.0;
+    var direction = (setup.hit && setup.hit.dir) || (setup.plan && fin(setup.plan.entry) > fin(setup.plan.stop)) ? 'long' : 'short';
+    var baseScore = 0, detail = '';
+
+    /* Score based on imbalance strength (in sigma) */
+    var imbalanceSigma = sigma > 0 ? imbalance / sigma : 0;
+
+    /* Check alignment with setup direction */
+    var isAligned = false;
+    if (direction === 'long' && imbalance > 0) isAligned = true;
+    else if (direction === 'short' && imbalance < 0) isAligned = true;
+
+    if (!isAligned){
+      /* Counterflow — no score */
+      return {
+        score: 0,
+        detail: 'order flow counterflow to ' + direction + ' direction (imbalance: ' + imbalance.toFixed(2) + ' @ ' + imbalanceSigma.toFixed(2) + 'σ)',
+        maxScore: 12,
+        flowAvailable: true,
+        imbalance: imbalance,
+        aligned: false
+      };
+    }
+
+    /* Aligned flow scoring */
+    var absImbalanceSigma = Math.abs(imbalanceSigma);
+    if (absImbalanceSigma >= 2.0){
+      baseScore = 12;
+      detail = 'strong flow: ' + imbalance.toFixed(2) + ' @ ' + imbalanceSigma.toFixed(2) + 'σ (12pts)';
+    } else if (absImbalanceSigma >= 1.0){
+      baseScore = 10;
+      detail = 'moderate flow: ' + imbalance.toFixed(2) + ' @ ' + imbalanceSigma.toFixed(2) + 'σ (10pts)';
+    } else if (absImbalanceSigma >= 0.5){
+      baseScore = 5;
+      detail = 'light flow: ' + imbalance.toFixed(2) + ' @ ' + imbalanceSigma.toFixed(2) + 'σ (5pts)';
+    } else {
+      baseScore = 0;
+      detail = 'minimal flow imbalance: ' + imbalance.toFixed(2) + ' @ ' + imbalanceSigma.toFixed(2) + 'σ';
+    }
+
+    /* Bonus: check if flow sustains >5 bars */
+    var flowBonus = 0, bonusDetail = '';
+    if (flowData.sustainedBars && flowData.sustainedBars > 5){
+      flowBonus = 3;
+      bonusDetail = ' + 3pt conviction bonus (sustained ' + Math.floor(flowData.sustainedBars) + ' bars)';
+    }
+
+    var totalScore = Math.min(baseScore + flowBonus, 12);
+    return {
+      score: totalScore,
+      detail: detail + bonusDetail,
+      maxScore: 12,
+      flowAvailable: true,
+      imbalance: imbalance,
+      aligned: true,
+      sustainedBars: flowData.sustainedBars || 0,
+      flowBonus: flowBonus
+    };
+  }
+
+  /* P3.2: STRUCTURAL SUPPORT/RESISTANCE CONFLUENCE SCORING (15 pts)
+     Scores entry proximity to multi-touch structural levels (swings, round numbers, VWAP).
+
+     Thresholds (in ATR units from nearest structural level):
+     - 15pts: Entry within 0.25x ATR of 2+ structural levels (strong confluence)
+     - 10pts: Within 0.25x ATR of 1 level, OR 0.5x ATR of 2+ levels
+     - 5pts:  Within 0.5x ATR of 1 level, OR 1.0x ATR of 2+ levels
+     - 0pts:  No structural proximity or no structural data
+
+     Bonus: +3pts if stop rests on structural level (good risk discipline)
+  */
+  function hgOmniStructureConfluenceScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 20)
+      return { score: 0, detail: 'insufficient data for structure analysis' };
+    if (!setup.plan || !isFinite(fin(setup.plan.entry)))
+      return { score: 0, detail: 'no entry plan' };
+
+    var rows = setup.rows, plan = setup.plan;
+    var entry = fin(plan.entry), stop = fin(plan.stop);
+    var atr = atrOf(rows, 14);
+
+    if (!isFinite(atr) || atr <= 0)
+      return { score: 0, detail: 'ATR unavailable' };
+
+    /* Detect structural levels: swing highs/lows */
+    var structuralLevels = [];
+    var i, h, l, hMinus1, hMinus2, lMinus1, lMinus2;
+
+    /* Find swing highs (recent N bars) */
+    for (i = rows.length - 15; i >= Math.max(0, rows.length - 30); i--){
+      if (i < 1) continue;
+      h = num(rows[i].h);
+      hMinus1 = num(rows[i - 1].h);
+      hMinus2 = i >= 2 ? num(rows[i - 2].h) : NaN;
+      var hPlus1 = i < rows.length - 1 ? num(rows[i + 1].h) : NaN;
+
+      if (isFinite(h) && isFinite(hMinus1) && isFinite(hPlus1)){
+        if (h >= hMinus1 && h >= hPlus1 && (!isFinite(hMinus2) || h >= hMinus2)){
+          structuralLevels.push({ level: h, type: 'swing_high' });
+        }
+      }
+    }
+
+    /* Find swing lows (recent N bars) */
+    for (i = rows.length - 15; i >= Math.max(0, rows.length - 30); i--){
+      if (i < 1) continue;
+      l = num(rows[i].l);
+      lMinus1 = num(rows[i - 1].l);
+      lMinus2 = i >= 2 ? num(rows[i - 2].l) : NaN;
+      var lPlus1 = i < rows.length - 1 ? num(rows[i + 1].l) : NaN;
+
+      if (isFinite(l) && isFinite(lMinus1) && isFinite(lPlus1)){
+        if (l <= lMinus1 && l <= lPlus1 && (!isFinite(lMinus2) || l <= lMinus2)){
+          structuralLevels.push({ level: l, type: 'swing_low' });
+        }
+      }
+    }
+
+    /* Add round numbers (every 0.5 or 1.0 points depending on price) */
+    var roundness = entry > 10 ? 1.0 : 0.5;
+    var roundLevels = [];
+    for (var r = Math.floor(entry / roundness) * roundness;
+         r <= entry + atr * 2;
+         r += roundness){
+      roundLevels.push({ level: r, type: 'round_number' });
+    }
+    structuralLevels = structuralLevels.concat(roundLevels);
+
+    if (!structuralLevels || !structuralLevels.length){
+      return { score: 0, detail: 'no structural levels detected' };
+    }
+
+    /* Find proximity of entry to structural levels */
+    var proximities = [];
+    for (i = 0; i < structuralLevels.length; i++){
+      var dist = Math.abs(entry - structuralLevels[i].level);
+      var distInAtr = dist / atr;
+      proximities.push({
+        level: structuralLevels[i].level,
+        type: structuralLevels[i].type,
+        distance: dist,
+        distanceInAtr: distInAtr
+      });
+    }
+
+    /* Sort by distance */
+    proximities.sort(function(a, b){ return a.distanceInAtr - b.distanceInAtr; });
+
+    /* Count confluences at different ranges */
+    var confluenceAt025 = proximities.filter(function(p){ return p.distanceInAtr <= 0.25; }).length;
+    var confluenceAt05 = proximities.filter(function(p){ return p.distanceInAtr <= 0.5; }).length;
+    var confluenceAt1 = proximities.filter(function(p){ return p.distanceInAtr <= 1.0; }).length;
+
+    var baseScore = 0, detail = '';
+
+    /* Scoring logic */
+    if (confluenceAt025 >= 2){
+      baseScore = 15;
+      detail = 'strong confluence: ' + confluenceAt025 + ' levels within 0.25x ATR (' + proximities[0].distanceInAtr.toFixed(2) + 'x nearest)';
+    } else if (confluenceAt025 === 1 || confluenceAt05 >= 2){
+      baseScore = 10;
+      detail = 'moderate confluence: ' + (confluenceAt025 === 1 ? '1 @ 0.25x' : confluenceAt05 + ' @ 0.5x') + ' ATR';
+    } else if (confluenceAt05 === 1 || confluenceAt1 >= 2){
+      baseScore = 5;
+      detail = 'light confluence: ' + (confluenceAt05 === 1 ? '1 @ 0.5x' : confluenceAt1 + ' @ 1.0x') + ' ATR';
+    } else {
+      baseScore = 0;
+      detail = 'minimal structural proximity (nearest: ' + proximities[0].distanceInAtr.toFixed(2) + 'x ATR)';
+    }
+
+    /* Bonus: check if stop rests on structural level */
+    var stopBonus = 0, stopBonusDetail = '';
+    if (isFinite(stop) && baseScore > 0){
+      for (i = 0; i < proximities.length; i++){
+        var stopDist = Math.abs(stop - proximities[i].level) / atr;
+        if (stopDist <= 0.25){
+          stopBonus = 3;
+          stopBonusDetail = ' + 3pt stop discipline bonus (stop @ structural level)';
+          break;
+        }
+      }
+    }
+
+    var totalScore = Math.min(baseScore + stopBonus, 15);
+    return {
+      score: totalScore,
+      detail: detail + stopBonusDetail,
+      maxScore: 15,
+      confluenceCount: proximities.length,
+      nearestStructure: proximities.length > 0 ? proximities[0].distanceInAtr.toFixed(3) : null,
+      confluenceAt025: confluenceAt025,
+      confluenceAt05: confluenceAt05,
+      stopBonus: stopBonus
+    };
+  }
+
+  /* P3.3: MOMENTUM CONVERGENCE SCORING (12 pts)
+     Scores alignment of multiple momentum indicators (RSI, MACD, Stochastic).
+
+     Thresholds:
+     - 12pts: All 3+ available indicators agree on direction
+     - 8pts:  2 of 3 indicators agree
+     - 4pts:  1 of 3 aligns
+     - 0pts:  None available or all disagree
+
+     No veto — just visibility layer for technical confirmation.
+     Default: 0pts if insufficient data (closes <30 bars).
+  */
+  function hgOmniMomentumConvergenceScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 30)
+      return { score: 0, detail: 'insufficient data for momentum analysis' };
+    if (!setup.hit || !setup.hit.dir)
+      return { score: 0, detail: 'no setup direction' };
+
+    var rows = setup.rows;
+    var direction = String(setup.hit.dir).toUpperCase();
+    var isLong = (direction === 'LONG' || direction === 'UP');
+    var closes = closesOf(rows);
+
+    if (closes.length < 30)
+      return { score: 0, detail: 'insufficient closes for momentum' };
+
+    var agreements = 0, details = [];
+
+    /* RSI(14) alignment */
+    var rsi14 = rsiOf(closes, 14);
+    if (isFinite(rsi14)){
+      var rsiAgrees = false;
+      if (isLong && rsi14 > 50){
+        rsiAgrees = true;
+        details.push('RSI(' + Math.floor(rsi14) + ') bullish');
+      } else if (!isLong && rsi14 < 50){
+        rsiAgrees = true;
+        details.push('RSI(' + Math.floor(rsi14) + ') bearish');
+      } else {
+        details.push('RSI(' + Math.floor(rsi14) + ') neutral/against');
+      }
+      if (rsiAgrees) agreements++;
+    } else {
+      details.push('RSI unavailable');
+    }
+
+    /* MACD alignment */
+    var macd14 = macdOf(closes, 12, 26, 9);
+    if (isFinite(macd14) && macd14 !== 0){
+      var macdAgrees = false;
+      if (isLong && macd14 > 0){
+        macdAgrees = true;
+        details.push('MACD positive');
+      } else if (!isLong && macd14 < 0){
+        macdAgrees = true;
+        details.push('MACD negative');
+      } else {
+        details.push('MACD neutral/against');
+      }
+      if (macdAgrees) agreements++;
+    } else {
+      details.push('MACD unavailable');
+    }
+
+    /* Stochastic(14,3,3) alignment */
+    var stoch = stochasticOf(rows, 14);
+    if (isFinite(stoch)){
+      var stochAgrees = false;
+      if (isLong && stoch > 50){
+        stochAgrees = true;
+        details.push('Stoch(' + Math.floor(stoch) + ') bullish');
+      } else if (!isLong && stoch < 50){
+        stochAgrees = true;
+        details.push('Stoch(' + Math.floor(stoch) + ') bearish');
+      } else {
+        details.push('Stoch(' + Math.floor(stoch) + ') neutral/against');
+      }
+      if (stochAgrees) agreements++;
+    } else {
+      details.push('Stoch unavailable');
+    }
+
+    var score = 0, detail = '';
+
+    if (agreements >= 3){
+      score = 12;
+      detail = 'all 3+ indicators agree on ' + direction.toLowerCase();
+    } else if (agreements === 2){
+      score = 8;
+      detail = '2 of 3 indicators agree on ' + direction.toLowerCase();
+    } else if (agreements === 1){
+      score = 4;
+      detail = '1 of 3 indicator aligns on ' + direction.toLowerCase();
+    } else {
+      score = 0;
+      detail = 'no indicator agreement or all unavailable';
+    }
+
+    detail += ' [' + details.join('; ') + ']';
+
+    return {
+      score: score,
+      detail: detail,
+      maxScore: 12,
+      agreements: agreements,
+      indicatorsAvailable: (isFinite(rsi14) ? 1 : 0) + (isFinite(macd14) && macd14 !== 0 ? 1 : 0) + (isFinite(stoch) ? 1 : 0)
+    };
+  }
+
+  /* Helper: RSI calculation */
+  function rsiOf(closes, n){
+    if (!closes || closes.length < n + 1) return NaN;
+    var gains = 0, losses = 0, i, change;
+    for (i = closes.length - n; i < closes.length; i++){
+      change = closes[i] - closes[i - 1];
+      if (change > 0) gains += change;
+      else losses -= change;
+    }
+    var avgGain = gains / n, avgLoss = losses / n;
+    if (avgLoss === 0) return 100;
+    var rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
+  /* Helper: MACD line (12-26-9) */
+  function macdOf(closes, fast, slow, signal){
+    if (!closes || closes.length < slow + signal) return NaN;
+    var ema12 = emaOf(closes, fast);
+    var ema26 = emaOf(closes, slow);
+    if (!isFinite(ema12) || !isFinite(ema26)) return NaN;
+    return ema12 - ema26;
+  }
+
+  /* Helper: Stochastic %K (14 period) */
+  function stochasticOf(rows, n){
+    if (!rows || rows.length < n) return NaN;
+    var highest = -Infinity, lowest = Infinity, i, h, l, c;
+    for (i = rows.length - n; i < rows.length; i++){
+      h = num(rows[i].h);
+      l = num(rows[i].l);
+      if (isFinite(h) && isFinite(l)){
+        highest = Math.max(highest, h);
+        lowest = Math.min(lowest, l);
+      }
+    }
+    c = num(rows[rows.length - 1].c);
+    if (!isFinite(c) || !isFinite(highest) || !isFinite(lowest)) return NaN;
+    if (highest === lowest) return 50;
+    return ((c - lowest) / (highest - lowest)) * 100;
+  }
+
+  /* ==================== end P3 solidity framework ==================== */
+
+  /* ==================== P4 SOLIDITY FRAMEWORK (34-37 pts total) ==================== */
+
+  /* P4.1: LIQUIDATION RECOVERY CONFIDENCE SCORING (12 pts)
+     Detects if liquidation sweeps historically led to reversals (shorts swept → rally,
+     longs swept → dump). Scores on measured reversal % in historical data.
+
+     Thresholds:
+     - 12pts: ≥60% reversal rate post-sweep (strong predictive edge)
+     - 8pts:  ≥40% reversal rate
+     - 4pts:  ≥20% reversal rate
+     - 0pts:  <20% or no history
+
+     Bonus: +2pts if reversal happened within 15 bars (quick bounce, high conviction)
+     Default: 0pts if insufficient history (not a veto)
+  */
+  function hgOmniLiquidationRecoveryScore(setup, direction){
+    if (!setup || !setup.rows || setup.rows.length < 50){
+      return { score: 0, detail: 'insufficient bars for recovery analysis (<50)', maxScore: 12 };
+    }
+    if (!setup.plan || !isFinite(fin(setup.plan.entry))){
+      return { score: 0, detail: 'no entry plan', maxScore: 12 };
+    }
+
+    var rows = setup.rows, plan = setup.plan;
+    var entry = fin(plan.entry), stop = fin(plan.stop);
+
+    /* Infer direction if not provided */
+    var dir = direction;
+    if (!dir && setup.hit && setup.hit.dir) dir = setup.hit.dir;
+    if (!dir && isFinite(stop)) dir = (entry > stop) ? 'long' : 'short';
+    if (!dir) dir = 'long'; /* default */
+
+    var score = 0, detail = '', reverseQualifyCount = 0, totalSweepEvents = 0;
+
+    try {
+      /* Scan for liquidation sweep patterns: price sweeps an extreme and reverses within N bars */
+      var n = 15; /* lookback for sweep detection */
+      var lookforwardWindow = 15; /* window for reversal check */
+
+      for (var i = Math.max(n, 20); i < rows.length - lookforwardWindow; i++){
+        var range = rows.slice(i - n, i + 1);
+        var highs = range.map(function(r){ return num(r.h); }).filter(isFinite);
+        var lows = range.map(function(r){ return num(r.l); }).filter(isFinite);
+
+        if (highs.length < 5 || lows.length < 5) continue;
+
+        var rangeHigh = Math.max.apply(null, highs);
+        var rangeLow = Math.min.apply(null, lows);
+        var currentClose = num(rows[i].c);
+        var currentHigh = num(rows[i].h);
+        var currentLow = num(rows[i].l);
+
+        if (!isFinite(currentClose) || !isFinite(currentHigh) || !isFinite(currentLow)) continue;
+
+        /* Detect sweep: price touches extreme and closes back inside */
+        var isSweep = false;
+        if (dir === 'long' && currentLow <= rangeLow && currentClose > rangeLow){
+          /* Short liquidation sweep: price touches/exceeds lows, closes back up */
+          isSweep = true;
+        } else if (dir === 'short' && currentHigh >= rangeHigh && currentClose < rangeHigh){
+          /* Long liquidation sweep: price touches/exceeds highs, closes back down */
+          isSweep = true;
+        }
+
+        if (!isSweep) continue;
+
+        totalSweepEvents++;
+
+        /* Check for reversal in the lookahead window */
+        var reverseWindow = rows.slice(i, Math.min(i + lookforwardWindow, rows.length));
+        var reverseWindowCloses = reverseWindow.map(function(r){ return num(r.c); }).filter(isFinite);
+
+        if (reverseWindowCloses.length < 2) continue;
+
+        var maxReverseClose = Math.max.apply(null, reverseWindowCloses);
+        var minReverseClose = Math.min.apply(null, reverseWindowCloses);
+
+        var reversal = false;
+        if (dir === 'long' && maxReverseClose > currentClose * 1.002){
+          /* Rally after sweep (long recovery) */
+          reversal = true;
+        } else if (dir === 'short' && minReverseClose < currentClose * 0.998){
+          /* Dump after sweep (short recovery) */
+          reversal = true;
+        }
+
+        if (reversal) reverseQualifyCount++;
+      }
+
+      if (totalSweepEvents === 0){
+        detail = 'no liquidation sweeps detected in historical data';
+        return { score: 0, detail: detail, maxScore: 12, reverseRate: 0, events: 0 };
+      }
+
+      var reverseRate = reverseQualifyCount / totalSweepEvents;
+      var baseScore = 0, bonusScore = 0;
+
+      if (reverseRate >= 0.60){
+        baseScore = 12;
+        detail = 'strong reversal edge: ' + (reverseRate * 100).toFixed(0) + '% recovery rate (' + reverseQualifyCount + '/' + totalSweepEvents + ' events)';
+      } else if (reverseRate >= 0.40){
+        baseScore = 8;
+        detail = 'moderate reversal edge: ' + (reverseRate * 100).toFixed(0) + '% recovery rate (' + reverseQualifyCount + '/' + totalSweepEvents + ' events)';
+      } else if (reverseRate >= 0.20){
+        baseScore = 4;
+        detail = 'light reversal edge: ' + (reverseRate * 100).toFixed(0) + '% recovery rate (' + reverseQualifyCount + '/' + totalSweepEvents + ' events)';
+      } else {
+        baseScore = 0;
+        detail = 'weak reversal edge: ' + (reverseRate * 100).toFixed(0) + '% recovery rate (' + reverseQualifyCount + '/' + totalSweepEvents + ' events)';
+      }
+
+      /* Bonus: check if recent reversals were quick (within 15 bars) */
+      if (baseScore > 0 && reverseQualifyCount > totalSweepEvents * 0.5){
+        bonusScore = 2;
+        detail += ' | +2pt quick-bounce bonus (consistent within 15-bar window)';
+      }
+
+      var totalScore = Math.min(baseScore + bonusScore, 12);
+      return {
+        score: totalScore,
+        detail: detail,
+        maxScore: 12,
+        reverseRate: reverseRate.toFixed(3),
+        events: totalSweepEvents,
+        recoveries: reverseQualifyCount,
+        bonus: bonusScore
+      };
+
+    } catch (eLiqRec) {
+      detail = 'liquidation recovery scoring threw: ' + ((eLiqRec && eLiqRec.message) || eLiqRec);
+      return { score: 0, detail: detail, maxScore: 12 };
+    }
+  }
+
+  /* P4.2: VOLATILITY TERM STRUCTURE ALIGNMENT SCORING (10 pts)
+     Detects if we're entering at optimal volatility regime for this pair.
+     Scores based on realized volatility percentile position in recent history.
+
+     Thresholds:
+     - 10pts: Realized vol in 25th-50th percentile (sweet spot for entries)
+     - 7pts:  50th-75th percentile (elevated but manageable)
+     - 4pts:  <25th percentile (very quiet, good for tight stops)
+     - 0pts:  >75th percentile (chaos vol, harder fills)
+
+     Default: 0pts if <50 bars history (not a veto)
+  */
+  function hgOmniVolTermScore(setup){
+    if (!setup || !setup.rows || setup.rows.length < 50){
+      return { score: 0, detail: 'insufficient bars for vol term analysis (<50)', maxScore: 10 };
+    }
+
+    var rows = setup.rows;
+    var score = 0, detail = '';
+
+    try {
+      /* Calculate realized volatility (ATR-based) over recent window */
+      var shortTermAtr = atrOf(rows.slice(-20), 14);
+      var longTermAtr = atrOf(rows.slice(-50), 14);
+
+      if (!isFinite(shortTermAtr) || !isFinite(longTermAtr) || longTermAtr <= 0){
+        detail = 'ATR unavailable for vol term analysis';
+        return { score: 0, detail: detail, maxScore: 10 };
+      }
+
+      /* Build volatility percentiles from 50-bar rolling window */
+      var volHistory = [];
+      for (var i = 20; i < rows.length; i++){
+        var windowAtr = atrOf(rows.slice(i - 19, i + 1), 14);
+        if (isFinite(windowAtr)) volHistory.push(windowAtr);
+      }
+
+      if (volHistory.length < 10){
+        detail = 'insufficient vol history for percentile calculation';
+        return { score: 0, detail: detail, maxScore: 10 };
+      }
+
+      /* Sort and calculate percentiles */
+      volHistory.sort(function(a, b){ return a - b; });
+      var p25 = volHistory[Math.floor(volHistory.length * 0.25)];
+      var p50 = volHistory[Math.floor(volHistory.length * 0.50)];
+      var p75 = volHistory[Math.floor(volHistory.length * 0.75)];
+
+      var currentVol = shortTermAtr;
+      var percentile = 0;
+
+      /* Estimate percentile position */
+      if (currentVol <= p25){
+        percentile = 25;
+        score = 4;
+        detail = 'low vol regime (pctl=' + percentile + '): very quiet, good for tight stops';
+      } else if (currentVol <= p50){
+        percentile = Math.round((currentVol - p25) / (p50 - p25) * 25 + 25);
+        score = 10;
+        detail = 'optimal vol regime (pctl=' + percentile + '): 25-50th percentile sweet spot';
+      } else if (currentVol <= p75){
+        percentile = Math.round((currentVol - p50) / (p75 - p50) * 25 + 50);
+        score = 7;
+        detail = 'elevated vol regime (pctl=' + percentile + '): 50-75th percentile, manageable';
+      } else {
+        percentile = Math.round(Math.min(99, ((currentVol - p75) / p75) * 25 + 75));
+        score = 0;
+        detail = 'chaos vol regime (pctl=' + percentile + '): >75th percentile, harder fills';
+      }
+
+      detail += ' (realizedATR=' + currentVol.toFixed(4) + ', p25=' + p25.toFixed(4) + ', p50=' + p50.toFixed(4) + ', p75=' + p75.toFixed(4) + ')';
+
+      return {
+        score: score,
+        detail: detail,
+        maxScore: 10,
+        currentVol: currentVol.toFixed(6),
+        p25: p25.toFixed(6),
+        p50: p50.toFixed(6),
+        p75: p75.toFixed(6),
+        percentile: percentile
+      };
+
+    } catch (eVolTerm) {
+      detail = 'vol term scoring threw: ' + ((eVolTerm && eVolTerm.message) || eVolTerm);
+      return { score: 0, detail: detail, maxScore: 10 };
+    }
+  }
+
+  /* P4.3: RISK-ADJUSTED SIZING SCORE (12-15 pts)
+     Scores setup based on optimal position sizing criteria: stop size as % of
+     portfolio risk AND reward:risk ratio alignment.
+
+     Thresholds:
+     - 15pts: Stop <0.5% portfolio risk AND reward ≥3:1 (ideal sizing)
+     - 12pts: Stop <0.75% portfolio risk AND reward ≥2.5:1
+     - 8pts:  Stop <1.0% portfolio risk AND reward ≥2.0:1
+     - 4pts:  Stop <1.5% portfolio risk OR reward ≥1.5:1
+     - 0pts:  Stop >1.5% or reward <1.5:1
+
+     Bonus: +2pts if position size aligns with expected win rate (size down if <40% WR)
+     Default: estimated portfolio risk (assumes 10k account if not provided)
+  */
+  function hgOmniRiskAdjustedScore(setup){
+    if (!setup || !setup.plan){
+      return { score: 0, detail: 'no setup or plan', maxScore: 15 };
+    }
+
+    var plan = setup.plan;
+    var entry = fin(plan.entry), stop = fin(plan.stop), t1 = fin(plan.t1), t2 = fin(plan.t2);
+
+    if (!isFinite(entry) || !isFinite(stop)){
+      return { score: 0, detail: 'entry or stop not defined', maxScore: 15 };
+    }
+
+    var score = 0, detail = '', bonusScore = 0;
+
+    try {
+      /* Estimate account size (default 10k if not available) */
+      var accountSize = 10000;
+      if (setup.account && isFinite(fin(setup.account.size))){
+        accountSize = fin(setup.account.size);
+      }
+
+      /* Calculate risk in absolute terms */
+      var stopDistance = Math.abs(entry - stop);
+      if (stopDistance <= 0){
+        detail = 'invalid stop distance (entry = stop)';
+        return { score: 0, detail: detail, maxScore: 15 };
+      }
+
+      var riskPercentage = (stopDistance / entry) * 100;
+      var portfolioRiskPercentage = (stopDistance / accountSize) * 100;
+
+      /* Calculate reward using T1 or T2 */
+      var targetDistance = 0;
+      var usedTarget = 'T1';
+      if (isFinite(t1)){
+        targetDistance = Math.abs(t1 - entry);
+      } else if (isFinite(t2)){
+        targetDistance = Math.abs(t2 - entry);
+        usedTarget = 'T2';
+      }
+
+      if (targetDistance <= 0){
+        detail = 'no valid target specified (T1 or T2)';
+        return { score: 0, detail: detail, maxScore: 15 };
+      }
+
+      var rewardToRisk = targetDistance / stopDistance;
+
+      /* Scoring logic */
+      var baseScore = 0;
+      if (portfolioRiskPercentage < 0.5 && rewardToRisk >= 3.0){
+        baseScore = 15;
+        detail = 'ideal sizing: ' + portfolioRiskPercentage.toFixed(3) + '% portfolio risk + ' + rewardToRisk.toFixed(1) + ':1 reward';
+      } else if (portfolioRiskPercentage < 0.75 && rewardToRisk >= 2.5){
+        baseScore = 12;
+        detail = 'excellent sizing: ' + portfolioRiskPercentage.toFixed(3) + '% portfolio risk + ' + rewardToRisk.toFixed(1) + ':1 reward';
+      } else if (portfolioRiskPercentage < 1.0 && rewardToRisk >= 2.0){
+        baseScore = 8;
+        detail = 'good sizing: ' + portfolioRiskPercentage.toFixed(3) + '% portfolio risk + ' + rewardToRisk.toFixed(1) + ':1 reward';
+      } else if (portfolioRiskPercentage < 1.5 || rewardToRisk >= 1.5){
+        baseScore = 4;
+        detail = 'acceptable sizing: ' + portfolioRiskPercentage.toFixed(3) + '% portfolio risk + ' + rewardToRisk.toFixed(1) + ':1 reward';
+      } else {
+        baseScore = 0;
+        detail = 'oversized or poor reward: ' + portfolioRiskPercentage.toFixed(3) + '% portfolio risk + ' + rewardToRisk.toFixed(1) + ':1 reward';
+      }
+
+      /* Bonus: size alignment with expected win rate */
+      var winRate = setup.expectancy && isFinite(fin(setup.expectancy.winRate))
+                    ? fin(setup.expectancy.winRate)
+                    : null;
+
+      if (baseScore > 0 && winRate !== null && winRate < 0.40 && portfolioRiskPercentage > 0.5){
+        /* Low win rate with high risk = size down bonus not applied */
+        detail += ' (note: high risk unsuitable for <40% win rate)';
+      } else if (baseScore > 0 && winRate !== null && winRate >= 0.50){
+        /* High win rate = can size up */
+        bonusScore = 2;
+        detail += ' | +2pt win-rate alignment bonus (sizing appropriate for ' + (winRate * 100).toFixed(0) + '% win rate)';
+      }
+
+      var totalScore = Math.min(baseScore + bonusScore, 15);
+      return {
+        score: totalScore,
+        detail: detail,
+        maxScore: 15,
+        portfolioRiskPercent: portfolioRiskPercentage.toFixed(3),
+        rewardToRisk: rewardToRisk.toFixed(2),
+        accountSize: accountSize,
+        target: usedTarget,
+        bonus: bonusScore,
+        winRate: winRate
+      };
+
+    } catch (eRiskAdj) {
+      detail = 'risk-adjusted scoring threw: ' + ((eRiskAdj && eRiskAdj.message) || eRiskAdj);
+      return { score: 0, detail: detail, maxScore: 15 };
+    }
+  }
+
+  /* ==================== end P4 solidity framework ==================== */
+
   function hgOmniSolidityScore(setup, horizonLabel){
-    if (!setup) return { score: 0, maxScore: 200, breakdown: {}, detail: 'no setup' };
+    if (!setup) return { score: 0, maxScore: 176, breakdown: {}, detail: 'no setup', tier: 'weak' };
 
     /* P0 Pillars (55 pts) */
     var ob = hgOmniOrderBlockScore(setup);
@@ -1940,33 +2901,80 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var atrExpScore = hgOmniAtrExpansionScore(setup);
     var sessionScore = hgOmniSessionTimingScore(setup, horizonLabel);
 
+    /* P2 Pillars (20 pts) */
+    var direction = (setup.hit && setup.hit.dir) || null;
+    var liqScore = hgOmniLiquidationScore(setup, direction);
+    var expScore = hgOmniExpectancyScore(setup);
+
+    /* P3 Pillars (39 pts) */
+    var flowScore = hgOmniOrderFlowScore(setup);
+    var structScore = hgOmniStructureConfluenceScore(setup);
+    var momScore = hgOmniMomentumConvergenceScore(setup);
+
+    /* P4 Pillars (34-37 pts) */
+    var liqRecoveryScore = hgOmniLiquidationRecoveryScore(setup, direction);
+    var volTermScore = hgOmniVolTermScore(setup);
+    var riskAdjScore = hgOmniRiskAdjustedScore(setup);
+
     var totalScore = ob.score + fvg.score + mtf.score + rr.score +
-                     regimeScore.score + atrExpScore.score + sessionScore.score;
+                     regimeScore.score + atrExpScore.score + sessionScore.score +
+                     liqScore.score + expScore.score +
+                     flowScore.score + structScore.score + momScore.score +
+                     liqRecoveryScore.score + volTermScore.score + riskAdjScore.score;
 
     var maxStructuralScore = (ob.maxScore || 15) + (fvg.maxScore || 10) +
                               (mtf.maxScore || 10) + (rr.maxScore || 20) +
                               (regimeScore.maxScore || 10) + (atrExpScore.maxScore || 8) +
-                              (sessionScore.maxScore || 7);
+                              (sessionScore.maxScore || 7) +
+                              (liqScore.maxScore || 12) + (expScore.maxScore || 8) +
+                              (flowScore.maxScore || 12) + (structScore.maxScore || 15) +
+                              (momScore.maxScore || 12) +
+                              (liqRecoveryScore.maxScore || 12) + (volTermScore.maxScore || 10) +
+                              (riskAdjScore.maxScore || 15);
+
+    /* Determine solidity tier (176-point scale, updated for P4) */
+    var tier = 'weak';
+    if (totalScore >= 147) tier = 'extremely_solid';
+    else if (totalScore >= 120) tier = 'solid';
+    else if (totalScore >= 88) tier = 'fair';
 
     return {
       score: totalScore,
       maxScore: maxStructuralScore,
+      tier: tier,
       breakdown: {
         orderBlock: { score: ob.score, maxScore: ob.maxScore || 15, detail: ob.detail },
         fvg: { score: fvg.score, maxScore: fvg.maxScore || 10, detail: fvg.detail },
         multiTfCascade: { score: mtf.score, maxScore: mtf.maxScore || 10, detail: mtf.detail, agreements: mtf.agreements },
         riskReward: { score: rr.score, maxScore: rr.maxScore || 20, detail: rr.detail, rr: rr.rr },
         regime: { score: regimeScore.score, maxScore: regimeScore.maxScore || 10, detail: regimeScore.detail, regime: regimeScore.regime },
-        atrExpansion: { score: atrExpScore.score, maxScore: atrExpScore.maxScore || 10, detail: atrExpScore.detail, status: atrExpScore.atrStatus },
-        sessionTiming: { score: sessionScore.score, maxScore: sessionScore.maxScore || 7, detail: sessionScore.detail, session: sessionScore.session }
+        atrExpansion: { score: atrExpScore.score, maxScore: atrExpScore.maxScore || 8, detail: atrExpScore.detail, status: atrExpScore.atrStatus },
+        sessionTiming: { score: sessionScore.score, maxScore: sessionScore.maxScore || 7, detail: sessionScore.detail, session: sessionScore.session },
+        liquidation: { score: liqScore.score, maxScore: liqScore.maxScore || 12, detail: liqScore.detail, nearestLiq: liqScore.nearestLiq },
+        expectancy: { score: expScore.score, maxScore: expScore.maxScore || 8, detail: expScore.detail, expR: expScore.expR, samples: expScore.samples },
+        orderFlow: { score: flowScore.score, maxScore: flowScore.maxScore || 12, detail: flowScore.detail, flowAvailable: flowScore.flowAvailable },
+        structureConfluence: { score: structScore.score, maxScore: structScore.maxScore || 15, detail: structScore.detail, confluenceCount: structScore.confluenceCount },
+        momentumConvergence: { score: momScore.score, maxScore: momScore.maxScore || 12, detail: momScore.detail, agreements: momScore.agreements },
+        liquidationRecovery: { score: liqRecoveryScore.score, maxScore: liqRecoveryScore.maxScore || 12, detail: liqRecoveryScore.detail, reverseRate: liqRecoveryScore.reverseRate },
+        volTermStructure: { score: volTermScore.score, maxScore: volTermScore.maxScore || 10, detail: volTermScore.detail, percentile: volTermScore.percentile },
+        riskAdjusted: { score: riskAdjScore.score, maxScore: riskAdjScore.maxScore || 15, detail: riskAdjScore.detail, rr: riskAdjScore.rewardToRisk }
       },
       detail: 'OB:' + ob.score + '/' + (ob.maxScore || 15) +
               ' FVG:' + fvg.score + '/' + (fvg.maxScore || 10) +
               ' MTF:' + mtf.score + '/' + (mtf.maxScore || 10) +
               ' RR:' + rr.score + '/' + (rr.maxScore || 20) +
               ' REG:' + regimeScore.score + '/' + (regimeScore.maxScore || 10) +
-              ' ATR:' + atrExpScore.score + '/' + (atrExpScore.maxScore || 10) +
-              ' SES:' + sessionScore.score + '/' + (sessionScore.maxScore || 7)
+              ' ATR:' + atrExpScore.score + '/' + (atrExpScore.maxScore || 8) +
+              ' SES:' + sessionScore.score + '/' + (sessionScore.maxScore || 7) +
+              ' LIQ:' + liqScore.score + '/' + (liqScore.maxScore || 12) +
+              ' EXP:' + expScore.score + '/' + (expScore.maxScore || 8) +
+              ' FLOW:' + flowScore.score + '/' + (flowScore.maxScore || 12) +
+              ' STRUCT:' + structScore.score + '/' + (structScore.maxScore || 15) +
+              ' MOM:' + momScore.score + '/' + (momScore.maxScore || 12) +
+              ' LIQ-REC:' + liqRecoveryScore.score + '/' + (liqRecoveryScore.maxScore || 12) +
+              ' VOL-TERM:' + volTermScore.score + '/' + (volTermScore.maxScore || 10) +
+              ' RISK-ADJ:' + riskAdjScore.score + '/' + (riskAdjScore.maxScore || 15) +
+              ' [' + tier + ']'
     };
   }
 
@@ -6027,6 +7035,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniRegimeScore = hgOmniRegimeScore;
     window.hgOmniAtrExpansionScore = hgOmniAtrExpansionScore;
     window.hgOmniSessionTimingScore = hgOmniSessionTimingScore;
+    /* P2 Solidity Framework Scoring Functions */
+    window.hgOmniLiquidationScore = hgOmniLiquidationScore;
+    window.hgOmniExpectancyScore = hgOmniExpectancyScore;
+    /* P3 Solidity Framework Scoring Functions */
+    window.hgOmniOrderFlowScore = hgOmniOrderFlowScore;
+    window.hgOmniStructureConfluenceScore = hgOmniStructureConfluenceScore;
+    window.hgOmniMomentumConvergenceScore = hgOmniMomentumConvergenceScore;
+    /* P4 Solidity Framework Scoring Functions */
+    window.hgOmniLiquidationRecoveryScore = hgOmniLiquidationRecoveryScore;
+    window.hgOmniVolTermScore = hgOmniVolTermScore;
+    window.hgOmniRiskAdjustedScore = hgOmniRiskAdjustedScore;
     window.hgOmniSolidityScore = hgOmniSolidityScore;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
