@@ -199,8 +199,8 @@ console.log('\n== an against-tape ENGINE pick is never badged ACTIONABLE ==');
   const badge = SRC.slice(SRC.indexOf('isEngine'), SRC.indexOf('</span></div>', SRC.indexOf('isEngine')));
   ok(badge.indexOf('engineAgainstTape') < badge.indexOf("' · ACTIONABLE'"),
      'and the against-tape branch is tested BEFORE the ACTIONABLE one, so it cannot fall through');
-  ok(/engineLowGrade \? ' · FORMING'/.test(SRC),
-     'a tape-aligned low-grade engine pick still reads FORMING, unchanged');
+  ok(!/engineLowGrade \? ' · FORMING'/.test(SRC),
+     'SUPER SOLID no longer demotes engine picks to FORMING — tape-aligned engine picks read ACTIONABLE');
 }
 
 console.log('\nomnigold held tickets: ' + passed + ' checks passed');

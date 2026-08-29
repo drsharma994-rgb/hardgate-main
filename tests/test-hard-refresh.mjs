@@ -185,7 +185,7 @@ assert(iNews < iOnchain && iOnchain < iRotation && iRotation < iGoldspot,
 const groupTabs = gid => run("HG_NAV_GROUPS.filter(function(g){ return g.id===" + JSON.stringify(gid) + "; })[0].tabs.join(',')");
 assert(groupTabs('overview') === 'brain,book,trade,log,news,bias,regime,trendmx,rotation,execute,startrader',
   'COMMAND group: workflow then context');
-assert(groupTabs('crypto') === 'omnibtc,omnipresent,omniroute,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis',
+assert(groupTabs('crypto') === 'omnibtc,omnipresent,omniroute,lev20,bulls,best,swing,scalp,edge,smart,squeeze,reversalsniper,smc,ob,trap,div,coil,apex,oiflow,liqs,onchain,chartvision,carry,venueprem,termbasis',
   'CRYPTO group: BTC desk first, then anticipation, ranked scans → structure → flow → funding');
 assert(groupTabs('gold') === 'super-gold,omnigold,goldswing,goldscalp,gold,goldpro,goldspot,goldcoint,goldpine,signallog',
   'GOLD group: super desk first, then scanners');
