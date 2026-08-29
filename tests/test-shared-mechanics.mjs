@@ -71,7 +71,7 @@ console.log('== the module stands alone ==');
 {
   const M = boot(['indicators.js', 'indicators2.js', 'fixpack14-core.js', 'hg-mechanics.js']);
   ok(typeof M.hgMechRunAll === 'function', 'hgMechRunAll is exported without either tab loaded');
-  ok(Array.isArray(M.HG_MECH_KINDS) && M.HG_MECH_KINDS.length === 16, 'it declares 16 kinds');
+  ok(Array.isArray(M.HG_MECH_KINDS) && M.HG_MECH_KINDS.length === 18, 'it declares 18 kinds');
   const unmapped = M.HG_MECH_KINDS.filter(k => !M.HG_MECH_FAMILY[k]);
   ok(unmapped.length === 0, 'every kind has a consensus family'
     + (unmapped.length ? ' — missing: ' + unmapped.join(', ') : ''));
@@ -152,7 +152,7 @@ console.log('\n== omniroute registers every shared kind in all the right places 
   }
   const bt = W.hgOmniBacktestAll(tape(400, 3), { rMult: 2, horizon: 20, warm: 45 });
   for (const k of M.HG_MECH_KINDS) ok(k in bt, k + ' is back-tested, so it earns an in-sample record');
-  ok(Object.keys(bt).length === 22, 'twenty-two back-testable mechanics (' + Object.keys(bt).length + ')');
+  ok(Object.keys(bt).length === 24, 'twenty-four back-testable mechanics (' + Object.keys(bt).length + ')');
 }
 
 console.log('\n== the crypto-native three: gold cannot have these ==');

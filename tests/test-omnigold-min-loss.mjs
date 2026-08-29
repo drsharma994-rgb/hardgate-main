@@ -126,10 +126,12 @@ console.log('\n== 4. a volatility stop is AGAINST — the continuation ticket st
      'the compromise is named on the ticket (got notes=' + JSON.stringify(graded.notes) + ')');
 
   const ranked = [
-    { horizon: 'SCALP', kind: 'ORB', dir: 'long', grade: { ticket: true, vetoes: [] },
-      plan: { entry: 4300, stop: 4270, t1: 4345, momentumStop: true } },
-    { horizon: 'SCALP', kind: 'MMOVE', dir: 'long', grade: { ticket: true, vetoes: [] },
-      plan: { entry: 4300, stop: 4240, t1: 4420 } }
+    { horizon: 'SCALP', kind: 'ORB', dir: 'long', grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+      plan: { entry: 4300, stop: 4270, t1: 4345, momentumStop: true },
+      consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] } },
+    { horizon: 'SCALP', kind: 'MMOVE', dir: 'long', grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+      plan: { entry: 4300, stop: 4240, t1: 4420 },
+      consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] } }
   ];
   const pick = W.hgOgPickFor(ranked, 'SCALP');
   ok(pick && pick.kind === 'MMOVE', 'STRONGEST pick prefers the structural ticket over a vol-stop');
@@ -140,10 +142,12 @@ console.log('\n== 4. a volatility stop is AGAINST — the continuation ticket st
      with ticket". When the only remaining ticket IS that continuation,
      pick it — empty is the defect. */
   const onlyVol = [
-    { horizon: 'SWING', kind: 'ORB', dir: 'long', grade: { ticket: true, vetoes: [] },
-      plan: { entry: 4300, stop: 4270, t1: 4345, momentumStop: true } },
-    { horizon: 'SWING', kind: 'POC-REVERT', dir: 'short', grade: { ticket: false, vetoes: ['fade-strength'] },
-      plan: { entry: 4300, stop: 4320, t1: 4240 } }
+    { horizon: 'SWING', kind: 'ORB', dir: 'long', grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+      plan: { entry: 4300, stop: 4270, t1: 4345, momentumStop: true },
+      consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] } },
+    { horizon: 'SWING', kind: 'POC-REVERT', dir: 'short', grade: { ticket: false, vetoes: ['fade-strength'], evaluated: 40, total: 47 },
+      plan: { entry: 4300, stop: 4320, t1: 4240 },
+      consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] } }
   ];
   const swingPick = W.hgOgPickFor(onlyVol, 'SWING');
   ok(swingPick && swingPick.kind === 'ORB' && swingPick.plan.momentumStop === true,

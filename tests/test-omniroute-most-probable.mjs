@@ -65,7 +65,7 @@ function ticket(over){
     grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
     plan: { entry: 68000, stop: 66000, t1: 72000, t2: 74000, rr1: 2.0 },
     distAtr: 0.5,
-    consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] },
+    consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] },
     gates: [
       { key: 'adx-trend', info: true, pass: true },
       { key: 'macd-momentum', info: true, pass: true },
@@ -108,7 +108,7 @@ console.log('== balanced score: strategies and indicators share the rank, tape i
   const W = boot();
   const lonely = ticket({
     kind: 'ORB', distAtr: 0.15, rr: 4,
-    consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] },
+    consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] },
     gates: [{ key: 'adx-trend', info: true, pass: false }, { key: 'macd-momentum', info: true, pass: false }]
   });
   const chorus = ticket({

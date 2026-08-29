@@ -6,78 +6,6 @@
 <title>HARDGATE — DELTA · COINDCX · BINANCE · GOLD (PAXG)</title>
 <link rel="manifest" href="manifest.webmanifest">
 <script>
-/* In-memory localStorage/sessionStorage polyfill — ~30 desk modules persist
-   watchlists, alert dedup state, conviction locks, and settings via
-   localStorage/sessionStorage. Sandboxed opaque-origin preview hosts (and
-   some third-party-storage-partitioned browser contexts) block real access
-   to these APIs entirely, throwing on get/set. Detect that here, before any
-   other script runs, and swap in an in-memory Storage-compatible shim so
-   every existing getItem/setItem/removeItem call keeps working unchanged —
-   state just will not survive a full page reload in that environment.
-   Where real storage is available (production on Render, normal browsers)
-   this is a complete no-op. */
-(function(){
-  'use strict';
-  function makeMemoryStorage(){
-    var store = {};
-    return {
-      getItem: function(k){ return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
-      setItem: function(k, v){ store[String(k)] = String(v); },
-      removeItem: function(k){ delete store[String(k)]; },
-      clear: function(){ store = {}; },
-      key: function(i){ var keys = Object.keys(store); return i >= 0 && i < keys.length ? keys[i] : null; },
-      get length(){ return Object.keys(store).length; }
-    };
-  }
-  function ensureStorage(name){
-    var works = false;
-    try{
-      var s = window[name];
-      var probe = '__hg_storage_probe__';
-      s.setItem(probe, '1');
-      s.removeItem(probe);
-      works = true;
-    }catch(e){ works = false; }
-    if (!works){
-      var shim = makeMemoryStorage();
-      try{ Object.defineProperty(window, name, { value: shim, writable: true, configurable: true }); }
-      catch(e){ try{ window[name] = shim; }catch(e2){} }
-    }
-  }
-  ensureStorage('localStorage');
-  ensureStorage('sessionStorage');
-})();
-</script>
-<script>
-/* Preview-hosting API proxy shim — HARDGATE's ~30 desk modules call same-origin
-   paths like fetch('/api/proxy?...'). When this build is served as a static
-   bundle from an external preview host with the Node backend proxied under
-   /port/8420/, those absolute '/api/...' calls must be redirected there
-   instead of hitting the static host's root. __PORT_8420__ is replaced with
-   the real proxy path at deploy time; while it is still the literal
-   placeholder (local dev, or served by scripts/server.mjs itself) this is a
-   no-op and every call goes out unchanged. Must run before any other script. */
-(function(){
-  'use strict';
-  var RAW = '__PORT_8420__';
-  if (RAW.indexOf('__PORT_') === 0) return; /* not substituted — same-origin, do nothing */
-  var PREFIX = '/' + RAW.replace(/^\/+/, '');
-  var origFetch = window.fetch;
-  if (typeof origFetch === 'function'){
-    window.fetch = function(input, init){
-      try{
-        if (typeof input === 'string' && input.charAt(0) === '/' && input.indexOf('/api/') === 0){
-          input = PREFIX + input;
-        } else if (input && typeof input === 'object' && typeof input.url === 'string' && input.url.charAt(0) === '/' && input.url.indexOf('/api/') === 0){
-          input = new Request(PREFIX + input.url, input);
-        }
-      }catch(e){}
-      return origFetch(input, init);
-    };
-  }
-})();
-</script>
-<script>
 /* ?diag=1 — ATTRIBUTE THE FAILURES THAT ONLY HAPPEN ON A COLD LOAD.
 
    A warm desk is clean: a full hardRefreshAll produced three errors, all of
@@ -470,8 +398,414 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 </header>
 <div id="marketPictureBar" class="market-picture-bar">MARKET PICTURE: <b id="mpVerdict">—</b> <span id="mpDetail" class="note"></span></div>
 <div class="navgroups" id="navGroups" role="tablist" aria-label="HARDGATE tool groups"></div>
-<nav id="navTabs" aria-label="HARDGATE tabs"></nav>
-<main></main>
+<nav id="navTabs" aria-label="HARDGATE tabs">
+  <button id="tabB_brain" onclick="showTab('brain')">BRAIN</button>
+  <button id="tabB_trade" onclick="showTab('trade')">TRADE PLAN</button>
+  <button id="tabB_log" onclick="showTab('log')">LOG</button>
+  <button id="tabB_bias" class="on" onclick="showTab('bias')">BIAS</button>
+  <button id="tabB_best" onclick="showTab('best')">BEST</button>
+  <button id="tabB_swing" onclick="showTab('swing')">SWING SCAN</button>
+  <button id="tabB_scalp" onclick="showTab('scalp')">SCALP SCAN</button>
+  <button id="tabB_smart" onclick="showTab('smart')">SMART $</button>
+  <button id="tabB_gold" onclick="showTab('gold')">GOLD</button>
+  <button id="tabB_coil" onclick="showTab('coil')">COIL WATCHLIST</button>
+  <button id="tabB_apex" onclick="showTab('apex')">APEX (RS)</button>
+  <button id="tabB_trap" onclick="showTab('trap')">LIQUIDITY TRAP</button>
+  <button id="tabB_smc" onclick="showTab('smc')">SMC (FVG)</button>
+  <button id="tabB_ob" onclick="showTab('ob')">ORDER BLOCKS</button>
+  <button id="tabB_div" onclick="showTab('div')">DIVERGENCE</button>
+  <button id="tabB_basis" onclick="showTab('basis')">BASIS</button>
+  <button id="tabB_search" onclick="showTab('search')">SEARCH</button>
+  <button id="tabB_finder" onclick="showTab('finder')">FIND TRADE</button>
+</nav>
+<main>
+
+<!-- ================= BRAIN ================= -->
+<section id="tab_brain" class="tabpane">
+  <div class="panel">
+    <h2>BRAIN <span>meta-intelligence · loading…</span></h2>
+    <div class="note">BRAIN synthesizes every intelligence layer. Click RUN SYNTHESIS when loaded.</div>
+  </div>
+</section>
+
+<!-- ================= BIAS ================= -->
+<section id="tab_bias" class="tabpane on">
+  <div class="panel">
+    <h2>Daily Direction <span>fundamental + technical + sentiment, each gate shown, no composite score</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <div class="row" id="biasChips"></div>
+      <input id="biasSym" placeholder="symbol e.g. BTCUSD" style="width:150px">
+      <button class="btn" id="biasRun" onclick="runBias()">EVALUATE</button>
+    </div>
+    <div class="note">Verdict logic: direction requires 1D structure and 4H cascade to agree; any veto gate (RSI exhaustion, funding extreme against you, sentiment extreme) forces STAND ASIDE. A veto is information, not an obstacle.</div>
+    <div class="prog" id="biasProg"><i></i></div>
+  </div>
+  <div id="biasOut"></div>
+</section>
+
+<!-- ================= SWING ================= -->
+<section id="tab_swing" class="tabpane">
+  <div class="panel">
+    <h2>Swing Scanner <span>4H structure · 1D-derived bias · funding-clean only</span></h2>
+    <div class="row">
+      <label class="f">SCAN TOP (BY TURNOVER)<input id="swingN" type="number" value="30" min="5" max="500" style="width:80px"></label>
+      <label class="f">MIN 24H TURNOVER $<input id="swingTurn" type="number" value="200000" style="width:110px"></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="swingAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
+      <button class="btn" id="swingRun" onclick="runScan('swing')">SCAN</button>
+      <button class="btn" id="swingDiag" onclick="runGateDiagnostics()">CALIBRATE</button>
+      <span class="note" id="swingStat"></span>
+    </div>
+    <div class="prog" id="swingProg"><i></i></div>
+  </div>
+  <div class="note" style="margin-bottom:10px">Gates: G1 4H EMA cascade aligned (9&gt;21&gt;50 or inverse) with real spread — |EMA21−EMA50| ≥ 0.25×ATR, so flat-tape cascades don't count · G2 price on correct side of 4H EMA200 (HTF proxy) · G3 RSI-14 not exhausted (blocks &gt;70 long / &lt;30 short) · G4 |funding| ≤ 0.05% and not paying against you · G5 volume expansion vs 20-bar mean · G6 structural R:R ≥ 2 from last swing · G7 no opposing CUSUM event in last 20 bars (the one feature your own walk-forward validated OOS, AUC ≈0.58). All gates on CLOSED bars only — nothing repaints. Zero results is a valid, honest result. Each card shows <b>regime</b> — the 4H tape read (STRONG TREND / WEAK TREND / RANGE / COMPRESSION / VOLATILE EXPANSION), same as EDGE and DIVERGENCE.</div>
+  <div id="swingDesk"></div>
+  <div class="cards" id="swingCards"></div>
+  <div id="swingDiagOut"></div>
+  <div id="swingWatch"></div>
+  <div class="empty" id="swingEmpty" style="display:none">No CLEAN swing setups. Standing aside is a position.</div>
+</section>
+
+<!-- ================= SCALP ================= -->
+<section id="tab_scalp" class="tabpane">
+  <div class="panel">
+    <h2>Scalp Scanner <span>15m trigger inside 1H context · ATR targets · funding-window aware</span></h2>
+    <div class="row">
+      <label class="f">SCAN TOP (BY TURNOVER)<input id="scalpN" type="number" value="20" min="5" max="500" style="width:80px"></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="scalpAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
+      <button class="btn" id="scalpRun" onclick="runScan('scalp')">SCAN</button>
+      <span class="note" id="scalpStat"></span>
+    </div>
+    <div class="prog" id="scalpProg"><i></i></div>
+  </div>
+  <div class="note" style="margin-bottom:10px">Gates: G1 1H EMA cascade sets direction · G2 15m EMA9/21 pullback-and-reclaim in that direction · G3 15m RSI in 40–65 band (long) / 35–60 (short), no chasing exhaustion · G4 funding clean · G5 ≥ 25 min to funding settlement (00:00/08:00/16:00 UTC = 5:30/13:30/21:30 IST) · G6 ATR-based 2R target inside recent range. Scalps are invalid if you can't be filled early — entry is the reclaim close, not a market chase.</div>
+  <div id="scalpDesk"></div>
+  <div class="cards" id="scalpCards"></div>
+  <div id="scalpWatch"></div>
+  <div class="empty" id="scalpEmpty" style="display:none">No CLEAN scalp triggers right now.</div>
+
+<div class="row" style="margin-top:10px">
+<label class="f">BACKTEST SYMBOL (Twelve Data)<input id="scalpBtSym" type="text" placeholder="e.g. BTC" style="width:140px" onkeydown="if(event.key==='Enter') runScalpBacktestUI()"></label>
+<button class="btn" id="scalpBtRun" onclick="runScalpBacktestUI()">BACKTEST SCALP</button>
+<button class="btn" id="scalpBtX" onclick="btCancel('scalp')" style="display:none">CANCEL</button>
+</div>
+<div class="prog" id="scalpBtProg"><i></i></div>
+<div id="scalpBtOut"></div>
+</section>
+
+    <section id="tab_coil" class="tabpane">
+    <div class="panel">
+      <h2>Compression Stalker <span>find stored energy before the breakout · manual execution</span></h2>
+      <div class="row">
+        <button class="btn" id="coilRun" onclick="runCoilScan()">FIND COILS</button>
+        <span class="note" id="coilStat"></span>
+      </div>
+      <div class="prog" id="coilProg"><i></i></div>
+    </div>
+    <div class="note" style="margin-bottom:10px">Gates: G1 Bollinger Band width is ≥ 25% tighter than its 50-bar average (Volatility Squeeze) · G2 Volume z-score < -0.5 (Drought/Quiet Accumulation) · G3 Price above 4H 200 EMA (Bullish HTF context). Action: Do not buy blindly. Send these to the Trade Plan and wait for a Liquidity Sweep of the local low before manually entering.</div>
+    <div id="coilDesk"></div>
+    <div class="cards" id="coilCards"></div>
+    <div id="coilWatch"></div>
+    <div class="empty" id="coilEmpty" style="display:none">No compressed assets found. The market is currently expanded.</div>
+      <div class="note" style="margin:16px 0 10px;border-top:1px solid var(--line);padding-top:14px">Expansion check: after FIND COILS saves a watchlist, run this to see which of those symbols have since closed outside the compression range on a volume spike (G4 closed above coil high, G5 vol z&gt;2). Two-step process by design — run FIND COILS first, check back later.</div>
+      <div class="row">
+        <button class="btn" id="expRun" onclick="runExpansionCheck()">CHECK EXPANSION</button>
+        <span class="note" id="expStat"></span>
+      </div>
+      <div class="prog" id="expProg"><i></i></div>
+      <div class="cards" id="expCards"></div>
+      <div class="empty" id="expEmpty" style="display:none">No saved coils have triggered expansion yet.</div>
+  </section>
+
+  <section id="tab_div" class="tabpane">
+    <div class="panel">
+      <h2>RSI Divergence <span>regular + hidden divergence on 4H · price vs momentum disagreement</span></h2>
+      <div class="row">
+        <button class="btn" id="divRun" onclick="runDivScan()">FIND DIVERGENCE</button>
+        <span class="note" id="divStat"></span>
+      </div>
+      <div class="prog" id="divProg"><i></i></div>
+    </div>
+    <div class="note" style="margin-bottom:10px">Gates: G1 valid pivot structure (price vs RSI disagree over 2 swing points) &middot; G2 span&ge;10 bars between pivots, newest pivot &le;15 bars old &middot; G3 funding not extreme/opposing &middot; G4 no opposing CUSUM event in last 10 bars &middot; G5 R:R&ge;2. Regular divergence favors range/reversal contexts; hidden divergence favors trending continuation — shown as regime context, not a veto.</div>
+    <div id="divDesk"></div>
+    <div class="cards" id="divCards"></div>
+    <div class="empty" id="divEmpty" style="display:none">No qualifying divergence found.</div>
+  </section>
+
+  <section id="tab_basis" class="tabpane">
+    <div class="panel">
+      <h2>Cross-Venue Basis <span>Delta India vs CoinDCX price gap · informational, not an executed arbitrage</span></h2>
+      <div class="row">
+        <button class="btn" id="basisRun" onclick="runBasisScan()">FIND BASIS GAPS</button>
+        <span class="note" id="basisStat"></span>
+      </div>
+      <div class="prog" id="basisProg"><i></i></div>
+    </div>
+    <div class="note" style="margin-bottom:10px">Gates: G1 base asset listed on both venues &middot; G2 |basis|&ge;0.15%. CoinDCX's public API exposes no funding-rate field in this app, so this cannot confirm a funding-driven arbitrage — it only flags a price disagreement between venues. Verify funding, withdrawal/transfer friction and execution cost yourself before acting.</div>
+    <div class="cards" id="basisCards"></div>
+    <div class="empty" id="basisEmpty" style="display:none">No basis gaps found.</div>
+  </section>
+
+    <section id="tab_apex" class="tabpane">
+      <div class="panel">
+        <h2>Apex Leaders <span>relative strength vs BTC · manual macro execution</span></h2>
+        <div class="row">
+          <button class="btn" id="apexRun" onclick="runApexScan()">FIND APEX ASSETS</button>
+          <span class="note" id="apexStat"></span>
+        </div>
+        <div class="prog" id="apexProg"><i></i></div>
+      </div>
+      <div class="note" style="margin-bottom:10px">Gates: G1 BTC not bullish (24h return ≤ 1.5%, macro headwind present) · G2 Asset is outperforming BTC by ≥ 5% over 24h (the RS spread) · G3 Asset holding above its 1H EMA50 (short-term structure intact despite BTC bleeding). Action: Watch Bitcoin, not the altcoin. The minute BTC prints a 15m bullish sweep/reclaim, manually buy the #1 Apex asset.</div>
+      <div id="apexDesk"></div>
+      <div class="cards" id="apexCards"></div>
+      <div class="empty" id="apexEmpty" style="display:none">No valid Apex setups. Either BTC is currently bullish (no headwind to test against), or no assets are showing true relative strength.</div>
+    </section>
+
+
+    <section id="tab_trap" class="tabpane">
+      <div class="panel">
+        <h2>Liquidation Snapback <span>mean reversion · fading the extreme</span></h2>
+        <div class="row">
+          <button class="btn" id="trapRun" onclick="runTrapScan()">FIND TRAPPED TRADERS</button>
+          <span class="note" id="trapStat"></span>
+        </div>
+        <div class="prog" id="trapProg"><i></i></div>
+      </div>
+      <div class="note" style="margin-bottom:10px">Gates: G1 Extreme excursion — price pierced a volatility-scaled outer Bollinger Band (2.5–4.5 SD, wider for higher-ATR% assets) · G2 The rejection — candle closed back inside a volatility-scaled inner band (1.8–3.0 SD) · G3 Momentum exhaustion (RSI < 30 or > 70). Action: The crowd is trapped at the extreme. You are fading them. Buy/sell the reclaim, stop goes just past the liquidation wick, target the mean.</div>
+      <div id="trapDesk"></div>
+      <div class="cards" id="trapCards"></div>
+      <div class="empty" id="trapEmpty" style="display:none">No active liquidity traps. The market is currently respecting its boundaries.</div>
+    </section>
+
+      <section id="tab_smc" class="tabpane">
+        <div class="panel">
+          <h2>SMC (FVG) <span>institutional imbalance · fair value gaps · mitigation taps</span></h2>
+          <div class="row">
+            <button class="btn" id="smcRun" onclick="runSmcScan()">FIND UNMITIGATED FVGs</button>
+            <span class="note" id="smcStat"></span>
+          </div>
+          <div class="prog" id="smcProg"><i></i></div>
+        </div>
+        <div class="note" style="margin-bottom:10px">Gates: G1 Displacement (a valid 3-candle Fair Value Gap was created recently) · G2 Unmitigated (the gap has not been fully filled or invalidated by subsequent closes) · G3 The Tap (current price has pulled back and is trading inside the FVG zone) · G4 HTF Context (aligned with the 4H/200 EMA trend — note: this scan runs on 4H candles, not 1D). Action: the asset is currently sitting in an institutional Point of Interest (POI). Drop to a 5m/15m chart. Wait for a local sweep or Change of Character (CHOCH) in your direction, then execute.</div>
+        <div id="smcDesk"></div>
+        <div class="cards" id="smcCards"></div>
+        <div class="empty" id="smcEmpty" style="display:none">No assets are currently tapping an unmitigated 4H FVG.</div>
+      </section>
+
+      <section id="tab_ob" class="tabpane">
+        <div class="panel">
+          <h2>ORDER BLOCKS <span>institutional order blocks · equal-high/low liquidity pools</span></h2>
+          <div class="row">
+            <button class="btn" id="obRun" onclick="runObScan()">FIND UNMITIGATED ORDER BLOCKS</button>
+            <span class="note" id="obStat"></span>
+          </div>
+          <div class="prog" id="obProg"><i></i></div>
+        </div>
+        <div class="note" style="margin-bottom:10px">Gates: G1 Valid Order Block (the last opposite-colored 4H candle before a displacement candle that broke recent structure) · G2 Unmitigated (no subsequent candle has fully closed/wicked through the block) · G3 Price inside OB (current price has pulled back and is trading inside the block) · G4 HTF Context (aligned with the 4H/200 EMA trend). Liquidity Target shows the nearest unswept equal-high/low pool in your direction. Action: drop to a 5m/15m chart, wait for a local sweep or Change of Character (CHOCH), then execute.</div>
+        <div id="obDesk"></div>
+        <div class="cards" id="obCards"></div>
+        <div class="empty" id="obEmpty" style="display:none">No assets are currently tapping an unmitigated 4H Order Block.</div>
+      </section>
+
+
+
+
+
+<!-- ================= GOLD ================= -->
+<section id="tab_gold" class="tabpane">
+  <div class="panel">
+    <h2>Gold Setup <span>ONE composite card — 4H cascade + 1D structure + auto macro (DXY · 10Y · real-rate hint) + XAUUSDT positioning · honest STAND ASIDE when the pillars disagree</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn" id="goldSetupRun" onclick="runGoldSetup()">BUILD GOLD SETUP</button>
+      <span class="note" id="goldSetupStat"></span>
+    </div>
+    <div class="prog" id="goldSetupProg"><i></i></div>
+    <div id="goldSetupOut"><div class="empty">Run BUILD GOLD SETUP — the composite engine reads the 4H/1D structure, the auto macro legs and Binance XAUUSDT positioning, then emits one exact plan (entry · stop · T1/T2/T3) or an honest STAND ASIDE.</div></div>
+  </div>
+  <div class="panel">
+    <h2>Gold — XAUUSD <span>session-aware · Asian range + PDH/PDL liquidity · sweep-and-reclaim scalps · auto data chain: Binance PAXG → Twelve Data → Yahoo</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn" id="goldRun" onclick="runGold()">EVALUATE GOLD</button>
+      <span class="statuschip" id="goldSess">session <b>—</b></span>
+      <span class="statuschip" id="goldLvl">PDH <b>—</b> · PDL <b>—</b> · Asia <b>—</b></span>
+      <span class="statuschip" id="goldDataSrc">DATA <b>—</b></span>
+      <span class="note" id="goldStat"></span>
+    </div>
+    <div class="note">Gold logic: swing side follows the 4H/1D hard gates (same discipline as crypto, no exceptions for the shiny metal). Scalps only fire inside London (12:30–15:30 IST) or NY (17:30–20:30 IST) kill zones, and only on a sweep of the Asian range or prior-day high/low followed by a closed-bar reclaim — the Judas pattern you already trade. Fear &amp; Greed is crypto sentiment and is deliberately NOT applied here. DXY, 10Y yields and the real-rate hint now load automatically into MACRO (AUTO) below — nullable Yahoo legs degrade to “—” and never break the ledgers; the event calendar stays manual homework.</div>
+    <div class="prog" id="goldProg"><i></i></div>
+  </div>
+  
+<div class="row" style="margin-top:10px">
+<button class="btn" id="goldBtRun" onclick="runGoldBacktest()">BACKTEST GOLD</button>
+<button class="btn" id="goldBtX" onclick="btCancel('goldbt')" style="display:none">CANCEL</button>
+</div>
+<div class="prog" id="goldBtProg"><i></i></div>
+<div id="goldBtOut"></div>
+<div class="grid2">
+    <div class="panel"><h2>Swing Ledger <span>4H structure</span></h2><div id="goldSwingOut"><div class="empty">Run EVALUATE GOLD.</div></div></div>
+    <div class="panel"><h2>Scalp Ledger <span>15m sweep-and-reclaim in kill zone</span></h2><div id="goldScalpOut"><div class="empty">Run EVALUATE GOLD.</div></div></div>
+  </div>
+
+  <div class="panel" style="margin-top:10px">
+    <h2>Macro (auto) <span>DXY via Frankfurter/ECB · 10Y yield + silver via Yahoo proxy · loads with EVALUATE, never blocks the ledgers</span></h2>
+    <div id="goldMacroAuto"><div class="empty">Run EVALUATE GOLD or DEEP SCAN.</div></div>
+    <div class="row" style="margin-top:10px">
+      <input id="tdKeyInput" type="text" placeholder="Override Twelve Data key (stored locally)" style="width:280px">
+      <button class="btn ghost" onclick="saveTdKey()">SAVE</button>
+      <span class="note" id="tdKeyStat">optional — Binance PAXG is the primary free gold source, so no key is needed for the main feed</span>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:10px">
+    <h2>Deep Scan <span>37-gate swing engine + 20-gate scalp ledgers · weekly structure · auto macro gates · GOLD v3.0 engine ported inline</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn" id="goldDeepRun" onclick="runGoldDeep()">RUN DEEP SCAN</button>
+      <span class="note" id="goldDeepStat"></span>
+    </div>
+    <div class="prog" id="goldDeepProg"><i></i></div>
+    <div id="goldDeepOut"><div class="empty">Run DEEP SCAN for the full 37-gate engine.</div></div>
+  </div>
+
+  <details class="panel" style="margin-top:10px">
+    <summary style="cursor:pointer;font-family:var(--disp);letter-spacing:.14em;font-size:13px">GOLD CHEAT SHEET <span style="color:var(--mut);font-size:10px;letter-spacing:0">behavioral notes — click to expand</span></summary>
+    <div style="margin-top:8px">
+      <div class="note">• London open (07:00 UTC) often sweeps the Asia range — watch for the Judas reclaim.</div>
+      <div class="note">• NY morning (12:00–14:00 UTC) = highest liquidity + cleanest moves.</div>
+      <div class="note">• NY afternoon (15:00–21:00 UTC) = chop / low volume. Reduce size.</div>
+      <div class="note">• NFP week (first Friday): widen stops, expect false breaks Wed–Thu.</div>
+      <div class="note">• London Fix (15:00 UTC) and NY Close (21:00 UTC) = spike risk. Avoid entries 15 min before/after.</div>
+      <div class="note">• Gold is anti-correlated to DXY and real yields. When both rise together, gold is trapped — range likely.</div>
+      <div class="note">• Bollinger squeeze on 4H often precedes $15–$30 moves within 24h.</div>
+      <div class="note">• Mean reversion works best at Asia high/low + London kill zone. Trend continuation works best in NY morning.</div>
+    </div>
+  </details>
+</section>
+
+<!-- ================= SMART $ (BINANCE) ================= -->
+<section id="tab_smart" class="tabpane">
+  <div class="panel">
+    <h2>Smart Money — Binance positioning <span>100% free fapi data · funding · OI · retail vs top traders · taker flow</span></h2>
+    <div class="row">
+      <button class="btn" id="smartRun" onclick="runSmartScan()">RUN SCAN</button>
+      <select id="smartVenue" onchange="setSmartVenue(this.value)" title="BINANCE ONLY = the classic scan · +COINDCX = also cover every CoinDCX contract that has a Binance twin — positioning is a property of the asset, honestly stamped; CoinDCX-only contracts are named (no positioning data exists for them)">
+        <option value="binance">BINANCE ONLY</option>
+        <option value="cdcx">+COINDCX</option>
+      </select>
+      <span class="note" id="smartStat"></span>
+    </div>
+    <div class="note" style="margin-top:8px">Evidence, not signals — now with executable plans. Every card tallies independent positioning reads: <b>price/OI regime</b> (new-longs trend fuel · short-covering fade · new-shorts fuel · long capitulation), <b>funding crowding</b> (|f| ≥ 0.05%/8h — fade the crowded side), <b>retail contrarian</b> (≥65% / ≤35% long), <b>smart-money divergence</b> (top traders vs retail ≥15pp — follow top traders), <b>taker imbalance</b> (≥1.1 / ≤0.9). Direction = evidence majority; cards with a majority get a <b>SWING</b> (continuation — 4H structure stop, 2R/3.5R) or <b>SCALP</b> (reversion — stop beyond the 24h extreme, 1.5R/2.5R, 24h time-stop) plan with entry · stop · targets and a one-click handoff to TRADE PLAN; CONFIRMED means the 4H EMA20/50 cascade agrees. Universe: the full Binance USDT-perp list with ≥$5M 24h turnover, screened to |24h move| ≥ 2% or top-120 turnover. Funding/OI/retail positioning exists only on Binance — Delta/CoinDCX expose no such fields; their full perp universes are structure-scanned on the SWING/SCALP tabs. <b>+COINDCX mode</b>: every CoinDCX contract with a Binance twin is scanned through the twin (positioning is a property of the asset — the card says so and hands off to CoinDCX); contracts with no twin are named honestly, never fabricated.</div>
+    <div class="prog" id="smartProg"><i></i></div>
+  </div>
+  <div id="smartDesk"></div>
+  <div id="smartGold"></div>
+  <div class="cards" id="smartCards"></div>
+  <div class="empty" id="smartEmpty" style="display:none">No positioning edges right now — the market is balanced.</div>
+</section>
+
+<!-- ================= BEST ================= -->
+<section id="tab_best" class="tabpane">
+  <div class="panel">
+    <h2>Best Setup <span>hard gates are the ticket in · ranking = tally of independent aligned confirmations · WAIT is a first-class answer</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <label class="f">SCAN TOP (BY TURNOVER)<input id="bestN" type="number" value="30" min="5" max="500" style="width:80px"></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px"><input id="bestAll" type="checkbox" style="width:auto"> SCAN WHOLE EXCHANGE</label>
+      <button class="btn" id="bestRun" onclick="runBest()">FIND BEST</button>
+      <span class="note" id="bestStat"></span>
+      <span class="note">Telegram: crypto 7/7 CLEAN + 6/7 NEAR (default) — convicted-only mode (hgAlertCryptoConvictedOnly=1, default) sends gate-clean MOST PROBABLE only, no NEAR. Gold uses separate 15-min batch. Set hgAlertCleanOnly=0 or hgAlertCryptoConvictedOnly=0 to widen.</span>
+    </div>
+    <div class="note">How this ranks — and how it refuses to lie: every candidate must first pass ALL seven swing hard gates (cascade+spread, HTF side, RSI, funding, volume, R:R≥2, no opposing CUSUM). That is binary; nothing "almost" passes. Institutional + time-decay vetoes drop stale momentum (&gt;6 bars, &lt;1 ATR displacement), CVD severe divergence, and L2 spoof traps before ranking. Survivors are scored across <b>9 independent evidence families</b> (F1–F9) plus R1/R2 robustness. ≥5/9 families required for #1 when a strong pool exists. WAIT is a first-class answer. The #1 panel shows <b>4H regime</b> (STRONG TREND / WEAK TREND / …) — per-symbol tape context, not the market-wide REGIME tab.</div>
+    <div class="prog" id="bestProg"><i></i></div>
+  </div>
+  <div id="bestOut"><div class="empty">Run FIND BEST.</div></div>
+</section>
+
+<!-- ================= SEARCH ================= -->
+<section id="tab_search" class="tabpane">
+  <div class="panel">
+    <h2>Search <span>look up any coin across Delta India and CoinDCX futures &mdash; a lookup, not a signal</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <label class="f">COIN / SYMBOL<input id="searchQ" type="text" placeholder="e.g. BTC, SOL, PEPE" style="width:200px" onkeydown="if(event.key==='Enter') runSearch()"></label>
+      <button class="btn" id="searchRun" onclick="runSearch()">SEARCH</button>
+      <span class="note" id="searchStat"></span>
+    </div>
+    <div class="note">Matches the coin's base asset on both exchanges independently &mdash; the two use different symbol formats (Delta's BTCUSD vs CoinDCX's B-BTC_USDT), so this maps by underlying asset, not spelling. Delta India shows live mark price, funding and 24h turnover from its ticker feed. CoinDCX's ticker feed has no funding/turnover fields, so price there is the last closed 15m candle close &mdash; everything else is marked n/a rather than guessed.</div>
+    <div class="prog" id="searchProg"><i></i></div>
+  </div>
+  <div id="searchOut"><div class="empty">Type a coin and hit SEARCH.</div></div>
+</section>
+
+<section id="tab_finder" class="tabpane">
+<div class="panel">
+<h2>Find Trade <span>one symbol, every strategy this app knows — SWING, SCALP, and Judas Sweep, gates shown honestly</span></h2>
+<div class="row" style="margin-bottom:10px">
+<label class="f">TYPE<select id="finderType" onchange="finderTypeChanged()"><option value="crypto">CRYPTO</option><option value="gold">GOLD (XAUTUSD)</option></select></label>
+<label class="f" id="finderSymWrap">SYMBOL<input id="finderSym" type="text" placeholder="e.g. BTC" style="width:140px" onkeydown="if(event.key==='Enter') runFinder()"></label>
+<button class="btn" onclick="runFinder()">EVALUATE</button>
+<span class="note" id="finderStat"></span>
+</div>
+<div class="note">Runs this app's existing SWING and SCALP gate ledgers plus a session-gated Judas Sweep check (liquidity sweep of the Asian range / prior-day high-low, kill-zone timed) on one symbol at a time — crypto looks the symbol up on Delta India first, then CoinDCX. Nothing here is a new indicator; it's the same gates used elsewhere in this app, just gathered in one place per-symbol, with an optional Twelve Data backtest for context.</div>
+</div>
+<div id="finderOut"></div>
+</section>
+
+<!-- ================= LOG ================= -->
+<section id="tab_log" class="tabpane">
+  <div class="panel">
+    <h2>Setup Log <span>every CLEAN setup auto-logs · outcomes graded against candle history · stored in this browser (localStorage)</span></h2>
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn" id="logCheck" onclick="checkOutcomes()">CHECK OUTCOMES</button>
+      <button class="btn ghost" onclick="exportLog()">EXPORT JSON</button>
+      <button class="btn ghost" onclick="clearLog()">CLEAR</button>
+      <span class="note" id="logStat"></span>
+    </div>
+    <div class="note" id="logSummary">—</div>
+    <hr class="sep">
+    <div class="note">Grading rules, stated so the numbers can't flatter you: outcome = first touch of T1 or stop on closed candles after log time. If both print inside the same bar, it counts as <b>SL</b> (conservative — intrabar order is unknowable). Fees ARE modelled: Delta taker 0.05% / maker 0.02% +18% GST, charged on notional — entries are limits (maker), TP1 exits limits (maker), SL exits market (taker). <b>Funding and slippage are still NOT modelled</b>, so net remains optimistic. Costs override in Settings if your volume tier differs. Open &gt;14 days → EXPIRED, excluded from hit rate. ΣR gross assumes -1R on SL, +R:R on TP1; ΣR NET subtracts round-trip fees. This is a signal audit, not a PnL statement. Data lives in this browser only — EXPORT before clearing cache or switching devices.</div>
+  </div>
+  <div class="panel" style="overflow-x:auto" id="logTable"></div>
+</section>
+
+<!-- ================= TRADE ================= -->
+<section id="tab_trade" class="tabpane">
+  <div id="tradeDesk"></div>
+  <div class="grid2">
+    <div class="panel">
+      <h2>Entry Planner <span>plan is computed here; execution stays server-side (delta-trader.ts) or manual</span></h2>
+      <div class="row" style="margin-bottom:8px">
+        <label class="f">SYMBOL<input id="tSym" placeholder="BTCUSD" style="width:120px"></label>
+        <label class="f">SIDE<select id="tSide"><option value="long">LONG</option><option value="short">SHORT</option></select></label>
+        <button class="btn ghost" onclick="pullMark()">PULL MARK</button>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="f">ENTRY<input id="tEntry" type="number" step="any" style="width:110px"></label>
+        <label class="f">STRUCTURAL STOP<input id="tStop" type="number" step="any" style="width:110px"></label>
+        <label class="f">T1 (optional)<input id="tT1" type="number" step="any" style="width:110px"></label>
+        <label class="f">T2 runner (optional)<input id="tT2" type="number" step="any" style="width:110px"></label>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="f">EQUITY $<input id="tEq" type="number" value="1000" style="width:90px"></label>
+        <label class="f">RISK %<input id="tRisk" type="number" value="1" step="0.25" style="width:70px"></label>
+        <label class="f">AUTO LEVERAGE<input id="tLev" type="number" value="10" step="1" readonly style="width:70px;opacity:0.75;cursor:not-allowed" title="Computed automatically from stop distance for 1.5x liquidation clearance"></label>
+        <label class="f">MMR %<input id="tMmr" type="number" value="0.5" step="0.1" style="width:70px"></label>
+        <label class="f">T1 SCALE-OUT %<input id="tScale" type="number" value="50" step="5" style="width:80px"></label>
+      </div>
+      <button class="btn" onclick="planTrade()">COMPUTE PLAN</button>
+      <hr class="sep">
+      <div class="checklist" id="tCheck">
+        <label><input type="checkbox" class="ck"> Isolated margin selected</label>
+        <label><input type="checkbox" class="ck"> Auto top-up is OFF</label>
+        <label><input type="checkbox" class="ck"> Stop is beyond swept liquidity — not reverse-engineered to hit an R:R</label>
+        <label><input type="checkbox" class="ck"> Position fits venue liquidity (check book depth vs size)</label>
+        <label><input type="checkbox" class="ck"> Trade will be logged fixed-R in the tradelog</label>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Plan Ledger</h2>
+      <div id="tradeOut"><div class="empty">Compute a plan to see sizing, liquidation clearance and the ticket.</div></div>
+    </div>
+  </div>
+</section>
+
+</main>
 
 
 <script src="build-stamp.js"></script>
@@ -527,7 +861,7 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="desk-scan-universe.js"></script>
 <script src="reversalsniper.js"></script>
 <script src="edge.js?v=526"></script>
-<script src="startradertab.js?v=40"></script>
+<script src="startradertab.js?v=526"></script>
 <script src="engine.js"></script>
 <script src="news.js"></script>
 <script src="onchain.js"></script>
@@ -592,15 +926,15 @@ table tr:hover td{background:rgba(201,146,26,.06)}
 <script src="purged-cv.js"></script>
 <script src="agent-debate.js"></script>
 <script src="formation-lab.js"></script>
-<script src="book-routing.js?v=55"></script>
-<script src="api-client.js?v=1"></script>
+<script src="book-routing.js?v=526"></script>
+<script src="api-client.js?v=526"></script>
 <script src="tradeos.js"></script>
 <script src="hey-lens.js"></script>
 <script src="atomic-agent-desk.js"></script>
 <script src="ai-agent.js"></script>
 <script src="agent-alerts.js"></script>
-<script src="book.js?v=56"></script>
-<script src="execute.js?v=56"></script>
+<script src="book.js?v=526"></script>
+<script src="execute.js?v=526"></script>
 <script src="pinemath.js"></script>
 <script src="pinegoldmath.js"></script>
 <script src="goldpine.js"></script>
@@ -2652,14 +2986,17 @@ async function runObScanLeg(opts){
    Order inside each group follows how you trade: command center → scan →
    gold lane → conviction desks / pine / lab → utilities. */
 const HG_NAV_GROUPS = [
-  { id:'crypto',     label:'CRYPTO',   tabs:['omniroute', 'lev20', 'bulls'] },
-  { id:'gold',       label:'GOLD',     tabs:['omnigold'] },
+  { id:'overview',   label:'COMMAND',  tabs:['brain','book','trade','log','news','bias','regime','trendmx','rotation','execute','startrader'] },
+  { id:'crypto',     label:'CRYPTO',   tabs:['omnibtc','omnipresent','omniroute','lev20','bulls','best','swing','scalp','edge','smart','squeeze','reversalsniper','smc','ob','trap','div','coil','apex','oiflow','liqs','onchain','chartvision','carry','venueprem','termbasis'] },
+  { id:'gold',       label:'GOLD',     tabs:['super-gold','omnigold','goldswing','goldscalp','gold','goldpro','goldspot','goldcoint','goldpine','signallog'] },
+  { id:'strategies', label:'MODELS',   tabs:['super-setup','super-best','super-sniper','super-book','super-calibrate','pine','pine-msb','pine-sqz','pine-smf','pine-ht','pine-smc','pine-cipher','pine-rf','pine-nw','pine-avwap','strats','meanrev','formationlab','scorecard','reliability'] },
+  { id:'tools',      label:'TOOLS',    tabs:['risk','basis','search','finder','tradeos','hey','aiagent'] },
 ];
 const HG_TAB_GROUP = {};
 HG_NAV_GROUPS.forEach(function(g){ g.tabs.forEach(function(t){ HG_TAB_GROUP[t] = g.id; }); });
-const HG_GROUP_FALLBACK = 'crypto';     // dynamic tabs with no mapping land here ('tools' group removed)
+const HG_GROUP_FALLBACK = 'tools';      // dynamic tabs with no mapping land here
 const HG_GROUP_KEY = 'hg_active_group'; // localStorage persistence of the active group
-let HG_GROUP = 'crypto';
+let HG_GROUP = 'overview';
 
 function hgGroupHas(gid){ return HG_NAV_GROUPS.some(function(g){ return g.id===gid; }); }
 function hgTabExists(id){
@@ -2848,13 +3185,218 @@ function showTab(t){
 let __hgTabScanSeq = 0;
 let __hgTabScanBusy = false;
 const HG_TAB_AUTO_SCAN = {
-  /* Trimmed to the two kept tabs. Every other entry that used to live here
-     (swing, scalp, best, smart, squeeze, reversalsniper, smc, ob, trap,
-     div, coil, apex, oiflow, liqs, onchain, chartvision, carry, venueprem,
-     termbasis, super-* , pine-*, strats, meanrev, formationlab, scorecard,
-     reliability, risk, basis, search, finder, tradeos, omnipresent,
-     omnibtc, book, ...) is gone along with its tab — those tabs no longer
-     exist, so their auto-scan entries would just be dead references. */
+  swing: function(opts){
+    opts = opts || {};
+    if (opts.quiet && typeof cryptoScanWarm === 'function') return cryptoScanWarm('swing');
+    return runScan('swing', opts);
+  },
+  scalp: function(opts){
+    opts = opts || {};
+    if (opts.quiet && typeof cryptoScanWarm === 'function') return cryptoScanWarm('scalp');
+    return runScan('scalp', opts);
+  },
+  best: function(opts){
+    opts = opts || {};
+    if (opts.quiet && typeof bestScanWarm === 'function') return bestScanWarm();
+    return runBest(opts);
+  },
+  pine: async function(){
+    const pane = document.getElementById('tab_pine');
+    const runBtn = pane && pane.querySelector('#pineRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-msb': async function(){
+    const pane = document.getElementById('tab_pine-msb');
+    const runBtn = pane && pane.querySelector('#pineMsbRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-sqz': async function(){
+    const pane = document.getElementById('tab_pine-sqz');
+    const runBtn = pane && pane.querySelector('#pineSqzRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-smf': async function(){
+    const pane = document.getElementById('tab_pine-smf');
+    const runBtn = pane && pane.querySelector('#pineSmfRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-ht': async function(){
+    const pane = document.getElementById('tab_pine-ht');
+    const runBtn = pane && pane.querySelector('#pineHtRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-smc': async function(){
+    const pane = document.getElementById('tab_pine-smc');
+    const runBtn = pane && pane.querySelector('#pineSmcRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-cipher': async function(){
+    const pane = document.getElementById('tab_pine-cipher');
+    const runBtn = pane && pane.querySelector('#pineCipherRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-rf': async function(){
+    const pane = document.getElementById('tab_pine-rf');
+    const runBtn = pane && pane.querySelector('#pineRfRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-nw': async function(){
+    const pane = document.getElementById('tab_pine-nw');
+    const runBtn = pane && pane.querySelector('#pineNwRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  'pine-avwap': async function(){
+    const pane = document.getElementById('tab_pine-avwap');
+    const runBtn = pane && pane.querySelector('#pineAvwapRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  goldpine: async function(){
+    const pane = document.getElementById('tab_goldpine');
+    const runBtn = pane && pane.querySelector('#goldPineRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  brain: async function(){
+    const pane = document.getElementById('tab_brain');
+    const runBtn = pane && pane.querySelector('#brainRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  edge: async function(opts){
+    opts = opts || {};
+    const pane = document.getElementById('tab_edge');
+    const runBtn = pane && pane.querySelector('#edgeRun');
+    const mounted = !!(runBtn);
+    if (opts.quiet || !mounted){
+      if (typeof edgeWarm === 'function'){
+        return edgeWarm(opts.quiet ? opts : Object.assign({}, opts, { force: true }));
+      }
+    }
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  coil: function(){ return runCoilScan(); },
+  apex: function(){ return runApexScan(); },
+  trap: function(){ return runTrapScan(); },
+  smc: function(){ return runSmcScan(); },
+  ob: function(){ return runObScan(); },
+  div: function(){ return runDivScan(); },
+  bias: function(){ return runBias(); },
+  basis: function(){ return runBasisScan(); },
+  search: function(){ return runSearch(); },
+  smart: function(){ return runSmartScan(); },
+  gold: function(){ return runGold(); },
+  goldpro: async function(){
+    const pane = document.getElementById('tab_goldpro');
+    const runBtn = pane && pane.querySelector('[data-gp="run"]');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof refreshGoldPro === 'function') await refreshGoldPro();
+  },
+  finder: function(){ return runFinder(); },
+  trendmx: async function(){
+    const pane = document.getElementById('tab_trendmx');
+    const runBtn = pane && pane.querySelector('[data-r="run"]');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof hgPaintTrendmxFromSnap === 'function') hgPaintTrendmxFromSnap();
+  },
+  squeeze: async function(){
+    const pane = document.getElementById('tab_squeeze');
+    const runBtn = pane && pane.querySelector('#sqRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+    else if (typeof hgPaintSqueezeFromSnap === 'function') hgPaintSqueezeFromSnap();
+  },
+  'super-setup': async function(){
+    if (typeof window.superSetupRunScan === 'function'){
+      await window.superSetupRunScan({ force: true });
+    }
+  },
+  'super-gold': async function(){
+    if (typeof window.superGoldRunScan === 'function'){
+      await window.superGoldRunScan({ force: true });
+    }
+  },
+  'super-best': async function(){
+    if (typeof window.superBestRunScan === 'function'){
+      await window.superBestRunScan({ force: true });
+    }
+  },
+  'super-sniper': async function(){
+    if (typeof window.superSniperRunScan === 'function'){
+      await window.superSniperRunScan({ force: true });
+    }
+  },
+  'super-book': async function(){
+    if (typeof window.superBookRefresh === 'function'){
+      await window.superBookRefresh();
+    }
+  },
+  'super-calibrate': async function(){
+    if (typeof window.superCalibrateRun === 'function'){
+      await window.superCalibrateRun({ force: true });
+    }
+  },
+  goldswing: async function(){
+    if (typeof gwWarm === 'function') await gwWarm();
+    else if (typeof goldswingRefresh === 'function') await goldswingRefresh({ force: true });
+  },
+  goldscalp: async function(){
+    if (typeof gsWarm === 'function') await gsWarm();
+    else if (typeof goldscalpRefresh === 'function') await goldscalpRefresh({ force: true });
+  },
+  reversalsniper: async function(){
+    if (typeof rsRunScan === 'function') await rsRunScan({ quiet: true });
+    else if (typeof rsRefresh === 'function') await rsRefresh();
+  },
+  news: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.news : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+    else if (typeof hgNewsRefresh === 'function') await hgNewsRefresh(false);
+  },
+  rotation: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.rotation : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  oiflow: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.oiflow : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  onchain: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.onchain : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  chartvision: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.chartvision : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  carry: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.carry : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  venueprem: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.venueprem : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  termbasis: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.termbasis : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  liqs: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.liqs : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  scorecard: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.scorecard : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  aiagent: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.aiagent : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  hey: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.hey : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
+  tradeos: async function(){
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.tradeos : null;
+    if (mod && typeof mod.refresh === 'function') await mod.refresh({ force: true });
+  },
   omniroute: async function(){
     const pane = document.getElementById('tab_omniroute');
     const runBtn = pane && pane.querySelector('#omniRun');
@@ -2871,10 +3413,53 @@ const HG_TAB_AUTO_SCAN = {
       return st || 'refreshed';
     }
     if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  omnipresent: async function(){
+    const pane = document.getElementById('tab_omnipresent');
+    const runBtn = pane && pane.querySelector('#opRun');
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  omnibtc: async function(){
+    const pane = document.getElementById('tab_omnibtc');
+    const runBtn = pane && pane.querySelector('#obtcRun');
+    const mod = (typeof HG_TAB_MODS !== 'undefined') ? HG_TAB_MODS.omnibtc : null;
+    if (mod && typeof mod.refresh === 'function'){
+      const st = await mod.refresh();
+      const sl = String(st || '').toLowerCase();
+      if (sl.indexOf('skipped: not run yet') === 0){
+        if (runBtn && !runBtn.disabled) runBtn.click();
+        return 'refreshed';
+      }
+      return st || 'refreshed';
+    }
+    if (runBtn && !runBtn.disabled) runBtn.click();
+  },
+  book: async function(){
+    if (typeof superBookRefresh === 'function') await superBookRefresh();
+    else if (typeof bookRefresh === 'function') await bookRefresh();
   }
 };
 const HG_SCAN_RUN_BTN = {
-  omniroute: '#omniRun'
+  brain: '#brainRun',
+  goldpro: '[data-gp="run"]',
+  goldscalp: '#gsRun',
+  goldswing: '#gwRun',
+  goldpine: '#goldPineRun',
+  trendmx: '[data-r="run"]',
+  squeeze: '#sqRun',
+  pine: '#pineRun',
+  'pine-msb': '#pineMsbRun',
+  'pine-sqz': '#pineSqzRun',
+  'pine-smf': '#pineSmfRun',
+  'pine-ht': '#pineHtRun',
+  'pine-smc': '#pineSmcRun',
+  'pine-cipher': '#pineCipherRun',
+  'pine-rf': '#pineRfRun',
+  'pine-nw': '#pineNwRun',
+  'pine-avwap': '#pineAvwapRun',
+  omniroute: '#omniRun',
+  omnipresent: '#opRun',
+  omnibtc: '#obtcRun'
 };
 function hgCollectAllScanTabIds(){
   const seen = {};
@@ -3038,10 +3623,7 @@ function scheduleTabAutoScan(t){
    ========================================================================= */
 const BIAS_QUICK = ['BTCUSD','ETHUSD','SOLUSD','XAUTUSD'];
 function renderBiasChips(){
-  /* biasChips lived in the now-removed static BIAS tab. This still gets
-     called from boot/setExchange paths that predate the two-tab layout;
-     null-guard rather than throw when the pane no longer exists. */
-  const el = $('biasChips'); if (!el) return; el.innerHTML='';
+  const el = $('biasChips'); el.innerHTML='';
   const syms = S.exchange==='delta' ? BIAS_QUICK : ['B-BTC_USDT','B-ETH_USDT','B-SOL_USDT'];
   syms.forEach(s=>{
     const b=document.createElement('button'); b.className='chip'; b.textContent=s;
@@ -6133,11 +6715,6 @@ async function checkOutcomes(){
   btn.disabled=false;
 }
 function renderLog(){
-  /* logSummary/logTable lived in the now-removed static LOG tab. loadLog()
-     itself keeps recording setups (scans still call it), only the render
-     is gone — so this stays a no-op instead of throwing when the pane
-     no longer exists. */
-  if (!$('logSummary') || !$('logTable')) return;
   const l=loadLog().slice().sort((a,b)=>b.ts-a.ts);
   const tp=l.filter(e=>e.status==='tp').length, sl=l.filter(e=>e.status==='sl').length,
         op=l.filter(e=>e.status==='open').length, ex=l.filter(e=>e.status==='exp').length; const tsStop = l.filter(e=>e.status==='time_stop').length; const unf = l.filter(e=>e.status==='unfilled').length;
@@ -8559,17 +9136,8 @@ const HG_MOUNTED = {};
     for (let i=0;i<(main.children||[]).length;i++) if (main.children[i].id === id) return true;
     return false;
   }
-  /* Only OMNIROUTE (crypto) and OMNIGOLD (gold) are kept as tabs. Every
-     other dynamically-registered module is skipped entirely here — no nav
-     button, no pane, no HG_TAB_MODS entry — so it never becomes clickable
-     and never enters the auto-scan tab set (hgCollectAllScanTabIds unions
-     HG_TAB_MODS keys). The underlying .js files for those tabs may still
-     load (some are relied on as shared libraries, e.g. news.js / 
-     reversalsniper.js), but their own tab UI is gone. */
-  var HG_KEPT_TABS = { omniroute: true, omnigold: true, lev20: true, bulls: true };
   (window.HG_tabs || []).forEach(function(mod){
     if (!mod || !mod.id || !mod.label || typeof mod.mount !== 'function') return;
-    if (!HG_KEPT_TABS[mod.id]) return;
     HG_TAB_MODS[mod.id] = mod;
     /* skip if already present in static HTML */
     if (!_hasId('tabB_' + mod.id)){
@@ -8601,7 +9169,7 @@ function hgBootNav(){
   hgRenderGroupChips();
   let saved = null;
   try{ saved = localStorage.getItem(HG_GROUP_KEY); }catch(e){}
-  HG_GROUP = (saved && hgGroupHas(saved)) ? saved : 'crypto';
+  HG_GROUP = (saved && hgGroupHas(saved)) ? saved : 'overview';
   hgPaintGroups();
   const first = hgGroupFirstTab(HG_GROUP);
   if (first) showTab(first);
@@ -8617,10 +9185,14 @@ try{
   }
 }catch(e){}
 
-/* saveTdKey() and its tdKeyInput/tdKeyStat DOM restore were the Twelve
-   Data key override UI, which lived in the now-removed GOLD static tab
-   pane. hg_td_key had zero other consumers (confirmed via repo-wide
-   grep), so both are dropped rather than left as orphaned dead code. */
+function saveTdKey(){
+  const v = ($('tdKeyInput').value||'').trim();
+  try{
+    if (v) localStorage.setItem('hg_td_key', v); else localStorage.removeItem('hg_td_key');
+    $('tdKeyStat').textContent = v ? 'saved \u00b7 takes effect on reload' : 'override cleared \u00b7 built-in key active on reload';
+  }catch(e){ $('tdKeyStat').textContent = 'save failed: ' + e.message; }
+}
+try{ const __tdk = localStorage.getItem('hg_td_key'); if (__tdk && $('tdKeyInput')) $('tdKeyInput').value = __tdk; }catch(e){}
 
 runMarketPictureUI();
 
