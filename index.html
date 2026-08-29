@@ -824,7 +824,7 @@ function hgScanWholeExchange(opts, checkboxEl){
 
 const DELTA = 'https://api.india.delta.exchange';
 const CDCX_PUB = 'https://public.coindcx.com';
-const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || 'de260a776e5d49d091d7a49bf9d17be5';
+const TWELVEDATA_KEY = localStorage.getItem('hg_td_key') || '';
 const CDCX_API = 'https://api.coindcx.com';
 /* EXECUTE BRACKET — execute.js + Render /api/execute proxy (EXECUTE_BACKEND_URL env).
    Optional desk override: window.HG_EXECUTE_BACKEND_OVERRIDE or Settings → Execute URL */
@@ -7205,6 +7205,7 @@ function searchBase(sym, ex){
 }
 
 async function getCryptoCandlesTD(base, res, count){
+if (!TWELVEDATA_KEY) throw new Error('Twelve Data key not set — save one in localStorage as hg_td_key to enable the TD-backed backtests');
 const key = 'tdc|' + base + '|' + res + '|' + count;
 const hit = S.candleCache[key];
 if (hit && (nowSec()-hit.at) < 300) return hit.rows;   // cache hits are free — no quota spend, no throttle

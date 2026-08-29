@@ -1,0 +1,146 @@
+HARDGATE FIX PACK 17 — pplx.app CoinDCX proxy + hardening tail
+Build stamp: hg-v528  (was hg-v527)  •  sw.js HG_CACHE: hg-v528
+
+WHY THIS PACK EXISTS
+--------------------
+Two loose ends and one live incident:
+
+1. LIVE INCIDENT (v527, published to https://hardgateperplexity1.pplx.app):
+   OMNIROUTE full-scan reported
+      "coindcx leg failed: HTTP 404 — Delta India contracts only"
+   Root cause: pplx.app is a STATIC host by default.  The desk endpoints
+   /api/coindcx/{instruments,marks,candles} and the generic /api/proxy?url=…
+   are Node handlers.  On Render they run inside scripts/server.mjs; on
+   Vercel they run as serverless functions.  On pplx.app they simply do not
+   exist unless we tell publish_website to run a backend.
+
+2. HARDENING TAIL from Pack 16's security review:
+      - remove hardcoded Twelve Data key
+      - gate /api/notify with the shared-secret already used elsewhere
+      - bump build stamp AND sw.js in the same commit (drift guard)
+
+3. TXT OWED: the "update by myself" contract requires one txt per pack.
+   Packs 13-16 have their txt files.  This is Pack 17's.
+
+WHAT SHIPPED (files touched)
+----------------------------
+NEW  scripts/server-minimal.mjs
+     68-line zero-dep Node server for the pplx.app sandbox.  Mounts ONLY:
+        GET /api/proxy               (api/proxy.js)
+        GET /api/fred                (api/fred.js)
+        GET /api/news/calendar       (api/news-calendar.js)
+        GET /api/coindcx/*           (lib/coindcx-api.mjs)
+        GET /healthz                 (readiness probe)
+     Mutating routes (book, execute, xm-trader, chart-vision, etc.) are
+     DELIBERATELY not mounted.  A public URL had no business calling them
+     even when they were reachable — signal-only pipeline, period.
+
+CHG  index.html
+     line 827 — hardcoded Twelve Data key removed; now reads
+        localStorage.getItem('hg_td_key') || ''
+     line ~7208 — getCryptoCandlesTD() short-circuits with a clear error
+     when no key is set, instead of firing an anonymous request and
+     misinterpreting the 401.
+
+CHG  lib/notify-api.mjs (99-103)
+     POST /api/notify now calls checkApiAuth(req).  Same shared-secret
+     pattern already used by paperbook/execute.  Frontend already sends
+     X-Hardgate-Key via api-client.js:hgApiHeaders() reading hg_api_key
+     from localStorage, so nothing else changed browser-side.
+
+CHG  build-stamp.js  →  version: 'hg-v528'
+CHG  sw.js           →  const HG_CACHE = 'hg-v528'
+     ALWAYS BUMP BOTH.  scripts/drift-guard fails the suite if one moves
+     without the other.
+
+HOW THE PORT REWRITE ACTUALLY WORKS
+-----------------------------------
+index.html:55-75 already has the shim:
+
+    var RAW = '__PORT_8420__';
+    if (RAW.indexOf('__PORT_') === 0) return;  /* local dev, no-op */
+    var PREFIX = '/' + RAW.replace(/^\/+/, '');
+    window.fetch = function(input, init){
+       ...if input starts with '/api/' → prepend PREFIX...
+    };
+
+deploy_website / publish_website scans the bundle for __PORT_8420__ and
+rewrites it to 'port/8420' (the exact ingress path pplx.app uses to reach
+the sandbox on that port).  From then on every '/api/...' fetch is
+transparently rerouted to '/port/8420/api/...'.
+
+On Render (scripts/server.mjs) the placeholder stays literal → the shim
+no-ops → same-origin '/api/...' hits the real server directly.
+
+To PUBLISH the site with the backend, use the run_command flag:
+
+    publish_website(
+      project_path="/home/user/workspace/hardgateperplexity",
+      dist_path=  "/home/user/workspace/hardgateperplexity",
+      run_command="node scripts/server-minimal.mjs",
+      port=8420,
+      app_name="HARDGATE",
+      site_id="40ad8986-2b52-407f-abae-5348d5191b8c"
+    )
+
+The site_id keeps the same slug (hardgateperplexity1.pplx.app) and the
+same publish record — no new URL, no stale twin.
+
+VERIFICATION (live, v528)
+-------------------------
+curl https://hardgateperplexity1.pplx.app/build-stamp.js | grep version
+  → version: 'hg-v528'
+
+curl -o /dev/null -w "%{http_code}\n" \
+     https://hardgateperplexity1.pplx.app/port/8420/api/coindcx/marks
+  → 200
+
+curl -o /dev/null -w "%{http_code}\n" \
+     "https://hardgateperplexity1.pplx.app/port/8420/api/proxy?url=https%3A%2F%2Fpublic.coindcx.com%2Fmarket_data%2Fv3%2Fcurrent_prices%2Ffutures%2Frt"
+  → 200
+
+curl -o /dev/null -w "%{http_code}\n" \
+     https://hardgateperplexity1.pplx.app/port/8420/healthz
+  → 200
+
+The bare paths (/api/coindcx/marks with no /port/8420/ prefix) still 404
+because pplx.app serves the static bundle, not the backend — that's why
+the shim rewrites them client-side before they leave the browser.
+
+KNOWN LIMITS / CHOICES I MADE FOR YOU
+-------------------------------------
+- The pplx.app sandbox is single-instance and can be recycled.  If you
+  see /api/coindcx/* going 404 again after a long idle, the server may
+  have been evicted — republish (same command, same site_id) and it
+  comes back on the same URL.
+- Delta India works direct because it sends Access-Control-Allow-Origin:*.
+  If Delta ever tightens that, we'd need to add the Delta paths to
+  server-minimal.mjs too — trivial one-liner in the router.
+- I did NOT mount /api/book, /api/execute, or the XM trader routes.
+  They are execution paths, and the app is signal-only.  Anything that
+  tries to hit them on pplx.app will 404, which is the correct behaviour
+  for a public URL.
+- Render is unchanged.  scripts/server.mjs is still the production entry
+  and mounts the full API surface.  server-minimal.mjs is a pplx.app-only
+  companion.
+
+ROLLBACK
+--------
+If v528 ever misbehaves on pplx.app:
+   git revert <sha of v528>
+   git push origin main
+   publish_website(..., run_command="")     ← empty run_command reverts
+                                              to static-only serving
+That will restore the previous CoinDCX-404 behaviour but everything else
+keeps working.
+
+FILES SUMMARY
+-------------
+   scripts/server-minimal.mjs   NEW   68 lines
+   build-stamp.js               CHG   version → hg-v528
+   sw.js                        CHG   HG_CACHE → hg-v528
+   lib/notify-api.mjs           CHG   checkApiAuth wired on POST /api/notify
+   index.html                   CHG   hardcoded TD key removed + guard rail
+   HARDGATE-FIX-PACK-17.txt     NEW   this file
+
+—  hg-v528 shipped Aug 30 2026
