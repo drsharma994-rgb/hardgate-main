@@ -3389,6 +3389,159 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== end P0 solidity framework ==================== */
 
+  /* ==================== REPLAY CALIBRATION ADDITIONS (additive) ====================
+     Everything in this section was added AFTER the 2496-trade replay backtest
+     and the out-of-sample refit (scripts/solidity-refit.json). Nothing here
+     modifies any pillar or hgOmniSolidityScore — these are new reads layered
+     on top of the same setup object. */
+
+  /* Round-trip trading cost as a percent of price, BOTH sides of the trade:
+       taker fee 0.05% x 2 legs  = 0.10%
+       slippage 0.02% x 2 legs   = 0.04%
+       total                     = 0.14%
+     This is a documented DEFAULT, not a measurement. A desk on maker fees or
+     a different venue overrides it by setting window.HG_OMNI_RT_COST_PCT
+     (read at call time) — the constant here is only the fallback. */
+  var HG_OMNI_RT_COST_PCT = 0.14;
+
+  /* The replay's #1 finding: cost-to-stop geometry kills tight-stop trades.
+     A 0.5%-stop scalp pays 0.28R to fees+slip before the market moves at
+     all, so a 26% win-rate book that looks breakeven gross is deeply
+     negative net. costR = round-trip cost expressed in R (fractions of the
+     stop distance):
+       'ok'    costR <= 0.125  — stop is at least 8x the round-trip cost
+       'thin'  0.125 - 0.25    — costs eat an eighth to a quarter of every R
+       'heavy' 0.25 - 0.5      — a quarter to half of every R goes to costs
+       'fatal' > 0.5           — fees alone eat over half an R; geometry
+                                 unpayable regardless of edge
+     Degrades to a null result on missing data — never throws. */
+  function hgOmniCostDrag(setup){
+    var nul = { costR: null, tier: null, rtCostPct: null, stopDistPct: null,
+                detail: 'cost drag not computable — no entry/stop geometry' };
+    try {
+      if (!setup || !setup.plan) return nul;
+      var entry = fin(setup.plan.entry), stop = fin(setup.plan.stop);
+      if (!isFinite(entry) || !isFinite(stop) || entry === 0) return nul;
+      var stopDistPct = Math.abs(entry - stop) / Math.abs(entry) * 100;
+      if (!isFinite(stopDistPct) || stopDistPct <= 0){
+        return { costR: null, tier: null, rtCostPct: null, stopDistPct: null,
+                 detail: 'entry equals stop — no R to cost' };
+      }
+      /* window override read at CALL time, so a venue change does not need
+         a reload of this file; the constant is only the default. */
+      var rt = NaN;
+      try { if (typeof window !== 'undefined') rt = fin(window.HG_OMNI_RT_COST_PCT); } catch (eW) {}
+      if (!isFinite(rt) || rt <= 0) rt = HG_OMNI_RT_COST_PCT;
+      var costR = rt / stopDistPct;
+      var tier = costR <= 0.125 ? 'ok'
+               : costR <= 0.25  ? 'thin'
+               : costR <= 0.5   ? 'heavy'
+               : 'fatal';
+      var detail = 'round-trip cost ' + rt.toFixed(2) + '% vs stop distance '
+                 + stopDistPct.toFixed(2) + '% — ' + costR.toFixed(2)
+                 + 'R of every trade goes to fees+slippage ['
+                 + (tier === 'ok'    ? 'ok: stop is >= 8x the round-trip cost'
+                  : tier === 'thin'  ? 'thin: costs eat an eighth to a quarter of every R'
+                  : tier === 'heavy' ? 'heavy: a quarter to half of every R goes to costs'
+                  : 'fatal: fees alone eat over half an R — unpayable geometry') + ']';
+      return { costR: costR, tier: tier, rtCostPct: rt, stopDistPct: stopDistPct, detail: detail };
+    } catch (eCost) {
+      return { costR: null, tier: null, rtCostPct: null, stopDistPct: null,
+               detail: 'cost drag threw — ' + ((eCost && eCost.message) || eCost) };
+    }
+  }
+
+  /* Out-of-sample refit verdict, baked from scripts/solidity-refit.json:
+       fitted on 2496 replay trades, chronological split — train = first 1497
+       (2026-06-13 .. 2026-07-29), test = last 999 (2026-07-29 .. 2026-08-29).
+       Primary P(win) model test AUC = 0.5192 (< 0.52 threshold) and the
+       top-vs-bottom decile netR gap is NEGATIVE, so the verdict is
+       'not-predictive': the pillar scores carry no out-of-sample ranking
+       power for win probability. Per that verdict NO fitted probability is
+       shipped — printing a P(win) from a model that cannot rank winners
+       would be a lie with two decimal places. The score stays useful as a
+       structural checklist; it is not a probability. Re-run
+       scripts/refit-solidity-weights.mjs on new replay data and replace this
+       block ONLY if the verdict improves to 'weak' or 'predictive'. */
+  var HG_OMNI_REFIT = {
+    verdict: 'not-predictive',
+    testAUC: 0.5192,
+    trainN: 1497,
+    testN: 999,
+    trainedThrough: '2026-07-29',
+    source: 'scripts/solidity-refit.json (generated 2026-08-29)'
+  };
+
+  function hgOmniMeasuredProb(setup){
+    /* Verdict is 'not-predictive' — honesty over decoration: prob is null
+       and the detail is what the UI should say. */
+    return {
+      prob: null,
+      verdict: HG_OMNI_REFIT.verdict,
+      testAUC: HG_OMNI_REFIT.testAUC,
+      detail: 'refit not predictive OOS (AUC ' + HG_OMNI_REFIT.testAUC.toFixed(4)
+            + ') — score is informational only'
+    };
+  }
+
+  /* Compact inline badge block for one candidate card: solidity score +
+     tier, cost drag, and the measured-probability read (currently the
+     honest "informational only" note — see HG_OMNI_REFIT above). Candidate
+     rows carry dir/kind/level at the TOP level, not under .hit, so the
+     setup shape the pillars expect is rebuilt here; pillars whose inputs
+     (rows, liq map, order flow) are absent at render time degrade to their
+     own documented defaults inside hgOmniSolidityScore. Returns '' on any
+     failure — a missing chip, never a crashed card. */
+  function hgOmniSolidityBadgesHtml(c){
+    try {
+      if (!c || !c.plan) return '';
+      var setup = {
+        plan: c.plan,
+        hit: (c.hit && c.hit.dir) ? c.hit : { dir: c.dir, kind: c.kind, level: c.level },
+        rows: c.rows || null,
+        extra: (c.extra && typeof c.extra === 'object') ? c.extra : null
+      };
+      var sol = null, cost = null, mp = null;
+      try { sol = hgOmniSolidityScore(setup); } catch (eS) {}
+      try { cost = hgOmniCostDrag(setup); } catch (eD) {}
+      try { mp = hgOmniMeasuredProb(setup); } catch (eP) {}
+      var AMBER = '#d97706';
+      var h = '';
+      if (sol && isFinite(fin(sol.score))){
+        var tierTxt = String(sol.tier || 'weak').replace(/_/g, ' ').toUpperCase();
+        var tierCls = (sol.tier === 'extremely_solid' || sol.tier === 'solid') ? 'ok'
+                    : (sol.tier === 'weak') ? 'bad' : '';
+        var tierSty = (sol.tier === 'fair')
+          ? ' style="color:' + AMBER + ';border-color:' + AMBER + '"' : '';
+        h += '<span class="gpip ' + tierCls + '"' + tierSty
+          +  ' title="' + esc(sol.detail || '') + '">SOLIDITY '
+          +  sol.score + '/' + (sol.maxScore || 200) + ' · ' + esc(tierTxt) + '</span>';
+      }
+      if (cost && isFinite(fin(cost.costR))){
+        var cCls = cost.tier === 'ok' ? 'ok' : cost.tier === 'fatal' ? 'bad' : '';
+        var cSty = (cost.tier === 'heavy' || cost.tier === 'thin')
+          ? ' style="color:' + AMBER + ';border-color:' + AMBER + '"' : '';
+        h += ' <span class="gpip ' + cCls + '"' + cSty
+          +  ' title="' + esc(cost.detail || '') + '">COST '
+          +  cost.costR.toFixed(2) + 'R — ' + esc(cost.tier) + '</span>';
+      }
+      if (mp){
+        if (isFinite(fin(mp.prob))){
+          h += ' <span class="gpip" title="' + esc(mp.detail || '') + '">P(WIN) '
+            +  (fin(mp.prob) * 100).toFixed(0) + '%</span>';
+        } else if (mp.detail){
+          /* No fitted probability is shipped — say so instead of decorating. */
+          h += ' <span class="dim">' + esc(mp.detail) + '</span>';
+        }
+      }
+      return h ? '<div style="margin-top:4px">' + h + '</div>' : '';
+    } catch (eB) {
+      return '';
+    }
+  }
+
+  /* ==================== end replay calibration additions ==================== */
+
   function hgOmniGates(rows, hit, positioning, extra){
     /* One reason string for every gate that depends on pass-2 enrichment,
        declared FIRST because the funding gate runs before `x` is assigned and
@@ -5605,6 +5758,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         +  ' · <b>R:R ' + fmt(c.plan.rr1, 2) + '</b>'
         +  ' · risk ' + fmt(c.plan.riskPct, 2) + '%</div>';
       if (c.plan.note) h += '<div class="dim">' + esc(c.plan.note) + '</div>';
+      /* Replay-calibration read: 200-pt solidity score + cost-to-stop drag
+         (+ the honest measured-probability note). Built from the same plan
+         the card prints; returns '' rather than crashing the card when data
+         is missing. */
+      try { h += hgOmniSolidityBadgesHtml(c); } catch (eSol) {}
       if (typeof window !== 'undefined' && typeof window.hgStrategyTradeDetailHtml === 'function'){
         h += window.hgStrategyTradeDetailHtml(c.plan);
       }
@@ -7471,6 +7629,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniMultiAssetScore = hgOmniMultiAssetScore;
     window.hgOmniNewsCalendarScore = hgOmniNewsCalendarScore;
     window.hgOmniSolidityScore = hgOmniSolidityScore;
+    /* Replay calibration additions — cost-to-stop drag, the (currently
+       withheld) measured probability, and the card badge builder. The
+       round-trip cost default is overridable via window.HG_OMNI_RT_COST_PCT. */
+    window.hgOmniCostDrag = hgOmniCostDrag;
+    window.hgOmniMeasuredProb = hgOmniMeasuredProb;
+    window.hgOmniSolidityBadgesHtml = hgOmniSolidityBadgesHtml;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;

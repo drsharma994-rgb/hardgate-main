@@ -1,0 +1,309 @@
+{
+  "generatedAt": "2026-08-29T15:52:50.825Z",
+  "input": "backtest-omniroute-results.json",
+  "target": "P(win) where win = (outcome === 'target')",
+  "split": "chronological by tISO: first 60% train, last 40% test (no shuffling)",
+  "trainPeriod": {
+    "from": "2026-06-13T22:00:00.000Z",
+    "to": "2026-07-29T17:00:00.000Z"
+  },
+  "testPeriod": {
+    "from": "2026-07-29T17:00:00.000Z",
+    "to": "2026-08-29T09:00:00.000Z"
+  },
+  "pillarsUsed": [
+    "orderBlock",
+    "multiTfCascade",
+    "riskReward",
+    "sessionTiming",
+    "liquidation",
+    "expectancy",
+    "structureConfluence",
+    "momentumConvergence",
+    "liquidationRecovery",
+    "volTermStructure",
+    "riskAdjusted",
+    "sectorMomentum",
+    "multiAsset"
+  ],
+  "dropped": [
+    {
+      "pillar": "fvg",
+      "reason": "constant across all trades (variance=0.00e+0 < 1e-9)",
+      "constantValue": 0
+    },
+    {
+      "pillar": "regime",
+      "reason": "constant across all trades (variance=0.00e+0 < 1e-9)",
+      "constantValue": 2
+    },
+    {
+      "pillar": "atrExpansion",
+      "reason": "constant across all trades (variance=0.00e+0 < 1e-9)",
+      "constantValue": 4
+    },
+    {
+      "pillar": "orderFlow",
+      "reason": "constant across all trades (variance=0.00e+0 < 1e-9)",
+      "constantValue": 0
+    },
+    {
+      "pillar": "newsCalendar",
+      "reason": "constant across all trades (variance=0.00e+0 < 1e-9)",
+      "constantValue": 6
+    }
+  ],
+  "coefficientsRaw": {
+    "orderBlock": 0.007951163769168247,
+    "multiTfCascade": -0.07212651215045414,
+    "riskReward": 0.026338844096710494,
+    "sessionTiming": -0.029866969862215265,
+    "liquidation": 0.0004447834202653828,
+    "expectancy": 0.002593143966310206,
+    "structureConfluence": 0.019858046156208786,
+    "momentumConvergence": 0.0068104568086158794,
+    "liquidationRecovery": -0.11431244540143401,
+    "volTermStructure": -0.02366181100668984,
+    "riskAdjusted": -0.0397758166762674,
+    "sectorMomentum": 0.021229978984914768,
+    "multiAsset": -0.01914110098830405
+  },
+  "coefficientsPerStandardizedUnit": {
+    "orderBlock": 0.04622873076088193,
+    "multiTfCascade": -0.21683715543941146,
+    "riskReward": 0.06159234142028901,
+    "sessionTiming": -0.0765815868213287,
+    "liquidation": 0.0022940730594789246,
+    "expectancy": 0.006954014413787653,
+    "structureConfluence": 0.10880087031681103,
+    "momentumConvergence": 0.03497051987562028,
+    "liquidationRecovery": -0.036965043471870136,
+    "volTermStructure": -0.07402110375666729,
+    "riskAdjusted": -0.03782035488967361,
+    "sectorMomentum": 0.059618181526431856,
+    "multiAsset": -0.04340308340027009
+  },
+  "intercept": -1.0247954591422785,
+  "interceptRaw": 0.28234203878633596,
+  "means": {
+    "orderBlock": 5.5143620574482295,
+    "multiTfCascade": 2.2685370741482966,
+    "riskReward": 16.82698730794923,
+    "sessionTiming": 3.1569806279225117,
+    "liquidation": 5.543086172344689,
+    "expectancy": 3.23313293253173,
+    "structureConfluence": 10.004008016032063,
+    "momentumConvergence": 5.151636606546426,
+    "liquidationRecovery": 11.951903807615231,
+    "volTermStructure": 5.858383433533734,
+    "riskAdjusted": 7.759519038076152,
+    "sectorMomentum": 3.5437541750167,
+    "multiAsset": 2.2251169004676017
+  },
+  "sds": {
+    "orderBlock": 5.8140835861211055,
+    "multiTfCascade": 3.0063446709733372,
+    "riskReward": 2.338460305780138,
+    "sessionTiming": 2.5640896004723985,
+    "liquidation": 5.157730605403753,
+    "expectancy": 2.681692379649305,
+    "structureConfluence": 5.478931283619437,
+    "momentumConvergence": 5.134827348347504,
+    "liquidationRecovery": 0.32336849537300183,
+    "volTermStructure": 3.128294099540373,
+    "riskAdjusted": 0.9508379223861283,
+    "sectorMomentum": 2.8082072793757504,
+    "multiAsset": 2.2675332744334322
+  },
+  "trainN": 1497,
+  "testN": 999,
+  "trainWinRate": 0.2672,
+  "testWinRate": 0.2563,
+  "testAUC": 0.5191921475437415,
+  "decileLift": [
+    {
+      "decile": 1,
+      "n": 99,
+      "pMin": 0.1243,
+      "pMax": 0.1846,
+      "winRate": 0.2626,
+      "avgNetR": -0.1048
+    },
+    {
+      "decile": 2,
+      "n": 100,
+      "pMin": 0.185,
+      "pMax": 0.2083,
+      "winRate": 0.22,
+      "avgNetR": -0.3086
+    },
+    {
+      "decile": 3,
+      "n": 100,
+      "pMin": 0.2083,
+      "pMax": 0.2253,
+      "winRate": 0.26,
+      "avgNetR": -0.3136
+    },
+    {
+      "decile": 4,
+      "n": 100,
+      "pMin": 0.2254,
+      "pMax": 0.2414,
+      "winRate": 0.21,
+      "avgNetR": -0.4191
+    },
+    {
+      "decile": 5,
+      "n": 100,
+      "pMin": 0.2414,
+      "pMax": 0.2586,
+      "winRate": 0.26,
+      "avgNetR": -0.2111
+    },
+    {
+      "decile": 6,
+      "n": 100,
+      "pMin": 0.2586,
+      "pMax": 0.2765,
+      "winRate": 0.23,
+      "avgNetR": -0.4504
+    },
+    {
+      "decile": 7,
+      "n": 100,
+      "pMin": 0.2766,
+      "pMax": 0.2914,
+      "winRate": 0.23,
+      "avgNetR": -0.3181
+    },
+    {
+      "decile": 8,
+      "n": 100,
+      "pMin": 0.2919,
+      "pMax": 0.3088,
+      "winRate": 0.36,
+      "avgNetR": 0.0302
+    },
+    {
+      "decile": 9,
+      "n": 100,
+      "pMin": 0.3089,
+      "pMax": 0.3309,
+      "winRate": 0.28,
+      "avgNetR": -0.2619
+    },
+    {
+      "decile": 10,
+      "n": 100,
+      "pMin": 0.3312,
+      "pMax": 0.4138,
+      "winRate": 0.25,
+      "avgNetR": -0.378
+    }
+  ],
+  "netRPositiveModel": {
+    "note": "Secondary model: target is netR > 0 (differs from outcome==target on 177 trades, mostly positive-netR timeouts)",
+    "testAUC": 0.5530542125012615,
+    "coefficientsPerStandardizedUnit": {
+      "orderBlock": 0.03572816248325812,
+      "multiTfCascade": -0.1352901501046153,
+      "riskReward": -0.1833248929208787,
+      "sessionTiming": -0.02328263409692357,
+      "liquidation": -0.0015655579506603816,
+      "expectancy": -0.02504013756168574,
+      "structureConfluence": 0.01874961424957874,
+      "momentumConvergence": 0.13597994394537236,
+      "liquidationRecovery": -0.0502835289910351,
+      "volTermStructure": -0.13330583118342995,
+      "riskAdjusted": -0.03156467359198412,
+      "sectorMomentum": 0.14801499158637144,
+      "multiAsset": -0.09020317655543166
+    },
+    "intercept": -0.6825728027158758,
+    "decileLift": [
+      {
+        "decile": 1,
+        "n": 99,
+        "pMin": 0.158,
+        "pMax": 0.2489,
+        "winRate": 0.2525,
+        "avgNetR": -0.665
+      },
+      {
+        "decile": 2,
+        "n": 100,
+        "pMin": 0.2489,
+        "pMax": 0.275,
+        "winRate": 0.27,
+        "avgNetR": -0.5081
+      },
+      {
+        "decile": 3,
+        "n": 100,
+        "pMin": 0.2755,
+        "pMax": 0.2953,
+        "winRate": 0.27,
+        "avgNetR": -0.4061
+      },
+      {
+        "decile": 4,
+        "n": 100,
+        "pMin": 0.2954,
+        "pMax": 0.3106,
+        "winRate": 0.33,
+        "avgNetR": -0.2771
+      },
+      {
+        "decile": 5,
+        "n": 100,
+        "pMin": 0.3107,
+        "pMax": 0.332,
+        "winRate": 0.34,
+        "avgNetR": -0.2383
+      },
+      {
+        "decile": 6,
+        "n": 100,
+        "pMin": 0.3321,
+        "pMax": 0.3547,
+        "winRate": 0.31,
+        "avgNetR": -0.2163
+      },
+      {
+        "decile": 7,
+        "n": 100,
+        "pMin": 0.3548,
+        "pMax": 0.3728,
+        "winRate": 0.37,
+        "avgNetR": -0.0614
+      },
+      {
+        "decile": 8,
+        "n": 100,
+        "pMin": 0.3728,
+        "pMax": 0.3939,
+        "winRate": 0.37,
+        "avgNetR": -0.0881
+      },
+      {
+        "decile": 9,
+        "n": 100,
+        "pMin": 0.3943,
+        "pMax": 0.419,
+        "winRate": 0.27,
+        "avgNetR": -0.304
+      },
+      {
+        "decile": 10,
+        "n": 100,
+        "pMin": 0.4192,
+        "pMax": 0.5721,
+        "winRate": 0.44,
+        "avgNetR": 0.0233
+      }
+    ]
+  },
+  "verdict": "not-predictive",
+  "verdictRule": "predictive: testAUC>=0.55 AND top-vs-bottom decile win-rate gap>0; weak: AUC 0.52-0.55; not-predictive: AUC<0.52"
+}

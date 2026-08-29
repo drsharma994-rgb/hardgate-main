@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v525',
-  pack: 'OMNIROUTE 200-point solidity framework complete — 18 pillars',
-  built: '2026-08-29T05:30:00Z',
-  note: 'P2-P5 of the OMNIROUTE solidity framework: liquidation, expectancy, order flow, structure, momentum, liq recovery, vol term, risk-adjusted sizing, sector momentum, multi-asset confirmation, news blackout. hgOmniSolidityScore now grades every setup on a 200-point scale with tier mapping (170+ extremely solid / 140+ solid / 105+ fair).'
+  version: 'hg-v526',
+  pack: 'replay calibration — cost-drag gates, replay evidence, solidity on cards',
+  built: '2026-08-29T16:30:00Z',
+  note: 'Backtest-driven additions from 9,766 zero-lookahead replay trades: cost-drag chips (fees-vs-stop geometry, the #1 measured killer) on OMNIROUTE and OMNIGOLD setup cards, per-kind replay evidence lines on OMNIGOLD (honest win rates and net R), engine grade-A/B badges, and the 200-pt solidity score now rendering on OMNIROUTE cards. Refit verdicts were not-predictive OOS, so no fitted probabilities shipped — scores labeled informational.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
