@@ -2034,7 +2034,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
           if (stopWellPlaced){
             stopBonus = 2;
-            score += stopBonus;
+            /* Cap at maxScore like every sibling bonus (RR, ATR, orderFlow,
+               structure, liqRecovery, riskAdjusted) — without this the
+               pillar returned 14/12 and the framework's real ceiling
+               drifted to 202 instead of exactly 200. */
+            score = Math.min(score + stopBonus, 12);
             detail += ' | +2pt stop bonus (positioned away from major liq at '
                     + majorLiq.price.toFixed(6) + ')';
           }
@@ -2887,8 +2891,399 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== end P4 solidity framework ==================== */
 
+  /* ==================== P5 SOLIDITY FRAMEWORK (24 pts total) — FINAL ==================== */
+
+  /* P5 thresholds — named once so the three scorers below cannot drift apart.
+     Every input is read from state the app has ALREADY fetched (setup fields,
+     pass-2 enrichment, cached window globals). P5 makes zero network calls. */
+  var P5_SECTOR_MAX = 8;                    /* P5.1 sector/market momentum alignment */
+  var P5_ASSET_MAX = 10;                    /* P5.2 multi-asset macro confirmation */
+  var P5_NEWS_MAX = 6;                      /* P5.3 news/calendar blackout */
+  var P5_EMA_FAST = 21;                     /* sector-trend EMA pair, fast leg */
+  var P5_EMA_SLOW = 50;                     /* sector-trend EMA pair, slow leg */
+  var P5_FUNDING_BASELINE_PCT = 0.01;       /* perp baseline funding %/8h — the band centers here, not on 0 */
+  var P5_FUNDING_NEUTRAL_PCT = 0.01;        /* |funding - baseline| within this reads neutral, not a vote */
+  var P5_OI_RISING_PCT = 2;                 /* OI change % that counts as "position building" */
+  var P5_PRICE_DRIFT_BARS = 12;             /* bars used for the OI-confirmation price drift */
+  var P5_NEWS_MAJOR_RE = /FOMC|FED\b|CPI|NFP|NON.?FARM|PAYROLL|RATE\s*DECISION|GDP|PCE/i;
+  var P5_NEWS_BLACKOUT_MIN = 30;            /* FOMC/CPI/NFP-class event inside this = 0 pts */
+  var P5_NEWS_CAUTION_MIN = 60;             /* major event inside this = 1 pt */
+  var P5_NEWS_RED_HORIZON_MIN = 240;        /* red-flag events beyond this defer to the calendar read */
+
+  /* P5.1: SECTOR + MARKET MOMENTUM ALIGNMENT (8 pts)
+     Scores whether the trade direction rides the sector tide and the broad
+     market tide, or fights them.
+
+     Sector bias  = the contract's own higher-timeframe trend: the resampled
+                    daily EMA21/EMA50 pair pass-2 enrichment already computed
+                    (setup.extra.htf), else the same EMA pair on the intraday
+                    rows in hand. No network.
+     Market bias  = the regime read P1 already carries on the setup
+                    (setup.extra.regime / setup.regime / setup.btcRegime),
+                    else the cached 8-gauge module (window.regimeState()) —
+                    a pure cache read. RISK-ON = long bias, RISK-OFF = short,
+                    anything else neutral.
+
+     Thresholds:
+     - 8pts: aligned with BOTH sector and market bias
+     - 5pts: aligned with sector, market neutral/unknown
+     - 3pts: against sector but market aligned (also: sector aligned but
+             market against — a mixed tape, half credit either way)
+     - 0pts: against both, or no data at all
+
+     Graceful degradation: 0 pts, never a veto. ~5ms.
+  */
+  function hgOmniSectorMomentumScore(setup){
+    if (!setup || !setup.hit || !setup.hit.dir){
+      return { score: 0, detail: 'no setup direction', maxScore: P5_SECTOR_MAX };
+    }
+
+    var dirRaw = String(setup.hit.dir).toLowerCase();
+    var tradeSide = (dirRaw === 'long' || dirRaw === 'up') ? 'long' : 'short';
+    var score = 0, detail = '';
+
+    try {
+      /* --- sector bias: higher-timeframe EMA pair of the contract itself --- */
+      var sectorBias = null;   /* 'long' | 'short' | null */
+      var sectorSrc = 'n/a';
+      var htf = setup.extra && setup.extra.htf;
+      if (htf && isFinite(fin(htf.e21)) && isFinite(fin(htf.e50))){
+        sectorBias = (fin(htf.e21) >= fin(htf.e50)) ? 'long' : 'short';
+        /* htf.e21/e50 are historical field names — they hold the DAILY_FAST/DAILY_SLOW EMAs */
+        sectorSrc = 'daily EMA' + DAILY_FAST + '/' + DAILY_SLOW;
+      } else if (setup.rows && setup.rows.length >= P5_EMA_SLOW + 10){
+        var secCloses = closesOf(setup.rows);
+        var secFast = emaOf(secCloses.slice(-(P5_EMA_FAST * 3)), P5_EMA_FAST);
+        var secSlow = emaOf(secCloses.slice(-(P5_EMA_SLOW * 3)), P5_EMA_SLOW);
+        if (isFinite(secFast) && isFinite(secSlow)){
+          sectorBias = (secFast >= secSlow) ? 'long' : 'short';
+          sectorSrc = 'intraday EMA' + P5_EMA_FAST + '/' + P5_EMA_SLOW;
+        }
+      }
+
+      /* --- market bias: regime read already on the setup, else cached module --- */
+      var marketBias = null;   /* 'long' | 'short' | 'neutral' | null */
+      var marketSrc = 'n/a';
+      var regime = (setup.extra && setup.extra.regime) || setup.regime || setup.btcRegime || null;
+      if (!regime || !regime.label){
+        /* last resort: the live regime module's cache, if this page loaded it.
+           regimeState() is a synchronous cache read — it never fetches. */
+        try {
+          var wReg = (typeof window !== 'undefined') ? window : null;
+          if (wReg && typeof wReg.regimeState === 'function') regime = wReg.regimeState();
+        } catch (eReg) { regime = null; }
+      }
+      if (regime && regime.label){
+        var regLbl = String(regime.label).toUpperCase();
+        if (regLbl.indexOf('RISK-ON') >= 0) marketBias = 'long';
+        else if (regLbl.indexOf('RISK-OFF') >= 0) marketBias = 'short';
+        else marketBias = 'neutral';
+        marketSrc = regime.source || 'regime';
+      }
+
+      if (sectorBias === null && marketBias === null){
+        return { score: 0, detail: 'no sector or market context available', maxScore: P5_SECTOR_MAX,
+                 sectorBias: null, marketBias: null };
+      }
+
+      var sectorAligned = (sectorBias === tradeSide);
+      var marketAligned = (marketBias === tradeSide);
+      var marketNeutral = (marketBias === 'neutral' || marketBias === null);
+
+      if (sectorAligned && marketAligned){
+        score = 8;
+        detail = 'trade rides both tides: sector ' + sectorBias + ' (' + sectorSrc + ') + market ' + marketBias + ' (' + marketSrc + ')';
+      } else if (sectorAligned && marketNeutral){
+        score = 5;
+        detail = 'sector aligned (' + sectorSrc + '), market neutral/unknown';
+      } else if (!sectorAligned && marketAligned){
+        score = 3;
+        /* absent is not "against" — say which one it actually was */
+        detail = (sectorBias === null)
+          ? 'sector unknown, but market aligned (' + marketSrc + ')'
+          : 'against sector (' + sectorBias + ' via ' + sectorSrc + ') but market aligned (' + marketSrc + ')';
+      } else if (sectorAligned && !marketNeutral && !marketAligned){
+        /* sector with, market against — a mixed tape gets the same half credit */
+        score = 3;
+        detail = 'sector aligned (' + sectorSrc + ') but market against (' + marketBias + ' via ' + marketSrc + ')';
+      } else {
+        score = 0;
+        var secTxt = (sectorBias === null) ? 'sector unknown' : 'sector against (' + sectorBias + ')';
+        var mktTxt = (marketBias === null) ? 'market unknown'
+                   : (marketBias === 'neutral') ? 'market neutral'
+                   : 'market against (' + marketBias + ')';
+        detail = 'no alignment: ' + secTxt + ', ' + mktTxt;
+      }
+
+      return {
+        score: score,
+        detail: detail,
+        maxScore: P5_SECTOR_MAX,
+        sectorBias: sectorBias,
+        marketBias: marketBias,
+        tradeSide: tradeSide
+      };
+
+    } catch (eSector) {
+      detail = 'sector momentum scoring threw: ' + ((eSector && eSector.message) || eSector);
+      return { score: 0, detail: detail, maxScore: P5_SECTOR_MAX };
+    }
+  }
+
+  /* P5.2: MULTI-ASSET MACRO CONFIRMATION (10 pts)
+     Three independent macro signals, each read ONLY from cached state the
+     scan already fetched — this function adds zero network calls:
+
+     (a) BTC trend    — setup.btcRegime / setup.extra.btcRegime (the scan
+                        wires the BTC daily proxy here in pass 2), else the
+                        regime read on the setup ONLY when its source is the
+                        btc-daily-proxy (that source IS a BTC read), else an
+                        EMA21/50 slope on setup.btcRows if the caller
+                        supplied BTC bars. The generic 8-gauge composite
+                        (regimeState() / a plain extra.regime) is NEVER read
+                        here: P5.1's market bias and P1's regime pillar
+                        already score that exact datum, and one datum must
+                        not count in three pillars. An absent BTC read
+                        scores n/a. RISK-ON confirms longs, RISK-OFF
+                        confirms shorts.
+     (b) Funding      — setup.positioning.fundingPct (or .funding.rate), the
+                        same object the perp gates already receive. Contrarian
+                        read: negative funding (shorts paying) supports longs,
+                        positive funding (longs paying) supports shorts.
+                        |funding| < P5_FUNDING_NEUTRAL_PCT reads neutral.
+     (c) OI trend     — setup.extra.oi.changePct from pass-2 enrichment (or
+                        positioning.oi.changePct / .oiChangePct). Rising OI
+                        (>= P5_OI_RISING_PCT%) WITH price drifting in the
+                        trade direction over the last P5_PRICE_DRIFT_BARS
+                        bars = position building = confirmation.
+
+     Thresholds:
+     - 10pts: 3/3 signals aligned with trade direction
+     -  7pts: 2/3 aligned
+     -  4pts: 1/3 aligned
+     -  0pts: 0/3 aligned, or no macro data at all
+
+     Graceful degradation: 0 pts, never a veto. ~5ms.
+  */
+  function hgOmniMultiAssetScore(setup){
+    if (!setup || !setup.hit || !setup.hit.dir){
+      return { score: 0, detail: 'no setup direction', maxScore: P5_ASSET_MAX };
+    }
+
+    var dirRaw = String(setup.hit.dir).toLowerCase();
+    var wantLong = (dirRaw === 'long' || dirRaw === 'up');
+    var tradeSide = wantLong ? 'long' : 'short';
+    var alignedCount = 0, checkedCount = 0;
+    var parts = [];
+
+    try {
+      /* ---- (a) BTC trend ---- */
+      var btcReg = setup.btcRegime || (setup.extra && setup.extra.btcRegime) || null;
+      if (!btcReg || !btcReg.label){
+        /* Accept the setup's regime read ONLY when it is genuinely a BTC
+           read (the btc-daily-proxy pass 2 attaches when regime.js's
+           gauges fail). Falling back to the full 8-gauge composite here
+           double-counted the SAME datum P5.1's market bias and P1's
+           regime pillar already score — an absent BTC read must score
+           n/a, not borrow a signal from another pillar. */
+        var regAny = (setup.extra && setup.extra.regime) || setup.regime || null;
+        if (regAny && regAny.label && regAny.source === 'btc-daily-proxy') btcReg = regAny;
+      }
+      if ((!btcReg || !btcReg.label) && setup.btcRows && setup.btcRows.length >= P5_EMA_SLOW + 5){
+        var btcCloses = closesOf(setup.btcRows);
+        var btcFast = emaOf(btcCloses.slice(-(P5_EMA_FAST * 3)), P5_EMA_FAST);
+        var btcSlow = emaOf(btcCloses, P5_EMA_SLOW);
+        if (isFinite(btcFast) && isFinite(btcSlow)){
+          btcReg = { label: (btcFast >= btcSlow) ? 'RISK-ON' : 'RISK-OFF', source: 'btc-bars-ema' };
+        }
+      }
+      if (btcReg && btcReg.label){
+        checkedCount++;
+        var btcLbl = String(btcReg.label).toUpperCase();
+        var btcBias = (btcLbl.indexOf('RISK-ON') >= 0) ? 'long'
+                    : (btcLbl.indexOf('RISK-OFF') >= 0) ? 'short' : 'neutral';
+        if (btcBias === tradeSide){ alignedCount++; parts.push('BTC:aligned(' + btcLbl + ')'); }
+        else if (btcBias === 'neutral'){ parts.push('BTC:neutral(' + btcLbl + ')'); }
+        else { parts.push('BTC:against(' + btcLbl + ')'); }
+      } else {
+        parts.push('BTC:n/a');
+      }
+
+      /* ---- (b) funding rate direction (contrarian read) ---- */
+      var pos = setup.positioning || (setup.extra && setup.extra.positioning) || null;
+      var fundPct = NaN;
+      if (pos){
+        fundPct = fin(pos.fundingPct);
+        if (!isFinite(fundPct)) fundPct = fin(pos.funding && pos.funding.rate);
+      }
+      if (!isFinite(fundPct) && setup.extra) fundPct = fin(setup.extra.fundingPct);
+      if (isFinite(fundPct)){
+        checkedCount++;
+        /* deviation from the +0.01%/8h perp baseline — funding AT baseline is
+           the market's resting state and must read neutral, not "longs crowded" */
+        var fundDev = fundPct - P5_FUNDING_BASELINE_PCT;
+        if (Math.abs(fundDev) <= P5_FUNDING_NEUTRAL_PCT){
+          parts.push('FUND:neutral(' + fundPct.toFixed(4) + '% ~ baseline)');
+        } else if (wantLong && fundDev < 0){
+          /* funding well below baseline — shorts paying, contrarian support for longs */
+          alignedCount++; parts.push('FUND:aligned(' + fundPct.toFixed(4) + '% shorts pay)');
+        } else if (!wantLong && fundDev > 0){
+          /* funding well above baseline — crowded long side supports shorts */
+          alignedCount++; parts.push('FUND:aligned(+' + fundPct.toFixed(4) + '% longs pay)');
+        } else {
+          parts.push('FUND:against(' + fundPct.toFixed(4) + '%)');
+        }
+      } else {
+        parts.push('FUND:n/a');
+      }
+
+      /* ---- (c) open-interest trend + price confirmation ---- */
+      var oiPct = NaN;
+      if (setup.extra && setup.extra.oi) oiPct = fin(setup.extra.oi.changePct);
+      if (!isFinite(oiPct) && pos){
+        oiPct = fin(pos.oi && pos.oi.changePct);
+        if (!isFinite(oiPct)) oiPct = fin(pos.oiChangePct);
+      }
+      if (isFinite(oiPct) && setup.rows && setup.rows.length >= P5_PRICE_DRIFT_BARS + 1){
+        var oiCloses = closesOf(setup.rows);
+        var driftFrom = oiCloses[oiCloses.length - 1 - P5_PRICE_DRIFT_BARS];
+        var driftTo = oiCloses[oiCloses.length - 1];
+        if (isFinite(driftFrom) && driftFrom > 0 && isFinite(driftTo)){
+          checkedCount++;
+          var driftPct = (driftTo - driftFrom) / driftFrom * 100;
+          var priceWithTrade = wantLong ? (driftPct > 0) : (driftPct < 0);
+          if (oiPct >= P5_OI_RISING_PCT && priceWithTrade){
+            /* rising OI + aligned price = new positions building our way */
+            alignedCount++;
+            parts.push('OI:aligned(+' + oiPct.toFixed(1) + '% OI, ' + driftPct.toFixed(1) + '% drift)');
+          } else if (oiPct >= P5_OI_RISING_PCT){
+            parts.push('OI:against(+' + oiPct.toFixed(1) + '% OI but price drift ' + driftPct.toFixed(1) + '%)');
+          } else {
+            parts.push('OI:flat(' + oiPct.toFixed(1) + '%)');
+          }
+        } else {
+          parts.push('OI:n/a(price drift uncomputable)');
+        }
+      } else {
+        parts.push('OI:n/a');
+      }
+
+      /* ---- score by aligned count ---- */
+      var score = 0;
+      if (checkedCount === 0){
+        return { score: 0, detail: 'no macro data available (BTC/funding/OI all absent)', maxScore: P5_ASSET_MAX,
+                 aligned: 0, checked: 0 };
+      }
+      if (alignedCount >= 3) score = 10;
+      else if (alignedCount === 2) score = 7;
+      else if (alignedCount === 1) score = 4;
+      else score = 0;
+
+      return {
+        score: score,
+        detail: alignedCount + '/3 macro signals aligned — ' + parts.join(' '),
+        maxScore: P5_ASSET_MAX,
+        aligned: alignedCount,
+        checked: checkedCount
+      };
+
+    } catch (eAsset) {
+      return { score: 0, detail: 'multi-asset scoring threw: ' + ((eAsset && eAsset.message) || eAsset), maxScore: P5_ASSET_MAX };
+    }
+  }
+
+  /* P5.3: NEWS / CALENDAR BLACKOUT (6 pts)
+     Reads the SAME news state P1's session-timing penalty and gate 11 already
+     use: setup.extra.redFlagNews {minutesUntil, event}, and setup.extra.news —
+     the hgNewsRisk() shape {risk:'high'|'med'|'low', blackout:boolean, note}.
+     Falls back to a live window.hgNewsRisk(sym) call, which is a pure cache
+     read (it never fetches). No new network calls.
+
+     Thresholds:
+     - 6pts: no high-impact event nearby — OR no calendar available at all.
+             This pillar DEFAULTS HIGH: an unloaded calendar is not evidence
+             of danger, and hgNewsRisk's own 'news not loaded' note is a
+             default, not a measurement.
+     - 3pts: minor/medium event more than 1 hour away (risk 'med')
+     - 1pt:  major event within ~1 hour but not blacking out the pair
+             (risk 'high' outside the blackout window, or a non-FOMC-class
+             blackout)
+     - 0pts: FOMC/CPI/NFP-class event within P5_NEWS_BLACKOUT_MIN minutes,
+             or an active blackout naming such an event
+
+     ~2ms.
+  */
+  function hgOmniNewsCalendarScore(setup){
+    var score = P5_NEWS_MAX;
+    var detail = 'no calendar available — assumed clear (defaults high)';
+    var status = 'clear';
+
+    try {
+      var news = (setup && setup.extra && setup.extra.news) || (setup && setup.news) || null;
+      if (!news){
+        /* pure cache read of the news module, if loaded — never fetches */
+        try {
+          var wNews = (typeof window !== 'undefined') ? window : null;
+          var sym = setup && ((setup.extra && setup.extra.ticker && setup.extra.ticker.sym) || setup.sym || null);
+          if (wNews && typeof wNews.hgNewsRisk === 'function' && sym) news = wNews.hgNewsRisk(sym);
+        } catch (eNw) { news = null; }
+      }
+      var red = setup && setup.extra && setup.extra.redFlagNews;
+
+      /* an ACTIVE calendar blackout always wins — a red-flag entry pointing at a
+         more distant event must never outscore it */
+      if (news && news.blackout === true){
+        var majorBoNow = P5_NEWS_MAJOR_RE.test(String(news.note || ''));
+        if (majorBoNow){
+          score = 0; status = 'blackout';
+          detail = 'active blackout on a FOMC/CPI/NFP-class event: ' + (news.note || '');
+        } else {
+          score = 1; status = 'caution';
+          detail = 'active blackout window: ' + (news.note || 'unnamed high-impact event');
+        }
+      } else if (red && isFinite(fin(red.minutesUntil)) && fin(red.minutesUntil) <= P5_NEWS_RED_HORIZON_MIN){
+        /* red-flag path — minutes-to-event resolution, but only inside the
+           horizon: an event days away must not permanently cap this pillar */
+        var mins = fin(red.minutesUntil);
+        var isMajor = P5_NEWS_MAJOR_RE.test(String(red.event || ''));
+        if (isMajor && mins <= P5_NEWS_BLACKOUT_MIN){
+          score = 0; status = 'blackout';
+          detail = 'FOMC/CPI/NFP-class event within ' + P5_NEWS_BLACKOUT_MIN + 'min: ' + red.event + ' in ' + mins + 'min';
+        } else if (mins <= P5_NEWS_CAUTION_MIN){
+          score = 1; status = 'caution';
+          detail = 'event within 1 hour: ' + (red.event || 'unnamed') + ' in ' + mins + 'min';
+        } else {
+          score = 3; status = 'minor';
+          detail = 'event more than 1 hour away: ' + (red.event || 'unnamed') + ' in ' + mins + 'min';
+        }
+      } else if (news && news.note && /not loaded|no calendar|news error/i.test(String(news.note))){
+        /* unloaded module: a default, not a measurement — stay at 6 */
+        score = P5_NEWS_MAX; status = 'clear';
+        detail = 'calendar not loaded (' + news.note + ') — assumed clear (defaults high)';
+      } else if (news && String(news.risk) === 'high'){
+        score = 1; status = 'caution';
+        detail = 'major event on the horizon (outside blackout): ' + (news.note || '');
+      } else if (news && String(news.risk) === 'med'){
+        score = 3; status = 'minor';
+        detail = 'minor/medium event more than 1 hour away: ' + (news.note || '');
+      } else if (news){
+        score = P5_NEWS_MAX; status = 'clear';
+        detail = 'no high-impact event nearby' + (news.note ? ' (' + news.note + ')' : '');
+      }
+
+      return { score: score, detail: detail, maxScore: P5_NEWS_MAX, status: status };
+
+    } catch (eNews) {
+      /* this pillar defaults HIGH: a scoring failure is not a news event */
+      return { score: P5_NEWS_MAX, detail: 'news scoring threw — assumed clear: ' + ((eNews && eNews.message) || eNews),
+               maxScore: P5_NEWS_MAX, status: 'clear' };
+    }
+  }
+
+  /* ==================== end P5 solidity framework ==================== */
+
   function hgOmniSolidityScore(setup, horizonLabel){
-    if (!setup) return { score: 0, maxScore: 176, breakdown: {}, detail: 'no setup', tier: 'weak' };
+    if (!setup) return { score: 0, maxScore: 200, breakdown: {}, detail: 'no setup', tier: 'weak' };
 
     /* P0 Pillars (55 pts) */
     var ob = hgOmniOrderBlockScore(setup);
@@ -2916,11 +3311,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var volTermScore = hgOmniVolTermScore(setup);
     var riskAdjScore = hgOmniRiskAdjustedScore(setup);
 
+    /* P5 Pillars (24 pts) — FINAL */
+    var sectorScore = hgOmniSectorMomentumScore(setup);
+    var multiAssetScore = hgOmniMultiAssetScore(setup);
+    var newsCalScore = hgOmniNewsCalendarScore(setup);
+
     var totalScore = ob.score + fvg.score + mtf.score + rr.score +
                      regimeScore.score + atrExpScore.score + sessionScore.score +
                      liqScore.score + expScore.score +
                      flowScore.score + structScore.score + momScore.score +
-                     liqRecoveryScore.score + volTermScore.score + riskAdjScore.score;
+                     liqRecoveryScore.score + volTermScore.score + riskAdjScore.score +
+                     sectorScore.score + multiAssetScore.score + newsCalScore.score;
 
     var maxStructuralScore = (ob.maxScore || 15) + (fvg.maxScore || 10) +
                               (mtf.maxScore || 10) + (rr.maxScore || 20) +
@@ -2930,13 +3331,15 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                               (flowScore.maxScore || 12) + (structScore.maxScore || 15) +
                               (momScore.maxScore || 12) +
                               (liqRecoveryScore.maxScore || 12) + (volTermScore.maxScore || 10) +
-                              (riskAdjScore.maxScore || 15);
+                              (riskAdjScore.maxScore || 15) +
+                              (sectorScore.maxScore || 8) + (multiAssetScore.maxScore || 10) +
+                              (newsCalScore.maxScore || 6);
 
-    /* Determine solidity tier (176-point scale, updated for P4) */
+    /* Determine solidity tier (200-point scale, updated for P5 — framework complete) */
     var tier = 'weak';
-    if (totalScore >= 147) tier = 'extremely_solid';
-    else if (totalScore >= 120) tier = 'solid';
-    else if (totalScore >= 88) tier = 'fair';
+    if (totalScore >= 170) tier = 'extremely_solid';
+    else if (totalScore >= 140) tier = 'solid';
+    else if (totalScore >= 105) tier = 'fair';
 
     return {
       score: totalScore,
@@ -2957,7 +3360,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         momentumConvergence: { score: momScore.score, maxScore: momScore.maxScore || 12, detail: momScore.detail, agreements: momScore.agreements },
         liquidationRecovery: { score: liqRecoveryScore.score, maxScore: liqRecoveryScore.maxScore || 12, detail: liqRecoveryScore.detail, reverseRate: liqRecoveryScore.reverseRate },
         volTermStructure: { score: volTermScore.score, maxScore: volTermScore.maxScore || 10, detail: volTermScore.detail, percentile: volTermScore.percentile },
-        riskAdjusted: { score: riskAdjScore.score, maxScore: riskAdjScore.maxScore || 15, detail: riskAdjScore.detail, rr: riskAdjScore.rewardToRisk }
+        riskAdjusted: { score: riskAdjScore.score, maxScore: riskAdjScore.maxScore || 15, detail: riskAdjScore.detail, rr: riskAdjScore.rewardToRisk },
+        sectorMomentum: { score: sectorScore.score, maxScore: sectorScore.maxScore || 8, detail: sectorScore.detail, sectorBias: sectorScore.sectorBias, marketBias: sectorScore.marketBias },
+        multiAsset: { score: multiAssetScore.score, maxScore: multiAssetScore.maxScore || 10, detail: multiAssetScore.detail, aligned: multiAssetScore.aligned, checked: multiAssetScore.checked },
+        newsCalendar: { score: newsCalScore.score, maxScore: newsCalScore.maxScore || 6, detail: newsCalScore.detail, status: newsCalScore.status }
       },
       detail: 'OB:' + ob.score + '/' + (ob.maxScore || 15) +
               ' FVG:' + fvg.score + '/' + (fvg.maxScore || 10) +
@@ -2974,6 +3380,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               ' LIQ-REC:' + liqRecoveryScore.score + '/' + (liqRecoveryScore.maxScore || 12) +
               ' VOL-TERM:' + volTermScore.score + '/' + (volTermScore.maxScore || 10) +
               ' RISK-ADJ:' + riskAdjScore.score + '/' + (riskAdjScore.maxScore || 15) +
+              ' SECTOR:' + sectorScore.score + '/' + (sectorScore.maxScore || 8) +
+              ' ASSET:' + multiAssetScore.score + '/' + (multiAssetScore.maxScore || 10) +
+              ' NEWS:' + newsCalScore.score + '/' + (newsCalScore.maxScore || 6) +
               ' [' + tier + ']'
     };
   }
@@ -5754,11 +6163,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         __omni.regimeWarm = 'threw: ' + ((e && e.message) || e);
         return null;
       }).then(function(){
-        /* If the 8-gauge module produced nothing, fall back to a BTC daily
-           read off Binance klines — one request, an endpoint this scan
-           already relies on. Failure here simply leaves the gate UNCHECKED. */
+        /* ALWAYS take a BTC daily read off Binance klines — one request, an
+           endpoint this scan already relies on. It serves two readers: the
+           regime gate falls back to it when the 8-gauge module produced
+           nothing, and P5.2's multi-asset pillar reads it (as ex.btcRegime)
+           as a BTC-trend leg independent of the 8-gauge composite, so that
+           pillar's "3 independent signals" are genuinely three signals.
+           Failure here simply leaves both readers UNCHECKED. */
         __omni.regimeProxy = null;
-        if (typeof W.regimeState === 'function' && W.regimeState()) return null;
         if (typeof W.binanceKlines !== 'function') return null;
         return Promise.resolve().then(function(){ return W.binanceKlines('BTCUSDT', '1d', 120); })
           .then(function(rows){ __omni.regimeProxy = hgOmniBtcRegime(rows); })
@@ -6040,6 +6452,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
               try { ex.regime = W.regimeState(); } catch (er) { ex.regime = null; }
             }
             if (!ex.regime && __omni.regimeProxy) ex.regime = __omni.regimeProxy;
+            /* P5.2 wiring: the BTC daily proxy is a genuine BTC read, so it
+               feeds the multi-asset pillar's BTC leg regardless of whether
+               the 8-gauge verdict is also present. */
+            if (!ex.btcRegime && __omni.regimeProxy) ex.btcRegime = __omni.regimeProxy;
             /* hgNewsRisk is a pure read of the news cache — it never fetches —
                so like the daily HTF it does not belong behind the network
                enrichment ceiling. */
@@ -6051,6 +6467,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             if (typeof W.xuPositioning === 'function'){
               try { pos = W.xuPositioning(fitem.base || fitem.sym); } catch (er) { pos = null; }
             }
+            /* P5.2 wiring: attach the SAME positioning object the perp gates
+               receive, so the multi-asset pillar's funding leg reads real
+               data instead of reporting FUND:n/a on every card. */
+            if (!ex.positioning && pos) ex.positioning = pos;
             /* The live price captured at ingestion, so level-fresh can judge
                the plan against where the market actually is. */
             ex.livePx = held[j].livePx;
@@ -7046,6 +7466,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniLiquidationRecoveryScore = hgOmniLiquidationRecoveryScore;
     window.hgOmniVolTermScore = hgOmniVolTermScore;
     window.hgOmniRiskAdjustedScore = hgOmniRiskAdjustedScore;
+    /* P5 Solidity Framework Scoring Functions — framework complete at 200 pts */
+    window.hgOmniSectorMomentumScore = hgOmniSectorMomentumScore;
+    window.hgOmniMultiAssetScore = hgOmniMultiAssetScore;
+    window.hgOmniNewsCalendarScore = hgOmniNewsCalendarScore;
     window.hgOmniSolidityScore = hgOmniSolidityScore;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;

@@ -29,7 +29,7 @@ WHAT WAS DELIVERED
    ✓ Scenario 2: Structural Confluence (multi-level entry)
    ✓ Scenario 3: Momentum Convergence (3-indicator agreement)
    ✓ All scenarios pass validation
-   ✓ Runnable: node test_p3_solidity.js ✓
+   ✓ Runnable: node tests/solidity/test_p3_solidity.js ✓
    ✓ Demonstrates all P3 indicators in realistic conditions
 
 3. DOCUMENTATION:
@@ -183,7 +183,7 @@ HOW TO USE
 
 Command Line Testing:
   cd C:\Users\Lenovo\hardgate-main
-  node test_p3_solidity.js
+  node tests/solidity/test_p3_solidity.js
 
 Browser Testing (after loading omniroute.js):
   // Test individual P3 functions
@@ -209,7 +209,7 @@ omniroute.js
 
 test_p3_solidity.js
   Status: Ready to run
-  Command: node test_p3_solidity.js
+  Command: node tests/solidity/test_p3_solidity.js
 
 Documentation:
   P3_QUICK_REFERENCE.md — API reference

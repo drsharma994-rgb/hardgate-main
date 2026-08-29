@@ -64,7 +64,7 @@ CODE DELIVERABLES
    ├─ Scenario 2: Structural Confluence — entry @ swing low + round number → 15pts
    ├─ Scenario 3: Momentum Convergence — all 3 indicators bullish → 12pts
    ├─ Included helper functions: RSI, MACD, Stochastic
-   └─ Runnable: node test_p3_solidity.js
+   └─ Runnable: node tests/solidity/test_p3_solidity.js
 
 3. P3_QUICK_REFERENCE.md (NEW)
    ├─ Function signatures, input/output specs

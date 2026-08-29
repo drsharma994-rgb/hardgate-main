@@ -208,7 +208,7 @@ accountSize = 10000;  // default (override per-setup)
 
 Run test suite:
 ```bash
-node test_p4_solidity.js
+node tests/solidity/test_p4_solidity.js
 ```
 
 Scenarios included:

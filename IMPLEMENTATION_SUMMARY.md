@@ -158,7 +158,7 @@ Future Capacity: P2/P3 (120 points) → 200-point framework complete
   - 10 comprehensive test scenarios
   - Realistic sample data generation
   - All passing assertions
-  - Run with: `node test-p1-solidity.js`
+  - Run with: `node tests/solidity/test-p1-solidity.js`
 
 - **`IMPLEMENTATION_SUMMARY.md`** (this file)
   - High-level delivery overview

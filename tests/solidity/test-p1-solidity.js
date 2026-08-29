@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Load omniroute module
-const omnirouteCode = fs.readFileSync(path.join(__dirname, 'omniroute.js'), 'utf8');
+const omnirouteCode = fs.readFileSync(path.join(__dirname, '..', '..', 'omniroute.js'), 'utf8');
 
 // Create a minimal global context for the module
 global.window = {};

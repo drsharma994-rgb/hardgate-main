@@ -394,7 +394,7 @@ TO DEPLOY P4:
    - Contains P4 functions + integration (backward compatible)
 
 2. Optionally add test file for validation:
-   node test_p4_solidity.js
+   node tests/solidity/test_p4_solidity.js
 
 3. In production app, no code changes required:
    - hgOmniSolidityScore(setup) automatically returns P4 scores

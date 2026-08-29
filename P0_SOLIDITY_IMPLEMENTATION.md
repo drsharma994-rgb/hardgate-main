@@ -294,7 +294,7 @@ function shouldDisplaySetup(setup) {
 Run the standalone test to verify implementation:
 
 ```bash
-node test_p0_solidity.js
+node tests/solidity/test_p0_solidity.js
 ```
 
 Expected output shows:

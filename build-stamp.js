@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v524',
-  pack: 'confluence ratings on detailed setup cards — complete spectrum',
-  built: '2026-08-28T08:45:00Z',
-  note: 'Added confluence spectrum display to detailed setup breakdown cards in SCAN COVERAGE section. Every setup card now shows confluence score + spectrum badge (EXCEPTIONAL/STRONG/FAIR/WEAK) for full transparency.'
+  version: 'hg-v525',
+  pack: 'OMNIROUTE 200-point solidity framework complete — 18 pillars',
+  built: '2026-08-29T05:30:00Z',
+  note: 'P2-P5 of the OMNIROUTE solidity framework: liquidation, expectancy, order flow, structure, momentum, liq recovery, vol term, risk-adjusted sizing, sector momentum, multi-asset confirmation, news blackout. hgOmniSolidityScore now grades every setup on a 200-point scale with tier mapping (170+ extremely solid / 140+ solid / 105+ fair).'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

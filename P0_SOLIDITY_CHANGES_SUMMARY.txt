@@ -19,7 +19,7 @@ FILES MODIFIED
 2. test_p0_solidity.js (NEW)
    - Standalone test file with utilities
    - 500+ lines of test code + demo output
-   - Can run independently: node test_p0_solidity.js
+   - Can run independently: node tests/solidity/test_p0_solidity.js
    - Shows scoring breakdown with sample setup
 
 3. P0_SOLIDITY_IMPLEMENTATION.md (NEW)
@@ -73,7 +73,7 @@ All exported at lines 5771-5777 in omniroute.js
 TEST EXECUTION RESULTS
 ================================================================================
 
-Command: node test_p0_solidity.js
+Command: node tests/solidity/test_p0_solidity.js
 Status: ✓ PASS (all utilities working)
 
 Sample output from test setup (20-bar, R:R 1.56):

@@ -444,7 +444,7 @@ The implementation includes a comprehensive test suite (`test-p1-solidity.js`) c
 
 **Run tests:**
 ```bash
-node test-p1-solidity.js
+node tests/solidity/test-p1-solidity.js
 ```
 
 Expected output:

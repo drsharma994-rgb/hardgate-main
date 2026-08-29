@@ -23,7 +23,7 @@ SUPPORTING DELIVERABLES:
    ├─ Path: C:\Users\Lenovo\hardgate-main\test_p3_solidity.js
    ├─ Type: Automated test suite (Node.js)
    ├─ Content: 3 scenarios (20 bars each) covering all P3 indicators
-   ├─ Execution: node test_p3_solidity.js
+   ├─ Execution: node tests/solidity/test_p3_solidity.js
    ├─ Output: Detailed scoring breakdown for each scenario
    └─ Status: ✓ Runs successfully, all tests pass
 
@@ -233,7 +233,7 @@ omniroute.js
 
 test_p3_solidity.js
   - Path: C:\Users\Lenovo\hardgate-main\test_p3_solidity.js
-  - Status: Ready to run (node test_p3_solidity.js)
+  - Status: Ready to run (node tests/solidity/test_p3_solidity.js)
 
 P3_QUICK_REFERENCE.md
   - Path: C:\Users\Lenovo\hardgate-main\P3_QUICK_REFERENCE.md
@@ -256,7 +256,7 @@ QUICK START
 ================================================================================
 
 Test Locally:
-  node test_p3_solidity.js
+  node tests/solidity/test_p3_solidity.js
 
 Browser Test:
   1. Load omniroute.js

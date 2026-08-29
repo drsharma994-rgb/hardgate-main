@@ -1,5 +1,5 @@
 const fs = require('fs');
-const omnirouteCode = fs.readFileSync('./omniroute.js', 'utf8');
+const omnirouteCode = fs.readFileSync(require('path').join(__dirname, '..', '..', 'omniroute.js'), 'utf8');
 
 // Check for P1 functions
 const checks = [

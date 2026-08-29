@@ -23,7 +23,7 @@ FILES MODIFIED/CREATED:
 2. test_p3_solidity.js (NEW)
    Location: C:\Users\Lenovo\hardgate-main\test_p3_solidity.js
    Content: 3 realistic test scenarios covering each P3 indicator
-   Usage: node test_p3_solidity.js
+   Usage: node tests/solidity/test_p3_solidity.js
    Status: ✓ Runs successfully, all scenarios pass
 
 3. P3_QUICK_REFERENCE.md (NEW)

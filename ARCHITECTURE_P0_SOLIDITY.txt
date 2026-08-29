@@ -244,7 +244,7 @@ Test File: test_p0_solidity.js (500+ lines)
   - Shows scoring breakdown
   - No external dependencies
 
-Run: node test_p0_solidity.js
+Run: node tests/solidity/test_p0_solidity.js
 Expected: Shows score 0-55 with per-pillar breakdown
 
 Test Results (20-bar test setup, R:R 1.56):

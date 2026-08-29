@@ -1,0 +1,93 @@
+================================================================================
+P5 COMPLETION REPORT — OMNIROUTE 200-POINT SOLIDITY FRAMEWORK
+================================================================================
+Date: 2026-08-29
+Status: FRAMEWORK COMPLETE — 200 / 200 POINTS, 18 PILLARS
+
+WHAT WAS BUILT (24 pts, purely additive — zero P0-P4 function bodies touched)
+--------------------------------------------------------------------------------
+1. hgOmniSectorMomentumScore(setup) — 8 pts
+   Trade direction vs sector tide (contract's daily EMA21/50 from pass-2
+   enrichment, intraday EMA fallback) and broad market tide (regime read
+   already on the setup, cached regimeState() fallback).
+   8 both aligned / 5 sector aligned + market neutral / 3 mixed / 0 against
+   both or no data. Degrades to 0, never a veto.
+
+2. hgOmniMultiAssetScore(setup) — 10 pts
+   Three INDEPENDENT cached macro signals vs trade direction:
+     (a) BTC trend (btcRegime / extra.btcRegime — pass-2 wiring attaches
+         the BTC daily proxy on every scan; a regime read counts ONLY
+         when its source is 'btc-daily-proxy'; else EMA on supplied
+         btcRows; the generic 8-gauge composite is never read here —
+         P5.1 and P1 already score it, so no double-counting),
+     (b) funding direction (positioning.fundingPct — pass-2 wiring
+         attaches the xuPositioning object as extra.positioning;
+         contrarian read, neutral band centered on the +0.01%/8h baseline),
+     (c) OI trend (extra.oi.changePct >= 2% with 12-bar price drift the
+         trade's way).
+   10 for 3/3, 7 for 2/3, 4 for 1/3, 0 for 0/3 or no data.
+   The scoring functions add ZERO network calls; the scan warm now always
+   takes one BTC daily klines read (an endpoint the scan already relies
+   on) so the BTC leg is checkable on every scan.
+
+3. hgOmniNewsCalendarScore(setup) — 6 pts
+   Blackout logic on the SAME news state P1 and gate 11 use
+   (extra.redFlagNews, extra.news in the hgNewsRisk shape, cached
+   hgNewsRisk(sym) fallback — a pure cache read).
+   6 clear or no calendar (DEFAULTS HIGH) / 3 minor event >1h away /
+   1 major event within ~1h / 0 FOMC-CPI-NFP-class event within 30 min.
+
+INTEGRATION
+--------------------------------------------------------------------------------
+- hgOmniSolidityScore(): three new calls, totals extended, breakdown keys
+  sectorMomentum / multiAsset / newsCalendar, detail string extended with
+  SECTOR / ASSET / NEWS segments.
+- No-setup early return: maxScore 176 -> 200.
+- Tier mapping rescaled to 200 points:
+    >= 170  extremely_solid
+    >= 140  solid
+    >= 105  fair
+    <  105  weak
+- Window exports added: hgOmniSectorMomentumScore, hgOmniMultiAssetScore,
+  hgOmniNewsCalendarScore.
+
+VALIDATION
+--------------------------------------------------------------------------------
+- node -c omniroute.js .............. PASS
+- node tests/solidity/test_p5_solidity.js .......... PASS (19/19 checks green; the test
+  extracts and executes the REAL P5 section from omniroute.js, including
+  a regression check that the multi-asset BTC leg never double-counts
+  the 8-gauge regime composite)
+
+THE COMPLETE 18-PILLAR, 200-POINT FRAMEWORK
+--------------------------------------------------------------------------------
+P0 (55 pts)
+   1. Order Block Quality ................. 15
+   2. Fair Value Gap ...................... 10
+   3. Multi-TF EMA Cascade ................ 10
+   4. Risk:Reward ......................... 20
+P1 (25 pts)
+   5. Regime Classification ............... 10
+   6. ATR Expansion ....................... 8
+   7. Session Timing ...................... 7
+P2 (20 pts)
+   8. Liquidation Map ..................... 12
+   9. Expectancy / Statistical Edge ....... 8
+P3 (39 pts)
+  10. Order Flow Confluence ............... 12
+  11. Structural Confluence ............... 15
+  12. Momentum Convergence ................ 12
+P4 (37 pts)
+  13. Liquidation Recovery ................ 12
+  14. Vol Term Structure .................. 10
+  15. Risk-Adjusted Sizing ................ 15
+P5 (24 pts) — FINAL
+  16. Sector + Market Momentum ............ 8
+  17. Multi-Asset Confirmation ............ 10
+  18. News / Calendar Blackout ............ 6
+                                           ---
+  TOTAL .................................. 200
+
+================================================================================
+THE OMNIROUTE 200-POINT SOLIDITY FRAMEWORK IS COMPLETE.
+================================================================================

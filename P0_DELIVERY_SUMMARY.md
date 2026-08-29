@@ -110,7 +110,7 @@ window.hgOmniSolidityScore
 
 **Execution**:
 ```bash
-node test_p0_solidity.js
+node tests/solidity/test_p0_solidity.js
 ```
 
 **Sample Output** (from 20-bar test setup):
@@ -278,7 +278,7 @@ Total 200-point system:
 4. Coordinate with existing gate framework
 
 ### For Testing
-1. Run `node test_p0_solidity.js` to verify scoring
+1. Run `node tests/solidity/test_p0_solidity.js` to verify scoring
 2. Test with live setup data from scanning
 3. Validate scoring ranges against live cards
 4. Report any threshold adjustments needed
@@ -368,4 +368,4 @@ For questions or integration support, refer to:
 - API Documentation: `P0_SOLIDITY_IMPLEMENTATION.md`
 - Quick Reference: `P0_SOLIDITY_CHANGES_SUMMARY.txt`
 - Architecture: `ARCHITECTURE_P0_SOLIDITY.txt`
-- Live Test: `node test_p0_solidity.js`
+- Live Test: `node tests/solidity/test_p0_solidity.js`
