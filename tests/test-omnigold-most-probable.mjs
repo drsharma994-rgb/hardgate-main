@@ -65,7 +65,7 @@ function ticket(over){
     grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
     plan: { entry: 3390, stop: 3410, t1: 3350, t2: 3320, rr1: 2.0 },
     distAtr: 0.5,
-    consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] },
+    consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['TREND'], against: [], split: [] },
     gates: [
       { key: 'ema-stack', info: true, pass: true },
       { key: 'rsi-zone', info: true, pass: true },
@@ -155,14 +155,14 @@ console.log('== STRONGEST pick uses the balance, after tape and near filters =='
   });
   const nearQuiet = ticket({
     kind: 'THREE-BAR', distAtr: 1.67, horizon: 'SWING',
-    consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] },
+    consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] },
     gates: []
   });
   const nearWins = W.hgOgPickFor([farChorus, nearQuiet], 'SWING', 'short');
   ok(nearWins === nearQuiet, 'a 6×ATR chorus still loses to a near ticket (got ' + (nearWins && nearWins.kind) + ')');
 
-  const a = ticket({ kind: 'KZ-JUDAS', distAtr: 0.12, consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }, gates: [] });
-  const b = ticket({ kind: 'THREE-BAR', distAtr: 1.67, consensus: { nAgree: 1, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }, gates: [] });
+  const a = ticket({ kind: 'KZ-JUDAS', distAtr: 0.12, consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }, gates: [] });
+  const b = ticket({ kind: 'THREE-BAR', distAtr: 1.67, consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }, gates: [] });
   const closest = W.hgOgPickFor([b, a], 'SCALP', 'short');
   ok(closest === a, 'equal evidence → closer print is STRONGEST (got ' + (closest && closest.kind) + ')');
 

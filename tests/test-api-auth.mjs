@@ -49,7 +49,7 @@ console.log('== wiring ==');
   ok(idx.indexOf('/api/notify/capabilities') >= 0, 'index.html checks notify capabilities');
   const notifySrc = fs.readFileSync(path.join(root, 'lib/notify-api.mjs'), 'utf8');
   ok(notifySrc.indexOf('telegramTokenHealth') >= 0, 'notify-api token health check');
-  ok(notifySrc.indexOf('checkApiAuth(req)') < 0, 'notify POST does not gate on api secret');
+  ok(notifySrc.indexOf('checkApiAuth(req)') >= 0, 'notify POST gates on HARDGATE_API_SECRET (pplx.app guard)');
 }
 
 console.log('== telegram token health (no env) ==');

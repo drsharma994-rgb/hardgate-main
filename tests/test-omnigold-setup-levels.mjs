@@ -166,13 +166,15 @@ console.log('\n== 7. STRONGEST prefers a nearby ticket over a 6×ATR FVG ==');
 {
   const far = {
     horizon: 'SWING', kind: 'FVG-FILL', dir: 'long', distAtr: 6.2,
-    grade: { ticket: true, vetoes: [] },
-    plan: { entry: 4429.10, stop: 4318.37, t1: 4650, momentumStop: false }
+    grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+    plan: { entry: 4429.10, stop: 4318.37, t1: 4650, momentumStop: false },
+    consensus: { nAgree: 4, nAgainst: 0, nSplit: 0, agree: ['IMBALANCE'], against: [], split: [] }
   };
   const near = {
     horizon: 'SWING', kind: 'THREE-BAR', dir: 'long', distAtr: 1.67,
-    grade: { ticket: true, vetoes: [] },
-    plan: { entry: 4506, stop: 4499.97, t1: 4518, momentumStop: false }
+    grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+    plan: { entry: 4506, stop: 4499.97, t1: 4518, momentumStop: false },
+    consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }
   };
   /* Ranked as the live desk was: higher-consensus FVG first. */
   const pick = W.hgOgPickFor([far, near], 'SWING');
@@ -183,13 +185,15 @@ console.log('\n== 7. STRONGEST prefers a nearby ticket over a 6×ATR FVG ==');
      'a far FVG still wins STRONGEST when nothing nearer ticketed');
   const nearer = {
     horizon: 'SWING', kind: 'KZ-JUDAS', dir: 'long', distAtr: 0.12,
-    grade: { ticket: true, vetoes: [] },
-    plan: { entry: 4534.80, stop: 4518.07, t1: 4560, momentumStop: false }
+    grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+    plan: { entry: 4534.80, stop: 4518.07, t1: 4560, momentumStop: false },
+    consensus: { nAgree: 3, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }
   };
   const alsoNear = {
     horizon: 'SWING', kind: 'THREE-BAR', dir: 'long', distAtr: 1.67,
-    grade: { ticket: true, vetoes: [] },
-    plan: { entry: 4506, stop: 4499.97, t1: 4518, momentumStop: false }
+    grade: { ticket: true, vetoes: [], evaluated: 40, total: 47 },
+    plan: { entry: 4506, stop: 4499.97, t1: 4518, momentumStop: false },
+    consensus: { nAgree: 2, nAgainst: 0, nSplit: 0, agree: ['SWEEP'], against: [], split: [] }
   };
   const closest = W.hgOgPickFor([alsoNear, nearer], 'SWING');
   ok(closest && closest.kind === 'KZ-JUDAS',

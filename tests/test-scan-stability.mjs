@@ -61,12 +61,14 @@ function boot(){
 console.log('== source: the three mechanisms exist where the contract says ==');
 {
   ok(/var CARD_RENDER_MAX = \d+/.test(SRC), 'a render cap is declared, not improvised');
-  ok(/isTk \|\| shown < CARD_RENDER_MAX/.test(SRC), 'every ticket renders regardless of the cap');
+  ok(/hgOmniIsSuperSolid\(collapsed\[i\]\)/.test(SRC), 'only SUPER SOLID tickets render as full cards');
+  ok(/CARD_RENDER_MAX/.test(SRC), 'a render cap constant is still declared for overflow budgeting');
   ok(/function gradeStep\(j\)/.test(SRC) && /omniSleep\(0\)\.then\(function\(\)\{ return gradeStep\(stop\); \}\)/.test(SRC),
      'grading is chunked and yields the main thread between chunks');
   ok(/held\[j\]\.rows = null;/.test(SRC), 'each contract\'s bars are released once graded');
   ok(/try \{ gradeOne\(gj\); \}/.test(SRC), 'one bad contract cannot take down the rest of the grade');
-  ok(/-card screen cap/.test(SRC), 'the overflow names itself instead of silently truncating');
+  ok(/SUPER SOLID bar|did not clear the SUPER SOLID/.test(SRC),
+     'the overflow names itself instead of silently truncating');
 }
 
 console.log('\n== end-to-end: a 60-name universe through the real runScan ==');
@@ -110,12 +112,12 @@ await W.hgOmniRunScan(ui);
   const cards = (html.match(/<div class="card">/g) || []).length;
   const tickets = (html.match(/>TICKET</g) || []).length;
   ok(cards > 0, 'cards rendered (' + cards + ')');
-  ok(cards <= 40 + tickets, 'full-ledger cards on screen are capped (' + cards + ' cards, ' + tickets + ' tickets, cap 40 + every ticket)');
+  ok(cards <= 40, 'full-ledger cards on screen are capped (' + cards + ' cards, cap ' + 40 + ')');
   /* Setup-level tickets (hg-v424) can mark far named levels DEAD ON ARRIVAL
      instead of painting a full card. Those extras must still be NAMED —
-     either the screen-cap overflow or the dead-levels note — never dropped. */
-  ok(/-card screen cap/.test(html) || /DEAD LEVELS/.test(html),
-     'extras are named (screen cap or dead-on-arrival), not silently truncated');
+     either the SUPER SOLID overflow note or the dead-levels note — never dropped. */
+  ok(/SUPER SOLID bar/.test(html) || /DEAD LEVELS/.test(html),
+     'extras are named (super-solid overflow or dead-on-arrival), not silently truncated');
   ok(/hgOmniWhyNoTickets\(\)/.test(html) || /card not rendered/.test(html),
      'and points at where the full ledgers still live (or names the dead ones)');
   ok(statHistory.some(s2 => /grading \d+\/\d+/.test(s2)), 'grading progressed in visible chunks — the main thread was yielded');
