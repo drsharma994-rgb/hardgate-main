@@ -63,6 +63,33 @@ services:
       # now that puppeteer is a required dependency.
       - key: PUPPETEER_SKIP_DOWNLOAD
         value: "1"
+  # ---------------------------------------------------------------------
+  # hardgate-v526 — frozen snapshot of the hg-v526 release under its own
+  # name/URL (https://hardgate-v526.onrender.com). Pinned to the
+  # release-v526 branch with autoDeploy OFF, so pushes to main never touch
+  # it. FREE plan on purpose (spins down when idle; first hit after idle
+  # is slow) — bump to starter deliberately if it should stay warm.
+  # No secrets: optional integrations (Gemini/XM/Telegram) stay off here;
+  # the app + /api/proxy work without them. No second daemon either —
+  # this is the SITE only.
+  # ---------------------------------------------------------------------
+  - type: web
+    name: hardgate-v526
+    runtime: node
+    plan: free
+    region: singapore
+    branch: release-v526
+    buildCommand: npm ci
+    startCommand: node scripts/server.mjs
+    autoDeploy: false
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22.11.0"
+      - key: TELEGRAM_DISABLED
+        value: "1"
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "1"
   - type: worker
     name: hardgate-daemon
     runtime: node
