@@ -17,9 +17,9 @@
         "sym": "XAU",
         "dir": "long",
         "entry": 4463.69,
-        "stop": 4443.292216566236,
+        "stop": 4444.552909043256,
         "t1": 4532,
-        "lev": 84,
+        "lev": 87,
         "state": "APPROACHING"
       }
     ],
@@ -268,18 +268,17 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-30T01:41:26.590Z"
+    "at": "2026-08-30T07:27:44.347Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-30T01:41:26.591Z"
+    "at": "2026-08-30T07:27:44.347Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-30T01:41:26.591Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -294,7 +293,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-30T01:41:26.866Z"
+    "at": "2026-08-30T07:27:44.709Z"
   },
   "bookFill": {
     "key": "u0|p0",
