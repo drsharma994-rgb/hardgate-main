@@ -4382,9 +4382,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      routine hour does it. Missing 1h bars mean this cannot be checked, and
      unchecked is a FAIL here, never a pass. */
   var HG_OMNI_20X_NOISE_ATR_MULT = 3;
-  /* Quality floor when no full conviction certificate exists: the 200-pt
-     solidity score's 'fair' tier boundary. Structural checklist only — the
-     refit says it is not predictive, and the banner says so too. */
+  /* Quality floor, solidity path: the 200-pt score's 'fair' tier boundary.
+     Structural checklist only — the refit says it is not predictive, and the
+     banner says so too. HONESTY NOTE from a real 531-contract scan: live
+     solidity scores ran 29-41/200, so this path is structurally unreachable
+     today. It is KEPT (harmless, future-proof) but it is no longer the only
+     alternate to a conviction cert — the reachable alternate is the
+     mechanic's own out-of-sample FORWARD ledger reading 'has paid'
+     (hgOmni20xForwardPaid), the same stats the FORWARD table renders. */
   var HG_OMNI_20X_SOLIDITY_FLOOR = 105;
 
   /* All of the above are window-overridable AT CALL TIME, same pattern as
@@ -4432,67 +4437,229 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return NaN;
   }
 
-  /* Does ONE candidate survive 20x geometry? null = no (and why is not
-     printed — a shortlist, not a second ledger). Non-null = the numbers the
-     section prints. Every gate must hold:
-       (a) plan with finite entry/stop/t1, the stop on the LOSS side of
-           entry (below for a long, above for a short — an abs() distance
-           would bless a plan whose downside has no stop at all), AND a
-           non-vetoed candidate. The
-           veto signal is the SAME boolean the cards use: c.grade.ticket
-           (setupCard prints TICKET / VETO / WATCH from it — grade.ticket is
-           true only when vetoes AND hard-unknowns are both empty, so a
-           WATCH card is excluded too: at 20x, "no data" is not "safe").
-       (b) stopDistPct * STOP_SAFETY <= liqDistPct — the stop speaks first.
-       (c) NOISE_ATR_MULT * 1h-ATR% <= liqDistPct — routine noise cannot
-           reach the liquidation price. Missing ATR -> null, never a pass.
-       (d) cost tier 'ok' (costR <= 0.125) via hgOmniCostDrag's exact math.
-       (e) quality floor: a FULL conviction certificate (count >= 3 and
-           costGate === 'passed') or solidity >= the 'fair' boundary —
-           recorded as quality:'conviction'|'solidity'.
-     Math: liqPrice = entry*(1 -/+ liqDistPct/100) for long/short;
-     marginLossAtStopPct = stopDistPct * LEV (a 1.2% stop at 20x costs 24%
-     of the margin — the card prints it); bufferX = liqDistPct/stopDistPct.
-     Null-safe throughout: any missing input disqualifies, nothing throws. */
-  function hgOmni20xQualify(c){
+  /* The SAFE BAND a 20x stop distance must land in, derived from the SAME
+     gates that judge it — nothing here loosens anything, it only names the
+     interval the existing gates already imply:
+       lo = rtCost / 0.125  — any tighter and hgOmniCostDrag's costR breaches
+            the 'ok' tier ceiling (0.14% rt cost -> 1.12% of entry);
+       hi = liqDistPct / STOP_SAFETY — any wider and the stop-width gate
+            fails (4.6% / 2.5 -> 1.84% of entry).
+     Null when the configured combination leaves no interval (fail closed). */
+  function hgOmni20xBand(){
     try {
       var P = hgOmni20xParams();
       if (!P) return null;
-      if (!c || !c.plan) return null;
-      if (!c.grade || c.grade.ticket !== true) return null;
-      var dir = String(((c.dir != null) ? c.dir : (c.hit && c.hit.dir)) || '').toLowerCase();
+      var rt = NaN;
+      try { if (typeof window !== 'undefined') rt = fin(window.HG_OMNI_RT_COST_PCT); } catch (eW) { rt = NaN; }
+      if (!isFinite(rt) || rt <= 0) rt = HG_OMNI_RT_COST_PCT;
+      var lo = rt / OMNI_CV_COST_OK_R;
+      var hi = P.liqDistPct / P.safety;
+      if (!isFinite(lo) || !isFinite(hi) || lo <= 0 || hi <= 0 || lo > hi) return null;
+      return { lo: lo, hi: hi };
+    } catch (eBnd) { return null; }
+  }
+
+  /* 20X RE-PLAN — a tighter 1h stop for a ticket whose SWING stop can never
+     fit 20x geometry. Production fact this exists for: nearly every ticket
+     plan carries a 10-23% swing stop, and 1.84% is the widest stop the
+     existing gates can ever accept — so without a re-plan the section is
+     structurally empty, not selective.
+
+     The stop comes from REAL 1h structure, the same lastSwing idiom the plan
+     engine uses (plans.js: extreme over the lookback EXCLUDING the live bar,
+     buffered HG_STOP_BUFFER_ATR x ATR14): walk the lookback out from 1 to 20
+     bars, take each distinct running swing extreme, buffer it, and keep the
+     NEAREST one whose distance from the CURRENT plan entry lands inside the
+     safe band. No structural level in-band -> try 1.5x ATR(1h) if THAT
+     distance is in-band. Neither -> null: no invented level, ever.
+
+     The result is NOT the swing invalidation and the card must say so — a
+     20x stop this tight can be hit by ordinary noise while the swing idea
+     stays alive. t1 is set at 2R from the NEW stop so the printed geometry
+     is self-consistent. Entry is never moved. Null-safe throughout. */
+  function hgOmni20xReplan(plan, dir, rows1h){
+    try {
+      var band = hgOmni20xBand();
+      if (!band) return null;
+      dir = String(dir || '').toLowerCase();
       if (dir !== 'long' && dir !== 'short') return null;
-      var entry = fin(c.plan.entry), stop = fin(c.plan.stop), t1 = fin(c.plan.t1);
-      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1) || entry <= 0) return null;
-      /* The stop must sit on the LOSS side of entry — below it for a long,
-         above it for a short. Math.abs() alone would accept a long whose
-         "stop" is ABOVE entry, and then every number this section prints is
-         fiction: the road down to liquidation has no stop on it at all, so
-         the true loss at the unguarded exit is 100% of margin, not
-         stopDistPct * lev. Plans should never arrive this way; one that
-         does is malformed and does not qualify. */
+      var entry = fin(plan && plan.entry);
+      if (!plan || !isFinite(entry) || entry <= 0) return null;
+      if (!isFinite(fin(plan.stop)) || !isFinite(fin(plan.t1))) return null;
+      var rows = (rows1h && rows1h.length >= 16) ? rows1h : null;
+      if (!rows) return null;
+      var a1 = atrOf(rows, 14);
+      if (!isFinite(a1) || a1 <= 0) return null;
+      var w = null;
+      try { w = (typeof window !== 'undefined') ? window : null; } catch (eW2) { w = null; }
+      /* plans.js owns the buffer constant; fall back to its documented 0.25 */
+      var buf = 0.25;
+      try {
+        var bo = w ? fin(w.HG_STOP_BUFFER_ATR) : NaN;
+        if (isFinite(bo) && bo > 0) buf = bo;
+      } catch (eB2) {}
+      var buffer = buf * a1;
+      var n = rows.length;
+      var stop = NaN, src = null, prev = NaN;
+      var look, i, i0, lvl, px, cand, dist;
+      for (look = 1; look <= 20; look++){
+        i0 = Math.max(0, n - 1 - look);
+        /* lastSwing idiom: extreme over the lookback, live bar excluded */
+        lvl = (dir === 'long') ? Infinity : -Infinity;
+        for (i = i0; i < n - 1; i++){
+          px = (dir === 'long') ? fin(rows[i] && rows[i].l) : fin(rows[i] && rows[i].h);
+          if (!isFinite(px)) continue;
+          lvl = (dir === 'long') ? Math.min(lvl, px) : Math.max(lvl, px);
+        }
+        if (!isFinite(lvl)) continue;
+        if (isFinite(prev) && lvl === prev) continue; /* same level, wider window */
+        prev = lvl;
+        cand = (dir === 'long') ? (lvl - buffer) : (lvl + buffer);
+        /* the stop must sit on the LOSS side of entry, or it is no stop */
+        if (dir === 'long' ? !(cand < entry) : !(cand > entry)) continue;
+        dist = Math.abs(entry - cand) / entry * 100;
+        if (!isFinite(dist) || dist <= 0) continue;
+        if (dist >= band.lo && dist <= band.hi){ stop = cand; src = '1h-swing'; break; }
+        /* the running extreme only widens with the window — once past the
+           cap, no larger lookback can come back inside the band */
+        if (dist > band.hi) break;
+      }
+      if (!isFinite(stop)){
+        cand = (dir === 'long') ? (entry - 1.5 * a1) : (entry + 1.5 * a1);
+        dist = Math.abs(entry - cand) / entry * 100;
+        if ((dir === 'long' ? cand < entry : cand > entry)
+            && isFinite(dist) && dist >= band.lo && dist <= band.hi){
+          stop = cand; src = '1.5xATR-1h';
+        }
+      }
+      if (!isFinite(stop) || !src) return null;
       if (dir === 'long' ? !(stop < entry) : !(stop > entry)) return null;
-      var stopDistPct = Math.abs(entry - stop) / entry * 100;
-      if (!isFinite(stopDistPct) || stopDistPct <= 0) return null;
-      /* (b) stop inside liquidation with the safety multiple to spare */
-      if (stopDistPct * P.safety > P.liqDistPct) return null;
+      var risk = Math.abs(entry - stop);
+      if (!(risk > 0)) return null;
+      var t1 = (dir === 'long') ? (entry + 2 * risk) : (entry - 2 * risk);
+      if (!isFinite(t1) || t1 <= 0) return null;
+      return { entry: entry, stop: stop, t1: t1,
+               stopDistPct: risk / entry * 100, src: src };
+    } catch (eRp) { return null; }
+  }
+
+  /* Quality path (b): has this candidate's MECHANIC paid out of sample?
+     Reads the EXACT same source the FORWARD table renders — hg-forward.js's
+     hgFwdPool('OMNIROUTE') per-mechanic stat block, judged by the SAME
+     hgOmniPoolRead call hgFwdPanelHTML makes (minRr = MIN_RR as omniroute
+     passes it at render, minSamples = the panel's 20, barZ = the family-wise
+     bar over the mechanics that pool actually holds). Nothing is
+     reimplemented: the READ column and this gate cannot disagree.
+     Null whenever any piece is unavailable — fail closed, never a pass. */
+  function hgOmni20xForwardPaid(c){
+    try {
+      var w = null;
+      try { w = (typeof window !== 'undefined') ? window : null; } catch (eW3) { w = null; }
+      if (!w || typeof w.hgFwdPool !== 'function') return null;
+      var kind = String((c && (c.kind || (c.hit && c.hit.kind))) || '');
+      if (!kind) return null;
+      var pool = null;
+      try { pool = w.hgFwdPool('OMNIROUTE'); } catch (ePl) { pool = null; }
+      if (!pool || typeof pool !== 'object') return null;
+      var p = pool[kind];
+      if (!p || !(fin(p.samples) > 0)) return null;
+      var keys = [], k;
+      for (k in pool) if (Object.prototype.hasOwnProperty.call(pool, k)) keys.push(k);
+      var barZ = hgOmniFamilyZ(Math.max(1, keys.length));
+      var v = null;
+      try { v = hgOmniPoolRead(p, MIN_RR, 20, barZ); } catch (eV) { v = null; }
+      if (!v || !v.read) return null;
+      return { read: String(v.read), z: fin(v.z), samples: fin(p.samples), bar: fin(v.bar) };
+    } catch (eFp) { return null; }
+  }
+
+  /* The FULL 20x gate set on ONE geometry. Same thresholds as ever — this
+     refactor moves the gates into a form that can (1) judge a re-planned
+     stop through the identical set and (2) say WHICH gate failed, for the
+     near-miss block. Every failure is collected rather than short-circuited,
+     so "failed only on stop-width" is a checkable fact, not a guess.
+     Gates (all must hold — none loosened):
+       (a) plan with finite entry/stop/t1, the stop on the LOSS side of
+           entry (below for a long, above for a short — an abs() distance
+           would bless a plan whose downside has no stop at all).
+       (b) stopDistPct * STOP_SAFETY <= liqDistPct — the stop speaks first.
+       (c) NOISE_ATR_MULT * 1h-ATR% <= liqDistPct — routine noise cannot
+           reach the liquidation price. Missing ATR -> FAIL, never a pass.
+       (d) cost tier 'ok' (costR <= 0.125) via hgOmniCostDrag's exact math
+           ON THE PLAN BEING JUDGED — a tighter stop pays more R to fees.
+       (e) quality floor, ANY of (recorded in q.quality):
+             'conviction'   — FULL certificate (count >= 3, costGate passed);
+             'forward-paid' — this mechanic's out-of-sample FORWARD ledger
+                              reads 'has paid' (hgOmni20xForwardPaid: the
+                              same stats and the same bar the FORWARD table
+                              renders — unavailable state fails closed);
+             'solidity'     — solidity >= the 'fair' floor (kept: harmless
+                              and future-proof, though live scans score
+                              29-41/200 so it rarely fires today).
+     Math: liqPrice = entry*(1 -/+ liqDistPct/100) for long/short;
+     marginLossAtStopPct = stopDistPct * LEV (a 1.2% stop at 20x costs 24%
+     of the margin — the card prints it); bufferX = liqDistPct/stopDistPct.
+     Returns { ok, fails:[{gate,why}], q } — why strings carry percentages
+     and verdicts only, NEVER price levels, because they are shown for
+     setups that failed safety. Null-safe throughout; nothing throws. */
+  function hgOmni20xGateRun(c, plan, P){
+    var fails = [];
+    var out = { ok: false, fails: fails, q: null };
+    try {
+      if (!P){ fails.push({ gate: 'params', why: 'leverage/maintenance-margin combination leaves no liq distance' }); return out; }
+      var dir = String(((c && c.dir != null) ? c.dir : (c && c.hit && c.hit.dir)) || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short'){ fails.push({ gate: 'dir', why: 'direction unknown' }); return out; }
+      /* (a) plan geometry + (b) stop width */
+      var entry = fin(plan && plan.entry), stop = fin(plan && plan.stop), t1 = fin(plan && plan.t1);
+      var stopDistPct = NaN;
+      if (!plan || !isFinite(entry) || !isFinite(stop) || !isFinite(t1) || entry <= 0){
+        fails.push({ gate: 'plan', why: 'no finite entry/stop/t1' });
+      } else if (dir === 'long' ? !(stop < entry) : !(stop > entry)){
+        /* A "stop" on the profit side means the road to liquidation has no
+           stop on it at all — the true loss at the unguarded exit is 100%
+           of margin, not stopDistPct * lev. Malformed, never qualified. */
+        fails.push({ gate: 'plan', why: 'stop on the wrong side of entry — malformed plan' });
+      } else {
+        stopDistPct = Math.abs(entry - stop) / entry * 100;
+        if (!isFinite(stopDistPct) || stopDistPct <= 0){
+          fails.push({ gate: 'plan', why: 'entry equals stop — no distance to judge' });
+          stopDistPct = NaN;
+        } else if (stopDistPct * P.safety > P.liqDistPct){
+          fails.push({ gate: 'stop-width', why: 'stop ' + fmt(stopDistPct, 2) + '% — needs <=' + fmt(P.liqDistPct / P.safety, 2) + '% for ' + fmt(P.lev, 0) + 'x' });
+        }
+      }
       /* (c) noise cannot liquidate before the stop speaks */
       var atrPct = hgOmni20xAtrPct(c);
-      if (!isFinite(atrPct) || atrPct <= 0) return null;
-      if (atrPct * P.noiseMult > P.liqDistPct) return null;
+      if (!isFinite(atrPct) || atrPct <= 0){
+        fails.push({ gate: 'noise', why: '1h ATR unknown — the noise check cannot run, and unchecked is a FAIL at 20x' });
+      } else if (atrPct * P.noiseMult > P.liqDistPct){
+        fails.push({ gate: 'noise', why: 'ATR noise ' + fmt(P.noiseMult, 0) + 'x' + fmt(atrPct, 1) + '%=' + fmt(atrPct * P.noiseMult, 1) + '% exceeds the ' + fmt(P.liqDistPct, 1) + '% liq distance' });
+      }
       /* (d) cost gate — the replay's #1 finding applies double under
          leverage, because the fee is paid on NOTIONAL while the account
-         holds only margin */
+         holds only margin. Judged on the plan being judged. */
       var cost = null;
-      try { cost = hgOmniCostDrag({ plan: c.plan }); } catch (eC) { cost = null; }
-      if (!cost || cost.tier !== 'ok' || !isFinite(fin(cost.costR))) return null;
-      /* (e) quality floor */
-      var quality = null;
-      var cv = (c.conviction && typeof c.conviction === 'object') ? c.conviction
-             : (c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
+      try { cost = hgOmniCostDrag({ plan: plan }); } catch (eC) { cost = null; }
+      if (!cost || cost.tier !== 'ok' || !isFinite(fin(cost.costR))){
+        fails.push({ gate: 'cost', why: (cost && cost.tier)
+          ? ('cost tier ' + String(cost.tier) + ' (' + fmt(cost.costR, 2) + 'R of every trade to fees) — needs ok (<=0.125R)')
+          : 'cost drag not computable' });
+      }
+      /* (e) quality floor — three alternate paths, all fail closed */
+      var quality = null, qualWhy = [];
+      var cv = (c && c.conviction && typeof c.conviction === 'object') ? c.conviction
+             : (c && c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
              : null;
       if (cv && isFinite(fin(cv.count)) && fin(cv.count) >= 3 && cv.costGate === 'passed'){
         quality = 'conviction';
+      } else {
+        qualWhy.push('no full conviction cert');
+      }
+      if (!quality){
+        var fw = hgOmni20xForwardPaid(c);
+        if (fw && fw.read === 'has paid') quality = 'forward-paid';
+        else qualWhy.push(fw ? ('forward ledger reads "' + String(fw.read) + '"')
+                             : 'mechanic has no settled forward record');
       }
       if (!quality){
         var sol = null;
@@ -4501,19 +4668,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
              judged here is the SAME number the SOLIDITY chip on the card
              shows — the section and the chip cannot disagree. */
           sol = hgOmniSolidityScore({
-            plan: c.plan,
-            hit: (c.hit && c.hit.dir) ? c.hit : { dir: c.dir, kind: c.kind, level: c.level },
-            rows: (c.rows && c.rows.length) ? c.rows : null,
-            extra: (c.extra && typeof c.extra === 'object') ? c.extra : null
+            plan: (c && c.plan) || null,
+            hit: (c && c.hit && c.hit.dir) ? c.hit : { dir: c && c.dir, kind: c && c.kind, level: c && c.level },
+            rows: (c && c.rows && c.rows.length) ? c.rows : null,
+            extra: (c && c.extra && typeof c.extra === 'object') ? c.extra : null
           });
         } catch (eS) { sol = null; }
         if (sol && isFinite(fin(sol.score)) && fin(sol.score) >= P.solidityFloor) quality = 'solidity';
+        else qualWhy.push((sol && isFinite(fin(sol.score)))
+          ? ('solidity ' + fmt(sol.score, 0) + ' < the ' + fmt(P.solidityFloor, 0) + ' floor')
+          : 'solidity not computable');
       }
-      if (!quality) return null;
+      if (!quality) fails.push({ gate: 'quality', why: qualWhy.join('; ') });
+      if (fails.length) return out;
       var liqPrice = (dir === 'long')
         ? entry * (1 - P.liqDistPct / 100)
         : entry * (1 + P.liqDistPct / 100);
-      return {
+      out.ok = true;
+      out.q = {
         liqPrice: liqPrice,
         liqDistPct: P.liqDistPct,
         stopDistPct: stopDistPct,
@@ -4522,7 +4694,89 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         costR: fin(cost.costR),
         quality: quality
       };
+      return out;
+    } catch (eGr) {
+      /* a throw is a failure of THIS code, not evidence about the setup —
+         report it as an unpassable gate so nothing qualifies by accident */
+      fails.push({ gate: 'error', why: 'gate evaluation threw' });
+      out.ok = false; out.q = null;
+      return out;
+    }
+  }
+
+  /* Does ONE candidate survive 20x geometry? null = no. Non-null = the
+     numbers the section prints, now stamped planUsed:'primary'|'x20'.
+     The PRIMARY plan is tried first through the unchanged gate set. If — and
+     only if — it failed on stop-width ALONE (every other gate passed), the
+     candidate's x20plan (the tighter 1h-structure stop stamped in
+     hgOmniEvaluate) is pushed through the SAME full gate set: stop band,
+     noise, cost recomputed on the NEW stop, quality floor. Any other primary
+     failure, or no x20plan, or the x20plan failing anything: null. The veto
+     signal stays the SAME boolean the cards use (c.grade.ticket — a WATCH
+     card is excluded too: at 20x, "no data" is not "safe"). */
+  function hgOmni20xQualify(c){
+    try {
+      var P = hgOmni20xParams();
+      if (!P) return null;
+      if (!c || !c.plan) return null;
+      if (!c.grade || c.grade.ticket !== true) return null;
+      var prim = hgOmni20xGateRun(c, c.plan, P);
+      if (prim.ok){
+        prim.q.planUsed = 'primary';
+        return prim.q;
+      }
+      if (c.x20plan && prim.fails.length === 1 && prim.fails[0].gate === 'stop-width'){
+        var alt = hgOmni20xGateRun(c, c.x20plan, P);
+        if (alt.ok){
+          alt.q.planUsed = 'x20';
+          alt.q.x20 = {
+            entry: fin(c.x20plan.entry), stop: fin(c.x20plan.stop), t1: fin(c.x20plan.t1),
+            stopDistPct: fin(c.x20plan.stopDistPct), src: String(c.x20plan.src || '')
+          };
+          var pE = fin(c.plan.entry), pS = fin(c.plan.stop);
+          alt.q.primaryStopDistPct = (isFinite(pE) && isFinite(pS) && pE > 0)
+            ? Math.abs(pE - pS) / pE * 100 : NaN;
+          return alt.q;
+        }
+      }
+      return null;
     } catch (e20) { return null; }
+  }
+
+  /* Why did a TICKET not make the 20X shortlist? Diagnosis for the
+     near-miss block: runs the primary plan through the full gate set, and
+     when stop-width was the only failure, runs the x20 re-plan too (or says
+     no in-band structure existed). Returns { qualified, fails:[{gate,why}] }
+     or null for non-tickets — the near-miss block only ranks tickets.
+     Reasons carry percentages and verdicts, never price levels. */
+  function hgOmni20xExplain(c){
+    try {
+      var P = hgOmni20xParams();
+      if (!P) return null;
+      if (!c || !c.grade || c.grade.ticket !== true) return null;
+      var prim = hgOmni20xGateRun(c, c.plan || null, P);
+      if (prim.ok) return { qualified: true, planUsed: 'primary', fails: [] };
+      var fails = prim.fails;
+      if (fails.length === 1 && fails[0].gate === 'stop-width'){
+        if (c.x20plan){
+          var alt = hgOmni20xGateRun(c, c.x20plan, P);
+          if (alt.ok) return { qualified: true, planUsed: 'x20', fails: [] };
+          var f2 = [], i2;
+          for (i2 = 0; i2 < alt.fails.length; i2++){
+            f2.push({ gate: String(alt.fails[i2].gate),
+                      why: String(alt.fails[i2].why) + ' — even on the 20x re-plan (primary ' + String(fails[0].why) + ')' });
+          }
+          fails = f2.length ? f2 : fails;
+        } else {
+          var band = hgOmni20xBand();
+          fails = [{ gate: 'stop-width',
+                     why: String(fails[0].why) + '; no 1h structure lands in the '
+                        + (band ? (fmt(band.lo, 2) + '-' + fmt(band.hi, 2) + '%') : 're-plan')
+                        + ' band, so no tighter stop exists' }];
+        }
+      }
+      return { qualified: false, fails: fails };
+    } catch (eEx) { return null; }
   }
 
   /* The whole section for the tab: permanent warning banner, then one
@@ -4552,7 +4806,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       h += '<div class="note warn" style="display:block">20x is unforgiving: a ~'
         +  P.liqDistPct.toFixed(1) + '% adverse move liquidates the full isolated margin. '
         +  'These cards passed geometry gates (stop ' + P.safety + 'x inside liquidation, noise check, '
-        +  'cost gate, conviction/solidity floor) — that is safety of GEOMETRY, not a prediction. '
+        +  'cost gate, quality floor: conviction cert, a forward record that has paid, or solidity) '
+        +  '— that is safety of GEOMETRY, not a prediction. '
         +  'Funding and gap slippage are NOT modeled. Signals only — this desk does not execute.</div>';
       if (!list.length){
         h += '<div class="empty">no setup currently clears the 20x safety gates — with 20x leverage '
@@ -4560,25 +4815,75 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       } else {
         for (i = 0; i < list.length; i++){
           c = list[i]; q = quals[i];
+          var used20 = !!(q && q.planUsed === 'x20' && q.x20);
           var head = esc(String(c.base || c.sym || '?'))
                    + ' · ' + esc(String(c.dir || '').toUpperCase())
                    + ' · ' + esc(String(c.kind || ''));
           h += '<div class="card">';
-          h += '<div class="ttl">' + head + ' ' + pill('20X GEOMETRY OK', 'ok')
+          h += '<div class="ttl">' + head + ' ' + pill(used20 ? '20X RE-PLAN OK' : '20X GEOMETRY OK', 'ok')
             +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
-          h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry)
-            +  ' · STOP ' + fmtPx(c.plan.stop)
-            +  ' · T1 ' + fmtPx(c.plan.t1) + '</div>';
-          /* The 20x arithmetic, spelled out. marginLossAtStopPct is the
-             point of the whole section: a 1.2% stop is "small" until it is
-             printed as 24% of the margin. */
+          if (used20){
+            /* The re-plan card must never read like the swing card. The stop
+               is 1h structure chosen to FIT 20x, not the level that proves
+               the idea wrong — say so before the numbers. */
+            h += '<div class="note warn" style="display:block">20X PLAN — tighter 1h stop, NOT the '
+              +  'swing invalidation: ordinary noise can stop this trade while the swing idea stays alive.</div>';
+            h += '<div class="plan">20x ENTRY ' + fmtPx(q.x20.entry)
+              +  ' · STOP ' + fmtPx(q.x20.stop)
+              +  ' · T1 ' + fmtPx(q.x20.t1)
+              +  ' <span class="dim">(' + esc(String(q.x20.src || '')) + ', 2R)</span></div>';
+            h += '<div class="plan dim">swing plan: stop ' + fmt(q.primaryStopDistPct, 2)
+              +  '% away — that invalidation stays live after a 20x stop-out</div>';
+          } else {
+            h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry)
+              +  ' · STOP ' + fmtPx(c.plan.stop)
+              +  ' · T1 ' + fmtPx(c.plan.t1) + '</div>';
+          }
+          /* The 20x arithmetic, spelled out — computed from the plan that
+             actually QUALIFIED (q came from that gate run). A 1.2% stop is
+             "small" until it is printed as 24% of the margin. */
           h += '<div class="plan">est. liq ' + fmtPx(q.liqPrice)
             +  ' (' + fmt(q.liqDistPct, 2) + '%)'
+            +  ' · stop ' + fmt(q.stopDistPct, 2) + '%'
             +  ' · stop-to-liq buffer ' + fmt(q.bufferX, 1) + 'x'
             +  ' · at stop you lose <b>' + fmt(q.marginLossAtStopPct, 0) + '%</b> of margin'
             +  ' · cost ' + fmt(q.costR, 2) + 'R</div>';
           try { h += hgOmniSolidityBadgesHtml(c); } catch (eB) {}
-          h += '<div class="dim">[via ' + esc(String(q.quality)) + ']</div>';
+          h += '<div class="dim">[via ' + esc(String(q.quality)) + ' · plan: ' + esc(String(q.planUsed || 'primary')) + ']</div>';
+          h += '</div>';
+        }
+      }
+      /* NEAR-MISS TRANSPARENCY. When the shortlist is thin, name the
+         closest TICKETS and the gate that stopped each — so an empty or
+         near-empty section reads as gates doing their job on specific
+         setups, not as a dead feature. NO entry/stop levels here, ever:
+         these failed a safety gate, and printing tradable numbers under a
+         "not qualified" heading is how a warning becomes a suggestion. */
+      if (list.length < 3){
+        var near = [], ni, nc, nx;
+        for (ni = 0; ni < arr.length; ni++){
+          nc = arr[ni]; if (!nc) continue;
+          if (!(nc.grade && nc.grade.ticket === true)) continue;
+          if (list.indexOf(nc) >= 0) continue;   /* already qualified */
+          nx = null;
+          try { nx = hgOmni20xExplain(nc); } catch (eNx) { nx = null; }
+          if (!nx || nx.qualified || !nx.fails || !nx.fails.length) continue;
+          near.push({ c: nc, fails: nx.fails });
+        }
+        near.sort(function(a, b){ return a.fails.length - b.fails.length; });
+        if (near.length){
+          h += '<div class="note dim" style="margin-top:8px;opacity:.8"><b>NEAREST MISSES — NOT QUALIFIED</b>'
+            +  ' <span class="dim">(closest tickets and the gate that stopped each · no levels shown on setups that failed safety)</span>';
+          for (ni = 0; ni < near.length && ni < 3; ni++){
+            var nf = near[ni].fails[0];
+            var nMore = near[ni].fails.length - 1;
+            h += '<div class="dim">' + esc(String(near[ni].c.base || near[ni].c.sym || '?'))
+              +  ' ' + esc(String(near[ni].c.dir || '').toUpperCase())
+              +  ' ' + esc(String(near[ni].c.kind || ''))
+              +  ' — failed: ' + esc(String(nf.gate)) + ': ' + esc(String(nf.why))
+              +  (nMore > 0 ? ' <span class="dim">(+' + nMore + ' more gate' + (nMore === 1 ? '' : 's') + ')</span>' : '')
+              +  '</div>';
+          }
           h += '</div>';
         }
       }
@@ -5892,6 +6197,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (plan && isFinite(fin(plan.entry)) && isFinite(livePx) && isFinite(atrNow) && atrNow > 0){
         distAtr = Math.abs(livePx - fin(plan.entry)) / atrNow;
       }
+      /* 20X RE-PLAN — computed HERE because the raw 1h bars (extra.rows1h)
+         are only in scope during evaluation; they are released after grading
+         and the 20X section renders later from the candidate list alone.
+         Tickets with a finite plan only: the re-plan is a fallback GEOMETRY
+         for the 20X section (a tighter 1h-structure stop in the safe band),
+         never a new trade idea. Null when no in-band structure exists. */
+      var x20plan = null;
+      try {
+        if (grade && grade.ticket === true && plan){
+          x20plan = hgOmni20xReplan(plan, hit.dir,
+            (extra && extra.rows1h && extra.rows1h.length) ? extra.rows1h : null);
+        }
+      } catch (eX20p) { x20plan = null; }
       out.push({
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
@@ -5903,6 +6221,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         gates: gates, grade: grade, plan: plan, distAtr: distAtr,
         /* 1h ATR% scalar for the 20X section's noise gate — see above. */
         atr1hPct: atr1hPct,
+        /* Tighter 1h-structure stop for the 20X section, or null. Stamped
+           here because rows1h does not ride the candidate. */
+        x20plan: x20plan,
         /* Carried so hgOmniRank can put the setup the rest of the scan agrees
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
@@ -8287,7 +8608,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           + '<div class="note warn" style="display:block">20x is unforgiving: a ~4.6% adverse move liquidates '
           + 'the full isolated margin. This section fills when a scan runs — press RUN FULL SCAN above. '
           + 'Only setups whose geometry survives 20x pass its gates (stop 2.5x inside liquidation, ATR-noise '
-          + 'check, cost gate, conviction/solidity floor); most scans yield few or none, which is the gates '
+          + 'check, cost gate, quality floor: conviction cert, a forward record that has paid, or solidity). '
+          + 'Wide-stop tickets get one honest fallback: a tighter 1h-structure stop is tried through the SAME '
+          + 'gates and labelled as NOT the swing invalidation. Most scans still yield few, which is the gates '
           + 'working, not a malfunction. Signals only — this desk does not execute.</div>'
           + '<div class="empty">no scan yet — the 20x gates run on scan results.</div>'
           + '</section>';
@@ -8756,6 +9079,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        _STOP_SAFETY / _NOISE_ATR_MULT / _SOLIDITY_FLOOR, read at call time. */
     window.hgOmni20xQualify = hgOmni20xQualify;
     window.hgOmni20xSectionHtml = hgOmni20xSectionHtml;
+    /* 20X evolution helpers — the safe band, the 1h re-plan, the full gate
+       run on one geometry, the forward-paid quality read, and the near-miss
+       diagnosis. Exported so each is testable apart from a live scan. */
+    window.hgOmni20xBand = hgOmni20xBand;
+    window.hgOmni20xReplan = hgOmni20xReplan;
+    window.hgOmni20xGateRun = hgOmni20xGateRun;
+    window.hgOmni20xForwardPaid = hgOmni20xForwardPaid;
+    window.hgOmni20xExplain = hgOmni20xExplain;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;
