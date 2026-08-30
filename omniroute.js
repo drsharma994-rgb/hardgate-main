@@ -2467,8 +2467,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var regime = null;
     var regimeDetail = '';
 
-    /* Try to extract regime from extra/setup enrichment */
-    if (setup.extra && setup.extra.regime){
+    /* Try to extract regime from extra/setup enrichment.
+       DATA WIRING ONLY (hg-v533) — the label->points mapping below is
+       byte-identical. extra.regimeStruct is the STRUCTURAL tape read (the
+       same detectRegime() the regime-fit context gate prints, translated to
+       this pillar's vocabulary by hgOmniRegimeStructFeed). It is preferred
+       because extra.regime is a DIFFERENT datum — the RISK-ON/RISK-OFF
+       macro composite — whose labels this vocabulary can only ever score
+       2/10 ("mismatch or unknown"): that is why this pillar sat capped at 2
+       on every enriched card since the stamp landed. The macro read stays
+       exactly where it was for its own consumers (the regime gate, P5.1
+       market bias, P5.2 btc-daily-proxy leg); when regimeStruct is absent
+       this pillar behaves byte-identically to hg-v532. */
+    if (setup.extra && setup.extra.regimeStruct && setup.extra.regimeStruct.label){
+      regime = setup.extra.regimeStruct;
+    } else if (setup.extra && setup.extra.regime){
       regime = setup.extra.regime;
     } else if (setup.regime){
       regime = setup.regime;
@@ -6578,6 +6591,175 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
   }
 
+  /* ============ SOLIDITY FEED PRODUCERS (hg-v533) ============
+
+     Two of the 18 stamp pillars were reading fields the scan never produced:
+
+     - hgOmniOrderFlowScore (12 pts) reads extra.orderFlow
+       { imbalance, sigma, sustainedBars } and scored 0 on every card
+       because nothing anywhere wrote that field;
+     - hgOmniRegimeScore (10 pts) reads extra.regime, which pass 2 fills
+       with the RISK-ON/RISK-OFF macro composite — a label that pillar's
+       TREND/RANGE/COMPRESSION vocabulary can only score 2/10, so the
+       pillar sat capped at 2 on every enriched card.
+
+     Both feeds below are TRANSLATIONS of data the scan already fetched or
+     already computes — zero new network calls, and every branch that
+     cannot be satisfied honestly produces NOTHING, so the pillar scores 0
+     (orderFlow) or falls back to hg-v532 behavior (regime). No pillar's
+     scoring logic is touched. */
+
+  /* extra.orderFlow from the REAL Binance taker series pass 2 already
+     fetched (binanceTakerRatio(base+'USDT','4h',6) — the same object the
+     CVD and taker-flow gates read).
+
+     The pillar's contract is an imbalance in sigma units at entry
+     (imbalance/sigma thresholds 0.5/1.0/2.0σ) plus a sustained-flow bonus
+     (sustainedBars > 5). Honest mapping from 6 windows of buy/sell ratio:
+
+     - per-window imbalance = (r-1)/(r+1), the SAME signed [-1,1] mapping
+       hgOmniCvd integrates (a 0.5 ratio must mirror a 2.0 ratio);
+     - imbalance = the MEAN per-window imbalance;
+     - sigma = the standard error of that mean (sample sd over n-1 df,
+       divided by sqrt(n)), so imbalance/sigma is a t-like z with n-1
+       degrees of freedom — "how many sigmas from zero flow is the mean
+       of what was actually measured";
+     - sustainedBars = consecutive most-recent windows (4h each) whose
+       sign agrees with the mean — with the scan's 6 windows the +3 bonus
+       (needs >5) fires only when ALL SIX agree, i.e. 24h of one-sided
+       aggressor flow.
+
+     FAIL-CLOSED branches, each deliberate:
+     - fewer than 5 valid windows: no honest dispersion from that little
+       data — produce nothing (pillar scores 0 exactly as before);
+     - zero dispersion (all windows identical): sigma would be fabricated
+       — produce nothing;
+     - candle-approximated CVD names (no Binance twin, no takerSeries):
+       produce NOTHING. The pillar reads imbalance/sigma with no source
+       flag, so anything attached would be scored as if it were aggressor
+       flow, and a close-location candle proxy is not a trade tape. Those
+       names keep scoring 0 — the honest number.
+
+     KNOWN PILLAR QUIRK (documented, NOT changed — scoring logic is
+     frozen): hgOmniOrderFlowScore derives its direction with
+       (hit && hit.dir) || (plan && entry > stop) ? 'long' : 'short'
+     where || binds tighter than ?:, so any truthy hit.dir reads as
+     'long'. The feed stays honestly signed regardless; fixing the
+     precedence is a separate change. */
+  function hgOmniOrderFlowFeed(ex){
+    var pack = ex && ex.takerSeries;
+    var series = pack && pack.series;
+    if (!series || !series.length) return null;
+    var imbs = [], i, r;
+    for (i = 0; i < series.length; i++){
+      r = fin(series[i] && series[i].buySellRatio);
+      if (!isFinite(r) || r <= 0) continue;
+      imbs.push((r - 1) / (r + 1));
+    }
+    var n = imbs.length;
+    if (n < 5) return null;
+    var mean = 0;
+    for (i = 0; i < n; i++) mean += imbs[i];
+    mean /= n;
+    var ss = 0, d;
+    for (i = 0; i < n; i++){ d = imbs[i] - mean; ss += d * d; }
+    var sd = Math.sqrt(ss / (n - 1));
+    /* AUDIT FIX (hg-v533): sd <= 0 alone does NOT catch all-identical
+       windows — summing six equal doubles leaves ~1e-17 of floating-point
+       residue in ss (e.g. six 1.1 ratios -> sd 3e-18), which turned the
+       documented "zero dispersion -> produce nothing" branch into a
+       fabricated sigma and a 1e16-sigma z scoring 12/12. Imbalances live in
+       [-1,1] and the smallest REAL dispersion Binance's 4-decimal ratios
+       can produce is ~1e-7, while summation noise sits at ~1e-17; 1e-9
+       separates the two by eight orders of magnitude each way. */
+    if (!isFinite(sd) || sd < 1e-9) return null;
+    var se = sd / Math.sqrt(n);
+    if (!isFinite(se) || se <= 0) return null;
+    var want = mean > 0 ? 1 : (mean < 0 ? -1 : 0);
+    var sustained = 0;
+    if (want !== 0){
+      for (i = n - 1; i >= 0; i--){
+        if ((imbs[i] > 0 ? 1 : (imbs[i] < 0 ? -1 : 0)) !== want) break;
+        sustained++;
+      }
+    }
+    return {
+      imbalance: mean,
+      sigma: se,
+      sustainedBars: sustained,
+      windows: n,
+      source: 'binance-taker',
+      note: 'mean per-window taker imbalance over ' + n + ' Binance 4h windows; '
+          + 'sigma is the standard error of that mean (z = imbalance/sigma, '
+          + (n - 1) + ' df)'
+    };
+  }
+
+  /* extra.regimeStruct from the STRUCTURAL regime read the scan already
+     computes — the same detectRegime() call behind the regime-fit context
+     gate and the consensus tie-break ('STRONG TREND' / 'WEAK TREND' /
+     'RANGE' / 'COMPRESSION' / 'VOLATILE EXPANSION' on the scan tape).
+
+     Translation to the pillar's vocabulary rides on detectRegime's
+     MACHINE name (rg.regime), not on parsing its display label:
+     - 'trend'       -> 'TREND'        (pillar: 10 with a directional setup)
+     - 'range'       -> 'RANGE'        (pillar: 7)
+     - 'compression' -> 'COMPRESSION'  (pillar: 5)
+     - 'weak_trend' / 'volatile' keep their raw display labels
+       ('WEAK TREND' / 'VOLATILE EXPANSION'), which the pillar scores 2 —
+       correct: a default/no-clear-regime read and a volatility blowout
+       are exactly the "mismatch or unknown" caution cases;
+     - 'unknown' (DATA THIN), a missing detectRegime, thin rows, or a
+       throw produce NOTHING (fail-closed -> hg-v532 behavior).
+
+     A NEW field, deliberately: extra.regime must keep carrying the
+     RISK-ON/RISK-OFF macro composite for the regime gate, P5.1's market
+     bias and P5.2's btc-daily-proxy leg — those consumers are untouched. */
+  function hgOmniRegimeStructFeed(rows){
+    var w = (typeof window !== 'undefined') ? window : null;
+    var fn = (w && typeof w.detectRegime === 'function') ? w.detectRegime : null;
+    if (!fn || !rows || rows.length < 60) return null;
+    var rg = null;
+    try { rg = fn(rows); } catch (eRg){ return null; }
+    if (!rg || !rg.regime) return null;
+    var name = String(rg.regime).toLowerCase();
+    var label = null;
+    if (name === 'trend') label = 'TREND';
+    else if (name === 'range') label = 'RANGE';
+    else if (name === 'compression') label = 'COMPRESSION';
+    else if (name === 'weak_trend' || name === 'volatile'){
+      label = String(rg.label || name).toUpperCase();
+    } else {
+      return null;
+    }
+    return { regime: name, label: label, rawLabel: rg.label || null, source: 'detectRegime' };
+  }
+
+  /* Attach both feeds to the SHARED enrichment object. Called once per
+     symbol at the top of hgOmniEvaluate, so the fields ride the same `ex`
+     both stamp sites read: the evaluate-site stamp copies ex into
+     exForHit, and the late card-render stamp copies the SAME exBySym
+     entry into lsExHit — one producer covers both with no further
+     plumbing. Never overwrites a field a caller already supplied; never
+     throws. */
+  function hgOmniAttachSolidityFeeds(rows, ex){
+    if (!ex) return;
+    try {
+      if (!ex.orderFlow){
+        var of = hgOmniOrderFlowFeed(ex);
+        if (of) ex.orderFlow = of;
+      }
+    } catch (eOf) {}
+    try {
+      if (!ex.regimeStruct){
+        var rs = hgOmniRegimeStructFeed(rows);
+        if (rs) ex.regimeStruct = rs;
+      }
+    } catch (eRs) {}
+  }
+
+  /* ============ end solidity feed producers ============ */
+
   /* Whole per-symbol evaluation: detectors -> gates -> plan. Pure given
      rows; hgPlanLevels is looked up defensively and NaN-safe. */
   function hgOmniEvaluate(item, rows, positioning, extra){
@@ -6596,6 +6778,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         hits.push(house[hi]);
       }
     }
+    /* SOLIDITY FEED PRODUCERS (hg-v533) — attach orderFlow/regimeStruct to
+       the shared enrichment BEFORE any stamping, from data already in hand
+       (takerSeries pass 2 fetched; detectRegime on the scan rows). Mutating
+       `extra` here is the established pattern (quietGates below does the
+       same) and is what lets the late card-render stamp see the fields via
+       the same exBySym entry. Fail-closed: absent data attaches nothing. */
+    extra = extra || {};
+    try { hgOmniAttachSolidityFeeds(rows, extra); } catch (eFeeds) {}
     if (!hits.length){
       /* No engine named a trade. Do not invent a ticket — but still run
          the indicator ledger on this name so quiet contracts are not a
@@ -9677,6 +9867,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* Full-data stamp builder — the compact {score,maxScore,tier,detail}
        every candidate card/gate prefers over the starved recompute. */
     window.hgOmniSolidityStamp = hgOmniSolidityStamp;
+    /* Solidity feed producers (hg-v533) — orderFlow from the real Binance
+       taker series, regimeStruct from the structural detectRegime read.
+       Exported so harnesses/tests measure the SHIPPED producers. */
+    window.hgOmniOrderFlowFeed = hgOmniOrderFlowFeed;
+    window.hgOmniRegimeStructFeed = hgOmniRegimeStructFeed;
+    window.hgOmniAttachSolidityFeeds = hgOmniAttachSolidityFeeds;
     /* Replay calibration additions — cost-to-stop drag, the (currently
        withheld) measured probability, and the card badge builder. The
        round-trip cost default is overridable via window.HG_OMNI_RT_COST_PCT. */

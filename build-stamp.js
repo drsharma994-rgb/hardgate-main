@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v532',
-  pack: 'solidity scored on full scan data — live tiers become real',
-  built: '2026-08-30T16:00:00Z',
-  note: 'Live solidity was data-starved at render (candidates drop rows/enrichment), pinning every card at 29-41/200 WEAK regardless of quality. Scores are now stamped during the scan with the full enrichment in hand (rows1h, daily EMAs, OI, funding, BTC regime, news) and the card badge, 20X quality floor, and APEX all read the same stamp. Measured on real bars: median 32 -> 87, ceiling 37 -> 115+; FAIR (105+) genuinely reachable, SOLID (140+) only for near-perfect setups in peak session, and orderFlow remains a dead pillar (no data producer) — honestly documented, no thresholds touched.'
+  version: 'hg-v533',
+  pack: 'orderFlow + regime pillars fed live — SOLID tier within reach',
+  built: '2026-08-30T19:00:00Z',
+  note: 'The two dead/capped solidity pillars now eat real data the scan already fetches: extra.orderFlow derived from the 6-window Binance taker series (honest SE-of-mean sigma, sustained-run bonus only on 24h one-sided flow, candle-approximated CVD names deliberately get nothing) and extra.regimeStruct carrying the structural regime vocabulary the pillar always wanted (TREND 10 / RANGE 7 / COMPRESSION 5). Pillar scoring functions byte-identical; all consumers twin-vm verified unchanged. Measured: regime escapes its 2-cap on genuine trend fits, orderFlow scores only when real windows support it. SOLID (140+) is now reachable by strong setups, not just perfect ones.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
