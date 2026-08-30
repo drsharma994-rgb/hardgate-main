@@ -4145,6 +4145,51 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     };
   }
 
+  /* FULL-DATA SOLIDITY STAMP BUILDER — the one place a candidate's stored
+     solidity read {score, maxScore, tier, detail} is produced. Called from
+     TWO sites, both while real data is still in scope:
+       (1) hgOmniEvaluate, for tickets (grade.ticket === true) — the 20X
+           quality floor, APEX cards and every always-rendered card;
+       (2) the card render pass, for the <= CARD_RENDER_MAX non-ticket
+           cards that will actually reach the screen (late stamp from
+           exBySym, which still holds rows1h/enrichment at that point).
+     WHY NOT EVERY CANDIDATE: the full 18-pillar score costs ~2.3-3.9 ms per
+     call on 180-bar tapes (measured in a node vm harness over
+     scripts/.bt-cache: hot pillars are volTerm ~1.3 ms — a 160-slot rolling
+     ATR percentile — and liquidationRecovery ~0.6 ms). At ~1131 candidates
+     that is ~3-4.5 s of main-thread work per scan for scores nothing would
+     ever display; tickets + renderable non-tickets is the whole set of
+     consumers, and costs well under half a second.
+     rows: the 1h enrichment bars when present (>=120 — the pillars'
+     documented native TF), else whatever intraday tape the caller still
+     holds; ex must be the REAL enrichment object (htf, oi, positioning,
+     regime, btcRegime, news, ticker, per-mechanic stats) — never a
+     field-stripping copy. Returns compact scalars only, NOT the breakdown:
+     memory matters at 1131 candidates. Never throws — a scoring failure
+     returns null and the render side falls back to its starved recompute. */
+  function hgOmniSolidityStamp(hit, plan, rows, ex, positioning){
+    try {
+      if (!plan || !hit) return null;
+      var solRows = (ex && ex.rows1h && ex.rows1h.length >= 120)
+        ? ex.rows1h
+        : ((rows && rows.length) ? rows : null);
+      var s = hgOmniSolidityScore({
+        plan: plan,
+        hit: hit,
+        rows: solRows,
+        extra: ex || null,
+        positioning: positioning || (ex && ex.positioning) || null,
+        btcRegime: (ex && ex.btcRegime) || null,
+        regime: (ex && ex.regime) || null,
+        sym: (ex && ex.sym) || null
+      }, String(TF || '').toUpperCase() || undefined);
+      if (s && isFinite(fin(s.score))){
+        return { score: s.score, maxScore: s.maxScore, tier: s.tier, detail: s.detail };
+      }
+      return null;
+    } catch (eStamp) { return null; }
+  }
+
   /* ==================== end P0 solidity framework ==================== */
 
   /* ==================== REPLAY CALIBRATION ADDITIONS (additive) ====================
@@ -4281,7 +4326,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         extra: (c.extra && typeof c.extra === 'object') ? c.extra : null
       };
       var sol = null, cost = null, mp = null;
-      try { sol = hgOmniSolidityScore(setup); } catch (eS) {}
+      /* PREFER THE EVALUATE-TIME STAMP. c.solidity was scored inside
+         hgOmniEvaluate while the 1h bars and the full enrichment (htf, oi,
+         positioning, regime, btcRegime, news, per-mechanic stats) were still
+         in scope. The recompute below runs on rows:null / extra:null —
+         held[j].rows is released after grading and candidate.extra is a
+         boolean — which starves 13 of 18 pillars and pinned every live card
+         at ~29-41/200 WEAK. It remains ONLY as the fallback for candidates
+         that predate the stamp (a restored snapshot) or whose stamping
+         failed. */
+      if (c.solidity && isFinite(fin(c.solidity.score))){
+        sol = c.solidity;
+      } else {
+        try { sol = hgOmniSolidityScore(setup); } catch (eS) {}
+      }
       try { cost = hgOmniCostDrag(setup); } catch (eD) {}
       try { mp = hgOmniMeasuredProb(setup); } catch (eP) {}
       var AMBER = '#d97706';
@@ -4663,10 +4721,19 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
       if (!quality){
         var sol = null;
-        try {
-          /* Same setup shape hgOmniSolidityBadgesHtml builds, so the score
-             judged here is the SAME number the SOLIDITY chip on the card
-             shows — the section and the chip cannot disagree. */
+        /* PREFER THE EVALUATE-TIME STAMP (c.solidity): scored with the full
+           enrichment in scope, and it is the SAME number the SOLIDITY chip
+           on the card shows (hgOmniSolidityBadgesHtml prefers it too), so
+           the section and the chip cannot disagree. The stamp is scored on
+           the PRIMARY plan; when this gate re-runs on the x20 re-plan the
+           quality floor still reads the candidate's one displayed score —
+           the re-plan changes geometry gates, not the setup's quality. */
+        if (c && c.solidity && isFinite(fin(c.solidity.score))){
+          sol = c.solidity;
+        } else try {
+          /* Starved fallback — same setup shape hgOmniSolidityBadgesHtml
+             rebuilds when the stamp is absent (rows nulled after grading,
+             extra collapsed to a boolean): only for pre-stamp candidates. */
           sol = hgOmniSolidityScore({
             plan: (c && c.plan) || null,
             hit: (c && c.hit && c.hit.dir) ? c.hit : { dir: c && c.dir, kind: c && c.kind, level: c && c.level },
@@ -6639,6 +6706,23 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             (extra && extra.rows1h && extra.rows1h.length) ? extra.rows1h : null);
         }
       } catch (eX20p) { x20plan = null; }
+      /* FULL-DATA SOLIDITY STAMP — scored HERE, not at render, because the
+         inputs most pillars read (bars, htf, oi, positioning, regime,
+         btcRegime, news, per-mechanic stats) are only in scope during
+         evaluation: held[j].rows is released after grading and the candidate
+         carries `extra` as a BOOLEAN (hit.extra), so the render-time rebuild
+         saw rows:null / extra:null, starving 13 of the 18 pillars — every
+         live card read ~29-41/200 WEAK regardless of quality.
+         SCOPE: tickets only, at this site. The full score costs ~2.3-3.9 ms
+         per call (see hgOmniSolidityStamp) and most of the 1131 candidates
+         never display one; renderable NON-tickets get their late stamp in
+         the card render pass, where the enrichment map is still alive.
+         exForHit is the REAL per-hit enrichment (htf, oi, positioning,
+         regime, btcRegime, news, ticker, per-mechanic stats) — not a
+         field-stripping copy. Stamping failure = null, never a throw. */
+      var solidity = (grade && grade.ticket === true && plan)
+        ? hgOmniSolidityStamp(hit, plan, rows, exForHit, positioning)
+        : null;
       out.push({
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
@@ -6647,6 +6731,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            candidate so the card can print it. Mechanics that do not emit one
            carry null and render nothing new — the chip is opt-in by data. */
         conviction: (hit.conviction && typeof hit.conviction === 'object') ? hit.conviction : null,
+        /* Full-data solidity, scored above while rows1h/enrichment were in
+           scope. {score, maxScore, tier, detail} or null. Render paths
+           prefer this over their starved recompute. */
+        solidity: solidity,
         gates: gates, grade: grade, plan: plan, distAtr: distAtr,
         /* 1h ATR% scalar for the 20X section's noise gate — see above. */
         atr1hPct: atr1hPct,
@@ -8539,7 +8627,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           return gradeStep(0).then(function(){
             return { cands: cands, scanned: list.length, uni: uni.length,
                    fired: nPass1Fired, held: held.length, enriched: subset.length, thin: thin,
-                   failed: failed, pooled: pooled, pass1Err: pass1Err, pass1Done: done };
+                   failed: failed, pooled: pooled, pass1Err: pass1Err, pass1Done: done,
+                   /* The live enrichment map rides to the render pass so the
+                      LATE SOLIDITY STAMP can score renderable non-tickets on
+                      real data. exBySym is declared in THIS callback's scope —
+                      the render pass runs in a SIBLING .then(), where the bare
+                      identifier is a ReferenceError, not a closure read. */
+                   exBySym: exBySym };
           });
         });
       });
@@ -8704,6 +8798,51 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            from the chart is what the reader sees regardless of the badge.
            Only a REAL DOA veto collapses; an AGAINST resting-order plan at
            genuine structure still renders in full. */
+        /* LATE SOLIDITY STAMP — the second stamp site (see
+           hgOmniSolidityStamp). Tickets were stamped inside hgOmniEvaluate;
+           this pass covers the <= CARD_RENDER_MAX non-ticket cards the loop
+           below will actually render, WHILE exBySym still holds the real
+           enrichment (rows1h, htf, oi, positioning, regime, btcRegime,
+           news, pooled stats). Without it those cards would fall back to
+           the starved recompute (rows:null, extra:null) and read ~29-41/200
+           WEAK regardless of quality. Mirrors the render loop's own
+           selection (DOA skip, ticket-or-under-cap) so nothing rendered is
+           left unstamped and nothing unrendered is paid for; at most 40
+           stamps x ~2.3-3.9 ms is ~150 ms once per scan. Best-effort: a
+           stamp failure leaves null and the chip degrades honestly. */
+        try {
+          var lsShown = 0, lsi;
+          for (lsi = 0; lsi < collapsed.length; lsi++){
+            var lsc = collapsed[lsi];
+            if (!lsc) continue;
+            var lsLf = null, lsg;
+            for (lsg = 0; lsg < (lsc.gates || []).length; lsg++){
+              var lsgg = lsc.gates[lsg];
+              if (lsgg && lsgg.key === 'level-fresh'){ lsLf = lsgg; break; }
+            }
+            if (lsLf && lsLf.pass === false && lsLf.info !== true) continue;
+            var lsTk = !!(lsc.grade && lsc.grade.ticket);
+            if (!(lsTk || lsShown < CARD_RENDER_MAX)) continue;
+            lsShown++;
+            if (lsc.solidity || !lsc.plan) continue;
+            /* res.exBySym, NOT a bare exBySym: that map is declared in the
+               grading .then() — a sibling callback, not an ancestor — so the
+               bare name threw ReferenceError here on every scan and this
+               whole pass was silently skipped (the catch below ate it). */
+            var lsEx = (res && res.exBySym && res.exBySym[lsc.sym]) || null;
+            var lsExHit = null;
+            if (lsEx){
+              lsExHit = {};
+              for (var lsk in lsEx) if (Object.prototype.hasOwnProperty.call(lsEx, lsk)) lsExHit[lsk] = lsEx[lsk];
+              /* same per-mechanic stats selection hgOmniEvaluate makes */
+              var lsKey = (lsc.kind === 'UTAD') ? 'SPRING' : lsc.kind;
+              lsExHit.stats = (lsEx.stats && lsEx.stats[lsKey]) ? lsEx.stats[lsKey] : null;
+            }
+            lsc.solidity = hgOmniSolidityStamp(
+              { dir: lsc.dir, kind: lsc.kind, level: lsc.level },
+              lsc.plan, null, lsExHit, lsEx && lsEx.positioning);
+          }
+        } catch (eLS) { try { console.warn('omniroute late solidity stamp skipped', eLS); } catch (eLS2) {} }
         var deadLines = '';
         var shown = 0, overflowN = 0, overflowLines = '';
         for (i = 0; i < collapsed.length; i++){
@@ -9535,6 +9674,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniMultiAssetScore = hgOmniMultiAssetScore;
     window.hgOmniNewsCalendarScore = hgOmniNewsCalendarScore;
     window.hgOmniSolidityScore = hgOmniSolidityScore;
+    /* Full-data stamp builder — the compact {score,maxScore,tier,detail}
+       every candidate card/gate prefers over the starved recompute. */
+    window.hgOmniSolidityStamp = hgOmniSolidityStamp;
     /* Replay calibration additions — cost-to-stop drag, the (currently
        withheld) measured probability, and the card badge builder. The
        round-trip cost default is overridable via window.HG_OMNI_RT_COST_PCT. */

@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v531',
-  pack: 'APEX tiers — stacked-edge setups in OMNIROUTE and OMNIGOLD',
-  built: '2026-08-30T14:00:00Z',
-  note: 'APEX (OMNIROUTE, above 20X): setups qualify only with a proven edge (forward ledger has-paid or conviction cert), a >=2-mechanic cluster on identical levels with a paid member, with-trend on every timeframe (reversion kinds excluded by name), >=16/23 indicators with and <=3 against, real depth + participation, non-vetoed ticket with ok cost. APEX GOLD: grade-A/B tape-aligned engine picks via the real pick gate, swing geometry preferred, fatal-cost blocked on any horizon, STRONG confluence floor. Every card shows both exit designs — bank half at +1R (stop to BE) vs full target — with the app-measured SHADOW/48%-at-1R evidence. No promised win rates anywhere; every number traces to measured state; empty is a position.'
+  version: 'hg-v532',
+  pack: 'solidity scored on full scan data — live tiers become real',
+  built: '2026-08-30T16:00:00Z',
+  note: 'Live solidity was data-starved at render (candidates drop rows/enrichment), pinning every card at 29-41/200 WEAK regardless of quality. Scores are now stamped during the scan with the full enrichment in hand (rows1h, daily EMAs, OI, funding, BTC regime, news) and the card badge, 20X quality floor, and APEX all read the same stamp. Measured on real bars: median 32 -> 87, ceiling 37 -> 115+; FAIR (105+) genuinely reachable, SOLID (140+) only for near-perfect setups in peak session, and orderFlow remains a dead pillar (no data producer) — honestly documented, no thresholds touched.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
