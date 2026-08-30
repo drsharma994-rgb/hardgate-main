@@ -172,7 +172,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var DAILY_SLOW = 21;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
-                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', held: { n: 0 },
+                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', last20xHtml: '', held: { n: 0 },
                  openSetups: [] };
   /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
      hardRefreshAll used to click RUN, which blanked the cards and then
@@ -4354,6 +4354,243 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== end replay calibration additions ==================== */
 
+  /* ==================== 20X — leverage-safe subset (additive) ====================
+     A DISPLAY-ONLY shortlist of setups whose GEOMETRY survives 20x isolated
+     leverage. Nothing here predicts a win, sizes a position, or places an
+     order — this app never executes crypto orders. The section exists
+     because "20x" is usually said by people who have not done the
+     liquidation arithmetic, and the honest output of that arithmetic is
+     "almost nothing qualifies" on most scans. */
+
+  /* The leverage this section is scoped to. At 20x isolated, initial margin
+     is 5% of notional, so a 5% adverse move wipes the margin BEFORE
+     maintenance margin is considered. */
+  var HG_OMNI_20X_LEV = 20;
+  /* Approximate tier-1 maintenance margin, in % of notional. Real tiers
+     vary by venue, symbol and position size — 0.4% is a documented DEFAULT
+     for the smallest tier, not a measurement of any specific account. It
+     SHRINKS the usable distance to liquidation:
+       liqDistPct = (100 / LEV) - MMR = 5.0 - 0.4 = 4.6% */
+  var HG_OMNI_20X_MMR_PCT = 0.4;
+  /* The stop must sit at least this many times INSIDE the liquidation
+     distance, so the stop always speaks before the exchange does. At the
+     defaults: stopDistPct <= 4.6 / 2.5 = 1.84% of price. */
+  var HG_OMNI_20X_STOP_SAFETY = 2.5;
+  /* Ordinary noise must not be able to liquidate the position: 3 x the 1h
+     ATR% has to fit inside the liquidation distance. A symbol whose hourly
+     range is a third of the liq distance can be stopped by NOTHING — a
+     routine hour does it. Missing 1h bars mean this cannot be checked, and
+     unchecked is a FAIL here, never a pass. */
+  var HG_OMNI_20X_NOISE_ATR_MULT = 3;
+  /* Quality floor when no full conviction certificate exists: the 200-pt
+     solidity score's 'fair' tier boundary. Structural checklist only — the
+     refit says it is not predictive, and the banner says so too. */
+  var HG_OMNI_20X_SOLIDITY_FLOOR = 105;
+
+  /* All of the above are window-overridable AT CALL TIME, same pattern as
+     HG_OMNI_RT_COST_PCT: set window.HG_OMNI_20X_LEV / _MMR_PCT /
+     _STOP_SAFETY / _NOISE_ATR_MULT / _SOLIDITY_FLOOR and the next render
+     uses them — no reload of this file. Returns null when the derived
+     liquidation distance is degenerate (lev/mmr combination leaves nothing),
+     because a section computed from a non-positive liq distance would be
+     fiction. */
+  function hgOmni20xParams(){
+    var w = null;
+    try { w = (typeof window !== 'undefined') ? window : null; } catch (eW) { w = null; }
+    function ov(name, dflt){
+      var v = NaN;
+      try { if (w) v = fin(w[name]); } catch (eO) { v = NaN; }
+      return (isFinite(v) && v > 0) ? v : dflt;
+    }
+    var lev = ov('HG_OMNI_20X_LEV', HG_OMNI_20X_LEV);
+    var mmr = ov('HG_OMNI_20X_MMR_PCT', HG_OMNI_20X_MMR_PCT);
+    var safety = ov('HG_OMNI_20X_STOP_SAFETY', HG_OMNI_20X_STOP_SAFETY);
+    var noiseMult = ov('HG_OMNI_20X_NOISE_ATR_MULT', HG_OMNI_20X_NOISE_ATR_MULT);
+    var solFloor = ov('HG_OMNI_20X_SOLIDITY_FLOOR', HG_OMNI_20X_SOLIDITY_FLOOR);
+    var liqDistPct = (100 / lev) - mmr;
+    if (!isFinite(liqDistPct) || liqDistPct <= 0) return null;
+    return { lev: lev, mmrPct: mmr, safety: safety, noiseMult: noiseMult,
+             solidityFloor: solFloor, liqDistPct: liqDistPct };
+  }
+
+  /* The 1h ATR as a percent of the last 1h close. Candidates carry the
+     compact scalar `atr1hPct` stamped in hgOmniEvaluate (the raw 1h bars are
+     released after grading, so the number is captured while they exist); a
+     candidate shape that still carries rows1h is computed directly. NaN when
+     neither exists — which the noise gate treats as a FAIL. */
+  function hgOmni20xAtrPct(c){
+    var v = fin(c && c.atr1hPct);
+    if (isFinite(v) && v > 0) return v;
+    try {
+      var r = (c && c.rows1h && c.rows1h.length) ? c.rows1h : null;
+      if (r && r.length >= 15){
+        var a = atrOf(r, 14);
+        var px = fin(r[r.length - 1].c);
+        if (isFinite(a) && isFinite(px) && px > 0) return a / px * 100;
+      }
+    } catch (eA) {}
+    return NaN;
+  }
+
+  /* Does ONE candidate survive 20x geometry? null = no (and why is not
+     printed — a shortlist, not a second ledger). Non-null = the numbers the
+     section prints. Every gate must hold:
+       (a) plan with finite entry/stop/t1, the stop on the LOSS side of
+           entry (below for a long, above for a short — an abs() distance
+           would bless a plan whose downside has no stop at all), AND a
+           non-vetoed candidate. The
+           veto signal is the SAME boolean the cards use: c.grade.ticket
+           (setupCard prints TICKET / VETO / WATCH from it — grade.ticket is
+           true only when vetoes AND hard-unknowns are both empty, so a
+           WATCH card is excluded too: at 20x, "no data" is not "safe").
+       (b) stopDistPct * STOP_SAFETY <= liqDistPct — the stop speaks first.
+       (c) NOISE_ATR_MULT * 1h-ATR% <= liqDistPct — routine noise cannot
+           reach the liquidation price. Missing ATR -> null, never a pass.
+       (d) cost tier 'ok' (costR <= 0.125) via hgOmniCostDrag's exact math.
+       (e) quality floor: a FULL conviction certificate (count >= 3 and
+           costGate === 'passed') or solidity >= the 'fair' boundary —
+           recorded as quality:'conviction'|'solidity'.
+     Math: liqPrice = entry*(1 -/+ liqDistPct/100) for long/short;
+     marginLossAtStopPct = stopDistPct * LEV (a 1.2% stop at 20x costs 24%
+     of the margin — the card prints it); bufferX = liqDistPct/stopDistPct.
+     Null-safe throughout: any missing input disqualifies, nothing throws. */
+  function hgOmni20xQualify(c){
+    try {
+      var P = hgOmni20xParams();
+      if (!P) return null;
+      if (!c || !c.plan) return null;
+      if (!c.grade || c.grade.ticket !== true) return null;
+      var dir = String(((c.dir != null) ? c.dir : (c.hit && c.hit.dir)) || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') return null;
+      var entry = fin(c.plan.entry), stop = fin(c.plan.stop), t1 = fin(c.plan.t1);
+      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1) || entry <= 0) return null;
+      /* The stop must sit on the LOSS side of entry — below it for a long,
+         above it for a short. Math.abs() alone would accept a long whose
+         "stop" is ABOVE entry, and then every number this section prints is
+         fiction: the road down to liquidation has no stop on it at all, so
+         the true loss at the unguarded exit is 100% of margin, not
+         stopDistPct * lev. Plans should never arrive this way; one that
+         does is malformed and does not qualify. */
+      if (dir === 'long' ? !(stop < entry) : !(stop > entry)) return null;
+      var stopDistPct = Math.abs(entry - stop) / entry * 100;
+      if (!isFinite(stopDistPct) || stopDistPct <= 0) return null;
+      /* (b) stop inside liquidation with the safety multiple to spare */
+      if (stopDistPct * P.safety > P.liqDistPct) return null;
+      /* (c) noise cannot liquidate before the stop speaks */
+      var atrPct = hgOmni20xAtrPct(c);
+      if (!isFinite(atrPct) || atrPct <= 0) return null;
+      if (atrPct * P.noiseMult > P.liqDistPct) return null;
+      /* (d) cost gate — the replay's #1 finding applies double under
+         leverage, because the fee is paid on NOTIONAL while the account
+         holds only margin */
+      var cost = null;
+      try { cost = hgOmniCostDrag({ plan: c.plan }); } catch (eC) { cost = null; }
+      if (!cost || cost.tier !== 'ok' || !isFinite(fin(cost.costR))) return null;
+      /* (e) quality floor */
+      var quality = null;
+      var cv = (c.conviction && typeof c.conviction === 'object') ? c.conviction
+             : (c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
+             : null;
+      if (cv && isFinite(fin(cv.count)) && fin(cv.count) >= 3 && cv.costGate === 'passed'){
+        quality = 'conviction';
+      }
+      if (!quality){
+        var sol = null;
+        try {
+          /* Same setup shape hgOmniSolidityBadgesHtml builds, so the score
+             judged here is the SAME number the SOLIDITY chip on the card
+             shows — the section and the chip cannot disagree. */
+          sol = hgOmniSolidityScore({
+            plan: c.plan,
+            hit: (c.hit && c.hit.dir) ? c.hit : { dir: c.dir, kind: c.kind, level: c.level },
+            rows: (c.rows && c.rows.length) ? c.rows : null,
+            extra: (c.extra && typeof c.extra === 'object') ? c.extra : null
+          });
+        } catch (eS) { sol = null; }
+        if (sol && isFinite(fin(sol.score)) && fin(sol.score) >= P.solidityFloor) quality = 'solidity';
+      }
+      if (!quality) return null;
+      var liqPrice = (dir === 'long')
+        ? entry * (1 - P.liqDistPct / 100)
+        : entry * (1 + P.liqDistPct / 100);
+      return {
+        liqPrice: liqPrice,
+        liqDistPct: P.liqDistPct,
+        stopDistPct: stopDistPct,
+        marginLossAtStopPct: stopDistPct * P.lev,
+        bufferX: P.liqDistPct / stopDistPct,
+        costR: fin(cost.costR),
+        quality: quality
+      };
+    } catch (e20) { return null; }
+  }
+
+  /* The whole section for the tab: permanent warning banner, then one
+     compact card per qualifying candidate, or the honest empty state. Fed
+     the SAME collapsed candidate list the card render uses, in the same
+     pass. Returns '' only if even the banner cannot be built. */
+  function hgOmni20xSectionHtml(candidates){
+    try {
+      var P = hgOmni20xParams();
+      if (!P){
+        return '<div class="note warn">20X section unavailable — the configured leverage/maintenance-margin '
+             + 'combination leaves no distance to liquidation, so no geometry can be judged.</div>';
+      }
+      var list = [], quals = [], i, c, q;
+      var arr = (candidates && candidates.length) ? candidates : [];
+      for (i = 0; i < arr.length; i++){
+        c = arr[i]; if (!c) continue;
+        q = null;
+        try { q = hgOmni20xQualify(c); } catch (eQ) { q = null; }
+        if (q){ list.push(c); quals.push(q); }
+      }
+      var h = '<section data-omni-20x="1">';
+      h += '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS (' + list.length + ')</div>';
+      /* The banner is PERMANENT — it renders on the empty state too,
+         because the reader most likely to need it is the one about to
+         force a trade that did not qualify. */
+      h += '<div class="note warn" style="display:block">20x is unforgiving: a ~'
+        +  P.liqDistPct.toFixed(1) + '% adverse move liquidates the full isolated margin. '
+        +  'These cards passed geometry gates (stop ' + P.safety + 'x inside liquidation, noise check, '
+        +  'cost gate, conviction/solidity floor) — that is safety of GEOMETRY, not a prediction. '
+        +  'Funding and gap slippage are NOT modeled. Signals only — this desk does not execute.</div>';
+      if (!list.length){
+        h += '<div class="empty">no setup currently clears the 20x safety gates — with 20x leverage '
+          +  'that is the correct output most of the time, not a malfunction.</div>';
+      } else {
+        for (i = 0; i < list.length; i++){
+          c = list[i]; q = quals[i];
+          var head = esc(String(c.base || c.sym || '?'))
+                   + ' · ' + esc(String(c.dir || '').toUpperCase())
+                   + ' · ' + esc(String(c.kind || ''));
+          h += '<div class="card">';
+          h += '<div class="ttl">' + head + ' ' + pill('20X GEOMETRY OK', 'ok')
+            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+          h += '<div class="plan">ENTRY ' + fmtPx(c.plan.entry)
+            +  ' · STOP ' + fmtPx(c.plan.stop)
+            +  ' · T1 ' + fmtPx(c.plan.t1) + '</div>';
+          /* The 20x arithmetic, spelled out. marginLossAtStopPct is the
+             point of the whole section: a 1.2% stop is "small" until it is
+             printed as 24% of the margin. */
+          h += '<div class="plan">est. liq ' + fmtPx(q.liqPrice)
+            +  ' (' + fmt(q.liqDistPct, 2) + '%)'
+            +  ' · stop-to-liq buffer ' + fmt(q.bufferX, 1) + 'x'
+            +  ' · at stop you lose <b>' + fmt(q.marginLossAtStopPct, 0) + '%</b> of margin'
+            +  ' · cost ' + fmt(q.costR, 2) + 'R</div>';
+          try { h += hgOmniSolidityBadgesHtml(c); } catch (eB) {}
+          h += '<div class="dim">[via ' + esc(String(q.quality)) + ']</div>';
+          h += '</div>';
+        }
+      }
+      h += '</section>';
+      return h;
+    } catch (eSec) {
+      return '';
+    }
+  }
+
+  /* ==================== end 20X leverage-safe subset ==================== */
+
   function hgOmniGates(rows, hit, positioning, extra){
     /* One reason string for every gate that depends on pass-2 enrichment,
        declared FIRST because the funding gate runs before `x` is assigned and
@@ -5583,6 +5820,21 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
     var planFn = (typeof window !== 'undefined' && typeof window.hgPlanLevels === 'function')
       ? window.hgPlanLevels : null;
+    /* 20X SECTION INPUT — the 1h ATR as % of the last 1h close, captured
+       HERE because the raw 1h bars (extra.rows1h, pass-2 enrichment) are
+       released after grading and the 20x noise gate runs at render time. A
+       compact scalar rides every candidate instead of an array of candles.
+       Null when the name was past the enrichment ceiling or 1h bars are
+       thin — the 20x gate treats that as a FAIL, never a pass. */
+    var atr1hPct = null;
+    try {
+      var r1h20 = (extra && extra.rows1h && extra.rows1h.length) ? extra.rows1h : null;
+      if (r1h20 && r1h20.length >= 15){
+        var a1h20 = atrOf(r1h20, 14);
+        var c1h20 = fin(r1h20[r1h20.length - 1].c);
+        if (isFinite(a1h20) && isFinite(c1h20) && c1h20 > 0) atr1hPct = a1h20 / c1h20 * 100;
+      }
+    } catch (eA20) { atr1hPct = null; }
     for (i = 0; i < hits.length; i++){
       try {
       var hit = hits[i];
@@ -5649,6 +5901,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
            carry null and render nothing new — the chip is opt-in by data. */
         conviction: (hit.conviction && typeof hit.conviction === 'object') ? hit.conviction : null,
         gates: gates, grade: grade, plan: plan, distAtr: distAtr,
+        /* 1h ATR% scalar for the 20X section's noise gate — see above. */
+        atr1hPct: atr1hPct,
         /* Carried so hgOmniRank can put the setup the rest of the scan agrees
            with above the one nothing supports. */
         consensus: hgOmniConsensus(hgOmniConsensusVoters(hits, rows, exForHit), hit),
@@ -7059,6 +7313,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try { if (ui && ui.cards) __omni.lastCardsHtml = ui.cards.innerHTML; } catch (eC) {}
     try { if (ui && ui.pool) __omni.lastPoolHtml = ui.pool.innerHTML; } catch (eP) {}
     try { if (ui && ui.mp) __omni.lastMpHtml = ui.mp.innerHTML; } catch (eM) {}
+    try { if (ui && ui.x20) __omni.last20xHtml = ui.x20.innerHTML; } catch (eX) {}
   }
 
   function omniKeepLast(ui, why){
@@ -7071,6 +7326,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try {
       if (ui && ui.mp && __omni.lastMpHtml != null) ui.mp.innerHTML = __omni.lastMpHtml;
     } catch (eM) {}
+    try {
+      if (ui && ui.x20 && __omni.last20xHtml != null) ui.x20.innerHTML = __omni.last20xHtml;
+    } catch (eX) {}
     if (__omni.lastStat) omniSafeStat(ui, __omni.lastStat);
     try {
       if (ui && ui.warn){
@@ -7612,6 +7870,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                  + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
               : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
             hgOmniPaintMostProbable(ui, [], tape0, [], { n: 0 });
+            /* 20X: banner + honest empty state even on an empty scan. */
+            try { if (ui.x20) ui.x20.innerHTML = hgOmni20xSectionHtml([]); } catch (e20e) {}
             omniRememberPaint(ui);
           });
         }
@@ -7739,6 +7999,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
+        /* 20X — leverage-safe subset, from the SAME collapsed candidate
+           list this pass just carded, so a trade cannot appear here that
+           the desk did not card. Best-effort: a 20x render failure must
+           never take the cards down with it. */
+        try { if (ui.x20) ui.x20.innerHTML = hgOmni20xSectionHtml(collapsed); } catch (e20r) {
+          try { console.warn('omniroute 20x section failed', e20r); } catch (e20w) {}
+        }
         var mpBag = [], mi;
         for (mi = 0; mi < few.length; mi++){
           var row = hgOmniMpRow(few[mi]);
@@ -7948,6 +8215,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
       + '<div id="omniSide"></div>'
       + '<div id="omniMp" style="margin-top:12px"></div>'
+      + '<div id="omni20x" style="margin-top:12px"></div>'
       + '<div id="omniGridOut" style="margin-top:10px"></div>'
       + '<div id="omniPool" style="margin-top:10px"></div>'
       + '<div class="cards" id="omniCards" style="margin-top:12px"></div>'
@@ -7979,6 +8247,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
       warn: el.querySelector('#omniWarn'), side: el.querySelector('#omniSide'), cards: el.querySelector('#omniCards'),
       mp: el.querySelector('#omniMp'),
+      x20: el.querySelector('#omni20x'),
       pool: el.querySelector('#omniPool'),
       matrix: el.querySelector('#omniMatrix'),
       proTrader: el.querySelector('#omniProTrader'),
@@ -8001,6 +8270,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       }
       if (ui.mp && __omni.lastMpHtml != null){
         try { ui.mp.innerHTML = __omni.lastMpHtml; } catch (eMp) {}
+      }
+      if (ui.x20 && __omni.last20xHtml != null){
+        try { ui.x20.innerHTML = __omni.last20xHtml; } catch (eX20) {}
       }
     }
     omniRefreshSide(ui);
@@ -8461,6 +8733,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniCostDrag = hgOmniCostDrag;
     window.hgOmniMeasuredProb = hgOmniMeasuredProb;
     window.hgOmniSolidityBadgesHtml = hgOmniSolidityBadgesHtml;
+    /* 20X leverage-safe subset — display/signal only, never execution.
+       Constants overridable via window.HG_OMNI_20X_LEV / _MMR_PCT /
+       _STOP_SAFETY / _NOISE_ATR_MULT / _SOLIDITY_FLOOR, read at call time. */
+    window.hgOmni20xQualify = hgOmni20xQualify;
+    window.hgOmni20xSectionHtml = hgOmni20xSectionHtml;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;
