@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v530',
-  pack: '20X populates honestly — forward-paid floor, 1h re-plan, near-misses',
-  built: '2026-08-30T12:00:00Z',
-  note: 'The 20X section can now fill without loosening a single safety gate: quality floor reachable via conviction cert OR the mechanic forward ledger reading has-paid (same state the FORWARD table renders); wide-stop tickets get a 20X re-plan from 1h structure inside the 1.12-1.84% band (labeled: NOT the swing invalidation), re-judged by the full gate set; nearest-misses listed with the exact failed gate and no tradable levels. All thresholds unchanged; every new path fails closed.'
+  version: 'hg-v531',
+  pack: 'APEX tiers — stacked-edge setups in OMNIROUTE and OMNIGOLD',
+  built: '2026-08-30T14:00:00Z',
+  note: 'APEX (OMNIROUTE, above 20X): setups qualify only with a proven edge (forward ledger has-paid or conviction cert), a >=2-mechanic cluster on identical levels with a paid member, with-trend on every timeframe (reversion kinds excluded by name), >=16/23 indicators with and <=3 against, real depth + participation, non-vetoed ticket with ok cost. APEX GOLD: grade-A/B tape-aligned engine picks via the real pick gate, swing geometry preferred, fatal-cost blocked on any horizon, STRONG confluence floor. Every card shows both exit designs — bank half at +1R (stop to BE) vs full target — with the app-measured SHADOW/48%-at-1R evidence. No promised win rates anywhere; every number traces to measured state; empty is a position.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

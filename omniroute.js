@@ -172,7 +172,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
   var DAILY_SLOW = 21;
 
   var __omni = { ui: null, busy: false, ran: false, snap: null, lastStat: '', xsRescued: 0,
-                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', last20xHtml: '', held: { n: 0 },
+                 lastCardsHtml: '', lastPoolHtml: '', lastMpHtml: '', last20xHtml: '', lastApexHtml: '', held: { n: 0 },
                  openSetups: [] };
   /* A finished scan is still the desk. Tab-switch auto-scan and the 5-min
      hardRefreshAll used to click RUN, which blanked the cards and then
@@ -4896,6 +4896,435 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
   /* ==================== end 20X leverage-safe subset ==================== */
 
+  /* ==================== APEX — stacked-edge setups ====================
+
+     The trades an elite, extremely selective trader would actually take.
+     Six rules, ALL required, EVERY one failing closed on missing data:
+       1. PROVEN EDGE ONLY — the mechanic's own out-of-sample forward ledger
+          reads 'has paid' (hgOmni20xForwardPaid: the same hgFwdPool +
+          hgOmniPoolRead at the family-wise bar the FORWARD table renders),
+          OR the hit carries a FULL conviction certificate (count >= 3,
+          formation cost gate passed).
+       2. STACKED INDEPENDENT EDGES — the candidate is a confluence cluster:
+          >= 2 mechanics fired on identical levels (the collapse pass already
+          merged them into one card carrying alsoKinds), AND at least one of
+          the cluster is forward-paid.
+       3. WITH-TREND ONLY, EVERY TIMEFRAME — trend gate PASS + htf-daily
+          PASS + regime gate PASS (the regime gate is already true on a
+          neutral tape and false only when the tape is against the side, so
+          PASS is exactly 'not against'). Counter-trend / reversion mechanics
+          NEVER reach APEX regardless of other merits — their trend gate
+          passes as 'context only', which is not the same claim.
+       4. CLEAN TAPE CONTEXT — the shared indicator bank (the same ~23 reads
+          behind the 'INDICATORS MIXED 19w/3a' chip) must be strongly with:
+          >= 16 with AND <= 3 against. Plus book-depth PASS and
+          participation PASS — thin books and dead tape are how good setups
+          die.
+       5. NON-VETOED TICKET — grade.ticket === true, a finite plan with the
+          stop on the loss side, and cost tier ok (hgOmniCostDrag
+          costR <= 0.125R).
+       6. THE BANKING EXIT — the +1R bank level and the 2R level must be
+          computable from the plan's own entry/stop, both sides.
+
+     NOTHING here prints a promised win rate. Every number an APEX card
+     shows is a stat the app already measured: the forward pool's settled
+     T1-first / expectancy / n, and the SHADOW bank-half comparison over
+     settled pairs. Display only — this desk does not execute. */
+
+  /* The shared context-indicator bank, keyed exactly as hg-gates.js
+     hgIndicatorGates pushes them (the 'context-gates' placeholder is NOT a
+     read and is excluded). A key absent from a candidate simply does not
+     count, so a candidate without the bank can never reach 16-with — the
+     rule fails closed by arithmetic. */
+  var OMNI_APEX_CONTEXT_KEYS = {
+    'ichimoku':1, 'donchian-pos':1, 'stoch-rsi':1, 'hurst-regime':1,
+    'squeeze-state':1, 'keltner-pos':1, 'structure-shift':1,
+    'macd-momentum':1, 'bollinger-pctb':1, 'volume-z':1,
+    'regression-slope':1, 'value-area':1, 'htf-confirm':1, 'regime-fit':1,
+    'adx-regime':1, 'obv-flow':1, 'mfi-pressure':1, 'cci-stretch':1,
+    'ema-ribbon':1, 'heikin-trend':1, 'rsi-classic':1, 'roc-thrust':1,
+    'vwap-stretch':1
+  };
+  var OMNI_APEX_WITH_MIN = 16;
+  var OMNI_APEX_AGAINST_MAX = 3;
+
+  /* First gate on the candidate's own ledger with this key, or null. */
+  function hgOmniApexGate(c, key){
+    try {
+      if (!c || !c.gates || !c.gates.length) return null;
+      for (var i = 0; i < c.gates.length; i++){
+        var g = c.gates[i];
+        if (g && String(g.key) === key) return g;
+      }
+    } catch (eG) {}
+    return null;
+  }
+
+  /* The with/against tally over the shared context bank — the SAME counting
+     rule hgContextRead uses for the 'Nw/Na' chip: pass === true is with,
+     pass === false is against, anything else is n/a and counts for
+     neither side. */
+  function hgOmniApexContextTally(c){
+    var out = { withN: 0, againstN: 0, seen: 0 };
+    try {
+      if (!c || !c.gates || !c.gates.length) return out;
+      for (var i = 0; i < c.gates.length; i++){
+        var g = c.gates[i];
+        if (!g || OMNI_APEX_CONTEXT_KEYS[String(g.key)] !== 1) continue;
+        out.seen++;
+        if (g.pass === true) out.withN++;
+        else if (g.pass === false) out.againstN++;
+      }
+    } catch (eT) { return { withN: 0, againstN: 0, seen: 0 }; }
+    return out;
+  }
+
+  /* Forward verdict for ONE mechanic name — hgOmni20xForwardPaid only reads
+     `kind`, so a shim keeps the two gates judging the identical stats at
+     the identical family-wise bar. Null = no settled record (fail closed). */
+  function hgOmniApexForwardFor(kind){
+    try {
+      var k = String(kind || '');
+      if (!k) return null;
+      return hgOmni20xForwardPaid({ kind: k });
+    } catch (eF) { return null; }
+  }
+
+  /* Raw pool row for the verbatim measured-stat line (samples / hit / expR),
+     the same block hgFwdPanelHTML tabulates. Null when unavailable. */
+  function hgOmniApexPoolRow(kind){
+    try {
+      var w = (typeof window !== 'undefined') ? window : null;
+      if (!w || typeof w.hgFwdPool !== 'function') return null;
+      var pool = null;
+      try { pool = w.hgFwdPool('OMNIROUTE'); } catch (ePl) { pool = null; }
+      if (!pool || typeof pool !== 'object') return null;
+      var p = pool[String(kind || '')];
+      if (!p || !(fin(p.samples) > 0)) return null;
+      return p;
+    } catch (eP) { return null; }
+  }
+
+  /* The SHADOW measurement the FORWARD panel already computes — as-traded
+     vs bank-half-at-+1R per-trade R over settled pairs, summed across every
+     mechanic in the pool (same weighting as hgFwdPanelHTML's shadow block:
+     bankN / bankExpR / bankActualExpR). Null until real pairs exist. */
+  function hgOmniApexShadowStats(){
+    try {
+      var w = (typeof window !== 'undefined') ? window : null;
+      if (!w || typeof w.hgFwdPool !== 'function') return null;
+      var pool = null;
+      try { pool = w.hgFwdPool('OMNIROUTE'); } catch (ePl2) { pool = null; }
+      if (!pool || typeof pool !== 'object') return null;
+      var bn = 0, bs = 0, ba = 0, k, p;
+      for (k in pool){
+        if (!Object.prototype.hasOwnProperty.call(pool, k)) continue;
+        p = pool[k];
+        if (p && fin(p.bankN) > 0 && isFinite(fin(p.bankExpR)) && isFinite(fin(p.bankActualExpR))){
+          bn += fin(p.bankN);
+          bs += fin(p.bankN) * fin(p.bankExpR);
+          ba += fin(p.bankN) * fin(p.bankActualExpR);
+        }
+      }
+      if (!(bn > 0)) return null;
+      return { n: bn, shadowR: bs / bn, actualR: ba / bn };
+    } catch (eSh) { return null; }
+  }
+
+  /* The full six-rule run on ONE candidate. Failures are COLLECTED, not
+     short-circuited, so 'failed only on counter-trend' is a checkable fact
+     for the near-miss line. Returns { ok, fails:[{rule,why}], data } —
+     data non-null only when every rule held. Null-safe throughout; a throw
+     is a failure of THIS code and reads as an unpassable rule. */
+  function hgOmniApexCheck(c){
+    var fails = [];
+    var out = { ok: false, fails: fails, data: null };
+    try {
+      if (!c){ fails.push({ rule: 'input', why: 'no candidate' }); return out; }
+      var dir = String(((c.dir != null) ? c.dir : (c.hit && c.hit.dir)) || '').toLowerCase();
+      var kind = String((c.kind || (c.hit && c.hit.kind)) || '');
+      if (dir !== 'long' && dir !== 'short'){ fails.push({ rule: 'input', why: 'direction unknown' }); return out; }
+      if (!kind){ fails.push({ rule: 'input', why: 'mechanic unknown' }); return out; }
+
+      /* 1 — proven edge only */
+      var quality = null;
+      var fwSelf = hgOmniApexForwardFor(kind);
+      if (fwSelf && fwSelf.read === 'has paid') quality = 'forward-paid';
+      if (!quality){
+        var cv = (c.conviction && typeof c.conviction === 'object') ? c.conviction
+               : (c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
+               : null;
+        if (cv && isFinite(fin(cv.count)) && fin(cv.count) >= 3 && cv.costGate === 'passed') quality = 'conviction';
+      }
+      if (!quality){
+        fails.push({ rule: 'proven-edge',
+          why: fwSelf ? ('forward ledger reads "' + String(fwSelf.read) + '" and no full conviction certificate')
+                      : 'no settled forward record and no full conviction certificate' });
+      }
+
+      /* 2 — stacked independent edges: >= 2 mechanics on identical levels,
+         at least one forward-paid. The collapse pass already merged the
+         duplicates; alsoKinds is that merge's receipt. ARRAY ONLY: a
+         corrupted alsoKinds (a string iterates as characters, so 'ORB'
+         would mint the fake mechanics 'O','R','B') must read as no
+         cluster at all, never as a bigger one. */
+      var clusterKinds = [kind], i, ak;
+      if (Array.isArray(c.alsoKinds) && c.alsoKinds.length){
+        for (i = 0; i < c.alsoKinds.length; i++){
+          ak = String(c.alsoKinds[i] || '');
+          if (ak && clusterKinds.indexOf(ak) < 0) clusterKinds.push(ak);
+        }
+      }
+      var paidKinds = [];
+      for (i = 0; i < clusterKinds.length; i++){
+        var fwk = (clusterKinds[i] === kind) ? fwSelf : hgOmniApexForwardFor(clusterKinds[i]);
+        if (fwk && fwk.read === 'has paid') paidKinds.push(clusterKinds[i]);
+      }
+      if (clusterKinds.length < 2){
+        fails.push({ rule: 'cluster', why: 'only one mechanic fired on these levels — APEX needs >=2 on identical levels' });
+      } else if (!paidKinds.length){
+        fails.push({ rule: 'cluster', why: clusterKinds.length + ' mechanics fired on identical levels, but none carries a forward ledger that has paid' });
+      }
+
+      /* 3 — with-trend only, every timeframe. Reversion/counter-trend kinds
+         are rejected by NAME, because for them the trend gates pass as
+         'context only' and prove nothing about alignment. A family lookup
+         that throws reads as reversion — fail closed. */
+      var isRev = true;
+      try {
+        isRev = (REVERSION_KINDS[kind] === true) || (hgOmniIsReversion(kind) === true);
+      } catch (eRv) { isRev = true; }
+      if (isRev) fails.push({ rule: 'counter-trend', why: kind + ' is a counter-trend/reversion mechanic — APEX is with-trend only' });
+      var gT = hgOmniApexGate(c, 'trend');
+      if (!gT || gT.pass !== true){
+        fails.push({ rule: 'trend', why: gT ? (gT.pass === false ? 'trend gate against the setup' : 'trend gate unchecked — unverified is not with-trend') : 'trend gate missing from the ledger' });
+      }
+      var gH = hgOmniApexGate(c, 'htf-daily');
+      if (!gH || gH.pass !== true){
+        fails.push({ rule: 'htf-daily', why: gH ? (gH.pass === false ? 'daily timeframe disagrees with the setup' : 'daily read unchecked — unverified is not with-trend') : 'htf-daily gate missing from the ledger' });
+      }
+      var gR = hgOmniApexGate(c, 'regime');
+      if (!gR || gR.pass !== true){
+        fails.push({ rule: 'regime', why: gR ? (gR.pass === false ? 'regime is against the side' : 'regime unchecked — unverified is not clean') : 'regime gate missing from the ledger' });
+      }
+
+      /* 4 — clean tape context */
+      var tally = hgOmniApexContextTally(c);
+      if (!tally.seen){
+        fails.push({ rule: 'indicators', why: 'shared indicator bank absent from this candidate — the tape context cannot be judged' });
+      } else if (!(tally.withN >= OMNI_APEX_WITH_MIN && tally.againstN <= OMNI_APEX_AGAINST_MAX)){
+        fails.push({ rule: 'indicators',
+          why: 'indicator context ' + tally.withN + 'w/' + tally.againstN + 'a of ' + tally.seen
+             + ' — APEX needs >=' + OMNI_APEX_WITH_MIN + ' with and <=' + OMNI_APEX_AGAINST_MAX + ' against' });
+      }
+      var gB = hgOmniApexGate(c, 'book-depth');
+      if (!gB || gB.pass !== true){
+        fails.push({ rule: 'book-depth', why: gB ? (gB.pass === false ? 'book too thin — slippage would eat the stop' : 'book depth unmeasured — a thin book is how good setups die') : 'book-depth gate missing from the ledger' });
+      }
+      var gP = hgOmniApexGate(c, 'participation');
+      if (!gP || gP.pass !== true){
+        fails.push({ rule: 'participation', why: gP ? (gP.pass === false ? 'trigger bar is a volume vacuum' : 'participation unmeasured — dead tape cannot be ruled out') : 'participation gate missing from the ledger' });
+      }
+
+      /* 5 — non-vetoed ticket, finite plan, cost tier ok */
+      if (!c.grade || c.grade.ticket !== true){
+        fails.push({ rule: 'ticket', why: 'not a cleared TICKET — a veto or missing hard data stands it aside' });
+      }
+      var entry = fin(c.plan && c.plan.entry), stop = fin(c.plan && c.plan.stop), t1 = fin(c.plan && c.plan.t1);
+      var risk = NaN;
+      if (!c.plan || !isFinite(entry) || !isFinite(stop) || !isFinite(t1) || entry <= 0){
+        fails.push({ rule: 'plan', why: 'no finite entry/stop/t1 — nothing to place' });
+      } else if (dir === 'long' ? !(stop < entry) : !(stop > entry)){
+        fails.push({ rule: 'plan', why: 'stop on the wrong side of entry — malformed plan' });
+      } else {
+        risk = Math.abs(entry - stop);
+        if (!(risk > 0)){ fails.push({ rule: 'plan', why: 'entry equals stop — no risk unit to bank against' }); risk = NaN; }
+      }
+      var cost = null;
+      try { cost = hgOmniCostDrag({ plan: (c.plan || null) }); } catch (eC) { cost = null; }
+      if (!cost || cost.tier !== 'ok' || !(fin(cost.costR) <= OMNI_CV_COST_OK_R)){
+        fails.push({ rule: 'cost',
+          why: (cost && isFinite(fin(cost.costR)))
+            ? ('cost ' + fmt(cost.costR, 2) + 'R of every trade to fees (tier ' + String(cost.tier) + ') — needs ok (<=' + OMNI_CV_COST_OK_R + 'R)')
+            : 'cost drag not computable' });
+      }
+
+      /* 6 — the banking exit must be computable from the plan itself */
+      var bank1R = NaN, twoR = NaN;
+      if (isFinite(risk) && risk > 0){
+        bank1R = (dir === 'long') ? (entry + risk) : (entry - risk);
+        twoR   = (dir === 'long') ? (entry + 2 * risk) : (entry - 2 * risk);
+        if (!isFinite(bank1R) || bank1R <= 0 || !isFinite(twoR) || twoR <= 0){
+          fails.push({ rule: 'bank-exit', why: '1R/2R arithmetic is degenerate on this plan' });
+          bank1R = NaN; twoR = NaN;
+        }
+      } else {
+        fails.push({ rule: 'bank-exit', why: 'no finite risk unit — the +1R bank level cannot be computed' });
+      }
+
+      if (fails.length) return out;
+      out.ok = true;
+      out.data = {
+        clusterKinds: clusterKinds,
+        paidKinds: paidKinds,
+        quality: quality,
+        withCount: tally.withN,
+        againstCount: tally.againstN,
+        bank1R: bank1R,
+        twoR: twoR,
+        entry: entry, stop: stop, t1: t1, risk: risk, dir: dir,
+        checksSummary: 'edge ' + quality
+          + ' · ' + clusterKinds.length + ' mechanics on one set of levels (' + paidKinds.length + ' forward-paid)'
+          + ' · trend+htf-daily+regime PASS'
+          + ' · indicators ' + tally.withN + 'w/' + tally.againstN + 'a'
+          + ' · book-depth+participation PASS'
+          + ' · ticket, cost ok, 1R/2R computed'
+      };
+      return out;
+    } catch (eAx) {
+      fails.push({ rule: 'error', why: 'apex evaluation threw — nothing qualifies by accident' });
+      out.ok = false; out.data = null;
+      return out;
+    }
+  }
+
+  /* Public contract: null = not APEX. Non-null = the fields the card
+     prints, every one derived from data the app already measured. */
+  function hgOmniApexQualify(c){
+    try {
+      var r = hgOmniApexCheck(c);
+      if (!r || !r.ok || !r.data) return null;
+      return {
+        clusterKinds: r.data.clusterKinds.slice(),
+        paidKinds: r.data.paidKinds.slice(),
+        quality: r.data.quality,
+        withCount: r.data.withCount,
+        againstCount: r.data.againstCount,
+        bank1R: r.data.bank1R,
+        checksSummary: r.data.checksSummary
+      };
+    } catch (eQ) { return null; }
+  }
+
+  /* One measured forward line per mechanic: 'PO3 forward: 62% T1-first,
+     +0.41R, n=214' — the pool's own settled numbers, verbatim, never a
+     projection. '' when the mechanic has nothing settled. */
+  function hgOmniApexForwardLine(kind, paid){
+    try {
+      var p = hgOmniApexPoolRow(kind);
+      if (!p) return '';
+      var hitPct = isFinite(fin(p.hit)) ? (fin(p.hit) * 100).toFixed(0) + '%' : '—';
+      var expTxt = isFinite(fin(p.expR)) ? ((fin(p.expR) >= 0 ? '+' : '') + fin(p.expR).toFixed(2) + 'R') : '—';
+      return '<div class="dim">' + esc(String(kind)) + ' forward: ' + esc(hitPct) + ' T1-first, '
+           + esc(expTxt) + ', n=' + esc(String(fin(p.samples)))
+           + (paid ? ' — <b>has paid</b> at the family-wise bar' : '')
+           + '</div>';
+    } catch (eL) { return ''; }
+  }
+
+  /* The whole APEX section: header, the permanent selectivity note, one
+     card per qualifying candidate or the honest empty state, and the
+     near-miss line. Fed the SAME collapsed candidate list the card render
+     uses, in the same pass. Returns '' only if even the header cannot be
+     built. */
+  function hgOmniApexSectionHtml(candidates){
+    try {
+      var arr = (candidates && candidates.length) ? candidates : [];
+      var list = [], quals = [], nears = [], i, c, r;
+      for (i = 0; i < arr.length; i++){
+        c = arr[i]; if (!c) continue;
+        r = null;
+        try { r = hgOmniApexCheck(c); } catch (eR) { r = null; }
+        if (r && r.ok && r.data){ list.push(c); quals.push(r.data); }
+        else if (r && r.fails && r.fails.length && c.grade && c.grade.ticket === true){
+          /* Near-misses rank TICKETS only: naming a vetoed card as 'nearly
+             APEX' would contradict the desk's own verdict on it. */
+          nears.push({ c: c, fails: r.fails });
+        }
+      }
+      var h = '<section data-omni-apex="1">';
+      h += '<div class="hg-mp-eye">APEX — STACKED-EDGE SETUPS (' + list.length + ')</div>';
+      /* Permanent — the empty state is the normal state, and the reader
+         must see WHY before deciding the section is broken. */
+      h += '<div class="note">APEX prints a card only when every independent check already stands in the trade’s favour: '
+        +  'a forward ledger that has paid, several mechanics on one set of levels, with-trend on every timeframe, and a clean tape. '
+        +  'Selectivity IS the edge — most scans show nothing here, and that is the bar holding.</div>';
+      if (!list.length){
+        h += '<div class="empty">no setup clears the APEX bar on this scan. That is the expected result: '
+          +  'the bar exists to be missed by almost everything.</div>';
+      } else {
+        var shadow = hgOmniApexShadowStats();
+        for (i = 0; i < list.length; i++){
+          c = list[i]; r = quals[i];
+          var head = esc(String(c.base || c.sym || '?'))
+                   + ' · ' + esc(String(r.dir || '').toUpperCase())
+                   + ' · ' + esc(String(c.kind || ''));
+          h += '<div class="card">';
+          h += '<div class="ttl">' + head + ' ' + pill('APEX', 'ok')
+            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+          /* The cluster — one trade several mechanics found. */
+          h += '<div class="dim">' + esc(r.clusterKinds.join(' + '))
+            +  ' — ' + r.clusterKinds.length + ' mechanics, one trade</div>';
+          /* Measured forward evidence per mechanic, verbatim from the pool. */
+          var fj;
+          for (fj = 0; fj < r.clusterKinds.length; fj++){
+            h += hgOmniApexForwardLine(r.clusterKinds[fj], r.paidKinds.indexOf(r.clusterKinds[fj]) >= 0);
+          }
+          /* The levels — plan first, then the banking arithmetic from it. */
+          h += '<div class="plan">ENTRY ' + fmtPx(r.entry)
+            +  ' · STOP ' + fmtPx(r.stop)
+            +  ' · 1R-BANK ' + fmtPx(r.bank1R)
+            +  ' · T1 ' + fmtPx(r.t1) + '</div>';
+          /* TWO exit designs, side by side, with the app's own measured
+             evidence for each — no promised numbers anywhere. */
+          h += '<div class="plan"><b>EXIT A — BANK HALF AT +1R</b>: sell half at '
+            +  fmtPx(r.bank1R) + ' (+1R), stop to breakeven ' + fmtPx(r.entry)
+            +  ', rest runs to 2R ' + fmtPx(r.twoR) + '</div>';
+          h += '<div class="plan"><b>EXIT B — FULL POSITION TO 2R</b>: all out at '
+            +  fmtPx(r.twoR) + ' (2R), stop never moves</div>';
+          if (shadow){
+            var acTxt = (shadow.actualR >= 0 ? '+' : '') + shadow.actualR.toFixed(2) + 'R';
+            var shTxt = (shadow.shadowR >= 0 ? '+' : '') + shadow.shadowR.toFixed(2) + 'R';
+            h += '<div class="note"><b>SHADOW — bank half at +1R</b>: ' + shadow.n
+              +  ' settled pair' + (shadow.n === 1 ? '' : 's') + ' · as traded ' + esc(acTxt)
+              +  ' vs shadow ' + esc(shTxt) + ' per trade — this desk’s own settled forward pairs, '
+              +  'measured after the fact, never a promise. Read the tradeoff from the two numbers, '
+              +  'not from a preference.</div>';
+          } else {
+            h += '<div class="note dim">SHADOW — bank half at +1R: no settled pairs yet — the comparison '
+              +  'fills as forward trades settle, and until then neither exit design has evidence over the other.</div>';
+          }
+          try { h += hgOmniSolidityBadgesHtml(c); } catch (eB) {}
+          h += '<div class="dim">' + esc(r.checksSummary) + '</div>';
+          h += '<div class="dim">APEX bar: proven edge + stacked mechanics + with-trend everywhere + clean tape. '
+            +  'Most scans have none — that is the bar working, not failing.</div>';
+          h += '</div>';
+        }
+      }
+      /* Near-miss transparency, tickets only, no levels ever — these missed
+         a selectivity bar, and printing tradable numbers under a 'not
+         qualified' heading turns a warning into a suggestion. */
+      if (nears.length && list.length < 3){
+        nears.sort(function(a, b){ return a.fails.length - b.fails.length; });
+        var nMax = nears.length < 3 ? nears.length : 3, ni;
+        for (ni = 0; ni < nMax; ni++){
+          var nf = nears[ni].fails[0];
+          var nMore = nears[ni].fails.length - 1;
+          h += '<div class="dim">nearest: ' + esc(String(nears[ni].c.base || nears[ni].c.sym || '?'))
+            +  ' ' + esc(String(nears[ni].c.dir || '').toUpperCase())
+            +  ' ' + esc(String(nears[ni].c.kind || ''))
+            +  ' — failed: ' + esc(String(nf.rule)) + ': ' + esc(String(nf.why))
+            +  (nMore > 0 ? ' <span class="dim">(+' + nMore + ' more rule' + (nMore === 1 ? '' : 's') + ')</span>' : '')
+            +  '</div>';
+        }
+      }
+      h += '</section>';
+      return h;
+    } catch (eSec) { return ''; }
+  }
+
+  /* ==================== end APEX stacked-edge setups ==================== */
+
   function hgOmniGates(rows, hit, positioning, extra){
     /* One reason string for every gate that depends on pass-2 enrichment,
        declared FIRST because the funding gate runs before `x` is assigned and
@@ -7634,6 +8063,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try { if (ui && ui.cards) __omni.lastCardsHtml = ui.cards.innerHTML; } catch (eC) {}
     try { if (ui && ui.pool) __omni.lastPoolHtml = ui.pool.innerHTML; } catch (eP) {}
     try { if (ui && ui.mp) __omni.lastMpHtml = ui.mp.innerHTML; } catch (eM) {}
+    try { if (ui && ui.apex) __omni.lastApexHtml = ui.apex.innerHTML; } catch (eAx) {}
     try { if (ui && ui.x20) __omni.last20xHtml = ui.x20.innerHTML; } catch (eX) {}
   }
 
@@ -7647,6 +8077,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     try {
       if (ui && ui.mp && __omni.lastMpHtml != null) ui.mp.innerHTML = __omni.lastMpHtml;
     } catch (eM) {}
+    try {
+      if (ui && ui.apex && __omni.lastApexHtml != null) ui.apex.innerHTML = __omni.lastApexHtml;
+    } catch (eAx) {}
     try {
       if (ui && ui.x20 && __omni.last20xHtml != null) ui.x20.innerHTML = __omni.last20xHtml;
     } catch (eX) {}
@@ -8191,6 +8624,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                  + 'Check the venue legs / proxy rate limit and re-run before reading a market view into it.</div>')
               : '<div class="empty">no setup fired on any contract. That is a normal result — the detectors are meant to be quiet.</div>';
             hgOmniPaintMostProbable(ui, [], tape0, [], { n: 0 });
+            /* APEX: header + honest empty state even on an empty scan. */
+            try { if (ui.apex) ui.apex.innerHTML = hgOmniApexSectionHtml([]); } catch (eApE) {}
             /* 20X: banner + honest empty state even on an empty scan. */
             try { if (ui.x20) ui.x20.innerHTML = hgOmni20xSectionHtml([]); } catch (e20e) {}
             omniRememberPaint(ui);
@@ -8320,6 +8755,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  deadLines + '</div>';
         }
         ui.cards.innerHTML = h || '<div class="empty">setups found but cards failed to render — see console.</div>';
+        /* APEX — stacked-edge tier, from the SAME collapsed candidate list
+           this pass just carded (the collapse pass is what stamped
+           alsoKinds, so the cluster rule reads the same merge the cards
+           print). Best-effort: an APEX render failure must never take the
+           cards down with it. */
+        try { if (ui.apex) ui.apex.innerHTML = hgOmniApexSectionHtml(collapsed); } catch (eApR) {
+          try { console.warn('omniroute apex section failed', eApR); } catch (eApW) {}
+        }
         /* 20X — leverage-safe subset, from the SAME collapsed candidate
            list this pass just carded, so a trade cannot appear here that
            the desk did not card. Best-effort: a 20x render failure must
@@ -8536,6 +8979,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       + '<div class="note warn" id="omniWarn" style="display:none"></div>'
       + '<div id="omniSide"></div>'
       + '<div id="omniMp" style="margin-top:12px"></div>'
+      + '<div id="omniApex" style="margin-top:12px"></div>'
       + '<div id="omni20x" style="margin-top:12px"></div>'
       + '<div id="omniGridOut" style="margin-top:10px"></div>'
       + '<div id="omniPool" style="margin-top:10px"></div>'
@@ -8568,6 +9012,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       btn: el.querySelector('#omniRun'), stat: el.querySelector('#omniStat'),
       warn: el.querySelector('#omniWarn'), side: el.querySelector('#omniSide'), cards: el.querySelector('#omniCards'),
       mp: el.querySelector('#omniMp'),
+      apex: el.querySelector('#omniApex'),
       x20: el.querySelector('#omni20x'),
       pool: el.querySelector('#omniPool'),
       matrix: el.querySelector('#omniMatrix'),
@@ -8592,9 +9037,31 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       if (ui.mp && __omni.lastMpHtml != null){
         try { ui.mp.innerHTML = __omni.lastMpHtml; } catch (eMp) {}
       }
+      if (ui.apex && __omni.lastApexHtml != null){
+        try { ui.apex.innerHTML = __omni.lastApexHtml; } catch (eApM) {}
+      }
       if (ui.x20 && __omni.last20xHtml != null){
         try { ui.x20.innerHTML = __omni.last20xHtml; } catch (eX20) {}
       }
+    }
+    /* Pre-scan placeholder for APEX, same reason as the 20X one below: an
+       empty container is an undiscoverable feature. Header + the permanent
+       selectivity note + how it fills. Never overwrites a restored render. */
+    if (ui.apex && !ui.apex.innerHTML){
+      try {
+        ui.apex.innerHTML =
+          '<section data-omni-apex="1">'
+          + '<div class="hg-mp-eye">APEX — STACKED-EDGE SETUPS</div>'
+          + '<div class="note">The most selective tier on this desk. A card prints only when EVERY independent check '
+          + 'already stands in the trade’s favour: a mechanic whose out-of-sample forward ledger has paid (or a full '
+          + 'conviction certificate), at least two mechanics fired on identical levels with one of them forward-paid, '
+          + 'with-trend on 4H + daily + regime, indicator context strongly with (>=16 with, <=3 against), live book and '
+          + 'participation, a non-vetoed ticket at cost tier ok — plus two exit designs judged by the desk’s own SHADOW '
+          + 'measurement, never a promised number. Selectivity IS the edge — most scans show nothing here, and that is '
+          + 'the bar holding. This section fills when a scan runs — press RUN FULL SCAN above.</div>'
+          + '<div class="empty">no scan yet — the APEX bar runs on scan results.</div>'
+          + '</section>';
+      } catch (eApP) {}
     }
     /* Before the first scan the 20X container used to sit empty and the
        section was undiscoverable. Render a visible placeholder: header +
@@ -9087,6 +9554,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmni20xGateRun = hgOmni20xGateRun;
     window.hgOmni20xForwardPaid = hgOmni20xForwardPaid;
     window.hgOmni20xExplain = hgOmni20xExplain;
+    /* APEX stacked-edge tier — the six-rule qualifier, the collected-fails
+       diagnostic behind the near-miss line, and the section renderer.
+       Display/signal only, never execution; every printed number is a
+       measured stat the app already tracks. */
+    window.hgOmniApexQualify = hgOmniApexQualify;
+    window.hgOmniApexCheck = hgOmniApexCheck;
+    window.hgOmniApexSectionHtml = hgOmniApexSectionHtml;
     window.hgOmniMarketSide = hgOmniMarketSide;
     window.hgOmniMarketSideHtml = hgOmniMarketSideHtml;
     window.hgOmniEvaluate = hgOmniEvaluate;

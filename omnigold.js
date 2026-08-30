@@ -6408,14 +6408,226 @@ terse status, and never launches a first-time scan on a global refresh.
     return h;
   }
 
-  function hgOgGoldEnginesPanelHtml(bridge){
+  /* ================= APEX GOLD — GRADE-GATED SETUPS (ADDITIVE) =============
+     The gold setups an elite, extremely selective trader would take, grounded
+     ONLY in what this app has measured on the PAXG 1h replay
+     (2026-03-15..08-29, n=7270 settled — HG_OG_REPLAY_EVIDENCE):
+       1. ENGINE grade A/B only — the one selection ordering that held
+          (A 54.3% WR n=70 vs B 36.1% vs C 34.8%, ~31% scan baseline) — taken
+          from the REAL pick gate hgOgPickGoldEngineFor (tape-aligned per
+          horizon), never demoted grades, never grade-C FORMING fallbacks.
+       2. SWING geometry preferred — ENGINE:SWING was the only near-breakeven
+          cohort (-0.06R net, PF 0.90); a SCALP pick qualifies ONLY when its
+          cost tier is ok (0.26% PAXG round trip <= 0.125R of the stop),
+          because ENGINE:SCALP was cost-dominated at -2.603R/trade net.
+          A SWING pick rides its cohort through thin/heavy tiers (the cohort
+          net already paid those fees) but a FATAL tier — the stop tighter
+          than the fee, 'structurally unpayable' per hgOgCostDrag — blocks
+          ANY horizon. Either cost failure shows as a labeled NEAR MISS,
+          never a card; an unmeasurable cost fails closed to null.
+       3. TAPE-ALIGNED — the pick's direction must agree with hgOgDeskTape;
+          a MIXED/absent tape read means no APEX. Empty is a position.
+       4. CONFLUENCE FLOOR — the real hgOgAdvancedConfluenceScore path must
+          read >= 70 (STRONG), OR the grade is A (the grade already encodes
+          the measured selection). Unscorable = fail closed.
+       5. BANKING EXIT — both designs printed with the app's own measured
+          line, plus the mechanic's replay record via hgOgReplayEvidence.
+     No promised win rates anywhere — only stats the replay settled. */
+
+  /* hgOgApexQualify(pick, horizon, tapeDir)
+     -> null | { grade, horizon, quality, costTier, confluence, bank1R,
+                 dir, kind, plan?, nearMiss? }
+     pick is an hgOgPickGoldEngineFor output ({ plan, engineGrade, ... }).
+     Null-safe: any degenerate input returns null, never a throw. */
+  function hgOgApexQualify(pick, horizon, tapeDir){
+    try{
+      if (!pick || !pick.plan || typeof pick.plan !== 'object') return null;
+      var entry = fin(pick.plan.entry), stop = fin(pick.plan.stop), t1 = fin(pick.plan.t1);
+      if (!isFinite(entry) || !isFinite(stop) || !isFinite(t1)) return null;
+      if (!(Math.abs(entry - stop) > 0)) return null;
+      var dir = String(pick.dir || '').toLowerCase();
+      if (dir !== 'long' && dir !== 'short') return null;
+      /* RULE 1 — grade gate. A/B only, never demoted, never the grade-C
+         FORMING fallback (engineLowGrade). */
+      var g = String(pick.engineGrade || '').toUpperCase();
+      if (g !== 'A' && g !== 'B') return null;
+      if (pick.engineDemoted || pick.engineLowGrade || pick.demoted) return null;
+      /* RULE 3 — tape alignment. MIXED/absent tape = no APEX. */
+      var tape = String(tapeDir || '').toLowerCase();
+      if (tape !== 'long' && tape !== 'short') return null;
+      if (dir !== tape || pick.engineAgainstTape) return null;
+      /* RULE 4 — confluence floor via the real scorer. Engine picks come
+         back as a scalar (grade-based path), cards as { score }. Fail
+         closed when unscorable, unless the grade is A — grade A already
+         encodes the measured selection edge. */
+      var confRaw = null;
+      try { confRaw = hgOgAdvancedConfluenceScore(pick); } catch (eConf){ confRaw = null; }
+      var conf = fin(typeof confRaw === 'number' ? confRaw : (confRaw && confRaw.score));
+      if (g !== 'A' && !(isFinite(conf) && conf >= 70)) return null;
+      /* RULE 2 — horizon geometry. SWING rides the near-breakeven cohort
+         through thin/heavy tiers (the cohort's net already paid those fees),
+         but a FATAL tier — the fee over half of 1R, 'structurally unpayable'
+         per hgOgCostDrag — blocks ANY horizon. SCALP additionally demands
+         the ok tier (ENGINE:SCALP was cost-dominated). Unmeasurable cost on
+         a cost-tiered tier = fail closed. */
+      var hz = String(horizon || pick.horizon || '').toUpperCase();
+      if (hz !== 'SCALP' && hz !== 'SWING') return null;
+      var drag = hgOgCostDrag(pick);
+      if (!drag) return null;
+      var tier = drag.tier;
+      var costFail = (hz === 'SCALP') ? (tier !== 'ok') : (tier === 'fatal');
+      if (costFail){
+        var why;
+        if (hz === 'SCALP'){
+          /* measured cohort drag, printed only when the record exists */
+          var coh = hgOgReplayEvidence('ENGINE:SCALP');
+          why = 'scalp cost drag' + ((coh && isFinite(fin(coh.avgNetR)))
+            ? ' — replay: ' + coh.avgNetR.toFixed(1) + 'R/trade net'
+            : ' — the replay cohort was cost-dominated');
+        } else {
+          why = 'a stop tighter than the fee — ' + drag.rtCostPct.toFixed(2)
+            + '% RT is ' + drag.costR.toFixed(2) + 'R of 1R (' + tier + ' tier)';
+        }
+        return {
+          grade: g, horizon: hz, quality: 'NEAR-MISS', costTier: tier,
+          confluence: isFinite(conf) ? conf : null, bank1R: null,
+          dir: dir, kind: String(pick.kind || ''),
+          nearMiss: why
+        };
+      }
+      /* +1R in the trade's own direction: one full risk unit past entry.
+         2*entry - stop works for both sides (long stop below -> above). */
+      var bank1R = entry + (entry - stop);
+      return {
+        grade: g, horizon: hz, quality: 'APEX', costTier: tier,
+        confluence: isFinite(conf) ? conf : null, bank1R: bank1R,
+        dir: dir, kind: String(pick.kind || ''),
+        plan: { entry: entry, stop: stop, t1: t1 }
+      };
+    }catch(eApex){ return null; }
+  }
+
+  /* Cost chip for an APEX card — unlike hgOgCostChipHtml this prints ALL
+     tiers, because on a grade-gated card the ok tier is the point. */
+  function hgOgApexCostChipHtml(drag){
+    if (!drag || !isFinite(fin(drag.costR))) return '';
+    var cls = (drag.tier === 'ok') ? 'ok' : (drag.tier === 'thin') ? 'warn' : 'bad';
+    return pill('COST ' + drag.costR.toFixed(2) + 'R of 1R — ' + drag.tier
+      + ' (' + drag.rtCostPct.toFixed(2) + '% RT)', cls);
+  }
+
+  /* 'grade-A · replay 54% WR n=70 — mind the costs' — the grade's own
+     settled record, nothing promised. '' when the grade has no record. */
+  function hgOgApexGradeReplayLine(grade){
+    var ev = hgOgReplayEvidence(grade);
+    if (!ev || !isFinite(fin(ev.winRate))) return '';
+    return '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">grade-'
+      + esc(String(grade)) + ' · replay ' + (ev.winRate * 100).toFixed(0)
+      + '% WR n=' + ev.n + ' — mind the costs</div>';
+  }
+
+  function hgOgApexCardHtml(q, pick, tapeDir){
+    if (!q) return '';
+    if (q.nearMiss){
+      /* No tradable levels beyond what the engine rows below already show
+         for this pick — APEX does not re-print a trade the costs ate. */
+      return '<div class="hg-mp-note warn og-apex-nearmiss">near miss — '
+        + esc(q.horizon) + ' ' + hgOgGradeChipHtml(q.grade)
+        + ' ' + esc(String(q.dir || '').toUpperCase())
+        + ' is tape-aligned but ' + esc(q.nearMiss)
+        + '. Its levels stay on the engine row below.</div>';
+    }
+    if (!q.plan) return '';
+    var entry = q.plan.entry, stop = q.plan.stop, t1 = q.plan.t1;
+    var h = '<div class="og-gold-engine-row og-gold-engine-best og-apex-card">';
+    h += '<div class="hg-mp-head">XAUUSD ' + esc(String(q.dir).toUpperCase())
+      + ' ' + hgOgGradeChipHtml(q.grade, { large: true })
+      + ' <span>' + esc(q.horizon + ' · ' + (q.kind || 'GOLD ENGINE')) + '</span></div>';
+    h += hgOgApexGradeReplayLine(q.grade);
+    h += '<div class="hg-mp-grid">'
+      + '<div><i>ENTRY</i><b>' + fmtPx(entry) + '</b></div>'
+      + '<div><i>STOP</i><b>' + fmtPx(stop) + '</b></div>'
+      + '<div><i>1R BANK</i><b>' + fmtPx(q.bank1R) + '</b></div>'
+      + '<div><i>T1</i><b>' + fmtPx(t1) + '</b></div>'
+      + '</div>';
+    /* BOTH exit designs, with the app's own measured banking line —
+       reused verbatim from the SHADOW bank note in hg-forward.js. */
+    h += '<div class="hg-mp-note">EXIT A — bank half at +1R (' + fmtPx(q.bank1R)
+      + '), stop to breakeven (' + fmtPx(entry) + '), rest runs to T1 (' + fmtPx(t1) + '). '
+      + 'EXIT B — full position to T1 (' + fmtPx(t1) + '), no partial.'
+      + '<div class="dim" style="font-size:11px;margin-top:2px">in-sample, 48% of stopped gold scalps had first reached +1R</div></div>';
+    h += hgOgReplayLineHtml(q.kind);
+    var cohKey = (q.horizon === 'SWING') ? 'ENGINE:SWING' : 'ENGINE:SCALP';
+    var coh = hgOgReplayEvidence(cohKey);
+    if (coh && isFinite(fin(coh.avgNetR))){
+      h += '<div class="dim og-replay-line" style="font-size:11px;margin-top:2px">cohort '
+        + esc(cohKey) + ': ' + (coh.winRate * 100).toFixed(0) + '% WR, '
+        + (coh.avgNetR >= 0 ? '+' : '') + coh.avgNetR.toFixed(2)
+        + 'R net (n=' + coh.n + ') — settled replay, not a promise</div>';
+    }
+    var chip = hgOgApexCostChipHtml(hgOgCostDrag(pick));
+    if (chip) h += '<div style="margin-top:2px">' + chip + '</div>';
+    h += '<div class="dim" style="font-size:11px;margin-top:2px">tape-aligned: pick '
+      + esc(String(q.dir).toUpperCase()) + ' · gold tape ' + esc(hgOgTapeLabel(String(tapeDir || '').toLowerCase())) + '</div>';
+    if (isFinite(fin(q.confluence)))
+      h += '<div class="dim" style="font-size:11px;margin-top:2px">confluence '
+        + fin(q.confluence).toFixed(0) + '/100 via engine-grade path'
+        + (q.grade === 'A' ? ' (grade A clears the floor by selection)' : ' (floor 70)') + '</div>';
+    h += '</div>';
+    return h;
+  }
+
+  /* The APEX panel. tapeDir optional — falls back to the tab's own last
+     desk-tape read (__og.tape.desk); no tape = honest empty state. */
+  function hgOgApexPanelHtml(bridge, tapeDir){
+    var tape = String(tapeDir || '').toLowerCase();
+    if (tape !== 'long' && tape !== 'short'){
+      try { tape = String((__og.tape && __og.tape.desk) || '').toLowerCase(); } catch (eTp){ tape = ''; }
+    }
+    var h = '<section class="hg-mp og-apex-gold" data-og-apex="1" aria-label="APEX gold grade-gated setups">';
+    h += '<div class="hg-mp-eye">APEX GOLD — GRADE-GATED SETUPS</div>';
+    h += '<div class="hg-mp-head">XAUUSD <span>grade-A/B engine pick · tape-aligned · swing geometry (non-fatal costs) or ok-tier scalp · replay-measured stats only, not a win probability</span></div>';
+    var cards = '', near = '';
+    if (bridge && bridge.ok && (tape === 'long' || tape === 'short')){
+      /* Swing first — the only near-breakeven cohort leads the tier. */
+      var hzs = [HORIZONS.swing.label, HORIZONS.scalp.label], i, pick, q;
+      for (i = 0; i < hzs.length; i++){
+        pick = null;
+        try {
+          pick = hgOgPickGoldEngineFor(bridge, hzs[i], tape,
+            { allowC: false, allowAgainstTape: false });
+        } catch (ePk){ pick = null; }
+        if (!pick) continue;
+        q = hgOgApexQualify(pick, hzs[i], tape);
+        if (!q) continue;
+        if (q.nearMiss) near += hgOgApexCardHtml(q, pick, tape);
+        else cards += hgOgApexCardHtml(q, pick, tape);
+      }
+    }
+    h += cards + near;
+    if (!cards){
+      h += '<div class="hg-mp-note">no grade-A/B tape-aligned pick clears the APEX bar right now — the bar existing is the point.'
+        + ((tape === 'long' || tape === 'short') ? ''
+           : ' Gold tape reads UNREAD/MIXED — an unread tape is a stand-aside, not a coin flip.')
+        + '</div>';
+    }
+    h += '</section>';
+    return h;
+  }
+  /* ================= end APEX GOLD ========================================= */
+
+  function hgOgGoldEnginesPanelHtml(bridge, tapeDir){
     bridge = bridge || {};
+    /* APEX GOLD mounts at the head of the engines panel (ADDITIVE) —
+       fail closed to plain engines panel if the apex block ever throws. */
+    var apex = '';
+    try { apex = hgOgApexPanelHtml(bridge, tapeDir); } catch (eApexPanel){ apex = ''; }
     var h = '<section class="hg-mp og-gold-engines" data-og-gold-engines="1" aria-label="Gold tab engines">';
     h += '<div class="hg-mp-eye">GOLD SCALP / SWING ENGINES</div>';
     h += '<div class="hg-mp-head">XAUUSD <span>same multi-strategy catalog as GOLD SCALP + GOLD SWING tabs</span></div>';
     if (!bridge.ok){
       h += '<div class="hg-mp-note warn">' + esc(bridge.why || 'goldind.js / goldswing.js not loaded') + '</div></section>';
-      return h;
+      return apex + h;
     }
     h += '<div class="hg-mp-note">Liquidity sweep, OB retest, FVG fill, session VWAP, EMA ribbon, Asian breakout, RSI divergence, swing structure — ranked with goldRankSetups + hgApplyGoldBestLevels when loaded. '
       + 'Grades: ' + hgOgGradeLegendHtml()
@@ -6445,7 +6657,7 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!swRanked.length) h += '<div class="dim" style="margin-left:12px">no swing strategy triggered on this bar</div>';
     else h += hgOgEngineGradeBannerHtml(swRanked);
     h += '</section>';
-    return h;
+    return apex + h;
   }
 
   function hgOgRunGoldTabEngines(shared, scalpRows, swingRows){
@@ -6508,10 +6720,12 @@ terse status, and never launches a first-time scan on a global refresh.
     });
   }
 
-  function hgOgPaintGoldEngines(ui, bridge){
+  function hgOgPaintGoldEngines(ui, bridge, tapeDir){
+    /* tapeDir is ADDITIVE optional — omitted, the APEX head block falls
+       back to the tab's stored desk-tape read; nothing else changes. */
     var host = ui && ui.goldEngines;
     if (!host) return;
-    try { host.innerHTML = hgOgGoldEnginesPanelHtml(bridge); }
+    try { host.innerHTML = hgOgGoldEnginesPanelHtml(bridge, tapeDir); }
     catch (eGe){ host.innerHTML = ''; }
   }
 
@@ -6537,7 +6751,7 @@ terse status, and never launches a first-time scan on a global refresh.
       : hgOgRunGoldTabEngines(shared, res.scalp.rows, res.swing.rows);
     return bridgeP.then(function(bridge){
       __og.bridge = bridge;
-      hgOgPaintGoldEngines(ui, bridge);
+      hgOgPaintGoldEngines(ui, bridge, deskTape);
       hgOgPaintScalpVerdict(ui, hgOgPickScalpVerdict(ogCollapsed || [], bridge, deskTape));
     });
   }
@@ -8452,6 +8666,10 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgConfluenceFitNoteHtml = hgOgConfluenceFitNoteHtml;
     window.hgOgConfluenceFitPwin = hgOgConfluenceFitPwin;
     window.hgOgConfluenceFitPwinHtml = hgOgConfluenceFitPwinHtml;
+    /* APEX GOLD (ADDITIVE) — grade-gated, tape-aligned, cost-tiered tier
+       built ONLY from measured replay evidence; see hgOgApexQualify. */
+    window.hgOgApexQualify = hgOgApexQualify;
+    window.hgOgApexPanelHtml = hgOgApexPanelHtml;
     /* hgOgReport() — the desk record, on demand, from the console.
 
        The forward log lives in localStorage, so it can only be read in the
