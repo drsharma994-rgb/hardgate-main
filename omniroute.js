@@ -8275,6 +8275,24 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         try { ui.x20.innerHTML = __omni.last20xHtml; } catch (eX20) {}
       }
     }
+    /* Before the first scan the 20X container used to sit empty and the
+       section was undiscoverable. Render a visible placeholder: header +
+       the permanent risk banner + how it fills. Never overwrites a
+       restored scan render. */
+    if (ui.x20 && !ui.x20.innerHTML){
+      try {
+        ui.x20.innerHTML =
+          '<section data-omni-20x="1">'
+          + '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS</div>'
+          + '<div class="note warn" style="display:block">20x is unforgiving: a ~4.6% adverse move liquidates '
+          + 'the full isolated margin. This section fills when a scan runs — press RUN FULL SCAN above. '
+          + 'Only setups whose geometry survives 20x pass its gates (stop 2.5x inside liquidation, ATR-noise '
+          + 'check, cost gate, conviction/solidity floor); most scans yield few or none, which is the gates '
+          + 'working, not a malfunction. Signals only — this desk does not execute.</div>'
+          + '<div class="empty">no scan yet — the 20x gates run on scan results.</div>'
+          + '</section>';
+      } catch (eX20p) {}
+    }
     omniRefreshSide(ui);
 
     /* The parameter grid runs on bars the scan already fetched, so it costs

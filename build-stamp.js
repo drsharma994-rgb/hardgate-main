@@ -18,9 +18,9 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v528',
-  pack: '20X — leverage-safe setups section in OMNIROUTE',
-  built: '2026-08-30T09:30:00Z',
+  version: 'hg-v529',
+  pack: '20X section visible before first scan',
+  built: '2026-08-30T10:30:00Z',
   note: 'New 20X section after MOST PROBABLE: shows only setups whose geometry is safe at 20x isolated leverage. Gates (all fail-closed): non-vetoed ticket, stop 2.5x inside the ~4.6% liquidation distance, 3x 1h-ATR noise inside liq distance, cost tier ok, conviction certificate or solidity >= 105. Every card prints est. liq price, stop-to-liq buffer, margin loss at stop, and cost drag; a standing banner says geometry safety is not a prediction. Audit caught and fixed a wrong-side-stop fail-open before ship.'
 };
 
