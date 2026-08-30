@@ -9,8 +9,37 @@
    Run:  node scripts/backtest-omniroute.mjs --smoke     (2 symbols x 500 bars)
          node scripts/backtest-omniroute.mjs             (top 25 x 2000 bars)
          flags: --top=N --bars=N --offline
-   Out:  scripts/backtest-omniroute-results.json + console table.
+   Out:  scripts/backtest-omniroute-v531-results.json + console table.
+         (backtest-omniroute-results.json is the committed pre-v531 evidence
+         and is NEVER rewritten by this script.)
    Cache: scripts/.bt-cache/*.json — re-runs are fully offline.
+
+   v531 EXTENSION (hg-v531 roster + cohort tags — measurement only, no rule
+   of the audited replay model was touched):
+   - The six conviction mechanics (HTF-PULLBACK, DONCHIAN-DRIVE, AVWAP-DEFEND,
+     COMPRESSION-BREAK, SWEEP-RECLAIM, EXHAUST-REVERT) need no harness wiring:
+     detection goes through the module's own hgOmniDetect (omniroute.js:1426-
+     1437 runs them), and pricing goes through the module's own
+     hgOmniPlanForHit, whose conviction branch (omniroute.js:2054-2071) fires
+     whenever hit.conviction.costGate === 'passed' and uses the certified
+     stopHint geometry via hgPlanFromRisk (2R t1). The harness asserts
+     hgPlanFromRisk exists in the sandbox so that branch can never silently
+     fall through to a rebuilt geometry.
+   - Per-trade cohort tags, all computed from the prefix at signal time
+     (zero lookahead):
+       hasConviction — hit carries the formation cert with costGate 'passed';
+       cluster       — >= 2 DISTINCT mechanic kinds fired on the same
+                       symbol+direction at the SAME bar with entries within
+                       0.25*ATR14 of each other (same-bar detection output
+                       only — mirrors the app's identical-levels collapse);
+       withTrend     — 1h prefix EMA21 >= EMA50 AND daily EMA10 >= EMA21
+                       (cached daily bars cut to <= signal time) BOTH agreeing
+                       with the trade direction; unknown/absent HTF = false;
+       stopBand20x   — plan stopDistPct in [1.12, 1.84] AND costR <= 0.125 at
+                       the module's 0.14% round-trip default (the 20X safe
+                       band with cost tier 'ok').
+   - New aggregates: full per-mechanic table for ALL kinds (the six new ones
+     always listed, n=0 if they never traded) and the four cohort splits.
 
    ASSUMPTIONS / DEVIATIONS FROM THE LIVE APP (each also listed in the output
    JSON under `deviations`):
@@ -78,7 +107,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE_DIR = path.join(root, 'scripts', '.bt-cache');
-const OUT_PATH = path.join(root, 'scripts', 'backtest-omniroute-results.json');
+/* v531: NEW output file. scripts/backtest-omniroute-results.json is committed
+   pre-v531 evidence and must never be overwritten. */
+const OUT_PATH = path.join(root, 'scripts', 'backtest-omniroute-v531-results.json');
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes('--' + name);
@@ -101,6 +132,16 @@ const SLIP_SIDE = 0.0002;         // slippage 0.02% per side
 const COST_SIDE = FEE_SIDE + SLIP_SIDE;
 const DAILY_FAST = 10, DAILY_SLOW = 21;   // omniroute.js:167-168
 const HTF_DAILY_BARS = 35;        // closed daily bars fed to the htf EMAs
+
+/* ---- v531 roster / cohort constants ---- */
+const ROSTER_VERSION = 'hg-v531';
+const CV_KINDS = ['HTF-PULLBACK','DONCHIAN-DRIVE','AVWAP-DEFEND',
+                  'COMPRESSION-BREAK','SWEEP-RECLAIM','EXHAUST-REVERT'];
+const RT_COST_PCT = 0.14;         // HG_OMNI_RT_COST_PCT default (omniroute.js:4163)
+const COST_OK_R = 0.125;          // 'ok' cost-tier ceiling (OMNI_CV_COST_OK_R, omniroute.js:554)
+const BAND20X_LO = 1.12, BAND20X_HI = 1.84;   // 20X safe band, stopDistPct
+const CLUSTER_ATR = 0.25;         // cluster tag: entries within 0.25*ATR14 (same bar)
+const H1_FAST = 21, H1_SLOW = 50; // withTrend tag: 1h prefix EMAs
 
 const FAPI = 'https://fapi.binance.com';
 const CHUNK = 4, SLEEP_MS = 350;  // polite pacing, scalp-audit style
@@ -135,7 +176,11 @@ function boot(){
 }
 const W = boot();
 for (const fn of ['hgOmniDetect','hgOmniPlanForHit','hgOmniDerivePlan','hgOmniSolidityScore',
-                  'hgOmniBtcRegime','hgOmniDropForming','hgOmniIsReversion']){
+                  'hgOmniBtcRegime','hgOmniDropForming','hgOmniIsReversion',
+                  /* v531: hgPlanFromRisk (plans.js:973) must exist or the
+                     conviction branch of hgOmniPlanForHit (omniroute.js:2054)
+                     silently falls through to a rebuilt geometry. */
+                  'hgPlanFromRisk']){
   if (typeof W[fn] !== 'function') { console.error('sandbox missing ' + fn); process.exit(1); }
 }
 
@@ -145,6 +190,18 @@ function emaOf(vals, n){
   let k = 2 / (n + 1), e = vals[0];
   for (let i = 1; i < vals.length; i++) e = vals[i] * k + e * (1 - k);
   return e;
+}
+
+/* atrOf, verbatim semantics from omniroute.js:217 (mean TR of last n bars). */
+function atrOf(rows, n){
+  if (!rows || rows.length < n + 1) return NaN;
+  let sum = 0, cnt = 0;
+  for (let i = rows.length - n; i < rows.length; i++){
+    const h = +rows[i].h, l = +rows[i].l, pc = +rows[i - 1].c;
+    if (!isFinite(h) || !isFinite(l) || !isFinite(pc)) continue;
+    sum += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)); cnt++;
+  }
+  return cnt ? sum / cnt : NaN;
 }
 
 /* ============================= data layer ============================= */
@@ -226,11 +283,38 @@ async function fetchFunding(sym){
    no volume in that opening week (not yet listed) drop out. Residual
    survivorship: perps delisted before the fetch date are invisible. */
 const UNIVERSE_RANK_DAYS = 7;
+let universeCacheNote = null;   // v531: set when an adjacent-day cached universe is reused
 async function fetchUniverse(n){
   const windowStartMs = RealDate.now() - BARS_1H * 3600 * 1000;
   const key = 'universe-pit-' + new RealDate(windowStartMs).toISOString().slice(0, 10);
   const cached = cacheRead(key);
   if (cached && cached.syms && cached.syms.length >= n) return cached.syms.slice(0, n);
+  /* v531 cache-reuse: the key embeds the window-start DATE, so a run one day
+     after the cache was built misses on the exact key even though the ranking
+     window is 96%+ identical. Reuse the nearest cached point-in-time universe
+     whose windowStart is within 3 days — still point-in-time (ranked over the
+     first 7 days of ITS OWN window, never by end-of-window volume) — and say
+     so in meta. This avoids re-ranking ~500 perps per run; it never touches
+     the replay itself. */
+  try {
+    const cand = fs.readdirSync(CACHE_DIR)
+      .filter(f => /^universe-pit-\d{4}-\d{2}-\d{2}\.json$/.test(f))
+      .map(f => {
+        const c = cacheRead(f.replace(/\.json$/, ''));
+        const ws = c && c.windowStart ? RealDate.parse(c.windowStart) : NaN;
+        return { name: f, c, dMs: Math.abs(ws - windowStartMs) };
+      })
+      .filter(x => x.c && x.c.syms && x.c.syms.length >= n && isFinite(x.dMs) && x.dMs <= 3 * 86400000)
+      .sort((a, b) => a.dMs - b.dMs);
+    if (cand.length){
+      universeCacheNote = 'universe reused from cache ' + cand[0].name + ' (windowStart ' +
+        cand[0].c.windowStart + ', ' + (cand[0].dMs / 86400000).toFixed(2) +
+        ' days from this run\'s nominal window start; still point-in-time ranked over the first ' +
+        UNIVERSE_RANK_DAYS + ' days of its own window)';
+      console.log('universe: ' + universeCacheNote);
+      return cand[0].c.syms.slice(0, n);
+    }
+  } catch (e) { /* fall through to fetch */ }
   if (OFFLINE) throw new Error('offline: no point-in-time universe cache ' + key);
   const tickers = await j(FAPI + '/fapi/v1/ticker/24hr');
   const candidates = tickers
@@ -297,8 +381,18 @@ function fundingAt(recs, tSec){            // deviation 9: last record <= tSec
 
 const STAT_KEY = k => (k === 'UTAD' ? 'SPRING' : k);   // app rule (omniroute.js:4629)
 
+/* v531: conviction hits trade in a PARALLEL dedup lane (cvlong/cvshort) —
+   one open conviction trade per symbol+direction, independent of the legacy
+   lane. Without it the six deliberately-rare mechanics are crowded out: in
+   the smoke run 95% of signals were skipsOpen because commodity mechanics
+   (MMOVE/ORB fire on a third of bars) always occupied the single slot, and
+   the conviction cohort measured n=0 by construction. The fill/exit/fee
+   model is byte-identical in both lanes; only the slot allocation differs.
+   The pre-v531 evidence file was produced WITHOUT this lane — compare
+   legacy-cohort numbers, not overall, across the two files. */
 function replaySymbol(sym, rows, daily, btcDaily, funding, counters){
-  const trades = [], open = { long: null, short: null };
+  const trades = [], open = { long: null, short: null, cvlong: null, cvshort: null };
+  const LANES = ['long', 'short', 'cvlong', 'cvshort'];
   const statTally = {};   // statKey -> {wins, losses} — walk-forward record (deviation 4)
 
   const statsFor = (kind) => {
@@ -326,7 +420,7 @@ function replaySymbol(sym, rows, daily, btcDaily, funding, counters){
     if (outcome === 'target') statTally[key].wins++;
     else if (outcome === 'stop') statTally[key].losses++;   // timeouts settle neither, like 'open' in the app
     trades.push(tr);
-    open[tr.dir] = null;
+    open[tr.lane] = null;
   };
 
   /* First-touch exit check for bar i. A bar spanning BOTH stop and t1 is a
@@ -357,15 +451,15 @@ function replaySymbol(sym, rows, daily, btcDaily, funding, counters){
     const bar = rows[i];
 
     /* 1) advance any pending/open trades with this bar */
-    for (const dir of ['long', 'short']){
-      const tr = open[dir];
+    for (const lane of LANES){
+      const tr = open[lane];
       if (!tr) continue;
       if (tr.state === 'pending'){
         if (bar.l <= tr.entry && tr.entry <= bar.h){
           tr.state = 'open'; tr.fillIdx = i; tr.barsToFill = i - tr.signalIdx;
           checkExit(tr, bar, i, true);     // fill bar: stop counts; t1 only if open was through entry
         } else if (i - tr.signalIdx >= FILL_WINDOW){
-          counters.expired++; open[dir] = null;   // never filled — not a trade
+          counters.expired++; open[lane] = null;   // never filled — not a trade
         }
       } else if (tr.state === 'open'){
         if (!checkExit(tr, bar, i, false) && i - tr.fillIdx >= TIMEOUT_BARS){
@@ -384,10 +478,48 @@ function replaySymbol(sym, rows, daily, btcDaily, funding, counters){
     if (!hits.length) continue;
     counters.signals += hits.length;
 
+    /* ---- v531 same-bar tag inputs (prefix-only, zero lookahead) ---- */
+    /* detection tally per kind — proves the six are wired even when dedup or
+       plan rejection keeps a kind out of the trade list */
+    for (const h of hits){
+      if (!h || !h.kind) continue;
+      counters.detectedByKind[h.kind] = (counters.detectedByKind[h.kind] || 0) + 1;
+      if (h.conviction && h.conviction.costGate === 'passed') counters.convictionSignals++;
+    }
+    /* cluster: >= 2 DISTINCT kinds, same direction, entries within
+       0.25*ATR14 of each other, from THIS bar's full detection output —
+       mirrors the app's identical-levels collapse, same-bar info only. */
+    const atr14 = atrOf(prefix, 14);
+    const entryOfHit = h => {
+      const lvl = +h.level;
+      return (isFinite(lvl) && lvl > 0) ? lvl : bar.c;   // same choice hgOmniPlanForHit makes with livePx
+    };
+    const clusterOf = (hit) => {
+      if (!isFinite(atr14) || !(atr14 > 0)) return { cluster: false, kinds: [] };
+      const e0 = entryOfHit(hit), kinds = [];
+      for (const other of hits){
+        if (!other || other === hit || other.kind === hit.kind || other.dir !== hit.dir) continue;
+        if (Math.abs(entryOfHit(other) - e0) <= CLUSTER_ATR * atr14) kinds.push(other.kind);
+      }
+      return { cluster: kinds.length > 0, kinds };
+    };
+    /* withTrend inputs: 1h prefix EMA21/EMA50 (window sizing mirrors htfAt:
+       fast over 2*n closes, slow over 2*n closes) */
+    const h1Closes = prefix.map(r => r.c).filter(isFinite);
+    const h1Fast = emaOf(h1Closes.slice(-(H1_FAST * 2)), H1_FAST);
+    const h1Slow = emaOf(h1Closes.slice(-(H1_SLOW * 2)), H1_SLOW);
+    const h1Up = (isFinite(h1Fast) && isFinite(h1Slow)) ? (h1Fast >= h1Slow) : null;
+
     const tSec = bar.t + TF_SEC;           // signal bar CLOSE time
     for (const hit of hits){
       if (!hit || (hit.dir !== 'long' && hit.dir !== 'short')) continue;
-      if (open[hit.dir]){ counters.skipsOpen++; continue; }   // deviation 3 (dedup)
+      /* v531: formation cert decides the dedup lane — conviction hits have
+         their own slot per direction so commodity mechanics cannot crowd
+         out the rare roster (see the note above replaySymbol). */
+      const cert = (hit.conviction && typeof hit.conviction === 'object' &&
+                    hit.conviction.costGate === 'passed') ? hit.conviction : null;
+      const lane = (cert ? 'cv' : '') + hit.dir;
+      if (open[lane]){ counters.skipsOpen++; continue; }   // deviation 3 (dedup, per lane)
 
       /* plan the printed trade with the module's own planner */
       let plan = null;
@@ -422,22 +554,43 @@ function replaySymbol(sym, rows, daily, btcDaily, funding, counters){
       const pillars = {};
       for (const k in (sol.breakdown || {})) pillars[k] = sol.breakdown[k].score;
 
-      open[hit.dir] = {
-        state: 'pending', signalIdx: i,
+      /* ---- v531 cohort tags (all from the prefix at signal time) ---- */
+      const hasConviction = !!cert;
+      const cl = clusterOf(hit);
+      const dailyUp = (htf && isFinite(htf.e21) && isFinite(htf.e50)) ? (htf.e21 >= htf.e50) : null;
+      const withTrend = (h1Up === null || dailyUp === null) ? false
+        : (hit.dir === 'long' ? (h1Up === true && dailyUp === true)
+                              : (h1Up === false && dailyUp === false));
+      const stopDistPct = Math.abs(+plan.entry - +plan.stop) / Math.abs(+plan.entry) * 100;
+      const costRForm = RT_COST_PCT / stopDistPct;   // formation-cost arithmetic, omniroute.js:4220-4230
+      const stopBand20x = stopDistPct >= BAND20X_LO && stopDistPct <= BAND20X_HI && costRForm <= COST_OK_R;
+
+      open[lane] = {
+        state: 'pending', signalIdx: i, lane,
         sym, tISO: new RealDate(tSec * 1000).toISOString(),
         dir: hit.dir, mechanic: hit.kind,
         entry: +plan.entry, stop: +plan.stop, t1: +plan.t1,
         rr1: round4(+plan.rr1),
         solidity: sol.score, tier: sol.tier, pillarBreakdown: pillars,
+        /* v531 tags */
+        hasConviction,
+        conviction: cert ? { count: cert.count, classes: cert.classes,
+                             costR: round4(cert.costR), stopDistPct: round4(cert.stopDistPct),
+                             confirmations: cert.confirmations } : null,
+        planViaConvictionBranch: hasConviction && String(plan.targetPolicy || '').includes('conviction'),
+        cluster: cl.cluster, clusterKinds: cl.kinds,
+        withTrend, h1Up, dailyUp,
+        stopDistPct: round4(stopDistPct), costRAtDefaultRt: round4(costRForm), stopBand20x,
         fillIdx: -1, barsToFill: null
       };
       counters.opened++;
+      if (hasConviction) counters.convictionOpened++;
     }
   }
 
   /* trades still pending/open when the data ran out: not resolvable, not counted */
-  for (const dir of ['long', 'short']) if (open[dir]){
-    counters[open[dir].state === 'pending' ? 'expired' : 'unresolvedAtEnd']++;
+  for (const lane of LANES) if (open[lane]){
+    counters[open[lane].state === 'pending' ? 'expired' : 'unresolvedAtEnd']++;
   }
   return trades;
 }
@@ -492,7 +645,8 @@ console.log('universe: ' + syms.join(' '));
 const btcDaily = await fetchDaily('BTCUSDT');
 
 const counters = { signals: 0, opened: 0, skipsOpen: 0, planRejected: 0, scoreFailed: 0,
-                   expired: 0, unresolvedAtEnd: 0, ambiguousBars: 0, fillBarT1Deferred: 0 };
+                   expired: 0, unresolvedAtEnd: 0, ambiguousBars: 0, fillBarT1Deferred: 0,
+                   /* v531 */ convictionSignals: 0, convictionOpened: 0, detectedByKind: {} };
 const allTrades = [];
 const perSymBars = {};
 let dataEndSec = 0;   // latest bar close across all symbols → meta.generatedAt (bar data, not wall clock)
@@ -543,9 +697,23 @@ if (scores.length){
   for (const v of s){ const b = Math.floor(v / 10) * 10; const key = b + '-' + (b + 9); dist.histogram[key] = (dist.histogram[key] || 0) + 1; }
 }
 
-/* per-mechanic counts (context, not a claim) */
+/* v531: FULL per-mechanic aggregates for ALL kinds. The six conviction kinds
+   are always listed (n=0 when they never produced a resolved trade) so an
+   unwired or never-firing mechanic is visible, not silently absent. */
+const mechTrades = {};
+for (const t of allTrades) (mechTrades[t.mechanic] = mechTrades[t.mechanic] || []).push(t);
 const byMech = {};
-for (const t of allTrades){ const k = t.mechanic; (byMech[k] = byMech[k] || { n: 0, netR: 0 }); byMech[k].n++; byMech[k].netR = round4(byMech[k].netR + t.netR); }
+for (const k of [...new Set([...CV_KINDS, ...Object.keys(mechTrades)])].sort())
+  byMech[k] = aggregate(mechTrades[k] || []);
+
+/* v531: the four cohort splits */
+const split = (pred) => ({ yes: aggregate(allTrades.filter(pred)), no: aggregate(allTrades.filter(t => !pred(t))) });
+const cohorts = {
+  conviction:  (s => ({ conviction: s.yes, legacy: s.no }))(split(t => t.hasConviction)),
+  cluster:     (s => ({ clustered: s.yes, solo: s.no }))(split(t => t.cluster)),
+  withTrend:   (s => ({ withTrend: s.yes, againstOrUnknown: s.no }))(split(t => t.withTrend)),
+  stopBand20x: (s => ({ inBand: s.yes, outside: s.no }))(split(t => t.stopBand20x))
+};
 
 const result = {
   wallClockRunAt: new RealDate().toISOString(),   // when the script ran; canonical timestamp is meta.generatedAt (bar data)
@@ -566,11 +734,24 @@ const result = {
     'fees ' + (COST_SIDE * 100).toFixed(2) + '% per side on entry+exit notional, in R',
     'account omitted (riskAdjusted default 10000)',
     'universe = top-' + TOP_N + ' USDT perps ranked by summed quoteVolume over the FIRST ' + UNIVERSE_RANK_DAYS + ' days of the lookback window (point-in-time; replaces end-of-window 24h-volume ranking and its attention bias; residual survivorship: perps delisted before fetch date are invisible)',
-    'newsCalendar pillar constant (no historical calendar source offline): news blackouts are not modeled and live FOMC/CPI score caps never fire in the replay'
-  ],
+    'newsCalendar pillar constant (no historical calendar source offline): news blackouts are not modeled and live FOMC/CPI score caps never fire in the replay',
+    /* ---- v531 additions ---- */
+    'v531: cohort tags are HARNESS definitions, prefix-only at signal time: cluster = >=2 distinct kinds, same symbol+direction, same bar, entries within ' + CLUSTER_ATR + 'xATR14 (mirrors the app\'s identical-levels collapse but is computed here, not by app code); withTrend = 1h EMA' + H1_FAST + '>=EMA' + H1_SLOW + ' (fast over ' + (H1_FAST * 2) + ' closes, slow over ' + (H1_SLOW * 2) + ') AND daily EMA' + DAILY_FAST + '>=EMA' + DAILY_SLOW + ' both agreeing with direction, unknown=false; stopBand20x = plan stopDistPct in [' + BAND20X_LO + ', ' + BAND20X_HI + '] AND costR<=' + COST_OK_R + ' at the module default ' + RT_COST_PCT + '% round trip (window.HG_OMNI_RT_COST_PCT overrides are not modeled)',
+    'v531: dedup (one open trade per symbol+direction) means a clustered bar contributes ONE trade tagged cluster=true; the co-firing kinds are recorded in clusterKinds, they are not separately traded',
+    'v531: conviction mechanics fire inside the module\'s own hgOmniDetect and price through hgOmniPlanForHit\'s conviction branch (certified stopHint geometry via hgPlanFromRisk, 2R t1) — no harness-side reimplementation',
+    'v531: conviction hits trade in a PARALLEL dedup lane (one open conviction trade per symbol+direction, independent of the legacy lane; fill/exit/fee model byte-identical). Without it the rare roster measured n=0 by construction — 95% of all signals are skipsOpen and commodity mechanics always held the single slot. The pre-v531 evidence file has no such lane: compare its numbers against this file\'s LEGACY cohort, not against overall.'
+  ].concat(universeCacheNote ? ['v531 cache reuse: ' + universeCacheNote] : []),
   meta: {
+    rosterVersion: ROSTER_VERSION,
     generatedAt: new RealDate(dataEndSec * 1000).toISOString(),  // from bar data: latest bar close across the universe
     universe: syms,
+    universeCacheNote: universeCacheNote || null,
+    cohortTagDefinitions: {
+      hasConviction: 'hit carries conviction cert with costGate=passed (emitted only by the six v531 mechanics at formation)',
+      cluster: '>=2 distinct mechanic kinds on the same symbol+direction at the same bar, entries within ' + CLUSTER_ATR + 'xATR14 of each other (same-bar detection output only)',
+      withTrend: '1h prefix EMA' + H1_FAST + '>=EMA' + H1_SLOW + ' AND daily (cached bars cut to <= signal time) EMA' + DAILY_FAST + '>=EMA' + DAILY_SLOW + ', both agreeing with trade direction; unknown/absent = false',
+      stopBand20x: 'plan stopDistPct in [' + BAND20X_LO + ', ' + BAND20X_HI + '] AND costR = ' + RT_COST_PCT + '/stopDistPct <= ' + COST_OK_R
+    },
     universeSelection: 'point-in-time: all USDT perps listed today, ranked by summed quoteVolume over the first ' +
                        UNIVERSE_RANK_DAYS + ' days of the ' + BARS_1H + 'x1h lookback window (NOT today\'s 24h volume)',
     barCount: { perSymbolRequested: BARS_1H, perSymbol: perSymBars,
@@ -582,12 +763,18 @@ const result = {
       'newsCalendar constant at max: historical news blackouts are not modeled; live FOMC/CPI score caps never fire in the replay.',
       'Touch-based fills throughout: limit entry and t1 fill on a bare touch of the level (no trade-through/queue requirement); stops exit exactly at the stop price with only the flat ' + (SLIP_SIDE * 100).toFixed(2) + '% slippage (no gap-through-stop modeling). Mildly optimistic on both sides; small on liquid 1h perps but nonzero.',
       'STATISTICAL POWER: per-tier and per-quartile buckets can be small; at n~15 a difference of ~0.3R/trade is inside one standard error. Treat bucket deltas as directional evidence, not statistically significant results.',
-      'Residual universe survivorship: the point-in-time ranking can only see perps still listed on the fetch date; symbols delisted during the window are absent.'
+      'Residual universe survivorship: the point-in-time ranking can only see perps still listed on the fetch date; symbols delisted during the window are absent.',
+      /* ---- v531 additions ---- */
+      'v531 KLINE WINDOW AS-CACHED: the fetch layer has no incremental extension (cache is used whenever it holds >= the requested bars), so a re-run on a warm cache measures the window ending at the cache fetch date, not the run date. The measured window end is meta.generatedAt (latest cached bar close), which may lag wallClockRunAt.',
+      'v531 COHORT POWER: conviction / cluster / in-band cohorts are far smaller than their complements by construction (the six mechanics are deliberately rare); at small n a cohort delta of several tenths of an R is inside one standard error. Directional evidence only.',
+      'v531 CLUSTER UNDER DEDUP: because one trade per symbol+direction may be open, a cluster is measured as the FIRST tradeable hit of the co-firing group; which kind that is depends on hgOmniDetect\'s emission order, not on any quality ranking.',
+      'v531 stopBand20x uses the module\'s DEFAULT ' + RT_COST_PCT + '% round-trip cost: venues that override window.HG_OMNI_RT_COST_PCT live would shift costR and the band verdict; the cert\'s own costR (carried per trade) is authoritative for conviction hits.'
     ]
   },
   counters,
   scoreDistribution: dist,
-  aggregates: { overall, byTier: tierAgg, byQuartile: quartAgg, quartileCuts: cuts, byMechanic: byMech },
+  aggregates: { overall, byTier: tierAgg, byQuartile: quartAgg, quartileCuts: cuts,
+                byMechanic: byMech, cohorts },
   trades: allTrades.map(({ state, signalIdx, fillIdx, ...t }) => t)
 };
 fs.writeFileSync(OUT_PATH, JSON.stringify(result, null, 1));
@@ -599,9 +786,29 @@ const printAgg = (name, a) => console.log(row([name, a.n, fmt(a.winRate), fmt(a.
 printAgg('OVERALL', overall);
 for (const k of ['weak','fair','solid','extremely_solid']) if (tierAgg[k]) printAgg('tier:' + k, tierAgg[k]);
 for (const k of ['Q1','Q2','Q3','Q4']) if (quartAgg[k]) printAgg('quart:' + k, quartAgg[k]);
+
+/* v531 cohort splits */
+console.log('\n-- v531 cohorts (' + ROSTER_VERSION + ') --');
+for (const [group, sides] of Object.entries(cohorts))
+  for (const [name, a] of Object.entries(sides))
+    if (a.n) printAgg(group + ':' + name, a); else console.log(row([group + ':' + name, 0, '—','—','—','—','—','—'], widths));
+
+/* v531 full per-mechanic table (all kinds; the six conviction kinds always shown) */
+console.log('\n-- per mechanic --');
+for (const [k, a] of Object.entries(byMech)){
+  const mark = CV_KINDS.includes(k) ? '*' : ' ';
+  if (a.n) printAgg(mark + k, a);
+  else console.log(row([mark + k, 0, '—','—','—','—','—','—'], widths));
+}
+console.log('(* = v531 conviction mechanic)');
+
 console.log('\nsolidity: min ' + dist.min + ' · p25 ' + dist.p25 + ' · med ' + dist.median +
             ' · p75 ' + dist.p75 + ' · max ' + dist.max + ' · mean ' + dist.mean);
 console.log('histogram: ' + Object.entries(dist.histogram || {}).map(([k, v]) => k + ':' + v).join(' '));
-console.log('counters: ' + JSON.stringify(counters));
-console.log('mechanics: ' + Object.entries(byMech).map(([k, v]) => k + ' n=' + v.n + ' netR=' + fmt(v.netR)).join(' · '));
+const { detectedByKind, ...flatCounters } = counters;
+console.log('counters: ' + JSON.stringify(flatCounters));
+console.log('detected by kind: ' + Object.entries(detectedByKind).sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => k + ':' + v).join(' '));
+console.log('conviction detections: ' + CV_KINDS.map(k => k + ':' + (detectedByKind[k] || 0)).join(' ') +
+            '  (signals=' + counters.convictionSignals + ', opened=' + counters.convictionOpened + ')');
 console.log('\nwrote ' + OUT_PATH + ' (' + allTrades.length + ' trades) in ' + ((RealDate.now() - t0) / 1000).toFixed(1) + 's');
