@@ -37,7 +37,10 @@ console.log('== the record site carries the CRYPTO stack, not gold\'s ==');
      'stack3 counts exactly regime, htf-confirm, stoch-rsi');
   ok(!/'regime-fit':1[^]{0,40}'hurst-regime':1/.test(OR),
      'and never gold\'s regime-fit / hurst-regime, which did not replicate on crypto');
-  const rec = OR.slice(OR.indexOf('fwdRows.push'), OR.indexOf('try { W.hgFwdRecordScan'));
+  /* the record is built as `var fwdRow = {...}` and pushed after the
+     optional solidity stamp rides on (hg-v533) — anchor on the build, so
+     the slice covers the fields the record actually carries */
+  const rec = OR.slice(OR.indexOf('var fwdRow = {'), OR.indexOf('try { W.hgFwdRecordScan'));
   ok(/stack3:/.test(rec), 'stack3 rides on the same forward record as entry/stop/t1');
   ok(/pass === true/.test(rec), 'only an explicit pass counts — UNCHECKED is not agreement');
 }
