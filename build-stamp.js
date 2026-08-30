@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v526',
-  pack: 'replay calibration — cost-drag gates, replay evidence, solidity on cards',
-  built: '2026-08-29T16:30:00Z',
-  note: 'Backtest-driven additions from 9,766 zero-lookahead replay trades: cost-drag chips (fees-vs-stop geometry, the #1 measured killer) on OMNIROUTE and OMNIGOLD setup cards, per-kind replay evidence lines on OMNIGOLD (honest win rates and net R), engine grade-A/B badges, and the 200-pt solidity score now rendering on OMNIROUTE cards. Refit verdicts were not-predictive OOS, so no fitted probabilities shipped — scores labeled informational.'
+  version: 'hg-v527',
+  pack: 'OMNIROUTE conviction mechanics — 6 formation-gated strategies',
+  built: '2026-08-30T06:00:00Z',
+  note: 'Six new research-backed OMNIROUTE mechanics (HTF-PULLBACK, DONCHIAN-DRIVE, AVWAP-DEFEND, COMPRESSION-BREAK, SWEEP-RECLAIM, EXHAUST-REVERT), each requiring 4 independent confirmations (structure/momentum/participation) on the closed bar plus a formation-time cost-gate veto (costR > 0.125 = setup never forms). Structure stops 1.2-2.5x ATR per replay evidence. Hits carry a conviction certificate rendered as a CONVICTION chip; measured-edge ledger tracks the new kinds automatically.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

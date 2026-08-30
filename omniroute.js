@@ -162,7 +162,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      disabled the gate on every card. */
   /* Which detector families trade AGAINST the prevailing trend. Used so the
      trend gates grade each setup against the right model. */
-  var REVERSION_KINDS = { SPRING:true, UTAD:true, VALUE:true, ABSORB:true };
+  var REVERSION_KINDS = { SPRING:true, UTAD:true, VALUE:true, ABSORB:true,
+                          /* conviction roster's two counter-trend slots — counter-trend
+                             is what these setups ARE, so the trend gate reads as context
+                             for them exactly as it does for SPRING/UTAD */
+                          'SWEEP-RECLAIM':true, 'EXHAUST-REVERT':true };
 
   var DAILY_FAST = 10;
   var DAILY_SLOW = 21;
@@ -506,6 +510,695 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     return null;
   }
 
+  /* ==================== CONVICTION ROSTER — six formation-time mechanics ====================
+
+     Designed against the 2,496-trade replay (scripts/backtest-omniroute-results.json):
+     26.3% WR / -0.24R net / PF 0.69 overall, and the per-mechanic ledger says the
+     only net-positive kinds were trend/participation/institutional-level ideas
+     (AVWAP-RECLAIM +25.8R/71, MMOVE +10.9R/188, NR7-BREAK +7.8R/150, CUSUM-SHIFT
+     +6.6R/77, VOL-EXPANSION +1.3R/22) while every naked reversion kind bled
+     (PIN-REJECT -118R/115, THREE-BAR -126.8R/161, UTAD -63.2R/135, RSI-DIVERGE
+     -36.1R/58). This roster therefore (a) tilts continuation-ward, (b) makes its
+     two counter-trend slots earn formation with structure-CONFIRMED triggers
+     instead of anticipation, and (c) bakes the cost gate into formation itself so
+     tight-stop geometry can never print.
+
+     SHARED CONTRACTS (all six):
+       - >= 3 independent confirmations on the CLOSED bar, at least one each of
+         structure / momentum / participation, carried verbatim on the hit as
+         hit.conviction plus a hit.stopHint. Extra fields on a hit are legal per
+         the detector contract (hg-mechanics.js:14-17 — only kind/dir/level/why
+         are read downstream), so this is additive and non-breaking. Because a
+         hit cannot exist with count < 3 or a failed cost gate, the label is
+         honest by construction — there is no post-hoc scoring path to it.
+       - Structure-based stop FIRST: 0.35*ATR beyond the defining structural
+         extreme (matches the reversion branch of hgOmniPlanForHit), then FLOORED
+         at 1.2*ATR from entry (widen to the floor when structure is nearer) and
+         CAPPED at 2.5*ATR (structure further away => the setup does not form —
+         that invalidation is a thesis for a different timeframe).
+       - Formation cost gate LAST (hgOmniFormCostGate — hgOmniCostDrag's own
+         arithmetic on raw entry/stop): costR > 0.125, the 'ok' tier ceiling, and
+         the setup DOES NOT FORM. At the default 0.14% round trip no conviction
+         mechanic can form with a stop closer than 1.12% of price (8x round-trip
+         cost). Combined with the 1.2*ATR floor, low-ATR majors only form in
+         expanded-volatility regimes — intended: that is exactly the cohort the
+         replay said nearly broke even.
+       - PURE over the rows prefix: no fetch, no DOM, no Date.now — higher-TF
+         context is aggregated from the rows already in hand — so
+         hgOmniBacktestOne's detectFn(rows.slice(0, i+1)) replays every one of
+         them with zero lookahead, and so will any future backtest. */
+
+  var OMNI_CV_STOP_BUF_ATR   = 0.35;  /* structure buffer — same 0.35*ATR the reversion branch uses */
+  var OMNI_CV_STOP_FLOOR_ATR = 1.2;   /* stop floor — the replay's #1 killer was tight-stop geometry */
+  var OMNI_CV_STOP_CAP_ATR   = 2.5;   /* invalidation further away = different timeframe, no form */
+  var OMNI_CV_COST_OK_R      = 0.125; /* hgOmniCostDrag's 'ok' tier ceiling — formation veto above it */
+
+  /* ---- shared pure helpers (conviction roster only) ---- */
+
+  /* EMA as a SERIES (same seeding as emaOf: first value seeds), because the
+     roster needs "rising over k bars" and "the zone at bar i", not just the
+     final value. */
+  function hgOmniCvEmaArr(vals, n){
+    if (!vals || vals.length < n || n <= 0) return null;
+    var k = 2 / (n + 1), out = [vals[0]], i;
+    for (i = 1; i < vals.length; i++) out.push(vals[i] * k + out[i - 1] * (1 - k));
+    return out;
+  }
+
+  /* Wilder RSI as a series. Entries before the seed window are NaN. */
+  function hgOmniCvRsiArr(closes, n){
+    if (!closes || closes.length < n + 2 || !(n > 0)) return null;
+    var out = [], i, ch, g = 0, l = 0;
+    for (i = 1; i <= n; i++){
+      ch = closes[i] - closes[i - 1];
+      if (!isFinite(ch)) return null;
+      if (ch > 0) g += ch; else l -= ch;
+    }
+    g /= n; l /= n;
+    for (i = 0; i < n; i++) out.push(NaN);
+    out.push(l === 0 ? 100 : (g === 0 ? 0 : 100 - 100 / (1 + g / l)));
+    for (i = n + 1; i < closes.length; i++){
+      ch = closes[i] - closes[i - 1];
+      if (!isFinite(ch)) ch = 0;
+      g = (g * (n - 1) + (ch > 0 ? ch : 0)) / n;
+      l = (l * (n - 1) + (ch < 0 ? -ch : 0)) / n;
+      out.push(l === 0 ? 100 : (g === 0 ? 0 : 100 - 100 / (1 + g / l)));
+    }
+    return out;
+  }
+
+  /* Mean volume over the n bars ENDING AT endIdx-1 — the bar under test is
+     EXCLUDED so a thrust cannot dilute its own baseline (same reason
+     hgOmniAbsorb slices the last bar off before meanVol). */
+  function hgOmniCvVolSma(rows, n, endIdx){
+    if (!rows || !(endIdx > 0)) return NaN;
+    var s = 0, c = 0, i, v;
+    for (i = Math.max(0, endIdx - n); i < endIdx; i++){
+      v = num(rows[i] && rows[i].v);
+      if (isFinite(v)){ s += v; c++; }
+    }
+    return (c >= Math.min(n, 10)) ? s / c : NaN;
+  }
+
+  /* CLOSED higher-TF context from the rows in hand: factor-4 buckets aligned
+     to floor(t / (4*barSec)). On a 1h feed this is exactly the spec'd agg4h
+     (UTC-aligned 14400s buckets); on this desk's own 4h scan it yields 16h
+     context — generalized on the line-160 precedent ("asking for a 50-period
+     daily EMA silently disabled the gate"): a helper hard-wired to 1h input
+     would make every roster mechanic silently dead on the 4h scan. A bucket
+     only counts when ALL FOUR bars are present, so the trailing (possibly
+     forming) bucket and any gap-holed bucket are DROPPED — no forming-bar
+     leak, no lookahead. Degenerate input => empty array. */
+  function hgOmniCvAggHtf(rows){
+    if (!rows || rows.length < 9) return [];
+    var i, a, b, deltas = [];
+    for (i = Math.max(1, rows.length - 12); i < rows.length; i++){
+      a = num(rows[i - 1] && rows[i - 1].t); b = num(rows[i] && rows[i].t);
+      if (isFinite(a) && isFinite(b) && b > a) deltas.push(b - a);
+    }
+    if (!deltas.length) return [];
+    deltas.sort(function(x, y){ return x - y; });
+    var barSec = deltas[Math.floor(deltas.length / 2)];
+    if (!(barSec > 0)) return [];
+    var per = barSec * 4, out = [], bucket = null, t, key, h, l, c, v;
+    for (i = 0; i < rows.length; i++){
+      t = num(rows[i] && rows[i].t);
+      if (!isFinite(t)) continue;
+      key = Math.floor(t / per) * per;
+      h = num(rows[i].h); l = num(rows[i].l); c = num(rows[i].c); v = num(rows[i].v);
+      if (!bucket || bucket.t !== key){
+        if (bucket && bucket.n === 4) out.push(bucket);
+        bucket = { t: key, o: num(rows[i].o), h: h, l: l, c: c,
+                   v: isFinite(v) ? v : 0, n: 1 };
+      } else {
+        if (isFinite(h) && h > bucket.h) bucket.h = h;
+        if (isFinite(l) && l < bucket.l) bucket.l = l;
+        if (isFinite(c)) bucket.c = c;
+        if (isFinite(v)) bucket.v += v;
+        bucket.n++;
+      }
+    }
+    if (bucket && bucket.n === 4) out.push(bucket);
+    return out;
+  }
+
+  /* Stop geometry contract 0.3: floor at 1.2*ATR (widen when structure is
+     nearer), cap at 2.5*ATR (return null — the setup does not form). */
+  function hgOmniCvClampStop(dir, entry, stop, atr){
+    entry = fin(entry); stop = fin(stop); atr = fin(atr);
+    if (!isFinite(entry) || !isFinite(stop) || !(atr > 0)) return null;
+    var dist = (dir === 'long') ? (entry - stop) : (stop - entry);
+    if (!(dist > 0)) return null;
+    if (dist > OMNI_CV_STOP_CAP_ATR * atr) return null;
+    if (dist < OMNI_CV_STOP_FLOOR_ATR * atr){
+      dist = OMNI_CV_STOP_FLOOR_ATR * atr;
+      stop = (dir === 'long') ? (entry - dist) : (entry + dist);
+    }
+    return stop;
+  }
+
+  /* The one hit shape all six emit. A hit NEVER exists with a failed gate,
+     so costGate is the literal string 'passed' by construction. */
+  function hgOmniCvHit(kind, dir, level, stop, why, confirmations, classes, gate){
+    return {
+      kind: kind, dir: dir, level: level, stopHint: stop, why: why,
+      conviction: {
+        confirmations: confirmations,
+        count: confirmations.length,
+        classes: classes,
+        costGate: 'passed',
+        costR: gate.costR,
+        stopDistPct: gate.stopDistPct
+      }
+    };
+  }
+
+  /* ---- 1. HTF-PULLBACK — trend-continuation --------------------------------
+     THESIS. In an established higher-TF trend, a shallow multi-bar pullback on
+     CONTRACTING volume that resumes with an expansion thrust monetizes trend
+     persistence: the pullback is inventory adjustment, not distribution.
+     LINEAGE: Donchian/Turtle trend persistence; moving-average pullback
+     systems; Grimes (The Art & Science of Technical Analysis) pullback
+     taxonomy; Wyckoff/Weis effort-vs-result for the volume signature.
+     CONFIRMATIONS: S1 HTF trend (aggregated EMA rising, price above it),
+     S2 defined 3-12 bar pullback holding the EMA20-EMA50 zone, M1 resumption
+     thrust with RSI held, P1 dry pullback / wet thrust. count=4, S:2 M:1 P:1.
+     FIRE RATE: the 3-12 bar geometry plus the dual volume condition is rare —
+     est. 0.3-0.5 signals/symbol/week. Nearest kin TREND-RECLAIM fires on a
+     single-bar EMA cross with no HTF filter, no pullback shape, no volume
+     signature (and lost -26.7R in replay); BOS-RETEST keys off a broken level
+     and has no participation class. No existing kind reads this conjunction. */
+  var OMNI_HTFPB_MIN_ROWS   = 120;  /* enough closed bars for the HTF EMA + 1h EMAs */
+  var OMNI_HTFPB_HTF_EMA_N  = 21;   /* HTF trend EMA. Spec said EMA50-over-60-buckets;
+                                       sized down on the line-160 precedent — 180 bars of
+                                       scan history can never yield 60 factor-4 buckets,
+                                       and an EMA the history cannot support is a silently
+                                       dead gate, not a stricter one. */
+  var OMNI_HTFPB_HTF_RISE   = 4;    /* HTF EMA must be rising over this many HTF bars */
+  var OMNI_HTFPB_SWING_LOOK = 25;   /* the defining swing must sit within this many bars */
+  var OMNI_HTFPB_PB_MIN     = 3;    /* pullback length bounds — shorter is noise, */
+  var OMNI_HTFPB_PB_MAX     = 12;   /* longer is a regime change, not a pullback */
+  var OMNI_HTFPB_ZONE_ATR   = 0.3;  /* EMA20..EMA50 zone tolerance, in ATR */
+  var OMNI_HTFPB_RSI_FLOOR  = 40;   /* RSI must hold this through a long pullback (60 ceil short) */
+  var OMNI_HTFPB_DRY_X      = 0.9;  /* pullback mean volume < this x vSMA20 (dry) */
+  var OMNI_HTFPB_THRUST_X   = 1.3;  /* resumption bar volume >= this x vSMA20 (wet) */
+
+  function hgOmniHtfPullback(rows){
+    if (!rows || rows.length < OMNI_HTFPB_MIN_ROWS) return null;
+    var n = rows.length - 1;
+    var atr = atrOf(rows, 14);
+    if (!(atr > 0)) return null;
+    /* S1 — higher-TF trend from the factor-4 aggregate */
+    var h4 = hgOmniCvAggHtf(rows);
+    if (!h4 || h4.length < OMNI_HTFPB_HTF_EMA_N + OMNI_HTFPB_HTF_RISE + 2) return null;
+    var c4 = closesOf(h4);
+    var e4 = hgOmniCvEmaArr(c4, OMNI_HTFPB_HTF_EMA_N);
+    if (!e4) return null;
+    var eN = e4[e4.length - 1], eP = e4[e4.length - 1 - OMNI_HTFPB_HTF_RISE];
+    var c4last = c4[c4.length - 1];
+    if (!isFinite(eN) || !isFinite(eP) || !isFinite(c4last)) return null;
+    var up = c4last > eN && eN > eP;
+    var dn = c4last < eN && eN < eP;
+    if (!up && !dn) return null;
+    var dir = up ? 'long' : 'short';
+    var c1 = closesOf(rows);
+    if (c1.length !== rows.length) return null;   /* a hole breaks index alignment */
+    var e20 = hgOmniCvEmaArr(c1, 20), e50 = hgOmniCvEmaArr(c1, 50);
+    var r = hgOmniCvRsiArr(c1, 14);
+    if (!e20 || !e50 || !r) return null;
+    /* S2 — the defining swing extreme within the lookback, then a 3-12 bar
+       pullback into the EMA20-EMA50 zone that never closes beyond EMA50. */
+    var i, h, l, c, swIdx = -1, swVal = dir === 'long' ? -Infinity : Infinity;
+    for (i = Math.max(1, n - OMNI_HTFPB_SWING_LOOK); i <= n - 1; i++){
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (dir === 'long'){ if (isFinite(h) && h >= swVal){ swVal = h; swIdx = i; } }
+      else { if (isFinite(l) && l <= swVal){ swVal = l; swIdx = i; } }
+    }
+    if (swIdx < 0 || !isFinite(swVal)) return null;
+    var pbBars = (n - 1) - swIdx;
+    if (pbBars < OMNI_HTFPB_PB_MIN || pbBars > OMNI_HTFPB_PB_MAX) return null;
+    var PL = Infinity, PH = -Infinity, plIdx = -1, phIdx = -1;
+    var entryLvl = dir === 'long' ? -Infinity : Infinity;
+    var pbVolSum = 0, pbVolN = 0, v;
+    for (i = swIdx + 1; i <= n - 1; i++){
+      h = num(rows[i].h); l = num(rows[i].l); c = num(rows[i].c); v = num(rows[i].v);
+      if (!isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
+      if (dir === 'long'){
+        if (h >= swVal) return null;               /* a new high is not a pullback */
+        if (c < e50[i]) return null;               /* no close below EMA50 */
+        if (l < PL){ PL = l; plIdx = i; }
+        if (h > entryLvl) entryLvl = h;            /* the pullback's reaction high */
+      } else {
+        if (l <= swVal) return null;
+        if (c > e50[i]) return null;
+        if (h > PH){ PH = h; phIdx = i; }
+        if (l < entryLvl) entryLvl = l;
+      }
+      if (isFinite(v)){ pbVolSum += v; pbVolN++; }
+    }
+    if (!pbVolN) return null;
+    if (dir === 'long'){
+      if (!(plIdx >= 0 && isFinite(PL) && isFinite(entryLvl))) return null;
+      if (!(PL >= e50[plIdx] - OMNI_HTFPB_ZONE_ATR * atr
+         && PL <= e20[plIdx] + OMNI_HTFPB_ZONE_ATR * atr)) return null;
+    } else {
+      if (!(phIdx >= 0 && isFinite(PH) && isFinite(entryLvl))) return null;
+      if (!(PH <= e50[phIdx] + OMNI_HTFPB_ZONE_ATR * atr
+         && PH >= e20[phIdx] - OMNI_HTFPB_ZONE_ATR * atr)) return null;
+    }
+    /* M1 — resumption thrust with momentum held through the pullback */
+    var lc = num(rows[n].c), mid;
+    if (!isFinite(lc)) return null;
+    if (dir === 'long'){
+      mid = (swVal + PL) / 2;
+      if (!(lc > num(rows[n - 1].h) && lc > mid)) return null;
+      for (i = swIdx + 1; i <= n - 1; i++){ if (!(r[i] >= OMNI_HTFPB_RSI_FLOOR)) return null; }
+      if (!(r[n] > r[n - 1])) return null;
+    } else {
+      mid = (swVal + PH) / 2;
+      if (!(lc < num(rows[n - 1].l) && lc < mid)) return null;
+      for (i = swIdx + 1; i <= n - 1; i++){ if (!(r[i] <= 100 - OMNI_HTFPB_RSI_FLOOR)) return null; }
+      if (!(r[n] < r[n - 1])) return null;
+    }
+    /* P1 — dry pullback, wet thrust */
+    var vs = hgOmniCvVolSma(rows, 20, n), lv = num(rows[n].v);
+    if (!isFinite(vs) || !(vs > 0) || !isFinite(lv)) return null;
+    if (!((pbVolSum / pbVolN) < OMNI_HTFPB_DRY_X * vs && lv >= OMNI_HTFPB_THRUST_X * vs)) return null;
+    /* geometry + formation cost gate */
+    var entry = entryLvl;
+    var stop = (dir === 'long') ? (PL - OMNI_CV_STOP_BUF_ATR * atr)
+                                : (PH + OMNI_CV_STOP_BUF_ATR * atr);
+    stop = hgOmniCvClampStop(dir, entry, stop, atr);
+    if (stop === null) return null;
+    var gate = hgOmniFormCostGate(entry, stop);
+    if (!gate) return null;
+    return hgOmniCvHit('HTF-PULLBACK', dir, entry, stop,
+      'higher-TF trend intact; ' + pbBars + '-bar dry pullback into the EMA zone resumed on '
+        + (lv / vs).toFixed(1) + 'x volume through ' + entry.toFixed(6),
+      ['htf-ema-trend', 'pullback-structure-held-ema50', 'resumption-thrust-rsi',
+       'volume-dry-then-expand'],
+      { structure: 2, momentum: 1, participation: 1 }, gate);
+  }
+
+  /* ---- 2. DONCHIAN-DRIVE — breakout with participation ---------------------
+     THESIS. A close through a 55-bar Donchian extreme out of a MATURE base,
+     delivered by a wide-range conviction bar on climactic volume, monetizes
+     breakout continuation; the participation requirement filters the
+     liquidity-thin false breaks that make naked channel breakouts
+     unprofitable net of costs in crypto.
+     LINEAGE: Donchian channel trend-following (Donchian 1960s; Turtle rules,
+     55-bar system 2); volume-confirmed breakout studies (opening-range
+     range+volume conditioning, generalized to session-free perps).
+     CONFIRMATIONS: S1 close-through with margin, S2 aged extreme (a fresh
+     high is momentum chasing, an aged one is a regime event), M1 drive bar,
+     P1 climax volume. count=4, S:2 M:1 P:1.
+     OVERLAP: ORB is a session range, NR7-BREAK a one-bar compression — no
+     existing kind reads a 55-bar aged channel + drive bar + volume climax. */
+  var OMNI_DON_LOOK        = 55;   /* Donchian lookback — the Turtle 55-bar channel */
+  var OMNI_DON_MARGIN_ATR  = 0.25; /* close-through margin, not a wick-through */
+  var OMNI_DON_AGE_MIN     = 20;   /* the extreme must have stood this many bars */
+  var OMNI_DON_DRIVE_ATR   = 1.5;  /* drive-bar range floor, in ATR */
+  var OMNI_DON_CLOSE_POS   = 0.75; /* close in the top/bottom quarter of the bar */
+  var OMNI_DON_VOL_X       = 2.0;  /* climax volume multiple of vSMA20 */
+  var OMNI_DON_VOL_HIGHEST = 20;   /* and the highest volume of this many bars */
+  var OMNI_DON_STOP_ATR    = 1.5;  /* breakout stop distance. Spec wrote
+                                      max(DH-0.35*ATR, entry-1.5*ATR), whose max()
+                                      arm is always the 0.35 one and is then
+                                      overridden by the 1.2 floor; its own prose
+                                      says "in practice ~1.5 ATR — deliberately far
+                                      wider than the base's near edge" (the replay's
+                                      #1 killer was tight stops under breakout
+                                      levels), so 1.5 ATR is implemented directly. */
+
+  function hgOmniDonchianDrive(rows){
+    if (!rows || rows.length < OMNI_DON_LOOK + 25) return null;
+    var n = rows.length - 1;
+    var atr = atrOf(rows, 14);
+    if (!(atr > 0)) return null;
+    var i, h, l, DH = -Infinity, DL = Infinity, dhIdx = -1, dlIdx = -1;
+    for (i = n - OMNI_DON_LOOK; i <= n - 1; i++){
+      h = num(rows[i].h); l = num(rows[i].l);
+      if (isFinite(h) && h >= DH){ DH = h; dhIdx = i; }   /* >= : LAST touch dates the base */
+      if (isFinite(l) && l <= DL){ DL = l; dlIdx = i; }
+    }
+    if (!isFinite(DH) || !isFinite(DL)) return null;
+    var c = num(rows[n].c), o = num(rows[n].o), lh = num(rows[n].h), ll = num(rows[n].l), v = num(rows[n].v);
+    if (!isFinite(c) || !isFinite(o) || !isFinite(lh) || !isFinite(ll) || !isFinite(v)) return null;
+    var rng = lh - ll;
+    if (!(rng > 0)) return null;
+    var dir = null, lvl = NaN, age = NaN;
+    if (c > DH + OMNI_DON_MARGIN_ATR * atr){ dir = 'long'; lvl = DH; age = n - dhIdx; }
+    else if (c < DL - OMNI_DON_MARGIN_ATR * atr){ dir = 'short'; lvl = DL; age = n - dlIdx; }
+    if (!dir) return null;                                        /* S1 */
+    if (!(age >= OMNI_DON_AGE_MIN)) return null;                  /* S2 */
+    var pos = (c - ll) / rng;
+    if (!(rng >= OMNI_DON_DRIVE_ATR * atr)) return null;          /* M1: real drive bar */
+    if (dir === 'long' ? !(pos >= OMNI_DON_CLOSE_POS) : !(pos <= 1 - OMNI_DON_CLOSE_POS)) return null;
+    var vs = hgOmniCvVolSma(rows, 20, n);
+    if (!isFinite(vs) || !(vs > 0)) return null;
+    if (!(v >= OMNI_DON_VOL_X * vs)) return null;                 /* P1: climax volume */
+    for (i = n - OMNI_DON_VOL_HIGHEST; i <= n - 1; i++){
+      var pv = num(rows[i].v);
+      if (isFinite(pv) && pv > v) return null;                    /* highest of the window */
+    }
+    var entry = lvl;
+    var stop = (dir === 'long') ? (entry - OMNI_DON_STOP_ATR * atr)
+                                : (entry + OMNI_DON_STOP_ATR * atr);
+    stop = hgOmniCvClampStop(dir, entry, stop, atr);
+    if (stop === null) return null;
+    var gate = hgOmniFormCostGate(entry, stop);
+    if (!gate) return null;
+    return hgOmniCvHit('DONCHIAN-DRIVE', dir, entry, stop,
+      'closed through the ' + OMNI_DON_LOOK + '-bar channel ' + (dir === 'long' ? 'high' : 'low')
+        + ' at ' + entry.toFixed(6) + ' (' + age + ' bars old) on a ' + (rng / atr).toFixed(1)
+        + 'x-ATR drive bar with ' + (v / vs).toFixed(1) + 'x volume',
+      ['donchian-close-through-margin', 'aged-base-' + age + '-bars', 'drive-bar-close-location',
+       'climax-volume-highest-of-' + OMNI_DON_VOL_HIGHEST],
+      { structure: 2, momentum: 1, participation: 1 }, gate);
+  }
+
+  /* ---- 3. AVWAP-DEFEND — institutional cost basis, tested and held ---------
+     THESIS. The VWAP anchored at a significant swing extreme is the average
+     cost basis of everyone positioned since that extreme; a market that holds
+     above it for bars on end, then TESTS it intrabar and closes back above on
+     expanding volume, has just shown the institutional bid defending its
+     inventory. Trades WITH the defense — continuation, not a fade.
+     LINEAGE: anchored-VWAP practice (Brian Shannon); Wyckoff "test" logic.
+     The replay's best kind was AVWAP-RECLAIM (+25.8R/71) — same level, but
+     RECLAIM fires on the cross; DEFEND requires the held cost basis, the
+     tag-and-hold, momentum intact AND participation on the defense bar, which
+     RECLAIM never reads. count=4, S:2 M:1 P:1.
+     CONFIRMATIONS: S1 aged anchor extreme unbroken since it printed, S2 cost
+     basis held N bars then tagged and defended, M1 RSI intact and turning up
+     on the defense, P1 defense-bar volume expansion. */
+  var OMNI_AVD_ANCHOR_MIN = 20;   /* anchor age floor — a fresh pivot is not a cost basis yet */
+  var OMNI_AVD_ANCHOR_MAX = 130;  /* anchor age ceiling — beyond this the basis is stale */
+  var OMNI_AVD_HOLD_BARS  = 10;   /* consecutive closes that must have held the basis */
+  var OMNI_AVD_TAG_ATR    = 0.25; /* the test wick must come at least this near, in ATR */
+  var OMNI_AVD_RSI_BULL   = 45;   /* momentum floor on a long defense (mirror: 55 ceiling short) */
+  var OMNI_AVD_VOL_X      = 1.3;  /* defense-bar participation multiple of vSMA20 */
+
+  function hgOmniAvwapDefend(rows){
+    if (!rows || rows.length < OMNI_AVD_ANCHOR_MAX + 10) return null;
+    var n = rows.length - 1;
+    var atr = atrOf(rows, 14);
+    if (!(atr > 0)) return null;
+    var c1 = closesOf(rows);
+    if (c1.length !== rows.length) return null;
+    var r = hgOmniCvRsiArr(c1, 14);
+    if (!r) return null;
+    var vs = hgOmniCvVolSma(rows, 20, n), lv = num(rows[n].v);
+    if (!isFinite(vs) || !(vs > 0) || !isFinite(lv)) return null;
+    var lc = num(rows[n].c), ll = num(rows[n].l), lh = num(rows[n].h);
+    if (!isFinite(lc) || !isFinite(ll) || !isFinite(lh)) return null;
+    var sides = ['long', 'short'], s, dir, i, ext, extIdx, x;
+    for (s = 0; s < sides.length; s++){
+      dir = sides[s];
+      /* S1 — the anchor: the defining extreme inside the age window, unbroken since */
+      ext = dir === 'long' ? Infinity : -Infinity; extIdx = -1;
+      for (i = n - OMNI_AVD_ANCHOR_MAX; i <= n - OMNI_AVD_ANCHOR_MIN; i++){
+        if (i < 0) continue;
+        x = dir === 'long' ? num(rows[i].l) : num(rows[i].h);
+        if (!isFinite(x)) continue;
+        if (dir === 'long' ? x <= ext : x >= ext){ ext = x; extIdx = i; }
+      }
+      if (extIdx < 0 || !isFinite(ext)) continue;
+      var broken = false;
+      for (i = extIdx + 1; i <= n; i++){
+        x = dir === 'long' ? num(rows[i].l) : num(rows[i].h);
+        if (isFinite(x) && (dir === 'long' ? x < ext : x > ext)){ broken = true; break; }
+      }
+      if (broken) continue;
+      /* running AVWAP from the anchor — av[i-extIdx] is the basis AT bar i */
+      var pvs = 0, vvs = 0, av = [], tp, vv;
+      for (i = extIdx; i <= n; i++){
+        tp = (num(rows[i].h) + num(rows[i].l) + num(rows[i].c)) / 3;
+        if (!isFinite(tp)){ av = null; break; }
+        vv = num(rows[i].v);
+        if (!isFinite(vv) || vv <= 0) vv = 1;
+        pvs += tp * vv; vvs += vv;
+        av.push(pvs / vvs);
+      }
+      if (!av || !(vvs > 0)) continue;
+      var avN = av[av.length - 1];
+      if (!isFinite(avN) || !(avN > 0)) continue;
+      /* S2 — basis held for HOLD_BARS, then tagged and defended on bar n */
+      var held = true;
+      for (i = n - OMNI_AVD_HOLD_BARS; i <= n - 1; i++){
+        var ci = num(rows[i].c), ai = av[i - extIdx];
+        if (!isFinite(ci) || !isFinite(ai) || (dir === 'long' ? ci <= ai : ci >= ai)){ held = false; break; }
+      }
+      if (!held) continue;
+      if (dir === 'long'){
+        if (!(ll <= avN + OMNI_AVD_TAG_ATR * atr && lc > avN)) continue;
+      } else {
+        if (!(lh >= avN - OMNI_AVD_TAG_ATR * atr && lc < avN)) continue;
+      }
+      /* M1 — momentum intact and turning with the defense */
+      if (dir === 'long'){
+        if (!(r[n] >= OMNI_AVD_RSI_BULL && r[n] > r[n - 1])) continue;
+      } else {
+        if (!(r[n] <= 100 - OMNI_AVD_RSI_BULL && r[n] < r[n - 1])) continue;
+      }
+      /* P1 — participation on the defense bar */
+      if (!(lv >= OMNI_AVD_VOL_X * vs)) continue;
+      /* geometry + formation cost gate: stop beyond the test bar's wick,
+         which by construction is beyond the basis itself */
+      var entry = avN;
+      var stop = (dir === 'long') ? (ll - OMNI_CV_STOP_BUF_ATR * atr)
+                                  : (lh + OMNI_CV_STOP_BUF_ATR * atr);
+      stop = hgOmniCvClampStop(dir, entry, stop, atr);
+      if (stop === null) continue;
+      var gate = hgOmniFormCostGate(entry, stop);
+      if (!gate) continue;
+      return hgOmniCvHit('AVWAP-DEFEND', dir, entry, stop,
+        'cost basis anchored ' + (n - extIdx) + ' bars back at ' + ext.toFixed(6)
+          + ' held ' + OMNI_AVD_HOLD_BARS + ' bars, tagged and defended at ' + entry.toFixed(6)
+          + ' on ' + (lv / vs).toFixed(1) + 'x volume',
+        ['aged-anchor-extreme-unbroken', 'avwap-held-then-defended', 'rsi-intact-turning',
+         'defense-volume-expansion'],
+        { structure: 2, momentum: 1, participation: 1 }, gate);
+    }
+    return null;
+  }
+
+  /* ---- 4. COMPRESSION-BREAK — volatility-cycle expansion with a dry base ---
+     THESIS. A multi-bar volatility compression on DRYING volume is the tape
+     agreeing on price; the first expansion bar through the box on climactic
+     volume is the disagreement that starts the next leg. The desk's own
+     replay says the volatility-cycle family pays (NR7-BREAK +7.8R/150,
+     VOL-EXPANSION +1.3R/22); this generalizes the one-bar NR7 to a full box
+     and adds the participation signature neither of those reads.
+     LINEAGE: NR7/inside-range compression (Crabel), Bollinger band-width
+     squeeze, Wyckoff phase C-D volume drought before markup.
+     CONFIRMATIONS: S1 tight multi-bar box, S2 close-through with margin,
+     M1 expansion drive bar, P1 dry box / climactic break volume. count=4,
+     S:2 M:1 P:1. OVERLAP: NR7-BREAK is one bar with no volume read; PO3
+     needs a sweep-and-reclaim; SQUEEZE-FIRE is the TTM indicator with no
+     participation class. */
+  var OMNI_CMP_BOX_BARS   = 12;   /* compression box length */
+  var OMNI_CMP_BOX_ATR    = 2.0;  /* box height ceiling, in ATR — tighter than PO3's 2.2 */
+  var OMNI_CMP_MARGIN_ATR = 0.25; /* close-through margin */
+  var OMNI_CMP_DRIVE_ATR  = 1.4;  /* break-bar range floor */
+  var OMNI_CMP_CLOSE_POS  = 0.7;  /* close in the directional 30% of the break bar */
+  var OMNI_CMP_DRY_X      = 0.95; /* box mean volume <= this x vSMA20 (drought) */
+  var OMNI_CMP_THRUST_X   = 1.8;  /* break-bar volume >= this x vSMA20 (climax) */
+
+  function hgOmniCompressionBreak(rows){
+    if (!rows || rows.length < OMNI_CMP_BOX_BARS + 28) return null;
+    var n = rows.length - 1;
+    var atr = atrOf(rows, 14);
+    if (!(atr > 0)) return null;
+    var i, h, l, v, boxHi = -Infinity, boxLo = Infinity, volSum = 0, volN = 0;
+    for (i = n - OMNI_CMP_BOX_BARS; i <= n - 1; i++){
+      h = num(rows[i].h); l = num(rows[i].l); v = num(rows[i].v);
+      if (!isFinite(h) || !isFinite(l)) return null;
+      if (h > boxHi) boxHi = h;
+      if (l < boxLo) boxLo = l;
+      if (isFinite(v)){ volSum += v; volN++; }
+    }
+    if (!isFinite(boxHi) || !isFinite(boxLo) || boxHi <= boxLo || !volN) return null;
+    if (!(boxHi - boxLo <= OMNI_CMP_BOX_ATR * atr)) return null;    /* S1: compressed */
+    var c = num(rows[n].c), o = num(rows[n].o), lh = num(rows[n].h), ll = num(rows[n].l), lv = num(rows[n].v);
+    if (!isFinite(c) || !isFinite(o) || !isFinite(lh) || !isFinite(ll) || !isFinite(lv)) return null;
+    var dir = null, lvl = NaN;
+    if (c > boxHi + OMNI_CMP_MARGIN_ATR * atr){ dir = 'long'; lvl = boxHi; }
+    else if (c < boxLo - OMNI_CMP_MARGIN_ATR * atr){ dir = 'short'; lvl = boxLo; }
+    if (!dir) return null;                                          /* S2: close-through */
+    var rng = lh - ll;
+    if (!(rng > 0) || !(rng >= OMNI_CMP_DRIVE_ATR * atr)) return null;
+    var pos = (c - ll) / rng;
+    if (dir === 'long' ? !(pos >= OMNI_CMP_CLOSE_POS && c > o)
+                       : !(pos <= 1 - OMNI_CMP_CLOSE_POS && c < o)) return null;  /* M1 */
+    var vs = hgOmniCvVolSma(rows, 20, n);
+    if (!isFinite(vs) || !(vs > 0)) return null;
+    if (!((volSum / volN) <= OMNI_CMP_DRY_X * vs && lv >= OMNI_CMP_THRUST_X * vs)) return null;  /* P1 */
+    var entry = lvl;
+    var stop = (dir === 'long') ? (boxLo - OMNI_CV_STOP_BUF_ATR * atr)
+                                : (boxHi + OMNI_CV_STOP_BUF_ATR * atr);
+    stop = hgOmniCvClampStop(dir, entry, stop, atr);
+    if (stop === null) return null;
+    var gate = hgOmniFormCostGate(entry, stop);
+    if (!gate) return null;
+    return hgOmniCvHit('COMPRESSION-BREAK', dir, entry, stop,
+      OMNI_CMP_BOX_BARS + '-bar compression (' + ((boxHi - boxLo) / atr).toFixed(1)
+        + 'x ATR box, dry volume) broke ' + (dir === 'long' ? 'up through ' : 'down through ')
+        + entry.toFixed(6) + ' on ' + (lv / vs).toFixed(1) + 'x volume',
+      ['multi-bar-compression-box', 'close-through-with-margin', 'expansion-drive-bar',
+       'volume-drought-then-climax'],
+      { structure: 2, momentum: 1, participation: 1 }, gate);
+  }
+
+  /* ---- 5. SWEEP-RECLAIM — counter-trend, structure-CONFIRMED sweep ---------
+     THESIS. A climactic stop-run through an established range extreme that is
+     answered ON THE NEXT BAR by a displacement close back through both the
+     level and the sweep bar itself is a completed liquidity raid — the
+     counter-trend slot that EARNS formation instead of anticipating it. The
+     replay is blunt about anticipation: SPRING/UTAD fire on the sweep bar and
+     lost -63.2R/135 on the UTAD side, PIN-REJECT -118R/115. This kind cannot
+     fire on the sweep bar at all.
+     LINEAGE: Wyckoff spring TEST (the confirmation, not the spring); stop-run
+     / liquidity-raid literature.
+     CONFIRMATIONS: S1 real-depth sweep of the established range extreme,
+     S2 next-bar reclaim closing beyond the sweep bar's extreme, M1 confirm
+     bar closes directionally, P1 climactic volume on the sweep bar. count=4,
+     S:2 M:1 P:1. Family SWEEP so consensus never double-counts it with
+     SPRING/UTAD/PIN-REJECT. */
+  var OMNI_SWR_DEPTH_ATR   = 0.25; /* sweep must pierce at least this far — a tick is noise */
+  var OMNI_SWR_CLOSE_POS   = 0.6;  /* confirm bar closes in its directional 40% */
+  var OMNI_SWR_SWEEP_VOL_X = 1.5;  /* sweep-bar volume multiple of vSMA20 (the stop-run) */
+
+  function hgOmniSweepReclaim(rows){
+    if (!rows || rows.length < RANGE_LOOKBACK + 6) return null;
+    var n = rows.length - 1;
+    var atr = atrOf(rows, 14);
+    if (!(atr > 0)) return null;
+    /* the range must be established BEFORE the sweep bar: slice off the
+       confirm bar, and hgOmniRange itself excludes the sweep bar */
+    var rng = hgOmniRange(rows.slice(0, rows.length - 1), RANGE_LOOKBACK);
+    if (!rng) return null;
+    var sw = rows[n - 1], cf = rows[n];
+    var swH = num(sw.h), swL = num(sw.l), swV = num(sw.v);
+    var c = num(cf.c), o = num(cf.o), lh = num(cf.h), ll = num(cf.l);
+    if (!isFinite(swH) || !isFinite(swL) || !isFinite(swV)) return null;
+    if (!isFinite(c) || !isFinite(o) || !isFinite(lh) || !isFinite(ll)) return null;
+    var crng = lh - ll;
+    if (!(crng > 0)) return null;
+    var vs = hgOmniCvVolSma(rows, 20, n - 1);           /* baseline excludes the sweep bar */
+    if (!isFinite(vs) || !(vs > 0)) return null;
+    var dir = null, lvl = NaN;
+    if (swL < rng.lo && (rng.lo - swL) >= OMNI_SWR_DEPTH_ATR * atr
+        && c > rng.lo && c > swH){ dir = 'long'; lvl = rng.lo; }
+    else if (swH > rng.hi && (swH - rng.hi) >= OMNI_SWR_DEPTH_ATR * atr
+        && c < rng.hi && c < swL){ dir = 'short'; lvl = rng.hi; }
+    if (!dir) return null;                              /* S1 + S2 */
+    var pos = (c - ll) / crng;
+    if (dir === 'long' ? !(pos >= OMNI_SWR_CLOSE_POS && c > o)
+                       : !(pos <= 1 - OMNI_SWR_CLOSE_POS && c < o)) return null;  /* M1 */
+    if (!(swV >= OMNI_SWR_SWEEP_VOL_X * vs)) return null;                          /* P1 */
+    var entry = lvl;
+    var stop = (dir === 'long') ? (Math.min(swL, ll) - OMNI_CV_STOP_BUF_ATR * atr)
+                                : (Math.max(swH, lh) + OMNI_CV_STOP_BUF_ATR * atr);
+    stop = hgOmniCvClampStop(dir, entry, stop, atr);
+    if (stop === null) return null;
+    var gate = hgOmniFormCostGate(entry, stop);
+    if (!gate) return null;
+    return hgOmniCvHit('SWEEP-RECLAIM', dir, entry, stop,
+      'stop-run through the range ' + (dir === 'long' ? 'low' : 'high') + ' at ' + entry.toFixed(6)
+        + ' on ' + (swV / vs).toFixed(1) + 'x volume, reclaimed next bar through the sweep bar’s '
+        + (dir === 'long' ? 'high' : 'low'),
+      ['range-extreme-swept-with-depth', 'next-bar-reclaim-displacement', 'confirm-bar-close-location',
+       'climax-volume-on-sweep'],
+      { structure: 2, momentum: 1, participation: 1 }, gate);
+  }
+
+  /* ---- 6. EXHAUST-REVERT — counter-trend, climax + confirmed turn ----------
+     THESIS. A capitulation bar — 30-bar price extreme, stretched from the
+     mean, on climactic volume — followed by a held higher low and a close
+     back through the reaction bar is a supply/demand exhaustion whose TURN
+     is already on the tape. The replay's naked reversion kinds (THREE-BAR
+     -126.8R/161, RSI-DIVERGE -36.1R/58, PIN-REJECT -118R) all anticipate;
+     this slot only forms two bars AFTER the climax, once structure has
+     actually broken the other way.
+     LINEAGE: Wyckoff selling/buying climax + secondary test; capitulation-
+     volume studies.
+     CONFIRMATIONS: S1 30-bar extreme stretched >= 2 ATR beyond EMA20,
+     S2 higher-low (lower-high) hold plus a close through the reaction bar,
+     M1 RSI at an extreme on the climax and recovering, P1 climax volume the
+     highest of its window. count=4, S:2 M:1 P:1. Family REVERSION. */
+  var OMNI_EXR_EXTREME_LOOK   = 30;  /* the climax must be a genuine windowed extreme */
+  var OMNI_EXR_STRETCH_ATR    = 2.0; /* climax close at least this far beyond EMA20 */
+  var OMNI_EXR_RSI_OS         = 30;  /* oversold ceiling at a long climax (70 floor short) */
+  var OMNI_EXR_CLIMAX_X       = 1.8; /* climax volume multiple of vSMA20 */
+  var OMNI_EXR_CLIMAX_HIGHEST = 15;  /* and highest of this many bars */
+
+  function hgOmniExhaustRevert(rows){
+    if (!rows || rows.length < OMNI_EXR_EXTREME_LOOK + 25) return null;
+    var n = rows.length - 1, k = n - 2;                 /* k: the climax bar, two bars back */
+    var atr = atrOf(rows, 14);
+    if (!(atr > 0)) return null;
+    var c1 = closesOf(rows);
+    if (c1.length !== rows.length) return null;
+    var e20 = hgOmniCvEmaArr(c1, 20);
+    var r = hgOmniCvRsiArr(c1, 14);
+    if (!e20 || !r) return null;
+    var kH = num(rows[k].h), kL = num(rows[k].l), kC = num(rows[k].c), kV = num(rows[k].v);
+    var rH = num(rows[n - 1].h), rL = num(rows[n - 1].l);
+    var c = num(rows[n].c), lh = num(rows[n].h), ll = num(rows[n].l);
+    if (!isFinite(kH) || !isFinite(kL) || !isFinite(kC) || !isFinite(kV)) return null;
+    if (!isFinite(rH) || !isFinite(rL) || !isFinite(c) || !isFinite(lh) || !isFinite(ll)) return null;
+    var i, x, dir = null;
+    /* S1 — windowed extreme + stretch, long side then mirrored short */
+    var isLowExt = true, isHighExt = true;
+    for (i = n - OMNI_EXR_EXTREME_LOOK; i <= n; i++){
+      if (i === k) continue;
+      x = num(rows[i].l); if (isFinite(x) && x < kL) isLowExt = false;
+      x = num(rows[i].h); if (isFinite(x) && x > kH) isHighExt = false;
+    }
+    if (isLowExt && kC <= e20[k] - OMNI_EXR_STRETCH_ATR * atr) dir = 'long';
+    else if (isHighExt && kC >= e20[k] + OMNI_EXR_STRETCH_ATR * atr) dir = 'short';
+    if (!dir) return null;
+    /* S2 — the turn is on the tape: held reaction extreme, then a close through it */
+    if (dir === 'long'){
+      if (!(rL > kL && ll > kL && c > rH)) return null;
+    } else {
+      if (!(rH < kH && lh < kH && c < rL)) return null;
+    }
+    /* M1 — RSI at the extreme on the climax, recovering by the confirm bar */
+    if (dir === 'long'){
+      if (!(r[k] <= OMNI_EXR_RSI_OS && r[n] > r[k])) return null;
+    } else {
+      if (!(r[k] >= 100 - OMNI_EXR_RSI_OS && r[n] < r[k])) return null;
+    }
+    /* P1 — climax participation: outsized AND the highest of its window */
+    var vs = hgOmniCvVolSma(rows, 20, k);               /* baseline excludes the climax bar */
+    if (!isFinite(vs) || !(vs > 0)) return null;
+    if (!(kV >= OMNI_EXR_CLIMAX_X * vs)) return null;
+    for (i = k - OMNI_EXR_CLIMAX_HIGHEST; i <= k - 1; i++){
+      if (i < 0) continue;
+      x = num(rows[i].v);
+      if (isFinite(x) && x > kV) return null;
+    }
+    /* geometry + formation cost gate: entry at the confirmed break level,
+       stop beyond the climax extreme */
+    var entry = dir === 'long' ? rH : rL;
+    var stop = (dir === 'long') ? (kL - OMNI_CV_STOP_BUF_ATR * atr)
+                                : (kH + OMNI_CV_STOP_BUF_ATR * atr);
+    stop = hgOmniCvClampStop(dir, entry, stop, atr);
+    if (stop === null) return null;
+    var gate = hgOmniFormCostGate(entry, stop);
+    if (!gate) return null;
+    return hgOmniCvHit('EXHAUST-REVERT', dir, entry, stop,
+      (dir === 'long' ? 'selling' : 'buying') + ' climax at the ' + OMNI_EXR_EXTREME_LOOK
+        + '-bar extreme on ' + (kV / vs).toFixed(1) + 'x volume; turn confirmed through '
+        + entry.toFixed(6),
+      ['windowed-extreme-stretched-from-mean', 'held-reaction-then-structure-break',
+       'rsi-extreme-recovering', 'climax-volume-highest-of-' + OMNI_EXR_CLIMAX_HIGHEST],
+      { structure: 2, momentum: 1, participation: 1 }, gate);
+  }
+
+  /* ==================== end conviction roster ==================== */
+
   /* Run every detector; return all hits (a symbol can present more than one
      family, which is genuine confluence rather than a duplicate). Pure. */
 
@@ -725,6 +1418,23 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     d = hgOmniOrb(rows, ORB_BARS); if (d) out.push(d);
     if (prof){ d = hgOmniValueReject(rows, prof); if (d) out.push(d); }
     d = hgOmniMeasuredMove(rows, 10); if (d) out.push(d);
+    /* The conviction roster: six formation-time mechanics, each demanding
+       >= 3 independent confirmations and a PASSED formation cost gate before
+       a hit can exist. Pure over rows, so the measured-edge replay sees
+       exactly what the live scan trades. Individually wrapped — one bad
+       detector must not cost the other five, nor the scan. */
+    try { d = hgOmniHtfPullback(rows); } catch (eCv1) { d = null; }
+    if (d) out.push(d);
+    try { d = hgOmniDonchianDrive(rows); } catch (eCv2) { d = null; }
+    if (d) out.push(d);
+    try { d = hgOmniAvwapDefend(rows); } catch (eCv3) { d = null; }
+    if (d) out.push(d);
+    try { d = hgOmniCompressionBreak(rows); } catch (eCv4) { d = null; }
+    if (d) out.push(d);
+    try { d = hgOmniSweepReclaim(rows); } catch (eCv5) { d = null; }
+    if (d) out.push(d);
+    try { d = hgOmniExhaustRevert(rows); } catch (eCv6) { d = null; }
+    if (d) out.push(d);
     return out;
   }
 
@@ -1070,6 +1780,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       VALUE:  function(r){ var p = hgOmniProfile(r, 24); return p ? hgOmniValueReject(r, p) : null; },
       MMOVE:  function(r){ return hgOmniMeasuredMove(r, 10); }
     };
+    /* The conviction roster replays under the SAME kind strings the detect
+       pass emits (rule below): pure functions of rows, zero lookahead, so
+       detectFn(rows.slice(0, i+1)) measures exactly what is traded. Wrapped
+       like the shared block — a throwing detector is a null, not a dead pool. */
+    fns['HTF-PULLBACK']      = function(r){ try { return hgOmniHtfPullback(r); } catch (e) { return null; } };
+    fns['DONCHIAN-DRIVE']    = function(r){ try { return hgOmniDonchianDrive(r); } catch (e) { return null; } };
+    fns['AVWAP-DEFEND']      = function(r){ try { return hgOmniAvwapDefend(r); } catch (e) { return null; } };
+    fns['COMPRESSION-BREAK'] = function(r){ try { return hgOmniCompressionBreak(r); } catch (e) { return null; } };
+    fns['SWEEP-RECLAIM']     = function(r){ try { return hgOmniSweepReclaim(r); } catch (e) { return null; } };
+    fns['EXHAUST-REVERT']    = function(r){ try { return hgOmniExhaustRevert(r); } catch (e) { return null; } };
     /* The shared mechanics are pure functions of rows, so they backtest
        exactly like the six above. Registered by the SAME kind string the
        detect pass emits, or the in-sample pool and the live scan would be
@@ -1212,7 +1932,11 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                         'VWAP-REVERT','NR7-BREAK','TREND-RECLAIM','FVG-FILL','BOS-RETEST',
                         'EQH-SWEEP','EQL-SWEEP','SQUEEZE-FIRE','RSI-DIVERGE','AVWAP-RECLAIM',
                         'CUSUM-SHIFT','VOL-EXPANSION','PIN-REJECT','ENGULF-LEVEL',
-                        'POC-REVERT','THREE-BAR'];
+                        'POC-REVERT','THREE-BAR',
+                        /* the conviction roster — six more searches, so the Sidak bar
+                           below tightens accordingly: the accepted cost of honesty */
+                        'HTF-PULLBACK','DONCHIAN-DRIVE','AVWAP-DEFEND',
+                        'COMPRESSION-BREAK','SWEEP-RECLAIM','EXHAUST-REVERT'];
 
   /* FORWARD-ONLY mechanics. These read positioning, and the walk-forward
      replays candles — there is no historical funding rate or open interest
@@ -1250,7 +1974,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     'EDGE':'TREND', 'SWING':'TREND', 'SCALP':'TREND', 'HOUSE-SQUEEZE':'TREND', 'COIL':'TREND',
     'MR':'REVERSION', 'SNIPER':'REVERSION',
     'TRAP':'SWEEP', 'SMC':'SWEEP',
-    'FUND-FADE':'POSITIONING'
+    'FUND-FADE':'POSITIONING',
+    /* The conviction roster. Four continuation kinds vote TREND; the two
+       counter-trend kinds sit in SWEEP/REVERSION so hgOmniIsReversion treats
+       them correctly and consensus never double-counts them with
+       SPRING/UTAD/PIN-REJECT. */
+    'HTF-PULLBACK':'TREND', 'DONCHIAN-DRIVE':'TREND', 'AVWAP-DEFEND':'TREND',
+    'COMPRESSION-BREAK':'TREND',
+    'SWEEP-RECLAIM':'SWEEP', 'EXHAUST-REVERT':'REVERSION'
   };
   /* The shared mechanics bring their own family map. Merged rather than
      retyped, so a kind cannot be classified one way here and another there. */
@@ -1311,6 +2042,33 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var planFn = (w && typeof w.hgPlanLevels === 'function') ? w.hgPlanLevels : null;
     var a = atrOf(rows, 14);
     if (!(isFinite(a) && a > 0) && isFinite(entry)) a = entry * 0.01;
+
+    /* Conviction mechanics computed their own structural stop at formation
+       and PROVED it pays costs (hgOmniFormCostGate); the plan must use THAT
+       geometry, not rebuild it. Entry stays hit.level — the printed trade IS
+       the mechanic. Targets are R-multiples because that is what
+       hgPlanFromRisk supports: 2R/3.5R, the 3.5R T2 standing in for the
+       trend thesis' trail, which the plan builder does not support and is
+       not faked. Returns whatever fromRisk decides — never falls through to
+       rebuild a different geometry than the one the gate certified. */
+    if (hit.conviction && hit.conviction.costGate === 'passed'
+        && isFinite(fin(hit.stopHint)) && isFinite(entry) && fromRisk){
+      var cvT1R = isFinite(fin(hit.t1R)) ? fin(hit.t1R) : 2.0;
+      var cvT2R = isFinite(fin(hit.t2R)) ? fin(hit.t2R) : 3.5;
+      var cvPl = fromRisk(hit.dir, entry, fin(hit.stopHint), {
+        t1R: cvT1R, t2R: cvT2R, minRr: minRr,
+        targetPolicy: 'R-multiples of conviction-gated structural risk'
+      });
+      if (cvPl){
+        cvPl.note = 'SETUP ' + String(hit.kind) + ' @ ' + entry
+                  + ' — CONVICTION ' + fin(hit.conviction.count) + '/3+ · formation cost gate passed ('
+                  + (isFinite(fin(hit.conviction.costR)) ? fin(hit.conviction.costR).toFixed(3) : '?')
+                  + 'R to costs)';
+        cvPl.planSrc = 'hgOmniPlanForHit';
+        cvPl.dir = hit.dir;
+      }
+      return cvPl;
+    }
 
     if (reversion && isFinite(entry) && fromRisk){
       var lastBar = (rows && rows.length) ? rows[rows.length - 1] : null;
@@ -3451,6 +4209,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     }
   }
 
+  /* Formation-time cost veto for the conviction roster. Same math as
+     hgOmniCostDrag above but takes raw entry/stop instead of a plan, because
+     it runs BEFORE any plan exists. costR > 0.125 (the 'ok' tier ceiling,
+     OMNI_CV_COST_OK_R) => the setup DOES NOT FORM — no exceptions, no
+     downgrade path. Consequence at the default 0.14% round trip: no
+     conviction mechanic can form with a stop closer than 1.12% of price
+     (8x the round-trip cost). Window override read at call time, same
+     pattern as hgOmniCostDrag. */
+  function hgOmniFormCostGate(entry, stop){
+    entry = fin(entry); stop = fin(stop);
+    if (!isFinite(entry) || !isFinite(stop) || entry === 0) return null;
+    var stopDistPct = Math.abs(entry - stop) / Math.abs(entry) * 100;
+    if (!(stopDistPct > 0)) return null;
+    var rt = NaN;
+    try { if (typeof window !== 'undefined') rt = fin(window.HG_OMNI_RT_COST_PCT); } catch (eW) {}
+    if (!isFinite(rt) || rt <= 0) rt = HG_OMNI_RT_COST_PCT;
+    var costR = rt / stopDistPct;
+    if (costR > OMNI_CV_COST_OK_R) return null;          /* VETO: not 'ok' tier */
+    return { costR: costR, stopDistPct: stopDistPct, rtCostPct: rt };
+  }
+
   /* Out-of-sample refit verdict, baked from scripts/solidity-refit.json:
        fitted on 2496 replay trades, chronological split — train = first 1497
        (2026-06-13 .. 2026-07-29), test = last 999 (2026-07-29 .. 2026-08-29).
@@ -3532,6 +4311,39 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         } else if (mp.detail){
           /* No fitted probability is shipped — say so instead of decorating. */
           h += ' <span class="dim">' + esc(mp.detail) + '</span>';
+        }
+      }
+      /* CONVICTION chip — the conviction roster's formation-time certificate
+         (hgOmniCvHit). Only hits that emit conviction {confirmations, count,
+         costGate} get a chip; the legacy mechanics carry none and show
+         nothing new. Green only when every confirmation fired AND the
+         formation cost gate passed — anything less renders neutral, because
+         a partial certificate is context, not a credential. The tooltip
+         names the confirmations so the chip is auditable, not decorative. */
+      var cv = (c.conviction && typeof c.conviction === 'object') ? c.conviction
+             : (c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
+             : null;
+      if (cv){
+        var names = [];
+        if (Object.prototype.toString.call(cv.confirmations) === '[object Array]'){
+          for (var ci = 0; ci < cv.confirmations.length; ci++){
+            var cf = cv.confirmations[ci];
+            if (cf === null || cf === undefined) continue;
+            if (typeof cf === 'object') names.push(String(cf.name || cf.label || cf.id || ''));
+            else names.push(String(cf));
+          }
+        }
+        var cvTotal = names.length || (isFinite(fin(cv.count)) ? fin(cv.count) : 0);
+        var cvFired = isFinite(fin(cv.count)) ? fin(cv.count) : names.length;
+        if (cvTotal > 0){
+          var cvGreen = (cvFired >= cvTotal) && cv.costGate === 'passed';
+          var cvTip = (names.length ? names.join(' · ') : 'confirmation names unavailable')
+                    + (cv.costGate === 'passed'
+                        ? (' · formation cost gate passed'
+                           + (isFinite(fin(cv.costR)) ? ' (' + fin(cv.costR).toFixed(3) + 'R round trip)' : ''))
+                        : '');
+          h += ' <span class="gpip ' + (cvGreen ? 'ok' : '') + '" title="' + esc(cvTip)
+            +  '">CONVICTION ' + cvFired + '/' + cvTotal + '</span>';
         }
       }
       return h ? '<div style="margin-top:4px">' + h + '</div>' : '';
@@ -4832,6 +5644,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         sym: item && item.sym, base: item && item.base, exchange: item && item.exchange,
         kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         extra: hit.extra === true,
+        /* The conviction roster's formation-time certificate rides the
+           candidate so the card can print it. Mechanics that do not emit one
+           carry null and render nothing new — the chip is opt-in by data. */
+        conviction: (hit.conviction && typeof hit.conviction === 'object') ? hit.conviction : null,
         gates: gates, grade: grade, plan: plan, distAtr: distAtr,
         /* Carried so hgOmniRank can put the setup the rest of the scan agrees
            with above the one nothing supports. */
@@ -7558,6 +8374,16 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniProfile = hgOmniProfile;
     window.hgOmniValueReject = hgOmniValueReject;
     window.hgOmniMeasuredMove = hgOmniMeasuredMove;
+    /* Conviction roster — six formation-time mechanics (>= 3 confirmations,
+       structural stop, formation cost gate baked into formation). Exported
+       so each is testable/replayable on its own rows, like the native six. */
+    window.hgOmniHtfPullback = hgOmniHtfPullback;
+    window.hgOmniDonchianDrive = hgOmniDonchianDrive;
+    window.hgOmniAvwapDefend = hgOmniAvwapDefend;
+    window.hgOmniCompressionBreak = hgOmniCompressionBreak;
+    window.hgOmniSweepReclaim = hgOmniSweepReclaim;
+    window.hgOmniExhaustRevert = hgOmniExhaustRevert;
+    window.hgOmniFormCostGate = hgOmniFormCostGate;
     /* Cross-sectional pieces are exported so the universe read is testable
        on its own — it is the only part of this desk that cannot be checked
        from a single symbol's bars. */

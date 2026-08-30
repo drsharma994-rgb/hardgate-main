@@ -220,7 +220,8 @@ console.log('\n== registered as forward-only, and honest about it ==');
     { stats: { samples: 41, hit: 0.46, expR: 0.1 }, minRr: 2 }).filter(x => x.key === 'measured-edge')[0];
   const m = /\+(\d\.\d\d)σ is the bar/.exec(g.why);
   ok(!!m, 'the significance bar is on the card');
-  ok(/\b27 mechanics scanned/.test(g.why), 'counting all 27 including the un-replayable ones (' + m[1] + 'σ)');
+  /* 27 became 33 when the conviction roster landed six more searches. */
+  ok(/\b33 mechanics scanned/.test(g.why), 'counting all 33 including the un-replayable ones (' + m[1] + 'σ)');
 }
 
 console.log('\n== the sweep collects the universe without extra network ==');

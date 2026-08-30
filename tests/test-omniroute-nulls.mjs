@@ -527,20 +527,21 @@ for (const [name, mk, gateKey] of fields){
 
      This used to assert "exactly +2 sigma passes" against a hard-coded +2.00,
      and that PASS was the defect: the measured-edge gate credits a mechanic
-     only at the FAMILY-WISE bar (+2.89 sigma across 27 crypto mechanics), so
-     a row between +2.00 and +2.89 was printed green as "has paid" in the
-     summary while the ledger refused to credit it on the card.
+     only at the FAMILY-WISE bar (+2.96 sigma across the 33 crypto mechanics
+     — 27 before the conviction roster landed six more), so a row between
+     +2.00 and the bar was printed green as "has paid" in the summary while
+     the ledger refused to credit it on the card.
 
      The negative side keeps its -2 sigma bar, and that asymmetry is correct
-     rather than an oversight. Reporting whichever of 27 mechanics looks BEST
+     rather than an oversight. Reporting whichever of 33 mechanics looks BEST
      is a search, so a positive claim must clear the multiple-comparisons
      correction. Noticing that one specific mechanic is losing is not a
      search, so it does not. */
   const se = Math.sqrt(0.4 * 0.6 / 100);
-  const BAR = win.hgOmniFamilyZ(27);
-  ok(BAR > 2.8 && BAR < 3.0, 'the family-wise bar is +' + BAR.toFixed(2) + ' sigma, not +2.00');
+  const BAR = win.hgOmniFamilyZ(33);
+  ok(BAR > 2.9 && BAR < 3.0, 'the family-wise bar is +' + BAR.toFixed(2) + ' sigma, not +2.00');
   ok(r(100, 0.40 + 2*se).read === 'within noise',
-     'exactly +2 sigma is NOT "has paid" — it does not clear the 27-mechanic bar');
+     'exactly +2 sigma is NOT "has paid" — it does not clear the 33-mechanic bar');
   ok(r(100, 0.40 + (BAR + 0.05)*se).read === 'has paid',
      'clearing the family-wise bar does earn it');
   ok(r(100, 0.40 - 2*se).read === 'has not paid',

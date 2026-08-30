@@ -152,7 +152,14 @@ console.log('\n== omniroute registers every shared kind in all the right places 
   }
   const bt = W.hgOmniBacktestAll(tape(400, 3), { rMult: 2, horizon: 20, warm: 45 });
   for (const k of M.HG_MECH_KINDS) ok(k in bt, k + ' is back-tested, so it earns an in-sample record');
-  ok(Object.keys(bt).length === 22, 'twenty-two back-testable mechanics (' + Object.keys(bt).length + ')');
+  /* 22 = the native six + sixteen shared; the conviction roster added six
+     more back-testable kinds (HTF-PULLBACK, DONCHIAN-DRIVE, AVWAP-DEFEND,
+     COMPRESSION-BREAK, SWEEP-RECLAIM, EXHAUST-REVERT). */
+  ok(Object.keys(bt).length === 28, 'twenty-eight back-testable mechanics (' + Object.keys(bt).length + ')');
+  for (const k of ['HTF-PULLBACK','DONCHIAN-DRIVE','AVWAP-DEFEND','COMPRESSION-BREAK','SWEEP-RECLAIM','EXHAUST-REVERT']){
+    ok(k in bt, k + ' is back-tested, so it earns an in-sample record');
+    ok(listSrc.indexOf("'" + k + "'") >= 0, k + ' is in OMNI_MECHANICS');
+  }
 }
 
 console.log('\n== the crypto-native three: gold cannot have these ==');
