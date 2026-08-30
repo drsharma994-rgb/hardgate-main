@@ -4309,15 +4309,190 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     source: 'scripts/solidity-refit.json (generated 2026-08-29)'
   };
 
+  /* ============ forward refit monitor (hg-v533) ============
+     The offline refit above judged the 200-pt score on REPLAY-time stamps
+     — which were starved of most pillar inputs — and found it
+     not-predictive. Since hg-v532 the LIVE stamps are scored with the full
+     data in scope, and every OMNIROUTE forward record now carries the
+     score it fired with (rec.sol). Once enough of those records SETTLE,
+     this monitor re-asks the offline refit's exact question on genuine
+     forward evidence: does the score rank win/loss outcomes?
+
+     NO DATA TORTURE — hardcoded discipline:
+       ONE fit (logistic), ONE feature (standardized sol), ONE fixed
+       chronological 60/40 split, and the SAME verdict bars the offline
+       refit used (test AUC >= 0.55 predictive / >= 0.52 weak / < 0.52
+       not-predictive). No feature search, no threshold tuning, no
+       re-splitting until something passes. Change any of these and the
+       verdict stops being comparable to the offline one and becomes
+       whatever the person running it wanted to see.
+
+     THE MONITOR REPORTS; IT NEVER PROMOTES. A 'predictive' verdict here
+     changes a line of text, not a gate — promotion to a gate is a human
+     decision made after reviewing the fit.
+
+     Pure ES5, deterministic, no deps. Input capped at the most recent
+     5000 settled scored records; the whole pass is O(n log n) and runs
+     well under 50 ms at n=2000. Never throws. */
+  function hgOmniSolidityRefitCheck(pool){
+    try {
+      var src = Array.isArray(pool) ? pool : [];
+      var recs = [], i, r;
+      for (i = 0; i < src.length; i++){
+        r = src[i];
+        if (!r) continue;
+        /* defensive: accept a pre-filtered pool, but never another desk's */
+        if (r.tab !== undefined && r.tab !== null && String(r.tab) !== 'OMNIROUTE') continue;
+        /* win/loss only — expiry is excluded, the ledger's own convention */
+        if (r.state !== 't1' && r.state !== 'stop') continue;
+        if (!isFinite(fin(r.sol))) continue;   /* unscored records are not evidence */
+        recs.push({ t: fin(r.barT) || 0, sol: fin(r.sol), win: (r.state === 't1') ? 1 : 0 });
+      }
+      /* chronological by fire time — the split must respect time. Ties are
+         the NORM, not the edge case: every row of one scan shares the same
+         floored barT, and a sort on time alone would break ties by INPUT
+         ORDER — the same pool shuffled could then land different records on
+         each side of the train/test boundary and move the AUC. The verdict
+         must be a function of the evidence, not of array order, so ties
+         break on record content (sol, then outcome); records identical in
+         all three are interchangeable everywhere downstream. */
+      recs.sort(function(a, b){ return (a.t - b.t) || (a.sol - b.sol) || (a.win - b.win); });
+      if (recs.length > 5000) recs = recs.slice(recs.length - 5000);
+      var n = recs.length;
+      /* GATE: below 300 settled scored records a fit is noise, not evidence */
+      if (n < 300) return { state: 'accumulating', n: n, needed: 300 };
+      var nTrain = Math.floor(n * 0.6);
+      var train = recs.slice(0, nTrain);
+      var test = recs.slice(nTrain);
+      /* standardize on TRAIN moments only — the test set must not leak in */
+      var mu = 0, j;
+      for (j = 0; j < train.length; j++) mu += train[j].sol;
+      mu /= train.length;
+      var vv = 0, d;
+      for (j = 0; j < train.length; j++){ d = train[j].sol - mu; vv += d * d; }
+      var sd = Math.sqrt(vv / train.length);
+      var wTr = 0;
+      for (j = 0; j < train.length; j++) wTr += train[j].win;
+      if (!(sd > 0) || wTr === 0 || wTr === train.length){
+        /* a constant score or a single-class train window cannot be fit —
+           report the fact instead of inventing a verdict (fail closed) */
+        return { state: 'degenerate', n: n,
+                 why: !(sd > 0) ? 'zero variance in train scores' : 'single-class train outcomes' };
+      }
+      /* logistic fit: win ~ intercept + b1 * z(sol). Newton-Raphson with a
+         fixed iteration cap — deterministic; 1-D logistic converges fast. */
+      var b0 = 0, b1 = 0, it;
+      for (it = 0; it < 30; it++){
+        var g0 = 0, g1 = 0, h00 = 0, h01 = 0, h11 = 0, x, z, p, e, w;
+        for (j = 0; j < train.length; j++){
+          x = (train[j].sol - mu) / sd;
+          z = b0 + b1 * x;
+          p = 1 / (1 + Math.exp(-z));
+          e = train[j].win - p;
+          w = p * (1 - p);
+          g0 += e; g1 += e * x;
+          h00 += w; h01 += w * x; h11 += w * x * x;
+        }
+        var det = h00 * h11 - h01 * h01;
+        if (!isFinite(det) || Math.abs(det) < 1e-12) break;
+        var db0 = (h11 * g0 - h01 * g1) / det;
+        var db1 = (h00 * g1 - h01 * g0) / det;
+        if (!isFinite(db0) || !isFinite(db1)) break;
+        b0 += db0; b1 += db1;
+        if (Math.abs(db0) < 1e-10 && Math.abs(db1) < 1e-10) break;
+      }
+      /* test AUC of the fitted model, rank-based (Mann-Whitney), average
+         ranks over ties — the same statistic the offline refit reported */
+      var scored = [], nPos = 0, nNeg = 0;
+      for (j = 0; j < test.length; j++){
+        scored.push({ s: b0 + b1 * ((test[j].sol - mu) / sd), win: test[j].win, i: j });
+        if (test[j].win) nPos++; else nNeg++;
+      }
+      if (!nPos || !nNeg) return { state: 'degenerate', n: n, why: 'single-class test outcomes' };
+      scored.sort(function(a, b){ return (a.s - b.s) || (a.i - b.i); });
+      var ranks = new Array(scored.length), k0 = 0, k1;
+      while (k0 < scored.length){
+        k1 = k0;
+        while (k1 + 1 < scored.length && scored[k1 + 1].s === scored[k0].s) k1++;
+        var avgRank = (k0 + k1) / 2 + 1;   /* 1-based average rank across the tie run */
+        for (j = k0; j <= k1; j++) ranks[j] = avgRank;
+        k0 = k1 + 1;
+      }
+      var sumPos = 0;
+      for (j = 0; j < scored.length; j++) if (scored[j].win) sumPos += ranks[j];
+      var auc = (sumPos - nPos * (nPos + 1) / 2) / (nPos * nNeg);
+      /* top-vs-bottom test QUINTILE win-rate gap, by fitted score */
+      var q = Math.floor(scored.length / 5);
+      var topW = 0, botW = 0, tq;
+      for (j = 0; j < q; j++) botW += scored[j].win;
+      for (j = scored.length - q; j < scored.length; j++) topW += scored[j].win;
+      var topHit = q ? topW / q : NaN;
+      var botHit = q ? botW / q : NaN;
+      /* FIXED verdict bars — identical to the offline refit's. Do not tune. */
+      var verdict = (auc >= 0.55) ? 'predictive' : (auc >= 0.52) ? 'weak' : 'not-predictive';
+      return { state: 'fit', verdict: verdict, auc: auc, n: n,
+               trainN: train.length, testN: test.length, beta: b1,
+               topHit: topHit, botHit: botHit,
+               gap: (isFinite(topHit) && isFinite(botHit)) ? (topHit - botHit) : NaN };
+    } catch (eRf) { return { state: 'error', n: 0 }; }
+  }
+
+  /* Live wrapper: reads the OMNIROUTE forward pool through hg-forward's
+     export and MEMOIZES on a pool signature (record count + settled scored
+     count), so a scan render pays for at most one fit no matter how many
+     cards call the badge builder. Fail-closed: no hg-forward, no verdict. */
+  var __omniRefitLive = { sig: null, out: null };
+  function hgOmniSolidityRefitLive(){
+    try {
+      if (typeof window === 'undefined' || typeof window.hgFwdRecords !== 'function') return null;
+      var list = window.hgFwdRecords('OMNIROUTE');
+      if (!Array.isArray(list)) return null;
+      var nSet = 0, i, r;
+      for (i = 0; i < list.length; i++){
+        r = list[i];
+        if (r && (r.state === 't1' || r.state === 'stop') && isFinite(fin(r.sol))) nSet++;
+      }
+      var sig = list.length + '|' + nSet;
+      if (__omniRefitLive.sig === sig && __omniRefitLive.out) return __omniRefitLive.out;
+      var out = hgOmniSolidityRefitCheck(list);
+      __omniRefitLive = { sig: sig, out: out };
+      return out;
+    } catch (eRl) { return null; }
+  }
+  /* ============ end forward refit monitor ============ */
+
   function hgOmniMeasuredProb(setup){
-    /* Verdict is 'not-predictive' — honesty over decoration: prob is null
-       and the detail is what the UI should say. */
+    /* The OFFLINE verdict is 'not-predictive' — prob stays null and the
+       detail says why. The FORWARD monitor above re-asks the question on
+       settled forward records (full-data stamps, hg-v532+) and this note
+       reports its live state. Even a 'predictive' forward verdict only
+       changes the wording — NEVER auto-promotes the score to a gate. */
+    var base = 'refit not predictive OOS (AUC ' + HG_OMNI_REFIT.testAUC.toFixed(4)
+             + ') — score is informational only';
+    var detail = base, fwd = null;
+    try { fwd = hgOmniSolidityRefitLive(); } catch (eF) { fwd = null; }
+    if (fwd){
+      if (fwd.state === 'accumulating'){
+        detail = base + ' · forward refit pending: ' + fwd.n + '/' + fwd.needed
+               + ' settled scored trades';
+      } else if (fwd.state === 'fit' && fwd.verdict === 'not-predictive'){
+        detail = base + ' · forward refit agrees: AUC ' + fwd.auc.toFixed(4)
+               + ' on ' + fwd.n + ' settled (not predictive)';
+      } else if (fwd.state === 'fit'){
+        detail = 'forward refit: AUC ' + fwd.auc.toFixed(4) + ' on ' + fwd.n
+               + ' settled (' + fwd.verdict + ')'
+               + (fwd.verdict === 'predictive'
+                   ? ' — candidate for gate promotion — review before acting'
+                   : '');
+      }
+      /* degenerate/error states keep the offline note — fail closed */
+    }
     return {
       prob: null,
       verdict: HG_OMNI_REFIT.verdict,
       testAUC: HG_OMNI_REFIT.testAUC,
-      detail: 'refit not predictive OOS (AUC ' + HG_OMNI_REFIT.testAUC.toFixed(4)
-            + ') — score is informational only'
+      forward: fwd,
+      detail: detail
     };
   }
 
@@ -8758,7 +8933,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                     break;
                   }
                 }
-                fwdRows.push({ sym: fitem.sym, dir: found[k].dir,
+                var fwdRow = { sym: fitem.sym, dir: found[k].dir,
                                entry: found[k].plan.entry, stop: found[k].plan.stop, t1: found[k].plan.t1,
                                mechanic: found[k].kind,
                                ticket: !!(found[k].grade && found[k].grade.ticket),
@@ -8789,7 +8964,25 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
                                   Recorded for the forward panel to judge fill probability
                                   as outcomes settle. Calibration uses gold's rates as a
                                   placeholder — crypto-specific measurement needed. */
-                               fillRiskGapR: fillRiskGapR });
+                               fillRiskGapR: fillRiskGapR };
+                /* SOLIDITY ON THE RECORD (hg-v533). Since hg-v532 tickets
+                   are stamped with the FULL-DATA 200-pt score inside
+                   hgOmniEvaluate, while bars + enrichment are in scope.
+                   Riding the compact scalars on the forward record is what
+                   lets hgOmniSolidityRefitCheck later ask whether the
+                   full-data score ranks SETTLED outcomes — the offline
+                   refit (test AUC 0.5192, not-predictive) judged starved
+                   replay stamps, not these. Non-tickets carry no stamp at
+                   this site (their late stamp happens at card render,
+                   after recording) so they get NO fields — absent means
+                   absent, never a fabricated zero. */
+                var fwdSol = found[k].solidity;
+                if (fwdSol && isFinite(fin(fwdSol.score))){
+                  fwdRow.sol = fin(fwdSol.score);
+                  fwdRow.solTier = String(fwdSol.tier || '');
+                  fwdRow.solV = 'v533';
+                }
+                fwdRows.push(fwdRow);
               }
               if (fwdRows.length){
                 try { W.hgFwdRecordScan('OMNIROUTE', TF, fwdRows, { horizonBars: 20 }); }
@@ -9879,6 +10072,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniCostDrag = hgOmniCostDrag;
     window.hgOmniMeasuredProb = hgOmniMeasuredProb;
     window.hgOmniSolidityBadgesHtml = hgOmniSolidityBadgesHtml;
+    /* Forward refit monitor (hg-v533) — pure verdict function plus the
+       memoized live wrapper. Reports only; never promotes a gate. */
+    window.hgOmniSolidityRefitCheck = hgOmniSolidityRefitCheck;
+    window.hgOmniSolidityRefitLive = hgOmniSolidityRefitLive;
     /* 20X leverage-safe subset — display/signal only, never execution.
        Constants overridable via window.HG_OMNI_20X_LEV / _MMR_PCT /
        _STOP_SAFETY / _NOISE_ATR_MULT / _SOLIDITY_FLOOR, read at call time. */

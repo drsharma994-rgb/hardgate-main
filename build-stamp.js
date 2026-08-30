@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v533',
-  pack: 'orderFlow + regime pillars fed live — SOLID tier within reach',
-  built: '2026-08-30T19:00:00Z',
-  note: 'The two dead/capped solidity pillars now eat real data the scan already fetches: extra.orderFlow derived from the 6-window Binance taker series (honest SE-of-mean sigma, sustained-run bonus only on 24h one-sided flow, candle-approximated CVD names deliberately get nothing) and extra.regimeStruct carrying the structural regime vocabulary the pillar always wanted (TREND 10 / RANGE 7 / COMPRESSION 5). Pillar scoring functions byte-identical; all consumers twin-vm verified unchanged. Measured: regime escapes its 2-cap on genuine trend fits, orderFlow scores only when real windows support it. SOLID (140+) is now reachable by strong setups, not just perfect ones.'
+  version: 'hg-v534',
+  pack: 'solidity forward-refit loop — the score now earns its own verdict',
+  built: '2026-08-30T21:30:00Z',
+  note: 'Every fired ticket forward record now carries its full-data solidity score (sol/solTier/solV, absent when unstamped — never faked). An in-app monitor (hgOmniSolidityRefitCheck) waits for 300 settled scored trades, then runs a fixed-discipline chronological OOS fit (60/40 by fire time, single feature, tie-corrected AUC verified vs Mann-Whitney, verdict bars 0.55/0.52, no threshold shopping) and surfaces the live verdict in the card note: refit pending n/300 -> AUC + verdict. Never auto-promotes — predictive reads as candidate for gate promotion, review before acting. scripts/refit-forward-check.mjs runs the same exported math offline.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

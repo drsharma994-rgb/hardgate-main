@@ -111,7 +111,7 @@ localStorage. Never throws.
     if (!(risk > 0)) return null;
     /* target must sit on the correct side of entry, or the record is unsettleable */
     if (dir === 'long' ? !(t1 > entry) : !(t1 < entry)) return null;
-    return {
+    var out = {
       tab: String(rec.tab), mechanic: String(rec.mechanic), sym: String(rec.sym),
       tf: String(rec.tf || ''), dir: dir,
       entry: entry, stop: stop, t1: t1, risk: risk,
@@ -160,6 +160,22 @@ localStorage. Never throws.
       state: 'open', r: null, settledT: null,
       at: isFinite(fin(rec.at)) ? fin(rec.at) : barT
     };
+    /* THE 200-PT SOLIDITY SCORE AT FIRING TIME (hg-v533). Optional, three
+       tiny scalars: sol (the score), solTier, solV (the stamp version).
+       The offline refit judged the score not-predictive (test AUC 0.5192),
+       but it judged REPLAY-time stamps that were starved of most pillar
+       inputs; since hg-v532 live stamps are scored with the FULL data in
+       scope. Whether the full-data score ranks outcomes is therefore an
+       open question only forward evidence can answer, and like grade and
+       stack3 above, the score cannot be reconstructed later — so it is
+       written at record time. ABSENT MEANS ABSENT: a candidate that
+       carried no stamp gets no fields, never a fabricated zero. */
+    if (isFinite(fin(rec.sol))){
+      out.sol = fin(rec.sol);
+      out.solTier = String(rec.solTier || '');
+      out.solV = String(rec.solV || '');
+    }
+    return out;
   }
 
   /* Add a record unless this firing is already logged. Pure: takes and
@@ -606,7 +622,10 @@ localStorage. Never throws.
             /* accept the grade wherever the calling desk keeps it */
             grade: c.grade || c.engineGrade || (c.gradeObj && c.gradeObj.letter) || o.grade || '',
             /* stack3 from OMNIROUTE and OMNIGOLD, passed through unchanged */
-            stack3: c.stack3
+            stack3: c.stack3,
+            /* solidity stamp fields (hg-v533) ride through untouched;
+               hgFwdNormalize attaches them only when sol is finite */
+            sol: c.sol, solTier: c.solTier, solV: c.solV
           });
           if (r === 'recorded') added++;
         }
@@ -857,6 +876,25 @@ localStorage. Never throws.
     W.hgFwdWarn = hgFwdWarn;
     W.hgFwdHealth = hgFwdHealth;
     W.hgFwdHealthHTML = hgFwdHealthHTML;
+
+    /* Raw records for one tab (all tabs when tab is falsy) — for analysis
+       layers that need per-record fields the stat block deliberately drops
+       (the solidity forward-refit monitor reads sol + outcome per record).
+       The AGGREGATE is NOT merged in: it keeps counts, not records, so a
+       refit cannot use it — evidence pruned into the aggregate is simply
+       beyond per-record analysis, and pretending otherwise would fabricate
+       rows. load() re-parses storage, so callers get fresh copies. */
+    W.hgFwdRecords = function(tab){
+      try {
+        var l = load(), out = [], i;
+        for (i = 0; i < l.length; i++){
+          if (!l[i]) continue;
+          if (tab && l[i].tab !== tab) continue;
+          out.push(l[i]);
+        }
+        return out;
+      } catch (e) { hgFwdWarn('records', e); return []; }
+    };
 
     W.hgFwdState = function(){
       try {
