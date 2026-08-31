@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v534',
-  pack: 'solidity forward-refit loop — the score now earns its own verdict',
-  built: '2026-08-30T21:30:00Z',
-  note: 'Every fired ticket forward record now carries its full-data solidity score (sol/solTier/solV, absent when unstamped — never faked). An in-app monitor (hgOmniSolidityRefitCheck) waits for 300 settled scored trades, then runs a fixed-discipline chronological OOS fit (60/40 by fire time, single feature, tie-corrected AUC verified vs Mann-Whitney, verdict bars 0.55/0.52, no threshold shopping) and surfaces the live verdict in the card note: refit pending n/300 -> AUC + verdict. Never auto-promotes — predictive reads as candidate for gate promotion, review before acting. scripts/refit-forward-check.mjs runs the same exported math offline.'
+  version: 'hg-v535',
+  pack: '20X smarter + shorts unblocked — symbol trend beats blanket macro veto',
+  built: '2026-08-31T08:30:00Z',
+  note: 'Two audited changes. (1) 20X: replan searches up to 3 structural swings on the 4h tape then 15m structure (data already fetched) for a stop inside the untouched 1.12-1.84% band (+65 qualifiers measured, prior path provably unchanged); section ranked by real solidity; PRIME chip when forward-paid + symbol-trend + solidity 105+ stack; TREND cards carry the exit-study hint (info only, below significance). (2) The macro-regime veto demotes to an AGAINST note when the symbol own 4h AND daily trends both align with the trade (raw EMA reads; missing data never demotes) — shorts on genuinely downtrending symbols can now earn tickets and reach 20X in a RISK-ON tape; APEX and PRIME stay macro-strict. Basis: symbol-trend cohort PF 0.734 vs 0.666 in the 2,832-trade replay.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
