@@ -4711,19 +4711,77 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
      existing gates can ever accept — so without a re-plan the section is
      structurally empty, not selective.
 
-     The stop comes from REAL 1h structure, the same lastSwing idiom the plan
+     The stop comes from REAL structure, the same lastSwing idiom the plan
      engine uses (plans.js: extreme over the lookback EXCLUDING the live bar,
-     buffered HG_STOP_BUFFER_ATR x ATR14): walk the lookback out from 1 to 20
-     bars, take each distinct running swing extreme, buffer it, and keep the
-     NEAREST one whose distance from the CURRENT plan entry lands inside the
-     safe band. No structural level in-band -> try 1.5x ATR(1h) if THAT
-     distance is in-band. Neither -> null: no invented level, ever.
+     buffered HG_STOP_BUFFER_ATR x ATR14 of the SAME tape). MULTI-CANDIDATE
+     SEARCH, structure first, coarse tape first:
+       1. up to the 3 nearest DISTINCT 1h swings (hgOmni20xSwingCands);
+       2. then — only when the evaluate pass actually retained a 15m tape
+          (enrichOne stamps extra.rows15m on every enriched name; nothing is
+          fetched here) — up to the 3 nearest DISTINCT 15m swings, buffered
+          with the 15m tape's OWN ATR14. 1h structure is preferred because
+          an hourly extreme is defended by more trading than a 15-minute
+          one; 15m only ever ADDS candidates AFTER every 1h level was tried.
+       3. no structural level in-band -> try 1.5x ATR(1h) if THAT distance
+          is in-band. Nothing in-band anywhere -> null: no invented level,
+          ever. The band itself is unchanged — this search finds more REAL
+          levels inside the same frozen gates, it loosens none of them.
+     The winner is the FIRST candidate whose buffered distance from the
+     CURRENT plan entry lands inside the safe band; src records which tape
+     produced it ('1h-swing' / '15m-swing' / '1.5xATR-1h') and srcIdx which
+     candidate on that tape won (0 = nearest).
 
      The result is NOT the swing invalidation and the card must say so — a
      20x stop this tight can be hit by ordinary noise while the swing idea
      stays alive. t1 is set at 2R from the NEW stop so the printed geometry
      is self-consistent. Entry is never moved. Null-safe throughout. */
-  function hgOmni20xReplan(plan, dir, rows1h){
+
+  /* Up to the 3 nearest distinct structural swings on ONE tape, as buffered
+     stop candidates for the re-plan: walk the lookback out from 1 to 20
+     bars (live bar excluded, the lastSwing idiom), keep each DISTINCT
+     running extreme on the LOSS side of entry, buffered by this tape's own
+     ATR14 x the plans.js buffer multiple. Levels tighter than band.lo can
+     never qualify (the cost floor is arithmetic, not preference) and do NOT
+     consume a candidate slot — so this collector never sees fewer usable
+     levels than the single-walk it generalizes. The running extreme only
+     widens with the window, so collection stops once past band.hi: no wider
+     lookback can come back inside. [] on any starved input — fail closed. */
+  function hgOmni20xSwingCands(tape, dir, entry, buffer, band){
+    var out = [];
+    try {
+      if (!tape || tape.length < 16) return out;
+      if (!band || !isFinite(entry) || entry <= 0) return out;
+      if (!isFinite(buffer) || buffer <= 0) return out;
+      var n = tape.length, prev = NaN;
+      var look, i, i0, lvl, px, cand, dist;
+      for (look = 1; look <= 20 && out.length < 3; look++){
+        i0 = Math.max(0, n - 1 - look);
+        /* lastSwing idiom: extreme over the lookback, live bar excluded */
+        lvl = (dir === 'long') ? Infinity : -Infinity;
+        for (i = i0; i < n - 1; i++){
+          px = (dir === 'long') ? fin(tape[i] && tape[i].l) : fin(tape[i] && tape[i].h);
+          if (!isFinite(px)) continue;
+          lvl = (dir === 'long') ? Math.min(lvl, px) : Math.max(lvl, px);
+        }
+        if (!isFinite(lvl)) continue;
+        if (isFinite(prev) && lvl === prev) continue; /* same level, wider window */
+        prev = lvl;
+        cand = (dir === 'long') ? (lvl - buffer) : (lvl + buffer);
+        /* the stop must sit on the LOSS side of entry, or it is no stop */
+        if (dir === 'long' ? !(cand < entry) : !(cand > entry)) continue;
+        dist = Math.abs(entry - cand) / entry * 100;
+        if (!isFinite(dist) || dist <= 0) continue;
+        if (dist < band.lo) continue; /* can never qualify — not a slot */
+        out.push({ stop: cand, dist: dist });
+        /* the running extreme only widens with the window — once past the
+           cap, no larger lookback can come back inside the band */
+        if (dist > band.hi) break;
+      }
+    } catch (eSc) { return []; }
+    return out;
+  }
+
+  function hgOmni20xReplan(plan, dir, rows1h, rows15m){
     try {
       var band = hgOmni20xBand();
       if (!band) return null;
@@ -4744,38 +4802,37 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         var bo = w ? fin(w.HG_STOP_BUFFER_ATR) : NaN;
         if (isFinite(bo) && bo > 0) buf = bo;
       } catch (eB2) {}
-      var buffer = buf * a1;
-      var n = rows.length;
-      var stop = NaN, src = null, prev = NaN;
-      var look, i, i0, lvl, px, cand, dist;
-      for (look = 1; look <= 20; look++){
-        i0 = Math.max(0, n - 1 - look);
-        /* lastSwing idiom: extreme over the lookback, live bar excluded */
-        lvl = (dir === 'long') ? Infinity : -Infinity;
-        for (i = i0; i < n - 1; i++){
-          px = (dir === 'long') ? fin(rows[i] && rows[i].l) : fin(rows[i] && rows[i].h);
-          if (!isFinite(px)) continue;
-          lvl = (dir === 'long') ? Math.min(lvl, px) : Math.max(lvl, px);
+      /* candidates: 1h structure first (preferred — more robust), then 15m
+         structure when the evaluate pass retained it, each tape buffered
+         with ITS OWN ATR14 x the same plans.js multiple. */
+      var cands = hgOmni20xSwingCands(rows, dir, entry, buf * a1, band), j;
+      for (j = 0; j < cands.length; j++){ cands[j].src = '1h-swing'; cands[j].idx = j; }
+      var tape15 = (rows15m && rows15m.length >= 16) ? rows15m : null;
+      if (tape15){
+        var a15 = atrOf(tape15, 14);
+        if (isFinite(a15) && a15 > 0){
+          var c15 = hgOmni20xSwingCands(tape15, dir, entry, buf * a15, band), k15;
+          for (k15 = 0; k15 < c15.length; k15++){
+            c15[k15].src = '15m-swing'; c15[k15].idx = k15;
+            cands.push(c15[k15]);
+          }
         }
-        if (!isFinite(lvl)) continue;
-        if (isFinite(prev) && lvl === prev) continue; /* same level, wider window */
-        prev = lvl;
-        cand = (dir === 'long') ? (lvl - buffer) : (lvl + buffer);
-        /* the stop must sit on the LOSS side of entry, or it is no stop */
-        if (dir === 'long' ? !(cand < entry) : !(cand > entry)) continue;
-        dist = Math.abs(entry - cand) / entry * 100;
-        if (!isFinite(dist) || dist <= 0) continue;
-        if (dist >= band.lo && dist <= band.hi){ stop = cand; src = '1h-swing'; break; }
-        /* the running extreme only widens with the window — once past the
-           cap, no larger lookback can come back inside the band */
-        if (dist > band.hi) break;
+      }
+      var stop = NaN, src = null, srcIdx = -1, cand, dist;
+      for (j = 0; j < cands.length; j++){
+        if (cands[j].dist >= band.lo && cands[j].dist <= band.hi){
+          /* FIRST in-band candidate wins — nearest structure, coarse tape
+             first. The band is the same frozen interval as ever. */
+          stop = cands[j].stop; src = String(cands[j].src); srcIdx = cands[j].idx;
+          break;
+        }
       }
       if (!isFinite(stop)){
         cand = (dir === 'long') ? (entry - 1.5 * a1) : (entry + 1.5 * a1);
         dist = Math.abs(entry - cand) / entry * 100;
         if ((dir === 'long' ? cand < entry : cand > entry)
             && isFinite(dist) && dist >= band.lo && dist <= band.hi){
-          stop = cand; src = '1.5xATR-1h';
+          stop = cand; src = '1.5xATR-1h'; srcIdx = 0;
         }
       }
       if (!isFinite(stop) || !src) return null;
@@ -4785,7 +4842,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var t1 = (dir === 'long') ? (entry + 2 * risk) : (entry - 2 * risk);
       if (!isFinite(t1) || t1 <= 0) return null;
       return { entry: entry, stop: stop, t1: t1,
-               stopDistPct: risk / entry * 100, src: src };
+               stopDistPct: risk / entry * 100, src: src, srcIdx: srcIdx };
     } catch (eRp) { return null; }
   }
 
@@ -4986,7 +5043,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           alt.q.planUsed = 'x20';
           alt.q.x20 = {
             entry: fin(c.x20plan.entry), stop: fin(c.x20plan.stop), t1: fin(c.x20plan.t1),
-            stopDistPct: fin(c.x20plan.stopDistPct), src: String(c.x20plan.src || '')
+            stopDistPct: fin(c.x20plan.stopDistPct), src: String(c.x20plan.src || ''),
+            /* which candidate on that tape won (0 = nearest) — a receipt of
+               the multi-candidate search, printed dim on the card */
+            srcIdx: fin(c.x20plan.srcIdx)
           };
           var pE = fin(c.plan.entry), pS = fin(c.plan.stop);
           alt.q.primaryStopDistPct = (isFinite(pE) && isFinite(pS) && pE > 0)
@@ -5053,6 +5113,27 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         try { q = hgOmni20xQualify(c); } catch (eQ) { q = null; }
         if (q){ list.push(c); quals.push(q); }
       }
+      /* RANKING — the stamped solidity score (c.solidity, the evaluate-time
+         full-enrichment number the SOLIDITY chip shows) descending, null
+         scores last, ties broken by LOWER costR. Ordering only: every card
+         here already passed the identical gate set, nothing is re-judged. */
+      if (list.length > 1){
+        var ordr = [], oi2;
+        for (oi2 = 0; oi2 < list.length; oi2++) ordr.push({ c: list[oi2], q: quals[oi2] });
+        ordr.sort(function(a, b){
+          var sa = (a.c && a.c.solidity) ? fin(a.c.solidity.score) : NaN;
+          var sb = (b.c && b.c.solidity) ? fin(b.c.solidity.score) : NaN;
+          var fa = isFinite(sa), fb = isFinite(sb);
+          if (fa && fb && sa !== sb) return sb - sa;
+          if (fa !== fb) return fa ? -1 : 1;
+          var ca = fin(a.q && a.q.costR), cb = fin(b.q && b.q.costR);
+          var fca = isFinite(ca), fcb = isFinite(cb);
+          if (fca && fcb && ca !== cb) return ca - cb;
+          if (fca !== fcb) return fca ? -1 : 1;
+          return 0;
+        });
+        for (oi2 = 0; oi2 < ordr.length; oi2++){ list[oi2] = ordr[oi2].c; quals[oi2] = ordr[oi2].q; }
+      }
       var h = '<section data-omni-20x="1">';
       h += '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS (' + list.length + ')</div>';
       /* The banner is PERMANENT — it renders on the empty state too,
@@ -5074,8 +5155,71 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           var head = esc(String(c.base || c.sym || '?'))
                    + ' · ' + esc(String(c.dir || '').toUpperCase())
                    + ' · ' + esc(String(c.kind || ''));
+          /* PRIME — three independently MEASURED edges stacked on a card
+             that already qualified, ALL required:
+               (1) the quality path is forward-paid or a full conviction
+                   cert (solidity-only does not count here — it grades
+                   structure, not an out-of-sample record);
+               (2) with-trend on the SAME reads APEX makes: NOT a
+                   reversion/counter-trend kind (rejected by NAME, exactly
+                   like APEX rule 3 — for those kinds hgOmniGates stamps
+                   trend and htf-daily pass=true as 'context only', which
+                   proves nothing about alignment, while the PF pair cited
+                   below was measured on REAL EMA/direction agreement),
+                   plus hgOmniApexGate trend PASS + htf-daily PASS + regime
+                   PASS (regime PASS is exactly 'not against');
+               (3) stamped solidity at/above the same frozen 105 floor.
+             Marker only: it gates nothing and loosens nothing. The tooltip
+             names each edge with its MEASURED basis — the replay PF pair is
+             hardcoded from scripts/backtest-omniroute-v531-results.json
+             aggregates.cohorts.withTrend (PF 0.7344 with vs 0.6656
+             against-or-unknown, n=752/2080). Fails closed to no chip. */
+          var prime = false, primeTip = '';
+          try {
+            var qEdge = !!(q && (q.quality === 'forward-paid' || q.quality === 'conviction'));
+            /* reversion kinds excluded by NAME — a lookup that throws
+               reads as reversion, fail closed (same idiom as APEX) */
+            var pRev = true;
+            try {
+              pRev = (REVERSION_KINDS[String(c.kind || '')] === true)
+                  || (hgOmniIsReversion(c.kind) === true);
+            } catch (ePRv) { pRev = true; }
+            var pgT = hgOmniApexGate(c, 'trend');
+            var pgH = hgOmniApexGate(c, 'htf-daily');
+            var pgR = hgOmniApexGate(c, 'regime');
+            var pTrend = !pRev && !!(pgT && pgT.pass === true && pgH && pgH.pass === true && pgR && pgR.pass === true);
+            var pSol = (c && c.solidity) ? fin(c.solidity.score) : NaN;
+            if (qEdge && pTrend && isFinite(pSol) && pSol >= P.solidityFloor){
+              prime = true;
+              var tipQ = '';
+              if (q.quality === 'forward-paid'){
+                var pRow = hgOmniApexPoolRow(c.kind);
+                if (pRow){
+                  var pHit = isFinite(fin(pRow.hit)) ? ((fin(pRow.hit) * 100).toFixed(0) + '%') : '—';
+                  var pExp = isFinite(fin(pRow.expR)) ? ((fin(pRow.expR) >= 0 ? '+' : '') + fin(pRow.expR).toFixed(2) + 'R') : '—';
+                  tipQ = 'forward-paid: ' + String(c.kind || '') + ' ' + pHit + ' T1-first, ' + pExp + ', n=' + fmt(pRow.samples, 0);
+                } else {
+                  tipQ = 'forward-paid (pool row unavailable at render — the gate read it at qualify time)';
+                }
+              } else {
+                var pCv = (c.conviction && typeof c.conviction === 'object') ? c.conviction
+                        : (c.hit && c.hit.conviction && typeof c.hit.conviction === 'object') ? c.hit.conviction
+                        : null;
+                tipQ = 'conviction cert: count ' + (pCv ? fmt(pCv.count, 0) : '—') + ' >= 3, formation cost gate passed';
+              }
+              primeTip = '3 stacked edges — 1) ' + tipQ
+                + ' · 2) with-trend: trend + htf-daily + regime PASS — withTrend replay PF 0.734 vs 0.666'
+                + ' · 3) solidity ' + fmt(pSol, 0) + '/200 (floor ' + fmt(P.solidityFloor, 0) + ')';
+            }
+          } catch (ePr) { prime = false; primeTip = ''; }
+          /* APEX cross-tag — hgOmniApexQualify's own verdict, called
+             null-safe. Nothing of its logic is duplicated here. */
+          var apx = null;
+          try { apx = hgOmniApexQualify(c); } catch (eApx) { apx = null; }
           h += '<div class="card">';
           h += '<div class="ttl">' + head + ' ' + pill(used20 ? '20X RE-PLAN OK' : '20X GEOMETRY OK', 'ok')
+            +  (prime ? ' <span class="gpip ok" title="' + esc(primeTip) + '">PRIME</span>' : '')
+            +  (apx ? ' ' + pill('APEX', 'ok') : '')
             +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
           if (used20){
             /* The re-plan card must never read like the swing card. The stop
@@ -5086,7 +5230,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             h += '<div class="plan">20x ENTRY ' + fmtPx(q.x20.entry)
               +  ' · STOP ' + fmtPx(q.x20.stop)
               +  ' · T1 ' + fmtPx(q.x20.t1)
-              +  ' <span class="dim">(' + esc(String(q.x20.src || '')) + ', 2R)</span></div>';
+              +  ' <span class="dim">(' + esc(String(q.x20.src || ''))
+              +  ((String(q.x20.src || '').indexOf('swing') >= 0 && isFinite(fin(q.x20.srcIdx)) && fin(q.x20.srcIdx) >= 0)
+                    ? esc(' cand#' + fmt(fin(q.x20.srcIdx) + 1, 0)) : '')
+              +  ', 2R)</span></div>';
             h += '<div class="plan dim">swing plan: stop ' + fmt(q.primaryStopDistPct, 2)
               +  '% away — that invalidation stays live after a 20x stop-out</div>';
           } else {
@@ -5103,6 +5250,18 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
             +  ' · stop-to-liq buffer ' + fmt(q.bufferX, 1) + 'x'
             +  ' · at stop you lose <b>' + fmt(q.marginLossAtStopPct, 0) + '%</b> of margin'
             +  ' · cost ' + fmt(q.costR, 2) + 'R</div>';
+          /* TREND-family exit study — INFO ONLY, plans unchanged. Numbers
+             hardcoded from scripts/exit-optimization-results.json
+             (families.TREND: chosen FIXED 3R / horizon 40 bars, walk-forward
+             test z = 1.1629 against the Sidak bar 2.6611 — directional,
+             below significance). No other family earned a hint: their
+             walk-forward deltas were flat or negative in the same run. */
+          try {
+            if (hgOmniFamilyOf(c.kind) === 'TREND'){
+              h += '<div class="dim">exit study: TREND family tested best at 3R/40 bars '
+                +  '(walk-forward, directional z=1.16 — below significance; plans unchanged)</div>';
+            }
+          } catch (eXh) {}
           try { h += hgOmniSolidityBadgesHtml(c); } catch (eB) {}
           h += '<div class="dim">[via ' + esc(String(q.quality)) + ' · plan: ' + esc(String(q.planUsed || 'primary')) + ']</div>';
           h += '</div>';
@@ -5937,6 +6096,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var rgWhy = x.regimeWarm ? ('regime unavailable — warm reported: ' + x.regimeWarm)
                              : 'regime module has not run';
     var rgProxy = (x.regime && x.regime.source === 'btc-daily-proxy');
+    var rgInfo = false;
     if (x.regime && x.regime.label){
       var lbl = String(x.regime.label).toUpperCase();
       if (lbl.indexOf('RISK-ON') >= 0) { rg = (hit.dir === 'long'); }
@@ -5945,8 +6105,47 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       rgWhy = 'regime ' + x.regime.label
             + (rgProxy ? (' (BTC daily proxy — regime.js gauges unavailable' + (x.regime.detail ? '; ' + x.regime.detail : '') + ')') : '')
             + (rg ? '' : ' — against the setup side');
+      /* A macro read imposed as a VETO silenced every short for as long as
+         BTC's own daily stack was bullish — including shorts on symbols in
+         their own confirmed downtrend. The v531 roster replay
+         (scripts/backtest-omniroute-v531-results.json, aggregates.cohorts
+         .withTrend) measured SYMBOL-level trend alignment as the edge:
+         withTrend PF 0.7344 vs againstOrUnknown 0.6656 across 531 contracts
+         — not BTC direction imposed on all of them. So when the symbol's OWN
+         tape argues with the trade on BOTH the scan timeframe and the daily,
+         the adverse macro read is DEMOTED to context (info:true — 'an info
+         gate REPORTS an adverse read without standing the trade aside').
+         RAW alignment, deliberately NOT the trend/htf-daily gate passes:
+         those auto-pass reversion kinds as 'context only' (the PRIME-marker
+         audit caught exactly that trap), so the EMA stacks are re-read here
+         from the same e21/e50 and he21/he50 the trend and htf-daily gates
+         already computed. PROVENANCE CAVEAT: those e21/e50 are the 4h SCAN
+         tape (TF='4h'), while the replay cohort was tagged on the 1h prefix
+         EMA21/50 (backtest-omniroute.mjs H1_FAST/H1_SLOW) — the daily half
+         (EMA10/21) matches exactly, the intraday half is the nearest
+         in-ledger equivalent, chosen so this demotion can never contradict
+         the trend-gate row printed on the same card. The PF pair is
+         directional evidence for symbol-trend alignment, not a replay of
+         this exact trigger. Either read missing or disagreeing => the veto
+         stands exactly as before. Neutral/absent regime unchanged. APEX
+         requires regime pass === true, so a demoted read still blocks APEX
+         — the macro-strict tier stays macro-strict. */
+      if (rg === false){
+        var rgOwn1h = (isFinite(e21) && isFinite(e50))
+          ? (((e21 >= e50) ? 'long' : 'short') === hit.dir) : null;
+        var rgOwnD  = (isFinite(he21) && isFinite(he50))
+          ? (((he21 >= he50) ? 'long' : 'short') === hit.dir) : null;
+        if (rgOwn1h === true && rgOwnD === true){
+          rgInfo = true;
+          rgWhy = 'regime ' + x.regime.label
+                + (rgProxy ? (' (BTC daily proxy — regime.js gauges unavailable' + (x.regime.detail ? '; ' + x.regime.detail : '') + ')') : '')
+                + ' — against this ' + hit.dir
+                + ', but the symbol own 4h + daily trend align with it: demoted to context'
+                + ' (symbol-trend cohort PF 0.734 vs 0.666 in replay)';
+        }
+      }
     }
-    gates.push({ key:'regime', hard:false, pass: rg, why: rgWhy });
+    gates.push({ key:'regime', hard:false, info: rgInfo, pass: rg, why: rgWhy });
 
     /* 11 — event blackout: never open into a scheduled high-impact print */
     /* hgNewsRisk() returns {risk:'low', note:'news not loaded'} when the news
@@ -7067,8 +7266,12 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var x20plan = null;
       try {
         if (grade && grade.ticket === true && plan){
+          /* rows15m rides the same enrichment extra as rows1h (enrichOne
+             stamps both) — passing it is a read of data already in hand,
+             never a fetch. Names past the enrich ceiling carry neither. */
           x20plan = hgOmni20xReplan(plan, hit.dir,
-            (extra && extra.rows1h && extra.rows1h.length) ? extra.rows1h : null);
+            (extra && extra.rows1h && extra.rows1h.length) ? extra.rows1h : null,
+            (extra && extra.rows15m && extra.rows15m.length) ? extra.rows15m : null);
         }
       } catch (eX20p) { x20plan = null; }
       /* FULL-DATA SOLIDITY STAMP — scored HERE, not at render, because the
