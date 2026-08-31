@@ -4,11 +4,11 @@
   "gold": null,
   "lastRunAt": "2026-08-30T22:40:51.041Z",
   "ticket": {
-    "long": null,
-    "short": {
+    "long": {
       "sym": "XAU",
-      "entry": 4508.876834617324
-    }
+      "entry": 4506.771497737076
+    },
+    "short": null
   },
   "sniper": {
     "key": "XAU@4463.69",
@@ -142,17 +142,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-30T22:40:51.041Z"
+    "at": "2026-08-31T00:52:44.870Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-30T22:40:51.041Z"
+    "at": "2026-08-31T00:52:44.871Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
+  "engineAlertAt": "2026-08-31T00:52:44.871Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -167,7 +168,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-30T22:40:51.874Z"
+    "at": "2026-08-31T00:52:45.265Z"
   },
   "bookFill": {
     "key": "u0|p0",
