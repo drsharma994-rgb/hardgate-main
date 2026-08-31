@@ -3476,9 +3476,21 @@ terse status, and never launches a first-time scan on a global refresh.
       var atrN = atrOf(rows, 14);
       var distAtr = (isFinite(livePx) && isFinite(setupPx) && isFinite(atrN) && atrN > 0)
                   ? Math.abs(livePx - setupPx) / atrN : NaN;
+      /* FORMATION at plan construction (hg-v533): the venue stop floor and
+         the measured-toxic kind demotion are decided HERE, where the plan
+         is built, and stamped on the card. A throwing check is a
+         fail-closed not-formed, never a silently tradable card. */
+      var formation;
+      try { formation = hgOgFormation({ kind: hit.kind, horizon: cfg.label, plan: plan }); }
+      catch (eFm) {
+        formation = { formed: false, drag: null, failClosed: true,
+          reasons: ['formation check threw — fail closed: ' + ((eFm && eFm.message) || eFm)] };
+      }
       out.push({
         horizon: cfg.label, kind: hit.kind, dir: hit.dir, level: hit.level, why: hit.why,
         gates: gates, grade: grade, plan: plan,
+        formation: formation,
+        replaySurvivor: hgOgIsSurvivor(hit.kind),
         /* Carried on the candidate so the ranker can put the setup the rest
            of the desk agrees with above the one nothing supports. */
         consensus: hgOgConsensus(hgOgConsensusVoters(hits, rows, ex), hit),
@@ -4073,9 +4085,26 @@ terse status, and never launches a first-time scan on a global refresh.
 
   function hgOgDeskOrder(list, tape){
     var tapeDir = String(tape || '').toLowerCase();
+    /* replay-survivor class key (hg-v533): within the SAME section — same
+       ticket state, same tape side — a kind the replay measured
+       gross-positive at scale with a low fee load sorts ahead of untagged
+       kinds. Ranking only: it never crosses a section boundary (a survivor
+       WATCH cannot outrank a TICKET), and pick selection is untouched. */
+    function ordCls(c){
+      return ((c && c.grade && c.grade.ticket) ? 2 : 0)
+        + (((tapeDir === 'long' || tapeDir === 'short')
+            && String((c && c.dir) || '').toLowerCase() === tapeDir) ? 1 : 0);
+    }
+    function surv(c){
+      return (c && (c.replaySurvivor || hgOgIsSurvivor(c.kind))) ? 1 : 0;
+    }
     return (list || []).slice().sort(function(a, b){
       if (!!a.topPick !== !!b.topPick) return a.topPick ? -1 : 1;
       if (!!a.topWatch !== !!b.topWatch) return a.topWatch ? -1 : 1;
+      if (ordCls(a) === ordCls(b)){
+        var va = surv(a), vb = surv(b);
+        if (va !== vb) return vb - va;
+      }
       var sa = hgOgBalanceScore(a, tapeDir);
       var sb = hgOgBalanceScore(b, tapeDir);
       if (sb !== sa) return sb - sa;
@@ -4333,19 +4362,39 @@ terse status, and never launches a first-time scan on a global refresh.
             ? ' · WITH GOLD TAPE · gate blocked · not trade-ready'
             : ' · WITH GOLD TAPE · not a win probability.')) + '</div>';
 
-      /* CONFLUENCE SCORE & SPECTRUM RATING */
+      /* CONFLUENCE SCORE & SPECTRUM RATING — truth-labeled (hg-v532).
+         A scalar confResult means the score came from the engine grade
+         fallback in hgOgAdvancedConfluenceScore, not from multi-factor
+         arithmetic; the badge says so ('GRADE-A CLASS', never
+         'EXCEPTIONAL') and every tier carries its measured replay record.
+         COST QUARANTINE: heavy/fatal fee tiers print COSTS FIRST above
+         the badge; a fatal tier suppresses the medal entirely — the
+         score stays, as plain text. */
       var confResult = hgOgAdvancedConfluenceScore(row);
       var confScore = typeof confResult === 'number' ? confResult : (confResult && fin(confResult.score));
       if (isFinite(fin(confScore))){
-        var confColor = confScore >= 85 ? '#10b981' : confScore >= 70 ? '#22c55e' : confScore >= 50 ? '#f59e0b' : '#dc2626';
-        var confBadge = confScore >= 85 ? '🏆 EXCEPTIONAL' : confScore >= 70 ? '✓ STRONG' : confScore >= 50 ? '⚠ FAIR' : '✗ WEAK';
-        h += '<div style="margin:12px 0;padding:8px;border:2px solid ' + confColor + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
-        h += '<div style="display:flex;justify-content:space-between;align-items:center">';
-        h += '<div style="font-size:1.4em;font-weight:bold;color:' + confColor + '">' + confScore.toFixed(0) + '/100</div>';
-        h += '<div style="background:' + confColor + ';color:white;padding:4px 8px;border-radius:6px;font-size:0.8em;font-weight:bold">' + confBadge + '</div>';
-        /* replay fit hook (ADDITIVE): '' while the baked verdict is not-predictive */
-        h += hgOgConfluenceFitPwinHtml(confScore);
-        h += '</div></div>';
+        var confFromGrade = (typeof confResult === 'number');
+        var confB = hgOgTierBadgeInfo(confScore, row, confFromGrade);
+        var confColor = confB.color;
+        var confDrag = hgOgCostDrag(row);
+        if (confDrag && (confDrag.tier === 'heavy' || confDrag.tier === 'fatal')){
+          h += hgOgCostsFirstHtml(row, confDrag);
+        }
+        if (confDrag && confDrag.tier === 'fatal'){
+          h += '<div class="dim og-conf-plain" style="margin:12px 0">MULTI-FACTOR CONFLUENCE '
+            + confScore.toFixed(0) + '/100 — badge withheld: the fee is '
+            + confDrag.costR.toFixed(2) + 'R of this stop'
+            + (confB.suffix ? ' · ' + esc(confB.suffix) : '') + '</div>';
+        } else {
+          h += '<div style="margin:12px 0;padding:8px;border:2px solid ' + confColor + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
+          h += '<div style="display:flex;justify-content:space-between;align-items:center">';
+          h += '<div style="font-size:1.4em;font-weight:bold;color:' + confColor + '">' + confScore.toFixed(0) + '/100</div>';
+          h += '<div style="background:' + confColor + ';color:white;padding:4px 8px;border-radius:6px;font-size:0.8em;font-weight:bold">' + esc(confB.label)
+            + (confB.suffix ? ' <span style="font-weight:normal;opacity:.92">· ' + esc(confB.suffix) + '</span>' : '') + '</div>';
+          /* replay fit hook (ADDITIVE): '' while the baked verdict is not-predictive */
+          h += hgOgConfluenceFitPwinHtml(confScore);
+          h += '</div></div>';
+        }
       }
 
       /* Replay evidence + cost drag (ADDITIVE). Cost chip only when the fee
@@ -5063,38 +5112,69 @@ terse status, and never launches a first-time scan on a global refresh.
     };
   }
 
-  /* Multi-Factor Confluence Display */
+  /* Factor bars, shared by the medal box and the quarantined plain render —
+     a factor checklist stays useful even where the medal would be a lie. */
+  function hgOgConfluenceFactorsHtml(setup){
+    if (!setup || !setup.confluenceFactors || !setup.confluenceFactors.length) return '';
+    var html = '<div style="font-size:0.9em;color:var(--fg-muted,#666)">';
+    setup.confluenceFactors.forEach(function(f){
+      var barColor = f.value >= (f.max * 0.8) ? '#22c55e' : f.value >= (f.max * 0.6) ? '#f59e0b' : '#dc2626';
+      html += '<div style="margin-bottom:6px">';
+      html += '<div style="display:flex;justify-content:space-between;margin-bottom:2px">';
+      html += '<span>' + f.name + '</span>';
+      html += '<span style="font-weight:bold;color:' + barColor + '">' + Math.round(f.value) + '/' + f.max + '</span>';
+      html += '</div>';
+      html += '<div style="height:8px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden">';
+      html += '<div style="height:100%;width:' + (f.value/f.max*100) + '%;background:' + barColor + '"></div>';
+      html += '</div></div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
+  /* Multi-Factor Confluence Display — truth-labeled (hg-v532).
+     - A score that came from the engine grade scalar (setup.confluenceFromGrade,
+       or the same predicate the scorer uses: engineGrade && !gateConf) is
+       labeled GRADE-A CLASS at >=85 instead of EXCEPTIONAL, because 85 is
+       reachable ONLY through that fallback (grade-A = 85): the multi-factor
+       scan arithmetic tops out near 82 (market-conditions factor caps at
+       84.25/5 = 16.85, Wilson factor at 0.3) and the replay's own byTierNote
+       says the same. Every tier badge carries its measured replay record.
+     - COST QUARANTINE: heavy/fatal cost tiers render COSTS FIRST above the
+       badge; fatal additionally suppresses the medal — score as plain text,
+       factors kept, setup still rendered. */
   function hgOgRenderConfluenceBreakdown(setup){
     if (!setup || setup.confluenceScore === null || setup.confluenceScore === undefined) return '';
     var score = isFinite(fin(setup.confluenceScore)) ? fin(setup.confluenceScore) : 0;
-    var color = score >= 85 ? '#10b981' : score >= 70 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#dc2626';
-    var badge = score >= 85 ? '🏆 EXCEPTIONAL' : score >= 70 ? '✓ STRONG' : score >= 50 ? '⚠ FAIR' : '✗ WEAK';
+    var fromGrade = setup.confluenceFromGrade === true || !!(setup.engineGrade && !setup.gateConf);
+    var b = hgOgTierBadgeInfo(score, setup, fromGrade);
+    var color = b.color;
+    var drag = hgOgCostDrag(setup);
+    var html = '';
+    if (drag && (drag.tier === 'heavy' || drag.tier === 'fatal')){
+      html += hgOgCostsFirstHtml(setup, drag);
+    }
+    if (drag && drag.tier === 'fatal'){
+      html += '<div class="og-conf-plain" style="margin:12px 0;padding:8px;border:1px solid var(--hr);border-radius:4px">';
+      html += '<div style="font-weight:bold;margin-bottom:4px">MULTI-FACTOR CONFLUENCE ' + score + '/100</div>';
+      html += '<div class="dim" style="font-size:11px">badge withheld — the fee is ' + drag.costR.toFixed(2)
+        + 'R of this stop (fatal tier): a medal on a structurally unpayable trade is a lie'
+        + (b.suffix ? ' · ' + esc(b.suffix) : '') + '</div>';
+      html += hgOgConfluenceFactorsHtml(setup);
+      html += '</div>';
+      return html;
+    }
 
-    var html = '<div style="margin:12px 0;padding:8px;border:2px solid ' + color + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
+    html += '<div style="margin:12px 0;padding:8px;border:2px solid ' + color + ';border-radius:4px;background:rgba(34,197,94,0.05)">';
     html += '<div style="font-weight:bold;margin-bottom:8px;color:' + color + '">⭐ MULTI-FACTOR CONFLUENCE</div>';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     html += '<div style="font-size:2em;font-weight:bold;color:' + color + '">' + score + '/100</div>';
-    html += '<div style="background:' + color + ';color:white;padding:4px 8px;border-radius:6px;font-size:0.85em;font-weight:bold">' + badge + '</div>';
+    html += '<div style="background:' + color + ';color:white;padding:4px 8px;border-radius:6px;font-size:0.85em;font-weight:bold">' + esc(b.label)
+      + (b.suffix ? ' <span style="font-weight:normal;opacity:.92">· ' + esc(b.suffix) + '</span>' : '') + '</div>';
     /* replay fit hook (ADDITIVE): '' while the baked verdict is not-predictive */
     html += hgOgConfluenceFitPwinHtml(score);
     html += '</div>';
-
-    /* Factor breakdown */
-    if (setup.confluenceFactors && setup.confluenceFactors.length > 0){
-      html += '<div style="font-size:0.9em;color:var(--fg-muted,#666)">';
-      setup.confluenceFactors.forEach(function(f){
-        var barColor = f.value >= (f.max * 0.8) ? '#22c55e' : f.value >= (f.max * 0.6) ? '#f59e0b' : '#dc2626';
-        html += '<div style="margin-bottom:6px">';
-        html += '<div style="display:flex;justify-content:space-between;margin-bottom:2px">';
-        html += '<span>' + f.name + '</span>';
-        html += '<span style="font-weight:bold;color:' + barColor + '">' + Math.round(f.value) + '/' + f.max + '</span>';
-        html += '</div>';
-        html += '<div style="height:8px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden">';
-        html += '<div style="height:100%;width:' + (f.value/f.max*100) + '%;background:' + barColor + '"></div>';
-        html += '</div></div>';
-      });
-      html += '</div>';
-    }
+    html += hgOgConfluenceFactorsHtml(setup);
     html += '</div>';
     return html;
   }
@@ -5135,7 +5215,99 @@ terse status, and never launches a first-time scan on a global refresh.
     return (isFinite(ovr) && ovr > 0) ? ovr : HG_OG_RT_COST_PCT;
   }
 
-  /* COMPACT baked evidence. kinds/cohorts: [n, winRate, avgNetR, avgGrossR];
+  /* ==================== venue-true cost model (hg-v533) ====================
+
+     WHY. The 0.26% round trip above is PAXG-calibrated — it is the cost model
+     the replay was measured under, and it stayed the only cost model even
+     though this desk EXECUTES gold on XM XAUUSD (xm-trader.js, the same
+     broker bridge every SEND TICKET TO XM button feeds), where the round
+     trip is spread-driven and roughly 13x cheaper. Pricing an XM execution
+     at PAXG fees mislabels the fee-R of every stop; pricing PAXG at XM fees
+     would be worse. So the venue is named, and each preset carries its own
+     documented basis.
+
+     XM PRESET ARITHMETIC (documented, overridable):
+       spread   ~$0.35 on XAUUSD (typical XM standard-account spread), taken
+                against a conservative LOW spot reference of $3,500/oz — a
+                lower reference makes the spread a LARGER percent, so the
+                assumption errs against the trade: 0.35 / 3500 = 0.010%.
+       slippage 0.010% round trip (both sides pooled) — same class of
+                assumption as the replay's 0.03%/side on thin PAXG, scaled
+                for a deep spot-gold book.
+       total    ~0.020% round trip.
+     Override window.HG_OG_XM_SPREAD_USD to re-derive from a different
+     spread; the slippage and reference-spot constants are deliberate
+     constants, not knobs.
+
+     VENUE SELECTION. window.HG_OG_VENUE ('XM' | 'PAXG') picks the preset.
+     Absent or unrecognised -> PAXG, the CONSERVATIVE fallback: assuming the
+     expensive venue can only overstate fees, never understate them.
+     window.HG_OG_RT_COST_PCT keeps its old meaning as the PAXG-preset
+     override (hgOgRtCostPct reads it), so nothing that tuned it breaks.
+
+     HONESTY RULE, enforced at every render site via
+     hgOgVenueCostNoteHtml(): the replay outcomes were measured AT PAXG
+     COSTS. A cheaper venue changes the COST arithmetic (fee-R of a stop,
+     venue-adjusted net), never the measured outcomes (n, WR, grossR). */
+  var HG_OG_VENUE_DEFAULT = 'PAXG';
+  var HG_OG_XM_SPREAD_USD = 0.35;     /* assumed XAUUSD spread, $/oz */
+  var HG_OG_XM_SPOT_REF_USD = 3500;   /* conservative LOW spot reference */
+  var HG_OG_XM_SLIP_PCT = 0.010;      /* round-trip slippage assumption, % */
+
+  /* -> { venue: 'XM'|'PAXG', rtCostPct, basis }. Never throws; anything
+     unreadable fails closed to the PAXG preset. */
+  function hgOgVenueCost(){
+    var w = W();
+    var venue = '';
+    try { venue = String((w && w.HG_OG_VENUE) || '').toUpperCase().replace(/^\s+|\s+$/g, ''); }
+    catch (eV) { venue = ''; }
+    if (venue === 'XM'){
+      var spread = NaN;
+      try { spread = w ? fin(w.HG_OG_XM_SPREAD_USD) : NaN; } catch (eS) { spread = NaN; }
+      if (!(isFinite(spread) && spread > 0)) spread = HG_OG_XM_SPREAD_USD;
+      var spreadPct = spread / HG_OG_XM_SPOT_REF_USD * 100;
+      var rt = spreadPct + HG_OG_XM_SLIP_PCT;
+      if (isFinite(rt) && rt > 0){
+        return {
+          venue: 'XM', rtCostPct: rt,
+          basis: 'XM XAUUSD assumed $' + spread.toFixed(2) + ' spread on $'
+            + HG_OG_XM_SPOT_REF_USD + ' ref spot (' + spreadPct.toFixed(3)
+            + '%) + ' + HG_OG_XM_SLIP_PCT.toFixed(3) + '% slippage = '
+            + rt.toFixed(3) + '% round trip'
+        };
+      }
+      /* degenerate override -> fall through to the conservative preset */
+    }
+    return {
+      venue: 'PAXG', rtCostPct: hgOgRtCostPct(),
+      basis: 'PAXG replay cost model: 0.1% taker/side + 0.03% slippage/side = '
+        + hgOgRtCostPct().toFixed(2) + '% round trip'
+        + (venue && venue !== 'PAXG' ? ' (venue "' + venue + '" unrecognised — conservative fallback)' : '')
+    };
+  }
+
+  /* One dim line for anywhere replay numbers sit beside venue-cost numbers.
+     '' at PAXG costs (nothing to reconcile); at a cheaper venue it states
+     that the measured outcomes are PAXG-cost facts. */
+  function hgOgVenueCostNoteHtml(){
+    var vc = hgOgVenueCost();
+    var rt = fin(vc && vc.rtCostPct);
+    if (!isFinite(rt) || Math.abs(rt - HG_OG_REPLAY_EVIDENCE.rtCostPct) < 1e-9) return '';
+    return '<div class="dim og-venue-note" style="font-size:11px;margin-top:2px">venue '
+      + esc(String(vc.venue)) + ' costs (' + rt.toFixed(3) + '% RT) price the FEES here — the replay record itself was measured AT PAXG COSTS ('
+      + HG_OG_REPLAY_EVIDENCE.rtCostPct.toFixed(2)
+      + '% RT): cheaper execution changes the cost math, not the measured outcomes</div>';
+  }
+  /* ================== end venue-true cost model (hg-v533) ================== */
+
+  /* COMPACT baked evidence.
+     kinds: [n, winRate, avgNetR, avgGrossR, medianCostR] — the 5th element
+       (hg-v533) is that kind's MEDIAN per-trade fee load in R, measured at
+       the replay's 0.26% PAXG round trip (perKind.medianCostR in
+       scripts/omnigold-replay-evidence.json). It is what lets a cheaper
+       venue's fee math be recomputed HONESTLY: fees scale with the venue's
+       round-trip cost, the measured gross outcomes do not.
+     cohorts: [n, winRate, avgNetR, avgGrossR];
      grades: [n, winRate, avgNetR] (per-grade gross was not recoverable).
      Keys are uppercase so lookup can normalise case. */
   var HG_OG_REPLAY_EVIDENCE = {
@@ -5147,53 +5319,53 @@ terse status, and never launches a first-time scan on a global refresh.
     fit: { verdict: 'not-predictive', testAUC: 0.4924,
            topDecileLift: 0.929, bottomDecileLift: 0.864 },
     kinds: {
-      'ADR-FADE':        [242, 0.3388, -1.415,  0.017],
-      'THREE-BAR':       [283, 0.3392, -4.220,  0.018],
-      'ENGULF-LEVEL':    [115, 0.3652, -3.351,  0.096],
-      'CCI-EXTREME':     [372, 0.3118, -1.095, -0.046],
-      'STOCHRSI-TURN':   [495, 0.3394, -0.737,  0.053],
-      'PIN-REJECT':      [195, 0.3590, -4.018,  0.077],
-      'SPRING':          [132, 0.2879, -1.555, -0.136],
-      'ROUND-MAGNET':    [713, 0.3745, -0.783,  0.133],
-      'VWAP-BAND':       [ 71, 0.2535, -1.217, -0.239],
-      'SWEEP-V2':        [205, 0.3220, -1.818, -0.034],
-      'LONDON-FIX':      [133, 0.2481, -0.465, -0.063],
-      'HA-FLIP':         [109, 0.2936, -0.387,  0.069],
-      'FVG-HVN':         [151, 0.2450, -0.714, -0.166],
-      'SQUEEZE-FIRE':    [ 53, 0.3019, -0.310,  0.094],
-      'CUSUM-SHIFT':     [ 53, 0.3019, -0.185,  0.082],
-      'NY-OPEN-DRIVE':   [ 62, 0.1774, -0.433, -0.106],
-      'STRUCT-BOS':      [104, 0.3077, -0.164,  0.165],
-      'BOS-RETEST':      [ 87, 0.3218, -0.299,  0.112],
-      'NR7-BREAK':       [143, 0.2587, -0.529, -0.102],
-      'MMOVE':           [212, 0.3019, -0.250,  0.072],
-      'MFI-SQUAT':       [117, 0.2650, -0.732, -0.092],
-      'PIVOT-REJECT':    [177, 0.2994, -1.139, -0.094],
-      'INSIDE-BREAK':    [126, 0.3016, -0.394,  0.044],
-      'ASIA-BREAK':      [ 91, 0.2198, -0.463, -0.068],
-      'KZ-JUDAS':        [158, 0.2975, -2.206, -0.108],
-      'ORB':             [142, 0.2817, -0.332,  0.024],
-      'TREND-RECLAIM':   [107, 0.3364, -0.397,  0.082],
-      'DI-CROSS':        [107, 0.2710, -0.358, -0.001],
-      'PO3':             [158, 0.3038, -0.823, -0.048],
-      'FIB-618':         [126, 0.2778, -0.635, -0.115],
-      'PD-EQUILIBRIUM':  [307, 0.2964, -5.185, -0.111],
-      'FVG-FILL':        [155, 0.2774, -0.346,  0.039],
-      'ER-IGNITION':     [ 80, 0.2500, -1.392, -0.250],
-      'RSI-DIVERGE':     [ 51, 0.3529, -2.720,  0.071],
-      'PDL-SWEEP':       [ 76, 0.1974, -1.588, -0.408],
-      'RIBBON-PULLBACK': [102, 0.2451, -0.447, -0.093],
-      'VWAP-REVERT':     [ 61, 0.2951, -0.662, -0.077],
-      'AVWAP-RECLAIM':   [117, 0.3419, -0.370,  0.080],
-      'ICHI-KUMO':       [107, 0.2617, -0.401, -0.053],
-      'EQH-SWEEP':       [ 47, 0.3404, -1.390,  0.021],
-      'WEEKLY-OPEN':     [150, 0.3533, -0.645,  0.076],
-      'EMA50-HOLD':      [118, 0.2712, -1.131, -0.108],
-      'UTAD':            [107, 0.3364, -1.493,  0.009],
-      'PDH-SWEEP':       [ 81, 0.3210, -1.174, -0.024],
-      'EQL-SWEEP':       [ 53, 0.3774, -1.033,  0.132],
-      'OPENING RANGE BREAKOUT':   [69, 0.4928, -1.798,  0.220],
-      'HVN / VOLUME NODE RETEST': [65, 0.3846, -3.071, -0.038]
+      'ADR-FADE':        [242, 0.3388, -1.415,  0.017, 1.462],
+      'THREE-BAR':       [283, 0.3392, -4.220,  0.018, 2.325],
+      'ENGULF-LEVEL':    [115, 0.3652, -3.351,  0.096, 1.868],
+      'CCI-EXTREME':     [372, 0.3118, -1.095, -0.046, 0.679],
+      'STOCHRSI-TURN':   [495, 0.3394, -0.737,  0.053, 0.532],
+      'PIN-REJECT':      [195, 0.3590, -4.018,  0.077, 2.383],
+      'SPRING':          [132, 0.2879, -1.555, -0.136, 0.944],
+      'ROUND-MAGNET':    [713, 0.3745, -0.783,  0.133, 0.720],
+      'VWAP-BAND':       [ 71, 0.2535, -1.217, -0.239, 0.646],
+      'SWEEP-V2':        [205, 0.3220, -1.818, -0.034, 0.932],
+      'LONDON-FIX':      [133, 0.2481, -0.465, -0.063, 0.241],
+      'HA-FLIP':         [109, 0.2936, -0.387,  0.069, 0.268],
+      'FVG-HVN':         [151, 0.2450, -0.714, -0.166, 0.322],
+      'SQUEEZE-FIRE':    [ 53, 0.3019, -0.310,  0.094, 0.245],
+      'CUSUM-SHIFT':     [ 53, 0.3019, -0.185,  0.082, 0.238],
+      'NY-OPEN-DRIVE':   [ 62, 0.1774, -0.433, -0.106, 0.214],
+      'STRUCT-BOS':      [104, 0.3077, -0.164,  0.165, 0.211],
+      'BOS-RETEST':      [ 87, 0.3218, -0.299,  0.112, 0.224],
+      'NR7-BREAK':       [143, 0.2587, -0.529, -0.102, 0.260],
+      'MMOVE':           [212, 0.3019, -0.250,  0.072, 0.226],
+      'MFI-SQUAT':       [117, 0.2650, -0.732, -0.092, 0.354],
+      'PIVOT-REJECT':    [177, 0.2994, -1.139, -0.094, 0.803],
+      'INSIDE-BREAK':    [126, 0.3016, -0.394,  0.044, 0.284],
+      'ASIA-BREAK':      [ 91, 0.2198, -0.463, -0.068, 0.231],
+      'KZ-JUDAS':        [158, 0.2975, -2.206, -0.108, 1.242],
+      'ORB':             [142, 0.2817, -0.332,  0.024, 0.235],
+      'TREND-RECLAIM':   [107, 0.3364, -0.397,  0.082, 0.341],
+      'DI-CROSS':        [107, 0.2710, -0.358, -0.001, 0.240],
+      'PO3':             [158, 0.3038, -0.823, -0.048, 0.461],
+      'FIB-618':         [126, 0.2778, -0.635, -0.115, 0.373],
+      'PD-EQUILIBRIUM':  [307, 0.2964, -5.185, -0.111, 2.307],
+      'FVG-FILL':        [155, 0.2774, -0.346,  0.039, 0.261],
+      'ER-IGNITION':     [ 80, 0.2500, -1.392, -0.250, 0.622],
+      'RSI-DIVERGE':     [ 51, 0.3529, -2.720,  0.071, 1.947],
+      'PDL-SWEEP':       [ 76, 0.1974, -1.588, -0.408, 0.780],
+      'RIBBON-PULLBACK': [102, 0.2451, -0.447, -0.093, 0.244],
+      'VWAP-REVERT':     [ 61, 0.2951, -0.662, -0.077, 0.306],
+      'AVWAP-RECLAIM':   [117, 0.3419, -0.370,  0.080, 0.305],
+      'ICHI-KUMO':       [107, 0.2617, -0.401, -0.053, 0.232],
+      'EQH-SWEEP':       [ 47, 0.3404, -1.390,  0.021, 0.848],
+      'WEEKLY-OPEN':     [150, 0.3533, -0.645,  0.076, 0.619],
+      'EMA50-HOLD':      [118, 0.2712, -1.131, -0.108, 0.412],
+      'UTAD':            [107, 0.3364, -1.493,  0.009, 1.022],
+      'PDH-SWEEP':       [ 81, 0.3210, -1.174, -0.024, 0.745],
+      'EQL-SWEEP':       [ 53, 0.3774, -1.033,  0.132, 0.887],
+      'OPENING RANGE BREAKOUT':   [69, 0.4928, -1.798,  0.220, 0.880],
+      'HVN / VOLUME NODE RETEST': [65, 0.3846, -3.071, -0.038, 1.304]
     },
     grades: {
       'A':         [70, 0.5429, -1.714],
@@ -5203,6 +5375,29 @@ terse status, and never launches a first-time scan on a global refresh.
       'B-DEMOTED': [88, 0.4091, -3.133],
       'C-DEMOTED': [20, 0.5500, -2.764]
     },
+    /* SCAN multi-factor score tiers, [n, winRate, avgNetR], baked from
+       scripts/backtest-omnigold-results.json aggregates.byTier (the same
+       replay the evidence file distills). The ordering is the point:
+       WEAK 34% WR beat STRONG 30% — the tiers did not rank outcomes.
+       No EXCEPTIONAL row exists because >=85 is unreachable by the scan
+       arithmetic (byTierNote says so; independently: the market-conditions
+       factor caps at 84.25/5 = 16.85 and the Wilson factor at 0.3, so the
+       scan total tops out near 82). ENGINE grade rows above are a separate
+       scalar scale — never pooled with these. */
+    tiers: {
+      'WEAK':   [ 330, 0.3420, -0.243],
+      'FAIR':   [5422, 0.3100, -1.547],
+      'STRONG': [1241, 0.3040, -0.536]
+    },
+    /* Median per-trade fee load in R over settled replay trades, computed
+       from trades[] in scripts/backtest-omnigold-results.json as
+       rMultiple - netR (settled = win/loss/both-touch/timeout, n=7270).
+       NOTE: an earlier draft of the desk-stance wording quoted 0.79R;
+       that figure does not reproduce from the shipped trades — these do. */
+    medianCostR: { all: 0.626, scalp: 0.738, swing: 0.335 },
+    /* Profit factor of the one near-breakeven cohort, from
+       aggregates.bySource['ENGINE:SWING'].profitFactor. */
+    pf: { 'ENGINE:SWING': 0.90 },
     cohorts: {
       'SCAN:SCALP':   [5466, 0.3035, -1.524, -0.012],
       'SCAN:SWING':   [1527, 0.3353, -0.523,  0.024],
@@ -5227,37 +5422,195 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!key) return null;
     var E = HG_OG_REPLAY_EVIDENCE;
     var row = hgOgReplayRow(E.kinds, key);
-    if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: row[3] };
+    if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: row[3],
+                      medianCostR: (row.length > 4 ? row[4] : null) };
     row = hgOgReplayRow(E.grades, key);
     if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: null };
     row = hgOgReplayRow(E.cohorts, key);
     if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: row[3] };
+    /* SCAN score tiers ('WEAK'/'FAIR'/'STRONG') — ADDITIVE keys, no gross. */
+    row = hgOgReplayRow(E.tiers, key);
+    if (row) return { n: row[0], winRate: row[1], avgNetR: row[2], avgGrossR: null };
     return null;
   }
 
+  /* '7270' -> '7,270' — the banner and legend quote the settled count. */
+  function hgOgFmtCount(n){
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  /* SPECTRUM TRUTH LABELS (hg-v532). One place decides what a confluence
+     badge is allowed to claim:
+       - fromGrade (the engine-grade scalar path in
+         hgOgAdvancedConfluenceScore): >=85 is labeled GRADE-A CLASS, never
+         EXCEPTIONAL — 85 is exactly the grade-A scalar and the ONLY way to
+         reach 85 (scan arithmetic tops out near 82, see the tiers bake
+         above). The suffix is that grade's own settled replay record
+         ('replay 54% WR, -1.71R net on scalps' for grade-A).
+       - scan path: the tier word keeps its measured record as a suffix
+         (STRONG '· replay 30% WR', FAIR '· replay 31% WR',
+         WEAK '· replay 34% WR') — printed precisely because the ordering
+         is upside down and the reader deserves to see it on the badge,
+         not in a footnote.
+     Returns { color, label, suffix }; suffix '' when no record exists. */
+  function hgOgTierBadgeInfo(score, setup, fromGrade){
+    var s = isFinite(fin(score)) ? fin(score) : 0;
+    var color = s >= 85 ? '#10b981' : s >= 70 ? '#22c55e' : s >= 50 ? '#f59e0b' : '#dc2626';
+    var label = s >= 85 ? '🏆 EXCEPTIONAL' : s >= 70 ? '✓ STRONG' : s >= 50 ? '⚠ FAIR' : '✗ WEAK';
+    var suffix = '';
+    if (fromGrade){
+      if (s >= 85) label = 'GRADE-A CLASS';
+      var g = String((setup && (setup.engineGrade
+        || ((typeof setup.grade === 'string') ? setup.grade : ''))) || (s >= 85 ? 'A' : '')).toUpperCase();
+      var demoted = !!(setup && (setup.engineDemoted || setup.demoted));
+      var gkey = g ? (g + (demoted ? '-DEMOTED' : '')) : '';
+      var gev = gkey ? hgOgReplayEvidence(gkey) : null;
+      if (gev && isFinite(fin(gev.winRate)) && isFinite(fin(gev.avgNetR))){
+        /* 'on scalps' is a per-grade measured fact, not a template: the
+           grade rows pool horizons, and in the replay only A / A-DEMOTED /
+           B-DEMOTED / C-DEMOTED settled 100% on scalp geometry. B settled
+           30 scalp + 6 swing and C settled 2 scalp + 21 swing (trades[] in
+           scripts/backtest-omnigold-results.json, keyed by the engine
+           scalar: A=85, A-dem=75, B=70, B-dem=60, C=45, C-dem=35) — so the
+           horizon claim prints only where it is true of every trade. */
+        var gAllScalp = (gkey === 'A' || gkey === 'A-DEMOTED'
+          || gkey === 'B-DEMOTED' || gkey === 'C-DEMOTED');
+        suffix = 'replay ' + (gev.winRate * 100).toFixed(0) + '% WR, '
+          + gev.avgNetR.toFixed(2) + 'R net' + (gAllScalp ? ' on scalps' : '');
+      }
+    } else if (s >= 85){
+      /* Practically unreachable: no scan trade in the 7,270-trade replay
+         scored 85 and the arithmetic cannot get there. Stated, not hidden. */
+      suffix = 'unreached in replay — scan arithmetic tops out near 82';
+    } else {
+      var tev = hgOgReplayEvidence(s >= 70 ? 'STRONG' : s >= 50 ? 'FAIR' : 'WEAK');
+      if (tev && isFinite(fin(tev.winRate))){
+        suffix = 'replay ' + (tev.winRate * 100).toFixed(0) + '% WR';
+      }
+    }
+    return { color: color, label: label, suffix: suffix };
+  }
+
+  /* COST QUARANTINE (hg-v532). A heavy/fatal fee load must be read BEFORE
+     any medal: this block renders above the confluence badge in the warn
+     style. The 2.60R figure is the measured ENGINE:SCALP cohort net loss —
+     named explicitly, because this warning also renders on SCAN cards
+     whose own cohort record differs; ENGINE:SCALP is quoted as the cohort
+     that actually carried this drag class (its settled trades measured
+     median 1.16R of fees per stop, 89% at heavy-or-fatal tier, from
+     trades[] in scripts/backtest-omnigold-results.json).
+     '' when the fee tier is ok/thin or the cost is unmeasurable. */
+  function hgOgCostsFirstHtml(setup, drag){
+    var d = drag || hgOgCostDrag(setup);
+    if (!d || (d.tier !== 'heavy' && d.tier !== 'fatal')) return '';
+    var coh = hgOgReplayEvidence('ENGINE:SCALP');
+    var cohNet = (coh && isFinite(fin(coh.avgNetR))) ? fin(coh.avgNetR) : -2.603;
+    var cohTxt = (cohNet < 0)
+      ? ('lost ' + Math.abs(cohNet).toFixed(2) + 'R/trade net')
+      : ('netted +' + cohNet.toFixed(2) + 'R/trade');
+    var txt = 'COSTS FIRST: ' + d.rtCostPct.toFixed(2) + '% round trip is '
+      + d.costR.toFixed(2) + 'R of this stop — the replay\'s ENGINE scalp cohort '
+      + cohTxt + ' under fee loads like this';
+    return '<div class="note warn og-costs-first" style="margin:8px 0;padding:6px 8px;'
+      + 'border:1px solid #f59e0b;border-left:3px solid #dc2626;border-radius:4px;'
+      + 'background:rgba(245,158,11,0.08);font-weight:bold;font-size:0.85em">'
+      + esc(txt) + '</div>'
+      /* replay-vs-venue honesty (hg-v533): the cohort loss above is a
+         PAXG-cost fact; a cheaper venue re-prices the fee, not the record. */
+      + hgOgVenueCostNoteHtml();
+  }
+
+  /* The legend's honest header — above the four tier cells, in warn style,
+     because the tier table below it did NOT rank outcomes and saying so in
+     a footnote while the cells said 'Trade immediately' is how a reader
+     took real losses on 'EXCEPTIONAL' labels. */
+  function hgOgSpectrumTruthHeaderHtml(){
+    var E = HG_OG_REPLAY_EVIDENCE;
+    var txt = 'measured reality: these tiers did NOT rank outcomes in the '
+      + hgOgFmtCount(E.settled) + '-trade replay (WEAK outperformed STRONG); '
+      + 'grade-A selection is real but scalp costs erased it. '
+      + 'The tiers are a checklist, not a ranking.';
+    return '<div class="warn og-spectrum-truth" style="margin-bottom:8px;padding:6px 8px;'
+      + 'border-left:3px solid #f59e0b;background:rgba(245,158,11,0.08);'
+      + 'font-size:0.85em;font-weight:bold">' + esc(txt) + '</div>';
+  }
+
+  /* The four legend cells, captioned with the measured record instead of an
+     instruction ('Trade immediately' told a reader to click; 34% > 30% is
+     what actually happened). Numbers come from the baked tables only. */
+  function hgOgSpectrumLegendCellsHtml(){
+    var A = hgOgReplayEvidence('A');
+    var wrTxt = function(ev){
+      return (ev && isFinite(fin(ev.winRate)))
+        ? ('replay ' + (ev.winRate * 100).toFixed(0) + '% WR') : 'no replay record';
+    };
+    var capA = (A && isFinite(fin(A.avgNetR)))
+      ? ('engine grade-A scalar only — ' + wrTxt(A) + ', ' + A.avgNetR.toFixed(2) + 'R net on scalps')
+      : 'engine grade-A scalar only';
+    var h = '';
+    h += '<div style="padding:6px;border-left:3px solid #10b981;background:#10b98111"><span style="color:#10b981;font-weight:bold">🏆 ≥85</span><br>GRADE-A CLASS<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(capA) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #22c55e;background:#22c55e11"><span style="color:#22c55e;font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt(hgOgReplayEvidence('STRONG'))) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #f59e0b;background:#f59e0b11"><span style="color:#f59e0b;font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt(hgOgReplayEvidence('FAIR'))) + '</span></div>';
+    h += '<div style="padding:6px;border-left:3px solid #dc2626;background:#dc262611"><span style="color:#dc2626;font-weight:bold">✗ <50</span><br>WEAK<br><span style="color:var(--fg-muted,#666);font-size:0.8em">' + esc(wrTxt(hgOgReplayEvidence('WEAK'))) + '</span></div>';
+    return h;
+  }
+
+  /* DESK-STANCE BANNER (hg-v532). Permanent, at the top of the tab beside
+     the scan controls — the replay's verdict before any card decorates
+     anything. Every figure is baked from the two replay files; the median
+     fee figures are the measured ones (see the medianCostR bake note).
+     An earlier draft called ENGINE:SWING 'the only cohort that survived
+     costs' and its makeup 'grade-A/B' — neither traces: PF 0.90 is a net
+     LOSS (avgNetR -0.056), and its 27 settled trades were engine scalar
+     45 x21 (grade-C, low tally) + scalar 70 x6, with no grade-A at all
+     (trades[] in scripts/backtest-omnigold-results.json). */
+  function hgOgDeskStanceBannerHtml(){
+    var E = HG_OG_REPLAY_EVIDENCE;
+    var med = E.medianCostR || {};
+    var pfSw = fin(E.pf && E.pf['ENGINE:SWING']);
+    var sw = hgOgReplayEvidence('ENGINE:SWING');
+    var swNet = (sw && isFinite(fin(sw.avgNetR))) ? fin(sw.avgNetR).toFixed(2) : '-0.06';
+    var txt = 'REPLAY VERDICT (' + hgOgFmtCount(E.settled) + ' settled PAXG trades): '
+      + 'scalp-geometry setups lost net of costs across every tier — the median trade paid '
+      + fin(med.all).toFixed(2) + 'R in fees (' + fin(med.scalp).toFixed(2) + 'R on scalp geometry). '
+      + 'No cohort finished net-positive; the closest was ENGINE setups on SWING geometry ('
+      + swNet + 'R/trade net, PF ' + (isFinite(pfSw) ? pfSw.toFixed(2) : '0.90')
+      + ' — still a net loss). '
+      + 'Confluence tiers did not rank outcomes. Every number here is measured, in '
+      + E.src + ' + scripts/backtest-omnigold-results.json.';
+    return '<div class="note warn og-replay-banner" data-og-replay-banner="1" '
+      + 'style="margin-bottom:10px;border-left:3px solid #dc2626">' + esc(txt) + '</div>';
+  }
+
   /* Cost drag of the round trip measured in R. costR = RT% / stop distance %:
-     the 0.26% RT against a 0.30% stop is 0.87R of fees — the trade must
+     0.26% RT against a 0.30% stop is 0.87R of fees — the trade must
      clear nearly a full R before the reader is flat. Tiers:
        ok    <= 0.125  fees are noise
        thin  <= 0.25   a quarter R of drag — the edge must be real
        heavy <= 0.5    half an R — no measured kind's gross edge pays this
        fatal >  0.5    the stop is tighter than the fee: structurally unpayable
      Accepts an OMNIGOLD card ({ plan:{entry,stop} }) or a raw engine setup
-     ({ entry, stop }). Null-safe: anything non-finite -> null, never a throw. */
-  function hgOgCostDrag(setup){
+     ({ entry, stop }). venueCost is optional (hg-v533): pass an
+     hgOgVenueCost() result to price a specific venue; omitted, the ACTIVE
+     venue is read (PAXG conservative fallback — identical numbers to before
+     the venue model existed). Null-safe: non-finite -> null, never a throw. */
+  function hgOgCostDrag(setup, venueCost){
     if (!setup) return null;
     var src = (setup.plan && typeof setup.plan === 'object') ? setup.plan : setup;
     var entry = fin(src.entry), stop = fin(src.stop);
     if (!isFinite(entry) || !isFinite(stop) || entry <= 0) return null;
     var stopPct = Math.abs(entry - stop) / entry * 100;
     if (!(stopPct > 0)) return null;
-    var rt = hgOgRtCostPct();
+    var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
+    var rt = fin(vc && vc.rtCostPct);
+    if (!(isFinite(rt) && rt > 0)) return null;
     var costR = rt / stopPct;
     if (!isFinite(costR)) return null;
     var tier = (costR <= 0.125) ? 'ok'
       : (costR <= 0.25) ? 'thin'
       : (costR <= 0.5) ? 'heavy' : 'fatal';
-    return { costR: costR, stopPct: stopPct, rtCostPct: rt, tier: tier };
+    return { costR: costR, stopPct: stopPct, rtCostPct: rt, tier: tier,
+             venue: String((vc && vc.venue) || 'PAXG') };
   }
 
   /* 'COST 0.42R — fees eat the edge' chip. Renders ONLY when the fee load
@@ -5350,6 +5703,245 @@ terse status, and never launches a first-time scan on a global refresh.
     if (p === null) return '';
     return ' <span class="dim" style="font-size:11px">fit P(win) ' + (p * 100).toFixed(0) + '%</span>';
   }
+
+  /* ==================== setup FORMATION (hg-v533) ====================
+
+     WHY THIS EXISTS. A reader took real losses on setups this desk drew as
+     tradable cards while its own baked replay had already measured those
+     kinds losing at scale, and while the stop geometry meant fees consumed
+     a material share of 1R before the idea could speak. Chips and footnotes
+     were not enough — the fix is at FORMATION: a setup that fails these
+     bars never becomes a tradable card. It renders, demoted and levelless,
+     in the MEASURED-NEGATIVE section instead, so nothing is hidden and
+     nothing toxic looks tradable. */
+
+  /* Formation stop floor: venue round trip may cost at most this share of
+     1R. 0.125 is hgOgCostDrag's own 'ok' ceiling — the tier this file has
+     always called 'fees are noise'. Equivalent stop-distance floor:
+     stopDistPct >= rtCostPct / 0.125 = 8x the venue round trip
+     (XM ~0.020% RT -> stops >= 0.16% form; PAXG 0.26% RT -> only stops
+     >= 2.08% form. The floor adapts to the venue honestly). */
+  var HG_OG_FORM_COST_R_MAX = 0.125;
+
+  /* Measured-toxic kind demotion thresholds, applied to the baked per-kind
+     replay rows (n >= 100 so one regime cannot condemn a kind):
+       grossR <= -0.05          direction measured wrong at scale, costs aside
+       venue-adj netR <= -0.5   still toxic after re-pricing fees at the venue
+     venue-adjusted netR = avgGrossR - (venueRt / 0.26) * medianCostR:
+     the kind's median fee load was measured at the 0.26% PAXG round trip,
+     so a venue's fee load is that median scaled by the round-trip ratio;
+     gross outcomes are measured facts and are NOT rescaled. */
+  var HG_OG_DEMOTE_MIN_N = 100;
+  var HG_OG_DEMOTE_GROSS_R = -0.05;
+  var HG_OG_DEMOTE_VENUE_NET_R = -0.5;
+
+  /* Replay-survivor bar: positive gross at scale with a low measured fee
+     load — the kinds whose edge was real and cheap to hold (STRUCT-BOS,
+     BOS-RETEST, SQUEEZE-FIRE, CUSUM-SHIFT class). Ranking preference only. */
+  var HG_OG_SURVIVOR_MIN_N = 50;
+  var HG_OG_SURVIVOR_MAX_MED_COST_R = 0.3;
+
+  /* The kind's venue-adjusted net R, or NaN when the row lacks the pieces. */
+  function hgOgVenueNetR(row, venueCost){
+    if (!row) return NaN;
+    var gross = fin(row.avgGrossR), med = fin(row.medianCostR);
+    var rt = fin(venueCost && venueCost.rtCostPct);
+    if (!isFinite(gross) || !isFinite(med) || !(rt > 0)) return NaN;
+    return gross - (rt / HG_OG_REPLAY_EVIDENCE.rtCostPct) * med;
+  }
+
+  /* Demotion verdict for ONE kind at the given (or active) venue.
+     null = not demoted (including: no baked row, or n < 100 — demotion is an
+     evidence claim and only measured evidence can make it).
+     Else { kind, n, winRate, grossR, paxgNetR, medCostR, venueNetR, venue,
+            reasons[] }. */
+  function hgOgKindDemotion(kind, venueCost){
+    try{
+      var ev = hgOgReplayEvidence(kind);
+      if (!ev || !isFinite(fin(ev.avgGrossR))) return null;   /* kinds only carry gross */
+      if (!(fin(ev.n) >= HG_OG_DEMOTE_MIN_N)) return null;
+      var vc = (venueCost && isFinite(fin(venueCost.rtCostPct))) ? venueCost : hgOgVenueCost();
+      var reasons = [];
+      if (fin(ev.avgGrossR) <= HG_OG_DEMOTE_GROSS_R){
+        reasons.push('grossR ' + fin(ev.avgGrossR).toFixed(3) + ' <= ' + HG_OG_DEMOTE_GROSS_R
+          + ' at n=' + ev.n + ' — direction measured wrong at scale regardless of costs');
+      }
+      var vnet = hgOgVenueNetR(ev, vc);
+      if (isFinite(vnet) && vnet <= HG_OG_DEMOTE_VENUE_NET_R){
+        reasons.push('venue-adjusted netR ' + vnet.toFixed(3) + ' <= ' + HG_OG_DEMOTE_VENUE_NET_R
+          + ' at ' + vc.venue + ' costs (gross ' + fin(ev.avgGrossR).toFixed(3)
+          + ' - ' + (fin(vc.rtCostPct) / HG_OG_REPLAY_EVIDENCE.rtCostPct).toFixed(3)
+          + ' x medCostR ' + fin(ev.medianCostR).toFixed(3) + ')');
+      }
+      if (!reasons.length) return null;
+      return {
+        kind: String(kind).toUpperCase(), n: ev.n, winRate: ev.winRate,
+        grossR: ev.avgGrossR, paxgNetR: ev.avgNetR, medCostR: ev.medianCostR,
+        venueNetR: isFinite(vnet) ? vnet : null, venue: vc.venue, reasons: reasons
+      };
+    }catch(eKd){
+      /* An unreadable evidence row cannot prove toxicity — but it cannot
+         clear the kind either; the caller's stop floor still applies. */
+      return null;
+    }
+  }
+
+  /* Has this kind's LIVE forward ledger genuinely paid? THE SAME READ the
+     FORWARD table renders — hgFwdPool per tab, judged by the same
+     hgOmniPoolRead call hgFwdPanelHTML makes for these panels (minRr =
+     OG_T1_R exactly as runScan passes it at render, minSamples = the
+     panel's 20, barZ = the family-wise bar over the mechanics that pool
+     actually holds). Nothing reimplemented: this gate and the READ column
+     cannot disagree. Fail closed: any missing piece -> null, never a pass. */
+  function hgOgForwardPaid(kind, horizon){
+    try{
+      var w = W();
+      if (!w || typeof w.hgFwdPool !== 'function' || typeof w.hgOmniPoolRead !== 'function') return null;
+      var k = String(kind || '');
+      if (!k) return null;
+      var hz = String(horizon || '').toUpperCase();
+      var tabs = (hz === 'SCALP' || hz === 'SWING')
+        ? ['OMNIGOLD:' + hz]
+        : ['OMNIGOLD:SCALP', 'OMNIGOLD:SWING'];
+      for (var ti = 0; ti < tabs.length; ti++){
+        var pool = null;
+        try { pool = w.hgFwdPool(tabs[ti]); } catch (ePl) { pool = null; }
+        if (!pool || typeof pool !== 'object') continue;
+        var p = pool[k];
+        if (!p || !(fin(p.samples) > 0)) continue;
+        var keys = [], kk;
+        for (kk in pool) if (Object.prototype.hasOwnProperty.call(pool, kk)) keys.push(kk);
+        var barZ = hgOgFamilyZ(Math.max(1, keys.length));
+        var v = null;
+        try { v = w.hgOmniPoolRead(p, OG_T1_R, 20, barZ); } catch (eV) { v = null; }
+        if (v && v.read === 'has paid'){
+          return { tab: tabs[ti], read: 'has paid', z: fin(v.z), bar: fin(v.bar),
+                   samples: fin(p.samples), hit: fin(p.hit) };
+        }
+      }
+      return null;
+    }catch(eFp){ return null; }
+  }
+
+  /* The replay-survivor list, DERIVED from the baked rows (never written by
+     hand, so a re-bake moves it): grossR > 0, n >= 50, medianCostR <= 0.3.
+     Cached — the baked table cannot change within a load. */
+  var __ogSurvivors = null;
+  function hgOgSurvivorKinds(){
+    if (__ogSurvivors) return __ogSurvivors.slice();
+    var out = [], kinds = HG_OG_REPLAY_EVIDENCE.kinds, k, r;
+    for (k in kinds){
+      if (!Object.prototype.hasOwnProperty.call(kinds, k)) continue;
+      r = kinds[k];
+      if (r && r.length > 4 && fin(r[3]) > 0 && fin(r[0]) >= HG_OG_SURVIVOR_MIN_N
+          && fin(r[4]) <= HG_OG_SURVIVOR_MAX_MED_COST_R){
+        out.push(k);
+      }
+    }
+    out.sort();
+    __ogSurvivors = out;
+    return out.slice();
+  }
+  function hgOgIsSurvivor(kind){
+    if (kind === null || kind === undefined) return false;
+    var key = String(kind).toUpperCase().replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    return hgOgSurvivorKinds().indexOf(key) >= 0;
+  }
+
+  /* THE FORMATION VERDICT, at plan construction, for every OMNIGOLD setup —
+     scan cards ({ kind, horizon, plan }) and engine setups
+     ({ strategy|stratKey, entry, stop }) alike.
+     -> { formed, venue, drag, reasons[], stopFloor?, kindDemotion?,
+          unDemoted? }.
+       - STOP FLOOR: venueRt / stopDistPct > 0.125 -> not formed.
+       - KIND DEMOTION: measured-toxic per hgOgKindDemotion -> not formed,
+         UNLESS the kind's live forward ledger reads 'has paid' (the same
+         read the FORWARD table renders) — then unDemoted carries both the
+         demotion and the forward evidence, shown on the card.
+       - No measurable stop -> no stop-floor verdict (a card without levels
+         is already not tradable); kind demotion still applies.
+     Never throws. Callers treat their OWN failure to obtain a verdict as
+     not-formed (fail closed); this function only fails closed on evidence
+     (absent forward ledger = still demoted), not on absent geometry. */
+  function hgOgFormation(setup){
+    var vc = hgOgVenueCost();
+    var out = { formed: true, venue: vc, drag: null, reasons: [] };
+    if (!setup) return out;
+    var kind = String(setup.kind || setup.strategy || setup.stratKey || '');
+    var drag = null;
+    try { drag = hgOgCostDrag(setup, vc); } catch (eD) { drag = null; }
+    out.drag = drag;
+    if (drag && fin(drag.costR) > HG_OG_FORM_COST_R_MAX){
+      out.formed = false;
+      out.stopFloor = { costR: drag.costR, maxR: HG_OG_FORM_COST_R_MAX,
+                        stopPct: drag.stopPct, rtCostPct: drag.rtCostPct, venue: vc.venue };
+      out.reasons.push('stop inside ' + (1 / HG_OG_FORM_COST_R_MAX)
+        + 'x the venue round-trip — fees are ' + drag.costR.toFixed(2)
+        + 'R of 1R before the idea speaks (' + vc.venue + ' '
+        + fin(vc.rtCostPct).toFixed(3) + '% RT vs ' + drag.stopPct.toFixed(2) + '% stop)');
+    }
+    var dem = kind ? hgOgKindDemotion(kind, vc) : null;
+    if (dem){
+      var paid = hgOgForwardPaid(kind, setup.horizon);
+      if (paid){
+        out.unDemoted = { demotion: dem, forward: paid };
+      } else {
+        out.formed = false;
+        out.kindDemotion = dem;
+        out.reasons.push('measured-negative kind in the ' + hgOgFmtCount(HG_OG_REPLAY_EVIDENCE.settled)
+          + '-trade replay: ' + dem.reasons.join('; '));
+      }
+    }
+    return out;
+  }
+
+  /* The stood-aside section: every setup that fired but did NOT form.
+     Collapsed, listed with each kind's replay row — n, WR, grossR,
+     venue-net — and the formation reason. NO entry/stop/target renders
+     here, deliberately: a level on a measured-negative card is an
+     invitation. */
+  function hgOgDemotedSectionHtml(cards){
+    if (!cards || !cards.length) return '';
+    var vc = hgOgVenueCost();
+    var h = '<details class="note og-demoted-kinds" data-og-demoted="1" style="margin-top:12px">';
+    h += '<summary style="cursor:pointer"><b>MEASURED-NEGATIVE KINDS — stood aside</b> ('
+      + cards.length + ' setup' + (cards.length === 1 ? '' : 's')
+      + ' fired, none tradable)</summary>';
+    h += '<div class="dim" style="margin:8px 0;font-size:0.85em">These fired and are on the record — they are NOT tradable cards, and no levels are printed. '
+      + 'A kind stands aside when the replay measured it negative at scale (grossR &le; '
+      + HG_OG_DEMOTE_GROSS_R + ', n &ge; ' + HG_OG_DEMOTE_MIN_N
+      + ') or venue-adjusted net toxic (netR &le; ' + HG_OG_DEMOTE_VENUE_NET_R
+      + ' at ' + esc(vc.venue) + ' costs, n &ge; ' + HG_OG_DEMOTE_MIN_N
+      + '); a stop stands aside when ' + esc(vc.venue) + ' fees exceed '
+      + HG_OG_FORM_COST_R_MAX + 'R of 1R on it. A demoted kind whose LIVE forward ledger reads '
+      + '\'has paid\' (the FORWARD table\'s own read) forms again, with that evidence shown.</div>';
+    h += hgOgVenueCostNoteHtml();
+    var i, c, ev, vnet;
+    for (i = 0; i < cards.length; i++){
+      c = cards[i];
+      if (!c) continue;
+      h += '<div class="dim og-demoted-row" style="margin:4px 0;font-size:0.85em">'
+        + esc(String(c.horizon || '') + ' · ' + String(c.kind || '?') + ' '
+              + String(c.dir || '').toUpperCase());
+      ev = hgOgReplayEvidence(c.kind);
+      if (ev && isFinite(fin(ev.avgGrossR))){
+        vnet = hgOgVenueNetR(ev, vc);
+        h += ' · replay n=' + ev.n + ', WR ' + (ev.winRate * 100).toFixed(0)
+          + '%, gross ' + (ev.avgGrossR >= 0 ? '+' : '') + ev.avgGrossR.toFixed(3) + 'R'
+          + (isFinite(vnet) ? (', venue-net ' + (vnet >= 0 ? '+' : '') + vnet.toFixed(3) + 'R') : '');
+      } else {
+        h += ' · no baked replay row (n &lt; 40)';
+      }
+      if (c.formation && c.formation.reasons && c.formation.reasons.length){
+        h += '<br><span style="opacity:.85">— ' + esc(c.formation.reasons.join(' · ')) + '</span>';
+      }
+      h += '</div>';
+    }
+    h += '</details>';
+    return h;
+  }
+
+  /* ==================== end setup FORMATION (hg-v533) ==================== */
 
   /* ==================== end replay evidence + cost drag ==================== */
 
@@ -5965,6 +6557,9 @@ terse status, and never launches a first-time scan on a global refresh.
       c = ranked[i];
       if (!c || String(c.horizon || '').toUpperCase() !== 'SCALP') continue;
       if (!(c.grade && c.grade.ticket) || !c.plan) continue;
+      /* not-FORMED (hg-v533): the scalp verdict never argues from a card
+         the desk stood aside on */
+      if (c.formation && c.formation.formed === false) continue;
       key = ogTradeKey(c);
       if (seen[key]) continue;
       seen[key] = true;
@@ -5980,6 +6575,12 @@ terse status, and never launches a first-time scan on a global refresh.
       for (i = 0; i < picks.length; i++){
         c = hgOgBridgeToVerdictCand(picks[i], 'GOLDSCALP engine');
         if (!c || !(c.grade && c.grade.ticket)) continue;
+        /* bridge setups carry no stamp — run FORMATION live (hg-v533);
+           a throwing check is a fail-closed skip, and the setup stays
+           visible on the engines panel row */
+        var vf = null;
+        try { vf = hgOgFormation(c); } catch (eVf){ vf = { formed: false }; }
+        if (vf && vf.formed === false) continue;
         key = ogTradeKey(c);
         if (seen[key]) continue;
         seen[key] = true;
@@ -6039,7 +6640,15 @@ terse status, and never launches a first-time scan on a global refresh.
       var confObj = typeof confResult === 'number' ? { confluenceScore: confResult } : confResult;
       if (confObj && isFinite(fin(confObj.confluenceScore || confObj.score))){
         var displayScore = fin(confObj.confluenceScore || confObj.score);
-        h += hgOgRenderConfluenceBreakdown({ confluenceScore: displayScore });
+        /* Truth labels + cost quarantine (hg-v532): the renderer needs to
+           know whether the score is the engine grade scalar and what the
+           stop geometry is — a bare { confluenceScore } hid both. */
+        h += hgOgRenderConfluenceBreakdown({
+          confluenceScore: displayScore,
+          confluenceFromGrade: (typeof confResult === 'number'),
+          engineGrade: c.engineGrade, engineDemoted: c.engineDemoted,
+          plan: c.plan, entry: c.entry, stop: c.stop
+        });
       }
     }
     h += '<div class="hg-mp-note">SETTLED ' + esc(ev.source) + ' · '
@@ -6056,6 +6665,8 @@ terse status, and never launches a first-time scan on a global refresh.
     /* Replay evidence line (ADDITIVE): the mechanic's settled PAXG-replay
        record; '' for engine-bridged kinds with no n>=40 record. */
     h += hgOgReplayLineHtml(c.kind);
+    /* replay-vs-venue honesty (hg-v533) */
+    h += hgOgVenueCostNoteHtml();
     if (tier === 'go' && !c.engineSrc){
       h += '<div class="row" style="margin-top:8px">'
         + '<button type="button" class="btn og-xm-send" data-og-key="' + esc(ogTradeKey(c)) + '">SEND TICKET TO XM</button>'
@@ -6331,6 +6942,12 @@ terse status, and never launches a first-time scan on a global refresh.
       for (i = 0; i < ranked.length; i++){
         c = ranked[i];
         if (!hgOgGoldEngineGradeOk(c, gradeOpts)) continue;
+        /* FORMATION live-check (hg-v533): engine setups carry no stamp.
+           A not-formed setup is never an engine pick — its row still
+           renders (levelless) on the engines panel. Fail closed on throw. */
+        var fm = null;
+        try { fm = hgOgFormation(c); } catch (eFm){ fm = { formed: false }; }
+        if (fm && fm.formed === false) continue;
         if (alignedOnly && (tapeDir === 'long' || tapeDir === 'short')){
           if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
         }
@@ -6392,6 +7009,22 @@ terse status, and never launches a first-time scan on a global refresh.
       + (c.formationScore ? (' · formation ' + fin(c.formationScore)) : '')
       + (tier === 'best' ? ' · <b>tab best</b>' : '') + '</div>';
     if (isFinite(fin(c.entry)) && isFinite(fin(c.stop))){
+      /* FORMATION (hg-v533): a not-formed engine setup keeps its row —
+         parity, nothing vanishes — but loses its levels grid. Printing
+         ENTRY/STOP on a setup the desk stood aside on is how a reader
+         takes the trade anyway. Fail closed: a throwing check hides the
+         levels, never shows them. */
+      var rowFm = null;
+      try { rowFm = hgOgFormation(c); } catch (eRf){ rowFm = { formed: false, reasons: ['formation check threw — fail closed'] }; }
+      if (rowFm && rowFm.formed === false){
+        h += '<div class="hg-mp-note warn og-engine-not-formed">did not FORM — '
+          + esc((rowFm.reasons && rowFm.reasons.length) ? rowFm.reasons.join(' · ') : 'stood aside')
+          + '. No levels printed; see MEASURED-NEGATIVE KINDS.</div>';
+        h += hgOgReplayLineHtml(c.strategy || c.stratKey);
+        h += hgOgVenueCostNoteHtml();
+        h += '</div>';
+        return h;
+      }
       h += '<div class="hg-mp-grid">';
       h += '<div><i>ENTRY</i><b>' + fmtPx(c.entry) + '</b></div>';
       h += '<div><i>STOP</i><b>' + fmtPx(c.stop) + '</b></div>';
@@ -6400,7 +7033,7 @@ terse status, and never launches a first-time scan on a global refresh.
       h += '</div>';
       /* Replay evidence + cost drag (ADDITIVE) — only where entry+stop render. */
       var engCostChip = hgOgCostChipHtml(c);
-      if (engCostChip) h += '<div style="margin-top:2px">' + engCostChip + '</div>';
+      if (engCostChip) h += '<div style="margin-top:2px">' + engCostChip + hgOgVenueCostNoteHtml() + '</div>';
       h += hgOgReplayLineHtml(c.strategy || c.stratKey);
       h += hgOgEngineReplayLinesHtml(c, horizon);
     }
@@ -6452,6 +7085,11 @@ terse status, and never launches a first-time scan on a global refresh.
       var g = String(pick.engineGrade || '').toUpperCase();
       if (g !== 'A' && g !== 'B') return null;
       if (pick.engineDemoted || pick.engineLowGrade || pick.demoted) return null;
+      /* FORMATION (hg-v533): defensive — the pick gate already filters, but
+         APEX must never print what did not form. Fail closed on throw. */
+      var apxFm = null;
+      try { apxFm = hgOgFormation(pick); } catch (eApFm){ apxFm = { formed: false }; }
+      if (apxFm && apxFm.formed === false) return null;
       /* RULE 3 — tape alignment. MIXED/absent tape = no APEX. */
       var tape = String(tapeDir || '').toLowerCase();
       if (tape !== 'long' && tape !== 'short') return null;
@@ -6567,6 +7205,9 @@ terse status, and never launches a first-time scan on a global refresh.
     }
     var chip = hgOgApexCostChipHtml(hgOgCostDrag(pick));
     if (chip) h += '<div style="margin-top:2px">' + chip + '</div>';
+    /* replay-vs-venue honesty (hg-v533): the cohort/replay lines above are
+       PAXG-cost facts; the chip prices the ACTIVE venue. */
+    h += hgOgVenueCostNoteHtml();
     h += '<div class="dim" style="font-size:11px;margin-top:2px">tape-aligned: pick '
       + esc(String(q.dir).toUpperCase()) + ' · gold tape ' + esc(hgOgTapeLabel(String(tapeDir || '').toLowerCase())) + '</div>';
     if (isFinite(fin(q.confluence)))
@@ -6792,14 +7433,15 @@ terse status, and never launches a first-time scan on a global refresh.
     h += 'strategies + indicators, balanced · not a win probability</span></div>';
     h += '<div class="hg-mp-note">' + esc(note) + '</div>';
 
-    /* CONFLUENCE SPECTRUM LEGEND — full transparency */
+    /* CONFLUENCE SPECTRUM LEGEND — truth-labeled (hg-v532). The header
+       states the replay's finding ABOVE the cells; each cell's caption is
+       the measured record ('Trade immediately' used to sit under a tier
+       whose >=85 row does not exist and whose ordering ran backwards). */
     h += '<div style="margin:12px 0;padding:12px;border:1px solid var(--hr);border-radius:4px;background:var(--bg-muted,rgba(0,0,0,0.02))">';
     h += '<div style="font-weight:bold;margin-bottom:8px;color:var(--fg-muted,#666)">Confluence Rating Spectrum</div>';
+    h += hgOgSpectrumTruthHeaderHtml();
     h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;font-size:0.85em">';
-    h += '<div style="padding:6px;border-left:3px solid #10b981;background:#10b981' + '11' + '"><span style="color:#10b981;font-weight:bold">🏆 ≥85</span><br>EXCEPTIONAL<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Trade immediately</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #22c55e;background:#22c55e' + '11' + '"><span style="color:#22c55e;font-weight:bold">✓ 70-84</span><br>STRONG<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Trade with conviction</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #f59e0b;background:#f59e0b' + '11' + '"><span style="color:#f59e0b;font-weight:bold">⚠️ 50-69</span><br>FAIR<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Acceptable but not best</span></div>';
-    h += '<div style="padding:6px;border-left:3px solid #dc2626;background:#dc2626' + '11' + '"><span style="color:#dc2626;font-weight:bold">✗ <50</span><br>WEAK<br><span style="color:var(--fg-muted,#666);font-size:0.8em">Skip this setup</span></div>';
+    h += hgOgSpectrumLegendCellsHtml();
     h += '</div>';
     /* Replay footnote (ADDITIVE): the OOS verdict on this very legend. */
     h += hgOgConfluenceFitNoteHtml();
@@ -6830,6 +7472,8 @@ terse status, and never launches a first-time scan on a global refresh.
   function hgOgMpRow(c){
     if (!c || !c.plan) return null;
     if (!(c.grade && c.grade.ticket)) return null;
+    /* not-FORMED (hg-v533): never a MOST PROBABLE row */
+    if (c.formation && c.formation.formed === false) return null;
     return {
       sym: 'XAUUSD',
       dir: c.dir,
@@ -6874,6 +7518,8 @@ terse status, and never launches a first-time scan on a global refresh.
       if (!c || c.horizon !== horizon) continue;
       if (!(c.grade && c.grade.ticket)) continue;
       if (!c.plan) continue;              /* no levels means nothing to act on */
+      /* not-FORMED (hg-v533): never a pick, whatever its grade says */
+      if (c.formation && c.formation.formed === false) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
     }
@@ -6924,6 +7570,9 @@ terse status, and never launches a first-time scan on a global refresh.
       if (c.grade && c.grade.ticket) continue;
       if (!c.plan) continue;
       if (String(c.dir || '').toLowerCase() !== tapeDir) continue;
+      /* not-FORMED (hg-v533): not even as a WATCH — it lives in the
+         MEASURED-NEGATIVE section instead */
+      if (c.formation && c.formation.formed === false) continue;
       if (c.plan.momentumStop === true) vol.push(c);
       else structural.push(c);
     }
@@ -7017,6 +7666,9 @@ terse status, and never launches a first-time scan on a global refresh.
        hgOgCostChipHtml is null-safe — no plan, no chip. */
     var costChip = hgOgCostChipHtml(c);
     if (costChip) badge += ' ' + costChip;
+    /* replay-survivor tag (hg-v533): kind measured gross-POSITIVE at scale
+       with a low fee load in the PAXG replay. A ranking tag, not a promise. */
+    if (c.replaySurvivor || hgOgIsSurvivor(c.kind)) badge += ' ' + pill('replay-survivor', 'ok');
     var h = '<div class="card' + (c.topPick ? ' og-pick' : '') + (c.topWatch ? ' og-watch' : '') + '">';
     h += '<div class="ttl">GOLD · ' + esc(c.horizon) + ' · ' + esc(c.kind) + ' ' + esc(c.dir.toUpperCase()) + ' ' + badge + '</div>';
     var confResult = hgOgAdvancedConfluenceScore(c);
@@ -7024,7 +7676,14 @@ terse status, and never launches a first-time scan on a global refresh.
       var confObj = typeof confResult === 'number' ? { confluenceScore: confResult } : confResult;
       if (confObj && isFinite(fin(confObj.confluenceScore || confObj.score))){
         var displayScore = fin(confObj.confluenceScore || confObj.score);
-        h += hgOgRenderConfluenceBreakdown({ confluenceScore: displayScore });
+        /* Truth labels + cost quarantine (hg-v532): pass the grade-scalar
+           flag and the stop geometry through — see hgOgRenderConfluenceBreakdown. */
+        h += hgOgRenderConfluenceBreakdown({
+          confluenceScore: displayScore,
+          confluenceFromGrade: (typeof confResult === 'number'),
+          engineGrade: c.engineGrade, engineDemoted: c.engineDemoted,
+          plan: c.plan, entry: c.entry, stop: c.stop
+        });
       }
     }
     h += '<div class="dim">' + esc(c.why) + '</div>';
@@ -7068,6 +7727,22 @@ terse status, and never launches a first-time scan on a global refresh.
       /* Replay evidence line (ADDITIVE): the mechanic's settled PAXG-replay
          record, negative numbers included; '' when it has no n>=40 record. */
       h += hgOgReplayLineHtml(c.kind);
+      /* venue-vs-replay honesty (hg-v533): cost figures on this card are
+         venue-priced, the replay line above is a PAXG-cost fact. */
+      h += hgOgVenueCostNoteHtml();
+      /* UN-DEMOTED evidence (hg-v533): this kind is measured-negative in
+         the replay, and it forms ONLY because its live forward ledger reads
+         'has paid' — the reader sees both facts, not neither. */
+      if (c.formation && c.formation.unDemoted){
+        var ud = c.formation.unDemoted;
+        h += '<div class="dim og-undemoted-line" style="font-size:11px;margin-top:2px">replay-demoted kind ('
+          + esc((ud.demotion && ud.demotion.reasons) ? ud.demotion.reasons.join('; ') : 'measured negative at scale')
+          + ') — UN-DEMOTED: live forward ledger reads \'has paid\' ('
+          + esc(String((ud.forward && ud.forward.tab) || ''))
+          + ', n=' + fin(ud.forward && ud.forward.samples)
+          + ' settled, hit ' + (fin(ud.forward && ud.forward.hit) * 100).toFixed(0)
+          + '%, +' + fin(ud.forward && ud.forward.z).toFixed(2) + 'σ past the family-wise bar)</div>';
+      }
       var t1Note = hgOgTargetReadout(Object.assign({ dir: c.dir }, c.plan), c.horizon);
       if (t1Note) h += '<div class="dim og-t1-readout">' + esc(t1Note) + '</div>';
       var mktNote = hgOgEntryMarketNote(c, c.plan);
@@ -7767,6 +8442,28 @@ terse status, and never launches a first-time scan on a global refresh.
           }
         }
 
+        /* FORMATION PARTITION (hg-v533). Cards stamped not-formed at plan
+           construction leave the tradable list HERE, before any pick,
+           verdict or MOST PROBABLE row can see them, and land in the
+           MEASURED-NEGATIVE section below — visible, levelless, never
+           tradable-looking. A card without a stamp is treated as formed
+           (the stamp is written by hgOgEvaluate on every scan card; only
+           synthetic shapes lack it). */
+        var ogDemotedCards = [];
+        (function(){
+          var keep = [], fi, fc;
+          for (fi = 0; fi < ogCollapsed.length; fi++){
+            fc = ogCollapsed[fi];
+            if (fc && fc.formation && fc.formation.formed === false) ogDemotedCards.push(fc);
+            else keep.push(fc);
+          }
+          ogCollapsed = keep;
+        })();
+        if (ogDemotedCards.length){
+          __og.lastStat += '  ·  ' + ogDemotedCards.length + ' stood aside (measured-negative kind / venue stop floor)';
+          ui.stat.textContent = __og.lastStat + warn;
+        }
+
         var pickScalp = hgOgPickFor(ogCollapsed, HORIZONS.scalp.label, deskTape);
         var pickSwing = hgOgPickFor(ogCollapsed, HORIZONS.swing.label, deskTape);
         var watchScalp = pickScalp ? null : hgOgPickWatchFor(ogCollapsed, HORIZONS.scalp.label, deskTape);
@@ -7834,6 +8531,13 @@ terse status, and never launches a first-time scan on a global refresh.
         }
         if (heldCards.length){
           h += hgOgHeldQueueHtml(heldCards, deskTape);
+        }
+        /* MEASURED-NEGATIVE KINDS — stood aside (hg-v533). Every setup that
+           fired but did not FORM renders here: visible, with its replay row
+           and the formation reason, and with NO levels. Rendered-information
+           parity: nothing the scan generated is silently dropped. */
+        if (ogDemotedCards.length){
+          h += hgOgDemotedSectionHtml(ogDemotedCards);
         }
         /* Prepend circuit breaker warning banner if active */
         var drawdownStateBanner = hgOgResetWeeklyDrawdown();
@@ -7929,6 +8633,9 @@ terse status, and never launches a first-time scan on a global refresh.
     if (!c || !(c.grade && c.grade.ticket) || !c.plan) return null;
     if (c.grade.vetoes && c.grade.vetoes.length) return null;
     if (c.dir !== 'long' && c.dir !== 'short') return null;
+    /* not-FORMED (hg-v533): the execution path is the LAST place a
+       stood-aside setup may leak through */
+    if (c.formation && c.formation.formed === false) return null;
     var live = fin(liveOverride);
     if (!(live > 0)) live = isFinite(fin(c.livePx)) ? fin(c.livePx) : hgOgXmLivePx();
     return {
@@ -8210,6 +8917,10 @@ terse status, and never launches a first-time scan on a global refresh.
       + 'The perp gates have no meaning here (spot gold has no funding, OI, retail ratio or taker flow) and are deliberately absent rather than faked; '
       + 'in their place sit session, real-rate macro, DXY inverse, yield guard and ADR budget. '
       + 'Levels come from the house plan engine. <b>MOST PROBABLE SETUPS</b> lead the tab: one SCALP and one SWING ticket when the mechanic ledger clears; otherwise grade-A/B setups from the <b>GOLD SCALP / GOLD SWING</b> engines (15m + 4h). Cards still badge STRONGEST. Nothing here is a profit forecast.</div>'
+      /* DESK-STANCE BANNER (hg-v532) — permanent, before any scan runs:
+         the replay's verdict on this tab's own labels, in the reader's
+         face where the scan button is, not in a footnote below a card. */
+      + hgOgDeskStanceBannerHtml()
       + '<div class="row"><button class="btn" id="ogRun">RUN GOLD SCAN</button>'
       +   ' <button class="btn" id="ogGrid">R / HORIZON GRID</button></div>'
       + '<div class="note" id="ogStat">idle — press RUN. Fetches two horizons of gold bars, then measures every mechanic on each.</div>'
@@ -8623,6 +9334,7 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgBridgeSetupToPick = hgOgBridgeSetupToPick;
     window.hgOgPickGoldEngineFor = hgOgPickGoldEngineFor;
     window.hgOgPickGoldEngineForMp = hgOgPickGoldEngineForMp;
+    window.hgOgGoldEngineRowHtml = hgOgGoldEngineRowHtml;  /* levelless when not formed (hg-v533) — testable */
     window.hgOgEngineGradeBannerHtml = hgOgEngineGradeBannerHtml;
     window.hgOgGoldEnginesPanelHtml = hgOgGoldEnginesPanelHtml;
     window.hgOgPaintOgPostScan = hgOgPaintOgPostScan;
@@ -8659,6 +9371,21 @@ terse status, and never launches a first-time scan on a global refresh.
     window.HG_OG_REPLAY_EVIDENCE = HG_OG_REPLAY_EVIDENCE;
     window.hgOgRtCostPct = hgOgRtCostPct;
     window.hgOgCostDrag = hgOgCostDrag;
+    /* Venue-true cost model + setup FORMATION (hg-v533) — exported so the
+       venue arithmetic, the stop floor, the measured-toxic demotion list
+       and the survivor list are testable without a mount. HG_OG_VENUE /
+       HG_OG_XM_SPREAD_USD are read from window at call time (set them
+       there); the PAXG preset stays tunable via HG_OG_RT_COST_PCT. */
+    window.hgOgVenueCost = hgOgVenueCost;
+    window.hgOgVenueCostNoteHtml = hgOgVenueCostNoteHtml;
+    window.hgOgVenueNetR = hgOgVenueNetR;
+    window.hgOgKindDemotion = hgOgKindDemotion;
+    window.hgOgForwardPaid = hgOgForwardPaid;
+    window.hgOgSurvivorKinds = hgOgSurvivorKinds;
+    window.hgOgIsSurvivor = hgOgIsSurvivor;
+    window.hgOgFormation = hgOgFormation;
+    window.hgOgDemotedSectionHtml = hgOgDemotedSectionHtml;
+    window.HG_OG_FORM_COST_R_MAX = HG_OG_FORM_COST_R_MAX;
     window.hgOgCostChipHtml = hgOgCostChipHtml;
     window.hgOgReplayEvidence = hgOgReplayEvidence;
     window.hgOgReplayLineHtml = hgOgReplayLineHtml;
@@ -8666,6 +9393,14 @@ terse status, and never launches a first-time scan on a global refresh.
     window.hgOgConfluenceFitNoteHtml = hgOgConfluenceFitNoteHtml;
     window.hgOgConfluenceFitPwin = hgOgConfluenceFitPwin;
     window.hgOgConfluenceFitPwinHtml = hgOgConfluenceFitPwinHtml;
+    /* Spectrum truth labels + cost quarantine + desk-stance banner
+       (hg-v532) — exported so the honest wording is testable without a
+       full mount. */
+    window.hgOgTierBadgeInfo = hgOgTierBadgeInfo;
+    window.hgOgCostsFirstHtml = hgOgCostsFirstHtml;
+    window.hgOgRenderConfluenceBreakdown = hgOgRenderConfluenceBreakdown;
+    window.hgOgSpectrumTruthHeaderHtml = hgOgSpectrumTruthHeaderHtml;
+    window.hgOgDeskStanceBannerHtml = hgOgDeskStanceBannerHtml;
     /* APEX GOLD (ADDITIVE) — grade-gated, tape-aligned, cost-tiered tier
        built ONLY from measured replay evidence; see hgOgApexQualify. */
     window.hgOgApexQualify = hgOgApexQualify;

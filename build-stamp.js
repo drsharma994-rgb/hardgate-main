@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v535',
-  pack: '20X smarter + shorts unblocked — symbol trend beats blanket macro veto',
-  built: '2026-08-31T08:30:00Z',
-  note: 'Two audited changes. (1) 20X: replan searches up to 3 structural swings on the 4h tape then 15m structure (data already fetched) for a stop inside the untouched 1.12-1.84% band (+65 qualifiers measured, prior path provably unchanged); section ranked by real solidity; PRIME chip when forward-paid + symbol-trend + solidity 105+ stack; TREND cards carry the exit-study hint (info only, below significance). (2) The macro-regime veto demotes to an AGAINST note when the symbol own 4h AND daily trends both align with the trade (raw EMA reads; missing data never demotes) — shorts on genuinely downtrending symbols can now earn tickets and reach 20X in a RISK-ON tape; APEX and PRIME stay macro-strict. Basis: symbol-trend cohort PF 0.734 vs 0.666 in the 2,832-trade replay.'
+  version: 'hg-v536',
+  pack: 'OMNIGOLD tells the truth and acts on it — labels, costs, demotions',
+  built: '2026-09-01T06:00:00Z',
+  note: 'OMNIGOLD overhaul after real losses traded on EXCEPTIONAL labels the replay had discredited. (1) Truth labels: EXCEPTIONAL becomes GRADE-A CLASS with its measured record in the badge; every tier shows its replay WR; legend states tiers did not rank outcomes. (2) Costs first: heavy-cost cards warn above the badge, fatal-cost cards get no medal. (3) Venue-true costs: XM XAUUSD preset (~0.020% RT) vs PAXG (0.26%), formation stop floor at 8x venue round trip. (4) Measured-toxic kinds stood aside at formation (22 at PAXG / 12 at XM costs, incl. PD-EQUILIBRIUM, PIN-REJECT, THREE-BAR, SPRING) into a visible evidence section - un-demoted only by a live forward has-paid read. (5) Nine replay-survivor kinds promoted (STRUCT-BOS class). Every number traces to the 7,270-trade PAXG replay; outcomes were measured at PAXG costs and cards say so at XM.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
