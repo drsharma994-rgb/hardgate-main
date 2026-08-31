@@ -2975,7 +2975,17 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
 
     var imbalance = fin(flowData.imbalance);
     var sigma = fin(flowData.sigma) || 1.0;
-    var direction = (setup.hit && setup.hit.dir) || (setup.plan && fin(setup.plan.entry) > fin(setup.plan.stop)) ? 'long' : 'short';
+    /* hg-v540: hit.dir is authoritative when present; only a setup with no
+       explicit direction falls back to the plan's entry>stop geometry.
+       (The old one-liner let || bind tighter than ?:, so any truthy
+       hit.dir — 'short' included — read as 'long' and honest sell-side
+       flow on shorts scored as counterflow 0.) */
+    var direction;
+    if (setup.hit && setup.hit.dir){
+      direction = String(setup.hit.dir).toLowerCase();
+    } else {
+      direction = (setup.plan && fin(setup.plan.entry) > fin(setup.plan.stop)) ? 'long' : 'short';
+    }
     var baseScore = 0, detail = '';
 
     /* Score based on imbalance strength (in sigma) */
@@ -7020,12 +7030,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
        flow, and a close-location candle proxy is not a trade tape. Those
        names keep scoring 0 — the honest number.
 
-     KNOWN PILLAR QUIRK (documented, NOT changed — scoring logic is
-     frozen): hgOmniOrderFlowScore derives its direction with
+     PILLAR QUIRK RESOLVED (hg-v540): hgOmniOrderFlowScore used to derive
+     its direction with
        (hit && hit.dir) || (plan && entry > stop) ? 'long' : 'short'
-     where || binds tighter than ?:, so any truthy hit.dir reads as
-     'long'. The feed stays honestly signed regardless; fixing the
-     precedence is a separate change. */
+     where || binds tighter than ?:, so any truthy hit.dir read as 'long'
+     and this honestly-signed feed scored short setups backwards. The
+     pillar now reads hit.dir directly (lowercased), falling back to the
+     plan's entry>stop geometry only when no hit.dir exists. */
   function hgOmniOrderFlowFeed(ex){
     var pack = ex && ex.takerSeries;
     var series = pack && pack.series;

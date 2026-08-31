@@ -382,3 +382,80 @@ console.log('  window.hgOmniStructureConfluenceScore(setup)');
 console.log('  window.hgOmniMomentumConvergenceScore(setup)');
 console.log('  window.hgOmniSolidityScore(setup)  // returns full 12-pillar breakdown');
 console.log('='.repeat(90));
+
+/**
+ * REGRESSION: hgOmniOrderFlowScore direction derivation (hg-v540)
+ *
+ * The pillar used to compute
+ *   (hit && hit.dir) || (plan && entry > stop) ? 'long' : 'short'
+ * where || binds tighter than ?:, so ANY truthy hit.dir — 'short'
+ * included — read as 'long'. A short setup with honest sell-side flow
+ * (negative imbalance) scored as counterflow 0. These assertions run the
+ * REAL function booted from omniroute.js, not a copy.
+ */
+(function(){
+  var fs = require('fs');
+  var vm = require('vm');
+  var path = require('path');
+  var ROOT = path.join(__dirname, '..', '..');
+
+  var ctx = { console: { log(){}, warn(){}, error(){} }, Math, Date, isFinite, isNaN, parseFloat,
+              parseInt, JSON, Array, Object, Number, String, Promise, RegExp, Error, TypeError,
+              setTimeout, clearTimeout };
+  ctx.window = ctx; ctx.globalThis = ctx; ctx.HG_tabs = [];
+  ctx.localStorage = { getItem: () => null, setItem(){}, removeItem(){} };
+  ctx.document = { createElement: () => ({ style:{}, innerHTML:'', appendChild(){}, setAttribute(){},
+    addEventListener(){}, querySelector:()=>null, querySelectorAll:()=>[] }), getElementById:()=>null,
+    querySelector:()=>null, querySelectorAll:()=>[], head:{appendChild(){}}, body:{appendChild(){}},
+    documentElement:{appendChild(){}}, addEventListener(){} };
+  vm.createContext(ctx);
+  ['indicators.js','indicators2.js','fixpack14-core.js','plans.js','hg-mechanics.js',
+   'hg-forward.js','hg-gates.js','hg-plan.js','omniroute.js'].forEach(function(f){
+    vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  });
+
+  var failures = 0;
+  function ok(cond, label){
+    if (cond){ console.log('  ok — ' + label); }
+    else { failures++; console.log('  FAIL — ' + label); }
+  }
+
+  function flowSetup(dir, imbalance){
+    return {
+      kind: 'SPRING',
+      hit: { kind: 'SPRING', dir: dir, level: 100 },
+      plan: dir === 'long' ? { entry: 100, stop: 99 } : { entry: 100, stop: 101 },
+      extra: { orderFlow: { imbalance: imbalance, sigma: 1.0, sustainedBars: 3 } }
+    };
+  }
+
+  console.log('\n' + '='.repeat(90));
+  console.log('REGRESSION: order flow direction derivation (real hgOmniOrderFlowScore)');
+  console.log('='.repeat(90));
+
+  var r = ctx.window.hgOmniOrderFlowScore;
+  ok(typeof r === 'function', 'hgOmniOrderFlowScore exported');
+
+  /* THE bug: short setup, sell-side flow (negative imbalance) must be aligned */
+  var shortAligned = r(flowSetup('short', -1.5));
+  ok(shortAligned.aligned === true, 'short setup + negative imbalance is ALIGNED (was scored counterflow before hg-v540)');
+  ok(shortAligned.score === 10, 'short setup @ -1.5σ scores 10 (moderate flow), got ' + shortAligned.score);
+
+  /* Real counterflow on a short must still score 0 */
+  var shortCounter = r(flowSetup('short', 1.5));
+  ok(shortCounter.score === 0 && shortCounter.aligned === false, 'short setup + positive imbalance stays counterflow 0');
+
+  /* Longs unchanged by the fix */
+  var longAligned = r(flowSetup('long', 2.2));
+  ok(longAligned.aligned === true && longAligned.score === 12, 'long setup + strong positive imbalance still scores 12');
+
+  /* No hit.dir: falls back to plan geometry (entry < stop == short) */
+  var geomShort = r({ plan: { entry: 100, stop: 101 }, extra: { orderFlow: { imbalance: -0.7, sigma: 1.0 } } });
+  ok(geomShort.aligned === true && geomShort.score === 5, 'no hit.dir: entry<stop geometry reads short, -0.7σ scores 5');
+
+  if (failures){
+    console.log('\n' + failures + ' regression assertion(s) FAILED');
+    process.exit(1);
+  }
+  console.log('\nAll order-flow direction regression assertions passed.');
+})();

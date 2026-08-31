@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v539',
-  pack: 'OMNIPRESENT 20X populated by geometry tier — replay said no quality door',
-  built: '2026-09-01T12:00:00Z',
-  note: 'OMNIPRESENT mechanics replayed offline (8,522 trades, 25 symbols): BOTH zone-rejection kinds measured gross-negative (OP-HIGH-REJECT -0.022R n=4204, OP-LOW-REJECT -0.039R n=4318) and the hard-gated cohort ran WORSE (PF 0.65, n=164) - so the replay-evidence quality door stays shut, computed at runtime from the baked table. The 20X section now populates via a GEOMETRY OK - quality unproven tier (all safety gates pass; warn label carries the mechanic negative replay record), ranked below any forward-paid setups. Audit caught the smoke run silently overwriting the full-run evidence file (shared OUT_PATH, fixed) - the initially reported +0.05 gross for OP-LOW-REJECT was from the corrupted file and inverts in the honest run.'
+  version: 'hg-v540',
+  pack: 'order-flow pillar reads the short side honestly',
+  built: '2026-09-01T14:00:00Z',
+  note: 'hgOmniOrderFlowScore no longer misreads every setup with a truthy hit.dir as long: || bound tighter than ?: in the old direction one-liner, so short setups with honest sell-side flow (negative taker imbalance) scored as counterflow 0 and shorts against net buying were credited as aligned. Direction now comes from hit.dir directly (lowercased), falling back to the plan entry>stop geometry only when no hit.dir exists. Live effect since hg-v533 wired extra.orderFlow from the real Binance taker series. Sigma thresholds (0.5/1.0/2.0) and the sustained-flow bonus are untouched; regression covered in tests/solidity/test_p3_solidity.js.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
