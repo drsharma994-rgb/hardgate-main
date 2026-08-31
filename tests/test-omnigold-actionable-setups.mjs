@@ -73,6 +73,14 @@ console.log('\n== pick gold engine respects tape (aligned first) ==');
 console.log('\n== demoted grade B + against tape still surfaces ==');
 {
   const W = boot();
+  /* hg-v533 FORMATION floor: this fixture's 12-point stop on 4628 is a
+     0.26% stop — at the conservative PAXG default venue the round trip is
+     1.0R of 1R and the setup rightly does NOT form. The subject of THIS
+     test is the against-tape/demoted-grade surfacing, and the desk executes
+     gold on XM, so the fixture now declares its venue (XM ~0.020% RT ->
+     0.08R of 1R, forms). The PAXG-default refusal is asserted in its own
+     block at the end of this file. */
+  W.HG_OG_VENUE = 'XM';
   const bridge = {
     ok: true,
     scalp: {
@@ -123,6 +131,10 @@ console.log('\n== engine beats veto watch in MP horizon ==');
 console.log('\n== grade C fallback when no A/B ==');
 {
   const W = boot();
+  /* hg-v533: same venue declaration as the demoted-grade-B block above —
+     the 11-point stop on 4627 (0.24% stop) only forms at XM costs; the
+     grade-C fallback mechanics are what this block is about. */
+  W.HG_OG_VENUE = 'XM';
   const bridge = {
     ok: true,
     scalp: {
@@ -165,6 +177,26 @@ console.log('\n== grade chips ==');
     swing: { ranked: [], best: null, rejected: [] }
   });
   ok(/og-grade-lg/.test(panel), 'engines panel large grade chip');
+}
+
+console.log('\n== FORMATION floor at PAXG default refuses the tight-stop engine pick (hg-v533) ==');
+{
+  /* The same fixture the demoted-grade-B block declares XM for: at the
+     conservative PAXG default (0.26% RT) a 0.26% stop pays 1.0R of 1R in
+     fees — the pick gate must refuse it, and its row must render WITHOUT
+     levels. This is the behavior a reader took real losses without. */
+  const W = boot();
+  const row = { dir: 'short', strategy: 'LIQUIDITY SWEEP REVERSAL', entry: 4628, stop: 4640, t1: 4610,
+    grade: 'B', tally: 6, demoted: true };
+  const bridge = { ok: true, scalp: { ranked: [row], best: row }, swing: { ranked: [], best: null } };
+  ok(W.hgOgPickGoldEngineFor(bridge, 'SCALP', 'long') === null,
+     'PAXG default: 0.26% stop does not form as an engine pick');
+  const fm = W.hgOgFormation(row);
+  ok(fm && fm.formed === false && /stop inside 8x the venue round-trip/.test(fm.reasons.join(' ')),
+     'formation names the 8x venue round-trip floor');
+  const rowHtml = W.hgOgGoldEngineRowHtml(row, 'best', 'SCALP');
+  ok(/did not FORM/.test(rowHtml) && !/ENTRY/.test(rowHtml),
+     'engine row stays visible but levelless when not formed');
 }
 
 console.log('\n== wiring exports ==');
