@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v536',
-  pack: 'OMNIGOLD tells the truth and acts on it — labels, costs, demotions',
-  built: '2026-09-01T06:00:00Z',
-  note: 'OMNIGOLD overhaul after real losses traded on EXCEPTIONAL labels the replay had discredited. (1) Truth labels: EXCEPTIONAL becomes GRADE-A CLASS with its measured record in the badge; every tier shows its replay WR; legend states tiers did not rank outcomes. (2) Costs first: heavy-cost cards warn above the badge, fatal-cost cards get no medal. (3) Venue-true costs: XM XAUUSD preset (~0.020% RT) vs PAXG (0.26%), formation stop floor at 8x venue round trip. (4) Measured-toxic kinds stood aside at formation (22 at PAXG / 12 at XM costs, incl. PD-EQUILIBRIUM, PIN-REJECT, THREE-BAR, SPRING) into a visible evidence section - un-demoted only by a live forward has-paid read. (5) Nine replay-survivor kinds promoted (STRUCT-BOS class). Every number traces to the 7,270-trade PAXG replay; outcomes were measured at PAXG costs and cards say so at XM.'
+  version: 'hg-v537',
+  pack: 'OMNIPRESENT gets a 20X face — same audited gates, own forward record',
+  built: '2026-09-01T12:00:00Z',
+  note: 'OMNIPRESENT 20X — LEVERAGE-SAFE SETUPS section. All leverage math reuses the audited omniroute exports (hgOmni20xQualify/GateRun/Replan/Explain, hgOmniCostDrag) through an adapter (opX20Wrap) that maps the OP candidate shape (top-level entry/stop/t1) into {plan:{...}}; atr1hPct and the 1h re-plan are stamped at scan time while the bars exist. Quality floor honesty: OP has no conviction certs and no meaningful solidity, so the ONLY quality path is its own settled forward record — hgOmni20xForwardPaid now reads the candidate-named pool (c.fwdTab, default OMNIROUTE = bit-identical for existing callers), so OP-HIGH-REJECT/OP-LOW-REJECT are judged against the OMNIPRESENT pool with the same 20-sample/familyZ(2) bar the measured-edge gate uses. Section is structurally empty until that record pays, and says so; near-misses never print levels; ARMED can never appear (no ticket without a 1h rejection close). hgOmni20xParams window-exported so the OP banner prints the same frozen numbers omniroute judges with.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

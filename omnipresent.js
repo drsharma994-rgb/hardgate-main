@@ -87,7 +87,7 @@
   var T2_FLOOR_R = 5;       // the runner starts at 5R — the squeezed stop is what buys this
   var T2_CAP_R = 10;        // and stretches to the opposite zone, up to 10R
 
-  var __op = { busy: false, ran: false, ui: null, lastStat: null, snap: null };
+  var __op = { busy: false, ran: false, ui: null, lastStat: null, snap: null, lastX20Html: '' };
 
   function opSleep(ms){ return new Promise(function (res){ setTimeout(res, ms); }); }
 
@@ -709,6 +709,7 @@
                   cands[c].grade = gradeFn ? gradeFn(cands[c].gates)
                     : { ticket: false, vetoes: [], verdict: 'grade engine unavailable' };
                   cands[c].livePx = livePx;
+                  opX20Stamp(cands[c], rows);
                   found.push(cands[c]);
                 }
               })
@@ -774,6 +775,15 @@
             : ('<div class="empty">no zone within ' + ARM_MAX_ATR + 'xATR of any market — the detectors are meant to be quiet when nothing is near.</div>');
           ui.cards.innerHTML = h || empty;
           try { if (typeof W.hgMpPin === 'function') W.hgMpPin('omnipresent', top, null, ui.cards); } catch (eMp) {}
+          /* 20X — judged on the same collapsed one-per-contract list the
+             desk ranks; kept for remount restore. */
+          try{
+            if (ui.x20){
+              var x20h = opX20SectionHtml(ranked.one);
+              ui.x20.innerHTML = x20h;
+              __op.lastX20Html = x20h;
+            }
+          }catch(eX20r){}
         });
       })
       .catch(function (e){
@@ -783,6 +793,244 @@
         __op.busy = false;
         ui.btn.disabled = false;
       });
+  }
+
+  /* ============ 20X — leverage-safe setups (this desk's face) ============
+     ALL leverage math is the audited omniroute machinery, called through its
+     window exports (hgOmni20xParams / hgOmni20xQualify / hgOmni20xReplan /
+     hgOmni20xExplain) — nothing is reimplemented here, so the two tabs can
+     never disagree about what survives 20x. This file only (1) adapts the
+     OP candidate shape into what those functions read, and (2) names the
+     quality floor honestly: this desk has no conviction certificates and no
+     meaningful solidity score, so the ONLY reachable quality path is its own
+     settled forward record (fwdTab 'OMNIPRESENT', kinds OP-HIGH-REJECT /
+     OP-LOW-REJECT — the same pool the measured-edge gate and FORWARD table
+     read). Until 20+ settled samples clear the 2-mechanic significance bar,
+     nothing can qualify and the section says exactly why. Every missing
+     field maps to ABSENT — fail closed, never a placeholder that could read
+     as qualification. */
+
+  /* Stamp the two 20X inputs that need the raw bars, at SCAN time, because
+     rows exist only inside the scan closure (the omniroute lesson: capture
+     atr1hPct and the re-plan while the tape is in scope or the noise gate
+     can never run). Best-effort; absent on any failure — fail closed. */
+  function opX20Stamp(c, rows){
+    try{
+      var aPct = (fin(c.atr) > 0 && fin(c.livePx) > 0) ? fin(c.atr) / fin(c.livePx) * 100 : NaN;
+      if (isFinite(aPct) && aPct > 0) c.atr1hPct = aPct;
+      /* re-plan only where it could ever be used: a TICKET (TRIGGERED by
+         construction — the rejection gate blocks tickets on ARMED). This
+         desk has no 15m tape; hgOmni20xReplan handles the null — fewer
+         candidates, honestly. */
+      if (c.grade && c.grade.ticket === true && gfn('hgOmni20xReplan')){
+        c.x20plan = W.hgOmni20xReplan({ entry: c.entry, stop: c.stop, t1: c.t1 }, c.dir, rows, null) || null;
+      }
+    }catch(e){}
+  }
+
+  /* ADAPTER — an OP candidate reshaped into what hgOmni20xQualify reads.
+     Field map (every mapped field from real data, every missing field ABSENT):
+       dir                 <- c.dir
+       grade               <- c.grade       (same hgOmniGrade producer — the
+                                             same ticket boolean, TRIGGERED-only
+                                             by this desk's rejection gate)
+       plan.entry/stop/t1  <- c.entry / c.stop / c.t1  (top-level here)
+       atr1hPct            <- c.atr1hPct    (scan-time stamp; absent -> the
+                                             noise gate FAILs, by design)
+       x20plan             <- c.x20plan     (scan-time re-plan; absent -> no
+                                             stop-width fallback)
+       kind                <- OP-HIGH-REJECT / OP-LOW-REJECT (the exact key
+                              this desk's forward recorder writes)
+       fwdTab              <- 'OMNIPRESENT' (quality reads THIS desk's own
+                              pool — never another tab's record)
+       conviction          <- ABSENT: no formation-time certificate exists on
+                              this desk and one is never fabricated from
+                              confluence/evidence counts (path fails closed)
+       solidity            <- ABSENT: the 18-pillar score is omniroute-shaped;
+                              a starved recompute is meaningless here and no
+                              SOLIDITY chip is ever printed on these cards */
+  function opX20Wrap(c){
+    if (!c) return null;
+    var dir = String(c.dir || '').toLowerCase();
+    var wrap = {
+      dir: dir,
+      grade: c.grade || null,
+      plan: { entry: c.entry, stop: c.stop, t1: c.t1 },
+      kind: 'OP-' + (dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT'),
+      fwdTab: 'OMNIPRESENT',
+      sym: c.sym, base: c.base, exchange: c.exchange
+    };
+    var aPct = fin(c.atr1hPct);
+    if (isFinite(aPct) && aPct > 0) wrap.atr1hPct = aPct;
+    if (c.x20plan) wrap.x20plan = c.x20plan;
+    return wrap;
+  }
+
+  /* Does ONE OP candidate survive 20x? The audited qualifier answers, on the
+     wrapped shape. Null when the module is absent — fail closed, and the
+     section renderer says so out loud instead of throwing. */
+  function opX20Qualify(c){
+    var qFn = gfn('hgOmni20xQualify');
+    if (!qFn) return null;
+    var wrap = opX20Wrap(c);
+    if (!wrap) return null;
+    try{ return qFn(wrap); }catch(e){ return null; }
+  }
+
+  function opX20Placeholder(){
+    return '<section data-op-20x="1">'
+      + '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS</div>'
+      + '<div class="note warn" style="display:block">20x is unforgiving: a ~4.6% adverse move liquidates '
+      + 'the full isolated margin. This section fills when a scan runs — press RUN OMNIPRESENT SCAN above. '
+      + 'Only TRIGGERED tickets whose geometry survives 20x pass its gates (stop 2.5x inside liquidation, '
+      + 'ATR-noise check, cost gate, quality floor — on this desk, only a forward record that has paid). '
+      + 'Most scans yield none, which is the gates working, not a malfunction. '
+      + 'Signals only — this desk does not execute.</div>'
+      + '<div class="empty">no scan yet — the 20x gates run on scan results.</div>'
+      + '</section>';
+  }
+
+  /* The whole section: permanent warning banner (copied VERBATIM from the
+     omniroute section — one message about 20x risk everywhere), this desk's
+     quality-floor truth, one compact card per qualifier, the honest empty
+     state, and near-miss transparency that NEVER prints levels for a setup
+     that failed a safety gate. Fed the same collapsed one-per-contract list
+     the desk ranks. */
+  function opX20SectionHtml(cands){
+    try{
+      if (!gfn('hgOmni20xParams') || !gfn('hgOmni20xQualify')){
+        return '<section data-op-20x="1"><div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS</div>'
+          + '<div class="note warn" style="display:block">20X section unavailable — the omniroute leverage module '
+          + '(hgOmni20xParams / hgOmni20xQualify) has not loaded. This desk never reimplements the liquidation '
+          + 'arithmetic, so nothing is judged without it.</div></section>';
+      }
+      var P = null;
+      try{ P = W.hgOmni20xParams(); }catch(eP){ P = null; }
+      if (!P){
+        return '<section data-op-20x="1"><div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS</div>'
+          + '<div class="note warn" style="display:block">20X section unavailable — the configured '
+          + 'leverage/maintenance-margin combination leaves no distance to liquidation, so no geometry can be judged.</div>'
+          + '</section>';
+      }
+      var arr = Array.isArray(cands) ? cands : [];
+      var list = [], quals = [], i, c, q;
+      for (i = 0; i < arr.length; i++){
+        c = arr[i]; if (!c) continue;
+        q = opX20Qualify(c);
+        if (q){ list.push(c); quals.push(q); }
+      }
+      /* rank by LOWER cost drag — the one meaningful ordering this desk has.
+         Omniroute ranks by its stamped solidity, which does not exist here
+         and is never faked; costR is that ranking's own tiebreak, promoted. */
+      if (list.length > 1){
+        var ordr = [], oi;
+        for (oi = 0; oi < list.length; oi++) ordr.push({ c: list[oi], q: quals[oi] });
+        ordr.sort(function (a, b){
+          var ca = fin(a.q && a.q.costR), cb = fin(b.q && b.q.costR);
+          var fa = isFinite(ca), fb = isFinite(cb);
+          if (fa && fb && ca !== cb) return ca - cb;
+          if (fa !== fb) return fa ? -1 : 1;
+          return 0;
+        });
+        for (oi = 0; oi < ordr.length; oi++){ list[oi] = ordr[oi].c; quals[oi] = ordr[oi].q; }
+      }
+      var h = '<section data-op-20x="1">';
+      h += '<div class="hg-mp-eye">20X — LEVERAGE-SAFE SETUPS (' + list.length + ')</div>';
+      /* banner verbatim from omniroute — it renders on the empty state too,
+         because the reader most likely to need it is the one about to force
+         a trade that did not qualify. */
+      h += '<div class="note warn" style="display:block">20x is unforgiving: a ~'
+        +  P.liqDistPct.toFixed(1) + '% adverse move liquidates the full isolated margin. '
+        +  'These cards passed geometry gates (stop ' + P.safety + 'x inside liquidation, noise check, '
+        +  'cost gate, quality floor: conviction cert, a forward record that has paid, or solidity) '
+        +  '— that is safety of GEOMETRY, not a prediction. '
+        +  'Funding and gap slippage are NOT modeled. Signals only — this desk does not execute.</div>';
+      /* what the quality floor honestly IS on this desk */
+      h += '<div class="note">Quality floor on THIS desk: OMNIPRESENT setups carry no conviction certificate and no '
+        +  'meaningful solidity score, and neither is ever fabricated — the only reachable quality path is this '
+        +  'desk&#39;s OWN settled forward record (OP-HIGH-REJECT / OP-LOW-REJECT in the OMNIPRESENT pool, the same '
+        +  'stats the measured-edge gate reads: 20+ settled samples clearing the 2-mechanic significance bar). '
+        +  'Until that record has paid, this section is structurally empty — correct, not broken. '
+        +  'ARMED zones can never appear here: no ticket exists before a 1h rejection close.</div>';
+      if (!list.length){
+        h += '<div class="empty">no setup currently clears the 20x safety gates — with 20x leverage '
+          +  'that is the correct output most of the time, not a malfunction.</div>';
+      } else {
+        for (i = 0; i < list.length; i++){
+          c = list[i]; q = quals[i];
+          var used20 = !!(q && q.planUsed === 'x20' && q.x20);
+          var mech = 'OP-' + (c.dir === 'short' ? 'HIGH-REJECT' : 'LOW-REJECT');
+          h += '<div class="card">';
+          h += '<div class="ttl">' + esc(c.base || c.sym) + ' · ' + esc(String(c.dir || '').toUpperCase())
+            +  ' · ' + esc(mech)
+            +  ' <span class="gpip ok">' + (used20 ? '20X RE-PLAN OK' : '20X GEOMETRY OK') + '</span>'
+            +  ' <span class="dim">' + esc(String(c.exchange || '').toUpperCase()) + '</span></div>';
+          if (used20){
+            /* the re-plan card must never read like the zone card — the stop
+               is 1h structure chosen to FIT 20x, not the invalidation */
+            h += '<div class="note warn" style="display:block">20X PLAN — tighter 1h stop, NOT the '
+              +  'zone invalidation: ordinary noise can stop this trade while the zone idea stays alive.</div>';
+            h += '<div>20x ENTRY <b>' + pxF(q.x20.entry) + '</b> · STOP <b>' + pxF(q.x20.stop)
+              +  '</b> · T1 <b>' + pxF(q.x20.t1) + '</b> <span class="dim">('
+              +  esc(String(q.x20.src || '')) + ', 2R)</span></div>';
+            h += '<div class="dim">zone plan: stop '
+              +  (isFinite(fin(q.primaryStopDistPct)) ? fin(q.primaryStopDistPct).toFixed(2) : '—')
+              +  '% away — that invalidation stays live after a 20x stop-out</div>';
+          } else {
+            h += '<div>ENTRY <b>' + pxF(c.entry) + '</b> · STOP <b>' + pxF(c.stop)
+              +  '</b> · T1 <b>' + pxF(c.t1) + '</b></div>';
+          }
+          /* the 20x arithmetic, spelled out — computed from the plan that
+             actually qualified. A 1.2% stop is "small" until it is printed
+             as 24% of the margin. */
+          h += '<div>est. liq ' + pxF(q.liqPrice)
+            +  ' (' + fin(q.liqDistPct).toFixed(2) + '%)'
+            +  ' · stop ' + fin(q.stopDistPct).toFixed(2) + '%'
+            +  ' · stop-to-liq buffer ' + fin(q.bufferX).toFixed(1) + 'x'
+            +  ' · at stop you lose <b>' + fin(q.marginLossAtStopPct).toFixed(0) + '%</b> of margin'
+            +  ' · cost ' + fin(q.costR).toFixed(2) + 'R</div>';
+          h += '<div class="dim">[via ' + esc(String(q.quality)) + ' · plan: ' + esc(String(q.planUsed || 'primary')) + ']</div>';
+          h += '</div>';
+        }
+      }
+      /* NEAR-MISS TRANSPARENCY — same discipline as omniroute: name the
+         closest TICKETS and the gate that stopped each, so a thin section
+         reads as gates doing their job on specific setups. NO entry/stop
+         levels here, ever: these failed a safety gate, and printing tradable
+         numbers under a "not qualified" heading turns a warning into a
+         suggestion. */
+      if (list.length < 3 && gfn('hgOmni20xExplain')){
+        var near = [], ni, nc, nx, nw;
+        for (ni = 0; ni < arr.length; ni++){
+          nc = arr[ni]; if (!nc) continue;
+          if (!(nc.grade && nc.grade.ticket === true)) continue;
+          if (list.indexOf(nc) >= 0) continue;
+          nw = opX20Wrap(nc);
+          nx = null;
+          try{ nx = W.hgOmni20xExplain(nw); }catch(eNx){ nx = null; }
+          if (!nx || nx.qualified || !nx.fails || !nx.fails.length) continue;
+          near.push({ c: nc, fails: nx.fails });
+        }
+        near.sort(function (a, b){ return a.fails.length - b.fails.length; });
+        if (near.length){
+          h += '<div class="note dim" style="margin-top:8px;opacity:.8"><b>NEAREST MISSES — NOT QUALIFIED</b>'
+            +  ' <span class="dim">(closest tickets and the gate that stopped each · no levels shown on setups that failed safety)</span>';
+          for (ni = 0; ni < near.length && ni < 3; ni++){
+            var nf = near[ni].fails[0], nMore = near[ni].fails.length - 1;
+            h += '<div class="dim">' + esc(String(near[ni].c.base || near[ni].c.sym || '?'))
+              +  ' ' + esc(String(near[ni].c.dir || '').toUpperCase())
+              +  ' — failed: ' + esc(String(nf.gate)) + ': ' + esc(String(nf.why))
+              +  (nMore > 0 ? ' <span class="dim">(+' + nMore + ' more gate' + (nMore === 1 ? '' : 's') + ')</span>' : '')
+              +  '</div>';
+          }
+          h += '</div>';
+        }
+      }
+      h += '</section>';
+      return h;
+    }catch(eSec){
+      return '<div class="note warn">20X section failed to render — nothing was judged.</div>';
+    }
   }
 
   /* ==================== render ==================== */
@@ -881,10 +1129,14 @@
       + '<div class="row" style="margin-top:8px"><button class="btn" id="opRun">RUN OMNIPRESENT SCAN</button></div>'
       + '<div id="opSide"></div>'
       + '<div class="cards" id="opCards" style="margin-top:12px"></div>'
+      + '<div id="opX20" style="margin-top:12px"></div>'
       + '</div>';
-    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), side: el.querySelector('#opSide'), cards: el.querySelector('#opCards') };
+    var ui = { btn: el.querySelector('#opRun'), stat: el.querySelector('#opStat'), side: el.querySelector('#opSide'), cards: el.querySelector('#opCards'), x20: el.querySelector('#opX20') };
     if (!ui.btn || !ui.stat || !ui.cards) return;
     __op.ui = ui;
+    /* 20X: restore the last rendered section across remounts (the omniroute
+       last20xHtml idiom), else the pre-scan placeholder. */
+    try{ if (ui.x20) ui.x20.innerHTML = __op.lastX20Html || opX20Placeholder(); }catch(eX20m){}
     var missing = [];
     if (!gfn('xuUniverse')) missing.push('xuUniverse');
     if (!gfn('xuCandles')) missing.push('xuCandles');
@@ -917,6 +1169,11 @@
     window.opOnePerContract = opOnePerContract;
     window.opRankHead = opRankHead;
     window.opNextCloses = opNextCloses;
+    /* 20X face — the adapter, the qualify wrapper and the renderer, exported
+       so each is testable on a synthetic candidate apart from a live scan. */
+    window.opX20Wrap = opX20Wrap;
+    window.opX20Qualify = opX20Qualify;
+    window.opX20SectionHtml = opX20SectionHtml;
     window.hgOpRunScan = runScan;   /* the scan loop itself, for the stability harness */
     window.hgOpState = function (){ try{ return __op.snap ? JSON.parse(JSON.stringify(__op.snap)) : null; }catch(e){ return null; } };
     window.HG_tabs = window.HG_tabs || [];

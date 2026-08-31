@@ -4862,7 +4862,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var kind = String((c && (c.kind || (c.hit && c.hit.kind))) || '');
       if (!kind) return null;
       var pool = null;
-      try { pool = w.hgFwdPool('OMNIROUTE'); } catch (ePl) { pool = null; }
+      /* The candidate may name its OWN forward tab (c.fwdTab — OMNIPRESENT's
+         20X adapter stamps 'OMNIPRESENT' so its quality read judges its own
+         settled record, never this desk's). Absent, the read is bit-identical
+         to the original: hgFwdPool('OMNIROUTE'). The family-wise bar below is
+         computed over the keys of WHICHEVER pool was read, so the "READ
+         column and this gate cannot disagree" property holds per tab. */
+      try { pool = w.hgFwdPool(String((c && c.fwdTab) || 'OMNIROUTE')); } catch (ePl) { pool = null; }
       if (!pool || typeof pool !== 'object') return null;
       var p = pool[kind];
       if (!p || !(fin(p.samples) > 0)) return null;
@@ -10287,6 +10293,10 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     /* 20X evolution helpers — the safe band, the 1h re-plan, the full gate
        run on one geometry, the forward-paid quality read, and the near-miss
        diagnosis. Exported so each is testable apart from a live scan. */
+    /* Params exported so OMNIPRESENT's 20X face prints the same frozen
+       numbers this file judges with — never a duplicated constant that
+       could drift (the liq-distance arithmetic lives HERE, once). */
+    window.hgOmni20xParams = hgOmni20xParams;
     window.hgOmni20xBand = hgOmni20xBand;
     window.hgOmni20xReplan = hgOmni20xReplan;
     window.hgOmni20xGateRun = hgOmni20xGateRun;
