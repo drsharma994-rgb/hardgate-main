@@ -5,25 +5,34 @@
   "lastRunAt": "2026-08-30T22:40:51.041Z",
   "ticket": {
     "long": {
-      "sym": "XAU",
-      "entry": 4506.771497737076
+      "sym": "B-ZKP_USDT",
+      "entry": 0.04943729950583894
     },
     "short": null
   },
   "sniper": {
-    "key": "XAU@4463.69",
+    "key": "B-LA_USDT@0.060743754757644285;B-MIRA_USDT@0.046631474776578495",
     "hits": [
       {
-        "sym": "XAU",
+        "sym": "B-LA_USDT",
         "dir": "long",
-        "entry": 4463.69,
-        "stop": 4444.552909043256,
-        "t1": 4532,
-        "lev": 87,
+        "entry": 0.060743754757644285,
+        "stop": 0.05949920597997392,
+        "t1": 0.06261057792414983,
+        "lev": 27,
+        "state": "APPROACHING"
+      },
+      {
+        "sym": "B-MIRA_USDT",
+        "dir": "long",
+        "entry": 0.046631474776578495,
+        "stop": 0.04555423277965517,
+        "t1": 0.04824733777196349,
+        "lev": 25,
         "state": "APPROACHING"
       }
     ],
-    "at": "2026-08-30T01:41:26.590Z"
+    "at": "2026-08-31T06:45:05.115Z"
   },
   "squeeze": {
     "key": "B-AAVE_USDT:long;B-ACE_USDT:short;B-BTR_USDT:long;B-CAKE_USDT:long;B-FLOCK_USDT:long;B-ICP_USDT:long;B-LA_USDT:long;B-LIT_USDT:long;B-TNSR_USDT:long;B-TURBO_USDT:long;B-XPL_USDT:long;B-ZBT_USDT:long",
@@ -142,18 +151,18 @@
   "bestNotified": {},
   "newsBlackout": {
     "active": false,
-    "at": "2026-08-31T00:52:44.870Z"
+    "at": "2026-08-31T06:45:05.115Z"
   },
   "setups": {
     "keys": {},
-    "at": "2026-08-31T00:52:44.871Z"
+    "at": "2026-08-31T06:45:05.115Z"
   },
   "degraded": {
     "count": 0,
     "since": null,
     "lastErr": null
   },
-  "engineAlertAt": "2026-08-31T00:52:44.871Z",
+  "engineAlertAt": "2026-08-31T06:45:05.116Z",
   "bookExec": {
     "key": "p0|f0",
     "snap": {
@@ -168,7 +177,7 @@
   },
   "bookDayHalt": {
     "active": false,
-    "at": "2026-08-31T00:52:45.265Z"
+    "at": "2026-08-31T06:45:05.776Z"
   },
   "bookFill": {
     "key": "u0|p0",
