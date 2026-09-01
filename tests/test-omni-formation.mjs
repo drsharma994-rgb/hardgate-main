@@ -142,6 +142,23 @@ console.log('\n== keepLevels never tightens a named stop ==');
   ok(fm.hit.stop <= hit.stop + 1e-6, 'structure may widen, never pull the stop in');
 }
 
+console.log('\n== cost final-gate demotes, does not empty a VALUE ticket ==');
+{
+  const rows = tape(180, 11, 60000);
+  const mark = rows[rows.length - 1].c;
+  const hit = { dir: 'long', entry: mark - 200, stop: mark - 240, t1: mark + 200,
+    t2: mark + 400, rr: 2, mark: mark, planSrc: 'hgOmniPlanForHit', kind: 'VALUE' };
+  const orig = W.hgTicketFinalGates;
+  W.hgTicketFinalGates = function(){
+    return { ok: false, tag: 'cost', reason: 'VETO — cost 22 bps = 51% of a 43 bps R', chips: ['cost'] };
+  };
+  const fm = W.hgFormTicket(hit, { rows, style: 'swing', a4: mark * 0.01, keepLevels: true });
+  W.hgTicketFinalGates = orig;
+  ok(fm.ok === true, 'cost veto is a demote, not a refuse (' + ((fm && fm.reason) || 'ok') + ')');
+  ok(Math.abs(fm.hit.entry - hit.entry) < 1e-9, 'ENTRY still locked after cost demote');
+  ok(/cost/i.test(String(fm.hit.finalGateDemote || '')), 'cost reason is stamped on the plan');
+}
+
 console.log('\n== rank prefers higher formationScore after evidence ==');
 {
   const ranked = W.hgOmniRank([

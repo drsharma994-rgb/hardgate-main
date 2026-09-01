@@ -782,19 +782,21 @@ function hgFormKeepLevels(hit, ctx, params, dir, mark, a4, rows, style, baseStyl
     }catch(eKeep){}
   }
 
-  /* 6. Final gates: PROVEN-BAD / cost are refuses. Regime is a demote. */
+  /* 6. Final gates: PROVEN-BAD is a refuse. Cost / regime are demotes —
+        VALUE tickets often have a tight setup-level R, and the desk already
+        owns net-R / cost-drag. A second cost veto here emptied the tab. */
   if (typeof G.hgTicketFinalGates === 'function'){
     try{
       var fg = G.hgTicketFinalGates(plan, { minRr: minRr, lane: 'crypto', style: baseStyle });
       if (fg && fg.chips && fg.chips.length){
         plan.evidenceChips = (plan.evidenceChips || []).concat(fg.chips);
       }
-      if (fg && fg.ok === false && (fg.tag === 'edge' || fg.tag === 'cost')){
-        return { ok: false, reason: fg.reason || 'final gate refused', tag: fg.tag || 'formation', hit: plan };
+      if (fg && fg.ok === false && fg.tag === 'edge'){
+        return { ok: false, reason: fg.reason || 'PROVEN-BAD archetype', tag: 'edge', hit: plan };
       }
-      if (fg && fg.ok === false && fg.tag === 'regime'){
+      if (fg && fg.ok === false){
         rankBoost -= 10;
-        plan.regimeDemote = fg.reason;
+        plan.finalGateDemote = fg.reason || fg.tag;
       }
     }catch(eFg){}
   }
