@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v547',
-  pack: 'OMNIGOLD intelligent gold formation',
-  built: '2026-09-01T17:10:00Z',
-  note: 'OMNIGOLD hgOgFormTicket locks named ENTRY (ROUND/FVG/Asia), structure-widens STOP then re-clips at 2.5% of gold (never tighten, never a 1000-pt lastSwing), places T1 at OG_T1_R of formed risk and names the first gold magnet beyond that print, stamps MARKET vs LIMIT, scores conviction (killzone/tape/fill/replay). Cost/weekend/thin-fill demote only. Native tickets never go through hgApplyGoldBestLevels.'
+  version: 'hg-v548',
+  pack: 'OMNI advanced edge rank',
+  built: '2026-09-01T18:40:00Z',
+  note: 'OMNIROUTE / OMNIPRESENT / OMNIGOLD share hgOmniAdvancedEdge: Wilson-lower expectancy vs T1 R plus consensus, tape, fill, cost, formation. Rank and MOST PROBABLE prefer measured edge. Missing data fail-open. Named entries stay put. Not a win probability.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */

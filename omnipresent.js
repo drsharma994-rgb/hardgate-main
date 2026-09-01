@@ -481,6 +481,10 @@
         }
       }
     }
+    try {
+      var stampOp = gfn('hgOmniStampEdge');
+      if (stampOp) stampOp(cand, { livePx: livePx });
+    } catch (eOpEdge) {}
     return cand;
   }
 
@@ -686,6 +690,9 @@
     var aF = isFinite(+a.formationScore) ? +a.formationScore : -1;
     var bF = isFinite(+b.formationScore) ? +b.formationScore : -1;
     if (aF !== bF) return aF > bF;
+    var aE = isFinite(+a.edgeScore) ? +a.edgeScore : -1;
+    var bE = isFinite(+b.edgeScore) ? +b.edgeScore : -1;
+    if (aE !== bE) return aE > bE;
     var aD = (a.zone && isFinite(+a.zone.distAtr)) ? +a.zone.distAtr : 99;
     var bD = (b.zone && isFinite(+b.zone.distAtr)) ? +b.zone.distAtr : 99;
     return aD < bD;
@@ -711,6 +718,9 @@
       if (at !== bt) return bt - at;
       var as = ((b && b.score) || 0) - ((a && a.score) || 0);
       if (as) return as;
+      var ae = isFinite(+a.edgeScore) ? +a.edgeScore : -1;
+      var be = isFinite(+b.edgeScore) ? +b.edgeScore : -1;
+      if (be !== ae) return be - ae;
       return ((b && +b.formationScore) || 0) - ((a && +a.formationScore) || 0);
     });
     var showable = one.filter(opShowable);
@@ -1766,6 +1776,7 @@
         || (c.evidenceChips && c.evidenceChips.length) || c.liveNote){
       h += '<div class="dim">FORMATION'
         + (isFinite(fin(c.formationScore)) ? (' ' + fin(c.formationScore)) : '')
+        + (isFinite(fin(c.edgeScore)) ? (' · EDGE ' + Math.round(fin(c.edgeScore))) : '')
         + (isFinite(fin(c.fillProb)) ? (' · fill ' + fin(c.fillProb) + '%') : '')
         + (c.fillNote ? (' · ' + esc(String(c.fillNote).slice(0, 80))) : '')
         + ((c.evidenceChips && c.evidenceChips.length) ? (' · ' + esc(c.evidenceChips.join(' · '))) : '')

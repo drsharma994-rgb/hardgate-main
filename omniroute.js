@@ -2176,6 +2176,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     formed = hgOmniDerivePlan(formed);
     formed.formationOk = true;
     if (fm.formationScore != null) formed.formationScore = fm.formationScore;
+    hgOmniStampEdge({ plan: formed, dir: formed.dir }, extra);
     return { plan: formed, ok: true };
   }
 
@@ -2189,6 +2190,144 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
               - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
     return 0.5 * (1 + sgn * y);
+  }
+
+  /* Wilson score interval LOWER bound. A raw 20% on 40 samples is not
+     treated as 20%. n<=0 returns null — missing data is not a fake 0%. */
+  function hgOmniWilsonLower(hits, n, z){
+    n = fin(n); hits = fin(hits); z = isFinite(fin(z)) ? fin(z) : 1.96;
+    if (!(n > 0) || !isFinite(hits) || !isFinite(z) || z <= 0) return null;
+    hits = Math.max(0, Math.min(n, hits));
+    var p = hits / n;
+    var z2 = z * z;
+    var denom = 1 + z2 / n;
+    var center = p + z2 / (2 * n);
+    var inner = p * (1 - p) / n + z2 / (4 * n * n);
+    var margin = z * Math.sqrt(Math.max(0, inner));
+    return Math.max(0, Math.min(1, (center - margin) / denom));
+  }
+
+  function hgOmniEdgeReplay(cand, extra){
+    extra = extra || {};
+    var src = (cand && cand.replay) || (cand && cand.fwd)
+           || (extra && extra.fwd) || (cand && cand.stats)
+           || (extra && extra.stats) || (cand && cand.plan && cand.plan.replay)
+           || null;
+    var n = NaN, hit = NaN, costR = NaN;
+    if (src && typeof src === 'object'){
+      n = fin(src.n);
+      if (!isFinite(n)) n = fin(src.samples);
+      var wins = fin(src.wins);
+      hit = fin(src.hit);
+      if (isFinite(wins) && isFinite(n) && n > 0
+          && !(src.hit != null && isFinite(hit) && hit >= 0 && hit <= 1)){
+        hit = wins / n;
+      }
+      if (isFinite(hit) && hit > 1 && isFinite(n) && n > 0) hit = Math.min(1, hit / n);
+      costR = fin(src.costR);
+    }
+    if (!isFinite(costR)) costR = fin(cand && cand.costR);
+    if (!isFinite(costR) && cand && cand.plan) costR = fin(cand.plan.costR);
+    if (!isFinite(costR)) costR = fin(extra && extra.costR);
+    return { n: n, hit: hit, costR: costR };
+  }
+
+  /* Conservative expectancy + consensus/tape/fill/cost. Rank and MOST
+     PROBABLE promotion — not a win probability. Missing data fail-open.
+     Fail-closed only on evidence. Does not move named entries. */
+  function hgOmniAdvancedEdge(cand, extra){
+    extra = extra || {};
+    cand = cand || {};
+    var plan = (cand.plan && typeof cand.plan === 'object') ? cand.plan : cand;
+    var t1R = fin(plan && plan.rr1);
+    if (!isFinite(t1R) || t1R <= 0) t1R = fin(cand.rr1);
+    if (!isFinite(t1R) || t1R <= 0) t1R = 2;
+    var cons = cand.consensus || extra.consensus || {};
+    var nAgree = cons.nAgree || 0;
+    var nAgainst = cons.nAgainst || 0;
+    var replay = hgOmniEdgeReplay(cand, extra);
+    var n = replay.n, hit = replay.hit, costR = replay.costR;
+    var prior = 1 / (1 + t1R);
+    var pLo = null;
+    if (isFinite(n) && n > 0 && isFinite(hit)){
+      pLo = hgOmniWilsonLower(hit <= 1 ? hit * n : hit, n, 1.96);
+    }
+    if (pLo == null) pLo = prior;
+    var cost = isFinite(costR) ? costR : 0;
+    var E = pLo * t1R - (1 - pLo) - cost;
+
+    var dir = String(cand.dir || (plan && plan.dir) || '').toLowerCase();
+    var tape = String(extra.tape || cand.tape || '').toLowerCase();
+    var againstTape = cand.againstTape === true || extra.againstTape === true
+      || ((tape === 'long' || tape === 'short') && dir && dir !== tape);
+    var familiesAgainst = cand.familiesAgainst === true
+      || (nAgainst > nAgree && (nAgree + nAgainst) >= 2);
+
+    var fillProb = fin(plan && plan.fillProb);
+    if (!isFinite(fillProb)) fillProb = fin(cand.fillProb);
+    var fillNote = String((plan && plan.fillNote) || cand.fillNote || '');
+    var thinFill = (isFinite(fillProb) && fillProb < 40)
+      || /thin/i.test(fillNote) || !!(plan && plan.fillDemote);
+    var distAtr = fin(cand.distAtr);
+    if (!isFinite(distAtr)) distAtr = fin(extra.distAtr);
+
+    var formed = true;
+    if (cand.formation && cand.formation.formed === false) formed = false;
+    if (cand.formationOk === false) formed = false;
+    if (extra.formation && extra.formation.formed === false) formed = false;
+    if (plan && plan.formationOk === false) formed = false;
+
+    var why = [], pass = true;
+    if (againstTape){ pass = false; why.push('against tape'); }
+    if (familiesAgainst){ pass = false; why.push('families against'); }
+    if (isFinite(n) && n >= 20 && E < -0.05){
+      pass = false;
+      why.push('n≥20 toxic E ' + E.toFixed(2) + 'R');
+    }
+    if (isFinite(costR) && costR > 0.30){ pass = false; why.push('cost ' + costR.toFixed(2) + 'R'); }
+    if (thinFill && isFinite(distAtr) && distAtr > 1.5){ pass = false; why.push('thin fill far'); }
+    if (!formed){ pass = false; why.push('not formed'); }
+    if (!why.length) why.push('edge read · not a win probability');
+
+    var eClamped = Math.max(-1.25, Math.min(1.25, E));
+    var score = 50 + 40 * (eClamped / 1.25);
+    score += Math.min(16, nAgree * 4);
+    score -= Math.min(16, nAgainst * 5);
+    if (cand.replaySurvivor === true) score += 8;
+    var tot = (cand.grade && cand.grade.total) || 0;
+    var ev = (cand.grade && cand.grade.evaluated) || 0;
+    if (tot > 0) score += 6 * (ev / tot);
+    if (cand.mtf === true || extra.mtf === true) score += 8;
+    if (thinFill) score -= 12;
+    if (isFinite(costR)) score -= Math.min(20, costR * 50);
+    var fs = fin(cand.formationScore);
+    if (!isFinite(fs) && plan) fs = fin(plan.formationScore);
+    if (isFinite(fs)) score += 0.12 * fs;
+    if (isFinite(distAtr) && distAtr <= 1) score += 6;
+    if (isFinite(distAtr) && distAtr > 3) score -= 8;
+    score = Math.max(0, Math.min(100, Math.round(score)));
+
+    return {
+      score: score, pass: pass, why: why.join(' · '),
+      E: E, pLo: pLo, n: isFinite(n) ? n : 0, t1R: t1R,
+      costR: isFinite(costR) ? costR : null,
+      againstTape: againstTape, familiesAgainst: familiesAgainst
+    };
+  }
+
+  function hgOmniStampEdge(cand, extra){
+    if (!cand) return cand;
+    var edge = hgOmniAdvancedEdge(cand, extra || {});
+    cand.edgeScore = edge.score;
+    cand.edgePass = edge.pass;
+    cand.edgeWhy = edge.why;
+    cand.edgeE = edge.E;
+    if (cand.plan && typeof cand.plan === 'object'){
+      cand.plan.edgeScore = edge.score;
+      cand.plan.edgePass = edge.pass;
+      cand.plan.edgeWhy = edge.why;
+    }
+    return cand;
   }
 
   /* THE MULTIPLE-COMPARISONS BAR.
@@ -7421,6 +7560,8 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
         formationScore: (plan && isFinite(fin(plan.formationScore))) ? fin(plan.formationScore) : NaN
       });
+      try { hgOmniStampEdge(out[out.length - 1], { fwd: exForHit.fwd, stats: exForHit.stats }); }
+      catch (eEdge) {}
       } catch (eHit) {
         try { console.warn('omniroute evaluate skipped', item && item.sym, hits[i] && hits[i].kind, eHit); } catch (eHit2) {}
       }
@@ -7493,6 +7634,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var bf = isFinite(fin(b.formationScore)) ? fin(b.formationScore)
              : (b.plan && isFinite(fin(b.plan.formationScore)) ? fin(b.plan.formationScore) : -1);
       if (bf !== af) return bf - af;
+      /* Conservative edge after formation. Missing score is mid-pack (50) so
+         older tickets without a stamp stay ordered as they were. */
+      var aes = isFinite(fin(a.edgeScore)) ? fin(a.edgeScore)
+             : (a.plan && isFinite(fin(a.plan.edgeScore)) ? fin(a.plan.edgeScore) : 50);
+      var bes = isFinite(fin(b.edgeScore)) ? fin(b.edgeScore)
+             : (b.plan && isFinite(fin(b.plan.edgeScore)) ? fin(b.plan.edgeScore) : 50);
+      if (bes !== aes) return bes - aes;
       /* fin(), not isFinite: a cleared R:R is null, and isFinite(null) is true,
          so the raw test would rank an unknown R:R as a real 0 rather than
          sinking it below every setup that has one. */
@@ -7688,17 +7836,20 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       tapeScore = (dir === tapeDir) ? 1 : -1;
     }
     var ticketN = (c && c.grade && c.grade.ticket) ? 1 : 0;
+    var edgeN = 0;
+    if (c && isFinite(fin(c.edgeScore))) edgeN = Math.max(0, Math.min(100, fin(c.edgeScore))) / 100;
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
               + 30 * infoRatio
               + 12 * coverage
               + 10 * alsoNorm
-              + 10 * near;
+              + 10 * near
+              + 8 * edgeN;
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, near: near, tapeScore: tapeScore,
-      ticket: ticketN, info: info, dist: dist,
+      ticket: ticketN, info: info, dist: dist, edge: edgeN,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }
@@ -7724,7 +7875,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     tape = String(tape || '').toLowerCase();
     limit = Math.max(1, Math.min(5, Math.floor(fin(limit) || OMNI_MP_MAX)));
     if (tape !== 'long' && tape !== 'short') return [];
-    var pool = [], heldCards = [], i, c, seen = {}, heldSeen = {};
+    var pool = [], heldCards = [], skipped = [], i, c, seen = {}, heldSeen = {};
     var ranked = hgOmniDeskOrder(list || [], tape);
     for (i = 0; i < ranked.length; i++){
       c = ranked[i];
@@ -7740,8 +7891,14 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
       var sym = String(c.sym || c.base || '');
       if (!sym || seen[sym]) continue;
       seen[sym] = true;
+      /* edgePass === false is skipped when a passer exists. Missing stamp
+         is not a fail (compat with tickets that never ran the edge). */
+      if (c.edgePass === false){ skipped.push(c); continue; }
       pool.push(c);
       if (pool.length >= limit) break;
+    }
+    if (!pool.length && skipped.length){
+      for (i = 0; i < skipped.length && pool.length < limit; i++) pool.push(skipped[i]);
     }
     pool.heldCards = heldCards;
     return pool;
@@ -7804,7 +7961,7 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     for (i = 0; i < few.length; i++) if (few[i] && few[i].plan) any = true;
     var tier = any ? 'clean' : 'forming';
     var note = any
-      ? 'Balanced across mechanic families and indicator reads on the crypto tape. Tickets only. Not a win probability.'
+      ? 'Balanced across mechanic families, indicator reads, and shrunk expectancy on the crypto tape. Tickets only. Not a win probability.'
       : hgOmniMpNoneWhy(tape, held);
     var h = '<section class="hg-mp" data-hg-mp="omniroute" data-omni-mp="1" data-tier="' + tier + '" aria-label="Most probable crypto setups">';
     h += '<div class="hg-mp-eye">MOST PROBABLE SETUPS</div>';
@@ -8366,6 +8523,13 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
           + (c.plan.fillNote ? (' · ' + esc(String(c.plan.fillNote).slice(0, 80))) : '')
           + ((c.plan.evidenceChips && c.plan.evidenceChips.length)
               ? (' · ' + esc(c.plan.evidenceChips.join(' · '))) : '')
+          + '</div>';
+      }
+      if (isFinite(fin(c.edgeScore)) || (c.plan && isFinite(fin(c.plan.edgeScore)))){
+        var es = isFinite(fin(c.edgeScore)) ? fin(c.edgeScore) : fin(c.plan.edgeScore);
+        h += '<div class="dim">EDGE ' + Math.round(es)
+          + (c.edgePass === false ? ' · sink' : '')
+          + (c.edgeWhy ? (' · ' + esc(String(c.edgeWhy).slice(0, 90))) : '')
           + '</div>';
       }
       if (typeof window !== 'undefined' && typeof window.hgStrategyTradeDetailHtml === 'function'){
@@ -10365,6 +10529,9 @@ first-time whole-universe sweep); while a scan is in flight, 'busy'.
     window.hgOmniEvaluate = hgOmniEvaluate;
     window.hgOmniPlanForHit = hgOmniPlanForHit;
     window.hgOmniFormTicket = hgOmniFormTicket;
+    window.hgOmniWilsonLower = hgOmniWilsonLower;
+    window.hgOmniAdvancedEdge = hgOmniAdvancedEdge;
+    window.hgOmniStampEdge = hgOmniStampEdge;
     window.hgOmniPoiFromKind = hgOmniPoiFromKind;
     window.hgOmniConsensusVoters = hgOmniConsensusVoters;
     window.hgOmniIsReversion = hgOmniIsReversion;

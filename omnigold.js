@@ -3804,6 +3804,10 @@ terse status, and never launches a first-time scan on a global refresh.
         rr: (plan && isFinite(fin(plan.rr1))) ? fin(plan.rr1) : NaN,
         distAtr: distAtr
       });
+      try {
+        var stampFn = (w && typeof w.hgOmniStampEdge === 'function') ? w.hgOmniStampEdge : null;
+        if (stampFn) stampFn(out[out.length - 1], { fwd: ex.fwd, stats: ex.stats });
+      } catch (eOgEdge) {}
     }
     return out;
   }
@@ -4370,6 +4374,8 @@ terse status, and never launches a first-time scan on a global refresh.
       tapeScore = (dir === tapeDir) ? 1 : -1;
     }
     var ticketN = (c && c.grade && c.grade.ticket) ? 1 : 0;
+    var edgeN = 0;
+    if (c && isFinite(fin(c.edgeScore))) edgeN = Math.max(0, Math.min(100, fin(c.edgeScore))) / 100;
     var score = 100 * tapeScore
               + 120 * ticketN
               + 30 * family
@@ -4377,11 +4383,12 @@ terse status, and never launches a first-time scan on a global refresh.
               + 12 * coverage
               + 10 * alsoNorm
               + 8 * horizon
-              + 10 * near;
+              + 10 * near
+              + 8 * edgeN;
     return {
       score: score, family: family, infoRatio: infoRatio, coverage: coverage,
       alsoNorm: alsoNorm, horizon: horizon, near: near, tapeScore: tapeScore,
-      ticket: ticketN, info: info, dist: dist,
+      ticket: ticketN, info: info, dist: dist, edge: edgeN,
       nAgree: nAgree, nAgainst: nAgainst
     };
   }
@@ -7721,6 +7728,7 @@ terse status, and never launches a first-time scan on a global refresh.
           + (c.plan.t1Source ? ' · T1 ' + esc(String(c.plan.t1Source)) : '')
           + (isFinite(fin(c.plan.t1Magnet)) ? (' @ ' + fmtPx(c.plan.t1Magnet)) : '')
           + (isFinite(formScore) ? ' · conviction ' + Math.round(formScore) : '')
+          + (isFinite(fin(c.edgeScore)) ? ' · EDGE ' + Math.round(fin(c.edgeScore)) : '')
           + (c.plan.costDemote ? ' · cost demote' : '')
           + (c.plan.fillDemote ? ' · thin fill' : '')
           + '</div>';
