@@ -212,12 +212,13 @@ Browser tabs load even when Binance/Delta REST is geo-blocked in the VM; CoinDCX
 5. **Tests** — `tests/test-<tab>.mjs`, `tests/test-handoff-coverage.mjs`; run `npm test`
 6. **Ship** — bump cache in `sw.js` / script `?v=` when needed
 
-### Gold tabs (GOLD SCALP / GOLD SWING) — hg-v266
+### Gold tabs (GOLD SCALP / GOLD SWING) — hg-v266 / hg-v550
 - Both tabs use `hgApplyGoldBestLevels` + `hgGoldPostApplyRefresh` after `goldRankSetups` to snap entry/stop/TPs and re-sync **grade from tally** (A≥8, B≥5, else C) plus structural R:R tally legs.
 - **Scalp** min R:R 1.2 at build; **swing** build gate stays 1.2 on the 1.5R ladder, but formation enforces **2.0R** via `HG_GOLD_SWING_MIN_RR`.
 - Pass `candleSource` from `gold.src['15m']` (scalp) or `gold.src['4h']` (swing) into setup bundles for volume-trust / mixed-feed A+ behavior.
 - Swing tab mirrors scalp: GOLD A+ panel, `hgTallyLegAudit` chips, mixed-feed banner when `gold.mixed`.
-- Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`
+- **Institutional filters (`hgGoldInstFilter` in `goldind.js`):** sweep setups need MSS + displacement + IFVG/FVG on the execution TF (15m scalp / 4h swing) — a liquidity grab alone is rejected (`SWEEP BLOCK`). OB displacement volume must exceed the prior 5-bar average (`OB TRAP`). Gold **longs** are killed when DXY **and** TNX are bullish (EMA50 / `RISING`) — missing feeds fail-open (`CONVICTION LOCK` here is a signal kill, not `conviction-lock.js`). Asia 00–07 GMT **rejects** standard scalp execution unless Asian-range or a violent AH/AL sweep; swing **demotes**. London 08:00 GMT and NY overlap 12:00–16:00 GMT get session priority weight. **News-gate:** CPI / NFP / FOMC / GDP lock **new** scalp and swing minting **30 min before / 15 min after**; other high-impact still NEWS-FADE. Live booked convictions keep running. **Spread lock:** live bid/ask wider than **250 points / 2.5 pips ($0.25)** kills the entry; missing quotes fail-open. **MTF matrix:** scalp longs need H4 **and** Daily `price > EMA20 > EMA50`; HTF conflict locks scalp and leaves Gold Wing open; missing HTF fail-open. **1.5×ATR14 is a FLOOR, never a cap** (structure may widen to 3.5× scalp / 4.0× swing).
+- Tests: `node tests/test-goldscalp.mjs`, `node tests/test-goldswing.mjs`, `node tests/test-gold-best-levels.mjs`, `node tests/test-gold-inst-gates.mjs`
 
 ### MOST PROBABLE levels — hg-v440 / hg-v442
 - **Every market-scan tab** pins one **MOST PROBABLE** panel with **ENTRY · STOP · T1 · T2**. CLEAN / confirmed / ticket rows win. Else the best 6/7 NEAR (watch only). Else one closest draft (not a ticket). No levels → no banner. Dual-venue SWING/SCALP merge re-pins the ranked leader. GOLD SCALP / GOLD SWING keep their own eye banners. G1–G7 unchanged.

@@ -537,8 +537,10 @@ console.log('== 7) tally context legs ==');
     cleanup();
     return { mc: mc, env: env };
   }
-  /* news window: -2 tally + one-letter grade downgrade, stamp shown */
-  const news = { loaded: true, events: [{ title: 'US CPI', impact: 'high', t: Math.floor(MAR_NOW/1000) + 300 }] };
+  /* news window: -2 tally + one-letter grade downgrade, stamp shown.
+     Use a non-tier-1 high-impact print so NEWS-FADE still applies; CPI/NFP/FOMC/GDP
+     hard-lock new swing minting via hgGoldNewsGate. */
+  const news = { loaded: true, events: [{ title: 'US Core PCE', impact: 'high', t: Math.floor(MAR_NOW/1000) + 300 }] };
   const a = await scanWith({ macro: MACRO_TAIL, news: news }, MAR_NOW);
   assert(a.mc && a.mc.tally === 4, 'news window: tally 4 + 2 macro − 2 news = 4 (got ' + (a.mc && a.mc.tally) + ')');
   assert(a.mc && a.mc.grade === 'C', 'news window: grade B downgraded one letter to C');

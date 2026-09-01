@@ -18,10 +18,10 @@ var G = (typeof window !== 'undefined') ? window : globalThis;
 
 /* ---- the stamp -------------------------------------------------------- */
 var HG_BUILD = {
-  version: 'hg-v548',
-  pack: 'OMNI advanced edge rank',
-  built: '2026-09-01T18:40:00Z',
-  note: 'OMNIROUTE / OMNIPRESENT / OMNIGOLD share hgOmniAdvancedEdge: Wilson-lower expectancy vs T1 R plus consensus, tape, fill, cost, formation. Rank and MOST PROBABLE prefer measured edge. Missing data fail-open. Named entries stay put. Not a win probability.'
+  version: 'hg-v550',
+  pack: 'Gold news-gate + spread + MTF confluence',
+  built: '2026-09-01T20:00:00Z',
+  note: 'GOLD SCALP / GOLD SWING: News-gate locks new minting 30m before / 15m after CPI NFP FOMC GDP. Live bid/ask wider than 250 points (2.5 pips / $0.25) locks the entry. Scalp longs need H4 and Daily price > EMA20 > EMA50; HTF conflict locks scalp and leaves Gold Wing open. Missing news/spread/HTF fail-open. 1.5x ATR14 remains the stop floor, not a cap. Not a win probability.'
 };
 
 /* ---- pure helpers (unit-tested) -------------------------------------- */
